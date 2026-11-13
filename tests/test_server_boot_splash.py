@@ -2,7 +2,7 @@
 
 מ-GRUB ועד ה-DCUI השרת הציג tty1 שחור עם סמן (מיפוי המסכים, S1), ובאתחול
 הראשון גם את שורות ההתקדמות של firstboot באנגלית (S2) ואת יומן הבקשות של
-האשף (S4). ‏server/system/bootsplash.py מצייר את אותה תמונה סטטית שהסוכן מצייר
+האשף (S4). server/system/bootsplash.py מצייר את אותה תמונה סטטית שהסוכן מצייר
 (agent/lib/gui/splash.sh) על ה-framebuffer, ושגיאות נשארות גלויות: ה-console
 אינו מנותק מה-framebuffer, ו-stderr של firstboot והאשף עדיין מגיע אליו.
 """
@@ -195,7 +195,7 @@ def test_setup_installs_renders_and_enables_the_boot_screen():
     assert '"$APP_DIR/deploy/imagesrv-boot-splash.service"' in setup
     assert 'run "$SPLASH_GUI" --splash-raw "$SPLASH_RAW" --size 640x240' in setup
     assert setup.count("run systemctl enable imagesrv-boot-splash.service") == 1
-    render = setup[setup.index('if [[ -x "$SPLASH_GUI" ]]'):setup.index("# ‏#1195")]
+    render = setup[setup.index('if [[ -x "$SPLASH_GUI" ]]'):setup.index("# \u200f#1195")]
     assert render.count("warn ") == 2, "both ways of having no picture are said"
 
 

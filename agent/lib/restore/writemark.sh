@@ -65,6 +65,11 @@ writemark_json() {
     printf ',"write_mark":"%s"' "$_wj"
 }
 
+# #2834 (Nadav 20/10: nothing from a disk's content outside the image): a name read
+# from a disk -- a local clone's source names it, a person may have -- has no shape a
+# filter could find (the server's redact, usb_scrub), so the log says only what it is.
+writemark_kind() { case "$1" in '') echo "(empty)" ;; "$WRITEMARK_NAME") echo "the mark" ;; *) echo "another name (not logged)" ;; esac; }
+
 _writemark_want() {
     # $1 = index, $2 = names file or "". The partition's original name ("" = none).
     [ -z "$2" ] || awk -F'|' -v i="$1" '$1 == i { print $2; exit }' "$2"
@@ -82,14 +87,14 @@ writemark_clear() {
     set --
     for _wc_x in $_wc_i; do set -- "$@" -c "$_wc_x:$(_writemark_want "$_wc_x" "$_wc_names")"; done
     sgdisk "$@" "$DEVROOT/$_wc_d" >> "$LOG_FILE" 2>&1 \
-        || { log "$_wc_d: sgdisk refused to clear the incomplete-write mark: $*"; return 1; }
+        || { log "$_wc_d: sgdisk refused to clear the incomplete-write mark (partitions $(echo $_wc_i))"; return 1; }   # #2834: not $* -- it holds the names
     for _wc_x in $_wc_i; do
         _wc_r=$(sgdisk -i "$_wc_x" "$DEVROOT/$_wc_d" 2>> "$LOG_FILE") \
             || { log "$_wc_d: partition $_wc_x could not be read back after the mark was cleared"; return 1; }
         _wc_got=$(printf '%s\n' "$_wc_r" | sed -n "s/^Partition name: '\(.*\)'.*/\1/p")
         _wc_want=$(_writemark_want "$_wc_x" "$_wc_names")
         [ "$_wc_got" = "$_wc_want" ] \
-            || { log "$_wc_d: partition $_wc_x is named '$_wc_got' after sgdisk -c, not '$_wc_want'"; return 1; }
+            || { log "$_wc_d: partition $_wc_x is named $(writemark_kind "$_wc_got") after sgdisk -c, not $(writemark_kind "$_wc_want")"; return 1; }
     done
     log "$_wc_d: the incomplete-write mark is cleared (partitions $(echo $_wc_i))"
 }

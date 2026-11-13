@@ -1,12 +1,12 @@
-"""הכרעת נדב 11/10: ‏PXE proxy מסורב **בשרת** כש-`capabilities.classrooms()` כבוי.
+"""הכרעת נדב 11/10: PXE proxy מסורב **בשרת** כש-`capabilities.classrooms()` כבוי.
 
-‏proxy (‏#36) קיים בשביל תחנות הכיתה שמקבלות כתובת מה-DHCP של המכללה —
+proxy (#36) קיים בשביל תחנות הכיתה שמקבלות כתובת מה-DHCP של המכללה —
 כלומר הוא חלק מהכיתות, ו-v1 בלי כיתות. עד כאן רק הממשק הסתיר אותו, ו-
-‏`PUT /api/console/net/interfaces/{n}` עם ‏proxy=true עדיין הדליק אותו
+`PUT /api/console/net/interfaces/{n}` עם proxy=true עדיין הדליק אותו
 (ממצא סקר השאריות, 11/10).
 
-‏409 עם סיבה כשהיכולת כבויה; כיבוי proxy (‏proxy=false) ו-DHCP מלא לא
-מושפעים. בדיקות ‏#36 הקיימות מדליקות את היכולת ב-monkeypatch (v1.2).
+409 עם סיבה כשהיכולת כבויה; כיבוי proxy (proxy=false) ו-DHCP מלא לא
+מושפעים. בדיקות #36 הקיימות מדליקות את היכולת ב-monkeypatch (v1.2).
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def _stale_proxy_row(ctx) -> None:
 
 
 def test_a_stale_proxy_row_is_not_applied_while_classrooms_are_off(dhcp_server):  # noqa: F811
-    """‏#1303: ‏`apply_dnsmasq` רינדר והפעיל את ה-proxy לפי ה-DB בלי לבדוק את
+    """#1303: `apply_dnsmasq` רינדר והפעיל את ה-proxy לפי ה-DB בלי לבדוק את
     היכולת — שינוי בכרטיס **אחר** היה מדליק את `imagesrv-proxy` על v1."""
     admin, fake = dhcp_server["admin"], dhcp_server["fake"]
     assert capabilities.classrooms() is False, "v1 — הבדיקה מניחה כיתות כבויות"
@@ -88,7 +88,7 @@ def test_a_stale_proxy_row_still_applies_when_classrooms_are_on(  # noqa: F811
 
 
 def test_proxy_support_is_not_served_while_classrooms_are_off(dhcp_server):  # noqa: F811
-    """‏#1303: ‏`GET /net/proxy-support` לא היה מגודר. ‏v1 בלי proxy — הנתיב
+    """#1303: `GET /net/proxy-support` לא היה מגודר. v1 בלי proxy — הנתיב
     אינו קיים (404, כמו ארגז הכלים), ובלי לחשוף את גרסת ה-dnsmasq."""
     r = dhcp_server["admin"].get("/api/console/net/proxy-support")
     assert r.status_code == 404, r.text

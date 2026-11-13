@@ -1,6 +1,6 @@
-"""השומר על קריאת המכונה האמיתית — ובעיקר: הראיה שהוא בכלל מותקן (‏#113).
+"""השומר על קריאת המכונה האמיתית — ובעיקר: הראיה שהוא בכלל מותקן (#113).
 
-‏`hostguard.block_real_host_reads()` רץ ב-`pytest_configure`, כלומר לפני
+`hostguard.block_real_host_reads()` רץ ב-`pytest_configure`, כלומר לפני
 כל בדיקה בריצה הזאת. אבל שומר שלא תפס כלום נראה **בדיוק** כמו שומר
 שאין מה לתפוס, וזה עיקרון 5 בגרסת כלי הבדיקה: אם היה מסתפקים ב"אף
 בדיקה לא נכשלה", אז סריקה שהחמיצה את כל אתרי הקישור הייתה נחשבת
@@ -11,7 +11,7 @@
   הנחה;
 * השומר באמת זורק כשקוראים לו בלי שורש, ובאמת עובד כשמזריקים שורש.
 
-הבדיקה הזאת היא מה שהופך את "‏931 עברו" למשפט על הקוד ולא על המכונה
+הבדיקה הזאת היא מה שהופך את "931 עברו" למשפט על הקוד ולא על המכונה
 שהריצה עליה.
 """
 
@@ -21,15 +21,15 @@ import pytest
 
 import hostguard
 
-#: אתרי הקישור שקיימים בקוד היום. ‏`console_dhcp`, ‏`console_netcfg`
-#: ו-`health` מרכיבים את ה-hook בזמן קריאה (‏`dhcp.list_interfaces`
+#: אתרי הקישור שקיימים בקוד היום. `console_dhcp`, `console_netcfg`
+#: ו-`health` מרכיבים את ה-hook בזמן קריאה (`dhcp.list_interfaces`
 #: בתוך גוף `default_hooks`), ולכן הם נפתרים דרך שני השמות האלה.
 KNOWN_SITES = {"server.net.dhcp.list_interfaces",
                "server.net.dhcp_host.list_interfaces"}
 
 
 def test_the_guard_is_installed_and_says_where():
-    """‏[] כאן אינו "אין בעיה" — הוא "הסריקה לא מצאה כלום"."""
+    """[] כאן אינו "אין בעיה" — הוא "הסריקה לא מצאה כלום"."""
     sites = set(hostguard.patched_sites)
     assert sites, ("השומר לא תפס אף אתר קישור — הסריקה לא עבדה, "
                    "והריצה הזאת אינה מוגנת בכלל")
@@ -40,7 +40,7 @@ def test_the_guard_is_installed_and_says_where():
 def test_every_module_in_the_package_was_scanned():
     """מודול שלא ניתן לייבא הוא חור בשומר, לא הערה.
 
-    ‏`unguarded_sites()` סורק שוב **אחרי** ההתקנה: זו הקריאה החוזרת
+    `unguarded_sites()` סורק שוב **אחרי** ההתקנה: זו הקריאה החוזרת
     שמכריעה, ולא העובדה שההתקנה לא זרקה.
     """
     assert hostguard.unimportable_modules == [], (
@@ -50,7 +50,7 @@ def test_every_module_in_the_package_was_scanned():
 
 
 def test_reading_the_machine_fails_loudly_and_names_the_fix():
-    """ברירת המחדל — ‏`/sys/class/net` האמיתי — נכשלת, ובשם."""
+    """ברירת המחדל — `/sys/class/net` האמיתי — נכשלת, ובשם."""
     from server.net import dhcp
 
     before = len(hostguard.blocked_host_reads)
@@ -78,7 +78,7 @@ def test_an_injected_root_still_reads_normally(tmp_path):
 def test_the_console_apps_never_fall_back_to_the_machine():
     """הראיה מהצד של ה-HTTP: כל ראוטר שיש לו hook בשם `interfaces`
     מקבל אותו מ-`default_hooks()`, ובריצת בדיקות ברירת המחדל הזאת
-    היא השומר. ‏endpoint שלא הוזרק לו hook ייכשל — ולא יקרא מכונה."""
+    היא השומר. endpoint שלא הוזרק לו hook ייכשל — ולא יקרא מכונה."""
     from server.console import dhcp as console_dhcp, netcfg as console_netcfg
     from server.system import health
 

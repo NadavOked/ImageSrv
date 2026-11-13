@@ -1,8 +1,8 @@
-"""‏#1728 — זרם ריק או חלקי הוא כשל של הזרם, לא של הדיסק.
+"""#1728 — זרם ריק או חלקי הוא כשל של הזרם, לא של הדיסק.
 
-ברזל rc5, ‏18/10: משכפל שאותחל באמצע הזרם קיבל את הגל הרץ שוב, ניסה לכתוב
+ברזל rc5, 18/10: משכפל שאותחל באמצע הזרם קיבל את הגל הרץ שוב, ניסה לכתוב
 את מחיצה 1 מזרם שכבר היה במחיצה 3, ו-fanout דיווח `empty stream` על שתי
-המגירות. ‏`_read_fanout_report` קרא את השורה כ"הכתיבה לדיסק נכשלה" — בלי
+המגירות. `_read_fanout_report` קרא את השורה כ"הכתיבה לדיסק נכשלה" — בלי
 `stream` — ולכן `ata_capture` רץ, `ata_log` ריק נשלח, והשרת רשם
 `disk_failure` עם `cause=unclassified` על **שני דיסקים תקינים**, שנצבעו כתום
 בסבב הבא.
@@ -10,13 +10,13 @@
 שני הצדדים:
 
 - **הסוכן** (`verdict.sh`): פסק האורך של fanout (`empty`/`short`/`long
-  stream`) הוא של הזרם — כל המגירות קיבלו אותם בייטים. ‏`fail_written_target`
+  stream`) הוא של הזרם — כל המגירות קיבלו אותם בייטים. `fail_written_target`
   מקבל `stream`, ואין `ata_log`.
 - **השרת** (`disk_failures.record`): סוכן ישן (rc5 על הברזל) עדיין שולח
   `ata_log` על שורה כזו. בלי ראיה מהקרנל (כבל/דיסק) — לא נרשם, ורשומה
   שכבר נרשמה כך אינה צובעת.
 
-שומרי תיקון-יתר: ‏`write error` של fanout בלי ראיית קרנל עדיין נרשם (#440:
+שומרי תיקון-יתר: `write error` של fanout בלי ראיית קרנל עדיין נרשם (#440:
 דיסק מת אינו "הרשת"), וראיית כבל ליד זרם ריק עדיין נרשמת כבל.
 """
 
@@ -35,7 +35,7 @@ from test_stream_honesty import drawer_run, errors_of
 REPO = Path(__file__).resolve().parent.parent
 MAC = "b4:2e:99:07:1a:c4"
 
-#: הנוסח המדויק שהגיע מהברזל — ‏`_write_fail` של verdict.sh לפני התיקון.
+#: הנוסח המדויק שהגיע מהברזל — `_write_fail` של verdict.sh לפני התיקון.
 METAL_ERROR = "partition 1: הכתיבה לדיסק נכשלה (fanout: empty stream; partclone rc=1)"
 
 CABLE_LINES = [
@@ -86,7 +86,7 @@ def test_a_row_already_recorded_from_the_metal_does_not_colour_the_disk(conn):
 
 
 def test_a_dead_disk_without_kernel_lines_is_still_recorded(conn):
-    """שומר #440: ‏`write error` של fanout הוא המגירה שמתה — לא הזרם."""
+    """שומר #440: `write error` של fanout הוא המגירה שמתה — לא הזרם."""
     error = "partition 3: הכתיבה לדיסק נכשלה (fanout: write error; partclone rc=1)"
     row = disk_failures.record(conn, "ses_1728", MAC, _target(error, []))
     assert row is not None and row["cause"] == "unclassified"
@@ -106,7 +106,7 @@ def test_the_stream_phrases_are_what_fanout_and_the_agent_write():
     # getattr: בבקרה השלילית הטסט נופל על ה-assert, לא על סמל חסר.
     assert getattr(disk_failures, "STREAM_PHRASES", ()) == (
         "fanout: empty stream", "fanout: short stream", "fanout: long stream")
-    # fanout.c: ‏"empty stream", ו-"%s stream (got …)" עם "short"/"long".
+    # fanout.c: "empty stream", ו-"%s stream (got …)" עם "short"/"long".
     assert '"empty stream"' in fanout
     assert '"%s stream (got %lld of %lld)"' in fanout
     assert '"short" : "long"' in fanout
@@ -114,9 +114,9 @@ def test_the_stream_phrases_are_what_fanout_and_the_agent_write():
 
 # --- הסוכן --------------------------------------------------------------------
 
-#: ‏fanout כמו הבינארי על stdin ריק: פותח וסוגר כל fifo (המגירה מקבלת EOF,
-#: ‏partclone יוצא), כותב את ה-sha של אפס בייטים (`fanout_eof` — ‏reached_eof),
-#: ומדווח `failed empty stream` על כל מגירה, ‏rc=1. ‏fanout שלא היה פותח את
+#: fanout כמו הבינארי על stdin ריק: פותח וסוגר כל fifo (המגירה מקבלת EOF,
+#: partclone יוצא), כותב את ה-sha של אפס בייטים (`fanout_eof` — reached_eof),
+#: ומדווח `failed empty stream` על כל מגירה, rc=1. fanout שלא היה פותח את
 #: ה-fifo היה מכשיל את המגירה על "פג הזמן" — ענף אחר, והטסט לא היה נוגע בבאג.
 EMPTY_FANOUT = (
     "#!/bin/sh\n"

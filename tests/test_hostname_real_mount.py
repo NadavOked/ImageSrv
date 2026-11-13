@@ -1,22 +1,22 @@
-"""‏#89 ו-#107: שם המחשב בצד הלינוקס — מול btrfs ו-ext4 **אמיתיים**.
+"""#89 ו-#107: שם המחשב בצד הלינוקס — מול btrfs ו-ext4 **אמיתיים**.
 
-‏`test_hostname_linux_dual.py` מכסה את הלוגיקה עם `mount` מזויף, והמזויף
+`test_hostname_linux_dual.py` מכסה את הלוגיקה עם `mount` מזויף, והמזויף
 הוא ההנחה שלנו על הקרנל: שעיגון רגיל נותן את ה-subvolume ברירת המחדל,
 ש-`subvolid=5` חושף את ילדי ה-top level כתיקיות, ושה-snapshot של openSUSE
-נראה דרך ה-default. כאן ההנחה נבדקת: קובץ דליל על התקן loop, ‏`mkfs` אמיתי,
-‏subvolumes אמיתיים, ‏`write_hostname` של הסוכן בדיוק כמו שהוא — ורק
-‏`manifest_plan`/‏`partition_node` מוחלפים, כי אין אימג' ואין דיסק.
+נראה דרך ה-default. כאן ההנחה נבדקת: קובץ דליל על התקן loop, `mkfs` אמיתי,
+subvolumes אמיתיים, `write_hostname` של הסוכן בדיוק כמו שהוא — ורק
+`manifest_plan`/`partition_node` מוחלפים, כי אין אימג' ואין דיסק.
 
 הקריאה בחזרה אינה דרך הסוכן: עיגון עצמאי של ה-top level, וכל
-‏`etc/hostname` שנמצא בו — כדי שסוכן שגוי לא יוכל לחתום על עצמו, וכדי
+`etc/hostname` שנמצא בו — כדי שסוכן שגוי לא יוכל לחתום על עצמו, וכדי
 שכתיבה למקום הלא נכון (ה-subvolume השני, ה-top level) תיראה.
 
 **מה זה לא מוכיח:** צד ה-Windows של dual-boot (כוורת SYSTEM אמיתית —
 המזויף ב-`test_hostname_linux_dual.py` בלבד), ושחזור מאימג' על ברזל.
 
-**הרצה:** לינוקס, ‏`sudo -n`, ‏`losetup`, ‏`mkfs.btrfs`/`btrfs`
-(‏btrfs-progs) ו-`mkfs.ext4`. בתחנת הווינדוס — דילוג; כש-
-‏`IMAGESRV_REQUIRE_NATIVE=1` — כלי חסר הוא כישלון בשמו (`native.py`, #52).
+**הרצה:** לינוקס, `sudo -n`, `losetup`, `mkfs.btrfs`/`btrfs`
+(btrfs-progs) ו-`mkfs.ext4`. בתחנת הווינדוס — דילוג; כש-
+`IMAGESRV_REQUIRE_NATIVE=1` — כלי חסר הוא כישלון בשמו (`native.py`, #52).
 המכונה היחידה שנוגעים בה: קובץ דליל ב-`tmp_path`. ה-`mkfs` רץ רק אחרי
 שנבדק שה-loop מגובה **בקובץ שלנו**.
 """

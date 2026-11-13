@@ -1,7 +1,7 @@
-"""‏#1491 — שמירה מ-VM אינה כותבת לדיסק ה-VM: הכיווץ נעשה על עותק.
+"""#1491 — שמירה מ-VM אינה כותבת לדיסק ה-VM: הכיווץ נעשה על עותק.
 
 הכלל של #1466 (נדב 16/10) — "דיסק המקור אינו נכתב" — חל גם על
-`vmdisk.capture_disk`: ‏`ntfsresize`, הטבלה החדשה ו-`ntfsfix -d` רצים על
+`vmdisk.capture_disk`: `ntfsresize`, הטבלה החדשה ו-`ntfsfix -d` רצים על
 dm-snapshot מעל loop **לקריאה בלבד** של `disk.raw`, וה-copy-on-write הוא קובץ
 דליל בגודל התקציב.
 
@@ -30,7 +30,7 @@ def done(argv, rc=0, out="", err=""):
 
 
 class ViewHost:
-    """מארח מזויף ל-`shrink_view`: ‏losetup/blockdev/dmsetup עם מצב — מה מחובר
+    """מארח מזויף ל-`shrink_view`: losetup/blockdev/dmsetup עם מצב — מה מחובר
     ומה קיים — כדי שהשחרור ייקרא בחזרה ולא רק יישלח."""
 
     def __init__(self, free=100 * GIB, getro="1", create_rc=0, status_ok=True, relocs="40",

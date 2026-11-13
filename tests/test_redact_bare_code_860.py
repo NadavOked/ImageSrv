@@ -1,6 +1,6 @@
 """#860: קוד pairing בצורת XXX-XXX-XXX מוסתר ביומן גם בלי `code=` לפניו.
 
-‏`test_interserver_enrollment.py::test_redact_hides_a_bare_pairing_code` מגריל
+`test_interserver_enrollment.py::test_redact_hides_a_bare_pairing_code` מגריל
 קוד ב-`generate_pairing_code()`, ומאז 16/10 הצורה שלו היא XXXX-XXXX — שמוסתרת
 בתבנית אחרת. לכן בבקרה הרטרואקטיבית (24/10) הוא עבר גם כשתבנית #860 הוסרה:
 אף טסט לא בדק את הצורה ש-#860 תיקן. כאן הצורה כתובה במפורש.

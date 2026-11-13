@@ -241,7 +241,7 @@ async function storageScan() {
   const f = SV.form, type = storageType();
   const body = { type, server: (f.server || "").trim() };
   if (type === "smb") body.creds = { username: (f.username || "").trim(), secret: f.secret || "", domain: (f.domain || "").trim() };
-  if (type === "iscsi") { body.portal = (f.portal || "").trim(); if (f.chap) body.creds = { chap_user: (f.chap_user || "").trim(), chap_secret: f.chap_secret || "" }; }
+  if (type === "iscsi") body.portal = (f.portal || "").trim();   // #2606: בלי CHAP — הוא של ההתחברות, לא של הגילוי
   SV.scan = { status: "running" }; renderCurrent();
   try {
     const r = await post(SL + "/scan", body);
@@ -251,6 +251,7 @@ async function storageScan() {
   } catch (e) { SV.scan = { status: "failed", reason: e.message }; }
   renderCurrent();
 }
+storageScan = guarded("storageScan", storageScan);   // ‏#2840: לחיצה כפולה = בקשה אחת
 async function storageTest() {
   SV.test = { status: "running" }; SV.busy = true; renderCurrent();
   try {
@@ -380,7 +381,8 @@ function storageIscsiAView() {
   const form = `<div class="card-b form1">
     <div class="inline">${storageInput("portal", 'פורטל <span class="muted">(כתובת:פורט)</span>', { mono: true, placeholder: "10.44.3.75:3260" })}<button class="btn" onclick="storageScan()">גלה יעדים</button></div>
     <div class="field"><label>יעדים שנמצאו <span class="muted">(SendTargets)</span></label>${storagePicklist("iqn", targets, (it) => ({ value: it.iqn, cap: it.portal || "" }), 'עדיין לא בוצע גילוי — לחץ "גלה יעדים"')}${targets && SV.scan.rejected ? UI.note("warn", `היעד החזיר ${SV.scan.rejected} שמות לא תקינים — נדחו. אם זה לא צפוי, בדקו מי עונה בכתובת הזו.`) : ""}</div>
-    ${storageCheckbox("chap", "‏CHAP — היעד דורש אימות")}
+    ${storageCheckbox("chap", "‏CHAP — היעד דורש אימות בהתחברות")}
+    <div class="cap">‏CHAP חל על ההתחברות ליעד (ה-session) בלבד, לא על הגילוי. יעד שדורש CHAP כבר בגילוי אינו נתמך — "גלה יעדים" ייכשל מולו.</div>
     ${f.chap ? `<div class="form2">${storageInput("chap_user", "משתמש CHAP", { mono: true })}${storageInput("chap_secret", 'סוד CHAP <span class="muted">(12–16 תווים)</span>', { type: "password" })}</div>` : ""}
     ${storageCheckbox("auto", 'שמור בהתחברות אוטומטית — היעד חוזר לבד אחרי אתחול השרת (<span class="mono">node.startup=automatic</span>)')}
     ${storageInput("name", "שם תצוגה")}
@@ -521,6 +523,7 @@ async function storageConnect(id, body = {}) {
     toast(`${row.name}: ${row.state_label}`); closeDrawer(); await loadStorage();
   } catch (e) { toast("החיבור נכשל: " + e.message); }
 }
+storageConnect = guarded("storageConnect", storageConnect);   // ‏#2840: לחיצה כפולה = בקשה אחת
 /* #2460: הסוד אינו בגיבוי — אחרי שחזור המיקום מבקש אותו כאן, בשדה בתוך המגירה. */
 const STORAGE_SECRET_TEXT = {
   smb: ["סיסמה", "הסיסמה של המיקום אינה בגיבוי — הקלד אותה מחדש"],

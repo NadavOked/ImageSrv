@@ -1,28 +1,28 @@
-"""‏TLS לקונסולה (‏#703, tracer 5).
+"""TLS לקונסולה (#703, tracer 5).
 
 הקונסולה (8081, כרטיס הניהול) הגישה HTTP וסיסמת admin עברה גלויה —
 במכללה שמלמדת סייבר. מ-tracer 5 המאזין של הקונסולה הוא **HTTPS בלבד**:
 תעודה חתומה-עצמית שנוצרת בהפעלה הראשונה ל-``<data_dir>/console-tls/``
-(‏``console.crt`` + ‏``console.key`` ב-0600) ונשארת **אותה תעודה** בכל
-הפעלה — הדפדפן של המפעיל מאשר אותה פעם אחת. ‏HTTP על 8081 אינו מוגש
+(``console.crt`` + ``console.key`` ב-0600) ונשארת **אותה תעודה** בכל
+הפעלה — הדפדפן של המפעיל מאשר אותה פעם אחת. HTTP על 8081 אינו מוגש
 (fail-closed): אין הפניה שקטה ואין מאזין-מפנה, כי מאזין HTTP על אותו
 פורט הוא בדיוק מה שהדפדפן (או תלמיד) היה נופל אליו קודם.
 
 **למה תעודה נפרדת מזהות ה-interserver (`storage_nodes.ensure_identity`)
 ולא אותה זהות:** ה-SPKI של זהות ה-interserver **מוצמד** על ידי הצד
 השני (SPKI-pin, #740), והיא נוצרת בלי SAN של כרטיס הניהול (על ראשי —
-בלי SAN כלל, כתעודת-לקוח). תעודת הקונסולה צריכה SAN של ‎--console-host‏
+בלי SAN כלל, כתעודת-לקוח). תעודת הקונסולה צריכה SAN של --console-host
 כדי שהדפדפן יתלונן על "לא מוכרת" בלבד ולא גם על "שם לא תואם", ואסור
 שחידושה ישבור pin. המחולל **משותף** (`interserver_auth.generate_self_signed`)
 — אין כאן מחולל שני, רק זהות שנייה.
 
-**למה stdlib ssl ולא pyOpenSSL:** ‏uvicorn מקבל ``ssl_certfile``/
+**למה stdlib ssl ולא pyOpenSSL:** uvicorn מקבל ``ssl_certfile``/
 ``ssl_keyfile`` ובונה ``ssl.SSLContext`` בעצמו; לקונסולה אין תעודת-לקוח
 ואין exporter, ולכן אין צורך ב-terminator של pyOpenSSL כמו ב-8443.
 
-**‏EKU ותוקף (#1815):** התעודה העצמית נושאת EKU ‏``serverAuth`` בלבד — היא
+**EKU ותוקף (#1815):** התעודה העצמית נושאת EKU ``serverAuth`` בלבד — היא
 מוגשת לדפדפן ואינה משמשת כתעודת-לקוח. **התוקף נשאר 3650 יום, וזו מגבלה
-ידועה:** ‏Apple ‏(support.apple.com/103769, iOS 13 / macOS 10.15 ואילך) דורשת
+ידועה:** Apple (support.apple.com/103769, iOS 13 / macOS 10.15 ואילך) דורשת
 מ**כל** תעודת שרת TLS תוקף של 825 יום לכל היותר, בלי הבחנה בין שורש מובנה
 לאמון שהמשתמש הוסיף. כלומר ה-EKU לבדו כנראה **אינו** מספיק ל-Safari. קיצור
 התוקף מחייב חידוש אוטומטי (ושינוי טביעת האצבע שהמפעיל אישר) — הכרעה פתוחה.
@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
+import logging
 import os
 import shutil
 import socket
@@ -44,6 +45,8 @@ from server.core.atomicfile import write_atomic
 from server.interserver.auth import (generate_self_signed, is_loopback,
                                                  write_credential_0600)
 
+log = logging.getLogger("imagesrv.console_tls")
+
 #: תת-התיקייה של ``data_dir`` שבה חיה זהות הקונסולה.
 CONSOLE_TLS_DIRNAME = "console-tls"
 CERT_NAME = "console.crt"
@@ -51,13 +54,13 @@ KEY_NAME = "console.key"
 #: ה-CN של התעודה; מה שהדפדפן מציג ב"הונפק ל".
 COMMON_NAME = "imagesrv-console"
 GENERATED_MARKER = "generated.sha256"
-#: ‏#1380: ה-CN שהשרת נתן לתעודה שיצר לפני שנכתב ``generated.sha256`` (v0.75) —
+#: #1380: ה-CN שהשרת נתן לתעודה שיצר לפני שנכתב ``generated.sha256`` (v0.75) —
 #: ``imagectl-console`` לפני שינוי השם, ``COMMON_NAME`` אחריו.
 LEGACY_COMMON_NAMES = ("imagectl-console", COMMON_NAME)
-#: ‏#1380: סמן של תעודה **שהמפעיל העלה** (טביעת האצבע שלה). תעודה כזו אינה
+#: #1380: סמן של תעודה **שהמפעיל העלה** (טביעת האצבע שלה). תעודה כזו אינה
 #: מועמדת למיגרציה גם אם ה-CN שלה זהה לשלנו.
 UPLOADED_MARKER = "uploaded.sha256"
-#: ‏#2095: תת-התיקייה עם העותק ש-uvicorn טוען בפועל — נכתב בכל עליית שרת
+#: #2095: תת-התיקייה עם העותק ש-uvicorn טוען בפועל — נכתב בכל עליית שרת
 #: מהבייטים שטביעת האצבע חושבה מהם, ולכן ``/me`` = מה שמוגש, גם אם מישהו
 #: כותב את התעודה הקנונית אחרי העלייה.
 SERVING_DIRNAME = "serving"
@@ -73,22 +76,22 @@ class ConsoleTLS:
 
     cert_path: Path
     key_path: Path
-    #: ‏SHA-256 של התעודה (DER), ``AB:CD:…`` — הצורה שהדפדפן מציג
+    #: SHA-256 של התעודה (DER), ``AB:CD:…`` — הצורה שהדפדפן מציג
     #: ב"פרטי תעודה", כדי שנדב ישווה ביד.
     fingerprint_sha256: str
     #: ה-SANs שבתעודה, כפי שנקראו ממנה (לא כפי שביקשנו).
     sans: tuple[str, ...]
-    #: ‏#153: המנפיק הוא הנושא — התעודה שנוצרה כאן, או עצמית שהועלתה.
-    #: ‏False = תעודה שהועלתה וחתומה בידי CA (של המכללה או ציבורי).
+    #: #153: המנפיק הוא הנושא — התעודה שנוצרה כאן, או עצמית שהועלתה.
+    #: False = תעודה שהועלתה וחתומה בידי CA (של המכללה או ציבורי).
     self_signed: bool = True
     regenerated: bool = False
     previous_fingerprint_sha256: str | None = None
-    #: ‏#1380: ההחלפה הייתה מיגרציה של תעודה שנוצרה לפני הסמן (ולא חידוש רגיל).
+    #: #1380: ההחלפה הייתה מיגרציה של תעודה שנוצרה לפני הסמן (ולא חידוש רגיל).
     migrated_legacy: bool = False
-    #: ‏#1380: הניסיון להחליף תעודה שלנו נכשל — הישנה ממשיכה להיות מוגשת
+    #: #1380: הניסיון להחליף תעודה שלנו נכשל — הישנה ממשיכה להיות מוגשת
     #: והשרת מדפיס את הסיבה (עיקרון 5: לא "הצליח" בשקט).
     migration_error: str | None = None
-    #: ‏#2095: הבייטים שטביעת האצבע חושבה מהם — מה ש-``uvicorn_kwargs`` מגיש.
+    #: #2095: הבייטים שטביעת האצבע חושבה מהם — מה ש-``uvicorn_kwargs`` מגיש.
     cert_pem: bytes = field(default=b"", repr=False)
     key_pem: bytes = field(default=b"", repr=False)
 
@@ -100,7 +103,7 @@ class ConsoleTLS:
     def uvicorn_kwargs(self) -> dict:
         """הארגומנטים ל-``uvicorn.Config`` של מאזין הקונסולה.
 
-        ‏#2095: uvicorn קורא את הקבצים כשהמאזין נבנה — ומאזין של כתובת שהגיעה
+        #2095: uvicorn קורא את הקבצים כשהמאזין נבנה — ומאזין של כתובת שהגיעה
         אחרי העלייה (#1088) נבנה דקות אחר כך. התעודה הקנונית הוחלפה בינתיים
         על הדיסק (ה-DCUI הנפיק אותה מחדש), ו-``/me`` דיווח טביעה של תעודה
         שאינה זו שמוגשת. לכן המאזין טוען **עותק** של הבייטים שבזיכרון, ב-
@@ -109,12 +112,12 @@ class ConsoleTLS:
         directory.mkdir(parents=True, exist_ok=True)
         cert_path, key_path = directory / CERT_NAME, directory / KEY_NAME
         write_credential_0600(key_path, self.key_pem.decode("utf-8"))
-        write_atomic(cert_path, self.cert_pem, mode=0o600)   # ‏#2425: כמו הקנונית שהועלתה
+        write_atomic(cert_path, self.cert_pem, mode=0o600)   # #2425: כמו הקנונית שהועלתה
         return {"ssl_certfile": str(cert_path), "ssl_keyfile": str(key_path)}
 
 
 def check_tls_flag(mode: str, console_host: str) -> None:
-    """‏``--console-tls off`` מותר **רק** על loopback (הרצת פיתוח/e2e).
+    """``--console-tls off`` מותר **רק** על loopback (הרצת פיתוח/e2e).
 
     על כל כתובת אחרת הסיסמה הייתה עוברת ברשת גלויה — וזה בדיוק מה
     ש-tracer 5 סוגר. הסירוב נוקב בשני הדגלים, לא נופל ל-TLS בשקט."""
@@ -134,7 +137,7 @@ def _is_ip(host: str) -> bool:
 
 
 def fingerprint_sha256(cert_pem: bytes) -> str:
-    """‏SHA-256 של התעודה (DER), ‏``AB:CD:…`` — כמו בדפדפן."""
+    """SHA-256 של התעודה (DER), ``AB:CD:…`` — כמו בדפדפן."""
     from cryptography import x509
     der = x509.load_pem_x509_certificate(cert_pem).public_bytes(_encoding_der())
     digest = hashlib.sha256(der).hexdigest().upper()
@@ -160,7 +163,7 @@ def cert_sans(cert_pem: bytes) -> tuple[str, ...]:
 
 
 def _is_legacy_generated(cert_pem: bytes, directory: Path) -> bool:
-    """‏#1380: תעודה שהשרת יצר לפני ש-``generated.sha256`` נכתב (v0.75).
+    """#1380: תעודה שהשרת יצר לפני ש-``generated.sha256`` נכתב (v0.75).
 
     שלושה תנאים, וכולם חיוביים: חתומה-עצמית, ה-CN של השרת, ו**אין** סמן
     מכל סוג — לא ``generated.sha256`` (קיים = מנגנון הסמן מכריע, גם כשאינו
@@ -222,7 +225,7 @@ def ensure_console_cert(data_dir, console_host: str,
                         hostname: str | None = None) -> ConsoleTLS:
     """מחזיר את זהות הקונסולה — יוצר אותה **פעם אחת** אם אין.
 
-    ‏SAN = ‏``console_host`` (IP או DNS) + שם המארח. רק תעודה שהשרת יצר
+    SAN = ``console_host`` (IP או DNS) + שם המארח. רק תעודה שהשרת יצר
     וסימן בטביעת האצבע שלה מתחדשת כשכתובת הקונסולה השתנתה. תעודה שהמפעיל
     העלה לעולם אינה מוחלפת אוטומטית, גם אם היא חתומה-עצמית.
     חצי זהות (תעודה בלי מפתח או להפך) היא כשל בשמו, לא יצירה מחדש
@@ -244,7 +247,7 @@ def ensure_console_cert(data_dir, console_host: str,
         generated_fingerprint = (generated.read_text(encoding="ascii").strip()
                                  if generated.is_file() else "")
         legacy = _is_legacy_generated(existing_pem, directory)
-        # ‏#2095: loopback אינו כתובת חדשה — זה מה שהשרת מעביר כשה-lease עוד
+        # #2095: loopback אינו כתובת חדשה — זה מה שהשרת מעביר כשה-lease עוד
         # לא הגיע. תעודה שנוצרה מחדש עליו התחלפה בכל אתחול שבו השרת עלה
         # לפני ה-DHCP (ESXi, 24/10), והדפדפן נדרש לאשר שוב.
         if (console_host not in cert_sans(existing_pem) and not is_loopback(console_host)
@@ -253,7 +256,7 @@ def ensure_console_cert(data_dir, console_host: str,
             try:
                 _replace_generated(directory, console_host, hostname)
             except Exception as exc:                     # noqa: BLE001 — כל כשל, לא רק OSError
-                # ‏#1380: ``_replace_generated`` החזיר את הישנה למקומה. נשארים
+                # #1380: ``_replace_generated`` החזיר את הישנה למקומה. נשארים
                 # עליה, אבל בגלוי: השרת מדפיס את הסיבה בכל עלייה.
                 migration_error = f"{type(exc).__name__}: {exc}"
             else:
@@ -278,9 +281,9 @@ def ensure_console_cert(data_dir, console_host: str,
 
 def presented_console_cert(address: tuple[str, int] = ("127.0.0.1", 8081),
                            timeout: float = 1.0) -> bytes:
-    """‏#2148: התעודה שמאזין הקונסולה **מציג עכשיו** (PEM) — מה שהדפדפן יראה.
+    """#2148: התעודה שמאזין הקונסולה **מציג עכשיו** (PEM) — מה שהדפדפן יראה.
 
-    ‏#2095 קרא את ``serving/`` מהדיסק, וזה לא היה עדכני: אחרי restart העותק
+    #2095 קרא את ``serving/`` מהדיסק, וזה לא היה עדכני: אחרי restart העותק
     שם נשאר של התהליך הקודם עד שהחדש בנה את המאזין, וה-DCUI הציג טביעה
     שאף מאזין כבר לא הגיש (ESXi, 24/10). כאן אין עותק לסמוך עליו — לחיצת
     יד TLS על loopback (הקונסולה מאזינה עליו תמיד, #904), בלי אימות: אנחנו
@@ -290,7 +293,7 @@ def presented_console_cert(address: tuple[str, int] = ("127.0.0.1", 8081),
     return ssl.get_server_certificate(address, timeout=timeout).encode("ascii")
 
 
-# --- ‏#153: תעודה שהמפעיל מעלה מלשונית ההגדרות ---------------------------------
+# --- #153: תעודה שהמפעיל מעלה מלשונית ההגדרות ---------------------------------
 
 #: גבול גודל לכל אחד מהשניים — תעודה עם שרשרת ארוכה היא כמה KB.
 MAX_PEM_BYTES = 64 * 1024
@@ -346,19 +349,21 @@ def _ssl_loads(cert_pem: bytes, key_pem: bytes, directory: Path) -> str | None:
             ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER).load_cert_chain(
                 str(cert_file), str(key_file))
         except (ssl.SSLError, OSError) as exc:
-            return str(exc)
+            # #2543: טקסט OpenSSL/מערכת ההפעלה ליומן השרת; בתשובה וביומן האירועים — שלנו.
+            log.warning("console TLS pair does not load in ssl: %s", exc)
+            return "הפרטים ביומן השרת"
     return None
 
 
-#: ‏#2425: העקומות ש-Chrome, ‏Firefox ו-Safari מקבלים בתעודת שרת.
+#: #2425: העקומות ש-Chrome, Firefox ו-Safari מקבלים בתעודת שרת.
 BROWSER_CURVES = ("secp256r1", "secp384r1")
 
 
 def _browsers_accept(cert) -> None:
-    """‏#2425: ‏``load_cert_chain`` מצליח גם על תעודה שהדפדפן ידחה (ed25519, ‏secp256k1,
-    ‏EKU של clientAuth בלבד). פורט 8081 אינו נופל ל-HTTP, ולכן אחרי האתחול הקונסולה הייתה
-    ננעלת עד שמחזירים את ``.prev`` ממסוף השרת. מתקבלים: ‏RSA, ‏EC על P-256/P-384, ו-EKU
-    שכולל serverAuth (‏Apple דורשת את ההרחבה עצמה — support.apple.com/103769)."""
+    """#2425: ``load_cert_chain`` מצליח גם על תעודה שהדפדפן ידחה (ed25519, secp256k1,
+    EKU של clientAuth בלבד). פורט 8081 אינו נופל ל-HTTP, ולכן אחרי האתחול הקונסולה הייתה
+    ננעלת עד שמחזירים את ``.prev`` ממסוף השרת. מתקבלים: RSA, EC על P-256/P-384, ו-EKU
+    שכולל serverAuth (Apple דורשת את ההרחבה עצמה — support.apple.com/103769)."""
     from cryptography import x509
     from cryptography.hazmat.primitives.asymmetric import ec, rsa
     from cryptography.x509.oid import ExtendedKeyUsageOID
@@ -375,7 +380,7 @@ def _browsers_accept(cert) -> None:
     except x509.ExtensionNotFound:
         usages = ()
     if ExtendedKeyUsageOID.SERVER_AUTH not in usages:
-        raise UploadRefused("לתעודה אין Extended Key Usage של serverAuth (‏TLS Web Server "
+        raise UploadRefused("לתעודה אין Extended Key Usage של serverAuth (\u200fTLS Web Server "
                             "Authentication) — הדפדפן ידחה אותה והקונסולה הייתה ננעלת אחרי האתחול")
 
 
@@ -383,14 +388,14 @@ def validate_upload(cert_pem: bytes, key_pem: bytes, now=None) -> dict:
     """בודק זוג שהועלה: PEM, מפתח לא מוצפן, תואם, ובתוקף **עכשיו**.
 
     מחזיר את ``cert_details`` של התעודה; כל כשל הוא ``UploadRefused``
-    בשמו. ‏SAN שאינו כולל את שם המארח **אינו** סיבת דחייה — תעודה של
-    ‏``imagesrv.college.ac.il`` היא בדיוק מה שמעלים כדי לגשת בשם — אלא
+    בשמו. SAN שאינו כולל את שם המארח **אינו** סיבת דחייה — תעודה של
+    ``imagesrv.college.ac.il`` היא בדיוק מה שמעלים כדי לגשת בשם — אלא
     אזהרה שהלשונית מציגה (``covers_hostname``)."""
     import datetime
     from cryptography.hazmat.primitives import serialization
     if len(cert_pem) > MAX_PEM_BYTES or len(key_pem) > MAX_PEM_BYTES:
         raise UploadRefused("קובץ גדול מ-64KB — זו אינה תעודה או מפתח PEM")
-    # ‏#2425: ‏PEM שמכיל גם את המפתח הודבק בשדה התעודה — הפענוח מדלג על הבלוק, והמפתח
+    # #2425: PEM שמכיל גם את המפתח הודבק בשדה התעודה — הפענוח מדלג על הבלוק, והמפתח
     # היה נכתב לקובץ התעודה, שאינו מוגן כמו קובץ המפתח.
     if b"PRIVATE KEY-----" in cert_pem:
         raise UploadRefused("בשדה התעודה יש מפתח פרטי — מדביקים בו רק את התעודה "
@@ -425,7 +430,7 @@ def validate_upload(cert_pem: bytes, key_pem: bytes, now=None) -> dict:
 
 def install_upload(data_dir, cert_pem: bytes, key_pem: bytes) -> dict:
     """מאמת, טוען ב-``ssl`` כמו uvicorn, ורק אז מחליף — הזוג הקודם נשמר
-    כ-``.prev``. ‏``UploadRefused`` = שום קובץ לא השתנה."""
+    כ-``.prev``. ``UploadRefused`` = שום קובץ לא השתנה."""
     info = validate_upload(cert_pem, key_pem)
     directory = Path(data_dir) / CONSOLE_TLS_DIRNAME
     error = _ssl_loads(cert_pem, key_pem, directory)
@@ -439,9 +444,9 @@ def install_upload(data_dir, cert_pem: bytes, key_pem: bytes) -> dict:
                               key_path.read_text(encoding="utf-8"))
     # כל קובץ מוחלף אטומית; בין שתי ההחלפות הזוג אינו תואם, וזה החלון היחיד.
     write_credential_0600(key_path, key_pem.decode())
-    write_atomic(cert_path, cert_pem, mode=0o600)   # ‏#2425: מה שהמפעיל הדביק, לא קריא לכל
+    write_atomic(cert_path, cert_pem, mode=0o600)   # #2425: מה שהמפעיל הדביק, לא קריא לכל
     (directory / GENERATED_MARKER).unlink(missing_ok=True)
-    write_atomic(directory / UPLOADED_MARKER,   # ‏#1380: לא מועמדת למיגרציה גם אם ה-CN שלנו
+    write_atomic(directory / UPLOADED_MARKER,   # #1380: לא מועמדת למיגרציה גם אם ה-CN שלנו
                  fingerprint_sha256(cert_pem) + "\n", encoding="ascii")
     return info
 

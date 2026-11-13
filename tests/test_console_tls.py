@@ -1,18 +1,18 @@
-"""‏#703 (tracer 5): הקונסולה (8081) מוגשת ב-HTTPS עם תעודה חתומה-עצמית.
+"""#703 (tracer 5): הקונסולה (8081) מוגשת ב-HTTPS עם תעודה חתומה-עצמית.
 
 מה שנבדק כאן, כהתנהגות:
-- הפעלה ראשונה עם ‎--console-host‏ שאינו loopback **יוצרת** תעודה+מפתח
+- הפעלה ראשונה עם --console-host שאינו loopback **יוצרת** תעודה+מפתח
   ב-``<data_dir>/console-tls/`` — המפתח 0600, ה-SAN הוא כרטיס הניהול
   ושם המארח — והפעלה שנייה **טוענת את אותה תעודה** (אותה טביעת אצבע).
-- ‏``--console-tls off`` מתקבל רק על loopback; על כרטיס ניהול — סירוב
+- ``--console-tls off`` מתקבל רק על loopback; על כרטיס ניהול — סירוב
   בשם שני הדגלים, לא נפילה שקטה ל-HTTP.
-- ‏``main`` מוליך את התעודה **למאזיני הקונסולה בלבד** (כולל המאזין
+- ``main`` מוליך את התעודה **למאזיני הקונסולה בלבד** (כולל המאזין
   הכפול על 127.0.0.1, #904) — לא לסוכן (8080).
 - עוגיית ההתחברות נושאת ``Secure`` תחת TLS, ולא בלעדיו (שומר מפני
   תיקון-יתר שהיה שובר את הרצת הפיתוח על http://127.0.0.1).
-- ‏``/me`` מדווח ``tls`` עם טביעת האצבע (לשורת הסטטוס), ומסך הפורטים
-  קורא ל-8081 ‏HTTPS.
-- **לחיצת-יד אמיתית**: ‏uvicorn עם התעודה שנוצרה, לקוח stdlib שסומך רק
+- ``/me`` מדווח ``tls`` עם טביעת האצבע (לשורת הסטטוס), ומסך הפורטים
+  קורא ל-8081 HTTPS.
+- **לחיצת-יד אמיתית**: uvicorn עם התעודה שנוצרה, לקוח stdlib שסומך רק
   עליה — 200. זו הראיה ש-``ssl_certfile``/``ssl_keyfile`` של stdlib
   מקבלים את המפתח (EC P-256, PKCS8) שהמחולל המשותף מפיק.
 """
@@ -88,7 +88,7 @@ def test_first_start_creates_cert_and_0600_key_with_the_management_sans(tmp_path
 @pytest.mark.parametrize("ahead_hours", [3, 14])
 def test_a_cert_issued_while_the_rtc_ran_ahead_is_valid_once_the_clock_is_corrected(
         tmp_path: Path, ahead_hours: int):
-    """‏#2139 (rc3, Hyper-V 24/10): שעון חומרה בשעון מקומי — 3 שעות קדימה
+    """#2139 (rc3, Hyper-V 24/10): שעון חומרה בשעון מקומי — 3 שעות קדימה
     עד ש-chrony מתקן. תעודה שנוצרה בחלון הזה נבדקת בשעון המתוקן (וב-UTC+14,
     ההיסט הגדול ביותר), כמו שדפדפן בודק אותה: היא כבר בתוקף, ולא בעוד שעות."""
     import datetime
@@ -165,7 +165,7 @@ def test_main_refuses_tls_off_on_a_management_nic(tmp_path: Path, monkeypatch, c
                  "--console-host", "10.0.0.1", "--console-tls", "off")
     assert exc.value.code == 2
     err = capsys.readouterr().err
-    # ‏"unrecognized arguments: --console-tls" של argparse גם יוצא 2 ומזכיר
+    # "unrecognized arguments: --console-tls" של argparse גם יוצא 2 ומזכיר
     # את הדגל — הראיה שהסירוב הוא **שלנו** היא ההסבר על loopback.
     assert "--console-tls" in err and "loopback" in err, err
 
@@ -175,7 +175,7 @@ def test_main_refuses_tls_off_on_a_management_nic(tmp_path: Path, monkeypatch, c
 def test_main_gives_the_cert_to_every_console_listener_and_nothing_else(
         tmp_path: Path, monkeypatch):
     """ברירת המחדל היא TLS דלוק. שני מאזיני הקונסולה (כרטיס הניהול +
-    ‏127.0.0.1, ‏#904) מקבלים את אותה תעודה מ-``data_dir``; הסוכן והקיוסק
+    127.0.0.1, #904) מקבלים את אותה תעודה מ-``data_dir``; הסוכן והקיוסק
     אינם משתנים (הסוכן הוא http בהכרח — GRUB בלי TLS)."""
     configs = run_main(tmp_path, monkeypatch, "--console-host", "10.0.0.1")
 
@@ -257,7 +257,7 @@ def test_login_cookie_is_secure_under_tls(tmp_path: Path, images_root: Path, clo
 
 
 def test_login_cookie_is_not_secure_without_tls(tmp_path: Path, images_root: Path, clock):
-    """‏--console-tls off על 127.0.0.1: עוגיית Secure על http הייתה נזרקת
+    """--console-tls off על 127.0.0.1: עוגיית Secure על http הייתה נזרקת
     על ידי הדפדפן, והמפתח לא היה מצליח להיכנס לעולם."""
     _client, login = _console(tmp_path, images_root, clock, None)
     assert "secure" not in login.headers["set-cookie"].lower()
@@ -294,7 +294,7 @@ def _free_port() -> int:
 
 
 def test_uvicorn_serves_https_with_the_generated_cert(tmp_path: Path):
-    """‏stdlib ssl בצד השרת (uvicorn) ובצד הלקוח, שסומך **רק** על התעודה
+    """stdlib ssl בצד השרת (uvicorn) ובצד הלקוח, שסומך **רק** על התעודה
     שנוצרה ומאמת את שם המארח מול ה-IP SAN — 200. לקוח בלי התעודה נכשל
     בלחיצת-היד (השומר מפני "עבר כי לא אימת")."""
     uvicorn = pytest.importorskip("uvicorn")
@@ -330,7 +330,7 @@ def test_uvicorn_serves_https_with_the_generated_cert(tmp_path: Path):
                                    context=untrusted)
         assert "CERTIFICATE_VERIFY_FAILED" in str(exc.value)
 
-        # ‏HTTP רגיל על מאזין ה-TLS אינו מקבל דף — fail-closed (uvicorn
+        # HTTP רגיל על מאזין ה-TLS אינו מקבל דף — fail-closed (uvicorn
         # סוגר/מחזיר שגיאה; העיקר: לא 200 ולא הפניה).
         with pytest.raises(Exception):
             urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5)

@@ -1,10 +1,10 @@
-"""לשונית ההגדרות: תעודת ה-TLS של הקונסולה ושם המארח (‏#153).
+"""לשונית ההגדרות: תעודת ה-TLS של הקונסולה ושם המארח (#153).
 
-שני הכרטיסים נוגעים במכונה — קבצי התעודה, ‏``hostnamectl``, ‏``systemctl
+שני הכרטיסים נוגעים במכונה — קבצי התעודה, ``hostnamectl``, ``systemctl
 restart`` — ולכן, כמו ה-DHCP, כל מגע עובר דרך hooks שבדיקות מזריקות:
 
 - ``hostname()`` — השם שהמכונה מדווחת עכשיו (הקריאה החוזרת).
-- ``set_hostname(name)`` — ‏``None`` בהצלחה, אחרת הודעת שגיאה.
+- ``set_hostname(name)`` — ``None`` בהצלחה, אחרת הודעת שגיאה.
 - ``restart_server()`` — מתזמן ``systemctl restart`` **אחרי** שהתשובה
   יצאה (``deploy_net.restart_server_later``).
 
@@ -20,6 +20,7 @@ restart`` — ולכן, כמו ה-DHCP, כל מגע עובר דרך hooks שבד
 
 from __future__ import annotations
 
+import logging
 import socket
 import subprocess
 from typing import Callable
@@ -33,12 +34,14 @@ from server.agent.api import ServerContext
 from server.db import journal
 from server.update import restart_blocker
 
+log = logging.getLogger("imagesrv.console_hostcfg")
+
 Hooks = dict[str, Callable]
 
 
 def hostname_refusal(name: str) -> str | None:
     """למה ``name`` (כבר באותיות קטנות) אינו שם שרת, או ``None``.
-    ‏#1997 (נדב, 22/10): שם השרת הוא שם מחשב — אותו כלל כמו מחשב בנייה ושרת
+    #1997 (נדב, 22/10): שם השרת הוא שם מחשב — אותו כלל כמו מחשב בנייה ושרת
     משנה (`hostname_rule`): אותיות אנגליות, ספרות ומקף, עד 15, בלי נקודות.
     עד כאן RFC 1123 (עד 253, עם נקודות) — ושם כזה לא נכנס לשורת שרת המשנה
     ולא ל-NetBIOS."""
@@ -51,9 +54,13 @@ def _hostnamectl(name: str) -> str | None:
                               capture_output=True, text=True, timeout=20,
                               stdin=subprocess.DEVNULL)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return f"hostnamectl לא רץ: {exc}"
+        # #2543: הטקסט של מערכת ההפעלה ושל hostnamectl ליומן השרת; ללקוח — משפט שלנו.
+        log.warning("hostnamectl set-hostname could not run: %s", exc)
+        return "hostnamectl לא רץ — הפרטים ביומן השרת"
     if done.returncode != 0:
-        return f"hostnamectl החזיר {done.returncode}: {(done.stderr or done.stdout).strip()}"
+        log.warning("hostnamectl set-hostname rc=%s: %s", done.returncode,
+                    (done.stderr or done.stdout).strip()[:300])
+        return f"hostnamectl החזיר {done.returncode} — הפרטים ביומן השרת"
     return None
 
 
@@ -67,14 +74,14 @@ def default_hooks() -> Hooks:
 
 def create_hostcfg_router(ctx: ServerContext, data_dir, running_tls,
                           hooks: Hooks | None = None, busy_source=None) -> APIRouter:
-    """‏``running_tls`` — ה-``ConsoleTLS`` שהתהליך הזה עלה איתו (``None`` =
+    """``running_tls`` — ה-``ConsoleTLS`` שהתהליך הזה עלה איתו (``None`` =
     הקונסולה בלי TLS). ההשוואה מולו היא מה שאומר "ממתין לאתחול"."""
     router = APIRouter(prefix="/api/console")
     _, admin_only = auth.dependencies(ctx.conn)
     hooks = {**default_hooks(), **(hooks or {})}
 
     def _not_during_round() -> None:
-        blocker = restart_blocker(busy_source or ctx)   # ‏#1891
+        blocker = restart_blocker(busy_source or ctx)   # #1891
         if blocker:
             raise HTTPException(409, f"{blocker} — השינוי מחייב אתחול של "
                                      "השרת, ולכן ממתין שזה יסתיים")

@@ -6,9 +6,9 @@
 כשהוא סוטה מהם. השרת **אינו** ממציא כלים ואינו משנה אותם.
 
 הבחירה — שתי רשימות id נפרדות, **בנייה/שיכפול** ו-**תלמיד** (תלמיד = v2,
-אבל הבחירה נשמרת כבר עכשיו) — נשמרת בשני מקומות: ‏`settings` (‏
+אבל הבחירה נשמרת כבר עכשיו) — נשמרת בשני מקומות: `settings` (
 `tools.selection`, JSON) ו-`<data_dir>/tools-selection.json`. הקובץ הוא מה
-שבניית ה-initrd תקרא בשלב 2 (‏`build_initramfs.sh --tools-selection`), ולכן
+שבניית ה-initrd תקרא בשלב 2 (`build_initramfs.sh --tools-selection`), ולכן
 הוא נכתב **בכל שמירה**, לא רק ב-DB. id שאינו בקטלוג נדחה ב-422 בשמו —
 לא נזרק בשקט (עיקרון 5).
 
@@ -59,8 +59,8 @@ def read_selection(conn) -> dict[str, list[str]]:
 
 
 def summarize(tools: list[dict], ids: list[str]) -> dict:
-    """ספירה וגודל משוער של הכלים המסומנים. ‏`size_kb_known` סוכם רק מה
-    שנמדד ואינו ארוז; ‏`size_unknown` סופר את המסומנים בלי מספר — כדי
+    """ספירה וגודל משוער של הכלים המסומנים. `size_kb_known` סוכם רק מה
+    שנמדד ואינו ארוז; `size_unknown` סופר את המסומנים בלי מספר — כדי
     שהדף יגיד "+K לא נמדדו" ולא יציג סכום חלקי כמלא (עיקרון 5)."""
     by_id = {t["id"]: t for t in tools}
     chosen = [by_id[i] for i in ids if i in by_id]
@@ -71,13 +71,13 @@ def summarize(tools: list[dict], ids: list[str]) -> dict:
 
 def write_selection_file(data_dir: Path, selection: dict[str, list[str]]) -> Path:
     path = Path(data_dir) / SELECTION_FILE
-    # ‏#1828: אטומי — קובץ בחירה חתוך אינו "שום דבר לא נבחר".
+    # #1828: אטומי — קובץ בחירה חתוך אינו "שום דבר לא נבחר".
     write_atomic(path, json.dumps({"schema": 1, **selection}, ensure_ascii=False, indent=1) + "\n")
     return path
 
 
 def _edition_gate() -> None:
-    """‏v1 בלי ארגז הכלים: הדף אינו קיים, ולכן 404 — לכל קורא, לפני auth."""
+    """v1 בלי ארגז הכלים: הדף אינו קיים, ולכן 404 — לכל קורא, לפני auth."""
     if not capabilities.tools():
         raise HTTPException(404, "ארגז הכלים אינו במהדורה זו")
 

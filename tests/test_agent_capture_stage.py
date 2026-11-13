@@ -1,15 +1,15 @@
-"""‏#980 §4, §6 — הצד של הסוכן: שלב הקליטה בדיווח, ומצב ה-NTFS בבדיקת המכונה.
+"""#980 §4, §6 — הצד של הסוכן: שלב הקליטה בדיווח, ומצב ה-NTFS בבדיקת המכונה.
 
-§4: ‏`capture_stage` כותב את השלב ל-`$RUN_DIR/stage`, ו-`build_progress` נושא
-אותו (‏`"stage"`) **רק בדיווח של משימה** — סבב כיתה/חדר אינו קליטה. קובץ חסר
+§4: `capture_stage` כותב את השלב ל-`$RUN_DIR/stage`, ו-`build_progress` נושא
+אותו (`"stage"`) **רק בדיווח של משימה** — סבב כיתה/חדר אינו קליטה. קובץ חסר
 = השדה חסר (השרת משאיר את השלב הקודם), לא "שלב ראשון".
 
-§6: ‏`probe_ntfs` (ב-`hibernation.sh`, ליד שער המהובר של הקליטה) — אותו
-‏`ntfs-3g.probe --readwrite`, קריאה בלבד, לכל מחיצת NTFS ש-blkid רואה:
-‏`clean` (0) / ‏`hibernated` (14) / ‏`dirty` (15) / ‏`error` עם ה-rc. כלי שאינו
-ארוז = ‏`null`, לא רשימה ריקה שאומרת "בדקנו" (עיקרון 5).
+§6: `probe_ntfs` (ב-`hibernation.sh`, ליד שער המהובר של הקליטה) — אותו
+`ntfs-3g.probe --readwrite`, קריאה בלבד, לכל מחיצת NTFS ש-blkid רואה:
+`clean` (0) / `hibernated` (14) / `dirty` (15) / `error` עם ה-rc. כלי שאינו
+ארוז = `null`, לא רשימה ריקה שאומרת "בדקנו" (עיקרון 5).
 
-רץ תחת bash (Git Bash בווינדוס), כמו `test_agent_idle.py` — ‏busybox אינו
+רץ תחת bash (Git Bash בווינדוס), כמו `test_agent_idle.py` — busybox אינו
 מותקן על תחנת הפיתוח, והמסלולים כאן אינם תלויים ב-awk של busybox.
 """
 
@@ -132,7 +132,7 @@ def test_a_failed_blkid_is_an_error_not_an_empty_list(tmp_path):
 
 
 def test_the_probe_carries_ntfs_and_stays_null_without_hibernation_sh(tmp_path):
-    """‏`probe_json` נושא `ntfs`; ‏probe.sh לבדו (כמו בטסטים שלו) = ‏null."""
+    """`probe_json` נושא `ntfs`; probe.sh לבדו (כמו בטסטים שלו) = null."""
     out = sh(f'export SYSROOT={posix(tmp_path)!r}; . {posix(LIB)}/common.sh; . {posix(LIB)}/probe.sh; . {posix(LIB)}/probe_bg.sh; '
              r'printf "{\"x\":0%s}" "$(probe_json)"')
     assert json.loads(out)["probe"]["ntfs"] is None

@@ -1,7 +1,7 @@
-"""‏#1828 — קובץ ה-dnsmasq נבדק (‏--test) לפני ה-restart, ובכשל הקודם חוזר.
+"""#1828 — קובץ ה-dnsmasq נבדק (--test) לפני ה-restart, ובכשל הקודם חוזר.
 
-‏``subprocess.run`` של ``dhcp_host`` מוחלף ברשם: הבדיקות לעולם לא מריצות
-‏dnsmasq או systemctl אמיתיים. כל תרחיש נבנה מתשובות מוזרקות.
+``subprocess.run`` של ``dhcp_host`` מוחלף ברשם: הבדיקות לעולם לא מריצות
+dnsmasq או systemctl אמיתיים. כל תרחיש נבנה מתשובות מוזרקות.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ class _Done:
 
 @pytest.fixture()
 def machine(monkeypatch):
-    """‏`script[argv0]` — רשימת תשובות לפי הסדר (rc או חריגה); הקריאות נרשמות."""
+    """`script[argv0]` — רשימת תשובות לפי הסדר (rc או חריגה); הקריאות נרשמות."""
     calls: list[list[str]] = []
     script: dict[str, list] = {"dnsmasq": [], "systemctl": []}
 

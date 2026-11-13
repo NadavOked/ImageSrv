@@ -1,5 +1,5 @@
-"""‏#968 — פערי ה-API של הסקירה הכללית: ‏uptime ו-deploy_ip ב-`/me`,
-‏severity בכל שורת `/journal`, ו-`folder` ב-`/tasks`.
+"""#968 — פערי ה-API של הסקירה הכללית: uptime ו-deploy_ip ב-`/me`,
+severity בכל שורת `/journal`, ו-`folder` ב-`/tasks`.
 
 עיקרון 5 בכל שדה: מה שלא נמדד מוחזר ``null`` ומוצג בשם — לא 0, לא
 127.0.0.1, ולא "info" שנראה כמו סיווג.
@@ -58,8 +58,8 @@ def test_deploy_ip_is_the_host_of_server_base():
 
 
 def test_deploy_ip_is_null_when_the_deploy_network_is_not_configured():
-    """‏#1088: בלי רשת הפצה ‏server_base הוא loopback — וזו לא כתובת שתחנה
-    רואה. ‏null, לא "127.0.0.1"."""
+    """#1088: בלי רשת הפצה server_base הוא loopback — וזו לא כתובת שתחנה
+    רואה. null, לא "127.0.0.1"."""
     none = deploy_net.DeployState("none", None, None)
     assert deploy_net.deploy_ip("http://127.0.0.1:8080", none) is None
 
@@ -101,7 +101,7 @@ def test_every_severity_entry_is_a_known_event():
 
 @pytest.fixture()
 def gap_server(tmp_path: Path, images_root: Path, clock):
-    """שרת עם uptime מוזרק (‏health_hooks) ורשת הפצה מ-CLI; ‏``build``
+    """שרת עם uptime מוזרק (health_hooks) ורשת הפצה מ-CLI; ``build``
     בונה גם שרת שרשת ההפצה שלו טרם הוגדרה."""
     if TestClient is None:
         pytest.skip("fastapi is required")
@@ -155,9 +155,9 @@ def test_me_deploy_ip_is_null_when_the_deploy_network_is_not_configured(gap_serv
 
 
 def test_me_without_injection_returns_null_not_a_guess(server):
-    """‏create_app בלי ``deploy`` ובלי hook — ‏deploy_ip מ-server_base (אין
-    הקשר שאומר "לא הוגדרה"), ‏uptime מברירת המחדל (‏/proc/uptime: מספר על
-    לינוקס, ‏null בתחנת פיתוח) — לעולם לא ערך מומצא."""
+    """create_app בלי ``deploy`` ובלי hook — deploy_ip מ-server_base (אין
+    הקשר שאומר "לא הוגדרה"), uptime מברירת המחדל (/proc/uptime: מספר על
+    לינוקס, null בתחנת פיתוח) — לעולם לא ערך מומצא."""
     me = server["admin"].get("/api/console/me").json()
     assert me["deploy_ip"] == "10.44.12.10"
     assert me["uptime_seconds"] is None or isinstance(me["uptime_seconds"], int)
@@ -176,7 +176,7 @@ def test_journal_rows_carry_the_server_side_severity(server):
     assert rows["machine_add"]["severity"] == "info"
     for row in rows.values():
         assert row["severity"] in ("info", "ok", "warn", "err")
-        # ‏#968: "רק להוסיף שדה" — המבנה הקיים לא זז. ‏#1008 הוסיף ``id``, ‏#1296 את היעד.
+        # #968: "רק להוסיף שדה" — המבנה הקיים לא זז. #1008 הוסיף ``id``, #1296 את היעד.
         assert set(row) == {"id", "ts", "user", "event", "label", "text", "severity",
                             "machine", "round_id", "class_id"}
 
@@ -199,8 +199,8 @@ def test_tasks_carry_the_capture_folder(server):
 
 
 def test_tasks_folder_is_empty_string_for_the_library_root(server):
-    """קליטה ישנה בלי תיקייה = שורש הספרייה — ‏"" מפורש, לא ‏null ולא
-    "לא ידוע". ‏#1251: קליטה חדשה בלי תיקייה נדחית (‏test_capture.py), ולכן
+    """קליטה ישנה בלי תיקייה = שורש הספרייה — "" מפורש, לא null ולא
+    "לא ידוע". #1251: קליטה חדשה בלי תיקייה נדחית (test_capture.py), ולכן
     השורה הישנה נכתבת ישירות ל-DB — כמו משימה שנוצרה לפני ההכרעה."""
     admin = server["admin"]
     admin.post("/api/console/groups",

@@ -1,21 +1,21 @@
-"""‏#2410 — תקרת הגוף חלה על **כל** נתיב כתיבה בפורט הסוכן (‎:8080).
+"""#2410 — תקרת הגוף חלה על **כל** נתיב כתיבה בפורט הסוכן (:8080).
 
 הקומיט הראשון של #2410 חסם את 9 נתיבי `server/agent/api.py`. אבל באפליקציית
-הסוכן יושבים גם הקיוסק של מחשב הבנייה (‏`/api/console/{login,sessions,room…}` —
-אותם route-ים של הקונסולה), ‏`station.py`, ‏`cloner_round.py` והמניפסטים של
-הקליטה וההפצה הישירה — וכל אחד מהם קרא את הגוף כולו לזיכרון. ‏`body.BodyCap`
+הסוכן יושבים גם הקיוסק של מחשב הבנייה (`/api/console/{login,sessions,room…}` —
+אותם route-ים של הקונסולה), `station.py`, `cloner_round.py` והמניפסטים של
+הקליטה וההפצה הישירה — וכל אחד מהם קרא את הגוף כולו לזיכרון. `body.BodyCap`
 יושב לפני הניתוב, והטסט כאן עובר על **כל** נתיב שרשום ב-`create_agent_app`:
 נתיב חדש שיתווסף בלי תקרה נופל כאן בשמו, בלי שמישהו יזכור להוסיף לו טסט.
 
-החריג היחיד הוא העלאת נתוני האימג' (‏`PUT /api/v1/capture/{task_id}/files/{filename}`,
-‏`body.STREAM_ROUTES`) — והטסט בודק במפורש שקליטה אמיתית, עם קובץ גדול
+החריג היחיד הוא העלאת נתוני האימג' (`PUT /api/v1/capture/{task_id}/files/{filename}`,
+`body.STREAM_ROUTES`) — והטסט בודק במפורש שקליטה אמיתית, עם קובץ גדול
 מהתקרה ועם המניפסט שלה, עוברת.
 
-ובאותו ענף, ‏#2411: פירור אתחול (‏`/boot/step?mac=`) נרשם רק כשה-MAC תואם
+ובאותו ענף, #2411: פירור אתחול (`/boot/step?mac=`) נרשם רק כשה-MAC תואם
 את החכירה — כמו `/boot/menu`.
 
 בקרה שלילית: בלי `BodyCap` ב-`create_agent_app`, ועם `station.py`,
-‏`cloner_round.py` ו-`capture.py` של a000bec7 — כל נתיבי הכתיבה שאינם ב-`api.py`
+`cloner_round.py` ו-`capture.py` של a000bec7 — כל נתיבי הכתיבה שאינם ב-`api.py`
 מחזירים כאן משהו אחר מ-413; ובלי `_record_verified` ב-`app.py` הזר רושם פירור.
 """
 
@@ -46,8 +46,8 @@ WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 def _walk(routes, prefix: str = ""):
-    """‏(מתודות, נתיב) של כל route — גם ב-FastAPI שמחזיק ראוטרים מוכללים בעצלות
-    (‏`_IncludedRouter`, ‏0.141) וגם בשטוח (‏0.115.11, גרסת הייצור)."""
+    """(מתודות, נתיב) של כל route — גם ב-FastAPI שמחזיק ראוטרים מוכללים בעצלות
+    (`_IncludedRouter`, 0.141) וגם בשטוח (0.115.11, גרסת הייצור)."""
     for route in routes:
         if isinstance(route, APIRoute):
             yield route.methods, prefix + route.path
@@ -108,7 +108,7 @@ def test_every_write_route_on_the_agent_port_is_capped(agent_env):
 
 
 def test_a_chunked_body_over_the_cap_is_refused_too(agent_env):
-    """בלי `Content-Length` — המונה בזמן הקריאה הוא השער (‏`/api/console/room`
+    """בלי `Content-Length` — המונה בזמן הקריאה הוא השער (`/api/console/room`
     קורא `request.json()` בעצמו, ולכן רק `BodyCap` עומד בדרכו)."""
     raw = b'{"pad": "' + b"x" * OVER_CAP + b'"}'
 
@@ -151,7 +151,7 @@ def test_a_real_capture_with_a_file_over_the_cap_lands_in_the_library(agent_env,
     assert raw["partitions"][1]["sha256"] == sha(big)
 
 
-# --- #2411: ‏/boot/step ------------------------------------------------------
+# --- #2411: /boot/step ------------------------------------------------------
 
 
 def _step(server, client: str, mac: str) -> str | None:

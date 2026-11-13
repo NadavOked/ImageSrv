@@ -303,3 +303,61 @@ def test_setup_refuses_what_the_console_would_refuse(tmp_path):
                          encoding="utf-8", stdin=subprocess.DEVNULL, timeout=60)
     assert got.returncode != 0 and "כתובת שרת זמן לא תקינה" in got.stderr
     assert get_setting(connect(tmp_path / "imagesrv.db"), "ntp_servers") is None
+
+
+# --- #2400 (#2144 item 3): the synced time into the hardware clock, as UTC ------------------------
+
+@LINUX_ONLY
+def test_a_synced_source_steps_the_clock_and_writes_the_hardware_clock_utc(tmp_path):
+    """chronyd -Q measures only; a source that answered then steps the clock once (chronyd -q) and
+    hwclock --systohc --utc writes it -- a server that boots with no network starts from it."""
+    order = tmp_path / "order"
+    note = f"printf '%s\\n' \"$*\" >> '{order.as_posix()}'"
+    box, calls = _clock_box(tmp_path, f"{note}; echo 'System clock wrong by 0.003127 seconds (ignored)' >&2; exit 0")
+    shim = tmp_path / "bin" / "chroot"   # every other chroot call: into the same order file
+    shim.write_text(shim.read_text().replace("esac\n", f"esac\n{note}\n", 1), newline="\n")
+    got = _run(box, _with_ntp(_answers(tmp_path / "answers"), "10.44.0.250"))
+    assert got.returncode == 0, got.stderr[-3000:]
+    log = order.read_text(encoding="utf-8").splitlines()
+    t = box["target"].as_posix()
+    measure = log.index(f"{t} timeout 30 chronyd -Q -t 20 server 10.44.0.250 iburst")
+    step = log.index(f"{t} timeout 30 chronyd -q -t 20 server 10.44.0.250 iburst")
+    rtc = log.index(f"{t} hwclock --systohc --utc")
+    assert measure < step < rtc
+    assert "installer: clock stepped and written to the hardware clock (UTC)" in got.stderr
+
+
+@LINUX_ONLY
+@pytest.mark.parametrize("chronyd", ["echo 'Timeout reached' >&2; exit 1", "exit 1"])
+def test_no_answer_writes_no_hardware_clock(tmp_path, chronyd):
+    seen = tmp_path / "chronyd-calls"
+    box, calls = _clock_box(tmp_path, f"printf '%s\\n' \"$*\" >> '{seen.as_posix()}'; {chronyd}")
+    got = _run(box, _answers(tmp_path / "answers"))
+    assert got.returncode == 0, got.stderr[-3000:]
+    assert "hwclock" not in calls.read_text(encoding="utf-8")
+    assert [line for line in seen.read_text(encoding="utf-8").splitlines() if "chronyd -q" in line] == []
+    assert any("chronyd -Q" in line for line in seen.read_text(encoding="utf-8").splitlines())
+
+
+@LINUX_ONLY
+def test_a_hardware_clock_that_cannot_be_written_is_said_and_the_install_completes(tmp_path):
+    """No /dev/rtc (some VMs) is a log line by name, not a failed installation, and the
+    check's own verdict stays what chronyd -Q measured."""
+    box, _ = _clock_box(tmp_path, "echo 'System clock wrong by 0.003127 seconds (ignored)' >&2; exit 0")
+    shim = tmp_path / "bin" / "chroot"
+    head, rest = shim.read_text().split("\n", 1)
+    shim.write_text(f'{head}\ncase "$*" in *hwclock*) echo "hwclock: Cannot access the Hardware Clock" >&2; exit 1 ;; esac\n'
+                    f'{rest}', newline="\n")
+    got = _run(box, _with_ntp(_answers(tmp_path / "answers"), "10.44.0.250"))
+    assert got.returncode == 0, got.stderr[-3000:]
+    assert box["state"].read_text(encoding="utf-8").splitlines()[0] == "state=done"
+    assert "installer: [clock-rtc-failed] hwclock=1: hwclock: Cannot access the Hardware Clock" in got.stderr
+    assert "written to the hardware clock" not in got.stderr
+    assert (Path(box["state"]).parent / "clock-check").read_text().startswith("clock=synced\n")
+
+
+def test_hwclock_is_in_the_target_and_the_pool():
+    from test_installer_packages import installer_pkgs
+    assert "util-linux-extra" in installer_pkgs()
+    pool = REPO / "tools" / "iso" / "packages.txt"
+    assert "util-linux-extra" in {line.split("#", 1)[0].strip() for line in pool.read_text(encoding="utf-8").splitlines()}

@@ -1,13 +1,13 @@
 """#2478 + #2498 — two writes an attacker could inflate, now capped.
 
-* **#2478** — ‏`login_account_failures` (#2443) took a row per failed login with no
+* **#2478** — `login_account_failures` (#2443) took a row per failed login with no
   cap on the row count: a random username per attempt added a row per request
   until the 30-minute window ran out. Same shape as #2459 (`login_attempts`):
   per (name, surface) only the last `ACCOUNT_LIMIT` rows are kept -- all that
   `_check_account` reads -- and the whole table holds at most `MAX_ACCOUNT_ROWS`;
   above it the names with the fewest rows go first, oldest first, so a locked
   account goes last. The account decision itself does not change.
-* **#2498** — ‏`GET /boot/menu?mac=` wrote an `unknown_mac` line on every request,
+* **#2498** — `GET /boot/menu?mac=` wrote an `unknown_mac` line on every request,
   with no identity gate and no throttle; a random MAC per request grew the
   journal (kept 365 days) linearly. Now: one line per MAC per window with a
   count (as the hello, #2487 -- same key), no line for a requester whose lease
@@ -204,7 +204,10 @@ def test_the_flood_count_comes_in_the_next_window(identity_server, monkeypatch):
     now[0] += agent_api.IDENTITY_JOURNAL_WINDOW_S + 1
     _menus(identity_server["stranger"], ["02:77:00:00:00:01"])
     lines = [d for _u, d in journal_details(identity_server, "journal_flood")]
-    assert any("+10 more different not journaled" in d for d in lines), lines
+    # #2489: all of them come from one stranger, so its own cap (JOURNAL_KEYS_PER_SOURCE)
+    # binds before the event's: every one past it is counted, not only the 10 past `cap`.
+    counted = cap + 10 - agent_api.JOURNAL_KEYS_PER_SOURCE
+    assert any(f"+{counted} more different not journaled" in d for d in lines), lines
     for line in lines:
         assert he_detail("journal_flood", line) != line, line
 

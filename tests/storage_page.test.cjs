@@ -526,3 +526,17 @@ test('#2460: a restored location whose secret is not in the backup asks for it i
   assert.deepEqual(sent.map(r => [r.url, r.method, r.body]), [['/storage-locations/loc_dddd0004/connect', 'POST', {secret: 'n3w-pass'}]]);
   assert.match(toasts.at(-1), /fs01-images: מחובר/);
 });
+
+test('#2606: CHAP is the login\'s, not the discovery\'s — the wizard says so, and "גלה יעדים" sends no CHAP', async () => {
+  const {run, requests} = setup({...BASE, 'POST /storage-locations/scan': {ok: true, items: [{portal: PORTAL, iqn: IQN}]}});
+  await run('loadStorage()');
+  run(`storageGo('iscsi-a')`);
+  run(`storageField('portal', ${JSON.stringify(PORTAL)}); storageField('chap', true); storageField('chap_user', 'imagesrv'); storageField('chap_secret', 'secretsecret')`);
+  const html = run('storagePage()');
+  assert.match(html, /CHAP — היעד דורש אימות בהתחברות/);
+  assert.match(html, /CHAP חל על ההתחברות ליעד \(ה-session\) בלבד, לא על הגילוי/);
+  await run('storageScan()'); await settle();
+  const body = requests.find(r => r.url === '/storage-locations/scan').body;
+  assert.deepEqual(body, {type: 'iscsi', server: '', portal: PORTAL});
+  assert.doesNotMatch(JSON.stringify(body), /secretsecret|imagesrv/, 'no CHAP detail leaves for the discovery');
+});

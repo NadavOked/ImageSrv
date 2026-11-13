@@ -251,6 +251,7 @@ async function nicsvcSave() {
   toast(`נשמר — ${name} נותן עכשיו: ${wanted.map((k) => NICSVC_NAME[k]).join(" · ") || "אף שירות"}`);
   await nicsvcRefresh();
 }
+nicsvcSave = guarded("nicsvcSave", nicsvcSave);   // ‏#2840: לחיצה כפולה = בקשה אחת
 async function nicsvcRefresh() {
   try { await nicsvcLoad(); } catch (e) { toast("מצב השירותים לא נקרא: " + e.message); }
   if (typeof current !== "undefined" && current === "network" && typeof renderCurrent === "function") renderCurrent();
@@ -374,8 +375,10 @@ async function nicsvcKeep() {
   toast(p ? `השינוי נשמר — ${(p.previous || []).includes("console") && !p.applied.includes("console") ? `הקונסולה כבויה ב-${p.interface}` : `${p.interface} עודכן`}.${nicsvcYou().address ? ` נכנסים מ-${nicsvcYou().address}.` : ""}` : "השינוי נשמר");
   await nicsvcRefresh();
 }
+nicsvcKeep = guarded("nicsvcKeep", nicsvcKeep, { key: "netRollback" });   // ‏#2840: לחיצה כפולה = בקשה אחת
 async function nicsvcUndo() {
   try { await post("/net/services/revert", {}); } catch (e) { toast(e.message); }
   clearInterval(NICSVC_TICK); NICSVC_TICK = null;
   await nicsvcRefresh();
 }
+nicsvcUndo = guarded("nicsvcUndo", nicsvcUndo, { key: "netRollback" });   // ‏#2840: לחיצה כפולה = בקשה אחת

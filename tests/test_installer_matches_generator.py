@@ -56,7 +56,7 @@ def test_the_placeholder_is_actually_present():
 
 
 def test_the_installer_substitutes_both_placeholders():
-    """‏@@GRUB_PORT@@ נוסף אחרי #37. פלייסהולדר שלא מוחלף נשאר כטקסט
+    """@@GRUB_PORT@@ נוסף אחרי #37. פלייסהולדר שלא מוחלף נשאר כטקסט
     בקובץ שה-GRUB קורא, והתחנה פונה לכתובת שאינה כתובת."""
     text = INSTALLER.read_text(encoding="utf-8")
     assert PORT_PLACEHOLDER in embedded_bootstrap()
@@ -105,10 +105,10 @@ def test_the_installer_never_enables_dhcp():
 
 
 def test_the_installer_no_longer_writes_enable_tftp():
-    """‏#1013: enable-tftp/tftp-root עברו לקובץ שהשרת מרנדר (dhcp.render),
+    """#1013: enable-tftp/tftp-root עברו לקובץ שהשרת מרנדר (dhcp.render),
     כי dnsmasq קורא את /etc/dnsmasq.d במצטבר — שורה פעילה בקובץ המתקין
     הייתה הופכת את המתג של 69 בקונסולה ל"כבוי" מזויף. הערה מותרת; שורה
-    פעילה לא. ‏--tftp-root נשאר: הוא נתיב ההעתקה של shim/GRUB ומועבר לשרת."""
+    פעילה לא. --tftp-root נשאר: הוא נתיב ההעתקה של shim/GRUB ומועבר לשרת."""
     text = INSTALLER.read_text(encoding="utf-8")
     assert not re.search(r"^enable-tftp\s*$", text, re.M)
     assert not re.search(r"^tftp-root=", text, re.M)
@@ -116,7 +116,7 @@ def test_the_installer_no_longer_writes_enable_tftp():
 
 
 def test_the_storage_args_environment_is_quoted():
-    """‏STORAGE_ARGS מכיל רווחים (--storage-role X --primary-url Y). ‏Environment=
+    """STORAGE_ARGS מכיל רווחים (--storage-role X --primary-url Y). Environment=
     בלי גרשיים = systemd מפצל למילים וקולט רק ``IMAGESRV_STORAGE_ARGS=--storage-role``
     → כל התקנת secondary קורסת "expected one argument". חייב גרשיים סביב הערך."""
     text = INSTALLER.read_text(encoding="utf-8")

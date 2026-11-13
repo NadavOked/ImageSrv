@@ -3,11 +3,11 @@
 זה הקובץ שסוגר את הלולאה: אותו resolver שעונה ל-hello מוזרק גם ל-endpoint
 של תפריט ה-GRUB (boot/http.py). אין שאילתה שנייה ואין ממשק שני.
 
-‏#731 (tracer 1 של #703): המצב המשותף — ‏DB, ספרייה, שולח, משימות-רקע
+#731 (tracer 1 של #703): המצב המשותף — DB, ספרייה, שולח, משימות-רקע
 והאתחול החד-פעמי — יושב ב-`ServerRuntime` **אחד** ש-`create_runtime`
 בונה פעם אחת. שתי האפליקציות (`create_agent_app` לסוכן, `create_console_app`
 לקונסולה) נבנות מאותו runtime, ולכן אין שני DB, אין שני sweep ואין שני
-תהליכי-רקע. ‏`create_app` נשאר כמעטפת דקה שמרכיבה את שתיהן על אפליקציה
+תהליכי-רקע. `create_app` נשאר כמעטפת דקה שמרכיבה את שתיהן על אפליקציה
 אחת — התנהגות זהה למה שהיה, בשביל הבדיקות וה-e2e.
 """
 
@@ -36,6 +36,7 @@ from server.rounds import drive_rates, pulls
 from server.net import deploy_net, dhcp
 from server.learn import netloss as learn_netloss, wol as learn_wol   # #1846, #1847
 from server.learn import server_io   # #1884
+from server.learn import boot_marks   # #2830
 from server.learn import tuning as learn_tuning   # #2028
 from server.net import pxe_log   # #1887
 from server.agent import timing as agent_timing   # #2056
@@ -124,10 +125,10 @@ ROOM_CLOCK_SECONDS = 5.0
 def _off_vlan_decline(mac: str, step: str) -> bool:
     """רושם שאינו רושם: פירור אתחול (#400) שהתקבל מחוץ לווילן ההפצה (#584).
 
-    ‏`GET /boot/step?mac=&s=` לוקח את ה-MAC מהשאילתה, וזה אינו זהות;
+    `GET /boot/step?mac=&s=` לוקח את ה-MAC מהשאילתה, וזה אינו זהות;
     מחוץ לווילן ההפצה אין ראיה שהפונה הוא המכונה. מחזיר False —
     **ראיה חיובית** שהפירור לא נרשם, לא היעדר חריגה — ורושם ביומן מי
-    ניסה ומה. ‏`record_step` מחזיר ל-GRUB 200 בכל מקרה (שקט כלפי מסך
+    ניסה ומה. `record_step` מחזיר ל-GRUB 200 בכל מקרה (שקט כלפי מסך
     האתחול, רועש ביומן), ולכן האבחון נשאר אמין בלי להפיל אתחול."""
     log.warning("boot step %s for %s not recorded — off deployment vlan (#584)",
                 step, mac)
@@ -135,12 +136,12 @@ def _off_vlan_decline(mac: str, step: str) -> bool:
 
 
 def _record_verified(rt: ServerRuntime, scope: dict, mac: str, step: str) -> bool:
-    """‏#2411: פירור אתחול (#400) על וילן ההפצה נרשם רק כשה-`?mac=` תואם את
+    """#2411: פירור אתחול (#400) על וילן ההפצה נרשם רק כשה-`?mac=` תואם את
     החכירה — אותה בדיקה כמו בתפריט (`api.boot_identity_ok`, אותו יומן ואותו
     ריסון של #1949). אחרת מכונה אחרת בוילן הייתה כותבת שביל מומצא ("הגיע עד
     agent-hello") למכונה כבויה, ומאפסת את `first_at` של שביל אמיתי. בקשה של
-    השרת עצמו (‏`server_source`, הסימולציה על loopback) נרשמת כמו היום.
-    ‏False — ראיה חיובית שלא נרשם; ‏GRUB מקבל 200 בכל מקרה (`record_step`)."""
+    השרת עצמו (`server_source`, הסימולציה על loopback) נרשמת כמו היום.
+    False — ראיה חיובית שלא נרשם; GRUB מקבל 200 בכל מקרה (`record_step`)."""
     client = scope.get("client")
     client_ip = client[0] if client else None
     if not server_source(scope) and not boot_identity_ok(rt.ctx, mac, client_ip):
@@ -151,12 +152,12 @@ def _record_verified(rt: ServerRuntime, scope: dict, mac: str, step: str) -> boo
 
 
 def _probe_decline(mac: str, step: str) -> bool:
-    """רושם שאינו רושם: הפירור `menu` של הבדיקה העצמית של השרת (‏#976).
+    """רושם שאינו רושם: הפירור `menu` של הבדיקה העצמית של השרת (#976).
 
     אותה צורה כמו `_off_vlan_decline`, ומאותו טעם: הפונה אינו המכונה.
     בלי זה כל כניסה לקונסולה איפסה את שביל הפירורים של מכונה רשומה
     ל-"תפריט האתחול נמסר (1/9)" — גם כשהיא הייתה ב-`agent-hello` רגע
-    קודם. ‏info ולא warning: זה המצב הרגיל, פעם בכל מסך בריאות."""
+    קודם. info ולא warning: זה המצב הרגיל, פעם בכל מסך בריאות."""
     log.info("boot step %s for %s not recorded — server's own probe (#976)",
              step, mac)
     return False
@@ -167,7 +168,7 @@ class ConsoleNoStaleCache:
     משאיר אצל המשתמשים JS ישן מול API חדש — באגים בלתי ניתנים לשחזור.
 
     middleware גולמי ולא @app.middleware: העטיפה של Starlette בונה כל
-    תשובה מחדש וממקטינה את שמות הכותרות — כולל של ‎/boot, שם GRUB חייב
+    תשובה מחדש וממקטינה את שמות הכותרות — כולל של /boot, שם GRUB חייב
     "Content-Length" באותיות גדולות (ראו boot/http.py). כאן נוגעים אך
     ורק בתשובות הקונסולה; כל השאר עובר כמות שהוא."""
 
@@ -194,8 +195,8 @@ class ConsoleNoStaleCache:
 class ServerRuntime:
     """המצב המשותף לשתי האפליקציות — בעל יחיד (#731/#703).
 
-    ‏`create_runtime` בונה אותו **פעם אחת** ומריץ בו את האתחול החד-פעמי
-    (‏`sweep_work_areas`, ‏`drain_crumbs`, ‏`ensure_admin`); ‏`create_agent_app`
+    `create_runtime` בונה אותו **פעם אחת** ומריץ בו את האתחול החד-פעמי
+    (`sweep_work_areas`, `drain_crumbs`, `ensure_admin`); `create_agent_app`
     ו-`create_console_app` מקבלים אותו כמות שהוא. שני runtime = שני DB,
     שני sweep, שני תהליכי-רקע — וזה בדיוק מה שהפיצול הזה מונע."""
 
@@ -222,81 +223,81 @@ class ServerRuntime:
     #: הקצב של שעון-הרקע של החדר (#456). ברירת המחדל היא הייצור; בדיקות
     #: מעבירות ערך קצר כדי שהלולאה תדגום מהר בלי להמתין 5ש'.
     room_clock_interval: float = ROOM_CLOCK_SECONDS
-    #: ‏#1564: קצב הדופק למשניים המצומדים. בדיקות מעבירות ערך קצר.
+    #: #1564: קצב הדופק למשניים המצומדים. בדיקות מעבירות ערך קצר.
     heartbeat_interval: float = storage_heartbeat.HEARTBEAT_SECONDS
-    # ‏#703 (tracer 5): זהות ה-TLS של הקונסולה, כשהיא מוגשת ב-HTTPS. ``None``
-    # = ‏``--console-tls off`` (loopback) או בדיקות — ואז העוגייה בלי
-    # ``Secure`` ו-``/me`` מדווח ``tls: null``. ‏main מעביר ערך אמיתי.
+    # #703 (tracer 5): זהות ה-TLS של הקונסולה, כשהיא מוגשת ב-HTTPS. ``None``
+    # = ``--console-tls off`` (loopback) או בדיקות — ואז העוגייה בלי
+    # ``Secure`` ו-``/me`` מדווח ``tls: null``. main מעביר ערך אמיתי.
     console_tls: ConsoleTLS | None = None
-    # ‏#1088: רשת ההפצה — מקורה (יחידה/קונסולה/לא הוגדרה) ומה שהקונסולה
+    # #1088: רשת ההפצה — מקורה (יחידה/קונסולה/לא הוגדרה) ומה שהקונסולה
     # צריכה כדי להשלים את ההתקנה בהדלקת DHCP. ``None`` = בדיקות/קוד ישן:
     # ההדלקה מתנהגת כמו קודם, בלי השלמה.
     deploy: "deploy_net.DeployContext | None" = None
-    #: ‏#153: hooks של לשונית התעודה/שם המארח (``console_hostcfg``) —
-    #: ‏``None`` = ברירות המחדל האמיתיות; בדיקות מזריקות, כמו ``dhcp_hooks``.
+    #: #153: hooks של לשונית התעודה/שם המארח (``console_hostcfg``) —
+    #: ``None`` = ברירות המחדל האמיתיות; בדיקות מזריקות, כמו ``dhcp_hooks``.
     host_hooks: dict | None = None
-    #: ‏#1920: הדיסק-און-קי שמחובר לשרת — ``{"scan", "open"}`` של ``server.usbstick.device``. ``None`` = ההתקן האמיתי;
+    #: #1920: הדיסק-און-קי שמחובר לשרת — ``{"scan", "open"}`` של ``server.usbstick.device``. ``None`` = ההתקן האמיתי;
     #: בדיקות מזריקות תיקייה במקום התקן (לעולם לא נוגעים בדיסק של המכונה שהן רצות עליה).
     usb_hooks: dict | None = None
-    #: ‏#1334: עדכון אימג' ב-VM — מנוע אחד לתהליך (VM אחד בכל פעם).
+    #: #1334: עדכון אימג' ב-VM — מנוע אחד לתהליך (VM אחד בכל פעם).
     vmupdate: "VmUpdate | None" = None
-    #: ‏#1372: המארח של עדכון ה-VM — אזהרה בסטטוס העדכון ובבריאות, וההכנה
-    #: בעלייה. ‏None = לא הודלק (בדיקות); ‏main מדליק.
+    #: #1372: המארח של עדכון ה-VM — אזהרה בסטטוס העדכון ובבריאות, וההכנה
+    #: בעלייה. None = לא הודלק (בדיקות); main מדליק.
     vm_host: "VmHost | None" = None
     auto_reboot_hook: object = auto_reboot.default_reboot
     auto_reboot_interval: float = auto_reboot.CHECK_SECONDS
-    #: ‏#2407: זמן ההפעלה מחדש המתוזמנת שהעלייה הזו באה ממנה (``consume_marker``);
-    #: המתזמן קורא אותו כדי לא לבצע את אותו מופע שוב. ‏None = עלייה רגילה.
+    #: #2407: זמן ההפעלה מחדש המתוזמנת שהעלייה הזו באה ממנה (``consume_marker``);
+    #: המתזמן קורא אותו כדי לא לבצע את אותו מופע שוב. None = עלייה רגילה.
     auto_reboot_last: "datetime | None" = None
-    #: ‏#1737: הסיבוב היומי (‏`housekeeping`) — מתי הראשון ובאיזה קצב. בדיקות מקצרות.
+    #: #1737: הסיבוב היומי (`housekeeping`) — מתי הראשון ובאיזה קצב. בדיקות מקצרות.
     housekeeping_first: float = housekeeping.FIRST_RUN_S
     housekeeping_every: float = housekeeping.EVERY_S
-    #: ‏#2437: ה-hash של סיסמת עורך ה-GRUB לכל grub.cfg שמוגש. ריק = נעול בלי
+    #: #2437: ה-hash של סיסמת עורך ה-GRUB לכל grub.cfg שמוגש. ריק = נעול בלי
     #: סיסמה (בדיקות, תחנת פיתוח, או סיסמה שלא נקראה).
     grub_password_hash: str = ""
-    #: ‏#2450: הקובץ עצמו — למנהל שרואה את הסיסמה בהגדרות. ‏None = אין כזה.
+    #: #2450: הקובץ עצמו — למנהל שרואה את הסיסמה בהגדרות. None = אין כזה.
     grub_password_file: "str | Path | None" = None
 
 
 async def _room_clock(rt: ServerRuntime, interval: float) -> None:
     """לולאת הרקע שמריצה את הדופק של חדר השיכפולים בקצב קבוע — #456.
 
-    ‏**גל שאיש אינו צופה בו חייב להתקדם.** בלי הלולאה הזו `tick` רץ רק
+    **גל שאיש אינו צופה בו חייב להתקדם.** בלי הלולאה הזו `tick` רץ רק
     מ-hello של משכפל או מ-GET `/overview`; חדר שכל מכונותיו נעלמו אינו
     מייצר אף אחד מהם, ו-`_mark_lost` לעולם אינו מפקיע את החברים השקטים
     (#456, והזנב של #659). היא המקור ה**בלתי-תלוי-בצופה** ל-tick.
 
-    ‏`tick` עושה I/O סינכרוני מול sqlite; מריצים אותו ב-worker thread כדי
-    לא לחסום את לולאת האירועים המשותפת לשלושת השרתים. ‏`db.Database` נותן
+    `tick` עושה I/O סינכרוני מול sqlite; מריצים אותו ב-worker thread כדי
+    לא לחסום את לולאת האירועים המשותפת לשלושת השרתים. `db.Database` נותן
     חיבור לכל תהליכון (WAL) — אותו מודל בדיוק כמו מסלול ה-hello של uvicorn,
-    שגם הוא רץ בתהליכון מהמאגר. ‏`room.sweep` לעולם אינו זורק, ולכן דגימה
+    שגם הוא רץ בתהליכון מהמאגר. `room.sweep` לעולם אינו זורק, ולכן דגימה
     שנכשלה נרשמת ביומן וממשיכה — הלולאה אינה מתה על תקלה חולפת.
 
     #1066: באותו תהליכון, כל `storage_check_interval` (ברירת מחדל 60ש')
     נבדקים מיקומי האחסון המחוברים/לא-נגישים. disconnected לא נבדק.
 
-    ‏#1737: ובאותו תהליכון, פעם ביום (‏`housekeeping.Schedule`), התקרה לכל מה
-    שאינו אימג' — טבלאות שגדלות ואזורי עבודה נטושים. ‏`housekeeping.run` לעולם
+    #1737: ובאותו תהליכון, פעם ביום (`housekeeping.Schedule`), התקרה לכל מה
+    שאינו אימג' — טבלאות שגדלות ואזורי עבודה נטושים. `housekeeping.run` לעולם
     אינו זורק.
     """
-    pxe_elapsed = 0.0   # ‏#1887
+    pxe_elapsed = 0.0   # #1887
     storage_every = rt.storage_check_interval or storage_locations.CHECK_INTERVAL
-    # ‏#2123: מיקום שסומן "לא נבדק" בעלייה נבדק כבר בפעימה הראשונה, לא אחרי דקה.
+    # #2123: מיקום שסומן "לא נבדק" בעלייה נבדק כבר בפעימה הראשונה, לא אחרי דקה.
     elapsed = storage_every if storage_locations.has_unchecked(rt.conn) else 0.0
     chores = housekeeping.Schedule(rt.housekeeping_first, rt.housekeeping_every)
-    up_since = clockstep._mono()   # ‏#2905: שקט של השרת עצמו אינו שקט של המכונה
+    up_since = clockstep._mono()   # #2905: שקט של השרת עצמו אינו שקט של המכונה
     while True:
         await asyncio.sleep(interval)
         await asyncio.to_thread(room.sweep, rt.conn, rt.store)
-        # ‏#1573: משיכה שנכשלה או שתקה נסגרת גם כשאיש אינו צופה.
+        # #1573: משיכה שנכשלה או שתקה נסגרת גם כשאיש אינו צופה.
         await asyncio.to_thread(pulls.background_sweep, rt.store)
-        # ‏#2905: משימה `running` שהמכונה שלה שקטה (קליטה שנעזבה, מקור של סבב ישיר שנסגר)
-        # נסגרת `failed` בשמה — אחרת היא מחזיקה את השרת "עסוק" לנצח (‏busy_db).
+        # #2905: משימה `running` שהמכונה שלה שקטה (קליטה שנעזבה, מקור של סבב ישיר שנסגר)
+        # נסגרת `failed` בשמה — אחרת היא מחזיקה את השרת "עסוק" לנצח (busy_db).
         await asyncio.to_thread(silent_tasks.background_sweep, rt.conn, rt.store,
                                 rt.library.root, up_since)
-        # ‏#1847: שליחה חוזרת מוקדמת להערה שעברה פי 2 מהזמן הטיפוסי, והתראה על רצף.
+        # #1847: שליחה חוזרת מוקדמת להערה שעברה פי 2 מהזמן הטיפוסי, והתראה על רצף.
         await asyncio.to_thread(learn_wol.sweep, rt.conn, rt.wol_send)
-        # ‏#1887: מה ש-dnsmasq ראה (קריאת journal בלבד) — כל `pxe_log.EVERY_S`. לעולם אינו זורק.
+        # #1887: מה ש-dnsmasq ראה (קריאת journal בלבד) — כל `pxe_log.EVERY_S`. לעולם אינו זורק.
         pxe_elapsed += interval
         if pxe_elapsed >= pxe_log.EVERY_S:
             pxe_elapsed = 0.0
@@ -313,7 +314,7 @@ async def _room_clock(rt: ServerRuntime, interval: float) -> None:
 
 
 def _library_roots(rt: ServerRuntime) -> list[Path]:
-    """‏#1737: השורשים שהסחיפה היומית עוברת עליהם — המקומי, ומיקום אחסון רק
+    """#1737: השורשים שהסחיפה היומית עוברת עליהם — המקומי, ומיקום אחסון רק
     כשהוא מחובר עכשיו (על מיקום שנפל אין מה לקרוא, וזה לא "ריק")."""
     roots = [Path(rt.library.root)]
     for loc in storage_locations.library_roots(rt.conn, rt.library.root):
@@ -323,7 +324,7 @@ def _library_roots(rt: ServerRuntime) -> list[Path]:
 
 
 async def _storage_heartbeat(rt: ServerRuntime, interval: float) -> None:
-    """‏#1564: הדופק למשניים המצומדים, כל ``interval`` שניות.
+    """#1564: הדופק למשניים המצומדים, כל ``interval`` שניות.
 
     משימה **נפרדת** משעון החדר, באותו `lifespan`: משני שלא עונה מעכב רק
     את הדופק (עד ``storage_heartbeat.TIMEOUT_SECONDS`` לכל משני), לעולם
@@ -342,7 +343,7 @@ def _install_room_clock(app: FastAPI, rt: ServerRuntime) -> None:
 
     מותקן על **אפליקציה אחת בלבד בכל תהליך** — הקונסולה בייצור, והמעטפת
     המשולבת בבדיקות/e2e — אחרת שלוש האפליקציות שחולקות runtime היו מריצות
-    שלושה שעונים על אותו DB. ‏`lifespan` (ולא תשתית תזמון חדשה) הוא ההכרעה
+    שלושה שעונים על אותו DB. `lifespan` (ולא תשתית תזמון חדשה) הוא ההכרעה
     ב-#456: המשימה עולה ב-startup ומבוטלת ב-shutdown, בלי מודול scheduler.
     """
     interval = rt.room_clock_interval
@@ -358,7 +359,7 @@ def _install_room_clock(app: FastAPI, rt: ServerRuntime) -> None:
         live["n"] += 1
         if live["n"] == 1:
             if rt.vmupdate is not None:
-                # ‏#1649: שמירת VM שנקטעה באתחול משאירה עותק dm ושני loop
+                # #1649: שמירת VM שנקטעה באתחול משאירה עותק dm ושני loop
                 await asyncio.to_thread(rt.vmupdate.clear_leftovers)
             task = asyncio.create_task(_room_clock(rt, interval))
             reboot_task = asyncio.create_task(
@@ -367,7 +368,7 @@ def _install_room_clock(app: FastAPI, rt: ServerRuntime) -> None:
             heartbeat_task = asyncio.create_task(
                 _storage_heartbeat(rt, rt.heartbeat_interval))
             live["tasks"] = (task, reboot_task, heartbeat_task)
-            # ‏#1751: התראות במייל — תהליכון משלו (SMTP איטי אינו נוגע בלולאה),
+            # #1751: התראות במייל — תהליכון משלו (SMTP איטי אינו נוגע בלולאה),
             # וגם הדופק לדיסק שממנו "הייתי למטה מ-X עד Y" נגזר.
             watcher = email_alerts.Watcher(rt.conn, rt.data_dir)
             rt.ctx.email_alerts = watcher
@@ -386,14 +387,14 @@ def _install_room_clock(app: FastAPI, rt: ServerRuntime) -> None:
                 watcher = getattr(rt.ctx, "email_alerts", None)
                 if watcher is not None:
                     await asyncio.to_thread(watcher.stop)
-                # ‏#1426: השולח יושב על ctx; ל-ServerRuntime אין `sender`
+                # #1426: השולח יושב על ctx; ל-ServerRuntime אין `sender`
                 await asyncio.to_thread(rt.ctx.sender.close)
 
     app.router.lifespan_context = lifespan
 
 
 def _backfill_used_bytes(conn: Connection, library: ImageLibrary) -> None:
-    """‏#1494: שורת יומן לכל אימג' שנוסתה בו השלמה — מה נכתב, ומה לא ולמה."""
+    """#1494: שורת יומן לכל אימג' שנוסתה בו השלמה — מה נכתב, ומה לא ולמה."""
     def report(result: dict) -> None:
         written = ", ".join(f"p{i}={b}" for i, b in sorted(result["written"].items()))
         if written:
@@ -410,7 +411,7 @@ def _backfill_used_bytes(conn: Connection, library: ImageLibrary) -> None:
 
 
 def _readback_reporter(conn: Connection):
-    """‏#1805: שורת יומן לכל אימג' שנוסה — מה גובב לקריאה חוזרת, ומה לא ולמה."""
+    """#1805: שורת יומן לכל אימג' שנוסה — מה גובב לקריאה חוזרת, ומה לא ולמה."""
     def report(result: dict) -> None:
         written = ", ".join(f"p{i}" for i in sorted(result["written"]))
         if written:
@@ -430,13 +431,13 @@ def create_runtime(
     now_fn=None,
     sender_runner=None,
     sender_portbase: int | None = None,
-    # ‏e2e_simulation בלבד: שולח מדומה (ראו sender.Sender.simulate).
+    # e2e_simulation בלבד: שולח מדומה (ראו sender.Sender.simulate).
     sender_simulate: bool = False,
     auto_reboot_hook=None,
     auto_reboot_interval: float = auto_reboot.CHECK_SECONDS,
-    # שתי תקרות ההמתנה של udpcast. ‏None = ברירת המחדל של `sender.py`
+    # שתי תקרות ההמתנה של udpcast. None = ברירת המחדל של `sender.py`
     # (כמו `sender_portbase`): הערך בייצור אינו זז, ומי שצריך תקרה קצרה —
-    # מעבדה, טסט, ‏e2e — מעביר אותה כאן במקום לחכות דקות (#341).
+    # מעבדה, טסט, e2e — מעביר אותה כאן במקום לחכות דקות (#341).
     sender_max_wait: int | None = None,
     sender_start_timeout: float | None = None,
     wol_send=None,
@@ -448,78 +449,78 @@ def create_runtime(
     storage_check_interval: float = storage_locations.CHECK_INTERVAL,
     netcfg_hooks: dict | None = None,
     known_macs_hooks: dict | None = None,
-    # ‏#855: ‏`{"leases": identity.LeaseFile(...)}` — מקור חכירות ה-DHCP
-    # לשומר הזהות של hello/progress. ‏`None` = השומר אינו מותקן (בדיקות
-    # יחידה, כמו `dhcp_hooks`); ‏`server.main` מעביר תמיד, ו-e2e מעביר
+    # #855: `{"leases": identity.LeaseFile(...)}` — מקור חכירות ה-DHCP
+    # לשומר הזהות של hello/progress. `None` = השומר אינו מותקן (בדיקות
+    # יחידה, כמו `dhcp_hooks`); `server.main` מעביר תמיד, ו-e2e מעביר
     # קובץ משלו. אין ברירת מחדל אמיתית כאן בכוונה: קובץ dnsmasq של המכונה
     # שהטסטים רצים עליה אינו ראיה על מכונות מדומות.
     identity_hooks: dict | None = None,
-    # ‏#748: ברירת המחדל None משאירה את ``repo_dir`` כתיקיית העבודה של
+    # #748: ברירת המחדל None משאירה את ``repo_dir`` כתיקיית העבודה של
     # ``server/update.py`` בזמן הריצה (main.py הוא היחיד שמעביר ערך אמיתי).
     repo_dir: str | Path | None = None,
     update_hooks: dict | None = None,
     netcfg_state_dir: str | Path | None = None,
     boot_dir: str | Path | None = None,
     extra_cmdline: tuple[str, ...] = (),
-    # ‏Storage Nodes (#655/#723): תפקיד ההתקנה. ‏None = לא הועבר (בדיקות,
+    # Storage Nodes (#655/#723): תפקיד ההתקנה. None = לא הועבר (בדיקות,
     # וקוד ישן) ואז ההגדרה נשארת כפי שהיא — התפקיד נקרא ממילא fail-closed
-    # (‏storage_nodes.role). ‏main מעביר תמיד את הערך מהדגל (ברירת מחדל
+    # (storage_nodes.role). main מעביר תמיד את הערך מהדגל (ברירת מחדל
     # standalone), וזו הכתיבה בהפעלה.
     storage_role: str | None = None,
     primary_url: str | None = None,
-    # ‏#456: הקצב של שעון-הרקע של החדר. ברירת המחדל היא הייצור; בדיקות
+    # #456: הקצב של שעון-הרקע של החדר. ברירת המחדל היא הייצור; בדיקות
     # מעבירות ערך קצר כדי שהלולאה תדגום מהר.
     room_clock_interval: float = ROOM_CLOCK_SECONDS,
-    # ‏#1564: ראו ``ServerRuntime.heartbeat_interval``.
+    # #1564: ראו ``ServerRuntime.heartbeat_interval``.
     heartbeat_interval: float = storage_heartbeat.HEARTBEAT_SECONDS,
-    # ‏#1737: ראו ``ServerRuntime.housekeeping_first``.
+    # #1737: ראו ``ServerRuntime.housekeeping_first``.
     housekeeping_first: float = housekeeping.FIRST_RUN_S,
     housekeeping_every: float = housekeeping.EVERY_S,
-    # ‏#703 (tracer 5): ``None`` = הקונסולה בלי TLS (loopback/בדיקות).
+    # #703 (tracer 5): ``None`` = הקונסולה בלי TLS (loopback/בדיקות).
     console_tls: ConsoleTLS | None = None,
-    # ‏#1088: ראו ``ServerRuntime.deploy``.
+    # #1088: ראו ``ServerRuntime.deploy``.
     deploy: "deploy_net.DeployContext | None" = None,
-    # ‏#153: ראו ``ServerRuntime.host_hooks``.
+    # #153: ראו ``ServerRuntime.host_hooks``.
     host_hooks: dict | None = None,
-    # ‏#1920: ראו ``ServerRuntime.usb_hooks``.
+    # #1920: ראו ``ServerRuntime.usb_hooks``.
     usb_hooks: dict | None = None,
-    # ‏#1013: בעלייה, לכתוב את קובץ ה-dnsmasq הראשי מה-DB אם הוא שונה ממה
-    # שעל הדיסק (‏`console_dhcp.sync_main_conf`). ‏False כברירת מחדל מאותו
+    # #1013: בעלייה, לכתוב את קובץ ה-dnsmasq הראשי מה-DB אם הוא שונה ממה
+    # שעל הדיסק (`console_dhcp.sync_main_conf`). False כברירת מחדל מאותו
     # טעם כמו ``known_macs_hooks``: רק ``main`` מדליק; בדיקות לא נוגעות
     # ב-dnsmasq של המכונה שהן רצות עליה.
     sync_dnsmasq: bool = False,
-    # ‏#2174: בעלייה, הניסיון החוזר של dnsmasq (‏#1816) ב-dnsmasq.service.d מותאם
-    # למקור שבעץ, ו-daemon-reload כשצריך. ‏False כברירת מחדל מאותו טעם כמו
+    # #2174: בעלייה, הניסיון החוזר של dnsmasq (#1816) ב-dnsmasq.service.d מותאם
+    # למקור שבעץ, ו-daemon-reload כשצריך. False כברירת מחדל מאותו טעם כמו
     # ``sync_dnsmasq``: רק ``main`` מדליק, ורק על לינוקס.
     dnsmasq_dropin: bool = False,
-    # ‏#705: שלבי האכיפה של השירותים לכל כרטיס (‏`nic_services.NicServices`)
-    # ועוד hooks שלו — בדיקות מזריקות; ‏`main` מוסיף את המאזינים אחרי שהם קיימים.
+    # #705: שלבי האכיפה של השירותים לכל כרטיס (`nic_services.NicServices`)
+    # ועוד hooks שלו — בדיקות מזריקות; `main` מוסיף את המאזינים אחרי שהם קיימים.
     nic_hooks: dict | None = None,
-    # ‏#1334: מנוע עדכון ה-VM. ‏None = המנוע האמיתי מול המארח; בדיקות
+    # #1334: מנוע עדכון ה-VM. None = המנוע האמיתי מול המארח; בדיקות
     # מזריקות מנוע עם זיופים (כמו ``dhcp_hooks``).
     vmupdate_engine: "VmUpdate | None" = None,
-    # ‏#1372: ראו ``ServerRuntime.vm_host``. ‏False כברירת מחדל מאותו טעם כמו
+    # #1372: ראו ``ServerRuntime.vm_host``. False כברירת מחדל מאותו טעם כמו
     # ``sync_dnsmasq``: רק ``main`` שואל את המארח שהוא רץ עליו.
     vm_host: bool = False,
-    # הכרעת נדב 15/10: ‏`drive_rates.read_link` — מהירות כרטיס ההפצה, הגג
-    # והפתיחה של הקצב לפיה. ‏None כברירת מחדל מאותו טעם כמו ``sync_dnsmasq``:
-    # רק ``main`` קורא את ‎/sys של המכונה; בלעדיו — 600m/900m של היום.
+    # הכרעת נדב 15/10: `drive_rates.read_link` — מהירות כרטיס ההפצה, הגג
+    # והפתיחה של הקצב לפיה. None כברירת מחדל מאותו טעם כמו ``sync_dnsmasq``:
+    # רק ``main`` קורא את /sys של המכונה; בלעדיו — 600m/900m של היום.
     link_speed=None,
-    # ‏#1494: השלמת `used_bytes` לאימג'ים ישנים מכותרת partclone, ברקע, פעם
-    # אחת בעלייה. ‏False כברירת מחדל מאותו טעם כמו ``sync_dnsmasq``: רק
+    # #1494: השלמת `used_bytes` לאימג'ים ישנים מכותרת partclone, ברקע, פעם
+    # אחת בעלייה. False כברירת מחדל מאותו טעם כמו ``sync_dnsmasq``: רק
     # ``main`` מדליק; בבדיקות תהליכון רקע שמריץ zstd על ספריית tmp היה כותב
     # ליומן בזמן לא צפוי.
     backfill_used_bytes: bool = False,
-    # ‏#1805: הגיבוב לקריאה החוזרת (readbackhash.py) — תהליכון רקע שעובר על
-    # הספרייה בעלייה, כשאימג' נכנס (`kick`), ופעם בעשר דקות. ‏False כמו למעלה:
+    # #1805: הגיבוב לקריאה החוזרת (readbackhash.py) — תהליכון רקע שעובר על
+    # הספרייה בעלייה, כשאימג' נכנס (`kick`), ופעם בעשר דקות. False כמו למעלה:
     # רק ``main`` מדליק.
     backfill_readback: bool = False,
-    # ‏#1447: אזור הזמן של המערכת מיושר להגדרה בעלייה (``timedatectl``).
-    # ‏False כברירת מחדל מאותו טעם כמו ``sync_dnsmasq``: רק ``main`` מדליק —
+    # #1447: אזור הזמן של המערכת מיושר להגדרה בעלייה (``timedatectl``).
+    # False כברירת מחדל מאותו טעם כמו ``sync_dnsmasq``: רק ``main`` מדליק —
     # בבדיקות ברירת המחדל הייתה משנה את אזור הזמן של מכונת הבדיקות.
     apply_timezone: bool = False,
     apply_timesync: bool = False,
-    # ‏#2437: קובץ סיסמת עורך ה-GRUB (‏`grub_password.PASSWORD_FILE`). ‏None =
+    # #2437: קובץ סיסמת עורך ה-GRUB (`grub_password.PASSWORD_FILE`). None =
     # לא נוגעים בו — מאותו טעם כמו ``sync_dnsmasq``: רק ``main`` מעביר, ורק על
     # לינוקס. אז הסיסמה נוצרת אם חסרה (התקנה חדשה ושדרוג), וה-bootstrap על
     # ה-TFTP ננעל אם הוא נכתב לפני #2437.
@@ -535,8 +536,8 @@ def create_runtime(
     conn = connect(data_dir / "imagesrv.db")
     auto_reboot_last = auto_reboot.consume_marker(conn, data_dir)
 
-    # ‏#655/#723: תצורת ה-Storage Node נכתבת בהפעלה כשהיא הועברה (main).
-    # ‏None = לא הועבר — משאירים את ההגדרה הקיימת; התפקיד נקרא ממילא
+    # #655/#723: תצורת ה-Storage Node נכתבת בהפעלה כשהיא הועברה (main).
+    # None = לא הועבר — משאירים את ההגדרה הקיימת; התפקיד נקרא ממילא
     # fail-closed. הוולידציה (משני מחייב כתובת-אב) נעשתה כבר ב-main.
     if storage_role is not None:
         storage_nodes.persist_config(conn, storage_role, primary_url)
@@ -547,20 +548,20 @@ def create_runtime(
             conn, "image_manifest_rejected",
             f"המניפסט {path} הוצא מהספרייה: {reason}", ""))
     storage_locations.ensure_local(conn, library.root)
-    storage_locations.mark_unchecked_after_start(conn)   # ‏#2123
+    storage_locations.mark_unchecked_after_start(conn)   # #2123
     library.bind_locations(
         lambda: storage_locations.library_roots(conn, library.root))
-    # ‏#1334: ברירת המחדל לכל שושלת גרסאות — מה שמחשב בנייה מקבל לסבב חדש.
+    # #1334: ברירת המחדל לכל שושלת גרסאות — מה שמחשב בנייה מקבל לסבב חדש.
     library.bind_defaults(lambda: image_versions.pointers(conn))
 
-    # ‏#88: מה שקליטה שהשרת מת באמצעה השאירה בשורש הספרייה נסחף כאן —
+    # #88: מה שקליטה שהשרת מת באמצעה השאירה בשורש הספרייה נסחף כאן —
     # אבל רק מה שטבלת המשימות מוכיחה שהוא יתום. ההנמקה המלאה, כולל למה
     # אוטומטי ולא דיווח-והמפעיל-ימחק, בראש work_areas.py. עולה מיד אחרי
     # פתיחת ה-DB: זה מקור הראיה, ואין מה לסחוף בלעדיו.
     sweep_work_areas(conn, library.root)
 
-    # ‏#1494: אימג' שנקלט לפני #1368 נושא `used_bytes: null`, וכלל המקום הפנוי
-    # (‏#1354) מסרב לו בכל מגירה. ברקע: קריאת כותרת למחיצה מהירה, אבל מיקום
+    # #1494: אימג' שנקלט לפני #1368 נושא `used_bytes: null`, וכלל המקום הפנוי
+    # (#1354) מסרב לו בכל מגירה. ברקע: קריאת כותרת למחיצה מהירה, אבל מיקום
     # רשת שנפל לא יעכב את עליית השרת; כל קריאה תחומה בטיימר משלה.
     if apply_timezone:
         timezone.apply_on_start(conn, {**timezone.default_hooks(), **(host_hooks or {})})
@@ -571,7 +572,7 @@ def create_runtime(
         threading.Thread(target=_backfill_used_bytes, args=(conn, library),
                          name="used-bytes-backfill", daemon=True).start()
 
-    # ‏#56: זרוע ההחזרה (`imagesrv-netrollback`) רצה כשהשרת **לא** רץ —
+    # #56: זרוע ההחזרה (`imagesrv-netrollback`) רצה כשהשרת **לא** רץ —
     # זו כל מטרתה — ולכן אין לה חיבור ל-DB. היא משאירה פירור על הדיסק,
     # והוא הופך לשורת יומן כאן, בהפעלה שאחריה, עם זמן ההחזרה האמיתי.
     # מיד אחרי פתיחת ה-DB ולפני שהקונסולה יכולה לענות: מי שפותח את
@@ -583,17 +584,17 @@ def create_runtime(
     netcfg_dir = Path(netcfg_state_dir) if netcfg_state_dir else data_dir / "netcfg"
     netcfg_dir.mkdir(parents=True, exist_ok=True)
 
-    # ‏WoL יוצא על **וילן ההפצה בלבד**. בלי הכפייה הזו השידור הולך לפי
+    # WoL יוצא על **וילן ההפצה בלבד**. בלי הכפייה הזו השידור הולך לפי
     # טבלת הניתוב — ובשרת דו-כרטיסי ברירת המחדל היא הרשת הרגילה של
     # המכללה. אז מחשבי השיכפול לא מתעוררים (הם בוילן ההפצה), והמכללה
     # מקבלת ברודקאסט שאין לה מה לעשות איתו. נמדד במעבדה (בדיקה 7.2,
-    # 2026-08-29): ‏12 חבילות על eth1 ואפס על eth0.
+    # 2026-08-29): 12 חבילות על eth1 ואפס על eth0.
     #
-    # ‏#44 הוסיף את היכולת לכפות ממשק ואת הטסטים סביבה — אבל הטסטים
+    # #44 הוסיף את היכולת לכפות ממשק ואת הטסטים סביבה — אבל הטסטים
     # מזריקים שולח, ואיש לא בנה אחד למסלול האמיתי: `wol_send` נשאר
     # `None` וכל שידור נפל לברירת המחדל חסרת-הממשק. יכולת שקיימת ואינה
     # מחוברת נראית בדיוק כמו יכולת שעובדת (עיקרון 5).
-    # ‏#2428: וכשאין כרטיס הפצה (לא הוגדרה) — שולח שמסרב, לא ברירת המחדל.
+    # #2428: וכשאין כרטיס הפצה (לא הוגדרה) — שולח שמסרב, לא ברירת המחדל.
     if wol_send is None:
         wol_send = wol.broadcast_sender(interface) if interface else wol.unpinned_sender
 
@@ -605,7 +606,7 @@ def create_runtime(
     # היום ההפרדה הזאת נמצאת ב-db.Database, שנותן חיבור לכל תהליכון —
     # לא רק לתהליכון השידור אלא גם לתהליכוני המאגר של uvicorn, שמריצים
     # כל endpoint סינכרוני וכל dependency סינכרוני של הקונסולה.
-    # ‏#201: `sender_portbase` הוא הפורט שהשידור **באמת** יתפוס. הוא נשאר
+    # #201: `sender_portbase` הוא הפורט שהשידור **באמת** יתפוס. הוא נשאר
     # `None` בייצור, ואז נופלים על `DEFAULT_PORTBASE` (9000) — ברירת המחדל
     # לא זזה. מי שמעביר ערך הוא מי שאסור לו להתנגש בהפצה אמיתית: ה-e2e,
     # שמריץ שרת אמיתי בתת-תהליך ולכן אין לאן להזריק לו שולח מזויף. הגנה
@@ -613,20 +614,20 @@ def create_runtime(
     def on_sender_event(event: str, detail: str) -> None:
         status = sender.status()
         session_id = status.get("session_id") if status else None
-        # ‏#1296: הגל שהמנוע משדר — אותה הנחה כמו `record_stream` למטה. אין סטטוס = NULL.
+        # #1296: הגל שהמנוע משדר — אותה הנחה כמו `record_stream` למטה. אין סטטוס = NULL.
         journal(conn, event, detail, round_id=session_id)
         if session_id and event in ("send_done", "send_failed", "send_stopped"):
             # קצב אוטומטי (11/10): מה ש-udp-sender ספר בגל שהסתיים — הגל הבא
             # עולה רק על אפס שידורים חוזרים שנקראו כאן. לעולם אינו זורק.
-            # ‏#1758: ואיך השולח סיים — גל שנכשל עם שידורים חוזרים הוא ההגנה.
+            # #1758: ואיך השולח סיים — גל שנכשל עם שידורים חוזרים הוא ההגנה.
             outcome = {**sender.wave_outcome(session_id), "ended": event}
             drive_rates.record_stream(conn, session_id, outcome)
-            # ‏#1884: הדיסק של הספרייה בגל — לפני #1846, שלא יאשים את הרשת בגל שהשרת האט.
+            # #1884: הדיסק של הספרייה בגל — לפני #1846, שלא יאשים את הרשת בגל שהשרת האט.
             server_io.end(conn, "wave", session_id, library.root, seconds=outcome.get("wall_s"))
-            # ‏#1846: האבדן של הגל מול הבסיס של כרטיס ההפצה — קפיצה נרשמת ביומן.
+            # #1846: האבדן של הגל מול הבסיס של כרטיס ההפצה — קפיצה נרשמת ביומן.
             # לעולם אינו זורק.
             learn_netloss.evaluate(conn, session_id)
-            # ‏#2028: סבב למידה פתוח. החדר אולי כבר סגר את הגל. לעולם אינו זורק.
+            # #2028: סבב למידה פתוח. החדר אולי כבר סגר את הגל. לעולם אינו זורק.
             learn_tuning.record_wave(conn, session_id)
         if event != "send_failed":
             return
@@ -655,24 +656,24 @@ def create_runtime(
         **({"start_timeout": sender_start_timeout}
            if sender_start_timeout is not None else {}),
         link_speed=link_speed,
-        # ‏#447 + קצב אוטומטי (11/10): הקצב לגל — מהגל הקודם של כל מחשב שיכפול
+        # #447 + קצב אוטומטי (11/10): הקצב לגל — מהגל הקודם של כל מחשב שיכפול
         # (#1471) והכוננים שבו, לעולם לא מעל `max_bitrate` (בלעדיו — 900m) ולא מעל
         # 90% מהקישור של כרטיס ההפצה (15/10).
-        # ‏#1884: באותו רגע — צילום הדיסק של הספרייה ולחץ ה-I/O של השרת (לעולם אינו זורק).
+        # #1884: באותו רגע — צילום הדיסק של הספרייה ולחץ ה-I/O של השרת (לעולם אינו זורק).
         wave_bitrate=wave_bitrate,
-        # ‏#1430: `store` נבנה למטה (הוא צריך את `sender.stop`); הקריאה
+        # #1430: `store` נבנה למטה (הוא צריך את `sender.stop`); הקריאה
         # היא מתהליכון השולח, הרבה אחרי שהפונקציה הזו סיימה.
         live_receivers=lambda session_id: store.live_count(session_id),
-        # ‏#1950: חבר `lost` שעדיין מקבל את הזרם נספר במחיצה הבאה.
+        # #1950: חבר `lost` שעדיין מקבל את הזרם נספר במחיצה הבאה.
         lost_receivers=lambda session_id: store.lost_ips(session_id),
-        # ‏#1430: חבר שלא דיווח מעל דקה ולא סיים את המחיצה הקודמת אינו נספר
+        # #1430: חבר שלא דיווח מעל דקה ולא סיים את המחיצה הקודמת אינו נספר
         # במחיצה הבאה (`--min-receivers`).
         quiet_receivers=lambda session_id: store.quiet_ips(
             session_id, QUIET_SECONDS),
-        # ‏#2056: תקרת הנטישה של השולח גדלה עם ההמתנה למחשב שהתנתק (הגדרה בקונסולה).
+        # #2056: תקרת הנטישה של השולח גדלה עם ההמתנה למחשב שהתנתק (הגדרה בקונסולה).
         lost_wait=lambda: agent_timing.lost_seconds(conn),
-        # ‏#2202: שאלה למפעיל בגל (‏net_devices.prompt — חלוקת המקום, RAID) עוצרת
-        # את שעון ה-180 של השולח; מכונה שחרגה מהתקרה (‏ASK_HOLD_MAX_SECONDS)
+        # #2202: שאלה למפעיל בגל (net_devices.prompt — חלוקת המקום, RAID) עוצרת
+        # את שעון ה-180 של השולח; מכונה שחרגה מהתקרה (ASK_HOLD_MAX_SECONDS)
         # משתחררת מהגל לבדה. שאלת ה-SMART שהייתה כאן הוסרה (#2044).
         pending_prompts=lambda session_id: prompt_hold.waiting_in_wave(conn, session_id),
     )
@@ -687,19 +688,19 @@ def create_runtime(
             journal(conn, "wol_sent", f"{group_id} count={woken}")
 
     def on_running(session: dict) -> None:
-        # ‏#715: גל שהמקור שלו הוא מחשב בנייה — המנוע של השרת **אינו**
+        # #715: גל שהמקור שלו הוא מחשב בנייה — המנוע של השרת **אינו**
         # משדר; מחשב הבנייה רואה `running` ב-hello הבא ומשדר בעצמו.
         # ביומן, כדי שגל שלא יצא ייראה כמה שהוא ולא כ"המנוע לא התחיל".
         if direct.is_direct_wave(conn, session["id"]):
             journal(conn, "send_delegated", f'{session["id"]} {session["image_id"]}',
                     round_id=session["id"])
             # קצב אוטומטי: גם הזרם ממחשב הבנייה עובר ברשת — אותה פתיחה, אותו
-            # גג וירידה לכונן איטי; ‏`task.direct.multicast.max_bitrate` מכאן.
+            # גג וירידה לכונן איטי; `task.direct.multicast.max_bitrate` מכאן.
             drive_rates.decide(conn, session["id"],
                                lambda: room.wave_drives(conn, session["id"]),
                                sender.max_bitrate, direct=True)
             return
-        # ‏#2427: שידור שלא הופעל אינו `running` שקט — הסבב נכשל בשמו. ‏`fail` הוא
+        # #2427: שידור שלא הופעל אינו `running` שקט — הסבב נכשל בשמו. `fail` הוא
         # CAS על open/running: סבב שכבר נסגר (הסגירה הקדימה את ההתחלה) אינו משתנה.
         refused = sender.start(session)
         if refused and store.fail(
@@ -714,27 +715,27 @@ def create_runtime(
         on_opened=wake_class,
         **({"now_fn": now_fn} if now_fn else {}),
     )
-    # ‏#411: מה שנשאר `running` מהריצה הקודמת — משימת קליטה, סבב שידור —
+    # #411: מה שנשאר `running` מהריצה הקודמת — משימת קליטה, סבב שידור —
     # מסומן כישלון **בשם** לפני שהקונסולה עונה (הכרעת נדב 06/09, אפשרות
-    # 1). ‏`sender.status()` הוא הראיה החיובית היחידה שסבב עדיין משודר;
+    # 1). `sender.status()` הוא הראיה החיובית היחידה שסבב עדיין משודר;
     # מנוע שזה עתה נבנה אינו משדר דבר. אחרי ה-sweep (שמשאיר `running`
     # במכוון) ולפני שמישהו יכול לקרוא את הסבב "פעיל" ב-hello.
     reconciled = reconcile_on_start(conn, library.root, sender.status())
-    # ‏#1470: קליטה שהאימות שלה נקטע באתחול — האימות רץ מחדש מההתחלה, ברקע;
+    # #1470: קליטה שהאימות שלה נקטע באתחול — האימות רץ מחדש מההתחלה, ברקע;
     # האימג' נשאר מחוץ לספרייה עד שהוא עובר.
     for task_id in reconciled["tasks_reverify"]:
         start_verification(conn, library.root, task_id)
-    # ‏#720: ספריית חבילות הדרייברים — תיקייה ליד ה-DB, לא בספריית האימג'ים.
+    # #720: ספריית חבילות הדרייברים — תיקייה ליד ה-DB, לא בספריית האימג'ים.
     ctx = ServerContext(conn=conn, library=library, store=store, sender=sender,
                         drivers=DriverLibrary(data_dir / "drivers"),
                         leases=(identity_hooks or {}).get("leases"),
                         data_dir=data_dir)
-    # ‏#2684: ראיה אחת לשעון השרת (chrony) -- למשכפל ב-hello ולקונסולה ב-forecasts.
+    # #2684: ראיה אחת לשעון השרת (chrony) -- למשכפל ב-hello ולקונסולה ב-forecasts.
     ctx.clock_trust = hello_eta.ClockTrust(
         {**health_default_hooks(), **(health_hooks or {})}["timesync_status"])
     drain_crumbs(ctx, netcfg_dir)
-    # ‏#705: השירותים לכל כרטיס — **לפני** ה-render של dnsmasq בעלייה, כי הוא
-    # קורא אותם; ‏`startup` מחזיר שינוי שפג בזמן שהשרת לא רץ.
+    # #705: השירותים לכל כרטיס — **לפני** ה-render של dnsmasq בעלייה, כי הוא
+    # קורא אותם; `startup` מחזיר שינוי שפג בזמן שהשרת לא רץ.
     ctx.nic_services = _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq,
                                      nic_hooks, netcfg_hooks, health_hooks,
                                      apply_timesync=apply_timesync)
@@ -750,11 +751,11 @@ def create_runtime(
         print("\n  כניסה ראשונה: admin / admin — הקונסולה תדרוש החלפת סיסמה\n",
               flush=True)
 
-    # ‏#141: KNOWN_MACS_CONF הוא נגזרת של טבלת המכונות, לא מקור — קובץ
+    # #141: KNOWN_MACS_CONF הוא נגזרת של טבלת המכונות, לא מקור — קובץ
     # שנמחק או לא נכתב מעולם משאיר **כל** מכונה בלי dhcp-boot (עיקרון 5).
     # נכתב מחדש כאן, בעליית השרת, ולא רק כשמישהו עורך מכונה מהקונסולה
-    # (console_api._sync_known_macs, אותם hooks בדיוק). ‏`known_macs_hooks`
-    # הוא `None` כברירת מחדל בכוונה: ‏main.py הוא היחיד שמדליק אותו
+    # (console_api._sync_known_macs, אותם hooks בדיוק). `known_macs_hooks`
+    # הוא `None` כברירת מחדל בכוונה: main.py הוא היחיד שמדליק אותו
     # במפורש — בלעדיו זו הרצת בדיקות, ואסור לה לגעת בדיסק/ב-dnsmasq.
     if known_macs_hooks is not None:
         error = known_macs_hooks["apply"](dhcp.render_known_macs(registry.all_macs(conn)))
@@ -770,15 +771,15 @@ def create_runtime(
 
     engine = vmupdate_engine or VmUpdate(
         conn, library,
-        # ‏ה-VM לעולם אינו יוצא לאינטרנט דרך כרטיס ההפצה (docs/guides/vm-update.md).
+        # ה-VM לעולם אינו יוצא לאינטרנט דרך כרטיס ההפצה (docs/guides/vm-update.md).
         deploy_interface=lambda: deploy.state.interface if deploy else None)
     host = (VmHost(engine.host_problem, repo_dir or REPO_ROOT)
             if vm_host else None)
     if host is not None:
         health_hooks = {**(health_hooks or {}), "vm_host": host.health}
     if backfill_readback:
-        # ‏#1864 (ברזל 20/10): אחרי שהשולח קיים — הגיבוב מפנה לו את הדרך (`server_busy`),
-        # ואימג' שנפתח לו סבב קודם לאימג' גדול שאיש לא פורס (`last_use`, ‏`kick`).
+        # #1864 (ברזל 20/10): אחרי שהשולח קיים — הגיבוב מפנה לו את הדרך (`server_busy`),
+        # ואימג' שנפתח לו סבב קודם לאימג' גדול שאיש לא פורס (`last_use`, `kick`).
         threading.Thread(target=readbackhash.run_forever, args=(library,),
                          kwargs={"report": _readback_reporter(conn),
                                  "busy": readbackhash.server_busy(conn, sender),
@@ -808,7 +809,7 @@ def create_runtime(
 
 
 def _grub_lock(conn, password_file, deploy) -> str:
-    """‏#2437: הסיסמה של עורך ה-GRUB — נוצרת אם חסרה — וה-hash שלה.
+    """#2437: הסיסמה של עורך ה-GRUB — נוצרת אם חסרה — וה-hash שלה.
 
     כשל אינו עוצר את השרת: התפריטים ננעלים בלי סיסמה (איש אינו עורך), והסיבה
     ביומן. אותו hash עובר ל-`DeployContext`, כדי שה-bootstrap שהקונסולה כותבת
@@ -821,7 +822,7 @@ def _grub_lock(conn, password_file, deploy) -> str:
                 f"סיסמת עורך ה-GRUB לא נקראה — התפריטים נעולים בלי סיסמה: {error}")
     elif created:
         journal(conn, "grub_password_created",
-                f"נוצרה סיסמה לעורך ה-GRUB של התחנות ב-{password_file} (‏0600, ‏#2437)")
+                f"נוצרה סיסמה לעורך ה-GRUB של התחנות ב-{password_file} (\u200f0600, \u200f#2437)")
     if deploy is not None:
         deploy.grub_password_hash = password_hash
         problem = deploy_net.refresh_grub_cfg(deploy.tftp_root, password_hash)
@@ -851,15 +852,15 @@ def _multicast_addresses(ctx, session_id: str) -> list[str | None]:
 
 def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
                   netcfg_hooks=None, health_hooks=None, apply_timesync=False):
-    """‏#705: ‏`NicServices` עם הבסיס של היום (כרטיס הניהול מה-`DeployContext`,
+    """#705: `NicServices` עם הבסיס של היום (כרטיס הניהול מה-`DeployContext`,
     כרטיס ההפצה של השולח) ושני שלבי אכיפה שחיים כאן — dnsmasq וחומת האש.
-    ‏dnsmasq מחובר רק כשיש hooks מפורשים או ‏`sync_dnsmasq` (‏main): ברירות
+    dnsmasq מחובר רק כשיש hooks מפורשים או `sync_dnsmasq` (main): ברירות
     המחדל האמיתיות כותבות ל-/etc ומפעילות שירות, ובדיקה אסור לה."""
     from server.net import nic_services
     from server.system import timesync
 
     hooks = dict(nic_hooks or {})
-    # ‏#113: אותה רשימת כרטיסים שהוזרקה לשאר הלשוניות — בדיקה לא קוראת את המכונה
+    # #113: אותה רשימת כרטיסים שהוזרקה לשאר הלשוניות — בדיקה לא קוראת את המכונה
     injected = next((h["interfaces"] for h in (dhcp_hooks, netcfg_hooks, health_hooks)
                      if h and "interfaces" in h), None)
     if "interfaces" not in hooks and injected is not None:
@@ -878,7 +879,7 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
         hooks["dnsmasq"] = dnsmasq_step
     if "firewall" not in hooks and deploy is not None:
         def firewall_step(nic):
-            if deploy.primary_ip_error:      # ‏#2160: לא פותחים 8443 לכל הכרטיס בשקט
+            if deploy.primary_ip_error:      # #2160: לא פותחים 8443 לכל הכרטיס בשקט
                 return deploy.primary_ip_error
             regenerate = (deploy.hooks or {}).get("firewall", deploy_net.regenerate_firewall)
             per = nic.firewall_services()
@@ -896,9 +897,9 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
                 error = regenerate(deploy.repo_dir, deploy_if=None, servers_if=None,
                                    primary_ip=deploy.primary_ip, services=per, **proxy_args)
             if error == deploy_net.NO_FIREWALL:
-                # ‏#2440: שרת בלי חומת אש — שינוי השירותים אינו מוחזר בגללה, אבל
+                # #2440: שרת בלי חומת אש — שינוי השירותים אינו מוחזר בגללה, אבל
                 # היומן אומר שאין כלל שנכתב (ומסך הבריאות: "לא נטענה").
-                from .db import journal as journal_line   # ‏`journal` מקומי בפונקציה הזו
+                from .db import journal as journal_line   # `journal` מקומי בפונקציה הזו
                 journal_line(ctx.conn, "firewall_not_installed", error)
                 return None
             return error
@@ -938,56 +939,56 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
     return service
 
 
-#: ‏#1266: הדגל שאינו מוגש לתחנות מ-PXE, גם כשהועבר ב-`--extra-cmdline`.
+#: #1266: הדגל שאינו מוגש לתחנות מ-PXE, גם כשהועבר ב-`--extra-cmdline`.
 #: הסוכן כבר אינו מכיר אותו (#1303); ההסרה נשארת בשביל initramfs ישן.
 STRIPPED_CMDLINE = "imagesrv.debug"
 
 
 def _boot_asgi(rt: ServerRuntime):
-    """אפליקציית ה-ASGI הגולמית של ‎/boot, בנויה מ-runtime משותף.
+    """אפליקציית ה-ASGI הגולמית של /boot, בנויה מ-runtime משותף.
 
     כל מה ש-GRUB נוגע בו — התפריט, הקרנל וה-initramfs — מוגש מכאן:
     ה-HTTP של GRUB מזהה Content-Length רק באותיות גדולות, ו-Starlette
-    ממקטין כותרות. ההסבר המלא ב-boot/http.py (issue #12). ‏extra_cmdline:
+    ממקטין כותרות. ההסבר המלא ב-boot/http.py (issue #12). extra_cmdline:
     תוספות מפעיל לשורת הקרנל דרך הגדרה — לא בעריכת קוד על השרת (#18).
 
     התצורה נבנית **בכל בקשה**, כי `imagesrv.monitor` אינו תוספת מפעיל
     אלא מתג בקונסולה (#690), שצריך לתפוס בלי להפעיל מחדש.
-    ‏`imagesrv.debug` (מעטפת הניפוי המקומית של הסוכן) **מוסר** מתוספות
+    `imagesrv.debug` (מעטפת הניפוי המקומית של הסוכן) **מוסר** מתוספות
     המפעיל תמיד: עד #1266 רק מתג ה-SSH בקונסולה הכניס אותו, והמתג יצא
     מהמוצר — אז הדגל אינו מוגש מ-PXE לעולם (`STRIPPED_CMDLINE`)."""
     conn = rt.conn
     resolve = make_resolver(
         conn, rt.library, rt.store, rt.server_base,
         identity_ok=lambda mac, client_ip: boot_identity_ok(rt.ctx, mac, client_ip),
-        # ‏#2498: שורת `unknown_mac` של התפריט — מרוסנת, כמו ב-hello (#2487).
+        # #2498: שורת `unknown_mac` של התפריט — מרוסנת, כמו ב-hello (#2487).
         unknown_journal=lambda mac, client_ip, lease_matched: boot_journal_unknown(
             rt.ctx, mac, client_ip, lease_matched))
 
     async def boot_asgi(scope, receive, send):
-        # ‏#584: שביל הפירורים (#400) נרשם רק אם הבקשה התקבלה על וילן
+        # #584: שביל הפירורים (#400) נרשם רק אם הבקשה התקבלה על וילן
         # ההפצה — אותה הכרעה בדיוק כמו הספירה של #536, ומאותו טעם:
         # ה-MAC שבשאילתה אינו זהות, ומחוץ לווילן אין ראיה שהפונה הוא
         # המכונה. פירור זר היה הופך "לא ידוע" ל"בדקנו, הגיע" (עיקרון 5)
         # ומאפס את `first_at` של שביל אמיתי. ההכרעה המודעת (#584): פירור
         # מחוץ לווילן **אינו נרשם**; המחיר המוצהר הוא שתחנת תרחיש-3 (#39)
-        # שמאתחלת מחוץ לווילן מאבדת את שביל האבחון שלה. ‏boot/ אינו מכיר
+        # שמאתחלת מחוץ לווילן מאבדת את שביל האבחון שלה. boot/ אינו מכיר
         # טופולוגיית רשת, ולכן ההחלטה יושבת כאן, בדיוק כמו ה-resolver.
         off_vlan = off_deploy_vlan(scope, rt.server_base)
-        # ‏#976: הבדיקה העצמית של השרת מסומנת, ומכובדת רק כשהפונה הוא
-        # השרת עצמו (‏`self_probe`). היא מקבלת את התפריט האמיתי ואינה
+        # #976: הבדיקה העצמית של השרת מסומנת, ומכובדת רק כשהפונה הוא
+        # השרת עצמו (`self_probe`). היא מקבלת את התפריט האמיתי ואינה
         # רושמת דבר — לא `net_seen`, לא פירור ולא ספירת אתחול.
         probe = self_probe(scope)
         await create_boot_asgi(
-            # ‏#536: הסקופ של **הבקשה הזו** נכנס ל-resolver, שרק ממנו
+            # #536: הסקופ של **הבקשה הזו** נכנס ל-resolver, שרק ממנו
             # אפשר לדעת על איזו מכתובות השרת היא התקבלה. הספירה של
-            # ‏`bootguard` תלויה בזה, ולכן ה-resolver נקשר כאן ולא פעם
-            # אחת למעלה. ‏`boot/` אינו מכיר טופולוגיית רשת ואינו צריך.
+            # `bootguard` תלויה בזה, ולכן ה-resolver נקשר כאן ולא פעם
+            # אחת למעלה. `boot/` אינו מכיר טופולוגיית רשת ואינו צריך.
             resolve=lambda mac, ip: resolve(mac, ip, scope),
             config=GrubConfig(
                 server_base=rt.server_base,
-                # ‏#32: נבדק בכל בקשה, ומאותה סיבה שהתצורה כולה נבנית
-                # בכל בקשה — ‏initramfs גרפי שנוסף או הוסר מתיקיית האתחול
+                # #32: נבדק בכל בקשה, ומאותה סיבה שהתצורה כולה נבנית
+                # בכל בקשה — initramfs גרפי שנוסף או הוסר מתיקיית האתחול
                 # תופס מיד, בלי הפעלה מחדש של השרת. הבדיקה זולה (stat
                 # אחד), ובקשת אתחול היא ממילא אירוע נדיר לכל מכונה.
                 gui_initrd_path=gui_initrd_path(rt.boot_dir),
@@ -997,32 +998,35 @@ def _boot_asgi(rt: ServerRuntime):
                     tuple(p for p in rt.extra_cmdline
                           if not p.startswith(STRIPPED_CMDLINE)),
                     monitor.stations_enabled(conn)),
-                # ‏#2437: ‏`e`/`c` נעולים בסיסמה; כל ערך `--unrestricted`.
+                # #2437: `e`/`c` נעולים בסיסמה; כל ערך `--unrestricted`.
                 password_hash=rt.grub_password_hash,
             ),
             boot_dir=rt.boot_dir,
-            # ‏#400: שביל הפירורים. מוזרק כמו ה-resolver — ‏`boot/` אינו
-            # מכיר DB, והשרת אינו מכיר את תחביר ה-GRUB. ‏#584: מחוץ לווילן
+            # #400: שביל הפירורים. מוזרק כמו ה-resolver — `boot/` אינו
+            # מכיר DB, והשרת אינו מכיר את תחביר ה-GRUB. #584: מחוץ לווילן
             # ההפצה הרושם דוחה את הפירור בגלוי במקום לכתוב אותו.
             record=(_probe_decline if probe
                     else _off_vlan_decline if off_vlan
                     else lambda mac, step: _record_verified(rt, scope, mac, step)),
+            # #2830: סמני `up=` נשמרים רק אחרי שהפירור עצמו נרשם (`record_step`), כלומר רק
+            # אחרי שהזהות אומתה — פירור שנדחה (#584/#976/#2411) אינו משאיר גם סמנים.
+            marks_record=lambda mac, marks: boot_marks.record(rt.conn, mac, marks),
         )(scope, receive, send)
 
     return boot_asgi
 
 
 def _add_agent_routes(app: FastAPI, rt: ServerRuntime, *, gui_channel: bool = True) -> None:
-    """הצד שהסוכן (initramfs) והקושחה רואים: ‎/api/v1 (‏hello/login/pulls/
-    progress/disk-event/images), ‏capture הסוכן, מסך התחנה, ומאזין ה-‎/boot.
+    """הצד שהסוכן (initramfs) והקושחה רואים: /api/v1 (hello/login/pulls/
+    progress/disk-event/images), capture הסוכן, מסך התחנה, ומאזין ה-/boot.
 
-    ‏#824: `create_station_router` (‏`/api/v1/agent/{state,groups,sessions}`)
-    הוא גם ה-API שהסוכן על המכונה צורך — ‏guistate.sh/guibridge.sh/
+    #824: `create_station_router` (`/api/v1/agent/{state,groups,sessions}`)
+    הוא גם ה-API שהסוכן על המכונה צורך — guistate.sh/guibridge.sh/
     guiparent.sh/classround.sh קוראים אותו דרך `$SERVER`, שהוא פורט הסוכן.
     הנתיבים האלה מחזירים את מה ש-hello מחזיר ממילא למכונה (ראה ה-docstring
-    של ‏`station_state`), ואין ביניהם נתיב ניהול — הפעולה היחידה, פתיחת סבב,
+    של `station_state`), ואין ביניהם נתיב ניהול — הפעולה היחידה, פתיחת סבב,
     דורשת שם וסיסמה. ולכן הם חיים כאן ולא על הקונסולה (#703: הגבול הוא
-    ה-socket). ‏#1247: מסך התחנה בדפדפן והמאזין ‎:8082 הוסרו; הגואי הנייטיב
+    ה-socket). #1247: מסך התחנה בדפדפן והמאזין :8082 הוסרו; הגואי הנייטיב
     הוא הצרכן היחיד."""
     app.include_router(create_agent_router(
         rt.ctx, rt.server_base, rt.data_dir,
@@ -1031,11 +1035,11 @@ def _add_agent_routes(app: FastAPI, rt: ServerRuntime, *, gui_channel: bool = Tr
     app.include_router(create_cloner_round_router(rt.ctx))   # 16/10: a cloner opens a round on its own drawers
     app.include_router(create_agent_capture_router(rt.ctx))
     app.include_router(direct.create_direct_router(rt.ctx))   # #715
-    # ‏17/09 (מדוד על השרת החי): הכניסה במסך מחשב הבנייה קיבלה 404 —
-    # ‏buildmenu.sh/roomflow.sh קוראים `$SERVER/api/console/{login,folders,
+    # 17/09 (מדוד על השרת החי): הכניסה במסך מחשב הבנייה קיבלה 404 —
+    # buildmenu.sh/roomflow.sh קוראים `$SERVER/api/console/{login,folders,
     # images,tasks/capture,room…}` על פורט הסוכן. אותה משפחה כמו #824:
     # allowlist מחשב הבנייה (בלי שום נתיב ניהול); `create_station_router` כלול בו.
-    # ‏#1576: מה שנכנס כאן הוא ערוץ הגואי של מחשב הבנייה -- השרת מסמן, לא הגוף.
+    # #1576: מה שנכנס כאן הוא ערוץ הגואי של מחשב הבנייה -- השרת מסמן, לא הגוף.
     app.include_router(create_kiosk_router(rt.ctx, room_wake=_kiosk_room_wake(rt),
                                            version=_server_version(rt)),
                        dependencies=[Depends(mark_build_gui)] if gui_channel else [])
@@ -1043,8 +1047,8 @@ def _add_agent_routes(app: FastAPI, rt: ServerRuntime, *, gui_channel: bool = Tr
 
 
 def _server_version(rt: ServerRuntime):
-    """‏#1252: תג ה-git של השרת לכותרת הגואי (‏`/agent/state`) — אותו מקור
-    כמו `/me.version` (‏#915) ואותה ברירת מחדל לתיקיית העץ (‏#748)."""
+    """#1252: תג ה-git של השרת לכותרת הגואי (`/agent/state`) — אותו מקור
+    כמו `/me.version` (#915) ואותה ברירת מחדל לתיקיית העץ (#748)."""
     repo_dir = rt.repo_dir or REPO_ROOT
     hooks = {**default_update_hooks(), **(rt.update_hooks or {})}
     return lambda: current_version(hooks, repo_dir)
@@ -1052,8 +1056,8 @@ def _server_version(rt: ServerRuntime):
 
 def _kiosk_room_wake(rt: ServerRuntime):
     """שליחת ה-WoL של חדר השיכפולים — אותה פונקציה בקונסולה ובסוכן.
-    ‏`only` (נדב 17/10) — רק מחשבי השיכפול שנבחרו, כל אחד לפי ה-MAC שלו (הם כבר
-    אומתו כמחשבי שיכפול רשומים, בכל קבוצת שיכפול); ‏None = כל החדר."""
+    `only` (נדב 17/10) — רק מחשבי השיכפול שנבחרו, כל אחד לפי ה-MAC שלו (הם כבר
+    אומתו כמחשבי שיכפול רשומים, בכל קבוצת שיכפול); None = כל החדר."""
     conn = rt.conn
     kw = {"send": rt.wol_send} if rt.wol_send else {}
 
@@ -1071,19 +1075,19 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     שהוא גם מסך ניהול). ה-API `/api/v1/agent/*` חי על הסוכן (#824)."""
     ctx = rt.ctx
     health_hooks = dict(rt.health_hooks or {})
-    # ‏#2454: שורת "סיסמת GRUB" — צהובה עד "שמרתי"; אין קובץ (בדיקות, פיתוח) = אין שורה.
+    # #2454: שורת "סיסמת GRUB" — צהובה עד "שמרתי"; אין קובץ (בדיקות, פיתוח) = אין שורה.
     health_hooks.setdefault("grub_password", lambda: grub_reminder(ctx.conn, rt.grub_password_file))
-    # ‏#748: תיקיית העץ נופלת לתיקיית הקוד עצמה כשאין ``--repo-dir``
+    # #748: תיקיית העץ נופלת לתיקיית הקוד עצמה כשאין ``--repo-dir``
     # מפורש (בדיקות/הרצה ישירה) — ראו ``main.py``.
     repo_dir = rt.repo_dir or REPO_ROOT
-    # ‏#915/#1297: הגרסה שמוצגת בקונסולה נקראת מאותו מקור כמו כפתור
+    # #915/#1297: הגרסה שמוצגת בקונסולה נקראת מאותו מקור כמו כפתור
     # "עדכן". ההכרעה נשמרת לפי HEAD, ולכן בקשות /me אינן מריצות שוב את
     # המאמת; checkout מחליף את מפתח המטמון.
     update_hooks = {**default_update_hooks(), **(rt.update_hooks or {})}
-    # ‏#1297: warm the per-HEAD cache at application startup.  Requests reuse
+    # #1297: warm the per-HEAD cache at application startup.  Requests reuse
     # it; a checkout changes HEAD and therefore computes a fresh value.
     started_with = display_version(update_hooks, repo_dir)
-    # ‏#1546: ‏`/health/live` היא הראיה של server-upgrade.sh ש"החדש רץ" — ולכן
+    # #1546: `/health/live` היא הראיה של server-upgrade.sh ש"החדש רץ" — ולכן
     # היא הגרסה שהתהליך **טען**, לא מה שעל הדיסק עכשיו (שרת חיפה, 17/10: העץ
     # על v0.75.0, תהליך של v0.74.2, ו-live אמר v0.75.0). הקריאה בעלייה היא
     # זו שכבר חיממה את המטמון למעלה — לא קריאה שנייה ל-`describe`: גרסה
@@ -1100,19 +1104,19 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
                 return read
             live_version[0] = read
         return live_version[0]
-    # ‏#1073: למשתמש הפצה אין קונסולה — `deploy` מקבל 403 על **כל** נתיב
+    # #1073: למשתמש הפצה אין קונסולה — `deploy` מקבל 403 על **כל** נתיב
     # ניהול, גם עם עוגייה שפורט הסוכן הנפיק (אותו סוד). ה-dependency נוסף
-    # כאן, בהרכבה, ולא בתוך הראוטרים: ‏`kiosk.py` בונה מהם עותקים משלו
+    # כאן, בהרכבה, ולא בתוך הראוטרים: `kiosk.py` בונה מהם עותקים משלו
     # לפורט הסוכן, ושם deploy מותר — מחשב הבנייה נכנס משם.
-    # ‏HTTP בלבד (`Request`): ה-WebSocket של המוניטור סוגר deploy ב-4403
+    # HTTP בלבד (`Request`): ה-WebSocket של המוניטור סוגר deploy ב-4403
     # **אחרי** accept (#904) כדי שהסיבה תגיע לדפדפן, ולכן נשאר מחוץ לזה.
     no_deploy = [Depends(auth.console_only(ctx.conn))]
 
     def include(router) -> None:
         app.include_router(router, dependencies=no_deploy)
 
-    # ‏#968: ‏uptime מאותו מנגנון הזרקה של מסך הבריאות (health_hooks);
-    # ‏deploy_ip מ-server_base — null כשרשת ההפצה טרם הוגדרה (#1088), כי
+    # #968: uptime מאותו מנגנון הזרקה של מסך הבריאות (health_hooks);
+    # deploy_ip מ-server_base — null כשרשת ההפצה טרם הוגדרה (#1088), כי
     # אז server_base הוא 127.0.0.1 ולא כתובת שתחנה רואה.
     _health = {**health_default_hooks(), **(rt.health_hooks or {})}
     uptime_hook = _health["uptime"]
@@ -1121,14 +1125,14 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
         version=lambda: display_version(update_hooks, repo_dir),
         tls=rt.console_tls,
         uptime=uptime_hook,
-        clock_status=_health["timesync_status"],   # ‏#1814: הודעת MFA על שעון סוטה
+        clock_status=_health["timesync_status"],   # #1814: הודעת MFA על שעון סוטה
         deploy_ip=lambda: deploy_net.deploy_ip(
             rt.server_base, rt.deploy.state if rt.deploy else None)))
     include(create_storage_router(ctx, rt.data_dir))   # #727/#740
     include(create_storage_locations_router(
         ctx, rt.storage_hooks, rt.data_dir, rt.server_base,   # #1066
         boot_trees=tuple(str(t) for t in (
-            rt.boot_dir, rt.deploy.tftp_root if rt.deploy else None) if t)))   # ‏#2462
+            rt.boot_dir, rt.deploy.tftp_root if rt.deploy else None) if t)))   # #2462
     include(create_backup_target_router(ctx, rt.storage_hooks, rt.data_dir))   # #1956
     include(create_library_router(ctx))
     include(create_iso_router(ctx))   # #404: לשונית ISO -- העלאה, רשימה, מחיקה
@@ -1139,7 +1143,7 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     include(create_usb_stick_router(
         ctx, rt.usb_hooks, version=lambda: display_version(update_hooks, repo_dir).version or ""))   # #1920: הדיסק-און-קי בשרת
     include(create_net_router(ctx))
-    # ‏#1013: מתג ה-TFTP בדף הפורטים מחיל את אותם קובצי dnsmasq, דרך אותם
+    # #1013: מתג ה-TFTP בדף הפורטים מחיל את אותם קובצי dnsmasq, דרך אותם
     # hooks, כמו לשונית ה-DHCP — מקום אחד שכותב את הקובץ.
     dhcp_hooks = {**console_dhcp.default_hooks(), **(rt.dhcp_hooks or {})}
     dhcp_router = create_dhcp_router(ctx, dhcp_hooks, deploy=rt.deploy)
@@ -1166,9 +1170,9 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     include(create_ups_router(ctx, (rt.host_hooks or {}).get("ups")))   # #1973
     include(create_email_router(ctx))   # #1751
     include(create_grub_password_router(ctx, rt.grub_password_file))   # #2450
-    # ‏#690: admin RFB proxy + settings — ה-HTTP שלו admin_only ממילא.
+    # #690: admin RFB proxy + settings — ה-HTTP שלו admin_only ממילא.
     app.include_router(create_monitor_router(ctx))
-    # ‏#1334: ה-HTTP דרך include (console_only: deploy מקבל את הסירוב של #1073),
+    # #1334: ה-HTTP דרך include (console_only: deploy מקבל את הסירוב של #1073),
     # וה-WebSocket — כמו המוניטור — מחוץ לו, וסוגר בעצמו כל מי שאינו admin.
     if rt.vmupdate is not None:
         include(create_vmupdate_router(ctx, rt.vmupdate))
@@ -1176,13 +1180,13 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     include(image_versions.create_versions_router(ctx))   # #1334: גרסאות + ברירת מחדל
     include(create_console_capture_router(ctx))
     include(create_room_router(ctx, wake=_kiosk_room_wake(rt)))
-    # ‏#984: מכונה בודדת / grp_BUILD — אותו שולח מוזרק כמו בחדר.
+    # #984: מכונה בודדת / grp_BUILD — אותו שולח מוזרק כמו בחדר.
     include(create_wake_router(ctx, rt.wol_send))
-    # ‏#980: כיבוי החדר + היסטוריית סבבים — קונסולה בלבד, לא בסוכן.
+    # #980: כיבוי החדר + היסטוריית סבבים — קונסולה בלבד, לא בסוכן.
     include(create_room_console_router(ctx))
     app.mount("/console", StaticFiles(directory=STATIC_DIR, html=True), name="console")
     app.add_middleware(ConsoleNoStaleCache)
-    # ‏#2757: חידוש עוגיית הקונסולה בשימוש פעיל -- רק כאן, כי רק כאן ה-middleware שמוסר
+    # #2757: חידוש עוגיית הקונסולה בשימוש פעיל -- רק כאן, כי רק כאן ה-middleware שמוסר
     # את העוגייה החדשה. פורט הסוכן אינו מחדש.
     app.add_middleware(session_renewal.SessionRenewal, conn=ctx.conn, tls=rt.console_tls)
 
@@ -1192,40 +1196,40 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
 
 
 def create_agent_app(rt: ServerRuntime) -> FastAPI:
-    """האפליקציה שהסוכן והקושחה מדברים איתה (‎:8080 בייצור)."""
+    """האפליקציה שהסוכן והקושחה מדברים איתה (:8080 בייצור)."""
     app = FastAPI(title="ImageSrv agent", docs_url=None, redoc_url=None)
     setattr(app.state, auth.KIOSK_APP_FLAG, True)   # #1340
     app.state.ctx = rt.ctx
     app.state.runtime = rt
     app.state.data_dir = rt.data_dir
     _add_agent_routes(app, rt)
-    # ‏#2410: תקרת גוף לכל נתיבי הכתיבה בפורט הסוכן, חוץ מהעלאת נתוני האימג'.
+    # #2410: תקרת גוף לכל נתיבי הכתיבה בפורט הסוכן, חוץ מהעלאת נתוני האימג'.
     app.add_middleware(agent_body.BodyCap)
     return app
 
 
 def create_console_app(rt: ServerRuntime) -> FastAPI:
-    """אפליקציית הקונסולה/הניהול (‎:8081 בייצור)."""
+    """אפליקציית הקונסולה/הניהול (:8081 בייצור)."""
     app = FastAPI(title="ImageSrv console", docs_url=None, redoc_url=None)
     setattr(app.state, auth.CONSOLE_APP_FLAG, True)   # #1340
     app.state.ctx = rt.ctx
     app.state.runtime = rt
     app.state.data_dir = rt.data_dir
     _add_console_routes(app, rt)
-    # ‏#1633: ‏X-Frame-Options + ‏Fetch Metadata + סוג גוף — על 8081 בלבד. לא
+    # #1633: X-Frame-Options + Fetch Metadata + סוג גוף — על 8081 בלבד. לא
     # ב-`_add_console_routes`: במעטפת המשולבת (`create_app`) יושבים גם נתיבי
     # הסוכן והקיוסק, ושם הלקוח הוא sh/curl ולא דפדפן.
     app.add_middleware(ConsoleFetchGuard)
-    # ‏#456: שעון-הרקע של החדר יושב על הקונסולה — היא האפליקציה שרצה תמיד
+    # #456: שעון-הרקע של החדר יושב על הקונסולה — היא האפליקציה שרצה תמיד
     # בייצור, והחדר הוא ממילא מסך ניהול. אפליקציה **אחת** בכל תהליך.
     _install_room_clock(app, rt)
     return app
 
 
 def create_alive_app(rt: ServerRuntime, fingerprint: str) -> FastAPI:
-    """‏#1310: המאזין "אתה שם?" של הראשי על 8443 — אפליקציה **נפרדת**, בלי
+    """#1310: המאזין "אתה שם?" של הראשי על 8443 — אפליקציה **נפרדת**, בלי
     אף ראוטר של הקונסולה או הסוכן. השם הוא השם שהקונסולה מציגה בראש העץ,
-    והגרסה מאותו מקור כמו `/me` (‏`_server_version`)."""
+    והגרסה מאותו מקור כמו `/me` (`_server_version`)."""
     from server.net import ports
     from server.interserver import primary_alive
     return primary_alive.create_alive_app(
@@ -1257,15 +1261,15 @@ def create_app(
     # והראשון מנצח. בבדיקות המשולבות (#1073) deploy נכנס דרך הסוכן (allowlist)
     # ומסורב על נתיבי ניהול (`console_only`). MFA והחלפה כפויה (#1085)
     # נבדקים על `create_console_app`, לא כאן — בייצור הם על שני פורטים.
-    # ‏#1576: בלי סימון ערוץ הגואי -- כאן נתיבי הקיוסק מאפילים על אותם נתיבי
+    # #1576: בלי סימון ערוץ הגואי -- כאן נתיבי הקיוסק מאפילים על אותם נתיבי
     # קונסולה, וכל קליטה "מהקונסולה" בבדיקות הייתה מסומנת build_gui. הסימון
     # נבדק על הפיצול האמיתי (`create_agent_app` + `create_console_app`).
     _add_agent_routes(app, rt, gui_channel=False)
     _add_console_routes(app, rt)
-    # ‏#824: נתיבי התחנה (`create_station_router`) מגיעים מ-`_add_agent_routes`
+    # #824: נתיבי התחנה (`create_station_router`) מגיעים מ-`_add_agent_routes`
     # — לא נוספים כאן בנפרד. תוספת מפורשת למעטפת בלבד היא בדיוק מה שהסתיר
     # את ה-404 של הסוכן בייצור אחרי #738.
-    # ‏#456: המעטפת המשולבת (בדיקות/e2e) מריצה גם את שעון-הרקע של החדר,
+    # #456: המעטפת המשולבת (בדיקות/e2e) מריצה גם את שעון-הרקע של החדר,
     # כדי שההתנהגות תהיה זהה לייצור. אפליקציה אחת → שעון אחד.
     _install_room_clock(app, rt)
     return app

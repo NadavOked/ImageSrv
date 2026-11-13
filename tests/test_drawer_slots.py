@@ -150,7 +150,8 @@ def test_room_uses_mapping_for_validation_and_drawer_numbers(room_server):
     ]
     _hello(anon, CLONER1, disks=disks)
     assert room._validate_target_slots(
-        ctx.conn, [{"mac": CLONER1, "ports": [5]}]) == [{"mac": CLONER1, "ports": [5]}]
+        ctx.conn, [{"mac": CLONER1, "ports": [5]}]) == [{"mac": CLONER1, "ports": [5],   # #2458: + shown
+                                                          "shown": [{"port": 5, "serial": "S5", "size_bytes": 1000}]}]
     with pytest.raises(ValueError):
         room._validate_target_slots(ctx.conn, [{"mac": CLONER1, "ports": [2]}])
 

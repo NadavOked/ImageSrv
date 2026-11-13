@@ -1,15 +1,15 @@
-"""‏#1264 — רשת ההפצה על שני כרטיסים: bond במצב balance-alb, כתובת אחת.
+"""#1264 — רשת ההפצה על שני כרטיסים: bond במצב balance-alb, כתובת אחת.
 
-הכרעת נדב (10–11/10): שני הכרטיסים **פעילים במקביל** על ה-‎.1 של רשת
+הכרעת נדב (10–11/10): שני הכרטיסים **פעילים במקביל** על ה-.1 של רשת
 ההפצה, ואם אחד נופל השני ממשיך. בלי הגדרה בסוויץ'.
 
 מה נבדק כאן:
-- ‏`netcfg`: קובץ ה-bond (‏`bond-slaves`/‏`bond-mode balance-alb`/‏`bond-miimon`),
+- `netcfg`: קובץ ה-bond (`bond-slaves`/`bond-mode balance-alb`/`bond-miimon`),
   ובעיות הגדרה של bond. כרטיס יחיד — הקובץ **בלי שינוי**.
-- ‏`netcfg_host`: קריאת `/proc/net/bonding/<bond>` — ‏`checked=False` הוא "לא
+- `netcfg_host`: קריאת `/proc/net/bonding/<bond>` — `checked=False` הוא "לא
   נבדק", ולעולם לא "פעיל" (עיקרון 5).
-- ‏`PUT /api/console/net/config/{שם}/second`: הוספה והסרה על מכונה מדומה —
-  הכתובת, ה-DHCP, ‏`deploy:interface`, חומת האש ו-dnsmasq עוברים לשם החדש;
+- `PUT /api/console/net/config/{שם}/second`: הוספה והסרה על מכונה מדומה —
+  הכתובת, ה-DHCP, `deploy:interface`, חומת האש ו-dnsmasq עוברים לשם החדש;
   כל הסירובים קורים **לפני** שנוגעים במשהו; קריאה חוזרת שנכשלה מחזירה את
   הקבצים הקודמים. בבדיקות הכול hooks — שום דבר לא נוגע ברשת של המכונה.
 """
@@ -183,8 +183,8 @@ class Machine:
 
 @pytest.fixture()
 def lab(tmp_path: Path, images_root: Path, clock):
-    """שרת שרשת ההפצה שלו כבר הוגדרה מהקונסולה על eth1 (‏10.44.9.1/24).
-    ‏eth0 = ניהול, ‏eth2/eth3 = כרטיסים פנויים."""
+    """שרת שרשת ההפצה שלו כבר הוגדרה מהקונסולה על eth1 (10.44.9.1/24).
+    eth0 = ניהול, eth2/eth3 = כרטיסים פנויים."""
     if TestClient is None:
         pytest.skip("fastapi is required")
     from server.console import users
@@ -443,7 +443,7 @@ def test_editing_the_deploy_network_on_the_bond_keeps_both_cards(lab):
 
 
 def test_a_failed_completion_is_named_dnsmasq_still_follows_and_a_retry_on_the_new_name_finishes(lab):
-    """חומת האש נפלה אחרי שהמכונה כבר עברה ל-bond: ‏ok=false עם השלב בשם, ה-DHCP
+    """חומת האש נפלה אחרי שהמכונה כבר עברה ל-bond: ok=false עם השלב בשם, ה-DHCP
     הולך אחרי הכתובת, ושליחה חוזרת על bond0 משלימה בלי לגעת שוב במכונה."""
     lab.deploy.hooks["firewall"] = lambda repo, **kw: "nft -c נפל"
     r = _second(lab, "eth1", "eth2")
@@ -589,7 +589,7 @@ def test_1804_failed_module_write_rolls_back(lab, monkeypatch, caplog):
     result = _second(lab, "eth1", "eth2").json()
     assert result["ok"] is False, result
     assert "imagesrv-bond.conf" in result["apply_error"]
-    # ‏#2510: טקסט ה-OSError ביומן השרת; בתשובה — הנתיב שלנו ומשפט קבוע.
+    # #2510: טקסט ה-OSError ביומן השרת; בתשובה — הנתיב שלנו ומשפט קבוע.
     assert "module file write failed" not in result["apply_error"]
     assert "הפרטים ביומן השרת" in result["apply_error"]
     assert any("module file write failed" in r.getMessage() for r in caplog.records)
@@ -623,7 +623,7 @@ def test_1804_failed_removal_restores_module_file_and_bond(lab, monkeypatch, cap
     monkeypatch.setattr(Path, "unlink", fail_removal)
     result = _second(lab, "bond0", "").json()
     assert result["ok"] is False, result
-    assert "module file removal failed" not in result["apply_error"]      # ‏#2510
+    assert "module file removal failed" not in result["apply_error"]      # #2510
     assert "הפרטים ביומן השרת" in result["apply_error"]
     assert any("module file removal failed" in r.getMessage() for r in caplog.records)
     assert "הוחזרה ואומתה" in result["apply_error"]

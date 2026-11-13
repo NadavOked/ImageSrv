@@ -1,18 +1,18 @@
-"""תשובת שרת שאינה מובנת, בכרטיס שהשרת מפיץ בו: מסך הכישלון, לא דיסק בשקט (‏#2666).
+"""תשובת שרת שאינה מובנת, בכרטיס שהשרת מפיץ בו: מסך הכישלון, לא דיסק בשקט (#2666).
 
 הכרעת נדב (07/11, בסקירת מודל האמון #2578): **כל כשל אימות במכונה שמגיעה לרשת
 שהשרת מפיץ בה אימג'ים מסתיים במסך הגרפי** — הסיבה בעברית וכפתור "אתחל עכשיו".
-הפער היה תשובה לא תקינה או `schema` לא מוכר: ‏`grub_menu.decide` החזירה `LOCAL`
+הפער היה תשובה לא תקינה או `schema` לא מוכר: `grub_menu.decide` החזירה `LOCAL`
 בשקט, וגם `decide.sh` של הסוכן (שם הסיבה על המסך הייתה "אין למחשב הזה משימה").
 
-* **התפריט** — רק על דגל שהשרת שם על ראיה חיובית (‏`answer_failure.FLAG`):
-  ‏`schema` לא מוכר → ערך הסוכן הרגיל, שורת קרנל נקייה (עיקרון 2).
-* **השרת** — הדגל רק כשהבקשה הגיעה ל**כרטיס מפיץ** (‏`hello.serves_images`), ורק
-  בתקציב של #75 (‏`bootguard.ATTEMPT_LIMIT`). אחריו — הדיסק. מחוץ לרשת המפיצה,
+* **התפריט** — רק על דגל שהשרת שם על ראיה חיובית (`answer_failure.FLAG`):
+  `schema` לא מוכר → ערך הסוכן הרגיל, שורת קרנל נקייה (עיקרון 2).
+* **השרת** — הדגל רק כשהבקשה הגיעה ל**כרטיס מפיץ** (`hello.serves_images`), ורק
+  בתקציב של #75 (`bootguard.ATTEMPT_LIMIT`). אחריו — הדיסק. מחוץ לרשת המפיצה,
   או בכל ספק — כמו היום.
 * **הסוכן** — `schema` שאינו 1 (כולל תשובה שלא נקראה) → `bad_answer` →
-  ‏`die_local` עם הסיבה האמיתית, מסך הכישלון ו"אתחל עכשיו". לאן האתחול הבא —
-  השרת מחליט (‏#75): הסוכן אינו יודע אם הכרטיס מפיץ, והוא אינו סומך על תשובה
+  `die_local` עם הסיבה האמיתית, מסך הכישלון ו"אתחל עכשיו". לאן האתחול הבא —
+  השרת מחליט (#75): הסוכן אינו יודע אם הכרטיס מפיץ, והוא אינו סומך על תשובה
   שלא הבין.
 
 בקרה שלילית: ראו גוף ה-PR — כל קובצי הייצור של ה-PR הוחזרו יחד ל-origin/main.
@@ -81,7 +81,7 @@ def test_anything_but_true_is_todays_local_disk(flag):
 
 def test_an_answer_that_is_not_an_object_carries_no_evidence_and_stays_local():
     """אין על מה לשים דגל: תשובה שאינה אובייקט אינה יכולה לומר מאיפה הגיעה.
-    ה-resolver של השרת תמיד מחזיר אובייקט (‏`build_answer`)."""
+    ה-resolver של השרת תמיד מחזיר אובייקט (`build_answer`)."""
     for junk in ("not a dict", None, [FLAG]):
         assert (decide(junk).action, decide(junk).code) == (LOCAL, "bad-answer")
 
@@ -153,7 +153,7 @@ def test_on_the_distributing_card_the_menu_serves_the_screen(bad_schema):
 @pytest.mark.parametrize("base", [OFF_VLAN, None], ids=["not-distributing", "no-evidence"])
 def test_on_a_card_that_does_not_distribute_it_boots_the_disk(bad_schema, base):
     """רשת שהשרת לא מפיץ בה — וגם ב-TestClient, שה-scope שלו אינו כתובת (ספק):
-    ערך אחד, ‏`timeout=0`, בלי ImageSrv, ובלי לספור (תרחיש 7 בהדגמה)."""
+    ערך אחד, `timeout=0`, בלי ImageSrv, ובלי לספור (תרחיש 7 בהדגמה)."""
     for _ in range(LIMIT + 1):
         text = menu(bad_schema, MAC, base)
         assert decision(text) == "# decision: bad-schema"
@@ -181,7 +181,7 @@ def test_a_quiet_hour_starts_a_new_budget(bad_schema):
 
 
 def test_a_good_answer_on_the_distributing_card_is_unchanged(server):
-    """בלי תקלה — אותה החלטה של היום (‏#1802), ואין ספירה של #2666."""
+    """בלי תקלה — אותה החלטה של היום (#1802), ואין ספירה של #2666."""
     assert decision(menu(server, MAC)) == "# decision: unregistered-screen"
     row = server["ctx"].conn.execute(
         "SELECT context FROM boot_attempts WHERE mac = ?", (MAC,)).fetchone()
@@ -189,7 +189,7 @@ def test_a_good_answer_on_the_distributing_card_is_unchanged(server):
 
 
 def test_the_screen_condition_is_one_function_for_both_screens():
-    """"הכרטיס הזה מפיץ" — תנאי אחד (‏`serves_images`), לשני המסכים, כדי שכרטיס
+    """"הכרטיס הזה מפיץ" — תנאי אחד (`serves_images`), לשני המסכים, כדי שכרטיס
     כיתות מפיץ (v2) ייכנס במקום אחד (הבהרת נדב, 07/11)."""
     source = (REPO / "server/agent/hello.py").read_text(encoding="utf-8")
     resolve = source[source.index("    def resolve("):]

@@ -1,18 +1,18 @@
-"""‏#1803 — עדכון גרסה מתקין חבילות שנוספו ל-packages.txt של התג החדש.
+"""#1803 — עדכון גרסה מתקין חבילות שנוספו ל-packages.txt של התג החדש.
 
-מעבדה 19/10: שרת שהותקן מ-ISO v0.59.2 ועודכן בכפתור עד rc7 — ‏ifenslave (‏#1264,
-‏packages.txt:39) לא הותקן, כי ``deploy/security-upgrade.sh`` שידרג רק חבילות
+מעבדה 19/10: שרת שהותקן מ-ISO v0.59.2 ועודכן בכפתור עד rc7 — ifenslave (#1264,
+packages.txt:39) לא הותקן, כי ``deploy/security-upgrade.sh`` שידרג רק חבילות
 **מותקנות**. מה שנבדק כאן:
 
 * חבילה מ-``tools/iso/packages.txt`` של התג שחסרה בשרת — מותקנת מהמאגר החתום של
-  הגרסה, וראיה חיובית בקריאה חוזרת (‏dpkg-query) שהיא מותקנת.
+  הגרסה, וראיה חיובית בקריאה חוזרת (dpkg-query) שהיא מותקנת.
 * חבילה חדשה שאינה במאגר — כשל גלוי **לפני** apt (עיקרון 5), ובכפתור העדכון: חזרה לתג
   הקודם בשלב ``packages``, עם הסיבה בסטטוס.
 * אין חבילות חדשות — אין קריאה ל-apt.
 * ``tools/iso/make-pool.sh --security`` אורז את **כל** הסגירה של packages.txt.
 
-אותו harness כמו ‏#1411 (‏``World`` ב-test_security_pool_1411): ‏apt, ‏dpkg ו-curl
-מדומים על PATH; ‏tar, ‏sha256sum ו-zcat אמיתיים.
+אותו harness כמו #1411 (``World`` ב-test_security_pool_1411): apt, dpkg ו-curl
+מדומים על PATH; tar, sha256sum ו-zcat אמיתיים.
 """
 
 from __future__ import annotations

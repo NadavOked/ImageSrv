@@ -1,6 +1,6 @@
-"""‏#1983: ‏discovery אינו כותב רשומות בשם שהיעד בחר, וסוד ה-CHAP אינו ב-argv.
+"""#1983: discovery אינו כותב רשומות בשם שהיעד בחר, וסוד ה-CHAP אינו ב-argv.
 
-‏CVE-2026-44943: בלי `-o nonpersistent`, ‏iscsiadm 2.1.11 כותב כ-root רשומת node
+CVE-2026-44943: בלי `-o nonpersistent`, iscsiadm 2.1.11 כותב כ-root רשומת node
 לכל יעד ש-SendTargets החזיר, בשם שהיעד בחר — ו-`../` יוצא מה-DB. נמדד 06/11 על
 הבינארי של Debian 13 מול stub על loopback. הטסטים כאן מזייפים את `_run` בלבד, ולכן
 בודקים מה נשלח ל-iscsiadm ומה נעשה בתשובה שלו, ולא מה iscsiadm עושה בפועל.
@@ -24,7 +24,7 @@ PASSWORD = "node.session.auth.password"
 
 
 class FakeIscsiadm:
-    """‏`_run` מזויף: רושם כל argv, ומחזיק רשומת node כקובץ כמו iscsiadm האמיתי —
+    """`_run` מזויף: רושם כל argv, ומחזיק רשומת node כקובץ כמו iscsiadm האמיתי —
     שטוח, `<iqn>/<host>,<port>`, כפי שנמדד אחרי `-o new` בלי tpgt."""
 
     def __init__(self, nodes: Path, discovered: str = ""):
@@ -38,7 +38,7 @@ class FakeIscsiadm:
 
     def __call__(self, cmd, timeout=30, input_text=None):
         del timeout, input_text
-        if cmd[0] == "udevadm":   # ‏#2649: לא iscsiadm, ולא ב-`calls`
+        if cmd[0] == "udevadm":   # #2649: לא iscsiadm, ולא ב-`calls`
             return HookResult(OK, payload={"stdout": "", "stderr": ""})
         self.calls.append(list(cmd))
         for needle, result in self.fail.items():
@@ -235,7 +235,7 @@ def test_the_record_stays_unreadable_to_others(iscsiadm):
 
 
 def test_every_record_iscsiadm_marked_gets_the_secret(iscsiadm, monkeypatch):
-    """‏`-p` בלי tpgt תואם גם רשומה מ-discovery ישן: ‏`<host>,<port>,<tpgt>/<iface>`."""
+    """`-p` בלי tpgt תואם גם רשומה מ-discovery ישן: `<host>,<port>,<tpgt>/<iface>`."""
     old = iscsiadm.nodes / IQN / "10.44.3.75,3260,1" / "default"
     old.parent.mkdir(parents=True)
     iscsiadm.record().write_text("# END RECORD\n", newline="\n")
@@ -254,7 +254,7 @@ def test_every_record_iscsiadm_marked_gets_the_secret(iscsiadm, monkeypatch):
 
 def test_a_record_that_was_not_marked_fails_by_name_and_login_does_not_run(
         iscsiadm, tmp_path, monkeypatch):
-    """‏DB במקום אחר (גרסה אחרת של open-iscsi): עדיף כישלון בשם על login בלי סוד."""
+    """DB במקום אחר (גרסה אחרת של open-iscsi): עדיף כישלון בשם על login בלי סוד."""
     monkeypatch.setattr(sl, "ISCSI_NODES_DIR", tmp_path / "elsewhere")
     result = sl.iscsi_login(IQN, PORTAL, {"user": "u1", "secret": SECRET}, True)
     assert result.status == FAILED and "רשומ" in result.reason

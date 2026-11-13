@@ -1,15 +1,15 @@
-"""‏#2040 — מחשב בנייה עם שני כרטיסים מחוברים: רשת ההפצה ורשת הכיתות.
+"""#2040 — מחשב בנייה עם שני כרטיסים מחוברים: רשת ההפצה ורשת הכיתות.
 
 הכרעת נדב (23/10): שני הכרטיסים מחוברים, בכל סדר, וה-BIOS עולה מהדיסק.
-1. ‏Windows שעלה מהדיסק לא מקבל כתובת ברשת ההפצה — ה-dnsmasq של כרטיס ההפצה
-   עונה רק לאתחול רשת (‏`PXEClient`) ולסוכן (‏vendor class `ImageSrv-agent`).
+1. Windows שעלה מהדיסק לא מקבל כתובת ברשת ההפצה — ה-dnsmasq של כרטיס ההפצה
+   עונה רק לאתחול רשת (`PXEClient`) ולסוכן (vendor class `ImageSrv-agent`).
 2. כשעולים מהרשת, הסוכן עובד רק על הכרטיס שה-DHCP של השרת שלנו ענה עליו
-   (‏server-id == ה-host של `imagesrv.server`) ומוריד את השני לכל הריצה.
+   (server-id == ה-host של `imagesrv.server`) ומוריד את השני לכל הריצה.
 3. לא לפי סדר אלפביתי — זה היה הבאג: הראשון שקיבל חכירה כלשהי נבחר.
 
 צד הסוכן: הלולאה האמיתית של `agent/init` עם `udhcpc`/`ip` מזויפים
-(‏`test_init_network.udhcpc_prelude`). צד השרת: הקובץ ש-`dhcp.render`
-מייצר, דרך המסלול שכותב אותו (‏`console_dhcp.render_dnsmasq`) ודרך מודל של
+(`test_init_network.udhcpc_prelude`). צד השרת: הקובץ ש-`dhcp.render`
+מייצר, דרך המסלול שכותב אותו (`console_dhcp.render_dnsmasq`) ודרך מודל של
 כללי ההתאמה של dnsmasq — אין dnsmasq אמיתי ב-Testrunner.
 """
 
@@ -26,7 +26,7 @@ from test_init_network import FOREIGN_SID, SERVER_IP, _make_net, _run
 
 REPO = Path(__file__).resolve().parent.parent
 BUILD = REPO / "tools" / "build_initramfs.sh"
-#: מה שה-udhcpc של הסוכן שולח (‏`-V`) — כמחרוזת ולא דרך הקבוע, כדי שהטסטים
+#: מה שה-udhcpc של הסוכן שולח (`-V`) — כמחרוזת ולא דרך הקבוע, כדי שהטסטים
 #: ההתנהגותיים ייפלו בבקרה השלילית על התשובה עצמה ולא על AttributeError.
 AGENT_VC = "ImageSrv-agent"
 
@@ -63,8 +63,8 @@ def test_our_server_on_the_second_nic_is_chosen_and_the_first_goes_down(tmp_path
 
 @bash
 def test_bonding_masters_is_not_a_nic_to_take_down(tmp_path):
-    """‏`/sys/class/net/bonding_masters` הוא קובץ, לא כרטיס (מודול bonding טעון).
-    נמדד ב-netns על ה-Testrunner ‏(23/10): הלולאה ניסתה להוריד אותו והדפיסה
+    """`/sys/class/net/bonding_masters` הוא קובץ, לא כרטיס (מודול bonding טעון).
+    נמדד ב-netns על ה-Testrunner (23/10): הלולאה ניסתה להוריד אותו והדפיסה
     WARNING שקרי — "would not go down"."""
     net = tmp_path / "net"
     _make_net(net, {"lo": 1, "eth0": 1, "eth1": 1})
@@ -90,8 +90,8 @@ def test_our_server_on_the_first_nic_leaves_the_second_unprobed_and_down(tmp_pat
 
 @bash
 def test_no_nic_with_our_server_is_server_not_found_not_a_guess(tmp_path):
-    """שני כרטיסים, לשניהם חכירה, אף אחת מהשרת שלנו — אין ניחוש: ‏`fail` (אתחול
-    → ‏GRUB → דיסק מקומי, עיקרון 1), אף מחזיק חכירה לא רץ, ואף כרטיס לא נבדק
+    """שני כרטיסים, לשניהם חכירה, אף אחת מהשרת שלנו — אין ניחוש: `fail` (אתחול
+    → GRUB → דיסק מקומי, עיקרון 1), אף מחזיק חכירה לא רץ, ואף כרטיס לא נבדק
     פעמיים (הרשת שלו לא זזה). הקוד הישן לקח את eth0 והמשיך."""
     net = tmp_path / "net"
     _make_net(net, {"lo": 1, "eth0": 1, "eth1": 1})
@@ -120,7 +120,7 @@ def test_every_udhcpc_in_init_names_the_agent_to_dnsmasq():
     אחרת בכרטיס ההפצה הסוכן עצמו לא היה מקבל כתובת."""
     text = (AGENT / "init").read_text(encoding="utf-8").replace("\\\n", " ")
     calls = [line for line in text.splitlines() if re.search(r"^\s*(if )?udhcpc -i", line)]
-    assert len(calls) == 2, calls          # הבדיקה (‏-q) ומחזיק החכירה
+    assert len(calls) == 2, calls          # הבדיקה (-q) ומחזיק החכירה
     for call in calls:
         assert f"-V {AGENT_VC} " in call, call
     assert dhcp.AGENT_VENDOR_CLASS == AGENT_VC
@@ -178,12 +178,12 @@ WINDOWS = "MSFT 5.0"
 
 def _answers(text: str, nic: str, vendor_class: str) -> bool:
     """מודל של כללי dnsmasq שהקובץ נשען עליהם: בלי `dhcp-range` לכרטיס אין
-    תשובה; כל בקשה מתויגת בשם הכרטיס שהגיעה עליו (man dnsmasq); ‏
-    `dhcp-vendorclass` מתאים **כתת-מחרוזת** של אופציה 60; ‏`dhcp-ignore` מתעלם
-    מלקוח כשכל התגים שלו מתקיימים (‏`tag:!x` = התג x אינו).
-    ‏**תג `set:` של `dhcp-range` אינו בקבוצה כש-`dhcp-ignore` נבדק** — נמדד על
-    dnsmasq 2.91 ב-netns ‏(23/10): ‏`dhcp-ignore=tag:if-s0,tag:!imagesrv-boot`
-    לא עצר את `MSFT 5.0` (‏DHCPOFFER, ‏"tags: if-s0, s0"). מודל, לא dnsmasq."""
+    תשובה; כל בקשה מתויגת בשם הכרטיס שהגיעה עליו (man dnsmasq); 
+    `dhcp-vendorclass` מתאים **כתת-מחרוזת** של אופציה 60; `dhcp-ignore` מתעלם
+    מלקוח כשכל התגים שלו מתקיימים (`tag:!x` = התג x אינו).
+    **תג `set:` של `dhcp-range` אינו בקבוצה כש-`dhcp-ignore` נבדק** — נמדד על
+    dnsmasq 2.91 ב-netns (23/10): `dhcp-ignore=tag:if-s0,tag:!imagesrv-boot`
+    לא עצר את `MSFT 5.0` (DHCPOFFER, "tags: if-s0, s0"). מודל, לא dnsmasq."""
     lines = [ln.split("#", 1)[0].strip() for ln in text.splitlines()]
     if not any(re.fullmatch(rf"dhcp-range=set:if-{re.escape(nic)},.*", ln) for ln in lines):
         return False
@@ -212,7 +212,7 @@ def test_the_deploy_nic_answers_netboot_and_the_agent_only():
 
 
 def test_another_nic_that_hands_out_addresses_still_answers_windows():
-    """וילן אחר שהשרת מחלק בו כתובות (‏eth2) — שם Windows כן צריך כתובת."""
+    """וילן אחר שהשרת מחלק בו כתובות (eth2) — שם Windows כן צריך כתובת."""
     text = dhcp.render([DEPLOY, CLASSROOM], tftp_root="/srv/tftp", unregistered_if="eth1")
     assert _answers(text, "eth2", WINDOWS)
     assert "dhcp-ignore=tag:eth2" not in text
@@ -227,8 +227,8 @@ def test_without_a_named_deploy_nic_nothing_is_gated():
 
 @pytest.mark.parametrize("source", ["cli", "console"])
 def test_the_file_the_console_writes_gates_the_deploy_nic(tmp_path, images_root, clock, source):
-    """המסלול שכותב את הקובץ (‏`console_dhcp.render_dnsmasq`) — כרטיס ההפצה מכל
-    מקור. ‏dnsmasq לא מופעל: בלי `dhcp_hooks`, בלי מכונה."""
+    """המסלול שכותב את הקובץ (`console_dhcp.render_dnsmasq`) — כרטיס ההפצה מכל
+    מקור. dnsmasq לא מופעל: בלי `dhcp_hooks`, בלי מכונה."""
     pytest.importorskip("fastapi")
     from test_unknown_screen_1802 import _rendered
     text = _rendered(tmp_path, images_root, clock, source, "eth1")

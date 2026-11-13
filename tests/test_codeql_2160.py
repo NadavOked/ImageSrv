@@ -1,10 +1,10 @@
-"""‏#2160 — ממצאי CodeQL שאומתו כאמיתיים (מהריפו הציבורי), כל אחד עם הנתיב שלו.
+"""#2160 — ממצאי CodeQL שאומתו כאמיתיים (מהריפו הציבורי), כל אחד עם הנתיב שלו.
 
-1. ‏538: גיבוי ``/etc/network/interfaces`` של ``adopt_interface`` וסמן ההחזרה של
+1. 538: גיבוי ``/etc/network/interfaces`` של ``adopt_interface`` וסמן ההחזרה של
    ``netcfg_rollback`` נכתבו 0644 (ברירת המחדל של ``write_atomic`` לקובץ חדש) —
    עותק קריא לכולם של קובץ שהמנהל אולי נעל.
-2. ‏532: ‏``/api/v1/agent/log`` (פורט הסוכן, בלי כניסה) החזיר את טקסט החריגה של zlib.
-3. ‏267: ‏``--primary-url`` עם שם מארח השאיר ``primary_ip=None`` בשקט, וכל חילול של
+2. 532: ``/api/v1/agent/log`` (פורט הסוכן, בלי כניסה) החזיר את טקסט החריגה של zlib.
+3. 267: ``--primary-url`` עם שם מארח השאיר ``primary_ip=None`` בשקט, וכל חילול של
    חומת האש מהשרת פתח את 8443 מכל הכרטיס, בלי ``saddr``.
 """
 
@@ -84,7 +84,7 @@ def test_a_real_gzip_log_is_still_stored(conn):
 
 
 def _main_deploy_context(tmp_path, monkeypatch, primary_url: str, resolve) -> dict:
-    """מריץ את ``main`` (‏`test_console_bind.run_main`) כמשני, ומחזיר את מה שנבנה
+    """מריץ את ``main`` (`test_console_bind.run_main`) כמשני, ומחזיר את מה שנבנה
     ל-``DeployContext`` — המקום שממנו כל חילול של חומת האש לוקח את ``primary_ip``."""
     from test_console_bind import run_main
 

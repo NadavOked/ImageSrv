@@ -1,10 +1,10 @@
-"""‏#557, צד הסוכן — הלולאה נעצרת על `not_open`, ורק עליו.
+"""#557, צד הסוכן — הלולאה נעצרת על `not_open`, ורק עליו.
 
 שרת שמסרב לסוכן שאינו מקשיב הוא אותה לולאה עם קוד אחר. שני הצדדים
 נדרשים, ולכן הקובץ הזה קיים לצד `test_closed_session_report.py`.
 
-⚠️ **וההבחנה שהכול תלוי בה:** ‏`not_open` פירושו *"נענינו בלא"*.
-שגיאת רשת, ‏500, או תשובה ריקה פירושן *"לא הצלחנו לשאול"* — ולולאה
+⚠️ **וההבחנה שהכול תלוי בה:** `not_open` פירושו *"נענינו בלא"*.
+שגיאת רשת, 500, או תשובה ריקה פירושן *"לא הצלחנו לשאול"* — ולולאה
 שנעצרת **עליהן** היא מכונה שמפסיקה לדווח כי השרת אותחל לשנייה.
 """
 
@@ -23,7 +23,7 @@ BASH = shutil.which("bash")
 JQ = shutil.which("jq")
 requires_bash = pytest.mark.skipif(BASH is None, reason="bash לא זמין")
 
-#: ⚠️ **בלי `jq`, ‏`json_get` מחזיר `null` על כל קלט** — והטסטים היו
+#: ⚠️ **בלי `jq`, `json_get` מחזיר `null` על כל קלט** — והטסטים היו
 #: עוברים חמישה מתוך שישה **מהסיבה הלא נכונה**: כל תשובה נראית
 #: כ"אין קוד", ולכן `CONTINUE`. ירוק שאינו מעיד על דבר.
 #:
@@ -36,10 +36,10 @@ requires_jq = pytest.mark.skipif(
 def run_case(tmp_path: Path, reply: str | None) -> subprocess.CompletedProcess:
     """מריץ את `progress_refused_for_good` מול תשובה נתונה.
 
-    ‏**הפונקציה האמיתית נטענת מהקובץ** ולא משוכפלת כאן: טסט שמשכפל
+    **הפונקציה האמיתית נטענת מהקובץ** ולא משוכפלת כאן: טסט שמשכפל
     את הלוגיקה עובר גם כשהמימוש נסחף.
 
-    ⚠️ ‏`common.sh` מגדיר `log` בעצמו, ולכן הוא נטען **לפני**
+    ⚠️ `common.sh` מגדיר `log` בעצמו, ולכן הוא נטען **לפני**
     הדריסה. הפוך — והטסט רואה קוד יציאה בלי שום הסבר.
     """
     run_dir = tmp_path / "run"
@@ -95,7 +95,7 @@ def test_a_success_reply_keeps_the_loop_running(tmp_path: Path):
 @requires_bash
 @requires_jq
 def test_a_different_refusal_keeps_the_loop_running(tmp_path: Path):
-    """‏`not_member` הוא סירוב — **ואינו** סיבה להפסיק לדווח.
+    """`not_member` הוא סירוב — **ואינו** סיבה להפסיק לדווח.
 
     מכונה שאינה ברשימה עדיין עשויה להצטרף בגל הבא. עצירה עליה
     הייתה מרחיבה את התיקון למקום שלא נמדד בו כשל.
@@ -107,7 +107,7 @@ def test_a_different_refusal_keeps_the_loop_running(tmp_path: Path):
 @requires_bash
 @requires_jq
 def test_garbage_that_is_not_json_keeps_the_loop_running(tmp_path: Path):
-    """‏proxy שהחזיר HTML במקום JSON אינו אומר שהסבב נסגר."""
+    """proxy שהחזיר HTML במקום JSON אינו אומר שהסבב נסגר."""
     assert run_case(tmp_path, "<html>502</html>").stdout.strip() == "CONTINUE"
 
 

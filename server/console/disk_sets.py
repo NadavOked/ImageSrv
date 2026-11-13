@@ -26,7 +26,7 @@ async def _body(request: Request) -> dict:
 def register(router: APIRouter, ctx: ServerContext, admin_only) -> None:
     @router.get("/disk-sets")
     def list_sets(user=Depends(admin_only)):
-        return _guard(disk_sets.list_sets, ctx.conn)   # ‏#1858: 503 כשסימוני ה-F1 לא נקראו
+        return _guard(disk_sets.list_sets, ctx.conn)   # #1858: 503 כשסימוני ה-F1 לא נקראו
 
     @router.post("/disk-sets")
     async def create_set(request: Request, user=Depends(admin_only)):
@@ -35,7 +35,7 @@ def register(router: APIRouter, ctx: ServerContext, admin_only) -> None:
                         b.get("instructor", True), user[0])
         return {"ok": True, "id": set_id}
 
-    # ‏לפני `{set_id}`: "rounds" אינו מספר
+    # לפני `{set_id}`: "rounds" אינו מספר
     @router.get("/disk-sets/rounds")
     def assignable_rounds(user=Depends(admin_only)):
         return disk_sets.rounds(ctx.conn)
@@ -62,12 +62,12 @@ def register(router: APIRouter, ctx: ServerContext, admin_only) -> None:
 
     @router.get("/disks")
     def all_disks(user=Depends(admin_only)):
-        """‏כל הדיסקים שהשרת מכיר + האפשרויות לסינון; הסינון עצמו בקונסולה (רשימה של מאות לכל היותר)."""
+        """כל הדיסקים שהשרת מכיר + האפשרויות לסינון; הסינון עצמו בקונסולה (רשימה של מאות לכל היותר)."""
         rows = _guard(disk_sets.disks, ctx.conn)
         rows.sort(key=disk_sets.sort_key)
         return {"disks": rows}
 
-    # ‏#1858 (מוקאפ 07/11): "נצפה F1" לדיסק לפי serial. ‏`mac` (אופציונלי) = המכונה שבה הדיסק היה כשסומן.
+    # #1858 (מוקאפ 07/11): "נצפה F1" לדיסק לפי serial. `mac` (אופציונלי) = המכונה שבה הדיסק היה כשסומן.
     @router.post("/disks/{serial}/f1")
     async def mark_f1(serial: str, request: Request, user=Depends(admin_only)):
         b = await _body(request) if await request.body() else {}

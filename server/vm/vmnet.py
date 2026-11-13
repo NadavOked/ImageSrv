@@ -1,31 +1,31 @@
-"""הרשת של ה-VM לעדכון (‏#1334, ‏#1468) — זהות משלו על כרטיס שהמפעיל בוחר.
+"""הרשת של ה-VM לעדכון (#1334, #1468) — זהות משלו על כרטיס שהמפעיל בוחר.
 
-**הכרעת נדב 16/10 (‏#1468):** ל-VM יש **כתובת משלו** ברשת שהמפעיל בוחר
+**הכרעת נדב 16/10 (#1468):** ל-VM יש **כתובת משלו** ברשת שהמפעיל בוחר
 ("כרטיס לעדכוני VM"), כדי שחומת האש של המכללה תראה אותו בנפרד מהשרת ותנטר
 ותשלוט בו לפי כתובת. האורח רשאי להגיע למארחים אחרים בוילן הזה (למשל שיתוף
 קבצים) — **חומת האש של המכללה** שולטת בזה, לא אנחנו. כרטיס ההפצה (וכל כרטיס
 שמתחתיו — חבר ב-bond, הורה של VLAN) מסורב; כרטיס הניהול **מותר** (רשת
 הניהול יכולה להיות גם רשת הכיתות).
 
-**החיבור:** ‏macvtap במצב `bridge` על הכרטיס שנבחר (`TAP_NAME`), עם MAC
+**החיבור:** macvtap במצב `bridge` על הכרטיס שנבחר (`TAP_NAME`), עם MAC
 יציב שהשרת ייצר פעם אחת (`new_mac` — unicast, locally-administered; שמור
-ב-DB). ‏QEMU מקבל את ה-fd של ‏`/dev/tapN` (‏`-netdev tap,fd=`) ושום דבר
+ב-DB). QEMU מקבל את ה-fd של `/dev/tapN` (`-netdev tap,fd=`) ושום דבר
 אחר. האורח עושה DHCP בעצמו מול שרת ה-DHCP של הוילן — **אין** `ip_forward`,
 **אין** DHCP על המארח, ואין NAT.
 
-**האיום:** ‏Windows שמתעדכן מהאינטרנט הוא אורח לא-מהימן. מה שאסור לו: להגיע
+**האיום:** Windows שמתעדכן מהאינטרנט הוא אורח לא-מהימן. מה שאסור לו: להגיע
 **לשרת עצמו** (הקונסולה, ה-API של הסוכן, הערוץ הבין-שרתי) ולרשת ההפצה.
 
 * **מארח ↔ אורח בשכבה 2 — סגור מעצם macvtap.** בין הכרטיס לבין ילד macvlan
   אין מיתוג פנימי: מסגרת מהאורח לכתובת של השרת על אותו כרטיס יוצאת לחוט,
   והסוויץ' אינו מחזיר מסגרת לפורט שממנו היא באה. זה לא כלל שלנו שאפשר לשכוח
   לטעון — זה המבנה, ולכן לא מנסים "לתקן" אותו (נדב: כך במכוון).
-* **בכל זאת, במארח** (`ruleset`, ‏`table inet imagesrv_vm`): ‏`input` זורק
-  מסגרות עם ה-MAC שהוקצה לאורח — ‏IPv4 **ו-IPv6** (משפחת `inet`). זו הגנה
+* **בכל זאת, במארח** (`ruleset`, `table inet imagesrv_vm`): `input` זורק
+  מסגרות עם ה-MAC שהוקצה לאורח — IPv4 **ו-IPv6** (משפחת `inet`). זו הגנה
   מתקלות בלבד, לא מאורח עוין: Windows יכול לשנות את ה-MAC שלו, ו-macvtap
   אינו מסנן MAC מקור. ההגנות בפועל הן שהסוויץ' אינו מחזיר מסגרות לפורט
-  שממנו באו, וחומת האש של המכללה. ‏`output` זורק כל מה שמשתמש המערכת `imagesrv-vm`
-  שולח: ‏QEMU עם macvtap אינו צריך socket רשת אחד (‏VNC/QMP הם unix
+  שממנו באו, וחומת האש של המכללה. `output` זורק כל מה שמשתמש המערכת `imagesrv-vm`
+  שולח: QEMU עם macvtap אינו צריך socket רשת אחד (VNC/QMP הם unix
   sockets), וגם כלי השמירה שרצים תחתיו.
 * **אין כלל לפי כתובת — במכוון (סקירת אבטחה 16/10).** כלל `ip saddr` לפי
   הכתובת מה-DHCP היה נשען על תשובה שכל אחד בוילן יכול לזייף (ואז השרת זורק
@@ -37,20 +37,20 @@
   והסיבה שה-VM קיבל זהות משלו: היא רואה אותו בכתובת שלו וחוסמת אותו מהשרת.
   נדב מאמת זאת מתוך האורח, ב-IPv4 וב-IPv6, בכל פלטפורמה.
 
-**ראיה ל-lease** (`watch_lease`): ‏socket ‏`AF_PACKET` על `TAP_NAME` עצמו —
-רואה רק את מה שהאורח שולח ומה שנמסר לו. **‏DHCPACK** שה-`chaddr` שלו הוא
+**ראיה ל-lease** (`watch_lease`): socket `AF_PACKET` על `TAP_NAME` עצמו —
+רואה רק את מה שהאורח שולח ומה שנמסר לו. **DHCPACK** שה-`chaddr` שלו הוא
 ה-MAC של ה-VM = שרת ה-DHCP של הוילן נתן לו כתובת. זו ראיה חיובית מהרשת, לא
-מהאורח: ‏ARP של האורח היה "מוכיח" גם כתובת APIPA שהוא המציא לעצמו, ו-guest
+מהאורח: ARP של האורח היה "מוכיח" גם כתובת APIPA שהוא המציא לעצמו, ו-guest
 agent אינו מותקן באימג'ים של המכללה. בלי חבילה חדשה (stdlib), קריאה בלבד.
-ACK נספר רק כש**נכנס** מהחוט (לא `PACKET_OUTGOING`, ‏MAC המקור אינו של ה-VM —
+ACK נספר רק כש**נכנס** מהחוט (לא `PACKET_OUTGOING`, MAC המקור אינו של ה-VM —
 אחרת האורח "עונה לעצמו"), כשה-`xid` שלו הוא של בקשה שהאורח שלח, וכשהכתובת
 שימושית (לא loopback/link-local/multicast/broadcast/0.0.0.0/שמורה). ההאזנה
 נמשכת כל זמן שה-VM רץ, וחידוש עם כתובת אחרת מעדכן את המסך. הכתובת **מוצגת**
 בלבד — שום כלל במארח אינו נבנה ממנה.
-‏DHCP שנשלח ולא נענה ≠ ‏DHCP שלא נשלח — שני סירובים שונים (`no_lease_message`).
+DHCP שנשלח ולא נענה ≠ DHCP שלא נשלח — שני סירובים שונים (`no_lease_message`).
 
-**כשל = סירוב** (עיקרון 5): ‏macvtap שלא נוצר או לא נקרא בחזרה, טבלה שלא
-חזרה, ‏socket שלא נפתח, ואין ACK תוך `LEASE_TIMEOUT_S` — כל אחד בשמו, עם הרמז
+**כשל = סירוב** (עיקרון 5): macvtap שלא נוצר או לא נקרא בחזרה, טבלה שלא
+חזרה, socket שלא נפתח, ואין ACK תוך `LEASE_TIMEOUT_S` — כל אחד בשמו, עם הרמז
 לפלטפורמה (`platform_hint`, לפי `systemd-detect-virt`).
 """
 
@@ -69,9 +69,9 @@ from typing import Callable
 
 TABLE = "imagesrv_vm"
 VM_USER = "imagesrv-vm"
-#: ה-macvtap של ה-VM. ‏15 תווים לכל היותר (IFNAMSIZ).
+#: ה-macvtap של ה-VM. 15 תווים לכל היותר (IFNAMSIZ).
 TAP_NAME = "imagesrv-vm0"
-#: כמה זמן מהדלקת QEMU עד שחייב להגיע DHCPACK. ‏Windows על KVM מבקש כתובת
+#: כמה זמן מהדלקת QEMU עד שחייב להגיע DHCPACK. Windows על KVM מבקש כתובת
 #: בדקה הראשונה; חמש דקות מכסות זיהוי חומרה בעלייה ראשונה של אימג'.
 LEASE_TIMEOUT_S = 300
 _IFNAME = re.compile(r"[A-Za-z0-9_.:-]{1,15}")
@@ -111,8 +111,8 @@ def valid_ifname(name: object) -> bool:
 
 
 def ruleset(uid: int, mac: str) -> str:
-    """הטבלה — טקסט ל-`nft -f -`. ‏delete+create בטרנזאקציה אחת. אין בה שום כתובת
-    שבאה מהרשת: ‏`ether saddr` במשפחת `inet` תופס IPv4 ו-IPv6 רק כל עוד האורח
+    """הטבלה — טקסט ל-`nft -f -`. delete+create בטרנזאקציה אחת. אין בה שום כתובת
+    שבאה מהרשת: `ether saddr` במשפחת `inet` תופס IPv4 ו-IPv6 רק כל עוד האורח
     שומר על ה-MAC שהוקצה לו. זו הגנה מתקלות, לא מאורח עוין: Windows יכול
     לשנות MAC ו-macvtap אינו מסנן MAC מקור. ההגנות בפועל הן הסוויץ' שאינו
     מחזיר מסגרות לפורט המקור וחומת האש של המכללה."""
@@ -139,7 +139,7 @@ def ruleset(uid: int, mac: str) -> str:
 
 
 def apply(uid: int, mac: str, *, run=subprocess.run) -> str | None:
-    """טוען וקורא בחזרה. ‏None = הטבלה במקומה; אחרת הסיבה."""
+    """טוען וקורא בחזרה. None = הטבלה במקומה; אחרת הסיבה."""
     text = ruleset(uid, mac)
     try:
         loaded = run(["nft", "-f", "-"], input=text, capture_output=True, text=True, timeout=15)
@@ -159,7 +159,7 @@ def apply(uid: int, mac: str, *, run=subprocess.run) -> str | None:
 
 def remove(*, run=subprocess.run) -> str | None:
     """מוחק את הטבלה כשה-VM כבה — אין סיבה לחסום MAC שאיש אינו משתמש בו.
-    ‏None = אין טבלה (נמחקה עכשיו או לא הייתה)."""
+    None = אין טבלה (נמחקה עכשיו או לא הייתה)."""
     try:
         run(["nft", "delete", "table", "inet", TABLE], capture_output=True, text=True,
             timeout=15, stdin=subprocess.DEVNULL)
@@ -176,7 +176,7 @@ def remove(*, run=subprocess.run) -> str | None:
 def macvtap_up(lower: str, mac: str, *, run=subprocess.run,
                sysfs: Path = Path("/sys/class/net"), dev: Path = Path("/dev"),
                wait_s: float = 5.0, sleep=time.sleep) -> tuple[Path | None, str | None]:
-    """יוצר את `TAP_NAME` על `lower` ומחזיר (‏/dev/tapN, None) — או (None, הסיבה).
+    """יוצר את `TAP_NAME` על `lower` ומחזיר (/dev/tapN, None) — או (None, הסיבה).
     נקרא בחזרה מ-`ip -d link`: סוג, מצב bridge, ה-MAC והכרטיס שמתחתיו."""
     if not valid_ifname(lower) or lower == TAP_NAME:
         return None, f"שם כרטיס לא תקין: {lower!r}"
@@ -226,21 +226,21 @@ def macvtap_down(*, run=subprocess.run) -> str | None:
 
 _DHCP_MAGIC = b"\x63\x82\x53\x63"
 _DISCOVER, _REQUEST, _ACK = 1, 3, 5
-#: ‏`sll_pkttype` של מסגרת שהממשק **שלח** (linux/if_packet.h).
+#: `sll_pkttype` של מסגרת שהממשק **שלח** (linux/if_packet.h).
 PACKET_OUTGOING = 4
 
 
 def usable_lease(address: str) -> bool:
-    """כתובת שאפשר להציג כ"ה-VM קיבל": לא loopback, ‏link-local, ‏multicast,
-    ‏broadcast, ‏0.0.0.0 או טווח שמור."""
+    """כתובת שאפשר להציג כ"ה-VM קיבל": לא loopback, link-local, multicast,
+    broadcast, 0.0.0.0 או טווח שמור."""
     ip = ipaddress.IPv4Address(address)
     return not (ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified
                 or ip.is_reserved or ip == ipaddress.IPv4Address("255.255.255.255"))
 
 
 def dhcp_from(frame: bytes, mac: str) -> tuple[str, str | None, str | None, bytes] | None:
-    """מסגרת Ethernet → ‏("request", None, None, xid) כשהאורח ביקש כתובת,
-    ‏("ack", הכתובת, שרת ה-DHCP, xid) כשנענה — רק כשה-`chaddr` הוא `mac` והכתובת
+    """מסגרת Ethernet → ("request", None, None, xid) כשהאורח ביקש כתובת,
+    ("ack", הכתובת, שרת ה-DHCP, xid) כשנענה — רק כשה-`chaddr` הוא `mac` והכתובת
     שימושית (`usable_lease`). כל דבר אחר — None. **מי** שלח — בודק הקורא."""
     try:
         if len(frame) < 14 + 20 + 8 + 240 or frame[12:14] != b"\x08\x00":
@@ -288,11 +288,11 @@ def _packet_socket(ifname: str):   # pragma: no cover — לינוקס בלבד,
 def watch_lease(ifname: str, mac: str, timeout: float, stop: Callable[[], bool],
                 on_ack: Callable[[str, str | None], None] | None = None, *,
                 open_socket=_packet_socket, clock=time.monotonic) -> dict:
-    """מאזין ל-DHCP של האורח **כל זמן שה-VM רץ** (`stop`). ‏ACK תקף (נכנס מהחוט,
-    ‏xid של בקשה שהאורח שלח, כתובת שימושית) → ‏`on_ack(כתובת, שרת)` — גם בחידוש.
-    בלי ACK תקף תוך `timeout` — חוזר מיד עם ‏address=None. התוצאה:
-    ‏`{"address", "server", "requests", "ignored", "error"}` — ‏`ignored` = תשובות
-    שנדחו (יוצאות, מה-MAC של ה-VM, או בלי בקשה תואמת); ‏`error` = לא ניתן היה
+    """מאזין ל-DHCP של האורח **כל זמן שה-VM רץ** (`stop`). ACK תקף (נכנס מהחוט,
+    xid של בקשה שהאורח שלח, כתובת שימושית) → `on_ack(כתובת, שרת)` — גם בחידוש.
+    בלי ACK תקף תוך `timeout` — חוזר מיד עם address=None. התוצאה:
+    `{"address", "server", "requests", "ignored", "error"}` — `ignored` = תשובות
+    שנדחו (יוצאות, מה-MAC של ה-VM, או בלי בקשה תואמת); `error` = לא ניתן היה
     להאזין בכלל (≠ "לא נענה")."""
     mac = _mac(mac)
     own = bytes.fromhex(mac.replace(":", ""))
@@ -348,15 +348,15 @@ HINTS = {
 
 
 def detect_virt(*, run=subprocess.run) -> str | None:
-    """‏`systemd-detect-virt`: ‏"vmware"/"microsoft"/"kvm"/… או "none" (ברזל).
-    ‏None = לא ניתן לדעת (אין הכלי / לא רץ)."""
+    """`systemd-detect-virt`: "vmware"/"microsoft"/"kvm"/… או "none" (ברזל).
+    None = לא ניתן לדעת (אין הכלי / לא רץ)."""
     try:
         proc = run(["systemd-detect-virt"], capture_output=True, text=True, timeout=5,
                    stdin=subprocess.DEVNULL)
     except (OSError, subprocess.TimeoutExpired):
         return None
     out = proc.stdout.strip()
-    # rc≠0 עם "none" = ברזל (כך הכלי מדווח); ‏rc≠0 בלי פלט = הכלי נכשל
+    # rc≠0 עם "none" = ברזל (כך הכלי מדווח); rc≠0 בלי פלט = הכלי נכשל
     return out if out and (proc.returncode == 0 or out == "none") else None
 
 
@@ -384,8 +384,8 @@ def no_lease_message(result: dict, nic: str, mac: str, timeout: float, virt: str
 
 
 def stacked(name: str, sysfs: Path = Path("/sys/class/net")) -> set[str] | None:
-    """כל הכרטיסים שמעל `name` ומתחתיו, טרנזיטיבית (‏`upper_*`/`lower_*` ב-sysfs):
-    ‏bond שהוא חבר בו, החברים של bond, ‏VLAN עליו וההורה של VLAN. ‏None = התיקייה
+    """כל הכרטיסים שמעל `name` ומתחתיו, טרנזיטיבית (`upper_*`/`lower_*` ב-sysfs):
+    bond שהוא חבר בו, החברים של bond, VLAN עליו וההורה של VLAN. None = התיקייה
     של `name` עצמו לא נקראה — "לא נבדק", לא "אין קשר"."""
     def links(nic: str) -> set[str]:
         return {p.name.split("_", 1)[1] for p in (sysfs / nic).iterdir()

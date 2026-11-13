@@ -1,8 +1,8 @@
-"""‏#2202 — שאלה למפעיל (חלוקת המקום, RAID) מחזיקה את המחיצה הראשונה של השולח.
+"""#2202 — שאלה למפעיל (חלוקת המקום, RAID) מחזיקה את המחיצה הראשונה של השולח.
 
-ברזל 25/10 (משכפל 2, ‏`ses_ca1fb8e9`): ‏`send_start` ב-21:32:19, שאלת חלוקת
-המקום (#1898) עלתה ב-21:32:21, וב-21:35:19 ‏`send_failed: אף מחשב לא הצטרף
-לשידור תוך 180 שניות`. ‏#1581 עצר את השעון רק לשאלת SMART (‏`smart_asks`);
+ברזל 25/10 (משכפל 2, `ses_ca1fb8e9`): `send_start` ב-21:32:19, שאלת חלוקת
+המקום (#1898) עלתה ב-21:32:21, וב-21:35:19 `send_failed: אף מחשב לא הצטרף
+לשידור תוך 180 שניות`. #1581 עצר את השעון רק לשאלת SMART (`smart_asks`);
 שאלת share/raid נשאלת על המסך בלבד, והשרת יודע עליה רק מה-`prompt` של ה-hello.
 
 הכרעה (03/11): בלי שדה חדש — השולח ממתין כל עוד לחבר חי בגל, לא במצב סופי,
@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import hello_body, setup_classroom
+from conftest import HANG_S, hello_body, setup_classroom
 
 pytest.importorskip("fastapi")
 
@@ -27,7 +27,7 @@ from server.rounds.sender import DEFAULT_START_TIMEOUT, SenderEngine    # noqa: 
 from test_sender import (NOBODY_JOINED_LOG, Recorder, _journal_events,  # noqa: E402
                          free_ports, library, wait_for)                 # noqa: F401 (fixtures)
 
-#: השאלה כפי שהסוכן שולח אותה בזמן שאלת חלוקת המקום (‏attended.sh, ‏drawergate.sh).
+#: השאלה כפי שהסוכן שולח אותה בזמן שאלת חלוקת המקום (attended.sh, drawergate.sh).
 SHARE_PROMPT = {"waiting_for": "operator", "prompt": "Disk 2: share question"}
 
 
@@ -57,7 +57,7 @@ def test_a_share_question_holds_the_first_partition_until_it_is_answered(
 
     # התשובה: ה-hello שהסוכן שולח כשהשאלה נגמרת — בלי prompt.
     server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), "joining": False})
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     events = _journal_events(ctx)
     assert events.index("send_held_prompt") < events.index("send_prompt_released")
     assert "send_held_smart" not in events and "send_hold_released" not in events   # #1889
@@ -67,7 +67,7 @@ def test_a_share_question_holds_the_first_partition_until_it_is_answered(
 
 
 def test_a_start_timeout_under_an_open_question_says_so_not_check_the_cable(library, free_ports):
-    """‏"אף מחשב לא הצטרף ... יש לבדוק כבל רשת" שלח את המפעיל לחפש תקלה במכונה
+    """"אף מחשב לא הצטרף ... יש לבדוק כבל רשת" שלח את המפעיל לחפש תקלה במכונה
     שחיכתה לו. udp-sender שיצא בלי לשדר בזמן שחבר בגל עומד על שאלה — נאמר כך.
 
     **בקרה שלילית:** על הקוד הישן ההודעה היא "אף מחשב לא הצטרף"."""
@@ -96,7 +96,7 @@ def test_without_a_question_the_sender_starts_at_once_and_says_nothing_new(
     )
     for _ in range(2):
         server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     assert "send_held_prompt" not in _journal_events(server["ctx"])
     recorder.processes[0].release()
 
@@ -164,7 +164,7 @@ def test_past_the_ceiling_only_that_machine_leaves_the_wave(conn):
 
 def test_the_question_over_one_hello_without_the_prompt_clears_it(tmp_path):
     """הממצא הצדדי של #2202: אחרי `attended` ה-hello האחרון שיצא נשא עדיין
-    את השאלה, ושום hello לא בא אחריו לפני הזרם — ‏`net_devices.prompt` נשאר
+    את השאלה, ושום hello לא בא אחריו לפני הזרם — `net_devices.prompt` נשאר
     על השאלה שנענתה, והקונסולה הציגה "ממתין למפעיל" לאורך השחזור. עכשיו:
     hello אחד בלי `waiting_for`/`prompt` אחרי התשובה, ו-stdout של הקורא נקי.
 

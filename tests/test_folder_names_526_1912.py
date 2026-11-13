@@ -1,7 +1,7 @@
 """#1912 / #526: שומר התנהגותי לשמות תיקיות בקונסולה — כל הדרכים ליצור תיקייה.
 
-‏#526: ארבע דרכים ליצור תיקייה (POST, PUT, order, rename) ולא כולן בדקו את
-השם; ‏POST דרס תיקייה קיימת. הטסטים של #526 ב-`test_server_library.py` תופסים
+#526: ארבע דרכים ליצור תיקייה (POST, PUT, order, rename) ולא כולן בדקו את
+השם; POST דרס תיקייה קיימת. הטסטים של #526 ב-`test_server_library.py` תופסים
 שם לא תקין ב-PUT, שם לא קיים ב-order, ודריסה ב-POST. כאן מה שנשאר מהטבלה:
 
 * שמות שמסוכנים בפועל — `..`, רווח בקצה, סלאש — נדחים ב-POST וב-rename,
@@ -11,8 +11,8 @@
 
 כל טסט קורא את המצב בחזרה מ-GET /folders (ראיה חיובית), לא רק את קוד התשובה.
 
-בקרה שלילית (ראו גוף ה-PR): ‏`_checked_name` ב-POST הוחלף ב-strip; בדיקת ה-409
-ב-rename הוסרה; ‏`_checked_name` על שם ה-URL ב-PUT הוסר.
+בקרה שלילית (ראו גוף ה-PR): `_checked_name` ב-POST הוחלף ב-strip; בדיקת ה-409
+ב-rename הוסרה; `_checked_name` על שם ה-URL ב-PUT הוסר.
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ def test_renaming_a_folder_onto_an_existing_one_is_409_and_touches_neither(serve
 
 
 def test_put_with_a_dangerous_url_name_does_not_create_a_folder(server):
-    """‏PUT על שם שאינו קיים יוצר אותו — ולכן שם ה-URL נבדק כמו שם ב-POST."""
+    """PUT על שם שאינו קיים יוצר אותו — ולכן שם ה-URL נבדק כמו שם ב-POST."""
     admin = server["admin"]
     before = _folder_names(admin)
     r = admin.put("/api/console/folders/%20Lab", json={"description": "x"})

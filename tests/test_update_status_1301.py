@@ -1,4 +1,4 @@
-"""‏#1301 — what ``GET /api/console/update/status`` hands the update screen.
+"""#1301 — what ``GET /api/console/update/status`` hands the update screen.
 
 * ``apply`` starts the run with ``started_at``/``by``/``from`` (the script keeps
   them, ``test_server_upgrade_1301.py``) and the read adds the server's ``now``,

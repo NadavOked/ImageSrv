@@ -473,6 +473,6 @@ def test_every_write_path_reads_back_before_it_grows():
 
 def test_the_console_says_sampled_and_has_the_switch():
     js = console_js()
-    assert "נבדק במדגם" in js and "לא אומת אחרי הכתיבה" in js and "readbackLine(d)" in js
+    assert "הושלם · נבדק במדגם" in js and "הושלם · לא נבדק — הבדיקה אחרי הכתיבה לא רצה" in js and "readbackLine(d)" in js   # #2987
     assert 'key: "readback_full"' in js and "אימות מלא מוסיף כ-5 דק' לסבב של 4 מגירות" in js
     assert re.search(r"[A-Za-z]{2,}", FAIL) is None and re.search(r"[A-Za-z]{2,}", NOT_RUN) is None

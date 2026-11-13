@@ -1,4 +1,4 @@
-"""‏#2649: ‏`iscsi_login` ממתין לקישור ה-by-path ש-udev יוצר אחרי ש-`iscsiadm -l` חזר.
+"""#2649: `iscsi_login` ממתין לקישור ה-by-path ש-udev יוצר אחרי ש-`iscsiadm -l` חזר.
 
 נמדד 07/11 על testrunner: הקישור מופיע 40-100ms אחרי החזרת הקריאה, ו-15 מתוך 15
 התחברויות החזירו `ok` עם `device_by_path` ריק. כאן `_run` ו-`_iscsi_by_path` מזויפים.
@@ -15,7 +15,7 @@ from server.storage.locations import FAILED, OK, HookResult
 from test_iscsi_discovery_1983 import iscsiadm   # noqa: F401
 from test_storage_locations import IQN, PORTAL
 
-REAL_WAIT = sl._wait_iscsi_by_path   # ‏הפיקסצ'ר של #1983 מחליף אותה ב-stub
+REAL_WAIT = sl._wait_iscsi_by_path   # הפיקסצ'ר של #1983 מחליף אותה ב-stub
 LINK = f"/dev/disk/by-path/ip-{PORTAL}-iscsi-{IQN}-lun-0"
 
 

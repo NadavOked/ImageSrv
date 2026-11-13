@@ -1,13 +1,13 @@
-"""‏#2427 — מרוצים במשדר המולטיקאסט. כל טסט כאן הוא ה-PoC של הסריקה
-(‏lab/security-scan-1104/scan6/poc_sender_races.py) **הפוך**: שם הוא עבר כשהבאג
+"""#2427 — מרוצים במשדר המולטיקאסט. כל טסט כאן הוא ה-PoC של הסריקה
+(lab/security-scan-1104/scan6/poc_sender_races.py) **הפוך**: שם הוא עבר כשהבאג
 קיים, כאן הוא נכשל כשהבאג קיים.
 
-1א. סגירה בחלון שבין ה-commit ל-running לבין ``on_running`` — ‏udp-sender לא עולה.
-1ב. ‏``stop`` בין מחיצות — המחיצה הבאה לא מופעלת אחרי ש-``stop`` אמר "איננו".
-2.  ‏``start`` שסורב מכשיל את הסבב בשמו, ולא נבלע ב-log; וסגירת סבב כיתה
-    אינה "ok" כשהמשדר שרד SIGKILL (כמו ``close_round``, ‏#439).
-3.  ‏``close_round`` מול ``_finish_wave`` — הגל שהוחלף אינו נשאר ``open``.
-4.  חריגה בתהליכון השולח — ‏``failed`` בשם, לא ``starting`` לתמיד.
+1א. סגירה בחלון שבין ה-commit ל-running לבין ``on_running`` — udp-sender לא עולה.
+1ב. ``stop`` בין מחיצות — המחיצה הבאה לא מופעלת אחרי ש-``stop`` אמר "איננו".
+2.  ``start`` שסורב מכשיל את הסבב בשמו, ולא נבלע ב-log; וסגירת סבב כיתה
+    אינה "ok" כשהמשדר שרד SIGKILL (כמו ``close_round``, #439).
+3.  ``close_round`` מול ``_finish_wave`` — הגל שהוחלף אינו נשאר ``open``.
+4.  חריגה בתהליכון השולח — ``failed`` בשם, לא ``starting`` לתמיד.
 """
 
 from __future__ import annotations
@@ -232,7 +232,7 @@ def test_closing_a_classroom_round_whose_sender_died_is_ok(server_with_sender):
 
 
 def test_close_round_racing_the_next_wave_leaves_no_open_wave(tmp_path, library, monkeypatch):
-    """T1 = close_round קורא את round_row (גל W1). ‏T2 = ‏_finish_wave פותח את W2 במקום
+    """T1 = close_round קורא את round_row (גל W1). T2 = _finish_wave פותח את W2 במקום
     W1 ומעדכן את room_rounds — בין הקריאה של T1 ל-CAS שלו ל-'closing'."""
     from types import SimpleNamespace
     from server.rounds import room

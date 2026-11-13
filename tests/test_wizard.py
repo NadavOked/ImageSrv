@@ -72,7 +72,7 @@ def _write_fake(path: Path, body: str) -> None:
 
 
 def _rerun_over_http(tmp_path: Path, admin_name: str = "admin"):
-    """אשף בהרצה חוזרת (‏--rerun) מול DB אמיתי עם admin, דרך ה-HTTP — כך
+    """אשף בהרצה חוזרת (--rerun) מול DB אמיתי עם admin, דרך ה-HTTP — כך
     שגם הכתובת שה-handler מוסר לבדיקה נבדקת. מחזיר (state, apply, close)."""
     from server import db as server_db
     from server.console import users
@@ -112,11 +112,11 @@ def _rerun_over_http(tmp_path: Path, admin_name: str = "admin"):
 
 
 def test_rerun_guesses_go_through_login_guard(tmp_path: Path, monkeypatch) -> None:
-    """‏#1631: בהרצה החוזרת `_verify_current_admin` בדק את סיסמת admin בלי
+    """#1631: בהרצה החוזרת `_verify_current_admin` בדק את סיסמת admin בלי
     `login_guard` — ערוץ ניחוש בלי השהיה ובלי נעילה. אחרי חמישה כשלונות
     מאותה כתובת גם הסיסמה הנכונה נדחית עד תום ההשהיה, וההתקנה לא רצה.
 
-    ‏#2326: ההשהיה אחרי חמישה כשלונות היא שנייה אחת (`2**0`). בשעון אמיתי
+    #2326: ההשהיה אחרי חמישה כשלונות היא שנייה אחת (`2**0`). בשעון אמיתי
     ריצה מלאה תחת עומס עברה אותה, והשומר שחרר בצדק. השעון מוזז ביד."""
     from server.console import login_guard
 
@@ -137,7 +137,7 @@ def test_rerun_guesses_go_through_login_guard(tmp_path: Path, monkeypatch) -> No
 
 
 def test_rerun_with_the_right_password_still_runs_the_installer(tmp_path: Path) -> None:
-    """שומר מהצד השני של #1631: ‏login_guard אינו חוסם את המנהל עצמו."""
+    """שומר מהצד השני של #1631: login_guard אינו חוסם את המנהל עצמו."""
     _state, apply, close = _rerun_over_http(tmp_path)
     try:
         got = apply("Curr3nt!admin")

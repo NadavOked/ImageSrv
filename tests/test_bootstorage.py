@@ -1,13 +1,13 @@
-"""‏#1331 — דרייבר האחסון ה-in-box של הדיסק שנכתב הופך ל-boot-start
-(`agent/lib/postdeploy/bootstorage.sh`, ‏interfaces.md §17 צעד 5א).
+"""#1331 — דרייבר האחסון ה-in-box של הדיסק שנכתב הופך ל-boot-start
+(`agent/lib/postdeploy/bootstorage.sh`, interfaces.md §17 צעד 5א).
 
-אותה קופסה של `test_postdeploy.py` (‏sh אמיתי, כלים מזויפים), עם hive
-‏`SYSTEM` מזויף: עץ קבצים, ערך לקובץ. מה שנבדק הוא **מה נשאר ב-SYSTEM**
+אותה קופסה של `test_postdeploy.py` (sh אמיתי, כלים מזויפים), עם hive
+`SYSTEM` מזויף: עץ קבצים, ערך לקובץ. מה שנבדק הוא **מה נשאר ב-SYSTEM**
 ו**מה דווח** ב-`drivers.boot`:
 
-* ‏`Start` ו-`StartOverride\\0` נכתבים כ-0 **בסט הבקרה של `Select\\Current`**
+* `Start` ו-`StartOverride\\0` נכתבים כ-0 **בסט הבקרה של `Select\\Current`**
   — לא ב-ControlSet001 הקבוע — ונקראים חזרה;
-* השירות נבחר לפי **הדיסק** (‏nvme → ‏stornvme, ‏sd → ‏storahci), לא לפי
+* השירות נבחר לפי **הדיסק** (nvme → stornvme, sd → storahci), לא לפי
   המכונה — כי מגירה של משכפל הולכת למכונה אחרת (#1269);
 * כל כשל — קריאה שנשברה, כתיבה שלא נקראה חזרה, שירות שאינו באימג' — הוא
   `failed` בשמו, ה-staging נשאר `staged` והשחזור `done` (עיקרון 5);
@@ -60,7 +60,7 @@ def test_a_driver_that_is_already_boot_start_is_not_written(tmp_path):
 
 
 def test_start_zero_with_an_override_of_three_is_not_already(tmp_path):
-    """‏Start=0 לבד אינו ראיה: ‏StartOverride\\0=3 גובר עליו."""
+    """Start=0 לבד אינו ראיה: StartOverride\\0=3 גובר עליו."""
     box = Box(tmp_path, system={**SYSTEM_RAID, f"{SVC}/storahci/Start": "0"})
     _, result = box.stage("sda")
     assert result["boot"] == {"state": "enabled", "service": "storahci"}
@@ -78,7 +78,7 @@ def test_no_override_key_needs_only_start(tmp_path):
 
 
 def test_an_image_without_the_service_is_a_failure_not_a_skip(tmp_path):
-    """‏Windows 7 אין לו stornvme — הדיסק הזה לא יעלה, וזה ממצא."""
+    """Windows 7 אין לו stornvme — הדיסק הזה לא יעלה, וזה ממצא."""
     system = {k: v for k, v in SYSTEM_RAID.items() if "stornvme" not in k}
     box = Box(tmp_path, system=system)
     _, result = box.stage("nvme0n1")
@@ -89,7 +89,7 @@ def test_an_image_without_the_service_is_a_failure_not_a_skip(tmp_path):
 
 
 def test_a_read_that_breaks_is_not_a_missing_service(tmp_path):
-    """‏rc 3 = "לא נמצא"; כל קוד אחר = הקריאה עצמה נשברה (עיקרון 5)."""
+    """rc 3 = "לא נמצא"; כל קוד אחר = הקריאה עצמה נשברה (עיקרון 5)."""
     box = Box(tmp_path, env="FAKE_SYS_GET_RC=5")
     _, result = box.stage("sda")
     assert result["boot"]["state"] == "failed"
@@ -160,7 +160,7 @@ def test_the_agent_loads_bootstorage_before_postdeploy():
     assert post.index("_device_path_add \"$_hive\" ||") < post.index('boot_storage_enable "$1"')
 
 
-# --- השרת: ‏drivers.boot נשמר, פגום נזנח לבדו, כשל נרשם ביומן --------------
+# --- השרת: drivers.boot נשמר, פגום נזנח לבדו, כשל נרשם ביומן --------------
 
 pytest.importorskip("fastapi")
 

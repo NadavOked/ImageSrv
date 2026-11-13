@@ -8,12 +8,12 @@
 
   python3 -I deploy/security-pool-lock.py deploy/security-pool.json
 
-פלט (שורה אחת, מופרדת ברווחים): ‏`<asset> <sha256> <size> <date>`.
+פלט (שורה אחת, מופרדת ברווחים): `<asset> <sha256> <size> <date>`.
 כל שדה נבדק בצורתו; קובץ שלא נקרא או שדה שאינו תקין = יציאה 2 עם הסיבה
 ב-stderr. "לא הצלחנו לקרוא" אינו "אין מאגר" (עיקרון 5).
 
 נקרא משני הצדדים, כדי שתהיה רק הגדרה אחת לצורת הקובץ:
-‏tools/git/release-sign.sh (לפני הפרסום) ו-deploy/security-upgrade.sh (בשרת).
+tools/git/release-sign.sh (לפני הפרסום) ו-deploy/security-upgrade.sh (בשרת).
 """
 
 from __future__ import annotations

@@ -278,7 +278,7 @@ sr_cancelled() {
     # half-written one that looks whole -- the primary and backup GPT go. 0 =
     # wiped (sgdisk exit 0): the card says so, the caller counts to the
     # power-off. 1 = not wiped: said on the screen, the machine held for a person.
-    _sc_id=$(sr_disk_ident "$1") && [ "$_sc_id" = "$(cat "$RUN_DIR/gui/restore.disk" 2>/dev/null)" ] || {   # #2431: the disk it began on only
+    _sc_id=$(sr_disk_ident "$1") && [ "$_sc_id" = "$(cat "$RUN_DIR/gui/restore.disk" 2>/dev/null)" ] && assert_target "$1" || {   # #2431: the disk it began on only; #2486: and the one bound (slot too), with no twin -- an empty serial matches any disk of that size
         target_set "$1" failed "השחזור בוטל, אבל הדיסק ב-$1 אינו זה שהשחזור התחיל עליו (או שלא נקרא) — הטבלה לא נמחקה"
         sr_gui_message "השחזור בוטל — הטבלה לא נמחקה" "הדיסק במחשב אינו זה שהשחזור התחיל עליו. בדקו אותו לפני שמאתחלים ממנו." || :
         log "WARNING: restore: cancelled, but $1 is not the disk the restore began on (${_sc_id:-unreadable}) -- nothing wiped"; return 1; }

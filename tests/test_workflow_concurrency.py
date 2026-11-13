@@ -1,11 +1,11 @@
 """אף workflow אינו דוחק ריצה ממתינה על `main`.
 
-‏GitHub מרשה **ריצה ממתינה אחת** בכל קבוצת concurrency. קבוצה שנקבעת
+GitHub מרשה **ריצה ממתינה אחת** בכל קבוצת concurrency. קבוצה שנקבעת
 לפי `github.ref` בלבד היא קבוצה אחת לכל `main` — ולכן דחיפה חדשה
 מבטלת את הממתינה שלפניה, גם כש-`cancel-in-progress` הוא false.
 
 ריצה שבוטלה **אינה אדומה**, ולכן הקומיט נראה תקין. זה נמדד פעמיים:
-‏#236 (‏13 מיזוגים בלי ריצת טסטים) ו-#258 (‏47 ריצות של סורקי אבטחה).
+#236 (13 מיזוגים בלי ריצת טסטים) ו-#258 (47 ריצות של סורקי אבטחה).
 בפעם הראשונה התיקון הוחל על קובץ אחד, ואיש לא בדק את השאר — הטסט
 הזה הוא מה שהיה תופס את זה.
 """
@@ -47,7 +47,7 @@ def test_no_workflow_groups_by_branch_alone(path):
     ids=lambda p: p.name,
 )
 def test_a_workflow_that_runs_on_push_keys_its_group_on_the_sha(path):
-    """‏workflow שרץ על push חייב ש-github.sha ייכנס לשם הקבוצה."""
+    """workflow שרץ על push חייב ש-github.sha ייכנס לשם הקבוצה."""
     src = _text(path)
     block = src.split("concurrency:", 1)[1].split("\njobs:", 1)[0]
     assert "github.sha" in block, (

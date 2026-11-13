@@ -1,8 +1,8 @@
-"""‏#2441: ‏`--mcast-ports` ו-`--primary-ip` נבדקים בגלוב שלילי, כמו שאר הדגלים.
+"""#2441: `--mcast-ports` ו-`--primary-ip` נבדקים בגלוב שלילי, כמו שאר הדגלים.
 
 הגלוב החיובי `[0-9]*-[0-9]*` מאפשר ל-`*` לתפוס רווח ושורה חדשה, ולכן ערך עם
 שורת כלל נוספת עבר ונכתב לחומת האש כמו שהוא (סקירת Fable, 04/11,
-‏`06-generator-validation.sh`: ‏`dport 8081` ו-`dport 22` על כרטיס ההפצה). מהרשת
+`06-generator-validation.sh`: `dport 8081` ו-`dport 22` על כרטיס ההפצה). מהרשת
 זה לא נגיש היום — זה פער אימות. כאן: סירוב, וגם שהערכים התקינים עוברים.
 """
 
@@ -21,7 +21,7 @@ INJECT_IP = "1.2.3.4 tcp dport 22 accept #INJECTED"
 
 def _refused(flag: str, value: str) -> subprocess.CompletedProcess:
     """הערך עובר בסביבה ולא ב-argv: ב-Git Bash של ווינדוס argv נחתך בשורה חדשה
-    (‏"39000-39001\n" מגיע כ-"39000-39001"), ואז טסט השורה החדשה לא בודק דבר."""
+    ("39000-39001\n" מגיע כ-"39000-39001"), ואז טסט השורה החדשה לא בודק דבר."""
     return subprocess.run(
         [BASH, "-c", 'exec bash "$0" "$@" "$IMAGESRV_VALUE"', str(GEN), *PRIMARY_ARGS, flag],
         capture_output=True, text=True, encoding="utf-8", check=False,

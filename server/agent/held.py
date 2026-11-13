@@ -1,17 +1,17 @@
-"""‏#2031 — משכפל שמחזיק את התוצאות עד "כבה" (#2024): "דלוק — מחכה ללחיצה".
+"""#2031 — משכפל שמחזיק את התוצאות עד "כבה" (#2024): "דלוק — מחכה ללחיצה".
 
 אחרי #2024 משכפל שיש בו דיסק עם בעיה נשאר דלוק עד לחיצה על "כבה", **בלי hello**
 — בכוונה: hello היה הופך אותו ל"נראה" לגל חדש, וה-WoL החוזר (#1721) לא היה
 מעיר ולא מכשיל את הסבב בשמו. בלי שום דיווח הקונסולה ציירה אותו "לא מחובר".
 
-הסוכן (‏`agent/lib/core/hold.sh`, ‏`held_report`) שולח בזמן ההחזקה דיווח קל בנתיב
-ה-progress, **בלי סבב ובלי משימה** — ‏`{"mac", "state": "held", "problems": [...]}`
-— בקצב ההמתנה (‏`POLL_MAX`, 15ש'). כאן הוא נרשם ב-`held_at`/`held_json` ובראיית
-החיים של progress (‏`progress_seen`, ‏#1839) — **לא** ב-`last_seen`: המשכפל אינו
+הסוכן (`agent/lib/core/hold.sh`, `held_report`) שולח בזמן ההחזקה דיווח קל בנתיב
+ה-progress, **בלי סבב ובלי משימה** — `{"mac", "state": "held", "problems": [...]}`
+— בקצב ההמתנה (`POLL_MAX`, 15ש'). כאן הוא נרשם ב-`held_at`/`held_json` ובראיית
+החיים של progress (`progress_seen`, #1839) — **לא** ב-`last_seen`: המשכפל אינו
 מצטרף לגל ואינו "נראה" ל-`room._unseen`. התשובה נושאת את `power_action` של
-הקונסולה (‏#980) — אותו ערוץ כמו ה-hello, ולכן "כבה" מהקונסולה מגיע גם להחזקה.
+הקונסולה (#980) — אותו ערוץ כמו ה-hello, ולכן "כבה" מהקונסולה מגיע גם להחזקה.
 
-"מוחזק" = דיווח held טרי (‏`FRESH_SECONDS`). hello מצטרף (המכונה חזרה לתור)
+"מוחזק" = דיווח held טרי (`FRESH_SECONDS`). hello מצטרף (המכונה חזרה לתור)
 ומסירת כיבוי מנקים אותו; מכונה שכבתה מהחשמל מתיישנת לבד.
 """
 
@@ -23,14 +23,14 @@ from server.db import NET_SEEN_MIN_INTERVAL_SECONDS, _settle, _write_lock, writi
 
 #: ארבע פעימות של 15ש' — דיווח אחד או שניים שאבדו אינם "כבה".
 FRESH_SECONDS = 60
-#: גבולות קלט: מגירות במשכפל (‏`drawer_count` ≤ 8) עם מרווח, ומשפט סיבה אחד.
+#: גבולות קלט: מגירות במשכפל (`drawer_count` ≤ 8) עם מרווח, ומשפט סיבה אחד.
 MAX_PROBLEMS = 16
 MAX_TEXT = 300
 LEVELS = ("r", "o")
 
 
 def well_formed(problems: object) -> list[dict]:
-    """רשימת הבעיות כפי שהסוכן כתב אותן ב-`end.problems` (‏`<disk>|<r|o>|<reason>`).
+    """רשימת הבעיות כפי שהסוכן כתב אותן ב-`end.problems` (`<disk>|<r|o>|<reason>`).
     פריט פגום נזנח; רשימה שאינה נקראת = ריקה — המצב "מוחזק" נשאר, בלי פירוט."""
     if not isinstance(problems, list):
         return []
@@ -71,7 +71,7 @@ def note(conn: sqlite3.Connection, mac: str, problems: list[dict],
 
 
 def clear(conn: sqlite3.Connection, mac: str) -> None:
-    """המכונה כבר אינה מחזיקה (hello מצטרף / כיבוי נמסר). ‏SELECT קודם — רוב ה-hello אינם כותבים."""
+    """המכונה כבר אינה מחזיקה (hello מצטרף / כיבוי נמסר). SELECT קודם — רוב ה-hello אינם כותבים."""
     row = conn.execute("SELECT held_at FROM net_devices WHERE mac = ?", (mac,)).fetchone()
     if row is None or row["held_at"] is None:
         return
@@ -83,8 +83,8 @@ def clear(conn: sqlite3.Connection, mac: str) -> None:
 
 def view(held_at: str | None, held_json: str | None,
          now: datetime | None = None) -> dict | None:
-    """מה שהקונסולה מציגה: ‏None = לא מוחזק (או דיווח ישן/פגום — לא ראיה שהוא דלוק),
-    אחרת ‏`{"at", "problems"}`. חותמת מהעתיד אינה טרייה (‏#774)."""
+    """מה שהקונסולה מציגה: None = לא מוחזק (או דיווח ישן/פגום — לא ראיה שהוא דלוק),
+    אחרת `{"at", "problems"}`. חותמת מהעתיד אינה טרייה (#774)."""
     at = _stamp(held_at)
     if at is None:
         return None

@@ -13,7 +13,7 @@
 הבקרה השלילית של השכבה הרביעית — ``_expand_candidate`` בסוכן עצמו,
 כולל "סוכן ישן שלא הציב EXPAND_OVERRIDE" — יושבת ב-``test_agent.py``
 לצד שאר בדיקות ``expand_last``, לא כאן: שם כבר קיים ה-harness
-(‏`run_expand`) שמריץ POSIX sh אמיתי מול sgdisk מזויף.
+(`run_expand`) שמריץ POSIX sh אמיתי מול sgdisk מזויף.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from test_server_room import (CLONER1, CLONER2, cloner_hello, heartbeat,
 
 
 def test_a_missing_choice_is_auto():
-    """‏None — השדה לא נשלח בכלל — הוא בדיוק "auto", כדי ש-pulls.py
+    """None — השדה לא נשלח בכלל — הוא בדיוק "auto", כדי ש-pulls.py
     ו-station.py, ששניהם לא עודכנו, ימשיכו לקבל את הבחירה האוטומטית
     בלי לדעת שהשדה קיים (עיקרון 1)."""
     assert validate_expand_choice(MANIFEST_256, None) == "auto"
@@ -53,7 +53,7 @@ def test_the_system_partition_is_accepted_manually():
 
 
 def test_a_non_system_partition_is_refused():
-    """‏#59 שוקל בדיוק מה ש-`expandable_candidate` שוקל — windows/linux
+    """#59 שוקל בדיוק מה ש-`expandable_candidate` שוקל — windows/linux
     בלבד. מחיצת ה-ESP קיימת במניפסט, אבל אינה מועמדת."""
     with pytest.raises(ValueError, match="windows/linux"):
         validate_expand_choice(MANIFEST_256, 1)

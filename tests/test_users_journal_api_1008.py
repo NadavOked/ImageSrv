@@ -1,11 +1,11 @@
-"""‏#1008 — פערי ה-API של דפי ההרשאות והיומן (‏#954 גל 6).
+"""#1008 — פערי ה-API של דפי ההרשאות והיומן (#954 גל 6).
 
-1. ‏`GET /users` → ‏`last_login_at` + ‏`last_login_from` לכל משתמש. נכתבים
+1. `GET /users` → `last_login_at` + `last_login_from` לכל משתמש. נכתבים
    ב-`users` בכל כניסה שהנפיקה עוגייה — **לא** מ-`console_sessions` (#1039),
    שנמחקת ביציאה ובתפוגה, ולא מהיומן, ששורת ה-`login` שלו אינה נושאת
-   כתובת. ‏null = "לא נרשמה כניסה" (משתמש חדש, או התקנה מלפני #1008) — לא 0.
-3. ‏`/journal` → ‏`id` בכל שורה, ‏`before=<id>` לדפדוף, ו-`X-Journal-Total`.
-4. ‏`GET /journal.csv` — אותם פרמטרים, אותה הרשאה (admin בלבד).
+   כתובת. null = "לא נרשמה כניסה" (משתמש חדש, או התקנה מלפני #1008) — לא 0.
+3. `/journal` → `id` בכל שורה, `before=<id>` לדפדוף, ו-`X-Journal-Total`.
+4. `GET /journal.csv` — אותם פרמטרים, אותה הרשאה (admin בלבד).
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ def test_user_who_never_logged_in_has_null_last_login_not_missing(server):
 
 
 def test_login_records_when_and_from_where(server):
-    """ה-fixture כבר נכנס כ-noc מ-``testclient`` (‏request.client.host)."""
+    """ה-fixture כבר נכנס כ-noc מ-``testclient`` (request.client.host)."""
     row = _users(server)["noc"]
     assert row["last_login_from"] == "testclient"
     assert row["last_login_at"] and row["last_login_at"].endswith("+00:00")
@@ -64,9 +64,9 @@ def test_failed_login_does_not_move_last_login(server):
 
 
 def test_password_alone_does_not_count_until_the_second_factor(server):
-    """משתמש עם MFA: ‏`/login` הוא חצי כניסה (``mfa_required``, בלי עוגייה).
+    """משתמש עם MFA: `/login` הוא חצי כניסה (``mfa_required``, בלי עוגייה).
     הכתובת מתעדכנת רק כש-`/login/mfa` מנפיק את העוגייה."""
-    # ‏`create_app` המשולב שם את הקיוסק ראשון (בלי MFA) — אפליקציית הקונסולה
+    # `create_app` המשולב שם את הקיוסק ראשון (בלי MFA) — אפליקציית הקונסולה
     # בנפרד, כמו ב-test_login_mfa.
     conn = server["ctx"].conn
     runtime = server["app"].state.runtime
@@ -78,7 +78,7 @@ def test_password_alone_does_not_count_until_the_second_factor(server):
     enrol = TestClient(create_console_app(runtime), client=("10.44.10.66", 50000))
     complete_console_login(enrol, conn, "mfa2", "Aa12345!-x")
     assert _users(server)["mfa2"]["last_login_from"] == "10.44.10.66"
-    # ‏#2414: קוד הרישום נצרך — הכניסה הבאה, באותם 30 שניות, היא ב-step הבא.
+    # #2414: קוד הרישום נצרך — הכניסה הבאה, באותם 30 שניות, היא ב-step הבא.
     conn.execute("UPDATE users SET mfa_last_step = NULL WHERE username = 'mfa2'")
     conn.commit()
 
@@ -137,7 +137,7 @@ def test_journal_total_counts_every_matching_row_not_the_page(server):
     r = server["admin"].get("/api/console/journal",
                             params={"event": "machine_add", "limit": 2})
     assert r.headers["X-Journal-Total"] == "5"
-    # ‏before מזיז את הדף, לא את הסך.
+    # before מזיז את הדף, לא את הסך.
     last = r.json()[-1]["id"]
     r2 = server["admin"].get("/api/console/journal",
                              params={"event": "machine_add", "limit": 2, "before": last})
@@ -177,7 +177,7 @@ def test_journal_csv_has_the_same_rows_as_the_screen(server):
 
 def test_journal_csv_quotes_commas_and_defuses_formulas(server):
     conn = server["ctx"].conn
-    # ‏login_failed נושא את השם שהוקלד במסך הכניסה — טקסט של מי שלא נכנס.
+    # login_failed נושא את השם שהוקלד במסך הכניסה — טקסט של מי שלא נכנס.
     journal(conn, "login_failed", "=HYPERLINK(\"http://x\",\"a, b\")", "")
     r = server["admin"].get("/api/console/journal.csv",
                             params={"event": "login_failed"})

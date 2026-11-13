@@ -1,11 +1,11 @@
-"""‏#313 — שלושת רצפי הכתיבות שנשארו, ועוד `db.set_setting` עצמו.
+"""#313 — שלושת רצפי הכתיבות שנשארו, ועוד `db.set_setting` עצמו.
 
-‏#272 מצא את שני הבאגים ותיקן אותם ב-`net_seen`; ‏#356 החיל אותם על
-מסלול ה-hello (`agent_loops.note`, ‏`bootguard.guard`). מה שנשאר הוא
+#272 מצא את שני הבאגים ותיקן אותם ב-`net_seen`; #356 החיל אותם על
+מסלול ה-hello (`agent_loops.note`, `bootguard.guard`). מה שנשאר הוא
 מסלול ה**קונסולה**, ואותה צורה בדיוק — ``conn.execute(...)`` ואחריו
 ``conn.commit()``, בלי ``_write_lock`` ובלי ``writing``:
 
-1. **כתיבה שנכשלה מרעילה את החיבור.** ‏pysqlite מוציא ``BEGIN`` לפני
+1. **כתיבה שנכשלה מרעילה את החיבור.** pysqlite מוציא ``BEGIN`` לפני
    כל DML. אם ה-DML נכשל ב-``database is locked`` ואיש אינו עושה
    ``rollback``, החיבור נשאר **בתוך טרנזאקציה** — ומשם sqlite אינו
    מפעיל את ה-busy handler לשדרוג נעילה, וכל כתיבה נכשלת **מיד**, גם
@@ -13,11 +13,11 @@
    אירוע עומס **חולף אחד** משבית את הכתיבה של אותו תהליכון עד אתחול
    השרת. באתרים שכאן זה אומר קונסולה שמפסיקה לשמור: המפעיל לוחץ
    "שמור", מקבל שגיאה, מנסה שוב — וזה נכשל שוב, מיד, לתמיד.
-2. **כותבים בתוך התהליך מרעיבים זה את זה.** ‏sqlite אינו מבטיח
+2. **כותבים בתוך התהליך מרעיבים זה את זה.** sqlite אינו מבטיח
    הוגנות: הממתין ישן ב-busy handler ובזמן השינה האחרים כותבים שוב.
    ``_write_lock`` הוא התור ההוגן בתוך התהליך.
 
-ארבעת האתרים נבדקים כאן בנפרד — ‏`users`, ‏`console_api`, ‏`registry`,
+ארבעת האתרים נבדקים כאן בנפרד — `users`, `console_api`, `registry`,
 ו-`db.set_setting` — כי כל אחד מהם רץ ממסלול אחר וכשל באחד אינו מעיד
 על השאר.
 
@@ -52,7 +52,7 @@ GROUP = "grp_CLONERS"
 
 
 class _Body:
-    """‏Request מזויף ל-endpoint שקורא ``await request.json()``."""
+    """Request מזויף ל-endpoint שקורא ``await request.json()``."""
 
     def __init__(self, payload: dict):
         self._payload = payload
@@ -104,7 +104,7 @@ def test_a_failed_user_create_leaves_the_connection_usable(tmp_path):
 def test_user_writes_do_not_starve_each_other(tmp_path):
     """כמה מסכי ניהול פתוחים יחד — וכל משתמש שנוצר באמת נוצר.
 
-    הראיה חיובית: כל תשע הרשומות נמצאות. ‏`create` אינו בולע חריגות,
+    הראיה חיובית: כל תשע הרשומות נמצאות. `create` אינו בולע חריגות,
     אבל מה שנספר הוא מה שנכתב ולא מה שלא נזרק.
     """
     db = connect(tmp_path / "t.db")
@@ -222,9 +222,9 @@ def test_machine_writes_do_not_starve_each_other(tmp_path):
 
 
 def test_a_failed_set_setting_leaves_the_connection_usable(tmp_path):
-    """‏`set_setting` הוא מסלול הכתיבה של **כל** מסכי ההגדרות.
+    """`set_setting` הוא מסלול הכתיבה של **כל** מסכי ההגדרות.
 
-    ‏DHCP, כתובות, מתגים ורשימת התיקיות עוברים כאן. חיבור מורעל
+    DHCP, כתובות, מתגים ורשימת התיקיות עוברים כאן. חיבור מורעל
     כאן הוא קונסולה שהפסיקה לשמור — ולפי עיקרון 5, "שמירה שלא הצליחה
     להיבדק" אינה "נשמר".
     """
@@ -265,8 +265,8 @@ def test_settings_writes_do_not_starve_each_other(tmp_path):
 def test_the_write_lock_is_not_reentrant(tmp_path):
     """שומר על ההנחה שכל התיקון הזה נשען עליה.
 
-    ‏`_write_lock` הוא ``Lock`` ולא ``RLock``, ולכן כל קינון — למשל
-    ‏`journal` שייקרא **בתוך** בלוק כתיבה במקום אחריו — נתקע לנצח ולא
+    `_write_lock` הוא ``Lock`` ולא ``RLock``, ולכן כל קינון — למשל
+    `journal` שייקרא **בתוך** בלוק כתיבה במקום אחריו — נתקע לנצח ולא
     נכשל. תקיעה אינה נראית ככשל, והיא נראית כמו שרת עמוס.
     """
     from server.db import _write_lock
@@ -278,5 +278,5 @@ def test_the_write_lock_is_not_reentrant(tmp_path):
         if reentered:
             _write_lock.release()
     assert reentered is False, (
-        "‏_write_lock הפך ל-RLock — קינון כבר לא ייתקע, "
+        "\u200f_write_lock הפך ל-RLock — קינון כבר לא ייתקע, "
         "וההנחה שהתיקון נשען עליה אינה נכונה יותר")

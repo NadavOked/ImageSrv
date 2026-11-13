@@ -34,9 +34,9 @@ log = logging.getLogger("imagesrv.boot")
 #: בלי no-store, proxy ברשת המכללה יכול להגיש למחשב את ההחלטה של מחשב
 #: אחר — או את זו של אתמול.
 #:
-#: **אין כאן `Connection: close`, בכוונה (#1423).** ‏GRUB יודע איפה הקובץ
+#: **אין כאן `Connection: close`, בכוונה (#1423).** GRUB יודע איפה הקובץ
 #: נגמר לפי Content-Length, וסוגר את החיבור בעצמו כשהוא סוגר את הקובץ.
-#: עם `close` השרת סגר ראשון ונשאר ב-TIME_WAIT לשישים שניות. ‏GRUB יוצא
+#: עם `close` השרת סגר ראשון ונשאר ב-TIME_WAIT לשישים שניות. GRUB יוצא
 #: מאותם פורטי מקור בכל אתחול (21550 ואילך) ואינו עונה ב-RST, ולכן אתחול
 #: חוזר מהיר נתקע על כל פורט כזה כ-15.6 שניות של SYN חוזרים. החצי השני
 #: של התיקון — RST כש-GRUB סוגר, במקום LAST-ACK — ב-`server/net/grub_close.py`.
@@ -60,10 +60,10 @@ class Resolver(Protocol):
 
     כאן גם מקומה של שכבת האימות השנייה מסעיף 6 באפיון: המחולל לא מכיר
     טופולוגיית רשת, ולכן כל החלטה שתלויה ברשת שממנה הבקשה הגיעה שייכת
-    ל-resolver. **מה שמיושם היום צר מזה, ובכוונה** (‏#536): בקשה שלא
+    ל-resolver. **מה שמיושם היום צר מזה, ובכוונה** (#536): בקשה שלא
     התקבלה על וילן ההפצה נענית כרגיל — תחנה מחוץ לווילן מושכת תפריט
-    לגיטימי (תרחיש 3, ‏#39) — אבל **אינה נספרת** כאתחול ב-`bootguard`.
-    ‏known=false לפי רשת המקור אינו מיושם: ה-MAC שבשאילתה אינו זהות,
+    לגיטימי (תרחיש 3, #39) — אבל **אינה נספרת** כאתחול ב-`bootguard`.
+    known=false לפי רשת המקור אינו מיושם: ה-MAC שבשאילתה אינו זהות,
     והתשובה לכך היא לא לספור אותו — לא לשקר על מה שידוע.
     """
 
@@ -99,17 +99,20 @@ def build_config_text(
     return text
 
 
-#: מה שהשרת מספק לרישום צעד: ‏MAC קנוני ושם צעד מהרשימה, החוצה "נרשם".
+#: מה שהשרת מספק לרישום צעד: MAC קנוני ושם צעד מהרשימה, החוצה "נרשם".
 Recorder = Callable[[str, str], bool]
+#: #2830: מה שהשרת מספק לשמירת סמני `up=` (MAC קנוני, סמנים שעברו `parse_marks`), החוצה "נשמר".
+MarksRecorder = Callable[[str, "dict[str, float]"], bool]
 
 
 def record_step(record: Recorder | None, raw_mac: object, raw_step: object,
-                client_ip: str | None, *, raw_up: object = None) -> bool:
+                client_ip: str | None, *, raw_up: object = None,
+                marks_record: MarksRecorder | None = None) -> bool:
     """רושם פירור אחד. לעולם לא זורקת — הקורא מחזיר ל-GRUB 200 בכל מקרה.
 
     כל דחייה נכתבת ליומן השרת, ובכוונה: הבקשה עצמה היא הדבר היחיד
     שהמכונה חסרת-הראש שולחת, ואם היא נופלת כאן בשקט — השביל **אינו
-    קיים** ואיש לא יידע. ‏MAC פגום וצעד שאינו מהרשימה הם שני מצבים
+    קיים** ואיש לא יידע. MAC פגום וצעד שאינו מהרשימה הם שני מצבים
     שונים, ולכן שתי שורות שונות ביומן.
     """
     mac = normalize_mac(raw_mac)
@@ -140,17 +143,20 @@ def record_step(record: Recorder | None, raw_mac: object, raw_step: object,
                 log.info("boot marks %s %s: %s", raw_step, mac,
                          " ".join(f"{key}={value:.2f}"
                                   for key, value in marks.items()))
+                if marks_record is not None:
+                    # #2830: רק אחרי שהפירור עצמו נרשם — אותה בדיקת זהות (#2411) חלה גם כאן.
+                    marks_record(mac, marks)
         except Exception:  # noqa: BLE001 — diagnostics never alter the step result
             log.exception("could not log boot marks for %s", mac)
     return recorded
 
 
 def gui_initrd_path(boot_dir: str | Path | None) -> str | None:
-    """הנתיב המוגש של ה-initramfs הגרפי — ‏**רק אם הקובץ באמת שם** (#32).
+    """הנתיב המוגש של ה-initramfs הגרפי — **רק אם הקובץ באמת שם** (#32).
 
-    ‏`grub_menu` טהור ואינו נוגע בדיסק, ולכן הבדיקה יושבת כאן, במודול
+    `grub_menu` טהור ואינו נוגע בדיסק, ולכן הבדיקה יושבת כאן, במודול
     שממילא מגיש קבצים מהתיקייה הזאת. מה שחוזר הוא ראיה חיובית:
-    ‏`is_file()` ענה True. כל דבר אחר — אין תיקיית אתחול, הקובץ חסר, אין
+    `is_file()` ענה True. כל דבר אחר — אין תיקיית אתחול, הקובץ חסר, אין
     הרשאה, נתיב פגום — מחזיר None, וכל התפקידים נופלים ל-initramfs
     הטקסטואלי.
 
@@ -172,9 +178,9 @@ def gui_initrd_path(boot_dir: str | Path | None) -> str | None:
 def config_for_scope(scope: dict, config: GrubConfig) -> GrubConfig:
     """אותה תצורה, אבל עם הכתובת שאליה הלקוח באמת התחבר (issue #39).
 
-    תחנה מחוץ לווילן ההפצה (תרחיש 3) מגיעה דרך ‎$net_default_server, ואם
+    תחנה מחוץ לווילן ההפצה (תרחיש 3) מגיעה דרך $net_default_server, ואם
     התפריט שהיא מקבלת מפנה את הקרנל לכתובת ההפצה הקבועה — היא לא תגיע
-    אליה, ותיפול ל-chain_local. המקור כאן הוא ‎scope["server"], שאותו
+    אליה, ותיפול ל-chain_local. המקור כאן הוא scope["server"], שאותו
     uvicorn ממלא מה-sockname של החיבור שהתקבל. מכוון: *לא* כותרת Host,
     שהיא קלט של הלקוח ולכן תשתול כתובת שרירותית בשורת הקרנל.
 
@@ -208,13 +214,14 @@ def _response_headers(content_type: bytes, length: int) -> list:
 
 def create_boot_asgi(resolve: Resolver, config: GrubConfig,
                      boot_dir: str | Path | None = None,
-                     record: Recorder | None = None):
-    """אפליקציית ASGI לנתיבי ‎/boot: התפריט + קבצי הקרנל וה-initramfs.
+                     record: Recorder | None = None,
+                     marks_record: MarksRecorder | None = None):
+    """אפליקציית ASGI לנתיבי /boot: התפריט + קבצי הקרנל וה-initramfs.
 
     ממופה ב-mount על "/boot", ולכן ה-path שמגיע לכאן הוא היחסי:
     "/menu", "/step", "/vmlinuz", "/initrd.img".
 
-    ‏`record` הוא שביל הפירורים של #400 — מוזרק כמו ה-resolver, מאותה
+    `record` הוא שביל הפירורים של #400 — מוזרק כמו ה-resolver, מאותה
     סיבה: המודול הזה אינו מכיר DB.
     """
     root = Path(boot_dir).resolve() if boot_dir else None
@@ -236,15 +243,16 @@ def create_boot_asgi(resolve: Resolver, config: GrubConfig,
             path = path[len(prefix):] or "/"
         client_ip = scope.get("client")[0] if scope.get("client") else None
 
-        # ‏#400: פירור. תמיד 200 וגוף של בייט אחד, גם כשלא נרשם דבר —
-        # ‏GRUB מדפיס אותו, וקוד שגיאה כאן היה שגיאה על מסך האתחול.
+        # #400: פירור. תמיד 200 וגוף של בייט אחד, גם כשלא נרשם דבר —
+        # GRUB מדפיס אותו, וקוד שגיאה כאן היה שגיאה על מסך האתחול.
         if path in (trace.STEP_PATH, "/step", "/step/"):
             params = parse_qs(scope.get("query_string", b"").decode())
             record_step(record,
                         (params.get("mac") or [None])[0],
                         (params.get("s") or [None])[0],
                         client_ip,
-                        raw_up=(params.get("up") or [None])[0])
+                        raw_up=(params.get("up") or [None])[0],
+                        marks_record=marks_record)
             await send_all(send, 200, trace.TINY_BODY, MEDIA_TYPE.encode())
             return
 

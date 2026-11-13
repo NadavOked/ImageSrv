@@ -1,4 +1,4 @@
-"""סחיפת אזורי עבודה יתומים (‏#88).
+"""סחיפת אזורי עבודה יתומים (#88).
 
 הבדיקה המרכזית כאן היא לא שהיתומים נמחקים אלא שמה ש**אינו** מוכח יתום
 שורד: אזור עבודה של משימה שרצה עכשיו, אזור עבודה שאין לו שורה בבסיס
@@ -57,7 +57,7 @@ def events(conn) -> dict[str, str]:
 
 
 def test_a_work_area_of_a_task_that_failed_is_swept(conn, tmp_path):
-    """‏#88 עצמו: כך נראים חמשת היתומים שנמדדו על שרת המעבדה — שורת
+    """#88 עצמו: כך נראים חמשת היתומים שנמדדו על שרת המעבדה — שורת
     משימה במצב `failed`, ותיקייה שאיש לא ניקה."""
     root = tmp_path / "images"
     add_task(conn, "tsk_0930", "failed")
@@ -133,7 +133,7 @@ def test_a_work_area_of_a_live_task_survives_the_sweep(conn, tmp_path):
 
 def test_a_work_area_with_no_row_at_all_is_kept_not_swept(conn, tmp_path):
     """עיקרון 5: היעדר שורה אינו ראיה שהמשימה מתה אלא ראיה שה-DB הזה
-    אינו מכיר אותה — ‏--data-dir אחר, בסיס משוחזר מגיבוי."""
+    אינו מכיר אותה — --data-dir אחר, בסיס משוחזר מגיבוי."""
     root = tmp_path / "images"
     make_area(root, ".capture-tsk_unknown")
 
@@ -246,7 +246,7 @@ def test_a_missing_library_root_is_not_an_error(conn, tmp_path):
 
 
 def test_the_sweep_recognises_the_directory_capture_actually_creates(tmp_path):
-    """‏`staging_dir` ו-`CAPTURE_AREA` הם שני עותקים של אותה מוסכמת שם.
+    """`staging_dir` ו-`CAPTURE_AREA` הם שני עותקים של אותה מוסכמת שם.
     אם אחד ישתנה, הסחיפה תפסיק לזהות יתומים — בשקט."""
     area = staging_dir(tmp_path, "tsk_0930")
     match = CAPTURE_AREA.match(area.name)
@@ -264,7 +264,7 @@ def test_human_bytes_reads_like_a_person_wrote_it():
 
 
 def test_the_server_sweeps_when_it_comes_up(tmp_path, images_root):
-    """‏#88 מקצה לקצה: היתום נמחק בעליית השרת, האימג'ים לא נגעו, והשורה
+    """#88 מקצה לקצה: היתום נמחק בעליית השרת, האימג'ים לא נגעו, והשורה
     ביומן אומרת כמה נמחק וכמה מקום התפנה."""
     from server.app import create_app
 

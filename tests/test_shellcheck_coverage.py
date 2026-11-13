@@ -100,7 +100,7 @@ def test_the_derivation_is_not_empty():
     assert "agent/imagesrv-agent" in derived and "agent/init" in derived, (
         "נקודות הכניסה של הסוכן אינן נגזרות — אין להן סיומת .sh")
     assert any(p.startswith("agent/lib/") for p in derived), (
-        "‏agent/lib/ אינו נגזר — זו השכבה שרצה כ-root מול דיסקים")
+        "\u200fagent/lib/ אינו נגזר — זו השכבה שרצה כ-root מול דיסקים")
 
 
 def test_there_are_shell_files_to_check():
@@ -125,7 +125,7 @@ def test_every_prune_carries_a_declared_reason():
     """
     for pruned in _prunes():
         assert _is_exempt(pruned + "/x.sh") or _is_exempt(pruned), (
-            f"‏{pruned} מנוכה מהסריקה ב-shellcheck.yml בלי נימוק ב-EXEMPT "
+            f"\u200f{pruned} מנוכה מהסריקה ב-shellcheck.yml בלי נימוק ב-EXEMPT "
             "כאן. ניכוי בלי נימוק הוא חור שקט.")
 
 
@@ -142,7 +142,7 @@ def test_the_file_list_is_derived_and_not_written_by_hand():
         for tok in re.split(r"\s+", line.strip().strip(QUOTES)):
             tok = tok.strip().strip(QUOTES)
             assert not tok.endswith(".sh"), (
-                f"‏shellcheck.yml נוקב בנתיב קשיח: {tok!r}. הרשימה נגזרת "
+                f"\u200fshellcheck.yml נוקב בנתיב קשיח: {tok!r}. הרשימה נגזרת "
                 "מהעץ — נתיב כתוב ביד מחזיר את #247 ואת #371.")
 
 
@@ -157,9 +157,9 @@ def test_the_shell_dialect_is_derived_and_not_guessed():
     assert re.search(r"head -n? ?1 ", flat), (
         "השלב אינו גוזר את סוג המעטפת מה-shebang")
     assert re.search(r'shellcheck -s "\$\w+"', flat), (
-        "‏shellcheck נקרא עם סוג קבוע ולא עם הסוג שנגזר")
+        "\u200fshellcheck נקרא עם סוג קבוע ולא עם הסוג שנגזר")
     assert "agent/lib/*.sh|agent/imagesrv-agent|agent/init)" in flat, (
-        "‏agent/lib/ נטען ב-`.` ואין לו shebang — הניב שלו חייב להיות "
+        "\u200fagent/lib/ נטען ב-`.` ואין לו shebang — הניב שלו חייב להיות "
         "מוצהר, ולא נגזר מקובץ שאין ממה לגזור בו")
 
 
@@ -179,7 +179,7 @@ def test_exemptions_carry_a_reason():
 def test_no_exemption_is_stale():
     """חריג שאינו תואם לאף קובץ הוא חור פתוח לקבצים עתידיים.
 
-    ‏`vendor/**` בפרט: אם התת-עץ הוסר או שונה שמו, החריג נשאר ומכסה
+    `vendor/**` בפרט: אם התת-עץ הוסר או שונה שמו, החריג נשאר ומכסה
     מראש כל מה שיגיע לשם אחר כך — הרשאה שאיש לא הכריע עליה.
     """
     shell = _all_shell()

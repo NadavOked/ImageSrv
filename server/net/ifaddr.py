@@ -1,22 +1,22 @@
-"""כרטיס וילן השרתים כלקוח DHCP — הקונסולה נקשרת לפי **שם כרטיס** (‏#1088).
+"""כרטיס וילן השרתים כלקוח DHCP — הקונסולה נקשרת לפי **שם כרטיס** (#1088).
 
 הכרעת נדב (18/09): השרת הראשי מתחבר לרשת השרתים של המכללה ומקבל כתובת
-מה-DHCP שלה. עד כאן ‎--console-host‏ היה כתובת בלבד — כתובת שמשתנה עם
+מה-DHCP שלה. עד כאן --console-host היה כתובת בלבד — כתובת שמשתנה עם
 lease חדש השאירה את הקונסולה קשורה לכתובת שכבר אינה על הכרטיס. מעכשיו
 הדגל מקבל גם שם כרטיס (`eth0`/`ens18`); השרת פותר את הכתובת בעלייה
 ו**מאזין מחדש** כשהיא משתנה.
 
 שלושה חלקים, כולם טהורים או עם hooks:
 
-* ‏`ipv4_of` / `read_ipv4` — שם כרטיס → הכתובת שלו, מ-`ip -json -4 addr`.
+* `ipv4_of` / `read_ipv4` — שם כרטיס → הכתובת שלו, מ-`ip -json -4 addr`.
   שלושה מצבים, לא שניים (עיקרון 5): כתובת · אין כתובת (`None`) · הבדיקה
   עצמה נכשלה (`AddressLookupError`). "אין כתובת" הוא מצב לגיטימי — lease
   שעוד לא הגיע — ואינו כשל; `ip` שנפל הוא כשל ואינו "אין כתובת".
-* ‏`AddressWatcher` — תהליכון שדוגם כל `interval` שניות ומדווח **שינוי**
-  בלבד (‏`on_change(old, new)`). ההשוואה היא לערך שנקרא בפעם הקודמת, ולכן
-  ‏None→כתובת (lease ראשון) הוא שינוי כמו כתובת→כתובת.
-* ‏`dhclient_lease` / `servers_nic_status` — מה שמסך הבריאות מציג: הכתובת,
-  ‏DHCP או סטטי, ומתי החכירה פגה — מקובץ החכירות של dhclient (ifupdown),
+* `AddressWatcher` — תהליכון שדוגם כל `interval` שניות ומדווח **שינוי**
+  בלבד (`on_change(old, new)`). ההשוואה היא לערך שנקרא בפעם הקודמת, ולכן
+  None→כתובת (lease ראשון) הוא שינוי כמו כתובת→כתובת.
+* `dhclient_lease` / `servers_nic_status` — מה שמסך הבריאות מציג: הכתובת,
+  DHCP או סטטי, ומתי החכירה פגה — מקובץ החכירות של dhclient (ifupdown),
   כי `ip addr` אינו נושא תוקף לכתובת ש-dhclient קבע.
 """
 
@@ -33,7 +33,7 @@ from typing import Callable
 
 from server.net.dhcp import validate_name
 
-#: כל כמה שניות הכתובת נדגמת. ‏lease של DHCP נמדד בשעות; 10 שניות זה
+#: כל כמה שניות הכתובת נדגמת. lease של DHCP נמדד בשעות; 10 שניות זה
 #: הזמן שלוקח למפעיל להבחין ש"הקונסולה לא עונה" ולנסות שוב.
 POLL_SECONDS = 10.0
 
@@ -42,15 +42,15 @@ DHCLIENT_LEASES_DIR = "/var/lib/dhcp"
 
 
 class AddressLookupError(RuntimeError):
-    """‏`ip` קיים ונכשל, או שהפלט שלו אינו JSON — הבדיקה עצמה נשברה.
+    """`ip` קיים ונכשל, או שהפלט שלו אינו JSON — הבדיקה עצמה נשברה.
     אינו "אין כתובת": מי שמקפל את השניים יקשור את הקונסולה ל-loopback
     ויקרא לזה "עוד לא הגיע lease"."""
 
 
 def is_interface_name(value: str | None) -> bool:
     """האם הערך הוא שם כרטיס (ולא כתובת IP). אותה רשימת-היתר כמו שם
-    כרטיס בקובץ dnsmasq (‏`dhcp.validate_name`) — ולא "כל מה שאינו IP":
-    ‏`0.0.0.0`, ‏`::1` ו-`localhost` אינם שמות כרטיס."""
+    כרטיס בקובץ dnsmasq (`dhcp.validate_name`) — ולא "כל מה שאינו IP":
+    `0.0.0.0`, `::1` ו-`localhost` אינם שמות כרטיס."""
     if not value or value == "localhost":
         return False
     if _looks_like_ip(value):
@@ -77,10 +77,10 @@ def _looks_like_ip(value: str) -> bool:
 def ipv4_of(name: str, nics: list) -> str | None:
     """הכתובת ה-IPv4 של הכרטיס מתוך פלט `ip -json addr` שכבר נקרא.
 
-    ‏#1121 ס' 5: בזמן חידוש lease יש לרגע **שתי** כתובות, והישנה מסומנת
-    `deprecated`; ‏169.254.x היא `scope link`. לכן: כתובת `scope global`
+    #1121 ס' 5: בזמן חידוש lease יש לרגע **שתי** כתובות, והישנה מסומנת
+    `deprecated`; 169.254.x היא `scope link`. לכן: כתובת `scope global`
     שאינה deprecated קודמת; deprecated מדולגת תמיד; בלי global — הראשונה
-    שאינה deprecated. ‏None = הכרטיס קיים בלי IPv4 **או** אינו ברשימה —
+    שאינה deprecated. None = הכרטיס קיים בלי IPv4 **או** אינו ברשימה —
     הקורא שרוצה להבדיל ביניהם בודק `ifname` בעצמו."""
     fallback: str | None = None
     for nic in nics or []:
@@ -110,11 +110,11 @@ def _run_ip(args: list[str]) -> str:
 
 
 def read_ipv4(name: str, run: Callable[[list[str]], str] = _run_ip) -> str | None:
-    """הכתובת של הכרטיס **עכשיו**, מהמכונה. ‏`run` מוזרק בבדיקות.
+    """הכתובת של הכרטיס **עכשיו**, מהמכונה. `run` מוזרק בבדיקות.
 
-    ‏`ip -json -4 addr show dev X` על כרטיס שאינו קיים יוצא 1 — וזה
-    ‏`AddressLookupError` ("הכרטיס לא נמצא" הוא כשל תצורה, לא lease
-    שמתעכב); על כרטיס בלי כתובת הוא יוצא 0 עם `addr_info: []` — ‏None.
+    `ip -json -4 addr show dev X` על כרטיס שאינו קיים יוצא 1 — וזה
+    `AddressLookupError` ("הכרטיס לא נמצא" הוא כשל תצורה, לא lease
+    שמתעכב); על כרטיס בלי כתובת הוא יוצא 0 עם `addr_info: []` — None.
     """
     out = run(["-4", "addr", "show", "dev", name])
     try:
@@ -129,9 +129,9 @@ def read_ipv4(name: str, run: Callable[[list[str]], str] = _run_ip) -> str | Non
 
 class AddressWatcher:
     """דוגם את כתובת הכרטיס ומדווח שינוי — בתהליכון daemon, או ידנית
-    (‏`check_once`) בבדיקות.
+    (`check_once`) בבדיקות.
 
-    ‏`on_change(old, new)` נקרא **רק** כשהכתובת שנקראה שונה מהקודמת; כשל
+    `on_change(old, new)` נקרא **רק** כשהכתובת שנקראה שונה מהקודמת; כשל
     קריאה (`AddressLookupError`) אינו "אין כתובת" — הוא נמסר ל-`on_error`
     ואינו משנה את הערך הידוע, כדי שנפילה חד-פעמית של `ip` לא תסגור את
     מאזין הקונסולה.
@@ -164,7 +164,7 @@ class AddressWatcher:
         try:
             handled = self._on_change(old, now)
         except Exception:
-            # ‏#1121 ס' 6: חריגה = הטיפול לא קרה; הערך הידוע חוזר לישן כדי
+            # #1121 ס' 6: חריגה = הטיפול לא קרה; הערך הידוע חוזר לישן כדי
             # שהדגימה הבאה תדווח שוב (אחרת השינוי "נזכר" בלי מאזין).
             self.current = old
             raise
@@ -186,7 +186,7 @@ class AddressWatcher:
         self._stop.set()
 
     def _loop(self) -> None:
-        # ‏#1121 ס' 6: חריגה ב-`on_change`/`lookup` שאינה AddressLookupError
+        # #1121 ס' 6: חריגה ב-`on_change`/`lookup` שאינה AddressLookupError
         # הייתה הורגת את התהליכון לצמיתות — והקונסולה הייתה נשארת על
         # כתובת ישנה בלי שאיש יראה. נרשמת ב-`on_error`, והדגימה הבאה רצה.
         while not self._stop.wait(self.interval):
@@ -222,8 +222,8 @@ _FIELD = re.compile(r"^\s*(fixed-address|expire|option dhcp-server-identifier|"
 def parse_dhclient_leases(text: str) -> Lease | None:
     """החכירה **האחרונה** בקובץ — dhclient מוסיף בסוף ואינו מוחק.
 
-    ‏`expire 4 2026/09/18 12:00:00;` הוא UTC (dhclient כותב בזמן אוניברסלי
-    כברירת מחדל). ‏`expire never;` = ללא תוקף. ‏None = אין אף חכירה בקובץ.
+    `expire 4 2026/09/18 12:00:00;` הוא UTC (dhclient כותב בזמן אוניברסלי
+    כברירת מחדל). `expire never;` = ללא תוקף. None = אין אף חכירה בקובץ.
     """
     latest: Lease | None = None
     for block in _LEASE_BLOCK.finditer(text or ""):
@@ -242,7 +242,7 @@ def parse_dhclient_leases(text: str) -> Lease | None:
 def _parse_expire(raw: str) -> datetime | None:
     if not raw or raw == "never":
         return None
-    # ‏"4 2026/09/18 12:00:00" — יום בשבוע, תאריך, שעה, ב-UTC.
+    # "4 2026/09/18 12:00:00" — יום בשבוע, תאריך, שעה, ב-UTC.
     parts = raw.split()
     if len(parts) == 3:
         parts = parts[1:]
@@ -254,7 +254,7 @@ def _parse_expire(raw: str) -> datetime | None:
 
 
 def dhclient_lease(name: str, leases_dir: str | Path = DHCLIENT_LEASES_DIR) -> Lease | None:
-    """החכירה של הכרטיס מ-`/var/lib/dhcp/dhclient.<if>.leases`. ‏None =
+    """החכירה של הכרטיס מ-`/var/lib/dhcp/dhclient.<if>.leases`. None =
     אין קובץ (כרטיס סטטי, או לקוח DHCP אחר) או שאין בו חכירה."""
     path = Path(leases_dir) / f"dhclient.{name}.leases"
     try:
@@ -267,7 +267,7 @@ def dhclient_lease(name: str, leases_dir: str | Path = DHCLIENT_LEASES_DIR) -> L
 def servers_nic_status(name: str, address: str | None, lease: Lease | None,
                        *, lookup_failed: str | None = None,
                        hostname: str = "") -> tuple[str, str]:
-    """שורת "כתובת השרתים" במסך הבריאות — ‏(state, detail), שלושה מצבים:
+    """שורת "כתובת השרתים" במסך הבריאות — (state, detail), שלושה מצבים:
 
     * הבדיקה נכשלה (`lookup_failed`) → `unknown`. לא "אין כתובת".
     * אין כתובת → `warn` — הקונסולה על loopback בלבד עד שיגיע lease.

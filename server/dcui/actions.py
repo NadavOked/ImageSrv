@@ -117,10 +117,10 @@ def physical_reset_admin_password(conn, new_password: str) -> ActionResult:
         conn.execute("DELETE FROM mfa_backup_codes WHERE username = ?", (stored,))
         conn.execute("DELETE FROM login_attempts WHERE key LIKE ?",
                      (stored.lower() + "|%",))
-        # ‏#2443: גם התקרה לפי חשבון — זו הדרך החוזרת של מי שננעל מכל הכתובות.
+        # #2443: גם התקרה לפי חשבון — זו הדרך החוזרת של מי שננעל מכל הכתובות.
         conn.execute("DELETE FROM login_account_failures WHERE username = ?",
                      (stored.lower(),))
-    # ‏#1853: ‏`users.update(password=…)` כבר מבטל את כל ה-sessions והצופים (`bump_auth_epoch`).
+    # #1853: `users.update(password=…)` כבר מבטל את כל ה-sessions והצופים (`bump_auth_epoch`).
     info = users.flags(conn, stored)
     verified = (users.verify(conn, stored, new_password) == "admin"
                 and not info["mfa_enabled"] and not info["must_change_password"])
@@ -392,7 +392,10 @@ def apply_network(conn, form: dict[str, str], data_dir: Path,
         detail_lines += ([f"Still no match after waiting {netcfg_host.DHCP_LEASE_WAIT_S} "
                           "seconds for DHCP."] if waited and gaps else [])
         return ActionResult(False, "Network change was not verified.", tuple(detail_lines))
-    return ActionResult(True, "Network change applied; confirm within 60 seconds.")
+    # #2371: after a DHCP wait of up to 30 s the window is not 60 s any more --
+    # what is left, from the marker's own deadline (as the confirm dialog counts).
+    left = max(0, int(marker.deadline - float(active_hooks["now"]())))
+    return ActionResult(True, f"Network change applied; confirm within {left} seconds.")
 
 
 def restart_management_network(conn, interface: str, data_dir: Path,

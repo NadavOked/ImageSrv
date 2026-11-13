@@ -3,7 +3,7 @@
 1. **חשבונות שליחה** (``accounts``): איך שולחים. ספק מרשימה (``PROVIDERS``)
    ממלא מארח, פורט והצפנה; המפעיל רואה אותם רק ב"SMTP מותאם". אימות:
    ``none`` (relay / Direct Send), ``password`` או ``oauth`` (device code,
-   ‏``email_oauth``).
+   ``email_oauth``).
 2. **כללים** (``rules``): על מה ולמי. כל כלל: קטגוריות, רמת חומרה מינימלית,
    נמענים — **ושפה לכל נמען** — וחשבון שולח. **כלל ברירת המחדל נוצר לבד**
    עם הנמען הראשון (``add_recipient``): שגיאות ואזהרות מכל הקטגוריות, בשפת
@@ -11,7 +11,7 @@
 3. **היסטוריה** — בתור (``email_alerts.history``).
 
 **סודות** — סיסמה ואסימון OAuth — בקבצי ``0600`` תחת ``<data_dir>/email-accounts``
-(‏``interserver_auth.write_credential_0600``), כמו שאר הסודות של השרת. לא ב-DB,
+(``interserver_auth.write_credential_0600``), כמו שאר הסודות של השרת. לא ב-DB,
 לא ביומן, לא בשום GET. **שינוי יעד בלי סוד חדש מוחק את הסודות** (סקירת
 אבטחה): מי שמחליף ספק/מארח/פורט/הצפנה/אימות/משתמש/אפליקציה בלי להזין
 סיסמה באותה בקשה לא יקבל את הסיסמה או את האסימון בשליחה הבאה.
@@ -56,8 +56,8 @@ KIND_CATEGORY = {kind: cat for cat, kinds in CATEGORIES.items() for kind in kind
 
 SECURITY = ("starttls", "tls", "none")
 AUTH = ("none", "password", "oauth")
-#: ספקים: מה הבחירה ממלאת. ‏``host=None`` = נגזר (Direct Send) או נשאר למפעיל
-#: (relay). ‏``auth`` = האימותים המותרים, הראשון הוא ברירת המחדל. ‏``oauth`` =
+#: ספקים: מה הבחירה ממלאת. ``host=None`` = נגזר (Direct Send) או נשאר למפעיל
+#: (relay). ``auth`` = האימותים המותרים, הראשון הוא ברירת המחדל. ``oauth`` =
 #: ספק ה-OAuth (``email_oauth.OAUTH``).
 PROVIDERS: dict[str, dict] = {
     "office365": {"host": "smtp.office365.com", "port": 587, "security": "starttls",
@@ -118,7 +118,7 @@ def load(conn) -> tuple[dict, str | None]:
             raise ValueError("מבנה לא צפוי")
     except ValueError as exc:
         # הפרטים (שורה/עמודה של ה-JSON) — ליומן השרת; לקונסולה — ניסוח קבוע (CodeQL
-        # ‏py/stack-trace-exposure, ‏PR ציבורי #54).
+        # py/stack-trace-exposure, PR ציבורי #54).
         log.warning("email alerts: stored settings unreadable: %s", exc)
         return empty(), ("הגדרות ההתראות השמורות פגומות — שום מייל לא יוצא עד שמירה מחדש"
                          " (הפרטים ביומן השרת)")
@@ -150,10 +150,10 @@ def _secret_dir(data_dir) -> Path:
 def secret_path(data_dir, account_id: str, what: str) -> Path:
     """``what`` הוא ``password`` או ``oauth``; המזהה נבדק — הוא נכנס לשם קובץ.
 
-    שתי בדיקות, בכוונה: המזהה תואם **במלואו** (``fullmatch`` — ‏``$`` של ``match``
+    שתי בדיקות, בכוונה: המזהה תואם **במלואו** (``fullmatch`` — ``$`` של ``match``
     מקבל גם שורה חדשה בסוף) לאותיות, ספרות ו-``._-``, כך שאין בו מפריד נתיב; ואחרי
     נרמול, הנתיב חייב להיות **בתוך** ``<data_dir>/email-accounts/``. השנייה היא
-    הצורה ש-CodeQL מזהה כמחסום (‏``py/path-injection``, ‏PR ציבורי #54) — ורשת
+    הצורה ש-CodeQL מזהה כמחסום (``py/path-injection``, PR ציבורי #54) — ורשת
     ביטחון אם מישהו ירחיב פעם את התבנית."""
     if (not isinstance(account_id, str) or not _TOKEN.fullmatch(account_id)
             or what not in ("password", "oauth")):
@@ -248,7 +248,7 @@ def clean_addr(value, what: str) -> str:
 
 
 def direct_send_host(from_addr: str) -> str:
-    """‏Office 365 Direct Send: ה-MX של הדומיין — ``college.ac.il`` →
+    """Office 365 Direct Send: ה-MX של הדומיין — ``college.ac.il`` →
     ``college-ac-il.mail.protection.outlook.com``. ריק כשאין עדיין כתובת שולח."""
     domain = from_addr.rsplit("@", 1)[1].lower() if "@" in from_addr else ""
     return f"{domain.replace('.', '-')}.mail.protection.outlook.com" if domain else ""
@@ -260,7 +260,7 @@ TENANT_ALIASES = ("organizations", "common", "consumers")
 
 
 def valid_tenant(tenant: str) -> bool:
-    """‏tenant של Microsoft נכנס לנתיב ה-URL של ספק הזהות — רק GUID, דומיין, או
+    """tenant של Microsoft נכנס לנתיב ה-URL של ספק הזהות — רק GUID, דומיין, או
     אחד הכינויים (סקירת אבטחה: SSRF דרך ``oauth_tenant``)."""
     return isinstance(tenant, str) and (tenant in TENANT_ALIASES or bool(_GUID.match(tenant))
                                         or bool(_DOMAIN.match(tenant)))
@@ -273,7 +273,7 @@ def new_id(prefix: str) -> str:
 def merge_account(current: dict | None, body: dict, secrets_present: bool
                   ) -> tuple[dict, str | None, str | None, bool]:
     """מאמת חשבון (חדש כש-``current`` הוא ``None``). מחזיר (חשבון, סיסמה חדשה,
-    ‏client secret חדש, למחוק סודות?). זורק ``ConfigError`` לפני שנכתב דבר."""
+    client secret חדש, למחוק סודות?). זורק ``ConfigError`` לפני שנכתב דבר."""
     if not isinstance(body, dict):
         raise ConfigError("גוף הבקשה חייב להיות אובייקט")
     acc = json.loads(json.dumps(current)) if current else {
@@ -341,7 +341,7 @@ def merge_account(current: dict | None, body: dict, secrets_present: bool
         raise ConfigError("שליחה בלי אימות (Direct Send / relay) — בלי שם משתמש")
     if acc["auth"] != "none" and acc["security"] == "none":
         raise ConfigError("בלי הצפנה אין אימות: הסיסמה או האסימון היו עוברים ברשת גלויים")
-    # סוד נחשב רק אם הוא תואם לאימות הסופי: סיסמה רק ל-``password``, ‏client secret
+    # סוד נחשב רק אם הוא תואם לאימות הסופי: סיסמה רק ל-``password``, client secret
     # רק ל-``oauth``. אחרת סיסמה הייתה "מכשירה" שינוי יעד של חשבון OAuth — והאסימון
     # הישן היה ממשיך לפעול מול היעד החדש (סקירת אבטחה, #1751).
     if password is not None and acc["auth"] != "password":
@@ -435,7 +435,7 @@ def matching_rules(doc: dict, kind: str) -> list[dict]:
 
 
 def warnings(doc: dict) -> list[str]:
-    """אזהרות שאינן חוסמות. ‏Direct Send מעביר רק לנמענים בדומיין של השולח."""
+    """אזהרות שאינן חוסמות. Direct Send מעביר רק לנמענים בדומיין של השולח."""
     out = []
     for r in doc["rules"]:
         acc = account(doc, r.get("account_id", ""))

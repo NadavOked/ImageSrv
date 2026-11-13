@@ -1,14 +1,14 @@
-"""לשונית ההגדרות "התראות במייל" — ה-API (#1751). **admin בלבד**; ‏deploy
-מקבל 403 כמו בכל נתיב ניהול (``auth.console_only`` בהרכבה, ‏``admin_only`` כאן).
+"""לשונית ההגדרות "התראות במייל" — ה-API (#1751). **admin בלבד**; deploy
+מקבל 403 כמו בכל נתיב ניהול (``auth.console_only`` בהרכבה, ``admin_only`` כאן).
 
 המבנה (``email_config``): חשבונות שליחה, כללים, היסטוריה. המסלול הקצר של
-המסך: ``POST /accounts`` (ספק מרשימה), ‏``/oauth/start`` + ‏``/oauth/poll``
-("התחבר עם Microsoft"), ‏``POST /recipients`` — שיוצר לבד את כלל ברירת המחדל
+המסך: ``POST /accounts`` (ספק מרשימה), ``/oauth/start`` + ``/oauth/poll``
+("התחבר עם Microsoft"), ``POST /recipients`` — שיוצר לבד את כלל ברירת המחדל
 — ו-``POST /accounts/{id}/test``. כל השאר "מתקדם".
 
 שום תשובה אינה מחזירה סיסמה, אסימון, client secret או device code. בדיקה
 ו-OAuth הם סינכרוניים אבל תחומים בזמן (``email_alerts.TIMEOUT_SECONDS``,
-‏``email_oauth.TIMEOUT_SECONDS``), ו-FastAPI מריץ ``def`` בתהליכון מהמאגר.
+``email_oauth.TIMEOUT_SECONDS``), ו-FastAPI מריץ ``def`` בתהליכון מהמאגר.
 """
 
 from fastapi import APIRouter, Body, Depends, HTTPException
@@ -181,7 +181,7 @@ def create_email_router(ctx: ServerContext) -> APIRouter:
         try:
             return flows.start(acc, _data_dir())
         except email_oauth.OAuthError as exc:
-            # ‏``exc.public`` — הניסוח שלנו ותשובת הספק, מנוקים; לא ``str(exc)`` (CodeQL).
+            # ``exc.public`` — הניסוח שלנו ותשובת הספק, מנוקים; לא ``str(exc)`` (CodeQL).
             journal(ctx.conn, "email_oauth_failed", f"{acc['name'] or acc['id']}: {exc.public}", user[0])
             raise HTTPException(502, exc.public) from None
 

@@ -1,4 +1,4 @@
-"""‏#2419 (1) — ‏`server-upgrade.sh` עם ‏`set -E`: כשל בתוך פונקציה חוזר אחורה.
+"""#2419 (1) — `server-upgrade.sh` עם `set -E`: כשל בתוך פונקציה חוזר אחורה.
 
 בלי errtrace, ה-ERR trap אינו עובר לפונקציות. כשל בתוך ``stage()`` אחרי
 ה-checkout (כאן: סמן השחזור שלא נכתב) יצא ב-``set -e`` בלי rollback — העץ
@@ -44,7 +44,7 @@ def test_a_failed_command_substitution_rolls_back_once_from_the_main_shell(tmp_p
     _seed_db(data, previous="v0.48.0")
     repo = _fake_repo(tmp_path, live_ok=True)
     _upgrade_fakes(bindir)
-    # ‏AGENT_URL="$(systemctl show -p Environment … | sed … | head)" — לא בהקשר מותנה.
+    # AGENT_URL="$(systemctl show -p Environment … | sed … | head)" — לא בהקשר מותנה.
     fake_tool(bindir, "systemctl",
               'case "$1" in show) [ "$3" = Environment ] && exit 1; '
               'echo "LoadState=not-found" ;; esac; exit 0')

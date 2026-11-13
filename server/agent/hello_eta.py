@@ -1,6 +1,6 @@
-"""‏#1843 — מתי הגל צפוי להסתיים, בתשובת ה-hello שמחשב השיכפול מתחיל עליה לכתוב.
+"""#1843 — מתי הגל צפוי להסתיים, בתשובת ה-hello שמחשב השיכפול מתחיל עליה לכתוב.
 
-הקונסולה כבר מציגה "צפוי להסתיים ב-HH:MM" (‏`round.forecast`, ‏`server/learn/eta.py`).
+הקונסולה כבר מציגה "צפוי להסתיים ב-HH:MM" (`round.forecast`, `server/learn/eta.py`).
 כאן אותה הערכה נוסעת למשכפל עצמו, ב-`session.forecast`:
 
     {"ends_at": <epoch>, "why": null,         "clock": true}    יש הערכה מההיסטוריה, והשעון אמין
@@ -8,14 +8,14 @@
     {"ends_at": null,    "why": "clock",      "clock": false}   יש הערכה, אך שעון השרת לא הוכח מסונכרן
     {"ends_at": null,    "why": "no_image_size" | "no_drives" | "error", ...}   ההערכה לא נעשתה
 
-‏`clock` אומר אם מותר לצייר **שעה כלשהי** על המסך — גם את זו שהמשכפל מחשב לעצמו מהקצב
-שנמדד (עכשיו + הזמן שנותר). ‏`session.forecast` חסר = שרת ישן, או שאין מה להגיד (גל פתוח,
-או לא סבב חדר): הסוכן אינו מצייר שעה. ‏`ends_at` הוא epoch ולא טקסט: סוכן הוא POSIX sh,
-והשעון שלו נקבע מ-`now` של אותו hello (‏`clock_from_server`), כך ששניהם על אותו בסיס.
+`clock` אומר אם מותר לצייר **שעה כלשהי** על המסך — גם את זו שהמשכפל מחשב לעצמו מהקצב
+שנמדד (עכשיו + הזמן שנותר). `session.forecast` חסר = שרת ישן, או שאין מה להגיד (גל פתוח,
+או לא סבב חדר): הסוכן אינו מצייר שעה. `ends_at` הוא epoch ולא טקסט: סוכן הוא POSIX sh,
+והשעון שלו נקבע מ-`now` של אותו hello (`clock_from_server`), כך ששניהם על אותו בסיס.
 
 **שעון השרת** (הכרעת נדב, מוקאפ 07/11): שעה על המסך נשענת על שעון הקיר של השרת. כשהוא
 לא מסונכרן (#2144) הוא אולי לא השעה שהמפעיל רואה על השעון שלו — ושעה שגויה גרועה
-מהיעדר שעה. ‏`ClockTrust` מחזיר `True` **רק** על ראיה חיובית (‏`synchronized is True`
+מהיעדר שעה. `ClockTrust` מחזיר `True` **רק** על ראיה חיובית (`synchronized is True`
 מ-chrony, טרייה); מדידה שנכשלה, שלא הוזרקה או שלא נעשתה עדיין — "לא מסונכרן".
 """
 
@@ -33,13 +33,13 @@ from server.rounds import room
 log = logging.getLogger("imagesrv.hello_eta")
 
 #: כמה זמן קריאת `chronyc` אחת תקפה (ש'), וכמה זמן ממנה עדיין מאמינים לה אם
-#: הרענון הבא עוד לא חזר. ‏hello מגיע כל 2 ש' לכל משכפל; ‏chronyc הוא תהליך.
+#: הרענון הבא עוד לא חזר. hello מגיע כל 2 ש' לכל משכפל; chronyc הוא תהליך.
 CLOCK_TTL_S = 60
 CLOCK_MAX_AGE_S = 300
 
 
 class ClockTrust:
-    """האם שעון השרת מסונכרן — מהקריאה האחרונה של `status()` (‏`timesync.status`)."""
+    """האם שעון השרת מסונכרן — מהקריאה האחרונה של `status()` (`timesync.status`)."""
 
     def __init__(self, status: Callable[[], dict] | None, now: Callable[[], float] = time.monotonic):
         self._status, self._now = status, now

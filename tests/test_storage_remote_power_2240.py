@@ -1,9 +1,9 @@
-"""‏#2240 במסלול המשני — מוניטור מהראשי למכונה של המשני שבאמצע שיכפול מקומי.
+"""#2240 במסלול המשני — מוניטור מהראשי למכונה של המשני שבאמצע שיכפול מקומי.
 
-‏`storage.remote_power` כתב את אסימון הכוח למנהרה בלי לשאול: ‏`poweroff -f` עקף את
-‏`lc_power_commit` גם כאן. עכשיו (כמו `monitor.power`): ‏`local_copy` שהמשני מדווח
-ב-`/machines` → ‏409 בלי `immediate`; "כבה בכל זאת" עובר ב-relay הכללי
-(‏`CONSOLE_WRITES`) ל-`…/agent-power` **של המשני** — נבדק ב-``test_secondary_console_writes``,
+`storage.remote_power` כתב את אסימון הכוח למנהרה בלי לשאול: `poweroff -f` עקף את
+`lc_power_commit` גם כאן. עכשיו (כמו `monitor.power`): `local_copy` שהמשני מדווח
+ב-`/machines` → 409 בלי `immediate`; "כבה בכל זאת" עובר ב-relay הכללי
+(`CONSOLE_WRITES`) ל-`…/agent-power` **של המשני** — נבדק ב-``test_secondary_console_writes``,
 שם למשני יש אפליקציית קונסולה. כאן: אותם שני שרתים כמו ב-``test_storage_remote``.
 """
 

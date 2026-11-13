@@ -1,18 +1,18 @@
 """זיכרון הכיווץ של דיסק המקור — הצד של השרת ב-#926.
 
-‏#87 מכווץ את מחיצת ה-NTFS של דיסק הבנייה לפני הקליטה ומחזיר אותה
-אחריה, והפריסה המקורית ישבה ב-`targets/<disk>/shrunk` — ‏tmpfs. אובדן
+#87 מכווץ את מחיצת ה-NTFS של דיסק הבנייה לפני הקליטה ומחזיר אותה
+אחריה, והפריסה המקורית ישבה ב-`targets/<disk>/shrunk` — tmpfs. אובדן
 חשמל או אתחול בין `ntfsresize -s` לבין ההחזרה השאיר את הדיסק מכווץ
 בלי שאיש יודע. אותה משפחה כמו #874, ואותו פתרון: השרת זוכר.
 
 הסוכן שולח `shrink-open` **לפני** הכתיבה הראשונה למקור, עם הכניסה
 המלאה (idx, start, size, GUIDs, דגלים, שם) של **כל** מחיצה שתכווץ —
-`partitions`, רשומה **אחת לדיסק** (‏#929) — כל מה ש-`shrink_restore_source`
+`partitions`, רשומה **אחת לדיסק** (#929) — כל מה ש-`shrink_restore_source`
 צריך כדי להחזיר — ובלי 2xx הוא לא מכווץ. אחרי החזרה מוצלחת של כולן הוא
-שולח `shrink-close`. ‏hello (ממשק 3, `shrink_open`) עונה למכונה שדיווחה את
+שולח `shrink-close`. hello (ממשק 3, `shrink_open`) עונה למכונה שדיווחה את
 הסידורי של דיסק עם רשומה פתוחה, והסוכן — במחשב הבנייה — מציע להחזיר.
 
-**הסידורי הוא הזהות.** ‏`mac`/`port`/`dev` הם המקום שבו זה קרה, לתצוגה
+**הסידורי הוא הזהות.** `mac`/`port`/`dev` הם המקום שבו זה קרה, לתצוגה
 בקונסולה; דיסק אחר באותו חריץ אינו תואם, ודיסק שנדד לחריץ אחר כן. סידורי
 ריק = אין למה להצמיד זיכרון = סירוב לפני שנכתב בייט.
 
@@ -36,7 +36,7 @@ log = logging.getLogger("imagesrv.shrink_records")
 
 
 class BadRecord(ValueError):
-    """גוף שאי-אפשר לזכור ממנו: ‏`code` הוא מה שהתשובה נושאת."""
+    """גוף שאי-אפשר לזכור ממנו: `code` הוא מה שהתשובה נושאת."""
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -68,7 +68,7 @@ FIELDS = ("id", "mac", "dev", "serial", "port", "model", "image_name", "task_id"
 #: כמה מהסיבה נשמר (סקירת Fable): שורת קונסולה, לא יומן שלם.
 NOTE_MAX_CHARS = 400
 
-#: ‏#2436: הדגלים חוזרים ל-sgdisk כ-`-A idx:=:0x<attrs>` -- 16 ספרות הקס, כפי
+#: #2436: הדגלים חוזרים ל-sgdisk כ-`-A idx:=:0x<attrs>` -- 16 ספרות הקס, כפי
 #: ש-sgdisk -i מדפיס אותם. ערך אחר (רווח, אות) היה ארגומנט נוסף לפקודה.
 _ATTRS = re.compile(r"[0-9A-Fa-f]{16}")
 _SEPARATORS = re.compile(r"[|\r\n]")
@@ -90,13 +90,13 @@ def _partition(entry: object) -> dict:
     type_guid = _text(entry.get("type_guid"))
     if any(v is None for v in ints.values()) or type_guid is None:
         raise BadRecord("bad_layout", "idx, start_sector, size_sectors and type_guid are required")
-    # ‏GPT מתחיל מכניסה 1, ומחיצה בת 0 סקטורים אינה מחיצה (סקירת Fable).
+    # GPT מתחיל מכניסה 1, ומחיצה בת 0 סקטורים אינה מחיצה (סקירת Fable).
     if ints["idx"] < 1 or ints["size_sectors"] < 1:
         raise BadRecord("bad_layout", "idx and size_sectors must be at least 1")
     attrs = entry.get("attrs")
     if attrs not in (None, "") and not (isinstance(attrs, str) and _ATTRS.fullmatch(attrs)):
         raise BadRecord("bad_layout", "attrs must be 16 hex digits")
-    # ‏#2436: הסוכן קורא את הרשומה כשורה מופרדת ב-`|` -- שם `X|8000…` היה attrs
+    # #2436: הסוכן קורא את הרשומה כשורה מופרדת ב-`|` -- שם `X|8000…` היה attrs
     # אחר, ושורה חדשה בשם הייתה שורה שלמה משלה.
     for key in ("type_guid", "unique_guid", "name"):
         if isinstance(entry.get(key), str) and _SEPARATORS.search(entry[key]):
@@ -106,7 +106,7 @@ def _partition(entry: object) -> dict:
 
 
 def _partitions(body: dict) -> list[dict]:
-    """‏#929: `partitions` — רשימה, מחיצה אחת לפחות, אינדקסים שונים. גוף
+    """#929: `partitions` — רשימה, מחיצה אחת לפחות, אינדקסים שונים. גוף
     שקדם ל-#929 (מחיצה אחת בשדות העליונים) נקרא כרשימה של אחת. רשומה
     שאי-אפשר להחזיר ממנה את **כל** המחיצות היא רשומה שאין לפתוח."""
     raw = body.get("partitions")
@@ -124,12 +124,12 @@ def open_record(conn: sqlite3.Connection, body: dict, require_reported: bool = F
     """רושם את הפריסה המקורית לפני הכיווץ. מחזיר את הרשומה (עם `id`
     ו-`partitions`).
 
-    זורק `BadRecord` (‏`bad_mac` / `no_serial` / `bad_layout`) על גוף שאין
+    זורק `BadRecord` (`bad_mac` / `no_serial` / `bad_layout`) על גוף שאין
     לזכור ממנו, ו-`AlreadyOpen` כשיש רשומה פתוחה על אותו סידורי.
 
-    ‏#2492: ‏``require_reported`` (הסוכן, ‏`api.py`) — הסידורי חייב להיות מה שה-MAC
+    #2492: ``require_reported`` (הסוכן, `api.py`) — הסידורי חייב להיות מה שה-MAC
     הזה דיווח ל-`dev` הזה ב-hello האחרון (כמו `smart_history.record`); אחרת
-    ‏`BadRecord("serial_not_reported")`. בלעדיו כל מכונה הייתה פותחת רשומה על
+    `BadRecord("serial_not_reported")`. בלעדיו כל מכונה הייתה פותחת רשומה על
     דיסק של אחרת, ו-hello שלה היה מציע "להחזיר" דיסק שלא כווץ.
     """
     mac = lenient_mac(body.get("mac")) if isinstance(body, dict) else None
@@ -147,7 +147,7 @@ def open_record(conn: sqlite3.Connection, body: dict, require_reported: bool = F
         "opened_at": now_iso(), **parts[0], "partitions": parts,
         **{k: _text(body.get(k)) for k in _OPTIONAL_TEXT},
     }
-    # ‏#2492: עם ``require_reported`` (הסוכן) — רשומה פתוחה **של המכונה הזו**. ה-hello מציע
+    # #2492: עם ``require_reported`` (הסוכן) — רשומה פתוחה **של המכונה הזו**. ה-hello מציע
     # למכונה רק את שלה (`open_for`), ולכן רשומה של מכונה אחרת על אותו סידורי אינה
     # "כבר מכווץ": היא הייתה חוסמת בשקט את רשומת הבעלים. שתיהן גלויות בקונסולה.
     prior_sql = "SELECT id, opened_at FROM shrink_records WHERE serial = ? AND closed_at IS NULL"
@@ -178,9 +178,9 @@ def open_record(conn: sqlite3.Connection, body: dict, require_reported: bool = F
 
 def open_owner(conn: sqlite3.Connection, serial: object,
                record_id: int | None = None, mac: str | None = None) -> str | None:
-    """‏#2413: ה-MAC שפתח את הרשומה הפתוחה של הסידורי (ו-`record_id`, אם ניתן),
-    או None כשאין כזו. ‏`api.py` משווה אותו ל-MAC של הפונה לפני close/note.
-    ‏#2492: כמה מכונות יכולות להחזיק רשומה פתוחה על אותו סידורי — כשל-`mac` יש
+    """#2413: ה-MAC שפתח את הרשומה הפתוחה של הסידורי (ו-`record_id`, אם ניתן),
+    או None כשאין כזו. `api.py` משווה אותו ל-MAC של הפונה לפני close/note.
+    #2492: כמה מכונות יכולות להחזיק רשומה פתוחה על אותו סידורי — כשל-`mac` יש
     אחת מהן, הוא הבעלים שלה (ולא "הראשונה שנמצאה")."""
     if not isinstance(serial, str) or not serial:
         return None
@@ -201,7 +201,7 @@ def close_record(conn: sqlite3.Connection, serial: str, record_id: int | None = 
                  mac: str | None = None) -> bool:
     """סוגר את הרשומה הפתוחה של הסידורי. אמת רק אם רשומה פתוחה נסגרה
     עכשיו — רשומה שאינה קיימת או שכבר נסגרה אינה "נסגרה" (עיקרון 5).
-    ‏`record_id`, אם ניתן, חייב להיות אותה רשומה. ‏`mac`, אם ניתן (‏#2413,
+    `record_id`, אם ניתן, חייב להיות אותה רשומה. `mac`, אם ניתן (#2413,
     הסוכן), חייב להיות המכונה שפתחה אותה — באותו UPDATE, בלי מרוץ."""
     if not isinstance(serial, str) or not serial:
         return False
@@ -225,8 +225,8 @@ def note_record(conn: sqlite3.Connection, serial: str, record_id: int | None,
                 note: str, mac: str | None = None) -> bool:
     """למה הרשומה עדיין פתוחה — "הטבלה הוחזרה, מערכת הקבצים לא נמתחה
     (ntfsresize …)" — כדי שהקונסולה תראה סיבה ולא רק "מכווץ". אמת רק אם
-    רשומה פתוחה עודכנה; ‏`note` ריק אינו הערה (הקורא מסרב לפני). ‏`mac` — כמו
-    ב-`close_record` (‏#2413)."""
+    רשומה פתוחה עודכנה; `note` ריק אינו הערה (הקורא מסרב לפני). `mac` — כמו
+    ב-`close_record` (#2413)."""
     if not isinstance(serial, str) or not serial or not isinstance(note, str) or not note.strip():
         return False
     sql = "UPDATE shrink_records SET note = ? WHERE serial = ? AND closed_at IS NULL"
@@ -257,7 +257,7 @@ def open_for(conn: sqlite3.Connection, disks: list | None, mac: str | None = Non
     """מה ה-hello עונה (ממשק 3): הרשומות הפתוחות שהסידורי שלהן הוא אחד
     מהדיסקים שהמכונה דיווחה.
 
-    ‏#2492 (סקירה): ‏`mac` — רק רשומות **שהמכונה הזו פתחה**. הקשירה ב-`shrink-open`
+    #2492 (סקירה): `mac` — רק רשומות **שהמכונה הזו פתחה**. הקשירה ב-`shrink-open`
     נשענת על ה-hello של הפותח, כלומר על מה שהוא טען על עצמו; בלי הסינון כאן מכונה
     אחרת הייתה גורמת ל-hello שלי להציע "להחזיר" פריסה שהיא כתבה. רק סגירה של
     הבעלים נקבלת ממילא (#2413), ומאז #1466 הסוכן אינו פותח רשומות. דיסק שנדד —

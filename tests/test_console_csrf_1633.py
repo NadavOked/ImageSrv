@@ -1,7 +1,7 @@
-"""‏#1633: שומר הקונסולה (‎:8081) — ‏X-Frame-Options, ‏Fetch Metadata, סוג גוף.
+"""#1633: שומר הקונסולה (:8081) — X-Frame-Options, Fetch Metadata, סוג גוף.
 
 מה שנבדק כאן הוא ההתנהגות על ``create_console_app`` — האפליקציה שרצה על 8081
-בייצור — ולא על המעטפת המשולבת: ‏``create_app`` מרכיב גם את נתיבי הסוכן
+בייצור — ולא על המעטפת המשולבת: ``create_app`` מרכיב גם את נתיבי הסוכן
 והקיוסק, והשומר במכוון אינו שם.
 
 הפעולה הזדונית בכל טסט היא יצירת משתמש מנהל (``POST /users``): פעולה שמשנה
@@ -63,7 +63,7 @@ def _console_iframe_srcs():
 
 
 def test_console_iframe_is_same_origin_and_not_denied_2642(server):
-    """#2642: "צפייה במסך" טוענת ``monitor.html`` ב-iframe. ‏``DENY`` (#1633) הציג
+    """#2642: "צפייה במסך" טוענת ``monitor.html`` ב-iframe. ``DENY`` (#1633) הציג
     שם קובץ שבור. מוכיח את שני הצדדים: (א) ה-iframe היחיד של הקונסולה הוא נתיב
     יחסי (אותו מקור), לא כתובת זרה; (ב) הדף שהוא טוען אינו ``DENY`` — ``SAMEORIGIN``
     בדיוק, כך שדף זר עדיין נחסם."""
@@ -99,7 +99,7 @@ def _role(server, name):
 
 @pytest.mark.parametrize("site", ["cross-site", "same-site", "Cross-Site"])
 def test_foreign_page_cannot_change_state(server, site):
-    """‏same-site נדחה גם הוא: על IP, דף בפורט אחר של אותו שרת הוא same-site.
+    """same-site נדחה גם הוא: על IP, דף בפורט אחר של אותו שרת הוא same-site.
     שלוש שיטות על נתיבים אמיתיים, וכל אחת עם ראיה בטבלה שלא קרה דבר."""
     console = _console(server)
     assert console.post("/api/console/users", json=_new_user("victim")).status_code == 200
@@ -147,7 +147,7 @@ def test_own_page_user_action_and_non_browser_pass(server, site):
 
 # --- (ב2) דפדפן ישן: בלי Sec-Fetch-Site, עם Origin ----------------------------
 #
-# ‏TestClient מדבר עם ``http://testserver`` — זה ה-origin של "הקונסולה עצמה" כאן.
+# TestClient מדבר עם ``http://testserver`` — זה ה-origin של "הקונסולה עצמה" כאן.
 
 @pytest.mark.parametrize("origin", [
     "http://testserver:8082",        # אותו host, פורט אחר — הדף שהמיון תיאר
@@ -202,8 +202,8 @@ def test_json_body_under_a_simple_type_is_refused(server, ctype):
 
 
 def test_body_without_content_type_is_refused(server):
-    """‏Blob בלי type ב-fetch זר: גוף בלי ``Content-Type`` — גם זו בקשה פשוטה.
-    ‏httpx עם ``content=`` אינו מוסיף ``Content-Type`` — אורך בלבד, או chunked."""
+    """Blob בלי type ב-fetch זר: גוף בלי ``Content-Type`` — גם זו בקשה פשוטה.
+    httpx עם ``content=`` אינו מוסיף ``Content-Type`` — אורך בלבד, או chunked."""
     console = _console(server)
     raw = json.dumps(_new_user("evil-blob")).encode()
     r = console.post("/api/console/users", content=raw)
@@ -216,7 +216,7 @@ def test_body_without_content_type_is_refused(server):
 
 
 def test_bodyless_post_without_content_type_passes(server):
-    """‏POST בלי גוף ובלי כותרת (‏logout) — אין מה לפרש, עובר."""
+    """POST בלי גוף ובלי כותרת (logout) — אין מה לפרש, עובר."""
     console = _console(server)
     r = console.post("/api/console/logout")
     assert "content-type" not in r.request.headers
@@ -225,7 +225,7 @@ def test_bodyless_post_without_content_type_passes(server):
 
 
 def test_node_console_write_refuses_text_plain(server):
-    """המקום שהמיון נקב בו (``storage.py`` ‏``node_console_write``) — נעצר לפני ה-handler."""
+    """המקום שהמיון נקב בו (``storage.py`` ``node_console_write``) — נעצר לפני ה-handler."""
     r = _console(server).post("/api/console/storage-nodes/nope/console/users",
                               content=json.dumps(_new_user("x")),
                               headers={"Content-Type": "text/plain"})
@@ -235,14 +235,14 @@ def test_node_console_write_refuses_text_plain(server):
 def test_json_and_bodyless_delete_pass(server):
     console = _console(server)
     assert console.post("/api/console/users", json=_new_user("gone")).status_code == 200
-    # ‏``del()`` ב-console.js: ‏application/json בלי גוף.
+    # ``del()`` ב-console.js: application/json בלי גוף.
     r = console.delete("/api/console/users/gone", headers={"Content-Type": "application/json"})
     assert r.status_code == 200, r.text
     assert not _user_exists(server, "gone")
 
 
 def test_tar_upload_type_reaches_the_handler(server):
-    """העלאת אימג' (XHR, ‏application/x-tar) אינה נחסמת בשומר — ה-handler עונה."""
+    """העלאת אימג' (XHR, application/x-tar) אינה נחסמת בשומר — ה-handler עונה."""
     r = _console(server).post("/api/console/images/upload", content=b"not a tar",
                               headers={"Content-Type": "application/x-tar"})
     assert r.status_code not in (403, 415), r.text

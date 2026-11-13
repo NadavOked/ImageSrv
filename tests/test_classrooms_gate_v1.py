@@ -4,14 +4,14 @@
 השרת עצמו עדיין יצר קבוצת כיתה ופתח סבב כיתה לכל מי ששלח את הבקשה
 ישירות (ממצא סקר השאריות, 11/10). כאן נבדק שהשרת מסרב בשמו:
 
-- ‏`POST /api/console/groups` עם ‏role=classroom → ‏409 עם סיבה; ‏build/cloner
+- `POST /api/console/groups` עם role=classroom → 409 עם סיבה; build/cloner
   ממשיכים לעבוד.
-- ‏`POST /api/console/sessions` (פתיחת סבב כיתה) → ‏409 עם סיבה.
-- ‏allowlist הקיוסק על פורט הסוכן: ‏`GET /api/console/groups` (רשימת הכיתות
-  של מסך התחנה שהוסר) אינו מוגש; ‏`POST /api/console/sessions` מוגש אך
+- `POST /api/console/sessions` (פתיחת סבב כיתה) → 409 עם סיבה.
+- allowlist הקיוסק על פורט הסוכן: `GET /api/console/groups` (רשימת הכיתות
+  של מסך התחנה שהוסר) אינו מוגש; `POST /api/console/sessions` מוגש אך
   מסרב (זה אותו route של הקונסולה, והשער יושב בו).
 
-‏start/close של סבב **אינם** נחסמים: גל חדר השיכפולים הוא סבב רגיל לכל
+start/close של סבב **אינם** נחסמים: גל חדר השיכפולים הוא סבב רגיל לכל
 דבר, וסגירתו עוברת באותו endpoint (`test_room_wave_recovery.py`).
 
 כל בדיקה של "דלוק" מדליקה את היכולת ב-monkeypatch — כך v1.2 ממשיך לעבוד.
@@ -91,7 +91,7 @@ def test_kiosk_does_not_serve_the_class_list_while_classrooms_are_off(server):
     assert kiosk.post("/api/console/login", json={
         "username": "labtech", "password": "deploy-pass-1"}).status_code == 200
     assert kiosk.get("/api/console/groups").status_code == 404
-    # ‏POST /sessions נשאר ב-allowlist ומסרב בשער שלו.
+    # POST /sessions נשאר ב-allowlist ומסרב בשער שלו.
     response = kiosk.post("/api/console/sessions",
                           json={"group_id": "grp_LAB1", "image_id": "img_7f3a91"})
     assert response.status_code == 409, response.text
@@ -106,10 +106,10 @@ def test_kiosk_serves_the_class_list_when_classrooms_are_on(server, monkeypatch)
     assert kiosk.get("/api/console/groups").status_code == 200
 
 
-# --- נתיבי הסוכן (‏station.py, פורט 8080) --------------------------------------
+# --- נתיבי הסוכן (station.py, פורט 8080) --------------------------------------
 #
 # הכרעת נדב 11/10, המשך: "השרת מסרב לפקודות כיתות כל עוד הכיתות כבויות" —
-# כולל נתיבי הסוכן, **בלי תלות** במתג ‏`class_deploy_enabled` (#880).
+# כולל נתיבי הסוכן, **בלי תלות** במתג `class_deploy_enabled` (#880).
 
 from test_station import open_body, station  # noqa: E402,F401 — fixture
 
@@ -123,7 +123,7 @@ def _agent_class_calls(client, ids):
 
 
 def test_agent_class_routes_are_refused_while_classrooms_are_off(station, monkeypatch):  # noqa: F811
-    # כיתה רשומה והמתג #880 **דלוק** (‏setup_classroom) — הסירוב הוא של
+    # כיתה רשומה והמתג #880 **דלוק** (setup_classroom) — הסירוב הוא של
     # היכולת בלבד, לא של המתג ולא של נתונים חסרים.
     ids = setup_classroom(station)
     monkeypatch.setattr(capabilities, "CLASSROOMS", False)
@@ -156,6 +156,6 @@ def test_agent_class_routes_work_when_classrooms_are_on(station):  # noqa: F811
 
 
 def test_agent_active_session_view_is_not_a_class_route(station):  # noqa: F811
-    """‏/sessions/active מציג גם גל של חדר השיכפולים — הוא נשאר פתוח ב-v1."""
+    """/sessions/active מציג גם גל של חדר השיכפולים — הוא נשאר פתוח ב-v1."""
     assert capabilities.classrooms() is False
     assert station["anon"].get("/api/v1/agent/sessions/active").json() == {"session": None}

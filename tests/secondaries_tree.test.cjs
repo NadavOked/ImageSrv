@@ -106,7 +106,7 @@ test('a server node per secondary from /storage-nodes, with the tree under it; c
   assert.match(html, /<span class="tree-arrow" data-open="false" onclick="event\.stopPropagation\(\);toggleInventoryGroup\(this\.closest\('\.inventory-node'\),decodeURIComponent\('srv-n0de'\)\)">▸<\/span>/);
   assert.match(html, /<div id="srv-n0de" class="inventory-children" role="group" hidden>/, 'closed by default');
   for (const [page, label] of [['home', 'סקירה כללית'], ['machines', 'מחשבים'], ['images', "אימג&#39;ים"], ['health', 'בריאות ושירותים'], ['permissions', 'משתמשים והרשאות']]) {
-    const re = new RegExp(`data-branch-page="${page}" data-branch-node="n0de" role="treeitem" tabindex="0"(?: aria-expanded="(?:true|false)")? onclick="(?:treeNavToggle\\(this,decodeURIComponent\\('srv-n0de-[A-Za-z]+'\\),function\\(\\)\\{)?openSecondaryPage\\('n0de','${page}',this\\)[^"]*"[^>]*>.*?<span>${label}</span>`);
+    const re = new RegExp(`data-branch-page="${page}" data-branch-node="n0de"(?: data-adv)? role="treeitem" tabindex="0"(?: aria-expanded="(?:true|false)")? onclick="(?:treeNavToggle\\(this,decodeURIComponent\\('srv-n0de-[A-Za-z]+'\\),function\\(\\)\\{)?openSecondaryPage\\('n0de','${page}',this\\)[^"]*"[^>]*>.*?<span>${label}</span>`);
     assert.match(html, re, `child ${page}`);
   }
   // #1781 (נדב 07/11): אין עלה "העברות" — ההעברה מתחילה מתפריט ⋯ של האימג'

@@ -1,10 +1,10 @@
-"""‏#984 — WoL למחשב בנייה ולמשכפל **בודד** מהקונסולה.
+"""#984 — WoL למחשב בנייה ולמשכפל **בודד** מהקונסולה.
 
-עד כאן WoL מהקונסולה היה מסלול אחד: ‏`POST /room/wake`, שמעיר את כל
-‏`grp_CLONERS`. כאן נבדקים שני המסלולים החדשים —
-‏`POST /machines/{mac}/wake` ו-`POST /groups/{gid}/wake` — ומה שנדב
+עד כאן WoL מהקונסולה היה מסלול אחד: `POST /room/wake`, שמעיר את כל
+`grp_CLONERS`. כאן נבדקים שני המסלולים החדשים —
+`POST /machines/{mac}/wake` ו-`POST /groups/{gid}/wake` — ומה שנדב
 הכריע (17/09) שהם **לא** עושים: תחנות כיתה הן v2, ו-`sent` אינו
-‏`woken` (#528).
+`woken` (#528).
 
 **לעולם לא יוצאת מכאן חבילה אמיתית** — השולח מוזרק ל-`create_app`
 כמו ב-`test_wol.py`.
@@ -91,7 +91,7 @@ def test_a_single_cloner_is_woken_alone_not_the_whole_room(server):
 
 
 def test_the_mac_may_be_written_any_way(server):
-    """סעיף 10 — ‏`B4-2E-99-07-1A-C4` היא אותה מכונה."""
+    """סעיף 10 — `B4-2E-99-07-1A-C4` היא אותה מכונה."""
     spelled = BUILD.upper().replace(":", "-")
     result = server["admin"].post(f"/api/console/machines/{spelled}/wake")
     assert result.status_code == 200 and result.json()["sent"] == 1
@@ -127,7 +127,7 @@ def test_the_wake_is_written_to_the_journal_with_mac_and_user(server):
 
 
 def test_the_endpoint_reports_sent_not_woken(server):
-    """‏#528 — UDP בלי ACK: הקרנל קיבל 102 בייט, ותו לא."""
+    """#528 — UDP בלי ACK: הקרנל קיבל 102 בייט, ותו לא."""
     body = server["admin"].post(f"/api/console/machines/{BUILD}/wake").json()
     assert "sent" in body and "woken" not in body
 
@@ -136,7 +136,7 @@ def test_the_endpoint_reports_sent_not_woken(server):
 
 
 def test_admin_wakes_a_machine_and_deploy_has_no_console_for_it(server):
-    """‏#1073: WoL למכונה בודדת הוא פעולת קונסולה, ולמשתמש הפצה אין קונסולה —
+    """#1073: WoL למכונה בודדת הוא פעולת קונסולה, ולמשתמש הפצה אין קונסולה —
     403 עם ההודעה של `deploy_no_console`, ושום פקטה לא יוצאת. (החדר —
     `/room/wake` — נשאר לו, דרך הקיוסק ממחשב הבנייה.)"""
     refused = server["deploy"].post(f"/api/console/machines/{BUILD}/wake")
@@ -155,7 +155,7 @@ def test_anonymous_cannot_wake_a_machine(server):
 
 
 def test_a_viewer_role_is_refused_like_the_room(server):
-    """אותה רשימת-היתר כמו `/room/wake` (‏`ROOM_OPERATOR_ROLES`): תפקיד
+    """אותה רשימת-היתר כמו `/room/wake` (`ROOM_OPERATOR_ROLES`): תפקיד
     שלישי אינו מקבל את הכפתור ביום היוולדו."""
     from test_station import add_user_with_role                # noqa: PLC0415
 
@@ -180,14 +180,14 @@ def broken_server(tmp_path: Path, images_root):
     from server.net.wol import WakeRefused
 
     def dead(packet: bytes) -> None:
-        # ‏#2510: "אין carrier" מגיע מ-`link_state` כסירוב שלנו (`WakeRefused`);
-        # ‏OSError גולמי מקבל משפט קבוע — ראה test_a_raw_oserror_is_not_shown_raw.
+        # #2510: "אין carrier" מגיע מ-`link_state` כסירוב שלנו (`WakeRefused`);
+        # OSError גולמי מקבל משפט קבוע — ראה test_a_raw_oserror_is_not_shown_raw.
         raise WakeRefused("no-carrier: אין carrier על eth1")
 
     app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
                      wol_send=dead)
     ctx = app.state.ctx
-    # ‏#1073: WoL למכונה הוא פעולת קונסולה — admin (ל-deploy אין קונסולה).
+    # #1073: WoL למכונה הוא פעולת קונסולה — admin (ל-deploy אין קונסולה).
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test",
                  is_builtin=True, check_policy=False)
     admin = TestClient(app)
@@ -202,7 +202,7 @@ def broken_server(tmp_path: Path, images_root):
 
 
 def test_a_failed_send_is_visible_with_its_reason_and_in_the_journal(broken_server):
-    """‏"0 מחשבים" בלי סיבה שולח את הטכנאי ל-BIOS; הסיבה עולה למסך
+    """"0 מחשבים" בלי סיבה שולח את הטכנאי ל-BIOS; הסיבה עולה למסך
     **וגם** ליומן, ואין `wol_sent` על מה שלא נשלח."""
     result = broken_server["admin"].post(f"/api/console/machines/{BUILD}/wake")
     assert result.status_code == 200
@@ -217,7 +217,7 @@ def test_a_failed_send_is_visible_with_its_reason_and_in_the_journal(broken_serv
 
 
 def test_a_raw_oserror_is_not_shown_raw(tmp_path: Path, images_root):
-    """‏#2510: טקסט של OSError שאינו שלנו לא מגיע למסך — משפט קבוע במקומו."""
+    """#2510: טקסט של OSError שאינו שלנו לא מגיע למסך — משפט קבוע במקומו."""
     from server.app import create_app
     from server.console import users
     from server.net.wol import SEND_FAILED

@@ -72,7 +72,7 @@ def create_drivers_router(ctx: ServerContext) -> APIRouter:
             try:
                 free = console_library._library_free(root)
             except OSError as exc:
-                raise HTTPException(507, f"לא ניתן לקרוא כמה מקום פנוי בשרת: {exc}")
+                raise console_library.free_unmeasured(exc)   # #2543
             refused = disk_reserve.refusal(free, need, what)
             if refused is not None:
                 raise HTTPException(507, refused)
@@ -141,10 +141,10 @@ def _entry(name: str, by: str, manifest: dict) -> dict:
 
 def _for_drawer(ctx: ServerContext, library: DriverLibrary, mac: str,
                 session: str, port: int) -> JSONResponse:
-    """‏#1269: מגירה של מחשב שיכפול — הדגם שהמפעיל בחר לחריץ הזה בסבב.
+    """#1269: מגירה של מחשב שיכפול — הדגם שהמפעיל בחר לחריץ הזה בסבב.
 
-    שלושה מצבים, לא שניים: ‏`chosen: null` = לא נבחר דגם לחריץ (הסוכן
-    מדלג); ‏`chosen` עם `packages: []` = נבחר דגם ואין לו עכשיו חבילה
+    שלושה מצבים, לא שניים: `chosen: null` = לא נבחר דגם לחריץ (הסוכן
+    מדלג); `chosen` עם `packages: []` = נבחר דגם ואין לו עכשיו חבילה
     בספרייה (נמחקה מאז הפתיחה) — הסוכן מדווח `failed`, לא `no_match`;
     ואחרת החבילות. סבב שאינו גל של חדר → 404 `no_round`."""
     row = ctx.conn.execute(
@@ -170,12 +170,12 @@ def create_agent_drivers_router(ctx: ServerContext) -> APIRouter:
     def agent_drivers(request: Request, mac: str = "", session: str = "",
                       port: int | None = None) -> JSONResponse:
         """מה מתאים למכונה הזו. שלושה מצבים, לא שניים (עיקרון 5):
-        ‏`inventory: false` = המכונה מעולם לא דיווחה מלאי (סוכן ישן /
-        schema 1) — הסוכן מדווח `failed`, לא `no_match`; ‏`inventory:
+        `inventory: false` = המכונה מעולם לא דיווחה מלאי (סוכן ישן /
+        schema 1) — הסוכן מדווח `failed`, לא `no_match`; `inventory:
         true` עם `packages: []` = יש מלאי ואין חבילה תואמת.
 
-        ‏#1269: עם `session` ו-`port` — מגירה בסבב החדר, לפי הדגם שנבחר
-        (‏`_for_drawer`); המלאי של המשכפל אינו של המכונה שתקבל את הדיסק."""
+        #1269: עם `session` ו-`port` — מגירה בסבב החדר, לפי הדגם שנבחר
+        (`_for_drawer`); המלאי של המשכפל אינו של המכונה שתקבל את הדיסק."""
         canonical = lenient_mac(mac)
         if canonical is None:
             return JSONResponse({"ok": False, "error": "missing or malformed mac",

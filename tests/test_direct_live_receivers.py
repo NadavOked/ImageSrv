@@ -98,10 +98,10 @@ def _states(room_server, opened):
 
 
 def test_hello_after_every_target_finished_does_not_fail_a_written_wave(room_server):
-    """#1613: ‏`live_count == 0` כי **כולם סיימו** אינו "לא נשאר מי שיקבל".
+    """#1613: `live_count == 0` כי **כולם סיימו** אינו "לא נשאר מי שיקבל".
 
     בין הדיווח `done` של המקבלים לבין הדופק שסוגר את הגל, hello של המקור
-    (‏hold_beat אחרי `report_final` שלא נשמע, או סתם תזמון) ראה גל `running`
+    (hold_beat אחרי `report_final` שלא נשמע, או סתם תזמון) ראה גל `running`
     בלי חברים חיים — והשרת הכריז כישלון על גל שכל המגירות שלו נכתבו."""
     opened = _running_three(room_server)
     for mac in CLONERS:
@@ -116,7 +116,7 @@ def test_hello_after_every_target_finished_does_not_fail_a_written_wave(room_ser
 
 
 def test_one_target_written_and_the_rest_failed_is_not_a_failed_direct_send(room_server):
-    """מכונה אחת שסיימה (‏`done`/`partial`) קיבלה את הזרם כולו — המקור
+    """מכונה אחת שסיימה (`done`/`partial`) קיבלה את הזרם כולו — המקור
     כבר אחרי המחיצה האחרונה, והכרעת הסבב שייכת לספירת המגירות."""
     opened = _running_three(room_server)
     report(room_server["anon"], opened["wave_session_id"], CLONER1, {"sda": "done"})

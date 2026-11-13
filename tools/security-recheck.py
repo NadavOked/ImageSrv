@@ -9,13 +9,13 @@
 מה הוא בודק, ומאיפה:
 
 * **חבילות Debian** — הרשימה היא `tools/iso/packages.txt` **בתג** (האיחוד
-  של המתקין, ה-initramfs, הגואי, ארגז הכלים וה-ISO; ‏test_iso_build.py
-  שומר שהיא שלמה). לכל קבוצה (`# --- [installer]` וכו') ‏apt-cache מחשב
+  של המתקין, ה-initramfs, הגואי, ארגז הכלים וה-ISO; test_iso_build.py
+  שומר שהיא שלמה). לכל קבוצה (`# --- [installer]` וכו') apt-cache מחשב
   את סגור התלויות (Depends/PreDepends) על **המכונה הזו**, וכל חבילה
   ממופה לחבילת המקור שלה ולגרסה ש-apt היה מתקין היום (trixie +
   trixie-security). מול security-tracker.debian.org מודפס כל CVE שלא
   נסגר ב-trixie, או שנסגר בגרסה חדשה ממה ש-apt מציע. CVE בדרגת
-  ‏`unimportant` נספר ולא מודפס.
+  `unimportant` נספר ולא מודפס.
 * **הצמדות פייתון** — `server/requirements.txt` בתג מול גרסת חבילת
   ה-python3-* של Debian (#113): הצמדה שאינה הגרסה שנפרסת מסומנת.
 * **הקונסולה** — `<script src>`/`<link href>`/`import` לכתובת חיצונית

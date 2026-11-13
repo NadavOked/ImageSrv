@@ -1,4 +1,4 @@
-"""מחשבים שנופלים לסוכן בלולאה — התסמין של דיסק שלא עולה (‏#112).
+"""מחשבים שנופלים לסוכן בלולאה — התסמין של דיסק שלא עולה (#112).
 
 מכונה בלי משימה ובלי סבב מקבלת `set default=local`. `hello` ממנה הוא
 ראיה חיובית שהסוכן רץ אצלה — כלומר שהשרשור לדיסק המקומי נכשל.
@@ -45,7 +45,7 @@ def loop_server(tmp_path: Path, images_root: Path, clock):
     """שרת מלא עם בדיקות בריאות מזויפות — ועם ה-ctx ביד.
 
     כמו `health_server` ב-test_server_health, ובנוסף שולח מזויף: פתיחת
-    סבב כאן מבשילה במסלולים אמיתיים, ואסור שתפעיל `udp-sender` (‏#79).
+    סבב כאן מבשילה במסלולים אמיתיים, ואסור שתפעיל `udp-sender` (#79).
     """
     if TestClient is None:
         pytest.skip("fastapi is required")
@@ -62,7 +62,7 @@ def loop_server(tmp_path: Path, images_root: Path, clock):
         "ss": lambda: "",
         "unit_active": lambda name: "active",
         "http_get": lambda url: 200,
-        # ‏/boot/vmlinuz ו-/boot/initrd.img (#333) — מוזרקים כאן כדי
+        # /boot/vmlinuz ו-/boot/initrd.img (#333) — מוזרקים כאן כדי
         # שהבדיקה לא תפנה לרשת אמיתית.
         "http_size": lambda url: (200, 31_000_000),
         "interfaces": lambda: [],
@@ -211,7 +211,7 @@ def test_a_machine_with_a_task_never_shows_up(loop_server):
 
 def test_a_cloner_waiting_on_the_agent_is_not_a_loop(loop_server):
     """ברירת המחדל של מחשב שיכפול היא מסך ההמתנה של הסוכן (`cloner-wait`,
-    ‏#17). ‏hello ממנו בלי סבב הוא המצב התקין שלו, לא תקלה."""
+    #17). hello ממנו בלי סבב הוא המצב התקין שלו, לא תקלה."""
     mac = "aa:bb:cc:00:00:21"
     assert loop_server["admin"].post("/api/console/machines", json={
         "mac": mac, "name": "shich-1", "group_id": "grp_CLONERS",
@@ -244,7 +244,7 @@ def test_a_build_machine_waiting_for_a_capture_order_is_not_a_loop(loop_server):
 def test_a_hello_from_outside_the_deploy_vlan_is_not_a_loop(loop_server):
     """מחוץ לווילן ההפצה השרת אינו מגיש את שרשרת האתחול, ואין לו ראיה
     שהמכונה עברה בתפריט שלו. שם סוכן הוא בדרך כלל אשף השחזור שאדם
-    הפעיל בכוונה (‏#42)."""
+    הפעיל בכוונה (#42)."""
     ids = setup_classroom(loop_server)
     ctx = loop_server["ctx"]
     answer = {"schema": 1, "known": True, "role": "classroom",

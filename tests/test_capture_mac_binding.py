@@ -1,8 +1,8 @@
-"""קליטה ממחשב כיתה, קשורה ל-MAC — ‏#381, הצד הכותב של #69.
+"""קליטה ממחשב כיתה, קשורה ל-MAC — #381, הצד הכותב של #69.
 
 שני חצאים שאסור להפריד ביניהם, וזו כל הסיבה שהם Issue אחד:
 
-* **השער נפתח** — ‏`capture.py` מקבל גם מכונת כיתה. ‏`cloner` נשאר חסום:
+* **השער נפתח** — `capture.py` מקבל גם מכונת כיתה. `cloner` נשאר חסום:
   אין לו מערכת מקומית שיש מה לקלוט ממנה (#17), ולכן ההרחבה היא **רשימת
   היתר** ולא הסרת הבדיקה.
 * **הקשירה נכתבת** — ה-MAC של המכונה הקולטת יושב **במניפסט** (עיקרון 3:
@@ -76,7 +76,7 @@ def test_a_cloner_is_still_refused_and_the_message_says_why(server):
 
 
 def test_an_unregistered_machine_is_still_refused_before_the_role_is_read(server):
-    """עיקרון 1 לא זז: ‏MAC שאיננו מכירים אינו מקבל עבודה, גם לא קליטה.
+    """עיקרון 1 לא זז: MAC שאיננו מכירים אינו מקבל עבודה, גם לא קליטה.
     בלי הבדיקה הזו הרחבת רשימת ההיתר הייתה נמדדת על `machine["role"]`
     של `None`."""
     assert make_task(server, "ff:ff:ff:ff:ff:ff").status_code == 400
@@ -95,13 +95,13 @@ def test_the_manifest_of_a_classroom_capture_carries_its_machine(server, images_
 
 def test_a_build_capture_stays_free(server, images_root):
     """אימג' זהב ממחשב בנייה נפרס על כיתה שלמה, כמו תמיד. אילו הקשירה
-    הייתה חלה על כולם, ‏#381 היה שובר את כל הפריסה הקיימת."""
+    הייתה חלה על כולם, #381 היה שובר את כל הפריסה הקיימת."""
     manifest = captured_manifest(server, images_root, setup_build_machine(server))
     assert "machine_mac" not in manifest
 
 
 def test_the_machine_cannot_declare_its_own_binding(server, images_root):
-    """המניפסט מגיע ממכונה ברשת הלימודית. ‏`machine_mac` הוא שער בטיחות,
+    """המניפסט מגיע ממכונה ברשת הלימודית. `machine_mac` הוא שער בטיחות,
     ולכן השרת כותב אותו — בדיוק כמו `id` ו-`name` — ומה שהמכונה שלחה
     נמחק. בלי זה, מחשב כיתה היה משחרר את עצמו בשורה אחת ב-JSON."""
     from test_capture import manifest_for
@@ -179,7 +179,7 @@ def test_a_bound_image_still_restores_to_its_own_machine(server, images_root):
 
 def test_an_unbound_image_is_untouched(server, images_root):
     """כל הספרייה שנקלטה עד #381 היא בלי השדה. אילו "אין שדה" היה
-    מסתיים בסירוב, ‏#381 היה מכבה את הפריסה בכללותה."""
+    מסתיים בסירוב, #381 היה מכבה את הפריסה בכללותה."""
     ids = setup_classroom(server)
     response = server["anon"].post("/api/v1/agent/pulls", json={
         "mac": ids["mac2"], "image_id": "img_7f3a91", **ADMIN})
@@ -273,10 +273,10 @@ def test_the_refusal_is_journalled_in_hebrew(server, images_root):
 
 
 #: המודולים שפותחים שחזור, ולכן חייבים לשאול את `restore_refusal`.
-#: ‏`pulls.py` פותח את ה-session, אבל השער יושב במי שקורא לו (`api.py`)
+#: `pulls.py` פותח את ה-session, אבל השער יושב במי שקורא לו (`api.py`)
 #: — שם המניפסט כבר בידיים, ושם התשובה חוזרת למי שביקש.
-#: ‏`direct.py` (‏#715) פותח גל מדיסק חי — הקשירה נבדקת כשהמניפסט מגיע
-#: (‏`put_manifest`), מול המכונות שנבחרו כיעד.
+#: `direct.py` (#715) פותח גל מדיסק חי — הקשירה נבדקת כשהמניפסט מגיע
+#: (`put_manifest`), מול המכונות שנבחרו כיעד.
 # #2239: by path under server/, not the bare name -- api.py is now three modules
 # (agent/, console/, interserver/), and a name-only key held interserver/api.py,
 # which opens nothing, to a binding it has no reason to consult.
@@ -303,7 +303,7 @@ def test_every_module_that_opens_a_restore_consults_the_binding():
 
 
 def test_the_interfaces_document_declares_the_field():
-    """‏`docs/architecture/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים — שדה
+    """`docs/architecture/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים — שדה
     חדש במניפסט שאינו רשום שם אינו קיים מבחינת הרכיב הבא."""
     text = (REPO / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "machine_mac" in text

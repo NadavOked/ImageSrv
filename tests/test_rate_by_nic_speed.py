@@ -6,10 +6,10 @@
 
     גג = 90% מהקישור · פתיחה = 60% מהקישור (על 1GbE: בדיוק 900m/600m)
 
-ומהירות שלא נקראה (‏-1, קובץ חסר, שגיאת קריאה, כרטיס וירטואלי) — ההתנהגות
+ומהירות שלא נקראה (-1, קובץ חסר, שגיאת קריאה, כרטיס וירטואלי) — ההתנהגות
 של היום, והסיבה נאמרת (עיקרון 5: "לא נקרא" אינו 1GbE).
 
-שום טסט כאן אינו קורא את ‎/sys של המכונה: עץ מזויף ב-tmp_path, או hook
+שום טסט כאן אינו קורא את /sys של המכונה: עץ מזויף ב-tmp_path, או hook
 מוזרק ל-`SenderEngine`/`create_app`.
 """
 
@@ -29,7 +29,7 @@ FAST_MAC = "aa:bb:cc:00:00:21"
 @pytest.fixture()
 def conn(tmp_path):
     """מחשב השיכפול של `_drive` מוגדר 10G — כך הטסטים של כרטיס השרת אינם
-    נחסמים בהנחת 1Gb/s על המקבלים (‏15/10 ב'); לטסטים של המקבלים — ‏`slow`."""
+    נחסמים בהנחת 1Gb/s על המקבלים (15/10 ב'); לטסטים של המקבלים — `slow`."""
     c = db.connect(tmp_path / "imagesrv.db")
     nic_speed.set_manual(c, FAST_MAC, 10000)
     return c
@@ -102,7 +102,7 @@ def test_no_interface_is_said(tmp_path):
 
 
 def test_a_virtual_card_is_not_evidence_of_the_wire(tmp_path):
-    """‏vmxnet3 מדווח 10000 תמיד, גם כשהמארח מחובר ב-1G (עיקרון 5א)."""
+    """vmxnet3 מדווח 10000 תמיד, גם כשהמארח מחובר ב-1G (עיקרון 5א)."""
     root = _sys(tmp_path, "ens192", "10000", driver="vmxnet3")
     got = drive_rates.read_link("ens192", root)
     assert got["speed_mbps"] is None and got["why"] == "virtual"
@@ -211,7 +211,7 @@ def test_a_throwing_reader_is_the_start_rate_not_a_dead_wave(conn):
                               link=broken) == "600m"
 
 
-# --- חיווט: השולח, ה-runtime, ‏main ----------------------------------------------
+# --- חיווט: השולח, ה-runtime, main ----------------------------------------------
 
 
 def test_the_sender_without_a_reader_says_not_wired():
@@ -223,7 +223,7 @@ def test_the_sender_without_a_reader_says_not_wired():
 
 
 def test_main_wires_the_real_reader(tmp_path, monkeypatch):
-    """הראיה שהיכולת מחוברת בייצור: ‏`server.main` מעביר `read_link`."""
+    """הראיה שהיכולת מחוברת בייצור: `server.main` מעביר `read_link`."""
     import asyncio
 
     import server.app
@@ -311,7 +311,7 @@ def _on(mac, serial):
 
 
 def _report(conn, mac, nics):
-    """דגימת probe כפי שהסוכן שולח ב-hello (‏`probe.nic`)."""
+    """דגימת probe כפי שהסוכן שולח ב-hello (`probe.nic`)."""
     from server.agent import probe# noqa: PLC0415
     probe.record(conn, mac, probe.well_formed({"nic": nics}))
 

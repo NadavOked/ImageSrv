@@ -37,16 +37,16 @@ LINK_UP = "up"
 LINK_DOWN = "down"
 LINK_UNKNOWN = "unknown"
 
-#: ‏operstate שמשמעותו "אין קישור" — כאן sysfs אומר לנו דבר חיובי ולא
-#: סתם שותק. ‏`notpresent` הוא ממשק שהדרייבר שלו לא טען.
+#: operstate שמשמעותו "אין קישור" — כאן sysfs אומר לנו דבר חיובי ולא
+#: סתם שותק. `notpresent` הוא ממשק שהדרייבר שלו לא טען.
 _DEAD_OPERSTATES = {"down", "lowerlayerdown", "notpresent"}
 
 
 def _read(path: Path) -> str | None:
     """תוכן קובץ sysfs, או None אם **הקריאה עצמה** נכשלה.
 
-    ‏None כאן הוא "לא הצלחנו לבדוק", לא "הערך שלילי" — שני מצבים שונים
-    (עיקרון 5), ומי שקורא חייב להבחין ביניהם. ‏`carrier` של ממשק כבוי
+    None כאן הוא "לא הצלחנו לבדוק", לא "הערך שלילי" — שני מצבים שונים
+    (עיקרון 5), ומי שקורא חייב להבחין ביניהם. `carrier` של ממשק כבוי
     מחזיר EINVAL, ולכן דווקא כאן קל להתבלבל.
     """
     try:
@@ -56,20 +56,20 @@ def _read(path: Path) -> str | None:
 
 
 def link_state(interface: str, *, sysfs: str | Path = SYSFS_NET) -> tuple[str, str]:
-    """מצב הקישור של ממשק: ‏(`LINK_UP`/`LINK_DOWN`/`LINK_UNKNOWN`, סיבה).
+    """מצב הקישור של ממשק: (`LINK_UP`/`LINK_DOWN`/`LINK_UNKNOWN`, סיבה).
 
-    ‏`sendto` על UDP לממשק בלי carrier **אינו מחזיר שגיאה** — הקרנל
+    `sendto` על UDP לממשק בלי carrier **אינו מחזיר שגיאה** — הקרנל
     מקבל את החבילה ומשליך אותה (#74, אומת ב-tcpdump: אפס חבילות).
     כלומר היעדר חריגה אינו ראיה לכלום, וצריך ראיה חיובית אחרת. sysfs
-    הוא הראיה: ‏`operstate` ו-`carrier` נקראים לפני השליחה.
+    הוא הראיה: `operstate` ו-`carrier` נקראים לפני השליחה.
 
     שלושה מצבים, ובכוונה לא שניים:
 
-    * ‏`LINK_DOWN` — **ראיה חיובית שאין קישור**: operstate מת, ‏carrier
+    * `LINK_DOWN` — **ראיה חיובית שאין קישור**: operstate מת, carrier
       הוא "0", או שהממשק כלל אינו קיים ב-sysfs שקיים ונקרא. כאן שליחה
       היא בזבוז בייטים, והיא נכשלת בגלוי.
-    * ‏`LINK_UP` — ראיה חיובית שיש קישור.
-    * ‏`LINK_UNKNOWN` — **לא הצלחנו לבדוק**: אין ‏/sys בכלל (מכונה שאינה
+    * `LINK_UP` — ראיה חיובית שיש קישור.
+    * `LINK_UNKNOWN` — **לא הצלחנו לבדוק**: אין /sys בכלל (מכונה שאינה
       לינוקס, קונטיינר), או שהקבצים לא נקראים. זה *לא* אותו דבר כמו
       "אין carrier", ואסור שיחסום שליחה תקינה: הבדיקה היא כלי אבחון,
       ואם היא בעצמה לא זמינה — התקלה שלה לא אמורה לכבות את WoL ולהפיל
@@ -86,16 +86,16 @@ def link_state(interface: str, *, sysfs: str | Path = SYSFS_NET) -> tuple[str, s
                 f"אין {root} במכונה הזאת")
         return LINK_DOWN, (
             f"iface-missing: אין ממשק בשם {interface} בשרת — בדקו את שם "
-            "הממשק שהשרת הופעל איתו (‎--interface)")
+            "הממשק שהשרת הופעל איתו (\u200e--interface)")
 
     operstate = _read(entry / "operstate")
     carrier = _read(entry / "carrier")
-    # ‏carrier לפני operstate, ולא להפך: כרטיס אמיתי שהכבל שלו נשלף
-    # מדווח **גם** ‏operstate=down (או lowerlayerdown), ואילו ממשק
-    # שהורד ביד מחזיר EINVAL על carrier. כלומר ‏carrier="0" הוא
+    # carrier לפני operstate, ולא להפך: כרטיס אמיתי שהכבל שלו נשלף
+    # מדווח **גם** operstate=down (או lowerlayerdown), ואילו ממשק
+    # שהורד ביד מחזיר EINVAL על carrier. כלומר carrier="0" הוא
     # האבחנה הצרה — כבל — ומי שמדווח אותה קודם שולח את הטכנאי לכבל
     # במקום להציע לו להריץ `ip link set up` על ממשק שכבר למעלה.
-    # ‏operstate נכנס להודעה ממילא, כדי שהראיה הגולמית תישאר לעיניים.
+    # operstate נכנס להודעה ממילא, כדי שהראיה הגולמית תישאר לעיניים.
     if carrier == "0":
         return LINK_DOWN, (
             f"no-carrier: אין carrier על {interface} "
@@ -113,17 +113,17 @@ def link_state(interface: str, *, sysfs: str | Path = SYSFS_NET) -> tuple[str, s
 
 
 class WakeRefused(OSError):
-    """שליחה שהשולח שלנו מסרב לה בעצמו — ‏`reason` הוא משפט שאנחנו כתבנו.
+    """שליחה שהשולח שלנו מסרב לה בעצמו — `reason` הוא משפט שאנחנו כתבנו.
 
-    ‏#74: הסיבה עולה למסך. ‏#2510: רק משפט שלנו עולה — ה-strerror של
-    ‏`sendto`/`setsockopt` נשאר ביומן השרת, והמסך מקבל משפט מ-`ERRNO_REASONS`."""
+    #74: הסיבה עולה למסך. #2510: רק משפט שלנו עולה — ה-strerror של
+    `sendto`/`setsockopt` נשאר ביומן השרת, והמסך מקבל משפט מ-`ERRNO_REASONS`."""
 
     def __init__(self, reason: str):
         super().__init__(reason)
         self.reason = reason
 
 
-#: ‏#2510: ‏errno של שליחה שנכשלה → המשפט שעל המסך. רשימה סגורה; כל errno אחר
+#: #2510: errno של שליחה שנכשלה → המשפט שעל המסך. רשימה סגורה; כל errno אחר
 #: הוא `SEND_FAILED`, והטקסט המלא נכתב ל-log.
 ERRNO_REASONS = {
     errno.ENODEV: "כרטיס ההפצה לא נמצא בשרת",
@@ -144,7 +144,7 @@ class WakeResult(int):
 
     יורש מ-`int` ולא NamedTuple בכוונה: המונה **הוא** התשובה, וכל מי
     שסופר אותו ממשיך לעבוד בלי לדעת. הסיבה נוסעת לצידו כדי שהמסך יוכל
-    לומר **מה** קרה ולא רק "0 מחשבים" — ‏"נכשל" בלי סיבה שולח את
+    לומר **מה** קרה ולא רק "0 מחשבים" — "נכשל" בלי סיבה שולח את
     הטכנאי לאותם 12 BIOSים בדיוק כמו שקט (#74).
     """
 
@@ -156,9 +156,9 @@ class WakeResult(int):
 
 
 def magic_packet(mac: str) -> bytes:
-    """‏MAC בכל אחת משלוש הווריאציות (סעיף 10) → חבילת הקסם, 102 בייט.
+    """MAC בכל אחת משלוש הווריאציות (סעיף 10) → חבילת הקסם, 102 בייט.
 
-    ‏MAC לא תקין הוא ValueError ולא חבילה ריקה: מוטב שהקריאה תיכשל
+    MAC לא תקין הוא ValueError ולא חבילה ריקה: מוטב שהקריאה תיכשל
     בגלוי מאשר שתישלח לרשת חבילה שלא תעיר איש.
     """
     canonical = normalize_mac(mac)
@@ -186,7 +186,7 @@ def broadcast_sender(
 
     שני דברים נבדקים כאן כ**ראיה חיובית** ולא כהיעדר חריגה (#74):
     מצב הקישור של הממשק לפני השליחה (`link_state`), וכמה בייטים
-    ‏`sendto` דיווח שקיבל. בלי ממשק כפוי אין מה לבדוק — הניתוב יבחר —
+    `sendto` דיווח שקיבל. בלי ממשק כפוי אין מה לבדוק — הניתוב יבחר —
     ואז הבדיקה מדלגת; זו עוד סיבה להזריק ממשק.
     """
     bind_to_device = getattr(socket, "SO_BINDTODEVICE", None)
@@ -218,7 +218,7 @@ def broadcast_sender(
 
 
 def unpinned_sender(packet: bytes) -> None:
-    """‏#2428: השולח של שרת שאין לו כרטיס הפצה (רשת ההפצה לא הוגדרה — מצב
+    """#2428: השולח של שרת שאין לו כרטיס הפצה (רשת ההפצה לא הוגדרה — מצב
     המסירה). בלי כרטיס כפוי השידור היה יוצא לפי טבלת הניתוב, כלומר לרשת
     המכללה. מסרב בשם, וכל מסלול (מכונה, קבוצה, סריקת #1847) מציג את הסיבה."""
     raise WakeRefused("רשת ההפצה לא הוגדרה — Wake-on-LAN כבוי עד שתוגדר "
@@ -231,14 +231,14 @@ _send_broadcast = broadcast_sender()
 
 
 def _try_send(mac: str, send: Callable[[bytes], None]) -> str | None:
-    """חבילה אחת ל-MAC אחד. מחזיר ‏None בהצלחה, או **הסיבה** לכשל.
+    """חבילה אחת ל-MAC אחד. מחזיר None בהצלחה, או **הסיבה** לכשל.
 
     הסיבה חוזרת כערך ולא נבלעת ולא נזרקת: מי שקורא (מכונה בודדת או
     קבוצה) מחליט איך לאגד אותה ליומן, אבל בשני המסלולים היא מגיעה
     למסך — "נכשל" בלי סיבה שולח את הטכנאי ל-BIOS (#74).
 
-    ‏#2510: הסיבה היא תמיד משפט שלנו — ‏`WakeRefused.reason`, ‏`BAD_MAC`, או
-    ‏`ERRNO_REASONS` לפי ה-errno. טקסט החריגה המקורי נכתב ל-log בלבד.
+    #2510: הסיבה היא תמיד משפט שלנו — `WakeRefused.reason`, `BAD_MAC`, או
+    `ERRNO_REASONS` לפי ה-errno. טקסט החריגה המקורי נכתב ל-log בלבד.
     """
     try:
         send(magic_packet(mac))
@@ -257,9 +257,9 @@ def _try_send(mac: str, send: Callable[[bytes], None]) -> str | None:
 def wake_machine(
     conn, mac: str, send: Callable[[bytes], None] = _send_broadcast,
 ) -> WakeResult:
-    """‏#984: מעיר מכונה **אחת** — מחשב בנייה או משכפל בודד.
+    """#984: מעיר מכונה **אחת** — מחשב בנייה או משכפל בודד.
 
-    מי רשאי להתעורר כך (‏role) נבדק ב-API, לא כאן: המודול שולח למה
+    מי רשאי להתעורר כך (role) נבדק ב-API, לא כאן: המודול שולח למה
     שנאמר לו. כשל נרשם ביומן (`wol_failed`) עם הסיבה, כמו בקבוצה.
     """
     canonical = normalize_mac(mac) or mac
@@ -304,7 +304,7 @@ def wake_group(
     sent = 0
     failed: list[str] = []
     reasons: list[str] = []
-    # ‏#1554: הגל של החדר הוא session על grp_CLONERS, אבל החדר הוא כל
+    # #1554: הגל של החדר הוא session על grp_CLONERS, אבל החדר הוא כל
     # מחשבי השיכפול — גם בקבוצות משכפלים אחרות.
     if group_id == CLONERS_GROUP:
         rows = conn.execute(

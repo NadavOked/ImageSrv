@@ -2143,3 +2143,31 @@ body.tasks-open .scroll{padding-block-end:calc(44px + var(--task-h,220px))}
 .lb-legend .lb-sw.orange{border-color:var(--clr-warning);background:var(--clr-warning-soft)}.lb-legend .lb-sw.yellow{border-color:var(--clr-yellow);background:var(--clr-yellow-soft)}
 .lb-legend .lb-sw.red{border-color:var(--clr-danger);background:var(--clr-danger-soft)}.lb-legend .lb-sw.grey{border-color:var(--clr-muted);background:var(--clr-hover)}
 @container (max-width:720px){.lbay{grid-template-columns:64px minmax(0,1fr) auto;row-gap:0}.lbay .lb-n{grid-row:span 2}.lbay .lb-meta{grid-column:2;grid-row:2;flex-wrap:wrap;gap:8px 16px;padding-block-end:12px}.lbay .lb-led{grid-column:3;grid-row:1/span 2}.lbay .lb-txt{padding-block-end:8px}.lbay:not(:has(.lb-led)){grid-template-columns:64px minmax(0,1fr)}}
+/* ===== #3025: תצוגה בסיסית/מתקדמת (מוקאפ mockup-console-basic-advanced-1112, אושר 12/11) ===== */
+/* לשונית מתקדמת בתצוגה בסיסית — לא בעץ (גם לא בפס: railShown) */
+.sidebar .inventory-node.view-hide,.sidebar .inventory-children.view-hide{display:none!important}
+/* נקודת סטטוס על לשונית: אותו רכיב .status של שורת השרת, מיד אחרי השם; תקלה = אדום, אזהרה = כתום */
+.sidebar .inventory-node>.tabdot{flex:none;order:1}
+.sidebar .inventory-node>.tabdot i{width:8px;height:8px}
+.sidebar .inventory-node>.tabdot.err i{background:var(--clr-danger)}.sidebar .inventory-node>.tabdot.warn i{background:var(--clr-warning)}
+.sidebar .inventory-node>.tree-arrow{order:9}
+/* לשוניות שמוצגות זמנית בבסיסי: קטע משלו בתחתית העץ, כך ששום שורה מעליו לא זזה */
+.sidebar .tree-temp{margin-top:8px;border-top:1px solid var(--clr-border);padding-top:4px}
+.sidebar .tree-temp[hidden]{display:none}
+.sidebar .tree-temp-label{padding:8px 14px 4px;font-size:var(--t-xs);color:var(--clr-muted)}
+.sidebar .tree-temp .inventory-node{padding-inline-start:30px}
+.sidebar .tab-resolved{order:1;font-size:var(--t-xs);font-weight:400;color:var(--clr-success-fg)}
+/* בפס האייקונים: אותה נקודה בפינת האייקון */
+.rail .ri.al-err::before,.rail .ri.al-warn::before{content:"";position:absolute;top:3px;inset-inline-start:3px;width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 2px var(--clr-surface)}
+.rail .ri.al-err::before{background:var(--clr-danger)}.rail .ri.al-warn::before{background:var(--clr-warning)}
+/* המתג בתפריט המשתמש — אותו רכיב .sw של הקונסולה */
+.user-menu button.um-switch{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.user-menu .um-switch small{display:block;color:var(--clr-muted);font-size:var(--t-xs);line-height:16px}
+.user-menu .sw{width:40px;height:22px;border-radius:11px;background:var(--track);position:relative;flex:none}
+.user-menu .sw::after{content:"";position:absolute;top:2px;inset-inline-end:2px;width:18px;height:18px;border-radius:50%;background:var(--surface);box-shadow:0 1px 2px var(--shadow-strong)}
+.user-menu .um-switch[aria-checked="true"] .sw{background:var(--led-ok)}.user-menu .um-switch[aria-checked="true"] .sw::after{inset-inline-end:20px}
+/* #3033 (נדב 12/11): אין קבוצה עם פריט אחד — הכותרת יוצאת, והפריט יושב ברמה העליונה של העץ */
+.sidebar .inventory-node.view-flat{display:none}
+.sidebar .inventory-children.view-flat-box{display:block!important}
+.sidebar #srvTA .inventory-children.view-flat-box>.inventory-node{padding-inline-start:14px}
+.sidebar #secondaryServers>.inventory-children .inventory-children.view-flat-box>.inventory-node{padding-inline-start:14px}

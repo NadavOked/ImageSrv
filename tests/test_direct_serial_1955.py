@@ -1,6 +1,6 @@
-"""‏#1955 — הפצה ישירה נקשרת ל-serial של הדיסק שנבחר, לא לשם ההתקן.
+"""#1955 — הפצה ישירה נקשרת ל-serial של הדיסק שנבחר, לא לשם ההתקן.
 
-עד כאן `direct_send` שמר רק `disk` (‏`sda`), ו-`directsend.sh` קרא ל-`capture_disk`
+עד כאן `direct_send` שמר רק `disk` (`sda`), ו-`directsend.sh` קרא ל-`capture_disk`
 בלי הארגומנט השלישי — כלומר שער הזהות של #1901 (`capture_identity_reason`)
 **דולג** בהפצה ישירה. אם סדר הדיסקים במחשב הבנייה התחלף בין ההזמנה לביצוע,
 המשכפלים קיבלו דיסק אחר, וה-sha256 עבר כי הוא מחושב על מה שנקרא.
@@ -8,7 +8,7 @@
 מה שנבדק:
 1. השרת שומר `tasks.disk_serial` מה-hello (אותו `_reported_serial` של הקליטה),
    ו-hello מוסר אותו למחשב הבנייה.
-2. הסוכן מסרב **לפני הדאטגרם הראשון** כש-`/dev/sda` נושא serial אחר: ‏udp-sender
+2. הסוכן מסרב **לפני הדאטגרם הראשון** כש-`/dev/sda` נושא serial אחר: udp-sender
    לא רץ, והסיבה מגיעה לקונסולה בשמה.
 3. אותו serial — השידור יוצא; בלי serial ובמחשב שני דיסקים — "לא ניתן לוודא".
 """
@@ -86,7 +86,7 @@ def test_the_direct_task_stores_the_serial_the_console_saw_and_hello_hands_it_ov
     r = _open_direct(admin, [{"mac": CLONER1, "ports": [1, 2]}], disk="sdb")
     assert r.status_code == 200, r.json()
     task_id = r.json()["task_id"]
-    # ‏SELECT * ו-.get: בבקרה השלילית הטסט נכשל על הערך, לא על SQL.
+    # SELECT * ו-.get: בבקרה השלילית הטסט נכשל על הערך, לא על SQL.
     row = dict(room_server["ctx"].conn.execute(
         "SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone())
     assert (row["disk"], row.get("disk_serial")) == ("sdb", "B-sdb")

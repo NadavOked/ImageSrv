@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: "חולשת אבטחה / Security vulnerability"
+    url: https://github.com/NadavOked/ImageSrv/blob/main/SECURITY.md
+    about: "לא כ-Issue: מדווחים בפרטיות לפי SECURITY.md. / Not as an issue: report it privately, as SECURITY.md describes."

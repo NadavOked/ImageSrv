@@ -23,7 +23,7 @@ NOT_MOUNTED = lambda path: False   # noqa: E731
 
 
 def _mounted(*points):
-    """‏`is_mount` מזויף לפי נתיב פוסיקסי — עובד גם בתחנת הפיתוח (ווינדוס)."""
+    """`is_mount` מזויף לפי נתיב פוסיקסי — עובד גם בתחנת הפיתוח (ווינדוס)."""
     return lambda path: sl._posix(str(path)) in points
 
 

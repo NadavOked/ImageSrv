@@ -1,4 +1,4 @@
-"""‏#1737 — השרת לא מתמלא: רזרבה למערכת, תקרה לטבלאות, ‏staging נטוש, ‏journald.
+"""#1737 — השרת לא מתמלא: רזרבה למערכת, תקרה לטבלאות, staging נטוש, journald.
 
 נדב (18/10): "איך דואגים שהשרת לא יתמלא בדברים לא חיוניים, ושעוד חצי שנה הוא
 לא יפסיק לעבוד?" — והכרעתו: מחיקה **אוטומטית** של ישן, פעם ביום. אימג'ים
@@ -7,8 +7,8 @@
 הבדיקות כאן אינן רק "נמחק": לכל טבלה שקוראים ממנה "מצב נוכחי" נבדק שהקורא
 מחזיר **אותה תשובה** לפני הניקוי ואחריו — מחיקה שמשנה התנהגות אסורה.
 הרזרבה בקליטה, ב-pull, ב-receive וב-vmupdate נבדקת בקבצים של כל מסלול
-(‏test_capture_room, ‏test_capture_preflight, ‏test_storage_pull,
-‏test_push_stream_1457, ‏test_storage_transfer, ‏test_vmupdate*).
+(test_capture_room, test_capture_preflight, test_storage_pull,
+test_push_stream_1457, test_storage_transfer, test_vmupdate*).
 """
 
 from __future__ import annotations
@@ -254,7 +254,7 @@ def test_retention_deletes_the_old_and_every_reader_answers_the_same(conn):
     assert _count(conn, "machine_probe", "mac = 'aa:00:00:00:00:02'") == 1   # האחרונה — גם כשישנה
     assert _count(conn, "disk_events", "serial = 'S1'") == 2
     assert _count(conn, "disk_failures", "session_id = 'f1'") == 1
-    # ‏w8 של Y: מחוץ ל-WINDOW של הכונן, אבל הגל עוד בזיכרון הקצב (‏MEMORY_SCAN) — נשאר
+    # w8 של Y: מחוץ ל-WINDOW של הכונן, אבל הגל עוד בזיכרון הקצב (MEMORY_SCAN) — נשאר
     assert _count(conn, "drive_rates", "serial = 'Y'") == 6
     assert _count(conn, "drive_rates", "serial = 'X'") == drive_rates.WINDOW
     assert [r[0] for r in conn.execute("SELECT key FROM login_attempts ORDER BY key")] == [
@@ -296,7 +296,7 @@ def test_a_timestamp_that_is_not_iso_is_kept_not_guessed(conn):
     assert _count(conn, "boot_steps") == 1
 
 
-# --- 3. ‏staging נטוש ----------------------------------------------------------
+# --- 3. staging נטוש ----------------------------------------------------------
 
 
 def age(path: Path, seconds: float, now: float) -> None:
@@ -464,7 +464,7 @@ def test_the_room_clock_runs_housekeeping_in_the_background(tmp_path, monkeypatc
     assert "tsk_late" in events(app.state.ctx.conn)["work_area_swept"]
 
 
-# --- 5. ‏journald -------------------------------------------------------------
+# --- 5. journald -------------------------------------------------------------
 
 
 def test_new_servers_get_the_journal_ceiling_at_install():

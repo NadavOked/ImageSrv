@@ -1,11 +1,11 @@
-"""הגדרות הרשת של השרת עצמו — כתובת, שער, DNS ונתיבים (‏#55, ‏#57).
+"""הגדרות הרשת של השרת עצמו — כתובת, שער, DNS ונתיבים (#55, #57).
 
 מה שנבדק כאן הוא לא "האם ההגדרה נשמרה" אלא **האם הכתובת באמת השתנתה**.
-שלושה מצבים, ולא שניים: "כתבנו את הקובץ", "ההחלה רצה" ו"‏ip addr מראה
+שלושה מצבים, ולא שניים: "כתבנו את הקובץ", "ההחלה רצה" ו"ip addr מראה
 את הכתובת". רק השלישי הוא הצלחה, ולכן רוב הקובץ הזה הוא תרחישי כשל —
-קובץ שנכתב ולא נטען, ‏ifup שהצליח ולא שינה כלום, מצב שלא נקרא בכלל.
+קובץ שנכתב ולא נטען, ifup שהצליח ולא שינה כלום, מצב שלא נקרא בכלל.
 
-‏**אף בדיקה כאן אינה נוגעת ברשת אמיתית.** הכתיבה, ה-ifup והקריאה של
+**אף בדיקה כאן אינה נוגעת ברשת אמיתית.** הכתיבה, ה-ifup והקריאה של
 `ip addr` מוזרקים, בדיוק כמו `dhcp_hooks`: הבדיקה רואה את הטקסט שהיה
 נכתב ואת הפקודות שהיו רצות. שרת המעבדה, שהבדיקות רצות עליו דרך SSH,
 לא היה שורד את הגרסה האחרת.
@@ -84,14 +84,14 @@ def test_bad_settings_are_refused_in_hebrew(change, fragment):
 
 
 def test_a_masked_netmask_is_not_just_four_numbers():
-    """‏255.0.255.0 נראית כמו מסכה ואינה — ‏ifupdown היה מקבל אותה
+    """255.0.255.0 נראית כמו מסכה ואינה — ifupdown היה מקבל אותה
     ומייצר רשת שאיש לא התכוון אליה."""
     assert netcfg._valid_mask("255.255.254.0") is True
     assert netcfg._valid_mask("255.0.255.0") is False
 
 
 def test_every_problem_comes_back_at_once_and_not_one_at_a_time():
-    """‏#55 מבקש את שתי הבדיקות **יחד**. מפעיל שמתקן בעיה אחת ומגלה את
+    """#55 מבקש את שתי הבדיקות **יחד**. מפעיל שמתקן בעיה אחת ומגלה את
     השנייה רק בניסיון הבא לומד שהמסך לא יודע מה הוא רוצה — ובמסך שמשנה
     כתובות זה הרגע שבו הוא מנחש ומנתק את עצמו."""
     other = NetConfig("eth0", mode=MODE_STATIC, address="10.44.9.20",
@@ -143,7 +143,7 @@ def test_a_card_that_hands_out_addresses_cannot_be_left_unmanaged():
 
 
 def test_moving_a_dhcp_card_off_its_range_is_refused():
-    """הבדיקה שאף אחד מהצדדים לבדו לא יכול לעשות: ‏dhcp.validate בודק
+    """הבדיקה שאף אחד מהצדדים לבדו לא יכול לעשות: dhcp.validate בודק
     ש-server_ip בתוך הרשת של הטווח, ואינו יודע דבר על הכתובת שהכרטיס
     באמת יקבל."""
     moved = cfg(address="10.44.8.10")
@@ -156,7 +156,7 @@ def test_a_card_that_serves_nothing_is_not_constrained():
                            dhcp.InterfaceConfig("eth1")) == []
 
 
-# --- נתיבים סטטיים (‏#57) -----------------------------------------------------
+# --- נתיבים סטטיים (#57) -----------------------------------------------------
 
 
 def test_a_route_target_must_be_a_network_and_not_a_host():
@@ -206,8 +206,8 @@ def test_a_static_card_renders_an_ifupdown_stanza():
 
 
 def test_the_route_lines_never_swallow_their_own_failure():
-    """עיקרון 5 בשורה אחת: ‏`ip route add` שנכשל חייב להפיל את ה-ifup.
-    ‏`|| true` כאן היה הופך "הנתיב הוגדר" לנכון על הנייר ולשקר
+    """עיקרון 5 בשורה אחת: `ip route add` שנכשל חייב להפיל את ה-ifup.
+    `|| true` כאן היה הופך "הנתיב הוגדר" לנכון על הנייר ולשקר
     ב-`ip route` — וזה בדיוק הבאג שחוזר בכל שכבה בפרויקט."""
     text = netcfg.render(cfg(routes=[ROUTE]))
     assert "|| true" not in text
@@ -215,7 +215,7 @@ def test_the_route_lines_never_swallow_their_own_failure():
 
 
 def test_dns_is_not_written_as_a_line_that_does_nothing():
-    """‏`dns-nameservers` עובד רק דרך resolvconf, שאינו מותקן כאן.
+    """`dns-nameservers` עובד רק דרך resolvconf, שאינו מותקן כאן.
     שורה שנראית כמו הגדרה ואינה עושה כלום היא "כתבנו את הקובץ"
     שמתחזה ל"ההגדרה נכנסה"."""
     text = netcfg.render(cfg(dns=["10.44.0.5"]))
@@ -269,7 +269,7 @@ def test_the_machine_is_read_the_way_iproute_writes_it():
 
 
 def test_a_state_that_could_not_be_read_is_never_a_match():
-    """זה ההבדל בין ‎http=000 ל-200, ובין "לא בדקנו" ל"בדקנו והכל תקין"."""
+    """זה ההבדל בין http=000 ל-200, ובין "לא בדקנו" ל"בדקנו והכל תקין"."""
     unread = netcfg_host.LiveState(False, reason="ip addr: לא רץ")
     found = netcfg_host.mismatches(cfg(), unread)
     assert found and "לא נקרא" in found[0]
@@ -305,7 +305,7 @@ def test_a_full_match_is_empty():
 
 def test_a_main_interfaces_file_that_never_sources_the_directory(tmp_path: Path):
     """הצורה הנקייה ביותר של "כתבנו ולא קרה כלום": קובץ בתיקייה שאיש
-    לא טוען. ‏None (הקובץ הראשי לא נקרא) אינו "כן"."""
+    לא טוען. None (הקובץ הראשי לא נקרא) אינו "כן"."""
     main = tmp_path / "interfaces"
     main.write_text("auto lo\niface lo inet loopback\n")
     assert netcfg_host.sourced(main, "/etc/network/interfaces.d") is False
@@ -349,7 +349,7 @@ def build_state(fake) -> netcfg_host.LiveState:
 def net_server(tmp_path: Path, images_root: Path, clock):
     """שרת עם שני כרטיסים, מכונה מדומה, ושעון בידיים.
 
-    הקונסולה "מגיעה" דרך eth0 (‏10.10.10.8) — בדיוק כמו שרת המעבדה.
+    הקונסולה "מגיעה" דרך eth0 (10.10.10.8) — בדיוק כמו שרת המעבדה.
     """
     if TestClient is None:
         pytest.skip("fastapi is required")
@@ -365,8 +365,8 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         ],
         "confs": {},                # מה נכתב ל-interfaces.d
         "resolv": "nameserver 10.44.0.5\n",
-        # ‏(שם, האם סמן ההחזרה כבר היה על הדיסק) לכל כתיבה — הראיה
-        # לסדר הכתיבות, שהוא ההגנה עצמה (‏#56).
+        # (שם, האם סמן ההחזרה כבר היה על הדיסק) לכל כתיבה — הראיה
+        # לסדר הכתיבות, שהוא ההגנה עצמה (#56).
         "writes": [],
         "applied": [],              # אילו כרטיסים עברו ifdown/ifup
         "apply_error": None,
@@ -375,16 +375,16 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         "readable": True,           # האם המצב בפועל בכלל נקרא
         "timer": (True, "active"),  # האם זרוע ההחזרה של #56 פעילה
         "local": "10.10.10.8",      # דרך איזו כתובת הגיעה הבקשה
-        "peer": "10.10.10.50",      # ‏#2418: מאיזו כתובת הגיעה הבקשה (המפעיל)
+        "peer": "10.10.10.50",      # #2418: מאיזו כתובת הגיעה הבקשה (המפעיל)
         "dnsmasq": [],              # מה נכתב ל-dnsmasq (לשונית ה-DHCP)
         "proxy": [],                # ומה לאינסטנס ה-proxy
-        "management": "",           # ‏#1263: כרטיס הניהול שהמתקין רשם ("" = לא ידוע)
-        "foreign": None,            # ‏#1558: מנהל רשת שאינו ifupdown (None = ifupdown)
-        "probe": dhcp.ProbeResult(True, ()),   # מי כבר עונה ל-DHCP (‏#53)
-        # ‏#2805: ‏(כרטיס, admin_up בזמן הבדיקה) לכל "מי כבר עונה", ‏(כרטיס, up) לכל
-        # ‏`ip link set`, והאם הקישור מקבל carrier כשהוא מועלה.
+        "management": "",           # #1263: כרטיס הניהול שהמתקין רשם ("" = לא ידוע)
+        "foreign": None,            # #1558: מנהל רשת שאינו ifupdown (None = ifupdown)
+        "probe": dhcp.ProbeResult(True, ()),   # מי כבר עונה ל-DHCP (#53)
+        # #2805: (כרטיס, admin_up בזמן הבדיקה) לכל "מי כבר עונה", (כרטיס, up) לכל
+        # `ip link set`, והאם הקישור מקבל carrier כשהוא מועלה.
         "probed": [], "links": [], "link_error": None, "carrier": True, "slept": [],
-        "downs": [], "released": [],   # ‏#2855: ifdown/flush של החזרה לכרטיס בלי קובץ
+        "downs": [], "released": [],   # #2855: ifdown/flush של החזרה לכרטיס בלי קובץ
     }
 
     state_dir = tmp_path / "netstate"
@@ -407,7 +407,7 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         return next(n for n in fake["interfaces"] if n["name"] == name)
 
     def probe(name):
-        """כמו הבדיקה האמיתית: על כרטיס מושבת השליחה נכשלת ב-ENETDOWN (‏#2394)."""
+        """כמו הבדיקה האמיתית: על כרטיס מושבת השליחה נכשלת ב-ENETDOWN (#2394)."""
         up = nic(name).get("admin_up")
         fake["probed"].append((name, up))
         if up is False:
@@ -422,7 +422,7 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         return None
 
     def release(name):
-        """כמו `ip -4 addr flush`: הכרטיס נשאר בלי כתובת (‏#2855)."""
+        """כמו `ip -4 addr flush`: הכרטיס נשאר בלי כתובת (#2855)."""
         fake["released"].append(name)
         nic(name)["addresses"] = []
         return None
@@ -443,7 +443,7 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         "netcfg_peer_address": lambda request: fake["peer"],   # #2418
         "netcfg_management": lambda: fake["management"],
         "netcfg_foreign_manager": lambda: fake["foreign"],   # #1558
-        # ‏#2855: החזרה של כרטיס בלי קובץ — ifdown, ‏flush וקריאה חוזרת, כולם מדומים.
+        # #2855: החזרה של כרטיס בלי קובץ — ifdown, flush וקריאה חוזרת, כולם מדומים.
         "netcfg_down": lambda name: fake["downs"].append(name) or None,
         "netcfg_release": release,
         "netcfg_main_defines": lambda name: False,
@@ -451,13 +451,13 @@ def net_server(tmp_path: Path, images_root: Path, clock):
     # שתי הלשוניות הן שני ראוטרים, ולכן **שתי** הזרקות: הבדיקה שמוודאת
     # שהצדדים מסכימים חוצה אל `/api/console/net/interfaces` — הראוטר של
     # ה-DHCP — ובלי `dhcp_hooks` הוא נופל על ברירת המחדל שקוראת את
-    # ‏`/sys/class/net` של המכונה שמריצה. במעבדה יש שם `eth1` ולכן זה
+    # `/sys/class/net` של המכונה שמריצה. במעבדה יש שם `eth1` ולכן זה
     # עבר; ל-runner אין, והוא קיבל 404 (#113). אותה רשימת כרטיסים
     # מוזרקת לשני הצדדים, כי זה בדיוק מה שהבדיקה טוענת עליו.
     dhcp_hooks = {
         "interfaces": lambda: [dict(n) for n in fake["interfaces"]],
         "probe": probe,
-        "link_set": link_set,                       # ‏#2805 — לעולם לא `ip link` אמיתי
+        "link_set": link_set,                       # #2805 — לעולם לא `ip link` אמיתי
         "sleep": fake["slept"].append,
         "apply": lambda text: (fake["dnsmasq"].append(text), None)[1],
         "apply_proxy": lambda text, active: (
@@ -521,7 +521,7 @@ def test_a_static_address_goes_from_the_console_to_a_file(net_server):
 
 
 def test_the_file_is_written_but_nothing_moved(net_server):
-    """המצב שהמשימה קיימת בשבילו: הכתיבה הצליחה, ‏ifup יצא באפס,
+    """המצב שהמשימה קיימת בשבילו: הכתיבה הצליחה, ifup יצא באפס,
     והכתובת לא זזה — קובץ `interfaces` שלא טוען את `interfaces.d`,
     כרטיס שמנוהל בפועל בידי משהו אחר. "נשמר" כאן הוא שקר."""
     net_server["fake"]["applies"] = False
@@ -563,9 +563,9 @@ NETPLAN = "הרשת בשרת הזה מנוהלת ב-netplan (/etc/netplan/50-clo
 @pytest.mark.parametrize("send", ["put", "put_deploy"])
 def test_a_server_whose_network_is_not_ifupdown_is_refused_before_anything_is_touched(
         net_server, send):
-    """‏#1558: שרת חיפה (netplan + networkd + resolved). עד #1558 הקונסולה זיינה
+    """#1558: שרת חיפה (netplan + networkd + resolved). עד #1558 הקונסולה זיינה
     החזרה, כתבה ל-interfaces.d ול-resolv.conf והריצה ifup — ודיווחה תסמינים
-    ("Read-only file system", ‏"unknown interface") במקום הסיבה."""
+    ("Read-only file system", "unknown interface") במקום הסיבה."""
     fake = net_server["fake"]
     fake["foreign"] = NETPLAN
     response = globals()[send](net_server)   # put_deploy מוגדר למטה בקובץ
@@ -585,7 +585,7 @@ def test_foreign_manager_names_netplan_networkd_and_resolved(tmp_path):
     assert netcfg_host.foreign_manager(netplan, networkd, resolv) is None   # שרת ISO: אין אף אחד
     netplan.mkdir(); networkd.mkdir()
     assert netcfg_host.foreign_manager(netplan, networkd, resolv) is None   # תיקיות ריקות
-    (networkd / "10-eth0.link").write_text("", encoding="utf-8")          # ‏.link אינו ניהול כתובת
+    (networkd / "10-eth0.link").write_text("", encoding="utf-8")          # .link אינו ניהול כתובת
     assert netcfg_host.foreign_manager(netplan, networkd, resolv) is None
     (networkd / "20-eth0.network").write_text("", encoding="utf-8")
     assert "systemd-networkd" in netcfg_host.foreign_manager(netplan, networkd, resolv)
@@ -683,11 +683,11 @@ def test_the_dhcp_side_and_the_address_side_agree(net_server):
     assert "יוצא מהרשת החדשה" in moved.json()["detail"]
 
 
-# --- ‏#57: שער, DNS ונתיבים ----------------------------------------------------
+# --- #57: שער, DNS ונתיבים ----------------------------------------------------
 
 
 def test_a_static_route_reaches_the_file_and_the_routing_table(net_server):
-    """מה שהתחיל את כל הבקשה (‏#50): נתיב שלא נעלם באתחול."""
+    """מה שהתחיל את כל הבקשה (#50): נתיב שלא נעלם באתחול."""
     result = put(net_server, address="10.44.9.10", gateway="10.44.9.1",
                  dns=["10.44.0.5", "8.8.8.8"], routes=[ROUTE]).json()
     assert result["ok"] is True and result["mismatches"] == []
@@ -726,9 +726,9 @@ def test_a_bad_route_is_refused_in_hebrew_before_anything_is_written(net_server)
 
 @pytest.mark.parametrize(("network", "netmask", "expected"), [
     ("10.0.20.0", "255.255.255.0", "10.0.20.1"),        # הדוגמה של נדב
-    ("10.44.0.0", "255.255.254.0", "10.44.0.1"),        # ‏/23
-    ("172.16.8.0", "255.255.255.248", "172.16.8.1"),    # ‏/29
-    ("10.9.9.0", "255.255.255.252", "10.9.9.1"),        # ‏/30 — שרת + כתובת אחת
+    ("10.44.0.0", "255.255.254.0", "10.44.0.1"),        # /23
+    ("172.16.8.0", "255.255.255.248", "172.16.8.1"),    # /29
+    ("10.9.9.0", "255.255.255.252", "10.9.9.1"),        # /30 — שרת + כתובת אחת
 ])
 def test_the_deploy_server_address_is_the_first_host_of_the_network(network, netmask, expected):
     assert netcfg.deploy_address(network, netmask) == (expected, [])
@@ -739,11 +739,11 @@ def test_the_deploy_server_address_is_the_first_host_of_the_network(network, net
     ("10.0.20.0", "255.0.255.0", "מסכת רשת אינה תקינה"),
     ("10.0.20", "255.255.255.0", "כתובת הרשת אינה תקינה"),
     ("", "255.255.255.0", "כתובת הרשת אינה תקינה (ריק)"),
-    ("10.0.20.0", "255.255.255.254", "קטנה מדי"),       # ‏/31
-    ("10.0.20.0", "255.255.255.255", "קטנה מדי"),       # ‏/32
+    ("10.0.20.0", "255.255.255.254", "קטנה מדי"),       # /31
+    ("10.0.20.0", "255.255.255.255", "קטנה מדי"),       # /32
 ])
 def test_a_deploy_network_that_is_not_a_network_is_refused_not_rounded(network, netmask, fragment):
-    """‏10.0.20.5/24 **אינו** מעוגל ל-10.0.20.0: עיגול שקט הוא ניחוש לאיזו רשת
+    """10.0.20.5/24 **אינו** מעוגל ל-10.0.20.0: עיגול שקט הוא ניחוש לאיזו רשת
     המפעיל התכוון, והשרת היה מקבל כתובת שאיש לא כתב."""
     address, found = netcfg.deploy_address(network, netmask)
     assert address == ""
@@ -815,7 +815,7 @@ def test_a_range_outside_the_network_and_a_non_network_address_are_refused(net_s
 
 def test_a_gateway_must_sit_inside_the_deploy_network(net_server):
     """הקונסולה אינה מציעה שער ברשת ההפצה; מי שמגיע ב-API עם שער — הוא חייב
-    להיות בתוך הרשת (‏dhcp.validate)."""
+    להיות בתוך הרשת (dhcp.validate)."""
     out = put_deploy(net_server, gateway="10.44.99.1")
     assert out.status_code == 400 and "השער" in out.json()["detail"]
     assert put_deploy(net_server, gateway="10.44.20.254").status_code == 200
@@ -839,7 +839,7 @@ def test_the_management_card_cannot_be_the_deploy_network(net_server):
 
 
 def test_the_old_dhcp_path_refuses_the_management_card_too(net_server, classrooms_on):
-    """‏`PUT /net/interfaces/{שם}` הישן (דף הפורטים, API ישיר): DHCP מלא או
+    """`PUT /net/interfaces/{שם}` הישן (דף הפורטים, API ישיר): DHCP מלא או
     proxy על כרטיס הניהול — 409, ושום דבר לא נכתב. כיבוי — מותר."""
     net_server["fake"]["management"] = "eth1"
     admin = net_server["admin"]
@@ -860,7 +860,7 @@ def test_the_old_dhcp_path_refuses_the_management_card_too(net_server, classroom
 
 
 def test_an_unverified_address_leaves_the_dhcp_untouched(net_server):
-    """כתובת שנכתבה ולא זזה (‏`applies=False`): ה-DHCP **אינו** נשמר — DHCP
+    """כתובת שנכתבה ולא זזה (`applies=False`): ה-DHCP **אינו** נשמר — DHCP
     שמכריז על כתובת שהכרטיס אינו נושא אינו "חצי הצלחה"."""
     net_server["fake"]["applies"] = False
     result = put_deploy(net_server).json()
@@ -871,7 +871,7 @@ def test_an_unverified_address_leaves_the_dhcp_untouched(net_server):
 
 
 def test_the_dhcp_safety_gates_run_before_the_address_moves(net_server):
-    """שומרי ההדלקה של ראוטר ה-DHCP (‏#53 "מי כבר עונה", הקלדת השם שהמסך
+    """שומרי ההדלקה של ראוטר ה-DHCP (#53 "מי כבר עונה", הקלדת השם שהמסך
     שולח לבד) רצים **לפני** שהכתובת זזה — סירוב שם לא משאיר כרטיס בכתובת
     חדשה."""
     fake = net_server["fake"]
@@ -887,13 +887,13 @@ def test_the_dhcp_safety_gates_run_before_the_address_moves(net_server):
 
 
 def _admin_down(server, name="eth1"):
-    """כרטיס ההפצה כמו אחרי התקנה מה-ISO (‏#2805, ‏ESXi 10/11): מושבת, בלי כתובת."""
+    """כרטיס ההפצה כמו אחרי התקנה מה-ISO (#2805, ESXi 10/11): מושבת, בלי כתובת."""
     nic = next(n for n in server["fake"]["interfaces"] if n["name"] == name)
     nic.update(state="down", admin_up=False, link_up=None, addresses=[])
 
 
 def test_the_first_deploy_save_raises_a_disabled_card_and_probes_on_the_live_link(net_server):
-    """‏#2805: השמירה הראשונה, בדיוק מה שהמסך שולח, על כרטיס מושבת — 200. הקישור
+    """#2805: השמירה הראשונה, בדיוק מה שהמסך שולח, על כרטיס מושבת — 200. הקישור
     מועלה לפני "מי כבר עונה", והבדיקה שהתירה את ההדלקה רצה על הקישור **המורם**."""
     _admin_down(net_server)
     response = put_deploy(net_server)
@@ -965,7 +965,7 @@ def test_the_trunk_gate_refuses_before_the_disabled_card_is_raised(net_server):
 
 
 def test_a_refusal_after_the_gates_lowers_the_raised_card_again(net_server):
-    """הכרטיס הועלה והבדיקה נקייה, אבל הכתובת סורבה (‏#1558, מנהל רשת זר) — חוזר למושבת."""
+    """הכרטיס הועלה והבדיקה נקייה, אבל הכתובת סורבה (#1558, מנהל רשת זר) — חוזר למושבת."""
     _admin_down(net_server)
     fake = net_server["fake"]
     fake["foreign"] = "/etc/netplan קיים"
@@ -976,7 +976,7 @@ def test_a_refusal_after_the_gates_lowers_the_raised_card_again(net_server):
 
 
 def test_the_plain_dhcp_path_still_does_not_raise_a_disabled_card(net_server):
-    """רק רשת ההפצה מעלה כרטיס (‏#2805). ‏`PUT /net/interfaces/{שם}` נשאר כמו ב-#2394."""
+    """רק רשת ההפצה מעלה כרטיס (#2805). `PUT /net/interfaces/{שם}` נשאר כמו ב-#2394."""
     _admin_down(net_server)
     body = {"enabled": True, "range_start": "10.44.9.50", "range_end": "10.44.9.200",
             "netmask": "255.255.255.0", "server_ip": "10.44.9.10", "confirm": "eth1"}
@@ -1000,8 +1000,8 @@ def test_static_mode_takes_a_primary_and_a_secondary_dns(net_server):
 
 
 def test_the_read_names_the_management_card_and_never_guesses_it(net_server):
-    """‏`management_interface` מגיע ממה שהמתקין רשם (או מסך השרת אישר) —
-    ריק = ‏null ("לא ידוע"), ולא הכרטיס הראשון שנושא כתובת."""
+    """`management_interface` מגיע ממה שהמתקין רשם (או מסך השרת אישר) —
+    ריק = null ("לא ידוע"), ולא הכרטיס הראשון שנושא כתובת."""
     body = net_server["admin"].get(CONF).json()
     assert body["management_interface"] is None
     assert not any(r["management"] for r in body["interfaces"])
@@ -1009,16 +1009,16 @@ def test_the_read_names_the_management_card_and_never_guesses_it(net_server):
     body = net_server["admin"].get(CONF).json()
     assert body["management_interface"] == "eth0"
     assert {r["name"]: r["management"] for r in body["interfaces"]} == {"eth0": True, "eth1": False}
-    # מסך השרת (‏DCUI) גובר על הרישום של המתקין
+    # מסך השרת (DCUI) גובר על הרישום של המתקין
     from server.db import set_setting
     set_setting(net_server["ctx"].conn, "dcui:management_interface", "eth1")
     assert net_server["admin"].get(CONF).json()["management_interface"] == "eth1"
 
 
 def test_the_read_names_the_card_the_console_came_through(net_server):
-    """‏#1556: בשרת חיפה כרטיס הניהול לא היה ידוע, ו"הגדר כרשת הפצה" בחר את
-    ‏eth0 — הכרטיס שהקונסולה מחוברת דרכו. השרת יודע מאיזו כתובת שלו הבקשה
-    הגיעה; זה הכרטיס שאסור להציע כברירת מחדל. לא נקבע = ‏null, לא ניחוש."""
+    """#1556: בשרת חיפה כרטיס הניהול לא היה ידוע, ו"הגדר כרשת הפצה" בחר את
+    eth0 — הכרטיס שהקונסולה מחוברת דרכו. השרת יודע מאיזו כתובת שלו הבקשה
+    הגיעה; זה הכרטיס שאסור להציע כברירת מחדל. לא נקבע = null, לא ניחוש."""
     assert net_server["admin"].get(CONF).json().get("console_interface", "absent") == "eth0"
     net_server["fake"]["local"] = "10.44.9.10"
     assert net_server["admin"].get(CONF).json().get("console_interface", "absent") == "eth1"
@@ -1038,7 +1038,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def test_the_console_assets_all_carry_the_same_version():
-    """מטמון הדפדפן: חצי bump גרוע מאין bump. ‏netcfg.js חדש מול
+    """מטמון הדפדפן: חצי bump גרוע מאין bump. netcfg.js חדש מול
     console.js ישן הוא JS שקורא ל-`sheet()` בחתימה שכבר השתנתה."""
     page = (REPO / "server" / "static" / "index.html").read_text(encoding="utf-8")
     versions = set(re.findall(r"\?v=([0-9.]+)", page))
@@ -1047,21 +1047,21 @@ def test_the_console_assets_all_carry_the_same_version():
 
 
 def test_the_server_unit_may_write_where_the_code_writes():
-    """‏`ReadWritePaths` שאינו כולל את היעד = כתיבה שנכשלת על שרת אמיתי
+    """`ReadWritePaths` שאינו כולל את היעד = כתיבה שנכשלת על שרת אמיתי
     ועוברת בכל בדיקה. הדרישה נבדקת מול הקבוע שבקוד, ולא מול מחרוזת
     שהועתקה לכאן."""
     unit = (REPO / "deploy" / "imagesrv-server.service").read_text(encoding="utf-8")
     paths = next(line for line in unit.splitlines()
                  if line.startswith("ReadWritePaths="))
     assert netcfg_host.INTERFACES_DIR in paths
-    # ‏resolv.conf הוא קובץ בשורש /etc, ואי אפשר לפתוח אותו לבדו.
+    # resolv.conf הוא קובץ בשורש /etc, ואי אפשר לפתוח אותו לבדו.
     assert " /etc" in paths and netcfg_host.RESOLV_CONF.startswith("/etc/")
 
 
 @pytest.mark.parametrize("unit_name", ["imagesrv-server.service", "imagesrv-dcui.service",
                                        "imagesrv-netrollback.service"])
 def test_units_that_run_ifup_may_write_its_runtime_state(unit_name):
-    """‏#1241: ‏ProtectSystem=strict הופך את /run ל-read-only. ‏ifup/ifdown
+    """#1241: ProtectSystem=strict הופך את /run ל-read-only. ifup/ifdown
     נועלים את /run/network/ifstate.<כרטיס>, ו-dhcpcd כותב ל-/run/dhcpcd
     ול-/var/lib/dhcpcd — בלעדיהם כל החלת כתובת נכשלה על שרת מה-ISO."""
     unit = (REPO / "deploy" / unit_name).read_text(encoding="utf-8")
@@ -1087,7 +1087,7 @@ def _nic_card_source():
     `netNicSelectedCard` + שורת הטבלה `netNicRow`, במקום `renderNicCard`).
     הדרישה של #761 (פאנל אחד, לא שניים) נשמרת: כתובת בפועל מול מוגדר, DHCP
     מהמצב החי — בכרטיס אחד, וכתובת השרת בכרטיס ההפצה (`networkDeployTab`)."""
-    # ‏#1300 (console-full.html P.network, אחד-לאחד): בלי כרטיס "נבחר" — השורה עצמה נושאת הכול: הכתובת
+    # #1300 (console-full.html P.network, אחד-לאחד): בלי כרטיס "נבחר" — השורה עצמה נושאת הכול: הכתובת
     # בפועל (netAddrText, המוגדר ב-title ופער = פיל אדום) והתפקיד (netRolePill, DHCP מהמצב החי);
     # מצב ה-DHCP המלא — בכרטיס רשת ההפצה (networkDeployTab, netDhcpCell).
     return (_js_function("netNicRow") + _js_function("netAddrText") + _js_function("netRolePill")
@@ -1122,19 +1122,19 @@ def test_the_unified_nic_card_shows_the_operator_data_points():
 
 
 def test_the_edit_dialog_uses_a_real_radio_group_not_prompt_or_confirm():
-    """‏#761 אוסר `prompt()`/`confirm()` (חסומים בדפדפן המוטמע) ודורש
+    """#761 אוסר `prompt()`/`confirm()` (חסומים בדפדפן המוטמע) ודורש
     קבוצת radio אמיתית לבחירת המצב, לא `<select>`."""
     js = (REPO / "server" / "static" / "netcfg.js").read_text(encoding="utf-8")
     assert "prompt(" not in js and "confirm(window" not in js
     assert '"radio"' in js
-    # ‏#1263 (הכרעת נדב 10/10): שלושה אופנים בלבד — "לא מנוהל" אינו אפשרות
+    # #1263 (הכרעת נדב 10/10): שלושה אופנים בלבד — "לא מנוהל" אינו אפשרות
     # בחלון; כרטיס שעדיין לא מנוהל נפתח על הכתובת שהוא נושא בפועל.
     assert 'const NIC_MODES = [["deploy", "רשת הפצה"], ["dhcp", "DHCP מהרשת"], ["static", "כתובת ידנית"]];' in js
     assert "לא מנוהל מהקונסולה (ברירת מחדל)" not in js
 
 
 def test_sheet_supports_a_radio_field_type():
-    """התוספת ל-sheet() ב-console.js (‏#761) — בלי זה netcfg.js קורא
+    """התוספת ל-sheet() ב-console.js (#761) — בלי זה netcfg.js קורא
     ל-API שלא קיים, וזה נכשל בשקט בזמן ריצה, לא בבדיקה."""
     js = console_js()
     assert 'f.type === "radio"' in js
@@ -1142,10 +1142,10 @@ def test_sheet_supports_a_radio_field_type():
 
 # --- #1628: שם כרטיס לא תקין נעצר לפני כל כתיבה ------------------------------
 
-# newline (הזרקת `post-up` לקובץ), רווח, ‏`../`, תו פתיחה פסול ושם ארוך מ-15.
-# ‏`%0A` ו-`%20` מקודדים כי כך הם מגיעים בנתיב ה-URL. ‏`%2F` מפוענח ל-`/`
+# newline (הזרקת `post-up` לקובץ), רווח, `../`, תו פתיחה פסול ושם ארוך מ-15.
+# `%0A` ו-`%20` מקודדים כי כך הם מגיעים בנתיב ה-URL. `%2F` מפוענח ל-`/`
 # עוד לפני הניתוב, ולכן `../` מגיע לשרת כנתיב אחר ונדחה ב-404 — עדיין בלי
-# כתיבה; ‏`..%5C` (לוכסן הפוך) הוא הצורה של `../` שכן מגיעה ל-handler.
+# כתיבה; `..%5C` (לוכסן הפוך) הוא הצורה של `../` שכן מגיעה ל-handler.
 BAD_NAMES = {
     "newline": ("eth1%0Apost-up%20id", 400),
     "trailing-newline": ("eth1%0A", 400),
@@ -1167,7 +1167,7 @@ def _no_write_happened(server):
 
 @pytest.mark.parametrize("kind", sorted(BAD_NAMES))
 def test_a_bad_card_name_is_refused_before_any_write(net_server, kind):
-    """‏#1628: ‏`allow_missing` עוקף את "הכרטיס קיים במכונה", והשם נכנס
+    """#1628: `allow_missing` עוקף את "הכרטיס קיים במכונה", והשם נכנס
     לנתיב הקובץ ול-`iface`. רשימת היתר חייבת לרוץ לפני הכל — ובכל endpoint
     שמקבל `/{name}`."""
     name, expected = BAD_NAMES[kind]
@@ -1186,7 +1186,7 @@ def test_a_bad_card_name_is_refused_before_any_write(net_server, kind):
 
 
 def test_a_good_card_name_still_passes_the_guard(net_server):
-    """הצד השני: השם התקין (כולל VLAN ‏`eth1.700` ו-`:`) לא נחסם."""
+    """הצד השני: השם התקין (כולל VLAN `eth1.700` ו-`:`) לא נחסם."""
     assert put(net_server, address="10.44.9.11").status_code == 200
     assert "iface eth1 inet static" in net_server["fake"]["confs"]["eth1"]
     for i, name in enumerate(("eth1.700", "ens35", "br0:1", "a" * 15)):

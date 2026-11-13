@@ -1,18 +1,18 @@
-"""‏#1842 — זיכרון הקצב לכל (מחשב שיכפול, מספר מגירות).
+"""#1842 — זיכרון הקצב לכל (מחשב שיכפול, מספר מגירות).
 
 ברזל, 19/10, משכפל 2, אימג' של 19.5GB:
 
-    סבב של 4 מגירות יצא ב-432m — ‏`basis=held` מסבב של **2** מגירות
-    (‏ses_5002758a). ‏963k שידורים חוזרים (~7%), ‏623 פקיעות, ‏10:27.
-    הסבב הבא של 4, אחרי שהכלל ירד ×0.75 ל-324m: ‏437k (~3.3%), ‏78 פקיעות, ‏9:18.
+    סבב של 4 מגירות יצא ב-432m — `basis=held` מסבב של **2** מגירות
+    (ses_5002758a). 963k שידורים חוזרים (~7%), 623 פקיעות, 10:27.
+    הסבב הבא של 4, אחרי שהכלל ירד ×0.75 ל-324m: 437k (~3.3%), 78 פקיעות, 9:18.
 
 הכלל הקודם: מגל עם **פחות** מגירות — "לכל היותר הקצב שהוכח" — כלומר הקצב
 של 2 מגירות כמות שהוא על 4. הכלל החדש (הכרעת נדב 20/10): הקצב שהוכח × 0.75
 לכל הכפלה של מספר המגירות — 432m → 324m, הקצב שהברזל הוכיח ל-4 —
-‏`_from_previous`, והנימוק והמקור שם.
+`_from_previous`, והנימוק והמקור שם.
 
 הטסטים ממלאים את `wave_rates` דרך הפונקציות של הייצור (`record_stream`,
-‏`record_wave`) — העזרים של #1758.
+`record_wave`) — העזרים של #1758.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from console_src import console_js
 from server import db
 from server.rounds import drive_rates
 
-from test_rate_by_goodput_1758 import (  # noqa: F401 — ה-fixture ‏conn
+from test_rate_by_goodput_1758 import (  # noqa: F401 — ה-fixture conn
     CLONER2, OTHER, SENT, _drives, _next, _seed, conn)
 
 STATIC = Path(__file__).resolve().parents[1] / "server" / "static"
@@ -38,8 +38,8 @@ def _fast(rate_bits: float, eff: float = 0.92) -> float:
 
 
 def _held(conn, rate: str, drawers: int, mac: str = CLONER2) -> str:
-    """גל שהשיא שלו נעצר (‏`held`): הזרם רץ ב-92% מהקצב, אבדן נמוך, ‏6 פקיעות
-    לכל GB — מעל TIMEOUTS_PER_GB_HELD. כמו ses_5002758a: ‏432m, ‏held."""
+    """גל שהשיא שלו נעצר (`held`): הזרם רץ ב-92% מהקצב, אבדן נמוך, 6 פקיעות
+    לכל GB — מעל TIMEOUTS_PER_GB_HELD. כמו ses_5002758a: 432m, held."""
     bits = drive_rates.parse_bitrate(rate)
     return _seed(conn, rate, loss=0.003, wall=_fast(bits), drawers=drawers, mac=mac,
                  timeouts=round(6 * SENT / 10 ** 9))
@@ -49,8 +49,8 @@ def _held(conn, rate: str, drawers: int, mac: str = CLONER2) -> str:
 
 
 def test_four_drawers_do_not_start_at_the_held_rate_of_two(conn):
-    """רק היסטוריה של 2 מגירות (‏432m, ‏held); הגל הבא של 4 — **לא** 432m.
-    ‏432 × 0.75 = 324m (הכפלה אחת), והבסיס אומר שהוא נגזר ממספר מגירות אחר."""
+    """רק היסטוריה של 2 מגירות (432m, held); הגל הבא של 4 — **לא** 432m.
+    432 × 0.75 = 324m (הכפלה אחת), והבסיס אומר שהוא נגזר ממספר מגירות אחר."""
     _held(conn, "432m", drawers=2)
     two = _next(conn, drawers=2)
     assert two["max_bitrate"] == "432m" and two["basis"] == "held", two
@@ -60,8 +60,8 @@ def test_four_drawers_do_not_start_at_the_held_rate_of_two(conn):
 
 
 def test_two_four_two_each_count_starts_from_its_own_memory(conn):
-    """תוכנית הברזל, ‏2←4←2: אחרי שהגל של 4 נמדד, ה-4 הבא ממשיך מהזיכרון
-    **של 4** (טיפוס מ-324m), וה-2 הבא — מהזיכרון **של 2** (‏432m), בלי
+    """תוכנית הברזל, 2←4←2: אחרי שהגל של 4 נמדד, ה-4 הבא ממשיך מהזיכרון
+    **של 4** (טיפוס מ-324m), וה-2 הבא — מהזיכרון **של 2** (432m), בלי
     שהגל של 4 נוגע בו."""
     _held(conn, "432m", drawers=2)
     _seed(conn, "324m", loss=0.003, wall=_fast(324e6), drawers=4)
@@ -95,7 +95,7 @@ def test_the_room_screen_explains_the_drawers_basis():
 
 def _legacy(conn, session: str, rate: str, drawers: int) -> None:
     """גל מלפני #1758: מונה שולח נקי, בלי `delivered` — אין נקודת goodput,
-    ומקלט שלא דיווח (‏`drops` ‏NULL) — ‏`unmeasured`, נשאר."""
+    ומקלט שלא דיווח (`drops` NULL) — `unmeasured`, נשאר."""
     roster = [{"mac": CLONER2, "serial": f"{session}-{k}", "model": "EVO"}
               for k in range(drawers)]
     conn.execute("INSERT INTO wave_rates (session_id, decision, at, stream)"
@@ -136,7 +136,7 @@ def test_from_more_drawers_fewer_are_not_scaled(conn):
 
 
 def test_a_rate_unsafe_with_four_does_not_wall_two(conn):
-    """‏532m הפיל מקלט עם 4 מגירות. עם 2 מגירות, שהשיא שלהן 432m — הקצב
+    """532m הפיל מקלט עם 4 מגירות. עם 2 מגירות, שהשיא שלהן 432m — הקצב
     הזה אינו קיר: עולים ל-532m."""
     _seed(conn, "532m", loss=0.003, wall=_fast(532e6), drawers=4, dropped=1)
     _seed(conn, "432m", loss=0.003, wall=_fast(432e6), drawers=2)
@@ -145,7 +145,7 @@ def test_a_rate_unsafe_with_four_does_not_wall_two(conn):
 
 
 def test_a_rate_unsafe_with_two_walls_four(conn):
-    """‏532m הפיל מקלט עם 2 מגירות — עם 4 (יותר עומס במקלט) הוא קיר גם כן."""
+    """532m הפיל מקלט עם 2 מגירות — עם 4 (יותר עומס במקלט) הוא קיר גם כן."""
     _seed(conn, "532m", loss=0.003, wall=_fast(532e6), drawers=2, dropped=1)
     _seed(conn, "432m", loss=0.003, wall=_fast(432e6), drawers=4)
     got = _next(conn, drawers=4)
@@ -153,9 +153,9 @@ def test_a_rate_unsafe_with_two_walls_four(conn):
 
 
 def test_a_derived_rate_stays_below_a_rate_unsafe_with_these_drawers(conn):
-    """היסטוריה של 2 מגירות בלבד (‏600m → נגזר 450m ל-4), אבל בזיכרון
+    """היסטוריה של 2 מגירות בלבד (600m → נגזר 450m ל-4), אבל בזיכרון
     הקבוע (`unsafe_rates`) רשום ש-280m הפיל מקלט עם 4 מגירות — הגל של 4
-    יוצא מתחת לו (‏×0.75), לא בקצב הנגזר."""
+    יוצא מתחת לו (×0.75), לא בקצב הנגזר."""
     _held(conn, "600m", drawers=2)
     conn.execute("INSERT INTO unsafe_rates (mac, drawers, rate_bps, session_id, at)"
                  " VALUES (?,?,?,?,?)",
@@ -169,8 +169,8 @@ def test_a_derived_rate_stays_below_a_rate_unsafe_with_these_drawers(conn):
 
 
 def test_with_two_cloners_each_uses_its_own_count_and_the_minimum_rules(conn):
-    """משכפל 2 עם 4 מגירות (היסטוריה רק של 2: ‏432m → ‏324m) ומשכפל אחר עם
-    2 מגירות (היסטוריה של 2: ‏400m, ‏held) — הגל במינימום, 324m, לפי משכפל 2."""
+    """משכפל 2 עם 4 מגירות (היסטוריה רק של 2: 432m → 324m) ומשכפל אחר עם
+    2 מגירות (היסטוריה של 2: 400m, held) — הגל במינימום, 324m, לפי משכפל 2."""
     _held(conn, "432m", drawers=2)
     _held(conn, "400m", drawers=2, mac=OTHER)
     drives = _drives("next", 4, CLONER2) + _drives("next", 2, OTHER)

@@ -35,17 +35,17 @@ from server.core.atomicfile import fsync_dir, fsync_file, write_atomic
 log = logging.getLogger("imagesrv.isos")
 
 #: תיקיית ה-ISO בתוך שורש הספרייה. בלי נקודה בתחילתה: זה לא אזור עבודה
-#: שהסחיפה (`work_areas`) מוחקת, אלא נתונים של אדם. ‏`scan` של האימג'ים
+#: שהסחיפה (`work_areas`) מוחקת, אלא נתונים של אדם. `scan` של האימג'ים
 #: מחפש רק `manifest.json`, ולכן אינו מבלבל ביניהם.
 DIRNAME = "isos"
 FILE = "image.iso"
 META = "iso.json"
-#: ‏`iso_` + שש ספרות הקס -- כמו `img_` באימג'ים: המזהה הוא שם התיקייה,
+#: `iso_` + שש ספרות הקס -- כמו `img_` באימג'ים: המזהה הוא שם התיקייה,
 #: ולכן הוא הגבול בין "מזהה" ל"נתיב" (#110).
 ISO_ID = re.compile(r"iso_[0-9a-f]{6}")
 HASH_CHUNK = 4 * 1024 * 1024
 SECTOR = 2048
-#: ‏Primary Volume Descriptor: סקטור 16, בייט 0 = 1, בייטים 1-5 = "CD001", בייט 6 = 1.
+#: Primary Volume Descriptor: סקטור 16, בייט 0 = 1, בייטים 1-5 = "CD001", בייט 6 = 1.
 PVD_AT = 16 * SECTOR
 HEAD_BYTES = PVD_AT + 7
 NAME_MAX = 200
@@ -74,7 +74,7 @@ class IsoError(ValueError):
 def head_refusal(head: bytes) -> str | None:
     """למה הקובץ שראשו ``head`` אינו ISO, או ``None`` אם יש בו מבנה ISO 9660.
 
-    ‏``head`` חייב להכיל לפחות ``HEAD_BYTES`` בייטים, אלא אם הקובץ קצר מזה."""
+    ``head`` חייב להכיל לפחות ``HEAD_BYTES`` בייטים, אלא אם הקובץ קצר מזה."""
     if len(head) >= HEAD_BYTES and head[PVD_AT:PVD_AT + 7] == b"\x01CD001\x01":
         return None
     looks = ""
@@ -96,9 +96,9 @@ def file_sha256(path: Path) -> str:
 class IsoIntake:
     """קבלת ISO בזרם: כותב לקובץ הזמני, מחשב sha256 ובודק את הראש.
 
-    ‏``feed`` מחזיר את הסירוב ברגע שהראש הוכיח שזה לא ISO -- מאותו רגע
+    ``feed`` מחזיר את הסירוב ברגע שהראש הוכיח שזה לא ISO -- מאותו רגע
     דבר אינו נכתב עוד, והקורא ממשיך לרוקן את הזרם כדי שהדפדפן יקבל תשובה
-    ולא ניתוק. ‏``finish`` סוגר את המקרה של קובץ קצר מהראש."""
+    ולא ניתוק. ``finish`` סוגר את המקרה של קובץ קצר מהראש."""
 
     def __init__(self, handle, guard=None):
         self._handle = handle
@@ -164,7 +164,7 @@ class IsoStore:
             return None
         meta.setdefault("folder", "")
         meta.setdefault("filename", "")
-        # ‏"present" נקבע מהדיסק עכשיו, לא מהרשומה: קובץ שנעלם או השתנה בגודלו אינו "אומת".
+        # "present" נקבע מהדיסק עכשיו, לא מהרשומה: קובץ שנעלם או השתנה בגודלו אינו "אומת".
         path = directory / FILE
         try:
             meta["present"] = path.is_file() and not path.is_symlink() and path.stat().st_size == meta["size"]
@@ -190,7 +190,7 @@ class IsoStore:
 
     def admit(self, temp: Path, *, name: str, folder: str, filename: str, size: int,
                sha256: str, user: str) -> dict:
-        """מכניס את הקובץ שאומת לספרייה. ‏`temp` חייב להיות באותו כונן (rename)."""
+        """מכניס את הקובץ שאומת לספרייה. `temp` חייב להיות באותו כונן (rename)."""
         with self._lock:
             if self.name_taken(name):
                 raise IsoError(f'כבר יש ISO בשם "{name}" -- בחרו שם אחר', 409)
@@ -216,7 +216,7 @@ class IsoStore:
         return {**meta, "present": True}
 
     def delete(self, iso_id: str) -> dict:
-        """מוחק ISO. ‏"נמחק" נקבע בקריאה חוזרת מהדיסק, לא בהיעדר חריגה."""
+        """מוחק ISO. "נמחק" נקבע בקריאה חוזרת מהדיסק, לא בהיעדר חריגה."""
         found = self.get(iso_id)
         if found is None:
             raise IsoError("ה-ISO לא קיים", 404)

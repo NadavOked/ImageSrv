@@ -52,8 +52,8 @@ from server.disks import writefloor   # #2338
 from server.agent import unknown_screen   # #1802
 from server.agent import held# #2031
 
-#: נדב 18/10: ניתוק אוטומטי בחוסר פעילות. השדה נשאר בשניות (‏#1243, ברירת מחדל 600);
-#: ‏0 = כבוי (אין ניתוק — העוגייה עדיין פגה ב-auth.TTL_SECONDS, ו-logout עובד), אחרת
+#: נדב 18/10: ניתוק אוטומטי בחוסר פעילות. השדה נשאר בשניות (#1243, ברירת מחדל 600);
+#: 0 = כבוי (אין ניתוק — העוגייה עדיין פגה ב-auth.TTL_SECONDS, ו-logout עובד), אחרת
 #: דקות שלמות 1–1440. הקונסולה מציגה ושולחת דקות × 60 — בשום מקום בממשק לא שניות.
 IDLE_SETTING = "console_idle_seconds"
 IDLE_MAX_MINUTES = 1440
@@ -78,32 +78,32 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   # נדב 18/10: חיוב MFA למנהלים — כבוי כברירת מחדל.
                   console_mfa.SETTING,
                   "console_idle_seconds", "class_deploy_enabled", "cloner_beep",
-                  # ‏#748: כפתור "עדכן" — כבוי כברירת מחדל (נדב, 16/09).
+                  # #748: כפתור "עדכן" — כבוי כברירת מחדל (נדב, 16/09).
                   "update_enabled",
-                  # ‏#855: שומר הזהות (MAC + חכירת DHCP). חסר = דלוק; "false"
+                  # #855: שומר הזהות (MAC + חכירת DHCP). חסר = דלוק; "false"
                   # מפורש בלבד מכבה, ו-`setting_change` רושם מי.
                   identity.SETTING,
-                  # ‏#447: תקרת הקצב הנלמדת. ‏"false" — התקרה הקבועה בלבד.
+                  # #447: תקרת הקצב הנלמדת. "false" — התקרה הקבועה בלבד.
                   drive_rates.SETTING,
-                  # ‏#2028 (נדב 23/10): למידה אוטומטית — כבוי כברירת מחדל.
+                  # #2028 (נדב 23/10): למידה אוטומטית — כבוי כברירת מחדל.
                   learn_tuning.SETTING,
-                  # ‏#1366: סף CRC מוחלט — מעליו המגירה כתומה (0 = כבוי).
+                  # #1366: סף CRC מוחלט — מעליו המגירה כתומה (0 = כבוי).
                   crcwarn.SETTING,
-                  # ‏#1354: מינימום GB פנויים במחיצת המערכת אחרי שחזור (0–500).
+                  # #1354: מינימום GB פנויים במחיצת המערכת אחרי שחזור (0–500).
                   minfree.SETTING,
-                  # ‏#2338: סף מהירות הכתיבה לפני הזרם, MB/s (10–500; ברירת המחדל 50).
+                  # #2338: סף מהירות הכתיבה לפני הזרם, MB/s (10–500; ברירת המחדל 50).
                   writefloor.SETTING,
-                  # ‏#1802 (נדב 04/11): מחשב UEFI לא רשום עולה מהדיסק אחרי N שניות (0 = כבוי). ‏BIOS — לעולם לא (#345).
+                  # #1802 (נדב 04/11): מחשב UEFI לא רשום עולה מהדיסק אחרי N שניות (0 = כבוי). BIOS — לעולם לא (#345).
                   unknown_screen.SETTING,
-                  # ‏#1473: תקרת קצב להעברות בין אתרים, Mb/s (0 = ללא הגבלה).
+                  # #1473: תקרת קצב להעברות בין אתרים, Mb/s (0 = ללא הגבלה).
                   transfer_cap.SETTING,
-                  # ‏#1864 (נדב 20/10): אימות מלא אחרי הכתיבה; כבוי = מדגם.
+                  # #1864 (נדב 20/10): אימות מלא אחרי הכתיבה; כבוי = מדגם.
                   readbackhash.SETTING,
-                  # ‏#1972 (נדב 22/10): השרת כ-IGMP querier ברשת ההפצה. חסר = דלוק.
+                  # #1972 (נדב 22/10): השרת כ-IGMP querier ברשת ההפצה. חסר = דלוק.
                   igmp_querier.SETTING,
-                  # ‏#2056/#2059 (מוקאפ 05, נדב 24/10): זמני ההמתנה והכיבוי האוטומטי.
+                  # #2056/#2059 (מוקאפ 05, נדב 24/10): זמני ההמתנה והכיבוי האוטומטי.
                   *agent_timing.KEYS,
-                  # ‏#2786 (נדב 09/11): תבנית שמות המחשב בשיכפול — ריפוד וסיומת המרצה.
+                  # #2786 (נדב 09/11): תבנית שמות המחשב בשיכפול — ריפוד וסיומת המרצה.
                   room_names.PAD_SETTING, room_names.INSTRUCTOR_SETTING,
                   auto_reboot.MODE, auto_reboot.TIME, auto_reboot.WEEKDAY}
 
@@ -173,7 +173,7 @@ def _validate_write_settings(body: dict) -> dict[str, str]:
         elif key == unknown_screen.SETTING:
             secs = unknown_screen.parse(value)
             if secs is None:
-                # ‏#1802: הנוסח שנדב אישר (04/11), מילה במילה — אותו נוסח בחלון של הקונסולה.
+                # #1802: הנוסח שנדב אישר (04/11), מילה במילה — אותו נוסח בחלון של הקונסולה.
                 raise HTTPException(400, f"הערך חייב להיות בין 0 ל-{unknown_screen.MAXIMUM} שניות")
             normalized[key] = str(secs)
         elif key == transfer_cap.SETTING:
@@ -228,7 +228,7 @@ def _validate_write_settings(body: dict) -> dict[str, str]:
 #: והוא נדחה ב-400 במקום להיבלע ולהחזיר ``{"ok": True}`` שלא שינה כלום.
 EDIT_MACHINE_FIELDS = {"name", "group_id", "drawer_count", "drawer_slots", "mac",   # mac: #977 §5
                        "nic_speed_mbps"}   # 15/10: מהירות כרטיס ידנית, null = אוטומטי
-#: ‏#1127: שדה טקסט חופשי (שם קבוצה/מכונה) — תקרת אורך, כי הוא נכנס ליומן,
+#: #1127: שדה טקסט חופשי (שם קבוצה/מכונה) — תקרת אורך, כי הוא נכנס ליומן,
 #: לתפריט GRUB ולמסך; בלי תקרה שורה של מגה-בייט היא DoS שקט על הקונסולה.
 TEXT_FIELD_MAX = 100
 
@@ -244,7 +244,7 @@ CLASSROOMS_OFF = "כיתות אינן במהדורה זו (v2) — השרת אי
 
 
 def refuse_if_classrooms_off() -> None:
-    """‏409 בשם כש-`capabilities.classrooms()` כבוי. נקרא **אחרי** ההזדהות
+    """409 בשם כש-`capabilities.classrooms()` כבוי. נקרא **אחרי** ההזדהות
     (ה-Depends של הנתיב) — כך deploy בקונסולה עדיין מקבל את ה-403 שלו."""
     from fastapi import HTTPException  # noqa: PLC0415 — כמו שאר הקובץ
     if not capabilities.classrooms():
@@ -252,8 +252,8 @@ def refuse_if_classrooms_off() -> None:
 
 
 def _csv_cell(value):
-    """‏#1008: תא בייצוא היומן. טקסט שמתחיל ב-``= + - @`` (או טאב/CR) מקבל
-    ``'`` בראשו, כדי שגיליון אלקטרוני לא יריץ אותו כנוסחה — ‏``login_failed``
+    """#1008: תא בייצוא היומן. טקסט שמתחיל ב-``= + - @`` (או טאב/CR) מקבל
+    ``'`` בראשו, כדי שגיליון אלקטרוני לא יריץ אותו כנוסחה — ``login_failed``
     נושא את השם שהוקלד במסך הכניסה, כלומר טקסט של מי שלא נכנס."""
     if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
         return "'" + value
@@ -261,7 +261,7 @@ def _csv_cell(value):
 
 
 def _drawer_count(raw):
-    """#695: מאמת את מספר המגירות שהוגדר למחשב שכפול (1..8). ‏None = לא
+    """#695: מאמת את מספר המגירות שהוגדר למחשב שכפול (1..8). None = לא
     נשלח (משאירים את ברירת המחדל בסכמה)."""
     if raw is None:
         return None
@@ -295,10 +295,10 @@ def _reported_drawer_count(conn, mac: str) -> int | None:
 
 #: כל כתיבה כאן עוברת ב-``with _write_lock, writing(ctx.conn)`` — שני
 #: המנגנונים של `db.py`, מאותה סיבה שבגללה `net_seen` קיבל אותם (#272,
-#: ‏#356, ‏#313): כתיבה שנכשלה בלי ``rollback`` משאירה את החיבור בתוך
+#: #356, #313): כתיבה שנכשלה בלי ``rollback`` משאירה את החיבור בתוך
 #: טרנזאקציה, ומשם **כל** כתיבה על התהליכון הזה נכשלת מיד עד אתחול
 #: השרת — קונסולה שמחזירה שגיאה בכל שמירה, גם אחרי שהעומס חלף.
-#: ‏`journal` נוטל את אותה נעילה בעצמו, והיא ``Lock`` ולא ``RLock``,
+#: `journal` נוטל את אותה נעילה בעצמו, והיא ``Lock`` ולא ``RLock``,
 #: ולכן הרישום ביומן נשאר **מחוץ** לבלוק.
 
 
@@ -311,36 +311,36 @@ def create_console_router(
     deploy_ip: Callable[[], str | None] | None = None,
     clock_status: Callable[[], dict] | None = None,
 ) -> APIRouter:
-    """‏``tls`` (#703, tracer 5): ‏``console_tls.ConsoleTLS`` כשהקונסולה מוגשת
+    """``tls`` (#703, tracer 5): ``console_tls.ConsoleTLS`` כשהקונסולה מוגשת
     ב-HTTPS — העוגייה מקבלת ``Secure`` ו-``/me`` מדווח את טביעת האצבע.
-    ‏``None`` = בלי TLS (loopback/בדיקות): עוגיית ``Secure`` על http הייתה
+    ``None`` = בלי TLS (loopback/בדיקות): עוגיית ``Secure`` על http הייתה
     נזרקת על ידי הדפדפן, ואיש לא היה מצליח להיכנס בפיתוח.
 
-    ‏``kiosk`` (#1073): ‏``True`` כשהראוטר נבנה בשביל ה-allowlist של הקיוסק
+    ``kiosk`` (#1073): ``True`` כשהראוטר נבנה בשביל ה-allowlist של הקיוסק
     (`kiosk.py` — פורט הסוכן, שממנו מחשב הבנייה נכנס). שם הכניסה
     מקבלת גם ``deploy``; בקונסולה (ברירת המחדל) deploy מסורב ב-403 עם
     ``deploy_no_console`` — למשתמש הפצה אין ניהול וובי (הכרעת נדב 18/09).
 
-    ‏``uptime`` / ‏``deploy_ip`` (#968): שני קוראים ל-`/me` — זמן הפעילות
-    של המכונה (‏`health.read_uptime`, מוזרק דרך `health_hooks["uptime"]`)
-    וכתובת השרת כפי שהתחנות רואות אותה (מ-`server_base`; ‏``None`` כשרשת
-    ההפצה טרם הוגדרה — #1088). ‏``None`` לקורא עצמו = לא הוזרק (בדיקות
+    ``uptime`` / ``deploy_ip`` (#968): שני קוראים ל-`/me` — זמן הפעילות
+    של המכונה (`health.read_uptime`, מוזרק דרך `health_hooks["uptime"]`)
+    וכתובת השרת כפי שהתחנות רואות אותה (מ-`server_base`; ``None`` כשרשת
+    ההפצה טרם הוגדרה — #1088). ``None`` לקורא עצמו = לא הוזרק (בדיקות
     ישנות) — השדה מוחזר ``null``, לא ערך מומצא."""
     router = APIRouter(prefix="/api/console")
     current_user, admin_only = auth.dependencies(ctx.conn)
 
     def _sync_known_macs(user_id) -> dict | None:
-        """‏#141: מי שנכנס/יוצא מטבלת המכונות משנה מי מקבל dhcp-boot בכלל —
+        """#141: מי שנכנס/יוצא מטבלת המכונות משנה מי מקבל dhcp-boot בכלל —
         הקובץ נכתב מחדש **מיד**, לא ממתין לעריכת DHCP הבאה בלשונית הרשת.
 
-        מחזיר את שדה `network` של התשובה (#857): ‏`None` כשלא הופעל
-        (אין hooks), ‏`{"applied": True, "error": None}` בהצלחה,
-        ‏`{"applied": False, "error": "<סיבה>"}` בכשל. עד #857 הכשל
+        מחזיר את שדה `network` של התשובה (#857): `None` כשלא הופעל
+        (אין hooks), `{"applied": True, "error": None}` בהצלחה,
+        `{"applied": False, "error": "<סיבה>"}` בכשל. עד #857 הכשל
         נרשם ביומן בלבד והתשובה הייתה 200 נקי — ה-DB עודכן, הרשת לא,
         והמכונה החדשה לא קיבלה GRUB בשקט. ה-DB **אינו** מגולגל אחורה
         (המפעיל ביקש את המכונה) — התשובה פשוט מבחינה.
 
-        ‏`known_macs_hooks` הוא `None` כברירת מחדל בכוונה (בדיוק כמו
+        `known_macs_hooks` הוא `None` כברירת מחדל בכוונה (בדיוק כמו
         `dhcp_hooks` ב-console/dhcp.py, אבל כאן ה-None הוא גם ברירת
         המחדל הבטוחה לבדיקות): הוספה/מחיקה/ייבוא של מכונה קורים כמעט
         בכל בדיקה בחבילה, ובלי hook מוזרק זה היה אומר כתיבה אמיתית
@@ -367,7 +367,7 @@ def create_console_router(
     @router.post("/logout")
     def logout(request: Request, response: Response, user=Depends(current_user)):
         token = request.cookies.get(auth.COOKIE_NAME)
-        # ‏#1633: גם בשרת, לא רק בדפדפן — עותק של העוגייה נדחה מכאן והלאה.
+        # #1633: גם בשרת, לא רק בדפדפן — עותק של העוגייה נדחה מכאן והלאה.
         auth.revoke(ctx.conn, token)
         console_presence.forget(ctx.conn, token)
         from server.console import viewer_sessions
@@ -377,14 +377,14 @@ def create_console_router(
 
     @router.get("/sessions")
     def sessions(request: Request, user=Depends(admin_only)):
-        """‏#1039: מי מחובר לקונסולה — ‏``[{sid, user, role, ip, since, last_seen, current,
-        monitor}]`` (‏#2552 הוסיף sid/role/current/monitor). ‏``last_seen`` מדויק עד דקה
+        """#1039: מי מחובר לקונסולה — ``[{sid, user, role, ip, since, last_seen, current,
+        monitor}]`` (#2552 הוסיף sid/role/current/monitor). ``last_seen`` מדויק עד דקה
         (``console_presence.TOUCH_SECONDS``). הטוקן והגיבוב המלא אינם יוצאים."""
         return console_presence.active(ctx.conn, request.cookies.get(auth.COOKIE_NAME))
 
     @router.delete("/sessions/{sid}")
     def revoke_session(sid: str, request: Request, user=Depends(admin_only)):
-        """‏#2552: ניתוק סשן בודד לפי ה-``sid`` שב-``GET /sessions``. העוגייה נדחית מיד."""
+        """#2552: ניתוק סשן בודד לפי ה-``sid`` שב-``GET /sessions``. העוגייה נדחית מיד."""
         try:
             return console_presence.revoke_one(
                 ctx.conn, sid, user[0], request.cookies.get(auth.COOKIE_NAME))
@@ -396,8 +396,8 @@ def create_console_router(
         # זמן הניתוק מוחזר לכל משתמש מחובר — גם deploy, שאין לו גישה
         # למסך ההגדרות אבל הניתוק חל גם עליו.
         #
-        # ‏capabilities: דגלים נגזרי-שרת שהקונסולה חושפת מהם רכיבים
-        # מותנים. ‏`interbranch_transfer` (#723) — רק ל-admin, רק על
+        # capabilities: דגלים נגזרי-שרת שהקונסולה חושפת מהם רכיבים
+        # מותנים. `interbranch_transfer` (#723) — רק ל-admin, רק על
         # standalone, ורק כשיש משני פעיל אחד לפחות. הדגל הוא הנראות;
         # האכיפה עצמה יושבת בשכבת ה-route (שלבים הבאים ב-#655).
         info = users.flags(ctx.conn, user[0])
@@ -411,47 +411,49 @@ def create_console_router(
             "is_builtin": info["is_builtin"],
             "must_change_password": info["must_change_password"],
             "idle_seconds": int(get_setting(ctx.conn, "console_idle_seconds") or 600),
-            # ‏#915: גרסת השרת (תג git, ‏`update.current_version`) לשורת
-            # הסטטוס — לכל משתמש מחובר, לא רק admin. ‏None = אין תג על
+            # #915: גרסת השרת (תג git, `update.current_version`) לשורת
+            # הסטטוס — לכל משתמש מחובר, לא רק admin. None = אין תג על
             # העץ, והקונסולה לא מציגה מספר שאין לו מקור.
             "version": shown_version,
             "version_verified": version_verified,
-            # ‏#703 (tracer 5): מצב ה-TLS של הקונסולה וטביעת האצבע (SHA-256
+            # #703 (tracer 5): מצב ה-TLS של הקונסולה וטביעת האצבע (SHA-256
             # של התעודה, כמו בדפדפן) לשורת הסטטוס — כדי שהאישור החד-פעמי
-            # של התעודה יהיה השוואה, לא לחיצה. ‏null = בלי TLS (loopback).
+            # של התעודה יהיה השוואה, לא לחיצה. null = בלי TLS (loopback).
             "tls": tls.public_info() if tls is not None else None,
-            # ‏#936: שם השרת הראשי לצומת העליון בעץ — שם המארח (‏ports.server_name:
+            # #936: שם השרת הראשי לצומת העליון בעץ — שם המארח (ports.server_name:
             # שם אחד לתצוגה ולרשת, נדב 17/10). לכל משתמש מחובר.
             "server_name": ports.server_name(ctx.conn),
-            # ‏#1997: שם מארח שאינו שם מחשב חוקי (עברית, ארוך מ-15, נקודות) —
-            # ל"דורש טיפול" בסקירה, עם קישור לשינוי השם. ‏null = חוקי.
+            # #1997: שם מארח שאינו שם מחשב חוקי (עברית, ארוך מ-15, נקודות) —
+            # ל"דורש טיפול" בסקירה, עם קישור לשינוי השם. null = חוקי.
             "server_name_problem": hostname_rule.refusal(ports.server_name(ctx.conn), "שם השרת"),
-            # ‏#968: שורת-המשנה בסקירה — "פעיל 6 ימים 3 שעות" ו-"10.44.12.1".
-            # ‏uptime של המכונה (‏/proc/uptime); ‏null = לא נקרא → "לא נבדק".
-            # ‏deploy_ip = הכתובת שב-GRUB ובקרנל של התחנות (‏server_base);
-            # ‏null = רשת ההפצה לא הוגדרה (#1088) → מוצג בשם, לא 127.0.0.1.
+            # #968: שורת-המשנה בסקירה — "פעיל 6 ימים 3 שעות" ו-"10.44.12.1".
+            # uptime של המכונה (/proc/uptime); null = לא נקרא → "לא נבדק".
+            # deploy_ip = הכתובת שב-GRUB ובקרנל של התחנות (server_base);
+            # null = רשת ההפצה לא הוגדרה (#1088) → מוצג בשם, לא 127.0.0.1.
             "uptime_seconds": uptime() if uptime else None,
             "deploy_ip": deploy_ip() if deploy_ip else None,
-            # ‏#1933: האזור שהקונסולה מציגה בו כל זמן — ההגדרה של #1447, ובלעדיה
-            # ‏Asia/Jerusalem (שאליו ``apply_on_start`` מיישר את המערכת). לא UTC בשקט.
+            # #1933: האזור שהקונסולה מציגה בו כל זמן — ההגדרה של #1447, ובלעדיה
+            # Asia/Jerusalem (שאליו ``apply_on_start`` מיישר את המערכת). לא UTC בשקט.
             "timezone": timezone.zone_name(ctx.conn),
             "capabilities": {
                 "interbranch_transfer":
                     storage_nodes.can_interbranch_transfer(ctx.conn, user[1]),
-                # ‏#740: הוספת משני זמינה על ראשי גם בלי משניים קיימים (זו
+                # #740: הוספת משני זמינה על ראשי גם בלי משניים קיימים (זו
                 # הפעולה שיוצרת את הראשון); פאנל ה-pairing המקומי — על משני.
                 "enroll_secondary":
                     storage_nodes.can_enroll_secondary(ctx.conn, user[1]),
                 "open_local_pairing":
                     storage_nodes.can_open_local_pairing(ctx.conn, user[1]),
-                # ‏#1081: v1 מסתיר כיתות. קבוע בקוד, לא הגדרה למפעיל. v2 מדליק.
+                # #1081: v1 מסתיר כיתות. קבוע בקוד, לא הגדרה למפעיל. v2 מדליק.
                 "classrooms": capabilities.classrooms(),
                 # v1 בלי ארגז הכלים (נדב 19/09). קבוע בקוד; v1.1 מדליק.
                 "tools": capabilities.tools(),
             },
-            # ‏#1093: ערכת הנושא של המשתמש — auto/light/dark. ברירת מחדל
+            # #1093: ערכת הנושא של המשתמש — auto/light/dark. ברירת מחדל
             # auto (לפי מערכת ההפעלה). לא הגדרת שרת: זה של המשתמש.
             "theme": users.get_theme(ctx.conn, user[0]),
+            # #3025: תצוגה בסיסית/מתקדמת — של המשתמש, נשמרת כמו theme.
+            "view": users.get_view(ctx.conn, user[0]),
         }
 
     @router.put("/me/theme")
@@ -461,6 +463,17 @@ def create_console_router(
         theme = body.get("theme") if isinstance(body, dict) else None
         try:
             users.set_theme(ctx.conn, user[0], theme)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+        return {"ok": True}
+
+    @router.put("/me/view")
+    async def set_my_view(request: Request, user=Depends(current_user)):
+        """#3025: המשתמש על עצמו, כמו /me/theme. ערך זר → 422. בלי יומן."""
+        body = await request.json()
+        view = body.get("view") if isinstance(body, dict) else None
+        try:
+            users.set_view(ctx.conn, user[0], view)
         except ValueError as exc:
             raise HTTPException(422, str(exc))
         return {"ok": True}
@@ -476,7 +489,7 @@ def create_console_router(
         from server.rounds import session_view as sv       # noqa: PLC0415 — נמנע ממעגל ייבוא
 
         def with_extras(row):
-            # ‏#1255: מי פתח ומתי — רק כאן (קונסולה מאומתת), לא ב-`view()` המשותף לתחנה/סוכן
+            # #1255: מי פתח ומתי — רק כאן (קונסולה מאומתת), לא ב-`view()` המשותף לתחנה/סוכן
             return {**ctx.store.view(row, ctx.library), **sv.console_extras(ctx.store, row)}
 
         session = ctx.store.active()
@@ -490,7 +503,7 @@ def create_console_router(
         machines = ctx.conn.execute("SELECT COUNT(*) AS n FROM machines").fetchone()["n"]
         try:
             usage = shutil.disk_usage(ctx.library.root)
-            # ‏#1737: ‏reserve_bytes — מה שהשרת לא ייתן לאף כתיבה של אימג'
+            # #1737: reserve_bytes — מה שהשרת לא ייתן לאף כתיבה של אימג'
             # (`disk_reserve`); הקונסולה מתריעה כשהפנוי מתקרב אליו.
             storage = {"total_bytes": usage.total, "free_bytes": usage.free,
                        "reserve_bytes": disk_reserve.reserve()}
@@ -500,7 +513,7 @@ def create_console_router(
             "session": session_view,
             # משיכות היוניקאסט שרצות עכשיו. הן אינן "הסבב" — אבל הן
             # עבודה אמיתית על השרת, ושרת שעובד לא ייראה פנוי (#60).
-            # ‏#1843: לכל משיכה גם `forecast` — הזמן הצפוי לפי המשיכות הקודמות של המכונה.
+            # #1843: לכל משיכה גם `forecast` — הזמן הצפוי לפי המשיכות הקודמות של המכונה.
             "pulls": [{**with_extras(row),
                        "forecast": learn_eta.with_clock(      # #2684: + clock
                            sv.pull_forecast(ctx.store, row, ctx.library), ctx.clock_trust)}
@@ -511,8 +524,8 @@ def create_console_router(
             "images": len(ctx.library.scan()),
             "storage": storage,
             "now": now_iso(),
-            # ‏#1932: זמן הפעילות של המכונה גם כאן — ‏/me אינו עובר בערוץ הבין-שרתי
-            # (הוא של המשתמש בראשי), ו-/overview כן. ‏null = לא נקרא → "לא נבדק".
+            # #1932: זמן הפעילות של המכונה גם כאן — /me אינו עובר בערוץ הבין-שרתי
+            # (הוא של המשתמש בראשי), ו-/overview כן. null = לא נקרא → "לא נבדק".
             "uptime_seconds": uptime() if uptime else None,
         }
 
@@ -610,7 +623,7 @@ def create_console_router(
         if not label:
             raise HTTPException(400, "שם ריק")
         _text_field_ok(label, "שם הקבוצה")
-        # ‏`update_one` מכסה את השורה שלא נמצאה; ‏`writing` מכסה את
+        # `update_one` מכסה את השורה שלא נמצאה; `writing` מכסה את
         # ה-UPDATE שנכשל בכלל, ואת ה-``commit`` שאחריו.
         with _write_lock, writing(ctx.conn):
             if not update_one(ctx.conn,
@@ -627,7 +640,7 @@ def create_console_router(
             # חדר השיכפולים ומחשב הבנייה הם יחידים במערכת — אין להם
             # ניהול קבוצות, ולכן גם אי אפשר למחוק אותם.
             raise HTTPException(400, "קבוצה קבועה — אפשר להסיר ממנה מכונות, לא למחוק אותה")
-        # ‏#1016: בדיקה ומחיקה בטרנזאקציה אחת. כיתה שיש בה מחשבים (או סבבים)
+        # #1016: בדיקה ומחיקה בטרנזאקציה אחת. כיתה שיש בה מחשבים (או סבבים)
         # אינה נמחקת — המפתח הזר היה מחזיר 500 גולמי. סירוב בעברית, בלי שאריות.
         with _write_lock, writing(ctx.conn):
             if ctx.conn.execute("SELECT 1 FROM groups WHERE id = ?", (gid,)).fetchone() is None:
@@ -652,7 +665,7 @@ def create_console_router(
 
     @router.get("/machines/{mac}/firmware")
     def machine_firmware(mac: str, user=Depends(admin_only)):
-        """‏#2080: תמונת הקושחה של מכונה, מה השתנה, החיבורים, והשוואה לדגם."""
+        """#2080: תמונת הקושחה של מכונה, מה השתנה, החיבורים, והשוואה לדגם."""
         canonical = registry.normalize_mac(mac)
         if canonical is None or ctx.conn.execute("SELECT 1 FROM machines WHERE mac = ?", (canonical,)).fetchone() is None:
             raise HTTPException(404, "מכונה לא רשומה")
@@ -660,7 +673,7 @@ def create_console_router(
 
     @router.post("/machines/{mac}/firmware/accept")
     def accept_firmware(mac: str, user=Depends(admin_only)):
-        """‏"זו ההגדרה הנכונה": התמונה הנוכחית נשמרת, ומכאן משווים אליה."""
+        """"זו ההגדרה הנכונה": התמונה הנוכחית נשמרת, ומכאן משווים אליה."""
         canonical = registry.normalize_mac(mac)
         if canonical is None or ctx.conn.execute("SELECT 1 FROM machines WHERE mac = ?", (canonical,)).fetchone() is None:
             raise HTTPException(404, "מכונה לא רשומה")
@@ -670,16 +683,16 @@ def create_console_router(
 
     @router.get("/machines/boot-preview")
     def machines_boot_preview(user=Depends(current_user)):
-        """‏#2550: מה כל מחשב רשום יקבל באתחול הבא — **קריאה בלבד**, בקריאה אחת לכל
+        """#2550: מה כל מחשב רשום יקבל באתחול הבא — **קריאה בלבד**, בקריאה אחת לכל
         החדר. מגיע לאותה `decide()` שמגישה את קובץ ה-GRUB, בלי לספור אתחול, בלי
-        להגן לולאה ובלי לרשום ביומן. ‏`current_user` ולא `admin_only`: אין כאן פעולה
-        ואין סוד (‏deploy מסורב בקונסולה עצמה, #1073 — השער הזה אינו משתנה)."""
+        להגן לולאה ובלי לרשום ביומן. `current_user` ולא `admin_only`: אין כאן פעולה
+        ואין סוד (deploy מסורב בקונסולה עצמה, #1073 — השער הזה אינו משתנה)."""
         return boot_preview.preview_all(ctx.conn, ctx.library, ctx.store)
 
     @router.get("/machines")
     def machines(group: str | None = None, user=Depends(current_user)):
         # #417: המלאי האחרון שהמכונה דיווחה ב-hello, ליד מסך המכונה.
-        # ‏null = מעולם לא דיווחה (או שהדיווח האחרון היה פגום); [] = דיווחה
+        # null = מעולם לא דיווחה (או שהדיווח האחרון היה פגום); [] = דיווחה
         # בפועל אפס כוננים — שני ממצאים שונים, ואסור לקפל (עיקרון 5).
         query = (
             "SELECT m.mac, m.suffix, m.group_id, m.note, m.drawer_count, m.drawer_slots,"
@@ -695,32 +708,32 @@ def create_console_router(
             + " ORDER BY m.group_id, m.suffix"
         )
         rows = ctx.conn.execute(query, (group,) if group else ()).fetchall()
-        # ‏#720: המלאי החומרתי האחרון (schema 2). null = מעולם לא דיווחה.
+        # #720: המלאי החומרתי האחרון (schema 2). null = מעולם לא דיווחה.
         inventories = inventory.latest_all(ctx.conn)
-        # ‏#1049 שלב ב': הדגימה האחרונה של בדיקת המכונה + השערים שנגזרים ממנה.
+        # #1049 שלב ב': הדגימה האחרונה של בדיקת המכונה + השערים שנגזרים ממנה.
         # null = מעולם לא דיווחה; verdicts ריק = לא נמצאה בעיה **במה שנמדד**.
         probes = probe.latest_all(ctx.conn)
-        # ‏#980 §6: "בשימוש" מהקליטה האחרונה שהסתיימה. null = לא נקלט מהמחשב.
+        # #980 §6: "בשימוש" מהקליטה האחרונה שהסתיימה. null = לא נקלט מהמחשב.
         last_captures = _last_captures()
-        # ‏#704: השם לכל חיבור של כונן. ‏{} = אין שמות — כל המסכים מציגים "דיסק N".
+        # #704: השם לכל חיבור של כונן. {} = אין שמות — כל המסכים מציגים "דיסק N".
         names = slot_names.all_by_mac(ctx.conn)
-        # ‏#2001: מיפוי לפי דגם — מכונה ← דגם ← ברירת מחדל.
+        # #2001: מיפוי לפי דגם — מכונה ← דגם ← ברירת מחדל.
         model_maps, models = model_slots.all_maps(ctx.conn), model_slots.models_by_mac(ctx.conn)
-        set_labels = disk_sets.all_labels(ctx.conn)   # ‏#1857: שם הסט והמדבקה לפי סידורי
-        fw_counts = firmware_image.change_counts(ctx.conn)   # ‏#2080
-        # ‏#2028: הצעת הלמידה למחשב חדש — מנהל בלבד. ‏null = לא נקרא או אינו מנהל, ואז אין הצעה.
+        set_labels = disk_sets.all_labels(ctx.conn)   # #1857: שם הסט והמדבקה לפי סידורי
+        fw_counts = firmware_image.change_counts(ctx.conn)   # #2080
+        # #2028: הצעת הלמידה למחשב חדש — מנהל בלבד. null = לא נקרא או אינו מנהל, ואז אין הצעה.
         learning = learn_tuning.machine_states(ctx.conn) if user[1] == "admin" else None
-        # ‏#1858 (מוקאפ 10): מי לא הגיעה אחרי WoL — קריאה אחת לכל החדר. ‏None = הקריאה נכשלה.
+        # #1858 (מוקאפ 10): מי לא הגיעה אחרי WoL — קריאה אחת לכל החדר. None = הקריאה נכשלה.
         woke_waits = never_woke.waiting(ctx.conn)
-        f1_seen = f1_marks.all_marks(ctx.conn)   # ‏#1858 (07/11): "נצפה F1" לפי serial. ‏None = נכשל — אין ראיה שנייה
-        round_smart = disk_events.last_by_serial(ctx.conn)   # ‏#2706: מה שהסבב האחרון קרא, לתצוגה
+        f1_seen = f1_marks.all_marks(ctx.conn)   # #1858 (07/11): "נצפה F1" לפי serial. None = נכשל — אין ראיה שנייה
+        round_smart = disk_events.last_by_serial(ctx.conn)   # #2706: מה שהסבב האחרון קרא, לתצוגה
         result = []
         for r in rows:
             row = dict(r)
             disks_json = row.pop("disks_json")
             row["disks"] = json.loads(disks_json) if disks_json is not None else None
             stored_slots = row.pop("drawer_slots")
-            row["fw_changes"] = fw_counts.get(row["mac"], 0)   # ‏#2080: כמה שינויי קושחה מול ההפניה (0 = אין / לא נקרא)
+            row["fw_changes"] = fw_counts.get(row["mac"], 0)   # #2080: כמה שינויי קושחה מול ההפניה (0 = אין / לא נקרא)
             row["slot_model"] = models.get(row["mac"])
             model_map = model_maps.get(row["slot_model"])
             row["model_slot_map"] = ({"slots": model_map["slots"], "names": model_map["names"]}
@@ -732,16 +745,16 @@ def create_console_router(
             row["drawer_slots_custom"] = stored_slots is not None
             optical_json = row.pop("optical_json")
             row["optical"] = json.loads(optical_json) if optical_json is not None else None
-            # ‏#2846: אין `crc_suspect` — מונה CRC מוחלט הוא היסטוריה, לא מצב של הדיסק (נדב 11/11).
+            # #2846: אין `crc_suspect` — מונה CRC מוחלט הוא היסטוריה, לא מצב של הדיסק (נדב 11/11).
             for d in row["disks"] if isinstance(row["disks"], list) else []:
                 if isinstance(d, dict):
-                    # ‏#1857 (מוקאפ 04): "קוריאים · xx-7" ליד הדיסק; ‏None = בלי סט -- מוצג כמו היום.
+                    # #1857 (מוקאפ 04): "קוריאים · xx-7" ליד הדיסק; None = בלי סט -- מוצג כמו היום.
                     d["set_text"] = disk_sets.text_of(set_labels, d.get("serial"))
                     serial = d.get("serial")
-                    # ‏#2706: הפסק של הסבב האחרון ליד זה של ה-hello -- `smart` עצמו אינו משתנה (השער קורא אותו)
+                    # #2706: הפסק של הסבב האחרון ליד זה של ה-hello -- `smart` עצמו אינו משתנה (השער קורא אותו)
                     d["smart_round"] = round_smart.get(serial) if isinstance(serial, str) else None
                     mark = f1_seen.get(serial.strip()) if f1_seen and isinstance(serial, str) else None
-                    if mark is not None:   # ‏#1858: "נצפה F1" לפי serial -- הקונסולה לא מציעה לסמן שוב
+                    if mark is not None:   # #1858: "נצפה F1" לפי serial -- הקונסולה לא מציעה לסמן שוב
                         d["f1_observed"] = mark
             seen = inventories.get(row["mac"])
             row["inventory"] = seen["inventory"] if seen else None
@@ -750,21 +763,21 @@ def create_console_router(
             row["probe"] = sample["probe"] if sample else None
             row["probe_seen_at"] = sample["sampled_at"] if sample else None
             row["probe_verdicts"] = probe.verdicts(row["probe"])
-            # ‏15/10: מהירות כרטיס ההפצה — ידנית / מדווחת / הונחה 1Gb/s.
+            # 15/10: מהירות כרטיס ההפצה — ידנית / מדווחת / הונחה 1Gb/s.
             row["nic_speed"] = nic_speed.view(ctx.conn, row["mac"], row["probe"], sampled=True)
-            # ‏#2847: מהירות הקישור **שנמדדה** (Mb/s), בלי ידני ובלי הנחה — כדי שקישור איטי לא יוסתר
-            # בהגדרה ידנית. ‏null = לא נמדד / לא חד-משמעי (עיקרון 5: "לא ידוע" אינו "תקין").
+            # #2847: מהירות הקישור **שנמדדה** (Mb/s), בלי ידני ובלי הנחה — כדי שקישור איטי לא יוסתר
+            # בהגדרה ידנית. null = לא נמדד / לא חד-משמעי (עיקרון 5: "לא ידוע" אינו "תקין").
             row["nic_link_mbps"] = nic_speed.reported(row["probe"])[0]
             row["last_capture"] = last_captures.get(row["mac"])
             row["slot_names"] = names.get(row["mac"], {})
-            # ‏#1997: שם שנרשם לפני הכלל ואינו שם מחשב — מוצג כמו שהוא, וכאן
-            # הסיבה, ל"דורש טיפול" בסקירה. ‏null = חוקי. אין מיגרציה שמשנה שם.
+            # #1997: שם שנרשם לפני הכלל ואינו שם מחשב — מוצג כמו שהוא, וכאן
+            # הסיבה, ל"דורש טיפול" בסקירה. null = חוקי. אין מיגרציה שמשנה שם.
             row["name_problem"] = hostname_rule.refusal(row["suffix"], "שם המחשב")
-            # ‏#1367: באמצע שיכפול מקומי עכשיו — "אתחל" שואל לפני (room.local_copy_now)
+            # #1367: באמצע שיכפול מקומי עכשיו — "אתחל" שואל לפני (room.local_copy_now)
             row["local_copy"] = room.local_copy_now(row.pop("local_clone"), row["disks_reported_at"])
-            # ‏#2031: "דלוק — מחכה ללחיצה" (#2024): ‏{at, problems} מדיווח held טרי, או None
+            # #2031: "דלוק — מחכה ללחיצה" (#2024): {at, problems} מדיווח held טרי, או None
             row["held"] = held.view(row.pop("held_at"), row.pop("held_json"))
-            # ‏#1858: "לא הגיעה אחרי WoL" — ו-F1 רק עם דיסק שידוע שעוצר (`server/learn/never_woke.py`)
+            # #1858: "לא הגיעה אחרי WoL" — ו-F1 רק עם דיסק שידוע שעוצר (`server/learn/never_woke.py`)
             row["never_woke"] = never_woke.for_machine(woke_waits, row["mac"], row["disks"], row["drawer_slots"], f1_seen)
             row["learning"] = (None if learning is None else learning.get(row["mac"], {
                 "state": "offer", "waves": 0, "ports": 0, "required": learn_tuning.REQUIRED_WAVES}))
@@ -772,11 +785,11 @@ def create_console_router(
         return result
 
     def _last_captures() -> dict[str, dict]:
-        """‏#980 §6: הקליטה האחרונה שהסתיימה (‏`done` — יש לה מניפסט) לכל MAC,
+        """#980 §6: הקליטה האחרונה שהסתיימה (`done` — יש לה מניפסט) לכל MAC,
         עם ה"בשימוש" של המניפסט שלה. שלושה מצבים שאסור לקפל (עיקרון 5):
-        אין קליטה = אין מפתח; ‏`in_library: false` = האימג' כבר לא בספרייה
-        (‏`used_bytes: null` — לא נקרא, לא 0); ‏`used_bytes: null` עם
-        ‏`in_library: true` = מחיצה שלא נמדדה (‏`used_bytes_total`)."""
+        אין קליטה = אין מפתח; `in_library: false` = האימג' כבר לא בספרייה
+        (`used_bytes: null` — לא נקרא, לא 0); `used_bytes: null` עם
+        `in_library: true` = מחיצה שלא נמדדה (`used_bytes_total`)."""
         latest: dict[str, sqlite3.Row] = {}
         for r in ctx.conn.execute(
                 "SELECT id, mac, image_id, name, updated_at FROM tasks"
@@ -843,7 +856,7 @@ def create_console_router(
         if unknown:
             raise HTTPException(400, "שדות לא מוכרים: " + ", ".join(sorted(unknown)))
         if "mac" in body:
-            # ‏#977 §5: לבד — שם לא תקין אחרי שה-MAC כבר עבר היה משאיר חצי עריכה.
+            # #977 §5: לבד — שם לא תקין אחרי שה-MAC כבר עבר היה משאיר חצי עריכה.
             if len(body) > 1:
                 raise HTTPException(400, "עריכת MAC נשלחת לבד, בלי שדות אחרים")
             try:
@@ -854,7 +867,7 @@ def create_console_router(
                 raise HTTPException(400, str(exc))
             except registry.MacBusy as exc:
                 raise HTTPException(409, str(exc))
-            # ‏#141: הכתובת החדשה מקבלת GRUB והישנה כבר לא — מיד, לא בעריכה הבאה.
+            # #141: הכתובת החדשה מקבלת GRUB והישנה כבר לא — מיד, לא בעריכה הבאה.
             return {"ok": True, "mac": new,
                     "network": _sync_known_macs(user[0]) if changed else None}
         drawer_count = _drawer_count(body.get("drawer_count"))   # #695
@@ -875,7 +888,7 @@ def create_console_router(
         if ("drawer_count" in body and not mapping_sent and current is not None
                 and current["drawer_slots"] is not None):
             raise HTTPException(400, "למכונה יש מיפוי חיבורים מותאם; יש לשלוח גם drawer_slots")
-        # ‏15/10: נבדק **לפני** כל כתיבה — ערך פסול אינו משאיר חצי עריכה.
+        # 15/10: נבדק **לפני** כל כתיבה — ערך פסול אינו משאיר חצי עריכה.
         speed = body.get("nic_speed_mbps")
         if "nic_speed_mbps" in body and speed is not None and (
                 isinstance(speed, bool) or speed not in nic_speed.CHOICES):
@@ -917,8 +930,8 @@ def create_console_router(
 
     @router.put("/machines/{mac}/slot-names")
     async def put_slot_name(mac: str, request: Request, user=Depends(admin_only)):
-        """‏#704: שם לחיבור אחד — ``{"slot": "sata:1", "name": "דיסק 1"}``;
-        ‏``"name": null`` מחזיר לברירת המחדל. תווית בלבד: הבחירה לפי port."""
+        """#704: שם לחיבור אחד — ``{"slot": "sata:1", "name": "דיסק 1"}``;
+        ``"name": null`` מחזיר לברירת המחדל. תווית בלבד: הבחירה לפי port."""
         body = await request.json()
         if not isinstance(body, dict) or set(body) != {"slot", "name"}:
             raise HTTPException(400, 'הגוף חייב להיות {"slot", "name"} בלבד')
@@ -941,8 +954,8 @@ def create_console_router(
 
     @router.put("/machines/{mac}/slot-map")
     async def put_slot_map(mac: str, request: Request, user=Depends(admin_only)):
-        """‏#2001: חלון "מיפוי חיבורים" — שמירה אחת: ``{"scope": "machine"|"model",
-        "slots": [...] | null, "names": {key: name}}``. ‏``slots: null`` = "החזר
+        """#2001: חלון "מיפוי חיבורים" — שמירה אחת: ``{"scope": "machine"|"model",
+        "slots": [...] | null, "names": {key: name}}``. ``slots: null`` = "החזר
         לברירת המחדל" באותו היקף. הכול נבדק לפני כל כתיבה."""
         body = await request.json()
         if (not isinstance(body, dict) or not {"scope", "slots"} <= set(body)
@@ -1007,8 +1020,8 @@ def create_console_router(
 
     @router.get("/machines/{mac}/smart")
     def machine_smart(mac: str, user=Depends(current_user)):
-        """‏#1859: כל מאפייני ה-SMART של דיסקי המכונה, בעברית, מול הסבב הקודם של כל סידורי.
-        ‏`disks: null` = המכונה מעולם לא דיווחה דיסקים (לא "אין")."""
+        """#1859: כל מאפייני ה-SMART של דיסקי המכונה, בעברית, מול הסבב הקודם של כל סידורי.
+        `disks: null` = המכונה מעולם לא דיווחה דיסקים (לא "אין")."""
         canonical = registry.normalize_mac(mac)
         if canonical is None:
             raise HTTPException(400, "MAC לא תקין")
@@ -1025,7 +1038,7 @@ def create_console_router(
 
     @router.get("/disk-failures")
     def read_disk_failures(user=Depends(current_user)):
-        set_labels = disk_sets.all_labels(ctx.conn)   # ‏#1857: איזה דיסק להחליף -- השם מהמדבקה, לא רק ה-serial
+        set_labels = disk_sets.all_labels(ctx.conn)   # #1857: איזה דיסק להחליף -- השם מהמדבקה, לא רק ה-serial
         return [{**f, "set_text": disk_sets.text_of(set_labels, f["serial"])}
                 for f in disk_failures.list_open(ctx.conn)]
 
@@ -1061,7 +1074,7 @@ def create_console_router(
         תפקיד שלישי אסור ששתי הרשימות ייפרדו. חדר השיכפולים עשה את
         אותה הכרעה ב-#152 (``room.ROOM_OPERATOR_ROLES``).
 
-        ‏#581 סגר את ``start``/``close`` מאחורי הבדיקה הזו, אך **פתיחת**
+        #581 סגר את ``start``/``close`` מאחורי הבדיקה הזו, אך **פתיחת**
         הסבב מהקונסולה נשארה ``current_user`` בלבד — #592 סגר גם אותה.
         וכך כל חשבון מחובר — תפקיד שיתווסף מחר בכלל — כבר אינו יכול
         לפתוח או לעצור שידור חי לכיתה שלמה.
@@ -1101,7 +1114,7 @@ def create_console_router(
             if not roster or None in roster:
                 raise HTTPException(400, "בחירת המחשבים ריקה או מכילה MAC פגום")
 
-        # ‏#381, אחרי שה-roster ידוע: אימג' שנקלט ממחשב כיתה מסוים
+        # #381, אחרי שה-roster ידוע: אימג' שנקלט ממחשב כיתה מסוים
         # מסורב לכל יעד אחר, ובהודעה שנוקבת בשני הצדדים (עיקרון 5).
         refusal = restore_refusal(manifest, roster)
         if refusal is not None:
@@ -1109,14 +1122,14 @@ def create_console_router(
                     user[0])
             raise HTTPException(400, refusal)
 
-        # ‏#1500 (המשך #1494): כלל המקום הפנוי (#1354) שאינו ניתן לבדיקה על
+        # #1500 (המשך #1494): כלל המקום הפנוי (#1354) שאינו ניתן לבדיקה על
         # האימג' הזה — הסוכן מסרב לו בכל מחשב, אז סבב שנפתח עליו מעיר את
         # הכיתה ונכשל בכולה. אותה מחרוזת של הסוכן; כלל כבוי (0) אינו חוסם.
         blocked = minfree.unchecked(manifest, minfree.min_free_gb(ctx.conn))
         if blocked is not None:
             raise HTTPException(409, blocked)
 
-        # ‏#59: בחירת ההרחבה — ברירת המחדל האוטומטית, כיבוי, או מחיצה
+        # #59: בחירת ההרחבה — ברירת המחדל האוטומטית, כיבוי, או מחיצה
         # שנבחרה ביד. מאומתת מול המניפסט הזה לפני שהסבב נפתח.
         try:
             expand_choice = validate_expand_choice(
@@ -1170,13 +1183,13 @@ def create_console_router(
         # כולל הנפילה חזרה ל-`image_id` כשהמניפסט נמחק באמצע הסבב.
         if typed != session_label(row, ctx.library):
             raise HTTPException(400, "השם שהוקלד אינו זהה לשם האימג' שהסבב משדר")
-        # ‏#2427: הסגירה עוצרת את udp-sender (TERM, ואז KILL — עד 1.5 ש') — בתהליכון,
+        # #2427: הסגירה עוצרת את udp-sender (TERM, ואז KILL — עד 1.5 ש') — בתהליכון,
         # לא על לולאת האירועים, שקפאה בכל סגירה.
         try:
             await run_in_threadpool(ctx.store.close, session_id, user[0])
         except SessionError as exc:
             raise HTTPException(409, str(exc))
-        # ‏#2427: כמו `close_round` (#439) — "נסגר" רק עם ראיה שהמשדר מת.
+        # #2427: כמו `close_round` (#439) — "נסגר" רק עם ראיה שהמשדר מת.
         if row["kind"] == "multicast" and ctx.sender is not None:
             left = await run_in_threadpool(ctx.sender.stop, session_id)
             if left is not None:
@@ -1224,7 +1237,7 @@ def create_console_router(
     async def change_own_password(request: Request, response: Response,
                                   user=Depends(current_user)):
         body = await request.json()
-        # ‏#2414: הסיסמה הנוכחית היא ניחוש כמו בכניסה — אותו מונה ואותם ספים
+        # #2414: הסיסמה הנוכחית היא ניחוש כמו בכניסה — אותו מונה ואותם ספים
         # (שם משתמש + IP), כמו ב-`/me/mfa/disable`. אחרת session גנוב מנחש בלי הגבלה.
         ip = request.client.host if request.client else "?"
         try:
@@ -1256,8 +1269,8 @@ def create_console_router(
     async def edit_user(username: str, request: Request, user=Depends(admin_only)):
         body = await request.json()
         role = body.get("role") or None
-        # ‏#2414: ‏`users.lookup` מוצא בלי תלות ברישיות, ולכן גם השומרים — אחרת
-        # ‏`PUT /users/NOC` היה מוריד את `noc` המחובר ל-deploy.
+        # #2414: `users.lookup` מוצא בלי תלות ברישיות, ולכן גם השומרים — אחרת
+        # `PUT /users/NOC` היה מוריד את `noc` המחובר ל-deploy.
         is_self = username.strip().lower() == user[0].lower()
         if is_self and role and role != user[1]:
             raise HTTPException(400, "אי אפשר לשנות את התפקיד של עצמך")
@@ -1276,7 +1289,7 @@ def create_console_router(
             if disabled is not None:
                 users.set_disabled(ctx.conn, username, bool(disabled), by=user[0])
         except users.BuiltinProtected as exc:
-            # ‏#1262: לא קלט שגוי אלא מצב שמסרב — כמו שם תפוס.
+            # #1262: לא קלט שגוי אלא מצב שמסרב — כמו שם תפוס.
             raise HTTPException(409, str(exc))
         except ValueError as exc:
             raise HTTPException(400, str(exc))
@@ -1284,7 +1297,7 @@ def create_console_router(
 
     @router.delete("/users/{username}")
     def del_user(username: str, user=Depends(admin_only)):
-        # ‏#2414: בלי תלות ברישיות, כמו ב-edit_user — ‏`DELETE /users/NOC` הוא `noc`.
+        # #2414: בלי תלות ברישיות, כמו ב-edit_user — `DELETE /users/NOC` הוא `noc`.
         if username.strip().lower() == user[0].lower():
             raise HTTPException(400, "אי אפשר למחוק את המשתמש המחובר")
         # השומר על "יישאר מי שינהל" ירד ל-``users.delete`` ב-#521: שם הוא
@@ -1308,7 +1321,7 @@ def create_console_router(
         )
 
     #: חלון הסריקה של סינון מכונה/חיפוש (על הטקסט המתורגם), וגם התקרה של
-    #: ייצוא ה-CSV. ‏`/journal` עצמו מוגבל ל-1,000 שורות לדף.
+    #: ייצוא ה-CSV. `/journal` עצמו מוגבל ל-1,000 שורות לדף.
     journal_scan_cap = 20000
 
     def _journal_rows(response: Response, *, limit: int, max_limit: int,
@@ -1332,7 +1345,7 @@ def create_console_router(
             params.append(date_to)
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         if not (machine or q):
-            # ‏#1008: הסך של כל השורות התואמות — בלי ``before``, שמזיז את
+            # #1008: הסך של כל השורות התואמות — בלי ``before``, שמזיז את
             # הדף ולא את הסך. עם מכונה/חיפוש הסינון הוא על הטקסט המתורגם,
             # והסך אינו ידוע בלי לתרגם את כל היומן — ואז הכותרת **חסרה**
             # ("לא ידוע"), לא 0 ולא אורך הדף (עיקרון 5).
@@ -1340,7 +1353,7 @@ def create_console_router(
                 f"SELECT COUNT(*) AS n FROM journal {where}", params
             ).fetchone()["n"])
         if before is not None:
-            # ‏#1008: דפדוף לפי ``id`` ולא לפי offset — שורה שנכתבת בין שני
+            # #1008: דפדוף לפי ``id`` ולא לפי offset — שורה שנכתבת בין שני
             # דפים אינה מזיזה את הדף הבא ואינה מכפילה בו שורה.
             conditions.append("id < ?")
             params.append(before)
@@ -1367,7 +1380,7 @@ def create_console_router(
         ).fetchall()
         translator = JournalTranslator(ctx.conn, ctx.library)
         machine_q = machine.strip().lower()
-        # ‏#1296: MAC בסינון תואם גם את היעד המבני — שורה שהטקסט שלה נושא את שם
+        # #1296: MAC בסינון תואם גם את היעד המבני — שורה שהטקסט שלה נושא את שם
         # המחשב ולא את ה-MAC נמצאת. שורה בלי יעד (מלפני המיגרציה) — בטקסט, כמו קודם.
         machine_mac = registry.normalize_mac(machine) if machine_q else None
         text_q = q.strip().lower()
@@ -1382,14 +1395,14 @@ def create_console_router(
             ):
                 continue
             result.append({
-                # ‏#1008: סמן הדפדוף — ``before=<id>`` של השורה האחרונה בדף.
+                # #1008: סמן הדפדוף — ``before=<id>`` של השורה האחרונה בדף.
                 "id": r["id"],
                 "ts": r["ts"], "user": r["user"], "event": r["event"],
                 "label": label, "text": text,
-                # ‏#968: החומרה נקבעת בשרת לצד התרגום (journal_he.severity),
+                # #968: החומרה נקבעת בשרת לצד התרגום (journal_he.severity),
                 # לא בהיוריסטיקה על שם ה-event בקונסולה.
                 "severity": severity(r["event"]),
-                # ‏#1296: היעד המבני — ‏null = לא נרשם (שורה ישנה / אירוע בלי יעד).
+                # #1296: היעד המבני — null = לא נרשם (שורה ישנה / אירוע בלי יעד).
                 "machine": r["machine"], "round_id": r["round_id"], "class_id": r["class_id"],
             })
             if len(result) >= limit:
@@ -1426,9 +1439,9 @@ def create_console_router(
         before: int | None = None,
         user=Depends(admin_only),
     ):
-        """‏#1008: אותם פרמטרים ואותן שורות כמו ``/journal``, אחרי אותה
+        """#1008: אותם פרמטרים ואותן שורות כמו ``/journal``, אחרי אותה
         הרשאה (admin). ברירת המחדל והתקרה של ``limit`` הן חלון הסריקה ולא
-        1,000 — ייצוא שנחתך בשקט בדף הראשון אינו ייצוא. ‏``X-Journal-Total``
+        1,000 — ייצוא שנחתך בשקט בדף הראשון אינו ייצוא. ``X-Journal-Total``
         ו-``X-Journal-Search-Truncated`` כמו במסך."""
         meta = Response()
         rows = _journal_rows(
@@ -1451,30 +1464,30 @@ def create_console_router(
     @router.get("/settings")
     def read_settings(user=Depends(admin_only)):
         values = {key: get_setting(ctx.conn, key) for key in sorted(WRITE_SETTINGS)}
-        # ‏#1300: אותו שם כמו ‏/me — לקריאה בלבד; משנים אותו ב-POST /hostname (נדב 17/10).
+        # #1300: אותו שם כמו /me — לקריאה בלבד; משנים אותו ב-POST /hostname (נדב 17/10).
         values["server_name"] = ports.server_name(ctx.conn)
-        # ‏#1366: הערך שבתוקף — ברירת המחדל כשלא נקבע, לא "לא נקבע".
+        # #1366: הערך שבתוקף — ברירת המחדל כשלא נקבע, לא "לא נקבע".
         values[crcwarn.SETTING] = str(crcwarn.threshold(ctx.conn))
-        # ‏#1354: הערך שבתוקף — ברירת המחדל כשלא נקבע, לא "לא נקבע".
+        # #1354: הערך שבתוקף — ברירת המחדל כשלא נקבע, לא "לא נקבע".
         values[minfree.SETTING] = str(minfree.min_free_gb(ctx.conn))
-        # ‏#2338: הערך שבתוקף — "50" כשלא נקבע או כשהשמור פגום.
+        # #2338: הערך שבתוקף — "50" כשלא נקבע או כשהשמור פגום.
         values[writefloor.SETTING] = str(writefloor.mbps(ctx.conn))
-        # ‏#1802: הערך שבתוקף — "0" (כבוי) כשלא נקבע או כשהשמור פגום.
+        # #1802: הערך שבתוקף — "0" (כבוי) כשלא נקבע או כשהשמור פגום.
         values[unknown_screen.SETTING] = str(unknown_screen.autoboot_seconds(ctx.conn))
-        # ‏#1473: הערך שבתוקף — "0" (ללא הגבלה) כשלא נקבע או כשהשמור פגום.
+        # #1473: הערך שבתוקף — "0" (ללא הגבלה) כשלא נקבע או כשהשמור פגום.
         values[transfer_cap.SETTING] = str(transfer_cap.cap_mbps(ctx.conn))
-        # ‏#1864: הערך שבתוקף — "false" (מדגם) כשלא נקבע.
+        # #1864: הערך שבתוקף — "false" (מדגם) כשלא נקבע.
         values[readbackhash.SETTING] = "true" if readbackhash.mode(ctx.conn) == "full" else "false"
-        # ‏#1956: יעד גיבוי המסד — לקריאה בלבד כאן; בוחרים ב-POST /backup-target, שכותב
-        # ומקריא קובץ בדיקה. ‏`backup_dest` אינו ב-WRITE_SETTINGS — אין דרך לעקוף את הבדיקה.
+        # #1956: יעד גיבוי המסד — לקריאה בלבד כאן; בוחרים ב-POST /backup-target, שכותב
+        # ומקריא קובץ בדיקה. `backup_dest` אינו ב-WRITE_SETTINGS — אין דרך לעקוף את הבדיקה.
         values[backup_target.SETTING] = backup_target.describe(ctx.conn)
         # הערכים שבתוקף, והתקרה לפי הכונן — גם כאן דרך POST נפרד (`/backup-policy`): התקרה תלויה ביעד.
         values["backup_policy"] = backup_target.policy(ctx.conn, getattr(ctx, "data_dir", None))
-        # ‏#2056/#2059: הערך שבתוקף (ברירת המחדל כשלא נקבע) + כמה מכונות מחוברות החזירו אותו.
+        # #2056/#2059: הערך שבתוקף (ברירת המחדל כשלא נקבע) + כמה מכונות מחוברות החזירו אותו.
         for key in agent_timing.KEYS:
             values[key] = str(agent_timing.seconds(ctx.conn, key))
         values["agent_timing_applied"] = agent_timing.applied_counts(ctx.conn)
-        # ‏#2786: הערכים שבתוקף — ברירת המחדל (2, ‏INS) כשלא נקבע או כשהשמור פגום.
+        # #2786: הערכים שבתוקף — ברירת המחדל (2, INS) כשלא נקבע או כשהשמור פגום.
         values[room_names.PAD_SETTING] = str(room_names.pad(ctx.conn))
         values[room_names.INSTRUCTOR_SETTING] = room_names.instructor(ctx.conn)
         mode, at, weekday = auto_reboot.settings(ctx.conn)
@@ -1493,17 +1506,17 @@ def create_console_router(
         unknown = next((key for key in body if key not in WRITE_SETTINGS), None)
         if unknown is not None:
             raise HTTPException(400, f"הגדרה לא מוכרת: {unknown}")
-        # ‏#1794: validate the complete request before writing any key. The
+        # #1794: validate the complete request before writing any key. The
         # validator is deliberately exhaustive over WRITE_SETTINGS.
         normalized = _validate_write_settings(body)
         learning_was_on = learn_tuning.enabled(ctx.conn)
         set_settings(ctx.conn, normalized)
-        learn_tuning.settings_written(ctx.conn, normalized, learning_was_on, user[0])   # ‏#2028
+        learn_tuning.settings_written(ctx.conn, normalized, learning_was_on, user[0])   # #2028
         for key, value in normalized.items():
             journal(ctx.conn, "setting_change", f"{key}={value}", user[0])
         return {"ok": True}
 
     console_mfa.register(router, ctx, current_user, admin_only, tls, clock_status)
-    console_disk_sets.register(router, ctx, admin_only)   # ‏#1857
-    console_learning.register(router, ctx, admin_only)   # ‏#2028
+    console_disk_sets.register(router, ctx, admin_only)   # #1857
+    console_learning.register(router, ctx, admin_only)   # #2028
     return router

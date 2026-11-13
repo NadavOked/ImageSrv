@@ -1,4 +1,4 @@
-"""‏#1457: קליטת push במשני — חילוץ ו-sha256 **תוך כדי** הזרם.
+"""#1457: קליטת push במשני — חילוץ ו-sha256 **תוך כדי** הזרם.
 
 לפני #1457 המשני כתב את כל הגוף ל-``tmp*.transfer``, אחר כך ``extractall``
 העתיק אותו לאזור הביניים, ואז ``_sha256`` קרא כל מחיצה שוב — כ-3× קלט/פלט
@@ -111,7 +111,7 @@ def test_free_space_precheck_needs_the_length_once(secondary, monkeypatch):
     """עם חילוץ ישיר אין עותק שני על הדיסק: ``length + margin`` מספיק בדיוק,
     ובית אחד פחות — 507 (לא "ננסה")."""
     length = 70 * 1024 ** 3
-    # ‏#1737: ועוד הרזרבה למערכת — האימג' לא נכנס אם ישאיר פחות ממנה.
+    # #1737: ועוד הרזרבה למערכת — האימג' לא נכנס אם ישאיר פחות ממנה.
     need = length + interserver_api.FREE_SPACE_MARGIN + disk_reserve.SYSTEM_RESERVE_BYTES
     ctx = secondary[0]
 
@@ -190,7 +190,7 @@ def test_bad_archive_is_refused_by_name_drained_and_leaves_nothing(secondary, tm
         "two_roots": [(f"{IMAGE}/manifest.json", manifest), ("other/x", b"x")] + parts,
         "bad_sha": [(f"{IMAGE}/manifest.json", manifest)]
                    + [(n, b"Y" + PARTITION_BYTES[1:]) for n, _ in parts],
-        # ‏isfile() מקבל את שניהם; sparse נפרש לבייטים רבים מאלה שנשלחו.
+        # isfile() מקבל את שניהם; sparse נפרש לבייטים רבים מאלה שנשלחו.
         "sparse": [(f"{IMAGE}/manifest.json", manifest)]
                   + [(n, (tarfile.GNUTYPE_SPARSE, d)) for n, d in parts],
         "contiguous": [(f"{IMAGE}/manifest.json", manifest)]
@@ -257,7 +257,7 @@ def test_bytes_written_are_capped_at_the_declared_length(tmp_path):
 
 
 def test_sparse_member_is_refused_by_the_browser_upload_path_too(tmp_path):
-    """‏``_safe_name`` משותף — גם ``import_tar`` (העלאה מהדפדפן) מסרב לו."""
+    """``_safe_name`` משותף — גם ``import_tar`` (העלאה מהדפדפן) מסרב לו."""
     archive_path = tmp_path / "s.tar"
     archive_path.write_bytes(_tar([(f"{IMAGE}/manifest.json", _manifest_bytes(tmp_path))]
                                   + [(f"{IMAGE}/{n}", (tarfile.GNUTYPE_SPARSE, PARTITION_BYTES))

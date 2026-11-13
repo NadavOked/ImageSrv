@@ -1,7 +1,7 @@
 """כתובת השרת בתפריט נגזרת מהחיבור עצמו (issue #39).
 
 תחנה מחוץ לווילן ההפצה (תרחיש 3 באפיון, בדיקות 3.4–3.5) מושכת את התפריט
-דרך ‎$net_default_server — הכתובת שבאמת ענתה לה. עד #39 התפריט שהיא קיבלה
+דרך $net_default_server — הכתובת שבאמת ענתה לה. עד #39 התפריט שהיא קיבלה
 הפנה את linux/initrd ואת imagesrv.server לכתובת ההפצה הקבועה, שלא נגישה
 מהרשת שלה: משיכת הקרנל נכשלה והמסלול נפל ל-chain_local.
 
@@ -34,7 +34,7 @@ _ABSENT = _Absent()
 
 
 def fetch_menu(config: GrubConfig = CONFIG, server=("10.44.12.10", 8080)) -> str:
-    """מריץ בקשת ‎/boot/menu אחת מול האפליקציה הגולמית ומחזיר את הגוף."""
+    """מריץ בקשת /boot/menu אחת מול האפליקציה הגולמית ומחזיר את הגוף."""
     app = create_boot_asgi(resolve=lambda mac, ip: dict(ANSWER), config=config)
 
     scope = {

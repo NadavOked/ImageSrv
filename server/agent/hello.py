@@ -40,7 +40,7 @@ from server.core.tasks import active_task
 log = logging.getLogger("imagesrv.hello")
 _BOOT_SKIP_LOGGED: set[str] = set()
 
-#: ‏#839: סוד המוניטור — 16 בייטים אקראיים שהסוכן הגריל באתחול, כ-32
+#: #839: סוד המוניטור — 16 בייטים אקראיים שהסוכן הגריל באתחול, כ-32
 #: ספרות hex קטנות. אורך קבוע כי תשובת ה-VNC Authentication היא 16 בייטים
 #: בדיוק; קנוני (lowercase) כדי שהשוואה בשרת תהיה השוואת מחרוזות פשוטה.
 MONITOR_SECRET_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -51,7 +51,7 @@ def well_formed_monitor_secret(value: object) -> bool:
 
 
 def well_formed_monitor_auth(value: object) -> bool:
-    """‏#1077: הערך היחיד שמתקבל הוא ``hmac``. כל דבר אחר — כולל חסר —
+    """#1077: הערך היחיד שמתקבל הוא ``hmac``. כל דבר אחר — כולל חסר —
     הוא סוכן ישן, והפרוקסי יסרב."""
     return value == "hmac"
 
@@ -59,20 +59,20 @@ def well_formed_monitor_auth(value: object) -> bool:
 def off_deploy_vlan(scope: dict | None, server_base: str | None) -> bool:
     """האם הבקשה התקבלה על כתובת מקומית שאינה כתובת וילן ההפצה (issue #42).
 
-    המקור הוא ‎scope["server"] — ה-sockname של החיבור, שאותו uvicorn ממלא
+    המקור הוא scope["server"] — ה-sockname של החיבור, שאותו uvicorn ממלא
     (אותו מקור כמו ב-#39). מכוון: *לא* כותרת Host, שהיא קלט של הלקוח
     ולכן תאפשר לתחנה להכריז על עצמה כ"בתוך הווילן".
 
     לעולם לא זורקת, ובכל ספק עונה False — כלומר "כמו היום". השוואה
-    נעשית רק בין שתי כתובות IP: scope חסר, שם מארח (‏TestClient ממלא
-    ("testserver", 80)), או ‎server_base בלי כתובת מספרית — כולם ספק.
+    נעשית רק בין שתי כתובות IP: scope חסר, שם מארח (TestClient ממלא
+    ("testserver", 80)), או server_base בלי כתובת מספרית — כולם ספק.
     ערך ה-server חייב להיות זוג, כמו ב-#39; הפורט עצמו לא נשקל, שכן
     אותה מכונה על אותה כתובת היא אותו וילן.
 
-    ‏#498: ‏``server_base`` עם שם מארח היה ספק **קבוע** — כל בקשה, תמיד
+    #498: ``server_base`` עם שם מארח היה ספק **קבוע** — כל בקשה, תמיד
     "בפנים", וחובת הכניסה מחוץ לווילן (#42) מתה בשקט. לכן ``server.main``
-    מסרב לעלות עם ‎--server-url שאינו כתובת מספרית; בשרת רץ ה-``False``
-    של ספק נשאר רק למקרים החד-פעמיים (scope חסר, ‏TestClient).
+    מסרב לעלות עם --server-url שאינו כתובת מספרית; בשרת רץ ה-``False``
+    של ספק נשאר רק למקרים החד-פעמיים (scope חסר, TestClient).
     """
     try:
         host, _port = scope.get("server")
@@ -83,11 +83,11 @@ def off_deploy_vlan(scope: dict | None, server_base: str | None) -> bool:
 
 
 def on_deploy_vlan(scope: dict | None, server_base: str | None) -> bool:
-    """‏#1802: הבקשה התקבלה **על כתובת ההפצה** — המראה של `off_deploy_vlan`,
+    """#1802: הבקשה התקבלה **על כתובת ההפצה** — המראה של `off_deploy_vlan`,
     עם הספק לכיוון ההפוך. שם ספק נספר "בפנים" (שומר שאינו סופר אינו
     שומר); כאן "בפנים" פותח את שרשרת האתחול למכונה לא רשומה, ולכן רק
-    ראיה חיובית — שתי כתובות IP שוות — עונה True (עיקרון 1). ‏TestClient,
-    ‏scope חסר ושרת שרשת ההפצה שלו לא הוגדרה (‏loopback) — כולם False.
+    ראיה חיובית — שתי כתובות IP שוות — עונה True (עיקרון 1). TestClient,
+    scope חסר ושרת שרשת ההפצה שלו לא הוגדרה (loopback) — כולם False.
     """
     try:
         host, _port = scope.get("server")
@@ -98,10 +98,10 @@ def on_deploy_vlan(scope: dict | None, server_base: str | None) -> bool:
 
 
 def serves_images(scope: dict | None, server_base: str | None) -> bool:
-    """‏#2666 (הבהרת נדב 07/11): הבקשה התקבלה על כרטיס **שהשרת מפיץ בו אימג'ים**.
+    """#2666 (הבהרת נדב 07/11): הבקשה התקבלה על כרטיס **שהשרת מפיץ בו אימג'ים**.
 
-    זה התנאי של שני המסכים במסלול התפריט — "המחשב הזה לא רשום" (‏#1802) ומסך
-    הכישלון על תשובה לא מובנת (‏#2666) — ולא שם קבוע של וילן. היום הכרטיס היחיד
+    זה התנאי של שני המסכים במסלול התפריט — "המחשב הזה לא רשום" (#1802) ומסך
+    הכישלון על תשובה לא מובנת (#2666) — ולא שם קבוע של וילן. היום הכרטיס היחיד
     כזה הוא כרטיס ההפצה (`on_deploy_vlan`, ראיה חיובית בלבד); כרטיס כיתות שמפיץ
     (v2) נכנס **כאן**, ושני המסכים מקבלים אותו יחד. רשת שהשרת אינו מפיץ בה
     (למשל שרתים) — בלי מסך ובלי GRUB של סוכן: המחשב עולה מהדיסק.
@@ -109,15 +109,15 @@ def serves_images(scope: dict | None, server_base: str | None) -> bool:
     return on_deploy_vlan(scope, server_base)
 
 
-#: ‏#976: הכותרת שבה הבדיקה העצמית של השרת (‏`health.default_hooks`) מסמנת
+#: #976: הכותרת שבה הבדיקה העצמית של השרת (`health.default_hooks`) מסמנת
 #: את בקשות `/boot/*` של עצמה. שם הכותרת כפי ש-ASGI מוסר אותו: bytes,
-#: אותיות קטנות. ‏GRUB אינו שולח כותרות מותאמות, וגם אם ישלח — ראה
+#: אותיות קטנות. GRUB אינו שולח כותרות מותאמות, וגם אם ישלח — ראה
 #: `self_probe`: מבחוץ הכותרת אינה שווה דבר.
 PROBE_HEADER = b"x-imagesrv-probe"
 
 
-#: ‏#1127: תקרת גודל ועומק לשדות ה-hello שנשמרים כ-JSON (מלאי, probe).
-#: ‏64KB/שדה ועומק 8 — הסוכן שלנו שולח קילובייטים בודדים ועומק 3.
+#: #1127: תקרת גודל ועומק לשדות ה-hello שנשמרים כ-JSON (מלאי, probe).
+#: 64KB/שדה ועומק 8 — הסוכן שלנו שולח קילובייטים בודדים ועומק 3.
 HELLO_FIELD_MAX_BYTES = 64 * 1024
 HELLO_FIELD_MAX_DEPTH = 8
 HELLO_CAPPED_FIELDS = ("inventory", "probe", "netprobe", "optical")
@@ -145,11 +145,11 @@ def hello_payload_oversized(body: dict) -> str | None:
 
 
 def self_probe(scope: dict | None) -> bool:
-    """האם בקשת `/boot/*` הזו היא הבדיקה העצמית של השרת (‏#976).
+    """האם בקשת `/boot/*` הזו היא הבדיקה העצמית של השרת (#976).
 
     שני תנאים, ושניהם חובה: הכותרת `X-ImageSrv-Probe: 1` נמצאת, **והפונה
-    הוא השרת עצמו** — ‏`scope["client"]` הוא loopback, או שווה לכתובת
-    המקומית שעליה החיבור התקבל (‏`scope["server"]`). השני נחוץ כי
+    הוא השרת עצמו** — `scope["client"]` הוא loopback, או שווה לכתובת
+    המקומית שעליה החיבור התקבל (`scope["server"]`). השני נחוץ כי
     בייצור הבדיקה פונה ל-`http://<כתובת ההפצה>:8080`, וחיבור מקומי
     לכתובת כזו יוצא **ממנה** ולא מ-`127.0.0.1`. מכונה ברשת אינה יכולה
     להשלים לחיצת יד TCP מכתובת השרת, ולכן הכותרת אינה דלת אחורית:
@@ -162,7 +162,7 @@ def self_probe(scope: dict | None) -> bool:
     try:
         if dict(scope.get("headers") or ()).get(PROBE_HEADER) != b"1":
             return False
-        client_addr = scope.get("client")           # ‏#1127: בלי לקוח אין ראיה
+        client_addr = scope.get("client")           # #1127: בלי לקוח אין ראיה
         if not client_addr:
             return False
         client = ipaddress.ip_address(client_addr[0])
@@ -207,7 +207,7 @@ def login_required(conn: sqlite3.Connection, has_open_session: bool,
                    off_vlan: bool = False) -> bool:
     """הכלל של אשף השחזור, במקום אחד.
 
-    ‏hello מכריז עליו ב-`ui.require_login`, והשרת אוכף אותו שוב כשמשיכת
+    hello מכריז עליו ב-`ui.require_login`, והשרת אוכף אותו שוב כשמשיכת
     יוניקאסט נפתחת — הצהרה שהסוכן מציית לה אינה אכיפה.
     """
     if off_vlan:
@@ -230,7 +230,7 @@ def _ui(conn: sqlite3.Connection, has_open_session: bool,
 
 
 def class_deploy_enabled(conn: sqlite3.Connection) -> bool:
-    """‏#880: המתג של v1 "מהדורת שיכפול". ‏hello למחשב הבנייה מכריז
+    """#880: המתג של v1 "מהדורת שיכפול". hello למחשב הבנייה מכריז
     עליו (הכרטיס "הפצה לכיתות" מוצג רק כשהוא דלוק), ו-`station.py` אוכף
     אותו שוב בפתיחת הסבב — תפריט שמציע מה שהשרת יסרב לו הוא תפריט
     שמשקר. כל ערך שאינו "true" — כולל הגדרה חסרה — הוא כבוי."""
@@ -239,7 +239,7 @@ def class_deploy_enabled(conn: sqlite3.Connection) -> bool:
 
 def journal_unknown(conn: sqlite3.Connection, mac: str, client_ip: str | None,
                     suffix: str = "") -> None:
-    """שורת `unknown_mac`. ‏`api.py` מרסן אותה לפי MAC ב-hello (‏#2487)."""
+    """שורת `unknown_mac`. `api.py` מרסן אותה לפי MAC ב-hello (#2487)."""
     journal(conn, "unknown_mac", f"{mac} from {client_ip or '?'}{suffix}", machine=mac)
 
 
@@ -271,7 +271,7 @@ def _record_seen(conn, mac, ip, disks, monitor_secret, monitor_auth, prompt,
                  disk_probe, firmware, secure_boot, agent_version, local_clone,
                  optical, optical_reported, hw_inventory, hw_probe, history=True,
                  monitor_on=None) -> None:
-    # ‏#1858 (07/11): לפני `net_seen` -- הוא מרענן את `last_seen`, ומכונה שהקונסולה הציגה "לא הגיע · ייתכן F1"
+    # #1858 (07/11): לפני `net_seen` -- הוא מרענן את `last_seen`, ומכונה שהקונסולה הציגה "לא הגיע · ייתכן F1"
     # חדלה להיות כזו. לעולם אינו זורק.
     never_woke.arrived(conn, mac)
     net_seen(conn, mac, ip,
@@ -282,14 +282,14 @@ def _record_seen(conn, mac, ip, disks, monitor_secret, monitor_auth, prompt,
              local_clone=local_clone,
              optical_json=json.dumps(optical) if optical is not None else None,
              update_optical=optical_reported)
-    note_monitor_on(conn, mac, monitor_on)   # ‏#2844
-    # ‏#720: המלאי החומרתי (schema 2) נשמר מגורסת — שורה חדשה רק כשהשתנה.
-    # ‏None = הסוכן לא שלח (schema 1) או שלח פגום: הגרסה הקודמת נשארת.
-    # ‏#2487: ‏`history=False` (מכונה לא רשומה) — שורה אחת ל-MAC, נדרסת במקום:
-    # ‏hello לא מאומת שמשנה את התוכן בכל פעם אינו מגדל את הטבלה.
+    note_monitor_on(conn, mac, monitor_on)   # #2844
+    # #720: המלאי החומרתי (schema 2) נשמר מגורסת — שורה חדשה רק כשהשתנה.
+    # None = הסוכן לא שלח (schema 1) או שלח פגום: הגרסה הקודמת נשארת.
+    # #2487: `history=False` (מכונה לא רשומה) — שורה אחת ל-MAC, נדרסת במקום:
+    # hello לא מאומת שמשנה את התוכן בכל פעם אינו מגדל את הטבלה.
     if hw_inventory is not None:
         inventory.record(conn, mac, hw_inventory, history=history)
-    # ‏#1049 שלב ב' + #1048: בדיקת המכונה (כולל netprobe בתוך אותו JSON)
+    # #1049 שלב ב' + #1048: בדיקת המכונה (כולל netprobe בתוך אותו JSON)
     # — None = לא נשלח/פגום, הגרסה הקודמת נשארת; רק תוכן יציב שהשתנה
     # פותח גרסה.
     if hw_probe is not None:
@@ -326,19 +326,19 @@ def build_answer(
     direct_finished: tuple[bool, list[str] | None] = (False, None),
     read_only: bool = False,
 ) -> dict:
-    # ‏#2550: ‏`read_only` — התשובה שהתפריט היה נותן, **בלי שום תופעת לוואי**: לא
-    # `net_seen`, לא יומן, לא הצטרפות, ולא קידום סבב (`room.pulse`, ‏`maybe_start`).
+    # #2550: `read_only` — התשובה שהתפריט היה נותן, **בלי שום תופעת לוואי**: לא
+    # `net_seen`, לא יומן, לא הצטרפות, ולא קידום סבב (`room.pulse`, `maybe_start`).
     # שימושו היחיד הוא התצוגה בקונסולה של מה שמחשב יקבל באתחול
     # (`server/agent/boot_preview.py`); היא חייבת להגיע לאותה החלטה שהאתחול האמיתי
     # מגיע אליה, ולכן היא עוברת בדיוק בקוד הזה ולא בעותק שלו.
     if read_only:
         record_seen = record_journal = joining = False
     # כל מגע של המכונה נרשם ברשימת ההתקנים, גם של מכונה שאינה רשומה
-    # בטבלה — ככה מתגלה MAC לא מוכר, וזה חלק מעיקרון 1. ‏hello הוא POST
+    # בטבלה — ככה מתגלה MAC לא מוכר, וזה חלק מעיקרון 1. hello הוא POST
     # שבו המכונה מדווחת על עצמה, ולכן הוא תמיד רושם (ברירת המחדל).
     #
-    # ‏#585: ‏`record_seen=False` בא ממסלול **התפריט** מחוץ לווילן ההפצה.
-    # ‏`GET /boot/menu?mac=<MAC>` הוא בקשה בלי גוף ובלי עוגייה שכל פונה
+    # #585: `record_seen=False` בא ממסלול **התפריט** מחוץ לווילן ההפצה.
+    # `GET /boot/menu?mac=<MAC>` הוא בקשה בלי גוף ובלי עוגייה שכל פונה
     # שולח; מחוץ לווילן ההפצה אין ראיה שהפונה הוא המכונה, ולכן אסור שהוא
     # יקבע את ה-`ip`/`last_seen` שהשרת "מכיר" עבור אותו MAC — אחרת מכונה
     # כבויה נראית חיה, וכל בינוי זהות עתידי שיסתמך על הכתובת הזו מעגלי.
@@ -346,16 +346,16 @@ def build_answer(
     machine = registry.lookup(conn, mac, all_macs)
     if record_seen:
         try:
-            # ‏#2432: הכתובת שנרשמת היא ה-peer של החיבור — זו שעברה את שער הזהות
+            # #2432: הכתובת שנרשמת היא ה-peer של החיבור — זו שעברה את שער הזהות
             # מול החכירה — ולא `ip` מגוף ה-hello. ממנה הפרוקסי של המוניטור מתחבר
-            # (‏`monitor.py`), ושדה בגוף היה מפנה את חיבור המנהל לכל כתובת.
+            # (`monitor.py`), ושדה בגוף היה מפנה את חיבור המנהל לכל כתובת.
             _record_seen(conn, mac, client_ip, disks, monitor_secret,
                          monitor_auth, prompt, disk_probe, firmware, secure_boot,
                          agent_version, local_clone, optical, optical_reported,
                          hw_inventory, hw_probe, history=machine is not None,
                          monitor_on=monitor_on)
         except sqlite3.OperationalError as exc:
-            # ‏#1892: מחיצה מלאה אינה מפילה תשובה שאינה צריכה כתיבה — מכונה לא
+            # #1892: מחיצה מלאה אינה מפילה תשובה שאינה צריכה כתיבה — מכונה לא
             # רשומה מקבלת known:false (עיקרון 1). הכשל נרשם ואדום בבריאות.
             if not disk_full(exc):
                 raise
@@ -363,12 +363,12 @@ def build_answer(
 
     if machine is None:
         return _unknown(conn, mac, client_ip, off_vlan, record_journal)
-    # ‏#2001: "NVMe n" שנוסף ידנית בחלון מקבל את כתובת ה-PCI כשהכונן נראה.
+    # #2001: "NVMe n" שנוסף ידנית בחלון מקבל את כתובת ה-PCI כשהכונן נראה.
     if (record_seen and disks and machine["role"] in ("cloner", "build")
             and model_slots.complete_ordinals(conn, mac, disks)):
         machine = registry.lookup(conn, mac, all_macs)
 
-    # ‏#880: רק מחשב הבנייה מקבל את השדה — הוא היחיד עם התפריט. סוכן ישן
+    # #880: רק מחשב הבנייה מקבל את השדה — הוא היחיד עם התפריט. סוכן ישן
     # מתעלם משדה שאינו מכיר; סוכן חדש שלא קיבל אותו מתנהג ככבוי.
     extra = ({"class_deploy_enabled": class_deploy_enabled(conn)}
              if machine["role"] == "build" else {})
@@ -394,44 +394,44 @@ def build_answer(
         },
         "task": active_task(conn, mac),
         "session": None,
-        # ‏#1863: לפי הגודל בלבד, כולל המינימום הפנוי (#1354) — כמו הקונסולה.
-        # ‏#2550: בקריאה בלבד — מדלגים. ההחלטה (`decide`) אינה קוראת אותה, וסריקת
+        # #1863: לפי הגודל בלבד, כולל המינימום הפנוי (#1354) — כמו הקונסולה.
+        # #2550: בקריאה בלבד — מדלגים. ההחלטה (`decide`) אינה קוראת אותה, וסריקת
         # הספרייה לכל מכונה בחדר היא עלות (ודיווח מניפסט פגום ליומן) שהתצוגה אינה צריכה.
         "allowed_images": [] if read_only else library.allowed_for_disks(disks, minfree.min_free_gb(conn)),
         "ui": _ui(conn, has_open_session=False, off_vlan=off_vlan,
                   role=machine["role"]),
-        # ‏#874: הזיכרון בשרת במקום סימון על הדיסק — הרשומות הפתוחות שתואמות
+        # #874: הזיכרון בשרת במקום סימון על הדיסק — הרשומות הפתוחות שתואמות
         # לסידוריים שהמכונה שלחה או לחריץ באותה מכונה. הסוכן צובע מהן אדום
         # לפני הסבב; סוכן ישן מתעלם משדה שאינו מכיר (schema נשאר 1).
         "disk_failures": disk_failures.open_for(conn, mac, disks),
-        # ‏#1859: מה שהשרת למד מאז הסבב הקודם של כל סידורי (183/188 שעלו, מאפיין קריטי
+        # #1859: מה שהשרת למד מאז הסבב הקודם של כל סידורי (183/188 שעלו, מאפיין קריטי
         # שעלה, חום בכתיבה) — [{"serial", "reason"}]. הסוכן הופך את המילה לשאלה כתומה.
         "smart_learned": smart_history.learned_for(conn, disks),
-        # ‏#1859 (נדב 07/11): בכמה כל מאפיין עלה מאז הסבב הקודם — [{"serial", "rose": {"5": 3}}], רק לדיסק
+        # #1859 (נדב 07/11): בכמה כל מאפיין עלה מאז הסבב הקודם — [{"serial", "rose": {"5": 3}}], רק לדיסק
         # שיש לו סבב קודם. הגואי של המשכפל מצייר מזה את עמודת "עלה"; בלי רשומה = "אין עדיין השוואה".
         "smart_rose": smart_history.rose_for(conn, disks),
-        # ‏#926: דיסק שכווץ בקליטה ולא הוחזר לגודלו — לפי הסידורי שהמכונה
-        # שלחה. מחשב הבנייה מציע להחזיר (‏shrinkmem.sh); סוכן ישן מתעלם.
+        # #926: דיסק שכווץ בקליטה ולא הוחזר לגודלו — לפי הסידורי שהמכונה
+        # שלחה. מחשב הבנייה מציע להחזיר (shrinkmem.sh); סוכן ישן מתעלם.
         "shrink_open": shrink_records.open_for(conn, disks, mac),   # #2492: רק מה שפתחה
-        # ‏#704: השמות שהמפעיל נתן לחיבורים של המכונה הזו (‏{"sata:1": "דיסק 1"}).
-        # מסך מחשב השיכפול מצייר אותם במקום "דיסק N"; ‏{} = אין שמות.
+        # #704: השמות שהמפעיל נתן לחיבורים של המכונה הזו ({"sata:1": "דיסק 1"}).
+        # מסך מחשב השיכפול מצייר אותם במקום "דיסק N"; {} = אין שמות.
         "slot_names": slot_names.for_mac(conn, mac),
-        # ‏#1366: סף ה-CRC המוחלט (הגדרה בקונסולה) — המסך הממתין של מחשב
-        # השיכפול צובע ממנו כתום לפני שיש סבב. ‏0 = כבוי.
+        # #1366: סף ה-CRC המוחלט (הגדרה בקונסולה) — המסך הממתין של מחשב
+        # השיכפול צובע ממנו כתום לפני שיש סבב. 0 = כבוי.
         "crc_warn_threshold": crcwarn.threshold(conn),
-        # ‏#1354: המינימום הפנוי במחיצת המערכת אחרי שחזור (הגדרה בקונסולה).
+        # #1354: המינימום הפנוי במחיצת המערכת אחרי שחזור (הגדרה בקונסולה).
         # בכל תשובה ולא רק בסבב: השיכפול המקומי (בלי שרת) משתמש באחרון שהגיע.
         "min_free_gb": minfree.min_free_gb(conn),
-        # ‏#1864 (נדב 20/10): האימות אחרי הכתיבה — "sample"/"full". בכל תשובה, כמו
+        # #1864 (נדב 20/10): האימות אחרי הכתיבה — "sample"/"full". בכל תשובה, כמו
         # min_free_gb: השיכפול המקומי (בלי מניפסט מהשרת) קורא את האחרון שהגיע.
         "readback_mode": readbackhash.mode(conn),
-        # ‏#1857 (מוקאפ 04): שם הסט והמדבקה של דיסקים ששלח המשכפל ({serial: {set, label, text}}); דיסק בלי סט חסר.
+        # #1857 (מוקאפ 04): שם הסט והמדבקה של דיסקים ששלח המשכפל ({serial: {set, label, text}}); דיסק בלי סט חסר.
         "disk_labels": disk_sets.labels_for(conn, disks),
-        # ‏#1858 (07/11): "נצפה F1 בהדלקה" -- הדיסקים שהמכונה שלחה ושנרשם להם F1, לפי serial: [{serial, date, source}].
+        # #1858 (07/11): "נצפה F1 בהדלקה" -- הדיסקים שהמכונה שלחה ושנרשם להם F1, לפי serial: [{serial, date, source}].
         # הסוכן צובע אותם אדום ומדלג עליהם (smart.sh), ומציג "נצפה F1 (תאריך)". חסר = הקריאה נכשלה או שרת ישן --
         # הסוכן משאיר את מה שקיבל קודם; [] = אין. (None נשמט: "לא נקרא" אינו "אין".)
         **({"f1_observed": f1_seen} if (f1_seen := f1_marks.for_hello(conn, disks)) is not None else {}),
-        # ‏#2056/#2059: זמני ההמתנה והכיבוי האוטומטי (הגדרות בקונסולה). בכל תשובה לרשומה,
+        # #2056/#2059: זמני ההמתנה והכיבוי האוטומטי (הגדרות בקונסולה). בכל תשובה לרשומה,
         # ולכל תפקיד. הסוכן מחזיר את מה שהחיל ב-`applied_timing` (ראו interfaces.md).
         **agent_timing.hello_fields(conn),
     }
@@ -445,10 +445,10 @@ def build_answer(
 
     # משימה גוברת על סבב: היא מופנית למכונה הזו, לא לקבוצה.
     if answer["task"] is not None:
-        # ‏#715: מחשב הבנייה שהוא המקור מקבל גם את מצב הגל ופרמטרי
-        # השידור (‏`task.direct`, ממשק 3). ‏`multicast` הוא של `SenderEngine`
-        # (‏api.py); בלעדיו — ברירות המחדל של המנוע.
-        # ‏#2550: `task_block` יכול לכתוב (גל ישיר שנגמרו לו מקבלים נכשל ונרשם ביומן).
+        # #715: מחשב הבנייה שהוא המקור מקבל גם את מצב הגל ופרמטרי
+        # השידור (`task.direct`, ממשק 3). `multicast` הוא של `SenderEngine`
+        # (api.py); בלעדיו — ברירות המחדל של המנוע.
+        # #2550: `task_block` יכול לכתוב (גל ישיר שנגמרו לו מקבלים נכשל ונרשם ביומן).
         if answer["task"]["type"] == direct.DIRECT_SEND and not read_only:
             answer["task"]["direct"] = direct.task_block(
                 conn, store, answer["task"], multicast, *direct_finished)   # #1952
@@ -456,20 +456,20 @@ def build_answer(
 
     if machine["role"] == "cloner":
         # מחשבי השיכפול דוגמים כל הזמן — ה-hello שלהם הוא גם הדופק
-        # שמקדם את סבב החדר (סיום גל, פתיחת הגל הבא). ‏`pulse` ולא
+        # שמקדם את סבב החדר (סיום גל, פתיחת הגל הבא). `pulse` ולא
         # `tick`: קידום הסבב לא מפיל את ה-hello, בדיוק כמו
         # `agent_loops.note` שיושב באותו מסלול — והכישלון נרשם ביומן
         # ולא נבלע (#177).
-        if not read_only:    # ‏#2550: הדופק מקדם את הסבב; את זה מקדם הרקע (`room.sweep`)
+        if not read_only:    # #2550: הדופק מקדם את הסבב; את זה מקדם הרקע (`room.sweep`)
             room.pulse(conn, store, mac)
-            # ‏#1954: דיסק שנבחר כשהמשכפל היה כבוי — אותו דיסק נכתב, אחר או חסר מדולג בגלוי.
+            # #1954: דיסק שנבחר כשהמשכפל היה כבוי — אותו דיסק נכתב, אחר או חסר מדולג בגלוי.
             room.wake_check(conn, mac, disks)
         if not room.has_fresh_drawers(conn, mac):
             # המגירות של המכונה כבר נכתבו בסבב הזה ולא הוחלפו —
             # היא לא מצטרפת לגל, וממשיכה להמתין (wait_poll).
             return answer
 
-    # ‏#1554: גל החדר הוא session על grp_CLONERS; משכפל מכל קבוצת משכפלים מצטרף אליו.
+    # #1554: גל החדר הוא session על grp_CLONERS; משכפל מכל קבוצת משכפלים מצטרף אליו.
     session = store.active_for_group(
         room.CLONERS_GROUP if machine["role"] == "cloner" else machine["group_id"])
     if session is None:
@@ -483,7 +483,7 @@ def build_answer(
     if not read_only:
         session = store.maybe_start(session)
     elif store.would_start(session):
-        # ‏#2550: הסבב היה יוצא עכשיו; לא מתחילים אותו, רק עונים כאילו יצא.
+        # #2550: הסבב היה יוצא עכשיו; לא מתחילים אותו, רק עונים כאילו יצא.
         session = {**dict(session), "state": "running"}
 
     if store.member_done(session["id"], mac):
@@ -496,7 +496,7 @@ def build_answer(
             # שאיחרה עולה מקומית, ואינה מצטרפת לגל שכבר עזב.
             return answer
         if machine["role"] == "cloner":
-            # ‏#1703: הדופק שלמעלה רץ לפני ההצטרפות, ולא ספר את המגירות של
+            # #1703: הדופק שלמעלה רץ לפני ההצטרפות, ולא ספר את המגירות של
             # המכונה הזו. ה-hello שמשלים את הגל מוציא אותו כאן, באותה
             # תשובה — אחרת התשובה `open`, והסוכן לומד שהגל יצא רק מה-hello
             # הבא (22–23 ש' על ברזל במשכפל שהוער ב-WoL). אותו תנאי בדיוק
@@ -514,7 +514,7 @@ def build_answer(
 
     if (session["state"] == "running" and joining and session["prefix"] == "ROOM"
             and room.rejoined_mid_stream(conn, session, mac)):
-        # ‏#1728: משכפל שאותחל באמצע הזרם אינו חוזר לאמצע אותו זרם — הוא
+        # #1728: משכפל שאותחל באמצע הזרם אינו חוזר לאמצע אותו זרם — הוא
         # ממתין לגל הבא (`room._revived` פותח אותו גם כשהגל לא כתב דבר).
         return answer
 
@@ -528,28 +528,30 @@ def build_answer(
         "starts_in_seconds": store.starts_in_seconds(session)
         if session["state"] == "open"
         else 0,
-        # ‏#59: "auto" כשהסבב לא נפתח דרך הבחירה (pulls.py, station.py
+        # #59: "auto" כשהסבב לא נפתח דרך הבחירה (pulls.py, station.py
         # שלא עודכנו) — סוכן ישן שלא מכיר את השדה מתעלם ממנו וממשיך
         # בבחירה האוטומטית בדיוק כמו קודם (עיקרון 1).
         "expand_partition": session["expand_partition"] or "auto",
-        # ‏#1826: ה-portbase שהשולח של **השרת הזה** משדר בו — אותו ערך שמחשב
+        # #1826: ה-portbase שהשולח של **השרת הזה** משדר בו — אותו ערך שמחשב
         # בנייה מקבל ב-`task.direct.multicast`. בלעדיו הסוכן הניח 9000, ו-
-        # ‏`--sender-portbase` של השרת לא הגיע לאף מקלט.
+        # `--sender-portbase` של השרת לא הגיע לאף מקלט.
         "portbase": (multicast or direct.default_multicast())["portbase"],
     }
-    # ‏#695: לסבב חדר, המכונה מקבלת את **הפורטים שנבחרו לכתיבה עבורה בלבד**.
-    # ‏null שמור בכוונה לסבב ישן (התנהגות "כל הדיסקים"); קבוצה ריקה = לא נבחרה.
+    # #695: לסבב חדר, המכונה מקבלת את **הפורטים שנבחרו לכתיבה עבורה בלבד**.
+    # null שמור בכוונה לסבב ישן (התנהגות "כל הדיסקים"); קבוצה ריקה = לא נבחרה.
     if machine["role"] == "cloner" and session["prefix"] == "ROOM":
         round_row = room.active_round(conn)
-        # ‏#1790: בגל חוזר — בלי חריץ שהדיסק שבו כבר נכתב בסבב (לפי המלאי של ה-hello הזה).
+        # #1790: בגל חוזר — בלי חריץ שהדיסק שבו כבר נכתב בסבב (לפי המלאי של ה-hello הזה).
         answer["session"]["target_ports"] = room.target_ports(round_row, mac, disks)
-        # ‏#2448: ה-serial והגודל שבכל חריץ כזה, כפי שהמלאי של ה-hello הזה (והקונסולה) מציגים.
-        answer["session"]["target_disks"] = room.target_disks(answer["session"]["target_ports"], disks)
-        # ‏#1269: החריצים שלה שנבחר להם דגם דרייברים. ‏null = הסבב בלי
+        # #2448: ה-serial והגודל שבכל חריץ כזה. #2458: בגל הראשון — מה שהקונסולה הציגה ברגע
+        # הבחירה (`shown_disks`), לא המלאי של ה-hello הזה; בגלים הבאים — המלאי של ה-hello.
+        answer["session"]["target_disks"] = room.target_disks(
+            answer["session"]["target_ports"], disks, room.shown_disks(round_row, mac))
+        # #1269: החריצים שלה שנבחר להם דגם דרייברים. null = הסבב בלי
         # דרייברים, והסוכן אינו שואל דבר — ההתנהגות מלפני ה-Issue.
         answer["session"]["driver_ports"] = room_drivers.ports_for(round_row, mac)
-        # ‏#2786: שם המחשב לכל חריץ של המכונה הזו (`{"<port>": name}`) ולאיזו מערכת
-        # הפעלה לכתוב אותו. ‏null = הסבב בלי שמות, והסוכן אינו נוגע בשם שבאימג'.
+        # #2786: שם המחשב לכל חריץ של המכונה הזו (`{"<port>": name}`) ולאיזו מערכת
+        # הפעלה לכתוב אותו. null = הסבב בלי שמות, והסוכן אינו נוגע בשם שבאימג'.
         answer["session"]["hostnames"] = room_names.for_mac(round_row, mac)
         answer["session"]["hostname_os"] = room_names.os_for(round_row)
     answer["ui"] = _ui(conn, has_open_session=session["state"] == "open",
@@ -565,13 +567,13 @@ def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
 
     בלי הצטרפות ובלי דיסקים — תפריט אתחול רק שואל, לא מחייב.
 
-    ‏`scope` הוא של הבקשה הנוכחית, והוא כאן בשביל שתי שאלות בלבד: על
-    **איזו** מכתובות השרת היא התקבלה (‏#536), והאם היא הבדיקה העצמית של
-    השרת (‏#976, ‏`self_probe`). מי שמעביר אותו הוא `server/app.py`,
+    `scope` הוא של הבקשה הנוכחית, והוא כאן בשביל שתי שאלות בלבד: על
+    **איזו** מכתובות השרת היא התקבלה (#536), והאם היא הבדיקה העצמית של
+    השרת (#976, `self_probe`). מי שמעביר אותו הוא `server/app.py`,
     שקושר את ה-resolver מחדש בכל בקשה.
 
-    ‏#2498: ‏`unknown_journal(mac, client_ip, lease_matched)` כותב את שורת
-    ‏`unknown_mac` במקום `build_answer` — מרוסנת (‏`api.boot_journal_unknown`).
+    #2498: `unknown_journal(mac, client_ip, lease_matched)` כותב את שורת
+    `unknown_mac` במקום `build_answer` — מרוסנת (`api.boot_journal_unknown`).
     בלעדיו (בדיקות שבונות resolver ביד) — השורה נכתבת כמו קודם.
     """
 
@@ -592,22 +594,22 @@ def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
         # (lab 04/11: identity_refused journaled, attempts 1 -> 5).
         identity_verified = (do_not_record or identity_ok is None
                              or identity_ok(mac, client_ip))
-        # ‏#2498: שורת `unknown_mac` — לא לבדיקה העצמית, לא לשרת ולא ל-MAC פגום (כמו
+        # #2498: שורת `unknown_mac` — לא לבדיקה העצמית, לא לשרת ולא ל-MAC פגום (כמו
         # קודם), וגם לא לפונה שהזהות שלו נדחתה בוילן (`identity_refused` כבר נרשם
         # בשמו). מחוץ לוילן אין חכירה לבדוק, ושם השורה נשארת (#141) — מרוסנת.
         journal_unknown_line = not (probe or local_request or invalid_mac) and identity_verified
         if not do_not_record and identity_verified:
-            # ‏#1576: אתחול שנספר (אותו תנאי כמו net_seen והספירה של #75)
+            # #1576: אתחול שנספר (אותו תנאי כמו net_seen והספירה של #75)
             # מבטל משימת גואי שלא התחילה -- **לפני** בניית התשובה, כדי שהתפריט
             # והסוכן שעולה לא יראו אותה.
             cancel_gui_tasks_on_boot(conn, store, mac)
         answer = build_answer(
             conn, library, store, mac, client_ip=client_ip, joining=False,
-            # ‏#585: בקשת תפריט מחוץ לווילן ההפצה אינה כותבת `net_seen` —
-            # אותה הכרעה בדיוק כמו הספירה למטה, ומאותו טעם (‏MAC בשאילתה
+            # #585: בקשת תפריט מחוץ לווילן ההפצה אינה כותבת `net_seen` —
+            # אותה הכרעה בדיוק כמו הספירה למטה, ומאותו טעם (MAC בשאילתה
             # אינו זהות). על וילן ההפצה התפריט כן רושם, כמו היום.
-            # ‏#976: וגם לא הבדיקה העצמית של השרת — היא אינה המכונה.
-            # ‏#2411: וגם לא פונה שהזהות שלו לא אומתה מול החכירה.
+            # #976: וגם לא הבדיקה העצמית של השרת — היא אינה המכונה.
+            # #2411: וגם לא פונה שהזהות שלו לא אומתה מול החכירה.
             record_seen=not do_not_record and identity_verified,
             record_journal=journal_unknown_line and unknown_journal is None,
         )
@@ -618,15 +620,15 @@ def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
             _debug_boot_skip_once(reason, mac, client_ip)
             return answer
         if probe:
-            # ‏#976: הבדיקה העצמית מקבלת את התפריט האמיתי — זו הראיה
+            # #976: הבדיקה העצמית מקבלת את התפריט האמיתי — זו הראיה
             # החיובית שהיא באה בשבילו — אבל אינה אתחול: לא `net_seen`,
-            # ולא ספירה בתקציב הלולאה (‏#75). ארבע כניסות לקונסולה במהלך
+            # ולא ספירה בתקציב הלולאה (#75). ארבע כניסות לקונסולה במהלך
             # סבב פתוח שלחו את המכונה הרשומה הראשונה לדיסק המקומי.
             log.info("boot menu for %s is the server's own probe — served, "
                      "not recorded (#976)", mac)
             return answer
         if off_vlan:
-            # ‏#536: ‏MAC מהשאילתה אינו זהות. ‏`ATTEMPT_LIMIT` הוא 3,
+            # #536: MAC מהשאילתה אינו זהות. `ATTEMPT_LIMIT` הוא 3,
             # ולכן ארבע בקשות `GET /boot/menu?mac=<תחנה>` — בלי גוף,
             # בלי עוגייה, בלי להיות המכונה — גמרו את תקציב האתחולים של
             # תחנת כיתה חיה, והשומר שנועד להציל אותה מלולאה הוא זה
@@ -635,23 +637,23 @@ def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
             # ההפצה השרת אינו מגיש את שרשרת האתחול, ולכן בקשה כזו אינה
             # ראיה שהוא שלח את המכונה הזו לסוכן.
             #
-            # התשובה עצמה אינה משתנה — התראה ולא שער (‏#137), והתחנה
-            # שמושכת תפריט מרשת אחרת (תרחיש 3, ‏#39) ממשיכה לקבל את
+            # התשובה עצמה אינה משתנה — התראה ולא שער (#137), והתחנה
+            # שמושכת תפריט מרשת אחרת (תרחיש 3, #39) ממשיכה לקבל את
             # הסבב שלה. רק **הספירה** אינה מתרחשת.
             #
-            # ‏`off_deploy_vlan` עונה False בכל ספק, ולכן ספק נספר כמו
+            # `off_deploy_vlan` עונה False בכל ספק, ולכן ספק נספר כמו
             # היום. זה **אינו** "לא הצלחנו לבדוק ולכן בסדר": כאן הכיוון
-            # הבטוח הוא לספור — שומר שאינו סופר אינו שומר (‏#75).
+            # הבטוח הוא לספור — שומר שאינו סופר אינו שומר (#75).
             log.warning("boot menu for %s (from %s) did not arrive on the "
                         "deployment vlan — served, not counted", mac, client_ip)
             return answer
         if not identity_verified:
-            # ‏#2411: הפונה אינו המכונה (`identity_refused`), או שאי-אפשר לדעת
+            # #2411: הפונה אינו המכונה (`identity_refused`), או שאי-אפשר לדעת
             # (`identity_unverifiable`) — הסירוב כבר נרשם ביומן. הבקשה **אינה
             # נספרת** בתקציב של #75 ואינה רושמת דבר, ולכן אינה יכולה לגמור את
             # התקציב של תחנה אחרת. והיא גם אינה שולחת לסוכן (עיקרון 1): התשובה
             # מסומנת כמו תקציב שנגמר — תחנה וכיתה ומחשב בנייה מקבלים את התפריט
-            # הגלוי עם הדיסק כברירת מחדל, ומשכפל את מסך ההמתנה (‏`decide`). אחרת
+            # הגלוי עם הדיסק כברירת מחדל, ומשכפל את מסך ההמתנה (`decide`). אחרת
             # תחנה אמיתית שהזהות שלה אינה ניתנת לבדיקה (קובץ חכירות שלא נקרא)
             # הייתה עולה לסוכן, נדחית ב-hello, מאתחלת — ולולאה בלי מונה.
             # התשובה עצמה מגיעה לפונה, לא לתחנה: התחנה מבקשת תפריט משלה.
@@ -659,22 +661,22 @@ def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
                         "served without the agent, not counted (#2411)", mac, client_ip)
             return {**answer, "boot_guard": bootguard.EXHAUSTED}
         if answer_failure.failed(answer):
-            # ‏#2666: המחולל אינו מבין את התשובה (`schema`). בכרטיס מפיץ — מסך הכישלון
+            # #2666: המחולל אינו מבין את התשובה (`schema`). בכרטיס מפיץ — מסך הכישלון
             # של הסוכן, בתקציב של #75; אחריו, ומחוץ לרשת המפיצה — הדיסק, כמו היום.
-            # לפני `known`, באותו סדר של `grub_menu.decide`. ‏`bootguard` אינו סופר
-            # כאן: ‏`decide` בלי הדגל אומרת דיסק, ולכן אין לו הקשר.
+            # לפני `known`, באותו סדר של `grub_menu.decide`. `bootguard` אינו סופר
+            # כאן: `decide` בלי הדגל אומרת דיסק, ולכן אין לו הקשר.
             if serves_images(scope, server_base):
                 return answer_failure.offer(conn, mac, answer)
             return answer
         if answer.get("known") is not True:
-            # ‏#1802: מכונה לא רשומה בווילן ההפצה — המסך (`unknown_screen`); כשההגדרה
-            # דלוקה, בחלון — ‏UEFI לדיסק, ‏BIOS שוב המסך. ‏`bootguard` אינו רלוונטי: אין לה
+            # #1802: מכונה לא רשומה בווילן ההפצה — המסך (`unknown_screen`); כשההגדרה
+            # דלוקה, בחלון — UEFI לדיסק, BIOS שוב המסך. `bootguard` אינו רלוונטי: אין לה
             # סבב ואין לה משימה, ולכן אין לה הקשר לספור בו.
             if serves_images(scope, server_base):
                 return unknown_screen.offer(conn, mac, answer)
             return answer
         # רק כאן, ולא ב-hello: בקשת התפריט היא האתחול, והיא גם הרגע
-        # היחיד שבו אפשר להבטיח לאן ילך האתחול הבא (‏#75).
+        # היחיד שבו אפשר להבטיח לאן ילך האתחול הבא (#75).
         return bootguard.guard(conn, mac, answer)
 
     return resolve

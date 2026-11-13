@@ -1,4 +1,4 @@
-"""‏#770 (tracer-4 של #703): הקונסולה נקשרת פר-ממשק, לא ל-0.0.0.0.
+"""#770 (tracer-4 של #703): הקונסולה נקשרת פר-ממשק, לא ל-0.0.0.0.
 
 בפריסת המעבדה שרת הקונסולה (8081) נקשר ל-``0.0.0.0`` ולכן (א) התנגש עם
 שרת ה-preseed על ``10.44.3.1:8081`` ו-(ב) חשף את API הניהול על וילן
@@ -6,11 +6,11 @@
 
 מודל ה-FW: הקונסולה על ממשק המשרדים/שרתים **בלבד**. לכן הקונסולה מקבלת
 דגל ``--console-host`` משלה, בנפרד מ-``--host`` (הסוכן על וילן
-ההפצה). ברירת המחדל fail-closed — ‏loopback, לא ``0.0.0.0``: בלי כתובת
+ההפצה). ברירת המחדל fail-closed — loopback, לא ``0.0.0.0``: בלי כתובת
 ניהול מפורשת הקונסולה אינה נגישה מאף כרטיס חיצוני, ואינה תופסת 8081
 בממשקי ההפצה (עיקרון 5 — השומר עובד כברירת מחדל, לא רק אם זכרו דגל).
 
-שרשרת הראיות שתי חוליות, כל אחת בטסט משלה: ‏``build_parser`` נותן
+שרשרת הראיות שתי חוליות, כל אחת בטסט משלה: ``build_parser`` נותן
 ברירת מחדל שאינה ``0.0.0.0``, ו-``main`` מוליך את הערך של ``--console-host``
 דווקא למאזין הקונסולה — ולא לזה של הסוכן.
 """
@@ -24,7 +24,7 @@ import server.main
 
 
 def test_agent_host_defaults_to_unset_not_all_interfaces() -> None:
-    """#1074: ברירת המחדל של ``--host`` אינה 0.0.0.0 — ‏None, ו-main
+    """#1074: ברירת המחדל של ``--host`` אינה 0.0.0.0 — None, ו-main
     ממלא מכתובת כרטיס ההפצה."""
     args = server.main.build_parser().parse_args(
         ["--server-url", "http://10.44.12.10:8080"])
@@ -35,7 +35,7 @@ def test_console_host_defaults_to_loopback_not_all_interfaces() -> None:
     """הראיה הישירה: ברירת המחדל של ``--console-host`` היא loopback,
     ובוודאי לא ``0.0.0.0`` — הקונסולה לא עולה על כל הכרטיסים בלי שביקשו.
 
-    ‏getattr עם ברירת מחדל ``0.0.0.0`` נותן כשל **התנהגותי** (AssertionError
+    getattr עם ברירת מחדל ``0.0.0.0`` נותן כשל **התנהגותי** (AssertionError
     עם הערך בפועל) גם כשהדגל עדיין לא קיים, במקום AttributeError."""
     args = server.main.build_parser().parse_args(
         ["--server-url", "http://10.44.12.10:8080"])
@@ -79,14 +79,14 @@ def run_main(tmp_path: Path, monkeypatch, *extra_argv: str) -> dict[str, list[di
 
 def test_main_binds_console_to_console_host_not_agent_host(
         tmp_path: Path, monkeypatch) -> None:
-    """‏main היא החוליה שאין לה טסט אחר: המאזין של הקונסולה חייב להיקשר
+    """main היא החוליה שאין לה טסט אחר: המאזין של הקונסולה חייב להיקשר
     ל-``--console-host`` (כרטיס הניהול), ולא ל-``--host`` (ההפצה). דגל
     שמתפרס ואינו מגיע דווקא למאזין הנכון נראה כמו תיקון שעובד.
 
     שאר החוליות (runtime, הרצת uvicorn בפועל) מנוטרלות — נבדק רק לאיזה
     ``host`` נבנה כל ``uvicorn.Config``. הקונסולה על כרטיס ניהול נפרד,
     הסוכן על 0.0.0.0 של ההפצה — ו-``--host`` **אינו** בין מאזיני הקונסולה."""
-    # ‏--host 0.0.0.0 (ההפצה) לצד ``--console-host`` מפורש (כרטיס הניהול):
+    # --host 0.0.0.0 (ההפצה) לצד ``--console-host`` מפורש (כרטיס הניהול):
     # הערך של ``--console-host`` חייב להגיע דווקא למאזין הקונסולה, והסוכן
     # נשאר על ``--host``.
     configs = run_main(tmp_path, monkeypatch,
@@ -100,9 +100,9 @@ def test_main_binds_console_to_console_host_not_agent_host(
 
 def test_console_on_a_management_nic_also_listens_on_loopback(
         tmp_path: Path, monkeypatch) -> None:
-    """‏#904: חלון ה-pairing של המשני (``require_local``, #740) נאכף על
+    """#904: חלון ה-pairing של המשני (``require_local``, #740) נאכף על
     כתובת ה-peer — loopback בלבד. במעבדה הקונסולה של המשני נקשרה ל-
-    ‏10.30.0.8 בלבד, ומשם ה-peer לעולם אינו loopback: ‏403 תמיד, וה-ssh -L
+    10.30.0.8 בלבד, ומשם ה-peer לעולם אינו loopback: 403 תמיד, וה-ssh -L
     היה המוצא היחיד. לכן כשכרטיס הניהול אינו loopback הקונסולה מקבלת
     מאזין **שני** על 127.0.0.1, על אותו פורט — ורק היא: לסוכן
     אין מה לחפש על loopback."""
@@ -117,7 +117,7 @@ def test_console_on_a_management_nic_also_listens_on_loopback(
 
 def test_console_on_loopback_gets_a_single_listener(
         tmp_path: Path, monkeypatch) -> None:
-    """ברירת המחדל (loopback, #770) אינה מקבלת מאזין כפול — ‏127.0.0.1
+    """ברירת המחדל (loopback, #770) אינה מקבלת מאזין כפול — 127.0.0.1
     פעמיים על אותו פורט הוא כשל bind, ו-``serve_all`` היה מפיל את
     כל השרת בגללו."""
     configs = run_main(tmp_path, monkeypatch)
@@ -128,7 +128,7 @@ def test_console_on_loopback_gets_a_single_listener(
 def test_agent_binds_to_interface_address_by_default(
         tmp_path: Path, monkeypatch) -> None:
     """#1074: ברירת המחדל של 8080 היא כתובת ``--interface``, לא
-    0.0.0.0. ‏R20-F1 — bind לכל הכרטיסים היה החשיפה הרחבה."""
+    0.0.0.0. R20-F1 — bind לכל הכרטיסים היה החשיפה הרחבה."""
     monkeypatch.setattr(server.main, "_address_for_interface",
                         lambda name: "10.44.9.1")
     configs = run_main(tmp_path, monkeypatch, "--interface", "eth-deploy")
@@ -154,7 +154,7 @@ def test_host_all_interfaces_only_when_explicit_and_warns(
 
 
 def test_console_source_allowlist_flag_is_gone_and_refused_by_name(capsys) -> None:
-    """‏#1303: השומר לפי כתובת מקור (#151) נמחק — ההפרדה היא בחומת האש
+    """#1303: השומר לפי כתובת מקור (#151) נמחק — ההפרדה היא בחומת האש
     בלבד (`deploy/firewall-rules.md`). יחידה ישנה שעוד מעבירה את הדגל
     נעצרת בעלייה ואומרת את שמו; אחרת היה נראה כאילו הקונסולה מוגבלת."""
     import pytest

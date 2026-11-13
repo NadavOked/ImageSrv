@@ -1,18 +1,18 @@
-"""‏#1758 — הקצב הלומד בוחר לפי goodput, לא לפי אחוז האבדן.
+"""#1758 — הקצב הלומד בוחר לפי goodput, לא לפי אחוז האבדן.
 
 ברזל, 18/10, משכפל 2, משיכה לשתי מגירות, אימג' של 19.5GB (מה-Issue; הזמנים
 הם send_start→send_done מהיומן):
 
-    482m · ‏375ש' · אבדן 1.47% · ‏rcvbuf 198,228     ← המהיר ביותר
-    361m · ‏476ש' · אבדן 0.41% · ‏rcvbuf 54,915      (down)
-    270m · ‏624ש' · אבדן 0.02% · ‏rcvbuf 3,309       (down)
-    370m · ‏469ש' · —                               (up)
+    482m · 375ש' · אבדן 1.47% · rcvbuf 198,228     ← המהיר ביותר
+    361m · 476ש' · אבדן 0.41% · rcvbuf 54,915      (down)
+    270m · 624ש' · אבדן 0.02% · rcvbuf 3,309       (down)
+    370m · 469ש' · —                               (up)
 
 הכלל הקודם ירד ×0.75 על כל אבדן מעל 0.1%, ולכן הוריד את הגל המהיר ביותר.
 goodput = הבייטים שהמגירות כתבו בפועל, לכל מגירה, חלקי משך הזרם בשעון.
 
 הטסטים כאן ממלאים את `wave_rates` **רק** דרך הפונקציות של הייצור
-(`record_stream`, ‏`record_wave`) על החלטה שנשמרה — כך שבבקרה השלילית, על
+(`record_stream`, `record_wave`) על החלטה שנשמרה — כך שבבקרה השלילית, על
 הקוד הישן, הם רצים ונכשלים על ההחלטה עצמה, לא על עמודה חסרה.
 """
 
@@ -26,7 +26,7 @@ import pytest
 from server import db
 from server.rounds import drive_rates, nic_speed
 
-SENT = 19_500_000_000                 # ‏19.5GB — גודל האימג' מה-Issue
+SENT = 19_500_000_000                 # 19.5GB — גודל האימג' מה-Issue
 BLOCKS = -(-SENT // drive_rates.UDPCAST_BLOCK)
 CLONER2 = "78:ac:c0:9b:11:c2"
 OTHER = "aa:bb:cc:00:00:32"
@@ -46,9 +46,9 @@ def _drives(session: str, drawers: int = 2, mac: str = CLONER2) -> list[dict]:
 def _finish(conn, session, drives, *, loss, wall, lost=0, ended="send_done", rcvbuf=0,
             dropped=0, timeouts=0, failure="stream"):
     """סוף גל, כפי שהשרת רושם אותו: המונה של השולח (`record_stream`) ומה
-    שכל מגירה כתבה (`record_wave`). ‏`lost` — כמה מגירות של כל מכונה נכשלו.
-    ‏`dropped` / ‏`timeouts` (‏#1761) — שורות `Dropping client` / ‏`Timeout
-    notAnswered` ביומן השולח; ‏None = היומן לא נקרא."""
+    שכל מגירה כתבה (`record_wave`). `lost` — כמה מגירות של כל מכונה נכשלו.
+    `dropped` / `timeouts` (#1761) — שורות `Dropping client` / `Timeout
+    notAnswered` ביומן השולח; None = היומן לא נקרא."""
     drive_rates.record_stream(conn, session, {
         "sent_bytes": SENT, "loss_blocks": None if loss is None else round(BLOCKS * loss),
         "stream_bps": None, "stream_s": None, "wall_s": wall, "ended": ended,
@@ -109,8 +109,8 @@ def _bits(rate: str) -> int:
 
 
 def test_the_fastest_wave_of_the_metal_series_is_not_lowered(conn):
-    """482m, ‏1.47% אבדן, ‏375ש' — הזרם רץ ב-86% מהקצב שלו. האבדן כבר בתוך
-    הזמן, ואין סיבה לרדת: עולים. הכלל הקודם: ‏`down` ל-361m — ‏476ש'."""
+    """482m, 1.47% אבדן, 375ש' — הזרם רץ ב-86% מהקצב שלו. האבדן כבר בתוך
+    הזמן, ואין סיבה לרדת: עולים. הכלל הקודם: `down` ל-361m — 476ש'."""
     _seed(conn, "482m", loss=0.0147, wall=375, rcvbuf=198_228)
     got = _next(conn)
     assert _bits(got["max_bitrate"]) >= _bits("482m"), got
@@ -121,8 +121,8 @@ def test_the_fastest_wave_of_the_metal_series_is_not_lowered(conn):
 
 
 def test_the_whole_metal_series_climbs_from_482_not_from_270(conn):
-    """כל ארבעת הגלים בזיכרון: השיא הוא 482m (‏52MB/s למגירה) — לא 270m עם
-    הכי מעט אבדן (‏31MB/s). ממנו עולים; אין מעליו קצב שנוסה."""
+    """כל ארבעת הגלים בזיכרון: השיא הוא 482m (52MB/s למגירה) — לא 270m עם
+    הכי מעט אבדן (31MB/s). ממנו עולים; אין מעליו קצב שנוסה."""
     _seed(conn, "482m", loss=0.0147, wall=375, rcvbuf=198_228)
     _seed(conn, "361m", loss=0.0041, wall=476, rcvbuf=54_915)
     _seed(conn, "270m", loss=0.0002, wall=624, rcvbuf=3_309)
@@ -134,7 +134,7 @@ def test_the_whole_metal_series_climbs_from_482_not_from_270(conn):
 
 
 def test_the_metal_wave_at_270_alone_climbs_too(conn):
-    """270m, ‏0.02%, ‏624ש' — ‏92.7% מהקצב: הקצב הוא שהגביל. עולים (כמו קודם)."""
+    """270m, 0.02%, 624ש' — 92.7% מהקצב: הקצב הוא שהגביל. עולים (כמו קודם)."""
     _seed(conn, "270m", loss=0.0002, wall=624, rcvbuf=3_309)
     got = _next(conn)
     assert got["max_bitrate"] == "370m" and got["basis"] == "climb"
@@ -154,8 +154,8 @@ def test_the_journal_line_says_what_the_peak_is(conn):
 
 
 def _run(conn, model, waves, drawers=2):
-    """גלים אמיתיים ברצף: השרת בוחר (`decide`), ‏`model(bits)` אומר מה קרה —
-    ‏(goodput של הזרם בבייטים לשנייה, אבדן, מגירות שאבדו, איך השולח סיים)."""
+    """גלים אמיתיים ברצף: השרת בוחר (`decide`), `model(bits)` אומר מה קרה —
+    (goodput של הזרם בבייטים לשנייה, אבדן, מגירות שאבדו, איך השולח סיים)."""
     rates = []
     for n in range(waves):
         session = f"run_{n:02d}"
@@ -210,7 +210,7 @@ def test_a_new_machine_starts_one_step_below_the_fleets_proven_rate(conn):
 
 def test_fleet_start_skips_a_rate_that_was_unsafe_for_this_machine(conn):
     """קצב לא-בטוח נזכר גם כשהגל שרשם אותו אינו בזיכרון הגלים (`unsafe_rates`
-    אינו נשכח, ‏#1761) — המכונה "לא נראתה", ובכל זאת 700m אינו פתיחה שלה."""
+    אינו נשכח, #1761) — המכונה "לא נראתה", ובכל זאת 700m אינו פתיחה שלה."""
     conn.execute("INSERT INTO unsafe_rates (mac, drawers, rate_bps, session_id, at)"
                  " VALUES (?,?,?,?,?)", (CLONER2, 1, 700_000_000, "ses_gone",
                                         "2026-10-18T10:00:00+00:00"))
@@ -221,8 +221,8 @@ def test_fleet_start_skips_a_rate_that_was_unsafe_for_this_machine(conn):
 
 
 def test_a_known_machine_on_a_new_drawer_count_keeps_the_1842_rule_not_fleet(conn):
-    """הכרעת נדב 20/10 (‏#1842): מכונה מוכרת בלי גל במספר המגירות הזה — ‏×0.75
-    לכל הכפלה מהגל שלה, לא פתיחת צי. כאן 2→4: ‏432m × 0.75 = 324m, אף שמכונה
+    """הכרעת נדב 20/10 (#1842): מכונה מוכרת בלי גל במספר המגירות הזה — ×0.75
+    לכל הכפלה מהגל שלה, לא פתיחת צי. כאן 2→4: 432m × 0.75 = 324m, אף שמכונה
     אחרת הוכיחה 800m בארבע מגירות."""
     _seed(conn, "432m", loss=0.003, wall=_fast(432e6), drawers=2)
     _seed(conn, "800m", loss=0.001, wall=_fast(800e6), mac=OTHER, drawers=4)
@@ -237,7 +237,7 @@ def test_a_new_machine_without_fleet_data_uses_the_old_start(conn):
 
 
 def test_the_19_10_metal_sequence_reaches_577m_in_two_waves(conn):
-    """ברזל 19/10, משכפל 2: במקום ‏277→377→477→577, גל נקי קופץ 300m."""
+    """ברזל 19/10, משכפל 2: במקום 277→377→477→577, גל נקי קופץ 300m."""
     _seed(conn, "177m", loss=0.0002, wall=_fast(177e6), timeouts=0)
 
     rates = []
@@ -253,7 +253,7 @@ def test_the_19_10_metal_sequence_reaches_577m_in_two_waves(conn):
 
 
 def _peaked(bits: int):
-    """‏goodput עולה עם הקצב עד 650m, ומעליו האבדן אוכל יותר ממה שהקצב נותן."""
+    """goodput עולה עם הקצב עד 650m, ומעליו האבדן אוכל יותר ממה שהקצב נותן."""
     top = 650_000_000
     stream = 0.93 * min(bits, top) / 8 - 0.5 * max(0, bits - top) / 8
     return stream, 0.004 if bits <= top else 0.015, 0, "send_done"
@@ -261,7 +261,7 @@ def _peaked(bits: int):
 
 def test_the_climb_finds_the_peak_and_stays_on_it(conn):
     """600 → 700 (מהיר יותר) → 800 (איטי) → 750 (איטי, באמצע) → 725 (איטי) →
-    ‏700, ונשארים: הפער לקצב האיטי הקרוב (25m) קטן מ-2×REFINE_STEP."""
+    700, ונשארים: הפער לקצב האיטי הקרוב (25m) קטן מ-2×REFINE_STEP."""
     rates = _run(conn, _peaked, 9)
     assert rates == ["600m", "700m", "800m", "750m", "725m",
                      "700m", "700m", "700m", "700m"]
@@ -295,7 +295,7 @@ def test_a_drawer_lost_with_loss_above_the_peak_stops_the_search_below_it(conn):
 
 def test_a_sender_that_failed_with_loss_is_a_point_of_zero(conn):
     """השולח נכשל ב-700m עם 2.5% שידורים חוזרים (המנגנון של 11/09: מקלט שהופל)
-    — ‏goodput אפס, ולא חוזרים לשם."""
+    — goodput אפס, ולא חוזרים לשם."""
     def model(bits):
         if bits >= 700_000_000:
             return 0.0, 0.025, 2, "send_failed"
@@ -315,14 +315,14 @@ def test_a_failed_sender_without_loss_is_not_evidence_about_the_rate(conn):
 
 def test_loss_beyond_the_measured_range_holds_the_peak(conn):
     """הזרם ב-90% מהקצב, אבל 2.5% שידורים חוזרים — מעל כל גל שהסתיים על ברזל
-    (‏1.70%). לא עולים לשטח שלא נמדד; גם לא יורדים."""
+    (1.70%). לא עולים לשטח שלא נמדד; גם לא יורדים."""
     _seed(conn, "600m", loss=0.025, wall=SENT / (0.9 * 600e6 / 8))
     got = _next(conn)
     assert got["max_bitrate"] == "600m" and got["basis"] == "held"
 
 
 def test_a_stream_that_did_not_run_at_its_rate_goes_back(conn):
-    """הזרם ב-50% מהקצב (משהו אחר מגביל) ואין מתחתיו קצב שנוסה — ‏×0.75."""
+    """הזרם ב-50% מהקצב (משהו אחר מגביל) ואין מתחתיו קצב שנוסה — ×0.75."""
     _seed(conn, "600m", loss=0.0005, wall=SENT / (0.5 * 600e6 / 8))
     got = _next(conn)
     assert got["max_bitrate"] == "450m" and got["basis"] == "back"
@@ -359,7 +359,7 @@ def test_metal_19_10_disk_failure_at_577m_does_not_slow_the_class(conn):
 
 
 def test_a_higher_rate_within_the_noise_is_not_the_peak(conn):
-    """‏700m היה מהיר רק ב-2% מ-600m — בתוך הרעש (3%). השיא נשאר 600m."""
+    """700m היה מהיר רק ב-2% מ-600m — בתוך הרעש (3%). השיא נשאר 600m."""
     _seed(conn, "600m", loss=0.001, wall=SENT / 70e6)
     _seed(conn, "700m", loss=0.004, wall=SENT / 71.4e6)
     got = _next(conn)
@@ -376,20 +376,20 @@ def test_an_unreported_machine_is_not_a_slow_one(conn):
     assert got["basis"] == "down"
 
 
-# --- 3א. ‏#1761: האות הישיר מהשולח, וזיכרון של קצב לא-בטוח ---------------------
+# --- 3א. #1761: האות הישיר מהשולח, וזיכרון של קצב לא-בטוח ---------------------
 #
-# ‏udpcast (‏senddata.c:930-967): מקלט מנותק רק כשפקיעת ההמתנה ל-REQACK חוזרת
+# udpcast (senddata.c:930-967): מקלט מנותק רק כשפקיעת ההמתנה ל-REQACK חוזרת
 # יותר מ-retries-until-drop פעמים — `Dropping client #N because of timeout`;
 # וכל פקיעה מדפיסה `Timeout notAnswered=...`. אבדן rcvbuf אינו האות.
 
 
 def _fast(rate_bits: float, eff: float = 0.92) -> float:
-    """‏`wall` של גל שהזרם שלו רץ ב-`eff` מהקצב."""
+    """`wall` של גל שהזרם שלו רץ ב-`eff` מהקצב."""
     return SENT / (eff * rate_bits / 8)
 
 
 def test_a_dropped_client_makes_the_rate_unsafe(conn):
-    """‏700m היה מהיר יותר מ-600m, בלי מגירה שאבדה ובאבדן נמוך — אבל udp-sender
+    """700m היה מהיר יותר מ-600m, בלי מגירה שאבדה ובאבדן נמוך — אבל udp-sender
     ניתק בו מקלט. לא עולים אליו ולא מעליו. הכלל של #1758 לבדו היה רואה
     ב-700m שיא בטוח ועולה ל-800m."""
     _seed(conn, "600m", loss=0.003, wall=_fast(600e6))
@@ -402,20 +402,20 @@ def test_a_dropped_client_makes_the_rate_unsafe(conn):
 
 
 def test_a_dropped_client_alone_goes_back(conn):
-    """גל יחיד שבו נותק מקלט — ‏goodput אפס: ‏×0.75, גם כשהשולח סיים."""
+    """גל יחיד שבו נותק מקלט — goodput אפס: ×0.75, גם כשהשולח סיים."""
     _seed(conn, "600m", loss=0.003, wall=_fast(600e6), dropped=2)
     got = _next(conn)
     assert got["max_bitrate"] == "450m" and got["basis"] == "back", got
 
 
 def _per_gb(timeouts_per_gb: float) -> int:
-    """כמה שורות `Timeout notAnswered` הן `timeouts_per_gb` על SENT (‏19.5GB)."""
+    """כמה שורות `Timeout notAnswered` הן `timeouts_per_gb` על SENT (19.5GB)."""
     return round(timeouts_per_gb * SENT / 10 ** 9)
 
 
 def test_many_timeouts_per_gb_at_the_peak_hold_the_climb(conn):
     """השיא רץ ב-92% מהקצב, אבדן נמוך — אבל udp-sender כתב בו `Timeout
-    notAnswered` מעל TIMEOUTS_PER_GB_HELD (‏5.1/GB): נשארים, לא עולים."""
+    notAnswered` מעל TIMEOUTS_PER_GB_HELD (5.1/GB): נשארים, לא עולים."""
     timeouts = _per_gb(5.1)
     assert timeouts * 10 ** 9 / SENT > 5.0          # TIMEOUTS_PER_GB_HELD
     _seed(conn, "600m", loss=0.003, wall=_fast(600e6), timeouts=timeouts)
@@ -424,7 +424,7 @@ def test_many_timeouts_per_gb_at_the_peak_hold_the_climb(conn):
 
 
 def test_timeouts_per_gb_under_the_threshold_do_not_hold(conn):
-    """‏4.9/GB — מתחת לסף (המקסימום שנמדד בלי ניתוק, ברזל 19/10: ‏3.4/GB). עולים."""
+    """4.9/GB — מתחת לסף (המקסימום שנמדד בלי ניתוק, ברזל 19/10: 3.4/GB). עולים."""
     timeouts = _per_gb(4.9)
     assert 0 < timeouts * 10 ** 9 / SENT < 5.0      # TIMEOUTS_PER_GB_HELD
     _seed(conn, "600m", loss=0.003, wall=_fast(600e6), timeouts=timeouts)
@@ -433,7 +433,7 @@ def test_timeouts_per_gb_under_the_threshold_do_not_hold(conn):
 
 
 def test_one_timeout_at_277m_does_not_hold_two_drawers(conn):
-    """ברזל 19/10, משכפל 2, שתי מגירות, 19.5GB: ‏277m → פקיעה אחת, וכל המגירות
+    """ברזל 19/10, משכפל 2, שתי מגירות, 19.5GB: 277m → פקיעה אחת, וכל המגירות
     הצליחו. "פקיעה אחת עוצרת" היה נועל את שתי המגירות ב-277m."""
     _seed(conn, "277m", loss=0.0002, wall=_fast(277e6), timeouts=1)
     got = _next(conn)
@@ -441,7 +441,7 @@ def test_one_timeout_at_277m_does_not_hold_two_drawers(conn):
 
 
 def test_at_577m_on_metal_the_loss_is_what_holds(conn):
-    """ברזל 19/10: ‏577m — ‏67 פקיעות (‏3.4/GB, מתחת לסף) אבל 3.6%–4.0% שידורים
+    """ברזל 19/10: 577m — 67 פקיעות (3.4/GB, מתחת לסף) אבל 3.6%–4.0% שידורים
     חוזרים: LOSS_CLIMB_MAX הוא שעוצר, כמו על הברזל."""
     _seed(conn, "577m", loss=0.038, wall=_fast(577e6), timeouts=67)
     got = _next(conn)
@@ -453,7 +453,7 @@ def test_timeouts_below_the_peak_do_not_hold_it(conn):
     _seed(conn, "500m", loss=0.003, wall=_fast(500e6), timeouts=4)
     _seed(conn, "600m", loss=0.003, wall=_fast(600e6))
     got = _next(conn)
-    # השיא נקי (0.3% < 0.5%, בלי פקיעות) -- צעד גדול (‏#1761 המשך): ‏600m+300m.
+    # השיא נקי (0.3% < 0.5%, בלי פקיעות) -- צעד גדול (#1761 המשך): 600m+300m.
     assert got["max_bitrate"] == "900m" and got["basis"] == "climb", got
 
 
@@ -465,7 +465,7 @@ def test_an_unread_sender_log_is_not_a_clean_one(conn):
 
 
 def test_an_unread_sender_log_still_lets_the_rate_go_back(conn):
-    """ירידה אינה צריכה את היומן: הזרם ב-50% מהקצב — ‏×0.75 כמו קודם."""
+    """ירידה אינה צריכה את היומן: הזרם ב-50% מהקצב — ×0.75 כמו קודם."""
     _seed(conn, "600m", loss=0.003, wall=_fast(600e6, 0.5), dropped=None, timeouts=None)
     got = _next(conn)
     assert got["max_bitrate"] == "450m" and got["basis"] == "back", got
@@ -521,7 +521,7 @@ def test_a_slow_cloner_nic_still_caps_the_climb(conn):
 
 
 def test_from_fewer_drawers_the_climb_does_not_explore(conn):
-    """נלמד עם מגירה אחת; עכשיו שתיים — לא +100m, אלא השיא שהוכח × 0.75 (‏#1842)."""
+    """נלמד עם מגירה אחת; עכשיו שתיים — לא +100m, אלא השיא שהוכח × 0.75 (#1842)."""
     _seed(conn, "482m", loss=0.0147, wall=375, drawers=1)
     got = _next(conn, drawers=2)
     assert got["max_bitrate"] == "361m" and got["basis"] == "drawers"
@@ -554,7 +554,7 @@ from server.rounds import sender as sender_module  # noqa: E402
 
 
 def test_the_wall_time_runs_from_the_first_byte_to_send_done(engine_env, monkeypatch):
-    """‏`wall_s` — מהבייט הראשון של מחיצה 1 ועד `send_done`, כולל המעבר בין
+    """`wall_s` — מהבייט הראשון של מחיצה 1 ועד `send_done`, כולל המעבר בין
     המחיצות; בלי ההמתנה למקבלים לפני הבייט הראשון."""
     from types import SimpleNamespace
 
@@ -603,7 +603,7 @@ def test_the_wall_time_runs_from_the_first_byte_to_send_done(engine_env, monkeyp
 
 
 def test_the_wave_outcome_counts_drops_and_timeouts_over_the_partitions(engine_env):
-    """‏#1761: השורות של udp-sender (‏senddata.c) נספרות בכל המחיצות, מהקובץ
+    """#1761: השורות של udp-sender (senddata.c) נספרות בכל המחיצות, מהקובץ
     כולו — לא מהזנב, שאותו ממלאות שורות ההתקדמות."""
     engine, recorder = engine_env
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})

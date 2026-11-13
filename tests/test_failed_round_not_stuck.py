@@ -1,22 +1,22 @@
 """17/10 (ברזל): סבב שנכשל אינו חוטף את מסך הבחירה, ובמסך הסבב — רק מה שנבחר.
 
 מה קרה: מחשב שיכפול 2 פתח סבב "שחזור מהשרת", הסבב נכשל ("אף מחשב לא הצטרף
-לשידור תוך 180 שניות") ונשאר הסבב הנראה של ‏`GET /api/console/room` עד שנדב
+לשידור תוך 180 שניות") ונשאר הסבב הנראה של `GET /api/console/room` עד שנדב
 עצר אותו ידנית. בינתיים "שיכפול מהשרת" במחשב הבנייה הראה את מסך הבחירה
 לשנייה וקפץ למסך הסבב החי של הסבב הכושל ("גל 1 משדר").
 
-השורש לא היה בשרת: ‏`open_round` נחסם רק על `active` (‏`room.active_round`),
-וסבב `failed` אינו חוסם פתיחה (‏#1126). השורש בשרשרת הגואי: ‏`guistate.sh`
+השורש לא היה בשרת: `open_round` נחסם רק על `active` (`room.active_round`),
+וסבב `failed` אינו חוסם פתיחה (#1126). השורש בשרשרת הגואי: `guistate.sh`
 כתב `round=` לכל `.round` שאינו null — גם `failed` — ו-`state.c` הפך כל
-‏`round=` ל-`has_round=1`, כלומר למסך הסבב החי.
+`round=` ל-`has_round=1`, כלומר למסך הסבב החי.
 
 החוליות כאן:
 
 * **השרת** — ב-`test_cloner_round_server.py`: סבב `failed` ואז פתיחה חדשה מהמסך
-  של מחשב השיכפול מצליחה והסיבה נשארת על השורה הישנה; סבב פעיל עדיין חוסם (‏409).
-* **הסוכן** (‏`guistate.sh`) — סבב `failed` אינו `round=` אלא `room_failed=<סיבה>`;
+  של מחשב השיכפול מצליחה והסיבה נשארת על השורה הישנה; סבב פעיל עדיין חוסם (409).
+* **הסוכן** (`guistate.sh`) — סבב `failed` אינו `round=` אלא `room_failed=<סיבה>`;
   סבב חי עם `target_slots` מציג רק את המשכפלים שבו, בלי בחירה (סבב ישן) — כולם.
-* **הגואי** (‏`--png`, על המעבדה) — `room_failed=` היא שורה אדומה במסך הבחירה.
+* **הגואי** (`--png`, על המעבדה) — `room_failed=` היא שורה אדומה במסך הבחירה.
 """
 
 from __future__ import annotations
@@ -125,7 +125,7 @@ def test_no_round_or_an_old_round_without_a_choice_shows_every_cloner(tmp_path):
 @requires_native(("bash", BASH), "jq", why="gui_state בונה את המצב ב-jq")
 def test_each_drawer_carries_its_own_target_not_the_machines_progress(tmp_path):
     """17/10 (ברזל): נבחרה רק מגירה 3 ונכתבה רק היא, והמסך הראה 16% גם על 2.
-    ‏`room_drawer=` נושא את היעד של המגירה עצמה (שדות 16–17): ‏-1 וריק למגירה
+    `room_drawer=` נושא את היעד של המגירה עצמה (שדות 16–17): -1 וריק למגירה
     שאינה בגל, האחוז והמצב שלה למגירה שבגל — לא סכום המכונה."""
     room = _room(_round(wave_state="running", target_slots=[{"mac": C2, "ports": [2]}]))
     m2 = room["machines"][1]
@@ -217,7 +217,7 @@ def test_the_live_grid_draws_each_drawer_by_its_own_target(tmp_path):
 @_GUI
 def test_a_failed_wave_reads_as_failed(tmp_path):
     """17/10 (ברזל): הסבב נכשל והפס אמר "הגל משדר". גל `failed` כותב את
-    הכותרת באדום (‏--clr-danger-fg, "הגל נכשל"); גל `running` — לא."""
+    הכותרת באדום (--clr-danger-fg, "הגל נכשל"); גל `running` — לא."""
     binary = _build_gui(tmp_path)
     _render(binary, LIVE.format(d1="", d2="", wave="|running"), tmp_path / "run")
     _render(binary, LIVE.format(d1="", d2="", wave="|failed"), tmp_path / "fail")
@@ -246,7 +246,7 @@ def test_only_a_running_wave_says_it_is_broadcasting():
 #
 # ברזל 17/10: הכפתור "הער את מחשבי השיכפול" במסך הבחירה לא שלח דבר — הכרעת 16/10
 # צבעה אותו אפור ו-`main.c` שלח `room-wake` רק כשיש סבב. וכשנשלח — השרת העיר את
-# כל החדר (‏`wol_sent grp_CLONERS count=3`), כולל מחשב שיכפול 1 שאסור להעיר מרחוק;
+# כל החדר (`wol_sent grp_CLONERS count=3`), כולל מחשב שיכפול 1 שאסור להעיר מרחוק;
 # גם פתיחת סבב העירה את כולם, לא רק את מי שב-`target_slots`.
 
 from test_room_target_slots_1275 import MAIN_C, _bridge, bridge_tools, function_body  # noqa: E402
@@ -337,7 +337,7 @@ def test_an_off_machine_can_be_picked_and_select_all_picks_the_room():
 # --- הקונסולה: סבב אחד = שורה אחת (נדב 17/10, room_855f6a13) ------------------------
 
 def test_the_round_names_its_wave_and_the_wave_counts_only_the_rounds_cloners(room_server):
-    """‏`/overview.room.wave_session_id` מזהה את `/overview.session` של אותו סבב (הקונסולה
+    """`/overview.room.wave_session_id` מזהה את `/overview.session` של אותו סבב (הקונסולה
     מציגה שורה אחת), ו-`expected_clients` של הגל הוא מחשבי הסבב — לא "1/3 מחשבים"."""
     admin = room_server["admin"]
     assert admin.post("/api/console/room", json=room_body(

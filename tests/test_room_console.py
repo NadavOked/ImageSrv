@@ -1,7 +1,7 @@
-"""‏#980 — כיבוי כל המשכפלים והיסטוריית סבבי החדר (‏`server/rounds/room_console.py`).
+"""#980 — כיבוי כל המשכפלים והיסטוריית סבבי החדר (`server/rounds/room_console.py`).
 
 הכיבוי **אינו** נעשה מהשרת: הוא בקשה שנוסעת בתשובת ה-hello הבא
-(‏`power_action`), והסוכן מכבה אחרי `arm_wol` (‏#587). מה שנבדק כאן:
+(`power_action`), והסוכן מכבה אחרי `arm_wol` (#587). מה שנבדק כאן:
 ההקלדה (עיקרון 7), הסירוב באמצע סבב, שהבקשה נמסרת פעם אחת ורק למשכפלים,
 ושבקשה שפגה אינה מכבה מכונה שעולה אחר כך.
 """
@@ -151,7 +151,7 @@ def test_history_lists_finished_rounds_newest_first_without_the_one_on_screen(se
         "target_drives": 4, "written_drives": 1, "opened_by": "noc",
         "created_at": "2026-09-15T08:00:00+00:00",
         "closed_at": "2026-09-15T08:20:00+00:00", "failed_reason": "send_failed",
-        # ‏#1889: אין גלים בחלון — לא נמדד (null), לא 0.
+        # #1889: אין גלים בחלון — לא נמדד (null), לא 0.
         "waits": {"waves": 0, "open_wait_s": None, "smart_hold_s": None, "smart_holds": 0,
                   "smart_unreleased": 0}}
 

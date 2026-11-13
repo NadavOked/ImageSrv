@@ -13,8 +13,11 @@
 # (‏source_start_sector זוכר את המקום האמיתי), ו-expand_last מותח על היעד
 # רק את האחרונה.
 #
-# מחיצה שאי-אפשר למדוד (‏--info נכשל: מלוכלכת, מהוברת, לא עקבית) מסרבת את
-# **כל** הקליטה, בשם -- לא "מכווצים חלקית" (עיקרון 5). מחיצה שאין מה לכווץ
+# מחיצה שאי-אפשר למדוד (‏--info נכשל: מלוכלכת, מהוברת) מסרבת את **כל**
+# הקליטה, בשם (עיקרון 5). ‏#2972 (נדב 12/11, "כמו Clonezilla"): NTFS ש-ntfsresize
+# מוצא **לא עקבי** אינו סירוב -- הוא נקלט בגודלו המלא, בלי כיווץ, ונרשם ב-
+# ‏$RUN_DIR/shrink.dirty (‏partclone -I קורא אותו, #643; ‏Windows מריץ chkdsk
+# באתחול הראשון). "לא כווץ" אינו "נכשל", ואינו "כווץ" -- התווית אומרת זאת. מחיצה שאין מה לכווץ
 # בה, או שאינה NTFS (‏ext4 הוא מסלול נפרד עם e2fsck, לא כאן), פשוט אינה
 # בתוכנית; כשהאימג' עדיין גדול מהיעד, ‏shrink_unshrinkable_hint אומר זאת.
 
@@ -64,8 +67,10 @@ shrink_plan() {
     # לפי start_sector. ‏0 = התוכנית נכתבה (גם ריקה = אין מה לכווץ); ‏1 =
     # מחיצת NTFS שלא ניתן למדוד, SHRINK_ERROR אומר איזו. ‏--info קורא בלבד
     # ומריץ 100% מהחישוב ("You might resize at N bytes"); בלי -f: ווליום
-    # מלוכלך או עם סקטורים פגומים נעצר כאן, בהודעה של הכלי.
+    # מלוכלך או עם סקטורים פגומים נעצר כאן, בהודעה של הכלי. ‏#2972: "NTFS is
+    # inconsistent" -- המחיצה מחוץ לתוכנית ושורה ב-shrink.dirty, לא סירוב.
     _sp="$RUN_DIR/shrink.plan"; : > "$_sp"; _sp_m="$RUN_DIR/shrink.meas"; : > "$_sp_m"
+    _sp_d="$RUN_DIR/shrink.dirty"; : > "$_sp_d" || { SHRINK_ERROR="לא הצלחנו להכין את רשימת המחיצות שלא יכווצו — הדיסק לא שונה."; return 1; }
     _shrink_candidates "$2" > "$RUN_DIR/shrink.cand"
     while IFS='|' read -r _sp_idx _sp_guid _sp_uguid _sp_start _sp_size <&3; do
         [ -n "$_sp_idx" ] || continue
@@ -79,11 +84,11 @@ shrink_plan() {
             # ntfsresize.info.N; the screen gets Hebrew first and the fix.
             log "partition $_sp_idx: ntfsresize --info gave no minimum: $(tail -n 1 "$RUN_DIR/ntfsresize.info.$_sp_idx" 2>/dev/null | tr -d '\r')"
             LC_ALL=C grep -qF "NTFS is inconsistent" "$RUN_DIR/ntfsresize.info.$_sp_idx"; _sp_rc=$?
-            if [ "$_sp_rc" -eq 0 ]; then
-                SHRINK_ERROR="מחיצה $_sp_idx בדיסק $1 לא עקבית (NTFS) — בחלונות: chkdsk /f על הכונן, אתחלו פעמיים, כבו ב-shutdown /s /t 0 וקלטו מחדש. הדיסק לא שונה."
-            else   # 1 = another refusal, 2 = grep itself failed: neither is a diagnosis
-                SHRINK_ERROR="לא הצלחנו לבדוק כמה אפשר לכווץ את מחיצה $_sp_idx בדיסק $1 — פרטי ntfsresize ביומן הסוכן. הדיסק לא שונה."
-            fi
+            if [ "$_sp_rc" -eq 0 ]; then   # #2972: read at its full size, labelled -- never refused
+                echo "$_sp_idx" >> "$_sp_d" || { SHRINK_ERROR="לא הצלחנו לרשום שמחיצה $_sp_idx בדיסק $1 לא תכווץ (NTFS לא עקבי) — הדיסק לא שונה."; return 1; }
+                log "partition $_sp_idx: NTFS is inconsistent (ntfsresize) -- not shrunk, captured at its full size (#2972)"; continue
+            fi   # 1 = another refusal, 2 = grep itself failed: neither is a diagnosis
+            SHRINK_ERROR="לא הצלחנו לבדוק כמה אפשר לכווץ את מחיצה $_sp_idx בדיסק $1 — פרטי ntfsresize ביומן הסוכן. הדיסק לא שונה."
             return 1 ;;
         esac
         _sp_new=$(_shrink_target "$_sp_min" "$_sp_cur")

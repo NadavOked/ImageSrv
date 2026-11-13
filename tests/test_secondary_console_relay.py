@@ -1,7 +1,7 @@
-"""‏#1179: הקונסולה של המשני דרך הראשי — GET מרשימה מותרת, בערוץ 8443.
+"""#1179: הקונסולה של המשני דרך הראשי — GET מרשימה מותרת, בערוץ 8443.
 
 שני שרתים אמיתיים על loopback: הראשי (``server``) והמשני — אפליקציה מלאה
-(‏``create_app``) עם המאזין הבין-שרתי ``console_app=app``, כמו ``main.py``.
+(``create_app``) עם המאזין הבין-שרתי ``console_app=app``, כמו ``main.py``.
 הראשי מעביר ``GET /api/console/storage-nodes/{id}/console/<נתיב>``; המשני
 מריץ את ה-GET בתוך התהליך בזהות ``primary:<user>`` ומחזיר מעטפת.
 
@@ -141,7 +141,7 @@ PARITY = ("/overview", "/machines", "/groups", "/disk-failures", "/shrink-record
 @pytest.mark.parametrize("path", PARITY)
 def test_a_relayed_get_is_what_the_secondarys_own_console_answers(server, secondary, paired,
                                                                  path, monkeypatch):
-    # ‏#1783: בלי הקפיצה הטסט ירוק גם כשההשוואה עדיין כוללת את ``now``.
+    # #1783: בלי הקפיצה הטסט ירוק גם כשההשוואה עדיין כוללת את ``now``.
     clock = None
     if path == "/update/status":
         first, second, clock = _status_clock(monkeypatch)
@@ -156,7 +156,7 @@ def test_a_relayed_get_is_what_the_secondarys_own_console_answers(server, second
         assert relayed.json().get("now") == second, relayed.text
     own_body = own.json()
     if path == "/sessions":
-        # ‏#2552: ``current`` = "העוגייה של הבקשה הזו". הקונסולה של המשני מכירה את העוגייה
+        # #2552: ``current`` = "העוגייה של הבקשה הזו". הקונסולה של המשני מכירה את העוגייה
         # של עצמה; הקריאה המועברת מהראשי באה בלי עוגייה של המשני, ולכן אף סשן שם אינו
         # "הנוכחי" שלה -- וזה הנכון (הלשונית "סשנים" גם מוסתרת ב-SERVER_CTX). שני הצדדים
         # מוכחים במפורש, ורק אז ההשוואה על שאר השדות.
@@ -234,7 +234,7 @@ def test_an_oversized_console_body_is_refused(monkeypatch):
 
 
 def test_a_write_outside_the_write_allowlist_is_404(server, paired):
-    """‏#1179 שלב 2: כתיבה עוברת רק מ-``CONSOLE_WRITES`` (``test_secondary_console_writes``)."""
+    """#1179 שלב 2: כתיבה עוברת רק מ-``CONSOLE_WRITES`` (``test_secondary_console_writes``)."""
     for method in ("post", "put", "delete"):
         resp = getattr(server["admin"], method)(
             f"/api/console/storage-nodes/{paired}/console/journal")
@@ -370,6 +370,6 @@ def test_the_peer_identity_cannot_come_from_an_http_request(secondary):
 
 
 def test_main_hands_the_console_app_to_the_interserver_listener():
-    """‏main.py אינו נבדק ב-pytest; בלי זה כל GET דרך הערוץ עונה 503."""
+    """main.py אינו נבדק ב-pytest; בלי זה כל GET דרך הערוץ עונה 503."""
     source = (ROOT / "server" / "main.py").read_text(encoding="utf-8")
     assert "console_app=console_app" in source

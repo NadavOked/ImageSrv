@@ -56,6 +56,7 @@ async function vmuCall(method, path, body) {
     const error = new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
     error.code = data && data.code;
     error.details = (data && data.details) || {};
+    error.resources = (data && data.resources) || null;   // #2986: what the VM would get, even when refused
     error.status = response.status;
     noteApiFailure(error.message);
     throw error;
@@ -583,6 +584,7 @@ async function vmuAct(fn, okMessage = "") {
     return false;
   }
 }
+vmuAct = guarded("vmuAct", vmuAct, { key: "vmuAct" });   // ‏#2840: לחיצה כפולה = בקשה אחת
 
 /* --- התחלה: בחירת גרסת מקור --- */
 
@@ -591,7 +593,7 @@ async function vmuStartDialog(idEnc) {
   let versions = null, pre = null;
   try {
     [versions, pre] = await Promise.all([api("/images/" + encodeId(id) + "/versions", { primary: true }),
-      vmuCall("GET", "/precheck?image_id=" + encodeURIComponent(id)).catch((e) => ({ ok: false, code: e.code, error: e.message, details: e.details }))]);
+      vmuCall("GET", "/precheck?image_id=" + encodeURIComponent(id)).catch((e) => ({ ok: false, code: e.code, error: e.message, details: e.details, resources: e.resources }))]);
   } catch (e) { toast(e.message); return; }
   const rows = versions.versions || [];
   const chosen = rows.some((v) => v.id === id) ? id : (versions.latest_id || id);
@@ -609,7 +611,8 @@ async function vmuStartDialog(idEnc) {
   };
   const busy = pre && pre.code === "busy", nokvm = pre && pre.code === "no_kvm";
   const refuse = pre && pre.ok === false;
-  const res = pre && pre.ok ? pre : null;
+  // #2986: on a refusal the server still sends what the VM would get, so the tiles are not "—".
+  const res = pre && pre.ok ? pre : (pre && pre.resources) || null;
   const resources = `<div class="vmu-res"><div class="rt"><b><bdi dir="ltr">${res ? Math.round(res.memory_mib / 1024) + " GB" : "—"}</bdi></b><small>זיכרון</small></div>`
     + `<div class="rt"><b>${res ? res.cpus + " ליבות" : "—"}</b><small>מעבד</small></div>`
     + `<div class="rt"><b><bdi dir="ltr">${res ? vmuGB(res.disk_bytes) : "—"}</bdi></b><small>דיסק זמני · בגודל הדיסק המקורי</small></div></div>`;

@@ -1,12 +1,12 @@
-r"""יוצר את tests/fixtures/system-mini.hiv — ‏hive רישום מינימלי לטסטים.
+r"""יוצר את tests/fixtures/system-mini.hiv — hive רישום מינימלי לטסטים.
 
-רץ על Windows בלבד, פעם אחת (התוצר נכנס ל-git). ‏RegLoadAppKey יוצר
+רץ על Windows בלבד, פעם אחת (התוצר נכנס ל-git). RegLoadAppKey יוצר
 קובץ hive חדש בלי הרשאות מנהל — בניגוד ל-reg save שדורש SeBackupPrivilege.
 המבנה מחקה את הפינה של SYSTEM שהסוכן נוגע בה (agent/lib/postdeploy/hostname.sh):
-‏Select, ‏ComputerName, ו-Tcpip\Parameters עם ערכים שכנים מגוונים —
-שהטסטים יוכיחו ש-hivewrite משאיר אותם במקום (#33). ‏#1331: גם שני
-שירותי האחסון ה-in-box (agent/lib/postdeploy/bootstorage.sh) — ‏storahci עם
-‏StartOverride כמו במכונה שהותקנה במצב RAID, ו-stornvme בלעדיו.
+Select, ComputerName, ו-Tcpip\Parameters עם ערכים שכנים מגוונים —
+שהטסטים יוכיחו ש-hivewrite משאיר אותם במקום (#33). #1331: גם שני
+שירותי האחסון ה-in-box (agent/lib/postdeploy/bootstorage.sh) — storahci עם
+StartOverride כמו במכונה שהותקנה במצב RAID, ו-stornvme בלעדיו.
 """
 
 import ctypes
@@ -53,8 +53,8 @@ set_values(r"ControlSet001\Services\Tcpip\Parameters", {
     "EnableICMPRedirect": (winreg.REG_DWORD, 1),
 })
 
-# ‏#1331: הערכים כמו בשירות in-box שאינו boot-start. ‏Type/ErrorControl/
-# ‏ImagePath/Group הם השכנים ש-`hivewrite -d` חייב להשאיר במקום.
+# #1331: הערכים כמו בשירות in-box שאינו boot-start. Type/ErrorControl/
+# ImagePath/Group הם השכנים ש-`hivewrite -d` חייב להשאיר במקום.
 for svc in ("storahci", "stornvme"):
     set_values(rf"ControlSet001\Services\{svc}", {
         "Start": (winreg.REG_DWORD, 3),

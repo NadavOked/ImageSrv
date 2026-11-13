@@ -1,13 +1,13 @@
-"""‏#1334 — שני ממצאי האבטחה: האורח אינו מגיע למארח ולרשתות הפנימיות, והדיסק
+"""#1334 — שני ממצאי האבטחה: האורח אינו מגיע למארח ולרשתות הפנימיות, והדיסק
 שהאורח שינה אינו נקרא כ-root ואינו נעגן בקרנל של השרת.
 
-1. **רשת** (`server/vm/vmnet.py`, ‏#1468): הטבלה שנטענת לפני כל הדלקה — משתמש
+1. **רשת** (`server/vm/vmnet.py`, #1468): הטבלה שנטענת לפני כל הדלקה — משתמש
    ה-VM אינו שולח דבר, ומה שבא מה-MAC/הכתובת של האורח אינו מגיע למארח; ושורת
-   הפקודה של QEMU (ב-`test_vmupdate.py`) — ‏`-run-with` למשתמש ה-VM, ‏macvtap
+   הפקודה של QEMU (ב-`test_vmupdate.py`) — `-run-with` למשתמש ה-VM, macvtap
    בלבד, בלי hostfwd/guestfwd/smb. ה-macvtap וה-lease — `test_vmnet_1468.py`.
 2. **הדיסק** (`server/vm/vmdisk.py`): ערך שנקרא מהדיסק ואינו בפורמט הצפוי —
    נדחה לפני שהוא נוגע בפקודה; מחיצה שמערכת הקבצים שלה אינה זו שבמניפסט
-   המקור — נדחית לפני כל loop, ‏partclone או כיווץ.
+   המקור — נדחית לפני כל loop, partclone או כיווץ.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import pytest
 from console_src import console_js
 from server.vm import vmdisk, vmnet
 
-# --- 1. רשת (‏#1468: macvtap — הטבלה חוסמת את משתמש ה-VM ואת האורח במארח) -----
+# --- 1. רשת (#1468: macvtap — הטבלה חוסמת את משתמש ה-VM ואת האורח במארח) -----
 
 MAC = "0a:1b:2c:3d:4e:5f"
 
@@ -151,7 +151,7 @@ def capture_with(tmp_path, guest, source=SOURCE):
     (work / "disk.raw").write_bytes(b"")
     (work / "source-manifest.json").write_text(json.dumps(source), encoding="utf-8")
     with pytest.raises(vmdisk.DiskError) as caught:
-        # ‏#1535: ‏capture_disk מוסר את אזור העבודה לקבוצה של משתמש ה-VM (‏chown) —
+        # #1535: capture_disk מוסר את אזור העבודה לקבוצה של משתמש ה-VM (chown) —
         # בלי root, רק לקבוצה שלנו. ה-uid אינו נוגע בדיסק לפני האימות.
         vmdisk.capture_disk(NoHost(), work, work / "out", lambda n: None,
                             user=vmdisk.VmUser(999, os.getgid() if hasattr(os, "getgid") else 989),
@@ -161,7 +161,7 @@ def capture_with(tmp_path, guest, source=SOURCE):
 
 def test_a_partition_whose_filesystem_changed_is_refused_before_anything_runs(tmp_path):
     """האורח הפך את מחיצה 2 ל-ext4 (או לכל מה שמפרסר אחר יקרא) — נדחה
-    בשמו, לפני loop, ‏partclone, ‏ntfsresize או פונקציית סוכן."""
+    בשמו, לפני loop, partclone, ntfsresize או פונקציית סוכן."""
     exc = capture_with(tmp_path, FakeGuest(fs={"/dev/sda1": "vfat", "/dev/sda2": "ext4"}))
     assert exc.reason == "fs_changed" and "מחיצה 2" in exc.message
 
@@ -187,7 +187,7 @@ def test_another_disks_guid_is_refused(tmp_path):
     ("disk_guid", "0E239172-A515-D8B4-92A1-AD790E23917`id`"),
     ("start", "1048576; true"),
     ("start", 1000),            # לא כפולה של 512
-    ("attrs", 1 << 64),        # ‏-1 הוא int64 חוקי (כל הביטים, #1421) — מחוץ לטווח הוא 2**64
+    ("attrs", 1 << 64),        # -1 הוא int64 חוקי (כל הביטים, #1421) — מחוץ לטווח הוא 2**64
     ("attrs", -(1 << 63) - 1),
 ])
 def test_values_read_from_the_disk_are_validated_before_use(tmp_path, field, value):
@@ -260,7 +260,7 @@ def test_hibernation_codes_from_the_appliance(tmp_path, rc, reason):
 def test_a_hibernated_vm_disk_gives_the_fix_that_works_not_a_full_shutdown(tmp_path):
     """#1504 (המשך #1502, ברזל 16/10): עם Fast Startup דלוק כיבוי רגיל **הוא**
     שינה, ו"כיבוי מלא" לא משחרר את הדיסק. ההודעה אומרת זאת ונותנת את התיקון
-    שעובד — ‏`powercfg /h off` — כמו `capture_hibernated_message` של הסוכן.
+    שעובד — `powercfg /h off` — כמו `capture_hibernated_message` של הסוכן.
     עברית קודם: שורה שנפתחת באסימון LTR נפרסת הפוך."""
     guest = FakeGuest()
     guest.ntfs_3g_probe = lambda *_a: 14
@@ -322,7 +322,7 @@ def test_fresh_user_dir_is_new_private_and_owned_by_the_user(tmp_path):
 @posix_only
 def test_a_vars_file_planted_as_a_symlink_is_not_followed(tmp_path):
     """המשתמש שולט בתיקייה שלו בזמן הקריאה: symlink במקום קובץ הסיבות
-    אינו נקרא (‏O_NOFOLLOW), ותיקיית הקריאה נמחקת בלי לעקוב אחריו."""
+    אינו נקרא (O_NOFOLLOW), ותיקיית הקריאה נמחקת בלי לעקוב אחריו."""
     secret = tmp_path / "secret"
     secret.write_text("PLAN_ERROR=root-only-content\n", encoding="utf-8")
     seen = {}
@@ -484,7 +484,7 @@ def test_a_restore_that_failed_is_reported_not_swallowed():
 
 @posix_only
 def test_a_vars_file_planted_as_a_fifo_does_not_hang_the_server(tmp_path):
-    """‏FIFO במקום קובץ הסיבות: ‏open רגיל היה נחסם לנצח. נפתח ב-O_NONBLOCK,
+    """FIFO במקום קובץ הסיבות: open רגיל היה נחסם לנצח. נפתח ב-O_NONBLOCK,
     נדחה כלא-רגיל, ומחזיר מהר."""
     import time
 
@@ -499,12 +499,12 @@ def test_a_vars_file_planted_as_a_fifo_does_not_hang_the_server(tmp_path):
 
 
 @pytest.mark.parametrize("raw,hexed", [
-    (-(1 << 63), "8000000000000000"),          # ‏ESP של Windows (#1421)
-    (-(1 << 63) + 1, "8000000000000001"),      # ‏Recovery
+    (-(1 << 63), "8000000000000000"),          # ESP של Windows (#1421)
+    (-(1 << 63) + 1, "8000000000000001"),      # Recovery
     (0, "0000000000000000"),
 ])
 def test_gpt_attributes_come_back_as_signed_int64_and_are_read_as_bits(tmp_path, raw, hexed):
-    """‏#1421: ‏libguestfs מחזיר את ה-attrs כ-int64 עם סימן; ביט 63 = שלילי.
+    """#1421: libguestfs מחזיר את ה-attrs כ-int64 עם סימן; ביט 63 = שלילי.
     זה לא ערך זדוני — זה כל ESP ו-Recovery של Windows."""
     guest = FakeGuest(attrs=raw)
     disk = tmp_path / "disk.raw"

@@ -1,23 +1,23 @@
-"""‏#1545 — דיסק עם GPT ראשי פגום נדחה בשחזור, אף שהוא בדיוק הדיסק שצריך אותו.
+"""#1545 — דיסק עם GPT ראשי פגום נדחה בשחזור, אף שהוא בדיוק הדיסק שצריך אותו.
 
 ברזל 17/10, מחשב הבנייה (sgdisk 1.0.10): סבב שנקטע ב-16/10 השאיר את 34
 הסקטורים הראשונים של הדיסק זבל — ה-MBR, ה-header הראשי ומערך המחיצות
 הראשי. ה-header והמערך הגיבויים בסוף הדיסק תקינים. "שחזור לדיסק הזה" נכשל
 ב-`sgdisk דחה את תוכנית השחזור — הדיסק לא שונה`.
 
-**הפיקסצ'ר הוא הבייטים מהברזל**, לא שבירה מדומה (‏`tests/fixtures/gpt-metal-1017/`:
-‏head = 34 הסקטורים הראשונים, ‏tail = 33 האחרונים, ‏`sg.out` = פלט sgdisk שם),
+**הפיקסצ'ר הוא הבייטים מהברזל**, לא שבירה מדומה (`tests/fixtures/gpt-metal-1017/`:
+head = 34 הסקטורים הראשונים, tail = 33 האחרונים, `sg.out` = פלט sgdisk שם),
 על קובץ דליל בגודל המקורי (500118192 סקטורים). ניסיון ראשון שבר רק CRC ב-
 header ובמערך על דיסק עם MBR מגן תקין — ו-sgdisk טען אותו בשלום (rc=0 על
 Testrunner). מה שמכשיל את הטעינה הוא **MBR לא תקין יחד עם GPT פגום**:
-‏sgdisk הלא-אינטראקטיבי לא בוחר, ומדפיס `Invalid partition data!`.
+sgdisk הלא-אינטראקטיבי לא בוחר, ומדפיס `Invalid partition data!`.
 
 השורש ב-`gptcl.cc`: כש-`LoadPartitions` נכשל, הענף החלופי מטפל רק ב-
-‏`-l`/`-o`/`-v`/`-z`/`-Z`, מתעלם מ-`-n`/`-t`, ו-`retval = 2` מושם **אחרי**
+`-l`/`-o`/`-v`/`-z`/`-Z`, מתעלם מ-`-n`/`-t`, ו-`retval = 2` מושם **אחרי**
 הלולאה — ולכן:
 
-* ‏`--pretend --clear -n …` על הדיסק החי יוצא 2 על כל תוכנית (השער).
-* ‏`--zap-all` מוחק (אין `--pretend`) **ויוצא 2** — ו-`apply_gpt` נכשל אחרי
+* `--pretend --clear -n …` על הדיסק החי יוצא 2 על כל תוכנית (השער).
+* `--zap-all` מוחק (אין `--pretend`) **ויוצא 2** — ו-`apply_gpt` נכשל אחרי
   שהדיסק כבר נמחק. תיקון השער לבדו היה מזיז את הכישלון שורה אחת.
 
 sgdisk **אמיתי**, תחת busybox ash כמו בסוכן. לינוקס בלבד (sgdisk+busybox).
@@ -134,7 +134,7 @@ def test_the_fixture_is_the_metal_state_and_sgdisk_behaves_as_gptcl_cc_says(tmp_
         assert line in text, (line, text)
         assert line in (METAL / "sg.out").read_text(encoding="utf-8"), line   # אותו פלט כמו על הברזל
     first = _sg("--zap-all", str(img))
-    assert first.returncode != 0, "‏--zap-all על הטבלה הזו: gptcl.cc מחזיר 2"
+    assert first.returncode != 0, "\u200f--zap-all על הטבלה הזו: gptcl.cc מחזיר 2"
     second = _sg("--zap-all", str(img))
     assert second.returncode == 0, second.stdout + second.stderr
     assert "Invalid partition data!" not in second.stdout + second.stderr

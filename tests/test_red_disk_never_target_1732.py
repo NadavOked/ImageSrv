@@ -1,5 +1,5 @@
 """#1732 (נדב 18/10, אחרי התייעצות עם איש מקצוע): דיסק **אדום** — SMART נכשל
-(`fail`, ‏smart.sh) — **לעולם אינו יעד**, בשום מסלול. מותר רק כמקור: העתקה
+(`fail`, smart.sh) — **לעולם אינו יעד**, בשום מסלול. מותר רק כמקור: העתקה
 ממנו, קליטה/העלאה לשרת, חילוץ. זה מחליף את "כתוב בכל זאת" באישור (#1580).
 
 כל מסלול שכותב נבדק כאן מול דיסק אדום כיעד — והשרת והסוכן חוסמים גם כשהבקשה
@@ -28,7 +28,7 @@ from test_smart import (BASH, GUI_STUB, HEALTH_FAIL, HEALTH_OK, PRELUDE, asked, 
                         make_smartctl, posix, preflight, sh)
 
 RED = "SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת"
-RLM = "‏"
+RLM = "\u200f"
 
 bash_only = requires_native(("bash", BASH))
 
@@ -73,7 +73,7 @@ def test_the_gate_writes_the_healthy_sibling_and_never_the_red_one(tmp_path):
 @bash_only
 def test_an_orange_disk_is_still_written(tmp_path):
     """שומר מפני תיקון-יתר: כתום (נכשל בשיכפול הקודם, SMART תקין) נשאר יעד.
-    ‏#2042 (נדב 23/10): בלי שאלה (עד 23/10 — "נסה שוב")."""
+    #2042 (נדב 23/10): בלי שאלה (עד 23/10 — "נסה שוב")."""
     written, run, err = preflight(tmp_path, full(HEALTH_OK), gui=["rescue"], failed=("sda",))
     assert written == "sda" and asked(run) == [], err
 

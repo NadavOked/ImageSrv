@@ -1,11 +1,11 @@
-"""‏#201: השרת שהסימולציה מרימה לא ישדר על פורטי ההפצה של הייצור.
+"""#201: השרת שהסימולציה מרימה לא ישדר על פורטי ההפצה של הייצור.
 
 הסימולציה מריצה **שרת אמיתי** בתת-תהליך, ולכן אין לאן להזריק לה שולח
 מזויף כמו ב-`conftest`. ההגנה היחידה שאינה תלויה בכך שמישהו יזכור לנקות
-היא portbase שאינו יכול להתנגש (#79, ‏#156).
+היא portbase שאינו יכול להתנגש (#79, #156).
 
 שרשרת הראיות כאן היא שלושה חוליות, וכל אחת נבדקת בנפרד:
-‏`harness` מרכיב argv → ‏`server.main` מפרס אותו → ‏`create_app` מעביר
+`harness` מרכיב argv → `server.main` מפרס אותו → `create_app` מעביר
 את הערך ל-`SenderEngine`. חוליה שנשברת מפילה טסט משלה, ולא נבלעת.
 """
 
@@ -50,7 +50,7 @@ def test_command_uses_the_given_portbase(tmp_path: Path) -> None:
 
 
 def test_harness_portbase_cannot_collide_with_production() -> None:
-    """‏udpcast תופס portbase ו-portbase+1 — שניהם חייבים להיות מחוץ להפצה."""
+    """udpcast תופס portbase ו-portbase+1 — שניהם חייבים להיות מחוץ להפצה."""
     assert not PRODUCTION_PORTS & {harness.SENDER_PORTBASE,
                                    harness.SENDER_PORTBASE + 1}
 
@@ -89,11 +89,11 @@ def test_server_main_parses_the_harness_argv(tmp_path: Path, monkeypatch) -> Non
 
 
 def test_main_wires_the_flag_into_the_runtime(tmp_path: Path, monkeypatch) -> None:
-    """‏`main` הוא החוליה שאין לה טסט אחר: דגל שמתפרס ואינו מועבר הלאה
+    """`main` הוא החוליה שאין לה טסט אחר: דגל שמתפרס ואינו מועבר הלאה
     נראה בדיוק כמו דגל שעובד — השרת עולה, ומשדר על 9000 (פורט-הפצה-מכוון:
     תיעוד ברירת המחדל, לא בקשה) — עיקרון 5.
 
-    ‏#731/#738: מאז פיצול המאזינים `main` מעביר את הדגל ל-`create_runtime`
+    #731/#738: מאז פיצול המאזינים `main` מעביר את הדגל ל-`create_runtime`
     (בעל המצב המשותף), ולא ל-`create_app`. שאר החוליות (יצירת שלוש
     האפליקציות וההרצה בפועל דרך `serve_all`) מנוטרלות — נבדק רק שהערך
     הגיע ל-runtime."""

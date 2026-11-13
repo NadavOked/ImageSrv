@@ -1,17 +1,17 @@
 """מלכודת כיבוי: טסט שמגיע ל-reboot/poweroff/halt/shutdown אמיתי נכשל בשמו (#2181).
 
 הסוכן מסיים משימה, נכשל, או מקבל "כבה" מהקונסולה ב-`reboot -f` או
-`poweroff -f` — בלי נתיב, דרך ה-PATH. על ה-testrunner ‏`type -P reboot` הוא
-‏`/usr/sbin/reboot` (נמדד ב-#2077), ומה שמנע אתחול אמיתי באמצע ריצה היה רק
-שהמשתמש שם אינו root. ‏#2077 סגר את `run_path`; רתמות אחרות לא נסקרו.
+`poweroff -f` — בלי נתיב, דרך ה-PATH. על ה-testrunner `type -P reboot` הוא
+`/usr/sbin/reboot` (נמדד ב-#2077), ומה שמנע אתחול אמיתי באמצע ריצה היה רק
+שהמשתמש שם אינו root. #2077 סגר את `run_path`; רתמות אחרות לא נסקרו.
 
 כאן השומר הכללי, בשתי שכבות:
 
 1. **המלכודת ב-PATH.** בתחילת הריצה נוצרת תיקייה עם ארבעה זיופים
-   (‏`POWER_COMMANDS`) שרושמים כל קריאה ליומן ויוצאים 1, והיא נכנסת
+   (`POWER_COMMANDS`) שרושמים כל קריאה ליומן ויוצאים 1, והיא נכנסת
    **לראש** ה-PATH של התהליך. כל תהליך-בן יורש אותה; זיוף של טסט שנכנס
-   לפניה (‏`PATH="$stubs:$PATH"`) ממשיך לגבור, ורק הבינארי האמיתי מוצל.
-   ‏`env=` מפורש שבונה PATH מאפס (‏`{stubs}:/usr/sbin:/usr/bin`) מקבל את
+   לפניה (`PATH="$stubs:$PATH"`) ממשיך לגבור, ורק הבינארי האמיתי מוצל.
+   `env=` מפורש שבונה PATH מאפס (`{stubs}:/usr/sbin:/usr/bin`) מקבל את
    המלכודת **לפני התיקייה הראשונה של המערכת** — אחרי זיופי הטסט (POSIX).
 2. **השומר לכל טסט** (`power_guard`, autouse): קריאה חדשה ביומן בזמן
    הטסט = הטסט נכשל בשמו, עם הפקודה והארגומנטים. "הקריאה נכשלה כי איננו
@@ -20,11 +20,11 @@
 **מה לא מכוסה, ונאמר כאן ולא בשקט:**
 
 * סקריפט שמאפס PATH **בתוך עצמו** לתיקייה שיש בה הבינארי האמיתי
-  (‏`export PATH=/usr/sbin:...`) — ‏Python אינו רואה את זה. ‏`/usr/bin`
-  בדביאן 13 אינו מחזיק את reboot (‏`/usr/sbin` כן), ולכן `PATH=/usr/bin:/bin`
+  (`export PATH=/usr/sbin:...`) — Python אינו רואה את זה. `/usr/bin`
+  בדביאן 13 אינו מחזיק את reboot (`/usr/sbin` כן), ולכן `PATH=/usr/bin:/bin`
   פשוט אינו מוצא אותו.
-* קריאה בנתיב מלא (‏`/sbin/reboot`). הסוכן אינו קורא כך.
-* applet של busybox: ‏`busybox ash` עם FEATURE_SH_STANDALONE מריץ את
+* קריאה בנתיב מלא (`/sbin/reboot`). הסוכן אינו קורא כך.
+* applet של busybox: `busybox ash` עם FEATURE_SH_STANDALONE מריץ את
   ה-applet לפני ה-PATH. לסקריפט `-c` של busybox (POSIX) מוזרקות לכן
   **פונקציות** מלכודת בראש הסקריפט — פונקציה גוברת על applet, וזיוף-פונקציה
   של הטסט שמוגדר אחריהן גובר עליהן. סקריפט busybox **מקובץ** אינו מכוסה.
@@ -43,7 +43,7 @@ import pytest
 
 POWER_COMMANDS = ("reboot", "poweroff", "halt", "shutdown")
 
-#: תיקיות שבהן יושב הבינארי האמיתי. ‏PATH מפורש מקבל את המלכודת לפני הראשונה.
+#: תיקיות שבהן יושב הבינארי האמיתי. PATH מפורש מקבל את המלכודת לפני הראשונה.
 SYSTEM_DIRS = frozenset({"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin",
                          "/sbin", "/bin"})
 
@@ -98,7 +98,7 @@ def install() -> Path:
 
 
 def with_trap(path: str, trap: str | None = None) -> str:
-    """‏PATH של POSIX שהמלכודת בו לפני התיקייה הראשונה של המערכת."""
+    """PATH של POSIX שהמלכודת בו לפני התיקייה הראשונה של המערכת."""
     trap = trap or str(trap_dir())
     entries = path.split(":")
     if trap in entries:
@@ -115,7 +115,7 @@ def trap_functions() -> str:
 
 
 def _busybox_trapped(args):
-    """‏`[busybox, ash, -c, script, ...]` עם פונקציות המלכודת בראש הסקריפט."""
+    """`[busybox, ash, -c, script, ...]` עם פונקציות המלכודת בראש הסקריפט."""
     if isinstance(args, (str, bytes, os.PathLike)) or len(args) < 4:
         return args
     if PurePath(os.fspath(args[0])).name != "busybox" or args[1] not in ("ash", "sh"):
@@ -157,7 +157,7 @@ def escaped(start: int) -> list[str]:
 
 @pytest.fixture(autouse=True)
 def power_guard():
-    """טסט שהגיע למלכודת נכשל בשמו — ‏ERROR בפירוק, עם הפקודה."""
+    """טסט שהגיע למלכודת נכשל בשמו — ERROR בפירוק, עם הפקודה."""
     if not _trap:
         yield
         return

@@ -7,7 +7,7 @@ on a disk the round had read (metal 08/11, 14-1857-console-tooltips.txt, 05:16Z)
 
 The view carries the last round's verdict beside the hello's: `smart_round`
 `{verdict, reason, at}` from `disk_events`, by serial. **The hello's `smart` is not changed**:
-the red gate (`room.open`, ‏#1732) and the precheck read it, and a verdict from an earlier boot
+the red gate (`room.open`, #1732) and the precheck read it, and a verdict from an earlier boot
 is not evidence about the disk now (principle 5, the rule of #2705).
 
 The precheck (`room_precheck._learned`) decided, explicitly: it stays on the hello. With

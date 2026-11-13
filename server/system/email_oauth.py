@@ -1,18 +1,18 @@
-"""‏OAuth לשליחת מייל — device code (RFC 8628) ו-XOAUTH2 (#1751).
+"""OAuth לשליחת מייל — device code (RFC 8628) ו-XOAUTH2 (#1751).
 
 למה device code: השרת אינו צריך כתובת חזרה (redirect) שהדפדפן של המפעיל מגיע
 אליה. השרת מבקש קוד, הקונסולה מציגה קוד וכתובת, המפעיל מאשר בדפדפן **שלו**
 (במחשב שלו, עם האינטרנט שלו), והשרת מקבל refresh token ושומר אותו ב-0600.
-בשליחה: refresh → access token (בזיכרון בלבד) → ‏``AUTH XOAUTH2``.
+בשליחה: refresh → access token (בזיכרון בלבד) → ``AUTH XOAUTH2``.
 
 **מה צריך להיות פתוח מהשרת** (docs/guides/email-alerts.md): HTTPS יוצא לספק הזהות
-(Microsoft: ‏``login.microsoftonline.com``; ‏Google: ‏``oauth2.googleapis.com``) —
+(Microsoft: ``login.microsoftonline.com``; Google: ``oauth2.googleapis.com``) —
 בבקשת הקוד, בהמתנה לאישור, ובכל חידוש אסימון — ו-SMTP יוצא לשרת הדואר. בלי
-יציאה לאינטרנט מרשת הניהול, ‏"התחבר" נכשל **בצעד הראשון** (בקשת הקוד), בגלוי.
+יציאה לאינטרנט מרשת הניהול, "התחבר" נכשל **בצעד הראשון** (בקשת הקוד), בגלוי.
 
-**‏client id:** לכל ספק צריך מזהה של אפליקציה רשומה. אין כאן מזהה "ציבורי"
+**client id:** לכל ספק צריך מזהה של אפליקציה רשומה. אין כאן מזהה "ציבורי"
 של מוצר אחר — שימוש בזהות של אפליקציה אחרת הוא התחזות. המכללה רושמת
-אפליקציה (Azure: public client, ‏SMTP.Send) ומזינה את המזהה. הפירוט במסמך.
+אפליקציה (Azure: public client, SMTP.Send) ומזינה את המזהה. הפירוט במסמך.
 
 כל קריאת רשת עוברת דרך ``http`` מוזרק (``http_post``) — הבדיקות לא יוצאות לרשת.
 """
@@ -31,7 +31,7 @@ from server.system import email_config
 
 log = logging.getLogger("imagesrv.email_alerts")
 
-#: נקודות הקצה. ‏``{tenant}`` — של המכללה, או ``organizations``. ‏``host`` — המארח
+#: נקודות הקצה. ``{tenant}`` — של המכללה, או ``organizations``. ``host`` — המארח
 #: היחיד שמותר לפנות אליו בשם הספק; כל URL אחר נדחה לפני הבקשה (סקירת אבטחה: SSRF).
 OAUTH: dict[str, dict] = {
     "microsoft": {
@@ -40,7 +40,7 @@ OAUTH: dict[str, dict] = {
         "token": "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
         "scope": "https://outlook.office.com/SMTP.Send offline_access",
     },
-    # ‏Google מגביל את ה-scopes של device code; ‏``https://mail.google.com/`` (הנדרש ל-SMTP)
+    # Google מגביל את ה-scopes של device code; ``https://mail.google.com/`` (הנדרש ל-SMTP)
     # עשוי להידחות ב-``invalid_scope``. המנגנון כאן אחיד, והתשובה של Google מוצגת כמו שהיא.
     "google": {
         "host": "oauth2.googleapis.com",
@@ -56,9 +56,9 @@ TIMEOUT_SECONDS = 15.0
 class OAuthError(RuntimeError):
     """כשל OAuth — ההודעה בעברית ועם תשובת הספק.
 
-    ‏``public`` — מה שהקונסולה מציגה: הניסוח שלנו ותשובת הספק, מנוקים ומקוצרים
+    ``public`` — מה שהקונסולה מציגה: הניסוח שלנו ותשובת הספק, מנוקים ומקוצרים
     (``email_config.public_text``). הקונסולה קוראת אותו ולא את ``str(exc)``
-    (CodeQL ‏py/stack-trace-exposure, ‏PR ציבורי #54)."""
+    (CodeQL py/stack-trace-exposure, PR ציבורי #54)."""
 
     def __init__(self, message: str):
         super().__init__(message)
@@ -66,7 +66,7 @@ class OAuthError(RuntimeError):
 
 
 def http_post(url: str, fields: dict, timeout: float = TIMEOUT_SECONDS) -> tuple[int, dict]:
-    """‏POST של טופס; מחזיר (קוד, JSON). ‏4xx של ספק OAuth הוא תשובה (``error``),
+    """POST של טופס; מחזיר (קוד, JSON). 4xx של ספק OAuth הוא תשובה (``error``),
     לא חריגה. אין חיבור / תם הזמן — ``OAuthError`` בשמו."""
     data = urllib.parse.urlencode(fields).encode()
     req = urllib.request.Request(url, data=data, method="POST",
@@ -83,7 +83,7 @@ def http_post(url: str, fields: dict, timeout: float = TIMEOUT_SECONDS) -> tuple
     except (urllib.error.URLError, OSError, ValueError) as exc:
         host = urllib.parse.urlsplit(url).hostname
         # ליומן רק סוג החריגה ו-errno: הטקסט שלה עלול לשאת את גוף הבקשה
-        # (client_secret, ‏refresh_token). למפעיל — ניסוח קבוע.
+        # (client_secret, refresh_token). למפעיל — ניסוח קבוע.
         errno = getattr(getattr(exc, "reason", exc), "errno", None)
         # בלי שם השרת: הוא נגזר מטבלת הספקים (מפתח "token"), ו-CodeQL קורא
         # אותו כסוד (PR ציבורי #56). המפעיל רואה אותו בהודעה למטה.
@@ -115,7 +115,7 @@ def _endpoints(acc: dict) -> dict:
 
 
 def _explain(body: dict) -> str:
-    """תשובת הספק (``error``, ‏``error_description``) — שימושית למפעיל, ולכן עוברת,
+    """תשובת הספק (``error``, ``error_description``) — שימושית למפעיל, ולכן עוברת,
     אבל מנוקה ומקוצרת."""
     text = " — ".join(str(x) for x in (body.get("error"), body.get("error_description")) if x)
     return email_config.public_text(text) or "תשובה לא צפויה"
@@ -139,7 +139,7 @@ class DeviceFlows:
     def __init__(self, http=http_post, clock=time.monotonic):
         self.http, self.clock = http, clock
         self._open: dict[str, dict] = {}
-        #: דור לכל חשבון; ``cancel`` מגדיל. ‏``start`` שהדור השתנה בזמן הבקשה לספק
+        #: דור לכל חשבון; ``cancel`` מגדיל. ``start`` שהדור השתנה בזמן הבקשה לספק
         #: אינו פותח התחברות (cancel שהגיע באמצע ``start`` גובר).
         self._gen: dict[str, int] = {}
         self._lock = threading.Lock()
@@ -168,13 +168,13 @@ class DeviceFlows:
                 "expires_in": expires, "interval": interval, "message": body.get("message")}
 
     def cancel(self, account_id: str) -> bool:
-        """סוגר התחברות פתוחה של החשבון. ‏``True`` = הייתה כזו."""
+        """סוגר התחברות פתוחה של החשבון. ``True`` = הייתה כזו."""
         with self._lock:
             self._gen[account_id] = self._gen.get(account_id, 0) + 1
             return self._open.pop(account_id, None) is not None
 
     def poll(self, acc: dict, data_dir) -> dict:
-        """שאלה אחת לספק. ‏``connected`` רק כשהגיע refresh token ונכתב ל-0600."""
+        """שאלה אחת לספק. ``connected`` רק כשהגיע refresh token ונכתב ל-0600."""
         with self._lock:
             pending = self._open.get(acc["id"])
         if pending is None:
@@ -215,7 +215,7 @@ def save_token(data_dir, account_id: str, refresh_token: str | None, client_secr
 
 
 class _TokenCache:
-    """‏access tokens בזיכרון בלבד, עד דקה לפני שפגו."""
+    """access tokens בזיכרון בלבד, עד דקה לפני שפגו."""
 
     def __init__(self):
         self._tokens: dict[str, tuple[str, float]] = {}

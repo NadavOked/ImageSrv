@@ -1,6 +1,6 @@
 """כלים — תחום windows (#649): שני הכלים שנדב סימן בקטלוג (#1050).
 
-‏`win-users` ו-`win-blank-password` בלבד; ששת כלי האבחון של המודול המקורי
+`win-users` ו-`win-blank-password` בלבד; ששת כלי האבחון של המודול המקורי
 נמחקו, והטסטים שלהם איתם. האריזה — `tests/test_tools_packing.py`.
 """
 
@@ -115,7 +115,7 @@ def test_lists_contract_fields_and_valid_risks():
 
 
 def test_builder_has_no_unconditional_windows_block():
-    """‏#1050: הבנאי אורז לפי הבחירה, לא בלוק קבוע לכל תחום."""
+    """#1050: הבנאי אורז לפי הבחירה, לא בלוק קבוע לכל תחום."""
     text = BUILDER.read_text(encoding="utf-8")
     assert "REQUIRED_WINDOWS_BINARIES" not in text
     assert "--tools-selection" in text

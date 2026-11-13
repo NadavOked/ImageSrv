@@ -1,9 +1,9 @@
-"""‏#2855: החזרה (‏#56) של שינוי על כרטיס שלא היה מנוהל לפני השינוי.
+"""#2855: החזרה (#56) של שינוי על כרטיס שלא היה מנוהל לפני השינוי.
 
-בשרת העבודה (v0.91.10, ‏11/11) ההחזרה של enp2s0 — כרטיס ההפצה, בלי קובץ ב-
-‏`interfaces.d` — מחקה את הקובץ ואז הריצה `ifup enp2s0` על כרטיס ש-ifupdown כבר
-לא הכיר: ‏"ifup: unknown interface enp2s0", כשל בכל פעם, והכתובת 20.0.0.1 לא
-בהכרח ירדה. כאן: ‏ifdown כשה-stanza עוד קיים, מחיקה, ‏flush בלי ifup, וההצלחה
+בשרת העבודה (v0.91.10, 11/11) ההחזרה של enp2s0 — כרטיס ההפצה, בלי קובץ ב-
+`interfaces.d` — מחקה את הקובץ ואז הריצה `ifup enp2s0` על כרטיס ש-ifupdown כבר
+לא הכיר: "ifup: unknown interface enp2s0", כשל בכל פעם, והכתובת 20.0.0.1 לא
+בהכרח ירדה. כאן: ifdown כשה-stanza עוד קיים, מחיקה, flush בלי ifup, וההצלחה
 נקבעת רק מקריאה חוזרת (עיקרון 5). שום hook כאן אינו נוגע במכונה.
 """
 
@@ -98,7 +98,7 @@ def test_ifdown_runs_while_the_stanza_is_still_there(tmp_path: Path):
 
 
 def test_an_address_that_stayed_is_a_failure_by_name(tmp_path: Path):
-    """‏flush שלא הוריד — הכרטיס עדיין נושא את הכתובת: כשל, לא "הוחזר"."""
+    """flush שלא הוריד — הכרטיס עדיין נושא את הכתובת: כשל, לא "הוחזר"."""
     m = machine(flush_clears=False)
     errors = roll(tmp_path, m)
     assert len(errors) == 1 and "20.0.0.1/24" in errors[0]
@@ -112,7 +112,7 @@ def test_a_readback_that_did_not_run_is_not_success(tmp_path: Path):
 
 def test_a_card_defined_in_the_main_file_is_still_brought_up(tmp_path: Path):
     """כרטיס שמוגדר ב-`/etc/network/interfaces` עצמו — ifupdown מכיר אותו גם
-    בלי הקובץ שלנו, וההחזרה היא ifup כמו קודם. ‏None (לא נקרא) אינו "לא"."""
+    בלי הקובץ שלנו, וההחזרה היא ifup כמו קודם. None (לא נקרא) אינו "לא"."""
     for defined in (True, None):
         m = machine(main_defines=defined)
         roll(tmp_path / str(defined), m)

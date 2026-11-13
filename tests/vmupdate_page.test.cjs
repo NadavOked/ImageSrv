@@ -323,6 +323,24 @@ test('#1535: the start dialog titles each source version with its plain text (st
   assert.match(titles[1], /^גרסה ראשונה · נקלט ממחשב בנייה · dana/);
 });
 
+// #2986: a 4-core server was refused and the resource tiles said "—" -- the operator could not see what the VM
+// would get. A refusal now carries `resources`, and vmuCall keeps it on the thrown error.
+test('#2986: a refused start dialog still shows the memory and cores the VM would get', async () => {
+  const {run} = setup();
+  run(`api = async () => ({latest_id: 'img_b', versions: [{id: 'img_b', version: 2, name: 'Office', origin: 'vm'}]});
+    apiFetch = async (url) => url.includes('/precheck')
+      ? {ok: true, status: 200, json: async () => ({ok: false, code: 'memory', error: 'אין מספיק זיכרון',
+          details: {}, resources: {memory_mib: 4096, cpus: 3, disk_bytes: 1e11}})}
+      : {ok: true, status: 200, json: async () => ({})};
+    vmuWin = (o) => { globalThis.VMU_TEST_BODY = o.body; };`);
+  await run(`vmuStartDialog('img_b')`);
+  const body = run('VMU_TEST_BODY');
+  assert.match(body, /אין מספיק זיכרון/);
+  assert.match(body, /<b>3 ליבות<\/b>/);
+  assert.match(body, />4 GB</);
+  assert.doesNotMatch(body.split('<h3>משאבים</h3>')[1].split('</div></div>')[0], /—/);
+});
+
 // #2420: image_version comes from the manifest and lands in innerHTML -- the global "VM רץ" strip on every
 // page, and the preparing card. It is escaped where it is formatted (vmuVersion), not at each sink.
 test('#2420: a hostile image_version is escaped in the global strip in the page head and in the preparing card', () => {

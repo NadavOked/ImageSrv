@@ -4,6 +4,7 @@
 #include <string.h>
 #include "screens_install.h"
 #include "screens_rounds.h"   /* bidi_isolate */
+#include "install_raid.h"     /* #2792: install_store_bytes */
 
 static void kv(App *a,cairo_t *cr,Rect box,const char *key,const char *value,int ltr){const Theme *t=a->theme;install_text_r(cr,t,key,12,500,box.x+box.w-16,box.y+10,box.w*.38,t->muted);if(ltr){Text q=text_make(cr,FONT_MONO,12,400,value,(int)(box.w*.55),DIR_LTR);text_draw(cr,&q,box.x+box.w*.6-q.w,box.y+10,t->ink);text_free(&q);}   /* #2764: the same right edge as the Hebrew values, not the box's left */else install_text_r(cr,t,value,12,400,box.x+box.w*.6,box.y+10,box.w*.55,t->ink);}
 
@@ -128,7 +129,7 @@ void install_draw_backup(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a-
     if(other)install_field_draw(a,cr,(Rect){x+w-fw,y,fw,56},"מקום שמור (GB)",s->backup_other,0,HIT_INSTALL_BACKUP_OTHER_GB,1);
     install_field_draw(a,cr,(Rect){other?x:x+w-fw,y,fw,56},"שעת הגיבוי היומי",s->backup_time,0,HIT_INSTALL_BACKUP_TIME,1);y+=62;
     if(s->field_error[19][0])install_text_r(cr,t,s->field_error[19],12,600,x+w,y,w,t->danger_fg);else install_text_r(cr,t,"מוצע 02:00: שעה בלי סבבים. אם רץ סבב באותה שעה, הגיבוי מחכה לסיומו.",12,400,x+w,y,w,t->muted);y+=26;
-    const InstallDisk *d=s->disk>=0&&s->disk<s->ndisks?&s->disks[s->disk]:NULL;double disk_gb=d?(double)d->size_bytes/1e9:0,gb=atof(install_backup_gb(s));
+    double disk_gb=install_store_bytes(s)/1e9,gb=atof(install_backup_gb(s));   /* #2792: the RAID array, not its first member */
     double share=disk_gb>0?fmin(1,fmax(.01,gb/disk_gb)):.01;Rect bar={x,y,w,12};draw_fill_rrect(cr,bar,6,t->track);cairo_rectangle(cr,x+w*(1-.01-share),y,w*share,12);draw_set(cr,t->warning_line);cairo_fill(cr);cairo_rectangle(cr,x+w*.99,y,w*.01,12);draw_set(cr,t->indigo);cairo_fill(cr);y+=20;
     char mine[32],all[32],kept[48],whole[48],room[220];snprintf(mine,sizeof mine,"%s GB",install_backup_gb(s));snprintf(all,sizeof all,"%.0f GB",disk_gb);bidi_isolate(mine,kept,sizeof kept);bidi_isolate(all,whole,sizeof whole);   /* else "5 GB" reads "GB 5" in the Hebrew line */
     snprintf(room,sizeof room,"שמורים לגיבויים %s מתוך %s פנויים בכונן",kept,whole);install_text_r(cr,t,room,12,400,x+w,y,w,t->muted);y+=24;

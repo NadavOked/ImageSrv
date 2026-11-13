@@ -1,20 +1,20 @@
-"""‏#1601 ו-#1602 — שני ממצאים צדדיים של #1598 (מחשב שיכפול 2, 17/10).
+"""#1601 ו-#1602 — שני ממצאים צדדיים של #1598 (מחשב שיכפול 2, 17/10).
 
-‏**#1601** — בתחנה בודדת (`restore.sh`) כשל של **הזרם** נרשם כ-disk_failure
-על הדיסק התקין: ‏`run_restore` קרא ‏`fail_written_target` בלי הקשר, ולכן
-נאספה ראיית ATA, ‏`failure_json` צירף ‏`ata_log`, והשרת רשם את הדיסק
-(‏`failed_last` אדום בסבב הבא). התיקון: ‏`restore_blame` (failmark.sh) מאשים
-את הדיסק **רק על ראיה חיובית** — ‏fanout איבד את הקורא שלו תחת זרם זורם
-(‏`write error` / ‏`stalled`), או שהזרם הגיע שלם (sha תואם) והכתיבה בכל זאת
-נכשלה. כל השאר — ‏`stream`, בלי ‏ata_log, כמו המגירות ב-#1603.
+**#1601** — בתחנה בודדת (`restore.sh`) כשל של **הזרם** נרשם כ-disk_failure
+על הדיסק התקין: `run_restore` קרא `fail_written_target` בלי הקשר, ולכן
+נאספה ראיית ATA, `failure_json` צירף `ata_log`, והשרת רשם את הדיסק
+(`failed_last` אדום בסבב הבא). התיקון: `restore_blame` (failmark.sh) מאשים
+את הדיסק **רק על ראיה חיובית** — fanout איבד את הקורא שלו תחת זרם זורם
+(`write error` / `stalled`), או שהזרם הגיע שלם (sha תואם) והכתיבה בכל זאת
+נכשלה. כל השאר — `stream`, בלי ata_log, כמו המגירות ב-#1603.
 
-‏**#1602** — מגירה שיצאה מ-sysfs איבדה פורט, סידורי ושורת קרנל: ‏`disk_port`
+**#1602** — מגירה שיצאה מ-sysfs איבדה פורט, סידורי ושורת קרנל: `disk_port`
 ו-`ata_port_of` קוראים את ה-sysfs **ברגע הכשל**, אחרי שהכונן כבר איננו.
-על ברזל הגואי הראה ‏`drawer=0|sdb`. התיקון: ‏`target_init` שומר את הזהות
-(‏`seen`), והיא משמשת כשה-sysfs ריק — בראיה (‏`ident`) ובגואי. ‏`ata_capture`
-תופס גם ‏`device offline error, dev <d>,` ולא רק ‏`I/O error`.
+על ברזל הגואי הראה `drawer=0|sdb`. התיקון: `target_init` שומר את הזהות
+(`seen`), והיא משמשת כשה-sysfs ריק — בראיה (`ident`) ובגואי. `ata_capture`
+תופס גם `device offline error, dev <d>,` ולא רק `I/O error`.
 
-הטסטים של #1601 מריצים את ‏`run_restore` האמיתי עם ‏**fanout האמיתי**
+הטסטים של #1601 מריצים את `run_restore` האמיתי עם **fanout האמיתי**
 (מקומפל מ-`agent/fanout.c`); מה שלפני הזרם (טבלה, בדיקות מקדימות) מוחלף
 בפונקציות ריקות, כי הוא אינו הנבדק.
 """
@@ -35,15 +35,15 @@ from agentlib import agent_sources, flat_lib
 REPO = Path(__file__).resolve().parent.parent
 pytestmark = requires_native("gcc", posix=True, why="fanout האמיתי צריך gcc, ו-sysfs מזויף צריך symlink")
 
-#: ‏24MB: יותר מהחוצץ של fanout בתחנה (‏16MB, ‏restore.sh) ועוד ה-fifo
+#: 24MB: יותר מהחוצץ של fanout בתחנה (16MB, restore.sh) ועוד ה-fifo
 #: והצינור — כך ש-partclone שנתקע באמת עוצר את fanout עד הפינוי.
 PAYLOAD = hashlib.sha256(b"1601").digest() * (24 * 1024 * 1024 // 32)
 GOOD_SHA = hashlib.sha256(PAYLOAD).hexdigest()
 PLAN = (f"3|EBD0A0A2-B9E5-4433-87C0-68B6B72699C7|data|dd|2048|{len(PAYLOAD)}"
         f"|p3.data.dd.zst|{GOOD_SHA}|false|||\n")
 
-#: ‏partclone מזויף לפי ‏$PCL: ‏ok כותב הכול; ‏dies כותב 1MB ויוצא 1 (כונן
-#: שדחה כתיבה); ‏hangs בולע 2MB ומפסיק לקרוא (כונן תקוע); ‏fails_at_end
+#: partclone מזויף לפי $PCL: ok כותב הכול; dies כותב 1MB ויוצא 1 (כונן
+#: שדחה כתיבה); hangs בולע 2MB ומפסיק לקרוא (כונן תקוע); fails_at_end
 #: כותב הכול ויוצא 1 (הזרם שלם, הכתיבה נכשלה).
 PARTCLONE = r"""#!/bin/sh
 node=
@@ -56,8 +56,8 @@ case "$PCL" in
 esac
 """
 
-#: מקור הזרם לפי תרחיש. ‏timeout: ‏4MB ואז שקט; ‏cut: ‏4MB ויציאה (EOF
-#: באמצע); ‏empty: שום בייט; ‏whole: כל הקובץ.
+#: מקור הזרם לפי תרחיש. timeout: 4MB ואז שקט; cut: 4MB ויציאה (EOF
+#: באמצע); empty: שום בייט; whole: כל הקובץ.
 SOURCES = {
     "timeout": "head -c 4194304 {part!r}; sleep 40 & echo $! >> {pids!r}; wait",
     "cut": "head -c 4194304 {part!r}",
@@ -74,7 +74,7 @@ STUBS = {
     "fanout": None,   # the real one, compiled below
 }
 
-#: מה שלפני הזרם אינו הנבדק: הטבלה "נכתבה", ‏write_started נרשם כמו ב-apply_gpt.
+#: מה שלפני הזרם אינו הנבדק: הטבלה "נכתבה", write_started נרשם כמו ב-apply_gpt.
 PRE_STREAM = (
     "disk_fits() { :; }; boot_ca_preflight() { :; }; plan_gate() { :; }; write_check() { :; }; "   # #2412: plan_gate (expand.sh)
     "write_speed_verdict() { :; }; readback_drawers() { :; }; expand_last() { :; }; finish_grow() { :; }; "
@@ -96,8 +96,8 @@ def fanout_dir(tmp_path_factory):
 
 
 def sysfs_disk(box: Path, dev: str, serial: str, ata: int) -> None:
-    """כונן SATA ב-sysfs מזויף: ‏`device` הוא symlink לנתיב שעובר דרך ‏ataN,
-    בדיוק כמו בקרנל — משם נגזרים ‏disk_port ו-ata_port_of."""
+    """כונן SATA ב-sysfs מזויף: `device` הוא symlink לנתיב שעובר דרך ataN,
+    בדיוק כמו בקרנל — משם נגזרים disk_port ו-ata_port_of."""
     real = (box / "sys" / "devices" / "pci0000:00" / "0000:00:17.0" / f"ata{ata}"
             / f"host{ata - 1}" / f"target{ata - 1}:0:0" / f"{ata - 1}:0:0:0")
     real.mkdir(parents=True)
@@ -153,12 +153,12 @@ def station(tmp_path: Path, fanout_dir: Path, source: str, pcl: str) -> tuple[Pa
     return run, out
 
 
-#: תרחישים שבהם הזרם אשם. בלי התיקון כל אחד מהם משאיר ‏ata_log.json — כלומר
-#: ‏disk_failure בשרת על דיסק תקין.
+#: תרחישים שבהם הזרם אשם. בלי התיקון כל אחד מהם משאיר ata_log.json — כלומר
+#: disk_failure בשרת על דיסק תקין.
 STREAM_FAULTS = {
-    "timeout": "ok",      # ‏rc=124: ‏4MB ואז שקט, ‏wait_progress פוקע
-    "cut": "ok",          # המקור יצא באמצע: ‏fanout ראה EOF, ה-sha אינו תואם
-    "empty": "ok",        # שום בייט: ‏fanout "empty stream", ‏rc=1
+    "timeout": "ok",      # rc=124: 4MB ואז שקט, wait_progress פוקע
+    "cut": "ok",          # המקור יצא באמצע: fanout ראה EOF, ה-sha אינו תואם
+    "empty": "ok",        # שום בייט: fanout "empty stream", rc=1
 }
 
 
@@ -176,8 +176,8 @@ def test_a_stream_fault_on_a_station_is_not_recorded_against_its_disk(
 #: תרחישים שבהם הכונן אשם — **השומרים**: עוברים לפני התיקון ואחריו. בלעדיהם
 #: "תיקון" שמוותר על הראיה תמיד היה עובר.
 DISK_FAULTS = {
-    "dies": "whole",          # ‏partclone נכשל בכתיבה: ‏fanout "write error"
-    "hangs": "whole",         # הכונן נתקע: ‏fanout מפנה אותו, "stalled"
+    "dies": "whole",          # partclone נכשל בכתיבה: fanout "write error"
+    "hangs": "whole",         # הכונן נתקע: fanout מפנה אותו, "stalled"
     "fails_at_end": "whole",  # הזרם הגיע שלם (sha תואם), הכתיבה נכשלה
 }
 
@@ -194,7 +194,7 @@ def test_a_disk_fault_on_a_station_still_keeps_its_evidence(tmp_path, fanout_dir
 
 # --- #1602: מגירה שיצאה מ-sysfs שומרת את זהותה ----------------------------------
 
-#: מה שהקרנל כתב על ברזל ב-17/10 אחרי ‏`echo 1 > /sys/block/sdb/device/delete`,
+#: מה שהקרנל כתב על ברזל ב-17/10 אחרי `echo 1 > /sys/block/sdb/device/delete`,
 #: ושורת ata של הפורט אחריה. הראיה נחתכת מהשורה הראשונה שמעידה על כשל (#890),
 #: ושורת ה-ata נשמרת רק אם הפורט שנשמר ב-target_init מזוהה. השורה על sda
 #: (של השכנה) אסור שתיכנס.
@@ -207,7 +207,7 @@ KMSG = "\n".join([
 
 
 def pulled(tmp_path: Path, then: str) -> tuple[Path, str]:
-    """‏target_init על sdb כשהוא ב-sysfs, ואז הוא נשלף — ‏`then` רץ אחרי."""
+    """target_init על sdb כשהוא ב-sysfs, ואז הוא נשלף — `then` רץ אחרי."""
     box = tmp_path / "box"
     run = box / "run"
     (run / "targets").mkdir(parents=True)
@@ -233,7 +233,7 @@ def pulled(tmp_path: Path, then: str) -> tuple[Path, str]:
 
 def test_a_pulled_drawer_reports_the_serial_port_and_kernel_line_it_had(tmp_path):
     """הראיה על המגירה שנשלפה נושאת את הזהות שנקלטה ב-target_init, ואת שורת
-    ה-offline של הקרנל. בלי התיקון: ‏`ident` הוא ‏`||` ו-ata_log ריק."""
+    ה-offline של הקרנל. בלי התיקון: `ident` הוא `||` ו-ata_log ריק."""
     run, out = pulled(tmp_path, 'fail_written_target sdb "מחיצה 3: נשלפה"; echo "rc=$?"')
     log = log_of(run)
     assert out.strip().endswith("rc=0"), out + log
@@ -245,7 +245,7 @@ def test_a_pulled_drawer_reports_the_serial_port_and_kernel_line_it_had(tmp_path
 
 
 def test_a_pulled_drawer_keeps_its_slot_on_the_gui(tmp_path):
-    """‏`drawer=0|sdb` של 17/10: הגואי מציג את הפורט שנשמר, לא ‏0."""
+    """`drawer=0|sdb` של 17/10: הגואי מציג את הפורט שנשמר, לא 0."""
     gui = tmp_path / "gui"
     gui.mkdir()
     libs = "".join(f". {posix(flat_lib())}/{n}.sh; " for n in (

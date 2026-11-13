@@ -1,14 +1,14 @@
-"""‏#1372 — עדכון v0.71→v0.73.2 לא הכין את המארח ל-VM ולא הזהיר: "אומת" בירוק
+"""#1372 — עדכון v0.71→v0.73.2 לא הכין את המארח ל-VM ולא הזהיר: "אומת" בירוק
 בלי qemu/ovmf/guestfs ובלי imagesrv-vm. הסיבה: `server-upgrade.sh` של התג **הישן**
 רץ, ובו אין צעד 3ב.
 
 מה שנבדק כאן — **הגרסה שרצה** מוודאת את מה שהיא צריכה, בלי קשר למי שהעלה אותה:
-* ‏`VmUpdate.host_problem` — אותן בדיקות שההפעלה מסרבת לפיהן, כמשפט אחד.
-* ‏`VmHost.ensure` — בעלייה, מארח שאינו מוכן → deploy/vmupdate-host.sh של
+* `VmUpdate.host_problem` — אותן בדיקות שההפעלה מסרבת לפיהן, כמשפט אחד.
+* `VmHost.ensure` — בעלייה, מארח שאינו מוכן → deploy/vmupdate-host.sh של
   הגרסה שרצה, ביחידה מנותקת; ומה שקרה לה נאמר.
-* ‏`GET /update/status` — ‏`done` שאומת, ומארח שאינו מוכן → `warning` (הקונסולה
+* `GET /update/status` — `done` שאומת, ומארח שאינו מוכן → `warning` (הקונסולה
   מציגה "אומת — אבל …"), גם כשהסקריפט הישן כתב `done` בלי אזהרה.
-* ‏`GET /health` — שורת "עדכון ב-VM" צהובה, לא שקט.
+* `GET /health` — שורת "עדכון ב-VM" צהובה, לא שקט.
 """
 
 from __future__ import annotations
@@ -123,7 +123,7 @@ def server(tmp_path, images_root, clock, monkeypatch):
              "ls_remote_tags": lambda url: (True, "", ""),
              "verify_tag": lambda url, tag, repo_dir: {"state": "signed", "detail": "test"},
              "run_upgrade": lambda repo_dir, tag: (True, "")}
-    # מסך הבריאות לעולם אינו קורא את המכונה שהטסט רץ עליה (‏hostguard, ‏#113).
+    # מסך הבריאות לעולם אינו קורא את המכונה שהטסט רץ עליה (hostguard, #113).
     health = {"ss": lambda: "", "nft_ruleset": lambda: None, "unit_active": lambda name: "",
               "http_get": lambda url: None, "http_size": lambda url: (None, None),
               "interfaces": lambda: [], "tftp_root": lambda: tmp_path / "tftp",
@@ -181,7 +181,7 @@ def test_health_says_the_vm_host_is_not_ready(server):
 
 
 def test_main_turns_the_check_on_and_starts_the_preparation():
-    """‏create_runtime כבוי כברירת מחדל (בדיקות לא שואלות את המכונה) — רק main מדליק."""
+    """create_runtime כבוי כברירת מחדל (בדיקות לא שואלות את המכונה) — רק main מדליק."""
     main = (REPO / "server" / "main.py").read_text(encoding="utf-8")
     assert "vm_host=True" in main
     assert "target=vm_host.ensure" in main

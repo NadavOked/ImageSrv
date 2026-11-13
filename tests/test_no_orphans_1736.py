@@ -3,16 +3,16 @@
 על ה-Testrunner נמדדו ~100 תהליכים בני 10-23 שעות אחרי ריצה מלאה:
 `bash -c` עטיפה (לולאת ה-beat של `attended_start`, שהטסטים של
 `lc_pull_session` מפעילים בלי `attended_stop` שבקוד הייצור שאחריו),
-‏`sleep 300`, ו-stub של `fanout -S`. השורש בכלי הבדיקה: `subprocess.run`
+`sleep 300`, ו-stub של `fanout -S`. השורש בכלי הבדיקה: `subprocess.run`
 מחכה לתהליך הישיר ולא לצאצאיו.
 
-* ‏`test_the_tests_that_leaked_leave_nothing` -- מריץ את הטסטים שדלפו
+* `test_the_tests_that_leaked_leave_nothing` -- מריץ את הטסטים שדלפו
   בריצת pytest משלהם **בלי השומר** (כדי שלא הוא ינקה), ואז סורק את
-  `/proc` אחרי נתיב ה-tmp שלהם. ‏(`test_round_closed.py` נכנס לרשימה
+  `/proc` אחרי נתיב ה-tmp שלהם. (`test_round_closed.py` נכנס לרשימה
   כשהוא קיים בעץ.)
-* ‏`test_the_guard_*` -- הבקרה השלילית של השומר: טסט שמשאיר `sleep` חי
+* `test_the_guard_*` -- הבקרה השלילית של השומר: טסט שמשאיר `sleep` חי
   נכשל בשמו, ונקי / תהליך שבדרך החוצה אינם נכשלים.
-* ‏`test_the_scan_*` -- לוגיקת הסריקה על עץ `/proc` מזויף; רצה בכל מערכת.
+* `test_the_scan_*` -- לוגיקת הסריקה על עץ `/proc` מזויף; רצה בכל מערכת.
 
 הבדיקות שצריכות `/proc` מדולגות בווינדוס (אין שם ראיה, ואין udpcast).
 """

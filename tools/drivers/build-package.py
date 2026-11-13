@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""בניית חבילת דרייברים מ-driver pack של היצרן (‏#959, החוסם המעשי של #720).
+"""בניית חבילת דרייברים מ-driver pack של היצרן (#959, החוסם המעשי של #720).
 
 המפעיל מוריד CAB של HP/Dell/Lenovo (או פורש EXE לתיקייה), והכלי בונה
 את מה שהשרת מקבל ב-`POST /api/console/drivers/upload`: תיקייה אחת עם
-`manifest.json` — שם, כללי התאמה, ‏sha256 לכל קובץ — בתוך tar.
+`manifest.json` — שם, כללי התאמה, sha256 לכל קובץ — בתוך tar.
 
     python tools/drivers/build-package.py sp150000.cab \\
         --vendor "HP" --model "HP EliteDesk 800 G6 Desktop Mini PC" --out hp-800-g6.tar
@@ -11,24 +11,24 @@
     python tools/drivers/build-package.py <תיקייה-שנפרשה> --vendor LENOVO \\
         --model "ThinkCentre M720q" --version 2.1
 
-`--vendor` ו-`--model` הם מה שהמכונה מדווחת ב-hello (‏`dmi.sys_vendor`,
-‏`dmi.product_name`/`product_version`) — מוצגים בכרטיס המכונה בקונסולה.
+`--vendor` ו-`--model` הם מה שהמכונה מדווחת ב-hello (`dmi.sys_vendor`,
+`dmi.product_name`/`product_version`) — מוצגים בכרטיס המכונה בקונסולה.
 
-**כללי ההתאמה שנכתבים** (‏`docs/architecture/interfaces.md` §17):
+**כללי ההתאמה שנכתבים** (`docs/architecture/interfaces.md` §17):
 
-1. ‏`{"vendor", "model"}` — כשניתן `--vendor`. בלעדיו הכלל אינו נכתב
+1. `{"vendor", "model"}` — כשניתן `--vendor`. בלעדיו הכלל אינו נכתב
    (השרת דורש את שניהם) והסיכום אומר זאת במפורש.
-2. ‏`{"pci_any": [...]}` — כל `PCI\\VEN_xxxx&DEV_xxxx` מכל INF שה-`Class`
-   שלו הוא רשת או אחסון (‏Net / HDC / SCSIAdapter): אלה שני ה-classes
-   היחידים שהסוכן מדווח במלאי (‏`agent/lib/hw/inventory.sh`), ומזהה של
-   כרטיס מסך או שבב אודיו לא יתאים לעולם. ‏SUBSYS/REV נזרקים — המלאי
-   אינו מדווח אותם. ‏INF אינו נוקב בקוד class, ולכן המזהה נכתב בלי
-   class (‏`8086:15bc`) והשרת מתאים לפי vendor:device.
+2. `{"pci_any": [...]}` — כל `PCI\\VEN_xxxx&DEV_xxxx` מכל INF שה-`Class`
+   שלו הוא רשת או אחסון (Net / HDC / SCSIAdapter): אלה שני ה-classes
+   היחידים שהסוכן מדווח במלאי (`agent/lib/hw/inventory.sh`), ומזהה של
+   כרטיס מסך או שבב אודיו לא יתאים לעולם. SUBSYS/REV נזרקים — המלאי
+   אינו מדווח אותם. INF אינו נוקב בקוד class, ולכן המזהה נכתב בלי
+   class (`8086:15bc`) והשרת מתאים לפי vendor:device.
 
 המניפסט עובר את `server.library.drivers.validate_manifest` **לפני** שה-tar
 נכתב — הכלי אינו יכול לבנות מה שהשרת ידחה, כי זו אותה פונקציה.
 
-יציאה: ‏0 כשה-tar נכתב והסיכום הודפס; ‏1 על כל סירוב, בשמו.
+יציאה: 0 כשה-tar נכתב והסיכום הודפס; 1 על כל סירוב, בשמו.
 """
 
 from __future__ import annotations
@@ -100,7 +100,7 @@ def extract_cab(cab: Path, dest: Path) -> None:
     produced = [p for p in dest.rglob("*") if p.is_file()]
     if not produced:
         raise Refusal(f"{cmd[0]} יצא 0 אך לא פרש אף קובץ — ה-CAB ריק או שאינו CAB")
-    # ‏expand.exe יוצא 0 ו**מעתיק** קובץ שאינו CAB אל היעד בשמו (נמדד 17/09):
+    # expand.exe יוצא 0 ו**מעתיק** קובץ שאינו CAB אל היעד בשמו (נמדד 17/09):
     # יציאה 0 אינה ראיה. קובץ "שנפרש" שזהה בייט-בבייט למקור הוא העתק.
     size = cab.stat().st_size
     if any(p.stat().st_size == size and p.read_bytes() == cab.read_bytes() for p in produced):
@@ -121,7 +121,7 @@ def read_inf(path: Path) -> str:
 
 
 def scan_inf(text: str) -> tuple[str, list[str]]:
-    """(‏class של ה-INF באותיות קטנות, מזהי `vendor:device` ממוינים בלי כפילויות)."""
+    """(class של ה-INF באותיות קטנות, מזהי `vendor:device` ממוינים בלי כפילויות)."""
     found = CLASS_RE.search(text)
     klass = found.group(1).lower() if found else ""
     ids = {f"{v.lower()}:{d.lower()}" for v, d in HWID_RE.findall(text)}

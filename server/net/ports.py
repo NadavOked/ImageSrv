@@ -1,38 +1,38 @@
-"""מתג הדלקה/כיבוי לכל פורט של השרת — **בזמן ריצה** (‏#996).
+"""מתג הדלקה/כיבוי לכל פורט של השרת — **בזמן ריצה** (#996).
 
 הכרעת נדב (17/09): "לכל אחד אמור להיות דונגל הדלקה וכיבוי לפורט". עד
 כאן היה מתג ל-DHCP/proxy/מוניטור, ולמאזינים של השרת עצמו — סוכן
-‏8080, קונסולה 8081, בין-שרתים 8443 — לא היה כלום.
+8080, קונסולה 8081, בין-שרתים 8443 — לא היה כלום.
 
 שני חלקים:
 
-* **‏`Listeners`** — מנהל המאזינים שמחליף את `serve_all` הישן ב-`main.py`.
+* **`Listeners`** — מנהל המאזינים שמחליף את `serve_all` הישן ב-`main.py`.
   מחזיק לכל פורט את היצרן של ה-`uvicorn.Server` שלו (או `start`/`stop`
   של מאזין threaded, כמו ה-mTLS הבין-שרתי), פותח בעלייה רק את מה
   שהמצב השמור מרשה, וסוגר/פותח בזמן ריצה. "כבוי" כאן הוא **סוקט
-  סגור** — ‏`ss` לא מראה מאזין, ו-`bind` מבחוץ מצליח — ולא 403 על כל
+  סגור** — `ss` לא מראה מאזין, ו-`bind` מבחוץ מצליח — ולא 403 על כל
   בקשה (עיקרון 5: "לא מאזין" נמדד, לא מוצהר).
-* **המצב השמור** — ‏`settings` עם מפתח `port:<id>`, ‏JSON ‏`{"enabled": bool}`.
+* **המצב השמור** — `settings` עם מפתח `port:<id>`, JSON `{"enabled": bool}`.
   שורד אתחול: פורט שכבוי ב-DB לא מופעל כלל בעלייה הבאה. חסר = דלוק,
   כי אחרת שדרוג לגרסה הזו היה מכבה את השרת בשקט.
 
-**איך המאזין נסגר ונפתח.** ‏uvicorn 0.32 (דביאן 13) ו-0.52 (התחנה)
-חולקים אותו מחזור: ‏`Server.serve()` קושר ב-`startup` ומסמן `started`,
+**איך המאזין נסגר ונפתח.** uvicorn 0.32 (דביאן 13) ו-0.52 (התחנה)
+חולקים אותו מחזור: `Server.serve()` קושר ב-`startup` ומסמן `started`,
 מתקתק ב-`main_loop` כל 0.1ש' עד `should_exit`, ואז `shutdown()` סוגר
 **קודם** את סוקטי ההאזנה ורק אחר כך ממתין לחיבורים חיים. לכן סגירה =
-‏`should_exit = True` + המתנה למשימה (הפורט משוחרר כבר בתחילת ה-shutdown),
-ופתיחה = `Server` **חדש** מאותו `Config` (Server אינו רב-פעמי — ‏`started`
+`should_exit = True` + המתנה למשימה (הפורט משוחרר כבר בתחילת ה-shutdown),
+ופתיחה = `Server` **חדש** מאותו `Config` (Server אינו רב-פעמי — `started`
 ו-`servers` שלו הם מצב של ריצה אחת) והמתנה ל-`started` כראיה חיובית
-שהקשירה הצליחה. ‏`serve()` של uvicorn תופס SIGINT/SIGTERM ומשחזר את
+שהקשירה הצליחה. `serve()` של uvicorn תופס SIGINT/SIGTERM ומשחזר את
 הקודם ביציאה — עם מאזינים שנפתחים ונסגרים הסדר הזה מתערבב, ולכן אחרי
 כל מעבר המנהל מתקין את ה-handler **שלו** מחדש: אות = יציאה מתואמת של
 כולם, כמו ב-`serve_all` הישן.
 
-**מה נשאר במקום אחר, בכוונה.** ‏DHCP 67 ו-proxy 4011 (`PUT /net/interfaces/
+**מה נשאר במקום אחר, בכוונה.** DHCP 67 ו-proxy 4011 (`PUT /net/interfaces/
 {n}`) ומוניטור 5900 (`PUT /monitor/settings`)
-כבר יש להם מתג עם הראיה שלהם — ‏`/ports` **מצביע** אליהם (`toggle_url`) ואינו
-משכפל. ‏TFTP 69 (‏#1013) הוא dnsmasq: המתג נשמר כמו כל פורט (`port:tftp`)
-ומוחל דרך ה-render של הקונסולה (`console_dhcp.apply_dnsmasq` — ‏`enable-tftp`
+כבר יש להם מתג עם הראיה שלהם — `/ports` **מצביע** אליהם (`toggle_url`) ואינו
+משכפל. TFTP 69 (#1013) הוא dnsmasq: המתג נשמר כמו כל פורט (`port:tftp`)
+ומוחל דרך ה-render של הקונסולה (`console_dhcp.apply_dnsmasq` — `enable-tftp`
 נכתב בקובץ שהשרת מרנדר, לא בקובץ המתקין), והראיה היא `ss -ulnp`. שרת
 שקובץ המתקין שלו עדיין נושא `enable-tftp` (שודרג בלי להריץ את המתקין)
 מקבל `toggle: none` עם הסבר — לא "כבוי" מזויף (`tftp_switch`). מולטיקאסט
@@ -59,7 +59,7 @@ from server.net import dhcp, dhcp_host
 from server.db import get_setting, journal, set_setting
 
 log = logging.getLogger("imagesrv.ports")
-#: ‏#2510: מה שהקונסולה מקבלת כשפתיחה/סגירה נכשלה בחריגה שאינה שלנו.
+#: #2510: מה שהקונסולה מקבלת כשפתיחה/סגירה נכשלה בחריגה שאינה שלנו.
 TOGGLE_FAILED = "פתיחת הפורט או סגירתו נכשלה — הפרטים ביומן השרת"
 
 SETTING_PREFIX = "port:"
@@ -70,14 +70,14 @@ SETTING_PREFIX = "port:"
 OPEN_TIMEOUT = 5.0
 CLOSE_TIMEOUT = 10.0
 
-#: ‏SIGBREAK קיים רק בווינדוס; ‏uvicorn מטפל באותה שלישייה.
+#: SIGBREAK קיים רק בווינדוס; uvicorn מטפל באותה שלישייה.
 _SIGNALS = tuple(s for s in (signal.SIGINT, signal.SIGTERM,
                              getattr(signal, "SIGBREAK", None)) if s is not None)
 
 
 class ListenerError(RuntimeError):
     """פתיחה/סגירה **בזמן ריצה** שלא הסתיימה בראיה חיובית — bind שנכשל,
-    ‏`started` שלא הגיע בזמן. שגיאה לבקשה, לא נפילה של התהליך."""
+    `started` שלא הגיע בזמן. שגיאה לבקשה, לא נפילה של התהליך."""
 
 
 # --- המצב השמור ---------------------------------------------------------------
@@ -105,9 +105,9 @@ def set_enabled(conn, port_id: str, want: bool) -> None:
 
 def server_name(conn) -> str:
     """שם השרת — **שם המארח** של המכונה. הכרעת נדב (17/10, סידור עמוד ההגדרות):
-    שם אחד לתצוגה (העץ, הכותרת, מסכי התחנות, ‏`/me.server_name`) ולרשת, ומשנים
-    אותו במקום אחד — ‏``POST /hostname``. ההגדרה הישנה ``server_name`` (#936) אינה
-    נקראת עוד: שם תצוגה נפרד היה "שינוי שם" שני בעמוד. ‏``conn`` נשאר בחתימה
+    שם אחד לתצוגה (העץ, הכותרת, מסכי התחנות, `/me.server_name`) ולרשת, ומשנים
+    אותו במקום אחד — ``POST /hostname``. ההגדרה הישנה ``server_name`` (#936) אינה
+    נקראת עוד: שם תצוגה נפרד היה "שינוי שם" שני בעמוד. ``conn`` נשאר בחתימה
     בשביל הקוראים."""
     del conn
     return socket.gethostname()
@@ -117,14 +117,14 @@ def server_name(conn) -> str:
 
 
 def _server_host(server) -> str | None:
-    """הכתובת שמאזין uvicorn נקשר אליה — מה-`Config` שלו (‏#705)."""
+    """הכתובת שמאזין uvicorn נקשר אליה — מה-`Config` שלו (#705)."""
     return getattr(getattr(server, "config", None), "host", None)
 
 
 async def _guarded(port_id: str, server) -> None:
-    """‏uvicorn עושה `sys.exit(3)` על כשל bind. ‏SystemExit בתוך משימה של
+    """uvicorn עושה `sys.exit(3)` על כשל bind. SystemExit בתוך משימה של
     asyncio אינו נשאר בה — הלולאה כולה נופלת איתו (`Task.__step` מגלגל
-    ‏BaseException החוצה). כאן הוא הופך לחריגה רגילה שהמנהל יודע לתפוס:
+    BaseException החוצה). כאן הוא הופך לחריגה רגילה שהמנהל יודע לתפוס:
     בעלייה — יציאה מתואמת של כולם; בזמן ריצה — שגיאה לבקשה, והשאר חיים."""
     try:
         await server.serve()
@@ -136,13 +136,13 @@ async def _guarded(port_id: str, server) -> None:
 
 class Listeners:
     """המאזינים של התהליך, לפי מזהה פורט (`http_boot`/`http_console`/
-    ‏`interserver`). ‏`serve()` מחליף את `serve_all`: פותח מה שמותר, ממתין,
+    `interserver`). `serve()` מחליף את `serve_all`: פותח מה שמותר, ממתין,
     ומוריד את כולם כשאחד יצא **שלא מרצונו** (Ctrl-C, קריסה) — יציאה שהמנהל
     ביקש אינה מפילה את השאר."""
 
     def __init__(self, want_open: Callable[[str], bool] | None = None) -> None:
-        #: המצב השמור — `want_open(port_id)`; ‏None = הכול פתוח (בדיקות).
-        #: ‏main.py קובע אותו אחרי שה-DB קיים (`ports.enabled`).
+        #: המצב השמור — `want_open(port_id)`; None = הכול פתוח (בדיקות).
+        #: main.py קובע אותו אחרי שה-DB קיים (`ports.enabled`).
         self.want_open = want_open
         self._factories: dict[str, list[Callable[[], object]]] = {}
         self._threaded: dict[str, tuple[Callable[[], object], Callable[[object], None]]] = {}
@@ -159,7 +159,7 @@ class Listeners:
         self._exit: asyncio.Event | None = None
         self._lock: asyncio.Lock | None = None
         self._rebind_gen: dict[str, int] = {}
-        #: ‏#705: משימות של מאזין שה-retarget פותח או סוגר בכוונה — סיומן
+        #: #705: משימות של מאזין שה-retarget פותח או סוגר בכוונה — סיומן
         #: אינו "יציאה לא צפויה" שמפילה את כל השאר.
         self._retiring: set[asyncio.Task] = set()
 
@@ -168,15 +168,15 @@ class Listeners:
     def add(self, port_id: str, factories: list[Callable[[], object]], *,
             port: int, hosts: list[str]) -> None:
         """מאזין uvicorn: יצרן לכל `Server` (הקונסולה יכולה להיות שניים —
-        כרטיס הניהול ו-loopback, ‏#904), והפורט/כתובות **לתצוגה** בלבד —
+        כרטיס הניהול ו-loopback, #904), והפורט/כתובות **לתצוגה** בלבד —
         מה שבאמת מאזין נקרא מהסוקטים (`bound`)."""
         self._factories[port_id] = list(factories)
         self._specs[port_id] = {"port": port, "hosts": list(hosts)}
 
     def add_threaded(self, port_id: str, *, start: Callable[[], object],
                      stop: Callable[[object], None], port: int, hosts: list[str]) -> None:
-        """מאזין שאינו uvicorn (ה-mTLS הבין-שרתי): ‏`start()` קושר ומחזיר
-        אובייקט, ‏`stop(obj)` סוגר. ‏OSError מ-`start` הוא כשל bind."""
+        """מאזין שאינו uvicorn (ה-mTLS הבין-שרתי): `start()` קושר ומחזיר
+        אובייקט, `stop(obj)` סוגר. OSError מ-`start` הוא כשל bind."""
         self._threaded[port_id] = (start, stop)
         self._specs[port_id] = {"port": port, "hosts": list(hosts)}
 
@@ -231,7 +231,7 @@ class Listeners:
                     try:
                         await self._open(port_id)
                     except ListenerError as exc:
-                        # ‏_task_done אולי כבר רשם את החריגה של המשימה עצמה.
+                        # _task_done אולי כבר רשם את החריגה של המשימה עצמה.
                         if not self._failures:
                             self._failures.append(exc.__cause__ or exc)
                         self._exit.set()
@@ -271,7 +271,7 @@ class Listeners:
     async def rebind(self, port_id: str, *, hosts: list[str],
                      factories: list[Callable[[], object]] | None = None,
                      start: Callable[[], object] | None = None) -> None:
-        """‏#1088: אותו פורט, כתובת אחרת — הכרטיס קיבל lease חדש.
+        """#1088: אותו פורט, כתובת אחרת — הכרטיס קיבל lease חדש.
 
         סוגר את המאזין הקיים (אם היה פתוח), מחליף את היצרנים/`start` ואת
         הכתובות לתצוגה, ופותח מחדש **רק אם היה פתוח** — מתג שהמפעיל כיבה
@@ -281,7 +281,7 @@ class Listeners:
         if port_id not in self._specs:
             raise KeyError(port_id)
         assert self._lock is not None, "serve() לא רץ"
-        # ‏#1121 ס' 6: אסימון דור — כמה rebinds שהצטברו (הדוגם המשיך אחרי
+        # #1121 ס' 6: אסימון דור — כמה rebinds שהצטברו (הדוגם המשיך אחרי
         # timeout) מתבצעים לפי הסדר, ורק **האחרון** נכנס לתוקף: כתובת ישנה
         # שהגיעה לתור מאוחר לא תדרוס את החדשה.
         generation = self._rebind_gen[port_id] = self._rebind_gen.get(port_id, 0) + 1
@@ -307,7 +307,7 @@ class Listeners:
                        factories: list[Callable[[], object]] | None = None,
                        start: Callable[[], object] | None = None,
                        timeout: float | None = None) -> None:
-        """‏`rebind` מתהליכון אחר (הדוגם של `ifaddr.AddressWatcher`)."""
+        """`rebind` מתהליכון אחר (הדוגם של `ifaddr.AddressWatcher`)."""
         if self._loop is None:
             raise ListenerError("מנהל המאזינים אינו רץ")
         future = asyncio.run_coroutine_threadsafe(
@@ -317,7 +317,7 @@ class Listeners:
 
     async def retarget(self, port_id: str, *, hosts: list[str],
                        factory_for: Callable[[str], Callable[[], object]]) -> None:
-        """‏#705: אותו פורט, **קבוצת כתובות** אחרת — לפי השירותים של כל כרטיס.
+        """#705: אותו פורט, **קבוצת כתובות** אחרת — לפי השירותים של כל כרטיס.
 
         בניגוד ל-`rebind` זה מצטבר: שרת שהכתובת שלו נשארת **אינו נסגר**
         (חיבור הקונסולה שדרכו המפעיל שומר את השינוי חי עליו); כתובת חדשה
@@ -381,7 +381,7 @@ class Listeners:
     def request_retarget(self, port_id: str, *, hosts: list[str],
                          factory_for: Callable[[str], Callable[[], object]],
                          timeout: float | None = None) -> None:
-        """‏`retarget` מתהליכון אחר (ה-endpoint של #705 רץ במאגר של uvicorn)."""
+        """`retarget` מתהליכון אחר (ה-endpoint של #705 רץ במאגר של uvicorn)."""
         if self._loop is None:
             raise ListenerError("מנהל המאזינים אינו רץ")
         future = asyncio.run_coroutine_threadsafe(
@@ -396,7 +396,7 @@ class Listeners:
             try:
                 self._threads[port_id] = start()
             except OSError as exc:
-                # ‏#2510: ה-strerror ליומן השרת; ב-ListenerError — משפט שלנו.
+                # #2510: ה-strerror ליומן השרת; ב-ListenerError — משפט שלנו.
                 log.warning("listener %s did not start: %s", one_line(port_id), exc)
                 raise ListenerError(f"{port_id}: המאזין לא עלה — הפרטים ביומן השרת") from exc
             self._wanted.add(port_id)
@@ -408,7 +408,7 @@ class Listeners:
         self._opening.add(port_id)
         for task in tasks:
             task.add_done_callback(lambda t, p=port_id: self._task_done(p, t))
-        # הראיה החיובית: `started` — ‏uvicorn מסמן אותו רק אחרי create_server.
+        # הראיה החיובית: `started` — uvicorn מסמן אותו רק אחרי create_server.
         # עד אז המשימה שנגמרה היא כשל bind (uvicorn עושה sys.exit).
         try:
             deadline = self._loop.time() + OPEN_TIMEOUT
@@ -430,7 +430,7 @@ class Listeners:
             self._opening.discard(port_id)
             self._install_signal_handlers()
         # מאזין שעלה ונגמר בין `started` לכאן (Ctrl-C באמצע פתיחה) — יציאה
-        # לא צפויה כמו כל אחרת; ‏_task_done כבר לא ראה אותו כ"נפתח".
+        # לא צפויה כמו כל אחרת; _task_done כבר לא ראה אותו כ"נפתח".
         if any(t.done() for t in tasks):
             self._task_done(port_id, next(t for t in tasks if t.done()))
 
@@ -474,7 +474,7 @@ class Listeners:
         self.stop()
 
     def _install_signal_handlers(self) -> dict:
-        """‏`signal.signal` עובד רק בתהליכון הראשי — שם רצה הלולאה בייצור;
+        """`signal.signal` עובד רק בתהליכון הראשי — שם רצה הלולאה בייצור;
         בבדיקות שמריצות את המנהל מתהליכון אחר פשוט אין אותות לתפוס."""
         if threading.current_thread() is not threading.main_thread():
             return {}
@@ -497,9 +497,9 @@ class Listeners:
 
 # --- הטבלה: מה יש לכל שורה ב-/ports ------------------------------------------
 
-#: המאזינים של השרת עצמו: ‏(toggle, מה קורה אם מכבים). ‏"confirm" = כיבוי
-#: מאחורי הקלדת שם השרת (עיקרון 7), כי הוא שובר את המערכת; ‏"api" = מתג
-#: רגיל. ‏8081 מסורב בנוסף כשהבקשה מגיעה דרכו (הדלת האחרונה).
+#: המאזינים של השרת עצמו: (toggle, מה קורה אם מכבים). "confirm" = כיבוי
+#: מאחורי הקלדת שם השרת (עיקרון 7), כי הוא שובר את המערכת; "api" = מתג
+#: רגיל. 8081 מסורב בנוסף כשהבקשה מגיעה דרכו (הדלת האחרונה).
 OWN = {
     "http_boot": ("confirm",
                   "אין תפריט אתחול, קרנל ו-hello — תחנות לא יעלו מהרשת ויפלו "
@@ -511,16 +511,16 @@ OWN = {
                     "שרתי משנה לא יוכלו להירשם או לסנכרן מול השרת הזה"),
 }
 
-#: ‏#1013 — TFTP 69. האזהרה מוצגת בקונסולה **לפני** שדה הקלדת שם השרת
-#: (הכרעת נדב 19/09); ‏v2 יוסיף את מחשבי הכיתה לניסוח.
+#: #1013 — TFTP 69. האזהרה מוצגת בקונסולה **לפני** שדה הקלדת שם השרת
+#: (הכרעת נדב 19/09); v2 יוסיף את מחשבי הכיתה לניסוח.
 TFTP_WARNING_HE = ("כיבוי 69 (TFTP) עוצר את ה-PXE: מחשבי בנייה ושיכפול לא יעלו "
                    "מהשרת.")
 TFTP_OFF_MEANS = ("אין shim/GRUB ותפריט — אף מחשב לא עולה ב-PXE מהשרת הזה, "
                   "וסבבים לא יתחילו")
 
 #: אזהרה לפני כיבוי, לכל פורט, בניסוח של 69 (הכרעת נדב 19/09: "על כל פורט
-#: אזהרה"). הקונסולה מציגה אותה **לפני** ההקלדה/האישור; ‏`off_means` נשאר
-#: הטקסט הקצר בשורה. ‏v1 — בלי כיתות; ב-v2 מוסיפים "ומחשבי כיתה".
+#: אזהרה"). הקונסולה מציגה אותה **לפני** ההקלדה/האישור; `off_means` נשאר
+#: הטקסט הקצר בשורה. v1 — בלי כיתות; ב-v2 מוסיפים "ומחשבי כיתה".
 WARNINGS_HE = {
     "tftp": TFTP_WARNING_HE,
     "dhcp": ("כיבוי 67 (DHCP) עוצר את ה-PXE: מחשבי בנייה ושיכפול לא יקבלו כתובת "
@@ -545,9 +545,9 @@ def warning_for(port_id: str) -> str | None:
 
 
 def tftp_switch(conn, installer_conf: str | None) -> dict:
-    """שדות המתג של שורת `tftp` ב-`/ports` (‏#1013), לפי **קובץ המתקין**:
+    """שדות המתג של שורת `tftp` ב-`/ports` (#1013), לפי **קובץ המתקין**:
 
-    * ‏`installer_conf` הוא הטקסט של `/etc/dnsmasq.d/imagesrv.conf` (‏`""`
+    * `installer_conf` הוא הטקסט של `/etc/dnsmasq.d/imagesrv.conf` (`""`
       = אין קובץ), או `None` = קיים ולא נקרא (`dhcp.read_installer_conf`).
     * הקובץ עדיין נושא `enable-tftp` → **אין מתג** (`none`): dnsmasq קורא את
       /etc/dnsmasq.d במצטבר, והקובץ שהשרת מרנדר אינו יכול לבטל אותו.
@@ -574,7 +574,7 @@ def tftp_switch(conn, installer_conf: str | None) -> dict:
             "off_means": TFTP_OFF_MEANS, "warning_he": TFTP_WARNING_HE}
 
 
-#: שורות שהמתג שלהן חי במקום אחר — ‏`/ports` מצביע לשם.
+#: שורות שהמתג שלהן חי במקום אחר — `/ports` מצביע לשם.
 #: #1829: proxy toggles also regenerate the interface-scoped UDP 4011 rule;
 #: port_firewall reads that explicit accept rule instead of assuming it is open.
 ELSEWHERE = {
@@ -585,7 +585,7 @@ ELSEWHERE = {
 
 
 def bind_addresses(ss_output: str, port: int) -> list[str] | None:
-    """כתובות ההאזנה על פורט, מפלט `ss -ltnp`/`-ulnp`. ‏None = הטבלה לא
+    """כתובות ההאזנה על פורט, מפלט `ss -ltnp`/`-ulnp`. None = הטבלה לא
     נקראה (פלט ריק/בלי כותרת) — "לא נקרא" ואינו "אף אחד לא מאזין"."""
     lines = ss_output.splitlines()
     if not lines or "Local Address" not in lines[0]:
@@ -602,9 +602,9 @@ def bind_addresses(ss_output: str, port: int) -> list[str] | None:
 
 
 def measured_state(enabled_flag: bool | None, listening: bool | None) -> tuple[str, str]:
-    """שלושה מצבים, שלושה צבעים (עיקרון 5): ‏(state, detail).
+    """שלושה מצבים, שלושה צבעים (עיקרון 5): (state, detail).
 
-    ‏"כבוי" הוא המתג; "לא מאזין" נמדד; "לא נקרא" הוא ss שלא רץ — והוא
+    "כבוי" הוא המתג; "לא מאזין" נמדד; "לא נקרא" הוא ss שלא רץ — והוא
     אדום (`unknown`), כי דלת שאי אפשר לראות גרועה מדלת פתוחה שיודעים עליה.
     """
     if listening is None:
@@ -626,7 +626,7 @@ NFT_TIMEOUT = 5.0
 
 
 def read_nft_ruleset() -> str | None:
-    """פלט `nft list ruleset`. ‏None = לא הצלחנו לבדוק (חסר/נכשל/timeout).
+    """פלט `nft list ruleset`. None = לא הצלחנו לבדוק (חסר/נכשל/timeout).
 
     יציאה 0 עם פלט ריק היא בדיקה שהצליחה — הטבלה פשוט אינה שם. יציאה
     שאינה 0, או שאין בינארי, אינה "לא נטענה"."""
@@ -681,7 +681,7 @@ def count_imagesrv_rules(ruleset: str) -> int | None:
 
 
 def rule_interfaces(ruleset: str) -> set[str]:
-    """‏#1810: שמות הכרטיסים שכללי טבלת imagesrv מפנים אליהם (‏`iifname`)."""
+    """#1810: שמות הכרטיסים שכללי טבלת imagesrv מפנים אליהם (`iifname`)."""
     body = _imagesrv_table_body(ruleset) or ""
     names = set(re.findall(r'iifname\s+"([^"]+)"', body))
     for group in re.findall(r"iifname\s+\{([^}]*)\}", body):
@@ -696,9 +696,9 @@ def firewall_status(ruleset: str | None,
     None → לא הצלחנו לבדוק; אין טבלת imagesrv → לא נטענה;
     טבלה קיימת → פעילה, N כללים.
 
-    ‏#1810: ‏`interfaces` — הכרטיסים שקיימים במערכת. כלל `iifname` שמפנה לשם
+    #1810: `interfaces` — הכרטיסים שקיימים במערכת. כלל `iifname` שמפנה לשם
     שאינו ביניהם נטען בלי שגיאה ואינו תופס אף חבילה — אדום, לא "פעילה".
-    ‏None = לא נבדק (כמו היום); רשימה ריקה = לא נקראה, ונאמר.
+    None = לא נבדק (כמו היום); רשימה ריקה = לא נקראה, ונאמר.
     """
     if ruleset is None:
         return "unknown", "לא הצלחנו לבדוק"
@@ -718,9 +718,9 @@ def firewall_status(ruleset: str | None,
     return "ok", detail
 
 
-#: ‏#1267: לאיזו רשת שייכת כל שורה ב-`/ports`. ברשת ההפצה השרת מנהל את
-#: הפורטים ואין חומת אש של המכללה; ‏`mgmt`/`interserver` חוצים רשתות.
-#: ‏`firewall` (מצב ה-nft כולו) אינו פורט — ‏None.
+#: #1267: לאיזו רשת שייכת כל שורה ב-`/ports`. ברשת ההפצה השרת מנהל את
+#: הפורטים ואין חומת אש של המכללה; `mgmt`/`interserver` חוצים רשתות.
+#: `firewall` (מצב ה-nft כולו) אינו פורט — None.
 NETWORK = {"dhcp": "deploy", "tftp": "deploy", "http_boot": "deploy",
            "pxe_proxy": "deploy", "multicast": "deploy", "monitor": "deploy",
            "http_console": "mgmt", "interserver": "interserver", "ntp": "per_nic"}
@@ -731,12 +731,12 @@ def network_of(port_id: str) -> str | None:
 
 
 def port_firewall(ruleset: str | None, proto: str, port: str) -> tuple[str | None, str]:
-    """‏#1267: האם טבלת `inet imagesrv` של השרת מכניסה `proto`/`port`.
+    """#1267: האם טבלת `inet imagesrv` של השרת מכניסה `proto`/`port`.
 
-    ‏"open" רק על ראיה: כלל `accept` עם `<proto> dport <port>` (או policy
-    accept); ‏"blocked" רק כש-policy drop ואין כלל כזה. כל השאר — nft שלא
-    נקרא, טבלה שלא נטענה, policy שלא זוהה — ‏None ("לא נבדק", עיקרון 5).
-    ‏`nft list ruleset` מדפיס פורטים כמספרים (שמות שירות רק עם ‎-S)."""
+    "open" רק על ראיה: כלל `accept` עם `<proto> dport <port>` (או policy
+    accept); "blocked" רק כש-policy drop ואין כלל כזה. כל השאר — nft שלא
+    נקרא, טבלה שלא נטענה, policy שלא זוהה — None ("לא נבדק", עיקרון 5).
+    `nft list ruleset` מדפיס פורטים כמספרים (שמות שירות רק עם -S)."""
     if ruleset is None:
         return None, "nft לא נקרא — לא נבדק"
     body = _imagesrv_table_body(ruleset)
@@ -779,16 +779,16 @@ def port_firewall(ruleset: str | None, proto: str, port: str) -> tuple[str | Non
 def create_ports_router(ctx, snapshot: Callable[[], list[dict]],
                         listeners, dnsmasq_apply: Callable[[str, object], str | None] | None = None,
                         ) -> APIRouter:
-    """‏`PUT /api/console/ports/{id}` — ‏admin בלבד. נתלה בראוטר הבריאות
+    """`PUT /api/console/ports/{id}` — admin בלבד. נתלה בראוטר הבריאות
     (`/api/console`), כי המתג והחיווי הם אותם hooks.
 
-    ‏`def` ולא `async def`, בכוונה: המעבר עצמו
+    `def` ולא `async def`, בכוונה: המעבר עצמו
     רץ על לולאת האירועים דרך `Listeners.request`, ו-endpoint אסינכרוני
     היה חוסם את הלולאה שהוא ממתין לה.
 
-    ‏`dnsmasq_apply(what, user_id)` (‏#1013): מרנדר ומחיל את קובצי ה-dnsmasq
+    `dnsmasq_apply(what, user_id)` (#1013): מרנדר ומחיל את קובצי ה-dnsmasq
     מה-DB — זה מה שמכבה/מדליק את TFTP 69 בפועל (`console_dhcp.apply_dnsmasq`).
-    ‏None = אין חיבור ל-dnsmasq בתהליך הזה, והמתג אומר זאת.
+    None = אין חיבור ל-dnsmasq בתהליך הזה, והמתג אומר זאת.
     """
     router = APIRouter(prefix="/ports")
     _current_user, admin_only = auth.dependencies(ctx.conn)
@@ -825,7 +825,7 @@ def create_ports_router(ctx, snapshot: Callable[[], list[dict]],
         journal(ctx.conn, "port_toggle", f"{port_id} {'on' if want else 'off'}", user[0])
         applied, detail = False, ""
         if port_id == "tftp":
-            # ‏#1013: dnsmasq, לא מאזין של התהליך — הקובץ נכתב מחדש והשירות
+            # #1013: dnsmasq, לא מאזין של התהליך — הקובץ נכתב מחדש והשירות
             # מופעל מחדש; "מאזין" נמדד אחר כך ב-ss כמו בכל שורה.
             if dnsmasq_apply is None:
                 detail = ("אין חיבור ל-dnsmasq בתהליך הזה — ההגדרה נשמרה ותיכנס "

@@ -18,7 +18,7 @@ from server.storage.locations import FAILED, OK, UNCHECKED, HookResult
 
 IQN = "iqn.2005-10.org.freenas.ctl:images"
 PORTAL = "10.44.3.75:3260"
-#: ‏#2468: מה ש-`iscsi_login` מחזיר — קישור by-path של ה-LUN, לא `/dev/sdX`.
+#: #2468: מה ש-`iscsi_login` מחזיר — קישור by-path של ה-LUN, לא `/dev/sdX`.
 DEVICE = f"/dev/disk/by-path/ip-{PORTAL}-iscsi-{IQN}-lun-0"
 
 
@@ -272,7 +272,7 @@ def test_deploy_gets_403(env):
 
 
 def test_deploy_gets_403_on_every_endpoint_the_console_page_calls(env):
-    """‏#1066 שלב ב': הדף הוא admin בלבד (`data-admin` בעץ), וכל נתיב שהוא
+    """#1066 שלב ב': הדף הוא admin בלבד (`data-admin` בעץ), וכל נתיב שהוא
     קורא — לא רק list/test/create — מסרב ל-deploy ב-403 (לא 404/409: ההרשאה
     נבדקת לפני קיום השורה)."""
     base = "/api/console/storage-locations"
@@ -487,7 +487,7 @@ def test_disconnected_is_not_polled(env):
     assert sl.get(env["ctx"].conn, loc_id)["state"] == "disconnected"
 
 
-# --- #1994: ‏df על נקודת עיגון ריקה מודד את דיסק המערכת ----------------------
+# --- #1994: df על נקודת עיגון ריקה מודד את דיסק המערכת ----------------------
 
 def _create_smb(env, name="fileserver-images"):
     return env["admin"].post("/api/console/storage-locations", json={
@@ -588,7 +588,7 @@ def test_disconnect_umount_success_disconnects_location(env, make):
 @pytest.mark.parametrize("make", [_create_nfs, _create_smb, _connected_iscsi],
                          ids=["nfs", "smb", "iscsi"])
 def test_a_network_location_that_is_not_mounted_is_unreachable_not_connected(env, make):
-    """שרת שעלה כשה-NAS כבוי (‏`nofail`): התיקייה הריקה קיימת, ‏df עליה
+    """שרת שעלה כשה-NAS כבוי (`nofail`): התיקייה הריקה קיימת, df עליה
     "מצליח" ומודד את דיסק המערכת. נקודת עיגון אמיתית היא הראיה — במנטר
     וב"בדוק" כאחד."""
     made = make(env)
@@ -610,7 +610,7 @@ def test_a_network_location_that_is_not_mounted_is_unreachable_not_connected(env
 
 
 def test_the_local_location_is_a_folder_and_needs_no_mountpoint(env):
-    """‏`loc_local` הוא תיקייה בתוך דיסק המערכת — לא נקודת עיגון, ו-is_mount
+    """`loc_local` הוא תיקייה בתוך דיסק המערכת — לא נקודת עיגון, ו-is_mount
     עליו שקרי. הוא נשאר מחובר."""
     assert not env["fake"].is_mount(sl.get(env["ctx"].conn, sl.LOCAL_ID)["mount_point"])
     sl.poll(env["ctx"].conn, env["ctx"].library, env["fake"].as_dict())
@@ -769,7 +769,7 @@ def test_smb_secret_goes_to_credentials_file_not_argv_or_fstab(env):
 
 
 def test_creds_write_is_0600_in_mount_cifs_format(tmp_path: Path):
-    """ה-hook האמיתי: `username=`/`password=`/`domain=`, ‏0600, בלי קובץ זמני."""
+    """ה-hook האמיתי: `username=`/`password=`/`domain=`, 0600, בלי קובץ זמני."""
     target = tmp_path / "creds" / "loc_ab12cd34"
     result = sl.creds_write(str(target), {"username": "imagesrv", "password": "s3cret",
                                           "domain": "COLLEGE"})
@@ -786,7 +786,7 @@ def test_creds_write_is_0600_in_mount_cifs_format(tmp_path: Path):
 
 
 def test_smb_scan_uses_auth_file_not_argv(monkeypatch, tmp_path: Path):
-    """‏`smbclient -L` מקבל `-A <קובץ>` ולא `-U user%password`, והקובץ מוסר."""
+    """`smbclient -L` מקבל `-A <קובץ>` ולא `-U user%password`, והקובץ מוסר."""
     seen: list[list[str]] = []
 
     def fake_run(cmd, timeout=30, input_text=None):
@@ -814,7 +814,7 @@ def test_fstab_write_is_atomic(tmp_path: Path, monkeypatch):
     original = "UUID=abc / ext4 defaults 0 1\n"
     fstab.write_text(original, encoding="utf-8")
     monkeypatch.setattr(sl, "FSTAB_PATH", fstab)
-    monkeypatch.setattr(sl, "daemon_reload", lambda: HookResult(OK), raising=False)   # ‏#2122: לא PID 1 של המריץ
+    monkeypatch.setattr(sl, "daemon_reload", lambda: HookResult(OK), raising=False)   # #2122: לא PID 1 של המריץ
     entry = {"source": "10.44.10.20:/mnt/pool/images",
              "target": "/var/lib/imagesrv/storage/nas", "fstype": "nfs",
              "opts": "vers=4.1,soft"}
@@ -834,7 +834,7 @@ def test_fstab_write_is_atomic(tmp_path: Path, monkeypatch):
 
 
 def test_duplicate_mount_point_is_409_and_enforced_in_db(env, tmp_path: Path):
-    shared = env["data"] / "shared-images"      # ‏#2444: local רק בתוך data_dir / ‏/srv / כונן מעוגן
+    shared = env["data"] / "shared-images"      # #2444: local רק בתוך data_dir / /srv / כונן מעוגן
     shared.mkdir()
     first = env["admin"].post("/api/console/storage-locations", json={
         "name": "usb-a", "type": "local", "params": {"path": str(shared)},
@@ -938,7 +938,7 @@ def test_create_network_location_is_unchecked_until_its_mount_succeeds(env):
     mount. הטסט שלמעלה רואה רק את המצב הסופי — שורה שנולדה `connected` עוברת
     אותו, וזה בדיוק מה שמי שקורא את הטבלה בזמן העיגון (סריקה, הקונסולה,
     קריסה באמצע) היה רואה. המרגל קורא את המצב **בתוך** העיגון הקבוע:
-    ‏`FakeHooks.mount` שואל `if self.mount_fail_substr and ...` לפני כל עיגון."""
+    `FakeHooks.mount` שואל `if self.mount_fail_substr and ...` לפני כל עיגון."""
     conn = env["ctx"].conn
 
     class StateAtMount:
@@ -991,7 +991,7 @@ def test_connect_with_fstab_failure_is_not_connected(env):
 
 
 def test_connect_after_disconnect_puts_the_network_fstab_line_back(env):
-    """‏#1993: ‏connect כתב את fstab כשהמצב עוד היה `disconnected` — השורה
+    """#1993: connect כתב את fstab כשהמצב עוד היה `disconnected` — השורה
     דולגה, והמיקום "מחובר" לא שרד את האתחול הבא."""
     loc_id = _create_nfs(env).json()["id"]
     base = f"/api/console/storage-locations/{loc_id}"
@@ -1011,9 +1011,9 @@ ISCSIADM_WRITES = ("/run/lock/iscsi", "/var/lib/iscsi", "/etc/iscsi")
 
 
 def test_the_server_unit_lets_iscsiadm_write_its_lock_and_node_records():
-    """‏#1552: ‏ProtectSystem=strict הופך הכול לקריאה-בלבד מלבד ReadWritePaths.
+    """#1552: ProtectSystem=strict הופך הכול לקריאה-בלבד מלבד ReadWritePaths.
     נתיב שאינו מכוסה = "גלה יעדים" שנכשל ב-Read-only file system בכל שרת מותקן,
-    וכל טסט עם hooks מזויפים עובר. ‏/run/lock/iscsi עצמו לא קיים בעליית
+    וכל טסט עם hooks מזויפים עובר. /run/lock/iscsi עצמו לא קיים בעליית
     היחידה, ולכן מה שנפתח הוא /run/lock שבו iscsiadm יוצר אותו."""
     unit = (Path(__file__).resolve().parents[1] / "deploy" / "imagesrv-server.service").read_text(
         encoding="utf-8")

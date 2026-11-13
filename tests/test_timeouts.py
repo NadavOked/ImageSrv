@@ -49,21 +49,21 @@ def run_sh(script: str, timeout: int = TEST_TIMEOUT) -> str:
     """מריץ סקריפט bash עם תקרת זמן אמיתית ומחזיר את פלטו. פקיעה = כישלון.
 
     הפלט הולך לקובץ ולא ל-PIPE, ו-stdout/stderr של התהליך הם DEVNULL.
-    זה לא קישוט: ‏capture_output ממתין לסגירת הצינור, ו*כל* תהליך רקע
+    זה לא קישוט: capture_output ממתין לסגירת הצינור, ו*כל* תהליך רקע
     שהסקריפט השאיר אחריו מחזיק עותק שלו — כולל היתומים שנוצרים בדיוק
     כשתקרה נאכפת. בלי זה הבדיקה הייתה מודדת את היתומים ולא את המסלול,
     ומכריזה על "תקיעה" גם כשהסוכן דיווח ויצא כשורה תוך שניות.
 
-    ‏#1736: התהליך ראש session משלו וכל הקבוצה נהרגת בסוף (`hygiene.run_group`)
+    #1736: התהליך ראש session משלו וכל הקבוצה נהרגת בסוף (`hygiene.run_group`)
     -- stub ב-`&` או `sleep` שהסקריפט השאיר אחריו לא שורד את הטסט.
 
-    ‏stdin=DEVNULL: בריצה רב-קבצית של pytest בווינדוס ה-handle של stdin
+    stdin=DEVNULL: בריצה רב-קבצית של pytest בווינדוס ה-handle של stdin
     נשבר תחת capture, וכל subprocess שיורש אותו נופל ב-WinError 50 (#14).
 
     הסקריפט נכתב **לקובץ** ולא עובר ב-`bash -c`: בווינדוס ארגומנט שעובר
     ~8191 תווים נקטע בשקט, ו-bash מדווח "unexpected end of file" על שורה
     שאינה סוף הסקריפט — כשל שנראה כמו באג בקוד שנבדק (נמדד ב-#926: נתיב
-    ‏tmp_path של pytest ×20 זיופים + זיוף curl של 1.1KB עברו את הסף).
+    tmp_path של pytest ×20 זיופים + זיוף curl של 1.1KB עברו את הסף).
     """
     out_file = Path(tempfile.mkdtemp(prefix="imagesrv-wait-")) / "out"
     wrapped = (
@@ -84,8 +84,8 @@ def run_sh(script: str, timeout: int = TEST_TIMEOUT) -> str:
     try:
         return out_file.read_text(encoding="utf-8", errors="replace")
     finally:
-        # ‏#1238: בלי זה כל קריאה השאירה תיקייה ב-/tmp — ~8,100 על ה-Testrunner,
-        # ‏tmpfs של 2GB ב-91%, ו-507 מזויף בטסט לא קשור.
+        # #1238: בלי זה כל קריאה השאירה תיקייה ב-/tmp — ~8,100 על ה-Testrunner,
+        # tmpfs של 2GB ב-91%, ו-507 מזויף בטסט לא קשור.
         shutil.rmtree(out_file.parent, ignore_errors=True)
 
 
@@ -100,7 +100,7 @@ def waits_prelude(box: Path, **env) -> str:
 
 
 def log_of(run_dir: Path) -> str:
-    """‏common.sh קובע את LOG_FILE מתוך RUN_DIR — שם הלוג נמצא."""
+    """common.sh קובע את LOG_FILE מתוך RUN_DIR — שם הלוג נמצא."""
     path = run_dir / "agent.log"
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
@@ -208,11 +208,11 @@ def test_a_stream_that_never_starts_uses_the_start_ceiling(tmp_path):
 
 
 def test_pv_zero_ticks_before_the_first_byte_keep_the_start_ceiling(tmp_path):
-    """‏#1430: ‏`pv -n` מדפיס "0" בכל פעימה עוד לפני שהגיע בייט (גם הזיוף
+    """#1430: `pv -n` מדפיס "0" בכל פעימה עוד לפני שהגיע בייט (גם הזיוף
     ב-STUBS מחקה את זה). השינוי ""→"0" נקרא כאן כ"הזרם התחיל", ותקרת
     השקט (300) החליפה את תקרת ההתחלה (900) — בעוד השולח רשאי להמתין
     עד 780. כאן: "0" במשך 5 שניות, תקרת שקט 2 ותקרת התחלה 20, ואז הזרם
-    מגיע. **בקרה שלילית:** על הקוד הישן הפקיעה אחרי ~3 שניות, ‏rc=1."""
+    מגיע. **בקרה שלילית:** על הקוד הישן הפקיעה אחרי ~3 שניות, rc=1."""
     box = tmp_path / "box"
     counter = box / "bytes.raw"
     box.mkdir(parents=True)
@@ -256,7 +256,7 @@ STUBS = {
     "pv": '#!/bin/sh\necho 0 >&2\ncat\necho 65536 >&2\n',
     "zstd": '#!/bin/sh\nexec cat\n',
     "partclone.dd": '#!/bin/sh\ncat > /dev/null\n',
-    # ‏#1438: הקליטה והחדר מגבבים ומונים בתוך fanout (‏-S/‏-P), לא ב-tee.
+    # #1438: הקליטה והחדר מגבבים ומונים בתוך fanout (-S/-P), לא ב-tee.
     "fanout": (
         '#!/bin/sh\n'
         # #1805: the read-back is not modelled by this stand-in (test_readback_agent_1805.py
@@ -273,11 +273,11 @@ STUBS = {
     ),
 }
 
-#: ‏#1438: מה שכל fanout מזויף מקבל מעל לגוף שלו. הדגלים נקלפים מהחזית,
-#: כך שהגוף רואה "<buffer> <out>..." כמו קודם. ‏`fanout_eof <file>` עושה
-#: מה שהבינארי עושה בסוף זרם שנקרא כולו: מוסיף את סך הבייטים ל-‏-P
-#: (פורמט pv -n) וכותב ל-‏-S ‏64 ספרות hex ושורה חדשה — בלי "  -" של
-#: sha256sum. גוף שלא קורא לה מדמה fanout שלא הגיע ל-EOF. ‏-H (‏XXH64)
+#: #1438: מה שכל fanout מזויף מקבל מעל לגוף שלו. הדגלים נקלפים מהחזית,
+#: כך שהגוף רואה "<buffer> <out>..." כמו קודם. `fanout_eof <file>` עושה
+#: מה שהבינארי עושה בסוף זרם שנקרא כולו: מוסיף את סך הבייטים ל--P
+#: (פורמט pv -n) וכותב ל--S 64 ספרות hex ושורה חדשה — בלי "  -" של
+#: sha256sum. גוף שלא קורא לה מדמה fanout שלא הגיע ל-EOF. -H (XXH64)
 #: אינו ממודל ונכשל בקול, כדי שזיוף לא יעבור בשקט על דגל שאינו מבין.
 #: כלל "זרם ריק אינו ok" אינו ממודל — הוא של test_fanout.py.
 FANOUT_OPTIONS = (
@@ -302,7 +302,7 @@ FANOUT_OPTIONS = (
 
 def make_stubs(stub_dir: Path, extra: dict | None = None) -> str:
     """זיופים נכתבים מתוך bash דווקא — קובץ שנוצר מווינדוס אינו נחשב
-    בר-הרצה ב-Git Bash. ה-chmod חובה: ‏cat > יוצר קובץ בלי סיבית הרצה,
+    בר-הרצה ב-Git Bash. ה-chmod חובה: cat > יוצר קובץ בלי סיבית הרצה,
     וזיוף כזה עובר בווינדוס ונופל ב-CI בלבד. ערך None = בלי זיוף (למשל
     fanout שקומפל לאותה תיקייה)."""
     # שורות אמיתיות ולא "; " — סוגר של here-document חייב להיות לבדו
@@ -427,9 +427,9 @@ def test_a_station_whose_stream_never_arrives_fails_instead_of_freezing(tmp_path
     assert "מחיצה 2" in log, "הלוג לא אומר איזו מחיצה נתקעה"
 
 
-# --- ‏#957: המחיצה הראשונה ממתינה למפעיל, הבאות ממתינות לחדר ----------------
+# --- #957: המחיצה הראשונה ממתינה למפעיל, הבאות ממתינות לחדר ----------------
 
-#: ‏udp-receiver מזויף: רושם את ה-argv שלו ומוציא את התוכן — כמו האמיתי,
+#: udp-receiver מזויף: רושם את ה-argv שלו ומוציא את התוכן — כמו האמיתי,
 #: רק בלי רשת. הזרם עצמו כאן אינו הנבדק; הדגלים שהוא קיבל הם הנבדק.
 RECORDING_RECEIVER = (
     '#!/bin/sh\n'
@@ -439,7 +439,7 @@ RECORDING_RECEIVER = (
 )
 
 
-#: ‏fanout מזויף למגירה אחת: מזין את ה-fifo שלה ומדווח עליה `ok`.
+#: fanout מזויף למגירה אחת: מזין את ה-fifo שלה ומדווח עליה `ok`.
 FEED_ONE = (
     '#!/bin/sh\n'
     'shift\n'
@@ -463,7 +463,7 @@ def _flag(argv: list[str], flag: str) -> str:
 
 def _two_streams(tmp_path, harness: str, call: str) -> tuple[list[list[str]], list[str]]:
     """מריץ שתי מחיצות מוזרמות בשחזור אחד, ומחזיר את ה-argv של כל
-    ‏udp-receiver ואת התקרה ש-wait_progress קיבל לכל זרם."""
+    udp-receiver ואת התקרה ש-wait_progress קיבל לכל זרם."""
     box = tmp_path / "box"
     run = box / "run"
     payload = box / "part.bin"
@@ -483,7 +483,7 @@ def _two_streams(tmp_path, harness: str, call: str) -> tuple[list[list[str]], li
         f"UDP_ARGV={posix(argv)!r} UDP_PAYLOAD={posix(payload)!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_STALL_S=20; "
         + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
-        # ‏wait_progress האמיתי — רק רושם את התקרה שקיבל לפני שהוא ממתין.
+        # wait_progress האמיתי — רק רושם את התקרה שקיבל לפני שהוא ממתין.
         + "eval \"orig_$(declare -f wait_progress)\"; "
         f'wait_progress() {{ echo "$3" >> {posix(ceilings)!r}; orig_wait_progress "$@"; }}; '
         "node_is_block() { true; }; "
@@ -507,7 +507,7 @@ def _two_streams(tmp_path, harness: str, call: str) -> tuple[list[list[str]], li
     ],
 )
 def test_the_second_stream_waits_longer_for_its_first_byte_than_the_first(tmp_path, harness, call):
-    """‏#957 (FOG GH-536): למחיצה הראשונה ההמתנה היא "המפעיל לא התחיל"
+    """#957 (FOG GH-536): למחיצה הראשונה ההמתנה היא "המפעיל לא התחיל"
     — 600ש'. מהשנייה השולח ממתין עד 600ש' למגירה האיטית שעוד כותבת
     את הקודמת, ו-udp-receiver מודד את ההמתנה הזאת ב-`--start-timeout`
     שלו: תקרה של 600 שם הייתה מפילה דווקא את המקבל שהגיע ראשון, בדיוק
@@ -515,7 +515,7 @@ def test_the_second_stream_waits_longer_for_its_first_byte_than_the_first(tmp_pa
     תקרה בדיוק מקבל wait_progress שמסתכל על המונה — בשני מסלולי
     השחזור (תחנה בודדת, חדר שיכפולים).
 
-    **בקרה שלילית:** על הקוד הישן (‏`--start-timeout $UDPCAST_START_TIMEOUT`
+    **בקרה שלילית:** על הקוד הישן (`--start-timeout $UDPCAST_START_TIMEOUT`
     אחיד) שני הזרמים מקבלים 600, וההשוואה של הזרם השני נופלת."""
     blocks, ceilings = _two_streams(tmp_path, harness, call)
     assert len(blocks) == 2, blocks
@@ -532,9 +532,9 @@ def test_the_second_stream_waits_longer_for_its_first_byte_than_the_first(tmp_pa
     assert {_flag(b, "--receive-timeout") for b in blocks} == {"20"}
 
 
-#: ‏#1438: המונה של החדר נכתב עכשיו ב-fanout (‏-P), לא ב-pv. ‏FEED_ONE
+#: #1438: המונה של החדר נכתב עכשיו ב-fanout (-P), לא ב-pv. FEED_ONE
 #: שותק עד EOF — כך הקובץ מכיל רק את מה שנשאר מהמחיצה הקודמת, וזה מה
-#: ש-wait_progress קורא בסקירה הראשונה. ‏FEED_ONE_TICKS_ZERO כותב "0"
+#: ש-wait_progress קורא בסקירה הראשונה. FEED_ONE_TICKS_ZERO כותב "0"
 #: לפני הבייט הראשון, כמו pv -n — הצורה ש-waits.sh חייב לסנן.
 FEED_ONE_TICKS_ZERO = FEED_ONE.replace(
     'tmp="$(mktemp)"\n', '[ -z "$_fo_P" ] || echo 0 >> "$_fo_P"\ntmp="$(mktemp)"\n', 1)
@@ -545,10 +545,10 @@ FEED_ONE_TICKS_ZERO = FEED_ONE.replace(
              pytest.param(FEED_ONE, id="previous-partition-count")])
 def test_a_drawer_room_waits_out_a_late_second_partition_instead_of_the_stall_ceiling(
         tmp_path, feed):
-    """‏#1430 (מעבדת ה-VM, 15/10): ‏p1 נכתב, והשולח המתין למכונה שכבר
+    """#1430 (מעבדת ה-VM, 15/10): p1 נכתב, והשולח המתין למכונה שכבר
     נכשלה לפני ששידר את p14. המכונה התקינה פקעה אחרי ~361ש' — 300 של
     תקרת השקט ועוד ההמתנות למגירות — ולא אחרי 900 של תקרת ההתחלה.
-    השורש: ‏`$RUN_DIR/bytes.raw` של החדר אינו מתאפס בין מחיצות, והמונה
+    השורש: `$RUN_DIR/bytes.raw` של החדר אינו מתאפס בין מחיצות, והמונה
     הסופי של p1 נקרא ב-p14 כ"בייט ראשון" (ו-"0" של pv — באותה דרך).
 
     כאן: הזרם השני מחכה לשלוש דגימות — יותר מתקרת השקט (2), פחות מתקרת
@@ -615,12 +615,12 @@ _nap() {
 
 def test_the_later_ceiling_outlasts_the_senders_later_wait():
     """המספרים משני צידי הרשת חייבים להיות מסודרים, וזה נבדק כאן ולא
-    מונח: השולח (‏`server/rounds/sender.py`) ממתין למחיצות 2+ עד
-    ‏`max_wait_later` מהמקבל הראשון, ומוגבל ב-`start_timeout_later`
+    מונח: השולח (`server/rounds/sender.py`) ממתין למחיצות 2+ עד
+    `max_wait_later` מהמקבל הראשון, ומוגבל ב-`start_timeout_later`
     שמכיל אותו; המקבל שהצטרף ראשון ממתין את כל ה-`max_wait_later`
     בעצמו, ולכן תקרת הבייט הראשון שלו חייבת להיות **גדולה** ממנו —
     ומחשב הבנייה בהפצה ישירה ממתין ל-udp-sender שלו עד
-    ‏`start_timeout_later`, ולכן היא חייבת להיות גדולה גם ממנו.
+    `start_timeout_later`, ולכן היא חייבת להיות גדולה גם ממנו.
     והמחיצה הראשונה — לא השתנתה: הראשונה עדיין 600, ואינה ארוכה
     יותר מהשנייה."""
     from server.rounds import sender as sender_module
@@ -642,7 +642,7 @@ def test_the_later_ceiling_outlasts_the_senders_later_wait():
 
 
 def test_no_bare_wait_is_left_anywhere_in_the_agent():
-    """‏`wait <pid>` חשוף הוא המתנה בלי תקרה. כל אחת כזו עוברת דרך
+    """`wait <pid>` חשוף הוא המתנה בלי תקרה. כל אחת כזו עוברת דרך
     wait_pid/wait_progress, ולכן ההופעות היחידות של ה-builtin הן בתוך
     waits.sh עצמו."""
     offenders = []
@@ -682,11 +682,11 @@ def test_every_ceiling_is_defined_in_one_place():
 @pytest.mark.parametrize(
     ("path", "needles"),
     [
-        # ‏curl: בלי תקרת משך (מחיצה גדולה לוקחת דקות) אבל עם תקרת
+        # curl: בלי תקרת משך (מחיצה גדולה לוקחת דקות) אבל עם תקרת
         # חוסר-התקדמות — חיבור שנפל יוצא במקום להיתלות.
         ("lib/core/common.sh", ["--speed-limit", "--speed-time"]),
         ("lib/capture/capturesink.sh", ["--speed-limit", "--speed-time"]),   # #1217: capture_sink
-        # ‏udp-receiver ממתין לשדר לנצח כברירת מחדל. אלה התקרות שלו עצמו.
+        # udp-receiver ממתין לשדר לנצח כברירת מחדל. אלה התקרות שלו עצמו.
         ("lib/restore/restore.sh", ["--start-timeout", "--receive-timeout"]),
     ],
     ids=lambda v: str(v),
@@ -705,14 +705,14 @@ def _sh_default(path: Path, var: str) -> int:
 
 
 def test_the_stream_stall_ceiling_is_300_and_stays_under_the_watchdog_lease():
-    """‏11/09/2026 (הכרעת נדב): תקרת השקט באמצע הזרם הועלתה מ-120 ל-300ש'
+    """11/09/2026 (הכרעת נדב): תקרת השקט באמצע הזרם הועלתה מ-120 ל-300ש'
     — השולח מאט למקבל איטי בזנב אימג' גדול (גישת FOG/Clonezilla) במקום
-    להפילו, ותקרת 120 חתכה אותו דווקא אז (כשל ~90%). ‏udp-receiver
-    (‏`--receive-timeout` ב-restore.sh) נגזר מאותו ערך, ולכן הם נעים יחד.
+    להפילו, ותקרת 120 חתכה אותו דווקא אז (כשל ~90%). udp-receiver
+    (`--receive-timeout` ב-restore.sh) נגזר מאותו ערך, ולכן הם נעים יחד.
 
     **הקישור ל-watchdog:** התקרה חייבת להישאר מתחת ל-lease של ה-watchdog
     (watchdog.sh, 600ש'), שמוזן בכל דגימה של wait_progress/wait_pid — אחרת
-    ה-watchdog יאתחל את המכונה לפני שהשקט מדווח ככישלון גלוי. ‏300 < 600.
+    ה-watchdog יאתחל את המכונה לפני שהשקט מדווח ככישלון גלוי. 300 < 600.
 
     **בקרה שלילית:** החזרת ברירת המחדל ל-120 מפילה את `== 300`; העלאתה
     מעל ה-lease מפילה את בדיקת `< lease`."""
@@ -726,9 +726,9 @@ def test_the_stream_stall_ceiling_is_300_and_stays_under_the_watchdog_lease():
 
 
 def test_fanout_bounds_the_fifo_open_itself():
-    """‏open() על fifo לכתיבה נחסם עד שיש קורא. ‏fanout פותח ב-O_NONBLOCK
+    """open() על fifo לכתיבה נחסם עד שיש קורא. fanout פותח ב-O_NONBLOCK
     ומוותר אחרי OPEN_RETRY_MS — ומדווח על כך כפקיעה, לא כ"לא ניתן לפתוח":
-    ‏fifo שאין לו קורא ונתיב שאינו קיים הם שתי תקלות שונות לטכנאי."""
+    fifo שאין לו קורא ונתיב שאינו קיים הם שתי תקלות שונות לטכנאי."""
     source = (AGENT / "fanout.c").read_text(encoding="utf-8")
     assert "O_WRONLY | O_NONBLOCK" in source
     assert "OPEN_NO_READER" in source
@@ -744,8 +744,8 @@ def test_fanout_bounds_the_fifo_open_itself():
 def test_run_sh_leaves_no_temp_dir_behind(tmp_path, monkeypatch):
     """#1238: run_sh מנקה את התיקייה הזמנית שלו — גם אחרי ריצה תקינה.
 
-    ‏#2731: תיקייה זמנית משלו. בריצה מקבילית (`-n auto`) worker אחר יוצר
-    ‏`imagesrv-wait-*` בתיקייה המשותפת באותו רגע, והטסט נפל על תיקייה לא שלו."""
+    #2731: תיקייה זמנית משלו. בריצה מקבילית (`-n auto`) worker אחר יוצר
+    `imagesrv-wait-*` בתיקייה המשותפת באותו רגע, והטסט נפל על תיקייה לא שלו."""
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     assert run_sh("echo hi").strip() == "hi"
     left = sorted(tmp_path.glob("imagesrv-wait-*"))

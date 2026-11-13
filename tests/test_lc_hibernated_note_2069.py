@@ -164,7 +164,7 @@ def test_the_note_keeps_every_line_inside_its_card(fit_driver, tmp_path, size):
 
 #: lcinv.sh's refusal for a source that cannot be shrunk, as measure() in test_lc_ntfs_target_1937 reads it
 REFUSAL = ("המקור (דיסק 3) במצב שינה של Windows — אי אפשר לכווץ אותו לדיסק הזה, שקטן ממנו. "
-           "ב-Windows של המקור: ⁦powercfg /h off⁩, ואז כיבוי")
+           "ב-Windows של המקור: \u2066powercfg /h off\u2069, ואז כיבוי")
 
 
 @NATIVE
@@ -225,7 +225,7 @@ def _parsed_reason(driver, tmp_path, reason: str) -> bytes:
 
 #: LcFit.reason is 240 bytes: 239 and the NUL. Each letter width, at every alignment of the cut.
 @NATIVE
-@pytest.mark.parametrize("letter", ["ש", "⁦", "\U0001F4BF"], ids=["2-byte Hebrew", "3-byte isolate", "4-byte"])
+@pytest.mark.parametrize("letter", ["ש", "\u2066", "\U0001F4BF"], ids=["2-byte Hebrew", "3-byte isolate", "4-byte"])
 @pytest.mark.parametrize("pad", [0, 1, 2, 3])
 def test_a_long_reason_is_cut_between_letters_never_inside_one(cut_driver, tmp_path, letter, pad):
     reason = "a" * pad + letter * 200

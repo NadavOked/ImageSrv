@@ -1,32 +1,32 @@
-"""‏#1847 — מכונה שלא מתעוררת מ-WoL: זיהוי, שליחה חוזרת מוקדמת, התראה.
+"""#1847 — מכונה שלא מתעוררת מ-WoL: זיהוי, שליחה חוזרת מוקדמת, התראה.
 
 הכרעת נדב 19/10: השרת לומד **ממדידה שלו**, ושום דבר אינו נחסם בגלל הלמידה.
 
-‏`sendto` של חבילת הקסם מצליח גם כשהמכונה לעולם לא תתעורר (#74, #1721) — "נשלח"
+`sendto` של חבילת הקסם מצליח גם כשהמכונה לעולם לא תתעורר (#74, #1721) — "נשלח"
 אינו "התעורר". הראיה היחידה שהמכונה התעוררה היא שהיא **דיברה עם השרת**: הפירור
-הראשון של האתחול (‏`boottrace.record` — הקושחה ביקשה את התפריט) או hello.
+הראשון של האתחול (`boottrace.record` — הקושחה ביקשה את התפריט) או hello.
 
-**מה נרשם** (‏`wol_wakes`, שורה לכל הערה):
+**מה נרשם** (`wol_wakes`, שורה לכל הערה):
 
-    ‏`sent`     — WoL שנשלח בהצלחה (‏`wol.wake_machine` / ‏`wol.wake_group`) למכונה
+    `sent`     — WoL שנשלח בהצלחה (`wol.wake_machine` / `wol.wake_group`) למכונה
                  **שלא נראתה** ב-`AWAKE_S` האחרונות. מכונה ערה מתעלמת מהחבילה, ו-"ענתה"
-                 שלה אינו מדידה. שליחה נוספת בזמן שהערה פתוחה (‏`room_rewake` כל 60ש')
-                 היא **אותה הערה** — ‏`resent` עולה, השעון אינו מתאפס.
-    ‏`answered` — הראיה הראשונה מהמכונה תוך `ANSWER_S`: ‏`seconds` = מהשליחה הראשונה.
+                 שלה אינו מדידה. שליחה נוספת בזמן שהערה פתוחה (`room_rewake` כל 60ש')
+                 היא **אותה הערה** — `resent` עולה, השעון אינו מתאפס.
+    `answered` — הראיה הראשונה מהמכונה תוך `ANSWER_S`: `seconds` = מהשליחה הראשונה.
     הערה שלא נענתה תוך `ANSWER_S` — **לא התעוררה**.
 
-**מה נלמד לכל MAC** (‏`stats`, על `WINDOW` ההערות האחרונות שהוכרעו): שיעור
+**מה נלמד לכל MAC** (`stats`, על `WINDOW` ההערות האחרונות שהוכרעו): שיעור
 ההצלחה וזמן ההתעוררות הטיפוסי (חציון, רק עם `MIN_SAMPLES` הצלחות לפחות).
 
-**מה נעשה** (‏`sweep`, משעון החדר — ‏`app._room_clock`):
+**מה נעשה** (`sweep`, משעון החדר — `app._room_clock`):
 
     הערה פתוחה שעברה 2 × הזמן הטיפוסי של המכונה → שליחה חוזרת **אחת**, מוקדמת
-        (‏`wol_resent`) — לפני ש-`room_rewake` (60ש') או אדם היו שולחים
-    ‏`FAIL_STREAK` הערות אחרונות בלי תשובה → התראה **אחת** לרצף (‏`wol_no_wake`)
+        (`wol_resent`) — לפני ש-`room_rewake` (60ש') או אדם היו שולחים
+    `FAIL_STREAK` הערות אחרונות בלי תשובה → התראה **אחת** לרצף (`wol_no_wake`)
         ושורה כתומה במסך הבריאות: "לא מתעורר מ-WoL — BIOS/כבל"
 
 ו-**`wol_arm_failed`** (הסוכן דיווח שלא הצליח לדרוך WoL לפני כיבוי) נרשם **פעם
-אחת לכל אתחול** (‏`arm_failure_is_new`) — עד כאן כל hello, כל 5 דקות, הוסיף שורה.
+אחת לכל אתחול** (`arm_failure_is_new`) — עד כאן כל hello, כל 5 דקות, הוסיף שורה.
 
 ⚠️ מכונה שהתעוררה למערכת המקומית ואינה עולה ב-PXE (מחשב בנייה ב-Windows) אינה
 משאירה ראיה — היא תיספר "לא התעוררה". ההתראה אומרת זאת במפורש.
@@ -49,10 +49,10 @@ from server.system.health_rows import check
 log = logging.getLogger("imagesrv.learn_wol")
 
 #: מכונה שנראתה בחלון הזה ערה — ההערה שלה אינה מדידה. אותו חלון כמו
-#: ‏`room.AWAKE_SECONDS` ("ערה" במסך החדר).
+#: `room.AWAKE_SECONDS` ("ערה" במסך החדר).
 AWAKE_S = 30
 #: אחרי כמה שניות בלי ראיה הערה "לא התעוררה" — הזמן שבו החדר עצמו מוותר
-#: (‏`room.REWAKE_MAX × REWAKE_SECONDS + REWAKE_BOOT_SECONDS` = 6×60+180).
+#: (`room.REWAKE_MAX × REWAKE_SECONDS + REWAKE_BOOT_SECONDS` = 6×60+180).
 ANSWER_S = 540
 #: כמה הערות אחרונות שהוכרעו נחשבות לכל מכונה.
 WINDOW = 10
@@ -114,8 +114,8 @@ def answered(conn: sqlite3.Connection, mac: str, now: float | None = None) -> No
 
 
 def stats(conn: sqlite3.Connection, mac: str, now: float | None = None) -> dict:
-    """‏`{"decided", "answered", "rate", "typical_s", "streak"}` — ‏`rate`/‏`typical_s`
-    ‏None כשאין על מה (אין הערות שהוכרעו / פחות מ-MIN_SAMPLES הצלחות). ‏`streak` —
+    """`{"decided", "answered", "rate", "typical_s", "streak"}` — `rate`/`typical_s`
+    None כשאין על מה (אין הערות שהוכרעו / פחות מ-MIN_SAMPLES הצלחות). `streak` —
     כמה מההערות האחרונות שהוכרעו ברצף לא נענו."""
     now = time.time() if now is None else now
     rows = conn.execute(
@@ -195,8 +195,8 @@ def health_checks(conn: sqlite3.Connection, now: float | None = None) -> list[di
 
 
 def arm_failure_is_new(conn: sqlite3.Connection, mac: str, now: float | None = None) -> bool:
-    """‏`wol_arm_failed` פעם אחת לכל אתחול: True כשאין עוד שורה כזו למכונה מאז
-    תחילת האתחול הנוכחי (‏`boot_steps.first_at`). בלי שביל אתחול (מחוץ לוילן,
+    """`wol_arm_failed` פעם אחת לכל אתחול: True כשאין עוד שורה כזו למכונה מאז
+    תחילת האתחול הנוכחי (`boot_steps.first_at`). בלי שביל אתחול (מחוץ לוילן,
     בדיקות) — פעם ב-24 שעות. כשל בקריאה — True: עדיף שורה כפולה משורה שנבלעה."""
     now = time.time() if now is None else now
     try:

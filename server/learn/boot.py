@@ -1,27 +1,27 @@
-"""‏#1848 — זמן אתחול לכל מכונה ולכל שלב: זיהוי רגרסיה, ולפני/אחרי עדכון.
+"""#1848 — זמן אתחול לכל מכונה ולכל שלב: זיהוי רגרסיה, ולפני/אחרי עדכון.
 
 הכרעת נדב 19/10: השרת לומד **ממדידה שלו**, ושום דבר אינו נחסם בגלל הלמידה.
 
-הראיה ב-Issue: ‏10.7 שניות של ACPI ‏`_PSL` ב-HP G6 נמצאו **ביד** (‏`thermal.off`).
+הראיה ב-Issue: 10.7 שניות של ACPI `_PSL` ב-HP G6 נמצאו **ביד** (`thermal.off`).
 שביל הפירורים (#400) כבר רושם כל שלב, אבל רק את **האחרון** לכל מכונה
-(‏`boot_steps`) — השלב שהתארך לא השאיר עקבה.
+(`boot_steps`) — השלב שהתארך לא השאיר עקבה.
 
-**מה נמדד** (‏`boot_step_times`, שורה לכל מעבר): כש-`boottrace.record` רושם שלב
-מהשרשרת (‏`boot.trace.STEPS`) **שבא מיד אחרי** השלב הקודם של אותה מכונה, באותו
-אתחול — ‏`seconds` = מהפירור הקודם לזה, **בשעון השרת** (‏`boot_steps.at_epoch`,
-שבר שנייה). השלב נקרא בשם השלב **שהגיע**: "‏`pre-initrd` ארך 12ש'" = טעינת הקרנל.
+**מה נמדד** (`boot_step_times`, שורה לכל מעבר): כש-`boottrace.record` רושם שלב
+מהשרשרת (`boot.trace.STEPS`) **שבא מיד אחרי** השלב הקודם של אותה מכונה, באותו
+אתחול — `seconds` = מהפירור הקודם לזה, **בשעון השרת** (`boot_steps.at_epoch`,
+שבר שנייה). השלב נקרא בשם השלב **שהגיע**: "`pre-initrd` ארך 12ש'" = טעינת הקרנל.
 
-**לא נמדד:** ‏`entry` — המעבר מ-`menu` כולל את ההמתנה לאדם בתפריט (מחשב בנייה /
-תלמיד, ‏#140); שלב שדילג על קודמו (פירור שאבד — אין ממה למדוד); והענף המקומי (#416).
-סמני `up=` של `agent/init` (‏#1452) הם שעון של המכונה ואינם נשמרים — רק נרשמים ב-log.
+**לא נמדד:** `entry` — המעבר מ-`menu` כולל את ההמתנה לאדם בתפריט (מחשב בנייה /
+תלמיד, #140); שלב שדילג על קודמו (פירור שאבד — אין ממה למדוד); והענף המקומי (#416).
+סמני `up=` של `agent/init` (#1452) הם שעון של המכונה ואינם מעורבים כאן — נשמרים ב-`boot_marks` (#2830).
 
-**רגרסיה** (‏`regression`): המעבר האחרון ארך ≥ `FACTOR` × הבסיס **וגם** לפחות
+**רגרסיה** (`regression`): המעבר האחרון ארך ≥ `FACTOR` × הבסיס **וגם** לפחות
 `MIN_DELTA_S` יותר ממנו. הבסיס = חציון עד `WINDOW` המדידות **הקודמות** של אותו
 (MAC, שלב); בלי `MIN_SAMPLES` — אין בסיס ("לא נבדק"). נרשם ביומן `boot_step_slow`
 ומוצג במסך הבריאות עם שם השלב.
 
-**לפני/אחרי עדכון** (‏`version_compare`): לכל שלב — חציון כל המכונות בגרסת השרת
-הנוכחית מול הגרסה שלפניה (‏`agent_version.server_version` בזמן המדידה — השרת מגיש
+**לפני/אחרי עדכון** (`version_compare`): לכל שלב — חציון כל המכונות בגרסת השרת
+הנוכחית מול הגרסה שלפניה (`agent_version.server_version` בזמן המדידה — השרת מגיש
 את ה-GRUB, הקרנל וה-initramfs). שלב שהתארך פי `FACTOR` ויותר מ-`MIN_DELTA_S` — כתום.
 
 מה שנשמר: MAC, שם שלב, שניות וגרסה (#1924). לעולם אינו זורק.
@@ -43,7 +43,7 @@ log = logging.getLogger("imagesrv.learn_boot")
 #: פי כמה מהבסיס — ההגדרה ב-Issue.
 FACTOR = 2
 #: תוספת מוחלטת מינימלית. ⚠️ ניחוש מנומק: רוב המעברים הם שבר שנייה (משיכת מודול,
-#: ‏`insmod`), ושם "פי 2" הוא רעש של הרשת; ‏3ש' הם פחות משליש מ-10.7ש' של `_PSL`.
+#: `insmod`), ושם "פי 2" הוא רעש של הרשת; 3ש' הם פחות משליש מ-10.7ש' של `_PSL`.
 MIN_DELTA_S = 3.0
 #: כמה מדידות קודמות לכל (MAC, שלב) בבסיס, וכמה נדרשות לפחות.
 WINDOW = 10
@@ -53,7 +53,7 @@ SKIPPED = frozenset({"entry"})
 
 
 def version() -> str | None:
-    """גרסת השרת (נקראת פעם אחת לתהליך, ‏`lru_cache`). נקרא **לפני** הנעילה."""
+    """גרסת השרת (נקראת פעם אחת לתהליך, `lru_cache`). נקרא **לפני** הנעילה."""
     try:
         from server.core.agent_version import server_version   # noqa: PLC0415
         return server_version()
@@ -65,7 +65,7 @@ def version() -> str | None:
 def measure(conn: sqlite3.Connection, mac: str, step: str, prev: sqlite3.Row | None,
             now_epoch: float, server_version: str | None = None) -> float | None:
     """נקרא מתוך הכתיבה של `boottrace.record` (כבר תחת `_write_lock`), **לפני**
-    שהשורה החיה נדרסת. ‏`prev` — השורה הקודמת של המכונה; ‏`server_version` — מ-`version()`.
+    שהשורה החיה נדרסת. `prev` — השורה הקודמת של המכונה; `server_version` — מ-`version()`.
     מחזיר את השניות שנרשמו, או None (אין מעבר שנמדד)."""
     if (prev is None or step not in STEPS or step in SKIPPED or prev["step"] not in STEPS
             or STEP_INDEX[step] != prev["idx"] + 1 or prev["at_epoch"] is None):
@@ -79,8 +79,8 @@ def measure(conn: sqlite3.Connection, mac: str, step: str, prev: sqlite3.Row | N
 
 
 def regression(conn: sqlite3.Connection, mac: str, step: str) -> dict:
-    """המדידה האחרונה של (MAC, שלב) מול הבסיס שלה: ‏`{"seconds", "baseline",
-    "samples", "slow"}` — ‏`slow` ‏None = אין מדידה או אין בסיס."""
+    """המדידה האחרונה של (MAC, שלב) מול הבסיס שלה: `{"seconds", "baseline",
+    "samples", "slow"}` — `slow` None = אין מדידה או אין בסיס."""
     rows = conn.execute(
         "SELECT seconds FROM boot_step_times WHERE mac = ? AND step = ?"
         " ORDER BY rowid DESC LIMIT ?", (mac, step, WINDOW + 1)).fetchall()
@@ -109,8 +109,8 @@ def after_record(conn: sqlite3.Connection, mac: str, step: str, seconds: float |
 
 
 def version_compare(conn: sqlite3.Connection) -> dict | None:
-    """‏`{"now", "before", "steps": [{"step", "before_s", "now_s", "slow"}]}` — לכל שלב
-    עם `MIN_SAMPLES` מדידות בשתי הגרסאות. ‏None — אין שתי גרסאות שנמדדו."""
+    """`{"now", "before", "steps": [{"step", "before_s", "now_s", "slow"}]}` — לכל שלב
+    עם `MIN_SAMPLES` מדידות בשתי הגרסאות. None — אין שתי גרסאות שנמדדו."""
     versions = [r["version"] for r in conn.execute(
         "SELECT version, MAX(rowid) AS last FROM boot_step_times WHERE version IS NOT NULL"
         " GROUP BY version ORDER BY last DESC LIMIT 2")]

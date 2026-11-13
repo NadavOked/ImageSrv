@@ -1,18 +1,18 @@
-"""קליטה שנכשלה אינה משאירה את אזור העבודה שלה — ‏#1915.
+"""קליטה שנכשלה אינה משאירה את אזור העבודה שלה — #1915.
 
-**מה נמצא (BM-F04z, 20/10):** ‏zstd נהרג ב-4% ממחיצה 3. המשימה נרשמה
-‏`failed`, אבל `.capture-tsk_310a` נשאר על הדיסק עם 5.2GB. הסחיפה
-(‏`work_areas.sweep`) רצה רק בעליית השרת ואחר כך כל 24 שעות. כשהכשל הוא
+**מה נמצא (BM-F04z, 20/10):** zstd נהרג ב-4% ממחיצה 3. המשימה נרשמה
+`failed`, אבל `.capture-tsk_310a` נשאר על הדיסק עם 5.2GB. הסחיפה
+(`work_areas.sweep`) רצה רק בעליית השרת ואחר כך כל 24 שעות. כשהכשל הוא
 **דיסק מלא** (507), השרת שומר בדיוק את הזבל שגרם לו.
 
 **שתי דלתות מובילות ל-`failed`, ושתיהן נבדקות כאן:**
 
-1. ‏`capture._fail` — כל סירוב שהשרת מכריע בעצמו: אין מקום לפני הבייט
-   הראשון (507), ‏ENOSPC באמצע הזרם (507), אזור שנעלם, מזהה אימג' פגום,
+1. `capture._fail` — כל סירוב שהשרת מכריע בעצמו: אין מקום לפני הבייט
+   הראשון (507), ENOSPC באמצע הזרם (507), אזור שנעלם, מזהה אימג' פגום,
    מניפסט שאינו JSON, יעד מחוץ לשורש, אימג' שכבר קיים.
-2. **דיווח `failed` של הסוכן** (‏`/agent/progress`) — זו הדלת שבה BM-F04z
+2. **דיווח `failed` של הסוכן** (`/agent/progress`) — זו הדלת שבה BM-F04z
    עבר בפועל: ההעלאה של p3 הסתיימה כרגיל כשה-fifo נסגר, והסוכן דיווח
-   ‏`failed` על `zstd rc=137`. ‏`_fail` אינו במסלול הזה בכלל, ולכן תיקון
+   `failed` על `zstd rc=137`. `_fail` אינו במסלול הזה בכלל, ולכן תיקון
    של `_fail` לבדו לא היה סוגר את מה שנמצא על ברזל.
 
 כל טסט מעלה קודם מחיצה אמיתית, כדי שיהיה מה למחוק — אזור ריק שלא נמחק
@@ -63,12 +63,12 @@ def _state(server, task_id) -> str:
         "SELECT state FROM tasks WHERE id = ?", (task_id,)).fetchone()["state"]
 
 
-# --- דלת 1: ‏_fail, כל מסלול --------------------------------------------------
+# --- דלת 1: _fail, כל מסלול --------------------------------------------------
 
 
 def test_no_room_before_the_first_byte_removes_the_work_area(
         server, images_root, monkeypatch):
-    """‏507 לפני הבייט הראשון של מחיצה 3 — ומחיצה 1 כבר יושבת באזור."""
+    """507 לפני הבייט הראשון של מחיצה 3 — ומחיצה 1 כבר יושבת באזור."""
     import server.library.capture as capmod
     task_id, folder = _started(server, images_root)
     fake = types.SimpleNamespace(total=10 ** 12, used=10 ** 12 - 4, free=4)
@@ -83,7 +83,7 @@ def test_no_room_before_the_first_byte_removes_the_work_area(
 
 def test_a_disk_that_fills_mid_stream_removes_the_work_area(
         server, images_root, monkeypatch):
-    """‏507 מתוך הזרם (ENOSPC) — המקרה החמור של #1915: השרת נגמר לו המקום,
+    """507 מתוך הזרם (ENOSPC) — המקרה החמור של #1915: השרת נגמר לו המקום,
     והאזור שגרם לזה הוא בדיוק מה שנשאר."""
     task_id, folder = _started(server, images_root)
     orig_open = Path.open
@@ -110,7 +110,7 @@ def test_a_disk_that_fills_mid_stream_removes_the_work_area(
 
 def test_a_receive_record_that_cannot_be_written_removes_the_work_area(
         server, images_root, monkeypatch):
-    """‏`_StagingGone` עם משימה פתוחה (‏500 בשם): רשומת ה-sha256 של מה
+    """`_StagingGone` עם משימה פתוחה (500 בשם): רשומת ה-sha256 של מה
     שהתקבל לא נכתבה. כאן הנתיב שלה מזויף אל תת-תיקייה שאינה קיימת — כך
     המסלול נבחר בלי למחוק תיקייה שקובץ פתוח בתוכה (ווינדוס אינו מרשה)."""
     import server.library.capture as capmod
@@ -150,7 +150,7 @@ def test_a_manifest_that_is_not_json_removes_the_work_area(server, images_root):
 
 def test_a_target_outside_the_library_removes_the_work_area(
         server, images_root, monkeypatch):
-    """‏`inside` מחזיר None — מצב שאינו אמור לקרות, ולכן מזויף."""
+    """`inside` מחזיר None — מצב שאינו אמור לקרות, ולכן מזויף."""
     import server.library.capture as capmod
     task_id, folder = _started(server, images_root)
     assert _put(server, task_id, "p3.windows.pcl.zst", PART_B).status_code == 200
@@ -164,7 +164,7 @@ def test_a_target_outside_the_library_removes_the_work_area(
 
 
 def test_an_image_that_already_exists_removes_only_the_work_area(server, images_root):
-    """‏409: האזור נמחק, **והאימג' הקיים לא נגעו בו**."""
+    """409: האזור נמחק, **והאימג' הקיים לא נגעו בו**."""
     task_id, folder = _started(server, images_root)
     assert _put(server, task_id, "p3.windows.pcl.zst", PART_B).status_code == 200
     image_id = server["ctx"].conn.execute(
@@ -196,7 +196,7 @@ def _report(server, task_id, state):
 
 def test_an_agent_reported_failure_removes_the_work_area(server, images_root):
     """**לב #1915 כפי שקרה על ברזל:** ההעלאה הסתיימה כרגיל, והסוכן דיווח
-    ‏`failed`. ‏`_fail` אינו במסלול הזה."""
+    `failed`. `_fail` אינו במסלול הזה."""
     task_id, folder = _started(server, images_root)
 
     r = _report(server, task_id, "failed")

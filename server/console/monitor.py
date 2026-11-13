@@ -29,7 +29,7 @@ STATION_KEY = "monitor:stations"
 CMDLINE_PARAM = "imagesrv.monitor=1"
 CMDLINE_PREFIX = "imagesrv.monitor"
 
-#: מה שמקלידים כדי להדליק את המוניטור בכל התחנות. ‏ASCII, וזהה למה
+#: מה שמקלידים כדי להדליק את המוניטור בכל התחנות. ASCII, וזהה למה
 #: שנכנס לשורת הקרנל — מי שמקליד יודע בדיוק מה הוא מדליק.
 MONITOR_CONFIRM = "imagesrv.monitor"
 
@@ -38,11 +38,11 @@ MONITOR_CONFIRM = "imagesrv.monitor"
 #: הרשאה לעולם אינו נוגע בשירות ה-RFB — הבקרה השלילית מוכיחה בדיוק זאת.
 WS_UNAUTHENTICATED = 4401
 WS_FORBIDDEN = 4403
-#: ‏#1853: ההתחברות לקונסולה בוטלה בזמן צפייה (יציאה, מחיקה, הורדה ל-deploy, השבתה,
+#: #1853: ההתחברות לקונסולה בוטלה בזמן צפייה (יציאה, מחיקה, הורדה ל-deploy, השבתה,
 #: החלפת סיסמה) — אותו 4401, והדף אינו מנסה שוב.
 SESSION_ENDED_REASON = "נותקת מהקונסולה"
 
-#: ‏#839: הפרוקסי לא הצליח להזדהות מול המוניטור **במכונה** — המכונה לא
+#: #839: הפרוקסי לא הצליח להזדהות מול המוניטור **במכונה** — המכונה לא
 #: דיווחה סוד (סוכן ישן), המוניטור לא הציע את סוג-האבטחה שלנו (מוניטור
 #: ישן, או מי שמתחזה לו), או שדחה את הסוד. מובחן מ-4403 (המשתמש בדפדפן
 #: אינו admin) ומ-4502 (אין מי שיענה על 5900).
@@ -54,8 +54,8 @@ WS_MACHINE_AUTH = 4512
 WS_MACHINE_GONE = 4513
 MACHINE_GONE_REASON = "החיבור למחשב נותק — ייתכן שהמחשב כבה"
 
-#: ‏#1129: הגשר סוגר את שני הצדדים אחרי IDLE_SECONDS בלי בייט אחד לאף כיוון
-#: — ‏WS/TCP חצי-פתוח היה משאיר task ו-`active` תפוס לנצח.
+#: #1129: הגשר סוגר את שני הצדדים אחרי IDLE_SECONDS בלי בייט אחד לאף כיוון
+#: — WS/TCP חצי-פתוח היה משאיר task ו-`active` תפוס לנצח.
 WS_IDLE = 4408
 IDLE_SECONDS = 600
 
@@ -66,30 +66,30 @@ MONITOR_CONNECT_WAIT_SECONDS = 15.0
 MONITOR_CONNECT_ATTEMPT_SECONDS = 3.0
 MONITOR_CONNECT_BACKOFF = (0.25, 0.5, 1.0, 2.0, 3.0)
 
-#: ‏#1129: ‏Origin זר (דף באתר אחר שפתח WebSocket עם ה-cookie של המנהל —
-#: ‏SameSite=lax אינו מגן על WS בכל הדפדפנים) נסגר **לפני** accept:
+#: #1129: Origin זר (דף באתר אחר שפתח WebSocket עם ה-cookie של המנהל —
+#: SameSite=lax אינו מגן על WS בכל הדפדפנים) נסגר **לפני** accept:
 #: תוקף לא מקבל 101 ולא הסבר.
 ORIGIN_REFUSED = "Origin אינו תואם לשרת"
 
-#: ‏RFC 6455 §5.5.1: מסגרת close נושאת עד 125 בייט — 2 לקוד ו-123 לסיבה.
+#: RFC 6455 §5.5.1: מסגרת close נושאת עד 125 בייט — 2 לקוד ו-123 לסיבה.
 CLOSE_REASON_MAX_BYTES = 123
 
-#: ‏#1129: הודעות לקוח→שרת של RFB 3.8 שהדפדפן רשאי לשלוח, ואורכן הקבוע.
-#: ‏SetEncodings (2), ‏ClientCutText (6), ‏ClientFence (248) ו-QEMU (255) משתני-
-#: אורך ונפתרים ב-`client_message_length`. ‏#1392: ‏150 (EnableContinuousUpdates),
-#: ‏248 ו-255 הם מה ש-noVNC 1.6 (מסך ה-VM) מוסיף על monitor.js.
+#: #1129: הודעות לקוח→שרת של RFB 3.8 שהדפדפן רשאי לשלוח, ואורכן הקבוע.
+#: SetEncodings (2), ClientCutText (6), ClientFence (248) ו-QEMU (255) משתני-
+#: אורך ונפתרים ב-`client_message_length`. #1392: 150 (EnableContinuousUpdates),
+#: 248 ו-255 הם מה ש-noVNC 1.6 (מסך ה-VM) מוסיף על monitor.js.
 RFB_CLIENT_CUT_TEXT = 6
 RFB_CLIENT_FIXED_LENGTHS = {0: 20, 3: 10, 4: 8, 5: 6, 150: 10}
 RFB_CLIENT_FENCE = 248
 RFB_QEMU = 255
-#: ‏#1392: תקרה להודעת לקוח אחת. הגדולה הלגיטימית היא SetEncodings מלא
-#: (‏4+4·65535). אורך שמבטיח יותר — נסגר בשם, ולא ממתינים לו ובולעים כל מה
+#: #1392: תקרה להודעת לקוח אחת. הגדולה הלגיטימית היא SetEncodings מלא
+#: (4+4·65535). אורך שמבטיח יותר — נסגר בשם, ולא ממתינים לו ובולעים כל מה
 #: שאחריו (כך -8 של Extended Clipboard נקרא 4GB והמסך קפא בלי סגירה).
 RFB_CLIENT_MESSAGE_MAX = 1 << 20
 POWER_PREFIX = "imagesrv-power:"
 POWER_ACTIONS = ("reboot", "poweroff")
-#: ‏#1852 (הכרעת נדב 19/10): מכונה אחת — צופה אחד. מנהל שני רואה מי מחזיק
-#: ו**מבקש** שליטה, כמו ב-VM (‏#1334): המחזיק מאשר; 60 ש' בלי תשובה = סירוב;
+#: #1852 (הכרעת נדב 19/10): מכונה אחת — צופה אחד. מנהל שני רואה מי מחזיק
+#: ו**מבקש** שליטה, כמו ב-VM (#1334): המחזיק מאשר; 60 ש' בלי תשובה = סירוב;
 #: מחזיק שלא נראה 2 דק' (הדף שלו לא שאל על `…/control`) — אישור אוטומטי.
 CONTROL_REQUEST_SECONDS = 60
 HOLDER_GONE_SECONDS = 120
@@ -101,10 +101,10 @@ WS_MOVED = 4410
 WS_HANDED_OVER = 4411
 POWER_NAME_STALE = "שם המחשב השתנה מאז שהמוניטור נפתח — סגרו ופתחו אותו מחדש"
 POWER_OVER_WS_REFUSED = "פקודת כוח אינה עוברת ב-WebSocket — רק POST …/power"
-#: ‏#2240 (הכרעה 03/11): ‏`poweroff -f` של monitor.c באמצע שיכפול מקומי עוקף את
-#: ‏`lc_power_commit` — יעד שלא הושלם נראה אחרי העלייה כמו יעד טוב. ‏`…/power`
-#: מסרב (409, ‏`local_copy: true`) עד שהמפעיל בוחר: דרך הסוכן (‏`…/agent-power`)
-#: או "המחשב לא עונה" (‏`immediate: true`).
+#: #2240 (הכרעה 03/11): `poweroff -f` של monitor.c באמצע שיכפול מקומי עוקף את
+#: `lc_power_commit` — יעד שלא הושלם נראה אחרי העלייה כמו יעד טוב. `…/power`
+#: מסרב (409, `local_copy: true`) עד שהמפעיל בוחר: דרך הסוכן (`…/agent-power`)
+#: או "המחשב לא עונה" (`immediate: true`).
 POWER_OVER_LOCAL_COPY = ("המחשב באמצע שיכפול מקומי — כיבוי או הפעלה מחדש עכשיו ישאירו"
                          " דיסק יעד שעדיין לא הושלם שבור. אשרו מעל האזהרה")
 NOT_IN_LOCAL_COPY = ("המחשב אינו באמצע שיכפול מקומי עכשיו — הבקשה לא נשלחה."
@@ -112,9 +112,9 @@ NOT_IN_LOCAL_COPY = ("המחשב אינו באמצע שיכפול מקומי ע�
 
 
 def origin_allowed(headers) -> bool:
-    """‏#1129: ‏`Origin` חייב להתאים ל-`Host` של הבקשה, או להיעדר (לקוח שאינו
-    דפדפן — ‏wsmon.py, בדיקות). דפדפן תמיד שולח Origin ב-WebSocket, ולכן
-    היעדרו אינו מסלול עוקף לדף זר; ‏`null` (sandbox/file://) נדחה."""
+    """#1129: `Origin` חייב להתאים ל-`Host` של הבקשה, או להיעדר (לקוח שאינו
+    דפדפן — wsmon.py, בדיקות). דפדפן תמיד שולח Origin ב-WebSocket, ולכן
+    היעדרו אינו מסלול עוקף לדף זר; `null` (sandbox/file://) נדחה."""
     origin = headers.get("origin")
     if origin is None:
         return True
@@ -123,7 +123,7 @@ def origin_allowed(headers) -> bool:
 
 
 def refused_because(reason: str) -> str:
-    """‏#1855: ‏``refused`` ביומן נושא את הסיבה — ``refused — <סיבה>`` (עד כאן "refused" לבד,
+    """#1855: ``refused`` ביומן נושא את הסיבה — ``refused — <סיבה>`` (עד כאן "refused" לבד,
     ואי אפשר היה לדעת מה נדחה)."""
     return f"refused — {reason}"
 
@@ -141,7 +141,7 @@ def client_message_length(buf: bytes) -> int | None:
     if kind == RFB_CLIENT_CUT_TEXT:               # pad(3), s32 length
         if len(buf) < 8:
             return None
-        # ‏Extended Clipboard: אורך שלילי = |אורך| בייטים מורחבים (‏#1392).
+        # Extended Clipboard: אורך שלילי = |אורך| בייטים מורחבים (#1392).
         return 8 + abs(struct.unpack(">i", buf[4:8])[0])
     if kind == RFB_CLIENT_FENCE:                  # pad(3), u32 flags, u8 len
         if len(buf) < 9:
@@ -156,13 +156,13 @@ def client_message_length(buf: bytes) -> int | None:
 
 
 def cut_text_extended(buf: bytes) -> bool:
-    """‏ClientCutText (שכבר ידוע שיש בו 8 בייטים) באורך שלילי — Extended
+    """ClientCutText (שכבר ידוע שיש בו 8 בייטים) באורך שלילי — Extended
     Clipboard. noVNC 1.6 שולח כזה מעצמו, כתשובה ל-caps של QEMU 10."""
     return struct.unpack(">i", buf[4:8])[0] < 0
 
 
 def power_frame(action: str) -> bytes:
-    """‏ClientCutText (סוג 6) עם אסימון הכוח ש-monitor.c מזהה (#781)."""
+    """ClientCutText (סוג 6) עם אסימון הכוח ש-monitor.c מזהה (#781)."""
     body = (POWER_PREFIX + action).encode("ascii")
     return b"\x06\x00\x00\x00" + struct.pack(">I", len(body)) + body
 
@@ -175,8 +175,8 @@ def machine_name(conn, canonical: str) -> str | None:
 
 
 def in_local_copy(conn, canonical: str) -> bool:
-    """‏#2240: המכונה באמצע שיכפול מקומי **עכשיו** — אותה ראיה כמו `local_copy`
-    בחלון המחשב (‏`room.local_copy_now`: hello טרי עם `local_clone: copying`)."""
+    """#2240: המכונה באמצע שיכפול מקומי **עכשיו** — אותה ראיה כמו `local_copy`
+    בחלון המחשב (`room.local_copy_now`: hello טרי עם `local_clone: copying`)."""
     from server.rounds.room import local_copy_now
     row = conn.execute("SELECT local_clone, last_seen FROM net_devices WHERE mac = ?",
                        (canonical,)).fetchone()
@@ -195,10 +195,10 @@ def close_reason(text: str) -> str:
 
 async def accept_browser(websocket: WebSocket) -> None:
     """מקבל את ה-WebSocket **לפני** כל בדיקה, כדי שדחייה תגיע לדפדפן כקוד
-    וסיבה (‏#904 סעיף 4). לפי מפרט ASGI, ‏`websocket.close` לפני accept הוא
+    וסיבה (#904 סעיף 4). לפי מפרט ASGI, `websocket.close` לפני accept הוא
     דחיית ה-handshake — uvicorn מגיש אותה כ-HTTP 403 בשני המימושים
-    (‏wsproto/websockets), והדפדפן רואה 1006 בלי קוד ובלי סיבה: 4401,
-    ‏4403, ‏4404, ‏4409, ‏4502 ו-4512 כולם נראו "החיבור נסגר". ה-accept אינו
+    (wsproto/websockets), והדפדפן רואה 1006 בלי קוד ובלי סיבה: 4401,
+    4403, 4404, 4409, 4502 ו-4512 כולם נראו "החיבור נסגר". ה-accept אינו
     שולח בייט אחד של RFB ואינו נוגע במכונה — השער (cookie/admin) עדיין
     סוגר לפני TCP, וזו הבקרה השלילית של #859."""
     offered = websocket.headers.get("sec-websocket-protocol", "")
@@ -207,7 +207,7 @@ async def accept_browser(websocket: WebSocket) -> None:
     } else None
     await websocket.accept(subprotocol=protocol)
 
-#: ‏RFB security type 2 — מסגור VNC Authentication (challenge של 16
+#: RFB security type 2 — מסגור VNC Authentication (challenge של 16
 #: בייטים, תשובה של 16 בייטים). התשובה היא HMAC-SHA256(סוד, challenge)
 #: קטום ל-16 בייטים (#1077); הסוד עצמו אינו עובר על 5900.
 RFB_SECURITY_SECRET = 2
@@ -217,7 +217,7 @@ HMAC_RESPONSE_LEN = 16
 
 
 def flag_json(enabled: bool) -> str:
-    """ייצוג ההגדרה: ‏`{"enabled": bool}`, כמו מתגי `port:<id>`."""
+    """ייצוג ההגדרה: `{"enabled": bool}`, כמו מתגי `port:<id>`."""
     return json.dumps({"enabled": bool(enabled)})
 
 OpenConnection = Callable[
@@ -267,7 +267,7 @@ async def connect_machine(
         await asyncio.sleep(min(delay, remaining))
 
 
-#: ‏#1850: מכונה שנעלמה בלי FIN (‏`reboot -f`, ‏`poweroff -f`, כיבוי idle, חשמל,
+#: #1850: מכונה שנעלמה בלי FIN (`reboot -f`, `poweroff -f`, כיבוי idle, חשמל,
 #: כבל) — בלי keepalive הגשר חיכה לה עד `IDLE_SECONDS` (10 דק') עם מסך קפוא
 #: "מחובר". 10 ש' שקט, ואז שלוש בדיקות כל 5 ש': מכונה מתה מזוהה תוך ~25 ש',
 #: ומכונה שאותחלה (קרנל חדש עונה RST) מיד. כמה בייטים בדקה, רק בזמן צפייה.
@@ -277,7 +277,7 @@ KEEPALIVE_PROBES = 3
 
 
 def keep_alive(sock) -> None:
-    """‏TCP keepalive על ה-socket אל המכונה (#1850) — במוניטור המקומי ובמנהרה
+    """TCP keepalive על ה-socket אל המכונה (#1850) — במוניטור המקומי ובמנהרה
     מהמשני. כשל ה-keepalive מגיע לקורא כ-`TimeoutError`/`ConnectionError`, והגשר
     נסגר `machine` (4513) — וה-monitor.js מתחבר מחדש לבד."""
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
@@ -289,13 +289,13 @@ def keep_alive(sock) -> None:
             sock.setsockopt(socket.IPPROTO_TCP, option, value)
 
 
-#: ‏#2844: המכונה עלתה לפני שמתג המוניטור הופעל — שורת הקרנל נקבעת באתחול ואין
+#: #2844: המכונה עלתה לפני שמתג המוניטור הופעל — שורת הקרנל נקבעת באתחול ואין
 #: שירות שיענה על 5900. לא "סירבה לחיבור", שנראה כתקלה.
 BOOTED_BEFORE_MONITOR = "המכונה עלתה לפני שהמוניטור הופעל — הפעילו אותה מחדש"
 
 
 def booted_without_monitor(conn, mac: str, exc: BaseException) -> bool:
-    """‏True רק כשיש ראיה חיובית: החיבור סורב, והסוכן דיווח ב-hello של האתחול
+    """True רק כשיש ראיה חיובית: החיבור סורב, והסוכן דיווח ב-hello של האתחול
     הזה `monitor_on: false`. NULL (סוכן ישן / לא דיווח) או כל כשל אחר = False
     — "לא ידוע" אינו "עלתה לפני" (עיקרון 5)."""
     if not isinstance(exc, ConnectionRefusedError):
@@ -332,8 +332,8 @@ def station_cmdline(extra: tuple[str, ...], enabled: bool) -> tuple[str, ...]:
 
 def seen_within(last_seen: str | None,
                 now: datetime | None = None) -> bool:
-    """‏"מחובר" לרשימת המוניטור: אותו חלון (‏ONLINE_SECONDS) שבו
-    ‏``_target`` מסכים לפתוח חיבור. חותמת חסרה, פגומה או נאיבית = לא
+    """"מחובר" לרשימת המוניטור: אותו חלון (ONLINE_SECONDS) שבו
+    ``_target`` מסכים לפתוח חיבור. חותמת חסרה, פגומה או נאיבית = לא
     מחובר — לא ידוע אינו "כן" (עיקרון 5)."""
     if not last_seen:
         return False
@@ -348,7 +348,7 @@ def seen_within(last_seen: str | None,
 
 
 def machine_rows(conn, now: datetime | None = None) -> list[dict]:
-    """רשימת המכונות של דף המוניטור (#822): רק build/cloner, ‏``online``
+    """רשימת המכונות של דף המוניטור (#822): רק build/cloner, ``online``
     נקבע **בשרת** באותו חלון-נוכחות של ``_target``. משמש גם את הראשי
     שצופה במשני (#655 v1) — אותה רשימה, אותו חישוב."""
     from server.rounds.room import local_copy_now
@@ -367,11 +367,11 @@ def machine_rows(conn, now: datetime | None = None) -> list[dict]:
             "name": r["suffix"],
             "role": r["role"],
             "ip": r["ip"],
-            # ‏#1839: hello **או** progress — משכפל שכותב אינו שולח hello.
+            # #1839: hello **או** progress — משכפל שכותב אינו שולח hello.
             "online": bool(r["ip"]) and (seen_within(r["last_seen"], now)
                                          or seen_within(r["progress_seen"], now)),
             "prompt": r["prompt"],   # #906: השאלה שממתינה לאדם, או None
-            # ‏#2240: כפתורי הכוח של המוניטור מזהירים לפני כיבוי באמצע שיכפול מקומי
+            # #2240: כפתורי הכוח של המוניטור מזהירים לפני כיבוי באמצע שיכפול מקומי
             "local_copy": local_copy_now(r["local_clone"], r["last_seen"]),
         }
         for r in rows
@@ -384,17 +384,17 @@ def hmac_response(secret: str, challenge: bytes) -> bytes:
                     hashlib.sha256).digest()[:HMAC_RESPONSE_LEN]
 
 
-#: ‏#1837: אותה תווית כמו `REKEY_LABEL` ב-`agent/monitor.c` — בייט-בייט.
+#: #1837: אותה תווית כמו `REKEY_LABEL` ב-`agent/monitor.c` — בייט-בייט.
 REKEY_LABEL = b"imagesrv-monitor-rekey"
 
-#: ‏#1837: SecurityResult שאינו 0 — המכונה דחתה את התשובה של השרת. בעברית
-#: ובלי הסיבה של LibVNCServer (‏"password check failed!" באנגלית, באמצע
+#: #1837: SecurityResult שאינו 0 — המכונה דחתה את התשובה של השרת. בעברית
+#: ובלי הסיבה של LibVNCServer ("password check failed!" באנגלית, באמצע
 #: פס RTL). הסיבה הנפוצה: המכונה אותחלה וה-hello שלה עוד לא הגיע.
 MACHINE_REJECTED_SECRET = "המכונה דחתה את אימות השרת — ממתינים לדיווח הבא שלה"
 
 
 def next_secret(secret: str, challenge: bytes) -> str:
-    """‏#1837: הסוד הבא, אחרי אימות שהצליח — מה ש-`rekey_secret` במכונה
+    """#1837: הסוד הבא, אחרי אימות שהצליח — מה ש-`rekey_secret` במכונה
     גוזר מאותו סוד ומאותו challenge: HMAC-SHA256(סוד, תווית‖challenge)
     הקטום ל-16 בייטים, כ-32 hex קטנות (הצורה של `monitor_secret`).
 
@@ -407,9 +407,9 @@ def next_secret(secret: str, challenge: bytes) -> str:
 def _target(ctx: ServerContext, mac: str,
             now: datetime | None = None
             ) -> tuple[str, str, str | None, str | None]:
-    """‏(ip, role, monitor_secret, monitor_auth) של מכונה שמותר לפתוח אליה
-    מוניטור. הסוד (#839) חוזר כמו שהוא — ‏None כשהמכונה מעולם לא דיווחה
-    אחד. ‏monitor_auth הוא ``hmac`` אחרי #1077, או None לסוכן ישן."""
+    """(ip, role, monitor_secret, monitor_auth) של מכונה שמותר לפתוח אליה
+    מוניטור. הסוד (#839) חוזר כמו שהוא — None כשהמכונה מעולם לא דיווחה
+    אחד. monitor_auth הוא ``hmac`` אחרי #1077, או None לסוכן ישן."""
     canonical = registry.normalize_mac(mac)
     if canonical is None:
         raise HTTPException(404, "מכונה לא מוכרת")
@@ -437,7 +437,7 @@ def _target(ctx: ServerContext, mac: str,
         raise HTTPException(409, "זמן הנוכחות של המכונה אינו תקין")
 
     current = now or datetime.now(timezone.utc)
-    # ‏#1839: דיווח progress שהתקבל בחלון הוא ראיה שהמכונה חיה — בזמן כתיבה
+    # #1839: דיווח progress שהתקבל בחלון הוא ראיה שהמכונה חיה — בזמן כתיבה
     # הוא הקשר היחיד שלה, ובלעדיו המוניטור נדחה בדיוק כשהכי רוצים לצפות.
     if (current - seen > timedelta(seconds=ONLINE_SECONDS)
             and not seen_within(row["progress_seen"], current)):
@@ -450,7 +450,7 @@ class MachineAuthError(Exception):
 
 
 async def _read_exact(reader, n: int) -> bytes:
-    """‏n בייטים בדיוק; ‏EOF מוקדם הוא כשל בשם, לא bytes קצר (עיקרון 5)."""
+    """n בייטים בדיוק; EOF מוקדם הוא כשל בשם, לא bytes קצר (עיקרון 5)."""
     chunks = bytearray()
     while len(chunks) < n:
         piece = await reader.read(n - len(chunks))
@@ -472,16 +472,16 @@ async def _reason(reader) -> str:
 
 
 async def authenticate_machine(reader, writer, secret: str) -> str:
-    """‏#839/#1077: לחיצת-יד RFB 3.8 מול imagesrv-monitor, עד SecurityResult.
+    """#839/#1077: לחיצת-יד RFB 3.8 מול imagesrv-monitor, עד SecurityResult.
 
     הפרוקסי — ולא הדפדפן — הוא הצד שמזדהה: הוא בוחר את סוג 2 בלבד, עונה
     ל-challenge ב-HMAC-SHA256(סוד, challenge) הקטום ל-16 בייטים, וקורא
-    את התוצאה. הסוד עצמו אינו נשלח. ‏None (סוג 1) **לעולם אינו נבחר** גם
+    את התוצאה. הסוד עצמו אינו נשלח. None (סוג 1) **לעולם אינו נבחר** גם
     אם הוצע: מוניטור שמציע אותו הוא סוכן שלא שודרג או מישהו שמתחזה
     למכונה, ושניהם אינם מסלול. אחרי ההצלחה המכונה ממתינה ל-ClientInit
     — והוא מגיע מהדפדפן דרך הממסר הרגיל.
 
-    ‏#1837: מחזיר את הסוד הבא (`next_secret`) — המכונה כבר עברה אליו, והקורא
+    #1837: מחזיר את הסוד הבא (`next_secret`) — המכונה כבר עברה אליו, והקורא
     שומר אותו (`db.monitor_rekeyed`) לפני שהחיבור הבא נפתח.
     """
     banner = await _read_exact(reader, 12)
@@ -508,8 +508,8 @@ async def authenticate_machine(reader, writer, secret: str) -> str:
     return next_secret(secret, challenge)
 
 
-#: ‏#1334: הודעות קלט של RFB — מקלדת (4) ועכבר (5). צופה בלבד אינו שולח אותן.
-#: ‏#1392: וגם מקש QEMU (255) — noVNC שולח כך כל מקש אחרי ש-QEMU אישר -258.
+#: #1334: הודעות קלט של RFB — מקלדת (4) ועכבר (5). צופה בלבד אינו שולח אותן.
+#: #1392: וגם מקש QEMU (255) — noVNC שולח כך כל מקש אחרי ש-QEMU אישר -258.
 RFB_INPUT_TYPES = (4, 5, RFB_QEMU)
 
 
@@ -517,30 +517,30 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
                          idle_seconds: float = IDLE_SECONDS,
                          allow_input: Callable[[], bool] | None = None,
                          evicted: asyncio.Future | None = None) -> str:
-    """מגשר WebSocket שכבר התקבל (‏`accept_browser`) לזרם RFB שכבר עבר
+    """מגשר WebSocket שכבר התקבל (`accept_browser`) לזרם RFB שכבר עבר
     אימות מול המכונה.
 
-    הדפדפן רואה בדיוק את מה שראה תמיד (‏#839): גרסה, סוג-אבטחה None יחיד,
-    ‏SecurityResult OK — ואז הבייטים עוברים לשני הכיוונים. משמש
+    הדפדפן רואה בדיוק את מה שראה תמיד (#839): גרסה, סוג-אבטחה None יחיד,
+    SecurityResult OK — ואז הבייטים עוברים לשני הכיוונים. משמש
     את המוניטור המקומי **וגם** את המוניטור דרך המשני (#655 v1), ששם
     ``reader``/``writer`` הם המנהרה מהמשני ולא TCP למכונה. חוזר עם סיבת
     הסיום — ``browser``/``machine``/``idle``/``refused`` — ליומן;
     ביטול/ניתוק מטופלים אצל הקורא.
 
-    ‏#1129: הכיוון דפדפן→מכונה עובר **בגבולות הודעה** (RFB 3.8, סוגים
-    0/2/3/4/5; ‏#1392: וגם 150/248/255 של noVNC 1.6), ו-ClientCutText (6)
+    #1129: הכיוון דפדפן→מכונה עובר **בגבולות הודעה** (RFB 3.8, סוגים
+    0/2/3/4/5; #1392: וגם 150/248/255 של noVNC 1.6), ו-ClientCutText (6)
     נדחה בשם (המורחב — תשובת caps של noVNC — נזרק) — עד כאן פקודת הכוח
-    ‏`imagesrv-power:` נסעה בו, והאישור בהקלדת שם היה UI בלבד; עכשיו היא
+    `imagesrv-power:` נסעה בו, והאישור בהקלדת שם היה UI בלבד; עכשיו היא
     עוברת רק ב-`POST …/power` שמאמת את השם **בשרת**. סוג לא מוכר נסגר
     1002. הכיוון מכונה→דפדפן נשאר גולמי — הפרסור שלו בדפדפן, עם תקרות.
-    ‏idle_seconds בלי בייט לאף כיוון → שני הצדדים נסגרים (4408)."""
+    idle_seconds בלי בייט לאף כיוון → שני הצדדים נסגרים (4408)."""
     pending = bytearray()
     loop = asyncio.get_running_loop()
     last_activity = loop.time()
     outcome = "browser"
 
     async def from_browser() -> bytes | None:
-        """מסגרת בינארית אחת; ‏None = הדפדפן התנתק."""
+        """מסגרת בינארית אחת; None = הדפדפן התנתק."""
         nonlocal last_activity
         message = await websocket.receive()
         if message["type"] == "websocket.disconnect":
@@ -563,9 +563,9 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
         del pending[:n]
         return taken
 
-    # ‏#839: לחיצת-היד מול הדפדפן היא של הפרוקסי, לא של המכונה —
+    # #839: לחיצת-היד מול הדפדפן היא של הפרוקסי, לא של המכונה —
     # המכונה כבר עברה אימות למעלה. הדפדפן רואה בדיוק את מה שראה
-    # לפני: גרסה, סוג-אבטחה None יחיד, ‏SecurityResult OK. מכאן
+    # לפני: גרסה, סוג-אבטחה None יחיד, SecurityResult OK. מכאן
     # והלאה הבייטים עוברים כמו שהם (ClientInit → ServerInit …).
     await websocket.send_bytes(RFB_VERSION)
     if await browser_exact(12) is None:
@@ -578,7 +578,7 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
         await websocket.close(code=1002, reason="סוג אבטחה לא צפוי")
         return refused_because("סוג אבטחה לא צפוי")
     await websocket.send_bytes(b"\x00\x00\x00\x00")
-    # ‏ClientInit (בייט shared יחיד) הוא ההודעה היחידה בלי סוג — עובר כמו
+    # ClientInit (בייט shared יחיד) הוא ההודעה היחידה בלי סוג — עובר כמו
     # שהוא; מכאן כל הודעה מהדפדפן נושאת סוג.
     client_init = await browser_exact(1)
     if client_init is None:
@@ -601,8 +601,8 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
                     return
                 if length is None:
                     break
-                # ‏ClientCutText רגיל נסגר כבר על הכותרת — לא ממתינים לגוף.
-                # מורחב (Extended Clipboard, ‏#1392) נזרק במכוון: noVNC 1.6 שולח
+                # ClientCutText רגיל נסגר כבר על הכותרת — לא ממתינים לגוף.
+                # מורחב (Extended Clipboard, #1392) נזרק במכוון: noVNC 1.6 שולח
                 # אותו מעצמו בכל חיבור ל-QEMU, וגם הוא אינו מגיע למכונה לעולם.
                 if (buf[0] == RFB_CLIENT_CUT_TEXT
                         and not cut_text_extended(buf)):
@@ -619,7 +619,7 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
                 if buf[0] == RFB_CLIENT_CUT_TEXT:
                     del buf[:length]
                     continue
-                # ‏#1334: צופה בלבד — מקלדת ועכבר נזרקים כאן, בשרת; שאר
+                # #1334: צופה בלבד — מקלדת ועכבר נזרקים כאן, בשרת; שאר
                 # ההודעות (בקשות עדכון מסך, קידודים) עוברות כרגיל.
                 if (allow_input is not None and buf[0] in RFB_INPUT_TYPES
                         and not allow_input()):
@@ -660,8 +660,8 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
     downstream = asyncio.create_task(machine_to_browser())
     watchdog = asyncio.create_task(idle_watch())
     tasks = (upstream, downstream, watchdog)
-    # ‏#1852: הצפייה עברה — לחלון אחר של אותו מנהל, או למנהל אחר שקיבל שליטה.
-    # ‏`evicted` מתמלא ב-(קוד, סיבה) מבחוץ (`call_soon_threadsafe`).
+    # #1852: הצפייה עברה — לחלון אחר של אותו מנהל, או למנהל אחר שקיבל שליטה.
+    # `evicted` מתמלא ב-(קוד, סיבה) מבחוץ (`call_soon_threadsafe`).
     waits = tasks + ((evicted,) if evicted is not None else ())
     try:
         done, not_done = await asyncio.wait(
@@ -683,7 +683,7 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
             await websocket.close(code=WS_MACHINE_GONE,
                                   reason=MACHINE_GONE_REASON)
     finally:
-        # ביטול של ה-endpoint עצמו (‏#725) לא משאיר משימת ממסר יתומה.
+        # ביטול של ה-endpoint עצמו (#725) לא משאיר משימת ממסר יתומה.
         for task in tasks:
             if not task.done():
                 task.cancel()
@@ -692,8 +692,8 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
 
 async def bridge_until_revoked(websocket: WebSocket, task: asyncio.Task | None,
                                bridge: Awaitable[str]) -> str:
-    """‏#1853: הגשר של צופה שנרשם ב-`viewer_sessions` (כמו ה-VM, #1394). ביטול
-    ש-`viewer_sessions` עשה — ‏logout, מחיקה, הורדה ל-deploy — נסגר 4401 בשמו
+    """#1853: הגשר של צופה שנרשם ב-`viewer_sessions` (כמו ה-VM, #1394). ביטול
+    ש-`viewer_sessions` עשה — logout, מחיקה, הורדה ל-deploy — נסגר 4401 בשמו
     ונרשם ``session_revoked``. כל ביטול אחר (פירוק החיבור, #725) ממשיך החוצה."""
     try:
         return await bridge
@@ -705,7 +705,7 @@ async def bridge_until_revoked(websocket: WebSocket, task: asyncio.Task | None,
 
 
 def still_admin(conn, token: str) -> bool:
-    """‏#1853: בדיקה שנייה **אחרי** `viewer_sessions.register`. בין הבדיקה הראשונה לרישום
+    """#1853: בדיקה שנייה **אחרי** `viewer_sessions.register`. בין הבדיקה הראשונה לרישום
     יש await-ים (השער, `reserve`), ו-logout רץ בתהליכון אחר — ביטול שקרה בחלון הזה לא
     מצא את הגשר ברישום. הסדר בצד המבטל (המסד, ואז `viewer_sessions`) מבטיח שכל ביטול
     נתפס באחת משתיהן: לפני הבדיקה הזו — היא נכשלת; אחריה — הוא מבטל את המשימה."""
@@ -714,7 +714,7 @@ def still_admin(conn, token: str) -> bool:
 
 
 async def close_if_revoked(websocket: WebSocket, task: asyncio.Task | None) -> None:
-    """‏#1853: ביטול ש-`viewer_sessions` עשה לפני שהגשר נפתח (בזמן החיבור למכונה
+    """#1853: ביטול ש-`viewer_sessions` עשה לפני שהגשר נפתח (בזמן החיבור למכונה
     ואימותה) — 4401 בשמו, ולא סגירה עלומה שהדף מנסה שוב."""
     if task is None or not viewer_sessions.was_revoked(task):
         return
@@ -724,7 +724,7 @@ async def close_if_revoked(websocket: WebSocket, task: asyncio.Task | None) -> N
         pass   # כבר נסגר — אין מה להודיע
 
 
-#: ‏#1855: חלון הצבירה של כשלי התחברות זהים — הדפדפן מנסה שוב עד 20 פעמים
+#: #1855: חלון הצבירה של כשלי התחברות זהים — הדפדפן מנסה שוב עד 20 פעמים
 #: (2/4/8/15/30 ש', ~8.5 דק'), וסדרה כזו היא שורה אחת ביומן.
 REFUSAL_WINDOW_SECONDS = 600
 
@@ -735,8 +735,8 @@ def path_word(text: str) -> str:
 
 
 class RefusalLog:
-    """‏#1855: כל סגירה של `/monitor/{mac}` ושל `/storage-nodes/{nid}/monitor/{mac}`
-    שקודמת לגשר נרשמת ביומן (`monitor_refused`, ‏``<mac> <קוד> <סיבה>[ ×N נוספים][ node=<nid>]``)
+    """#1855: כל סגירה של `/monitor/{mac}` ושל `/storage-nodes/{nid}/monitor/{mac}`
+    שקודמת לגשר נרשמת ביומן (`monitor_refused`, ``<mac> <קוד> <סיבה>[ ×N נוספים][ node=<nid>]``)
     — עד כאן רק `monitor_connected` נרשם, וכשל לא השאיר עקבות בשרת (#1837 נמצא ביומן
     הסוכן). **בצבירה:** אותו כשל לאותו משתמש ולאותה מכונה תוך `REFUSAL_WINDOW_SECONDS`
     נספר ואינו שורה; הספירה נכתבת בשורה הבאה של אותו כשל, או כשהחיבור הצליח
@@ -746,7 +746,7 @@ class RefusalLog:
                  window: float = REFUSAL_WINDOW_SECONDS):
         self._clock, self._window = clock, window
         self._lock = threading.Lock()
-        #: ‏(mac, node, user, code, reason) → [מתי נכתבה השורה האחרונה, כמה נספרו מאז]
+        #: (mac, node, user, code, reason) → [מתי נכתבה השורה האחרונה, כמה נספרו מאז]
         self._seen: dict[tuple[str, str, str, int, str], list] = {}
 
     @staticmethod
@@ -780,7 +780,7 @@ class RefusalLog:
 
 
 class _Holder:
-    """‏#1852: מי מחזיק מכונה — ומאיזה event loop אפשר לסגור את הגשר שלו."""
+    """#1852: מי מחזיק מכונה — ומאיזה event loop אפשר לסגור את הגשר שלו."""
 
     def __init__(self, user: str, now: float, loop: asyncio.AbstractEventLoop):
         self.user = user
@@ -808,28 +808,28 @@ def create_monitor_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/api/console")
     _, admin_only = auth.dependencies(ctx.conn)
-    #: ‏#1852: מי מחזיק כל מכונה. ‏`threading.Lock` ולא asyncio: הבקשות של
-    #: ‏`…/control` רצות בתהליכוני ה-threadpool, וכל WebSocket ב-TestClient
+    #: #1852: מי מחזיק כל מכונה. `threading.Lock` ולא asyncio: הבקשות של
+    #: `…/control` רצות בתהליכוני ה-threadpool, וכל WebSocket ב-TestClient
     #: רץ ב-event loop משלו. אין `await` בתוך הנעילה.
     active: dict[str, _Holder] = {}
     grants: dict[str, tuple[str, float]] = {}
     outcomes: dict[str, dict] = {}
-    #: ‏#1129: הכותב אל המכונה של כל גשר פתוח — הנתיב היחיד של פקודת כוח.
+    #: #1129: הכותב אל המכונה של כל גשר פתוח — הנתיב היחיד של פקודת כוח.
     bridges: dict[str, asyncio.StreamWriter] = {}
     lock = threading.Lock()
     clock = clock or time.monotonic
-    refusals = RefusalLog(clock)   # ‏#1855
+    refusals = RefusalLog(clock)   # #1855
 
     @router.get("/monitor/settings")
     def read_settings(user=Depends(admin_only)):
-        """‏admin בלבד. גם הקריאה ניהולית — משתמש deploy מקבל 403:
+        """admin בלבד. גם הקריאה ניהולית — משתמש deploy מקבל 403:
         רשימת מי שאפשר להציץ אליו היא מידע ניהולי."""
         del user
         return {"port": MONITOR_PORT, "enabled": stations_enabled(ctx.conn)}
 
     @router.get("/monitor/machines")
     def list_machines(user=Depends(admin_only)):
-        """‏#822: דף המוניטור בקונסולה. רק build/cloner — אותו JOIN
+        """#822: דף המוניטור בקונסולה. רק build/cloner — אותו JOIN
         ואותו חלון-נוכחות של ``_target``, כדי ש"מחובר" בדף יהיה מה
         שהשרת יסכים לחבר אליו, ולא חישוב בדפדפן."""
         del user
@@ -838,7 +838,7 @@ def create_monitor_router(
     @router.put("/monitor/settings")
     def set_settings(body: dict, user=Depends(admin_only)):
         """הדלקה דורשת הקלדה מפורשת (עיקרון 7): מוניטור מעמיד שירות
-        ‏RFB בכל תחנת בנייה/שיכפול, ולחיצה מקרית אינה נראית עד שמישהו
+        RFB בכל תחנת בנייה/שיכפול, ולחיצה מקרית אינה נראית עד שמישהו
         מתחבר. כיבוי הוא הכיוון אל ברירת המחדל ואינו דורש אישור."""
         want = bool(body.get("enabled", False))
         if want and body.get("confirm") != MONITOR_CONFIRM:
@@ -874,7 +874,7 @@ def create_monitor_router(
                 f"{mac} {holder.user} \u2192 {to}", to, machine=mac)
 
     def reserve(mac: str, user: str) -> tuple[_Holder | None, str]:
-        """‏#1852: (המחזיק החדש, "") — או (None, הסיבה ל-4409, עם שם המחזיק)."""
+        """#1852: (המחזיק החדש, "") — או (None, הסיבה ל-4409, עם שם המחזיק)."""
         loop = asyncio.get_running_loop()
         with lock:
             now = clock()
@@ -927,7 +927,7 @@ def create_monitor_router(
 
     @router.get("/monitor/{mac}/control")
     def control_state(mac: str, user=Depends(admin_only)):
-        """‏#1852: מי מחזיק את המכונה, ובקשת שליטה פתוחה. הדף של המחזיק שואל
+        """#1852: מי מחזיק את המכונה, ובקשת שליטה פתוחה. הדף של המחזיק שואל
         כל כמה שניות — וזו גם ה"נוכחות" שלו (2 דק' בלי = לא נראה)."""
         canonical = _canonical_or_404(mac)
         with lock:
@@ -935,7 +935,7 @@ def create_monitor_router(
 
     @router.post("/monitor/{mac}/control/request")
     def control_request(mac: str, user=Depends(admin_only)):
-        """‏#1852: בקשה, לא השתלטות. מחזיק שלא נראה 2 דק' — אישור אוטומטי."""
+        """#1852: בקשה, לא השתלטות. מחזיק שלא נראה 2 דק' — אישור אוטומטי."""
         canonical = _canonical_or_404(mac)
         who = user[0]
         with lock:
@@ -958,7 +958,7 @@ def create_monitor_router(
 
     @router.post("/monitor/{mac}/control/answer")
     def control_answer(mac: str, body: dict, user=Depends(admin_only)):
-        """‏#1852: רק המחזיק עונה. אישור = הגשר שלו נסגר והמכונה שמורה למבקש."""
+        """#1852: רק המחזיק עונה. אישור = הגשר שלו נסגר והמכונה שמורה למבקש."""
         canonical = _canonical_or_404(mac)
         who = user[0]
         with lock:
@@ -982,10 +982,10 @@ def create_monitor_router(
 
     @router.post("/monitor/{mac}/power")
     async def power(mac: str, body: dict, user=Depends(admin_only)):
-        """‏#1129: הפעלה-מחדש/כיבוי של המכונה המנוטרת — האישור **בשרת**.
+        """#1129: הפעלה-מחדש/כיבוי של המכונה המנוטרת — האישור **בשרת**.
         עד כאן הדפדפן שלח `imagesrv-power:` ב-ClientCutText על ה-WS אחרי
         בדיקת שם ב-JS בלבד, והשם הגיע מ-`?name=` בכתובת (R48 ממצא 10):
-        כל מי שיש לו WS של admin כיבה מכונה בלי המודאל. עכשיו: ‏`confirm`
+        כל מי שיש לו WS של admin כיבה מכונה בלי המודאל. עכשיו: `confirm`
         מושווה ל-`suffix` **מהטבלה**, הגשר מסרב ל-ClientCutText מהדפדפן,
         והפקודה נכתבת אל המכונה מכאן. דורש מוניטור פתוח (409): הערוץ
         למכונה הוא ה-RFB המאומת של הגשר, ואין ערוץ אחר."""
@@ -999,10 +999,10 @@ def create_monitor_router(
         if name is None:
             raise HTTPException(404, "מכונה לא מוכרת")
         if body.get("confirm") != name:
-            # ‏#1850: מאז #1270 איש אינו מקליד — הדף שולח את שמו. אי-התאמה = השם
+            # #1850: מאז #1270 איש אינו מקליד — הדף שולח את שמו. אי-התאמה = השם
             # השתנה אחרי שהדף נפתח.
             raise HTTPException(403, POWER_NAME_STALE)
-        # ‏#2240: באמצע שיכפול מקומי — לא `poweroff -f` בלי בחירה מפורשת.
+        # #2240: באמצע שיכפול מקומי — לא `poweroff -f` בלי בחירה מפורשת.
         copying = in_local_copy(ctx.conn, canonical)
         immediate = body.get("immediate") is True
         if copying and not immediate:
@@ -1015,7 +1015,7 @@ def create_monitor_router(
         with lock:
             holder = active.get(canonical)
         if holder is None or holder.user != user[0]:
-            # ‏#1852: הפקודה נוסעת בגשר של מי שמחזיק את המכונה — רק הוא שולח אותה.
+            # #1852: הפקודה נוסעת בגשר של מי שמחזיק את המכונה — רק הוא שולח אותה.
             raise HTTPException(409, f"המכונה בצפייה של {holder.user if holder else 'אחר'}"
                                      " — בקשו שליטה כדי לשלוח פקודה")
         writer.write(power_frame(action))
@@ -1027,13 +1027,13 @@ def create_monitor_router(
 
     @router.post("/monitor/{mac}/agent-power")
     def agent_power(mac: str, body: dict, user=Depends(admin_only)):
-        """‏#2240: כיבוי/הפעלה מחדש **דרך הסוכן** של מכונה באמצע שיכפול מקומי —
+        """#2240: כיבוי/הפעלה מחדש **דרך הסוכן** של מכונה באמצע שיכפול מקומי —
         אחרי שהמפעיל אישר מעל האזהרה. אותו ערוץ כמו חלון המחשב (#1367):
-        ‏`request_power(confirmed=True)` נמסר ב-hello הבא, והסוכן מסמן את היעדים
-        שלא הושלמו (‏`lc_power_commit`) ומדווח ליומן לפני שהוא נכבה. ‏200 = הבקשה
+        `request_power(confirmed=True)` נמסר ב-hello הבא, והסוכן מסמן את היעדים
+        שלא הושלמו (`lc_power_commit`) ומדווח ליומן לפני שהוא נכבה. 200 = הבקשה
         נרשמה, לא "בוצעה". אינו נוסע בגשר, ולכן אינו דורש מוניטור פתוח — רק שאיש
         אחר אינו מחזיק את המכונה (#1852). הראשי מגיע לכאן במשני דרך
-        ‏`CONSOLE_WRITES`."""
+        `CONSOLE_WRITES`."""
         from server.rounds import room_console
         canonical = _canonical_or_404(mac)
         action = body.get("action")
@@ -1066,19 +1066,19 @@ def create_monitor_router(
         websocket: WebSocket,
         mac: str,
     ):
-        # ‏#1129: ‏Origin זר נסגר לפני accept — דף באתר אחר שמנצל את ה-cookie
+        # #1129: Origin זר נסגר לפני accept — דף באתר אחר שמנצל את ה-cookie
         # אינו מקבל 101. הלקוח הלגיטימי
         # (monitor.js) שולח Origin של השרת עצמו.
         if not origin_allowed(websocket.headers):
             await websocket.close(code=WS_FORBIDDEN, reason=ORIGIN_REFUSED)
             return
-        # ‏#904: accept לפני השער, אחרת כל סגירה למטה מגיעה לדפדפן כ-403
+        # #904: accept לפני השער, אחרת כל סגירה למטה מגיעה לדפדפן כ-403
         # אילם (ראו `accept_browser`). ה-accept אינו פותח דבר מול המכונה.
         await accept_browser(websocket)
-        # ‏השער נבדק כאן ידנית, ולא דרך `Depends(admin_only)`. ‏Depends
+        # השער נבדק כאן ידנית, ולא דרך `Depends(admin_only)`. Depends
         # על websocket מפיל את החיבור בקוד גנרי, וה-RFB proxy הוא נתיב
         # שאסור שאי-הרשאה תיגע בו בכלל: הסגירה חייבת לקרות **לפני**
-        # ‏`open_connection`, עם קוד מובחן (4401/4403) שהלקוח קורא. הבקרה
+        # `open_connection`, עם קוד מובחן (4401/4403) שהלקוח קורא. הבקרה
         # השלילית מסירה את בדיקת ה-admin ומראה ש-deploy מגיע ל-connector
         # במקום להיסגר 4403 — כלומר השורה הזאת היא מה שסוגר את הדלת.
         found = auth.check(ctx.conn, websocket.cookies.get(auth.COOKIE_NAME))
@@ -1090,12 +1090,12 @@ def create_monitor_router(
             return
 
         async def refuse(where: str, code: int, reason: str) -> None:
-            """‏#1855: סגירה לפני הגשר — ליומן (בצבירה) ולדפדפן, באותה סיבה."""
+            """#1855: סגירה לפני הגשר — ליומן (בצבירה) ולדפדפן, באותה סיבה."""
             reason = close_reason(reason)
             refusals.record(ctx.conn, where, found[0], code, reason)
             await websocket.close(code=code, reason=reason)
 
-        # ‏#705: המוניטור עובר בפורט הקונסולה — אין לו מאזין לסגור, ולכן "כבוי
+        # #705: המוניטור עובר בפורט הקונסולה — אין לו מאזין לסגור, ולכן "כבוי
         # בכרטיס" נאכף כאן, לפי הכתובת המקומית של החיבור, **לפני** כל TCP למכונה.
         gate = getattr(ctx, "nic_services", None)
         if gate is not None:
@@ -1110,7 +1110,7 @@ def create_monitor_router(
             await refuse(path_word(mac), 4404, "מכונה לא מוכרת")
             return
 
-        # ‏אחרי השער: אי-זמינות המכונה נסגרת גם היא כ-WebSocket, ולא
+        # אחרי השער: אי-זמינות המכונה נסגרת גם היא כ-WebSocket, ולא
         # כ-HTTPException — חריגה בנתיב websocket אחרי השער היא כשל
         # לא מטופל, ולכן קוד הסטטוס מתורגם לקוד סגירה (4000+status).
         try:
@@ -1120,23 +1120,23 @@ def create_monitor_router(
             await refuse(canonical, 4000 + exc.status_code, str(exc.detail))
             return
         if secret is None:
-            # ‏#839: בלי סוד אין עם מה להזדהות — ולכן גם אין TCP. מוניטור
+            # #839: בלי סוד אין עם מה להזדהות — ולכן גם אין TCP. מוניטור
             # שהיה נפתח כאן "כמו פעם" הוא בדיוק המסלול הלא-מאומת שנסגר.
             await refuse(canonical, WS_MACHINE_AUTH, "המכונה לא דיווחה סוד מוניטור — סוכן ישן?")
             return
         if machine_auth != MONITOR_AUTH_HMAC:
-            # ‏#1077: סוכן ישן ששולח סוד גולמי. לא נופלים לגולמי בשקט —
+            # #1077: סוכן ישן ששולח סוד גולמי. לא נופלים לגולמי בשקט —
             # "לא הצלחנו לאמת" אינו "אימתנו" (עיקרון 5). אתחול מספיק.
             await refuse(canonical, WS_MACHINE_AUTH,
                          "המכונה אינה תומכת באתגר-תגובה (HMAC) — סוכן ישן? אתחל מחדש")
             return
         holder, refused = reserve(canonical, found[0])
         if holder is None:
-            # ‏#1852: מי מחזיק — וב-`…/control` אפשר לבקש ממנו שליטה.
+            # #1852: מי מחזיק — וב-`…/control` אפשר לבקש ממנו שליטה.
             await refuse(canonical, 4409, refused)
             return
 
-        # ‏#1853: הגשר נושא מקלדת ועכבר — logout/מחיקה/הורדה ל-deploy סוגרים אותו.
+        # #1853: הגשר נושא מקלדת ועכבר — logout/מחיקה/הורדה ל-deploy סוגרים אותו.
         token = websocket.cookies.get(auth.COOKIE_NAME) or ""
         task = asyncio.current_task()
         if task is not None:
@@ -1149,14 +1149,14 @@ def create_monitor_router(
             try:
                 reader, writer = await connect_machine(open_connection, ip)
             except (OSError, asyncio.TimeoutError) as exc:
-                # ‏`finally` משחרר את ההזמנה; כאן רק סוגרים את החיבור.
-                if booted_without_monitor(ctx.conn, canonical, exc):   # ‏#2844
+                # `finally` משחרר את ההזמנה; כאן רק סוגרים את החיבור.
+                if booted_without_monitor(ctx.conn, canonical, exc):   # #2844
                     await refuse(canonical, 4502, BOOTED_BEFORE_MONITOR)
                     return
                 await refuse(canonical, 4502, "שירות המוניטור במכונה אינו זמין לאחר 15 שניות: "
                              f"{connect_error_reason(exc)}")
                 return
-            # ‏#1850: מכונה שנעלמה בלי FIN נסגרת 4513 תוך ~25 ש', לא idle אחרי 10 דק'.
+            # #1850: מכונה שנעלמה בלי FIN נסגרת 4513 תוך ~25 ש', לא idle אחרי 10 דק'.
             # (מכונה מזויפת בבדיקות אינה StreamWriter ואין לה socket.)
             machine_socket = (writer.get_extra_info("socket")
                               if hasattr(writer, "get_extra_info") else None)
@@ -1172,12 +1172,12 @@ def create_monitor_router(
             except asyncio.TimeoutError:
                 await refuse(canonical, WS_MACHINE_AUTH, "המוניטור לא השלים את לחיצת-היד תוך 5 שניות")
                 return
-            # ‏#1837: המכונה כבר עברה לסוד הבא — שומרים אותו לפני כל דבר
+            # #1837: המכונה כבר עברה לסוד הבא — שומרים אותו לפני כל דבר
             # אחר, כדי שהחיבור הבא יצליח בלי לחכות ל-hello.
             monitor_rekeyed(ctx.conn, canonical, secret, rekeyed)
 
             bridges[canonical] = writer
-            refusals.settle(ctx.conn, canonical, found[0])   # ‏#1855: הספירה של הסדרה שקדמה
+            refusals.settle(ctx.conn, canonical, found[0])   # #1855: הספירה של הסדרה שקדמה
             journal(ctx.conn, "monitor_connected", canonical, found[0], machine=canonical)
             # ניתוק/ביטול תוך כדי הגשר (ה-runner מבטל את ה-endpoint כשהדפדפן
             # הלך — ראו למטה) = "הדפדפן סגר"; חריגה אחרת = "כשל".
@@ -1193,17 +1193,17 @@ def create_monitor_router(
                 journal(ctx.conn, "monitor_closed", f"{canonical} {outcome}",
                         found[0], machine=canonical)
         except (WebSocketDisconnect, asyncio.CancelledError):
-            # ‏WebSocketDisconnect: הלקוח סגר בצורה מסודרת. ‏CancelledError:
+            # WebSocketDisconnect: הלקוח סגר בצורה מסודרת. CancelledError:
             # ה-ASGI runner מבטל את משימת ה-endpoint בזמן פירוק החיבור —
-            # ‏Starlette TestClient מבטל מיד אחרי websocket.disconnect, ו-uvicorn
-            # נוהג כך בכיבוי. ‏`gather(return_exceptions=True)` בולע רק חריגות
+            # Starlette TestClient מבטל מיד אחרי websocket.disconnect, ו-uvicorn
+            # נוהג כך בכיבוי. `gather(return_exceptions=True)` בולע רק חריגות
             # של המשימות-הבנות; ביטול של המשימה שמריצה את ה-gather עצמה חוצה
             # אותה החוצה (#725). מגיעים לכאן רק אחרי שאחת ממשימות הממסר כבר
             # הסתיימה — סגירה רגילה, לא כשל — ואסור שהביטול יצא מה-endpoint:
             # יציאה כזו מסמנת את ה-future של ה-runner כמבוטל ו-result() זורק.
-            await close_if_revoked(websocket, task)   # ‏#1853: ביטול לפני הגשר
+            await close_if_revoked(websocket, task)   # #1853: ביטול לפני הגשר
         finally:
-            # ‏#1860: ביטול שנופל בתוך `wait_closed` (ה-runner מבטל בפירוק,
+            # #1860: ביטול שנופל בתוך `wait_closed` (ה-runner מבטל בפירוק,
             # #725) — או `wait_closed` שזורק, בדיוק כשהמכונה נעלמה (#1850) —
             # דילג על `release`, והמכונה נשארה "כבר פתוח" (4409) עד אתחול.
             # השחרור יושב ב-`finally` משלו; הביטול ממשיך הלאה. סגירה שנכשלה

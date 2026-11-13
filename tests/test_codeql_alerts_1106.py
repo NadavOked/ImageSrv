@@ -17,10 +17,10 @@ import pytest
 from server.storage import locations as sl
 
 
-# --- #866: ‏ReDoS בקישור ה-by-path של iSCSI ---------------------------------------------
+# --- #866: ReDoS בקישור ה-by-path של iSCSI ---------------------------------------------
 
 def test_the_iscsi_device_check_is_linear_on_a_hostile_link():
-    """לפני: ‏`-iscsi-` יכול היה ליפול בשני המקטעים, והחיפוש ריבועי — 8,000
+    """לפני: `-iscsi-` יכול היה ליפול בשני המקטעים, והחיפוש ריבועי — 8,000
     חזרות לקחו שניות. הפורטל הוא כתובת IP ופורט, בלי `-`, ולכן הגבול יחיד."""
     hostile = "/dev/disk/by-path/ip-!" + "-iscsi-!" * 8000 + "\n"
     started = time.perf_counter()
@@ -34,7 +34,7 @@ def test_real_by_path_links_still_pass():
         assert sl.valid_iscsi_device(link), link
 
 
-# --- #652/#653: ‏TLS 1.3 בלבד, גם בצורה שהניתוח קורא ------------------------------------
+# --- #652/#653: TLS 1.3 בלבד, גם בצורה שהניתוח קורא ------------------------------------
 
 @pytest.fixture()
 def contexts(monkeypatch):
@@ -76,7 +76,7 @@ def test_every_interserver_context_refuses_everything_below_tls13(contexts, monk
 # --- #782-787/#791: נתיב קובץ הטוקן נשאר בתוך secondaries/ -------------------------------
 
 def test_a_token_path_that_would_leave_secondaries_is_refused(server, tmp_path, monkeypatch):
-    """‏`valid_node_id` הוא השומר הראשי; כאן הוא מנוטרל כדי להראות שהבדיקה
+    """`valid_node_id` הוא השומר הראשי; כאן הוא מנוטרל כדי להראות שהבדיקה
     בנקודת הכתיבה עוצרת לבד — 400, ושום קובץ לא נכתב מחוץ לתיקייה."""
     from server.interserver import storage_client, storage_nodes
     monkeypatch.setattr(storage_client, "pair_secondary", lambda *a, **k: {"token": "fake-token"})

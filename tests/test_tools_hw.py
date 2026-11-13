@@ -1,6 +1,6 @@
 """כלים — תחום hw (#649): הכלי היחיד שנדב סימן בקטלוג (#1050) — `tpm-clear`.
 
-‏14 כלי המלאי של המודול המקורי נמחקו, והטסטים שלהם איתם. האריזה —
+14 כלי המלאי של המודול המקורי נמחקו, והטסטים שלהם איתם. האריזה —
 `tests/test_tools_packing.py`.
 """
 
@@ -97,7 +97,7 @@ def test_hw_shell_stays_within_repository_limit():
 
 
 def test_builder_has_no_unconditional_hw_block_but_keeps_the_tcti_plugin():
-    """‏#1050: הבנאי אורז לפי הבחירה. ה-TCTI של tpm2 נטען ב-dlopen ו-ldd אינו
+    """#1050: הבנאי אורז לפי הבחירה. ה-TCTI של tpm2 נטען ב-dlopen ו-ldd אינו
     רואה אותו — לכן הוא נארז במפורש כש-tpm2_clear נבחר, ורק אז."""
     text = (ROOT / "tools/build_initramfs.sh").read_text(encoding="utf-8")
     assert "REQUIRED_HW_TOOL_BINARIES" not in text

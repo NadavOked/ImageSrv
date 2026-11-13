@@ -1,21 +1,21 @@
-"""‏#2028 — המלצת חיווט SATA לדגם, לחלון "מיפוי חיבורים".
+"""#2028 — המלצת חיווט SATA לדגם, לחלון "מיפוי חיבורים".
 
 נדב 23/10: במשכפלים יש יותר חיבורי SATA ממגירות. מהמדידות אפשר לומר לאילו חיבורים
 לחבר את המגירות: המהירים, בלי היסטוריית CRC. **קריאה בלבד:** שום דבר כאן אינו משנה
 מיפוי ואינו חוסם שמירה. מיפוי משתנה רק כשמנהל שומר אותו.
 
-**המקור** — `port_history` (‏#1844), `ports.WINDOW` התצפיות האחרונות לכל (מכונה, חיבור),
+**המקור** — `port_history` (#1844), `ports.WINDOW` התצפיות האחרונות לכל (מכונה, חיבור),
 ו-hello האחרון למה שמחובר עכשיו. תצפית = שורה שנמדד בה קישור או CRC, או שנכשלה בה כתיבה
-בסיבת כבל. ‏"בעייתית" — ‏`ports._problem`, אותו כלל של "כנראה כבל". "לא נמדד" אינו ראיה
+בסיבת כבל. "בעייתית" — `ports._problem`, אותו כלל של "כנראה כבל". "לא נמדד" אינו ראיה
 לשום כיוון: חיבור ריק שלא נמדד בשום מחשב מהדגם אינו מומלץ ואינו חשוד.
 
 **הסף** (נדב 06/11, מוקאפ 2028, שאלה 4): המלצה לדגם רק מ-`MIN_MACHINES` מחשבים **וגם**
-‏`MIN_WAVES` שיכפולים, ומתחתיו "אין מספיק נתונים". כתום "חשוד" על חיבור בודד — גם בלי
+`MIN_WAVES` שיכפולים, ומתחתיו "אין מספיק נתונים". כתום "חשוד" על חיבור בודד — גם בלי
 סף: די בתצפית בעייתית אחת בחיבור הזה של המחשב הזה, והיא יוצאת מהחלון אחרי `WINDOW`
 תצפיות, כמו "כנראה כבל".
 
 **מומלץ לדגם** (`recommended`): חיבור שנמדד נקי במחשב אחד לפחות, ובעייתי בפחות מ-
-‏`MIN_MACHINES` מחשבים, מהמהיר לאיטי, עד מספר המגירות של המחשב. **להימנע** (`avoid`): בעייתי
+`MIN_MACHINES` מחשבים, מהמהיר לאיטי, עד מספר המגירות של המחשב. **להימנע** (`avoid`): בעייתי
 ב-`MIN_MACHINES` מחשבים לפחות, או איטי מהמומלצים ולא נכנס למספר המגירות.
 """
 
@@ -35,7 +35,7 @@ ORDINALS_HE = ("הראשונה", "השנייה", "השלישית", "הרביעי
 
 
 def _sata(port: int) -> str:
-    return str(port - 1)        # ‏sata:k = ‏ataK = "SATA k-1" (המוסכמה של #1375)
+    return str(port - 1)        # sata:k = ataK = "SATA k-1" (המוסכמה של #1375)
 
 
 def _list_he(port_numbers: list[int]) -> str:
@@ -48,7 +48,7 @@ def _gbps(value: float) -> str:
 
 
 def _windows(conn: sqlite3.Connection, macs: list[str]) -> dict[tuple[str, int], list[sqlite3.Row]]:
-    """‏`{(mac, port): התצפיות האחרונות, מהחדשה}`, בלי שורות שלא נמדד בהן דבר."""
+    """`{(mac, port): התצפיות האחרונות, מהחדשה}`, בלי שורות שלא נמדד בהן דבר."""
     out: dict[tuple[str, int], list[sqlite3.Row]] = {}
     marks = ",".join("?" * len(macs))
     for row in conn.execute(f"SELECT * FROM port_history WHERE mac IN ({marks})"
@@ -89,7 +89,7 @@ def _model_ports(windows: dict) -> dict[int, dict]:
 
 
 def _rank(model: dict[int, dict], drawers: int) -> tuple[list[int], list[int]]:
-    """‏`(recommended, avoid)` — ראו למעלה."""
+    """`(recommended, avoid)` — ראו למעלה."""
     fit = sorted((p for p, m in model.items()
                   if m["clean"] and len(m["bad"]) < MIN_MACHINES and m["link"] is not None),
                  key=lambda p: (-model[p]["link"], p))

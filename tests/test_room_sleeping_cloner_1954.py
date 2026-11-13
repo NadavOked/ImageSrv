@@ -44,6 +44,11 @@ def _round_row(srv):
     return srv["ctx"].conn.execute("SELECT * FROM room_rounds WHERE state = 'active'").fetchone()
 
 
+#: #2458: `target_slots[].shown` -- the serial and size cloner_hello reported in each chosen slot.
+SHOWN = [{"port": 1, "serial": "S1", "size_bytes": 256060514304},
+         {"port": 2, "serial": "S2", "size_bytes": 256060514304}]
+
+
 def _item(srv, mac: str) -> dict:
     return next(x for x in json.loads(_round_row(srv)["target_slots_json"]) if x["mac"] == mac)
 
@@ -62,7 +67,8 @@ def _open_asleep(srv, serials=("S1", "S2"), ports=(1, 2)) -> None:
 
 def test_a_sleeping_cloners_drawers_open_a_round_bound_to_their_serials(room_server):
     _open_asleep(room_server)
-    assert _item(room_server, CLONER1) == {"mac": CLONER1, "ports": [1, 2], "expect": {"1": "S1", "2": "S2"}}
+    assert _item(room_server, CLONER1) == {"mac": CLONER1, "ports": [1, 2], "expect": {"1": "S1", "2": "S2"},
+                                           "shown": SHOWN}   # #2458: what the console showed
 
 
 def test_an_awake_cloner_is_not_bound(room_server):
@@ -78,7 +84,7 @@ def test_waking_with_the_same_disks_writes_them_and_drops_the_binding(room_serve
     _open_asleep(room_server)
     answer = cloner_hello(room_server["anon"], CLONER1, ["S1", "S2"])
     assert answer["session"]["target_ports"] == [1, 2]
-    assert _item(room_server, CLONER1) == {"mac": CLONER1, "ports": [1, 2]}
+    assert _item(room_server, CLONER1) == {"mac": CLONER1, "ports": [1, 2], "shown": SHOWN}
     assert _round_row(room_server)["target_drives"] == 2
     assert _mismatches(room_server) == []
 

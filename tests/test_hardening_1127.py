@@ -1,4 +1,4 @@
-"""‏#1127 — הקשחות קטנות אחרי R36/R39/R40, כל אחת עם הראיה שלה."""
+"""#1127 — הקשחות קטנות אחרי R36/R39/R40, כל אחת עם הראיה שלה."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from test_login_mfa import _fresh
 
 
 def test_logout_is_allowed_while_a_password_change_is_forced(tmp_path, images_root, clock, monkeypatch):
-    """‏R36: במצב "חובה להחליף סיסמה" רק `POST /me/password` היה מותר — גם
+    """R36: במצב "חובה להחליף סיסמה" רק `POST /me/password` היה מותר — גם
     logout קיבל 403, ומשתמש שמתחרט נשאר כלוא."""
     c = TestClient(_fresh(tmp_path, images_root, clock, monkeypatch))
     assert c.post("/api/console/login", json={"username": "admin", "password": "admin"}).json() == {
@@ -54,7 +54,7 @@ def test_a_plain_server_base_still_passes():
 
 
 def test_an_oversized_hello_field_is_refused_with_413(server):
-    """‏R39: ‏hw_inventory/hw_probe נשמרו בלי תקרת גודל/עומק."""
+    """R39: hw_inventory/hw_probe נשמרו בלי תקרת גודל/עומק."""
     from conftest import hello_body  # noqa: PLC0415
     anon = server["anon"]
     body = hello_body("b4:2e:99:07:1a:c4")

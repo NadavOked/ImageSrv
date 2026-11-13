@@ -1,19 +1,19 @@
 """גואי שלא עלה: האתחול הבא הולך לדיסק המקומי, והשרת שומע (נדב, 11/10).
 
-‏`die_local` הוא אתחול, לא ירידה מובטחת לדיסק: מחשב build/classroom בלי
+`die_local` הוא אתחול, לא ירידה מובטחת לדיסק: מחשב build/classroom בלי
 משימה עולה אוטומטית ל-ImageSrv (#641), ושומר הלולאה של השרת אינו סופר
 אתחולים בלי הקשר — כך גואי שנכשל בכל אתחול היה לולאה. לפני ה-`die_local`:
 
-* ‏`boot_next_local` (‏localboot.sh) מכוון BootNext לרשומת Boot#### של דיסק
-  מקומי (‏HD(...), לא רשת), ‏**ומאמת בקריאה חוזרת** (עיקרון 5). נכשל = נאמר.
-* ‏`gui_failed_report` שולח hello אחד עם ``gui_failed`` (screen, boot_next,
+* `boot_next_local` (localboot.sh) מכוון BootNext לרשומת Boot#### של דיסק
+  מקומי (HD(...), לא רשת), **ומאמת בקריאה חוזרת** (עיקרון 5). נכשל = נאמר.
+* `gui_failed_report` שולח hello אחד עם ``gui_failed`` (screen, boot_next,
   detail).
 * המסך אומר אם האתחול הבא כוון, ואם לא — למה.
 
-‏efibootmgr מזויף ב-PATH, ו-SYSROOT מצביע על עץ efivars מזויף — הטסט
+efibootmgr מזויף ב-PATH, ו-SYSROOT מצביע על עץ efivars מזויף — הטסט
 **לעולם** אינו נוגע ב-NVRAM של המכונה המריצה.
 
-בקרה שלילית: על 8eda4eff ‏localboot.sh אינו קיים, ו-gui_unavailable_local
+בקרה שלילית: על 8eda4eff localboot.sh אינו קיים, ו-gui_unavailable_local
 מאתחל בלי BootNext ובלי דיווח.
 """
 

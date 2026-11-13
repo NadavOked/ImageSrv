@@ -168,7 +168,7 @@ def test_node_delete(server):
 
 
 def test_list_nodes_exposes_node_id(server):
-    """‏#954 גל 7: ``node_id`` (המזהה הנגזר מ-SPKI, ``sn_<hex>``) קיים
+    """#954 גל 7: ``node_id`` (המזהה הנגזר מ-SPKI, ``sn_<hex>``) קיים
     בעמודה מאז ה-enrollment (#883) — טבלת "סניפים" בקונסולה מציגה אותו
     ליד השם, ולכן ``list_nodes`` חייב לחשוף אותו."""
     admin, conn = server["admin"], server["ctx"].conn

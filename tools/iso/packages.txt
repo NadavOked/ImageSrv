@@ -29,6 +29,7 @@ grub-efi-amd64-signed
 grub-pc-bin
 dnsmasq
 dhcpcd-base
+util-linux-extra    # #2400: hwclock in the target -- the synced (or typed, #2765) time into the hardware clock as UTC
 python3-fastapi
 python3-uvicorn
 python3-qrcode
@@ -38,6 +39,7 @@ python3-openssl
 open-iscsi
 nfs-common
 cifs-utils
+smbclient           # #2382: סריקת שיתופי SMB במיקומי אחסון (smbclient -L); cifs-utils רק מציע אותו (Suggests), ולכן לא הגיע גם לפני #1987
 git                 # #1185: כפתור העדכון עובד על /opt/imagesrv/.git שה-ISO נושא
 rsync               # #1128: tools/backup-server.sh — גיבוי מצטבר של האימג'ים
 ifenslave           # #1264: כרטיס שני לרשת ההפצה (bond, balance-alb) — bond-slaves ב-ifupdown
@@ -82,6 +84,7 @@ pci.ids
 pciutils
 efibootmgr
 dmsetup             # #1466: שיכפול מקומי/קליטה — מבט copy-on-write בזיכרון על המקור
+tzdata              # #2957: /usr/share/zoneinfo in the live installer (the time step's zones); the server has it anyway
 
 # --- [gui] tools/build_initramfs.sh · GUI_PACKAGES (--with-gui) -----------
 fonts-ibm-plex

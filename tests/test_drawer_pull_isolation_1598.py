@@ -1,15 +1,15 @@
-"""‏#1598 — מגירה שמתה באמצע הזרם יוצאת ממנו תוך שניות, והשאר גומרות.
+"""#1598 — מגירה שמתה באמצע הזרם יוצאת ממנו תוך שניות, והשאר גומרות.
 
-נמצא על ברזל ב-17/10 (מחשב שיכפול 2): ‏`echo 1 > /sys/block/sdb/device/delete`
-באמצע מחיצה 3. ‏partclone של sdb המשיך "לכתוב" אל ה-page cache, נתקע, ו-fanout
-פינה אותו רק אחרי ‏150 שניות (`STALL_EVICT_MS`) — כל אותו זמן הזרם של המכונה
+נמצא על ברזל ב-17/10 (מחשב שיכפול 2): `echo 1 > /sys/block/sdb/device/delete`
+באמצע מחיצה 3. partclone של sdb המשיך "לכתוב" אל ה-page cache, נתקע, ו-fanout
+פינה אותו רק אחרי 150 שניות (`STALL_EVICT_MS`) — כל אותו זמן הזרם של המכונה
 כולה עמד (#660). השולח איבד את המכונה, ו-sda, הדיסק התקין, נכשל ב"פג הזמן --
 הזרם לא הגיע" ונרשם כ-disk_failure.
 
-הטסטים מריצים את ‏`restore_partition_drawers` האמיתי עם ‏**fanout האמיתי**
-(מקומפל מ-`agent/fanout.c`), ‏zstd/partclone מזויפים, ‏sysfs ו-dmesg מזויפים
-תחת ‏`SYSROOT`. המגירה המתה מפסיקה לקרוא בדיוק כמו partclone תקוע, ולכן
-בלי התיקון fanout חוסם את הזרם, ‏`wait_progress` פוקע, ושתי המגירות נכשלות.
+הטסטים מריצים את `restore_partition_drawers` האמיתי עם **fanout האמיתי**
+(מקומפל מ-`agent/fanout.c`), zstd/partclone מזויפים, sysfs ו-dmesg מזויפים
+תחת `SYSROOT`. המגירה המתה מפסיקה לקרוא בדיוק כמו partclone תקוע, ולכן
+בלי התיקון fanout חוסם את הזרם, `wait_progress` פוקע, ושתי המגירות נכשלות.
 
 שלושה סימני מוות, כולם **ראיה חיובית** מהקרנל — שקט אינו מוות: מגירה
 איטית-אך-חיה חייבת להמשיך להאט את הזרם ולא להיפסל (#660).
@@ -33,13 +33,13 @@ from agentlib import agent_sources
 REPO = Path(__file__).resolve().parent.parent
 pytestmark = requires_native("gcc", posix=True, why="fanout האמיתי צריך gcc ו-fifo")
 
-#: ‏16MB: הרבה מעבר למה שהמגירה המתה בולעת לפני שהיא נחסמת (חוצץ fanout
-#: של 2MB + ‏fifo של 1MB + צינור ה-zstd), כך שבלי התיקון הזרם באמת עומד.
+#: 16MB: הרבה מעבר למה שהמגירה המתה בולעת לפני שהיא נחסמת (חוצץ fanout
+#: של 2MB + fifo של 1MB + צינור ה-zstd), כך שבלי התיקון הזרם באמת עומד.
 PAYLOAD = hashlib.sha256(b"1598").digest() * (16 * 1024 * 1024 // 32)
 GOOD_SHA = hashlib.sha256(PAYLOAD).hexdigest()
 
-#: ‏partclone מזויף. ל-sda — כותב את כל הבייטים לצומת. ל-sdb — בולע 2MB,
-#: ‏"מת" לפי ‏$DEATH, ומפסיק לקרוא בלי לצאת: כמו partclone שנתקע מול כונן
+#: partclone מזויף. ל-sda — כותב את כל הבייטים לצומת. ל-sdb — בולע 2MB,
+#: "מת" לפי $DEATH, ומפסיק לקרוא בלי לצאת: כמו partclone שנתקע מול כונן
 #: שנשלף, ולא כמו partclone שיוצא בשגיאה (שם fanout מקבל EPIPE בלאו הכי).
 PARTCLONE = r"""#!/bin/sh
 node=
@@ -141,8 +141,8 @@ def test_a_drawer_that_dies_mid_stream_is_out_in_seconds_and_the_other_finishes(
         tmp_path, fanout_dir, death):
     """התרחיש של 17/10, בכל אחד משלושת סימני המוות.
 
-    בלי התיקון: fanout חוסם את הזרם על sdb (פינוי רק אחרי ‏150ש'),
-    ‏`wait_progress` פוקע אחרי ‏20ש' שקט, ושתי המגירות נכשלות ב"הזרם לא הגיע".
+    בלי התיקון: fanout חוסם את הזרם על sdb (פינוי רק אחרי 150ש'),
+    `wait_progress` פוקע אחרי 20ש' שקט, ושתי המגירות נכשלות ב"הזרם לא הגיע".
     """
     source = f"stream_source() {{ cat {posix(tmp_path / 'box' / 'part.bin')!r}; }}; "
     box, run, out, elapsed = room(tmp_path, fanout_dir, death, source)
@@ -167,7 +167,7 @@ def test_a_drawer_that_dies_mid_stream_is_out_in_seconds_and_the_other_finishes(
 
 
 def test_a_drawer_that_only_goes_quiet_is_not_declared_dead(tmp_path, fanout_dir):
-    """השומר על #660: שקט בלי ראיה מהקרנל אינו מוות. ‏sdb מפסיקה לקרוא בלי
+    """השומר על #660: שקט בלי ראיה מהקרנל אינו מוות. sdb מפסיקה לקרוא בלי
     סימן — הזרם ממתין לה (back-pressure), ואיש לא מסמן אותה dead. עובר
     לפני התיקון ואחריו; בלעדיו "תיקון" שמפנה כל מגירה שקטה היה עובר."""
     source = f"stream_source() {{ cat {posix(tmp_path / 'box' / 'part.bin')!r}; }}; "
@@ -179,11 +179,11 @@ def test_a_drawer_that_only_goes_quiet_is_not_declared_dead(tmp_path, fanout_dir
 
 
 def test_a_stream_that_never_arrives_is_not_recorded_against_the_disks(tmp_path, fanout_dir):
-    """באג 3 של #1598: ‏"פג הזמן -- הזרם לא הגיע" אינו כשל של הכונן.
+    """באג 3 של #1598: "פג הזמן -- הזרם לא הגיע" אינו כשל של הכונן.
 
-    עד התיקון לולאת ההמתנה למגירות קראה ‏`fail_written_target` בלי ההקשר,
-    נאספה ראיית ATA, ‏`failure_json` צירף ‏`ata_log`, והשרת רשם disk_failure
-    (‏unclassified) על דיסק תקין — ‏`failed_last` בסבב הבא. הניגוב של ה-GPT
+    עד התיקון לולאת ההמתנה למגירות קראה `fail_written_target` בלי ההקשר,
+    נאספה ראיית ATA, `failure_json` צירף `ata_log`, והשרת רשם disk_failure
+    (unclassified) על דיסק תקין — `failed_last` בסבב הבא. הניגוב של ה-GPT
     (#1388) **נשאר**: הדיסק כתוב חלקית, ולכן אסור שיאתחל.
     """
     part = posix(tmp_path / "box" / "part.bin")

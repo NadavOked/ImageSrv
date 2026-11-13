@@ -66,8 +66,8 @@ def test_a_classroom_task_end_hits_the_reboot_stub_and_it_fails(tmp_path):
 def test_poweroff_and_safe_poweroff_fail_closed(tmp_path):
     """כיבוי (`safe_poweroff` האמיתי, ואז הפקודה עצמה) פוגע בזיוף ונכשל.
 
-    ‏`IMAGESRV_TEST=0` כדי שהפונקציה לא תחזור ב-`TEST-POWEROFF` לפני
-    ‏`poweroff -f`. ‏`arm_wol` מצליח — אחרת הפונקציה חוזרת בלי לכבות,
+    `IMAGESRV_TEST=0` כדי שהפונקציה לא תחזור ב-`TEST-POWEROFF` לפני
+    `poweroff -f`. `arm_wol` מצליח — אחרת הפונקציה חוזרת בלי לכבות,
     והבדיקה לא הייתה רואה את הפקודה.
     """
     result = run_path(

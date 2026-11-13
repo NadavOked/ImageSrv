@@ -1,4 +1,4 @@
-"""‏#1039: מי מחובר לקונסולה — ‏`GET /api/console/sessions`.
+"""#1039: מי מחובר לקונסולה — `GET /api/console/sessions`.
 
 העוגייה חתומה ואין sessions בזיכרון (`auth.py`), ולכן "מי מחובר" נרשם
 כאן, בטבלת ``console_sessions``: שורה לעוגייה (לפי ה-sha256 שלה — העוגייה
@@ -46,7 +46,7 @@ def touch(conn: sqlite3.Connection, token: str, username: str, ip: str,
     """נקרא על כל בקשת קונסולה **מאומתת**. כותב רק כשהעוגייה חדשה לתהליך
     או כשעברה דקה מהכתיבה הקודמת שלה.
 
-    ‏``since`` = רגע הנפקת העוגייה (התפוגה שבתוכה פחות ה-TTL) — הכניסה,
+    ``since`` = רגע הנפקת העוגייה (התפוגה שבתוכה פחות ה-TTL) — הכניסה,
     לא הבקשה הראשונה שנרשמה. העוגייה כבר אומתה (``auth.check``), ולכן
     הפענוח כאן אינו בדיקה."""
     key = _hash(token)
@@ -60,7 +60,7 @@ def touch(conn: sqlite3.Connection, token: str, username: str, ip: str,
             del _written[stale]
     fields = token.rpartition("|")[0].split("|")
     expires = int(fields[2])
-    # ‏"purpose:epoch" בעוגייה החדשה; עוגייה ישנה (3 מפרידים) = epoch 0 —
+    # "purpose:epoch" בעוגייה החדשה; עוגייה ישנה (3 מפרידים) = epoch 0 —
     # אותו פענוח כמו `auth.read_session`.
     epoch = int(fields[3].partition(":")[2] or 0) if len(fields) == 4 else 0
     try:
@@ -72,14 +72,14 @@ def touch(conn: sqlite3.Connection, token: str, username: str, ip: str,
                 " (token_hash, username, ip, since, last_seen, expires_at, auth_epoch)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?)"
                 " ON CONFLICT (token_hash) DO UPDATE SET"
-                # ‏#2414: ‏WebSocket (``auth.check``) אינו מעביר כתובת — לא מוחקים את הידועה.
+                # #2414: WebSocket (``auth.check``) אינו מעביר כתובת — לא מוחקים את הידועה.
                 " ip = CASE WHEN excluded.ip = '' THEN console_sessions.ip ELSE excluded.ip END,"
                 " last_seen = excluded.last_seen",
                 (key, username, ip, _iso(expires - ttl), _iso(now), expires, epoch),
             )
     except sqlite3.Error as exc:
         # הרישום משני לבקשה עצמה — מסך קונסולה לא נופל בגללו. אבל הוא לא
-        # נבלע: הסימון מוסר (הבקשה הבאה מנסה שוב), והיומן אומר. ‏last_seen
+        # נבלע: הסימון מוסר (הבקשה הבאה מנסה שוב), והיומן אומר. last_seen
         # הישן שנשאר בטבלה נראה כזה ב-/sessions ("נראה לפני 5 דק'").
         with _lock:
             _written.pop(key, None)
@@ -88,13 +88,13 @@ def touch(conn: sqlite3.Connection, token: str, username: str, ip: str,
 
 def idle_expired(conn: sqlite3.Connection, token: str, idle_seconds: int,
                  ttl: int) -> bool:
-    """‏#2414: האם העוגייה לא נראתה יותר מ-``idle_seconds`` (‏``console_idle_seconds``).
+    """#2414: האם העוגייה לא נראתה יותר מ-``idle_seconds`` (``console_idle_seconds``).
 
     עד כאן הניתוק בחוסר פעילות היה של הדפדפן בלבד, והעוגייה נשארה תקפה 12
-    שעות אחרי שהלשונית נסגרה. הפעילות האחרונה = ‏``last_seen`` של העוגייה, או
-    רגע ההנפקה כשאין לה שורה עדיין (עוגייה שהונפקה ולא נשלחה). ‏``last_seen``
+    שעות אחרי שהלשונית נסגרה. הפעילות האחרונה = ``last_seen`` של העוגייה, או
+    רגע ההנפקה כשאין לה שורה עדיין (עוגייה שהונפקה ולא נשלחה). ``last_seen``
     נכתב לכל היותר פעם ב-``TOUCH_SECONDS``, ולכן החסד הוא בדיוק דקה כזו —
-    הדפדפן מנתק ב-``idle_seconds``, השרת לכל המוקדם דקה אחריו. ‏0 = כבוי."""
+    הדפדפן מנתק ב-``idle_seconds``, השרת לכל המוקדם דקה אחריו. 0 = כבוי."""
     if idle_seconds <= 0:
         return False
     row = conn.execute(
@@ -108,7 +108,7 @@ def idle_expired(conn: sqlite3.Connection, token: str, idle_seconds: int,
 
 
 def rekey(conn: sqlite3.Connection, old: str, new: str) -> None:
-    """‏#2757: חידוש עוגייה — השורה של הישנה עוברת לחדשה, עם ``since`` ו-``last_seen``
+    """#2757: חידוש עוגייה — השורה של הישנה עוברת לחדשה, עם ``since`` ו-``last_seen``
     שלה, כדי ש"מי מחובר" ימשיך להראות סשן אחד ולא שניים. אין שורה לישנה — אין מה להעביר;
     הבקשה הבאה של החדשה תיצור אחת."""
     old_key, new_key = _hash(old), _hash(new)
@@ -139,20 +139,20 @@ def forget(conn: sqlite3.Connection, token: str | None) -> None:
         conn.execute("DELETE FROM console_sessions WHERE token_hash = ?", (key,))
 
 
-#: ‏#2552: מזהה הסשן על המסך = ששת התווים הראשונים של ה-sha256. הטוקן, והגיבוב
+#: #2552: מזהה הסשן על המסך = ששת התווים הראשונים של ה-sha256. הטוקן, והגיבוב
 #: המלא, אינם יוצאים מהשרת.
 SID_LEN = 6
 
 
 def active(conn: sqlite3.Connection, current_token: str | None = None) -> list[dict]:
-    """‏``[{sid, user, role, ip, since, last_seen, current, monitor}]`` — רק
+    """``[{sid, user, role, ip, since, last_seen, current, monitor}]`` — רק
     עוגיות שעדיין תקפות: לא פגו, המשתמש קיים ואינו מושבת, ה-``auth_epoch``
-    שבעוגייה לא בוטל מאז (``users.bump_auth_epoch``, ‏#1075), והיא לא בוטלה
-    בנפרד (``revoked_tokens`` — יציאה, או ניתוק מהמסך, ‏#2552) — אותם תנאים של
+    שבעוגייה לא בוטל מאז (``users.bump_auth_epoch``, #1075), והיא לא בוטלה
+    בנפרד (``revoked_tokens`` — יציאה, או ניתוק מהמסך, #2552) — אותם תנאים של
     ``auth.read_session``, כדי ש"מחובר" לא יכלול עוגייה שהשרת כבר דוחה.
 
-    ‏``sid`` — מזהה קצר (``SID_LEN``) לניתוק בודד. ‏``current`` — העוגייה של הבקשה
-    הזו. ‏``monitor`` — כמה גשרי מוניטור/VM פתוחים על העוגייה."""
+    ``sid`` — מזהה קצר (``SID_LEN``) לניתוק בודד. ``current`` — העוגייה של הבקשה
+    הזו. ``monitor`` — כמה גשרי מוניטור/VM פתוחים על העוגייה."""
     mine = _hash(current_token) if current_token else None
     bridges = viewer_sessions.open_by_hash()
     return [{"sid": r["token_hash"][:SID_LEN], "user": r["username"], "role": r["role"],
@@ -185,7 +185,7 @@ class SessionRefused(Exception):
 
 def revoke_one(conn: sqlite3.Connection, sid: str, by: str,
                current_token: str | None) -> dict:
-    """‏#2552: ניתוק סשן בודד לפי המזהה הקצר: העוגייה שלו נדחית **מיד** (``revoked_tokens``,
+    """#2552: ניתוק סשן בודד לפי המזהה הקצר: העוגייה שלו נדחית **מיד** (``revoked_tokens``,
     כמו logout), השורה נמחקת מהרשימה, וגשר מוניטור פתוח שלה נסגר.
 
     לא מנתקים את הסשן שממנו נשלחה הבקשה (למטרה הזו יש יציאה רגילה). מזהה שאינו

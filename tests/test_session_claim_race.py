@@ -1,7 +1,7 @@
 """המרוץ בתפיסת חריץ — שידור (#103) ומשיכה (#104).
 
 שני הפגמים הם אותו דפוס: קוראים, מחליטים, ואז כותבים — ובין הקריאה
-לכתיבה רצות עוד שאילתות. ‏uvicorn מריץ כל `def` רגיל בתהליכון מהמאגר
+לכתיבה רצות עוד שאילתות. uvicorn מריץ כל `def` רגיל בתהליכון מהמאגר
 ו-`db.Database` נותן חיבור לכל תהליכון, ולכן שני פותחים הם שני כותבים
 בלי טרנזאקציה משותפת. הכשל אינו איטיות אלא **שתי שורות פעילות**: סבב
 רפאים שחוסם את כל הבאים, או משיכה שנייה שאיש לא ידווח אליה.
@@ -81,7 +81,7 @@ class Gate:
 
 
 def _gate_the_window(monkeypatch, gate: Gate) -> None:
-    """‏`get_setting` נקראת בתוך `SessionStore.open`, אחרי הבדיקה ולפני
+    """`get_setting` נקראת בתוך `SessionStore.open`, אחרי הבדיקה ולפני
     ה-INSERT — כלומר בדיוק בחלון שבו המרוץ קורה."""
     real = db_module.get_setting
 
@@ -111,14 +111,14 @@ def _both(first, second, gate: Gate) -> None:
     assert not slow.is_alive(), "התהליכון הראשון נתקע"
 
 
-# --- ‏#103: חריץ השידור --------------------------------------------------------
+# --- #103: חריץ השידור --------------------------------------------------------
 
 
 def test_two_threads_opening_a_broadcast_leave_exactly_one(tmp_path, monkeypatch):
     """המפסיד מקבל SessionError, ובטבלה יש שורת multicast פעילה אחת.
 
     בלי האינדקס הייחודי שניהם מצליחים, והשני הופך לסבב רפאים:
-    ‏`active_broadcast` מחזירה ‏`LIMIT 1`, אז אף מכונה לא תצטרף אליו,
+    `active_broadcast` מחזירה `LIMIT 1`, אז אף מכונה לא תצטרף אליו,
     וכשהראשון ייסגר הוא יחסום כל פתיחה עתידית.
     """
     db = _fresh_db(tmp_path)
@@ -184,7 +184,7 @@ def test_repeated_broadcast_races_never_leave_two(tmp_path):
         SessionStore(db).close(opened[0], "noc")
 
 
-# --- ‏#104: משיכה לאותה תחנה ---------------------------------------------------
+# --- #104: משיכה לאותה תחנה ---------------------------------------------------
 
 
 def test_two_threads_pulling_for_one_station_share_one_pull(tmp_path, monkeypatch):

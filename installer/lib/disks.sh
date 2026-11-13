@@ -88,6 +88,19 @@ disk_contents() {
     else printf 'empty'; fi
 }
 
+# #3007: the disk's own SMART verdict, for the disk step's warning. "failed" only on
+# smartctl's DISK FAILING (exit bit 3), "passed" only on its PASSED / OK line with no
+# error bit; anything else -- no smartctl, no SMART (a VM), a disk that would not
+# open, a hang -- is "unknown", never "passed" (principle 5). Read-only: -H only.
+disk_smart() {
+    command -v smartctl >/dev/null 2>&1 || { printf unknown; return 0; }
+    _ds_out=$(timeout 15 smartctl -H "$DEVROOT/$1" 2>&1); _ds_rc=$?
+    if [ "$_ds_rc" -lt 124 ] && [ $((_ds_rc & 8)) -ne 0 ]; then printf failed
+    elif [ $((_ds_rc & 7)) -eq 0 ] && printf '%s\n' "$_ds_out" \
+            | grep -qE 'self-assessment test result: PASSED|SMART Health Status: OK'; then printf passed
+    else printf unknown; fi
+}
+
 print_inventory() {
     for _pi_name in $(list_disks); do
         _pi_base="$SYSROOT/sys/block/$_pi_name"
@@ -102,8 +115,9 @@ print_inventory() {
         _pi_has=$(disk_contents "$_pi_name"); _pi_hrc=$?
         [ "$_pi_hrc" -eq 0 ] || fail inventory-blkid "could not inspect contents of /dev/$_pi_name"
         _pi_iso=0; disk_is_iso "$_pi_name" && _pi_iso=1
-        printf 'disk=/dev/%s|model=%s|size=%s|bus=%s|removable=%s|has=%s|iso=%s\n' \
-            "$_pi_name" "$_pi_model" "$_pi_size" "$_pi_bus" "$_pi_rm" "$_pi_has" "$_pi_iso"
+        _pi_smart=unknown; [ "$_pi_iso" -eq 1 ] || _pi_smart=$(disk_smart "$_pi_name")
+        printf 'disk=/dev/%s|model=%s|size=%s|bus=%s|removable=%s|has=%s|iso=%s|smart=%s\n' \
+            "$_pi_name" "$_pi_model" "$_pi_size" "$_pi_bus" "$_pi_rm" "$_pi_has" "$_pi_iso" "$_pi_smart"
     done
 }
 

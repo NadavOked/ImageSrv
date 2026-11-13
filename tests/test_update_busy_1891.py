@@ -1,9 +1,9 @@
-"""‏#1891 — "החל עדכון" (ושינוי הגדרות שמחייב אתחול) נחסם על כל מה ש-
-‏`auto_reboot.busy_reason` מגדיר כ"עסוק", ולא רק על `sessions`.
+"""#1891 — "החל עדכון" (ושינוי הגדרות שמחייב אתחול) נחסם על כל מה ש-
+`auto_reboot.busy_reason` מגדיר כ"עסוק", ולא רק על `sessions`.
 
-שני המקרים מה-Issue: סבב חדר **בין גלים** (‏`room_rounds` ‏active, ‏
-‏`wave_session_id` ‏NULL ואין שורה פתוחה ב-`sessions`) וקליטה רצה. ושלישי:
-‏DB שזורק הוא סירוב בשם, לא "לא עסוק".
+שני המקרים מה-Issue: סבב חדר **בין גלים** (`room_rounds` active, 
+`wave_session_id` NULL ואין שורה פתוחה ב-`sessions`) וקליטה רצה. ושלישי:
+DB שזורק הוא סירוב בשם, לא "לא עסוק".
 """
 
 from __future__ import annotations
@@ -87,7 +87,7 @@ def test_a_settings_change_that_restarts_waits_for_a_room_round_between_waves(ho
     assert host["machine"].restarts == 0
 
 
-# --- ‏server-upgrade.sh: אותה הגדרה גם כשהסקריפט רץ ביד ------------------------
+# --- server-upgrade.sh: אותה הגדרה גם כשהסקריפט רץ ביד ------------------------
 
 def test_the_upgrade_script_refuses_between_two_waves_too(tmp_path):
     from test_installer_1131 import (BASH, _fake_repo, _run_upgrade, _seed_db, _status,
@@ -224,7 +224,7 @@ def test_a_finished_transfer_does_not_block(update_server, state):
 
 def test_apply_during_an_upload_from_the_console_is_refused(update_server, monkeypatch):
     """ההעלאה אינה שורה ב-DB — היא זרם בתוך תהליך השרת. מה ש"החל עדכון" שואל
-    (‏`restart_blocker`) נקרא כאן **באמצע** ההעלאה, ושוב אחריה."""
+    (`restart_blocker`) נקרא כאן **באמצע** ההעלאה, ושוב אחריה."""
     from server import update
     from server.console import library as console_library
     seen = {}
@@ -242,7 +242,7 @@ def test_apply_during_an_upload_from_the_console_is_refused(update_server, monke
 
 
 def test_receiving_an_image_from_the_primary_is_busy(tmp_path):
-    """המשני: ‏`receive_image` (‏PUT מהראשי) — עדכון באמצע חותך את ההעברה."""
+    """המשני: `receive_image` (PUT מהראשי) — עדכון באמצע חותך את ההעברה."""
     from types import SimpleNamespace
 
     from server import auto_reboot

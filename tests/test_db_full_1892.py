@@ -1,11 +1,11 @@
-"""‏#1892 — מחיצת ה-DB מלאה: היומן לא מפיל את hello, והבריאות אדומה.
+"""#1892 — מחיצת ה-DB מלאה: היומן לא מפיל את hello, והבריאות אדומה.
 
 שני סוגי מחיצה מלאה כאן:
 
-* **אמיתי** — ‏``PRAGMA max_page_count`` על חיבור אמיתי, ושורה שדורשת דפים
+* **אמיתי** — ``PRAGMA max_page_count`` על חיבור אמיתי, ושורה שדורשת דפים
   חדשים. זה מה שמוכיח ש-sqlite אכן מחזיר ``sqlite_errorcode == SQLITE_FULL``,
   והזיהוי בקוד נשען על הקוד ולא על נוסח ההודעה.
-* **מוזרק** לאפליקציה המלאה — כל כתיבה (‏INSERT/UPDATE/DELETE/REPLACE) זורקת
+* **מוזרק** לאפליקציה המלאה — כל כתיבה (INSERT/UPDATE/DELETE/REPLACE) זורקת
   את אותה חריגה, וקריאות עוברות. כך נראה דיסק מלא מבחוץ: קוראים, לא כותבים.
 """
 
@@ -64,7 +64,7 @@ def test_sqlite_reports_a_full_database_by_error_code(tmp_path):
 def test_journal_on_a_full_database_does_not_raise_and_is_recorded(tmp_path):
     conn = _really_full(tmp_path / "imagesrv.db")
     journal(conn, "unknown_mac", "y" * 65536)          # לא זורק
-    assert not conn.in_transaction                       # ‏rollback — אין נעילה יתומה
+    assert not conn.in_transaction                       # rollback — אין נעילה יתומה
     assert db_module.last_disk_full()["what"] == "journal unknown_mac"
     # כתיבה מוצלחת היא הראיה שהמחיצה התפנתה — האדום נמחק.
     journal(conn, "unknown_mac", "short")
@@ -79,7 +79,7 @@ def test_a_journal_error_that_is_not_disk_full_still_raises(tmp_path):
 
 @pytest.fixture()
 def app_full(tmp_path: Path, images_root: Path, clock, monkeypatch):
-    """אפליקציה מלאה; ‏`state["full"] = True` הופך כל כתיבה ל-SQLITE_FULL."""
+    """אפליקציה מלאה; `state["full"] = True` הופך כל כתיבה ל-SQLITE_FULL."""
     from server.rounds import sender as sender_module
     from server.console import users
     from server.app import create_app
@@ -145,7 +145,7 @@ def test_a_hello_whose_answer_needs_a_write_is_a_declared_503(app_full, monkeypa
     assert r.json()["code"] == "db_full"
 
 
-@pytest.mark.system_reserve          # הרזרבה האמיתית, ‏10 GiB (conftest מאפס אותה)
+@pytest.mark.system_reserve          # הרזרבה האמיתית, 10 GiB (conftest מאפס אותה)
 def test_db_partition_thresholds_in_health(app_full):
     admin, state = app_full["admin"], app_full["state"]
     state["free"] = 512 * 1024 ** 2

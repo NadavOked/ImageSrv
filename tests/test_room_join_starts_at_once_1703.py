@@ -1,26 +1,26 @@
-"""‏#1703 — ה-hello שמשלים את הגל מוציא אותו לדרך **באותה תשובה**.
+"""#1703 — ה-hello שמשלים את הגל מוציא אותו לדרך **באותה תשובה**.
 
 ברזל 17/10 (יומן השרת TA): משכפל שהוער ב-WoL לתוך גל פתוח — מה-hello הראשון
-עד `GET …/manifest`: ‏22 ש' (ses_fbd8f9ca, 08:24:11→08:24:33) ו-23 ש'
+עד `GET …/manifest`: 22 ש' (ses_fbd8f9ca, 08:24:11→08:24:33) ו-23 ש'
 (ses_81f31ff4, 09:41:45→09:42:08). משכפל שכבר היה דלוק: 0.
 
-השורש בשרת: ‏`hello.py` מריץ את הדופק (`room.pulse` → `tick`) **לפני**
-‏`record_hello`. בדופק הזה המכונה עוד אינה חברה, ‏`ready_drives` אינו סופר
+השורש בשרת: `hello.py` מריץ את הדופק (`room.pulse` → `tick`) **לפני**
+`record_hello`. בדופק הזה המכונה עוד אינה חברה, `ready_drives` אינו סופר
 את המגירות שלה, והגל נשאר `open` — גם כשהיא הנבחרת האחרונה (או היחידה).
-התשובה אומרת `open`, והגל יוצא רק בדופק **הבא**: שעון הרקע (‏5 ש') או
+התשובה אומרת `open`, והגל יוצא רק בדופק **הבא**: שעון הרקע (5 ש') או
 ה-hello הבא. הסוכן לומד שהגל יצא רק מה-hello הבא של הלולאה הראשית, וזה
 מגיע אחרי `smart_probe_idle`, הרמת הגואי, מסך הבחירה (#1322, יוצא על
 `open` לפי #1560) ו-`poll_sleep`.
 
-השעון מזויף (`now_fn=Clock()` של השרת ו-`room._utcnow`) ואינו זז; ‏TestClient
+השעון מזויף (`now_fn=Clock()` של השרת ו-`room._utcnow`) ואינו זז; TestClient
 בלי `with` אינו מריץ את שעון הרקע; ואין כאן `room.sweep` ולא hello נוסף.
 כלומר אם הגל רץ — ה-hello עצמו הוציא אותו.
 
 שומרי תיקון-יתר (עוברים לפני התיקון ואחריו):
 
 - חבר שעוד בדרך אינו מוחמץ: שני נבחרים, הראשון מקבל `open`.
-- דופק לא-מצטרף (`joining: false`, ‏attended.sh) אינו מצרף ואינו מוציא.
-- ‏#1728: החבר שהצטרף ראשון מקבל את הגל ב-hello הבא שלו ואינו נחשב
+- דופק לא-מצטרף (`joining: false`, attended.sh) אינו מצרף ואינו מוציא.
+- #1728: החבר שהצטרף ראשון מקבל את הגל ב-hello הבא שלו ואינו נחשב
   אתחול באמצע הזרם.
 """
 
@@ -32,7 +32,7 @@ import pytest
 
 from server.rounds import room as room_mod
 
-from test_server_room import (           # noqa: F401 — ‏room_server הוא fixture
+from test_server_room import (           # noqa: F401 — room_server הוא fixture
     CLONER1, CLONER2, cloner_hello, room_body, room_server,
 )
 
@@ -95,7 +95,7 @@ def test_two_selected_the_first_waits_and_the_second_starts_the_wave(room_server
     wave = second["session"]["id"]
     assert {m["mac"] for m in ctx.store.members(wave)} == {CLONER1, CLONER2}
 
-    # ‏#1728: הראשון לומד שהגל יצא מה-hello הבא שלו — חבר `waiting`, לא אתחול.
+    # #1728: הראשון לומד שהגל יצא מה-hello הבא שלו — חבר `waiting`, לא אתחול.
     again = cloner_hello(anon, CLONER1, ["S1", "S2"])
     assert again["session"] is not None and again["session"]["id"] == wave
     assert again["session"]["state"] == "running"
@@ -127,7 +127,7 @@ def test_the_boot_choice_leaves_on_the_main_answer_without_waiting_for_the_beat(
     """מחשב שיכפול שה-hello הראשי שלו ענה `open` (גל ממתין למשכפל נוסף):
     מסך הבחירה (#1322) יוצא מיד — לא אחרי `sleep 1` והלוך-חזור של הדופק
     (attended.sh) שיחזור ויגיד את אותו `open`. כאן הדופק עוד לא ענה
-    (`attended.round` ריק), וה-`sleep` של העולם המדומה סופר: ‏STAYED = נשאר."""
+    (`attended.round` ריק), וה-`sleep` של העולם המדומה סופר: STAYED = נשאר."""
     from test_end_of_task_1560 import cloner_menu        # noqa: PLC0415
 
     trace, log = cloner_menu(tmp_path, '""', (

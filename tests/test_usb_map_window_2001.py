@@ -115,14 +115,14 @@ def test_the_window_shows_every_connection_the_empty_ones_and_the_dvd_too(tmp_pa
     out, _usb = stick(tmp_path, TO_MAP)
     frame = frame_of(out)
     assert dialog_title(frame) == "מיפוי חיבורים", out.stdout + out.stderr
-    assert "dlg\tmap\t0\tמיפוי חיבורים\t⁨HP Compaq 8000 Elite SFF PC⁩ · נשמר על הדיסק-און-קי לדגם הזה" in frame
+    assert "dlg\tmap\t0\tמיפוי חיבורים\t\u2068HP Compaq 8000 Elite SFF PC\u2069 · נשמר על הדיסק-און-קי לדגם הזה" in frame
     assert conns(frame) == [
         ["SATA 0", "", "ST500DM002", "500GB", "", "", "דיסק 1", "2", "1", "disk"],
         ["SATA 1", "", "ריק", "", "", "", "דיסק 2", "0", "1", "empty"],   # #1874: between two disks, a drawer by its number
         ["SATA 2", "", "WDC WD2500", "250GB", "", "", "דיסק 3", "0", "1", "disk"],
         ["SATA 3", "", "ריק", "", "", "", "", "0", "0", "empty"],
         ["SATA 4", "", "ריק", "", "", "", "", "0", "0", "empty"],
-        ["SATA 5", "", "כונן CD/DVD · ⁨DVD-RAM GH60L⁩", "", "", "", "", "0", "0", "optical"],
+        ["SATA 5", "", "כונן CD/DVD · \u2068DVD-RAM GH60L\u2069", "", "", "", "", "0", "0", "optical"],
         ["NVMe 1", "03:00.0", "Samsung 970", "256GB", "", "", "דיסק 4", "0", "1", "disk"],
         ["NVMe 2", "04:00.0", "WD SN550", "1TB", "", "", "דיסק 5", "0", "1", "disk"]], frame
     assert "SanDisk" not in frame                                   # the stick is no connection

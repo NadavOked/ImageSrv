@@ -1,4 +1,4 @@
-"""‏#1972: השרת כ-IGMP querier בכרטיס ההפצה — שליחה, בחירה מול querier אחר,
+"""#1972: השרת כ-IGMP querier בכרטיס ההפצה — שליחה, בחירה מול querier אחר,
 ושורת הבריאות. הסוקט מזויף (סוקט raw דורש root); הבחירה והחבילה אמיתיות."""
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ class Clock:
 
 
 class FakeSocket:
-    """‏`script`: רשימת פריטים לכל `recvfrom` — bytes (חבילה שהגיעה) או מספר
+    """`script`: רשימת פריטים לכל `recvfrom` — bytes (חבילה שהגיעה) או מספר
     (שניות שעוברות בלי חבילה). כשהיא נגמרת — `stop` נדלק."""
 
     def __init__(self, clock: Clock, script: list, stop: threading.Event,

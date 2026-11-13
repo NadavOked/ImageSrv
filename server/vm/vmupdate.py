@@ -1,16 +1,16 @@
-"""עדכון אימג' בתוך VM על השרת — המנוע (‏#1334).
+"""עדכון אימג' בתוך VM על השרת — המנוע (#1334).
 
 מחזור החיים של VM **אחד**: אימג' → דיסק עבודה (`vmdisk.build_disk`) →
-‏QEMU/KVM → כיבוי → שמירה כגרסה חדשה (`vmdisk.capture_disk`) או ביטול.
+QEMU/KVM → כיבוי → שמירה כגרסה חדשה (`vmdisk.capture_disk`) או ביטול.
 העיצוב, ולמה כך: `docs/guides/vm-update.md`. החוזה: `docs/architecture/interfaces.md` סעיף 33.
 
 **הדיסק הוא מקור האמת** (עיקרון 3): כל מה שצריך כדי להמשיך אחרי אתחול
-השרת יושב ב-`<ספרייה>/.vmupdate/` — ‏`state.json`, ‏`source-manifest.json`,
-‏`disk.raw`. השרת שעולה וממצא שם VM "רץ" יודע שהוא **אינו** רץ (‏QEMU הוא
+השרת יושב ב-`<ספרייה>/.vmupdate/` — `state.json`, `source-manifest.json`,
+`disk.raw`. השרת שעולה וממצא שם VM "רץ" יודע שהוא **אינו** רץ (QEMU הוא
 בן של השרת ומת איתו), ומסמן `interrupted` — הדיסק נשאר, מדליקים שוב או
 מבטלים.
 
-**הכרעות נדב 13/10** (‏#1334): מנהל בלבד · הגרסה החדשה = ברירת המחדל לסבב
+**הכרעות נדב 13/10** (#1334): מנהל בלבד · הגרסה החדשה = ברירת המחדל לסבב
 חדש (`image_versions`) · אחרי כיבוי בכוח מדליקים שוב ומשיכים · 15 דק' לכיבוי
 מסודר ואז מוצע כוח · דיסק שלא הוכרע נשמר 7 ימים ונמחק עם שורת יומן ·
 מנהל שני צופה בלבד, ו"קח שליטה" היא **בקשה** שהשולט מאשר (60 ש' בלי תשובה
@@ -55,25 +55,31 @@ GROWTH_RESERVE_BYTES = 30 * GIB
 SHUTDOWN_GRACE_S = 15 * 60
 #: הכרעה 5: כמה זמן נשמר דיסק עבודה שאיש לא הכריע עליו.
 KEEP_UNDECIDED_S = 7 * 24 * 3600
-#: הכרעה 6: שולט שלא נראה (‏status/מסך) כל כך הרבה — "איננו".
+#: הכרעה 6: שולט שלא נראה (status/מסך) כל כך הרבה — "איננו".
 CONTROLLER_GONE_S = 120
 #: הכרעה 6: בקשת שליטה שלא נענתה — סירוב.
 REQUEST_TIMEOUT_S = 60
 #: כל כמה זמן רץ הניקיון (תפוגת בקשות, תפוגת 7 הימים).
 MAINTENANCE_S = 30
 
-#: ‏(מפתח הגדרה, ברירת מחדל, מינימום, מקסימום).
+#: (מפתח הגדרה, ברירת מחדל, מינימום, מקסימום).
 SETTINGS = {
     "memory_mib": ("vmupdate:memory_mib", 16384, 1024, 1 << 20),
     "cpus": ("vmupdate:cpus", 4, 1, 256),
 }
+#: #2986: מה שלא נקבע במפורש נגזר מהשרת — ליבות = min(4, ליבות השרת − 1) (שרת
+#: M910 עם 4 ליבות נותן 3), זיכרון = min(16GB, זמין − הרזרבה לשרת), ולא פחות
+#: מהרצפה. מתחת לרצפה `_check_vm` מסרב ואומר כמה חסר.
+CPUS_CAP = 4
+MEMORY_CAP_MIB = 16384
+MEMORY_FLOOR_MIB = 4096
 
 OVMF_DIR = Path("/usr/share/OVMF")
 OVMF = {
     False: ("OVMF_CODE_4M.fd", "OVMF_VARS_4M.fd"),
     True: ("OVMF_CODE_4M.secboot.fd", "OVMF_VARS_4M.ms.fd"),
 }
-#: ‏#1468: הרשת של ה-VM — הכרטיס שהמפעיל בחר, ה-MAC שהשרת ייצר פעם אחת
+#: #1468: הרשת של ה-VM — הכרטיס שהמפעיל בחר, ה-MAC שהשרת ייצר פעם אחת
 #: (Windows רואה את אותו כרטיס בכל פתיחה, וה-DHCP של המכללה — כתובת שמורה),
 #: וה-lease האחרון שנראה (לתצוגה ליד הבחירה).
 NIC_KEY = "vmupdate:nic"
@@ -87,7 +93,7 @@ UNDECIDED = ("stopped", "failed")
 
 
 class Refusal(Exception):
-    """סירוב בשם: ‏HTTP status, ‏`reason` למכונה, `message` לאדם, ומספרים."""
+    """סירוב בשם: HTTP status, `reason` למכונה, `message` לאדם, ומספרים."""
 
     def __init__(self, status: int, reason: str, message: str, **numbers):
         super().__init__(message)
@@ -105,7 +111,7 @@ class Machine:
     אצל הקורא, לא "בסדר" (עיקרון 5)."""
 
     def kvm(self) -> str | None:
-        """None = ‏/dev/kvm קיים ונפתח לקריאה-כתיבה; אחרת הסיבה."""
+        """None = /dev/kvm קיים ונפתח לקריאה-כתיבה; אחרת הסיבה."""
         try:
             fd = os.open("/dev/kvm", os.O_RDWR | os.O_CLOEXEC)
         except FileNotFoundError:
@@ -153,7 +159,7 @@ class Machine:
             return None
         return vmdisk.VmUser(entry.pw_uid, entry.pw_gid)
 
-    # -- הרשת של ה-VM (‏#1468, ‏`vmnet`) --
+    # -- הרשת של ה-VM (#1468, `vmnet`) --
 
     def firewall(self, uid: int, mac: str) -> str | None:
         return vmnet.apply(uid, mac)
@@ -168,7 +174,7 @@ class Machine:
         return vmnet.stacked(name)
 
     def macvtap(self, lower: str, mac: str) -> tuple[int | None, str | None]:
-        """(fd פתוח של ‏/dev/tapN, None) או (None, הסיבה). ה-fd עובר ל-QEMU."""
+        """(fd פתוח של /dev/tapN, None) או (None, הסיבה). ה-fd עובר ל-QEMU."""
         path, why = vmnet.macvtap_up(lower, mac)
         if path is None:
             return None, why
@@ -197,12 +203,12 @@ class Machine:
 
 
 def secure_boot_for(manifest: dict) -> bool:
-    """‏SB כבוי רק כשיש **ראיה** שהמטענים אינם חתומים (`boot_ca == []`).
-    ‏`null` ("לא נגזר") ורשימה — דלוק: אימג' Windows נבנה למכונה עם SB."""
+    """SB כבוי רק כשיש **ראיה** שהמטענים אינם חתומים (`boot_ca == []`).
+    `null` ("לא נגזר") ורשימה — דלוק: אימג' Windows נבנה למכונה עם SB."""
     return manifest.get("boot_ca") != []
 
 
-#: ‏`elevateprivileges` אינו כאן בכוונה: ‏`-run-with user=` מוריד הרשאות **אחרי**
+#: `elevateprivileges` אינו כאן בכוונה: `-run-with user=` מוריד הרשאות **אחרי**
 #: שהסינון נטען, ו-`deny` חוסם את ה-setuid עצמו (נמדד ב-Testrunner: SIGSYS).
 SANDBOX = "on,obsolete=deny,spawn=deny,resourcecontrol=deny"
 
@@ -210,9 +216,9 @@ SANDBOX = "on,obsolete=deny,spawn=deny,resourcecontrol=deny"
 def qemu_argv(*, workdir: Path, memory_mib: int, cpus: int, accel: str,
               secure_boot: bool, tap_fd: int, mac: str, ovmf_dir: Path = OVMF_DIR,
               run_as: str = vmnet.VM_USER) -> list[str]:
-    """שורת הפקודה. הרשת היחידה: ה-fd של ה-macvtap שהשרת יצר (‏#1468), עם `mac`.
-    **אין** `-netdev user` (slirp), ‏`bridge`, ‏`hostfwd`/`guestfwd`/`smb`, ואין
-    `-vnc` על TCP. ‏QEMU רץ כ-`run_as` — ה-uid שחומת האש (`vmnet`) חוסמת."""
+    """שורת הפקודה. הרשת היחידה: ה-fd של ה-macvtap שהשרת יצר (#1468), עם `mac`.
+    **אין** `-netdev user` (slirp), `bridge`, `hostfwd`/`guestfwd`/`smb`, ואין
+    `-vnc` על TCP. QEMU רץ כ-`run_as` — ה-uid שחומת האש (`vmnet`) חוסמת."""
     if type(tap_fd) is not int or tap_fd < 3:
         raise ValueError(f"fd לא תקין ל-macvtap: {tap_fd!r}")
     if not vmnet.valid_mac(mac):
@@ -236,15 +242,15 @@ def qemu_argv(*, workdir: Path, memory_mib: int, cpus: int, accel: str,
         "-drive", f"file={workdir / 'disk.raw'},format=raw,if=none,id=disk0,"
                   "discard=unmap,detect-zeroes=unmap",
         "-device", "ide-hd,drive=disk0,bus=ide.0,bootindex=1",
-        # ‏#1468: ‏macvtap (bridge) על הכרטיס שנבחר. השרת פתח את ‏/dev/tapN ומעביר
+        # #1468: macvtap (bridge) על הכרטיס שנבחר. השרת פתח את /dev/tapN ומעביר
         # את ה-fd (`pass_fds`) — QEMU אינו יוצר דבר ברשת בעצמו.
         "-netdev", f"tap,id=net0,fd={tap_fd}",
-        # ‏romfile= ריק: בלי ROM של PXE. ‏Windows אינו צריך אותו, ו-OVMF לא
+        # romfile= ריק: בלי ROM של PXE. Windows אינו צריך אותו, ו-OVMF לא
         # ינסה אתחול רשת — בוילן של המכללה זה היה DHCP/TFTP מול שרתים אמיתיים.
         "-device", f"e1000e,netdev=net0,mac={mac},romfile=",
         "-vga", "std",
         "-device", "qemu-xhci", "-device", "usb-tablet",
-        # ‏force-shared: כמה צופים (השולט + מנהלים שצופים) על אותו מסך.
+        # force-shared: כמה צופים (השולט + מנהלים שצופים) על אותו מסך.
         "-vnc", f"unix:{workdir / 'vnc.sock'},share=force-shared",
         "-qmp", f"unix:{workdir / 'qmp.sock'},server=on,wait=off",
         "-run-with", f"user={run_as}",
@@ -258,7 +264,7 @@ class QmpError(Exception):
 
 
 def qmp(path: Path, command: str, timeout: float = 5.0) -> dict:
-    """פקודת QMP אחת: greeting → ‏qmp_capabilities → הפקודה. אירועים
+    """פקודת QMP אחת: greeting → qmp_capabilities → הפקודה. אירועים
     באמצע מדולגים. כל כשל — QmpError בשם."""
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
@@ -290,15 +296,39 @@ def qmp(path: Path, command: str, timeout: float = 5.0) -> dict:
 # --- הגדרות -----------------------------------------------------------------------
 
 
-def read_settings(conn) -> dict[str, int]:
-    out = {}
-    for name, (key, default, low, high) in SETTINGS.items():
+def _stored_settings(conn) -> dict[str, int | None]:
+    """מה שנקבע במפורש ותקין; None = לא נקבע (או נשמר ערך לא תקין)."""
+    out: dict[str, int | None] = {}
+    for name, (key, _default, low, high) in SETTINGS.items():
         raw = get_setting(conn, key)
         try:
-            value = int(raw) if raw is not None else default
+            value = int(raw) if raw is not None else None
         except ValueError:
-            value = default
-        out[name] = value if low <= value <= high else default
+            value = None
+        out[name] = value if value is not None and low <= value <= high else None
+    return out
+
+
+def read_settings(conn) -> dict[str, int]:
+    return {name: SETTINGS[name][1] if value is None else value
+            for name, value in _stored_settings(conn).items()}
+
+
+def vm_settings(conn, machine, ram_reserve_mib: int) -> dict[str, int]:
+    """#2986: מה שה-VM יקבל בפועל. ערך שנקבע במפורש נשמר כמו שהוא; אחרת הוא
+    נגזר מהשרת. כשהשרת לא נקרא — ברירת המחדל הקבועה, ו-`_check_vm` יסרב
+    בשם ("לא ניתן לקרוא"), לא יעבור בשקט."""
+    stored = _stored_settings(conn)
+    out = read_settings(conn)
+    if stored["cpus"] is None:
+        cores = machine.cpu_count()
+        if cores is not None:
+            out["cpus"] = max(1, min(CPUS_CAP, cores - 1))
+    if stored["memory_mib"] is None:
+        avail = machine.mem_available_mib()
+        if avail is not None:
+            spare = (avail - ram_reserve_mib) // 1024 * 1024
+            out["memory_mib"] = max(MEMORY_FLOOR_MIB, min(MEMORY_CAP_MIB, spare))
     return out
 
 
@@ -334,9 +364,9 @@ class _Progress:
 class _Tap:
     """ה-fd של ה-macvtap בתוך `with` — נסגר ביציאה מהבלוק בכל מסלול.
 
-    ‏CodeQL (‏py/file-not-closed) אינו רואה סגירה דרך `machine.close_tap(fd)`
+    CodeQL (py/file-not-closed) אינו רואה סגירה דרך `machine.close_tap(fd)`
     — קריאה דרך אובייקט מוזרק — ודיווח על ה-fd מ-`_net_up` כ"לא נסגר".
-    ‏`with` על עוטף הוא הצורה שהוא מזהה; הסגירה עצמה נשארת `close_tap`,
+    `with` על עוטף הוא הצורה שהוא מזהה; הסגירה עצמה נשארת `close_tap`,
     כדי שהטסטים ימשיכו להזריק `Machine` מזויף."""
 
     def __init__(self, machine, fd: int) -> None:
@@ -368,7 +398,7 @@ class VmUpdate:
         self.host = host or vmdisk.Host()
         self.machine = machine or Machine()
         self.deploy_interface = deploy_interface
-        #: ‏TCG (אמולציה, פי 10–50 איטי) — דגל בדיקות בלבד, לא נגיש מה-API.
+        #: TCG (אמולציה, פי 10–50 איטי) — דגל בדיקות בלבד, לא נגיש מה-API.
         self.allow_tcg = allow_tcg
         self.ovmf_dir = Path(ovmf_dir)
         self.ram_reserve_mib = ram_reserve_mib
@@ -380,7 +410,7 @@ class VmUpdate:
         self._proc: subprocess.Popen | None = None
         self._threads: list[threading.Thread] = []
         self._progress = _Progress()
-        #: הכרעה 6 — מתי כל מנהל נראה לאחרונה (‏status/מסך). בזיכרון בלבד:
+        #: הכרעה 6 — מתי כל מנהל נראה לאחרונה (status/מסך). בזיכרון בלבד:
         #: נוכחות אינה שורדת אתחול, ושולט שלא נראה מאז האתחול "איננו".
         self._seen: dict[str, float] = {}
         #: מי צופה עכשיו במסך (חיבור WebSocket פתוח) — לפס "גם X צופה ב-VM".
@@ -390,8 +420,8 @@ class VmUpdate:
         self._every = maintenance_every
         self._ticker: threading.Thread | None = None
         self._guarded_at = 0.0
-        #: ‏#1468 (סקירת אבטחה 16/10): טעינת הטבלה ופירוק הרשת לעולם אינם חופפים.
-        #: ‏`_net_live` דלוק מ-`_net_up` שהצליח ועד ש-`_net_down` מתחיל, ונבדק תחת
+        #: #1468 (סקירת אבטחה 16/10): טעינת הטבלה ופירוק הרשת לעולם אינם חופפים.
+        #: `_net_live` דלוק מ-`_net_up` שהצליח ועד ש-`_net_down` מתחיל, ונבדק תחת
         #: אותו מנעול שבו נטענת הטבלה — טעינה אחרי פירוק אינה אפשרית.
         self._net_lock = threading.Lock()
         self._net_live = False
@@ -410,7 +440,7 @@ class VmUpdate:
         return {"state": "idle"}
 
     def _recover(self) -> dict:
-        """מה שעל הדיסק אחרי אתחול. ‏QEMU מת עם השרת — "רץ" אינו רץ."""
+        """מה שעל הדיסק אחרי אתחול. QEMU מת עם השרת — "רץ" אינו רץ."""
         path = self.workdir / "state.json"
         if not self.workdir.exists():
             return self._idle()
@@ -437,7 +467,7 @@ class VmUpdate:
             try:
                 self._qmp(self.workdir / "qmp.sock", "quit")   # QEMU שנשאר יתום
             except QmpError:
-                pass   # הצפוי: ‏QEMU מת עם השרת. המצב כבר אומר "נקטע".
+                pass   # הצפוי: QEMU מת עם השרת. המצב כבר אומר "נקטע".
             if was in ("running", "stopping"):
                 # ה-macvtap וכלל הכתובת נשארו מהתהליך שמת (#1468)
                 why = self._net_down()
@@ -447,11 +477,11 @@ class VmUpdate:
         return state
 
     def clear_leftovers(self) -> None:
-        """‏#1649: בעליית השרת — שאריות של שמירה שנקטעה באמצע כיווץ (העותק
-        `imagesrv-vmsave`, ה-loop-ים, ‏`shrink.cow`) מנוקות ונקראות בחזרה, כדי
+        """#1649: בעליית השרת — שאריות של שמירה שנקטעה באמצע כיווץ (העותק
+        `imagesrv-vmsave`, ה-loop-ים, `shrink.cow`) מנוקות ונקראות בחזרה, כדי
         שביטול או שמירה לא ייתקלו ב-loop שנשאר מחובר. כשל = אזהרה במצב, שורה
         ביומן ובלוג — לא נבלע, וגם לא מפיל את עליית השרת. כשיש VM בפעולה בתהליך
-        הזה (‏BUSY) — לא נוגעים: העותק שלו חי."""
+        הזה (BUSY) — לא נוגעים: העותק שלו חי."""
         with self._lock:
             if self._state.get("state") in BUSY or not self.workdir.exists():
                 return
@@ -477,7 +507,7 @@ class VmUpdate:
             self._save_state(self._state)
 
     def touch(self, user: str) -> None:
-        """המנהל הזה נמצא כאן (‏status, מסך) — הכרעה 6."""
+        """המנהל הזה נמצא כאן (status, מסך) — הכרעה 6."""
         with self._lock:
             self._seen[user] = self._now()
 
@@ -494,8 +524,8 @@ class VmUpdate:
             self._viewers.pop(token, None)
 
     def _viewer_list(self, user: str | None) -> list[dict]:
-        """מי צופה: ‏`id` אטום (גיבוב של האסימון — לא האסימון עצמו), ‏`you` למי
-        ששואל, ‏`controller` לשולט. השולט ראשון, אחר כך לפי שעת ההצטרפות."""
+        """מי צופה: `id` אטום (גיבוב של האסימון — לא האסימון עצמו), `you` למי
+        ששואל, `controller` לשולט. השולט ראשון, אחר כך לפי שעת ההצטרפות."""
         controller = self._state.get("controller")
         rows = [{"id": hashlib.sha256(token.encode()).hexdigest()[:12], **v,
                  "controller": v["user"] == controller, "you": bool(user) and v["user"] == user}
@@ -539,7 +569,7 @@ class VmUpdate:
                               "partitions": prog.partitions}
                              if state.get("state") in ("preparing", "saving") else None)
         net = state.get("network")
-        if isinstance(net, dict):   # ‏#1468: הכתובת שה-VM קיבל, או כמה נשאר לחכות לה
+        if isinstance(net, dict):   # #1468: הכתובת שה-VM קיבל, או כמה נשאר לחכות לה
             net = dict(net)
             since_ts = net.pop("since_ts", None)
             net["seconds_left"] = (max(0, int(since_ts + self.lease_timeout - now))
@@ -558,7 +588,7 @@ class VmUpdate:
                                   "disk_allocated_bytes": allocated}
         return state
 
-    # -- תחזוקה: בקשות שליטה שפגו, ‏7 ימים ----------------------------------
+    # -- תחזוקה: בקשות שליטה שפגו, 7 ימים ----------------------------------
 
     def _ensure_ticker(self) -> None:
         """לולאת התחזוקה רצה רק כשיש עדכון פתוח, ונגמרת כשאין — שרת בלי
@@ -584,7 +614,7 @@ class VmUpdate:
                 log.exception("vmupdate maintenance failed")
 
     def _guard_network(self, force: bool = False) -> None:
-        """בזמן שה-VM רץ, הבידוד נטען שוב בכל סבב תחזוקה. ‏`nft -f` של חומת
+        """בזמן שה-VM רץ, הבידוד נטען שוב בכל סבב תחזוקה. `nft -f` של חומת
         האש הראשית (המתקין, הקונסולה כשמדליקים DHCP) מתחיל ב-`flush ruleset`
         ומוחק גם את הטבלה שלנו — וה-VM היה ממשיך לרוץ בלי גבולות. טבלה שלא
         נטענה מחדש = ה-VM נכבה בכוח, בשם (עיקרון 5)."""
@@ -619,7 +649,7 @@ class VmUpdate:
                 proc.kill()
 
     def maintenance(self, *, guard: bool = False) -> None:
-        """‏`guard=True` — טעינת הבידוד מחדש עכשיו, בלי לחכות לסבב (לולאת
+        """`guard=True` — טעינת הבידוד מחדש עכשיו, בלי לחכות לסבב (לולאת
         הרקע ובדיקות)."""
         self._guard_network(force=guard)
         now = self._now()
@@ -727,8 +757,8 @@ class VmUpdate:
                                           "ה-VM רץ רק תחתיו (המתקין יוצר אותו)")
 
     def host_problem(self) -> str | None:
-        """‏#1372: האם המארח מוכן ל-VM — אותן בדיקות שההפעלה מסרבת לפיהן
-        (`_tools`, לשני מצבי Secure Boot), בלי אימג'. ‏None = מוכן; אחרת מה חסר,
+        """#1372: האם המארח מוכן ל-VM — אותן בדיקות שההפעלה מסרבת לפיהן
+        (`_tools`, לשני מצבי Secure Boot), בלי אימג'. None = מוכן; אחרת מה חסר,
         במשפט אחד. לעליית השרת, למסך הבריאות ולסטטוס העדכון (`server/vm/vmhost.py`)."""
         missing: list[str] = []
         for secure_boot in (False, True):
@@ -743,7 +773,7 @@ class VmUpdate:
         return " · ".join(problems) or None
 
     def _check_vm(self, settings: dict[str, int]) -> tuple[str, str]:
-        """‏KVM, זיכרון, ליבות, רשת. מחזיר (accel, כרטיס היציאה)."""
+        """KVM, זיכרון, ליבות, רשת. מחזיר (accel, כרטיס היציאה)."""
         why = self.machine.kvm()
         if why is not None:
             if not self.allow_tcg:
@@ -777,7 +807,7 @@ class VmUpdate:
         self._vm_nic_check(nic)
         return accel, nic
 
-    # -- הרשת של ה-VM (‏#1468) ---------------------------------------------------
+    # -- הרשת של ה-VM (#1468) ---------------------------------------------------
 
     def _vm_nic_check(self, name: object) -> None:
         """כרטיס שה-VM יכול לשבת עליו: קיים, ואינו כרטיס ההפצה ואינו מעליו/מתחתיו
@@ -843,7 +873,7 @@ class VmUpdate:
                 "lease_timeout_seconds": int(self.lease_timeout)}
 
     def set_network(self, name: object, user: str) -> dict:
-        """‏`name=None` מבטל את הבחירה (ה-VM לא יודלק עד שייבחר כרטיס)."""
+        """`name=None` מבטל את הבחירה (ה-VM לא יודלק עד שייבחר כרטיס)."""
         if name is not None:
             self._vm_nic_check(name)
         before = get_setting(self.conn, NIC_KEY) or None
@@ -854,7 +884,7 @@ class VmUpdate:
         return self.network_view()
 
     def _net_up(self, nic: str) -> int:
-        """‏macvtap + חומת האש — לפני **כל** הדלקה. מחזיר את ה-fd ל-QEMU."""
+        """macvtap + חומת האש — לפני **כל** הדלקה. מחזיר את ה-fd ל-QEMU."""
         user = self.machine.vm_user()
         if user is None:
             raise Refusal(503, "vm_user", f"משתמש המערכת {vmnet.VM_USER} אינו קיים")
@@ -889,14 +919,14 @@ class VmUpdate:
         return message
 
     def _check_space(self, manifest: dict) -> None:
-        """‏#1390: מה הפתיחה והשמירה **תופסות בפועל**, לא הגודל הלוגי.
+        """#1390: מה הפתיחה והשמירה **תופסות בפועל**, לא הגודל הלוגי.
 
-        ‏`disk.raw` דליל: ‏partclone כותב רק בלוקים בשימוש, ולכן הוא תופס את
-        ‏`used_bytes` של המחיצות (ועוד מה ש-Windows Update יכתוב — המרווח), לא את
-        גודל הדיסק (נמדד 13/10: לוגי 500.1GB, ‏26GB תפוסים אחרי 9GB שחזור).
+        `disk.raw` דליל: partclone כותב רק בלוקים בשימוש, ולכן הוא תופס את
+        `used_bytes` של המחיצות (ועוד מה ש-Windows Update יכתוב — המרווח), לא את
+        גודל הדיסק (נמדד 13/10: לוגי 500.1GB, 26GB תפוסים אחרי 9GB שחזור).
         הגרסה החדשה נכתבת לצד הישנה, דחוסה — כגודל המקור הדחוס.
 
-        מחיצה בלי `used_bytes` (‏#1368: ‏null ב-NTFS) — לא ממציאים מספר: נספר
+        מחיצה בלי `used_bytes` (#1368: null ב-NTFS) — לא ממציאים מספר: נספר
         גודל המחיצה המלא, וההודעה אומרת שזו הערכה שמרנית ובאילו מחיצות."""
         free = self.machine.free_bytes(self.library.root)
         if free is None:
@@ -910,7 +940,7 @@ class VmUpdate:
                 used += int(part.get("size_bytes") or 0)
                 unmeasured.append(f"p{part.get('index', '?')}")
         compressed = int(manifest.get("total_compressed_bytes") or 0)
-        # ‏#1737: הרזרבה למערכת נוספת על מרווח הגדילה — הוא לדיסק של ה-VM, היא לשרת.
+        # #1737: הרזרבה למערכת נוספת על מרווח הגדילה — הוא לדיסק של ה-VM, היא לשרת.
         keep = disk_reserve.reserve()
         need = used + self.growth_reserve_bytes + compressed + keep
         if free < need:
@@ -928,7 +958,7 @@ class VmUpdate:
     # -- פעולות -----------------------------------------------------------
 
     def start(self, image_id: str, user: str) -> dict:
-        settings = read_settings(self.conn)
+        settings = vm_settings(self.conn, self.machine, self.ram_reserve_mib)
         with self._lock:
             if self._state.get("state") not in ("idle", "saved") or self.workdir.exists():
                 raise Refusal(409, "busy",
@@ -1028,7 +1058,7 @@ class VmUpdate:
         fd = self._net_up(nic)
         try:
             # ה-fd נסגר ביציאה מה-with בשני המסלולים — ל-QEMU יש עותק משלו
-            # (‏pass_fds), ובחריגה הוא נסגר לפני `_net_down`, כמו קודם.
+            # (pass_fds), ובחריגה הוא נסגר לפני `_net_down`, כמו קודם.
             with _Tap(self.machine, fd):
                 argv = qemu_argv(workdir=self.workdir, memory_mib=self._state["memory_mib"],
                                  cpus=self._state["cpus"], accel=self._state["accel"],
@@ -1052,7 +1082,7 @@ class VmUpdate:
                                network={"interface": nic, "mac": mac, "state": "waiting",
                                         "address": None, "server": None, "at": None,
                                         "since_ts": self._now()})
-            # ‏#1468: היומן לפני ש-`running` נראה ב-status() (כמו ב-_fail) — מי שראה
+            # #1468: היומן לפני ש-`running` נראה ב-status() (כמו ב-_fail) — מי שראה
             # `running` רואה גם את השורה. אחרי השחרור קורא יכול היה להקדים אותה.
             journal(self.conn, "vmupdate_running", f"{self._state['image_id']} {nic} {mac}", user)
             self._set()
@@ -1216,7 +1246,7 @@ class VmUpdate:
         return self.status(user)
 
     def _disk_signature(self) -> tuple[int, int] | None:
-        """‏(גודל, ‏mtime) של דיסק העבודה, או None כשלא ניתן לקרוא אותו."""
+        """(גודל, mtime) של דיסק העבודה, או None כשלא ניתן לקרוא אותו."""
         try:
             stat = (self.workdir / "disk.raw").stat()
         except OSError:
@@ -1269,22 +1299,22 @@ class VmUpdate:
                                "error": None}
         except vmdisk.DiskError as exc:
             shutil.rmtree(out, ignore_errors=True)
-            # ‏#1491: השמירה אינה כותבת לדיסק (הכיווץ על עותק) — כל כשל בשמו משאיר
+            # #1491: השמירה אינה כותבת לדיסק (הכיווץ על עותק) — כל כשל בשמו משאיר
             # אותו שלם: מדליקים שוב, מתקנים ושומרים.
             self._fail(exc.reason, exc.message, disk_ready=True, user=user)
         except Exception as exc:   # noqa: BLE001
             log.exception("vmupdate save failed")
             shutil.rmtree(out, ignore_errors=True)
-            # ‏#2915: גם כשל שאינו `DiskError` (למשל `OSError` בכתיבת המניפסט
+            # #2915: גם כשל שאינו `DiskError` (למשל `OSError` בכתיבת המניפסט
             # לספרייה) לא נגע בדיסק העבודה — אבל לא מניחים: מוכן רק כשהגודל וה-mtime
             # זהים למה שהיו כשהשמירה התחילה. לא נקרא/השתנה = לא מוכן.
             intact = signature is not None and self._disk_signature() == signature
             self._fail("internal", f"השמירה נכשלה: {exc}", disk_ready=intact, user=user)
 
     def _check_save_space(self, source: dict) -> None:
-        """‏#1737: בין הפתיחה לשמירה עוברים ימים — דיסק העבודה גדל, קליטות נכנסו.
+        """#1737: בין הפתיחה לשמירה עוברים ימים — דיסק העבודה גדל, קליטות נכנסו.
         הגרסה החדשה נכתבת לספרייה רק אם אחריה נשארת הרזרבה למערכת. הגודל שלה
-        מוערך כגודל המקור הדחוס, כמו בפתיחה (`_check_space`). כשל = ‏`disk_ready`
+        מוערך כגודל המקור הדחוס, כמו בפתיחה (`_check_space`). כשל = `disk_ready`
         נשאר: מפנים מקום ושומרים שוב."""
         free = self.machine.free_bytes(self.library.root)
         if free is None:
@@ -1324,7 +1354,8 @@ class VmUpdate:
 
     def precheck(self, image_id: str) -> dict:
         """מה ש-`start` היה מסרב לו — בלי להתחיל (חלון ההתחלה: אין KVM, אין
-        מקום, VM אחר פתוח). ‏{"ok": true} או הסירוב בשמו ובמספריו."""
+        מקום, VM אחר פתוח). {"ok": true} או הסירוב בשמו ובמספריו."""
+        resources = None
         try:
             with self._lock:
                 if self._state.get("state") not in ("idle", "saved") or self.workdir.exists():
@@ -1341,12 +1372,17 @@ class VmUpdate:
                 vmdisk.check_openable(manifest)
             except vmdisk.DiskError as exc:
                 raise Refusal(400, exc.reason, exc.message) from exc
-            settings = read_settings(self.conn)
+            settings = vm_settings(self.conn, self.machine, self.ram_reserve_mib)
+            # #2986: גם כשמסרבים — אריחי המשאבים מציגים מה שה-VM היה מקבל, לא "—".
+            resources = {**settings, "disk_bytes": vmdisk.disk_bytes_for(manifest)}
             self._tools(manifest, secure_boot_for(manifest))
             accel, egress = self._check_vm(settings)
             self._check_space(manifest)
         except Refusal as exc:
-            return {"ok": False, "code": exc.reason, "error": exc.message, "details": exc.numbers}
+            out = {"ok": False, "code": exc.reason, "error": exc.message, "details": exc.numbers}
+            if resources is not None:
+                out["resources"] = resources
+            return out
         return {"ok": True, "accel": accel, "egress_interface": egress,
                 "vm_mac": self.ensure_mac(), "secure_boot": secure_boot_for(manifest),
                 "disk_bytes": vmdisk.disk_bytes_for(manifest), **settings}
@@ -1356,7 +1392,7 @@ class VmUpdate:
             self._require_control(user)
             state = self._state.get("state")
             if state == "preparing":
-                # ‏"ביטול" בחלון ההכנה (המוקאפ): התהליכון עוצר בחתיכה הבאה.
+                # "ביטול" בחלון ההכנה (המוקאפ): התהליכון עוצר בחתיכה הבאה.
                 self._cancel = True
                 return self.status(user)
             if state in BUSY:
@@ -1390,5 +1426,5 @@ class VmUpdate:
 
 
 def _lower_priority() -> None:   # pragma: no cover — רץ בתהליך הבן
-    """‏nice 10 ל-QEMU: השרת והשידור לכיתה קודמים לו."""
+    """nice 10 ל-QEMU: השרת והשידור לכיתה קודמים לו."""
     os.nice(10)

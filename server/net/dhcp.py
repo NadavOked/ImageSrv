@@ -8,14 +8,14 @@
 - הדלקה דורשת את שם הממשק באישור, וממשק שסומן כ-trunk דורש אישור נוסף.
 - לפני הדלקה בודקים אם מישהו אחר כבר עונה ל-DHCP על אותו ממשק.
 
-**שני קבצים, שני תהליכי dnsmasq** ‏(#36): ‏DHCP מלא נכתב לקובץ של
+**שני קבצים, שני תהליכי dnsmasq** (#36): DHCP מלא נכתב לקובץ של
 האינסטנס הראשי, ומצב proxy — לקובץ נפרד שרץ ביחידת systemd משלו
-(`imagesrv-proxy`). ‏dnsmasq 2.91 קופא ‏(100% CPU, מפסיק לענות לכל
+(`imagesrv-proxy`). dnsmasq 2.91 קופא (100% CPU, מפסיק לענות לכל
 הסוקטים) על בקשת PXE לפורט 4011 במצב proxy, ובאינסטנס משותף הקפיאה
 הזו הורגת גם את ה-DHCP של וילן ההפצה. ההפרדה אינה מתקנת את הבאג — היא
 מונעת ממנו להפיל רשת שלמה, עד שתיבדק גרסת dnsmasq חדשה יותר במעבדה.
 וכיוון שהבאג עדיין שם, הדלקת proxy דורשת אישור מפורש ונפרד כל עוד
-הגרסה המותקנת לא נבדקה — ‏`proxy_support()` ו-`PROXY_VERIFIED`
+הגרסה המותקנת לא נבדקה — `proxy_support()` ו-`PROXY_VERIFIED`
 ב-`dhcp_host.py` (שם, ולא כאן, כדי שלא יהיה עותק שני שמתיישן).
 
 המודול הזה לא נוגע ב-DB, ב-HTTP ובמכונה: הוא מקבל הגדרות, מאמת קלט
@@ -50,7 +50,7 @@ from server.net.dhcp_host import (  # noqa: F401  — ה-API של המודול �
 
 #: שורת conf פעילה שמשרתת ממשק, לעומת `except-interface=` (שוללת) או הערה.
 _INTERFACE_LINE = re.compile(r"^\s*interface\s*=\s*(\S+)\s*$")
-#: ‏`enable-tftp` פעיל (‏#1013) — בלי הערה, בלי ערך.
+#: `enable-tftp` פעיל (#1013) — בלי הערה, בלי ערך.
 _ENABLE_TFTP_LINE = re.compile(r"^\s*enable-tftp\s*$")
 
 SETTING_PREFIX = "dhcp:"
@@ -100,7 +100,7 @@ def _ip(value: str, label: str) -> ipaddress.IPv4Address:
         raise ValueError(f"{label}: כתובת לא תקינה ({value!r})")
 
 
-#: שם כרטיס — **רשימת-היתר**, כמו שם משתמש (‏#111), ומאותה סיבה: על
+#: שם כרטיס — **רשימת-היתר**, כמו שם משתמש (#111), ומאותה סיבה: על
 #: רשימת-איסור צריך לנחש נכון כל תו שדמון שרץ כ-root עושה בו משהו,
 #: ועל רשימת-היתר צריך רק לדעת איך נראה שם כרטיס. 15 תווים הם
 #: IFNAMSIZ של הקרנל — שם ארוך יותר לא יכול להתאים לכרטיס אמיתי.
@@ -115,8 +115,8 @@ def validate_name(name: str) -> None:
 
     זה השדה היחיד בתצורה שנכתב לקובץ כטקסט חופשי, בלי מרכאות ובלי
     בריחה, ולכן שורה חדשה בתוכו מוסיפה לקובץ **הוראה שלמה** — למשל
-    ‏`dhcp-range` שני על ממשק שאיש לא הגדיר — ורווח או `#` מפילים את
-    dnsmasq בעלייה, כלומר את כל וילן ההפצה (‏#102).
+    `dhcp-range` שני על ממשק שאיש לא הגדיר — ורווח או `#` מפילים את
+    dnsmasq בעלייה, כלומר את כל וילן ההפצה (#102).
 
     השם נאמר בחזרה למפעיל כ-`repr`, כדי שתו בלתי-נראה ייראה בהודעה.
     שם פסול אינו מנוקה בשקט: `eth 0` שהופך ל-`eth0` הוא ניחוש איזה
@@ -128,6 +128,10 @@ def validate_name(name: str) -> None:
 
 
 _LEASE = re.compile(r"[0-9]+[mhd]")
+_LEASE_MINUTES = {"m": 1, "h": 60, "d": 24 * 60}
+#: #2889: התקרה של זמן החכירה — שנה. אותו מספר בחלון רשת ההפצה (net.js, MAX_LEASE_DAYS).
+MAX_LEASE_DAYS = 365
+MAX_LEASE_MINUTES = MAX_LEASE_DAYS * 24 * 60
 
 
 def validate(cfg: InterfaceConfig) -> None:
@@ -135,13 +139,13 @@ def validate(cfg: InterfaceConfig) -> None:
 
     שדה שנכתב לקובץ נבדק **לפני** היציאה המוקדמת על ממשק כבוי: ממשק
     ב-proxy הוא `proxy and not enabled`, כלומר הוא נכנס ל-`render_proxy`
-    בדיוק דרך הענף שדילג על הבדיקות כולן (‏#102). מה שכן נשאר מאחורי
+    בדיוק דרך הענף שדילג על הבדיקות כולן (#102). מה שכן נשאר מאחורי
     היציאה הוא רק מה ש-`render` לבדו כותב — טווח, מסכה, שער, חכירה —
     כי לממשק שאינו מחלק כתובות אין להם משמעות.
     """
     validate_name(cfg.name)
     if cfg.server_ip:
-        # ‏`render_proxy` כותב אותה כ-`dhcp-range=set:...,<server_ip>,proxy`.
+        # `render_proxy` כותב אותה כ-`dhcp-range=set:...,<server_ip>,proxy`.
         _ip(cfg.server_ip, "כתובת השרת")
     if not cfg.enabled:
         return
@@ -158,24 +162,35 @@ def validate(cfg: InterfaceConfig) -> None:
         raise ValueError("כתובת השרת אינה ברשת של הטווח")
     if start <= server <= end:
         raise ValueError("כתובת השרת נמצאת בתוך הטווח שמחולק")
+    # #2889: כתובת הרשת וכתובת השידור אינן כתובות של מחשב (/31 ו-/32 — אין להן).
+    # `start` ו-`end` כבר בתוך הרשת, ולכן הטווח מכיל אותן רק כשהוא מתחיל/נגמר בהן.
+    if network.prefixlen < 31 and start == network.network_address:
+        raise ValueError(f"הטווח מתחיל בכתובת הרשת ({start}) — היא אינה כתובת של מחשב")
+    if network.prefixlen < 31 and end == network.broadcast_address:
+        raise ValueError(f"הטווח מסתיים בכתובת השידור ({end}) — היא אינה כתובת של מחשב")
     if cfg.gateway:
         if _ip(cfg.gateway, "שער") not in network:
             raise ValueError("השער אינו ברשת של הטווח")
     for entry in cfg.dns:
         _ip(entry, "DNS")
-    # ‏#2419: ספרות ASCII בלבד. ‏`isdigit` מקבל גם '١٢' — ההגדרה נשמרה, ו-dnsmasq נפל.
-    if not _LEASE.fullmatch(cfg.lease.strip().lower()):
+    # #2419: ספרות ASCII בלבד. `isdigit` מקבל גם '١٢' — ההגדרה נשמרה, ו-dnsmasq נפל.
+    lease = cfg.lease.strip().lower()
+    if not _LEASE.fullmatch(lease):
         raise ValueError("זמן חכירה: מספר ואחריו m/h/d, למשל 12h")
+    # #2889: 99999999 שעות (כ-11,000 שנה) עבר — חכירה שלא נגמרת לעולם היא כתובת
+    # שלא חוזרת לטווח. תקרה של שנה.
+    if int(lease[:-1]) * _LEASE_MINUTES[lease[-1]] > MAX_LEASE_MINUTES:
+        raise ValueError(f"זמן חכירה ארוך מדי — עד {MAX_LEASE_DAYS} ימים")
 
 
-# --- אמת חיה ל-DHCP (‏#762) --------------------------------------------------
+# --- אמת חיה ל-DHCP (#762) --------------------------------------------------
 
 
 def installer_serves_tftp(text: str) -> bool:
-    """האם קובץ המתקין (‏INSTALLER_CONF) עדיין נושא `enable-tftp` פעיל (‏#1013).
+    """האם קובץ המתקין (INSTALLER_CONF) עדיין נושא `enable-tftp` פעיל (#1013).
 
     פרסר טהור, כמו `parse_served_interfaces`: שורה פעילה בלבד — הערה
-    (`# enable-tftp`) אינה נספרת. ‏True = המתג מהקונסולה **אינו יכול
+    (`# enable-tftp`) אינה נספרת. True = המתג מהקונסולה **אינו יכול
     לכבות** את TFTP, ו-`/ports` חייב לומר זאת ולא להציג "כבוי" מזויף.
     """
     return any(_ENABLE_TFTP_LINE.match(raw.split("#", 1)[0])
@@ -227,13 +242,13 @@ def full_dhcp(configs: list[InterfaceConfig]) -> list[InterfaceConfig]:
 
 
 def proxy_only(configs: list[InterfaceConfig]) -> list[InterfaceConfig]:
-    """הממשקים שעונים על PXE בלבד — האינסטנס הנפרד. ‏enabled גובר, כדי
+    """הממשקים שעונים על PXE בלבד — האינסטנס הנפרד. enabled גובר, כדי
     ששום ממשק לא יופיע בשני הקבצים גם אם ה-DB מכיל את שניהם."""
     return [c for c in configs if c.proxy and not c.enabled]
 
 
-#: אופציה 93: הקושחה מצהירה מי היא, והטוען נבחר לפי זה — ‏UEFI מקבל את
-#: ה-shim החתום, ‏Legacy BIOS ‏(מחשבי השיכפול, ‏#38) מקבל GRUB ‏i386-pc.
+#: אופציה 93: הקושחה מצהירה מי היא, והטוען נבחר לפי זה — UEFI מקבל את
+#: ה-shim החתום, Legacy BIOS (מחשבי השיכפול, #38) מקבל GRUB i386-pc.
 #: שניהם קוראים את אותו grub.cfg — מחולל תפריט אחד. נדרש בשני הקבצים.
 _ARCH_MATCH = [
     "dhcp-match=set:bios,option:client-arch,0",
@@ -242,11 +257,11 @@ _ARCH_MATCH = [
     "",
 ]
 
-#: ‏#2040 (הכרעת נדב 23/10): ה-vendor class (אופציה 60) שה-udhcpc של הסוכן
-#: שולח (‏`-V` ב-`agent/init`). בכרטיס ההפצה רק לקוח עם התג הזה מקבל כתובת:
-#: קושחת PXE שולחת `PXEClient:Arch:...` (‏BIOS ו-UEFI, גם בבקשת החידוש),
-#: והסוכן שולח את זה. ‏Windows שעלה מהדיסק שולח `MSFT 5.0` ולא נענה —
-#: הכרטיס שלו ברשת ההפצה נשאר בלי כתובת. ‏dnsmasq משווה כתת-מחרוזת.
+#: #2040 (הכרעת נדב 23/10): ה-vendor class (אופציה 60) שה-udhcpc של הסוכן
+#: שולח (`-V` ב-`agent/init`). בכרטיס ההפצה רק לקוח עם התג הזה מקבל כתובת:
+#: קושחת PXE שולחת `PXEClient:Arch:...` (BIOS ו-UEFI, גם בבקשת החידוש),
+#: והסוכן שולח את זה. Windows שעלה מהדיסק שולח `MSFT 5.0` ולא נענה —
+#: הכרטיס שלו ברשת ההפצה נשאר בלי כתובת. dnsmasq משווה כתת-מחרוזת.
 AGENT_VENDOR_CLASS = "ImageSrv-agent"
 NETBOOT_TAG = "imagesrv-boot"
 _NETBOOT_MATCH = [
@@ -260,9 +275,9 @@ _NETBOOT_MATCH = [
 def _guard_names(configs: list[InterfaceConfig]) -> None:
     """השער האחרון לפני הקובץ שדמון root קורא.
 
-    ‏`validate` חוסמת בכניסה, וזו אותה בדיקה מאותו מקום — לא כלל שני —
+    `validate` חוסמת בכניסה, וזו אותה בדיקה מאותו מקום — לא כלל שני —
     על מה שנשלף מה-DB. רשומה שנכתבה לפני #102 לא תהפוך פה לקובץ שבור
-    בשקט: הרינדור נכשל, והקורא (‏`apply_all`) מדווח למפעיל וליומן.
+    בשקט: הרינדור נכשל, והקורא (`apply_all`) מדווח למפעיל וליומן.
     """
     for cfg in configs:
         validate_name(cfg.name)
@@ -275,7 +290,7 @@ def _head(what: str) -> list[str]:
 
 
 def _tftp_lines(tftp_root: str | None) -> list[str]:
-    """‏#1013: המתג. ‏None = כבוי — וגם אז נכתבת שורה, כדי שמי שקורא את
+    """#1013: המתג. None = כבוי — וגם אז נכתבת שורה, כדי שמי שקורא את
     הקובץ על השרת ידע שזה כיבוי מכוון ולא שורה שנשמטה."""
     if tftp_root:
         return ["# TFTP (#1013): the switch is the ports page in the console.",
@@ -284,7 +299,7 @@ def _tftp_lines(tftp_root: str | None) -> list[str]:
 
 
 def _pinned(lines: list[str], tftp_root: str | None, pin_tftp: bool) -> str:
-    """‏#1078-S / R20-F5: dnsmasq בלי אף `interface=` מאזין על **כל**
+    """#1078-S / R20-F5: dnsmasq בלי אף `interface=` מאזין על **כל**
     הכרטיסים (חוץ מ-`except-interface`). כש-`pin_tftp` (אין קובץ אחר
     שנושא את כרטיס ההפצה) וה-TFTP דלוק בלי שם — loopback בלבד."""
     if pin_tftp and tftp_root and not any(l.startswith("interface=") for l in lines):
@@ -296,12 +311,12 @@ def _pinned(lines: list[str], tftp_root: str | None, pin_tftp: bool) -> str:
 
 
 def _netboot_gate(netboot, nics, full, deploy_interface):
-    """‏#705: "אתחול מהרשת" כבוי בכרטיס = dnsmasq אינו משרת אותו כלל.
+    """#705: "אתחול מהרשת" כבוי בכרטיס = dnsmasq אינו משרת אותו כלל.
 
     מחזיר (שורות, ה-DHCP המלא שנשאר, כרטיס ההפצה שנשאר). כרטיס כבוי מקבל
-    ‏`except-interface=` — הוא גובר גם על `interface=` בקובץ המתקין, ולכן
+    `except-interface=` — הוא גובר גם על `interface=` בקובץ המתקין, ולכן
     גם הפצה מ-`cli` נסגרת באמת. כרטיס דלוק בלי DHCP מוגדר מקבל
-    ‏`interface=` (‏TFTP בלבד; טווח כתובות עדיין רק מלשונית ה-DHCP, ‏#53).
+    `interface=` (TFTP בלבד; טווח כתובות עדיין רק מלשונית ה-DHCP, #53).
     ותמיד יש לפחות `interface=` אחד — בלעדיו dnsmasq מאזין על **כל** מי
     שלא הוחרג (R20-F5)."""
     allowed = set(netboot)
@@ -330,39 +345,39 @@ def render(configs: list[InterfaceConfig], tftp_root: str | None = None,
            deploy_interface: str | None = None, pin_tftp: bool = False,
            netboot: list[str] | None = None, nics: list[str] = (),
            unregistered_if: str | None = None) -> str:
-    """הקובץ של האינסטנס הראשי — ‏DEFAULT_CONF, בתוך /etc/dnsmasq.d.
+    """הקובץ של האינסטנס הראשי — DEFAULT_CONF, בתוך /etc/dnsmasq.d.
 
     dnsmasq קורא את כל /etc/dnsmasq.d; קובץ ההתקנה (imagesrv.conf) נותן את
     הבסיס (port=0, dhcp-hostsfile, כרטיס ההפצה) והקובץ הזה מוסיף ממשקים
-    וטווחים — **ואת ה-TFTP** (‏#1013): ‏`tftp_root` הוא המתג. מחרוזת =
-    ‏`enable-tftp` + `tftp-root=`, ו-`None` = TFTP כבוי (המפעיל כיבה 69 בדף
+    וטווחים — **ואת ה-TFTP** (#1013): `tftp_root` הוא המתג. מחרוזת =
+    `enable-tftp` + `tftp-root=`, ו-`None` = TFTP כבוי (המפעיל כיבה 69 בדף
     הפורטים). השורות נכתבות **לפני** היציאה המוקדמת כשאין אף DHCP — אחרת
     התקנה טרייה (עם כרטיס הפצה, בלי DHCP עדיין) הייתה נשארת בלי TFTP.
     עד v0.47.5 המתקין כתב את שתי השורות ב-imagesrv.conf, ומשם אי-אפשר
     היה לכבות אותן מקובץ אחר (dnsmasq מצטבר) — לכן הן עברו לכאן.
 
-    ממשק במצב proxy לא מופיע כאן בשום צורה (‏#36) — גם לא כ-`interface`
+    ממשק במצב proxy לא מופיע כאן בשום צורה (#36) — גם לא כ-`interface`
     להגשת TFTP: הוא רץ בתהליך אחר, ושני תהליכים לא יכולים לתפוס את
     אותם פורטים על אותו כרטיס. `except-interface` מוציא אותו מפורשות,
     והוא גובר על כל השאר גם אם מישהו יוסיף `interface` בעתיד.
 
-    ‏`deploy_interface` (‏#1088): כרטיס ההפצה שהוגדר **מהקונסולה** — אז
-    ‏`imagesrv.conf` של המתקין אינו נושא `interface=`, והשורה שמצמידה את
+    `deploy_interface` (#1088): כרטיס ההפצה שהוגדר **מהקונסולה** — אז
+    `imagesrv.conf` של המתקין אינו נושא `interface=`, והשורה שמצמידה את
     ה-TFTP לכרטיס ההפצה בלבד (R20-F1) נכתבת כאן, גם כשאף DHCP אינו דלוק.
 
-    ‏`pin_tftp` (‏#1078): הקובץ הזה הוא היחיד שיכול לשאת `interface=` (מקור
+    `pin_tftp` (#1078): הקובץ הזה הוא היחיד שיכול לשאת `interface=` (מקור
     ההפצה אינו `cli`) — ואם אין בו אף שם, ה-TFTP נצמד ל-loopback (`_pinned`).
 
-    ‏`netboot` (‏#705): הכרטיסים שבהם "אתחול מהרשת" דלוק, כשהמפעיל ערך
+    `netboot` (#705): הכרטיסים שבהם "אתחול מהרשת" דלוק, כשהמפעיל ערך
     שירותים לכרטיסים (`None` = ההתנהגות של היום, והפלט זהה בית-בבית);
-    ‏`nics` — כל הכרטיסים שהשרת רואה, כדי שהכבויים יוחרגו בשם.
+    `nics` — כל הכרטיסים שהשרת רואה, כדי שהכבויים יוחרגו בשם.
 
-    ‏`unregistered_if` (‏#1802): כרטיס ההפצה, מכל מקור (cli או קונסולה) — עליו
+    `unregistered_if` (#1802): כרטיס ההפצה, מכל מקור (cli או קונסולה) — עליו
     בלבד `dhcp-boot` אינו דורש `tag:known`, כדי שמכונה לא רשומה תגיע לסוכן
     ותראה "המחשב הזה לא רשום" (פעם אחת — `server/agent/unknown_screen.py`). כל
-    כרטיס אחר, ו-`None`, נשארים כמו ב-#141. ‏#2040: על אותו כרטיס בלבד
-    ‏dnsmasq עונה רק לאתחול רשת (‏`PXEClient`) ולסוכן (‏`AGENT_VENDOR_CLASS`)
-    — ‏Windows שעלה מהדיסק במחשב בנייה אינו מקבל כתובת ברשת ההפצה.
+    כרטיס אחר, ו-`None`, נשארים כמו ב-#141. #2040: על אותו כרטיס בלבד
+    dnsmasq עונה רק לאתחול רשת (`PXEClient`) ולסוכן (`AGENT_VENDOR_CLASS`)
+    — Windows שעלה מהדיסק במחשב בנייה אינו מקבל כתובת ברשת ההפצה.
     """
     lines = _head("DHCP per interface")
     full, proxied = full_dhcp(configs), proxy_only(configs)
@@ -399,11 +414,11 @@ def render(configs: list[InterfaceConfig], tftp_root: str | None = None,
             f"{cfg.netmask},{cfg.lease}"
         )
         if cfg.name == unregistered_if:
-            # ‏#2040: כרטיס ההפצה בלבד. כרטיס אחר (וילן כיתה שהשרת מחלק בו
+            # #2040: כרטיס ההפצה בלבד. כרטיס אחר (וילן כיתה שהשרת מחלק בו
             # כתובות) נשאר כמו שהוא — שם Windows כן צריך כתובת.
             # התג הוא **שם הכרטיס**, ש-dnsmasq מדליק בעצמו על כל בקשה, ולא
             # `if-<שם>`: תג של dhcp-range עוד לא קיים כש-dhcp-ignore נבדק.
-            # נמדד על dnsmasq 2.91 ב-netns (23/10): עם `tag:if-<שם>` ‏`MSFT 5.0`
+            # נמדד על dnsmasq 2.91 ב-netns (23/10): עם `tag:if-<שם>` `MSFT 5.0`
             # קיבל DHCPOFFER; עם שם הכרטיס — ignored.
             lines.append(f"dhcp-ignore=tag:{cfg.name},tag:!{NETBOOT_TAG}")
         if cfg.gateway:
@@ -411,16 +426,16 @@ def render(configs: list[InterfaceConfig], tftp_root: str | None = None,
         if cfg.dns:
             lines.append(f"dhcp-option=tag:{tag},option:dns-server,{','.join(cfg.dns)}")
         lines.append(f"dhcp-option=tag:{tag},option:tftp-server,{cfg.server_ip}")
-        # ‏#1802 (הכרעת נדב 19/10): בכרטיס ההפצה בלבד גם מכונה לא רשומה
+        # #1802 (הכרעת נדב 19/10): בכרטיס ההפצה בלבד גם מכונה לא רשומה
         # מקבלת את קובץ האתחול — התפריט שלה נקבע בשרת (מסך "לא רשום" פעם
         # אחת, ואז דיסק). בכל כרטיס אחר ההערה שלמטה בתוקף כפי שהיא.
         known = "" if cfg.name == unregistered_if else "tag:known,"
-        # ‏#141: `tag:known` נוסף לשתי שורות ה-boot — מכונה שאינה ברשימת
+        # #141: `tag:known` נוסף לשתי שורות ה-boot — מכונה שאינה ברשימת
         # ה-MAC הרשומים (KNOWN_MACS_CONF, נטענת דרך dhcp-hostsfile
         # ב-imagesrv.conf) לא מקבלת את התג, ולכן dnsmasq אינו עונה לה
         # עם dhcp-boot בכלל. הקושחה נכשלת ב-PXE ונופלת לדיסק המקומי —
         # לפני שהיא בכלל שולחת בקשת TFTP, ולא רק בתוך grub.cfg
-        # (‏decide() ב-boot/grub_menu.py, שנשאר כרשת ביטחון שנייה: תחנה
+        # (decide() ב-boot/grub_menu.py, שנשאר כרשת ביטחון שנייה: תחנה
         # שמגיעה בכל זאת, למשל מרשת זרה שמפעילה proxy, עדיין נופלת שם
         # ל-unregistered).
         lines.append(
@@ -435,17 +450,17 @@ def render(configs: list[InterfaceConfig], tftp_root: str | None = None,
 
 def render_proxy(configs: list[InterfaceConfig],
                  tftp_root: str | None = DEFAULT_TFTP_ROOT) -> str:
-    """הקובץ של אינסטנס ה-proxy — ‏PROXY_CONF, מחוץ ל-/etc/dnsmasq.d.
-    ‏`tftp_root=None` = המתג של 69 כבוי (‏#1013) — גם כאן, אחרת האינסטנס
+    """הקובץ של אינסטנס ה-proxy — PROXY_CONF, מחוץ ל-/etc/dnsmasq.d.
+    `tftp_root=None` = המתג של 69 כבוי (#1013) — גם כאן, אחרת האינסטנס
     הזה היה ממשיך להאזין על 69 בכרטיסים שלו והמתג היה "כבוי אבל מאזין".
 
     מצב proxy הוא לרשת שיש בה DHCP קיים ואסור להתנגש בו: עונים על
     שאלות PXE בלבד, כתובות ממשיכות להגיע מהשרת הקיים. כאן זה גם התהליך
-    שמותר לו למות: ‏dnsmasq 2.91 קופא על בקשת PXE:4011 ‏(#36).
+    שמותר לו למות: dnsmasq 2.91 קופא על בקשת PXE:4011 (#36).
 
     הקובץ עומד בפני עצמו — היחידה מריצה אותו עם `--conf-file`, בלי
     `/etc/dnsmasq.conf` ובלי `/etc/dnsmasq.d` — ולכן הוא מביא את הכל
-    בעצמו: בלי DNS ‏(`port=0`), ‏TFTP משלו על הכרטיסים שלו בלבד, וקובץ
+    בעצמו: בלי DNS (`port=0`), TFTP משלו על הכרטיסים שלו בלבד, וקובץ
     חכירות נפרד. `bind-interfaces` בשני הקבצים הוא מה שמאפשר לשני
     התהליכים לחיות על אותה מכונה.
     """
@@ -471,7 +486,7 @@ def render_proxy(configs: list[InterfaceConfig],
         # כשיש רק שם קובץ, dnsmasq מגיש אותו מה-TFTP שלו עצמו ושם ב-siaddr
         # את כתובתו שלו על הממשק שדרכו הגיעה הבקשה. זו בדיוק הכתובת
         # שהתחנה יכולה להגיע אליה מהרשת שלה — וממנה GRUB ממלא את
-        # net_default_server, שהוא הכתובת הראשית ב-grub.cfg (‎#37).
+        # net_default_server, שהוא הכתובת הראשית ב-grub.cfg (#37).
         # כתובת מפורשת כאן הייתה מקבעת את וילן ההפצה ושוברת בדיוק את זה.
         # שם הקובץ נכתב עם הסיומת בכוונה: ל-basename בלי סיומת dnsmasq
         # מוסיף את מספר השכבה (".0"), ולשם מלא — לא.
@@ -491,7 +506,7 @@ def render_proxy(configs: list[InterfaceConfig],
 #
 # מכונה שאינה ברשימה הזו לא מגיעה לגרסת GRUB בכלל — לא רק שהיא אינה
 # מקבלת ערך ImageSrv בקובץ (זה כבר קיים: decide() ב-boot/grub_menu.py
-# מחזיר Decision(LOCAL, "unregistered")). ‏dhcp-boot בקובץ הראשי (render()
+# מחזיר Decision(LOCAL, "unregistered")). dhcp-boot בקובץ הראשי (render()
 # למעלה) דורש tag:known, וכאן זה מודלק — לכל MAC רשום, ורק לו. הקובץ הזה
 # נגזר מטבלת המכונות ולא מקור: הוא נכתב מחדש בכל שינוי ובכל עליית שרת
 # (dhcp_host.apply_known_macs, נקרא מ-console_api ומ-main.py). קובץ שנמחק
@@ -501,14 +516,14 @@ def render_proxy(configs: list[InterfaceConfig],
 #: MAC קנוני — אותה תבנית בדיוק כמו הקנוני של registry.py. השורה הזו
 #: נכתבת לקובץ ש-dnsmasq קורא כ-root, בלי בריחה ובלי מרכאות (בדיוק כמו
 #: שם הכרטיס, #102) — לכן היא מאומתת כאן שוב ולא רק בכניסה ל-DB.
-#: ‏#2419: ‏`fullmatch`, לא `^…$` — ה-`$` של Python מקבל גם "\n" בסוף.
+#: #2419: `fullmatch`, לא `^…$` — ה-`$` של Python מקבל גם "\n" בסוף.
 _MAC_HOSTLINE = re.compile(r"[0-9a-f]{2}(:[0-9a-f]{2}){5}")
 
 
 def _guard_macs(macs: list[str]) -> None:
     """השער האחרון לפני קובץ ה-host שדמון root קורא — אותה רוח כמו
-    ‏_guard_names (#102): רשומה שאינה MAC קנוני לא הופכת לשורת dnsmasq
-    שבורה בשקט. ‏render_known_macs נכשלת במקום לכתוב אותה."""
+    _guard_names (#102): רשומה שאינה MAC קנוני לא הופכת לשורת dnsmasq
+    שבורה בשקט. render_known_macs נכשלת במקום לכתוב אותה."""
     for mac in macs:
         if not isinstance(mac, str) or not _MAC_HOSTLINE.fullmatch(mac):
             raise ValueError(f"MAC לא קנוני בטבלת המכונות: {mac!r}")
@@ -519,7 +534,7 @@ def render_known_macs(macs: list[str]) -> str:
 
     כל שורה מדליקה את tag:known בדיוק כמו ``dhcp-host=<mac>,set:known``
     בקובץ הראשי (זה בדיוק התחביר ש-dhcp-hostsfile מצפה לו לשורה, בלי
-    התחילית). ‏macs ריק מייצר קובץ תקין וריק — dnsmasq טוען אותו, ואף
+    התחילית). macs ריק מייצר קובץ תקין וריק — dnsmasq טוען אותו, ואף
     tag:known לא נדלק, כלומר אף מכונה לא מקבלת dhcp-boot (בטוח: זו בדיוק
     ברירת המחדל של "מצב לא ברור" — עיקרון 1).
     """

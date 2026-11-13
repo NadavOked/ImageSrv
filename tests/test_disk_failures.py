@@ -1,4 +1,4 @@
-"""‏#874 — אדום לפני הסבב בלי לכתוב על הדיסק: הזיכרון בשרת.
+"""#874 — אדום לפני הסבב בלי לכתוב על הדיסק: הזיכרון בשרת.
 
 הכרעת נדב 16/09: הסימון על הדיסק (#845) נפסל. במקומו:
 
@@ -76,13 +76,13 @@ def test_no_lines_is_unclassified_not_a_guess():
 
 def test_a_disk_mark_next_to_a_cable_mark_is_still_the_cable():
     """קו רעוע מייצר גם ABRT; הכבל הוא ההסבר הפשוט יותר, ורק בלעדיו
-    ‏ABRT/UNC מצביעים על הדיסק."""
+    ABRT/UNC מצביעים על הדיסק."""
     both = DISK_LINES + ["[ 1201.0] ata2: SError: { ICRC }", "[ 1201.1] ata2.00: error: { ICRC ABRT }"]
     assert ata_cause.classify(both) == "cable"
     assert ata_cause.classify(["[ 1.0] ata2.00: error: { ABRT }"]) == "disk"
 
 
-#: ‏dmesg אמיתי מכשל הכתיבה על פורט 1 במחשב 2 (16/09 07:03, #890) — כפי
+#: dmesg אמיתי מכשל הכתיבה על פורט 1 במחשב 2 (16/09 07:03, #890) — כפי
 #: שהסוכן מסנן אותו לפורט: ראש (exception, SError, 30× WRITE FPDMA QUEUED),
 #: איפוס, רעש ACPI, ושוב. אין בו `ATA bus error` — שורת ה-`res` של הקרנל
 #: נכתבת בלי קידומת ata1 — ולכן הסימן הוא `10B8B` / `Handshk` / `interface
@@ -92,9 +92,9 @@ METAL_0703 = (Path(__file__).parent / "fixtures" / "ata1-cable-failure-0916.txt"
 
 
 def metal_tail_as_stored_in_the_lab_db() -> list[str]:
-    """הרשומה שנרשמה ב-DB של המעבדה ב-10:16 (#890): ‏`ata_capture` על main שמר
-    את 40 השורות **האחרונות** — ‏`failed to set xfermode`, איפוס, 13× ACPI,
-    ‏`Read log 0x00 page 0x00 failed` — ואף שורת SError. שתי השורות שאינן
+    """הרשומה שנרשמה ב-DB של המעבדה ב-10:16 (#890): `ata_capture` על main שמר
+    את 40 השורות **האחרונות** — `failed to set xfermode`, איפוס, 13× ACPI,
+    `Read log 0x00 page 0x00 failed` — ואף שורת SError. שתי השורות שאינן
     ב-fixture (xfermode, Read log) משוחזרות מהציטוט ב-Issue."""
     acpi = [l for l in METAL_0703 if "ACPI cmd" in l][:13]
     reset = next(l for l in METAL_0703 if "hard resetting link" in l)
@@ -107,8 +107,8 @@ def test_the_metal_failure_of_0703_with_its_head_is_a_cable():
 
 
 def test_read_log_failed_alone_after_a_reset_is_not_the_disk():
-    """‏#890: ‏`Read log ... failed` מופיע אחרי **כל** איפוס קו — לבדו, בלי
-    ‏UNC/ABRT/media error, הוא אינו ראיה על הדיסק אלא "לא סווג" (עיקרון 5).
+    """#890: `Read log ... failed` מופיע אחרי **כל** איפוס קו — לבדו, בלי
+    UNC/ABRT/media error, הוא אינו ראיה על הדיסק אלא "לא סווג" (עיקרון 5).
     בקרה שלילית: על main הרשומה מהברזל מסווגת `disk` — ההיפך מהאמת."""
     tail = metal_tail_as_stored_in_the_lab_db()
     assert not any("SError" in l for l in tail)
@@ -172,7 +172,7 @@ def test_the_progress_report_of_a_failed_drawer_lands_in_the_memory(server):
     body["disks"][0]["serial"] = "S3TWNE0JB04745"    # #2492: the disk it reported on sda
     assert server["anon"].post("/api/v1/agent/hello", json=body).status_code == 200
     report = {"session_id": ids["session"], "mac": ids["mac1"], "state": "writing",
-              # ‏sdb עם ata_log אך לא failed: רק כשל נרשם.
+              # sdb עם ata_log אך לא failed: רק כשל נרשם.
               "targets": [failed_target(), failed_target(dev="sdb", state="writing", serial="S9")]}
     for _ in range(3):   # הדיווח חוזר; הזיכרון לא
         assert server["anon"].post("/api/v1/agent/progress", json=report).json()["ok"]
@@ -188,7 +188,7 @@ def test_the_progress_report_of_a_failed_drawer_lands_in_the_memory(server):
 
 def test_hello_answers_the_failure_by_serial_on_any_machine(server):
     """הדיסק נדד למכונה אחרת: הרשומה מגיעה לפי הסידורי, ו-`port` הוא
-    ‏null — פורט 1 של מכונה אחרת אינו פורט 1 כאן."""
+    null — פורט 1 של מכונה אחרת אינו פורט 1 כאן."""
     ids = open_session(server, expected=2)
     hello(server, ids["mac1"])
     disk_failures.record(server["ctx"].conn, ids["session"], ids["mac1"], failed_target())
@@ -241,7 +241,7 @@ def test_a_failure_without_a_port_on_this_machine_needs_a_serial_to_match(conn):
 
 
 # --- מגירה שנשלפה אינה אשמת הדיסק (נדב 17/10) ----------------------------------
-# המקרה מהמעבדה: ‏`disk_failures` id=1241 (17/10 12:24 UTC), ‏`cause=unclassified`,
+# המקרה מהמעבדה: `disk_failures` id=1241 (17/10 12:24 UTC), `cause=unclassified`,
 # המגירה "נשלפה" ב-`echo 1 > /sys/block/sdb/device/delete`. הכונן לא החזיר שגיאה
 # משלו — הקרנל דחה כתיבה להתקן שכבר אינו שם — והדיסק נצבע כתום (failed_last).
 # הכלל: ירוק בהפצה הבאה, כמו "זרם שנקטע". רק על ראיה חיובית (עיקרון 5).
@@ -251,7 +251,7 @@ PULLED_ERROR = ("מחיצה 3: הקרנל דחה כתיבה לכונן: device o
 PULLED_LINES = ["[  200.000001] sd 2:0:0:0: [sdb] tag#3 device offline error, dev sdb,"
                 " sector 5963736 op 0x1:(WRITE) flags 0x100000 phys_seg 1 prio class 2"]
 
-#: ‏hot-unplug אמיתי של SATA: ה-AHCI מדווח שנוכחות ההתקן השתנתה (`DevExch`).
+#: hot-unplug אמיתי של SATA: ה-AHCI מדווח שנוכחות ההתקן השתנתה (`DevExch`).
 HOTPLUG_LINES = [
     "[  900.100001] ata3: exception Emask 0x10 SAct 0x0 SErr 0x4010000 action 0xe frozen",
     "[  900.100005] ata3: irq_stat 0x00400040, connection status changed",
@@ -264,7 +264,7 @@ HOTPLUG_LINES = [
 @pytest.mark.parametrize("lines, error", [
     (PULLED_LINES, PULLED_ERROR),       # 1241: ה-ata_log מ-#1602 והשגיאה של הסוכן
     ([], PULLED_ERROR),                 # סוכן לפני #1602: הראיה רק ב-error
-    ([], "מחיצה 2: הכונן נעלם מהמערכת (נשלף או נותק)"),   # ‏/sys/block/<d> נעלם
+    ([], "מחיצה 2: הכונן נעלם מהמערכת (נשלף או נותק)"),   # /sys/block/<d> נעלם
     (HOTPLUG_LINES, "מחיצה 1: הכתיבה נכשלה (partclone rc=1)"),
 ])
 def test_a_pulled_drawer_is_classified_removed(conn, lines, error):
@@ -275,7 +275,7 @@ def test_a_pulled_drawer_is_classified_removed(conn, lines, error):
 
 
 @pytest.mark.parametrize("lines, error, cause", [
-    # שגיאת כתיבה אמיתית: ‏errno 5 עם ata exception ו-UnrecovData — כמו id=1 במעבדה.
+    # שגיאת כתיבה אמיתית: errno 5 עם ata exception ו-UnrecovData — כמו id=1 במעבדה.
     (CABLE_LINES, "partition 3: fsync errno=5", "cable"),
     (CABLE_LINES, PULLED_ERROR, "cable"),          # סימן קו גובר גם על offline
     (DISK_LINES + PULLED_LINES, PULLED_ERROR, "disk"),
@@ -294,8 +294,8 @@ def test_without_evidence_of_a_pull_the_cause_is_unchanged(conn, lines, error, c
 
 def test_a_pulled_drawer_is_recorded_removed_and_does_not_colour_the_disk(conn):
     """הרשומה נשמרת (ראיה, ביומן), אבל hello אינו מחזיר אותה והקונסולה אינה
-    מציגה אותה — הדיסק ירוק בהפצה הבאה. ‏**בקרה שלילית:** על הקוד הישן היא
-    ‏`unclassified` וחוזרת בשניהם — כתום."""
+    מציגה אותה — הדיסק ירוק בהפצה הבאה. **בקרה שלילית:** על הקוד הישן היא
+    `unclassified` וחוזרת בשניהם — כתום."""
     mac = "b4:2e:99:07:1a:c4"
     row = disk_failures.record(conn, "ses1", mac, failed_target(
         dev="sdb", serial="S-PULLED", port=2, error=PULLED_ERROR, ata_log=PULLED_LINES))

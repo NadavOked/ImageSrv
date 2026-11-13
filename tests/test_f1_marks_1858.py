@@ -1,4 +1,4 @@
-"""‏#1858 (מוקאפ 07/11, נדב) — "נצפה F1 בהדלקה" לכל דיסק, לפי מספר סידורי.
+"""#1858 (מוקאפ 07/11, נדב) — "נצפה F1 בהדלקה" לכל דיסק, לפי מספר סידורי.
 
 ההכרעות של נדב:
 
@@ -8,7 +8,7 @@
 * דיסק שנצפה בו F1 **אדום** ומדולג בשיכפול, והתגית אומרת "נצפה F1" ולא "SMART תקול".
 * בלי סימון — הכול כמו היום.
 
-כאן: השרת (טבלה, ‏API, ‏hello, "לא הגיע", סימון אוטומטי). הסוכן — `test_f1_mark_agent_1858.py`, הגואי —
+כאן: השרת (טבלה, API, hello, "לא הגיע", סימון אוטומטי). הסוכן — `test_f1_mark_agent_1858.py`, הגואי —
 `test_f1_screens_1858.py`, הקונסולה — `f1_marks_1858.test.cjs`.
 """
 
@@ -100,7 +100,7 @@ def test_a_database_on_12_gains_the_marks_table_and_keeps_its_rows(tmp_path):
     conn.commit()
     conn.close()
     conn = db.connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16   # round/1107c: #1920 = 13, #1858 = 14; release/v0.91.11: 15 = net_devices.monitor_on (#2850)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 18   # 18: users.view (#3025), 17: boot_marks (#2830); round/1107c: #1920 = 13, #1858 = 14; release/v0.91.11: 15 = net_devices.monitor_on (#2850)
     assert f1_marks.all_marks(conn) == {}                                  # the table is back, empty
     conn.execute("INSERT INTO disk_f1_marks (serial, observed_at, source) VALUES ('S9', 'x', 'auto')")
     with pytest.raises(Exception):                                         # one mark per serial

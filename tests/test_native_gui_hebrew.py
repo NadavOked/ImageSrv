@@ -1,4 +1,4 @@
-"""‏#1245: עברית בשדות הטקסט של הגואי הנייטיב.
+"""#1245: עברית בשדות הטקסט של הגואי הנייטיב.
 
 נדב, 10/10, על ה-HP: אי אפשר להקליד עברית בשם ובתיאור של קליטה. ההכרעה
 שלו באותו יום: **עברית בכל שדה שאפשר**, ומגבלה רק בשדה שבאמת לא יכול
@@ -6,23 +6,23 @@
 
 מה נבנה, ומה נבדק כאן:
 
-* ‏`input.c` מוסר לכל מקש גם את התו שלו בפריסה הישראלית התקנית (‏SI-1452,
-  המצב הבסיסי): ‏`Event.he`. ‏`Event.ch` נשאר ה-US — קיצורי המקשים
-  (‏W/N/S/R, ‏1–9) עובדים לפי המקש הפיזי בשתי השפות, והמתקין (שכל שדותיו
+* `input.c` מוסר לכל מקש גם את התו שלו בפריסה הישראלית התקנית (SI-1452,
+  המצב הבסיסי): `Event.he`. `Event.ch` נשאר ה-US — קיצורי המקשים
+  (W/N/S/R, 1–9) עובדים לפי המקש הפיזי בשתי השפות, והמתקין (שכל שדותיו
   אנגלית: כתובות, שם מחשב, סיסמה) לא נוגע ב-`he` כלל.
-* ‏Shift משאיר את האותיות הלטיניות הגדולות ואת סימני ה-US, כמו ב-SI-1452.
-* ‏Alt+Shift מחליף שפה — פעם אחת, על הלחיצה שסוגרת את הצירוף; חזרה
-  אוטומטית (‏value 2) של מקש מוחזק אינה החלפה נוספת.
-* ‏`main.c` שומר את התו כ-UTF-8 (‏`utf8.h`), שלם או בכלל לא.
+* Shift משאיר את האותיות הלטיניות הגדולות ואת סימני ה-US, כמו ב-SI-1452.
+* Alt+Shift מחליף שפה — פעם אחת, על הלחיצה שסוגרת את הצירוף; חזרה
+  אוטומטית (value 2) של מקש מוחזק אינה החלפה נוספת.
+* `main.c` שומר את התו כ-UTF-8 (`utf8.h`), שלם או בכלל לא.
 * שדות אנגלית בלבד: משתמש וסיסמה (חשבון קונסולה), מספר היעדים (ספרות),
   והארגומנט של כלי (מילה לכלי shell). שם האימג', התיאור והתיקייה החדשה
-  — עברית (‏`images.DISPLAY_NAME_RE` מקבל א-ת).
+  — עברית (`images.DISPLAY_NAME_RE` מקבל א-ת).
 * שורת הסטטוס מראה את השפה כשבפוקוס שדה טקסט: "עב" מלא, "EN" במסגרת —
   ולחיצה עליו מחליפה; בשדה אנגלית-בלבד — ההסבר במקום מתג.
 
 שלושה סוגי טסט, כמו בכל native-gui: חוזי מקור (רצים גם בווינדוס, בלי
-מהדר), דרייבר C שכולל את `input.c` ו-`utf8.h` ישירות (‏cc בלבד, בלי root
-ובלי uinput), ורינדור ‏`--png` (‏cc + pango/cairo, ה-Testrunner).
+מהדר), דרייבר C שכולל את `input.c` ו-`utf8.h` ישירות (cc בלבד, בלי root
+ובלי uinput), ורינדור `--png` (cc + pango/cairo, ה-Testrunner).
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from test_cloner_gui import _build_gui, _count_color, _pkgconfig, _png_rgb, _ren
 REPO = Path(__file__).resolve().parent.parent
 SRC = REPO / "native-gui" / "src"
 
-#: SI-1452, המצב הבסיסי (בלי Shift): כל מקש ש**שונה** מ-US. ‏27 האותיות
+#: SI-1452, המצב הבסיסי (בלי Shift): כל מקש ש**שונה** מ-US. 27 האותיות
 #: (22 + 5 סופיות), ועוד חמשת סימני הפיסוק שזזו. כל מקש אחר — כמו US.
 SI1452 = {
     "KEY_GRAVE": ";", "KEY_Q": "/", "KEY_W": "'",
@@ -78,7 +78,7 @@ def _c_char(literal: str) -> str:
 
 
 def _keymap() -> dict[str, tuple[str, str, str | None]]:
-    """‏KEYMAP של input.c: ‏code → (רגיל, Shift, עברית או None)."""
+    """KEYMAP של input.c: code → (רגיל, Shift, עברית או None)."""
     table = re.search(r"KEYMAP\[\]\s*=\s*\{(.*?)\n\};", _code(_src("input.c")), re.S)
     assert table, "KEYMAP[] לא נמצא ב-input.c"
     char = r"'(?:\\.|[^'])'"
@@ -107,7 +107,7 @@ def test_si1452_base_level_maps_every_hebrew_letter_and_the_moved_punctuation():
 
 
 def test_shift_keeps_the_us_level_on_every_key():
-    """‏SI-1452: ‏Shift על מקש אות נותן את האות הלטינית הגדולה. העמודה השנייה
+    """SI-1452: Shift על מקש אות נותן את האות הלטינית הגדולה. העמודה השנייה
     של KEYMAP לא זזה — העברית היא עמודה רביעית, לא החלפה של הקיימות."""
     keymap = _keymap()
     for letter in "QWERTYUIOPASDFGHJKLZXCVBNM":
@@ -170,7 +170,7 @@ def test_makefile_lists_the_utf8_header():
     assert hdr and "src/utf8.h" in hdr.group(1)
 
 
-# --- 4. דרייבר C: ‏key_event ו-utf8 כפי שהם מתקמפלים --------------------------
+# --- 4. דרייבר C: key_event ו-utf8 כפי שהם מתקמפלים --------------------------
 
 CC = shutil.which("cc") or shutil.which("gcc")
 NATIVE_CC = requires_native(("cc", CC), posix=True, why="input.c/utf8.h נבנים על לינוקס בלבד")
@@ -293,7 +293,7 @@ def test_png_has_a_hebrew_typing_card():
 
 @GUI_BUILD
 def test_status_bar_draws_the_hebrew_chip_only_on_the_hebrew_card(tmp_path):
-    """‏pick (בלי שדה בפוקוס) מול pick-hebrew (התיאור בפוקוס, עב): הצ'יפ המלא
+    """pick (בלי שדה בפוקוס) מול pick-hebrew (התיאור בפוקוס, עב): הצ'יפ המלא
     בצבע הפעולה נמצא בשורת הסטטוס של השני בלבד."""
     binary = _build_gui(tmp_path)
     _render_all(binary, tmp_path, "1280x800")

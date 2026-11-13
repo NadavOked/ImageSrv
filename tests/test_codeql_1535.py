@@ -1,18 +1,18 @@
-"""‏#1535 — התראות CodeQL בשרת מהשער הציבורי של v0.75.0.
+"""#1535 — התראות CodeQL בשרת מהשער הציבורי של v0.75.0.
 
 1. **הרשאות** (`py/overly-permissive-file`): אזור העבודה של עדכון ה-VM היה
-   ‏0o755/0o644 — כל משתמש מקומי עבר בו וקרא את קובצי האתחול שהורדו מה-ESP.
-   מי שצריך אותם בפועל הוא משתמש ה-VM בלבד. ‏#1535 צמצם ל-0o710/0o640 דרך
-   הקבוצה שלו, אבל ‏CodeQL מסמן **כל** ביט שאינו של הבעלים (גם 0o710), והערת
-   `codeql[...]` אינה סוגרת התראה בשער הציבורי (#1610). ‏לכן הגישה ניתנת
-   **ב-ACL על ה-uid של משתמש ה-VM**: ‏root בעלים, ערך אחד בשמו (תיקייה —
-   מעבר בלבד, ‏`boot_ca_probe` בודק `[ -f ]` על נתיבים ידועים ואינו מונה;
-   קובץ — קריאה), והקבוצה ו"אחרים" — אפס. ‏QEMU פותח את הדיסק כ-root
+   0o755/0o644 — כל משתמש מקומי עבר בו וקרא את קובצי האתחול שהורדו מה-ESP.
+   מי שצריך אותם בפועל הוא משתמש ה-VM בלבד. #1535 צמצם ל-0o710/0o640 דרך
+   הקבוצה שלו, אבל CodeQL מסמן **כל** ביט שאינו של הבעלים (גם 0o710), והערת
+   `codeql[...]` אינה סוגרת התראה בשער הציבורי (#1610). לכן הגישה ניתנת
+   **ב-ACL על ה-uid של משתמש ה-VM**: root בעלים, ערך אחד בשמו (תיקייה —
+   מעבר בלבד, `boot_ca_probe` בודק `[ -f ]` על נתיבים ידועים ואינו מונה;
+   קובץ — קריאה), והקבוצה ו"אחרים" — אפס. QEMU פותח את הדיסק כ-root
    לפני `-run-with`, והשמירה רצה כשהוא כבוי.
 2. **ניקוי תגיות** (`js/incomplete-multi-character-sanitization`):
-   ‏vmupdate.js ו-nicsvc.js — ‏`stripTags` של console.js (‏#1523), לא ה-regex.
+   vmupdate.js ו-nicsvc.js — `stripTags` של console.js (#1523), לא ה-regex.
 3. **log-injection**: שבירת שורה מהבקשה אינה מגיעה ליומן.
-   (‏`stack-trace-exposure` — ב-`test_vmupdate_api.py`.)
+   (`stack-trace-exposure` — ב-`test_vmupdate_api.py`.)
 """
 
 from __future__ import annotations
@@ -47,8 +47,8 @@ def _mode(path: Path) -> int:
 
 
 def _acl(path: Path) -> dict:
-    """ה-ACL של `path` כמות שהקרנל מחזיר אותו: ‏{שם: הרשאה}, ו-`("user", uid)`
-    לערך בשם. ‏{} כשאין ACL כלל."""
+    """ה-ACL של `path` כמות שהקרנל מחזיר אותו: {שם: הרשאה}, ו-`("user", uid)`
+    לערך בשם. {} כשאין ACL כלל."""
     try:
         raw = os.getxattr(path, "system.posix_acl_access", follow_symlinks=False)
     except OSError as exc:
@@ -104,8 +104,8 @@ def test_capture_opens_the_work_area_to_the_vm_user_for_passage_only(tmp_path):
     from test_vmupdate_isolation import SOURCE, FakeGuest, NoHost
     work = tmp_path / "work"
     work.mkdir()
-    # הנקודה: התחלה **פתוחה לכולם** (כמו לפני #1535) והוכחה שנסגרת. ‏`chmod`
-    # חיצוני ולא `os.chmod`: ‏CodeQL (‏#1610) מסמן 0o777 גם כשזה מתקן בטסט.
+    # הנקודה: התחלה **פתוחה לכולם** (כמו לפני #1535) והוכחה שנסגרת. `chmod`
+    # חיצוני ולא `os.chmod`: CodeQL (#1610) מסמן 0o777 גם כשזה מתקן בטסט.
     subprocess.run(["chmod", "777", str(work)], check=True, stdin=subprocess.DEVNULL)
     assert _mode(work) & 0o007 == 0o007, oct(_mode(work))
     (work / "disk.raw").write_bytes(b"")
@@ -122,7 +122,7 @@ def test_capture_opens_the_work_area_to_the_vm_user_for_passage_only(tmp_path):
 @posix_only
 def test_a_new_parent_for_the_vm_users_dirs_is_passage_only_for_its_user(tmp_path):
     parent = tmp_path / "work" / "run"
-    # ה-uid האמיתי: ‏`fresh_user_dir` עושה `fchown` לילד, וזה דורש root לכל uid אחר.
+    # ה-uid האמיתי: `fresh_user_dir` עושה `fchown` לילד, וזה דורש root לכל uid אחר.
     child = agent_shell.fresh_user_dir(parent, os.getuid(), os.getgid())
     assert child.parent == parent
     _only_the_vm_user(parent, 1, os.getuid())
@@ -151,8 +151,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _permissive_chmods(source: str) -> list[tuple[int, int]]:
-    """‏(שורה, מצב) לכל `chmod` עם מצב קבוע שיש בו ביט שאינו של הבעלים — מה
-    ש-`py/overly-permissive-file` מסמן. ‏מצב נקרא מליטרל, או מקבוע שלם ברמת
+    """(שורה, מצב) לכל `chmod` עם מצב קבוע שיש בו ביט שאינו של הבעלים — מה
+    ש-`py/overly-permissive-file` מסמן. מצב נקרא מליטרל, או מקבוע שלם ברמת
     המודול (כמו שהיה `VM_PASS_MODE`)."""
     tree = ast.parse(source)
     consts = {n.targets[0].id: n.value.value for n in tree.body
@@ -164,7 +164,7 @@ def _permissive_chmods(source: str) -> list[tuple[int, int]]:
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
                 and node.func.attr in ("chmod", "fchmod", "lchmod")):
             continue
-        # רק `os.chmod` — ‏`Path.chmod` אינו מודל ב-CodeQL (ואלפי מופעים בטסטים).
+        # רק `os.chmod` — `Path.chmod` אינו מודל ב-CodeQL (ואלפי מופעים בטסטים).
         if not (isinstance(node.func.value, ast.Name) and node.func.value.id == "os"
                 and len(node.args) >= 2):
             continue
@@ -185,7 +185,7 @@ def test_the_rule_flags_group_execute_and_passes_owner_only():
 
 
 def test_no_os_chmod_in_the_server_grants_non_owner_bits():
-    """‏`tests/` לא נסרק כאן: ‏`test_interserver_enrollment.py:293` (התראה 147,
+    """`tests/` לא נסרק כאן: `test_interserver_enrollment.py:293` (התראה 147,
     קיימת מלפני #1610) פותח הרשאה בכוונה כדי לבדוק שנדחית."""
     bad = {}
     for path in sorted((ROOT / "server").rglob("*.py")):
@@ -200,8 +200,8 @@ def test_no_os_chmod_in_the_server_grants_non_owner_bits():
 
 @pytest.mark.parametrize("name", ["vmupdate.js", "nicsvc.js"])
 def test_tag_stripping_goes_through_strip_tags_not_the_regex(name):
-    """הדפוס `/<[^>]*>/g` → "" משאיר `<script>` מ-`<<b>script>` (‏#1523).
-    ‏stripTags עצמו נבדק ב-`strip_tags.test.cjs`."""
+    """הדפוס `/<[^>]*>/g` → "" משאיר `<script>` מ-`<<b>script>` (#1523).
+    stripTags עצמו נבדק ב-`strip_tags.test.cjs`."""
     source = (STATIC / name).read_text(encoding="utf-8")
     assert not re.search(r"""\.replace\(/<\[\^>\]\*>/g,\s*(""|'')\)""", source), name
     assert "stripTags(" in source, name

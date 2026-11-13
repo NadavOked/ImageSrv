@@ -170,3 +170,57 @@ function encodeId(value) { return encodeURIComponent(value).replaceAll("'", "%27
 /* ‏#1634: ערך כמחרוזת JS בתוך on*="…". ‏esc() אינו מספיק שם — הדפדפן מפענח &#39; חזרה ל-' לפני שה-JS רץ;
    אחרי encodeId לא נשאר גרש, & או < לפענח, והפונקציה מקבלת את הערך המקורי. */
 function jsStr(value) { return `decodeURIComponent('${encodeId(value == null ? "" : value)}')`; }
+
+/* ‏#2840 (המשך): כל כפתור ששולח פעולה לשרת = לחיצה אחת, בקשה אחת. ‏sheet() כבר כך מאז #2860; זה אותו
+   מנגנון לכפתורים שאינם עוברים בו (חלון openModalContent, כפתורי onclick ישירים). הכפתור כבוי, ‏aria-busy,
+   והגלגל של ‏.btn.busy (console.css) — עד ש-fn מסתיימת, גם בשגיאה. כניסה חוזרת עם אותו key בזמן שהפעולה
+   רצה נבלעת ומחזירה את אותה הבטחה. ‏opts: key (ברירת מחדל: הכפתור), label+after (טקסט הכפתור אחרי N שניות,
+   ברירת מחדל 5, לפעולה ארוכה). ‏fn רצה סינכרונית עד ה-await הראשון — כמו שהייתה בלי העטיפה. */
+const BUSY_RUNNING = new Map();
+let busyGen = 0;
+function withBusy(button, fn, opts = {}) {
+  const key = opts.key !== undefined ? opts.key : button;
+  if (key != null && BUSY_RUNNING.has(key)) return BUSY_RUNNING.get(key);
+  const gen = ++busyGen;
+  /* כפתור שכבר תפוס (חלון שה-okFn שלו קורא לפעולה עטופה) — הראשון הבעלים של המראה, ואנחנו רק נועלים. */
+  if (button && button._busyGen) button = null;
+  const was = button ? button.disabled : false, text = button ? button.textContent : "";
+  let timer = null, relabeled = false;
+  if (button) {
+    button._busyGen = gen;
+    button.disabled = true;
+    if (button.setAttribute) button.setAttribute("aria-busy", "true");
+    if (button.classList) button.classList.add("busy");
+    if (opts.label) timer = setTimeout(() => { if (button._busyGen === gen) { button.textContent = opts.label; relabeled = true; } }, (opts.after || 5) * 1000);
+  }
+  if (key != null) BUSY_RUNNING.set(key, true);
+  const run = (async () => {
+    try { return await fn(); }
+    finally {
+      BUSY_RUNNING.delete(key);
+      if (timer) clearTimeout(timer);
+      /* חלון שנפתח מחדש בזמן הפעולה (openModalContent) ניקה את הכפתור בעצמו — לא נוגעים בו. */
+      if (button && button._busyGen === gen) {
+        button._busyGen = 0;
+        button.disabled = was;
+        if (button.removeAttribute) button.removeAttribute("aria-busy");
+        if (button.classList) button.classList.remove("busy");
+        if (relabeled) button.textContent = text;
+      }
+    }
+  })();
+  if (BUSY_RUNNING.has(key)) BUSY_RUNNING.set(key, run);
+  return run;
+}
+/* הכפתור שנלחץ, לפונקציות שנקראות מ-onclick="fn()" (window.event נכון רק סינכרונית, לכן נקרא בכניסה). */
+function clickedButton() {
+  try { const e = window.event, el = e && e.type === "click" && e.currentTarget; return el && el.nodeType === 1 ? el : null; }   // רק לחיצה — לא Enter בשדה
+  catch (e) { return null; }
+}
+/* עטיפה לפונקציה קיימת: ‏`fn = guarded("fn", fn)` מיד אחרי ההגדרה — גוף הפונקציה אינו משתנה. המפתח כולל את
+   הארגומנטים, כך ששני מחשבים שונים לא חוסמים זה את זה אבל לחיצה כפולה על אותו אחד כן נחסמת. */
+function guarded(name, fn, opts = {}) {
+  return function (...args) {
+    return withBusy(clickedButton(), () => fn.apply(this, args), { key: name + "|" + args.map(String).join("|"), ...opts });
+  };
+}

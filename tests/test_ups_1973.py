@@ -1,6 +1,6 @@
-"""‏#1973: UPS דרך NUT — יומן בנפילת חשמל, עצירה גלויה וכיבוי בסוללה נמוכה.
+"""#1973: UPS דרך NUT — יומן בנפילת חשמל, עצירה גלויה וכיבוי בסוללה נמוכה.
 
-הפרוטוקול נבדק מול upsd מזויף על סוקט TCP אמיתי (‏127.0.0.1); הכיבוי
+הפרוטוקול נבדק מול upsd מזויף על סוקט TCP אמיתי (127.0.0.1); הכיבוי
 מוזרק — שום בדיקה כאן אינה קוראת ל-systemctl."""
 
 from __future__ import annotations
@@ -210,7 +210,7 @@ def test_a_failed_poweroff_is_said_and_retried(conn, caplog):
     m = ups.UpsMonitor(conn, stop_work=script.stop_work, poweroff=broken, read=script.read)
     m.tick()
     state, detail = m.health()
-    # ‏#2510: הכישלון גלוי בשורת הבריאות; הטקסט של systemctl — ביומן השרת.
+    # #2510: הכישלון גלוי בשורת הבריאות; הטקסט של systemctl — ביומן השרת.
     assert state == "bad" and "הכיבוי נכשל" in detail and "Access denied" not in detail
     assert any("Access denied" in r.getMessage() for r in caplog.records)
     m.tick()
@@ -349,7 +349,7 @@ def test_main_wires_the_monitor_and_the_health_row(monkeypatch):
 
 
 def test_nut_is_installed_by_the_installer_and_carried_on_the_iso():
-    """‏#1803: שרת קיים מקבל חבילה חדשה מכפתור העדכון רק כשהיא ב-packages.txt."""
+    """#1803: שרת קיים מקבל חבילה חדשה מכפתור העדכון רק כשהיא ב-packages.txt."""
     from test_installer_packages import installer_pkgs
     from test_iso_build import packages_txt
 

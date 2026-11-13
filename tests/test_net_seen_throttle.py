@@ -1,21 +1,21 @@
-"""חניקת הכתיבה של `net_seen` — ‏issue #136.
+"""חניקת הכתיבה של `net_seen` — issue #136.
 
-‏hello הוא גם ההצטרפות וגם הסקירה, וכל hello היה **טרנזאקציית כתיבה
+hello הוא גם ההצטרפות וגם הסקירה, וכל hello היה **טרנזאקציית כתיבה
 מלאה**. סוכן שסוקר כל שתי שניות = 30 כתיבות בדקה לכל מכונה, 600 לכיתה
 של 20 — ודווקא בדקה שבה השרת פותח סבב. זה בדיוק המזון של #54:
-‏`database is locked` שנראה כמו עומס ואינו.
+`database is locked` שנראה כמו עומס ואינו.
 
-הבדיקה כאן היא על **כתיבות בפועל** ולא על "נראה תקין": ‏`writes_to`
+הבדיקה כאן היא על **כתיבות בפועל** ולא על "נראה תקין": `writes_to`
 סופר את משפטי הכתיבה ש-sqlite באמת ביצע על `net_devices`, ולכן הוא
 ראיה חיובית שהכתיבה נחסכה — ולא היעדר שגיאה. שלושת הדברים שאסור
 לשבור נבדקים באותה מידת רצינות:
 
-* ‏`last_seen` נשאר הראיה שהמכונה חיה (‏#64, ‏#109). חלון החניקה חייב
+* `last_seen` נשאר הראיה שהמכונה חיה (#64, #109). חלון החניקה חייב
   להישאר קצר מ-`room.AWAKE_SECONDS`, אחרת "חסכנו כתיבות" הפך מכונה
   דלוקה לכבויה על המסך — התשובה הגרועה ביותר לטכנאי.
-* ‏`agent_loops` סופר **הגעות** hello ולא כתיבות. החניקה לא נוגעת בו,
+* `agent_loops` סופר **הגעות** hello ולא כתיבות. החניקה לא נוגעת בו,
   וזה נבדק מול השרת המלא ולא מונח.
-* ‏`disks_json` שורד דילוג — מסך מחשב הבנייה קורא ממנו.
+* `disks_json` שורד דילוג — מסך מחשב הבנייה קורא ממנו.
 """
 
 from __future__ import annotations
@@ -37,8 +37,8 @@ IP = "10.44.12.187"
 def writes_to(conn, table: str = "net_devices"):
     """סופר משפטי כתיבה לטבלה אחת, דרך ה-trace של sqlite.
 
-    ‏`total_changes` סופר שורות מכל הטבלאות, וכאן צריך בדיוק את
-    ‏`net_devices` — גם כשמונה אחר (‏`agent_loops`) כותב לצידו.
+    `total_changes` סופר שורות מכל הטבלאות, וכאן צריך בדיוק את
+    `net_devices` — גם כשמונה אחר (`agent_loops`) כותב לצידו.
     """
     seen: list[str] = []
 
@@ -89,7 +89,7 @@ def test_a_dense_hello_stream_writes_once_and_not_thirty_times(db):
             net_seen(db, MAC, IP)
 
     assert writes == [], (
-        f"‏hello חוזר בתוך חלון החניקה עדיין כותב — {len(writes)} כתיבות"
+        f"\u200fhello חוזר בתוך חלון החניקה עדיין כותב — {len(writes)} כתיבות"
     )
     # והשורה בכל זאת שם, עם מה שנכתב במגע הראשון.
     assert row_of(db)["ip"] == IP
@@ -124,7 +124,7 @@ def test_last_seen_moves_again_the_moment_the_window_passes(db):
 
 
 def test_a_hello_right_on_the_edge_of_the_window_is_written(db):
-    """הגבול עצמו שייך לכתיבה. ‏`<` ולא `<=`: סוכן שסוקר בדיוק בקצב
+    """הגבול עצמו שייך לכתיבה. `<` ולא `<=`: סוכן שסוקר בדיוק בקצב
     התקרה (15 שניות) חייב לכתוב בכל סקירה, אחרת הפער נפתח לכפול."""
     net_seen(db, MAC, IP)
     aged = age_the_row(db, NET_SEEN_MIN_INTERVAL_SECONDS)
@@ -135,7 +135,7 @@ def test_a_hello_right_on_the_edge_of_the_window_is_written(db):
 
 def test_the_window_stays_well_inside_the_awake_threshold():
     """השומר על המספר עצמו. הסף חייב להישאר קטן מ-`AWAKE_SECONDS`,
-    אחרת מכונה חיה מצטיירת ככבויה — ‏#64 ו-#109 שוב, דרך התיקון."""
+    אחרת מכונה חיה מצטיירת ככבויה — #64 ו-#109 שוב, דרך התיקון."""
     from server.rounds.room import AWAKE_SECONDS                   # noqa: PLC0415
 
     assert NET_SEEN_MIN_INTERVAL_SECONDS * 2 <= AWAKE_SECONDS
@@ -151,7 +151,7 @@ def test_a_timestamp_that_cannot_be_read_is_written_over(db):
         db.commit()
         with writes_to(db.connection) as writes:
             net_seen(db, MAC, IP)
-        assert len(writes) == 1, f"‏{broken!r} נחשב טרי"
+        assert len(writes) == 1, f"\u200f{broken!r} נחשב טרי"
 
 
 def test_a_clock_that_jumped_backwards_is_written_over(db):
@@ -188,7 +188,7 @@ def test_new_disks_are_written_at_once(db):
 
 
 def test_a_skipped_write_keeps_the_disks_it_already_had(db):
-    """‏hello של תפריט האתחול מגיע בלי דיסקים. הדילוג חייב לשמור על
+    """hello של תפריט האתחול מגיע בלי דיסקים. הדילוג חייב לשמור על
     הערך הקיים — בדיוק כמו ה-COALESCE שהיה שם קודם."""
     disks = json.dumps([{"dev": "sda", "size_bytes": 256060514304}])
     net_seen(db, MAC, IP, disks_json=disks)
@@ -216,7 +216,7 @@ def test_the_free_text_description_survives_the_throttle(db):
 
 
 def test_the_loop_counter_climbs_while_the_writes_stop(db):
-    """שני המונים על חיבור אחד, זה מול זה: ‏`agent_loops` עולה בכל
+    """שני המונים על חיבור אחד, זה מול זה: `agent_loops` עולה בכל
     הגעה, ו-`net_devices` לא נכתבת אף פעם."""
     from server.agent import loops as agent_loops   # noqa: PLC0415
 
@@ -233,13 +233,13 @@ def test_the_loop_counter_climbs_while_the_writes_stop(db):
         "SELECT hits FROM agent_loops WHERE mac = ?", (MAC,)
     ).fetchone()["hits"]
     assert hits == beats, "הגעות hello לא נספרו במלואן"
-    assert writes == [], f"‏net_devices נכתבה {len(writes)} פעמים מיותרות"
+    assert writes == [], f"\u200fnet_devices נכתבה {len(writes)} פעמים מיותרות"
 
 
 def test_the_loop_counter_counts_hellos_and_not_writes(server):
     """אותו משפט מול השרת המלא, דרך ה-endpoint האמיתי.
 
-    ‏`agent_loops` הוא הראיה ל"דיסק שלא עולה" (#112). הוא סופר את
+    `agent_loops` הוא הראיה ל"דיסק שלא עולה" (#112). הוא סופר את
     **הגעת** ה-hello, והחניקה של `net_seen` אינה אמורה לגעת בו — לא
     בהנחה, אלא בעשר בקשות אמיתיות.
     """

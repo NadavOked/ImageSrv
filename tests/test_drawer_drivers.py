@@ -1,9 +1,9 @@
-"""‏#1269 — הנחת דרייברים על מגירות של מחשב שיכפול (`agent/lib/postdeploy/postdeploy.sh`).
+"""#1269 — הנחת דרייברים על מגירות של מחשב שיכפול (`agent/lib/postdeploy/postdeploy.sh`).
 
-אותו staging של #720 (‏`test_postdeploy.py` בודק את המנגנון עצמו), מנקודת
+אותו staging של #720 (`test_postdeploy.py` בודק את המנגנון עצמו), מנקודת
 המבט של המגירה: רק החריצים ש-hello אמר שנבחר להם דגם
-(‏`session.driver_ports`), רק מגירה שנכתבה עד הסוף, התוצאה בקובץ של
-המגירה (‏`targets/<dev>/drivers.json`) — ובלי לגעת במצב העליון של המכונה.
+(`session.driver_ports`), רק מגירה שנכתבה עד הסוף, התוצאה בקובץ של
+המגירה (`targets/<dev>/drivers.json`) — ובלי לגעת במצב העליון של המכונה.
 בלי `driver_ports` הסוכן אינו שואל את השרת דבר.
 """
 
@@ -24,7 +24,7 @@ pytestmark = requires_native(("bash", BASH))
 
 M70Q = {"vendor": "LENOVO", "model": "ThinkCentre M70q Gen 3"}
 
-#: ‏curl שרושם כל URL של שאלת הדרייברים, ואחרת כמו ב-test_postdeploy.
+#: curl שרושם כל URL של שאלת הדרייברים, ואחרת כמו ב-test_postdeploy.
 CURL = r'''
 for a in "$@"; do url="$a"; done
 case "$url" in
@@ -40,7 +40,7 @@ esac
 
 
 class Drawers(Box):
-    """שתי מגירות — ‏sda בחריץ 1, ‏sdb בחריץ 2 — שנכתבו (`done`)."""
+    """שתי מגירות — sda בחריץ 1, sdb בחריץ 2 — שנכתבו (`done`)."""
 
     def __init__(self, tmp_path, *, ports: list[int] | None, chosen=M70Q,
                  packages=FILES, states=("done", "done")):
@@ -88,7 +88,7 @@ class Drawers(Box):
 def test_only_the_drawer_with_a_chosen_model_is_staged_and_the_machine_state_stays(tmp_path):
     box = Drawers(tmp_path, ports=[2])
     box.stage_drawers()
-    # ‏#1331: מגירת SATA — ‏storahci הוא boot-start על הדיסק שיצא מהמגירה.
+    # #1331: מגירת SATA — storahci הוא boot-start על הדיסק שיצא מהמגירה.
     assert box.outcome("sdb") == {"state": "staged", "packages": ["intel-nic", "ahci-fix"],
                                   "boot": {"state": "enabled", "service": "storahci"}}
     assert box.outcome("sda") is None, "חריץ 1 לא נבחר — השלב לא רץ עליו"

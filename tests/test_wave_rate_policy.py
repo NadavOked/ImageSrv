@@ -1,18 +1,18 @@
 """מדיניות קצב הגל — הכרעת נדב 17/10 (על #447/#1471, נתונים מ-#1571).
 
-נמדד: מחשב שיכפול 2 (i5-650) ירד סבב אחרי סבב, ‏600 → 450 → 337 → 252,
-עם ‏rexmits ‏228044 · ‏126026 · ‏1338 · ‏13426. העלייה דרשה `loss == 0` **בדיוק**,
+נמדד: מחשב שיכפול 2 (i5-650) ירד סבב אחרי סבב, 600 → 450 → 337 → 252,
+עם rexmits 228044 · 126026 · 1338 · 13426. העלייה דרשה `loss == 0` **בדיוק**,
 ולכן אף פעם לא עלתה; רק הרצפה (150m) עצרה.
 
 ההכרעה:
 
 1. **עלייה** כשהשידורים החוזרים ≤ 0.1% מהבלוקים **וגם** כל מקלט דיווח
-   ‏`RcvbufErrors`, והסכום באותו תקציב (כיול 17/10 מול ses_54a923dd — "אפס
+   `RcvbufErrors`, והסכום באותו תקציב (כיול 17/10 מול ses_54a923dd — "אפס
    בדיוק" לא קורה על ברזל). מקלט שלא דיווח ("לא נקרא") — לא עולים (עיקרון 5).
 2. **זיכרון לכל MAC ולפי מספר המגירות** שלו בגל; בלי נתון לאותו מספר — הקרוב,
    בצורה שמרנית.
 3. ההורדה ×0.75 מעל הסף נשארת כמו שהיא.
-4. שורת היומן אומרת על מה: ‏`basis=up(loss=0.04%,rcvbuf=0)`.
+4. שורת היומן אומרת על מה: `basis=up(loss=0.04%,rcvbuf=0)`.
 
 והצד של הסוכן: הסכום על מחיצות המולטיקאסט עולה בדיווח ההתקדמות (`udp_drops`).
 """
@@ -29,7 +29,7 @@ from server import db
 from server.rounds import drive_rates
 from server.agent import reports
 
-SENT = 10 ** 10                       # ‏10GB בגל
+SENT = 10 ** 10                       # 10GB בגל
 BLOCKS = -(-SENT // drive_rates.UDPCAST_BLOCK)
 BUDGET = int(BLOCKS * drive_rates.LOSS_DOWN_RATIO)   # 0.1% — לשידורים חוזרים ול-rcvbuf
 MAC_A = "aa:bb:cc:00:00:31"           # מחשב שיכפול 2 (i5-650)
@@ -43,7 +43,7 @@ def conn(tmp_path):
 
 
 def _drives(session: str, drawers: dict[str, int]) -> list[dict]:
-    """מגירות טריות בכל גל (בחדר מחליפים מגירות) — ‏`drawers`: ‏mac → כמה."""
+    """מגירות טריות בכל גל (בחדר מחליפים מגירות) — `drawers`: mac → כמה."""
     return [{"serial": f"{session}-{mac[-2:]}-{k}", "model": "EVO 870", "mac": mac,
              "port": k + 1}
             for mac, count in drawers.items() for k in range(count)]
@@ -84,7 +84,7 @@ def _next(conn, drawers=None):
 def test_the_measured_spiral_turns_back_up(conn):
     """הספירלה שנמדדה: גל ב-600m עם 1.7% שידורים חוזרים יורד ל-450m (×0.75,
     נשאר). ואז גלים עם 0.05% ומקלט שלא זרק כלום — **עולים**, ולא יורדים.
-    עד ההכרעה: 600 → 450 → 450 → 450 (‏`held` לנצח)."""
+    עד ההכרעה: 600 → 450 → 450 → 450 (`held` לנצח)."""
     assert _wave(conn, "ses_0", loss_ratio=0.017) == "600m"
     seen = [_wave(conn, f"ses_{n}") for n in range(1, 5)]
     assert seen == ["450m", "550m", "650m", "750m"]
@@ -101,7 +101,7 @@ def test_a_little_loss_with_a_clean_receiver_raises(conn):
 
 
 def test_loss_exactly_at_the_threshold_still_raises(conn):
-    """‏≤ 0.1% — הסף עצמו עוד עולה; מעליו יורד (הסף של ההורדה לא זז)."""
+    """≤ 0.1% — הסף עצמו עוד עולה; מעליו יורד (הסף של ההורדה לא זז)."""
     _wave(conn, "ses_1", loss_ratio=0.001)
     assert _next(conn)["basis"] == "up"
 
@@ -118,7 +118,7 @@ def test_a_receiver_that_dropped_more_than_the_budget_holds_the_rate(conn):
 
 @pytest.mark.parametrize("rcvbuf", [12, BUDGET])
 def test_a_few_receiver_drops_within_the_budget_still_raise(conn, rcvbuf):
-    """הכיול של 17/10: "‏rcvbuf == 0 בדיוק" לא מתקיים על מכונה אמיתית — אותו
+    """הכיול של 17/10: "rcvbuf == 0 בדיוק" לא מתקיים על מכונה אמיתית — אותו
     תקציב כמו השידורים החוזרים, 0.1%, כולל הסף עצמו."""
     _wave(conn, "ses_1", rcvbuf=rcvbuf)
     got = _next(conn)
@@ -126,9 +126,9 @@ def test_a_few_receiver_drops_within_the_budget_still_raise(conn, rcvbuf):
 
 
 def test_the_measured_wave_ses_54a923dd_raises(conn):
-    """הנתונים האמיתיים (מחשב 2, ‏17/10): ‏rcvbuf=189, ‏loss_blocks=187, זרם של
+    """הנתונים האמיתיים (מחשב 2, 17/10): rcvbuf=189, loss_blocks=187, זרם של
     640 שניות ב-30MB/s — כ-0.0014% מהבלוקים. הגל רץ ב-252m (תחתית הספירלה,
-    ‏31.5MB/s — הזרם ב-95% ממנו). לפי "rcvbuf == 0" הוא לא היה עולה לעולם."""
+    31.5MB/s — הזרם ב-95% ממנו). לפי "rcvbuf == 0" הוא לא היה עולה לעולם."""
     roster = [{"mac": MAC_A, "serial": "R1", "model": "EVO 870"}]
     sent = 30_000_000 * 640
     conn.execute(
@@ -192,7 +192,7 @@ def test_one_unread_receiver_of_two_is_unread(conn):
 
 
 def test_one_percent_loss_lowers_even_with_a_clean_receiver(conn):
-    """3. ההגנה לא זזה: מעל 0.1% — ‏×0.75, מה שהמקלט לא יגיד."""
+    """3. ההגנה לא זזה: מעל 0.1% — ×0.75, מה שהמקלט לא יגיד."""
     _wave(conn, "ses_1", loss_ratio=0.01, rcvbuf=0)
     got = _next(conn)
     assert got["max_bitrate"] == "450m" and got["basis"] == "down"
@@ -208,8 +208,8 @@ OFFLINE = ("מחיצה 3: הקרנל דחה כתיבה לכונן: device offlin
 
 
 def _real_wave(conn, sdb_state="failed"):
-    """‏ses_54a923dd משוחזר מה-DB של שרת המעבדה (17/10, ‏90ea1585): ‏wave_rates
-    (‏decision/stream) כפי שנשמרו, ו-`record_wave` על ה-targets_json וה-udp_drops
+    """ses_54a923dd משוחזר מה-DB של שרת המעבדה (17/10, 90ea1585): wave_rates
+    (decision/stream) כפי שנשמרו, ו-`record_wave` על ה-targets_json וה-udp_drops
     של החבר כפי שדווחו — sda הושלמה, sdb נפלה בדקה הראשונה (device offline)."""
     conn.execute(
         "INSERT INTO wave_rates (session_id, decision, at, stream) VALUES (?,?,?,?)",
@@ -237,7 +237,7 @@ def _real_next(conn):
 
 
 def test_rc2_ses_54a923dd_with_a_drawer_that_went_offline_raises(conn):
-    """על ברזל יצא `held` (‏ses_80844e82): ‏sdb נפלה ב-device offline ולא השאירה
+    """על ברזל יצא `held` (ses_80844e82): sdb נפלה ב-device offline ולא השאירה
     דגימה, ו"כל כונן עמד בקצב" חסם. מגירה **שנכשלה** אינה ראיה על הקצב —
     הזרם (96%), השידורים החוזרים (0.0014%), ה-rcvbuf ו-sda הוכיחו אותו."""
     _real_wave(conn)
@@ -288,7 +288,7 @@ def test_three_drawers_do_not_punish_a_wave_of_one(conn):
 
 
 def test_without_the_same_count_more_drawers_are_the_safe_side(conn):
-    """אין גל של 2 מגירות. ‏1 ו-3 במרחק שווה — ‏3 (יותר עומס) קובע: הקצב שעמד
+    """אין גל של 2 מגירות. 1 ו-3 במרחק שווה — 3 (יותר עומס) קובע: הקצב שעמד
     בשלוש מגירות בטוח לשתיים; זה שעמד באחת — לא בהכרח."""
     _wave(conn, "ses_1", drawers={MAC_A: 3}, loss_ratio=0.017)       # 3: 600 → 450
     _wave(conn, "ses_2", drawers={MAC_A: 1})                          # 1: 450 → 550
@@ -300,7 +300,7 @@ def test_without_the_same_count_more_drawers_are_the_safe_side(conn):
 
 def test_a_clean_wave_of_fewer_drawers_does_not_raise_more(conn):
     """רק גל נקי של מגירה אחת בזיכרון, והגל הבא של שלוש: לא עולים ממנו —
-    הקצב שהוא רץ בו × 0.75 לכל הכפלה (‏#1842, נדב 20/10): 600 × 0.75^log2(3)."""
+    הקצב שהוא רץ בו × 0.75 לכל הכפלה (#1842, נדב 20/10): 600 × 0.75^log2(3)."""
     _wave(conn, "ses_1", drawers={MAC_A: 1})
     got = _next(conn, {MAC_A: 3})
     assert got["max_bitrate"] == "380m" and got["basis"] == "drawers"
@@ -314,7 +314,7 @@ def test_a_clean_wave_of_more_drawers_raises_fewer(conn):
 
 
 def test_a_lowering_from_fewer_drawers_still_lowers(conn):
-    """‏#1842: ירידה ×0.75 (‏450m) גבוהה מ-600m × 0.75^log2(3) (‏380m) — הנמוך."""
+    """#1842: ירידה ×0.75 (450m) גבוהה מ-600m × 0.75^log2(3) (380m) — הנמוך."""
     _wave(conn, "ses_1", drawers={MAC_A: 1}, loss_ratio=0.017)
     got = _next(conn, {MAC_A: 3})
     assert got["max_bitrate"] == "380m" and got["basis"] == "drawers"
@@ -436,7 +436,7 @@ def test_one_unread_partition_makes_the_sum_unread_for_good(tmp_path):
 @needs_bash
 def test_the_drivers_outcome_does_not_overwrite_the_drops(tmp_path):
     """ברזל, ses_54a923dd: מחשב שיש לו גם `drivers.json` — השורה של הדרייברים
-    דרסה את `udp_drops`, והשרת (‏COALESCE) נשאר עם ערך ישן."""
+    דרסה את `udp_drops`, והשרת (COALESCE) נשאר עם ערך ישן."""
     run = tmp_path / "run"
     run.mkdir(parents=True)
     (run / "drivers.json").write_text('{"state":"skipped","packages":[]}\n',

@@ -1,6 +1,6 @@
-"""‏#1889 — כמה זמן הסבב חיכה לאדם, ועל מה. ניתוח של מה שכבר נאסף (היומן, ‏sessions).
+"""#1889 — כמה זמן הסבב חיכה לאדם, ועל מה. ניתוח של מה שכבר נאסף (היומן, sessions).
 
-‏`send_held_smart`/`send_hold_released` של השולח = ההמתנה לתשובת SMART; ‏`started_at − created_at` של כל
+`send_held_smart`/`send_hold_released` של השולח = ההמתנה לתשובת SMART; `started_at − created_at` של כל
 גל = הגל הפתוח. ההמלצה מוצגת לאדם, ושום דבר אינו משתנה אוטומטית. לא נמדד = None, לא 0.
 """
 

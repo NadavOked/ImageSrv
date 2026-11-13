@@ -1,14 +1,14 @@
 """נדב 18/10: "תכלס לא צריך לזה MFA. אם בנוי, אפשר להפעיל או לא".
 
 עד rc6 כל מנהל שאינו המקומי (is_builtin) חויב לרשום MFA בכניסה ובהחלפת סיסמה.
-עכשיו ‏`mfa_required_for_admins` (הגדרות ← אבטחה), כבוי כברירת מחדל:
+עכשיו `mfa_required_for_admins` (הגדרות ← אבטחה), כבוי כברירת מחדל:
 
 * כבוי — אין `mfa_enrollment_required`, לא בכניסה ולא בהחלפת סיסמה; מי שהפעיל MFA
-  ממשיך להתבקש לקוד; ב"החשבון שלי" אפשר להפעיל, ולבטל עם קוד (‏/me/mfa/disable).
-* דלוק — בדיוק מה שהיה (‏test_login_mfa.py רץ כולו כך).
+  ממשיך להתבקש לקוד; ב"החשבון שלי" אפשר להפעיל, ולבטל עם קוד (/me/mfa/disable).
+* דלוק — בדיוק מה שהיה (test_login_mfa.py רץ כולו כך).
 * שדרוג — שרת קיים עם מנהל כזה מקבל "false", ושורת יומן אומרת את זה.
 
-בקרה שלילית: ‏server/console/login.py ו-server/console/api.py (התנאי הישן), ו-db.py
+בקרה שלילית: server/console/login.py ו-server/console/api.py (התנאי הישן), ו-db.py
 (בלי ברירת המחדל) מוחזרים יחד — הטסטים של "כבוי" נופלים.
 """
 
@@ -173,8 +173,8 @@ def test_a_fresh_install_writes_no_upgrade_line(tmp_path):
 
 
 def test_guessing_the_code_on_a_stolen_session_is_limited_like_the_login(server, monkeypatch):
-    """סקירת האבטחה על 7534e0e7: ‏/me/mfa/disable לא הגביל ניסיונות — session גנוב
-    יכול לנחש קוד עד שיצליח. אותם ספים כמו ‏/login/mfa: אחרי 10 כשלונות נעילה, ובזמן
+    """סקירת האבטחה על 7534e0e7: /me/mfa/disable לא הגביל ניסיונות — session גנוב
+    יכול לנחש קוד עד שיצליח. אותם ספים כמו /login/mfa: אחרי 10 כשלונות נעילה, ובזמן
     הנעילה גם סיסמה וקוד נכונים נדחים; MFA נשאר מופעל."""
     from server.console import login_guard
     t = {"now": 1_000_000.0}

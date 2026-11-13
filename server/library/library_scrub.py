@@ -11,7 +11,7 @@ from server.library.images import (ImageLibrary, guarded_image_path, streamed_pa
                                    valid_image_id)
 
 CHUNK = 1024 * 1024
-#: ‏#2510: what the console shows for a file that could not be read; the OS text goes to the log.
+#: #2510: what the console shows for a file that could not be read; the OS text goes to the log.
 UNREADABLE = "הקובץ לא נקרא — הפרטים ביומן השרת"
 log = logging.getLogger("imagesrv.library_scrub")
 

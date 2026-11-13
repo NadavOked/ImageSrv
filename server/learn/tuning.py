@@ -1,45 +1,45 @@
-"""‏#2028 — למידה אוטומטית: סבב על 2 השיכפולים הבאים, ומה הותאם בעקבותיו.
+"""#2028 — למידה אוטומטית: סבב על 2 השיכפולים הבאים, ומה הותאם בעקבותיו.
 
 הכרעות נדב 23/10 ו-06/11 (מוקאפ `docs/design/mockups-1107/2028-learning.html`):
 
 * המתג `learning_enabled`, כבוי כברירת מחדל. כבוי = הכול ידני, כמו היום.
 * **הלמידה נשענת על שיכפולים אמיתיים.** אין כאן שום כתיבה לדיסק לצורך מדידה: כל מה
-  שנקרא הוא מה שהגל כבר השאיר — ‏`wave_rates`, ‏`model_speeds`, ‏`port_history`.
+  שנקרא הוא מה שהגל כבר השאיר — `wave_rates`, `model_speeds`, `port_history`.
 * סבב = `REQUIRED_WAVES` הגלים הבאים. הגיעו כולם עם ראיה — מתאימים; לא הגיעו —
   **לא משנים כלום** ומציגים "לא נלמד: 1 מתוך 2" (עיקרון 5: בלי ראיה אין שינוי).
 * כל שינוי נרשם עם הערך הקודם והחדש ועם המספר שהניע אותו (עיקרון 5ב), ואפשר לחזור
   ממנו. כיבוי המתג אינו מחזיר דבר: "ההגדרות נשארות כפי שהן". שינוי ידני גובר.
 * שלוש רמות: דיסק לפי סידורי, מחשב וחיבור לפי MAC ופורט, רשת לפי השרת (`_levels`).
 
-**ראיה לגל** (`_evidence`): השולח סיים (‏`send_done`), המונים שלו נקראו, הזרם אינו קצר
-מדגימה (‏`MIN_SAMPLE_*`), אף מקלט לא נותק, ומגירה אחת לפחות סיימה. גל ישיר ממחשב בנייה
-(‏#715) אינו נספר כלל: המונה שלו אינו בשרת.
+**ראיה לגל** (`_evidence`): השולח סיים (`send_done`), המונים שלו נקראו, הזרם אינו קצר
+מדגימה (`MIN_SAMPLE_*`), אף מקלט לא נותק, ומגירה אחת לפחות סיימה. גל ישיר ממחשב בנייה
+(#715) אינו נספר כלל: המונה שלו אינו בשרת.
 
 **מה הלמידה רשאית לשנות** — שתי הגדרות, ושתיהן רק כלפי מעלה:
 
-    ‏`writecheck_min_mbps` = הנמוך מבין `FLOOR_OF_MEDIAN` × החציון, `drive_rates.MARGIN` × הדיסק
+    `writecheck_min_mbps` = הנמוך מבין `FLOOR_OF_MEDIAN` × החציון, `drive_rates.MARGIN` × הדיסק
                             האיטי שנמדד, והזרם שהשרת עצמו מדד. לא פוסל דיסק שנכתב בסבב.
-    ‏`learned_start_mbps`  = הקצב שבו **כל** גלי הסבב עמדו, מעוגל מטה ל-`REFINE_STEP`,
+    `learned_start_mbps`  = הקצב שבו **כל** גלי הסבב עמדו, מעוגל מטה ל-`REFINE_STEP`,
                             בלי אבדן מעל `LOSS_DOWN_RATIO`. הגג של `drive_rates.choose` נשאר.
 
-שתיהן עד `MAX_STEP` מהערך הנוכחי בסבב אחד. ‏`crc_warn_threshold` מוצג בסיכום ואינו משתנה:
+שתיהן עד `MAX_STEP` מהערך הנוכחי בסבב אחד. `crc_warn_threshold` מוצג בסיכום ואינו משתנה:
 סף CRC הוא הכרעה של מנהל.
 
 **לא סומכים על מספר שמכונה מדווחת** (סקירת אבטחה 06/11: מכונה ברשת ההפצה יכולה לשקר, והרף
-חל על כולן). ‏`write_preflight.mbps` הוא דיווח של הסוכן, ולכן:
+חל על כולן). `write_preflight.mbps` הוא דיווח של הסוכן, ולכן:
 
-* נספרת רק מדידה של דיסק שהשרת שם ברשימת הגל (‏`decision.roster`, לפני שהגל יצא), של מכונה
+* נספרת רק מדידה של דיסק שהשרת שם ברשימת הגל (`decision.roster`, לפני שהגל יצא), של מכונה
   רשומה, שמגירה שלה סיימה בגל (`_measured`).
 * מדידה מעל מה שהקישור שלה מסוגל לו, או מעל `MODEL_OUTLIER` מחציון הדגם מחוץ לסבב — נדחית,
   נרשמת ביומן ולא נספרת. מדידה **נמוכה** אינה נדחית: היא יכולה רק למנוע העלאה, ודיסק גוסס
   אמיתי הוא בדיוק מי שהסף חייב להתחשב בו.
-* **התקרה נמדדת בשרת:** הזרם (‏`stream_bps`, המונה של udp-sender בשרת) מתקדם בקצב המקבל האיטי,
+* **התקרה נמדדת בשרת:** הזרם (`stream_bps`, המונה של udp-sender בשרת) מתקדם בקצב המקבל האיטי,
   וכל דיסק שסיים עמד בו. מעליו אין ראיה משרתת, וגם אין צורך: דיסק מהיר מהזרם אינו מעכב גל.
-  ‏`learned_start_mbps` כולו ממדידה בשרת, ודיווח של סוכן אינו יכול להעלות אותו.
+  `learned_start_mbps` כולו ממדידה בשרת, ודיווח של סוכן אינו יכול להעלות אותו.
 * כיוון מטה חסום לגמרי: למידה אינה מורידה הגדרה.
 
-‏`record_wave` לעולם אינו זורק — למידה אינה עוצרת סיום גל. הצעת הלמידה למחשב חדש
-(`machine_states`): ‏"נלמד" = נמדדו החיבורים שלו ב-`REQUIRED_WAVES` גלים (נדב 23/10:
+`record_wave` לעולם אינו זורק — למידה אינה עוצרת סיום גל. הצעת הלמידה למחשב חדש
+(`machine_states`): "נלמד" = נמדדו החיבורים שלו ב-`REQUIRED_WAVES` גלים (נדב 23/10:
 "נמדדו החיבורים שלו, לא דיסקים מסוימים"), ונגזר מ-`port_history`.
 """
 
@@ -60,15 +60,15 @@ log = logging.getLogger("imagesrv.learn_tuning")
 SETTING = "learning_enabled"
 #: כמה שיכפולים לסבב. המקור: נדב 23/10 ("2 הרצות"), אושר במוקאפ 06/11, שאלה 2.
 REQUIRED_WAVES = 2
-#: הסף מחצי החציון — אותו יחס שהסוכן כבר פוסל בו באדום (‏#1366, ‏`writecheck.sh`).
+#: הסף מחצי החציון — אותו יחס שהסוכן כבר פוסל בו באדום (#1366, `writecheck.sh`).
 FLOOR_OF_MEDIAN = 0.5
 #: כמה הגדרה יכולה לעלות בסבב אחד. ⚠️ ניחוש מנומק, לא מדידה: הגנה מפני דיווח שקרי (סקירת
-#: אבטחה 06/11). ‏50→75 בסבב, ו-600→900 הוא גג הקו כולו.
+#: אבטחה 06/11). 50→75 בסבב, ו-600→900 הוא גג הקו כולו.
 MAX_STEP = 1.5
 #: פי כמה מחציון הדגם מדידה נדחית. ⚠️ ניחוש מנומק: מרווח רחב, כי באותו דגם יש קושחות ומצבי
 #: מטמון שונים, והמטרה היא מספר שקרי ולא דיסק מהיר.
 MODEL_OUTLIER = 3
-#: ‏MB/s לכל Gb/s של קישור SATA: קידוד 8b/10b, כלומר 6Gb/s הם 600MB/s לכל היותר.
+#: MB/s לכל Gb/s של קישור SATA: קידוד 8b/10b, כלומר 6Gb/s הם 600MB/s לכל היותר.
 SATA_MBPS_PER_GBPS = 100
 #: בלי קישור ידוע (NVMe): PCIe 4.0 x4 הוא כ-7.9GB/s, מעל זה אין דיסק בחדר.
 ANY_DISK_MAX_MBPS = 8000
@@ -79,7 +79,7 @@ CRC_LABEL = "אזהרת CRC למגירה"
 
 
 class Refused(Exception):
-    """פעולה שהמצב לא מאפשר. ‏`status` — קוד ה-HTTP, הטקסט — למסך."""
+    """פעולה שהמצב לא מאפשר. `status` — קוד ה-HTTP, הטקסט — למסך."""
 
     def __init__(self, status: int, text: str) -> None:
         super().__init__(text)
@@ -108,7 +108,7 @@ def _collecting(conn: sqlite3.Connection) -> sqlite3.Row | None:
 
 
 def _evidence(row: sqlite3.Row) -> str | None:
-    """למה הגל **אינו** ראיה, או ‏None כשהוא כן."""
+    """למה הגל **אינו** ראיה, או None כשהוא כן."""
     stream, delivered = _json(row["stream"]), _json(row["delivered"])
     if not stream:
         return "המונים של השולח לא נקראו"
@@ -143,7 +143,7 @@ def _in(sessions: list[str]) -> str:
 
 
 def _waves(conn: sqlite3.Connection, sessions: list[str]) -> list[tuple[dict, dict]]:
-    """‏`(decision, stream)` לכל גל של הסבב שנרשם."""
+    """`(decision, stream)` לכל גל של הסבב שנרשם."""
     if not sessions:
         return []
     return [(_json(r["decision"]), _json(r["stream"])) for r in conn.execute(
@@ -171,7 +171,7 @@ def _model_base(conn: sqlite3.Connection, row: sqlite3.Row, sessions: list[str])
 
 
 def _measured(conn: sqlite3.Connection, sessions: list[str]) -> tuple[list[sqlite3.Row], list[sqlite3.Row]]:
-    """‏`(נספרות, נדחו)` מבין מדידות הכתיבה של הסבב — ראו למעלה."""
+    """`(נספרות, נדחו)` מבין מדידות הכתיבה של הסבב — ראו למעלה."""
     good: list[sqlite3.Row] = []
     bad: list[sqlite3.Row] = []
     registered = {r["mac"] for r in conn.execute("SELECT mac FROM machines")}
@@ -250,7 +250,7 @@ def _crc_row(conn: sqlite3.Connection, sessions: list[str]) -> dict:
 
 
 def _levels(conn: sqlite3.Connection, sessions: list[str]) -> dict:
-    """מה שנמדד בסבב, בשלוש הרמות. ‏`null` בשדה = לא נמדד, לא אפס."""
+    """מה שנמדד בסבב, בשלוש הרמות. `null` בשדה = לא נמדד, לא אפס."""
     disks = {"count": 0, "min_mbps": None, "max_mbps": None}
     links: dict[str, int] = {}
     machines, ports = set(), set()
@@ -329,7 +329,7 @@ def record_wave(conn: sqlite3.Connection, session_id: str) -> None:
     """נקרא משני הקצוות של גל: כשהשולח סיים (`app.on_sender_event`) וכשהחדר סגר אותו
     (`room`). הסדר ביניהם אינו מובטח, ולכן מי שמגיע שני הוא שסופר: בלי המונים של השולח ובלי
     הספירה של החדר אין עדיין מה לשפוט, וזה אינו כישלון של הגל. גל שאינו של החדר (אין לו
-    ‏`delivered`) אינו נספר. חוזר על עצמו בבטחה."""
+    `delivered`) אינו נספר. חוזר על עצמו בבטחה."""
     try:
         run = _collecting(conn)
         if run is None:
@@ -382,7 +382,7 @@ def settings_written(conn: sqlite3.Connection, written: dict[str, str], was_on: 
 
 
 def _restore(conn: sqlite3.Connection, change: sqlite3.Row, at: str, user: str) -> bool:
-    """מחזיר בתוך טרנזאקציה פתוחה. ‏False — הערך כבר אינו מה שהלמידה כתבה."""
+    """מחזיר בתוך טרנזאקציה פתוחה. False — הערך כבר אינו מה שהלמידה כתבה."""
     if get_setting(conn, change["key"]) != change["value"]:
         return False
     if change["previous"] is None:
@@ -395,7 +395,7 @@ def _restore(conn: sqlite3.Connection, change: sqlite3.Row, at: str, user: str) 
 
 
 def revert(conn: sqlite3.Connection, change_id: int | None, user: str) -> int:
-    """מחזיר שינוי אחד, או את כולם (‏`None`). מחזיר כמה הוחזרו; נכשל בקול (`Refused`)."""
+    """מחזיר שינוי אחד, או את כולם (`None`). מחזיר כמה הוחזרו; נכשל בקול (`Refused`)."""
     where, args = ("id = ? AND state = 'applied'", (change_id,)) if change_id is not None \
         else ("state = 'applied'", ())
     at, done, stale = now_iso(), [], []
@@ -453,9 +453,9 @@ def status(conn: sqlite3.Connection) -> dict:
 
 
 def machine_states(conn: sqlite3.Connection) -> dict[str, dict] | None:
-    """‏`{mac: {"state", "waves", "ports", "required"}}` לכל מכונה שיש עליה מה לומר.
-    ‏`state`: ‏`learned` / ‏`started` / ‏`dismissed`. מכונה שאינה ברשימה = הצעה (`offer`).
-    ‏None — לא נקרא, ואז אין הצעה: רשימת המכונות אינה נופלת בגלל הלמידה."""
+    """`{mac: {"state", "waves", "ports", "required"}}` לכל מכונה שיש עליה מה לומר.
+    `state`: `learned` / `started` / `dismissed`. מכונה שאינה ברשימה = הצעה (`offer`).
+    None — לא נקרא, ואז אין הצעה: רשימת המכונות אינה נופלת בגלל הלמידה."""
     try:
         measured = {r["mac"]: r for r in conn.execute(
             "SELECT mac, COUNT(DISTINCT session_id) AS waves, COUNT(DISTINCT port) AS ports"
@@ -474,7 +474,7 @@ def machine_states(conn: sqlite3.Connection) -> dict[str, dict] | None:
 
 
 def answer_offer(conn: sqlite3.Connection, mac: str, action: str, user: str) -> None:
-    """‏`start` / ‏`dismiss` על הצעת הלמידה למחשב. אינו נוגע במתג ואינו כותב לאף דיסק."""
+    """`start` / `dismiss` על הצעת הלמידה למחשב. אינו נוגע במתג ואינו כותב לאף דיסק."""
     state = {"start": "started", "dismiss": "dismissed"}.get(action)
     if state is None:
         raise Refused(400, "פעולה לא מוכרת: start או dismiss")

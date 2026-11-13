@@ -1,9 +1,9 @@
-"""המארח של "עדכון אימג' ב-VM" — הקוד שרץ מוודא את מה שהוא צריך (‏#1372).
+"""המארח של "עדכון אימג' ב-VM" — הקוד שרץ מוודא את מה שהוא צריך (#1372).
 
 עדכון מהכפתור רץ ב-`tools/server-upgrade.sh` של **התג הישן** (הוא מופעל לפני
 ה-checkout, ו-bash ממשיך לקרוא את הקובץ שנפתח). שרת שעודכן מ-v0.71 ל-v0.73.2
-לא הריץ את צעד 3ב (‏deploy/vmupdate-host.sh, ‏#1334) — הוא לא היה בסקריפט הישן —
-והעדכון דווח "אומת" בירוק בלי qemu, ‏ovmf, ‏guestfs ובלי imagesrv-vm (‏13/10).
+לא הריץ את צעד 3ב (deploy/vmupdate-host.sh, #1334) — הוא לא היה בסקריפט הישן —
+והעדכון דווח "אומת" בירוק בלי qemu, ovmf, guestfs ובלי imagesrv-vm (13/10).
 
 לכן ההכנה אינה תלויה במי שהפעיל את העדכון: **השרת החדש**, בעלייה, שואל את
 המנוע אם המארח מוכן (`VmUpdate.host_problem`, אותן בדיקות שההפעלה מסרבת
@@ -30,7 +30,7 @@ from typing import Callable
 
 log = logging.getLogger("imagesrv.vmhost")
 
-#: היחידה המנותקת. ‏`journalctl -u` עליה מראה את פלט ההכנה.
+#: היחידה המנותקת. `journalctl -u` עליה מראה את פלט ההכנה.
 UNIT = "imagesrv-vmhost"
 SCRIPT = Path("deploy") / "vmupdate-host.sh"
 WARNING_PREFIX = "עדכון ב-VM לא זמין: "
@@ -62,7 +62,7 @@ class VmHost:
         self.repo_dir = Path(repo_dir)
         self._run = run
         self._can_launch = can_launch
-        #: מה קרה להכנה ברקע בעלייה הזו — חלק מהאזהרה. ‏None = לא הופעלה.
+        #: מה קרה להכנה ברקע בעלייה הזו — חלק מהאזהרה. None = לא הופעלה.
         self.ensure_note: str | None = None
 
     def problem(self) -> str | None:
@@ -104,5 +104,5 @@ class VmHost:
         """(state, detail) לשורת "עדכון ב-VM" במסך הבריאות."""
         warning = self.warning()
         if warning is None:
-            return "ok", "QEMU, ‏OVMF, ‏guestfs והמשתמש imagesrv-vm — מוכנים"
+            return "ok", "QEMU, \u200fOVMF, \u200fguestfs והמשתמש imagesrv-vm — מוכנים"
         return "warn", warning.removeprefix(WARNING_PREFIX)

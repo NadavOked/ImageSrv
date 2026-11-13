@@ -1,17 +1,17 @@
-"""הבדיקה העצמית של השרת אינה נרשמת כמכונה (‏#976).
+"""הבדיקה העצמית של השרת אינה נרשמת כמכונה (#976).
 
-‏`/api/console/health` (וגם `/ports`) מושכים בחזרה את
-‏`GET /boot/menu?mac=<MAC רשום>` ו-`?mac=00:00:00:00:00:00` — זו הראיה
+`/api/console/health` (וגם `/ports`) מושכים בחזרה את
+`GET /boot/menu?mac=<MAC רשום>` ו-`?mac=00:00:00:00:00:00` — זו הראיה
 החיובית שהשרת מגיש תפריט בכתובת ההפצה ומה כתוב בשורת הקרנל. עד 17/09
 השרת לא הבחין בין הבדיקה של עצמו לבין GRUB של מכונה: כל כניסה לקונסולה
-דרסה את ‏IP/נראה-לאחרונה/שביל-הפירורים של מכונה אמיתית ל-`127.0.0.1 ·
+דרסה את IP/נראה-לאחרונה/שביל-הפירורים של מכונה אמיתית ל-`127.0.0.1 ·
 1/9`, יצרה התקן "לא רשום" `00:00:00:00:00:00` — **וגם ספרה אתחול**
-בתקציב לולאת האתחול (‏#75) של המכונה שנבדקה.
+בתקציב לולאת האתחול (#75) של המכונה שנבדקה.
 
 התיקון: הבדיקה מסמנת את עצמה בכותרת `X-ImageSrv-Probe: 1`, והשרת מכבד
-את הסימון **רק** כשהפונה הוא השרת עצמו — ‏loopback, או הכתובת המקומית
+את הסימון **רק** כשהפונה הוא השרת עצמו — loopback, או הכתובת המקומית
 שעליה החיבור התקבל (חיבור של השרת לכתובת ההפצה של עצמו יוצא ממנה,
-לא מ-`127.0.0.1`). ‏GRUB אמיתי לעולם אינו מגיע משם, ומבחוץ הכותרת
+לא מ-`127.0.0.1`). GRUB אמיתי לעולם אינו מגיע משם, ומבחוץ הכותרת
 אינה שווה דבר — ולכן היא אינה דרך לאתחל בלי להירשם.
 
 הבדיקות כאן מדברות עם השרת דרך HTTP בדיוק כמו הבדיקה העצמית: ה-hooks
@@ -46,7 +46,7 @@ PROBE = {"X-ImageSrv-Probe": "1"}
 @pytest.fixture()
 def probing_server(tmp_path: Path, images_root: Path, clock):
     """שרת מלא שהבדיקה העצמית שלו באמת מושכת את `/boot/menu` — דרך
-    ‏TestClient שמגיע מ-loopback, בדיוק כמו `urllib` על השרת."""
+    TestClient שמגיע מ-loopback, בדיוק כמו `urllib` על השרת."""
     if TestClient is None:
         pytest.skip("fastapi is required")
     from test_sender import Recorder                           # noqa: PLC0415
@@ -66,7 +66,7 @@ def probing_server(tmp_path: Path, images_root: Path, clock):
 
     hooks = {
         "ss": lambda: "",
-        "ss_tcp": lambda: "",      # ‏#996: /ports קורא גם את טבלת ה-TCP
+        "ss_tcp": lambda: "",      # #996: /ports קורא גם את טבלת ה-TCP
         "unit_active": lambda name: "active",
         "http_get": http_get,
         "http_size": lambda url: (200, 31_000_000),
@@ -115,7 +115,7 @@ def station_boots_and_reports(server, mac: str) -> dict:
 
 
 def evidence(row: dict) -> tuple:
-    # ‏`seconds`/`stalled` בפירורי האתחול נגזרים משעון הקיר בזמן הקריאה —
+    # `seconds`/`stalled` בפירורי האתחול נגזרים משעון הקיר בזמן הקריאה —
     # שנייה שמתחלפת בין "לפני" ל"אחרי" אינה "השרת כתב" (נפל פעם אחת בשער
     # המעבדה, 17/09). הראיה היא הצעד, האינדקס והחותמת — לא הגיל.
     def strip(step):
@@ -209,7 +209,7 @@ def test_the_ports_screen_does_not_mark_either(probing_server):
 
 
 def test_health_probes_do_not_spend_the_boot_budget(probing_server):
-    """‏#75 סופר בקשות תפריט לסבב פתוח. ארבע כניסות לקונסולה במהלך סבב
+    """#75 סופר בקשות תפריט לסבב פתוח. ארבע כניסות לקונסולה במהלך סבב
     היו שולחות את המכונה הרשומה הראשונה לדיסק המקומי — בלי שאתחלה."""
     ids = setup_classroom(probing_server)
     response = probing_server["deploy"].post(
@@ -251,7 +251,7 @@ def test_the_servers_own_address_counts_as_itself(probing_server):
 
 
 def test_loopback_without_the_mark_is_not_a_boot(probing_server):
-    """‏#1178 הפך את הכלל הישן ("בקשה מ-loopback בלי הכותרת נרשמת"): משיכת
+    """#1178 הפך את הכלל הישן ("בקשה מ-loopback בלי הכותרת נרשמת"): משיכת
     תפריט מהשרת עצמו — curl מקומי, verify-boot-payload — אינה אתחול של
     תחנה, עם כותרת או בלעדיה, והיא אינה יוצרת מכונה ואינה רושמת צעד."""
     ids = setup_classroom(probing_server)
@@ -265,7 +265,7 @@ def test_loopback_without_the_mark_is_not_a_boot(probing_server):
 
 @pytest.mark.parametrize("hook", ["http_get", "http_size"])
 def test_the_default_probes_carry_the_mark(monkeypatch, hook):
-    """‏`default_hooks()` הם מה שרץ בייצור — ואם הם לא שולחים את
+    """`default_hooks()` הם מה שרץ בייצור — ואם הם לא שולחים את
     הכותרת, כל מה שלמעלה מגן על שום דבר."""
     from server.system import health                                  # noqa: PLC0415
 

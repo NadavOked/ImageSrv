@@ -309,7 +309,7 @@ def driver(tmp_path_factory) -> Path:
 
 def _card(driver: Path, tmp_path: Path, net: str | None) -> list[str]:
     now = int(time.time())
-    state = ("title=‏שחזור: Windows 11 Lab\nsub=‏דיסק 1 · מחיצה 2 מתוך 3 · ממתין לזרם מהשרת · 0 MB/s\n"
+    state = ("title=\u200fשחזור: Windows 11 Lab\nsub=\u200fדיסק 1 · מחיצה 2 מתוך 3 · ממתין לזרם מהשרת · 0 MB/s\n"
              "pct=31\nbytes=12400000000\nmoving=1\ncancel=1\n"
              + (re.sub(r"NOW-(\d+)", lambda m: str(now - int(m.group(1))), net) + "\n" if net else "")
              + f"updated={now}\n")

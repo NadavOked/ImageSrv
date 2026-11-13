@@ -30,7 +30,7 @@ def create_storage_locations_router(
     server_base: str = "",
     boot_trees: tuple = (),
 ) -> APIRouter:
-    """‏`boot_trees` (‏#2462): ‏`--boot-dir` ו-`--tftp-root` בפועל — אסורים למיקום `local`."""
+    """`boot_trees` (#2462): `--boot-dir` ו-`--tftp-root` בפועל — אסורים למיקום `local`."""
     router = APIRouter(prefix="/api/console/storage-locations")
     current_user, admin_only = auth.dependencies(ctx.conn)
     del current_user
@@ -44,12 +44,12 @@ def create_storage_locations_router(
         return row
 
     def _validate(kind: str, params: dict) -> None:
-        """‏#1123 (3): 400 בשם השדה, לפני שכלי מערכת כלשהו רץ."""
+        """#1123 (3): 400 בשם השדה, לפני שכלי מערכת כלשהו רץ."""
         reason = sl.validate_params(kind, params)
         if reason:
             raise HTTPException(400, reason)
         if kind == "local":
-            # ‏#2444: ביצירה ובבדיקה בלבד — מיקום שמור אינו עובר כאן.
+            # #2444: ביצירה ובבדיקה בלבד — מיקום שמור אינו עובר כאן.
             path = params.get("path") or params.get("mount_point")
             if path:
                 reason = sl.local_path_problem(path, data_dir, hooks["is_mount"], boot_trees)
@@ -62,8 +62,8 @@ def create_storage_locations_router(
             ctx.conn.execute("DELETE FROM storage_locations WHERE id = ?", (loc_id,))
 
     def _fstab_or_unmount(row: dict) -> None:
-        """‏#1123 (4): עיגון בלי שורת fstab אינו `connected` — הוא לא ישרוד reboot."""
-        written = sl.rewrite_fstab(ctx.conn, hooks, include=row["id"])   # ‏#1993
+        """#1123 (4): עיגון בלי שורת fstab אינו `connected` — הוא לא ישרוד reboot."""
+        written = sl.rewrite_fstab(ctx.conn, hooks, include=row["id"])   # #1993
         if written.status != sl.OK:
             hooks["umount"](row["mount_point"])
             raise HTTPException(
@@ -97,10 +97,9 @@ def create_storage_locations_router(
             portal = body.get("portal") or server
             if not sl.valid_portal(portal):
                 raise HTTPException(400, "פורטל לא תקין — IP[:port] או שם מארח[:port]")
-            chap = creds if creds.get("user") or creds.get("chap_user") else None
-            if chap and "user" not in chap and creds.get("chap_user"):
-                chap = {"user": creds.get("chap_user"), "secret": creds.get("chap_secret")}
-            result = hooks["iscsi_discover"](portal, chap)
+            # #2606: `creds` אינו נקרא לגילוי iSCSI — ה-CHAP של המיקום הוא של ה-login
+            # (`node.session.auth.*`), ופרטים שאינם בשימוש אינם עוברים הלאה.
+            result = hooks["iscsi_discover"](portal)
         else:
             raise HTTPException(400, "סריקה רק ל-nfs / smb / iscsi")
         if result.status == sl.UNCHECKED:
@@ -118,7 +117,7 @@ def create_storage_locations_router(
         kind = body.get("type")
         if kind not in sl.TYPES:
             raise HTTPException(400, "סוג לא מוכר")
-        params = sl.client_params(kind, body.get("params") or {})   # ‏#2468
+        params = sl.client_params(kind, body.get("params") or {})   # #2468
         _validate(kind, params)
         tmp = data_dir / "storage-test"
         outcome = sl.test_connection(
@@ -141,7 +140,7 @@ def create_storage_locations_router(
         name = (body.get("name") or "").strip()
         if kind not in sl.TYPES:
             raise HTTPException(400, "סוג לא מוכר")
-        # ‏#2468: רק המפתחות שהלקוח רשאי לקבוע — ‏device_by_path/fs_*/uuid נקבעים בשרת.
+        # #2468: רק המפתחות שהלקוח רשאי לקבוע — device_by_path/fs_*/uuid נקבעים בשרת.
         params = sl.client_params(kind, body.get("params") or {})
         if not name:
             raise HTTPException(400, "חסר שם תצוגה")
@@ -170,7 +169,7 @@ def create_storage_locations_router(
         if taken:
             raise HTTPException(409, f"כבר יש מיקום על הנתיב הזה: {taken['name']}")
         now = now_iso()
-        # ‏#1123 (4): מיקום רשת נולד `unchecked` — `connected` רק אחרי fstab וגם mount.
+        # #1123 (4): מיקום רשת נולד `unchecked` — `connected` רק אחרי fstab וגם mount.
         state = "connected" if kind == "local" else "unchecked"
         try:
             _settle(ctx.conn)
@@ -216,7 +215,7 @@ def create_storage_locations_router(
                 f"{loc_id} {kind} {name}", user[0])
         return sl.public_row(sl.get(ctx.conn, loc_id), ctx.library)
 
-    # ‏#1988: "הוסף כונן" — כוננים ריקים בשרת, ואז חלוקה+ext4+fstab לפי UUID.
+    # #1988: "הוסף כונן" — כוננים ריקים בשרת, ואז חלוקה+ext4+fstab לפי UUID.
     @router.get("/disks")
     def disks(user=Depends(admin_only)):
         del user
@@ -257,7 +256,7 @@ def create_storage_locations_router(
             status = 503 if result.status == sl.UNCHECKED else 409
             raise HTTPException(status, result.reason or "ההתחברות נכשלה")
         payload = result.payload or {}
-        if sl.valid_iscsi_device(payload.get("device_by_path")):   # ‏#2468
+        if sl.valid_iscsi_device(payload.get("device_by_path")):   # #2468
             params["device_by_path"] = payload["device_by_path"]
         sl.save_params(ctx.conn, loc_id, params)
         journal(ctx.conn, "storage_iscsi_login",
@@ -270,7 +269,7 @@ def create_storage_locations_router(
         del user
         row = _row(loc_id)
         params = sl.params_of(row)
-        device = sl.iscsi_device(params)   # ‏#2468
+        device = sl.iscsi_device(params)   # #2468
         if not device:
             raise HTTPException(409, "אין התקן — יש להתחבר ליעד קודם")
         result = hooks["disk_probe"](device)
@@ -298,7 +297,7 @@ def create_storage_locations_router(
         if body.get("format"):
             raise HTTPException(400, "עיגון עם פירמוט עובר ב-/format")
         params = sl.params_of(row)
-        device = sl.iscsi_device(params)   # ‏#2468
+        device = sl.iscsi_device(params)   # #2468
         if row["type"] == "iscsi":
             if not device:
                 raise HTTPException(409, "אין התקן — יש להתחבר ליעד קודם")
@@ -309,7 +308,7 @@ def create_storage_locations_router(
                 raise HTTPException(409, "לא הצלחנו לקרוא את הדיסק — אין עיגון")
             if status == "empty" or not payload.get("fs_type"):
                 raise HTTPException(409, "אין מערכת קבצים על הדיסק — עיגון בלי פירמוט רק כשיש FS")
-            if payload.get("fs_type") not in sl.FS_TYPES:   # ‏#2468: נכתב ל-fstab
+            if payload.get("fs_type") not in sl.FS_TYPES:   # #2468: נכתב ל-fstab
                 raise HTTPException(409, f"מערכת הקבצים {payload.get('fs_type')} אינה נתמכת"
                                          f" — {' / '.join(sl.FS_TYPES)} בלבד")
             params["fs_type"] = payload.get("fs_type")
@@ -341,7 +340,7 @@ def create_storage_locations_router(
             raise HTTPException(422, "פירמוט דורש הקלדת ה-IQN")
         if confirm != iqn:
             raise HTTPException(403, "ה-IQN שהוקלד אינו זהה ליעד")
-        device = sl.iscsi_device(params)   # ‏#2468: רק קישור by-path של LUN מגיע לפירמוט
+        device = sl.iscsi_device(params)   # #2468: רק קישור by-path של LUN מגיע לפירמוט
         if not device:
             raise HTTPException(409, "אין התקן — יש להתחבר ליעד קודם")
         probed = hooks["disk_probe"](device)
@@ -424,7 +423,7 @@ def create_storage_locations_router(
         return sl.public_row(sl.get(ctx.conn, loc_id), ctx.library)
 
     def _typed_secret(row: dict, params: dict, body) -> bool:
-        """‏#2460: סוד שהמפעיל הקליד מחדש (`{"secret": ...}`) — אחרי שחזור, או כשהוחלף ב-NAS.
+        """#2460: סוד שהמפעיל הקליד מחדש (`{"secret": ...}`) — אחרי שחזור, או כשהוחלף ב-NAS.
         נכנס ל-`params` (בזיכרון; נשמר רק אחרי עיגון מוצלח). מחזיר אם הוקלד."""
         if body is None or not isinstance(body, dict) or "secret" not in body:
             return False
@@ -457,10 +456,10 @@ def create_storage_locations_router(
                 chap, bool(params.get("auto", True)))
             if logged.status != sl.OK:
                 why = logged.reason or "ההתחברות נכשלה"
-                if sl.secret_missing("iscsi", params):   # ‏#2460: הסיבה הסבירה, בשם
+                if sl.secret_missing("iscsi", params):   # #2460: הסיבה הסבירה, בשם
                     why = f"{sl.SECRET_OF['iscsi'][2]} · {why}"
                 raise HTTPException(409, why)
-            if sl.valid_iscsi_device((logged.payload or {}).get("device_by_path")):   # ‏#2468
+            if sl.valid_iscsi_device((logged.payload or {}).get("device_by_path")):   # #2468
                 params["device_by_path"] = logged.payload["device_by_path"]
                 row = {**row, "params_json": json.dumps(params, ensure_ascii=False)}
                 if not typed:
@@ -468,7 +467,7 @@ def create_storage_locations_router(
         mounted = sl.apply_mount(row, hooks)
         if mounted.status != sl.OK:
             raise HTTPException(409, mounted.reason or "העיגון נכשל")
-        if typed:   # ‏#2460: נשמר רק אחרי שעבד — סיסמה שגויה אינה מחליפה את הקיימת
+        if typed:   # #2460: נשמר רק אחרי שעבד — סיסמה שגויה אינה מחליפה את הקיימת
             sl.save_params(ctx.conn, loc_id, params)
         _fstab_or_unmount(row)
         sl.set_state(ctx.conn, loc_id, "connected", "", force_since=True)

@@ -1,14 +1,14 @@
-"""‏#1331 T8 — האם ה-initramfs של לינוקס שנכתב ימצא את הדיסק שלו
-(`agent/lib/postdeploy/linuxdrivers.sh`, ‏interfaces.md §17 צעד 1ל).
+"""#1331 T8 — האם ה-initramfs של לינוקס שנכתב ימצא את הדיסק שלו
+(`agent/lib/postdeploy/linuxdrivers.sh`, interfaces.md §17 צעד 1ל).
 
-אותה קופסה של `test_postdeploy.py` (‏sh אמיתי, כלים מזויפים) עם תוכנית
-לינוקס ועץ-שורש מזויף ב-`$RUN_DIR/linux` (‏`mount` מזויף). ה-initrd נבנה
-כאן כ-cpio ‏newc אמיתי — ארכיון microcode לא-דחוס לפניו, דחיסה אמיתית —
-ונקרא בכלים האמיתיים (‏od/tail/head/cut, ‏zcat/xzcat/zstd, ‏cpio). מה שנבדק:
+אותה קופסה של `test_postdeploy.py` (sh אמיתי, כלים מזויפים) עם תוכנית
+לינוקס ועץ-שורש מזויף ב-`$RUN_DIR/linux` (`mount` מזויף). ה-initrd נבנה
+כאן כ-cpio newc אמיתי — ארכיון microcode לא-דחוס לפניו, דחיסה אמיתית —
+ונקרא בכלים האמיתיים (od/tail/head/cut, zcat/xzcat/zstd, cpio). מה שנבדק:
 
-* מודול ה-bus של **הדיסק שנכתב** (‏nvme* → ‏nvme.ko, ‏sd* → ‏ahci.ko) ברשימת
-  הקבצים של ה-initrd או ב-`modules.builtin` → ‏`generic`; לא שם → ‏`hostonly`;
-* "לא הצלחנו לבדוק" (‏initrd פגום, פורמט לא מוכר, עיגון שנכשל, אין initrd) הוא
+* מודול ה-bus של **הדיסק שנכתב** (nvme* → nvme.ko, sd* → ahci.ko) ברשימת
+  הקבצים של ה-initrd או ב-`modules.builtin` → `generic`; לא שם → `hostonly`;
+* "לא הצלחנו לבדוק" (initrd פגום, פורמט לא מוכר, עיגון שנכשל, אין initrd) הוא
   `failed`/`unsupported` בשמו — **לעולם לא** `generic` (עיקרון 5);
 * הבדיקה קוראת בלבד: שום קובץ בשורש אינו משתנה, וה-staging נשאר
   `skipped`/`not_windows` והשחזור `done`.
@@ -41,7 +41,7 @@ OS_RELEASE = 'PRETTY_NAME="Debian GNU/Linux 13 (trixie)"\nID=debian\n'
 
 
 def newc(names: list[str], pad: int = 512) -> bytes:
-    """ארכיון cpio ‏newc אמיתי: קובץ קטן לכל שם, ו-TRAILER!!! בסוף."""
+    """ארכיון cpio newc אמיתי: קובץ קטן לכל שם, ו-TRAILER!!! בסוף."""
     out = bytearray()
 
     def entry(ino: int, name: str, data: bytes, mode: int) -> None:
@@ -119,7 +119,7 @@ def test_a_debian_initrd_with_ahci_on_a_sata_disk_is_generic(tmp_path):
 
 
 def test_a_host_only_initrd_without_nvme_on_an_nvme_disk_is_hostonly(tmp_path):
-    """‏MODULES=dep שנבנה על מכונת SATA: ‏ahci בפנים, ‏nvme לא."""
+    """MODULES=dep שנבנה על מכונת SATA: ahci בפנים, nvme לא."""
     box = linux_box(tmp_path, image=initrd([AHCI]))
     linux = stage_linux(box, "nvme0n1")
     assert linux["state"] == "hostonly" and linux["module"] == "nvme"
@@ -146,7 +146,7 @@ def test_a_dracut_xz_initrd_with_compressed_modules_and_no_early_cpio(tmp_path):
 
 
 def test_two_early_archives_are_both_walked(tmp_path):
-    """‏Debian שם microcode של AMD ושל Intel כארכיונים נפרדים, עם ריפוד."""
+    """Debian שם microcode של AMD ושל Intel כארכיונים נפרדים, עם ריפוד."""
     amd = newc(["kernel/x86/microcode/AuthenticAMD.bin"], pad=4)
     box = linux_box(tmp_path, image=initrd([NVME], early=MICROCODE + amd + b"\0" * 1024))
     assert stage_linux(box, "nvme0n1")["state"] == "generic"

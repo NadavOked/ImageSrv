@@ -1,6 +1,6 @@
-"""‏#1048 — כבל (ethtool) ו-LLDP ב-hello: נמדד · null · error; מטמון + pending.
+"""#1048 — כבל (ethtool) ו-LLDP ב-hello: נמדד · null · error; מטמון + pending.
 
-רץ על ה-sh האמיתי מול sysfs מזויף. ‏ethtool ו-lldpsniff מזויפים בנתיב
+רץ על ה-sh האמיתי מול sysfs מזויף. ethtool ו-lldpsniff מזויפים בנתיב
 מפורש (`ETHTOOL=`, `LLDPSNIFF=`): כלי המארח אינו "ארוז ב-initramfs".
 """
 

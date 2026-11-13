@@ -1,6 +1,6 @@
-"""‏#1885 — מעבד, throttle וטמפרטורה במשכפל בזמן גל. גל עם throttle שעלה לא נכנס ללמידה.
+"""#1885 — מעבד, throttle וטמפרטורה במשכפל בזמן גל. גל עם throttle שעלה לא נכנס ללמידה.
 
-הסוכן שולח `cpu` פעם אחת — בדיווח הסופי — ובינתיים רק קורא את החום מקומית. מקור שאינו קיים = ‏null,
+הסוכן שולח `cpu` פעם אחת — בדיווח הסופי — ובינתיים רק קורא את החום מקומית. מקור שאינו קיים = null,
 לא 0 ("אין throttle" ≠ "לא נקרא"). בשרת: שמירה, יומן, ודילוג בלמידת הקצב (#1842) על הגל הזה למכונה הזו.
 """
 
@@ -136,7 +136,7 @@ def test_the_agent_sends_cpu_once_final_with_deltas_and_the_peak(tmp_path):
     assert "cpu" not in _report(tmp_path, root, "writing")              # הצילום — בלי רשת
     _sys(tmp_path, "200 0 100 600 100 0 0", [3, 4], [91000, 40000], "200.0")
     assert "cpu" not in _report(tmp_path, root, "writing")              # רק החום המרבי נשמר
-    # +1000: idle +100, iowait +100 → עסוק 80%, ‏iowait 10%; throttle 7 → 10
+    # +1000: idle +100, iowait +100 → עסוק 80%, iowait 10%; throttle 7 → 10
     root = _sys(tmp_path, "900 0 200 700 200 0 0", [5, 5], [60000], "500.5")
     got = _report(tmp_path, root, "done")["cpu"]
     assert got == {"busy_pct": 80, "iowait_pct": 10, "throttle_delta": 3, "temp_max_c": 91, "seconds": 400}

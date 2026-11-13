@@ -1,25 +1,25 @@
-"""‏#1858 (מוקאפ 10) — "המכונה לא הגיעה אחרי WoL", ו-F1 רק כשיש דיסק שידוע שעוצר.
+"""#1858 (מוקאפ 10) — "המכונה לא הגיעה אחרי WoL", ו-F1 רק כשיש דיסק שידוע שעוצר.
 
-‏F1 של ה-BIOS עוצר את ההדלקה לפני PXE: הסוכן לא עולה ולא יכול לדווח, והשרת רואה רק "WoL נשלח, ואין
+F1 של ה-BIOS עוצר את ההדלקה לפני PXE: הסוכן לא עולה ולא יכול לדווח, והשרת רואה רק "WoL נשלח, ואין
 תשובה". הכרעת נדב 24/10: "מאושר רק אם אנחנו יודעים שיש F1 לדיסק" — השרת **לא רואה** את מסך ה-BIOS
 (עיקרון 5א), ולכן מכונה שלא הגיעה בלי ראיה כזו מקבלת הודעה כללית, בלי שום אזכור של F1.
 
-**מתי "לא הגיעה"** — ההערה האחרונה של המכונה (‏`wol_wakes`, #1847) עדיין **לא נענתה**, המכונה **לא נראתה
-מאז השליחה** (‏`net_devices.last_seen`), ועבר `max(MIN_WAIT_S, פי 2 מהזמן הטיפוסי שלה)` — אותו פי 2 ששולח את
+**מתי "לא הגיעה"** — ההערה האחרונה של המכונה (`wol_wakes`, #1847) עדיין **לא נענתה**, המכונה **לא נראתה
+מאז השליחה** (`net_devices.last_seen`), ועבר `max(MIN_WAIT_S, פי 2 מהזמן הטיפוסי שלה)` — אותו פי 2 ששולח את
 ה-WoL החוזר המוקדם (`learn_wol.EARLY_FACTOR`); בלי זמן טיפוסי נלמד (פחות מ-`MIN_SAMPLES` הצלחות) —
 `MIN_WAIT_S` לבדו. ההערה אינה פגה אחרי `ANSWER_S`: מכונה שעדיין שותקת היא עדיין "לא הגיעה", וכל ראיה
-מאוחרת (hello, פירור אתחול, ‏`last_seen`) מנקה אותה.
+מאוחרת (hello, פירור אתחול, `last_seen`) מנקה אותה.
 
-**ראיה ל-F1** — דיסק שהמכונה דיווחה עליו ב-hello האחרון, ‏`smart == "fail"` כשסיבת ה-SMART היא **בדיקת
+**ראיה ל-F1** — דיסק שהמכונה דיווחה עליו ב-hello האחרון, `smart == "fail"` כשסיבת ה-SMART היא **בדיקת
 הבריאות נכשלה** או **לא נקרא** (#2078), או שאין סיבה בכלל (סוכן ישן) — בדיוק הכלל של חלון הכיבוי בסוכן
-(‏`native-gui/src/screens.c`, ‏`app_f1_disk`; טסט צמד בודק שהשניים לא נסחפו). דיסק אדום משום שהוא לקריאה
-בלבד (‏`readonly`/`media_readonly`) אינו F1.
+(`native-gui/src/screens.c`, `app_f1_disk`; טסט צמד בודק שהשניים לא נסחפו). דיסק אדום משום שהוא לקריאה
+בלבד (`readonly`/`media_readonly`) אינו F1.
 
-**הראיה השנייה** (מוקאפ 07/11, נדב) — דיסק שנרשם לו "נצפה F1" לפי serial (‏`server/disks/f1_marks.py`).
-‏`f1.basis` נושא את המקור: ‏`observed` (גובר — אדם או מכונה ראו F1) או `smart_red`. דיסק מסומן שגם ה-SMART
+**הראיה השנייה** (מוקאפ 07/11, נדב) — דיסק שנרשם לו "נצפה F1" לפי serial (`server/disks/f1_marks.py`).
+`f1.basis` נושא את המקור: `observed` (גובר — אדם או מכונה ראו F1) או `smart_red`. דיסק מסומן שגם ה-SMART
 שלו אדום מקבל `smart_red: true`, והקונסולה אומרת את שניהם.
 
-**סימון אוטומטי** (‏`arrived`) — מכונה שהקונסולה הציגה "לא הגיע · ייתכן F1" ודיברה עם השרת: הדיסק שהוצג
+**סימון אוטומטי** (`arrived`) — מכונה שהקונסולה הציגה "לא הגיע · ייתכן F1" ודיברה עם השרת: הדיסק שהוצג
 נרשם `auto`. נקרא **לפני** ש-`net_seen` מרענן את `last_seen` — אחרת ההגעה עצמה מבטלת את התנאי "לא נראתה
 מאז השליחה" ולא היה מה לסמן.
 
@@ -63,8 +63,8 @@ def _epoch(stamp) -> float | None:
 
 
 def waiting(conn: sqlite3.Connection, now: float | None = None, mac: str | None = None) -> dict[str, dict] | None:
-    """‏`{mac: {sent_at, waited_s, typical_s, after_s, resent}}` לכל מכונה שהערתה האחרונה לא נענתה, שלא
-    נראתה מאז, ושעבר הסף (או רק `mac`). ‏`None` = הקריאה נכשלה (לא "אין אף אחת")."""
+    """`{mac: {sent_at, waited_s, typical_s, after_s, resent}}` לכל מכונה שהערתה האחרונה לא נענתה, שלא
+    נראתה מאז, ושעבר הסף (או רק `mac`). `None` = הקריאה נכשלה (לא "אין אף אחת")."""
     now = time.time() if now is None else now
     try:
         out: dict[str, dict] = {}
@@ -95,9 +95,9 @@ def _serial(disk: dict) -> str | None:
 
 
 def f1_disk(disks, slots: list[str] | None, marks: dict[str, dict] | None = None) -> dict | None:
-    """הדיסק שידוע שעוצר ב-F1, או `None`. שתי ראיות: דיסק שנרשם לו "נצפה F1" (‏`marks`, לפי serial;
-    ‏`basis: observed`, גובר), או SMART אדום (‏`basis: smart_red`). בכל אחת — הראשון לפי המגירה.
-    ‏`marks=None` = אין סימונים או שהקריאה נכשלה: אין ראיה שנייה, ושום טענה על F1 ממנה."""
+    """הדיסק שידוע שעוצר ב-F1, או `None`. שתי ראיות: דיסק שנרשם לו "נצפה F1" (`marks`, לפי serial;
+    `basis: observed`, גובר), או SMART אדום (`basis: smart_red`). בכל אחת — הראשון לפי המגירה.
+    `marks=None` = אין סימונים או שהקריאה נכשלה: אין ראיה שנייה, ושום טענה על F1 ממנה."""
     if not isinstance(disks, list):
         return None
     found = []
@@ -155,7 +155,7 @@ def for_machine(waits: dict[str, dict] | None, mac: str, disks, slots: list[str]
                 marks: dict[str, dict] | None = None) -> dict | None:
     """מה `GET /machines` מחזיר בשדה `never_woke`: `None` — לא ממתינה; `unchecked` — הקריאה נכשלה;
     אחרת `{state: "never_woke", sent_at, waited_s, typical_s, after_s, resent, f1}` עם `f1` = הדיסק
-    הידוע או `None`; ‏`marks` = ‏`f1_marks.all_marks` (‏`None` = אין / נכשל)."""
+    הידוע או `None`; `marks` = `f1_marks.all_marks` (`None` = אין / נכשל)."""
     if waits is None:
         return dict(UNCHECKED)
     wait = waits.get(mac)

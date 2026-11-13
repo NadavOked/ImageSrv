@@ -1,10 +1,10 @@
-"""‏#502: קליטה על 4Kn רושמת גיאומטריה לוגית, לא 512 קשיח.
+"""#502: קליטה על 4Kn רושמת גיאומטריה לוגית, לא 512 קשיח.
 
 הבאג המקורי: `capture.sh` הכפיל סקטורים ב-512 בארבעה מקומות וכתב
-`"sector_size":512`. על NVMe 4Kn ‏(`logical_block_size=4096`) מחיצה של
+`"sector_size":512`. על NVMe 4Kn (`logical_block_size=4096`) מחיצה של
 238GB נרשמה כ-30GB, ובשחזור נבראה כך.
 
-‏#670 מודד `logical_block_size` ומשתמש בו בגיאומטריית המחיצות, ב-swap,
+#670 מודד `logical_block_size` ומשתמש בו בגיאומטריית המחיצות, ב-swap,
 ב-min_target ובשדה המניפסט. `_disk_bytes` נשאר `× 512` במכוון: sysfs
 `/size` הוא תמיד יחידות 512, גם על 4Kn (מוסכמת קרנל, לא ניחוש).
 
@@ -12,11 +12,11 @@
 עדיין מסרב ל-`sector_size != 512` (`apply_gpt`), ולכן הנזק המקורי —
 מחיצות שמינית מהאמת — אינו יכול לקרות על אימג' שנקלט אחרי #670.
 
-‏#958 הוא הצד השני של אותו מטבע: אימג' 512n (כל הספרייה) על **יעד**
-‏4Kn. ‏`apply_gpt` השווה את המניפסט ל-512 קשיח ולא ל**דיסק שנכתב**, ולכן
+#958 הוא הצד השני של אותו מטבע: אימג' 512n (כל הספרייה) על **יעד**
+4Kn. `apply_gpt` השווה את המניפסט ל-512 קשיח ולא ל**דיסק שנכתב**, ולכן
 המספרים — סקטורים — היו נכתבים פי 8 שגויים. מכאן והלאה היעד נמדד
 ב-`blockdev --getss` ומושווה ל-`sector_size`, ושוני = סירוב בקול לפני
-‏`--zap-all`, עם שני המספרים בשדה `error` של היעד.
+`--zap-all`, עם שני המספרים בשדה `error` של היעד.
 """
 
 from __future__ import annotations
@@ -92,8 +92,8 @@ def test_4kn_capture_writes_logical_geometry_not_512(tmp_path):
         shell_pre=(
             f"printf '4096\\n' > {posix(logical)!r}; "
             f"printf '{KERNEL_SECTORS}\\n' > {posix(sizef)!r}; "
-            # ‏#1900: מקור 4Kn נדחה עכשיו לפני הבייט הראשון (השרת מקבל רק 512,
-            # ‏test_capture_gates.py). כאן נשמר חישוב הגיאומטריה — השער עקוף.
+            # #1900: מקור 4Kn נדחה עכשיו לפני הבייט הראשון (השרת מקבל רק 512,
+            # test_capture_gates.py). כאן נשמר חישוב הגיאומטריה — השער עקוף.
             "capture_source_reason() { :; }; "
         ),
     )
@@ -147,7 +147,7 @@ def test_apply_gpt_refuses_4kn_instead_of_carving_by_512(tmp_path):
     assert " -n " not in f" {recorded} "
 
 
-# --- ‏#958: הסקטור של היעד מול זה שהאימג' נקלט ממנו -------------------------
+# --- #958: הסקטור של היעד מול זה שהאימג' נקלט ממנו -------------------------
 
 
 def sgdisk_calls(box) -> str:
@@ -162,7 +162,7 @@ def blockdev_calls(box) -> str:
 
 def test_a_512_image_on_a_4kn_target_is_refused_before_zap_all(tmp_path):
     """הבאג של #958: מניפסט 512 (כל הספרייה) על NVMe 4Kn. עד כאן
-    ‏`apply_gpt` השוותה את המניפסט ל-512 קשיח — לא לדיסק — והייתה
+    `apply_gpt` השוותה את המניפסט ל-512 קשיח — לא לדיסק — והייתה
     ממשיכה ל---zap-all ולטבלה שכל מספר בה פי 8 שגוי. ההודעה נושאת את
     **שני** המספרים: "512" לבד אינו אבחנה."""
     box, run, prelude = build_box(tmp_path, target_ss="4096")
@@ -191,7 +191,7 @@ def test_the_target_error_names_both_sector_sizes_end_to_end(tmp_path):
 
 
 def test_a_matching_sector_size_is_measured_and_then_written(tmp_path):
-    """‏512 מול 512 ממשיך לכתוב — והראיה ש**נמדד** ולא נמנע היא הקריאה
+    """512 מול 512 ממשיך לכתוב — והראיה ש**נמדד** ולא נמנע היא הקריאה
     ל-`blockdev --getss` עצמה, לפני ה---zap-all."""
     box, run, prelude = build_box(tmp_path, target_ss="512")
     out = sh(prelude + 'apply_gpt sda m.json; echo "rc=$?"')
@@ -201,7 +201,7 @@ def test_a_matching_sector_size_is_measured_and_then_written(tmp_path):
 
 
 def test_an_unreadable_target_sector_size_is_a_refusal_not_a_pass(tmp_path):
-    """עיקרון 5: ‏blockdev שנכשל אינו "הסקטור תואם". "לא הצלחנו לבדוק"
+    """עיקרון 5: blockdev שנכשל אינו "הסקטור תואם". "לא הצלחנו לבדוק"
     הוא מצב משלו, והוא נעצר לפני בייט בדיוק כמו אי-התאמה."""
     box, run, prelude = build_box(tmp_path, target_ss=None)
     out = sh(prelude + 'apply_gpt sda m.json; echo "rc=$?"')

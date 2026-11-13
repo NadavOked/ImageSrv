@@ -1,13 +1,13 @@
-"""‏#1976: אימג' שעבר sysprep — ה-specialize דורס את השם שכתבנו ב-hive.
+"""#1976: אימג' שעבר sysprep — ה-specialize דורס את השם שכתבנו ב-hive.
 
 אימג' כללי (`sysprep /generalize`) מריץ באתחול הראשון את שלב ה-specialize,
-והוא קובע את שם המחשב מקובץ התשובות: ‏`ComputerName` = `*`, או בלי
+והוא קובע את שם המחשב מקובץ התשובות: `ComputerName` = `*`, או בלי
 `ComputerName` בכלל, הוא שם אקראי — מעל מה ש-`hostname.sh` כתב ל-SYSTEM.
 התיקון (`agent/lib/postdeploy/unattend.sh`): כשמצב האימג' (`Setup\\State\\ImageState`
 בכוורת SOFTWARE) הוא GENERALIZE_RESEAL, השם נכתב גם לקובץ התשובות שה-
 Setup יקרא. אימג' שלא עבר sysprep — הקובץ לא נגעים בו, וגם לא נוצר.
 
-הראיה היא הקובץ עצמו אחרי הכתיבה, מפוענח כ-XML: ‏`ComputerName` יושב
+הראיה היא הקובץ עצמו אחרי הכתיבה, מפוענח כ-XML: `ComputerName` יושב
 **בתוך** רכיב Shell-Setup של שלב ה-specialize — לא סתם מחרוזת בקובץ.
 """
 
@@ -25,7 +25,7 @@ pytestmark = requires_native(("bash", BASH))
 NS = "{urn:schemas-microsoft-com:unattend}"
 GENERALIZED = "IMAGE_STATE_GENERALIZE_RESEAL_TO_OOBE"
 
-#: ‏hivewrite מזויף: ‏ImageState מ-$IMAGE_STATE (ריק = הקריאה נכשלת),
+#: hivewrite מזויף: ImageState מ-$IMAGE_STATE (ריק = הקריאה נכשלת),
 #: הארכיטקטורה AMD64, וכל קריאה אחרת — השם שנכתב (אימות ה-hive עובר).
 HIVEWRITE = """echo "$*" >> "$RUN_DIR/hivewrites"
 if [ "$1" = "-g" ]; then
@@ -101,7 +101,7 @@ def all_names(path: Path) -> list[str]:
 # --- אימג' שעבר sysprep ------------------------------------------------------
 
 def test_a_star_computername_gets_the_name_with_a_minimal_edit(tmp_path):
-    """המקרה של ה-Issue: ‏`*` ב-Panther. רק הערך משתנה — CRLF ושאר הקובץ נשארים."""
+    """המקרה של ה-Issue: `*` ב-Panther. רק הערך משתנה — CRLF ושאר הקובץ נשארים."""
     original = answer()
     script, win = windows(tmp_path, GENERALIZED, {"Windows/Panther/unattend.xml": original})
     result = name(script)
@@ -138,7 +138,7 @@ def test_an_answer_file_without_a_specialize_pass_gets_one(tmp_path):
 
 
 def test_a_generalized_image_without_an_answer_file_gets_one(tmp_path):
-    """‏sysprep בלי /unattend: אין קובץ — וה-specialize נותן שם אקראי."""
+    """sysprep בלי /unattend: אין קובץ — וה-specialize נותן שם אקראי."""
     script, win = windows(tmp_path, GENERALIZED, {})
     assert name(script)["ok"] is True
     assert specialize_names(win / "Windows/Panther/unattend.xml") == ["LAB1-05"]

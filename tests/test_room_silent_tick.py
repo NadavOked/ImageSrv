@@ -1,6 +1,6 @@
-"""‏#456 + #659 — גל שאיש אינו צופה בו חייב להתקדם.
+"""#456 + #659 — גל שאיש אינו צופה בו חייב להתקדם.
 
-‏#450 נתן ל-`tick` את היכולת להפקיע חבר שנעלם (`_mark_lost`) — **בהינתן
+#450 נתן ל-`tick` את היכולת להפקיע חבר שנעלם (`_mark_lost`) — **בהינתן
 ש-`tick` רץ**. אבל `tick` מקודם היום רק מ-hello של משכפל (`room.pulse`)
 ומ-GET `/overview`. שני אלה תלויים במשהו חיצוני: מכונה חיה ששולחת hello,
 או אדם שמסתכל על מבט-העל. מסך החדר עצמו מושך `/api/console/room` שהוא
@@ -33,13 +33,13 @@ from test_server_room import (           # noqa: F401 — fixtures/עזרים מ
 
 pytest.importorskip("fastapi")
 
-#: זקנה מעל הסף. ‏getattr עם ברירת מחדל, כדי שהבקרה השלילית (מוטציה של
+#: זקנה מעל הסף. getattr עם ברירת מחדל, כדי שהבקרה השלילית (מוטציה של
 #: הקוד) תריץ את ההתנהגות ותיכשל על ה-assert, ולא על מחסור סמל.
 _AGE = getattr(room_mod, "LOST_SECONDS", 180) + 60
 
 
 def _open(room_server, target: int, drawers=None) -> None:
-    """‏#1410: בחירה מפורשת — ברירת המחדל: כל מגירות שני המשכפלים."""
+    """#1410: בחירה מפורשת — ברירת המחדל: כל מגירות שני המשכפלים."""
     opened = room_server["deploy"].post(
         "/api/console/room", json=room_body(room_server, target, drawers or {CLONER1: ["S1", "S2"], CLONER2: ["S3", "S4"]}))
     assert opened.status_code == 200, opened.text
@@ -103,7 +103,7 @@ def test_a_fully_silent_running_wave_advances_from_the_background_sweep(room_ser
     ל-`room.sweep`, בלי hello ובלי GET שמניע): היא `lost`, הגל מסתיים,
     וגל 2 נפתח (2 נכתבו, היעד 4 לא הושג).
 
-    ‏#1672 (נדב 17/10): גל שלא כתב **אף** מגירה מסיים את הסבב `failed` ואינו
+    #1672 (נדב 17/10): גל שלא כתב **אף** מגירה מסיים את הסבב `failed` ואינו
     פותח גל נוסף — ולכן כאן גל שכתב חלק. הגל המת בנתיב השעון — הטסט הבא.
     """
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
@@ -170,7 +170,7 @@ def test_future_wave_progress_is_rebased_neither_lost_nor_frozen(room_server):
 
 
 def test_power_loss_while_writing_is_marked_terminal_so_the_wave_finishes(room_server):
-    """‏#659: המכונה **האחרונה** מדווחת `writing` ואז מאבדת חשמל לצמיתות.
+    """#659: המכונה **האחרונה** מדווחת `writing` ואז מאבדת חשמל לצמיתות.
 
     זהו הזנב שנשאר פתוח אחרי #450: כשיש מכונה שורדת אחת, ה-hello שלה מריץ
     את `tick` ו-#450 מפקיע את המתה (מאומת ב-`test_room_vanished_member`).
@@ -178,7 +178,7 @@ def test_power_loss_while_writing_is_marked_terminal_so_the_wave_finishes(room_s
     התוצאה שנדרשת ב-DoD של #659: החבר מסומן terminal אחרי הסף, `_finish_wave`
     רץ, והסבב מתקדם במקום להיתקע לנצח על מקבל שלא יחזור.
 
-    ‏#1672 (נדב 17/10): כאן הגל לא כתב אף מגירה, ולכן "מתקדם" פירושו שהסבב
+    #1672 (נדב 17/10): כאן הגל לא כתב אף מגירה, ולכן "מתקדם" פירושו שהסבב
     נסגר `failed` ומשחרר את חריץ המולטיקאסט — לא גל 2 שממתין לנצח
     (`room_72308383` על ברזל). זה אותו מסלול כמו ב-`test_room_dead_wave_fails_round`,
     אבל בלי שורד: ההפקעה מגיעה רק משעון-הרקע.
@@ -216,8 +216,8 @@ def test_power_loss_while_writing_is_marked_terminal_so_the_wave_finishes(room_s
 def test_the_room_clock_actually_fires_in_the_background(tmp_path, monkeypatch):
     """שעון שקיים אבל אינו מחובר נראה בדיוק כמו שעון שעובד (עיקרון 5).
 
-    ‏`_room_clock` דרך `lifespan` חייב באמת לקרוא ל-`room.sweep` בקצב.
-    ‏TestClient כמנהל-הקשר מריץ את ה-`lifespan`; מחליפים את `room.sweep`
+    `_room_clock` דרך `lifespan` חייב באמת לקרוא ל-`room.sweep` בקצב.
+    TestClient כמנהל-הקשר מריץ את ה-`lifespan`; מחליפים את `room.sweep`
     במונה, ומאמתים שהוא נקרא — בלי להמתין לטיימר האמיתי.
     """
     from fastapi.testclient import TestClient
@@ -241,7 +241,7 @@ def test_the_room_clock_actually_fires_in_the_background(tmp_path, monkeypatch):
     app = create_app(tmp_path / "data", images, "http://10.44.12.10:8080",
                      now_fn=Clock(), room_clock_interval=0.02)
     try:
-        with TestClient(app):                 # ‏__enter__ מריץ את ה-lifespan
+        with TestClient(app):                 # __enter__ מריץ את ה-lifespan
             assert fired.wait(timeout=5.0), "שעון-הרקע לא ירה — הלולאה אינה מחוברת"
     finally:
         app.state.ctx.sender.stop()

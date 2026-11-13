@@ -1,20 +1,20 @@
-"""השרת כ-IGMP querier ברשת ההפצה (‏#1972, הכרעת נדב 22/10).
+"""השרת כ-IGMP querier ברשת ההפצה (#1972, הכרעת נדב 22/10).
 
 סוויץ' עם IGMP snooping (ה-Cisco של המכללה) לומד מי רוצה את זרם
 המולטיקאסט מתשובות המחשבים ל**שאילתות** IGMP. בלי querier ברשת אין
 שאילתות, הטבלה של הסוויץ' מתיישנת, והזרם מוצף לכל הפורטים או נחסם —
-תלוי בדגם. השרת שולח לכן שאילתה כללית (IGMPv2, ‏224.0.0.1, ‏TTL 1, ‏Router
+תלוי בדגם. השרת שולח לכן שאילתה כללית (IGMPv2, 224.0.0.1, TTL 1, Router
 Alert) כל `QUERY_INTERVAL` שניות על כרטיס ההפצה.
 
-**למה לא `multicast_querier` ולא igmpproxy.** ‏`multicast_querier` קיים רק
-על גשר לינוקס (‏/sys/class/net/<br>/bridge/) — בייצור כרטיס ההפצה הוא
-כרטיס פיזי, ורק במעבדה הוא br0. ‏igmpproxy הוא פרוקסי בין upstream
+**למה לא `multicast_querier` ולא igmpproxy.** `multicast_querier` קיים רק
+על גשר לינוקס (/sys/class/net/<br>/bridge/) — בייצור כרטיס ההפצה הוא
+כרטיס פיזי, ורק במעבדה הוא br0. igmpproxy הוא פרוקסי בין upstream
 ל-downstream; לרשת ההפצה אין upstream. סוקט raw אחד עובד על שניהם.
 
 **querier אחר ברשת** (נתב, הסוויץ' עצמו) מזוהה לפי שאילתות **נכנסות**. לפי
 RFC 2236 הכתובת הנמוכה מנצחת: querier אחר עם כתובת נמוכה משלנו שנשמע
 בתוך `OTHER_PRESENT` שניות — השרת אינו שולח. כדי לשמוע אותו, חומת האש
-מקבלת IGMP על כרטיס ההפצה (‏deploy/nftables-rules.sh); בלי זה הקרנל זורק
+מקבלת IGMP על כרטיס ההפצה (deploy/nftables-rules.sh); בלי זה הקרנל זורק
 את השאילתות לפני הסוקט, ו"לא נשמע querier אחר" היה "לא יכולנו לשמוע".
 
 **עיקרון 5.** "פעיל" רק אחרי `sendto` שהחזיר את אורך החבילה; שאילתה
@@ -35,11 +35,11 @@ from server.db import get_setting
 
 log = logging.getLogger("imagesrv.igmp")
 
-#: ‏"false" בלבד מכבה; חסר = דלוק (הכרעת נדב: השרת **הוא** ה-querier).
+#: "false" בלבד מכבה; חסר = דלוק (הכרעת נדב: השרת **הוא** ה-querier).
 SETTING = "igmp_querier"
 QUERY_INTERVAL = 125.0                       # RFC 2236 Query Interval
 MAX_RESPONSE_DS = 100                        # 10.0 שניות, ביחידות של 1/10
-#: ‏Other Querier Present Interval = 2 × 125 + 10/2.
+#: Other Querier Present Interval = 2 × 125 + 10/2.
 OTHER_PRESENT = 2 * QUERY_INTERVAL + MAX_RESPONSE_DS / 20
 ALL_HOSTS = "224.0.0.1"
 ROUTER_ALERT = b"\x94\x04\x00\x00"           # RFC 2113
@@ -54,7 +54,7 @@ def enabled(conn) -> bool:
 
 
 def parse_setting(value) -> str | None:
-    """‏true/false בלבד (גם bool של JSON); כל ערך אחר — None (סירוב)."""
+    """true/false בלבד (גם bool של JSON); כל ערך אחר — None (סירוב)."""
     if isinstance(value, bool):
         return "true" if value else "false"
     return value if value in ("true", "false") else None
@@ -88,7 +88,7 @@ def query_source(datagram: bytes) -> str | None:
 
 
 def firewall_hears(ruleset: str | None, interface: str) -> bool | None:
-    """האם חומת האש **הטעונה** מעבירה IGMP נכנס בכרטיס. ‏None = לא נקרא.
+    """האם חומת האש **הטעונה** מעבירה IGMP נכנס בכרטיס. None = לא נקרא.
 
     בלי טבלת imagesrv אין policy drop שלנו — הכול עובר. שרת ששודרג וחומת
     האש שלו נכתבה לפני #1972 זורק IGMP עד שהיא נכתבת מחדש (שמירת שירותי
@@ -115,7 +115,7 @@ def open_socket(interface: str, address: str):
 
 
 class Querier:
-    """מצב ה-querier בכרטיס אחד. ‏`run_forever` בתהליכון daemon (‏main בלבד)."""
+    """מצב ה-querier בכרטיס אחד. `run_forever` בתהליכון daemon (main בלבד)."""
 
     def __init__(self, conn, interface: str, address: Callable[[], str | None], *,
                  gate: Callable[[str], str | None] | None = None,

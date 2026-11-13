@@ -1,13 +1,13 @@
-"""‏#1949 — חכירת DHCP שפגה באמצע סבב, והצפת `identity_unverifiable` ביומן.
+"""#1949 — חכירת DHCP שפגה באמצע סבב, והצפת `identity_unverifiable` ביומן.
 
-‏R2 (מעבדה, ‏22/10): ‏VCLONE-2 רץ יותר מ-12 שעות על חכירה אחת. הסוכן הריץ
-‏`udhcpc -q` — חכירה אחת ויציאה — ולכן איש לא חידש אותה. ‏dnsmasq מחק אותה
+R2 (מעבדה, 22/10): VCLONE-2 רץ יותר מ-12 שעות על חכירה אחת. הסוכן הריץ
+`udhcpc -q` — חכירה אחת ויציאה — ולכן איש לא חידש אותה. dnsmasq מחק אותה
 מהקובץ כשפגה, שומר הזהות (#855) סירב לכל דיווח (`no DHCP lease for this
-mac`), והמכונה סומנה `client_lost`. ‏346 שורות סירוב ב-10 דקות.
+mac`), והמכונה סומנה `client_lost`. 346 שורות סירוב ב-10 דקות.
 
 שני תיקונים, ושומר הזהות עצמו **לא** משתנה:
-1. ‏`udhcpc` בלי `-q`: נשאר ברקע ומחדש ב-T1. ה-hook לא מוריד כתובת שכבר
-   שלנו — ‏`renew` באמצע שחזור אינו `flush`.
+1. `udhcpc` בלי `-q`: נשאר ברקע ומחדש ב-T1. ה-hook לא מוריד כתובת שכבר
+   שלנו — `renew` באמצע שחזור אינו `flush`.
 2. סירוב זהה נרשם ביומן פעם אחת ב-`IDENTITY_JOURNAL_WINDOW_S`, עם מונה.
 """
 
@@ -36,10 +36,10 @@ BUILD = REPO / "tools" / "build_initramfs.sh"
 
 @requires_native(("bash", BASH))
 def test_the_lease_holder_stays_resident_to_renew(tmp_path):
-    """‏busybox udhcpc: ‏`-q` = "Exit after obtaining lease" — ואז אין מי
+    """busybox udhcpc: `-q` = "Exit after obtaining lease" — ואז אין מי
     שיחדש. בלי `-q` הוא עובר לרקע אחרי `bound` ומחדש ב-T1 (נמדד על busybox
-    1.37 ב-netns, ‏22/10). ‏`-n` נשאר: כרטיס בלי DHCP עדיין מוותר ועובר הלאה.
-    ‏#2040: לפני המחזיק יש בדיקה חד-פעמית (‏`-q`, ‏hook שרק רושם) — היא אינה
+    1.37 ב-netns, 22/10). `-n` נשאר: כרטיס בלי DHCP עדיין מוותר ועובר הלאה.
+    #2040: לפני המחזיק יש בדיקה חד-פעמית (`-q`, hook שרק רושם) — היא אינה
     מחזיקה חכירה; המחזיק הוא הקריאה עם `udhcpc.script`, אחת, על הכרטיס שנבחר."""
     net = tmp_path / "net"
     _make_net(net, {"lo": 1, "eth0": 1, "eth1": 1})
@@ -66,8 +66,8 @@ def _hook_text(resolv: Path) -> str:
 
 def _run_hook(tmp_path: Path, event: str, ip: str, current: str | None,
               show_fails: bool = False) -> list[str]:
-    """מריץ את ה-hook האמיתי עם `ip`/`ifconfig`/`route` מזויפים. ‏`current` —
-    הכתובת שכבר על הכרטיס (‏None = אין). מחזיר את מה שהזיופים קיבלו."""
+    """מריץ את ה-hook האמיתי עם `ip`/`ifconfig`/`route` מזויפים. `current` —
+    הכתובת שכבר על הכרטיס (None = אין). מחזיר את מה שהזיופים קיבלו."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
     calls = tmp_path / "calls"
@@ -99,7 +99,7 @@ def _run_hook(tmp_path: Path, event: str, ip: str, current: str | None,
 
 @requires_native(("bash", BASH))
 def test_a_renewal_of_our_own_address_does_not_take_it_down(tmp_path):
-    """‏`renew` מגיע באמצע שחזור (כל 6 שעות על חכירה של 12). ‏`flush` מוריד את
+    """`renew` מגיע באמצע שחזור (כל 6 שעות על חכירה של 12). `flush` מוריד את
     הכתובת ואת הנתיבים מתחת לזרם ולדיווחים — על אותה כתובת אין מה להחליף."""
     calls = _run_hook(tmp_path, "renew", "10.44.0.161", current="10.44.0.161")
     assert not [c for c in calls if c.startswith(("ip addr flush", "ifconfig"))], calls
@@ -107,7 +107,7 @@ def test_a_renewal_of_our_own_address_does_not_take_it_down(tmp_path):
 
 @requires_native(("bash", BASH))
 def test_a_lost_lease_keeps_the_address(tmp_path):
-    """‏`deconfig` של udhcpc תושב: חכירה שלא חודשה עד הסוף. הכתובת נשארת —
+    """`deconfig` של udhcpc תושב: חכירה שלא חודשה עד הסוף. הכתובת נשארת —
     כמו כש-udhcpc יצא (`-q`) — וה-`bound` הבא מחליף אותה אם השתנתה."""
     calls = _run_hook(tmp_path, "deconfig", "", current="10.44.0.161")
     assert "ip link set eth0 up" in calls
@@ -119,7 +119,7 @@ def test_a_lost_lease_keeps_the_address(tmp_path):
                                                  ("10.44.0.161", True)])
 def test_a_new_or_unknown_address_is_still_configured(tmp_path, current, show_fails):
     """שומר: כרטיס בלי כתובת, עם כתובת אחרת, או ש-`ip addr show` נכשל עליו
-    (לא נבדק ≠ כבר שלנו) — ‏flush ו-ifconfig, כמו לפני."""
+    (לא נבדק ≠ כבר שלנו) — flush ו-ifconfig, כמו לפני."""
     calls = _run_hook(tmp_path, "bound", "10.44.0.161", current=current, show_fails=show_fails)
     assert "ip addr flush dev eth0" in calls, calls
     assert "ifconfig eth0 10.44.0.161 netmask 255.255.255.0" in calls, calls
@@ -129,7 +129,7 @@ def test_a_new_or_unknown_address_is_still_configured(tmp_path, current, show_fa
 
 def test_a_repeated_refusal_is_journaled_once_per_window_with_a_count(
         identity_server, monkeypatch):  # noqa: F811
-    """‏R2: שתי שורות כל 2 שניות. כל בקשה עדיין מסורבת (403) — רק הרישום
+    """R2: שתי שורות כל 2 שניות. כל בקשה עדיין מסורבת (403) — רק הרישום
     מרוסן — והשורה שאחרי החלון אומרת כמה נבלעו."""
     from server.agent import api
 

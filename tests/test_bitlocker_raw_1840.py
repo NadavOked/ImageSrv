@@ -1,25 +1,25 @@
 """#1840 (הכרעת נדב 07/11): כרך BitLocker נקלט ומשוחזר **סקטור-אחר-סקטור**.
 
-כמו FOG, ‏Clonezilla ו-Ghost: בלי כיווץ, רק ליעד בגודל המקור או גדול ממנו,
+כמו FOG, Clonezilla ו-Ghost: בלי כיווץ, רק ליעד בגודל המקור או גדול ממנו,
 והמפתח נשאר ב-TPM של המקור — במחשב אחר העותק יבקש מפתח שחזור. **זה חייב
-להיות גלוי למפעיל** לפני הקליטה ובשחזור. עד #1840 הכרך סורב (#671, ‏#1806).
+להיות גלוי למפעיל** לפני הקליטה ובשחזור. עד #1840 הכרך סורב (#671, #1806).
 
 מה נבדק כאן, על הקוד האמיתי של הסוכן:
 
-* קליטה: דיסק Windows 11 24H2 (‏ESP, ‏MSR, ‏C: מוצפן) נקלט; מחיצה 3 נקראת
+* קליטה: דיסק Windows 11 24H2 (ESP, MSR, C: מוצפן) נקלט; מחיצה 3 נקראת
   ב-`partclone.dd` (המסלול הקיים של מחיצה בלי מערכת קבצים מוכרת), נרשמת
   `fs: "BitLocker"`, אינה `expandable`, אינה מעוגנת, ונושאת sha256 כמו כל
   מחיצה. האזהרה כבר בשדה `error` של היעד **כשהבייט הראשון נקרא**, ונשארת
   עד הסוף. גם כש-blkid של busybox אומר "unknown" (החתימה `-FVE-FS-` היא הראיה).
 * בדיקה שלא רצה — עדיין סירוב לפני בייט (עיקרון 5;
-  ‏`test_capture_bitlocker_first_byte_1806.py`).
+  `test_capture_bitlocker_first_byte_1806.py`).
 * שחזור: יעד קטן מהפריסה — סירוב לפני כתיבה, וההודעה אומרת שהכרך מוצפן
   ולא מתכווץ; שם המחשב והדרייברים לא נוגעים בכרך ומדווחים שדולגו בגלל
   ההצפנה; ה"הושלם" כתום עם מפתח השחזור.
 * השרת מקבל את המניפסט, ו-`GET /api/console/images` מעביר את המחיצות.
 
 ה-sha256 בשחזור אינו חדש: `restore_partition` בודק אותו על כל זרם, בלי
-תלות ב-fs (‏restore.sh) — מה שנבדק כאן הוא שהכרך נכנס לאותו מסלול.
+תלות ב-fs (restore.sh) — מה שנבדק כאן הוא שהכרך נכנס לאותו מסלול.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ pytestmark = requires_native(("bash", BASH))
 NOTE = "מוצפן ב-BitLocker: יועתק כמו שהוא, בלי כיווץ; במחשב אחר יידרש מפתח שחזור"
 RESTORE_NOTE = "מוצפן ב-BitLocker: הועתק כמו שהוא, בלי כיווץ; במחשב אחר יידרש מפתח שחזור"
 
-#: ‏partclone.dd שרושם את הקריאה, ואת שדה `error` של היעד **ברגע** הקריאה — מה
+#: partclone.dd שרושם את הקריאה, ואת שדה `error` של היעד **ברגע** הקריאה — מה
 #: שהקונסולה והגואי מראים כשהבייט הראשון יוצא.
 PARTCLONE_DD = (
     '#!/bin/sh\n'
@@ -81,7 +81,7 @@ def _capture(tmp_path: Path, monkeypatch, third: str):
 
 @pytest.mark.parametrize("third", ["", "BitLocker"], ids=["busybox-unknown", "blkid-bitlocker"])
 def test_an_encrypted_c_is_captured_raw_not_refused(tmp_path, monkeypatch, third):
-    """ההכרעה: נקלט, לא מסורב. ‏partclone.dd על מחיצה 3, ‏fs=BitLocker במניפסט,
+    """ההכרעה: נקלט, לא מסורב. partclone.dd על מחיצה 3, fs=BitLocker במניפסט,
     לא expandable, לא נמדד (null — לא עוגן), ו-sha256 כמו כל מחיצה.
 
     בקרה שלילית: על הקוד שלפני #1840 — rc=1 והסירוב של #1806.
@@ -112,7 +112,7 @@ def test_an_encrypted_c_is_captured_raw_not_refused(tmp_path, monkeypatch, third
 def test_the_operator_sees_the_note_before_the_first_byte_and_on_done(tmp_path, monkeypatch):
     """"חובה שזה יהיה גלוי למפעיל, לפני הקליטה": שדה `error` של היעד — מה
     שהקונסולה והגואי מציגים — נושא את המשפט כבר בקריאה הראשונה (מחיצה 1),
-    ובדיווח האחרון. אותו נוסח בקונסולה (BL_NOTE, ‏console.js)."""
+    ובדיווח האחרון. אותו נוסח בקונסולה (BL_NOTE, console.js)."""
     box, run, out = _capture(tmp_path, monkeypatch, "")
     assert out.strip().endswith("rc=0"), out
     first = (run / "error.at.1").read_text(encoding="utf-8").strip()
@@ -198,7 +198,7 @@ def _box(tmp_path: Path):
 
 
 def test_the_drivers_never_touch_the_volume_and_say_why(tmp_path):
-    """postdeploy: ‏skipped/bitlocker — לא not_windows, ואף עיגון או כתיבה
+    """postdeploy: skipped/bitlocker — לא not_windows, ואף עיגון או כתיבה
     לכוורת. וה"הושלם" כתום: הועתק כמו שהוא, ובמחשב אחר — מפתח שחזור."""
     box = _box(tmp_path)
     _, result = box.stage()
@@ -227,7 +227,7 @@ def test_the_note_is_written_once(tmp_path):
 
 
 def test_the_hostname_is_skipped_because_of_the_encryption(tmp_path):
-    """שם המחשב: לא "אין מחיצת לינוקס" ולא ניסיון עיגון — ‏code=bitlocker,
+    """שם המחשב: לא "אין מחיצת לינוקס" ולא ניסיון עיגון — code=bitlocker,
     והסיבה בשמה."""
     box = _box(tmp_path)
     out = sh(box.script + 'write_hostname sda /dev/null PC-01; echo "rc=$?"')

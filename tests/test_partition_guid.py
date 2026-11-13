@@ -1,17 +1,17 @@
-"""‏#1212 — ה-GUID הייחודי של כל מחיצה נבדק בקליטה ונקרא בחזרה בשחזור.
+"""#1212 — ה-GUID הייחודי של כל מחיצה נבדק בקליטה ונקרא בחזרה בשחזור.
 
 ה-BCD של Windows מאתר את מחיצת המערכת לפי זוג GUID — של הדיסק ושל
 המחיצה (#26). עד כאן:
 
 * **בקליטה** הקריאה נעשתה ב-`sgdisk -i ... 2>/dev/null`, וקריאה שנכשלה
   הפכה למחרוזת ריקה במניפסט, בלי מילה.
-* **בשחזור** ‏`apply_gpt` דילג על `-u` כשהערך ריק, sgdisk המציא GUID חדש,
-  ו-`verify_table` קרא בחזרה רק את ה-GUID של הדיסק. תוצאה: ‏`done` ואז
-  ‏`winload.efi 0xc000000e` על כל מחשב משוחזר.
+* **בשחזור** `apply_gpt` דילג על `-u` כשהערך ריק, sgdisk המציא GUID חדש,
+  ו-`verify_table` קרא בחזרה רק את ה-GUID של הדיסק. תוצאה: `done` ואז
+  `winload.efi 0xc000000e` על כל מחשב משוחזר.
 
-הפטור של לינוקס נשמר (`server/library/capture.py`: ‏GRUB מאתר לפי UUID של מערכת
+הפטור של לינוקס נשמר (`server/library/capture.py`: GRUB מאתר לפי UUID של מערכת
 הקבצים): באימג' שאינו Windows, מחיצה ש-sgdisk לא הדפיס לה GUID ייחודי
-נרשמת ריקה כמו קודם — אבל ביומן, בשמה. ‏sgdisk שנכשל (אז גם סוג המחיצה
+נרשמת ריקה כמו קודם — אבל ביומן, בשמה. sgdisk שנכשל (אז גם סוג המחיצה
 לא נקרא, ואין ממה לגזור "אינו Windows") וערך שאינו GUID נדחים בכל אימג'.
 
 ההבחנה בין Windows ללינוקס היא מתפקידי המחיצות, אותו כלל כמו `_image_os`
@@ -43,12 +43,12 @@ UGUID_LINE = f'  echo "Partition unique GUID: {SOURCE_UGUID}"\n'
 
 def source_disk(type_guid: str, *, uguid_line: str = UGUID_LINE, i_rc: int = 0,
                 i_call: int = 2) -> str:
-    """‏`ONE_PARTITION` עם סוג מחיצה אחר, שורת GUID ייחודי אחרת, או `-i` שנכשל.
+    """`ONE_PARTITION` עם סוג מחיצה אחר, שורת GUID ייחודי אחרת, או `-i` שנכשל.
 
-    ‏`i_rc` מפיל את קריאת ה-`-i` מספר `i_call` בלבד. ‏capture.sh קורא את
+    `i_rc` מפיל את קריאת ה-`-i` מספר `i_call` בלבד. capture.sh קורא את
     המחיצה קודם לסוג, לסקטור הראשון ולגודל (קריאה אחת מאז #1212), ואחר כך
-    ל-GUID הייחודי (‏read_unique_guid, המשותף לשחזור) — זו הקריאה השנייה.
-    כש-`-i` נכשל כולו, ‏`_shrink_entry` כבר דוחה את הקליטה על הדגלים —
+    ל-GUID הייחודי (read_unique_guid, המשותף לשחזור) — זו הקריאה השנייה.
+    כש-`-i` נכשל כולו, `_shrink_entry` כבר דוחה את הקליטה על הדגלים —
     מסלול אחר, שקיים גם ב-main. כאן נבדק הכשל של הקריאה הזו בדיוק."""
     stub = (ONE_PARTITION
             .replace("C12A7328-F81F-11D2-BA4B-00A0C93EC93B (EFI)", f"{type_guid} (x)")
@@ -64,9 +64,9 @@ def source_disk(type_guid: str, *, uguid_line: str = UGUID_LINE, i_rc: int = 0,
 
 
 def capture(tmp_path, stub):
-    # ‏#1369: מחיצת ה-Windows כאן היא קובץ ריק בלי מערכת קבצים; מה שנבדק
+    # #1369: מחיצת ה-Windows כאן היא קובץ ריק בלי מערכת קבצים; מה שנבדק
     # הוא ה-GUID, ולכן היא "מכילה" מערכת (התפקיד נבדק ב-test_capture_measure_1368).
-    # ‏#1822: דיסק Windows בלי ESP נדחה — הפריסה אינה הנושא כאן (test_capture_layout_1822_1824).
+    # #1822: דיסק Windows בלי ESP נדחה — הפריסה אינה הנושא כאן (test_capture_layout_1822_1824).
     return capture_run(tmp_path, stubs={"sgdisk": stub, "curl": CURL_SINK},
                        shell_pre="_system_role() { echo windows; }; capture_layout_reason() { :; }; ")
 
@@ -79,7 +79,7 @@ def manifest_of(run):
 
 
 def test_a_windows_capture_records_the_unique_guid_it_read(tmp_path):
-    """הצד החיובי: ‏Windows עם GUID תקין נקלט, והערך מגיע למניפסט."""
+    """הצד החיובי: Windows עם GUID תקין נקלט, והערך מגיע למניפסט."""
     box, run, out = capture(tmp_path, source_disk(WINDOWS_TYPE))
     assert out.strip().endswith("rc=0"), out + (box / "capture.out").read_text(errors="replace")
     part = manifest_of(run)["partitions"][0]
@@ -88,7 +88,7 @@ def test_a_windows_capture_records_the_unique_guid_it_read(tmp_path):
 
 
 def test_a_windows_partition_without_a_unique_guid_fails_the_capture(tmp_path):
-    """הליבה של #1212 בצד הקליטה. עד כאן: ‏rc=0 ו-`"unique_guid":""` —
+    """הליבה של #1212 בצד הקליטה. עד כאן: rc=0 ו-`"unique_guid":""` —
     אימג' שייראה תקין בספרייה ולא יעלה על אף מחשב שישוחזר ממנו."""
     box, run, out = capture(tmp_path, source_disk(WINDOWS_TYPE, uguid_line=""))
     reason = refusal_reason(box, run, out)
@@ -111,8 +111,8 @@ def test_a_linux_partition_without_a_unique_guid_stays_exempt_but_is_named(tmp_p
 
 @pytest.mark.parametrize("type_guid", [WINDOWS_TYPE, LINUX_TYPE], ids=["windows", "linux"])
 def test_a_failed_sgdisk_read_fails_the_capture_on_any_image(tmp_path, type_guid):
-    """‏sgdisk שיצא שונה מאפס לא קרא גם את **סוג** המחיצה, ולכן אין ממה
-    לגזור שהאימג' אינו Windows — הפטור לא חל. ‏"לא הצלחנו לבדוק" נכשל."""
+    """sgdisk שיצא שונה מאפס לא קרא גם את **סוג** המחיצה, ולכן אין ממה
+    לגזור שהאימג' אינו Windows — הפטור לא חל. "לא הצלחנו לבדוק" נכשל."""
     box, run, out = capture(tmp_path, source_disk(type_guid, i_rc=5))
     reason = refusal_reason(box, run, out)
     assert "מחיצה 1" in reason and "rc=5" in reason, reason
@@ -138,9 +138,9 @@ DISK_LINE = 'echo "Disk identifier (GUID): 4C7B1E00-0000-4000-8000-000000000001"
 
 @pytest.mark.parametrize("type_guid", [WINDOWS_TYPE, LINUX_TYPE], ids=["windows", "linux"])
 def test_a_failed_table_read_fails_the_capture_by_its_exit_code(tmp_path, type_guid):
-    """‏`sgdisk -p` שנכשל נבלע עד כאן ב-`2>/dev/null | awk`: ה-GUID של הדיסק
+    """`sgdisk -p` שנכשל נבלע עד כאן ב-`2>/dev/null | awk`: ה-GUID של הדיסק
     יצא ריק, רשימת המחיצות ריקה, והסיבה הייתה "לא נמצאו מחיצות" — ניחוש
-    במקום קוד היציאה של הכלי (עיקרון 5א, ‏#51).
+    במקום קוד היציאה של הכלי (עיקרון 5א, #51).
 
     הקריאה הראשונה של `-p` עוברת: היא של שער סימן-הכתיבה (#1798), שכבר
     נכשל בגלוי כשהטבלה לא נקראה. כאן נכשלת קריאת הטבלה של הקליטה עצמה."""
@@ -158,8 +158,8 @@ def test_a_failed_table_read_fails_the_capture_by_its_exit_code(tmp_path, type_g
 @pytest.mark.parametrize("line", ["", 'echo "Disk identifier (GUID): not-a-guid"\n'],
                          ids=["missing", "garbage"])
 def test_a_disk_guid_that_was_not_read_fails_the_capture_on_any_image(tmp_path, type_guid, line):
-    """עד כאן: ‏rc=0 ו-`"disk_guid":""` במניפסט. השרת דוחה ‏`""` בכל אימג'
-    (‏`ImageLibrary._validate`: ‏"must be a canonical GUID") — אבל רק אחרי
+    """עד כאן: rc=0 ו-`"disk_guid":""` במניפסט. השרת דוחה `""` בכל אימג'
+    (`ImageLibrary._validate`: "must be a canonical GUID") — אבל רק אחרי
     שכל הדיסק כבר עבר ברשת. כאן זה נדחה לפני הבייט הראשון, בכל אימג'."""
     box, run, out = capture(tmp_path, source_disk(type_guid).replace(DISK_LINE, line))
     reason = refusal_reason(box, run, out)
@@ -169,7 +169,7 @@ def test_a_disk_guid_that_was_not_read_fails_the_capture_on_any_image(tmp_path, 
 
 def test_a_type_guid_that_is_not_a_guid_fails_the_capture(tmp_path):
     """סוג המחיצה נקרא עד כאן ב-`sgdisk -i ... 2>/dev/null` ונכתב למניפסט
-    בלי בדיקה. ‏validate_restore_plan דוחה אותו — בשחזור, מול כיתה."""
+    בלי בדיקה. validate_restore_plan דוחה אותו — בשחזור, מול כיתה."""
     box, run, out = capture(tmp_path, source_disk("not-a-guid"))
     reason = refusal_reason(box, run, out)
     assert "מחיצה 1" in reason and "סוג" in reason, reason
@@ -202,8 +202,8 @@ def test_unique_guids_that_came_back_from_the_disk_reach_done(tmp_path):
 
 
 def test_a_unique_guid_the_disk_did_not_keep_fails_the_restore(tmp_path):
-    """הליבה של #1212 בצד השחזור: ‏`sgdisk -u` יצא 0 והמחיצה נושאת GUID
-    אחר. עד כאן — ‏`done`, ו-0xc000000e בעלייה הראשונה."""
+    """הליבה של #1212 בצד השחזור: `sgdisk -u` יצא 0 והמחיצה נושאת GUID
+    אחר. עד כאן — `done`, ו-0xc000000e בעלייה הראשונה."""
     box, run, prelude = build_box(tmp_path)
     (box / "uguid.lie.2").write_text("AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA\n", newline="\n")
     out = sh(restore_run(prelude))
@@ -224,7 +224,7 @@ def test_a_unique_guid_the_disk_did_not_keep_fails_the_restore(tmp_path):
     ("garbage", "שאינו GUID"),
 ])
 def test_a_unique_guid_that_could_not_be_read_back_fails_the_restore(tmp_path, mode, expect):
-    """‏"לא הצלחנו לקרוא בחזרה" אינו "תואם" (עיקרון 5), בשלוש צורותיו."""
+    """"לא הצלחנו לקרוא בחזרה" אינו "תואם" (עיקרון 5), בשלוש צורותיו."""
     box, run, prelude = build_box(
         tmp_path, sgdisk_fail=["-i 2 *"] if mode == "sgdisk_failed" else None)
     if mode != "sgdisk_failed":
@@ -239,7 +239,7 @@ def test_a_unique_guid_that_could_not_be_read_back_fails_the_restore(tmp_path, m
 
 
 def test_a_failed_disk_guid_readback_fails_the_restore_by_its_exit_code(tmp_path):
-    """‏verify_table קרא את ה-GUID של הדיסק ב-`sgdisk -p 2>/dev/null | awk`:
+    """verify_table קרא את ה-GUID של הדיסק ב-`sgdisk -p 2>/dev/null | awk`:
     כשל נכשל-סגור (ריק ≠ המניפסט), אבל הסיבה הייתה "על הדיסק: empty" —
     ניחוש, וליעד הגיע "לא הצלחנו לכתוב את טבלת המחיצות" בלי שם (עיקרון 4)."""
     box, run, prelude = build_box(tmp_path, disk_guid=DISK_GUID, sgdisk_fail=["-p *"])
@@ -252,7 +252,7 @@ def test_a_failed_disk_guid_readback_fails_the_restore_by_its_exit_code(tmp_path
 
 
 def test_a_disk_guid_the_disk_did_not_keep_names_the_reason(tmp_path):
-    """‏#572 נכשל-סגור כבר מ-main; כאן נוסף שהיעד יודע **למה**. ‏#1924: בלי
+    """#572 נכשל-סגור כבר מ-main; כאן נוסף שהיעד יודע **למה**. #1924: בלי
     הערכים עצמם בשגיאה — הם ביומן."""
     box, run, prelude = build_box(tmp_path, disk_guid=DISK_GUID, guid_lie=LIE_GUID)
     out = sh(restore_run(prelude))
@@ -265,7 +265,7 @@ def test_a_disk_guid_the_disk_did_not_keep_names_the_reason(tmp_path):
 def test_a_partition_without_a_guid_in_the_manifest_is_logged_not_checked(tmp_path):
     """לינוקס שנפטר בקליטה אינו נכשל, אבל "לא נבדק" נרשם בשמו ואינו נספר
     כ"נבדק, תואם". אימג' Windows ישן בלי GUID נדחה לפני הדיסק — נדב 06/11,
-    ‏test_refuse_no_guid_1212.py."""
+    test_refuse_no_guid_1212.py."""
     fields = PLAN[1].split("|")
     fields[1], fields[2], fields[3] = LINUX_TYPE, "linux", "ext4"
     fields[9] = ""
@@ -279,7 +279,7 @@ def test_a_partition_without_a_guid_in_the_manifest_is_logged_not_checked(tmp_pa
 
 
 def test_the_readback_ignores_the_case_of_the_hex_digits(tmp_path):
-    """‏#1408: המניפסט נושא GUID קנוני (אותיות גדולות) — ‏validate_restore_plan
+    """#1408: המניפסט נושא GUID קנוני (אותיות גדולות) — validate_restore_plan
     דוחה אחר לפני --zap-all. הדיסק הוא שמחזיר כאן אותיות קטנות, וההשוואה
     עדיין אינה תלויה ברישיות."""
     fields = PLAN[1].split("|")
@@ -292,7 +292,7 @@ def test_the_readback_ignores_the_case_of_the_hex_digits(tmp_path):
 
 
 def test_the_expansion_reads_the_unique_guids_back_too(tmp_path):
-    """‏expand_last בונה את המחיצה מחדש (`-d` ואז `-n ... -u`) — ה-GUID
+    """expand_last בונה את המחיצה מחדש (`-d` ואז `-n ... -u`) — ה-GUID
     חייב לשרוד גם אותה. כאן `-u` של ההרחבה "לא נתפס": הטבלה של apply_gpt
     תקינה, ורק אחרי שהיא נקראה בחזרה הדיסק מתחיל לשקר על מחיצה 2."""
     box, run, prelude = build_box(tmp_path)

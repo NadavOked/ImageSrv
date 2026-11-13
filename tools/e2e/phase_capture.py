@@ -23,7 +23,7 @@ def _capture(ctx, name: str, folder: str, files: dict, source_bytes: int):
                "מחשב הבנייה קיבל את המשימה ב-hello")
     check("המשימה גוברת על סבב", ctx.builder.answer["session"] is None)
 
-    # ‏#737: בלי הכותרת הזו השרת מחזיר 401 על PUT /files (ועל המניפסט),
+    # #737: בלי הכותרת הזו השרת מחזיר 401 על PUT /files (ועל המניפסט),
     # והשלב נעצר באימות בלי לבדוק את נתיב ההעלאה. הסוכן האמיתי שולח
     # אותה מ-`TASK_TOKEN` שחזר ב-hello — אותו מקור, אותה כותרת.
     token = ((ctx.builder.answer or {}).get("task") or {}).get("token") or ""
@@ -40,12 +40,12 @@ def _capture(ctx, name: str, folder: str, files: dict, source_bytes: int):
 
     # אזור הביניים קיים *עכשיו*, באמצע הקליטה. בלי הביקורת החיובית הזו
     # הבדיקה "אזור הביניים נוקה" שלמטה היא glob ריק — והיא הייתה עוברת
-    # גם אם התבנית ‏.capture-* לא קיימת בכלל, כלומר גם אם הניקוי נמחק.
+    # גם אם התבנית .capture-* לא קיימת בכלל, כלומר גם אם הניקוי נמחק.
     check("אזור ביניים נפתח לקליטה", bool(list(ctx.images_dir.glob(".capture-*"))),
           str(list(ctx.images_dir.iterdir())))
 
     first = next(iter(files.values()))
-    # ‏#855: הדיווח נושא את אותה כותרת אסימון כמו ההעלאה (‏`uploader`),
+    # #855: הדיווח נושא את אותה כותרת אסימון כמו ההעלאה (`uploader`),
     # והתשובה נבדקת — 403 כאן היה נבלע, והבדיקה הבאה נופלת רחוק מהסיבה.
     status, reply = uploader.json("POST", "/api/v1/agent/progress", {
         "task_id": task["id"], "mac": ctx.builder.mac, "state": "capturing",
@@ -61,7 +61,7 @@ def _capture(ctx, name: str, folder: str, files: dict, source_bytes: int):
     manifest = make_manifest(source_bytes, files)
     status, result = uploader.json(
         "PUT", f"/api/v1/capture/{task['id']}/manifest", manifest)
-    # ‏#1470: ‏202 — המניפסט התקבל, מחשב הבנייה משתחרר, והאימות רץ ברקע.
+    # #1470: 202 — המניפסט התקבל, מחשב הבנייה משתחרר, והאימות רץ ברקע.
     # האימג' בספרייה רק כשהמשימה `done`.
     check("המניפסט התקבל — האימות ברקע", status == 202, str(result))
 

@@ -337,6 +337,7 @@ async function emSaveRelay() {
   catch (e) { return emPanelErr("em-relay-err", e.message); }
   emSaved("נשמר. שלח בדיקה כדי לוודא ששרת הדואר מקבל מהשרת הזה.");
 }
+emSaveRelay = guarded("emSaveRelay", emSaveRelay);   // ‏#2840: לחיצה כפולה = בקשה אחת
 async function emSaveCustom() {
   const host = emVal("em-host").trim(), from = emVal("em-from").trim(), user = emVal("em-user").trim(), pass = emVal("em-pass");
   const errs = [];
@@ -351,6 +352,7 @@ async function emSaveCustom() {
   catch (e) { return emPanelErr("em-custom-err", e.message); }
   emSaved(pass ? "נשמר. הסיסמה לא תוצג שוב." : "נשמר.");
 }
+emSaveCustom = guarded("emSaveCustom", emSaveCustom);   // ‏#2840: לחיצה כפולה = בקשה אחת
 async function emSaveGmail() {
   const addr = emVal("em-g-addr").trim(), pass = emVal("em-g-pass");
   if (!emIsMail(addr)) return emPanelErr("em-g-err", addr ? "זו לא כתובת מייל תקינה" : "הקלד את כתובת ה-Gmail");
@@ -359,6 +361,7 @@ async function emSaveGmail() {
   catch (e) { return emPanelErr("em-g-err", e.message); }
   emSaved("נשמר. הסיסמה לא תוצג שוב.");
 }
+emSaveGmail = guarded("emSaveGmail", emSaveGmail);   // ‏#2840: לחיצה כפולה = בקשה אחת
 /* "התחבר עם Microsoft": שומר את הכתובת (חשבון office365/oauth), ורק עם מזהה אפליקציה מבקש קוד. */
 async function emConnect() {
   const addr = emVal("em-o365-addr").trim();
@@ -376,6 +379,7 @@ async function emConnect() {
   renderCurrent();
   emPollLater();
 }
+emConnect = guarded("emConnect", emConnect);   // ‏#2840: לחיצה כפולה = בקשה אחת
 function emPollLater() {
   clearTimeout(EM.pollT);
   if (EM.device) EM.pollT = setTimeout(emPoll, Math.max(2, EM.device.interval) * 1000);
@@ -510,6 +514,7 @@ async function emSaveTo() {
   toast(r.rule_created ? "נשמר. נוצר כלל: שגיאות ואזהרות לכתובת הזו." : "נשמר.", 3200, "ok");
   renderCurrent();
 }
+emSaveTo = guarded("emSaveTo", emSaveTo);   // ‏#2840: לחיצה כפולה = בקשה אחת
 /* החלפת כתובת בכל הכללים, באותו מקום ובאותה שפה. */
 async function emReplaceAddress(oldAddr, newAddr, lang = null) {
   for (const r of EM_VIEW.rules) {
@@ -586,6 +591,7 @@ async function emRuleDup(idEnc) {
   } catch (e) { toast(e.message); }
   renderCurrent();
 }
+emRuleDup = guarded("emRuleDup", emRuleDup);   // ‏#2840: לחיצה כפולה = בקשה אחת
 function emRuleDelete(idEnc) {
   const r = emRuleById(idEnc);
   if (!r) return;

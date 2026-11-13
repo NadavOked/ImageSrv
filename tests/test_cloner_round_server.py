@@ -102,6 +102,11 @@ def no_round(srv) -> bool:
 
 # --- what is allowed ---------------------------------------------------------------
 
+def _without_shown(raw: str) -> list[dict]:
+    """#2458: `shown` (what the console showed) is checked in test_target_from_selection_2458."""
+    return [{k: v for k, v in item.items() if k != "shown"} for item in json.loads(raw)]
+
+
 def test_a_cloner_opens_a_round_on_its_own_chosen_drawers(identity_server):
     srv = identity_server
     cloner(srv)
@@ -109,7 +114,7 @@ def test_a_cloner_opens_a_round_on_its_own_chosen_drawers(identity_server):
     assert r.status_code == 200, r.text
     assert r.json()["ok"] is True and r.json()["id"].startswith("room_")
     row = room.active_round(srv["ctx"].conn)
-    assert json.loads(row["target_slots_json"]) == [{"mac": MAC1, "ports": [1, 3]}]
+    assert _without_shown(row["target_slots_json"]) == [{"mac": MAC1, "ports": [1, 3]}]
     assert row["target_drives"] == 2 and row["image_id"] == IMG_256
     assert row["opened_by"] == "מחשב שיכפול 1"
     # the machine's next hello is the ordinary round answer, for ports 1 and 3 only
@@ -148,7 +153,7 @@ def test_a_foreign_mac_in_the_body_is_ignored_the_target_is_the_caller(identity_
     register(srv, MAC2, "grp_CLONERS", "2")
     r = ask(srv, target_slots=[{"mac": MAC2, "ports": [1]}])
     assert r.status_code == 200, r.text
-    assert json.loads(room.active_round(srv["ctx"].conn)["target_slots_json"]) == \
+    assert _without_shown(room.active_round(srv["ctx"].conn)["target_slots_json"]) == \
         [{"mac": MAC1, "ports": [1, 3]}]
 
 
@@ -508,8 +513,8 @@ def test_the_offered_list_counts_the_minimum_free_space(identity_server, used):
 
 def test_a_python_type_error_reaches_the_agent_as_a_fixed_sentence(identity_server, monkeypatch,
                                                                      caplog):
-    """‏#2510 (CodeQL #859): ‏`TypeError` הוא טקסט של פייתון, לא הודעה שלנו —
-    לסוכן "בקשה לא תקינה", והטקסט ליומן השרת. ‏`ValueError` של ולידציה עובר כמו קודם."""
+    """#2510 (CodeQL #859): `TypeError` הוא טקסט של פייתון, לא הודעה שלנו —
+    לסוכן "בקשה לא תקינה", והטקסט ליומן השרת. `ValueError` של ולידציה עובר כמו קודם."""
     srv = identity_server
     cloner(srv)
     caplog.set_level("WARNING", logger="imagesrv.cloner_round")

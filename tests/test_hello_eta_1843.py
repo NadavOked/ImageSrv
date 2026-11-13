@@ -1,11 +1,11 @@
-"""‏#1843 — מתי הגל צפוי להסתיים, בתשובת ה-hello של מחשב השיכפול (`session.forecast`).
+"""#1843 — מתי הגל צפוי להסתיים, בתשובת ה-hello של מחשב השיכפול (`session.forecast`).
 
 מוקאפ 07/11 (נדב אישר): הגואי של המשכפל מציג "צפוי להסתיים ב-HH:MM" מעל "כ-N דק' נותרו".
 כאן הצד של השרת. שלושה מצבים נפרדים, ואף אחד מהם אינו מספר מומצא:
 
-* יש היסטוריה והשעון מסונכרן — ‏`ends_at` (epoch) = ‏`started_at` של הגל + ההערכה, ‏`clock: true`;
-* אין היסטוריה — ‏`why: "no_history"`, בלי שעה;
-* שעון השרת לא הוכח מסונכרן (#2144) — ‏`clock: false`, ו-`ends_at: null` גם כשיש הערכה.
+* יש היסטוריה והשעון מסונכרן — `ends_at` (epoch) = `started_at` של הגל + ההערכה, `clock: true`;
+* אין היסטוריה — `why: "no_history"`, בלי שעה;
+* שעון השרת לא הוכח מסונכרן (#2144) — `clock: false`, ו-`ends_at: null` גם כשיש הערכה.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ except ImportError:  # pragma: no cover
 @pytest.fixture()
 def clocked(tmp_path, monkeypatch):
     """חדר עם משכפל אחד, ו-`status` של שעון השרת שהבדיקה שולטת בו
-    (`status["now"]` — מה ש-`timesync.status` היה מחזיר; ‏None = לא הוזרק)."""
+    (`status["now"]` — מה ש-`timesync.status` היה מחזיר; None = לא הוזרק)."""
     if TestClient is None:
         pytest.skip("fastapi is required")
     from test_sender import Recorder                       # noqa: PLC0415
@@ -79,7 +79,7 @@ def _running(env) -> dict:
 
 def _history(env) -> None:
     """גל קודם של אותו משכפל עם 2 מגירות: 50MB/s ו-100ש' קבועים → לאימג' של המניפסט
-    (57,982,058,496 בייטים דחוסים) ‏100 + 1159.6 = 1259ש'."""
+    (57,982,058,496 בייטים דחוסים) 100 + 1159.6 = 1259ש'."""
     _wave(env["ctx"].conn, {CLONER1: {"drawers": 2, "done": 2, "written_bytes": 2 * 20 * GB}},
           wall=400, total=500)
 

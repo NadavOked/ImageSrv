@@ -1,14 +1,14 @@
-"""‏#1230 — כפתור העדכון בונה את ה-initrd, מול הקרנל של עכשיו.
+"""#1230 — כפתור העדכון בונה את ה-initrd, מול הקרנל של עכשיו.
 
 שני הצדדים של אותו חוזה, מורצים **בפועל** ב-bash:
 
-* ‏firstboot (שלב א', נשלף מ-`tools/iso/firstboot.sh` — לא עותק) בונה דרך
-  ‏`tools/boot-payload-build.sh` ורושם את `initrd.flags` — רק תפקיד ו-`--output`.
-* ‏`tools/server-upgrade.sh` קורא את אותו קובץ, ובונה את שני ה-initrd מול
+* firstboot (שלב א', נשלף מ-`tools/iso/firstboot.sh` — לא עותק) בונה דרך
+  `tools/boot-payload-build.sh` ורושם את `initrd.flags` — רק תפקיד ו-`--output`.
+* `tools/server-upgrade.sh` קורא את אותו קובץ, ובונה את שני ה-initrd מול
   הקרנל שנגזר **בזמן העדכון** (לא מהקובץ), ומעתיק את ה-vmlinuz שלו.
 * קובץ חסר: בשרת ISO — ברירת המחדל של ה-ISO; בלי ראיה — חזרה לתג הקודם.
 
-‏`build_initramfs.sh` מוחלף ב-stub שרושם את הדגלים וכותב ל-`--output` את גרסת
+`build_initramfs.sh` מוחלף ב-stub שרושם את הדגלים וכותב ל-`--output` את גרסת
 הקרנל שקיבל, כך שהתוכן על הדיסק הוא הראיה לאיזה קרנל נבנה.
 """
 
@@ -38,7 +38,7 @@ pytestmark = requires_native(("bash", BASH), why="firstboot/server-upgrade/boot-
 HELPER = REPO / "tools" / "boot-payload-build.sh"
 FIRSTBOOT = REPO / "tools" / "iso" / "firstboot.sh"
 OLD_KVER = "6.12.9-amd64"
-NEW_KVER = "6.12.22-amd64"   # ‏sort -V: ‏22 אחרי 9 — מיון מילוני היה בוחר את 9
+NEW_KVER = "6.12.22-amd64"   # sort -V: 22 אחרי 9 — מיון מילוני היה בוחר את 9
 ISO_EPOCH = 1700000000
 GIT_EPOCH = 1800000000
 
@@ -84,7 +84,7 @@ def _host(tmp_path: Path) -> Path:
     (host / "etc" / "iso-release.json").write_text(
         json.dumps({"source_date_epoch": ISO_EPOCH}), encoding="utf-8", newline="\n")
     (host / "boot").mkdir()
-    (host / "var-tmp").mkdir()                   # ‏#1465: ‏/var/tmp של הבנייה
+    (host / "var-tmp").mkdir()                   # #1465: /var/tmp של הבנייה
     return host
 
 
@@ -111,7 +111,7 @@ def _with_payload_builder(tree: Path) -> None:
 # --- firstboot, שלב א' ------------------------------------------------------------
 
 def _firstboot_stage_a() -> str:
-    """‏log(), ‏fail() ובלוק שלב א' — מתוך firstboot.sh עצמו."""
+    """log(), fail() ובלוק שלב א' — מתוך firstboot.sh עצמו."""
     text = FIRSTBOOT.read_text(encoding="utf-8")
     log = re.search(r"^log\(\) \{.*?^\}\n", text, flags=re.MULTILINE | re.DOTALL)
     fail = re.search(r"^fail\(\) \{.*?^\}\n", text, flags=re.MULTILINE | re.DOTALL)
@@ -122,14 +122,14 @@ def _firstboot_stage_a() -> str:
 
 
 def _run_firstboot(tmp_path: Path, host: Path, bindir: Path, env: dict | None = None):
-    src = tmp_path / "src"                       # ‏/opt/imagesrv-src של בניית --source: בלי .git
+    src = tmp_path / "src"                       # /opt/imagesrv-src של בניית --source: בלי .git
     _with_payload_builder(src)
     script = (
         "set -euo pipefail\n"
         f'SRC="{posix(src)}"; ETC="{posix(host / "etc")}"; HTTP_ROOT="{posix(host / "boot")}"\n'
         f'BUILD_LOG="{posix(tmp_path / "build.log")}"; STAGE_A_STAMP="{posix(tmp_path / "stage-a")}"\n'
         'STATUS="$ETC/firstboot.status"\n'
-        # ‏#1240: ההתקדמות נכתבת ל-tty1 של המכונה; בטסט — לקובץ.
+        # #1240: ההתקדמות נכתבת ל-tty1 של המכונה; בטסט — לקובץ.
         f'FIRSTBOOT_TTY="{posix(tmp_path / "tty1")}"; TTY_PROGRESS=1\n'
         + _firstboot_stage_a()
     )
@@ -172,7 +172,7 @@ def test_firstboot_build_failure_records_no_flags_and_names_the_failure(tmp_path
     status = (host / "etc" / "firstboot.status").read_text(encoding="utf-8")
     assert "state=payload-failed" in status and "Build failed" in status
     assert not (tmp_path / "stage-a").exists()
-    # ‏#1240: הכישלון מוצג על tty1, לא רק ביומן.
+    # #1240: הכישלון מוצג על tty1, לא רק ביומן.
     tty = (tmp_path / "tty1").read_text(encoding="utf-8")
     assert "first boot failed [payload-failed]" in tty and "Alt+F2" in tty
 
@@ -202,7 +202,7 @@ def _upgrade(tmp_path: Path, host: Path, bindir: Path, *, flags: Path | None,
     _seed_db(data, previous="v0.59.0")
     repo = _fake_repo(tmp_path, live_ok=True)
     _with_payload_builder(repo)
-    (repo / ".git").mkdir()                      # ‏/opt/imagesrv אחרי #1185: עץ git
+    (repo / ".git").mkdir()                      # /opt/imagesrv אחרי #1185: עץ git
     _upgrade_tools(bindir)
     (tmp_path / "units").mkdir(exist_ok=True)
     env = {**_upgrade_env(tmp_path, repo, data), **_host_env(host), "FAKE_TAG": tag,
@@ -251,10 +251,10 @@ def test_upgrade_rebuilds_both_initrds_against_the_kernel_installed_now(tmp_path
 
 
 def test_upgrade_without_flags_on_a_non_iso_server_builds_the_documented_default_and_records_it(tmp_path):
-    """‏#1546: שרת שהותקן ב-setup-boot-server.sh (שרת חיפה, 17/10) — אין
-    ‏initrd.flags ואין iso-release.json. עד #1546 כל עדכון שלו חזר אחורה.
-    ברירת המחדל מתועדת (docs/guides/server-install.md, ‏verify-boot-payload.sh):
-    ‏initrd.img + initrd.img.gui ב-HTTP_ROOT — אותן שורות של ה-ISO."""
+    """#1546: שרת שהותקן ב-setup-boot-server.sh (שרת חיפה, 17/10) — אין
+    initrd.flags ואין iso-release.json. עד #1546 כל עדכון שלו חזר אחורה.
+    ברירת המחדל מתועדת (docs/guides/server-install.md, verify-boot-payload.sh):
+    initrd.img + initrd.img.gui ב-HTTP_ROOT — אותן שורות של ה-ISO."""
     host = _host(tmp_path)
     bindir = tmp_path / "bin"
     bindir.mkdir()

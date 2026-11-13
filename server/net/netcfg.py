@@ -1,7 +1,7 @@
-"""הגדרות הרשת של השרת עצמו — הלוגיקה הטהורה (אפיון סעיף 24, ‏#55/#57).
+"""הגדרות הרשת של השרת עצמו — הלוגיקה הטהורה (אפיון סעיף 24, #55/#57).
 
-לשונית הרשת טיפלה עד היום בצד אחד בלבד: **מה השרת מחלק** (‏`dhcp.py`).
-כאן הצד השני — **איך השרת עצמו מחובר**: כתובת, מסכה, שער, ‏DNS ונתיבים
+לשונית הרשת טיפלה עד היום בצד אחד בלבד: **מה השרת מחלק** (`dhcp.py`).
+כאן הצד השני — **איך השרת עצמו מחובר**: כתובת, מסכה, שער, DNS ונתיבים
 סטטיים. הצורך התעורר מ-#50: נתיב סטטי שנוסף ב-`ip route add` נעלם
 באתחול הבא, ואין דרך להגדיר אותו מהקונסולה.
 
@@ -11,7 +11,7 @@
 זו בדיוק ההפרדה של `dhcp.py`/`dhcp_host.py`, ומאותה סיבה: היא מה
 שמאפשר לבדיקות להזריק hooks ולעולם לא לגעת ברשת של מכונת הבדיקות.
 
-**כל הבעיות חוזרות יחד, לא בזו אחר זו.** ‏`problems()` מחזיר *רשימה*:
+**כל הבעיות חוזרות יחד, לא בזו אחר זו.** `problems()` מחזיר *רשימה*:
 כתובת שמתנגשת בכרטיס אחר וגם טווח DHCP שיצא מהרשת החדשה הם שתי סיבות
 לסירוב אחד. מפעיל שמתקן אחת ומגלה את השנייה רק בניסיון הבא לומד שהמסך
 לא באמת יודע מה הוא רוצה — ובמסך שמשנה כתובות זה בדיוק הרגע שבו הוא
@@ -24,6 +24,7 @@ import ipaddress
 import json
 from dataclasses import asdict, dataclass, field
 
+from server.core import hostname_rule
 from server.net import dhcp
 
 SETTING_PREFIX = "netcfg:"
@@ -42,9 +43,9 @@ MODES_HE = {
     MODE_DHCP: "לקוח DHCP",
 }
 
-#: ‏#1264: רשת הפצה על שני כרטיסים — bond אחד, כתובת אחת (ה-‎.1 של הרשת).
-#: ‏balance-alb (‏mode 6): שני הכרטיסים פעילים יחד, failover שקוף, ו**בלי**
-#: הגדרה בסוויץ' (‏LACP היה דורש אותה). השם קבוע: יש לכל היותר רשת הפצה אחת.
+#: #1264: רשת הפצה על שני כרטיסים — bond אחד, כתובת אחת (ה-.1 של הרשת).
+#: balance-alb (mode 6): שני הכרטיסים פעילים יחד, failover שקוף, ו**בלי**
+#: הגדרה בסוויץ' (LACP היה דורש אותה). השם קבוע: יש לכל היותר רשת הפצה אחת.
 BOND_NAME = "bond0"
 BOND_MODE = "balance-alb"
 #: כל כמה מילישניות הקרנל בודק את הקישור של כל כרטיס — ובלי זה כבל שנשלף
@@ -78,7 +79,7 @@ class StaticRoute:
 class NetConfig:
     """ההגדרה של כרטיס אחד, כפי שהיא נשמרת בטבלת settings (JSON).
 
-    ‏`dns` ו-`routes` נשמרים לכרטיס, אבל ‏DNS מגיע בסוף ל-`/etc/resolv.conf`
+    `dns` ו-`routes` נשמרים לכרטיס, אבל DNS מגיע בסוף ל-`/etc/resolv.conf`
     אחד ומשותף — ראו `render_resolv`.
     """
 
@@ -89,7 +90,7 @@ class NetConfig:
     gateway: str = ""
     dns: list[str] = field(default_factory=list)
     routes: list[StaticRoute] = field(default_factory=list)
-    #: ‏#1264: חברי ה-bond, הראשי ראשון. ריק = כרטיס רגיל (וכך כל הגדרה
+    #: #1264: חברי ה-bond, הראשי ראשון. ריק = כרטיס רגיל (וכך כל הגדרה
     #: שנשמרה לפני #1264). לא ריק = `name` הוא ה-bond.
     slaves: list[str] = field(default_factory=list)
 
@@ -148,7 +149,7 @@ def _valid_ip(value: str) -> bool:
 
 
 def _valid_mask(value: str) -> bool:
-    """מסכה חייבת להיות רצף אחדות. ‏255.0.255.0 נראית כמו מסכה ואינה."""
+    """מסכה חייבת להיות רצף אחדות. 255.0.255.0 נראית כמו מסכה ואינה."""
     try:
         ipaddress.IPv4Network(f"0.0.0.0/{value.strip()}")
     except (ipaddress.NetmaskValueError, ValueError):
@@ -157,14 +158,14 @@ def _valid_mask(value: str) -> bool:
 
 
 def deploy_address(network: str, netmask: str) -> tuple[str, list[str]]:
-    """כתובת השרת ברשת ההפצה — **נגזרת**, לא נבחרת (‏#1263).
+    """כתובת השרת ברשת ההפצה — **נגזרת**, לא נבחרת (#1263).
 
     המפעיל נותן רשת ומסכה, והשרת מקבל את הכתובת הראשונה בה:
-    ‏10.0.20.0/255.255.255.0 → ‏10.0.20.1. מחזיר ‏(כתובת, בעיות); כתובת
+    10.0.20.0/255.255.255.0 → 10.0.20.1. מחזיר (כתובת, בעיות); כתובת
     ריקה כשיש בעיות.
 
-    כתובת שאינה כתובת הרשת עצמה (‏10.0.20.5/24) **נדחית ואינה מעוגלת**:
-    עיגול שקט ל-10.0.20.0 הוא ניחוש לאיזו רשת המפעיל התכוון. ‏/31 ו-/32
+    כתובת שאינה כתובת הרשת עצמה (10.0.20.5/24) **נדחית ואינה מעוגלת**:
+    עיגול שקט ל-10.0.20.0 הוא ניחוש לאיזו רשת המפעיל התכוון. /31 ו-/32
     נדחות — אין בהן מקום לשרת ולטווח.
     """
     network, netmask = (network or "").strip(), (netmask or "").strip()
@@ -204,12 +205,12 @@ def problems(cfg: NetConfig, others: list[NetConfig],
              live: dict[str, list[str]] | None = None) -> list[str]:
     """**כל** מה שלא יעבוד בהגדרה, בעברית. רשימה ריקה = מותר לכתוב.
 
-    ‏`others` הן ההגדרות של שאר הכרטיסים כפי שהן יהיו *אחרי* השינוי;
-    ‏`dhcp_cfg` היא הגדרת ה-DHCP של אותו כרטיס, אם יש. שתי משפחות
+    `others` הן ההגדרות של שאר הכרטיסים כפי שהן יהיו *אחרי* השינוי;
+    `dhcp_cfg` היא הגדרת ה-DHCP של אותו כרטיס, אם יש. שתי משפחות
     הבדיקות רצות יחד ומחזירות רשימה אחת (ראו ראש הקובץ).
 
-    ‏`live` (‏#2418): הכתובות שעל כל כרטיס **עכשיו** (`ip addr`, שם →
-    ‏["10.10.0.8/16"]). ‏`others` רואה רק כרטיס סטטי — כרטיס הניהול הוא
+    `live` (#2418): הכתובות שעל כל כרטיס **עכשיו** (`ip addr`, שם →
+    ["10.10.0.8/16"]). `others` רואה רק כרטיס סטטי — כרטיס הניהול הוא
     לקוח DHCP, ורשת הפצה שחפפה לרשת שקיבל מהמכללה עברה בלי מילה.
     """
     found: list[str] = []
@@ -220,7 +221,7 @@ def problems(cfg: NetConfig, others: list[NetConfig],
         found += _live_clashes(cfg, others, live or {})
     if cfg.mode != MODE_STATIC and (cfg.gateway or cfg.routes):
         found.append("שער ונתיבים סטטיים דורשים כתובת סטטית")
-    found += [f"‏DNS: כתובת לא תקינה ({d})" for d in cfg.dns if not _valid_ip(d)]
+    found += [f"\u200fDNS: כתובת לא תקינה ({d})" for d in cfg.dns if not _valid_ip(d)]
     found += _route_problems(cfg, others)
     found += _dhcp_problems(cfg, dhcp_cfg)
     found += _bond_problems(cfg)
@@ -228,7 +229,7 @@ def problems(cfg: NetConfig, others: list[NetConfig],
 
 
 def _bond_problems(cfg: NetConfig) -> list[str]:
-    """‏#1264: bond הוא בדיוק שני כרטיסים שונים, עם כתובת סטטית."""
+    """#1264: bond הוא בדיוק שני כרטיסים שונים, עם כתובת סטטית."""
     if not cfg.slaves:
         return []
     found = []
@@ -283,7 +284,7 @@ def _clash(cfg: NetConfig, network: ipaddress.IPv4Network,
 
 def _live_clashes(cfg: NetConfig, others: list[NetConfig],
                   live: dict[str, list[str]]) -> list[str]:
-    """חפיפה עם הרשת **החיה** של כל כרטיס אחר, גם כשאינו סטטי (‏#2418).
+    """חפיפה עם הרשת **החיה** של כל כרטיס אחר, גם כשאינו סטטי (#2418).
     כרטיס שהגדרתו הסטטית כבר נבדקה ב-`_clash` על אותה רשת — לא פעמיים."""
     network = cfg.network()
     if network is None:
@@ -308,7 +309,7 @@ def _live_clashes(cfg: NetConfig, others: list[NetConfig],
 
 
 def _route_problems(cfg: NetConfig, others: list[NetConfig]) -> list[str]:
-    """נתיבים סטטיים (‏#57). ‏`others` כבר כולל את `cfg` עצמו כשהוא נקרא
+    """נתיבים סטטיים (#57). `others` כבר כולל את `cfg` עצמו כשהוא נקרא
     מ-`problems`, ולכן שער שמגיע דרך הכרטיס הנערך נחשב בר-השגה."""
     found, seen = [], set()
     everyone = others if any(o.name == cfg.name for o in others) else [*others, cfg]
@@ -341,10 +342,10 @@ def _dhcp_problems(cfg: NetConfig,
                    dhcp_cfg: dhcp.InterfaceConfig | None) -> list[str]:
     """כרטיס שמחלק כתובות חייב כתובת סטטית, והיא חייבת להתאים לטווח.
 
-    שתי הבדיקות כאן ולא בשני מקומות: ‏`dhcp.validate()` כבר אוכף
+    שתי הבדיקות כאן ולא בשני מקומות: `dhcp.validate()` כבר אוכף
     ש-`server_ip` יושב ברשת של הטווח, אבל הוא אינו יודע דבר על הכתובת
     שהכרטיס באמת יקבל. חיבור השניים הוא מה שמונע כרטיס שמחלק
-    ‏10.44.9.50-200 ומקבל כתובת ב-10.44.8.0/24.
+    10.44.9.50-200 ומקבל כתובת ב-10.44.8.0/24.
     """
     if dhcp_cfg is None or not dhcp_cfg.enabled:
         return []
@@ -362,7 +363,7 @@ def _dhcp_problems(cfg: NetConfig,
     if network is None:
         return found
     if dhcp_cfg.server_ip and dhcp_cfg.server_ip.strip() != cfg.address.strip():
-        found.append(f"‏DHCP על {cfg.name} מכריז על עצמו בכתובת "
+        found.append(f"\u200fDHCP על {cfg.name} מכריז על עצמו בכתובת "
                      f"{dhcp_cfg.server_ip}, והכרטיס יקבל {cfg.address}")
     for value, label in ((dhcp_cfg.range_start, "תחילת הטווח"),
                          (dhcp_cfg.range_end, "סוף הטווח")):
@@ -389,21 +390,22 @@ _HEAD = [
 def render(cfg: NetConfig, hostname: str = "") -> str:
     """הקובץ שנכתב ל-`/etc/network/interfaces.d/imagesrv-<שם>`.
 
-    ‏ifupdown, ולא netplan/NetworkManager/systemd-networkd — כך המכונה
+    ifupdown, ולא netplan/NetworkManager/systemd-networkd — כך המכונה
     בנויה, ויש כבר תקדים בתיקייה הזו.
 
-    ‏`hostname` (‏#1088): בלקוח DHCP נכתב `hostname <שם>` — ifupdown מעביר
+    `hostname` (#1088): בלקוח DHCP נכתב `hostname <שם>` — ifupdown מעביר
     אותו ל-dhclient כאופציה 12, וכך ה-DNS של המכללה פותר `imagesrv`
     לכתובת שהתקבלה. ריק = לא נכתב (כרטיס סטטי, או קורא שלא מסר שם).
+    #2491: גם שם שאינו עובר את `hostname_rule` אינו נכתב — השורה רצה ב-sh.
 
     שתי החלטות ששוות הסבר:
 
-    * ‏`dns-nameservers` **אינו** נכתב. הוא עובד רק דרך resolvconf,
+    * `dns-nameservers` **אינו** נכתב. הוא עובד רק דרך resolvconf,
       שאינו מותקן כאן — שורה שנראית כמו הגדרה ואינה עושה כלום היא
-      בדיוק "כתבנו את הקובץ" שמתחזה ל"ההגדרה נכנסה". ‏DNS נכתב ישירות
-      ל-`/etc/resolv.conf` (‏`render_resolv`), והשורה כאן היא הערה
+      בדיוק "כתבנו את הקובץ" שמתחזה ל"ההגדרה נכנסה". DNS נכתב ישירות
+      ל-`/etc/resolv.conf` (`render_resolv`), והשורה כאן היא הערה
       שמסבירה איפה הוא באמת יושב.
-    * הנתיבים ב-`post-up`/`pre-down` **בלי** `|| true`. ‏`ip route add`
+    * הנתיבים ב-`post-up`/`pre-down` **בלי** `|| true`. `ip route add`
       שנכשל חייב להפיל את ה-ifup, אחרת "הנתיב הוגדר" יהיה נכון על
       הנייר ושקר ב-`ip route` (עיקרון 5).
     """
@@ -420,7 +422,10 @@ def render(cfg: NetConfig, hostname: str = "") -> str:
         # finish, and still leaves a missing address visible in live state.
         lines.append(f"iface {cfg.name} inet manual")
         command = "/usr/sbin/dhcpcd -4 -b"
-        if hostname.strip():
+        # #2491: ifupdown hands this line to sh as root, and the name is the
+        # kernel's hostname at write time.  A name outside `hostname_rule`
+        # is left out, not quoted: no -h beats a quoted shell word.
+        if hostname_rule.is_valid(hostname.strip()):
             command += f" -h {hostname.strip()}"
         lines += [f"    up {command} {cfg.name}",
                   f"    down /usr/sbin/dhcpcd -4 -k {cfg.name}"]
@@ -431,7 +436,7 @@ def render(cfg: NetConfig, hostname: str = "") -> str:
         f"    netmask {cfg.netmask}",
     ]
     if cfg.slaves:
-        # ‏#1264: ‏ifenslave (‏if-pre-up.d) יוצר את ה-bond ומצרף אליו את
+        # #1264: ifenslave (if-pre-up.d) יוצר את ה-bond ומצרף אליו את
         # הכרטיסים. לחברים אין קובץ משלהם — כתובת על חבר הייתה כתובת שנייה
         # באותה רשת, מחוץ ל-bond.
         lines += [f"    bond-slaves {' '.join(cfg.slaves)}",
@@ -475,7 +480,7 @@ def render_resolv(configs: list[NetConfig]) -> str:
 # --- מה השתנה ----------------------------------------------------------------
 
 #: השדות שהשינוי שלהם יכול לנתק את הקונסולה גם על כרטיס שאינו זה שדרכו
-#: הגיעה הבקשה — ולכן הם חמושים באותה החזרה אוטומטית (‏#57).
+#: הגיעה הבקשה — ולכן הם חמושים באותה החזרה אוטומטית (#57).
 REACH_FIELDS = ("gateway", "dns", "routes")
 
 
@@ -486,7 +491,7 @@ def changed(before: NetConfig, after: NetConfig) -> list[str]:
 
 
 def summary(cfg: NetConfig) -> str:
-    """תיאור קצר לשורת יומן: ‏"eth1 static 10.44.9.10/24"."""
+    """תיאור קצר לשורת יומן: "eth1 static 10.44.9.10/24"."""
     if cfg.mode == MODE_STATIC:
         bond = f" slaves={'+'.join(cfg.slaves)}" if cfg.slaves else ""
         return f"{cfg.name} {cfg.mode} {cfg.cidr}{bond}"

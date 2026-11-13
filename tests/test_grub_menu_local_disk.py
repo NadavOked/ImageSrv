@@ -1,15 +1,15 @@
-"""‏#416 — "אין דיסק" אינו "אין מערכת הפעלה", וענף הדיסק המקומי מדווח.
+"""#416 — "אין דיסק" אינו "אין מערכת הפעלה", וענף הדיסק המקומי מדווח.
 
 מחשב הבנייה (05/09) הדפיס "No operating system found on the local disk"
-על דיסק שהקושחה כלל לא ראתה (‏F12 ריק, ‏`no such device` על כל נתיב).
+על דיסק שהקושחה כלל לא ראתה (F12 ריק, `no such device` על כל נתיב).
 ההודעה שלחה לפרק אימג' תקין במשך שעה. שני מצבים שקופלו לאחד (עיקרון 5),
 בדיוק כמו #61 לפניו — ולכן הבדיקות כאן **מריצות** את `chain_local` על
 מפרש GRUB זעיר, במקום לספור מחרוזות: מכונה בלי דיסק, מכונה עם דיסק ריק,
 ומכונה שמטען האתחול שלה נדחה חייבות להדפיס שלושה מסכים שונים ולהשאיר
 שלושה פירורים שונים.
 
-המפרש מכיר רק את מה שהפונקציות האלה משתמשות בו: ‏function/for/if/else/
-fi/while, ‏set/unset, ‏echo עם הרחבת משתנים, ‏`[ -n ]`/`[ -z ]`/`[ = ]`,
+המפרש מכיר רק את מה שהפונקציות האלה משתמשות בו: function/for/if/else/
+fi/while, set/unset, echo עם הרחבת משתנים, `[ -n ]`/`[ -z ]`/`[ = ]`,
 ו-`search`/`probe`/`chainloader`/`boot`/`ls`/`imagesrv_trace` כפקודות
 מדומות. פקודה שאינו מכיר היא שגיאה — טסט שמריץ תחביר חדש בשקט אינו טסט.
 """
@@ -40,8 +40,8 @@ def answer(**overrides) -> dict:
 class Grub:
     """מפרש זעיר לתת-הקבוצה של תסריט GRUB שבפונקציות הדיסק המקומי.
 
-    ‏`disks` — האם (hd0) קיים; ‏`files` — הנתיבים שיש להם ESP; ‏`refuse` —
-    הנתיבים ש-chainloader דוחה. ‏`screen` הוא מה שהודפס, ‏`steps` הפירורים,
+    `disks` — האם (hd0) קיים; `files` — הנתיבים שיש להם ESP; `refuse` —
+    הנתיבים ש-chainloader דוחה. `screen` הוא מה שהודפס, `steps` הפירורים,
     ו-`booted` הנתיב שעלה (או None).
     """
 
@@ -236,7 +236,7 @@ def test_the_two_failure_screens_are_different():
 
 
 def test_a_refused_loader_is_still_reported_as_refused_with_its_own_breadcrumb():
-    """‏#61 נשאר כפי שהיה — ומקבל פירור."""
+    """#61 נשאר כפי שהיה — ומקבל פירור."""
     g = Grub(dynamic(), disks=True, files={WINDOWS}, refuse={WINDOWS}, shim_lock="y").chain_local()
     text = "\n".join(g.screen)
     assert "A boot loader WAS found on the local disk:" in text and WINDOWS in text
@@ -263,7 +263,7 @@ def test_search_ok_is_sent_once_even_when_several_loaders_are_found_and_refused(
 
 
 def test_every_stop_screen_lists_the_devices_grub_sees():
-    """‏5א: לפני שמסיקים ממה שהמכונה לא הצליחה, שואלים אותה מה היא רואה."""
+    """5א: לפני שמסיקים ממה שהמכונה לא הצליחה, שואלים אותה מה היא רואה."""
     for g in (Grub(dynamic(), disks=False).chain_local(), Grub(dynamic(), disks=True).chain_local()):
         assert "Devices GRUB can see:" in g.screen
         assert g.screen.index("Devices GRUB can see:") == len(g.screen) - 3   # ls, then Contact IT

@@ -273,7 +273,7 @@ udp_drops_log() {   # $1 = mode, $2 = what was streamed
 # receiver reported rcvbuf=0. The sum over this restore's multicast partitions
 # rides in the progress report (udp_drops); one unread partition makes the whole
 # sum unread -- a partial sum would read as "no drops" (principle 5).
-udp_drops_reset() { rm -f "$RUN_DIR/udp_drops.sum" "$RUN_DIR/udp_drops.json"; }
+udp_drops_reset() { rm -f "$RUN_DIR/udp_drops.sum" "$RUN_DIR/udp_drops.json" "$RUN_DIR/rcvbuf.min"; }   # rcvbuf.min: rcvbuf.sh (#2555)
 udp_drops_add() {   # $1 = rcvbuf, $2 = inerrors of one partition ("null" = not read)
     _ua=$(cat "$RUN_DIR/udp_drops.sum" 2>/dev/null) || _ua="0 0"
     case "$1 $_ua" in
@@ -281,7 +281,7 @@ udp_drops_add() {   # $1 = rcvbuf, $2 = inerrors of one partition ("null" = not 
         *) set -- $(($1 + ${_ua% *})) $(($2 + ${_ua#* })) ;;
     esac
     echo "$1 $2" > "$RUN_DIR/udp_drops.sum"
-    printf '{"rcvbuf":%s,"inerrors":%s}\n' "$1" "$2" > "$RUN_DIR/udp_drops.json"
+    printf '{"rcvbuf":%s,"inerrors":%s%s}\n' "$1" "$2" "$(command -v rcvbuf_frag >/dev/null 2>&1 && rcvbuf_frag)" > "$RUN_DIR/udp_drops.json"   # #2555: the buffer they were dropped from (rcvbuf.sh)
 }
 
 reread_table() {

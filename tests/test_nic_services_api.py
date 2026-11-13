@@ -1,8 +1,8 @@
-"""‏#705: ה-API של השירותים לכל כרטיס — admin בלבד, וחוזה התשובות.
+"""#705: ה-API של השירותים לכל כרטיס — admin בלבד, וחוזה התשובות.
 
 הכתובת המקומית של החיבור (`scope["server"]`) היא מה שמכריע "אתה מחובר דרך
-הכרטיס הזה" — ‏TestClient ממלא אותה מה-`base_url`, ולכן לקוח על
-‏`https://10.10.10.8:8081` מתנהג כמו דפדפן שמחובר דרך ens33.
+הכרטיס הזה" — TestClient ממלא אותה מה-`base_url`, ולכן לקוח על
+`https://10.10.10.8:8081` מתנהג כמו דפדפן שמחובר דרך ens33.
 """
 
 from __future__ import annotations
@@ -102,8 +102,8 @@ def test_failed_apply_is_502_and_the_db_is_back(rig):
 
 def test_monitor_websocket_is_gated_only_after_an_edit(rig):
     """המוניטור עובר ב-8081 — השער נאכף לפי הכתובת המקומית של החיבור, לפני
-    שהשרת פותח TCP למכונה (כאן: לפני בדיקת ה-MAC). ‏TestClient מדווח
-    ‏`server=testserver` ב-WebSocket — כתובת שאינה של אף כרטיס, ולכן אחרי
+    שהשרת פותח TCP למכונה (כאן: לפני בדיקת ה-MAC). TestClient מדווח
+    `server=testserver` ב-WebSocket — כתובת שאינה של אף כרטיס, ולכן אחרי
     עריכה היא נחסמת (עיקרון 5: "לא ידוע" אינו "מותר"); לפני עריכה — היום."""
     from starlette.websockets import WebSocketDisconnect
 

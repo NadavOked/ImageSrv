@@ -99,7 +99,8 @@ def test_every_installer_screen_renders_with_visible_ink_at_both_target_sizes(tm
              "install-6c-done-unchecked", "install-0c-disk-lab", "install-0d-disk-lab-unknown",
              "install-4b-admin-lab", "install-5d-summary-lab",   # #1412: the lab strip
              "install-3f-time-manual", "install-6d-done-manual",   # #2765
-             "install-3g-backup-off", "install-5e-summary-backup-off")   # #2865
+             "install-3g-backup-off", "install-5e-summary-backup-off",   # #2865
+             "install-0e-disk-smart-failed")   # #3007
     env = dict(os.environ)
     if (GUI / "fonts.conf").exists():
         env["FONTCONFIG_FILE"] = str(GUI / "fonts.conf")
@@ -129,7 +130,7 @@ int main(int argc, char **argv) {
     return 0;
 }
 '''
-FSI, PDI = "⁨", "⁩"
+FSI, PDI = "\u2068", "\u2069"
 
 
 def _disk_contents(tmp_path: Path, *raw: str) -> list[str]:
@@ -212,10 +213,10 @@ def test_progress_has_no_primary_button_ink_in_the_footer_action_area(tmp_path) 
 
 @NATIVE
 def test_back_button_is_drawn_on_every_screen_where_escape_goes_back(tmp_path) -> None:
-    """‏#1205: Esc חוזר ממסכים 2–6, אבל כפתור "חזור" צויר רק בחלקם — במסך
+    """#1205: Esc חוזר ממסכים 2–6, אבל כפתור "חזור" צויר רק בחלקם — במסך
     התפקיד (2) היה רק "הבא". מי שלא יודע על Esc לא מוצא את החזרה.
 
-    ב-1280x800 (קנה מידה 1, מוקאפ 10/10): ‏"הבא" ברוחב 118 מתחיל ב-x=880,
+    ב-1280x800 (קנה מידה 1, מוקאפ 10/10): "הבא" ברוחב 118 מתחיל ב-x=880,
     ו"חזור" נגמר 12 פיקסלים לפניו. האזור 850–866 נמצא בתוך "חזור" (מסגרת +
     רקע) ובמסך בלי חזרה הוא רקע הפס התחתון בלבד — צבע אחד. שורת המקשים
     נגמרת ב-768, לפני האזור."""
@@ -242,7 +243,7 @@ def test_back_button_is_drawn_on_every_screen_where_escape_goes_back(tmp_path) -
 
 @NATIVE
 def test_role_next_is_disabled_until_the_check_is_green(tmp_path) -> None:
-    """‏#1310: שלושת המצבים של מסך התפקיד. ב-1280x800 (קנה מידה 1) "הבא"
+    """#1310: שלושת המצבים של מסך התפקיד. ב-1280x800 (קנה מידה 1) "הבא"
     מתחיל ב-x=880; הנקודה 884,767 היא מילוי הכפתור (שמאל לטקסט). ירוק =
     מילוי של כפתור ראשי; לא-נבדק ונכשל = מילוי של כפתור מושבת, זהה בשניהם."""
     binary = _build(tmp_path)

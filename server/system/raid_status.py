@@ -1,7 +1,7 @@
 """מצב מערכי ה-RAID בעמוד הבריאות (#1989).
 
-המתקין יוצר מערך mdadm (‏installer/lib/raid.sh) ורושם את העובדה ב-
-``/etc/imagesrv/raid`` (‏0644 — השרת אינו רץ כ-root). הראיה למצב היא
+המתקין יוצר מערך mdadm (installer/lib/raid.sh) ורושם את העובדה ב-
+``/etc/imagesrv/raid`` (0644 — השרת אינו רץ כ-root). הראיה למצב היא
 ``/proc/mdstat``, לא ההצהרה: לכל מערך שורה — תקין / פגוע / בבנייה מחדש
 (עם אחוז). "התראה כשכונן נופל" = נורה אדומה כאן; ספירת הכשלים בקונסולה
 נשענת על אותה רשימה. מייל עדיין אין (#1751).
@@ -119,9 +119,9 @@ def array_check(array: Array) -> tuple[str, str]:
         label = ACTION_LABELS.get(array.action, array.action)
         pct = f" {array.percent:g}%" if array.percent is not None else " (ממתין)"
         bits.append(label + pct)
-        # ‏#2624: רק בנייה מחדש (recovery) ממלאת את הכונן החסר — זה "בתהליך".
+        # #2624: רק בנייה מחדש (recovery) ממלאת את הכונן החסר — זה "בתהליך".
         # סנכרון/שינוי מבנה/תיקון על מערך שחסר בו כונן רצים בלי יתירות, ו"בסנכרון"
-        # כתום הסתיר את זה (RAID10, ‏[4/3] [UUU_], ‏resync 13.4%, ‏07/11).
+        # כתום הסתיר את זה (RAID10, [4/3] [UUU_], resync 13.4%, 07/11).
         if array.action == "recovery" or not missing:
             return "warn", " · ".join(bits)
     if missing or array.failed:
@@ -158,14 +158,14 @@ def esp_check(read_mounts) -> dict:
 
 
 def health_checks(read_mdstat, read_declared, read_mounts=None) -> list[dict]:
-    """שורה לכל מערך, ושורת ESP לשרת שהמתקין יצר בו RAID. ‏`read_*` מחזירים טקסט, ‏None (אין קובץ)
+    """שורה לכל מערך, ושורת ESP לשרת שהמתקין יצר בו RAID. `read_*` מחזירים טקסט, None (אין קובץ)
     או זורקים. hook שלא הוזרק (None) = אין שורה — כמו `vm_host` ב-health.py."""
     if read_mdstat is None or read_declared is None:
         return []
     try:
         declared_text = read_declared()
     except OSError as exc:
-        # ‏#2510: ה-strerror ליומן השרת; בשורת הבריאות — משפט קבוע.
+        # #2510: ה-strerror ליומן השרת; בשורת הבריאות — משפט קבוע.
         log.warning("raid: %s unreadable: %s", RAID_FACT_PATH, exc)
         return [check("raid", "מערך RAID", "unknown",
                       f"לא ניתן לקרוא {RAID_FACT_PATH} — הפרטים ביומן השרת")]

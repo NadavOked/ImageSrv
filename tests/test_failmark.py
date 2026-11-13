@@ -1,19 +1,19 @@
-"""‏#874 — כשל כתיבה משאיר ראיה, לא סימון על הדיסק (הצד של הסוכן).
+"""#874 — כשל כתיבה משאיר ראיה, לא סימון על הדיסק (הצד של הסוכן).
 
-הכרעת נדב 16/09: הסימון ‏IMAGESRV-FAILED של #845 נפסל — הסוכן אינו משנה
-דיסק מחוץ לשיכפול. ‏`agent/lib/restore/failmark.sh` עושה במקומו שני דברים:
+הכרעת נדב 16/09: הסימון IMAGESRV-FAILED של #845 נפסל — הסוכן אינו משנה
+דיסק מחוץ לשיכפול. `agent/lib/restore/failmark.sh` עושה במקומו שני דברים:
 
-* **בכשל** (‏`fail_written_target`): ‏`target_set failed`, ואיסוף שורות
-  ה-ATA של הקרנל על הפורט של היעד — ‏`dmesg` מסונן ל-`ata<N>` /
-  ‏`I/O error, dev <dev>`, מאז ‏`target_init` (‏`since`), עד 40 — יחד עם
-  הסידורי והחריץ (‏`ident`). **אף קריאה ל-`sgdisk`**: ‏`sgdisk.calls` ריק.
-  הדיווח (‏`build_progress`) מצרף אותם ליעד `failed` כמות שהם — הסיווג
+* **בכשל** (`fail_written_target`): `target_set failed`, ואיסוף שורות
+  ה-ATA של הקרנל על הפורט של היעד — `dmesg` מסונן ל-`ata<N>` /
+  `I/O error, dev <dev>`, מאז `target_init` (`since`), עד 40 — יחד עם
+  הסידורי והחריץ (`ident`). **אף קריאה ל-`sgdisk`**: `sgdisk.calls` ריק.
+  הדיווח (`build_progress`) מצרף אותם ליעד `failed` כמות שהם — הסיווג
   (כבל/דיסק) הוא של השרת, לא של הסוכן.
-* **באתחול**: ‏`disk_failures_refresh` קורא את `disk_failures` מתשובת
+* **באתחול**: `disk_failures_refresh` קורא את `disk_failures` מתשובת
   ה-hello (זיכרון השרת, לפי סידורי או חריץ), ו-`disk_failure_cause`
   עונה ממנו למסך הממתין ולשער — בלי `sgdisk -p`.
 
-‏jq אינו קיים בתחנת הפיתוח, ולכן ‏`json_get_join` (המקום היחיד שנוגע
+jq אינו קיים בתחנת הפיתוח, ולכן `json_get_join` (המקום היחיד שנוגע
 ב-jq) מזויף כאן ומדפיס מה ש-jq היה מדפיס; הביטוי עצמו רץ ב-`requires_jq`.
 """
 
@@ -38,14 +38,14 @@ pytestmark = requires_native(("bash", BASH))
 JQ = shutil.which("jq")
 requires_jq = pytest.mark.skipif(JQ is None, reason="jq אינו מותקן — הביטוי לא היה רץ בכלל")
 
-#: ‏sgdisk מזויף שרק רושם: כל קריאה היא ראיה שהסוכן נגע בדיסק.
+#: sgdisk מזויף שרק רושם: כל קריאה היא ראיה שהסוכן נגע בדיסק.
 SGDISK_STUB = """#!/bin/sh
 printf '%s\\n' "$*" >> "{box}/sgdisk.calls"
 echo "Number  Start (sector)    End (sector)  Size       Code  Name"
 exit 0
 """
 
-#: ‏dmesg מזויף: שורות ata1 (הפורט של sda) ו-ata2 (השכן), לפני ואחרי
+#: dmesg מזויף: שורות ata1 (הפורט של sda) ו-ata2 (השכן), לפני ואחרי
 #: ה-`since` של היעד (uptime 300), ושורת I/O error לפי שם ההתקן.
 DMESG = "\n".join([
     "[    5.100000] ata1: SATA link up 6.0 Gbps (SStatus 133 SControl 300)",
@@ -77,8 +77,8 @@ def zap_calls(box: Path) -> list[str]:
 
 
 def rename_calls(box: Path) -> list[str]:
-    """קריאות שמשנות **שם** מחיצה (`-c`) — מה ש-#845 עשה. ‏`-n`/`-t`/`-e`
-    הן של apply_gpt, לפני הזרם, ונשארות — ו-#1798 ‏(`-c i:imagesrv-incomplete`)
+    """קריאות שמשנות **שם** מחיצה (`-c`) — מה ש-#845 עשה. `-n`/`-t`/`-e`
+    הן של apply_gpt, לפני הזרם, ונשארות — ו-#1798 (`-c i:imagesrv-incomplete`)
     רוכב על אותה קריאה של הטבלה (`-n`), לפני הזרם: זו אינה סימון של כשל."""
     return [c for c in sgdisk_calls(box)
             if (c.startswith("-c ") or " -c " in c) and " -n " not in f" {c}"]
@@ -89,8 +89,8 @@ def error_of(run: Path, dev: str) -> str:
     return path.read_text(encoding="utf-8").strip() if path.exists() else ""
 
 
-#: הזהות מוזרקת: ‏sysfs אמיתי דורש symlink ל-ataN (test_agent מדלג עליו
-#: בווינדוס). ‏ata_port_of עצמו נבדק למטה עם readlink מזויף.
+#: הזהות מוזרקת: sysfs אמיתי דורש symlink ל-ataN (test_agent מדלג עליו
+#: בווינדוס). ata_port_of עצמו נבדק למטה עם readlink מזויף.
 IDENT = ('disk_serial() { case "$1" in sda) printf S3TWNE0JB04745 ;; sdb) printf SB ;; esac; }; '
          'disk_port() { case "$1" in sda) printf 1 ;; sdb) printf 2 ;; esac; }; '
          'ata_port_of() { case "$1" in sda) printf 1 ;; sdb) printf 2 ;; esac; }; ')
@@ -115,7 +115,7 @@ def fail_run(tmp_path, *, script, state="writing", error="", since="300", dmesg=
     (sysroot / "proc").mkdir(parents=True)
     if sysroot_uptime is not None:
         (sysroot / "proc" / "uptime").write_text(sysroot_uptime + "\n", newline="\n")
-    # ה-dmesg בקובץ ולא ב-here-document בתוך הסקריפט: ‏MSYS bash חותך ארגומנט
+    # ה-dmesg בקובץ ולא ב-here-document בתוך הסקריפט: MSYS bash חותך ארגומנט
     # של `-c` ב-8,186 תווים (נמדד, #890), וה-fixture מהברזל לבדו הוא 10K.
     (box / "dmesg.txt").write_text(dmesg, encoding="utf-8", newline="\n")
     out = run_sh(
@@ -132,7 +132,7 @@ def fail_run(tmp_path, *, script, state="writing", error="", since="300", dmesg=
 
 def test_a_failed_target_wipes_the_gpt_after_recording_failure(tmp_path):
     """הבקרה המרכזית של #874: אחרי כשל **אין** קריאה ל-sgdisk כלל. בקרה
-    שלילית: על main (#845) ‏sgdisk.calls מכיל `-p` ואז `-c 1:IMAGESRV-FAILED`."""
+    שלילית: על main (#845) sgdisk.calls מכיל `-p` ואז `-c 1:IMAGESRV-FAILED`."""
     # #2434: the wipe is of the disk chosen -- bound as target_init does, with IDENT's identity
     box, run, out = fail_run(tmp_path, script='target_bind sda; fail_written_target sda "partition 3: stream cut"; echo "rc=$?"')
     assert out.strip().endswith("rc=0"), out
@@ -146,12 +146,12 @@ def test_a_target_rejected_before_writing_is_failed_without_any_wipe(tmp_path):
                            script='fail_written_target sda "serial changed — not written"')
     assert sgdisk_calls(box) == []
     assert error_of(run, "sda") == "serial changed — not written"
-    # ‏#1429: לא נוסתה כתיבה → אין ראיית כונן, והשרת אינו רושם disk_failure
+    # #1429: לא נוסתה כתיבה → אין ראיית כונן, והשרת אינו רושם disk_failure
     assert not (run / "targets" / "sda" / "ata_log.json").exists()
 
 
 def test_write_start_is_recorded_on_the_vm_path_where_targets_does_not_exist(tmp_path):
-    """‏#1427 (פתיחה מחדש): במסלול ה-VM אין `targets/loop0/` — ה-redirect נכשל."""
+    """#1427 (פתיחה מחדש): במסלול ה-VM אין `targets/loop0/` — ה-redirect נכשל."""
     _box, run, out = fail_run(tmp_path, write_started=False, script=(
         'disk_serial() { :; }; target_bind loop0; target_write_started loop0; echo "ws=$?"'))   # #2434: vmdisk binds its loop first
     assert "ws=0" in out, out
@@ -159,8 +159,8 @@ def test_write_start_is_recorded_on_the_vm_path_where_targets_does_not_exist(tmp
 
 
 def test_a_disk_without_a_serial_is_written_and_never_wiped_on_failure(tmp_path):
-    """‏#1427: ל-loop של ה-VM (ולדיסקים וירטואליים אחרים) אין serial. השער של
-    ‏#1409 סירב לכתוב אליהם בכלל — כל עדכון VM נכשל. הזהות נדרשת רק לניקוי
+    """#1427: ל-loop של ה-VM (ולדיסקים וירטואליים אחרים) אין serial. השער של
+    #1409 סירב לכתוב אליהם בכלל — כל עדכון VM נכשל. הזהות נדרשת רק לניקוי
     שאחרי כשל, ולכן: הכתיבה ממשיכה, והניקוי לא קורה בלי זהות."""
     box, run, out = fail_run(tmp_path, write_started=False, script=(
         'disk_serial() { :; }; target_bind sda; target_write_started sda; echo "ws=$?"; '
@@ -178,7 +178,7 @@ def test_a_written_target_is_not_wiped_after_its_serial_changes(tmp_path):
 
 
 def test_the_kernel_lines_of_the_targets_port_since_target_init_are_kept(tmp_path):
-    """‏dmesg מסונן: רק ata1 (הפורט של sda) ו-`I/O error, dev sda` — לא ata2,
+    """dmesg מסונן: רק ata1 (הפורט של sda) ו-`I/O error, dev sda` — לא ata2,
     לא ata12, לא sdb, ולא שורת `res` בלי קידומת — ורק מאז `since` (300):
     השורה ב-120 נופלת."""
     box, run, out = fail_run(tmp_path, script='fail_written_target sda "partition 3: stream cut"')
@@ -196,7 +196,7 @@ def test_the_kernel_lines_of_the_targets_port_since_target_init_are_kept(tmp_pat
 
 def test_without_a_since_stamp_the_whole_log_is_scanned_and_capped_at_40(tmp_path):
     """בלי `since` ובלי `exception` — 40 **הראשונות** בחלון (#890). בקרה
-    שלילית: על main ‏`tail -n 40` — ‏line 20..59."""
+    שלילית: על main `tail -n 40` — line 20..59."""
     long = "\n".join(f"[ {i:4d}.000000] ata1.00: line {i}" for i in range(60)) + "\n"
     box, run, _ = fail_run(tmp_path, since=None, dmesg=long,
                            script='fail_written_target sda "x"')
@@ -204,10 +204,10 @@ def test_without_a_since_stamp_the_whole_log_is_scanned_and_capped_at_40(tmp_pat
     assert len(lines) == 40 and lines[0].endswith("line 0") and lines[-1].endswith("line 39")
 
 
-#: ‏dmesg אמיתי מכשל הכתיבה על פורט 1 במחשב 2 (16/09 07:03, #890): 121 שורות
-#: ‏ata1 — ‏exception → SError → 30× WRITE FPDMA QUEUED → hard reset → רעש
+#: dmesg אמיתי מכשל הכתיבה על פורט 1 במחשב 2 (16/09 07:03, #890): 121 שורות
+#: ata1 — exception → SError → 30× WRITE FPDMA QUEUED → hard reset → רעש
 #: ACPI, ושוב. שורת `res ... (ATA bus error)` של הקרנל נכתבת **בלי** קידומת
-#: ‏ata1 ולכן אינה כאן — הראיה לקו היא `SError: { ... 10B8B Handshk }`.
+#: ata1 ולכן אינה כאן — הראיה לקו היא `SError: { ... 10B8B Handshk }`.
 METAL_0703 = (Path(__file__).parent / "fixtures" / "ata1-cable-failure-0916.txt").read_text(encoding="utf-8")
 
 #: 20 שורות רעש מפורט אחר לפני הכשל — נופלות בסינון הפורט, לא בסינון הרעש.
@@ -217,11 +217,11 @@ OTHER_PORT_NOISE = "\n".join(
 
 
 def test_the_head_of_the_failure_is_kept_and_the_reset_noise_is_dropped(tmp_path):
-    """‏#890, נמדד על ברזל: הראיה יושבת **בראש** הרצף (exception → SError →
+    """#890, נמדד על ברזל: הראיה יושבת **בראש** הרצף (exception → SError →
     failed commands), והרעש שאחרי כל איפוס (`ACPI cmd ... filtered out`,
-    ‏`SATA link up`, ‏`configured for UDMA`, ‏`EH complete`) אינו ראיה. נשמרות
+    `SATA link up`, `configured for UDMA`, `EH complete`) אינו ראיה. נשמרות
     40 השורות הראשונות מה-`exception Emask` הראשון, בלי הרעש. בקרה שלילית:
-    על main ‏`tail -n 40` שומר את הזנב — 9 שורות ACPI, ואף שורת SError."""
+    על main `tail -n 40` שומר את הזנב — 9 שורות ACPI, ואף שורת SError."""
     box, run, _ = fail_run(tmp_path, since=None, dmesg=OTHER_PORT_NOISE + METAL_0703,
                            script='fail_written_target sda "partition 3: stream cut"')
     lines = (run / "targets" / "sda" / "ata_log").read_text(encoding="utf-8").splitlines()
@@ -262,7 +262,7 @@ def test_the_noise_after_a_reset_is_dropped_even_when_the_head_is_short(tmp_path
 
 
 def test_the_report_carries_serial_port_and_the_lines_as_json(tmp_path):
-    """‏build_progress (ממשק 4): היעד ה-failed נושא serial/port/ata_port/ata_log
+    """build_progress (ממשק 4): היעד ה-failed נושא serial/port/ata_port/ata_log
     — JSON תקין גם עם מרכאות ולוכסן אחורי בשורת קרנל. יעד שלא נכשל אינו
     נושא אותם. בקרה שלילית: על main אין שדות כאלה בדיווח."""
     box, run, out = fail_run(
@@ -279,7 +279,7 @@ def test_the_report_carries_serial_port_and_the_lines_as_json(tmp_path):
 
 
 def test_a_target_that_was_already_failed_keeps_its_evidence(tmp_path):
-    """‏#73 דורס את הסיבה בכוונה; הראיה שנאספה בכשל הראשון נשארת, ו-dmesg
+    """#73 דורס את הסיבה בכוונה; הראיה שנאספה בכשל הראשון נשארת, ו-dmesg
     אינו נקרא שוב (השורה שנוספה אחרי הכשל הראשון אינה מופיעה)."""
     box, run, out = fail_run(
         tmp_path,
@@ -316,18 +316,18 @@ def test_ata_port_of_reads_the_ata_component_of_the_device_link(tmp_path):
 # --- חדר השיכפולים: המגירה שנכשלה בלבד, ובלי sgdisk ----------------------------
 
 
-#: ‏apply_gpt (שהטסטים כאן עוקפים) רושם write_started לפני הזרם — בלעדיו אין
+#: apply_gpt (שהטסטים כאן עוקפים) רושם write_started לפני הזרם — בלעדיו אין
 #: ראיה ואין ניקוי, כי לא נוסתה כתיבה (#1429).
-#: ‏#2434: ‏target_init (ב-drawer_run) קשר את הדיסקים לפני ש-IDENT הוזרק — הקשירה
+#: #2434: target_init (ב-drawer_run) קשר את הדיסקים לפני ש-IDENT הוזרק — הקשירה
 #: מחדש היא "הדיסקים שנבחרו הם אלה של IDENT".
 BOUND = "target_bind sda; target_bind sdb; "
 WRITTEN = BOUND + "target_write_started sda; target_write_started sdb; "
 
 
 def test_only_the_drawer_that_failed_carries_evidence_and_no_disk_is_renamed(tmp_path):
-    """הטופולוגיה של #440/#520: ‏sda שרדה, ‏sdb נפלה בכתיבה. הראיה על sdb
+    """הטופולוגיה של #440/#520: sda שרדה, sdb נפלה בכתיבה. הראיה על sdb
     בלבד, ואף מחיצה — של אף דיסק — אינה משנה שם (#845 הוסר)."""
-    # חותמת מעבר ל-uptime של תחנת הבדיקה: ‏target_init רושם `since` מ-/proc/uptime
+    # חותמת מעבר ל-uptime של תחנת הבדיקה: target_init רושם `since` מ-/proc/uptime
     # (קיים גם ב-MSYS), ושורה "ישנה" ממנו נופלת בצדק.
     box = tmp_path / "box"
     run, out = drawer_run(
@@ -384,7 +384,7 @@ def test_only_the_failed_drawer_has_its_gpt_wiped(tmp_path):
         {"fanout": MIXED_FANOUT, "sgdisk": stub_for(box)}, disks=("sda", "sdb"))
     assert out.strip().endswith("rc=0"), out
     zaps = zap_calls(box)
-    # ‏apply_gpt אינו רץ בטסט הזה (הזרם בלבד) — המחיקה היחידה היא של הכשל
+    # apply_gpt אינו רץ בטסט הזה (הזרם בלבד) — המחיקה היחידה היא של הכשל
     assert zaps == [f"--zap-all {posix(box)}/dev/sdb"], zaps
     assert (run / "targets/sdb/ata_log").exists()
 
@@ -393,7 +393,7 @@ def test_only_the_failed_drawer_has_its_gpt_wiped(tmp_path):
 
 
 def fake_jq(*lines: str) -> str:
-    """‏json_get_join מזויף: מה ש-jq היה מדפיס על התשובה — "ok" ואז שורה
+    """json_get_join מזויף: מה ש-jq היה מדפיס על התשובה — "ok" ואז שורה
     לרשומה — ורק אם קובץ התשובה קיים ואינו ריק (הביטוי האמיתי: requires_jq)."""
     body = " ".join(f"echo {line!r};" for line in ("ok", *lines))
     return 'json_get_join() { [ -s "$1" ] || return 1; ' + body + ' }; '
@@ -418,9 +418,9 @@ def memory_run(tmp_path, response: str | None, script: str, jq_fn: str):
 
 
 def test_a_disk_with_an_open_record_is_red_by_serial_or_by_slot(tmp_path):
-    """‏sda תואם לפי סידורי (הרשומה ממכונה אחרת, port ריק); ‏sdb תואם לפי
-    החריץ 2 במכונה הזאת (סידורי אחר — הדיסק הוחלף, הכבל לא); ‏sdc לא תואם.
-    ‏sgdisk אינו נקרא. בקרה שלילית: על main `disk_failure_cause` אינו קיים,
+    """sda תואם לפי סידורי (הרשומה ממכונה אחרת, port ריק); sdb תואם לפי
+    החריץ 2 במכונה הזאת (סידורי אחר — הדיסק הוחלף, הכבל לא); sdc לא תואם.
+    sgdisk אינו נקרא. בקרה שלילית: על main `disk_failure_cause` אינו קיים,
     ו-last_clone_failed קורא `sgdisk -p` ומוצא דיסק "נקי"."""
     run, out, box = memory_run(
         tmp_path,
@@ -440,7 +440,7 @@ def test_a_disk_with_an_open_record_is_red_by_serial_or_by_slot(tmp_path):
 
 def test_an_unreadable_answer_keeps_the_previous_memory_not_an_empty_one(tmp_path):
     """עיקרון 5: תשובה שלא נקראה (jq נפל, קובץ באמצע כתיבה) אינה "אין
-    כשלים" — ‏disk_failures הקודם נשאר, refresh מחזיר 1, ואין קובץ .next."""
+    כשלים" — disk_failures הקודם נשאר, refresh מחזיר 1, ואין קובץ .next."""
     run, out, _ = memory_run(
         tmp_path, hello_answer({"serial": "S3TWNE0JB04745", "port": None, "cause": "cable", "at": "t"}),
         'disk_failures_refresh; echo "first=$?"; '
@@ -470,7 +470,7 @@ def test_an_answer_without_failures_is_read_as_clean(tmp_path):
 
 @requires_jq
 def test_the_jq_expression_renders_the_hello_answer(tmp_path):
-    """הביטוי האמיתי, על jq אמיתי (מעבדת ה-VM): "ok" ואז שורה לרשומה, ‏null → ריק;
+    """הביטוי האמיתי, על jq אמיתי (מעבדת ה-VM): "ok" ואז שורה לרשומה, null → ריק;
     תשובה בלי השדה (שרת ישן) = "ok" בלבד; JSON קטוע = כשל, לא "נקי"."""
     run, out, _ = memory_run(
         tmp_path,

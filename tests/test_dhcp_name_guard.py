@@ -1,8 +1,8 @@
-"""שם הכרטיס הוא השדה שנכתב לקובץ dnsmasq כטקסט חופשי (‏#102).
+"""שם הכרטיס הוא השדה שנכתב לקובץ dnsmasq כטקסט חופשי (#102).
 
-‏`validate` בדקה כל שדה כתובת ולא בדקה את השם — והשם הוא היחיד שנכתב
-בלי מרכאות ובלי בריחה. ‏uvicorn מפענח `%0A` בנתיב לשורה חדשה, ולכן
-‏`PUT /interfaces/<שם>` עם `allow_missing` היה **הוראה שלמה** לקובץ
+`validate` בדקה כל שדה כתובת ולא בדקה את השם — והשם הוא היחיד שנכתב
+בלי מרכאות ובלי בריחה. uvicorn מפענח `%0A` בנתיב לשורה חדשה, ולכן
+`PUT /interfaces/<שם>` עם `allow_missing` היה **הוראה שלמה** לקובץ
 שדמון שרץ כ-root קורא: `dhcp-range` שני על ממשק שאיש לא הגדיר. רווח
 או `#` בשם אינם הזרקה אלא התרחיש הריאלי — dnsmasq מסרב לעלות, ווילן
 ההפצה כולו נשאר בלי DHCP ובלי PXE.
@@ -73,7 +73,7 @@ def test_the_refusal_shows_the_name_that_was_refused():
 
 
 def test_the_name_is_checked_before_the_disabled_shortcut():
-    """‏`if not cfg.enabled: return` דילג על הבדיקה כולה — וממשק
+    """`if not cfg.enabled: return` דילג על הבדיקה כולה — וממשק
     ב-proxy הוא בדיוק `proxy and not enabled`."""
     for cfg in (InterfaceConfig(INJECTION),
                 InterfaceConfig(INJECTION, proxy=True),
@@ -116,7 +116,7 @@ def test_the_renderers_refuse_a_bad_row_instead_of_writing_it():
 
 
 def path_of(name: str) -> str:
-    """מה שהדפדפן או `curl` באמת שולחים — ‏`%0A` לשורה חדשה, ‏`%23`
+    """מה שהדפדפן או `curl` באמת שולחים — `%0A` לשורה חדשה, `%23`
     ל-`#`. בלי הקידוד `#` בכלל לא היה מגיע לשרת (הוא fragment), והטסט
     היה מדווח על משהו אחר לגמרי."""
     return "/api/console/net/interfaces/" + quote(name, safe="")
@@ -142,7 +142,7 @@ def test_configure_refuses_a_hostile_name_from_the_url_path(dhcp_server, name):
 
 
 def test_the_proxy_path_is_refused_too(dhcp_server):
-    """‏proxy הוא המסלול שדילג על הוולידציה — והוא נבדק לפני שאר
+    """proxy הוא המסלול שדילג על הוולידציה — והוא נבדק לפני שאר
     השכבות, כדי ששם פסול לא יחזור כ-409 על גרסת dnsmasq."""
     admin, fake = dhcp_server["admin"], dhcp_server["fake"]
     before = len(fake["proxy_applied"])
@@ -182,10 +182,10 @@ def test_the_config_file_never_grows_a_line_nobody_asked_for(dhcp_server):
 
 @pytest.mark.parametrize("name", [INJECTION, "eth0 ", "eth0#c", "e" * 40])
 def test_describe_refuses_the_same_names(dhcp_server, name):
-    """‏#102 אכף את השם בשני מסלולים; ‏`describe` היה השלישי ולא נבדק.
+    """#102 אכף את השם בשני מסלולים; `describe` היה השלישי ולא נבדק.
 
-    זו אינה הזרקה ל-dnsmasq — ‏`all_configs()` קוראת רק מפתחות
-    ‏`dhcp:` — אלא **כישלון שקט**: ‏`nicdesc:eth0 ` (עם רווח) הוא מפתח
+    זו אינה הזרקה ל-dnsmasq — `all_configs()` קוראת רק מפתחות
+    `dhcp:` — אלא **כישלון שקט**: `nicdesc:eth0 ` (עם רווח) הוא מפתח
     אחר מ-`nicdesc:eth0`, ולכן המפעיל מקליד תיאור, מקבל ``{"ok": true}``
     ולא רואה אותו לעולם.
     """

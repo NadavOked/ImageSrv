@@ -1,9 +1,9 @@
 """ברזל 17/10: סבב שנסגר בשרת עוצר את מסלול המגירות כולו.
 
-מחשב שיכפול 2, ‏ses_d6e79f65: השולח נכשל ב-08:16:10 והסבב נסגר. לולאת
-הדיווח ראתה את זה (‏`progress: the server says this session is closed --
+מחשב שיכפול 2, ses_d6e79f65: השולח נכשל ב-08:16:10 והסבב נסגר. לולאת
+הדיווח ראתה את זה (`progress: the server says this session is closed --
 stopping`) — ועצרה **רק את עצמה**. המסלול הראשי המשיך: ב-08:16:12
-‏"partition 1 (esp): feeding 1 drawers", ‏udp-receiver ו-partclone מול שולח
+"partition 1 (esp): feeding 1 drawers", udp-receiver ו-partclone מול שולח
 שכבר יצא, המכונה נשארה "כותבת" והדיסק חצי-מוכן.
 
 עכשיו: לולאת הדיווח משאירה סמן (`$RUN_DIR/session-closed`), והמסלול הראשי
@@ -104,7 +104,7 @@ def test_a_round_closed_between_partitions_feeds_no_more(tmp_path):
 
 
 def test_a_round_closed_while_waiting_for_the_stream_stops_the_receiver(tmp_path):
-    """הצורה של 08:16:12: ‏udp-receiver ממתין לשולח שכבר יצא (כאן: מקור
+    """הצורה של 08:16:12: udp-receiver ממתין לשולח שכבר יצא (כאן: מקור
     שותק), והסבב נסגר שתי שניות אחרי. הזרם נעצר תוך שניות — לא בתקרת
     ההתחלה (40ש' כאן, 600 במכונה) — והמגירה נכשלת עם הסיבה האמיתית, לא
     "פג הזמן"."""

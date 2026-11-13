@@ -1,4 +1,4 @@
-"""‏#1371 — `deploy/apt-repo-consistent.py`: המאגר המקומי של שרת מה-ISO מפרסם
+"""#1371 — `deploy/apt-repo-consistent.py`: המאגר המקומי של שרת מה-ISO מפרסם
 רק חבילות שהקובץ שלהן נמצא בו, ו-Release תואם את האינדקס אחרי השינוי.
 
 הבדיקה הכללית (`assert_consistent`) היא מה ש-apt עצמו דורש: כל `Filename`
@@ -27,7 +27,7 @@ ON_DISK = ("qemu-system-x86", "ovmf")
 
 
 def _release(suite: Path) -> None:
-    """כמו write_index של make-pool.sh: ‏MD5Sum+SHA256, ולכל .gz גם השם הפרוס."""
+    """כמו write_index של make-pool.sh: MD5Sum+SHA256, ולכל .gz גם השם הפרוס."""
     files = sorted(p.relative_to(suite).as_posix() for p in suite.rglob("*") if p.is_file())
     lines = ["Origin: Debian", "Suite: stable", "Codename: trixie"]
     for title, algo in (("MD5Sum", "md5"), ("SHA256", "sha256")):

@@ -1,16 +1,16 @@
-"""‏DHCP — כל מה שנוגע במכונה עצמה (אפיון סעיף 24).
+"""DHCP — כל מה שנוגע במכונה עצמה (אפיון סעיף 24).
 
-‏dhcp.py הוא הלוגיקה הטהורה: מקבל הגדרות, מחזיר טקסט. כאן יושב הצד
+dhcp.py הוא הלוגיקה הטהורה: מקבל הגדרות, מחזיר טקסט. כאן יושב הצד
 המלוכלך — לקרוא אילו כרטיסים קיימים, לשאול אם מישהו כבר מחלק כתובות,
 לכתוב את קבצי ה-conf ולהפעיל שירותים. הפרדה זו גם מה שמאפשר לבדיקות
 להזריק `dhcp_hooks` ולעולם לא לגעת במכונה.
 
-שני יעדים, בכוונה (‏#36):
+שני יעדים, בכוונה (#36):
 
 - `DEFAULT_CONF` — בתוך `/etc/dnsmasq.d`, נטען לאינסטנס הראשי של
   dnsmasq (ה-DHCP של וילן ההפצה).
 - `PROXY_CONF` — **מחוץ** ל-`/etc/dnsmasq.d`, כדי שהאינסטנס הראשי לא
-  יטען אותו. הוא נטען ביחידה `imagesrv-proxy` בלבד. ‏dnsmasq 2.91 קופא
+  יטען אותו. הוא נטען ביחידה `imagesrv-proxy` בלבד. dnsmasq 2.91 קופא
   על בקשת PXE לפורט 4011 במצב proxy, וכל עוד זה כך — הקפיאה חייבת
   להישאר בתהליך שאפשר לאבד.
 """
@@ -34,17 +34,17 @@ from server.core.atomicfile import write_atomic
 log = logging.getLogger(__name__)
 
 DEFAULT_CONF = "/etc/dnsmasq.d/imagesrv-dhcp.conf"
-#: קובץ המתקין (‏#1013) — נקרא כאן כדי לדעת אם `enable-tftp` עדיין יושב בו.
+#: קובץ המתקין (#1013) — נקרא כאן כדי לדעת אם `enable-tftp` עדיין יושב בו.
 INSTALLER_CONF = "/etc/dnsmasq.d/imagesrv.conf"
 PROXY_CONF = "/etc/imagesrv/dnsmasq-proxy.conf"
 PROXY_UNIT = "imagesrv-proxy"
 
-#: ‏#141: רשימת המכונות הרשומות, שממנה dhcp-boot (render() הראשי) מדליק
+#: #141: רשימת המכונות הרשומות, שממנה dhcp-boot (render() הראשי) מדליק
 #: tag:known. **מחוץ** ל-/etc/dnsmasq.d בכוונה — הוא נטען כ-dhcp-hostsfile
 #: מפורש מתוך imagesrv.conf (setup-boot-server.sh), לא דרך הסריקה
 #: האוטומטית של dnsmasq לתיקייה, כדי ששינוי בו לא ידרוש לגעת בקובץ
 #: הממשקים שהקונסולה כותבת. כבר ב-ReadWritePaths של imagesrv-server
-#: (‏-/etc/imagesrv, אופציונלי) — אין שינוי ביחידה.
+#: (-/etc/imagesrv, אופציונלי) — אין שינוי ביחידה.
 KNOWN_MACS_CONF = "/etc/imagesrv/known-macs"
 
 
@@ -96,9 +96,9 @@ def _addresses(name: str) -> list[str]:
 
 
 def set_link(name: str, up: bool) -> str | None:
-    """‏`ip link set dev <name> up|down`, בלי כתובת (‏#2805). מחזיר הודעה או None.
+    """`ip link set dev <name> up|down`, בלי כתובת (#2805). מחזיר הודעה או None.
 
-    ‏None פירושו "הפקודה יצאה 0", לא "יש קישור" — את זה קובע `link_up`
+    None פירושו "הפקודה יצאה 0", לא "יש קישור" — את זה קובע `link_up`
     שנקרא בחזרה מ-`list_interfaces`."""
     try:
         done = subprocess.run(
@@ -107,9 +107,13 @@ def set_link(name: str, up: bool) -> str | None:
             stdin=subprocess.DEVNULL,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        return f"ip link: {exc}"
+        # #2543: הטקסט של מערכת ההפעלה ליומן השרת; ללקוח — משפט קבוע.
+        log.warning("dhcp_host: ip link set %s could not run: %s", name, exc)
+        return "ip link לא רץ — הפרטים ביומן השרת"
     if done.returncode != 0:
-        return f"ip link rc={done.returncode}: {(done.stderr or done.stdout).strip()[:200]}"
+        log.warning("dhcp_host: ip link set %s rc=%s: %s", name, done.returncode,
+                    (done.stderr or done.stdout).strip()[:300])
+        return f"ip link החזיר {done.returncode} — הפרטים ביומן השרת"
     return None
 
 
@@ -120,14 +124,14 @@ def set_link(name: str, up: bool) -> str | None:
 class ProbeResult:
     """תוצאת ה-DHCPDISCOVER על ממשק — **שלושה** מצבים, לא שניים.
 
-    - ‏`checked=False` — הבדיקה לא רצה בכלל. זה *לא* "נקי": שום דבר לא
-      נשלל, ואסור לתת לזה לפתוח את ההדלקה. ‏`reason` אומר למה.
-    - ‏`checked=True` עם `servers` ריק — שאלנו, ואיש לא ענה.
-    - ‏`servers` — מי ענה.
+    - `checked=False` — הבדיקה לא רצה בכלל. זה *לא* "נקי": שום דבר לא
+      נשלל, ואסור לתת לזה לפתוח את ההדלקה. `reason` אומר למה.
+    - `checked=True` עם `servers` ריק — שאלנו, ואיש לא ענה.
+    - `servers` — מי ענה.
 
     האובייקט אמיתי (truthy) תמיד, בכוונה: קודם הוחזרו `None`/`[]`/רשימה,
     ו-`if found:` קיפל את שני הראשונים לאחד — ככה אפשר היה להדליק DHCP
-    על ה-trunk של המכללה כשהבדיקה רק *נכשלה* ‏(#53). עכשיו `if` מקרי
+    על ה-trunk של המכללה כשהבדיקה רק *נכשלה* (#53). עכשיו `if` מקרי
     נופל לצד החוסם, לא לצד המדליק.
     """
 
@@ -150,11 +154,11 @@ def _probe_os_error(exc: OSError) -> ProbeResult:
     return ProbeResult(False, reason=reason)
 
 
-# ‏#2417: ההאזנה היא ברמת הקישור (AF_PACKET), לא על סוקט UDP. סוקט UDP
+# #2417: ההאזנה היא ברמת הקישור (AF_PACKET), לא על סוקט UDP. סוקט UDP
 # מקבל את ה-OFFER רק אחרי ה-hook של nft input ואחרי rp_filter — ו-OFFER
 # משודר אינו משויך ב-conntrack לבקשה שיצאה, ולכן חומת האש של השרת עצמו
 # (policy drop, בלי כלל ל-dport 68) זרקה אותו, והבדיקה דיווחה "נבדק, נקי".
-# אומת על Debian 13 במעבדה, 04/11. ‏AF_PACKET רואה את המסגרת לפני שניהם.
+# אומת על Debian 13 במעבדה, 04/11. AF_PACKET רואה את המסגרת לפני שניהם.
 AF_PACKET = getattr(socket, "AF_PACKET", 17)
 ETH_P_ALL = getattr(socket, "ETH_P_ALL", 3)
 PACKET_OUTGOING = getattr(socket, "PACKET_OUTGOING", 4)
@@ -165,7 +169,7 @@ SO_ATTACH_FILTER = getattr(socket, "SO_ATTACH_FILTER", 26)
 #: מסנן BPF בקרנל: רק UDP/IPv4 לא-מקוטע מפורט 67 או אליו (ה-OFFER, וה-DISCOVER
 #: שלנו כשהוא יוצא). בלעדיו כל תעבורת הכרטיס — גם מולטיקאסט של סבב שהשרת
 #: עצמו משדר — הייתה ממלאת את החוצץ, ו-OFFER שנזרק שם היה נראה כמו שקט.
-#: ‏(code, jt, jf, k); הקפיצות יחסיות לפקודה הבאה. ‏drop=11, ‏accept=12.
+#: (code, jt, jf, k); הקפיצות יחסיות לפקודה הבאה. drop=11, accept=12.
 _BPF_DHCP = (
     (0x28, 0, 0, 12),          # 0  ldh [12]            ethertype
     (0x15, 0, 9, 0x0800),      # 1  jeq IPv4            : drop
@@ -184,7 +188,7 @@ _BPF_DHCP = (
 
 
 def _open_tap(iface: str) -> socket.socket:
-    """סוקט AF_PACKET על `iface` בלבד, עם המסנן. ‏protocol=0 ביצירה = לא מקבל
+    """סוקט AF_PACKET על `iface` בלבד, עם המסנן. protocol=0 ביצירה = לא מקבל
     כלום עד ה-bind, כך שמסגרות מכרטיסים אחרים לא נכנסות לפני שהמסנן והכרטיס
     נקבעו. כשל = OSError, והקורא מחזיר "לא נבדק"."""
     tap = socket.socket(AF_PACKET, socket.SOCK_RAW, 0)
@@ -201,8 +205,8 @@ def _open_tap(iface: str) -> socket.socket:
 
 
 def _dhcp_frame(frame: bytes, xid: bytes) -> tuple[str, str] | None:
-    """מסגרת Ethernet → ‏("request", כתובת המקור) ל-BOOTREQUEST עם ה-xid שלנו,
-    ‏("reply", כתובת המקור) לתשובה אליו, או None לכל דבר אחר (כולל מסגרת
+    """מסגרת Ethernet → ("request", כתובת המקור) ל-BOOTREQUEST עם ה-xid שלנו,
+    ("reply", כתובת המקור) לתשובה אליו, או None לכל דבר אחר (כולל מסגרת
     קצרה/פגומה)."""
     if len(frame) < 14 + 20 or frame[12:14] != b"\x08\x00":
         return None
@@ -232,7 +236,7 @@ def _discover_frame(mac: bytes, xid: bytes) -> bytes:
     """ה-DISCOVER כמסגרת שלמה, כמו שלקוח DHCP שולח (RFC 2131 4.1): מ-0.0.0.0:68
     אל 255.255.255.255:67, ל-ff:ff:ff:ff:ff:ff, ממקור ה-MAC של הכרטיס.
 
-    ‏#2417, במעבדה 04/11: סוקט UDP על כרטיס בלי כתובת שלח עם כתובת **של כרטיס
+    #2417, במעבדה 04/11: סוקט UDP על כרטיס בלי כתובת שלח עם כתובת **של כרטיס
     אחר** (192.168.68.61), ושרת עם rp_filter=2 — ברירת המחדל בדביאן — לא ענה.
     "נבדק, נקי" על שאלה שאיש לא יכול היה לענות עליה."""
     bootp = (
@@ -257,12 +261,12 @@ def _discover_frame(mac: bytes, xid: bytes) -> bytes:
 def probe_existing_dhcp(iface: str, timeout: float = 2.0) -> ProbeResult:
     """שולח DHCPDISCOVER על הממשק ומחזיר מי ענה — ואם בכלל הצלחנו לשאול.
 
-    השליחה וההאזנה שתיהן ב-AF_PACKET על הכרטיס עצמו (‏#2417): ה-DISCOVER יוצא
+    השליחה וההאזנה שתיהן ב-AF_PACKET על הכרטיס עצמו (#2417): ה-DISCOVER יוצא
     כמסגרת שנבנתה כאן, ממקור 0.0.0.0, מהכרטיס הזה — עם כתובת או בלעדיה; וההאזנה
     רואה את ה-OFFER גם כשחומת האש של השרת או rp_filter זורקים אותו לפני כל
     סוקט UDP. אין bind לפורט 68, ולכן לקוח DHCP על הכרטיס אינו חוסם את הבדיקה.
 
-    ‏`checked=True` דורש **ראיה חיובית** שהשאלה נשאלה כמו שצריך ושההאזנה שמעה
+    `checked=True` דורש **ראיה חיובית** שהשאלה נשאלה כמו שצריך ושההאזנה שמעה
     את הכרטיס: ה-DISCOVER שלנו (ה-xid שלנו, ממקור 0.0.0.0) נראה יוצא בה, והקרנל
     לא השליך מסגרות שלה (PACKET_STATISTICS). בלי אלה — "לא הצלחנו לבדוק", לא
     "נקי" (עיקרון 5). כך גם בלי root ובלי קישור. זה מה שמונע את התקלה הגרועה
@@ -276,7 +280,7 @@ def probe_existing_dhcp(iface: str, timeout: float = 2.0) -> ProbeResult:
         except OSError as exc:
             return _probe_os_error(exc)
         try:
-            # סוקט נפרד: ההאזנה אינה רואה מה שהיא עצמה שלחה. ‏protocol=0 — אינו מקבל.
+            # סוקט נפרד: ההאזנה אינה רואה מה שהיא עצמה שלחה. protocol=0 — אינו מקבל.
             sender = socket.socket(AF_PACKET, socket.SOCK_RAW, 0)
             sender.bind((iface, 0))
             mac = sender.getsockname()[4]
@@ -328,8 +332,9 @@ def _listen(tap: socket.socket, iface: str, xid: bytes, timeout: float) -> Probe
         pass  # חלון ההאזנה נגמר — זה סיום הרגיל של הסריקה, לא כשל
     except OSError as exc:
         # שגיאה באמצע ההאזנה: מי שכבר ענה נספר, אבל שקט כאן אינו ראיה.
+        log.warning("dhcp_host: listening on %s broke off: %s", iface, exc)   # #2543
         return ProbeResult(bool(seen), tuple(seen), "" if seen else
-                           f"ההאזנה על {iface} נקטעה: {exc}")
+                           f"ההאזנה על {iface} נקטעה — הפרטים ביומן השרת")
     if seen:
         return ProbeResult(True, tuple(seen))
     if not asked and wrong_source:
@@ -344,7 +349,9 @@ def _listen(tap: socket.socket, iface: str, xid: bytes, timeout: float) -> Probe
         _packets, drops = struct.unpack(
             "II", tap.getsockopt(SOL_PACKET, PACKET_STATISTICS, 8))
     except (OSError, struct.error) as exc:
-        return ProbeResult(False, reason=f"לא ניתן לקרוא את מוני ההאזנה על {iface}: {exc}")
+        log.warning("dhcp_host: PACKET_STATISTICS on %s unreadable: %s", iface, exc)   # #2543
+        return ProbeResult(False, reason=(
+            f"לא ניתן לקרוא את מוני ההאזנה על {iface} — הפרטים ביומן השרת"))
     if drops:
         return ProbeResult(False, reason=(
             f"הקרנל השליך {drops} מסגרות DHCP בזמן ההאזנה על {iface} — תשובה יכלה "
@@ -372,7 +379,7 @@ _VERSION_LINE = re.compile(r"version\s+(\d+\.\d+(?:\.\d+)?)", re.IGNORECASE)
 class ProxySupport:
     """האם מותר להדליק proxy בלי אישור מפורש — **שלושה** מצבים, לא שניים.
 
-    בדיוק כמו `ProbeResult` (‏#53): ‏`read=False` הוא "לא הצלחנו לקרוא
+    בדיוק כמו `ProbeResult` (#53): `read=False` הוא "לא הצלחנו לקרוא
     את הגרסה", ולא "הגרסה תקינה". רק `verified` פותח, והוא דורש ראיה
     חיובית — גרסה שנקראה ונמצאת ב-`PROXY_VERIFIED`. האובייקט truthy
     תמיד, בכוונה, כדי ש-`if support:` מקרי לא ייקרא כאישור.
@@ -392,12 +399,12 @@ class ProxySupport:
     def reason(self) -> str:
         """למה חוסמים — האמת, לא "לא זמין". מפעיל שלא יודע *למה* יעקוף."""
         if self.broken:
-            head = (f"‏dnsmasq {self.version} המותקן כאן נתקע על בקשת PXE "
-                    "לפורט 4011 במצב proxy: ‏100% מעבד, מפסיק לענות לכל "
+            head = (f"\u200fdnsmasq {self.version} המותקן כאן נתקע על בקשת PXE "
+                    "לפורט 4011 במצב proxy: \u200f100% מעבד, מפסיק לענות לכל "
                     "הסוקטים, ולא מגיב ל-SIGTERM. באג upstream, שוחזר "
-                    "במעבדה (‏#36).")
+                    "במעבדה (\u200f#36).")
         elif self.read:
-            head = (f"‏dnsmasq {self.version} המותקן כאן לא נבדק במצב proxy. "
+            head = (f"\u200fdnsmasq {self.version} המותקן כאן לא נבדק במצב proxy. "
                     "הקפיאה של #36 שוחזרה ב-2.91, ואין ראיה חיובית שהיא "
                     "תוקנה בגרסה הזו — \"לא נבדק\" אינו \"תקין\".")
         else:
@@ -410,7 +417,7 @@ class ProxySupport:
 
 
 def proxy_support(raw: str | None) -> ProxySupport:
-    """מתרגם את פלט `dnsmasq --version` להחלטה. ‏None/זבל = לא נקרא."""
+    """מתרגם את פלט `dnsmasq --version` להחלטה. None/זבל = לא נקרא."""
     match = _VERSION_LINE.search(raw or "")
     return ProxySupport(read=bool(match), version=match.group(1) if match else "")
 
@@ -418,7 +425,7 @@ def proxy_support(raw: str | None) -> ProxySupport:
 def dnsmasq_version() -> str | None:
     """פלט `dnsmasq --version`, או None אם לא הצלחנו להריץ אותו.
 
-    קריאה בלבד — לא נוגעת בשירות. ‏None אינו "אין בעיה": הקורא חייב
+    קריאה בלבד — לא נוגעת בשירות. None אינו "אין בעיה": הקורא חייב
     להתייחס אליו כמו לגרסה שלא נבדקה.
     """
     try:
@@ -440,7 +447,7 @@ def apply(text: str, conf_path: str | Path = DEFAULT_CONF) -> str | None:
     מחזיר הודעת שגיאה או None. כתיבה שנכשלת (הרשאות) לא מפילה את השרת:
     ההגדרה כבר נשמרה ב-DB, והודעה ברורה בקונסולה עדיפה על 500.
 
-    ‏#1828: ‏`dnsmasq --test` על ההגדרה כולה **לפני** ה-restart, וכשל בבדיקה
+    #1828: `dnsmasq --test` על ההגדרה כולה **לפני** ה-restart, וכשל בבדיקה
     או ב-restart מחזיר את הקובץ הקודם — קובץ פגום אינו משאיר את dnsmasq
     למטה ואת הכיתה בלי DHCP/PXE.
     """
@@ -456,7 +463,7 @@ def apply_proxy(text: str, active: bool,
     על קובץ ריק הוא רק עוד משהו שיכול להיתקע. הכתיבה קודמת ל-systemctl,
     כך שכשל בכתיבה חוזר בלי לגעת בשירותים.
 
-    ‏#1828: כשהיחידה עולה — ‏`--test` על הקובץ (אותה שורה כמו ExecStartPre
+    #1828: כשהיחידה עולה — `--test` על הקובץ (אותה שורה כמו ExecStartPre
     שלה) לפני ה-restart, והחזרת הקודם בכשל. עצירה אינה דורשת בדיקה.
     """
     path = Path(conf_path)
@@ -467,17 +474,17 @@ def apply_proxy(text: str, active: bool,
 
 
 def apply_known_macs(text: str, conf_path: str | Path = KNOWN_MACS_CONF) -> str | None:
-    """‏#141: כותב את קובץ ה-known-macs ומבקש מ-dnsmasq לקרוא אותו מחדש.
+    """#141: כותב את קובץ ה-known-macs ומבקש מ-dnsmasq לקרוא אותו מחדש.
 
-    ‏reload ולא restart, בכוונה: `--dhcp-hostsfile` נטען מחדש ב-SIGHUP
+    reload ולא restart, בכוונה: `--dhcp-hostsfile` נטען מחדש ב-SIGHUP
     בלי לאבד חכירות ובלי להפיל את הסוקטים (נבדק במדריך dnsmasq ובמעבדה,
-    ‏#36 הוא התקדים למה restart על ההגדרה הזו אסור). מחזיר הודעת שגיאה
+    #36 הוא התקדים למה restart על ההגדרה הזו אסור). מחזיר הודעת שגיאה
     או None, באותו דפוס כמו apply/apply_proxy.
 
-    ‏#1828: בלי `--test` (קובץ hostsfile אינו קובץ הגדרה), אבל reload שנכשל
+    #1828: בלי `--test` (קובץ hostsfile אינו קובץ הגדרה), אבל reload שנכשל
     מחזיר את הקובץ הקודם, כמו השניים שלמעלה.
 
-    ‏#2840/#2853: dnsmasq **כבוי בכוונה** עד שרשת ההפצה מוגדרת (#1088), ו-reload על
+    #2840/#2853: dnsmasq **כבוי בכוונה** עד שרשת ההפצה מוגדרת (#1088), ו-reload על
     יחידה לא פעילה נכשל תמיד — בכל התקנה חדשה נרשם "נכשל" והקובץ שנכתב הוחזר
     לקודם. כש-`systemctl is-active` אומר במפורש `inactive`, הקובץ שנכתב נשאר:
     dnsmasq יקרא אותו כשיעלה. כל תשובה אחרת — כשל, כמו קודם (עיקרון 5).
@@ -487,7 +494,7 @@ def apply_known_macs(text: str, conf_path: str | Path = KNOWN_MACS_CONF) -> str 
 
 
 def _explicitly_inactive(unit: str) -> bool:
-    """‏True רק על `inactive` מפורש מ-`systemctl is-active` (קוד 3 = תשובה, לא כשל)."""
+    """True רק על `inactive` מפורש מ-`systemctl is-active` (קוד 3 = תשובה, לא כשל)."""
     try:
         result = subprocess.run(["systemctl", "is-active", unit], capture_output=True,
                                 text=True, timeout=10, check=False)
@@ -497,13 +504,13 @@ def _explicitly_inactive(unit: str) -> bool:
 
 
 def _main_test_cmd(path: Path) -> list[str]:
-    """‏`dnsmasq --test` כמו שהיחידה של דביאן בודקת לפני עלייה: ‏/etc/dnsmasq.conf
+    """`dnsmasq --test` כמו שהיחידה של דביאן בודקת לפני עלייה: /etc/dnsmasq.conf
     ועוד התיקייה של הקובץ, בלי הסיומות שהחבילה מדלגת עליהן."""
     return ["dnsmasq", "--test", f"--conf-dir={path.parent},.dpkg-dist,.dpkg-old,.dpkg-new"]
 
 
 def _dnsmasq_test(cmd: list[str]) -> str | None:
-    """‏None = dnsmasq קיבל את ההגדרה. בדיקה שלא רצה היא כישלון (עיקרון 5)."""
+    """None = dnsmasq קיבל את ההגדרה. בדיקה שלא רצה היא כישלון (עיקרון 5)."""
     try:
         result = subprocess.run(cmd, capture_output=True, text=True,
                                 timeout=20, check=False)
@@ -566,7 +573,7 @@ def _write(text: str, conf_path: str | Path) -> str | None:
     path = Path(conf_path)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        write_atomic(path, text)   # ‏#1908: לא קובץ חתוך שמפיל את dnsmasq
+        write_atomic(path, text)   # #1908: לא קובץ חתוך שמפיל את dnsmasq
     except OSError as exc:
         # הטקסט הגולמי של מערכת ההפעלה (אנגלית, תלוי-שפה) הולך ללוג בלבד;
         # המשתמש מקבל משפט בעברית עם הנתיב (#1016).
@@ -591,7 +598,7 @@ def _systemctl(action: str, unit: str) -> str | None:
     return None
 
 
-# --- אמת חיה ל-DHCP (‏#762) --------------------------------------------------
+# --- אמת חיה ל-DHCP (#762) --------------------------------------------------
 #
 # מה שמוצג בקונסולה כ-"DHCP בפועל" חייב לבוא מכאן, לא מ-InterfaceConfig.enabled
 # (שהוא כוונה שנשמרה, לא מציאות). שתי הפונקציות למטה הן הצד המלוכלך היחיד:
@@ -609,9 +616,9 @@ def read_active_conf(conf_path: str | Path = DEFAULT_CONF) -> str | None:
 
 
 def read_installer_conf(conf_path: str | Path = INSTALLER_CONF) -> str | None:
-    """קובץ ה-dnsmasq **של המתקין** (‏#1013), בשלושה מצבים — עיקרון 5:
-    הטקסט כשנקרא; ‏`""` כשהקובץ **אינו קיים** (ראיה חיובית: אין קובץ
-    שיכול לשאת `enable-tftp`); ‏`None` כשהוא קיים ולא ניתן לקרוא אותו —
+    """קובץ ה-dnsmasq **של המתקין** (#1013), בשלושה מצבים — עיקרון 5:
+    הטקסט כשנקרא; `""` כשהקובץ **אינו קיים** (ראיה חיובית: אין קובץ
+    שיכול לשאת `enable-tftp`); `None` כשהוא קיים ולא ניתן לקרוא אותו —
     "לא הצלחנו לבדוק", שאסור לקפל ל"אין"."""
     try:
         return Path(conf_path).read_text(encoding="utf-8")
@@ -622,10 +629,10 @@ def read_installer_conf(conf_path: str | Path = INSTALLER_CONF) -> str | None:
 
 
 def service_active(unit: str = "dnsmasq") -> bool | None:
-    """‏tri-state: `True`/`False` פעיל/לא, או `None` כשהבדיקה עצמה נכשלה.
+    """tri-state: `True`/`False` פעיל/לא, או `None` כשהבדיקה עצמה נכשלה.
 
-    ‏`systemctl is-active` מחזיר קוד יציאה שאינו 0 גם על "inactive" —
-    ‏`is-active` הוא בדיוק המשפחה שבה `1` הוא תשובה תקנית ולא כישלון של
+    `systemctl is-active` מחזיר קוד יציאה שאינו 0 גם על "inactive" —
+    `is-active` הוא בדיוק המשפחה שבה `1` הוא תשובה תקנית ולא כישלון של
     הפקודה, ולכן קוד היציאה לבדו אינו מספיק: קוראים את stdout בשם.
     """
     try:

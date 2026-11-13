@@ -93,7 +93,7 @@ int main(void) {
     for (int i = 0; saved[i]; i++) printf("saved %s -> %s\n", saved[i], id(theme_saved(saved[i], &THEME_LIGHT)));
     printf("saved (null) dark-default -> %s\n", id(theme_saved(NULL, &THEME_DARK)));
     printf("saved auto dark-default -> %s\n", id(theme_saved("auto", &THEME_DARK)));
-    const char *answers[] = { "admin\ndark\n", "deploy\r\nlight\r\n", "admin\n", "admin", "", "admin\n\n", NULL };
+    const char *answers[] = { "admin\ndark\n", "deploy\r\nlight\r\n", "admin\n", "admin", "", "admin\n\n", "admin\ndark\nadvanced\n", NULL };
     for (int i = 0; answers[i]; i++) {
         char role[8], t[8];
         theme_login_answer(answers[i], role, sizeof role, t, sizeof t);
@@ -125,6 +125,7 @@ def test_theme_helpers(tmp_path):
         "saved (null) dark-default -> dark", "saved auto dark-default -> dark",
         "answer 0 -> [admin] [dark]", "answer 1 -> [deploy] [light]", "answer 2 -> [admin] []",
         "answer 3 -> [admin] []", "answer 4 -> [] []", "answer 5 -> [admin] []",
+        "answer 6 -> [admin] [dark]",   # #3025: the third line (the view) changes nothing
         "cut -> [adm] [dar]",
     ], out
 

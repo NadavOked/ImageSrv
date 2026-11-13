@@ -1,10 +1,10 @@
-"""‏#1952 — צד מחשב הבנייה: מי קיבל את המחיצה הקודמת עד סופה.
+"""#1952 — צד מחשב הבנייה: מי קיבל את המחיצה הקודמת עד סופה.
 
 בהפצה ישירה udp-sender רץ במחשב הבנייה, ולשרת אין את הלוג שלו (במסלול
 הספרייה #1950 קורא אותו בשרת). לכן ה-hello שלפני כל מחיצה, מהשנייה, נושא
-‏`direct_finished`: הכתובות שהתחברו ולא נזרקו ולא התנתקו לפני `Transfer
-complete` (‏`agent/lib/restore/directrecv.sh`). השרת סופר לפיהן חבר `lost` שעדיין
-מקבל (‏`tests/test_direct_lost_receiver_1952.py`).
+`direct_finished`: הכתובות שהתחברו ולא נזרקו ולא התנתקו לפני `Transfer
+complete` (`agent/lib/restore/directrecv.sh`). השרת סופר לפיהן חבר `lost` שעדיין
+מקבל (`tests/test_direct_lost_receiver_1952.py`).
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ LOST_DROPPED = _log(f"New connection from {LIVE}  (#0) 00000009",
                     f"New connection from {LOST}  (#1) 00000009",
                     "Starting transfer: 00000009", "Dropping client #1 because of timeout",
                     "Transfer complete.", f"Disconnecting #0 ({LIVE})")
-#: ‏udpcast ממחזר את `#N` אחרי ניתוק — השורות נקראות לפי הסדר.
+#: udpcast ממחזר את `#N` אחרי ניתוק — השורות נקראות לפי הסדר.
 SLOT_REUSED = _log(f"New connection from {LOST}  (#0) 00000009", f"Disconnecting #0 ({LOST})",
                    f"New connection from {LIVE}  (#0) 00000009",
                    "Starting transfer: 00000009", "Transfer complete.", f"Disconnecting #0 ({LIVE})")
@@ -88,7 +88,7 @@ def test_the_hello_carries_who_finished_and_then_the_fragment_is_gone(tmp_path):
 
 
 def test_an_unreadable_log_is_reported_as_not_checked(tmp_path):
-    """"לא נבדק" — ‏null, שהשרת סופר כ"עדיין מקבל" (עיקרון 5) — ולא רשימה ריקה."""
+    """"לא נבדק" — null, שהשרת סופר כ"עדיין מקבל" (עיקרון 5) — ולא רשימה ריקה."""
     assert _direct_hello(tmp_path, "1", None) == ',"direct_finished":null rc=0\n'
 
 
@@ -111,7 +111,7 @@ def test_build_hello_carries_the_fragment_and_only_while_it_exists(fake_machine)
     assert json.loads(sh(env))["direct_finished"] == [LIVE]
 
 
-#: ‏udp-sender מזויף שכותב את שורות המקלטים כמו האמיתי: ‏LOST נזרק.
+#: udp-sender מזויף שכותב את שורות המקלטים כמו האמיתי: LOST נזרק.
 UDP_SENDER = (
     '#!/bin/sh\n'
     'printf "%s\\n" "$@" >> "$UDP_ARGV"\n'
@@ -135,7 +135,7 @@ def test_the_hello_before_partition_two_says_who_took_partition_one(tmp_path):
     box, run, out = direct_run(tmp_path, answer=_answer(), partitions=2, timeout=120,
                                udp_sender=UDP_SENDER, pre=pre)
     assert out.strip().endswith("rc=0"), out + (run / "agent.log").read_text("utf-8", "replace")
-    # ‏direct_wait_running, מחיצה 1, מחיצה 2
+    # direct_wait_running, מחיצה 1, מחיצה 2
     assert (run / "hellos").read_text("utf-8").splitlines() == [
         "NONE", "NONE", f',"direct_finished":["{LIVE}"]']
     assert not (run / "direct.finished").exists()

@@ -1,4 +1,4 @@
-"""‏#504 — המתקין מבטיח מנהל גם כששם המשתמש כבר קיים כ-deploy.
+"""#504 — המתקין מבטיח מנהל גם כששם המשתמש כבר קיים כ-deploy.
 
 הבאג: `except Exception` בלע את `IntegrityError` של PRIMARY KEY, ואז
 `users.update` רץ בלי `role=` — שדה שלא נשלח אינו משתנה. הסיסמה
@@ -37,7 +37,7 @@ def run_installer_admin(data_dir: Path, username: str, password: str,
                         monkeypatch: pytest.MonkeyPatch) -> None:
     """מריץ את בלוק המתקין מול DB אמיתי, עם החלפת נתיבי ה-bash.
 
-    ‏#1131 ס' 4: הסיסמה מגיעה ב-**fd 3** (המתקין: `3< <(printf …)`), לא ב-env
+    #1131 ס' 4: הסיסמה מגיעה ב-**fd 3** (המתקין: `3< <(printf …)`), לא ב-env
     — כאן צינור על fd 3, ומה שישב שם קודם (pytest) מוחזר אחרי הבלוק."""
     code = installer_admin_python()
     code = code.replace("$APP_DIR", REPO.resolve().as_posix())
@@ -76,7 +76,7 @@ def test_installer_creates_admin_on_empty_db(tmp_path, monkeypatch):
 
 
 def test_the_password_is_read_from_fd3_not_from_the_environment():
-    """‏#1131 ס' 4: env של תהליך-ילד נראה ב-`ps e`; הבלוק קורא fd 3 בלבד."""
+    """#1131 ס' 4: env של תהליך-ילד נראה ב-`ps e`; הבלוק קורא fd 3 בלבד."""
     code = installer_admin_python()
     assert "os.fdopen(3" in code
     assert 'environ.get("ADMIN_PASS")' not in code and 'environ["ADMIN_PASS"]' not in code
@@ -90,14 +90,14 @@ def test_install_summary_distinguishes_default_and_installer_passwords():
     text = INSTALLER.read_text(encoding="utf-8")
     assert 'if [[ -n "$ADMIN_PASS" ]]; then' in text
     assert 'משתמש $ADMIN_USER נוצר עם הסיסמה שנקבעה בהתקנה' in text
-    # ‏#2593: אין עוד מסלול admin/admin במתקין — הענף השני אומר שהמנהל הקיים נשאר.
+    # #2593: אין עוד מסלול admin/admin במתקין — הענף השני אומר שהמנהל הקיים נשאר.
     assert 'המנהל הקיים נשאר כפי שהיה' in text
     assert 'כניסה ראשונה: $ADMIN_USER / admin' not in text
     assert "must_change_password=False" in installer_admin_python()
 
 
 def test_operational_error_is_not_swallowed(tmp_path, monkeypatch):
-    """‏`except Exception` היה הופך דיסק נעול ל-«משתמש לא קיים».
+    """`except Exception` היה הופך דיסק נעול ל-«משתמש לא קיים».
 
     תופסים IntegrityError בשמו, ולכן OperationalError עולה כמו שהוא.
     """

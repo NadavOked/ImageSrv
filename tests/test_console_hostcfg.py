@@ -1,11 +1,11 @@
-"""‏#153 — לשונית ההגדרות: העלאת תעודת TLS לקונסולה ושינוי שם המארח.
+"""#153 — לשונית ההגדרות: העלאת תעודת TLS לקונסולה ושינוי שם המארח.
 
-שני הנתיבים נוגעים במכונה (קבצי התעודה, ‏`hostnamectl`, ‏`systemctl
+שני הנתיבים נוגעים במכונה (קבצי התעודה, `hostnamectl`, `systemctl
 restart`). כמו ב-DHCP, כל מגע במכונה עובר דרך hooks מוזרקים — הבדיקות
 כאן לעולם אינן מריצות `hostnamectl` או `systemd-run` אמיתיים.
 
 ההצלחה נקבעת בראיה חיובית (עיקרון 5): תעודה נבדקת בטעינה האמיתית של
-‏`ssl` לפני שהיא מחליפה את הקיימת, ושם מארח נחשב "שונה" רק כשהוא נקרא
+`ssl` לפני שהיא מחליפה את הקיימת, ושם מארח נחשב "שונה" רק כשהוא נקרא
 בחזרה מהמכונה.
 """
 
@@ -36,7 +36,7 @@ NOW = datetime.datetime.now(datetime.timezone.utc)
 
 def make_pair(cn="imagesrv.college.ac.il", *, dns=("imagesrv.college.ac.il",),
               not_before=None, not_after=None, issuer_cn=None):
-    """תעודה + מפתח (PEM). ‏``issuer_cn`` שונה מ-CN = "חתומה" (לא עצמית)."""
+    """תעודה + מפתח (PEM). ``issuer_cn`` שונה מ-CN = "חתומה" (לא עצמית)."""
     key = ec.generate_private_key(ec.SECP256R1())
     subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
     issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, issuer_cn or cn)])
@@ -47,7 +47,7 @@ def make_pair(cn="imagesrv.college.ac.il", *, dns=("imagesrv.college.ac.il",),
     if dns:
         builder = builder.add_extension(
             x509.SubjectAlternativeName([x509.DNSName(d) for d in dns]), critical=False)
-    # ‏#2425: תעודה בלי serverAuth נדחית בהעלאה (הדפדפן היה דוחה אותה) — tests/test_console_tls_upload_2425.py
+    # #2425: תעודה בלי serverAuth נדחית בהעלאה (הדפדפן היה דוחה אותה) — tests/test_console_tls_upload_2425.py
     builder = builder.add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
     cert = builder.sign(key, hashes.SHA256())
     key_pem = key.private_bytes(serialization.Encoding.PEM,
@@ -354,8 +354,8 @@ def test_a_valid_hostname_is_applied_read_back_and_restarts(host, given, applied
     assert events(host["ctx"], "hostname_changed") == [f"imagesrv-old → {applied}"]
 
 
-#: ‏#1997 (נדב, 22/10): שם השרת הוא שם מחשב — עד 15, בלי נקודות. עד כאן RFC 1123
-#: (‏"srv1.college.ac.il" ו-63 תווים עברו).
+#: #1997 (נדב, 22/10): שם השרת הוא שם מחשב — עד 15, בלי נקודות. עד כאן RFC 1123
+#: ("srv1.college.ac.il" ו-63 תווים עברו).
 @pytest.mark.parametrize("bad", [
     "", " ", "-abc", "abc-", "a_b", "has space", "a" * 16, "a" * 64, "שרת", "a..b", ".abc",
     "abc.", "10.0.0.1", "ab$c", ".".join(["a" * 63] * 4) + "a", "srv1.college.ac.il",
@@ -384,7 +384,7 @@ def test_hostnamectl_failure_is_reported_and_nothing_restarts(host):
 
 
 def test_a_name_that_does_not_read_back_is_not_a_success(host):
-    """‏hostnamectl החזיר 0 אך המכונה עדיין קוראת לעצמה בשם הישן — "לא
+    """hostnamectl החזיר 0 אך המכונה עדיין קוראת לעצמה בשם הישן — "לא
     הצלחנו לאמת" אינו "השתנה" (עיקרון 5)."""
     host["machine"].readback_lies = True
     r = host["admin"].post("/api/console/hostname", json={"hostname": "imagesrv-new"})

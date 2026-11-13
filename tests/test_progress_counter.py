@@ -2,7 +2,7 @@
 
 `pv -n -b` כותב מספרים ל-stderr, **ושם גם הודעות השגיאה שלו**. כשה-curl
 של ההעלאה נופל, ה-fifo נסגר ו-`pv` מקבל EPIPE ומדפיס
-``pv: write failed: Broken pipe`` לאותו קובץ בדיוק. ‏`tail -n 1` הרים
+``pv: write failed: Broken pipe`` לאותו קובץ בדיוק. `tail -n 1` הרים
 את השורה הזאת, והיא נכנסה ל-``$((...))``.
 
 **הבדיקה חייבת לרוץ תחת מעטפת POSIX, ובזה כל הערך שלה.** אותו קלט:
@@ -19,7 +19,7 @@
 **תת-המעטפת** ולא הלולאה — והערך חוזר **ריק**. משם שתי תוצאות, שתיהן
 נמדדו תחת busybox ash:
 
-* ``{"dev":"sda","bytes_written":,"state":"running"}`` — ‏JSON פגום.
+* ``{"dev":"sda","bytes_written":,"state":"running"}`` — JSON פגום.
   לא שדה אחד שגוי: **כל הדוח** נפסל בשרת.
 * קובץ `base` נכתב ריק, ובקריאה הבאה ``$(("" + 8192))`` מחזיר 8192 —
   כלומר הבייטים של כל המחיצות שכבר הסתיימו **נמחקים בשקט**,
@@ -56,7 +56,7 @@ def test_a_pv_error_line_does_not_kill_the_shell(tmp_path):
     """הבקרה השלילית של #100.
 
     לפני התיקון ``$((1000 + pv: write failed: Broken pipe))`` הרג את
-    ‏`busybox ash` עם קוד 2, ו-`bb` נכשל על returncode לפני שהגיע
+    `busybox ash` עם קוד 2, ו-`bb` נכשל על returncode לפני שהגיע
     לבדיקת הערך.
     """
     out = _run(tmp_path, ["4096", "8192", PV_ERROR])
@@ -71,7 +71,7 @@ def test_the_last_number_wins_and_not_the_last_line(tmp_path):
 
 
 def test_a_counter_with_no_numbers_at_all_is_zero(tmp_path):
-    """קובץ שכולו שגיאות: ‏0 התקדמות, ולא קריסה ולא מספר שהומצא."""
+    """קובץ שכולו שגיאות: 0 התקדמות, ולא קריסה ולא מספר שהומצא."""
     out = _run(tmp_path, [PV_ERROR, "pv: unknown option"])
     assert "alive" in out
     assert "bytes=1000" in out, out          # הבסיס בלבד
@@ -84,6 +84,6 @@ def test_an_empty_counter_is_still_zero(tmp_path):
 
 
 def test_carriage_returns_are_still_stripped(tmp_path):
-    """‏`pv` כותב \r בין דגימות. זה היה נכון קודם וחייב להישאר."""
+    """`pv` כותב \r בין דגימות. זה היה נכון קודם וחייב להישאר."""
     out = _run(tmp_path, ["4096\r", "8192\r"])
     assert "bytes=9192" in out, out

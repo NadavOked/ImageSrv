@@ -1,4 +1,4 @@
-"""‏#1882 — הלוג של המשכפל נשמר בשרת: קטע אחרון דחוס בסוף כל סבב, וכשלים מוכרים בעברית.
+"""#1882 — הלוג של המשכפל נשמר בשרת: קטע אחרון דחוס בסוף כל סבב, וכשלים מוכרים בעברית.
 
 שלושה צדדים: (1) השרת מסנן סודות ומידע מהדיסק **לפני** שנשמר בייט (#1924), ומזהה חתימות;
 (2) התקרות — גוף, פריסה, שורות למכונה — כדי שהדיסק של השרת לא יתמלא; (3) הסוכן שולח פעם
@@ -275,7 +275,7 @@ def test_a_send_that_fails_returns_zero_and_says_so_locally(tmp_path):
 
 
 def test_the_agent_sends_at_the_end_of_both_round_paths():
-    """הצלחה (‏imagesrv-agent, אחרי report_final) וכשל (‏end_failed_round) — פעם אחת כל אחד."""
+    """הצלחה (imagesrv-agent, אחרי report_final) וכשל (end_failed_round) — פעם אחת כל אחד."""
     main = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     idle = (LIB / "idle.sh").read_text(encoding="utf-8")
     assert main.count('agent_log_send "$2"') == 1 and idle.count('agent_log_send "$2"') == 1

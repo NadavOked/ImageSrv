@@ -1,23 +1,23 @@
-"""‏#1252 (נמדד על ברזל 10/10, ‏HP-BUILD מול השרת החדש ב-v0.59.2): כותרת
+"""#1252 (נמדד על ברזל 10/10, HP-BUILD מול השרת החדש ב-v0.59.2): כותרת
 הגואי הנייטיב הציגה "שרת imagesrv-srv · 10.10.10.1" ו-"גרסה v0.48.1",
 ותחתית מסך הכניסה "imagesrv-srv · v0.48.1 · 10.10.10.1" — מחרוזות מוקאפ
-מקודדות ב-`screens.c`. בפועל השרת היה TA, ‏10.44.0.1, ‏v0.59.2. טכנאי
+מקודדות ב-`screens.c`. בפועל השרת היה TA, 10.44.0.1, v0.59.2. טכנאי
 שרואה v0.48.1 חושב שהמכונה עלתה מ-initrd ישן (עיקרון 5).
 
 שלוש החוליות:
 
-* ‏`gui_state` (‏`agent/lib/gui/guistate.sh`) כותב `server_name=` ו-
-  ‏`server_version=` מ-`GET /api/v1/agent/state` (‏`null` → ריק), ו-
-  ‏`server_addr=` מ-`imagesrv.server` (‏`$SERVER`) — גם בתמונת הכשל וגם
+* `gui_state` (`agent/lib/gui/guistate.sh`) כותב `server_name=` ו-
+  `server_version=` מ-`GET /api/v1/agent/state` (`null` → ריק), ו-
+  `server_addr=` מ-`imagesrv.server` (`$SERVER`) — גם בתמונת הכשל וגם
   במסך המשכפל, כי את הכתובת הסוכן יודע בלי השרת.
-* ‏`state.c` מפרסר אותן, ו-`screens.c` מצייר אותן בכותרת, בתחתית הכניסה
+* `state.c` מפרסר אותן, ו-`screens.c` מצייר אותן בכותרת, בתחתית הכניסה
   ובשורת ההמתנה. ערך ריק מצויר "לא ידוע" — לא מספר. שם המכונה, שנפל
   ל-"BUILD-01"/"CLONER-02" מומצאים, נופל עכשיו גם הוא ל-"לא ידוע", ו-"2"
   נמחק מ-"מחשב שיכפול 2".
-* צד השרת — ‏`test_station_server_identity.py`.
+* צד השרת — `test_station_server_identity.py`.
 
 **בקרה שלילית:** על הקוד הישן `gui_state` אינו כותב אף אחת מהרשומות,
-‏`gui_server_addr` אינו קיים, המחרוזות המקודדות במקור, ושני מצבים עם
+`gui_server_addr` אינו קיים, המחרוזות המקודדות במקור, ושני מצבים עם
 שרת שונה מצוירים זהים — כל הטסטים נופלים.
 """
 
@@ -34,7 +34,7 @@ from test_cloner_gui import BASH, GUI, _build_gui, _pkgconfig, _png, posix, sh
 
 SRC = GUI / "src"
 
-#: מחרוזות המוקאפ שהגיעו לייצור. ‏install.c מחוץ לרשימה: ה-`install_demo`
+#: מחרוזות המוקאפ שהגיעו לייצור. install.c מחוץ לרשימה: ה-`install_demo`
 #: שלו הוא נתוני `--png` בלבד, ולא מסך שרץ מול שרת.
 MOCKUP = ("imagesrv-srv", "10.10.10.1", "v0.48.1", "CLONER-02")
 
@@ -73,7 +73,7 @@ def test_gui_state_writes_the_server_name_address_and_version(tmp_path):
 
 @requires_native(("bash", BASH), "jq", why="gui_state בונה את המצב ב-jq")
 def test_an_unread_version_is_an_empty_record_not_a_number(tmp_path):
-    """‏`server_version: null` (התג לא נקרא) ושרת ישן בלי השדות כלל — שתיהן
+    """`server_version: null` (התג לא נקרא) ושרת ישן בלי השדות כלל — שתיהן
     רשומה ריקה, שהמסך מצייר "לא ידוע"."""
     null = state_records(tmp_path / "null", None,
                          station={**STATION, "server_name": "TA", "server_version": None})

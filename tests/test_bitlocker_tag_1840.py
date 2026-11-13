@@ -1,8 +1,8 @@
-"""#1840: ‏`GET /api/console/images` מעביר את מחיצות ה-BitLocker (`fs: "BitLocker"`).
+"""#1840: `GET /api/console/images` מעביר את מחיצות ה-BitLocker (`fs: "BitLocker"`).
 
 הקונסולה מציגה לפיהן תג כתום ואת המשפט "מוצפן ב-BitLocker: יועתק כמו שהוא,
 בלי כיווץ; במחשב אחר יידרש מפתח שחזור" — ברשימה, במגירה ובבחירת האימג'
-לסבב (‏`tests/bitlocker_tag_1840.test.cjs`). ‏`[]` = אין מחיצה מוצפנת.
+לסבב (`tests/bitlocker_tag_1840.test.cjs`). `[]` = אין מחיצה מוצפנת.
 """
 from __future__ import annotations
 

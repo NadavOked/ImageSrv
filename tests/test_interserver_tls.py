@@ -1,6 +1,6 @@
 """Storage Nodes — אינטגרציית ה-mTLS הבין-שרתי על loopback (#740, tracer 2.1).
 
-**שני קצוות TLS אמיתיים**, לא TestClient: ‏``InterserverTLSServer`` (המשני)
+**שני קצוות TLS אמיתיים**, לא TestClient: ``InterserverTLSServer`` (המשני)
 מסיים mTLS 1.3 עם pyOpenSSL, ו-``PinnedMTLSClient`` (הראשי) מציג תעודת-לקוח
 ומצמיד את ה-SPKI של המשני. כאן נבדקים ה-handshake, ה-channel-binding
 (exporter) וקליטת תעודת-הלקוח החתומה-עצמית — הדברים שאי אפשר לזייף ב-
@@ -9,7 +9,7 @@ TestClient.
 הערת סביבה: הבדיקות רצות מול ``127.0.0.1`` בפורטים אקראיים (ולא מול
 כינויי loopback כמו 127.0.0.2/3 שאינם קיימים כברירת מחדל בווינדוס). ה-pin
 הוא על ה-SPKI, לא על ה-SAN, ולכן ההפרדה בין הקצוות היא בפורט — התכונה
-הביטחונית זהה. ‏**ה-channel-binding רץ כאן גם על 3.12** (pyOpenSSL), ומדולג
+הביטחונית זהה. **ה-channel-binding רץ כאן גם על 3.12** (pyOpenSSL), ומדולג
 רק אם pyOpenSSL באמת חסר (עיקרון 5).
 """
 
@@ -69,7 +69,7 @@ def test_live_pair_then_ping_happy(secondary, primary_certs):
     token = result["token"]
     assert len(bytes.fromhex(token)) == 32
     assert result["secondary_spki"] == secondary["ident"]["server_spki"]
-    # ‏ping על session חדשה (אותה תעודת-לקוח) — sender-constraint מסתדר.
+    # ping על session חדשה (אותה תעודת-לקוח) — sender-constraint מסתדר.
     with _client(secondary, primary_certs) as client:
         pong = client.ping(token)
     assert pong["ok"] is True and pong["role"] == "secondary"
@@ -112,7 +112,7 @@ def test_live_sender_constraint_stolen_token_other_cert_rejected(secondary, prim
 
 
 def test_live_channel_binding_begin_a_complete_b_rejected(secondary, primary_certs):
-    """‏pair-begin על חיבור A, ואז pair-complete עם אותו handle על חיבור B
+    """pair-begin על חיבור A, ואז pair-complete עם אותו handle על חיבור B
     (session אחרת → exporter אחר) → נדחה. זו הכריכה לערוץ (RFC 9266) על TLS חי."""
     code = interserver_auth.open_pairing_window(secondary["conn"])
     a = _client(secondary, primary_certs)
@@ -155,10 +155,10 @@ def test_live_downgrade_below_tls13_rejected(secondary, primary_certs):
 
 
 def test_live_fetch_server_spki_survives_a_slow_server_hello(secondary, monkeypatch):
-    """‏#902: ה-preview של ה-SPKI נפל במעבדה (דרך חומת האש של חיפה) עם
-    ‏``WantReadError`` — ה-socket נוצר עם timeout ולכן non-blocking ל-pyOpenSSL,
+    """#902: ה-preview של ה-SPKI נפל במעבדה (דרך חומת האש של חיפה) עם
+    ``WantReadError`` — ה-socket נוצר עם timeout ולכן non-blocking ל-pyOpenSSL,
     ו-``do_handshake`` נזרק ברגע שה-ServerHello לא מוכן מיד. ב-``open`` זה כבר
-    טופל; ‏``fetch_server_spki`` שכח. כאן מכריחים את המצב: ה-socket מוחזר
+    טופל; ``fetch_server_spki`` שכח. כאן מכריחים את המצב: ה-socket מוחזר
     במצב timeout **ומאולץ להיראות "לא מוכן"** בקריאה הראשונה, כמו ברשת
     אמיתית — בלי התיקון נופל ב-``WantReadError``, איתו מחזיר את ה-SPKI."""
     import socket as _socket
@@ -200,9 +200,9 @@ def _handler_threads() -> int:
 
 def test_live_silent_tcp_connection_is_closed_after_the_handshake_timeout(
         secondary, monkeypatch):
-    """‏#1122 (1): חיבור TCP שלא שולח בייט. בלי תקרה, ‏``do_handshake`` חוסם
+    """#1122 (1): חיבור TCP שלא שולח בייט. בלי תקרה, ``do_handshake`` חוסם
     לנצח ותהליכון נשאר תקוע לכל סורק — כאן המשני סוגר תוך התקרה, והתהליכון
-    משתחרר. הראיה החיובית: ‏recv מחזיר EOF (לא timeout) ומונה התהליכונים
+    משתחרר. הראיה החיובית: recv מחזיר EOF (לא timeout) ומונה התהליכונים
     חוזר לבסיס."""
     import socket
     import time
@@ -230,8 +230,8 @@ def test_live_silent_tcp_connection_is_closed_after_the_handshake_timeout(
 
 
 def test_live_normal_handshake_is_not_hurt_by_the_timeout(secondary, primary_certs):
-    """הצד החיובי של (1): ‏handshake רגיל עדיין עובר, והזרם שאחריו חוסם רגיל
-    (ה-timeout הוסר אחרי ה-handshake — ‏ping אחרי המתנה עדיין עונה)."""
+    """הצד החיובי של (1): handshake רגיל עדיין עובר, והזרם שאחריו חוסם רגיל
+    (ה-timeout הוסר אחרי ה-handshake — ping אחרי המתנה עדיין עונה)."""
     import time
     code = interserver_auth.open_pairing_window(secondary["conn"])
     with _client(secondary, primary_certs) as client:
@@ -241,7 +241,7 @@ def test_live_normal_handshake_is_not_hurt_by_the_timeout(secondary, primary_cer
 
 
 def test_live_renewed_primary_cert_on_the_same_key_still_pings(secondary, primary_certs):
-    """‏#1122 (2ב): הראשי חידש תעודה על אותו מפתח — מעל TLS אמיתי ה-ping
+    """#1122 (2ב): הראשי חידש תעודה על אותו מפתח — מעל TLS אמיתי ה-ping
     מצליח, והמשני עדכן את הכריכה לתעודה החדשה עם שורת יומן."""
     cert, key = primary_certs
     code = interserver_auth.open_pairing_window(secondary["conn"])
@@ -262,7 +262,7 @@ def test_live_renewed_primary_cert_on_the_same_key_still_pings(secondary, primar
 
 
 def test_live_changed_primary_key_is_named_in_the_response_body(secondary, primary_certs):
-    """‏#1122 (2א): מפתח אחר → 401 עם ``code: peer_cert_changed`` והודעה
+    """#1122 (2א): מפתח אחר → 401 עם ``code: peer_cert_changed`` והודעה
     בעברית — מה שהקונסולה בראשי מציגה. הסמל עובר את ה-terminator, לא רק
     את שכבת ה-service."""
     code = interserver_auth.open_pairing_window(secondary["conn"])
@@ -285,7 +285,7 @@ def test_live_changed_primary_key_is_named_in_the_response_body(secondary, prima
 
 
 class _ClosedConn:
-    """חיבור שכבר נסגר בצד השני: ‏recv מחזיר EOF, ‏sendall אוסף."""
+    """חיבור שכבר נסגר בצד השני: recv מחזיר EOF, sendall אוסף."""
     def __init__(self):
         self.sent = b""
 
@@ -307,7 +307,7 @@ def _small(secondary, primary_certs, *, length: int, rest: bytes):
 
 
 def test_small_request_body_shorter_than_declared_is_400_and_closes(secondary, primary_certs):
-    """‏#1122 (4): ‏Content-Length: 10, הגיעו 5 והחיבור נסגר → 400, ‏keep=False —
+    """#1122 (4): Content-Length: 10, הגיעו 5 והחיבור נסגר → 400, keep=False —
     לא dispatch של חצי גוף."""
     keep, sent = _small(secondary, primary_certs, length=10, rest=b"12345")
     assert keep is False
@@ -323,7 +323,7 @@ def test_small_request_bytes_beyond_declared_length_close_the_connection(seconda
 
 
 def test_small_request_exact_body_keeps_alive(secondary, primary_certs):
-    """הצד החיובי: גוף באורך המוצהר בדיוק — ‏keep-alive נשאר."""
+    """הצד החיובי: גוף באורך המוצהר בדיוק — keep-alive נשאר."""
     keep, sent = _small(secondary, primary_certs, length=2, rest=b"{}")
     assert keep is True
     assert sent.startswith(b"HTTP/1.1 ")

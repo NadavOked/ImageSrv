@@ -1,15 +1,15 @@
-"""‏#1837 — חיבור חוזר למוניטור בניסיון הראשון.
+"""#1837 — חיבור חוזר למוניטור בניסיון הראשון.
 
-משכפל 2, ‏19/10: אחרי כל סשן מאומת הסוכן הגריל סוד חדש, והשרת למד אותו
+משכפל 2, 19/10: אחרי כל סשן מאומת הסוכן הגריל סוד חדש, והשרת למד אותו
 רק ב-hello הבא. כל חיבור חוזר לפני ה-hello נדחה ב-`password check failed!`
 — שש דחיות ברצף במעבר מהיר בין שלוש מכונות. התיקון: הסוד הבא **נגזר**
 בשני הצדדים מאותו סוד ומאותו challenge (HMAC-SHA256(סוד,
-‏"imagesrv-monitor-rekey"‖challenge)[:16]), ברגע האימות. ‏`RekeyingMachine`
+"imagesrv-monitor-rekey"‖challenge)[:16]), ברגע האימות. `RekeyingMachine`
 כאן הוא המראה של `agent/monitor.c` — הגזירה כתובה בו **בנפרד** מ-
-‏`server.console.monitor.next_secret`, כדי שהטסט לא יאשר את עצמו;
-‏`test_monitor_native.py` מריץ את הבינארי האמיתי מול אותו וקטור.
+`server.console.monitor.next_secret`, כדי שהטסט לא יאשר את עצמו;
+`test_monitor_native.py` מריץ את הבינארי האמיתי מול אותו וקטור.
 
-בקרה שלילית: על הקוד שלפני התיקון (‏`server/*` ו-`agent/monitor.c` של
+בקרה שלילית: על הקוד שלפני התיקון (`server/*` ו-`agent/monitor.c` של
 הבסיס) החיבור השני נסגר 4512, ה-hello הישן דורס, והסיבה מגיעה באנגלית.
 """
 
@@ -32,19 +32,19 @@ from test_monitor import (CHALLENGE, MAC, SECRET, SERVER_INIT, FakeMachine,
                           browser_handshake, hello_with_secret, hmac16,
                           monitor_client, prepare_secret_machine, stored_secret)
 
-#: וקטור ידוע של הגזירה — חושב פעם אחת, לא בזמן הטסט. ‏`test_monitor_native`
+#: וקטור ידוע של הגזירה — חושב פעם אחת, לא בזמן הטסט. `test_monitor_native`
 #: מוודא שהבינארי של הסוכן כותב לקובץ הסוד בדיוק את זה.
 KNOWN_NEXT = "408f3bced059aba379c89a413e334fed"
 
 
 def rekey(secret: str, challenge: bytes) -> str:
-    """‏`rekey_secret` של monitor.c, כתוב כאן בנפרד מהשרת."""
+    """`rekey_secret` של monitor.c, כתוב כאן בנפרד מהשרת."""
     return hmaclib.new(bytes.fromhex(secret), b"imagesrv-monitor-rekey" + challenge,
                        hashlib.sha256).digest()[:16].hex()
 
 
 class RekeyingMachine(FakeMachine):
-    """מוניטור מזויף **מחמיר**: בודק את ה-HMAC מול הסוד שלו (‏`state`, משותף
+    """מוניטור מזויף **מחמיר**: בודק את ה-HMAC מול הסוד שלו (`state`, משותף
     לכל החיבורים — כמו התהליך האחד במכונה), ובהצלחה עובר לסוד הבא."""
 
     def __init__(self, state: dict):
@@ -86,7 +86,7 @@ def watch_once(client) -> None:
         assert websocket.receive_bytes() == SERVER_INIT
 
 
-# --- ‏#1837 -------------------------------------------------------------------
+# --- #1837 -------------------------------------------------------------------
 
 
 def test_next_secret_matches_the_known_vector_and_the_agent_mirror():
@@ -140,9 +140,9 @@ def test_a_response_captured_from_an_earlier_session_is_rejected(server):
 
 
 def test_a_hello_built_before_the_rekey_does_not_bring_the_old_secret_back(server):
-    """‏hello שהסוכן בנה לפני האימות והגיע אחריו נושא את הסוד הקודם. דריסה
+    """hello שהסוכן בנה לפני האימות והגיע אחריו נושא את הסוד הקודם. דריסה
     בו הייתה מחזירה את ה-"bad HMAC" בדיוק כשהמפעיל חוזר למכונה. הוא נזנח
-    פעם אחת; ‏hello שני עם אותו סוד הוא ראיה שהמכונה באמת נשארה עליו."""
+    פעם אחת; hello שני עם אותו סוד הוא ראיה שהמכונה באמת נשארה עליו."""
     prepare_secret_machine(server)
     state = {"secret": SECRET}
 
@@ -159,7 +159,7 @@ def test_a_hello_built_before_the_rekey_does_not_bring_the_old_secret_back(serve
     assert stored_secret(server) == KNOWN_NEXT
     watch_once(client)                                    # ועדיין מתחבר מיד
 
-    hello_with_secret(server, SECRET, auth="hmac")       # ‏hello אחרי הניקוי
+    hello_with_secret(server, SECRET, auth="hmac")       # hello אחרי הניקוי
     assert stored_secret(server) == SECRET
 
 

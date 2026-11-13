@@ -1,20 +1,20 @@
 """#1912: שומרי רגרסיה ל-`disk_serial` (agent/lib/hw/diskinfo.sh) — #16 ו-#30.
 
-‏#16: מגירה בלי serial נעלמה מסבב החדר — ספירת החדר היא לפי serial, ודיסק
+#16: מגירה בלי serial נעלמה מסבב החדר — ספירת החדר היא לפי serial, ודיסק
 וירטואלי (serial: null) הפך משכפל שלם לשקוף. התיקון: נפילה ל-`wwid`.
 
-‏#30: ‏`hdparm -I` על דיסק וירטואלי מייצר שגיאת קרנל בכל קריאה, וה-hello
-הקבוע הציף את מסך הבנייה. התיקון: ‏`wwid` **לפני** `hdparm`, ו-hdparm
+#30: `hdparm -I` על דיסק וירטואלי מייצר שגיאת קרנל בכל קריאה, וה-hello
+הקבוע הציף את מסך הבנייה. התיקון: `wwid` **לפני** `hdparm`, ו-hdparm
 נשאר מוצא אחרון.
 
-‏hdparm רץ רק כש-`SYSROOT` ריק (מכונה אמיתית), ולכן הטסט של #30 מריץ את
-‏`disk_serial` עם `SYSROOT=""` ומפנה את `/sys/...` לעץ מזויף דרך פונקציית
-‏`cat` — ו-hdparm מזויף על PATH רושם כל הפעלה שלו.
+hdparm רץ רק כש-`SYSROOT` ריק (מכונה אמיתית), ולכן הטסט של #30 מריץ את
+`disk_serial` עם `SYSROOT=""` ומפנה את `/sys/...` לעץ מזויף דרך פונקציית
+`cat` — ו-hdparm מזויף על PATH רושם כל הפעלה שלו.
 
 בקרה שלילית (מוטציות על diskinfo.sh, ראו גוף ה-PR):
   A. בלוק ה-wwid הוסר (הקוד שלפני #16) — נופלים הטסט של #16 והטסט של #30.
-  B. ‏wwid אחרי hdparm (הקוד שבין #16 ל-#30) — נופל הטסט של #30 בלבד.
-  ‏serial-קודם ו-hdparm-כמוצא-אחרון עוברים בשני המצבים: שומרים מפני
+  B. wwid אחרי hdparm (הקוד שבין #16 ל-#30) — נופל הטסט של #30 בלבד.
+  serial-קודם ו-hdparm-כמוצא-אחרון עוברים בשני המצבים: שומרים מפני
   "תיקון" שמוחק את hdparm או מעדיף wwid על serial אמיתי.
 """
 
@@ -75,7 +75,7 @@ def _fake_hdparm(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _disk_serial(tmp_path: Path, root: Path, *, real_machine: bool) -> tuple[str, list[str]]:
-    """מריץ `disk_serial sda`. ‏real_machine: ‏SYSROOT ריק (hdparm מותר), ו-/sys מופנה ל-root."""
+    """מריץ `disk_serial sda`. real_machine: SYSROOT ריק (hdparm מותר), ו-/sys מופנה ל-root."""
     bindir, log = _fake_hdparm(tmp_path)
     dev = tmp_path / "dev"
     dev.mkdir()
@@ -84,7 +84,7 @@ def _disk_serial(tmp_path: Path, root: Path, *, real_machine: bool) -> tuple[str
                  'cat() { case "$1" in /sys/*) command cat "$FAKE_ROOT$1" ;; *) command cat "$@" ;; esac; }; ')
     else:
         setup = f'export SYSROOT={_posix(root)!r}; '
-    # PATH דרך הסביבה ולא בתוך הסקריפט: ‏`C:/...` בווינדוס מכיל `:` — מפריד ה-PATH של bash.
+    # PATH דרך הסביבה ולא בתוך הסקריפט: `C:/...` בווינדוס מכיל `:` — מפריד ה-PATH של bash.
     env = {**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}"}
     script = ('export PATH="$PATH:/usr/bin:/bin"; '
               f'export DEVROOT={_posix(dev)!r} FAKE_ROOT={_posix(root)!r} '

@@ -1,9 +1,9 @@
 """הגשת קבצי האתחול של הסוכן — הפער שמעבדת ה-VM חשפה (issue #12).
 
 המתקין מניח vmlinuz ו-initrd.img ב-HTTP_ROOT והתפריט מפנה אליהם;
-השרת חייב להגיש אותם תחת ‎/boot, עם Content-Length באותיות גדולות — GRUB
+השרת חייב להגיש אותם תחת /boot, עם Content-Length באותיות גדולות — GRUB
 לא מזהה content-length באותיות קטנות של uvicorn, וקריאה-עד-EOF על חיבור
-פתוח נתקעת עד timeout. ‏**השרת אינו סוגר את החיבור ראשון** (#1423): GRUB
+פתוח נתקעת עד timeout. **השרת אינו סוגר את החיבור ראשון** (#1423): GRUB
 יודע איפה הקובץ נגמר לפי Content-Length וסוגר בעצמו, ו-TIME_WAIT בצד
 השרת היה מה שתקע אתחול חוזר מהיר.
 """
@@ -42,8 +42,8 @@ def test_boot_menu_still_wins_over_the_mount(tmp_path):
     response = client.get("/boot/menu?mac=aa:bb:cc:dd:ee:ff")
     assert response.status_code == 200
     assert b"chain_local" in response.content
-    # ‏Content-Length, לא chunked: ‏GRUB של EFI עם TPM דוחה קובץ שגודלו לא
-    # ידוע ב-open (#1518, ‏tests/test_boot_size_known_at_open_1518.py).
+    # Content-Length, לא chunked: GRUB של EFI עם TPM דוחה קובץ שגודלו לא
+    # ידוע ב-open (#1518, tests/test_boot_size_known_at_open_1518.py).
     assert response.headers["Content-Length"] == str(len(response.content))
     assert "connection" not in response.headers
 

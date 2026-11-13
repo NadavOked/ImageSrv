@@ -203,7 +203,7 @@ def test_a_name_that_does_not_read_back_fails_the_target(tmp_path):
     assert _names(box) == {1: "garbled", 2: "garbled", 3: "garbled"}
     state, error = _state(run)
     assert state == "failed" and "לא הוסר מהדיסק" in error, (state, error)
-    assert "partition 1 is named 'garbled' after sgdisk -c, not ''" in log_of(run)
+    assert "partition 1 is named another name (not logged) after sgdisk -c, not (empty)" in log_of(run)   # #2834: no name in the log
 
 
 def test_a_table_that_cannot_be_read_is_unchecked_never_clean(tmp_path):

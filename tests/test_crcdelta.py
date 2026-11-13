@@ -1,11 +1,11 @@
-"""‏#872: שגיאות CRC (מאפיין 199) כהפרש בסבב, לא כמונה מצטבר.
+"""#872: שגיאות CRC (מאפיין 199) כהפרש בסבב, לא כמונה מצטבר.
 
 המונה המצטבר מספר על ההיסטוריה של הכבלים (137–55,242 על כל 6 דיסקי
 הכיתה, 15/09) ולא על הדיסק. מה שאומר משהו על הסבב הזה הוא בכמה הוא עלה
 בו: 199 נקרא לפני הכתיבה (המטמון של smart_probe) ופעם אחת אחריה, וההפרש
 מגיע לדוח הסיום כ-`crc_delta`. הכלל של עיקרון 5: **חסר = לא נמדד**, לא 0.
 
-‏smartctl מזויף שקורא את הפלט שלו מקובץ, כדי שהבדיקה תוכל להחליף אותו
+smartctl מזויף שקורא את הפלט שלו מקובץ, כדי שהבדיקה תוכל להחליף אותו
 בין הקריאה הראשונה לשנייה — בדיוק מה שדיסק עם כבל רועע עושה.
 """
 
@@ -33,7 +33,7 @@ PRELUDE = (
 
 
 def box(tmp_path: Path, crc_before: int) -> tuple[str, Path]:
-    """‏RUN_DIR עם יעד sda שאותחל, smartctl מזויף שמדפיס את `smart.body`
+    """RUN_DIR עם יעד sda שאותחל, smartctl מזויף שמדפיס את `smart.body`
     ויוצא ב-`smart.rc`, ומטמון SMART שנקרא ממנו (crc_before)."""
     run = tmp_path / "run"; run.mkdir()
     dev = tmp_path / "dev"; dev.mkdir(); (dev / "sda").write_bytes(b"\x00")
@@ -45,7 +45,7 @@ def box(tmp_path: Path, crc_before: int) -> tuple[str, Path]:
                   newline="\n")
     subprocess.run([BASH, "-c", f'chmod +x {posix(sc)!r}'], check=True,
                    stdin=subprocess.DEVNULL)
-    # ‏#1742: ‏/sys/block/sda/ro = 0 -- כתיב; ro שלא נקרא היה "לא נבדק", לא "ok"
+    # #1742: /sys/block/sda/ro = 0 -- כתיב; ro שלא נקרא היה "לא נבדק", לא "ok"
     blk = tmp_path / "sysro" / "sys" / "block" / "sda"; blk.mkdir(parents=True)
     (blk / "ro").write_text("0\n", newline="\n")
     base = env(run, dev, sysroot=tmp_path / "sysro", smartctl=posix(sc)) + PRELUDE
@@ -66,7 +66,7 @@ def delta_file(tmp_path: Path) -> Path:
 
 
 def test_a_rise_during_the_round_is_the_delta_not_the_counter(tmp_path):
-    """‏55,242 לפני, 55,247 אחרי → 5. המונה עצמו (55K) אינו מעניין; מה
+    """55,242 לפני, 55,247 אחרי → 5. המונה עצמו (55K) אינו מעניין; מה
     שמעניין הוא שהכבל הפיל 5 בסבב הזה. בקרה שלילית: על main אין קובץ."""
     base, t = box(tmp_path, 55242)
     set_after(t, crc=55247)
@@ -125,7 +125,7 @@ def test_crc_delta_after_measures_and_keeps_the_exit_code_of_the_write(tmp_path)
 
 
 def test_the_report_carries_the_delta_only_when_it_was_measured(tmp_path):
-    """‏build_progress: ‏sda נמדד (5) → `crc_delta: 5`; ‏sdb לא נמדד → השדה
+    """build_progress: sda נמדד (5) → `crc_delta: 5`; sdb לא נמדד → השדה
     **חסר**, לא 0. בקרה שלילית: על main השדה חסר גם ל-sda."""
     run = tmp_path / "run"
     for dev in ("sda", "sdb"):
@@ -153,7 +153,7 @@ def test_target_init_clears_a_delta_from_the_previous_round(tmp_path):
 
 
 def test_the_agent_loads_the_lib_and_measures_on_both_restore_paths():
-    """‏imagesrv-agent הוא 300 שורות בדיוק: הטעינה והקריאות יושבות בשורות
+    """imagesrv-agent הוא 300 שורות בדיוק: הטעינה והקריאות יושבות בשורות
     קיימות. בלי הטעינה — `crc_delta_measure: not found` על הברזל."""
     src = (REPO / "agent" / "imagesrv-agent").read_text(encoding="utf-8")
     assert '. "$LIB_DIR/crcdelta.sh"' in src

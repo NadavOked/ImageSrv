@@ -1,4 +1,4 @@
-"""‏#988 — נראות ראשי/משני לפי תפקיד: ארבעת הכללים של נדב (17/09) בטבלה אחת.
+"""#988 — נראות ראשי/משני לפי תפקיד: ארבעת הכללים של נדב (17/09) בטבלה אחת.
 
 1. admin בראשי רואה גם את המשניים (סניפים, מכונות המשני, מוניטור דרך
    הראשי, העברות).
@@ -6,17 +6,17 @@
    **בוטל ב-#1073 (18/09): למשתמש הפצה אין קונסולה.** מה שנשאר לו הוא
    allowlist הקיוסק (אימג'ים, סבבים, חדר) ממחשב הבנייה; כאן, על
    `create_app` המשולב, הקיוסק קודם לקונסולה — ולכן `/images` 200 ו-
-   `/overview` 403 `deploy_no_console`. ‏`test_roles_v1.py` הוא הצד המלא.
+   `/overview` 403 `deploy_no_console`. `test_roles_v1.py` הוא הצד המלא.
 3. admin במשני רואה רק את השרת שלו — אין עץ סניפים, ואין "ראשי" מלבד
    מצב ה-pairing.
 4. ~~deploy במשני — אותה הגבלה כמו deploy בראשי~~ — אותו ביטול (#1073).
 
 הטבלה היא **תפקיד-שרת × תפקיד-משתמש × מסלול**, וכל תא הוא קוד תשובה
 מהשרת — לא הסתרה בקונסולה. ההסתרה בעץ (#954 גל 7) נבנית לפי אותם
-קודים: ‏403 (deploy) ו-409 (משני) שניהם "אין צומת", ולכן הקודים כאן
+קודים: 403 (deploy) ו-409 (משני) שניהם "אין צומת", ולכן הקודים כאן
 הם החוזה של הקונסולה, לא פרט מימוש.
 
-‏WebSocket: השער נסגר **אחרי** accept (#904) בקוד 4403/4409, ולכן התא
+WebSocket: השער נסגר **אחרי** accept (#904) בקוד 4403/4409, ולכן התא
 הוא קוד הסגירה. deploy נסגר לפני שהשרת פותח TCP/מנהרה לאיש.
 """
 
@@ -42,7 +42,7 @@ LOGINS = {"admin": ("noc", "admin-pass-123"),
 @pytest.fixture()
 def clients(server):
     """לקוח מחובר לכל תפקיד, מ-loopback — כדי ש-``/storage-pairing-window``
-    (‏loopback בלבד, #740) ייבחן על התפקיד ולא על כתובת ה-peer.
+    (loopback בלבד, #740) ייבחן על התפקיד ולא על כתובת ה-peer.
     משני אחד רשום (פעיל, עם credential שאינו קיים — אין רשת בטסט)."""
     conn = server["ctx"].conn
     conn.execute(
@@ -72,12 +72,12 @@ def _ws(client, _method, path):
     return e.value.code
 
 
-#: (מסלול, ‏method, ‏קורא) → תאים: ראשי/admin, ראשי/deploy, משני/admin, משני/deploy.
+#: (מסלול, method, קורא) → תאים: ראשי/admin, ראשי/deploy, משני/admin, משני/deploy.
 #:
-#: ‏admin בראשי "עובר את השער" — הקוד שם הוא מה שהמסלול עונה **אחרי**
-#: הרשאה: ‏400 = גוף ריק ל-enroll/preview, ‏409 = חלון pairing אינו של
-#: ראשי, ‏4500 = המשני הרשום בטסט אינו ניתן לפנייה (credential חסר).
-#: ‏admin במשני עובר את השער רק בחלון ה-pairing (כלל 3) ובמוניטור המקומי.
+#: admin בראשי "עובר את השער" — הקוד שם הוא מה שהמסלול עונה **אחרי**
+#: הרשאה: 400 = גוף ריק ל-enroll/preview, 409 = חלון pairing אינו של
+#: ראשי, 4500 = המשני הרשום בטסט אינו ניתן לפנייה (credential חסר).
+#: admin במשני עובר את השער רק בחלון ה-pairing (כלל 3) ובמוניטור המקומי.
 ROWS = [
     ("/api/console/storage-nodes", "get", _http,
      (200, 403, 409, 403)),
@@ -89,7 +89,7 @@ ROWS = [
      (200, 403, 409, 403)),
     (f"/api/console/storage-nodes/{NODE}/images", "get", _http,
      (200, 403, 409, 403)),
-    # ‏#1017: בדיקת חיבור בלבד — אותה שורה בטבלה כמו /machines (200 עם
+    # #1017: בדיקת חיבור בלבד — אותה שורה בטבלה כמו /machines (200 עם
     # connected:false על credential חסר — לא 5xx).
     (f"/api/console/storage-nodes/{NODE}/check", "post", _http,
      (200, 403, 409, 403)),
@@ -108,7 +108,7 @@ ROWS = [
     # מה ש-deploy **כן** רואה — allowlist הקיוסק (ממחשב הבנייה) בלבד.
     ("/api/console/images", "get", _http,
      (200, 200, 200, 200)),
-    # ‏#1073: קונסולה בלבד → deploy 403 (deploy_no_console), בראשי ובמשני.
+    # #1073: קונסולה בלבד → deploy 403 (deploy_no_console), בראשי ובמשני.
     ("/api/console/overview", "get", _http,
      (200, 403, 200, 403)),
 ]
@@ -136,7 +136,7 @@ def test_visibility_matrix(server, clients, row):
     ("standalone", "admin",
      {"interbranch_transfer": True, "enroll_secondary": True, "open_local_pairing": False,
       "classrooms": False, "tools": False}),
-    # ‏#1073: ל-deploy אין `/me` בכלל — הקונסולה סגורה בפניו (403).
+    # #1073: ל-deploy אין `/me` בכלל — הקונסולה סגורה בפניו (403).
     ("standalone", "deploy", None),
     ("secondary", "admin",
      {"interbranch_transfer": False, "enroll_secondary": False, "open_local_pairing": True,
@@ -145,7 +145,7 @@ def test_visibility_matrix(server, clients, row):
 ])
 def test_me_capabilities_follow_the_same_table(server, clients, server_role, user_role, caps):
     """הדגלים שמהם הקונסולה בונה את העץ — אותה טבלה, מהצד של ``/me``.
-    ‏admin בראשי מקבל ``interbranch_transfer`` כי יש משני פעיל אחד."""
+    admin בראשי מקבל ``interbranch_transfer`` כי יש משני פעיל אחד."""
     set_setting(server["ctx"].conn, storage_nodes.ROLE_KEY, server_role)
     resp = clients[user_role].get("/api/console/me")
     if caps is None:
@@ -184,7 +184,7 @@ def test_the_tools_api_does_not_exist_in_v1_404_by_name(server, clients):
 
 
 def test_turning_the_tools_flag_on_brings_the_api_and_the_capability_back(server, clients, monkeypatch):
-    """המסלול ש-v1.1 מדליק: אותו קוד, הדגל True → ‏/me אומר `tools: true`,
+    """המסלול ש-v1.1 מדליק: אותו קוד, הדגל True → /me אומר `tools: true`,
     הקטלוג נקרא (admin 200), וההרשאות חוזרות למקומן (deploy 403)."""
     from server.core import capabilities
     monkeypatch.setattr(capabilities, "TOOLS", True)

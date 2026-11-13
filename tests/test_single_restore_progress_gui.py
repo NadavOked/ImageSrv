@@ -51,7 +51,7 @@ from test_agent import AGENT, BASH, posix
 from test_unicast_pull import AWAIT, IMAGE, MAC, RUN_TIMEOUT_S
 
 REPO = Path(__file__).resolve().parent.parent
-RLM = "‏"
+RLM = "\u200f"
 TOTAL = 40_000_000_000
 
 pytestmark = requires_native(("bash", BASH), "jq")

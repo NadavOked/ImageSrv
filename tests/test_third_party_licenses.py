@@ -55,3 +55,14 @@ def test_iso_places_third_party_notices_at_its_root() -> None:
     text = BUILD_ISO.read_text(encoding="utf-8")
     assert '[[ -f "$ISO_TREE/imagesrv-src/THIRD_PARTY_NOTICES.md" ]]' in text
     assert '"$ISO_TREE/THIRD_PARTY_NOTICES.md"' in text
+
+
+def test_gpl_source_section_has_no_placeholder_and_points_at_the_release() -> None:
+    """#1707: owner decision 11/11 - source is attached to every Release, so
+    the notice must say so and must not carry an unfilled contact placeholder."""
+    text = NOTICES.read_text(encoding="utf-8")
+    section = text[text.index("## 3. Source code for GPL"):text.index("## 4. Full license texts")]
+
+    assert "<CONTACT-ADDRESS" not in text
+    assert "TO BE CONFIRMED" not in section
+    assert "attached" in section and "Release" in section

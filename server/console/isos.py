@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.agent.api import ServerContext
 from server.console import auth
-from server.console.library import UPLOAD_BATCH, UPLOAD_PREFIX
+from server.console.library import UPLOAD_BATCH, UPLOAD_PREFIX, free_unmeasured
 from server.db import get_setting, journal, set_setting
 from server.library import isos
 from server.library.images import validate_display_name
@@ -77,8 +77,8 @@ def create_iso_router(ctx: ServerContext) -> APIRouter:
 
     @router.post("/isos/upload")
     async def upload_iso(request: Request, user=Depends(admin_only)):
-        """קליטת ISO. הגוף הוא הקובץ עצמו (לא multipart); ‏`name`, ‏`folder` ו-`filename`
-        ב-query. ‏`X-Expected-Sha256` (לא חובה): ה-sha256 שהאתר שפרסם את ה-ISO נותן.
+        """קליטת ISO. הגוף הוא הקובץ עצמו (לא multipart); `name`, `folder` ו-`filename`
+        ב-query. `X-Expected-Sha256` (לא חובה): ה-sha256 שהאתר שפרסם את ה-ISO נותן.
 
         נכתב לדיסק תוך כדי קבלה -- ISO שוקל ג'יגות. כל ההעלאה, כולל קריאת
         האימות מהדיסק, היא "עסוק" ל"החל עדכון" (`inflight`), כמו העלאת אימג'."""
@@ -110,7 +110,7 @@ def create_iso_router(ctx: ServerContext) -> APIRouter:
             try:
                 free = _free(root)
             except OSError as exc:              # לא נמדד ≠ יש מקום (עיקרון 5)
-                raise HTTPException(507, f"לא ניתן לקרוא כמה מקום פנוי בשרת: {exc}")
+                raise free_unmeasured(exc)
             refused = disk_reserve.refusal(free, need, "העלאת ה-ISO")
             if refused is not None:
                 raise HTTPException(507, refused)

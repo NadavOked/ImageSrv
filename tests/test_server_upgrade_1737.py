@@ -1,6 +1,6 @@
-"""‏#1737 — שרת שכבר בשטח מקבל את תקרת ה-journald בעדכון הגרסה.
+"""#1737 — שרת שכבר בשטח מקבל את תקרת ה-journald בעדכון הגרסה.
 
-‏setup-boot-server.sh מתקין אותה בשרת חדש (‏test_disk_fill_1737); שרת המעבדה
+setup-boot-server.sh מתקין אותה בשרת חדש (test_disk_fill_1737); שרת המעבדה
 TA, וכל שרת שהותקן לפני #1737, מתעדכן רק דרך server-upgrade.sh. הסקריפט
 האמיתי רץ מול כלים מדומים על PATH, כמו ב-test_server_upgrade_1193.
 """
@@ -65,7 +65,7 @@ def test_the_upgrade_installs_the_journal_ceiling_and_restarts_journald(tmp_path
     assert installed.read_bytes() == CONF.read_bytes()
     assert "systemctl restart systemd-journald" in calls(tmp_path)
     status = _status(data)
-    # ‏warning אחר (מסך השרת המדומה כאן) אינו העניין; זה של היומן — אסור שיופיע.
+    # warning אחר (מסך השרת המדומה כאן) אינו העניין; זה של היומן — אסור שיופיע.
     assert status["state"] == "done" and "תקרת היומן" not in status.get("warning", "")
 
 

@@ -1,16 +1,16 @@
-"""‏#1889 — כמה זמן סבב חיכה לאדם, ועל מה. ניתוח בלבד — הנתונים כבר נאספים.
+"""#1889 — כמה זמן סבב חיכה לאדם, ועל מה. ניתוח בלבד — הנתונים כבר נאספים.
 
 בלילה של 19/10 גל חיכה 16 דק' לתשובת SMART, ואיש לא ידע לספור את זה אחר כך. שני מקורות קיימים, בלי
 טבלה חדשה:
 
-* **ההמתנה לתשובת SMART** — השולח רושם ביומן **`send_held_smart`** (‏`<ses> <macs…>`) כשהוא עוצר לפני המחיצה
-  הראשונה, ו-**`send_hold_released`** (‏`<ses> <N>s`) כשהשאלה האחרונה נענתה (‏`sender._hold_for_asks`).
-  ‏`smart_hold_s` = סכום ה-N של גלי הסבב. עצירה שלא שוחררה (הסבב נסגר בזמן ההמתנה) נספרת ב-`smart_unreleased`
+* **ההמתנה לתשובת SMART** — השולח רושם ביומן **`send_held_smart`** (`<ses> <macs…>`) כשהוא עוצר לפני המחיצה
+  הראשונה, ו-**`send_hold_released`** (`<ses> <N>s`) כשהשאלה האחרונה נענתה (`sender._hold_for_asks`).
+  `smart_hold_s` = סכום ה-N של גלי הסבב. עצירה שלא שוחררה (הסבב נסגר בזמן ההמתנה) נספרת ב-`smart_unreleased`
   — **בלי** שניות: לא ידוע כמה ארכה (עיקרון 5ב).
-* **הגל הפתוח** — ‏`sessions.started_at − created_at` של כל גל (‏multicast של קבוצת השיכפול, בחלון הזמן של
-  הסבב): מכונות שמצטרפות, החלפת מגירות, "התחל גל". ‏`open_wait_s` — סכום; גל שלא יצא — אינו נספר.
+* **הגל הפתוח** — `sessions.started_at − created_at` של כל גל (multicast של קבוצת השיכפול, בחלון הזמן של
+  הסבב): מכונות שמצטרפות, החלפת מגירות, "התחל גל". `open_wait_s` — סכום; גל שלא יצא — אינו נספר.
 
-‏`None` = לא נמדד (אין גל שיצא לדרך), לא 0. ההמלצה ("שקלו לענות מראש…") מוצגת לאדם — שום דבר אינו
+`None` = לא נמדד (אין גל שיצא לדרך), לא 0. ההמלצה ("שקלו לענות מראש…") מוצגת לאדם — שום דבר אינו
 משתנה אוטומטית. לעולם אינו זורק.
 """
 
@@ -43,7 +43,7 @@ def _span(a: str | None, b: str | None) -> float | None:
 
 
 def round_waits(conn: sqlite3.Connection, created_at: str, closed_at: str | None) -> dict:
-    """‏`{"waves", "open_wait_s", "smart_hold_s", "smart_holds", "smart_unreleased"}` לסבב בחלון."""
+    """`{"waves", "open_wait_s", "smart_hold_s", "smart_holds", "smart_unreleased"}` לסבב בחלון."""
     try:
         until = closed_at or datetime.now(timezone.utc).isoformat(timespec="seconds")
         waves = conn.execute(
@@ -78,8 +78,8 @@ def round_waits(conn: sqlite3.Connection, created_at: str, closed_at: str | None
 
 
 def week(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
-    """הסבבים שנסגרו ב-`WEEK_DAYS` הימים האחרונים: ‏`{"rounds", "smart_hold_s", "longest_s",
-    "open_wait_s"}` (‏None — לא נמדד באף סבב)."""
+    """הסבבים שנסגרו ב-`WEEK_DAYS` הימים האחרונים: `{"rounds", "smart_hold_s", "longest_s",
+    "open_wait_s"}` (None — לא נמדד באף סבב)."""
     now = now or datetime.now(timezone.utc)
     since = (now - timedelta(days=WEEK_DAYS)).isoformat(timespec="seconds")
     rows = conn.execute("SELECT created_at, closed_at FROM room_rounds WHERE state IN ('closed','failed')"

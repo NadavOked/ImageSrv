@@ -99,6 +99,7 @@ async function confirmNetRollback() {
   await loadNetcfg();
   if (typeof refreshNetPages === "function") refreshNetPages();
 }
+confirmNetRollback = guarded("confirmNetRollback", confirmNetRollback, { key: "netRollback" });   // ‏#2840: לחיצה כפולה = בקשה אחת
 
 /* --- עריכת הכתובת --------------------------------------------------------- */
 

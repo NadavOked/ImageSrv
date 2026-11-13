@@ -3,7 +3,7 @@
 #2468: ביצירת מיקום נשמר כל `params` שנשלח. מנהל קונסולה יכול היה לשלוח
 `device_by_path=/dev/sda` (שמגיע לפירמוט כ-root ול-`/etc/fstab`) ו-`fs_type` עם
 שורה חדשה בתוכו (שורת fstab מוזרקת). עכשיו: רק המפתחות של הסוג נשמרים, ההתקן
-הוא רק קישור by-path של LUN מ-`iscsi_login`, ‏`fs_type` מרשימה סגורה, ו-`fstab_write`
+הוא רק קישור by-path של LUN מ-`iscsi_login`, `fs_type` מרשימה סגורה, ו-`fstab_write`
 מסרב לשדה עם רווח או תו בקרה.
 
 #2462: עצי האתחול נבדקו לפי ברירת המחדל בלבד, ונתיב בתוך `data_dir` אושר לפני כל
@@ -65,7 +65,7 @@ def test_client_device_never_reaches_format_or_fstab(env):
 
 
 def test_create_local_drops_uuid_and_fs_type(env):
-    """‏`uuid` הופך מיקום local ל"כונן" שנכתב ל-fstab — גם הוא נקבע בשרת בלבד."""
+    """`uuid` הופך מיקום local ל"כונן" שנכתב ל-fstab — גם הוא נקבע בשרת בלבד."""
     folder = env["data"] / "extra-images"
     folder.mkdir()
     r = env["admin"].post(SL, json={
@@ -125,7 +125,7 @@ def test_by_path_lookup_returns_the_whole_lun_link(tmp_path, monkeypatch):
             return True
 
         def iterdir(self):
-            # ‏`resolve` — מה שהקוד הישן החזיר: ‏`/dev/sdX`, גם למחיצה.
+            # `resolve` — מה שהקוד הישן החזיר: `/dev/sdX`, גם למחיצה.
             return [type("E", (), {"name": n, "resolve": lambda self: "/dev/sdb"})()
                     for n in names]
 

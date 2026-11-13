@@ -1,4 +1,4 @@
-"""רשת ההפצה שמוגדרת **מהקונסולה**, לא במתקין (‏#1088).
+"""רשת ההפצה שמוגדרת **מהקונסולה**, לא במתקין (#1088).
 
 הכרעת נדב (18/09): במסירה למכללה רשת ההפצה אינה מוגדרת — כרטיס השרתים
 מקבל DHCP, שאר הכרטיסים "לא מוגדר", והמנהל שלו מגדיר את ההפצה מדף
@@ -10,12 +10,12 @@
 
 | במתקין | כאן |
 |---|---|
-| ‏`IMAGESRV_URL` + ‏`--interface` ביחידה | הגדרות `deploy:url` / `deploy:interface` ב-DB — ‏`main` קורא אותן כשאין `--server-url` |
-| ‏`grub/grub.cfg` עם כתובת הנפילה | ‏`write_grub_cfg` — אותו `render_bootstrap` |
-| ‏`interface=<הפצה>` ב-`imagesrv.conf` | ‏`dhcp.render(..., deploy_interface=)` בקובץ שהקונסולה כותבת |
-| ‏`systemctl enable dnsmasq` | ‏`enable_dnsmasq` |
-| ‏nftables עם `--deploy-if` | ‏`firewall` — המחולל רץ שוב עם שני הכרטיסים |
-| — | ‏`restart_server`: השרת עולה מחדש עם כתובת ההפצה (‏`server_base` נקבע בעלייה) |
+| `IMAGESRV_URL` + `--interface` ביחידה | הגדרות `deploy:url` / `deploy:interface` ב-DB — `main` קורא אותן כשאין `--server-url` |
+| `grub/grub.cfg` עם כתובת הנפילה | `write_grub_cfg` — אותו `render_bootstrap` |
+| `interface=<הפצה>` ב-`imagesrv.conf` | `dhcp.render(..., deploy_interface=)` בקובץ שהקונסולה כותבת |
+| `systemctl enable dnsmasq` | `enable_dnsmasq` |
+| nftables עם `--deploy-if` | `firewall` — המחולל רץ שוב עם שני הכרטיסים |
+| — | `restart_server`: השרת עולה מחדש עם כתובת ההפצה (`server_base` נקבע בעלייה) |
 
 **מקור הכתובת נאמר, לא מנוחש** (עיקרון 5): `source` הוא `cli` (הדגל
 ביחידה — המעבדה, שרת שהותקן עם כרטיס הפצה), `console` (הוגדר מכאן) או
@@ -77,9 +77,9 @@ def missing_nic(name: str, interfaces: list[dict]) -> str | None:
 
 
 def primary_ip_of(url: str, resolve: Callable | None = None) -> tuple[str | None, str | None]:
-    """הכתובת שחומת האש של משני פותחת לה את 8443 → ‏``(ip, None)`` או ``(None, סיבה)``.
+    """הכתובת שחומת האש של משני פותחת לה את 8443 → ``(ip, None)`` או ``(None, סיבה)``.
 
-    ‏#2160: ‏``--primary-url`` עם שם מארח השאיר ``primary_ip=None`` בשקט, והמחולל
+    #2160: ``--primary-url`` עם שם מארח השאיר ``primary_ip=None`` בשקט, והמחולל
     בלי ``--primary-ip`` פותח את 8443 מכל הכרטיס — חומת אש רחבה שנראית תקינה.
     כמו המתקין (``getent ahostsv4``, הראשונה): שם נפתר ל-IPv4. שם שלא נפתר
     אינו "בלי הגבלה" — זו סיבה, וחומת האש לא מחוללת מחדש עד שהיא נפתרת."""
@@ -94,7 +94,7 @@ def primary_ip_of(url: str, resolve: Callable | None = None) -> tuple[str | None
     try:
         infos = (resolve or socket.getaddrinfo)(host, None, socket.AF_INET, socket.SOCK_STREAM)
     except OSError as exc:
-        # ‏#2510: טקסט החריגה ליומן השרת; ללקוח — משפט קבוע.
+        # #2510: טקסט החריגה ליומן השרת; ללקוח — משפט קבוע.
         log.warning("primary %s did not resolve: %s", one_line(host), exc)
         return None, f"השם {host} של השרת הראשי לא נפתר לכתובת — הפרטים ביומן השרת"
     for info in infos or ():
@@ -123,7 +123,7 @@ class DeployState:
 
 
 def stored(conn) -> tuple[str | None, str | None]:
-    """‏(כרטיס, כתובת) כפי שנרשמו מהקונסולה, או ‏(None, None)."""
+    """(כרטיס, כתובת) כפי שנרשמו מהקונסולה, או (None, None)."""
     return (get_setting(conn, SETTING_INTERFACE) or None,
             get_setting(conn, SETTING_URL) or None)
 
@@ -149,10 +149,10 @@ def deploy_url(server_ip: str, port: int) -> str:
 
 
 def deploy_ip(server_base: str, state: "DeployState | None") -> str | None:
-    """‏#968: הכתובת שהתחנות רואות — המארח של ``server_base`` (מה שב-GRUB
-    ובשורת הקרנל). ‏``None`` כשרשת ההפצה טרם הוגדרה: אז ``server_base`` הוא
-    ‏loopback, ו-"127.0.0.1" בסקירה היה נתון מומצא (עיקרון 5). ‏``state``
-    ‏``None`` = אין הקשר הפצה (בדיקות/קוד ישן) — הכתובת כפי שהיא."""
+    """#968: הכתובת שהתחנות רואות — המארח של ``server_base`` (מה שב-GRUB
+    ובשורת הקרנל). ``None`` כשרשת ההפצה טרם הוגדרה: אז ``server_base`` הוא
+    loopback, ו-"127.0.0.1" בסקירה היה נתון מומצא (עיקרון 5). ``state``
+    ``None`` = אין הקשר הפצה (בדיקות/קוד ישן) — הכתובת כפי שהיא."""
     if state is not None and not state.configured:
         return None
     from urllib.parse import urlsplit
@@ -164,7 +164,7 @@ def deploy_ip(server_base: str, state: "DeployState | None") -> str | None:
 
 def _run(cmd: list[str], *, stdin_text: str | None = None,
          timeout: float = 30) -> tuple[bool, str, str]:
-    """‏(הצליח, stdout, stderr). ‏stdout ו-stderr נפרדים בכוונה: הפלט של
+    """(הצליח, stdout, stderr). stdout ו-stderr נפרדים בכוונה: הפלט של
     מחולל חומת האש הוא stdout, ואזהרה ב-stderr אסור שתחליף אותו."""
     kwargs = ({"input": stdin_text} if stdin_text is not None
               else {"stdin": subprocess.DEVNULL})
@@ -179,10 +179,10 @@ def _run(cmd: list[str], *, stdin_text: str | None = None,
 
 
 def write_grub_cfg(url: str, tftp_root: str | Path, password_hash: str = "") -> str | None:
-    """‏`grub/grub.cfg` על שורש ה-TFTP — מאותו מחולל שהמתקין מוטמע ממנו
-    (‏`tests/test_installer_matches_generator.py` שומר שהם זהים).
+    """`grub/grub.cfg` על שורש ה-TFTP — מאותו מחולל שהמתקין מוטמע ממנו
+    (`tests/test_installer_matches_generator.py` שומר שהם זהים).
 
-    ‏#2437: ‏`password_hash` הוא ה-hash של סיסמת העורך; ריק = נעול בלי סיסמה."""
+    #2437: `password_hash` הוא ה-hash של סיסמת העורך; ריק = נעול בלי סיסמה."""
     from boot.grub_menu import GrubConfig, render_bootstrap
     path = Path(tftp_root) / "grub" / "grub.cfg"
     try:
@@ -190,7 +190,7 @@ def write_grub_cfg(url: str, tftp_root: str | Path, password_hash: str = "") -> 
         path.parent.mkdir(parents=True, exist_ok=True)
         if created:
             path.parent.chmod(0o755)   # #1817: not the process umask (dnsmasq traverses it)
-        # ‏#1908: אטומי — grub.cfg חתוך הוא אף מחשב שלא מגיע לתפריט.
+        # #1908: אטומי — grub.cfg חתוך הוא אף מחשב שלא מגיע לתפריט.
         # #1817: dnsmasq must also read a formerly private file, regardless of umask.
         write_atomic(path, render_bootstrap(GrubConfig(server_base=url,
                                                        password_hash=password_hash)),
@@ -205,14 +205,16 @@ _FALLBACK_LINE = re.compile(r"^set imagesrv_fallback=(\S+)$", re.M)
 
 
 def refresh_grub_cfg(tftp_root: str | Path, password_hash: str) -> str | None:
-    """‏#2437: שרת משודרג נועל את ה-bootstrap שהשאיר על ה-TFTP — בעלייה.
+    """#2437: שרת משודרג נועל את ה-bootstrap שהשאיר על ה-TFTP — בעלייה.
 
-    נכתב מחדש רק כשהנעילה חסרה בו: בלי `set superusers` (גרסה שקדמה ל-#2437),
-    או בלי `password_pbkdf2` כשיש hash (המתקין כותב אותו לפני שהשרת עלה אי
-    פעם). הכתובת נלקחת **מהקובץ עצמו** (`set imagesrv_fallback=`), כך שהנעילה
-    אינה משנה לאן התחנות פונות. אין קובץ — אין מה לרענן (#1088: הקונסולה
-    תכתוב אותו). קובץ שלא אנחנו כתבנו נשאר כמות שהוא, ונאמר."""
-    from boot.grub_lock import is_pbkdf2_hash
+    #2491: נכתב מחדש **בכל עלייה**, עם ה-hash של הסיסמה הנוכחית. קובץ שכבר
+    נעול נשא את ה-hash של הסיסמה שהייתה בעלייה שכתבה אותו; אחרי החלפת
+    `/etc/imagesrv/grub-password` ביד הוא המשיך לאמת את הסיסמה הישנה. מלח חדש
+    בכל עלייה בסדר (`grub_password`). hash ריק (הסיסמה לא נקראה) = נעול בלי
+    סיסמה, כמו התפריטים שהשרת מגיש באותה עלייה. הכתובת נלקחת **מהקובץ עצמו**
+    (`set imagesrv_fallback=`), כך שהנעילה אינה משנה לאן התחנות פונות. אין
+    קובץ — אין מה לרענן (#1088: הקונסולה תכתוב אותו). קובץ שלא אנחנו כתבנו
+    נשאר כמות שהוא, ונאמר."""
     path = Path(tftp_root) / "grub" / "grub.cfg"
     try:
         text = path.read_text(encoding="ascii")
@@ -221,11 +223,6 @@ def refresh_grub_cfg(tftp_root: str | Path, password_hash: str) -> str | None:
     except (OSError, UnicodeDecodeError) as exc:
         log.warning("%s could not be read to lock it: %s", path, exc)
         return f"{path}: could not be read to lock it — details in the server log (#2437)"
-    lines = text.splitlines()
-    locked = any(line.startswith("set superusers=") for line in lines)
-    has_password = any(line.startswith("password_pbkdf2 ") for line in lines)
-    if locked and (has_password or not is_pbkdf2_hash(password_hash)):
-        return None
     found = _FALLBACK_LINE.search(text)
     if not found:
         return (f"{path} has no 'set imagesrv_fallback=' line -- not a file this server "
@@ -235,21 +232,21 @@ def refresh_grub_cfg(tftp_root: str | Path, password_hash: str) -> str | None:
 
 def enable_dnsmasq() -> str | None:
     """המתקין לא הפעיל את dnsmasq כשלא ידע מי כרטיס ההפצה; מכאן הוא
-    חייב לעלות גם באתחול הבא. ה-restart עצמו — ‏`dhcp_host.apply`."""
+    חייב לעלות גם באתחול הבא. ה-restart עצמו — `dhcp_host.apply`."""
     ok, out, err = _run(["systemctl", "enable", DNSMASQ_UNIT])
     return None if ok else f"systemctl enable {DNSMASQ_UNIT} נכשל: {err or out.strip()}"
 
 
-#: ‏#2440: מה ש-`regenerate_firewall` מחזיר כשהמתקין לא כתב חומת אש (‏`--no-firewall`,
+#: #2440: מה ש-`regenerate_firewall` מחזיר כשהמתקין לא כתב חומת אש (`--no-firewall`,
 #: או קובץ שאיבד את הכללים). זה כישלון בשם ולא הצלחה: אף כלל לא נכתב. הקוראים
 #: שמתזמרים (ההשלמה, שירותים לכל כרטיס) ממשיכים בגלוי, כאזהרה, כי שרת בלי חומת
 #: אש הוא מצב שהמתקין תומך בו; כל קורא אחר רואה אותו כשגיאה.
-NO_FIREWALL = ("לא הותקנה חומת אש (‏/etc/nftables.conf אינו של ImageSrv — "
+NO_FIREWALL = ("לא הותקנה חומת אש (\u200f/etc/nftables.conf אינו של ImageSrv — "
                "--no-firewall?) — אף כלל לא נכתב, וכל הפורטים פתוחים לכל כרטיס")
 
 
 def firewall_installed(conf: str | Path = NFTABLES_CONF) -> bool | None:
-    """האם המתקין כתב חומת אש. ‏None = לא הצלחנו לקרוא (ואינו "לא")."""
+    """האם המתקין כתב חומת אש. None = לא הצלחנו לקרוא (ואינו "לא")."""
     try:
         return "ImageSrv" in Path(conf).read_text(encoding="utf-8", errors="replace")
     except FileNotFoundError:
@@ -267,22 +264,22 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
     (`nft -c`), כותב ומטעין. חומת אש שלא הותקנה — לא נוגעים; הותקנה
     וכרטיס השרתים אינו ידוע — שגיאה בשם (הכללים לוילן ההפצה לא ייכתבו).
 
-    ‏`services` (‏#705): ‏[(כרטיס, [שירותים])] — המפעיל בחר שירותים לכל כרטיס,
-    והכללים נגזרים מהם בלבד (‏`--per-nic`); אז שני הכרטיסים אינם נדרשים.
+    `services` (#705): [(כרטיס, [שירותים])] — המפעיל בחר שירותים לכל כרטיס,
+    והכללים נגזרים מהם בלבד (`--per-nic`); אז שני הכרטיסים אינם נדרשים.
     `proxy_interfaces` (#1829) names the interfaces configured for PXE proxy;
     UDP 4011 additionally requires a deploy/netboot rule for that interface."""
     installed = firewall_installed(conf)
     if installed is None:
         return f"לא ניתן לקרוא את {conf} — חומת האש לא עודכנה"
     if not installed:
-        return NO_FIREWALL          # ‏#2440: לא "הצליח" — לא נכתב דבר
+        return NO_FIREWALL          # #2440: לא "הצליח" — לא נכתב דבר
     gen = Path(repo_dir) / "deploy" / "nftables-rules.sh"
     if services is not None:
         args = ["sh", str(gen), "--per-nic"]
         for nic, names in services:
             args += ["--service", f"{nic}:{','.join(names)}"]
     elif not servers_if:
-        return ("כרטיס השרתים אינו ידוע (‎--console-host אינו שם כרטיס) — "
+        return ("כרטיס השרתים אינו ידוע (\u200e--console-host אינו שם כרטיס) — "
                 "הכללים לוילן ההפצה לא נוספו")
     else:
         args = ["sh", str(gen), "--servers-if", servers_if]
@@ -295,14 +292,14 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
     ok, ruleset, err = _run(args)
     if not ok or not ruleset.strip():
         return f"מחולל חומת האש נכשל: {err or 'פלט ריק'}"
-    # ‏#1121: candidate ליד הקובץ → `nft -c` → `nft -f candidate` → ורק אז
+    # #1121: candidate ליד הקובץ → `nft -c` → `nft -f candidate` → ורק אז
     # החלפה אטומית. הקובץ הישן נדרס רק אחרי שהקרנל קיבל את החדש; טעינה
     # שנכשלה מחזירה את ה-ruleset הישן מהקובץ הישן (שעדיין שם), כדי שמה
     # שרץ עכשיו ומה שיעלה אחרי reboot יהיו אותו דבר.
     conf = Path(conf)
     candidate = conf.with_name(conf.name + ".candidate")
     try:
-        write_atomic(candidate, ruleset)   # ‏#1908: עם fsync, לפני ה-replace
+        write_atomic(candidate, ruleset)   # #1908: עם fsync, לפני ה-replace
     except OSError as exc:
         log.warning("%s not written: %s", candidate, exc)
         return f"לא ניתן לכתוב את {candidate} — הפרטים ביומן השרת"
@@ -329,10 +326,10 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
 
 def restart_server_later(delay: int = RESTART_DELAY_SECONDS) -> str | None:
     """אתחול השירות **אחרי** שהתשובה יצאה — יחידת systemd חולפת עם
-    ‏`--on-active`, כמו העדכון (`update.py`): תהליך-ילד היה נהרג יחד איתנו."""
-    # ‏#1121: שם יחידה ייחודי — יחידה חולפת בשם קבוע שעדיין ממתינה (3 ש')
-    # הייתה מכשילה השלמה שנייה ב-"Unit already exists"; ‏--collect מנקה.
-    # ‏uuid ולא זמן: רזולוציית השעון בווינדוס (הבדיקות) היא מילישניות.
+    `--on-active`, כמו העדכון (`update.py`): תהליך-ילד היה נהרג יחד איתנו."""
+    # #1121: שם יחידה ייחודי — יחידה חולפת בשם קבוע שעדיין ממתינה (3 ש')
+    # הייתה מכשילה השלמה שנייה ב-"Unit already exists"; --collect מנקה.
+    # uuid ולא זמן: רזולוציית השעון בווינדוס (הבדיקות) היא מילישניות.
     unit = f"imagesrv-deploy-restart-{uuid.uuid4().hex[:12]}"
     ok, out, err = _run(["systemd-run", f"--on-active={delay}",
                          f"--unit={unit}", "--collect",
@@ -343,7 +340,7 @@ def restart_server_later(delay: int = RESTART_DELAY_SECONDS) -> str | None:
 def default_hooks(password_hash: str = "") -> Hooks:
     return {
         "interfaces": list_interfaces,
-        # ‏#2437: אותה חתימה כמו hook מוזרק (url, root) — ה-hash נקשר כאן.
+        # #2437: אותה חתימה כמו hook מוזרק (url, root) — ה-hash נקשר כאן.
         "write_grub_cfg": lambda url, root: write_grub_cfg(url, root, password_hash),
         "enable_dnsmasq": enable_dnsmasq,
         "firewall": regenerate_firewall,
@@ -353,12 +350,12 @@ def default_hooks(password_hash: str = "") -> Hooks:
 
 def firewall_gate(conf: str | Path = NFTABLES_CONF,
                   read_ruleset: Callable[[], str | None] | None = None) -> str | None:
-    """‏#2440: האם מותר לשרת לעלות ולהגיש. ‏None = מותר; אחרת הסיבה.
+    """#2440: האם מותר לשרת לעלות ולהגיש. None = מותר; אחרת הסיבה.
 
-    המתקין כתב חומת אש (‏`firewall_installed`) — אז הטבלה `inet imagesrv` חייבת
-    להיות טעונה עכשיו. ‏nftables שלא עלה באתחול (קובץ פגום, מודול חסר) השאיר
-    את 8080/8081/8443 פתוחים לכל כרטיס, והשרת עלה כאילו כלום. ‏`nft` שלא נקרא
-    אינו "טעונה" (עיקרון 5). שרת בלי חומת אש מותקנת (‏`--no-firewall`) עולה —
+    המתקין כתב חומת אש (`firewall_installed`) — אז הטבלה `inet imagesrv` חייבת
+    להיות טעונה עכשיו. nftables שלא עלה באתחול (קובץ פגום, מודול חסר) השאיר
+    את 8080/8081/8443 פתוחים לכל כרטיס, והשרת עלה כאילו כלום. `nft` שלא נקרא
+    אינו "טעונה" (עיקרון 5). שרת בלי חומת אש מותקנת (`--no-firewall`) עולה —
     זה מצב שהמתקין תומך בו, ומסך הבריאות מציג "לא נטענה"."""
     installed = firewall_installed(conf)
     if installed is None:
@@ -397,7 +394,7 @@ def firewall_proxy_interfaces(conn) -> list[str]:
 @dataclass
 class DeployContext:
     """מה שהקונסולה צריכה כדי להשלים את ההתקנה — נבנה ב-`main` ומוזרק
-    ל-runtime. ‏`servers_interface` הוא כרטיס הניהול (‏`--console-host`
+    ל-runtime. `servers_interface` הוא כרטיס הניהול (`--console-host`
     כשם), ובלעדיו חומת האש אינה מחוללת מחדש."""
 
     state: DeployState
@@ -407,24 +404,24 @@ class DeployContext:
     servers_interface: str | None = None
     primary_ip: str | None = None
     hooks: Hooks | None = None
-    #: ‏#705: ‏`services(deploy_if)` → ‏[(כרטיס, [שירותים])] כשהמפעיל ערך שירותים
+    #: #705: `services(deploy_if)` → [(כרטיס, [שירותים])] כשהמפעיל ערך שירותים
     #: לכרטיסים, או None (ההתנהגות של היום). בלעדיו ההשלמה הייתה כותבת חומת
     #: אש לפי שני תפקידים — ודורסת בשקט את מה שהמפעיל בחר לכל כרטיס.
     services: Callable[[str], list | None] | None = None
-    #: ‏#2160: משני שכתובת הראשי שלו לא נפתרה — חומת האש **לא** מחוללת מחדש
-    #: (הכללים הקיימים נשארים), והסיבה חוזרת כשגיאה. ‏None = אין מה לחסום.
+    #: #2160: משני שכתובת הראשי שלו לא נפתרה — חומת האש **לא** מחוללת מחדש
+    #: (הכללים הקיימים נשארים), והסיבה חוזרת כשגיאה. None = אין מה לחסום.
     primary_ip_error: str | None = None
-    #: ‏#2437: ה-hash של סיסמת עורך ה-GRUB, ל-`grub/grub.cfg` שההשלמה כותבת.
-    #: ‏`create_runtime` ממלא אותו; ריק = נעול בלי סיסמה.
+    #: #2437: ה-hash של סיסמת עורך ה-GRUB, ל-`grub/grub.cfg` שההשלמה כותבת.
+    #: `create_runtime` ממלא אותו; ריק = נעול בלי סיסמה.
     grub_password_hash: str = ""
 
 
 def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str,
              management_confirmed: bool = False) -> dict:
-    """משלים את ההתקנה לכרטיס שהודלק עליו DHCP — **apply לפני commit** (‏#1121).
+    """משלים את ההתקנה לכרטיס שהודלק עליו DHCP — **apply לפני commit** (#1121).
 
     הסדר: grub.cfg → dnsmasq באתחול → חומת אש → תזמון אתחול → ורק אז
-    ‏`deploy:*` ב-DB. שלב שנכשל עוצר: אין אתחול, אין רישום, ו-`errors`
+    `deploy:*` ב-DB. שלב שנכשל עוצר: אין אתחול, אין רישום, ו-`errors`
     נוקב בו — כדי שהמנהל יוכל לתקן ולהדליק שוב (רישום לפני apply היה
     משאיר `source=console` על שרת שחומת האש שלו לא נכתבה, ואתחול היה
     מעלה אותו כך). מה שכבר נכתב לדיסק (grub.cfg) הוא idempotent ונכתב
@@ -433,9 +430,9 @@ def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str,
     url = deploy_url(server_ip, ctx.agent_port)
     result = {"ok": False, "url": url, "interface": interface,
               "errors": [], "restarting": False, "recorded": False}
-    # ‏#2428: כרטיס הניהול אינו רשת ההפצה — בכל מסלול שמגיע לכאן, לפני כל
-    # צעד. אחרת dnsmasq, ‏67/69/8080 ומולטיקאסט נפתחים ברשת המכללה.
-    # ‏#2668: החריג היחיד — שרת עם כרטיס יחיד, מחלון רשת ההפצה בלבד, אחרי
+    # #2428: כרטיס הניהול אינו רשת ההפצה — בכל מסלול שמגיע לכאן, לפני כל
+    # צעד. אחרת dnsmasq, 67/69/8080 ומולטיקאסט נפתחים ברשת המכללה.
+    # #2668: החריג היחיד — שרת עם כרטיס יחיד, מחלון רשת ההפצה בלבד, אחרי
     # שהשומר של DHCP קיים החזיר "נבדק, נקי" והמפעיל אישר (`management_confirmed`).
     if (ctx.servers_interface and interface == ctx.servers_interface
             and not management_confirmed):
@@ -470,7 +467,7 @@ def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str,
     for label, call in steps:
         err = call()
         if err == NO_FIREWALL:
-            # ‏#2440: שרת שהותקן בלי חומת אש — ממשיכים, ואומרים זאת בתשובה.
+            # #2440: שרת שהותקן בלי חומת אש — ממשיכים, ואומרים זאת בתשובה.
             result.setdefault("warnings", []).append(f"{label}: {err}")
             continue
         if err:

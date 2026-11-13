@@ -1,13 +1,13 @@
-"""‏#1977: שם שאינו חוקי ב-Windows — הסירוב אומר מה השם ומה הכלל.
+"""#1977: שם שאינו חוקי ב-Windows — הסירוב אומר מה השם ומה הכלל.
 
 הסוכן כבר סירב לשם כזה לפני כתיבת ה-hive
-(‏`test_agent.test_a_bad_hostname_is_refused_before_touching_the_disk`), אבל
+(`test_agent.test_a_bad_hostname_is_refused_before_touching_the_disk`), אבל
 ההודעה שהגיעה ליעד ולקונסולה הייתה "שם המחשב אינו תקין" — בלי השם ובלי
 הכלל. שם שנרשם לפני #1997 ("עמדה 3") נוחת כאן, ומי שקורא את שורת המכונה
 צריך לדעת מה לשנות.
 
 מ-#1997 השרת אוכף את אותו כלל ברישום (`server/core/hostname_rule.py`,
-‏`test_hostname_rule_1997` — שם גם ההשוואה בין הסוכן לשרת).
+`test_hostname_rule_1997` — שם גם ההשוואה בין הסוכן לשרת).
 """
 
 from __future__ import annotations

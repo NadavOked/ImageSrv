@@ -114,7 +114,7 @@ def test_an_image_the_library_would_reject_is_refused_on_import(tmp_path):
 def test_zero_partition_geometry_is_refused_on_import(tmp_path, field):
     parts = json.loads(json.dumps(MANIFEST_256["partitions"]))
     parts[0][field] = 0
-    # ‏used_bytes > size_bytes נפסל לפני הגיאומטריה (#1407); הוא מוסר כאן כדי
+    # used_bytes > size_bytes נפסל לפני הגיאומטריה (#1407); הוא מוסר כאן כדי
     # שהטסט ימשיך לבדוק את מה שבשמו — גיאומטריה אפסית.
     parts[0].pop("used_bytes")
     raw = tar_with_manifest(tmp_path, {"partitions": parts})
@@ -150,7 +150,7 @@ def test_importing_a_duplicate_id_is_refused(tmp_path):
 
 
 def test_the_image_is_invisible_until_every_sha256_matched(tmp_path, monkeypatch):
-    """‏#71: לאורך כל חלון האימות — דקות על אימג' אמיתי — האימג' שמיובא
+    """#71: לאורך כל חלון האימות — דקות על אימג' אמיתי — האימג' שמיובא
     אינו בספרייה. אימג' שנראה בספרייה הוא אימג' שמישהו יבחר לסבב."""
     source = tmp_path / "source"
     write_image(source, MANIFEST_256)
@@ -274,7 +274,7 @@ def test_a_symlink_in_an_archive_is_refused(tmp_path):
 
 # --- מה שהמניפסט מבקש, ולא מה שה-tar מכיל (#110) -----------------------------
 #
-# ‏`_safe_members` שומר על החילוץ, ושתי הבדיקות שמעליו מוכיחות זאת. שני
+# `_safe_members` שומר על החילוץ, ושתי הבדיקות שמעליו מוכיחות זאת. שני
 # השדות כאן נקראים מ**המניפסט** — קובץ שהמעלה כתב — ומצטרפים לנתיב אחרי
 # שהחילוץ כבר הסתיים, ולכן הם מסלול שני פנימה שאותה שמירה אינה מכסה.
 
@@ -304,13 +304,13 @@ def outside_part(name: str, sha: str = "cc" * 32) -> dict:
     "evil", "img_ZZZZZZ", "",
 ])
 def test_a_manifest_id_that_is_not_an_id_is_refused_by_name(tmp_path, bad_id):
-    """המזהה שבמניפסט הוא יעד ה-`rename`. ‏`../evil` בו הוא כתיבה אל
+    """המזהה שבמניפסט הוא יעד ה-`rename`. `../evil` בו הוא כתיבה אל
     מחוץ לשורש הספרייה, לכל מקום שתהליך השרת רשאי לכתוב אליו."""
     raw = tar_with_manifest(tmp_path, {"id": bad_id})
     target = tmp_path / "target"
     target.mkdir()
 
-    # מאז #1407 ‏`_validate` של הספרייה דוחה את המזהה בשמו, לפני הבדיקה
+    # מאז #1407 `_validate` של הספרייה דוחה את המזהה בשמו, לפני הבדיקה
     # הנפרדת של archive.py — התכונה (נדחה, ושום דבר לא נכתב) לא השתנתה.
     with pytest.raises(ArchiveError, match="מניפסט לא תקין: 'image id or name is malformed'"):
         import_bytes(raw, target)
@@ -323,7 +323,7 @@ def test_a_manifest_id_that_is_not_an_id_is_refused_by_name(tmp_path, bad_id):
 
 def test_the_library_root_holds_even_if_the_id_rule_is_widened(tmp_path, monkeypatch):
     """החגורה השנייה, לבדה: הכלל הורחב עד שהוא מקבל הכל, והיעד עדיין
-    חייב לנחות בתוך השורש. ‏`target.exists()` אינו גבול — היעד כאן
+    חייב לנחות בתוך השורש. `target.exists()` אינו גבול — היעד כאן
     אינו קיים, וזה בדיוק המקרה שהוא מכשיר."""
     monkeypatch.setattr(images, "IMAGE_ID", re.compile(r"[^\x00]*"))
     raw = tar_with_manifest(tmp_path, {"id": "../evil"})
@@ -339,8 +339,8 @@ def test_the_library_root_holds_even_if_the_id_rule_is_widened(tmp_path, monkeyp
 
 def test_a_partition_path_that_leaves_the_image_folder_is_never_read(tmp_path,
                                                                      monkeypatch):
-    """‏`part["file"]` נקרא מהמניפסט ולא מחברי ה-tar. קריאה בלבד — אבל
-    ‏`_sha256` על נתיב שהמעלה בחר הוא אורקל על תוכן הדיסק של השרת."""
+    """`part["file"]` נקרא מהמניפסט ולא מחברי ה-tar. קריאה בלבד — אבל
+    `_sha256` על נתיב שהמעלה בחר הוא אורקל על תוכן הדיסק של השרת."""
     secret = tmp_path / "secret.bin"
     secret.write_bytes(b"server-side-secret")
     raw = tar_with_manifest(

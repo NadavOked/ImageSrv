@@ -7,7 +7,7 @@ TOTP מקבל ±30 שניות. שרת שהשעון שלו סוטה בדקות ד
 
 מה שלא כאן: מסלול שחזור מה-DCUI (הכרעת נדב).
 
-בקרה שלילית: ‏`server/console/mfa.py`, ‏`api.py` ו-`app.py` מ-origin/round/1106d.
+בקרה שלילית: `server/console/mfa.py`, `api.py` ו-`app.py` מ-origin/round/1106d.
 """
 
 from __future__ import annotations

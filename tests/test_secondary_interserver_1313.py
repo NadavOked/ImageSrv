@@ -1,18 +1,18 @@
-"""‏#1313 — משני שהותקן מה-ISO לא האזין ב-8443.
+"""#1313 — משני שהותקן מה-ISO לא האזין ב-8443.
 
-נמדד במעבדה (12/10): חיפה, ‏role=secondary, ‏imagesrv-server active — ומ-FW-TA
-‏`curl https://<חיפה>:8443/` → connection refused. השורש: ‏`server/main.py`
-מרים את מאזין ה-enrollment הבין-שרתי רק כשניתן ‏`--interserver-host`, והמתקין
-(‏`setup-boot-server.sh`, שגם האשף וגם firstboot מה-ISO קוראים לו) לא העביר
+נמדד במעבדה (12/10): חיפה, role=secondary, imagesrv-server active — ומ-FW-TA
+`curl https://<חיפה>:8443/` → connection refused. השורש: `server/main.py`
+מרים את מאזין ה-enrollment הבין-שרתי רק כשניתן `--interserver-host`, והמתקין
+(`setup-boot-server.sh`, שגם האשף וגם firstboot מה-ISO קוראים לו) לא העביר
 אותו.
 
 שתי חוליות, כל אחת בטסט משלה:
 
-* **המתקין** — קטע בניית ‏`STORAGE_ARGS` מורץ **בפועל** ב-bash (לא חיפוש
+* **המתקין** — קטע בניית `STORAGE_ARGS` מורץ **בפועל** ב-bash (לא חיפוש
   טקסט), והפלט נפתח ב-``build_parser`` האמיתי: משני מקבל
-  ‏`--interserver-host <כרטיס השרתים>`, ‏standalone לא.
+  `--interserver-host <כרטיס השרתים>`, standalone לא.
 * **השרת** — ``main`` עם ה-argv הזה רושם את מאזין ``interserver`` על הכרטיס.
-  ומשני **שכבר הותקן** (override.conf בלי הדגל — ‏`server-upgrade.sh` אינו
+  ומשני **שכבר הותקן** (override.conf בלי הדגל — `server-upgrade.sh` אינו
   כותב אותו מחדש) מקבל את המאזין על ``--console-host`` אחרי העדכון.
 """
 
@@ -41,7 +41,7 @@ needs_bash = requires_native(("bash", BASH), why="קטע המתקין הוא bas
 # --- המתקין ------------------------------------------------------------------------
 
 def storage_args_block() -> str:
-    """הקטע שבונה את ‏STORAGE_ARGS — מה-`if` של התפקיד ועד כתיבת ה-override.
+    """הקטע שבונה את STORAGE_ARGS — מה-`if` של התפקיד ועד כתיבת ה-override.
 
     הקוד עצמו, לא עותק: סטייה בין המתקין לבדיקה היא בדיוק החור."""
     lines = INSTALLER.read_text(encoding="utf-8").split("\n")
@@ -55,7 +55,7 @@ def storage_args_block() -> str:
 
 def installer_storage_args(role: str, *, servers_if: str = "ens18",
                            console_host: str | None = None) -> list[str]:
-    """‏STORAGE_ARGS כפי שהמתקין היה כותב ל-override.conf, מפוצל כמו ב-systemd."""
+    """STORAGE_ARGS כפי שהמתקין היה כותב ל-override.conf, מפוצל כמו ב-systemd."""
     prelude = (
         "set -euo pipefail\n"
         f"STORAGE_ROLE={role}\n"
@@ -81,7 +81,7 @@ def parsed(argv: list[str]):
 
 @needs_bash
 def test_installer_gives_a_secondary_the_interserver_listener_on_the_servers_nic():
-    """הבאג כפי שנמדד: override של משני בלי ‏--interserver-host = אין 8443."""
+    """הבאג כפי שנמדד: override של משני בלי --interserver-host = אין 8443."""
     args = parsed(installer_storage_args("secondary", servers_if="ens18"))
     assert args.storage_role == "secondary"
     assert args.interserver_host == "ens18"
@@ -89,7 +89,7 @@ def test_installer_gives_a_secondary_the_interserver_listener_on_the_servers_nic
 
 @needs_bash
 def test_the_interserver_nic_is_the_servers_nic_even_with_an_explicit_console_host():
-    """חומת האש פותחת 8443 על ‏`iifname $SERVERS_IF` (nftables-rules.sh) —
+    """חומת האש פותחת 8443 על `iifname $SERVERS_IF` (nftables-rules.sh) —
     המאזין חייב לשבת על אותו כרטיס, גם כשהקונסולה קיבלה כתובת מפורשת."""
     args = parsed(installer_storage_args("secondary", servers_if="ens19",
                                          console_host="10.30.0.8"))
@@ -107,16 +107,16 @@ def test_installer_does_not_give_a_standalone_the_interserver_listener():
 
 # --- השרת ------------------------------------------------------------------------
 
-#: ‏#1310: המאזינים מסוג uvicorn שנרשמו בשם ``interserver`` בריצה האחרונה של
-#: ``run_main`` — "אתה שם?" של הראשי. ‏run_main עצמו מחזיר רק את ה-threaded
+#: #1310: המאזינים מסוג uvicorn שנרשמו בשם ``interserver`` בריצה האחרונה של
+#: ``run_main`` — "אתה שם?" של הראשי. run_main עצמו מחזיר רק את ה-threaded
 #: (ה-mTLS של המשני), כמו לפני #1310.
 ALIVE: list[dict] = []
 
 
 def run_main(tmp_path: Path, monkeypatch, *, stored_role: str,
              argv: list[str]) -> list[dict]:
-    """‏main עם כל החוליות מסביב מנוטרלות — מחזיר את המאזינים ה-threaded
-    שנרשמו (‏`interserver` הוא היחיד). התפקיד השמור מוזרק, כמו ה-DB.
+    """main עם כל החוליות מסביב מנוטרלות — מחזיר את המאזינים ה-threaded
+    שנרשמו (`interserver` הוא היחיד). התפקיד השמור מוזרק, כמו ה-DB.
     מאזין ה-"אתה שם?" של הראשי (#1310) נרשם ב-``ALIVE``."""
     import asyncio
 
@@ -176,7 +176,7 @@ def run_main(tmp_path: Path, monkeypatch, *, stored_role: str,
 @needs_bash
 def test_a_secondary_installed_by_the_installer_registers_the_8443_listener(
         tmp_path: Path, monkeypatch):
-    """שרשרת שלמה: ה-argv שהמתקין כותב → ‏main רושם `interserver` על
+    """שרשרת שלמה: ה-argv שהמתקין כותב → main רושם `interserver` על
     הכתובת של כרטיס השרתים, בפורט 8443."""
     argv = installer_storage_args("secondary", servers_if="ens18")
     threaded = run_main(tmp_path, monkeypatch, stored_role="secondary", argv=argv)
@@ -188,7 +188,7 @@ def test_a_secondary_installed_by_the_installer_registers_the_8443_listener(
 @needs_bash
 def test_a_standalone_installed_by_the_installer_has_no_8443_listener(
         tmp_path: Path, monkeypatch):
-    """אין מאזין mTLS. ‏8443 של standalone/ראשי הוא "אתה שם?" בלבד (#1310)."""
+    """אין מאזין mTLS. 8443 של standalone/ראשי הוא "אתה שם?" בלבד (#1310)."""
     argv = installer_storage_args("standalone", servers_if="ens18")
     assert run_main(tmp_path, monkeypatch, stored_role="standalone", argv=argv) == []
     assert [a["port"] for a in ALIVE] == [8443]
@@ -196,16 +196,16 @@ def test_a_standalone_installed_by_the_installer_has_no_8443_listener(
 
 def legacy_secondary_argv() -> list[str]:
     """ה-override.conf של משני שהותקן לפני התיקון (חיפה, v0.71.0) — כפי
-    שהמתקין כתב אותו: ‏`--console-host <כרטיס השרתים>`, בלי ‏`--interserver-host`."""
+    שהמתקין כתב אותו: `--console-host <כרטיס השרתים>`, בלי `--interserver-host`."""
     return ["--storage-role", "secondary", "--primary-url", PRIMARY,
             "--boot-dir", "/srv/imagesrv/boot", "--console-host", "ens18"]
 
 
 def test_an_already_installed_secondary_gets_the_listener_after_the_update(
         tmp_path: Path, monkeypatch):
-    """‏`server-upgrade.sh` אינו כותב את override.conf מחדש, והוא רץ מהעץ
+    """`server-upgrade.sh` אינו כותב את override.conf מחדש, והוא רץ מהעץ
     **הישן** (ה-checkout מחליף את הקובץ תחתיו) — לכן תיקון במתקין או בסקריפט
-    השדרוג לא היה מגיע לחיפה. השרת החדש עצמו מרים את 8443 על ‏--console-host."""
+    השדרוג לא היה מגיע לחיפה. השרת החדש עצמו מרים את 8443 על --console-host."""
     threaded = run_main(tmp_path, monkeypatch, stored_role="secondary",
                         argv=legacy_secondary_argv())
     assert [t["id"] for t in threaded] == ["interserver"]
@@ -223,7 +223,7 @@ def test_the_console_host_fallback_never_opens_8443_on_a_standalone(
 def test_the_fallback_needs_the_secondary_flag_not_only_a_stored_role(
         tmp_path: Path, monkeypatch):
     """תפקיד שמור פגום נקרא fail-closed כ-secondary (#746). זה אינו ראיה
-    שהשרת משני — מאזין רשת חדש נפתח רק כשה-unit עצמו אומר ‏`--storage-role
+    שהשרת משני — מאזין רשת חדש נפתח רק כשה-unit עצמו אומר `--storage-role
     secondary`."""
     argv = ["--console-host", "ens18"]
     assert run_main(tmp_path, monkeypatch, stored_role="secondary", argv=argv) == []
@@ -257,7 +257,7 @@ def test_an_explicit_interserver_host_still_wins(tmp_path: Path, monkeypatch, ex
     ["--storage-role", "standalone", "--console-host", "10.30.0.8"],
 ], ids=["plain", "legacy-secondary", "installer-secondary", "standalone-ip"])
 def test_8443_has_at_most_one_listener_per_server(tmp_path: Path, monkeypatch, stored_role, argv):
-    """‏"אתה שם?" של הראשי (#1310) עולה כשהתפקיד השמור **אינו** secondary;
+    """"אתה שם?" של הראשי (#1310) עולה כשהתפקיד השמור **אינו** secondary;
     ה-mTLS של המשני (#1313) רק כשהוא secondary. שניהם נרשמים כ-`interserver`
     על 8443 — ושניהם יחד היו bind כפול. בכל צירוף: לכל היותר אחד."""
     threaded = run_main(tmp_path, monkeypatch, stored_role=stored_role, argv=argv)

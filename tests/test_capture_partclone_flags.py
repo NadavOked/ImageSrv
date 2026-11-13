@@ -1,11 +1,11 @@
-"""‏#1472: הקליטה מריצה partclone עם `-a0 -z 524288`, כמו השיכפול המקומי.
+"""#1472: הקליטה מריצה partclone עם `-a0 -z 524288`, כמו השיכפול המקומי.
 
-הכרעת נדב 16/10. ‏`-a0` מוריד את ה-checksum של partclone עצמו, ו-`-z` הוא
-חוצץ של 512KB — נמדד על מחשב שיכפול 2 (i5-650, 15/10, ‏`lccopy.sh:116-118`):
-‏108 → 157MB/s ו-160 → 170MB/s. בטוח כי `fanout -S` מגבב את כל הזרם הדחוס
+הכרעת נדב 16/10. `-a0` מוריד את ה-checksum של partclone עצמו, ו-`-z` הוא
+חוצץ של 512KB — נמדד על מחשב שיכפול 2 (i5-650, 15/10, `lccopy.sh:116-118`):
+108 → 157MB/s ו-160 → 170MB/s. בטוח כי `fanout -S` מגבב את כל הזרם הדחוס
 והשרת מאמת את ה-sha256 הזה לפני שהאימג' נכנס לספרייה (עיקרון 6).
 
-‏`partclone.dd` אינו מקבל אף אחד מהם — אותו כלל כמו ב-`lccopy.sh:119`: הוא
+`partclone.dd` אינו מקבל אף אחד מהם — אותו כלל כמו ב-`lccopy.sh:119`: הוא
 מעתיק בייט-בייט ואינו מכיר את הדגלים של כלי מערכות הקבצים.
 
 הבדיקה רצה על `capture_disk` האמיתי (ההרנס של test_capture_refusals),
@@ -20,7 +20,7 @@ from test_capture_refusals import CURL_SINK, ONE_PARTITION, capture_run
 
 pytestmark = requires_native(("bash", BASH))
 
-#: ‏partclone מזויף: רושם את הארגומנטים ומזרים 4KB — מספיק לזרם שלם.
+#: partclone מזויף: רושם את הארגומנטים ומזרים 4KB — מספיק לזרם שלם.
 RECORDING_PARTCLONE = (
     '#!/bin/sh\n'
     'printf "%s\\n" "$*" >> "$RUN_DIR/pcl.args"\n'

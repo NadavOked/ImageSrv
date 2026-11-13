@@ -68,7 +68,7 @@ def bindable(port: int) -> bool:
 def busy_pair(offset: int):
     """זוג פורטים שבו רק אחד תפוס — ושהטסט עצמו מחזיק אותו.
 
-    ‏`offset` הוא המקום של הפורט התפוס בזוג: 0 הוא ה-portbase עצמו,
+    `offset` הוא המקום של הפורט התפוס בזוג: 0 הוא ה-portbase עצמו,
     1 הוא `portbase+1`. מחזיר `(portbase, הפורט התפוס)`.
     """
     for _ in range(20):
@@ -76,7 +76,7 @@ def busy_pair(offset: int):
         holder.bind(("127.0.0.1", 0))
         held = holder.getsockname()[1]
         base = held - offset
-        # ‏65535 הוא הפורט האחרון: `base+1` מעליו אינו פורט, ו-`bind`
+        # 65535 הוא הפורט האחרון: `base+1` מעליו אינו פורט, ו-`bind`
         # עליו זורק `OverflowError` ולא `OSError`.
         if base < 1 or base + 1 > 65535:
             holder.close()
@@ -112,7 +112,7 @@ def test_the_run_assigns_a_high_random_portbase_to_every_engine(library):
 
 
 def test_the_engine_that_create_app_builds_also_gets_the_run_portbase(server):
-    """‏`create_app` בונה מנוע משלו בלי לשאול — וזה המנוע מ-#156."""
+    """`create_app` בונה מנוע משלו בלי לשאול — וזה המנוע מ-#156."""
     assigned = getattr(hygiene, "test_portbase", None)
     assert assigned is not None, "הריצה לא הקצתה portbase לטסטים (#156)"
     assert server["ctx"].sender.portbase == assigned
@@ -126,7 +126,7 @@ def test_no_python_file_under_tests_asks_for_a_production_port():
     כאן, ולא מול כיתה. (והסורק תפס כך גם את השורה הזאת עצמה.)
 
     **הגבול מדויק ולא נדיב:** כל `*.py` תחת `tests/`, כולל תת-תיקיות
-    (‏`fixtures/make_fixture.py`), ולא קבצים אחרים. הקובץ היחיד שאינו
+    (`fixtures/make_fixture.py`), ולא קבצים אחרים. הקובץ היחיד שאינו
     פייתון בחבילה הוא בינארי (`fixtures/system-mini.hiv`), ואין לו
     שורות לסרוק.
     """
@@ -148,7 +148,7 @@ def test_no_python_file_under_tests_asks_for_a_production_port():
 
 
 def test_the_precheck_documents_that_udp_sender_binds_only_portbase_plus_one():
-    """‏#342: מי שתופס את portbase כדי לשחזר התנגשות לא יראה אחת.
+    """#342: מי שתופס את portbase כדי לשחזר התנגשות לא יראה אחת.
 
     נמדד ב-`ss -ulnp` במעבדה: udp-sender נקשר רק ל-portbase+1, לא
     ל-portbase. הבדיקה על שני הפורטים נשארת — הגנה מפני שינוי עתידי
@@ -210,7 +210,7 @@ def test_the_port_scan_reads_the_holder_and_reads_the_release():
 def test_a_table_that_could_not_be_read_is_not_an_empty_table(tmp_path, monkeypatch):
     """טבלה שקיימת ולא נקראה אינה "אין שם אף אחד" (עיקרון 5).
 
-    ‏`/proc/net/udp` ו-`/proc/net/udp6` הן שתי טבלאות; דילוג שקט על אחת
+    `/proc/net/udp` ו-`/proc/net/udp6` הן שתי טבלאות; דילוג שקט על אחת
     מהן היה מחזיר את התשובה החלקית של השנייה — "פנוי" על סמך חצי בדיקה.
     (תיקייה במקום קובץ היא כשל קריאה אמיתי, לא הזרקה.)
     """
@@ -251,7 +251,7 @@ def test_a_blank_line_is_not_an_unreadable_row(tmp_path, monkeypatch):
 def test_a_machine_with_no_kernel_table_refuses_to_guess(tmp_path, monkeypatch):
     """בלי טבלת קרנל אין תשובה — לא "פנוי", וגם לא ניחוש מ-bind.
 
-    ‏bind מוצלח היה ראיה חלקית בלבד: סוקט בדיקה נקשר לכתובת אחת ומפספס
+    bind מוצלח היה ראיה חלקית בלבד: סוקט בדיקה נקשר לכתובת אחת ומפספס
     מי שתפס את הפורט על כרטיס אחר, ו-bind לכל הכרטיסים אסור כאן. ראיה
     חלקית שמוצגת כתשובה היא בדיוק מה שעיקרון 5 אוסר.
     """
@@ -285,7 +285,7 @@ def test_a_busy_port_with_an_unidentified_holder_still_refuses(library, monkeypa
     """סוקט של משתמש אחר: אין לנו הרשאה לקרוא את ה-fd שלו, והפורט
     עדיין תפוס. "לא ידוע מי" אינו "אין אף אחד".
 
-    **וזו מגבלה, לא הצלחה:** ‏#156 ביקש הודעה שנוקבת ב-PID, ובמצב הזה
+    **וזו מגבלה, לא הצלחה:** #156 ביקש הודעה שנוקבת ב-PID, ובמצב הזה
     אין PID לנקוב בו. השרת רץ כ-root ולכן ברוב המקרים כן יזהה; כשלא —
     הוא אומר "בדקנו ולא זיהינו" ואינו ממציא מזהה. הטסט מוודא את
     ההתנהגות הזאת **ואת הפער שבצידה**, לא מברך עליה.
@@ -313,7 +313,7 @@ def test_a_busy_port_with_an_unidentified_holder_still_refuses(library, monkeypa
 
 @contextlib.contextmanager
 def free_pair():
-    """‏portbase ששני פורטיו פנויים, כך שהבדיקה המקדימה **עוברת**.
+    """portbase ששני פורטיו פנויים, כך שהבדיקה המקדימה **עוברת**.
 
     בלי זה הכישלון שנבדק כאן היה נתפס בבדיקה המקדימה, והנתיב שהטסט בא
     לבדוק לא היה נרוץ בכלל.
@@ -346,7 +346,7 @@ def test_a_failure_after_the_precheck_still_names_who_holds_the_port(
         def racing(cmd):
             # תפיסת הפורט **אחרי** הבדיקה המקדימה ולפני "השידור": זה
             # החלון, והוא נפתח כאן במכוון ולא במרוץ תלוי-תזמון.
-            # ‏#342: udp-sender נקשר בפועל רק ל-portbase+1. תפיסת
+            # #342: udp-sender נקשר בפועל רק ל-portbase+1. תפיסת
             # portbase כאן לא הייתה יוצרת התנגשות בכלל — זה קרה
             # בניסיון השחזור הראשון. לשחזור: לתפוס את +1, לא את הבסיס.
             if not recorder.commands:
@@ -366,7 +366,7 @@ def test_a_failure_after_the_precheck_still_names_who_holds_the_port(
 
 def test_a_failure_on_free_ports_does_not_invent_a_holder(
         library, tmp_path, monkeypatch):
-    """‏udp-sender נכשל גם מסיבות אחרות. "בדקנו ולא מצאנו" אינו "היה תפוס".
+    """udp-sender נכשל גם מסיבות אחרות. "בדקנו ולא מצאנו" אינו "היה תפוס".
 
     ההודעה חייבת לומר שהפורטים פנויים ושהסיבה אינה ידועה — ולא להמציא
     מחזיק כדי שיהיה מה לכתוב.

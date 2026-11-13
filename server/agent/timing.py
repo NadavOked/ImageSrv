@@ -36,8 +36,8 @@ IDLE = "gui_idle_poweroff_seconds"
 END = "gui_end_poweroff_seconds"
 KEYS = (LOST, IDLE, END)
 
-#: (ברירת מחדל, מינימום, מקסימום) בשניות. ‏LOST: התאום של ``room.LOST_SECONDS``;
-#: ‏IDLE/END: התאומים של ``IDLE_POWEROFF_S`` / ``END_POWEROFF_S`` ב-``agent/lib/core/idle.sh``.
+#: (ברירת מחדל, מינימום, מקסימום) בשניות. LOST: התאום של ``room.LOST_SECONDS``;
+#: IDLE/END: התאומים של ``IDLE_POWEROFF_S`` / ``END_POWEROFF_S`` ב-``agent/lib/core/idle.sh``.
 RANGES: dict[str, tuple[int, int, int]] = {
     LOST: (180, 180, 30 * 60),
     IDLE: (300, 60, 60 * 60),
@@ -48,17 +48,17 @@ LABELS = {LOST: "המתנה למחשב שהתנתק באמצע שיכפול",
           END: "ספירה לכיבוי בסוף משימה"}
 #: מי נספר כ"מחובר" לכל ערך: הערך הראשון חל על משכפלים בלבד, האחרים גם על מחשב הבנייה.
 ROLES = {LOST: ("cloner",), IDLE: ("cloner", "build"), END: ("cloner", "build")}
-#: ‏hello האחרון בן פחות מזה = מחובר (אותו חלון של "נראו ב-90 השניות האחרונות" במוניטור).
+#: hello האחרון בן פחות מזה = מחובר (אותו חלון של "נראו ב-90 השניות האחרונות" במוניטור).
 CONNECTED_SECONDS = 90
 
-#: ‏``--retries-until-drop`` של 200 הוא כ-190ש' (המדידה ב-``sender.py``, #437). כדי שהשולח
+#: ``--retries-until-drop`` של 200 הוא כ-190ש' (המדידה ב-``sender.py``, #437). כדי שהשולח
 #: לא יזרוק מקבל לפני שהשרת מכריז עליו אבוד, התקרה גדלה באותו יחס.
 RETRIES_PER_SECOND = 200 / 190
 
 
 def parse(key: str, raw: object) -> int | None:
-    """שלם בטווח של ``key`` — או ``None``. ‏``bool`` אינו מספר, ואפס מוביל נדחה
-    (‏ash קורא ‎020 כאוקטלי; אותו כלל של ``minfree.parse_gb``)."""
+    """שלם בטווח של ``key`` — או ``None``. ``bool`` אינו מספר, ואפס מוביל נדחה
+    (ash קורא 020 כאוקטלי; אותו כלל של ``minfree.parse_gb``)."""
     _default, low, high = RANGES[key]
     if isinstance(raw, bool):
         return None
@@ -122,7 +122,7 @@ def well_formed(raw: object) -> dict[str, int] | None:
 
 def note_applied(conn: sqlite3.Connection, mac: str, raw: object) -> None:
     """רושם את ``applied_timing`` של המכונה. סוכן שלא שלח את השדה (ישן) משאיר את
-    הרישום הקודם; סוכן ששלח — דורס. ‏SELECT קודם: רוב ה-hello אינם משנים דבר."""
+    הרישום הקודם; סוכן ששלח — דורס. SELECT קודם: רוב ה-hello אינם משנים דבר."""
     applied = well_formed(raw)
     if applied is None:
         return

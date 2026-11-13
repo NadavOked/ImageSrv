@@ -146,7 +146,7 @@ def test_a_new_password_is_stored_with_the_current_default(server):
 
 
 def test_login_upgrades_an_old_record_through_the_api(server):
-    """‏#2591: הנתיב האמיתי (`/api/console/login`) משדרג, והכניסה הבאה עובדת."""
+    """#2591: הנתיב האמיתי (`/api/console/login`) משדרג, והכניסה הבאה עובדת."""
     from server.console import users
     rehash_with(server, "labtech", "deploy-pass-1", 50_000)
     conn = server["ctx"].conn
@@ -210,7 +210,7 @@ def test_a_hebrew_username_is_refused_cleanly_instead_of_500_on_login(server):
     ניתן לאבחון וההצלחה לא.
 
     נדב הכריע ששמות המשתמש באנגלית בלבד, ולכן זה **כלל ולא עקיפה**:
-    ‏#111 נסגר כאן ולא בהחלפת פורמט ה-cookie, שהייתה מנתקת פעם אחת את
+    #111 נסגר כאן ולא בהחלפת פורמט ה-cookie, שהייתה מנתקת פעם אחת את
     כל המחוברים.
     """
     r = server["admin"].post(
@@ -223,8 +223,8 @@ def test_a_hebrew_username_is_refused_cleanly_instead_of_500_on_login(server):
 
 @pytest.mark.parametrize("name", ["aſ", "aK", "Kelvin", "teſt"])
 def test_a_unicode_fold_of_an_english_letter_is_refused(server, name):
-    """‏#2505: ‏`re.IGNORECASE` על תבנית ‏str מקפל לפי יוניקוד, ולכן `[a-z]`
-    קיבל ‏`ſ` (U+017F) ו-‏`K` (U+212A, קלווין). אינם latin-1 — אותו 500 על
+    """#2505: `re.IGNORECASE` על תבנית str מקפל לפי יוניקוד, ולכן `[a-z]`
+    קיבל `ſ` (U+017F) ו-`K` (U+212A, קלווין). אינם latin-1 — אותו 500 על
     סיסמה נכונה של #111."""
     r = server["admin"].post(
         "/api/console/users",
@@ -246,7 +246,7 @@ def test_english_usernames_in_either_case_still_pass(name):
 
 def test_a_created_user_can_actually_sign_in(server):
     """הצד החיובי של #93: שם תקין נוצר — ומתחבר. נקודה מותרת, רווח לא (#1085).
-    (‏admin: ‏#1073 — משתמש deploy אינו נכנס לקונסולה, ו-/me סגור בפניו.)"""
+    (admin: #1073 — משתמש deploy אינו נכנס לקונסולה, ו-/me סגור בפניו.)"""
     assert server["admin"].post(
         "/api/console/users",
         json={"username": "Rina.C", "password": "Some-pass-123!", "role": "admin"},

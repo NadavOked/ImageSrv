@@ -1,4 +1,4 @@
-"""‏#1334 — מנוע עדכון האימג' ב-VM, עם זיופים: תנאים מוקדמים, מחזור חיים,
+"""#1334 — מנוע עדכון האימג' ב-VM, עם זיופים: תנאים מוקדמים, מחזור חיים,
 שמירה אטומית כגרסה חדשה, ביטול והתאוששות אחרי אתחול.
 
 הדיסק עצמו (`vmdisk.build_disk`/`capture_disk`) מזויף כאן — הוא נבדק מול
@@ -35,15 +35,15 @@ NEW_BYTES = b"new partition bytes after windows update"
 
 #: ה-fd שה-macvtap המזויף "פותח" — מספר ש-qemu_argv מקבל (≥3), לא fd אמיתי.
 TAP_FD = 17
-#: ‏#1468: ה-lease שהרשת "נותנת" בטסטים שמבקשים אותו.
+#: #1468: ה-lease שהרשת "נותנת" בטסטים שמבקשים אותו.
 LEASE = {"address": "10.20.30.40", "server": "10.20.30.1", "requests": 1, "ignored": 0,
          "error": None}
 
 
 class FakeMachine:
-    """‏`lease=None` (ברירת המחדל): ה-DHCP "עוד לא ענה" עד שה-VM כבה — מחזור
-    החיים נבדק בלי שהראיה ל-lease משנה אותו. ‏dict בלי address — אין lease, מיד.
-    ‏dict עם address, או רשימה של כאלה (חידושים) — כל אחד נמסר ל-`on_ack`, וההאזנה
+    """`lease=None` (ברירת המחדל): ה-DHCP "עוד לא ענה" עד שה-VM כבה — מחזור
+    החיים נבדק בלי שהראיה ל-lease משנה אותו. dict בלי address — אין lease, מיד.
+    dict עם address, או רשימה של כאלה (חידושים) — כל אחד נמסר ל-`on_ack`, וההאזנה
     נמשכת עד שה-VM כבה, כמו ב-`vmnet.watch_lease`."""
 
     def __init__(self, *, kvm=None, mem=32768, cpus=8, free=10**13, missing=(),
@@ -151,7 +151,7 @@ class FakeProc:
 
 
 class FakeQemu:
-    """‏popen + QMP. ‏`system_powerdown` = ה-guest כבה (QEMU יוצא 0)."""
+    """popen + QMP. `system_powerdown` = ה-guest כבה (QEMU יוצא 0)."""
 
     def __init__(self, qmp_fails=False):
         self.procs: list[FakeProc] = []
@@ -219,7 +219,7 @@ def lab(tmp_path, monkeypatch):
     monkeypatch.setattr(vmdisk, "build_disk", fake_build)
     monkeypatch.setattr(vmdisk, "capture_disk", fake_capture())
     conn = connect(tmp_path / "imagesrv.db")
-    set_setting(conn, vmupdate.NIC_KEY, "eth0")   # ‏#1468: "כרטיס לעדכוני VM"
+    set_setting(conn, vmupdate.NIC_KEY, "eth0")   # #1468: "כרטיס לעדכוני VM"
     library = ImageLibrary(root)
     qemu = FakeQemu()
 
@@ -276,6 +276,7 @@ def test_tcg_only_behind_the_explicit_test_flag(lab):
 
 
 def test_memory_refusal_carries_the_numbers(lab):
+    vmupdate.write_settings(lab["conn"], {"memory_mib": 16384})   # explicit, not derived (#2986)
     exc = refusal(lab["make"](FakeMachine(mem=12000)))
     assert (exc.status, exc.reason) == (503, "memory")
     assert exc.numbers == {"vm_mib": 16384, "reserve_mib": 4096, "available_mib": 12000}
@@ -288,6 +289,41 @@ def test_unreadable_memory_is_a_refusal_not_a_pass(lab):
 
 
 def test_vm_may_not_take_every_core(lab):
+    exc = refusal(lab["make"](FakeMachine(cpus=1)))
+    assert exc.reason == "cpus" and exc.numbers == {"vm_cpus": 1, "server_cpus": 1}
+
+
+def test_four_core_server_gives_the_vm_three_cores(lab):
+    """#2986: the work server (M910, i5, 4 cores, no HT) was always refused --
+    the default was a fixed 4. Unset, it is min(4, cores - 1)."""
+    engine = lab["make"](FakeMachine(cpus=4))
+    pre = engine.precheck("img_7f3a91")
+    assert pre["ok"] is True and pre["cpus"] == 3, pre
+    engine.start("img_7f3a91", "noc")
+    wait_for(engine, "running")
+    argv = lab["qemu"].procs[0].args
+    assert argv[argv.index("-smp") + 1] == "3"
+
+
+def test_unset_memory_is_derived_from_what_the_server_has_free(lab):
+    """#2986: 16GB fixed was refused on a 16GB server. Unset, it is
+    min(16GB, available - reserve) in whole GB, never below the floor."""
+    pre = lab["make"](FakeMachine(mem=12000)).precheck("img_7f3a91")
+    assert pre["ok"] is True and pre["memory_mib"] == 7168, pre   # (12000 - 4096) -> 7GB
+    assert lab["make"]().precheck("img_7f3a91")["memory_mib"] == 16384   # the cap
+
+
+def test_below_the_memory_floor_is_refused_and_still_shows_the_resources(lab):
+    pre = lab["make"](FakeMachine(mem=6000)).precheck("img_7f3a91")
+    assert pre["ok"] is False and pre["code"] == "memory"
+    assert pre["details"] == {"vm_mib": 4096, "reserve_mib": 4096, "available_mib": 6000}
+    # the resource tiles show what the VM would get, not "--"
+    assert pre["resources"]["memory_mib"] == 4096 and pre["resources"]["cpus"] == 4
+    assert pre["resources"]["disk_bytes"] > 0
+
+
+def test_an_explicit_setting_is_kept_as_is(lab):
+    vmupdate.write_settings(lab["conn"], {"cpus": 4})
     exc = refusal(lab["make"](FakeMachine(cpus=4)))
     assert exc.reason == "cpus" and exc.numbers == {"vm_cpus": 4, "server_cpus": 4}
 
@@ -296,8 +332,8 @@ def test_vm_may_not_take_every_core(lab):
 def test_disk_space_refusal_names_every_number(lab):
     exc = refusal(lab["make"](FakeMachine(free=50 * 10**9)))
     assert (exc.status, exc.reason) == (507, "disk_space")
-    # תפוס 31457280+84509376512, מרווח 30GiB, גרסה חדשה = הדחוס 57982058496 (‏#1390),
-    # ורזרבה למערכת 10GiB (‏#1737)
+    # תפוס 31457280+84509376512, מרווח 30GiB, גרסה חדשה = הדחוס 57982058496 (#1390),
+    # ורזרבה למערכת 10GiB (#1737)
     need = 31457280 + 84509376512 + 30 * (1 << 30) + 57982058496 + 10 * (1 << 30)
     assert exc.numbers == {"need_bytes": need, "free_bytes": 50 * 10**9}
     assert "פנויים 50.0 GB" in exc.message
@@ -311,8 +347,8 @@ def test_missing_tools_are_named(lab):
     assert "qemu-system-x86_64" in exc.message and "OVMF_VARS_4M.ms.fd" in exc.message
 
 
-# ‏#1468: הכרטיס של ה-VM (הפצה מסורבת, ניהול מותר, macvtap, ‏lease) —
-# ‏`test_vmnet_1468.py`.
+# #1468: הכרטיס של ה-VM (הפצה מסורבת, ניהול מותר, macvtap, lease) —
+# `test_vmnet_1468.py`.
 
 
 def test_unknown_image_is_404(lab):
@@ -321,7 +357,7 @@ def test_unknown_image_is_404(lab):
 
 
 def test_2420_the_vm_state_carries_the_version_number_not_the_manifest_string(lab):
-    """#2420: ‏`image_version` מוצג בקונסולה (הפס "VM רץ" שבכל עמוד). הוא נגזר
+    """#2420: `image_version` מוצג בקונסולה (הפס "VM רץ" שבכל עמוד). הוא נגזר
     ב-`version_of` — מספר שלם — ולא מועתק מהמניפסט כמו שהוא."""
     real = lab["library"].get
 
@@ -369,7 +405,7 @@ def test_start_builds_boots_and_the_argv_never_bridges(lab):
 
 
 def test_whoever_sees_running_also_sees_its_journal_row(lab, monkeypatch):
-    """‏#1468: ‏`running` ושורת היומן שלו הם רגע אחד. כשהיומן נכתב אחרי שחרור
+    """#1468: `running` ושורת היומן שלו הם רגע אחד. כשהיומן נכתב אחרי שחרור
     הנעילה, קורא של status() ראה `running` בלי השורה (נכשל בריצה מלאה תחת עומס).
     כאן הכתיבה איטית בכוונה, כדי שהחלון יהיה תמיד פתוח ולא רק תחת עומס."""
     real = vmupdate.journal
@@ -550,7 +586,7 @@ def test_hibernated_windows_keeps_the_disk_for_another_boot(lab):
 
 @pytest.mark.parametrize("reason", ["shrink", "capture", "stream", "unchecked"])
 def test_a_failed_save_keeps_the_disk_for_another_boot(lab, reason):
-    """‏#1491: השמירה מכווצת עותק ואינה כותבת לדיסק — גם כשל באמצע הכיווץ
+    """#1491: השמירה מכווצת עותק ואינה כותבת לדיסק — גם כשל באמצע הכיווץ
     או הזרם משאיר אותו שלם: מדליקים שוב (ה-chkdsk שההודעה מבקשת) ושומרים."""
     def broken(*_a, **_k):
         raise vmdisk.DiskError(reason, "נכשל באמצע")
@@ -564,8 +600,8 @@ def test_a_failed_save_keeps_the_disk_for_another_boot(lab, reason):
 
 
 def test_2915_an_oserror_writing_the_manifest_keeps_the_disk_for_another_boot(lab):
-    """‏#2915: ‏`OSError` בכתיבת `manifest.json` (דיסק הספרייה מלא) אינו `DiskError`,
-    אבל דיסק העבודה לא נגע בו — ‏`disk_ready` נשאר, ו"הדלק"/"שמור" מותרים. לפני
+    """#2915: `OSError` בכתיבת `manifest.json` (דיסק הספרייה מלא) אינו `DiskError`,
+    אבל דיסק העבודה לא נגע בו — `disk_ready` נשאר, ו"הדלק"/"שמור" מותרים. לפני
     התיקון כל חריגה אחרת סימנה אותו לא-מוכן, והיציאה היחידה הייתה "בטל" = מחיקת
     כל העבודה."""
     real = vmupdate.write_atomic
@@ -871,7 +907,7 @@ def test_an_undecided_disk_is_deleted_after_7_days_with_a_journal_line(lab, monk
 
 
 def test_a_firewall_flushed_while_running_is_reloaded_or_the_vm_goes_off(lab):
-    """‏`flush ruleset` של חומת האש הראשית מוחק גם את הטבלה שלנו. סבב
+    """`flush ruleset` של חומת האש הראשית מוחק גם את הטבלה שלנו. סבב
     התחזוקה טוען אותה שוב; אם לא הצליח — ה-VM נכבה בכוח, ונרשם ביומן."""
     machine = FakeMachine()
     engine = lab["make"](machine)

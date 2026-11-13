@@ -1,16 +1,16 @@
-"""#1912: שומר רגרסיה ל-#22 — ‏`run_process` האמיתי אינו נחסם על הפלט של עצמו.
+"""#1912: שומר רגרסיה ל-#22 — `run_process` האמיתי אינו נחסם על הפלט של עצמו.
 
-‏#22: ‏udp-sender הופעל עם `stdout=PIPE` שאיש לא קרא. הוא מדפיס התקדמות בלי
+#22: udp-sender הופעל עם `stdout=PIPE` שאיש לא קרא. הוא מדפיס התקדמות בלי
 הפסקה, וכשחוצץ הצינור (~64KB) התמלא — באמצע המחיצה הגדולה — התהליך נחסם
 על הכתיבה, השידור קפא, והמקבלים מתו בזה אחר זה. התיקון: הפלט לקובץ.
 
 כל טסטי השולח מזריקים runner מזויף, ובתוך הטסטים `sender.subprocess` חסום
-בכוונה (‏`hygiene.block_real_processes`, ‏#79) — ולכן `run_process` עצמו מעולם
+בכוונה (`hygiene.block_real_processes`, #79) — ולכן `run_process` עצמו מעולם
 לא רץ בבדיקות. כאן רץ **הקוד שלו** (`__code__`) עם `subprocess` אמיתי
 בגלובלים פרטיים, בלי להסיר את החסימה מהמודול (תהליכון שידור של טסט אחר
 היה מגיע דרכה לשולח אמיתי). במקום udp-sender רץ python שמדפיס 1MB.
 
-בקרה שלילית: ‏`stdout=handle` → ‏`stdout=subprocess.PIPE` ב-`run_process`
+בקרה שלילית: `stdout=handle` → `stdout=subprocess.PIPE` ב-`run_process`
 (הקוד שלפני #22) — התהליך הבן נתקע ו-`wait` פג.
 """
 
@@ -36,13 +36,13 @@ CHILD = ("import sys\n"
 
 
 def _real_run_process(log: Path):
-    """‏`run_process` של הייצור, עם subprocess אמיתי ו-SENDER_LOG בתוך tmp."""
+    """`run_process` של הייצור, עם subprocess אמיתי ו-SENDER_LOG בתוך tmp."""
     def popen(*args, stdin=subprocess.DEVNULL, **kwargs):
-        # ‏stdin לא נורש: בווינדוס ה-handle של pytest נשבר בריצה רב-קבצית (#14).
+        # stdin לא נורש: בווינדוס ה-handle של pytest נשבר בריצה רב-קבצית (#14).
         return subprocess.Popen(*args, stdin=stdin, **kwargs)
 
     real = types.SimpleNamespace(Popen=popen, PIPE=subprocess.PIPE, STDOUT=subprocess.STDOUT)
-    # ‏nice/ionice אינם הנושא כאן — משתנה אחד בבדיקה (עיקרון 5ג).
+    # nice/ionice אינם הנושא כאן — משתנה אחד בבדיקה (עיקרון 5ג).
     priority = types.SimpleNamespace(background_cmd=lambda cmd: list(cmd))
     scope = {**sender_module.__dict__, "subprocess": real, "priority": priority,
              "SENDER_LOG": log}

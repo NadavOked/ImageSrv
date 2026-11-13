@@ -1,13 +1,13 @@
-"""‏evdev/uinput מפייתון, למעבדה בלבד (#949).
+"""evdev/uinput מפייתון, למעבדה בלבד (#949).
 
-שני צדדים של אותו חוזה: ‏`agent/monitor.c` יוצר התקן uinput, ו-
-‏`native-gui/src/input.c` קורא אותו מ-`/dev/input/event*`. הטסטים צריכים
+שני צדדים של אותו חוזה: `agent/monitor.c` יוצר התקן uinput, ו-
+`native-gui/src/input.c` קורא אותו מ-`/dev/input/event*`. הטסטים צריכים
 לעמוד בשני הקצוות — לקרוא את ההתקן שהמוניטור יצר, וליצור התקן שהגואי
-יקרא — בלי ספרייה חיצונית (‏`python-evdev` אינו במעבדה ואינו בייצור).
+יקרא — בלי ספרייה חיצונית (`python-evdev` אינו במעבדה ואינו בייצור).
 
-הכול x86_64 לינוקס: ‏`struct input_event` הוא 24 בייטים (‏timeval של שני
-‏long), ‏`input_absinfo` 24, ‏`uinput_setup` 92, ‏`uinput_abs_setup` 28. מספרי
-ה-ioctl מחושבים כמו `_IOC` בקרנל (‏dir<<30 | size<<16 | type<<8 | nr).
+הכול x86_64 לינוקס: `struct input_event` הוא 24 בייטים (timeval של שני
+long), `input_absinfo` 24, `uinput_setup` 92, `uinput_abs_setup` 28. מספרי
+ה-ioctl מחושבים כמו `_IOC` בקרנל (dir<<30 | size<<16 | type<<8 | nr).
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ def uinput_available() -> bool:
 
 
 def find_event_device(name: str, timeout: float = 5.0) -> Path:
-    """‏`/dev/input/eventN` של ההתקן ששמו `name` — הגבוה ביותר, כלומר
+    """`/dev/input/eventN` של ההתקן ששמו `name` — הגבוה ביותר, כלומר
     החדש ביותר, אם נשארה שארית מריצה שנהרגה. לא נמצא בזמן = כישלון בשם."""
     deadline = time.monotonic() + timeout
     while True:
@@ -79,8 +79,8 @@ def find_event_device(name: str, timeout: float = 5.0) -> Path:
                 continue
         if matches:
             node = Path(f"/dev/input/event{max(matches)}")
-            # ‏#1659: devtmpfs יוצר את הצומת root ‏0600, ורק אחר כך udev נותן
-            # אותו לקבוצה input (‏66–97ms, מכונת הטסטים 04/11). פתיחה בחלון
+            # #1659: devtmpfs יוצר את הצומת root 0600, ורק אחר כך udev נותן
+            # אותו לקבוצה input (66–97ms, מכונת הטסטים 04/11). פתיחה בחלון
             # הזה היא EACCES, והדרייבר נכשל ב-"probe … failed" בלי קשר לקוד.
             if node.exists() and os.access(node, os.R_OK):
                 return node
@@ -90,14 +90,14 @@ def find_event_device(name: str, timeout: float = 5.0) -> Path:
 
 
 def has_bit(fd: int, ev_type: int, code: int) -> bool:
-    """‏EVIOCGBIT: האם ההתקן מצהיר על `code` בסוג `ev_type` (‏0 = סוגי אירועים)."""
+    """EVIOCGBIT: האם ההתקן מצהיר על `code` בסוג `ev_type` (0 = סוגי אירועים)."""
     buf = bytearray(128)
     fcntl.ioctl(fd, EVIOCGBIT(ev_type, len(buf)), buf)
     return bool(buf[code // 8] >> (code % 8) & 1)
 
 
 def absinfo(fd: int, code: int) -> tuple[int, int, int]:
-    """‏(value, minimum, maximum) של ציר מוחלט."""
+    """(value, minimum, maximum) של ציר מוחלט."""
     buf = bytearray(ABSINFO.size)
     fcntl.ioctl(fd, EVIOCGABS(code), buf)
     value, minimum, maximum, _fuzz, _flat, _res = ABSINFO.unpack(buf)
@@ -105,7 +105,7 @@ def absinfo(fd: int, code: int) -> tuple[int, int, int]:
 
 
 def read_events(fd: int, timeout: float) -> list[tuple[int, int, int]]:
-    """כל האירועים שהגיעו עד `timeout` שניות של שקט: ‏[(type, code, value)]."""
+    """כל האירועים שהגיעו עד `timeout` שניות של שקט: [(type, code, value)]."""
     events: list[tuple[int, int, int]] = []
     deadline = time.monotonic() + timeout
     while True:
@@ -127,8 +127,8 @@ def read_events(fd: int, timeout: float) -> list[tuple[int, int, int]]:
 class UinputDevice:
     """התקן uinput מזויף שהטסט יוצר — הצד שהגואי קורא.
 
-    ‏`abs=(max_x, max_y)` = מצביע מוחלט (‏ABS_X/ABS_Y + BTN_LEFT); ‏`touch=True`
-    מוסיף BTN_TOUCH (מסך מגע); ‏`rel=True` = עכבר יחסי (‏REL_X/REL_Y + BTN_LEFT)."""
+    `abs=(max_x, max_y)` = מצביע מוחלט (ABS_X/ABS_Y + BTN_LEFT); `touch=True`
+    מוסיף BTN_TOUCH (מסך מגע); `rel=True` = עכבר יחסי (REL_X/REL_Y + BTN_LEFT)."""
 
     def __init__(self, name: str, *, abs: tuple[int, int] | None = None,
                  touch: bool = False, rel: bool = False, keys: tuple[int, ...] = ()):

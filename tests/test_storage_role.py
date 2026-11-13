@@ -1,9 +1,9 @@
 """Storage Nodes — tracer 1.1 (#655 / #723).
 
 שלוש קבוצות: (א) קריאת התפקיד fail-closed, (ב) מטריצת ה-capability
-של ‏``/me``, ו-(ג) מיגרציית הטבלאות (אידמפוטנטית). כולן על השרת המלא
+של ``/me``, ו-(ג) מיגרציית הטבלאות (אידמפוטנטית). כולן על השרת המלא
 דרך פיקסצ'ר ``server`` — עם לקוחות מחוברים כ-admin וכ-deploy
-(‏#1073: ל-deploy אין `/me` — הקונסולה סגורה בפניו, 403).
+(#1073: ל-deploy אין `/me` — הקונסולה סגורה בפניו, 403).
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from server.db import SCHEMA, now_iso, set_setting
 
 def _add_node(conn, node_id="node1", base_url="https://sec1.example",
               disabled_at=None):
-    """משני רשום אחד. ‏disabled_at=None → פעיל; חותמת → מושבת."""
+    """משני רשום אחד. disabled_at=None → פעיל; חותמת → מושבת."""
     conn.execute(
         "INSERT INTO storage_nodes"
         " (id, label, base_url, credential_ref, enrolled_at, disabled_at)"
@@ -40,7 +40,7 @@ def test_role_missing_setting_is_standalone(server):
 
 
 def test_role_written_malformed_value_fails_closed(server):
-    # ‏#746: ערך שנכתב ואינו תפקיד מוכר (פגום/זר/"primary"/ריק) נכשל-סגור
+    # #746: ערך שנכתב ואינו תפקיד מוכר (פגום/זר/"primary"/ריק) נכשל-סגור
     # ל-secondary — המצב שאינו מנהל משניים — ולא ל-standalone המורשה-יותר.
     conn = server["ctx"].conn
     for bad in ("banana", "primary", ""):
@@ -55,7 +55,7 @@ def test_role_secondary_is_read_back(server):
 
 
 def test_forged_role_value_cannot_manage_nodes(server):
-    # ‏#746 (בקרה שלילית): ערך role זר שנכתב אינו פותח ניהול משניים.
+    # #746 (בקרה שלילית): ערך role זר שנכתב אינו פותח ניהול משניים.
     # לפני התיקון "primary" היה מוכרע כ-standalone ו-assert עובר בשקט.
     conn = server["ctx"].conn
     set_setting(conn, storage_nodes.ROLE_KEY, "primary")

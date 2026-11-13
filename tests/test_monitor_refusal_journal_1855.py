@@ -1,7 +1,7 @@
-"""‏#1855 — כשל התחברות למוניטור משאיר שורה ביומן, עם הקוד והסיבה, בצבירה.
+"""#1855 — כשל התחברות למוניטור משאיר שורה ביומן, עם הקוד והסיבה, בצבירה.
 
 עד כאן רק `monitor_connected` נרשם: 4404/4409/4502/4512 נסגרו בלי עקבות בשרת
-(#1837 — ‏bad HMAC, "6 פעמים ברצף" — נמצא ביומן הסוכן במכונה), ו-`monitor_closed
+(#1837 — bad HMAC, "6 פעמים ברצף" — נמצא ביומן הסוכן במכונה), ו-`monitor_closed
 … refused` לא אמר מה נדחה. הדפדפן מנסה שוב עד 20 פעמים, ולכן סדרה של אותו כשל
 היא שורה אחת, והספירה נכתבת בשורה הבאה או כשהחיבור הצליח.
 
@@ -38,7 +38,7 @@ class Clock:
 
 def _client(server, machines, clock=None, name="noc"):
     """מוניטור עם מכונה מזויפת חדשה לכל חיבור (כל WebSocket ב-TestClient ב-loop משלו);
-    ‏``machines()`` מחזיר את הבאה."""
+    ``machines()`` מחזיר את הבאה."""
     async def connector(_host, _port):
         machine = machines()
         return machine, machine
@@ -60,7 +60,7 @@ def _closed(client, path=WS) -> tuple[int, str]:
 
 
 def test_a_machine_that_rejects_the_secret_leaves_a_journal_row_with_4512_and_the_reason(server):
-    """הגדרת "גמור" 3: סוד שגוי → ‏4512 לדפדפן **ושורת יומן** עם הקוד והסיבה —
+    """הגדרת "גמור" 3: סוד שגוי → 4512 לדפדפן **ושורת יומן** עם הקוד והסיבה —
     בלי ה-challenge ובלי התשובה (#839)."""
     prepare_secret_machine(server)
     seen = []
@@ -104,7 +104,7 @@ def test_a_series_of_the_same_failure_is_one_row_and_the_count_comes_later(serve
 
 
 def test_each_failure_before_the_bridge_is_journaled_by_code(server):
-    """‏4404 (MAC שאינו MAC), ‏4512 (סוכן ישן בלי סוד), ‏4409 "המכונה בצפייה של …"."""
+    """4404 (MAC שאינו MAC), 4512 (סוכן ישן בלי סוד), 4409 "המכונה בצפייה של …"."""
     conn = server["ctx"].conn
     machine_factory = FakeMachine
     users.create(conn, "ada", "admin-pass-456", "admin", by="test", check_policy=False)
@@ -127,7 +127,7 @@ def test_each_failure_before_the_bridge_is_journaled_by_code(server):
 
 
 def test_refused_inside_the_bridge_carries_what_was_refused(server):
-    """הגדרת "גמור" 2: ‏`monitor_closed … refused` עם הסיבה — כאן סוג הודעה לא מוכר, ואיזה."""
+    """הגדרת "גמור" 2: `monitor_closed … refused` עם הסיבה — כאן סוג הודעה לא מוכר, ואיזה."""
     prepare_secret_machine(server)
     client = _client(server, FakeMachine)
     with client.websocket_connect(WS) as ws:
@@ -142,7 +142,7 @@ def test_refused_inside_the_bridge_carries_what_was_refused(server):
 
 
 def test_a_refusal_through_a_secondary_is_journaled_with_the_node(server):
-    """`/storage-nodes/{nid}/monitor/{mac}` — אותו יומן, עם ‏`node=`."""
+    """`/storage-nodes/{nid}/monitor/{mac}` — אותו יומן, עם `node=`."""
     code, reason = _closed(server["admin"], f"/api/console/storage-nodes/n0de/monitor/{MAC}")
     assert (code, reason) == (4404, "שרת משנה לא קיים")
     assert journal_rows(server, "monitor_refused") == [
@@ -161,7 +161,7 @@ def test_the_new_rows_are_translated_to_hebrew(server):
 
 
 def test_a_view_that_moved_is_translated_to_hebrew(server):
-    """‏#2325: ‏`monitor_closed … moved` (‏4410 חלון אחר / 4411 השליטה הועברה, #1852)
+    """#2325: `monitor_closed … moved` (4410 חלון אחר / 4411 השליטה הועברה, #1852)
     הגיע ליומן כמילה האנגלית. גם עם `node=` של משני."""
     from test_monitor import prepare_build_machine
     prepare_build_machine(server)

@@ -1,4 +1,4 @@
-"""‏#32 — איזה initramfs כל תפקיד מקבל, ובקובץ שנרנדר בפועל.
+"""#32 — איזה initramfs כל תפקיד מקבל, ובקובץ שנרנדר בפועל.
 
 הכרעת הבעלים (2026-09-04):
 
@@ -7,22 +7,22 @@
     cloner     → מסך גרפי (הכרעת הבעלים החדשה: למחשב השיכפול יש מסך,
                  והוא מציג התקדמות פר-מגירה ותפריט SMART גרפי)
 
-מה שחסם: ‏`GrubConfig.initrd_path` היה **ערך יחיד**, ולכן כל מכונה קיבלה
+מה שחסם: `GrubConfig.initrd_path` היה **ערך יחיד**, ולכן כל מכונה קיבלה
 את אותו initramfs — הטקסטואלי בן 37MB או הגרפי בן 212MB, לפי מה שהיה
 מותקן על השרת באותו רגע. לא היה מנגנון שמבדיל.
 
 **הקובץ הזה בודק את שורת ה-`initrd` בקובץ שיצא, לא את ההחלטה.** זה
-הלקח של #320: ‏`decide()` היה נכון, והקובץ בכל זאת יצא שגוי. החלטה
+הלקח של #320: `decide()` היה נכון, והקובץ בכל זאת יצא שגוי. החלטה
 נכונה אינה מוכיחה קובץ נכון.
 
 שני העקרונות שנבדקים כאן במפורש:
 
-1. **ברירת מחדל בטוחה (עיקרון 1).** תפקיד לא מוכר, ‏MAC לא רשום, או
+1. **ברירת מחדל בטוחה (עיקרון 1).** תפקיד לא מוכר, MAC לא רשום, או
    קובץ GUI שאינו קיים על הדיסק — כולם מקבלים את הטקסטואלי. מכונה
    שלא עולה גרועה ממכונה בלי גואי.
-2. **הבחירה תלויה בתפקיד, לא במסלול.** ‏cloner מגיע ל-AGENT בשלושה
-   מסלולים (`cloner-wait`, ‏`session-joinable`, ‏`task-assigned`), וגם
-   ‏build ו-classroom מגיעים לערך הסוכן בשני מסלולים שונים. כיסוי של
+2. **הבחירה תלויה בתפקיד, לא במסלול.** cloner מגיע ל-AGENT בשלושה
+   מסלולים (`cloner-wait`, `session-joinable`, `task-assigned`), וגם
+   build ו-classroom מגיעים לערך הסוכן בשני מסלולים שונים. כיסוי של
    מסלול אחד בלבד הוא בדיוק הבור ש-#320 נפל בו.
 """
 
@@ -40,7 +40,7 @@ CFG = GrubConfig(
 )
 
 #: אותו שרת בדיוק, אבל בלי initramfs גרפי על הדיסק. זה מה ש-`boot/http.py`
-#: מוסר כשהקובץ אינו קיים — ‏None, ולא נתיב שאולי יעבוד.
+#: מוסר כשהקובץ אינו קיים — None, ולא נתיב שאולי יעבוד.
 CFG_NO_GUI = GrubConfig(server_base="http://10.44.12.10:8080")
 
 TEXT_INITRD = "initrd (http,10.44.12.10:8080)/boot/initrd.img"
@@ -88,9 +88,9 @@ AGENT_ROUTES = [
 def test_gui_roles_get_the_gui_initramfs_on_every_route(role, route):
     """שלושת התפקידים שיש להם מסך, בכל מסלול שמייצר ערך ImageSrv.
 
-    ‏cloner נוסף בהכרעת הבעלים: למחשב השיכפול יש מסך, והוא מציג
+    cloner נוסף בהכרעת הבעלים: למחשב השיכפול יש מסך, והוא מציג
     התקדמות פר-מגירה ותפריט SMART גרפי. הפרמטריזציה על המסלולים אינה
-    קישוט — ‏cloner מגיע לסוכן ב-`cloner-wait`, ב-`session-joinable`
+    קישוט — cloner מגיע לסוכן ב-`cloner-wait`, ב-`session-joinable`
     וב-`task-assigned`, ומחשבי השיכפול מתחילים כל בוקר בהמתנה ועוברים
     לסבב. אילו הבחירה הייתה לפי `code` ולא לפי תפקיד, המסך היה נעלם
     ברגע שנפתח סבב — אותו באג של #320.
@@ -116,7 +116,7 @@ def test_the_gui_role_set_includes_the_cloner():
 @pytest.mark.parametrize("route", AGENT_ROUTES)
 @pytest.mark.parametrize("role", ["build", "classroom", "cloner"])
 def test_no_gui_file_on_disk_means_everyone_gets_the_text_initramfs(role, route):
-    """‏`gui_initrd_path=None` = הקובץ אינו קיים על השרת. מכונה שלא עולה
+    """`gui_initrd_path=None` = הקובץ אינו קיים על השרת. מכונה שלא עולה
     גרועה ממכונה בלי גואי (עיקרון 1), ולכן **כל** תפקיד נופל לטקסטואלי.
 
     זו גם ההגנה מפני הפער בין הבנייה לפריסה: ה-GUI נבנה בגרסה משלו,
@@ -137,7 +137,7 @@ def test_an_unrecognised_role_gets_the_text_initramfs(role, route):
 
 @pytest.mark.parametrize("route", AGENT_ROUTES)
 def test_a_non_string_role_gets_the_text_initramfs(route):
-    """‏`decide()` הופך role שאינו מחרוזת ל-"unknown". זה אותו מסלול,
+    """`decide()` הופך role שאינו מחרוזת ל-"unknown". זה אותו מסלול,
     ובכל זאת נבדק — כי `None in frozenset` לא זורק, והוא היה עובר
     בשקט אילו ההשוואה נעשתה על הערך הגולמי."""
     text = render(answer(role=None, **route), CFG)
@@ -145,7 +145,7 @@ def test_a_non_string_role_gets_the_text_initramfs(route):
 
 
 def test_an_unregistered_mac_loads_no_initramfs_at_all():
-    """‏known=false אינו מקבל ערך ImageSrv בכלל — לא גרפי ולא טקסטואלי.
+    """known=false אינו מקבל ערך ImageSrv בכלל — לא גרפי ולא טקסטואלי.
     בקרה על כך שההרחבה לא הצמיחה שורת initrd במסלול שלא הייתה בו."""
     text = render(answer(known=False, role="build"), CFG)
     assert initrd_lines(text) == []
@@ -179,7 +179,7 @@ def test_the_default_config_has_no_gui_path():
 
 @pytest.mark.parametrize("role", ["build", "classroom"])
 def test_the_gui_roles_keep_everything_else_around_the_initrd(role):
-    """‏#641 שינה את האתחול לאוטומטי (`default=imagesrv`, `timeout=0`),
+    """#641 שינה את האתחול לאוטומטי (`default=imagesrv`, `timeout=0`),
     אבל #144 לא זז — שני ערכים, הדיסק המקומי לצד ImageSrv — ו-#32 נוגע
     בשורת ה-initrd ובה בלבד."""
     text = render(answer(role=role), CFG)
@@ -193,7 +193,7 @@ def test_the_gui_roles_keep_everything_else_around_the_initrd(role):
 
 @pytest.mark.parametrize("route", AGENT_ROUTES)
 def test_the_cloner_file_is_still_diskless(route):
-    """‏#320 לא זז. הבחירה לפי תפקיד נוספת לחריג הקיים, לא מחליפה אותו."""
+    """#320 לא זז. הבחירה לפי תפקיד נוספת לחריג הקיים, לא מחליפה אותו."""
     text = render(answer(role="cloner", **route), CFG)
     assert text.count("menuentry ") == 1
     assert "chainloader" not in text

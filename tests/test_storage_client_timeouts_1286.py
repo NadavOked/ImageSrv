@@ -1,6 +1,6 @@
-"""‏#1286 — משני שמקבל TCP ואז נתקע אינו חוסם את הראשי בלי תקרה.
+"""#1286 — משני שמקבל TCP ואז נתקע אינו חוסם את הראשי בלי תקרה.
 
-‏``PinnedMTLSClient.open`` הוריד את ה-timeout אחרי ה-connect
+``PinnedMTLSClient.open`` הוריד את ה-timeout אחרי ה-connect
 (``settimeout(None)``), ולכן handshake שלא מגיע, או תשובה שלא מגיעה אחרי
 בקשה, חסמו את ה-relay לנצח. כאן "משני" מזויף על loopback — TCP אמיתי
 ו-TLS 1.3 אמיתי (pyOpenSSL) — שמתנהג בכל פעם בצורה אחרת:
@@ -284,7 +284,7 @@ def test_put_whose_verify_never_answers_fails_at_the_ceiling(
 
 def test_fetch_server_spki_fails_in_name_when_the_secondary_accepts_and_stays_silent(
         secondaries):
-    """‏``fetch_server_spki`` הוריד את ה-timeout אחרי ה-connect כמו ``open``
+    """``fetch_server_spki`` הוריד את ה-timeout אחרי ה-connect כמו ``open``
     לפני #1286 — משני שמקבל TCP ולא שולח ServerHello תקע את ה-preview לנצח."""
     sec = secondaries(_hold, tls=False)
     _, error, elapsed = _run_bounded(

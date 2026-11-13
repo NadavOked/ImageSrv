@@ -46,9 +46,9 @@ def secondary_unreachable(exc: BaseException, port=None) -> str:
 
 
 def contact_failure(exc: BaseException, port=None) -> str:
-    """‏#595: מה הלקוח רואה כשהפנייה למשני נכשלה. הודעה עוברת רק מחריגה
+    """#595: מה הלקוח רואה כשהפנייה למשני נכשלה. הודעה עוברת רק מחריגה
     שאנחנו כותבים (ערוץ, קובץ אישורים, זהות — אחרי ``redact_secrets``);
-    ‏``OSError`` — המשפט של #1016; כל חריגה אחרת — משפט קבוע, והפרטים ליומן."""
+    ``OSError`` — המשפט של #1016; כל חריגה אחרת — משפט קבוע, והפרטים ליומן."""
     if isinstance(exc, (storage_client.InterserverClientError, interserver_auth.CredentialFileError,
                         interserver_auth.InterserverURLError, storage_nodes.IdentityError)):
         return interserver_auth.redact_secrets(str(exc))
@@ -68,7 +68,7 @@ def _node_port(node) -> int | None:
 
 
 class _NotSent(Exception):
-    """‏#1179 שלב 2: הכתיבה לא יצאה מהראשי (אין זהות/טוקן, החיבור לא נפתח)."""
+    """#1179 שלב 2: הכתיבה לא יצאה מהראשי (אין זהות/טוקן, החיבור לא נפתח)."""
 
 
 def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
@@ -154,7 +154,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
     @router.post("/storage-nodes/{nid}/disabled")
     async def set_disabled(nid: str, request: Request,
                            user=Depends(require_standalone)):
-        # ‏#732: פרסור בוליאני קפדני. ``bool("false")`` הוא ``True``,
+        # #732: פרסור בוליאני קפדני. ``bool("false")`` הוא ``True``,
         # ולכן ``{"disabled": "false"}`` היה **משבית** משני. מקבלים רק
         # בוליאני אמיתי; מחרוזת/מספר/אובייקט נדחים ב-400.
         disabled = (await request.json()).get("disabled")
@@ -176,7 +176,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
 
     # --- העברת אימג' ראשי→משני (#655 v1) ------------------------------------
     #
-    # ‏admin+standalone. ההעברה היא משימת רקע; כאן רק פתיחה ותצוגה. הכניסה
+    # admin+standalone. ההעברה היא משימת רקע; כאן רק פתיחה ותצוגה. הכניסה
     # לספריית המשני עוברת אימות sha256 **שם** (import_tar) — הראשי מדווח
     # ``done`` רק אחרי 200 שהמשני החזיר אחרי האימות.
 
@@ -206,7 +206,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
 
     # --- משיכת אימג' משני→ראשי (#1071) ---------------------------------------
     #
-    # היוזם תמיד הראשי. המשני רק עונה GET. ‏deploy → 403 (אין קונסולה, #1073);
+    # היוזם תמיד הראשי. המשני רק עונה GET. deploy → 403 (אין קונסולה, #1073);
     # שרת שאינו standalone → 409. אימג' שכבר קיים בראשי → 409, לא דריסה.
 
     @router.post("/storage-nodes/{nid}/pull")
@@ -214,7 +214,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
                          user=Depends(require_standalone)):
         body = await request.json()
         image_id = str(body.get("image_id") or "")
-        # ‏#1781: מיקום היעד בראשי, כמו ב-``…/transfer``. בלי בחירה — ``loc_local``.
+        # #1781: מיקום היעד בראשי, כמו ב-``…/transfer``. בלי בחירה — ``loc_local``.
         location_id = str(body.get("location_id") or "loc_local")
         try:
             tid = storage_transfer.start_pull(ctx, data_dir, nid, image_id, user,
@@ -223,9 +223,9 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             raise HTTPException(extra.status, extra.detail)
         return {"id": tid}
 
-    # ‏#1017: כל פרוקסי רושם את תוצאת הקריאה על השורה (``record_contact``)
+    # #1017: כל פרוקסי רושם את תוצאת הקריאה על השורה (``record_contact``)
     # ומחזיר את שלושת שדות המגע (``last_seen_at``/``last_error``/
-    # ‏``last_error_at``) — זמן השרת, לא שעון הדפדפן. "תשובה לא צפויה" היא
+    # ``last_error_at``) — זמן השרת, לא שעון הדפדפן. "תשובה לא צפויה" היא
     # מגע (המשני ענה) **וגם** כשל (התשובה אינה שמישה) — נרשמת ככשל.
 
     def _contact(node, error: str | None) -> dict:
@@ -234,8 +234,8 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
 
     @router.post("/storage-nodes/{nid}/check")
     def node_check(nid: str, user=Depends(require_standalone)):
-        """‏#1017: "בדוק חיבור" — ‏``GET /ping`` המאומת של המשני בלבד, בלי
-        לשלוף מכונות או אימג'ים. ‏``connected:false`` עם הסיבה — 200, לא 5xx;
+        """#1017: "בדוק חיבור" — ``GET /ping`` המאומת של המשני בלבד, בלי
+        לשלוף מכונות או אימג'ים. ``connected:false`` עם הסיבה — 200, לא 5xx;
         משני מושבת אינו נשאל (ואינו נרשם כ"לא ענה")."""
         node = storage_nodes.node_row(ctx.conn, nid)
         if node is None:
@@ -285,7 +285,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             error = "תשובה לא צפויה משרת המשנה"
             return {"connected": False, "error": error, "images": [],
                     **_contact(node, error)}
-        # ‏#1634: כמו ה-relay — המשני אינו מקור אמין לדפדפן של הראשי.
+        # #1634: כמו ה-relay — המשני אינו מקור אמין לדפדפן של הראשי.
         return {"connected": True, "error": None, "images": peer_safe.defang(answer),
                 **_contact(node, None)}
 
@@ -323,7 +323,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
     # --- הקונסולה של המשני דרך הראשי: GET מרשימה מותרת (#1179) ---------------
     #
     # הדפדפן קורא ל-``…/storage-nodes/{id}/console/<נתיב קונסולה>`` כשנבחר משני
-    # (‏``api()`` ב-console.js), והעמוד של הראשי מצייר את מה שחוזר — אותם
+    # (``api()`` ב-console.js), והעמוד של הראשי מצייר את מה שחוזר — אותם
     # עמודים ואותן לשוניות. רק GET ורק נתיב מ-``CONSOLE_GETS``; נתיב אחר אינו
     # נשלח למשני. כשל חיבור/דחייה של הערוץ → 502 עם הסיבה (העמוד מציג "לא
     # נקרא"), לא תשובה ריקה. 401/403 של המשני אינם עוברים כפי שהם — 401 היה
@@ -343,7 +343,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
         if node["disabled_at"]:
             raise HTTPException(409, f"{label} מושבת — לא נשאל")
         query = request.url.query
-        # ‏``sub`` כבר עבר את ``console_get_type`` (בלי ``%``/``\``/``..``) — עובר כפי שהוא.
+        # ``sub`` כבר עבר את ``console_get_type`` (בלי ``%``/``\``/``..``) — עובר כפי שהוא.
         target = "/console" + sub + (f"?{query}" if query else "")
         try:
             client, token = storage_nodes.node_client(ctx.conn, data_dir, node)
@@ -351,7 +351,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
                 status, answer = client.get_answer(
                     target, token, {"ImageSrv-Acting-User": user[0]})
         except Exception as exc:                             # noqa: BLE001
-            error = interserver_auth.redact_secrets(str(exc))
+            error = contact_failure(exc, _node_port(node))      # #2543
             _contact(node, error)
             raise HTTPException(502, f"{label} לא ענה: {error}")
         if status != 200:
@@ -429,13 +429,13 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
                     client.request_timeout = slow
                 client.open()
             except Exception as exc:                         # noqa: BLE001
-                raise _NotSent(interserver_auth.redact_secrets(str(exc)))
+                raise _NotSent(contact_failure(exc, _node_port(node)))   # #2543
             try:
                 with closing(client):
                     return client.send_answer(method, target, token, body,
                                               {"ImageSrv-Acting-User": user[0]})
             except storage_client.RequestNotSent as exc:
-                raise _NotSent(interserver_auth.redact_secrets(str(exc)))
+                raise _NotSent(contact_failure(exc))                     # #2543
 
         try:
             status, answer = await asyncio.to_thread(send)
@@ -444,7 +444,14 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             journal(ctx.conn, "peer_write", f"{what} → לא נשלחה: {exc}", user[0])
             raise HTTPException(502, f"{label} לא ענה — הפעולה לא נשלחה: {exc}")
         except Exception as exc:                             # noqa: BLE001
-            error = interserver_auth.redact_secrets(str(exc))
+            # #2543: אחרי השליחה "לא עונה בכתובת הזו" אינו נכון — חריגה שלנו עוברת,
+            # וכל טקסט אחר (OSError, SSL) ליומן השרת.
+            if isinstance(exc, storage_client.InterserverClientError):
+                error = interserver_auth.redact_secrets(str(exc))
+            else:
+                log.warning("secondary write dropped after send: %s: %s", type(exc).__name__,
+                            interserver_auth.redact_secrets(str(exc)))
+                error = "הפרטים ביומן השרת"
             _contact(node, error)
             journal(ctx.conn, "peer_write", f"{what} → לא ידוע: {error}", user[0])
             raise HTTPException(502, f"החיבור ל-{label} נפל אחרי השליחה — לא ידוע אם "
@@ -454,7 +461,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             detail = answer.get("detail") if isinstance(answer, dict) else ""
             error = f"הערוץ סירב ({status}): {detail}" if status != 200 else "תשובה לא צפויה משרת המשנה"
             if status == 404:
-                # ‏#1776: ‏``(method, sub)`` כבר עבר את הרשימה **שלנו** למעלה. ‏404 מהערוץ
+                # #1776: ``(method, sub)`` כבר עבר את הרשימה **שלנו** למעלה. 404 מהערוץ
                 # = הרשימה של המשני אינה מכירה אותו, כלומר המשני ישן מהראשי (נמדד 20/10:
                 # חיפה v0.75.0 מול /update/check). התשובה שלו נשארת בסוגריים, כראיה.
                 what = ("לעדכון מרחוק" if sub.startswith("/update/")
@@ -483,15 +490,15 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
     # קודי הסגירה כמו במוניטור המקומי (סעיף 14 ב-interfaces.md); כשל שהגיע
     # מהמשני חוזר כ-4000+הקוד שלו עם ה-detail שלו כסיבה.
 
-    #: ‏#1129: הכותב אל המנהרה של כל מוניטור-דרך-משני פתוח, לפי ``nid/mac``
+    #: #1129: הכותב אל המנהרה של כל מוניטור-דרך-משני פתוח, לפי ``nid/mac``
     #: — הנתיב היחיד של פקודת כוח למכונה של המשני (ראו ``monitor.power``).
     tunnels: dict[str, object] = {}
-    refusals = monitor.RefusalLog()   # ‏#1855: כשלי התחברות לפני הגשר — ליומן, בצבירה
+    refusals = monitor.RefusalLog()   # #1855: כשלי התחברות לפני הגשר — ליומן, בצבירה
 
     @router.post("/storage-nodes/{nid}/monitor/{mac}/power")
     async def remote_power(nid: str, mac: str, body: dict,
                            user=Depends(require_standalone)):
-        """‏#1129: כוח למכונה של המשני — אותו חוזה כמו `POST /monitor/{mac}/power`,
+        """#1129: כוח למכונה של המשני — אותו חוזה כמו `POST /monitor/{mac}/power`,
         אלא שהשם הקנוני מגיע מרשימת המכונות של **המשני** (הראשי אינו רושם
         אותה), והפריים נכתב למנהרה הפתוחה — המשני מעביר אותו למכונה
         כמו כל בייט אחר אחרי SecurityResult."""
@@ -520,14 +527,14 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             row = await asyncio.to_thread(remote_row)
         except Exception as exc:                             # noqa: BLE001
             raise HTTPException(502, "שרת המשנה אינו זמין: "
-                                + interserver_auth.redact_secrets(str(exc)))
+                                + contact_failure(exc, _node_port(node)))   # #2543
         name = row.get("name") if row else None
         if name is None:
             raise HTTPException(404, "המכונה אינה רשומה בשרת המשנה")
         if body.get("confirm") != name:
             raise HTTPException(403, monitor.POWER_NAME_STALE)   # #1850: איש אינו מקליד
-        # ‏#2240: כמו ב-`monitor.power` — באמצע שיכפול מקומי (לפי המשני) לא נשלח
-        # ‏`poweroff -f` בלי בחירה; דרך הסוכן = ‏`…/console/monitor/{mac}/agent-power`.
+        # #2240: כמו ב-`monitor.power` — באמצע שיכפול מקומי (לפי המשני) לא נשלח
+        # `poweroff -f` בלי בחירה; דרך הסוכן = `…/console/monitor/{mac}/agent-power`.
         # משני ישן שאינו מדווח `local_copy` — ההתנהגות שלפני #2240.
         copying = row.get("local_copy") is True
         if copying and body.get("immediate") is not True:
@@ -546,11 +553,11 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
     @router.websocket("/storage-nodes/{nid}/monitor/{mac}")
     async def remote_monitor(websocket: WebSocket, nid: str, mac: str):
         import asyncio
-        if not monitor.origin_allowed(websocket.headers):   # ‏#1129: לפני accept
+        if not monitor.origin_allowed(websocket.headers):   # #1129: לפני accept
             await websocket.close(code=monitor.WS_FORBIDDEN,
                                   reason=monitor.ORIGIN_REFUSED)
             return
-        await monitor.accept_browser(websocket)             # ‏#904: קוד וסיבה, לא 403
+        await monitor.accept_browser(websocket)             # #904: קוד וסיבה, לא 403
         found = auth.check(ctx.conn, websocket.cookies.get(auth.COOKIE_NAME))
         if found is None:
             await websocket.close(code=monitor.WS_UNAUTHENTICATED, reason="נדרשת התחברות")
@@ -562,7 +569,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
         where = canonical or monitor.path_word(mac)
 
         async def refuse(code: int, reason: str) -> None:
-            """‏#1855: סגירה לפני הגשר — ליומן (בצבירה) ולדפדפן, באותה סיבה."""
+            """#1855: סגירה לפני הגשר — ליומן (בצבירה) ולדפדפן, באותה סיבה."""
             reason = monitor.close_reason(reason)
             refusals.record(ctx.conn, where, found[0], code, reason, monitor.path_word(nid))
             await websocket.close(code=code, reason=reason)
@@ -585,16 +592,16 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             ident = storage_nodes.identity(ctx.conn, data_dir=data_dir)
             host, port, _ = interserver_auth.parse_interserver_url(node["base_url"])
         except Exception as exc:                             # noqa: BLE001
-            await refuse(4500, interserver_auth.redact_secrets(str(exc)))
+            await refuse(4500, contact_failure(exc))                 # #2543
             return
-        # ‏#1853: כמו המוניטור המקומי — logout/מחיקה/הורדה ל-deploy סוגרים את הגשר.
+        # #1853: כמו המוניטור המקומי — logout/מחיקה/הורדה ל-deploy סוגרים את הגשר.
         cookie = websocket.cookies.get(auth.COOKIE_NAME) or ""
         task = asyncio.current_task()
         if task is not None:
             viewer_sessions.register(cookie, found[0], task)
         writer = None
         try:
-            if not monitor.still_admin(ctx.conn, cookie):   # ‏#1853: ביטול בין הבדיקה לרישום
+            if not monitor.still_admin(ctx.conn, cookie):   # #1853: ביטול בין הבדיקה לרישום
                 await websocket.close(code=monitor.WS_UNAUTHENTICATED,
                                       reason=monitor.SESSION_ENDED_REASON)
                 return
@@ -607,10 +614,10 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
                 await refuse(4000 + exc.status, exc.detail)
                 return
             except (OSError, asyncio.TimeoutError, storage_client.InterserverClientError) as exc:
-                await refuse(4502, f"השרת המשני אינו זמין: {interserver_auth.redact_secrets(str(exc))}")
+                await refuse(4502, f"השרת המשני אינו זמין: {contact_failure(exc, port)}")   # #2543
                 return
             tunnels[f"{nid}/{canonical}"] = writer
-            refusals.settle(ctx.conn, canonical, found[0], monitor.path_word(nid))   # ‏#1855
+            refusals.settle(ctx.conn, canonical, found[0], monitor.path_word(nid))   # #1855
             journal(ctx.conn, "monitor_connected", f"{canonical} node={nid}", found[0])
             outcome = "error"
             try:
@@ -623,7 +630,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
                 journal(ctx.conn, "monitor_closed",
                         f"{canonical} {outcome} node={nid}", found[0])
         except (WebSocketDisconnect, asyncio.CancelledError):
-            await monitor.close_if_revoked(websocket, task)   # ‏#1853: ביטול לפני הגשר
+            await monitor.close_if_revoked(websocket, task)   # #1853: ביטול לפני הגשר
         finally:
             tunnels.pop(f"{nid}/{canonical}", None)
             if task is not None:
@@ -685,7 +692,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
 
     # --- הצד של הראשי: הוספת משני דרך enrollment מוקשח (#740) ----------------
     #
-    # ‏admin+standalone (``require_standalone``). המנהל מזין כתובת מפורשת,
+    # admin+standalone (``require_standalone``). המנהל מזין כתובת מפורשת,
     # קוד חד-פעמי, ואת ה-SPKI של המשני כפי שהוא מוצג שם. ``preview`` קורא
     # את ה-SPKI של השרת כדי שהמנהל יַשווה **לפני** שהוא שולח את הקוד; אין
     # כאן שם משתמש/סיסמה של המשני (הדגם הנעול הסיר את זה).
@@ -700,7 +707,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
         """קורא את ה-SPKI של המשני שבכתובת, להשוואה ידנית מול תצוגת המשני."""
         body = await request.json()
         url = body.get("url", "")
-        # ‏#1997: השם נבדק כבר כאן (שלב 1 בחלון), לא אחרי שהמפעיל הקליד את הקוד.
+        # #1997: השם נבדק כבר כאן (שלב 1 בחלון), לא אחרי שהמפעיל הקליד את הקוד.
         if "label" in body:
             try:
                 storage_nodes.check_label(body["label"])
@@ -728,7 +735,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
         expected_spki = str(body.get("expected_secondary_spki") or "")
         if not expected_spki:
             raise HTTPException(400, "חסר expected_secondary_spki (הצמד את ה-SPKI של שרת המשנה)")
-        # ‏#1997: שם שרת המשנה הוא שם מחשב — נבדק **לפני** ה-pairing. אחרי
+        # #1997: שם שרת המשנה הוא שם מחשב — נבדק **לפני** ה-pairing. אחרי
         # ה-pairing המשני כבר קשור, ורשומה שנופלת על השם משאירה אותו קשור.
         try:
             storage_nodes.check_label(body.get("label"))
@@ -747,7 +754,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
                 cert_pem=ident["cert_pem"], key_pem=ident["key_pem"],
                 primary_id=ident["node_id"])
         except storage_client.InterserverIdentityMismatch as exc:
-            # ‏#883: ההצהרה סותרת את המפתח — כשל בקול, לפני שהקוד נשלח.
+            # #883: ההצהרה סותרת את המפתח — כשל בקול, לפני שהקוד נשלח.
             raise HTTPException(400, interserver_auth.redact_secrets(str(exc)))
         except storage_client.InterserverClientError as exc:
             # הודעת ה-detail עלולה לשאת חומר — מסתירים לפני שהיא עוזבת.
@@ -756,7 +763,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             # החיבור עצמו לא נפתח (סירוב, אין נתיב, זמן קצוב) — #1016.
             raise HTTPException(502, secondary_unreachable(exc, enroll_port))
 
-        # ‏#883: המזהה — וממנו שם קובץ הטוקן — נגזר מה-SPKI שהמפעיל הצמיד
+        # #883: המזהה — וממנו שם קובץ הטוקן — נגזר מה-SPKI שהמפעיל הצמיד
         # וה-handshake אימת, לא מהצהרת ה-JSON של המשני. חגורה שנייה על
         # שם הקובץ: רק ``sn_<hex>`` נכנס ל-``secondaries/``.
         secondary_id = interserver_auth.node_id_from_spki(expected_spki)
@@ -764,7 +771,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             raise HTTPException(400, f"מזהה משני לא תקין: {secondary_id!r}")
         cred_dir = Path(data_dir) / "secondaries"
         cred_dir.mkdir(parents=True, exist_ok=True)
-        # ‏CodeQL #782-787/#791: חגורה שלישית, בצורה שהניתוח מזהה — הנתיב המנורמל
+        # CodeQL #782-787/#791: חגורה שלישית, בצורה שהניתוח מזהה — הנתיב המנורמל
         # חייב להישאר בתוך `secondaries/`. אחרי `valid_node_id` זה תמיד נכון.
         cred_root = os.path.normpath(cred_dir)
         cred_file = os.path.normpath(os.path.join(cred_root, f"{secondary_id}.token"))
@@ -785,8 +792,12 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
             # הרשומה נכשלה אבל המשני כבר קשור — לא re-enroll שקט: מנקים את
             # הקובץ היתום ומדווחים שהשחזור הוא ניתוק מקומי על המשני.
             cred_path.unlink(missing_ok=True)
+            why = str(exc)
+            if isinstance(exc, sqlite3.IntegrityError):      # #2543: טקסט sqlite ליומן השרת
+                log.warning("secondary enroll row failed: %s", exc)
+                why = "הרישום במסד נכשל — הפרטים ביומן השרת"
             raise HTTPException(
-                409, f"רישום המשני נכשל ({exc}). המשני כבר קשור — נתקו אותו "
+                409, f"רישום המשני נכשל ({why}). המשני כבר קשור — נתקו אותו "
                      f"מקומית (break-glass) לפני רישום מחדש.")
         return {"ok": True, "id": node_row, "node_id": secondary_id,
                 "secondary_spki": expected_spki}

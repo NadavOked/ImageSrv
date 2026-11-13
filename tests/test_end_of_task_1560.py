@@ -21,7 +21,7 @@
   רק כשיש ספירה, וצופה הסבב (roomflow.sh) מוסר ``room.ended`` רק כשהסבב
   שנפתח כאן **נעלם** — לא כשנכשל, לא כשנסגר כאן, ולא כשהקריאה נכשלה.
 * כל אתר קריאה: ההפצה הישירה שואלת (בלי `sleep 20`), הסבב שואל מתפריט
-  הבנייה, ‏`do_restore_drawers` סופר במקום לכבות מיד, ושיכפול מקומי סופר
+  הבנייה, `do_restore_drawers` סופר במקום לכבות מיד, ושיכפול מקומי סופר
   — שהצליח וגם שנכשל (ושנעצר ביד — לא).
 * הגואי (מעבדה בלבד: cc + pango): הספירה והשאלות החדשות מצוירות; רשומה
   פגומה אינה מצוירת.
@@ -45,7 +45,7 @@ from native import requires_native
 from test_agent import AGENT, BASH, REPO, posix
 from test_capture_end import END_STUBS
 from test_done_stays_done import DIRECT_ANSWER, DIRECT_STUBS
-from test_final_report import (  # noqa: F401 — ‏`reports` הוא fixture
+from test_final_report import (  # noqa: F401 — `reports` הוא fixture
     IMAGE,
     SESSION,
     cut_function,
@@ -90,7 +90,7 @@ def trace_of(run: Path) -> list[str]:
 
 # --- end_countdown (idle.sh) ---------------------------------------------------
 
-#: ‏finish_and_stop מזויף: רושם, ומחזיר את PO_RC. ‏POWEROFF_WHY=wol כש-1 —
+#: finish_and_stop מזויף: רושם, ומחזיר את PO_RC. POWEROFF_WHY=wol כש-1 —
 #: מה ש-safe_poweroff האמיתי קובע כשה-WoL לא נדרך (#587).
 POWER_STUB = (
     'finish_and_stop() { echo "POWEROFF" >> "$RUN_DIR/trace"; '
@@ -116,8 +116,8 @@ def countdown(tmp_path: Path, body: str, env: str = "") -> tuple[subprocess.Comp
 
 
 def test_the_count_runs_its_seconds_on_the_screen_and_then_powers_off(tmp_path):
-    """‏20 שניות, ובזמן הספירה ``end.poweroff`` = ‏<epoch>|<kind> — מה שכל
-    מסך מצייר. בסוף: ‏finish_and_stop (‏safe_poweroff, ‏WoL דרוך), והקובץ נמחק."""
+    """20 שניות, ובזמן הספירה ``end.poweroff`` = <epoch>|<kind> — מה שכל
+    מסך מצייר. בסוף: finish_and_stop (safe_poweroff, WoL דרוך), והקובץ נמחק."""
     before = int(time.time())
     out, run = countdown(tmp_path, (
         'sleep() { [ -f "$RUN_DIR/seen" ] || cp "$RUN_DIR/end.poweroff" "$RUN_DIR/seen"; '
@@ -134,7 +134,7 @@ def test_the_count_runs_its_seconds_on_the_screen_and_then_powers_off(tmp_path):
 
 
 def test_the_button_from_the_kiosk_powers_off_at_once_and_an_old_press_does_not_count(tmp_path):
-    """‏``end.now`` (הגשר כותב אותו על end-poweroff) — כיבוי בשנייה שאחרי. לחיצה
+    """``end.now`` (הגשר כותב אותו על end-poweroff) — כיבוי בשנייה שאחרי. לחיצה
     שנשארה מספירה קודמת נמחקת בתחילת הספירה: אחרת 0 שניות במקום 1."""
     run = tmp_path / "run"
     (run / "gui").mkdir(parents=True)
@@ -148,7 +148,7 @@ def test_the_button_from_the_kiosk_powers_off_at_once_and_an_old_press_does_not_
 
 
 def test_a_refused_power_off_returns_and_leaves_the_reason_on_every_screen(tmp_path):
-    """‏WoL לא נדרך: לא כבה (#587), חוזר עם 1 — והסיבה ב-power.fail, שכל מסך
+    """WoL לא נדרך: לא כבה (#587), חוזר עם 1 — והסיבה ב-power.fail, שכל מסך
     מצייר (gui_hello_state). הספירה עצמה ירדה מהמסך."""
     out, run = countdown(tmp_path, 'sleep() { :; }; end_countdown drawers "drawers complete" "" "" sdb; echo "rc=$?"',
                          env="PO_RC=1")
@@ -224,8 +224,8 @@ def watch(tmp_path: Path, room: object, *, fetch_ok: bool = True, seen_ago: int 
     (run / "room.src.json").write_text(json.dumps(room), encoding="utf-8")
     get = ('gui_get() { cp "$RUN_DIR/room.src.json" "$2"; }; ' if fetch_ok
            else 'gui_get() { return 1; }; ')
-    # ‏frozen: ‏`date +%s` של הסוכן מחזיר את השנייה שנכתבה — גבול של שנייה אחת
-    # ‏(599 מול 600) אינו תלוי בכמה זמן עלה ה-shell (Testrunner תחת עומס, 21/10).
+    # frozen: `date +%s` של הסוכן מחזיר את השנייה שנכתבה — גבול של שנייה אחת
+    # (599 מול 600) אינו תלוי בכמה זמן עלה ה-shell (Testrunner תחת עומס, 21/10).
     if frozen:
         get += f"date() {{ echo {now}; }}; "
     out = bash(f"export RUN_DIR={q(run)} GUI_DIR={q(run / 'gui')} LOG_FILE={q(run / 'agent.log')}; "
@@ -263,7 +263,7 @@ def test_a_room_that_could_not_be_read_is_not_an_end(tmp_path):
                          ids=["no-answer", "unreadable"])
 def test_a_watch_not_confirmed_for_ten_minutes_is_dropped_aloud(tmp_path, fetch_ok, room):
     """**סקירת אבטחה 17/10 (LOW):** טוקן שפג או שרת שלא עונה השאירו את
-    ‏room.watch לנצח — ומחשב הבנייה לא נכבה מ-idle לעולם. 600 ש׳ בלי "active"
+    room.watch לנצח — ומחשב הבנייה לא נכבה מ-idle לעולם. 600 ש׳ בלי "active"
     — הצפייה נמחקת, בשורה ביומן, ושעון ה-idle חוזר לספור. בלי שאלה."""
     out, run = watch(tmp_path, room, fetch_ok=fetch_ok, seen_ago=601)
     assert out.stdout.strip().splitlines()[-1] == "rc=1", out.stdout + out.stderr
@@ -307,7 +307,7 @@ STANDBY = '_build_standby=1; do_task; _r=$?; echo "STANDBY $_build_standby rc=$_
 
 @native_tools
 def test_a_direct_send_asks_and_menu_keeps_the_machine_on(tmp_path, reports):
-    """**לב ההכרעה לשליחה ישירה.** עד 17/10: ‏`sleep 20` וכיבוי בלי שאלה."""
+    """**לב ההכרעה לשליחה ישירה.** עד 17/10: `sleep 20` וכיבוי בלי שאלה."""
     result = run_path(tmp_path, url_of(reports), STANDBY, answer=DIRECT_ANSWER,
                       stubs=DIRECT_STUBS + END_STUBS, env=DIRECT_ENV + " CE_ANSWER=menu")
     trace = result["trace"]
@@ -379,7 +379,7 @@ HOLD_STUB = 'ui_error_hold() { echo "HOLD $1" >> "$RUN_DIR/trace"; }; '
 def test_a_failed_cloner_round_is_reported_and_counts_down_too(tmp_path, reports, stays_on):
     """**ברזל 17/10.** משכפל 2 נשאר דלוק אחרי "שחזור מהשרת" שנכשל, והסבב
     הבא נפתח בלעדיו: פעימת ההמתנה אינה מצטרפת לגל, ו-WoL לא מעיר מכונה
-    דלוקה. עכשיו: ‏'failed' מדווח (הקונסולה שומרת את הסיבה), ספירה, כיבוי.
+    דלוקה. עכשיו: 'failed' מדווח (הקונסולה שומרת את הסיבה), ספירה, כיבוי.
     כיבוי שסורב (WoL) — מסך הכישלון כמו קודם."""
     count = ('end_countdown() { echo "COUNTDOWN $1" >> "$RUN_DIR/trace"; return 1; }; '
              if stays_on else COUNT_STUB)
@@ -393,11 +393,11 @@ def test_a_failed_cloner_round_is_reported_and_counts_down_too(tmp_path, reports
 
 @native_tools
 def test_a_round_where_every_drawer_was_skipped_counts_down_too(tmp_path, reports):
-    """**ברזל 17/10, 09:19Z:** משכפל 2 אחרי שליחה ישירה שנכשלה (‏sha256 של
-    מחיצה 1) הציג 27 דקות את מסך הסבב — "נכשל", ‏0%, "אין פעולה במסך הזה" —
+    """**ברזל 17/10, 09:19Z:** משכפל 2 אחרי שליחה ישירה שנכשלה (sha256 של
+    מחיצה 1) הציג 27 דקות את מסך הסבב — "נכשל", 0%, "אין פעולה במסך הזה" —
     בלי כפתור ובלי כיבוי. שליחה ישירה מגיעה למשכפל כסבב, באותו
     `do_restore_drawers`: כשל כתיבה הוא המקרה שלמעלה; וכאן הכשל האחר של
-    אותו מסלול — כל המגירות דולגו (שער SMART). עד 17/10: ‏ui_error_hold."""
+    אותו מסלול — כל המגירות דולגו (שער SMART). עד 17/10: ui_error_hold."""
     result = run_path(tmp_path, url_of(reports), f"do_restore_drawers {IMAGE} {SESSION}",
                       stubs=COUNT_STUB + HOLD_STUB + 'smart_gate() { return 1; }; ',
                       env="IMAGESRV_TEST=0 D_ROLE=cloner")
@@ -410,7 +410,7 @@ def test_a_round_where_every_drawer_was_skipped_counts_down_too(tmp_path, report
 @native_tools
 def test_a_round_where_some_drawers_failed_shows_the_results_and_counts(tmp_path, reports):
     """**הכרעת נדב 17/10 (3).** סבב / שחזור מהשרת שבו חלק מהמגירות נכשלו:
-    ‏'partial' עם "1 מתוך 2" — מסך תוצאות שאפשר לעצור עליו את הספירה — ואז
+    'partial' עם "1 מתוך 2" — מסך תוצאות שאפשר לעצור עליו את הספירה — ואז
     כיבוי. עד 17/10: כמו הצלחה מלאה, בלי לומר מה נכשל."""
     partial = ('run_restore_drawers() { echo "DRAWERS" >> "$RUN_DIR/trace"; target_set sdb done; '
                'target_set sdc failed; echo done > "$RUN_DIR/state"; return 0; }; ')
@@ -519,7 +519,7 @@ def test_local_work_on_the_screen_is_not_left_for_the_round(tmp_path):
 # --- no idle power-off during a round (metal 17/10, 08:15 and 08:30 UTC) ---------
 
 def idle(tmp_path: Path, setup: dict[str, tuple[str, int]]) -> list[str]:
-    """``idle_check`` אחרי 400 ש׳ בלי מקש (התקרה 300). ‏setup: קובץ -> (תוכן,
+    """``idle_check`` אחרי 400 ש׳ בלי מקש (התקרה 300). setup: קובץ -> (תוכן,
     גיל בשניות) — הגיל קובע את ה-mtime, שהוא מה ש-``find -newer`` קורא."""
     run = tmp_path / "run"
     (run / "gui").mkdir(parents=True)
@@ -554,7 +554,7 @@ ACTIVE_ROOM = json.dumps({"round": {"id": "room_ab12cd34", "state": "active"}, "
      "gui/session-shown.json": (json.dumps({"session": {"state": "running"}}), 1)},
 ], ids=["opened-here", "room-shown", "direct-shown", "class-shown"])
 def test_no_idle_power_off_while_a_round_is_active(tmp_path, setup):
-    """**הבאג.** מחשב הבנייה פתח סבב, הציג 91% וגל משדר — ונכבה: ‏"אין
+    """**הבאג.** מחשב הבנייה פתח סבב, הציג 91% וגל משדר — ונכבה: "אין
     פעילות" ספר רק מקלדת ועכבר. סבב פעיל בלי קלט — אין כיבוי, והשעון מתאפס."""
     assert idle(tmp_path, setup) == []
 
@@ -709,7 +709,7 @@ def test_a_failed_cloner_round_the_server_did_not_confirm_still_counts_down(tmp_
     """**ברזל 17/10, 18:05–18:12Z (`room_72308383`).** הרשת של משכפל 2 ירדה
     באמצע הזרם; שתי המגירות נכשלו בגלוי, הדיווח הסופי לא אושר (השרת לא
     נגיש) — והמשכפל נתקע על "המשימה הסתיימה — והשרת לא אישר" בלי ספירה:
-    ‏`hold_unheard` אינו חוזר לעולם, גם אחרי שהשרת ענה שוב ("session closed").
+    `hold_unheard` אינו חוזר לעולם, גם אחרי שהשרת ענה שוב ("session closed").
     הכרעת נדב: משכפל נכבה אחרי 20 ש' **בכל מצב**, כולל כשל — בספירה גלויה.
     הדיווח ממשיך ברקע עד הכיבוי; השרת סוגר את הסבב בעצמו (גל מת → `failed`)."""
     reports.refuse_first = -1

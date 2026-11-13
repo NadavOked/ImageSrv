@@ -1,15 +1,15 @@
-"""‏#1470 + ‏#1461: האימות של קליטה רץ ברקע, והשרת ממשיך לענות בזמנו.
+"""#1470 + #1461: האימות של קליטה רץ ברקע, והשרת ממשיך לענות בזמנו.
 
 הכרעת נדב 16/10 (עיקרון 6 נשאר): מחשב הבנייה משתחרר מיד אחרי ההעלאה —
-‏`PUT /manifest` עונה 202 אחרי הבדיקות הזולות — והקריאה החוזרת של כל קובץ
+`PUT /manifest` עונה 202 אחרי הבדיקות הזולות — והקריאה החוזרת של כל קובץ
 מדיסק השרת רצה ברקע. האימג' **אינו** בספרייה עד שהיא עוברת; כישלון הוא
-‏`failed` בשם; אתחול באמצע מריץ אותה מחדש ולעולם אינו מכניס בלי אימות.
+`failed` בשם; אתחול באמצע מריץ אותה מחדש ולעולם אינו מכניס בלי אימות.
 בנוסף, ה-sha256 שהשרת חישב **בזמן הקבלה** מושווה למניפסט בתוך ה-PUT.
 
-‏#1461: עד כאן `finish_capture` גיבב את כל הקבצים על לולאת האירועים, וכל
+#1461: עד כאן `finish_capture` גיבב את כל הקבצים על לולאת האירועים, וכל
 השרת — hello, דיווחים, קונסולה — לא ענה למשך האימות (17.5 מתוך 45 דקות
 ב-17/09). הבדיקה הראשונה מריצה את ה-PUT ואת ה-hello **על לולאה אחת**,
-כמו uvicorn בייצור (‏`server/main.py`), ולא דרך TestClient — ‏TestClient
+כמו uvicorn בייצור (`server/main.py`), ולא דרך TestClient — TestClient
 בלי `with` פותח לולאה חדשה לכל בקשה, ושם הקיפאון אינו נראה.
 
 הגיבוב מוחלף בשער (`Gate`) שמחזיק אותו עד שהבדיקה משחררת — כך "אימות
@@ -44,7 +44,7 @@ from test_capture import (PART_A, PART_B, make_task, manifest_for, setup_build_m
 
 FILES = {"p1.esp.pcl.zst": PART_A, "p3.windows.pcl.zst": PART_B}
 REAL_SHA256 = capture._sha256
-#: ‏`getattr` ולא `capture.UPLOAD_SHA`: בבקרה השלילית הקבוע אינו קיים, והטסט
+#: `getattr` ולא `capture.UPLOAD_SHA`: בבקרה השלילית הקבוע אינו קיים, והטסט
 #: חייב ליפול על ההתנהגות ולא על AttributeError.
 UPLOAD_SHA = getattr(capture, "UPLOAD_SHA", ".upload-sha256")
 
@@ -53,7 +53,7 @@ class Gate:
     """תחליף ל-`capture._sha256` שמחזיק את הגיבוב עד `release`.
 
     מדווח את גודל הקובץ ל-`on_bytes` **לפני** ההמתנה, כדי שההתקדמות תיראה
-    בזמן שהאימות "רץ". ‏`order` — רישום סדר האירועים (שעון ווינדוס גס מכדי
+    בזמן שהאימות "רץ". `order` — רישום סדר האירועים (שעון ווינדוס גס מכדי
     להכריע "לפני" בין שני אירועים באותו טיק של 15ms)."""
 
     def __init__(self, wait_s: float = 8.0) -> None:
@@ -270,7 +270,7 @@ def test_the_upload_answer_still_carries_the_received_sha_and_records_it(server,
 
 
 def test_the_agents_final_report_after_the_manifest_gets_not_open(server, monkeypatch):
-    """‏`report_final` של הסוכן מקבל `not_open` אחרי שהמניפסט סגר את המשימה
+    """`report_final` של הסוכן מקבל `not_open` אחרי שהמניפסט סגר את המשימה
     (#127) — וזה חייב להישאר כך גם כשהמשימה `verifying`, אחרת הסוכן
     ממתין או נכשל על משימה שהשרת כבר לקח ממנו."""
     mac = setup_build_machine(server)
@@ -318,7 +318,7 @@ def _state_after_restart(ctx, tid: str, timeout: float = 15.0) -> dict:
 
 def _died_while_verifying(server, monkeypatch) -> tuple[str, str]:
     """קליטה שה-PUT שלה ענה 202 והשרת מת לפני שהאימות סיים: המשימה
-    ‏`verifying`, הקבצים באזור הביניים, ואף אחד לא מאמת."""
+    `verifying`, הקבצים באזור הביניים, ואף אחד לא מאמת."""
     mac = setup_build_machine(server)
     created = make_task(server, mac).json()
     head = _upload(server, created["id"])
@@ -373,8 +373,8 @@ def test_a_restart_with_nothing_left_to_verify_fails_by_name(
 
 def test_an_image_that_landed_before_the_restart_is_done(
         server, tmp_path, images_root, clock, monkeypatch):
-    """‏rename קורה רק אחרי שכל sha256 תאם; נפילה בינו לבין ה-UPDATE
-    משאירה אימג' מאומת בספרייה עם משימה `verifying` — ‏`done`, לא כישלון."""
+    """rename קורה רק אחרי שכל sha256 תאם; נפילה בינו לבין ה-UPDATE
+    משאירה אימג' מאומת בספרייה עם משימה `verifying` — `done`, לא כישלון."""
     tid, image_id = _died_while_verifying(server, monkeypatch)
     staging_dir(images_root, tid).rename(images_root / image_id)
     ctx = _reboot(tmp_path, images_root, clock)

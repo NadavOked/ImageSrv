@@ -1,4 +1,4 @@
-"""‏#144 — ערך ImageSrv **אחד** בתפריט, והוא הנכון לתפקיד המכונה.
+"""#144 — ערך ImageSrv **אחד** בתפריט, והוא הנכון לתפקיד המכונה.
 
 עד כאן קיבלה מכונה רשומה בלי משימה שלושה ערכים: הדיסק, `imagesrv`
 ו-`imagesrv-recovery` — **ואין על המסך שום דבר שמסביר את ההבדל**. ב-30/08
@@ -72,8 +72,8 @@ def test_a_registered_machine_gets_exactly_one_imagesrv_entry(role):
 
 
 def test_the_classroom_entry_is_the_one_that_actually_does_something():
-    """‏`decide.sh` על classroom בלי משימה: מצב רגיל מחזיר `local`
-    ומאתחל, ‏recovery מגיע למסך הכניסה והשחזור. מ-#641 המכונה עולה אליו
+    """`decide.sh` על classroom בלי משימה: מצב רגיל מחזיר `local`
+    ומאתחל, recovery מגיע למסך הכניסה והשחזור. מ-#641 המכונה עולה אליו
     אוטומטית, ולכן הערך שנבחר חייב להיות recovery — לא הרגיל (#144)."""
     decision = decide(answer(role="classroom"))
     assert decision.action == AGENT
@@ -83,7 +83,7 @@ def test_the_classroom_entry_is_the_one_that_actually_does_something():
 
 
 def test_the_build_machine_entry_reaches_the_build_console():
-    """מחשב הבנייה הוא ההפך הגמור: ‏`decide.sh` מחזיר `build_console`
+    """מחשב הבנייה הוא ההפך הגמור: `decide.sh` מחזיר `build_console`
     במצב רגיל, ו-recovery היה מסתיר את מסך הקליטה/ההפצה (#29). מ-#641
     הוא עולה אליו אוטומטית, במצב הרגיל."""
     decision = decide(answer(role="build"))
@@ -112,7 +112,7 @@ def test_exactly_one_of_the_two_offers_is_lit_for_every_menu_role():
 
 def test_a_gui_role_auto_boots_with_the_mode_its_role_needs():
     """מ-#641 build/classroom אינם בתפריט אלא עולים ישר לסוכן, והערך
-    שלהם נקבע ב-recovery_mode: ‏build רגיל (build_console), ‏classroom
+    שלהם נקבע ב-recovery_mode: build רגיל (build_console), classroom
     recovery — אותה טבלת החלטה, צד אחר."""
     assert decide(answer(role="build")).recovery_mode is False
     assert decide(answer(role="classroom")).recovery_mode is True
@@ -130,7 +130,7 @@ def test_the_single_entry_is_called_plainly_imagesrv():
 
 
 def test_the_gui_roles_auto_boot_without_a_menu():
-    """‏#641 הפך את #140: build/classroom בלי משימה עולים ישר ל-ImageSrv,
+    """#641 הפך את #140: build/classroom בלי משימה עולים ישר ל-ImageSrv,
     בלי תפריט ובלי טיימר. מה שלא זז הוא #144 — ערך ImageSrv אחד."""
     for role in ["classroom", "build"]:
         conf = settings(render(answer(role=role), CFG))
@@ -140,7 +140,7 @@ def test_the_gui_roles_auto_boot_without_a_menu():
 
 
 def test_the_entry_carries_nothing_but_the_server_and_the_mode():
-    """עיקרון 2 — שורת הקרנל נקייה. ‏`imagesrv.mode=recovery` הוא החריג
+    """עיקרון 2 — שורת הקרנל נקייה. `imagesrv.mode=recovery` הוא החריג
     היחיד המותר, וצמצום התפריט אינו תירוץ להוסיף עוד."""
     body = agent_entry(render(answer(), CFG))
     line = next(part for part in body.splitlines() if part.strip().startswith("if linux "))
@@ -190,7 +190,7 @@ def test_a_machine_with_work_still_goes_straight_to_the_agent():
 
 
 def test_the_boot_loop_guard_still_leaves_a_way_into_recovery():
-    """‏#75: דווקא המכונה שהשומר החזיר לדיסק היא זו שטכנאי צריך להיכנס
+    """#75: דווקא המכונה שהשומר החזיר לדיסק היא זו שטכנאי צריך להיכנס
     אליה. עם ערך אחד — הערך הזה הוא השחזור, וזה עדיין הפתח היחיד לתקן
     מכונה תקועה בשטח."""
     a = answer(task={"id": "tsk_0091"}, boot_guard="exhausted")

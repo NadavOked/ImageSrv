@@ -13,6 +13,9 @@ The agent's half, in the real shell code (`guibridge.sh` + `buildmenu.sh`):
 The server half is `tests/test_user_theme.py`, the GUI half
 `tests/test_native_login_theme.py`.
 
+#3025: a third line, the user's saved console view (`advanced`; absent or
+foreign = `basic`). The GUI reads only the first two (theme.c).
+
 Negative control: on the code before #1499 `gui_auth` prints the role only
 and `gui_saved_theme`/`gui_theme_save` do not exist, so every test here fails.
 """
@@ -47,6 +50,8 @@ if expr.startswith(".role | select("):
 if expr.startswith("if .theme =="):
     t = doc.get("theme")
     print(t if t in ("light", "dark") else "auto"); sys.exit(0)
+if expr.startswith('if .view == "advanced"'):
+    print("advanced" if doc.get("view") == "advanced" else "basic"); sys.exit(0)
 sys.exit(5)
 '''
 
@@ -89,12 +94,12 @@ AUTH = 'printf "noc\\nsecret\\n" | gui_auth'
 def test_the_auth_answer_is_the_role_then_the_saved_theme(tmp_path, saved, shown):
     out, rc, _ = run(tmp_path, AUTH, {"username": "noc", "role": "admin", "theme": saved})
     assert rc == 0, out
-    assert out.splitlines() == ["admin", shown], out
+    assert out.splitlines() == ["admin", shown, "basic"], out
 
 
 def test_deploy_gets_its_theme_too(tmp_path):
     out, rc, _ = run(tmp_path, AUTH, {"username": "labtech", "role": "deploy", "theme": "dark"})
-    assert rc == 0 and out.splitlines() == ["deploy", "dark"], out
+    assert rc == 0 and out.splitlines() == ["deploy", "dark", "basic"], out
 
 
 @pytest.mark.parametrize("login", [
@@ -103,7 +108,26 @@ def test_deploy_gets_its_theme_too(tmp_path):
 ], ids=["no-theme", "foreign"])
 def test_an_unknown_theme_is_the_default_never_a_guess(tmp_path, login):
     out, rc, _ = run(tmp_path, AUTH, login)
-    assert rc == 0 and out.splitlines() == ["admin", "auto"], out
+    assert rc == 0 and out.splitlines() == ["admin", "auto", "basic"], out
+
+
+# ---- #3025 (Nadav 12/11): the saved console view is the third line ----
+# The GUI keeps it and changes nothing on screen (the build machine's menu has
+# nothing to hide); the server half is tests/test_user_view_3025.py.
+
+@pytest.mark.parametrize("saved,shown", [("advanced", "advanced"), ("basic", "basic")])
+def test_the_auth_answer_ends_with_the_saved_view(tmp_path, saved, shown):
+    out, rc, _ = run(tmp_path, AUTH, {"username": "noc", "role": "admin", "theme": "dark", "view": saved})
+    assert rc == 0 and out.splitlines() == ["admin", "dark", shown], out
+
+
+@pytest.mark.parametrize("login", [
+    {"username": "noc", "role": "admin", "theme": "light"},                    # a server from before #3025
+    {"username": "noc", "role": "admin", "theme": "light", "view": "expert"},  # a value nobody defined
+], ids=["no-view", "foreign"])
+def test_an_unknown_view_is_basic_never_a_guess(tmp_path, login):
+    out, rc, _ = run(tmp_path, AUTH, login)
+    assert rc == 0 and out.splitlines() == ["admin", "light", "basic"], out
 
 
 def test_a_refused_login_prints_nothing(tmp_path):

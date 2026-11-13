@@ -15,14 +15,15 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
+from server.agent import body as agent_body   # #2471
 from server.console import auth, login_guard, totp, users
 from server.agent.api import ServerContext
 from server.db import _write_lock, get_setting, journal, now_iso, writing
 
-#: ‏נדב 18/10: "תכלס לא צריך לזה MFA. אם בנוי, אפשר להפעיל או לא". ‏"true" = כל מנהל
+#: נדב 18/10: "תכלס לא צריך לזה MFA. אם בנוי, אפשר להפעיל או לא". "true" = כל מנהל
 #: שאינו המקומי (is_builtin) חייב לרשום MFA בכניסה ובהחלפת סיסמה — ההתנהגות שהייתה
-#: עד rc6 לכולם. ברירת המחדל "false" (‏db.DEFAULT_SETTINGS): אין חיוב; מי שהפעיל MFA
-#: ממשיך להתבקש לקוד, ומ"החשבון שלי" אפשר להפעיל או לבטל (‏/me/mfa/disable, עם קוד).
+#: עד rc6 לכולם. ברירת המחדל "false" (db.DEFAULT_SETTINGS): אין חיוב; מי שהפעיל MFA
+#: ממשיך להתבקש לקוד, ומ"החשבון שלי" אפשר להפעיל או לבטל (/me/mfa/disable, עם קוד).
 SETTING = "mfa_required_for_admins"
 
 #: הסירוב לביטול עצמי כשהחיוב דלוק — אחרת הכניסה הבאה הייתה מחייבת רישום מחדש.
@@ -32,7 +33,7 @@ SELF_DISABLE_REQUIRED_HE = ("אימות דו-שלבי חובה למנהלים ב
 
 def mfa_demanded(conn: sqlite3.Connection, info: dict) -> bool:
     """האם MFA חובה למשתמש הזה: החיוב הכללי למנהלים דלוק, או שסומן לו "דרוש אימות
-    דו-שלבי" (נדב 18/10, ‏users.mfa_required)."""
+    דו-שלבי" (נדב 18/10, users.mfa_required)."""
     return get_setting(conn, SETTING) == "true" or bool(info.get("mfa_required"))
 
 
@@ -43,16 +44,16 @@ def enrollment_required(conn: sqlite3.Connection, role: str, info: dict) -> bool
             and mfa_demanded(conn, info))
 
 
-#: ‏409 כשסומן למשתמש "דרוש אימות דו-שלבי" (נדב 18/10).
+#: 409 כשסומן למשתמש "דרוש אימות דו-שלבי" (נדב 18/10).
 SELF_DISABLE_FLAGGED_HE = ('למשתמש שלך מסומן "דרוש אימות דו-שלבי" — מנהל יכול להסיר את הסימון'
                            ' בדף "משתמשים והרשאות"')
-#: ‏400 לאיפוס של עצמך מדף המשתמשים.
+#: 400 לאיפוס של עצמך מדף המשתמשים.
 RESET_SELF_HE = 'את האימות הדו-שלבי שלך מבטלים ב"החשבון שלי" (עם הסיסמה וקוד)'
 
 CHALLENGE_TTL = 5 * 60
-#: ‏#2101: כמה זמן setup שלא אושר מחזיר את אותו סוד ממתין. אחרי זה — סוד חדש.
+#: #2101: כמה זמן setup שלא אושר מחזיר את אותו סוד ממתין. אחרי זה — סוד חדש.
 PENDING_TTL = 15 * 60
-#: ‏#2101: מתי הוגרל הסוד הממתין של כל משתמש. בזיכרון ולא בעמודה: בלי שינוי
+#: #2101: מתי הוגרל הסוד הממתין של כל משתמש. בזיכרון ולא בעמודה: בלי שינוי
 #: סכמה, ואתחול שרת באמצע הגדרה פשוט מגריל סוד חדש — כמו לפני התיקון.
 _pending_since: dict[str, float] = {}
 _now = time.time
@@ -125,7 +126,7 @@ def _new_backup_codes(conn: sqlite3.Connection, username: str) -> list[str]:
 
 
 def _replayed(step: int, last_step: int | None) -> bool:
-    """‏#2414: קוד TOTP תקף רק ל-step שאחרי האחרון שנצרך. ‏``valid_window=1`` מקבל
+    """#2414: קוד TOTP תקף רק ל-step שאחרי האחרון שנצרך. ``valid_window=1`` מקבל
     גם את ה-step הקודם — ובלי ``<=``, קוד N נכנס שוב אחרי כניסה בקוד N+1."""
     return last_step is not None and step <= last_step
 
@@ -150,11 +151,11 @@ def consume_backup(conn: sqlite3.Connection, username: str, code: str) -> bool:
 
 
 def _qr_svg(otpauth_url: str) -> str:
-    """‏QR של ה-URI כ-SVG inline (בלי `<?xml`), ל-`innerHTML` של הקונסולה.
+    """QR של ה-URI כ-SVG inline (בלי `<?xml`), ל-`innerHTML` של הקונסולה.
 
-    ‏#1150: הייבוא בתוך הפונקציה — ‏python3-qrcode (דביאן 13: 8.2) מגיע
-    מהמתקין, ושרת שהותקן לפניו לא ייפול בכניסה; הוא מחזיר ‏`""` והקורא
-    אומר זאת בשם. ‏`SvgPathImage` אינו צריך PIL.
+    #1150: הייבוא בתוך הפונקציה — python3-qrcode (דביאן 13: 8.2) מגיע
+    מהמתקין, ושרת שהותקן לפניו לא ייפול בכניסה; הוא מחזיר `""` והקורא
+    אומר זאת בשם. `SvgPathImage` אינו צריך PIL.
     """
     try:
         import qrcode
@@ -165,14 +166,14 @@ def _qr_svg(otpauth_url: str) -> str:
     return img.to_string(encoding="unicode")
 
 
-#: ‏#1814: מגבלת ה-TOTP היא ±30 ש' — מסטייה כזו כל קוד נכון נראה "שגוי". זה אותו
-#: סף של שורת "שעון" בבריאות (‏`health.time_sync_check`).
+#: #1814: מגבלת ה-TOTP היא ±30 ש' — מסטייה כזו כל קוד נכון נראה "שגוי". זה אותו
+#: סף של שורת "שעון" בבריאות (`health.time_sync_check`).
 CLOCK_SKEW_MS = 30_000
 CLOCK_HINT_HE = " — ייתכן שהשעון בשרת לא מדויק; בדקו אותו בדף הבריאות"
 
 
 def clock_problem(clock_status) -> str | None:
-    """‏#1814: למה קוד נכון ייראה שגוי — פירוט אנגלי ליומן, או ‏None כשהשעון תקין.
+    """#1814: למה קוד נכון ייראה שגוי — פירוט אנגלי ליומן, או None כשהשעון תקין.
 
     רק ראיה חיובית על שעון בעייתי (סטייה מ-30 ש' או "לא מסונכרן") מוסיפה הערה.
     מדידה שנכשלה או לא הוזרקה אינה הערה: ההודעה נשארת "קוד שגוי" בלבד, כי
@@ -196,11 +197,11 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
              clock_status=None) -> None:
     """מוסיף את נתיבי ה-MFA לראוטר הקונסולה הקיים — מיזוג קל מול #1073.
 
-    ‏`clock_status` (#1814): ‏`() -> {"synchronized", "offset_ms"}` — מצב השעון של
+    `clock_status` (#1814): `() -> {"synchronized", "offset_ms"}` — מצב השעון של
     השרת (health `timesync_status`). כש-TOTP נדחה והשעון בעייתי, ההודעה אומרת זאת."""
 
     def wrong_code(message: str, username: str, what: str) -> HTTPException:
-        """‏401 של "קוד שגוי" — עם הערת שעון כשיש לה ראיה, ושורת יומן אחת."""
+        """401 של "קוד שגוי" — עם הערת שעון כשיש לה ראיה, ושורת יומן אחת."""
         problem = clock_problem(clock_status)
         if problem is None:
             return HTTPException(401, message)
@@ -208,8 +209,8 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
         return HTTPException(401, message + CLOCK_HINT_HE)
 
     def guarded_ip(request: Request, username: str) -> str:
-        """‏#2470: ‏`verify`/`enable` עוברים באותו מונה ובאותם ספים כמו `/login/mfa`
-        (‏login_guard — שם משתמש + IP): בלעדיו עוגייה גנובה מנחשת TOTP בלי הגבלה."""
+        """#2470: `verify`/`enable` עוברים באותו מונה ובאותם ספים כמו `/login/mfa`
+        (login_guard — שם משתמש + IP): בלעדיו עוגייה גנובה מנחשת TOTP בלי הגבלה."""
         ip = request.client.host if request.client else "?"
         try:
             login_guard.check(ctx.conn, username, ip)
@@ -226,7 +227,7 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
             raise HTTPException(403, "builtin_no_mfa")
         if role != "admin":
             raise HTTPException(403, "MFA למנהל בלבד")
-        # ‏#2101: setup שעוד לא אושר מחזיר את **אותו** סוד ממתין עד `PENDING_TTL` —
+        # #2101: setup שעוד לא אושר מחזיר את **אותו** סוד ממתין עד `PENDING_TTL` —
         # רענון הדף אחרי סריקת ה-QR לא ינתק את מה שהטלפון כבר שמר. ההחלטה בתוך
         # נעילת הכתיבה, כדי ששתי קריאות במקביל לא יגרילו שני סודות.
         now = _now()
@@ -251,7 +252,7 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
                 _pending_since[username] = now
         url = totp.otpauth_url(username, secret)
         svg = _qr_svg(url)
-        # ‏#1150: "אין חבילה" נאמר בשם ביומן ובקונסולה — לא נקפל ל"הצלחה"
+        # #1150: "אין חבילה" נאמר בשם ביומן ובקונסולה — לא נקפל ל"הצלחה"
         # (עיקרון 5). ההרשמה עצמה ממשיכה: הסוד וה-URI מספיקים להקלדה ידנית.
         journal(ctx.conn, "mfa_setup",
                 "QR SVG" if svg else
@@ -273,7 +274,7 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
             login_guard.record_failure(ctx.conn, username, ip)
             raise wrong_code("קוד שגוי, נסה שוב", username, "setup")
         # הצלחה אינה מאפסת את המונה: הבדיקה אינה צורכת את הקוד, ואיפוס כאן היה מאפשר
-        # לשלב ניחושי סיסמה (‏`enable` כש-MFA פעיל) עם קוד ידוע. ‏`enable` מאפס.
+        # לשלב ניחושי סיסמה (`enable` כש-MFA פעיל) עם קוד ידוע. `enable` מאפס.
         return {"verified": True}
 
     @router.post("/me/mfa/enable")
@@ -287,9 +288,9 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
         if not info["mfa_secret"]:
             raise HTTPException(400, "יש לקרוא ל-setup קודם")
         ip = guarded_ip(request, username)
-        # ‏#2470: כש-MFA כבר פעיל, זה "קודי גיבוי חדשים" (‏accountNewBackupCodes) — הקודים
+        # #2470: כש-MFA כבר פעיל, זה "קודי גיבוי חדשים" (accountNewBackupCodes) — הקודים
         # הישנים נפסלים ונמסרים חדשים. לכן כמו ב-`/me/mfa/disable`: הסיסמה הנוכחית **וגם**
-        # קוד TOTP שלא נצרך (‏#2414). הקוד נבדק רק אחרי סיסמה נכונה.
+        # קוד TOTP שלא נצרך (#2414). הקוד נבדק רק אחרי סיסמה נכונה.
         renew = bool(info["mfa_enabled"])
         password_ok = (not renew or users.verify(
             ctx.conn, username, str(body.get("current_password") or "")) is not None)
@@ -303,7 +304,7 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
         login_guard.clear(ctx.conn, username, ip)
         codes = _new_backup_codes(ctx.conn, username)
         with _write_lock, writing(ctx.conn):
-            # ‏#2414: הקוד שהפעיל את ה-MFA נצרך — אחרת הוא נכנס שוב ב-`/login/mfa`.
+            # #2414: הקוד שהפעיל את ה-MFA נצרך — אחרת הוא נכנס שוב ב-`/login/mfa`.
             ctx.conn.execute(
                 "UPDATE users SET mfa_enabled = 1, mfa_enrolled_at = ?, mfa_last_step = ?"
                 " WHERE username = ?",
@@ -318,10 +319,10 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
     async def mfa_disable_self(request: Request, response: Response,
                                user=Depends(current_user)):
         """נדב 18/10: מי שהפעיל MFA לעצמו יכול לבטל אותו — עם **הסיסמה הנוכחית וקוד**
-        (TOTP או קוד גיבוי). כשהחיוב דלוק — ‏409: ביטול היה מוביל לרישום כפוי בכניסה הבאה.
+        (TOTP או קוד גיבוי). כשהחיוב דלוק — 409: ביטול היה מוביל לרישום כפוי בכניסה הבאה.
 
         סקירת האבטחה על 7534e0e7: בלי הגבלה, session גנוב יכול לנחש קוד עד שיצליח.
-        עכשיו אותו מונה ואותם ספים כמו ב-`/login/mfa` (‏login_guard — שם משתמש + IP):
+        עכשיו אותו מונה ואותם ספים כמו ב-`/login/mfa` (login_guard — שם משתמש + IP):
         בדיקה לפני כל אימות, כשל נספר (סיסמה או קוד), הצלחה מאפסת; בזמן נעילה גם
         סיסמה וקוד נכונים נדחים."""
         body = await request.json()
@@ -393,15 +394,25 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
 
     @router.post("/login/mfa")
     async def login_mfa(request: Request, response: Response):
-        body = await request.json()
+        # #2471: הנתיב הלא-מאומת היחיד בקונסולה שקרא את הגוף בלי תקרה — לפני בדיקת
+        # האתגר. `read_json` כמו ב-`/login` (#2446): תקרה, עומק, ו-400 על לא-אובייקט.
+        try:
+            body = await agent_body.read_json(request)
+        except agent_body.BodyError as exc:
+            raise HTTPException(exc.status, "גוף הבקשה אינו JSON תקין" if exc.status == 400
+                                else "גוף הבקשה גדול מהתקרה") from None
+        if not isinstance(body, dict):
+            raise HTTPException(400, "גוף הבקשה אינו אובייקט")
         raw = body.get("challenge") or ""
         code = body.get("code") or ""
+        if not isinstance(raw, str) or not isinstance(code, str):
+            raise HTTPException(400, "האתגר והקוד חייבים להיות טקסט")
         auth.assert_secret(ctx.conn)
         stored = _challenge_user(ctx.conn, raw)
         if stored is None:
             raise HTTPException(401, "אתגר MFA פג או שגוי")
-        # ‏#1120: אותו מונה ואותם ספים כמו שלב הסיסמה — שם משתמש + IP.
-        # ‏`/login` אינו מאפס אותו למשתמש MFA (ראו console_login), אחרת
+        # #1120: אותו מונה ואותם ספים כמו שלב הסיסמה — שם משתמש + IP.
+        # `/login` אינו מאפס אותו למשתמש MFA (ראו console_login), אחרת
         # "סיסמה נכונה → קוד שגוי → כניסה מחדש" היה מאפס בכל סיבוב.
         ip = request.client.host if request.client else "?"
         try:
@@ -419,7 +430,7 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
         if step is None and consume_backup(ctx.conn, stored, code):
             used_backup = True
         elif step is None or _replayed(step, info["mfa_last_step"]):
-            # ‏#1120: ה-challenge חד-פעמי גם בכישלון — ניחוש שני דורש
+            # #1120: ה-challenge חד-פעמי גם בכישלון — ניחוש שני דורש
             # סיסמה מחדש. הכישלון נספר, והמסך חוזר לכניסה.
             consume_challenge(ctx.conn, raw)
             login_guard.record_failure(ctx.conn, stored, ip)
@@ -435,8 +446,8 @@ def register(router: APIRouter, ctx: ServerContext, current_user, admin_only, tl
                 )
         row = users.lookup(ctx.conn, stored)
         if info["must_change_password"]:
-            # ‏#2409: הקוד עבר — ועכשיו ההחלפה הכפויה, כמו בכניסה בלי MFA.
-            # עוגייה מוגבלת בלבד: ‏`/me/password` מנפיק את המלאה.
+            # #2409: הקוד עבר — ועכשיו ההחלפה הכפויה, כמו בכניסה בלי MFA.
+            # עוגייה מוגבלת בלבד: `/me/password` מנפיק את המלאה.
             auth.attach_cookie(response, ctx.conn, stored, row["role"], tls,
                                purpose=auth.PURPOSE_PWCHANGE)
             users.record_login(ctx.conn, stored, ip)

@@ -1,8 +1,8 @@
 """בדיקות על מכשיר המדידה עצמו.
 
 כל האימות של הפרויקט נשען על משפט אחד — "N עברו, אפס דילוגים" — ועל
-הנחה שקטה: שכשהריצה נגמרה, היא נגמרה. שתיהן נמצאו לא נכונות. ‏#52:
-שלוש חבילות שלמות יכלו לדלג ו-`pytest` יצא 0. ‏#79: טסט השאיר
+הנחה שקטה: שכשהריצה נגמרה, היא נגמרה. שתיהן נמצאו לא נכונות. #52:
+שלוש חבילות שלמות יכלו לדלג ו-`pytest` יצא 0. #79: טסט השאיר
 `udp-sender` אמיתי רץ שעתיים וחצי על פורט השידור של השרת.
 
 הקובץ הזה בודק את שני התיקונים בראיה חיובית: שהדגל באמת הופך דילוג
@@ -25,10 +25,10 @@ import hygiene
 import native
 from native import requires_native
 
-from conftest import hello_body, setup_classroom
+from conftest import HANG_S, hello_body, setup_classroom
 
 
-# --- ‏#52: כלי חסר במקום שהוא אמור להיות -------------------------------------
+# --- #52: כלי חסר במקום שהוא אמור להיות -------------------------------------
 
 
 def test_a_missing_tool_is_a_skip_here_and_a_failure_where_it_belongs(monkeypatch):
@@ -51,7 +51,7 @@ def test_a_tool_that_is_here_never_marks_anything(monkeypatch):
 
 
 def test_a_missing_header_counts_as_a_missing_requirement(monkeypatch, tmp_path):
-    """‏hivewrite צריך גם `/usr/include/hivex.h`, לא רק תוכניות."""
+    """hivewrite צריך גם `/usr/include/hivex.h`, לא רק תוכניות."""
     monkeypatch.setenv(native.ENV_FLAG, "1")
     absent = requires_native(paths=(str(tmp_path / "nope.h"),))
     assert absent.name == native.MISSING_MARK
@@ -93,7 +93,7 @@ def test_a_skipped_run_is_not_a_green_run_when_native_is_required(monkeypatch):
 
 def test_a_strict_xfail_that_failed_as_predicted_is_not_a_skipped_test(monkeypatch):
     """pytest מדווח xfail שנכשל כ-skipped + wasxfail. הוא רץ ונכשל כצפוי
-    (‏strict הופך מעבר לכישלון), ולכן הוא אינו "טסט שלא רץ" -- אחרת כל xfail
+    (strict הופך מעבר לכישלון), ולכן הוא אינו "טסט שלא רץ" -- אחרת כל xfail
     מפיל את ריצת המעבדה כש-IMAGESRV_REQUIRE_NATIVE=1. אבל ``run=False``
     נדלג ב-setup ולא רץ: הוא נשאר ברשימת הדילוגים."""
     monkeypatch.setenv(native.ENV_FLAG, "1")
@@ -114,13 +114,13 @@ def test_a_strict_xfail_that_failed_as_predicted_is_not_a_skipped_test(monkeypat
     assert audit.verdict()
 
 
-# --- ‏#295: כלי תחנת-פיתוח — דילוג מוצהר, לא אדום קבוע ------------------------
+# --- #295: כלי תחנת-פיתוח — דילוג מוצהר, לא אדום קבוע ------------------------
 
 
 def test_a_dev_workstation_tool_that_is_here_does_not_skip_anything():
     """הכיוון שבלעדיו זו מחיקה ולא דילוג.
 
-    ‏`skipif(True)` שחל בכל סביבה מוחק את הטסט בלי שאיש יבחין. הראיה
+    `skipif(True)` שחל בכל סביבה מוחק את הטסט בלי שאיש יבחין. הראיה
     החיובית היא שכשהכלי **כן** כאן — הסימון אינו מדלג.
     """
     mark = native.requires_dev_workstation(("pwsh/powershell", "/usr/bin/pwsh"))
@@ -164,7 +164,7 @@ def test_a_tool_in_sbin_is_found_and_not_skipped():
 def test_a_declared_skip_is_counted_and_named_but_never_fails(monkeypatch):
     """שתי האמירות של #295, ושתיהן נדרשות.
 
-    מוצהר → אינו מפיל גם כשהדגל דלוק (‏PowerShell נעדר מהמעבדה במכוון);
+    מוצהר → אינו מפיל גם כשהדגל דלוק (PowerShell נעדר מהמעבדה במכוון);
     ולא-מוצהר → עדיין מפיל, כדי ש-#52 לא ייפתח מחדש דרך הפתח הזה.
     """
     monkeypatch.setenv(native.ENV_FLAG, "1")
@@ -198,7 +198,7 @@ def test_declared_skips_are_reported_even_without_the_flag(monkeypatch):
 def test_verify_reads_exactly_the_tag_that_the_run_prints():
     """שני הקבצים חייבים להסכים על התג — אחרת המעבדה אדומה שוב, בשקט.
 
-    ‏`tools/verify.py` סופר דילוגים מתוך הפלט של pytest. אם `native.py`
+    `tools/verify.py` סופר דילוגים מתוך הפלט של pytest. אם `native.py`
     ישנה את השורה ו-verify לא, הדילוג המוצהר ייספר כדילוג רגיל והאימות
     ייפול — בדיוק האדום ש-#295 הסיר. הקישור הזה אינו נראה בשום diff,
     ולכן הבדיקה מריצה את הרג'קס של verify על השורה שהריצה באמת מדפיסה.
@@ -217,11 +217,11 @@ def test_verify_reads_exactly_the_tag_that_the_run_prints():
                              f"{native.DECLARED_PREFIX}: חסר pwsh/powershell"))
     headline = audit.notes()[0]
     found = verify.DECLARED.search(headline)
-    assert found, f"‏verify אינו מזהה את השורה שהריצה מדפיסה: {headline!r}"
+    assert found, f"\u200fverify אינו מזהה את השורה שהריצה מדפיסה: {headline!r}"
     assert int(found.group(1)) == 3
 
 
-# --- ‏#79: מה שהריצה משאירה אחריה --------------------------------------------
+# --- #79: מה שהריצה משאירה אחריה --------------------------------------------
 
 
 def test_the_server_fixture_never_hands_out_the_real_sender(server):
@@ -239,7 +239,7 @@ def test_the_server_fixture_never_hands_out_the_real_sender(server):
 def test_a_ripened_round_records_the_command_instead_of_broadcasting(server):
     """המסלול המדויק מ-#79: סבב של 1/1 מבשיל תוך כדי hello.
 
-    ‏`test_the_session_starts_once_when_two_threads_ripen_it` עשה בדיוק
+    `test_the_session_starts_once_when_two_threads_ripen_it` עשה בדיוק
     את זה, והשאיר מאחוריו שולח חי על ה-portbase של ההפצה.
     """
     ids = setup_classroom(server)
@@ -253,7 +253,7 @@ def test_a_ripened_round_records_the_command_instead_of_broadcasting(server):
     server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
 
     recorder = server["recorder"]
-    assert recorder.spawned.wait(timeout=5), "השידור לא יצא לדרך בכלל"
+    assert recorder.spawned.wait(timeout=HANG_S), "השידור לא יצא לדרך בכלל"
     assert recorder.commands[0][0] == "udp-sender"
 
 
@@ -261,19 +261,19 @@ def test_windows_allowed_failures_stay_empty():
     """#312: כשל בווינדוס הוא skipif מוצהר או תיקון. הרשימה הריקה היא השער.
 
     הוספה ל-`WINDOWS_ALLOWED_FAILURES` הייתה ממירה רעש לרשימה מתוחזקת
-    ביד — בדיוק מה שה-Issue אוסר ("29 שנקרא 28"). ‏28 המקוריים, הכרעה:
+    ביד — בדיוק מה שה-Issue אוסר ("29 שנקרא 28"). 28 המקוריים, הכרעה:
 
     רצים (תיקון בטסט, לא בקוד הייצור):
-    * ‏9 ב-`test_sender` — `free_ports` מחליף את `port_holders`
-    * ‏5 ב-`test_agent` (wizard) — `input` בבייטים, לא `\\r\\n` (#479)
-    * ‏5 ב-`test_restore_evidence` — `posix()` ב-`build_box`
-    * ‏1 ב-`test_hygiene` + 1 ב-`test_server_streams` — אותה הזרקה ב-fixture
-    * ‏1 ב-`test_server_netcfg` — `Path.as_posix()` מול מפריד ווינדוס
+    * 9 ב-`test_sender` — `free_ports` מחליף את `port_holders`
+    * 5 ב-`test_agent` (wizard) — `input` בבייטים, לא `\\r\\n` (#479)
+    * 5 ב-`test_restore_evidence` — `posix()` ב-`build_box`
+    * 1 ב-`test_hygiene` + 1 ב-`test_server_streams` — אותה הזרקה ב-fixture
+    * 1 ב-`test_server_netcfg` — `Path.as_posix()` מול מפריד ווינדוס
 
     דילוג מוצהר (התלות אינה קיימת כאן; במעבדה הם רצים):
-    * ‏`test_a_busy_udpcast_port_refuses_the_broadcast` — אין `/proc/net/udp`
+    * `test_a_busy_udpcast_port_refuses_the_broadcast` — אין `/proc/net/udp`
     * שלושה טסטי wol שכופים ממשק — אין `SO_BINDTODEVICE` (כמו האח שכבר מדלג)
-    * ‏`test_a_symlink_named_like_a_work_area_is_not_followed` — WinError 1314
+    * `test_a_symlink_named_like_a_work_area_is_not_followed` — WinError 1314
     """
     from conftest import WINDOWS_ALLOWED_FAILURES
 
@@ -324,8 +324,8 @@ def test_the_guard_blocks_a_real_spawn_and_records_it(tmp_path, monkeypatch):
     with pytest.raises(OSError):
         sender.run_process(["udp-sender", "--portbase", "21000",
                             "--file", str(tmp_path)])
-    # ‏`_no_real_sender` מפיל טסט שהשאיר רישום — הרישום הזה מכוון.
-    # ‏#1974: השולח רץ תחת `nice … ionice …` כשהכלים קיימים (‏priority.background_cmd) —
+    # `_no_real_sender` מפיל טסט שהשאיר רישום — הרישום הזה מכוון.
+    # #1974: השולח רץ תחת `nice … ionice …` כשהכלים קיימים (priority.background_cmd) —
     # מה שנחסם הוא אותה שורת פקודה, עם הקידומת או בלעדיה.
     from server.system import priority
     spawned = hygiene.blocked_spawns.pop()
@@ -342,7 +342,7 @@ def test_the_scan_finds_a_live_sender_and_proves_it_died(tmp_path):
     התהליך כאן הוא עותק של `cat` בשם `udp-sender`, חסום על fifo שאיש
     אינו כותב אליו: אותה צורה שהסורק מחפש (שם התוכנית **וגם** הנתיב),
     בלי לשדר בית אחד לרשת ובלי להשאיר אחריו תת-תהליך משלו. סקריפט עם
-    ‏shebang לא היה עובד — הקרנל מחליף את argv[0] בשם המפרש.
+    shebang לא היה עובד — הקרנל מחליף את argv[0] בשם המפרש.
     """
     fake = tmp_path / "udp-sender"
     shutil.copy(shutil.which("cat"), fake)

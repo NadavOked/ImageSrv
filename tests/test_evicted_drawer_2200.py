@@ -1,15 +1,15 @@
-"""‏#2200 — מגירה ש-fanout הוציא מהזרם נכשלת בסוף המחיצה, בלי 300 שניות המתנה.
+"""#2200 — מגירה ש-fanout הוציא מהזרם נכשלת בסוף המחיצה, בלי 300 שניות המתנה.
 
-נמצא על ברזל ב-25/10 (משכפל 2, ‏v0.76.4): ‏partclone של ה-Toshiba נעצר
-(‏SIGSTOP), ‏fanout הוציא אותו אחרי 45 שניות (#1796), והמגירה השנייה המשיכה.
-אבל בסוף המחיצה הסוכן המתין לצינור של המגירה שהוצאה את מלוא ‏`WAIT_DRAWER_S`
-(‏300ש'), ורק אז התחילה מחיצה 4: ‏`wall_s` ‏635.8 מול 311.6 בלי הזרקה.
+נמצא על ברזל ב-25/10 (משכפל 2, v0.76.4): partclone של ה-Toshiba נעצר
+(SIGSTOP), fanout הוציא אותו אחרי 45 שניות (#1796), והמגירה השנייה המשיכה.
+אבל בסוף המחיצה הסוכן המתין לצינור של המגירה שהוצאה את מלוא `WAIT_DRAWER_S`
+(300ש'), ורק אז התחילה מחיצה 4: `wall_s` 635.8 מול 311.6 בלי הזרקה.
 ואחרי ההמתנה ההריגה הגיעה למעטפת הצינור (`pipeline.pid`), וה-partclone
 (`reader.pid`) נשאר בחיים.
 
-כאן ‏`restore_partition_drawers` האמיתי, עם fanout מזויף שמדווח את מה
+כאן `restore_partition_drawers` האמיתי, עם fanout מזויף שמדווח את מה
 שהבינארי מדווח על מגירה שהוציא, ו-partclone מזויף שמפסיק לקרוא בלי לצאת.
-רץ גם בווינדוס (Git Bash, ‏mkfifo), כמו `test_timeouts.py`.
+רץ גם בווינדוס (Git Bash, mkfifo), כמו `test_timeouts.py`.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from agentlib import agent_sources
 
 pytestmark = requires_native(("bash", BASH))
 
-#: ‏partclone מזויף: ל-sda כותב הכול; ל-sdb קורא לפי ‏$SDB_READ ואז נתקע
+#: partclone מזויף: ל-sda כותב הכול; ל-sdb קורא לפי $SDB_READ ואז נתקע
 #: בלי לצאת ובלי לקרוא עוד -- כמו partclone שנעצר מול כונן תקוע.
 PARTCLONE = (
     '#!/bin/sh\n'
@@ -37,9 +37,9 @@ PARTCLONE = (
     'esac\n'
 )
 
-#: ‏fanout מזויף. הזרם (יעד אחד: ‏mid) עובר כמו שהוא. ה-fanout של המגירות
+#: fanout מזויף. הזרם (יעד אחד: mid) עובר כמו שהוא. ה-fanout של המגירות
 #: מזין את sdb ב-4KB בלבד וסוגר אותה -- זו ההוצאה -- ואת sda בהכול, ומדווח
-#: את השורה שהבינארי כותב על מגירה שהוציא (fanout.c, ‏make_room).
+#: את השורה שהבינארי כותב על מגירה שהוציא (fanout.c, make_room).
 EVICTING_FANOUT = (
     '#!/bin/sh\n'
     'shift\n'
@@ -82,7 +82,7 @@ def _room(tmp_path: Path, fanout: str, sdb_read: str, drawer_s: int) -> tuple[st
         "s=$(date +%s); "
         "restore_partition_drawers unicast http://s img 3 dd part.zst "
         f"{sha} '' sda sdb > {posix(box)}/pipe.out 2>&1; rc=$?; e=$(date +%s); "
-        # ‏kill -9 אינו מיידי ליתום שמחכה ל-init: עד 3 שניות לפני שמכריזים "חי".
+        # kill -9 אינו מיידי ליתום שמחכה ל-init: עד 3 שניות לפני שמכריזים "חי".
         f'r=$(cat {reader!r} 2>/dev/null); n=0; '
         'while [ -n "$r" ] && kill -0 "$r" 2>/dev/null && [ $n -lt 30 ]; do sleep 0.1; n=$((n + 1)); done; '
         'if [ -n "$r" ] && kill -0 "$r" 2>/dev/null; then alive=yes; else alive=no; fi; '
@@ -103,7 +103,7 @@ def _target(run: Path, dev: str, name: str) -> str:
 
 
 def test_an_evicted_drawer_fails_at_the_streams_end_not_after_the_drawer_ceiling(tmp_path):
-    """התרחיש של 25/10. ‏WAIT_DRAWER_S=20 עומד כאן במקום 300: בלי התיקון
+    """התרחיש של 25/10. WAIT_DRAWER_S=20 עומד כאן במקום 300: בלי התיקון
     המחיצה נגמרת אחרי 20 שניות לפחות, והמגירה נכשלת ב"פג הזמן"."""
     out, run = _room(tmp_path, EVICTING_FANOUT, "head -c 1", drawer_s=20)
     f = _fields(out)
@@ -125,9 +125,9 @@ def test_an_evicted_drawer_fails_at_the_streams_end_not_after_the_drawer_ceiling
 
 
 def test_a_drawer_past_its_ceiling_has_its_reader_killed_too(tmp_path):
-    """המסלול שלא השתנה בזמן: מגירה ש-fanout **לא** הוציא (קיבלה הכול, ‏ok)
-    ועדיין לא גמרה ממתינה את ‏WAIT_DRAWER_S ונכשלת ב"פג הזמן". מה שהשתנה:
-    גם כאן הקורא נהרג, ולא רק ‏pipeline.pid (הממצא הנלווה של #2200)."""
+    """המסלול שלא השתנה בזמן: מגירה ש-fanout **לא** הוציא (קיבלה הכול, ok)
+    ועדיין לא גמרה ממתינה את WAIT_DRAWER_S ונכשלת ב"פג הזמן". מה שהשתנה:
+    גם כאן הקורא נהרג, ולא רק pipeline.pid (הממצא הנלווה של #2200)."""
     out, run = _room(tmp_path, BASE_STUBS["fanout"], "cat", drawer_s=3)
     f = _fields(out)
     log = log_of(run)
@@ -141,7 +141,7 @@ def test_a_drawer_past_its_ceiling_has_its_reader_killed_too(tmp_path):
 
 
 def test_the_eviction_line_the_agent_reads_is_the_one_fanout_writes():
-    """הזיוף למעלה כותב ‏`failed stalled ...`, והסוכן מחפש ‏`feed failed stalled`.
+    """הזיוף למעלה כותב `failed stalled ...`, והסוכן מחפש `feed failed stalled`.
     שתי סיבות ההוצאה ב-fanout.c חייבות להתחיל ב-`stalled`, אחרת הזיוף בודק
     את עצמו ולא את הבינארי."""
     src = (AGENT / "fanout.c").read_text(encoding="utf-8")

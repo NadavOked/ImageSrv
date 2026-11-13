@@ -1,6 +1,6 @@
 """פירוט אירועי יומן שנכתב באנגלית — מתורגם בקריאה (#1503).
 
-‏`journal(conn, event, detail)` כותב את הפירוט כמו שהקוד כתב אותו; חלק
+`journal(conn, event, detail)` כותב את הפירוט כמו שהקוד כתב אותו; חלק
 מהקוראים כתבו משפט באנגלית (``"<mac> from <ip>"``, ``"… (reconciled on
 start)"``). המפעיל קורא את היומן בקונסולה בעברית RTL, ולכן `translate`
 ב-`journal_he` מעביר כל פירוט דרך `he_detail` לפני שהוא מוצג.
@@ -32,29 +32,33 @@ _FROM = [(r" progress from ", " התקדמות מ-"), (r" from ", " מ-")]
 _FOR = [(r" for ", " עבור ")]
 _AT_OPEN = [(r" at station round open$", " בפתיחת סבב מהתחנה")]
 _NET_NAME = r"^(\S+) "
-# ‏#2509: "<פירוט> [+N identical refusals in the last Ss not journaled]" (api._identity_refusal)
+# #2509: "<פירוט> [+N identical refusals in the last Ss not journaled]" (api._identity_refusal)
 _REFUSALS = [(r" \[\+(\d+) identical refusals in the last (\d+)s not journaled\]$",
               r" [ועוד \1 סירובים זהים ב-\2 השניות האחרונות שלא נרשמו]")]
 
 #: event -> [(regex, replacement)], applied in order with re.sub.
 RULES: dict[str, list[tuple[str, str]]] = {
     "task_token_refused": _FROM,
-    # ‏#2509: האירוע מגיע מ-`verdict.event` (identity.py), לא מקבוע, ולכן הסורק של הטסט אינו רואה אותו.
+    # #2509: האירוע מגיע מ-`verdict.event` (identity.py), לא מקבוע, ולכן הסורק של הטסט אינו רואה אותו.
     "identity_refused": _REFUSALS,
     "identity_unverifiable": _REFUSALS,
     "image_fetch_refused": _REFUSALS,
     "off_vlan_contact": _FROM,
-    # ‏#2487/#2498: "<mac> from <ip>[ [+N identical requests in the last Ss not journaled]]"
+    # #2487/#2498: "<mac> from <ip>[ [+N identical requests in the last Ss not journaled]]"
     "unknown_mac": _FROM + [(r" \[\+(\d+) identical requests in the last (\d+)s not journaled\]$",
                              r" [ועוד \1 בקשות זהות ב-\2 השניות האחרונות שלא נרשמו]")],
-    # ‏#2498: "<event>: over <K> different in <W>s -- the rest are counted, not journaled one by one"
+    # #2498: "<event>: over <K> different in <W>s -- the rest are counted, not journaled one by one"
     #         "<event>: +<N> more different not journaled one by one in the last <S>s"
     "journal_flood": [
         (r"^(\S+): over (\d+) different in (\d+)s -- the rest are counted, not journaled one by one$",
          r"\1: יותר מ-\2 מקורות שונים ב-\3 שניות — השאר נספרים ולא נרשמים אחד-אחד"),
         (r"^(\S+): \+(\d+) more different not journaled one by one in the last (\d+)s$",
-         r"\1: עוד \2 מקורות שונים שלא נרשמו אחד-אחד ב-\3 השניות האחרונות")],
-    # ‏#1814: "code rejected (setup|enable|login) while the server clock is off by <N>s | is not synchronized"
+         r"\1: עוד \2 מקורות שונים שלא נרשמו אחד-אחד ב-\3 השניות האחרונות"),
+        # #2489: "<event>: over <K> different from <ip> in <W>s -- the rest from it are counted, …"
+        (r"^(\S+): over (\d+) different from (\S+) in (\d+)s -- the rest from it are counted,"
+         r" not journaled one by one$",
+         r"\1: יותר מ-\2 שונים מהכתובת \3 ב-\4 שניות — השאר ממנה נספרים ולא נרשמים אחד-אחד")],
+    # #1814: "code rejected (setup|enable|login) while the server clock is off by <N>s | is not synchronized"
     "mfa_clock_skew": [
         (r"^code rejected \(setup\)", "קוד נדחה בהגדרת MFA"),
         (r"^code rejected \(enable\)", "קוד נדחה בהפעלת MFA"),
@@ -66,12 +70,12 @@ RULES: dict[str, list[tuple[str, str]]] = {
     "report_from_nonmember": _FOR,
     "report_on_closed_task": _FOR,
     "room_tick_failed": [(r"^background — ", "ברקע — ")],
-    # ‏#1988: "<מיקום> <התקן> UUID=<uuid> <שם>"
+    # #1988: "<מיקום> <התקן> UUID=<uuid> <שם>"
     "storage_location_add_disk": [(r"\bUUID=", "מזהה מערכת הקבצים (UUID)=")],
-    # ‏#1947: "<±שניות>s <סבבים>"; ‏"?" = חותמת בעתיד שהגלאי לא ראה את הקפיצה שלה.
+    # #1947: "<±שניות>s <סבבים>"; "?" = חותמת בעתיד שהגלאי לא ראה את הקפיצה שלה.
     "clock_jump": [(r"^\? ", "גודל לא ידוע (חותמת בעתיד) "), (r"^([+-]\d+)s\b", r"\1 שניות")],
     "capture_done": [(r"\(reconciled on start\)", "(הותאם בעלייה)"),
-                     # ‏#1470: האימות ברקע — כמה ובכמה זמן; ואימות שהושלם לפני אתחול
+                     # #1470: האימות ברקע — כמה ובכמה זמן; ואימות שהושלם לפני אתחול
                      (r" verified (\d+) bytes in ([\d.]+)s$", r" אומת: \1 בייט ב-\2 שניות"),
                      (r"\(verified before the restart; reconciled on start\)",
                       "(אומת לפני האתחול; הותאם בעלייה)")],
@@ -122,15 +126,15 @@ RULES: dict[str, list[tuple[str, str]]] = {
         (_NET_NAME + r"management selection not read back$",
          r"\1 · בחירת כרטיס הניהול לא נקראה בחזרה")],
     "dcui_net_rollback_requested": [(r"^no pending change$", "אין שינוי ממתין")],
-    # ‏#1848 / #1846: הלמידה — מזהים ומספרים נשארים, המילים בעברית
+    # #1848 / #1846: הלמידה — מזהים ומספרים נשארים, המילים בעברית
     "boot_step_slow": [(r" baseline=", " (רגיל: "), (r"s \((\d+) boots\)$", r"s, לפי \1 אתחולים)")],
     "net_loss_jump": [(r" baseline=", " (רגיל: "), (r"% \((\d+) waves\)", r"%, לפי \1 גלים)")],
-    # ‏#2413: "<נתיב>: <mac> is not <mac>, which opened the record of serial=<סידורי>"
+    # #2413: "<נתיב>: <mac> is not <mac>, which opened the record of serial=<סידורי>"
     "shrink_refused": [(r"^(\S+): (\S+) is not (\S+), which opened the record of ",
                         r"\1: \2 אינה \3, שפתחה את רשומת הכיווץ של ")],
-    # ‏#2421: "<סבב> <mac> <dev> serial=<סידורי> also on <mac>"
+    # #2421: "<סבב> <mac> <dev> serial=<סידורי> also on <mac>"
     "room_drawer_serial_conflict": [(r" also on ", " נמצא גם אצל ")],
-    # ‏#2443: "<שם> — <N> failures in <M> min from many addresses via console|agent (last ip=<ip>)"
+    # #2443: "<שם> — <N> failures in <M> min from many addresses via console|agent (last ip=<ip>)"
     # (בלי "via" — שורות שנכתבו לפני שהתקרה פוצלה לפי משטח)
     "login_account_lockout": [
         (r" via console \(last ip=", " via בקונסולה (last ip="),
@@ -139,26 +143,26 @@ RULES: dict[str, list[tuple[str, str]]] = {
          r" — \1 ניסיונות כושלים ב-\2 דקות מכמה כתובות, \3 (האחרונה: \4)"),
         (r" — (\d+) failures in (\d+) min from many addresses \(last ip=(\S+)\)$",
          r" — \1 ניסיונות כושלים ב-\2 דקות מכמה כתובות (האחרונה: \3)")],
-    # ‏#2459: "<N> keys — over <MAX> (last ip=<ip>)"
+    # #2459: "<N> keys — over <MAX> (last ip=<ip>)"
     "login_attempts_trimmed": [
         (r"^(\d+) keys — over (\d+) \(last ip=(\S+)\)$",
          r"נמחקו \1 רשומות ניסיונות כניסה — הטבלה עברה \2 (הכתובת האחרונה: \3)")],
-    # ‏#2478: "<N> rows — over <MAX> (last ip=<ip>)"
+    # #2478: "<N> rows — over <MAX> (last ip=<ip>)"
     "login_account_failures_trimmed": [
         (r"^(\d+) rows — over (\d+) \(last ip=(\S+)\)$",
          r"נמחקו \1 רשומות כשלי כניסה לפי חשבון — הטבלה עברה \2 (הכתובת האחרונה: \3)")],
-    # ‏#2442: "mac=<mac> ip=<ip> kind=offer|proxy nic=<כרטיס>[ as=server]"
+    # #2442: "mac=<mac> ip=<ip> kind=offer|proxy nic=<כרטיס>[ as=server]"
     "foreign_dhcp_seen": [
         (r" as=server$", " · מתחזה לשרת (הכתובת שלו במסגרת)"),
         (r"^mac=(\S+) ip=(\S+) kind=offer nic=(\S+)",
          r"כתובת MAC \1 · כתובת IP \2 · מציע כתובות (DHCPOFFER) · כרטיס \3"),
         (r"^mac=(\S+) ip=(\S+) kind=proxy nic=(\S+)",
          r"כתובת MAC \1 · כתובת IP \2 · מציע אתחול רשת (proxyDHCP) · כרטיס \3")],
-    # ‏#2442 (הצפה): "count=<N> last_mac=<mac> last_ip=<ip> nic=<כרטיס>"
+    # #2442 (הצפה): "count=<N> last_mac=<mac> last_ip=<ip> nic=<כרטיס>"
     "foreign_dhcp_more": [
         (r"^count=(\d+) last_mac=(\S+) last_ip=(\S+) nic=(\S+)$",
          r"\1 תשובות ממקורות שלא נרשמו אחד-אחד · האחרון: MAC \2, IP \3 · כרטיס \4")],
-    # ‏#2218: "<אימג'> sample -> full: … (<כתובת המשכפל>)"
+    # #2218: "<אימג'> sample -> full: … (<כתובת המשכפל>)"
     "readback_mode_switched": [(r" sample -> full: a direct send has no list on the server;"
                                 r" every chunk is compared with the live manifest's readback_xxh64",
                                 " ממדגם למלא: בהפצה ישירה אין לשרת רשימת בדיקה;"

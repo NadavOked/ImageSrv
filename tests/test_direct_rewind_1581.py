@@ -1,14 +1,14 @@
-"""‏#1581 בהפצה ישירה — המקור אינו סופר את ההמתנה לאדם כ"אף מחשב לא הצטרף".
+"""#1581 בהפצה ישירה — המקור אינו סופר את ההמתנה לאדם כ"אף מחשב לא הצטרף".
 
-אחרי #2044 (‏PR #2356) שאלת ה-SMART של המשכפל אינה קיימת, אבל שאלות המגירה
-(‏RAID ‏#1808, חלוקת המקום ‏#1898) נשארו, ומחשב השיכפול ממתין עליהן לאדם
-לפני הבייט הראשון (‏drawergate.sh → ‏attended → ‏`prompt` ב-hello). השולח
-**של השרת** מחזיק את המחיצה הראשונה בזמן הזה (‏#2202). בהפצה ישירה (‏#715)
+אחרי #2044 (PR #2356) שאלת ה-SMART של המשכפל אינה קיימת, אבל שאלות המגירה
+(RAID #1808, חלוקת המקום #1898) נשארו, ומחשב השיכפול ממתין עליהן לאדם
+לפני הבייט הראשון (drawergate.sh → attended → `prompt` ב-hello). השולח
+**של השרת** מחזיק את המחיצה הראשונה בזמן הזה (#2202). בהפצה ישירה (#715)
 השולח הוא udp-sender **במחשב הבנייה**, עם `--start-timeout 180` משלו, והוא
 לא שאל על השאלה כלל: שלוש דקות על שאלה = "אף מחשב משכפל לא הצטרף לזרם".
 
-השרת אומר עכשיו כמה חברים בגל ממתינים (‏`task.direct.operator_wait`,
-‏test_direct_operator_wait_1581.py), והמקור:
+השרת אומר עכשיו כמה חברים בגל ממתינים (`task.direct.operator_wait`,
+test_direct_operator_wait_1581.py), והמקור:
 * אינו מפעיל את udp-sender של המחיצה הראשונה כל עוד המספר אינו 0;
 * עוצר אותו אם השאלה עולה **אחרי** שהופעל ולפני הבייט הראשון, ומפעיל אותו
   שוב אחרי התשובה עם `--start-timeout` מלא;
@@ -47,8 +47,8 @@ def _flag(run: list[str], name: str) -> str:
     return run[run.index(name) + 1]
 
 
-#: ‏udp-sender שבהפעלה הראשונה **אינו** מקבל איש: השאלה של המשכפל עולה רגע
-#: אחרי שהופעל (‏$ASKING), והוא יוצא 0 בלי לשדר אחרי "start-timeout" קצר —
+#: udp-sender שבהפעלה הראשונה **אינו** מקבל איש: השאלה של המשכפל עולה רגע
+#: אחרי שהופעל ($ASKING), והוא יוצא 0 בלי לשדר אחרי "start-timeout" קצר —
 #: כמו האמיתי (#438). מההפעלה השנייה — המשכפל ענה והצטרף: הוא משדר.
 LATE_QUESTION_SENDER = (
     '#!/bin/sh\n'
@@ -67,7 +67,7 @@ LATE_QUESTION_SENDER = (
 
 
 def test_a_question_after_the_source_started_stops_partition_one_and_sends_it_again(tmp_path):
-    """ברזל 25/10 (‏ses_ca1fb8e9), בצורת ההפצה הישירה: השאלה עלתה שתי שניות
+    """ברזל 25/10 (ses_ca1fb8e9), בצורת ההפצה הישירה: השאלה עלתה שתי שניות
     אחרי שהשולח הופעל. כאן ה-start-timeout של הזיוף הוא 12 שניות במקום 180,
     והמשכפל עונה אחרי שלוש תשובות hello עם השאלה."""
     asking, answered = tmp_path / "asking.flag", tmp_path / "asked.count"
@@ -98,7 +98,7 @@ def test_a_question_after_the_source_started_stops_partition_one_and_sends_it_ag
     assert report["targets"][0]["state"] != "failed", report
 
 
-#: ‏udp-sender שמשדר מיד ורושם כמה hello היו לפניו.
+#: udp-sender שמשדר מיד ורושם כמה hello היו לפניו.
 COUNTING_SENDER = (
     '#!/bin/sh\n'
     'printf "%s\\n" "$@" >> "$UDP_ARGV"\n'
@@ -132,7 +132,7 @@ def test_the_first_partition_waits_while_a_cloner_is_on_a_question(tmp_path):
 
 
 def test_a_machine_that_never_came_still_fails_by_name(tmp_path):
-    """עיקרון 5: בלי שאלה פתוחה (‏`operator_wait: 0`) — מה שהיה: udp-sender שיצא
+    """עיקרון 5: בלי שאלה פתוחה (`operator_wait: 0`) — מה שהיה: udp-sender שיצא
     0 בלי לשדר הוא "אף מחשב משכפל לא הצטרף", ולא ניסיון נוסף."""
     answer = _answer()
     answer["task"]["direct"]["operator_wait"] = 0
@@ -143,7 +143,7 @@ def test_a_machine_that_never_came_still_fails_by_name(tmp_path):
 
 
 def test_stop_finds_only_our_udp_sender(tmp_path):
-    """‏`direct_stop_sender` הורג את udp-sender של ה-portbase שלנו בלבד —
+    """`direct_stop_sender` הורג את udp-sender של ה-portbase שלנו בלבד —
     לא תהליך אחר שמזכיר את המילה, ולא udp-sender על portbase אחר."""
     stubs = tmp_path / "stubs"
     stubs.mkdir()

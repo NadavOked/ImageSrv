@@ -1,8 +1,8 @@
-"""‏#1195: ה-DCUI על tty1 חייב מסך שקט — הודעות קרנל נשארות ביומן.
+"""#1195: ה-DCUI על tty1 חייב מסך שקט — הודעות קרנל נשארות ביומן.
 
 נמדד על ESXi 22/09: אחרי ההתקנה החיה הראשונה, שורות `imagesrv-drop IN=ens33 ...`
-(‏IGMP שנזרק ע"י חומת האש, ברמת warning) נדפסו מעל ה-DCUI. שני צדדים: הקרנל
-(‏`kernel.printk` — הקונסולה מקבלת רק crit ומעלה) וכלל ה-nft (‏`level info`)."""
+(IGMP שנזרק ע"י חומת האש, ברמת warning) נדפסו מעל ה-DCUI. שני צדדים: הקרנל
+(`kernel.printk` — הקונסולה מקבלת רק crit ומעלה) וכלל ה-nft (`level info`)."""
 
 from pathlib import Path
 
@@ -29,7 +29,7 @@ def test_the_drop_log_rule_is_info_not_warning():
 
 
 def test_the_installer_does_not_touch_sshd():
-    """‏#1266: SSH אינו חלק מהמוצר — המתקין אינו כותב drop-in ל-sshd ואינו
+    """#1266: SSH אינו חלק מהמוצר — המתקין אינו כותב drop-in ל-sshd ואינו
     טוען אותו מחדש (עד #1266 הוא סגר sshd קיים ללולאה המקומית, #729)."""
     setup = SETUP.read_text(encoding="utf-8")
     assert "/etc/ssh" not in setup

@@ -1,22 +1,23 @@
-"""‏#1633: שומר הקונסולה (‎:8081) מפני דף זר בדפדפן של מנהל מחובר.
+"""#1633: שומר הקונסולה (:8081) מפני דף זר בדפדפן של מנהל מחובר.
 
 שלושה דברים, כולם על אפליקציית הקונסולה בלבד (``create_console_app``):
 
-1. **‏`X-Frame-Options: SAMEORIGIN` על כל תשובה** — דף זר אינו יכול לעטוף את
+1. **`X-Frame-Options: SAMEORIGIN` על כל תשובה** — דף זר אינו יכול לעטוף את
    הקונסולה ב-iframe ולגנוב לחיצה (clickjacking), אבל דף של הקונסולה עצמה כן:
    "צפייה במסך" בדף המוניטור טוענת את ``monitor.html`` ב-iframe באותו מקור
-   (``console.js``, ‏``iframe.mon-frame``). ‏``DENY`` (#1633) חסם גם אותו — #2642.
-   ‏CSP עם ``frame-ancestors`` מחכה עד שה-``onclick=`` המוטמעים ייצאו מה-HTML
-   (#2493).
-2. **‏Fetch Metadata** — בקשה משנת-מצב (POST/PUT/PATCH/DELETE) שהדפדפן
+   (``console.js``, ``iframe.mon-frame``). ``DENY`` (#1633) חסם גם אותו — #2642.
+   #2817/#2493: לצדו ``SECURITY_HEADERS`` — CSP בלי ``script-src`` (``frame-ancestors``,
+   ``object-src``, ``base-uri``, ``form-action``), ``nosniff`` ו-``Referrer-Policy``.
+   ``script-src`` מחכה עד שה-``onclick=`` המוטמעים ייצאו מה-HTML.
+2. **Fetch Metadata** — בקשה משנת-מצב (POST/PUT/PATCH/DELETE) שהדפדפן
    סימן ``Sec-Fetch-Site`` שאינו ``same-origin`` או ``none`` → 403. עבור
    כתובת IP, "same-site" הוא ה-IP כולו בלי פורט, ולכן ``same-site`` נדחה
-   גם הוא: דף על אותו IP בפורט אחר שולח את העוגייה (‏SameSite=Lax לא עוצר).
+   גם הוא: דף על אותו IP בפורט אחר שולח את העוגייה (SameSite=Lax לא עוצר).
    **כותרת חסרה** — נבדק ``Origin``: דפדפן ישן בלי Fetch Metadata עדיין
    שולח ``Origin`` ב-POST/PUT/PATCH/DELETE, ולכן ``Origin`` שאינו בדיוק
    ה-scheme, ה-host והפורט שהבקשה הגיעה אליהם (``Host``) → 403, וכך גם
-   ``Origin: null`` (sandbox, ‏file://, הפניה). **אין גם ``Origin`` — עובר**:
-   סוכן, ‏curl, הערוץ הבין-שרתי (``_run_console``) ו-TestClient אינם דפדפן,
+   ``Origin: null`` (sandbox, file://, הפניה). **אין גם ``Origin`` — עובר**:
+   סוכן, curl, הערוץ הבין-שרתי (``_run_console``) ו-TestClient אינם דפדפן,
    ומי שאינו דפדפן אינו נושא את העוגייה של המנהל שמולו — הוא יכול לשלוח רק
    עוגייה שכבר יש לו, ואז אין כאן זיוף בקשה.
 3. **סוג גוף מרשימה מותרת** — בקשה משנת-מצב עם ``Content-Type`` חייבת
@@ -26,7 +27,7 @@
    שולח בלי preflight. סוג אחר מחייב preflight, והקונסולה אינה עונה ל-CORS.
 
 middleware גולמי ולא ``@app.middleware`` — מאותו טעם כמו ``ConsoleNoStaleCache``
-(‏app.py): העטיפה של Starlette בונה כל תשובה מחדש. כאן נוסף שם כותרת אחד
+(app.py): העטיפה של Starlette בונה כל תשובה מחדש. כאן נוסף שם כותרת אחד
 ולא נוגעים בשאר.
 """
 
@@ -42,15 +43,15 @@ UNSAFE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 #: סימנייה). ``same-site`` ו-``cross-site`` — דף אחר.
 ALLOWED_FETCH_SITES = frozenset({"same-origin", "none"})
 
-#: מה שהקונסולה שולחת בפועל: ‏``api()`` ב-console.js, ‏monitor.js, ‏vmupdate.js
-#: — JSON; ‏``images/upload`` ו-``drivers/upload`` (XHR) — ‏tar.
+#: מה שהקונסולה שולחת בפועל: ``api()`` ב-console.js, monitor.js, vmupdate.js
+#: — JSON; ``images/upload`` ו-``drivers/upload`` (XHR) — tar.
 ALLOWED_BODY_TYPES = frozenset({"application/json", "application/x-tar"})
 
-#: פורט ברירת המחדל לכל scheme — ‏``Origin`` ו-``Host`` משמיטים אותו.
+#: פורט ברירת המחדל לכל scheme — ``Origin`` ו-``Host`` משמיטים אותו.
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
-CROSS_SITE_HE = "הבקשה הגיעה מדף אחר ונדחתה (‏Sec-Fetch-Site). פתחו את הקונסולה ישירות"
-CROSS_ORIGIN_HE = "הבקשה הגיעה מדף אחר ונדחתה (‏Origin). פתחו את הקונסולה ישירות"
+CROSS_SITE_HE = "הבקשה הגיעה מדף אחר ונדחתה (\u200fSec-Fetch-Site). פתחו את הקונסולה ישירות"
+CROSS_ORIGIN_HE = "הבקשה הגיעה מדף אחר ונדחתה (\u200fOrigin). פתחו את הקונסולה ישירות"
 BODY_TYPE_HE = "סוג גוף הבקשה אינו נתמך — הקונסולה מקבלת JSON (application/json)"
 
 
@@ -90,7 +91,7 @@ def _endpoint(scheme: str, netloc: str) -> tuple[str, str, int] | None:
 
 def _same_origin(scope, origins: list[str]) -> bool:
     """``Origin`` יחיד, שהוא בדיוק ה-scheme+host+port שהבקשה הגיעה אליהם.
-    ‏``null``, ערך שאינו מתפרק, ``Host`` חסר או שני ערכים — אינם תואמים."""
+    ``null``, ערך שאינו מתפרק, ``Host`` חסר או שני ערכים — אינם תואמים."""
     hosts = _values(scope, b"host")
     if len(origins) != 1 or len(hosts) != 1:
         return False
@@ -103,14 +104,14 @@ def _same_origin(scope, origins: list[str]) -> bool:
 
 
 def refusal(scope) -> tuple[int, str, str] | None:
-    """``(status, code, message_he)`` לבקשה שנדחית, ‏``None`` לבקשה שעוברת."""
+    """``(status, code, message_he)`` לבקשה שנדחית, ``None`` לבקשה שעוברת."""
     if scope.get("method") not in UNSAFE_METHODS:
         return None
     # כל מופע של הכותרת נבדק — שני ערכים, אחד מהם זר, הם זר.
     sites = _values(scope, b"sec-fetch-site")
     if any(v.lower() not in ALLOWED_FETCH_SITES for v in sites):
         return 403, "cross_site", CROSS_SITE_HE
-    # דפדפן בלי Fetch Metadata: ‏Origin, אם נשלח, חייב להיות הקונסולה עצמה.
+    # דפדפן בלי Fetch Metadata: Origin, אם נשלח, חייב להיות הקונסולה עצמה.
     origins = _values(scope, b"origin")
     if not sites and origins and not _same_origin(scope, origins):
         return 403, "cross_origin", CROSS_ORIGIN_HE
@@ -124,13 +125,27 @@ def refusal(scope) -> tuple[int, str, str] | None:
     return None
 
 
+#: #2817/#2493: כותרות האבטחה של 8081, על כל תשובה. CSP **בלי** ``script-src`` ו-``default-src``:
+#: ~149 ``onclick=`` מוטמעים ו-``<script>`` מוטמע ב-index.html/monitor.html. ``form-action 'self'`` —
+#: הטפסים של הקונסולה (``#login-form``, ``#sheet``) אינם נשלחים לשום מקום אחר; ``nosniff`` —
+#: StaticFiles מגיש js/css בסוג שלהם (``mimetypes``), ושום תשובה אחרת אינה נטענת כסקריפט.
+SECURITY_HEADERS = (
+    (b"X-Frame-Options", b"SAMEORIGIN"),
+    (b"Content-Security-Policy",
+     b"frame-ancestors 'self'; object-src 'none'; base-uri 'none'; form-action 'self'"),
+    (b"X-Content-Type-Options", b"nosniff"),
+    (b"Referrer-Policy", b"same-origin"),
+)
+_SECURITY_NAMES = frozenset(name.lower() for name, _ in SECURITY_HEADERS)
+
+
 def _with_frame_sameorigin(headers) -> list:
-    kept = [(k, v) for k, v in headers if k.lower() != b"x-frame-options"]
-    return kept + [(b"X-Frame-Options", b"SAMEORIGIN")]
+    kept = [(k, v) for k, v in headers if k.lower() not in _SECURITY_NAMES]
+    return kept + list(SECURITY_HEADERS)
 
 
 class ConsoleFetchGuard:
-    """ה-middleware: ‏``app.add_middleware(ConsoleFetchGuard)`` בקונסולה בלבד."""
+    """ה-middleware: ``app.add_middleware(ConsoleFetchGuard)`` בקונסולה בלבד."""
 
     def __init__(self, inner):
         self.inner = inner

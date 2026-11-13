@@ -1,14 +1,14 @@
-"""מה שמסך החדר אומר **לפני** שגל יוצא לדרך — ‏#432 ו-#65.
+"""מה שמסך החדר אומר **לפני** שגל יוצא לדרך — #432 ו-#65.
 
-‏**#432 — הקישור וה-CRC של כל מגירה.** ב-05/09 כל מגירה שנכשלה אמרה זאת
-לפני שהסבב התחיל (‏`SATA link up 1.5 Gbps`), והראיה ישבה ב-dmesg. הסוכן
+**#432 — הקישור וה-CRC של כל מגירה.** ב-05/09 כל מגירה שנכשלה אמרה זאת
+לפני שהסבב התחיל (`SATA link up 1.5 Gbps`), והראיה ישבה ב-dmesg. הסוכן
 מדווח עכשיו ב-hello את מהירות הקישור, את המקסימום של הפורט ואת מונה ה-CRC
-(‏199); כאן הם הופכים למצב (`ok`/`slow`/`unknown`) ולאזהרה כתומה לפני
+(199); כאן הם הופכים למצב (`ok`/`slow`/`unknown`) ולאזהרה כתומה לפני
 "התחל". **אזהרה ולא חסימה** — שיכפול תמיד עם אדם ליד המכונות, וכתום שואל
-(כמו SMART, #872). ‏`unknown` אינו `ok` (עיקרון 5): קישור שלא נקרא מוצג
+(כמו SMART, #872). `unknown` אינו `ok` (עיקרון 5): קישור שלא נקרא מוצג
 "לא ידוע", לעולם לא ירוק.
 
-‏**#65 — המחשב החסר.** גל שמחכה ליותר מגירות ממה שהצטרפו אינו יוצא מקוצר
+**#65 — המחשב החסר.** גל שמחכה ליותר מגירות ממה שהצטרפו אינו יוצא מקוצר
 (אומת 29/08). המסך אומר **מי** חסר ולמה, ומציע: כבה אותו (להחליף בו
 מגירות), התחל בכל זאת, בטל.
 """
@@ -20,12 +20,12 @@ import sqlite3
 from server.disks import smart_history
 from server.learn import ports as learn_ports
 
-#: ‏verdict של disk_event שבו מונה ה-CRC נקרא באמת (‏`smart.sh`). ‏`unchecked`
-#: נקרא רק כשהסיבה היא `no_health` — ‏smartctl פתח את הדיסק וקרא מאפיינים.
-#: ‏`failed_last` דורס את ה-reason בסיבת השרת, ולכן אינו בסיס.
+#: verdict של disk_event שבו מונה ה-CRC נקרא באמת (`smart.sh`). `unchecked`
+#: נקרא רק כשהסיבה היא `no_health` — smartctl פתח את הדיסק וקרא מאפיינים.
+#: `failed_last` דורס את ה-reason בסיבת השרת, ולכן אינו בסיס.
 _CRC_READ_VERDICTS = ("ok", "warn")
-#: ‏#2083: ‏`fail` נקרא רק כשהאדום הוא ממצא שנקרא (‏`smart_was_read` של הסוכן,
-#: ‏smart.sh). ‏`health_unread` (#2078) ו-`readonly` (#1742) שומרים crc=0 שלא
+#: #2083: `fail` נקרא רק כשהאדום הוא ממצא שנקרא (`smart_was_read` של הסוכן,
+#: smart.sh). `health_unread` (#2078) ו-`readonly` (#1742) שומרים crc=0 שלא
 #: נקרא — בסיס כזה היה מייצר "CRC עלה" מזויף בסבב הבא (עיקרון 5).
 _CRC_READ_FAIL_REASONS = ("health_failed", "media_readonly")
 
@@ -44,8 +44,8 @@ def _count(value) -> int | None:
 
 
 def link_state(gbps: float | None, max_gbps: float | None) -> str:
-    """‏`slow` = נקרא מתחת למקסימום של הפורט; ‏`ok` = בו או מעליו;
-    ‏`unknown` = אחד מהשניים לא נקרא — "לא הצלחנו לבדוק", לא "תקין"."""
+    """`slow` = נקרא מתחת למקסימום של הפורט; `ok` = בו או מעליו;
+    `unknown` = אחד מהשניים לא נקרא — "לא הצלחנו לבדוק", לא "תקין"."""
     if gbps is None or max_gbps is None:
         return "unknown"
     return "slow" if gbps < max_gbps else "ok"
@@ -68,7 +68,7 @@ def crc_baseline(conn: sqlite3.Connection, serial: str | None) -> int | None:
 
 def drawer_fields(conn: sqlite3.Connection, disk: dict, mac: str | None = None) -> dict:
     """השדות של #432 למגירה אחת ב-`drawer_list`, מרשומת הדיסק של ה-hello.
-    ‏`mac` — המכונה, ל-#1844 (מה שנלמד על החיבור); ‏None = לא נשאל על החיבור."""
+    `mac` — המכונה, ל-#1844 (מה שנלמד על החיבור); None = לא נשאל על החיבור."""
     gbps, max_gbps = _num(disk.get("link_gbps")), _num(disk.get("link_max_gbps"))
     crc = _count(disk.get("crc"))
     base = crc_baseline(conn, disk.get("serial")) if crc is not None else None
@@ -77,16 +77,16 @@ def drawer_fields(conn: sqlite3.Connection, disk: dict, mac: str | None = None) 
         "link_max_gbps": max_gbps,
         "link_state": link_state(gbps, max_gbps),
         "crc": crc,
-        # ‏None = לא נמדד (אין מונה עכשיו, או אין סבב קודם שקרא אותו) — לא 0.
+        # None = לא נמדד (אין מונה עכשיו, או אין סבב קודם שקרא אותו) — לא 0.
         # שלילי (דיסק אחר עם אותו סידורי, מונה שאופס) אינו "עלה".
         "crc_rise": max(0, crc - base) if base is not None else None,
-        # ‏#1859: מה שהשרת למד מאז הסבב הקודם של הסידורי (‏None = כלום, או לא נקרא עכשיו), ו-
-        # ‏`smart_compared` — יש בכלל סבב קודם להשוות אליו (‏False = "אין עדיין השוואה").
+        # #1859: מה שהשרת למד מאז הסבב הקודם של הסידורי (None = כלום, או לא נקרא עכשיו), ו-
+        # `smart_compared` — יש בכלל סבב קודם להשוות אליו (False = "אין עדיין השוואה").
         **_learned(conn, disk),
-        # ‏#1844: מה שהשרת למד על החיבור ועל הדיסק מהגלים הקודמים — "כנראה כבל/מחבר"
-        # (‏`port_suspect`) או "הדיסק עצמו" (‏`disk_suspect`). המלצה, לא חסימה.
+        # #1844: מה שהשרת למד על החיבור ועל הדיסק מהגלים הקודמים — "כנראה כבל/מחבר"
+        # (`port_suspect`) או "הדיסק עצמו" (`disk_suspect`). המלצה, לא חסימה.
         **_ports(conn, disk, mac),
-        # ‏#2848 (נדב 11/11): "איטי" הוא של הסבב שבו נמדד בלבד (‏`drawer_list[].write_slow`) — מדידה
+        # #2848 (נדב 11/11): "איטי" הוא של הסבב שבו נמדד בלבד (`drawer_list[].write_slow`) — מדידה
         # מסבב קודם אינה מוזהרת ואינה צובעת (בוטל ה-`last_write_check` של #447).
     }
 
@@ -99,8 +99,8 @@ def _ports(conn: sqlite3.Connection, disk: dict, mac: str | None) -> dict:
 
 
 def _learned(conn: sqlite3.Connection, disk: dict) -> dict:
-    # ‏#2706 (הוכרע): רק מה-hello. ‏`smart_attrs: null` (לא נקרא מאז שהמכונה עלתה) = ‏(None, None),
-    # "לא נקרא עכשיו" -- גם כש-`smart_history` מחזיק שתי תמונות. תצוגת הקונסולה (`describe`, ‏#2705)
+    # #2706 (הוכרע): רק מה-hello. `smart_attrs: null` (לא נקרא מאז שהמכונה עלתה) = (None, None),
+    # "לא נקרא עכשיו" -- גם כש-`smart_history` מחזיק שתי תמונות. תצוגת הקונסולה (`describe`, #2705)
     # מראה את התמונה של הסבב עם התאריך שלה; אזהרת הגל אינה מקבלת אותה כקריאה של עכשיו.
     attrs = disk.get("smart_attrs")
     if not isinstance(attrs, dict) or not disk.get("serial"):
@@ -120,7 +120,7 @@ def _slot(m: dict, port: int | None, d: dict | None = None) -> str:
 
 
 def _held_where(m: dict) -> str:
-    """‏#2741: הדיסקים שב-`held.problems` — בשם המגירה/הפורט שלהם (לפי ה-`dev` ב-`drawer_list`),
+    """#2741: הדיסקים שב-`held.problems` — בשם המגירה/הפורט שלהם (לפי ה-`dev` ב-`drawer_list`),
     ואם לא נמצאו: שם ה-dev עצמו. עם הסיבה כשיש. אין בעיות — ריק."""
     by_dev = {d.get("dev"): d for d in m.get("drawer_list") or [] if d.get("dev")}
     out = []
@@ -142,7 +142,7 @@ def warnings(machines: list[dict], selection: bool) -> list[dict]:
     """האזהרות הכתומות לפני "התחל": מגירה שהגל הזה יכתוב (טרייה, בחריץ שנבחר)
     שהקישור שלה איטי מהפורט, או שמונה ה-CRC שלה עלה מאז הסבב הקודם שלה.
 
-    ‏#447 (ברזל 07/11, הכרעת נדב — אפשרות א'): בסבב עם בחירה (`selection`) — גם במכונה
+    #447 (ברזל 07/11, הכרעת נדב — אפשרות א'): בסבב עם בחירה (`selection`) — גם במכונה
     שנבחרה ועוד **לא הצטרפה**, מרגע הבחירה, לפי ה-hello האחרון שלה. הגל יוצא לבד באותו
     דופק שבו המכונה מצטרפת, ולכן בסבב עם יעד יחיד אזהרה שחיכתה להצטרפות לא נראתה לעולם
     (רק ביומן). מכונה שלא נבחרה — אין לה `selected`, ואין עליה אזהרה. בסבב ישן בלי בחירה
@@ -160,7 +160,7 @@ def warnings(machines: list[dict], selection: bool) -> list[dict]:
             ported = d.get("learned_he")                                            # #1844
             speed = d.get("model_speed") if isinstance(d.get("model_speed"), dict) else {}
             model_slow = speed.get("slow") is True                                  # #1845
-            # ‏#2846 (נדב 11/11): מונה CRC מוחלט הוא היסטוריה ולא מצב — רק עלייה (`rise`) מזהירה.
+            # #2846 (נדב 11/11): מונה CRC מוחלט הוא היסטוריה ולא מצב — רק עלייה (`rise`) מזהירה.
             if not slow and rise <= 0 and not learned and not ported and not model_slow:
                 continue
             parts = []
@@ -191,11 +191,11 @@ def warnings(machines: list[dict], selection: bool) -> list[dict]:
 
 def missing(machines: list[dict], remaining: int, slots: list[dict] | None,
             ready: int) -> list[dict]:
-    """‏#65: מי חסר בגל הפתוח, כשהמגירות המוכנות פחות ממה שהגל מחכה לו.
+    """#65: מי חסר בגל הפתוח, כשהמגירות המוכנות פחות ממה שהגל מחכה לו.
 
-    עם בחירת יעדים (‏#695) — כל מכונה שנבחרה ואין לה דיסק טרי בחריץ שנבחר,
+    עם בחירת יעדים (#695) — כל מכונה שנבחרה ואין לה דיסק טרי בחריץ שנבחר,
     או שלא הצטרפה. בלי בחירה — כל משכפל שלא הצטרף (אין דרך לדעת איזו מגירה
-    "צריכה" להיות). מכונה שהצטרפה וכבתה (‏`awake` false) היא `off`: הדיסקים
+    "צריכה" להיות). מכונה שהצטרפה וכבתה (`awake` false) היא `off`: הדיסקים
     שדיווחה לפני שכבתה אינם ראיה שהיא תכתוב."""
     expected = remaining
     if slots is not None:
@@ -236,9 +236,9 @@ def missing(machines: list[dict], remaining: int, slots: list[dict] | None,
                     "ports": short if reason == "drawers" else list(ports),
                     "awake": bool(m.get("awake")), "joined": bool(m.get("joined")),
                     # הכיבוי נמסר ב-hello (`power_action`): מכונה שאינה עונה לא תקבל אותו.
-                    # ‏#2031: למוחזק — בתשובת הדיווח held שלו
+                    # #2031: למוחזק — בתשובת הדיווח held שלו
                     "can_poweroff": bool(m.get("awake") or m.get("held")),
-                    # ‏#1367: באמצע שיכפול מקומי — הכיבוי ישבור את היעד; הקונסולה מזהירה
+                    # #1367: באמצע שיכפול מקומי — הכיבוי ישבור את היעד; הקונסולה מזהירה
                     "local_copy": bool(m.get("local_copy")),
                     "text_he": text})
     return out

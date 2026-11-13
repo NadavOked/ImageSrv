@@ -1,6 +1,6 @@
-"""‏#856: כתיבת שם המחשב שנכשלה אחרי שחזור — גלויה בדיווח, לא ביומן בלבד.
+"""#856: כתיבת שם המחשב שנכשלה אחרי שחזור — גלויה בדיווח, לא ביומן בלבד.
 
-‏`write_hostname` מחזיר קוד לא-אפסי ו-JSON של שגיאה (hive שלא נפתח, ext4
+`write_hostname` מחזיר קוד לא-אפסי ו-JSON של שגיאה (hive שלא נפתח, ext4
 שלא מתעגן), ו-`name_this_machine` לכד רק את ה-stdout: השגיאה נכתבה
 ל-`hostname.json` ב-tmpfs (נמחק באתחול, #106) ואז `done`. השרת והמפעיל
 ראו תחנה שהצליחה. ההכרעה "Never fatal" נשארת — השחזור **לא** נכשל —
@@ -9,11 +9,11 @@
 הצורה: היעד מסיים `done` **עם** `error` — אותו שדה שבו `finish_grow`
 מדווח "done (grow deferred)" (#648) ו-shrink.sh את "המקור לא הוחזר
 לגודלו" (#87) — ולכן השרת שומר (`session_members.error`) והקונסולה
-מציגה בלי שדה חדש. ‏`write_hostname` האמיתי רץ, עם hivewrite מזויף
+מציגה בלי שדה חדש. `write_hostname` האמיתי רץ, עם hivewrite מזויף
 שהאימות שלו נכשל (הקריאה החוזרת מחזירה שם אחר).
 
 בקרה שלילית — `git checkout origin/main -- agent/lib/postdeploy/hostname.sh` ואז
-הקובץ הזה: הטסט הראשון חייב ליפול (‏`error` חסר), האחרים לעבור.
+הקובץ הזה: הטסט הראשון חייב ליפול (`error` חסר), האחרים לעבור.
 """
 
 from __future__ import annotations
@@ -29,14 +29,14 @@ from test_smart import AGENT, BASH
 pytestmark = requires_native(("bash", BASH))
 
 #: hivewrite שכותב "בהצלחה" (rc=0) אבל הקריאה החוזרת מחזירה שם אחר —
-#: בדיוק #33: כתיבה שלא כתבה. ‏write_hostname מזהה ומחזיר hive_write_failed.
+#: בדיוק #33: כתיבה שלא כתבה. write_hostname מזהה ומחזיר hive_write_failed.
 HIVEWRITE_LIES = HIVEWRITE_OK.replace("echo LAB1-05", "echo OTHER")
 
 
 def restore_done_station(tmp_path: Path, **override: str) -> tuple[str, Path]:
     """תחנה אחרי שחזור מוצלח: היעד `sda` כבר `done` (finish_grow), ואז
-    ‏name_this_machine — כמו ב-`imagesrv-agent`. ‏json_get נדרס (אין jq)
-    רק לתשובת השרת; ‏`.error` נקרא מהקובץ בפועל."""
+    name_this_machine — כמו ב-`imagesrv-agent`. json_get נדרס (אין jq)
+    רק לתשובת השרת; `.error` נקרא מהקובץ בפועל."""
     script, run = windows_box(tmp_path, **override)
     (run / "response.json").write_text("{}", encoding="utf-8")
     script += (

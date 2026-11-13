@@ -1,4 +1,4 @@
-"""‏Wake-on-LAN — קבוצה 7 בתוכנית הבדיקות (`docs/lab/lab-test-plan.md`).
+"""Wake-on-LAN — קבוצה 7 בתוכנית הבדיקות (`docs/lab/lab-test-plan.md`).
 
 עד כאן ל-`server/net/wol.py` לא היה קובץ טסטים משלו: מה שנבדק (חבילת
 הקסם, ההחרגה של הפותח) נבדק דרך `test_station.py`, כלומר דרך פתיחת
@@ -105,7 +105,7 @@ def sockets():
 
 def fake_sysfs(root: Path, interface: str, *, carrier: str | None = "1",
                operstate: str | None = "up") -> Path:
-    """‏/sys/class/net מזויף. ‏None לקובץ = הקובץ לא קיים; במקומו נוצרת
+    """/sys/class/net מזויף. None לקובץ = הקובץ לא קיים; במקומו נוצרת
     תיקייה כשצריך קובץ ש**קיים ואי אפשר לקרוא** — בדיוק מה ש-`carrier`
     של ממשק כבוי עושה בקרנל (EINVAL), ומה שגם root לא יכול לעקוף."""
     root.mkdir(parents=True, exist_ok=True)
@@ -138,7 +138,7 @@ def test_the_packet_goes_out_as_udp_broadcast_to_port_9(sockets):
 @pytest.mark.skipif(not hasattr(socket, "SO_BINDTODEVICE"),
                     reason="SO_BINDTODEVICE is Linux-only")
 def test_a_named_interface_is_pinned_so_the_packet_cannot_leak(sockets, live_net):
-    """‏7.2 בקוד: החבילה נכפית על ממשק וילן ההפצה. הלכידה ב-tcpdump
+    """7.2 בקוד: החבילה נכפית על ממשק וילן ההפצה. הלכידה ב-tcpdump
     על שני הממשקים היא הצד שנשאר למעבדה."""
     made, factory = sockets
     broadcast_sender("eth1.44", socket_factory=factory,
@@ -160,14 +160,14 @@ def test_without_so_bindtodevice_a_pinned_send_fails_instead_of_leaking(
 
 # --- #74: הממשק חייב להוכיח שהוא חי --------------------------------------
 #
-# ‏`sendto` על ממשק ב-NO-CARRIER מצליח ושולח אפס חבילות (אומת במעבדה
-# ‏29-08-2026 ב-tcpdump). היעדר החריגה אינו ראיה, ולכן נדרשת ראיה
+# `sendto` על ממשק ב-NO-CARRIER מצליח ושולח אפס חבילות (אומת במעבדה
+# 29-08-2026 ב-tcpdump). היעדר החריגה אינו ראיה, ולכן נדרשת ראיה
 # חיובית מ-sysfs לפני השליחה — ואבחנה בין "אין קישור" ל"לא בדקנו".
 
 
 def test_a_missing_carrier_is_a_visible_failure_not_a_silent_success(
         sockets, tmp_path):
-    """הבאג עצמו: הכבל מנותק, ‏`sendto` לא מתלונן, ואפס חבילות יוצאות."""
+    """הבאג עצמו: הכבל מנותק, `sendto` לא מתלונן, ואפס חבילות יוצאות."""
     made, factory = sockets
     sysfs = fake_sysfs(tmp_path / "sys", "eth0", carrier="0", operstate="down")
     send = broadcast_sender("eth0", socket_factory=factory, sysfs=sysfs)
@@ -182,8 +182,8 @@ def test_the_failure_says_what_is_wrong_and_what_to_check(tmp_path, operstate):
     איזה ממשק, מה מצבו, ומה לבדוק — הכבל.
 
     הפרמטרים הם מה שנמדד במעבדה: כרטיס שהכבל שלו נשלף מדווח
-    ‏`carrier=0` יחד עם ‏operstate שאינו up (‏veth: lowerlayerdown,
-    ‏NIC פיזי: down). אם ‏operstate ייבדק ראשון, התשובה תהיה "הממשק
+    `carrier=0` יחד עם operstate שאינו up (veth: lowerlayerdown,
+    NIC פיזי: down). אם operstate ייבדק ראשון, התשובה תהיה "הממשק
     כבוי, הרץ ip link set up" — עצה שגויה לכבל מנותק."""
     sysfs = fake_sysfs(tmp_path / "sys", "eth0", carrier="0",
                        operstate=operstate)
@@ -194,8 +194,8 @@ def test_the_failure_says_what_is_wrong_and_what_to_check(tmp_path, operstate):
 
 
 def test_an_interface_that_is_administratively_down_is_caught_too(tmp_path):
-    """‏`carrier` של ממשק כבוי מחזיר EINVAL — כלומר הקובץ קיים ואינו
-    נקרא. ‏`operstate` הוא הראיה החיובית שנשארת, ואסור שהמצב הזה
+    """`carrier` של ממשק כבוי מחזיר EINVAL — כלומר הקובץ קיים ואינו
+    נקרא. `operstate` הוא הראיה החיובית שנשארת, ואסור שהמצב הזה
     ייפול ל"לא ידוע" ויישלח לשום מקום."""
     sysfs = fake_sysfs(tmp_path / "sys", "eth0",
                        carrier="!unreadable", operstate="down")
@@ -204,7 +204,7 @@ def test_an_interface_that_is_administratively_down_is_caught_too(tmp_path):
 
 
 def test_an_interface_absent_from_a_readable_sysfs_fails(tmp_path):
-    """שם ממשק שגוי בהגדרות — ‏sysfs נקרא ואומר שאין חיה כזאת."""
+    """שם ממשק שגוי בהגדרות — sysfs נקרא ואומר שאין חיה כזאת."""
     sysfs = fake_sysfs(tmp_path / "sys", "eth1")
     state, why = link_state("eth0", sysfs=sysfs)
     assert state == LINK_DOWN and "eth0" in why
@@ -221,7 +221,7 @@ def test_a_carrier_that_says_one_is_the_positive_evidence_we_send_on(tmp_path):
 @pytest.mark.skipif(not hasattr(socket, "SO_BINDTODEVICE"),
                     reason="SO_BINDTODEVICE is Linux-only")  # issue-312-windows-env
 def test_no_sysfs_at_all_is_unknown_and_still_sends(sockets, tmp_path):
-    """מכונה שאינה Linux / קונטיינר בלי ‏/sys: הבדיקה לא זמינה. חסימת
+    """מכונה שאינה Linux / קונטיינר בלי /sys: הבדיקה לא זמינה. חסימת
     WoL כאן הייתה הופכת תקלה באבחון לכיתה שלמה שלא מתעוררת."""
     made, factory = sockets
     absent = tmp_path / "no-sysfs-here"
@@ -234,7 +234,7 @@ def test_no_sysfs_at_all_is_unknown_and_still_sends(sockets, tmp_path):
 @pytest.mark.skipif(not hasattr(socket, "SO_BINDTODEVICE"),
                     reason="SO_BINDTODEVICE is Linux-only")  # issue-312-windows-env
 def test_an_unreadable_link_state_is_unknown_and_still_sends(sockets, tmp_path):
-    """ממשק וירטואלי / קבצים שלא נקראים: ‏operstate=unknown ו-carrier
+    """ממשק וירטואלי / קבצים שלא נקראים: operstate=unknown ו-carrier
     שאינו נקרא. לא ראינו קישור — אבל גם לא ראינו את היעדרו."""
     made, factory = sockets
     sysfs = fake_sysfs(tmp_path / "sys", "eth0",
@@ -247,7 +247,7 @@ def test_an_unreadable_link_state_is_unknown_and_still_sends(sockets, tmp_path):
 
 
 def test_operstate_up_alone_is_enough_when_carrier_cannot_be_read(tmp_path):
-    """ראיה חיובית אחת מספיקה: אם ‏operstate אומר up, אין צורך ב-carrier."""
+    """ראיה חיובית אחת מספיקה: אם operstate אומר up, אין צורך ב-carrier."""
     sysfs = fake_sysfs(tmp_path / "sys", "eth0",
                        carrier="!unreadable", operstate="up")
     assert link_state("eth0", sysfs=sysfs)[0] == LINK_UP
@@ -255,8 +255,8 @@ def test_operstate_up_alone_is_enough_when_carrier_cannot_be_read(tmp_path):
 
 def test_a_virtual_interface_with_carrier_one_is_up_despite_unknown_operstate(
         tmp_path):
-    """‏veth/tap מדווחים operstate=unknown לנצח — ובמעבדה הווירטואלית
-    זה הממשק היחיד שיש. ‏carrier=1 הוא הראיה."""
+    """veth/tap מדווחים operstate=unknown לנצח — ובמעבדה הווירטואלית
+    זה הממשק היחיד שיש. carrier=1 הוא הראיה."""
     sysfs = fake_sysfs(tmp_path / "sys", "eth0", carrier="1",
                        operstate="unknown")
     assert link_state("eth0", sysfs=sysfs)[0] == LINK_UP
@@ -274,7 +274,7 @@ def test_no_interface_pinned_means_nothing_to_check(sockets, tmp_path):
 
 
 def test_a_partial_sendto_is_a_failure_not_a_success(tmp_path):
-    """‏`sendto` שמחזיר פחות בייטים ממה שנתנו לו לא שלח חבילת קסם —
+    """`sendto` שמחזיר פחות בייטים ממה שנתנו לו לא שלח חבילת קסם —
     שלד של חבילה לא מעיר אף מחשב."""
     class ShortSocket(FakeSocket):
         def sendto(self, packet, address):
@@ -293,7 +293,7 @@ def test_a_partial_sendto_is_a_failure_not_a_success(tmp_path):
 def conn(tmp_path: Path):
     """טבלת MAC בלבד — שום מכונה לא "דיברה" עם השרת מעולם."""
     conn = connect(tmp_path / "wol.db")
-    # ‏grp_CLONERS נזרעת ב-connect (קבוצה קבועה) — רק הכיתה נוספת כאן.
+    # grp_CLONERS נזרעת ב-connect (קבוצה קבועה) — רק הכיתה נוספת כאן.
     conn.execute("INSERT INTO groups (id, label, role) VALUES (?, ?, ?)",
                  ("grp_LAB1", "כיתה LAB1", "classroom"))
     for mac, suffix, group in ((MAC1, "05", "grp_LAB1"),
@@ -312,14 +312,14 @@ def macs_of(packets: list[bytes]) -> set[str]:
 
 
 def test_waking_a_class_sends_to_every_mac_in_it(conn):
-    """‏7.3 — הערת קבוצה שלמה, לא מכונה אחת."""
+    """7.3 — הערת קבוצה שלמה, לא מכונה אחת."""
     packets: list[bytes] = []
     assert wake_group(conn, "grp_LAB1", send=packets.append) == 2
     assert macs_of(packets) == {MAC1, MAC2}
 
 
 def test_the_mac_table_is_the_source_not_who_talked_to_the_server(conn):
-    """‏7.4 — העיקרון. אף מכונה בטבלה לא עשתה hello מעולם (‏net_devices
+    """7.4 — העיקרון. אף מכונה בטבלה לא עשתה hello מעולם (net_devices
     ריקה), והן חייבות לקבל חבילה: מכונה כבויה היא בדיוק המקרה."""
     assert conn.execute("SELECT COUNT(*) AS n FROM net_devices"
                         ).fetchone()["n"] == 0
@@ -329,7 +329,7 @@ def test_the_mac_table_is_the_source_not_who_talked_to_the_server(conn):
 
 
 def test_an_unknown_mac_gets_nothing(conn):
-    """‏7.5 — מי שלא בטבלה לא מקבל חבילה, גם לא "ליתר ביטחון"."""
+    """7.5 — מי שלא בטבלה לא מקבל חבילה, גם לא "ליתר ביטחון"."""
     packets: list[bytes] = []
     wake_group(conn, "grp_LAB1", send=packets.append)
     assert STRANGER not in macs_of(packets)
@@ -393,7 +393,7 @@ def test_a_fully_failed_wake_is_still_visible_in_the_journal(conn):
 @pytest.mark.skipif(not hasattr(socket, "SO_BINDTODEVICE"),
                     reason="SO_BINDTODEVICE is Linux-only")  # issue-312-windows-env
 def test_the_journal_carries_the_reason_and_not_only_the_count(conn, tmp_path):
-    """‏#74 מקצה לקצה ביחידה: כבל אחד מנותק → אפס נספרות, והיומן אומר
+    """#74 מקצה לקצה ביחידה: כבל אחד מנותק → אפס נספרות, והיומן אומר
     *למה*. בלי המשפט הזה השורה אומרת "12 נכשלו" ושולחת את הטכנאי
     לחפש WoL ב-BIOS — בדיוק התסמין שהבאג ייצר."""
     sysfs = fake_sysfs(tmp_path / "sys", "eth0", carrier="0", operstate="up")
@@ -459,7 +459,7 @@ def server(tmp_path: Path, images_root, classrooms_on):
 
 
 def test_the_console_wake_button_wakes_the_room_and_nothing_else(server):
-    """‏7.6 — הקבוצה אינה נבחרת מהדפדפן. בקשה שמנסה להכתיב קבוצה אחרת אינה
+    """7.6 — הקבוצה אינה נבחרת מהדפדפן. בקשה שמנסה להכתיב קבוצה אחרת אינה
     מעירה דבר (17/10: גוף בלי `macs` הוא 400, לא "כל החדר"); בלי גוף — מחשבי
     השיכפול בלבד."""
     result = server["deploy"].post("/api/console/room/wake",
@@ -476,7 +476,7 @@ def test_the_wake_button_is_closed_to_anonymous(server):
 
 
 def test_a_deploy_user_may_wake_and_an_admin_may_too(server):
-    """הערה היא חלק מהפעלת סבב — משתמש הפצה מורשה (‏5.7), ולא נופל
+    """הערה היא חלק מהפעלת סבב — משתמש הפצה מורשה (5.7), ולא נופל
     ל-403 שנועד לניהול."""
     assert server["deploy"].post("/api/console/room/wake").status_code == 200
     assert server["admin"].post("/api/console/room/wake").status_code == 200
@@ -491,7 +491,7 @@ def test_the_wake_is_written_to_the_journal_with_the_user(server):
 
 
 def test_the_real_server_pins_wol_to_the_deployment_vlan(tmp_path, monkeypatch):
-    """‏#44 הוסיף את היכולת לכפות ממשק, ואיש לא חיבר אותה למסלול האמיתי.
+    """#44 הוסיף את היכולת לכפות ממשק, ואיש לא חיבר אותה למסלול האמיתי.
 
     הטסטים האחרים מזריקים שולח מזויף, ולכן עברו בעוד שהשרת האמיתי שידר
     לפי טבלת הניתוב — במעבדה (בדיקה 7.2) יצאו 12 חבילות על הרשת הרגילה
@@ -516,7 +516,7 @@ def test_the_real_server_pins_wol_to_the_deployment_vlan(tmp_path, monkeypatch):
 
 
 def test_the_counter_still_counts_and_carries_the_reason_with_it(conn):
-    """‏WakeResult הוא `int` — כל מי שסופר אותו ממשיך לעבוד בלי לדעת."""
+    """WakeResult הוא `int` — כל מי שסופר אותו ממשיך לעבוד בלי לדעת."""
     def dead(_packet):
         raise wol.WakeRefused("no-carrier: אין carrier על eth0")
 
@@ -544,7 +544,7 @@ def test_a_successful_wake_carries_no_reason(conn):
 
 
 def test_the_wake_endpoint_hands_the_reason_to_the_console(server):
-    """‏"0 מחשבים" בלי סיבה שולח את הטכנאי ל-12 BIOSים.
+    """"0 מחשבים" בלי סיבה שולח את הטכנאי ל-12 BIOSים.
 
     הראיה שהמסך *יכול* לומר למה: השדות יוצאים מה-API. הניסוח עצמו
     ב-`room.js` אינו מכוסה — אין JS test runner בריפו.
@@ -555,7 +555,7 @@ def test_the_wake_endpoint_hands_the_reason_to_the_console(server):
 
 
 def test_the_wake_endpoint_reports_sent_not_woken(server):
-    """‏#528 — המודול מונה `sent` (חבילות שיצאו), וה-API החזיר `woken`
+    """#528 — המודול מונה `sent` (חבילות שיצאו), וה-API החזיר `woken`
     (מכונות שהתעוררו). חבילת WoL היא UDP broadcast בלי ACK: `sendto`
     שהצליח פירושו שהקרנל קיבל 102 בייט, ולא שמכונה קמה. השם `woken`
     טען טענה שלא נמדדה (עיקרון 5), ולכן החזרתו חייבת להפיל את הטסט."""

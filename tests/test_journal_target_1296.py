@@ -1,13 +1,13 @@
-"""‏#1296 — יעד מבני לשורות היומן: ‏`journal.machine`, ‏`round_id`, ‏`class_id`.
+"""#1296 — יעד מבני לשורות היומן: `journal.machine`, `round_id`, `class_id`.
 
 עד כאן שורת יומן הייתה ``ts, user, event, detail`` בלבד, והסינון לפי מכונה
 חיפש את ה-MAC **בטקסט**. עכשיו לכל שורה שכותבה יודע את היעד — עמודות nullable:
 
-* ‏`machine` — ה-MAC הקנוני (כמו `machines.mac`);
-* ‏`round_id` — ‏`sessions.id` (סבב, גל, משיכה) או `room_rounds.id` (סבב חדר);
-* ‏`class_id` — ‏`groups.id`; **ריקה עד v2** (מיון 06/11).
+* `machine` — ה-MAC הקנוני (כמו `machines.mac`);
+* `round_id` — `sessions.id` (סבב, גל, משיכה) או `room_rounds.id` (סבב חדר);
+* `class_id` — `groups.id`; **ריקה עד v2** (מיון 06/11).
 
-‏NULL = "לא נרשם" (שורה מלפני המיגרציה, או אירוע בלי יעד כזה), לא "אף מכונה".
+NULL = "לא נרשם" (שורה מלפני המיגרציה, או אירוע בלי יעד כזה), לא "אף מכונה".
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ def test_a_database_on_10_gains_the_target_and_keeps_its_rows(tmp_path):
     raw.close()
 
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 16   # 13: usb_records/usb_syncs (#1920), 14: disk_f1_marks (#1858), 15: net_devices.monitor_on (#2850)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 18   # 18: users.view (#3025), 17: boot_marks (#2830), 13: usb_records/usb_syncs (#1920), 14: disk_f1_marks (#1858), 15: net_devices.monitor_on (#2850)
     [old] = conn.execute("SELECT user, detail, machine, round_id, class_id FROM journal").fetchall()
     assert tuple(old) == ("noc", f"{MAC} name=05", None, None, None)
     journal(conn, "agent_loop", MAC, machine=MAC)
@@ -81,7 +81,7 @@ def test_the_migration_runs_once_and_twice_is_harmless(tmp_path):
     assert [n for n in names if n in TARGET] == list(TARGET)
 
 
-# --- 2. ‏`journal()` --------------------------------------------------------------
+# --- 2. `journal()` --------------------------------------------------------------
 
 
 def test_journal_stores_the_target_and_an_empty_one_is_null(tmp_path):
@@ -96,7 +96,7 @@ def test_journal_stores_the_target_and_an_empty_one_is_null(tmp_path):
 
 
 def test_the_target_is_keyword_only():
-    """‏`journal(conn, event, detail, user, MAC)` היה נכנס בשקט כעמודה הלא נכונה."""
+    """`journal(conn, event, detail, user, MAC)` היה נכנס בשקט כעמודה הלא נכונה."""
     with pytest.raises(TypeError):
         journal(None, "x", "", "", MAC)  # type: ignore[misc]
 
@@ -195,7 +195,7 @@ def test_a_room_round_and_its_wave_carry_their_own_ids(room_server):
     assert _rows(conn, "session_open")[0]["round_id"] == wave_id
 
 
-# --- 4. ה-API: ‏`GET /api/console/journal` -----------------------------------------
+# --- 4. ה-API: `GET /api/console/journal` -----------------------------------------
 
 
 def test_journal_rows_expose_the_target_and_null_when_unrecorded(server):

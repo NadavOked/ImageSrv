@@ -1,19 +1,19 @@
-"""‏#704: השם שהמפעיל נותן לכל חיבור של כונן במכונה ("דיסק 1", "דיסק מיוחד").
+"""#704: השם שהמפעיל נותן לכל חיבור של כונן במכונה ("דיסק 1", "דיסק מיוחד").
 
 **המפתח הוא החיבור, לא הדיסק** — דיסק שהוחלף באותה מגירה שומר את השם:
 
-- יש לכונן `port` (‏SATA, ה-``ataN`` של ממשק 2) → ‏``sata:<port>``.
-- אין `port` (‏NVMe, ‏USB, בקר SCSI) ויש `serial` → ‏``serial:<serial>``.
+- יש לכונן `port` (SATA, ה-``ataN`` של ממשק 2) → ``sata:<port>``.
+- אין `port` (NVMe, USB, בקר SCSI) ויש `serial` → ``serial:<serial>``.
   הסוכן אינו מדווח היום מזהה חיבור יציב ל-NVMe (אין כתובת PCI ב-hello),
   ולכן כאן השם צמוד **לכונן**, והקונסולה אומרת זאת ליד השדה.
-- בלי שניהם — אין מפתח ואין שם. לא ממציאים מזהה מ-``dev`` (‏``sda``
+- בלי שניהם — אין מפתח ואין שם. לא ממציאים מזהה מ-``dev`` (``sda``
   מתחלף בין אתחולים).
 
 לכל כונן מפתח **אחד**: כונן עם `port` אינו נקרא לפי הסידורי שלו, כי אז
 השם היה נודד עם הדיסק — בדיוק מה שהבקשה פוסלת.
 
-**השם הוא תווית בלבד.** הבחירה, ‏``target_slots`` והמספור נשארים לפי
-`port`; בלי שם כל המסכים מציגים "דיסק N" כמו היום (‏SATA 0 → דיסק 1).
+**השם הוא תווית בלבד.** הבחירה, ``target_slots`` והמספור נשארים לפי
+`port`; בלי שם כל המסכים מציגים "דיסק N" כמו היום (SATA 0 → דיסק 1).
 """
 
 from __future__ import annotations
@@ -27,15 +27,15 @@ from server.db import _write_lock, now_iso, writing
 
 #: תקרת אורך בתווים — נכנס לתגית בגריד ולכותרת כרטיס בגואי הנייטיב.
 NAME_MAX = 24
-#: ‏``ataN`` על בקר שני יכול לעבור את 8 (‏``drawer_count``); 32 מספיק לכל לוח.
+#: ``ataN`` על בקר שני יכול לעבור את 8 (``drawer_count``); 32 מספיק לכל לוח.
 PORT_MAX = 32
 
 _SATA = re.compile(r"sata:([1-9][0-9]?)\Z")
 #: סידורי: ASCII מודפס בלי רווח ובלי ``|`` (המפריד של רשומות הגואי).
 _SERIAL = re.compile(r"serial:([!-{}~]{1,80})\Z")
-#: אותיות וספרות (כל שפה, ‏``\w``), רווח, ו- ``- . # ( ) /``. בלי מירכאות,
+#: אותיות וספרות (כל שפה, ``\w``), רווח, ו- ``- . # ( ) /``. בלי מירכאות,
 #: ``< > & ; \\ |`` ותווי בקרה: השם נכנס ל-HTML, ליומן ולקובץ המצב של הגואי.
-#: ‏CodeQL #615: עוגן `^` מפורש — `.match` מעגן ממילא, אבל הניתוח קורא את הביטוי לבדו.
+#: CodeQL #615: עוגן `^` מפורש — `.match` מעגן ממילא, אבל הניתוח קורא את הביטוי לבדו.
 _NAME = re.compile(r"^[\w \-.#()/]+\Z")
 
 
@@ -49,7 +49,7 @@ def key_for(port, serial) -> str | None:
 
 
 def parse_key(raw) -> str:
-    """מאמת מפתח שהגיע מהקונסולה. ‏ValueError = 400."""
+    """מאמת מפתח שהגיע מהקונסולה. ValueError = 400."""
     if isinstance(raw, str):
         m = _SATA.match(raw)
         if m and 1 <= int(m.group(1)) <= PORT_MAX:
@@ -61,7 +61,7 @@ def parse_key(raw) -> str:
 
 def clean_name(raw) -> str:
     """מאמת שם: מחרוזת, לא ריקה אחרי חיתוך רווחים, עד ``NAME_MAX`` תווים,
-    מהתווים המותרים בלבד. ‏ValueError = 400."""
+    מהתווים המותרים בלבד. ValueError = 400."""
     if not isinstance(raw, str):
         raise ValueError("השם חייב להיות טקסט")
     name = raw.strip()
@@ -75,8 +75,8 @@ def clean_name(raw) -> str:
 
 
 def all_by_mac(conn: sqlite3.Connection) -> dict[str, dict[str, str]]:
-    """כל השמות **האפקטיביים**, ``{mac: {slot: name}}`` — ‏#2001: שמות הדגם
-    (‏`model_slots`) למכונה בלי מיפוי משלה, ושמות המכונה מעליהם."""
+    """כל השמות **האפקטיביים**, ``{mac: {slot: name}}`` — #2001: שמות הדגם
+    (`model_slots`) למכונה בלי מיפוי משלה, ושמות המכונה מעליהם."""
     out: dict[str, dict[str, str]] = {}
     for r in conn.execute("SELECT mac, slot, name FROM machine_slot_names ORDER BY mac, slot"):
         out.setdefault(r["mac"], {})[r["slot"]] = r["name"]
@@ -93,8 +93,8 @@ def for_mac(conn: sqlite3.Connection, mac: str) -> dict[str, str]:
 
 
 def resolve(names: dict[str, str], port, serial, pci=None) -> str | None:
-    """השם של כונן אחד מתוך השמות של המכונה שלו, או ``None``. ‏#2001: ל-NVMe
-    קודם לפי החיבור (‏``nvme:<PCI>``, החלון), ואחר כך לפי הסידורי (#704)."""
+    """השם של כונן אחד מתוך השמות של המכונה שלו, או ``None``. #2001: ל-NVMe
+    קודם לפי החיבור (``nvme:<PCI>``, החלון), ואחר כך לפי הסידורי (#704)."""
     if isinstance(pci, str) and port is None and f"nvme:{pci}" in names:
         return names[f"nvme:{pci}"]
     key = key_for(port, serial)
@@ -103,9 +103,9 @@ def resolve(names: dict[str, str], port, serial, pci=None) -> str | None:
 
 def label(conn: sqlite3.Connection, mac: str, *, port=None, serial=None,
           dev: str | None = None) -> str | None:
-    """השם לשורת יומן. כשהדיווח נושא רק ``dev`` (‏דיווח התקדמות של מגירה),
+    """השם לשורת יומן. כשהדיווח נושא רק ``dev`` (דיווח התקדמות של מגירה),
     החריץ והסידורי נלקחים מהדיסקים שהמכונה דיווחה ב-hello האחרון —
-    ‏``sdb`` אינו "דיסק 2" לפי האות."""
+    ``sdb`` אינו "דיסק 2" לפי האות."""
     names = for_mac(conn, mac)
     if not names:
         return None
@@ -124,13 +124,13 @@ def label(conn: sqlite3.Connection, mac: str, *, port=None, serial=None,
 
 
 def journal_suffix(name: str | None) -> str:
-    """‏`` name="…"`` לסוף שורת יומן, או כלום — בלי שם השורה כמו היום."""
+    """`` name="…"`` לסוף שורת יומן, או כלום — בלי שם השורה כמו היום."""
     return f' name="{name}"' if name else ""
 
 
 def set_name(conn: sqlite3.Connection, mac: str, slot: str, name: str | None,
              user: str) -> None:
-    """שומר (או מוחק, ``name=None``) שם. ‏LookupError = המכונה לא רשומה."""
+    """שומר (או מוחק, ``name=None``) שם. LookupError = המכונה לא רשומה."""
     with _write_lock, writing(conn):
         if conn.execute("SELECT 1 FROM machines WHERE mac = ?", (mac,)).fetchone() is None:
             raise LookupError("מכונה לא רשומה")

@@ -134,6 +134,7 @@ static void parse_disk(InstallState *s,char *value){
     while((part=strtok_r(NULL,"|",&save))){char *eq=strchr(part,'=');if(!eq)continue;*eq++=0;
         if(!strcmp(part,"model"))snprintf(d->model,sizeof d->model,"%s",eq);else if(!strcmp(part,"size"))d->size_bytes=strtoull(eq,NULL,10);
         else if(!strcmp(part,"bus"))snprintf(d->bus,sizeof d->bus,"%s",eq);else if(!strcmp(part,"removable"))d->removable=truth(eq);
+        else if(!strcmp(part,"smart"))snprintf(d->smart,sizeof d->smart,"%s",eq);   /* #3007 */
         else if(!strcmp(part,"has"))snprintf(d->has,sizeof d->has,"%s",eq);else if(!strcmp(part,"iso"))d->iso=truth(eq);}
     if(strstr(d->has,"imagesrv")||strstr(d->has,"ImageSrv"))s->existing_disk=s->ndisks;
     s->ndisks++;
@@ -188,9 +189,9 @@ static void arm_reboot(InstallState *s,double now){s->reboot_at=now+INSTALL_AUTO
 static void cancel_reboot(InstallState *s){s->reboot_at=0;s->reboot_left=0;}
 
 void install_demo(App *a,int view){InstallState *s=&a->install;memset(s,0,sizeof *s);s->active=s->demo=1;s->view=view;s->disk=0;s->disk_ack=1;s->existing_disk=1;s->ndisks=3;
-    s->disks[0]=(InstallDisk){"/dev/sda","VMware Virtual disk","scsi","gpt:2 partitions (ext4, vfat)",64424509440ULL,0,0};
-    s->disks[1]=(InstallDisk){"/dev/nvme0n1","Samsung SSD 980","nvme","imagesrv installation",1073741824000ULL,0,0};
-    s->disks[2]=(InstallDisk){"/dev/sr0","USB install media","usb","iso9660 filesystem",4294967296ULL,1,1};s->virt=INSTALL_VIRT_METAL;s->raid=RAID_1;   /* #1989: the RAID row on screen */
+    s->disks[0]=(InstallDisk){"/dev/sda","VMware Virtual disk","scsi","gpt:2 partitions (ext4, vfat)",64424509440ULL,0,0,""};
+    s->disks[1]=(InstallDisk){"/dev/nvme0n1","Samsung SSD 980","nvme","imagesrv installation",1073741824000ULL,0,0,""};
+    s->disks[2]=(InstallDisk){"/dev/sr0","USB install media","usb","iso9660 filesystem",4294967296ULL,1,1,""};s->virt=INSTALL_VIRT_METAL;s->raid=RAID_1;   /* #1989: the RAID row on screen */
     s->nnics=3;s->nic=0;s->secondary=1;
     s->nics[0]=(InstallNic){"ens18","Intel I219-LM","52:54:00:aa:10:01","מחובר","10.44.10.37/24","DHCP · שער 10.44.10.254","10.44.10.37","255.255.255.0","10.44.10.254","10.44.10.2"};
     s->nics[1]=(InstallNic){"ens19","Intel I350","52:54:00:aa:12:01","מחובר","—","אין כתובת (אין DHCP ברשת הזו)","","","",""};s->nics[2]=(InstallNic){"ens20","Intel I350","52:54:00:aa:14:01","לא מודלק","—","—","","","",""};
@@ -300,6 +301,20 @@ static void pick_ntp(InstallState *s,int mode){s->ntp_org=mode==1;s->ntp_manual=
 static void pick_backup(InstallState *s,int i){s->backup_pick=i;s->field_error[18][0]=0;}
 static void land(App *a,int id){InstallState *s=&a->install;a->focus=id;if(id==HIT_INSTALL_PRIMARY)s->secondary=0;else if(id==HIT_INSTALL_SECONDARY)s->secondary=1;else if(id==HIT_INSTALL_DHCP)s->static_mode=0;else if(id==HIT_INSTALL_STATIC){s->static_mode=1;seed_from_nic(s);}else if(id>=HIT_INSTALL_NIC_BASE&&id<HIT_INSTALL_NIC_BASE+s->nnics)pick_nic(s,id-HIT_INSTALL_NIC_BASE);else if(id==HIT_INSTALL_NTP_AUTO)pick_ntp(s,0);else if(id==HIT_INSTALL_NTP_ORG)pick_ntp(s,1);else if(id==HIT_INSTALL_NTP_MANUAL)pick_ntp(s,2);else if(id>=HIT_INSTALL_BACKUP_BASE&&id<=HIT_INSTALL_BACKUP_BASE+INSTALL_BACKUP_OTHER)pick_backup(s,id-HIT_INSTALL_BACKUP_BASE);}
 static void move_focus(App *a,int dir){int ids[INSTALL_MAX_STOPS],n=stops(&a->install,ids),at=-1,h=home(&a->install);if(!n)return;for(int i=0;i<n;i++)if(ids[i]==a->focus)at=i;if(at<0){for(int i=0;i<n;i++)if(ids[i]==h)at=i;if(at>=0){a->focus=h;return;}at=dir>0?-1:0;}land(a,ids[(at+dir+n)%n]);}
+/* #2826: on the network screen Tab walks the stops without choosing. The NIC list is one
+ * stop -- the chosen row -- and nothing is chosen by landing: Tab had moved the choice to
+ * eth1 on the way to the IP field (ESXi 10/11, twice), and re-seeded the static fields.
+ * The arrows still walk every row and choose by landing (#1206); Space keeps its role. */
+static int nic_row(const InstallState *s,int id){return id>=HIT_INSTALL_NIC_BASE&&id<HIT_INSTALL_NIC_BASE+s->nnics;}
+static void tab_focus(App *a,int dir){InstallState *s=&a->install;if(s->view!=INSTALL_NETWORK){move_focus(a,dir);return;}
+    int all[INSTALL_MAX_STOPS],n=stops(s,all),ids[INSTALL_MAX_STOPS],m=0,at=-1,chosen=HIT_INSTALL_NIC_BASE+(s->nic>=0?s->nic:0);
+    for(int i=0;i<n;i++)if(!nic_row(s,all[i])||all[i]==chosen)ids[m++]=all[i];
+    if(!m)return;
+    for(int i=0;i<m;i++)if(ids[i]==a->focus||(nic_row(s,a->focus)&&nic_row(s,ids[i])))at=i;
+    if(at<0){int h=home(s);for(int i=0;i<m;i++)if(ids[i]==h){a->focus=h;return;}at=dir>0?-1:0;}   /* like move_focus: a focus off the list lands home first */
+    a->focus=ids[(at+dir+m)%m];}
+/* #2826: a space is never part of an address, a mask, a gateway or the DNS list */
+static int no_space_field(int id){return id==HIT_INSTALL_ADDRESS||id==HIT_INSTALL_NETMASK||id==HIT_INSTALL_GATEWAY||id==HIT_INSTALL_DNS;}
 /* Focus follows the screen: after next/back the old field id would keep
  * receiving keystrokes (typed on the admin screen, landed in the hostname;
  * ESXi 21/09), and the first Tab only moved it here. */
@@ -405,6 +420,7 @@ if(e->type==UIEV_CLICK){a->ptr_x=e->x;a->ptr_y=e->y;s->osk_drag=0;int id=app_hit
 if(e->type==UIEV_KEY&&e->key==KEYSYM_F5){osk_f5(a);return 0;}   /* #2778 */if(e->type==UIEV_SCROLL&&(s->view==INSTALL_FAILED||(s->view==INSTALL_PROGRESS&&s->technical_open))){s->output_scroll-=e->delta*3;if(s->output_scroll<0)s->output_scroll=0;return 0;}/* keyboard-only servers (a rack has a keyboard, rarely a mouse): on the disk
  * screen Up/Down pick the disk, Space ticks "I understand"; Space also
  * toggles the technical details on the progress screen. */
+if(e->type==UIEV_CHAR&&e->ch==' '&&no_space_field(a->focus))return 0;   /* #2826: before "selected on arrival" empties the field */
 if(keys_2776(a,b,e))return 0;   /* #2776/#2777: every control from the keyboard; a field arrived at is selected */
 /* #2866: on a box of the manual time, ↑↓ change its value and digits are typed into it; Tab, Enter and Esc are the screen's */
 if(s->view==INSTALL_TIME&&s->ntp_manual&&install_mt_box(a->focus)>=0){int i=install_mt_box(a->focus);
@@ -426,7 +442,7 @@ if(e->type==UIEV_CHAR){size_t n;char *v=field(s,a->focus,&n);if(v&&strlen(v)+1<n
     /* scrolling owns the arrows only where the output box is on screen: a
      * technical_open left over from a failed run must not eat them later */
     int output=s->view==INSTALL_FAILED||(s->view==INSTALL_PROGRESS&&s->technical_open);
-    if(e->key==KEYSYM_ESC){if(s->view==INSTALL_DONE)cancel_reboot(s);else back(a);return 0;}if(e->key==KEYSYM_UP&&output){choose(a,b,HIT_INSTALL_OUTPUT_UP);return 0;}if(e->key==KEYSYM_DOWN&&output){choose(a,b,HIT_INSTALL_OUTPUT_DOWN);return 0;}if(e->key==KEYSYM_BACKSPACE){size_t n;char *v=field(s,a->focus,&n);if(v){size_t z=strlen(v);if(z)v[--z]=0;edited(s,a->focus);if(a->focus==HIT_INSTALL_PRIMARY_URL)s->primary_checked=s->primary_ok=0;}return 0;}if(e->key==KEYSYM_ENTER){if(s->view!=INSTALL_PROGRESS)choose(a,b,s->view==INSTALL_FAILED?HIT_INSTALL_RETRY:HIT_INSTALL_NEXT);return 0;}if(e->key==KEYSYM_TAB||e->key==KEYSYM_BACKTAB||e->key==KEYSYM_UP||e->key==KEYSYM_DOWN)move_focus(a,e->key==KEYSYM_TAB||e->key==KEYSYM_DOWN?1:-1);return 0;}
+    if(e->key==KEYSYM_ESC){if(s->view==INSTALL_DONE)cancel_reboot(s);else back(a);return 0;}if(e->key==KEYSYM_UP&&output){choose(a,b,HIT_INSTALL_OUTPUT_UP);return 0;}if(e->key==KEYSYM_DOWN&&output){choose(a,b,HIT_INSTALL_OUTPUT_DOWN);return 0;}if(e->key==KEYSYM_BACKSPACE){size_t n;char *v=field(s,a->focus,&n);if(v){size_t z=strlen(v);if(z)v[--z]=0;edited(s,a->focus);if(a->focus==HIT_INSTALL_PRIMARY_URL)s->primary_checked=s->primary_ok=0;}return 0;}if(e->key==KEYSYM_ENTER){if(s->view!=INSTALL_PROGRESS)choose(a,b,s->view==INSTALL_FAILED?HIT_INSTALL_RETRY:HIT_INSTALL_NEXT);return 0;}if(e->key==KEYSYM_TAB||e->key==KEYSYM_BACKTAB){tab_focus(a,e->key==KEYSYM_TAB?1:-1);return 0;}if(e->key==KEYSYM_UP||e->key==KEYSYM_DOWN)move_focus(a,e->key==KEYSYM_DOWN?1:-1);return 0;}
 /* a key of the open keyboard: Shift is for the next character only; the panel
  * between the keys takes the click, so it never reaches what is under it */
 static int osk_press(App *a,InstallBridge *b,int id){InstallState *s=&a->install;int k=id-HIT_INSTALL_OSK_BASE;if(!s->osk||s->osk!=s->view||k<0||k>OSK_PREVIEW)return 0;

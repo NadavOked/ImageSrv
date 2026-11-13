@@ -19,7 +19,7 @@ from server.app import create_console_app, create_runtime
 
 @pytest.fixture(autouse=True)
 def _mfa_required_for_admins(monkeypatch):
-    """נדב 18/10: החיוב כבוי כברירת מחדל (‏test_mfa_required_setting.py בודק את שני
+    """נדב 18/10: החיוב כבוי כברירת מחדל (test_mfa_required_setting.py בודק את שני
     המצבים). הקובץ הזה בודק את זרימת ה-MFA עצמה — הרשמה כפויה, קוד, קודי גיבוי —
     ולכן הוא רץ עם החיוב **דלוק**, כמו שרת שבו המנהל הדליק אותו."""
     from server import db
@@ -29,7 +29,7 @@ def _mfa_required_for_admins(monkeypatch):
 def _fresh(tmp_path, images_root, clock, monkeypatch):
     """אפליקציית הקונסולה (:8081) — MFA והחלפה כפויה. הקיוסק נבדק בנפרד.
 
-    ‏`create_app` המשולב שם את הקיוסק ראשון (#1073), ולכן login שם מדלג
+    `create_app` המשולב שם את הקיוסק ראשון (#1073), ולכן login שם מדלג
     על MFA. בייצור הם על שני פורטים.
     """
     from server.rounds import sender as sender_module
@@ -47,7 +47,7 @@ def _console_client(server):
 
 
 def _next_totp_step(server, name):
-    """‏#2414: הקוד שהפעיל את ה-MFA נצרך (‏`mfa_last_step`), וכניסה באותם 30 שניות
+    """#2414: הקוד שהפעיל את ה-MFA נצרך (`mfa_last_step`), וכניסה באותם 30 שניות
     בקוד הזה היא replay. טסט שנכנס מיד אחרי הרישום מדמה כאן שה-step הבא הגיע."""
     server["ctx"].conn.execute("UPDATE users SET mfa_last_step = NULL WHERE username = ?", (name,))
     server["ctx"].conn.commit()
@@ -149,7 +149,7 @@ def _setup_as_new_admin(server, name: str):
 
 
 def test_mfa_setup_refresh_keeps_the_pending_secret(server):
-    """‏#2101: רענון מסך ההגדרה אחרי שהטלפון סרק את ה-QR קורא שוב ל-setup. כל עוד
+    """#2101: רענון מסך ההגדרה אחרי שהטלפון סרק את ה-QR קורא שוב ל-setup. כל עוד
     לא אושר — אותו סוד ממתין, והקוד מהאפליקציה (שסרקה את הראשון) מפעיל MFA."""
     assert server["admin"].post("/api/console/users", json={
         "username": "refresh", "password": "Aa12345!", "role": "admin",
@@ -186,7 +186,7 @@ def test_2114_mfa_setup_rejects_active_mfa_without_changing_it(server):
 
 
 def test_mfa_pending_secret_expires(server, monkeypatch):
-    """‏#2101: הסוד הממתין מוגבל בזמן — אחרי `PENDING_TTL` בלי אישור, setup מגריל חדש."""
+    """#2101: הסוד הממתין מוגבל בזמן — אחרי `PENDING_TTL` בלי אישור, setup מגריל חדש."""
     from server.console import mfa as console_mfa
     first = _setup_as_new_admin(server, "stale")
     later = time.time() + console_mfa.PENDING_TTL + 1
@@ -205,7 +205,7 @@ def _journal_details(server, event: str) -> list[str]:
 
 
 def test_mfa_setup_returns_inline_svg_qr(server):
-    """‏#1150: ‏`svg` הוא QR של `otpauth_url` — inline (בלי `<?xml`/DOCTYPE),
+    """#1150: `svg` הוא QR של `otpauth_url` — inline (בלי `<?xml`/DOCTYPE),
     כי `console.js` מכניס אותו ישירות ל-`innerHTML` של `.qr`."""
     import qrcode  # noqa: F401 — תלות ייצור (python3-qrcode); חסרה = כישלון, לא דילוג
     body = _setup_as_new_admin(server, "qr")
@@ -218,7 +218,7 @@ def test_mfa_setup_returns_inline_svg_qr(server):
 
 def test_mfa_setup_svg_encodes_the_otpauth_url(server):
     """התוכן המקודד הוא `otpauth_url` עצמו — לא הסוד לבדו ולא URL אחר.
-    ‏`qrcode` אינו מפענח, ולכן משווים למה שאותה ספרייה מייצרת מאותו קלט:
+    `qrcode` אינו מפענח, ולכן משווים למה שאותה ספרייה מייצרת מאותו קלט:
     הפלט דטרמיניסטי (אין אקראיות ב-QR), ו-URL אחר נותן path אחר."""
     import qrcode
     import qrcode.image.svg as qsvg
@@ -230,7 +230,7 @@ def test_mfa_setup_svg_encodes_the_otpauth_url(server):
 
 
 def test_mfa_setup_without_qrcode_package_is_named_not_silent(server, monkeypatch):
-    """‏python3-qrcode חסר → ‏`svg == ""` ורשומת יומן שאומרת זאת בשם — לא
+    """python3-qrcode חסר → `svg == ""` ורשומת יומן שאומרת זאת בשם — לא
     קריסה של ההרשמה ולא "הצלחה" שקטה (עיקרון 5). הסוד וה-URL עדיין חוזרים."""
     monkeypatch.setitem(sys.modules, "qrcode", None)
     monkeypatch.setitem(sys.modules, "qrcode.image.svg", None)
@@ -259,7 +259,7 @@ def test_two_step_login_and_wrong_code(server):
     secret = server["ctx"].conn.execute(
         "SELECT mfa_secret FROM users WHERE username = 'mfa2'"
     ).fetchone()["mfa_secret"]
-    # ‏#1120: קוד שגוי צרך את ה-challenge — כניסה מחדש מנפיקה חדש
+    # #1120: קוד שגוי צרך את ה-challenge — כניסה מחדש מנפיקה חדש
     r = c2.post("/api/console/login", json={"username": "mfa2", "password": "Aa12345!"})
     challenge = r.json()["challenge"]
     ok = c2.post("/api/console/login/mfa", json={
@@ -671,8 +671,8 @@ def test_1120_admin_reset_revokes_sessions(server):
 
 def test_2409_reset_password_does_not_bypass_mfa(server):
     """#2409: סיסמה זמנית מאיפוס של מנהל, למשתמש שה-MFA שלו דלוק, אינה עוקפת את
-    הקוד. עד התיקון: ‏login → ‏must_change_password → ‏`/me/password` → עוגייה מלאה
-    ו-`GET /users` ‏200, בלי TOTP. עכשיו: קוד קודם, ואז ההחלפה הכפויה."""
+    הקוד. עד התיקון: login → must_change_password → `/me/password` → עוגייה מלאה
+    ו-`GET /users` 200, בלי TOTP. עכשיו: קוד קודם, ואז ההחלפה הכפויה."""
     _, secret = _mfa_user(server, "rmfa")
     r = server["admin"].post("/api/console/users/rmfa/reset-password")
     assert r.status_code == 200, r.text
@@ -709,7 +709,7 @@ def test_2409_reset_password_does_not_bypass_mfa(server):
 
 def test_2409_wrong_code_after_reset_still_counts_toward_the_lock(server, monkeypatch):
     """#2409: סיסמה זמנית נכונה אינה מאפסת את מונה הניסיונות — כמו בכל כניסת MFA
-    (#1120). עד התיקון ‏must_change_password איפס אותו בשלב הסיסמה."""
+    (#1120). עד התיקון must_change_password איפס אותו בשלב הסיסמה."""
     from server.console import login_guard
     t = {"now": 1_000_000.0}
     monkeypatch.setattr(login_guard, "now", lambda: t["now"])
@@ -763,7 +763,7 @@ def test_2414_the_enrollment_code_is_spent(server, totp_clock):
 
 
 def test_2414_an_older_code_is_refused_after_a_newer_one(server, totp_clock):
-    """‏valid_window=1 מקבל גם את ה-step הקודם — אבל לא אחרי שנצרך step חדש ממנו."""
+    """valid_window=1 מקבל גם את ה-step הקודם — אבל לא אחרי שנצרך step חדש ממנו."""
     secret = _self_enrolled(server, "older")
     totp_clock["now"] += 90
     code_n = totp.totp_code(secret, when=totp_clock["now"])
@@ -785,7 +785,7 @@ def test_1120_password_longer_than_128_is_rejected_by_name(server):
 
 
 def test_1120_a_challenge_issued_before_the_lock_dies_with_the_lock(server, monkeypatch):
-    """#1120: ‏`/login/mfa` בודק את הנעילה בעצמו (`login_guard.check`), ולא
+    """#1120: `/login/mfa` בודק את הנעילה בעצמו (`login_guard.check`), ולא
     סומך על כך ש-`/login` כבר בדק. challenge שהונפק **לפני** הנעילה עדיין
     תקף בזמן — ובלי הבדיקה, מי שמחזיק אותו נכנס לחשבון נעול עם קוד נכון.
     עד כאן אף טסט לא הפיל את הסרת הבדיקה (בקרה רטרואקטיבית, 24/10): שאר
@@ -814,7 +814,7 @@ def test_1120_a_challenge_issued_before_the_lock_dies_with_the_lock(server, monk
 def test_1243_idle_default_is_600_on_every_login_path(server):
     """#1243: ברירת המחדל של הניתוק בחוסר פעילות היא 600 שניות — ב-DB
     טרי, וגם בגיבוי (`or …`) של שלושת המסלולים שמחזירים `idle_seconds`:
-    ‏`/login` (console_login), ‏`/login/mfa` (console_mfa) ו-`/me`
+    `/login` (console_login), `/login/mfa` (console_mfa) ו-`/me`
     (console_api). שלושה עותקים של אותו מספר — הטסט תופס סחיפה של כל אחד."""
     from server.db import DEFAULT_SETTINGS, get_setting      # noqa: PLC0415
     conn = server["ctx"].conn
@@ -841,9 +841,9 @@ def test_1243_idle_default_is_600_on_every_login_path(server):
 
 # ---------- #326 — ההגבלה של session מוגבלת אינה נשענת על כותרת Host ----------
 
-#: ‏CVE-2026-48710: ‏starlette (‏<1.0.1, כולל 0.46.2 שה-CI מתקין מ-PyPI) בונה
+#: CVE-2026-48710: starlette (<1.0.1, כולל 0.46.2 שה-CI מתקין מ-PyPI) בונה
 #: את ``request.url`` מכותרת ``Host`` בלי לאמת אותה, בזמן שהניתוב הולך לפי
-#: ‏``scope["path"]``. ‏Host כזה מזיז את ``request.url.path`` לנתיב המותר,
+#: ``scope["path"]``. Host כזה מזיז את ``request.url.path`` לנתיב המותר,
 #: והבקשה מגיעה לנתיב אחר לגמרי.
 _POISONED_MFA_HOST = "testserver/api/console/me/mfa/x?"
 _POISONED_PWCHANGE_HOST = "testserver/api/console/me/password?"
@@ -871,7 +871,7 @@ def test_326_mfa_enrollment_session_ignores_a_poisoned_host(server):
 def test_326_enforce_purpose_reads_the_routed_path(purpose, host, method, path, detail):
     """ההכרעה נעשית על הנתיב שהניתוב הולך לפיו, לא על ``request.url``.
 
-    ‏starlette מוטלא (‏Debian ‏0.46.1-3+deb13u2 ומעלה) כבר מאמת את ``Host``, ולכן
+    starlette מוטלא (Debian 0.46.1-3+deb13u2 ומעלה) כבר מאמת את ``Host``, ולכן
     הטסט שלמעלה עובר שם גם בלי התיקון. כאן ``request.url.path`` משקר במפורש —
     כך הבדיקה תלויה בקוד שלנו בלבד, בכל גרסת starlette."""
     from types import SimpleNamespace

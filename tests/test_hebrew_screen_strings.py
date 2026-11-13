@@ -9,22 +9,22 @@ journal) נשארים באנגלית.
 הטסט הזה הוא השומר. הוא סורק את **נקודות הכתיבה למסך** — לא כל מחרוזת
 בקוד — ונופל על משפט ASCII בלבד (שלוש מילים ומעלה) באחת מהן:
 
-* סוכן (‏sh): ‏`message=` / `title=` / `toast=` ל-state של הגואי, הארגומנט
-  הראשון של `gui_error`, שדה ה-error של יעד (‏`target_set … failed|skipped|
-  waiting|replacing`, ‏`fail_written_target`, ‏`_capture_failed`,
-  ‏`_direct_failed`, ‏`_drivers_fail`, ‏`_bootentry_fail`), והמשתנים שזורמים
-  אליו (‏`PLAN_ERROR`, ‏`SHRINK_ERROR`, ‏`LC_ERROR`, ‏`GROW_ERROR`, ‏`_dr_why`,
-  ‏`_bs_why`, ‏`_sr1_why`) ושדה `"error":` של hostname.
-* גואי נייטיב (‏C): מחרוזת ראשונה בקריאות הציור (‏`rtl`, ‏`text_make`,
-  ‏`key_button`, ‏`draw_pill`, …) ובהשמה ל-`title`/`sub`/`form_error`/`toast`.
+* סוכן (sh): `message=` / `title=` / `toast=` ל-state של הגואי, הארגומנט
+  הראשון של `gui_error`, שדה ה-error של יעד (`target_set … failed|skipped|
+  waiting|replacing`, `fail_written_target`, `_capture_failed`,
+  `_direct_failed`, `_drivers_fail`, `_bootentry_fail`), והמשתנים שזורמים
+  אליו (`PLAN_ERROR`, `SHRINK_ERROR`, `LC_ERROR`, `GROW_ERROR`, `_dr_why`,
+  `_bs_why`, `_sr1_why`) ושדה `"error":` של hostname.
+* גואי נייטיב (C): מחרוזת ראשונה בקריאות הציור (`rtl`, `text_make`,
+  `key_button`, `draw_pill`, …) ובהשמה ל-`title`/`sub`/`form_error`/`toast`.
 * אשף ההתקנה: כל קוד כשל של המנוע שיש לו שדה — יש לו גם שורה בעברית.
 * יומן הקונסולה: כל פירוט אנגלי שנכתב ל-`journal(…)` יש לו כלל תרגום.
 * מסך השרת (DCUI): כל הודעת ActionResult מתורגמת ב-`view.he`.
-* תשובות HTTP של הקונסולה: ‏`HTTPException` בלי עברית — רק ברשימה הלבנה
+* תשובות HTTP של הקונסולה: `HTTPException` בלי עברית — רק ברשימה הלבנה
   (קודי מכונה וממשקי סוכן).
 
-מה לא נבדק, בכוונה: מסך הטקסט של הקונסולה הלינוקסית (‏`ui.sh`,
-‏`dcui/app.py` ב-80x25) — היא אינה מציירת עברית (#1182); ‏`log …` ו-`>&2`;
+מה לא נבדק, בכוונה: מסך הטקסט של הקונסולה הלינוקסית (`ui.sh`,
+`dcui/app.py` ב-80x25) — היא אינה מציירת עברית (#1182); `log …` ו-`>&2`;
 ופלט גולמי של כלי שמוצג מאחורי "פרטים טכניים".
 """
 
@@ -51,12 +51,12 @@ dhcp dns ip mac guid uuid partuuid smart ata nvme sata ssd hdd usb rc stage
 mb gb mib gib kb bytes byte iso http https tftp wol dcui gui
 """.split())
 
-#: מילים שהן מזהי קוד/מצב ולא משפט (‏state=failed וכד').
+#: מילים שהן מזהי קוד/מצב ולא משפט (state=failed וכד').
 WORD = re.compile(r"[A-Za-z][A-Za-z']+")
 
 
 def english_words(text: str) -> list[str]:
-    """המילים הלטיניות שמרכיבות משפט: בלי ‏$משתנים, ‏--דגלים, ‏key=value,
+    """המילים הלטיניות שמרכיבות משפט: בלי $משתנים, --דגלים, key=value,
     נתיבים וטוקנים טכניים."""
     text = re.sub(r"\$\{[^}]*\}|\$\([^)]*\)|\$[A-Za-z_][A-Za-z0-9_]*", " ", text)
     text = re.sub(r"--?[A-Za-z][\w-]*", " ", text)
@@ -157,7 +157,7 @@ C_SINKS = re.compile(
 C_ASSIGN = re.compile(
     r"""snprintf\s*\([^;]*?\b(?:form_error|room_error|class_error|toast|done_title|done_sub)\b[^"]*"((?:[^"\\]|\\.)*)\""""
 )
-#: מסגרות הדגמה שמציירות את המסכים ל-PNG ושל מנגנון ההתקנה: ‏title/log שם הם
+#: מסגרות הדגמה שמציירות את המסכים ל-PNG ושל מנגנון ההתקנה: title/log שם הם
 #: הלוג הטכני שמאחורי "פרטים טכניים", לא כותרת מסך.
 C_SKIP = {"install.c"}
 
@@ -230,7 +230,7 @@ def test_the_installer_field_error_is_not_the_engine_english_line():
 # שאלה שהמכונה ממתינה עליה (prompt ב-hello → "ממתין למפעיל: …" בקונסולה)
 # --------------------------------------------------------------------------- #
 
-#: ‏`attended_start "…"` / ‏`attended "…" cmd` עם שאלה קבועה — מה שעולה כ-`prompt` כמו שהוא.
+#: `attended_start "…"` / `attended "…" cmd` עם שאלה קבועה — מה שעולה כ-`prompt` כמו שהוא.
 ATTENDED_QUESTION = re.compile(r"""\battended(?:_start)?\s+"([^"$]+)"(?:\s|;|$)""")
 
 
@@ -311,7 +311,7 @@ def test_every_english_journal_detail_has_a_translation_rule():
     assert not bad, "פירוט אנגלי ביומן בלי כלל ב-journal_he_detail:\n" + "\n".join(bad)
 
 
-#: ‏#2509: סיומת "[+N identical … in the last Ss not journaled]" נבנית ב-f-string נפרד ונצמדת
+#: #2509: סיומת "[+N identical … in the last Ss not journaled]" נבנית ב-f-string נפרד ונצמדת
 #: לפירוט דרך משתנה, והאירוע שלה מגיע מ-`verdict.event`. `_journal_details` מדלג על קריאה
 #: כזאת (האירוע אינו קבוע), ולכן "identical refusals" הגיע ליומן באנגלית. כאן סורקים את
 #: הסיומת עצמה, בכל מקום בשרת, ובודקים אותה מול האירועים שהיא יכולה לצאת תחתיהם.
@@ -360,14 +360,14 @@ def test_every_repeat_suffix_built_in_code_has_a_hebrew_rule():
 # מסך השרת (DCUI)
 # --------------------------------------------------------------------------- #
 
-#: הודעות DCUI שמוצגות במסך הטקסט בלבד (‏curses, ‏ASCII) ולעולם לא עוברות ב-`view.he`.
+#: הודעות DCUI שמוצגות במסך הטקסט בלבד (curses, ASCII) ולעולם לא עוברות ב-`view.he`.
 DCUI_TEXT_SCREEN_ONLY = {
     # app.py: נכתבת רק כשהמסך הגרפי לא עלה — אז אין מסך עברי שיציג אותה.
     "Graphic screen unavailable: ",
-    # app.py `_draw`: ‏curses על מסוף קטן מ-80x25 — המסך הגרפי אינו מעורב.
+    # app.py `_draw`: curses על מסוף קטן מ-80x25 — המסך הגרפי אינו מעורב.
     "terminal too small (80x25 needed)",
 }
-#: ‏`samples.py` הוא נתוני הדגמה לפריימים של המוקאפ, לא הודעות שהשרת כותב.
+#: `samples.py` הוא נתוני הדגמה לפריימים של המוקאפ, לא הודעות שהשרת כותב.
 DCUI_NOT_SCANNED = {"samples.py"}
 
 
@@ -455,7 +455,7 @@ def test_every_dcui_action_message_is_translated_for_the_graphic_screen():
 # תשובות HTTP של הקונסולה
 # --------------------------------------------------------------------------- #
 
-#: קודי מכונה (‏JS מתרגם אותם) וממשקי סוכן — שם התשובה נקראת על ידי קוד, לא אדם.
+#: קודי מכונה (JS מתרגם אותם) וממשקי סוכן — שם התשובה נקראת על ידי קוד, לא אדם.
 HTTP_ENGLISH_OK = {
     ("server/console/auth.py", "password_change_required"),
     ("server/console/auth.py", "mfa_enrollment_required"),
@@ -523,7 +523,7 @@ def _shell_scripts() -> list[Path]:
 
 
 def test_no_ascii_apostrophe_sits_inside_a_hebrew_word_in_shell():
-    """‏`הרג'יסטרי` בתוך printf '…' שבר את הציטוט. הגרש העברי הוא ‏׳ (U+05F3)."""
+    """`הרג'יסטרי` בתוך printf '…' שבר את הציטוט. הגרש העברי הוא ׳ (U+05F3)."""
     rx = re.compile("([א-ת])'([א-ת])")
     bad = []
     for path in _shell_scripts():

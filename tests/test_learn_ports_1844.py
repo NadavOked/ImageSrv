@@ -1,4 +1,4 @@
-"""‏#1844 — מגמת CRC/קישור לכל חיבור SATA: "כנראה כבל" מול "הדיסק".
+"""#1844 — מגמת CRC/קישור לכל חיבור SATA: "כנראה כבל" מול "הדיסק".
 
 אותו חיבור שבעייתי עם ≥2 דיסקים שונים — החיבור. אותו דיסק שבעייתי ב-≥2
 חיבורים — הדיסק. "לא נמדד" אינו בעיה ואינו "תקין". הלמידה אינה חוסמת —
@@ -69,7 +69,7 @@ def test_one_disk_bad_in_two_connections_is_the_disk(conn):
 
 
 def test_not_measured_is_not_a_problem(conn):
-    """‏crc_delta ‏None וקישור שלא נקרא — אינם ראיה לבעיה (עיקרון 5)."""
+    """crc_delta None וקישור שלא נקרא — אינם ראיה לבעיה (עיקרון 5)."""
     _obs(conn, MAC, 1, "S1", crc=None, link=(None, 6.0))
     _obs(conn, MAC, 1, "S2", crc=0, link=(6.0, 6.0))
     got = learn_ports.verdict(conn, MAC, 1, None)
@@ -189,7 +189,7 @@ def test_the_room_learns_from_finished_waves_and_tells_the_next_one(room_server)
 
 
 def test_the_console_says_the_learned_connection_in_words_not_a_colour():
-    """‏#2848 (נדב 11/11): מה שנלמד על החיבור הוא הערה ב-title בטקסט מהשרת — לא צבע (כתום הוא של SMART)."""
+    """#2848 (נדב 11/11): מה שנלמד על החיבור הוא הערה ב-title בטקסט מהשרת — לא צבע (כתום הוא של SMART)."""
     import re
     js = console_js()
     slot = re.search(r"^function slotClass\(s\) \{.*?^\}", js, re.M | re.S).group(0)

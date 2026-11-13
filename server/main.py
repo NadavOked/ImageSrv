@@ -35,13 +35,13 @@ def _configure_stdio() -> None:
 
 
 class InterfaceDetectionError(RuntimeError):
-    """‏`ip` קיים ורץ, אבל אף כרטיס אינו נושא את כתובת ה-server-url — או
+    """`ip` קיים ורץ, אבל אף כרטיס אינו נושא את כתובת ה-server-url — או
     שהבדיקה עצמה נשברה. זהו שרת לינוקס אמיתי שהשידור שלו ייצא לכרטיס הלא
     נכון, ולכן עדיף להיכשל בגלוי מלשדר לרשת הרגילה (#514, #19)."""
 
 
 def _ip_nics() -> list | None:
-    """כרטיסים מ-`ip -json addr`. ‏None רק כשאין `ip` (תחנת פיתוח)."""
+    """כרטיסים מ-`ip -json addr`. None רק כשאין `ip` (תחנת פיתוח)."""
     try:
         out = subprocess.run(
             ["ip", "-json", "addr"], capture_output=True, text=True,
@@ -60,12 +60,12 @@ def _ip_nics() -> list | None:
 def _interface_for(server_url: str) -> str | None:
     """הכרטיס שנושא את כתובת ה-server-url — הוא ממשק וילן ההפצה.
 
-    השידור (udp-sender) חייב לצאת דווקא ממנו: בלי ‎--interface‏ udpcast
+    השידור (udp-sender) חייב לצאת דווקא ממנו: בלי --interface udpcast
     בוחר את ברירת המחדל של הניתוב, וברשת עם שני כרטיסים זה ה-LAN —
     השידור לא פוגש אף מקבל ונכשל, וגרוע מזה, הוא מדבר ברשת הרגילה (#19).
 
     מחזיר `None` **רק** כשאין `ip` כלל — תחנת פיתוח (לא לינוקס), שם
-    השידור ממילא מזויף. ‏`ip` שקיים ונכשל, או שרץ ולא מצא התאמה, הם שרת
+    השידור ממילא מזויף. `ip` שקיים ונכשל, או שרץ ולא מצא התאמה, הם שרת
     אמיתי במצב שגוי — ומעלים `InterfaceDetectionError` במקום `None` שקט
     (עיקרון 5: פעולה שלא הצליחה לבדוק נכשלת, לא מוותרת) (#514).
     """
@@ -73,7 +73,7 @@ def _interface_for(server_url: str) -> str | None:
     nics = _ip_nics()
     if nics is None:
         return None
-    # ‏--server-url עם שם מארח (ולא IP) לא יתאים ל-addr.local לעולם —
+    # --server-url עם שם מארח (ולא IP) לא יתאים ל-addr.local לעולם —
     # פותרים אותו לכתובותיו לפני ההשוואה.
     candidates = {host}
     try:
@@ -86,13 +86,13 @@ def _interface_for(server_url: str) -> str | None:
                 return nic.get("ifname")
     raise InterfaceDetectionError(
         f"אף כרטיס אינו נושא את {host} — udp-sender היה משדר לכרטיס הלא "
-        f"נכון. העבר ‎--interface‏ במפורש.")
+        f"נכון. העבר \u200e--interface\u200f במפורש.")
 
 
 def _address_for_interface(name: str) -> str | None:
     """IPv4 של הכרטיס — כתובת ה-bind של הסוכן/קיוסק (#1074).
 
-    ‏None רק כשאין `ip` (תחנת פיתוח). כרטיס שקיים בלי IPv4, או `ip`
+    None רק כשאין `ip` (תחנת פיתוח). כרטיס שקיים בלי IPv4, או `ip`
     שנכשל — `InterfaceDetectionError`, לא נפילה ל-0.0.0.0 בשקט.
     """
     nics = _ip_nics()
@@ -111,10 +111,10 @@ def _address_for_interface(name: str) -> str | None:
 
 
 def agent_uvicorn_config(app, host: str, port: int):
-    """התצורה של מאזין הסוכן (8080) — ‏‎/boot של GRUB ו-API הסוכן.
+    """התצורה של מאזין הסוכן (8080) — /boot של GRUB ו-API הסוכן.
 
-    ‏#1423: ‏`http=ResetBootOnPeerClose` עונה ב-RST כש-GRUB סוגר חיבור
-    ‎/boot. בלעדיו השרת נשאר ב-LAST-ACK על החיבור האחרון, ו-GRUB, שיוצא
+    #1423: `http=ResetBootOnPeerClose` עונה ב-RST כש-GRUB סוגר חיבור
+    /boot. בלעדיו השרת נשאר ב-LAST-ACK על החיבור האחרון, ו-GRUB, שיוצא
     מאותם פורטי מקור בכל אתחול, נתקע עליו באתחול הבא.
     """
     import uvicorn
@@ -126,10 +126,10 @@ def agent_uvicorn_config(app, host: str, port: int):
 
 def build_parser() -> argparse.ArgumentParser:
     """הדגלים של השרת, בנפרד מההרצה — כדי שאפשר יהיה לפרוס שורת פקודה
-    בבדיקה בלי להרים uvicorn (‏#201: ה-e2e מרכיב argv, וצריך ראיה שהוא
+    בבדיקה בלי להרים uvicorn (#201: ה-e2e מרכיב argv, וצריך ראיה שהוא
     מתפרס כאן ולא נבלע)."""
     parser = argparse.ArgumentParser(description="ImageSrv server + console")
-    # ‏#1088: אינו חובה עוד. ריק = הכתובת נקראת ממה שנרשם מהקונסולה
+    # #1088: אינו חובה עוד. ריק = הכתובת נקראת ממה שנרשם מהקונסולה
     # (`deploy:url`, בהדלקת DHCP על כרטיס), ואם גם זה חסר — "רשת ההפצה לא
     # הוגדרה": הסוכן על loopback בלבד, והקונסולה אומרת מה לעשות.
     # היחידה מעבירה ``${IMAGESRV_URL}`` גם כשהוא ריק (ארגומנט ריק אחד).
@@ -141,14 +141,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "כשרשת ההפצה מוגדרת מהקונסולה (#1088)")
     parser.add_argument("--data-dir", default="/var/lib/imagesrv")
     parser.add_argument("--images", default="/srv/imagesrv/images")
-    # ‏#748: עץ הקוד עצמו — משם ``git describe``/``fetch``/``checkout``
+    # #748: עץ הקוד עצמו — משם ``git describe``/``fetch``/``checkout``
     # של כפתור העדכון. ברירת המחדל היא תיקיית הקוד (ImageStore ->
     # server/main.py -> parents[1]), שזהה ל-``WorkingDirectory`` ביחידת
-    # systemd (‏/opt/imagesrv) בלי לצטט אותה כאן כברירת מחדל שנייה.
+    # systemd (/opt/imagesrv) בלי לצטט אותה כאן כברירת מחדל שנייה.
     parser.add_argument("--repo-dir", default=None,
                         help="עץ הגיט של השרת; ברירת מחדל: תיקיית הקוד")
     parser.add_argument("--boot-dir", default="/srv/imagesrv/boot",
-                        help="הקרנל וה-initramfs שהמתקין הניח; מוגש תחת ‎/boot")
+                        help="הקרנל וה-initramfs שהמתקין הניח; מוגש תחת \u200e/boot")
     parser.add_argument("--dhcp-leases", default=identity.DEFAULT_LEASES,
                         help="קובץ החכירות של dnsmasq — שומר הזהות (#855) "
                              "משווה אליו את כתובת המקור של hello/progress")
@@ -159,20 +159,20 @@ def build_parser() -> argparse.ArgumentParser:
                         default=os.environ.get("IMAGESRV_EXTRA_CMDLINE", ""),
                         help="תוספות לשורת הקרנל של הסוכן (למשל קונסולה "
                              "טורית ו-debug במעבדה); גם IMAGESRV_EXTRA_CMDLINE")
-    # ‏#1074 (R20-F1): ברירת המחדל היא כתובת כרטיס ההפצה, לא 0.0.0.0.
-    # ‏None כאן = "לא ביקשו"; ‏main ממלא מ-`--interface` (או מ-server-url
-    # כשאין `ip`). ‏0.0.0.0 רק בבקשה מפורשת, ועם אזהרה ביומן.
+    # #1074 (R20-F1): ברירת המחדל היא כתובת כרטיס ההפצה, לא 0.0.0.0.
+    # None כאן = "לא ביקשו"; main ממלא מ-`--interface` (או מ-server-url
+    # כשאין `ip`). 0.0.0.0 רק בבקשה מפורשת, ועם אזהרה ביומן.
     parser.add_argument("--host", default=None,
                         help="כתובת ה-bind של הסוכן. ברירת מחדל: "
                              "כתובת כרטיס ההפצה (--interface). 0.0.0.0 רק "
                              "בבקשה מפורשת (R20-F1)")
     parser.add_argument("--port", type=int, default=8080,
                         help="פורט הסוכן: hello/pulls/progress/images ו-/boot")
-    # ‏#731 (tracer 1 של #703): הקונסולה/הניהול מאזינים על פורט **נפרד**
+    # #731 (tracer 1 של #703): הקונסולה/הניהול מאזינים על פורט **נפרד**
     # מהסוכן, כדי שחומת אש תוכל לחשוף רק אותו לווילן הניהול.
     parser.add_argument("--console-port", type=int, default=8081,
                         help="פורט הקונסולה/הניהול: /api/console ו-/console")
-    # ‏#770 (tracer 4 של #703): הקונסולה נקשרת פר-ממשק — לכרטיס הניהול/
+    # #770 (tracer 4 של #703): הקונסולה נקשרת פר-ממשק — לכרטיס הניהול/
     # המשרדים בלבד, ולא ל-`--host` (וילן ההפצה). קשירה ל-`0.0.0.0` חשפה
     # את API הניהול בכל הכרטיסים (כולל ההפצה/כיתות) והתנגשה עם ה-preseed
     # על 8081. ברירת המחדל **fail-closed** היא loopback ולא `0.0.0.0`:
@@ -180,28 +180,28 @@ def build_parser() -> argparse.ArgumentParser:
     # בממשקים אחרים — "הגבול הוא ה-socket" (#703), ועיקרון 5 (השומר עובד
     # כברירת מחדל, לא רק אם המפעיל זכר דגל). המפעיל קובע את כתובת הניהול
     # דרך היחידה (systemctl edit). TLS לקונסולה הוא tracer 5.
-    # ‏#1088: הדגל מקבל גם **שם כרטיס** (`eth0`/`ens18`) — כרטיס וילן השרתים
+    # #1088: הדגל מקבל גם **שם כרטיס** (`eth0`/`ens18`) — כרטיס וילן השרתים
     # הוא לקוח DHCP של המכללה; השרת פותר את הכתובת בעלייה ומאזין מחדש
-    # כשהיא משתנה (‏`ifaddr.AddressWatcher`). בלי כתובת על הכרטיס (lease
+    # כשהיא משתנה (`ifaddr.AddressWatcher`). בלי כתובת על הכרטיס (lease
     # שעוד לא הגיע) הקונסולה על 127.0.0.1 בלבד, עד שתגיע.
     parser.add_argument("--console-host", default="127.0.0.1",
                         help="כתובת ה-bind של הקונסולה — כרטיס הניהול/"
                              "המשרדים בלבד: כתובת, או שם כרטיס (ואז מאזין "
                              "מחדש בהחלפת כתובת, #1088). ברירת מחדל loopback "
                              "(fail-closed); לעולם לא 0.0.0.0 בלי בקשה מפורשת")
-    # ‏#703 (tracer 5): הקונסולה מוגשת ב-HTTPS בלבד — תעודה חתומה-עצמית
-    # שנוצרת פעם אחת ל-`<data_dir>/console-tls/` ונשארת. ‏HTTP על 8081
-    # אינו מוגש (fail-closed, בלי הפניה). ‏`off` מותר **רק** על loopback —
+    # #703 (tracer 5): הקונסולה מוגשת ב-HTTPS בלבד — תעודה חתומה-עצמית
+    # שנוצרת פעם אחת ל-`<data_dir>/console-tls/` ונשארת. HTTP על 8081
+    # אינו מוגש (fail-closed, בלי הפניה). `off` מותר **רק** על loopback —
     # הרצת פיתוח ו-`tools/e2e`; על כרטיס ניהול הסיסמה הייתה עוברת גלויה.
     parser.add_argument("--console-tls", choices=("on", "off"), default="on",
                         help="TLS לקונסולה (8081). off מותר רק עם "
                              "--console-host על loopback (127.0.0.1) — "
                              "פיתוח/e2e; ברירת מחדל on")
-    # ‏#201: הפורט שהשידור תופס בפועל (וגם portbase+1). בייצור לא נוגעים
-    # בו — ‏#1826: הסוכן מקבל אותו ב-`session.portbase`, אבל סוכן ישן מצפה
-    # ל-9000 וחומת האש של המתקין פותחת 9000-9001 בלבד (‏`--mcast-ports`).
+    # #201: הפורט שהשידור תופס בפועל (וגם portbase+1). בייצור לא נוגעים
+    # בו — #1826: הסוכן מקבל אותו ב-`session.portbase`, אבל סוכן ישן מצפה
+    # ל-9000 וחומת האש של המתקין פותחת 9000-9001 בלבד (`--mcast-ports`).
     # הדגל קיים בשביל מי שמריץ שרת אמיתי במקום שאסור לו להתנגש בהפצה:
-    # ‏`tools/e2e/harness.py`. **בכוונה דגל ולא משתנה סביבה** — משתנה
+    # `tools/e2e/harness.py`. **בכוונה דגל ולא משתנה סביבה** — משתנה
     # סביבה שנשאר תקוע ב-shell או ביחידה משנה את פורט ההפצה של הייצור
     # בשקט, ודווקא כאן זה הכשל שמנסים למנוע. דגל נראה ב-`ps`.
     parser.add_argument("--sender-portbase", type=int, default=None,
@@ -210,9 +210,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sender-simulate", action="store_true",
                         help="שולח מדומה — בלי udp-sender ובלי בדיקת פורטים; "
                              "tools/e2e_simulation.py בלבד, לעולם לא בשרת אמיתי")
-    # ‏Storage Nodes (#655/#723): תפקיד ההתקנה של השרת. **תצורת שרת
+    # Storage Nodes (#655/#723): תפקיד ההתקנה של השרת. **תצורת שרת
     # בלבד** — אינה נכנסת לשורת הפקודה של הקרנל (עיקרון 2), רק להגדרות.
-    # ‏#732: ברירת המחדל היא ``None`` (לא ``standalone``). ריסטארט בלי
+    # #732: ברירת המחדל היא ``None`` (לא ``standalone``). ריסטארט בלי
     # הדגל **אינו** כותב תפקיד, ולכן אינו דורס ``secondary`` שמור בשקט
     # (fail-open קריטי — משני שהופך לראשי חושף ניהול+בין-סניפים). התפקיד
     # נקרא ממילא fail-closed; כותבים רק כשהדגל ניתן במפורש.
@@ -223,10 +223,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--primary-url", default=None,
                         help="כתובת השרת הראשי — חובה ל-secondary, מתעלמים "
                              "ב-standalone")
-    # ‏#740 (tracer 2.1): מאזין ה-enrollment הבין-שרתי — **נפרד** מהסוכן/
+    # #740 (tracer 2.1): מאזין ה-enrollment הבין-שרתי — **נפרד** מהסוכן/
     # קונסולה/קיוסק, TLS 1.3 + mTLS בלבד, וללא נתיבי ניהול או עוגיות. עולה
-    # רק כשמסופק ‏--interserver-host/port והשרת הוא secondary (‏#1313: משני
-    # בלי הדגל — על ‏--console-host שאינו loopback). ‏--interserver-url
+    # רק כשמסופק --interserver-host/port והשרת הוא secondary (#1313: משני
+    # בלי הדגל — על --console-host שאינו loopback). --interserver-url
     # הוא הכתובת המפורשת שהמשני מציג (מאומתת קפדנית: https+פורט מפורש).
     parser.add_argument("--interserver-host", default=None,
                         help="כתובת ה-bind של מאזין ה-enrollment הבין-שרתי — "
@@ -240,7 +240,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _deploy_state(args) -> deploy_net.DeployState:
-    """‏#1088: מקור כתובת ההפצה — הדגל, מה שנרשם מהקונסולה, או "לא הוגדרה".
+    """#1088: מקור כתובת ההפצה — הדגל, מה שנרשם מהקונסולה, או "לא הוגדרה".
 
     ה-DB נפתח כאן לרגע **רק** כשאין דגל: עם `--server-url` אין מה לקרוא,
     ובדיקות שמזייפות את כל מה שאחרי הפרסור אינן נוגעות בדיסק.
@@ -258,10 +258,10 @@ def _deploy_state(args) -> deploy_net.DeployState:
 
 
 def _resolve_bind_host(parser, flag: str, value: str | None) -> tuple[str | None, str | None]:
-    """‏#1088: ‏(כתובת, שם-כרטיס) לדגל bind שמקבל כתובת **או** שם כרטיס.
+    """#1088: (כתובת, שם-כרטיס) לדגל bind שמקבל כתובת **או** שם כרטיס.
 
-    כתובת → ‏(כתובת, None). שם כרטיס → הכתובת שלו עכשיו (או None כשאין
-    lease עדיין) ושמו. ‏`ip` שנכשל, או כרטיס שאינו קיים — ‏`parser.error`:
+    כתובת → (כתובת, None). שם כרטיס → הכתובת שלו עכשיו (או None כשאין
+    lease עדיין) ושמו. `ip` שנכשל, או כרטיס שאינו קיים — `parser.error`:
     כתובת שלא הצלחנו לקרוא אינה "אין כתובת" (עיקרון 5).
     """
     from server.net import ifaddr
@@ -275,7 +275,7 @@ def _resolve_bind_host(parser, flag: str, value: str | None) -> tuple[str | None
 
 
 class _ServerGroup(list):
-    """‏#705: כמה מאזיני mTLS (אחד לכל כרטיס) כאובייקט אחד למנהל המאזינים."""
+    """#705: כמה מאזיני mTLS (אחד לכל כרטיס) כאובייקט אחד למנהל המאזינים."""
 
     @property
     def port(self):
@@ -301,8 +301,8 @@ def ifaddr_current(name: str) -> str | None:
 
 
 def _nic_baseline(nic, args, runtime, console_iface, console_addr, inter_iface, inter_addr) -> None:
-    """‏#705: על איזה כרטיס כל מאזין נקשר **היום** — אותם תנאים בדיוק כמו
-    הקשירה למטה (‏#1310 ראשי על כרטיס הקונסולה, ‏#1313 משני בלי הדגל)."""
+    """#705: על איזה כרטיס כל מאזין נקשר **היום** — אותם תנאים בדיוק כמו
+    הקשירה למטה (#1310 ראשי על כרטיס הקונסולה, #1313 משני בלי הדגל)."""
     from server.interserver import storage_nodes
     from server.interserver.auth import is_loopback
     if console_iface is None and console_addr and not is_loopback(console_addr):
@@ -330,9 +330,9 @@ def _owner_nic(address: str | None) -> str | None:
 
 
 def _primary_alive(runtime, args, hostname: str):
-    """‏#1310: יצרן המאזין "אתה שם?" של הראשי — ``None`` במשני (שם 8443 הוא
+    """#1310: יצרן המאזין "אתה שם?" של הראשי — ``None`` במשני (שם 8443 הוא
     ה-mTLS, ובלעדיו אינו נפתח כלל). אחרת פונקציה ``כתובת → (יצרנים,
-    כתובות)``, כמו ``console_servers``: ‏#1088 בונה מחדש בחילוף כתובת, ובלי
+    כתובות)``, כמו ``console_servers``: #1088 בונה מחדש בחילוף כתובת, ובלי
     כתובת עדיין — אין מאזין, לא loopback (אין מה לשאול מקומית).
 
     הזהות הבין-שרתית נוצרת כאן אם אין — אותה זהות שה-pairing היה יוצר
@@ -356,7 +356,7 @@ def _primary_alive(runtime, args, hostname: str):
 
 
 def _start_igmp_querier(runtime, deploy, interface: str | None) -> None:
-    """‏#1972: ה-querier על כרטיס ההפצה — ותמיד שורה במסך הבריאות. כאן בלבד
+    """#1972: ה-querier על כרטיס ההפצה — ותמיד שורה במסך הבריאות. כאן בלבד
     (כמו `vm_host`): בבדיקות אין סוקט raw ואין תהליכון."""
     from server.system import health
     from server.net import ifaddr, igmp_querier, ports
@@ -376,7 +376,7 @@ def _start_igmp_querier(runtime, deploy, interface: str | None) -> None:
 
 
 def _start_rogue_dhcp_watch(runtime, deploy, interface: str | None) -> None:
-    """‏#2442 (א): הקשבה לשרת DHCP/proxyDHCP זר על כרטיס ההפצה — ותמיד שורה
+    """#2442 (א): הקשבה לשרת DHCP/proxyDHCP זר על כרטיס ההפצה — ותמיד שורה
     במסך הבריאות. כאן בלבד (כמו ה-querier): בבדיקות אין AF_PACKET ואין תהליכון."""
     from server.console import dhcp as console_dhcp
     from server.net import rogue_dhcp
@@ -401,7 +401,7 @@ def _start_rogue_dhcp_watch(runtime, deploy, interface: str | None) -> None:
 
 
 def _start_ups_monitor(runtime) -> None:
-    """‏#1973: מנטר ה-UPS — יומן בנפילת חשמל, כיבוי מסודר בסוללה נמוכה. כאן
+    """#1973: מנטר ה-UPS — יומן בנפילת חשמל, כיבוי מסודר בסוללה נמוכה. כאן
     בלבד: בבדיקות אסור שתהליכון יקרא ל-`systemctl poweroff`."""
     from server.system import ups
     hooks = getattr(runtime, "health_hooks", None)
@@ -415,11 +415,22 @@ def _start_ups_monitor(runtime) -> None:
     threading.Thread(target=monitor.run_forever, daemon=True, name="ups-monitor").start()
 
 
+def _wire_server_disks(runtime) -> None:
+    """#3007: SMART של דיסקי השרת (מערכת וספרייה) בעמוד הבריאות. כאן בלבד: בבדיקות
+    smartctl אמיתי היה קורא את הדיסקים של המכונה שמריצה אותן."""
+    from server.system import server_disks
+    hooks = getattr(runtime, "health_hooks", None)
+    if hooks is None:          # בדיקות של main מחליפות את create_runtime
+        return
+    hooks["server_disks"] = server_disks.Cached(
+        {"מערכת": "/", "ספרייה": str(runtime.ctx.library.root)})
+
+
 def _host_config_writes() -> dict:
-    """‏#2267: הכותבים ל-/etc בעלייה — ‏known-macs (‏#141), הקובץ הראשי של
-    ‏dnsmasq (‏#1013) והניסיון החוזר שלו ב-dnsmasq.service.d (‏#2174) — רק על
+    """#2267: הכותבים ל-/etc בעלייה — known-macs (#141), הקובץ הראשי של
+    dnsmasq (#1013) והניסיון החוזר שלו ב-dnsmasq.service.d (#2174) — רק על
     לינוקס, מערכת ההפעלה של השרת (דביאן 13). שם הם בדיוק כמו קודם, כולל
-    כשל גלוי ביומן (עיקרון 5). על תחנת פיתוח (ווינדוס) אין /etc, אין systemctl ואין dnsmasq: הכתיבה רק יצרה ‏`C:\\etc\\imagesrv`
+    כשל גלוי ביומן (עיקרון 5). על תחנת פיתוח (ווינדוס) אין /etc, אין systemctl ואין dnsmasq: הכתיבה רק יצרה `C:\\etc\\imagesrv`
     ו-`C:\\etc\\dnsmasq.d` מחוץ ל-data-dir — ולכן לא מדליקים אותם, ואומרים זאת."""
     from server.net import dhcp_host
     from server.system import grub_password
@@ -428,7 +439,7 @@ def _host_config_writes() -> dict:
               "/etc/imagesrv/grub-password and /etc/dnsmasq.d are not written (#2267, #2437)")
         return {"known_macs_hooks": None, "sync_dnsmasq": False, "dnsmasq_dropin": False,
                 "grub_password_file": None}
-    # ‏#2437: סיסמת עורך ה-GRUB של התחנות — נוצרת בעלייה הראשונה אם חסרה.
+    # #2437: סיסמת עורך ה-GRUB של התחנות — נוצרת בעלייה הראשונה אם חסרה.
     return {"known_macs_hooks": {"apply": dhcp_host.apply_known_macs}, "sync_dnsmasq": True,
             "dnsmasq_dropin": True, "grub_password_file": grub_password.PASSWORD_FILE}
 
@@ -440,8 +451,8 @@ def main() -> None:
 
     from server.net import ifaddr
 
-    # ‏#2440: חומת אש שהותקנה ואינה טעונה = שרת בלי סינון. לא עולים, ואומרים
-    # למה; ‏Restart=on-failure מנסה שוב, והשרת עולה מעצמו כש-nftables עולה.
+    # #2440: חומת אש שהותקנה ואינה טעונה = שרת בלי סינון. לא עולים, ואומרים
+    # למה; Restart=on-failure מנסה שוב, והשרת עולה מעצמו כש-nftables עולה.
     blocked = deploy_net.firewall_gate()
     if blocked:
         print(f"imagesrv: {blocked}", file=sys.stderr)
@@ -456,8 +467,8 @@ def main() -> None:
             # אותו כלל כמו במתקין: ה-GRUB החתום נבנה בלי TLS.
             parser.error("--server-url חייב להתחיל ב-http://")
 
-        # ‏#498: המארח ב---server-url חייב להיות כתובת IP מספרית, לא שם.
-        # ‏`hello.off_deploy_vlan` משווה את ה-sockname של החיבור (תמיד כתובת)
+        # #498: המארח ב---server-url חייב להיות כתובת IP מספרית, לא שם.
+        # `hello.off_deploy_vlan` משווה את ה-sockname של החיבור (תמיד כתובת)
         # ל-hostname של הכתובת הזו; שם מארח לעולם אינו שווה לכתובת, ה-except
         # בלע את ה-ValueError, ו**כל** מכונה סווגה כ"בתוך וילן ההפצה" — כלומר
         # חובת הכניסה מחוץ לווילן (#42) לא נורתה לעולם. "לא הצלחנו לסווג"
@@ -475,7 +486,7 @@ def main() -> None:
 
     # תצורת ה-Storage Node מאומתת כאן, לפני הרמת השרת: משני בלי כתובת
     # שרת ראשי נכשל בקול (עיקרון 5), ולא מתגלגל ל-standalone בשקט.
-    # ‏#732: רק כשהדגל ניתן. בלעדיו התפקיד השמור נשאר, ואין מה לאמת.
+    # #732: רק כשהדגל ניתן. בלעדיו התפקיד השמור נשאר, ואין מה לאמת.
     if args.storage_role is not None:
         from server.interserver.storage_nodes import StorageConfigError, normalize_config
         try:
@@ -483,7 +494,7 @@ def main() -> None:
         except StorageConfigError as exc:
             parser.error(str(exc))
 
-    # ‏#740: הכתובת הבין-שרתית מאומתת כאן, לפני הרמת השרת — https+פורט מפורש,
+    # #740: הכתובת הבין-שרתית מאומתת כאן, לפני הרמת השרת — https+פורט מפורש,
     # בלי אישורים/query/fragment (עיקרון 5: downgrade נדחה, לא "מתוקן" בשקט).
     if args.interserver_url is not None:
         from server.interserver.auth import InterserverURLError, parse_interserver_url
@@ -492,7 +503,7 @@ def main() -> None:
         except InterserverURLError as exc:
             parser.error(str(exc))
 
-    # ‏#1088: ‏--console-host כשם כרטיס — הכתובת נפתרת עכשיו; ‏None = הכרטיס
+    # #1088: --console-host כשם כרטיס — הכתובת נפתרת עכשיו; None = הכרטיס
     # קיים בלי כתובת (lease שעוד לא הגיע), והקונסולה עולה על loopback עד
     # שהדוגם יראה כתובת. אותו דבר ל---interserver-host.
     console_addr, console_iface = _resolve_bind_host(parser, "--console-host",
@@ -501,10 +512,10 @@ def main() -> None:
                                                  args.interserver_host)
     machine_hostname = socket.gethostname()
 
-    # ‏#703 (tracer 5): TLS לקונסולה — הדגל מאומת כאן (off רק על loopback),
+    # #703 (tracer 5): TLS לקונסולה — הדגל מאומת כאן (off רק על loopback),
     # והתעודה נוצרת/נטענת **לפני** הרמת השרת: חצי זהות או תיקייה שאי
     # אפשר לכתוב אליה עוצרים בקול, לא קונסולה שעלתה בלי TLS (עיקרון 5).
-    # ‏#1088: עם שם כרטיס ה-SAN הוא הכתובת **הנוכחית** + שם המארח; בחילוף
+    # #1088: עם שם כרטיס ה-SAN הוא הכתובת **הנוכחית** + שם המארח; בחילוף
     # כתובת התעודה אינה מתחדשת (הדפדפן כבר אישר אותה) — היא תקפה לפי השם.
     from server.console.tls import ConsoleTLSError, check_tls_flag, ensure_console_cert
     console_tls = None
@@ -516,7 +527,7 @@ def main() -> None:
     except ConsoleTLSError as exc:
         parser.error(str(exc))
     if console_tls is not None and console_tls.migration_error:
-        # ‏#1380: התעודה היא שלנו והחלפתה נכשלה — הישנה ממשיכה להיות מוגשת, בגלוי.
+        # #1380: התעודה היא שלנו והחלפתה נכשלה — הישנה ממשיכה להיות מוגשת, בגלוי.
         print(f"error: could not replace the generated console TLS certificate with "
               f"one for --console-host {console_addr}: {console_tls.migration_error}; "
               f"still serving the old one (fingerprint {console_tls.fingerprint_sha256})",
@@ -526,7 +537,7 @@ def main() -> None:
         print(f"warning: console TLS certificate SANs {list(console_tls.sans)} "
               f"do not include --console-host {console_addr}; upload a matching certificate")
 
-    # ‏#1088: כתובת ההפצה וכרטיסה — מהדגל (המעבדה, שרת שהותקן עם כרטיס
+    # #1088: כתובת ההפצה וכרטיסה — מהדגל (המעבדה, שרת שהותקן עם כרטיס
     # הפצה), ממה שנרשם מהקונסולה, או "לא הוגדרה". שלושת המקורות נאמרים.
     if deploy.source == "cli":
         server_url = args.server_url
@@ -537,7 +548,7 @@ def main() -> None:
                 interface = _interface_for(server_url)
             except InterfaceDetectionError as exc:
                 # שרת אמיתי שלא ניתן לזהות לו ממשק שידור לא עולה בשקט על
-                # הכרטיס הלא נכון — הוא עוצר ומבקש ‎--interface‏ (#514).
+                # הכרטיס הלא נכון — הוא עוצר ומבקש --interface (#514).
                 parser.error(str(exc))
     elif deploy.source == "console":
         # הכרטיס שנרשם חייב לשאת את הכתובת שנרשמה — אחרת השרת **אינו**
@@ -568,7 +579,7 @@ def main() -> None:
               "broadcast is simulated)")
     host = urllib.parse.urlsplit(server_url).hostname
 
-    # ‏#1074: הסוכן (8080) נקשר לכתובת כרטיס ההפצה. ‏0.0.0.0
+    # #1074: הסוכן (8080) נקשר לכתובת כרטיס ההפצה. 0.0.0.0
     # רק אם המפעיל ביקש במפורש — ואז נאמר, לא בשקט (R20-F1).
     if args.host is None:
         nic_addr = None
@@ -588,19 +599,19 @@ def main() -> None:
     from .app import create_agent_app, create_console_app, create_runtime
     from .db import journal
 
-    # ‏#996: מנהל המאזינים — נבנה לפני ה-runtime כי הוא מוזרק אליו
-    # (‏health_hooks["port_listeners"], כמו כל hook אחר), ומאוכלס אחרי
+    # #996: מנהל המאזינים — נבנה לפני ה-runtime כי הוא מוזרק אליו
+    # (health_hooks["port_listeners"], כמו כל hook אחר), ומאוכלס אחרי
     # שהאפליקציות קיימות.
     listeners = ports.Listeners()
 
-    # ‏#1088: מה שהקונסולה צריכה כדי להשלים את ההתקנה בהדלקת DHCP —
+    # #1088: מה שהקונסולה צריכה כדי להשלים את ההתקנה בהדלקת DHCP —
     # ומה שמסך הבריאות מציג על רשת ההפצה ועל כתובת כרטיס השרתים.
-    # ‏#2160: שם מארח נפתר כאן ל-IPv4 (כמו המתקין); כשלון הוא סיבה בשם, לא None שקט.
+    # #2160: שם מארח נפתר כאן ל-IPv4 (כמו המתקין); כשלון הוא סיבה בשם, לא None שקט.
     primary_ip, primary_ip_error = (deploy_net.primary_ip_of(args.primary_url)
                                     if args.primary_url else (None, None))
     if primary_ip_error:
         print(f"warning: {primary_ip_error} — חומת האש לא תחולל מחדש עד שהשם ייפתר "
-              "(הפעלה מחדש של השרת), או ש-‏--primary-url יהיה כתובת IP")
+              "(הפעלה מחדש של השרת), או ש-\u200f--primary-url יהיה כתובת IP")
     deploy_ctx = deploy_net.DeployContext(
         state=deploy, agent_port=args.port, tftp_root=Path(args.tftp_root),
         repo_dir=Path(args.repo_dir) if args.repo_dir else REPO_ROOT,
@@ -619,16 +630,16 @@ def main() -> None:
                                          ifaddr.dhclient_lease(console_iface),
                                          hostname=machine_hostname)
 
-    # ‏#731/#738: runtime **אחד** — ‏DB, ספרייה, שולח, ה-sweep החד-פעמי —
+    # #731/#738: runtime **אחד** — DB, ספרייה, שולח, ה-sweep החד-פעמי —
     # ושלוש אפליקציות מעליו. תהליך אחד, שלושה מאזינים; לא שלושה תהליכים
-    # על אותו SQLite (זה היה נגמר ב-"cannot commit" אקראי, ‏CLAUDE.md).
+    # על אותו SQLite (זה היה נגמר ב-"cannot commit" אקראי, CLAUDE.md).
     #
-    # ‏#141: ‏known_macs_hooks מודלק כאן, ורק כאן — במפורש, לא כברירת
+    # #141: known_macs_hooks מודלק כאן, ורק כאן — במפורש, לא כברירת
     # מחדל בתוך create_runtime, כי הוספה/מחיקה של מכונה מהקונסולה קוראת
     # לאותם hooks בכל בדיקה בחבילה (registry.all_macs → dhcp.render_known_macs
     # → apply_known_macs). ברירת מחדל אמיתית שם הייתה כותבת ל-
-    # ‏/etc/imagesrv/known-macs ומריצה systemctl reload dnsmasq בכל הרצת
-    # ‏pytest.
+    # /etc/imagesrv/known-macs ומריצה systemctl reload dnsmasq בכל הרצת
+    # pytest.
     runtime = create_runtime(args.data_dir, args.images, server_url,
                              boot_dir=args.boot_dir, interface=interface,
                              multicast_interface_override=args.interface,
@@ -636,18 +647,18 @@ def main() -> None:
                              sender_simulate=args.sender_simulate,
                              storage_role=args.storage_role,
                              primary_url=args.primary_url,
-                             # ‏known_macs_hooks, ו-‏#1013: קובץ ה-dnsmasq הראשי נגזר
-                             # מה-DB בעלייה (‏sync_dnsmasq) — כאן בלבד, ועל לינוקס
-                             # בלבד (‏#2267: לא על תחנת פיתוח בווינדוס).
+                             # known_macs_hooks, ו-#1013: קובץ ה-dnsmasq הראשי נגזר
+                             # מה-DB בעלייה (sync_dnsmasq) — כאן בלבד, ועל לינוקס
+                             # בלבד (#2267: לא על תחנת פיתוח בווינדוס).
                              **_host_config_writes(),
                              # הכרעת נדב 15/10: הגג והפתיחה של הקצב לפי מהירות
                              # כרטיס ההפצה — כאן בלבד, כמו sync_dnsmasq.
                              link_speed=drive_rates.read_link,
-                             # ‏#855: מותקן כאן תמיד — כמו known_macs_hooks,
+                             # #855: מותקן כאן תמיד — כמו known_macs_hooks,
                              # ומאותו טעם: ברירת מחדל ב-create_runtime הייתה
                              # קוראת את קובץ המכונה בכל הרצת pytest.
                              identity_hooks={"leases": identity.LeaseFile(args.dhcp_leases)},
-                             # ‏#2843: הפעלה מחדש/כיבוי מהקונסולה — כאן בלבד, ומאותו טעם:
+                             # #2843: הפעלה מחדש/כיבוי מהקונסולה — כאן בלבד, ומאותו טעם:
                              # בלי hook הנתיב עונה 503, ואף הרצת בדיקות לא מכבה מכונה.
                              host_hooks={"power": server_power.schedule_later},
                              extra_cmdline=tuple(args.extra_cmdline.split()),
@@ -657,22 +668,22 @@ def main() -> None:
                                            "deploy": lambda: deploy_ctx.state,
                                            "servers_nic": servers_nic_status},
                              deploy=deploy_ctx,
-                             # ‏#1372: המארח של עדכון ה-VM — שואל, ומכין אם חסר.
+                             # #1372: המארח של עדכון ה-VM — שואל, ומכין אם חסר.
                              vm_host=True,
-                             # ‏#1494: used_bytes לאימג'ים ישנים מכותרת partclone.
+                             # #1494: used_bytes לאימג'ים ישנים מכותרת partclone.
                              backfill_used_bytes=True,
-                             # ‏#1805: הגיבוב לקריאה החוזרת מהדיסק אחרי כתיבה.
+                             # #1805: הגיבוב לקריאה החוזרת מהדיסק אחרי כתיבה.
                              backfill_readback=True,
-                             # ‏#1447: אזור הזמן של המערכת = ההגדרה (timedatectl).
+                             # #1447: אזור הזמן של המערכת = ההגדרה (timedatectl).
                              apply_timezone=True, apply_timesync=True)
-    # ‏#1372: עדכון מהכפתור רץ בסקריפט של התג **הישן**, ולכן ההכנה של הגרסה
+    # #1372: עדכון מהכפתור רץ בסקריפט של התג **הישן**, ולכן ההכנה של הגרסה
     # הזו אינה תלויה בו: מארח שאינו מוכן — deploy/vmupdate-host.sh שלנו, ברקע.
-    # ‏getattr: בדיקות של main מחליפות את create_runtime ברשומה משלהן.
+    # getattr: בדיקות של main מחליפות את create_runtime ברשומה משלהן.
     vm_host = getattr(runtime, "vm_host", None)
     if vm_host is not None:
         threading.Thread(target=vm_host.ensure, daemon=True, name="vmhost-ensure").start()
     if console_tls is not None and console_tls.regenerated:
-        # ‏#1417: נרשם רק כאן — לפני create_runtime אין runtime, וכל שימוש
+        # #1417: נרשם רק כאן — לפני create_runtime אין runtime, וכל שימוש
         # מוקדם יותר קרס (UnboundLocalError) בעלייה הראשונה אחרי ההחלפה
         journal(runtime.conn, "console_tls_regenerated", console_addr or "127.0.0.1",
                 f"old_sha256={console_tls.previous_fingerprint_sha256} "
@@ -681,22 +692,23 @@ def main() -> None:
     _start_igmp_querier(runtime, deploy, interface)   # #1972
     _start_rogue_dhcp_watch(runtime, deploy, interface)   # #2442
     _start_ups_monitor(runtime)   # #1973
+    _wire_server_disks(runtime)   # #3007
     agent_app = create_agent_app(runtime)
     console_app = create_console_app(runtime)
 
-    # ‏#996: ה-`Config` נבנה פעם אחת; ה-`Server` נבנה מחדש בכל פתיחה
-    # (‏uvicorn.Server אינו רב-פעמי), ולכן המנהל מקבל **יצרנים**.
+    # #996: ה-`Config` נבנה פעם אחת; ה-`Server` נבנה מחדש בכל פתיחה
+    # (uvicorn.Server אינו רב-פעמי), ולכן המנהל מקבל **יצרנים**.
     agent_config = agent_uvicorn_config(agent_app, args.host, args.port)
     configs: dict[tuple[str, str], object] = {("agent", args.host): agent_config}
 
     def agent_factory(h: str):
-        """‏#705: יצרן לכל כתובת — הסוכן נקשר לכל כרטיס שבו "אתחול מהרשת" דלוק."""
+        """#705: יצרן לכל כתובת — הסוכן נקשר לכל כרטיס שבו "אתחול מהרשת" דלוק."""
         if ("agent", h) not in configs:
             configs[("agent", h)] = agent_uvicorn_config(agent_app, h, args.port)
         cfg = configs[("agent", h)]
         return lambda: uvicorn.Server(cfg)
-    # ‏#770: הקונסולה על כרטיס הניהול (`--console-host`) בלבד — לא `--host`.
-    # ‏#703 (tracer 5): ‏`ssl_certfile`/`ssl_keyfile` של uvicorn (stdlib ssl)
+    # #770: הקונסולה על כרטיס הניהול (`--console-host`) בלבד — לא `--host`.
+    # #703 (tracer 5): `ssl_certfile`/`ssl_keyfile` של uvicorn (stdlib ssl)
     # על **כל** מאזין קונסולה — ורק עליהם; הסוכן נשאר http.
     console_ssl = console_tls.uvicorn_kwargs() if console_tls else {}
     console_scheme = "https" if console_tls else "http"
@@ -704,13 +716,13 @@ def main() -> None:
 
     def console_servers(addr: str | None) -> tuple[list, list[str]]:
         """היצרנים והכתובות של מאזין הקונסולה לכתובת נתונה — פונקציה, כי
-        ‏#1088 בונה אותם מחדש בכל חילוף כתובת של כרטיס השרתים.
+        #1088 בונה אותם מחדש בכל חילוף כתובת של כרטיס השרתים.
 
-        ‏#904: כשכרטיס הניהול אינו loopback, הקונסולה מאזינה **גם** על
-        ‏127.0.0.1 — חלון ה-pairing והפינוי של המשני (`require_local`,
-        ‏#740) נאכפים על כתובת ה-peer, ומחיבור לכרטיס הניהול ה-peer לעולם
+        #904: כשכרטיס הניהול אינו loopback, הקונסולה מאזינה **גם** על
+        127.0.0.1 — חלון ה-pairing והפינוי של המשני (`require_local`,
+        #740) נאכפים על כתובת ה-peer, ומחיבור לכרטיס הניהול ה-peer לעולם
         אינו loopback: במעבדה `POST /storage-pairing-window` החזיר 403 תמיד,
-        והמפעיל נאלץ ל-`ssh -L`. ‏uvicorn 0.32 (דביאן 13) קושר `host` יחיד,
+        והמפעיל נאלץ ל-`ssh -L`. uvicorn 0.32 (דביאן 13) קושר `host` יחיד,
         ולכן זה `Server` שני על אותו loop — כמו 8080/8081. loopback אינו
         מרחיב את החשיפה (אותה מכונה בלבד), ולכן אינו שובר את fail-closed
         של #770. בלי כתובת על הכרטיס (#1088) — loopback בלבד, עד שתגיע.
@@ -728,8 +740,8 @@ def main() -> None:
         cfg = configs[("console", h)]
         return lambda: uvicorn.Server(cfg)
 
-    # ‏#705: מאז שהמפעיל ערך שירותים לכרטיס — הכתובות נגזרות מהשירותים של כל
-    # כרטיס. עד אז (`edited` = ‏False) הכול נקשר בדיוק כמו קודם: שדרוג אינו משנה.
+    # #705: מאז שהמפעיל ערך שירותים לכרטיס — הכתובות נגזרות מהשירותים של כל
+    # כרטיס. עד אז (`edited` = False) הכול נקשר בדיוק כמו קודם: שדרוג אינו משנה.
     # runtime מזויף (בדיקות של main) אינו נושא אותו — ואז הכול כמו קודם.
     nic = getattr(getattr(runtime, "ctx", None), "nic_services", None)
     if nic is not None:
@@ -762,7 +774,7 @@ def main() -> None:
     else:
         print("console TLS: off (loopback only)")
 
-    # ‏#1310: הראשי עונה על 8443 ל"אתה שם?" בלבד — על כרטיס השרתים, שהוא
+    # #1310: הראשי עונה על 8443 ל"אתה שם?" בלבד — על כרטיס השרתים, שהוא
     # כרטיס הקונסולה. קונסולה על loopback בלבד = אין כרטיס שרתים = אין מאזין.
     alive_servers = None
     if console_iface or (console_addr and not is_loopback(console_addr)) or nic_plan is not None:
@@ -781,8 +793,8 @@ def main() -> None:
     watchers = []
 
     def watch(iface: str, current: str | None, rebind) -> None:
-        """‏#1088: דוגם את כתובת הכרטיס; בשינוי — יומן + מאזין מחדש.
-        ‏rebind שנכשל מחזיר False כדי שהדוגם ינסה שוב בדגימה הבאה (למשל
+        """#1088: דוגם את כתובת הכרטיס; בשינוי — יומן + מאזין מחדש.
+        rebind שנכשל מחזיר False כדי שהדוגם ינסה שוב בדגימה הבאה (למשל
         לפני שלולאת האירועים עלתה)."""
         def on_change(old, new):
             label = f"{iface} {old or '-'} → {new or '-'}"
@@ -801,7 +813,7 @@ def main() -> None:
 
     if console_iface:
         def rebind_console(new: str | None) -> None:
-            if nic is not None and nic.edited():   # ‏#705: הכתובות נגזרות מהשירותים
+            if nic is not None and nic.edited():   # #705: הכתובות נגזרות מהשירותים
                 _raise(apply_listeners(nic))
                 return
             factories, hosts = console_servers(new)
@@ -815,17 +827,17 @@ def main() -> None:
                         f"{machine_hostname} בלבד")
         watch(console_iface, console_addr, rebind_console)
 
-    # ‏#740: מאזין ה-enrollment הבין-שרתי (mTLS 1.3) עולה רק על משני, וכשניתן
-    # ‏--interserver-host (או, ב-#1313, ‏--console-host של משני). הוא threaded
+    # #740: מאזין ה-enrollment הבין-שרתי (mTLS 1.3) עולה רק על משני, וכשניתן
+    # --interserver-host (או, ב-#1313, --console-host של משני). הוא threaded
     # (pyOpenSSL terminator) לצד ה-uvicorn —
-    # ‏#996: גם הוא במנהל המאזינים, כמתג `interserver` (start/stop של ה-thread).
+    # #996: גם הוא במנהל המאזינים, כמתג `interserver` (start/stop של ה-thread).
     from server.interserver import storage_nodes
     inter_host = args.interserver_host
     if (not inter_host and args.storage_role == "secondary"
             and args.console_host and not is_loopback(args.console_host)):
-        # ‏#1313: משני שהותקן לפני התיקון — ה-override שלו (שהשדרוג אינו
-        # כותב מחדש) בלי ‏--interserver-host, והמאזין לא עלה מעולם. המתקין
-        # שם את שניהם על כרטיס השרתים, ולכן ‏--console-host הוא הכרטיס הנכון.
+        # #1313: משני שהותקן לפני התיקון — ה-override שלו (שהשדרוג אינו
+        # כותב מחדש) בלי --interserver-host, והמאזין לא עלה מעולם. המתקין
+        # שם את שניהם על כרטיס השרתים, ולכן --console-host הוא הכרטיס הנכון.
         # רק כשה-unit עצמו אומר secondary (לא תפקיד שמור פגום, #746), ולא
         # על loopback — לשם הראשי לעולם לא יגיע.
         inter_host, inter_addr, inter_iface = args.console_host, console_addr, console_iface
@@ -857,7 +869,7 @@ def main() -> None:
             return start_interserver
 
         def make_interserver_group(hosts: list[str]):
-            """‏#705: מאזין mTLS לכל כרטיס שבו "בין-שרתים" דלוק."""
+            """#705: מאזין mTLS לכל כרטיס שבו "בין-שרתים" דלוק."""
             def start_group():
                 group = _ServerGroup()
                 try:
@@ -892,7 +904,7 @@ def main() -> None:
     watched.discard(None)
 
     def watch_plan(p: dict) -> None:
-        """‏#705: כל כרטיס שמאזין נקשר אליו נדגם — כתובת שהתחלפה = אכיפה מחדש."""
+        """#705: כל כרטיס שמאזין נקשר אליו נדגם — כתובת שהתחלפה = אכיפה מחדש."""
         for name in p["nics"]["console"] + p["nics"]["netboot"] + p["nics"]["interserver"]:
             if name not in watched:
                 watched.add(name)
@@ -900,7 +912,7 @@ def main() -> None:
                       lambda _new: _raise(apply_listeners(nic)))
 
     def apply_listeners(nic_services) -> str | None:
-        """‏#705: שלב האכיפה של המאזינים — כל מאזין נקשר בדיוק לכתובות של
+        """#705: שלב האכיפה של המאזינים — כל מאזין נקשר בדיוק לכתובות של
         הכרטיסים שבהם השירות שלו דלוק (מצטבר: כתובת שנשארת אינה נסגרת)."""
         p = nic_services.current_plan()
         hosts = p["hosts"]
@@ -921,7 +933,7 @@ def main() -> None:
             if hosts["interserver"]:
                 errors.append("בין-שרתים: אין מאזין 8443 בתהליך הזה — בראשי: אתחול "
                               "השרת יעלה אותו לפי השירותים; בשרת המשנה: נדרש "
-                              "‎--interserver-host ביחידה")
+                              "\u200e--interserver-host ביחידה")
         elif alive_servers is not None:
             run("בין-שרתים", lambda: listeners.request_retarget(
                 "interserver", hosts=hosts["interserver"],
@@ -945,7 +957,7 @@ def main() -> None:
         if error:
             print(f"per-NIC services: firewall after startup revert failed: {error}")
 
-    # המצב השמור (‏`port:<id>` ב-DB) קובע מה נקשר בעלייה.
+    # המצב השמור (`port:<id>` ב-DB) קובע מה נקשר בעלייה.
     listeners.want_open = lambda port_id: ports.enabled(runtime.conn, port_id)
     try:
         asyncio.run(serve_all(listeners))
@@ -955,10 +967,10 @@ def main() -> None:
 
 
 async def serve_all(listeners) -> None:
-    """מריץ את כל המאזינים בתהליך אחד, עם כיבוי מתואם — ‏#996: דרך
+    """מריץ את כל המאזינים בתהליך אחד, עם כיבוי מתואם — #996: דרך
     `ports.Listeners`, שגם סוגר ופותח אותם בזמן ריצה.
 
-    ‏`listeners.want_open(port_id)` הוא המצב השמור ב-DB: פורט שהמפעיל כיבה אינו
+    `listeners.want_open(port_id)` הוא המצב השמור ב-DB: פורט שהמפעיל כיבה אינו
     מופעל כלל בעלייה. ברגע שמאזין יצא **שלא כי ביקשנו** — Ctrl-C או
     חריגה — כל השאר מתבקשים לצאת, ואז ממתינים להם לפני החזרה. חריגה
     (כשל bind בעלייה הוא הנפוץ) מתגלגלת החוצה **אחרי** שכולם נעצרו: שרת

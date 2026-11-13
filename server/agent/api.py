@@ -48,14 +48,18 @@ from server.core.tasks import TOKEN_HEADER, discard_failed_staging
 
 log = logging.getLogger("imagesrv.api")
 
-#: ‏#906: אורך השאלה שנשמרת מ-hello (`prompt`). שורת מסך אחת של הסוכן
+#: #906: אורך השאלה שנשמרת מ-hello (`prompt`). שורת מסך אחת של הסוכן
 #: היא ~60 תווים; מעבר לזה נקצץ, לא נדחה.
 PROMPT_MAX_CHARS = 200
 
-#: ‏#402: הערכים של `disk_probe` בממשק 2. `unchecked` ≠ `no_disks`
-#: (עיקרון 5): "לא הצלחנו לספור פורטים" אינו "אפס פורטים". ‏#2334: `no_driver`
+#: #402: הערכים של `disk_probe` בממשק 2. `unchecked` ≠ `no_disks`
+#: (עיקרון 5): "לא הצלחנו לספור פורטים" אינו "אפס פורטים". #2334: `no_driver`
 #: = בקר אחסון בלי מנהל התקן.
 DISK_PROBE_VALUES = frozenset({"drives", "no_disks", "no_ports", "unchecked", "no_driver"})
+
+#: #2489 (7): כמה פריטים מ-`all_macs` של hello נבדקים. הסוכן שולח את כל ממשקי
+#: הרשת (`sysinfo.sh`), ומחשב מכללה מחזיק אחד עד ארבעה; מה שמעבר לזה נשמט.
+HELLO_MAX_ALL_MACS = 16
 
 
 @dataclass
@@ -65,26 +69,26 @@ class ServerContext:
     store: SessionStore
     sender: object | None = None      # SenderEngine; None בבדיקות יחידה
     drivers: object | None = None     # DriverLibrary (#720); None בבדיקות ישנות
-    #: ‏#855: מקור חכירות ה-DHCP (`identity.LeaseFile`) — הצד שנוגע בקובץ,
-    #: מוזרק כמו `dhcp_hooks`. ‏`server.main` מתקין אותו תמיד; ‏None =
+    #: #855: מקור חכירות ה-DHCP (`identity.LeaseFile`) — הצד שנוגע בקובץ,
+    #: מוזרק כמו `dhcp_hooks`. `server.main` מתקין אותו תמיד; None =
     #: הרצת בדיקות בלי מקור, ואז שומר הזהות אינו מותקן (וה-/health אומר).
     leases: object | None = None
-    #: ‏#1128: תיקיית הנתונים — לגיבוי ההגדרות מהקונסולה; None בבדיקות ישנות.
+    #: #1128: תיקיית הנתונים — לגיבוי ההגדרות מהקונסולה; None בבדיקות ישנות.
     data_dir: Path | None = None
-    #: ‏#705: השירותים לכל כרטיס (`nic_services.NicServices`) — ‏`create_runtime`
+    #: #705: השירותים לכל כרטיס (`nic_services.NicServices`) — `create_runtime`
     #: מתקין תמיד; None = בדיקות שבונות ctx ביד, ואז אין שער (ההתנהגות של היום).
     nic_services: object | None = None
-    #: ‏#1949: ‏(אירוע, פירוט) → ‏[מתי נרשם, כמה נספרו מאז] — ריסון היומן
+    #: #1949: (אירוע, פירוט) → [מתי נרשם, כמה נספרו מאז] — ריסון היומן
     #: של סירובי הזהות (`_identity_repeats`). לכל אפליקציה, לא גלובלי.
-    #: ‏#2487: גם `("unknown_mac", mac)` — שורת ה-hello של מכונה לא רשומה.
+    #: #2487: גם `("unknown_mac", mac)` — שורת ה-hello של מכונה לא רשומה.
     identity_journaled: dict = field(default_factory=dict)
-    #: ‏#2498: אירוע → ‏[תחילת החלון, כמה מפתחות שונים נרשמו, כמה נספרו בלבד]
+    #: #2498: אירוע → [תחילת החלון, כמה מפתחות שונים נרשמו, כמה נספרו בלבד]
     #: (`_spend_journal_budget`).
     journal_budget: dict = field(default_factory=dict)
-    #: ‏#1973: מנטר ה-UPS (`ups.UpsMonitor`) — ‏`server.main` בלבד; None = אין מנטר.
+    #: #1973: מנטר ה-UPS (`ups.UpsMonitor`) — `server.main` בלבד; None = אין מנטר.
     ups: object | None = None
-    #: ‏#2684: האם שעון השרת מסונכרן (`hello_eta.ClockTrust`) -- אותה ראיה שה-hello נושא
-    #: למשכפל (`clock`), וממנה גם ה-`clock` של ה-forecasts שהקונסולה מקבלת. ‏None (בדיקות
+    #: #2684: האם שעון השרת מסונכרן (`hello_eta.ClockTrust`) -- אותה ראיה שה-hello נושא
+    #: למשכפל (`clock`), וממנה גם ה-`clock` של ה-forecasts שהקונסולה מקבלת. None (בדיקות
     #: שבונות ctx ביד, שרת בלי הוק) = "לא הוכח": הקונסולה לא תצייר שעה.
     clock_trust: object | None = None
 
@@ -97,8 +101,8 @@ def _error(status: int, message: str, code: str) -> JSONResponse:
 
 
 async def _read_body(request: Request) -> tuple[object, JSONResponse | None]:
-    """‏#2410/#2416: הגוף עם תקרת בייטים ונרמול (`body.read_json`). ‏`(גוף, None)`,
-    או `(None, תשובה)` — ‏413/400 בתבנית הרוחבית, **לפני** שער הזהות: גוף שלא
+    """#2410/#2416: הגוף עם תקרת בייטים ונרמול (`body.read_json`). `(גוף, None)`,
+    או `(None, תשובה)` — 413/400 בתבנית הרוחבית, **לפני** שער הזהות: גוף שלא
     נקרא אינו מגיע לשום בדיקה."""
     try:
         return await agent_body.read_json(request), None
@@ -107,14 +111,15 @@ async def _read_body(request: Request) -> tuple[object, JSONResponse | None]:
 
 
 def _identity_refusal(ctx: ServerContext, verdict: identity.Verdict,
-                      where: str) -> JSONResponse | None:
-    """‏`None` = ממשיכים. סירוב = 403 בשם (`identity_refused` /
+                      where: str, source: str | None = None) -> JSONResponse | None:
+    """`None` = ממשיכים. סירוב = 403 בשם (`identity_refused` /
     `identity_unverifiable`) ושורת יומן שנוקבת בנתיב — **לפני** כל רישום:
-    ‏`net_seen`, ספירת הלולאות, ההצטרפות לסבב, רשומת הכיווץ ואירוע הדיסק
-    לא מתרחשים, כי הפונה אינו המכונה (‏#585)."""
+    `net_seen`, ספירת הלולאות, ההצטרפות לסבב, רשומת הכיווץ ואירוע הדיסק
+    לא מתרחשים, כי הפונה אינו המכונה (#585). ``source`` — כתובת המקור של
+    החיבור, לתקרה לפי מקור (#2489)."""
     if verdict.ok:
         return None
-    repeats = _identity_repeats(ctx, verdict)
+    repeats = _identity_repeats(ctx, verdict, source)
     if repeats is not None:
         suffix = (f" [+{repeats[0]} identical refusals in the last {repeats[1]}s not journaled]"
                   if repeats[0] else "")
@@ -123,9 +128,9 @@ def _identity_refusal(ctx: ServerContext, verdict: identity.Verdict,
     return _error(403, verdict.message, verdict.event)
 
 
-#: ‏#1949: סירוב זהות זהה (אותו אירוע, אותו MAC/כתובת ואותה סיבה) נרשם
+#: #1949: סירוב זהות זהה (אותו אירוע, אותו MAC/כתובת ואותה סיבה) נרשם
 #: ביומן פעם אחת בחלון כזה; החוזרים בתוכו נספרים ונכתבים כמונה בשורה
-#: הבאה. ‏R2 (22/10): ‏346 שורות `identity_unverifiable` ב-10 דקות — שתיים
+#: הבאה. R2 (22/10): 346 שורות `identity_unverifiable` ב-10 דקות — שתיים
 #: כל 2 שניות — הסתירו את `client_lost` שבאמצען. הסירוב עצמו (403) אינו
 #: משתנה: רק הרישום מרוסן.
 IDENTITY_JOURNAL_WINDOW_S = 300
@@ -134,82 +139,113 @@ IDENTITY_JOURNAL_WINDOW_S = 300
 _IDENTITY_KEYS_PRUNE_AT = 256
 _identity_lock = threading.Lock()
 _clock = time.monotonic
-#: ‏#2498: הריסון לפי מפתח (#1949) אינו עוצר MAC אחר בכל בקשה — כל אחד הוא מפתח
+#: #2498: הריסון לפי מפתח (#1949) אינו עוצר MAC אחר בכל בקשה — כל אחד הוא מפתח
 #: חדש. לכן לכל אירוע מרוסן נרשמים אחד-אחד לכל היותר כל כך הרבה מפתחות **שונים**
 #: בחלון; מעבר לזה הם נספרים, ושורת `JOURNAL_FLOOD` אחת אומרת שזה התחיל ואחת בחלון
-#: הבא אומרת כמה (עיקרון 5). ‏32 — כמו `rogue_dhcp.MAX_SOURCES` (#2442): כיתה שלמה.
+#: הבא אומרת כמה (עיקרון 5). 32 — כמו `rogue_dhcp.MAX_SOURCES` (#2442): כיתה שלמה.
 JOURNAL_KEYS_PER_WINDOW = 32
+#: #2489 (6): תקרה שנייה, לכל כתובת מקור בתוך האירוע — פונה אחד שמחליף MAC בכל
+#: בקשה אינו מכלה לבדו את `JOURNAL_KEYS_PER_WINDOW`, וסירוב של מכונה אחרת עדיין
+#: נרשם בשמו. מכונה אמיתית מייצרת מפתח אחד עד שלושה (MAC, כתובת, סיבה).
+JOURNAL_KEYS_PER_SOURCE = 8
 JOURNAL_FLOOD = "journal_flood"
 
 
-def _identity_repeats(ctx: ServerContext, verdict: identity.Verdict) -> tuple[int, int] | None:
-    """‏None = סירוב שכבר נרשם בחלון הנוכחי — נספר ולא נכתב. אחרת
-    ‏(כמה נספרו מאז השורה הקודמת, לפני כמה שניות היא נכתבה) — ‏(0, 0) לראשון.
-    ‏#2498: סירוב הוא תמיד פונה שלא הוכח — נספר גם בתקרת המפתחות השונים."""
-    return _journal_repeats(ctx, (verdict.event, verdict.detail), budgeted=True)
+def _identity_repeats(ctx: ServerContext, verdict: identity.Verdict,
+                      source: str | None = None) -> tuple[int, int] | None:
+    """None = סירוב שכבר נרשם בחלון הנוכחי — נספר ולא נכתב. אחרת
+    (כמה נספרו מאז השורה הקודמת, לפני כמה שניות היא נכתבה) — (0, 0) לראשון.
+    #2498: סירוב הוא תמיד פונה שלא הוכח — נספר גם בתקרת המפתחות השונים,
+    ו-#2489 גם בתקרה של כתובת המקור שלו."""
+    return _journal_repeats(ctx, (verdict.event, verdict.detail), budgeted=True,
+                            source=source)
 
 
 def _journal_repeats(ctx: ServerContext, key: tuple[str, str],
-                     budgeted: bool = False) -> tuple[int, int] | None:
-    """‏#1949 לכל שורה חוזרת לפי מפתח; ‏#2487: גם `unknown_mac` של hello, לפי MAC.
-    ‏#2498: ‏``budgeted`` — המפתח נספר גם ב-`JOURNAL_KEYS_PER_WINDOW` של האירוע
-    (‏`key[0]`); מעבר לה ‏None, כמו חוזר."""
+                     budgeted: bool = False, source: str | None = None
+                     ) -> tuple[int, int] | None:
+    """#1949 לכל שורה חוזרת לפי מפתח; #2487: גם `unknown_mac` של hello, לפי MAC.
+    #2498: ``budgeted`` — המפתח נספר גם ב-`JOURNAL_KEYS_PER_WINDOW` של האירוע
+    (`key[0]`); מעבר לה None, כמו חוזר. #2489: ``source`` — וגם ב-
+    `JOURNAL_KEYS_PER_SOURCE` של הכתובת."""
     now = _clock()
-    flood = None
+    flood: list[str] = []
     with _identity_lock:
         seen = ctx.identity_journaled.get(key)
         if seen is not None and now - seen[0] < IDENTITY_JOURNAL_WINDOW_S:
             seen[1] += 1
             return None
-        admitted, flood = _spend_journal_budget(ctx, key[0], now) if budgeted else (True, None)
+        admitted, flood = (_spend_journal_budget(ctx, key[0], now, source) if budgeted
+                           else (True, []))
         # גם מפתח שלא נרשם נזכר: החוזרים שלו בחלון נספרים כחוזרים, ולא שוב בתקרה.
         ctx.identity_journaled[key] = [now, 0]
         if len(ctx.identity_journaled) > _IDENTITY_KEYS_PRUNE_AT:
             for old in [k for k, (at, _n) in ctx.identity_journaled.items()
                         if now - at >= IDENTITY_JOURNAL_WINDOW_S]:
                 del ctx.identity_journaled[old]
-    if flood is not None:
-        journal(ctx.conn, JOURNAL_FLOOD, flood)
+    for line in flood:
+        journal(ctx.conn, JOURNAL_FLOOD, line)
     if not admitted:
         return None
     return (seen[1], int(now - seen[0])) if seen is not None else (0, 0)
 
 
-def _spend_journal_budget(ctx: ServerContext, event: str, now: float) -> tuple[bool, str | None]:
-    """‏#2498: ‏(נרשם אחד-אחד?, שורת `JOURNAL_FLOOD` לכתוב או None). הקורא מחזיק
-    את `_identity_lock`. ‏`ctx.journal_budget[event]` = ‏[תחילת החלון, כמה נרשמו,
-    כמה נספרו בלבד]. השורה הראשונה בחלון חדש נושאת את המונה של הקודם."""
+def _spend_journal_budget(ctx: ServerContext, event: str, now: float,
+                          source: str | None = None) -> tuple[bool, list[str]]:
+    """#2498: (נרשם אחד-אחד?, שורות `JOURNAL_FLOOD` לכתוב). הקורא מחזיק
+    את `_identity_lock`. `ctx.journal_budget[event]` = [תחילת החלון, כמה נרשמו,
+    כמה נספרו בלבד]. השורה הראשונה בחלון חדש נושאת את המונה של הקודם.
+    #2489: `ctx.journal_budget[(event, source)]` = [תחילת החלון, כמה מפתחות]
+    של כתובת אחת; מה שמעבר ל-`JOURNAL_KEYS_PER_SOURCE` נספר במונה של האירוע."""
     budget = ctx.journal_budget.get(event)
-    line = None
+    lines: list[str] = []
     if budget is None or now - budget[0] >= IDENTITY_JOURNAL_WINDOW_S:
         if budget is not None and budget[2]:
-            line = (f"{event}: +{budget[2]} more different not journaled one by one"
-                    f" in the last {int(now - budget[0])}s")
+            lines.append(f"{event}: +{budget[2]} more different not journaled one by one"
+                         f" in the last {int(now - budget[0])}s")
         budget = ctx.journal_budget[event] = [now, 0, 0]
-    if budget[1] < JOURNAL_KEYS_PER_WINDOW:
-        budget[1] += 1
-        return True, line
+    if source is not None:
+        mine = ctx.journal_budget.get((event, source))
+        if mine is None or now - mine[0] >= IDENTITY_JOURNAL_WINDOW_S:
+            mine = ctx.journal_budget[(event, source)] = [now, 0]
+            if len(ctx.journal_budget) > _IDENTITY_KEYS_PRUNE_AT:
+                for old in [k for k, v in ctx.journal_budget.items() if isinstance(k, tuple)
+                            and now - v[0] >= IDENTITY_JOURNAL_WINDOW_S]:
+                    del ctx.journal_budget[old]
+        mine[1] += 1
+        if mine[1] > JOURNAL_KEYS_PER_SOURCE:
+            budget[2] += 1
+            if mine[1] == JOURNAL_KEYS_PER_SOURCE + 1:
+                lines.append(f"{event}: over {JOURNAL_KEYS_PER_SOURCE} different from {source} in"
+                             f" {IDENTITY_JOURNAL_WINDOW_S}s -- the rest from it are counted,"
+                             " not journaled one by one")
+            return False, lines
+    # budget[1] ממשיך לעלות מעבר לתקרה: השורה "over" נכתבת פעם אחת, גם כשהמונה
+    # budget[2] כבר התחיל מסירובים של כתובת שעברה את התקרה שלה.
+    budget[1] += 1
+    if budget[1] <= JOURNAL_KEYS_PER_WINDOW:
+        return True, lines
     budget[2] += 1
-    if budget[2] == 1:
-        line = (f"{event}: over {JOURNAL_KEYS_PER_WINDOW} different in"
-                f" {IDENTITY_JOURNAL_WINDOW_S}s -- the rest are counted, not journaled one by one")
-    return False, line
+    if budget[1] == JOURNAL_KEYS_PER_WINDOW + 1:
+        lines.append(f"{event}: over {JOURNAL_KEYS_PER_WINDOW} different in"
+                     f" {IDENTITY_JOURNAL_WINDOW_S}s -- the rest are counted, not journaled one by one")
+    return False, lines
 
 
 def identity_gate(ctx: ServerContext, mac: str, request: Request,
                   where: str) -> JSONResponse | None:
-    """‏#855/#997: ‏MAC מוצהר + כתובת המקור תואמת את חכירת ה-DHCP של אותו MAC.
+    """#855/#997: MAC מוצהר + כתובת המקור תואמת את חכירת ה-DHCP של אותו MAC.
 
-    שומר **אחד** לכל נתיב שמזהה מכונה לפי MAC מהגוף — ‏hello, ‏progress,
-    ‏login, ‏pulls, ‏disk-event, ‏shrink-*, וגם `station.py` (‏sessions)
-    ו-`direct.py` (המניפסט החי, לפי ה-MAC של המשימה). ‏`ctx.leases is None`
-    = השומר אינו מותקן (הרצת בדיקות בלי מקור; ‏`server.main` מתקין תמיד).
+    שומר **אחד** לכל נתיב שמזהה מכונה לפי MAC מהגוף — hello, progress,
+    login, pulls, disk-event, shrink-*, וגם `station.py` (sessions)
+    ו-`direct.py` (המניפסט החי, לפי ה-MAC של המשימה). `ctx.leases is None`
+    = השומר אינו מותקן (הרצת בדיקות בלי מקור; `server.main` מתקין תמיד).
     """
     if ctx.leases is None:
         return None
     client_ip = request.client.host if request.client else None
     return _identity_refusal(
-        ctx, identity.verify(ctx.conn, ctx.leases, mac, client_ip), where)
+        ctx, identity.verify(ctx.conn, ctx.leases, mac, client_ip), where, client_ip)
 
 
 def boot_identity_ok(ctx: ServerContext, mac: str, client_ip: str | None) -> bool:
@@ -221,16 +257,16 @@ def boot_identity_ok(ctx: ServerContext, mac: str, client_ip: str | None) -> boo
     if ctx.leases is None:
         return True
     verdict = identity.verify(ctx.conn, ctx.leases, mac, client_ip)
-    return _identity_refusal(ctx, verdict, "boot-cancel") is None
+    return _identity_refusal(ctx, verdict, "boot-cancel", client_ip) is None
 
 
 def boot_journal_unknown(ctx: ServerContext, mac: str, client_ip: str | None,
                          lease_matched: bool) -> None:
-    """‏#2498: שורת `unknown_mac` של `GET /boot/menu` — מרוסנת כמו זו של ה-hello
-    (#2487, אותו מפתח): אחת ל-MAC בחלון, ואחריה מונה. ‏``lease_matched`` = הבקשה
+    """#2498: שורת `unknown_mac` של `GET /boot/menu` — מרוסנת כמו זו של ה-hello
+    (#2487, אותו מפתח): אחת ל-MAC בחלון, ואחריה מונה. ``lease_matched`` = הבקשה
     על וילן ההפצה ועברה את בדיקת החכירה; רק כשהשומר באמת מותקן ודלוק זו ראיה,
     ואז המכונה אינה נספרת בתקרת המפתחות השונים — מחשב לא רשום אמיתי נרשם גם
-    בזמן הצפה. כל השאר (מחוץ לוילן, שומר כבוי) — נספר בה: ‏MAC אקראי בכל בקשה
+    בזמן הצפה. כל השאר (מחוץ לוילן, שומר כבוי) — נספר בה: MAC אקראי בכל בקשה
     אינו מגדל את היומן. התשובה עצמה אינה תלויה בזה (עיקרון 1)."""
     proven = lease_matched and ctx.leases is not None and identity.enabled(ctx.conn)
     repeats = _journal_repeats(ctx, ("unknown_mac", mac), budgeted=not proven)
@@ -252,17 +288,20 @@ def gui_session(ctx: ServerContext, request: Request):
 
 
 def source_gate(ctx: ServerContext, request: Request, where: str,
-                image_id: str) -> JSONResponse | None:
-    """‏#997: זהות בלי MAC מוצהר — `GET /images/…/manifest|files|readback`. הסוכן
-    מושך אותם ב-`http_get` בלי MAC ובלי כותרת (‏`agent/lib/core/common.sh`), ולכן
+                image_id: str | None) -> JSONResponse | None:
+    """#997: זהות בלי MAC מוצהר — `GET /images/…/manifest|files|readback`. הסוכן
+    מושך אותם ב-`http_get` בלי MAC ובלי כותרת (`agent/lib/core/common.sh`), ולכן
     הכיוון הפוך: כתובת המקור → החכירה שיושבת עליה → MAC רשום ב-`machines`.
     אותו מתג, אותם קודים.
 
-    ‏#2657: "רשומה" אינה מספיקה. המכונה צריכה להיות חברה בסבב או במשיכה
+    #2657: "רשומה" אינה מספיקה. המכונה צריכה להיות חברה בסבב או במשיכה
     פתוחים של **האימג' הזה** (`SessionStore.has_open_membership`), אחרת
-    ‏403 `image_fetch_refused`. חריג אחד, למניפסט בלבד: השחזור מהגואי מושך
-    אותו לפני שהמשיכה נפתחת (‏`single_restore.sh`), ונושא את כניסת המפעיל
-    לקונסולה (‏`gui_session`) — אותה הרשאה ש-`/agent/pulls` מקבל."""
+    403 `image_fetch_refused`. חריג אחד, למניפסט בלבד: השחזור מהגואי מושך
+    אותו לפני שהמשיכה נפתחת (`single_restore.sh`), ונושא את כניסת המפעיל
+    לקונסולה (`gui_session`) — אותה הרשאה ש-`/agent/pulls` מקבל.
+
+    #2489: ``image_id=None`` — נתיב שאינו של אימג' (`GET /agent/sessions/active`):
+    מכונה רשומה על הכתובת מספיקה, בלי בדיקת החברות."""
     if ctx.leases is None:
         return None
     client_ip = request.client.host if request.client else None
@@ -270,24 +309,25 @@ def source_gate(ctx: ServerContext, request: Request, where: str,
     verdict = identity.verify_source(
         ctx.conn, ctx.leases, client_ip,
         lambda mac: registry.lookup(ctx.conn, mac) is not None,
-        None if signed_in else (lambda mac: ctx.store.has_open_membership(mac, image_id)))
-    return _identity_refusal(ctx, verdict, where)
+        None if signed_in or image_id is None
+        else (lambda mac: ctx.store.has_open_membership(mac, image_id)))
+    return _identity_refusal(ctx, verdict, where, client_ip)
 
 
 def agent_credentials(ctx: ServerContext, request: Request, username: str,
                       password: str, failed_detail: str, machine: str | None = None
                       ) -> tuple[str | None, JSONResponse | None]:
-    """‏#1282: שער הסיסמה **האחד** של נתיבי הסוכן — ‏`/agent/login`,
-    ‏`/agent/pulls` ופתיחת סבב מהתחנה (`station.py`).
+    """#1282: שער הסיסמה **האחד** של נתיבי הסוכן — `/agent/login`,
+    `/agent/pulls` ופתיחת סבב מהתחנה (`station.py`).
 
-    ‏`(role, None)` = נכנס; ‏`(None, תשובה)` = סירוב להחזיר כמו שהוא. עד
+    `(role, None)` = נכנס; `(None, תשובה)` = סירוב להחזיר כמו שהוא. עד
     כאן רק `/agent/login` עבר דרך `login_guard` ובדק `must_change_password`;
     שני האחרים קראו ל-`users.verify` ישירות — ניחוש סיסמאות בלי השהיה
     ובלי נעילה, ו-admin/admin של התקנה טרייה נכנס לפני שהוחלף.
-    ‏`failed_detail` הוא שורת היומן של `agent_login_failed`, ו-``machine`` —
+    `failed_detail` הוא שורת היומן של `agent_login_failed`, ו-``machine`` —
     המכונה שממנה ניסו (#1296), כשהיא ידועה."""
     ip = request.client.host if request.client else "?"
-    # ‏#2443 (Fable): תקרת החשבון של פורט הסוכן — נפרדת מזו של הקונסולה.
+    # #2443 (Fable): תקרת החשבון של פורט הסוכן — נפרדת מזו של הקונסולה.
     try:
         login_guard.check(ctx.conn, username, ip, login_guard.AGENT)
     except login_guard.LoginBlocked as exc:
@@ -308,11 +348,11 @@ def create_agent_router(ctx: ServerContext,
                         server_base: str | None = None,
                         data_dir: Path | None = None,
                         clock_status=None) -> APIRouter:
-    """‏server_base — כתובת וילן ההפצה (מ---server-url). ‏hello שהתקבל על
+    """server_base — כתובת וילן ההפצה (מ---server-url). hello שהתקבל על
     כתובת מקומית אחרת דורש כניסה תמיד (#42); בלעדיה אין עם מה להשוות,
     וההתנהגות היא הישנה.
 
-    ‏`clock_status` (#1843): ‏`() -> {"synchronized", ...}` — מצב שעון השרת (health
+    `clock_status` (#1843): `() -> {"synchronized", ...}` — מצב שעון השרת (health
     `timesync_status`). בלעדיו אין שעה למשכפל: ראיה שלא הוזרקה אינה "מסונכרן".
     """
     router = APIRouter(prefix="/api/v1")
@@ -321,8 +361,8 @@ def create_agent_router(ctx: ServerContext,
 
     @router.post("/agent/hello")
     async def agent_hello(request: Request) -> JSONResponse:
-        """‏#1892: מחיצת ה-DB מלאה ו-hello שצריך לכתוב (סבב, בקשת כיבוי) —
-        ‏503 מוצהר עם סיבה, ולא 500. הסוכן חוזר לדיסק המקומי כמו בכל כשל
+        """#1892: מחיצת ה-DB מלאה ו-hello שצריך לכתוב (סבב, בקשת כיבוי) —
+        503 מוצהר עם סיבה, ולא 500. הסוכן חוזר לדיסק המקומי כמו בכל כשל
         (עיקרון 1); מכונה לא רשומה עונה known:false כרגיל (`build_answer`)."""
         try:
             return await _agent_hello(request)
@@ -342,14 +382,14 @@ def create_agent_router(ctx: ServerContext,
         return await run_in_threadpool(_agent_hello_body, request, body)
 
     def _extra_ok(mac: str, extra: str, client_ip: str | None) -> bool:
-        """‏#2439: כרטיס רשום מ-`all_macs` שאינו נמצא עכשיו במקום אחר
+        """#2439: כרטיס רשום מ-`all_macs` שאינו נמצא עכשיו במקום אחר
         (`identity.verify_extra`). כרטיס שאינו רשום אינו מזהה ממילא — לא נבדק
-        ואינו מרעיש את היומן. ‏`ctx.leases is None` — השומר אינו מותקן, כמו
+        ואינו מרעיש את היומן. `ctx.leases is None` — השומר אינו מותקן, כמו
         ב-`identity_gate`."""
         if ctx.leases is None or registry.lookup(ctx.conn, extra) is None:
             return True
         verdict = identity.verify_extra(ctx.conn, ctx.leases, mac, extra, client_ip)
-        return _identity_refusal(ctx, verdict, "hello all_macs") is None
+        return _identity_refusal(ctx, verdict, "hello all_macs", client_ip) is None
 
     def _agent_hello_body(request: Request, body: dict) -> JSONResponse:
         """All registry/session/sqlite work runs on a worker with its own connection."""
@@ -357,7 +397,7 @@ def create_agent_router(ctx: ServerContext,
         mac = lenient_mac(body.get("mac"))
         if mac is None:
             return _error(400, "missing or malformed mac", "bad_mac")
-        # ‏#1127: המלאי/ה-probe נשמרים כ-JSON בלי תקרה; הסוכן
+        # #1127: המלאי/ה-probe נשמרים כ-JSON בלי תקרה; הסוכן
         # שלנו לעולם לא מתקרב לזו, ומי שכן — נאמר לו, לא נשמר.
         oversized = hello_payload_oversized(body)
         if oversized:
@@ -366,52 +406,56 @@ def create_agent_router(ctx: ServerContext,
         if refused is not None:
             return refused
 
-        # ‏#524: זיהוי לפי כל כרטיס שהמכונה דיווחה, לא רק כרטיס האתחול.
+        # #524: זיהוי לפי כל כרטיס שהמכונה דיווחה, לא רק כרטיס האתחול.
         # ערך פגום מתעלמים ממנו — כמו שדה לא ידוע, לא כמו MAC ראשי חסר.
+        # #2489 (7): רק `HELLO_MAX_ALL_MACS` הפריטים הראשונים, ודה-דופליקציה ב-set —
+        # בלי תקרה, גוף של 1MiB נשא כ-52 אלף כתובות: סריקה ריבועית ושאילתה לכל אחת.
         all_macs: list[str] = []
         raw_all = body.get("all_macs")
         if isinstance(raw_all, list):
-            for item in raw_all:
+            seen_macs: set[str] = set()
+            for item in raw_all[:HELLO_MAX_ALL_MACS]:
                 extra = lenient_mac(item)
-                if extra is not None and extra not in all_macs:
+                if extra is not None and extra not in seen_macs:
+                    seen_macs.add(extra)
                     all_macs.append(extra)
 
         client_ip = request.client.host if request.client else None
-        # ‏#2439: ‏`all_macs` מזהה רק מה שלא נמצא עכשיו במקום אחר — אחרת הוא עקף
+        # #2439: `all_macs` מזהה רק מה שלא נמצא עכשיו במקום אחר — אחרת הוא עקף
         # את השער שלמעלה, שבודק את `mac` בלבד. כרטיס שנדחה נשמט מהרשימה (ונרשם
         # ביומן); ה-hello עצמו נענה, ומה שנשאר מזהה כמו תמיד.
         all_macs = [extra for extra in all_macs if extra == mac or _extra_ok(mac, extra, client_ip)]
         disks = body.get("disks") if isinstance(body.get("disks"), list) else None
         optical = drawer_slots.clean_optical(body.get("optical")) if "optical" in body else None
         off_vlan = off_deploy_vlan(request.scope, server_base)
-        # ‏hello של דופק (`joining: false`) אומר "אני חי" בלי לבקש להצטרף.
+        # hello של דופק (`joining: false`) אומר "אני חי" בלי לבקש להצטרף.
         # מכונה שנעצרה על שגיאה חייבת להישאר נראית בקונסולה, אבל אסור
         # שתיספר כמצטרפת לגל שהיא לא תבצע (#64). סוכן ישן אינו שולח את
         # השדה — והיעדרו נשאר "מצטרף", כמו תמיד.
         joining = body.get("joining")
         if not isinstance(joining, bool):
             joining = True
-        # ‏#839: סוד המוניטור של האתחול הזה — 32 ספרות hex קנוניות, כמו
+        # #839: סוד המוניטור של האתחול הזה — 32 ספרות hex קנוניות, כמו
         # שמונה-עשר הבייטים של MAC. ערך פגום נזנח כמו שדה לא ידוע; סוכן
         # ישן אינו שולח אותו כלל, והשורה שומרת את הסוד הקודם (COALESCE).
         monitor_secret = body.get("monitor_secret")
         if not well_formed_monitor_secret(monitor_secret):
             monitor_secret = None
-        # ‏#1077: נרשם רק כשיש סוד תקין באותו hello — אחרת COALESCE היה
+        # #1077: נרשם רק כשיש סוד תקין באותו hello — אחרת COALESCE היה
         # משאיר hmac על סוכן שחזר אחורה.
         monitor_auth = body.get("monitor_auth")
         if monitor_secret is None or not well_formed_monitor_auth(monitor_auth):
             monitor_auth = None
-        # ‏#2844: האם האתחול הזה הפעיל את שירות המוניטור. רק bool הוא ראיה;
+        # #2844: האם האתחול הזה הפעיל את שירות המוניטור. רק bool הוא ראיה;
         # סוכן ישן אינו שולח, וחסר נשאר "לא ידוע" (None).
         monitor_on = body.get("monitor_on")
         if not isinstance(monitor_on, bool):
             monitor_on = None
-        # ‏#720 (schema 2): המלאי החומרתי — DMI, PCI, TPM — למיפוי דרייברים.
+        # #720 (schema 2): המלאי החומרתי — DMI, PCI, TPM — למיפוי דרייברים.
         # פגום נזנח כמו שדה לא ידוע; סוכן ישן אינו שולח אותו, והגרסה
         # השמורה (אם יש) נשארת.
         hw_inventory = inventory.well_formed(body.get("inventory"))
-        # ‏#1049 שלב ב' + #1048: בדיקת המכונה (probe) ו-netprobe (כבל/LLDP).
+        # #1049 שלב ב' + #1048: בדיקת המכונה (probe) ו-netprobe (כבל/LLDP).
         # netprobe מגיע ב-hello כשדה אח (מקביל ל-probe) ונשמר בתוך אותה
         # שורת machine_probe. חסר/פגום → None, הגרסה הקודמת נשארת.
         raw_probe = body.get("probe")
@@ -420,26 +464,26 @@ def create_agent_router(ctx: ServerContext,
         elif raw_probe is None and "netprobe" in body:
             raw_probe = {"netprobe": body.get("netprobe")}
         hw_probe = probe.well_formed(raw_probe)
-        # ‏#906: המכונה ממתינה לאדם (שאלת SMART/אדום, מסך FAILED) ואומרת
+        # #906: המכונה ממתינה לאדם (שאלת SMART/אדום, מסך FAILED) ואומרת
         # על מה. רק `waiting_for: "operator"` עם `prompt` מחרוזת לא-ריקה
         # נשמר (קצוץ ל-PROMPT_MAX_CHARS); כל צורה אחרת — וגם היעדר השדה,
-        # שהוא "כבר לא ממתינה" — מנקה. ‏net_seen כותב אותו תמיד, בלי COALESCE.
+        # שהוא "כבר לא ממתינה" — מנקה. net_seen כותב אותו תמיד, בלי COALESCE.
         prompt = body.get("prompt")
         if (body.get("waiting_for") != "operator" or not isinstance(prompt, str)
                 or not prompt.strip()):
             prompt = None
         else:
             prompt = prompt.strip()[:PROMPT_MAX_CHARS]
-        # ‏#402: מה הסוכן מצא כשספר אפס דיסקים (ממשק 2). רק ארבעת הערכים
+        # #402: מה הסוכן מצא כשספר אפס דיסקים (ממשק 2). רק ארבעת הערכים
         # המוכרים נשמרים; כל צורה אחרת — וגם היעדר (סוכן ישן) — היא None,
         # והשורה שומרת את הערך הקודם (COALESCE), כמו disks_json.
         disk_probe = body.get("disk_probe")
         if disk_probe not in DISK_PROBE_VALUES:
             disk_probe = None
-        # ‏#1367 (נדב 14/10): שיכפול מקומי כותב במכונה עכשיו. רק "copying" נשמר;
+        # #1367 (נדב 14/10): שיכפול מקומי כותב במכונה עכשיו. רק "copying" נשמר;
         # כל צורה אחרת, וגם היעדר, היא "לא" — ומנקה (net_seen כותב תמיד).
         local_clone = "copying" if body.get("local_clone") == "copying" else None
-        # ‏#500: הקושחה (uefi/bios) ומצב ה-Secure Boot כפי שהסוכן קרא מה-EFI
+        # #500: הקושחה (uefi/bios) ומצב ה-Secure Boot כפי שהסוכן קרא מה-EFI
         # var. רק הצורה המדויקת נשמרת; כל דבר אחר = None והשורה שומרת את
         # הערך הקודם (COALESCE) — "לא דווח" אינו "כבוי".
         firmware = body.get("firmware")
@@ -464,32 +508,32 @@ def create_agent_router(ctx: ServerContext,
             firmware=firmware, secure_boot=secure_boot,
             agent_version=agent_version, local_clone=local_clone, optical=optical,
             optical_reported=True,
-            # ‏#2487: שורת `unknown_mac` נכתבת למטה, מרוסנת לפי MAC.
+            # #2487: שורת `unknown_mac` נכתבת למטה, מרוסנת לפי MAC.
             record_journal=False,
-            # ‏#1952: מי קיבל את המחיצה הקודמת עד סופה — מהלוג של מחשב הבנייה.
+            # #1952: מי קיבל את המחיצה הקודמת עד סופה — מהלוג של מחשב הבנייה.
             direct_finished=direct.clean_finished(body),
-            # ‏#715: פרמטרי השידור למקור שהוא מחשב בנייה — של המנוע, אם יש.
+            # #715: פרמטרי השידור למקור שהוא מחשב בנייה — של המנוע, אם יש.
             multicast=ctx.sender.multicast_params() if ctx.sender is not None else None,
         )
-        # ‏#980: בקשת כיבוי מהקונסולה נוסעת באותו hello, באותו קצב — בלי
+        # #980: בקשת כיבוי מהקונסולה נוסעת באותו hello, באותו קצב — בלי
         # polling חדש. רק ב-hello האמיתי (לא בתפריט האתחול), ורק למכונה
         # רשומה; השדה חסר כשאין בקשה, וסוכן ישן מתעלם ממנו.
         if answer["known"]:
-            # ‏#2056/#2059: מה שהסוכן אומר שהוא מחיל (זמני המתנה/כיבוי) -- נרשם, ומשם "הוחל ב-N מתוך M".
+            # #2056/#2059: מה שהסוכן אומר שהוא מחיל (זמני המתנה/כיבוי) -- נרשם, ומשם "הוחל ב-N מתוך M".
             agent_timing.note_applied(ctx.conn, mac, body.get("applied_timing"))
-            # ‏#2080: תמונת הקושחה (אתחול, בקר, BIOS, דיסק לכל חיבור) -- שורה חדשה רק כשהשתנתה
+            # #2080: תמונת הקושחה (אתחול, בקר, BIOS, דיסק לכל חיבור) -- שורה חדשה רק כשהשתנתה
             try:
                 firmware_image.record(ctx.conn, mac, body)
             except sqlite3.OperationalError as exc:
                 if not disk_full(exc):
                     raise
                 note_disk_full(f"hello firmware_image {mac}")
-            # ‏#2080 (מוקאפ 06 סעיף 2): חיבור שזז מאז ההדלקה הקודמת -- אזהרה במסך ההמתנה של המשכפל. אחרי `record`, כדי שתשקף את ה-hello הזה
+            # #2080 (מוקאפ 06 סעיף 2): חיבור שזז מאז ההדלקה הקודמת -- אזהרה במסך ההמתנה של המשכפל. אחרי `record`, כדי שתשקף את ה-hello הזה
             if answer.get("role") == "cloner":
                 fw_warning = firmware_image.cloner_warning(ctx.conn, mac)
                 if fw_warning is not None:
                     answer["fw_warning"] = fw_warning
-            # ‏#1857: מלאי הדיסקים (דגם/גודל/מקום) של משכפל ושל מחשב בנייה -- לרשימת "כל הדיסקים" ולשיוך לסטים
+            # #1857: מלאי הדיסקים (דגם/גודל/מקום) של משכפל ושל מחשב בנייה -- לרשימת "כל הדיסקים" ולשיוך לסטים
             if answer.get("role") in ("cloner", "build"):
                 try:
                     disk_sets.note_hello(ctx.conn, mac, disks)
@@ -498,22 +542,22 @@ def create_agent_router(ctx: ServerContext,
                         raise
                     note_disk_full(f"hello disk_inventory {mac}")
             power_action, power_confirmed = room_console.take_power(ctx.conn, mac)
-            # ‏#2031: hello מצטרף = המכונה חזרה לתור; כיבוי שנמסר = היא יוצאת מההחזקה
+            # #2031: hello מצטרף = המכונה חזרה לתור; כיבוי שנמסר = היא יוצאת מההחזקה
             if joining or power_action is not None:
                 held.clear(ctx.conn, mac)
             if power_action is not None:
                 answer["power_action"] = power_action
-                # ‏#1367: רק בקשה שאושרה מעל אזהרת השיכפול המקומי מכבה מכונה שכותבת
+                # #1367: רק בקשה שאושרה מעל אזהרת השיכפול המקומי מכבה מכונה שכותבת
                 if power_confirmed:
                     answer["power_confirmed"] = True
         else:
-            # ‏#1802 (נדב 04/11): המסך "המחשב הזה לא רשום" נשאר. כמה שניות עד עלייה
+            # #1802 (נדב 04/11): המסך "המחשב הזה לא רשום" נשאר. כמה שניות עד עלייה
             # אוטומטית מהדיסק (0 = כבוי) — הסוכן מחיל אותה ב-UEFI בלבד, לעולם לא ב-BIOS.
             answer[unknown_screen.SETTING] = unknown_screen.autoboot_seconds(ctx.conn)
-            # ‏#2487: מכונה לא רשומה נענית ונרשמת (כך היא נרשמת מהקונסולה), אבל
-            # ‏hello חוזר אינו כותב שורת יומן בכל פעם: אחת לחלון, ואחריה מונה —
+            # #2487: מכונה לא רשומה נענית ונרשמת (כך היא נרשמת מהקונסולה), אבל
+            # hello חוזר אינו כותב שורת יומן בכל פעם: אחת לחלון, ואחריה מונה —
             # כמו סירובי הזהות (#1949). מכונה אמיתית שולחת hello אחד לאתחול.
-            # ‏#2498: אותו מפתח כמו תפריט האתחול — בקשה ו-hello של אותו אתחול הם שורה אחת.
+            # #2498: אותו מפתח כמו תפריט האתחול — בקשה ו-hello של אותו אתחול הם שורה אחת.
             repeats = _journal_repeats(ctx, ("unknown_mac", mac))
             if repeats is not None:
                 journal_unknown(ctx.conn, mac, client_ip,
@@ -522,7 +566,7 @@ def create_agent_router(ctx: ServerContext,
         log.info("hello from %s (%s): known=%s off_vlan=%s",
                  # codeql[py/log-injection] false positive: MAC מנורמל, client_ip מה-socket, והשאר bool (#291)
                  mac, client_ip, answer["known"], off_vlan)
-        # ‏hello מוכיח שהסוכן רץ. אם השרת שלח את המכונה הזאת לדיסק
+        # hello מוכיח שהסוכן רץ. אם השרת שלח את המכונה הזאת לדיסק
         # המקומי ובכל זאת הסוכן ענה — השרשור לדיסק נכשל, וזה מה שמסך
         # הבריאות מראה (#112). ניטור בלבד: לא נוגע בתשובה שנשלחת.
         agent_loops.note(ctx.conn, ctx.store, mac, answer, off_vlan=off_vlan)
@@ -535,9 +579,9 @@ def create_agent_router(ctx: ServerContext,
         # reboots to the local disk. An alert in the journal, never a gate.
         if "gui_failed" in body:
             gui_failure.note(ctx.conn, mac, body.get("gui_failed"), known=bool(answer["known"]))
-        # ‏#1847: hello = המכונה ערה — סוגר הערת WoL פתוחה (אם יש).
+        # #1847: hello = המכונה ערה — סוגר הערת WoL פתוחה (אם יש).
         learn_wol.answered(ctx.conn, mac)
-        # ‏#1847: פעם אחת לכל אתחול, לא בכל hello (היה מציף את היומן כל 5 דק').
+        # #1847: פעם אחת לכל אתחול, לא בכל hello (היה מציף את היומן כל 5 דק').
         if (body.get("wol_armed") is False and answer["known"]
                 and learn_wol.arm_failure_is_new(ctx.conn, mac)):
             journal(ctx.conn, "wol_arm_failed", mac, machine=mac)
@@ -562,7 +606,7 @@ def create_agent_router(ctx: ServerContext,
             return refused
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
-        # ‏#2750: כמו #2748 — הגוף נקרא על הלולאה, עבודת ה-sqlite בתהליכון מהמאגר.
+        # #2750: כמו #2748 — הגוף נקרא על הלולאה, עבודת ה-sqlite בתהליכון מהמאגר.
         return await run_in_threadpool(_agent_login_body, request, body)
 
     def _agent_login_body(request: Request, body: dict) -> JSONResponse:
@@ -570,10 +614,10 @@ def create_agent_router(ctx: ServerContext,
         mac = lenient_mac(body.get("mac"))
         if mac is None:
             return _error(400, "missing or malformed mac", "bad_mac")
-        # ‏#2446: שם/סיסמה שאינם מחרוזת — 400, לפני `login_guard` ו-`users.verify`.
+        # #2446: שם/סיסמה שאינם מחרוזת — 400, לפני `login_guard` ו-`users.verify`.
         if not isinstance(username, str) or not isinstance(body.get("password", ""), str):
             return _error(400, "username and password must be strings", "bad_login")
-        # ‏#997: הזהות לפני הסיסמה — זר אינו מנסה סיסמאות בשם מכונה, ואינו
+        # #997: הזהות לפני הסיסמה — זר אינו מנסה סיסמאות בשם מכונה, ואינו
         # מייצר `agent_login_failed` על מכונה שאינה שלו.
         refused = identity_gate(ctx, mac, request, "login")
         if refused is not None:
@@ -590,7 +634,7 @@ def create_agent_router(ctx: ServerContext,
         """פתיחת משיכת יוניקאסט — התחנה מודיעה לשרת שהיא מתחילה למשוך.
 
         ההרשמה כאן היא כדי שהעבודה תיראה — במבט-העל, ביומן ובדיווחי
-        ההתקדמות — ומ-#2657 היא גם הרשות: ‏`/api/v1/images` מגיש קבצים רק
+        ההתקדמות — ומ-#2657 היא גם הרשות: `/api/v1/images` מגיש קבצים רק
         לחבר בסבב או במשיכה פתוחים של האימג' (`source_gate`). מה שכן נאכף כאן הוא בדיוק מה ש-hello מכריז עליו:
         כניסה, לפי ההגדרה ולפי הווילן (#42) — הצהרה שהסוכן מציית לה
         אינה אכיפה.
@@ -622,7 +666,7 @@ def create_agent_router(ctx: ServerContext,
         if manifest is None:
             pulls.journal_refusal(ctx.conn, mac, f"אימג' {image_id} לא קיים")
             return _error(404, "unknown image", "no_image")
-        # ‏#381: אימג' שנקלט ממחשב כיתה שייך למכונה שנקלט ממנה. הסירוב
+        # #381: אימג' שנקלט ממחשב כיתה שייך למכונה שנקלט ממנה. הסירוב
         # **גלוי** — הודעה שאומרת של מי הוא ומה ביקשנו — ולא נפילה שקטה
         # לדיסק מקומי (עיקרון 5).
         refusal = restore_refusal(manifest, [mac])
@@ -650,6 +694,10 @@ def create_agent_router(ctx: ServerContext,
                                                f"{username} at {mac} pull", machine=mac)
             if refused is not None:
                 return refused
+        else:
+            # #2489 (3): בלי כניסה ובלי סיסמה השם בגוף לא הוכח — `opened_by` ריק, ולא
+            # "admin" שמוצג במבט-העל כמנהל (`session_view.role_of`).
+            username = ""
 
         try:
             session_id = pulls.open_pull(
@@ -670,13 +718,13 @@ def create_agent_router(ctx: ServerContext,
             return refused
         if not isinstance(body, dict):
             body = {}
-        # ‏#2748: הגוף נקרא כאן, על הלולאה; כל עבודת ה-sqlite רצה בתהליכון מהמאגר
+        # #2748: הגוף נקרא כאן, על הלולאה; כל עבודת ה-sqlite רצה בתהליכון מהמאגר
         # (כמו hello). על הלולאה, DB נעול עצר את כל השרת עד `busy_timeout`.
         return await run_in_threadpool(_agent_progress_body, request, body)
 
     def _agent_progress_body(request: Request, body: dict) -> JSONResponse:
-        # ‏#855: הזהות נבדקת לפני הדיווח, בסבב ובמשימה כאחד — ורק כשיש MAC
-        # לבדוק; ‏MAC שאינו נקרא נשאר `bad_mac` של `reports.ingest`, כי
+        # #855: הזהות נבדקת לפני הדיווח, בסבב ובמשימה כאחד — ורק כשיש MAC
+        # לבדוק; MAC שאינו נקרא נשאר `bad_mac` של `reports.ingest`, כי
         # "לא הצלחנו לקרוא את המזהה" קודם ל"המזהה אינו תואם" (עיקרון 5).
         mac = lenient_mac(body.get("mac"))
         if mac is not None:
@@ -684,8 +732,8 @@ def create_agent_router(ctx: ServerContext,
             if refused is not None:
                 return refused
         if body.get("state") == "held" and "session_id" not in body and "task_id" not in body:
-            # ‏#2031: משכפל שמחזיק את התוצאות עד "כבה" (#2024) — בלי סבב ובלי משימה.
-            # ראיית חיים (‏progress_seen), לא hello: אינו מצטרף לגל ואינו "נראה" ל-#1721.
+            # #2031: משכפל שמחזיק את התוצאות עד "כבה" (#2024) — בלי סבב ובלי משימה.
+            # ראיית חיים (progress_seen), לא hello: אינו מצטרף לגל ואינו "נראה" ל-#1721.
             if mac is None:
                 return _error(400, "missing or malformed mac", "bad_mac")
             if registry.lookup(ctx.conn, mac) is None:
@@ -702,7 +750,7 @@ def create_agent_router(ctx: ServerContext,
                                 token=request.headers.get(TOKEN_HEADER, ""))
         if result.get("code") == "bad_token":     # #855: כמו ההעלאה — 403
             return JSONResponse(result, status_code=403)
-        # ‏#1839: דיווח שהתקבל (זהות + חבר בסבב פתוח / אסימון משימה) הוא ראיה
+        # #1839: דיווח שהתקבל (זהות + חבר בסבב פתוח / אסימון משימה) הוא ראיה
         # שהמכונה חיה — בזמן כתיבה זה הקשר היחיד שלה, ובלעדיו "לא מחובר" אחרי 90ש'.
         if result.get("ok") and mac is not None:
             agent_seen(ctx.conn, mac)
@@ -711,7 +759,7 @@ def create_agent_router(ctx: ServerContext,
         return JSONResponse(result, status_code=200 if (result.get("ok") or result.get("code") == "not_open") else 400)
 
     def _in_round(session_id: object, mac: str) -> bool:
-        """‏#2487: ה-MAC חבר בסבב הזה — ‏hello צירף אותו, ולכן הוא מכונה רשומה."""
+        """#2487: ה-MAC חבר בסבב הזה — hello צירף אותו, ולכן הוא מכונה רשומה."""
         return isinstance(session_id, str) and ctx.conn.execute(
             "SELECT 1 FROM session_members WHERE session_id = ? AND mac = ?",
             (session_id, mac)).fetchone() is not None
@@ -731,15 +779,15 @@ def create_agent_router(ctx: ServerContext,
         return await run_in_threadpool(_agent_disk_event_body, request, body)   # #2750
 
     def _agent_disk_event_body(request: Request, body: dict) -> JSONResponse:
-        # ‏#997: כמו progress — הזהות נבדקת כשיש MAC לבדוק; MAC שאינו נקרא
+        # #997: כמו progress — הזהות נבדקת כשיש MAC לבדוק; MAC שאינו נקרא
         # נשאר `bad_mac`/`bad_event` של `disk_events.ingest`.
         mac = lenient_mac(body.get("mac"))
         if mac is not None:
             refused = identity_gate(ctx, mac, request, "disk-event")
             if refused is not None:
                 return refused
-            # ‏#2487: כמו `open_pull` — MAC לא רשום אינו כותב. חבר בסבב שבגוף הוא
-            # רשום: ‏hello צירף אותו לפי `all_macs` (#524), גם מכרטיס שאינו הרשום.
+            # #2487: כמו `open_pull` — MAC לא רשום אינו כותב. חבר בסבב שבגוף הוא
+            # רשום: hello צירף אותו לפי `all_macs` (#524), גם מכרטיס שאינו הרשום.
             if registry.lookup(ctx.conn, mac) is None and not _in_round(body.get("session_id"), mac):
                 return _error(403, "this mac is not registered", "unknown_mac")
         result = disk_events.ingest(ctx.conn, body)
@@ -776,7 +824,7 @@ def create_agent_router(ctx: ServerContext,
 
     @router.post("/agent/firmware-accept")
     async def agent_firmware_accept(request: Request) -> JSONResponse:
-        """‏#2080 (הכרעת נדב 25/10): "זה מכוון" במסך ההמתנה של המשכפל -- התמונה הנוכחית נשמרת כהגדרה
+        """#2080 (הכרעת נדב 25/10): "זה מכוון" במסך ההמתנה של המשכפל -- התמונה הנוכחית נשמרת כהגדרה
         הנכונה, ביומן "אושר במשכפל <שם>". רק משכפל רשום, ורק על עצמו; מי שאינו משכפל -- 403."""
         body, refused = await _read_body(request)
         if refused is not None:
@@ -803,19 +851,19 @@ def create_agent_router(ctx: ServerContext,
 
     @router.post("/agent/log")
     async def agent_log(request: Request) -> JSONResponse:
-        """‏#1882: הקטע האחרון של לוג הסוכן, gzip, פעם אחת בסוף סבב. ‏mac/‏session_id/‏reason
+        """#1882: הקטע האחרון של לוג הסוכן, gzip, פעם אחת בסוף סבב. mac/session_id/reason
         ב-query (הגוף הוא הלוג עצמו). best effort מצד הסוכן — כשל כאן אינו משנה דבר שם."""
         mac = lenient_mac(request.query_params.get("mac"))
         if mac is None:
             return _error(400, "missing or malformed mac", "bad_mac")
-        # ‏#2750: הזהות והקבלה (sqlite) בתהליכון מהמאגר; רק קריאת הזרם על הלולאה.
+        # #2750: הזהות והקבלה (sqlite) בתהליכון מהמאגר; רק קריאת הזרם על הלולאה.
         refused = await run_in_threadpool(identity_gate, ctx, mac, request, "agent-log")
         if refused is not None:
             return refused
         declared = request.headers.get("content-length", "")
         if declared.isdigit() and int(declared) > agent_logs.MAX_BODY:
             return _error(413, "log too large", "too_large")
-        # ‏Content-Length אינו חובה (chunked): הגוף נקרא כזרם עם מונה, ובקשה שעוברת את
+        # Content-Length אינו חובה (chunked): הגוף נקרא כזרם עם מונה, ובקשה שעוברת את
         # התקרה נעצרת ב-413 ברגע שעברה — לא נקראת כולה לזיכרון (סקירה, #1882).
         body = bytearray()
         async for chunk in request.stream():
@@ -834,7 +882,7 @@ def create_agent_router(ctx: ServerContext,
 
     @router.post("/agent/shrink-open")
     async def agent_shrink_open(request: Request) -> JSONResponse:
-        """‏#926: הפריסה המקורית של מחיצת המקור, **לפני** `ntfsresize -s`.
+        """#926: הפריסה המקורית של מחיצת המקור, **לפני** `ntfsresize -s`.
 
         ההפך מ-disk-event: **לא** best-effort. הסוכן מכווץ רק אחרי 2xx
         עם `ok` — בלי רשומה בשרת אין כתיבה למקור (עיקרון 5).
@@ -855,7 +903,7 @@ def create_agent_router(ctx: ServerContext,
             if registry.lookup(ctx.conn, mac) is None:      # #2487: כמו `open_pull`
                 return _error(403, "this mac is not registered", "unknown_mac")
         try:
-            # ‏#2492: רק סידורי שה-MAC הזה דיווח ל-`dev` הזה (`serial_not_reported`, 403).
+            # #2492: רק סידורי שה-MAC הזה דיווח ל-`dev` הזה (`serial_not_reported`, 403).
             row = shrink_records.open_record(ctx.conn, body, require_reported=True)
         except shrink_records.BadRecord as exc:
             return _error(403 if exc.code == "serial_not_reported" else 400, str(exc), exc.code)
@@ -867,12 +915,12 @@ def create_agent_router(ctx: ServerContext,
 
     def _shrink_identity(body: dict, request: Request, where: str
                          ) -> tuple[str | None, int | None, JSONResponse | None]:
-        """‏`(mac, id, None)` — הפונה הוא המכונה שפתחה את הרשומה הפתוחה; אחרת
-        ‏`(None, None, תשובה)`.
+        """`(mac, id, None)` — הפונה הוא המכונה שפתחה את הרשומה הפתוחה; אחרת
+        `(None, None, תשובה)`.
 
-        ‏#997: הסידורי הוא הזהות של הרשומה, אבל ה-MAC — שהסוכן שולח תמיד
-        (‏`shrinkmem.sh`) — הוא הזהות של **הפונה**. בלעדיו אין מה להשוות לחכירה.
-        ‏#2413: ושער הזהות לבדו אומר רק "הפונה הוא מי שהוא אומר" — תחנה אחרת עם
+        #997: הסידורי הוא הזהות של הרשומה, אבל ה-MAC — שהסוכן שולח תמיד
+        (`shrinkmem.sh`) — הוא הזהות של **הפונה**. בלעדיו אין מה להשוות לחכירה.
+        #2413: ושער הזהות לבדו אומר רק "הפונה הוא מי שהוא אומר" — תחנה אחרת עם
         חכירה תקפה סגרה (או כתבה הערה על) רשומה של דיסק שאינו שלה, לפי הסידורי,
         והתזכורת להחזיר אותו לגודלו נעלמה. רשומה נסגרת בידי המכונה שפתחה אותה;
         דיסק שעבר מכונה — "נקה" בקונסולה (`clear`), בגלוי ובשם המשתמש."""
@@ -896,7 +944,7 @@ def create_agent_router(ctx: ServerContext,
 
     @router.post("/agent/shrink-close")
     async def agent_shrink_close(request: Request) -> JSONResponse:
-        """‏#926: המקור הוחזר לגודלו. סגירה של מה שאינו פתוח היא 404."""
+        """#926: המקור הוחזר לגודלו. סגירה של מה שאינו פתוח היא 404."""
         body, refused = await _read_body(request)
         if refused is not None:
             return refused
@@ -914,7 +962,7 @@ def create_agent_router(ctx: ServerContext,
 
     @router.post("/agent/shrink-note")
     async def agent_shrink_note(request: Request) -> JSONResponse:
-        """‏#926 (סקירת Fable): למה הרשומה עדיין פתוחה — הטבלה הוחזרה אך
+        """#926 (סקירת Fable): למה הרשומה עדיין פתוחה — הטבלה הוחזרה אך
         מערכת הקבצים לא נמתחה. best-effort מצד הסוכן; 404 על מה שאינו פתוח."""
         body, refused = await _read_body(request)
         if refused is not None:
@@ -942,17 +990,17 @@ def create_agent_router(ctx: ServerContext,
         manifest = ctx.library.get(image_id)
         live = manifest is None
         if live:
-            # ‏#715: מזהה חי (`live_…`) — המניפסט שמחשב הבנייה דיווח. אותו
+            # #715: מזהה חי (`live_…`) — המניפסט שמחשב הבנייה דיווח. אותו
             # נתיב בדיוק, כדי שהמקבלים לא ידעו מי משדר. לפני שהגיע: 404.
             manifest = direct.live_manifest(ctx.conn, image_id)
         if manifest is None:
             return _error(404, "unknown image", "no_image")
         public = {k: v for k, v in manifest.items() if not k.startswith("_")}
-        # ‏#1805/#1864 (נדב 20/10): האימות אחרי הכתיבה — "sample" (ברירת המחדל) או
+        # #1805/#1864 (נדב 20/10): האימות אחרי הכתיבה — "sample" (ברירת המחדל) או
         # "full" (`readback_full` בהגדרות). נקבע כשהסוכן מושך את המניפסט: לכל הסבב.
         public["readback_mode"] = readback_mode(ctx.conn)
         if live and public["readback_mode"] == "sample":
-            # ‏#2218 (הכרעה 03/11): להפצה ישירה אין אימג' בספרייה, ולכן אין רשימה
+            # #2218 (הכרעה 03/11): להפצה ישירה אין אימג' בספרייה, ולכן אין רשימה
             # למדגם (`…/readback/<n>` מחזיר 404 — ברזל 30/10, כל יעד יצא כתום).
             # עוברים לבדיקה מלאה מול ה-`readback_xxh64` שמעבר 1 שם במניפסט החי.
             public["readback_mode"] = "full"
@@ -960,7 +1008,7 @@ def create_agent_router(ctx: ServerContext,
                     f"{image_id} sample -> full: a direct send has no list on the server;"
                     f" every chunk is compared with the live manifest's readback_xxh64"
                     f" ({request.client.host if request.client else '?'})")
-        # ‏#2338 (נדב 03/11): סף המהירות של בדיקת הכתיבה לפני הזרם (‏writecheck.sh),
+        # #2338 (נדב 03/11): סף המהירות של בדיקת הכתיבה לפני הזרם (writecheck.sh),
         # ההגדרה `writecheck_min_mbps`. נקבע כשהסוכן מושך את המניפסט: לכל הסבב.
         public[writefloor.SETTING] = writefloor.mbps(ctx.conn)
         return JSONResponse(public)
@@ -978,8 +1026,8 @@ def create_agent_router(ctx: ServerContext,
 
     @router.get("/images/{image_id}/readback/{index}")
     def image_readback(image_id: str, index: int, request: Request):
-        """‏#1805/#1864: רשימת ה-XXH64 של מחיצה — שורה לחתיכה של 4MiB של זרם הנתונים
-        (‏`server/agent/readbackhash.py`). הסוכן בודק אותה בעצמו מול `readback_xxh64`
+        """#1805/#1864: רשימת ה-XXH64 של מחיצה — שורה לחתיכה של 4MiB של זרם הנתונים
+        (`server/agent/readbackhash.py`). הסוכן בודק אותה בעצמו מול `readback_xxh64`
         שבמניפסט; אין רשימה (טרם גובב, הפצה ישירה) — 404, והסוכן אומר "לא אומת"."""
         refused = source_gate(ctx, request, "readback", image_id)
         if refused is not None:

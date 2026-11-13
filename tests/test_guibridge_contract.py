@@ -11,7 +11,8 @@ Here it is run, and judged by positive evidence: exit 0 **and** every PASS
 line, by name, in order. An exit 0 that printed fewer cases is a failure.
 
 It needs only `sh`: every jq the script reaches is a shell function stub,
-except gui_saved_theme, whose "auto" fallback is the expected answer with
+except gui_saved_theme and gui_saved_view (#3025), whose "auto" and "basic"
+fallbacks are the expected answers with
 jq and without it. A missing `sh` is a declared skip (requires_native) --
 and a failure where IMAGESRV_REQUIRE_NATIVE is set.
 """

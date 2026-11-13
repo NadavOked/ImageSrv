@@ -30,7 +30,7 @@ def run(ctx) -> None:
           answer["known"] is False and answer["allowed_images"] == []
           and local_boot(answer), str(answer))
 
-    # ‏#855: שומר הזהות פעיל בשרת הזה — MAC בלי חכירה מסורב **בשם**, לא
+    # #855: שומר הזהות פעיל בשרת הזה — MAC בלי חכירה מסורב **בשם**, לא
     # מתקבל ולא נבלע כ"לא מוכר". וזו הראיה שהחכירות של המכונות האחרות
     # הן מה שמכניס אותן, לא היעדר בדיקה.
     status, answer = hello(probe, NO_LEASE_MAC, [disk("sda", GB256, "XXX-2")])
@@ -57,7 +57,7 @@ def run(ctx) -> None:
           str(answer["allowed_images"]))
 
     print("\n5. הרשאות — משתמש הפצה")
-    # ‏#1073: בקיוסק — רק ה-allowlist (אימג'ים, כיתות); בקונסולה — 403 על
+    # #1073: בקיוסק — רק ה-allowlist (אימג'ים, כיתות); בקונסולה — 403 על
     # **כל** נתיב ניהול, גם עם העוגייה שהקיוסק הנפיק (אותו סוד).
     allowed = [("GET", "/api/console/images"), ("GET", "/api/console/groups")]
     for method, path in allowed:

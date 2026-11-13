@@ -1,4 +1,4 @@
-"""‏#738 (tracer 2 של #703) + #1247: ה-allowlist של מחשב הבנייה על פורט הסוכן.
+"""#738 (tracer 2 של #703) + #1247: ה-allowlist של מחשב הבנייה על פורט הסוכן.
 
 #1247 הסיר את הקיוסק כאפליקציה נפרדת (:8082) ואת מסך התחנה בדפדפן
 (`/console/station`). ה-allowlist עצמו (`server/agent/kiosk.py`) נשאר, כי הסוכן
@@ -47,7 +47,7 @@ from test_server_room import cloner_hello  # noqa: E402
 EXPECTED_KIOSK_ROUTES = frozenset({
     # תת-קבוצת /api/console המסוננת (allowlist הקיוסק)
     ("POST", "/api/console/login"),
-    # ‏#1499 (נדב 16/10): ערכת הנושא של המשתמש עצמו, נשמרת מהגואי — גם ל-deploy
+    # #1499 (נדב 16/10): ערכת הנושא של המשתמש עצמו, נשמרת מהגואי — גם ל-deploy
     ("PUT", "/api/console/me/theme"),
     ("GET", "/api/console/groups"),
     ("GET", "/api/console/images"),
@@ -64,13 +64,13 @@ EXPECTED_KIOSK_ROUTES = frozenset({
     ("POST", "/api/console/room/start"),
     ("POST", "/api/console/room/wake"),
     ("POST", "/api/console/room/close"),
-    # ‏#1269: רשימת דגמי הדרייברים — מתג "להוסיף דרייברים" בגואי של מחשב הבנייה
-    # (קריאה בלבד, current_user; ‏`drivers.models`, בלי קבצים ובלי נתיבים)
+    # #1269: רשימת דגמי הדרייברים — מתג "להוסיף דרייברים" בגואי של מחשב הבנייה
+    # (קריאה בלבד, current_user; `drivers.models`, בלי קבצים ובלי נתיבים)
     ("GET", "/api/console/room/driver-models"),
-    # ‏#65 (הכרעת נדב 05/09: הבחירה במחשב הבנייה): "כבה אותו" — מכונה **אחת**
+    # #65 (הכרעת נדב 05/09: הבחירה במחשב הבנייה): "כבה אותו" — מכונה **אחת**
     # שהגל הפתוח מראה כחסרה. כיבוי כל החדר (`/room/poweroff`) נשאר בקונסולה בלבד.
     ("POST", "/api/console/room/missing/{mac}/poweroff"),
-    # ‏#1386: "בטל דיסק זה" ממסך ההפצה במחשב הבנייה — מגירה אחת בגל חי.
+    # #1386: "בטל דיסק זה" ממסך ההפצה במחשב הבנייה — מגירה אחת בגל חי.
     ("POST", "/api/console/room/drawer/cancel"),
 })
 
@@ -106,9 +106,9 @@ FORBIDDEN_ON_AGENT_PORT = (
 
 def _api_routes(app: FastAPI) -> set[tuple[str, str]]:
     """מלאי נתיבי ה-API של האפליקציה — (method, path), בלי HEAD/OPTIONS
-    האוטומטיים ובלי ה-Mount הסטטי (`/console`, ‏`/boot`) ובלי openapi.
+    האוטומטיים ובלי ה-Mount הסטטי (`/console`, `/boot`) ובלי openapi.
 
-    ‏FastAPI עוטף `include_router` כ-`_IncludedRouter` מקונן (לא משטח את
+    FastAPI עוטף `include_router` כ-`_IncludedRouter` מקונן (לא משטח את
     ה-routes ל-`app.routes`), ולכן יורדים רקורסיבית לכל אובייקט שיש לו
     רשימת `routes` ואוספים רק את עלי ה-APIRoute."""
     routes: set[tuple[str, str]] = set()
@@ -119,7 +119,7 @@ def _api_routes(app: FastAPI) -> set[tuple[str, str]]:
                 for method in route.methods or ():
                     if method not in ("HEAD", "OPTIONS"):
                         routes.add((method, route.path))
-            # ‏FastAPI עוטף `include_router` כ-`_IncludedRouter` ששומר את
+            # FastAPI עוטף `include_router` כ-`_IncludedRouter` ששומר את
             # ה-routes תחת `original_router`; תת-ראוטרים רגילים תחת `routes`.
             elif getattr(route, "original_router", None) is not None:
                 walk(route.original_router)
@@ -138,11 +138,11 @@ def _console_routes(app: FastAPI) -> set[tuple[str, str]]:
 def kiosk_env(tmp_path: Path, images_root: Path, classrooms_on):
     """runtime אחד → console_app (להקמה כ-admin) + agent_app (הנבדק).
 
-    ‏`classrooms_on` (הכרעת נדב 11/10): המלאי כאן הוא של v1.2 — לפני
-    ‏`create_agent_app`, כי רשימת הכיתות נכנסת לקיוסק רק כשהיכולת דלוקה.
+    `classrooms_on` (הכרעת נדב 11/10): המלאי כאן הוא של v1.2 — לפני
+    `create_agent_app`, כי רשימת הכיתות נכנסת לקיוסק רק כשהיכולת דלוקה.
     מלאי v1 נבדק ב-`test_classrooms_gate_v1.py`.
 
-    ‏WoL מזויף (`wol_send`) כדי ש-`/room/wake` יעבוד בלי חומרה. סבב לא
+    WoL מזויף (`wol_send`) כדי ש-`/room/wake` יעבוד בלי חומרה. סבב לא
     נפתח בהקמה, אבל השולח נבנה בכל מקרה — ריאל אחד היה מגיע ל-udp-sender
     (conftest חוסם ומכשיל)."""
     from test_sender import Recorder                       # noqa: PLC0415
@@ -273,7 +273,7 @@ def test_capture_workflow(kiosk_env):
 def test_room_workflow(kiosk_env):
     admin = _login_kiosk(kiosk_env)
     assert admin.get("/api/console/room").status_code == 200
-    # ‏#1410: בחירת מגירות מפורשת וחובה, מול מגירה שמחוברת כרגע.
+    # #1410: בחירת מגירות מפורשת וחובה, מול מגירה שמחוברת כרגע.
     cloner_hello(kiosk_env["anon"], "aa:bb:cc:00:00:20", ["S1"])
     opened = admin.post("/api/console/room", json={
         "image_id": "img_7f3a91", "target_drives": 2,
@@ -298,7 +298,7 @@ def _mutated_kiosk_app(rt, extra_router) -> FastAPI:
 def test_negative_control_storage_router_breaks_allowlist(kiosk_env):
     rt = kiosk_env["rt"]
     mutated = _mutated_kiosk_app(rt, create_storage_router(rt.ctx))
-    # מלאי הנתיבים מפסיק להיות שווה לרשימה — ‏storage-nodes נדבקו.
+    # מלאי הנתיבים מפסיק להיות שווה לרשימה — storage-nodes נדבקו.
     assert _console_routes(mutated) != EXPECTED_KIOSK_ROUTES
     assert ("GET", "/api/console/storage-nodes") in _api_routes(mutated)
     # והתנהגותית: נתיב אסור שהיה 404 הפך נגיש (לא 404).
@@ -321,10 +321,10 @@ def test_negative_control_full_console_router_breaks_allowlist(kiosk_env):
     assert admin.get("/api/console/machines").status_code != 404
 
 
-# --- ‏#742: route רב-מתודי אינו מכניס מתודה שלא ברשימה --------------------------
+# --- #742: route רב-מתודי אינו מכניס מתודה שלא ברשימה --------------------------
 
 def test_multi_method_route_does_not_leak_an_unlisted_method():
-    """אסטרה (#742): ‏GET מותר על route שמטפל גם ב-DELETE הכניס את ה-DELETE
+    """אסטרה (#742): GET מותר על route שמטפל גם ב-DELETE הכניס את ה-DELETE
     לקיוסק. היום כל ה-routes חד-מתודיים, ולכן הטסט בונה route כזה במפורש."""
     from fastapi import APIRouter
 

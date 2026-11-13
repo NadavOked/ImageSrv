@@ -1,4 +1,4 @@
-"""קצב סקירת הסרק של הסוכן — ‏issue #136.
+"""קצב סקירת הסרק של הסוכן — issue #136.
 
 שלושה מסלולים סקרו ב-`sleep 2` קבוע, וכל סקירה היא כתיבת DB בשרת.
 הקצב האחיד היה שגוי לכל אחד מארבעת הפונים בנפרד, ומסיבה אחרת — ולכן
@@ -9,7 +9,7 @@
   משימה, והזרם ממילא אינו מגיע לווילן שלה. פנייה אחת מספיקה.
 * **סבב פתוח מקבע את הקצב המהיר.** ההפצה היא מולטיקאסט, והאפיון
   (§28) מכניס מצטרפים מאוחרים לסבב **הבא** — כלומר תחנה שתראה את
-  ‏`running` באיחור של 15 שניות לא התעכבה, היא פספסה את הסבב. זה
+  `running` באיחור של 15 שניות לא התעכבה, היא פספסה את הסבב. זה
   הסנכרון עצמו ולא סקירת סרק.
 * **התקרה חייבת להישאר מתחת ל-`room.AWAKE_SECONDS` (=30).** מסך החדר
   קורא "דולק" מ-`last_seen` של מחשבי השיכפול, וזה הקורא היחיד של
@@ -20,7 +20,7 @@
 
 הסולם עצמו — 2 → 5 → 15 — נבדק כאן על ההתנהגות (מה נמסר ל-`sleep`),
 ולא על קריאת הקבועים: הבדיקה מריצה את `poll.sh` האמיתי דרך bash עם
-‏`sleep` מזויף, כמו שאר בדיקות הסוכן.
+`sleep` מזויף, כמו שאר בדיקות הסוכן.
 """
 
 from __future__ import annotations
@@ -87,7 +87,7 @@ def test_a_changed_answer_resets_the_ladder():
     """הנימוק של נדב: מחשב שיכפול שנדלק לפני מחשב הבנייה התרחב ל-15
     בזמן שחיכה. ברגע שהתשובה השתנתה — הוא חוזר להיות מהיר.
 
-    האיפוס נבדק כאן על שינוי שאינו סבב פתוח (‏`closed`), כדי שהטריגר
+    האיפוס נבדק כאן על שינוי שאינו סבב פתוח (`closed`), כדי שהטריגר
     שנמדד יהיה **השינוי** ולא הבלם של הסבב הפתוח.
     """
     out = run_poll(
@@ -156,7 +156,7 @@ def test_a_task_that_arrived_resets_the_ladder():
 
 
 def test_the_cosmetic_counters_are_not_part_of_the_signature():
-    """‏joined ו-starts_in_seconds משתנים בכל שנייה בסבב פתוח. אילו
+    """joined ו-starts_in_seconds משתנים בכל שנייה בסבב פתוח. אילו
     היו בחתימה, ההתרחבות הייתה מתאפסת תמיד ו-#136 היה חוזר בשקט."""
     source = (AGENT / "lib" / "core" / "poll.sh").read_text(encoding="utf-8")
     body = source[source.index("poll_signature()"):source.index("poll_widen()")]
@@ -172,7 +172,7 @@ def test_nothing_in_the_ladder_reads_a_clock():
     source = (AGENT / "lib" / "core" / "poll.sh").read_text(encoding="utf-8")
     code = "\n".join(ln for ln in source.splitlines() if not ln.lstrip().startswith("#"))
     for clock in ("date ", "$SECONDS", "uptime"):
-        assert clock not in code, f"‏poll.sh קורא שעון: {clock}"
+        assert clock not in code, f"\u200fpoll.sh קורא שעון: {clock}"
 
 
 # --- תחנה מחוץ לווילן ההפצה: אין לולאה --------------------------------------
@@ -236,7 +236,7 @@ def test_a_station_on_the_class_network_does_not_poll_at_all():
 
 
 def test_the_waiting_station_never_slows_down_across_iterations():
-    """הענף האמיתי, ארבעה סיבובים, ‏`poll_sleep` האמיתי — והקצב נשאר 2.
+    """הענף האמיתי, ארבעה סיבובים, `poll_sleep` האמיתי — והקצב נשאר 2.
 
     זו הדרישה שאחריה נדב חזר: לא "backoff עדין" בתחנה ממתינה אלא
     **אין backoff**. ארבעה סיבובים כי אחרי שלושה הסולם כבר היה בתקרה.
@@ -265,7 +265,7 @@ def test_a_station_on_the_deployment_vlan_keeps_waiting():
 
 
 def test_no_idle_branch_sleeps_a_flat_two_seconds():
-    """המסלולים עברו ל-`poll_sleep`. ‏`sleep 2` היחיד שנשאר הוא
+    """המסלולים עברו ל-`poll_sleep`. `sleep 2` היחיד שנשאר הוא
     בנתיב הכישלון של send_hello — ניסיון חוזר, לא סקירת סרק.
 
     ארבעה `poll_sleep`: wait_open, wait_poll, build_console, ומסלול

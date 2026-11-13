@@ -1,6 +1,6 @@
 """אף סקריפט בריפו אינו בונה שומר על `! cmd` כפקודה עצמאית (#231).
 
-הבאג שהוליד את הטסט הזה: ב-POSIX ‏`set -e` **אינו** חל על pipeline
+הבאג שהוליד את הטסט הזה: ב-POSIX `set -e` **אינו** חל על pipeline
 שמתחיל ב-`!`. סקריפט שכתוב כך —
 
     set -eu
@@ -17,7 +17,7 @@
 הדפוס ודורש שיימצא: סורק שלא יודע להיכשל שווה בדיוק כמו השומר שהוא בא
 להחליף.
 
-**מה שאינו נחשב ממצא:** ‏`if ! grep -q ...; then` ו-`while ! ping ...`
+**מה שאינו נחשב ממצא:** `if ! grep -q ...; then` ו-`while ! ping ...`
 תקינים לחלוטין — שם הסטטוס נצרך על ידי `if`/`while`, ו-`set -e` ממילא
 אינו אמור לחול. הסורק מחפש `!` בתחילת **פקודה עצמאית** בלבד: תחילת
 שורה, או מיד אחרי `;`.
@@ -32,21 +32,21 @@ REPO = Path(__file__).resolve().parent.parent
 #: הספריות שבהן רץ קוד מעטפת.
 SCANNED_DIRS = ("agent", "deploy", "tools", "tests", "boot")
 
-#: ‏`!` שפותח פקודה עצמאית — בתחילת שורה, אחרי `;`, ואחרי `&&`/`||`.
+#: `!` שפותח פקודה עצמאית — בתחילת שורה, אחרי `;`, ואחרי `&&`/`||`.
 #:
-#: ‏`&&` ו-`||` נכללים כי גם שם הסטטוס נבלע: ‏POSIX קובע ש-`set -e`
+#: `&&` ו-`||` נכללים כי גם שם הסטטוס נבלע: POSIX קובע ש-`set -e`
 #: אינו חל על אף איבר ב-AND-OR list פרט לאחרון, והאחרון כאן הוא
-#: ‏`! cmd` — שגם עליו הוא אינו חל. כלומר `setup && ! grep -q x`
+#: `! cmd` — שגם עליו הוא אינו חל. כלומר `setup && ! grep -q x`
 #: ואחריו `echo PASS` הוא בדיוק #231 בתחפושת.
 #:
-#: לא נתפס: ‏`[ ! -f x ]`, ‏`!=`, ‏`#!/bin/sh`, ו-`\!` של find.
+#: לא נתפס: `[ ! -f x ]`, `!=`, `#!/bin/sh`, ו-`\!` של find.
 BARE_NEGATION = re.compile(r"(?:^|;|&&|\|\|)[ \t]*![ \t]+[^ \t;&|=]", re.MULTILINE)
 
 #: מילות פתיחה שהופכות את שאר השורה ל**תנאי**. שם `!` תקין לחלוטין:
 #: הסטטוס נצרך על ידי `if`/`while`, ו-`set -e` ממילא אינו אמור לחול.
 CONDITIONAL = re.compile(r"^(if|elif|while|until)\b")
 
-#: ‏`[[ … ]]` של bash: מה שבפנים הוא ביטוי, ו-`!` בו אינו פקודה (כמו `[ ! -f x ]`).
+#: `[[ … ]]` של bash: מה שבפנים הוא ביטוי, ו-`!` בו אינו פקודה (כמו `[ ! -f x ]`).
 TEST_EXPR = re.compile(r"\[\[.*?\]\]")
 
 #: מוצא מפורש שנסקר והוכרע. ריק היום, ובכוונה.
@@ -80,9 +80,9 @@ def _shell_scripts() -> list[Path]:
 def _logical_lines(text: str) -> list[tuple[int, str]]:
     r"""מאחה שורות שמסתיימות ב-`\` לשורה לוגית אחת (#600).
 
-    ‏`if` פורש על פני **השורה הלוגית**, לא הפיזית. הסורק שסרק שורות
-    פיזיות פסל את `inbox-scan.sh:55` — ‏`&& ! awk` שהוא המשך של
-    ‏`if ! grep ... \` שמעליו, כלומר כתיב תקין לחלוטין.
+    `if` פורש על פני **השורה הלוגית**, לא הפיזית. הסורק שסרק שורות
+    פיזיות פסל את `inbox-scan.sh:55` — `&& ! awk` שהוא המשך של
+    `if ! grep ... \` שמעליו, כלומר כתיב תקין לחלוטין.
 
     מספר השורה המדווח הוא זה שבו השורה הלוגית **מתחילה**.
     """
@@ -113,7 +113,7 @@ def _hits(text: str) -> list[tuple[int, str]]:
         # נחסם, וזה כתיב תקין.
         if CONDITIONAL.match(stripped):
             continue
-        # ‏`[[ -n $u && ! -f x ]] || continue` (#2111) הוא ביטוי, לא `! cmd`
+        # `[[ -n $u && ! -f x ]] || continue` (#2111) הוא ביטוי, לא `! cmd`
         if BARE_NEGATION.search(TEST_EXPR.sub("[[ ]]", line)):
             out.append((number, line.strip()))
     return out
@@ -139,7 +139,7 @@ def test_no_bare_negated_command_guards():
         for number, line in _hits(text):
             findings.append(f"{rel}:{number}: {line}")
     assert not findings, (
-        "‏`! cmd` כפקודה עצמאית תחת `set -e` — הסטטוס נבלע והשורה הבאה "
+        "\u200f`! cmd` כפקודה עצמאית תחת `set -e` — הסטטוס נבלע והשורה הבאה "
         "רצה כאילו הכל תקין (#231):\n" + "\n".join(findings)
     )
 
@@ -160,10 +160,10 @@ def test_the_scanner_can_actually_fail(tmp_path):
 
 
 def test_the_scanner_catches_negation_after_and_or(tmp_path):
-    """‏`&&` ו-`||` הם אותו חור בדיוק — ‏`set -e` אינו חל שם.
+    """`&&` ו-`||` הם אותו חור בדיוק — `set -e` אינו חל שם.
 
     הגרסה הראשונה של הסורק עגנה רק על תחילת שורה ועל `;`, ולכן
-    ‏`setup && ! grep -q x` הייתה חומקת. נמצא בסקירת #299.
+    `setup && ! grep -q x` הייתה חומקת. נמצא בסקירת #299.
     """
     for line in ("setup && ! grep -q foo bar", "setup || ! test -f bar"):
         script = tmp_path / "g.sh"
@@ -172,7 +172,7 @@ def test_the_scanner_catches_negation_after_and_or(tmp_path):
 
 
 def test_the_scanner_does_not_flag_a_condition(tmp_path):
-    """ולא תיקון-יתר: ‏`!` בתוך תנאי הוא כתיב תקין ואסור לחסום אותו."""
+    """ולא תיקון-יתר: `!` בתוך תנאי הוא כתיב תקין ואסור לחסום אותו."""
     good = tmp_path / "ok.sh"
     good.write_text(
         "#!/bin/sh\n"
@@ -190,10 +190,10 @@ def test_the_scanner_does_not_flag_a_condition(tmp_path):
 
 
 def test_a_condition_that_spans_a_backslash_is_still_a_condition(tmp_path):
-    r"""‏#600: ‏`if` שנמשך ב-`\` — ההמשך שלו אינו פקודה עצמאית.
+    r"""#600: `if` שנמשך ב-`\` — ההמשך שלו אינו פקודה עצמאית.
 
     זה הכתיב שהפיל את `main` ב-08/09. הסורק סרק שורות פיזיות, ראה
-    ‏`&& ! awk` בשורה שאינה פותחת ב-`if`, ופסל כתיב תקין.
+    `&& ! awk` בשורה שאינה פותחת ב-`if`, ופסל כתיב תקין.
     """
     good = tmp_path / "cont.sh"
     good.write_text(
@@ -224,12 +224,12 @@ def test_a_bare_negation_that_spans_a_backslash_is_still_caught(tmp_path):
         encoding="utf-8",
     )
     hits = _hits(bad.read_text(encoding="utf-8"))
-    assert hits, "‏`! cmd` בהמשך שורה חמק מהסורק"
+    assert hits, "\u200f`! cmd` בהמשך שורה חמק מהסורק"
     assert hits[0][0] == 3, f"השורה הלוגית מתחילה ב-3, דווח {hits[0][0]}"
 
 
 def test_a_negation_inside_a_test_expression_is_not_a_command():
-    """‏`!` בתוך `[[ ]]` אינו פקודה; ‏`! cmd` אחרי `]] &&` עדיין נתפס."""
+    """`!` בתוך `[[ ]]` אינו פקודה; `! cmd` אחרי `]] &&` עדיין נתפס."""
     assert _hits('[[ -n "$u" && ! -f "deploy/$u" ]] || continue\n') == []
     assert _hits('[[ -n "$u" ]] && ! grep -q x f\necho PASS\n') != []
     assert _hits('setup && ! grep -q x f\n') != []

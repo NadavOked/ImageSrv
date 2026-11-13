@@ -1,12 +1,12 @@
-"""‏#345 — מסך הכישלון מבטיח "will stay powered on", ו-`halt` מכבה.
+"""#345 — מסך הכישלון מבטיח "will stay powered on", ו-`halt` מכבה.
 
-שני מסכי העצירה בקובץ ה-GRUB — הכישלון של `chain_local` (‏UEFI, לא נמצאה
+שני מסכי העצירה בקובץ ה-GRUB — הכישלון של `chain_local` (UEFI, לא נמצאה
 או נדחתה מערכת מקומית) והמסך של `try_local` ל-Legacy BIOS (#323) —
 מסתיימים במשפט `Contact IT. This computer will stay powered on.`, ומיד
 אחריו ב-`sleep --interruptible 60` ו-`halt`.
 
-‏`halt` **אינו** "עצור והשאר את המסך". על EFI הוא קורא ל-ResetSystem עם
-‏Shutdown, ועל i386-pc הוא מכבה דרך APM/ACPI — בשתי הפלטפורמות המכונה
+`halt` **אינו** "עצור והשאר את המסך". על EFI הוא קורא ל-ResetSystem עם
+Shutdown, ועל i386-pc הוא מכבה דרך APM/ACPI — בשתי הפלטפורמות המכונה
 נכבית, והדקה שהמפעיל רואה היא ה-`sleep` שלפניה. כלומר: המסך הזה קיים
 בדיוק כדי שטכנאי יקרא אותו, והוא מוחק את עצמו לפני שהטכנאי מגיע —
 ואז המכונה שהוא מוצא כבויה נראית כמו תקלת חשמל, לא ככישלון אתחול.
@@ -35,7 +35,7 @@ POWER_OFF_COMMANDS = ("halt", "poweroff", "shutdown", "reboot")
 #: המשפט שמסך העצירה מבטיח לאדם שעומד מול המכונה.
 PROMISE = "This computer will stay powered on."
 
-#: שתי הפונקציות שמסתיימות במסך עצירה. ‏`chain_local` הוא מסלול ה-UEFI
+#: שתי הפונקציות שמסתיימות במסך עצירה. `chain_local` הוא מסלול ה-UEFI
 #: שלא מצא (או שנדחה) בדיסק, ו-`try_local` הוא השומר של #323 — הענף
 #: שלו ל-Legacy BIOS הוא מחשב שיכפול שאין לו מערכת מקומית להעלות.
 STOP_SCREENS = ("chain_local", "try_local")
@@ -74,7 +74,7 @@ def _function(text: str, name: str) -> str:
 
 def _commands(body: str) -> list[str]:
     """המילה הראשונה בכל שורה שאינה הערה — הפקודות שבאמת ירוצו.
-    ‏`echo "... halt ..."` הוא טקסט על המסך, לא פקודה."""
+    `echo "... halt ..."` הוא טקסט על המסך, לא פקודה."""
     words = []
     for line in body.splitlines():
         stripped = line.strip()
@@ -108,7 +108,7 @@ def test_the_stop_screen_waits_in_a_loop_that_has_no_way_out(name, text):
     body = _function(text, name)
     assert "while " in body, f"{name} אינו ממתין בלולאה — המסך ייעלם"
 
-    # ‏`chain_local` פותח ב-`for ... done` על נתיבי האתחול, ולכן ה-`done`
+    # `chain_local` פותח ב-`for ... done` על נתיבי האתחול, ולכן ה-`done`
     # שמעניין כאן הוא זה שאחרי ה-`while`, לא הראשון בגוף.
     start = body.index("while ")
     loop = body[start : body.index("done", start)]
@@ -135,8 +135,8 @@ def test_the_stop_screens_are_still_ascii(text):
 
 @pytest.mark.parametrize("text", RENDERED)
 def test_the_wait_is_still_interruptible_so_a_key_does_not_hang_the_screen(text):
-    """‏`sleep --interruptible` נשאר: בלעדיו לחיצת מקש אינה נקלטת כלל
-    ‏(‏GRUB אינו קורא מהמקלדת תוך כדי `sleep` רגיל), והמסך נראה תקוע."""
+    """`sleep --interruptible` נשאר: בלעדיו לחיצת מקש אינה נקלטת כלל
+    (GRUB אינו קורא מהמקלדת תוך כדי `sleep` רגיל), והמסך נראה תקוע."""
     for name in STOP_SCREENS:
         body = _function(text, name)
         assert "sleep --interruptible" in body

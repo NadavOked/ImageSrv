@@ -26,14 +26,41 @@
 1. **וילן הפצה סגור** — רשת שכבה 2 נפרדת, בלי ניתוב החוצה, ש-ImageSrv הוא
    שרת ה-DHCP היחיד בה (פרק 2, פרק 4).
 2. **כללי חומת אש** — בעיקר: מי רשאי להגיע לקונסולה, ומה עובר בין אתרים (פרק 3).
-3. **הגדרות מתג בוילן ההפצה** — ‏IGMP snooping עם querier, ‏DHCP snooping,
-   בלי 802.1X (פרק 4).
+3. **הגדרות מתג בוילן ההפצה** — ‏port security, ‏DHCP snooping, ‏IGMP snooping
+   עם querier, בלי 802.1X (פרק 4). **שתי הראשונות הן חלק מהאבטחה** (האזהרה למטה).
 4. **ה-VM לעדכון Windows** — שמירת DHCP וכללי חומת אש לכתובת שלו, והגדרה
    בהיפרווייזר אם השרת עצמו וירטואלי (פרק 6).
 5. **יציאה מבוקרת לאינטרנט** — שעון (NTP), ‏DNS, ועדכון גרסה מ-GitHub רק
    בזמן עדכון (פרק 8).
 6. **מחשבי השיכפול** — הגדרת BIOS אחת להשכמה מהרשת, וכיבוי דרך המערכת
    בלבד, לא בכפתור (פרק 9).
+
+> ## ⚠️ אזהרה: בידוד רשת ההפצה הוא חלק מהאבטחה, לא המלצה
+>
+> שלושה חלקים של המערכת סומכים היום על כך שרק המחשבים שלכם מחוברים לוילן
+> ההפצה: **ערוץ המחשבים** (פורט 8080, בלי הצפנה עד #1076), **שידור
+> המולטיקאסט**, ו**האתחול מהרשת** (PXE: ה-initrd וה-grub.cfg אינם חתומים,
+> #2442). המוצר לא מאמת אותם בחתימה, ולכן ההגנה עליהם היא המתג.
+>
+> **שלוש הגדרות חובה, בכל סוויץ' בנתיב של וילן ההפצה:**
+>
+> 1. **וילן נפרד בלי ניתוב** — רק השרת (כרטיס ההפצה), מחשבי הבנייה ומחשבי
+>    השיכפול.
+> 2. **Port security** — מחשב אחד (MAC אחד, sticky) לכל פורט; פורט פנוי כבוי.
+> 3. **DHCP snooping** — רק הפורט של השרת trusted; כל השאר untrusted.
+>
+> **מה קורה בלעדיהן.** מחשב זר שמחובר לפורט בוילן ההפצה יכול:
+>
+> - **להתחזות למחשב רשום** ולקבל במקומו משימות ואימג'ים. באימג' יכולים
+>   להיות סודות (פרק 15).
+> - **לענות ב-DHCP וב-PXE לפני השרת**, ולהעלות במחשב שיכפול תוכנה משלו.
+>   מחשב שיכפול כותב לכל הדיסקים שבמגירות שלו.
+> - **לשדר מולטיקאסט מזויף** ולהכשיל סבב שלם.
+>
+> השרת **מתריע** על שרת DHCP זר, אבל **אינו חוסם** אותו. החסימה היא במתג.
+> ההגדרות עצמן: הטבלה בתחילת פרק 4, ו-4.5 ל-DHCP snooping. הרקע המלא:
+> `docs/architecture/security-model.md`. אותה אזהרה מופיעה קבועה בקונסולה,
+> בדף **רשת ← רשת הפצה** (#3002).
 
 **המסכים של המוצר עצמו** — ההגדרות, שרתי המשנה, "בטל דיסק זה", הדרייברים, אזור הזמן, הנפקת תעודה, מסכי סוף המשימה וצבעי הדיסקים — בפרק 13.
 
@@ -180,6 +207,10 @@
 
 ## 4. וילן ההפצה — הגדרות במתג
 
+> ⚠️ **port security ו-DHCP snooping בפרק הזה הם חלק ממודל האבטחה** — מה
+> קורה בלעדיהם: האזהרה בפרק 1. ‏IGMP snooping ו-querier הם לביצועים וליציבות
+> השידור.
+
 **המסירה נבדקה במעבדה עם מתג לא מנוהל (גיגה בכל הפורטים, כולל פורט השרת — פורט
 100Mb אחד מאט את כל הסבב לכ-11MB/s). זו התצורה המומלצת ל-v1 כשאפשר.**
 
@@ -280,11 +311,11 @@ end
 
 | דבר | פרט | מקור |
 |---|---|---|
-| DHCP ו-TFTP | dnsmasq על כרטיס וילן ההפצה, ‏UDP ‏67/68 ו-69, ופורט proxy-DHCP ‏4011 | `server/net/ports.py`, `CLAUDE.md` |
+| DHCP ו-TFTP | dnsmasq על כרטיס וילן ההפצה, ‏UDP ‏67/68 ו-69, ופורט proxy-DHCP ‏4011 | `server/net/ports.py` |
 | מולטיקאסט | `udp-sender` עם `--portbase 9000`, כלומר פורטים UDP ‏9000 ו-9001. מוצמד לכרטיס ההפצה עם `--interface` | `server/rounds/sender.py` (שורות 35, 556-560), `server/main.py` |
 | כתובת קבוצה | **השרת לא מעביר `--mcast-data-address`**, ולכן udpcast גוזר אותה מכתובת ה-IP של השרת (ראו סעיף 4.4) | `server/rounds/sender.py`, `command_for` |
 | WoL | UDP ‏9, ‏broadcast `255.255.255.255`, נשלח מהכרטיס של וילן ההפצה בלבד (`SO_BINDTODEVICE`) | `server/net/wol.py` |
-| HTTP | GRUB, kernel ו-initrd | `CLAUDE.md` |
+| HTTP | GRUB, kernel ו-initrd | `docs/architecture/grub-generator.md` |
 
 **דרישות שכבר רשומות באפיון** (`docs/architecture/imagesrv-spec.md` סעיף 6): ‏IGMP snooping
 על כל סוויץ' בנתיב, ‏querier אחד לוילן, ו-IGMP בגרסה עקבית. המדריך הזה
@@ -367,8 +398,7 @@ effect when the interface is in a non-trunking mode". זו אזהרה רגילה
 - **עם snooping ובלי querier:** הסוויץ' לומד חברות מדוחות IGMP של
   המשכפלים, אבל החברות **פוקעת** אחרי כ-2-4 דקות אם אף אחד לא שולח
   General Query. ‏`docs/architecture/imagesrv-spec.md` סעיף 6 מתאר את זה בדיוק: "הזרם
-  נופל באמצע" אחרי 125-260 שניות. **שני המצבים נראים כמו באג בקוד**
-  (`docs/lab/lab-test-plan.md` שורה 763).
+  נופל באמצע" אחרי 125-260 שניות. **שני המצבים נראים כמו באג בקוד**.
 
 **מי עושה querier?** יש שתי אפשרויות, ו**רק אחת** צריכה להיות פעילה בכל
 וילן:
@@ -1204,7 +1234,7 @@ show vlan id 44
 - Red Hat, 802.3ad ושליחה בקישור אחד: <https://access.redhat.com/solutions/372813>
 - Meraki, storm control (השוואה ל-Catalyst): <https://documentation.meraki.com/Switching/MS_-_Switches/Operate_and_Maintain/How-Tos/Storm_Control_for_MS>
 - ליבה/trunks/VTP: שרשורי Cisco Community על VTP revision (<https://community.cisco.com/t5/switching/vtp-question/m-p/1270818>, <https://community.cisco.com/t5/other-network-architecture-subjects/vtp-client-and-revision-numbers/td-p/4139867>); למידת mrouter מ-General Query (<https://community.cisco.com/t5/switching/igmp-snooping-querier-switch-w-o-receivers-receiving-multicast/td-p/3067622>, <https://www.cisco.com/c/fr_ca/support/docs/switches/catalyst-9300-switch/222250-troubleshoot-igmp-snooping-on-cisco-swit.html>).
-- בפרויקט: `docs/architecture/imagesrv-spec.md` סעיף 6, ‏`docs/lab/lab-test-plan.md` שורות 79 ו-763,
+- בפרויקט: `docs/architecture/imagesrv-spec.md` סעיף 6,
   ‏`server/rounds/sender.py`, ‏`server/net/wol.py`, ‏`C:\ImageCtl-Lab\evening-1015\research-new-failures-1022.md`
   (N01, N02, N05, N06, N07, N09, N28), ‏`research-multicast.md`, ‏`research-boot.md`.
 

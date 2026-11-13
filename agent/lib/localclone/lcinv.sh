@@ -209,8 +209,10 @@ _lc_measure_fit() {
     fi
     # #1466 P2: the run reuses this plan (lc_shrink_plan) on the same disk and table.
     cp "$RUN_DIR/shrink.plan" "$LC/measure/$1.plan" && _lc_clean "$(disk_serial "$1")" > "$LC/measure/$1.serial" || rm -f "$LC/measure/$1.plan"
+    # #2972: an inconsistent NTFS stays at its full size -- a target it does not fit is told why, not "after the shrink"
+    _lm_d=""; [ ! -s "$RUN_DIR/shrink.dirty" ] || _lm_d="במקור$(_lc_src_he "$1") — מחיצה $(awk 'NR > 1 { printf ", " } { printf "%s", $0 }' "$RUN_DIR/shrink.dirty"): NTFS לא נסגר כראוי (לא עקבי), ולכן לא כווצה"
     if [ ! -s "$RUN_DIR/shrink.plan" ]; then
-        echo "done|$_lm_need|אין מה לכווץ במקור" > "$_lm_out"; return 0
+        echo "done|$_lm_need|$_lm_d" > "$_lm_out"; return 0
     fi
     # The compacted layout, as shrink.sh will write it: every partition after
     # a shrunk one moves back by the sum of the shrinks before it.
@@ -222,7 +224,7 @@ _lc_measure_fit() {
     # source (#1466), so there is no original layout to record (#926 is the
     # capture's in-place shrink). A view that cannot be had is refused in
     # lc_run by name, before a byte reaches the target.
-    echo "done|$_lm_min|" > "$_lm_out"
+    echo "done|$_lm_min|$_lm_d" > "$_lm_out"
 }
 
 lc_verdict() {
@@ -233,7 +235,7 @@ lc_verdict() {
     [ "$1" -ge "$2" ] && { echo "fits|$2|"; return; }
     case "$3" in
         done) case "$4" in ''|*[!0-9]*) echo "unchecked||$5"; return ;; esac
-              if [ "$1" -ge "$4" ]; then echo "shrink|$4|"; else echo "short|$4|"; fi ;;
+              if [ "$1" -ge "$4" ]; then echo "shrink|$4|"; else echo "short|$4|$5"; fi ;;   # #2972: $5 = why a partition was not shrunk
         failed) # a minimum that was measured still says "does not fit" when it does not
                 case "$4" in ''|*[!0-9]*) ;; *) [ "$1" -lt "$4" ] && { echo "short|$4|"; return; } ;; esac
                 echo "unchecked|$4|${5:-המדידה נכשלה}" ;;

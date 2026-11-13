@@ -1,11 +1,11 @@
-"""‏#1179 שלב 2: כתיבה מהראשי על המשני — רשימה מותרת, בערוץ 8443.
+"""#1179 שלב 2: כתיבה מהראשי על המשני — רשימה מותרת, בערוץ 8443.
 
 אותם שני שרתים אמיתיים של ``test_secondary_console_relay``. הראשי מעביר
 ``POST/PUT/DELETE /api/console/storage-nodes/{id}/console/<נתיב>`` רק כשהזוג
 ``(שיטה, נתיב)`` ב-``CONSOLE_WRITES``; המשני מריץ אותו בתוך התהליך בזהות
 ``primary:<user>``. מוכח: (א) הפעולה קורית **במשני** ולא בראשי; (ב) רשומת
 יומן בשני הצדדים — ``peer_write`` בראשי (מי בראשי, איזה שרת, מה יצא) ובמשני
-(‏``primary:<user>``); (ג) נתיב מחוץ לרשימה, גוף גדול מהתקרה וערך שעבר
+(``primary:<user>``); (ג) נתיב מחוץ לרשימה, גוף גדול מהתקרה וערך שעבר
 ``defang`` — נדחים **בלי לשאול**; (ד) לא נשלחה / לא ידוע אם בוצעה — שני
 מצבים גלויים (502); (ה) 401 של המשני אינו עובר כ-401.
 """
@@ -60,7 +60,7 @@ def test_a_user_is_created_on_the_secondary_and_journaled_on_both_sides(server, 
     assert primary_rows and primary_rows[-1][0] == "noc"
     assert "HAIFA" in primary_rows[-1][1] and "POST /users → 200" in primary_rows[-1][1]
     assert _journal(secondary["conn"])[-1] == ("primary:noc", "POST /users → 200")
-    # הנתיב עצמו רושם בשם מי שביצע — ‏primary:noc, לא משתמש מקומי של המשני
+    # הנתיב עצמו רושם בשם מי שביצע — primary:noc, לא משתמש מקומי של המשני
     assert any(u == "primary:noc" for u, _ in secondary["conn"].execute(
         "SELECT user, detail FROM journal WHERE event != 'peer_write'").fetchall())
 
@@ -169,14 +169,15 @@ def _econnreset(*_a, **_k):
 
 def test_a_reset_while_the_request_is_still_being_written_is_not_sent(server, secondary,
                                                                      paired, monkeypatch):
-    # ‏ECONNRESET בתוך ה-sendall: הבקשה לא נכתבה במלואה, והמשני אינו מריץ בקשה
+    # ECONNRESET בתוך ה-sendall: הבקשה לא נכתבה במלואה, והמשני אינו מריץ בקשה
     # בלי כותרות שלמות או בלי הגוף המוצהר (#1122) — "לא נשלחה", לא "לא ידוע".
-    # ‏#1286: הלקוח כותב ב-``send`` (לא-חוסם, דרך select) ולא ב-``sendall``.
+    # #1286: הלקוח כותב ב-``send`` (לא-חוסם, דרך select) ולא ב-``sendall``.
     from OpenSSL import SSL                                       # noqa: PLC0415
     monkeypatch.setattr(SSL.Connection, "send", _econnreset)
     resp = _write(server, paired, "POST", "/users", {"username": "x", "password": "y", "role": "admin"})
     assert resp.status_code == 502 and "לא נשלחה" in resp.json()["detail"], resp.json()
-    assert "ECONNRESET" in resp.json()["detail"]
+    # #2543: the OpenSSL text goes to the server log; the operator reads our sentence.
+    assert "ECONNRESET" not in resp.json()["detail"] and "הפרטים ביומן השרת" in resp.json()["detail"]
     assert "לא נשלחה" in _journal(server["ctx"].conn)[-1][1]
     assert users.lookup(secondary["conn"], "x") is None, "המשני הריץ בקשה שלא נשלחה"
 
@@ -191,7 +192,7 @@ def test_a_reset_after_the_request_was_fully_written_is_unknown(server, secondar
 
 
 def test_a_stopped_interserver_listener_stops_accepting(secondary):
-    # ‏close() לבדו אינו מעיר accept() חסום בלינוקס: המאזין המשיך לקבל חיבור
+    # close() לבדו אינו מעיר accept() חסום בלינוקס: המאזין המשיך לקבל חיבור
     # אחד, השלים TLS וסגר בלי לקרוא — הראשי ראה ECONNRESET אחרי השליחה.
     srv = secondary["server"]
     srv.stop()
@@ -308,7 +309,7 @@ def test_the_network_write_allowlist(method, path, allowed):
 # --- #2240: כוח דרך הסוכן למכונה של המשני באמצע שיכפול מקומי -----------------------
 
 def test_power_over_a_local_copy_is_a_request_on_the_secondary(server, secondary, paired):
-    """"כבה בכל זאת" במוניטור מהראשי: ‏`…/agent-power` עובר ב-relay, והבקשה נרשמת
+    """"כבה בכל זאת" במוניטור מהראשי: `…/agent-power` עובר ב-relay, והבקשה נרשמת
     **במשני** (בשם `primary:<user>`), בערוץ ה-hello של המכונה שם, כ-confirmed — לא
     בראשי ולא כפריים במנהרה. ה-MAC במקפים: `:` אינו עובר את בדיקת הנתיב."""
     from datetime import datetime, timezone

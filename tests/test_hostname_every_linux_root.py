@@ -1,20 +1,20 @@
-"""‏#107 (המשך): שם המחשב בכל שורש לינוקס שעל הדיסק — לא רק בראשון.
+"""#107 (המשך): שם המחשב בכל שורש לינוקס שעל הדיסק — לא רק בראשון.
 
-הקליטה מסמנת `"system": true` על **כל** מחיצת לינוקס שיש בה ‏etc/os-release
-או etc/fstab (‏#1899, ‏`_linux_system` ב-manifest.sh) — דיסק עם שתי הפצות
+הקליטה מסמנת `"system": true` על **כל** מחיצת לינוקס שיש בה etc/os-release
+או etc/fstab (#1899, `_linux_system` ב-manifest.sh) — דיסק עם שתי הפצות
 מקבל שני סימונים. השחזור לקח את הראשון בלבד (`[...][0]` ב-`_mount_linux`),
 והשורש השני עלה עם השם שבאימג' — אותה צורת כשל של #107, רק בין שתי מערכות
 לינוקס במקום Windows ולינוקס. עכשיו כל שורש מסומן נכתב; שורש שנכשל נאמר
 בשמו (מספר המחיצה), והאחרים נכתבים בכל זאת (עיקרון 5).
 
-אותו קו ב-`_mount_linux` שבר את `linux_identity_reset` (‏#1979, grow.sh):
+אותו קו ב-`_mount_linux` שבר את `linux_identity_reset` (#1979, grow.sh):
 היא עוברת על כל מחיצת לינוקס עם תוכנית של שורה אחת, אבל `_mount_linux`
 לקחה את הסימון מהמניפסט בלי להסתכל בתוכנית שקיבלה — מחיצה 2 (/boot)
 עוגנה כ-`mount -t '' /dev/sda3`, ושורש מסומן שני לא אופס לעולם.
 
-‏`mount`/`umount` מזויפים כמו ב-`test_linux_identity_1979`: העיגון מעתיק את
+`mount`/`umount` מזויפים כמו ב-`test_linux_identity_1979`: העיגון מעתיק את
 "המחיצה" (`disks/<צומת>`) לנקודת העיגון, והניתוק מחזיר את התוכן אליה — מה
-שנכתב נוחת בדיוק במחיצה שעוגנה. ‏`jq` מזויף מחזיר את `$MARKED` (‏`[0]` — את
+שנכתב נוחת בדיוק במחיצה שעוגנה. `jq` מזויף מחזיר את `$MARKED` (`[0]` — את
 הראשון, אחרת את כולם), כמו jq אמיתי על מניפסט שבו המחיצות האלה מסומנות.
 הטסט האחרון מריץ jq אמיתי על מניפסט אמיתי (לינוקס; בווינדוס אין jq).
 """
@@ -45,7 +45,7 @@ echo "mount $*" >> "$RUN_DIR/mounts"
 d="$RUN_DIR/disks/${dev##*/}"
 [ -d "$d" ] || exit 32
 cp -R "$d/." "$mnt/" && echo "$d" > "$RUN_DIR/mounted\""""
-UMOUNT = """case "$1" in */linux) ;; *) exit 0 ;; esac   # ‏צד ה-Windows: ntfs-3g מזויף, אין מה להחזיר
+UMOUNT = """case "$1" in */linux) ;; *) exit 0 ;; esac   # \u200fצד ה-Windows: ntfs-3g מזויף, אין מה להחזיר
 d=$(cat "$RUN_DIR/mounted")
 rm -rf "$d" && mkdir -p "$d" && cp -R "$1/." "$d/" && rm -rf "$1" && mkdir -p "$1\""""
 JQ = """case "$*" in
@@ -71,7 +71,7 @@ def box(tmp_path: Path, plan: list[str], marked: str, *, roots=("sda3", "sda4"),
     for node in roots:
         seed(run, node)
     if boot:
-        (run / "disks/sda2/grub").mkdir(parents=True)   # ‏/boot נפרד: אין etc
+        (run / "disks/sda2/grub").mkdir(parents=True)   # /boot נפרד: אין etc
     bindir = tmp_path / "bin"; bindir.mkdir()
     stubs = {"mount": MOUNT, "umount": UMOUNT, **({"jq": JQ} if jq else {})}
     script = "".join(stub(bindir / n, b) for n, b in stubs.items())
@@ -112,7 +112,7 @@ UNTOUCHED = ("BUILD-01", "BUILD-01")
 # --- שם המחשב: כל שורש מסומן ------------------------------------------------------
 
 def test_every_marked_linux_root_gets_the_name(tmp_path):
-    """שתי הפצות על דיסק אחד — שתיהן נקראות בשם. ‏/boot (2) אינו נגע."""
+    """שתי הפצות על דיסק אחד — שתיהן נקראות בשם. /boot (2) אינו נגע."""
     script, run = box(tmp_path, [BOOT, ROOT_A, ROOT_B], "3 4")
     rc, result = name(script)
     assert (rc, result) == (0, {"ok": True, "hostname": "LAB1-05", "method": "etc-hostname"})
@@ -130,7 +130,7 @@ def test_a_root_that_failed_is_named_by_partition_and_the_others_are_written(tmp
 
 
 def test_dual_boot_with_two_linux_roots_names_all_three(tmp_path):
-    """‏#107 בצורתו המלאה: Windows ושתי מערכות לינוקס."""
+    """#107 בצורתו המלאה: Windows ושתי מערכות לינוקס."""
     script, run = box(tmp_path, [WIN, ROOT_A, ROOT_B], "3 4", boot=False)
     (run / "win/Windows/System32/config").mkdir(parents=True)
     (run / "win/Windows/System32/config/SYSTEM").write_bytes(CLEAN_HIVE)
@@ -145,7 +145,7 @@ def test_dual_boot_with_two_linux_roots_names_all_three(tmp_path):
 # --- שומרים: מה שעבד קודם עובד גם עכשיו -------------------------------------------
 
 def test_one_marked_root_after_boot_is_the_one_written(tmp_path):
-    """‏#1899: /boot ראשונה, השורש מסומן — נכתב השורש בלבד."""
+    """#1899: /boot ראשונה, השורש מסומן — נכתב השורש בלבד."""
     script, run = box(tmp_path, [BOOT, ROOT_A], "3", roots=("sda3",))
     rc, result = name(script)
     assert (rc, result["ok"]) == (0, True), result
@@ -160,7 +160,7 @@ def test_an_old_manifest_without_marks_names_the_first_linux_partition(tmp_path)
     assert names(run) == {"sda3": NAMED, "sda4": UNTOUCHED}
 
 
-# --- ‏#1979: איפוס הזהות עובר על כל מחיצה בתוכנית של שורה אחת -----------------------
+# --- #1979: איפוס הזהות עובר על כל מחיצה בתוכנית של שורה אחת -----------------------
 
 def identity(script: str) -> tuple[int, str]:
     out = sh(script + 'linux_identity_reset sda /dev/null; echo "rc=$? why=$LINUX_ID_ERROR"')

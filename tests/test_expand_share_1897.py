@@ -1,18 +1,18 @@
-"""‏#1897 — הכרעת נדב (04/11): כל כונן חוזר לגודלו במקור, ורק C: מתפשרת.
+"""#1897 — הכרעת נדב (04/11): כל כונן חוזר לגודלו במקור, ורק C: מתפשרת.
 
 אימג' C: + D: + E: שנקלט עם כיווץ (#87/#929): שלושתן מכווצות במניפסט. עד
-22/10 ‏D: הגיעה לכל יעד מכווצת, עם כ-2GB פנויים, לתמיד; מ-22/10 המקום הנוסף
+22/10 D: הגיעה לכל יעד מכווצת, עם כ-2GB פנויים, לתמיד; מ-22/10 המקום הנוסף
 התחלק לפי היחס במקור. ההכרעה של 04/11 מחליפה את שתיהן:
 
 1. בקליטה מכווצים את כל הכוננים (כבר כך מ-#929 — לא נבדק כאן).
 2. בשחזור כל כונן חוזר לגודלו המקורי (`shrunk_from_bytes`).
-3. דיסק גדול מהמקור: ‏D: ו-E: בגודלן המקורי, וכל המקום הנוסף ל-C:.
-4. דיסק קטן מהמקור: רק C: קטנה, עד המקום הפנוי המינימלי שלה; ‏D: ו-E: בגודלן
+3. דיסק גדול מהמקור: D: ו-E: בגודלן המקורי, וכל המקום הנוסף ל-C:.
+4. דיסק קטן מהמקור: רק C: קטנה, עד המקום הפנוי המינימלי שלה; D: ו-E: בגודלן
    המקורי. לא מספיק — השיכפול לא מתחיל, עם סיבה, לפני הבייט הראשון (diskfit).
 
 הטסטים כאן מודדים את **גודל כל כונן ביעד** — לא רק שהוא זז — על ארבעה יעדים:
 גדול (500GB), שווה למקור (256GB), קטן שעוד מספיק (160GB) וקטן שאינו מספיק
-(128GB). והתאומים — הסוכן (‏jq, ‏`cand_room`) והשרת (‏`minfree.cand_room`) —
+(128GB). והתאומים — הסוכן (jq, `cand_room`) והשרת (`minfree.cand_room`) —
 אומרים את אותו גודל ל-C: כמו קריאת ה-sgdisk ש-`expand_last` כותב בפועל.
 """
 
@@ -38,8 +38,8 @@ WIN = "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"
 REC = "DE94BBA4-06D1-4D40-A16A-BFD50179D6AC"
 ESP = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B"
 
-#: המקור: ‏256GB. ‏C: ‏120→30GiB (‏20 תפוסים), ‏recovery ‏800MiB שלא כווצה,
-#: ‏D: ‏100→12GiB (‏10 תפוסים), ‏E: ‏15→4GiB (‏2 תפוסים) — בפריסה הצפופה של הקליטה.
+#: המקור: 256GB. C: 120→30GiB (20 תפוסים), recovery 800MiB שלא כווצה,
+#: D: 100→12GiB (10 תפוסים), E: 15→4GiB (2 תפוסים) — בפריסה הצפופה של הקליטה.
 C_START = 206848
 C_NOW, C_ORIG = 30 * GIB, 120 * GIB
 REC_SIZE = 800 * MIB
@@ -92,7 +92,7 @@ def plan_of(m: dict) -> list[str]:
 
 
 def layout(disk: int) -> dict:
-    """מה שהיעד אמור לקבל: הזנב נארז מסוף הדיסק (‏_move_to_tail), כל אחת בגודלה
+    """מה שהיעד אמור לקבל: הזנב נארז מסוף הדיסק (_move_to_tail), כל אחת בגודלה
     במקור, ו-C: מ-C_START עד תחילת ה-recovery."""
     e_n, e_start = tail_n(5, E_ORIG // 512, end=disk - 34)
     d_n, d_start = tail_n(4, D_ORIG // 512, end=e_start - 1)
@@ -110,10 +110,10 @@ def test_d_and_e_get_their_source_size_and_c_takes_the_rest(tmp_path, disk):
     want = layout(disk)
     e_n, d_n, r_n = want["args"]
     call = f" {calls[0]} "
-    assert f" {e_n} " in call, f"‏E: לא חזרה ל-15GiB בדיוק: {call}"
-    assert f" {d_n} " in call, f"‏D: לא חזרה ל-100GiB בדיוק: {call}"
-    assert f" {r_n} " in call, "‏recovery לא כווצה — זזה לזנב בגודלה"
-    assert f" -d 2 -n 2:{C_START}:0 " in call, "‏C: נמתחת עד ה-recovery ולוקחת את כל השאר"
+    assert f" {e_n} " in call, f"\u200fE: לא חזרה ל-15GiB בדיוק: {call}"
+    assert f" {d_n} " in call, f"\u200fD: לא חזרה ל-100GiB בדיוק: {call}"
+    assert f" {r_n} " in call, "\u200frecovery לא כווצה — זזה לזנב בגודלה"
+    assert f" -d 2 -n 2:{C_START}:0 " in call, "\u200fC: נמתחת עד ה-recovery ולוקחת את כל השאר"
     c_bytes = want["c_sectors"] * 512
     assert c_bytes >= C_NOW
     if disk >= DISK_256:
@@ -121,7 +121,7 @@ def test_d_and_e_get_their_source_size_and_c_takes_the_rest(tmp_path, disk):
     if disk == DISK_160:
         assert c_bytes < C_ORIG, "יעד קטן: רק C: מתפשרת"
     more = (tmp_path / "box/run/targets/sda/expanded.more").read_text().split()
-    assert more == ["4|ntfs", "5|ntfs"], "‏D: ו-E: גדלות גם כמערכת קבצים אחרי הזרם"
+    assert more == ["4|ntfs", "5|ntfs"], "\u200fD: ו-E: גדלות גם כמערכת קבצים אחרי הזרם"
 
 
 @needs_shell
@@ -179,7 +179,7 @@ def test_after_the_stream_d_and_e_grow_too_and_a_failure_names_it(tmp_path):
     assert rc == "rc=1 err=מחיצה 4 (ntfs): boom"
 
 
-# --- לפני הבייט הראשון: disk_fits, ‏min-free, והשרת -----------------------------
+# --- לפני הבייט הראשון: disk_fits, min-free, והשרת -----------------------------
 
 LIBS = ("common", "jsonq", "sysinfo", "diskinfo", "progress", "failmark", "restore", "expand", "diskfit")
 
@@ -259,9 +259,9 @@ def test_the_agent_and_the_server_give_c_what_expand_writes(tmp_path, disk):
 def test_the_smallest_disk_the_server_offers_is_the_one_the_agent_accepts(tmp_path, gb):
     """"נכנס לדיסק מ-X" של הקונסולה — הבייט שבו הסוכן מתחיל לקבל, לא לפניו.
 
-    ‏gb=0: סוף הפריסה עם D: ו-E: בגודלן במקור, ועוד **33 סקטורים** — ה-GPT
+    gb=0: סוף הפריסה עם D: ו-E: בגודלן במקור, ועוד **33 סקטורים** — ה-GPT
     המשני (כותרת + 32 של רשומות; הסקטור השמיש האחרון הוא D-34, ושם
-    ‏_move_to_tail מסיים את E:). לא `required_bytes` + ההפרשים: ה-256KiB שבו
+    _move_to_tail מסיים את E:). לא `required_bytes` + ההפרשים: ה-256KiB שבו
     הם מרווח של בדיקה 2.7 על הפריסה **המכווצת**, לא דרישה (נמדד 04/11 על
     ה-testrunner: ההנחה הזו הייתה גבוהה ב-245,248 בייט, בדיוק 262144-16896)."""
     m = c_d_e()
@@ -272,7 +272,7 @@ def test_the_smallest_disk_the_server_offers_is_the_one_the_agent_accepts(tmp_pa
         assert smallest == end_full + 33 * 512, smallest - end_full
     else:
         assert smallest == required_bytes(m) - 262144 + (D_ORIG - D_NOW) + (E_ORIG - E_NOW) \
-            + 33 * 512 + (40 - 30) * GIB, "‏C: צריכה 40GiB (‏20 תפוסים + 20 פנויים) במקום 30"
+            + 33 * 512 + (40 - 30) * GIB, "\u200fC: צריכה 40GiB (\u200f20 תפוסים + 20 פנויים) במקום 30"
     rc, err = _disk_fits(tmp_path / "at", m, smallest, gb)
     assert rc == "rc=0", err
     rc, err = _disk_fits(tmp_path / "below", m, smallest - 512, gb)
@@ -285,4 +285,4 @@ def test_the_server_does_not_offer_the_image_below_d_and_e_at_their_source_size(
     floor = minfree.min_disk_bytes(m, 0)
     assert floor > DISK_128 * 512 > required_bytes(m), "עד #1897 (04/11) הוצע מ-required_bytes"
     assert minfree.min_disk_bytes(m, 0) <= DISK_160 * 512
-    assert minfree.min_disk_bytes(m, 20) > DISK_160 * 512, "‏C: עם 13GB פנויים אינה 20"
+    assert minfree.min_disk_bytes(m, 20) > DISK_160 * 512, "\u200fC: עם 13GB פנויים אינה 20"

@@ -1,16 +1,16 @@
-"""‏#106: סירוב מבני בקליטה מגיע לקונסולה **עם סיבה**, לא כ-failed ריק.
+"""#106: סירוב מבני בקליטה מגיע לקונסולה **עם סיבה**, לא כ-failed ריק.
 
-‏`capture_disk` ידע לצרף סיבה לכשל של מחיצה בלבד (שורות 211-218 לפני
+`capture_disk` ידע לצרף סיבה לכשל של מחיצה בלבד (שורות 211-218 לפני
 התיקון). ארבעת הסירובים שקורים *לפני* הזרם — אין דיסק כזה, הדיסק אינו
 GPT, אין מחיצות, לא הצלחנו לחשב את הפריסה — היו `log` ו-`return 1`
-בלבד. ‏`log` כותב ל-`$LOG_FILE` שיושב ב-tmpfs ונמחק באתחול, ומהדהד
+בלבד. `log` כותב ל-`$LOG_FILE` שיושב ב-tmpfs ונמחק באתחול, ומהדהד
 ל-tty שנמחק מיד אחר כך ב-`ui_clear`. הסיבה קיימת לרגע ואז נעלמת.
 
 מה שהמפעיל ראה: משימת קליטה במצב `failed`, בלי שורת סיבה. מה שהוא היה
 צריך לדעת — "הכונן שחיברת אינו GPT" — נכתב ונעלם. זו שיחת התמיכה
 הגרועה ביותר: הטכנאי מחליף כבל, מחליף כונן, מנסה שוב.
 
-לכן כל בדיקה כאן נמדדת ב**מצב שהקונסולה קוראת** — ‏`targets/<dev>/error`
+לכן כל בדיקה כאן נמדדת ב**מצב שהקונסולה קוראת** — `targets/<dev>/error`
 ומה ש-`build_progress` מרכיב ממנו (ממשק 4) — ולא ביומן. בדיקה שמסתפקת
 ביומן הייתה עוברת גם על הקוד השבור.
 
@@ -44,15 +44,15 @@ TASK = "tsk_106"
 
 #: כותרת GPT אמיתית כפי ש-`disk_scheme` מחפש אותה: "EFI PART" ב-LBA1.
 GPT_DISK = bytes(512) + b"EFI PART" + bytes(504)
-#: ‏MBR ותו לא — החתימה ב-510, ואין "EFI PART" אחריה.
+#: MBR ותו לא — החתימה ב-510, ואין "EFI PART" אחריה.
 MBR_DISK = bytes(510) + b"\x55\xaa" + bytes(512)
 
 
 def fat32_head(fat1: int = 0x0FFFFFFF) -> bytes:
-    """‏#1823: ראש מחיצה ש-`capture_fat_reason` קורא כ-FAT32 — ‏BPB (512 בייט
+    """#1823: ראש מחיצה ש-`capture_fat_reason` קורא כ-FAT32 — BPB (512 בייט
     לסקטור, סקטור שמור אחד, שתי FAT) ו-FAT[1] בסקטור 1. ברירת המחדל: ביט
     הכיבוי הנקי וביט אין-שגיאת-קלט/פלט דולקים. בלי `FAT32   ` ובלי `55AA` —
-    ‏blkid אמיתי (מעבדה) עדיין עונה "אין TYPE" על מחיצות הקופסה."""
+    blkid אמיתי (מעבדה) עדיין עונה "אין TYPE" על מחיצות הקופסה."""
     raw = bytearray(1024)
     struct.pack_into("<HBH", raw, 11, 512, 1, 1)
     raw[16] = 2
@@ -66,14 +66,14 @@ CLEAN_PARTITION = fat32_head()
 #: לא זה ולא זה. דיסק ריק שזה עתה יצא מהאריזה.
 BLANK_DISK = bytes(1024)
 
-#: ‏sgdisk שמדפיס טבלה בלי אף מחיצה — דיסק עם כותרת GPT ותו לא.
+#: sgdisk שמדפיס טבלה בלי אף מחיצה — דיסק עם כותרת GPT ותו לא.
 EMPTY_TABLE = (
     '#!/bin/sh\n'
     'echo "Disk identifier (GUID): 4C7B1E00-0000-4000-8000-000000000001"\n'
     'echo "Number  Start (sector)    End (sector)  Size       Code  Name"\n'
 )
 
-#: ‏sgdisk עם מחיצה אחת — מספיק כדי לעבור את שער "אין מחיצות".
+#: sgdisk עם מחיצה אחת — מספיק כדי לעבור את שער "אין מחיצות".
 ONE_PARTITION = (
     '#!/bin/sh\n'
     'if [ "$1" = "-i" ]; then\n'
@@ -90,8 +90,8 @@ ONE_PARTITION = (
     'echo "   1            2048          206847   100.0 MiB   EF00  EFI system"\n'
 )
 
-#: ‏awk אמיתי בכל קריאה — חוץ מזו שמחשבת את הפריסה, שמזוהה לפי `-v disk=`
-#: והיא היחידה בקובץ. השער הרביעי הוא "‏awk לא הניב ערך", וזה המצב היחיד
+#: awk אמיתי בכל קריאה — חוץ מזו שמחשבת את הפריסה, שמזוהה לפי `-v disk=`
+#: והיא היחידה בקובץ. השער הרביעי הוא "awk לא הניב ערך", וזה המצב היחיד
 #: שמייצר אותו: כל שאר המסלולים מדפיסים מספר. הזיוף מדויק בכוונה — הוא
 #: לא מפיל את פרסור ה-sgdisk שרץ באותו קובץ שורה קודם.
 AWK_WITHOUT_AN_ANSWER = (
@@ -103,7 +103,7 @@ AWK_WITHOUT_AN_ANSWER = (
     'exec "$real" "$@"\n'
 )
 
-#: ‏curl מזויף שמחקה `-T <קובץ>`: הוא **קורא** את ה-fifo שהקליטה פותחת.
+#: curl מזויף שמחקה `-T <קובץ>`: הוא **קורא** את ה-fifo שהקליטה פותחת.
 #: בלעדיו `tee` נחסם ב-open() לנצח — בדיוק המצב שהסוכן עצמו נכווה בו,
 #: וכאן הוא היה הופך בדיקה שאמורה לעבור לתקיעה של 45 שניות. הוא יושב
 #: ליד ההרנס ולא בקובץ של #87: הוא מה שמניע את המסלול ה**מצליח**, וגם
@@ -121,11 +121,11 @@ CURL_SINK = (
 )
 
 
-#: ‏#926: curl שמשחק גם את השרת של זיכרון הכיווץ — עונה ל-`shrink-open` /
-#: ‏`shrink-close` כמו `-o <קובץ>` + `-w '%{http_code}'` של הסוכן, רושם כל
+#: #926: curl שמשחק גם את השרת של זיכרון הכיווץ — עונה ל-`shrink-open` /
+#: `shrink-close` כמו `-o <קובץ>` + `-w '%{http_code}'` של הסוכן, רושם כל
 #: גוף שנשלח (`shrink_open.sent` / `shrink_close.sent`) ואת הצעד ב-order.log,
-#: ומרוקן `-T` כמו CURL_SINK. ‏SHRINK_OPEN_HTTP / SHRINK_CLOSE_HTTP קובעים
-#: את התשובה; ‏000 = השרת לא נענה כלל (curl יוצא 7, בלי קוד).
+#: ומרוקן `-T` כמו CURL_SINK. SHRINK_OPEN_HTTP / SHRINK_CLOSE_HTTP קובעים
+#: את התשובה; 000 = השרת לא נענה כלל (curl יוצא 7, בלי קוד).
 CURL_SHRINK_SERVER = (
     '#!/bin/sh\n'
     'f=""; o=""; d=""; url=""\n'
@@ -166,20 +166,20 @@ CURL_SHRINK_SERVER = (
     'exit 0\n'
 )
 
-#: ‏#1248: בדיקת המקום עוברת, וכל קריאה אחרת נכשלת כמו curl שלא התחבר.
+#: #1248: בדיקת המקום עוברת, וכל קריאה אחרת נכשלת כמו curl שלא התחבר.
 CURL_NO_SERVER = (
     '#!/bin/sh\n'
     'case "$*" in */preflight*) echo \'{"status":"ok","reason":"space checked"}\'; exit 0 ;; esac\n'
     'exit 7\n'
 )
 
-#: ‏jq אינו מותקן בווינדוס; ‏`json_get` על תשובת `shrink-open` (ok/id) עובר
+#: jq אינו מותקן בווינדוס; `json_get` על תשובת `shrink-open` (ok/id) עובר
 #: דרך התחליף הצר של test_directsend — במעבדה וב-CI רץ jq אמיתי.
 JQ_STUB = '#!/bin/sh\nexec python "' + posix(Path(__file__).parent / "jq_shim.py") + '" "$@"\n'
 
 
-#: ‏#1466: קליטה עם כיווץ מריצה עכשיו גם את צד העותק בזיכרון (dmsetup, modprobe,
-#: ‏rmmod -- כעשרה תהליכים מזויפים). בווינדוס (Git Bash) זה 34-45 שניות לקליטה,
+#: #1466: קליטה עם כיווץ מריצה עכשיו גם את צד העותק בזיכרון (dmsetup, modprobe,
+#: rmmod -- כעשרה תהליכים מזויפים). בווינדוס (Git Bash) זה 34-45 שניות לקליטה,
 #: נמדד 16/10 -- ממש על התקרה הכללית של 45, ולכן לקליטה תקרה משלה. היא עדיין
 #: תקרה: מסלול שנתקע נכשל כאן, לא תלוי לנצח.
 CAPTURE_TIMEOUT = 90
@@ -190,15 +190,15 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
                 raid=False) -> tuple[Path, Path, str]:
     """מריץ את `capture_disk` האמיתי מול דיסק מזויף, ומחזיר (box, run, out).
 
-    ‏`node_is_block` מוחלף כמו בכל שאר בדיקות הסוכן: אין דרך ליצור התקן
+    `node_is_block` מוחלף כמו בכל שאר בדיקות הסוכן: אין דרך ליצור התקן
     בלוקים בלי root, ובדיקה שמדולגת בחצי מהסביבות היא ירוק בלי ראיה.
-    ‏`disk_scheme` לעומת זאת רץ באמת — `dd` על קובץ רגיל קורא בדיוק כמו
+    `disk_scheme` לעומת זאת רץ באמת — `dd` על קובץ רגיל קורא בדיוק כמו
     על צומת, ולכן המחרוזת שמגיעה להודעה היא זו שהכלי באמת החזיר.
 
-    שרשרת הטעינה היא זו של `agent/imagesrv-agent`, באותו סדר. ‏`manifest.sh`
+    שרשרת הטעינה היא זו של `agent/imagesrv-agent`, באותו סדר. `manifest.sh`
     נעדר ממנה עד #338, ובסביבת בדיקה זה כשל **שקט**: ב-POSIX sh פונקציה
     שאינה מוגדרת היא "command not found" ל-stderr, הריצה ממשיכה ומחזירה
-    ‏`rc=0`, והמניפסט יוצא עם `os` ריק ו-`partitions` ריק. שני השומרים
+    `rc=0`, והמניפסט יוצא עם `os` ריק ו-`partitions` ריק. שני השומרים
     בסוף הקובץ אוכפים את שני הצדדים — השרשרת עצמה והתוצר שלה.
     """
     box = tmp_path / "box"
@@ -206,17 +206,17 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
     run = box / "run"
     dev.mkdir(parents=True)
     run.mkdir(parents=True)
-    # ‏#1808: שער ה-RAID קורא את 16 הסקטורים האחרונים (ראיה חיובית שהדיסק נקרא)
+    # #1808: שער ה-RAID קורא את 16 הסקטורים האחרונים (ראיה חיובית שהדיסק נקרא)
     # לפי גודלו ב-sysfs — הקופסה מרופדת לפחות לזה, והגודל נחשף כמו בכונן אמיתי.
     image = image + bytes(max(0, 8192 - len(image)))
     (dev / disk).write_bytes(image)
-    # ‏#1130: שער ה-BitLocker קורא את הסקטור הראשון של **צומת המחיצה**, וקריאה
+    # #1130: שער ה-BitLocker קורא את הסקטור הראשון של **צומת המחיצה**, וקריאה
     # שנכשלה היא "לא הצלחנו לבדוק" — סירוב, לא ירוק. בקופסה יש קובץ לדיסק
     # בלבד; המחיצות מקבלות כותרת נקייה (CLEAN_PARTITION, #1823), וטסט שרוצה חתימה
-    # (‏FVE_SECTOR) דורס אותה ב-shell_pre.
+    # (FVE_SECTOR) דורס אותה ב-shell_pre.
     for idx in range(1, 5):
         (dev / f"{disk}{idx}").write_bytes(CLEAN_PARTITION)
-    # ‏`disk_scheme` גוזר את מיקום כותרת ה-GPT מגודל הסקטור הלוגי (#126),
+    # `disk_scheme` גוזר את מיקום כותרת ה-GPT מגודל הסקטור הלוגי (#126),
     # ולכן הקופסה חייבת לחשוף אותו כמו כל כונן אמיתי. בלעדיו התשובה היא
     # `unknown` — לא ידענו — וזה מצב אחר מכל ארבעת הסירובים שנבדקים כאן.
     queue = box / "sys/block" / disk / "queue"
@@ -227,12 +227,12 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
     nodes.write_text(f"{posix(dev)}/{disk}\n" if present else "",
                      encoding="utf-8", newline="\n")
 
-    # ‏env נכתב **לפני** ה-`.` של capture.sh: כל ה-`${X:-ברירת מחדל}` שבו
+    # env נכתב **לפני** ה-`.` של capture.sh: כל ה-`${X:-ברירת מחדל}` שבו
     # נגזרים בטעינה, וייצוא שמגיע אחריה אינו משנה דבר.
     extra_env = "".join(f"export {name}={value!r}; "
                         for name, value in (env or {}).items())
     stubs = dict(stubs or {})
-    # ‏#1248: בדיקת המקום רצה לפני הכיווץ; טסט בלי curl משלו בודק שער אחר.
+    # #1248: בדיקת המקום רצה לפני הכיווץ; טסט בלי curl משלו בודק שער אחר.
     stubs.setdefault("curl", CURL_NO_SERVER)
     if shutil.which("jq") is None and "jq" not in stubs:
         stubs["jq"] = JQ_STUB
@@ -245,19 +245,19 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
         make_stubs(box / "stubs", stubs)
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(dev)!r} "
         f"SYSROOT={posix(box)!r} SERVER=http://s; " + extra_env
-        # ‏#926: jsonq.sh — shrink_open_record קורא את תשובת השרת (ok/id) ב-json_get.
+        # #926: jsonq.sh — shrink_open_record קורא את תשובת השרת (ok/id) ב-json_get.
         + f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; "
         f". {posix(AGENT)}/lib/core/waits.sh; {agent_sources('sysinfo', 'diskinfo', 'progress', 'failmark')}"
-        # ‏manifest.sh (#338) ואז bootca.sh, בדיוק כסדר של
-        # `imagesrv-agent`: ‏`capture_disk` קורא לשניהם בשורת המניפסט,
+        # manifest.sh (#338) ואז bootca.sh, בדיוק כסדר של
+        # `imagesrv-agent`: `capture_disk` קורא לשניהם בשורת המניפסט,
         # ופונקציה שאינה טעונה היא מניפסט פגום — לא שגיאה.
         f". {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/capture/manifest.sh; . {posix(AGENT)}/lib/restore/gptboot.sh; "
         f". {posix(AGENT)}/lib/postdeploy/bootca.sh; . {posix(AGENT)}/lib/capture/hibernation.sh; . {posix(AGENT)}/lib/restore/ntfsunhib.sh; "
-        # ‏#87: shrink.sh לפני capture.sh כמו בסוכן; הוא עצמו קורא ל-attended
-        # (‏#906) ול-ui.sh, ולכן גם הם כאן — פונקציה שאינה טעונה היא כשל שקט.
+        # #87: shrink.sh לפני capture.sh כמו בסוכן; הוא עצמו קורא ל-attended
+        # (#906) ול-ui.sh, ולכן גם הם כאן — פונקציה שאינה טעונה היא כשל שקט.
         f". {posix(AGENT)}/lib/gui/ui.sh; . {posix(AGENT)}/lib/core/attended.sh; "
-        # ‏#926: shrinkmem.sh — הרשומה בשרת לפני הכיווץ; נטען אחרי shrink.sh כמו בסוכן.
-        # ‏#929: shrinkplan.sh (המדידה והשאלה) לפניו, shrinkoffer.sh (ההצעה באתחול) אחריו.
+        # #926: shrinkmem.sh — הרשומה בשרת לפני הכיווץ; נטען אחרי shrink.sh כמו בסוכן.
+        # #929: shrinkplan.sh (המדידה והשאלה) לפניו, shrinkoffer.sh (ההצעה באתחול) אחריו.
         f". {posix(AGENT)}/lib/shrink/shrinkplan.sh; . {posix(AGENT)}/lib/shrink/shrink.sh; . {posix(AGENT)}/lib/localclone/lcsnap.sh; "   # #1466: the RAM view
         f". {posix(AGENT)}/lib/shrink/shrinkmem.sh; . {posix(AGENT)}/lib/shrink/shrinkoffer.sh; "
         f". {posix(AGENT)}/lib/capture/capturedetail.sh; "   # #1505: the console's partition table, loaded before capture.sh like the agent does
@@ -266,10 +266,10 @@ def capture_run(tmp_path, *, present=True, image=GPT_DISK, stubs=None,
         f". {posix(AGENT)}/lib/capture/capture.sh; . {posix(AGENT)}/lib/restore/writemark.sh; . {posix(AGENT)}/lib/capture/capturesink.sh; "   # #1217
         f". {posix(AGENT)}/lib/restore/readback.sh; . {posix(AGENT)}/lib/localclone/readbacklc.sh; "   # #1805: rb_capture_json (a direct send's digest; nothing here)
         f'node_is_block() {{ grep -qxF "$1" {posix(nodes)!r} 2>/dev/null; }}; '
-        # ‏#1808: שער ה-RAID נבדק ב-test_capture_gates.py (‏raid=True); כאן הוא
+        # #1808: שער ה-RAID נבדק ב-test_capture_gates.py (raid=True); כאן הוא
         # מוחלף כמו node_is_block — קופסאות רבות מזייפות גודל דיסק ב-sysfs.
         + ("" if raid else "raid_member_reason() { :; }; ")
-        # ‏shell_pre רץ **אחרי** שרשרת הטעינה, ולכן הוא יכול להחליף
+        # shell_pre רץ **אחרי** שרשרת הטעינה, ולכן הוא יכול להחליף
         # פונקציה שנטענה — זה מה שמאפשר לבדוק מה קורה כשהיא מתנהגת רע.
         + shell_pre
         + f"capture_disk {TASK} {disk}{'' if serial is None else ' ' + repr(serial)} > {posix(box)}/capture.out 2>&1; "
@@ -312,8 +312,8 @@ def test_a_disk_that_is_not_there_says_so(tmp_path):
 @pytest.mark.parametrize("scheme", ["mbr", "none"])
 def test_a_source_disk_that_is_not_gpt_names_what_was_found(tmp_path, scheme):
     """הגדרת ה"גמור" של #106 מילה במילה: לא "capture failed" אלא
-    "הכונן אינו GPT (נמצא: mbr)". המגבלה עצמה נשארת — ‏GPT בלבד היא
-    החלטת אפיון (‏`docs/architecture/imagesrv-spec.md:52`) — הבאג הוא שהיא הגיעה
+    "הכונן אינו GPT (נמצא: mbr)". המגבלה עצמה נשארת — GPT בלבד היא
+    החלטת אפיון (`docs/architecture/imagesrv-spec.md:52`) — הבאג הוא שהיא הגיעה
     ליעד בלי סיבה."""
     box, run, out = capture_run(
         tmp_path, image={"mbr": MBR_DISK, "none": BLANK_DISK}[scheme])
@@ -334,7 +334,7 @@ def test_a_gpt_disk_without_partitions_says_that_and_not_something_else(tmp_path
 def test_a_layout_that_could_not_be_sized_says_it_could_not_be_sized(tmp_path):
     """השער הרביעי: יש מחיצות, והחישוב לא הניב ערך.
 
-    ‏"לא הצלחנו לחשב" אינו "אין מחיצות" ואינו "המחיצה נכשלה" — עיקרון 5
+    "לא הצלחנו לחשב" אינו "אין מחיצות" ואינו "המחיצה נכשלה" — עיקרון 5
     בדיוק. הסירוב עצמו נכון (בלי רצפת גודל אי אפשר לדעת לאיזה כונן
     האימג' נכנס), ומה שחסר לו היה רק המילה.
     """
@@ -378,7 +378,7 @@ def test_the_refusals_do_not_collapse_into_one_message(tmp_path):
 
 def test_the_reason_also_stays_in_the_log(tmp_path):
     """הדיווח הוא היעד, והיומן נשאר — הוא מה שיש לטכנאי שיושב מול
-    המכונה בזמן אמת. ‏#106 אינו "להעביר את הסיבה", הוא "גם לשם"."""
+    המכונה בזמן אמת. #106 אינו "להעביר את הסיבה", הוא "גם לשם"."""
     box, run, out = capture_run(tmp_path, image=MBR_DISK)
     refusal_reason(box, run, out)
     assert "mbr" in log_of(run), log_of(run)
@@ -431,8 +431,8 @@ def test_no_structural_refusal_returns_without_writing_a_reason():
 
 
 def test_the_target_is_registered_before_the_first_check():
-    """‏`target_set` על יעד שלא נרשם אינו כותב לשום מקום שהקונסולה
-    קוראת. ‏`target_init` חייב להיות השורה הראשונה בפועל — שני השערים
+    """`target_set` על יעד שלא נרשם אינו כותב לשום מקום שהקונסולה
+    קוראת. `target_init` חייב להיות השורה הראשונה בפועל — שני השערים
     הראשונים רצים לפני שהיה בכלל מה לדווח עליו."""
     lines = capture_body()
     init = first_index(lines, 'target_init "$_disk"')
@@ -442,7 +442,7 @@ def test_the_target_is_registered_before_the_first_check():
 
 
 def test_the_interfaces_document_says_when_the_capture_target_appears():
-    """‏`docs/architecture/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים. השדה
+    """`docs/architecture/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים. השדה
     `error` לא השתנה — אבל הוא מתמלא עכשיו במצבים חדשים, לפני שנשלח
     בייט אחד, וזה בדיוק מה שהמסמך צריך לומר."""
     doc = Path(__file__).resolve().parent.parent / "docs" / "architecture" / "interfaces.md"
@@ -454,7 +454,7 @@ def test_the_interfaces_document_says_when_the_capture_target_appears():
 
 
 def test_the_harness_loads_every_lib_that_capture_calls():
-    """‏`213dc1f` הוסיף את `test_every_lib_file_is_loaded_and_packed` בדיוק
+    """`213dc1f` הוסיף את `test_every_lib_file_is_loaded_and_packed` בדיוק
     בשביל הכשל הזה — אבל הוא בודק את `agent/imagesrv-agent` בלבד. הבקרה
     השלילית שלו מדווחת שכשהוסרה משם שורת הטעינה **כל שאר 1365 הטסטים
     עברו**. אותה עיוורון בדיוק השאירה את `manifest.sh` מחוץ להרנס הזה:
@@ -463,7 +463,7 @@ def test_the_harness_loads_every_lib_that_capture_calls():
 
     לכן הבדיקה **נגזרת** ואינה רשימה: כל ספריית `agent/lib` שמגדירה
     פונקציה ש-`capture.sh` קורא לה בקוד חייבת להיות בשרשרת. ה-lib הבא
-    שייחתך מ-`capture.sh` (‏#211) ייתפס כאן ביום שהוא נוצר.
+    שייחתך מ-`capture.sh` (#211) ייתפס כאן ביום שהוא נוצר.
     """
     src = inspect.getsource(capture_run)
     chain = set(re.findall(r"lib/(?:\w+/)?(\w+\.sh)", src))
@@ -484,18 +484,18 @@ def test_the_harness_loads_every_lib_that_capture_calls():
         if used:
             missing[lib.name] = used
     assert not missing, \
-        f"‏capture.sh קורא לפונקציות מספריות שההרנס אינו טוען: {missing}"
+        f"\u200fcapture.sh קורא לפונקציות מספריות שההרנס אינו טוען: {missing}"
 
 
 def test_a_successful_capture_produces_a_whole_manifest(tmp_path):
     """הצד השני של אותו שער, על ה**תוצר**: ריצה שנספרת כהצלחה חייבת
     להשאיר מניפסט מלא.
 
-    זה מה שהיה שבור בפועל — ‏`rc=0`, ובמניפסט `"os":""` ו-`"partitions":[]`:
-    ‏`os` ריק כי `_image_os` לא היה מוגדר, ו-`partitions` ריק כי
-    ‏`$(_mark_expandable ...)` החזיר כלום ובלע את הרשומה שנבנתה לפניו.
+    זה מה שהיה שבור בפועל — `rc=0`, ובמניפסט `"os":""` ו-`"partitions":[]`:
+    `os` ריק כי `_image_os` לא היה מוגדר, ו-`partitions` ריק כי
+    `$(_mark_expandable ...)` החזיר כלום ובלע את הרשומה שנבנתה לפניו.
     שדה ריק שנראה כמו תשובה הוא עיקרון 5, וכאן הוא ישב בתוך כלי הבדיקה:
-    כל טענה עתידית על `role`, ‏`fs`, ‏`used_bytes` או `expandable` הייתה
+    כל טענה עתידית על `role`, `fs`, `used_bytes` או `expandable` הייתה
     ירוקה בלי לבדוק דבר.
     """
     box, run, out = capture_run(
@@ -503,7 +503,7 @@ def test_a_successful_capture_produces_a_whole_manifest(tmp_path):
     assert out.strip().endswith("rc=0"), \
         out + (box / "capture.out").read_text(encoding="utf-8", errors="replace")
     written = json.loads((run / "new-manifest.json").read_text(encoding="utf-8"))
-    assert written["os"], f"‏os ריק על ריצה שנספרה כהצלחה: {written}"
+    assert written["os"], f"\u200fos ריק על ריצה שנספרה כהצלחה: {written}"
     assert written["partitions"], f"מניפסט בלי מחיצות על ריצה מוצלחת: {written}"
     # התפקיד מגיע מ-`_partition_role` על ה-GUID של `ONE_PARTITION`. מחרוזת
     # ריקה הייתה עוברת כל טענה שמסתפקת בקיום המפתח.
@@ -516,7 +516,7 @@ PIPE_INPUT = "#!/bin/sh\nhead -c 4096 /dev/zero\nexit 0\n"
 
 MIDPIPE_FAILURES = [
     ("zstd", "#!/bin/sh\ncat\nexit 7\n", 7),
-    # ‏#1438: fanout במקום pv|tee|sha256sum — מעביר הכול, מגבב, ויוצא 9.
+    # #1438: fanout במקום pv|tee|sha256sum — מעביר הכול, מגבב, ויוצא 9.
     (
         "fanout",
         "#!/bin/sh\n"
@@ -567,7 +567,7 @@ def test_capture_manifest_uses_source_logical_sector_size(tmp_path):
         stubs={"sgdisk": ONE_PARTITION, "curl": CURL_SINK},
         shell_pre=(
             f"printf '4096\\n' > {posix(logical_size)!r}; "
-            # ‏#1900: מקור 4Kn נדחה עכשיו לפני הבייט הראשון (test_capture_gates).
+            # #1900: מקור 4Kn נדחה עכשיו לפני הבייט הראשון (test_capture_gates).
             # הטסט הזה שומר על חישוב המניפסט לפי גודל הסקטור, ולכן עוקף את השער.
             "capture_source_reason() { :; }; "
         ),
@@ -592,7 +592,7 @@ def test_capture_manifest_uses_source_logical_sector_size(tmp_path):
 
 # --- #671, #1840: כרך BitLocker נקלט גולמי — בשמו, לא בשקט --------------------
 
-#: util-linux probe_bitlocker.c / FOG isBitlockedPartition: ‎-FVE-FS-‎
+#: util-linux probe_bitlocker.c / FOG isBitlockedPartition: -FVE-FS-
 #: ב-offset 3 של הסקטור הראשון. בלי המגן, `_fs_of` מחזיר unknown/BitLocker
 #: ו-`partclone_for_fs` נופל ל-`partclone.dd` — קליטת ההצפנה בשקט. מאז #1840
 #: היא נקלטת גולמי **בשמה** (`fs: "BitLocker"` ואזהרה), לא בשקט.
@@ -601,7 +601,7 @@ FVE_SECTOR = b"\xeb\x52\x90-FVE-FS-" + bytes(501)
 
 def test_a_bitlocker_signature_is_captured_raw_by_name_not_silently(tmp_path):
     """חתימת BitLocker על צומת המחיצה — עד #1840 סירוב; מאז (הכרעת נדב 07/11)
-    ‏partclone.dd, **בשמו**: ‏`fs: "BitLocker"` במניפסט ולא `unknown`, והאזהרה
+    partclone.dd, **בשמו**: `fs: "BitLocker"` במניפסט ולא `unknown`, והאזהרה
     בשדה `error` של היעד. "קליטת ההצפנה בשקט" שהמגן הזה נכתב נגדה עדיין אסורה —
     מה שהשתנה הוא שהיא נקלטת בגלוי. הפירוט: `tests/test_bitlocker_raw_1840.py`.
     """

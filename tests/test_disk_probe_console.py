@@ -1,6 +1,6 @@
-"""‏#402 — צד השרת של `disk_probe`: הראיה שהסוכן אוסף לא נזרקת בכניסה.
+"""#402 — צד השרת של `disk_probe`: הראיה שהסוכן אוסף לא נזרקת בכניסה.
 
-הסוכן (‏PR #798) כבר שולח ב-hello `disk_probe` — ‏`drives` / `no_disks` /
+הסוכן (PR #798) כבר שולח ב-hello `disk_probe` — `drives` / `no_disks` /
 `no_ports` / `unchecked` (ממשק 2) — וזה מה שמבחין בין "יש פורטי SATA
 ולא חובר כונן" (חברו כונן) לבין "הבקר מנוטרל בקושחה" (געו בביוס, כבל לא
 יעזור). עד כאן `hello.py` שמר רק `disks_json`, והמפעיל ראה `מגירות=0`
@@ -57,11 +57,11 @@ def _room_machine(server) -> dict:
                 if m["mac"] == CLONER)
 
 
-# ‏#2334: `no_driver` — בקר אחסון בלי מנהל התקן; בלי `DISK_PROBE_VALUES` הוא נזרק ל-None.
+# #2334: `no_driver` — בקר אחסון בלי מנהל התקן; בלי `DISK_PROBE_VALUES` הוא נזרק ל-None.
 @pytest.mark.parametrize("probe", ["no_disks", "no_ports", "unchecked", "no_driver"])
 def test_zero_disks_carries_why_to_all_three_console_views(server, probe):
     """שלושה ממצאים שונים על אותו `0` — כל אחד מגיע כמות שהוא לשלושת
-    המסכים שמציגים מגירות. ‏`unchecked` חייב להישאר `unchecked`."""
+    המסכים שמציגים מגירות. `unchecked` חייב להישאר `unchecked`."""
     _register(server)
     _hello(server, disk_probe=probe)
     # ה-API קודם, ב-`.get` — כדי שהבקרה השלילית תיפול על הערך (None ≠ probe)
@@ -75,7 +75,7 @@ def test_zero_disks_carries_why_to_all_three_console_views(server, probe):
 
 
 def test_an_old_agent_leaves_disk_probe_null_not_a_guess(server):
-    """סוכן ישן לא שולח את השדה — ‏null, לא `no_disks` ולא `unchecked`:
+    """סוכן ישן לא שולח את השדה — null, לא `no_disks` ולא `unchecked`:
     "לא נשלח" הוא מצב רביעי, והקונסולה מציגה עליו את הטקסט הישן."""
     _register(server)
     _hello(server)

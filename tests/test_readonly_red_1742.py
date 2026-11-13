@@ -377,7 +377,7 @@ def test_restore_to_this_disk_refuses_a_read_only_disk_in_its_words(tmp_path):
     r = restore(tmp_path, run_restore)
     assert "STARTED" not in r["trace"], r["out"]
     last = body(cards(r["seen"])[-1]) if r["seen"] else ""
-    assert last == f"message=השחזור לא התחיל — לא נכתב דבר|‏{READONLY_HE} · המחשב יופעל מחדש\n", (last, r["out"])
+    assert last == f"message=השחזור לא התחיל — לא נכתב דבר|\u200f{READONLY_HE} · המחשב יופעל מחדש\n", (last, r["out"])
     assert "TEST-REBOOT: restore: sda is read-only" in r["out"], r["out"]
 
 

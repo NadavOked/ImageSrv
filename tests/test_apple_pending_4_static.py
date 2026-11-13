@@ -207,7 +207,7 @@ def test_dashboard_pages_share_the_compact_header():
     for needle in ('actions, tabs, tab, compact: true });',                       # סקירה
                    'name: "בריאות ושירותים", sub, pill, actions, compact: true });',            # בריאות
                    'tabs: NET_TABS, tab, tabClick: netTabClick, compact: true });',  # רשת
-                   'const header = netHeader(3);',                                  # פורטים — ‏#1300: אותה כותרת "רשת"
+                   'const header = netHeader(3);',                                  # פורטים — #1300: אותה כותרת "רשת"
                    'רענון</button>`, compact: true });',                           # מוניטור
                    'pill: tab === 0 ? pill : "", actions, tabs, tab, compact: true });'):  # חדר ההפצה
         assert needle in js, needle
@@ -222,6 +222,6 @@ def test_numbers_are_tabular_across_the_page_and_notes_share_the_technical_detai
 
 def test_network_banners_hide_raw_system_text():
     js = _js()
-    fn = js[js.index("function netUnreadNotes()"):js.index("const NET_TABS =")]   # ‏#1300: netWarnCount ירדה (הפיל שלה ירד מהכותרת)
+    fn = js[js.index("function netUnreadNotes()"):js.index("const NET_TABS =")]   # #1300: netWarnCount ירדה (הפיל שלה ירד מהכותרת)
     assert fn.count("T(") >= 9 and "${esc(e." not in fn, "אין עוד שגיאה גולמית בגוף ההודעה"
     assert "UI.noteTech(" in (STATIC / "netcfg.js").read_text(encoding="utf-8")

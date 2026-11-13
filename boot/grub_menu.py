@@ -46,14 +46,14 @@ __all__ = [
 #: ולכן מצב לא ברור, ולכן דיסק מקומי.
 SUPPORTED_SCHEMA = 1
 
-#: ‏#2666: הדגל שהשרת שם על תשובה שהמחולל אינו מבין, כשהבקשה הגיעה לכרטיס מפיץ
-#: ובתוך התקציב של #75 — **רק במסלול התפריט** (‏`server/agent/answer_failure.py`).
+#: #2666: הדגל שהשרת שם על תשובה שהמחולל אינו מבין, כשהבקשה הגיעה לכרטיס מפיץ
+#: ובתוך התקציב של #75 — **רק במסלול התפריט** (`server/agent/answer_failure.py`).
 ANSWER_FAILURE_FLAG = "answer_failure_screen"
 
-#: ‏#2666: קודי ההחלטה של "התשובה אינה מובנת" — מה שהשרת שואל לפני שהוא סופר.
+#: #2666: קודי ההחלטה של "התשובה אינה מובנת" — מה שהשרת שואל לפני שהוא סופר.
 ANSWER_FAILURE_CODES = frozenset({"bad-answer", "bad-schema"})
 
-#: ‏GRUB: ערך שלילי ב-timeout = התפריט ממתין לאדם ללא הגבלת זמן. זה מה
+#: GRUB: ערך שלילי ב-timeout = התפריט ממתין לאדם ללא הגבלת זמן. זה מה
 #: שנדב הכריע ב-#140 עבור כל מכונה רשומה שאין לה משימה — ראו decide().
 MENU_NO_TIMEOUT = -1
 
@@ -65,7 +65,7 @@ JOINABLE_SESSION_STATES = frozenset({"open", "running"})
 #: ההחלטה של הסוכן עצמו (`agent/lib/core/decide.sh`) קרואה מהצד השני:
 #:
 #:   build      → `build_console`  — מסך הקליטה/ההפצה, הדרך היחידה אליו
-#:                מאתחול קר (#29). ‏recovery היה מסתיר אותו.
+#:                מאתחול קר (#29). recovery היה מסתיר אותו.
 #:   classroom  → `local`, כלומר `die_local` ו-`reboot -f`. ערך "רגיל"
 #:                בתחנת כיתה בלי משימה הוא **הערך היחיד שאינו עושה דבר**,
 #:                ומאז #140 (תפריט בלי טיימר) הוא גם לולאה: המכונה
@@ -86,7 +86,7 @@ ROLES_WITH_NORMAL_ENTRY = frozenset({"build"})
 #:                נוגעת ב-initramfs שנבחר בלבד, לא בערכי התפריט.
 #:
 #: הבחירה תלויה ב**תפקיד** ולא במסלול ההחלטה, מאותה סיבה שבה `diskless`
-#: תלוי בתפקיד: ‏cloner מגיע ל-AGENT בשלושה מסלולים שונים, ובחירה לפי
+#: תלוי בתפקיד: cloner מגיע ל-AGENT בשלושה מסלולים שונים, ובחירה לפי
 #: `code` הייתה מחזירה את ההתנהגות הישנה ברגע שנפתח סבב (#320).
 ROLES_WITH_GUI = frozenset({"build", "classroom", "cloner"})
 
@@ -117,7 +117,7 @@ class GrubConfig:
     kernel_path: str = "/boot/vmlinuz"
     initrd_path: str = "/boot/initrd.img"
 
-    #: ה-initramfs הגרפי, לתפקידים שב-ROLES_WITH_GUI (#32). ‏None פירושו
+    #: ה-initramfs הגרפי, לתפקידים שב-ROLES_WITH_GUI (#32). None פירושו
     #: "אין כזה על השרת הזה", וכל התפקידים נופלים ל-initrd_path.
     #:
     #: מכוון שזה נתיב ולא דגל: המודול הזה טהור ואינו נוגע בדיסק, ולכן
@@ -128,15 +128,15 @@ class GrubConfig:
     #: מהסיבה הזאת.
     gui_initrd_path: str | None = None
 
-    #: אין כאן יותר שדות תזמון. ‏hidden_timeout (2 שניות ל-ESC) ו-menu_timeout
-    #: (‏15 שניות בתפריט הגלוי) הוסרו ב-#140: מכונה רשומה מקבלת תפריט גלוי
+    #: אין כאן יותר שדות תזמון. hidden_timeout (2 שניות ל-ESC) ו-menu_timeout
+    #: (15 שניות בתפריט הגלוי) הוסרו ב-#140: מכונה רשומה מקבלת תפריט גלוי
     #: שממתין לאדם ללא הגבלה, ומכונה שאיננו משרתים עולה מהדיסק מיד. שני
     #: הערכים נגזרים מההחלטה עצמה ואין מה לכוונן בהם.
     #: פרמטרים נוספים לשורת הפקודה של הקרנל, אם צריך לחומרה חריגה.
     extra_cmdline: tuple[str, ...] = ()
-    #: ‏#2437: ה-hash של סיסמת העורך (‏`grub_lock.pbkdf2_hash`) — לא הסיסמה.
+    #: #2437: ה-hash של סיסמת העורך (`grub_lock.pbkdf2_hash`) — לא הסיסמה.
     #: ריק = נעול בלי סיסמה: איש אינו עורך, והאתחול אינו נפגע. השרת ממלא
-    #: אותו מ-`/etc/imagesrv/grub-password` (‏`server/system/grub_password.py`).
+    #: אותו מ-`/etc/imagesrv/grub-password` (`server/system/grub_password.py`).
     password_hash: str = ""
 
     def __post_init__(self) -> None:
@@ -149,14 +149,14 @@ class GrubConfig:
             raise ValueError(f"server_base has no host: {self.server_base!r}")
         if _ASCII_SAFE.search(self.server_base):
             raise ValueError("server_base must be plain ASCII")
-        # ‏#1127: הכתובת נכנסת לשורת הקרנל ולסקריפט GRUB — תווים שמפרשים
+        # #1127: הכתובת נכנסת לשורת הקרנל ולסקריפט GRUB — תווים שמפרשים
         # שם ($, גרשיים, רווח, ;) אינם כתובת. המקור מקומי (CLI/DB), וזול לסגור.
         if _GRUB_META.search(self.server_base):
             raise ValueError("server_base carries a GRUB/shell metacharacter")
 
     @property
     def grub_host(self) -> str:
-        """ה-netloc בתחביר ההתקן של GRUB: ‎(http,10.44.0.10:8080)."""
+        """ה-netloc בתחביר ההתקן של GRUB: (http,10.44.0.10:8080)."""
         return urlsplit(self.server_base).netloc
 
     @property
@@ -190,17 +190,17 @@ class Decision:
     offer_recovery: bool = False
     offer_agent: bool = False
     #: האם הקובץ מכיל בכלל ערך "עלה מהדיסק המקומי" ואת הפונקציה
-    #: ‏`chain_local` שמאחוריו. כבוי רק למחשב שיכפול (#320).
+    #: `chain_local` שמאחוריו. כבוי רק למחשב שיכפול (#320).
     offer_local: bool = True
     #: האם ערך ה-ImageSrv טוען את ה-initramfs הגרפי (#32). נגזר מהתפקיד
     #: בלבד, ולכן אינו יכול להשתנות כשאותה מכונה עוברת מהמתנה לסבב.
-    #: ברירת המחדל False: כל החלטה שנוצרת לפני שהתפקיד ידוע — ‏JSON פגום,
+    #: ברירת המחדל False: כל החלטה שנוצרת לפני שהתפקיד ידוע — JSON פגום,
     #: schema לא נתמך, MAC לא רשום — היא ממילא מצב לא ברור.
     gui_screen: bool = False
     recovery_mode: bool = False
-    #: ‏#1802 (נדב 04/11): ההגדרה "עלייה אוטומטית מהדיסק" — ‏UEFI בלבד. בקובץ AGENT
-    #: עם הדגל, ‏`$grub_platform = efi` הופך את ערך הדיסק לברירת המחדל; ‏BIOS נשאר
-    #: על ערך הסוכן (שוב המסך) — ברשת ההפצה BIOS = משכפל, ולא מעלים דבר (‏#345).
+    #: #1802 (נדב 04/11): ההגדרה "עלייה אוטומטית מהדיסק" — UEFI בלבד. בקובץ AGENT
+    #: עם הדגל, `$grub_platform = efi` הופך את ערך הדיסק לברירת המחדל; BIOS נשאר
+    #: על ערך הסוכן (שוב המסך) — ברשת ההפצה BIOS = משכפל, ולא מעלים דבר (#345).
     efi_local: bool = False
     extra: dict = field(default_factory=dict)
 
@@ -208,7 +208,7 @@ class Decision:
 def normalize_mac(raw: object) -> str | None:
     """מנרמל MAC לתבנית הקנונית של סעיף 6 בממשקים: lowercase עם נקודתיים.
 
-    מקבל את כל הווריאציות שמופיעות באפיון (‎B4:2E:99 / b4-2e-99 / b42e99).
+    מקבל את כל הווריאציות שמופיעות באפיון (B4:2E:99 / b4-2e-99 / b42e99).
     מחזיר None אם זה לא MAC תקין — והקורא חייב להתייחס לזה כמצב לא ברור.
     """
     if not isinstance(raw, str):
@@ -230,10 +230,10 @@ def decide(answer: object) -> Decision:
 
     schema = answer.get("schema", SUPPORTED_SCHEMA)
     if not isinstance(schema, int) or schema > SUPPORTED_SCHEMA:
-        # ‏#2666 (הכרעת נדב 07/11): כשל אימות בכרטיס שהשרת מפיץ בו מסתיים במסך
+        # #2666 (הכרעת נדב 07/11): כשל אימות בכרטיס שהשרת מפיץ בו מסתיים במסך
         # הכישלון של הסוכן, לא בדיסק בשקט. רק כשהשרת אמר אותו במפורש — הוא שם
         # את הדגל על ראיה חיובית שהכרטיס מפיץ, ובתוך התקציב של #75
-        # (‏`server/agent/answer_failure.py`). ‏`is True` בכוונה: כל ערך אחר —
+        # (`server/agent/answer_failure.py`). `is True` בכוונה: כל ערך אחר —
         # כמו היום. ערך רגיל בלי `imagesrv.mode` — שורת הקרנל נקייה (עיקרון 2).
         # תשובה שאינה אובייקט (למעלה) אינה יכולה לשאת דגל, ונשארת בדיסק.
         if answer.get(ANSWER_FAILURE_FLAG) is True:
@@ -246,15 +246,15 @@ def decide(answer: object) -> Decision:
     # known: false → כלום. המחשב עולה מהדיסק כאילו לא קרה דבר.
     # ההתראה על MAC לא מוכר עולה בקונסולה, לא במסך של התלמיד.
     if answer.get("known") is not True:
-        # ‏#1802 (הכרעת נדב 19/10): חריג אחד, ורק כשהשרת אמר אותו במפורש —
+        # #1802 (הכרעת נדב 19/10): חריג אחד, ורק כשהשרת אמר אותו במפורש —
         # מכונה לא רשומה **בווילן ההפצה** מקבלת את הסוכן, שמציג "המחשב הזה
         # לא רשום". השרת מדליק את הדגל רק על ראיה חיובית שהבקשה הגיעה לכתובת
-        # ההפצה (‏`server/agent/unknown_screen.py`). ‏`is True` בכוונה: כל ערך
+        # ההפצה (`server/agent/unknown_screen.py`). `is True` בכוונה: כל ערך
         # אחר הוא כמו היום. שורת הקרנל נשארת נקייה (עיקרון 2): ערך רגיל, בלי
         # `imagesrv.mode`.
         #
-        # ‏#1802 (נדב 04/11): המסך נשאר, ו-F2 הוא הפעלה מחדש בלבד. כשההגדרה
-        # "עלייה אוטומטית מהדיסק" דלוקה והמסך הוגש בחלון — ‏UEFI עולה מהדיסק, ו-BIOS
+        # #1802 (נדב 04/11): המסך נשאר, ו-F2 הוא הפעלה מחדש בלבד. כשההגדרה
+        # "עלייה אוטומטית מהדיסק" דלוקה והמסך הוגש בחלון — UEFI עולה מהדיסק, ו-BIOS
         # מקבל שוב את הסוכן (המסך). קודם לדגל המסך: השרת לא מדליק את שניהם.
         if answer.get("unregistered_autoboot") is True:
             return Decision(AGENT, "unregistered-autoboot",
@@ -270,24 +270,24 @@ def decide(answer: object) -> Decision:
     if not isinstance(role, str):
         role = "unknown"
 
-    # שומר לולאת האתחול (‏#75). השרת ספר שהוא כבר שלח את המכונה הזו
+    # שומר לולאת האתחול (#75). השרת ספר שהוא כבר שלח את המכונה הזו
     # לסוכן שוב ושוב עבור אותה עבודה, והיא חזרה בכל פעם — כלומר היא
     # נכשלת לפני שהיא מספיקה לדווח. הסבב אינו מוסר לה יותר, והיא
     # עולה מהדיסק המקומי כמו כל מצב לא ברור אחר. הדגל אינו קופץ מעל
-    # התפקיד: מחשב הבנייה עדיין מקבל את התפריט הגלוי שלו (‏#29), ותחנה
+    # התפקיד: מחשב הבנייה עדיין מקבל את התפריט הגלוי שלו (#29), ותחנה
     # עדיין מקבלת בו את ערך השחזור — היא בדיוק המכונה שטכנאי צריך
     # להיכנס אליה, וזו הדרך היחידה לתקן מכונה תקועה בשטח.
     guarded = answer.get("boot_guard") == "exhausted"
 
-    # ‏#320: למחשב שיכפול אין דיסק אתחול — יש לו מגירות, והן הסחורה.
+    # #320: למחשב שיכפול אין דיסק אתחול — יש לו מגירות, והן הסחורה.
     # אתחול מאחת מהן הוא נגיעה בדיסק שאמור להיכתב, ולכן הקובץ שלו יוצא
     # בלי ערך מקומי ובלי `chainloader` בכלל. הדגל תלוי ב**תפקיד** ולא
-    # במסלול: ‏cloner מגיע ל-AGENT בשלושה מסלולים שונים (משימה, סבב פתוח,
+    # במסלול: cloner מגיע ל-AGENT בשלושה מסלולים שונים (משימה, סבב פתוח,
     # והמתנה), וקובץ בלי דיסק בהמתנה שמצמיח ערך מקומי ברגע שנפתח סבב
     # הוא בדיוק הבור שכיסוי לפי code היה משאיר פתוח.
     diskless = role == "cloner"
 
-    # ‏#32: אותה תבנית בדיוק, ומאותו טעם. ‏gui נגזר מהתפקיד פעם אחת, לפני
+    # #32: אותה תבנית בדיוק, ומאותו טעם. gui נגזר מהתפקיד פעם אחת, לפני
     # ההסתעפות, ונמסר לכל החלטה שיכולה לייצר ערך ImageSrv — כדי שמכונה
     # לא תחליף initramfs באמצע היום כשנפתח לה סבב.
     gui = role in ROLES_WITH_GUI
@@ -313,21 +313,21 @@ def decide(answer: object) -> Decision:
 
     # task: null וגם session: null — ברירת המחדל של הממשק.
     #
-    # ‏#140 (הכרעת נדב, 2026-08-30): כל מכונה רשומה שאין לה משימה מגיעה
+    # #140 (הכרעת נדב, 2026-08-30): כל מכונה רשומה שאין לה משימה מגיעה
     # למסך בחירה **גלוי** בין הדיסק המקומי ל-ImageSrv — תחנת כיתה בדיוק
     # כמו מחשב הבנייה, בלי ESC ובלי טיימר. עד כאן היה הבדל *הצגה* בין
-    # התפקידים (‏ROLES_WITH_VISIBLE_MENU); הוא בוטל, והתפקיד אינו קובע
+    # התפקידים (ROLES_WITH_VISIBLE_MENU); הוא בוטל, והתפקיד אינו קובע
     # יותר **אם** יש תפריט. מ-#144 הוא קובע **מה** יש בו: אותם שני ערכים
     # בדיוק לכל תפקיד, כשהשני נבחר לפי מה ששימושי למכונה הזו.
     #
     # המחיר הוצג לנדב ואושרר: אתחול רגיל של תחנה כבר **אינו** עולה מהדיסק
-    # תוך שניות — הוא ממתין לאדם. ‏set default=local נשאר, אבל בלי טיימר
+    # תוך שניות — הוא ממתין לאדם. set default=local נשאר, אבל בלי טיימר
     # הוא רק הערך המסומן ולא נבחר לעולם. מה שעדיין מגן על עיקרון 1 הוא
-    # שני השומרים שלמעלה (‏unregistered ו-bad-schema), ששניהם עדיין עולים
+    # שני השומרים שלמעלה (unregistered ו-bad-schema), ששניהם עדיין עולים
     # מהדיסק בלי תפריט, וכיבוי השרת — שם PXE נכשל בקושחה והמכונה לא
     # מגיעה לקובץ הזה בכלל.
     #
-    # ‏#144: **ערך ImageSrv אחד** בנוסף לדיסק, ולא שניים. עד כאן הוצגו גם
+    # #144: **ערך ImageSrv אחד** בנוסף לדיסק, ולא שניים. עד כאן הוצגו גם
     # `imagesrv` וגם `imagesrv-recovery` זה לצד זה, בלי שום דבר על המסך
     # שמסביר את ההבדל — ונדב בחר בלנובו (`role=classroom`) דווקא את זה
     # שמחזיר `local` ומאתחל. איזה מהשניים שימושי נקבע בידי התפקיד, וזה
@@ -335,17 +335,17 @@ def decide(answer: object) -> Decision:
     normal = role in ROLES_WITH_NORMAL_ENTRY
     code = "boot-loop-guard" if guarded else "no-task"
 
-    # ‏#641 (הכרעת נדב, 2026-09-10): היפוך #140. מחשב build/classroom רשום
+    # #641 (הכרעת נדב, 2026-09-10): היפוך #140. מחשב build/classroom רשום
     # שאין לו משימה עולה **ישר ל-ImageSrv, אוטומטי לגמרי** — בלי מסך בחירה,
     # בלי ESC, בלי טיימר. בחירת הדיסק המקומי עברה אל תוך מסך ה-ImageSrv
     # עצמו. זה בדיוק המסלול שבו משימה/סבב פעיל מעלים את הסוכן (AGENT,
-    # ‏timeout=0, hidden, default=imagesrv); ההבדל היחיד הוא הערך המתאים
-    # לתפקיד — ‏build מקבל את הערך הרגיל (build_console, #29), ו-classroom
+    # timeout=0, hidden, default=imagesrv); ההבדל היחיד הוא הערך המתאים
+    # לתפקיד — build מקבל את הערך הרגיל (build_console, #29), ו-classroom
     # את ה-recovery (מסך הכניסה/בחירה, כי "רגיל" ב-classroom מחזיר local
-    # ומאתחל — #144). ‏offer_local נשאר דלוק כמו במסלול המשימה: הערך המקומי
+    # ומאתחל — #144). offer_local נשאר דלוק כמו במסלול המשימה: הערך המקומי
     # קיים בקובץ אך חבוי (timeout=0), והבחירה שאדם רואה היא של מסך ImageSrv.
     #
-    # ‏`not guarded` בכוונה: כששומר לולאת האתחול (#75) ירה, המכונה **לא**
+    # `not guarded` בכוונה: כששומר לולאת האתחול (#75) ירה, המכונה **לא**
     # תעלה אוטומטית אל מה שכבר לולא אותה — היא מקבלת את התפריט הגלוי כדי
     # שטכנאי ייכנס לשחזור (ראו ROLES_WITH_NORMAL_ENTRY והטסטים של #75).
     # תפקיד שאינו ב-ROLES_WITH_GUI (teacher/unknown וכו') אינו משתנה גם
@@ -410,7 +410,7 @@ def render(answer: object, config: GrubConfig, *, recovery: bool = False) -> str
 def render_local_only(code: str, *, password_hash: str = "") -> str:
     """קובץ המילוט. עולה מהדיסק המקומי, בלי תפריט ובלי הודעה.
 
-    נעול גם הוא (#2437): ‏ESC שנלחץ באתחול פותח תפריט גם תחת `timeout=0`."""
+    נעול גם הוא (#2437): ESC שנלחץ באתחול פותח תפריט גם תחת `timeout=0`."""
     return _assemble(
         code=code,
         timeout=0,
@@ -422,9 +422,9 @@ def render_local_only(code: str, *, password_hash: str = "") -> str:
 
 def _render_decision(decision: Decision, config: GrubConfig) -> str:
     if decision.action == AGENT:
-        # ‏#320: ‏offer_local כבוי (מחשב שיכפול) = ערך יחיד בקובץ, וגם
+        # #320: offer_local כבוי (מחשב שיכפול) = ערך יחיד בקובץ, וגם
         # ה-`chain_local` נשאר בחוץ. הוא לא היה נבחר לעולם תחת
-        # ‏timeout=0/hidden, אבל הוא כן היה משאיר `chainloader` בקובץ ואת
+        # timeout=0/hidden, אבל הוא כן היה משאיר `chainloader` בקובץ ואת
         # רשימת נתיבי האתחול שמאחוריו — והדרישה היא שלא תהיה שם דרך אל
         # הכוננים, לא שקשה להגיע אליה.
         entries = [_entry_agent(config, recovery=decision.recovery_mode,
@@ -455,10 +455,10 @@ def _render_decision(decision: Decision, config: GrubConfig) -> str:
 
     # שני מצבים בלבד, ושניהם נגזרים מההחלטה — לא מהתצורה:
     #
-    # תפריט גלוי → ‏MENU_NO_TIMEOUT, ממתין לאדם ללא הגבלה (#140).
+    # תפריט גלוי → MENU_NO_TIMEOUT, ממתין לאדם ללא הגבלה (#140).
     #
     # בלי תפריט → אפס. מי שמגיע לכאן בלי תפריט הוא מי שאין לו גם צוהר
-    # שחזור (‏unregistered ו-bad-schema, שניהם עם offer_recovery=False),
+    # שחזור (unregistered ו-bad-schema, שניהם עם offer_recovery=False),
     # כלומר קובץ עם ערך אחד ואין בו מה ללחוץ עליו. שתי שניות שם היו המתנה
     # חסרת תכלית על מחשב שאיננו משרתים — ולכן הוא מקבל בדיוק את מה
     # ש-render_local_only נותן ל-MAC פגום: חיבור מיידי לדיסק המקומי.
@@ -492,7 +492,7 @@ def _assemble(
         "# Generated by ImageSrv. Do not edit - regenerated on every boot.",
         f"# decision: {_ascii(code)}",
         "",
-        # ‏#2437: לפני כל ערך — ‏`e`/`c` דורשים סיסמה; כל ערך `--unrestricted`.
+        # #2437: לפני כל ערך — `e`/`c` דורשים סיסמה; כל ערך `--unrestricted`.
         *lock_lines(password_hash),
         "set pager=0",
         f"set default={default}",
@@ -500,10 +500,10 @@ def _assemble(
         f"set timeout_style={timeout_style}",
     ]
     if efi_local:
-        # ‏#1802: רק UEFI עולה מהדיסק לבד; ‏BIOS נשאר על ברירת המחדל (הסוכן).
+        # #1802: רק UEFI עולה מהדיסק לבד; BIOS נשאר על ברירת המחדל (הסוכן).
         head.append('if [ "$grub_platform" = "efi" ]; then set default=local; fi')
     if chain_local:
-        # ‏#416: הענף המקומי מדווח פירורים בדיוק כשיש בקובץ את הפונקציה.
+        # #416: הענף המקומי מדווח פירורים בדיוק כשיש בקובץ את הפונקציה.
         head += [
             "",
             _func_chain_local(traced=bool(trace_host)),
@@ -542,19 +542,19 @@ LOCAL_BOOT_PATHS: tuple[str, ...] = (
     "/EFI/BOOT/bootx64.efi",
 )
 
-#: ‏#345: הזנב המשותף לשני מסכי העצירה — מה שרץ אחרי שכבר אין מה להעלות.
+#: #345: הזנב המשותף לשני מסכי העצירה — מה שרץ אחרי שכבר אין מה להעלות.
 #:
-#: כאן ישב `halt`, והוא סתר את המשפט שמעליו. ‏`halt` אינו "עצור והשאר את
-#: המסך": על EFI הוא ‏ResetSystem עם Shutdown, ועל i386-pc הוא כיבוי דרך
-#: ‏APM/ACPI — בשתי הפלטפורמות המכונה **נכבית**, והדקה שהמפעיל ראה היא
+#: כאן ישב `halt`, והוא סתר את המשפט שמעליו. `halt` אינו "עצור והשאר את
+#: המסך": על EFI הוא ResetSystem עם Shutdown, ועל i386-pc הוא כיבוי דרך
+#: APM/ACPI — בשתי הפלטפורמות המכונה **נכבית**, והדקה שהמפעיל ראה היא
 #: ה-`sleep` שלפניו. המסך הזה קיים בדיוק כדי שטכנאי יקרא אותו, ומכונה
 #: שנכבית לפני שהוא מגיע נראית לו כתקלת חשמל ולא ככישלון אתחול.
 #:
 #: הלולאה בנויה מ-`[` ומ-`sleep` בלבד — שתי פקודות שכבר מוכחות בקובץ
-#: הזה. במכוון לא `while true`: ‏`true` הוא מודול נפרד ב-GRUB, וקריאה
+#: הזה. במכוון לא `while true`: `true` הוא מודול נפרד ב-GRUB, וקריאה
 #: לפקודה שלא נטענה מדפיסה שגיאה על מסך שכל תפקידו להיקרא.
 #:
-#: ‏`--interruptible` נשאר כדי שלחיצת מקש תיקלט (ב-`sleep` רגיל GRUB
+#: `--interruptible` נשאר כדי שלחיצת מקש תיקלט (ב-`sleep` רגיל GRUB
 #: אינו קורא מהמקלדת כלל, והמסך נראה תקוע). היא אינה יציאה: הלולאה
 #: חוזרת אל ה-`sleep` בכל מקרה, ו-`stay_on` נקבע פעם אחת ולא נוגעים בו.
 _STAY_POWERED_ON = """    echo "Contact IT. This computer will stay powered on."
@@ -570,28 +570,28 @@ _STAY_POWERED_ON = """    echo "Contact IT. This computer will stay powered on."
 # אם אין מערכת בכלל — עוצרים עם הודעה במקום exit, כי exit מחזיר לקושחה
 # ש-PXE ראשון בסדר האתחול שלה, וזה ייצור לולאה אינסופית.
 #
-# ‏#61: "נמצא ונדחה" אינו "לא נמצא". על הלנובו (Secure Boot) ‏bootmgfw.efi
-# נמצא, ‏chainloader נדחה בידי shim, והמסך אמר "No operating system found"
-# — שני מצבים שקופלו לאחד (עיקרון 5). ‏`boot` רץ רק אם chainloader
+# #61: "נמצא ונדחה" אינו "לא נמצא". על הלנובו (Secure Boot) bootmgfw.efi
+# נמצא, chainloader נדחה בידי shim, והמסך אמר "No operating system found"
+# — שני מצבים שקופלו לאחד (עיקרון 5). `boot` רץ רק אם chainloader
 # הצליח (ראיה חיובית); הנתיב הראשון שנמצא-ונדחה נשמר ב-chain_refused,
-# והמסך הסופי אומר מה נמצא ולמה לא עלה. ‏Secure Boot מוזכר רק כשיש
-# ראיה: ‏GRUB מייצא shim_lock=y בדיוק כשהוא רושם את מאמת ה-shim, כלומר
+# והמסך הסופי אומר מה נמצא ולמה לא עלה. Secure Boot מוזכר רק כשיש
+# ראיה: GRUB מייצא shim_lock=y בדיוק כשהוא רושם את מאמת ה-shim, כלומר
 # כשכל chainloader עובר דרכו (grub-core/kern/efi/sb.c). בלי הראיה לא
 # מנחשים. את שורת השגיאה המדויקת GRUB עצמו מדפיס לפני המסך הזה
-# (‏grub_script_execute_cmdline קורא ל-grub_print_error גם בתוך if).
+# (grub_script_execute_cmdline קורא ל-grub_print_error גם בתוך if).
 #
-# ‏#416: "אין דיסק" ו"יש דיסק ואין עליו מערכת" הם שני מצבים (עיקרון 5),
+# #416: "אין דיסק" ו"יש דיסק ואין עליו מערכת" הם שני מצבים (עיקרון 5),
 # והמסך קיפל אותם לאחד: מחשב הבנייה (05/09) הדפיס "No operating system
 # found on the local disk" על דיסק שהקושחה כלל לא ראתה, וההודעה שלחה
 # לפרק אימג' תקין. אחרי הלולאה שואלים את GRUB מה הוא **רואה** (5א):
-# ‏`probe --driver (hd0)` מצליח בדיוק כשיש התקן דיסק — על EFI ‏(efidisk)
-# ועל i386-pc ‏(biosdisk) — ונכשל ב-`no such device` כשאין, ו-`ls` מדפיס
+# `probe --driver (hd0)` מצליח בדיוק כשיש התקן דיסק — על EFI (efidisk)
+# ועל i386-pc (biosdisk) — ונכשל ב-`no such device` כשאין, ו-`ls` מדפיס
 # את רשימת ההתקנים כדי שהטכנאי יקרא אותה ולא ינחש. שני המודולים חלק
 # מהתמונה החתומה של דביאן (build-efi-images), כמו search_fs_file.
 #
-# והענף הזה גם מדווח לשרת (`imagesrv_trace local-*`, ‏boot/trace.py):
+# והענף הזה גם מדווח לשרת (`imagesrv_trace local-*`, boot/trace.py):
 # עד #416 ערך הדיסק המקומי היה היחיד בלי פירורים — והוא זה שנכשל.
-# הפירורים נפלטים רק בקובץ שיש בו את הפונקציה (‏`traced`): בקובץ
+# הפירורים נפלטים רק בקובץ שיש בו את הפונקציה (`traced`): בקובץ
 # הקבוע שעל ה-TFTP השרת ממילא שקט, ובקובץ של מכונה לא רשומה אין מה
 # לרשום (עיקרון 1).
 
@@ -669,7 +669,7 @@ function chain_local {
 
 _FUNC_CHAIN_LOCAL = _func_chain_local(traced=False)
 
-#: ‏#323: השומר שדרכו עוברת **כל** נפילה לדיסק המקומי.
+#: #323: השומר שדרכו עוברת **כל** נפילה לדיסק המקומי.
 #:
 #: הקובץ הסטטי שעל ה-TFTP רץ לפני שהמכונה שאלה על ה-MAC שלה, וכשהשרת
 #: שקט אין ממי לשאול — ולכן הוא אינו יכול לדעת שמולו מחשב שיכפול. מה
@@ -678,9 +678,9 @@ _FUNC_CHAIN_LOCAL = _func_chain_local(traced=False)
 #: אך ורק ל-`client-arch 0`, וברשת הזאת מחשבי השיכפול הם היחידים שאין
 #: להם UEFI (#38, אפיון סעיף 4). זו ראיה חיובית, לא ניחוש.
 #:
-#: ‏#391: הראיה עונה על "איזו פלטפורמה", ומשתמשים בה כתשובה ל"איזה
+#: #391: הראיה עונה על "איזו פלטפורמה", ומשתמשים בה כתשובה ל"איזה
 #: תפקיד". שתי השאלות מתלכדות **רק בגלל דרישת רכש** — מחשב שיכפול =
-#: ‏Legacy BIOS (אפיון סעיף 4) — ולא בגלל תכונה של הקוד. מה נשבר
+#: Legacy BIOS (אפיון סעיף 4) — ולא בגלל תכונה של הקוד. מה נשבר
 #: בלעדיה: מחשב שיכפול UEFI שהשרת שקט מולו נכנס ל-`chain_local`, וזה
 #: סורק את **כל** הכוננים המחוברים — כלומר את מגירות הסחורה — ומעלה
 #: את ה-ESP הראשון שנמצא בהן. הלקוח היה מקבל דיסק שווינדוס כבר עלה
@@ -693,7 +693,7 @@ _FUNC_CHAIN_LOCAL = _func_chain_local(traced=False)
 #: **לא לעשות כלום**.
 #:
 #: וגם בלי הסחורה: כל נתיב ב-LOCAL_BOOT_PATHS הוא בינארי EFI. על
-#: i386-pc ‏`chain_local` לא היה מעלה אף אחד מהם ממילא — הוא היה סורק
+#: i386-pc `chain_local` לא היה מעלה אף אחד מהם ממילא — הוא היה סורק
 #: את כל הכוננים המחוברים וקופץ אל תוך PE שהקושחה אינה יודעת להריץ.
 _FUNC_TRY_LOCAL = """function try_local {
     if [ "$grub_platform" = "efi" ]; then
@@ -750,16 +750,16 @@ def _entry_agent(config: GrubConfig, *, recovery: bool, gui: bool = False,
 
     השם "ImageSrv - recovery / imaging" היה מובן רק כשהוא הופיע ליד
     "ImageSrv": בלעדיו הוא רק שואל את המפעיל שאלה שהוא לא אמור לענות
-    עליה. ‏recovery משנה את שורת הפקודה, לא את מה שכתוב על המסך.
+    עליה. recovery משנה את שורת הפקודה, לא את מה שכתוב על המסך.
 
-    ‏gui (#32) משנה **רק** את שורת ה-initrd. הוא לא נכנס לשורת הפקודה של
+    gui (#32) משנה **רק** את שורת ה-initrd. הוא לא נכנס לשורת הפקודה של
     הקרנל: הסוכן מזהה את הקיוסק לפי מה שארוז בו (`/usr/bin/imagesrv-kiosk`
     קיים או לא), ופרמטר קרנל היה ממציא ממשק שני שיכול לסתור את הראשון
     (עיקרון 2).
     """
     cmdline = _kernel_cmdline(config, recovery=recovery)
     host = config.grub_host
-    # ‏`and` ולא ברירת מחדל: אם אין נתיב גרפי בתצורה — כלומר הקובץ אינו
+    # `and` ולא ברירת מחדל: אם אין נתיב גרפי בתצורה — כלומר הקובץ אינו
     # קיים על השרת — גם תפקיד עם מסך נופל לטקסטואלי. ראו gui_initrd_path.
     initrd = (config.gui_initrd_path if gui and config.gui_initrd_path
               else config.initrd_path)
@@ -773,16 +773,16 @@ def _entry_agent(config: GrubConfig, *, recovery: bool, gui: bool = False,
         "initrd",
         fallback_local=fallback_local,
     )
-    # ‏#400: חמישה פירורים, כל אחד בשורה משל עצמו. הם **בין** הפקודות
+    # #400: חמישה פירורים, כל אחד בשורה משל עצמו. הם **בין** הפקודות
     # ולא עוטפים אותן: פקודה שנכשלת בתוך menuentry ממשיכה לבאה אחריה,
-    # ולכן שרת שאינו עונה על ‎/boot/step מייצר שגיאה על המסך — ולא
+    # ולכן שרת שאינו עונה על /boot/step מייצר שגיאה על המסך — ולא
     # מכונה שאינה עולה. מה שקורה כאן הוא בדיוק המקטע שהיה חור שחור:
-    # ‏entry (נכנסנו) · http-ok (המודול נטען) · pre-linux (לפני הקרנל) ·
-    # ‏pre-initrd (הקרנל נטען) · pre-boot (ה-initramfs נטען).
+    # entry (נכנסנו) · http-ok (המודול נטען) · pre-linux (לפני הקרנל) ·
+    # pre-initrd (הקרנל נטען) · pre-boot (ה-initramfs נטען).
     #
-    # ‏#503/#1405: pre-initrd/pre-boot נשלחים רק אחרי שלולאת הטעינה
+    # #503/#1405: pre-initrd/pre-boot נשלחים רק אחרי שלולאת הטעינה
     # הצליחה. כשל סופי אינו ממשיך לפירור: הוא נכנס למסלול המילוט הבטוח,
-    # שאינו חוזר. הפירור עצמו נשאר פקודה עצמאית, ולכן כשל של ‎/boot/step
+    # שאינו חוזר. הפירור עצמו נשאר פקודה עצמאית, ולכן כשל של /boot/step
     # אינו יכול למנוע את פקודת הטעינה שאחריו.
     return f"""menuentry "ImageSrv" --unrestricted --id imagesrv {{
     {grub_call("entry")}
@@ -813,12 +813,12 @@ def _kernel_cmdline(config: GrubConfig, *, recovery: bool) -> str:
         "console=tty0",
         "quiet",
         "loglevel=3",
-        # ‏thermal.psv=-1 (הכרעת נדב 20/10, #1871: "רק החלק שמאט"): פרמטר
+        # thermal.psv=-1 (הכרעת נדב 20/10, #1871: "רק החלק שמאט"): פרמטר
         # של דרייבר ה-ACPI thermal של הקרנל שמבטל את נקודות ה-trip הפסיביות,
-        # ולכן ‏_PSL אינו מוערך. על ‏HP EliteDesk 800 G6 ההערכה הזו נכשלה
-        # ב-timeouts (‏`_PSL evaluation failure` ב-5.83 ש', ‏20/10). נשארים:
-        # אזורי ‏acpitz (‏probe.thermal), ‏_CRT ו-_ACx, והגנת החום של המעבד
-        # בחומרה (‏TCC/THERMTRIP). פרמטר של הקרנל ולא פרט משימה (עיקרון 2),
+        # ולכן _PSL אינו מוערך. על HP EliteDesk 800 G6 ההערכה הזו נכשלה
+        # ב-timeouts (`_PSL evaluation failure` ב-5.83 ש', 20/10). נשארים:
+        # אזורי acpitz (probe.thermal), _CRT ו-_ACx, והגנת החום של המעבד
+        # בחומרה (TCC/THERMTRIP). פרמטר של הקרנל ולא פרט משימה (עיקרון 2),
         # ורק בערך הרשת של הסוכן — לא בערכים המקומיים.
         "thermal.psv=-1",
     ]
@@ -838,7 +838,7 @@ def _ascii(text: str) -> str:
 
 def _strip_non_ascii(text: str) -> str:
     """לקובץ שלם: מסיר רק תווים שאינם ASCII, ומשאיר את התחביר של GRUB
-    ‏(‎$‎ ומירכאות) שלם."""
+    ($ ומירכאות) שלם."""
     return _ASCII_SAFE_MULTILINE.sub("", text)
 
 
@@ -854,7 +854,7 @@ def render_bootstrap(config: GrubConfig) -> str:
     למשוך את התפריט הדינמי. הוא מיוצר מכאן ולא נכתב ביד כדי ש-chain_local
     יהיה מוגדר במקום אחד בלבד ולא יסטה בין שני הקבצים.
     """
-    # ‏netloc בלי פורט = 80, כמו בכל URL של http.
+    # netloc בלי פורט = 80, כמו בכל URL של http.
     port = urlsplit(f"//{config.grub_host}").port or 80
     lock = "\n".join(lock_lines(config.password_hash))
     return _strip_non_ascii(f"""# ImageSrv bootstrap - generated by boot/grub_menu.py:render_bootstrap().

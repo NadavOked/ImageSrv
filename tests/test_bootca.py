@@ -1,16 +1,16 @@
-"""‏#85 — גזירת החותם של מטעני האתחול של האימג' בזמן הקליטה.
+"""#85 — גזירת החותם של מטעני האתחול של האימג' בזמן הקליטה.
 
 מה שנבדק כאן הוא `agent/lib/postdeploy/bootca.sh`: הוא פותח את ה-ESP, מוצא את מטעני
 האתחול, קורא מהם את טבלת התעודות של Authenticode, ומדפיס את שני שדות
-המניפסט — ‏`boot_ca` ו-`boot_ca_error`.
+המניפסט — `boot_ca` ו-`boot_ca_error`.
 
-**שלושה מצבים, ולא שניים.** רשימה = נגזר; ‏`[]` = המטענים נקראו ואין
-עליהם חתימה כלל; ‏`null` + סיבה = לא ניתן היה לגזור. שדה חסר ושדה שנכשל
-הם שני מצבים שונים — זה בדיוק הדפוס של `used_bytes=0` (‏#298), שאמר גם
+**שלושה מצבים, ולא שניים.** רשימה = נגזר; `[]` = המטענים נקראו ואין
+עליהם חתימה כלל; `null` + סיבה = לא ניתן היה לגזור. שדה חסר ושדה שנכשל
+הם שני מצבים שונים — זה בדיוק הדפוס של `used_bytes=0` (#298), שאמר גם
 "ריק" וגם "לא מדדנו".
 
 ה-PEים כאן נבנים בייט-בייט בפייתון, ולכן ההיסטים שהסוכן מחשב נבדקים
-באמת: מספר שגוי יקרא בייטים אחרים ויקבל תשובה אחרת. ‏`openssl` מוחלף
+באמת: מספר שגוי יקרא בייטים אחרים ויקבל תשובה אחרת. `openssl` מוחלף
 בכפיל בגבול המערכת (זה הכלי החיצוני, לא הלוגיקה), והפלט שהכפיל מחזיר
 הוא **הפלט שנמדד בפועל** מ-`openssl 3.5.7` על `shimx64.efi` של דביאן 13.
 """
@@ -54,9 +54,9 @@ def posix(p: Path | str) -> str:
 def path_entry(p: Path | str) -> str:
     """נתיב שמתאים לשבת בתוך `PATH`.
 
-    ‏`C:/...` אינו כזה: הנקודתיים הן **המפריד** של PATH, ולכן ערך כזה
+    `C:/...` אינו כזה: הנקודתיים הן **המפריד** של PATH, ולכן ערך כזה
     נקרא כשני רכיבים — `C` וגם `/Users/...` — וכל כלי בספרייה פשוט לא
-    נמצא. ‏Git Bash מבין את הצורה `/c/...`.
+    נמצא. Git Bash מבין את הצורה `/c/...`.
     """
     text = posix(p)
     if len(text) > 1 and text[1] == ":":
@@ -65,7 +65,7 @@ def path_entry(p: Path | str) -> str:
 
 
 # --- פלט openssl שנמדד ------------------------------------------------------
-# ‏/boot/efi/EFI/debian/shimx64.efi על שרת המעבדה, ‏2026-09-04. הקובץ נושא
+# /boot/efi/EFI/debian/shimx64.efi על שרת המעבדה, 2026-09-04. הקובץ נושא
 # **שתי** רשומות WIN_CERTIFICATE — טבלה של 19360 בייט, 9792 ואז 9568 —
 # והקושחה מריצה אותו אם אחת מהן מתחברת ל-`db`.
 
@@ -85,7 +85,7 @@ subject=C=US, O=Microsoft Corporation, CN=Microsoft UEFI CA 2023
 issuer=C=US, O=Microsoft Corporation, CN=Microsoft RSA Devices Root CA 2021
 """
 
-#: החתימה של `bootmgfw.efi` שהפילה את הלנובו (‏#61/#85): ה-`db` שלו
+#: החתימה של `bootmgfw.efi` שהפילה את הלנובו (#61/#85): ה-`db` שלו
 #: מכיל רק את תעודות 2011.
 CHAIN_WIN_2023 = """\
 subject=C=US, ST=Washington, L=Redmond, O=Microsoft Corporation, CN=Windows
@@ -120,7 +120,7 @@ def make_pe(
     cert_type: int = 2,
     declared_size: int | None = None,
 ) -> bytes:
-    """‏PE מינימלי עם טבלת תעודות. ‏`blobs` ריק = קובץ בלי חתימה כלל."""
+    """PE מינימלי עם טבלת תעודות. `blobs` ריק = קובץ בלי חתימה כלל."""
     lfanew = 128
     dos = bytearray(lfanew)
     dos[0:2] = b"MZ"
@@ -169,7 +169,7 @@ def toolbox(tmp_path: Path, openssl: str | None) -> Path:
     """ספריית PATH יחידה. כל כלי הוא עטיפת sh ולא העתק בינארי — עטיפה
     עוברת גם ב-Git Bash, שבו העתקת exe מנתקת אותו מה-DLL שלו.
 
-    ‏`openssl=None` פירושו שהכלי **באמת** אינו ב-PATH: זו הבקרה השלילית
+    `openssl=None` פירושו שהכלי **באמת** אינו ב-PATH: זו הבקרה השלילית
     "בלי הכלי המתאים", והיא חייבת לתת "לא ניתן היה לגזור" ולא קריסה.
     """
     box = tmp_path / "toolbox"
@@ -181,7 +181,7 @@ def toolbox(tmp_path: Path, openssl: str | None) -> Path:
         wrapper = box / tool
         wrapper.write_text(f'#!/bin/sh\nexec {posix(real)!r} "$@"\n', encoding="utf-8")
         wrapper.chmod(0o755)
-    # קודם מוחקים: ‏tmp_path משותף לכמה הרצות באותו טסט, וכפיל ששרד
+    # קודם מוחקים: tmp_path משותף לכמה הרצות באותו טסט, וכפיל ששרד
     # מהרצה קודמת היה הופך את "אין כלי" ל"יש כלי" — בשקט.
     tool = box / "openssl"
     tool.unlink(missing_ok=True)
@@ -215,8 +215,8 @@ BROKEN_OPENSSL = "#!/bin/sh\necho 'unable to load PKCS7 object' >&2\nexit 1\n"
 #: הכפיל, מחושב פעם אחת. `openssl=None` בהרצה = הכלי אינו ב-PATH כלל.
 FAKE_OPENSSL = fake_openssl()
 
-#: אותו סדר טעינה של `imagesrv-agent` — ‏`bootca.sh` נשען על
-#: ‏`node_is_block` שב-restore.sh, וטעינה חלקית היתה בודקת קוד אחר.
+#: אותו סדר טעינה של `imagesrv-agent` — `bootca.sh` נשען על
+#: `node_is_block` שב-restore.sh, וטעינה חלקית היתה בודקת קוד אחר.
 SOURCE_CHAIN = "".join(
     f". {posix(lib_path(name))!r}; "
     for name in ("common.sh", "waits.sh", "sysinfo.sh", "diskinfo.sh", "restore.sh", "bootca.sh")
@@ -257,9 +257,9 @@ def run_leaf_issuer(tmp_path: Path, text: str) -> str:
         + SOURCE_CHAIN
         + "_leaf_issuer"
     )
-    # ‏input בבייטים ולא ב-text: עם `text=True` ווינדוס מתרגם כל `\n` שנכתב
+    # input בבייטים ולא ב-text: עם `text=True` ווינדוס מתרגם כל `\n` שנכתב
     # לצינור ל-`\r\n`, וה-`awk` של `_leaf_issuer` מוציא `CN=` משורה שנושאת
-    # ‏`\r` בסופה — כלומר שם CA עם תו נסתר (#491, אותו כשל כמו #479). הפלט
+    # `\r` בסופה — כלומר שם CA עם תו נסתר (#491, אותו כשל כמו #479). הפלט
     # מפוענח כאן, כדי שלא יעבור universal-newlines ויסתיר את מה שהתקבל.
     proc = subprocess.run([BASH, "-c", script], input=text.encode("utf-8"),
                           capture_output=True, cwd=str(REPO))
@@ -271,7 +271,7 @@ def run_leaf_issuer(tmp_path: Path, text: str) -> str:
 
 
 def test_two_signatures_on_one_file_give_two_names(tmp_path):
-    """‏`bootmgfw.efi`/`shimx64.efi` נושאים יותר מחתימה אחת, והקושחה
+    """`bootmgfw.efi`/`shimx64.efi` נושאים יותר מחתימה אחת, והקושחה
     מריצה אותם אם **אחת** מהן מתחברת ל-`db`. שם יחיד היה מסתיר קובץ
     שעולה מצוין ממכונה שמכירה דווקא את השני."""
     esp = tmp_path / "esp"
@@ -283,7 +283,7 @@ def test_two_signatures_on_one_file_give_two_names(tmp_path):
 
 
 def test_every_loader_on_the_esp_is_recorded(tmp_path):
-    """‏ESP עם Windows וגם עם shim — שניהם נספרים, בלי לייחד את Windows."""
+    """ESP עם Windows וגם עם shim — שניהם נספרים, בלי לייחד את Windows."""
     esp = tmp_path / "esp"
     put(esp, "/EFI/Microsoft/Boot/bootmgfw.efi", make_pe([blob(b"WIN2023")]))
     put(esp, "/EFI/debian/shimx64.efi", make_pe([blob(b"CA2011")]))
@@ -302,7 +302,7 @@ def test_the_same_ca_is_listed_once(tmp_path):
 
 
 def test_the_lenovo_case_is_named(tmp_path):
-    """מה ש-#85 קיים בשבילו: ‏tiny11 חתום ב-`Windows UEFI CA 2023`,
+    """מה ש-#85 קיים בשבילו: tiny11 חתום ב-`Windows UEFI CA 2023`,
     וה-`db` של הלנובו מכיל רק את תעודות 2011. השם חייב לצאת מהקליטה
     כדי שאפשר יהיה לדעת את זה לפני שמוחקים כונן."""
     esp = tmp_path / "esp"
@@ -340,7 +340,7 @@ def _both_fields_present(out: dict, needle: str) -> None:
 
 
 def test_an_image_with_no_esp_says_so(tmp_path):
-    """אימג' לינוקס בלי ESP. ‏`null` וסיבה — לא שדה חסר ולא קריסה."""
+    """אימג' לינוקס בלי ESP. `null` וסיבה — לא שדה חסר ולא קריסה."""
     _both_fields_present(run_boot_ca_json(tmp_path, node=""), "ESP")
 
 
@@ -362,7 +362,7 @@ def test_an_openssl_that_fails_is_not_an_unsigned_image(tmp_path):
 
 
 def test_a_node_that_is_not_a_block_device_is_refused(tmp_path):
-    """בלי ESPROOT, ה-node חייב להיות התקן בלוקים. ‏`mount` על קובץ רגיל
+    """בלי ESPROOT, ה-node חייב להיות התקן בלוקים. `mount` על קובץ רגיל
     מקים לו `loop` מאחורי הגב — לעגן משהו אחר ולקרוא ממנו חתימה גרוע
     מלומר "לא ידענו"."""
     plain = tmp_path / "not-a-device"
@@ -415,7 +415,7 @@ def test_fewer_than_five_data_directories_carries_no_table(tmp_path):
 
 def run_with_broken_dedup_awk(tmp_path: Path, esp: Path) -> dict:
     """כמו `run_boot_ca_json`, אבל ה-`awk` שכותב את רשימת החותמים המנוכה
-    (‏bootca.sh:213) נכשל — בדיוק תרחיש ה-tmpfs המלא של #506.
+    (bootca.sh:213) נכשל — בדיוק תרחיש ה-tmpfs המלא של #506.
 
     העטיפה נופלת **רק** כשמגיע אליה קובץ `.raw` (הארגומנט של קריאת
     ה-dedup), ולכן ה-`awk` של `_leaf_issuer` (קורא stdin, בלי ארגומנט
@@ -452,7 +452,7 @@ def run_with_broken_dedup_awk(tmp_path: Path, esp: Path) -> dict:
 
 
 def test_a_failed_signer_list_write_is_not_an_unsigned_image(tmp_path):
-    """‏#506 — ה-`awk` שכותב את רשימת החותמים נכשל (tmpfs מלא). קובץ ריק
+    """#506 — ה-`awk` שכותב את רשימת החותמים נכשל (tmpfs מלא). קובץ ריק
     שיוצא 0 נקרא כ-`[]` + `error:null` — "נקרא, המטען אינו חתום" — במקום
     "לא הצלחנו לקרוא". על אימג' ווינדוס זו מסקנה הפוכה מהאמת (עיקרון 5)."""
     esp = tmp_path / "esp"
@@ -463,7 +463,7 @@ def test_a_failed_signer_list_write_is_not_an_unsigned_image(tmp_path):
 
 
 def test_a_table_of_a_type_we_do_not_read_is_not_unsigned(tmp_path):
-    """‏wCertificateType שאינו 2 אינו Authenticode. טבלה שיש בה תוכן
+    """wCertificateType שאינו 2 אינו Authenticode. טבלה שיש בה תוכן
     ולא הוצאנו ממנה חותם היא כישלון קריאה, לא "אין חתימה"."""
     esp = tmp_path / "esp"
     put(esp, "/EFI/BOOT/bootx64.efi", make_pe([blob(b"CA2011")], cert_type=1))
@@ -503,9 +503,9 @@ def test_a_bag_with_no_single_leaf_says_nothing(tmp_path):
 
 
 def test_a_silent_boot_ca_still_leaves_a_valid_manifest(tmp_path):
-    """הבקרה השלילית של החיווט עצמו: ‏`boot_ca_json` שלא הדפיס דבר —
-    ‏lib שלא נטען, למשל — היה מייצר `"os":"",,` כלומר מניפסט שאינו
-    ‏JSON, **אחרי** שכל הבייטים כבר עברו. כך נראה כישלון שמתגלה בסוף
+    """הבקרה השלילית של החיווט עצמו: `boot_ca_json` שלא הדפיס דבר —
+    lib שלא נטען, למשל — היה מייצר `"os":"",,` כלומר מניפסט שאינו
+    JSON, **אחרי** שכל הבייטים כבר עברו. כך נראה כישלון שמתגלה בסוף
     שעה של קריאת דיסק ואין לו שום קשר נראה לסיבה.
     """
     from test_capture_refusals import ONE_PARTITION, capture_run
@@ -535,7 +535,7 @@ def test_a_boot_ca_failure_never_fails_a_capture():
 
 
 def test_the_interfaces_document_says_why_boot_ca_is_a_list():
-    """‏`docs/architecture/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים — וכאן
+    """`docs/architecture/interfaces.md` הוא מקור האמת למה שעובר בין רכיבים — וכאן
     הוא צריך לשאת גם את **הנימוק**, לא רק את המבנה. בלי הנימוק השדה
     נראה כמו רשימה מיותרת, ומישהו יחזיר אותו למחרוזת: קובץ PE נושא
     יותר מחתימה אחת, והקושחה מקבלת אותו אם אחת מהן מתחברת ל-`db`.

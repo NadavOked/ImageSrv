@@ -2,13 +2,13 @@
 
 ב-08/11 (סבב 1107c) נמצאו על ה-testrunner, תחת חמש תיקיות ריצה, loops עם
 קובץ גיבוי `(deleted)` ונקודות עגינה tmpfs של 96MB (`fx/full`, מ-
-``test_when_the_drop_fails...`` ומ-``test_bad_sectors_ask...``). ‏`rm -rf` על
-תיקיית הריצה דילג עליהן, ‏`/work` התמלא ב-100%, וילדי `sudo` של ריצה שנקטעה
+``test_when_the_drop_fails...`` ומ-``test_bad_sectors_ask...``). `rm -rf` על
+תיקיית הריצה דילג עליהן, `/work` התמלא ב-100%, וילדי `sudo` של ריצה שנקטעה
 החזיקו את `/tmp/imagesrv-lc-engine.lock` עד שריצה 4 פקעה.
 
 השומר: אחרי שה-fixture של הדיסקים נסגר -- גם כשההרמה נקטעה באמצע -- אין תחת
 תיקיית הטסט עגינה או loop, **נקרא ישירות מ-/proc/mounts ומ-sysfs** ולא דרך
-הקוד שמנקה. החלק הראשון (הקורא עצמו, ‏`session_verdict`, ההנחיה שכל
+הקוד שמנקה. החלק הראשון (הקורא עצמו, `session_verdict`, ההנחיה שכל
 fixture עובר דרך `lcfx`) רץ בכל מקום; השני דורש root ו-loop devices.
 """
 
@@ -203,3 +203,37 @@ def test_the_orphan_guard_kills_a_root_orphan_by_pid(tmp_path):
     finally:
         for pid, _ in orphan_guard.processes_mentioning(marker):
             hygiene.kill_pid(pid)
+
+
+@requires_native(posix=True, why="process groups and setsid")
+def test_a_cut_setup_does_not_wait_for_a_pipe_a_dying_child_still_holds(tmp_path, monkeypatch):
+    """#2838: a root child killed in the middle of mount/losetup can hold the pipe for a while.
+    `root_cut` made the cut, the group was dead, and the one-second drain that followed raised a
+    plain TimeoutExpired instead of the SetupCut the caller waits for -- 2.38s into the test, under
+    a load of 10-18 on 14 cores. Here a grandchild that left the group (setsid) holds the pipe for
+    20s, so the failure does not depend on how loaded the machine is.
+
+    **Negative control:** with the old `communicate(timeout=RUN_GROUP_DRAIN_S)` after the cut, this
+    raises TimeoutExpired after ~1s."""
+    pidfile = tmp_path / "holder.pid"
+    code = "\n".join([
+        "import os, sys, time",
+        "if os.fork() == 0:",
+        "    os.setsid()",
+        "    open(sys.argv[1], 'w').write(str(os.getpid()))",
+        "    time.sleep(20)",
+        "    os._exit(0)",
+        "time.sleep(30)",
+    ])
+    monkeypatch.setattr(lcfx, "_root_argv", lambda args: [sys.executable, "-c", code, str(pidfile)])
+    monkeypatch.setattr(mountleak, "leftovers", lambda fx: [f"loop {fx}/disk.img"])
+    started = time.monotonic()
+    try:
+        with pytest.raises(lcfx.SetupCut) as cut:
+            lcfx.root_cut(tmp_path / "fx", "setup", cut_when=lambda seen: bool(seen), timeout=60)
+        assert cut.value.seen, "the cut was made on a state that was never seen"
+        assert time.monotonic() - started < 10, "the cut waited for the child that still holds the pipe"
+        assert pidfile.is_file(), "the grandchild never started: the pipe was not held"
+    finally:
+        if pidfile.is_file():
+            hygiene.kill_pid(int(pidfile.read_text()))

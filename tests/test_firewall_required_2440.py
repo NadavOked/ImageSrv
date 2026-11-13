@@ -1,9 +1,9 @@
-"""‏#2440: השרת אינו עולה ומגיש בלי חומת האש שהותקנה לו, ו-"אין חומת אש" אינו "הצליח".
+"""#2440: השרת אינו עולה ומגיש בלי חומת האש שהותקנה לו, ו-"אין חומת אש" אינו "הצליח".
 
-1. ‏`imagesrv-server.service` הצהיר רק `After=network-online.target` — בלי שום קשר
-   ל-`nftables.service` (נמדד במעבדה: ‏`ORDERING ON nftables: NONE`). ‏nftables
+1. `imagesrv-server.service` הצהיר רק `After=network-online.target` — בלי שום קשר
+   ל-`nftables.service` (נמדד במעבדה: `ORDERING ON nftables: NONE`). nftables
    שלא עלה באתחול השאיר את 8080/8081/8443 בלי סינון, והשרת עלה כרגיל.
-2. ‏`regenerate_firewall` החזיר `None` — "הצליח" — כשלא הותקנה חומת אש, וההגדרה
+2. `regenerate_firewall` החזיר `None` — "הצליח" — כשלא הותקנה חומת אש, וההגדרה
    מהקונסולה דיווחה OK בלי שנכתב כלל אחד.
 
 מה **אסור** לשבור: שרת שהותקן ב-`--no-firewall` (מצב שהמתקין תומך בו). הוא עולה,
@@ -27,7 +27,7 @@ UNIT = REPO / "deploy" / "imagesrv-server.service"
 
 
 def _run_main(tmp_path: Path, monkeypatch) -> list:
-    """‏main עם כל מה שאחרי השער מנוטרל. מחזיר את הקריאות ל-create_runtime."""
+    """main עם כל מה שאחרי השער מנוטרל. מחזיר את הקריאות ל-create_runtime."""
     uvicorn = pytest.importorskip("uvicorn")
     built = []
     monkeypatch.setattr(server.app, "create_runtime", lambda *a, **k: built.append(a) or "rt")
@@ -69,7 +69,7 @@ def test_a_server_installed_without_a_firewall_still_starts_and_says_so(
     (True, "table inet imagesrv {\n}\n", False),        # טעונה
     (True, "table inet filter {\n}\n", True),           # הותקנה, לא טעונה
     (True, None, True),                                 # nft לא נקרא — לא "טעונה"
-    (False, None, False),                               # ‏--no-firewall
+    (False, None, False),                               # --no-firewall
     (None, "table inet imagesrv {\n}\n", True),         # הקובץ לא נקרא
 ])
 def test_the_gate_has_one_answer_per_state(monkeypatch, installed, ruleset, blocked):
@@ -86,7 +86,7 @@ def test_regenerating_without_an_installed_firewall_is_not_a_success(tmp_path):
 
 
 def test_completing_the_install_without_a_firewall_continues_with_a_warning(tmp_path):
-    """‏--no-firewall: ההשלמה אינה נכשלת בגלל חומת אש שאינה קיימת, אבל התשובה אומרת זאת."""
+    """--no-firewall: ההשלמה אינה נכשלת בגלל חומת אש שאינה קיימת, אבל התשובה אומרת זאת."""
     from server.db import connect
     conn = connect(tmp_path / "x.db")
     hooks = {
@@ -113,7 +113,7 @@ def test_nic_services_on_a_server_without_a_firewall_journal_it(tmp_path, images
         servers_interface="eth0",
         hooks={"firewall": lambda repo, **kw: deploy_net.regenerate_firewall(
             repo, **kw, conf=tmp_path / "absent.conf")})
-    # ‏#1810: הצעד בודק שכרטיס ההפצה (eth1) קיים לפני שהוא מחולל כללים —
+    # #1810: הצעד בודק שכרטיס ההפצה (eth1) קיים לפני שהוא מחולל כללים —
     # רשימת הכרטיסים מוזרקת (#113), לא נקראת מהמכונה שמריצה את הבדיקה.
     app = server.app.create_app(tmp_path / "data", images_root, "http://10.44.9.10:8080",
                                 deploy=deploy, health_hooks={
@@ -125,7 +125,7 @@ def test_nic_services_on_a_server_without_a_firewall_journal_it(tmp_path, images
 
 
 def test_the_unit_orders_after_nftables_without_a_hard_dependency():
-    """סדר: ‏After=nftables.service, כדי שהשער ימצא את הטבלה טעונה באתחול.
+    """סדר: After=nftables.service, כדי שהשער ימצא את הטבלה טעונה באתחול.
     בלי Requires/Requisite — אלה היו מפילים (או מדליקים nftables) בשרת
     שהותקן ב---no-firewall; האכיפה היא השער ב-main."""
     lines = [l for l in UNIT.read_text(encoding="utf-8").splitlines()

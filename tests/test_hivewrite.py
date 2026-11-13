@@ -1,8 +1,8 @@
 """hivewrite — כתיבת ערך בודד ל-hive בלי לדרוס את שכניו (#33).
 
 הבדיקות מקמפלות את agent/hivewrite.c ומריצות אותו מול hive אמיתי
-(‏tests/fixtures/system-mini.hiv, נוצר עם make_fixture.py על Windows).
-הנקודה הקריטית אינה "הערך נכתב" אלא "שאר ערכי המפתח שרדו" — ‏setval
+(tests/fixtures/system-mini.hiv, נוצר עם make_fixture.py על Windows).
+הנקודה הקריטית אינה "הערך נכתב" אלא "שאר ערכי המפתח שרדו" — setval
 של hivexsh היה מוחק את כל הגדרות ה-TCP/IP של המכונה המשוחזרת.
 """
 
@@ -23,11 +23,11 @@ FIXTURE = REPO / "tests" / "fixtures" / "system-mini.hiv"
 PARAMS = r"ControlSet001\Services\Tcpip\Parameters"
 COMPUTERNAME = r"ControlSet001\Control\ComputerName\ComputerName"
 
-# ‏#33 — שם המחשב ב-Windows. חבילה שדילגה כאן נראתה בדיוק כמו חבילה
+# #33 — שם המחשב ב-Windows. חבילה שדילגה כאן נראתה בדיוק כמו חבילה
 # שעברה, וזה מה שהחביא את הבאג חודשים (#52).
 pytestmark = requires_native(
     "gcc", "hivexget", paths=("/usr/include/hivex.h",), posix=True,
-    why="hivewrite צריך gcc, ‏libhivex-dev ו-hivexget",
+    why="hivewrite צריך gcc, \u200flibhivex-dev ו-hivexget",
 )
 
 
@@ -125,7 +125,7 @@ def test_dangling_pair_is_a_usage_error(hivewrite, hive):
 
 
 def test_get_reads_string_and_dword(hivewrite, hive):
-    """‏-g הוא מסלול האימות של הסוכן — hivexget הוא wrapper ל-hivexsh
+    """-g הוא מסלול האימות של הסוכן — hivexget הוא wrapper ל-hivexsh
     שאינו רץ ב-initramfs, ולכן הקריאה-חזרה חייבת לעבור באותו בינארי."""
     result = run(hivewrite, "-g", hive, PARAMS, "Hostname")
     assert result.returncode == 0, result.stderr
@@ -153,9 +153,9 @@ def test_get_missing_value_fails(hivewrite, hive):
 
 def lsval(hive, path) -> str:
     """הפלט של `lsval` ב-hivexsh — פורמט regedit, שבו הסוג נראה:
-    ‏`"Name"="text"` הוא REG_SZ ו-`"Name"=str(2):"…"` הוא REG_EXPAND_SZ (כך
-    ‏hivexsh מדפיס אותו — נמדד במעבדה 16/09; `hex(2):` היה ניחוש בלי libhivex).
-    ‏hivexget הוא wrapper ל-hivexsh, ולכן hivexsh קיים בכל מקום שהטסט רץ."""
+    `"Name"="text"` הוא REG_SZ ו-`"Name"=str(2):"…"` הוא REG_EXPAND_SZ (כך
+    hivexsh מדפיס אותו — נמדד במעבדה 16/09; `hex(2):` היה ניחוש בלי libhivex).
+    hivexget הוא wrapper ל-hivexsh, ולכן hivexsh קיים בכל מקום שהטסט רץ."""
     script = f"cd {path}\nlsval\n"
     result = subprocess.run(
         ["hivexsh", str(hive)], input=script, capture_output=True, text=True,
@@ -186,14 +186,14 @@ def test_x_alone_is_a_usage_error(hivewrite, hive):
     result = run(hivewrite, "-x", "-g", hive, PARAMS, "DevicePath")
     assert result.returncode != 0 and "usage" in result.stderr
 
-# --- #1331: -d כותב REG_DWORD — ‏Start של שירות אחסון in-box ------------------
+# --- #1331: -d כותב REG_DWORD — Start של שירות אחסון in-box ------------------
 
 STORAHCI = r"ControlSet001\Services\storahci"
 
 
 def test_d_writes_a_dword_and_every_sibling_survives(hivewrite, hive):
-    """‏Start=0 בתוך מפתח שמחזיק גם Type/ErrorControl/Group/ImagePath —
-    אותה סיבה כמו ב-#33: ‏setval של hivexsh היה מוחק את השכנים."""
+    """Start=0 בתוך מפתח שמחזיק גם Type/ErrorControl/Group/ImagePath —
+    אותה סיבה כמו ב-#33: setval של hivexsh היה מוחק את השכנים."""
     before = value_listing(hive, STORAHCI)
     assert any(line.startswith('"Start"=dword:00000003') for line in before), before
     result = run(hivewrite, "-d", hive, STORAHCI, "Start", "0")

@@ -119,7 +119,7 @@ def test_an_unsynced_clock_is_an_orange_card_with_the_mockups_words():
     frame = _frame(UNSYNCED, LATER)
     (prob,) = _probs(frame)
     assert prob[1] == "warn" and prob[3] == "השעון של השרת לא מסונכרן"
-    assert prob[4] == ("שרת הזמן (⁨10.44.0.250⁩) לא ענה מאז האתחול. השעה עלולה להיות "
+    assert prob[4] == ("שרת הזמן (\u206810.44.0.250\u2069) לא ענה מאז האתחול. השעה עלולה להיות "
                        "שגויה ביומן, בזמני הסבבים ובבדיקת תוקף התעודה.")
     assert prob[5] == ("<b>מה לעשות:</b> לבדוק שהרשת מאפשרת NTP (UDP 123) אל שרת הזמן, או לשנות "
                        "בקונסולה: הגדרות ← מקור השעה.")

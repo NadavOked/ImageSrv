@@ -1,14 +1,14 @@
-"""‏#433 — רשומת Boot#### לווינדוס המשוחזר על UEFI (`agent/lib/postdeploy/bootentry.sh`).
+"""#433 — רשומת Boot#### לווינדוס המשוחזר על UEFI (`agent/lib/postdeploy/bootentry.sh`).
 
 שחזור מחיצות משחזר דיסק, לא NVRAM: הרשומה שהקושחה מעלה ממנה יושבת על
-הלוח. ‏`ensure_boot_entry` רץ על ה-sh האמיתי עם efibootmgr מזויף שמחזיק
-"NVRAM" בקובץ: מה שנבדק הוא **מה נקרא בחזרה** (‏`efibootmgr -v`) ולא קוד
-היציאה של הכתיבה — ‏UEFI מתיר לקושחה להשמיט רשומה, ולכן הזיוף יודע גם
+הלוח. `ensure_boot_entry` רץ על ה-sh האמיתי עם efibootmgr מזויף שמחזיק
+"NVRAM" בקובץ: מה שנבדק הוא **מה נקרא בחזרה** (`efibootmgr -v`) ולא קוד
+היציאה של הכתיבה — UEFI מתיר לקושחה להשמיט רשומה, ולכן הזיוף יודע גם
 "לכתוב בהצלחה" בלי שהרשומה תופיע. שלושת המצבים שהבריף ביקש: אין
-‏efivars (‏Legacy — דילוג בשם), אין רשומה (נוצרת ונקראת בחזרה + BootNext),
+efivars (Legacy — דילוג בשם), אין רשומה (נוצרת ונקראת בחזרה + BootNext),
 יש רשומה (משתמשים בה, בלי כפילות).
 
-‏`SYSROOT` הוא תפר הבדיקה של efivars: בלעדיו הבדיקה הייתה מדברת עם
+`SYSROOT` הוא תפר הבדיקה של efivars: בלעדיו הבדיקה הייתה מדברת עם
 ה-NVRAM האמיתי של מכונת הבדיקות.
 """
 
@@ -37,8 +37,8 @@ WINDOWS_OWN = (f"Boot0000* Windows Boot Manager\tHD(1,GPT,{ESP_UUID},0x800,0x320
                "/File(\\EFI\\MICROSOFT\\BOOT\\BOOTMGFW.EFI)WINDOWS.........")
 
 #: efibootmgr מזויף. ה-NVRAM הוא הקובץ $FAKE_NVRAM (שורות Boot####, ואולי
-#: שורת BootNext). ‏-C מוסיף רשומה — או, תחת FAKE_CREATE=drop, יוצא 0 בלי
-#: להוסיף (הקושחה השמיטה); ‏-n קובע BootNext — או, תחת FAKE_NEXT=drop, לא.
+#: שורת BootNext). -C מוסיף רשומה — או, תחת FAKE_CREATE=drop, יוצא 0 בלי
+#: להוסיף (הקושחה השמיטה); -n קובע BootNext — או, תחת FAKE_NEXT=drop, לא.
 EFIBOOTMGR = r'''
 echo "$*" >> "$FAKE_NVRAM.calls"
 case "$1" in
@@ -123,7 +123,7 @@ class Box:
 
 
 def test_no_efivars_is_skipped_by_name_not_failed(tmp_path):
-    """‏Legacy BIOS (מחשבי השיכפול, #391): אין API, ואומרים זאת."""
+    """Legacy BIOS (מחשבי השיכפול, #391): אין API, ואומרים זאת."""
     box = Box(tmp_path, efivars=False)
     assert box.ensure() == {"state": "skipped", "entry": "", "reason": "no_efivars"}
     assert box.calls() == [] and box.target_error() is None
@@ -136,7 +136,7 @@ def test_a_missing_entry_is_created_read_back_and_made_boot_next(tmp_path):
     lines = box.nvram_lines()
     assert any(f"HD(1,GPT,{ESP_UUID}," in l and "\\EFI\\Microsoft\\Boot\\bootmgfw.efi" in l for l in lines)
     assert "BootNext: 0001" in lines
-    # ‏--create-only: ‏BootOrder לא נגעו בו — ‏PXE נשאר ראשון ברשת הזאת.
+    # --create-only: BootOrder לא נגעו בו — PXE נשאר ראשון ברשת הזאת.
     assert any(c.startswith("-C ") for c in box.calls())
     assert not any(c.startswith("-c ") or "-o " in c for c in box.calls())
     assert box.target_error() is None and box.target_state() == "done"
@@ -156,7 +156,7 @@ def test_an_existing_entry_is_reused_and_no_duplicate_is_written(tmp_path):
 
 
 def test_a_create_that_exits_zero_but_does_not_read_back_is_a_failure(tmp_path):
-    """‏R17: הקושחה רשאית להשמיט רשומה שאינה לרוחה. כתיבה אינה ראיה."""
+    """R17: הקושחה רשאית להשמיט רשומה שאינה לרוחה. כתיבה אינה ראיה."""
     box = Box(tmp_path, env="FAKE_CREATE=drop")
     result = box.ensure()
     assert result["state"] == "failed" and "בקריאה בחזרה" in result["error"]
@@ -215,7 +215,7 @@ def test_a_partuuid_that_cannot_be_read_is_a_failure(tmp_path):
 
 
 def test_an_empty_efivars_directory_is_a_mount_that_failed(tmp_path):
-    """‏init אומר "efivarfs would not mount" ומשאיר תיקייה ריקה — זו לא
+    """init אומר "efivarfs would not mount" ומשאיר תיקייה ריקה — זו לא
     קושחה בלי משתנים, זו קריאה שנכשלה; לא כותבים לתוך כלום."""
     box = Box(tmp_path, efivars=False)
     (box.sys / "sys/firmware/efi/efivars").mkdir(parents=True)
@@ -244,7 +244,7 @@ def test_the_builder_packs_efibootmgr():
 
 @pytest.mark.parametrize("flag", ["-c ", " -o "])
 def test_boot_order_is_never_rewritten(flag):
-    """‏`-c` בלי ‏`-C` מקדים את הרשומה ל-BootOrder — וברשת הזאת PXE חייב
+    """`-c` בלי `-C` מקדים את הרשומה ל-BootOrder — וברשת הזאת PXE חייב
     להישאר ראשון, אחרת התחנה לא חוזרת ל-ImageSrv לעולם."""
     text = (AGENT / "lib" / "postdeploy" / "bootentry.sh").read_text(encoding="utf-8")
     for line in text.splitlines():

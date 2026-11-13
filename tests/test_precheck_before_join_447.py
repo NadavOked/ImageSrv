@@ -1,15 +1,15 @@
-"""‏#447 (ברזל 07/11, ‏room_e35abf2c) — האזהרה לפני "התחל" מופיעה **לפני** שהמשכפל מצטרף.
+"""#447 (ברזל 07/11, room_e35abf2c) — האזהרה לפני "התחל" מופיעה **לפני** שהמשכפל מצטרף.
 
-על ברזל: משכפל 2 הוער ב-WoL וחיכה (‏`awake=true`), ואז נפתח סבב עם יעד יחיד. ‏`round.precheck`
-היה `[]` בכל הדגימות עד היציאה, והאזהרה נרשמה רק ביומן. השורש: ‏`warnings()` דילג על מכונה
+על ברזל: משכפל 2 הוער ב-WoL וחיכה (`awake=true`), ואז נפתח סבב עם יעד יחיד. `round.precheck`
+היה `[]` בכל הדגימות עד היציאה, והאזהרה נרשמה רק ביומן. השורש: `warnings()` דילג על מכונה
 שלא הצטרפה, והגל יוצא לבד באותו דופק שבו היא מצטרפת — בסבב עם יעד יחיד אין אף רגע שבו הגל
 פתוח **וגם** המכונה הצטרפה.
 
 הכרעת נדב 07/11 (אפשרות א'): בסבב עם בחירה, האזהרה מחושבת גם למכונה שנבחרה ועוד לא הצטרפה
 — מרגע הבחירה. **היציאה האוטומטית לא משתנה** (#432 בתוקף): אזהרה, לא חסימה.
 
-‏#2848 (נדב 11/11): "איטי בבדיקת הכתיבה הקודמת" כבר אינו אזהרה (רק הסבב הנוכחי קובע), ולכן הסימן
-כאן הוא "איטי מהרגיל לדגם" (‏`model_slow`, ‏#1845) — אותו כלל בחירה, סימן שעדיין מוזהר.
+#2848 (נדב 11/11): "איטי בבדיקת הכתיבה הקודמת" כבר אינו אזהרה (רק הסבב הנוכחי קובע), ולכן הסימן
+כאן הוא "איטי מהרגיל לדגם" (`model_slow`, #1845) — אותו כלל בחירה, סימן שעדיין מוזהר.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from test_precheck_writecheck_447 import _journal
 
 
 def _x_slow_for_its_model(room_server) -> None:
-    """שלושה דיסקים אחרים מאותו דגם (‏"Drawer SSD" של cloner_hello) ב-400 MB/s, ו-X ב-100 — איטי לדגם."""
+    """שלושה דיסקים אחרים מאותו דגם ("Drawer SSD" של cloner_hello) ב-400 MB/s, ו-X ב-100 — איטי לדגם."""
     conn = room_server["ctx"].conn
     rows = [("ses_0", s, 400) for s in ("A", "B", "C")] + [("ses_0", "X", 100)]
     for i, (ses, serial, mbps) in enumerate(rows):
@@ -81,7 +81,7 @@ def test_only_the_selected_slot_of_a_waiting_cloner_warns():
 
 
 def test_a_round_without_selection_still_waits_for_the_join():
-    """סבב ישן בלי בחירה (‏roster ‏None): אין דרך לדעת מי ייכתב — רק מי שהצטרף, כמו קודם."""
+    """סבב ישן בלי בחירה (roster None): אין דרך לדעת מי ייכתב — רק מי שהצטרף, כמו קודם."""
     d = {"port": 1, "serial": "X", "fresh": True, "selected": False, "model_speed": SLOW_MODEL}
     waiting = {"mac": CLONER1, "name": "01", "joined": False, "drawer_list": [d]}
     assert room_precheck.warnings([waiting], selection=False) == []
@@ -89,7 +89,7 @@ def test_a_round_without_selection_still_waits_for_the_join():
 
 
 def test_a_past_rounds_slow_write_is_no_warning():
-    """‏#2848 (נדב 11/11): `last_write_check` של #447 (רשומה של שרת ישן) אינו סימן — אין אזהרה."""
+    """#2848 (נדב 11/11): `last_write_check` של #447 (רשומה של שרת ישן) אינו סימן — אין אזהרה."""
     d = {"port": 1, "serial": "X", "fresh": True, "selected": True,
          "last_write_check": {"mbps": 21, "slow": True, "text_he": "בבדיקת הכתיבה הקודמת נמדד איטי"}}
     assert room_precheck.warnings([{"mac": CLONER1, "name": "01", "joined": True, "drawer_list": [d]}],

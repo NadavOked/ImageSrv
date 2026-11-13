@@ -1,5 +1,5 @@
 """תשתית משותפת לבדיקות השרת: ספרייה מזויפת, שעון נשלט, ולקוחות
-מחוברים בשני התפקידים — ושתי בדיקות על הריצה עצמה (#52, ‏#79).
+מחוברים בשני התפקידים — ושתי בדיקות על הריצה עצמה (#52, #79).
 """
 
 from __future__ import annotations
@@ -27,9 +27,9 @@ except ImportError:  # pragma: no cover
     TestClient = None
 
 
-# --- כנות הריצה: כלי שחסר, ותהליך ששרד (#52, ‏#79) --------------------------
+# --- כנות הריצה: כלי שחסר, ותהליך ששרד (#52, #79) --------------------------
 #
-# ‏"N עברו, אפס דילוגים" הוא המשפט שכל האימות של הפרויקט נשען עליו,
+# "N עברו, אפס דילוגים" הוא המשפט שכל האימות של הפרויקט נשען עליו,
 # ולכן המכשיר עצמו צריך בדיקה: חבילה שדילגה במקום שהכלים אמורים להיות
 # אינה ירוקה, וטסט שהשאיר תהליך שידור חי לא סיים.
 
@@ -42,6 +42,14 @@ _run: dict[str, str | None] = {"basetemp": None}
 WINDOWS_ALLOWED_FAILURES: frozenset[str] = frozenset()
 _win_failed: list[str] = []
 
+#: #2808 family: the ceiling for waiting on an event that WILL happen (a thread starting, a
+#: state change, a fake process being released). It is a hang detector, never a speed
+#: assertion: a passing run returns the moment the event arrives and never waits for it.
+#: Five seconds was measured too short under the full run's load (load 10-18 on 14 cores,
+#: 10-11/11): the wait returned False for an event that arrived a little later, and the
+#: test went red for a reason that is not the code under test.
+HANG_S = 60.0
+
 
 def pytest_report_header(config) -> str:
     return _orphan_guard.header_line()
@@ -51,52 +59,52 @@ def pytest_configure(config) -> None:
     config.addinivalue_line(
         "markers", f"{native.MISSING_MARK}(tools): כלי מקומי חסר במקום שנדרש"
     )
-    # ‏#949: חמשת טסטי evdev כותבים ל-/dev/uinput וקוראים /dev/input/event* —
+    # #949: חמשת טסטי evdev כותבים ל-/dev/uinput וקוראים /dev/input/event* —
     # במעבדה root; ב-CI הציבורי הם רצים בצעד נפרד תחת sudo (tests.yml).
     config.addinivalue_line(
         "markers", "uinput: דורש /dev/uinput כתיב וקריאת /dev/input — root או sudo"
     )
-    # ‏#1737: הרזרבה למערכת (‏10GiB) — רק בטסטים שבודקים אותה; ראו `_host_free_space`.
+    # #1737: הרזרבה למערכת (10GiB) — רק בטסטים שבודקים אותה; ראו `_host_free_space`.
     config.addinivalue_line(
         "markers", "system_reserve: הטסט בודק את הרזרבה של disk_reserve — היא נשארת 10GiB"
     )
-    # ‏#1334: אינטגרציית ה-VM (‏qemu, ‏ovmf, ‏guestfs, ‏root) — opt-in במעבדה בלבד.
+    # #1334: אינטגרציית ה-VM (qemu, ovmf, guestfs, root) — opt-in במעבדה בלבד.
     # ב-CI הציבורי היא **מוסרת במפורש** (-m "not vm_it"), לא "מדולגת": דילוג
     # תחת REQUIRE_NATIVE=1 הוא כישלון, וזה מה שהפיל את tests מאז v0.73.2.
     config.addinivalue_line(
         "markers", "vm_it: אינטגרציית עדכון ה-VM — IMAGESRV_VM_IT=1, root וכלי השרת"
     )
-    # ‏#2118: רגיש לעומס (זרם שמחכה ‏WAIT_STREAM_STALL, ערך של המוצר) — נכשל תחת
-    # ‏`-n auto` ועובר לבדו. רץ סדרתית אחרי השלב המקבילי: ‏`-m "not serial"`
-    # ואז ‏`-m serial`; השער סופר את שני השלבים יחד (lab_gate.py).
+    # #2118: רגיש לעומס (זרם שמחכה WAIT_STREAM_STALL, ערך של המוצר) — נכשל תחת
+    # `-n auto` ועובר לבדו. רץ סדרתית אחרי השלב המקבילי: `-m "not serial"`
+    # ואז `-m serial`; השער סופר את שני השלבים יחד (lab_gate.py).
     config.addinivalue_line(
         "markers", "serial: רגיש לעומס; רץ סדרתית אחרי השלב המקבילי, #2118"
     )
-    # לפני האיסוף: ‏`requires_native(("sgdisk", which("sgdisk")))` נקבע ביבוא
+    # לפני האיסוף: `requires_native(("sgdisk", which("sgdisk")))` נקבע ביבוא
     # המודול, ו-busybox ash של הטסט מוצא את sgdisk באותו PATH (#1594).
     if os.name != "nt":
         os.environ["PATH"] = native.with_sbin(os.environ.get("PATH", ""))
     hygiene.block_real_processes()
-    # ‏portbase גבוה ואקראי לכל הריצה: יתום של ריצה שנקטעה לא ינקה איש,
+    # portbase גבוה ואקראי לכל הריצה: יתום של ריצה שנקטעה לא ינקה איש,
     # ולכן ההגנה היא שלא יהיה לו במה להתנגש (#156).
     hygiene.assign_test_portbase()
-    # ‏#2099: תחת xdist — לוג שולח לכל worker; סדרתי — כמו קודם.
+    # #2099: תחת xdist — לוג שולח לכל worker; סדרתי — כמו קודם.
     hygiene.isolate_sender_log(os.environ.get("PYTEST_XDIST_WORKER"))
     hostguard.block_real_host_reads()
     hostguard.detach_host_dev()
-    # ‏#893: בווינדוס סקריפט `-c` ארוך נחתך בשקט — טסט שמעביר כזה נכשל בשמו.
+    # #893: בווינדוס סקריפט `-c` ארוך נחתך בשקט — טסט שמעביר כזה נכשל בשמו.
     msys_guard.install()
-    # ‏#2181: reboot/poweroff/halt/shutdown אמיתי — מלכודת ב-PATH, וטסט שהגיע אליה נכשל.
+    # #2181: reboot/poweroff/halt/shutdown אמיתי — מלכודת ב-PATH, וטסט שהגיע אליה נכשל.
     powertrap.install()
-    # ‏#2702: ריצה שנקטעה ב-SIGTERM מפרקת את ה-fixtures (loops, tmpfs) כמו ריצה רגילה.
+    # #2702: ריצה שנקטעה ב-SIGTERM מפרקת את ה-fixtures (loops, tmpfs) כמו ריצה רגילה.
     hygiene.install_sigterm_as_interrupt()
 
 
-#: קובץ עקבות אופציונלי — ‏`IMAGESRV_TEST_TRACE=<נתיב>`.
+#: קובץ עקבות אופציונלי — `IMAGESRV_TEST_TRACE=<נתיב>`.
 #:
-#: ‏07/09: ריצה מלאה נגמרה ב-87% **בלי שורת סיכום כלל**, כלומר לא היה
+#: 07/09: ריצה מלאה נגמרה ב-87% **בלי שורת סיכום כלל**, כלומר לא היה
 #: ממה לקרוא תוצאה. מוות כזה הוא תהליך-בן שהרג את הריצה לפני
-#: ‏`pytest_sessionfinish`, ו-`faulthandler_timeout` — מסלול האבחון
+#: `pytest_sessionfinish`, ו-`faulthandler_timeout` — מסלול האבחון
 #: הרגיל — **אינו זמין בווינדוס**. לכן הקובץ הזה: הוא כתוב ומסונכרן
 #: לדיסק **לפני** כל טסט, ולכן מוות שקט משאיר את שם הטסט האחרון.
 #:
@@ -107,7 +115,7 @@ _trace = os.environ.get("IMAGESRV_TEST_TRACE")
 
 def pytest_runtest_setup(item) -> None:
     if _trace:
-        # ‏`flush` **ו-**`fsync`: חוצץ שנשאר בזיכרון נעלם עם התהליך,
+        # `flush` **ו-**`fsync`: חוצץ שנשאר בזיכרון נעלם עם התהליך,
         # וזה בדיוק המקרה שהקובץ הזה אמור לתעד.
         with open(_trace, "a", encoding="utf-8") as fh:
             fh.write(f"{item.nodeid}\n")
@@ -130,11 +138,11 @@ def _say(lines: list[str]) -> None:
         print(text.encode("ascii", "backslashreplace").decode())
 
 
-#: ‏#2099: תחת pytest-xdist המנהל (controller) קובע את קוד היציאה, והוא
+#: #2099: תחת pytest-xdist המנהל (controller) קובע את קוד היציאה, והוא
 #: **מתעלם** מ-`session.exitstatus` של worker (נקרא רק `exitstatus == 2`,
-#: ‏Ctrl-C). תהליך יתום או שולח אמיתי שה-worker מצא היו נעלמים בשקט — ריצה
+#: Ctrl-C). תהליך יתום או שולח אמיתי שה-worker מצא היו נעלמים בשקט — ריצה
 #: אדומה שנראית ירוקה (עיקרון 5). לכן ה-worker מוסר את הממצאים דרך
-#: ‏`workeroutput`, והמנהל מוסיף אותם לפסק שלו. הדילוגים וכשלי ווינדוס אינם
+#: `workeroutput`, והמנהל מוסיף אותם לפסק שלו. הדילוגים וכשלי ווינדוס אינם
 #: עוברים כאן: הדוחות עצמם מגיעים למנהל (`pytest_runtest_logreport`).
 WORKER_PROBLEMS_KEY = "imagesrv_problems"
 _worker_problems: list[str] = []
@@ -154,9 +162,9 @@ def pytest_testnodedown(node, error) -> None:
     _worker_problems.extend(getattr(node, "workeroutput", {}).get(WORKER_PROBLEMS_KEY, []))
 
 
-#: ‏#2121: שער המעבדה אינו קורא את קוד היציאה (הוא 1 בכל ריצה על ה-testrunner,
+#: #2121: שער המעבדה אינו קורא את קוד היציאה (הוא 1 בכל ריצה על ה-testrunner,
 #: שש שגיאות uinput), ולכן יתום או שולח אמיתי שנמצאו כאן — שאינם טסט ב-junit —
-#: היו נעלמים בו. ‏`IMAGESRV_SESSION_PROBLEMS=<נתיב>`: הרשימה נכתבת תמיד, גם
+#: היו נעלמים בו. `IMAGESRV_SESSION_PROBLEMS=<נתיב>`: הרשימה נכתבת תמיד, גם
 #: ריקה — קובץ חסר אומר "לא נרשם", לא "אין בעיות" (עיקרון 5).
 SESSION_PROBLEMS_ENV = "IMAGESRV_SESSION_PROBLEMS"
 
@@ -404,7 +412,7 @@ def server(tmp_path: Path, images_root: Path, clock: Clock, monkeypatch):
     בכמה מסלולים — hello, מבט-על, תחנה — וכל אחד מהם הפעיל `udp-sender`
     אמיתי, על פורט השידור של השרת, שנשאר לרוץ אחרי סוף הריצה (#79).
 
-    ‏`port_holders` מוזרק לריק: בלי `/proc/net/udp` (ווינדוס) המנוע נכשל
+    `port_holders` מוזרק לריק: בלי `/proc/net/udp` (ווינדוס) המנוע נכשל
     *לפני* השידור המזויף, והטסט מת על כשל סביבתי במקום על ההתנהגות
     שהוא בודק (#312). זה אותו מקור-אמת ש-`free_ports` מחליף ב-test_sender.
     """
@@ -428,11 +436,11 @@ def server_with_sender(server: dict):
 @pytest.fixture(autouse=True)
 def _classrooms_restore():
     """הכרעת נדב 11/10: השרת מסרב לכיתות כש-`capabilities.classrooms()` כבוי
-    (v1). ‏`setup_classroom` בודק את זרימת v1.2 ולכן מדליק את היכולת לטסט
+    (v1). `setup_classroom` בודק את זרימת v1.2 ולכן מדליק את היכולת לטסט
     הנוכחי — בלי לדרוש מכל אחד מ-40 הקוראים להעביר `monkeypatch` (הם
     מעבירים מילונים שונים). כאן הערך חוזר אחרי כל טסט — ל**מה שהיה לפניו**,
-    ולא ל"מה שהיה כש-setup_classroom רץ": ‏autouse מתפרק אחרון, אחרי
-    ‏`monkeypatch` של `classrooms_on`, ושחזור יחסי היה משאיר True דולף."""
+    ולא ל"מה שהיה כש-setup_classroom רץ": autouse מתפרק אחרון, אחרי
+    `monkeypatch` של `classrooms_on`, ושחזור יחסי היה משאיר True דולף."""
     from server.core import capabilities                        # noqa: PLC0415
     before = capabilities.CLASSROOMS
     yield
@@ -441,14 +449,14 @@ def _classrooms_restore():
 
 @pytest.fixture(autouse=True)
 def _host_free_space(request, monkeypatch):
-    """‏#1737: השרת שומר ‏10GiB פנויים למערכת (‏`disk_reserve.reserve()`), והם
+    """#1737: השרת שומר 10GiB פנויים למערכת (`disk_reserve.reserve()`), והם
     נמדדים על הדיסק **של המארח**. ב-Testrunner יש 3.5–7GB פנויים, ולכן כל
-    קליטה, העלאה, העברה ומשיכה בחבילה נדחתה "אין מקום" (rc6, ‏5a9a0cf4) — טסט
+    קליטה, העלאה, העברה ומשיכה בחבילה נדחתה "אין מקום" (rc6, 5a9a0cf4) — טסט
     שנכשל לפי מצב הדיסק של המכונה שמריצה אותו אינו בודק את הקוד.
 
     כאן הרזרבה היא 0, כמו לפני #1737 — חוץ מטסט שמסומן `system_reserve`: שם
     היא הערך האמיתי, והטסט מזייף את המקום הפנוי בעצמו. הקוד לא משתנה; רק
-    הקלט של הבדיקה (‏`reserve()` נקרא בזמן הקריאה בדיוק בשביל זה)."""
+    הקלט של הבדיקה (`reserve()` נקרא בזמן הקריאה בדיוק בשביל זה)."""
     if request.node.get_closest_marker("system_reserve"):
         return
     from server.storage import disk_reserve                        # noqa: PLC0415
@@ -457,7 +465,7 @@ def _host_free_space(request, monkeypatch):
 
 @pytest.fixture()
 def classrooms_on(monkeypatch):
-    """v1.2 לטסט אחד: כיתות דלוקות בשרת (‏`capabilities.CLASSROOMS`)."""
+    """v1.2 לטסט אחד: כיתות דלוקות בשרת (`capabilities.CLASSROOMS`)."""
     from server.core import capabilities                        # noqa: PLC0415
     monkeypatch.setattr(capabilities, "CLASSROOMS", True)
 
@@ -465,7 +473,7 @@ def classrooms_on(monkeypatch):
 def setup_classroom(server: dict, expected: int = 2) -> dict:
     """קבוצת כיתה עם שתי מכונות רשומות; מחזיר מזהים שימושיים.
 
-    מדליק את הכיתות (v1.2) עד סוף הטסט — ראה ‏`_classrooms_restore`."""
+    מדליק את הכיתות (v1.2) עד סוף הטסט — ראה `_classrooms_restore`."""
     from server.core import capabilities                        # noqa: PLC0415
     capabilities.CLASSROOMS = True
     admin = server["admin"]
@@ -481,7 +489,7 @@ def setup_classroom(server: dict, expected: int = 2) -> dict:
         },
     ).json()
     assert result["saved"] == 2 and not result["rejected"]
-    # ‏#880: ברירת המחדל של v1 היא "הפצה לכיתות כבויה", וסבב כיתה מהסוכן
+    # #880: ברירת המחדל של v1 היא "הפצה לכיתות כבויה", וסבב כיתה מהסוכן
     # (`POST /api/v1/agent/sessions`) מסורב ב-409. בדיקה שרושמת כיתה
     # בודקת את זרימת v2 — ומדליקה את המתג במפורש, כמו שהמפעיל היה עושה.
     # הבדיקות של המתג עצמו מכבות אותו חזרה.
@@ -520,11 +528,11 @@ def hello_body(mac: str, disk_bytes: int = 256060514304) -> dict:
 
 def room_slots(conn, drawers: dict[str, list[str]],
                size_bytes: int | None = 256060514304) -> list[dict]:
-    """‏#1410: סבב חדר נפתח רק על בחירה מפורשת של מגירות שהמשכפל כבר דיווח.
+    """#1410: סבב חדר נפתח רק על בחירה מפורשת של מגירות שהמשכפל כבר דיווח.
 
-    רושם את `drawers` (‏mac → serials, ‏serial i בחריץ i+1) כדיווח ה-hello
+    רושם את `drawers` (mac → serials, serial i בחריץ i+1) כדיווח ה-hello
     האחרון של כל מכונה — אותה צורה ש-`cloner_hello` שולח — ומחזיר את
-    ‏`target_slots` שבוחר את כולן. ‏`size_bytes=None` הוא כונן שלא דיווח
+    `target_slots` שבוחר את כולן. `size_bytes=None` הוא כונן שלא דיווח
     גודל. ה-hello האמיתי שהטסט שולח אחר כך דורס את הדיווח הזה כרגיל.
     """
     for mac, serials in drawers.items():

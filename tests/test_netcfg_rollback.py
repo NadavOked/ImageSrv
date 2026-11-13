@@ -1,4 +1,4 @@
-"""ההחזרה האוטומטית של תצורת רשת שלא אושרה (‏#56) — ההגנה מנעילה עצמית.
+"""ההחזרה האוטומטית של תצורת רשת שלא אושרה (#56) — ההגנה מנעילה עצמית.
 
 זו הפרוסה שמצילה את המפעיל מעצמו: שינוי כתובת על הכרטיס שדרכו הוא
 מחובר מנתק אותו, ואז אין דרך לבטל. הדרישה הקשה היא ש**ההחזרה תשרוד גם
@@ -78,7 +78,7 @@ def test_a_machine_without_a_boot_id_still_expires():
 
 
 def arm_hooks(store: dict) -> dict:
-    """‏hooks שכותבים למילון במקום לרשת. הזרוע רצה כאן בדיוק כפי שהיא
+    """hooks שכותבים למילון במקום לרשת. הזרוע רצה כאן בדיוק כפי שהיא
     רצה תחת systemd, פרט לכך ששום `ifup` אינו קורה."""
     def write_conf(name, text, root=None):
         if text is None:
@@ -91,7 +91,7 @@ def arm_hooks(store: dict) -> dict:
         "netcfg_write_resolv": lambda text, path=None: store.__setitem__(
             "resolv", text),
         "netcfg_apply": lambda name: store["applied"].append(name) or None,
-        # ‏#2855: כרטיס בלי קובץ קודם יורד בלי ifup — גם זה בלי לגעת במכונה.
+        # #2855: כרטיס בלי קובץ קודם יורד בלי ifup — גם זה בלי לגעת במכונה.
         "netcfg_down": lambda name: store["downs"].append(name) or None,
         "netcfg_release": lambda name: store["released"].append(name) or None,
         "netcfg_main_defines": lambda name: False,
@@ -117,7 +117,7 @@ def test_the_previous_file_comes_back_word_for_word(tmp_path: Path, store):
 
 
 def test_a_card_that_had_no_file_gets_none_back(tmp_path: Path, store):
-    """‏`text: null` פירושו "לא היה קובץ" — וההחזרה מוחקת, ולא משאירה
+    """`text: null` פירושו "לא היה קובץ" — וההחזרה מוחקת, ולא משאירה
     קובץ ריק שנראה מנוהל."""
     netcfg_rollback.write_pending(
         tmp_path, marker(files=[{"name": "eth1", "text": None}]))
@@ -205,7 +205,7 @@ def test_a_change_on_another_card_needs_no_confirmation(net_server):
 
 
 def test_a_gateway_or_dns_change_arms_it_on_any_card(net_server):
-    """‏#57: שניהם יכולים לנתק את הקונסולה בדיוק כמו שינוי כתובת."""
+    """#57: שניהם יכולים לנתק את הקונסולה בדיוק כמו שינוי כתובת."""
     assert put(net_server, dns=["9.9.9.9"]).json()["rollback"]["pending"] is True
     confirm(net_server)
     assert put(net_server, gateway="10.44.9.1").json()["rollback"]["pending"] is True
@@ -214,7 +214,7 @@ def test_a_gateway_or_dns_change_arms_it_on_any_card(net_server):
 def test_an_address_that_cannot_be_traced_to_a_card_is_treated_as_the_live_one(
         net_server):
     """מי שלא יודע דרך מה הוא מחובר חייב להניח שהוא מנתק את עצמו.
-    ‏"לא ידוע" נופל לצד המגן, לא לצד המרשה (עיקרון 5)."""
+    "לא ידוע" נופל לצד המגן, לא לצד המרשה (עיקרון 5)."""
     net_server["fake"]["local"] = ""
     assert put(net_server, address="10.44.9.11").json()["rollback"]["pending"] is True
 
@@ -299,7 +299,7 @@ def test_confirming_the_wrong_card_is_refused(net_server):
 
 def test_a_confirmation_whose_marker_survives_is_not_reported_as_confirmed(
         net_server, monkeypatch):
-    """‏#291 (התראת code-scanning על ה-``except: pass`` ב-`clear_pending`):
+    """#291 (התראת code-scanning על ה-``except: pass`` ב-`clear_pending`):
     מחיקת הסמן שנכשלה נבלעת שם, והקונסולה ענתה "אושר — ההגדרה נשארת"
     ורשמה `net_confirmed` — בזמן שהסמן נשאר על הדיסק והזרוע מחזירה את
     השינוי בתום החלון. "אושר" בלי ראיה שהסמן איננו הוא עיקרון 5 בדיוק.
@@ -316,15 +316,15 @@ def test_a_confirmation_whose_marker_survives_is_not_reported_as_confirmed(
     response = confirm(net_server, "eth0")
     assert response.status_code == 500, response.text
     assert "סמן ההחזרה" in response.json()["detail"]
-    # ‏#1226 "גמור": ואומר שהשינוי יוחזר — לא רק שהמחיקה נכשלה
+    # #1226 "גמור": ואומר שהשינוי יוחזר — לא רק שהמחיקה נכשלה
     assert "יוחזר בתום החלון" in response.json()["detail"], response.text
     assert pending_file(net_server)["interface"] == "eth0"
     assert ("net_confirmed", "eth0") not in journal_events(net_server)
 
 
 def test_an_unarmed_change_whose_old_marker_survives_says_so(net_server, monkeypatch):
-    """‏#2076: שינוי שאינו חמוש מנקה סמן ישן (רק סמן פגום מגיע לשם — תקין נדחה
-    קודם). ‏`clear_pending` בולע כישלון מחיקה; "הוחל" בלי לומר שהסמן נשאר הוא
+    """#2076: שינוי שאינו חמוש מנקה סמן ישן (רק סמן פגום מגיע לשם — תקין נדחה
+    קודם). `clear_pending` בולע כישלון מחיקה; "הוחל" בלי לומר שהסמן נשאר הוא
     עיקרון 5 — אותה ראיה חיובית כמו באישור (#291/#1226)."""
     path = netcfg_rollback.pending_path(net_server["state_dir"])
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -470,7 +470,7 @@ def test_the_unit_reads_the_marker_where_the_server_writes_it():
 
 
 def test_the_check_runs_on_the_way_up_and_not_only_on_a_clock():
-    """‏OnBootSec=0 הוא מה שתופס את המקרה הגרוע: השינוי הפיל את הרשת,
+    """OnBootSec=0 הוא מה שתופס את המקרה הגרוע: השינוי הפיל את הרשת,
     השרת נפל איתה, המכונה אותחלה."""
     assert "OnBootSec=0" in TIMER
     assert "OnUnitActiveSec=10s" in TIMER

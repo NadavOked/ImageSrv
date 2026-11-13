@@ -482,7 +482,13 @@ function sheet({ title, sub = "", fields = [], submitLabel = "שמירה", cance
       ? setTimeout(() => { if (submitting) say(`${busy.label || "פועל…"} ${busy.slow}`); }, (busy.after || 5) * 1000) : null;
     let next;
     try { next = await onSubmit(values); close(); }
-    catch (error) { $("#sf-error").textContent = error.message; return; }
+    catch (error) {
+      /* ‏#2891: חלון ארוך (רשת ההפצה, 529px) — השגיאה ישבה מתחת לקפל, והלחיצה נראתה כמו כלום. */
+      const shown = $("#sf-error");
+      shown.textContent = error.message;
+      if (shown.scrollIntoView) shown.scrollIntoView({ block: "nearest" });
+      return;
+    }
     finally {
       submitting = false;
       if (slow) clearTimeout(slow);
@@ -912,6 +918,7 @@ async function showApp() {
   document.querySelectorAll("[data-cap]").forEach(
     (el) => el.classList.toggle("hidden", !el.dataset.cap.split("|").some((cap) => caps[cap])));   // "a|b" = אחת מהיכולות
   pages.deploy.tabs = deployTabs();
+  applyView();   // ‏#3025: בסיסי/מתקדם, לפי /me — אחרי data-admin/data-cap
   applyServerName();
   renderActivity();
   selectPageById("home");
@@ -1637,6 +1644,199 @@ function updateAlertBadge() {
     badge.classList.remove("has-alerts");
     badge.setAttribute("hidden", "");
   }
+  if (typeof paintTabAlerts === "function") paintTabAlerts();   // ‏#3025: הנקודות על הלשוניות והקטע הזמני
+}
+
+/* ===== #3025: תצוגה בסיסית/מתקדמת (נדב 12/11; mockup-console-basic-advanced-1112, אושר 12/11) =====
+   ‏users.view — של המשתמש, נשמר בשרת כמו theme (‏/me, ‏PUT /me/view). בסיסי מסתיר את הלשוניות המסומנות
+   ‏data-adv ב-index.html (ו-ISO באימג'ים); מתקדם מציג הכול. ההתראות עצמן לא מסוננות לעולם — הפעמון
+   ו"דורש טיפול" מציגים כל תקלה, גם בבסיסי. לשונית מוסתרת עם התראה פתוחה (או שנפתחה מקישור) מוצגת
+   בקטע "מוצגות זמנית" בתחתית העץ, כך ששום שורה מעליה לא זזה. נקודה אדומה (תקלה) / כתומה (אזהרה)
+   מיד אחרי שם הלשונית. התקלה נפתרה כשהמשתמש בתוכה — "נפתרה", והיא יוצאת כשהוא עובר ללשונית אחרת. */
+function viewAdvanced() { const me = PRIMARY_ME || ME; return !!me && me.view === "advanced"; }   // ‏/me בלי view = בסיסי
+
+function toggleView() {
+  const me = PRIMARY_ME || ME;
+  if (!me) return;
+  const next = me.view === "advanced" ? "basic" : "advanced";
+  me.view = next;
+  if (ME && ME !== me) ME.view = next;
+  applyView();
+  return put("/me/view", { view: next }).catch((e) => toast(e.message));
+}
+
+function applyView() {
+  const adv = viewAdvanced();
+  const sw = document.getElementById("viewToggle");
+  if (sw) {
+    sw.setAttribute("aria-checked", String(adv));
+    const sub = sw.querySelector && sw.querySelector("small");
+    if (sub) sub.textContent = adv ? "כל הלשוניות מוצגות" : "מציג את כל הלשוניות";   // מוקאפ 3 / 4
+  }
+  if (pages.images) {
+    pages.images.tabs = imagesTabs();   // ‏ISO — מתקדם בלבד
+    if (current === "images" && currentTab >= pages.images.tabs.length) activateTab(0);
+  }
+  paintTabAlerts();
+}
+
+/* הלשוניות שיש בהן התראה פתוחה, מאותם נתונים שהפעמון ו"דורש טיפול" קוראים. מפתח = data-page של הצומת,
+   או net-N ללשונית של דף הרשת (data-net-tab). */
+const TAB_NET_CHECKS = new Set(["nics", "servers_nic", "rogue_dhcp", "igmp_querier", "dhcp_port", "dnsmasq"]);
+function tabAlerts(src) {
+  const out = {};
+  const note = (key, level) => { if (level === "err" || (level === "warn" && out[key] !== "err")) out[key] = level; };
+  for (const c of Array.isArray(src.health) ? src.health : []) {
+    if (c.state !== "warn" && c.state !== "bad") continue;
+    const level = c.state === "bad" ? "err" : "warn", id = String(c.id || "");
+    note("health", level);
+    if (id === "deploy_net" || id === "deploy_nic") note("net-2", level);   // "רשת" מקבלת אותה מהילד (treeDotLevel)
+    if (TAB_NET_CHECKS.has(id)) note("network", level);
+    if (id.startsWith("storage") || id === "db_space") note("storage", level);
+  }
+  if (src.storageLevel) note("storage", src.storageLevel);
+  for (const m of Array.isArray(src.machines) ? src.machines : []) {
+    if (src.isFailed && src.isFailed(m)) note("machines", "err");
+    for (const v of Array.isArray(m.probe_verdicts) ? m.probe_verdicts : []) note("machines", v.level === "err" ? "err" : "warn");
+    if (m.name_problem) note("machines", "warn");
+  }
+  for (const d of Array.isArray(src.net) ? src.net : []) if (!d.registered) note("machines", "warn");
+  for (const st of Object.values(src.secondary || {})) if (st && st.connected === false) note("branches", "err");
+  return out;
+}
+
+/* הקטע הזמני: הסדר נשמר (מה שמעל לא זז), חדש נכנס בסוף. ‏here = הלשונית הפתוחה. */
+function tempTabsModel(prev, hidden, alerts, here, adv) {
+  if (adv) return [];
+  const isHidden = new Set(hidden), seen = new Set(), out = [];
+  const add = (key, resolved) => { if (!seen.has(key)) { seen.add(key); out.push({ key, level: alerts[key] || "", resolved }); } };
+  for (const p of prev || []) {
+    if (!isHidden.has(p.key)) continue;
+    if (alerts[p.key]) add(p.key, false);
+    else if (p.key === here) add(p.key, !!(p.resolved || p.level));   // נפתרה כשהוא בתוכה — נשארת עד שיעבור
+  }
+  for (const key of hidden) if (alerts[key]) add(key, false);
+  if (here && isHidden.has(here)) add(here, false);   // נפתחה מקישור (התראה, חיפוש) — בלי להפעיל מתקדם
+  return out;
+}
+
+/* נקודה על צומת: דף — שלו או של ילדיו; קבוצה בלי דף — רק כשהיא מכווצת (פתוחה = הילד עצמו מסומן). */
+const worstLevel = (levels) => levels.includes("err") ? "err" : levels.includes("warn") ? "warn" : "";
+function treeDotLevel(own, kids, isPage, open) {
+  return isPage ? worstLevel([own, ...kids]) : open ? "" : worstLevel(kids);
+}
+function tabDotHtml(level) {
+  const label = level === "err" ? "תקלה" : "אזהרה";
+  return `<span class="status ${level} tabdot" role="img" aria-label="${label}" title="${label}"><i></i></span>`;
+}
+
+/* נדב 12/11 (#3033): אין קבוצה עם פריט אחד — קבוצה שבתצוגה הנוכחית נשאר בה פריט אחד (או אף אחד) מוצגת
+   כפריט עצמו, בלי הכותרת. פריט שהקטע הזמני מציג מתוכה נספר בה, ואז הקבוצה חוזרת. */
+function groupIsFlat(visible, temp) { return visible + temp <= 1; }
+
+/* ‏data-page בעץ הראשי, data-branch-page בעץ של שרת משנה (#1179); ‏net-N ללשונית של דף הרשת. */
+const tabNodeKey = (n) => (n && n.dataset ? (n.dataset.netTab != null ? "net-" + n.dataset.netTab : n.dataset.page || n.dataset.branchPage || "") : "");
+const TEMP_TABS = {};    // מפתח העץ ("" = הראשי, אחרת מזהה שרת המשנה) → [{key, level, resolved}]
+const TAB_ALERTS = {};   // מפתח העץ → {לשונית: err|warn}
+/* ההתראות של עץ: הראשי — כל מה שהפעמון קורא; שרת משנה — בדיקות ה-/health שלו (SERVER_HEALTH, אותו מקור
+   כמו הנקודה שליד שמו), ובהקשר שלו גם HEALTH/MACHINES שנטענו ממנו. בהקשר של שרת אחר נשמר מה שנמדד. */
+function treeAlerts(key) {
+  if (!isAdmin()) return {};
+  if ((SERVER_CTX || "") === key) {
+    const st = OVERVIEW && OVERVIEW.storage, pct = homeStoragePct(st);
+    return tabAlerts({ health: HEALTH, machines: MACHINES, net: Array.isArray(NET) ? NET : HOME.net,
+      secondary: key ? {} : SECONDARY_STATUS, storageLevel: pct == null ? "" : homeStorageLevel(pct, st), isFailed: machineIsFailed });
+  }
+  if (key) { const h = SERVER_HEALTH[key]; return tabAlerts({ health: h && Array.isArray(h.checks) ? h.checks : [] }); }
+  return TAB_ALERTS[key] || {};
+}
+
+function paintTabAlerts() {
+  const srv = document.getElementById("srvTA");
+  const real = (el, ...fns) => !!el && fns.every((f) => typeof el[f] === "function");   // בלי DOM מלא (טסטים) — רק הפס
+  if (!real(srv, "querySelectorAll", "querySelector") || !real(document, "querySelectorAll")) { drawRail(); return; }
+  const adv = viewAdvanced();
+  document.querySelectorAll("#srvTA [data-adv], #secondaryServers [data-adv]").forEach((el) => {
+    el.classList.toggle("view-hide", !adv);
+    const box = el.nextElementSibling;   // ‏#3033: הילדים של צומת מתקדם (רשת של שרת משנה) — איתו
+    if (hasClass(el, "inventory-node") && box && hasClass(box, "inventory-children")) box.classList.toggle("view-hide", !adv);
+  });
+  const trees = [{ key: "", root: srv }];
+  document.querySelectorAll("#secondaryServers > .inventory-children").forEach((root) => {
+    const owner = root.previousElementSibling;
+    if (owner && owner.dataset && owner.dataset.secondary) trees.push({ key: owner.dataset.secondary, root });
+  });
+  for (const t of trees) paintTree(t.key, t.root, adv);
+  drawRail();
+}
+
+function paintTree(key, root, adv) {
+  const box = root.querySelector(":scope > .tree-temp"), list = box && box.querySelector(".tree-temp-list");
+  if (!box || !list || typeof list.contains !== "function") return;
+  const alerts = TAB_ALERTS[key] = treeAlerts(key);
+  const originals = [...root.querySelectorAll(".inventory-node")].filter((n) => !list.contains(n) && !hasClass(n, "server-node"));
+  const offByView = (n) => !!n.closest(".view-hide");
+  const shown = (n) => !offByView(n) && !n.closest(".hidden");
+  const active = root.querySelector(".inventory-node.active");
+  const here = active ? tabNodeKey(active) : "";
+  const hidden = [];
+  for (const n of originals) {
+    const k = tabNodeKey(n);
+    if (k && offByView(n) && !n.closest(".hidden") && !hidden.includes(k)) hidden.push(k);
+  }
+  const prev = TEMP_TABS[key] || [];
+  const before = new Map(prev.map((t) => [t.key, t]));
+  const temp = TEMP_TABS[key] = tempTabsModel(prev, hidden, alerts, here, adv);
+  const inTemp = new Set(temp.map((t) => t.key));
+  // קבוצה שנשאר בה פריט אחד — הפריט עצמו (#3033)
+  for (const g of originals) {
+    if (g.dataset.page || g.dataset.branchPage || g.dataset.netTab != null) continue;   // קבוצה = צומת בלי דף
+    const gbox = g.nextElementSibling;
+    if (!gbox || !hasClass(gbox, "inventory-children")) continue;
+    const kids = [...gbox.children].filter((c) => hasClass(c, "inventory-node"));
+    const flat = !adv && groupIsFlat(kids.filter(shown).length, kids.filter((c) => offByView(c) && inTemp.has(tabNodeKey(c))).length);
+    g.classList.toggle("view-flat", flat);
+    gbox.classList.toggle("view-flat-box", flat);
+  }
+  // הנקודות בעץ
+  root.querySelectorAll(".tabdot, .tab-resolved").forEach((d) => d.remove());
+  for (const n of originals) {
+    delete n.dataset.al;
+    if (!shown(n)) continue;
+    const next = n.nextElementSibling;
+    const kidsBox = next && hasClass(next, "inventory-children") ? next : null;
+    const kids = kidsBox ? [...kidsBox.querySelectorAll(".inventory-node")].filter(shown).map((k) => alerts[tabNodeKey(k)] || "") : [];
+    const level = treeDotLevel(alerts[tabNodeKey(n)] || "", kids, !!(n.dataset.page || n.dataset.branchPage || n.dataset.netTab != null),
+      !!kidsBox && !kidsBox.hasAttribute("hidden"));
+    if (!level) continue;
+    n.dataset.al = level;
+    n.insertAdjacentHTML("beforeend", tabDotHtml(level));
+  }
+  // הקטע הזמני: עותק של הצומת (אותו onclick, אותו אייקון), בלי חץ ובלי ילדים
+  list.innerHTML = "";
+  const hereHidden = !!here && hidden.includes(here);
+  for (const t of temp) {
+    const orig = originals.find((n) => tabNodeKey(n) === t.key);
+    if (!orig) continue;
+    const c = orig.cloneNode(true);
+    for (const a of ["id", "data-adv", "data-al", "aria-expanded", "aria-current"]) c.removeAttribute(a);
+    c.classList.remove("active", "anc", "view-hide");
+    c.classList.add("temp");
+    const arrow = c.querySelector(".tree-arrow");
+    if (arrow) { arrow.className = "tree-arrow-sp"; arrow.textContent = ""; arrow.removeAttribute("onclick"); arrow.removeAttribute("data-open"); }
+    if (t.resolved) c.insertAdjacentHTML("beforeend", `<span class="tab-resolved">נפתרה</span>`);
+    else if (t.level) { c.dataset.al = t.level; c.insertAdjacentHTML("beforeend", tabDotHtml(t.level)); }
+    if (hereHidden && t.key === here) { c.classList.add("active"); c.setAttribute("aria-current", "page"); }
+    list.appendChild(c);
+    const was = before.get(t.key);
+    if (t.resolved && !(was && was.resolved)) toast(`התקלה ב${railLabel(orig)} נפתרה. הלשונית תוסתר כשתעבור ללשונית אחרת.`, 6000, "ok");
+  }
+  if (temp.length) box.removeAttribute("hidden"); else box.setAttribute("hidden", "");
+  // הצומת המוסתר אינו "אתה כאן" — העותק בקטע הזמני הוא; וקבוצת-האב שלו אינה מסומנת
+  if (hereHidden && !list.contains(active)) {
+    active.classList.remove("active"); active.removeAttribute("aria-current");
+    root.querySelectorAll(".inventory-node.anc").forEach((x) => x.classList.remove("anc"));
+  }
 }
 
 /* ‏#936: שם השרת הראשי בצומת העליון מגיע מ-/me (‏`server_name` = שם המארח,
@@ -1682,6 +1882,9 @@ const BRANCH_TREE = [
     ["settings", "הגדרות", "t-sliders"]] },
 ];
 const BRANCH_VIEWS = BRANCH_TREE.flatMap((x) => Array.isArray(x) ? [x] : x.kids);
+/* ‏#3033 (נדב 12/11): העץ של שרת משנה מסונן לפי ה-view של המשתמש, באותם כללים כמו העץ הראשי (index.html, data-adv). */
+const BRANCH_ADVANCED = new Set(["health", "storage", "network", "drivers", "permissions"]);
+const branchAdv = (page) => (BRANCH_ADVANCED.has(page) ? " data-adv" : "");
 
 /* צומת שנפתח/נסגר בעץ של שרת משנה — אותו מבנה של הצמתים ב-index.html. */
 function branchBox(n, wasOpen, key, head, kids, open = false) {
@@ -1709,7 +1912,7 @@ function branchLeafKids(n, page, wasOpen) {
     return plain("תרשים", "t-network", go("openNetwork(0,null,this)"), ` data-net-tab="0"`)
       + `<div class="inventory-node" data-net-tab="1" id="srv-${esc(n.id)}-nicNode" role="treeitem" tabindex="0" onclick="${go("openNetwork(1,null,this)")}"><span class="tree-arrow-sp" id="srv-${esc(n.id)}-nicTreeArrow"></span><span>${uiIcon("t-nic")}</span><span>חיבורים פיזיים</span></div><div id="srv-${esc(n.id)}-nicTree" class="inventory-children" role="group" hidden></div>`
       + plain("רשת הפצה", "deploy", go("openNetwork(2,null,this)"), ` data-net-tab="2"`)
-      + plain("פורטים", "t-ports", `openSecondaryPage('${idEnc}','ports',this)`, ` data-branch-page="ports" data-branch-node="${esc(n.id)}"`);
+      + plain("פורטים", "t-ports", `openSecondaryPage('${idEnc}','ports',this)`, ` data-branch-page="ports" data-branch-node="${esc(n.id)}" data-adv`);   // ‏#3033
   }
   return null;
 }
@@ -1720,13 +1923,13 @@ function branchTreeHtml(n, wasOpen) {
   const leaf = ([page, label, icon]) => {
     if (BRANCH_TREE_BOXES[page]) {
       return branchBox(n, wasOpen, BRANCH_TREE_BOXES[page], (boxId, open) =>
-        `<div class="inventory-node" data-branch-page="${esc(page)}" data-branch-node="${esc(n.id)}" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="treeNavToggle(this,${jsStr(boxId)},function(){openSecondaryPage('${idEnc}','${page}',this)})">${branchArrow(boxId, open)}<span>${uiIcon(icon)}</span><span>${esc(label)}</span></div>`,
+        `<div class="inventory-node" data-branch-page="${esc(page)}" data-branch-node="${esc(n.id)}"${branchAdv(page)} role="treeitem" tabindex="0" aria-expanded="${open}" onclick="treeNavToggle(this,${jsStr(boxId)},function(){openSecondaryPage('${idEnc}','${page}',this)})">${branchArrow(boxId, open)}<span>${uiIcon(icon)}</span><span>${esc(label)}</span></div>`,
         branchLeafKids(n, page, wasOpen));
     }
     return leafPlain([page, label, icon]);
   };
   const leafPlain = ([page, label, icon]) =>
-    `<div class="inventory-node" data-branch-page="${esc(page)}" data-branch-node="${esc(n.id)}" role="treeitem" tabindex="0" onclick="openSecondaryPage('${idEnc}','${page}',this)"><span class="tree-arrow-sp"></span><span>${uiIcon(icon)}</span><span>${esc(label)}</span></div>`;
+    `<div class="inventory-node" data-branch-page="${esc(page)}" data-branch-node="${esc(n.id)}"${branchAdv(page)} role="treeitem" tabindex="0" onclick="openSecondaryPage('${idEnc}','${page}',this)"><span class="tree-arrow-sp"></span><span>${uiIcon(icon)}</span><span>${esc(label)}</span></div>`;
   return BRANCH_TREE.map((x) => {
     if (Array.isArray(x)) return leaf(x);
     const boxId = `srv-${n.id}-${x.id}`;
@@ -1788,6 +1991,8 @@ function openSecondaryPage(nid, page, el) {
     || document.querySelector(`[data-secondary="${CSS.escape(nid)}"]`), page);
 }
 
+/* ‏#3033: הקטע "מוצגות זמנית" בתחתית העץ של שרת משנה — אותו מבנה כמו #treeTemp של הראשי (index.html). */
+const TREE_TEMP_HTML = `<div class="tree-temp" role="group" aria-label="מוצגות זמנית" hidden><div class="tree-temp-label">מוצגות זמנית — יש התראה פתוחה</div><div class="tree-temp-list"></div></div>`;
 async function populateSidebarSecondaries() {
   const host = document.getElementById("secondaryServers");
   if (!host) return;
@@ -1812,8 +2017,9 @@ async function populateSidebarSecondaries() {
     const idEnc = encodeId(n.id);
     const kids = branchTreeHtml(n, wasOpen);
     const dot = n.disabled_at ? { cls: "", text: "מושבת" } : serverDotState(SERVER_HEALTH[n.id]);   // נדב 18/10: אותה נקודה כמו TA
-    return `<div class="inventory-node server-node" data-secondary="${esc(n.id)}" data-conn="${n.disabled_at ? "off" : "checking"}" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="treeNavToggle(this,${jsStr(boxId)},function(){openSecondaryPage('${idEnc}','home',this)})"><span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),${jsStr(boxId)})">${open ? "▾" : "▸"}</span><span>${uiIcon("server")}</span><strong class="server-name">${esc(n.label)}</strong><span class="status ${dot.cls}" data-secondary-status="${esc(n.id)}" title="${esc(dot.text)}" aria-label="${esc(dot.text)}"><i></i></span></div><div id="${esc(boxId)}" class="inventory-children" role="group"${open ? "" : " hidden"}>${kids}</div>`;
+    return `<div class="inventory-node server-node" data-secondary="${esc(n.id)}" data-conn="${n.disabled_at ? "off" : "checking"}" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="treeNavToggle(this,${jsStr(boxId)},function(){openSecondaryPage('${idEnc}','home',this)})"><span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),${jsStr(boxId)})">${open ? "▾" : "▸"}</span><span>${uiIcon("server")}</span><strong class="server-name">${esc(n.label)}</strong><span class="status ${dot.cls}" data-secondary-status="${esc(n.id)}" title="${esc(dot.text)}" aria-label="${esc(dot.text)}"><i></i></span></div><div id="${esc(boxId)}" class="inventory-children" role="group"${open ? "" : " hidden"}>${kids}${TREE_TEMP_HTML}</div>`;
   }).join("");
+  paintTabAlerts();   // ‏#3033: בסיסי/מתקדם, נקודות וקטע זמני — גם בעץ של כל שרת משנה
   await Promise.all(nodes.filter((n) => !n.disabled_at).map((n) =>
     api(`/storage-nodes/${encodeId(n.id)}/machines`, { primary: true })
       .then((a) => markSecondaryStatus(n, !!a.connected, a.error))
@@ -2736,7 +2942,7 @@ function roundDskHtml(m, s) {
   else if (d.state === "failed") { text = "נכשל"; bar = "err"; pct = 100; rc = " bad"; }
   else {
     pct = d.bytes_total > 0 ? Math.round(100 * (d.bytes_written || 0) / d.bytes_total) : d.state === "done" ? 100 : 0;
-    bar = d.state === "done" ? "ok" : slotClass(s) === "warn" ? "warn" : ""; text = `${pct}%`;
+    bar = d.state === "done" ? "ok" : slotClass(s) === "warn" || stallText(d) ? "warn" : ""; text = `${pct}%`;
   }
   const meter = live && !gone && !going && d.state !== "failed" ? ` role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"` : "";
   const act = live && d.state === "writing" && !going && d.dev && roomOperator()
@@ -2744,9 +2950,19 @@ function roundDskHtml(m, s) {
   const drv = live && d.drivers && d.drivers.state ? `<span class="dline ${driversTone(d.drivers)}">${esc(driversOutcomeText(d.drivers))}</span>` : "";
   const rb = live && d.state !== "failed" ? readbackLine(d) : "";   // #1805
   const tl = live ? stagesLine(d) : "";   // #1883
-  const warn = live && d.state === "done" && d.error ? `<span class="dline warn">${esc(d.error)}</span>` : "";   // #2042: done with a warning (an orange disk's "SMART: …"), as the cloner screen's "הושלם — …"
+  const warn = live && d.state === "done" && d.error ? `<span class="dline warn" title="${esc(d.error)}">${esc(d.error_short || d.error)}</span>` : "";   // #2987: the short words; the whole one in the hover   // #2042: done with a warning (an orange disk's "SMART: …"), as the cloner screen's "הושלם — …"
+  const stl = live && !going && stallText(d) ? `<span class="dline warn">${esc(stallText(d))}</span>` : "";   // #2988
   const nod = s.noDisk ? `<span class="dline bad">${esc(`אין דיסק ב${s.n != null ? `מגירה ${s.n}` : label} — לא נכתבה בסבב הזה`)}</span>` : "";   // #2201
-  return `<div class="dsk${rc}${s.noDisk ? " bay-emphasis err" : bayEmphasis(s)}" data-slot="${s.n ?? ""}"${d ? ` title="${esc(diskTitle(m, s, d))}"` : ""}><span>${esc(label)}</span><div class="bar ${bar}"${meter}><i style="--w:${pct}%"></i></div><b>${esc(text)}</b>${act}${nod}${warn}${drv}${rb}${tl}</div>`;
+  return `<div class="dsk${rc}${s.noDisk ? " bay-emphasis err" : bayEmphasis(s)}" data-slot="${s.n ?? ""}"${d ? ` title="${esc(diskTitle(m, s, d))}"` : ""}><span>${esc(label)}</span><div class="bar ${bar}"${meter}><i style="--w:${pct}%"></i></div><b>${esc(text)}</b>${act}${stl}${nod}${warn}${drv}${rb}${tl}</div>`;
+}
+/* ‏#2988 (מוקאפ 06-bay-states, נדב 12/11): מגירה שעומדת באמצע הכתיבה -- מהסוכן (‏drawer_list[].stall, ‏agent/lib/restore/stall.sh)
+   תוך שניות, לא כשהתקרה נגמרת. התקרה היא של הסוכן (‏stall_limit_s); בלעדיה לא נאמר מספר. ההכרעה עצמה לא השתנתה. */
+function stallText(d) {
+  if (!d || d.state !== "writing" || d.stall_s == null) return "";
+  const lim = d.stall_limit_s != null ? d.stall_limit_s : null;
+  if (d.stall === "waiting_disk") return `ממתין לדיסק… הכתיבה עומדת ${d.stall_s} ש'${lim != null ? ` · ייכשל אחרי ${lim} ש'` : ""}`;
+  if (d.stall === "waiting_net") return `הרשת נותקה — ממתין${lim != null ? ` (עד ${lim} ש')` : ""} · הדיסק לא נמחק`;
+  return "";
 }
 /* ‏#1883: כמה זמן ארך כל שלב במגירה (‏drawer_list[].stages, ‏[{stage, seconds}]) — שורה מתחת לפס, אחרי
    שהמגירה הסתיימה. ‏null = לא נמדד: אין שורה (לא "0"). */
@@ -2767,14 +2983,17 @@ function roomMachHtml(m, r) {
   const bootRisk = slots.filter((s) => s.live && s.disk.drivers && driversTone(s.disk.drivers) === "bad");   // ‏#1331: הדיסק עלול לא לעלות
   const red = failed.length > 0 || bootRisk.length > 0;
   const name = (s) => slotLabel(m, s.n, s.disk);
-  const why = (s) => s.noDisk ? "אין דיסק במגירה" : s.disk.state === "failed" ? drawerErrorText(s.disk.error) : s.fail && s.fail.cause === "readonly" ? failureCauseText(s.fail)
+  // #2987: a failed disk says the agent's short sentence (error_short); the diagnosis (error) stays in the hover
+  const why = (s) => s.noDisk ? "אין דיסק במגירה" : s.disk.state === "failed" ? (s.disk.error_short || drawerErrorText(s.disk.error)) : s.fail && s.fail.cause === "readonly" ? failureCauseText(s.fail)
     : DISK_RULE_SHORT[slotRule(s).target_reason] || "SMART נכשל";   // #2848: the rule's reason, short on the card
   let sub;
-  if (failed.length) sub = esc(failed.map((s) => `${name(s)} אדום — ${why(s)}`).join("; ")) + (done.length ? `; ${esc(done.map(name).join(", "))} ${done.length === 1 ? "משוחזר" : "משוחזרים"}` : "");
+  // #2987 (Nadav 12/11): a line per disk, not one paragraph
+  if (failed.length) sub = failed.map((s) => `<div class="ms-line">${esc(`${name(s)} — ${why(s)}`)}</div>`).join("") + (done.length ? `<div class="ms-line">${esc(`${done.map(name).join(", ")} ${done.length === 1 ? "משוחזר" : "משוחזרים"}`)}</div>` : "");
   else if (st.held) sub = esc(`${HELD_HE} — ${heldLine(m, rm.held)}`);   // #2031
   else if (st.off) sub = "לא מחובר — לא הצטרף לסבב";
   else sub = (net && net.ip ? `<bdi dir="ltr">${esc(net.ip)}</bdi>` : "כתובת לא ידועה") + (rm && rm.awake && !rm.joined && r.wave_state === "running" ? " · לא הצטרף לגל" : "");
-  const pill = red ? UI.pill("err", "דיסק אדום") : UI.pill(st.cls, st.text);
+  const reds = failed.length + bootRisk.filter((s) => !failed.includes(s)).length;   // #2987: "2 דיסקים אדומים", not "2 דיסק אדום"
+  const pill = red ? UI.pill("err", reds > 1 ? `${reds} דיסקים אדומים` : "דיסק אדום") : UI.pill(st.cls, st.text);
   const wol = st.held ? heldButton(m) : st.off && roomOperator() ? `<button class="btn sm wx" onclick="wakeMachine('${encodeId(m.mac)}')" title="WoL למכונה הזו בלבד (#984)">WoL</button>` : "";
   const notes = bootRisk.map((s) => `<div class="mach-note err">${esc(name(s))} — ${BOOT_RISK_HE}</div>`).join("")   // ‏#1331
     + gone.map((s) => `<div class="mach-note">${esc(rowLabel(m, s))} — <bdi>${esc((s.live.cancel && s.live.cancel.text_he) || "בוטל")}</bdi> · ${esc(s.live.error || "טבלת המחיצות נמחקה, הדיסק יוצג ריק")}</div>`).join("");
@@ -2835,7 +3054,7 @@ function roomNotes(kids, st, hint = "") {
     if (warn.length) out.push(UI.note("warn", `<b>${esc(whereList(warn))}</b> — ${SMART_HALF_HE} / CRC שעלה / קישור איטי: <b>הסוכן ממשיך לכתוב</b> (כתום = כותב), והדיסק ייבדק שוב באימות. דילוג מרחוק — <b title="אין endpoint לדילוג על מגירה">דורש API</b>.${clears(warn).length ? " " + clears(warn).join(" · ") : ""}`));
     /* ‏#1767: אדום הוא שלוש סיבות שונות (slotClass) — הכתיבה בסבב נכשלה, קריאה בלבד (#1742), SMART נכשל.
        הערה לכל סיבה, בסיבה שלה; רק ל-SMART נכשל "לא כותבים... מדולג" — דיסק שהכתיבה אליו נכשלה כן נכתב. */
-    const redWhy = (s) => s.disk.state === "failed" ? (s.disk.error ? `הכתיבה בסבב נכשלה: ${drawerErrorText(s.disk.error)}` : "הכתיבה בסבב נכשלה")
+    const redWhy = (s) => s.disk.state === "failed" ? (s.disk.error ? `הכתיבה בסבב נכשלה: ${s.disk.error_short || drawerErrorText(s.disk.error)}` : "הכתיבה בסבב נכשלה")
       : s.fail && s.fail.cause === "readonly" ? failureCauseText(s.fail) : null;
     const byWhy = new Map();
     red.forEach((x) => { const k = redWhy(x.s); if (!byWhy.has(k)) byWhy.set(k, []); byWhy.get(k).push(x); });
@@ -2942,7 +3161,7 @@ function roomNewWindow(kids) {
     `<option value="${esc(fo || "-")}"${folder === fo ? " selected" : ""}>${esc(fo || "ללא תיקייה")} (${images.filter((i) => (i.folder || "") === fo).length})</option>`).join("");
   const opts = `<option value="">${folder == null ? "— בחר קודם תיקייה —" : "— בחר אימג' —"}</option>` + (folder == null ? [] : images.filter((i) => (i.folder || "") === folder)).map((img) => {
     const blocked = imageDeployBlock(img), reason = blocked ? null : imageFitReason(img, floor), g = gbCeil(img.min_target_bytes);
-    return `<option value="${esc(img.id)}"${blocked || reason ? " disabled" : ""}${img.id === f.image ? " selected" : ""}>${esc(img.name)}${g != null ? ` · נכנס לדיסק מ-${g} GB` : " · גודל נדרש לא ידוע"}${imageHibernated(img) ? " · " + HIB_TAG : ""}${imageBitLocker(img) ? " · " + BL_TAG : ""}${blocked ? " — לא ניתן לפרוס: " + esc(blocked) : reason ? " — לא נכנס: " + esc(reason) : ""}</option>`;
+    return `<option value="${esc(img.id)}"${blocked || reason ? " disabled" : ""}${img.id === f.image ? " selected" : ""}>${esc(img.name)}${g != null ? ` · נכנס לדיסק מ-${g} GB` : " · גודל נדרש לא ידוע"}${imageHibernated(img) ? " · " + HIB_TAG : ""}${imageBitLocker(img) ? " · " + BL_TAG : ""}${imageNtfsInconsistent(img) ? " · " + NI_TAG : ""}${blocked ? " — לא ניתן לפרוס: " + esc(blocked) : reason ? " — לא נכנס: " + esc(reason) : ""}</option>`;
   }).join("");
   const floorNote = floor ? `המגירה הקטנה ביותר בחדר: ${marketedDiskSize(floor.size_bytes)} (${esc(floor.port != null ? portLabel(findMachine(floor.mac), floor.port) : `דיסק ${floor.dev}`)} במחשב ${esc(floor.name)}).` : "גודל הדיסקים לא ידוע — יסורב במכונה אם לא ייכנס.";
   const builders = (MACHINES || []).filter((m) => machineRole(m) === "build" && Array.isArray(m.disks) && m.disks.length);
@@ -3207,7 +3426,8 @@ function nmSummary(kids) {
    קיים (מוסתר כשאין מה לומר), כדי שבחירה ברשימה תעדכן אותו במקום — בלי לבנות את החלון מחדש. */
 function roomHibBody(img) {
   return (imageHibernated(img) ? `<span class="n-chip w">${esc(HIB_TAG)}</span><span>${esc(HIB_ROUND)}</span>` : "")
-    + (imageBitLocker(img) ? `<span class="n-chip w">${esc(BL_TAG)}</span><span>${esc(BL_NOTE)}</span>` : "");   // ‏#1840
+    + (imageBitLocker(img) ? `<span class="n-chip w">${esc(BL_TAG)}</span><span>${esc(BL_NOTE)}</span>` : "")   // ‏#1840
+    + (imageNtfsInconsistent(img) ? `<span class="n-chip w">${esc(NI_TAG)}</span><span>${esc(NI_NOTE)}</span>` : "");   // ‏#2972
 }
 function roomHibNote(img) {
   return `<div class="full rn-hib" id="rn-hib" aria-live="polite"${roomHibBody(img) ? "" : " hidden"}>${roomHibBody(img)}</div>`;
@@ -3282,6 +3502,7 @@ async function startWave() {
   try { await go(); }
   catch (e) { toast("הגל לא התחיל: " + e.message, 6000); }   // ‏409 — אף משכפל לא הצטרף / המניפסט טרם הגיע
 }
+startWave = guarded("startWave", startWave);   // ‏#2840: לחיצה כפולה = בקשה אחת
 async function reopenRoom() {
   const r = roomRound();
   if (!roomOperator() || !r || r.state !== "failed") return;
@@ -3292,6 +3513,7 @@ async function reopenRoom() {
     await loadDeploy();
   } catch (e) { toast("הסבב לא נפתח מחדש: " + e.message, 6000); }
 }
+reopenRoom = guarded("reopenRoom", reopenRoom);   // ‏#2840: לחיצה כפולה = בקשה אחת
 function stopRoom() {
   const r = roomRound();
   if (!roomOperator() || !r) return;
@@ -3358,7 +3580,8 @@ let IMG = imgInit();
 /* ‏#404: הלשונית הרביעית "ISO" — iso.js; בלעדיו (או בהקשר שרת משנה, שאין לו ספריית ISO) שלוש הלשוניות כמקודם. */
 function imagesTabs() {
   const tabs = ["קבצים", "קליטות", "אחסון"];
-  return typeof isoTabs === "function" && isoTabs() ? tabs.concat("ISO") : tabs;
+  // ‏#3025: ‏ISO — בתצוגה המתקדמת בלבד
+  return typeof isoTabs === "function" && isoTabs() && (typeof viewAdvanced !== "function" || viewAdvanced()) ? tabs.concat("ISO") : tabs;
 }
 
 /* ‏GB עשרוני כלפי מעלה (#953) — "נכנס לדיסק מ-X GB"; הבייטים ב-tooltip. */
@@ -3487,6 +3710,14 @@ function imageBitLocker(img) { return !!(img && Array.isArray(img.bitlocker) && 
 function imageBitLockerRow(img) {
   return imageBitLocker(img) ? ["הצפנה", `<span class="hib-src">מחיצה ${esc(img.bitlocker.join(", "))} — ${esc(BL_NOTE)}</span>`] : null;
 }
+/* ‏#2972 (נדב 12/11, "כמו Clonezilla"): מחיצת NTFS ש-ntfsresize מצא לא עקבית נקלטה בגודלה המלא, בלי
+   כיווץ — `ntfs_inconsistent` ב-/api/console/images. כתום, לא חוסם ולא שואל — אותם רכיבים כמו BitLocker. */
+const NI_TAG = "NTFS לא נסגר";
+const NI_NOTE = "NTFS לא נסגר כראוי (לא עקבי) — לא כווץ; Windows יריץ chkdsk באתחול הראשון";   // ‏CAPTURE_NTFS_NOTE, agent/lib/capture/captureview.sh
+function imageNtfsInconsistent(img) { return !!(img && Array.isArray(img.ntfs_inconsistent) && img.ntfs_inconsistent.length); }
+function imageNtfsRow(img) {
+  return imageNtfsInconsistent(img) ? ["NTFS", `<span class="hib-src">מחיצה ${esc(img.ntfs_inconsistent.join(", "))} — ${esc(NI_NOTE)}</span>`] : null;
+}
 /* שורת "המקור בקליטה" בלשונית "סקירה" של המגירה; ‏null = אין שורה */
 function imageHibSourceRow(img) {
   if (!imageHibernated(img)) return null;
@@ -3500,7 +3731,7 @@ function imageRow(r) {
     attrs: `class="${sel ? "sel" : ""}" data-id="${esc(r.id)}"${drag}`,
     cells: [
       `<input type="checkbox" aria-label="בחירת ${esc(r.name)}" ${sel ? "checked" : ""} onchange="toggleImgSel('${idEnc}',this.checked)">`,
-      `<span class="dskico">${uiIcon("storage")}</span><a role="link" tabindex="0" class="name" onclick="openImageDetail('${idEnc}')">${esc(r.name)}</a>${r.available === false ? ` ${UI.pill("err", "לא זמין")}` : ""}${imageHibernated(r) ? ` <span title="${esc(HIB_TIP)}">${UI.pill("warn", HIB_TAG)}</span>` : ""}${imageBitLocker(r) ? ` <span title="${esc(BL_NOTE)}">${UI.pill("warn", BL_TAG)}</span>` : ""}`,   // ‏#1066: המיקום לא נגיש — רשום, לא נמחק. ‏#1300: בלי תיאור מתחת לשם (הוא במגירה)
+      `<span class="dskico">${uiIcon("storage")}</span><a role="link" tabindex="0" class="name" onclick="openImageDetail('${idEnc}')">${esc(r.name)}</a>${r.available === false ? ` ${UI.pill("err", "לא זמין")}` : ""}${imageHibernated(r) ? ` <span title="${esc(HIB_TIP)}">${UI.pill("warn", HIB_TAG)}</span>` : ""}${imageBitLocker(r) ? ` <span title="${esc(BL_NOTE)}">${UI.pill("warn", BL_TAG)}</span>` : ""}${imageNtfsInconsistent(r) ? ` <span title="${esc(NI_NOTE)}">${UI.pill("warn", NI_TAG)}</span>` : ""}`,   // ‏#1066: המיקום לא נגיש — רשום, לא נמחק. ‏#1300: בלי תיאור מתחת לשם (הוא במגירה)
       esc(imageOsLabel(r.os)), ltr(fmtBytes(r.total_compressed_bytes)), r.system_unmarked ? sysUncheckedCell(r) : imgFits(r), r.folder ? esc(r.folder) : `<span class="muted">ללא תיקייה</span>`, imgVerify(r), ltr(fmtDate(r.created)),
       UI.rowMenu(r.name, [["פרטים", `openImageDetail('${idEnc}')`], ["הפץ", `deployImage('${idEnc}')`]]
         .concat((r.system_candidates || []).length ? [["סימון מחיצת המערכת (C:)…", `markSystemPartition('${idEnc}')`]] : [])   // ‏#1896
@@ -3837,6 +4068,7 @@ async function scrubLibrary() {
     if (current === "images") renderCurrent();
   } catch (e) { toast(e.message); }
 }
+scrubLibrary = guarded("scrubLibrary", scrubLibrary);   // ‏#2840: לחיצה כפולה = בקשה אחת
 
 function imageHistory(img) {
   const events = [];
@@ -3886,7 +4118,7 @@ function imageChips(img, s, use) {
   const saved = img.last_scrub;
   const sha = s ? (s.state === "intact" ? ["", "sha256 אומת"] : s.state === "unavailable" ? ["w", "sha256 לא נבדק"] : ["d", "sha256 לא תואם"])
     : saved && saved.state !== "intact" ? ["d", "sha256 לא תואם"] : ["", "sha256 אומת"];
-  return `<span class="n-meta"><span class="n-chip ${sha[0]}">${esc(sha[1])}</span><span class="n-chip n">${esc(use.length ? "בשימוש: " + use.join(" · ") : "לא בסבב פעיל")}</span>${imageHibernated(img) ? `<span class="n-chip w" title="${esc(HIB_TIP)}">${esc(HIB_TAG)}</span>` : ""}${imageBitLocker(img) ? `<span class="n-chip w" title="${esc(BL_NOTE)}">${esc(BL_TAG)}</span>` : ""}</span>`;
+  return `<span class="n-meta"><span class="n-chip ${sha[0]}">${esc(sha[1])}</span><span class="n-chip n">${esc(use.length ? "בשימוש: " + use.join(" · ") : "לא בסבב פעיל")}</span>${imageHibernated(img) ? `<span class="n-chip w" title="${esc(HIB_TIP)}">${esc(HIB_TAG)}</span>` : ""}${imageBitLocker(img) ? `<span class="n-chip w" title="${esc(BL_NOTE)}">${esc(BL_TAG)}</span>` : ""}${imageNtfsInconsistent(img) ? `<span class="n-chip w" title="${esc(NI_NOTE)}">${esc(NI_TAG)}</span>` : ""}</span>`;
 }
 /* --- מגירת אימג' (#1300, console-full.html W.imgDrawer): ראש — שם, משנה קצרה ותגיות; לשוניות
    עם מונים; "סקירה" = פרטים (~5 שורות + "כונן מינימלי") והודעת sha256 בתחתית; "מחיצות" =
@@ -3921,6 +4153,7 @@ function imageDrawerHtml(img) {
     ["גודל בשרת", `${ltr(fmtBytes(img.total_compressed_bytes))} דחוס <a href="/api/console/images/${idEnc}/download">הורדה</a>`],
     imageHibSourceRow(img),   // ‏#2053
     imageBitLockerRow(img),   // ‏#1840
+    imageNtfsRow(img),   // ‏#2972
   ].filter(Boolean));
   const tech = UI.kv([
     ["בשימוש במקור", img.used_bytes == null ? `<span class="muted">לא ידוע</span>` : ltr(fmtBytes(img.used_bytes))],
@@ -4121,6 +4354,7 @@ async function startRound() {
     toast(e.message);
   }
 }
+startRound = guarded("startRound", startRound);   // ‏#2840: לחיצה כפולה = בקשה אחת
 
 async function reopenRound() {
   if (!ME || !["admin", "deploy"].includes(ME.role)) return;
@@ -4135,6 +4369,7 @@ async function reopenRound() {
     refreshStatus();
   } catch (e) { toast("הסבב לא נפתח מחדש: " + e.message, 6000); }
 }
+reopenRound = guarded("reopenRound", reopenRound);   // ‏#2840: לחיצה כפולה = בקשה אחת
 
 function stopRound() {
   if (!ME || !["admin", "deploy"].includes(ME.role)) return;
@@ -4881,6 +5116,7 @@ async function wakeRoom() {
     toast(`WoL נשלח ל-${r.sent} מחשבים${r.failed ? `, ${r.failed} נכשלו` : ""}${(r.reasons || []).length ? " — " + r.reasons.join("; ") : ""}`, 6000);
   } catch (e) { toast("WoL נכשל: " + e.message); }
 }
+wakeRoom = guarded("wakeRoom", wakeRoom);   // ‏#2840: לחיצה כפולה = בקשה אחת
 
 /* ---------- #954 גל 3א: מחשבי שיכפול (חדר השיכפולים) ומחשבי בנייה — הקבוצות הקבועות כאובייקטים ----------
    נבנה לפי docs/design/console-redesign/cloners.md ו-builders.md (מוקאפים מאושרים 17/09),
@@ -4970,11 +5206,12 @@ const DRAWER_STATE_HE = { writing: "כותב", done: "נכתב", failed: "נכש
    כשל של הקריאה הוא `failed` עם הסיבה ב-`error` (drawerErrorText), לא שורה כאן. */
 function readbackLine(d) {
   // ‏#1907 (נדב 22/10): הושלם, לא אומת — רשימת הבדיקה לא הורדה מהשרת אחרי כל הניסיונות; סיבה משלו, כתום.
-  if (d.readback === "unverified" && d.readback_why === "list_not_fetched") return `<span class="dline warn" title="${esc(d.readback_reason || "")}">לא אומת — הרשימה לא הורדה</span>`;
-  if (d.readback === "unverified") return `<span class="dline warn" title="${esc(d.readback_reason || "")}">לא אומת אחרי הכתיבה — אין עדיין רשימת בדיקה לאימג'</span>`;
+  // ‏#2987 (מוקאפ 05/06, נדב 12/11): הנוסח הקצר של מסך המשכפל; ההסבר הארוך -- בריחוף.
+  if (d.readback === "unverified" && d.readback_why === "list_not_fetched") return `<span class="dline warn" title="${esc(d.readback_reason || "רשימת הבדיקה לא הורדה מהשרת")}">הושלם · לא נבדק — רשימת הבדיקה לא הורדה</span>`;
+  if (d.readback === "unverified") return `<span class="dline warn" title="${esc(d.readback_reason || "אין עדיין רשימת בדיקה לאימג'")}">הושלם · לא נבדק — הבדיקה אחרי הכתיבה לא רצה</span>`;
   // ‏#1864 (נדב 20/10): ברירת המחדל היא מדגם — "נבדק במדגם", לעולם לא "אומת" סתם.
-  if (d.readback === "sampled") return `<span class="dline" title="${esc(d.readback_reason || "")}">נבדק במדגם — חלק מהבלוקים נקרא בחזרה מהדיסק ותאם לאימג'</span>`;
-  if (d.readback === "verified") return `<span class="dline">אומת במלואו — כל הבלוקים נקראו בחזרה מהדיסק ותאמו לאימג'</span>`;
+  if (d.readback === "sampled") return `<span class="dline" title="${esc(d.readback_reason || "חלק מהבלוקים נקרא בחזרה מהדיסק ותאם לאימג'")}">הושלם · נבדק במדגם</span>`;
+  if (d.readback === "verified") return `<span class="dline" title="כל הבלוקים נקראו בחזרה מהדיסק ותאמו לאימג'">הושלם · נבדק במלואו</span>`;
   return "";
 }
 
@@ -5329,7 +5566,7 @@ function bayChip(s) {
    בלי סבב אין rule מהשרת, ו-DISK_RULE_HE הוא אותו משפט — tests/test_disk_rule_parity_2848.py). */
 function bayLines(s) {
   const d = s.disk, r = slotRule(s), out = [];
-  if (d.state === "failed") out.push(["bad", "נכשל בסבב" + (d.error ? " — " + drawerErrorText(d.error) : "")]);
+  if (d.state === "failed") out.push(["bad", "נכשל בסבב" + (d.error ? " — " + (d.error_short || drawerErrorText(d.error)) : "")]);   // #2987
   if (r.color === "red") {
     const tr = r.target_reason;
     const why = tr === "smart_fail" ? (s.fail && s.fail.cause === "readonly" ? failureCauseText(s.fail) : smartText(d))
@@ -5373,7 +5610,7 @@ function bayStatus(s) {
    MAC, וכרטיס מגירה לכל חריץ. "דיסק אדום" במקום מחובר/לא מחובר; בסבב תגית הסבב נשארת לצידה. */
 function clonerMachHtml(m, admin) {
   const macEnc = encodeId(m.mac), st = clonerState(m), { slots } = machineSlots(m);
-  const red = slots.some((s) => s.disk && slotClass(s) === "err");
+  const reds = slots.filter((s) => s.disk && slotClass(s) === "err").length, red = reds > 0;   // #2987: "2 דיסקים אדומים"
   const unid = slots.filter((s) => s.disk && s.disk.fresh === null)
     .map((s) => `<div class="mach-note">לא ניתן לזהות את הכונן ב${s.n != null ? `חריץ ${s.n}` : esc(rowConn(s))} — אין לו מספר סידורי</div>`).join("");
   const rows = slots.length ? slots.map((s) => { const t = s.disk ? bayStatus(s) : ""; return bayCardHtml(m, s, { act: t ? `<span class="lb-st">${esc(t)}</span>` : "", lines: s.disk && s.n == null ? [["warn", "לא ממופה"]] : [] }); }).join("")
@@ -5383,7 +5620,7 @@ function clonerMachHtml(m, admin) {
   const held = st.held ? `<div class="mach-note">${esc(heldLine(m, m.held))}</div>` : "";   // #2031
   const acts = admin || st.held ? `<div class="acts">${admin ? `<button class="btn sm" type="button" onclick="event.stopPropagation();openMachineDetail('${macEnc}','disks')">חריצים</button>` : ""}${st.held ? heldButton(m) : ""}</div>` : "";
   const pill = banner || (red && st.cls !== "run") ? "" : UI.pill(MACH_PILL[st.cls] || "", st.text);
-  return `<div class="mach lbm${!st.cls ? " off" : ""}" data-mac="${esc(m.mac)}"${open}><div class="mt"><span>${esc(machineName(m) || m.mac)}</span>${pill}${red ? UI.pill("err", "דיסק אדום") : ""}</div>${banner}<div class="ms mono">${esc(m.mac)}</div><div class="lbays">${rows}</div>${unid}${nicLinkNote(m)}${held}${acts}</div>`;
+  return `<div class="mach lbm${!st.cls ? " off" : ""}" data-mac="${esc(m.mac)}"${open}><div class="mt"><span>${esc(machineName(m) || m.mac)}</span>${pill}${red ? UI.pill("err", reds > 1 ? `${reds} דיסקים אדומים` : "דיסק אדום") : ""}</div>${banner}<div class="ms mono">${esc(m.mac)}</div><div class="lbays">${rows}</div>${unid}${nicLinkNote(m)}${held}${acts}</div>`;
 }
 /* המקרא — אותו מקרא בחלון "התחל סבב" ובדף "מחשבי שיכפול" (מוקאפ disk-colors). */
 function diskColorLegend() {
@@ -5665,6 +5902,7 @@ async function clearDiskFailure(id) {
     toast("הניקוי נכשל: " + e.message);
   }
 }
+clearDiskFailure = guarded("clearDiskFailure", clearDiskFailure);   // ‏#2840: לחיצה כפולה = בקשה אחת
 /* #926: דיסקים מכווצים — מחיצת המקור כווצה לקליטה (#87) ולא הוחזרה לגודלה
    (אובדן חשמל / אתחול לפני סוף הקליטה). הרשומה נפתחת בשרת **לפני** הכיווץ
    ונסגרת אחרי ההחזרה; מה שנשאר פתוח הוא דיסק שעדיין מכווץ. כתום, לא אדום:
@@ -5695,6 +5933,7 @@ async function clearShrinkRecord(id) {
     toast("הניקוי נכשל: " + e.message);
   }
 }
+clearShrinkRecord = guarded("clearShrinkRecord", clearShrinkRecord);   // ‏#2840: לחיצה כפולה = בקשה אחת
 
 /* ---------- מגירת מחשב (machine-drawer.md) ---------- */
 function diskBoxesHtml(m) {
@@ -6007,7 +6246,7 @@ function machineDataHtml(m) {
   if (!d || d.loading) return `<div class="muted">טוען…</div>`;
   if (d.error) return UI.note("warn", "הנתונים לא נקראו: " + esc(d.error));
   return UI.kv([["לוג המכונה", agentLogsHtml(d.agent_logs)], ["מעבד בגל", cpuWavesHtml(d.cpu)], ["DHCP/PXE מאז ההערה", pxeHtml(d.pxe)],
-    ["היסטוריית IP", ipHistoryHtml(d.ip_history)], ["כרטיס רשת לאורך זמן", nicHistoryHtml(d.nic_history)], ["זריקות בגלים", waveDropsHtml(d.wave_drops)]]);
+    ["היסטוריית IP", ipHistoryHtml(d.ip_history)], ["כרטיס רשת לאורך זמן", nicHistoryHtml(d.nic_history)], ["זמני עלייה (initramfs)", bootMarksHtml(d.boot_marks)], ["זריקות בגלים", waveDropsHtml(d.wave_drops)]]);
 }
 /* ‏#1885: מעבד, throttle וטמפ' בגלים האחרונים. ‏null בשדה = לא נמדד ("—"), לא 0. */
 function cpuWavesHtml(rows) {
@@ -6036,6 +6275,18 @@ function nicHistoryHtml(rows) {
   if (!rows.length) return `<span class="muted">לא נדגם</span>`;
   const n = (v) => v == null ? "—" : String(v);
   return rows.slice(0, 5).map((r) => `<span class="mono">${esc(fmtWhen(r.at))}</span> <span class="mono">${esc(r.iface)}</span> ${esc(n(r.speed_mbps))}Mb/s · CRC ${esc(n(r.rx_crc_errors))} · dropped ${esc(n(r.rx_dropped))}`).join("<br>");
+}
+/* ‏#2830: `up=` של ה-initramfs — שניות מהעלאת הקרנל; "רשת" = ה-DHCP ענה. מפתח חסר = הנקודה לא הושגה ("—"), לא 0. */
+const BOOT_MARK_HE = { init: "init", modules: "מודולים", nic: "כרטיס", link: "קישור", dhcp: "DHCP", gui: "גואי" };
+function bootMarksHtml(rows) {
+  if (!Array.isArray(rows)) return `<span class="muted">לא נקרא</span>`;
+  if (!rows.length) return `<span class="muted">לא נשמר אתחול</span>`;
+  const sec = (v) => `<bdi dir="ltr">${esc(Number(v).toFixed(1))}</bdi>ש'`;
+  return rows.slice(0, 5).map((r) => {
+    const parts = Object.keys(BOOT_MARK_HE).filter((k) => r.marks && r.marks[k] != null)
+      .map((k) => `${esc(BOOT_MARK_HE[k])} ${sec(r.marks[k])}${r.took && r.took[k] != null && k !== "init" ? ` (+${esc(Number(r.took[k]).toFixed(1))})` : ""}`);
+    return `<span class="mono">${esc(fmtWhen(r.at))}</span> · ${r.net_s == null ? `<span class="muted">רשת לא נמדדה</span>` : `רשת עלתה אחרי ${sec(r.net_s)}`}<br><span class="sub">${parts.join(" · ")}</span>`;
+  }).join("<br>");
 }
 function waveDropsHtml(rows) {
   if (!Array.isArray(rows)) return `<span class="muted">לא נקרא</span>`;
@@ -6852,6 +7103,7 @@ async function healthSvcStart(idEnc) {
   if (!p || healthSvcUnread(p)) return;
   try { await healthSvcSend(p, true); } catch (e) { toast(`ההפעלה נכשלה: ${e.message}`); }
 }
+healthSvcStart = guarded("healthSvcStart", healthSvcStart);   // ‏#2840: לחיצה כפולה = בקשה אחת
 
 /* ‏#1933: "YYYY-MM-DD HH:MM:SS" / "HH:MM:SS" באזור התצוגה (‏zoneParts); מה שאינו חותמת — כפי שהוא. */
 function fmtWhen(ts) {
@@ -7815,6 +8067,15 @@ function netPickDeploy() {
       return () => editDeployNet(v.nic);
     } });
 }
+/* ‏#3002 (נדב 12/11): שורה קבועה בראש "רשת הפצה" — ערוץ המחשבים, השידור וה-PXE סומכים על בידוד
+   הרשת, והשרת אינו יכול לבדוק את המתג. מוצגת תמיד, גם כשהכרטיסים לא נקראו ולפני שהוגדרה רשת. */
+const NET_ISOLATION_NOTE = '<div class="c12">' + UI.note("warn",
+  "<b>רשת ההפצה חייבת להיות מבודדת — זה חלק מהאבטחה.</b> המחשבים, השידור והאתחול מהרשת סומכים על כך"
+  + " שרק המחשבים שלכם מחוברים אליה. במתג: וילן נפרד בלי ניתוב, port security (מחשב אחד לכל פורט)"
+  + " ו-DHCP snooping (רק הפורט של השרת מחלק כתובות). בלעדיהם, מחשב זר שמחובר לרשת יכול להתחזות"
+  + " למחשב רשום, להעלות מחשב שיכפול מהאתחול שלו או להפיל סבב. השרת מתריע על DHCP זר, אבל אינו"
+  + " חוסם אותו. ההגדרות: מדריך מנהל ה-IT, פרק 4.") + "</div>";
+
 function networkDeployTab() {
   const nics = NETW.nics, focus = netDeployNic();
   const candidates = deployCandidates(), candidate = deployDefaultNic(candidates);
@@ -7846,7 +8107,7 @@ function networkDeployTab() {
       + netDeployCardsCard(focus)
       + netLeasesCard(focus);
   }
-  return `<div class="page aligned">${header}<div class="body">${body}</div></div>`;
+  return `<div class="page aligned">${header}<div class="body">${NET_ISOLATION_NOTE}${body}</div></div>`;
 }
 
 function networkPage(tab = 0) {
@@ -9105,7 +9366,8 @@ function markTreeSelection(el, id) {
     x.removeAttribute("aria-current");
   });
   const node = el || document.querySelector(`.inventory-node[data-page="${id}"]`);
-  if (!node) { drawRail(); return; }
+  const repaint = () => (typeof paintTabAlerts === "function" ? paintTabAlerts() : drawRail());   // ‏#3025: גם הקטע הזמני
+  if (!node) { repaint(); return; }
   node.classList.add("active");
   node.setAttribute("aria-current", "page");
   for (let box = node.parentElement; box && box.classList; box = box.parentElement) {
@@ -9116,7 +9378,7 @@ function markTreeSelection(el, id) {
     }
   }
   markTreeAncestor(node);
-  drawRail();   // ‏#1300: הפס עוקב אחרי אותו סימון
+  repaint();   // ‏#1300: הפס עוקב אחרי אותו סימון
 }
 
 /* apple-pending-4 · 2: הלשונית היא המקור והעץ עוקב אחריה. הצומת של הלשונית מסומן במלואו
@@ -9220,6 +9482,7 @@ function toggleInventoryGroup(nodeEl, childId) {
   if (arrow) arrow.dataset.open = String(opening);
   if (arrow) arrow.textContent = opening ? "▾" : "▸";
   if (nodeEl && nodeEl.setAttribute) nodeEl.setAttribute("aria-expanded", String(opening));
+  if (typeof paintTabAlerts === "function") paintTabAlerts();   // ‏#3025: קבוצה מכווצת — הנקודה של ילדיה
 }
 
 /* ‏#1300 (נדב 12/10 — "בדיוק כמו המוקאפ", console-full.html ‏#tree click): ענף שהוא גם דף (מחשבים, רשת)
@@ -9388,7 +9651,7 @@ function restoreNav() {
 /* ---- הפס: נגזר מהעץ ---- */
 const RAIL_KIDS = { machines: "machineTree", network: "netTA" };   // רמה שלישית — לתפריט הצף
 let RAIL_NODES = [];
-const railShown = (el) => !!el && !hasClass(el, "hidden");
+const railShown = (el) => !!el && !hasClass(el, "hidden") && !hasClass(el, "view-hide");   // ‏#3025: גם בסיסי
 function railLabel(node) {
   const spans = [...(node.children || [])].filter((c) => c.tagName === "SPAN" || c.tagName === "STRONG");
   const last = spans[spans.length - 1];
@@ -9422,6 +9685,10 @@ function railModel() {
       if (items.length) out.push({ label: railLabel(el), items });
     }
   }
+  // ‏#3025: הקטע הזמני של התצוגה הבסיסית — קבוצה משלו בתחתית הפס
+  const temp = document.getElementById("treeTemp"), tl = document.getElementById("treeTempList");
+  const tempItems = temp && tl && typeof temp.hasAttribute === "function" && !temp.hasAttribute("hidden") ? [...(tl.children || [])].filter((c) => hasClass(c, "inventory-node")) : [];
+  if (tempItems.length) out.push({ label: "מוצגות זמנית", items: tempItems });
   return out;
 }
 function railActive() { const srv = document.getElementById("srvTA"); return srv && srv.querySelector ? srv.querySelector(".inventory-node.active") : null; }
@@ -9442,7 +9709,8 @@ function drawRail() {
     const i = RAIL_NODES.push(n) - 1, kids = railKids(n).length > 0;
     const own = railOwner(n, act), deep = own && act !== n, label = railLabel(n);
     const name = deep ? `${label}, נבחר: ${railLabel(act)}` : label;
-    return `<button type="button" class="ri${own ? " cur" : ""}${kids ? " kids" : ""}" data-ri="${i}" tabindex="${i === stop ? 0 : -1}" aria-label="${esc(name)}"`
+    const al = n.dataset && (n.dataset.al === "err" || n.dataset.al === "warn") ? ` al-${n.dataset.al}` : "";   // ‏#3025
+    return `<button type="button" class="ri${own ? " cur" : ""}${kids ? " kids" : ""}${al}" data-ri="${i}" tabindex="${i === stop ? 0 : -1}" aria-label="${esc(name)}"`
       + `${own ? (deep ? ' aria-current="location"' : ' aria-current="page"') : ""}${kids ? ' aria-haspopup="menu" aria-expanded="false" aria-controls="navFly"' : ""}>${railIcon(n)}</button>`;
   }).join("") + "</div>");
   const { cls: fcls, text: ftxt } = serverDotState(SERVER_HEALTH[""]);   // נדב 18/10: הנקודה של הראשי (הקופסה בתחתית העץ יצאה)
@@ -9958,7 +10226,13 @@ function openModalContent(title, body, okLabel = "אישור", okFn = closeModal
   ok.textContent = okLabel;
   ok.className = "btn " + (danger ? "danger" : "primary");   // פעולה הרסנית לא נראית כמו אישור רגיל
   ok.disabled = false;
-  ok.onclick = okFn;
+  /* ‏#2840 (המשך): "אישור" שמחכה לשרת = כבוי + גלגל, ולחיצה נוספת נבלעת. מפתח חדש בכל פתיחה, כך שחלון
+     שנפתח מתוך okFn (שלב הבא באשף) אינו נחסם על ידי הקודם; והכפתור מנוקה כאן, ולכן ה-finally של הקודם לא נוגע בו. */
+  ok._busyGen = 0;
+  if (ok.removeAttribute) ok.removeAttribute("aria-busy");
+  if (ok.classList) ok.classList.remove("busy");
+  const busyKey = {};
+  ok.onclick = okFn === closeModal ? closeModal : (event) => withBusy(ok, () => okFn(event), { key: busyKey });   // סגירה בלבד — אין מה לחכות לו
   const modal = document.getElementById("modal");
   const form = document.getElementById("sheet");
   if (form) form.classList.add("hidden");
@@ -10782,6 +11056,7 @@ async function wakeMachine(macEnc) {
     toast(wolResultText(r, machineName(m) || m.mac), 6000);
   } catch (e) { toast(wolErrorText(e), 6000); }
 }
+wakeMachine = guarded("wakeMachine", wakeMachine);   // ‏#2840: לחיצה כפולה = בקשה אחת
 async function wakeGroup(gidEnc) {
   let gid = gidEnc; try { gid = decodeURIComponent(gidEnc); } catch (e) {}
   try {
@@ -10789,6 +11064,7 @@ async function wakeGroup(gidEnc) {
     toast(wolResultText(r, groupLabel(gid)), 6000);
   } catch (e) { toast(wolErrorText(e), 6000); }
 }
+wakeGroup = guarded("wakeGroup", wakeGroup);   // ‏#2840: לחיצה כפולה = בקשה אחת
 
 function isAdmin() { return !!ME && ME.role === "admin"; }
 function pageAllowed(id) {

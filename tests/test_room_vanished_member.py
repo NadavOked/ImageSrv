@@ -1,10 +1,10 @@
-"""‏#450 — מכונה שנעלמה אינה תוקעת את הגל לנצח.
+"""#450 — מכונה שנעלמה אינה תוקעת את הגל לנצח.
 
-‏`tick` סיים גל רק כשלכל חבר רשום היה מצב סופי, ולא הפקיע חברים שקטים.
+`tick` סיים גל רק כשלכל חבר רשום היה מצב סופי, ולא הפקיע חברים שקטים.
 מכונה אחת שכובתה, איבדה רשת או קרסה באמצע — בלי דיווח סופי — מנעה
 פתיחת גל נוסף, גם אחרי שכל השורדים סיימו. זה תקוע כבר ב-N=1.
 
-התיקון: ‏`tick` מפקיע חבר שלא דיווח **progress** מעל `LOST_SECONDS`
+התיקון: `tick` מפקיע חבר שלא דיווח **progress** מעל `LOST_SECONDS`
 ומסמן אותו `lost` — מצב נבדל מ-`failed` (לא דיווח כישלון) ומ-`done`
 (אין ראיה שכתב). הדופק הנמדד הוא progress ולא hello, אחרת מכונה בריאה
 שעסוקה בכתיבה (שמפסיקה לשלוח hello, #449) הייתה מופקעת בטעות — ולכן
@@ -12,8 +12,8 @@
 מכונה שעדיין מדווחת.
 
 הערה על #456: הטסטים מריצים את `tick` דרך hello של מכונה שורדת
-(‏`heartbeat`). מי שמריץ את `tick` כשהחדר **שקט לגמרי** הוא #456
-(‏tick מרקע / overview), ואינו נגוע כאן.
+(`heartbeat`). מי שמריץ את `tick` כשהחדר **שקט לגמרי** הוא #456
+(tick מרקע / overview), ואינו נגוע כאן.
 """
 
 from __future__ import annotations
@@ -24,14 +24,14 @@ import pytest
 
 from server.rounds import room as room_mod
 
-from test_server_room import (           # noqa: F401 — ‏room_server הוא fixture
+from test_server_room import (           # noqa: F401 — room_server הוא fixture
     CLONER1, CLONER2, cloner_hello, room_body, heartbeat, report, room, room_server,
 )
 
 pytest.importorskip("fastapi")
 
-#: הזקנה מעל הספָּף. ‏getattr עם ברירת מחדל, כדי שהבקרה השלילית (קוד ללא
-#: ‏`LOST_SECONDS`) תריץ את ההתנהגות ותיכשל על ה-assert, ולא על מחסור סמל.
+#: הזקנה מעל הספָּף. getattr עם ברירת מחדל, כדי שהבקרה השלילית (קוד ללא
+#: `LOST_SECONDS`) תריץ את ההתנהגות ותיכשל על ה-assert, ולא על מחסור סמל.
 _AGE = getattr(room_mod, "LOST_SECONDS", 180) + 60
 
 
@@ -39,7 +39,7 @@ _AGE = getattr(room_mod, "LOST_SECONDS", 180) + 60
 
 
 def _open(room_server, target: int, drawers=None) -> None:
-    """‏#1410: בחירה מפורשת — ברירת המחדל: כל מגירות שני המשכפלים."""
+    """#1410: בחירה מפורשת — ברירת המחדל: כל מגירות שני המשכפלים."""
     opened = room_server["deploy"].post(
         "/api/console/room", json=room_body(room_server, target, drawers or {CLONER1: ["S1", "S2"], CLONER2: ["S3", "S4"]}))
     assert opened.status_code == 200, opened.text
@@ -80,7 +80,7 @@ def _events(ctx) -> list[str]:
 
 
 def test_a_vanished_member_is_marked_lost_and_the_wave_advances(room_server):
-    """‏#450: אחד מסיים, השני נהרג ב-SIGKILL בלי לדווח.
+    """#450: אחד מסיים, השני נהרג ב-SIGKILL בלי לדווח.
 
     היום הגל נשאר `running` לנצח ואין גל שני. אחרי: השני מסומן `lost`,
     הגל מסתיים, וגל 2 נפתח (היעד לא הושג). הטסט נופל אם החדר נשאר תקוע.
@@ -100,7 +100,7 @@ def test_a_vanished_member_is_marked_lost_and_the_wave_advances(room_server):
     _progress_writing(anon, wave1, CLONER2, ["sda", "sdb"])
 
     # הגל רץ מעל הספָּף ו-CLONER2 שקט כל אותו זמן: מזקינים את שתי החותמות
-    # שההפקעה נמדדת מהן (‏`started_at` של הגל ו-`updated_at` של החבר).
+    # שההפקעה נמדדת מהן (`started_at` של הגל ו-`updated_at` של החבר).
     old = _age_started(ctx, wave1, _AGE)
     ctx.conn.execute(
         "UPDATE session_members SET updated_at = ? WHERE session_id = ? AND mac = ?",
@@ -125,7 +125,7 @@ def test_a_vanished_member_is_marked_lost_and_the_wave_advances(room_server):
 
 
 def test_a_member_still_reporting_progress_is_not_lost(room_server):
-    """‏#449 בשכבת ההפקעה: מכונה שכותבת מפסיקה לשלוח hello אך מדווחת
+    """#449 בשכבת ההפקעה: מכונה שכותבת מפסיקה לשלוח hello אך מדווחת
     progress. סף שנמדד לפי hello (או לפי גיל הגל בלבד) היה מפקיע מכונה
     בריאה. גל ישן + progress טרי חייבים להשאיר את החבר `writing`.
     """
@@ -139,7 +139,7 @@ def test_a_member_still_reporting_progress_is_not_lost(room_server):
 
     report(anon, wave1, CLONER1, {"sda": "done", "sdb": "done"})
 
-    # הגל רץ הרבה זמן (‏`started_at` ישן), אבל CLONER2 מדווח התקדמות עכשיו.
+    # הגל רץ הרבה זמן (`started_at` ישן), אבל CLONER2 מדווח התקדמות עכשיו.
     _age_started(ctx, wave1, _AGE)
     _progress_writing(anon, wave1, CLONER2, ["sda", "sdb"])   # updated_at = עכשיו
 

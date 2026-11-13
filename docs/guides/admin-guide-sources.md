@@ -100,7 +100,7 @@
 | ה-watchdog לא מכסה כיבוי שנתקע | קרנל v6.12: ‏`drivers/watchdog/iTCO_wdt.c:592` (‏`watchdog_stop_on_reboot`), ‏`drivers/watchdog/watchdog_core.c:158-176` (‏`watchdog_reboot_notifier` עוצר על `SYS_POWER_OFF` לפני `device_shutdown()`); ‏`metal-1017-poweroff.md` ס' "למה ה-watchdog לא אתחל"; הערה ב-`agent/lib/core/watchdog.sh:4-6` |
 | מסלול הכיבוי 4/4 על ברזל; תקיעה אחת לא שוחזרה | ‏`metal-1017-poweroff.md`, הרצות 1–4 וס' "ניתוח" 1 (הכרעה: ‏`poweroff -f` נשאר, הצעה א') |
 | ‏1Gb ≈ ‏110MB/s; נמדד 106MB/s (17/09) | `docs/architecture/imagesrv-spec.md:113-115` |
-| קליטה: ‏74MB/s ל-NVMe מול 54MB/s ל-HDD, אותו מקור, אימג' וקו | `docs/research/R10-server-storage-and-capacity.md:22,38-42` (ברזל, 05/09) |
+| קליטה: ‏74MB/s ל-NVMe מול 54MB/s ל-HDD, אותו מקור, אימג' וקו | מחקר הקליטה הפנימי של הפרויקט (ברזל, 05/09) |
 | סבב למגירה אחת: רשת 75MB/s (תקרה 600m), דיסק 202MB/s, 19.5GB | ‏`metal-1017-results.md` (בדיקה 8, ‏17/10, ‏08:24–08:30 UTC) |
 | 202MB/s = ‏97% מ-209MB/s של בדיקת הכתיבה; המעבד 67% עסוק (usr+sys+sirq) ועוד 17% iowait; הדיסק הוא הגבול | ‏`C:\ImageCtl-Lab\evening-1015\cloner-pipeline-perf.md` ס' 0 ו-1.1 (‏@מנהל-ביצועים, ‏17/10; ‏#1571). מעבד i5-650, שתי ליבות פיזיות |
 | המעבד כגבול בכמה מגירות | אותו מסמך, ס' 0 סעיף 3 — **הערכה**, לא מדידה |

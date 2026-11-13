@@ -1,24 +1,24 @@
-"""‏#1206: כל מסך במתקין נגמר בחצים, רווח, Enter ו-Esc בלבד.
+"""#1206: כל מסך במתקין נגמר בחצים, רווח, Enter ו-Esc בלבד.
 
 נמדד ב-23/09 על VM של ESXi: הקונסולה של ESXi בדפדפן מעבירה ל-VM את
-החצים, Enter ו-Esc — **אבל לא Tab**, שהדפדפן בולע. ‏Tab שנשלח ישירות
+החצים, Enter ו-Esc — **אבל לא Tab**, שהדפדפן בולע. Tab שנשלח ישירות
 (`govc vm.keystrokes`) כן הזיז פוקוס, כלומר המתקין טיפל בו; מה שחסר הוא
 טיפול בחצים מחוץ למסך הדיסק. בלי עכבר (#1204) לא הייתה דרך לבחור תפקיד,
 כרטיס רשת או DHCP/סטטי, ולא לעבור בין שדות הסיסמה.
 
 החוזה שנבדק כאן:
 
-* ‏↑/↓ (וגם Tab/Shift+Tab) עוברים על **כל** הפקדים במסך, בסדר הקריאה.
+* ↑/↓ (וגם Tab/Shift+Tab) עוברים על **כל** הפקדים במסך, בסדר הקריאה.
 * נחיתה על אפשרות (תפקיד, כרטיס רשת, DHCP/סטטי) **בוחרת** אותה — כמו
   ברשימת הדיסקים: מה שמסומן הוא מה שנבחר.
 * רווח מחוץ לשדה טקסט לוחץ על הכפתור שבפוקוס ("בדוק חיבור"), ובמסך הרשת
   מחליף DHCP↔סטטי בלי לעבור על שורות הכרטיסים האחרים.
 * חץ שלא שינה דיסק אינו מבטל את "אני מבין" (VM עם דיסק אחד + ISO).
 
-הדרייבר כולל את `install.c` ישירות (‏`#include`), כמו
-‏`test_native_gui_input.py` עם `input.c`, ומזין אירועים ל-`install_handle`
+הדרייבר כולל את `install.c` ישירות (`#include`), כמו
+`test_native_gui_input.py` עם `input.c`, ומזין אירועים ל-`install_handle`
 על מצב ה-demo. הגשר הוא `cat >/dev/null; echo >>LOG` — כל פעולה שהמתקין שלח נרשמת.
-‏cc + כותרות cairo = לינוקס בלבד; בווינדוס זה דילוג, לא מעבר.
+cc + כותרות cairo = לינוקס בלבד; בווינדוס זה דילוג, לא מעבר.
 """
 
 from __future__ import annotations
@@ -229,14 +229,14 @@ def test_role_arrows_switch_the_role_and_reach_the_url_and_the_check_button(driv
     states, bridge = _press(driver, tmp_path, ROLE, "UP", "UP", "DOWN", "DOWN", "DOWN", "SPACE")
     assert _col(states, "focus") == [
         "primary_url", "secondary", "primary", "secondary", "primary_url", "check", "check"]
-    # נחיתה על אפשרות בוחרת אותה: ‏UP השני עבר ל"ראשי", ‏DOWN החזיר ל"משני"
+    # נחיתה על אפשרות בוחרת אותה: UP השני עבר ל"ראשי", DOWN החזיר ל"משני"
     assert _col(states, "secondary") == ["1", "1", "0", "1", "1", "1", "1"]
     assert bridge == ["check-primary"], "רווח על 'בדוק חיבור' לוחץ עליו — ורק עליו"
 
 
 @NATIVE
 def test_network_arrows_pick_the_nic_and_pass_the_mode_without_changing_it(driver, tmp_path):
-    """‏#2096: DHCP/סטטי הוא עצירה **אחת** — האפשרות שנבחרה. ‏↑ מהשדות אל שורת
+    """#2096: DHCP/סטטי הוא עצירה **אחת** — האפשרות שנבחרה. ↑ מהשדות אל שורת
     הכרטיס עבר דרך "DHCP" והחליף מצב (Hyper-V, 24/10); המצב מתחלף ברווח."""
     states, _ = _press(driver, tmp_path, NETWORK, "DOWN", "DOWN", "DOWN", "DOWN", "DOWN", "UP", "UP")
     assert _col(states, "focus") == [
@@ -247,7 +247,7 @@ def test_network_arrows_pick_the_nic_and_pass_the_mode_without_changing_it(drive
 
 @NATIVE
 def test_network_space_flips_to_static_without_walking_past_the_other_nics(driver, tmp_path):
-    """‏ens19 + כתובת סטטית: הליכה בחצים עד "סטטית" הייתה בוחרת את ens20
+    """ens19 + כתובת סטטית: הליכה בחצים עד "סטטית" הייתה בוחרת את ens20
     בדרך. רווח מחליף מצב במקום, והפוקוס עובר לשדה ה-IP; ↑ מגיע לעצירת
     המצב בלי להחליף אותו, ורווח שם מחזיר ל-DHCP."""
     states, _ = _press(driver, tmp_path, NETWORK, "DOWN", "SPACE", "UP", "SPACE")
@@ -259,7 +259,7 @@ def test_network_space_flips_to_static_without_walking_past_the_other_nics(drive
 @NATIVE
 def test_admin_arrows_move_between_the_fields_like_tab(driver, tmp_path):
     """מסך 5: נמדד ש-Tab עובר מהמשתמש לסיסמה — אבל Tab לא מגיע מהדפדפן.
-    ‏#1632: שני שדות ה-root באותו מסך, אחרי אימות סיסמת ה-admin."""
+    #1632: שני שדות ה-root באותו מסך, אחרי אימות סיסמת ה-admin."""
     states, _ = _press(driver, tmp_path, ADMIN, "DOWN", "DOWN", "DOWN", "DOWN", "DOWN", "UP", "TAB", "BTAB")
     # #2776: the eye ("הצג") after each password is a stop of its own -- the keyboard alone reaches it
     assert _col(states, "focus") == [
@@ -280,13 +280,13 @@ def test_disk_arrow_that_changes_nothing_keeps_the_acknowledgement(driver, tmp_p
 def test_disk_arrow_that_changes_the_disk_still_clears_the_acknowledgement(driver, tmp_path):
     """השומר מהצד השני: דיסק אחר = אישור חדש. רווח מאשר שוב."""
     states, _ = _press(driver, tmp_path, DISK, "DOWN", "SPACE", "DOWN")
-    assert _col(states, "disk") == ["0", "1", "1", "0"]  # ‏sr0 היא המדיה ומדולגת
+    assert _col(states, "disk") == ["0", "1", "1", "0"]  # sr0 היא המדיה ומדולגת
     assert _col(states, "ack") == ["1", "0", "1", "0"]
 
 
 @NATIVE
 def test_a_leftover_technical_open_does_not_steal_the_arrows(driver, tmp_path):
-    """‏technical_open נשאר דלוק אחרי ריצה שנכשלה ו"נסה שוב"; החצים גללו
+    """technical_open נשאר דלוק אחרי ריצה שנכשלה ו"נסה שוב"; החצים גללו
     פלט שאינו על המסך במקום לזוז בין הפקדים."""
     states, _ = _press(driver, tmp_path, ROLE, "technical-open", "UP")
     assert _col(states, "focus")[-1] == "secondary"
@@ -302,7 +302,7 @@ def test_escape_goes_back_and_enter_validates_forward_unchanged(driver, tmp_path
 
 @NATIVE
 def test_next_on_the_role_screen_waits_for_a_green_check(driver, tmp_path):
-    """‏#1310 (נדב 12/10: "זה לא תקין אם זה לא ירוק"): משני עובר את מסך
+    """#1310 (נדב 12/10: "זה לא תקין אם זה לא ירוק"): משני עובר את מסך
     התפקיד רק אחרי בדיקה ירוקה. Enter הוא הדרך היחידה ב-ESXi — הכפתור
     המושבת לבדו לא היה עוצר אותו."""
     states, bridge = _press(driver, tmp_path, ROLE, "ENTER")      # the demo is green

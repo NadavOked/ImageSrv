@@ -1,19 +1,19 @@
-"""‏#2490 — אשף האתחול הראשון: ‏8081 רק על loopback ועל כרטיס ההתקנה.
+"""#2490 — אשף האתחול הראשון: 8081 רק על loopback ועל כרטיס ההתקנה.
 
-‏`POST /api/wizard/apply` אינו דורש הזדהות, והקריאה הראשונה קובעת את סיסמת
-המנהל. ‏firstboot מבקש DHCP זמני לכל כרטיס עם קישור (גם להפצה), והאשף
-מאזין על ‏0.0.0.0 — וחומת האש הקבועה עולה רק בסוף ההתקנה. כלומר כל מחשב
+`POST /api/wizard/apply` אינו דורש הזדהות, והקריאה הראשונה קובעת את סיסמת
+המנהל. firstboot מבקש DHCP זמני לכל כרטיס עם קישור (גם להפצה), והאשף
+מאזין על 0.0.0.0 — וחומת האש הקבועה עולה רק בסוף ההתקנה. כלומר כל מחשב
 באותו קטע רשת יכול היה לקבוע את סיסמת המנהל לפני המפעיל.
 
 התיקון אינו משנה מסך: טבלת nftables קטנה (``inet imagesrv_wizard``) נטענת
-ונקראת בחזרה **לפני** שהאשף עולה, ומתירה 8081 רק על ‏``lo`` (הגואי על
+ונקראת בחזרה **לפני** שהאשף עולה, ומתירה 8081 רק על ``lo`` (הגואי על
 tty1 מדבר עם האשף דרך 127.0.0.1) ועל הכרטיס ש-``/etc/imagesrv/installer-nic``
 נוקב בו לפי MAC. היחידה עצמה מסרבת לעלות בלי הטבלה. חומת האש הקבועה
 (``flush ruleset``) מחליפה אותה בסוף ההתקנה.
 
 למה לא bind לכתובת הכרטיס: הגואי המקומי מתחבר ל-127.0.0.1 (היה נשבר), ו-
 לינוקס מקבל חבילה לכתובת של כרטיס אחד גם כשהיא נכנסת בכרטיס אחר (weak
-host) — ‏``iifname`` בודק את כרטיס הכניסה, bind לא.
+host) — ``iifname`` בודק את כרטיס הכניסה, bind לא.
 """
 
 from __future__ import annotations
@@ -38,6 +38,9 @@ MAC = "52:54:00:12:34:56"
 OTHER_MAC = "52:54:00:ab:cd:ef"
 LO_RULE = 'iifname "lo" tcp dport 8081 accept'
 DROP_RULE = "tcp dport 8081 counter drop"
+#: #2518: DNS and rpcbind dropped off loopback (test_wizard_guard_dns_2518.py).
+LOCAL_ONLY = [f'iifname != "lo" {proto} dport {port} counter drop'
+              for port in (53, 111) for proto in ("udp", "tcp")]
 
 
 def _sys_net(tmp_path: Path, nics: dict[str, str]) -> Path:
@@ -78,7 +81,8 @@ def test_guard_opens_8081_on_loopback_and_the_installer_nic_only(tmp_path, shell
     fact = _fact(tmp_path, f"state=configured\ninterface=eth0\nmac={MAC.upper()}\nreason=dhcp\n")
     proc = _run(shell, "--nic-fact", str(fact), "--sys-net", str(sys_net))
     assert proc.returncode == 0, proc.stderr
-    assert _rules(proc.stdout) == [LO_RULE, 'iifname "ens19" tcp dport 8081 accept', DROP_RULE]
+    assert _rules(proc.stdout) == [LO_RULE, 'iifname "ens19" tcp dport 8081 accept', DROP_RULE,
+                                   *LOCAL_ONLY]
     assert "ens18" not in proc.stdout
     out = proc.stdout
     # שאר התעבורה (תשובות DHCP, apt המקומי) אינה עניינה של הטבלה הזו.
@@ -103,7 +107,7 @@ def test_guard_without_a_known_installer_nic_stays_closed_to_the_network(tmp_pat
     fact = _fact(tmp_path, fact_text) if fact_text is not None else tmp_path / "missing"
     proc = _run(BASH, "--nic-fact", str(fact), "--sys-net", str(sys_net))
     assert proc.returncode == 0, proc.stderr
-    assert _rules(proc.stdout) == [LO_RULE, DROP_RULE]
+    assert _rules(proc.stdout) == [LO_RULE, DROP_RULE, *LOCAL_ONLY]
     assert "[network-nic-undecidable]" in proc.stderr
 
 
@@ -163,7 +167,7 @@ def test_firstboot_loads_and_reads_back_the_guard_before_the_wizard_starts() -> 
 
 
 def test_wizard_unit_refuses_to_start_without_the_guard() -> None:
-    """גם `systemctl start` מכל מקום אחר (‏Wants= של הגואי) — לא בלי הטבלה."""
+    """גם `systemctl start` מכל מקום אחר (Wants= של הגואי) — לא בלי הטבלה."""
     unit = WIZARD_UNIT.read_text(encoding="utf-8")
     pre = unit.index("ExecStartPre=/usr/sbin/nft list table inet imagesrv_wizard")
     assert pre < unit.index("ExecStart=/usr/bin/python3 -m server.wizard")
@@ -177,7 +181,7 @@ def test_the_local_gui_reaches_the_wizard_through_loopback() -> None:
 
 # --- הרצת firstboot (מסוף ה-DHCP ועד שהאשף עולה) מול nft/systemctl מדומים ----
 
-#: ‏nft ו-systemctl כפונקציות bash: עוברות גם לתת-מעטפות ולצינורות, ובלי PATH.
+#: nft ו-systemctl כפונקציות bash: עוברות גם לתת-מעטפות ולצינורות, ובלי PATH.
 STUBS = r'''set -euo pipefail
 fail() { printf "FAIL %s\n" "$1"; exit 1; }
 log() { printf "LOG %s\n" "$*"; }

@@ -1,23 +1,23 @@
-"""‏#200 — הבקרה השלילית ל-`except Exception: rollback` ב-`open(replaces=)`.
+"""#200 — הבקרה השלילית ל-`except Exception: rollback` ב-`open(replaces=)`.
 
 השומר נכנס ל-main ב-#194 **בלי שאיש ראה אותו נכשל**, וזה בדיוק מה
 ש-`CONTRIBUTING.md` פוסל: *"טסט שלא ראית נכשל אינו טסט"*.
 
-**מה נבדק כאן, ומה לא.** ‏`pytest.raises` על החריגה **אינו** בקרה
+**מה נבדק כאן, ומה לא.** `pytest.raises` על החריגה **אינו** בקרה
 שלילית: החריגה מתפשטת גם בלי ה-rollback. מה שנשבר בלעדיו הוא **הנעילה**
-— ‏`open(replaces=...)` פותח `BEGIN IMMEDIATE` במפורש, ולכן נעילת
+— `open(replaces=...)` פותח `BEGIN IMMEDIATE` במפורש, ולכן נעילת
 הכתיבה נתפסת עוד לפני הכתיבה הראשונה. חריגה שיוצאת מהפונקציה בלי
-‏commit/rollback לוקחת אותה איתה, והכותב הבא ממתין `busy_timeout` שלם
+commit/rollback לוקחת אותה איתה, והכותב הבא ממתין `busy_timeout` שלם
 ואז מקבל ``database is locked`` — כשל שנראה כמו עומס והוא קורא שכבר
-ויתר (#54, ‏#184).
+ויתר (#54, #184).
 
 לכן הראיה כאן היא **כותב שני על חיבור שני**: כתיבה שהצליחה וערך שנקרא
 בחזרה, ולא היעדר סימן כישלון (עיקרון 5). ה-`busy_timeout` שלו **קצר
 בכוונה** — מאתיים אלפיות שנייה — כדי שהכישלון יהיה מהיר וחד; הארכתו
 הייתה הופכת את הבאג לאיטי במקום למנוע אותו.
 
-**הבקרה השלילית שהורצה** (‏02/09, תחנת פיתוח ווינדוס, פייתון 3.12):
-הסרת ה-``except Exception`` מ-`server/rounds/sessions.py` — ‏`grep -c` על
+**הבקרה השלילית שהורצה** (02/09, תחנת פיתוח ווינדוס, פייתון 3.12):
+הסרת ה-``except Exception`` מ-`server/rounds/sessions.py` — `grep -c` על
 ``self.conn.rollback()`` ירד **מ-2 ל-1** ועל ``except Exception``
 **מ-1 ל-0**, כלומר ראיה חיובית שהשומר באמת איננו — ואז::
 
@@ -26,11 +26,11 @@
     2 failed
 
 עם השומר: ``2 passed``. שני הכשלים הם **על התנהגות** — נעילה שנשארה
-תפוסה, וסגירה שלא נסוגה — ולא ‏`ImportError` או קובץ חסר.
+תפוסה, וסגירה שלא נסוגה — ולא `ImportError` או קובץ חסר.
 
 **ומה שעבר בשני המצבים:** האסרשנים על **מספר הסבבים בטבלה** ועל
 ``failing.fired`` — הם השומרים מפני תיקון-יתר ומפני מעבר בריק, ולא
-הבקרה. ‏`fired` מוודא שהתקלה אכן נורתה פעם אחת (טסט שלא ירה בה היה
+הבקרה. `fired` מוודא שהתקלה אכן נורתה פעם אחת (טסט שלא ירה בה היה
 "עובר" בלי לבדוק דבר), והספירה מוודאת שאף סבב שני לא נכתב.
 """
 
@@ -53,10 +53,10 @@ WRITER_TIMEOUT_MS = 200
 
 class FailingWrite:
     """חיבור שמתנהג כרגיל עד שהמשפט המסומן מגיע — ואז חריגה שאינה
-    ‏`IntegrityError`, בדיוק כמו ``disk I/O error`` או ``database is
+    `IntegrityError`, בדיוק כמו ``disk I/O error`` או ``database is
     locked`` שמגיעים מהעולם האמיתי אל תוך הטרנזאקציה המפורשת.
 
-    ‏`SessionStore` נוגע בחיבור רק דרך ``execute`` / ``commit`` /
+    `SessionStore` נוגע בחיבור רק דרך ``execute`` / ``commit`` /
     ``rollback``, ולכן זה כל מה שצריך לעטוף.
     """
 
@@ -82,7 +82,7 @@ class FailingWrite:
 def two_writers(tmp_path: Path):
     """שני חיבורים על אותו קובץ — המצב שבו הבאג חי.
 
-    ‏`db.Database` נותן חיבור לכל תהליכון, ולכן נעילה יתומה של אחד היא
+    `db.Database` נותן חיבור לכל תהליכון, ולכן נעילה יתומה של אחד היא
     ``database is locked`` אצל כל השאר. חיבור אחד לא היה מדגים דבר:
     הוא רואה את הטרנזאקציה של עצמו.
     """
@@ -105,7 +105,7 @@ def _open_wave(store: SessionStore) -> str:
 
 
 def _second_writer_works(other: sqlite3.Connection, value: str) -> str:
-    """כותב שני: כתיבה, ‏commit, וקריאה חזרה — ראיה חיובית ולא היעדר סימן."""
+    """כותב שני: כתיבה, commit, וקריאה חזרה — ראיה חיובית ולא היעדר סימן."""
     other.execute("INSERT INTO settings (key, value) VALUES ('probe', ?)"
                   " ON CONFLICT (key) DO UPDATE SET value = excluded.value", (value,))
     other.commit()
@@ -130,7 +130,7 @@ def test_a_failure_inside_the_explicit_transaction_releases_the_write_lock(
                    replaces=wave)
 
     # קודם כותבים, ואז מאמתים: עם `-O` ה-assert נעלם ואיתו הכתיבה עצמה
-    # (‏`py/side-effect-in-assert`), והכתיבה הזו **היא** המדידה.
+    # (`py/side-effect-in-assert`), והכתיבה הזו **היא** המדידה.
     read_back = _second_writer_works(other, "1")
     assert read_back == "1", \
         "הכותב השני נחסם — הנעילה של הטרנזאקציה המפורשת נשארה יתומה"

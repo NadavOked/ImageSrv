@@ -1,4 +1,4 @@
-"""‏`POST /api/console/backup-target`, ‏`/backup-policy` — יעד גיבוי המסד, השעה והמקום השמור
+"""`POST /api/console/backup-target`, `/backup-policy` — יעד גיבוי המסד, השעה והמקום השמור
 (#1956). admin בלבד.
 
 כלי המערכת רק דרך `storage_hooks` שמוזרקים ל-`create_app` (ניתוק יעד SMB/NFS ישן). הבדיקות מזייפות אותם.

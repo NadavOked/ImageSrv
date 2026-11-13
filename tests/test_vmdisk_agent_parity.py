@@ -1,12 +1,12 @@
-"""‏#1334 — השרת מריץ את פונקציות הסוכן, וההעתקים הקטנים שלו מסכימים איתן.
+"""#1334 — השרת מריץ את פונקציות הסוכן, וההעתקים הקטנים שלו מסכימים איתן.
 
 שני דברים נבדקים כאן:
 
 1. **הגשר** (`server/vm/agent_shell.py`) — טוען את כל `agent/lib` בלי תופעות
-   לוואי, מחזיר את הסיבה שהסוכן נתן (‏`PLAN_ERROR` וחבריו), ו-`log` אינו
+   לוואי, מחזיר את הסיבה שהסוכן נתן (`PLAN_ERROR` וחבריו), ו-`log` אינו
    מלכלך את ה-stdout שפונקציה מחזירה בו ערך.
-2. **ארבעת ההעתקים** ב-`server/vm/vmdisk.py` (‏`partclone_for_fs`,
-   ‏`partclone_mode`, ‏`partition_role`, ‏`mark_expandable`) — כל אחד מורץ
+2. **ארבעת ההעתקים** ב-`server/vm/vmdisk.py` (`partclone_for_fs`,
+   `partclone_mode`, `partition_role`, `mark_expandable`) — כל אחד מורץ
    מול המקור בסוכן על אותו קלט. סטייה = אדום.
 """
 
@@ -40,7 +40,7 @@ Partition name: 'Basic data partition'
 
 def call(tmp_path, func, *args, stubs: dict[str, str] | None = None,
          extra_env: dict[str, str] | None = None):
-    # ‏bash.exe שמורץ ישירות בווינדוס אינו רואה את /usr/bin (awk, ‏cut) — כמו
+    # bash.exe שמורץ ישירות בווינדוס אינו רואה את /usr/bin (awk, cut) — כמו
     # ב-`test_agent.sh`. בלינוקס ה-PATH של התהליך נשאר.
     env = {"PATH": "/usr/bin:/bin"} if os.name == "nt" else {}
     env.update(extra_env or {})
@@ -66,7 +66,7 @@ def test_the_bridge_loads_every_agent_lib_and_runs_a_function(tmp_path):
 
 
 def test_the_agents_reason_comes_back_by_name(tmp_path):
-    """‏apply_gpt מול יעד שגודל הסקטור שלו לא נקרא — ה-PLAN_ERROR של הסוכן
+    """apply_gpt מול יעד שגודל הסקטור שלו לא נקרא — ה-PLAN_ERROR של הסוכן
     עצמו חוזר, לא "rc=1"."""
     manifest = tmp_path / "m.json"
     manifest.write_text(json.dumps({"sector_size": 512, "scheme": "gpt"}), encoding="utf-8")
@@ -79,7 +79,7 @@ def test_the_agents_reason_comes_back_by_name(tmp_path):
 
 
 def test_log_lines_go_to_the_log_not_into_a_returned_value(tmp_path):
-    """‏boot_ca_json מחזיר JSON ב-stdout ו-log בדרך — ב-common.sh ה-log היה
+    """boot_ca_json מחזיר JSON ב-stdout ו-log בדרך — ב-common.sh ה-log היה
     מודפס גם ל-stdout ושובר את הפרסור."""
     got = call(tmp_path, "boot_ca_json", "/dev/does-not-exist")
     fragment = json.loads("{" + got.out.strip() + "}")
@@ -137,7 +137,7 @@ def _part(index, role, start):
 @pytest.mark.parametrize("layout", [
     [("esp", 2048), ("msr", 206848), ("windows", 239616), ("recovery", 9000000)],
     [("linux", 9000000), ("esp", 2048)],                       # ענן: השורש ראשון ואחרון
-    [("esp", 2048), ("windows", 239616), ("windows", 8000000)],  # ‏D: אחרי C:
+    [("esp", 2048), ("windows", 239616), ("windows", 8000000)],  # D: אחרי C:
     [("esp", 2048), ("recovery", 4096)],                       # אין מועמד
 ])
 def test_mark_expandable_matches_the_agent(tmp_path, layout):
@@ -185,18 +185,18 @@ def test_the_boot_paths_come_from_bootca_sh(tmp_path):
     assert "/EFI/Microsoft/Boot/bootmgfw.efi" in paths and "/EFI/BOOT/bootx64.efi" in paths
 
 
-# --- ‏#1491: תקציב העותק של הכיווץ — `_lc_relocs` של הסוכן, דרך הגשר -------------
+# --- #1491: תקציב העותק של הכיווץ — `_lc_relocs` של הסוכן, דרך הגשר -------------
 
-#: מה ש-ntfsresize v2022.10.3 הדפיס ב-Testrunner (17/10) — ‏-n על C: של
-#: ‏`test_vmupdate_integration`, ליעד 2.16GB ול-1GB.
+#: מה ש-ntfsresize v2022.10.3 הדפיס ב-Testrunner (17/10) — -n על C: של
+#: `test_vmupdate_integration`, ליעד 2.16GB ול-1GB.
 RELOCS_NONE = "Collecting resizing constraints ...\nNeeded relocations : 0 (0 MB)\n"
 RELOCS_SOME = "Collecting resizing constraints ...\nNeeded relocations : 3277 (14 MB)\n"
 
 
 @pytest.mark.parametrize("said,mb", [(RELOCS_NONE, "0"), (RELOCS_SOME, "14"), ("", "")])
 def test_the_bridge_reads_the_relocations_the_way_the_agent_does(tmp_path, said, mb):
-    """‏`view_budget` קורא ל-`_lc_relocs` דרך הגשר — הוא חייב להיטען שם (‏lcsnap.sh),
-    ו-0 הוא מספר שנמדד, לא "לא נמדד". פלט בלי השורה = ריק (‏view_budget נכשל)."""
+    """`view_budget` קורא ל-`_lc_relocs` דרך הגשר — הוא חייב להיטען שם (lcsnap.sh),
+    ו-0 הוא מספר שנמדד, לא "לא נמדד". פלט בלי השורה = ריק (view_budget נכשל)."""
     out = tmp_path / "relocs.txt"
     out.write_text(said, encoding="utf-8", newline="\n")
     got = call(tmp_path, "_lc_relocs", posix(out))

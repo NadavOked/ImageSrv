@@ -48,7 +48,7 @@ CHALLENGE = bytes(range(16))
 SERVER_INIT = b"\x00\x40\x00\x20" + b"\x00" * 16 + b"\x00\x00\x00\x00"
 
 
-#: ‏FramebufferUpdateRequest — הודעת לקוח RFB שלמה (ראו test_monitor.FB_REQUEST).
+#: FramebufferUpdateRequest — הודעת לקוח RFB שלמה (ראו test_monitor.FB_REQUEST).
 FB_REQUEST = b"\x03\x01\x00\x00\x00\x00\x04\x00\x03\x00"
 
 
@@ -119,7 +119,7 @@ def _recv_exact(sock, n: int) -> bytes:
 
 
 class FakeRfbServer(threading.Thread):
-    """מוניטור מזויף על TCP אמיתי (‏127.0.0.1, פורט אקראי): לחיצת-יד RFB 3.8
+    """מוניטור מזויף על TCP אמיתי (127.0.0.1, פורט אקראי): לחיצת-יד RFB 3.8
     עם סוג 2, ואז הד — כל מה שמגיע נרשם ומוחזר עם הקידומת ``echo:``."""
 
     def __init__(self, *, offered: bytes = b"\x02", result: int = 0, reason: bytes = b""):
@@ -186,7 +186,7 @@ def machine(secondary, monkeypatch):
 
 
 def _browser_handshake(ws) -> None:
-    """מה ש-monitor.js עושה, בייט-בייט: גרסה, None, ‏ClientInit."""
+    """מה ש-monitor.js עושה, בייט-בייט: גרסה, None, ClientInit."""
     assert ws.receive_bytes() == b"RFB 003.008\n"
     ws.send_bytes(b"RFB 003.008\n")
     assert ws.receive_bytes() == b"\x01\x01"
@@ -214,7 +214,7 @@ def test_remote_monitor_reaches_the_machine_through_the_secondary(server, second
     with admin.websocket_connect(_ws_path(paired)) as ws:
         _browser_handshake(ws)
         assert ws.receive_bytes() == SERVER_INIT
-        ws.send_bytes(FB_REQUEST)                            # ‏#1129: הודעה שלמה
+        ws.send_bytes(FB_REQUEST)                            # #1129: הודעה שלמה
         assert ws.receive_bytes() == b"echo:" + FB_REQUEST
     assert machine.closed.wait(5)
     expected = hmaclib.new(SECRET_BYTES, CHALLENGE, hashlib.sha256).digest()[:16]
@@ -232,7 +232,7 @@ def test_remote_monitor_reaches_the_machine_through_the_secondary(server, second
 
 
 def test_remote_monitor_gate_closes_before_any_tunnel(server, secondary, paired, machine):
-    """‏deploy/אנונימי נסגרים בראשי לפני שהמשני — או המכונה — נוגעים בכלל."""
+    """deploy/אנונימי נסגרים בראשי לפני שהמשני — או המכונה — נוגעים בכלל."""
     assert _close_code(server["deploy"], _ws_path(paired))[0] == monitor.WS_FORBIDDEN
     assert _close_code(server["anon"], _ws_path(paired))[0] == monitor.WS_UNAUTHENTICATED
     assert not machine.connected.is_set()
@@ -242,8 +242,8 @@ def test_remote_monitor_gate_closes_before_any_tunnel(server, secondary, paired,
 
 
 def test_remote_monitor_rejection_arrives_after_accept(server, secondary, paired, machine):
-    """‏#904 סעיף 4: גם דרך המשני — הכניסה ל-with מצליחה (101), והקוד עם
-    הסיבה העברית מגיע ב-receive, לא כ-HTTP 403 אילם. ‏`_close_code` סובלני
+    """#904 סעיף 4: גם דרך המשני — הכניסה ל-with מצליחה (101), והקוד עם
+    הסיבה העברית מגיע ב-receive, לא כ-HTTP 403 אילם. `_close_code` סובלני
     לשני המצבים, ולכן הבדיקה כאן היא שהכניסה **אינה** זורקת."""
     with server["admin"].websocket_connect(_ws_path("nope")) as ws:
         with pytest.raises(WebSocketDisconnect) as e:
@@ -255,7 +255,7 @@ def test_remote_monitor_rejection_arrives_after_accept(server, secondary, paired
 def test_remote_monitor_unknown_node_and_mac(server, secondary, paired, machine):
     assert _close_code(server["admin"], _ws_path("nope"))[0] == 4404
     assert _close_code(server["admin"], _ws_path(paired, "not-a-mac"))[0] == 4404
-    # ‏MAC תקין שהמשני אינו מכיר — הכשל הוא של המשני, ומגיע עם הקוד שלו.
+    # MAC תקין שהמשני אינו מכיר — הכשל הוא של המשני, ומגיע עם הקוד שלו.
     code, reason = _close_code(server["admin"], _ws_path(paired, "aa:bb:cc:dd:ee:99"))
     assert code == 4404 and "מוכרת" in reason
     assert not machine.connected.is_set()
@@ -280,7 +280,7 @@ def test_remote_monitor_machine_rejecting_the_secret(server, secondary, paired,
     monkeypatch.setattr(monitor, "MONITOR_PORT", fake.port)
     _register(secondary["conn"], "127.0.0.1")
     code, reason = _close_code(server["admin"], _ws_path(paired))
-    # ‏#1837: הסיבה בעברית — לא "bad secret" של המכונה.
+    # #1837: הסיבה בעברית — לא "bad secret" של המכונה.
     assert code == 4512 and reason == monitor.MACHINE_REJECTED_SECRET, reason
     fake.stop()
 
@@ -294,7 +294,7 @@ def test_remote_monitor_secondary_down(server, secondary, paired, machine):
 
 def test_remote_monitor_wrong_pin_never_reaches_the_machine(server, secondary, paired,
                                                             machine):
-    """‏SPKI מוצמד שאינו של המשני → החיבור נדחה בראשי אחרי ה-handshake ולפני
+    """SPKI מוצמד שאינו של המשני → החיבור נדחה בראשי אחרי ה-handshake ולפני
     בקשה; המשני לא פתח TCP למכונה ולא רשם מנהרה."""
     conn = server["ctx"].conn
     with db._write_lock, db.writing(conn):
@@ -326,9 +326,9 @@ def test_remote_monitor_refused_on_a_secondary_server(server, secondary, paired,
     assert not machine.connected.is_set()
 
 
-# --- #1122 (3): ‏relay_tunnel אינו בולע את סיבת הסגירה -----------------------
+# --- #1122 (3): relay_tunnel אינו בולע את סיבת הסגירה -----------------------
 #
-# ‏``relay_tunnel`` מחזיר את הסיבה, ו-``_monitor_tunnel`` רושם אותה ליומן
+# ``relay_tunnel`` מחזיר את הסיבה, ו-``_monitor_tunnel`` רושם אותה ליומן
 # (``storage_monitor_tunnel_closed``). כאן ה-TLS מזויף בגבול המערכת (אובייקט
 # עם ``pending``/``recv``/``send``), ה-sockets אמיתיים.
 
@@ -414,11 +414,11 @@ def test_remote_monitor_tunnel_close_is_journaled_with_a_reason(server, secondar
 
 @contextlib.contextmanager
 def _one_event_loop(client):
-    """‏#1480: כל בקשה של ``TestClient`` שאינו בתוך ``with`` פותחת portal משלה —
+    """#1480: כל בקשה של ``TestClient`` שאינו בתוך ``with`` פותחת portal משלה —
     לולאת אירועים ותהליכון קצר-חיים משלה — ולכן ``POST`` בזמן ש-WS פתוח רץ
-    על **לולאה אחרת** מזו שמחזיקה את מנהרת ה-TLS. ‏``writer.write`` ממנו הוא
+    על **לולאה אחרת** מזו שמחזיקה את מנהרת ה-TLS. ``writer.write`` ממנו הוא
     ``WSASend`` שנשלח מתהליכון שמסתיים מיד אחרי הבקשה, וב-Windows (proactor)
-    ההשלמה שלו לא מגיעה לעולם: ‏``proactor.close()`` של לולאת ה-WS ממתין לה
+    ההשלמה שלו לא מגיעה לעולם: ``proactor.close()`` של לולאת ה-WS ממתין לה
     בלי תקרה והטסט תקוע. בייצור יש לולאה אחת (uvicorn), וזה מה שהבלוק הזה
     משחזר — בלי ה-lifespan של ``with client`` (שעון חדר, auto-reboot).
     יציאה מהבלוק ממתינה לסיום ה-handler, כך שהיומן כבר נכתב אחריה."""
@@ -432,10 +432,10 @@ def _one_event_loop(client):
 
 def test_remote_power_verifies_the_secondarys_name_and_writes_through_the_tunnel(
         server, secondary, paired, machine):
-    """‏`POST /storage-nodes/{nid}/monitor/{mac}/power`: השם מושווה לרשימת
+    """`POST /storage-nodes/{nid}/monitor/{mac}/power`: השם מושווה לרשימת
     המכונות של **המשני** ("Remote"), לא ל-`?name=`; בלי מוניטור פתוח → 409;
     עם מוניטור פתוח והשם הנכון הפריים `imagesrv-power:reboot` מגיע למכונה
-    דרך המנהרה, והראשי רושם `monitor_power`. ‏ClientCutText ישירות ב-WS
+    דרך המנהרה, והראשי רושם `monitor_power`. ClientCutText ישירות ב-WS
     נדחה גם בנתיב הזה (אותו גשר)."""
     admin = server["admin"]
     path = f"/api/console/storage-nodes/{paired}/monitor/{MAC}/power"
@@ -443,7 +443,7 @@ def test_remote_power_verifies_the_secondarys_name_and_writes_through_the_tunnel
     assert admin.post(path, json={"action": "reboot", "confirm": "remote"}).status_code == 403
     assert server["deploy"].post(path, json={"action": "reboot", "confirm": "Remote"}).status_code == 403
     with _one_event_loop(admin):
-        assert admin.portal is not None                    # ‏#1480: לולאה אחת ל-WS ול-POST
+        assert admin.portal is not None                    # #1480: לולאה אחת ל-WS ול-POST
         with admin.websocket_connect(_ws_path(paired)) as ws:
             _browser_handshake(ws)
             assert ws.receive_bytes() == SERVER_INIT
@@ -463,7 +463,7 @@ def test_remote_power_verifies_the_secondarys_name_and_writes_through_the_tunnel
     assert [(r["event"], r["detail"]) for r in rows] == [
         ("monitor_connected", f"{MAC} node={paired}"),
         ("monitor_power", f"{MAC} reboot node={paired}"),
-        # ‏#1855: ‏refused נושא את הסיבה
+        # #1855: refused נושא את הסיבה
         ("monitor_closed",
          f"{MAC} refused — ClientCutText — {monitor.POWER_OVER_WS_REFUSED} node={paired}")]
     assert admin.post(path, json={"action": "reboot", "confirm": "Remote"}).status_code == 409
@@ -482,7 +482,7 @@ def test_remote_monitor_refuses_a_foreign_origin_before_accept(server, secondary
 def test_remote_monitor_socket_to_the_machine_carries_keepalive(server, secondary,
                                                                 paired, machine,
                                                                 monkeypatch):
-    """‏#1850 במנהרה: ה-socket של המשני אל המכונה נושא TCP keepalive — מכונה
+    """#1850 במנהרה: ה-socket של המשני אל המכונה נושא TCP keepalive — מכונה
     שנעלמה בלי FIN סוגרת את המנהרה תוך ~25 ש', לא `idle`. קריאה בחזרה מהקרנל."""
     made: list[socket.socket] = []
     real = socket.create_connection

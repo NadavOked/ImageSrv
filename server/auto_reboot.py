@@ -25,8 +25,8 @@ MARKER = "scheduled-reboot"
 CHECK_SECONDS = 60.0
 RETRY_MINUTES = 10
 GIVE_UP_MINUTES = 120
-#: ‏#1642: ``update_status`` שנשאר "רץ" בלי חותמת התקדמות חדשה כל כך הרבה זמן אינו
-#: עדכון שרץ. ‏``server-upgrade.sh`` מחתים כל מעבר שלב (fetch/verify/install/
+#: #1642: ``update_status`` שנשאר "רץ" בלי חותמת התקדמות חדשה כל כך הרבה זמן אינו
+#: עדכון שרץ. ``server-upgrade.sh`` מחתים כל מעבר שלב (fetch/verify/install/
 #: payload/restart), והמתנת ה-/health/live שלו היא 90 שניות. השעה **נבחרה, לא
 #: נמדדה**: רחוק מעל שלב בודד, וקצר מהניסיון הבא של "כל יום".
 STALE_UPDATE_MINUTES = 60
@@ -79,11 +79,11 @@ def next_occurrence(mode: str, at: str, weekday: int, now: datetime) -> datetime
 
 
 def update_verdict(rt, now: datetime | None = None) -> tuple[bool, str | None]:
-    """‏(עסוק, הערה) לגבי ``update_status``. קורא בלבד (‏#1642).
+    """(עסוק, הערה) לגבי ``update_status``. קורא בלבד (#1642).
 
     ``running`` אינו בהכרח עדכון חי: הוא נשאר ב-DB גם כשהשרת כבר רץ על התג
     שלו. עסוק רק כשיש ראיה שהעדכון אולי עדיין רץ — גרסה אחרת (או שלא נקראה)
-    ו**חותמת התקדמות טרייה**. ‏"הגרסה הרצה היא התג" נקבע ב-``update.running_verdict``,
+    ו**חותמת התקדמות טרייה**. "הגרסה הרצה היא התג" נקבע ב-``update.running_verdict``,
     אותה פונקציה שהקונסולה משתמשת בה. חותמת שאינה זמן תקין = לא ידוע = עסוק.
     ההערה (אם יש) היא מה שהתעלמנו ממנו, והיא נרשמת ביומן כשההפעלה מחדש יוצאת."""
     doc = update.get_status(rt.conn) or {}
@@ -105,9 +105,9 @@ def update_verdict(rt, now: datetime | None = None) -> tuple[bool, str | None]:
 def busy_reason(rt, now: datetime | None = None, *, include_update: bool = True) -> str | None:
     """מה מונע restart של השרת עכשיו, או None. ההגדרה **היחידה** של "עסוק" —
     האתחול המתוזמן, "החל עדכון", שינויי הגדרות שמחייבים אתחול
-    (‏`update.restart_blocker`) ו-`server-upgrade.sh` קוראים כולם כאן (#1891).
+    (`update.restart_blocker`) ו-`server-upgrade.sh` קוראים כולם כאן (#1891).
 
-    ‏``include_update=False``: למי שהוא עצמו העדכון — "החל עדכון" בודק עדכון
+    ``include_update=False``: למי שהוא עצמו העדכון — "החל עדכון" בודק עדכון
     רץ בנפרד (עם התג בהודעה), והסקריפט רץ **בתוך** מצב "רץ" של עצמו."""
     conn = rt.conn
     in_db = busy_db.reason(conn)
@@ -123,9 +123,9 @@ def busy_reason(rt, now: datetime | None = None, *, include_update: bool = True)
         state = vm.status(None).get("state")
         if state not in ("idle", "saved", "error"):
             return f"עדכון VM במצב {state}"
-    # ‏#1891 (סקירה): האות הזה מגיע מהמחשב עצמו. רק מחשב **רשום** נספר — ה-hello
-    # שכתב אותו עבר את שער הזהות (‏identity_gate) לפני net_seen; ‏MAC לא רשום
-    # אינו חוסם כלום. ורק דיווח טרי (`local_copy_now`, ‏AWAKE_SECONDS): מחשב
+    # #1891 (סקירה): האות הזה מגיע מהמחשב עצמו. רק מחשב **רשום** נספר — ה-hello
+    # שכתב אותו עבר את שער הזהות (identity_gate) לפני net_seen; MAC לא רשום
+    # אינו חוסם כלום. ורק דיווח טרי (`local_copy_now`, AWAKE_SECONDS): מחשב
     # ששתק אינו "כותב". הרשימה בהודעה — כדי שהמנהל יידע את מי לבדוק.
     rows = conn.execute(
         "SELECT n.mac, n.local_clone, n.last_seen FROM net_devices n"
@@ -144,7 +144,7 @@ def default_reboot() -> None:
 def consume_marker(conn, data_dir: str | Path) -> datetime | None:
     """זמן ההפעלה מחדש המתוזמנת שהעלייה הזו היא תוצאתה, או None כשאין סימן.
 
-    ‏#2407: המתזמן מקבל את הזמן (``ServerRuntime.auto_reboot_last``) כדי לא לבצע
+    #2407: המתזמן מקבל את הזמן (``ServerRuntime.auto_reboot_last``) כדי לא לבצע
     את אותו מופע שוב — שרת שעולה תוך פחות מדקה הופעל מחדש כשש פעמים ב-TA.
     סימן שלא נקרא (פגום, ריק, עם אזור זמן) **אינו** "אין סימן" (עיקרון 5): הוא
     נחשב כמופע שבוצע עכשיו, כדי שספק לא יפעיל מחדש באותה דקה — ונרשם ביומן."""

@@ -1,11 +1,11 @@
-"""‏installer/gui-bridge.sh — הדלת היחידה של גואי המתקין אל המנוע (#1190 חלק 2).
+"""installer/gui-bridge.sh — הדלת היחידה של גואי המתקין אל המנוע (#1190 חלק 2).
 
 הגואי שולח JSON על stdin ופעולה ב-argv, ומקבל key=value. כאן המנוע הוא
 shim שרושם מה קיבל ומחזיר מה שהטסט מכתיב — כמו בטסטי הסוכן. הבדיקות:
-המלאי ממזג דיסקים וכרטיסים (עם ניסוחי #1183); ‏apply כותב answers ב-0600
-ומתחיל את המנוע עם --state; ‏validate מחזיר שגיאה לשדה הנכון מקוד הכשל של
-המנוע; כללי הסיסמה; ‏eject שנכשל מדווח ולא נבלע; ‏reboot רק אחרי eject.
-דורש sh + jq (‏Linux/Testrunner; בווינדוס אין jq — דילוג מפורש)."""
+המלאי ממזג דיסקים וכרטיסים (עם ניסוחי #1183); apply כותב answers ב-0600
+ומתחיל את המנוע עם --state; validate מחזיר שגיאה לשדה הנכון מקוד הכשל של
+המנוע; כללי הסיסמה; eject שנכשל מדווח ולא נבלע; reboot רק אחרי eject.
+דורש sh + jq (Linux/Testrunner; בווינדוס אין jq — דילוג מפורש)."""
 from __future__ import annotations
 
 import json
@@ -281,7 +281,7 @@ def test_green_shows_name_version_fingerprint_and_records_the_check(tmp_path):
 
 
 def test_a_display_name_in_hebrew_is_still_green(tmp_path):
-    """‏`name` הוא השם שבראש העץ בקונסולה — טקסט חופשי, יכול להיות עברית."""
+    """`name` הוא השם שבראש העץ בקונסולה — טקסט חופשי, יכול להיות עברית."""
     m = _machine(tmp_path)
     pem, spki = _primary_cert(tmp_path)
     out, _ = _answer(m, tmp_path, {"name": "שרת תל אביב", "version": None, "fingerprint": spki}, pem=pem)
@@ -396,7 +396,7 @@ def test_standalone_answers_have_no_primary(tmp_path):
 
 
 def test_engine_refusal_lands_on_the_address_field(tmp_path):
-    """‏[primary-unverified] מהמנוע → errors.primary_url, כמו כל קוד אחר."""
+    """[primary-unverified] מהמנוע → errors.primary_url, כמו כל קוד אחר."""
     m = _machine(tmp_path)
     engine = m["engine"]
     engine.write_text(engine.read_text().replace(
@@ -409,7 +409,7 @@ def test_engine_refusal_lands_on_the_address_field(tmp_path):
 
 
 def test_check_primary_green_end_to_end_against_the_real_listener(tmp_path):
-    """הראשי האמיתי (‏`server.interserver.primary_alive` + זהות + uvicorn TLS) על
+    """הראשי האמיתי (`server.interserver.primary_alive` + זהות + uvicorn TLS) על
     כתובת loopback משלו בפורט 8443, ו-curl/openssl/jq **אמיתיים**: ירוק,
     והטביעה היא זהות הראשי."""
     import socket

@@ -1,7 +1,7 @@
-"""‏#1884 — דיסק הספרייה בשרת ולחץ ה-I/O בזמן גל וקליטה, שהלמידה לא תאשים את הרשת.
+"""#1884 — דיסק הספרייה בשרת ולחץ ה-I/O בזמן גל וקליטה, שהלמידה לא תאשים את הרשת.
 
-הראיה (20/10): ‏psi full 48% על ה-NVMe המשותף, השידור ב-15–50MB/s, המשכפל 95% idle. גל כזה מסומן
-‏`server_disk`: ‏#1842 לא לומד ממנו קצב, ו-#1846 לא מתריע "אבדן קפץ". ‏PSI שלא נקרא — "לא נבדק", לא "תקין".
+הראיה (20/10): psi full 48% על ה-NVMe המשותף, השידור ב-15–50MB/s, המשכפל 95% idle. גל כזה מסומן
+`server_disk`: #1842 לא לומד ממנו קצב, ו-#1846 לא מתריע "אבדן קפץ". PSI שלא נקרא — "לא נבדק", לא "תקין".
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ def _snap(at, dev="nvme0n1p2", r=0, w=0, io=0, some=0, full=0):
 
 
 def test_the_measurement_is_rates_and_shares_of_the_stream_time():
-    """‏400ש' זרם: ‏20GB נקראו (50MB/s), השרת כולו חיכה 192ש' (48%) — "server_disk"."""
+    """400ש' זרם: 20GB נקראו (50MB/s), השרת כולו חיכה 192ש' (48%) — "server_disk"."""
     got = server_io.measure(_snap(1000), _snap(1500, r=20 * 10 ** 9 // 512, w=10 ** 9 // 512,
                                                 io=250_000, some=300 * 10 ** 6, full=192 * 10 ** 6),
                             seconds=400)
@@ -130,7 +130,7 @@ def test_netloss_does_not_blame_the_network_for_a_server_bound_wave(conn, tmp_pa
     _bound(conn, tmp_path, slow, 192 * 10 ** 6)
     assert learn_netloss.evaluate(conn, slow)["state"] == "server_disk"
     assert conn.execute("SELECT 1 FROM journal WHERE event = 'net_loss_jump'").fetchone() is None
-    # ‏ולא נכנס לבסיס של הגל הבא
+    # ולא נכנס לבסיס של הגל הבא
     nxt = _wave(conn, 0.005)
     _bound(conn, tmp_path, nxt, 10 ** 6)
     got = learn_netloss.assess(conn, nxt)
@@ -140,7 +140,7 @@ def test_netloss_does_not_blame_the_network_for_a_server_bound_wave(conn, tmp_pa
 
 
 def test_the_rate_learning_skips_a_server_bound_wave(conn, tmp_path, device):
-    """‏#1842: הגל הקודם של המכונה שממנו הקצב נגזר אינו הגל שהשרת האט."""
+    """#1842: הגל הקודם של המכונה שממנו הקצב נגזר אינו הגל שהשרת האט."""
     calm = _wave(conn, 0.0)
     _bound(conn, tmp_path, calm, 10 ** 6)
     slow = _wave(conn, 0.0, rate="300m")

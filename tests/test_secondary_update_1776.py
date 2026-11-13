@@ -1,10 +1,10 @@
-"""‏#1776: עדכון שרת המשנה מהקונסולה של הראשי (נדב 19/10: "אני מתל אביב רוצה לעדכן את חיפה").
+"""#1776: עדכון שרת המשנה מהקונסולה של הראשי (נדב 19/10: "אני מתל אביב רוצה לעדכן את חיפה").
 
 אותם שני שרתים אמיתיים של ``test_secondary_console_writes`` — ראשי ומשני על loopback, ערוץ
 mTLS מאומת. ה-hooks של העדכון מזויפים בשני הצדדים (git/systemd-run אינם נוגעים במכונה);
 כל שרת כותב את הסטטוס ל-DB **שלו**, ולכן "איפה זה רץ" נקרא משם.
 
-מוכח: (א) ‏``POST /update/check`` ו-``POST /update/apply`` עוברים בערוץ ורצים **במשני**, בשם
+מוכח: (א) ``POST /update/check`` ו-``POST /update/apply`` עוברים בערוץ ורצים **במשני**, בשם
 ``primary:<user>``, ולא בראשי; (ב) רשומת יומן בשני השרתים; (ג) סירוב החתימה של המשני
 (``reason: signature``) מגיע לראשי ב-``GET /update/status``; (ד) סירובים של המשני עצמו
 (כבוי, תג לא תקין) עוברים עם ה-detail; (ה) deploy → 403 והמשני לא נשאל; (ו) "חזור לגרסה"
@@ -164,9 +164,9 @@ def test_the_relay_waits_for_the_slow_update_calls(server, secondary, paired, mo
     assert seen == [expected]
 
 
-# --- ‏#1776, סעיף 2 במיון 06/11: משני ישן מדי — ההודעה אומרת מה לעשות ----------
+# --- #1776, סעיף 2 במיון 06/11: משני ישן מדי — ההודעה אומרת מה לעשות ----------
 #
-# ‏20/10 על ברזל: ת"א (עם #1776) מול חיפה v0.75.0 קיבל "502 חיפה: הערוץ סירב (404):
+# 20/10 על ברזל: ת"א (עם #1776) מול חיפה v0.75.0 קיבל "502 חיפה: הערוץ סירב (404):
 # הפעולה אינה מורשית בערוץ הבין-שרתי". רשימת ההיתרים יושבת **במשני**, וגרסה ישנה
 # אינה מכירה את /update/check. הראשי כבר בדק את הרשימה **שלו** לפני השליחה, ולכן
 # 404 מהערוץ אומר שהמשני ישן ממנו. "משני ישן" מדומה כאן בסירוב של ``console_write``
@@ -213,7 +213,7 @@ def test_an_older_secondary_on_another_write_names_the_operation(
 
 def test_a_channel_refusal_that_is_not_404_is_not_called_an_old_version(
         server, secondary, paired, monkeypatch):
-    """רק 404 מהערוץ הוא "לא מכיר את הפעולה". ‏401 (טוקן) נשאר "הערוץ סירב"."""
+    """רק 404 מהערוץ הוא "לא מכיר את הפעולה". 401 (טוקן) נשאר "הערוץ סירב"."""
     _enable(secondary["conn"])
     _old_secondary(monkeypatch, status=401, detail="טוקן שגוי")
     resp = server["admin"].post(_url(paired, "/update/check"), json={})
@@ -223,7 +223,7 @@ def test_a_channel_refusal_that_is_not_404_is_not_called_an_old_version(
 
 
 def test_the_secondary_itself_says_its_allowlist_may_be_older_than_the_primary(monkeypatch):
-    """הצד של המשני: מי שקורא את הסירוב במשני (יומן, ‏curl) רואה את הסיבה הסבירה
+    """הצד של המשני: מי שקורא את הסירוב במשני (יומן, curl) רואה את הסיבה הסבירה
     ואת התיקון — לא רק "אינה מורשית"."""
     status, _headers, body = interserver_api.run_console_write(
         None, "POST", "/update/revert", "", "primary:noc", b"")

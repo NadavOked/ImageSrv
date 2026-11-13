@@ -1,18 +1,18 @@
-"""שני דיווחים שנבלעו באותו קובץ — ‏issues #109 ו-#127.
+"""שני דיווחים שנבלעו באותו קובץ — issues #109 ו-#127.
 
 שניהם אותה צורה בדיוק, בשתי שכבות שונות: משהו נשלח לשרת, ומה שחזר ממנו
 נמחק לפני שמישהו הסתכל בו.
 
-**‏#109 — הדופק של מכונה שנעצרה.** ‏`ui_error_hold` הפעילה את הדופק
-כ-`"$2" > /dev/null 2>&1 || true`: ‏stdout, ‏stderr וקוד היציאה, שלושתם
+**#109 — הדופק של מכונה שנעצרה.** `ui_error_hold` הפעילה את הדופק
+כ-`"$2" > /dev/null 2>&1 || true`: stdout, stderr וקוד היציאה, שלושתם
 בשורה אחת. הדופק אינו דיווח שייחזור בעוד שתי שניות (שם ה-`|| true` של
-‏`progress_loop` נכון ונשאר) — הוא **הראיה היחידה** שהמכונה חיה:
-‏`last_seen` נכתב ב-hello ובו בלבד, ואחרי `AWAKE_SECONDS` הקונסולה
+`progress_loop` נכון ונשאר) — הוא **הראיה היחידה** שהמכונה חיה:
+`last_seen` נכתב ב-hello ובו בלבד, ואחרי `AWAKE_SECONDS` הקונסולה
 מציירת את המכונה כ**כבויה**. זו התשובה הגרועה ביותר שאפשר לתת לטכנאי —
 היא שולחת אותו לחפש כבל חשמל בזמן שהמכונה דלוקה עם הודעת השגיאה שהוא
 בא לקרוא. זו חזרה של #64, דרך התיקון של #64 עצמו.
 
-**‏#127 — דיווח הסיום של קליטה.** ‏`echo done > state; sleep 4; kill`,
+**#127 — דיווח הסיום של קליטה.** `echo done > state; sleep 4; kill`,
 פעמיים: אותו הימור ש-#101 הוציא מסבב הכיתה וממסלול המגירות. כאן הוא
 החמור מכולם — הצעד הבא הוא `poweroff -f` והדיסק נשלף — ומשימה שנשארה
 פתוחה בשרת מול מחשב כבוי היא מצב שהמפעיל אינו יכול לפענח.
@@ -33,7 +33,7 @@ import subprocess
 from pathlib import Path
 
 from test_agent import AGENT, BASH, posix
-from test_final_report import (  # noqa: F401 — ‏`reports` הוא fixture
+from test_final_report import (  # noqa: F401 — `reports` הוא fixture
     REPO,
     RUN_TIMEOUT_S,
     MAC,
@@ -47,10 +47,10 @@ from test_final_report import (  # noqa: F401 — ‏`reports` הוא fixture
 )
 
 TASK = "tsk_5c20a1"
-#: האסימון שה-hello מוסר למכונה (#530) — ‏48 תווים כמו `tasks.new_token`.
+#: האסימון שה-hello מוסר למכונה (#530) — 48 תווים כמו `tasks.new_token`.
 TOKEN = "5c" * 24
 
-#: תשובת השרת למחשב בנייה עם משימת קליטה (ממשק 3). ‏`do_task` קורא
+#: תשובת השרת למחשב בנייה עם משימת קליטה (ממשק 3). `do_task` קורא
 #: מכאן `.task.*` ולא `.session.*` — ולכן גם הדיווח שלו נושא `task_id`.
 TASK_ANSWER = {
     "schema": 1, "known": True, "role": "build",
@@ -81,7 +81,7 @@ def run_capture(tmp_path: Path, server: str, *, tries: int = 2,
     )
 
 
-# --- ‏#127: שני מסלולי הקליטה קוראים את התשובה --------------------------------
+# --- #127: שני מסלולי הקליטה קוראים את התשובה --------------------------------
 
 
 @native_tools
@@ -111,7 +111,7 @@ def test_a_capture_does_not_power_off_when_the_final_report_was_refused(
 
 @native_tools
 def test_a_capture_powers_off_once_the_server_took_the_report(tmp_path, reports):
-    """אישור הוא אישור: ‏200 → המכונה אומרת שהאימג' בספרייה ונכבית."""
+    """אישור הוא אישור: 200 → המכונה אומרת שהאימג' בספרייה ונכבית."""
     result = run_capture(tmp_path, url_of(reports))
 
     assert "TEST-HOLD" not in result["out"]
@@ -144,8 +144,8 @@ def test_a_failed_capture_reports_its_failure_and_reads_the_answer(
         tmp_path, reports):
     """המסלול השני, שהיה שבור באותה צורה בדיוק.
 
-    ‏"נכשל" חייב להגיע לשרת לא פחות מ"הסתיים": בלעדיו המשימה נשארת
-    ‏`running`, והמפעיל מחפש קליטה שכבר מתה. הקוד שלפני התיקון הרג
+    "נכשל" חייב להגיע לשרת לא פחות מ"הסתיים": בלעדיו המשימה נשארת
+    `running`, והמפעיל מחפש קליטה שכבר מתה. הקוד שלפני התיקון הרג
     כאן את הדווח אחרי `sleep 4` — כלומר גם הימר וגם השתיק.
     """
     result = run_capture(tmp_path, url_of(reports), capture_rc=1)
@@ -184,19 +184,19 @@ def code_only(text: str) -> str:
 
 @native_tools
 def test_the_capture_path_no_longer_bets_on_the_clock():
-    """‏`sleep 4` היה ההימור, ושני המסלולים עוברים עכשיו דרך
-    ‏`report_final` — מנגנון אחד לארבעת דיווחי הסיום, לא ארבעה."""
+    """`sleep 4` היה ההימור, ושני המסלולים עוברים עכשיו דרך
+    `report_final` — מנגנון אחד לארבעת דיווחי הסיום, לא ארבעה."""
     raw = cut_function("do_task")
     assert raw is not None
     body = code_only(raw)
     assert "sleep 4" not in body, "מסלול הקליטה עדיין מהמר על שעון"
     assert body.count("report_final") == 2, "אחד משני המסלולים אינו קורא תשובה"
-    # ⚠️ ‏`finish_and_stop` ולא `poweroff -f`. המחרוזת עברה
+    # ⚠️ `finish_and_stop` ולא `poweroff -f`. המחרוזת עברה
     # ל-`common.sh` כשנוסף מתג `after-task`, והשומר הזה נשאר טוען
     # עליה — כלומר **נכשל על קוד תקין**. הוא `@native_tools`, ולכן
     # מדולג בווינדוס ולא רץ מעולם; נתפס בהרצה על מכונת הלינוקס
     # (#573/#588), בדיוק כמו התאום שלו ב-`test_final_report.py` (#587).
-    # ‏#1560: סוף הקליטה עבר ל-build_end_ask (task.sh) — השאלה ואחריה finish_and_stop.
+    # #1560: סוף הקליטה עבר ל-build_end_ask (task.sh) — השאלה ואחריה finish_and_stop.
     assert body.index("report_final") < body.index("build_end_ask")
     ask = cut_function("build_end_ask")
     assert ask is not None and "finish_and_stop" in code_only(ask)
@@ -205,15 +205,15 @@ def test_the_capture_path_no_longer_bets_on_the_clock():
 @native_tools
 def test_a_held_capture_keeps_a_heartbeat():
     """עצירה אינה שתיקה (#64). המסלול הזה החזיק עצירה **בלי** דופק —
-    ‏`ui_error_hold "capture did not complete"` בלי ארגומנט שני — וגם
+    `ui_error_hold "capture did not complete"` בלי ארגומנט שני — וגם
     הרג את הדווח, כך שהמכונה נעלמה מהקונסולה פעמיים."""
     body = cut_function("do_task")
     assert 'ui_error_hold "capture did not complete" hold_beat' in body
 
 
-# --- ‏#109: כישלון הדופק מגיע למקום שמישהו רואה -------------------------------
+# --- #109: כישלון הדופק מגיע למקום שמישהו רואה -------------------------------
 #
-# ‏`ui_error_hold` אינה חוזרת, ולכן היא נבדקת מול דופק שסופר את עצמו
+# `ui_error_hold` אינה חוזרת, ולכן היא נבדקת מול דופק שסופר את עצמו
 # ויוצא מהמעטפת בקריאה ה-N. זו יציאה ולא `kill`: בלי job control הריגת
 # תת-מעטפת משאירה בנים חיים, ומדידת "כמה פעימות היו" בשעון היא בדיוק
 # ההימור שהאיסיו הזה עוסק בו.
@@ -241,7 +241,7 @@ FLAPPING_BEAT = BEAT_COUNTER + (
 def hold_probe(tmp_path: Path, beat: str, *, beats: int = 5) -> dict:
     """מריץ עצירה אמיתית — בלי `IMAGESRV_TEST=1`, שקוצר אותה לפני הלולאה.
 
-    ‏`HOLD_BEAT_S=0` כדי שהלולאה לא תמתין: מה שנמדד הוא מספר הפעימות
+    `HOLD_BEAT_S=0` כדי שהלולאה לא תמתין: מה שנמדד הוא מספר הפעימות
     שקרו, לא כמה זמן הן לקחו.
     """
     run = tmp_path / "run"
@@ -299,7 +299,7 @@ def test_a_heartbeat_that_fails_reaches_the_screen(tmp_path):
 
 @native_tools
 def test_the_reason_curl_gave_is_not_thrown_away(tmp_path):
-    """‏`2>&1 > /dev/null` מחק בדיוק את המשפט שאומר מה קרה. "לא הצליח
+    """`2>&1 > /dev/null` מחק בדיוק את המשפט שאומר מה קרה. "לא הצליח
     להתחבר" ו"לא הצליח לפענח שם" שולחים טכנאי לשני מקומות שונים."""
     result = hold_probe(tmp_path, DEAD_BEAT)
 
@@ -351,7 +351,7 @@ def test_a_failed_heartbeat_never_becomes_an_action():
     start = hold.index("hold_watch() {")
     watch = code_only(hold[start:hold.index("\n}\n", start)])   # #2068: hold_action (a person's button) is its own function
     for verb in ("reboot", "poweroff", "die_local", "run_restore"):
-        assert verb not in watch, f"‏hold_watch עושה {verb} על כישלון דופק"
+        assert verb not in watch, f"\u200fhold_watch עושה {verb} על כישלון דופק"
     # #2068: the only reboot / power-off in the hold is a press on the failure screen (fail.action)
     action = code_only(hold[hold.index("hold_action() {"):])
     assert 'fail.action' in action.split("case")[0], "hold_action פועל בלי לחיצה"
@@ -359,7 +359,7 @@ def test_a_failed_heartbeat_never_becomes_an_action():
 
 @native_tools
 def test_the_hold_no_longer_swallows_the_beat():
-    """הבליעה המשולשת עצמה — ‏stdout, ‏stderr ו-`|| true` בשורה אחת."""
+    """הבליעה המשולשת עצמה — stdout, stderr ו-`|| true` בשורה אחת."""
     ui = (AGENT / "lib" / "gui" / "ui.sh").read_text(encoding="utf-8")
     hold = ui[ui.index("ui_error_hold() {"):]
     hold = code_only(hold[:hold.index("\n}\n")])
@@ -406,20 +406,20 @@ def error_hold_call_sites() -> list[tuple[str, int, str, int]]:
 
 
 def test_every_error_hold_in_the_agent_carries_a_heartbeat():
-    """‏#133, ובאותה נשימה כל מקרה עתידי מאותה מחלקה.
+    """#133, ובאותה נשימה כל מקרה עתידי מאותה מחלקה.
 
-    ‏`ui_error_hold` בלי ארגומנט שני היא עצירה **בלי דופק**: ‏`last_seen`
+    `ui_error_hold` בלי ארגומנט שני היא עצירה **בלי דופק**: `last_seen`
     נכתב ב-hello ובו בלבד, ואחרי `AWAKE_SECONDS` הקונסולה מציירת את
     המכונה ככבויה — בזמן שהיא עומדת דלוקה עם הודעת השגיאה שהטכנאי בא
     לקרוא. זה #64, שנסגר, וחזר.
 
     במסלול המשיכה ההערה בקוד טענה שהדווח "מושאר רץ בכוונה" — **וזה נכון
-    רק כש-`pull_open` הצליחה.** כשהיא נכשלה `_ppid` ריק, ‏`progress_loop`
+    רק כש-`pull_open` הצליחה.** כשהיא נכשלה `_ppid` ריק, `progress_loop`
     מעולם לא הופעל, ואין מה להשאיר. מכונה שנכשלה גם בפתיחה וגם בשחזור
     הייתה שקופה לשרת לחלוטין — עם דיסק במצב לא ידוע.
 
     הבדיקה היא על **כל** אתרי הקריאה ולא על אחד, כי זו הפעם השלישית
-    שהמחלקה הזאת חוזרת: ‏#64 (בלי דופק), ‏#109 (דופק שנבלע), וזה.
+    שהמחלקה הזאת חוזרת: #64 (בלי דופק), #109 (דופק שנבלע), וזה.
     """
     sites = error_hold_call_sites()
     assert sites, "לא נמצאה אף קריאה — הבדיקה מודדת את עצמה ולא את הסוכן"
@@ -430,14 +430,14 @@ def test_every_error_hold_in_the_agent_carries_a_heartbeat():
     )
 
 
-# --- ‏#855: הדיווח על משימה נושא את אסימון המשימה --------------------------
+# --- #855: הדיווח על משימה נושא את אסימון המשימה --------------------------
 
 
 @native_tools
 def test_the_capture_report_carries_the_task_token(tmp_path, reports):
     """השרת דורש מ-#855 את `X-Imagesrv-Task-Token` גם על `/progress` של
     משימה — אותה כותרת שההעלאה כבר שולחת (`capture.sh`). בלי זה השרת
-    עונה 403, ‏`report_final` רואה כישלון, ומחשב הבנייה נעצר על
+    עונה 403, `report_final` רואה כישלון, ומחשב הבנייה נעצר על
     "השרת לא אישר" אחרי קליטה שהצליחה. הבקרה השלילית: על `progress.sh`
     שלפני התיקון הכותרת חסרה והטסט נופל כאן."""
     run_capture(tmp_path, url_of(reports))

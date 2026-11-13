@@ -55,19 +55,19 @@ EVENTS_HE = {
     "session_start_auto": "השידור התחיל — ההמתנה הסתיימה",
     "session_start_manual": "השידור התחיל ידנית",
     "session_close": "סבב נסגר",
-    # ‏#1861: ‏`event=` של `Sessions.close` — סבב גמור שנסגר כשנפתח הבא (#35).
+    # #1861: `event=` של `Sessions.close` — סבב גמור שנסגר כשנפתח הבא (#35).
     "session_autoclose": "סבב שהסתיים נסגר — נפתח סבב חדש",
-    # ‏#411: פיוס בעליית השרת — סבב שהיה `running` בלי משדר.
+    # #411: פיוס בעליית השרת — סבב שהיה `running` בלי משדר.
     "session_orphaned": "השרת עלה מחדש — המשדר אבד, הסבב נסגר ככישלון",
     "session_image_bound": "פתיחת סבב נדחתה — האימג' קשור למכונה אחרת",
     "pull_open": "משיכת יוניקאסט התחילה",
     "pull_done": "משיכת יוניקאסט הסתיימה",
-    # ‏#1573: כישלון שהמכונה דיווחה, או שתיקה מעבר לתקרה — הסיבה בפירוט.
+    # #1573: כישלון שהמכונה דיווחה, או שתיקה מעבר לתקרה — הסיבה בפירוט.
     "pull_failed": "משיכת יוניקאסט נכשלה",
     "pull_refused": "משיכת יוניקאסט נדחתה",
     "client_done": "מחשב סיים לכתוב",
     "client_failed": "כתיבה נכשלה במחשב",
-    # ‏#1801/#1861: ‏`f"client_{state}"` (reports.py) — ‏partial = חלק מהמגירות נכתבו וחלק לא.
+    # #1801/#1861: `f"client_{state}"` (reports.py) — partial = חלק מהמגירות נכתבו וחלק לא.
     "client_partial": "מחשב סיים חלקית — חלק מהדיסקים לא נכתבו",
     "wol_sent": "המחשבים הוערו (WoL)",
     "wol_failed": "הערת WoL נכשלה",
@@ -77,15 +77,15 @@ EVENTS_HE = {
     "wol_no_wake": "המחשב לא מתעורר מ-WoL — BIOS/כבל",
     "model_speed_dropped": "מדידת בדיקת הכתיבה של דיסק לא נשמרה — אין דגם או מספר סידורי ב-hello של המחשב (#2532)",
     "boot_step_slow": "שלב באתחול התארך פי 2 מהבסיס של המחשב",
-    # ‏#1882: הזנב של לוג הסוכן נשמר בשרת (מסונן), עם הכשלים המוכרים שזוהו בו.
+    # #1882: הזנב של לוג הסוכן נשמר בשרת (מסונן), עם הכשלים המוכרים שזוהו בו.
     "agent_log": "הלוג של המכונה מסוף הסבב נשמר בשרת",
-    # ‏#1888: ה-IP של מכונה השתנה — חכירה חדשה, DHCP זר, או מכונה שעברה רשת.
+    # #1888: ה-IP של מכונה השתנה — חכירה חדשה, DHCP זר, או מכונה שעברה רשת.
     "ip_changed": "כתובת ה-IP של המכונה השתנתה",
-    # ‏#1885: ה-throttle של מעבד המשכפל עלה בגל — הגל לא נכנס ללמידת הקצב.
+    # #1885: ה-throttle של מעבד המשכפל עלה בגל — הגל לא נכנס ללמידת הקצב.
     "cloner_throttled": "המשכפל התחמם/הואט בגל — בדקו אוורור; הגל לא נכנס ללמידת הקצב",
-    # ‏#1884: השרת חיכה לדיסק של הספרייה חלק ניכר מזמן הזרם — הגל לא נכנס ללמידה.
+    # #1884: השרת חיכה לדיסק של הספרייה חלק ניכר מזמן הזרם — הגל לא נכנס ללמידה.
     "server_disk_slow": "דיסק הספרייה בשרת היה צוואר הבקבוק — הגל לא נכנס ללמידת הקצב",
-    # ‏#1886: לפני שהקליטה נוצרה — אין מקום לגרסה הקודמת של האימג' (סירוב), או שאין למה להשוות.
+    # #1886: לפני שהקליטה נוצרה — אין מקום לגרסה הקודמת של האימג' (סירוב), או שאין למה להשוות.
     "capture_space_refused": "קליטה סורבה לפני שהתחילה — אין מקום בשרת לגרסה הקודמת של האימג'",
     "capture_space_unchecked": "קליטה התחילה בלי השוואה לגרסה קודמת — המקום ייבדק כשהסוכן ימדוד",
     "room_open": "סבב חדר שיכפולים נפתח",
@@ -94,29 +94,29 @@ EVENTS_HE = {
     "room_wave": "גל חדש בחדר השיכפולים",
     "room_wave_lost": "הגל של סבב החדר נסגר לפני הזמן — ממתין לגל הבא",
     "room_drawer_changed": "המגירה הוחלפה אחרי סיום הכתיבה",
-    # ‏#1386: "בטל דיסק זה" — הבקשה, ואחריה הראיה מהסוכן (המגירה דיווחה cancelled).
+    # #1386: "בטל דיסק זה" — הבקשה, ואחריה הראיה מהסוכן (המגירה דיווחה cancelled).
     "room_drawer_cancel_requested": "התבקש ביטול הכתיבה לדיסק אחד בגל",
     "room_drawer_cancelled": "הכתיבה לדיסק בוטלה — טבלת המחיצות נמחקה, שאר הדיסקים ממשיכים",
     "room_drawer_cancel_refused": "ביטול הכתיבה לדיסק לא בוצע — הדיסק כבר לא כותב (הסיבה בשורה)",   # #2916
-    # ‏#105: כונן בלי serial שסיים — לא הוחלף, פשוט אין זהות לספור.
+    # #105: כונן בלי serial שסיים — לא הוחלף, פשוט אין זהות לספור.
     "room_drawer_unidentified": "לא ניתן לזהות את הכונן (אין serial) — הכתיבה לא נספרה",
     "room_drawer_serial_conflict": "אותו serial במכונה אחרת — הכתיבה לא נספרה, כדי לא לסמן 'נכתב' מגירה שלא נכתבה",   # #2421
     "room_drawer_wake_mismatch": "המשכפל עלה ובחריץ שנבחר אין את הדיסק שנבחר — המגירה דולגה ולא נכתבה",   # #1954
     "room_drawer_no_disk": "בחריץ שנבחר לסבב אין דיסק — המגירה נכשלה ולא נכתבה, שאר המגירות נכתבו",   # #2201
     "room_done": "סבב חדר השיכפולים הושלם",
     "room_failed": "סבב חדר השיכפולים נכשל — אף מגירה לא נכתבה בגל",   # 17/10
-    # ‏#1721: ה-WoL של הגל נבלע (המשכפל עוד היה בספירת הכיבוי) — נשלח שוב, עם תקרה.
+    # #1721: ה-WoL של הגל נבלע (המשכפל עוד היה בספירת הכיבוי) — נשלח שוב, עם תקרה.
     "room_rewake": "מחשב שיכפול לא חזר לגל הפתוח — נשלח WoL חוזר",
     "room_wake_failed": "סבב חדר השיכפולים נכשל — מחשב שיכפול לא התעורר לגל",
     "room_close": "סבב חדר השיכפולים נסגר",
-    # ‏#980: כיבוי החדר עובר דרך הסוכן (hello) — בקשה, מסירה, או פקיעה.
-    # ‏#977 §4: אותו ערוץ לאתחול מחשב אחד; הפעולה עצמה בטקסט (כיבוי/אתחול).
+    # #980: כיבוי החדר עובר דרך הסוכן (hello) — בקשה, מסירה, או פקיעה.
+    # #977 §4: אותו ערוץ לאתחול מחשב אחד; הפעולה עצמה בטקסט (כיבוי/אתחול).
     "room_poweroff": "התבקש כיבוי כל מחשבי השיכפול",
     "machine_reboot": "התבקש אתחול מרחוק",
-    # ‏#65: "כבה אותו" — מחשב שיכפול אחד שחסר בגל הפתוח, כדי להחליף בו מגירות.
+    # #65: "כבה אותו" — מחשב שיכפול אחד שחסר בגל הפתוח, כדי להחליף בו מגירות.
     "room_missing_poweroff": "התבקש כיבוי מחשב שיכפול שחסר בגל",
     "held_poweroff": "התבקש כיבוי משכפל שמחכה ללחיצה (דיסק עם בעיה)",   # #2031
-    # ‏#432: הגל יצא לדרך עם אזהרת precheck על מגירה. ‏#2704: בלי סיבה בתווית הכללית (רשימת הסינון,
+    # #432: הגל יצא לדרך עם אזהרת precheck על מגירה. #2704: בלי סיבה בתווית הכללית (רשימת הסינון,
     # ושורה שאי-אפשר לקרוא) -- מאז #1844/#1845/#447 האזהרה היא גם למידה וכתיבה איטית, לא רק קישור/CRC.
     # הסוג לפי הפירוט: `precheck_he`.
     "room_precheck_warned": "הגל יצא לדרך למרות אזהרה על מגירה",
@@ -126,13 +126,13 @@ EVENTS_HE = {
     # ברזל 17/10: מחשב שיכפול בגל עומד על שאלת SMART — השולח לא מתחיל עד התשובה.
     "send_held_smart": "השידור ממתין לתשובה על דיסק (SMART) — הזמן לא נספר",
     "send_hold_released": "אין עוד שאלה פתוחה על דיסק — השידור ממשיך",
-    # ‏#2202: וכל שאלה אחרת למפעיל (חלוקת המקום, RAID) — אותה עצירה, בשם משלה.
+    # #2202: וכל שאלה אחרת למפעיל (חלוקת המקום, RAID) — אותה עצירה, בשם משלה.
     "send_held_prompt": "השידור ממתין לתשובת מפעיל — הזמן לא נספר",
     "send_prompt_released": "אין עוד שאלה פתוחה למפעיל — השידור ממשיך",
     "prompt_hold_expired": "שאלה למפעיל לא נענתה בזמן — המכונה שוחררה מהגל, השאר ממשיכים",
-    # ‏#1950: חבר שסומן "אבד" קיבל את המחיצה הקודמת עד סופה — השולח ממתין גם לו.
+    # #1950: חבר שסומן "אבד" קיבל את המחיצה הקודמת עד סופה — השולח ממתין גם לו.
     "send_counts_lost": "מחשב שסומן כאבוד עדיין מקבל את הזרם — השידור ממתין גם לו",
-    # ‏#1430: חבר בגל לא דיווח מעל דקה — המחיצה הבאה אינה סופרת אותו ויוצאת כשהשאר מוכנים.
+    # #1430: חבר בגל לא דיווח מעל דקה — המחיצה הבאה אינה סופרת אותו ויוצאת כשהשאר מוכנים.
     "send_quiet_wait": "מחשב בגל לא דיווח מעל דקה — המחיצה הבאה יוצאת בלי להמתין לו",
     "smart_ask_expired": "שאלת SMART לא נענתה בזמן — המכונה שוחררה מהגל, השאר ממשיכים",
     "wave_rate": "נקבע קצב לגל",
@@ -141,7 +141,7 @@ EVENTS_HE = {
     "send_done": "השידור הסתיים",
     "send_failed": "השידור נכשל",
     "send_stopped": "השידור נעצר",
-    # ‏#715: הפצה ישירה — המקור הוא מחשב הבנייה, השרת מתזמר בלבד.
+    # #715: הפצה ישירה — המקור הוא מחשב הבנייה, השרת מתזמר בלבד.
     "room_open_direct": "סבב הפצה ישירה ממחשב הבנייה נפתח",
     "send_delegated": "הגל יצא — מחשב הבנייה משדר מהדיסק שלו",
     "direct_manifest": "מחשב הבנייה סיים לקרוא את הדיסק — המניפסט הגיע",
@@ -153,13 +153,14 @@ EVENTS_HE = {
     "journal_flood": "הצפה ביומן — אירועים ממקורות שונים נספרים ולא נרשמים אחד-אחד (#2498)",
     "disk_failure": "דיסק נכשל בכתיבה — נרשם לזיכרון הכשלים",
     "disk_failure_cleared": "רשומת כשל דיסק נוקתה",
+    "disk_write_slow": "דיסק נפסל כאיטי בבדיקת הכתיבה — לא נכתב",   # #2956
     "boot_loop_local": "מחשב אתחל שוב ושוב — נשלח לדיסק המקומי",
     "boot_loop_unverified": "ספירת האתחולים נכשלה — המחשב נשלח לדיסק המקומי",
     "agent_loop": "מחשב הגיע לסוכן בלי משימה ובלי סבב",
     "gui_failed": "הגואי לא עלה",   # 11/10: gui_failure.py
     "agent_loop_unverified": "ספירת ההגעות לסוכן נכשלה",
     "report_from_nonmember": "דיווח ממחשב שאינו בסבב",
-    # ‏#855: שומר הזהות — MAC מוצהר מול חכירת ה-DHCP.
+    # #855: שומר הזהות — MAC מוצהר מול חכירת ה-DHCP.
     "identity_refused": "פנייה בשם מחשב מכתובת שאינה שלו — סורבה",
     "identity_unverifiable": "זהות מחשב לא ניתנת לבדיקה — סורבה",
     "image_fetch_refused": "בקשת אימג׳ ממחשב בלי סבב או משיכה פתוחים לאימג׳ — סורבה",   # #2657
@@ -181,14 +182,14 @@ EVENTS_HE = {
     "storage_monitor_tunnel": "מוניטור למכונה נפתח מהשרת הראשי",
     "monitor_connected": "מוניטור נפתח למכונה",
     "monitor_closed": "מוניטור נסגר",
-    "monitor_refused": "מוניטור לא נפתח",   # ‏#1855: "<mac> <קוד> <סיבה>"
+    "monitor_refused": "מוניטור לא נפתח",   # #1855: "<mac> <קוד> <סיבה>"
     "monitor_power": "פקודת כוח דרך המוניטור",
     "monitor_control_request": "בקשת שליטה במכונה במוניטור",
     "monitor_control_approved": "שליטה במוניטור הועברה באישור",
     "monitor_control_denied": "בקשת שליטה במוניטור נדחתה",
     "monitor_control_timeout": "בקשת שליטה במוניטור לא נענתה",
     "monitor_control_auto": "שליטה במוניטור הועברה — המחזיק לא נראה",
-    # ‏#1334: עדכון אימג' בתוך VM על השרת.
+    # #1334: עדכון אימג' בתוך VM על השרת.
     "vmupdate_start": "עדכון ב-VM: הדיסק נבנה מהאימג'",
     "vmupdate_running": "עדכון ב-VM: ה-VM הודלק",
     "vmupdate_failed": "עדכון ב-VM נכשל",
@@ -248,6 +249,7 @@ EVENTS_HE = {
     "capture_verifying": "אימג' התקבל — מאמת לפני הכניסה לספרייה",
     "capture_done": "אימג' נקלט",
     "capture_failed": "קליטת אימג' נכשלה",
+    "ntfs_not_shrunk": "מחיצת NTFS לא נסגרה כראוי — נקראה בגודלה המלא, בלי כיווץ",   # #2972
     "capture_space_warning": "אזהרת מקום בקליטה — יחס הדחיסה אינו ידוע",
     "capture_cancel": "קליטת אימג' בוטלה",
     "work_area_swept": "אזורי עבודה יתומים נמחקו",
@@ -260,7 +262,7 @@ EVENTS_HE = {
     "iso_delete": "ISO נמחק מהשרת",
     "iso_folder_create": "תיקיית ISO נוצרה",
     "iso_folder_delete": "תיקיית ISO נמחקה",
-    # ‏#1861: הקריאה פרוסה על שתי שורות ב-app.py, והסריקה שורה-שורה לא ראתה אותה.
+    # #1861: הקריאה פרוסה על שתי שורות ב-app.py, והסריקה שורה-שורה לא ראתה אותה.
     "image_manifest_rejected": "אימג' הוצא מהספרייה — המניפסט שלו פגום",
     "driver_upload": "חבילת דרייברים יובאה",
     "driver_delete": "חבילת דרייברים נמחקה",
@@ -291,20 +293,20 @@ EVENTS_HE = {
     "net_rollback": "הוחזרה תצורת רשת קודמת, השינוי לא אושר",
     "net_rollback_unreadable": "הוחזרה תצורת רשת, הפרטים לא ניתנים לקריאה",
     "net_rollback_marker_stuck": "סמן החזרה ישן של הרשת לא נמחק",   # #2076
-    # ‏#705: שירותים לכל כרטיס רשת
+    # #705: שירותים לכל כרטיס רשת
     "nic_services_set": "השירותים של כרטיס רשת שונו",
     "nic_services_armed": "כיבוי הקונסולה בכרטיס ממתין לאישור — בלעדיו יחזור",
     "nic_services_confirmed": "השינוי בשירותי הכרטיס אושר מהכתובת האחרת",
     "nic_services_reverted": "השירותים של כרטיס רשת חזרו להגדרה הקודמת",
     "nic_services_apply_failed": "החלת השירותים של כרטיס רשת נכשלה — ההגדרה הקודמת הוחזרה",
-    # ‏#292: 55 אירועים שנכתבו בפועל ולא היו כאן — הגיעו למסך כמפתח באנגלית.
-    # ‏tests/test_journal_events_he.py מצליב מעכשיו כל `journal(conn, "…")` מול הטבלה.
+    # #292: 55 אירועים שנכתבו בפועל ולא היו כאן — הגיעו למסך כמפתח באנגלית.
+    # tests/test_journal_events_he.py מצליב מעכשיו כל `journal(conn, "…")` מול הטבלה.
     "admin_password_reset_dcui": "סיסמת המנהל אופסה ממסך השרת (DCUI)",
     "bind_address_changed": "כתובת ההאזנה של השרת השתנתה",
     "client_lost": "מכונה אבדה באמצע גל — לא דיווחה בזמן",
-    # ‏#1947: שעון השרת זז (NTP, ‏snapshot, סנכרון מהמארח) — הזמנים של הסבבים הפעילים כוילו.
+    # #1947: שעון השרת זז (NTP, snapshot, סנכרון מהמארח) — הזמנים של הסבבים הפעילים כוילו.
     "clock_jump": "שעון השרת קפץ — זמני הסבבים הפעילים כוילו מחדש",
-    # ‏#1728: אתחול באמצע הזרם — יצא מהגל וממתין לגל הבא.
+    # #1728: אתחול באמצע הזרם — יצא מהגל וממתין לגל הבא.
     "room_rejoin": "מחשב שיכפול אותחל באמצע הזרם — ממתין לגל הבא",
     "console_tls_by_name_only": "תעודת הקונסולה תקפה לשם בלבד, לא לכתובת",
     "dcui_auth_failure": "ניסיון כניסה כושל במסך השרת (DCUI)",
@@ -325,7 +327,7 @@ EVENTS_HE = {
     "deploy_net_failed": "הגדרת רשת ההפצה נכשלה",
     "deploy_net_set": "רשת ההפצה הוגדרה",
     "net_deploy_saved": "הגדרות רשת ההפצה נשמרו (כתובת השרת נגזרה מהרשת)",
-    # ‏#2668: שרת עם כרטיס יחיד — ההגדרה המסוכנת ביותר, ולכן שורה משלה ביומן.
+    # #2668: שרת עם כרטיס יחיד — ההגדרה המסוכנת ביותר, ולכן שורה משלה ביומן.
     "net_deploy_on_management": "רשת ההפצה הוגדרה על כרטיס הניהול (כרטיס יחיד) — "
                                 "אחרי בדיקה שאין DHCP אחר ואישור מפורש",
     "net_deploy_bond": "כרטיס שני ברשת ההפצה עודכן (bond0)",
@@ -381,7 +383,7 @@ EVENTS_HE = {
     "storage_location_format": "מיקום אחסון פורמט",
     "storage_location_mount": "מיקום אחסון עוגן",
     "storage_location_unreachable": "מיקום אחסון אינו נגיש",
-    # ‏#1988: "הוסף כונן" (server/storage/disks.py)
+    # #1988: "הוסף כונן" (server/storage/disks.py)
     "storage_disk_prepare_start": "הכנת כונן חדש למיקום אחסון",
     "storage_disk_prepare_failed": "הכנת הכונן החדש נכשלה",
     "storage_disk_add_failed": "הוספת הכונן נכשלה — לא נוסף מיקום",
@@ -395,7 +397,7 @@ EVENTS_HE = {
     "smart_answered": "שאלת SMART על דיסק נענתה",               # #989
     "task_token_refused": "אסימון משימה נדחה",
     "settings_backup_downloaded": "גיבוי ההגדרות הורד",
-    # ‏#2437: סיסמת עורך ה-GRUB (‏server/app.py `_grub_lock`), ו-#2450: מנהל ראה אותה.
+    # #2437: סיסמת עורך ה-GRUB (server/app.py `_grub_lock`), ו-#2450: מנהל ראה אותה.
     "grub_password_viewed": "סיסמת ה-GRUB הוצגה למנהל",
     "grub_server_lock_failed": "ה-GRUB של השרת לא ננעל בעדכון",   # #2452, tools/server-upgrade.sh
     "grub_password_saved": "מנהל סימן שסיסמת ה-GRUB נשמרה מחוץ לשרת",   # #2454
@@ -408,12 +410,12 @@ EVENTS_HE = {
     "user_enabled": "משתמש הופעל מחדש",
     "send_simulated": "שידור מדומה (סימולציה בלבד — אין udp-sender)",
     "shrink_open": "רשומת כיווץ נפתחה לדיסק — הטבלה המקורית נשמרה בשרת",
-    # ‏#1861: ברירת המחדל של `event` ב-`shrink_records.close_record`.
+    # #1861: ברירת המחדל של `event` ב-`shrink_records.close_record`.
     "shrink_close": "רשומת כיווץ נסגרה",
-    # ‏#2442 (א): ‏server/net/rogue_dhcp.py
+    # #2442 (א): server/net/rogue_dhcp.py
     "foreign_dhcp_seen": "נראה שרת DHCP או proxyDHCP זר ברשת ההפצה",
     "foreign_dhcp_more": "עוד תשובות DHCP זרות ממקורות שמעבר לתקרה — אולי הצפה (#2442)",
-    # ‏#1973: ה-UPS (‏server/system/ups.py).
+    # #1973: ה-UPS (server/system/ups.py).
     "ups_on_battery": "החשמל נפל — השרת על סוללת UPS",
     "ups_power_restored": "החשמל חזר — השרת על חשמל",
     "ups_low_battery": "סוללת ה-UPS נמוכה",
@@ -447,7 +449,7 @@ EVENTS_HE = {
     "grub_cfg_lock_failed": "נעילת grub.cfg הקיים על ה-TFTP נכשלה (#2437)",
 }
 
-#: ‏#968: חומרת האירוע לציר-הזמן ולעמודת הצבע ביומן — נקבעת **כאן**, לצד
+#: #968: חומרת האירוע לציר-הזמן ולעמודת הצבע ביומן — נקבעת **כאן**, לצד
 #: התרגום, ולא בהיוריסטיקה על שם ה-event בקונסולה (שהתיישנה עם כל
 #: אירוע חדש). ארבעה ערכים: ``ok`` הושלם/אושר · ``warn`` דורש תשומת לב ·
 #: ``err`` כשל/סירוב · ``info`` (ברירת המחדל לכל אירוע שאינו ברשימה,
@@ -457,7 +459,7 @@ _SEVERITY_ERR = {
     "mfa_backup_codes_failed",   # #2470
     "agent_login_failed", "agent_role_refused", "class_deploy_refused",
     "session_image_bound", "pull_refused", "pull_failed", "pull_sweep_failed", "task_sweep_failed", "cloner_round_refused", "client_failed", "wol_failed",
-    "room_wave_lost", "room_failed", "room_wake_failed", "room_drawer_no_disk", "send_failed", "direct_failed", "disk_failure",
+    "room_wave_lost", "room_failed", "room_wake_failed", "room_drawer_no_disk", "send_failed", "direct_failed", "disk_failure", "disk_write_slow",
     "session_orphaned", "identity_refused", "storage_transfer_failed", "storage_disk_prepare_failed", "storage_disk_add_failed", "storage_location_disconnect_failed", "logo_refused",
     "capture_failed", "drivers_failed", "boot_storage_failed", "dhcp_apply_failed", "nic_services_apply_failed",
     "known_macs_apply_failed", "dnsmasq_dropin_failed", "vmupdate_failed", "vmupdate_firewall_lost", "retention_failed",
@@ -470,6 +472,7 @@ _SEVERITY_ERR = {
 }
 _SEVERITY_WARN = {
     "mfa_clock_skew",   # #1814
+    "ntfs_not_shrunk",   # #2972: orange, the image is in
     "fw_changed",   # #2080
     "login_attempts_trimmed",   # #2459
     "login_account_failures_trimmed", "journal_flood",   # #2478, #2498
@@ -515,7 +518,7 @@ def severity(event: str) -> str:
 
 
 def idle_minutes_he(seconds: str) -> str:
-    """‏`console_idle_seconds` כמו שהקונסולה מציגה אותו: "כבוי" (0), "אחרי N דקות"."""
+    """`console_idle_seconds` כמו שהקונסולה מציגה אותו: "כבוי" (0), "אחרי N דקות"."""
     try:
         n = int(seconds)
     except ValueError:
@@ -542,7 +545,7 @@ SETTINGS_HE = {
     "clone_name_instructor": "שמות מחשב: סיומת הדיסק של המרצה",   # #2786
     "intersite_rate_cap_mbps": "הגבלת קצב בין אתרים (Mb/s)",   # #1473
     "igmp_querier": "IGMP querier ברשת ההפצה",   # #1972
-    # ‏#2056/#2059 (מוקאפ 05): אותן תוויות כמו בהגדרות הקונסולה; הערך בשניות
+    # #2056/#2059 (מוקאפ 05): אותן תוויות כמו בהגדרות הקונסולה; הערך בשניות
     "lost_wait_seconds": "המתנה למחשב שהתנתק באמצע שיכפול (שניות)",
     "gui_idle_poweroff_seconds": "כיבוי כשאין פעילות (שניות)",
     "gui_end_poweroff_seconds": "ספירה לכיבוי בסוף משימה (שניות)",
@@ -553,7 +556,7 @@ SETTINGS_HE = {
     "backup_target": "יעד גיבוי המסד",   # #1956: הסוג, ואחריו היעד (בלי סיסמה)
     "backup_policy": "מדיניות גיבוי המסד",   # #1956: השעה והמקום השמור
     "backup:enabled": "גיבוי אוטומטי",   # #2865: המתג בהגדרות ← גיבוי המסד
-    # ‏#1991: אותן תוויות כמו בהגדרות הקונסולה (console.js)
+    # #1991: אותן תוויות כמו בהגדרות הקונסולה (console.js)
     "identity_check": "אימות מחשבים לפי כתובת ה-DHCP",
     "readback_full": "אימות מלא אחרי הכתיבה",
     "update_enabled": "עדכון גרסה מהקונסולה",
@@ -563,7 +566,7 @@ ROLES_HE = {"classroom": "כיתה", "cloner": "חדר שיכפולים", "build
 
 FIELDS_HE = {"name": "שם", "description": "תיאור", "folder": "תיקייה", "sort": "סדר"}
 
-#: למה הוחזרה תצורת הרשת (‏#56). שתי הסיבות היחידות שהזרוע כותבת.
+#: למה הוחזרה תצורת הרשת (#56). שתי הסיבות היחידות שהזרוע כותבת.
 ROLLBACK_HE = {"expired": "לא אושר בתוך חלון הזמן",
                "boot": "המכונה אותחלה לפני שהשינוי אושר"}
 
@@ -576,14 +579,14 @@ _SES = re.compile(r"\b(ses_[0-9a-f]+)\b")
 _GRP = re.compile(r"\b(grp_\w+)\b")
 _EXPAND = re.compile(r"expand=(\S+)")
 _SERIAL = re.compile(r"\bserial=(\S+)")
-#: ‏#1857: שורות יומן על דיסק לפי הסידורי -- מקבלות בקריאה את הסט והמדבקה הנוכחיים ("קוריאים · xx-7"),
+#: #1857: שורות יומן על דיסק לפי הסידורי -- מקבלות בקריאה את הסט והמדבקה הנוכחיים ("קוריאים · xx-7"),
 #: כדי שמי שקורא "דיסק נכשל" יידע איזה דיסק לשלוף. בקריאה ולא בכתיבה: דיסק ששויך אחרי הכשל מקבל שם גם בשורה הישנה.
-_SET_EVENTS = ("disk_failure", "disk_failure_cleared")
+_SET_EVENTS = ("disk_failure", "disk_failure_cleared", "disk_write_slow")
 
 
-#: ‏#2704/#2707: סוג האזהרות ביומן -- אותה טבלה ואותן מילים כמו כותרת ה-precheck בעמוד החדר
-#: (‏`PRECHECK_NOUN_HE`/`precheckSigns` ב-console.js; ‏tests/test_precheck_kind_2707.py שומר שהן לא נסחפות).
-#: ‏#2707: "הדיסק עצמו" ו"איטי לדגם" אינם קישור; כמה סוגים -- בסדר הזה, מחוברים ב"או".
+#: #2704/#2707: סוג האזהרות ביומן -- אותה טבלה ואותן מילים כמו כותרת ה-precheck בעמוד החדר
+#: (`PRECHECK_NOUN_HE`/`precheckSigns` ב-console.js; tests/test_precheck_kind_2707.py שומר שהן לא נסחפות).
+#: #2707: "הדיסק עצמו" ו"איטי לדגם" אינם קישור; כמה סוגים -- בסדר הזה, מחוברים ב"או".
 PRECHECK_NOUN_HE = {"link": "קישור חשוד", "slow": "כתיבה איטית", "disk": "דיסק חשוד"}
 #: מילות `smart_learned` (#1859) לפי סוג: 183/188 שעלו -- כנראה הכבל (smart_history.ROSE_LINK); קריטי/חם -- הדיסק.
 PRECHECK_SMART_KIND = {"link": ("downshift_rose", "timeout_rose"), "disk": ("critical_rose", "hot")}
@@ -591,7 +594,7 @@ _PRECHECK_SIGN = {"learned=port": "link", "learned=slow_write": "slow", "learned
                   "learned=disk": "disk",
                   **{f"smart={w}": k for k, words in PRECHECK_SMART_KIND.items() for w in words}}
 #: כל אסימון ש-`room.journal_precheck` כותב, בעברית -- ראשי המשפטים של המסך (room_precheck.py,
-#: ‏crcwarn.text_he, ‏learn/ports.py, ‏learn/models.py), בלי המספרים שהיומן אינו נושא.
+#: crcwarn.text_he, learn/ports.py, learn/models.py), בלי המספרים שהיומן אינו נושא.
 PRECHECK_REASON_HE = {"learned=port": "כנראה כבל/מחבר, לא הדיסק", "learned=disk": "הדיסק עצמו",
                       "learned=slow_model": "איטי מהרגיל לדגם",
                       # #2848: no longer written (a past round's slow write is not warned) -- kept to read older journal lines
@@ -601,8 +604,8 @@ _PRECHECK_ITEM = re.compile(r", (?=[0-9a-f]{2}(?::[0-9a-f]{2}){5}:)")
 
 
 def precheck_he(detail: str) -> tuple[str, list[str]] | None:
-    """‏#2704: ‏(הסוג, הסיבות בעברית) של שורת `room_precheck_warned`; ‏None = הפירוט לא נקרא --
-    התווית הכללית, לעולם לא סוג מנוחש. ‏#2707: כל אסימון לסוג שלו (`_PRECHECK_SIGN`; ‏`link=`/‏`crc+`/‏`crc=`
+    """#2704: (הסוג, הסיבות בעברית) של שורת `room_precheck_warned`; None = הפירוט לא נקרא --
+    התווית הכללית, לעולם לא סוג מנוחש. #2707: כל אסימון לסוג שלו (`_PRECHECK_SIGN`; `link=`/`crc+`/`crc=`
     -- קישור); בלי אסימון מוכר -- "עם אזהרה"."""
     m = _PRECHECK.match(detail)
     if not m:
@@ -628,6 +631,36 @@ def precheck_he(detail: str) -> tuple[str, list[str]] | None:
                 reasons.append(said)
     nouns = [PRECHECK_NOUN_HE[k] for k in ("link", "slow", "disk") if k in kinds]
     return (f"עם {' או '.join(nouns)}" if nouns else "עם אזהרה"), reasons
+
+
+#: #2956: `disk_write_slow` (server/disks/slow_write.py) --
+#: "<mac> <dev> serial=<S> port=<P> drawer=<N|?>[ name="<שם>"] mbps=<M> others=<a,b|-> model=<דגם> — <reason של הסוכן>".
+_SLOW_WRITE = re.compile(r'^(\S+) (\S+) serial=(\S+) port=(\S+) drawer=(\S+)(?: name="([^"]*)")? mbps=(\S+)'
+                         r' others=(\S+) model=(.*?) — (.*)$', re.S)
+_SLOW_REASON_HEAD = re.compile(r"^איטי — \d+ MB/s,? ?")
+
+
+def slow_write_he(detail: str) -> tuple[str, str, str] | None:
+    """#2956: (ה-MAC, המגירה, המשפט) של שורת `disk_write_slow`; None = הפירוט לא נקרא -- הגולמי נשאר.
+    ה"מדוע" הוא נוסח הסוכן עצמו (הסף שבתוקף, או היחס לשאר המגירות מאותו סוג) -- לא מחושב מחדש.
+    `?` = לא דווח, ונאמר כך -- לא נבלע."""
+    m = _SLOW_WRITE.match(detail)
+    if not m:
+        return None
+    mac, _dev, serial, _port, drawer_no, name, mbps, others, model, why = m.groups()
+    # #2945: מספר המגירה שהמסך מציג (לא ה-port). לא ידוע -- "דיסק" בלי מספר, לא ניחוש.
+    drawer = f"מגירה {drawer_no}" if drawer_no != "?" else "דיסק"
+    if name:
+        drawer += f" ({name})"
+    model_he = "דגם לא דווח" if model == "?" else f"דגם {model}"
+    serial_he = "סיריאל לא דווח" if serial == "?" else f"סיריאל {serial}"
+    measured = f"נמדד {mbps} MB/s" if mbps != "?" else "המהירות לא נקראה"
+    why = _SLOW_REASON_HEAD.sub("", why).strip()
+    rest = (f"שאר המגירות שנמדדו בגל: {others.replace(',', ', ')} MB/s" if others != "-"
+            else "אף מגירה אחרת לא נמדדה בגל")
+    verb = "נפסלה כאיטית בבדיקת הכתיבה ולא נכתבה" if drawer_no != "?" else "נפסל כאיטי בבדיקת הכתיבה ולא נכתב"
+    return mac, drawer, (f"{verb} — {model_he}, {serial_he}. "
+                         f"{measured}{', ' + why if why else ''}. {rest}.")
 
 
 def _expand_note(detail: str) -> str:
@@ -666,7 +699,7 @@ class JournalTranslator:
             row["id"]: f'{row["prefix"]} · {self._groups.get(row["group_id"], row["group_id"])}'
             for row in conn.execute("SELECT id, prefix, group_id FROM sessions")
         }
-        self._sets = disk_sets.all_labels(conn)   # ‏#1857
+        self._sets = disk_sets.all_labels(conn)   # #1857
 
     def _names(self, text: str) -> str:
         text = _MAC.sub(lambda m: self._machines.get(m.group(1), m.group(1)), text)
@@ -700,6 +733,10 @@ class JournalTranslator:
             if got is not None:   # #2704: the kind in the label; the raw tokens stay -- they are the evidence
                 label = f"{label} {got[0]}"
                 text += f" — {'; '.join(got[1])}" if got[1] else ""
+        elif event == "disk_write_slow":
+            got = slow_write_he(detail)   # #2956
+            if got is not None:
+                text = f"{self._machines.get(got[0], got[0])} · {got[1]} {got[2]}"
         elif event == "pull_open":
             m = re.search(r"(ses_\w+) (\S+) (\S+) mac=(\S+)", detail)
             if m:
@@ -764,7 +801,7 @@ class JournalTranslator:
                 text = f"{m.group(1)} — {version}"
         elif event == "net_rollback":
             # הזמן שמדווח הוא **זמן ההחזרה** שבפירור, ולא זמן הקריאה:
-            # השורה נכתבת בהפעלה שאחרי, ולפעמים ימים אחרי האירוע (‏#56).
+            # השורה נכתבת בהפעלה שאחרי, ולפעמים ימים אחרי האירוע (#56).
             m = re.search(r"(\S+) at=(\S+) reason=(\S+)", detail)
             if m:
                 text = (f"{m.group(1)} — {ROLLBACK_HE.get(m.group(3), m.group(3))}, "
@@ -799,19 +836,19 @@ class JournalTranslator:
                 if rest:                               # שורה עם הסבר (השדרוג של MFA, 18/10)
                     text += f" — {rest}"
         elif event in ("power_delivered", "power_expired"):
-            # ‏"<mac> <poweroff|reboot>" — המכונה בשמה, הפעולה בעברית.
+            # "<mac> <poweroff|reboot>" — המכונה בשמה, הפעולה בעברית.
             m = re.match(r"(\S+) (\S+)$", detail)
             if m:
                 action = {"poweroff": "כיבוי", "reboot": "אתחול"}.get(m.group(2), m.group(2))
                 text = f"{self._machines.get(m.group(1), m.group(1))} · {action}"
         elif event in ("monitor_closed", "monitor_power", "monitor_refused"):
-            # ‏#1855: ‏monitor_refused — "<mac> <קוד> <סיבה>"; ‏refused — "refused — <סיבה>".
-            # ‏#1129: "<mac> <סיבה/פעולה>[ node=<nid>]" — המילה השנייה מתורגמת.
+            # #1855: monitor_refused — "<mac> <קוד> <סיבה>"; refused — "refused — <סיבה>".
+            # #1129: "<mac> <סיבה/פעולה>[ node=<nid>]" — המילה השנייה מתורגמת.
             words = {"browser": "הדפדפן סגר", "machine": "המכונה סגרה",
                      "idle": "נסגר אחרי 10 דק' בלי תעבורה",
                      "refused": "נסגר — הודעה אסורה מהדפדפן", "error": "כשל",
-                     "session_revoked": "נסגר — ההתחברות לקונסולה הסתיימה",   # ‏#1853
-                     # ‏#2325: ‏4410 (אותו מנהל, חלון אחר) או 4411 (השליטה הועברה) — #1852
+                     "session_revoked": "נסגר — ההתחברות לקונסולה הסתיימה",   # #1853
+                     # #2325: 4410 (אותו מנהל, חלון אחר) או 4411 (השליטה הועברה) — #1852
                      "moved": "נסגר — הצפייה עברה לחלון אחר או למנהל אחר",
                      "reboot": "הפעלה מחדש", "poweroff": "כיבוי"}
             m = re.match(r"(\S+) (\S+)(.*)$", detail)
@@ -820,7 +857,7 @@ class JournalTranslator:
                                   words.get(m.group(2), m.group(2)),
                                   m.group(3).strip().removeprefix("— ")) if part)
         elif event == "machine_mac_edit":
-            # ‏#977 §5: "<ישן> -> <חדש>" — שתי הכתובות, כי הישנה היא שההיסטוריה עליה.
+            # #977 §5: "<ישן> -> <חדש>" — שתי הכתובות, כי הישנה היא שההיסטוריה עליה.
             m = re.search(r"([0-9a-f:]{17}) -> ([0-9a-f:]{17})", detail)
             if m:
                 text = f"{m.group(1)} הוחלפה ב-{m.group(2)}"

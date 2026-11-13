@@ -97,18 +97,35 @@ class Extras:
     primary_url: str = ""
     advertised_url: str = ""          # 16/10: the address the primary sees
     parent_last_contact: str | None = None
+    #: #2793: the health page's RAID rows (``raid_status.health_checks``) -- the
+    #: same source, so the screen and the console never disagree.
+    raid: tuple[dict, ...] = ()
 
 
-def collect_extras(conn, uptime_path: Path = Path("/proc/uptime")) -> Extras:
+def _raid_rows() -> tuple[dict, ...]:
+    from server.system import raid_status
+    return tuple(raid_status.health_checks(
+        lambda: raid_status.read_optional(raid_status.MDSTAT_PATH),
+        lambda: raid_status.read_optional(raid_status.RAID_FACT_PATH),
+        lambda: raid_status.read_optional(raid_status.MOUNTS_PATH)))
+
+
+def collect_extras(conn, uptime_path: Path = Path("/proc/uptime"),
+                   raid_rows=_raid_rows) -> Extras:
     """Read-only, and each part independently: one unreadable source leaves
     its field empty ("not shown"), it does not hide the others."""
+    try:
+        raid = raid_rows()
+    except Exception:  # noqa: BLE001 -- not "no RAID": an unread check is a problem (principle 5)
+        raid = ({"id": "raid", "label": "מערך RAID", "state": "unknown",
+                 "detail": "בדיקת ה-RAID נכשלה"},)
     uptime = None
     try:
         uptime = int(float(uptime_path.read_text(encoding="ascii").split()[0]))
     except (OSError, ValueError, IndexError):
         uptime = None
     if conn is None:
-        return Extras(uptime_seconds=uptime)
+        return Extras(uptime_seconds=uptime, raid=raid)
     from server.interserver import storage_nodes
     try:
         rows = conn.execute(
@@ -132,7 +149,7 @@ def collect_extras(conn, uptime_path: Path = Path("/proc/uptime")) -> Extras:
         advertised = storage_nodes.advertised_url(conn)
     except Exception:  # noqa: BLE001
         advertised = ""
-    return Extras(uptime, secondaries, has_parent, primary, advertised, parent_contact)
+    return Extras(uptime, secondaries, has_parent, primary, advertised, parent_contact, raid)
 
 
 # ---- translation of the backend's ASCII messages ------------------------------
@@ -172,12 +189,10 @@ _EXACT = {
         "ההחלה נכשלה; ההחזרה האוטומטית עדיין דרוכה.",
     "Live read-back did not match the requested configuration.":
         "המצב החי שנקרא בחזרה אינו מה שביקשנו.",
-    "Network change applied; confirm within 60 seconds.":
-        "השינוי הוחל. מאשרים תוך 60 שניות.",
     "Management network restarted; the address read back live.":
         "רשת הניהול הופעלה מחדש, והכתובת נקראה בחזרה מהמצב החי.",
     "Management network restart was not verified.": "ההפעלה מחדש של רשת הניהול לא אומתה.",
-    "ifdown/ifup failed.": "‏ifdown/ifup נכשל.",
+    "ifdown/ifup failed.": "\u200fifdown/ifup נכשל.",
     "Live read-back did not match the saved configuration.":
         "המצב החי שנקרא בחזרה אינו ההגדרה השמורה.",
     "The management interface has no saved configuration.":
@@ -255,14 +270,17 @@ _PATTERNS = (
     (r"Temporary address applied to ([A-Za-z0-9._-]+)\.", "הכתובת הזמנית הוחלה על {0}."),
     (r"Temporary network command failed: (.+)\.", "פקודת הרשת הזמנית נכשלה: {0}."),
     (r"Conflict (\d+)", "התנגשות {0}"),
-    # ‏#2349: apply_network על DHCP, אחרי ההמתנה ל-lease
+    # #2349: apply_network על DHCP, אחרי ההמתנה ל-lease
     (r"Still no match after waiting (\d+) seconds for DHCP\.",
      "גם אחרי {0} שניות של המתנה ל-DHCP, המצב החי אינו מה שביקשנו."),
+    # #2371: מה שנשאר מחלון האישור אחרי ההמתנה, לא 60 קבוע
+    (r"Network change applied; confirm within (\d+) seconds\.",
+     "השינוי הוחל. מאשרים תוך {0} שניות."),
     (r"([A-Za-z0-9@._-]+): restart failed", "{0}: ההפעלה מחדש נכשלה"),
     (r"([A-Za-z0-9@._-]+) did not read back active", "{0} לא חזר למצב פעיל"),
-    # ‏#1988: "הוסף כונן" (actions.py)
+    # #1988: "הוסף כונן" (actions.py)
     (r"Disk (\S+) added as storage location (.+)\.", "הכונן {0} נוסף כמיקום האחסון {1}."),
-    (r"Mounted at (\S+) \(UUID in /etc/fstab, nofail\)\.", "מחובר קבוע ב-{0} (‏UUID ב-/etc/fstab, ‏nofail)."),
+    (r"Mounted at (\S+) \(UUID in /etc/fstab, nofail\)\.", "מחובר קבוע ב-{0} (\u200fUUID ב-/etc/fstab, \u200fnofail)."),
     (r"Write/read-back check passed\.", "קובץ בדיקה נכתב ונקרא בחזרה."),
 )
 
@@ -484,6 +502,38 @@ def clock_problem(snapshot: Snapshot, extras: Extras) -> Problem | None:
     return None
 
 
+def raid_problems(extras: Extras) -> list[Problem]:
+    """#2793: the RAID rows of the health page, as cards. A degraded array is
+    red (#1989), a rebuild orange, an ESP that did not mount orange, and a row
+    that could not be read is orange "not checked" -- never "fine"."""
+    found = []
+    for row in extras.raid:
+        state, detail, rid = row.get("state"), clean(row.get("detail", "")), row.get("id", "")
+        if rid == "raid_esp":
+            if state == "warn":
+                found.append(Problem(
+                    "warn", "מחיצת ה-ESP לא מעוגנת",
+                    f"{detail}.", "<b>מה לעשות:</b> לבדוק את הכונן הראשון במערך.", ("", "")))
+            elif state == "unknown":
+                found.append(Problem(
+                    "warn", "לא הצלחנו לבדוק את מחיצת ה-ESP", f"{detail}.",
+                    "<b>מה לעשות:</b> רענון (F5); הפרטים ביומן השרת.", ("", "")))
+        elif state == "bad":
+            found.append(Problem(
+                "bad", "מערך RAID פגוע", f"{detail}. השרת רץ בלי יתירות.",
+                "<b>מה לעשות:</b> להחליף את הכונן החסר; המערך ייבנה מחדש מעצמו.", ("", ""),
+                "אם יפול עוד כונן — <b>הנתונים יאבדו</b>."))
+        elif state == "warn":
+            found.append(Problem(
+                "warn", "מערך RAID בבנייה מחדש או בסנכרון", f"{detail}.",
+                "<b>מה לעשות:</b> לא לכבות את השרת עד שהבנייה תסתיים.", ("", "")))
+        elif state == "unknown":
+            found.append(Problem(
+                "warn", "לא הצלחנו לבדוק את מערך ה-RAID", f"{detail}.",
+                "<b>מה לעשות:</b> רענון (F5); אם זה חוזר — עמוד הבריאות בקונסולה.", ("", "")))
+    return found
+
+
 def lab_iso_problem(snapshot: Snapshot) -> Problem | None:
     """#1412: a server installed from a lab ISO (``build-iso.sh --lab``) says
     so, and so does one whose ISO manifest could not answer (principle 5).
@@ -619,6 +669,7 @@ def problems(snapshot: Snapshot, extras: Extras, today: datetime) -> list[Proble
     clock = clock_problem(snapshot, extras)
     if clock is not None:
         found.append(clock)
+    found.extend(raid_problems(extras))
     lab = lab_iso_problem(snapshot)
     if lab is not None:
         found.append(lab)
@@ -639,7 +690,7 @@ def uptime_text(seconds: int) -> str:
 
 
 def _local_hhmm(stamp: str) -> str:
-    """‏#1933: חותמת ה-DB (UTC) → HH:MM בשעון המכונה, כמו שאר המסך — לא חיתוך
+    """#1933: חותמת ה-DB (UTC) → HH:MM בשעון המכונה, כמו שאר המסך — לא חיתוך
     המחרוזת, שהציג UTC. חותמת בלי היסט היא UTC; מה שאינו חותמת → "" (לא ניחוש)."""
     try:
         when = datetime.fromisoformat(stamp.strip())
@@ -845,9 +896,14 @@ def _preinstall(frame: Frame, snapshot: Snapshot) -> None:
     if snapshot.console_url:
         frame.add("hero", "wait", "ההתקנה עדיין לא הסתיימה",
                   f"ממשיכים את ההתקנה מדפדפן: <b>{mono_m(snapshot.console_url)}</b>", "", "")
+    elif snapshot.installer_nic:
+        # #2516: האשף פתוח רק על כרטיס ההתקנה (#2490) — הכתובת שלו, או שאין כתובת.
+        frame.add("hero", "bad", "ההתקנה עדיין לא הסתיימה — ואין כתובת",
+                  f"לכרטיס ההתקנה ({mono_m(snapshot.installer_nic)}) אין כתובת. "
+                  "<b>F2</b> מגדיר לו כתובת זמנית.", "", "")
     else:
         frame.add("hero", "bad", "ההתקנה עדיין לא הסתיימה — ואין כתובת",
-                  "אף כרטיס רשת לא קיבל כתובת מ־DHCP. <b>F2</b> מגדיר כתובת זמנית.", "", "")
+                  "כרטיס ההתקנה אינו ידוע, ולכן האשף סגור לרשת ופתוח רק בשרת הזה.", "", "")
     frame.add("tile", "כרטיסי רשת", "", "")
     for nic in snapshot.interfaces[:6]:
         up = nic.link == "up"
@@ -1069,7 +1125,7 @@ def _disk_dialog(frame: Frame, runtime) -> None:
         failure = runtime.result
         frame.add("d.error", (failure.he if failure and failure.he else he(runtime.message))
                   or "רשימת הכוננים לא נקראה")
-        frame.add("d.note", "\"לא נקרא\" אינו \"אין כונן ריק\". ‏F5 קורא שוב.")
+        frame.add("d.note", "\"לא נקרא\" אינו \"אין כונן ריק\". \u200fF5 קורא שוב.")
         frame.add("d.btn", "חזרה", "Esc", "plain", 1)
         return
     items = listing.get("items") or []
@@ -1203,7 +1259,7 @@ def _advertised_dialog(frame: Frame, runtime) -> None:
     frame.add("d.field", "כתובת ופורט", runtime.advert, "text", 1, 1)
     if runtime.message:
         frame.add("d.error", he(runtime.message))
-    frame.add("d.note", f"לדוגמה {mono_m('203.0.113.40:8443')} — ‏https:// נוסף לבד. "
+    frame.add("d.note", f"לדוגמה {mono_m('203.0.113.40:8443')} — \u200fhttps:// נוסף לבד. "
                         "שדה ריק מוחק את ההגדרה.")
     frame.add("d.btn", "שמירה", "Enter", "pri", 0)
     frame.add("d.btn", "ביטול", "Esc", "plain", 0)

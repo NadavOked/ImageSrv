@@ -1,4 +1,4 @@
-"""‏#737: ה-uploader של phase_capture שולח X-Imagesrv-Task-Token.
+"""#737: ה-uploader של phase_capture שולח X-Imagesrv-Task-Token.
 
 בלי הכותרת `PUT /api/v1/capture/.../files` מחזיר 401, וה-e2e נעצר
 לפני שמסלול הקליטה באמת נבדק. הסוכן האמיתי שולח אותה מ-hello;
@@ -51,7 +51,7 @@ def test_phase_capture_uploader_sends_the_task_token(monkeypatch, tmp_path):
     images.mkdir()
     staging = images / ".capture-ab12"
     seen: list[dict] = []
-    #: ‏#1470: אחרי המניפסט המשימה עוברת ל-verifying ואז done (האימות ברקע).
+    #: #1470: אחרי המניפסט המשימה עוברת ל-verifying ואז done (האימות ברקע).
     state = {"task": "running"}
 
     builder = SimpleNamespace(
@@ -82,7 +82,7 @@ def test_phase_capture_uploader_sends_the_task_token(monkeypatch, tmp_path):
                 shutil.rmtree(staging)
             builder.answer = {"task": None, "session": None}
             state["task"] = "done"
-            # ‏#1470: ‏202 — המניפסט התקבל והאימות רץ ברקע
+            # #1470: 202 — המניפסט התקבל והאימות רץ ברקע
             return _Resp(json.dumps({"ok": True, "state": "verifying"}).encode(), status=202)
         return _Resp(json.dumps({"ok": True}).encode())
 

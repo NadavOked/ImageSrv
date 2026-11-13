@@ -1,6 +1,6 @@
 """Storage Nodes — כניסת ה-enrollment הבין-שרתי על המשני (#740, tracer 2.1).
 
-זה הצד ש**מקבל** את הראשי: ‏pair-begin / pair-complete / ping מעל mTLS 1.3
+זה הצד ש**מקבל** את הראשי: pair-begin / pair-complete / ping מעל mTLS 1.3
 עם channel-binding (RFC 9266) ו-SPKI-pin. שכבת ה-TLS עצמה מסתיימת ב-
 terminator של pyOpenSSL (ראו ``interserver_auth`` — stdlib ssl אינו יכול
 לקלוט תעודת-לקוח לא-מוכרת ואין לו exporter); כאן יושבת הלוגיקה שמעליו.
@@ -12,7 +12,7 @@ terminator של pyOpenSSL (ראו ``interserver_auth`` — stdlib ssl אינו �
 
 ⚠️ **בלי ``from __future__ import annotations``** — האנוטציה ``Request``
 ב-dependencies חייבת להיות אובייקט אמיתי ל-FastAPI, אחרת ה-endpoint מחזיר
-422 (אותו באג של ``auth.py``/``boot/http.py``, ‏CLAUDE.md).
+422 (אותו באג של ``auth.py``/``boot/http.py``, CLAUDE.md).
 """
 
 import logging
@@ -38,10 +38,19 @@ log = logging.getLogger("imagesrv.interserver")
 
 #: תוקף ה-handle של pair-begin עד pair-complete — קצר, אותה session.
 HANDLE_TTL_SECONDS = 60
-#: ‏#1122: כמה זמן מותר ל-handshake של ה-TLS להימשך. חיבור TCP שלא שולח
+#: #1122: כמה זמן מותר ל-handshake של ה-TLS להימשך. חיבור TCP שלא שולח
 #: בייט (סורק, FW שחתך באמצע) שחרר את התהליכון שלו אחרי זה, לא לעולם.
 HANDSHAKE_TIMEOUT_SECONDS = 10.0
-#: ‏#1122: קוד תשובה בשם כשהמפתח של האב השתנה — הקונסולה בראשי מציגה אותו.
+#: #2488: אחרי ה-handshake ולפני האימות — כמה זמן מותר לבקשה להגיע: שורת
+#: הבקשה והכותרות, וגוף ה-JSON של בקשה רגילה. זו גם תקרת השקט של keep-alive
+#: בין בקשות. הראשי שולח בקשה שלמה מיד ופותח חיבור לכל שימוש (`PinnedMTLSClient`).
+READ_TIMEOUT_SECONDS = 30.0
+#: #2488: תקרת שורת הבקשה והכותרות. הראשי שולח פחות מ-1KB; מעבר לזה = 431.
+MAX_HEAD_BYTES = 64 * 1024
+#: #2488: חיבורים (תהליכונים) בו-זמנית. מעבר לזה החיבור נסגר ב-accept, לפני
+#: ה-TLS. ראשי אחד פותח כמה בודדים: דופק, ממסר קונסולה, מוניטור לכל מכונה, העברות.
+MAX_CONNECTIONS = 64
+#: #1122: קוד תשובה בשם כשהמפתח של האב השתנה — הקונסולה בראשי מציגה אותו.
 PEER_CERT_CHANGED = "peer_cert_changed"
 PEER_CERT_CHANGED_DETAIL = "התעודה של הראשי השתנתה — יש לבצע רישום מחדש"
 
@@ -66,7 +75,7 @@ class PairError(Exception):
         self.status = status
         self.detail = detail
         self.code = code
-        #: ‏#1456: כותרות שהתשובה חייבת לשאת (‏416 → ``Content-Range``).
+        #: #1456: כותרות שהתשובה חייבת לשאת (416 → ``Content-Range``).
         self.headers = headers or {}
 
     def payload(self) -> dict:
@@ -84,7 +93,7 @@ def _utcnow() -> datetime:
 # --- שומרי ה-peer, נאכפים בשכבת ה-service -----------------------------------
 
 def _require_secure_peer(peer: TlsPeer) -> None:
-    """‏TLS 1.3 בדיוק **וגם** תעודת-לקוח נוכחת. ראיה חיובית: גרסה לא-מדווחת
+    """TLS 1.3 בדיוק **וגם** תעודת-לקוח נוכחת. ראיה חיובית: גרסה לא-מדווחת
     או ``None`` נדחית, לא "כנראה בסדר" (עיקרון 5, downgrade)."""
     if peer.tls_version != "TLSv1.3":
         raise PairError(421, "נדרש TLS 1.3 בדיוק")
@@ -169,7 +178,7 @@ def pair_complete(conn, handles: dict, peer: TlsPeer, body: dict, *,
         raise PairError(400, "handle לא קיים או פג")
 
     # channel-binding: complete חייב לרוץ על אותה session TLS כמו begin.
-    # ‏begin על A, complete על B → exporters שונים → נדחה (RFC 9266).
+    # begin על A, complete על B → exporters שונים → נדחה (RFC 9266).
     if not _exporter_matches(peer.exporter, handle["exporter"]):
         raise PairError(400, "אי-התאמת channel-binding — begin ו-complete על session שונה")
     # אותה תעודת-לקוח בדיוק שפתחה את ה-handle.
@@ -213,7 +222,7 @@ def _cert_binding_ok(peer_ref: str, bound_ref: str) -> bool:
 
 
 def _peer_bound(peer_cert_der: bytes, cred) -> bool:
-    """‏**נקודת הבקרה השלילית המכריעה של #740** (RFC 8705 sender-constraint).
+    """**נקודת הבקרה השלילית המכריעה של #740** (RFC 8705 sender-constraint).
 
     שני תנאים: ה-SPKI של הפונה תואם את ה-pin (המפתח הנכון), **וגם**
     ה-thumbprint של התעודה תואם את ``bound_cert_ref`` (אותה תעודה בדיוק).
@@ -229,7 +238,7 @@ def _peer_bound(peer_cert_der: bytes, cred) -> bool:
 
 def authenticate_parent(conn, peer: TlsPeer, *, token: str, protocol_version: str,
                         has_console_cookie: bool = False):
-    """השומר המשותף לכל קריאה מאומתת של האב: ‏TLS 1.3, תעודת-לקוח כרוכה
+    """השומר המשותף לכל קריאה מאומתת של האב: TLS 1.3, תעודת-לקוח כרוכה
     לטוקן, SPKI תואם ה-pin, בלי console cookie, ותפקיד secondary.
     אי-התאמת SPKI/תעודה = 401 קשה, בלי TOFU. מחזיר את רשומת האב.
     עיקרון 5: נאכף בשכבת ה-service, לא רק ב-route."""
@@ -275,7 +284,7 @@ def authenticate_parent(conn, peer: TlsPeer, *, token: str, protocol_version: st
 
 def ping(conn, peer: TlsPeer, *, token: str, protocol_version: str,
          has_console_cookie: bool = False) -> dict:
-    """‏ping מאומת — ראו :func:`authenticate_parent`."""
+    """ping מאומת — ראו :func:`authenticate_parent`."""
     cred = authenticate_parent(conn, peer, token=token,
                                protocol_version=protocol_version,
                                has_console_cookie=has_console_cookie)
@@ -290,7 +299,7 @@ def ping(conn, peer: TlsPeer, *, token: str, protocol_version: str,
 
 
 def _own_version() -> str | None:
-    """גרסת התוכנה של השרת הזה (תג git), כפי ש-/me מדווח. ‏None = אין תג —
+    """גרסת התוכנה של השרת הזה (תג git), כפי ש-/me מדווח. None = אין תג —
     הראשי מציג "לא ידועה", לא מספר שאין לו מקור."""
     from server.core.agent_version import server_version
     return server_version()
@@ -300,8 +309,8 @@ def _own_version() -> str | None:
 #
 # הגוף הוא ה-tar של תיקיית האימג' (``archive.tar_stream``), והכניסה לספרייה
 # היא ``archive.import_tar_stream`` — אותם שומרים של העלאה מהדפדפן: חילוץ
-# לאזור ביניים, ‏sha256 של כל מחיצה מול המניפסט, ורק אז ``rename`` לספרייה
-# (עיקרון 6). ‏#1457: החילוץ וה-sha256 נעשים **תוך כדי** קבלת הזרם — בלי קובץ
+# לאזור ביניים, sha256 של כל מחיצה מול המניפסט, ורק אז ``rename`` לספרייה
+# (עיקרון 6). #1457: החילוץ וה-sha256 נעשים **תוך כדי** קבלת הזרם — בלי קובץ
 # ``.transfer``, בלי העתקה ובלי קריאה שנייה — ולכן אחרי הבייט האחרון נשארת
 # רק הכניסה לספרייה, והראשי לא מחכה לאימות של דקות.
 # קטוע/לא-תואם — נמחק ומדווח בגלוי; לעולם לא תיקייה חלקית בשם אימג'.
@@ -396,7 +405,7 @@ def list_images(ctx, peer: TlsPeer, *, token: str, protocol_version: str,
         for part in streamed_partitions(manifest):
             name = part["file"]
             sha[name] = part.get("sha256") or ""
-            # ‏#2160: ``size_bytes`` הוא סכום של **כל** הקבצים או ``None`` — קובץ
+            # #2160: ``size_bytes`` הוא סכום של **כל** הקבצים או ``None`` — קובץ
             # שלא נמדד (נעלם, סימלינק, stat נכשל) לא נספר כאפס. סכום חלקי נראה
             # כגודל שנמדד, והראשי היה בודק מקום פנוי מול מספר קטן מדי; ``None``
             # גורם לו להיכשל בשם (`_check_pull_space`, "לא דיווח את הגודל").
@@ -466,7 +475,7 @@ def parse_byte_range(header: str | None, size: int) -> tuple[int, int, int]:
     except ValueError:
         return 200, 0, size - 1
     if start < 0 or start >= size:
-        # ‏#1456: הגודל בתשובה (RFC 9110) — הראיה של הראשי שהקובץ שלו שלם.
+        # #1456: הגודל בתשובה (RFC 9110) — הראיה של הראשי שהקובץ שלו שלם.
         raise PairError(416, f"טווח לא ניתן לסיפוק: {header}",
                         headers={"Content-Range": f"bytes */{size}"})
     end = min(max(end, start), size - 1)
@@ -543,7 +552,7 @@ def receive_image_precheck(ctx, peer: TlsPeer, *, token: str, protocol_version: 
     except OSError as exc:
         # לא הצלחנו לבדוק ≠ יש מקום (עיקרון 5).
         raise PairError(507, f"לא ניתן לקרוא את המקום הפנוי בספרייה: {exc}")
-    # ‏#1737: ועוד הרזרבה למערכת — האימג' לא ייכנס אם ישאיר פחות ממנה.
+    # #1737: ועוד הרזרבה למערכת — האימג' לא ייכנס אם ישאיר פחות ממנה.
     keep = disk_reserve.reserve()
     need = length * FREE_SPACE_FACTOR + FREE_SPACE_MARGIN + keep
     if free < need:
@@ -554,7 +563,7 @@ def receive_image_precheck(ctx, peer: TlsPeer, *, token: str, protocol_version: 
 
 def _space_refusal(ctx, library, location_id: str, *, need: int, keep: int,
                    free: int) -> str:
-    """‏#1697: ה-507 אומר כמה נדרש, כמה פנוי **בכל** מיקום אחסון במשני, ולאן כן
+    """#1697: ה-507 אומר כמה נדרש, כמה פנוי **בכל** מיקום אחסון במשני, ולאן כן
     אפשר להעביר. ההודעה עוברת כמו שהיא לשורת ההעברה בקונסולת הראשי — שם
     המפעיל בוחר את המיקום, ובלי הרשימה הוא רואה "אין מקום" בזמן שבדף האחסון
     של המשני יש דיסק פנוי. אין בחירה אוטומטית: היעד נשאר מה שהמפעיל בחר.
@@ -603,8 +612,8 @@ class _BodyTooLong(Exception):
 
 
 class _BodyReader:
-    """‏``read(n)`` מעל מנות הגוף, עם ספירה מול Content-Length (‏#1457):
-    ‏``tarfile`` במצב זרם קורא ממנו, ו-``received`` הוא הראיה לכמה הגיע."""
+    """``read(n)`` מעל מנות הגוף, עם ספירה מול Content-Length (#1457):
+    ``tarfile`` במצב זרם קורא ממנו, ו-``received`` הוא הראיה לכמה הגיע."""
 
     def __init__(self, chunks: Iterable[bytes], limit: int):
         self._chunks = iter(chunks)
@@ -636,10 +645,10 @@ class _BodyReader:
 
 def receive_image(ctx, plan: ReceivePlan, chunks: Iterable[bytes]) -> dict:
     """מחלץ את הזרם ישר לאזור ביניים **בתוך** הספרייה (אותה מערכת קבצים),
-    עם sha256 תוך כדי כתיבה (``import_tar_stream``, ‏#1457), ומכניס רק אחרי
+    עם sha256 תוך כדי כתיבה (``import_tar_stream``, #1457), ומכניס רק אחרי
     שכל מחיצה תאמה למניפסט. מחזיר את המניפסט שנקלט.
 
-    ‏#1891: כל הקבלה היא "עסוק" ל"החל עדכון" במשני (‏`inflight`) — restart
+    #1891: כל הקבלה היא "עסוק" ל"החל עדכון" במשני (`inflight`) — restart
     באמצע חותך את ההעברה מהראשי."""
     from server.system import inflight
     with inflight.holding("קבלת אימג' משרת אחר"):
@@ -698,7 +707,7 @@ def _receive_image(ctx, plan: ReceivePlan, chunks: Iterable[bytes]) -> dict:
 
 def list_machines(ctx, peer: TlsPeer, *, token: str, protocol_version: str,
                   has_console_cookie: bool = False) -> dict:
-    """מה שדף המוניטור של המשני מראה — ‏``monitor.machine_rows`` — לאב
+    """מה שדף המוניטור של המשני מראה — ``monitor.machine_rows`` — לאב
     המאומת. קריאה בלבד; ``node_id`` מצורף כדי שהאב ידע ממי קיבל."""
     from server.console.monitor import machine_rows
     authenticate_parent(ctx.conn, peer, token=token, protocol_version=protocol_version,
@@ -717,7 +726,7 @@ def list_machines(ctx, peer: TlsPeer, *, token: str, protocol_version: str,
 # מעטפת ``{status, body, headers}``. רק GET, ורק נתיב שמתאים לשורה ב-
 # ``CONSOLE_GETS``; לכל שורה הטיפוס העליון שהנתיב מחזיר — הראשי בודק אותו.
 
-#: ‏(ביטוי לנתיב המלא אחרי ``/api/console``, הטיפוס העליון של תשובה 200).
+#: (ביטוי לנתיב המלא אחרי ``/api/console``, הטיפוס העליון של תשובה 200).
 #: בלי ``/me``, הורדות/CSV/גיבוי, ``…/probe`` (שולח DHCP לרשת) ו-``…/disk``.
 CONSOLE_GETS: tuple[tuple[str, type], ...] = (
     (r"/overview", dict), (r"/machines", list), (r"/groups", list),
@@ -732,15 +741,15 @@ CONSOLE_GETS: tuple[tuple[str, type], ...] = (
     (r"/users", list), (r"/journal", list), (r"/journal/events", list),
     (r"/settings", dict), (r"/update", dict), (r"/update/status", dict),
     # מה-gate (11/10): כרטיסי TLS ושם המארח בהגדרות, ומי מחובר לקונסולה (דף הרשת).
-    (r"/tls", dict), (r"/hostname", dict), (r"/sessions", list),   # ‏``current`` תמיד False כאן: אין עוגייה של המשני (#2552)
-    # ‏#1932: שורת "אזור זמן" בהגדרות של המשני (קריאה; הכתיבה ב-``CONSOLE_WRITES``).
+    (r"/tls", dict), (r"/hostname", dict), (r"/sessions", list),   # ``current`` תמיד False כאן: אין עוגייה של המשני (#2552)
+    # #1932: שורת "אזור זמן" בהגדרות של המשני (קריאה; הכתיבה ב-``CONSOLE_WRITES``).
     (r"/timezone", dict),
     # המשני עונה 409 משלו (אינו מנהל ילדים) — העמוד מקבל את תשובת המשני.
     (r"/storage-nodes", list), (r"/storage-node-groups", list), (r"/storage-transfers", list),
 )
-#: ‏#1179 שלב 2: כתיבה מהראשי — רשימה נפרדת, ‏(שיטה, ביטוי לנתיב), לפי הסדר שנקבע:
-#: משתמשים → הגדרות → רשת. **מחוץ לרשימה במכוון:** ‏``/users/{n}/reset-password``
-#: (הסיסמה החדשה חוזרת בתשובה, ו-``defang`` היה משבש בה תווים כמו ``&``), ‏``/ports/…``
+#: #1179 שלב 2: כתיבה מהראשי — רשימה נפרדת, (שיטה, ביטוי לנתיב), לפי הסדר שנקבע:
+#: משתמשים → הגדרות → רשת. **מחוץ לרשימה במכוון:** ``/users/{n}/reset-password``
+#: (הסיסמה החדשה חוזרת בתשובה, ו-``defang`` היה משבש בה תווים כמו ``&``), ``/ports/…``
 #: (כיבוי 8443 במשני מנתק אותו מהראשי — ואין דרך להדליק בחזרה מכאן), מחיקת אימג'/
 #: מכונה וכל העלאה.
 CONSOLE_WRITES: tuple[tuple[str, str], ...] = (
@@ -749,33 +758,33 @@ CONSOLE_WRITES: tuple[tuple[str, str], ...] = (
     ("POST", r"/room"), ("POST", r"/room/close"),
     ("POST", r"/users"), ("PUT", r"/users/[^/]+"), ("DELETE", r"/users/[^/]+"),
     ("POST", r"/settings"),
-    # ‏#1932: אזור הזמן של המשני — הגדרה כמו ``/settings`` (‏timedatectl + ההגדרה במשני עצמו).
+    # #1932: אזור הזמן של המשני — הגדרה כמו ``/settings`` (timedatectl + ההגדרה במשני עצמו).
     ("POST", r"/timezone"),
-    # רשת: כרטיסים ו-DHCP (‏/net/interfaces) וכתובות (‏/net/config). שינוי כתובת שמנתק
-    # את המשני מהראשי חוזר לבד: אישור ההחזרה (‏/net/config/confirm) לא יגיע, וה-rollback
-    # של המשני (#1263) מחזיר. ‏…/probe (שולח DHCP לרשת) אינו כאן — הוא GET שאינו ברשימה.
+    # רשת: כרטיסים ו-DHCP (/net/interfaces) וכתובות (/net/config). שינוי כתובת שמנתק
+    # את המשני מהראשי חוזר לבד: אישור ההחזרה (/net/config/confirm) לא יגיע, וה-rollback
+    # של המשני (#1263) מחזיר. …/probe (שולח DHCP לרשת) אינו כאן — הוא GET שאינו ברשימה.
     ("POST", r"/net/interfaces"), ("PUT", r"/net/interfaces/[^/]+"),
     ("PUT", r"/net/interfaces/[^/]+/description"), ("DELETE", r"/net/interfaces/[^/]+"),
     ("POST", r"/net/config/[^/]+/preview"), ("PUT", r"/net/config/[^/]+"),
     ("PUT", r"/net/config/[^/]+/deploy"), ("PUT", r"/net/config/[^/]+/second"),
     ("POST", r"/net/config/confirm"),
-    # ‏#1776 (נדב 19/10: "אני מתל אביב רוצה לעדכן את חיפה"): לשונית העדכון של המשני בעץ
+    # #1776 (נדב 19/10: "אני מתל אביב רוצה לעדכן את חיפה"): לשונית העדכון של המשני בעץ
     # של הראשי — בדיקה והחלה, במסלול החתום של המשני עצמו (server-upgrade.sh מסרב לתג
-    # שאינו חתום, והסיבה חוזרת ב-GET /update/status). ‏/update/revert אינו כאן: הוא דורש
+    # שאינו חתום, והסיבה חוזרת ב-GET /update/status). /update/revert אינו כאן: הוא דורש
     # את שם השרת **של המשני**, והקונסולה של הראשי שולחת את שם הראשי.
     ("POST", r"/update/check"), ("POST", r"/update/apply"),
-    # ‏#2240: כוח דרך הסוכן למכונה של המשני באמצע שיכפול מקומי (המוניטור מהראשי).
-    # רק הנתיב הזה — ‏``…/power`` (‏``poweroff -f``) נשאר במנהרה של המוניטור בלבד.
+    # #2240: כוח דרך הסוכן למכונה של המשני באמצע שיכפול מקומי (המוניטור מהראשי).
+    # רק הנתיב הזה — ``…/power`` (``poweroff -f``) נשאר במנהרה של המוניטור בלבד.
     ("POST", r"/monitor/[^/]+/agent-power"),
 )
-#: ‏#1776: תקרת בקשה ארוכה מ-``REQUEST_TIMEOUT`` (15 ש') לכתיבות שהמשני עונה עליהן
-#: לאט מטבען. ‏``/update/check`` מריץ אצלו ls-remote (20 ש') + הורדת התג ובדיקת החתימה
-#: (60+60 ש'); ‏``/update/apply`` ממתין ל-systemd-run (15 ש') ולקריאת הגרסה. בלי זה
+#: #1776: תקרת בקשה ארוכה מ-``REQUEST_TIMEOUT`` (15 ש') לכתיבות שהמשני עונה עליהן
+#: לאט מטבען. ``/update/check`` מריץ אצלו ls-remote (20 ש') + הורדת התג ובדיקת החתימה
+#: (60+60 ש'); ``/update/apply`` ממתין ל-systemd-run (15 ש') ולקריאת הגרסה. בלי זה
 #: הראשי היה מכריז "לא ידוע אם בוצעה" על בדיקה תקינה שפשוט לוקחת דקה.
-#: ‏``/timezone`` (#1932): ‏timedatectl set-timezone (עד 20 ש') ואז קריאה חוזרת (עד 10 ש').
+#: ``/timezone`` (#1932): timedatectl set-timezone (עד 20 ש') ואז קריאה חוזרת (עד 10 ש').
 CONSOLE_WRITE_TIMEOUTS: dict[str, float] = {"/update/check": 180.0, "/update/apply": 60.0,
                                             "/timezone": 45.0}
-#: ‏#1776: סירוב של כתיבה שאינה ב-``CONSOLE_WRITES`` **של המשני הזה**. הראשי שולח רק
+#: #1776: סירוב של כתיבה שאינה ב-``CONSOLE_WRITES`` **של המשני הזה**. הראשי שולח רק
 #: מה שברשימה שלו, ולכן הסיבה הסבירה היא משני ישן מהראשי — וזה מה שנאמר, עם התיקון.
 #: הראשי מתרגם את ה-404 הזה בעצמו (``console/storage.py``), כי משני ישן שולח את הנוסח
 #: הישן שלו ("אינה מורשית בערוץ הבין-שרתי").
@@ -789,7 +798,7 @@ _ACTING_USER = re.compile(r"^[A-Za-z0-9._@-]{1,64}$")
 #: נתיב שעובר כפי שהוא, בלי פענוח אחר-כך: בלי ``%`` (אין ``%2e%2e``/``%2f``/קידוד
 #: כפול שהופכים לנתיב אחר אחרי unquote), בלי ``\``, בלי רווח — רק תווים שאינם
 #: משתנים בפענוח. הבדיקה והבקשה רצות על **אותה** מחרוזת.
-#: ‏CodeQL #780/#781: ‏`^` מפורש — ‏`fullmatch` מעגן ממילא, אבל הניתוח קורא את הביטוי לבדו.
+#: CodeQL #780/#781: `^` מפורש — `fullmatch` מעגן ממילא, אבל הניתוח קורא את הביטוי לבדו.
 _SAFE_PATH = re.compile(r"^(?:/[A-Za-z0-9._~-]+)+")
 #: תקרה לגוף שהקונסולה של המשני מחזירה, לפני שהוא נאסף לזיכרון.
 MAX_CONSOLE_BODY = 16 * 1024 * 1024
@@ -809,7 +818,7 @@ def console_get_type(path: str) -> type | None:
 
 
 def console_write_allowed(method: str, path: str) -> bool:
-    """‏``(method, path)`` ברשימת הכתיבה — אחרי אותה בדיקת נתיב של ה-GET (בלי ``%``/``..``)."""
+    """``(method, path)`` ברשימת הכתיבה — אחרי אותה בדיקת נתיב של ה-GET (בלי ``%``/``..``)."""
     if not _SAFE_PATH.fullmatch(path or "") or any(seg in (".", "..") for seg in path.split("/")):
         return False
     return any(method == m and re.fullmatch(p, path) for m, p in CONSOLE_WRITES)
@@ -824,7 +833,7 @@ def run_console_get(app, path: str, query: str, user: str) -> tuple[int, dict, o
 
 def run_console_write(app, method: str, path: str, query: str, user: str,
                       body: bytes) -> tuple[int, dict, object]:
-    """‏#1179 שלב 2: כתיבה אחת מהרשימה, בתוך התהליך — אותה זהות, אותו מסלול."""
+    """#1179 שלב 2: כתיבה אחת מהרשימה, בתוך התהליך — אותה זהות, אותו מסלול."""
     if not console_write_allowed(method, path):
         return 404, {}, {"detail": WRITE_NOT_ALLOWED}
     if len(body) > MAX_CONSOLE_WRITE_BODY:
@@ -868,7 +877,7 @@ def _run_console(app, method: str, path: str, query: str, user: str,
     try:
         asyncio.run(app(scope, receive, send))
     except Exception as exc:                                 # noqa: BLE001
-        # ‏ServerErrorMiddleware שולח 500 ואז זורק שוב — התשובה כבר אצלנו.
+        # ServerErrorMiddleware שולח 500 ואז זורק שוב — התשובה כבר אצלנו.
         log.warning("interserver: console %s %s raised — %s", method, path, exc)
     if size[0] > MAX_CONSOLE_BODY:
         return 500, {}, {"detail": f"תשובת הקונסולה גדולה מ-{MAX_CONSOLE_BODY} בייטים"}
@@ -906,7 +915,7 @@ def console_get(ctx, app, peer: TlsPeer, *, path: str, query: str, acting_user: 
 def console_write(ctx, app, peer: TlsPeer, *, method: str, path: str, query: str,
                   acting_user: str, body: bytes, token: str, protocol_version: str,
                   has_console_cookie: bool = False) -> dict:
-    """‏#1179 שלב 2: כתיבה מהרשימה בשם ``primary:<acting_user>``. האימות **לפני**
+    """#1179 שלב 2: כתיבה מהרשימה בשם ``primary:<acting_user>``. האימות **לפני**
     הנתיב, והתקרה **לפני** ההרצה. רשומת יומן ``peer_write`` במשני — מי (בראשי), מה,
     ומה יצא — גם כשהנתיב עצמו אינו כותב יומן."""
     authenticate_parent(ctx.conn, peer, token=token, protocol_version=protocol_version,
@@ -955,7 +964,7 @@ class MachineAuthError(Exception):
 
 def monitor_target(ctx, peer: TlsPeer, *, token: str, protocol_version: str,
                    mac: str, has_console_cookie: bool = False) -> tuple[str, str, str]:
-    """‏``(mac קנוני, ip, secret)`` של מכונה שמותר לפתוח אליה מוניטור מהאב —
+    """``(mac קנוני, ip, secret)`` של מכונה שמותר לפתוח אליה מוניטור מהאב —
     אותם תנאים של המוניטור המקומי (``monitor._target``: רשומה, build/cloner,
     נראתה ב-90 השניות האחרונות). בלי סוד או בלי ``monitor_auth: hmac`` =
     512 (סוכן ישן), לפני TCP."""
@@ -993,10 +1002,10 @@ def _reason_sync(sock: socket.socket) -> str:
 
 
 def authenticate_machine_sync(sock: socket.socket, secret: str) -> str:
-    """‏#839/#1077 על socket חוסם — מראה של ``monitor.authenticate_machine``
+    """#839/#1077 על socket חוסם — מראה של ``monitor.authenticate_machine``
     (שהוא asyncio): גרסה, סוג 2 בלבד (None לעולם לא), HMAC על ה-challenge,
-    ‏SecurityResult. אחרי ההצלחה המכונה ממתינה ל-ClientInit — מהאב.
-    ‏#1837: מחזיר את הסוד הבא, כמו המקור האסינכרוני."""
+    SecurityResult. אחרי ההצלחה המכונה ממתינה ל-ClientInit — מהאב.
+    #1837: מחזיר את הסוד הבא, כמו המקור האסינכרוני."""
     from server.console.monitor import (MACHINE_REJECTED_SECRET, RFB_SECURITY_SECRET, RFB_VERSION,
                             hmac_response, next_secret)
     banner = _recv_exact(sock, 12)
@@ -1021,15 +1030,15 @@ def authenticate_machine_sync(sock: socket.socket, secret: str) -> str:
 
 
 def _close_reason(side: str, exc: BaseException) -> str:
-    """‏#1122: סיבת סגירה בשם — הצד + סוג החריגה + הפרטים. ‏SysCallError
+    """#1122: סיבת סגירה בשם — הצד + סוג החריגה + הפרטים. SysCallError
     ו-ZeroReturnError של OpenSSL הם שלושת-רבעי הסגירות בפועל, וכולם נבלעו."""
     return f"{side}: {type(exc).__name__}: {exc}"
 
 
 def relay_tunnel(tls_conn, raw_sock: socket.socket, machine: socket.socket, *,
                  initial: bytes = b"", idle_seconds: float = TUNNEL_IDLE_SECONDS) -> str:
-    """ממסר דו-כיווני בתהליכון אחד: ‏TLS(האב) ↔ TCP(המכונה), עד שצד נסגר
-    או עד ``idle_seconds`` בלי תנועה. ‏non-blocking + select, ו-Want*Error
+    """ממסר דו-כיווני בתהליכון אחד: TLS(האב) ↔ TCP(המכונה), עד שצד נסגר
+    או עד ``idle_seconds`` בלי תנועה. non-blocking + select, ו-Want*Error
     של OpenSSL מטופלים כ"עוד לא", לא ככשל.
 
     מחזיר את **סיבת הסגירה** (#1122) — הקורא רושם אותה ליומן. מנהרה
@@ -1104,7 +1113,7 @@ def _bearer(headers) -> str:
 def create_interserver_app(ctx, tls_peer_provider):
     """אפליקציה **מבודדת** לכניסה הבין-שרתית — לא הקונסולה ולא הסוכן.
 
-    בלי ‏/console, ‏/boot או עוגיות. ``tls_peer_provider`` הוא
+    בלי /console, /boot או עוגיות. ``tls_peer_provider`` הוא
     callable(request)->TlsPeer שה-terminator מזין; הוא **מקור זהות ה-TLS
     היחיד** (עיקרון 5: לא header, לא request.client). המאזין בייצור הוא
     ``InterserverTLSServer`` למטה; האפליקציה הזאת היא אותן פונקציות
@@ -1230,7 +1239,7 @@ def create_interserver_app(ctx, tls_peer_provider):
 
 # --- terminator TLS של pyOpenSSL (המאזין הבין-שרתי בייצור ובבדיקות) ---------
 #
-# ‏uvinicorn/stdlib-ssl אינם יכולים לקלוט תעודת-לקוח לא-מוכרת ולחשוף
+# uvinicorn/stdlib-ssl אינם יכולים לקלוט תעודת-לקוח לא-מוכרת ולחשוף
 # exporter (ראו interserver_auth). לכן המאזין הבין-שרתי הוא terminator
 # עצמאי: הוא מסיים את ה-mTLS, בונה ``TlsPeer`` מהחיבור החי, וקורא לאותן
 # פונקציות service בדיוק שה-app ומבחני היחידה משתמשים בהן — מקור אמת אחד.
@@ -1257,17 +1266,64 @@ def _iter_file_range(path: Path, start: int, length: int, chunk_size: int = 1024
 _PREFIX = "/api/interserver/v1"
 
 
+class HeadTooLarge(Exception):
+    """#2488: שורת הבקשה והכותרות עברו את ``MAX_HEAD_BYTES`` — 431 וסגירה."""
+
+
+class _TimedRecv:
+    """#2488: ``recv`` עם תקרת זמן כוללת על חיבור pyOpenSSL. כשהזמן עבר —
+    ``b""``, כמו חיבור שנסגר: הכותרות נקראות כ"נסגר" והגוף כ"קצר מהמוצהר".
+
+    אותו מוקש כמו ב-``_handshake_within``: socket עם timeout הוא non-blocking
+    ל-pyOpenSSL, ולכן ממתינים ב-``select`` ומנסים שוב. אחרי כל קריאה הוא חוזר
+    לחוסם רגיל — הזרמים שאחרי האימות אינם תחת התקרה הזו."""
+
+    def __init__(self, conn, raw, seconds: float):
+        self._conn = conn
+        self._raw = raw
+        self.seconds = seconds
+        self.deadline = time.monotonic() + seconds
+        self.timed_out = False
+
+    def recv(self, size: int) -> bytes:
+        from OpenSSL import SSL
+        remaining = self.deadline - time.monotonic()
+        if remaining <= 0:
+            self.timed_out = True
+            return b""
+        self._raw.settimeout(remaining)
+        try:
+            while True:
+                try:
+                    return self._conn.recv(size)
+                except SSL.WantReadError:
+                    wait_r, wait_w = [self._raw], []
+                except SSL.WantWriteError:
+                    wait_r, wait_w = [], [self._raw]
+                remaining = self.deadline - time.monotonic()
+                if remaining <= 0 or not any(select.select(wait_r, wait_w, [], remaining)):
+                    self.timed_out = True
+                    return b""
+        finally:
+            self._raw.settimeout(None)
+
+
 def _read_http_head(conn):
     """קורא שורת-בקשה וכותרות של בקשת HTTP/1.1 אחת מחיבור pyOpenSSL.
-    מחזיר ``(method, path, headers, rest)`` — ‏``rest`` הם בייטי הגוף שכבר
-    הגיעו עם הכותרות — או ``None`` כשהחיבור נסגר."""
+    מחזיר ``(method, path, headers, rest)`` — ``rest`` הם בייטי הגוף שכבר
+    הגיעו עם הכותרות — או ``None`` כשהחיבור נסגר. #2488: מעבר ל-
+    ``MAX_HEAD_BYTES`` בלי סוף הכותרות — ``HeadTooLarge``."""
     buf = b""
     while b"\r\n\r\n" not in buf:
+        if len(buf) > MAX_HEAD_BYTES:
+            raise HeadTooLarge()
         chunk = conn.recv(4096)
         if not chunk:
             return None
         buf += chunk
     head, _, rest = buf.partition(b"\r\n\r\n")
+    if len(head) > MAX_HEAD_BYTES:
+        raise HeadTooLarge()
     lines = head.split(b"\r\n")
     method, path, _ = (lines[0].decode() + "  ").split(" ", 2)
     headers = {}
@@ -1321,11 +1377,11 @@ def _peer_addr(raw) -> str:
 
 
 def _handshake_within(conn, raw, seconds: float) -> bool:
-    """‏#1122: ‏``do_handshake`` עם תקרת זמן. מחזיר ``True`` כשה-handshake
-    הושלם, ‏``False`` כשפג הזמן — והקורא סוגר.
+    """#1122: ``do_handshake`` עם תקרת זמן. מחזיר ``True`` כשה-handshake
+    הושלם, ``False`` כשפג הזמן — והקורא סוגר.
 
-    ‏socket עם timeout הוא non-blocking ל-pyOpenSSL (אותו מוקש כמו #902 בצד
-    הלקוח): ‏``do_handshake`` זורק ``WantReadError``/``WantWriteError`` ברגע
+    socket עם timeout הוא non-blocking ל-pyOpenSSL (אותו מוקש כמו #902 בצד
+    הלקוח): ``do_handshake`` זורק ``WantReadError``/``WantWriteError`` ברגע
     שהבייט הבא לא הגיע, ולכן ממתינים ב-``select`` עד ה-deadline ומנסים שוב.
     בסיום — חוסם רגיל (``settimeout(None)``): קליטת אימג' של עשרות ג'יגה
     אסור שתיפול על timeout של handshake."""
@@ -1364,7 +1420,7 @@ class InterserverTLSServer:
         import threading
         self.ctx = ctx
         self.data_dir = data_dir
-        #: ‏#1179: אפליקציית הקונסולה של השרת הזה — ל-``GET /console/…`` בלבד.
+        #: #1179: אפליקציית הקונסולה של השרת הזה — ל-``GET /console/…`` בלבד.
         self.console_app = console_app
         self.handles: dict = {}
         self._cert_pem = cert_pem
@@ -1376,6 +1432,9 @@ class InterserverTLSServer:
         self.port = self._sock.getsockname()[1]
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._serve, daemon=True)
+        #: #2488: חריץ לכל חיבור חי — נתפס ב-accept, משתחרר כשהתהליכון מסיים.
+        self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+        self._refused = 0
 
     def start(self) -> "InterserverTLSServer":
         self._thread.start()
@@ -1384,9 +1443,9 @@ class InterserverTLSServer:
     def stop(self) -> None:
         import socket
         self._stop.set()
-        # ‏close() לבדו אינו מעיר accept() חסום בלינוקס: המאזין המשיך לקבל חיבור
+        # close() לבדו אינו מעיר accept() חסום בלינוקס: המאזין המשיך לקבל חיבור
         # אחד, השלים TLS וסגר בלי לקרוא (ECONNRESET אצל השולח, שנראה "אחרי
-        # השליחה"). ‏shutdown מעיר אותו; בווינדוס הוא נכשל על שקע מאזין
+        # השליחה"). shutdown מעיר אותו; בווינדוס הוא נכשל על שקע מאזין
         # (ENOTCONN), ושם close לבדו כבר מעיר את ה-accept.
         try:
             self._sock.shutdown(socket.SHUT_RDWR)
@@ -1404,9 +1463,25 @@ class InterserverTLSServer:
                 raw, _addr = self._sock.accept()
             except OSError:
                 break
+            # #2488: מעבר לתקרה — סגירה מיד, לפני ה-TLS ובלי תהליכון. שורת לוג
+            # לראשון ואחר כך לכל מאה, כדי שהצפה לא תהפוך להצפת לוג.
+            if not self._slots.acquire(blocking=False):
+                self._refused += 1
+                if self._refused == 1 or self._refused % 100 == 0:
+                    log.warning("interserver: %d connections open (the cap) -- refused %s"
+                                " (%d refused so far)", MAX_CONNECTIONS, _peer_addr(raw),
+                                self._refused)
+                raw.close()
+                continue
             import threading
-            threading.Thread(target=self._handle, args=(tls_ctx, raw),
+            threading.Thread(target=self._handle_in_slot, args=(tls_ctx, raw),
                              name=HANDLER_THREAD_NAME, daemon=True).start()
+
+    def _handle_in_slot(self, tls_ctx, raw) -> None:
+        try:
+            self._handle(tls_ctx, raw)
+        finally:
+            self._slots.release()
 
     def _handle(self, tls_ctx, raw) -> None:
         from OpenSSL import SSL
@@ -1425,8 +1500,19 @@ class InterserverTLSServer:
                                                      interserver_auth.EXPORTER_LENGTH),
             )
             while not self._stop.is_set():
-                head = _read_http_head(conn)
+                # #2488: הכותרות בתקרת גודל וזמן — כאן עוד לא אומת דבר.
+                timed = _TimedRecv(conn, raw, READ_TIMEOUT_SECONDS)
+                try:
+                    head = _read_http_head(timed)
+                except HeadTooLarge:
+                    conn.sendall(_http_response(
+                        431, {"detail": f"כותרות הבקשה גדולות מ-{MAX_HEAD_BYTES} בייטים"},
+                        close=True))
+                    break
                 if head is None:
+                    if timed.timed_out:
+                        log.info("interserver: no complete request from %s in %gs -- closed",
+                                 _peer_addr(raw), READ_TIMEOUT_SECONDS)
                     break
                 method, path, headers, rest = head
                 if method == "PUT" and _image_id_of(path) is not None:
@@ -1437,7 +1523,7 @@ class InterserverTLSServer:
                 elif method == "GET" and _image_file_of(path) is not None:
                     keep = self._send_file(conn, peer, path, headers)
                 else:
-                    keep = self._small_request(conn, peer, method, path, headers, rest)
+                    keep = self._small_request(conn, peer, method, path, headers, rest, raw=raw)
                 if not keep or headers.get("connection", "").lower() == "close":
                     break
         except SSL.Error:
@@ -1450,15 +1536,17 @@ class InterserverTLSServer:
             conn.close()
             raw.close()
 
-    def _small_request(self, conn, peer, method, path, headers, rest) -> bool:
+    def _small_request(self, conn, peer, method, path, headers, rest, raw=None) -> bool:
         """בקשת JSON: קוראים את הגוף (עד התקרה) ומשיבים. מחזיר האם
-        להמשיך ב-keep-alive."""
+        להמשיך ב-keep-alive. #2488: ``raw`` נמסר — הגוף בתקרת זמן (עוד לפני
+        האימות); גוף שלא הגיע בזמן הוא גוף קצר מהמוצהר."""
         length = int(headers.get("content-length", "0") or 0)
         if length > MAX_JSON_BODY:
             conn.sendall(_http_response(413, {"detail": "גוף גדול מדי"}, close=True))
             return False
-        body = b"".join(_body_chunks(conn, rest, length))
-        # ‏#1122 (Low): גוף שאינו באורך המוצהר אסור שישאיר את החיבור ב-
+        source = conn if raw is None else _TimedRecv(conn, raw, READ_TIMEOUT_SECONDS)
+        body = b"".join(_body_chunks(source, rest, length))
+        # #1122 (Low): גוף שאינו באורך המוצהר אסור שישאיר את החיבור ב-
         # keep-alive — קצר = החיבור נסגר באמצע (400, לא dispatch של חצי
         # JSON); ארוך = בייטים מעבר ל-Content-Length שאיש לא יקרא (desync).
         if len(body) != length:
@@ -1470,7 +1558,7 @@ class InterserverTLSServer:
         return len(rest) <= length
 
     def _receive_stream(self, conn, peer, path, headers, rest) -> bool:
-        """‏``PUT /images/{id}``: precheck → ‏``100 Continue`` → זרם לקובץ →
+        """``PUT /images/{id}``: precheck → ``100 Continue`` → זרם לקובץ →
         תשובה. דחייה ב-precheck נשלחת **בלי** לקרוא גוף, והחיבור נסגר —
         כדי שלקוח שלא חיכה ל-100 לא ישאיר עשרות ג'יגה בצנרת."""
         try:
@@ -1526,7 +1614,7 @@ class InterserverTLSServer:
         return True
 
     def _monitor_tunnel(self, conn, raw, peer, path, headers, rest) -> None:
-        """‏``GET /monitor/{mac}``: אימות → יעד → מנעול → TCP למכונה →
+        """``GET /monitor/{mac}``: אימות → יעד → מנעול → TCP למכונה →
         לחיצת-יד בסוד של המשני → ``200`` → ממסר גולמי עד סגירה."""
         from server.console import monitor as monitor_module
         try:
@@ -1565,7 +1653,7 @@ class InterserverTLSServer:
                     512, {"detail": "המוניטור לא השלים את לחיצת-היד תוך 5 שניות"},
                     close=True))
                 return
-            # ‏#1837: המכונה כבר עברה לסוד הבא — כמו במוניטור המקומי.
+            # #1837: המכונה כבר עברה לסוד הבא — כמו במוניטור המקומי.
             monitor_rekeyed(self.ctx.conn, mac, secret, rekeyed)
             conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream"
                          b"\r\nConnection: close\r\n\r\n")
@@ -1588,7 +1676,7 @@ class InterserverTLSServer:
         bare, _, query = path.partition("?")
         console_path = _console_path_of(bare)
         if method in ("POST", "PUT", "DELETE") and console_path is not None:
-            # ‏#1179 שלב 2: הגוף עובר לקונסולה כפי שהוא — לא מפוענח כאן.
+            # #1179 שלב 2: הגוף עובר לקונסולה כפי שהוא — לא מפוענח כאן.
             creds = {"token": _bearer(headers),
                      "protocol_version": headers.get("imagesrv-protocol-version", ""),
                      "has_console_cookie": "imagesrv_session" in headers.get("cookie", "")}
@@ -1694,7 +1782,7 @@ def _image_file_of(path: str) -> tuple[str, str] | None:
 
 
 def _console_path_of(path: str) -> str | None:
-    """‏#1179: ‏``/…`` מ-``/api/interserver/v1/console/…`` (בלי query), או ``None``."""
+    """#1179: ``/…`` מ-``/api/interserver/v1/console/…`` (בלי query), או ``None``."""
     prefix = f"{_PREFIX}/console/"
     if not path.startswith(prefix) or len(path) == len(prefix):
         return None

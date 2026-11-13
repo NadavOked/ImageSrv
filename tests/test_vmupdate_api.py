@@ -1,6 +1,6 @@
-"""‏#1334 — ה-API של עדכון ה-VM: מי מגיע, ומה הוא מקבל כשמסורב.
+"""#1334 — ה-API של עדכון ה-VM: מי מגיע, ומה הוא מקבל כשמסורב.
 
-שני שערים: ה-HTTP (‏admin_only — ‏deploy ‏403, אנונימי ‏401) וה-WebSocket
+שני שערים: ה-HTTP (admin_only — deploy 403, אנונימי 401) וה-WebSocket
 של המסך, שעובר בשער של המוניטור **לפני** שנפתח ה-socket של ה-VNC. הבדיקה
 המרכזית של ה-WS היא שה-connector **לא נקרא** כשההרשאה חסרה.
 """
@@ -37,7 +37,7 @@ def vm(server, tmp_path, monkeypatch):
         (ovmf / name).write_bytes(b"fw")
     qemu = FakeQemu()
     engine.machine = FakeMachine()
-    set_setting(engine.conn, vmupdate.NIC_KEY, "eth0")   # ‏#1468: "כרטיס לעדכוני VM"
+    set_setting(engine.conn, vmupdate.NIC_KEY, "eth0")   # #1468: "כרטיס לעדכוני VM"
     engine.ovmf_dir = ovmf
     engine._popen = qemu.popen
     engine._qmp = qemu.qmp
@@ -96,7 +96,7 @@ def test_save_rejects_a_bad_name_by_name(server, vm):
     assert bad.status_code == 400 and bad.json()["code"] == "name"
 
 
-# --- ‏#1535: הסירוב ללקוח נבנה מהכלל, לא מטקסט החריגה; הטקסט — ליומן, בשורה אחת ---
+# --- #1535: הסירוב ללקוח נבנה מהכלל, לא מטקסט החריגה; הטקסט — ליומן, בשורה אחת ---
 
 
 def _api_log(caplog) -> list[str]:
@@ -134,7 +134,7 @@ def test_a_bad_version_name_is_refused_by_the_rule_without_echoing_it_1535(serve
 
 
 class QemuReader:
-    """ה-VNC של QEMU: באנר, סוג None יחיד, ‏SecurityResult OK — ואז חוסם."""
+    """ה-VNC של QEMU: באנר, סוג None יחיד, SecurityResult OK — ואז חוסם."""
 
     def __init__(self):
         self.chunks = [b"RFB 003.008\n", b"\x01\x01", b"\x00\x00\x00\x00"]
@@ -303,8 +303,8 @@ def test_a_viewer_who_does_not_control_cannot_type(server, vm, monkeypatch):
 
 # --- #1392: מה ש-noVNC 1.6 שולח בפועל מול QEMU 10 -----------------------------
 #
-# נמדד 13/10 על שרת ת"א (QEMU 10.0.13, ‏rfbprobe מול vnc.sock): אחרי
-# SetEncodings של noVNC, ‏QEMU שולח ServerCutText **מורחב** (caps, אורך -8)
+# נמדד 13/10 על שרת ת"א (QEMU 10.0.13, rfbprobe מול vnc.sock): אחרי
+# SetEncodings של noVNC, QEMU שולח ServerCutText **מורחב** (caps, אורך -8)
 # ומאשר את -258 (QEMU Extended Key Event). noVNC 1.6 עונה ל-caps ב-ClientCutText
 # מורחב (אורך -8 כ-s32), ומאז כל מקש נשלח כהודעה 255 ולא 4. הגשר קרא את -8
 # כ-4GB: כל בקשת עדכון, עכבר ומקש אחריו נבלעו, והחיבור לא נסגר — מסך שחור
@@ -354,7 +354,7 @@ def test_novnc_1_6_sequence_reaches_qemu_and_the_bridge_stays_open(server, vm, m
     # כל הודעה כיחידה, בסדר — חוץ מה-ClientCutText, שאינו עובר לעולם (#1129).
     assert writes == [PIXEL_FORMAT, SET_ENCODINGS, FULL_UPDATE,
                       NEXT_UPDATE, MOUSE, SHIFT_DOWN, SHIFT_UP, NEXT_UPDATE]
-    # הדפדפן הוא שסגר, לא הגשר (‏refused = ‏1002 על 255 / ‏4403 על ה-caps).
+    # הדפדפן הוא שסגר, לא הגשר (refused = 1002 על 255 / 4403 על ה-caps).
     assert closed == ["browser"]
 
 
@@ -368,10 +368,10 @@ def test_novnc_1_6_keys_and_mouse_are_dropped_for_a_viewer_who_does_not_control(
 
 # --- #1394: רק ביטול ש-viewer_sessions עשה הוא "ההתחברות בוטלה" ----------------
 #
-# ‏7b5a51f2 קרא לכל CancelledError ‏session_revoked. אבל ה-endpoint מבוטל גם
+# 7b5a51f2 קרא לכל CancelledError session_revoked. אבל ה-endpoint מבוטל גם
 # בפירוק החיבור (#725 — ראו ה-except החיצוני), ואז היומן אמר "ההתחברות בוטלה"
-# על צופה שאיש לא ביטל. נמדד: ‏TestClient מבטל את המשימה מיד אחרי ה-disconnect,
-# ובלינוקס הביטול הקדים אותו — ‏['session_revoked'] במקום ['browser'].
+# על צופה שאיש לא ביטל. נמדד: TestClient מבטל את המשימה מיד אחרי ה-disconnect,
+# ובלינוקס הביטול הקדים אותו — ['session_revoked'] במקום ['browser'].
 
 
 def _closed_details(server):
@@ -406,7 +406,7 @@ def test_only_a_revocation_is_journaled_as_a_revoked_session(server, vm, monkeyp
             assert gone.value.code == 4401
         else:
             # ביטול שאינו מ-viewer_sessions: מה שהשרת עושה בפירוק החיבור.
-            _user, loop, task = viewer_sessions._tasks[token][0]   # ‏#1853: כמה צופים לעוגייה
+            _user, loop, task = viewer_sessions._tasks[token][0]   # #1853: כמה צופים לעוגייה
             loop.call_soon_threadsafe(task.cancel)
         deadline = time.monotonic() + 5
         while not _closed_details(server) and time.monotonic() < deadline:
@@ -428,9 +428,9 @@ class ClosingWriter(Writer):
 def test_console_logout_closes_the_open_vm_viewer_and_its_qemu_socket_1394(
         server, vm, monkeypatch):
     """הגדרת "גמור" של #1394, דרך ה-HTTP ולא דרך `viewer_sessions` ישירות:
-    צופה פתוח → ‏`POST /api/console/logout` באותה עוגייה → הגשר נסגר ב-4401
-    (‏"session_revoked" ביומן) וה-socket ל-QEMU נסגר. בלי החיווט ב-logout
-    הגשר נשאר פתוח עד idle (נמדד 13/10: ‏4.5 דק' אחרי היציאה)."""
+    צופה פתוח → `POST /api/console/logout` באותה עוגייה → הגשר נסגר ב-4401
+    ("session_revoked" ביומן) וה-socket ל-QEMU נסגר. בלי החיווט ב-logout
+    הגשר נשאר פתוח עד idle (נמדד 13/10: 4.5 דק' אחרי היציאה)."""
     import time
 
     sock = vm["engine"].workdir / "vnc.sock"

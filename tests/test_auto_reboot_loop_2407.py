@@ -1,6 +1,6 @@
-"""‏#2407: הפעלה מחדש מתוזמנת אינה מבוצעת פעמיים על אותו מופע.
+"""#2407: הפעלה מחדש מתוזמנת אינה מבוצעת פעמיים על אותו מופע.
 
-נמדד על ה-TA ב-04/11 (‏v0.81.3, ‏daily 10:21): השרת עלה תוך ~20 שניות, ובעלייה
+נמדד על ה-TA ב-04/11 (v0.81.3, daily 10:21): השרת עלה תוך ~20 שניות, ובעלייה
 המתזמן חישב את ``due`` **כולל הדקה הנוכחית** — ולכן הפעיל מחדש שוב, כשש פעמים,
 עד שהדקה עברה. הסימן ``scheduled-reboot`` כבר נשא את זמן הביצוע, אבל
 ``consume_marker`` מחק אותו בלי למסור את הזמן למתזמן.
@@ -50,7 +50,7 @@ def make(server, tmp_path, clock, calls, last_done=None):
 def test_fast_boot_in_the_scheduled_minute_does_not_reboot_again(daily, tmp_path):
     clock, calls = [SCHEDULED], []
     assert make(daily, tmp_path, clock, calls).tick() == "done"
-    # העלייה: ‏~20 שניות אחרי, ואותם מרווחי ~11 שניות שנמדדו ב-TA.
+    # העלייה: ~20 שניות אחרי, ואותם מרווחי ~11 שניות שנמדדו ב-TA.
     clock[0] = SCHEDULED.replace(second=20)
     last = auto_reboot.consume_marker(daily["ctx"].conn, tmp_path)
     assert last == SCHEDULED
@@ -91,7 +91,7 @@ def test_unreadable_marker_counts_as_already_done_and_is_journalled(daily, tmp_p
     assert isinstance(last, datetime) and minute <= last <= datetime.now()
     assert not (tmp_path / auto_reboot.MARKER).exists()
     line = journal_details(daily)[-1]
-    # "השרת אותחל" בראש — ההתראה במייל (‏email_alerts) נשארת; והספק נאמר בגלוי.
+    # "השרת אותחל" בראש — ההתראה במייל (email_alerts) נשארת; והספק נאמר בגלוי.
     assert line.startswith("השרת אותחל לפי לוח הזמנים") and "לא נקרא" in line
     assert "נחשב כבוצע" in line
     clock, calls = [minute], []

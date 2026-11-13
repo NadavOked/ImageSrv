@@ -1,9 +1,9 @@
-"""‏#1386 "בטל דיסק זה" באמצע גל — צד הסוכן.
+"""#1386 "בטל דיסק זה" באמצע גל — צד הסוכן.
 
 מגירה אחת יוצאת מזרם חי, והשאר ממשיכות. המנגנון של #1603: ה-zstd של
-המגירה נהרג, ה-fifo מאבד את הקורא, ‏fanout מקבל EPIPE ומפיל רק אותה. אחר
-כך טבלת המחיצות נמחקת (ראשית וגיבוי — ‏`sgdisk --zap-all`), והמגירה מסומנת
-‏`cancelled` — לא `failed`: בלי ראיית ATA, ולכן בלי disk_failure בשרת, ובסבב
+המגירה נהרג, ה-fifo מאבד את הקורא, fanout מקבל EPIPE ומפיל רק אותה. אחר
+כך טבלת המחיצות נמחקת (ראשית וגיבוי — `sgdisk --zap-all`), והמגירה מסומנת
+`cancelled` — לא `failed`: בלי ראיית ATA, ולכן בלי disk_failure בשרת, ובסבב
 הבא היא ירוקה.
 
 כמו ב-#1598, ה-`restore_partition_drawers` האמיתי מול **fanout האמיתי**.
@@ -32,7 +32,7 @@ JQ = shutil.which("jq")
 requires_jq = pytest.mark.skipif(JQ is None, reason="jq אינו מותקן — הביטוי לא היה רץ בכלל")
 requires_gcc = requires_native("gcc", posix=True, why="fanout האמיתי צריך gcc ו-fifo")
 
-#: ‏partclone מזויף. ל-sda — כותב הכול. ל-sdb — מגירה איטית: בולעת 2MB,
+#: partclone מזויף. ל-sda — כותב הכול. ל-sdb — מגירה איטית: בולעת 2MB,
 #: ומי שמבקש את הביטול הוא "המפעיל" (קובץ הבקשה, כמו שהגשר/לולאת הדיווח
 #: כותבים אותו), ואז ממשיכה לקרוא 64K כל 0.3 ש' — עד EOF.
 PARTCLONE = r"""#!/bin/sh
@@ -212,8 +212,8 @@ def test_the_libs_load_cancel_sh_where_its_writers_run():
 
 @requires_jq
 def test_the_build_machine_posts_the_cancel_with_its_session(tmp_path):
-    """‏X / "בטל…" במחשב הבנייה: אותו POST כמו הקונסולה, בסשן המחובר (role
-    admin/deploy — `room_operator` בשרת). ‏dev פגום — לא נשלח כלום; 409 — הסיבה
+    """X / "בטל…" במחשב הבנייה: אותו POST כמו הקונסולה, בסשן המחובר (role
+    admin/deploy — `room_operator` בשרת). dev פגום — לא נשלח כלום; 409 — הסיבה
     של השרת על המסך."""
     setup, gui = bridge_setup(tmp_path, "build")
     run = tmp_path / "run"

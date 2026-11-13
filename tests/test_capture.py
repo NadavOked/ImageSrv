@@ -23,12 +23,12 @@ from conftest import (
 
 PART_A = b"partition-one-bytes"
 PART_B = b"partition-three-bytes"
-#: ‏#1830: מה שהקבצים המזויפים "מכסים" — השרת דוחה זרם קטן מ-1% מ-`used_bytes`
+#: #1830: מה שהקבצים המזויפים "מכסים" — השרת דוחה זרם קטן מ-1% מ-`used_bytes`
 #: של המחיצה (`capture.MIN_STREAM_TO_USED`), ולכן הערכים כאן הם פי 50 מהקובץ (2%).
 USED_A, USED_B = 50 * len(PART_A), 50 * len(PART_B)
 
-#: ‏GUID דיסק אמיתי מהמעבדה — הצורה, לא הזהות, היא מה שנבדק. אימג'
-#: ‏Windows אמיתי נושא אותו תמיד; הסוכן גוזר אותו מ-`sgdisk -p` בקליטה.
+#: GUID דיסק אמיתי מהמעבדה — הצורה, לא הזהות, היא מה שנבדק. אימג'
+#: Windows אמיתי נושא אותו תמיד; הסוכן גוזר אותו מ-`sgdisk -p` בקליטה.
 DISK_GUID = "047B3400-0000-0000-0000-0000003AEE00"
 
 
@@ -97,7 +97,7 @@ def do_capture(server, task_id, manifest=None, files=None, token=None):
 
 
 def wait_verified(server, task_id: str, timeout: float = 15.0) -> str:
-    """‏#1470: ה-PUT של המניפסט עונה 202 והאימות רץ ברקע. מחכים שהמשימה
+    """#1470: ה-PUT של המניפסט עונה 202 והאימות רץ ברקע. מחכים שהמשימה
     תצא מ-`verifying` — ומחזירים את המצב שאליו הגיעה, לא מניחים אותו."""
     deadline = time.monotonic() + timeout
     while True:
@@ -113,7 +113,7 @@ def wait_verified(server, task_id: str, timeout: float = 15.0) -> str:
 
 
 def test_capture_is_refused_to_a_cloner(server):
-    """‏#381 הרחיב את השער לרשימת היתר — ‏`cloner` נשאר בחוץ.
+    """#381 הרחיב את השער לרשימת היתר — `cloner` נשאר בחוץ.
 
     למכונת שיכפול אין מערכת מקומית משלה, ומשימת קליטה עליה היא בקשה
     לקרוא דיסק ריק (#17). מחשב כיתה **כן** נקלט מאז #381, ומה שקורה
@@ -140,9 +140,9 @@ def test_one_open_task_per_machine(server):
 
 @pytest.mark.parametrize("folder", [None, "", "   "])
 def test_a_capture_without_a_target_folder_is_refused(server, folder):
-    """‏#1251 (נדב, 10/10): אימג' חדש נשמר תמיד בתיקייה. השרת אוכף —
+    """#1251 (נדב, 10/10): אימג' חדש נשמר תמיד בתיקייה. השרת אוכף —
     לא רק המסכים — כי כל לקוח (קונסולה, קיוסק, גואי, טקסט, curl) מגיע
-    לכאן. ‏400 עם הסבר בעברית, ואף משימה לא נוצרה."""
+    לכאן. 400 עם הסבר בעברית, ואף משימה לא נוצרה."""
     mac = setup_build_machine(server)
     body = {"mac": mac, "disk": "sda", "name": "Windows 11 Base"}
     if folder is not None:
@@ -238,7 +238,7 @@ def test_a_manifest_that_records_a_dropped_fast_startup_is_accepted_and_kept(ser
 
 
 def test_intake_stores_the_real_requirement_not_the_source_disk_size(server, images_root):
-    """‏#82: הסוכן שולח `min_target_bytes` = גודל דיסק המקור, ומה שמונח
+    """#82: הסוכן שולח `min_target_bytes` = גודל דיסק המקור, ומה שמונח
     בספרייה הוא הדרישה האמיתית — סוף הפריסה.
 
     הנרמול כאן, ולא רק בקריאה, כי הדיסק הוא מקור האמת (עיקרון 3): אסור
@@ -272,9 +272,9 @@ def test_a_manifest_whose_size_requirement_is_unknowable_is_refused(server):
 
     response = do_capture(server, created["id"], manifest=bad)
     assert response.status_code == 400
-    # ‏#780: בדיקת הגיאומטריה תופסת size_bytes חסר קודם ("malformed geometry");
-    # ‏size_bytes קיים אך min_target שאינו ניתן לחישוב עדיין נדחה ב-"how much room".
-    # מאז #1407 ‏`_validate` דורש min_target_bytes עוד לפני שתי אלה, ודוחה בשמו.
+    # #780: בדיקת הגיאומטריה תופסת size_bytes חסר קודם ("malformed geometry");
+    # size_bytes קיים אך min_target שאינו ניתן לחישוב עדיין נדחה ב-"how much room".
+    # מאז #1407 `_validate` דורש min_target_bytes עוד לפני שתי אלה, ודוחה בשמו.
     detail = response.json()["detail"]
     assert ("missing field: min_target_bytes" in detail or "how much room" in detail
             or "malformed geometry" in detail)
@@ -286,7 +286,7 @@ def test_zero_partition_geometry_is_refused_at_capture(server, field):
     created = make_task(server, mac).json()
     malformed = manifest_for()
     malformed["partitions"][0][field] = 0
-    # ‏used_bytes > size_bytes נפסל לפני הגיאומטריה (#1407) — מוסר כדי
+    # used_bytes > size_bytes נפסל לפני הגיאומטריה (#1407) — מוסר כדי
     # שהטסט ימשיך לבדוק גיאומטריה אפסית.
     malformed["partitions"][0].pop("used_bytes")
 
@@ -297,8 +297,8 @@ def test_zero_partition_geometry_is_refused_at_capture(server, field):
 
 
 def test_a_windows_image_without_disk_guid_is_refused(server, images_root):
-    """‏#571: ‏Windows קושר את ה-BCD ל-GUID של הדיסק, ואימג' בלי `disk_guid`
-    עולה ל-`winload.efi 0xc000000e` על כל מחשב משוחזר (#26). ‏disk_guid
+    """#571: Windows קושר את ה-BCD ל-GUID של הדיסק, ואימג' בלי `disk_guid`
+    עולה ל-`winload.efi 0xc000000e` על כל מחשב משוחזר (#26). disk_guid
     ריק אינו "אין צורך ב-GUID" אלא "הקליטה לא הצליחה לקרוא אותו", ושני
     המצבים שונים (עיקרון 5).
 
@@ -320,7 +320,7 @@ def test_a_windows_image_without_disk_guid_is_refused(server, images_root):
 
 
 def test_a_windows_image_with_a_nil_disk_guid_is_refused(server, images_root):
-    """‏GUID אפס-מוחלט (nil UUID) הוא ערך שנקרא כזבל — GPT פגום, דיסק שאופס
+    """GUID אפס-מוחלט (nil UUID) הוא ערך שנקרא כזבל — GPT פגום, דיסק שאופס
     עם חתימה ששרדה, או כלי partition לא-תקני. בלעדי ההבחנה הוא **מתחזה**
     לערך תקין ועוקף את שער #571 (שדחה רק ריק/null), נכנס לספרייה, ומשוחזר
     ל-GUID אפס → אותו `winload.efi 0xc000000e`. "לא הצלחנו לקרוא GUID" חייב
@@ -338,7 +338,7 @@ def test_a_windows_image_with_a_nil_disk_guid_is_refused(server, images_root):
 
 
 def test_a_windows_image_with_a_malformed_disk_guid_is_refused(server, images_root):
-    """‏GUID שאינו בפורמט (למשל "unknown") אינו זהות — נדחה בקליטה כמו nil,
+    """GUID שאינו בפורמט (למשל "unknown") אינו זהות — נדחה בקליטה כמו nil,
     לא מגיע ל-sgdisk -U מול הכיתה. מרחיב #443/#760: פורמט, לא רק ריק/אפס."""
     mac = setup_build_machine(server)
     created = make_task(server, mac).json()
@@ -352,10 +352,10 @@ def test_a_windows_image_with_a_malformed_disk_guid_is_refused(server, images_ro
 
 
 def test_a_linux_image_without_disk_guid_is_accepted(server):
-    """הצד השני של ההבחנה: לינוקס אינו קשור ל-`disk_guid` — ‏GRUB מאתר
+    """הצד השני של ההבחנה: לינוקס אינו קשור ל-`disk_guid` — GRUB מאתר
     לפי UUID של מערכת הקבצים (`docs/architecture/interfaces.md`). אימג' לינוקס בלי
-    ‏disk_guid תקין, והשער של #571 חל על Windows בלבד. בלי ההבחנה הזאת
-    היינו חוסמים בקליטה אימג' תקין לגמרי — ‏#571 מהצד השני."""
+    disk_guid תקין, והשער של #571 חל על Windows בלבד. בלי ההבחנה הזאת
+    היינו חוסמים בקליטה אימג' תקין לגמרי — #571 מהצד השני."""
     mac = setup_build_machine(server)
     created = make_task(server, mac).json()
     parts = [
@@ -403,10 +403,10 @@ def test_a_missing_partition_file_is_caught(server, images_root):
 
 
 def test_a_task_whose_image_id_is_not_an_id_never_becomes_a_folder(server, images_root):
-    """‏#110: המזהה הוא שם התיקייה, והכלל נאכף **גם כאן** ולא רק בייבוא.
+    """#110: המזהה הוא שם התיקייה, והכלל נאכף **גם כאן** ולא רק בייבוא.
 
     המזהה נוצר בשרת, ולכן זה מצב שאינו אמור לקרות — וזה בדיוק מה שהופך
-    אותו למסוכן: אם השורה בבסיס הנתונים אינה מה שחשבנו, ‏`root / image_id`
+    אותו למסוכן: אם השורה בבסיס הנתונים אינה מה שחשבנו, `root / image_id`
     הוא נתיב שיוצא מהשורש, ואף אחד לא היה מגלה.
     """
     mac = setup_build_machine(server)
@@ -449,16 +449,16 @@ def test_only_the_last_partition_may_be_expandable(server):
 
 
 def test_a_root_followed_only_by_swap_is_still_expandable(server):
-    """‏#46: ה-swap של מתקין דביאן יושבת בזנב, וה-root שלפניה מורחבת.
+    """#46: ה-swap של מתקין דביאן יושבת בזנב, וה-root שלפניה מורחבת.
 
-    ‏swap אינה משודרת ונוצרת מחדש מהמניפסט, ולכן הסוכן מעתיק אותה לזנב
+    swap אינה משודרת ונוצרת מחדש מהמניפסט, ולכן הסוכן מעתיק אותה לזנב
     הדיסק ומרחיב את מה שלפניה — והשרת חייב לקבל מניפסט כזה. הכלל הישן
     ("רק ממש האחרונה") היה אומר שאימג' Linux טיפוסי לא מורחב לעולם.
     """
     mac = setup_build_machine(server)
     created = make_task(server, mac).json()
     parts = manifest_for()["partitions"]
-    # ‏512MiB ולא 4GiB: מאז #1407 מחיצה שנגמרת אחרי min_target_bytes נפסלת,
+    # 512MiB ולא 4GiB: מאז #1407 מחיצה שנגמרת אחרי min_target_bytes נפסלת,
     # וזנב הדיסק כאן הוא 668MiB (כך גם בשני הטסטים הבאים).
     parts.append({"index": 4, "type_guid": SWAP_GUID, "role": "swap",
                   "fs": "swap", "start_sector": 498888704,
@@ -469,10 +469,10 @@ def test_a_root_followed_only_by_swap_is_still_expandable(server):
 
 
 def test_a_recovery_partition_after_the_expandable_one_is_accepted(server):
-    """‏#58 — **היפוך מכוון** של הכלל הקודם ("רק swap אחרי המורחבת").
+    """#58 — **היפוך מכוון** של הכלל הקודם ("רק swap אחרי המורחבת").
 
-    זו הפריסה של Windows 11: ‏esp · msr · windows · recovery. הכלל הישן
-    אמר שאף אימג' Windows לא יורחב לעולם. ‏recovery אינה נבראת מחדש כמו
+    זו הפריסה של Windows 11: esp · msr · windows · recovery. הכלל הישן
+    אמר שאף אימג' Windows לא יורחב לעולם. recovery אינה נבראת מחדש כמו
     swap — היא נכתבת מקובץ הזרם שלה, במיקום החדש שבזנב, לפי האינדקס.
     """
     mac = setup_build_machine(server)

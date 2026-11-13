@@ -1,4 +1,4 @@
-"""‏#1050 — הבחירה שנשמרה בקונסולה מגיעה ל-initrd ולתפריט התחנה.
+"""#1050 — הבחירה שנשמרה בקונסולה מגיעה ל-initrd ולתפריט התחנה.
 
 שני צדדים, טבלה אחת (`agent/lib/tools/toolbins.sh`): הבנאי (`build_initramfs.sh
 --tools-selection`) אורז את הבינארים של מזהי ה-`build` שבקובץ, והתחנה
@@ -55,7 +55,7 @@ def posix(p: Path) -> str:
 
 
 def sh(script: str, *, strict: bool = False) -> subprocess.CompletedProcess:
-    """‏`strict` = הדגלים של הבנאי (`set -euo pipefail`): מה שעובר בטסט חייב
+    """`strict` = הדגלים של הבנאי (`set -euo pipefail`): מה שעובר בטסט חייב
     לעבור גם שם, ו-grep שמחזיר 1 על רשימה ריקה היה מפיל את הבנייה."""
     head = "set -euo pipefail; " if strict else ""
     return subprocess.run(
@@ -126,7 +126,7 @@ def has_runner(tool_id: str) -> bool:
 
 
 def test_the_plan_is_the_union_of_the_selected_ids_binaries(tmp_path):
-    """‏magicrescue נבחר ואין לו מודול (#1104): הוא אינו בתוכנית, ונקוב בשמו."""
+    """magicrescue נבחר ואין לו מודול (#1104): הוא אינו בתוכנית, ונקוב בשמו."""
     chosen = ["disk-blkdiscard", "win-users", "win-blank-password", "magicrescue",
               "disk-dd-zero", "nvme-sanitize", "disk-nvme-format"]
     sel = selection(tmp_path, chosen, student=["photorec"])
@@ -145,8 +145,8 @@ def test_the_plan_is_the_union_of_the_selected_ids_binaries(tmp_path):
 
 
 def test_the_whole_catalog_plans_every_runnable_binary_once(tmp_path):
-    """‏#1104: הקטלוג כולו נבחר → נארזים רק הבינארים של מזהים שיש להם מודול.
-    בינארי שרק מזהה בלי מודול צריך (testdisk, ‏ddrescue…) אינו בתוכנית."""
+    """#1104: הקטלוג כולו נבחר → נארזים רק הבינארים של מזהים שיש להם מודול.
+    בינארי שרק מזהה בלי מודול צריך (testdisk, ddrescue…) אינו בתוכנית."""
     sel = selection(tmp_path, CATALOG_IDS)
     out = sh(f"tools_bins_plan {posix(sel)!r}", strict=True)
     assert out.returncode == 0, out.stderr
@@ -161,7 +161,7 @@ def test_the_whole_catalog_plans_every_runnable_binary_once(tmp_path):
 
 @pytest.mark.parametrize("tool_id", CATALOG_IDS)
 def test_an_id_alone_is_packed_only_when_a_module_runs_it(tmp_path, tool_id):
-    """‏#1104: מזהה שנבחר לבדו נארז אם ורק אם מודול בתחנה מריץ אותו. בלי
+    """#1104: מזהה שנבחר לבדו נארז אם ורק אם מודול בתחנה מריץ אותו. בלי
     מודול — כלום ב-stdout, rc 0 (הבחירה תקינה), והמזהה נקוב ב-stderr."""
     sel = selection(tmp_path, [tool_id])
     out = sh(f"tools_bins_plan {posix(sel)!r}", strict=True)
@@ -175,7 +175,7 @@ def test_an_id_alone_is_packed_only_when_a_module_runs_it(tmp_path, tool_id):
 
 
 def test_the_runner_table_matches_the_real_station_modules(tmp_path):
-    """‏`tools_has_runner` מול מה שהמודולים האמיתיים מציגים כשכל הקטלוג נבחר.
+    """`tools_has_runner` מול מה שהמודולים האמיתיים מציגים כשכל הקטלוג נבחר.
     מי שמממש מודול לאחד השמונה ושוכח את הטבלה — או מוסיף מזהה לקטלוג בלי
     מודול ובלי לרשום אותו כאן — נופל כאן, ולא נארז בשקט."""
     shown = set(listed(station(tmp_path, CATALOG_IDS)))
@@ -206,7 +206,7 @@ def test_an_unknown_id_stops_the_plan_loudly_and_packs_nothing(tmp_path):
 
 
 def test_the_file_the_server_writes_is_parsed_with_its_real_whitespace(tmp_path):
-    """‏json.dump עם indent, ‏\\r\\n של ווינדוס, ורווחים — כולם אותו קובץ."""
+    """json.dump עם indent, \\r\\n של ווינדוס, ורווחים — כולם אותו קובץ."""
     sel = tmp_path / "sel.json"
     sel.write_bytes(b'{\r\n "schema": 1,\r\n "build": [\r\n  "tpm-clear",\r\n  "win-users"\r\n ],\r\n "student": []\r\n}\r\n')
     out = sh(f"tools_bins_plan {posix(sel)!r}", strict=True)
@@ -229,7 +229,7 @@ def test_the_builder_has_the_flag_and_uses_the_same_table():
 
 
 def test_the_builder_knows_the_apt_package_of_every_binary_the_table_can_name():
-    """‏TOOL_PKG בבנאי ו-`tools_bins` בטבלה חייבים לנוע יחד: בינארי בלי
+    """TOOL_PKG בבנאי ו-`tools_bins` בטבלה חייבים לנוע יחד: בינארי בלי
     חבילה נופל ב-copy_bin עם הודעה גרועה, וחבילה בלי בינארי מותקנת לשווא."""
     text = BUILDER.read_text(encoding="utf-8")
     block = text[text.index("declare -A TOOL_PKG=("):]
@@ -323,7 +323,7 @@ def test_the_agent_stays_within_300_lines_and_loads_the_table():
 
 
 def test_no_tools_bins_module_shadows_the_glob():
-    """‏tools_load מגלגל `tools_*.sh` כמודולים; קובץ `tools_bins.sh` היה נטען
+    """tools_load מגלגל `tools_*.sh` כמודולים; קובץ `tools_bins.sh` היה נטען
     כתחום "bins" בלי `tools_bins_list` — לכן הטבלה היא `toolbins.sh`."""
     assert not (LIB / "tools_bins.sh").exists()
     modules = sorted(p.name for p in lib_files(LIB) if p.match("tools_*.sh"))

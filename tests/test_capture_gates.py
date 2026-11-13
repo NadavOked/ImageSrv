@@ -1,15 +1,15 @@
-"""שערי המקור של הקליטה — לפני הבייט הראשון (#1901, ‏#1808, ‏#1900).
+"""שערי המקור של הקליטה — לפני הבייט הראשון (#1901, #1808, #1900).
 
-‏#1901: משימת קליטה נקשרה לשם ההתקן (`sda`) בלבד. סדר הדיסקים מתחלף בין
+#1901: משימת קליטה נקשרה לשם ההתקן (`sda`) בלבד. סדר הדיסקים מתחלף בין
 אתחולים, וה-sha256 מאמת את מה שנקרא — לא את הדיסק שהמפעיל בחר — ולכן אימג'
 של הדיסק הלא נכון נכנס לספרייה בשם שניתן לו. מעכשיו ההזמנה נושאת את ה-serial
 שה-hello דיווח, והסוכן מסרב כשה-serial של `/dev/<disk>` שונה.
 
-‏#1808: חבר במערך Intel RST נראה ללינוקס כדיסק רגיל. הסירוב לפי חתימת
-המטא-דאטה על הדיסק (העוגן של IMSM בסקטור הלפני-אחרון; ‏blkid לשאר), ו"לא
+#1808: חבר במערך Intel RST נראה ללינוקס כדיסק רגיל. הסירוב לפי חתימת
+המטא-דאטה על הדיסק (העוגן של IMSM בסקטור הלפני-אחרון; blkid לשאר), ו"לא
 הצלחנו לבדוק" הוא סירוב — לא "אין RAID".
 
-‏#1900: מערכת קבצים שהשרת לא יקבל, או מקור 4Kn, נקלטו במלואם ונדחו רק
+#1900: מערכת קבצים שהשרת לא יקבל, או מקור 4Kn, נקלטו במלואם ונדחו רק
 ב-`finish_capture`. עכשיו — לפני בדיקת המקום ולפני הבייט הראשון.
 
 כל הסירובים נמדדים במה שהקונסולה מקבלת (`targets[].error`), כמו #106.
@@ -33,7 +33,7 @@ from test_timeouts import make_stubs, run_sh
 
 pytestmark = requires_native(("bash", BASH))
 
-#: ‏sgdisk שמשאיר סימן שנקרא — "הגענו לקריאת הטבלה" = עברנו את שערי המקור.
+#: sgdisk שמשאיר סימן שנקרא — "הגענו לקריאת הטבלה" = עברנו את שערי המקור.
 SGDISK_MARK = EMPTY_TABLE.replace("#!/bin/sh\n", '#!/bin/sh\ntouch "$RUN_DIR/sgdisk.ran"\n', 1)
 NO_PARTITIONS = "לא נמצאו מחיצות"
 
@@ -93,7 +93,7 @@ def test_the_task_carries_the_serial_the_console_saw_and_hello_hands_it_over(ser
     assert server["anon"].post("/api/v1/agent/hello", json=body).status_code == 200
     created = make_task(server, mac, disk="sdb").json()
 
-    # ‏SELECT * ו-.get: בבקרה השלילית (בלי העמודה) הטסט נכשל על הערך, לא על SQL.
+    # SELECT * ו-.get: בבקרה השלילית (בלי העמודה) הטסט נכשל על הערך, לא על SQL.
     row = dict(server["ctx"].conn.execute("SELECT * FROM tasks WHERE id = ?",
                                           (created["id"],)).fetchone())
     assert (row["disk"], row.get("disk_serial")) == ("sdb", "WD-B")
@@ -102,7 +102,7 @@ def test_the_task_carries_the_serial_the_console_saw_and_hello_hands_it_over(ser
 
 
 def test_a_disk_the_machine_never_reported_is_ordered_with_an_unknown_serial(server):
-    """לא דווח = לא ידוע (‏None), לא serial של דיסק אחר."""
+    """לא דווח = לא ידוע (None), לא serial של דיסק אחר."""
     from test_capture import make_task, setup_build_machine
     mac = setup_build_machine(server)
     created = make_task(server, mac, disk="nvme0n1").json()
@@ -129,10 +129,10 @@ def test_an_intel_rst_member_is_refused_by_its_signature(tmp_path):
     assert not (run / "sgdisk.ran").exists()
 
 
-#: ‏blkid שמדווח חבר md על הדיסק השלם (‏-p), ושותק על מחיצות.
+#: blkid שמדווח חבר md על הדיסק השלם (-p), ושותק על מחיצות.
 BLKID_MD_MEMBER = ('#!/bin/sh\ncase " $* " in *" -p "*) echo linux_raid_member; exit 0 ;; esac\n'
                    'exit 2\n')
-#: ‏blkid שהבדיקה שלו עצמה נכשלה (‏rc 4) על הדיסק השלם.
+#: blkid שהבדיקה שלו עצמה נכשלה (rc 4) על הדיסק השלם.
 BLKID_BROKEN_ON_DISK = '#!/bin/sh\ncase " $* " in *" -p "*) exit 4 ;; esac\nexit 2\n'
 
 
@@ -149,7 +149,7 @@ def test_a_raid_check_that_could_not_run_is_a_refusal_not_a_pass(tmp_path):
 
 
 def test_a_disk_tail_that_does_not_read_is_unchecked_not_none(tmp_path):
-    """‏blkid עונה rc 2 גם על "לא נפתח" (נמדד, util-linux 2.41.5) — לכן הקריאה
+    """blkid עונה rc 2 גם על "לא נפתח" (נמדד, util-linux 2.41.5) — לכן הקריאה
     של סוף הדיסק היא הראיה. גודל ב-sysfs שגדול מהקובץ = קריאה קצרה."""
     box, run, out = capture_run(
         tmp_path, raid=True, stubs={"sgdisk": SGDISK_MARK},
@@ -184,16 +184,16 @@ def test_hello_names_a_member_on_the_build_machine_in_three_states(tmp_path):
     assert _raid_json(tmp_path / "d", _with_isw_anchor(), "station") == "[]"
 
 
-# --- #1900: מערכת קבצים לא נתמכת / ‏4Kn ----------------------------------------
+# --- #1900: מערכת קבצים לא נתמכת / 4Kn ----------------------------------------
 
-#: ‏curl שרושם כל כתובת — "preflight לא נקרא" = הסירוב היה לפני בדיקת המקום.
+#: curl שרושם כל כתובת — "preflight לא נקרא" = הסירוב היה לפני בדיקת המקום.
 CURL_LOG = ('#!/bin/sh\necho "$*" >> "$RUN_DIR/curl.log"\n'
             'case "$*" in */preflight*) echo \'{"status":"ok","reason":"space checked"}\'; exit 0 ;; esac\n'
             'exit 7\n')
 
 
 def _blkid_fs(fs: str) -> str:
-    """‏blkid: הדיסק השלם (‏-p) — כלום; מחיצה — `fs`."""
+    """blkid: הדיסק השלם (-p) — כלום; מחיצה — `fs`."""
     return ('#!/bin/sh\ncase " $* " in *" -p "*) exit 2 ;; esac\n'
             f'case " $* " in *" TYPE "*) echo {fs}; exit 0 ;; esac\nexit 2\n')
 
@@ -209,7 +209,7 @@ def test_an_unsupported_filesystem_is_refused_before_the_space_check(tmp_path, f
 
 
 def test_a_partition_without_a_filesystem_is_still_read_raw(tmp_path):
-    """אסור לסרב ל-unknown (‏MSR, ‏raw, ‏VeraCrypt הם dd תקין) — הקליטה ממשיכה
+    """אסור לסרב ל-unknown (MSR, raw, VeraCrypt הם dd תקין) — הקליטה ממשיכה
     לבדיקת המקום."""
     # בדיקת המקום עונה "refused" — הקליטה נעצרת שם ולא ממשיכה לזרם.
     curl = CURL_LOG.replace('"status":"ok","reason":"space checked"', '"status":"refused","reason":"STOP-AT-SPACE"')
@@ -238,7 +238,7 @@ def test_the_agent_and_the_server_accept_the_same_filesystems():
     assert agent == FILESYSTEMS - {""}
 
 
-# --- #1823: ‏ESP שלא כובה כראוי -----------------------------------------------
+# --- #1823: ESP שלא כובה כראוי -----------------------------------------------
 
 #: בדיקת המקום עונה "refused" — הגענו אליה = עברנו את שערי המחיצות.
 CURL_STOP_AT_SPACE = CURL_LOG.replace('"status":"ok","reason":"space checked"',
@@ -246,7 +246,7 @@ CURL_STOP_AT_SPACE = CURL_LOG.replace('"status":"ok","reason":"space checked"',
 
 
 def _fat16_head(fat1: int) -> bytes:
-    """‏FAT16: ‏40000 סקטורים, ‏4 לאשכול, ‏40 לכל FAT — ‏9971 אשכולות (≥4085)."""
+    """FAT16: 40000 סקטורים, 4 לאשכול, 40 לכל FAT — 9971 אשכולות (≥4085)."""
     raw = bytearray(1024)
     struct.pack_into("<HBHBHH", raw, 11, 512, 4, 1, 2, 512, 40000)
     struct.pack_into("<H", raw, 22, 40)
@@ -271,8 +271,8 @@ def _preflight_ran(run: Path) -> bool:
 
 @pytest.mark.parametrize("head", [fat32_head(0x07FFFFFF), _fat16_head(0x7FFF)], ids=["fat32", "fat16"])
 def test_an_esp_not_cleanly_shut_down_is_refused_by_name_before_a_byte(tmp_path, head):
-    """partclone.fat מסרב ל-FAT בלי ביט הכיבוי הנקי ב-FAT[1] — גם עם ‏-I
-    (‏get_used_block). עד #1823 זה הגיע לקונסולה כ"שלב=pcl rc=1"."""
+    """partclone.fat מסרב ל-FAT בלי ביט הכיבוי הנקי ב-FAT[1] — גם עם -I
+    (get_used_block). עד #1823 זה הגיע לקונסולה כ"שלב=pcl rc=1"."""
     box, run, out = _fat_capture(tmp_path, head)
     reason = refusal_reason(box, run, out)
     assert "מחיצה 1" in reason and "לא נקייה" in reason and "כבו" in reason, reason
@@ -294,7 +294,7 @@ def test_a_clean_esp_passes_the_gate(tmp_path, head):
 
 
 def test_a_fat_header_that_does_not_read_is_unchecked_not_clean(tmp_path):
-    """עיקרון 5: ראש מחיצה שאינו נקרא (‏512 בייט — FAT[1] מעבר לסוף) — סירוב."""
+    """עיקרון 5: ראש מחיצה שאינו נקרא (512 בייט — FAT[1] מעבר לסוף) — סירוב."""
     box, run, out = _fat_capture(tmp_path, fat32_head()[:512])
     reason = refusal_reason(box, run, out)
     assert "לא הצלחנו לקרוא את כותרת ה-FAT" in reason, reason

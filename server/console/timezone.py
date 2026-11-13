@@ -1,4 +1,4 @@
-"""לשונית ההגדרות: אזור הזמן של השרת (‏#1447, הכרעת נדב 17/10).
+"""לשונית ההגדרות: אזור הזמן של השרת (#1447, הכרעת נדב 17/10).
 
 אזור אחד משמש שלושה: התחנות (מחרוזת POSIX ב-hello, ``timezone.posix_tz``),
 מסך השרת (DCUI) וזמני השרת המקומיים (הפעלה מחדש אוטומטית). לכן השינוי
@@ -10,12 +10,14 @@
 נכתבת ההגדרה. אזור שאינו ברשימת tzdata נדחה לפני שנוגעים במכונה. ה-DB
 שומר UTC כמו תמיד — רק התצוגה מקומית. **admin בלבד.**
 
-‏hooks (בדיקות מזריקות דרך ``host_hooks``, כמו ``console_hostcfg``):
-‏``timezone()`` — האזור שהמערכת מדווחת (‏``None`` = לא נקרא);
-‏``set_timezone(zone)`` — ‏``None`` בהצלחה, אחרת הודעת שגיאה.
+hooks (בדיקות מזריקות דרך ``host_hooks``, כמו ``console_hostcfg``):
+``timezone()`` — האזור שהמערכת מדווחת (``None`` = לא נקרא);
+``set_timezone(zone)`` — ``None`` בהצלחה, אחרת הודעת שגיאה.
 """
 
 from __future__ import annotations
+
+import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
@@ -23,6 +25,8 @@ from server.console import auth
 from server.system import timezone
 from server.agent.api import ServerContext
 from server.db import journal, set_setting
+
+log = logging.getLogger("imagesrv.console_timezone")
 
 
 def create_timezone_router(ctx: ServerContext, hooks: dict | None = None) -> APIRouter:
@@ -34,7 +38,8 @@ def create_timezone_router(ctx: ServerContext, hooks: dict | None = None) -> API
         try:
             return timezone.zones()
         except OSError as exc:
-            raise HTTPException(500, f"רשימת אזורי הזמן לא נקראה: {exc}") from None
+            log.warning("timezone list unreadable: %s", exc)        # #2543
+            raise HTTPException(500, "רשימת אזורי הזמן לא נקראה — הפרטים ביומן השרת") from None
 
     @router.get("/timezone")
     def timezone_status(user=Depends(admin_only)):

@@ -1,10 +1,10 @@
 """#2414 — שלושה ליקויי הקשחה בניהול משתמשים.
 
-1. ‏`PUT /users/{username}`: השומרים "אי אפשר לשנות את התפקיד של עצמך" ו"אי אפשר
+1. `PUT /users/{username}`: השומרים "אי אפשר לשנות את התפקיד של עצמך" ו"אי אפשר
    לחסום את המשתמש המחובר" השוו שם עם רגישות לרישיות, ו-`users.lookup` מוצא בלי.
-2. ‏`POST /me/password` לא עבר דרך `login_guard` — session גנוב ניחש את הסיסמה
+2. `POST /me/password` לא עבר דרך `login_guard` — session גנוב ניחש את הסיסמה
    הנוכחית בלי הגבלה.
-3. ‏`console_idle_seconds` נאכף רק בדפדפן; העוגייה נשארה תקפה 12 שעות.
+3. `console_idle_seconds` נאכף רק בדפדפן; העוגייה נשארה תקפה 12 שעות.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ def test_another_user_is_still_editable_in_any_case(server):
     assert users.lookup(server["ctx"].conn, "labtech")["disabled_at"] is not None
 
 
-# ---------- 2. ‏/me/password תחת login_guard ----------
+# ---------- 2. /me/password תחת login_guard ----------
 
 
 @pytest.fixture()
@@ -121,7 +121,7 @@ def _idle_past_issue(server, idle_clock) -> None:
 
     עוגייה בלי שורה ב-`console_sessions` מתחילה את חוסר הפעילות שלה ברגע ההנפקה (`auth.issue`,
     שעון קיר אמיתי, לא `presence._now` המוזרק). `+= limit + 1` מהרגע שבו השעון הוזרק נתן שנייה
-    אחת בלבד לכל מה שבא בין השניים -- ושלוש גזירות PBKDF2 (600K, ‏#2639) על מכונה עמוסה לוקחות
+    אחת בלבד לכל מה שבא בין השניים -- ושלוש גזירות PBKDF2 (600K, #2639) על מכונה עמוסה לוקחות
     יותר. כאן השעון קופץ מ**עכשיו**, שבוודאות אחרי ההנפקה."""
     idle_clock["now"] = max(idle_clock["now"], time.time()) + _idle_limit(server) + 1
 
@@ -231,7 +231,7 @@ def test_an_idle_console_cookie_is_refused_on_the_agent_port(server, idle_clock)
 
 def test_a_kiosk_session_is_not_cut_by_the_console_idle(server, idle_clock):
     """הגואי של מחשב הבנייה מחזיק את עוגיית הקיוסק לאורך פעולה שלמה בלי בקשות —
-    סבב של 34 דקות ואז סגירה. היא פטורה (‏#1340: הקונסולה ממילא מסרבת לה)."""
+    סבב של 34 דקות ואז סגירה. היא פטורה (#1340: הקונסולה ממילא מסרבת לה)."""
     from server.app import create_agent_app
     agent = TestClient(create_agent_app(server["app"].state.runtime))
     r = agent.post("/api/console/login", json={"username": "noc", "password": "admin-pass-123"})
@@ -256,7 +256,7 @@ def test_a_password_change_cookie_idles_out_from_its_issue(server, idle_clock):
 
 
 def test_own_account_cannot_be_deleted_through_another_case(server):
-    """השומר מזהה "עצמך" כמו ב-edit_user. (‏`users.delete` עצמו משווה שם מדויק, ולכן
+    """השומר מזהה "עצמך" כמו ב-edit_user. (`users.delete` עצמו משווה שם מדויק, ולכן
     עד כאן התשובה הייתה 404 "לא קיים" — לא מחיקה; זה הסירוב הנכון, בשמו.)"""
     server["admin"].post("/api/console/users", json={"username": "admin2", "password": "Aa12345!", "role": "admin"})
     r = server["admin"].delete("/api/console/users/NOC")

@@ -1,7 +1,7 @@
 """ייחוס שלב: מזייפים שלב אחד, מריצים את הפונקציה האמיתית, בודקים
 את המחרוזת שהטכנאי רואה ואת מצב היעד — לא קוד יציאה.
 
-למה הקובץ הזה קיים. ‏#440 ו-#444 (וגם צד השחזור של #443) שרדו לא כי
+למה הקובץ הזה קיים. #440 ו-#444 (וגם צד השחזור של #443) שרדו לא כי
 לא נכתבו טסטים, אלא כי הטסטים כיסו את הטופולוגיות שהמחבר דמיין:
 
 - ``test_a_stream_cut_at_the_source`` מזייף מקור שנופל *אחרי* ש-fanout
@@ -210,7 +210,7 @@ def grow_station(tmp_path, *, fs="ntfs", stubs=None, mark=True) -> tuple[Path, s
 ])
 def test_grow_failure_defers_growth_without_failing_clone(tmp_path, runner, fs, stubs):
     """שיטת קרונזילה: דיסק שקיבל תמונה מלאה הוא done גם אם ההרחבה נכשלה.
-    הכישלון הופך ל-warning ‏\"done (grow deferred)\" ולא מפיל את המגירה."""
+    הכישלון הופך ל-warning \"done (grow deferred)\" ולא מפיל את המגירה."""
     run, out = runner(tmp_path, fs=fs, stubs=stubs)
     assert out.strip().endswith("rc=0"), out
     assert state_of(run, "sda") == "done"
@@ -221,7 +221,7 @@ def test_grow_failure_defers_growth_without_failing_clone(tmp_path, runner, fs, 
 
 
 def test_ntfs_grow_calls_the_three_steps_in_order_dirty_last(tmp_path):
-    """שיטת FOG resetFlag: ‏ntfsfix -b -d לפני ה-resize, ntfsresize עם
+    """שיטת FOG resetFlag: ntfsfix -b -d לפני ה-resize, ntfsresize עם
     double force, ואז ntfsfix -d **אחרון** — כי ה-resize עלול לסמן dirty
     מחדש, וניקוי הדגל חייב לבוא אחריו כדי שלא ירוץ chkdsk בבוט הראשון."""
     run, out = grow_drawers(tmp_path, stubs={
@@ -254,7 +254,7 @@ def test_ntfsfix_failure_still_attempts_double_force_resize(tmp_path):
     assert out.strip().endswith("rc=0"), out
     assert state_of(run, "sda") == "done"
     assert "דגל ה-dirty" in error_of(run, "sda"), error_of(run, "sda")
-    # ‏ntfsfix -b -d לפני ה-resize, וגם ntfsfix -d האחרון — שניהם רצו.
+    # ntfsfix -b -d לפני ה-resize, וגם ntfsfix -d האחרון — שניהם רצו.
     calls = (run / "ntfsfix.called").read_text(encoding="utf-8").strip().splitlines()
     dev = f"{posix(run)}/dev/sda2"
     assert f"-b -d {dev}" in calls, calls
@@ -271,7 +271,7 @@ UMOUNT_STUCK = "#!/bin/sh\nexit 32\n"
     ("xfs", {"mount": OK, "xfs_growfs": OK, "umount": UMOUNT_STUCK}, "xfs הורחב, אך נשאר מעוגן (umount rc=32)"),
 ])
 def test_a_grow_that_succeeded_is_never_said_deferred(tmp_path, runner, fs, stubs, said):
-    """‏#2011 (שטח 22/10): ‏ntfsresize הצליח ורק ה-`ntfsfix -d` האחרון נכשל — ההודעה אמרה
+    """#2011 (שטח 22/10): ntfsresize הצליח ורק ה-`ntfsfix -d` האחרון נכשל — ההודעה אמרה
     "ההרחבה נדחתה" ומיד אחריה "מערכת הקבצים הורחבה". הורחב = "הורחב"; הדגל שנשאר הוא
     אזהרה (#2009 — לא ירוק), ו"נדחתה" נשאר רק כשההרחבה עצמה לא קרתה."""
     run, out = runner(tmp_path, fs=fs, stubs=stubs)
@@ -285,7 +285,7 @@ def test_a_grow_that_succeeded_is_never_said_deferred(tmp_path, runner, fs, stub
 
 def test_one_drawer_deferring_grow_leaves_the_machine_done(tmp_path):
     """האזהרה שייכת רק למגירה שההרחבה שלה נדחתה; השאר done נקי,
-    והמכונה כולה done (‏best-effort — לא partial)."""
+    והמכונה כולה done (best-effort — לא partial)."""
     run, out = grow_drawers(
         tmp_path, fs="ntfs", disks=("sda", "sdb"),
         stubs={"ntfsresize": (

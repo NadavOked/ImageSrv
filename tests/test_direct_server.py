@@ -1,7 +1,7 @@
-"""‏#715 — הפצה ישירה ממחשב הבנייה: השרת מתזמר, המקור הוא הדיסק.
+"""#715 — הפצה ישירה ממחשב הבנייה: השרת מתזמר, המקור הוא הדיסק.
 
 מה שנבדק כאן מול ה-API, כמו שזה קורה בחדר: פתיחת סבב עם
-`source: {kind: build_disk}` — ‏WoL רק לנבחרים, משימת `direct_send` למחשב
+`source: {kind: build_disk}` — WoL רק לנבחרים, משימת `direct_send` למחשב
 הבנייה עם פרמטרי השידור של השרת; המניפסט החי מוגש למקבלים באותו נתיב
 כמו אימג' מהספרייה; הגל אינו יוצא לפני המניפסט; המנוע של השרת **אינו**
 משדר; הסבב יחיד ונסגר עם הגל; עצירה סוגרת גם את המשימה; והסירובים —
@@ -91,7 +91,7 @@ def _put_manifest(room_server, task_id, manifest=None, token=None):
 def test_open_wakes_only_the_selected_and_hands_the_build_machine_a_task(room_server):
     opened = _setup(room_server)
     admin, anon = room_server["admin"], room_server["anon"]
-    # ‏WoL: חבילה אחת — למשכפל שנבחר, לא לכל החדר.
+    # WoL: חבילה אחת — למשכפל שנבחר, לא לכל החדר.
     assert len(room_server["woken"]) == 1
     view = room(admin)["round"]
     assert view["source"]["kind"] == "build_disk"
@@ -108,7 +108,7 @@ def test_open_wakes_only_the_selected_and_hands_the_build_machine_a_task(room_se
     assert task["direct"]["session_state"] == "open"
     mc = task["direct"]["multicast"]
     assert set(mc) == {"portbase", "min_receivers", "max_wait", "start_timeout",
-                       "max_wait_later", "start_timeout_later",   # ‏#957
+                       "max_wait_later", "start_timeout_later",   # #957
                        "retries_until_drop", "max_bitrate"}
     assert mc["portbase"] == room_server["ctx"].sender.portbase
     assert mc["max_wait_later"] == room_server["ctx"].sender.max_wait_later
@@ -207,7 +207,7 @@ def test_a_bad_manifest_fails_the_task_and_a_foreign_token_is_refused(room_serve
 
 
 def test_a_manifest_bound_to_another_machine_is_refused(room_server):
-    """‏#381 בנתיב החי: `machine_mac` זר → 400 בשם, המשימה failed, אין מניפסט."""
+    """#381 בנתיב החי: `machine_mac` זר → 400 בשם, המשימה failed, אין מניפסט."""
     opened = _setup(room_server)
     bound = {**_live_manifest(), "machine_mac": "aa:bb:cc:00:00:99"}
     r = _put_manifest(room_server, opened["task_id"], manifest=bound)
@@ -218,7 +218,7 @@ def test_a_manifest_bound_to_another_machine_is_refused(room_server):
 
 
 def _joined_then(room_server, manifest=None, raw=None):
-    """סבב ישיר, המשכפל הצטרף, ואז PUT של מניפסט שהשרת דוחה (‏#2906)."""
+    """סבב ישיר, המשכפל הצטרף, ואז PUT של מניפסט שהשרת דוחה (#2906)."""
     opened = _setup(room_server)
     anon, conn = room_server["anon"], room_server["ctx"].conn
     cloner_hello(anon, CLONER1, ["S1", "S2"])
@@ -233,7 +233,7 @@ def _joined_then(room_server, manifest=None, raw=None):
 
 
 def _assert_round_and_wave_failed(room_server, opened, conn, detail):
-    """‏#2906: המשימה, הסבב והגל נכשלים יחד — והמשכפל שהצטרף רואה כשל בשם הסיבה."""
+    """#2906: המשימה, הסבב והגל נכשלים יחד — והמשכפל שהצטרף רואה כשל בשם הסיבה."""
     assert conn.execute("SELECT state FROM tasks WHERE id = ?",
                         (opened["task_id"],)).fetchone()["state"] == "failed"
     rr = conn.execute("SELECT state, failed_reason FROM room_rounds"
@@ -251,8 +251,8 @@ def _assert_round_and_wave_failed(room_server, opened, conn, detail):
 
 
 def test_a_rejected_manifest_fails_the_round_and_the_wave_too(room_server):
-    """‏#2906: מניפסט עם sha256 פגום — לא רק המשימה: הסבב `failed` והמשכפל שהצטרף
-    אינו ממתין לעד (קודם: `tasks=failed`, ‏`room_rounds=active`, ‏`sessions=open`)."""
+    """#2906: מניפסט עם sha256 פגום — לא רק המשימה: הסבב `failed` והמשכפל שהצטרף
+    אינו ממתין לעד (קודם: `tasks=failed`, `room_rounds=active`, `sessions=open`)."""
     opened, conn, detail = _joined_then(room_server, _live_manifest(sha="not-a-sha"))
     _assert_round_and_wave_failed(room_server, opened, conn, detail)
 

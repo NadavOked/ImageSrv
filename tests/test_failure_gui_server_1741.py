@@ -1,14 +1,14 @@
 """#1741: the server's own failure screens on the GUI, display-only; #2517: "started" from evidence.
 
 נדב, 17/10: "אין מסך שאינו גואי". שלושה מסכים שאדם עומד מולם נשארו טקסט
-אחרי #1739: כישלון האתחול הראשון (‏S3, ‏`tools/iso/firstboot.sh`), ה-hold
-של המתקין החי (‏S9, ‏`installer/imagesrv-installer`) וכיבוי/אתחול של השרת
-(‏S7). עכשיו כולם כותבים את רשומות מסך הכישלון האחיד (#1569) עם role
-‏`server`/`installer` (‏`installer/lib/failgui.sh`) ומעלים את הגואי
+אחרי #1739: כישלון האתחול הראשון (S3, `tools/iso/firstboot.sh`), ה-hold
+של המתקין החי (S9, `installer/imagesrv-installer`) וכיבוי/אתחול של השרת
+(S7). עכשיו כולם כותבים את רשומות מסך הכישלון האחיד (#1569) עם role
+`server`/`installer` (`installer/lib/failgui.sh`) ומעלים את הגואי
 עם `--no-input`. הסיבה לא מוסתרת: העברית, ושורת היומן באנגלית מתחתיה.
 בלי framebuffer או בינארי — הטקסט הוא המסך.
 
-‏#2517: יחידת גואי ההתקנה נכשלה ב-203/EXEC (הבינארי לא הועתק למערכת
+#2517: יחידת גואי ההתקנה נכשלה ב-203/EXEC (הבינארי לא הועתק למערכת
 המותקנת) ו-firstboot כתב "started" כי `is-active` נבדק לפני ה-exec.
 "הוצג" נקבע עכשיו רק מראיה: הגואי נגע ב-`IMAGESRV_GUI_BEAT` אחרי פריים.
 
@@ -377,7 +377,7 @@ S3_STATE = (
     "fail=bad|1|ההכנה הראשונה של השרת נכשלה|first boot failed · payload-failed|server\n"
     "fail_why=בניית קובצי האתחול של השרת (שלב א׳) נכשלה.\n"
     "fail_step=השרת לא הושלם, והוא נשאר דלוק.\n"
-    "fail_step=השורה ביומן: ⁦Boot payload decision failed⁩\n"
+    "fail_step=השורה ביומן: \u2066Boot payload decision failed\u2069\n"
     "fail_ctx=שלב|payload-failed\n"
 )
 

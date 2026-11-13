@@ -1,16 +1,16 @@
-"""‏#2841 — משכפל שהשתתק אחרי `direct_done`: ‏0/3 בשקט, ובלי יומן הסוכן בשרת.
+"""#2841 — משכפל שהשתתק אחרי `direct_done`: 0/3 בשקט, ובלי יומן הסוכן בשרת.
 
-עבודה, 11/11 (‏v0.91.10, ‏`room_eb19e599`): הזרם הסתיים ב-15:19:04, המשכפל דיווח
-`verifying` על שתי מגירות עד 15:27:28 ושתק; ‏`client_lost` ב-15:30:28 (בדיוק 180ש'
+עבודה, 11/11 (v0.91.10, `room_eb19e599`): הזרם הסתיים ב-15:19:04, המשכפל דיווח
+`verifying` על שתי מגירות עד 15:27:28 ושתק; `client_lost` ב-15:30:28 (בדיוק 180ש'
 אחרי), והסבב נסגר `room_done written=0/3` — כמו כל סיום. ב-15:32 המשכפל ביקש PXE
-מחדש: הוא **אותחל**, לא כובה. ‏`agent_logs` ריק — הסוכן שולח את היומן רק בסוף סבב
-(‏`imagesrv-agent` אחרי `report_final`, ‏`end_failed_round`), וסוף לא הגיע.
+מחדש: הוא **אותחל**, לא כובה. `agent_logs` ריק — הסוכן שולח את היומן רק בסוף סבב
+(`imagesrv-agent` אחרי `report_final`, `end_failed_round`), וסוף לא הגיע.
 
 שני צדדים:
   * השרת: חבר שאבד עם מגירות פתוחות נרשם ביומן עם מה שהיה פתוח, וסבב ישיר שבו שום
-    דבר לא נכתב ומשכפל אבד — נכשל בשמו (`room_failed` + ‏`failed_reason`), לא `room_done`.
-  * הסוכן: היומן עולה לשרת בתחילת האימות (‏`checkpoint`), ולפני כל אתחול שהסוכן
-    או ה-watchdog יוזמים באמצע עבודה (‏`fatal`).
+    דבר לא נכתב ומשכפל אבד — נכשל בשמו (`room_failed` + `failed_reason`), לא `room_done`.
+  * הסוכן: היומן עולה לשרת בתחילת האימות (`checkpoint`), ולפני כל אתחול שהסוכן
+    או ה-watchdog יוזמים באמצע עבודה (`fatal`).
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from agentlib import flat_lib
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
 from test_direct_server import _put_manifest, _setup
-from test_server_room import (           # noqa: F401 — ‏room_server הוא fixture
+from test_server_room import (           # noqa: F401 — room_server הוא fixture
     CLONER2, cloner_hello, heartbeat, room, room_server,
 )
 
@@ -90,7 +90,7 @@ def test_the_lost_line_names_what_was_left_open(room_server):
 
 
 def test_unreadable_targets_are_not_no_open_drawers():
-    """‏targets_json שלא נקרא — "לא ידוע", לא "אין מה שנשאר פתוח" (עיקרון 5)."""
+    """targets_json שלא נקרא — "לא ידוע", לא "אין מה שנשאר פתוח" (עיקרון 5)."""
     assert room_mod._unreported({"targets_json": "{not json"}) == [("?", "unread")]
     assert room_mod._unreported({"targets_json": json.dumps(
         [{"dev": "sda", "state": "done"}, {"dev": "sdb", "state": "verifying"}])}) == [("sdb", "verifying")]

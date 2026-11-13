@@ -1,4 +1,4 @@
-"""‏#1049 שלב א' — בדיקת מכונה ב-hello: כל שדה נמדד · חסר→null · פגום→error.
+"""#1049 שלב א' — בדיקת מכונה ב-hello: כל שדה נמדד · חסר→null · פגום→error.
 
 רץ על ה-sh האמיתי מול sysfs מזויף (SYSFS_ROOT/PROC_ROOT דרך SYSROOT).
 ה-JSON נטען בפייתון — לא "נראה תקין". בינארים אופציונליים (dmidecode,
@@ -446,7 +446,7 @@ def test_hello_without_the_probe_lib_has_no_probe_field(fake_machine):
 
 
 def test_probe_is_cached_in_run_dir_between_hellos(fake_machine):
-    """‏arping ו-smartctl אינם רצים בכל poll: התשובה נשמרת ב-$RUN_DIR/probe.json
+    """arping ו-smartctl אינם רצים בכל poll: התשובה נשמרת ב-$RUN_DIR/probe.json
     ומוגשת משם עד PROBE_TTL. שינוי ב-sysfs בתוך החלון אינו נראה; אחרי פקיעה — כן."""
     sysroot = fake_machine["sysroot"]
     ac = sysroot / "sys/class/power_supply/AC"

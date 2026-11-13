@@ -40,7 +40,7 @@ from server.db import _write_lock, writing
 PROTOCOL_VERSION = "2.1"
 
 #: חלון ה-pairing: ברירת המחדל (ה-API המקומי) היא 3 דקות. התקרה עלתה מ-5
-#: ל-10 דקות בהכרעת נדב (16/10): הקוד שמסך השרת (DCUI, ‏F4) מציג בנוכחות
+#: ל-10 דקות בהכרעת נדב (16/10): הקוד שמסך השרת (DCUI, F4) מציג בנוכחות
 #: פיזית תקף 10 דקות — זמן ללכת לקונסולה של הראשי ולהקליד אותו.
 WINDOW_TTL_SECONDS = 180
 WINDOW_TTL_MIN = 120
@@ -59,7 +59,7 @@ _SALT_BYTES = 16
 
 #: אלפבית הקוד — קריא לאדם, בלי תווים דו-משמעיים (0/O, 1/I/L).
 _CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
-#: ‏``XXXX-XXXX`` — שמונה תווים (הכרעת נדב 16/10, מוקאפ #1525): שמונה
+#: ``XXXX-XXXX`` — שמונה תווים (הכרעת נדב 16/10, מוקאפ #1525): שמונה
 #: תיבות בקונסולת הראשי. 31^8 ≈ 2^39.6, עם 5 ניסיונות לחלון.
 _CODE_GROUPS = 2
 _CODE_GROUP_LEN = 4
@@ -70,7 +70,7 @@ _CODE_GROUP_LEN = 4
 def is_loopback(host: str | None) -> bool:
     """האם ה-peer הוא loopback אמיתי — 127.0.0.0/8 או ``::1``.
 
-    ‏"מקומי" בדגם הנעול נאכף, לא רק מוצג: חלון ה-pairing והפינוי נפתחים
+    "מקומי" בדגם הנעול נאכף, לא רק מוצג: חלון ה-pairing והפינוי נפתחים
     רק מחיבור loopback מאומת. ראיה חיובית בלבד (עיקרון 5) — ``host``
     ריק/לא-ידוע מחזיר ``False``, לא "כנראה מקומי". ``Forwarded``/
     ``X-Forwarded-For`` **אינם** נבדקים כאן: הם כותרות שניתן לזייף,
@@ -81,8 +81,8 @@ def is_loopback(host: str | None) -> bool:
     try:
         addr = ipaddress.ip_address(host)
     except ValueError:
-        return False              # ‏#860: "127.evil" אינו כתובת, לא loopback
-    # ‏IPv4-mapped (``::ffff:127.0.0.1``) נשפט לפי הכתובת שבפנים — בלי
+        return False              # #860: "127.evil" אינו כתובת, לא loopback
+    # IPv4-mapped (``::ffff:127.0.0.1``) נשפט לפי הכתובת שבפנים — בלי
     # להסתמך על השינוי של 3.13 ב-``IPv6Address.is_loopback``.
     mapped = getattr(addr, "ipv4_mapped", None)
     return bool((mapped or addr).is_loopback)
@@ -93,7 +93,7 @@ def is_loopback(host: str | None) -> bool:
 def generate_pairing_code() -> str:
     """קוד חד-פעמי קריא לאדם, ``XXXX-XXXX`` מאלפבית לא-דו-משמעי.
 
-    ‏``secrets.choice`` ולא ``random`` — זה סוד. שמונה תווים מ-31 הם
+    ``secrets.choice`` ולא ``random`` — זה סוד. שמונה תווים מ-31 הם
     כ-39 סיביות; עם חלון של דקות ותקרת 5 ניסיונות, די והותר.
     """
     groups = [
@@ -186,7 +186,7 @@ def verify_and_consume_code(conn, code: str, *, now: datetime | None = None) -> 
     החלון (חד-פעמי). כל ניסיון מוריד את המונה, וכשהוא מתאפס — החלון
     נסגר (rate-limit). התפוגה נבדקת **לפני** האימות, ואינה סופרת ניסיון.
 
-    ‏#745: **כל** מסלול הקריאה→אימות→צריכה/הפחתה יושב תחת נעילת כתיבה
+    #745: **כל** מסלול הקריאה→אימות→צריכה/הפחתה יושב תחת נעילת כתיבה
     אחת (``_write_lock`` + ``writing``), כי הוא read-modify-write. שתי
     בקשות עם הקוד הנכון במקביל היו קוראות את החלון לפני שאחת סוגרת,
     ושתיהן מחזירות ``True`` — קוד חד-פעמי שנצרך פעמיים; והמונה שנקרא
@@ -251,7 +251,7 @@ def parse_interserver_url(url: str) -> tuple[str, int, str]:
     """מחזיר ``(host, port, path)`` לכתובת בין-שרתי חוקית, אחרת חריגה.
 
     דורש ``https`` מפורש, host מפורש, **port מפורש**, ובלי אישורים
-    (user:pass), query או fragment. ‏HTTP, פורט חסר, או כל תוספת סמויה
+    (user:pass), query או fragment. HTTP, פורט חסר, או כל תוספת סמויה
     נדחים בקול (עיקרון 5) — לא "מתקנים" בשקט לברירת מחדל.
     """
     parts = urllib.parse.urlsplit((url or "").strip())
@@ -285,15 +285,15 @@ def write_credential_0600(path, token: str) -> None:
     ואז fsync על התיקייה (POSIX). הטוקן לא עובר ב-SQLite, ביומן או
     בהודעת שגיאה — רק לקובץ הזה.
 
-    ‏#860: הקובץ הזמני נפתח ב-``O_EXCL`` (ו-``O_NOFOLLOW`` ב-POSIX) — שם
+    #860: הקובץ הזמני נפתח ב-``O_EXCL`` (ו-``O_NOFOLLOW`` ב-POSIX) — שם
     קבוע בתיקייה הוא הזמנה ל-symlink שיפנה את הטוקן החוצה, ו-``O_TRUNC``
     היה עוקב אחריו. שארית מריצה שקרסה מוסרת קודם ב-``unlink`` (שאינו
     עוקב אחרי קישור); אם משהו מופיע שוב בין ההסרה לפתיחה — ``O_EXCL``
     נכשל ב-``FileExistsError`` במקום לכתוב לתוכו.
 
-    ‏#291: ‏CodeQL ‏``py/path-injection`` על הפונקציה הזו הוא false positive.
-    לה שני קוראים, ושניהם בונים את הנתיב בעצמם: ‏``console_storage.enroll``
-    (‏``secondaries/sn_<16 hex>.token``, אחרי ``storage_nodes.valid_node_id``)
+    #291: CodeQL ``py/path-injection`` על הפונקציה הזו הוא false positive.
+    לה שני קוראים, ושניהם בונים את הנתיב בעצמם: ``console_storage.enroll``
+    (``secondaries/sn_<16 hex>.token``, אחרי ``storage_nodes.valid_node_id``)
     ו-``console_tls`` (שם קבוע תחת ``data_dir``). שום רכיב של הנתיב אינו
     מחרוזת חופשית מהבקשה.
     """
@@ -338,11 +338,11 @@ def load_credential(path) -> str:
     מקובץ פתוח־לכל אינו "אישור תקין".
     """
     path = os.fspath(path)
-    # ‏#747: פותחים תחילה עם ``O_NOFOLLOW`` (קישור סימבולי נדחה בפתיחה
+    # #747: פותחים תחילה עם ``O_NOFOLLOW`` (קישור סימבולי נדחה בפתיחה
     # עצמה, אטומית) ו-``O_CLOEXEC``, ואז מאמתים על ה-fd **הפתוח** דרך
     # ``os.fstat`` — ולא ``lstat`` על הנתיב לפני הפתיחה. אחרת תוקף עם
     # כתיבה לספרייה מחליף את הקובץ שאומת ב-symlink בין ה-בדיקה ל-open
-    # (‏TOCTOU), והשירות קורא יעד לא-מאומת. האימות על ה-fd מבטיח שמה
+    # (TOCTOU), והשירות קורא יעד לא-מאומת. האימות על ה-fd מבטיח שמה
     # שנבדק הוא בדיוק מה שנקרא (עיקרון 5).
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
     if hasattr(os, "O_NOFOLLOW"):
@@ -350,7 +350,7 @@ def load_credential(path) -> str:
     try:
         fd = os.open(path, flags)
     except OSError as exc:
-        # ‏ELOOP = הנתיב האחרון הוא קישור סימבולי (‏O_NOFOLLOW).
+        # ELOOP = הנתיב האחרון הוא קישור סימבולי (O_NOFOLLOW).
         raise CredentialFileError(
             f"קובץ האישורים אינו קובץ בטוח לפתיחה: {path}") from exc
     try:
@@ -378,9 +378,9 @@ _SECRET_PATTERNS = [
     re.compile(r"(?i)\bbearer\s+\S+"),
     re.compile(r"\b[0-9a-fA-F]{32,}\b"),                     # טוקן/גיבוב hex
     re.compile(r"(?i)(code\s*[:=]\s*)[A-Z0-9-]{5,}"),
-    # ‏#860: קוד pairing בצורתו (XXX-XXX-XXX מהאלפבית שלנו) גם בלי `code=`.
+    # #860: קוד pairing בצורתו (XXX-XXX-XXX מהאלפבית שלנו) גם בלי `code=`.
     re.compile(r"\b[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}\b"),
-    # ‏16/10: והצורה של היום, ‏XXXX-XXXX (שמונה תווים, מסך השרת F4).
+    # 16/10: והצורה של היום, XXXX-XXXX (שמונה תווים, מסך השרת F4).
     re.compile(r"\b[A-Z0-9]{4}-[A-Z0-9]{4}\b"),
     re.compile(r"-----BEGIN[^-]*PRIVATE KEY-----.*?-----END[^-]*PRIVATE KEY-----",
                re.DOTALL),
@@ -403,18 +403,18 @@ def redact_secrets(text: str) -> str:
 # ⚠️ **ממצא נמדד (2026-09-13).** ה-tls-exporter (RFC 9266) מגיע מ-**pyOpenSSL**,
 # ולא מ-stdlib ssl כפי שהונח: ל-``ssl.SSLSocket``/``SSLObject`` **אין**
 # ``export_keying_material`` — לא ב-3.12, וגם לא ב-3.13/3.14 (נמדד מול
-# ‏``Lib/ssl.py`` של v3.13.0 ומול whatsnew-3.13). ‏``get_channel_binding``
-# היחיד ב-stdlib הוא ``tls-unique``, שאינו מוגדר ל-TLS 1.3. ‏uvicorn מריץ
+# ``Lib/ssl.py`` של v3.13.0 ומול whatsnew-3.13). ``get_channel_binding``
+# היחיד ב-stdlib הוא ``tls-unique``, שאינו מוגדר ל-TLS 1.3. uvicorn מריץ
 # stdlib ssl, ולכן מאזין ה-enrollment הוא **terminator של pyOpenSSL** (בדיוק
 # כפי שאסטרה הצביעה ב-#740) — וממנו גם ה-exporter, וגם קליטת תעודת-הלקוח
-# החתומה-עצמית הלא-מוכרת בזמן ה-pairing: ‏stdlib ssl דורש CA ואינו יכול
-# לקבל תעודה לא-מוכרת (VERIFY אין לו callback). ‏pyOpenSSL 25.0.0 (דביאן 13)
+# החתומה-עצמית הלא-מוכרת בזמן ה-pairing: stdlib ssl דורש CA ואינו יכול
+# לקבל תעודה לא-מוכרת (VERIFY אין לו callback). pyOpenSSL 25.0.0 (דביאן 13)
 # חושף את ``Connection.export_keying_material`` ואת ``set_verify`` עם callback.
 # **המשמעות:** בדיקת ה-channel-binding **רצה גם על 3.12** (היכולת קיימת),
 # ואינה מדולגת שם — הדילוג יחול רק אם pyOpenSSL באמת חסר (עיקרון 5:
 # מדלגים כשבאמת אין יכולת, לא כדי להסתיר).
 
-#: תווית ה-exporter הנעולה ל-#740 (RFC 9266). ‏bytes — כך pyOpenSSL מצפה.
+#: תווית ה-exporter הנעולה ל-#740 (RFC 9266). bytes — כך pyOpenSSL מצפה.
 EXPORTER_LABEL = b"EXPORTER-ImageSrv-Pairing-2.1"
 EXPORTER_LENGTH = 32
 
@@ -441,7 +441,7 @@ def _to_der(cert) -> bytes:
 def spki_sha256(cert) -> str:
     """טביעת SHA-256 (hex) של ה-SubjectPublicKeyInfo של התעודה.
 
-    ‏SPKI ולא טביעת התעודה כולה: המפתח שורד חידוש תעודה, ולכן ה-pin נשאר
+    SPKI ולא טביעת התעודה כולה: המפתח שורד חידוש תעודה, ולכן ה-pin נשאר
     יציב. זה מה שמוצג בחלון ה-pairing ומה שהראשי/משני נצמדים אליו."""
     from cryptography import x509 as _x509
     from cryptography.hazmat.primitives import serialization
@@ -469,7 +469,7 @@ def verify_pinned_spki_value(actual_spki: str, expected_spki: str) -> bool:
     """כמו :func:`verify_pinned_spki`, אבל בין שתי מחרוזות SPKI מוכנות —
     להצמדה ההדדית ב-pair-begin (המשני משווה את שלו למה שהראשי הצהיר).
 
-    ‏#860: צד חסר אינו התאמה. ``expected`` מגיע מגוף JSON ו-``actual``
+    #860: צד חסר אינו התאמה. ``expected`` מגיע מגוף JSON ו-``actual``
     מזהות השרת; ריק מול ריק היה "עובר" — ראיה חיובית בלבד (עיקרון 5)."""
     if not actual_spki or not expected_spki:
         return False
@@ -479,7 +479,7 @@ def verify_pinned_spki_value(actual_spki: str, expected_spki: str) -> bool:
 def node_id_from_spki(spki: str) -> str:
     """מזהה משני יציב, נגזר מ-SPKI התעודה (לא UUID מקומי, #740).
 
-    ‏#860: ‏SPKI ריק אינו "sn_" — זו זהות בלי מקור, ומעלה ``ValueError``."""
+    #860: SPKI ריק אינו "sn_" — זו זהות בלי מקור, ומעלה ``ValueError``."""
     if not spki:
         raise ValueError("SPKI ריק — אין ממנו מזהה שרת משנה")
     return "sn_" + spki[:16]
@@ -497,18 +497,18 @@ def can_export_keying_material() -> bool:
     return hasattr(SSL.Connection, "export_keying_material")
 
 
-#: ‏#2139: כמה אחורה notBefore — מעבר להיסט של RTC בשעון מקומי (עד ‏UTC±14).
+#: #2139: כמה אחורה notBefore — מעבר להיסט של RTC בשעון מקומי (עד UTC±14).
 NOT_BEFORE_BACKDATE = timedelta(hours=24)
 
 
 def generate_self_signed(common_name: str, *, ip_sans=(), dns_sans=(),
                          days: int = 3650, eku=None) -> tuple[bytes, bytes]:
-    """‏(cert_pem, key_pem) — תעודת EC P-256 חתומה-עצמית לזהות בין-שרתית.
+    """(cert_pem, key_pem) — תעודת EC P-256 חתומה-עצמית לזהות בין-שרתית.
 
-    ‏EC P-256: מפתח קטן, מהיר, ונתמך ב-TLS 1.3. ה-SANs נדרשים כדי
+    EC P-256: מפתח קטן, מהיר, ונתמך ב-TLS 1.3. ה-SANs נדרשים כדי
     שהצד השני יוכל להצמיד SPKI מול חיבור לכתובת הנכונה בבדיקות loopback.
 
-    ‏notBefore יום אחורה (‏#2139): שעון חומרה בשעון מקומי (‏Hyper-V, ברזל
+    notBefore יום אחורה (#2139): שעון חומרה בשעון מקומי (Hyper-V, ברזל
     שהיה עליו Windows) מקדים את השעון ב-3 שעות עד ש-chrony מתקן. תעודה
     שנוצרה בחלון הזה הייתה "עדיין לא בתוקף" לדפדפן, ולשרת שני ששעונו
     נכון, עד שהשעון מדביק אותה."""
@@ -569,10 +569,10 @@ def _accept_any(*_args) -> bool:
 
 
 def tls13_only_context():
-    """‏``SSL.Context`` של pyOpenSSL שנעול על TLS 1.3 — לכל context בין-שרתי.
+    """``SSL.Context`` של pyOpenSSL שנעול על TLS 1.3 — לכל context בין-שרתי.
 
-    ‏``set_min/max_proto_version`` הם הנעילה בפועל. ‏``OP_NO_*`` אומרים את אותו
-    דבר בצורה ש-CodeQL מזהה (#652/#653: ‏``TLS_METHOD`` לבדו נקרא אצלו כ"מתיר
+    ``set_min/max_proto_version`` הם הנעילה בפועל. ``OP_NO_*`` אומרים את אותו
+    דבר בצורה ש-CodeQL מזהה (#652/#653: ``TLS_METHOD`` לבדו נקרא אצלו כ"מתיר
     SSLv2"), ובלעדיהם ההתראה נשארת על context שאינו מתיר דבר מלבד 1.3."""
     from OpenSSL import SSL
     ctx = SSL.Context(SSL.TLS_METHOD)
@@ -584,7 +584,7 @@ def tls13_only_context():
 
 
 def build_server_tls_context(cert_pem: bytes, key_pem: bytes):
-    """‏context של מאזין ה-enrollment (המשני): TLS 1.3 בלבד, דורש תעודת-לקוח,
+    """context של מאזין ה-enrollment (המשני): TLS 1.3 בלבד, דורש תעודת-לקוח,
     וקולט אותה גם כשאינה מוכרת (הצמדה בקוד, לא בשרשרת)."""
     from OpenSSL import SSL
     ctx = tls13_only_context()
@@ -595,7 +595,7 @@ def build_server_tls_context(cert_pem: bytes, key_pem: bytes):
 
 def build_pinned_client_context(expected_server_spki: str,
                                 cert_pem: bytes, key_pem: bytes):
-    """‏context של הלקוח היוצא (הראשי): מציג תעודת-לקוח, ומצמיד את ה-SPKI
+    """context של הלקוח היוצא (הראשי): מציג תעודת-לקוח, ומצמיד את ה-SPKI
     של המשני. אי-התאמת SPKI מפילה את ה-handshake — hard fail, בלי TOFU."""
     from OpenSSL import SSL
     ctx = tls13_only_context()

@@ -1,7 +1,7 @@
 """#1505 — הצד של הסוכן בפירוט הקליטה: `capturedetail.sh` + `build_progress`.
 
 הטבלה נבנית מ-`parts.txt` (כמו שהקליטה בונה אותה), מתעדכנת במהלך הזרימה,
-ונישאת **רק** בדיווח של משימה. ‏`used_bytes` שלא נמדד הוא `null`, לא אפס;
+ונישאת **רק** בדיווח של משימה. `used_bytes` שלא נמדד הוא `null`, לא אפס;
 וקריאת-עזר שחסרה (טסט שטוען רק את capture.sh) אינה מפילה קליטה.
 רץ תחת bash, כמו `test_agent_capture_stage.py`.
 """
@@ -114,7 +114,7 @@ def test_the_capture_flow_marks_the_table_at_every_step():
 
 
 def test_a_non_number_never_lands_in_the_used_column(tmp_path):
-    """הקובץ עצמו, לא רק ה-JSON: ‏`-` = לא נמדד, ו-`null`/טקסט/ריק אינם נכתבים אליו."""
+    """הקובץ עצמו, לא רק ה-JSON: `-` = לא נמדד, ו-`null`/טקסט/ריק אינם נכתבים אליו."""
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     (run_dir / "parts.txt").write_text(PARTS, encoding="utf-8", newline="\n")

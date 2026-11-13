@@ -1,12 +1,12 @@
-"""‏#432 + #65 — מה שמסך החדר אומר לפני שגל יוצא לדרך.
+"""#432 + #65 — מה שמסך החדר אומר לפני שגל יוצא לדרך.
 
-‏#432: כל מגירה נושאת את מהירות הקישור, את המקסימום של הפורט ואת עליית
+#432: כל מגירה נושאת את מהירות הקישור, את המקסימום של הפורט ואת עליית
 מונה ה-CRC מאז הסבב הקודם שלה; גל פתוח מציג **אזהרה כתומה** על מגירה איטית
 או שה-CRC שלה עלה — אזהרה ולא חסימה, וגל שיצא בכל זאת נרשם ביומן. קישור
 שלא נקרא הוא `unknown` — לעולם לא `ok` (עיקרון 5).
 
-‏#65: גל שמחכה ליותר מגירות ממה שהצטרפו אומר **מי** חסר ולמה, ו"כבה אותו"
-מכבה מכונה אחת כזו — דרך הסוכן (‏`power_action`), רק בגל פתוח.
+#65: גל שמחכה ליותר מגירות ממה שהצטרפו אומר **מי** חסר ולמה, ו"כבה אותו"
+מכבה מכונה אחת כזו — דרך הסוכן (`power_action`), רק בגל פתוח.
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def test_crc_rise_is_measured_against_the_disks_last_round(room_server):
                                              ("unchecked", "no_smartctl"),
                                              ("failed_last", "cable")])
 def test_a_baseline_smartctl_never_read_is_no_baseline(room_server, verdict, reason):
-    """‏disk_events שומר 0 ל-CRC שלא נקרא. 0 כזה אינו בסיס: אחרת כל דיסק עם
+    """disk_events שומר 0 ל-CRC שלא נקרא. 0 כזה אינו בסיס: אחרת כל דיסק עם
     היסטוריה של 137 שגיאות היה "עולה ב-137" בסבב הראשון."""
     admin, anon, ctx = room_server["admin"], room_server["anon"], room_server["ctx"]
     _disk_event(ctx, "S1", 0, verdict=verdict, reason=reason)
@@ -184,8 +184,8 @@ def _asleep(ctx, mac: str) -> None:
 
 
 def _slots_round(room_server):
-    """שלוש מגירות נבחרו: שתיים ב-shich-1, אחת ב-shich-2. ‏shich-1 מצטרף עם
-    מגירה 1 בלבד (2 נשלפה), ‏shich-2 כבוי."""
+    """שלוש מגירות נבחרו: שתיים ב-shich-1, אחת ב-shich-2. shich-1 מצטרף עם
+    מגירה 1 בלבד (2 נשלפה), shich-2 כבוי."""
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
     drawers_hello(anon, CLONER1, [disk("S1", 1), disk("S2", 2)])
     drawers_hello(anon, CLONER2, [disk("S3", 1)])
@@ -226,7 +226,7 @@ def test_nothing_is_missing_when_the_ready_drawers_cover_the_wave(room_server):
 
 
 def test_a_selected_cloner_that_never_said_hello_is_listed_as_off(room_server):
-    """‏#1410: אין עוד סבב בלי בחירה — משכפל שנבחר ולא הגיע מופיע כחסר."""
+    """#1410: אין עוד סבב בלי בחירה — משכפל שנבחר ולא הגיע מופיע כחסר."""
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
     _open(deploy, target=4, slots=room_slots(ctx.conn, {
         CLONER1: ["S1", "S2"], CLONER2: ["S3", "S4"]}))

@@ -34,16 +34,16 @@ def _network_block(net: Path, uptime: Path, short_deadline: bool = False) -> str
     return tick + '\n_up=""\n' + mark + "\n" + block
 
 
-#: ‏#2040: ה-host של imagesrv.server, וה-server-id של DHCP זר (רשת הכיתות).
+#: #2040: ה-host של imagesrv.server, וה-server-id של DHCP זר (רשת הכיתות).
 SERVER_IP = "10.44.9.10"
 FOREIGN_SID = "192.168.50.1"
 
 
 def udhcpc_prelude(net: Path, log: Path, ok_ifs: str, foreign_ifs: str = "") -> str:
-    """‏udhcpc ו-ip מזויפים ללולאה האמיתית של init. כרטיס ב-`ok_ifs` מקבל
-    חכירה; ה-probe (‏`-q`) רושם server-id כמו ה-hook האמיתי (‏udhcpc.probe) —
+    """udhcpc ו-ip מזויפים ללולאה האמיתית של init. כרטיס ב-`ok_ifs` מקבל
+    חכירה; ה-probe (`-q`) רושם server-id כמו ה-hook האמיתי (udhcpc.probe) —
     כרטיס ב-`foreign_ifs` מקבל אותה משרת זר, והשאר מהשרת שלנו. הלוג:
-    ‏`udhcpc <כרטיס> probe|lease`; ה-argv המלא ב-`<log>.args`; ‏`ip link` ב-`<log>.ip`."""
+    `udhcpc <כרטיס> probe|lease`; ה-argv המלא ב-`<log>.args`; `ip link` ב-`<log>.ip`."""
     (net.parent / "run").mkdir(exist_ok=True)
     return f"""
 LIB_DIR=/nonexistent-lib

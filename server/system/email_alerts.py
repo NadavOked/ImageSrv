@@ -3,20 +3,20 @@
 השרת שולח מייל כשיש עדכון, כשהוא עלה מחדש (כולל "הייתי למטה מ-X עד Y"),
 אחרי הפעלה מחדש אוטומטית, ובתקלות: סבב שנכשל, דיסק אדום, מקום פנוי נמוך,
 ושרת ראשי/משני שלא עונה. **איך** שולחים ו**למי** — ``email_config`` (חשבונות
-שליחה וכללים); ‏OAuth — ``email_oauth``; הטקסט — ``email_text``. כאן: התור,
+שליחה וכללים); OAuth — ``email_oauth``; הטקסט — ``email_text``. כאן: התור,
 השליחה, מקורות האירועים ותהליכון הרקע.
 
 **מקור האירועים הוא היומן (`journal`) ולא קריאות חדשות בכל אתר.** התהליכון
 קורא את היומן מהשורה האחרונה שראה (סמן ב-``settings``) וממפה אירועים לסוגים
 (``JOURNAL_KINDS``). שלושה אירועים נכתבים ליומן מכאן ועוברים באותו מסלול:
-‏``server_started`` (מהדופק שנשמר לדיסק), ‏``update_available`` (מבדיקת העדכונים
+``server_started`` (מהדופק שנשמר לדיסק), ``update_available`` (מבדיקת העדכונים
 האחרונה) ו-``peer_unreachable``/``peer_back`` (מחותמות המגע הבין-שרתי).
-‏``low_space`` (מדגימת המקום הפנוי במחיצת הנתונים, ``Watcher._check_space``) — פעם
-אחת לכל ירידה מתחת לרזרבה. ‏``smart_red`` נכתב ב-``disk_events`` (דיסק ש-SMART שלו
+``low_space`` (מדגימת המקום הפנוי במחיצת הנתונים, ``Watcher._check_space``) — פעם
+אחת לכל ירידה מתחת לרזרבה. ``smart_red`` נכתב ב-``disk_events`` (דיסק ש-SMART שלו
 אדום, פעם אחת לכל דיסק שהאדים) ועובר כאן כ"דיסק אדום", כמו ``disk_failure``.
 
 כך **שום endpoint ושום פעולה אינם נחסמים**: מי שיוצר אירוע רק כותב שורת יומן.
-השליחה — ‏SMTP עם תקרת זמן קשיחה — רצה רק בתהליכון הרקע (``Watcher``).
+השליחה — SMTP עם תקרת זמן קשיחה — רצה רק בתהליכון הרקע (``Watcher``).
 
 **איחוד והגבלת קצב, לכל (כלל, סוג, שפה):** לכל צירוף כזה לכל היותר מייל
 ממתין אחד (אינדקס חלקי ב-DB), ואירועים נוספים מצטרפים אליו. מייל יוצא לא לפני
@@ -66,7 +66,7 @@ LOW_SPACE_KEY = "email_alerts_low_space"
 HEARTBEAT_FILE = "alive.heartbeat"
 
 #: אירוע ביומן → (סוג התראה, תנאי על ה-detail או ``None``). הטקסט בשורת המייל
-#: הוא ``item.<אירוע>`` בקטלוג. ‏``auto_reboot`` נרשם גם על כל דחייה ("נדחה — …"
+#: הוא ``item.<אירוע>`` בקטלוג. ``auto_reboot`` נרשם גם על כל דחייה ("נדחה — …"
 #: כל 10 דקות); רק ביצוע, ויתור ותקלה הם התראה. התנאי קורא את **היומן**
 #: (שנכתב ב-``auto_reboot.py``), לא טקסט של מייל.
 JOURNAL_KINDS: dict[str, tuple[str, object]] = {
@@ -98,8 +98,8 @@ HEARTBEAT_SECONDS = 60
 #: הדופק של הראשי למשניים הוא 150 שניות (``storage_heartbeat``) — ארבעה
 #: דופקים שהוחמצו לפני שאומרים "לא עונה".
 PEER_SILENT_SECONDS = 600
-#: ‏``low_space`` נדרך שוב רק כשהמקום חזר לרזרבה **ועוד** זה. בלי השוליים, מחיצה
-#: שעומדת על הקו — ‏``StreamGuard`` של הקליטה עוצר בדיוק ברזרבה, ‏journald מוסיף
+#: ``low_space`` נדרך שוב רק כשהמקום חזר לרזרבה **ועוד** זה. בלי השוליים, מחיצה
+#: שעומדת על הקו — ``StreamGuard`` של הקליטה עוצר בדיוק ברזרבה, journald מוסיף
 #: ומנקה — הייתה "חוצה" אותו בכל דגימה, וכל חציה הייתה מייל.
 LOW_SPACE_CLEAR_MARGIN = 1024 ** 3
 JOURNAL_BATCH = 500
@@ -123,7 +123,7 @@ def _parse(ts) -> datetime | None:
 
 @contextmanager
 def _tx(conn):
-    """כתיבה דרך המסלול של db: ``_settle`` → ``_write_lock`` → ``writing`` (#54, ‏#457).
+    """כתיבה דרך המסלול של db: ``_settle`` → ``_write_lock`` → ``writing`` (#54, #457).
     לעולם לא קוראים ל-``journal`` בתוך הבלוק — הנעילה אינה רה-אנטרנטית."""
     db._settle(conn)
     with db._write_lock, db.writing(conn):
@@ -193,7 +193,7 @@ def _text(resp) -> str:
 def _failure_text(exc: BaseException, host, port) -> str:
     """כשל בצד שלנו (רשת, TLS, זמן) — ניסוח קבוע בעברית; ``str(exc)`` הגולמי
     (errno, שם מחלקה, פרטי OpenSSL) נכתב ליומן השרת ולא לתשובה (CodeQL
-    ‏py/stack-trace-exposure, ‏PR ציבורי #54). תשובת **שרת הדואר** עצמה אינה עוברת
+    py/stack-trace-exposure, PR ציבורי #54). תשובת **שרת הדואר** עצמה אינה עוברת
     כאן — היא שימושית למפעיל ועוברת מנוקה (``email_config.public_text``)."""
     log.warning("email alerts: send via %s:%s failed: %s: %s", host, port, type(exc).__name__, exc)
     where = f"{host}:{port}"
@@ -220,9 +220,9 @@ def _failure_text(exc: BaseException, host, port) -> str:
 
 def send(acc: dict, recipients: list[str], msg: EmailMessage, *, password: str | None = None,
          oauth_token: str | None = None, timeout: float = TIMEOUT_SECONDS) -> SendResult:
-    """שולח מייל אחד מהחשבון ``acc``. ‏``ok`` רק כש-DATA נענה ב-250 — ראיה חיובית
-    (עיקרון 5). ‏``refused``: נמענים שנדחו כשאחרים התקבלו (המייל יצא אליהם).
-    אימות: ``password`` — ‏``AUTH`` רגיל; ‏``oauth`` — ‏``AUTH XOAUTH2`` עם האסימון.
+    """שולח מייל אחד מהחשבון ``acc``. ``ok`` רק כש-DATA נענה ב-250 — ראיה חיובית
+    (עיקרון 5). ``refused``: נמענים שנדחו כשאחרים התקבלו (המייל יצא אליהם).
+    אימות: ``password`` — ``AUTH`` רגיל; ``oauth`` — ``AUTH XOAUTH2`` עם האסימון.
     חשבון עם אימות בלי סוד — לא מתחבר בכלל."""
     auth = acc.get("auth", "none")
     if auth == "password" and not password:
@@ -336,7 +336,7 @@ def kind_label(lang: str, kind: str) -> str:
 def build_message(conn, lang: str, from_addr: str, recipients: list[str], kind: str,
                   items: list[str], dropped: int = 0) -> EmailMessage:
     """המייל בשפת הנמען (``email_text``): חלק ``text/plain`` וחלק HTML עם ``dir``/
-    ‏``lang`` ו-``text-align`` — בעברית מימין לשמאל, באנגלית משמאל לימין."""
+    ``lang`` ו-``text-align`` — בעברית מימין לשמאל, באנגלית משמאל לימין."""
     from html import escape  # noqa: PLC0415
     direction = email_text.direction(lang)
     align = email_text.ALIGN[direction]
@@ -389,7 +389,7 @@ def _merge_items(first: list, first_dropped: int, second: list, second_dropped: 
 def enqueue(conn, kind: str, make_item, *, now: datetime | None = None,
             doc: dict | None = None) -> int:
     """מצרף אירוע לכל כלל שהוא עובר (קטגוריה + חומרה), בכל שפה של נמעני הכלל.
-    ‏``make_item(lang)`` מחזיר את שורת האירוע בשפה. מחזיר כמה שורות תור נגעו —
+    ``make_item(lang)`` מחזיר את שורת האירוע בשפה. מחזיר כמה שורות תור נגעו —
     0 = אין כלל שמעוניין, וזה לא כשל."""
     if doc is None:
         doc, _ = email_config.load(conn)
@@ -637,7 +637,7 @@ def startup_detail(conn, prev: datetime | None, error: str | None, now: datetime
 def _peer_status(conn, now: datetime) -> dict[str, tuple[bool, str]]:
     """{מפתח: (לא עונה?, תיאור)} — רק עם ראיה: בראשי, כשל אחרון מאוחר מהתשובה
     האחרונה ושקט של ``PEER_SILENT_SECONDS``; במשני, שהראשי לא פנה כל הזמן הזה.
-    ‏"לא נמדד" (חותמות ריקות) אינו "לא עונה"."""
+    "לא נמדד" (חותמות ריקות) אינו "לא עונה"."""
     silent = now - timedelta(seconds=PEER_SILENT_SECONDS)
     lang = email_text.language(conn)
     out: dict[str, tuple[bool, str]] = {}
@@ -668,7 +668,7 @@ def _peer_status(conn, now: datetime) -> dict[str, tuple[bool, str]]:
 
 def data_free_bytes(data_dir) -> int | None:
     """המקום הפנוי במחיצת הנתונים (ה-DB) — אותה מדידה כמו שורת ``db_space`` בבריאות.
-    ‏``None`` = לא נמדד (עיקרון 5), לא אפס."""
+    ``None`` = לא נמדד (עיקרון 5), לא אפס."""
     if data_dir is None:
         return None
     try:
@@ -786,9 +786,9 @@ class Watcher:
             set_setting(self.conn, PEER_STATE_KEY, json.dumps(new_state))
 
     def _check_space(self) -> None:
-        """‏``low_space`` פעם אחת לכל ירידה מתחת לרזרבה (``disk_reserve`` — הסף של שורת
+        """``low_space`` פעם אחת לכל ירידה מתחת לרזרבה (``disk_reserve`` — הסף של שורת
         הבריאות ``db_space``). המצב נשמר ב-``settings``, כך שהפעלה מחדש אינה שולחת שוב.
-        ‏"לא נמדד" אינו נמוך ואינו חזרה: המצב נשאר כמו שהיה."""
+        "לא נמדד" אינו נמוך ואינו חזרה: המצב נשאר כמו שהיה."""
         free = self.free_bytes()
         if free is None:
             return

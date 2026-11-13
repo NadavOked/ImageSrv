@@ -45,7 +45,7 @@ function setup(fixtures, {role = 'admin', withIso = true} = {}) {
   const files = ['progress.js', ...consoleFiles()].concat(withIso ? ['iso.js'] : []);
   for (const f of files) vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx);
   const run = s => vm.runInContext(s, ctx);
-  run(`ME={username:"u",role:"${role}",idle_seconds:300,capabilities:{}}; toast=(m)=>__toasts.push(m); current="images"; currentTab=3; globalThis.sheets=[]; sheet=(o)=>sheets.push(o); renderCurrent=()=>{ globalThis.__renders=(globalThis.__renders||0)+1; }; IMAGES=[]; FOLDERS=[]; OVERVIEW=null;`);
+  run(`ME={username:"u",role:"${role}",idle_seconds:300,capabilities:{},view:"advanced"}; toast=(m)=>__toasts.push(m); current="images"; currentTab=3; globalThis.sheets=[]; sheet=(o)=>sheets.push(o); renderCurrent=()=>{ globalThis.__renders=(globalThis.__renders||0)+1; }; IMAGES=[]; FOLDERS=[]; OVERVIEW=null;`);
   ctx.__toasts = toasts;
   return {run, toasts, requests, xhrs, nodes, node};
 }

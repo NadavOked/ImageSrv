@@ -19,13 +19,18 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient       # noqa: E402
 
 
-def forge(secret: bytes, username: str, role: str, seconds: int = 12 * 3600) -> str:
+def forge(secret: bytes, username: str, role: str, seconds: int = 12 * 3600,
+          epoch: int | None = None) -> str:
     """טוקן חתום בסוד נתון — מה שתוקף היה בונה.
 
-    ‏#2414: ברירת המחדל היא עוגייה שהונפקה עכשיו (תפוגה = עכשיו + ‏TTL). בלי
+    #2414: ברירת המחדל היא עוגייה שהונפקה עכשיו (תפוגה = עכשיו + TTL). בלי
     שורה ב-``console_sessions`` חוסר הפעילות נמדד מרגע ההנפקה (תפוגה פחות TTL),
     ותפוגה של שעה אחת היא עוגייה שהונפקה לפני 11 שעות."""
     payload = f"{username}|{role}|{int(time.time()) + seconds}"
+    if epoch is not None:
+        # #2471: משתמש חדש נוצר עם ``auth_epoch`` מהשעון — טוקן בפורמט הישן (epoch 0)
+        # נדחה בשבילו ממילא. ``epoch`` = טוקן בפורמט הנוכחי (``purpose:epoch``).
+        payload += f"|:{epoch}"
     signature = hmac.new(secret, payload.encode(), hashlib.sha256).hexdigest()
     return f"{payload}|{signature}"
 
@@ -59,7 +64,7 @@ def test_a_missing_secret_does_not_become_the_key_0x00(server):
 
 
 def test_a_missing_secret_fails_loudly_and_does_not_look_like_logged_out(server):
-    """‏401 ("לא מחובר") היה קיפול של "לא הצלחנו לקרוא את הסוד" לתוך
+    """401 ("לא מחובר") היה קיפול של "לא הצלחנו לקרוא את הסוד" לתוך
     "אין כאן משתמש" — שני מצבים שונים, עיקרון 5."""
     drop_secret(server)
     admin = loud_client(server)
@@ -79,7 +84,7 @@ def test_a_missing_secret_refuses_to_issue_a_new_cookie(server):
 @pytest.mark.parametrize("value", [None, "", "zznothex", "00"])
 def test_the_secret_error_does_not_send_the_operator_to_a_backup(server, value):
     """#2473: מאז #2424 הגיבוי אינו מכיל את ``console_secret``, ולכן ההודעה
-    ‏"שחזרו מגיבוי" שלחה את המפעיל לפעולה שאין בה מה למצוא. ההודעה אומרת
+    "שחזרו מגיבוי" שלחה את המפעיל לפעולה שאין בה מה למצוא. ההודעה אומרת
     מה כן עושים: מוחקים את השורה ומפעילים מחדש — והמתכון הזה עובד."""
     from server import db
     from server.console import auth
@@ -103,7 +108,7 @@ def test_the_secret_error_does_not_send_the_operator_to_a_backup(server, value):
 
 @pytest.mark.parametrize("value", ["", "   ", "zznothex", "00", "aabbccdd"])
 def test_a_corrupt_or_short_secret_is_refused(server, value):
-    """‏hex לא תקין, וסוד קצר מדי שהוא שריד ולא סוד."""
+    """hex לא תקין, וסוד קצר מדי שהוא שריד ולא סוד."""
     from server.console import auth
     from server.db import set_setting
     set_setting(server["ctx"].conn, auth.SECRET_KEY, value)
@@ -181,8 +186,10 @@ def test_the_role_in_the_payload_is_ignored_even_when_signed(server):
     from server.db import get_setting
     secret = bytes.fromhex(get_setting(server["ctx"].conn, "console_secret"))
     client = TestClient(server["app"])
-    client.cookies.set("imagesrv_session", forge(secret, "labtech", "admin"))
-    # ‏#1073: הטבלה אומרת deploy — ול-deploy אין קונסולה. הטוקן החתום "admin"
+    epoch = server["ctx"].conn.execute(
+        "SELECT auth_epoch FROM users WHERE username = 'labtech'").fetchone()["auth_epoch"]
+    client.cookies.set("imagesrv_session", forge(secret, "labtech", "admin", epoch=epoch))
+    # #1073: הטבלה אומרת deploy — ול-deploy אין קונסולה. הטוקן החתום "admin"
     # לא פותח אפילו את /me, ובוודאי לא את /users.
     me = client.get("/api/console/me")
     assert me.status_code == 403

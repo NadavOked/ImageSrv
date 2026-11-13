@@ -1,27 +1,27 @@
-"""‏#1882 — הלוג של המשכפל נשמר בשרת: קטע אחרון דחוס בכל סוף סבב, וזיהוי כשלים מוכרים.
+"""#1882 — הלוג של המשכפל נשמר בשרת: קטע אחרון דחוס בכל סוף סבב, וזיהוי כשלים מוכרים.
 
-**למה.** ‏`/run/imagesrv/agent.log` יושב ב-tmpfs של המכונה ונמחק באתחול, ובייצור אין SSH
-(‏#702). עד כאן לא הייתה שום דרך לדעת **למה** דיסק נכשל בכיתה — רק שורת ה-`error` של היעד.
+**למה.** `/run/imagesrv/agent.log` יושב ב-tmpfs של המכונה ונמחק באתחול, ובייצור אין SSH
+(#702). עד כאן לא הייתה שום דרך לדעת **למה** דיסק נכשל בכיתה — רק שורת ה-`error` של היעד.
 
-**מה מגיע.** הסוכן (‏`agent/lib/core/datareport.sh: agent_log_send`) שולח פעם אחת בסוף כל סבב —
-בהצלחה (‏`round_end`) ובכשל (‏`failed`: מגירה אחת לפחות נכשלה, או אף מגירה לא הושלמה) — את
-‏`AGENT_LOG_LINES` השורות האחרונות של הלוג, חתוכות ל-`AGENT_LOG_BYTES`, דחוסות ב-gzip.
+**מה מגיע.** הסוכן (`agent/lib/core/datareport.sh: agent_log_send`) שולח פעם אחת בסוף כל סבב —
+בהצלחה (`round_end`) ובכשל (`failed`: מגירה אחת לפחות נכשלה, או אף מגירה לא הושלמה) — את
+`AGENT_LOG_LINES` השורות האחרונות של הלוג, חתוכות ל-`AGENT_LOG_BYTES`, דחוסות ב-gzip.
 בקשה אחת לסבב, אחרי הדיווח הסופי — לא בכל דיווח של 2 שניות (רשת ההפצה, #1882).
 
-**מה נשמר** (‏`agent_logs`): ‏`mac`, ‏`session_id`, ‏`reason`, ‏`at` (שעון השרת), ‏`lines`,
-‏`bytes`, ‏`truncated`, ‏`signatures_json` והטקסט **אחרי סינון**, דחוס (‏`text_gz`).
+**מה נשמר** (`agent_logs`): `mac`, `session_id`, `reason`, `at` (שעון השרת), `lines`,
+`bytes`, `truncated`, `signatures_json` והטקסט **אחרי סינון**, דחוס (`text_gz`).
 
 **פרטיות (#1924) וסודות.** לפני שנשמר בייט, `redact` מחליף: מפתחות/עוגיות/סיסמאות/אסימונים
-(כותרות HTTP, ‏`token=`/‏`password=`…, מפתח פרטי), GUIDs, ‏UUID של מערכות קבצים ומספרים סידוריים
-של NTFS, תוויות (‏`LABEL=`/‏`PARTLABEL=`), ושמות מחשב ומשתמשים **שנקראו מהדיסק** (‏`computer='…'`,
-‏`hostname='…'`, ‏`raw='…'`, ‏`\\Users\\<שם>`). מה שהשרת עצמו נתן (שם המחשב שנכתב) אינו מידע מהדיסק,
+(כותרות HTTP, `token=`/`password=`…, מפתח פרטי), GUIDs, UUID של מערכות קבצים ומספרים סידוריים
+של NTFS, תוויות (`LABEL=`/`PARTLABEL=`), ושמות מחשב ומשתמשים **שנקראו מהדיסק** (`computer='…'`,
+`hostname='…'`, `raw='…'`, `\\Users\\<שם>`). מה שהשרת עצמו נתן (שם המחשב שנכתב) אינו מידע מהדיסק,
 אבל גם הוא עובר את אותו סינון — אין כאן הבחנה עדינה שעלולה לטעות לכיוון הדליפה.
 
-**חתימות** (‏`SIGNATURES`) — כמו `ata_cause.py`: ביטוי → הסבר בעברית. מידע בלבד: שום דבר כאן
+**חתימות** (`SIGNATURES`) — כמו `ata_cause.py`: ביטוי → הסבר בעברית. מידע בלבד: שום דבר כאן
 אינו צובע דיסק, אינו מדלג ואינו חוסם (הכרעת נדב 20/10). מה שלא תאם — בלי חתימה, לא ניחוש.
 
 **תקרות** (הדיסק של השרת לא מתמלא): גוף ≤ `MAX_BODY` דחוס, ≤ `MAX_INFLATE` פרוס (פצצת דחיסה
-נדחית), טקסט שמור ≤ `MAX_TEXT` (הזנב); ‏`KEEP_PER_MAC` רשומות לכל מכונה ו-`KEEP_ROWS` בסך הכול —
+נדחית), טקסט שמור ≤ `MAX_TEXT` (הזנב); `KEEP_PER_MAC` רשומות לכל מכונה ו-`KEEP_ROWS` בסך הכול —
 נאכף **בכל הכנסה**, ו-`housekeeping` מוחק אחרי 90 יום.
 
 לעולם אינו זורק: כשל הוא תשובה `{"ok": false}` ושורה ב-log של השרת — הסוכן ממשיך כרגיל.
@@ -40,7 +40,7 @@ from server.db import _settle, _write_lock, journal, now_iso, writing
 
 log = logging.getLogger("imagesrv.agent_logs")
 
-#: הגוף הדחוס שמתקבל — מעליו 413. הסוכן שולח עד 64KB פרוסים, ‏gzip מוריד פי 5–10.
+#: הגוף הדחוס שמתקבל — מעליו 413. הסוכן שולח עד 64KB פרוסים, gzip מוריד פי 5–10.
 MAX_BODY = 128 * 1024
 #: כמה בייטים פרוסים לכל היותר — מעבר לזה פצצת דחיסה, ונדחה.
 MAX_INFLATE = 512 * 1024
@@ -49,9 +49,9 @@ MAX_TEXT = 64 * 1024
 #: רשומות לכל מכונה, ובסך הכול — נאכף בכל הכנסה (`_trim`).
 KEEP_PER_MAC = 30
 KEEP_ROWS = 1000
-#: למה נשלח. ‏`failed` = מגירה נכשלה או אף אחת לא הושלמה; ‏`round_end` = הסבב הסתיים.
-#: ‏#2841: ‏`checkpoint` = משכפל בתחילת האימות שאחרי הכתיבה (השלב הארוך); ‏`fatal` = הסוכן
-#: (‏die_local) או ה-watchdog עומדים לאתחל את המכונה באמצע עבודה.
+#: למה נשלח. `failed` = מגירה נכשלה או אף אחת לא הושלמה; `round_end` = הסבב הסתיים.
+#: #2841: `checkpoint` = משכפל בתחילת האימות שאחרי הכתיבה (השלב הארוך); `fatal` = הסוכן
+#: (die_local) או ה-watchdog עומדים לאתחל את המכונה באמצע עבודה.
 REASONS = frozenset({"failed", "round_end", "checkpoint", "fatal"})
 
 _SESSION = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
@@ -110,7 +110,7 @@ def redact(text: str) -> str:
 
 
 def classify(text: str) -> list[dict]:
-    """לכל חתימה שתאמה — ‏`{"key", "he", "line"}` (השורה **האחרונה** שתאמה, מסוננת)."""
+    """לכל חתימה שתאמה — `{"key", "he", "line"}` (השורה **האחרונה** שתאמה, מסוננת)."""
     found = []
     lines = text.splitlines()
     for key, pattern, he in SIGNATURES:
@@ -121,7 +121,7 @@ def classify(text: str) -> list[dict]:
 
 
 def inflate(body: bytes) -> str:
-    """גוף gzip → טקסט. ‏`BadLog` על גוף ריק, גדול מדי, לא-gzip, או פצצת דחיסה."""
+    """גוף gzip → טקסט. `BadLog` על גוף ריק, גדול מדי, לא-gzip, או פצצת דחיסה."""
     if not body:
         raise BadLog("empty body")
     if len(body) > MAX_BODY:
@@ -132,7 +132,7 @@ def inflate(body: bytes) -> str:
         if unpack.unconsumed_tail:
             raise BadLog("inflated log too large")
     except zlib.error as exc:
-        # ‏#2160: הודעה קבועה לרשת (פורט הסוכן, בלי כניסה); הפירוט של zlib — ליומן השרת.
+        # #2160: הודעה קבועה לרשת (פורט הסוכן, בלי כניסה); הפירוט של zlib — ליומן השרת.
         log.warning("agent log upload is not gzip: %s", exc)
         raise BadLog("not gzip") from exc
     text = raw.decode("utf-8", errors="replace")
@@ -149,7 +149,7 @@ def _tail(text: str) -> tuple[str, bool]:
 
 def receive(conn: sqlite3.Connection, mac: str, session_id: object, reason: object,
             body: bytes, known: bool) -> dict:
-    """‏`POST /api/v1/agent/log` אחרי שער הזהות. ‏`known` — המכונה רשומה."""
+    """`POST /api/v1/agent/log` אחרי שער הזהות. `known` — המכונה רשומה."""
     try:
         if not known:
             return {"ok": False, "code": "unknown_machine", "error": "not a registered machine"}

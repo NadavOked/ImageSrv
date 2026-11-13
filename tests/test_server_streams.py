@@ -1,6 +1,6 @@
-"""שני זרמים, שני כללים — ‏issue #60.
+"""שני זרמים, שני כללים — issue #60.
 
-‏`udp-sender` אחד יש בשרת, ולכן **שידור מולטיקאסט אחד** בכל המערכת: סבב
+`udp-sender` אחד יש בשרת, ולכן **שידור מולטיקאסט אחד** בכל המערכת: סבב
 כיתה או גל חדר שיכפולים תופסים את החריץ, והשני מקבל 409. זה הכלל הישן
 והוא נשאר.
 
@@ -11,7 +11,7 @@
 
 הערה על ההנחה שבישיו: "שחזור יוניקאסט פותח session עם expected_clients==1"
 אינו מדויק. סבב של מחשב אחד הוא **עדיין מולטיקאסט** (אותו udp-sender עם
-‏`--min-receivers 1`), ולכן הוא נשאר חסום — יש כאן בדיקה שמקבעת את זה.
+`--min-receivers 1`), ולכן הוא נשאר חסום — יש כאן בדיקה שמקבעת את זה.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ pytest.importorskip("fastapi")
 #: כיתה ובודקות את זרימת v1.2 — ולכן מדליקות את היכולת (`classrooms_on`).
 pytestmark = pytest.mark.usefixtures("classrooms_on")
 
-from conftest import hello_body, room_slots, setup_classroom
+from conftest import HANG_S, hello_body, room_slots, setup_classroom
 
 #: הכתובת שאיתה נוצר השרת ב-conftest — וילן ההפצה.
 VLAN = "http://10.44.12.10:8080"
@@ -141,7 +141,7 @@ def test_a_unicast_pull_opens_while_a_round_is_open(server):
 
 
 def test_two_unicast_pulls_run_side_by_side(server):
-    """‏8.5: שתי תחנות מחוץ לוילן בו-זמנית, אחת לינוקס ואחת Windows."""
+    """8.5: שתי תחנות מחוץ לוילן בו-זמנית, אחת לינוקס ואחת Windows."""
     lab2 = second_class(server)
 
     first = pull(server, lab2["mac1"], image="img_7f3a91")
@@ -180,7 +180,7 @@ def test_the_same_machine_does_not_pull_twice(server):
 def test_the_same_request_twice_is_the_same_pull(server):
     """ה-retry של הסוכן (#104): אותה תחנה, אותו אימג', ואיש עוד לא דיווח.
 
-    ‏`curl --retry 3 --max-time 10` שולח שוב בקשה שהשרת כבר קיבל וענה
+    `curl --retry 3 --max-time 10` שולח שוב בקשה שהשרת כבר קיבל וענה
     עליה באיחור. השנייה אינה משיכה חדשה ואינה תחרות על הדיסק — היא
     אותה בקשה, ולכן מקבלת את **אותו** מזהה. אחרת נפתחת משיכה שנייה
     שאיש לא ידווח אליה, והתחנה נחסמת על עבודה שלא באמת רצה.
@@ -200,7 +200,7 @@ def test_a_pull_that_reported_is_not_handed_out_again(server):
     """מרגע שדווח משהו זו עבודה קיימת ולא בקשה שאבדה — וחוזרים לחסימה.
 
     משיכה שנכשלה היא מקרה אחר: היא נסגרת כ-`failed` עם הסיבה ואינה
-    חוסמת (‏#1573, למטה).
+    חוסמת (#1573, למטה).
     """
     lab2 = second_class(server)
     pull_id = pull(server, lab2["mac1"]).json()["id"]
@@ -251,8 +251,8 @@ def test_a_finished_pull_leaves_the_overview(server):
 
 
 def test_a_finished_pull_does_not_block_the_next_one(server):
-    """‏`sweep` רץ עד היום רק מ-`/overview`: בלי מפעיל מול הקונסולה, גם
-    משיכה **שהצליחה** החזירה 409 לשחזור הבא של אותה תחנה (‏#1573)."""
+    """`sweep` רץ עד היום רק מ-`/overview`: בלי מפעיל מול הקונסולה, גם
+    משיכה **שהצליחה** החזירה 409 לשחזור הבא של אותה תחנה (#1573)."""
     lab2 = second_class(server)
     first = pull(server, lab2["mac1"]).json()["id"]
     assert report(server, first, lab2["mac1"], "done").json()["ok"] is True
@@ -277,7 +277,7 @@ def test_an_operator_can_still_close_a_running_pull(server):
 
 # --- כשל אינו נשאר "רץ" (#1573) ---------------------------------------------
 
-#: הסיבה שהסוכן שלח ב-17/10 על HP-BUILD (‏#1545) — מה שהמפעיל צריך לקרוא.
+#: הסיבה שהסוכן שלח ב-17/10 על HP-BUILD (#1545) — מה שהמפעיל צריך לקרוא.
 SGDISK = "sgdisk דחה את תוכנית השחזור — הדיסק לא שונה"
 
 
@@ -326,7 +326,7 @@ def test_a_failed_pull_does_not_block_the_next_pull_of_that_station(server):
 
 
 def test_a_failed_pull_closes_as_failed_with_its_reason(server):
-    """‏"נכשל" אינו "הסתיים" ואינו "רץ": המצב `failed`, והסיבה נשארת (עיקרון 4/5)."""
+    """"נכשל" אינו "הסתיים" ואינו "רץ": המצב `failed`, והסיבה נשארת (עיקרון 4/5)."""
     lab2 = second_class(server)
     pull_id = pull(server, lab2["mac1"]).json()["id"]
     assert report_failed(server, pull_id, lab2["mac1"]).json()["ok"] is True
@@ -341,7 +341,7 @@ def test_a_failed_pull_closes_as_failed_with_its_reason(server):
 
 def test_a_pull_that_has_not_reported_for_too_long_closes_as_failed(server):
     """רשת הביטחון: שתיקה מעבר לתקרה = כשל בשם, עם שעת הדיווח האחרון.
-    שעתיים — פחות מ-HP-BUILD (‏4 שעות, 17/10) ומעל כל תקרה סבירה."""
+    שעתיים — פחות מ-HP-BUILD (4 שעות, 17/10) ומעל כל תקרה סבירה."""
     from datetime import datetime                          # noqa: PLC0415
     lab2 = second_class(server)
     pull_id = pull(server, lab2["mac1"]).json()["id"]
@@ -369,7 +369,7 @@ def test_a_pull_that_never_reported_is_also_bounded(server):
 
 def test_a_stamp_without_a_timezone_is_not_measured_and_breaks_nothing(server):
     """חותמת בלי אזור זמן (שורה ישנה/ידנית) — "לא נמדד", לא שתיקה ולא 500:
-    ‏naive מול aware זורק, והיה מפיל את `/overview` ואת פתיחת המשיכה."""
+    naive מול aware זורק, והיה מפיל את `/overview` ואת פתיחת המשיכה."""
     lab2 = second_class(server)
     pull_id = pull(server, lab2["mac1"]).json()["id"]
     conn = server["ctx"].conn
@@ -384,7 +384,7 @@ def test_a_stamp_without_a_timezone_is_not_measured_and_breaks_nothing(server):
 
 def test_a_pull_that_reports_within_the_ceiling_still_blocks(server):
     """משיכה שבאמת כותבת אינה מוחלפת: דיווח לפני שתי דקות הוא ראיה שהיא
-    חיה (‏curl איטי, שרת שאותחל) — לא שתיקה."""
+    חיה (curl איטי, שרת שאותחל) — לא שתיקה."""
     lab2 = second_class(server)
     pull_id = pull(server, lab2["mac1"]).json()["id"]
     assert report(server, pull_id, lab2["mac1"], "writing").json()["ok"] is True
@@ -398,8 +398,8 @@ def test_a_pull_that_reports_within_the_ceiling_still_blocks(server):
 
 
 def test_the_ceiling_is_far_above_the_agents_report_gap():
-    """התקרה מעל קצב הדיווח (‏~2ש', ‏curl ‏--max-time 10 ‏--retry 3) וגם מעל
-    אתחול שרת; מתחת לחדר (‏180) הייתה מפילה משיכה בריאה בעדכון שרת."""
+    """התקרה מעל קצב הדיווח (~2ש', curl --max-time 10 --retry 3) וגם מעל
+    אתחול שרת; מתחת לחדר (180) הייתה מפילה משיכה בריאה בעדכון שרת."""
     from server.rounds import room                                # noqa: PLC0415
     from server.rounds.pulls import SILENT_SECONDS                # noqa: PLC0415
     assert room.LOST_SECONDS < SILENT_SECONDS <= 30 * 60
@@ -407,7 +407,7 @@ def test_the_ceiling_is_far_above_the_agents_report_gap():
 
 def test_the_background_clock_sweeps_pulls(tmp_path, monkeypatch):
     """תחנה שאיש אינו צופה בה: בלי השעון, משיכה תקועה חוסמת גם את
-    האתחול הלילי (‏`auto_reboot.busy_reason`) ואת עדכון השרת — לנצח."""
+    האתחול הלילי (`auto_reboot.busy_reason`) ואת עדכון השרת — לנצח."""
     import threading                                       # noqa: PLC0415
     from fastapi.testclient import TestClient              # noqa: PLC0415
     from conftest import Clock, write_image, MANIFEST_256  # noqa: PLC0415
@@ -482,7 +482,7 @@ def test_a_pull_is_not_the_round_the_station_screen_shows(server):
 
 
 def test_closing_a_pull_does_not_stop_the_broadcast(server_with_sender):
-    """‏`on_closed` מגיע ל-SenderEngine שמתעלם ממזהה הסבב: סגירת משיכה
+    """`on_closed` מגיע ל-SenderEngine שמתעלם ממזהה הסבב: סגירת משיכה
     הייתה הורגת את השידור של הכיתה."""
     from test_sender import wait_for
 
@@ -492,7 +492,7 @@ def test_closing_a_pull_does_not_stop_the_broadcast(server_with_sender):
     assert open_round(server, lab1["group"], expected=1).status_code == 200
     server["anon"].post("/api/v1/agent/hello", json=hello_body(lab1["mac1"]))
     server["anon"].post("/api/v1/agent/hello", json=hello_body(lab1["mac1"]))
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     assert wait_for(lambda: len(recorder.commands) >= 1)
 
     pull_id = pull(server, lab2["mac1"]).json()["id"]
@@ -505,7 +505,7 @@ def test_closing_a_pull_does_not_stop_the_broadcast(server_with_sender):
         "/api/console/overview").json()["sender"]["state"] == "sending"
 
 
-# --- מי מורשה לפתוח משיכה (‏#42 לא משתנה) ------------------------------------
+# --- מי מורשה לפתוח משיכה (#42 לא משתנה) ------------------------------------
 
 
 def test_a_pull_from_another_network_demands_a_login(server):
@@ -534,7 +534,7 @@ def test_a_wrong_password_does_not_open_a_pull(server):
 
 
 def test_pull_passwords_go_through_the_login_guard(server, monkeypatch):
-    """‏#1282: הסיסמה של משיכה נבדקה בלי `login_guard` — בלי השהיה ובלי
+    """#1282: הסיסמה של משיכה נבדקה בלי `login_guard` — בלי השהיה ובלי
     נעילה, בניגוד ל-`/agent/login`. אחרי 5 כשלונות גם הנכונה ממתינה."""
     from server.console import login_guard
 
@@ -550,7 +550,7 @@ def test_pull_passwords_go_through_the_login_guard(server, monkeypatch):
 
 
 def test_a_pull_by_a_user_who_must_change_password_is_refused(server):
-    """‏#1282: ‏`/agent/login` מסרב למי שחייב להחליף סיסמה; משיכה קיבלה אותו."""
+    """#1282: `/agent/login` מסרב למי שחייב להחליף סיסמה; משיכה קיבלה אותו."""
     lab2 = second_class(server)
     conn = server["ctx"].conn
     conn.execute("UPDATE users SET must_change_password = 1 WHERE username = 'labtech'")

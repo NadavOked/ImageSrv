@@ -112,7 +112,7 @@ def test_parse_interserver_url_rejects_unsafe(url):
     ("::ffff:127.0.0.1", True),
     ("10.0.0.5", False), ("192.168.1.1", False), ("", False), (None, False),
     ("::ffff:10.0.0.1", False),
-    # ‏#860: קידומת "127." אינה כתובת — רק כתובת loopback אמיתית עוברת.
+    # #860: קידומת "127." אינה כתובת — רק כתובת loopback אמיתית עוברת.
     ("127.evil", False), ("127.0.0.1.9", False), ("127.", False),
 ])
 def test_is_loopback(host, expected):
@@ -129,7 +129,7 @@ def test_redact_hides_secrets():
 
 
 def test_redact_hides_a_bare_pairing_code():
-    # ‏#860: הקוד בצורתו (XXX-XXX-XXX) מוסתר גם כשאין לפניו `code=` —
+    # #860: הקוד בצורתו (XXX-XXX-XXX) מוסתר גם כשאין לפניו `code=` —
     # למשל בהודעת שגיאה שמצטטת את מה שהמפעיל הקליד.
     code = interserver_auth.generate_pairing_code()
     out = interserver_auth.redact_secrets(f"pairing failed for {code} at 10.0.0.5")
@@ -141,7 +141,7 @@ def test_redact_hides_a_bare_pairing_code():
     ("", ""), (None, None), ("", "ab12"), ("ab12", ""), (None, "ab12"),
 ])
 def test_verify_pinned_spki_value_empty_is_never_a_match(actual, expected):
-    # ‏#860: ריק מול ריק "עבר" — pin שטרם נשמר מול begin בלי server_spki.
+    # #860: ריק מול ריק "עבר" — pin שטרם נשמר מול begin בלי server_spki.
     assert interserver_auth.verify_pinned_spki_value(actual, expected) is False
 
 
@@ -151,7 +151,7 @@ def test_verify_pinned_spki_value_matches_case_insensitively():
 
 
 def test_node_id_from_spki_rejects_empty():
-    # ‏#860: "sn_" בלי SPKI הוא מזהה בלי מקור — לא ערך.
+    # #860: "sn_" בלי SPKI הוא מזהה בלי מקור — לא ערך.
     with pytest.raises(ValueError):
         interserver_auth.node_id_from_spki("")
 
@@ -223,7 +223,7 @@ def test_open_window_rejects_ttl_outside_locked_range(conn):
 
 def _run_in_parallel(fn, n):
     """מריץ את ``fn`` ב-n תהליכונים שמתחילים יחד (barrier). מחזיר
-    ‏(תוצאות, שגיאות) לפי אינדקס."""
+    (תוצאות, שגיאות) לפי אינדקס."""
     barrier = threading.Barrier(n)
     results: list = [None] * n
     errors: list = [None] * n
@@ -288,7 +288,7 @@ def test_credential_write_read_roundtrip(tmp_path):
 
 
 def test_credential_tmp_symlink_is_not_followed(tmp_path):
-    # ‏#860: שם הקובץ הזמני קבוע (`.<name>.tmp`). symlink בשם הזה שמפנה
+    # #860: שם הקובץ הזמני קבוע (`.<name>.tmp`). symlink בשם הזה שמפנה
     # החוצה היה מקבל את הטוקן (O_TRUNC עוקב אחרי קישור). עכשיו הקישור
     # מוסר ו-O_EXCL|O_NOFOLLOW פותח קובץ חדש — היעד נשאר כפי שהיה.
     path = tmp_path / "node.cred"
@@ -304,7 +304,7 @@ def test_credential_tmp_symlink_is_not_followed(tmp_path):
 
 
 def test_credential_stale_tmp_from_a_crash_is_replaced(tmp_path):
-    # ‏O_EXCL לבדו היה הופך שארית של ריצה שקרסה לחסימה קבועה של הרישום.
+    # O_EXCL לבדו היה הופך שארית של ריצה שקרסה לחסימה קבועה של הרישום.
     path = tmp_path / "node.cred"
     (tmp_path / ".node.cred.tmp").write_text("half-written", encoding="utf-8")
     interserver_auth.write_credential_0600(path, "tok")
@@ -359,7 +359,7 @@ def test_credential_toctou_symlink_swap_not_followed(tmp_path, monkeypatch):
 # --- (ד) הצד המקומי של המשני על השרת המלא -----------------------------------
 
 def _local_client(server, host="127.0.0.1", user="noc", pw="admin-pass-123"):
-    """‏TestClient עם כתובת peer מפורשת, מחובר. loopback כברירת מחדל."""
+    """TestClient עם כתובת peer מפורשת, מחובר. loopback כברירת מחדל."""
     from conftest import complete_console_login
     client = TestClient(server["app"], client=(host, 40000))
     complete_console_login(client, server["ctx"].conn, user, pw)
@@ -459,7 +459,7 @@ def test_verify_pinned_spki_matches_and_rejects():
 
 
 def test_channel_binding_capability_present_with_pyopenssl():
-    # ‏[ממצא #740] היכולת מגיעה מ-pyOpenSSL, לא מ-stdlib ssl — ולכן היא
+    # [ממצא #740] היכולת מגיעה מ-pyOpenSSL, לא מ-stdlib ssl — ולכן היא
     # קיימת גם על 3.12, וה-exporter אינו מדולג כאן.
     assert interserver_auth.can_export_keying_material() is True
 
@@ -476,7 +476,7 @@ def test_enroll_capability_standalone_admin_true_even_with_zero_nodes(server):
     caps = _caps(server["admin"])
     assert caps["enroll_secondary"] is True         # אין צורך במשני קיים
     assert caps["open_local_pairing"] is False       # לא משני
-    # ‏#1073: ל-deploy אין /me בכלל — הקונסולה סגורה בפניו.
+    # #1073: ל-deploy אין /me בכלל — הקונסולה סגורה בפניו.
     assert server["deploy"].get("/api/console/me").status_code == 403
 
 
@@ -490,7 +490,7 @@ def test_local_pairing_capability_only_on_secondary_admin(server):
 
 # --- (ז) שומרי הכניסה הבין-שרתית בשכבת ה-service (#740) ----------------------
 #
-# ‏peer מזויף (TlsPeer) + conn של משני עם זהות — כדי לבדוק כל שומר בלי
+# peer מזויף (TlsPeer) + conn של משני עם זהות — כדי לבדוק כל שומר בלי
 # להרים TLS חי. ה-handshake האמיתי נבדק ב-test_interserver_tls.py.
 
 from server.interserver import api as interserver_api                           # noqa: E402
@@ -735,7 +735,7 @@ def test_ingress_ping_sender_constraint_decisive(tmp_path, monkeypatch):
 
 # --- (ז**) #1122: חידוש תעודה בראשי — TOFU על המפתח, לא על התעודה ----------
 #
-# ‏TLS 1.3 מוכיח ב-CertificateVerify שהפונה מחזיק את המפתח הפרטי של התעודה
+# TLS 1.3 מוכיח ב-CertificateVerify שהפונה מחזיק את המפתח הפרטי של התעודה
 # שהציג. לכן תעודה **חדשה על אותו מפתח** (SPKI זהה) היא אותו ראשי, ומאמצים
 # אותה — אבל רק אחרי שהטוקן אומת, ועם שורת יומן. מפתח **אחר** נשאר 401 קשה,
 # בשם (``peer_cert_changed``) כדי שהקונסולה בראשי תגיד למנהל מה לעשות.
@@ -796,7 +796,7 @@ def test_ingress_renewed_cert_on_the_same_key_is_adopted(tmp_path):
     assert conn.execute("SELECT pinned_parent_spki FROM parent_credentials"
                         " WHERE singleton = 1").fetchone()["pinned_parent_spki"]         == interserver_auth.spki_sha256(primary)
     assert _renewals(conn) == 1
-    # ‏ping שני עם אותה תעודה — כבר כרוכה, בלי יומן נוסף.
+    # ping שני עם אותה תעודה — כבר כרוכה, בלי יומן נוסף.
     interserver_api.ping(conn, _peer(renewed), token=comp["token"], protocol_version="2.1")
     assert _renewals(conn) == 1
 
@@ -900,7 +900,7 @@ def test_enroll_route_writes_0600_token_and_row(server, monkeypatch, tmp_path):
     admin = _local_client(server)                           # הראשי standalone; admin
     # מזייפים את השיחה הבין-שרתית — הצד הזה נבדק אמיתי ב-test_interserver_tls.
     fake_token = interserver_auth.generate_token()
-    # ‏#883: המזהה נגזר מה-SPKI המוצמד (``sn_`` + 16 הקסה), לא מההצהרה.
+    # #883: המזהה נגזר מה-SPKI המוצמד (``sn_`` + 16 הקסה), לא מההצהרה.
     derived = interserver_auth.node_id_from_spki("cc" * 32)
     monkeypatch.setattr(storage_client, "pair_secondary", lambda *a, **k: {
         "token": fake_token, "parent_id": "p", "secondary_id": derived,
@@ -938,9 +938,9 @@ def test_enroll_route_wrong_protocol_version_rejected(server):
     assert resp.status_code == 426
 
 
-# --- (י) ‏#883: זהות המשני נגזרת מה-SPKI המוצמד, לא מהצהרת ה-JSON ---------
+# --- (י) #883: זהות המשני נגזרת מה-SPKI המוצמד, לא מהצהרת ה-JSON ---------
 #
-# ‏begin מחזיר ``secondary_id`` — הצהרה עצמית של המשני. עד #883 היא הפכה
+# begin מחזיר ``secondary_id`` — הצהרה עצמית של המשני. עד #883 היא הפכה
 # ל-``node_id`` ברשומה **ולשם קובץ הטוקן** (``secondaries/{id}.token``):
 # משני מאומת-אך-עוין (או מפעיל שטעה בכתובת) יכול היה לכתוב קובץ 0600
 # **מחוץ** לתיקייה, כמשתמש השרת. הבקרה השלילית: על הקוד הישן
@@ -969,7 +969,7 @@ def _fake_pair_begin(monkeypatch, *, secondary_id, spki, token=None):
 
 def test_enroll_traversal_secondary_id_rejected_before_code_and_no_file(
         server, monkeypatch, tmp_path):
-    """‏secondary_id="../x" → 400, לא נוצר שום קובץ, והקוד לא נשלח (אין
+    """secondary_id="../x" → 400, לא נוצר שום קובץ, והקוד לא נשלח (אין
     pair-complete) — המשני לא נקשר לאב על סמך הצהרה שסותרת את המפתח."""
     admin = _local_client(server)
     spki = "cc" * 32

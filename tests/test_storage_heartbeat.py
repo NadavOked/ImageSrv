@@ -65,7 +65,7 @@ def test_beat_with_a_wrong_token_never_stamps_the_secondary(
 
 def test_a_secondary_that_accepts_tcp_and_never_answers_fails_fast(
         server, paired, tmp_path):
-    """‏TCP נפתח ו-TLS לעולם אינו מתחיל: התקרה הקצרה של הדופק, לא 10+15ש'."""
+    """TCP נפתח ו-TLS לעולם אינו מתחיל: התקרה הקצרה של הדופק, לא 10+15ש'."""
     hang = socket.socket()
     hang.bind(("127.0.0.1", 0))
     hang.listen(1)                              # backlog: connect עובר, אין accept

@@ -1,6 +1,6 @@
-"""‏#2000 — כשל בצעד של החזרה (rollback) אינו "החזרה הצליחה".
+"""#2000 — כשל בצעד של החזרה (rollback) אינו "החזרה הצליחה".
 
-‏``install_units_and_restart`` נקרא רק מתוך ``if`` ב-``rollback``, ושם
+``install_units_and_restart`` נקרא רק מתוך ``if`` ב-``rollback``, ושם
 ``set -e`` כבוי. בלי בדיקה של כל צעד, כשל בהתקנת היחידות של התג הקודם נבלע,
 ה-``restart`` הצליח, והסטטוס אמר ``reason: rollback`` ("עובד, על הגרסה
 הקודמת") על שרת שחזר רק חלקית. הטסט מריץ את הסקריפט האמיתי: השדרוג נכשל
@@ -16,7 +16,7 @@ from test_installer_1131 import (  # noqa: F401 -- bindir is a fixture
 
 
 def _prev_tree_without_units(bindir):
-    git = bindir / "git"   # העץ של v0.48.0 — ‏deploy/*.service אינם בו, ‏install נכשל
+    git = bindir / "git"   # העץ של v0.48.0 — deploy/*.service אינם בו, install נכשל
     git.write_text(git.read_text(encoding="utf-8").replace(
         "checkout) exit 0 ;;",
         'checkout) if [ "$3" = v0.48.0 ]; then rm -f deploy/*.service; fi; exit 0 ;;'),

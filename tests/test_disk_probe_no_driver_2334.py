@@ -1,15 +1,15 @@
-"""‏#2334 — בקר דיסקים בלי מנהל התקן אינו "0 מגירות".
+"""#2334 — בקר דיסקים בלי מנהל התקן אינו "0 מגירות".
 
-המשך של #1825/#1809. ‏#1914 טוען ואורז את מנהלי ההתקן של מחלקת PCI 01,
+המשך של #1825/#1809. #1914 טוען ואורז את מנהלי ההתקן של מחלקת PCI 01,
 אבל כשבקר אחסון קיים ואף מנהל התקן לא נקשר אליו (כרטיס SATA שלא נארז,
-‏RAID של יצרן), ה-hello דיווח `disks: []` עם `unchecked`/`no_disks`/
+RAID של יצרן), ה-hello דיווח `disks: []` עם `unchecked`/`no_disks`/
 `no_ports` — והמסך אמר "לא חוברו דיסקים". המפעיל חיפש כבל, והתשובה
 הייתה מנהל התקן או הגדרת BIOS. זו עיקרון 5א: "לא ראינו דיסקים" נקרא
 כ"אין דיסקים".
 
-‏`disk_probe` מקבל ערך חמישי, `no_driver`: אין דיסקים, ובעץ ה-PCI יש
+`disk_probe` מקבל ערך חמישי, `no_driver`: אין דיסקים, ובעץ ה-PCI יש
 התקן במחלקה `0x01*` בלי קישור `driver`. הראיה היא sysfs בלבד, ורק כשאין
-דיסקים (#1702 — לא להאט אתחול). ‏sysfs שלא נקרא אינו `no_driver`.
+דיסקים (#1702 — לא להאט אתחול). sysfs שלא נקרא אינו `no_driver`.
 
 הטסטים מריצים את `disk_probe` ו-`build_hello` האמיתיים דרך bash, על
 עץ sysfs מזויף ו-`dmesg` מזויף — אותו דפוס כמו `test_drawer_probe.py`.
@@ -29,7 +29,7 @@ native = requires_native(("bash", BASH))
 
 
 def _pci(sysroot: Path, slot: str, cls: str, driver: bool) -> None:
-    """התקן PCI מזויף. ‏`driver` הוא תיקייה ולא קישור — בווינדוס אין
+    """התקן PCI מזויף. `driver` הוא תיקייה ולא קישור — בווינדוס אין
     symlink, ו-`[ -e ]` של הסוכן מקבל את שניהם. בשם החריץ `-` במקום `:`
     (נתיב בווינדוס); הסוכן אינו קורא את השם."""
     dev = sysroot / "sys/bus/pci/devices" / slot
@@ -39,13 +39,13 @@ def _pci(sysroot: Path, slot: str, cls: str, driver: bool) -> None:
         (dev / "driver").mkdir()
 
 
-#: ‏SATA AHCI (‏`0x010601`) — הבקר שה-Issue נותן כדוגמה.
+#: SATA AHCI (`0x010601`) — הבקר שה-Issue נותן כדוגמה.
 SATA = "0x010601"
 
 
 @native
 def test_storage_controller_without_driver_is_no_driver(tmp_path):
-    """הלב של #2334: בקר `0x010601` בלי `driver` ‏→ `no_driver`.
+    """הלב של #2334: בקר `0x010601` בלי `driver` → `no_driver`.
 
     ה-`dmesg` בלי שורת ahci — בלי התיקון זה `unchecked`, וזה מה שהמפעיל
     ראה כ"0 מגירות"."""
@@ -59,7 +59,7 @@ def test_storage_controller_without_driver_is_no_driver(tmp_path):
                                              (PORTS_OK, "no_disks"),
                                              (NO_PORTS, "no_ports")])
 def test_a_bound_controller_keeps_the_existing_answer(tmp_path, dmesg, expected):
-    """אותו בקר **עם** `driver` ‏→ ההתנהגות הקיימת, ללא שינוי."""
+    """אותו בקר **עם** `driver` → ההתנהגות הקיימת, ללא שינוי."""
     sysroot = _empty_sysroot(tmp_path)
     _pci(sysroot, "0000-00-1f.2", SATA, driver=True)
     assert probe(sysroot, dmesg, tmp_path / "b") == expected
@@ -68,7 +68,7 @@ def test_a_bound_controller_keeps_the_existing_answer(tmp_path, dmesg, expected)
 @native
 def test_no_driver_wins_over_no_ports(tmp_path):
     """הכרעה (נשארה פתוחה ב-Issue): ahci קשור עם 0 פורטים **וגם** בקר בלי
-    מנהל התקן ‏→ `no_driver`. ‏`no_ports` אומר "אף פורט אינו מופעל" — וזה
+    מנהל התקן → `no_driver`. `no_ports` אומר "אף פורט אינו מופעל" — וזה
     לא נכון על בקר שאיננו רואים דרכו; הדיסקים יכולים להיות עליו."""
     sysroot = _empty_sysroot(tmp_path)
     _pci(sysroot, "0000-00-1f.2", SATA, driver=True)
@@ -86,7 +86,7 @@ def test_a_driverless_device_outside_class_01_is_not_no_driver(tmp_path):
 
 @native
 def test_unread_sysfs_is_not_no_driver(tmp_path):
-    """עיקרון 5: אין עץ PCI שנקרא ‏→ אין ראיה, ולא `no_driver`. נשאר מה
+    """עיקרון 5: אין עץ PCI שנקרא → אין ראיה, ולא `no_driver`. נשאר מה
     שהיה — `unchecked`."""
     sysroot = _empty_sysroot(tmp_path)          # אין sys/bus/pci כלל
     assert probe(sysroot, NO_AHCI, tmp_path / "b") == "unchecked"
@@ -94,7 +94,7 @@ def test_unread_sysfs_is_not_no_driver(tmp_path):
 
 @native
 def test_a_disk_present_still_reports_drives(tmp_path):
-    """הנתיב החם: יש דיסק ‏→ `drives`, גם כשיש בקר נוסף בלי מנהל התקן."""
+    """הנתיב החם: יש דיסק → `drives`, גם כשיש בקר נוסף בלי מנהל התקן."""
     sysroot = _empty_sysroot(tmp_path)
     _pci(sysroot, "0000-03-00.0", SATA, driver=False)
     blk = sysroot / "sys/block/sda"

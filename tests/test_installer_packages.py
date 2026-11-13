@@ -2,8 +2,8 @@
 
 הסניף המשני הראשון במעבדה (16/09) הותקן מהמתקין, והמוניטור (WebSocket
 ב-uvicorn, #690) החזיר 500 עד ``apt-get install python3-websockets``:
-‏uvicorn אינו מדבר WebSocket בעצמו, והחבילה לא הייתה ברשימה. הראשי
-במעבדה הותקן ידנית ולכן זה לא נראה שם. באותה משפחה: ‏python3-cryptography
+uvicorn אינו מדבר WebSocket בעצמו, והחבילה לא הייתה ברשימה. הראשי
+במעבדה הותקן ידנית ולכן זה לא נראה שם. באותה משפחה: python3-cryptography
 ו-python3-openssl לערוץ הבין-שרתי 8443 (#740).
 
 הטסט קורא את מערך ``PKGS`` **מתוך המתקין עצמו** — לא מעתיק את הרשימה —
@@ -63,7 +63,7 @@ def test_installer_apt_list_has_the_server_runtime_packages() -> None:
 
 def test_requirements_pin_the_same_packages_the_installer_installs() -> None:
     """מה שהמתקין מביא ב-apt מוצמד גם ב-pip — אחרת ה-CI בודק סביבה
-    שאינה זו שנפרסת (‏#113 מהצד השני)."""
+    שאינה זו שנפרסת (#113 מהצד השני)."""
     pins = pinned_requirements()
     missing = [pip for pip in SERVER_APT_TO_PIP.values() if pip not in pins]
     assert not missing, f"אינו מוצמד ב-requirements.txt: {missing} (יש: {pins})"

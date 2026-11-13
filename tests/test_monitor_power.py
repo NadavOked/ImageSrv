@@ -4,8 +4,8 @@
 ו-**כיבוי** של המחשב המנוטר. האסימון נוסע למכונה כ-ClientCutText על
 ה-RFB, ו-monitor.c (שרץ כ-root) ממפה אותו ל-`reboot -f`/`poweroff -f`.
 
-‏#1129 (R48): את ה-ClientCutText כותב **השרת** (`POST …/power`,
-‏`monitor.power_frame`) אחרי שהשווה את השם שהוקלד לשם הקנוני מהטבלה —
+#1129 (R48): את ה-ClientCutText כותב **השרת** (`POST …/power`,
+`monitor.power_frame`) אחרי שהשווה את השם שהוקלד לשם הקנוני מהטבלה —
 לא הדפדפן. הדפדפן רק קורא ל-POST; ClientCutText מהדפדפן נדחה בגשר.
 
 מה שנבדק כאן: (א) שני הכפתורים קיימים ו-Ctrl+Alt+Del איננו, (ב) הדפדפן
@@ -75,7 +75,7 @@ def test_html_has_reboot_and_poweroff_buttons():
 
 
 def test_server_builds_the_reboot_and_poweroff_tokens():
-    """‏#1129: השרת בונה את האסימון מהתחילית + הפעולה; זה מה ש-monitor.c
+    """#1129: השרת בונה את האסימון מהתחילית + הפעולה; זה מה ש-monitor.c
     יזהה. נועלים את התחילית המדויקת ואת שתי הפעולות — שני הצדדים חייבים
     להסכים על שתיהן, אחרת monitor.c לא ימפה את מה שהשרת שולח."""
     from server.console import monitor
@@ -96,8 +96,8 @@ def test_js_wires_each_button_to_a_power_action():
 
 
 def test_js_sends_power_through_the_server_not_over_the_websocket():
-    """‏#1129: הדפדפן קורא ל-`POST …/power` עם השם שהוקלד; הוא **אינו** בונה
-    ‏ClientCutText ואינו מכיר את האסימון — האישור והכתיבה למכונה בשרת."""
+    """#1129: הדפדפן קורא ל-`POST …/power` עם השם שהוקלד; הוא **אינו** בונה
+    ClientCutText ואינו מכיר את האסימון — האישור והכתיבה למכונה בשרת."""
     js = _js()
     assert "clientCutText" not in js
     assert POWER_PREFIX not in js
@@ -110,7 +110,7 @@ def test_js_sends_power_through_the_server_not_over_the_websocket():
 
 
 def test_power_is_behind_a_confirm_modal_not_prompt_or_confirm():
-    """‏prompt()/confirm() חסומים בדפדפן מוטמע (CLAUDE.md). האישור חייב
+    """prompt()/confirm() חסומים בדפדפן מוטמע (CLAUDE.md). האישור חייב
     לעבור במודאל של הדף, ופעולה הרסנית על מכונה חיה נעולה בהקלדת השם
     (עיקרון 7)."""
     js = _js()
@@ -119,7 +119,7 @@ def test_power_is_behind_a_confirm_modal_not_prompt_or_confirm():
     assert "powerModal" in js
     # מודאל האישור קיים ב-DOM של הדף.
     assert 'id="pmodal"' in _html()
-    # ‏#1129: ההשוואה אינה בדפדפן ואינה מול `?name=` — השם נשלח לשרת כמו שהוא.
+    # #1129: ההשוואה אינה בדפדפן ואינה מול `?name=` — השם נשלח לשרת כמו שהוא.
     assert "input.value !== NAME" not in js
     assert "sendPower(action, NAME)" in js, "#1270: the known name is sent, not typed"
     assert "pmodal-input" not in js and "pmodal-input" not in _html()
@@ -129,7 +129,7 @@ def test_power_is_behind_a_confirm_modal_not_prompt_or_confirm():
 
 
 def test_monitor_c_registers_cut_text_hook():
-    """‏LibVNCServer קורא ל-setXCutText כשמגיע ClientCutText — זה השער
+    """LibVNCServer קורא ל-setXCutText כשמגיע ClientCutText — זה השער
     שדרכו האסימון נכנס ל-monitor.c."""
     c = _c()
     assert "setXCutText" in c

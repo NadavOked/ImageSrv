@@ -1,4 +1,4 @@
-"""‏#408: קליטה בלי `used_bytes` מציגה קצב — לא מסך קפוא.
+"""#408: קליטה בלי `used_bytes` מציגה קצב — לא מסך קפוא.
 
 הגואי אינו מתקמפל בווינדוס; הבדיקה על המקור, הקומפילציה על ה-Testrunner."""
 
@@ -9,7 +9,7 @@ GUI = REPO / "native-gui" / "src"
 
 
 def test_the_capture_screen_shows_a_rate_when_there_is_no_denominator():
-    """‏#408: קליטה בלי `used_bytes` (‏NTFS מלוכלך) הציגה מסך קפוא — יש מונה
+    """#408: קליטה בלי `used_bytes` (NTFS מלוכלך) הציגה מסך קפוא — יש מונה
     אבל אין מכנה. הגואי מודד קצב משתי קריאות מצב עוקבות (bytes + updated=)
     ומציג אותו במקום "סה״כ (משוער)" כשאין אחוז; אינו מוצג כ-0 לפני שנמדד."""
     main_c = (GUI / "main.c").read_text(encoding="utf-8")

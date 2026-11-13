@@ -52,7 +52,7 @@ def note(conn: sqlite3.Connection, mac: str, raw: object, *, known: bool) -> boo
     try:
         journal(conn, "gui_failed", text, machine=mac)
     except sqlite3.Error:
-        # ‏#1535: ה-MAC מגיע מה-hello — שבירת שורה אינה מגיעה ליומן.
+        # #1535: ה-MAC מגיע מה-hello — שבירת שורה אינה מגיעה ליומן.
         log.exception("gui_failed for %s was not journaled",
                       mac.replace("\r", " ").replace("\n", " "))
         return False

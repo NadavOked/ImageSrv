@@ -36,15 +36,17 @@ for scenario in no_cookie empty_cookie refused transport; do
     [ ! -e "$CONSOLE_JAR" ]
 done
 echo 'PASS HTTP/cookie rejection, including transport failure with HTTP 200'
-# Auth must return the role, then the saved theme (#1499) -- nothing else --
-# and must reject role lookup failure. The mocked login answer carries no
-# theme, so the second line is "auto" (with or without jq).
+# Auth must return the role, the saved theme (#1499) and the saved view
+# (#3025) -- nothing else -- and must reject role lookup failure. The mocked
+# login answer carries neither, so the lines are "auto" and "basic" (with or
+# without jq).
 gui_role() { [ "$role_ok" = yes ] || return 1; GUI_ROLE='admin'; }
 scenario='good' role_ok='yes'
 printf 'operator\nsecret\n' | gui_auth > "$RUN_DIR/auth"
 [ "$(sed -n 1p "$RUN_DIR/auth")" = admin ] || { echo 'FAIL auth line 1 is not the role'; cat "$RUN_DIR/auth"; exit 1; }
 [ "$(sed -n 2p "$RUN_DIR/auth")" = auto ] || { echo 'FAIL auth line 2 is not the theme'; cat "$RUN_DIR/auth"; exit 1; }
-[ "$(wc -l < "$RUN_DIR/auth" | tr -d ' ')" = 2 ] || { echo 'FAIL auth printed more than role and theme'; cat "$RUN_DIR/auth"; exit 1; }
+[ "$(sed -n 3p "$RUN_DIR/auth")" = basic ] || { echo 'FAIL auth line 3 is not the view'; cat "$RUN_DIR/auth"; exit 1; }
+[ "$(wc -l < "$RUN_DIR/auth" | tr -d ' ')" = 3 ] || { echo 'FAIL auth printed more than role, theme and view'; cat "$RUN_DIR/auth"; exit 1; }
 role_ok=no
 if printf 'operator\nsecret\n' | gui_auth > "$RUN_DIR/auth"; then exit 1; fi
 [ ! -s "$RUN_DIR/auth" ] && [ ! -e "$CONSOLE_JAR" ]

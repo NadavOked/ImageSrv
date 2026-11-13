@@ -1,4 +1,4 @@
-"""‏#424 — מחיצה בלי קובץ אינה מחיצת swap, והצירוף הזה מחק מחיצות ווינדוס.
+"""#424 — מחיצה בלי קובץ אינה מחיצת swap, והצירוף הזה מחק מחיצות ווינדוס.
 
 ```sh
 is_swap_partition() {     # $1 = fs, $2 = file
@@ -21,8 +21,8 @@ is_swap_partition() {     # $1 = fs, $2 = file
 מסמן `failed`, ואומר איזו מחיצה ולמה (עיקרון 4).
 
 מה שנמדד כאן אינו קוד יציאה אלא **מה שהטכנאי רואה ומה שקרה ליעד**:
-‏`targets/<dev>/error`, קובץ הקריאות של `mkswap`, וקובץ הקריאות של
-‏`sgdisk` — שהוא הראיה ש"הדיסק לא נגע". ‏`sgdisk --zap-all` הוא הנגיעה
+`targets/<dev>/error`, קובץ הקריאות של `mkswap`, וקובץ הקריאות של
+`sgdisk` — שהוא הראיה ש"הדיסק לא נגע". `sgdisk --zap-all` הוא הנגיעה
 הראשונה בדיסק בכל מסלול שחזור, ולכן השער חייב לשבת **לפניו**.
 """
 
@@ -52,7 +52,7 @@ NTFS_EMPTY_FILE = (
     "|||false|33333333-3333-3333-3333-333333333333|"
 )
 
-#: אותה מחיצה, אבל `file` הוא JSON `null`. ‏`jq -r` מרנדר null כמחרוזת
+#: אותה מחיצה, אבל `file` הוא JSON `null`. `jq -r` מרנדר null כמחרוזת
 #: `null`, ולכן זו צורה **שנייה ונפרדת** של אותו כשל — ושתיהן מופיעות
 #: בתנאי המקורי.
 NTFS_NULL_FILE = (
@@ -60,7 +60,7 @@ NTFS_NULL_FILE = (
     "|null|null|false|33333333-3333-3333-3333-333333333333|"
 )
 
-#: מחיצת swap אמיתית: ‏`fs=swap`, בלי קובץ ובלי sha — בדיוק מה שהקליטה
+#: מחיצת swap אמיתית: `fs=swap`, בלי קובץ ובלי sha — בדיוק מה שהקליטה
 #: כותבת (אפיון סעיף 14). היא **חייבת** להמשיך לקבל `mkswap`.
 SWAP_ROW = (
     f"2|{SWAP_GUID}|swap|swap|206848|8589934592"
@@ -69,7 +69,7 @@ SWAP_ROW = (
 
 
 def stub_mkswap(box: Path) -> None:
-    """‏`mkswap` שמתעד ואינו נוגע בדבר.
+    """`mkswap` שמתעד ואינו נוגע בדבר.
 
     בלי הזיוף "לא הופעל" אינו מצב שאפשר לקרוא: על לינוקס `mkswap` אמיתי
     קיים ורץ, ובווינדוס הוא חסר ולכן *כל* קריאה נראית ככישלון. הקובץ
@@ -92,9 +92,9 @@ def calls(box: Path, tool: str) -> str:
 def live_nodes(box: Path, *indexes: int) -> None:
     """אילו `/dev/sdaN` "חזרו" מהדיסק — בצורה שהסוכן באמת שואל עליה.
 
-    ‏`build_box` כותב את הרשימה עם מפריד הנתיבים של המערכת, ואילו הסוכן
+    `build_box` כותב את הרשימה עם מפריד הנתיבים של המערכת, ואילו הסוכן
     מקבל `DEVROOT` בצורת POSIX. בווינדוס השניים אינם משתווים, ולכן
-    ‏`node_is_block` מחזירה שקר על כל צומת ו-`apply_gpt` נכשלת עוד לפני
+    `node_is_block` מחזירה שקר על כל צומת ו-`apply_gpt` נכשלת עוד לפני
     שהגיעה ללולאת הכתיבה — כלומר הבדיקה הייתה "עוברת" מסיבה שאינה
     הסיבה שנבדקת. הרשימה נכתבת כאן שוב, כדי שמה שנמדד יהיה מה שנטען.
     """
@@ -112,8 +112,8 @@ def live_nodes(box: Path, *indexes: int) -> None:
 def test_an_ntfs_partition_without_a_file_never_reaches_mkswap(tmp_path, row, shape):
     """הכשל בצורתו המלאה, מקצה לקצה.
 
-    עד התיקון: ‏`is_swap_partition` החזירה אמת, ‏`make_swap` הריצה
-    ‏`mkswap` על `/dev/sda3`, ‏`target_partition_done` נספרה, והמכונה
+    עד התיקון: `is_swap_partition` החזירה אמת, `make_swap` הריצה
+    `mkswap` על `/dev/sda3`, `target_partition_done` נספרה, והמכונה
     סיימה ב-`done` — מחיצת ווינדוס מפורמטת, ודיווח של הצלחה מלאה.
 
     אחרי התיקון אין `mkswap`, אין `sgdisk` (כלומר הטבלה כלל לא נמחקה),
@@ -126,10 +126,10 @@ def test_an_ntfs_partition_without_a_file_never_reaches_mkswap(tmp_path, row, sh
 
     assert rc_of(out) == "rc=1", out
     assert state_of(run) == "failed"
-    assert calls(box, "mkswap") == "", f"‏mkswap רץ על מחיצת NTFS ({shape})"
+    assert calls(box, "mkswap") == "", f"\u200fmkswap רץ על מחיצת NTFS ({shape})"
     assert calls(box, "sgdisk") == "", "הדיסק נגע לפני שהמניפסט נבדק"
-    # ‏#1408 (77557596): `validate_restore_plan` דוחה את השורה לפני
-    # ‏`--zap-all`; ‏#1435: ההודעה נוקבת במחיצה ובכלל (test_restore_plan_1418).
+    # #1408 (77557596): `validate_restore_plan` דוחה את השורה לפני
+    # `--zap-all`; #1435: ההודעה נוקבת במחיצה ובכלל (test_restore_plan_1418).
     assert target_error(run) == ("תוכנית השחזור פגומה (מחיצה 3: קובץ או sha256 חסרים או "
                                  "לא חוקיים) — הדיסק לא שונה")
 
@@ -138,7 +138,7 @@ def test_an_ntfs_partition_without_a_file_never_reaches_mkswap(tmp_path, row, sh
 def test_a_real_swap_partition_is_still_created_with_mkswap(tmp_path):
     """הבקרה החיובית, ובלעדיה התיקון עלול לשבור swap תקין בשקט.
 
-    ‏`fs=swap` בלי קובץ הוא המצב הרגיל של מחיצת swap (אפיון סעיף 14),
+    `fs=swap` בלי קובץ הוא המצב הרגיל של מחיצת swap (אפיון סעיף 14),
     והיא נבראת ב-`mkswap -U` על המיקום שההרחבה קבעה (#48).
     """
     box, _run, prelude = build_box(tmp_path, plan=[SWAP_ROW])
@@ -149,13 +149,13 @@ def test_a_real_swap_partition_is_still_created_with_mkswap(tmp_path):
 
     assert rc_of(out) == "rc=0", out
     recorded = calls(box, "mkswap")
-    assert "-U 3f7c-swap" in recorded, f"‏mkswap בלי ה-UUID מהמניפסט: {recorded!r}"
-    assert "sda2" in recorded, f"‏mkswap על הצומת הלא נכון: {recorded!r}"
+    assert "-U 3f7c-swap" in recorded, f"\u200fmkswap בלי ה-UUID מהמניפסט: {recorded!r}"
+    assert "sda2" in recorded, f"\u200fmkswap על הצומת הלא נכון: {recorded!r}"
 
 
 @requires_bash
 def test_only_the_fs_field_decides_that_a_partition_is_swap(tmp_path):
-    """הפונקציה עצמה, שורה-שורה: ‏`fs` מכריע, ‏`file` אינו מכריע דבר."""
+    """הפונקציה עצמה, שורה-שורה: `fs` מכריע, `file` אינו מכריע דבר."""
     _box, _run, prelude = build_box(tmp_path)
     out = sh(prelude + 'for c in "swap|null" "swap|" "swap|p2.swap.zst" '
              '"ntfs|" "ntfs|null" "vfat|"; do f=${c%%|*}; n=${c#*|}; '
@@ -170,7 +170,7 @@ def test_only_the_fs_field_decides_that_a_partition_is_swap(tmp_path):
 def test_no_drawer_is_touched_when_the_plan_is_refused(tmp_path):
     """אותו שער בחדר השיכפולים, ושם המחיר מוכפל במספר המגירות.
 
-    ‏`restore_partition_drawers` מריצה `make_swap` על **כל** מגירה חיה
+    `restore_partition_drawers` מריצה `make_swap` על **כל** מגירה חיה
     בלולאה אחת, ולכן מניפסט פגום אחד היה מפרמט שלוש מחיצות ווינדוס
     בבת אחת. השער יושב לפני לולאת ה-`apply_gpt`, וכל מגירה מקבלת את
     הסיבה בשמה.
@@ -226,7 +226,7 @@ def test_a_partition_labelled_swap_but_holding_ntfs_is_refused(server, images_ro
 
     הקליטה פטרה מקובץ לפי `role`, והסוכן מחליט לפי `fs` — ולכן רשומה
     עם `role: "swap"` ו-`fs: "ntfs"` עברה את הקליטה בשלמותה והגיעה
-    ל-`mkswap`. ‏`fs` הוא המכריע בשני הצדדים, ורשומה כזו נפסלת.
+    ל-`mkswap`. `fs` הוא המכריע בשני הצדדים, ורשומה כזו נפסלת.
     """
     from server.library.images import ImageLibrary
 
@@ -271,7 +271,7 @@ def test_capture_refuses_a_manifest_whose_ntfs_partition_carries_no_file(server)
 
 
 def test_capture_refuses_a_partition_that_calls_itself_swap_without_being_one(server):
-    """‏`role: "swap"` היה פטור מלא מבדיקת הקובץ — גם כשה-`fs` אמר ntfs.
+    """`role: "swap"` היה פטור מלא מבדיקת הקובץ — גם כשה-`fs` אמר ntfs.
 
     זו הדלת שדרכה מניפסט כזה נכנס לספרייה **מאומת**, ומשם למחשב בכיתה.
     """

@@ -1,4 +1,4 @@
-"""‏`copy_libs`: ספרייה חסרה עוצרת את בניית ה-initramfs, wrapper לא (#507).
+"""`copy_libs`: ספרייה חסרה עוצרת את בניית ה-initramfs, wrapper לא (#507).
 
 תיקון #12 היה אמיתי — `hivexget` הוא wrapper של shell, `ldd` יוצא
 nonzero, ו-`pipefail` הרג את כל הבנייה. אבל `{ ldd || true; }` ו-

@@ -102,7 +102,7 @@ def test_known_must_be_exactly_true():
 
 
 def test_no_task_and_no_session_auto_boots_imagesrv_for_a_gui_role():
-    """‏#641 (היפוך #140): תחנת כיתה רשומה בלי משימה עולה ישר ל-ImageSrv,
+    """#641 (היפוך #140): תחנת כיתה רשומה בלי משימה עולה ישר ל-ImageSrv,
     אוטומטי — במקום התפריט הגלוי שהמתין לאדם."""
     d = decide(answer(task=None, session=None))
     assert d.action == AGENT
@@ -120,7 +120,7 @@ def test_no_task_still_reaches_recovery_on_a_classroom_station():
 
 
 def test_build_machine_with_no_task_auto_boots_the_build_console():
-    """‏#641: מחשב הבנייה בלי משימה עולה ישר ל-ImageSrv (הערך הרגיל —
+    """#641: מחשב הבנייה בלי משימה עולה ישר ל-ImageSrv (הערך הרגיל —
     build_console, #29), אוטומטי, בלי תפריט שממתין לאדם."""
     d = decide(answer(role="build"))
     assert d.action == AGENT
@@ -155,7 +155,7 @@ def test_a_task_loads_the_agent():
 
 
 def test_an_empty_task_object_is_not_a_task():
-    """‏`{}` אינו משימה — ההחלטה נופלת למסלול no-task ולא ל-task-assigned.
+    """`{}` אינו משימה — ההחלטה נופלת למסלול no-task ולא ל-task-assigned.
     (בתחנת כיתה המסלול הזה עולה אוטומטית ל-ImageSrv מ-#641, ולכן נבדק
     ה-`code` ולא ה-action.)"""
     assert decide(answer(task={})).code == "no-task"
@@ -203,7 +203,7 @@ def test_a_non_object_answer_boots_locally(junk):
 
 
 def test_a_machine_with_no_task_auto_boots_imagesrv_but_keeps_a_local_entry():
-    """‏#641: ברירת המחדל עברה ל-ImageSrv, אבל הערך המקומי נשאר בקובץ
+    """#641: ברירת המחדל עברה ל-ImageSrv, אבל הערך המקומי נשאר בקובץ
     (חבוי) — הבחירה בדיסק עוברת אל תוך מסך ה-ImageSrv, לא נעלמת."""
     text = render(answer(), CFG)
     assert "set default=imagesrv" in text
@@ -234,7 +234,7 @@ def test_every_network_entry_retries_kernel_and_initrd_three_times(a):
     entry = text.split('menuentry "ImageSrv" --unrestricted --id imagesrv {', 1)[1].split("\n}", 1)[0]
     assert entry.count("for attempt in 1 2 3; do") == 2
     assert 'if linux (http,10.44.12.10:8080)/boot/vmlinuz ' in entry
-    # ‏`then` בשורה משלו מאז 54223f94 ("Fix GRUB retry command boundaries")
+    # `then` בשורה משלו מאז 54223f94 ("Fix GRUB retry command boundaries")
     assert 'if initrd (http,10.44.12.10:8080)/boot/initrd.img\n        then\n' in entry
     assert 'echo "Loading kernel over HTTP (attempt $attempt of 3)..."' in entry
     assert 'echo "Loading initrd over HTTP (attempt $attempt of 3)..."' in entry
@@ -270,7 +270,7 @@ def test_retry_keeps_the_kernel_command_line_clean_and_the_menu_ascii():
 
 # רשימה סגורה של כל מה שמותר בשורת הקרנל של הסוכן. פרמטר חדש חייב להיכנס
 # לכאן במפורש, ולכן אי אפשר שפרט משימה ידלוף לשם "על הדרך".
-# thermal.psv=-1: ‏ACPI _PSL timeouts על HP EliteDesk 800 G6 (#1848, #1870). נדב 20/10:
+# thermal.psv=-1: ACPI _PSL timeouts על HP EliteDesk 800 G6 (#1848, #1870). נדב 20/10:
 # רק החלק שמאט -- לא thermal.off. פרמטר של הקרנל ולא פרט משימה, ולכן נכנס לרשימה במודע.
 AGENT_KERNEL_PARAMS = {
     "ip=dhcp", "imagesrv.server=http://10.44.12.10:8080", "console=tty0",
@@ -404,7 +404,7 @@ def test_local_only_is_silent_and_immediate():
 
 # --- הרמה העליונה של הקובץ --------------------------------------------------
 #
-# עד #140 היה כאן רמז ל-ESC (‏#41): שורת echo שהודיעה על הצוהר החבוי. אין
+# עד #140 היה כאן רמז ל-ESC (#41): שורת echo שהודיעה על הצוהר החבוי. אין
 # יותר צוהר חבוי במכונה רשומה — יש תפריט גלוי, והערכים עצמם על המסך. מה
 # שהרמז נשמר בזכותו ולא נעלם איתו הוא שני הגבולות שהבדיקות שלו קיבעו:
 # ששום פקודה חוסמת לא מתגנבת לרמה העליונה, ושמה שכן מודפס שם אינו נושא
@@ -441,7 +441,7 @@ ANSWERS = [
 
 @pytest.mark.parametrize("a", ANSWERS)
 def test_nothing_blocking_runs_at_the_top_level(a):
-    """הקובץ נטען לפני שהטיימר מתחיל. ‏sleep/pause/read ברמה העליונה
+    """הקובץ נטען לפני שהטיימר מתחיל. sleep/pause/read ברמה העליונה
     היו מוסיפים המתנה שאיש לא ביקש — גם בתפריט הגלוי של #140, שבו כבר
     אין טיימר לצמצם, וגם במסלול המכונה הזרה שחייב להישאר מיידי."""
     for line in _top_level(render(a, CFG)):
@@ -511,7 +511,7 @@ def test_bootstrap_fetches_the_dynamic_menu_with_the_mac():
 
 def test_bootstrap_prefers_the_address_that_answered_dhcp():
     """תחנה שעלתה דרך PXE proxy ברשת זרה (תרחיש 3, בדיקות 3.4-3.5) לא
-    מגיעה לכתובת של וילן ההפצה. ‏net_default_server היא הכתובת שענתה לה
+    מגיעה לכתובת של וילן ההפצה. net_default_server היא הכתובת שענתה לה
     בפועל, ולכן היא הראשית; הפורט נלקח מהתצורה."""
     text = render_bootstrap(CFG)
     assert 'if [ -n "$net_default_server" ]; then' in text
@@ -554,8 +554,8 @@ def test_bootstrap_is_ascii():
 
 # --- #61: chainloader שנדחה אינו "אין מערכת הפעלה" ---------------------------
 #
-# על הלנובו (Secure Boot, ‏2026-08-29) ‏bootmgfw.efi נמצא על הדיסק,
-# ‏chainloader נדחה בידי shim — והמסך אמר "No operating system found".
+# על הלנובו (Secure Boot, 2026-08-29) bootmgfw.efi נמצא על הדיסק,
+# chainloader נדחה בידי shim — והמסך אמר "No operating system found".
 # שני מצבים שונים שקופלו לאחד (עיקרון 5). הבדיקות כאן שומרות שהם נפרדים.
 
 
@@ -565,7 +565,7 @@ def _chain_local() -> str:
 
 
 def test_boot_runs_only_when_chainloader_actually_succeeded():
-    """‏`boot` אחרי chainloader שנכשל הדפיס 'you need to load the kernel
+    """`boot` אחרי chainloader שנכשל הדפיס 'you need to load the kernel
     first' — רעש שהסתיר את השגיאה האמיתית. הצלחה נקבעת לפי ראיה חיובית."""
     text = render_local_only("x")
     try_chain = text[text.index("function try_chain") : text.index("function chain_local")]

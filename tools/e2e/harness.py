@@ -22,23 +22,23 @@ PORT = 8199
 BASE = f"http://127.0.0.1:{PORT}"
 #: אף אחד לא מאזין שם — זה "השרת השקט" של תרחיש ברירת המחדל.
 DEAD_BASE = f"http://127.0.0.1:{PORT + 1}"
-#: ‏#731 (tracer 1 של #703): הקונסולה עברה לפורט נפרד. הסימולציה מריצה
+#: #731 (tracer 1 של #703): הקונסולה עברה לפורט נפרד. הסימולציה מריצה
 #: שרת אמיתי, ומאז הפיצול `server.main` מרים שני מאזינים — סוכן על PORT,
 #: קונסולה על CONSOLE_PORT. לא PORT+1 (זה DEAD_BASE, ה"שרת השקט").
 CONSOLE_PORT = PORT + 2
 CONSOLE_BASE = f"http://127.0.0.1:{CONSOLE_PORT}"
 
-#: הקידומות שחיות על אפליקציית הקונסולה (‏CONSOLE_BASE), לא על הסוכן:
+#: הקידומות שחיות על אפליקציית הקונסולה (CONSOLE_BASE), לא על הסוכן:
 #: הדף הסטטי ונתיבי הניהול `/api/console/*`.
 _CONSOLE_PREFIXES = (
     "/console",
     "/api/console",
 )
-#: הפורט שהשרת של הסימולציה משדר עליו — ‏30199 ו-30200, ולא 9000/9001.
+#: הפורט שהשרת של הסימולציה משדר עליו — 30199 ו-30200, ולא 9000/9001.
 #: זה **לא** נוחות: השרת שהסימולציה מרימה הוא שרת אמיתי, ובמעבדה מותקן
 #: `udp-sender` אמיתי ומחוברות אליה שתי מכונות פיזיות. שידור על 9000
 #: הוא שידור על וילן ההפצה, ויתום ששרד ריצה שנקטעה מפיל את ההפצה הבאה
-#: וזה נראה כמו תקלת רשת (#79, ‏#156, ‏#201). מספר גבוה שאינו מכיל "900"
+#: וזה נראה כמו תקלת רשת (#79, #156, #201). מספר גבוה שאינו מכיל "900"
 #: — כדי ש-`ss -lunp | grep :900` יישאר בדיקה שאין בה דו-משמעות.
 SENDER_PORTBASE = 30199
 
@@ -53,12 +53,12 @@ CLONER_MAC = "aa:bb:cc:00:00:20"
 CLASS_MACS = ["b4:2e:99:07:1a:c4", "b4:2e:99:07:1a:c5",
               "b4:2e:99:07:1a:c6", "b4:2e:99:07:1a:c7"]
 UNKNOWN_MAC = "de:ad:be:ef:00:01"
-#: ‏#855: MAC שהסימולציה **אינה** כותבת לו חכירה — הראיה ששומר הזהות
+#: #855: MAC שהסימולציה **אינה** כותבת לו חכירה — הראיה ששומר הזהות
 #: פעיל בשרת האמיתי, ולא רק ש"כולם עוברים כי כולם על loopback".
 NO_LEASE_MAC = "de:ad:be:ef:00:02"
 #: כל מכונה שהסימולציה מפעילה, כולל ה-MAC "הלא מוכר" של שלב הקצוות:
-#: בייצור גם מכונה לא רשומה מקבלת חכירה מ-dnsmasq (‏dhcp-range מחלק לכולם;
-#: ‏tag:known של #141 מגביל רק את dhcp-boot), ו-hello שלה עונה known=false.
+#: בייצור גם מכונה לא רשומה מקבלת חכירה מ-dnsmasq (dhcp-range מחלק לכולם;
+#: tag:known של #141 מגביל רק את dhcp-boot), ו-hello שלה עונה known=false.
 SIM_MACS = (BUILD_MAC, CLONER_MAC, UNKNOWN_MAC, *CLASS_MACS)
 
 ADMIN = {"username": "noc", "password": "Sim-pass-1234!"}
@@ -107,7 +107,7 @@ def sha(data: bytes) -> str:
 def disk(dev: str, size_bytes: int, serial: str, port: int | None = None) -> dict:
     """דיסק כפי שהסוכן מדווח אותו (ממשק 2).
 
-    ‏`port` הוא החריץ הפיזי (ataN). מכונה בלי חריצים מדמה סוכן ישן או
+    `port` הוא החריץ הפיזי (ataN). מכונה בלי חריצים מדמה סוכן ישן או
     VM עם SCSI — השדה פשוט לא נשלח, וזה חייב להמשיך לעבוד.
     """
     entry = {"dev": dev, "size_bytes": size_bytes, "model": "SIM SSD",
@@ -121,8 +121,8 @@ def disk(dev: str, size_bytes: int, serial: str, port: int | None = None) -> dic
 class Client:
     """לקוח HTTP קטן ששומר cookie — כמו דפדפן, בלי דפדפן.
 
-    ‏#731: אחרי פיצול המאזינים יש שני פורטים. הלקוח מנתב לפי הנתיב —
-    נתיבי קונסולה/קיוסק אל `console_base`, כל השאר (סוכן, ‎/boot, images)
+    #731: אחרי פיצול המאזינים יש שני פורטים. הלקוח מנתב לפי הנתיב —
+    נתיבי קונסולה/קיוסק אל `console_base`, כל השאר (סוכן, /boot, images)
     אל `base`. אותו cookie נשלח לשניהם, בדיוק כמו דפדפן שמדבר עם שני
     פורטים על אותו host. מי שמעביר `base` מפורש (למשל DEAD_BASE) מנתב
     את צד הסוכן לשם — נתיבי הקונסולה עדיין הולכים ל-console_base."""
@@ -131,7 +131,7 @@ class Client:
         self.base = base
         self.console_base = console_base
         self.cookie = None
-        # ‏#737: כותרות שהסוכן האמיתי שולח בכל בקשה (אסימון משימה).
+        # #737: כותרות שהסוכן האמיתי שולח בכל בקשה (אסימון משימה).
         self.headers = {}
 
     def _base_for(self, path: str) -> str:
@@ -178,8 +178,8 @@ def hello(client: Client, mac: str, disks: list[dict]):
 def make_manifest(source_bytes: int, files: dict[str, bytes]) -> dict:
     """מניפסט ממשק 1 לשני קבצים — ESP קטן ומחיצת windows מתרחבת.
 
-    ‏`used_bytes` פי 50 מהקובץ (2%): השרת דוחה זרם קטן מ-1% ממה שתפוס
-    במחיצה (‏#1830, ‏`capture.MIN_STREAM_TO_USED`)."""
+    `used_bytes` פי 50 מהקובץ (2%): השרת דוחה זרם קטן מ-1% ממה שתפוס
+    במחיצה (#1830, `capture.MIN_STREAM_TO_USED`)."""
     esp_name, win_name = sorted(files)          # p1 לפני p3
     return {
         "schema": 1, "family": 256 if source_bytes == GB256 else 500,
@@ -202,7 +202,7 @@ def make_manifest(source_bytes: int, files: dict[str, bytes]) -> dict:
 
 
 def write_leases(workdir: Path) -> Path:
-    """‏#855: קובץ חכירות בתבנית dnsmasq לכל מכונה מדומה — כולן על loopback.
+    """#855: קובץ חכירות בתבנית dnsmasq לכל מכונה מדומה — כולן על loopback.
 
     השרת שהסימולציה מרימה הוא אמיתי, ושומר הזהות שלו **אינו מכובה**: הוא
     מקבל את הקובץ הזה ב---dhcp-leases במקום את קובץ המכונה, בדיוק כמו
@@ -231,19 +231,19 @@ def start_server(workdir: Path) -> tuple[subprocess.Popen, Path, Path]:
          "--server-url", BASE,
          "--data-dir", str(data_dir), "--images", str(images),
          "--host", "127.0.0.1", "--port", str(PORT),
-         # ‏#731: פורט נפרד לקונסולה, כמו בייצור.
+         # #731: פורט נפרד לקונסולה, כמו בייצור.
          "--console-port", str(CONSOLE_PORT),
-         # ‏#703 (tracer 5): הקונסולה כאן על 127.0.0.1 (ברירת המחדל של
-         # ‎--console-host), ולכן ``off`` מותר — הלקוח למעלה מדבר http פשוט.
+         # #703 (tracer 5): הקונסולה כאן על 127.0.0.1 (ברירת המחדל של
+         # --console-host), ולכן ``off`` מותר — הלקוח למעלה מדבר http פשוט.
          # לחיצת-היד האמיתית עם התעודה נבדקת ב-tests/test_console_tls.py.
          "--console-tls", "off",
-         # ‏#201: השרת הזה אמיתי ומגיע ל-udp-sender אמיתי. בלי הדגל הזה
+         # #201: השרת הזה אמיתי ומגיע ל-udp-sender אמיתי. בלי הדגל הזה
          # הוא משדר על פורטי ההפצה של הייצור.
          "--sender-portbase", str(SENDER_PORTBASE),
-         # ‏#854: בלי udp-sender (ווינדוס, ‏CI) השולח נכשל וכשל השולח הוא
+         # #854: בלי udp-sender (ווינדוס, CI) השולח נכשל וכשל השולח הוא
          # עכשיו כשל הסבב — הסימולציה "עברה" רק כל עוד זה נבלע בשקט.
          "--sender-simulate",
-         # ‏#855: חכירות לכל מכונה מדומה — השומר פעיל, הקובץ הוא של הסימולציה.
+         # #855: חכירות לכל מכונה מדומה — השומר פעיל, הקובץ הוא של הסימולציה.
          "--dhcp-leases", str(leases)],
         cwd=str(REPO), stdout=log, stderr=subprocess.STDOUT,
     )
@@ -310,7 +310,7 @@ def _responded(url: str) -> bool:
 
 
 def wait_for_server(timeout: float = 25.0) -> bool:
-    # ‏#731: שני מאזינים — קונסולה (‎/console/) וסוכן (GET על נתיב-POST
+    # #731: שני מאזינים — קונסולה (/console/) וסוכן (GET על נתיב-POST
     # מחזיר 405, וזו ראיה שהאפליקציה עלתה). שניהם חייבים לענות לפני
     # שהסימולציה מתחילה (#1247: הקיוסק הוסר).
     deadline = time.time() + timeout

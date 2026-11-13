@@ -122,7 +122,7 @@ def test_nonempty_folder_cannot_be_deleted(server):
 
 
 def test_put_folder_validates_the_url_name(server):
-    """‏PUT /folders/{name} יצר תיקייה משם ה-URL בלי `_checked_name`
+    """PUT /folders/{name} יצר תיקייה משם ה-URL בלי `_checked_name`
     (שורה 178). שם לא תקין חייב להידחות כמו ב-POST, לא להיווצר בשקט."""
     admin = server["admin"]
     r = admin.put("/api/console/folders/a@b", json={"description": "x"})
@@ -132,7 +132,7 @@ def test_put_folder_validates_the_url_name(server):
 
 
 def test_folder_order_rejects_an_unknown_name(server):
-    """‏POST /folders/order יצר תיקייה משם ברשימה (שורה 153). שם שאינו
+    """POST /folders/order יצר תיקייה משם ברשימה (שורה 153). שם שאינו
     קיים חייב לחזור 400, כמו groups/order — ולא להיווצר."""
     admin = server["admin"]
     r = admin.post("/api/console/folders/order", json={"names": ["no_such_folder"]})
@@ -142,7 +142,7 @@ def test_folder_order_rejects_an_unknown_name(server):
 
 
 def test_creating_a_folder_that_exists_does_not_overwrite(server):
-    """‏POST /folders דרס תיקייה קיימת ודיווח יצירה (שורה 191). שם קיים
+    """POST /folders דרס תיקייה קיימת ודיווח יצירה (שורה 191). שם קיים
     חייב לחזור 409, והתיאור שהיה חייב להישאר."""
     admin = server["admin"]
     assert admin.post("/api/console/folders",
@@ -187,7 +187,7 @@ def test_manual_add_and_explicit_edit(server):
 
 
 def test_cloner_machines_get_computer_names(server):
-    """‏#1997 (נדב, 22/10): גם מחשב שיכפול מקבל שם מחשב באנגלית — לא שם
+    """#1997 (נדב, 22/10): גם מחשב שיכפול מקבל שם מחשב באנגלית — לא שם
     חופשי. שם הקבוצה ("חדר שיכפולים") הוא תווית תצוגה ונשאר חופשי."""
     admin = server["admin"]
     assert admin.post("/api/console/groups",
@@ -336,20 +336,20 @@ def test_swap_round_trips_through_export_and_import(server, images_root, tmp_pat
 
 
 def test_an_archive_whose_id_is_not_an_id_is_refused_through_the_console(server, tmp_path):
-    """‏#110 מקצה לקצה, דרך המסלול שמשתמש אמיתי עובר בו: ארכיון שהמזהה
+    """#110 מקצה לקצה, דרך המסלול שמשתמש אמיתי עובר בו: ארכיון שהמזהה
     במניפסט שלו אינו בצורת המזהים נדחה ב-400, עם הודעה שאומרת למה."""
     source = tmp_path / "source"
     write_image(source, {**MANIFEST_256, "id": "img_lnx001"})
     raw = b"".join(tar_stream(source / "img_lnx001", "img_lnx001"))
     response = server["admin"].post("/api/console/images/upload", content=raw)
     assert response.status_code == 400
-    # ‏#1407 (77557596): בדיקת המזהה עברה ל-`ImageLibrary._validate`, ולכן
+    # #1407 (77557596): בדיקת המזהה עברה ל-`ImageLibrary._validate`, ולכן
     # הסירוב מגיע משם — לפני הבדיקה הנפרדת ב-archive.py.
     assert "image id or name is malformed" in response.json()["detail"]
 
 
 def test_an_image_still_being_imported_is_offered_to_nobody(server, images_root):
-    """‏#71 מקצה לקצה: אזור עבודה בשורש הספרייה אינו נראה בקונסולה ואינו
+    """#71 מקצה לקצה: אזור עבודה בשורש הספרייה אינו נראה בקונסולה ואינו
     מועמד לסבב. אותו מניפסט בדיוק, אחרי שנכנס לספרייה — כן."""
     write_image(images_root / ".import-4b1e77a2", MANIFEST_LINUX)
     mac = setup_classroom(server)["mac1"]

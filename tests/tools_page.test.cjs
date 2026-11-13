@@ -201,7 +201,7 @@ test('the tools page is admin-only: pageAllowed refuses deploy, and the tree nod
   admin.run('ME.capabilities.tools=true');
   assert.equal(admin.run("pageAllowed('tools')"), true);
   const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  assert.match(index, /<div class="inventory-node hidden" data-page="tools" data-admin data-cap="tools" onclick="selectPageById\('tools'\)"/);
+  assert.match(index, /<div class="inventory-node hidden" data-page="tools" data-admin data-cap="tools" data-adv onclick="selectPageById\('tools'\)"/);   // #3025: advanced only
 });
 
 // --- v1 בלי ארגז הכלים (הכרעת נדב 19/09; v1.1 = הכלים) --------------------------------

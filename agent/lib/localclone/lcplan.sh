@@ -186,7 +186,7 @@ lc_table_check() {
         if [ "$(_tc_up "$_tc_gt")" != "$(_tc_up "$_tc_t")" ]; then LC_ERROR="מחיצה $_tc_i: סוג $_tc_gt במקום $_tc_t"
         elif [ -n "$_tc_u" ] && [ "$(_tc_up "$_tc_gu")" != "$(_tc_up "$_tc_u")" ]; then log "$1: partition $_tc_i unique GUID $_tc_gu, want $_tc_u"; LC_ERROR="מחיצה $_tc_i: ה-GUID הייחודי אינו של המקור (הערכים ביומן הסוכן)"
         elif [ "$_tc_ga" != "$_tc_wa" ]; then LC_ERROR="מחיצה $_tc_i: דגלים $_tc_ga במקום $_tc_wa"
-        elif [ "$_tc_gn" != "$_tc_wn" ]; then log "$1: partition $_tc_i name '$_tc_gn', want '$_tc_wn'"; LC_ERROR="מחיצה $_tc_i: שם המחיצה אינו הסימן שנכתב (הערכים ביומן הסוכן)"
+        elif [ "$_tc_gn" != "$_tc_wn" ]; then log "$1: partition $_tc_i is named $(writemark_kind "$_tc_gn"), not the mark (#2834)"; LC_ERROR="מחיצה $_tc_i: שם המחיצה אינו הסימן שנכתב"
         elif [ "$_tc_i" = "$_tc_grow" ]; then
             _tc_st=$(( (_tc_st + 2047) / 2048 * 2048 ))   # #2016: expand_last aligns the grown one's start up to 1MiB
             { [ "$_tc_gf" = "$_tc_st" ] && [ "$_tc_gs" -ge "$_tc_ws" ]; } || LC_ERROR="מחיצה $_tc_i (שהוגדלה): התחלה $_tc_gf/$_tc_st, גודל $_tc_gs/$_tc_ws"

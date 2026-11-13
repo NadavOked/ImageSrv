@@ -1,4 +1,4 @@
-"""‏#1128 (R41): גיבוי ההגדרות מהקונסולה — ‏`GET /api/console/update/backup`.
+"""#1128 (R41): גיבוי ההגדרות מהקונסולה — `GET /api/console/update/backup`.
 
 מה שנבדק הוא **ראיה חיובית** (עיקרון 5): הארכיון נפתח, ה-DB שבתוכו נפתח
 ב-sqlite ומכיל את המשתמש שנוצר, כל קובץ ב-`SHA256SUMS` מתאים לתוכנו,
@@ -44,7 +44,7 @@ def test_consistent_db_copy_is_a_readable_database_even_under_wal(tmp_path: Path
     copy = sqlite3.connect(":memory:")
     copy.deserialize(raw)
     assert copy.execute("SELECT k FROM t").fetchone()[0] == "alive"
-    # ‏cp של הקובץ הראשי בלבד לא היה רואה את השורה — זו הסיבה ל-backup API.
+    # cp של הקובץ הראשי בלבד לא היה רואה את השורה — זו הסיבה ל-backup API.
     assert b"alive" not in (tmp_path / "live.db").read_bytes()
     assert b"alive" in raw
 
@@ -56,7 +56,7 @@ def test_archive_has_db_manifest_sums_and_no_images(tmp_path: Path):
     (data / "netcfg").mkdir()
     (data / "netcfg" / "servers.conf").write_text("iface=ens33\n")
     (data / "console.pem").write_bytes(b"-----KEY-----")
-    # ‏#1302: לוגו מוסד שהועלה לפני שהיכולת הוסרה — שארית, לא הגדרה.
+    # #1302: לוגו מוסד שהועלה לפני שהיכולת הוסרה — שארית, לא הגדרה.
     (data / "branding").mkdir()
     (data / "branding" / "logo.png").write_bytes(b"PNG")
     (data / "imagesrv.db-wal").write_bytes(b"wal")
@@ -76,7 +76,7 @@ def test_archive_has_db_manifest_sums_and_no_images(tmp_path: Path):
 
 
 def test_integrity_failure_is_an_error_not_a_smaller_backup(monkeypatch):
-    """‏עיקרון 5: עותק שלא עבר integrity_check אינו "גיבוי קטן יותר" — הוא כשל."""
+    """עיקרון 5: עותק שלא עבר integrity_check אינו "גיבוי קטן יותר" — הוא כשל."""
     conn = sqlite3.connect(":memory:")
     conn.execute("CREATE TABLE t (k)")
     monkeypatch.setattr(backup_mod, "_integrity", lambda c: "*** page 3: broken")
@@ -115,7 +115,7 @@ def test_download_restores_to_a_database_with_the_users(server):
     restored.deserialize(members["data/imagesrv.db"])
     names = {row[0] for row in restored.execute("SELECT username FROM users")}
     assert {"noc", "dep"} <= names
-    # ‏#2424 (נדב 04/11): חותם העוגיות אינו בגיבוי — שרת משוחזר מייצר חדש
+    # #2424 (נדב 04/11): חותם העוגיות אינו בגיבוי — שרת משוחזר מייצר חדש
     # (tests/test_backup_console_secret_2424.py).
     secret = restored.execute("SELECT value FROM settings WHERE key='console_secret'").fetchone()
     assert secret is None

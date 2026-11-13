@@ -137,7 +137,7 @@ def test_a_gui_direct_send_is_cancelled_with_its_round_and_wave(kiosk_env):
     _boot(kiosk_env)
     task = _q(kiosk_env, "SELECT state, error FROM tasks WHERE id = ?", opened["task_id"])
     assert (task["state"], task["error"]) == ("cancelled", REASON)
-    # ‏#2907: נכשלים בשם, לא `closed` בלי סיבה — והמשכפל שהצטרף אינו נשאר `waiting` תחת גל סגור.
+    # #2907: נכשלים בשם, לא `closed` בלי סיבה — והמשכפל שהצטרף אינו נשאר `waiting` תחת גל סגור.
     rnd = _q(kiosk_env, "SELECT state, failed_reason FROM room_rounds WHERE id = ?", opened["id"])
     assert rnd["state"] == "failed" and "אותחל" in rnd["failed_reason"]
     wave = _q(kiosk_env, "SELECT state, failed_reason FROM sessions WHERE id = ?",
@@ -146,7 +146,7 @@ def test_a_gui_direct_send_is_cancelled_with_its_round_and_wave(kiosk_env):
 
 
 def test_a_cloner_that_joined_the_cancelled_wave_sees_the_failure_by_name(kiosk_env):
-    """‏#2907: `store.close` לא נגע בחברים — המשכפל שהצטרף נשאר `waiting` לעד."""
+    """#2907: `store.close` לא נגע בחברים — המשכפל שהצטרף נשאר `waiting` לעד."""
     _, gui = _env(kiosk_env)
     opened = _direct(gui, kiosk_env)
     cloner_hello(kiosk_env["anon"], CLONER, ["S1"])          # מצטרף לגל הפתוח

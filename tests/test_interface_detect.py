@@ -1,4 +1,4 @@
-"""‏#514 — זיהוי ממשק השידור מבחין בין תחנת פיתוח (אין `ip`) לבין שרת
+"""#514 — זיהוי ממשק השידור מבחין בין תחנת פיתוח (אין `ip`) לבין שרת
 לינוקס אמיתי שאי אפשר לזהות לו ממשק. הראשון מחזיר None (השידור מזויף
 ממילא); השני נכשל בגלוי, כדי ש-udp-sender לא ישדר לכרטיס הלא נכון."""
 
@@ -45,7 +45,7 @@ def test_ip_ran_but_no_nic_matches_fails_loudly(monkeypatch):
 
 
 def test_ip_present_but_failed_fails_loudly(monkeypatch):
-    # ‏CalledProcessError = `ip` קיים ורץ ונכשל — שרת אמיתי, לא None שקט.
+    # CalledProcessError = `ip` קיים ורץ ונכשל — שרת אמיתי, לא None שקט.
     def boom(*a, **k):
         raise subprocess.CalledProcessError(1, "ip")
     monkeypatch.setattr(subprocess, "run", boom)
@@ -64,7 +64,7 @@ def test_hostname_url_is_resolved_before_matching(monkeypatch):
 
 
 def test_ip_present_but_malformed_json_fails_loudly(monkeypatch):
-    # ‏`ip` יצא 0 אבל הפלט אינו JSON — שרת אמיתי, לא None שקט (Codex #2).
+    # `ip` יצא 0 אבל הפלט אינו JSON — שרת אמיתי, לא None שקט (Codex #2).
     monkeypatch.setattr(subprocess, "run", _fake_run('{"truncated'))
     with pytest.raises(InterfaceDetectionError):
         _interface_for("http://10.44.0.1:8080")

@@ -1,11 +1,11 @@
-"""‏#855 — זהות מכונה: ‏MAC מוצהר **וגם** כתובת מקור שתואמת את חכירת ה-DHCP.
+"""#855 — זהות מכונה: MAC מוצהר **וגם** כתובת מקור שתואמת את חכירת ה-DHCP.
 
 הסוכן ב-initramfs חסר-מצב ואין לו איפה להחזיק סוד; הראיה שיש היא
-הרשת: השרת הוא ה-DHCP של וילן ההפצה (‏#702), ולכן לכל MAC שעלה ב-PXE
+הרשת: השרת הוא ה-DHCP של וילן ההפצה (#702), ולכן לכל MAC שעלה ב-PXE
 יש חכירה עם כתובת. hello/progress שמגיעים **מכתובת אחרת** אינם המכונה.
 
-ארבעת הנתיבים של ה-Issue: ‏hello (מסירת `task.token`, חברות והבשלה של
-סבב), ‏progress של סבב, ‏progress של קליטה (בנוסף לאסימון — ‏db67dbd).
+ארבעת הנתיבים של ה-Issue: hello (מסירת `task.token`, חברות והבשלה של
+סבב), progress של סבב, progress של קליטה (בנוסף לאסימון — db67dbd).
 ועיקרון 5 בשני מקומות: "אין חכירה" ו"אין קובץ" הם `identity_unverifiable`
 (סירוב בשם), לא "תקין"; והמתג `identity_check` כבוי הוא מצב מוצהר
 שהבריאות אומרת, לא ברירת מחדל שקטה.
@@ -38,7 +38,7 @@ IMAGE = "img_7f3a91"
 
 
 def write_leases(path: Path, pairs: dict[str, str]) -> Path:
-    """קובץ חכירות בתבנית dnsmasq: ‏`<פקיעה> <mac> <ip> <שם> <client-id>`."""
+    """קובץ חכירות בתבנית dnsmasq: `<פקיעה> <mac> <ip> <שם> <client-id>`."""
     lines = [f"1789000000 {mac} {ip} STN-{i} 01:{mac}"
              for i, (mac, ip) in enumerate(pairs.items())]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -46,7 +46,7 @@ def write_leases(path: Path, pairs: dict[str, str]) -> Path:
 
 
 def _health_hooks(tmp_path: Path) -> dict:
-    """הבדיקות המזויפות של מסך הבריאות (‏test_server_health) — כדי ש-/health
+    """הבדיקות המזויפות של מסך הבריאות (test_server_health) — כדי ש-/health
     יענה בלי לגעת ב-ss/systemctl של המכונה שהטסט רץ עליה."""
     tftp = tmp_path / "tftp"
     (tftp / "grub").mkdir(parents=True)
@@ -63,8 +63,8 @@ def _health_hooks(tmp_path: Path) -> dict:
 
 @pytest.fixture()
 def identity_server(tmp_path: Path, images_root: Path, clock, monkeypatch):
-    """כמו `server`, עם קובץ חכירות מוזרק: ‏MAC1 ו-BUILD חכורים ל-STATION_IP,
-    ‏MAC2 בלי חכירה. שני לקוחות אנונימיים — מכתובת החכירה ומכתובת זרה."""
+    """כמו `server`, עם קובץ חכירות מוזרק: MAC1 ו-BUILD חכורים ל-STATION_IP,
+    MAC2 בלי חכירה. שני לקוחות אנונימיים — מכתובת החכירה ומכתובת זרה."""
     from server.rounds import sender as sender_module
     from server.console import users
     from test_sender import Recorder
@@ -89,10 +89,10 @@ def identity_server(tmp_path: Path, images_root: Path, clock, monkeypatch):
     bundle = {
         "app": app, "ctx": ctx, "admin": admin, "deploy": deploy, "clock": clock,
         "leases": leases,
-        # ‏`client=` של TestClient הוא ה-peer שהשרת רואה (`request.client.host`).
+        # `client=` של TestClient הוא ה-peer שהשרת רואה (`request.client.host`).
         "station": TestClient(app, client=(STATION_IP, 40001)),
         "stranger": TestClient(app, client=(STRANGER_IP, 40002)),
-        # ‏`anon` — מה שהעוזרים המשותפים (make_task/do_capture) מצפים לו.
+        # `anon` — מה שהעוזרים המשותפים (make_task/do_capture) מצפים לו.
         "anon": TestClient(app, client=(STATION_IP, 40003)),
     }
     yield bundle
@@ -108,7 +108,7 @@ def journal_events(server, event: str) -> list[dict]:
 
 
 def journal_details(server, event: str) -> list[tuple[str, str]]:
-    """‏(user, detail) גולמיים — המתרגם של הקונסולה מחליף MAC בשם המחשב,
+    """(user, detail) גולמיים — המתרגם של הקונסולה מחליף MAC בשם המחשב,
     וכאן בודקים מה **נכתב**."""
     return [(r["user"], r["detail"]) for r in server["ctx"].conn.execute(
         "SELECT user, detail FROM journal WHERE event = ? ORDER BY id", (event,))]
@@ -144,7 +144,7 @@ def test_parse_leases_reads_the_dnsmasq_format_and_normalises_the_mac():
 
 
 def test_parse_leases_skips_what_is_not_an_ipv4_lease():
-    """‏dnsmasq כותב לאותו קובץ גם שורת `duid` ורשומות IPv6; שורה ריקה,
+    """dnsmasq כותב לאותו קובץ גם שורת `duid` ורשומות IPv6; שורה ריקה,
     שורה קצרה ושורה שאין בה MAC אינן חכירות — ואינן מפילות את הקריאה."""
     text = ("duid 00:01:00:01:2a:3b:4c:5d:aa:bb:cc:00:00:99\n"
             "\n"
@@ -162,7 +162,7 @@ def test_parse_leases_the_last_line_for_a_mac_wins():
 
 def test_lease_file_distinguishes_unreadable_from_no_lease(tmp_path: Path):
     """שלושה מצבים, לא שניים (עיקרון 5): הקובץ נקרא ויש חכירה; נקרא ואין;
-    לא נקרא בכלל. ‏`if lookup.ip:` מקרי נופל לצד החוסם בשניים האחרונים."""
+    לא נקרא בכלל. `if lookup.ip:` מקרי נופל לצד החוסם בשניים האחרונים."""
     path = write_leases(tmp_path / "leases", {MAC1: STATION_IP})
     leases = identity.LeaseFile(path)
     assert leases.lookup(MAC1) == identity.Lookup(read=True, ip=STATION_IP)
@@ -187,7 +187,7 @@ def test_hello_from_another_address_is_refused_and_leaves_no_trace(identity_serv
     """הסירוב הוא 403 בשם, היומן נוקב ב-MAC המוצהר, בכתובת המקור ובכתובת
     שבחכירה — והמכונה המזויפת **אינה** נרשמת: לא ב-`net_seen` (רשימת
     ההתקנים), לא בספירת הלולאות. רישום היה נותן לזייפן לשנות את ה-`ip`
-    ו-`last_seen` שהשרת מכיר עבור מכונה אמיתית (‏#585)."""
+    ו-`last_seen` שהשרת מכיר עבור מכונה אמיתית (#585)."""
     ids = setup_classroom(identity_server)
     response = hello(identity_server["stranger"], ids["mac1"])
     assert response.status_code == 403, response.text
@@ -229,7 +229,7 @@ def test_a_forged_hello_neither_joins_nor_ripens_a_round(identity_server):
     assert store.joined_count(ids["session"]) == 0
     assert session_state(identity_server, ids["session"]) == "open"
     assert journal_events(identity_server, "session_start_auto") == []
-    # ‏MAC2 אין לו חכירה בפיקסטורה — מוסיפים אותה: הסבב צריך שתי מכונות אמיתיות.
+    # MAC2 אין לו חכירה בפיקסטורה — מוסיפים אותה: הסבב צריך שתי מכונות אמיתיות.
     write_leases(identity_server["leases"], {MAC1: STATION_IP, MAC2: STATION_IP,
                                              BUILD: STATION_IP})
     for mac in (ids["mac1"], ids["mac2"]):
@@ -253,7 +253,7 @@ def test_a_mac_without_a_lease_is_unverifiable_not_ok(identity_server):
 
 
 def test_an_unreadable_leases_file_refuses_by_name(identity_server):
-    """‏DHCP חיצוני, קובץ שנמחק, הרשאות — "לא הצלחנו לבדוק" ≠ "תקין".
+    """DHCP חיצוני, קובץ שנמחק, הרשאות — "לא הצלחנו לבדוק" ≠ "תקין".
     הסירוב נוקב בקובץ, כדי שהמפעיל ידע מה לתקן (או לכבות את המתג)."""
     ids = setup_classroom(identity_server)
     identity_server["leases"].unlink()
@@ -266,15 +266,15 @@ def test_an_unreadable_leases_file_refuses_by_name(identity_server):
 
 
 def test_a_malformed_mac_is_still_bad_mac(identity_server):
-    """‏"לא הצלחנו לקרוא את המזהה" קודם לזהות — אין MAC להשוות מולו."""
+    """"לא הצלחנו לקרוא את המזהה" קודם לזהות — אין MAC להשוות מולו."""
     body = hello_body("not-a-mac")
     response = identity_server["stranger"].post("/api/v1/agent/hello", json=body)
     assert response.status_code == 400 and response.json()["code"] == "bad_mac"
 
 
 def test_the_boot_menu_is_not_gated(identity_server):
-    """‏GRUB מבקש את התפריט לפני שיש סוכן; מסלול ה-/boot אינו נחסם
-    (‏#976 ו-#585 מטפלים בו במקומו, לפי כתובת השרת ולא לפי חכירה)."""
+    """GRUB מבקש את התפריט לפני שיש סוכן; מסלול ה-/boot אינו נחסם
+    (#976 ו-#585 מטפלים בו במקומו, לפי כתובת השרת ולא לפי חכירה)."""
     ids = setup_classroom(identity_server)
     response = identity_server["stranger"].get(f"/boot/menu?mac={ids['mac1']}")
     assert response.status_code == 200, response.text
@@ -292,7 +292,7 @@ def test_the_switch_is_on_by_default_and_health_reports_the_leases(identity_serv
 
 
 def test_switching_off_admits_everyone_and_is_journalled_and_visible(identity_server):
-    """‏DHCP חיצוני: המתג כבוי הוא מצב **מוצהר** — היומן אומר מי כיבה,
+    """DHCP חיצוני: המתג כבוי הוא מצב **מוצהר** — היומן אומר מי כיבה,
     והבריאות אומרת שהזהות אינה נבדקת. hello זר עובר."""
     ids = setup_classroom(identity_server)
     assert identity_server["admin"].post(
@@ -338,7 +338,7 @@ def test_a_round_report_from_another_address_is_refused(identity_server):
     """פריט 4: דיווח סבב לפי `session_id`+MAC מהגוף. מכתובת זרה → 403,
     והחבר אינו משתנה; מכתובת החכירה → כרגיל."""
     ids = open_round(identity_server, expected=1)
-    for _ in range(2):      # הצטרפות, ואז ה-hello שמבשיל (‏maybe_start קודם ל-record_hello)
+    for _ in range(2):      # הצטרפות, ואז ה-hello שמבשיל (maybe_start קודם ל-record_hello)
         assert hello(identity_server["station"], ids["mac1"]).status_code == 200
     assert session_state(identity_server, ids["session"]) == "running"
 
@@ -357,7 +357,7 @@ def test_a_round_report_from_another_address_is_refused(identity_server):
 
 
 def test_a_capture_report_needs_both_the_token_and_the_identity(identity_server):
-    """האסימון (‏db67dbd) והזהות הם שני שומרים, לא אחד: אסימון נכון
+    """האסימון (db67dbd) והזהות הם שני שומרים, לא אחד: אסימון נכון
     מכתובת זרה — 403 זהות; כתובת נכונה בלי אסימון — 403 אסימון; שניהם — 200."""
     setup_build_machine(identity_server, BUILD)
     task = make_task(identity_server, BUILD).json()
@@ -398,7 +398,7 @@ def test_without_a_lease_source_the_gate_is_not_installed(server):
 
 
 def test_main_installs_the_lease_file_by_default(tmp_path: Path, monkeypatch):
-    """הראיה הישירה: ‏`server.main` מעביר ל-`create_runtime` מקור חכירות —
+    """הראיה הישירה: `server.main` מעביר ל-`create_runtime` מקור חכירות —
     ברירת המחדל היא קובץ dnsmasq של דביאן, ו---dhcp-leases מחליף אותו."""
     import asyncio
     import uvicorn
@@ -432,7 +432,7 @@ def test_main_installs_the_lease_file_by_default(tmp_path: Path, monkeypatch):
 
 
 def test_the_simulation_leases_every_machine_it_runs_to_loopback(tmp_path: Path):
-    """‏e2e (‏tools/e2e_simulation.py): שרת אמיתי, ארבע מכונות על loopback.
+    """e2e (tools/e2e_simulation.py): שרת אמיתי, ארבע מכונות על loopback.
     השומר **אינו** מכובה שם — ההרנס כותב קובץ חכירות לכל MAC שהוא מפעיל
     (גם ה-MAC "הלא מוכר" של שלב הקצוות — בייצור גם הוא מקבל חכירה) ומעביר
     אותו ב---dhcp-leases."""

@@ -1,4 +1,4 @@
-"""‏#1773 + ‏#1814 — שרת **שמתעדכן** עובר מ-systemd-timesyncd ל-chrony, ושעון שקפץ חוזר.
+"""#1773 + #1814 — שרת **שמתעדכן** עובר מ-systemd-timesyncd ל-chrony, ושעון שקפץ חוזר.
 
 הכרעת נדב (19/10, PR #1834, אפשרות ב'): ההחלפה היא שלב מפורש של זוג קבוע
 (``deploy/timesync-swap.sh``), ו-``deploy/security-upgrade.sh`` נשאר עם ``--no-remove``
@@ -12,11 +12,11 @@ systemd-timesyncd, וכל עדכון של שרת קיים חזר לתג הקוד
 * ``timesync-swap.sh``: בדיקות מקדימות שלא נוגעות בדבר (דרך חזרה במאגר, הסרה אחת בלבד),
   שרת הזמן של timesyncd עובר להגדרה, chrony שלא מסתנכרן מחזיר ל-timesyncd **בגלוי**, וגם
   כשל החזרה נאמר בשמו.
-* ‏#1814: ``makestep 1.0 -1`` בהגדרה ש-server/system/timesync.py כותב (התקנה ועדכון), ושורת
+* #1814: ``makestep 1.0 -1`` בהגדרה ש-server/system/timesync.py כותב (התקנה ועדכון), ושורת
   "שעון" בבריאות: מקור, מסונכרן או לא, וסטייה — עם כיוון וסף.
 
-הכלים החיצוניים (apt, ‏dpkg-query, ‏systemctl, ‏chronyc, ‏timedatectl, ‏systemd-analyze)
-מדומים על PATH; python, ‏zcat ו-timeout אמיתיים. ההרצה האמיתית — ב-chroot של Debian 13 (PR).
+הכלים החיצוניים (apt, dpkg-query, systemctl, chronyc, timedatectl, systemd-analyze)
+מדומים על PATH; python, zcat ו-timeout אמיתיים. ההרצה האמיתית — ב-chroot של Debian 13 (PR).
 """
 
 from __future__ import annotations

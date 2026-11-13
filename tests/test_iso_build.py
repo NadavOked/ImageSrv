@@ -1,4 +1,4 @@
-"""‏ISO ההתקנה (#1139): הרשימה האחת, ה-preseed, ומה ש-firstboot אסור לו.
+"""ISO ההתקנה (#1139): הרשימה האחת, ה-preseed, ומה ש-firstboot אסור לו.
 
 הלקח של R25: ההתקנה מה-ISO רצה **בלי אינטרנט**, ולכן חבילה שנוספה
 ל-`PKGS` של המתקין או לרשימות `build_initramfs.sh` ולא ל-`tools/iso/
@@ -8,9 +8,9 @@ packages.txt` מתגלה רק מול שרת אמיתי, כשה-pool כבר נצ�
 
 ועוד שלושה חוזים שאסור שיזוזו בשקט:
   מפעיל את late-command.sh, root בלבד, הדיסק נבחר ב-early_command.
-* ‏firstboot.sh לעולם אינו מעביר `--deploy-if` (R25 §2.5: זה המוקש —
-  ‏dnsmasq שנדלק על כרטיס שנוחש), ובונה עם `--skip-apt`.
-* ‏#1190: אין מתקין דביאן — ה-ISO עולה ל-/live (הקרנל + initramfs המתקין החי) עם
+* firstboot.sh לעולם אינו מעביר `--deploy-if` (R25 §2.5: זה המוקש —
+  dnsmasq שנדלק על כרטיס שנוחש), ובונה עם `--skip-apt`.
+* #1190: אין מתקין דביאן — ה-ISO עולה ל-/live (הקרנל + initramfs המתקין החי) עם
   imagesrv.mode=installer בלבד; firstboot משלים מהתשובות בלי אשף.
   ו-firstboot.sh קורא אותן — לא heuristic (R62).
 """
@@ -48,13 +48,13 @@ ISOLINUX_ENTRY_TEMPLATE = ISO_DIR / "imagesrv.cfg.in"
 BASH_SCRIPTS = ("make-pool.sh", "build-iso.sh", "firstboot.sh", "firstboot-answers.sh", "test-iso.sh")
 
 #: מה שרק ה-ISO מוסיף — אין לו מקור בקבצים האחרים, ולכן מוצהר כאן.
-#: ‏ca-certificates/systemd-timesyncd: מה ש-d-i היה מביא ב-standard ו-debootstrap לא (ESXi 21/09).
-#: ‏dbus ו-linux-image-amd64 עברו ל-PKGS של המתקין (‏#1987) — יש להם מקור שם.
+#: ca-certificates/systemd-timesyncd: מה ש-d-i היה מביא ב-standard ו-debootstrap לא (ESXi 21/09).
+#: dbus ו-linux-image-amd64 עברו ל-PKGS של המתקין (#1987) — יש להם מקור שם.
 ISO_ONLY = {"nftables", "sqlite3", "ca-certificates", "chrony"}
 #: תיקיית קושחה ש-build_initramfs.sh דורש (#1125) → החבילה שמביאה אותה בדביאן 13.
 FIRMWARE_PACKAGE = {"rtl_nic": "firmware-realtek", "i915": "firmware-intel-graphics"}
-#: ‏#1820 (הכרעת נדב 31/10: "צריך לכלול הכול"): חבילת קושחה של דביאן 13 → מודול
-#: קווי מ-drivers/net/ethernet שמבקש ממנה קובץ (`modinfo -F firmware`, ‏6.12.113, ‏31/10).
+#: #1820 (הכרעת נדב 31/10: "צריך לכלול הכול"): חבילת קושחה של דביאן 13 → מודול
+#: קווי מ-drivers/net/ethernet שמבקש ממנה קובץ (`modinfo -F firmware`, 6.12.113, 31/10).
 #: שרת עם כרטיס כזה עלה מה-ISO בלי רשת, כי ה-ISO נשא רק את rtl_nic.
 WIRED_NIC_FIRMWARE = {
     "firmware-bnx2": "bnx2", "firmware-bnx2x": "bnx2x", "firmware-misc-nonfree": "tg3",
@@ -132,7 +132,7 @@ def test_the_sources_were_actually_parsed() -> None:
 
 
 def vmupdate_pkgs() -> set[str]:
-    """‏#1334: deploy/vmupdate-packages.txt — המקור היחיד של חבילות עדכון ה-VM
+    """#1334: deploy/vmupdate-packages.txt — המקור היחיד של חבילות עדכון ה-VM
     (ההתקנה והעדכון מהכפתור מתקינים ממנו דרך deploy/vmupdate-host.sh)."""
     text = (REPO / "deploy" / "vmupdate-packages.txt").read_text(encoding="utf-8")
     return set(_strip_comments(text).split())
@@ -169,8 +169,8 @@ def firmware_gate_dirs() -> set[str]:
 
 
 def test_firmware_the_initramfs_gate_demands_is_on_the_iso() -> None:
-    """‏#1125 הפך תיקיית קושחה חסרה לכישלון בנייה; שרת שהותקן מה-ISO בלי
-    ‏firmware-realtek נפל payload-failed בשלב א' של האתחול הראשון (QEMU, 19/09)."""
+    """#1125 הפך תיקיית קושחה חסרה לכישלון בנייה; שרת שהותקן מה-ISO בלי
+    firmware-realtek נפל payload-failed בשלב א' של האתחול הראשון (QEMU, 19/09)."""
     dirs = firmware_gate_dirs()
     assert {"rtl_nic", "i915"} <= dirs, dirs
     unknown = sorted(dirs - FIRMWARE_PACKAGE.keys())
@@ -180,7 +180,7 @@ def test_firmware_the_initramfs_gate_demands_is_on_the_iso() -> None:
 
 
 def test_wired_nic_firmware_is_on_the_iso_and_in_the_notices_1820() -> None:
-    """‏#1820: שרת עם Broadcom NetXtreme II (bnx2) עלה מה-ISO בלי רשת, כי ה-ISO נשא
+    """#1820: שרת עם Broadcom NetXtreme II (bnx2) עלה מה-ISO בלי רשת, כי ה-ISO נשא
     רק firmware-realtek. כל חבילת קושחה לכרטיס קווי חייבת להיות ב-packages.txt
     (ההתקנה offline מתקינה את כולה), ורשומה ב-THIRD_PARTY_NOTICES.md (#1707)."""
     missing = sorted(WIRED_NIC_FIRMWARE.keys() - packages_txt())
@@ -193,7 +193,7 @@ def test_wired_nic_firmware_is_on_the_iso_and_in_the_notices_1820() -> None:
 
 def test_no_ssh_server_on_the_product_server() -> None:
     """הכרעת נדב 19/09: אין SSH על השרת האמיתי — כלי מעבדה, מותקן ידנית.
-    ‏ISO שמביא sshd הוא ISO שמפר את ההכרעה בשקט."""
+    ISO שמביא sshd הוא ISO שמפר את ההכרעה בשקט."""
     assert "openssh-server" not in packages_txt()
     for name in ("firstboot.sh", "firstboot-answers.sh", "imagesrv-firstboot.service"):
         code = _strip_comments((ISO_DIR / name).read_text(encoding="utf-8"))
@@ -201,9 +201,9 @@ def test_no_ssh_server_on_the_product_server() -> None:
 
 
 def test_build_iso_ships_the_live_installer_and_no_debian_installer() -> None:
-    """‏#1190: המטען הוא /live/vmlinuz + /live/initrd.img (build_initramfs --installer
+    """#1190: המטען הוא /live/vmlinuz + /live/initrd.img (build_initramfs --installer
     --with-gui), הקרנל מה-pool ומודולי ה-initramfs מושווים אליו, אין גיבוב root
-    (‏#1632 — נבחר במסך ההתקנה), ומתקין דביאן (install.amd, preseed) אינו על ה-ISO."""
+    (#1632 — נבחר במסך ההתקנה), ומתקין דביאן (install.amd, preseed) אינו על ה-ISO."""
     build = BUILD_ISO.read_text(encoding="utf-8")
     assert "--live-initrd" in build and 'die "חסר --live-initrd' in build
     assert 'dpkg-deb -x "$kdeb"' in build and '"$ikver" == "$KVER"' in build, "אין השוואת קרנל↔מודולים"
@@ -278,7 +278,7 @@ def test_grub_template_boots_the_live_installer_only() -> None:
     grub = GRUB_TEMPLATE.read_text(encoding="utf-8")
     entries = re.findall(r"^menuentry .*", grub, re.MULTILINE)
     assert entries == ["menuentry --hotkey=m 'ImageSrv server install' --unrestricted {"]   # #1302, #2450
-    assert "set timeout=0" in grub, "‏#1190: ישר למתקין, בלי תפריט"
+    assert "set timeout=0" in grub, "\u200f#1190: ישר למתקין, בלי תפריט"
     assert "set default=0" in grub
     assert "ImageSrv @TAG@ installer" in grub
     shown = [line for line in grub.splitlines() if not line.lstrip().startswith("#")]
@@ -294,7 +294,7 @@ def test_grub_template_boots_the_live_installer_only() -> None:
 def test_isolinux_templates_boot_the_live_installer_only() -> None:
     menu = ISOLINUX_MENU_TEMPLATE.read_text(encoding="utf-8").splitlines()
     assert menu == ["include stdmenu.cfg", "include imagesrv.cfg", "timeout 1",
-                    "noescape 1", "allowoptions 0"], "‏#1190: ישר למתקין גם ב-BIOS; #2453: בלי עריכה"
+                    "noescape 1", "allowoptions 0"], "\u200f#1190: ישר למתקין גם ב-BIOS; #2453: בלי עריכה"
     entries = ISOLINUX_ENTRY_TEMPLATE.read_text(encoding="utf-8")
     assert re.findall(r"^label (.+)$", entries, re.MULTILINE) == ["imagesrv"]
     assert entries.count("menu default") == 1
@@ -308,15 +308,15 @@ def test_firstboot_never_passes_deploy_if_builds_payload_and_starts_wizard() -> 
     code = _strip_comments(FIRSTBOOT.read_text(encoding="utf-8"))
     assert "--deploy-if" not in code, "כרטיס הפצה שנוחש = dnsmasq על הרשת הלא נכונה (R25 §2.5)"
     assert "setup-boot-server.sh" not in code, "שלב ב' שייך לאשף ואינו עוד התקנה לא-אינטראקטיבית"
-    # ‏#1230: הבנייה עברה ל-tools/boot-payload-build.sh — אותו קוד שכפתור העדכון
-    # מריץ. שני ה-initrd, ‏--skip-apt וה-epoch נבדקים בהרצה ב-test_boot_payload_1230.
+    # #1230: הבנייה עברה ל-tools/boot-payload-build.sh — אותו קוד שכפתור העדכון
+    # מריץ. שני ה-initrd, --skip-apt וה-epoch נבדקים בהרצה ב-test_boot_payload_1230.
     assert "tools/boot-payload-build.sh" in code and "--iso-default" in code
     assert '--write-flags "$ETC/initrd.flags"' in code, "העדכון בונה לפי מה ש-firstboot רשם"
-    # ‏#1125: build_initramfs.sh נופל בלי SOURCE_DATE_EPOCH כשאין .git — ו-/opt/imagesrv-src
+    # #1125: build_initramfs.sh נופל בלי SOURCE_DATE_EPOCH כשאין .git — ו-/opt/imagesrv-src
     # של בניית --source הוא git archive. הזמן מגיע ממניפסט ה-ISO (נמדד ב-QEMU 19/09).
     assert '--manifest "$ETC/iso-release.json"' in code
     helper = _strip_comments(PAYLOAD_BUILD.read_text(encoding="utf-8"))
-    # ‏#1465: הסקריפט מזכיר את הדגל גם בתזמון המקבילי — סופרים רק בברירת המחדל של ה-ISO.
+    # #1465: הסקריפט מזכיר את הדגל גם בתזמון המקבילי — סופרים רק בברירת המחדל של ה-ISO.
     iso_default = re.search(r'^    lines=\((.*?)\)$', helper, re.MULTILINE | re.DOTALL)
     assert iso_default, "boot-payload-build.sh: the ISO default lines=(...) not found"
     assert iso_default.group(1).count("--skip-apt") == 2, "שני initrd (טקסט + GUI), שניהם בלי apt — החבילות מה-ISO"
@@ -375,7 +375,7 @@ def test_installer_console_runtime_text_is_ascii_only() -> None:
 
 def test_firstboot_brings_up_dhcp_then_wizard_gui_and_dcui_fallback_on_the_headless_path() -> None:
     full = _strip_comments(FIRSTBOOT.read_text(encoding="utf-8"))
-    # ‏#1190: המסלול הראשון (תשובות) מדליק את ה-DCUI ויוצא; המסלול ללא תשובות
+    # #1190: המסלול הראשון (תשובות) מדליק את ה-DCUI ויוצא; המסלול ללא תשובות
     # (שרת בלי מסך) מתחיל ב-NIC_FILE — בודקים את הסדר שם.
     code = full[full.index('NIC_FILE="$ETC/installer-nic"'):]
     dhcp = code.index('dhcpcd -4 -1 -t 20 "$nic"')
@@ -386,7 +386,7 @@ def test_firstboot_brings_up_dhcp_then_wizard_gui_and_dcui_fallback_on_the_headl
     assert 'for nic_path in /sys/class/net/*' in code
     assert 'temporary_dhcp "$nic" &' in code and 'wait "$dhcp_pid"' in code
     assert '/sys/class/net/$nic/carrier' in code and "sleep 1" in code
-    assert "for _ in 1 2 3" in code  # ‏shellcheck SC2034: המשתנה אינו בשימוש
+    assert "for _ in 1 2 3" in code  # shellcheck SC2034: המשתנה אינו בשימוש
     for outcome in ("(dhcp)", "no carrier", "no dhcp offer"):
         assert outcome in code
     assert full.count('>>"$BUILD_LOG" 2>&1') >= 1 and '--build-log "$BUILD_LOG"' in full
@@ -435,7 +435,7 @@ def test_scripts_parse(name: str) -> None:
 
 
 def test_the_iso_source_is_the_public_repo_and_private_paths_stop_the_build() -> None:
-    """‏20/09: ISO v0.51.0 הראשון נבנה מ-`git archive` של הריפו **הפרטי** —
+    """20/09: ISO v0.51.0 הראשון נבנה מ-`git archive` של הריפו **הפרטי** —
     62 תשובות מחקר, `tools/agents/`, `.agents/`, `logs/` נסעו בתוך `imagesrv-src/`
     לכל שרת שיותקן. ברירת המחדל היא clone של הציבורי בתג, ושומר ב-ISO_TREE
     מסרב לארוז נתיבים פרטיים גם כשנותנים `--source` מקומי — אותה רשימה כמו
@@ -468,7 +468,7 @@ def test_build_iso_packs_the_public_clone_with_its_git_dir_and_never_a_private_o
     assert 'cp -a "$REPO/.git" "$ISO_TREE/imagesrv-src/.git"' in code, "ה-.git של ה-clone מהציבורי לא נארז"
     guard = code.split('cp -a "$REPO/.git"', 1)[0]
     assert '"$origin" == "$PUBLIC_URL"' in guard, "אין בדיקה ש-origin של ה-.git הנארז הוא הציבורי"
-    assert 'if [[ -z "$SOURCE" ]]' in guard, "‏--source (עץ מקומי, היסטוריה פרטית) חייב להישאר בלי .git"
+    assert 'if [[ -z "$SOURCE" ]]' in guard, "\u200f--source (עץ מקומי, היסטוריה פרטית) חייב להישאר בלי .git"
 
 
 # --- #1190: המתקין החי ---------------------------------------------------------
@@ -491,7 +491,7 @@ def test_firstboot_completes_from_the_installers_answers_without_the_wizard() ->
     assert "3< <(printf '%s\\n' \"$secret\")" in fa and 'shred -u "$ANSWERS_SECRET"' in fa, "הסיסמה דרך FD ונמחקת"
     assert '3< "$ANSWERS_SECRET"' not in fa, "הקובץ כולו אינו הסיסמה"
     assert "answers-secret-missing \"$ANSWERS_SECRET has no admin_pass= line\"" in fa
-    # ‏הכרטיס עולה אחרי setup-boot-server — networking.service רץ לפני שהקובץ נכתב;
+    # הכרטיס עולה אחרי setup-boot-server — networking.service רץ לפני שהקובץ נכתב;
     # דרכו ולא ב-ifup מתוך firstboot (#2094: ה-dhcpcd מת עם יחידת ה-oneshot)
     assert "systemctl restart networking.service" in fa and "[nic-up-failed]" in fa
     assert "verify-boot-payload.sh" in fa and 'touch "$STAMP"' in fa

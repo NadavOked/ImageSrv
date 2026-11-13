@@ -1,11 +1,11 @@
 """#1806: שער ה-BitLocker רץ **לפני שבייט אחד עוזב את המחשב**.
 
 עד #1806 הבדיקה רצה בתוך לולאת הזרם, מחיצה אחר מחיצה. דיסק Windows 11
-24H2 טיפוסי — ESP, ‏MSR, ‏C: מוצפן — העלה את מחיצות 1 ו-2 לשרת, ורק
+24H2 טיפוסי — ESP, MSR, C: מוצפן — העלה את מחיצות 1 ו-2 לשרת, ורק
 במחיצה 3 הגיעה ההכרעה. כאן נמדד מה **יצא**: כל קריאת curl נרשמת.
 
 #1840 (הכרעת נדב 07/11) הפך את ההכרעה עצמה: כרך מוצפן נקלט גולמי
-(‏`tests/test_bitlocker_raw_1840.py`), והנוסח של סירוב ה-BitLocker הוסר. מה
+(`tests/test_bitlocker_raw_1840.py`), והנוסח של סירוב ה-BitLocker הוסר. מה
 שנשאר מ-#1806 הוא המקום: השער (`capture_bitlocker_gate`) יושב ליד שער המהובר,
 לפני בדיקת המקום, הכיווץ והזרם — ובדיקה **שלא רצה** עדיין מסרבת שם, לפני
 שבייט יצא.
@@ -23,7 +23,7 @@ from test_capture_refusals import capture_run, refusal_reason
 
 pytestmark = requires_native(("bash", BASH))
 
-#: הדיסק של Windows 11 24H2 כפי ש-sgdisk מדפיס אותו: ESP, ‏MSR ו-C:.
+#: הדיסק של Windows 11 24H2 כפי ש-sgdisk מדפיס אותו: ESP, MSR ו-C:.
 THREE_PARTITIONS = (
     '#!/bin/sh\n'
     'if [ "$1" = "-i" ]; then\n'
@@ -46,7 +46,7 @@ THREE_PARTITIONS = (
     'echo "   3          239616         4433919   2.0 GiB     0700  Basic data"\n'
 )
 
-#: ‏curl שרושם **כל** קריאה ל-`$RUN_DIR/curl.log` ומרוקן `-T` כמו CURL_SINK.
+#: curl שרושם **כל** קריאה ל-`$RUN_DIR/curl.log` ומרוקן `-T` כמו CURL_SINK.
 #: ההעלאה נמדדת במה שיצא, לא במה שהקוד מתכוון לעשות.
 CURL_RECORDER = (
     '#!/bin/sh\n'
@@ -61,7 +61,7 @@ CURL_RECORDER = (
     'exit 0\n'
 )
 
-#: ‏partclone שרושם שהופעל — הוא הקורא של כל בייט שיוצא.
+#: partclone שרושם שהופעל — הוא הקורא של כל בייט שיוצא.
 PARTCLONE_RECORDER = (
     '#!/bin/sh\n'
     'echo "$*" >> "$RUN_DIR/partclone.ran"\n'
@@ -71,7 +71,7 @@ PARTCLONE_RECORDER = (
 
 
 def _unchecked_third(tmp_path: Path, monkeypatch):
-    # ‏dd שנכשל על כותרת מחיצה 3 בלבד — "לא הצלחנו לבדוק", לא "מוצפן" ולא "נקי".
+    # dd שנכשל על כותרת מחיצה 3 בלבד — "לא הצלחנו לבדוק", לא "מוצפן" ולא "נקי".
     monkeypatch.setattr(test_capture_refusals, "CAPTURE_TIMEOUT", 400)
     real_dd = shutil.which("dd") or "/usr/bin/dd"
     dd = ('#!/bin/sh\ncase "$*" in *sda3*bs=512*) exit 5 ;; esac\n'
@@ -86,7 +86,7 @@ def _unchecked_third(tmp_path: Path, monkeypatch):
 
 
 def test_a_third_partition_that_could_not_be_checked_is_refused_before_a_byte_leaves(tmp_path, monkeypatch):
-    """מחיצה 3 שכותרתה לא נקראה ← סירוב בשמה, ואף קובץ (`p1`, ‏`p2`) לא נפתח
+    """מחיצה 3 שכותרתה לא נקראה ← סירוב בשמה, ואף קובץ (`p1`, `p2`) לא נפתח
     בשרת, partclone לא רץ, והשלב `stream` לא נפתח (עיקרון 5)."""
     box, run, out = _unchecked_third(tmp_path, monkeypatch)
     reason = refusal_reason(box, run, out)
@@ -114,9 +114,9 @@ def test_the_refusal_comes_before_the_space_check_and_the_shrink(tmp_path, monke
 
 
 def test_the_hibernation_header_promise_is_kept_in_capture():
-    """‏`hibernation.sh:2-3` מבטיח "Both run before a byte moves". הטסט
+    """`hibernation.sh:2-3` מבטיח "Both run before a byte moves". הטסט
     הזה קורא את capture.sh: הקריאה ל-`capture_bitlocker_gate` יושבת לפני
-    ‏`capture_stage stream` ואינה בתוך לולאת הזרם."""
+    `capture_stage stream` ואינה בתוך לולאת הזרם."""
     src = (AGENT / "lib" / "capture" / "capture.sh").read_text(encoding="utf-8")
     gate = src.index("capture_bitlocker_gate")
     assert gate < src.index("capture_stage shrink"), "השער אחרי הכיווץ"

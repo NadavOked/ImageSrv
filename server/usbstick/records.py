@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
 from dataclasses import dataclass, field
@@ -26,6 +27,8 @@ from datetime import datetime
 from pathlib import Path
 
 from server.disks.model_slots import model_key
+
+log = logging.getLogger("imagesrv.usbstick")
 
 REPORTS_DIR = "reports"
 REPORT_RE = re.compile(r"^clone-(\d{8})-(\d{6})\.json$")
@@ -273,7 +276,9 @@ def read_reports(root: Path) -> Reading:
                 else:
                     out.ignored += 1
     except OSError as exc:
-        raise ReadError(f"לא הצלחתי לקרוא את תיקיית הדוחות: {exc.strerror or exc}") from exc
+        # #2543: ה-strerror ליומן השרת; בתשובה — משפט שלנו.
+        log.warning("usb stick reports folder %s unreadable: %s", base, exc)
+        raise ReadError("לא הצלחתי לקרוא את תיקיית הדוחות — הפרטים ביומן השרת") from exc
     names.sort(reverse=True)
     out.beyond_cap = max(0, len(names) - MAX_FILES)
     for name in names[:MAX_FILES]:
@@ -281,7 +286,8 @@ def read_reports(root: Path) -> Reading:
             with open(base / name, "rb") as fh:
                 raw = fh.read(MAX_FILE_BYTES + 1)
         except OSError as exc:
-            out.rejected.append(Rejected(name, f"הקובץ לא נקרא: {exc.strerror or exc}"))
+            log.warning("usb stick report %s unreadable: %s", name, exc)   # #2543
+            out.rejected.append(Rejected(name, "הקובץ לא נקרא — הפרטים ביומן השרת"))
             continue
         try:
             out.records.append(parse_report(name, raw))

@@ -1,25 +1,25 @@
-"""‏#2907 — סבב שנגמר בלי אף הצלחה, בגלל אירוע שאינו "המפעיל עצר", נכשל **בשם**.
+"""#2907 — סבב שנגמר בלי אף הצלחה, בגלל אירוע שאינו "המפעיל עצר", נכשל **בשם**.
 
 "נסגר 0/N בלי `failed_reason`" (הצורה של #2841) נוצר בארבעה מסלולים ש-PR #2859
 לא כיסה (הוא כיסה מסלול אחד: משכפל שאבד באמצע `_finish_wave`):
 
-  1. עלייה מחדש של השרת באמצע שידור כיתה: ‏`reconcile` סגר `closed` בלי סיבה.
-  2. אותו דבר בסבב ישיר: ‏`_resume` סגר `closed` 0/N ‏(`room_done`).
+  1. עלייה מחדש של השרת באמצע שידור כיתה: `reconcile` סגר `closed` בלי סיבה.
+  2. אותו דבר בסבב ישיר: `_resume` סגר `closed` 0/N (`room_done`).
   3. ביטול באתחול של משימת גואי שעוד pending — ראו `test_gui_task_boot_cancel_1576.py`
      (הסבב והגל `failed`, והמשכפל שהצטרף `failed` ולא `waiting`).
-  4. כל המגירות דיווחו `failed` (בלי lost): ‏`_finish_wave` סגר `closed` 0/N.
+  4. כל המגירות דיווחו `failed` (בלי lost): `_finish_wave` סגר `closed` 0/N.
 
 והתצוגה בגואי (סעיף 5 ב-Issue): סבב `failed` הוא מה שהגואי מציג כ"הסבב נכשל"
-(‏`guistate.sh`: ‏`room_failed=`); סבב `closed` אינו נראה כלל (`visible_round`).
+(`guistate.sh`: `room_failed=`); סבב `closed` אינו נראה כלל (`visible_round`).
 
-אין כאן הפיכה של עצירת מפעיל לכשל: ‏`test_an_operator_stop_is_still_closed_not_failed`.
+אין כאן הפיכה של עצירת מפעיל לכשל: `test_an_operator_stop_is_still_closed_not_failed`.
 """
 
 from __future__ import annotations
 
 from test_direct_server import _put_manifest, _setup
 from test_reconcile_on_start import _boot
-from test_server_room import (           # noqa: F401 — ‏room_server הוא fixture
+from test_server_room import (           # noqa: F401 — room_server הוא fixture
     CLONER1, cloner_hello, heartbeat, report, room, room_server,
 )
 
@@ -49,7 +49,7 @@ def _running_direct_wave(room_server) -> dict:
 
 
 def test_every_drawer_failed_fails_the_direct_round_by_name(room_server):
-    """היום: `room_done written=0/2`, ‏`closed`, בלי סיבה — והסבב נעלם מהמסך."""
+    """היום: `room_done written=0/2`, `closed`, בלי סיבה — והסבב נעלם מהמסך."""
     opened = _running_direct_wave(room_server)
     ctx = room_server["ctx"]
     report(room_server["anon"], opened["wave_session_id"], CLONER1,
@@ -89,8 +89,8 @@ def test_an_operator_stop_is_still_closed_not_failed(room_server):
 
 
 def test_a_restart_mid_direct_wave_fails_the_round_by_name(room_server, tmp_path):
-    """היום: ‏`reconcile` סוגר את הגל והחברים `failed`, ו-`_resume` סוגר את הסבב
-    `closed` 0/N ‏(`room_done`) — אותה צורה של #2841, בלי סיבה."""
+    """היום: `reconcile` סוגר את הגל והחברים `failed`, ו-`_resume` סוגר את הסבב
+    `closed` 0/N (`room_done`) — אותה צורה של #2841, בלי סיבה."""
     from server.rounds.reconcile import reconcile_on_start
 
     opened = _running_direct_wave(room_server)
@@ -131,7 +131,7 @@ def test_a_restart_mid_library_wave_still_opens_the_next_wave(room_server, tmp_p
 
 def test_a_classroom_broadcast_orphaned_by_a_restart_is_failed_with_a_reason(
         tmp_path, monkeypatch, classrooms_on):
-    """היום: ‏`closed`, ‏`failed_reason` NULL — ובסקירה (`latest_failed_broadcast`) אין כשל."""
+    """היום: `closed`, `failed_reason` NULL — ובסקירה (`latest_failed_broadcast`) אין כשל."""
     first = _boot(tmp_path, monkeypatch, seed=True)
     ctx, admin = first["ctx"], first["admin"]
     mac = "b4:2e:99:00:00:09"

@@ -133,8 +133,11 @@ _linux_check_root() {
     # Read, never sourced: the file is the image's. usr/lib first -- an
     # absolute /etc/os-release symlink would resolve into the agent's own root,
     # and so would an absolute /lib (#1331: never the agent's modules).
-    _ld_os=$(cat "$1/usr/lib/os-release" "$1/etc/os-release" 2>/dev/null \
-        | sed -n 's/^PRETTY_NAME=//p' | head -n 1 | tr -d "\"'")
+    # #2486: a plain file only (never a link, a device or a FIFO), and 64 KiB
+    # of it -- /dev/zero in the image is one endless line for sed.
+    _ld_os=$(for _ldo in "$1/usr/lib/os-release" "$1/etc/os-release"; do
+            [ -f "$_ldo" ] && [ ! -L "$_ldo" ] && head -c 65536 "$_ldo"
+        done 2>/dev/null | sed -n 's/^PRETTY_NAME=//p' | head -n 1 | tr -d "\"'")
     _ld_moddir="$1/usr/lib/modules"
     [ -d "$_ld_moddir" ] && [ ! -L "$1/usr/lib" ] || _ld_moddir="$1/lib/modules"
     _ld_n=0

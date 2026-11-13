@@ -1,15 +1,15 @@
-"""‏#1997 (נדב, 22/10): שם של מחשב או של שרת הוא ה-hostname — ולכן באנגלית.
+"""#1997 (נדב, 22/10): שם של מחשב או של שרת הוא ה-hostname — ולכן באנגלית.
 
 הכלל אחד, והוא חל על: מחשב בנייה, משכפל ותחנה; שם השרת עצמו (המתקין, האשף,
-‏``POST /hostname``); ושם של שרת משנה ברישום ובעריכה. אותיות לטיניות, ספרות
+``POST /hostname``); ושם של שרת משנה ברישום ובעריכה. אותיות לטיניות, ספרות
 ומקף, עד 15 תווים (NetBIOS — Windows מקצר שם ארוך יותר בשקט), לא מתחיל ולא
 נגמר במקף.
 
 עברית מותרת **רק** בשם אימג', שם תיקיית אימג'ים ושם דיסק (``images.
-validate_display_name``, ‏``slot_names``) — לא כאן.
+validate_display_name``, ``slot_names``) — לא כאן.
 
 אותו כלל יושב בשני מקומות שאינם Python, והטסטים משווים אותם לזה:
-‏``agent/lib/postdeploy/hostname.sh`` (``write_hostname`` — מסרב לפני הכתיבה ל-Windows)
+``agent/lib/postdeploy/hostname.sh`` (``write_hostname`` — מסרב לפני הכתיבה ל-Windows)
 ו-``installer/lib/answers.sh`` (שם השרת במתקין).
 """
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 
-#: NetBIOS. ‏``sessions.HOSTNAME_MAX`` הוא אותו מספר, מכאן.
+#: NetBIOS. ``sessions.HOSTNAME_MAX`` הוא אותו מספר, מכאן.
 HOSTNAME_MAX = 15
 
 _OK = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?")
@@ -42,17 +42,17 @@ def refusal(name: object, what: str = "השם") -> str | None:
     return f"{what} '{name}' אינו חוקי — {RULE}"
 
 
-#: ‏#2786 (נדב 09/11): ההודעה הקצרה מתחת לשדה, כשמנסים להקליד תו אסור.
+#: #2786 (נדב 09/11): ההודעה הקצרה מתחת לשדה, כשמנסים להקליד תו אסור.
 CHARS_HE = "רק אותיות באנגלית, ספרות ומקף"
 
 
 def computer_name_refusal(name: object, what: str = "שם המחשב") -> str | None:
-    """‏#2786: שם שנכתב לדיסק בסבב שיכפול — הכלל למעלה, **וגם לא כולו ספרות**.
+    """#2786: שם שנכתב לדיסק בסבב שיכפול — הכלל למעלה, **וגם לא כולו ספרות**.
 
-    ‏Windows מסרב לשם מחשב שכולו ספרות (‏NetBIOS), ולינוקס (RFC 1123) מקבל
+    Windows מסרב לשם מחשב שכולו ספרות (NetBIOS), ולינוקס (RFC 1123) מקבל
     אותו — החיתוך של שניהם אוסר. התוספת כאן ולא ב-``is_valid``: הכלל ההוא
     חל גם על שם השרת ועל רישום מכונות, והמתקין והסוכן משוכפלים מולו (#1997);
-    הרחבתו היא שאלה נפרדת. הקונסולה (``console.js``, ‏``cloneNameRefusal``)
+    הרחבתו היא שאלה נפרדת. הקונסולה (``console.js``, ``cloneNameRefusal``)
     מחזיקה את אותו כלל, וטסט משווה ביניהם."""
     refused = refusal(name, what)
     if refused is not None:

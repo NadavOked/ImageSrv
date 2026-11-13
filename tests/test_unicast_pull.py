@@ -1,7 +1,7 @@
-"""הצד השני של #60: הסוכן פותח את זרם היוניקאסט — ‏issue #63.
+"""הצד השני של #60: הסוכן פותח את זרם היוניקאסט — issue #63.
 
-‏#60 בנה בשרת את `POST /api/v1/agent/pulls`, וכל מה שנתלה עליו — דיווחי
-התקדמות, שורת יומן, שורה במבט-העל. ‏`single_station_flow` פשוט לא קרא
+#60 בנה בשרת את `POST /api/v1/agent/pulls`, וכל מה שנתלה עליו — דיווחי
+התקדמות, שורת יומן, שורה במבט-העל. `single_station_flow` פשוט לא קרא
 לו: תחנה מושכת אימג' עשרים דקות, ומפעיל שמסתכל בקונסולה רואה שרת פנוי.
 
 שלוש שאלות שהבדיקות כאן שואלות, ולא אחת:
@@ -10,7 +10,7 @@
   לא יכול היה לצפות בה.
 * **מה קורה כשהפתיחה נכשלת** — עיקרון 1 אומר שהשחזור ממשיך; מה שאסור
   הוא לוותר בשקט. ולכן חצי מהקובץ הזה עוסק ב*הבחנה* בין סוגי הכישלון:
-  ‏`curl -f` מקפל 404 ("השרת הזה ישן מהendpoint") ו-503 ("השרת שממנו
+  `curl -f` מקפל 404 ("השרת הזה ישן מהendpoint") ו-503 ("השרת שממנו
   אנחנו עומדים למשוך 40 ג'יגה נופל") לאותו exit 22, ושני אלה שולחים
   טכנאי לשני מקומות שונים.
 * **האם הזרם נסגר** — לא "ישנו וקיווינו" אלא דיווח סיום שנשלח, ושכשל
@@ -19,7 +19,7 @@
 חלק א' רץ מול **שרת HTTP אמיתי** בתהליכון, עם ה-curl וה-jq האמיתיים:
 זה מה שנבדק — קוד סטטוס אמיתי שעובר דרך `-w '%{http_code}'`, ולא זיוף
 של הפונקציה שאמורה לקרוא אותו. חלק ב' מריץ את האשף עצמו עם תפרים
-מזויפים (‏`pull_post`, ‏`run_restore`, ‏`http_get`) ובודק את החיווט.
+מזויפים (`pull_post`, `run_restore`, `http_get`) ובודק את החיווט.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ from test_agent import AGENT, BASH, posix
 
 REPO = Path(__file__).resolve().parent.parent
 
-#: ‏curl ו-jq הם המנגנון שנבדק כאן, לא נוחות: ההבחנה בין 404 ל-503 היא
+#: curl ו-jq הם המנגנון שנבדק כאן, לא נוחות: ההבחנה בין 404 ל-503 היא
 #: קוד הסטטוס שחוזר מ-curl, וההבחנה בין "404 שלנו" ל-"404 של הנתב" היא
 #: השדה `code` שנקרא ב-jq. בלעדיהם אין מה לבדוק — ובמעבדה זה כישלון (#52).
 pytestmark = requires_native(("bash", BASH), "curl", "jq")
@@ -100,11 +100,11 @@ def url_of(httpd: HTTPServer) -> str:
     return f"http://{host}:{port}"
 
 
-# --- חלק א': ‏pull_open מול תשובות אמיתיות -----------------------------------
+# --- חלק א': pull_open מול תשובות אמיתיות -----------------------------------
 
 
 def journal(run: Path) -> str:
-    """היומן המקומי של הסוכן — ריק כשעוד לא נכתבה בו שורה. ‏\"\" ולא
+    """היומן המקומי של הסוכן — ריק כשעוד לא נכתבה בו שורה. \"\" ולא
     חריגה, כדי שבקרה שלילית תיפול על מה שהיא בודקת ולא על קובץ חסר."""
     path = run / "agent.log"
     return path.read_text(encoding="utf-8") if path.exists() else ""
@@ -115,7 +115,7 @@ def open_pull(tmp_path: Path, server: str, *, user: str = "labtech",
     """מריץ את `pull_open` האמיתי. מחזיר (פלט, היומן המקומי)."""
     run = tmp_path / "run"
     run.mkdir(exist_ok=True)
-    # ‏shlex.quote ולא repr: לסיסמה מותר להכיל לוכסן אחורי, ו-repr של
+    # shlex.quote ולא repr: לסיסמה מותר להכיל לוכסן אחורי, ו-repr של
     # פייתון היה מכפיל אותו לתוך המרכאות הבודדות של sh.
     args = " ".join(shlex.quote(a) for a in (server, MAC, IMAGE, user, password))
     script = (
@@ -137,7 +137,7 @@ def open_pull(tmp_path: Path, server: str, *, user: str = "labtech",
 
 
 def test_a_pull_that_opened_hands_back_the_session_id(tmp_path, fake_server):
-    """ראיה חיובית אחת: ‏200 שנשא `id`. זה — ורק זה — זרם פתוח."""
+    """ראיה חיובית אחת: 200 שנשא `id`. זה — ורק זה — זרם פתוח."""
     out, log = open_pull(tmp_path, url_of(fake_server))
 
     assert "OPENED=[ses_pull01]" in out
@@ -145,7 +145,7 @@ def test_a_pull_that_opened_hands_back_the_session_id(tmp_path, fake_server):
 
 
 def test_an_answer_without_an_id_is_not_an_open_stream(tmp_path, fake_server):
-    """‏200 ריק אינו "לא הייתה שגיאה, אז הכל טוב": דיווחי ההתקדמות
+    """200 ריק אינו "לא הייתה שגיאה, אז הכל טוב": דיווחי ההתקדמות
     היו נשלחים ל-session שאינו קיים, והמסך היה נשאר ריק בדיוק כמו
     לפני התיקון — רק שהפעם בשקט."""
     fake_server.body = b"{}"
@@ -157,7 +157,7 @@ def test_an_answer_without_an_id_is_not_an_open_stream(tmp_path, fake_server):
 
 
 def test_an_old_server_is_named_as_an_old_server(tmp_path, fake_server):
-    """‏404 בלי מעטפת השגיאה שלנו = הנתב אומר "אין כזה נתיב". סוכן חדש
+    """404 בלי מעטפת השגיאה שלנו = הנתב אומר "אין כזה נתיב". סוכן חדש
     מול שרת שלפני #60 — ומהמצב הזה יוצאים בשחזור רגיל, לא בתעלומה."""
     fake_server.status = 404
     fake_server.body = b'{"detail":"Not Found"}'
@@ -170,9 +170,9 @@ def test_an_old_server_is_named_as_an_old_server(tmp_path, fake_server):
 
 
 def test_a_server_that_fell_over_is_not_an_old_server(tmp_path, fake_server):
-    """הגוטצ'ה של #63, ועיקרון 5 עליה: ‏`curl -f` נותן ל-404 ול-503
-    את אותו exit 22. ‏404 פירושו "המשך, השרת פשוט לא יודע לרשום" —
-    ‏503 פירושו שהשרת שממנו התחנה עומדת למשוך את האימג' חולה. טכנאי
+    """הגוטצ'ה של #63, ועיקרון 5 עליה: `curl -f` נותן ל-404 ול-503
+    את אותו exit 22. 404 פירושו "המשך, השרת פשוט לא יודע לרשום" —
+    503 פירושו שהשרת שממנו התחנה עומדת למשוך את האימג' חולה. טכנאי
     שנשלח לשדרג שרת בזמן שהשרת נופל מפסיד אחר צהריים."""
     fake_server.status = 503
     fake_server.body = b"service unavailable"
@@ -184,7 +184,7 @@ def test_a_server_that_fell_over_is_not_an_old_server(tmp_path, fake_server):
 
 
 def test_a_refusal_the_server_did_make_keeps_its_reason(tmp_path, fake_server):
-    """‏404 *עם* `code` הוא השרת מכיר את הנתיב וסירב — אימג' שאינו
+    """404 *עם* `code` הוא השרת מכיר את הנתיב וסירב — אימג' שאינו
     קיים. אותו קוד HTTP, סיפור אחר לגמרי."""
     fake_server.status = 404
     fake_server.body = b'{"ok":false,"error":"unknown image","code":"no_image"}'
@@ -196,7 +196,7 @@ def test_a_refusal_the_server_did_make_keeps_its_reason(tmp_path, fake_server):
 
 
 def test_a_server_that_never_answered_has_its_own_line(tmp_path, fake_server):
-    """‏000: אין תשובה בכלל. לא שרת ישן ולא סירוב — ולכן לא אותה שורה."""
+    """000: אין תשובה בכלל. לא שרת ישן ולא סירוב — ולכן לא אותה שורה."""
     dead = url_of(fake_server)
     fake_server.shutdown()
     fake_server.server_close()
@@ -231,15 +231,15 @@ def test_a_station_without_a_login_sends_empty_credentials(tmp_path, fake_server
 
 # --- חלק ב': החיווט באשף השחזור ---------------------------------------------
 
-#: ‏`progress_loop` מזויף בכל הבדיקות **חוץ** מזו שבודקת את הסגירה.
+#: `progress_loop` מזויף בכל הבדיקות **חוץ** מזו שבודקת את הסגירה.
 #: הלולאה האמיתית היא אינסופית, ובמסלול הכישלון היא נשארת לרוץ בכוונה —
 #: תהליך רקע כזה ששורד את הריצה מחזיק את הצינור של הבדיקה (הגוטצ'ה של
 #: `capture_output`) ומזהם את הריצה הבאה. איפה שנבדקת הסגירה, הלולאה
 #: האמיתית רצה — ושם היא גם נהרגת, כי זה בדיוק מה שנבדק.
 LOOP_STUB = 'progress_loop() { echo "LOOP $1" >> "$RUN_DIR/trace"; }; '
 
-#: ‏`ui.sh` מפעילה את הדווח **ברקע** (`progress_loop ... &`), ולכן כל מה
-#: שהוא כותב נכתב אחרי שהמעטפת הראשית כבר המשיכה הלאה. ‏`wait` חוסם עד
+#: `ui.sh` מפעילה את הדווח **ברקע** (`progress_loop ... &`), ולכן כל מה
+#: שהוא כותב נכתב אחרי שהמעטפת הראשית כבר המשיכה הלאה. `wait` חוסם עד
 #: ש**כל** תהליך רקע של המעטפת באמת יצא — כלומר עד שהכתיבה שלו הושלמה —
 #: ולכן פייתון לעולם אינו קורא קובץ שעוד נכתב. הוא אינו `sleep`: הוא
 #: אינו מהמר על חלון זמן אלא ממתין לאירוע.
@@ -247,7 +247,7 @@ LOOP_STUB = 'progress_loop() { echo "LOOP $1" >> "$RUN_DIR/trace"; }; '
 #: מה שהוא מונע בפועל הוא שורת JSON חתוכה ב-`posts.jsonl` — דיווח אחרון
 #: של לולאה שנהרגה שנוחת בזמן שפייתון כבר קורא — כשל שהיה נראה כמו באג
 #: בבניית הדיווח. הוא **אינו** מה שתיקן את ה-flake עצמו; ראו RESTORE_STUB.
-#: ‏11/10: אשף הטקסט (`single_station_flow`) הוסר — GUI בלבד. מה שנשאר הוא
+#: 11/10: אשף הטקסט (`single_station_flow`) הוסר — GUI בלבד. מה שנשאר הוא
 #: הכתיבה שמאחורי מסך השחזור הגרפי, `single_restore_run`, והיא שנבדקת.
 FLOW = f'single_restore_run {IMAGE}; echo "RC=$?"; wait'
 
@@ -264,7 +264,7 @@ def run_flow(script: str, keys: tuple[str, ...], out_file: Path) -> None:
     """
     with out_file.open("w", encoding="utf-8") as sink:
         try:
-            # ‏input בבייטים ולא ב-text (#491): ‏`single_restore_run` אינו קורא
+            # input בבייטים ולא ב-text (#491): `single_restore_run` אינו קורא
             # stdin, ומקשים שמחכים שם חייבים להישאר שם (GUI בלבד, 11/10).
             subprocess.run(
                 [BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + script],
@@ -280,7 +280,7 @@ def run_flow(script: str, keys: tuple[str, ...], out_file: Path) -> None:
             ) from None
 
 #: המתנה על ראיה חיובית עם תקרה — הדפוס של `agent/lib/core/waits.sh`: חוזרת
-#: ברגע שהשורה נמצאת, ואומרת בקול כשהיא לא הגיעה. ‏500 × 0.02 = תקרה של
+#: ברגע שהשורה נמצאת, ואומרת בקול כשהיא לא הגיעה. 500 × 0.02 = תקרה של
 #: 10 שניות, שאין להגיע אליה לעולם; הגעה אליה היא כשל ולא איטיות.
 AWAIT = (
     'await_line() { _n=0; '
@@ -290,7 +290,7 @@ AWAIT = (
     'echo "AWAIT-TIMEOUT: \'$2\' never reached $1"; return 1; }; '
 )
 
-#: ‏run_restore מזויף — הצינור עצמו נבדק במקום אחר (והוא דורש חומרה).
+#: run_restore מזויף — הצינור עצמו נבדק במקום אחר (והוא דורש חומרה).
 #: מה שכן משוחזר כאן הוא מה שהאמיתי כותב: המצב שממנו נבנה הדיווח.
 #:
 #: והוא **ממתין לדווח שיעלה**, וזה לא קישוט אלא תיקון ה-flake.
@@ -307,7 +307,7 @@ AWAIT = (
 #: ברציפות, כשהמכונה הייתה עמוסה יותר); אחריו 20 מתוך 20 ירוקות.
 RESTORE_STUB = (
     'run_restore() { '
-    # ‏#1561: הגואי של ההתקדמות (סטאב שיוצא מיד) מת לפני הכשל -- כדי שמסך
+    # #1561: הגואי של ההתקדמות (סטאב שיוצא מיד) מת לפני הכשל -- כדי שמסך
     # הכישלון כאן ייפתח בגואי משלו, דטרמיניסטית. הגואי החי: test_single_restore_progress_gui.py.
     '_g=0; while sr_gui_alive && [ "$_g" -lt 500 ]; do sleep 0.02; _g=$((_g + 1)); done; '
     '[ -n "${AWAIT_TEXT:-}" ] && { await_line "$AWAIT_FILE" "$AWAIT_TEXT" '
@@ -319,8 +319,8 @@ RESTORE_STUB = (
     'writemark_release_done() { :; }; '   # #1877: the mark is not what is tested here (test_writemark_postdeploy_1877.py)
 )
 
-#: ‏#1545: הגואי שמסך הכישלון מעלה — רושם מה קיבל ומה היה בקובץ המצב, ויוצא.
-#: ‏#1561: כל גואי של השחזור עולה כ-`--screen progress` על `restore.state`.
+#: #1545: הגואי שמסך הכישלון מעלה — רושם מה קיבל ומה היה בקובץ המצב, ויוצא.
+#: #1561: כל גואי של השחזור עולה כ-`--screen progress` על `restore.state`.
 #: הגואי של ההתקדמות (בלי `message=`) יוצא מיד, ומסך הכישלון נרשם.
 GUI_STUB = (
     '#!/bin/sh\n'
@@ -336,7 +336,7 @@ def station(tmp_path, *, pull_code: str = "200",
             keys: tuple[str, ...] = ("1", "ERASE", ""),
             gui: bool = False, reason: str = "no", gate_reply: str = "") -> dict:
     """מריץ את `single_restore_run` האמיתי מקצה לקצה עם תפרים מזויפים.
-    ‏`keys` הם מקשים שמחכים ב-stdin — הכתיבה אינה קוראת אותם (GUI בלבד).
+    `keys` הם מקשים שמחכים ב-stdin — הכתיבה אינה קוראת אותם (GUI בלבד).
 
     התפרים הם בדיוק הגבולות של המערכת: הרשת (`pull_post`,
     `http_post_json`, `http_get`), הדיסק (`pick_internal_disk`) והכתיבה
@@ -363,7 +363,7 @@ def station(tmp_path, *, pull_code: str = "200",
     else:
         await_file, await_text = posix(run / "trace"), "LOOP "
 
-    # ‏#1545: בלי gui=True הנתיב לא קיים — גם על מכונה שיש בה גואי מותקן
+    # #1545: בלי gui=True הנתיב לא קיים — גם על מכונה שיש בה גואי מותקן
     gui_bin = tmp_path / "station-gui"
     if gui:
         gui_bin.write_text(GUI_STUB, encoding="utf-8", newline="\n")
@@ -426,7 +426,7 @@ def test_the_wizard_opens_the_stream_before_it_writes(tmp_path):
     בלבד — עשרים דקות של משיכה שהשרת לא ידע עליהן."""
     result = station(tmp_path)
 
-    # ‏`PULL` הוא הראשון, ו-`RESTORE` אחריו. הדווח (`LOOP`) נכנס לעקבה
+    # `PULL` הוא הראשון, ו-`RESTORE` אחריו. הדווח (`LOOP`) נכנס לעקבה
     # מתהליכון רקע, ולכן מיקומו ביחס ל-`RESTORE` אינו מובטח ואינו נבדק.
     assert result["trace"][0] == "PULL"
     assert result["trace"].index("PULL") < result["trace"].index("RESTORE unicast")
@@ -443,7 +443,7 @@ def test_the_reporter_gets_the_session_the_server_returned(tmp_path):
 
 
 def test_the_gui_restore_opens_the_pull_without_credentials(tmp_path):
-    """‏11/10 (GUI בלבד): הכניסה בטקסט שסיפקה את האישורים הוסרה, והסיסמה
+    """11/10 (GUI בלבד): הכניסה בטקסט שסיפקה את האישורים הוסרה, והסיסמה
     שהוקלדה בגואי אינה יוצאת מתהליך הכניסה של הקיוסק. המשיכה נפתחת עם
     אישורים ריקים — גם כש-RECOVERY_* מוגדרים בסביבה (שאריות, לא כניסה).
     בקרה שלילית: הקוד הישן שולח labtech/pass."""
@@ -453,12 +453,12 @@ def test_the_gui_restore_opens_the_pull_without_credentials(tmp_path):
     assert result["sent"]["password"] == ""
 
 
-#: ‏#2657: מה ש-`sr_refused pull` משאיר — ‏`die_local` (‏TEST-REBOOT) לפני הכתיבה.
+#: #2657: מה ש-`sr_refused pull` משאיר — `die_local` (TEST-REBOOT) לפני הכתיבה.
 PULL_REFUSED = "TEST-REBOOT: restore: the server did not open the pull -- nothing was written (#2657)"
 
 
 def test_an_old_server_stops_the_restore_before_the_disk(tmp_path):
-    """‏#2657: הקבצים מוגשים רק בתוך משיכה פתוחה, ולכן משיכה שלא נפתחה
+    """#2657: הקבצים מוגשים רק בתוך משיכה פתוחה, ולכן משיכה שלא נפתחה
     עוצרת **לפני** הדיסק — לא מוחקת את הטבלה ונכשלת בזרם. עד #2657 השחזור
     המשיך ("הבייטים מוגשים ממילא"). מה שאסור הוא לוותר בשקט — ולכן יש
     שורה ביומן, וגם אין דיווחים לשום מקום."""
@@ -533,7 +533,7 @@ PLAN_REFUSED = "sgdisk דחה את תוכנית השחזור — הדיסק לא
 
 
 def test_a_failed_restore_brings_the_gui_back_in_hebrew_with_the_reason(tmp_path):
-    """‏#1545 (ברזל 17/10): הגשר שחרר את התצוגה לכתיבה, והכישלון היה טקסט
+    """#1545 (ברזל 17/10): הגשר שחרר את התצוגה לכתיבה, והכישלון היה טקסט
     באנגלית על tty שחור בלי הסיבה. הגואי חוזר כמסך הודעה: כותרת בעברית,
     והסיבה של היעד עצמו. ה-hold שמתחתיו (פעימה, TEST-HOLD) לא השתנה.
     בקרה שלילית: לפני התיקון הגואי לא מופעל כלל (`gui.seen` לא נוצר)."""

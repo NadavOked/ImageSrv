@@ -1,10 +1,10 @@
-"""‏#1839 — משכפל שכותב נשאר "מחובר" ופתוח למוניטור.
+"""#1839 — משכפל שכותב נשאר "מחובר" ופתוח למוניטור.
 
-אותו ערב (19/10, משכפל 2): ‏`last_seen` התעדכן רק מ-hello, ובזמן כתיבה
+אותו ערב (19/10, משכפל 2): `last_seen` התעדכן רק מ-hello, ובזמן כתיבה
 הסוכן שולח רק progress כל 2ש'. אחרי 90ש' המשכפל הכותב הוצג "לא מחובר"
 והמוניטור סירב לו (4409). התיקון: דיווח שהתקבל נרשם ב-`progress_seen`,
 ו"מחובר" של המוניטור קורא את שתי החותמות. עמודה נפרדת ולא `last_seen`:
-‏`room` (#1721) קורא `last_seen` אחרי פתיחת הגל כ"המשכפל עלה מחדש", ושלושה
+`room` (#1721) קורא `last_seen` אחרי פתיחת הגל כ"המשכפל עלה מחדש", ושלושה
 טסטים ב-`test_room_rewake_1721` נפלו כשהדיווח האחרון של גל 1 נכתב שם.
 
 בקרה שלילית: על הקוד שלפני התיקון `online` הוא False והחיבור נסגר 4409.
@@ -28,7 +28,7 @@ from test_monitor import (MAC, SERVER_INIT, browser_handshake,
 
 
 class _Clock:
-    """שעון של `server.db` — ‏`datetime.now` שזז רק כשהטסט מזיז אותו."""
+    """שעון של `server.db` — `datetime.now` שזז רק כשהטסט מזיז אותו."""
 
     def __init__(self, start: datetime):
         self.now = start
@@ -72,8 +72,8 @@ def _progress(server, session_id: str, written: int) -> None:
 
 
 def test_progress_alone_for_120_seconds_keeps_the_machine_online(server, monkeypatch):
-    """**הבאג עצמו.** ‏hello אחד בתחילת הגל, ואז רק progress כל 2ש' במשך
-    120ש' — כמו משכפל שכותב. בסוף: ‏`online: true` ברשימת המוניטור,
+    """**הבאג עצמו.** hello אחד בתחילת הגל, ואז רק progress כל 2ש' במשך
+    120ש' — כמו משכפל שכותב. בסוף: `online: true` ברשימת המוניטור,
     והחיבור למוניטור מתקבל (ServerInit, לא 4409 "המכונה אינה מחוברת")."""
     start = datetime(2026, 10, 19, 19, 29, 30, tzinfo=timezone.utc)
     clock = _Clock(start)

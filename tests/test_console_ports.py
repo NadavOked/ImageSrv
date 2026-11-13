@@ -39,7 +39,7 @@ def ports_server(tmp_path: Path, images_root: Path, clock):
     fake = {"ss": SS_DNSMASQ, "http": 200,
             "interfaces": [{"name": "eth0", "state": "up", "mac": "aa", "addresses": []}],
             "udp_sender_pids": [],
-            # ‏#996: טבלת ה-TCP "לא נקראה" כאן — כמו בתחנה בלי ss. בלי
+            # #996: טבלת ה-TCP "לא נקראה" כאן — כמו בתחנה בלי ss. בלי
             # ההזרקה הבדיקה הייתה מריצה ss אמיתי (ובמעבדה — רואה מאזינים
             # אמיתיים). המתג עצמו נבדק ב-test_port_toggles.py.
             "ss_tcp": "",
@@ -78,7 +78,7 @@ def by_id(rows):
 
 
 def test_ports_endpoint_is_console_only(ports_server):
-    """‏#1073: הדף הוא קונסולה — deploy מקבל 403 `deploy_no_console` (לא
+    """#1073: הדף הוא קונסולה — deploy מקבל 403 `deploy_no_console` (לא
     admin_only: הנתיב עצמו נשאר current_user, והסירוב הוא של הקונסולה)."""
     resp = ports_server["deploy"].get("/api/console/ports")
     assert resp.status_code == 403 and "מחשב הבנייה" in resp.json()["detail"]
@@ -93,7 +93,7 @@ def test_ports_endpoint_requires_login(ports_server):
 
 def test_the_list_includes_5900_and_no_8082_and_no_ssh(ports_server):
     """זה בדיוק מה שהעניין #822 מדווח: 5900 חסר ברשימה הקבועה הישנה.
-    ‏#1247: 8082 הוסר ואינו ברשימה. ‏#1266: SSH יצא מהמוצר — אין שורת 22,
+    #1247: 8082 הוסר ואינו ברשימה. #1266: SSH יצא מהמוצר — אין שורת 22,
     לא לתחנות ולא לשרת × כרטיס."""
     rows = by_id(ports_server["admin"].get("/api/console/ports").json())
     assert rows["monitor"]["port"] == "5900"
@@ -131,8 +131,8 @@ def test_monitor_switch_on_shows_a_warning_not_green(ports_server):
 
 def test_unverified_ports_say_so_and_are_not_painted_green(ports_server):
     """8081: טבלת הסוקטים של TCP לא נקראה — "לא נקרא" הוא `unknown`
-    (אדום — דלת שאי אפשר לראות), ולעולם לא ok (עיקרון 5). ‏#996
-    החליף את "אין hook" הישן בקריאה אמיתית מ-`ss -ltnp`; ‏4011 נקרא
+    (אדום — דלת שאי אפשר לראות), ולעולם לא ok (עיקרון 5). #996
+    החליף את "אין hook" הישן בקריאה אמיתית מ-`ss -ltnp`; 4011 נקרא
     מטבלת ה-UDP, שכאן קיימת ואין בה מאזין — ובלי proxy דלוק זה off."""
     rows = by_id(ports_server["admin"].get("/api/console/ports").json())
     for pid in ("http_console",):
@@ -142,7 +142,7 @@ def test_unverified_ports_say_so_and_are_not_painted_green(ports_server):
 
 
 def test_pxe_proxy_4011_is_not_a_v1_row(ports_server):
-    """‏#1303 (נדב 12/10): ‏PXE proxy שייך לכיתות (v1.2) — ‏`PUT /net/interfaces`
+    """#1303 (נדב 12/10): PXE proxy שייך לכיתות (v1.2) — `PUT /net/interfaces`
     כבר מסרב לו ב-409 כשהכיתות כבויות. שורת 4011 בדף הפורטים הייתה שארית
     מוצגת של יכולת שאין ב-v1, ולכן היא לא נשלחת."""
     rows = by_id(ports_server["admin"].get("/api/console/ports").json())
@@ -203,7 +203,7 @@ def test_firewall_row_three_states(ports_server):
 # --- #1267: שיוך לרשת + חומת אש בשרת לכל פורט שבין רשתות -----------------------
 
 NFT_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "nftables"
-DEPLOY_IDS = ("dhcp", "tftp", "http_boot", "multicast", "monitor")   # ‏#1303: ‏pxe_proxy — רק עם כיתות (v1.2)
+DEPLOY_IDS = ("dhcp", "tftp", "http_boot", "multicast", "monitor")   # #1303: pxe_proxy — רק עם כיתות (v1.2)
 
 
 def _nft(name: str) -> str:
@@ -212,7 +212,7 @@ def _nft(name: str) -> str:
 
 def test_every_port_row_names_its_network(ports_server):
     """#1267: הקונסולה מפצלת לפי רשת — והשיוך בא מהשרת, לא מרשימה ב-JS.
-    ‏`firewall` (מצב ה-nft כולו) אינו פורט ואינו שייך לרשת."""
+    `firewall` (מצב ה-nft כולו) אינו פורט ואינו שייך לרשת."""
     rows = by_id(ports_server["admin"].get("/api/console/ports").json())
     for pid in DEPLOY_IDS:
         assert rows[pid]["network"] == "deploy", pid
@@ -223,7 +223,7 @@ def test_every_port_row_names_its_network(ports_server):
 
 
 def test_cross_network_ports_read_the_server_firewall_per_port(ports_server):
-    """ראשי (primary.conf): 8081 פתוח על וילן השרתים, וגם 8443 — ‏#1310,
+    """ראשי (primary.conf): 8081 פתוח על וילן השרתים, וגם 8443 — #1310,
     "אתה שם?" של מתקין משני. הראיה היא הכלל עצמו, לא היעדר שגיאה."""
     ports_server["fake"]["nft_ruleset"] = _nft("primary.conf")
     rows = by_id(ports_server["admin"].get("/api/console/ports").json())
@@ -250,7 +250,7 @@ def test_deploy_ports_carry_no_firewall_verdict(ports_server):
 
 def test_firewall_that_could_not_be_read_is_not_checked_never_open(ports_server):
     """עיקרון 5: nft שלא נקרא, טבלה שלא נטענה, או טבלה בלי policy ידוע —
-    ‏`None` ("לא נבדק"), לעולם לא "open"."""
+    `None` ("לא נבדק"), לעולם לא "open"."""
     for ruleset, phrase in ((None, "לא נבדק"), ("", "לא נטענה"),
                             ("table inet imagesrv {\n\tchain input {\n\t}\n}\n", "לא ידוע")):
         ports_server["fake"]["nft_ruleset"] = ruleset
@@ -278,6 +278,6 @@ def test_port_firewall_ignores_comments_drops_and_longer_port_numbers():
     ranged = body.replace("80810", "8000-8100")
     assert port_firewall(ranged, "tcp", "8081") == (
         None, "יש בטבלת imagesrv כלל טווח/קבוצה שלא פוענח — לא נבדק")
-    # ‏כללי udp של ההפצה אינם נוגעים לשאלה על tcp (‏#1310: בראשי 8443 פתוח)
+    # כללי udp של ההפצה אינם נוגעים לשאלה על tcp (#1310: בראשי 8443 פתוח)
     assert port_firewall(_nft("primary.conf"), "tcp", "8443")[0] == "open"
     assert port_firewall(_nft("primary.conf"), "tcp", "4444")[0] == "blocked"

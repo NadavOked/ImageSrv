@@ -11,9 +11,9 @@
 **לפני** שהמניפסט מקבל את שמו. קובץ שאינו מוצהר, קובץ שחסר, או קובץ
 שה-sha שלו שונה — החבילה כולה נדחית ואינה משאירה דבר. אחרי הכניסה
 החבילה **בלתי-משתנה**: אין עריכה, רק מחיקה (מאחורי הקלדת שם) וייבוא
-מחדש. הסוכן מאמת את אותם sha256 שוב לפני ההעתקה ל-NTFS (‏postdeploy.sh).
+מחדש. הסוכן מאמת את אותם sha256 שוב לפני ההעתקה ל-NTFS (postdeploy.sh).
 
-**ההתאמה** (`match`) היא פונקציה טהורה על המלאי (‏`server/agent/inventory.py`)
+**ההתאמה** (`match`) היא פונקציה טהורה על המלאי (`server/agent/inventory.py`)
 ורשימת החבילות — דטרמיניסטית, בלי מצב: אותו מלאי ואותן חבילות נותנים
 תמיד אותה רשימה, באותו סדר. אין התאמה = רשימה ריקה, לא שגיאה.
 """
@@ -35,7 +35,7 @@ from server.library.images import inside
 log = logging.getLogger("imagesrv.drivers")
 
 #: שם חבילה = שם התיקייה = מה שמופיע ב-`\ImageSrv\Drivers\<name>` על
-#: הדיסק המשוחזר. ‏ASCII בלבד: הנתיב הזה נכתב ל-NTFS מלינוקס ונקרא
+#: הדיסק המשוחזר. ASCII בלבד: הנתיב הזה נכתב ל-NTFS מלינוקס ונקרא
 #: ב-Windows, ושם-תיקייה שאינו ASCII הוא סיכון בשני הצדדים.
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -44,13 +44,13 @@ UNVERIFIED = "manifest.unverified"
 #: תקרת קבצים לחבילה — חבילת דרייבר אמיתית היא עשרות קבצים, לא אלפים.
 FILES_LIMIT = 2000
 MATCH_LIMIT = 64
-#: ‏`vendor:device[:class]` — ה-class אופציונלי (#959): ‏INF של דרייבר נוקב
+#: `vendor:device[:class]` — ה-class אופציונלי (#959): INF של דרייבר נוקב
 #: ב-`PCI\VEN_8086&DEV_15BC` בלבד, ואין ממנו דרך לגזור את קוד ה-class
 #: ש-`inventory.PCI_RE` דורש. מזהה בלי class תואם כל בקר עם אותו
 #: vendor:device, בכל class.
 PCI_ID_RE = re.compile(r"^[0-9a-f]{4}:[0-9a-f]{4}(:[0-9a-f]{6})?$")
 #: תקרה לכלל `pci_any` — חבילת דגם של HP/Lenovo מונה מאות מזהי רשת
-#: ואחסון (‏INF אחד של Intel מונה עשרות דורות), וכולם בכלל אחד.
+#: ואחסון (INF אחד של Intel מונה עשרות דורות), וכולם בכלל אחד.
 PCI_ANY_LIMIT = 512
 
 
@@ -62,10 +62,10 @@ class DriverError(ValueError):
 
 
 def safe_relative(path: object) -> str | None:
-    """נתיב יחסי תקין בתוך החבילה — ‏`x/y.inf` — או ``None``.
+    """נתיב יחסי תקין בתוך החבילה — `x/y.inf` — או ``None``.
 
-    לוכסן אחורי (‏tar שנוצר ב-Windows) מנורמל ל-`/`; מוחלט, `..`, רכיב
-    ריק או תו בקרה נדחים. ‏ASCII בלבד מאותו טעם כמו `NAME_RE`.
+    לוכסן אחורי (tar שנוצר ב-Windows) מנורמל ל-`/`; מוחלט, `..`, רכיב
+    ריק או תו בקרה נדחים. ASCII בלבד מאותו טעם כמו `NAME_RE`.
     """
     if not isinstance(path, str) or not path or len(path) > 255:
         return None
@@ -153,7 +153,7 @@ def _id_present(pci: str, have: list[str]) -> bool:
 
 
 def _rule_matches(rule: dict, inventory: dict) -> str | None:
-    """‏`"pci"` / `"model"` כשהכלל תואם, אחרת ``None``."""
+    """`"pci"` / `"model"` כשהכלל תואם, אחרת ``None``."""
     have = list(inventory.get("pci") or [])
     if "pci" in rule:
         return "pci" if all(_id_present(p, have) for p in rule["pci"]) else None
@@ -178,7 +178,7 @@ def match(inventory: dict | None, packages: list[dict]) -> list[dict]:
       vendor:device. כלל דגם תואם כשה-vendor שווה ל-`sys_vendor` וה-model
       ל-`product_name` **או** `product_version` (בלי רגישות לרישיות
       ולרווחים בקצוות).
-    - חבילה מתאימה כשאחד מכלליה תואם. ‏**PCI גובר על דגם**: חבילה
+    - חבילה מתאימה כשאחד מכלליה תואם. **PCI גובר על דגם**: חבילה
       שתאמה ב-PCI מסומנת `pci` גם אם תאמה גם בדגם, וההתאמות לפי PCI
       קודמות ברשימה — הן הראיה מהחומרה עצמה, ושם הדגם הוא נפילה אחורה.
     - בלי מלאי, או בלי חבילה תואמת — רשימה ריקה. לא שגיאה.

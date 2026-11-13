@@ -9,7 +9,7 @@
 השפה: ההגדרה ``ui_language`` אם קיימת וידועה, אחרת ``he``. #1700 יקבע את
 המפתח הסופי; ערך לא מוכר נופל לעברית, כמו היום (``hello`` מכריז ``he``).
 
-‏``en`` הוא מקום שמור: מלא, כדי שטסט יפיל מפתח שנוסף לעברית בלי אנגלית,
+``en`` הוא מקום שמור: מלא, כדי שטסט יפיל מפתח שנוסף לעברית בלי אנגלית,
 אבל אינו נבחר בשום מקום עד #1700.
 """
 
@@ -59,9 +59,9 @@ CATALOG: dict[str, dict[str, str]] = {
         # מבנה המייל
         "subject": "[ImageSrv] {server}: {label}",
         "subject_count": "[ImageSrv] {server}: {label} ({count})",
-        "heading": "שרת ImageSrv ‏{server}: {label}",
+        "heading": "שרת ImageSrv \u200f{server}: {label}",
         "dropped": "ועוד {count} אירועים — ראו את יומן השרת",
-        "footer": "נשלח משרת ImageSrv ‏{server} · לשינוי ההתראות: הגדרות › התראות במייל",
+        "footer": "נשלח משרת ImageSrv \u200f{server} · לשינוי ההתראות: הגדרות › התראות במייל",
         # זמן
         "time_unknown": "לא ידוע",
         "utc_suffix": " UTC",

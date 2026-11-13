@@ -1,4 +1,4 @@
-"""‏#1193 — git writes happen inside the detached upgrade script.
+"""#1193 — git writes happen inside the detached upgrade script.
 
 The real bash script runs against PATH shims.  The assertions cover the
 observable command order and the persisted status.  The fetch regression also
@@ -200,7 +200,7 @@ def test_checkout_failure_records_git_error_and_does_not_restart(tmp_path, bindi
 
 
 
-# --- ‏#1185: אחרי שה-checkout הצליח, כל כשל מחזיר את העץ לתג הקודם -----------------
+# --- #1185: אחרי שה-checkout הצליח, כל כשל מחזיר את העץ לתג הקודם -----------------
 #
 # העץ הוא מה שהשרת יריץ באתחול הבא. כשל שעוצר את הסקריפט אחרי ה-checkout ולפני
 # החזרה משאיר את /opt/imagesrv על התג החדש בזמן שהשירות הרץ (והיחידות וה-initrd)
@@ -238,7 +238,7 @@ def test_empty_commit_answers_are_not_the_same_commit(tmp_path, bindir):
     data = tmp_path / "data"
     _seed_db(data)
     repo = _fake_repo(tmp_path, live_ok=True)
-    # ‏#1546: לפני ה-checkout ה-HEAD נקרא (יעד החזרה); הריקים — רק אחריו.
+    # #1546: לפני ה-checkout ה-HEAD נקרא (יעד החזרה); הריקים — רק אחריו.
     fake_tool(bindir, "git", _git_shim(
         checkout='touch "$FAKE_LOG.co"',
         head='$([ -e "$FAKE_LOG.co" ] || echo fake-commit-before)', tag_commit=""))
@@ -253,7 +253,7 @@ def test_empty_commit_answers_are_not_the_same_commit(tmp_path, bindir):
 
 
 def test_an_unreadable_head_before_the_upgrade_refuses_without_touching_the_tree(tmp_path, bindir):
-    """‏#1546: יעד החזרה הוא ה-HEAD של לפני הריצה. בלי ראיה מהו — לא משדרגים."""
+    """#1546: יעד החזרה הוא ה-HEAD של לפני הריצה. בלי ראיה מהו — לא משדרגים."""
     data = tmp_path / "data"
     _seed_db(data)
     repo = _fake_repo(tmp_path, live_ok=True)

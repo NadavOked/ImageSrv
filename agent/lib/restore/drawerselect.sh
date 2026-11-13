@@ -35,8 +35,8 @@ resolve_target_drawers() {
         esac
     done
     [ -n "$_disks" ] || die_local "the room selected no writable drawers"
-    # #2448: what the console showed in each chosen slot (the serial and size of this
-    # hello's own inventory) -> drawer_shown, port|size_bytes|serial. Absent/null = a
+    # #2448: what the console showed in each chosen slot (#2458: at the choice, in the wave
+    # it opened; later, this hello's inventory) -> drawer_shown, port|size_bytes|serial. Absent/null = a
     # server from before #2448: the slot alone, as before. Anything else -- or jq that
     # broke on it -- is not "nothing to compare": die_local, nothing written (principle 5).
     rm -f "$RUN_DIR/drawer_shown"

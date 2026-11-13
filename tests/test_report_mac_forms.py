@@ -1,7 +1,7 @@
-"""‏#108 — דיווח התקדמות בכל אחת מצורות ה-MAC של סעיף 6.
+"""#108 — דיווח התקדמות בכל אחת מצורות ה-MAC של סעיף 6.
 
-‏`hello` ו-`pulls` מנרמלים את ה-MAC לפני שהם נוגעים ב-DB, והסכימה
-מצהירה שהעמודה קנונית (‏`db.py`: "קנוני: lowercase עם נקודתיים").
+`hello` ו-`pulls` מנרמלים את ה-MAC לפני שהם נוגעים ב-DB, והסכימה
+מצהירה שהעמודה קנונית (`db.py`: "קנוני: lowercase עם נקודתיים").
 דיווח ההתקדמות השווה גולמי — ולכן מכונה שהצטרפה כ-`b4:2e:...`
 ומדווחת כ-`B4-2E-...` נענתה "אינה חברה", נרשמה ביומן כמדווחת
 מחוץ לסבב, והגל לא נסגר כי שורתה נשארה `waiting`.
@@ -103,7 +103,7 @@ def test_every_form_of_section_six_reaches_the_same_row(server, form):
 
 
 def test_a_capture_task_report_in_dashes_updates_the_task(server):
-    """אותו באג ב-`_ingest_task`: ‏`tasks.mac` קנוני גם הוא."""
+    """אותו באג ב-`_ingest_task`: `tasks.mac` קנוני גם הוא."""
     mac = "aa:bb:cc:00:00:10"
     assert server["admin"].post("/api/console/machines", json={
         "mac": mac, "name": "BUILD-PC", "group_id": "grp_BUILD",

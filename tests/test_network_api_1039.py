@@ -1,14 +1,14 @@
-"""‏#1039: שני פערי ה-API של אובייקט הרשת — מי מחובר לקונסולה, ומי חכור.
+"""#1039: שני פערי ה-API של אובייקט הרשת — מי מחובר לקונסולה, ומי חכור.
 
-‏`GET /api/console/sessions` (admin): ‏`[{user, ip, since, last_seen}]`.
-השרת **אינו** כותב ל-DB בכל בקשה (נדב): ‏`last_seen` מתעדכן לכל היותר
+`GET /api/console/sessions` (admin): `[{user, ip, since, last_seen}]`.
+השרת **אינו** כותב ל-DB בכל בקשה (נדב): `last_seen` מתעדכן לכל היותר
 פעם בדקה לכל session — נמדד כאן בשעון מוזרק, מול הטבלה עצמה.
 
-‏`GET /api/console/net/interfaces/{n}/leases` (admin): קובץ החכירות של
+`GET /api/console/net/interfaces/{n}/leases` (admin): קובץ החכירות של
 dnsmasq, מסונן לרשתות של הכרטיס. עיקרון 5: קובץ שלא נקרא הוא
-‏`checked:false` + ‏`reason` + ‏`leases:null` — לא רשימה ריקה. הקובץ מוזרק
-(‏`identity_hooks["leases"]`, כמו `dhcp_hooks`); הבדיקות לעולם לא קוראות
-את ‏`/var/lib/misc/dnsmasq.leases` של המכונה שהן רצות עליה.
+`checked:false` + `reason` + `leases:null` — לא רשימה ריקה. הקובץ מוזרק
+(`identity_hooks["leases"]`, כמו `dhcp_hooks`); הבדיקות לעולם לא קוראות
+את `/var/lib/misc/dnsmasq.leases` של המכונה שהן רצות עליה.
 """
 
 from __future__ import annotations
@@ -116,9 +116,9 @@ def test_admin_sees_who_is_connected_from_where_and_since_when(net, presence_clo
     body = resp.json()
     assert sorted(s["user"] for s in body) == ["noc", "noc2"]
     for s in body:
-        # ‏#2552 הוסיף sid/role/current/monitor (מסך הסשנים); ארבעת הראשונים הם של #1039
+        # #2552 הוסיף sid/role/current/monitor (מסך הסשנים); ארבעת הראשונים הם של #1039
         assert set(s) == {"user", "ip", "since", "last_seen", "sid", "role", "current", "monitor"}
-        assert s["ip"] == "testclient"               # ‏request.client.host של TestClient
+        assert s["ip"] == "testclient"               # request.client.host של TestClient
         assert s["since"] and s["last_seen"]
         assert s["since"] <= s["last_seen"]
 
@@ -155,7 +155,7 @@ def test_logout_and_revocation_remove_the_session(net, presence_clock):
     assert net["admin2"].post("/api/console/logout").status_code == 200
     assert [s["user"] for s in net["admin"].get("/api/console/sessions").json()] == ["noc"]
 
-    # ביטול כל ה-sessions של המשתמש (‏auth_epoch, ‏#1075) — שורה שנשארת
+    # ביטול כל ה-sessions של המשתמש (auth_epoch, #1075) — שורה שנשארת
     # הייתה "מחובר" על עוגייה שכבר אינה תקפה.
     net["admin2"].post("/api/console/login",
                        json={"username": "noc2", "password": "admin-pass-456"})
@@ -165,7 +165,7 @@ def test_logout_and_revocation_remove_the_session(net, presence_clock):
 
 
 def test_logout_revokes_a_copied_cookie_and_only_that_one(net, presence_clock, monkeypatch):
-    """‏#1633: logout מחק רק את העוגייה בדפדפן. העוגייה חסרת-מצב, ולכן עותק
+    """#1633: logout מחק רק את העוגייה בדפדפן. העוגייה חסרת-מצב, ולכן עותק
     שנגנב לפני היציאה נשאר תקף עד 12 שעות אחריה. אחרי התיקון השרת דוחה את
     העותק — ורק אותו: כניסה אחרת של אותו משתמש (דפדפן שני) נשארת מחוברת.
 
@@ -220,7 +220,7 @@ def test_unreadable_lease_file_is_not_an_empty_list(net):
 
 
 def test_unreadable_lease_file_keeps_the_os_text_in_the_server_log_595(net, caplog):
-    """‏#595: הנתיב ו-strerror של ה-OSError ליומן השרת; ללקוח — משפט קבוע."""
+    """#595: הנתיב ו-strerror של ה-OSError ליומן השרת; ללקוח — משפט קבוע."""
     caplog.set_level("WARNING", logger="imagesrv.console_dhcp")
     net["lease_path"].unlink()
     body = net["admin"].get("/api/console/net/interfaces/eth0/leases").json()

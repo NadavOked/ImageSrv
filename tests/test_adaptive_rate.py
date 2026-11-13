@@ -1,13 +1,13 @@
 """קצב מולטיקאסט אוטומטי לגמרי — הכרעת נדב 11/10: "אני לא נוגע בזה,
 והשרת לבד מחליט".
 
-על גבי #447 (‏`server/rounds/drive_rates.py`, שעד כאן רק הוריד מתחת לתקרה):
+על גבי #447 (`server/rounds/drive_rates.py`, שעד כאן רק הוריד מתחת לתקרה):
 
-* **פתיחה ב-600m** — נמדד נקי, ‏re-xmits=0 (מ.19, ‏06/09). ‏`IMAGESRV_MAX_BITRATE`,
+* **פתיחה ב-600m** — נמדד נקי, re-xmits=0 (מ.19, 06/09). `IMAGESRV_MAX_BITRATE`,
   כשהוגדר, הוא הגג; כשלא — הגג הוא 900m.
 * **למעלה** — רק על ראיה חיובית לגל נקי: אפס שידורים חוזרים **וגם** כל
   כונן בגל עמד בקצב. מדידה שחסרה = נשאר במקום (עיקרון 5).
-* **למטה** — שידורים חוזרים מעל סף קטן (‏‎-25%), או כונן איטי מוכר (#447).
+* **למטה** — שידורים חוזרים מעל סף קטן (-25%), או כונן איטי מוכר (#447).
 * **רצפה** — רבע מקצב הפתיחה; **גג** — לעולם לא מעליו.
 * **זיכרון** — לכל מחשב שיכפול (MAC) הגל האחרון שלו הוא נקודת המוצא, והגל
   יוצא מהמינימום על המכונות; מכונה שלא נראתה — פתיחה (#1471, נדב 16/10).
@@ -23,10 +23,10 @@ from server import db
 from server.rounds import drive_rates
 
 MB = 1_000_000
-SENT = 10 ** 10                     # ‏10GB בגל — ‏6.87 מיליון בלוקים של 1456
+SENT = 10 ** 10                     # 10GB בגל — 6.87 מיליון בלוקים של 1456
 CLEAN = 0
 FEW = 10                            # מעל אפס, מתחת לסף — "לא נקי, לא רע"
-MANY = 100_000                      # ‏~1.5% מהבלוקים — מעל הסף
+MANY = 100_000                      # ~1.5% מהבלוקים — מעל הסף
 
 
 @pytest.fixture()
@@ -51,16 +51,16 @@ def _kept(conn, session, serial, rate_bps, cap_bps, model="EVO 870"):
     conn.commit()
 
 
-STREAM_FULL = 0.95                  # ‏udp-sender מגיע ל-95.7% מהתקרה (06/09)
+STREAM_FULL = 0.95                  # udp-sender מגיע ל-95.7% מהתקרה (06/09)
 
 
 def _wave(conn, session, serials=("S1", "S2"), ceiling=None, loss=CLEAN,
           sent=SENT, kept_up=True, measured=True, stream=STREAM_FULL,
           stream_s=600, mac=MAC_A, rcvbuf=0):
     """גל שלם: השרת בחר קצב ויצא, כל כונן השאיר דגימה, והשולח דיווח.
-    ‏`stream` — הקצב הממוצע של הזרם עצמו, כחלק מקצב הגל (‏None = לא נמדד).
-    ‏`mac` — מחשב השיכפול של כל הכוננים בגל (#1471).
-    ‏`rcvbuf` — מה שהמקלט דיווח שהקרנל שלו זרק (הכרעת נדב 17/10; ‏None = לא דיווח)."""
+    `stream` — הקצב הממוצע של הזרם עצמו, כחלק מקצב הגל (None = לא נמדד).
+    `mac` — מחשב השיכפול של כל הכוננים בגל (#1471).
+    `rcvbuf` — מה שהמקלט דיווח שהקרנל שלו זרק (הכרעת נדב 17/10; None = לא דיווח)."""
     rate = drive_rates.decide(conn, session,
                               lambda: [_drive(s, mac=mac) for s in serials], ceiling)
     cap = drive_rates.parse_bitrate(rate) // 8
@@ -79,7 +79,7 @@ def _wave(conn, session, serials=("S1", "S2"), ceiling=None, loss=CLEAN,
 
 
 def _next(conn, serials=("S1", "S2"), ceiling=None, macs=None):
-    """‏`macs` — המכונה של כל כונן, באותו סדר (‏None = כולם על מחשב 1)."""
+    """`macs` — המכונה של כל כונן, באותו סדר (None = כולם על מחשב 1)."""
     macs = macs or [MAC_A] * len(serials)
     return drive_rates.choose(conn, [_drive(s, mac=m) for s, m in zip(serials, macs)],
                               ceiling)
@@ -106,7 +106,7 @@ def test_a_configured_cap_below_600m_is_where_it_opens(conn):
 
 
 def test_a_configured_cap_above_900m_raises_the_roof_not_the_start(conn):
-    # ‏15/10 (ב): מחשב שיכפול שמהירותו לא ידועה מונח 1Gb/s — ואז הגג 900m גם
+    # 15/10 (ב): מחשב שיכפול שמהירותו לא ידועה מונח 1Gb/s — ואז הגג 900m גם
     # מתחת ל-"1g". כשהמקבל הוגדר 10G — הגג המוגדר הוא שקובע, כמו קודם.
     from server.rounds import nic_speed                                # noqa: PLC0415
     assert _next(conn, ceiling="1g")["ceiling"] == "900m"
@@ -190,7 +190,7 @@ def test_a_drive_of_the_wave_with_no_sample_is_no_evidence(conn):
 
 
 def test_a_clean_wave_whose_stream_ran_slow_does_not_raise(conn):
-    """בקרה שלילית — התנאי השני (המתאם, 11/10): ‏`bytes_written` של כונן נספר
+    """בקרה שלילית — התנאי השני (המתאם, 11/10): `bytes_written` של כונן נספר
     אחרי פריסת הדחיסה, ולכן כונן שהאט את הזרם לחצי עדיין "עמד בקצב". הזרם
     עצמו — מה ש-udp-sender ספר — רץ ב-50% מקצב הגל: אין רשות לעלות."""
     _wave(conn, "ses_1", stream=0.5)
@@ -293,7 +293,7 @@ def test_the_floor_follows_a_lower_configured_cap(conn):
 
 
 def test_a_clean_wave_never_goes_above_the_configured_cap(conn):
-    """בקרה שלילית — עלייה מעל הגג: ‏`IMAGESRV_MAX_BITRATE` הוא מה שהשרת מכבד."""
+    """בקרה שלילית — עלייה מעל הגג: `IMAGESRV_MAX_BITRATE` הוא מה שהשרת מכבד."""
     seen = [_wave(conn, f"ses_{n}", ceiling="200m") for n in range(3)]
     assert seen == ["200m", "200m", "200m"]
     got = _next(conn, ceiling="200m")
@@ -344,7 +344,7 @@ def test_new_drawers_on_a_known_machine_continue_from_its_last_wave(conn):
     עד היום כונן שלא היה בגל הקודם החזיר את כל הגל לפתיחה (600m), ולכן
     הקצב לא טיפס לעולם. הזיכרון הוא של המכונה: הגל הקודם שלה נקי — עולים.
     (אותו מספר מגירות: מגל עם פחות מגירות אין עלייה — הכרעת נדב 17/10,
-    ‏`test_wave_rate_policy`.)"""
+    `test_wave_rate_policy`.)"""
     _wave(conn, "ses_1", serials=("S1", "S2"))
     got = _next(conn, serials=("N1", "N2"))
     assert got["max_bitrate"] == "700m"
@@ -391,7 +391,7 @@ def test_each_machine_is_judged_by_its_own_last_wave(conn):
 
 def test_a_drive_without_a_machine_is_an_unknown_machine(conn):
     """עיקרון 5: כונן בלי MAC אינו "מכונה מוכרת" — פתיחה, לא התעלמות. גם
-    כשגל קודם נרשם עם כונן בלי MAC: ‏None אינו מכונה שאפשר לזכור."""
+    כשגל קודם נרשם עם כונן בלי MAC: None אינו מכונה שאפשר לזכור."""
     _wave(conn, "ses_0", serials=("S0",), mac=None)
     _wave(conn, "ses_1", serials=("S1",))
     got = drive_rates.choose(conn, [_drive("S2"), _drive("S3", mac=None)], None)
@@ -413,7 +413,7 @@ def test_a_wave_is_not_its_own_previous(conn):
     """החלטה חוזרת לאותו גל נשענת על הגל שלפניו — לא על עצמה (אחרת גל
     נקי שנבחר מחדש היה מטפס מעצמו)."""
     _wave(conn, "ses_1")
-    assert _wave(conn, "ses_2") == "700m"            # ‏ses_2 נקי ונמדד
+    assert _wave(conn, "ses_2") == "700m"            # ses_2 נקי ונמדד
     again = drive_rates.decide(conn, "ses_2", lambda: [_drive("S1"), _drive("S2")], None)
     assert again == "700m"
 

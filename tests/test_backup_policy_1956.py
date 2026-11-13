@@ -325,7 +325,9 @@ def test_a_failed_write_prunes_nothing(box, bytes_are_gb, monkeypatch):
     assert tick(box) == 1
     assert copies(box) == [OLD]
     row = health(box)
-    assert row["state"] == "bad" and "No space left" in row["detail"], row
+    # #2543: the OS text goes to the server log; the operator reads our sentence.
+    assert row["state"] == "bad" and "הפרטים ביומן השרת" in row["detail"], row
+    assert "No space left" not in row["detail"], row
 
 
 def test_the_cap_holds_even_when_the_saved_reserve_is_larger(box, bytes_are_gb, monkeypatch):

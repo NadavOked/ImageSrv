@@ -1,18 +1,18 @@
-"""‏#1943 — שאריות #1908: כל קובץ שהשרת מחליף נכתב ב-``write_atomic``.
+"""#1943 — שאריות #1908: כל קובץ שהשרת מחליף נכתב ב-``write_atomic``.
 
 שתי שאלות לכל אתר, כל אחת בטסט משלה:
 
-* **כתיבה שנקטעה** (קבוצה א' ב-#1943 — כתיבה במקום): ‏``io.open`` מוזרק
+* **כתיבה שנקטעה** (קבוצה א' ב-#1943 — כתיבה במקום): ``io.open`` מוזרק
   כך שהכתיבה לקובץ **הזה בלבד** כותבת חצי וזורקת ``ENOSPC``. הישן נשאר
   שלם, ואין קובץ זמני יתום לידו.
-* **עמידות** (קבוצה ב' — tmp + ‏``os.replace`` בלי ``fsync``): ‏``os.fsync``
+* **עמידות** (קבוצה ב' — tmp + ``os.replace`` בלי ``fsync``): ``os.fsync``
   נרשם; הבייטים שעל הדיסק בנתיב אחרי הכתיבה הם inode שעבר ``fsync``, ובפוסיקס
-  גם התיקייה שלו (ה-rename). ‏tmp+replace בלי fsync "אטומי" מול קריסה, אבל
+  גם התיקייה שלו (ה-rename). tmp+replace בלי fsync "אטומי" מול קריסה, אבל
   נפילת חשמל שניות אחריו יכולה להשאיר קובץ ריק (ext4 delayed allocation).
 
 ההזרקה **סלקטיבית לפי שם** כי בחלק מהאתרים יש לפני הכתיבה הזו כתיבה אחרת
-(מפתח לפני תעודה, ‏state.json לפני המניפסט). ‏``write_atomic`` פותח את הקובץ
-הזמני דרך ``tempfile.mkstemp`` + ‏``os.fdopen`` — ה-fd ממופה חזרה לשם דרך
+(מפתח לפני תעודה, state.json לפני המניפסט). ``write_atomic`` פותח את הקובץ
+הזמני דרך ``tempfile.mkstemp`` + ``os.fdopen`` — ה-fd ממופה חזרה לשם דרך
 ``mkstemp`` עטוף.
 """
 
@@ -95,7 +95,7 @@ def leftovers(directory: Path, *keep: str) -> list[str]:
     return sorted(p.name for p in directory.iterdir() if p.name not in keep)
 
 
-# --- storage_nodes: ‏server.crt של זהות השרת בין אתרים -------------------------
+# --- storage_nodes: server.crt של זהות השרת בין אתרים -------------------------
 
 def test_interserver_cert_survives_a_write_that_dies_halfway(tmp_path, monkeypatch):
     conn = connect(tmp_path / "imagesrv.db")
@@ -174,13 +174,13 @@ def test_a_rollback_crumb_cut_halfway_leaves_no_torn_crumb(tmp_path, monkeypatch
     assert leftovers(tmp_path) == []          # פירור חתוך היה נקרא "פגום" בהפעלה הבאה
 
 
-# --- storage_locations: ‏/etc/fstab וקובץ אישורי CIFS -----------------------------
+# --- storage_locations: /etc/fstab וקובץ אישורי CIFS -----------------------------
 
 def test_fstab_is_durable(tmp_path, monkeypatch, fsynced):
     fstab = tmp_path / "fstab"
     fstab.write_text("UUID=1 / ext4 defaults 0 1\n", encoding="utf-8")
     monkeypatch.setattr(storage_locations, "FSTAB_PATH", fstab)
-    monkeypatch.setattr(storage_locations, "daemon_reload",   # ‏#2122: לא PID 1 של המריץ
+    monkeypatch.setattr(storage_locations, "daemon_reload",   # #2122: לא PID 1 של המריץ
                         lambda: storage_locations.HookResult(storage_locations.OK), raising=False)
     entries = [{"source": "//nas/images", "target": "/srv/images-2", "fstype": "cifs"}]
     assert storage_locations.fstab_write(entries).status == storage_locations.OK
@@ -209,7 +209,7 @@ def test_cifs_credentials_are_durable_and_0600(tmp_path, fsynced):
         assert path.stat().st_mode & 0o777 == 0o600
 
 
-# --- images: ‏manifest.json בעריכה, ורשימת הקריאה החוזרת --------------------------
+# --- images: manifest.json בעריכה, ורשימת הקריאה החוזרת --------------------------
 
 def test_library_manifest_edit_survives_a_write_that_dies_halfway(tmp_path, monkeypatch):
     path = tmp_path / "manifest.json"
@@ -249,7 +249,7 @@ def test_readback_list_is_durable(tmp_path, fsynced):
     assert_durable(tmp_path / "img_1805aa" / "p1.esp.pcl.zst.readback", fsynced)
 
 
-# --- wizard: ‏firstboot.status (כישלון והצלחה) -----------------------------------
+# --- wizard: firstboot.status (כישלון והצלחה) -----------------------------------
 
 def _wizard(tmp_path):
     status = tmp_path / "firstboot.status"
@@ -281,7 +281,7 @@ def test_wizard_done_status_cut_halfway_leaves_no_tmp(tmp_path, monkeypatch):
     assert leftovers(tmp_path, status.name) == []
 
 
-# --- vmupdate: ‏state.json ומניפסט הגרסה החדשה -----------------------------------
+# --- vmupdate: state.json ומניפסט הגרסה החדשה -----------------------------------
 
 def test_vm_update_state_survives_a_write_that_dies_halfway(tmp_path, monkeypatch):
     (tmp_path / "state.json").write_text(OLD, encoding="utf-8")

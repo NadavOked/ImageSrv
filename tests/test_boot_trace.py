@@ -1,13 +1,13 @@
 """שביל הפירורים של האתחול (#400).
 
-‏2026-09-05, הבדיקה הראשונה על ברזל: מחשב שיכפול פיזי קיבל DHCP, טען
-‏GRUB, משך את התפריט הדינמי — ואז שבע דקות שקט. הוא לא ביקש `linux.mod`
+2026-09-05, הבדיקה הראשונה על ברזל: מחשב שיכפול פיזי קיבל DHCP, טען
+GRUB, משך את התפריט הדינמי — ואז שבע דקות שקט. הוא לא ביקש `linux.mod`
 ולא `vmlinuz`, ואי אפשר היה לדעת למה: למחשבי שיכפול אין מסך **בהגדרה**
-(#17). בין ‎`GET /boot/menu` ל-`POST /api/v1/agent/hello` השרת לא ידע כלום.
+(#17). בין `GET /boot/menu` ל-`POST /api/v1/agent/hello` השרת לא ידע כלום.
 
 מה שנבדק כאן הוא בדיוק שני הצדדים של הדרישה, והם מושכים לכיוונים הפוכים:
 
-1. **שביל שנכשל אינו מפיל את האתחול.** ‏`/boot/step` שאינו זמין, ‏MAC
+1. **שביל שנכשל אינו מפיל את האתחול.** `/boot/step` שאינו זמין, MAC
    פגום, רושם שזורק — כולם מחזירים 200 ומשאירים מכונה שממשיכה לעלות.
 2. **ואינו נבלע בשקט.** הרשימה מנויה מראש (`boot/trace.py`), ולכן
    "לא הגיע ל-http-ok" הוא **שם של שלב** ולא "לא ידוע".
@@ -90,7 +90,7 @@ def test_a_step_that_is_not_in_the_list_is_refused():
     לניחוש — ואז אין לו שום ערך."""
     spy = Spy()
     status, _ = call("/step", f"mac={MAC}&s=almost-there", spy)
-    assert status == 200          # ‏GRUB לא רואה שגיאה
+    assert status == 200          # GRUB לא רואה שגיאה
     assert spy.steps == []        # ...והצעד לא נרשם
 
 
@@ -146,7 +146,7 @@ def test_the_entry_carries_the_five_breadcrumbs_in_order():
 
 
 def test_each_breadcrumb_sits_between_the_commands_it_dates():
-    """‏entry לפני `insmod http`, ‏http-ok אחריו, ואז לפני linux, לפני
+    """entry לפני `insmod http`, http-ok אחריו, ואז לפני linux, לפני
     initrd, ואחריו. זה מה שהופך "נעצר" ל"נעצר **איפה**"."""
     lines = agent_entry(render(CLONER, CONFIG))
     where = {line.split()[1]: i for i, line in enumerate(lines)
@@ -257,10 +257,10 @@ def test_a_breadcrumb_never_guards_a_boot_command():
     פקודה שנכשלה בתוך menuentry מדפיסה שגיאה וההרצה עוברת לבאה אחריה;
     מה שמפיל ערך הוא `linux`/`initrd` שנכשלים. לכן כל קריאת פירור
     חייבת לעמוד **לבדה** בשורה — לא לפני `&&`, ולא על אותה שורה עם
-    פקודת אתחול. שרת שאינו עונה על ‎/boot/step מייצר שגיאה על המסך,
+    פקודת אתחול. שרת שאינו עונה על /boot/step מייצר שגיאה על המסך,
     לא מכונה שאינה עולה.
 
-    ‏#503 מתיר `if [ "$?" = "0" ]` סביב הפירור (הפקודה שומרת על הפירור,
+    #503 מתיר `if [ "$?" = "0" ]` סביב הפירור (הפקודה שומרת על הפירור,
     לא להפך). השורה של הקריאה עצמה נשארת לבדה — אחרת הפירור היה יכול
     לשבת לפני `&& linux` ולמנוע אתחול.
     """
@@ -271,7 +271,7 @@ def test_a_breadcrumb_never_guards_a_boot_command():
 
 
 def test_the_trace_url_is_quoted_so_grub_does_not_choke_on_the_ampersand():
-    """‏`&` הוא תו מיוחד בלקסר של GRUB. מחוץ למירכאות הוא שובר את השורה
+    """`&` הוא תו מיוחד בלקסר של GRUB. מחוץ למירכאות הוא שובר את השורה
     — כלומר את הפונקציה — כלומר את ערך האתחול של כל מכונה ברשת."""
     body = re.search(rf"function {trace.GRUB_FUNCTION_NAME} \{{\n(.*?)\n\}}",
                      render(CLONER, CONFIG), re.S).group(1).strip()
@@ -340,7 +340,7 @@ def test_progress_keeps_the_first_timestamp(conn):
 
 
 def test_a_step_that_went_backwards_is_a_new_boot(conn):
-    """המכונה אותחלה מחדש. ‏`first_at` מתאפס, אחרת "לפני 40 דקות" יתאר
+    """המכונה אותחלה מחדש. `first_at` מתאפס, אחרת "לפני 40 דקות" יתאר
     ניסיון שכבר נגמר."""
     boottrace.record(conn, MAC, "pre-boot")
     conn.execute("UPDATE boot_steps SET first_at = '2020-01-01T00:00:00+00:00'")
@@ -413,8 +413,8 @@ def stalled(step: str, minutes: int = 7) -> dict:
 def test_a_machine_that_stopped_is_named_by_the_step_it_did_not_reach():
     """זו כל הבקשה של #400: לא "לא ידוע", אלא שם של שלב.
 
-    ‏HP שהשאיר `entry` ושתק שבע דקות נעצר לפני `http-ok` — כלומר על
-    ‏`insmod http`. זה משפט שאפשר לפעול לפיו.
+    HP שהשאיר `entry` ושתק שבע דקות נעצר לפני `http-ok` — כלומר על
+    `insmod http`. זה משפט שאפשר לפעול לפיו.
     """
     info = stalled("entry")
     assert info["step"] == "entry"
@@ -503,10 +503,10 @@ def _hello(mac: str) -> dict:
     return hello_body(mac)
 
 
-# --- מי רשאי לכתוב פירור אתחול (‏#584) ----------------------------------------
+# --- מי רשאי לכתוב פירור אתחול (#584) ----------------------------------------
 #
-# ‏`GET /boot/step?mac=<MAC>&s=<צעד>` רשם פירור לפי ה-MAC שבשאילתה, בלי
-# אימות הפונה. אותה משפחה בדיוק כמו #536: ‏MAC בשאילתה אינו זהות, ומחוץ
+# `GET /boot/step?mac=<MAC>&s=<צעד>` רשם פירור לפי ה-MAC שבשאילתה, בלי
+# אימות הפונה. אותה משפחה בדיוק כמו #536: MAC בשאילתה אינו זהות, ומחוץ
 # לווילן ההפצה אין ראיה שהפונה הוא המכונה. פירור מזויף הופך "לא ידוע"
 # ל"בדקנו, הגיע" (עיקרון 5) ומאפס את `first_at` של שביל אמיתי. ההכרעה
 # המודעת (#584): פירור מחוץ לווילן **אינו נרשם** — כמו שבקשת תפריט מחוץ
@@ -519,19 +519,19 @@ OFF_VLAN = "http://10.10.10.8:8080"
 
 
 def step_row(server, mac: str):
-    """שורת `boot_steps` של ה-MAC — **המצב עצמו**. ‏None = לא נרשם פירור."""
+    """שורת `boot_steps` של ה-MAC — **המצב עצמו**. None = לא נרשם פירור."""
     return server["ctx"].conn.execute(
         "SELECT step, first_at FROM boot_steps WHERE mac = ?", (mac,)).fetchone()
 
 
 def test_a_step_from_off_vlan_is_not_recorded(server):
-    """הבאג עצמו: ‏`GET /boot/step?mac=&s=` מרשת שאינה וילן ההפצה, למכונה
+    """הבאג עצמו: `GET /boot/step?mac=&s=` מרשת שאינה וילן ההפצה, למכונה
     שמעולם לא אתחלה — אסור שישאיר לה פירור."""
     anon = server["anon"]
     assert step_row(server, MAC) is None
 
     resp = anon.get(f"{OFF_VLAN}/boot/step?mac={MAC}&s=agent-start")
-    assert resp.status_code == 200              # ‏GRUB מקבל 200 בכל מקרה
+    assert resp.status_code == 200              # GRUB מקבל 200 בכל מקרה
     assert resp.content == trace.TINY_BODY
 
     assert step_row(server, MAC) is None
@@ -602,7 +602,7 @@ def posix(p: Path) -> str:
 def test_a_dead_step_endpoint_does_not_stop_the_agent(tmp_path):
     """הבקרה השלילית של "האתחול ממשיך", בצד הסוכן.
 
-    ‏127.0.0.1:9 הוא discard — אין שם מאזין. ‏`trace_step` נכשל, אומר
+    127.0.0.1:9 הוא discard — אין שם מאזין. `trace_step` נכשל, אומר
     זאת, מחזיר 0, והפקודה שאחריו רצה. מכונה שנעצרת בגלל כלי אבחון היא
     בדיוק מה ש-#400 אוסר.
     """

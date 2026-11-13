@@ -225,7 +225,7 @@ if [ "$SKIP_APT" -eq 0 ]; then
         busybox-static zstd partclone udpcast gdisk curl jq pv \
         ntfs-3g libhivex-dev hdparm coreutils util-linux openssl \
         e2fsprogs btrfs-progs xfsprogs cpio gzip gcc libc6-dev ethtool \
-        smartmontools dmidecode pciutils pci.ids efibootmgr dmsetup
+        smartmontools dmidecode pciutils pci.ids efibootmgr dmsetup tzdata
     # #1050: the toolbox delta -- only what the selection needs, or nothing.
     if [ "${#TOOL_PKGS[@]}" -gt 0 ]; then
         echo "tools: installing ${TOOL_PKGS[*]}"
@@ -366,6 +366,17 @@ if [ "$WITH_INSTALLER" -eq 1 ]; then
     install -m 0644 "$INSTALLER_SRC"/lib/*.sh           "$ROOT/usr/lib/imagesrv/installer/lib/"
     # #1447: the zone list answers.sh checks the timezone against (not a .sh)
     install -m 0644 "$INSTALLER_SRC/lib/zones.txt"      "$ROOT/usr/lib/imagesrv/installer/lib/zones.txt"
+    # #2957: the GUI's time step knows a zone by /usr/share/zoneinfo/<zone> (native-gui
+    # install.c) and draws the hour through it. Without tzdata in the live image
+    # Asia/Jerusalem was "not known here" and the boxes were UTC (ESXi, v0.92.0, 12/11).
+    # Every zone the engine accepts (zones.txt) must be there after the copy.
+    [ -d /usr/share/zoneinfo ] || { echo "--installer: /usr/share/zoneinfo is missing on the builder (tzdata)" >&2; exit 1; }
+    mkdir -p "$ROOT/usr/share/zoneinfo"
+    cp -a /usr/share/zoneinfo/. "$ROOT/usr/share/zoneinfo/"
+    while IFS= read -r _zone; do
+        case "$_zone" in ''|'#'*) continue ;; esac
+        [ -s "$ROOT/usr/share/zoneinfo/$_zone" ]             || { echo "--installer: zone $_zone (zones.txt) is not in the live image's zoneinfo" >&2; exit 1; }
+    done < "$INSTALLER_SRC/lib/zones.txt"
     if [ -f "$INSTALLER_SRC/gui-bridge.sh" ]; then
         install -m 0755 "$INSTALLER_SRC/gui-bridge.sh" "$ROOT/usr/lib/imagesrv/installer/gui-bridge.sh"
     else

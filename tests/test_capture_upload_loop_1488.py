@@ -1,7 +1,7 @@
-"""‏#1488: ההעלאה של קובץ מחיצה אינה חוסמת את לולאת האירועים.
+"""#1488: ההעלאה של קובץ מחיצה אינה חוסמת את לולאת האירועים.
 
-‏`stream_to` כתב וגיבב כל chunk ישירות בתוך `async for` — על הלולאה
-שמשותפת לסוכנים ולקונסולה (‏`server/main.py`). דיסק שרת איטי הפך כל
+`stream_to` כתב וגיבב כל chunk ישירות בתוך `async for` — על הלולאה
+שמשותפת לסוכנים ולקונסולה (`server/main.py`). דיסק שרת איטי הפך כל
 `write` להמתנה של כל השרת. אותה משפחה כמו #1461, בשלב ההעלאה.
 
 הבדיקה מריצה את ההעלאה, hello ובקשת קונסולה **על לולאה אחת** (httpx
@@ -34,7 +34,7 @@ BODY = bytes(range(256)) * (5 * 4096 + 7)
 
 
 class GatedSha:
-    """‏`hashlib` מזויף: ה-`update` הראשון ממתין לשער, השאר עוברים."""
+    """`hashlib` מזויף: ה-`update` הראשון ממתין לשער, השאר עוברים."""
 
     def __init__(self, wait_s: float = 6.0) -> None:
         self.entered = threading.Event()
@@ -98,7 +98,7 @@ def test_hello_and_the_console_are_answered_while_an_upload_is_writing(server, m
 
 
 def test_a_disk_that_fills_mid_upload_is_still_a_named_507(server, monkeypatch):
-    """‏#411 נשמר: ‏ENOSPC מתוך הכתיבה — גם כשהיא בתהליכון — הוא 507 בשם,
+    """#411 נשמר: ENOSPC מתוך הכתיבה — גם כשהיא בתהליכון — הוא 507 בשם,
     והקובץ החלקי ורשומת ה-sha נמחקים."""
     import errno
     mac = setup_build_machine(server)

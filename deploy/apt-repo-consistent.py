@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """deploy/apt-repo-consistent.py — המאגר המקומי מפרסם רק מה שיש בו (#1371).
 
-‏`/var/lib/imagesrv/apt-repo` של שרת שהותקן מה-ISO לפני #1371 קיבל את
-‏`dists/` של ה-ISO כולו ורק את `pool/*/imagesrv`: האינדקס מנה כ-500 חבילות של
-ה-netinst (‏dbus-user-session ועוד) שהקבצים שלהן לא הועתקו, ו-apt
-בחר בהן ונפל ב-"File not found" (‏13/10, שרת ת"א: ‏495 מתוך 1134).
+`/var/lib/imagesrv/apt-repo` של שרת שהותקן מה-ISO לפני #1371 קיבל את
+`dists/` של ה-ISO כולו ורק את `pool/*/imagesrv`: האינדקס מנה כ-500 חבילות של
+ה-netinst (dbus-user-session ועוד) שהקבצים שלהן לא הועתקו, ו-apt
+בחר בהן ונפל ב-"File not found" (13/10, שרת ת"א: 495 מתוך 1134).
 
 הסקריפט מוריד מכל `dists/<suite>/<רכיב>/binary-*/Packages.gz` כל רשומה שה-
-‏`Filename` שלה אינו קובץ במאגר, ומחשב מחדש את הגיבובים ב-`Release` לקבצים
+`Filename` שלה אינו קובץ במאגר, ומחשב מחדש את הגיבובים ב-`Release` לקבצים
 שהשתנו — כך apt מוצא את החבילה במקור אחר (האינטרנט, כשחומת האש פותחת 443)
 במקום לבחור קובץ שאינו קיים. מאגר עקבי אינו משתנה (אידמפוטנטי).
 
   python3 deploy/apt-repo-consistent.py /var/lib/imagesrv/apt-repo
 
-‏0 = המאגר עקבי (כבר היה, או תוקן) — השורה האחרונה אומרת כמה. ‏1 = לא נבדק
-(אין `dists`, אינדקס לא נקרא, ‏Release חסר): "לא הצלחנו לבדוק" אינו "עקבי".
+0 = המאגר עקבי (כבר היה, או תוקן) — השורה האחרונה אומרת כמה. 1 = לא נבדק
+(אין `dists`, אינדקס לא נקרא, Release חסר): "לא הצלחנו לבדוק" אינו "עקבי".
 נקרא מ-deploy/vmupdate-host.sh.
 """
 
@@ -26,7 +26,7 @@ import os
 import sys
 from pathlib import Path
 
-#: שמות הסעיפים ב-Release → hashlib. ‏make-pool.sh כותב MD5Sum ו-SHA256.
+#: שמות הסעיפים ב-Release → hashlib. make-pool.sh כותב MD5Sum ו-SHA256.
 ALGOS = {"MD5Sum": "md5", "SHA1": "sha1", "SHA256": "sha256", "SHA512": "sha512"}
 
 
@@ -63,7 +63,7 @@ def fix_index(repo: Path, index: Path) -> tuple[int, int]:
 
 def rewrite_release(suite: Path, changed: set[str]) -> None:
     """הגיבוב והגודל של כל שורה ב-Release שמתייחסת לקובץ שהשתנה — גם לשם
-    הפרוס (‏`…/Packages`, שתוכנו הוא ה-.gz אחרי פריסה; ‏make-pool.sh רושם את שניהם)."""
+    הפרוס (`…/Packages`, שתוכנו הוא ה-.gz אחרי פריסה; make-pool.sh רושם את שניהם)."""
     release = suite / "Release"
     out, algo = [], None
     for line in release.read_text(encoding="utf-8").splitlines():

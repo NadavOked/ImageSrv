@@ -95,6 +95,14 @@ gui_saved_theme() {
         "$RUN_DIR/console_login.json" 2>/dev/null || echo auto
 }
 
+gui_saved_view() {
+    # #3025 (Nadav 12/11): the console view the signed-in user saved (users.view),
+    # from the same login answer. The GUI keeps it and changes nothing on screen.
+    # advanced as saved; absent or anything else = basic.
+    jq -r 'if .view == "advanced" then "advanced" else "basic" end' \
+        "$RUN_DIR/console_login.json" 2>/dev/null || echo basic
+}
+
 gui_theme_save() {
     # #1499: a switch made in the GUI while signed in is the user's own saved
     # theme -- the console's PUT /me/theme, with the GUI's session. 200 only.

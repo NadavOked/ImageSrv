@@ -1,16 +1,16 @@
 """מעגנים ו-loop שטסט השאיר מאחוריו (#2702).
 
-‏`rm -rf` על תיקיית הריצה **מדלג** על נקודת עגינה ("on a different
+`rm -rf` על תיקיית הריצה **מדלג** על נקודת עגינה ("on a different
 device"), ו-loop שקובץ הגיבוי שלו נמחק נשאר `(deleted)` ותופס מקום ושם.
 ב-08/11 נמצאו כאלה תחת חמש תיקיות ריצה על ה-testrunner, ו-`/work` התמלא
 ב-100% באמצע ריצה מלאה. הקורא כאן הוא **ראיה חיובית** (עיקרון 5): הוא
 קורא את `/proc/mounts` ואת `/sys/block/loop*/loop/backing_file` — אותם
 מקורות שהקרנל עצמו מחזיק — ולא את מה שהטסט חושב שניקה.
 
-* ‏`leftovers(root)` — מה שחי תחת `root` (נתיב עגינה, או קובץ גיבוי של loop).
-* ‏`sweep(root)` — ניתוק לפי ההתאמה הזאת בלבד, כ-root דרך `sudo -n`. הוא
+* `leftovers(root)` — מה שחי תחת `root` (נתיב עגינה, או קובץ גיבוי של loop).
+* `sweep(root)` — ניתוק לפי ההתאמה הזאת בלבד, כ-root דרך `sudo -n`. הוא
   לא בא במקום ניקוי הטסט: הוא רשת, והטסט שהשאיר נכשל בשמו.
-* בלי `/proc` ו-`/sys` (ווינדוס) אין ראיה: ‏`supported()` אומר זאת.
+* בלי `/proc` ו-`/sys` (ווינדוס) אין ראיה: `supported()` אומר זאת.
 """
 
 from __future__ import annotations
@@ -38,12 +38,12 @@ def _roots(root: Path | str) -> tuple[str, ...]:
 
 
 def _under(path: str, roots: tuple[str, ...]) -> bool:
-    # גבול שם שלם: ‏`.../fx` אינו תופס את `.../fx2`
+    # גבול שם שלם: `.../fx` אינו תופס את `.../fx2`
     return any(path == r or path.startswith(r.rstrip("/") + "/") for r in roots)
 
 
 def _unescape(field: str) -> str:
-    """‏/proc/mounts כותב רווח כ-`\\040` וטאב כ-`\\011`."""
+    """/proc/mounts כותב רווח כ-`\\040` וטאב כ-`\\011`."""
     out, i = [], 0
     while i < len(field):
         if field[i] == "\\" and field[i + 1:i + 4].isdigit() and len(field[i + 1:i + 4]) == 3:
@@ -56,7 +56,7 @@ def _unescape(field: str) -> str:
 
 
 def mounts_under(root: Path | str, mounts: Path = PROC_MOUNTS) -> list[tuple[str, str, str]]:
-    """‏(מקור, נקודת עגינה, סוג) לכל עגינה שנקודתה תחת `root`."""
+    """(מקור, נקודת עגינה, סוג) לכל עגינה שנקודתה תחת `root`."""
     roots = _roots(root)
     found = []
     for line in mounts.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -67,7 +67,7 @@ def mounts_under(root: Path | str, mounts: Path = PROC_MOUNTS) -> list[tuple[str
 
 
 def loops_under(root: Path | str, sys_block: Path = SYS_BLOCK) -> list[tuple[str, str]]:
-    """‏(שם ה-loop, קובץ הגיבוי) לכל loop שקובץ הגיבוי שלו תחת `root` —
+    """(שם ה-loop, קובץ הגיבוי) לכל loop שקובץ הגיבוי שלו תחת `root` —
     כולל כשהקובץ נמחק (`(deleted)`), שזה בדיוק היתום."""
     roots = _roots(root)
     found = []
@@ -88,7 +88,7 @@ def leftovers(root: Path | str, mounts: Path = PROC_MOUNTS, sys_block: Path = SY
 
 
 def wait_clean(root: Path | str, timeout: float = 10.0) -> list[str]:
-    """‏`losetup -d` מנתק בעצלתיים (autoclear) ו-udev מחזיק צמתים עוד רגע, ולכן
+    """`losetup -d` מנתק בעצלתיים (autoclear) ו-udev מחזיק צמתים עוד רגע, ולכן
     קריאה מיד אחרי הניקוי רואה לפעמים את מה שכבר בדרך החוצה. מחכים עד
     `timeout`; מה שנשאר אחריו הוא יתום אמיתי."""
     end = time.monotonic() + timeout
@@ -120,8 +120,8 @@ def sweep(root: Path | str) -> list[str]:
 
 
 if __name__ == "__main__":
-    # ‏`python3 mountleak.py list|sweep <dir>` -- למי שמוחק תיקיית ריצה בלי pytest
-    # (‏`/work/full*.sh`: ‏`rm -rf` דולג על עגינה). ‏`list` יוצא 1 כשנמצא משהו.
+    # `python3 mountleak.py list|sweep <dir>` -- למי שמוחק תיקיית ריצה בלי pytest
+    # (`/work/full*.sh`: `rm -rf` דולג על עגינה). `list` יוצא 1 כשנמצא משהו.
     import sys
 
     if len(sys.argv) != 3 or sys.argv[1] not in ("list", "sweep") or not supported():

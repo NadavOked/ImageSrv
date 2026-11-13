@@ -185,10 +185,23 @@ do_apply() {
     emit job "$!"
 }
 
+# #2809: "Input/output error" (mke2fs on metal, #2775) is the drive, its cable or its
+# port answering -- not the installer. A failed install says so in Hebrew, and the
+# line is always in the technical details: the tail alone had cut it off. Control
+# characters (mke2fs's backspace progress) are dropped; they drew as boxes.
+IO_ERROR_HE='שגיאת כתיבה לדיסק. ייתכן שהדיסק, הכבל או השקע תקולים. נסו כבל, שקע או דיסק אחר.'
+log_clean() { sed 's/\x1b\[[0-9;]*m//g' | tr -d '\000-\010\013-\037\177'; }
+
 do_progress() {
     [ -r "$STATE_FILE" ] || { emit state ready; return 0; }
     cat "$STATE_FILE"
-    [ -r "$ENGINE_LOG" ] && tail -n 20 "$ENGINE_LOG" | sed 's/\x1b\[[0-9;]*m//g; s/^/output=/'
+    [ -r "$ENGINE_LOG" ] || return 0
+    _dp_io=$(grep -F 'Input/output error' "$ENGINE_LOG" | tail -n 1)
+    if [ -n "$_dp_io" ] && grep -qx 'state=failed' "$STATE_FILE"; then emit error "$IO_ERROR_HE"; fi
+    {
+        if [ -n "$_dp_io" ] && ! tail -n 20 "$ENGINE_LOG" | grep -qF "$_dp_io"; then printf '%s\n' "$_dp_io"; fi
+        tail -n 20 "$ENGINE_LOG"
+    } | log_clean | sed 's/^/output=/'
     return 0
 }
 

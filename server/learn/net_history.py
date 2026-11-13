@@ -1,19 +1,19 @@
-"""‏#1888 — היסטוריית רשת ו-IP לכל מכונה: קישור, מוני שגיאות/זריקות לאורך זמן, ושינויי IP.
+"""#1888 — היסטוריית רשת ו-IP לכל מכונה: קישור, מוני שגיאות/זריקות לאורך זמן, ושינויי IP.
 
-**מה כבר נאסף, ולא שוכפל:** ‏`wave_rates.drops` (‏#1758/#1842) שומר **לכל גל** את ‏`rcvbuf`/`inerrors` של כל
-מכונה (‏`udp_drops` מהדיווח) — זו ההיסטוריה לכל גל; כאן רק נקראת (‏`wave_drops`).
+**מה כבר נאסף, ולא שוכפל:** `wave_rates.drops` (#1758/#1842) שומר **לכל גל** את `rcvbuf`/`inerrors` של כל
+מכונה (`udp_drops` מהדיווח) — זו ההיסטוריה לכל גל; כאן רק נקראת (`wave_drops`).
 
 **מה חסר, ונוסף:**
 
-* **‏`ip_history`** — שורה כשה-IP של MAC **משתנה** (או נראה בפעם הראשונה), מתוך `db.net_seen` — אותה כתיבה,
-  לא hello נוסף. ‏`ip`, ‏`at`, ‏`previous`. שינוי (לא ראשון) — יומן **`ip_changed`** (‏`<mac> <ישן> → <חדש>`):
-  שימושי לחכירה כפולה ול-DHCP זר. ‏`KEEP_IPS` אחרונות למכונה (בכל הכנסה) + 365 יום.
-* **‏`nic_history`** — המונים של בדיקת המכונה (‏`probe.nic[].stats`: ‏`rx_crc_errors`, ‏`rx_dropped`) ומהירות
+* **`ip_history`** — שורה כשה-IP של MAC **משתנה** (או נראה בפעם הראשונה), מתוך `db.net_seen` — אותה כתיבה,
+  לא hello נוסף. `ip`, `at`, `previous`. שינוי (לא ראשון) — יומן **`ip_changed`** (`<mac> <ישן> → <חדש>`):
+  שימושי לחכירה כפולה ול-DHCP זר. `KEEP_IPS` אחרונות למכונה (בכל הכנסה) + 365 יום.
+* **`nic_history`** — המונים של בדיקת המכונה (`probe.nic[].stats`: `rx_crc_errors`, `rx_dropped`) ומהירות
   הקישור, ש-`probe.py` **דורס** בשורה האחרונה (שדות נדיפים). דגימה נשמרת כשהמהירות השתנתה, כשהמונה ירד
   (אתחול — סדרה חדשה), או כשעברה `NIC_GAP_S` מהדגימה הקודמת של אותו כרטיס — לא בכל רענון של 10 דק'.
-  ‏`KEEP_NIC` למכונה (בכל הכנסה) + 90 יום.
+  `KEEP_NIC` למכונה (בכל הכנסה) + 90 יום.
 
-ערך שלא נמדד נשמר ‏NULL — לא 0. חומרה ורשת בלבד (#1924). לעולם אינו זורק.
+ערך שלא נמדד נשמר NULL — לא 0. חומרה ורשת בלבד (#1924). לעולם אינו זורק.
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def nic_history(conn: sqlite3.Connection, mac: str, limit: int = 20) -> list[dic
 
 
 def wave_drops(conn: sqlite3.Connection, mac: str, limit: int = 10) -> list[dict]:
-    """‏`wave_rates.drops[mac]` של הגלים האחרונים שהמכונה הייתה בהם — ‏`rcvbuf`/`inerrors` (‏null = לא נקרא)."""
+    """`wave_rates.drops[mac]` של הגלים האחרונים שהמכונה הייתה בהם — `rcvbuf`/`inerrors` (null = לא נקרא)."""
     out = []
     for row in conn.execute("SELECT session_id, at, drops FROM wave_rates WHERE drops IS NOT NULL"
                             " ORDER BY rowid DESC LIMIT 200"):

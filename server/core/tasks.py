@@ -14,7 +14,7 @@ import shutil
 import sqlite3
 from pathlib import Path
 
-#: אורך האסימון בבתים. ‏`token_hex(24)` = 48 תווים = 192 סיביות.
+#: אורך האסימון בבתים. `token_hex(24)` = 48 תווים = 192 סיביות.
 #:
 #: להשוואה, `task_id` הוא `token_hex(2)` — **65,536 ערכים**, וזה מספיק
 #: כדי לנחש אותו (#535). המזהה הוא שם, לא סוד; האסימון הוא הסוד.
@@ -24,15 +24,15 @@ TOKEN_BYTES = 24
 def new_token() -> str:
     return secrets.token_hex(TOKEN_BYTES)
 
-#: ‏#1576: מאיפה הוזמנה המשימה (עמודת `tasks.origin`).
+#: #1576: מאיפה הוזמנה המשימה (עמודת `tasks.origin`).
 ORIGIN_CONSOLE = "console"
 ORIGIN_BUILD_GUI = "build_gui"
 
 
 def request_origin(request) -> str:
-    """‏`build_gui` כשהבקשה נכנסה בערוץ הסוכן -- ראוטר הקיוסק על פורט הסוכן,
-    שמסמן אותה (‏kiosk.mark_build_gui) -- אחרת `console`. **השרת קובע, לא
-    הלקוח**: גואי ישן או נתיב עתידי בלי שדה עדיין מסומן לפי הערוץ (‏#1576,
+    """`build_gui` כשהבקשה נכנסה בערוץ הסוכן -- ראוטר הקיוסק על פורט הסוכן,
+    שמסמן אותה (kiosk.mark_build_gui) -- אחרת `console`. **השרת קובע, לא
+    הלקוח**: גואי ישן או נתיב עתידי בלי שדה עדיין מסומן לפי הערוץ (#1576,
     סקירת אבטחה)."""
     return getattr(request.state, "task_origin", ORIGIN_CONSOLE)
 
@@ -40,8 +40,8 @@ def request_origin(request) -> str:
 #: מצבים שבהם המשימה עדיין מחכה למכונה או רצה עליה.
 OPEN_STATES = ("pending", "running")
 
-#: ‏#980 §4: שלבי הקליטה שהסוכן מדווח (‏`stage` בדיווח ההתקדמות), לפי הסדר:
-#: בדיקת NTFS → כיווץ → זרם + sha256 → החזרת הגודל → אימות. ‏"PXE" אינו שלב
+#: #980 §4: שלבי הקליטה שהסוכן מדווח (`stage` בדיווח ההתקדמות), לפי הסדר:
+#: בדיקת NTFS → כיווץ → זרם + sha256 → החזרת הגודל → אימות. "PXE" אינו שלב
 #: של הסוכן — הוא `state: pending`, לפני שהסוכן לקח את המשימה.
 CAPTURE_STAGES = ("ntfs_check", "shrink", "stream", "restore_size", "verify")
 
@@ -60,11 +60,11 @@ TASK_ID = re.compile(r"[A-Za-z0-9_-]+")
 def staging_dir(library_root: Path, task_id: str) -> Path:
     """איפה נאספים קבצי הקליטה עד שהמניפסט מאומת.
 
-    ‏`task_id` מגיע בנתיב ה-URL. ‏`capture.task_for` כבר דורש שהוא קיים
+    `task_id` מגיע בנתיב ה-URL. `capture.task_for` כבר דורש שהוא קיים
     ב-DB, אבל הנתיב נבנה כאן — ולכן כאן הגבול: מזהה שאינו רכיב יחיד
-    נדחה בשמו (‏ValueError), ולא "מתוקן". אחריו, הנתיב שנפתר (‏realpath)
+    נדחה בשמו (ValueError), ולא "מתוקן". אחריו, הנתיב שנפתר (realpath)
     חייב להיות ילד ישיר של שורש הספרייה — הצורה ש-CodeQL מזהה כמנקה
-    ‏(py/path-injection), והחגורה השנייה אם הכלל למעלה יורחב מחר.
+    (py/path-injection), והחגורה השנייה אם הכלל למעלה יורחב מחר.
     """
     if not isinstance(task_id, str) or not TASK_ID.fullmatch(task_id):
         raise ValueError(f"task id is not a single path component: {task_id!r}")
@@ -76,7 +76,7 @@ def staging_dir(library_root: Path, task_id: str) -> Path:
 
 
 def discard_failed_staging(conn: sqlite3.Connection, library_root: Path, task_id: object) -> None:
-    """‏#1915: הסוכן דיווח `failed` (‏`/agent/progress`) — הדלת שבה BM-F04z
+    """#1915: הסוכן דיווח `failed` (`/agent/progress`) — הדלת שבה BM-F04z
     עבר בפועל, ו-`capture._fail` אינו בה. האזור נמחק כמו בביטול ובאימות
     שנכשל — רק בקליטה, ורק כשהיא באמת `failed` עכשיו (השורה, לא הדיווח)."""
     row = conn.execute("SELECT id, type, state FROM tasks WHERE id = ?", (task_id,)).fetchone()
@@ -95,12 +95,12 @@ def active_task(conn: sqlite3.Connection, mac: str) -> dict | None:
         return None
     return {
         "id": row["id"], "type": row["type"], "disk": row["disk"],
-        # ‏#1901: ה-serial שנרשם בהזמנה; ``None`` = לא ידוע. הסוכן מסרב לקלוט
-        # כשה-serial של `/dev/<disk>` שונה (אחרת: שם ההתקן לבדו, ‏G18).
+        # #1901: ה-serial שנרשם בהזמנה; ``None`` = לא ידוע. הסוכן מסרב לקלוט
+        # כשה-serial של `/dev/<disk>` שונה (אחרת: שם ההתקן לבדו, G18).
         "disk_serial": row["disk_serial"],
         "image_id": row["image_id"], "name": row["name"],
         "description": row["description"], "folder": row["folder"],
-        # ‏#530: ה-token נמסר **רק** למכונה שה-hello שלה תואם את ה-MAC
+        # #530: ה-token נמסר **רק** למכונה שה-hello שלה תואם את ה-MAC
         # של המשימה, וכל כתיבה על המשימה דורשת אותו בחזרה. בלעדיו
         # כל פונה שמכיר `task_id` העלה אימג' משלו (#530), ביטל ביטול
         # (#532), או הרג קליטה חיה (#535).

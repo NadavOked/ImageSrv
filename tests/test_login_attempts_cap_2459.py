@@ -1,4 +1,4 @@
-"""#2459 — ‏`login_attempts` תחומה במספר מפתחות.
+"""#2459 — `login_attempts` תחומה במספר מפתחות.
 
 עד כאן כל שם משתמש אקראי הוסיף שורה (מפתח = שם + IP), והיא נשארה עד ה-housekeeping
 של 90 יום: ניחוש שמות אקראיים ניפח את ה-DB בלי גבול. עכשיו מעל `MAX_KEYS` מפתח חדש
@@ -7,7 +7,7 @@
 מה **לא** השתנה (הכרעת נדב 05/11): הספים לפי (שם, IP), והתקרה לפי חשבון — 50 ב-15
 דקות, נעילה ל-15 דקות, בלי פטור לפי כתובת. אלה נבדקים כאן גם תחת הצפה.
 
-בקרה שלילית: ‏`server/console/login_guard.py` מ-origin/main → נופלים `test_random_usernames_do_not_grow_the_table_without_bound`,
+בקרה שלילית: `server/console/login_guard.py` מ-origin/main → נופלים `test_random_usernames_do_not_grow_the_table_without_bound`,
 `test_a_locked_key_survives_the_flood` ו-`test_the_account_cap_still_holds_under_the_flood`.
 """
 
@@ -26,7 +26,7 @@ CAP = 20
 def guard(server, monkeypatch):
     t = {"now": time.time()}
     monkeypatch.setattr(login_guard, "now", lambda: t["now"])
-    # ‏raising=False: מול הקוד הישן (בלי MAX_KEYS) הטסט נופל על הטענה, לא על monkeypatch.
+    # raising=False: מול הקוד הישן (בלי MAX_KEYS) הטסט נופל על הטענה, לא על monkeypatch.
     monkeypatch.setattr(login_guard, "MAX_KEYS", CAP, raising=False)
     return server["ctx"].conn, t
 

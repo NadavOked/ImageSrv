@@ -1,17 +1,17 @@
-"""‏#1635 — שלושה ערכים מתשובת השרת שהסוכן הכניס לנתיב או לקובץ המצב בלי רשימת היתר.
+"""#1635 — שלושה ערכים מתשובת השרת שהסוכן הכניס לנתיב או לקובץ המצב בלי רשימת היתר.
 
 המקור בכולם הוא השרת בלבד, ולכן זו הקשחה ולא חולשה — אבל הסוכן רץ כ-root
 על הדיסק המשוחזר, ושם תשובה פגומה היא מחיקה ולא תצוגה שגויה:
 
 1. **שמות חבילות דרייברים** (`postdeploy.sh`): כל שם הוא תיקייה תחת
-   ‏`ImageSrv/Drivers/` שעוברת `rm -rf` — גם חבילה בלי קבצים, שאותה
-   ‏`_drivers_fetch` (שבודק `_pkg`) לא רואה כלל. ‏`../../Windows` מחק את
+   `ImageSrv/Drivers/` שעוברת `rm -rf` — גם חבילה בלי קבצים, שאותה
+   `_drivers_fetch` (שבודק `_pkg`) לא רואה כלל. `../../Windows` מחק את
    מחיצת Windows. עכשיו: התווים של `NAME_RE` ב-`drivers.py`, לפני הורדה ועיגון.
-2. **‏`.task.disk`** (`task.sh`, ‏`directsend.sh`): נכנס ל-`$RUN_DIR/targets/<disk>`
-   ול-`/dev/<disk>`. עכשיו ‏`json_disk` (jsonq.sh) — שם קרנל או כלום, והמשימה
+2. **`.task.disk`** (`task.sh`, `directsend.sh`): נכנס ל-`$RUN_DIR/targets/<disk>`
+   ול-`/dev/<disk>`. עכשיו `json_disk` (jsonq.sh) — שם קרנל או כלום, והמשימה
    נכשלת בגלוי (דיווח `failed`) בלי ש-`capture_disk`/`direct_send_run` נקראו.
-3. **שם האימג' במסך המשכפל** (`clonergui.sh`): ‏`\\n` בשם הוסיף רשומת state.
-   עכשיו ‏`tr '\\r\\n|'` כמו בשאר הרשומות.
+3. **שם האימג' במסך המשכפל** (`clonergui.sh`): `\\n` בשם הוסיף רשומת state.
+   עכשיו `tr '\\r\\n|'` כמו בשאר הרשומות.
 
 הכול רץ על ה-sh האמיתי עם `json_get` מזויף — אין jq בווינדוס, והפילטרים
 עצמם אינם מה שנבדק.
@@ -37,7 +37,7 @@ pytestmark = requires_native(("bash", BASH))
 
 @pytest.mark.parametrize("evil", ["../../Windows", "..", "a/b", "a b", ".hidden", "-rf"])
 def test_a_package_name_outside_the_allowlist_fails_before_the_disk_is_touched(tmp_path, evil):
-    """חבילה בלי קבצים ושם מחוץ לרשימה — לצד חבילה תקינה. ‏`Drivers/` כבר קיים
+    """חבילה בלי קבצים ושם מחוץ לרשימה — לצד חבילה תקינה. `Drivers/` כבר קיים
     בדיסק (אימג' שנקלט ממכונה שקיבלה דרייברים), ולכן `../../Windows` אמיתי:
     בלי התיקון ה-`rm -rf` מוחק את `Windows/` ואיתו את הכוורת."""
     answer = answer_for(FILES)
@@ -61,10 +61,10 @@ def test_a_name_with_the_allowed_punctuation_is_staged(tmp_path):
     assert box.staged_files() == {"Realtek_8168.v2-x64/rt640x64.inf": b"[Version] rt\n"}
 
 
-# --- 2. ‏.task.disk -------------------------------------------------------------
+# --- 2. .task.disk -------------------------------------------------------------
 
 #: מה שמסביב ל-`do_task`/`direct_send_task` — מסך, דיווח, החזקה — מזויף, ושני
-#: הצרכנים של שם הדיסק רושמים עם מה נקראו. ‏`report_final` רושם את המצב שנשלח.
+#: הצרכנים של שם הדיסק רושמים עם מה נקראו. `report_final` רושם את המצב שנשלח.
 SURROUND = (
     'log() { printf "%s\\n" "$*" >> "$RUN_DIR/agent.log"; }; '
     'ui_clear() { :; }; ui_header() { :; }; progress_loop() { :; }; gui_parent() { :; }; '
@@ -122,7 +122,7 @@ def test_a_kernel_disk_name_reaches_the_capture_unchanged(tmp_path, kind, consum
 
 
 def test_a_newline_in_the_image_name_cannot_add_a_state_record(tmp_path):
-    """‏`\\n` בשם מהמניפסט היה כותב שורה שנייה — כאן `drawer_count=8`, רשומה
+    """`\\n` בשם מהמניפסט היה כותב שורה שנייה — כאן `drawer_count=8`, רשומה
     שהמסך קורא כמספר המגירות. אחרי התיקון: רשומת `cloner=` אחת, מקופלת לרווחים."""
     run = tmp_path / "run"; run.mkdir()
     gui = tmp_path / "gui"; gui.mkdir()

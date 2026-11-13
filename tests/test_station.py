@@ -192,7 +192,7 @@ def test_the_build_machine_opens_a_class_round_for_chosen_machines(station):
 
 
 def test_a_class_round_from_the_agent_is_refused_while_the_switch_is_off(station):
-    """‏`setup_classroom` מדליק את המתג (הבדיקות של זרימה 13.3 הן v2);
+    """`setup_classroom` מדליק את המתג (הבדיקות של זרימה 13.3 הן v2);
     כאן מכבים אותו חזרה — ברירת המחדל של v1 — ופתיחה מהסוכן נדחית
     ב-409 עם קוד וסיבה, נרשמת ביומן בעברית, ואינה מעירה איש. **בקרה
     שלילית:** על main הסבב נפתח (200) והכיתה מוערת — אומת 16/09."""
@@ -216,9 +216,9 @@ def test_a_class_round_from_the_agent_is_refused_while_the_switch_is_off(station
 
 
 def test_the_switch_off_refuses_before_the_password_is_checked(station):
-    """‏#1282: עד כאן המתג נבדק **אחרי** הסיסמה — סיסמה שגויה קיבלה 401
+    """#1282: עד כאן המתג נבדק **אחרי** הסיסמה — סיסמה שגויה קיבלה 401
     ונכונה 409. ב-v1 המתג כבוי תמיד, ולכן כל `POST /sessions` היה בודק
-    סיסמאות בלי שום נתיב פתיחה מאחוריו: ‏409 מול 401 גילה מה נכון. עכשיו
+    סיסמאות בלי שום נתיב פתיחה מאחוריו: 409 מול 401 גילה מה נכון. עכשיו
     הסירוב קודם לסיסמה — שתי הסיסמאות מקבלות אותה תשובה, ואין ניסיון
     שנספר."""
     ids = setup_classroom(station)
@@ -236,7 +236,7 @@ def test_the_switch_off_refuses_before_the_password_is_checked(station):
 
 
 def test_round_open_passwords_go_through_the_login_guard(station, monkeypatch):
-    """‏#1282: פתיחת סבב מהתחנה בדקה סיסמה בלי `login_guard` — בלי השהיה
+    """#1282: פתיחת סבב מהתחנה בדקה סיסמה בלי `login_guard` — בלי השהיה
     ובלי נעילה, בניגוד ל-`/agent/login` ולכניסה לקונסולה. אחרי 5 כשלונות
     גם הסיסמה הנכונה ממתינה."""
     from server.console import login_guard
@@ -254,7 +254,7 @@ def test_round_open_passwords_go_through_the_login_guard(station, monkeypatch):
 
 
 def test_a_round_open_by_a_user_who_must_change_password_is_refused(station):
-    """‏#1282: הקיוסק ו-`/agent/login` מסרבים למי שחייב להחליף סיסמה; פתיחת
+    """#1282: הקיוסק ו-`/agent/login` מסרבים למי שחייב להחליף סיסמה; פתיחת
     סבב קיבלה אותו — ובהתקנה טרייה זה admin/admin."""
     ids = setup_classroom(station)
     conn = station["ctx"].conn
@@ -272,7 +272,7 @@ def test_a_round_open_by_a_user_who_must_change_password_is_refused(station):
 def add_user_with_role(station, username: str, password: str, role: str) -> None:
     """מכניס משתמש בתפקיד שאינו admin/deploy.
 
-    ‏`users.create` דוחה תפקיד כזה, וגם ה-CHECK בסכימה — ולכן זה עובר
+    `users.create` דוחה תפקיד כזה, וגם ה-CHECK בסכימה — ולכן זה עובר
     דרך `ignore_check_constraints`: הבדיקה מדמה **סכימה של מחר**, את
     היום שבו יתווסף תפקיד שלישי, וזו בדיוק השאלה שהקוד לא שאל.
     """
@@ -519,7 +519,7 @@ def test_a_wake_failure_does_not_stop_the_rest(tmp_path, images_root, clock):
     server = {"admin": client, "deploy": client, "anon": TestClient(app)}
     setup_classroom(server)
 
-    # ‏#997: `mac` חובה (זהות הפותח). פותח שאינו בכיתה — שתי המכונות מוערות.
+    # #997: `mac` חובה (זהות הפותח). פותח שאינו בכיתה — שתי המכונות מוערות.
     response = server["anon"].post("/api/v1/agent/sessions", json={
         "username": "noc", "password": "admin-pass-123", "mac": "aa:bb:cc:00:00:10",
         "group_id": "grp_LAB1", "image_id": "img_7f3a91"})

@@ -29,8 +29,9 @@ def create_timesync_router(ctx, supplied_hooks=None) -> APIRouter:
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         except Exception as exc:
-            journal(ctx.conn, "timesync_change_failed", str(exc), user[0])
-            raise HTTPException(500, str(exc)) from exc
+            why = timesync.said(exc)      # #2543: our sentence; any other text to the server log
+            journal(ctx.conn, "timesync_change_failed", why, user[0])
+            raise HTTPException(500, why) from exc
         old = describe_old()
         timesync.save(ctx.conn, value)
         journal(ctx.conn, "timesync_changed", f"{old} → {value or 'אוטומטי'}", user[0])
@@ -48,14 +49,15 @@ def create_timesync_router(ctx, supplied_hooks=None) -> APIRouter:
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         except Exception as exc:
-            raise HTTPException(500, str(exc)) from exc
+            raise HTTPException(500, timesync.said(exc)) from exc
         try:
             done = timesync.apply_manual(epoch, hooks)
             old = describe_old()
             timesync.save(ctx.conn, "", done["set_at"])
         except Exception as exc:
-            journal(ctx.conn, "timesync_change_failed", str(exc), user[0])
-            raise HTTPException(500, str(exc)) from exc
+            why = timesync.said(exc)      # #2543: our sentence; any other text to the server log
+            journal(ctx.conn, "timesync_change_failed", why, user[0])
+            raise HTTPException(500, why) from exc
         journal(ctx.conn, "timesync_changed",
                 f"{old} → ידני, {timesync.local_text(done['set_at'], zone)}"
                 + ("" if done["rtc_written"] else " (שעון החומרה לא נכתב)"), user[0])
@@ -68,6 +70,6 @@ def create_timesync_router(ctx, supplied_hooks=None) -> APIRouter:
         except TimeoutError as exc:
             raise HTTPException(504, str(exc)) from exc
         except Exception as exc:
-            raise HTTPException(500, str(exc)) from exc
+            raise HTTPException(500, timesync.said(exc)) from exc
 
     return router

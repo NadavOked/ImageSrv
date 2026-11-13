@@ -1,16 +1,16 @@
-"""קליטה מבר-מתכת 13/10 (img_5790e4, ‏tsk_749e): שלושה שדות שהמניפסט והמשימה
+"""קליטה מבר-מתכת 13/10 (img_5790e4, tsk_749e): שלושה שדות שהמניפסט והמשימה
 מסרו בלי ראיה.
 
-- **#1368** — ‏`used_bytes=null` בכל מחיצת NTFS. ‏`_used_bytes` עיגן ב-`mount -t
-  ntfs`, ובקרנל דביאן 13 אין סוג כזה (‏CONFIG_NTFS_FS כבוי, ‏ntfs3 לא נארז);
-  ‏mount של busybox אינו מפעיל mount.ntfs. נמדד בתוך ה-initramfs עצמו
-  (‏chroot על ה-Testrunner): ‏"No such device". המדידה עוברת ל-ntfs-3g לקריאה
+- **#1368** — `used_bytes=null` בכל מחיצת NTFS. `_used_bytes` עיגן ב-`mount -t
+  ntfs`, ובקרנל דביאן 13 אין סוג כזה (CONFIG_NTFS_FS כבוי, ntfs3 לא נארז);
+  mount של busybox אינו מפעיל mount.ntfs. נמדד בתוך ה-initramfs עצמו
+  (chroot על ה-Testrunner): "No such device". המדידה עוברת ל-ntfs-3g לקריאה
   בלבד — אותה ספרייה שכבר כותבת את שם המחשב — ו-FUSE, שעליו הוא רץ, מוצהר
-  בבנאי (‏tests/test_initramfs_modules.py).
+  בבנאי (tests/test_initramfs_modules.py).
 - **#1369** — שתי מחיצות `role=windows`: ה-GUID של Basic Data משותף לכל
-  מחיצת נתונים/OEM. ‏windows ניתן רק למחיצה ש-Windows\\System32 יושבת בה.
+  מחיצת נתונים/OEM. windows ניתן רק למחיצה ש-Windows\\System32 יושבת בה.
   מניפסט ישן עם שתיים ממשיך לעבוד: כתיבת השם בוחרת את זו שיש בה מערכת.
-- **#1370** — ‏`bytes_total=0` על משימה שהסתיימה: השרת ממלא אותו
+- **#1370** — `bytes_total=0` על משימה שהסתיימה: השרת ממלא אותו
   מ-`total_compressed_bytes` כשהמניפסט מתקבל.
 """
 
@@ -27,10 +27,10 @@ from test_capture_refusals import CURL_SINK, capture_run, refusal_reason
 
 BASIC_DATA = "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"
 
-#: ‏mount של ה-initramfs מול NTFS: אין סוג כזה בקרנל (‏"No such device").
+#: mount של ה-initramfs מול NTFS: אין סוג כזה בקרנל ("No such device").
 MOUNT_WITHOUT_NTFS = '#!/bin/sh\necho "mount: No such device" >&2\nexit 32\n'
 
-#: ‏ntfs-3g שמעגן "באמת": רושם את הקריאה, ובמחיצה 2 בלבד חושף מערכת.
+#: ntfs-3g שמעגן "באמת": רושם את הקריאה, ובמחיצה 2 בלבד חושף מערכת.
 #: הארגומנט האחרון הוא נקודת העיגון, זה שלפניו — הצומת.
 NTFS3G = (
     '#!/bin/sh\n'
@@ -56,7 +56,7 @@ DF_ONE_MIB = ('#!/bin/sh\n'
               'echo "/dev/x 1000000 1024 1 1% /mnt"\n')
 
 
-# --- #1368: ‏used_bytes של NTFS נמדד דרך ntfs-3g, לקריאה בלבד ----------------
+# --- #1368: used_bytes של NTFS נמדד דרך ntfs-3g, לקריאה בלבד ----------------
 
 
 def _probe(tmp_path: Path, call: str, ntfs3g: str = NTFS3G) -> tuple[str, Path]:
@@ -79,14 +79,14 @@ def _probe(tmp_path: Path, call: str, ntfs3g: str = NTFS3G) -> tuple[str, Path]:
 
 @requires_native(("bash", BASH))
 def test_an_ntfs_partition_is_measured_and_not_null(tmp_path):
-    """הבאג עצמו: ‏mount -t ntfs נכשל ב-initramfs, והמדידה חייבת לעבור."""
+    """הבאג עצמו: mount -t ntfs נכשל ב-initramfs, והמדידה חייבת לעבור."""
     out, run = _probe(tmp_path, "_used_bytes /dev/sda3 ntfs")
     assert out == str(1024 * 1024), (out, _text(run / "log"))
 
 
 @requires_native(("bash", BASH))
 def test_the_ntfs_measurement_mounts_read_only(tmp_path):
-    """מדידה בלבד: ‏`-o ro` — גם על כרך מלוכלך או מהובר אין כתיבה."""
+    """מדידה בלבד: `-o ro` — גם על כרך מלוכלך או מהובר אין כתיבה."""
     _probe(tmp_path, "_used_bytes /dev/sda3 ntfs")
     calls = _text(tmp_path / "box" / "run" / "ntfs-3g.calls")
     assert calls.startswith("-o ro /dev/sda3 "), calls
@@ -100,7 +100,7 @@ def test_an_ntfs_partition_that_will_not_mount_is_still_null(tmp_path):
     assert out == "null"
 
 
-# --- #1369: ‏windows רק על ראיה ------------------------------------------------
+# --- #1369: windows רק על ראיה ------------------------------------------------
 
 
 @requires_native(("bash", BASH))
@@ -127,7 +127,7 @@ def test_a_system_check_that_could_not_mount_is_a_reason_not_a_role(tmp_path):
 
 @requires_native(("bash", BASH))
 def test_a_non_ntfs_basic_data_partition_is_data_without_mounting(tmp_path):
-    """‏Windows עולה רק מ-NTFS: ‏FAT/exFAT בעלי GUID של Basic Data הם נתונים."""
+    """Windows עולה רק מ-NTFS: FAT/exFAT בעלי GUID של Basic Data הם נתונים."""
     out, run = _probe(tmp_path, "_system_role 4 /dev/sda4 vfat")
     assert out == "data"
     assert not (run / "ntfs-3g.calls").exists()
@@ -135,8 +135,8 @@ def test_a_non_ntfs_basic_data_partition_is_data_without_mounting(tmp_path):
 
 # --- הקליטה כולה: המניפסט ש-img_5790e4 היה צריך לקבל -------------------------
 
-#: ‏p1 = מחיצת OEM/נתונים בתחילת הדיסק, ‏p2 = ‏C:. שתיהן Basic Data.
-#: ‏p3 = ה-ESP: ‏Windows בדיסק בלי ESP נדחה מאז #1822, וזה לא הנושא כאן.
+#: p1 = מחיצת OEM/נתונים בתחילת הדיסק, p2 = C:. שתיהן Basic Data.
+#: p3 = ה-ESP: Windows בדיסק בלי ESP נדחה מאז #1822, וזה לא הנושא כאן.
 TWO_BASIC_DATA = (
     '#!/bin/sh\n'
     'if [ "$1" = "-i" ]; then\n'
@@ -168,7 +168,7 @@ CAPTURE_STUBS = {
     "mount": MOUNT_WITHOUT_NTFS, "ntfs-3g": NTFS3G,
     "umount": UMOUNT_CLEAN, "df": DF_ONE_MIB,
 }
-#: הכיווץ אינו הנושא כאן, ויש לו טסטים משלו (‏test_shrink_on_capture).
+#: הכיווץ אינו הנושא כאן, ויש לו טסטים משלו (test_shrink_on_capture).
 NO_SHRINK = "shrink_before_capture() { return 0; }; "
 
 
@@ -182,7 +182,7 @@ def _captured(tmp_path, **stubs) -> dict:
 
 @requires_native(("bash", BASH))
 def test_the_oem_partition_is_data_and_only_the_system_is_windows(tmp_path):
-    """img_5790e4: ‏p1 ‏(3GB, ‏sector 2048) ו-‏p2 ‏(C:) שתיהן היו windows."""
+    """img_5790e4: p1 (3GB, sector 2048) ו-p2 (C:) שתיהן היו windows."""
     written = _captured(tmp_path)
     roles = {p["index"]: p["role"] for p in written["partitions"]}
     assert roles == {1: "data", 2: "windows", 3: "esp"}, written["partitions"]
@@ -257,7 +257,7 @@ def test_no_windows_partition_with_a_system_still_says_no_hive(tmp_path):
     assert result["ok"] is False and result["code"] == "no_hive", result
 
 
-# --- #1370: ‏bytes_total של משימה שהסתיימה -----------------------------------
+# --- #1370: bytes_total של משימה שהסתיימה -----------------------------------
 
 
 def _task_row(server, task_id):
@@ -275,9 +275,9 @@ def test_a_finished_capture_carries_its_compressed_total(server):
 
 
 def test_a_total_that_is_not_a_byte_count_is_not_guessed(server):
-    """‏"12" (מחרוזת) או True אינם מספר בייטים — המכנה נשאר "לא ידוע".
+    """"12" (מחרוזת) או True אינם מספר בייטים — המכנה נשאר "לא ידוע".
 
-    מאז #1407 ‏`_validate` דוחה מניפסט כזה בקליטה, בשמו (עיקרון 6), ולכן
+    מאז #1407 `_validate` דוחה מניפסט כזה בקליטה, בשמו (עיקרון 6), ולכן
     הוא אינו מגיע לחישוב המכנה כלל — ושום מספר אינו מנוחש בדרך."""
     created = make_task(server, setup_build_machine(server)).json()
     manifest = manifest_for()

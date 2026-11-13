@@ -19,7 +19,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from conftest import hello_body
+from conftest import HANG_S, hello_body
 from native import requires_native
 from server.rounds import drive_rates, room as room_mod
 from test_class_deploy_switch import PRELUDE, STATION
@@ -123,7 +123,7 @@ def test_a_question_after_send_start_pauses_timeout_then_resumes(
         "prefix": "LAB1", "expected_clients": 1})
     for _ in range(2):
         server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     threading.Event().wait(delay)
     server["anon"].post("/api/v1/agent/hello", json={
         **hello_body(ids["mac1"]), **OPERATOR_PROMPT})

@@ -1,6 +1,6 @@
-"""נתיבי ‎/boot לא סוגרים את החיבור ראשונים (#1423).
+"""נתיבי /boot לא סוגרים את החיבור ראשונים (#1423).
 
-‏GRUB יוצא מאותם פורטי מקור בכל אתחול (21550, 21551, ...), עם ISN קטן
+GRUB יוצא מאותם פורטי מקור בכל אתחול (21550, 21551, ...), עם ISN קטן
 ובלי timestamps, ואינו עונה ב-RST. כשהשרת סגר ראשון (`Connection: close`)
 הוא נשאר ב-TIME_WAIT לשישים שניות על אותו 4-tuple, ואתחול חוזר מהיר נתקע
 על כל פורט כזה: 40 SYN ב-15.6 שניות, ורק אז GRUB עובר לפורט הבא.
@@ -10,7 +10,7 @@
 
 והחיבור האחרון: GRUB סוגר אותו עם חלון אפס ועובר לאתחל, בלי לאשר את ה-FIN
 של השרת. בלי RST השרת נשאר ב-LAST-ACK ותוקע את האתחול הבא באותה דרך
-(2 מתוך 5 אתחולים חוזרים במעבדה). ‏`server/net/grub_close.py` עונה ב-RST.
+(2 מתוך 5 אתחולים חוזרים במעבדה). `server/net/grub_close.py` עונה ב-RST.
 """
 
 import asyncio
@@ -27,7 +27,7 @@ CONFIG = GrubConfig(server_base="http://127.0.0.1:8080")
 ANSWER = {"schema": 1, "known": True, "role": "classroom", "task": {"type": "deploy"}}
 MAC = "b4:2e:99:07:1a:c4"
 
-#: כל סוגי התשובות של ‎/boot: תפריט, פירור, קובץ אתחול, ו-404.
+#: כל סוגי התשובות של /boot: תפריט, פירור, קובץ אתחול, ו-404.
 PATHS = ["/menu", "/step", "/vmlinuz", "/no-such-file"]
 
 
@@ -58,7 +58,7 @@ def _start_headers(app, path: str) -> list:
 def test_no_boot_answer_asks_to_close_the_connection(tmp_path, path):
     headers = _start_headers(_app(tmp_path), path)
     names = [name for name, _ in headers]
-    # ראיה חיובית שזו תשובה של ‎/boot: BASE_HEADERS באותיות גדולות (#12).
+    # ראיה חיובית שזו תשובה של /boot: BASE_HEADERS באותיות גדולות (#12).
     assert b"Cache-Control" in names
     assert [v for n, v in headers if n.lower() == b"connection"] == []
 
@@ -116,7 +116,7 @@ def test_the_server_does_not_close_first_on_the_wire(live_boot, path):
         head, _ = _read_response(sock)
         assert b"connection: close" not in head.lower()
         sock.settimeout(1.0)
-        # ‏recv שמחזיר b"" הוא FIN מהשרת — בדיוק הבאג. פקיעת זמן היא הראיה
+        # recv שמחזיר b"" הוא FIN מהשרת — בדיוק הבאג. פקיעת זמן היא הראיה
         # החיובית שהחיבור עוד פתוח.
         with pytest.raises(socket.timeout):
             extra = sock.recv(1)
@@ -126,7 +126,7 @@ def test_the_server_does_not_close_first_on_the_wire(live_boot, path):
 # ---------- החיבור האחרון של GRUB: RST ולא LAST-ACK ----------
 
 def _agent_like_app(boot_dir):
-    """כמו מאזין הסוכן: ‎/boot מוגש באפליקציית האתחול, כל השאר API רגיל."""
+    """כמו מאזין הסוכן: /boot מוגש באפליקציית האתחול, כל השאר API רגיל."""
     boot = _app(boot_dir)
 
     async def app(scope, receive, send):
@@ -166,7 +166,7 @@ def live_agent(tmp_path):
 
 def _close_after(port: int, path: str) -> bytes | type:
     """בקשה, קריאת התשובה, סגירת צד הכתיבה כמו GRUB — ומה השרת עשה:
-    ‏b"" הוא FIN, ‏ConnectionResetError הוא RST."""
+    b"" הוא FIN, ConnectionResetError הוא RST."""
     with socket.create_connection(("127.0.0.1", port), timeout=5) as sock:
         sock.sendall(f"GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n".encode())
         _read_response(sock)
@@ -182,7 +182,7 @@ def _close_after(port: int, path: str) -> bytes | type:
 @pytest.mark.parametrize("path", [f"/boot/step?mac={MAC}&s=pre-boot",
                                   f"/boot/menu?mac={MAC}", "/boot/vmlinuz"])
 def test_grub_closing_a_boot_connection_gets_a_reset(live_agent, path):
-    """בלי RST השרת נשאר ב-LAST-ACK: ‏GRUB סוגר עם חלון אפס ולא מאשר את
+    """בלי RST השרת נשאר ב-LAST-ACK: GRUB סוגר עם חלון אפס ולא מאשר את
     ה-FIN של השרת, והאתחול הבא נתקע על אותו פורט מקור."""
     assert _close_after(live_agent, path) is ConnectionResetError
 

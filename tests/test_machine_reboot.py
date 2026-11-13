@@ -1,8 +1,8 @@
-"""‏#977 §4 — "אתחול מרחוק" ממגירת המחשב (‏`POST /api/console/machines/{mac}/reboot`).
+"""#977 §4 — "אתחול מרחוק" ממגירת המחשב (`POST /api/console/machines/{mac}/reboot`).
 
 אותו ערוץ כמו כיבוי החדר (#980): השרת **רושם בקשה**, והיא נוסעת בתשובת
-ה-hello הבא של המכונה (‏`power_action: "reboot"`) — בלי polling חדש ובלי
-‏`reboot` מהשרת. הסוכן מאתחל רק כשהוא ממתין (‏`poll_sleep`), ולכן מכונה
+ה-hello הבא של המכונה (`power_action: "reboot"`) — בלי polling חדש ובלי
+`reboot` מהשרת. הסוכן מאתחל רק כשהוא ממתין (`poll_sleep`), ולכן מכונה
 שעובדת עכשיו מסורבת כבר בשרת. מה שנבדק כאן: הבקשה נמסרת פעם אחת ורק
 למכונה שנבחרה, האישור (שם המחשב, נשלח מחלון האישור — #1270), הסירובים,
 והמיגרציה של ה-CHECK בטבלת הבקשות.
@@ -134,7 +134,7 @@ def test_an_old_database_accepts_a_reboot_request_and_keeps_pending_rows(tmp_pat
 
     legacy = db_module.SCHEMA.replace("CHECK (action IN ('poweroff', 'reboot'))",
                                       "CHECK (action IN ('poweroff'))")
-    # ‏#1367: גם `confirmed` לא היה אז -- הוא נוסף בעמודה, והבנייה מחדש שומרת אותו
+    # #1367: גם `confirmed` לא היה אז -- הוא נוסף בעמודה, והבנייה מחדש שומרת אותו
     legacy = legacy.replace(",\n    confirmed    INTEGER NOT NULL DEFAULT 0   -- #1367: אושר מעל אזהרת שיכפול מקומי", "")
     assert "('poweroff', 'reboot')" not in legacy and "confirmed    INTEGER" not in legacy
     path = tmp_path / "old.db"

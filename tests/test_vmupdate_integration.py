@@ -1,23 +1,23 @@
-"""‏#1334 — קצה-לקצה מול התקני loop אמיתיים ו-QEMU: אימג' זעיר → דיסק → VM
+"""#1334 — קצה-לקצה מול התקני loop אמיתיים ו-QEMU: אימג' זעיר → דיסק → VM
 שמריץ מטען ומכבה את עצמו → שמירה כגרסה חדשה → פתיחה חוזרת של הגרסה החדשה
 וקריאת מה שה-VM כתב.
 
-**מה זה מוכיח:** שפונקציות הסוכן (‏apply_gpt, ‏expand_last, ‏grow, ‏shrink_plan,
-‏_shrink_gpt, ‏_shrink_compact, ‏boot_ca_json…) רצות על השרת מול /dev/loopN
+**מה זה מוכיח:** שפונקציות הסוכן (apply_gpt, expand_last, grow, shrink_plan,
+_shrink_gpt, _shrink_compact, boot_ca_json…) רצות על השרת מול /dev/loopN
 ומחזירות את מה שהן מחזירות על ברזל; שהטבלה חוזרת מהדיסק עם אותם GUIDים;
 שהמחיצה נמתחת בפתיחה ומתכווצת בשמירה, וה-recovery שאחריה עוברת לזנב וחוזרת;
 שה-sha256 של כל קובץ בגרסה החדשה נכון; ושמה שה-VM כתב לדיסק **נמצא בגרסה
 החדשה** — כי פותחים אותה שוב באותו מסלול וקוראים.
 
 **מה זה לא מוכיח:** Windows. האימג' כאן הוא ESP עם `startup.nsh` ש-UEFI
-Shell של OVMF מריץ (כותב קובץ ומכבה), ומחיצת NTFS ריקה. ‏Windows אמיתי,
-‏Secure Boot, ‏KVM על ברזל, הפעלת רישיון ו-Windows Update — ראו
+Shell של OVMF מריץ (כותב קובץ ומכבה), ומחיצת NTFS ריקה. Windows אמיתי,
+Secure Boot, KVM על ברזל, הפעלת רישיון ו-Windows Update — ראו
 `docs/guides/vm-update.md` סעיף 7.
 
-**הרצה:** root (‏losetup, ‏mount), ‏Linux, והכלים של השרת. ‏opt-in במפורש —
-‏`IMAGESRV_VM_IT=1` — כי ריצת המעבדה הרגילה אינה root, ודילוג שקט על "אין
-root" היה ירוק בלי ראיה (#52). ‏TCG (אין /dev/kvm ב-Testrunner — הוא VM):
-‏`allow_tcg=True` הוא דגל הבדיקה, ולא נגיש מה-API.
+**הרצה:** root (losetup, mount), Linux, והכלים של השרת. opt-in במפורש —
+`IMAGESRV_VM_IT=1` — כי ריצת המעבדה הרגילה אינה root, ודילוג שקט על "אין
+root" היה ירוק בלי ראיה (#52). TCG (אין /dev/kvm ב-Testrunner — הוא VM):
+`allow_tcg=True` הוא דגל הבדיקה, ולא נגיש מה-API.
 
     sudo -n env IMAGESRV_VM_IT=1 TMPDIR=$HOME/x-tmp python3 -m pytest \\
         tests/test_vmupdate_integration.py -q -rs
@@ -94,8 +94,8 @@ def ours(node: str, backing: Path) -> None:
 
 
 def capture_source(work: Path, library: Path) -> dict:
-    """אימג' Windows זעיר: ESP ‏(vfat, ‏startup.nsh) + C: ‏(NTFS) + recovery
-    ‏(NTFS) אחריה — הפריסה של Windows 11, עם זנב שההרחבה מזיזה."""
+    """אימג' Windows זעיר: ESP (vfat, startup.nsh) + C: (NTFS) + recovery
+    (NTFS) אחריה — הפריסה של Windows 11, עם זנב שההרחבה מזיזה."""
     disk = work / "source.raw"
     with disk.open("wb") as fh:
         fh.truncate(4 * GIB)
@@ -113,7 +113,7 @@ def capture_source(work: Path, library: Path) -> dict:
         sh("mount", f"{loop}p1", str(mnt))
         try:
             # ה-UEFI Shell של OVMF מריץ startup.nsh מ-fs0: — כותב קובץ ASCII
-            # (‏>a) ומכבה את המכונה. זה ה"עדכון" של הבדיקה.
+            # (>a) ומכבה את המכונה. זה ה"עדכון" של הבדיקה.
             (mnt / "startup.nsh").write_bytes(
                 f"echo -off\r\necho {PAYLOAD} >a fs0:\\ran.txt\r\nreset -s\r\n".encode())
         finally:
@@ -184,7 +184,7 @@ def table_of(disk: Path) -> dict[int, dict[str, str]]:
 @pytest.fixture()
 def library_root():
     """הספרייה במקום שמשתמש ה-VM יכול לעבור בו — כמו /srv/imagesrv/images
-    בייצור. ‏TMPDIR של המעבדה יושב תחת /home/test ‏(0700), ושם imagesrv-vm
+    בייצור. TMPDIR של המעבדה יושב תחת /home/test (0700), ושם imagesrv-vm
     אינו מגיע לקובצי ה-ESP שהורדו (נמדד 13/10)."""
     import tempfile
     root = Path(tempfile.mkdtemp(prefix="f1334-lib-", dir="/var/tmp"))
@@ -203,14 +203,14 @@ def test_open_boot_payload_save_and_reopen(tmp_path, library_root):
     assert library.get("img_1334aa") is not None, "the test image itself must be valid"
     conn = connect(tmp_path / "imagesrv.db")
     vmupdate.write_settings(conn, {"memory_mib": 1024, "cpus": 1})
-    # ‏#1468: ה-VM על macvtap בכרטיס היציאה של המכונה. ה-UEFI Shell אינו עושה DHCP,
+    # #1468: ה-VM על macvtap בכרטיס היציאה של המכונה. ה-UEFI Shell אינו עושה DHCP,
     # ולכן תקרת ה-lease גבוהה מזמן המטען — כאן נבדק החיבור, לא ה-lease.
     nic = sh("ip", "-o", "-4", "route", "get", "1.1.1.1").split(" dev ")[1].split()[0]
     set_setting(conn, vmupdate.NIC_KEY, nic)
     engine = vmupdate.VmUpdate(conn, library, allow_tcg=True, ram_reserve_mib=256,
                                growth_reserve_bytes=64 * MIB, lease_timeout=3600)
 
-    # 1. אימג' → דיסק → VM. ‏boot_ca == [] → בלי Secure Boot (ה-Shell אינו חתום).
+    # 1. אימג' → דיסק → VM. boot_ca == [] → בלי Secure Boot (ה-Shell אינו חתום).
     engine.start("img_1334aa", "root")
     running = wait_state(engine, "running", 300)
     assert running["secure_boot"] is False and running["accel"] in ("kvm", "tcg")
@@ -229,7 +229,7 @@ def test_open_boot_payload_save_and_reopen(tmp_path, library_root):
     # 2ב. הבידוד: QEMU רץ כמשתמש ה-VM, והטבלה של vmnet חוסמת אותו מהמארח.
     vm_user = vmupdate.Machine().vm_user()
     uid, gid = vm_user.uid, vm_user.gid
-    # ‏`process=imagesrv-vmupdate` משנה את שם התהליך — מחפשים בשורת הפקודה.
+    # `process=imagesrv-vmupdate` משנה את שם התהליך — מחפשים בשורת הפקודה.
     owners = [line.split()[0] for line in sh("ps", "-e", "-o", "uid=,args=").splitlines()
               if "imagesrv-vmupdate,process=" in line]
     assert owners and set(owners) == {str(uid)}, owners
@@ -250,7 +250,7 @@ def test_open_boot_payload_save_and_reopen(tmp_path, library_root):
             capture_output=True, env=ENV, stdin=subprocess.DEVNULL)
         assert probe.returncode != 0, f"the VM user reached {target}:22"
 
-    # 3. המטען רץ ב-UEFI Shell ומכבה — ‏QEMU יוצא 0, המצב stopped.
+    # 3. המטען רץ ב-UEFI Shell ומכבה — QEMU יוצא 0, המצב stopped.
     stopped = wait_state(engine, "stopped", 900)
     assert stopped["forced"] is False and stopped["runtime_seconds"] >= 0
     # ה-macvtap והטבלה ירדו עם QEMU (#1468)
@@ -316,9 +316,9 @@ def _sha_of(path: Path) -> str:
 
 
 def test_save_shrinks_a_copy_and_never_writes_the_vm_disk(tmp_path, library_root):
-    """‏#1491: שמירה שמכווצת את C: — ה-sha256 של `disk.raw` אחריה זהה לזה
-    שלפניה, ובכל זאת הגרסה החדשה מכווצת (‏`shrunk_from_bytes`) ונפתחת. ובסוף
-    לא נשאר עותק: לא ‏dm, לא loop על הדיסק, ולא קובץ copy-on-write."""
+    """#1491: שמירה שמכווצת את C: — ה-sha256 של `disk.raw` אחריה זהה לזה
+    שלפניה, ובכל זאת הגרסה החדשה מכווצת (`shrunk_from_bytes`) ונפתחת. ובסוף
+    לא נשאר עותק: לא dm, לא loop על הדיסק, ולא קובץ copy-on-write."""
     source = capture_source(tmp_path, library_root)
     work = library_root.parent / "work"
     work.mkdir()
@@ -364,7 +364,7 @@ def test_save_shrinks_a_copy_and_never_writes_the_vm_disk(tmp_path, library_root
 
 
 def _leave_a_cut_save_behind(disk: Path, cow: Path) -> None:
-    """מה ש-`shrink_view` משאיר כשהשרת אותחל באמצע כיווץ (‏#1649) — אותם
+    """מה ש-`shrink_view` משאיר כשהשרת אותחל באמצע כיווץ (#1649) — אותם
     חלקים, בלי `finally`: loop לקריאה בלבד על הדיסק, loop על ה-COW, והעותק."""
     origin = sh("losetup", "--find", "--show", "--read-only", str(disk)).strip()
     with cow.open("wb") as fh:
@@ -387,7 +387,7 @@ class NoShrinkHost(vmdisk.Host):
 
 @pytest.mark.parametrize("shrinks", [False, True], ids=["nothing-to-shrink", "shrinks-c-drive"])
 def test_a_save_after_a_cut_save_clears_the_leftovers_and_succeeds(tmp_path, library_root, shrinks):
-    """‏#1649: אחרי אתחול באמצע כיווץ נשארים העותק ושני loop. ה-`detach_all`
+    """#1649: אחרי אתחול באמצע כיווץ נשארים העותק ושני loop. ה-`detach_all`
     (של ביטול, ושל סוף כל שמירה) נכשל עליהם — והשמירה הבאה מנקה ומצליחה, גם
     כשאין מה לכווץ (שם `shrink_view` לא רץ)."""
     source = capture_source(tmp_path, library_root)

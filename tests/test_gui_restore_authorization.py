@@ -1,21 +1,21 @@
 """השחזור מהגואי מוחק את הדיסק רק מאחורי סשן קונסולה חי (סקירת אבטחה, 11/10).
 
 עד 11/10 ה-handoff של `restore-start` עבר ב-`recovery_gate` לפני
-‏`single_restore_run`: שלושת המצבים של `.ui.require_login` וכניסה בטקסט.
+`single_restore_run`: שלושת המצבים של `.ui.require_login` וכניסה בטקסט.
 כשמסכי הטקסט נמחקו (GUI בלבד) נמחק איתם גם השער — ו-handoff עם שם אימג'
 הספיק כדי למחוק את הדיסק. סקירת האבטחה סימנה זאת MEDIUM. השער חזר בצד
-הסוכן, fail-closed (‏`gui_restore_authorized`, ‏guiparent.sh):
+הסוכן, fail-closed (`gui_restore_authorized`, guiparent.sh):
 
-* ‏`.ui.require_login` שאינו true/false — סירוב (עיקרון 5).
+* `.ui.require_login` שאינו true/false — סירוב (עיקרון 5).
 * הגשר מעביר עם ה-handoff את ה-cookie jar של הכניסה בגואי
-  (‏`$RUN_DIR/gui/handoff.jar`), והסוכן בודק אותו מול השרת: ‏200 על נתיב
-  קונסולה שדורש סשן — ורק אז. בלי jar, ‏401, בלי תשובה — סירוב.
+  (`$RUN_DIR/gui/handoff.jar`), והסוכן בודק אותו מול השרת: 200 על נתיב
+  קונסולה שדורש סשן — ורק אז. בלי jar, 401, בלי תשובה — סירוב.
 * ה-jar חד-פעמי: סירוב מוחק אותו; ג'אר שאושר נוסע עם המשיכה (השרת מקבל
-  אותו כהרשאה, 11/10) ונמחק מיד אחריה; ‏`console_login.json` (שממנו `gui_role`
+  אותו כהרשאה, 11/10) ונמחק מיד אחריה; `console_login.json` (שממנו `gui_role`
   קורא תפקיד) נמחק בכל כשל כניסה, ביציאת הקיוסק וביציאה מהגואי.
 
 בקרה שלילית: על הקומיט שלפני התיקון (bca54871) הטסטים של הסירוב נופלים —
-‏`gui_restore_authorized` אינו קיים, וה-handoff מגיע ל-`single_restore_run`.
+`gui_restore_authorized` אינו קיים, וה-handoff מגיע ל-`single_restore_run`.
 """
 
 from __future__ import annotations
@@ -111,7 +111,7 @@ HANDOFF = (
 
 
 def test_the_handoff_without_a_session_erases_nothing(tmp_path):
-    """הצורה שהסקירה סימנה: handoff עם שם אימג', בלי סשן — ‏die_local, ושום
+    """הצורה שהסקירה סימנה: handoff עם שם אימג', בלי סשן — die_local, ושום
     כתיבה. בקרה שלילית: על bca54871 הפלט מכיל ERASED img_1."""
     out, rc, _ = run(tmp_path, HANDOFF, jar=False)
     assert "ERASED" not in out, out
@@ -270,7 +270,7 @@ def test_logout_drops_the_session_and_the_role(tmp_path):
 
 @pytest.mark.parametrize("code", ["401", "503"])
 def test_a_refused_sign_in_leaves_no_role_behind(tmp_path, code):
-    """curl כותב את גוף הסירוב ל-console_login.json; ‏gui_role קורא משם תפקיד.
+    """curl כותב את גוף הסירוב ל-console_login.json; gui_role קורא משם תפקיד.
     סירוב חייב למחוק אותו — אחרת תפקיד ישן מכניסה קודמת עובר את gui_role."""
     out, rd = bridge(tmp_path,
                      'printf \'{"role":"admin"}\' > "$RUN_DIR/console_login.json"; '

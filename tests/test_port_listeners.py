@@ -1,8 +1,8 @@
-"""‏#996: מנהל המאזינים — סגירה ופתיחה של פורט **בזמן ריצה**, על סוקט אמיתי.
+"""#996: מנהל המאזינים — סגירה ופתיחה של פורט **בזמן ריצה**, על סוקט אמיתי.
 
 זה הטסט שהעניין דורש במפורש: "כבוי" חייב להיות "לא מאזין" בפועל —
-‏bind על loopback אחרי כיבוי מצליח, ‏connect נכשל — ולא 403 על כל בקשה.
-‏uvicorn אמיתי על 127.0.0.1 עם פורט שהמערכת בוחרת; אף פורט ייצור אינו
+bind על loopback אחרי כיבוי מצליח, connect נכשל — ולא 403 על כל בקשה.
+uvicorn אמיתי על 127.0.0.1 עם פורט שהמערכת בוחרת; אף פורט ייצור אינו
 נתפס כאן.
 
 הבקרה השלילית (בגוף ה-PR): בלי `server/net/ports.py` הטסטים כאן לא רצים
@@ -109,7 +109,7 @@ def test_close_releases_the_socket_and_open_rebinds_it():
 
 
 def test_a_port_disabled_in_the_saved_state_is_not_bound_at_boot():
-    """‏#996: מצב שמור שורד אתחול — פורט שכבוי ב-DB לא מופעל כלל."""
+    """#996: מצב שמור שורד אתחול — פורט שכבוי ב-DB לא מופעל כלל."""
     agent_port, kiosk_port = free_port(), free_port()
 
     async def scenario():
@@ -190,7 +190,7 @@ def test_request_is_usable_from_a_worker_thread():
 # --- החוזה של serve_all הישן, שנשמר: כיבוי מתואם וכשל bind בעלייה --------
 
 class _FakeServer:
-    """‏uvicorn.Server מזויף: `serve()` קורוטינה, `should_exit`, ‏`started`
+    """uvicorn.Server מזויף: `serve()` קורוטינה, `should_exit`, `started`
     ו-`servers` — החוזה המינימלי שהמנהל נשען עליו."""
 
     def __init__(self, mode: str):
@@ -255,10 +255,10 @@ def test_threaded_listener_is_opened_and_stopped_by_the_manager():
     asyncio.run(scenario())
 
 
-# --- ‏#742 (אודיט אסטרה על serve_all): אותות, SystemExit, תקרת המתנה ----------
+# --- #742 (אודיט אסטרה על serve_all): אותות, SystemExit, תקרת המתנה ----------
 
 class _SignalGrabbingServer(_FakeServer):
-    """כמו uvicorn: ‏`serve()` מתקין handler משלו ל-SIGINT ומשחזר ביציאה."""
+    """כמו uvicorn: `serve()` מתקין handler משלו ל-SIGINT ומשחזר ביציאה."""
 
     def _handle(self, signum, frame):
         self.should_exit = True
@@ -285,11 +285,11 @@ def test_the_managers_signal_handler_wins_over_every_listener(saved_signal_handl
     פתיחה/סגירה ה-handler המותקן חייב להיות של המנהל — אחרת Ctrl-C/SIGTERM
     מגיע לשרת אחד בלבד — ובסוף ה-handler המקורי חוזר.
 
-    הבדיקה הראשונה ממתינה ל-`_opening` ריק ולא רק ל-`is_open`: ‏`is_open`
+    הבדיקה הראשונה ממתינה ל-`_opening` ריק ולא רק ל-`is_open`: `is_open`
     נדלק ברגע ש-`serve()` של "b" סימן `started` — אחרי שהתקין את ה-handler
     שלו ולפני ש-`_open` התעורר והחזיר את של המנהל. מי שהתעורר ראשון בחלון
     הזה קבע את התוצאה (טיימרים של asyncio בהפרש של שבריר מילישנייה), וב-
-    ריצה מלאה ועמוסה על ה-Testrunner זה היה הטסט. ‏`set_open` ממתין
+    ריצה מלאה ועמוסה על ה-Testrunner זה היה הטסט. `set_open` ממתין
     לסיום המעבר בעצמו, ולכן שתי הבדיקות שאחריו אינן צריכות זאת."""
     original = signal.getsignal(signal.SIGINT)
     a = _SignalGrabbingServer("wait")
@@ -297,7 +297,7 @@ def test_the_managers_signal_handler_wins_over_every_listener(saved_signal_handl
     async def scenario():
         mgr = ports.Listeners()
         mgr.add("a", [lambda: a], port=1, hosts=[])
-        # ‏Server אינו רב-פעמי — כל פתיחה של "b" מקבלת אחד חדש.
+        # Server אינו רב-פעמי — כל פתיחה של "b" מקבלת אחד חדש.
         mgr.add("b", [lambda: _SignalGrabbingServer("wait")], port=2, hosts=[])
         task = asyncio.ensure_future(mgr.serve(lambda pid: True))
         await _wait(lambda: mgr.is_open("a") and mgr.is_open("b") and not mgr._opening)
@@ -315,8 +315,8 @@ def test_the_managers_signal_handler_wins_over_every_listener(saved_signal_handl
 
 
 def test_uvicorn_sys_exit_on_bind_failure_at_boot_is_a_listener_error():
-    """‏uvicorn עושה `sys.exit(3)` על כשל bind — לא OSError כמו ב-_FakeServer
-    למעלה. ‏SystemExit שלא נתפס מפיל את הלולאה כולה בלי לסגור את השאר."""
+    """uvicorn עושה `sys.exit(3)` על כשל bind — לא OSError כמו ב-_FakeServer
+    למעלה. SystemExit שלא נתפס מפיל את הלולאה כולה בלי לסגור את השאר."""
 
     class _Exits(_FakeServer):
         async def serve(self):

@@ -30,6 +30,9 @@ ISO_MANIFEST = Path("/etc/imagesrv/iso-release.json")
 PREINSTALL_REPO = Path("/opt/imagesrv-src")
 SERVER_OVERRIDE = Path("/etc/systemd/system/imagesrv-server.service.d/override.conf")
 SYS_NET = Path("/sys/class/net")
+#: #2516: the card the installer configured (state=/mac=) -- the one card the
+#: first-boot wizard guard (deploy/nftables-wizard.sh, #2490) opens 8081 on.
+INSTALLER_NIC = Path("/etc/imagesrv/installer-nic")
 
 
 @dataclass(frozen=True)
@@ -127,6 +130,9 @@ class Snapshot:
     #: #2865: the console's "גיבוי אוטומטי" is off (setting backup:enabled=false) -- an orange bar
     #: above the hero; the server stays "תקין"
     backup_off: bool = False
+    #: #2516 (pre-install only): the installer card by name, as the wizard guard finds it
+    #: (by MAC); "" = undecidable -- the guard keeps 8081 on loopback only
+    installer_nic: str = ""
 
 
 def _command_text(result: CommandResult) -> str:
@@ -419,7 +425,7 @@ def is_pre_install(data_dir: Path = DATA_DIR,
 
 def _preinstall_snapshot(rows: list[dict], runner: Runner, sys_net: Path,
                          repo_dir: Path, manifest_file: Path,
-                         current: datetime) -> Snapshot:
+                         current: datetime, installer_fact: Path = INSTALLER_NIC) -> Snapshot:
     interfaces = []
     for row in rows:
         address = row["addresses"][0] if row["addresses"] else ""
@@ -431,17 +437,33 @@ def _preinstall_snapshot(rows: list[dict], runner: Runner, sys_net: Path,
             address_checked=bool(row.get("address_checked")),
         ))
     addressed = next((nic for nic in interfaces if nic.address), None)
-    address = addressed.address.split("/")[0] if addressed else ""
+    # #2516: the browser address is the installer card's -- the only card the wizard
+    # guard opens 8081 on. The first card with an address (the deploy card, 06/11)
+    # was a URL the guard drops: the operator who did what the screen said got a timeout.
+    installer = _installer_nic(installer_fact, interfaces)
+    address = installer.address.split("/")[0] if installer and installer.address else ""
     version, version_verified = _version(runner, repo_dir, manifest_file)
     return Snapshot(
         hostname=socket.gethostname(),
         version=version, version_verified=version_verified,
         console_url=f"https://{address}:8081" if address else "",
         no_address=not bool(address), fingerprint="not created",
-        management=addressed or (interfaces[0] if interfaces else NicInfo("unknown")),
+        management=installer or addressed or (interfaces[0] if interfaces else NicInfo("unknown")),
         interfaces=tuple(interfaces), refreshed=current.strftime("%H:%M:%S"),
-        pre_install=True,
+        pre_install=True, installer_nic=installer.name if installer else "",
     )
+
+
+def _installer_nic(fact: Path, interfaces: list[NicInfo]) -> NicInfo | None:
+    """#2516: the card deploy/nftables-wizard.sh opens the wizard port on -- the same
+    rule: ``state=configured`` and the ``mac=`` of a card here (the name in the
+    installer is not necessarily the name here). None = the guard keeps 8081 on
+    loopback only (no file, not configured, a MAC on no card, a file not read)."""
+    values = _read_key_values(fact)
+    mac = values.get("mac", "").strip().lower()
+    if values.get("state") != "configured" or not mac:
+        return None
+    return next((nic for nic in interfaces if nic.mac.strip().lower() == mac), None)
 
 
 #: #2148: where the DCUI asks the console which certificate it presents
@@ -509,13 +531,14 @@ def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
                      override_file: Path = SERVER_OVERRIDE,
                      repo_dir: Path = Path("/opt/imagesrv"),
                      manifest_file: Path = ISO_MANIFEST,
-                     now: datetime | None = None, conn=None) -> Snapshot:
+                     now: datetime | None = None, conn=None,
+                     installer_fact: Path = INSTALLER_NIC) -> Snapshot:
     rows = _interface_rows(sys_net, runner)
     current = now or datetime.now()
     if is_pre_install(data_dir, status_file):
         source_repo = PREINSTALL_REPO if repo_dir == Path("/opt/imagesrv") else repo_dir
         return _preinstall_snapshot(
-            rows, runner, sys_net, source_repo, manifest_file, current)
+            rows, runner, sys_net, source_repo, manifest_file, current, installer_fact)
     conn = conn or connect(data_dir / "imagesrv.db")
     deploy_state = deploy_net.resolve(conn, None, None)
     deploy_name = deploy_state.interface or ""

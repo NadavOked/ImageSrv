@@ -1,15 +1,15 @@
-"""‏#410 — זמן שעבר, קצב והערכת סיום על מסך החדר.
+"""#410 — זמן שעבר, קצב והערכת סיום על מסך החדר.
 
 הנתונים היו בשרת כל הזמן: `started_at` של הגל, ו-`bytes_written`/`moved_at`
 לכל מגירה (#552). מה שלא היה הוא הגזירה — ולכן המסך הגרפי אמר בהערה
-`/* bytes, no rate in the state */`. ‏ETA = היתרה חלקי הקצב.
+`/* bytes, no rate in the state */`. ETA = היתרה חלקי הקצב.
 
-‏17/10 (ברזל): הקצב היה ממוצע מאז שהגל יצא (‏`bytes_written` חלקי
-‏`moved_at − started_at`), והמכנה כלל את ההמתנה לפני הבייט הראשון ובין
+17/10 (ברזל): הקצב היה ממוצע מאז שהגל יצא (`bytes_written` חלקי
+`moved_at − started_at`), והמכנה כלל את ההמתנה לפני הבייט הראשון ובין
 המחיצות. מאז הוא הקצב **העדכני**: הבייטים בחלון האחרון של 10 שניות לפחות,
-מחותמות שהשרת עצמו שם על הדיווחים (‏`reports._stamp_window`).
+מחותמות שהשרת עצמו שם על הדיווחים (`reports._stamp_window`).
 
-⚠️ ‏`None` ≠ `0` (עיקרון 5): מגירה שלא נמדדה אינה "עצרה". כל דרך שבה
+⚠️ `None` ≠ `0` (עיקרון 5): מגירה שלא נמדדה אינה "עצרה". כל דרך שבה
 המדידה עצמה נכשלת — אין חותמת, אין בייטים, אפס שניות, לא כותבת — חייבת
 לצאת `None`, ולא מספר שנראה כמו מדידה.
 """
@@ -34,9 +34,9 @@ GB = 1_000_000_000
 
 
 def _ago(seconds: float, now: datetime | None = None) -> str:
-    # ‏`now` — שעון אחד לכל הדיווחים של טסט. ‏`isoformat(timespec="seconds")` חותך
+    # `now` — שעון אחד לכל הדיווחים של טסט. `isoformat(timespec="seconds")` חותך
     # מיקרו-שניות, ולכן שתי קריאות לשעון הקיר (`_ago(12)` ואז `_ago(0)`) שחוצות
-    # גבול שנייה נותנות פער 13 ולא 12: ‏900MB/13s = 69230769 במקום 75_000_000
+    # גבול שנייה נותנות פער 13 ולא 12: 900MB/13s = 69230769 במקום 75_000_000
     # (ה-nightly הציבורי, 07/11, ריצה 42348661231).
     return ((now or datetime.now(timezone.utc)) - timedelta(seconds=seconds)).isoformat(timespec="seconds")
 
@@ -48,7 +48,7 @@ def _pace(**target):
 
 
 def test_rate_is_the_recent_window_not_the_average_since_the_wave_started():
-    """17/10 (ברזל): ‏5GB אחרי 100 שניות מאז שהגל יצא הם "50MB/s" בממוצע; אבל
+    """17/10 (ברזל): 5GB אחרי 100 שניות מאז שהגל יצא הם "50MB/s" בממוצע; אבל
     הקצב העדכני (החלון האחרון) הוא מה שהמגירה עושה עכשיו."""
     pace = _pace(recent_bps=75_000_000)
     assert pace["rate_bps"] == 75_000_000
@@ -68,7 +68,7 @@ def test_eta_is_unknown_without_a_total_but_the_rate_still_reads():
 ])
 def test_a_measurement_that_cannot_be_made_is_none_not_zero(broken):
     """חלון שטרם נסגר / חלון שלא זז / חותמת פגומה / חלון ישן (הדיווחים פסקו) /
-    לא כותבת — כולם "לא נמדד". ‏0 היה אומר "נמדד: עצרה"."""
+    לא כותבת — כולם "לא נמדד". 0 היה אומר "נמדד: עצרה"."""
     pace = _pace(**broken)
     assert pace == {"rate_bps": None, "eta_s": None}
 
@@ -143,8 +143,8 @@ def test_a_wave_that_did_not_start_has_no_elapsed_and_an_unmeasured_drawer_does_
 
 def test_the_numbers_reach_the_room_screen_from_a_real_wave(room_server, monkeypatch):
     """קצה-לקצה: גל רץ 100 שניות, אבל המגירה החלה לכתוב רק לפני 12 — ההמתנה
-    למקבלים ולשאלת SMART. שני דיווחים 12 שניות זה מזה, ‏900MB ביניהם: ‏GET /room
-    נושא 75MB/s — מה שהמגירה עושה עכשיו — ולא ‏~10MB/s, הממוצע מאז שהגל יצא
+    למקבלים ולשאלת SMART. שני דיווחים 12 שניות זה מזה, 900MB ביניהם: GET /room
+    נושא 75MB/s — מה שהמגירה עושה עכשיו — ולא ~10MB/s, הממוצע מאז שהגל יצא
     שהמסך הציג עד 17/10. השעון של הדיווחים מוזז דרך `reports.now_iso`."""
     admin, anon, ctx = room_server["admin"], room_server["anon"], room_server["ctx"]
     assert admin.post("/api/console/room", json=room_body(

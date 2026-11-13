@@ -3,7 +3,7 @@
 הסדר אחרי סיסמה נכונה:
   (1) deploy בקונסולה → 403 deploy_no_console, לפני MFA/כפייה (#1073)
   (2) mfa_required / must_change_password / mfa_enrollment_required — או session מלאה.
-      ‏MFA לפני החלפה כפויה (#2409): סיסמה זמנית מאיפוס אינה עוקפת את הקוד.
+      MFA לפני החלפה כפויה (#2409): סיסמה זמנית מאיפוס אינה עוקפת את הקוד.
 הקיוסק (`kiosk=True`) מקבל גם deploy, מדלג על MFA; החלפה כפויה → 403.
 הגבלת ניסיונות (#1075) חלה על שלב הסיסמה לכל תפקיד.
 """
@@ -31,7 +31,7 @@ def _blocked_reply(exc: login_guard.LoginBlocked) -> JSONResponse:
     if exc.retry_after is not None:
         headers["Retry-After"] = str(exc.retry_after)
     if exc.code == login_guard.ACCOUNT_CAPPED:
-        # ‏#2443: מה קרה ומתי זה נפתח — מסך הכניסה מציג את המשפט הזה כלשונו,
+        # #2443: מה קרה ומתי זה נפתח — מסך הכניסה מציג את המשפט הזה כלשונו,
         # ולא את "החשבון נעול ל-N דקות" של התקרה לפי (שם, IP).
         return JSONResponse({"detail": exc.message, "error": exc.code,
                              "message_he": exc.message},
@@ -40,7 +40,7 @@ def _blocked_reply(exc: login_guard.LoginBlocked) -> JSONResponse:
 
 
 def login_surface(request: Request) -> str:
-    """‏#2443: המשטח נקבע לפי הפורט — ‏`/api/console/login` חי גם בפורט הסוכן
+    """#2443: המשטח נקבע לפי הפורט — `/api/console/login` חי גם בפורט הסוכן
     (מחשב הבנייה), וכשלון משם אינו נספר בתקרה של הקונסולה."""
     on_agent_port = getattr(request.app.state, auth.KIOSK_APP_FLAG, False)
     return login_guard.AGENT if on_agent_port else login_guard.CONSOLE
@@ -48,9 +48,9 @@ def login_surface(request: Request) -> str:
 
 async def finish_login(conn, request: Request, response: Response, *,
                        tls, kiosk: bool = False):
-    # ‏#2446: גוף פגום (`{`, ‏`\xff\xfe`, ריק), גוף שאינו אובייקט, או שם/סיסמה שאינם
-    # מחרוזת — ‏400 לפני כל בדיקה, ולא 500 מ-`.strip()`/`.get()` על מה שהגיע.
-    # ‏`body.read_json` — אותה תקרה, עומק ונרמול של הסוכן; הנתיב חשוף גם ב-8080.
+    # #2446: גוף פגום (`{`, `\xff\xfe`, ריק), גוף שאינו אובייקט, או שם/סיסמה שאינם
+    # מחרוזת — 400 לפני כל בדיקה, ולא 500 מ-`.strip()`/`.get()` על מה שהגיע.
+    # `body.read_json` — אותה תקרה, עומק ונרמול של הסוכן; הנתיב חשוף גם ב-8080.
     try:
         body = await agent_body.read_json(request)
     except agent_body.BodyError as exc:
@@ -79,18 +79,18 @@ async def finish_login(conn, request: Request, response: Response, *,
 
     stored = users.canonical_name(conn, username) or username
     info = users.flags(conn, stored)
-    # ‏#1120: למשתמש MFA בקונסולה הסיסמה היא חצי כניסה — המונה מתאפס רק
+    # #1120: למשתמש MFA בקונסולה הסיסמה היא חצי כניסה — המונה מתאפס רק
     # ב-`/login/mfa`. אחרת קוד שגוי + כניסה מחדש
     # היו מאפסים את הספירה, ו-10 ניסיונות לא היו מצטברים לנעילה לעולם.
-    # ‏#2409: גם עם החלפה כפויה — הסיסמה הזמנית היא עדיין רק חצי כניסה.
+    # #2409: גם עם החלפה כפויה — הסיסמה הזמנית היא עדיין רק חצי כניסה.
     if kiosk or not info["mfa_enabled"]:
         login_guard.clear(conn, username, ip)
 
     if role == "deploy" and not kiosk:
-        # ‏#1073: הסיסמה נכונה — וזו בדיוק הסיבה שהתשובה אינה 401.
+        # #1073: הסיסמה נכונה — וזו בדיוק הסיבה שהתשובה אינה 401.
         # "בדקנו, ואתה לא נכנס מכאן" הוא מצב משלו (עיקרון 5), עם
         # הודעה שמסך הכניסה מציג כלשונה. לפני MFA/כפייה: להפצה אין
-        # קונסולה בכלל. ‏JSONResponse ולא HTTPException: הגוף הוא חוזה
+        # קונסולה בכלל. JSONResponse ולא HTTPException: הגוף הוא חוזה
         # (`error` + `message_he`), לא `detail` חופשי.
         journal(conn, "login_refused_console", "deploy", stored)
         return JSONResponse(
@@ -100,20 +100,22 @@ async def finish_login(conn, request: Request, response: Response, *,
     if kiosk:
         if info["must_change_password"]:
             raise HTTPException(403, "החלף סיסמה בקונסולה קודם")
-        # ‏#1340: בפורט הסוכן העוגייה מסומנת — סיסמה בלבד, ב-HTTP; הקונסולה מסרבת לה.
+        # #1340: בפורט הסוכן העוגייה מסומנת — סיסמה בלבד, ב-HTTP; הקונסולה מסרבת לה.
         purpose = auth.PURPOSE_KIOSK if getattr(
             request.app.state, auth.KIOSK_APP_FLAG, False) else ""
         auth.attach_cookie(response, conn, stored, role, tls, purpose=purpose)
         users.record_login(conn, stored, ip)
         journal(conn, "login", "kiosk", stored)
-        # ‏#1499 (נדב 16/10): ערכת הנושא השמורה של המשתמש — ה-GUI הנייטיבי
-        # של מחשב הבנייה נפתח בה. ‏auto/light/dark; ‏auto = ברירת המחדל (בהיר).
+        # #1499 (נדב 16/10): ערכת הנושא השמורה של המשתמש — ה-GUI הנייטיבי
+        # של מחשב הבנייה נפתח בה. auto/light/dark; auto = ברירת המחדל (בהיר).
         return {"username": stored, "role": role, "idle_seconds": _idle(conn),
-                "theme": users.get_theme(conn, stored)}
+                "theme": users.get_theme(conn, stored),
+                # #3025: בסיסי/מתקדם — הגואי שומר, ולא משנה בו מסך (אין בו מה להסתיר).
+                "view": users.get_view(conn, stored)}
 
-    # ‏#2409: ‏MFA לפני החלפה כפויה. בסדר ההפוך, סיסמה זמנית מאיפוס של מנהל
-    # הספיקה: ‏pwchange → ‏`/me/password` → עוגייה מלאה, בלי קוד. ההחלפה
-    # הכפויה נמשכת **אחרי** הקוד — ‏`/login/mfa` מנפיק אז את עוגיית ה-pwchange.
+    # #2409: MFA לפני החלפה כפויה. בסדר ההפוך, סיסמה זמנית מאיפוס של מנהל
+    # הספיקה: pwchange → `/me/password` → עוגייה מלאה, בלי קוד. ההחלפה
+    # הכפויה נמשכת **אחרי** הקוד — `/login/mfa` מנפיק אז את עוגיית ה-pwchange.
     if info["mfa_enabled"]:
         challenge = console_mfa.make_challenge(conn, stored)
         journal(conn, "login", "mfa_required", stored)

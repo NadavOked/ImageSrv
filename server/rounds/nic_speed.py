@@ -4,14 +4,14 @@
 (`drive_rates.read_link`) לבין הכרטיס האיטי מבין מחשבי השיכפול בגל. לכל
 מכונה, לפי הסדר:
 
-1. **ידני** — מה שהמנהל קבע במגירת המכונה (‏1/2.5/10Gb/s). גובר.
-2. **מדווח** — ‏`speed_mbps` של כרטיס ההפצה מבדיקת המכונה שהסוכן שולח ב-hello
-   (‏`probe.nic`, ‏`agent/lib/hw/probe.sh`). כרטיס ההפצה = הכרטיס היחיד עם
-   קישור; ואם יש כמה — היחיד שעליו נבדקה התנגשות כתובת (‏`ip_conflict`,
+1. **ידני** — מה שהמנהל קבע במגירת המכונה (1/2.5/10Gb/s). גובר.
+2. **מדווח** — `speed_mbps` של כרטיס ההפצה מבדיקת המכונה שהסוכן שולח ב-hello
+   (`probe.nic`, `agent/lib/hw/probe.sh`). כרטיס ההפצה = הכרטיס היחיד עם
+   קישור; ואם יש כמה — היחיד שעליו נבדקה התנגשות כתובת (`ip_conflict`,
    הסוכן בודק רק את הכרטיס שלו). שניים או אפס — לא יודעים איזה.
 3. **הנחה** — אין ידני ואין דיווח תקין: **מניחים 1Gb/s** (הכרעת נדב,
-   שמרני). ההנחה **מוגבלת** והמסך אומר שהיא הנחה, לא מדידה (‏`source:
-   "assumed"` + ‏`why`) — "לא ידוע" אינו מוצג כ"נמדד".
+   שמרני). ההנחה **מוגבלת** והמסך אומר שהיא הנחה, לא מדידה (`source:
+   "assumed"` + `why`) — "לא ידוע" אינו מוצג כ"נמדד".
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def manual(conn: sqlite3.Connection, mac: str) -> int | None:
 
 
 def set_manual(conn: sqlite3.Connection, mac: str, mbps: int | None) -> None:
-    """‏`None` = חזרה לאוטומטי (המפתח נמחק)."""
+    """`None` = חזרה לאוטומטי (המפתח נמחק)."""
     if mbps is None:
         set_settings(conn, {}, remove=[PREFIX + mac])
     elif mbps in CHOICES:
@@ -49,9 +49,9 @@ def set_manual(conn: sqlite3.Connection, mac: str, mbps: int | None) -> None:
 
 
 def reported(sample: dict | None) -> tuple[int | None, str | None]:
-    """(‏Mb/s, ‏None) מהדגימה האחרונה, או (‏None, למה): ‏`no_probe` · ‏`no_nic`
-    (הסוכן לא דיווח כרטיס עם קישור) · ‏`ambiguous` (כמה כרטיסים ואין דרך
-    לדעת איזה מהם להפצה) · ‏`unknown` (‏null/‏-1/לא מספר)."""
+    """(Mb/s, None) מהדגימה האחרונה, או (None, למה): `no_probe` · `no_nic`
+    (הסוכן לא דיווח כרטיס עם קישור) · `ambiguous` (כמה כרטיסים ואין דרך
+    לדעת איזה מהם להפצה) · `unknown` (null/-1/לא מספר)."""
     nics = (sample or {}).get("nic") if isinstance(sample, dict) else None
     if sample is None:
         return None, "no_probe"
@@ -72,9 +72,9 @@ def reported(sample: dict | None) -> tuple[int | None, str | None]:
 
 def view(conn: sqlite3.Connection, mac: str, sample: dict | None = None,
          sampled: bool = False) -> dict:
-    """‏`{"speed_mbps", "source", "why"}` — ‏`source`: ‏`manual` · ‏`reported` ·
-    ‏`assumed` (‏`speed_mbps` = ‏`ASSUMED_MBPS`, ‏`why` = למה הדיווח לא שימש).
-    ‏`sample` — הדגימה, כשהקורא כבר קרא אותה (`sampled=True`)."""
+    """`{"speed_mbps", "source", "why"}` — `source`: `manual` · `reported` ·
+    `assumed` (`speed_mbps` = `ASSUMED_MBPS`, `why` = למה הדיווח לא שימש).
+    `sample` — הדגימה, כשהקורא כבר קרא אותה (`sampled=True`)."""
     chosen = manual(conn, mac)
     if chosen is not None:
         return {"speed_mbps": chosen, "source": "manual", "why": None}
@@ -88,8 +88,8 @@ def view(conn: sqlite3.Connection, mac: str, sample: dict | None = None,
 
 
 def slowest(conn: sqlite3.Connection, macs) -> dict | None:
-    """המכונה האיטית בגל: ‏`{"mac", "speed_mbps", "source", "why"}`, ו-`assumed`
-    — כל המכונות שמהירותן הונחה. ‏None — אין מכונות."""
+    """המכונה האיטית בגל: `{"mac", "speed_mbps", "source", "why"}`, ו-`assumed`
+    — כל המכונות שמהירותן הונחה. None — אין מכונות."""
     seen = [{"mac": mac, **view(conn, mac)} for mac in sorted({m for m in macs if m})]
     if not seen:
         return None

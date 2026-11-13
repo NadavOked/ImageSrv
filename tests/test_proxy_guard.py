@@ -1,8 +1,8 @@
-"""‏#36 — השומר של מצב proxy: כפתור אחד שיכול להקפיא את dnsmasq.
+"""#36 — השומר של מצב proxy: כפתור אחד שיכול להקפיא את dnsmasq.
 
 מצב proxy נשען על תכונה שבורה ב-dnsmasq המותקן: בקשת PXE לפורט 4011
-מקפיאה את התהליך (‏100% מעבד, מפסיק לענות לכל הסוקטים). הבידוד לאינסטנס
-נפרד (‏imagesrv-proxy) כבר שם, והוא מציל את ה-DHCP של וילן ההפצה — אבל
+מקפיאה את התהליך (100% מעבד, מפסיק לענות לכל הסוקטים). הבידוד לאינסטנס
+נפרד (imagesrv-proxy) כבר שם, והוא מציל את ה-DHCP של וילן ההפצה — אבל
 הוא לא הופך את ההדלקה לפעולה שאפשר לעשות בהיסח הדעת.
 
 הבדיקות כאן על ההגנה עצמה, לא על התכונה:
@@ -28,7 +28,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-#: הכרעת נדב 11/10: ‏proxy מסורב בשרת כשהכיתות כבויות (v1). השומר של #36
+#: הכרעת נדב 11/10: proxy מסורב בשרת כשהכיתות כבויות (v1). השומר של #36
 #: נבדק כאן על v1.2 — ולכן היכולת דלוקה (`classrooms_on`).
 pytestmark = pytest.mark.usefixtures("classrooms_on")
 
@@ -70,7 +70,7 @@ def test_a_version_we_could_not_read_is_not_a_version_that_is_fine(raw):
 
 
 def test_a_version_nobody_tested_is_neither_broken_nor_approved():
-    """‏2.92 יצאה בלי אזכור תיקון ב-CHANGELOG. היעדר אזכור אינו ראיה
+    """2.92 יצאה בלי אזכור תיקון ב-CHANGELOG. היעדר אזכור אינו ראיה
     לתיקון — הגרסה נשארת "לא נבדקה", והיא חוסמת."""
     support = dhcp.proxy_support("Dnsmasq version 2.92  Copyright (c) 2000-2025")
     assert support.read is True and support.version == "2.92"
@@ -189,7 +189,7 @@ ON = {"proxy": True, "server_ip": "10.44.1.10", "confirm": "eth1"}
 
 
 def test_the_api_refuses_proxy_on_a_version_that_was_never_verified(guarded):
-    """‏#36 סעיף 3: הכפתור לבדו אינו הגנה. גם קריאה ישירה ל-API — עם
+    """#36 סעיף 3: הכפתור לבדו אינו הגנה. גם קריאה ישירה ל-API — עם
     ההקלדה של שם הכרטיס ובלי המסך — נעצרת."""
     admin, fake = guarded["admin"], guarded["fake"]
     response = admin.put("/api/console/net/interfaces/eth1", json=ON)
@@ -214,7 +214,7 @@ def test_the_api_refuses_when_it_could_not_read_the_version_at_all(guarded):
 
 
 def test_switching_full_dhcp_to_proxy_is_gated_too(guarded):
-    """מעבר מ-DHCP מלא ל-proxy אינו "הדלקה" (‏turning_on הוא False),
+    """מעבר מ-DHCP מלא ל-proxy אינו "הדלקה" (turning_on הוא False),
     ובלי בדיקה נפרדת הוא היה עוקף את השומר לגמרי."""
     admin = guarded["admin"]
     good = dict(enabled=True, range_start="10.44.1.50", range_end="10.44.1.200",

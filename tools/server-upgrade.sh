@@ -283,7 +283,32 @@ fi
 # עלה) — אחרת אין סיבה לאבד את מה שנרשם בינתיים. בלי עותק — לא משדרגים.
 DB_SNAPSHOT="$DB.pre-upgrade"
 DB_NOTE=""
-if ! DB_SNAP_VER="$(python3 - "$DB" "$DB_SNAPSHOT" <<'PYEOF' 2>&1
+# ‏#2508: עותק קיים **אינו נדרס** כשקוד התג אינו פותח את ה-DB הנוכחי (‏SCHEMA_VERSION
+# שלו נמוך מ-user_version — חזרה לגרסה שלפני מיגרציה). אז העותק הקיים הוא הדרך
+# היחידה חזרה, וההודעה של db.SchemaError (בקוד **הישן**, ולכן השם אינו משתנה)
+# מפנה אליו; עותק של DB שהתג מסרב לו אינו דרך חזרה משום דבר, והחזרה בריצה הזו
+# אינה משחזרת DB (‏DB_SNAP_VER ריק — גם בסמן של #1893). גרסת התג נקראת מ-git,
+# ו"לא נקראה" עוצר כמו עותק שנכשל (עיקרון 5). תג בלי השורה קודם ל-#1894 ואינו מסרב.
+DB_KEEP=""
+if [[ -f "$DB_SNAPSHOT" ]]; then
+    if ! target_db="$(git -C "$REPO_DIR" show "$TAG:server/db.py" 2>&1)" \
+            || ! db_now="$(python3 -c 'import sqlite3, sys; print(sqlite3.connect(sys.argv[1]).execute("PRAGMA user_version").fetchone()[0])' "$DB" 2>&1)" \
+            || [[ ! "$db_now" =~ ^[0-9]+$ ]]; then
+        why="לא נקבע אם $TAG פותח את ה-DB הנוכחי (${db_now:-$target_db}) — לא משדרגים: העותק $DB_SNAPSHOT עלול להיות הדרך היחידה חזרה"
+        set_status failed "$why" install "$why"
+        drop_marker || :
+        die "$why"
+    fi
+    target_schema="$(sed -n '/^SCHEMA_VERSION = [0-9]/{s/^SCHEMA_VERSION = \([0-9][0-9]*\).*/\1/p;q;}' <<<"$target_db")"
+    if [[ -n "$target_schema" ]] && (( target_schema < db_now )); then
+        DB_KEEP="$db_now"
+    fi
+fi
+if [[ -n "$DB_KEEP" ]]; then
+    DB_SNAP_VER=""
+    DB_NOTE=" (‏$TAG אינו פותח DB מגרסת סכמה $DB_KEEP — העותק שלפני העדכון, $DB_SNAPSHOT, נשמר ולא נדרס; ‏#2508)"
+    echo "ה-DB לא הועתק:$DB_NOTE"
+elif ! DB_SNAP_VER="$(python3 - "$DB" "$DB_SNAPSHOT" <<'PYEOF' 2>&1
 import os, sqlite3, sys
 src, dst = sys.argv[1:3]
 tmp = dst + ".tmp"
@@ -313,8 +338,9 @@ PYEOF
     set_status failed "$why" install "$why"
     drop_marker || :
     die "$why"
+else
+    echo "ה-DB הועתק ל-$DB_SNAPSHOT (גרסת סכמה $DB_SNAP_VER)"
 fi
-echo "ה-DB הועתק ל-$DB_SNAPSHOT (גרסת סכמה $DB_SNAP_VER)"
 
 stage install
 if ! git_error="$(git -C "$REPO_DIR" checkout --detach "$TAG" 2>&1)"; then
@@ -511,6 +537,20 @@ if [[ -f "$DNSMASQ_DROPIN" ]]; then
     fi
 else
     echo "$DNSMASQ_DROPIN אינו בתג $TAG — גרסה בלי ניסיון חוזר ל-dnsmasq"
+fi
+# #2634: no OS login on tty2-tty6 outside the recovery entry -- also for a server installed
+# before it. A failure does not roll back (the server serves without it), but it is said.
+GETTY_DROPIN="deploy/getty-recovery-only.conf"
+if [[ -f "$GETTY_DROPIN" ]]; then
+    if gt_out="$(install -D -m 0644 "$GETTY_DROPIN" "$UNIT_DIR/getty@.service.d/imagesrv-recovery-only.conf" 2>&1)"; then
+        echo "login רק בשחזור: $UNIT_DIR/getty@.service.d/imagesrv-recovery-only.conf"
+    else
+        gt_why="חסימת ה-login ב-tty2-6 (#2634) לא הותקנה: $(printf '%s\n' "${gt_out:-אין פלט}" | tail -n 1)"
+        echo "server-upgrade: $gt_why"
+        UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }$gt_why"
+    fi
+else
+    echo "$GETTY_DROPIN אינו בתג $TAG — גרסה בלי חסימת login ב-tty2-6"
 fi
 systemctl daemon-reload || rollback "systemctl daemon-reload נכשל"
 enable_timers || rollback "הפעלת $FAILED_TIMER נכשלה (systemctl enable --now)"

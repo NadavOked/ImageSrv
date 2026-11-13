@@ -1,9 +1,9 @@
 """סדר טעינת המודולים ב-initramfs — דרייבר PHY לפני דרייבר MAC.
 
-‏`r8169` שעושה probe לפני ש-`realtek.ko` נרשם נכשל ב-EADDRNOTAVAIL,
+`r8169` שעושה probe לפני ש-`realtek.ko` נרשם נכשל ב-EADDRNOTAVAIL,
 והקרנל אינו מנסה שוב: המודול נשאר טעון וההתקן נשאר בלי דרייבר. מחשב
 Lenovo עם RTL8168 לא קיבל ממשק רשת בכלל בגלל זה, ורק במעבדת חומרה
-(‏2026-08-29, ‏#76) זה נראה — ב-VM הכרטיס אינו זקוק ל-PHY נפרד.
+(2026-08-29, #76) זה נראה — ב-VM הכרטיס אינו זקוק ל-PHY נפרד.
 
 הבדיקה מריצה את הקטע האמיתי מתוך `tools/build_initramfs.sh` על עץ
 מודולים מזויף, ולא בודקת את הטקסט שלו: ניסוח אחר שישבור את הסדר
@@ -59,7 +59,7 @@ def generate(tmp_path: Path, phy: list[str], ethernet: list[str], pre: str = "")
 
 
 def test_phy_drivers_load_before_the_mac_drivers_that_need_them(tmp_path: Path):
-    """‏realtek לפני r8169 — למרות ש-r8169 קודם לו אלפביתית."""
+    """realtek לפני r8169 — למרות ש-r8169 קודם לו אלפביתית."""
     mods = generate(tmp_path, phy=["realtek", "marvell"],
                     ethernet=["r8169", "e1000e", "igc"])
     assert mods.index("realtek") < mods.index("r8169")
@@ -77,7 +77,7 @@ def test_every_phy_driver_precedes_every_ethernet_driver(tmp_path: Path):
 
 
 def test_storage_still_comes_first_and_there_are_no_duplicates(tmp_path: Path):
-    """‏sort -u ביטל בשקט גם את הכוונה של "Storage first"; היא חזרה."""
+    """sort -u ביטל בשקט גם את הכוונה של "Storage first"; היא חזרה."""
     mods = generate(tmp_path, phy=["realtek"], ethernet=["r8169", "e1000e"])
     assert mods.index("ahci") < mods.index("realtek")
     assert mods.index("nvme") < mods.index("r8169")
@@ -91,16 +91,16 @@ def test_a_phy_module_listed_in_both_trees_is_not_duplicated(tmp_path: Path):
     assert mods.index("realtek") < mods.index("r8169")
 
 def test_the_usb_controller_loads_before_anything_that_hangs_off_it(tmp_path: Path):
-    """‏usbhid מצהיר depends: usbcore,hid — ובלי הבקר אין USB בכלל (#77).
+    """usbhid מצהיר depends: usbcore,hid — ובלי הבקר אין USB בכלל (#77).
 
-    ‏#43 הוסיף את `hid` ונעצר שם, ולכן מקלדת USB לא עבדה על חומרה:
-    האשף הוצג ואף הקשה לא הגיעה. ‏PS/2 הסתירה את זה — `i8042` built-in.
+    #43 הוסיף את `hid` ונעצר שם, ולכן מקלדת USB לא עבדה על חומרה:
+    האשף הוצג ואף הקשה לא הגיעה. PS/2 הסתירה את זה — `i8042` built-in.
     """
     mods = generate(tmp_path, phy=["realtek"], ethernet=["r8169"])
     for controller in ("usbcore", "xhci_hcd", "ehci_hcd", "uhci_hcd"):
         assert controller in mods, f"{controller} is not loaded at all"
         assert mods.index(controller) < mods.index("usbhid")
-    # ‏usbhid תלוי גם ב-hid עצמו.
+    # usbhid תלוי גם ב-hid עצמו.
     assert mods.index("hid") < mods.index("usbhid")
     # ומה שמתחבר ל-USB בא אחרי הבקר.
     assert mods.index("usbcore") < mods.index("usb-storage")
@@ -132,9 +132,9 @@ def test_the_builder_packs_the_cpufreq_tree():
 
 
 def test_psmouse_is_in_the_modules_load_list(tmp_path: Path):
-    """‏#1204: ‏VM של ESXi (govc) מקבל בקר PS/2 בלבד, בלי בקר USB. בלי
-    ‏psmouse (שכולל את פרוטוקול vmmouse) אין עכבר במתקין הגרפי בכלל,
-    אף שהמקלדת עבדה — ‏`i8042` הוא built-in, בדיוק כמו ש-PS/2 הסתיר את
+    """#1204: VM של ESXi (govc) מקבל בקר PS/2 בלבד, בלי בקר USB. בלי
+    psmouse (שכולל את פרוטוקול vmmouse) אין עכבר במתקין הגרפי בכלל,
+    אף שהמקלדת עבדה — `i8042` הוא built-in, בדיוק כמו ש-PS/2 הסתיר את
     היעדר `usbhid` ב-#77. מודול חסר אינו פטאלי, כמו atkbd/hyperv_keyboard
     לצידו."""
     mods = generate(tmp_path, phy=["realtek"], ethernet=["r8169"])
@@ -174,10 +174,10 @@ def run_closure(tmp_path: Path, src: Path, root: Path, *, softdep: bool = True,
 
 
 def test_a_module_pulls_in_a_dependency_from_a_directory_nobody_listed(tmp_path: Path):
-    """‏usbcore תלוי ב-usb-common, שיושב בתיקייה שלישית שאיש לא רשם.
+    """usbcore תלוי ב-usb-common, שיושב בתיקייה שלישית שאיש לא רשם.
 
     זה מה שהשאיר את המקלדת בלי חשמל אחרי שכבר נוספו usb/core ו-usb/host
-    בידיים (‏#77): הנורה לא נדלקה, כי בלי usb-common גם usbcore לא נטען.
+    בידיים (#77): הנורה לא נדלקה, כי בלי usb-common גם usbcore לא נטען.
     רשימת תיקיות ידנית תמיד תפספס תלות אחת עמוק יותר — ולכן הגרף נסגר
     מ-modules.dep ולא מניחוש.
     """
@@ -282,7 +282,7 @@ def copy_snippet() -> str:
 def run_copy(tmp_path: Path, trees: dict[str, list[str]]) -> Path:
     """מריץ את לולאת ההעתקה האמיתית על עץ מודולים מזויף.
 
-    ‏bash ולא sh: ‏MODULE_SUBDIRS הוא מערך, ו-dash אינו מכיר מערכים.
+    bash ולא sh: MODULE_SUBDIRS הוא מערך, ו-dash אינו מכיר מערכים.
     """
     src, root = tmp_path / "src", tmp_path / "root"
     for rel, names in trees.items():
@@ -305,7 +305,7 @@ def test_the_builder_packs_the_filesystem_trees(tmp_path: Path):
     """בלעדיהם ה-initramfs יכול לעגן NTFS דרך FUSE ותו לא.
 
     זה נראה כמו שלושה באגים נפרדים: שם המחשב בלינוקס לא נכתב כי
-    ‏`mount -t ext4` נכשל (#62), ‏`used_bytes` היה 0 בכל מניפסט כי
+    `mount -t ext4` נכשל (#62), `used_bytes` היה 0 בכל מניפסט כי
     המדידה מודדת אחרי מאונט, והרחבת btrfs הייתה נכשלת ברגע שיהיה
     אימג' כזה. עץ אחד שלא נארז.
     """
@@ -325,9 +325,9 @@ def test_the_builder_packs_the_filesystem_trees(tmp_path: Path):
 
 @requires_native("bash", why="MODULE_SUBDIRS הוא מערך bash")
 def test_the_whole_nls_tree_is_packed_and_not_a_guessed_subset(tmp_path: Path):
-    """‏vfat דורש את קידוד ברירת המחדל של הקרנל — כאן `cp437` **וגם**
-    `ascii` (‏CONFIG_FAT_DEFAULT_CODEPAGE=437, ‏IOCHARSET="ascii").
-    בחירת תת-קבוצה היא בדיוק הניחוש שנכשל ב-#33, ‏#76 ו-#77."""
+    """vfat דורש את קידוד ברירת המחדל של הקרנל — כאן `cp437` **וגם**
+    `ascii` (CONFIG_FAT_DEFAULT_CODEPAGE=437, IOCHARSET="ascii").
+    בחירת תת-קבוצה היא בדיוק הניחוש שנכשל ב-#33, #76 ו-#77."""
     packed = run_copy(tmp_path, {
         "kernel/fs/nls": ["nls_cp437", "nls_ascii", "nls_cp1255", "nls_utf8"],
     })
@@ -349,7 +349,7 @@ def test_a_tree_nobody_asked_for_is_left_out(tmp_path: Path):
 
 
 def test_ext4_pulls_in_the_dependencies_that_sit_outside_its_own_tree(tmp_path: Path):
-    """‏mbcache יושב ישירות ב-kernel/fs ולא בתת-תיקייה, ו-crc16 ב-kernel/lib.
+    """mbcache יושב ישירות ב-kernel/fs ולא בתת-תיקייה, ו-crc16 ב-kernel/lib.
 
     בדיוק הצורה של #77: התיקייה שנרשמה בידיים היא לא התיקייה שבה יושבת
     התלות. הגרף נסגר מ-modules.dep, ולכן אלה לא צריכים להיות ברשימה.
@@ -382,16 +382,16 @@ def test_ext4_pulls_in_the_dependencies_that_sit_outside_its_own_tree(tmp_path: 
 
 
 def test_the_filesystem_modules_are_loaded_and_not_left_to_autoload(tmp_path: Path):
-    """טעינה מפורשת ולא הסתמכות על ‏`fs-ext4` דרך modules.alias.
+    """טעינה מפורשת ולא הסתמכות על `fs-ext4` דרך modules.alias.
 
-    השרשרת ההיא (‏depmod → modules.alias → /proc/sys/kernel/modprobe →
+    השרשרת ההיא (depmod → modules.alias → /proc/sys/kernel/modprobe →
     busybox modprobe) נכשלת בשקט בכל חוליה. ברשימה, כישלון נספר
     ומדווח כ-`N modules did not load`.
     """
     mods = generate(tmp_path, phy=["realtek"], ethernet=["r8169"])
     for name in ("efivarfs", "fat", "vfat", "nls_cp437", "nls_ascii", "ext4", "btrfs", "xfs"):
         assert name in mods, f"{name} אינו ברשימת הטעינה"
-    # ‏efivarfs נטען לפני שה-init מנסה לעגן אותו — ראו agent/init.
+    # efivarfs נטען לפני שה-init מנסה לעגן אותו — ראו agent/init.
     assert len(mods) == len(set(mods))
 
 
@@ -481,7 +481,7 @@ def required_snippet() -> str:
     return "\n".join(lines[start:end + 1])
 
 
-#: ‏modules.builtin של קרנל דביאן 13 — ‏FUSE built-in (נמדד 13/10, #1368).
+#: modules.builtin של קרנל דביאן 13 — FUSE built-in (נמדד 13/10, #1368).
 BUILTIN_FUSE = "kernel/fs/fuse/fuse.ko\nkernel/fs/fuse/virtiofs.ko\n"
 
 
@@ -489,8 +489,8 @@ def run_required(tmp_path: Path, present, kver: str = KVER,
                  builtin: str | None = BUILTIN_FUSE, pre: str = ""):
     """מריץ את ההעתקה-לפי-שם האמיתית על עץ שבו קיימים רק `present`.
 
-    ‏`builtin` = תוכן modules.builtin; ‏None = הקובץ אינו קיים. ‏`pre` = מה
-    שנקבע לפני האזור (‏#1918: ‏BUTTON_MOD / _btn_miss של בדיקת כפתור ההפעלה)."""
+    `builtin` = תוכן modules.builtin; None = הקובץ אינו קיים. `pre` = מה
+    שנקבע לפני האזור (#1918: BUTTON_MOD / _btn_miss של בדיקת כפתור ההפעלה)."""
     src, root = tmp_path / "src", tmp_path / "root"
     for mod in present:
         directory = src / LAYOUT[mod]
@@ -514,10 +514,10 @@ def run_required(tmp_path: Path, present, kver: str = KVER,
 
 @requires_native("bash", why="REQUIRED_MODULES הוא מערך bash")
 def test_every_declared_platform_gets_its_nic_and_its_disk_controller(tmp_path: Path):
-    """‏ESXi, ‏KVM ו-Xen — לא רק ה-Hyper-V שעליו נבנה האימג'.
+    """ESXi, KVM ו-Xen — לא רק ה-Hyper-V שעליו נבנה האימג'.
 
     מכונה על ESXi עלתה בלי כרטיס רשת, ועל KVM ו-Xen גם בלי דיסק.
-    ‏`vmw_pvscsi` ו-`virtio_scsi` שרדו רק במקרה, כי הם יושבים תחת
+    `vmw_pvscsi` ו-`virtio_scsi` שרדו רק במקרה, כי הם יושבים תחת
     `scsi` שכן נארזת.
     """
     done, packed = run_required(tmp_path, list(LAYOUT))
@@ -528,7 +528,7 @@ def test_every_declared_platform_gets_its_nic_and_its_disk_controller(tmp_path: 
 
 @requires_native("bash", why="REQUIRED_MODULES הוא מערך bash")
 def test_a_driver_that_sits_loose_under_drivers_net_is_still_packed(tmp_path: Path):
-    """‏`virtio_net` ו-`xen-netfront` אינם בתיקייה משלהם.
+    """`virtio_net` ו-`xen-netfront` אינם בתיקייה משלהם.
 
     לולאת התיקיות מעתיקה `kernel/drivers/net/<תת-תיקייה>`, והם קבצים
     ישירות תחת `net`. רשימה לפי תיקיות לא יכולה להגיע אליהם בכלל —
@@ -593,9 +593,9 @@ def test_the_local_clone_view_modules_are_not_loaded_at_boot():
 def test_the_build_stops_when_a_declared_platform_driver_is_missing(tmp_path: Path):
     """שכחה נתפסת בבנייה ולא מול מכונה — זו כל תוחלת ההצהרה.
 
-    ‏initramfs שנבנה בלי דרייבר של פלטפורמה מוצהרת נראה תקין לחלוטין,
+    initramfs שנבנה בלי דרייבר של פלטפורמה מוצהרת נראה תקין לחלוטין,
     והכשל מגיע רק כשמחשב אמיתי עולה ומודיע `no DHCP lease on any
-    interface` — בלי רמז לאיזה מודול חסר. ככה נראו #76, ‏#77 ו-#84.
+    interface` — בלי רמז לאיזה מודול חסר. ככה נראו #76, #77 ו-#84.
     """
     present = [m for m in LAYOUT if m != "vmxnet3"]
     done, _ = run_required(tmp_path, present)
@@ -622,7 +622,7 @@ BOOT_FILES = ("vmlinuz", "initrd.img", "initrd.img.gui")
 def test_a_cloud_kernel_refusal_says_to_copy_the_boot_files_from_the_primary(
     tmp_path: Path
 ):
-    """‏#904: השרת המשני במעבדה (16/09) עלה על linux-image-cloud-amd64,
+    """#904: השרת המשני במעבדה (16/09) עלה על linux-image-cloud-amd64,
     והבנאי סירב — נכון (#78). אבל ההודעה אמרה רק אילו מודולים חסרים,
     והמסלול שעבד — העתקת vmlinuz + initrd.img + initrd.img.gui מהראשי —
     לא נאמר בשום מקום. עכשיו הסירוב על קרנל cloud נוקב בו בשמו. הלוגיקה
@@ -656,10 +656,10 @@ def test_the_build_stops_when_a_declared_filesystem_module_is_missing(
 ):
     """הבקרה השלילית של #121, מודול-מודול.
 
-    ‏`exfat` ו-`isofs` נשרו מהעץ בין שתי גרסאות והבנייה יצאה 0, כי
+    `exfat` ו-`isofs` נשרו מהעץ בין שתי גרסאות והבנייה יצאה 0, כי
     מערכות הקבצים לא היו מוצהרות בשום מקום — הן הגיעו כתוצר לוואי של
-    ‏`MODULE_SUBDIRS` וסגירת התלויות. ‏`ext4` שנושר כך הוא #62 ו-#84
-    מחדש: שם המחשב לא נכתב, ‏`used_bytes` אפס בכל מניפסט — ושוב, רק
+    `MODULE_SUBDIRS` וסגירת התלויות. `ext4` שנושר כך הוא #62 ו-#84
+    מחדש: שם המחשב לא נכתב, `used_bytes` אפס בכל מניפסט — ושוב, רק
     מול מכונה אמיתית.
     """
     done, _ = run_required(tmp_path, [m for m in LAYOUT if m != absent])
@@ -673,8 +673,8 @@ def test_a_declared_filesystem_module_is_packed_even_from_a_tree_nobody_listed(
 ):
     """ההצהרה גם מרפאת: המודול מועתק לפי שם, לא לפי תיקייה.
 
-    ‏`MODULE_SUBDIRS=()` כאן — אף עץ לא הועתק — ובכל זאת כל מודול
-    מוצהר חייב להימצא בתוצר. אותה תכונה בדיוק כמו ‏`virtio_net`,
+    `MODULE_SUBDIRS=()` כאן — אף עץ לא הועתק — ובכל זאת כל מודול
+    מוצהר חייב להימצא בתוצר. אותה תכונה בדיוק כמו `virtio_net`,
     שיושב ישירות תחת `kernel/drivers/net` ולולאת התיקיות לא נוגעת בו.
     """
     done, packed = run_required(tmp_path, list(LAYOUT))
@@ -683,7 +683,7 @@ def test_a_declared_filesystem_module_is_packed_even_from_a_tree_nobody_listed(
         assert (packed / where / f"{mod}.ko.xz").is_file(), f"{mod} לא נארז"
 
 
-# --- ‏FUSE: ‏ntfs-3g רץ עליו (#1368) -------------------------------------------
+# --- FUSE: ntfs-3g רץ עליו (#1368) -------------------------------------------
 
 
 @requires_native("bash", why="REQUIRED_FS_MODULES הוא מערך bash")
@@ -692,9 +692,9 @@ def test_a_declared_filesystem_module_is_packed_even_from_a_tree_nobody_listed(
     (None, "fuse(modules.builtin-unreadable)"),
 ])
 def test_the_build_stops_when_fuse_is_not_built_in(tmp_path: Path, builtin, named):
-    """בלי FUSE אין ntfs-3g: ‏used_bytes של NTFS, בדיקת מחיצת המערכת וכתיבת
+    """בלי FUSE אין ntfs-3g: used_bytes של NTFS, בדיקת מחיצת המערכת וכתיבת
     השם נופלים כולם — ומתגלים מול מחשב בנייה כ-null. כאן הבנייה עוצרת.
-    ‏modules.builtin שלא נקרא אינו "built-in" (עיקרון 5)."""
+    modules.builtin שלא נקרא אינו "built-in" (עיקרון 5)."""
     done, _ = run_required(tmp_path, list(LAYOUT), builtin=builtin)
     assert done.returncode != 0, "FUSE חסר והבנייה הצליחה"
     assert named in done.stderr, done.stderr
@@ -817,8 +817,8 @@ def modules_region_snippet() -> str:
 def test_the_build_emits_the_required_module_set_for_the_runtime(tmp_path: Path):
     """מודולי החובה נכתבים לקובץ נפרד ש-`agent/init` יקרא (#407).
 
-    בלי הקובץ הזה, ‏`agent/init` אינו יכול להבחין בין מודול פלטפורמה
-    שלא נטען (צפוי על ברזל) לבין מודול חובה שלא נטען (‏initramfs שבור),
+    בלי הקובץ הזה, `agent/init` אינו יכול להבחין בין מודול פלטפורמה
+    שלא נטען (צפוי על ברזל) לבין מודול חובה שלא נטען (initramfs שבור),
     ושניהם מתקפלים ל-`N modules did not load` — בדיוק עיקרון 5.
     הקובץ חייב לשקף את ההצהרה, ולא רשימה שנכתבה כאן בידיים.
     """
@@ -856,8 +856,8 @@ def run_init_block(tmp_path: Path, modules: list[str], required: list[str],
     """מריץ את קטע הטעינה עם `modprobe` מזויף שנכשל על `fail`."""
     moddir = tmp_path / "etc" / "imagesrv"
     moddir.mkdir(parents=True)
-    # ‏LF בלבד — הבנייה כותבת את הקבצים על דביאן, ו-`read -r` בסוכן משאיר
-    # ‏`\r` שווינדוס היה מוסיף, כך שכל שם היה נראה שונה מהמצופה.
+    # LF בלבד — הבנייה כותבת את הקבצים על דביאן, ו-`read -r` בסוכן משאיר
+    # `\r` שווינדוס היה מוסיף, כך שכל שם היה נראה שונה מהמצופה.
     (moddir / "modules").write_text(
         "\n".join(modules) + "\n", encoding="utf-8", newline="\n")
     (moddir / "modules.required").write_text(
@@ -873,8 +873,8 @@ def run_init_block(tmp_path: Path, modules: list[str], required: list[str],
         "true" if hypervisor else "false")
     stub = ('modprobe() { for _f in $FAIL; do '
             '[ "$_f" = "$1" ] && return 1; done; return 0; }\n')
-    # ‏`:` בסוף — הקטע יושב באמצע `agent/init`, אחריו יש עוד קוד ואין
-    # ‏`set -e`, ולכן קוד היציאה של השורה האחרונה בו אינו משמעותי שם.
+    # `:` בסוף — הקטע יושב באמצע `agent/init`, אחריו יש עוד קוד ואין
+    # `set -e`, ולכן קוד היציאה של השורה האחרונה בו אינו משמעותי שם.
     # בלעדיו, ריצה שבה רק מודול רשות נכשל הייתה יוצאת 1 על `[ -n "" ]`.
     run_dir = tmp_path / "run"; run_dir.mkdir()
     script = (f'FAIL="{" ".join(fail)}"\nRUN_DIR={run_dir.as_posix()!r}\n'
@@ -921,8 +921,8 @@ def test_only_detected_virtual_platform_failures_are_warned(tmp_path: Path):
     assert "xen-blkfront" not in out and "vmxnet3" not in out
 
 
-#: ‏#1379: הקידומת הישנה שעל המסך. מפוצלת בכוונה: שינוי השם המכני ctl→srv
-#: ‏(#1699) שכתב את השומר ל-"imagesrv init:" — מחרוזת שהבאג מעולם לא הדפיס —
+#: #1379: הקידומת הישנה שעל המסך. מפוצלת בכוונה: שינוי השם המכני ctl→srv
+#: (#1699) שכתב את השומר ל-"imagesrv init:" — מחרוזת שהבאג מעולם לא הדפיס —
 #: והשומר עבר גם כשהבאג הוחזר (בקרה שלילית, #1912).
 OLD_INIT_PREFIX = "image" + "ctl init:"
 

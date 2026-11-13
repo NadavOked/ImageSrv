@@ -1,9 +1,9 @@
-"""‏#447 → ‏#2848 (נדב 11/11): דיסק שנפסל כאיטי בבדיקת הכתיבה **אינו** מוזהר בסבב הבא.
+"""#447 → #2848 (נדב 11/11): דיסק שנפסל כאיטי בבדיקת הכתיבה **אינו** מוזהר בסבב הבא.
 
-‏#447 (ברזל 03/11) הוסיף אזהרה לפני "התחל" על דיסק שבדיקת הכתיבה **האחרונה** שלו הייתה איטית
-(‏`last_write_check`). נדב 11/11 הסיר אותה: "איטי" נקבע רק לפי הסבב הנוכחי — הסבב הבא מודד
+#447 (ברזל 03/11) הוסיף אזהרה לפני "התחל" על דיסק שבדיקת הכתיבה **האחרונה** שלו הייתה איטית
+(`last_write_check`). נדב 11/11 הסיר אותה: "איטי" נקבע רק לפי הסבב הנוכחי — הסבב הבא מודד
 מחדש, ודיסק שאינו איטי עוד חוזר לצבע של ה-SMART שלו, בלי שום סימון מהעבר. מה שנשאר מכאן:
-המדידה עצמה עדיין נשמרת ב-`model_speeds` (‏#1845, "איטי מהרגיל לדגם"), גם בגל שנסגר מבחוץ.
+המדידה עצמה עדיין נשמרת ב-`model_speeds` (#1845, "איטי מהרגיל לדגם"), גם בגל שנסגר מבחוץ.
 """
 
 from __future__ import annotations
@@ -78,7 +78,7 @@ def test_the_next_wave_of_the_same_round_is_not_warned_either(room_server):
 
 
 def test_a_wave_closed_from_the_console_still_learns_the_write_check(room_server):
-    """‏#2345: גל שנסגר מבחוץ (`/api/console/sessions/{id}/close`) מסתיים ב-`room._resume`,
+    """#2345: גל שנסגר מבחוץ (`/api/console/sessions/{id}/close`) מסתיים ב-`room._resume`,
     לא ב-`_finish_wave` — והמדידה של המגירה שנפסלה חייבת להגיע ל-`model_speeds` גם משם."""
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
     assert deploy.post("/api/console/room", json=room_body(
@@ -91,7 +91,7 @@ def test_a_wave_closed_from_the_console_still_learns_the_write_check(room_server
     closed = deploy.post(f"/api/console/sessions/{wave}/close",
                          json={"confirm_name": "Office 2024 Standard"})
     assert closed.status_code == 200, closed.text
-    cloner_hello(anon, CLONER1, ["X", "Y"])                # הדופק — ‏_resume
+    cloner_hello(anon, CLONER1, ["X", "Y"])                # הדופק — _resume
     assert room(deploy)["round"]["wave_session_id"] != wave
     got = {r["serial"]: r["mbps"] for r in ctx.conn.execute(
         "SELECT serial, mbps FROM model_speeds WHERE session_id = ?", (wave,))}

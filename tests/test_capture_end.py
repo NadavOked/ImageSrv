@@ -2,7 +2,7 @@
 
 נדב, 05/09 (#409): "בסוף, כשהוא מסיים, לחזור לתפריט הראשי — או לכבות."
 זה נבנה כשאלה על **מסך הטקסט**; ב-11/10 מסכי הטקסט נמחקו, ונדב הכריע
-"הכול גואי": השאלה היא דיאלוג קטן בגואי (askgui.sh, ‏kind capture-end).
+"הכול גואי": השאלה היא דיאלוג קטן בגואי (askgui.sh, kind capture-end).
 "כבה" הוא ברירת המחדל: בלי גואי, או בלי תשובה עד `CAPTURE_END_ASK_S` —
 כיבוי, ההגנה שהייתה כאן לפני #409 (מי שקלט ויצא מהחדר מוצא מכונה כבויה).
 
@@ -10,18 +10,18 @@
 בגבול שלו — `gui_ask_choice` מחזיר את התשובה שהוגדרה (`CE_ANSWER`), ריק =
 אין תשובה:
 
-* **"חזרה לתפריט"** — ‏`do_task` חוזר ללולאה ו-`_build_standby` מתאפס.
+* **"חזרה לתפריט"** — `do_task` חוזר ללולאה ו-`_build_standby` מתאפס.
 * **"כבה"** — כיבוי מיד, בלי המתנה.
 * **בלי תשובה** — כיבוי; ומקש "1" שמחכה ב-stdin (בטקסט הישן "תפריט") אינו
   נקרא.
-* **השאלה עוברת במנגנון הקיים** — ‏`attended` (‏hello עם `prompt`, #906).
+* **השאלה עוברת במנגנון הקיים** — `attended` (hello עם `prompt`, #906).
 * **הגואי מופעל לפני הקריאה** — שאלת הכיווץ היא דיאלוג גרפי בלבד (#928).
 
 הכיבוי מזויף כ-`exit 0` (כמו `poweroff -f`: אינו חוזר), ו-`sleep` מזויף
-כרישום. ‏`IMAGESRV_TEST=0`: ה-`exit 0` של מצב הטסט יושב לפני הכיבוי.
+כרישום. `IMAGESRV_TEST=0`: ה-`exit 0` של מצב הטסט יושב לפני הכיבוי.
 
 הפלט הולך לקובץ ולא ל-PIPE (גוטצ'ה ב-`CLAUDE.md`); ה-stdin הוא צינור
-משלנו ולא ירושה (‏#14).
+משלנו ולא ירושה (#14).
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ import subprocess
 from pathlib import Path
 
 from test_agent import BASH, posix
-from test_final_report import (  # noqa: F401 — ‏`reports` הוא fixture
+from test_final_report import (  # noqa: F401 — `reports` הוא fixture
     LOOP_STUB,
     REPO,
     RUN_TIMEOUT_S,
@@ -59,8 +59,8 @@ END_STUBS = (
 
 def run_end(tmp_path: Path, server: str, *, answer: str | None,
             keep_open: bool = False, gui: str = "") -> dict:
-    """מריץ קליטה מוצלחת עד סופה. ‏`answer` נכתב ל-stdin ואז הוא נסגר;
-    ‏`keep_open` משאיר אותו פתוח ושקט עד שהמעטפת יוצאת — מסך בלי אדם."""
+    """מריץ קליטה מוצלחת עד סופה. `answer` נכתב ל-stdin ואז הוא נסגר;
+    `keep_open` משאיר אותו פתוח ושקט עד שהמעטפת יוצאת — מסך בלי אדם."""
     run = tmp_path / "run"
     (run / "targets").mkdir(parents=True, exist_ok=True)
     (run / "resp.json").write_text(json.dumps(TASK_ANSWER), encoding="utf-8")
@@ -147,8 +147,8 @@ def test_no_answer_powers_off_and_no_key_is_read(tmp_path, reports):
 
 @native_tools
 def test_the_question_is_the_gui_dialog_through_attended(tmp_path, reports):
-    """‏`attended` נושא את השאלה לקונסולה (#906); השאלה עצמה היא הדיאלוג
-    capture-end. ‏#1560 (ברזל 17/10): התקרה 20 ש׳ (CAPTURE_END_ASK_S, נדב), והנושא
+    """`attended` נושא את השאלה לקונסולה (#906); השאלה עצמה היא הדיאלוג
+    capture-end. #1560 (ברזל 17/10): התקרה 20 ש׳ (CAPTURE_END_ASK_S, נדב), והנושא
     הוא רגע הכיבוי — הגואי סופר אליו; עד אז "20" כטקסט קבוע שלא זז."""
     result = run_end(tmp_path, url_of(reports), answer=None, gui="poweroff")
     asked = [t for t in result["trace"] if t.startswith("ASKED ")]
@@ -177,7 +177,7 @@ def test_the_report_is_sent_before_the_power_off(tmp_path, reports):
 @native_tools
 def test_the_gui_is_started_before_the_capture_reads(tmp_path, reports):
     """שאלת הכיווץ היא דיאלוג גרפי בלבד (#928, 11/10). קליטה שהוזמנה
-    מהקונסולה מגיעה לפעמים לפני שהגואי עלה — ‏`do_task` מפעיל אותו לפני
+    מהקונסולה מגיעה לפעמים לפני שהגואי עלה — `do_task` מפעיל אותו לפני
     הקריאה, ולא נופל למסך טקסט."""
     result = run_end(tmp_path, url_of(reports), answer=None)
 

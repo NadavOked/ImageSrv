@@ -187,6 +187,8 @@ _shrink_compact() {
 shrink_json_extra() {
     # $1 idx $2 start $3 size_sectors $4 sector size. השדות שמבדילים פריסה
     # מכווצת מזו שעל דיסק המקור -- או כלום: שדה חסר = כמו על המקור.
+    # ‏#2972: ‏"ntfs_inconsistent":true = ‏ntfsresize מצא את ה-NTFS לא עקבי, והוא נקלט בגודלו המלא.
+    if grep -qx "$1" "$RUN_DIR/shrink.dirty" 2>/dev/null; then printf ',"ntfs_inconsistent":true'; fi
     [ -f "$RUN_DIR/parts.orig.txt" ] || return 0
     awk -F'|' -v i="$1" -v s="$2" -v z="$3" -v ss="$4" '$1 == i {
         if ($5 + 0 != z + 0) printf ",\"shrunk_from_bytes\":%.0f", $5 * ss

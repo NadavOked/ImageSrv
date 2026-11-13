@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""verify-release-tag.py — ‏#1277: האם תג גרסה חתום במפתח שהשרת סומך עליו.
+"""verify-release-tag.py — #1277: האם תג גרסה חתום במפתח שהשרת סומך עליו.
 
 שימוש: verify-release-tag.py <repo|git-dir> <tag> <allowed-signers>
 
@@ -13,23 +13,23 @@
      ב-stderr, בתחילית ``unchecked:``
 
 המקבלים: ``tools/server-upgrade.sh`` (לפני ה-checkout — 1 ו-2 שניהם
-סירוב), ‏``server/update.py`` (בדיקת עדכון בקונסולה: חתום / לא חתום /
+סירוב), ``server/update.py`` (בדיקת עדכון בקונסולה: חתום / לא חתום /
 לא נבדק), ו-``tools/git/release-sign.sh`` (התג שנחתם בפרסום עובר את
 אותו מאמת שהשרתים יריצו, לפני שהוא נדחף).
 
 **למה לא ``git verify-tag``:** הוא מפעיל את ``ssh-keygen``, וזה מחייב את
 חבילת לקוח ה-SSH על השרת — ו-#1266 הוציא SSH מהמוצר. הפורמט של חתימת
-git ב-SSH (‏SSHSIG, ‏PROTOCOL.sshsig) קטן ומוגדר, ו-``cryptography`` כבר
-מותקן בשרת (‏#740). התאימות נבדקת מול חתימות אמיתיות של ``git tag -s``
+git ב-SSH (SSHSIG, PROTOCOL.sshsig) קטן ומוגדר, ו-``cryptography`` כבר
+מותקן בשרת (#740). התאימות נבדקת מול חתימות אמיתיות של ``git tag -s``
 ב-``tests/test_release_signing_1277.py``.
 
 מה נאכף, ולמה:
 * האובייקט הוא תג מוער (לא תג קל), ושורת ה-``tag`` שבתוכו היא **בדיוק**
   התג המבוקש — אחרת אפשר להציג חתימה תקפה של גרסה ישנה תחת שם חדש.
 * החתימה היא החתימה האחרונה בתג (כמו ש-git קורא אותה), מסוג SSH בלבד,
-  ב-namespace ‏``git``, וה-hash ‏sha512/sha256.
+  ב-namespace ``git``, וה-hash sha512/sha256.
 * המפתח שבחתימה זהה בבייטים למפתח שבקובץ — ורק אז האימות הקריפטוגרפי.
-* ‏ed25519, או RSA עם ‏rsa-sha2-512/256 (לא ‏SHA-1).
+* ed25519, או RSA עם rsa-sha2-512/256 (לא SHA-1).
 """
 
 from __future__ import annotations
@@ -117,7 +117,7 @@ def read_tag(repo: str, tag: str) -> bytes:
 
 
 def split_signature(raw: bytes) -> tuple[bytes, bytes]:
-    """‏(payload, signature) — החתימה מתחילה בשורת הסמן **האחרונה**, כמו ב-git."""
+    """(payload, signature) — החתימה מתחילה בשורת הסמן **האחרונה**, כמו ב-git."""
     start, pos = None, 0
     for line in raw.splitlines(keepends=True):
         if line.startswith(SIG_MARKERS):

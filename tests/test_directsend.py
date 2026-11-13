@@ -1,9 +1,9 @@
-"""‏#715 — הפצה ישירה ממחשב הבנייה: הסוכן כמקור המולטיקאסט.
+"""#715 — הפצה ישירה ממחשב הבנייה: הסוכן כמקור המולטיקאסט.
 
 השרת נשאר המתזמר; מחשב הבנייה מריץ `udp-sender` על הדיסק שלו. מה
 שנבדק כאן הוא שהשידור מהסוכן **זהה** לשידור מהשרת בכל דגל שקובע את
 התנהגות הזרם — אחרת מקבל שכוונן ל-`--retries-until-drop 200` של השרת
-(‏#437) היה מקבל ברירת מחדל אחרת ממקור אחר, והכשל היה נראה כמו רשת.
+(#437) היה מקבל ברירת מחדל אחרת ממקור אחר, והכשל היה נראה כמו רשת.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
-#: ‏udp-sender מזויף שרושם את ה-argv שלו ובולע את stdin.
+#: udp-sender מזויף שרושם את ה-argv שלו ובולע את stdin.
 RECORD_ARGV = (
     '#!/bin/sh\n'
     'printf "%s\n" "$@" > "$UDP_ARGV"\n'
@@ -80,7 +80,7 @@ def test_max_bitrate_is_passed_only_when_the_server_set_one(tmp_path):
     assert "--max-bitrate" not in without
 
 
-# --- ‏direct_send_run: שתי קריאות, מניפסט בלי העלאה, sha על החוט ---------------
+# --- direct_send_run: שתי קריאות, מניפסט בלי העלאה, sha על החוט ---------------
 
 import hashlib
 import json
@@ -93,8 +93,8 @@ from test_timeouts import run_sh
 MAC = "aa:bb:cc:00:00:10"
 TASK = "tsk_715"
 
-#: ‏partclone מזויף: מוציא 4096 בייטים שנקבעים ב-$PCL_BYTE; קריאה שנייה
-#: יכולה להוציא משהו אחר (‏PCL_SECOND) כדי לדמות דיסק שהשתנה בין הקריאות.
+#: partclone מזויף: מוציא 4096 בייטים שנקבעים ב-$PCL_BYTE; קריאה שנייה
+#: יכולה להוציא משהו אחר (PCL_SECOND) כדי לדמות דיסק שהשתנה בין הקריאות.
 PARTCLONE = (
     '#!/bin/sh\n'
     'n=$(cat "$PCL_COUNT" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$PCL_COUNT"\n'
@@ -104,7 +104,7 @@ PARTCLONE = (
     'exit 0\n'
 )
 
-#: ‏udp-sender מזויף: רושם argv, בולע את הזרם, ומדפיס את שורת ההתחלה
+#: udp-sender מזויף: רושם argv, בולע את הזרם, ומדפיס את שורת ההתחלה
 #: כמו האמיתי — אלא אם UDP_SILENT: אז יוצא 0 בלי לשדר (#438).
 UDP_SENDER = (
     '#!/bin/sh\n'
@@ -114,7 +114,7 @@ UDP_SENDER = (
     'exit 0\n'
 )
 
-#: ‏curl מזויף: רושם את ה-argv שלו (איזה URL, אילו דגלים) ועונה 0.
+#: curl מזויף: רושם את ה-argv שלו (איזה URL, אילו דגלים) ועונה 0.
 CURL_RECORD = (
     '#!/bin/sh\n'
     'printf "%s\n" "$@" >> "$CURL_ARGV"\n'
@@ -123,9 +123,9 @@ CURL_RECORD = (
 )
 
 
-#: ‏jq אינו מותקן בתחנת הפיתוח (ווינדוס). במקום דילוג שקט — תחליף צר
-#: בפייתון, **רק** לביטויים שמסלול ההפצה הישירה מריץ (json_get, ‏manifest_plan,
-#: ‏.partitions|length, בלוק המולטיקאסט); כל ביטוי אחר יוצא 5 כמו jq על
+#: jq אינו מותקן בתחנת הפיתוח (ווינדוס). במקום דילוג שקט — תחליף צר
+#: בפייתון, **רק** לביטויים שמסלול ההפצה הישירה מריץ (json_get, manifest_plan,
+#: .partitions|length, בלוק המולטיקאסט); כל ביטוי אחר יוצא 5 כמו jq על
 #: שגיאה. במעבדה (jq אמיתי ב-PATH) התחליף אינו נכנס לתמונה.
 JQ_SHIM_PY = (REPO / "tests" / "jq_shim.py")
 JQ_STUB = '#!/bin/sh\nexec python "' + posix(JQ_SHIM_PY) + '" "$@"\n'
@@ -143,7 +143,7 @@ def _answer(session_state="running", task=TASK, receivers=2, bitrate=None):
                                  "retries_until_drop": 200, "max_bitrate": bitrate}}}}
 
 
-#: ‏sgdisk עם שתי מחיצות — ESP ואחריה מחיצת נתונים — לשידור של שני זרמים.
+#: sgdisk עם שתי מחיצות — ESP ואחריה מחיצת נתונים — לשידור של שני זרמים.
 TWO_PARTITIONS = (
     '#!/bin/sh\n'
     'if [ "$1" = "-i" ]; then\n'
@@ -202,7 +202,7 @@ def direct_run(tmp_path, *, answer=None, env=None, udp_silent=False, partitions=
         stubs.setdefault("blkid", "#!/bin/sh\nexit 2\n")
     libs =" ".join(f"[ ! -f {posix(flat_lib())}/{n}.sh ] || . {posix(flat_lib())}/{n}.sh;" if n == "captureview" else f". {posix(flat_lib())}/{n}.sh;" for n in (
         "common", "sysinfo", "diskinfo", "waits", "jsonq", "gptboot", "progress", "failmark", "restore", "manifest",
-        "bootca", "hibernation", "ntfsunhib", "captureview", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink", "directsend", "directrecv", "ui"))   # ‏#87/#929: shrink*.sh לפני capture.sh, כמו בסוכן; #1217: capturesink.sh; #1466: lcsnap.sh (lc_src_node), כמו בסוכן
+        "bootca", "hibernation", "ntfsunhib", "captureview", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink", "directsend", "directrecv", "ui"))   # #87/#929: shrink*.sh לפני capture.sh, כמו בסוכן; #1217: capturesink.sh; #1466: lcsnap.sh (lc_src_node), כמו בסוכן
     out = run_sh(
         make_stubs(box / "stubs", stubs) + exports + libs
         + "raid_member_reason() { :; }; "   # #1808: the RAID gate has its own tests (test_capture_gates.py); these disks are files
@@ -234,7 +234,7 @@ def test_the_disk_is_read_twice_hashed_once_on_the_wire_and_nothing_is_uploaded(
     curl = (box / "curl.argv").read_text("utf-8")
     assert "/api/v1/direct/tsk_715/manifest" in curl
     assert "-T" not in curl.splitlines() and "/capture/" not in curl
-    # ‏udp-sender קיבל את ערכי השרת, על הכרטיס שלנו, בלי --file
+    # udp-sender קיבל את ערכי השרת, על הכרטיס שלנו, בלי --file
     udp = (box / "udp.argv").read_text("utf-8").splitlines()
     assert "--min-receivers" in udp and udp[udp.index("--min-receivers") + 1] == "2"
     assert udp[udp.index("--interface") + 1] == "eth0" and "--file" not in udp
@@ -244,14 +244,14 @@ def test_the_disk_is_read_twice_hashed_once_on_the_wire_and_nothing_is_uploaded(
 
 
 def test_the_second_partition_waits_for_the_drawers_not_for_the_operator(tmp_path):
-    """‏#957 בהפצה ישירה: אותו כלל כמו `SenderEngine` — המחיצה הראשונה
+    """#957 בהפצה ישירה: אותו כלל כמו `SenderEngine` — המחיצה הראשונה
     יוצאת עם `max_wait`/`start_timeout` של השרת, ומהשנייה עם
-    ‏`max_wait_later`/`start_timeout_later` שלו (ממשק 3), כי שם ההמתנה
+    `max_wait_later`/`start_timeout_later` שלו (ממשק 3), כי שם ההמתנה
     היא למגירה שעוד כותבת את הקודמת ולא למפעיל. הסוכן אינו ממציא את
     המספרים — הוא מעביר את מה שהשרת נתן, לפי מספר הזרם.
 
     **בקרה שלילית:** על directsend.sh הישן שני ה-udp-sender מקבלים
-    ‏120/180, וההשוואה של השני נופלת."""
+    120/180, וההשוואה של השני נופלת."""
     # שתי מחיצות = שני ניסיונות עיגון בקריאה הראשונה (~8ש' כל אחד בווינדוס)
     # ועוד שני זרמים; 45 השניות של מחיצה אחת אינן מספיקות, וזה איטיות
     # של הקופסה, לא תקיעה — הרצה שנתקעת עדיין נופלת, רק מאוחר יותר.
@@ -267,7 +267,7 @@ def test_the_second_partition_waits_for_the_drawers_not_for_the_operator(tmp_pat
 
 
 def test_a_sender_that_exits_zero_without_transferring_is_a_failure(tmp_path):
-    """‏#438 בצד המקור: udp-sender שפג לו start-timeout יוצא 0 בלי מקבל."""
+    """#438 בצד המקור: udp-sender שפג לו start-timeout יוצא 0 בלי מקבל."""
     box, run, out = direct_run(tmp_path, udp_silent=True)
     assert out.strip().endswith("rc=1"), out
     report = _progress(box)
@@ -290,8 +290,8 @@ def test_a_closed_wave_or_a_task_that_is_no_longer_ours_does_not_send(tmp_path):
         assert "הגל לא התחיל" in _progress(box)["targets"][0]["error"]   # #1503
 
 
-#: ‏partclone שהזרם שלו הוא שורת הפקודה שקיבל: שתי קריאות עם דגלים שונים
-#: מייצרות בייטים שונים -- בדיוק כמו partclone אמיתי עם ובלי ‎-a0 (#1574).
+#: partclone שהזרם שלו הוא שורת הפקודה שקיבל: שתי קריאות עם דגלים שונים
+#: מייצרות בייטים שונים -- בדיוק כמו partclone אמיתי עם ובלי -a0 (#1574).
 PARTCLONE_ARGV = (
     '#!/bin/sh\n'
     'printf "%s\\n" "$*" >> "$PCL_ARGS"\n'
@@ -302,13 +302,13 @@ PARTCLONE_ARGV = (
 
 
 def test_both_reads_run_partclone_with_the_same_flags(tmp_path):
-    """‏#1574, ברזל 17/10: ‏#1472 נתן לקריאה הראשונה (המניפסט) ‏`-a0 -z 524288`
-    ולשנייה (השידור) את ברירות המחדל של partclone. ‏partclone עם checksum
+    """#1574, ברזל 17/10: #1472 נתן לקריאה הראשונה (המניפסט) `-a0 -z 524288`
+    ולשנייה (השידור) את ברירות המחדל של partclone. partclone עם checksum
     וחוצץ אחרים הוא זרם אחר, ולכן **כל** הפצה ישירה נכשלה במחיצה 1 עם
     "הבייטים שנשלחו שונים מהמניפסט". כאן partclone מזויף מזרים את ה-argv
     שלו -- הקריאות זהות רק אם הדגלים זהים.
 
-    **בקרה שלילית:** על directsend.sh/capture.sh של main ‏rc=1 והשורות שונות."""
+    **בקרה שלילית:** על directsend.sh/capture.sh של main rc=1 והשורות שונות."""
     args = tmp_path / "pcl.args"
     box, run, out = direct_run(tmp_path, env={"PCL_ARGS": posix(args)},
                                extra_stubs={"partclone.fat": PARTCLONE_ARGV},

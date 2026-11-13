@@ -1,11 +1,11 @@
-"""‏#2026 — שחזור עדכון שנקטע (#1893) מחזיר גם טיימרים, ומסיר כל יחידה
+"""#2026 — שחזור עדכון שנקטע (#1893) מחזיר גם טיימרים, ומסיר כל יחידה
 שהעדכון הוסיף.
 
-עד #2026 ‏``server-upgrade-recover.sh`` התקין מחדש רק ``deploy/*.service``
+עד #2026 ``server-upgrade-recover.sh`` התקין מחדש רק ``deploy/*.service``
 של התג הקודם. מאז #1957 העדכון מתקין ומפעיל גם ``*.timer``; חשמל שנפל אחרי
-``enable_timers`` השאיר את ‏``imagesrv-backup.timer`` מופעל מול עץ שאין בו
+``enable_timers`` השאיר את ``imagesrv-backup.timer`` מופעל מול עץ שאין בו
 את המודול שלו. רשימת היחידות שהעדכון הביא נקראת מ-git (``ls-tree`` של התג),
-לא מהסמן — סמן שנכתב ב-``server-upgrade.sh`` ישן (‏v0.76 בשטח) אין בו רשימה.
+לא מהסמן — סמן שנכתב ב-``server-upgrade.sh`` ישן (v0.76 בשטח) אין בו רשימה.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from test_upgrade_recovery_1893 import (  # noqa: F401 -- bindir is a fixture
     _box, _marker, _recover, _status, bindir, calls, pytestmark,
 )
 
-NEW = ("imagesrv-backup.service", "imagesrv-backup.timer")   # ‏#1895/#1957 — רק בתג החדש
+NEW = ("imagesrv-backup.service", "imagesrv-backup.timer")   # #1895/#1957 — רק בתג החדש
 
 
 def _cut_after_enable_timers(tmp_path, bindir, *, git_ls_tree="ok", disable_fails=False):

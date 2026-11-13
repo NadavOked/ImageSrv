@@ -1,13 +1,13 @@
-"""‏#996: מתג הדלקה/כיבוי לכל פורט — ‏`PUT /api/console/ports/{id}` ומה
+"""#996: מתג הדלקה/כיבוי לכל פורט — `PUT /api/console/ports/{id}` ומה
 ש-`/ports` מחזיר לצידו (`enabled`/`bind`/`toggle`/`off_means`).
 
-אותו דפוס hooks מוזרק כמו test_console_ports.py: ‏`ss`/`ss_tcp` מזויפים,
+אותו דפוס hooks מוזרק כמו test_console_ports.py: `ss`/`ss_tcp` מזויפים,
 ומנהל המאזינים מזויף — רושם מה נתבקש ומחזיר "מאזין" רק למה שפתוח. ככה
-"‏`ss` לא מראה מאזין אחרי כיבוי" נמדד באותו מקום שהמתג נגע בו. הסוקט
+"`ss` לא מראה מאזין אחרי כיבוי" נמדד באותו מקום שהמתג נגע בו. הסוקט
 האמיתי נבדק ב-test_port_listeners.py.
 
 עיקרון 5 — שלושה מצבים, לא שניים: "כבוי" (המתג) ≠ "לא מאזין" (נמדד ב-ss)
-‏≠ "לא נקרא" (ss חסר). כל אחד מהם צבע משלו, ואף אחד אינו ירוק.
+≠ "לא נקרא" (ss חסר). כל אחד מהם צבע משלו, ואף אחד אינו ירוק.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ class FakeListeners:
 
 
 class FakeDnsmasq:
-    """‏#1013: dnsmasq מזויף — ה-`apply` מקבל את הקובץ שהשרת רינדר, ומה
+    """#1013: dnsmasq מזויף — ה-`apply` מקבל את הקובץ שהשרת רינדר, ומה
     ש-`ss -ulnp` "רואה" נגזר ממנו: שורת `enable-tftp` פעילה = מאזין על 69.
     ככה "ss לא מראה 69 אחרי כיבוי" נמדד באותו מקום שהמתג נגע בו."""
 
@@ -125,11 +125,11 @@ def _build(tmp_path: Path, images_root: Path, clock, listeners, *, base_port=80,
         "interfaces": lambda: fake["interfaces"],
         "tftp_root": lambda: tftp,
         "udp_sender_pids": lambda: fake["udp_sender_pids"],
-        # ‏#996: מנהל המאזינים מוזרק כמו כל השאר — None = אין מנהל בתהליך
+        # #996: מנהל המאזינים מוזרק כמו כל השאר — None = אין מנהל בתהליך
         # הזה (כמו ב-create_app של הבדיקות), והמתג חייב לומר זאת.
         "port_listeners": listeners,
         "nft_ruleset": lambda: fake["nft_ruleset"],
-        # ‏#1013: קובץ המתקין — מוזרק, כי במעבדה הקובץ האמיתי קיים (ועד
+        # #1013: קובץ המתקין — מוזרק, כי במעבדה הקובץ האמיתי קיים (ועד
         # שהמתקין ירוץ שם מחדש הוא נושא enable-tftp).
         "installer_conf": lambda: fake["installer_conf"],
     }
@@ -137,7 +137,7 @@ def _build(tmp_path: Path, images_root: Path, clock, listeners, *, base_port=80,
     dnsmasq = FakeDnsmasq(fake)
     app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
                      now_fn=clock, health_hooks=hooks,
-                     # ‏#1013: המתג של 69 כותב קובץ dnsmasq — לעולם לא את האמיתי.
+                     # #1013: המתג של 69 כותב קובץ dnsmasq — לעולם לא את האמיתי.
                      dhcp_hooks={"apply": dnsmasq.apply, "apply_proxy": dnsmasq.apply_proxy,
                                  "interfaces": lambda: fake["interfaces"],
                                  "probe": lambda name: dhcp.ProbeResult(True, ()),
@@ -205,7 +205,7 @@ def test_every_switch_row_warns_before_shutdown_in_the_69_wording(toggles):
 
 
 def test_the_missing_rows_are_there_now(toggles):
-    """‏DHCP 67 ובין-שרתים 8443 — חסרו ב-/ports. (‏#1266: SSH יצא מהמוצר.)"""
+    """DHCP 67 ובין-שרתים 8443 — חסרו ב-/ports. (#1266: SSH יצא מהמוצר.)"""
     rows = rows_of(toggles)
     assert rows["dhcp"]["port"] == "67" and rows["dhcp"]["proto"] == "udp"
     assert rows["interserver"]["port"] == "8443"
@@ -220,7 +220,7 @@ def test_bind_comes_from_the_socket_table_not_from_configuration(toggles):
     assert rows["dhcp"]["bind"] == ["0.0.0.0:67"]
 
 
-def test_our_ports_point_at_the_ports_api_and_say_who_needs_the_name(toggles, classrooms_on):   # ‏#1303: 4011 — v1.2
+def test_our_ports_point_at_the_ports_api_and_say_who_needs_the_name(toggles, classrooms_on):   # #1303: 4011 — v1.2
     rows = rows_of(toggles)
     name = server_name(toggles)
     for pid in ("http_boot", "http_console"):
@@ -236,7 +236,7 @@ def test_our_ports_point_at_the_ports_api_and_say_who_needs_the_name(toggles, cl
     assert rows["monitor"]["toggle_url"] == "/api/console/monitor/settings"
     assert rows["monitor"]["confirm_word"] == "imagesrv.monitor"
     # ולמי שאין מתג — אומרים למה.
-    # ‏#1013: TFTP הפך למתג "confirm" (הקלדת שם השרת); מולטיקאסט נשאר בלי מתג.
+    # #1013: TFTP הפך למתג "confirm" (הקלדת שם השרת); מולטיקאסט נשאר בלי מתג.
     assert rows["tftp"]["toggle"] == "confirm" and rows["multicast"]["toggle"] == "none"
     assert rows["tftp"]["toggle_url"] == "/api/console/ports/tftp"
     assert rows["multicast"]["enabled"] is None
@@ -270,8 +270,8 @@ def test_socket_table_unreadable_is_unknown_never_green(toggles):
         assert "לא נקרא" in rows[pid]["detail"]
 
 
-def test_bind_is_null_when_not_read_and_empty_only_when_read_and_not_listening(toggles, classrooms_on):   # ‏#1303: 4011 — v1.2
-    """‏#1039: ‏`bind` הגיע כ-`[]` גם כשטבלת הסוקטים לא נקראה — "לא נקרא"
+def test_bind_is_null_when_not_read_and_empty_only_when_read_and_not_listening(toggles, classrooms_on):   # #1303: 4011 — v1.2
+    """#1039: `bind` הגיע כ-`[]` גם כשטבלת הסוקטים לא נקראה — "לא נקרא"
     קופל ל"לא מאזין", והקונסולה לא יכלה להבחין (עיקרון 5)."""
     fake = toggles["fake"]
     fake["ss"], fake["ss_tcp"] = "", ""               # ss לא רץ, בשני הפרוטוקולים
@@ -289,8 +289,8 @@ def test_bind_is_null_when_not_read_and_empty_only_when_read_and_not_listening(t
 
 
 def test_api_port_off_closes_the_listener_and_reads_back(toggles):
-    """הגדרת ה"גמור" של #996: כיבוי 8443 → ‏ss (מוזרק) לא מראה מאזין +
-    ‏`/ports.enabled=false`; הדלקה → חוזר."""
+    """הגדרת ה"גמור" של #996: כיבוי 8443 → ss (מוזרק) לא מראה מאזין +
+    `/ports.enabled=false`; הדלקה → חוזר."""
     resp = toggles["admin"].put("/api/console/ports/interserver", json={"enabled": False})
     assert resp.status_code == 200, resp.text
     body = resp.json()
@@ -322,7 +322,7 @@ def test_the_state_is_saved_so_it_survives_a_restart(toggles):
 
 
 def test_http_boot_off_needs_the_server_name(toggles):
-    """‏8080 כבוי = אין PXE ואין סוכנים — הרסני, מאחורי הקלדת שם (עיקרון 7)."""
+    """8080 כבוי = אין PXE ואין סוכנים — הרסני, מאחורי הקלדת שם (עיקרון 7)."""
     put = lambda body: toggles["admin"].put("/api/console/ports/http_boot", json=body)  # noqa: E731
     assert put({"enabled": False}).status_code == 400
     assert put({"enabled": False, "confirm": "wrong"}).status_code == 400
@@ -385,7 +385,7 @@ def test_rows_toggled_elsewhere_refuse_here_and_point_there(toggles):
 
 
 def test_open_that_fails_to_bind_is_reported_not_faked(toggles):
-    """‏DB אומר "דלוק", הפורט תפוס על ידי אחר: ‏ok=false עם הסיבה, המצב
+    """DB אומר "דלוק", הפורט תפוס על ידי אחר: ok=false עם הסיבה, המצב
     השמור נשאר "דלוק" (זו הבקשה), ו-/ports מראה את הפער באדום."""
     toggles["admin"].put("/api/console/ports/interserver", json={"enabled": False})
     toggles["listeners"].fail_open.add("interserver")
@@ -401,7 +401,7 @@ def test_open_that_fails_to_bind_is_reported_not_faked(toggles):
 
 def test_without_a_listener_manager_the_switch_says_it_did_not_apply(
         tmp_path, images_root, clock):
-    """‏create_app בבדיקות אינו מריץ מאזינים — המתג נשמר, ואומר במפורש
+    """create_app בבדיקות אינו מריץ מאזינים — המתג נשמר, ואומר במפורש
     שלא הוחל עכשיו. לא "ok" על מה שלא קרה (עיקרון 5)."""
     t = _build(tmp_path, images_root, clock, None)
     resp = t["admin"].put("/api/console/ports/http_boot",
@@ -415,7 +415,7 @@ def test_without_a_listener_manager_the_switch_says_it_did_not_apply(
 
 
 def test_interserver_without_a_listener_has_no_switch(tmp_path, images_root, clock):
-    """‏8443 עולה רק על משני עם --interserver-host; בלעדיו השורה קיימת,
+    """8443 עולה רק על משני עם --interserver-host; בלעדיו השורה קיימת,
     אומרת שאינה מוגדרת, ואין לה מתג."""
     t = _build(tmp_path, images_root, clock,
                FakeListeners(("http_boot", "http_console")))
@@ -430,7 +430,7 @@ def test_interserver_without_a_listener_has_no_switch(tmp_path, images_root, clo
     assert rows["interserver"]["state"] == "ok"
 
 
-# --- ‏#1013: TFTP 69 — מתג מאחורי הקלדת שם השרת, dnsmasq בצד השרת -------------
+# --- #1013: TFTP 69 — מתג מאחורי הקלדת שם השרת, dnsmasq בצד השרת -------------
 
 
 def test_tftp_row_carries_a_confirm_switch_and_the_warning(toggles):
@@ -515,7 +515,7 @@ def test_tftp_three_measured_states_off_is_never_faked(toggles):
 def test_old_installer_file_means_no_switch_and_says_why(tmp_path, images_root, clock):
     """שדרוג בלי להריץ את המתקין (המעבדה): imagesrv.conf עדיין נושא
     enable-tftp, ו-dnsmasq מצטבר — המתג לא יכול לכבות. אז אין מתג, בשם;
-    ‏PUT מסורב; המצב הנמדד נשאר ss."""
+    PUT מסורב; המצב הנמדד נשאר ss."""
     t = _build(tmp_path, images_root, clock, FakeListeners(), installer_conf=INSTALLER_OLD)
     row = rows_of(t)["tftp"]
     assert row["toggle"] == "none" and row["enabled"] is None

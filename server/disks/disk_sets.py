@@ -4,12 +4,12 @@
 ``xx-1`` … ``xx-29``. **השם הולך עם הדיסק לפי המספר הסידורי, לא עם המגירה**, והוא תצוגה
 בלבד (לא נכתב ל-Windows). המטרה (נדב): "שאדע דיסק מסט xx לא תקין ואותו להחליף".
 
-* סטים ושיוך: ``disk_sets`` / ``disk_set_members`` (``serial`` מפתח -- דיסק בסט אחד; ‏``set_id+suffix``
+* סטים ושיוך: ``disk_sets`` / ``disk_set_members`` (``serial`` מפתח -- דיסק בסט אחד; ``set_id+suffix``
   ייחודי -- שני דיסקים לא יקבלו אותו שם). דיסק שיצא (הוחלף/הוסר) נשמר ב-``disk_set_history``.
 * ``disk_inventory`` -- כל דיסק שנראה ב-hello של משכפל/מחשב בנייה (דגם, גודל, מקום אחרון): בלעדיו אי
   אפשר להראות דיסק שכבר יצא מהמשכפל.
-* בריאות לכל דיסק -- **ממה שכבר נאסף** (``disk_events``, ‏``disk_failures``, ‏``room_rounds``), בלי איסוף
-  חדש. ‏"לא נבדק" אינו "תקין" (עיקרון 5): דיסק בלי שום אירוע SMART הוא ``unchecked``.
+* בריאות לכל דיסק -- **ממה שכבר נאסף** (``disk_events``, ``disk_failures``, ``room_rounds``), בלי איסוף
+  חדש. "לא נבדק" אינו "תקין" (עיקרון 5): דיסק בלי שום אירוע SMART הוא ``unchecked``.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ def _norm_suffix(raw: object) -> str:
     text = str(raw or "").strip()
     text = text.upper() if text.upper() == INSTRUCTOR else text
     if not suffix_ok(text):
-        raise SetError(f"מספר לא תקין: {text!r} (‏INS או מספר שלם בלי אפס מוביל)")
+        raise SetError(f"מספר לא תקין: {text!r} (\u200fINS או מספר שלם בלי אפס מוביל)")
     return text
 
 
@@ -68,7 +68,7 @@ def _serial(raw: object) -> str:
 # ---------------------------------------------------------------- inventory
 
 def note_hello(conn: sqlite3.Connection, mac: str, disks: object) -> None:
-    """רושם את הדיסקים של hello (משכפל/בנייה). ‏SELECT קודם -- hello שלא שינה דבר ובן פחות מ-15ש'
+    """רושם את הדיסקים של hello (משכפל/בנייה). SELECT קודם -- hello שלא שינה דבר ובן פחות מ-15ש'
     אינו כותב (כמו ``net_seen``, #136)."""
     if not isinstance(disks, list):
         return
@@ -144,7 +144,7 @@ def create(conn: sqlite3.Connection, name: object, prefix: object, students: obj
 # ---------------------------------------------------------------- health
 
 def _written_at(conn: sqlite3.Connection) -> dict[str, str]:
-    """הכתיבה התקינה האחרונה לכל סידורי: סוף הסבב שבו נכתב (‏`written_serials`)."""
+    """הכתיבה התקינה האחרונה לכל סידורי: סוף הסבב שבו נכתב (`written_serials`)."""
     out: dict[str, str] = {}
     for r in conn.execute("SELECT written_serials, COALESCE(closed_at, created_at) AS at FROM room_rounds"):
         try:
@@ -181,7 +181,7 @@ def health(conn: sqlite3.Connection, serials: list[str]) -> dict[str, dict]:
     """מצב כל סידורי: ``state`` (red/orange/ok/unchecked), ``reason`` (קוד, כמו ב-SMART), מתי נכשל, מתי נכתב.
 
     אדום = אירוע SMART ``fail`` אחרון, או כשל פתוח של דיסק (``disk_failures`` בלי ``cleared_at``,
-    ‏cause=disk). כתום = ``warn``, או כשל פתוח אחר (כבל…). תקין = ``ok`` ואין כשל פתוח. אין אירוע = לא נבדק."""
+    cause=disk). כתום = ``warn``, או כשל פתוח אחר (כבל…). תקין = ``ok`` ואין כשל פתוח. אין אירוע = לא נבדק."""
     good = _written_at(conn)
     out: dict[str, dict] = {}
     for serial in serials:
@@ -212,7 +212,7 @@ def health(conn: sqlite3.Connection, serials: list[str]) -> dict[str, dict]:
 # ---------------------------------------------------------------- views
 
 def _disk_view(conn, serial, inv, member, set_by_id, hl, places, names, f1=None) -> dict:
-    # ‏#1858 (07/11): "נצפה F1" צובע אדום (כלל 24/10: דיסק שגורם ל-F1 מדולג בשיכפול) -- בלי לטעון ש-SMART פגום:
+    # #1858 (07/11): "נצפה F1" צובע אדום (כלל 24/10: דיסק שגורם ל-F1 מדולג בשיכפול) -- בלי לטעון ש-SMART פגום:
     # הסיבה `f1_observed` נקבעת רק כשאין סיבה אדומה משלו.
     if f1 is not None and hl["state"] != "red":
         hl = {**hl, "state": "red", "reason": "f1_observed"}
@@ -327,7 +327,7 @@ def rounds(conn: sqlite3.Connection, limit: int = 40) -> list[dict]:
 # ---------------------------------------------------------------- changes
 
 def assign(conn: sqlite3.Connection, set_id: int, items: object, user: str) -> int:
-    """משייך דיסקים לסט (אחרי אימות מלא, או כלום). ‏``items``: ``[{"serial", "suffix"}]``."""
+    """משייך דיסקים לסט (אחרי אימות מלא, או כלום). ``items``: ``[{"serial", "suffix"}]``."""
     row = _set_row(conn, set_id)
     if not isinstance(items, list) or not items:
         raise SetError("אין דיסקים לשייך")
@@ -424,14 +424,14 @@ def _label_entry(r: sqlite3.Row) -> dict:
 
 
 def all_labels(conn: sqlite3.Connection) -> dict[str, dict]:
-    """‏#1857: כל הדיסקים ששויכו לסט, ``{serial: {"set", "label", "text"}}`` -- בשאילתה אחת, למסכים
+    """#1857: כל הדיסקים ששויכו לסט, ``{serial: {"set", "label", "text"}}`` -- בשאילתה אחת, למסכים
     שמציגים הרבה דיסקים בבת אחת (רשימת המכונות, כשלי דיסק, היומן). דיסק בלי סט חסר."""
     return {r["serial"]: _label_entry(r) for r in conn.execute(
         "SELECT m.serial, m.suffix, s.name, s.prefix FROM disk_set_members m JOIN disk_sets s ON s.id = m.set_id")}
 
 
 def text_of(labels: dict[str, dict], serial: object) -> str | None:
-    """‏``all_labels`` -> הטקסט ("קוריאים · xx-7") של דיסק לפי הסידורי, או ``None``. סידורי שאינו מחרוזת
+    """``all_labels`` -> הטקסט ("קוריאים · xx-7") של דיסק לפי הסידורי, או ``None``. סידורי שאינו מחרוזת
     (JSON פגום ב-hello) אינו נחפש."""
     entry = labels.get(serial) if isinstance(serial, str) else None
     return entry["text"] if entry else None

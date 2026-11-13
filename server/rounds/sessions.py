@@ -9,7 +9,7 @@
 
 שני זרמים, שני כללים (#60). המגבלה "אחד בכל המערכת" נובעת מ-`udp-sender`
 היחיד, ולכן היא חלה על מה שמשתמש בו — סבב כיתה וגל חדר שיכפולים. משיכת
-יוניקאסט של תחנה בודדת (‏HTTP מול `/api/v1/images/...`) אינה נוגעת בו
+יוניקאסט של תחנה בודדת (HTTP מול `/api/v1/images/...`) אינה נוגעת בו
 ואינה מתחרה על כתובת המולטיקאסט: כמה כאלה רצות יחד, וגם בזמן שידור.
 היא בכל זאת session — כדי שדיווחי ההתקדמות, המסך והיומן יראו אותה
 בדיוק כמו כל עבודה אחרת. שרת שעובד לא ייראה פנוי.
@@ -29,27 +29,27 @@ from server.db import get_setting, journal, now_iso, update_one, writing
 from server.agent import readbackhash
 from server.core.hostname_rule import HOSTNAME_MAX
 
-#: ‏``HOSTNAME_MAX`` — התקרה של NetBIOS, מ-`hostname_rule` (#1997: כלל אחד לשם
+#: ``HOSTNAME_MAX`` — התקרה של NetBIOS, מ-`hostname_rule` (#1997: כלל אחד לשם
 #: מחשב). שם מחשב ארוך ממנה אינו נכתב, ו-`hostname.sh` דוחה אותו — אבל שם,
 #: בקצה, אחרי שהאימג' כבר נכתב על הדיסק (#98).
 
-#: הסיומת הקצרה ביותר ש-`registry.normalize_suffix` מייצרת: ‏"5" → "05".
+#: הסיומת הקצרה ביותר ש-`registry.normalize_suffix` מייצרת: "5" → "05".
 #: היא הרצפה, ולכן קידומת שאינה מותירה לה מקום פסולה בוודאות — גם
 #: כשהקבוצה עדיין ריקה ואי אפשר למדוד את הסיומת הארוכה בפועל.
 SUFFIX_MIN = 2
 
 #: הקידומת של גל חדר השיכפולים — היחיד מסלולי הסבב שאינם כיתה, וגם
-#: הקידומת הארוכה ביותר האפשרית לשם לא-כיתתי. ‏room.py פותח תמיד עם
+#: הקידומת הארוכה ביותר האפשרית לשם לא-כיתתי. room.py פותח תמיד עם
 #: המחרוזת הזו; היא כאן כדי שהגבול למטה ייגזר ממנה ולא ייכתב כמספר קסם.
 ROOM_PREFIX = "ROOM"
 
 #: אורך השם המרבי למכונה שאינה כיתתית: מה שנשאר תחת HOSTNAME_MAX אחרי
-#: הקידומת הארוכה ביותר והמקף. ‏`registry.normalize_name` אוכף אותו
+#: הקידומת הארוכה ביותר והמקף. `registry.normalize_name` אוכף אותו
 #: **ברישום**, כדי ששם שאינו יכול להפוך לשם מחשב יידחה מיד — ולא
 #: בפתיחת הסבב, מאוחר ועל כל הקבוצה (#405).
 NONCLASSROOM_NAME_MAX = HOSTNAME_MAX - len(ROOM_PREFIX) - 1
 
-#: מה ששם מחשב מורכב ממנו. ‏`_` **אינו** כאן, והוא בדיוק התו שנולד
+#: מה ששם מחשב מורכב ממנו. `_` **אינו** כאן, והוא בדיוק התו שנולד
 #: מ-`label.replace(" ", "_")` ב-`console/api.py` ושורד לתוך מזהה הקבוצה.
 _PREFIX_OK = re.compile(r"[A-Z0-9-]+")
 
@@ -66,7 +66,7 @@ PULL_PREFIX = "PULL"
 
 #: מה שהמפעיל רואה כשהחריץ כבר תפוס. אותה הודעה בדיוק לשני המסלולים —
 #: הבדיקה המקדימה שתפסה את המצב, והאינדקס הייחודי שתפס את מי שחמק
-#: מהבדיקה (‏#103, ‏#104). מבחינת מי שקורא את המסך זה אותו מצב, ולכן
+#: מהבדיקה (#103, #104). מבחינת מי שקורא את המסך זה אותו מצב, ולכן
 #: המחרוזת אחת ולא שתיים שהתיישנו זו מול זו.
 TAKEN = {
     MULTICAST: "כבר יש סבב פעיל — לעולם לא יותר מאחד בו-זמנית",
@@ -90,7 +90,7 @@ class SessionSuperseded(SessionError):
 
 
 def _iso(ts: str | None) -> datetime | None:
-    """חותמת ISO עם אזור זמן, או None — "לא נמדד" (‏#1430)."""
+    """חותמת ISO עם אזור זמן, או None — "לא נמדד" (#1430)."""
     try:
         got = datetime.fromisoformat(ts) if ts else None
     except (TypeError, ValueError):
@@ -138,7 +138,7 @@ class SessionStore:
         רק מי שברשימה מוער ומצטרף; השאר עולים מהדיסק (עיקרון 1).
 
         `expand_partition` — בחירת ההרחבה מהקונסולה (#59), כבר מנורמלת
-        על ידי `imagefit.validate_expand_choice`. ‏`None` פירושו שהקורא
+        על ידי `imagefit.validate_expand_choice`. `None` פירושו שהקורא
         לא עודכן בשביל #59 (pulls.py, station.py) — נשמר כ-`NULL`,
         וה-hello עצמו נופל בו חזרה ל-"auto" (עיקרון 1).
 
@@ -166,7 +166,7 @@ class SessionStore:
         if kind == MULTICAST and replaces is None:
             self._claim_broadcast_slot(opened_by)
         if roster is not None:
-            # ‏17/10: גל של חדר השיכפולים (קבוצה בתפקיד `cloner`) מקבל בבחירה כל מחשב
+            # 17/10: גל של חדר השיכפולים (קבוצה בתפקיד `cloner`) מקבל בבחירה כל מחשב
             # שיכפול, מכל קבוצת שיכפול — הבחירה של הסבב היא `target_slots` (#1555);
             # כל קבוצה אחרת — רק את המחשבים שלה, כמו קודם.
             registered = {
@@ -223,12 +223,12 @@ class SessionStore:
         state, started = ("open", None) if kind == MULTICAST else ("running", now_iso())
         try:
             if replaces is not None:
-                # ‏BEGIN IMMEDIATE תופס את נעילת הכתיבה **לפני** הקריאה־
+                # BEGIN IMMEDIATE תופס את נעילת הכתיבה **לפני** הקריאה־
                 # כתיבה, ולכן הסגירה וה-INSERT הם פעולה אחת מבחינת כל
                 # תהליכון אחר — ומי שהפסיד ממתין ב-`busy_timeout` ואז
                 # מגלה שהגל כבר נסגר, במקום לפתוח גל שני.
                 self.conn.execute("BEGIN IMMEDIATE")
-                # ‏`update_one` הוא אותו דפוס בדיוק כמו ב-`_transition`,
+                # `update_one` הוא אותו דפוס בדיוק כמו ב-`_transition`,
                 # והוא גם זה שמשחרר את נעילת הכתיבה כשלא תאמה שורה (#54).
                 if not update_one(
                     self.conn,
@@ -254,7 +254,7 @@ class SessionStore:
         except sqlite3.IntegrityError as exc:
             # ההכרעה האמיתית על החריץ היא כאן ולא בבדיקה שלמעלה: בין
             # הקריאה לכתיבה רצות עוד שאילתות, ותהליכון אחר יכול לכתוב
-            # בתוכן (‏#103, ‏#104). האינדקס החלקי הייחודי ב-`db.py` הוא
+            # בתוכן (#103, #104). האינדקס החלקי הייחודי ב-`db.py` הוא
             # שמכריע, וה-rollback משחרר את נעילת הכתיבה של ה-INSERT
             # שנדחה — בדיוק מהסיבה של `db.update_one` (#54).
             self.conn.rollback()
@@ -268,7 +268,7 @@ class SessionStore:
             raise
         if replaces is not None:
             # אחרי ה-commit, ובאותו נוסח של `close`: הסגירה נרשמת ביומן
-            # ומנוע השידור מקבל את ההודעה. ‏`replaces` הוא מולטיקאסט
+            # ומנוע השידור מקבל את ההודעה. `replaces` הוא מולטיקאסט
             # בהגדרה, ולכן אין כאן את התנאי של `close`.
             journal(self.conn, "session_close", replaces, opened_by, round_id=replaces)
             self.on_closed(replaces)
@@ -281,7 +281,7 @@ class SessionStore:
         journal(self.conn, "session_open",
                 f"{session_id} {group_id} {image_id} prefix={prefix}"
                 + (f" machines={len(roster)}" if roster is not None else "")
-                # ‏#59: כיבוי ההרחבה או בחירה ידנית נרשמים ביומן —
+                # #59: כיבוי ההרחבה או בחירה ידנית נרשמים ביומן —
                 # "auto" הוא ברירת המחדל השקטה מלפני ה-Issue, ולכן אינו
                 # נרשם (אחרת כל סבב, כולל אלה שלא נגעו בהרחבה, היה
                 # נראה כמו החלטה שמישהו קיבל).
@@ -322,11 +322,11 @@ class SessionStore:
                   event: str = "session_start_manual") -> None:
         """התחלה ידנית מהקונסולה. נדחית כשאיש עוד לא הצטרף (#843).
 
-        ‏`record_hello` מצרף רק לסבב `open`, ולכן סבב שהותחל ריק הוא גל
+        `record_hello` מצרף רק לסבב `open`, ולכן סבב שהותחל ריק הוא גל
         שאיש אינו יכול להצטרף אליו: udp-sender ממתין `start_timeout`,
         רושם `send_failed`, והסבב נשאר `running` בלי חברים — מצב שנמדד
         במעבדה 15/09. הבדיקה כאן ולא בקונסולה: ה-API הוא הגבול.
-        ההתחלה האוטומטית (`maybe_start`, ‏`room.tick`) אינה עוברת כאן —
+        ההתחלה האוטומטית (`maybe_start`, `room.tick`) אינה עוברת כאן —
         שם התנאי כבר דורש מצטרף.
         """
         if self.joined_count(session_id) == 0:
@@ -376,7 +376,7 @@ class SessionStore:
             return False
         self.conn.commit()
         journal(self.conn, event, session_id, user, round_id=session_id)
-        # רק שידור מודיע למנוע. ‏`SenderEngine.stop` מתעלם ממזהה הסבב
+        # רק שידור מודיע למנוע. `SenderEngine.stop` מתעלם ממזהה הסבב
         # שהוא מקבל, ולכן סגירת משיכת יוניקאסט הייתה הורגת את השידור
         # של הכיתה — סבב שאין לו שום קשר אליה.
         if row["kind"] == MULTICAST:
@@ -412,7 +412,7 @@ class SessionStore:
 
     def _spent(self, session: sqlite3.Row) -> bool:
         """סבב שהתחיל וכל מי שהצטרף סיים או נכשל — תצוגת סיכום בלבד (#35).
-        גלי חדר השיכפולים מוחרגים: ‏room.py מנהל את מחזורם בעצמו, ופינוי
+        גלי חדר השיכפולים מוחרגים: room.py מנהל את מחזורם בעצמו, ופינוי
         מבחוץ היה שומט את חשבון הכוננים של הסבב המצטבר."""
         if session["state"] != "running":
             return False
@@ -493,7 +493,7 @@ class SessionStore:
         ).fetchone()["n"]
 
     def live_count(self, session_id: str) -> int:
-        """‏#1430: חברים שעוד יכולים לקבל זרם — כל מי שאינו במצב סופי.
+        """#1430: חברים שעוד יכולים לקבל זרם — כל מי שאינו במצב סופי.
 
         מכונה שמגירה אחת שלה נכשלה עדיין `writing` ונספרת; מכונה שכל
         המגירות שלה נכשלו מדווחת `failed` ואינה מתחברת עוד לשולח."""
@@ -504,9 +504,9 @@ class SessionStore:
         ).fetchone()["n"]
 
     def quiet_ips(self, session_id: str, seconds: int) -> list[str | None]:
-        """‏#1430: הכתובת האחרונה שנראתה (‏`net_devices`, מה-hello; ‏None כשאינה
+        """#1430: הכתובת האחרונה שנראתה (`net_devices`, מה-hello; None כשאינה
         ידועה) של כל חבר שאינו במצב סופי ולא דיווח `seconds` שניות — מהדיווח
-        האחרון (‏`updated_at`) או מתחילת הגל, המאוחר מביניהם (כמו
+        האחרון (`updated_at`) או מתחילת הגל, המאוחר מביניהם (כמו
         `room._mark_lost`, שנותן לכל חבר גרייס מתחילת הגל). חותמת שאינה
         נקראת אינה "שקט" — לא נמדד; חותמת בעתיד (קפיצת שעון, #1947) — לא שקט.
         השולח מצליב אותן מול מי שקיבל את המחיצה הקודמת עד סופה, כמו `lost_ips`."""
@@ -527,8 +527,8 @@ class SessionStore:
         return quiet
 
     def lost_ips(self, session_id: str) -> list[str | None]:
-        """‏#1950: הכתובת האחרונה שנראתה (‏`net_devices`, מה-hello) של כל חבר
-        `lost` בגל — ‏None כשאינה ידועה. השולח מצליב אותן מול מי שקיבל את
+        """#1950: הכתובת האחרונה שנראתה (`net_devices`, מה-hello) של כל חבר
+        `lost` בגל — None כשאינה ידועה. השולח מצליב אותן מול מי שקיבל את
         המחיצה הקודמת עד סופה (`sender.finished_receivers`)."""
         return [row["ip"] or None for row in self.conn.execute(
             "SELECT d.ip FROM session_members m LEFT JOIN net_devices d ON d.mac = m.mac"
@@ -537,8 +537,8 @@ class SessionStore:
         ).fetchall()]
 
     def has_open_membership(self, mac: str, image_id: str) -> bool:
-        """‏#2657: האם המכונה חברה בסבב פתוח (‏`open`/`running`) של האימג' הזה.
-        משיכה (‏`pulls.open_pull`) היא סבב עם חבר אחד, ולכן נספרת כאן גם היא.
+        """#2657: האם המכונה חברה בסבב פתוח (`open`/`running`) של האימג' הזה.
+        משיכה (`pulls.open_pull`) היא סבב עם חבר אחד, ולכן נספרת כאן גם היא.
         זה מה ש-`api.source_gate` דורש לפני שהוא מגיש מניפסט, קבצים או רשימת אימות."""
         return self.conn.execute(
             "SELECT 1 FROM session_members m JOIN sessions s ON s.id = m.session_id"
@@ -579,7 +579,7 @@ class SessionStore:
         if session["state"] != "open":
             return self.is_member(session["id"], mac)
         # שתי הכתיבות הן טרנזאקציה אחת: הצטרפות שנרשמה בלי לאפס את
-        # הטיימר היא סבב שיוצא מוקדם מדי. ‏`writing` מוודא שכישלון של
+        # הטיימר היא סבב שיוצא מוקדם מדי. `writing` מוודא שכישלון של
         # השנייה אינו משאיר את הנעילה של הראשונה יתומה (#290).
         with writing(self.conn):
             inserted = self.conn.execute(
@@ -615,7 +615,7 @@ class SessionStore:
         return session_view.build(self, session, library)
 
     def would_start(self, session: sqlite3.Row) -> bool:
-        """האם תנאי ההתחלה הכפול מתקיים עכשיו. **קריאה בלבד** — ‏`maybe_start`
+        """האם תנאי ההתחלה הכפול מתקיים עכשיו. **קריאה בלבד** — `maybe_start`
         מיישם אותו, והתצוגה של מה שמחשב יקבל באתחול (#2550) שואלת אותו בלי
         להתחיל דבר: אותה הכרעה, בלי מקום שבו שתיים יכולות להיפרד.
 

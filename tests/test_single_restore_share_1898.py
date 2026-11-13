@@ -1,18 +1,18 @@
-"""‏#1898 — הכרעת נדב (22/10): שאלת החלוקה גם בשחזור יחיד של מחשב בנייה.
+"""#1898 — הכרעת נדב (22/10): שאלת החלוקה גם בשחזור יחיד של מחשב בנייה.
 
-dual-boot שנקלט עם כיווץ (‏C: לפני שורש הלינוקס): עד כאן רק המשכפל שאל
-(‏`drawer_share_gate`), ובשחזור היחיד ‏`disk_fits` סירב בשם "יישארו רק X GB
-ב-C:" — כי בלי `share.ok` ‏C: אינה גדלה. עכשיו `sr_share_gate`
-(‏`agent/lib/restore/single_restore.sh`) מציג את אותה חלוקה (‏`share_plan`, ‏kind
-‏`share`) על הגואי של ההתקדמות, לפני `pull_open` ולפני בייט ראשון:
+dual-boot שנקלט עם כיווץ (C: לפני שורש הלינוקס): עד כאן רק המשכפל שאל
+(`drawer_share_gate`), ובשחזור היחיד `disk_fits` סירב בשם "יישארו רק X GB
+ב-C:" — כי בלי `share.ok` C: אינה גדלה. עכשיו `sr_share_gate`
+(`agent/lib/restore/single_restore.sh`) מציג את אותה חלוקה (`share_plan`, kind
+`share`) על הגואי של ההתקדמות, לפני `pull_open` ולפני בייט ראשון:
 
-* ‏`split` — ‏`targets/<disk>/share.ok`, והשחזור ממשיך (‏`expand_last` ו-`disk_fits`
+* `split` — `targets/<disk>/share.ok`, והשחזור ממשיך (`expand_last` ו-`disk_fits`
   קוראים אותו).
-* ‏`skip`, בלי תשובה עד התקרה, או בלי גואי — **לא נכתב דבר**, והסיבה בעברית על
-  הגואי (‏`sr_refused share`).
+* `skip`, בלי תשובה עד התקרה, או בלי גואי — **לא נכתב דבר**, והסיבה בעברית על
+  הגואי (`sr_refused share`).
 * אימג' שאין בו מחיצה מכווצת לפני המועמד — אין שאלה, כמו קודם.
 
-התשובה מגיעה מה-stdout של הגואי (‏`restore.out`), כמו `restore-cancel`: אין
+התשובה מגיעה מה-stdout של הגואי (`restore.out`), כמו `restore-cancel`: אין
 כאן גשר שיהפוך אותה ל-`ask-decision`.
 """
 
@@ -156,7 +156,7 @@ def test_an_image_with_nothing_shrunk_before_the_root_is_not_asked(tmp_path):
 
 
 def test_a_split_that_did_not_compute_writes_nothing(tmp_path):
-    """‏share_plan נכשל (גודל הדיסק לא נקרא) — לא שאלה, ולא כתיבה בלי חלוקה."""
+    """share_plan נכשל (גודל הדיסק לא נקרא) — לא שאלה, ולא כתיבה בלי חלוקה."""
     r = restore(tmp_path, dual_boot(), "split", disk_size=False, wait_s=3)
     assert "WRITE" not in r["trace"] and not _asked(r["seen"]), (r["trace"], r["seen"])
     assert "TEST-REBOOT: restore: the split of the room did not compute (#1898)" in r["out"], r["out"]

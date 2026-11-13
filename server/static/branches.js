@@ -260,7 +260,7 @@ function branchMachineHtml(nid, m, roomMachine) {
   const status = live.awake === true || m.online === true || m.awake === true ? "מחובר" : "לא מחובר";
   const drawers = role === "cloner" ? `<div class="slots">${disks.length ? disks.map(branchDrawerHtml).join("") : `<span class="muted">לא דווחו מגירות</span>`}</div>` : "";
   const capture = role === "build" ? `<div class="sub">${esc(branchCaptureText(m))}</div>` : "";
-  return `<div class="mcard" data-branch-machine="${esc(m.mac)}"><div class="mcard-h"><b>${esc(branchMachineName(m))}</b><span class="muted">${roleHe} · ${status}</span></div>${drawers}${capture}<div class="acts"><button class="btn sm" onclick="branchMonitor('${encodeId(nid)}','${encodeId(m.mac)}','${encodeId(branchMachineName(m))}')">מוניטור</button></div></div>`;
+  return `<div class="mcard" data-branch-machine="${esc(m.mac)}"><div class="mcard-h"><b>${esc(branchMachineName(m))}</b><span class="muted">${roleHe} · ${status}</span></div>${drawers}${capture}<div class="acts"><button class="btn sm" onclick="branchMonitor(${jsStr(nid)},${jsStr(m.mac)},${jsStr(branchMachineName(m))})">מוניטור</button></div></div>`;
 }
 function branchRoundHtml(n, c) {
   const r = c.room && c.room.round;

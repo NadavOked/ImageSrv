@@ -1,18 +1,18 @@
-"""‏#1581 בהפצה ישירה — השרת אומר למקור שמחשב בגל ממתין לאדם.
+"""#1581 בהפצה ישירה — השרת אומר למקור שמחשב בגל ממתין לאדם.
 
-‏`SenderEngine` של השרת אינו מפעיל את udp-sender של המחיצה הראשונה כל עוד
-חבר בגל עומד על שאלה למפעיל (‏`_hold_for_asks`, ‏`prompt_hold`, #2202), ועוצר
+`SenderEngine` של השרת אינו מפעיל את udp-sender של המחיצה הראשונה כל עוד
+חבר בגל עומד על שאלה למפעיל (`_hold_for_asks`, `prompt_hold`, #2202), ועוצר
 אותו אם השאלה עולה לפני הבייט הראשון. בגל שהמקור שלו הוא מחשב בנייה
-(‏#715) המנוע הזה **אינו רץ** — udp-sender רץ במחשב הבנייה, עם
-‏`--start-timeout 180` משלו, והשרת לא אמר לו דבר על השאלה. משכפל שעמד על
+(#715) המנוע הזה **אינו רץ** — udp-sender רץ במחשב הבנייה, עם
+`--start-timeout 180` משלו, והשרת לא אמר לו דבר על השאלה. משכפל שעמד על
 שאלת חלוקת המקום (#1898) או RAID (#1808) יותר משלוש דקות — המקור יצא
 "אף מחשב משכפל לא הצטרף לזרם".
 
-כאן: ‏`task.direct.operator_wait` = כמה חברים בגל עומדים עכשיו על שאלה —
+כאן: `task.direct.operator_wait` = כמה חברים בגל עומדים עכשיו על שאלה —
 אותה שאילתה ואותן תקרות כמו השולח של השרת.
 
 **בקרה שלילית:** על `server/rounds/direct.py` של `origin/main` השדה חסר
-(‏`KeyError: 'operator_wait'`) בשלושת הטסטים הראשונים; הרביעי (גל שלא רץ)
+(`KeyError: 'operator_wait'`) בשלושת הטסטים הראשונים; הרביעי (גל שלא רץ)
 נופל גם הוא על אותו שדה חסר.
 """
 
@@ -27,7 +27,7 @@ from test_server_room import CLONER1, CLONER2, room_server  # noqa: F401
 
 pytest.importorskip("fastapi")
 
-#: השאלה כפי שהסוכן שולח אותה בזמן שאלת מגירה (‏attended.sh, ‏drawergate.sh).
+#: השאלה כפי שהסוכן שולח אותה בזמן שאלת מגירה (attended.sh, drawergate.sh).
 SHARE_PROMPT = {"waiting_for": "operator", "prompt": "Disk 2: share question", "joining": False}
 
 
@@ -52,7 +52,7 @@ def test_a_member_on_a_question_is_told_to_the_source(room_server):
 
 
 def test_the_answer_clears_it(room_server):
-    """ה-hello בלי prompt שהסוכן שולח כשהשאלה נגמרת (‏attended)."""
+    """ה-hello בלי prompt שהסוכן שולח כשהשאלה נגמרת (attended)."""
     _running_three(room_server)
     _asks(room_server, CLONER1)
     _asks(room_server, CLONER3)
@@ -64,7 +64,7 @@ def test_the_answer_clears_it(room_server):
 
 
 def test_a_member_past_the_ceiling_leaves_the_wave_and_stops_holding(room_server):
-    """אותה תקרה כמו השולח של השרת (‏`ASK_HOLD_MAX_SECONDS` מתחילת הגל):
+    """אותה תקרה כמו השולח של השרת (`ASK_HOLD_MAX_SECONDS` מתחילת הגל):
     שאלה שאיש לא עונה עליה אינה מחזיקה את המקור לנצח — רק החבר הזה משתחרר."""
     opened = _running_three(room_server)
     conn = room_server["ctx"].conn

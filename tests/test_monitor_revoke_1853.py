@@ -1,6 +1,6 @@
-"""‏#1853 — גשר מוניטור פתוח נסגר כשההתחברות לקונסולה בוטלה.
+"""#1853 — גשר מוניטור פתוח נסגר כשההתחברות לקונסולה בוטלה.
 
-‏#1394 חיווט את צופה ה-VM ל-`viewer_sessions`; המוניטור — מקומי ודרך שרת משנה —
+#1394 חיווט את צופה ה-VM ל-`viewer_sessions`; המוניטור — מקומי ודרך שרת משנה —
 לא נרשם, ולכן גשר שנושא מקלדת ועכבר למכונה נשאר חי אחרי logout, אחרי מחיקת
 המשתמש ואחרי הורדתו ל-deploy: עד שהדפדפן סגר, המכונה נעלמה, או 10 דק' בלי
 תעבורה. ומחיקה/הורדה לא קראו ל-`revoke_user` כלל — גם לא לצופה ה-VM.
@@ -87,7 +87,7 @@ def _assert_revoked(server, ws, machine) -> None:
 
 
 def test_console_logout_closes_the_open_monitor_and_its_machine_socket(server):
-    """הגדרת "גמור" 3, דרך ה-HTTP: צופה פתוח → ‏`POST /logout` באותה עוגייה."""
+    """הגדרת "גמור" 3, דרך ה-HTTP: צופה פתוח → `POST /logout` באותה עוגייה."""
     client, machine = _watching(server, "noc")
     console = TestClient(server["app"])
     console.cookies.set(auth.COOKIE_NAME, client.cookies.get(auth.COOKIE_NAME))
@@ -100,7 +100,7 @@ def test_console_logout_closes_the_open_monitor_and_its_machine_socket(server):
 
 @pytest.mark.parametrize("how", ["delete", "demote", "disable", "password"])
 def test_deleting_demoting_disabling_or_repassing_the_admin_closes_the_monitor(server, how):
-    """‏"password" ו-"disable" — ממצאי סקירת האבטחה על #1853: עריכת סיסמה בעמוד
+    """"password" ו-"disable" — ממצאי סקירת האבטחה על #1853: עריכת סיסמה בעמוד
     המשתמשים (`users.update`) והשבתה (`set_disabled`) לא ביטלו צופים."""
     conn = server["ctx"].conn
     users.create(conn, "ada", "admin-pass-456", "admin", by="test", check_policy=False)

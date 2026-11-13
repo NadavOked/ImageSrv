@@ -205,9 +205,10 @@ def test_hibernated_recovery_gets_a_full_view_alongside_a_clean_windows_shrink(t
 @pytest.mark.parametrize("direct", [False, True])
 def test_inconsistent_measure_is_not_bypassed_for_a_required_view(tmp_path, direct):
     succeeded(fast_run(tmp_path / "control", direct=direct), direct=direct)
-    resize = '#!/bin/sh\necho "NTFS is inconsistent"\nexit 1\n'
+    # #2972: "NTFS is inconsistent" is read whole now (test_capture_ntfs_inconsistent_2972); any other failed measure is not bypassed
+    resize = '#!/bin/sh\necho "ERROR: Volume is scheduled for check."\nexit 1\n'
     box, run, out = fast_run(tmp_path / "bad", direct=direct, extra={"ntfsresize": resize})
-    assert "לא עקבית (NTFS)" in refusal_reason(box, run, out)
+    assert "לא הצלחנו לבדוק כמה אפשר לכווץ" in refusal_reason(box, run, out)
     assert not any(s.startswith(("modprobe ", "partclone ", "ntfsfix ")) for s in order(run))
     no_source_writes(box, run)
 
@@ -221,9 +222,9 @@ def test_hibernated_capture_reads_the_view_reports_orange_and_never_writes_sourc
 
 @pytest.mark.parametrize("direct", [False, True])
 @pytest.mark.parametrize("env,reason,attempted", [
-    ({"DROP_FAIL": "1"}, "ביטול ההשהיה בעותק של מחיצה 2 נכשל — לא נקלט. ב-Windows של המקור: ⁦powercfg /h off⁩, ואז כיבוי — המקור לא נכתב", True),
-    ({"READBACK_RC": "14"}, "ביטול ההשהיה בעותק של מחיצה 2 נכשל — לא נקלט. ב-Windows של המקור: ⁦powercfg /h off⁩, ואז כיבוי — המקור לא נכתב", True),
-    ({"READBACK_RC": "18"}, "ביטול ההשהיה בעותק של מחיצה 2 נכשל — לא נקלט. ב-Windows של המקור: ⁦powercfg /h off⁩, ואז כיבוי — המקור לא נכתב", True),
+    ({"DROP_FAIL": "1"}, "ביטול ההשהיה בעותק של מחיצה 2 נכשל — לא נקלט. ב-Windows של המקור: \u2066powercfg /h off\u2069, ואז כיבוי — המקור לא נכתב", True),
+    ({"READBACK_RC": "14"}, "ביטול ההשהיה בעותק של מחיצה 2 נכשל — לא נקלט. ב-Windows של המקור: \u2066powercfg /h off\u2069, ואז כיבוי — המקור לא נכתב", True),
+    ({"READBACK_RC": "18"}, "ביטול ההשהיה בעותק של מחיצה 2 נכשל — לא נקלט. ב-Windows של המקור: \u2066powercfg /h off\u2069, ואז כיבוי — המקור לא נכתב", True),
     ({"MEM_KIB": str(1280 * 1024)}, "מחיצה 2: לביטול מצב השינה בעותק נדרשים 384 MB זיכרון, ויש 256 MB — לא נקלט. המקור לא נכתב", False),
     ({"VIEW_RC": "18"}, "לא הצלחנו לבדוק אם Windows בה כובה עד הסוף", False),
     ({"DM_INVALID": "1"}, "אינו תקין אחרי ביטול ההשהיה", True),

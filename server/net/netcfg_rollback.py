@@ -1,4 +1,4 @@
-"""ההחזרה האוטומטית של תצורת רשת שלא אושרה (‏#56).
+"""ההחזרה האוטומטית של תצורת רשת שלא אושרה (#56).
 
 שינוי כתובת על הכרטיס שדרכו המנהל מחובר מנתק אותו מהקונסולה — ואז אין
 דרך לבטל. הדפוס הוא של Cisco ו-MikroTik: מחילים, ואם לא אושר תוך דקה
@@ -7,7 +7,7 @@
 **זה אינו תהליכון ב-uvicorn, ולא במקרה.** שינוי שהפיל את הרשת מפיל
 לעיתים גם את השירות, ואז מי שאמור להחזיר כבר לא רץ. לכן:
 
-* ההגדרה הקודמת נשמרת **לדיסק** בסמן `pending.json` — ‏*הטקסט* הקודם
+* ההגדרה הקודמת נשמרת **לדיסק** בסמן `pending.json` — *הטקסט* הקודם
   של כל קובץ שנגענו בו, לא הפרשי-הגדרות.
 * המודול הזה רץ כיחידת systemd עצמאית (`imagesrv-netrollback.service`)
   שטיימר מפעיל כל עשר שניות. הוא אינו מייבא FastAPI, אינו נוגע ב-DB,
@@ -55,7 +55,7 @@ REASON_HE = {
 def boot_id(path: str | Path = "/proc/sys/kernel/random/boot_id") -> str:
     """מזהה האתחול הנוכחי, או "" אם אי אפשר לקרוא.
 
-    ‏"" נשמר בסמן כמו כל ערך אחר, והשוואה בין שני "" אינה מפעילה החזרה
+    "" נשמר בסמן כמו כל ערך אחר, והשוואה בין שני "" אינה מפעילה החזרה
     בעלייה — במכונה בלי `/proc` (פיתוח, ווינדוס) נשארת רק הפקיעה.
     """
     try:
@@ -71,7 +71,7 @@ def boot_id(path: str | Path = "/proc/sys/kernel/random/boot_id") -> str:
 class Pending:
     """מה שצריך כדי להחזיר, גם בלי DB וגם בלי השרת.
 
-    ‏`files` הוא [{"name": כרטיס, "text": הטקסט הקודם או None}]. ‏None
+    `files` הוא [{"name": כרטיס, "text": הטקסט הקודם או None}]. None
     פירושו "לא היה קובץ" — והחזרה תמחק אותו, ולא תשאיר קובץ ריק שנראה
     מנוהל.
     """
@@ -129,7 +129,7 @@ def write_pending(state_dir: str | Path, marker: Pending) -> str | None:
     path = pending_path(state_dir)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        # ‏#2160: הסמן מעתיק את טקסט ההגדרה ואת resolv.conf — ‏0600, לא 0644 של קובץ חדש.
+        # #2160: הסמן מעתיק את טקסט ההגדרה ואת resolv.conf — 0600, לא 0644 של קובץ חדש.
         write_atomic(path, marker.to_json(), mode=0o600)
     except OSError as exc:
         return f"לא ניתן לכתוב את סמן ההחזרה {path}: {exc.strerror or exc}"
@@ -141,7 +141,7 @@ def clear_pending(state_dir: str | Path) -> None:
         pending_path(state_dir).unlink(missing_ok=True)
     except OSError:
         # לא נבלע: מי שמדווח "אושר" בודק `pending_path().exists()` אחרי
-        # הקריאה (‏#291); ‏`run_once` שנכשל כאן פשוט מחזיר שוב בסבב הבא.
+        # הקריאה (#291); `run_once` שנכשל כאן פשוט מחזיר שוב בסבב הבא.
         pass
 
 
@@ -154,7 +154,7 @@ def corrupt_pending(state_dir: str | Path) -> bool:
 
 
 def decide(marker: Pending | None, now: float, boot: str) -> str | None:
-    """למה להחזיר עכשיו — או None. ‏**זו כל הלוגיקה**, והיא טהורה.
+    """למה להחזיר עכשיו — או None. **זו כל הלוגיקה**, והיא טהורה.
 
     סדר הבדיקות מכוון: אתחול קודם לפקיעה, כדי שהפירור יסביר את הסיבה
     האמיתית גם כשגם הזמן עבר.
@@ -194,7 +194,7 @@ def write_crumb(state_dir: str | Path, interface: str, reason: str,
 
 
 def read_crumbs(state_dir: str | Path) -> list[dict | None]:
-    """הפירורים, ישן→חדש. ‏`None` = פירור שלא ניתן לפענח — הוא מדווח
+    """הפירורים, ישן→חדש. `None` = פירור שלא ניתן לפענח — הוא מדווח
     ככזה ולא נבלע בשקט."""
     root = Path(state_dir)
     if not root.is_dir():
@@ -231,7 +231,7 @@ def restore(marker: Pending, hooks: dict | None = None) -> list[str]:
     """
     hooks = {**netcfg_host.default_hooks(), **(hooks or {})}
     errors = []
-    # ‏#2855: כרטיס שלא היה לו קובץ — ‏ifdown **לפני** שהקובץ נמחק, כשה-stanza
+    # #2855: כרטיס שלא היה לו קובץ — ifdown **לפני** שהקובץ נמחק, כשה-stanza
     # עוד מספר ל-ifupdown מה להוריד. קוד היציאה אינו קובע (כרטיס שלא עלה הוא
     # "not configured"); מה שקובע הוא הקריאה החוזרת שבסוף.
     unmanaged = [entry.get("name", marker.interface) for entry in marker.files
@@ -259,8 +259,8 @@ def restore(marker: Pending, hooks: dict | None = None) -> list[str]:
 
 
 def _release(name: str, hooks: dict) -> list[str]:
-    """‏#2855: כרטיס שחזר ל"לא מנוהל" — בלי ifup (ifupdown כבר לא מכיר אותו:
-    ‏"unknown interface" בשרת העבודה, 11/11). הכתובת יורדת, ו"ירדה" נקבע רק
+    """#2855: כרטיס שחזר ל"לא מנוהל" — בלי ifup (ifupdown כבר לא מכיר אותו:
+    "unknown interface" בשרת העבודה, 11/11). הכתובת יורדת, ו"ירדה" נקבע רק
     מקריאה חוזרת שנקראה ואינה מראה כתובת על הכרטיס (עיקרון 5)."""
     error = hooks["netcfg_release"](name)
     state = hooks["netcfg_state"]()

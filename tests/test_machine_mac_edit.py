@@ -1,4 +1,4 @@
-"""‏#977 §5 — עריכת MAC של מכונה רשומה (‏`PUT /api/console/machines/{mac}` עם `mac`).
+"""#977 §5 — עריכת MAC של מכונה רשומה (`PUT /api/console/machines/{mac}` עם `mac`).
 
 כרטיס רשת שהוחלף: השורה עוברת לכתובת החדשה (שם, קבוצה, חריצים נשארים),
 ו-known-macs נכתב מחדש מיד — אחרת הכתובת החדשה אינה מקבלת GRUB (#141)
@@ -53,7 +53,7 @@ def test_the_row_moves_to_the_new_mac_and_keeps_its_name_and_group(server):
     after = rows(server)
     assert OLD not in after
     assert after[NEW]["suffix"] == "BUILD-1" and after[NEW]["group_id"] == "grp_BUILD"
-    # ‏known-macs נכתב מחדש: החדשה מקבלת GRUB, הישנה כבר לא (#141).
+    # known-macs נכתב מחדש: החדשה מקבלת GRUB, הישנה כבר לא (#141).
     text = server["fake"]["applied"][-1]
     assert f"{NEW},set:known" in text and OLD not in text
     detail = server["ctx"].conn.execute(

@@ -1,21 +1,21 @@
-"""‏UPS דרך NUT — יומן בנפילת חשמל, כיבוי מסודר בסוללה נמוכה (‏#1973, נדב 22/10).
+"""UPS דרך NUT — יומן בנפילת חשמל, כיבוי מסודר בסוללה נמוכה (#1973, נדב 22/10).
 
-**שלושה מצבים, מהקונסולה:** אין UPS · ‏USB (ה-UPS מחובר לשרת; השרת מריץ את
+**שלושה מצבים, מהקונסולה:** אין UPS · USB (ה-UPS מחובר לשרת; השרת מריץ את
 הדרייבר ואת upsd של NUT על loopback) · רשת (שרת NUT אחר מחזיק את ה-UPS;
 השרת רק קורא ממנו). בשני האחרונים השרת קורא את המשתנים **בפרוטוקול של NUT**
-(‏`LIST VAR`, ‏TCP ‏3493) — אותו פרוטוקול ש-`upsc` מדבר, בלי לפרסר פלט של כלי.
+(`LIST VAR`, TCP 3493) — אותו פרוטוקול ש-`upsc` מדבר, בלי לפרסר פלט של כלי.
 
 **מה קורה:**
 
-* ‏`OB` (על סוללה) — שורה ביומן: החשמל נפל. חזרה ל-`OL` — שורה: החשמל חזר.
-* ‏`OB`+`LB` (סוללה נמוכה בזמן שהחשמל נפל), או ‏`FSD` (כיבוי כפוי מהשרת
-  שמחזיק את ה-UPS) — עוצרים **בגלוי** את מה שרץ (‏`stop_all_work`: סבב
+* `OB` (על סוללה) — שורה ביומן: החשמל נפל. חזרה ל-`OL` — שורה: החשמל חזר.
+* `OB`+`LB` (סוללה נמוכה בזמן שהחשמל נפל), או `FSD` (כיבוי כפוי מהשרת
+  שמחזיק את ה-UPS) — עוצרים **בגלוי** את מה שרץ (`stop_all_work`: סבב
   שידור/משיכה נכשל עם הסיבה, סבב חדר נכשל, קליטה רצה נכשלת), ורק אז
-  ‏`systemctl poweroff`.
-* ‏`LB` בלי `OB` (הסוללה נטענת אחרי הפסקה) — אינו מכבה.
+  `systemctl poweroff`.
+* `LB` בלי `OB` (הסוללה נטענת אחרי הפסקה) — אינו מכבה.
 
 **עיקרון 5.** כיבוי רק על ראיה חיובית — קריאה שהצליחה ונשאה `LB`/`FSD`.
-‏UPS שלא נקרא **אינו** מכבה את השרת: הוא שורה אדומה במסך הבריאות ושורה
+UPS שלא נקרא **אינו** מכבה את השרת: הוא שורה אדומה במסך הבריאות ושורה
 ביומן במעבר, לא שקט. "לא נקרא" ו"על חשמל" הם שני מצבים.
 """
 
@@ -36,7 +36,7 @@ from server.db import _write_lock, get_setting, journal, now_iso, set_settings, 
 from server.core.logtext import one_line
 
 log = logging.getLogger("imagesrv.ups")
-#: ‏#2510: מה שהקונסולה מקבלת כשהכשל אינו `UpsError` שלנו — הטקסט המקורי ל-log.
+#: #2510: מה שהקונסולה מקבלת כשהכשל אינו `UpsError` שלנו — הטקסט המקורי ל-log.
 READ_FAILED = "קריאת ה-UPS נכשלה — הפרטים ביומן השרת"
 SHUTDOWN_FAILED = "פקודת הכיבוי נכשלה — הפרטים ביומן השרת"
 
@@ -44,7 +44,7 @@ MODE, TARGET = "ups_mode", "ups_target"
 MODES = ("none", "usb", "net")
 MODES_HE = {"none": "אין UPS", "usb": "USB — מחובר לשרת", "net": "רשת — שרת NUT"}
 NUT_PORT = 3493
-#: שם ה-UPS כשהוא מחובר לשרת עצמו (‏ups.conf שהשרת כותב).
+#: שם ה-UPS כשהוא מחובר לשרת עצמו (ups.conf שהשרת כותב).
 USB_NAME = "imagesrv"
 USB_TARGET = f"{USB_NAME}@127.0.0.1"
 POLL_SECONDS = 10.0
@@ -63,7 +63,7 @@ class UpsError(RuntimeError):
 
 
 def _our_text(exc: Exception, fallback: str) -> str:
-    """‏#2510: הודעה של `UpsError` (שלנו) עוברת כמו שהיא; כל חריגה אחרת — ל-log,
+    """#2510: הודעה של `UpsError` (שלנו) עוברת כמו שהיא; כל חריגה אחרת — ל-log,
     וללקוח `fallback`."""
     if isinstance(exc, UpsError):
         return str(exc)
@@ -83,7 +83,7 @@ class Target:
 
 
 def parse_target(value: object) -> Target:
-    """‏`ups@host[:port]` — כמו ש-`upsc` מקבל. ‏ValueError עם הסיבה בעברית."""
+    """`ups@host[:port]` — כמו ש-`upsc` מקבל. ValueError עם הסיבה בעברית."""
     text = str(value or "").strip()
     name, at, rest = text.partition("@")
     if not at or not _NAME.match(name):
@@ -120,7 +120,7 @@ def configured(conn) -> tuple[str, Target | None]:
 
 def read_vars(target: Target, timeout: float = READ_TIMEOUT,
               connect=socket.create_connection) -> dict[str, str]:
-    """‏`LIST VAR <ups>` מול upsd. ‏UpsError על כל תשובה שאינה רשימה שלמה."""
+    """`LIST VAR <ups>` מול upsd. UpsError על כל תשובה שאינה רשימה שלמה."""
     try:
         sock = connect((target.host, target.port), timeout)
     except OSError as exc:
@@ -247,7 +247,7 @@ class UpsMonitor:
         self.error: str | None = None
         self.shutdown_error: str | None = None
         self.shutting_down = False
-        #: התהליכון והקונסולה (‏POST ‎/ups קורא מיד) — דגימה אחת בכל פעם,
+        #: התהליכון והקונסולה (POST /ups קורא מיד) — דגימה אחת בכל פעם,
         #: כדי שמעבר לא יירשם ביומן פעמיים.
         self._lock = threading.Lock()
 
@@ -360,7 +360,7 @@ def default_hooks() -> dict:
             (NUT_DIR / name).write_text(text, encoding="utf-8")
 
     def start_usb() -> None:
-        # ‏nut-driver-enumerator קורא את ups.conf ויוצר nut-driver@imagesrv.
+        # nut-driver-enumerator קורא את ups.conf ויוצר nut-driver@imagesrv.
         _systemctl("restart", "nut-driver-enumerator.service")
         _systemctl("enable", "--now", "nut-server.service")
         _systemctl("restart", "nut-server.service")
@@ -373,7 +373,7 @@ def default_hooks() -> dict:
 
 
 def _switch(hooks: dict, mode: str, old_mode: str) -> None:
-    """קובצי NUT והשירות ל-`mode` (ממצב `old_mode`). ‏`net` ו-`none` אינם נוגעים בהם."""
+    """קובצי NUT והשירות ל-`mode` (ממצב `old_mode`). `net` ו-`none` אינם נוגעים בהם."""
     if mode == "usb":
         hooks["write"](render_usb())
         hooks["start_usb"]()
@@ -385,7 +385,7 @@ def _switch(hooks: dict, mode: str, old_mode: str) -> None:
 def apply(conn, mode: str, target_text: object, hooks: dict, user: str) -> dict:
     """מאמת, מחיל (USB: קובצי NUT ושירות), שומר ורושם. מחזיר את הקריאה שאחרי.
 
-    ‏ValueError = סירוב לפני שנגעו בדבר. ‏RuntimeError = ההחלה נכשלה — לא נשמר."""
+    ValueError = סירוב לפני שנגעו בדבר. RuntimeError = ההחלה נכשלה — לא נשמר."""
     if mode not in MODES:
         raise ValueError("UPS: מצב לא מוכר — none, usb או net")
     target = parse_target(target_text) if mode == "net" else None
@@ -393,7 +393,7 @@ def apply(conn, mode: str, target_text: object, hooks: dict, user: str) -> dict:
     try:
         _switch(hooks, mode, old_mode)
     except Exception as exc:  # noqa: BLE001 — ההחלה נכשלה: הקבצים חוזרים למה שה-DB אומר
-        # ‏#2916 §4: "לא נשמר" חייב לשרת גם את הקבצים. ‏usb → none ש-`systemctl disable`
+        # #2916 §4: "לא נשמר" חייב לשרת גם את הקבצים. usb → none ש-`systemctl disable`
         # שלו נכשל השאיר `MODE=none` בקובץ מול `ups_mode=usb` ב-DB, והמנטר ממשיך לפי ה-DB.
         if old_mode != mode:
             try:

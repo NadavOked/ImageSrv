@@ -118,8 +118,11 @@ def test_without_a_manual_time_nothing_of_this_runs_and_the_time_server_is_asked
     got = _run(box, _answers(tmp_path / "answers"), "--dry-run")
     assert got.returncode == 0, got.stderr
     lines = _normal(got.stdout, box)
-    assert not [line for line in lines if "hwclock" in line or "date -u -s" in line or "date -d" in line]
+    assert not [line for line in lines if "date -u -s" in line or "date -d" in line]
     assert [line for line in lines if "chronyd -Q" in line]
+    # #2400: the one hwclock here is the synced source's -- right after its step (chronyd -q), not the manual time's
+    rtc = [i for i, line in enumerate(lines) if "hwclock" in line]
+    assert len(rtc) == 1 and "chronyd -q" in lines[rtc[0] - 1], lines
 
 
 def _manual_box(tmp_path: Path, chroot_extra: str = ""):

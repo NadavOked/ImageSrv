@@ -34,7 +34,11 @@ _mount_linux() {
     _node=$(partition_node "$1" "$_idx")
     _mnt="$RUN_DIR/linux"
     mkdir -p "$_mnt"
-    mount -t "$_fs" "$_node" "$_mnt" >> "$LOG_FILE" 2>&1 || { log "could not mount $_node" >&2; return 1; }
+    # #2486: nodev,nosuid -- a device node or a setuid file inside the image is
+    # never opened as one here. Nothing runs from this mount and nothing needs
+    # its /dev: the name, the identity reset (grow.sh) and the initramfs check
+    # (linuxdrivers.sh) only read and write plain files.
+    mount -t "$_fs" -o nodev,nosuid "$_node" "$_mnt" >> "$LOG_FILE" 2>&1 || { log "could not mount $_node" >&2; return 1; }
     [ -d "$_mnt/etc" ] && { echo "$_mnt"; return 0; }
     if [ "$_fs" != "btrfs" ]; then
         umount "$_mnt" >> "$LOG_FILE" 2>&1
@@ -48,7 +52,7 @@ _mount_linux() {
     # root is the one child that holds etc/ -- found, not guessed. Zero or
     # several is a named failure, never a pick (עיקרון 5).
     umount "$_mnt" >> "$LOG_FILE" 2>&1
-    mount -t btrfs -o subvolid=5 "$_node" "$_mnt" >> "$LOG_FILE" 2>&1 \
+    mount -t btrfs -o subvolid=5,nodev,nosuid "$_node" "$_mnt" >> "$LOG_FILE" 2>&1 \
         || { log "could not mount the btrfs top level of $_node" >&2; return 1; }
     _root=""; _n=0
     for _d in "$_mnt"/*/etc; do
@@ -65,9 +69,21 @@ _mount_linux() {
     return 4
 }
 
+_linux_plain_file() {
+    # $1 = path. 0 = a regular file, or nothing there (it is created). #2486:
+    # a symlink -- absolute or ../.. -- resolves in the agent's root, not the
+    # image's, and a device or a FIFO is not a file: a write through either
+    # leaves the image. Refused, never followed.
+    [ ! -L "$1" ] && { [ -f "$1" ] || [ ! -e "$1" ]; }
+}
+
 _write_linux_files() {
     # $1 = the restored system's /etc, $2 = name. Replaces /etc/hostname and
     # the 127.0.1.1 line the installer wrote in /etc/hosts (added if absent).
+    # rc 2 = one of the three is not a plain file ($_wlf_bad names it).
+    for _wlf in hostname hosts hosts.new; do
+        _linux_plain_file "$1/$_wlf" || { _wlf_bad="/etc/$_wlf"; return 2; }
+    done
     printf '%s\n' "$2" > "$1/hostname" || return 1
     if [ -f "$1/hosts" ]; then
         awk -v n="$2" 'BEGIN { done = 0 }
@@ -140,6 +156,11 @@ _write_linux_root() {
     # directory under the top-level mount.
     _umount_checked "$RUN_DIR/linux"
     _umrc=$?
+    if [ "$_rc" -eq 2 ]; then
+        log "WARNING: $_wlf_bad on the restored disk is a link or not a regular file -- not written through (#2486)" >&2
+        printf '{"ok":false,"error":"%s","code":"hostname_target_not_regular"}\n' "$(json_escape "$_wlf_bad בדיסק המשוחזר אינו קובץ רגיל (קישור או התקן) — שם המחשב לא נכתב דרכו")"
+        return 1
+    fi
     if [ "$_rc" -ne 0 ]; then
         printf '{"ok":false,"error":"לא הצלחנו לכתוב את /etc/hostname","code":"hostname_write_failed"}\n'
         return 1

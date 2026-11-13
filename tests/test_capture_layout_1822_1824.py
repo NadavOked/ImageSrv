@@ -1,15 +1,15 @@
 """שני סירובים של פריסת הדיסק בקליטה — לפני בדיקת המקום ולפני הבייט הראשון.
 
-‏#1824: דיסק דינמי (LDM על GPT). מחיצות LDM אינן Basic Data, ‏`_partition_role`
+#1824: דיסק דינמי (LDM על GPT). מחיצות LDM אינן Basic Data, `_partition_role`
 קרא להן `data`, ו-`partclone.dd` העתיק חצי ממערך דינמי כאילו היה דיסק — בלי
 סירוב, בלי שם מחשב ובלי כיווץ.
 
-‏#1822: ‏Windows בדיסק שאין בו ESP (ה-ESP על דיסק אחר). הקליטה "הצליחה",
-והמשוחזרות לא עלו. ‏Windows על GPT עולה רק מ-ESP — ולכן סירוב. דיסק נתונים
-ולינוקס בלי ESP (‏bios_grub) — נקלטים כמו קודם (מה שאסור לשבור ב-Issue).
+#1822: Windows בדיסק שאין בו ESP (ה-ESP על דיסק אחר). הקליטה "הצליחה",
+והמשוחזרות לא עלו. Windows על GPT עולה רק מ-ESP — ולכן סירוב. דיסק נתונים
+ולינוקס בלי ESP (bios_grub) — נקלטים כמו קודם (מה שאסור לשבור ב-Issue).
 
 הסיבה נמדדת במה שהקונסולה מקבלת (`targets[].error`), והקוד — במה שמסך הכשל
-קורא (`capture.reason`, ‏#2052).
+קורא (`capture.reason`, #2052).
 """
 
 from __future__ import annotations
@@ -34,16 +34,16 @@ LDM_DATA = "AF9B60A0-1431-4F62-BC68-3311714A69AD"
 #: בדיקת המקום עונה "refused" — מי שהגיע אליה עבר את שערי הפריסה.
 CURL_STOP_AT_SPACE = CURL_LOG.replace('"status":"ok","reason":"space checked"',
                                       '"status":"refused","reason":"STOP-AT-SPACE"')
-#: ‏ntfs-3g שמעגן "Windows": ‏Windows\\System32 בנקודת העיגון (‏_system_role).
+#: ntfs-3g שמעגן "Windows": Windows\\System32 בנקודת העיגון (_system_role).
 NTFS3G_WINDOWS = '#!/bin/sh\nfor a; do m="$a"; done\nmkdir -p "$m/Windows/System32"\n'
-#: ‏ntfs-3g שמעגן מחיצת נתונים: אין Windows\\System32.
+#: ntfs-3g שמעגן מחיצת נתונים: אין Windows\\System32.
 NTFS3G_DATA = "#!/bin/sh\nexit 0\n"
 UMOUNT_OK = '#!/bin/sh\nfor a; do m="$a"; done\nrm -rf "$m/Windows"\nexit 0\n'
 PROBE_CLEAN = "#!/bin/sh\nexit 0\n"
 
 
 def _sgdisk(parts: list[tuple[int, str]]) -> str:
-    """‏sgdisk שמדפיס את הטבלה `parts` (‏index, ‏type GUID), ‏2048 סקטורים לכל אחת."""
+    """sgdisk שמדפיס את הטבלה `parts` (index, type GUID), 2048 סקטורים לכל אחת."""
     body = ['#!/bin/sh', 'if [ "$1" = "-i" ]; then', '  case "$2" in']
     for i, guid in parts:
         first = 2048 * i
@@ -91,13 +91,13 @@ def test_a_dynamic_disk_is_refused_before_the_space_check(tmp_path, ldm):
 
 
 def test_an_unknown_non_ldm_type_is_still_data_and_reaches_the_space_check(tmp_path):
-    """מה שאסור לשבור (#1824): ‏GUID לא מוכר שאינו LDM נשאר data."""
+    """מה שאסור לשבור (#1824): GUID לא מוכר שאינו LDM נשאר data."""
     box, run, out = _run(tmp_path, [(1, ESP), (2, "11111111-2222-3333-4444-555555555555")])
     assert "STOP-AT-SPACE" in refusal_reason(box, run, out)
     assert _space_was_checked(run)
 
 
-# --- #1822: ‏Windows בלי ESP --------------------------------------------------------
+# --- #1822: Windows בלי ESP --------------------------------------------------------
 
 
 def test_windows_on_a_disk_without_an_esp_is_refused_before_the_space_check(tmp_path):
@@ -116,7 +116,7 @@ def test_windows_with_its_esp_on_the_same_disk_is_not_refused(tmp_path):
 
 
 def test_a_data_disk_without_an_esp_is_still_captured(tmp_path):
-    """‏Basic Data בלי Windows\\System32 — דיסק נתונים, נקלט (#1822, "מה אסור")."""
+    """Basic Data בלי Windows\\System32 — דיסק נתונים, נקלט (#1822, "מה אסור")."""
     box, run, out = _run(tmp_path, [(1, BASIC_DATA)], ntfs3g=NTFS3G_DATA, fs="ntfs")
     assert "STOP-AT-SPACE" in refusal_reason(box, run, out)
     assert _space_was_checked(run)

@@ -70,14 +70,14 @@ def health_server(tmp_path: Path, images_root: Path, clock, monkeypatch):
 
     fake = {"ss": SS_DNSMASQ, "active": "active", "http": 200, "journal": "",
             "interfaces": [{"name": "eth0", "state": "up", "mac": "aa", "addresses": []}],
-            # ‏vmlinuz ו-initrd.img כפי שהתחנה מושכת אותם (#333): קוד
-            # וגודל, כי 404 של ‎/boot הוא גוף בן תשעה בייטים (#332).
+            # vmlinuz ו-initrd.img כפי שהתחנה מושכת אותם (#333): קוד
+            # וגודל, כי 404 של /boot הוא גוף בן תשעה בייטים (#332).
             "assets": {"vmlinuz": (200, 9_000_000),
                        "initrd.img": (200, 31_000_000)},
-            # ריק = לא רץ. ‏None = הבדיקה לא רצה. לא סורקים /proc של
+            # ריק = לא רץ. None = הבדיקה לא רצה. לא סורקים /proc של
             # המכונה שהטסט רץ עליה (#439).
             "udp_sender_pids": [],
-            # ‏#1074: ברירת המחדל כאן — טבלה טעונה, כדי ש-all-green יישאר
+            # #1074: ברירת המחדל כאן — טבלה טעונה, כדי ש-all-green יישאר
             # ירוק. שלושת המצבים נבדקים בנפרד עם subprocess מזויף.
             "nft_ruleset": (
                 "table inet imagesrv {\n"
@@ -186,7 +186,7 @@ def test_a_healthy_server_is_all_green(health_server):
     assert rows["nics"]["state"] == "ok"
     # DHCP עוד לא הודלק מהקונסולה — וזה נאמר, לא מוסתר.
     assert "לא הודלק" in rows["nics"]["detail"]
-    # ‏#1266: SSH יצא מהמוצר — אין לו בדיקת בריאות בכלל.
+    # #1266: SSH יצא מהמוצר — אין לו בדיקת בריאות בכלל.
     assert not any(k.startswith("ssh") for k in rows), rows.keys()
     assert rows["udp_sender"]["state"] == "ok"
     assert rows["firewall"]["state"] == "ok"
@@ -256,7 +256,7 @@ def test_1817_stat_failure_is_red_with_path(health_server, monkeypatch, caplog):
     row = by_id(response.json())["boot_files"]
     assert row["state"] == "bad"
     assert str(path) in row["detail"]
-    # ‏#2510: ה-strerror ביומן השרת, לא בשורה שהקונסולה מציגה.
+    # #2510: ה-strerror ביומן השרת, לא בשורה שהקונסולה מציגה.
     assert "permission probe denied" not in row["detail"]
     assert any("permission probe denied" in r.getMessage() for r in caplog.records)
 
@@ -279,15 +279,15 @@ def test_1817_symlink_target_directory_must_be_traversable(health_server):
 
 # --- #333: שרשרת האתחול אינה נגמרת בשורש ה-TFTP -------------------------
 #
-# ‏shim, ‏GRUB ו-grub.cfg מביאים את התחנה עד התפריט. משם היא מושכת ב-HTTP
-# את ‎/boot/vmlinuz ואת ‎/boot/initrd.img מ-/srv/imagesrv/boot, ואת
-# **אלה** ‎boot_files לא בדק. בהתקנה נקייה (#332) התיקייה נשארה ריקה,
+# shim, GRUB ו-grub.cfg מביאים את התחנה עד התפריט. משם היא מושכת ב-HTTP
+# את /boot/vmlinuz ואת /boot/initrd.img מ-/srv/imagesrv/boot, ואת
+# **אלה** boot_files לא בדק. בהתקנה נקייה (#332) התיקייה נשארה ריקה,
 # שניהם החזירו 404, והשורה הייתה ירוקה בשני המקרים.
 
 def test_a_fresh_server_without_the_initrd_is_red(health_server):
     """זה בדיוק מה שנמדד ב-#332: המתקין סיים "מוכן", התיקייה ריקה.
 
-    ‏shim, ‏GRUB והתפריט **כן** על ה-TFTP — ולכן השורה הייתה ירוקה
+    shim, GRUB והתפריט **כן** על ה-TFTP — ולכן השורה הייתה ירוקה
     למרות ששום תחנה לא יכולה לעלות. הכרעה: `bad`. שרת שאינו יכול
     להגיש אתחול אינו "אזהרה" — אי אפשר לפרוס ממנו.
     """
@@ -301,7 +301,7 @@ def test_a_fresh_server_without_the_initrd_is_red(health_server):
 def test_a_truncated_asset_is_red_although_it_answers_200(health_server):
     """גודל בלבד אינו ראיה, וגם 200 בלבד אינו.
 
-    גוף ה-404 של ‎/boot הוא תשעה בייטים — "יש תשובה ויש גודל" הוא בדיוק
+    גוף ה-404 של /boot הוא תשעה בייטים — "יש תשובה ויש גודל" הוא בדיוק
     המצב שנראה תקין ב-#332. קובץ שנקטע באמצע העתקה נראה אותו הדבר.
     """
     health_server["fake"]["assets"] = {"vmlinuz": (200, 9_000_000),
@@ -312,7 +312,7 @@ def test_a_truncated_asset_is_red_although_it_answers_200(health_server):
 
 
 def test_a_boot_asset_that_could_not_be_probed_is_red_not_ok(health_server):
-    """‏"לא הצלחנו לבדוק" אינו "בדקנו, הכל תקין" — עיקרון 5.
+    """"לא הצלחנו לבדוק" אינו "בדקנו, הכל תקין" — עיקרון 5.
 
     אם בדיקה שלא רצה הייתה מחזירה `ok`, היינו חוזרים בדיוק לבאג: מסך
     ירוק על שרת שאינו יכול להגיש אתחול.
@@ -368,7 +368,7 @@ def _shim(server, tmp_path, src_bytes, tftp_bytes):
     tftp = server["tftp"]
     tftp.joinpath("bootx64.efi").write_bytes(tftp_bytes)
     # אותם fakes כמו ב-fixture: אף בדיקה אינה נוגעת במכונה שמריצה
-    # אותה. ‏hostguard תופס בדיוק את זה (#113).
+    # אותה. hostguard תופס בדיוק את זה (#113).
     hooks = {**health.default_hooks(),
              "ss": lambda: SS_DNSMASQ, "unit_active": lambda n: "active",
              "http_get": lambda u: 200,
@@ -394,7 +394,7 @@ def test_a_stale_shim_in_tftp_is_reported_bad(health_server, tmp_path):
 
 
 def test_a_shim_that_cannot_be_read_is_unknown_and_not_ok(health_server, tmp_path):
-    """‏"לא הצלחנו לבדוק" אינו "בדקנו, תואם" — עיקרון 5.
+    """"לא הצלחנו לבדוק" אינו "בדקנו, תואם" — עיקרון 5.
 
     אם חוסר-קריאה היה מחזיר `ok`, שרת בלי shim-signed מותקן היה
     מדווח שהשרשרת עדכנית. זה בדיוק הכשל שהבדיקה נועדה למנוע.
@@ -436,7 +436,7 @@ def test_an_orphan_udp_sender_is_red(health_server):
 
 
 def test_a_udp_sender_check_that_could_not_run_is_not_ok(health_server):
-    """‏"לא הצלחנו לבדוק" אינו "לא רץ" — ו"לא רץ" הוא הירוק (#439)."""
+    """"לא הצלחנו לבדוק" אינו "לא רץ" — ו"לא רץ" הוא הירוק (#439)."""
     health_server["fake"]["udp_sender_pids"] = None
     rows = health_server["admin"].get("/api/console/health").json()
     assert any(r["id"] == "udp_sender" and r["state"] != "ok"

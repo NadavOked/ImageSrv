@@ -164,8 +164,13 @@ def render_preinstall(snapshot: Snapshot, message: str = "") -> list[str]:
     canvas.put(15, 4, "Continue the installation from a browser:")
     if snapshot.console_url:
         canvas.put(17, 6, snapshot.console_url)
+    elif snapshot.installer_nic:
+        # #2516: only the installer card is open to the wizard (#2490) -- its address or nothing.
+        canvas.put(17, 6, f"{snapshot.installer_nic} (the installer card) has no address.", 70)
+        canvas.put(18, 6, "Press F2 to set a static address on it.", 70)
     else:
-        canvas.put(17, 6, "No address is available. Press F2 to set a static address.")
+        canvas.put(17, 6, "The installer card is unknown: the wizard is closed to", 70)
+        canvas.put(18, 6, "the network and open only on this server.", 70)
     if message:
         canvas.put(20, 4, message, 70)
     return canvas.lines()

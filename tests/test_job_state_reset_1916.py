@@ -1,32 +1,32 @@
-"""משימה מדווחת על עצמה בלבד — ‏#1916.
+"""משימה מדווחת על עצמה בלבד — #1916.
 
-**מה קרה על ברזל (20/10, ‏HP-BUILD-2):** קליטה ראשונה נכשלה. באותו אתחול
+**מה קרה על ברזל (20/10, HP-BUILD-2):** קליטה ראשונה נכשלה. באותו אתחול
 נשלחה קליטה שנייה, והיא נסגרה בשרת כ-`failed` תוך 3 שניות, בלי שגיאה
 ובלי שבלוק אחד נקרא. ה-`source_progress` שלה נשא את המספרים של הקליטה
 הקודמת.
 
-**השורש, בקוד:** ‏`do_task` מרים את `progress_loop` **לפני** ש-`capture_disk`
-כותב משהו משלו. הדיווח הראשון נבנה (‏`build_progress`) מתוך `$RUN_DIR/state`
+**השורש, בקוד:** `do_task` מרים את `progress_loop` **לפני** ש-`capture_disk`
+כותב משהו משלו. הדיווח הראשון נבנה (`build_progress`) מתוך `$RUN_DIR/state`
 — ושם עדיין `failed` של המשימה הקודמת — ומתוך `targets/<dev>/`, שבו
-‏`partclone.log` של המשימה הקודמת (‏`target_init` אינו מוחק אותו). השרת
-(‏`reports._ingest_task`) רואה `state == "failed"` וסוגר את המשימה החדשה.
+`partclone.log` של המשימה הקודמת (`target_init` אינו מוחק אותו). השרת
+(`reports._ingest_task`) רואה `state == "failed"` וסוגר את המשימה החדשה.
 
 **אותה משפחה בשלושה מסלולים נוספים**, וכולם נבדקים כאן:
 
 * סבב מגירות אחרי סבב שנכשל — הדיווח הראשון של הסבב החדש נושא `failed`,
-  והחבר נרשם טרמינלי (‏`TERMINAL` ב-`reports.py`) בסבב שלא כתב בו בייט.
+  והחבר נרשם טרמינלי (`TERMINAL` ב-`reports.py`) בסבב שלא כתב בו בייט.
 * שחזור תחנה אחרי שחזור שנכשל — אותו `failed` עליון.
 * הפצה ישירה אחרי הפצה שהושלמה — `done` עליון, והשרת **סוגר משימת
-  `direct_send` כ-`done`** על סמך הצהרת הסוכן (‏#715). זו הצורה החמורה:
+  `direct_send` כ-`done`** על סמך הצהרת הסוכן (#715). זו הצורה החמורה:
   הצלחה בלי ראיה, עיקרון 5.
 
 **איך נבדק:** הזיוף של `progress_loop` מצלם את הדיווח שהלולאה האמיתית
-הייתה שולחת ברגע שהיא עולה (‏`build_progress` האמיתי), והעבודה המזויפת
+הייתה שולחת ברגע שהיא עולה (`build_progress` האמיתי), והעבודה המזויפת
 (קליטה/שחזור) **ממתינה לצילום** לפני שהיא נוגעת במשהו. כך הצילום הוא
 בדיוק הדיווח הראשון של המשימה — בלי מרוץ, ובלי לסמוך על תזמון.
 
-‏`json_get` מוחלף בפייתון כדי שהקובץ ירוץ גם בלי jq (תחנת הפיתוח);
-‏`jsonq.sh` עצמו קיים כדי שיהיה מקום אחד לזייף (ראו ראשו).
+`json_get` מוחלף בפייתון כדי שהקובץ ירוץ גם בלי jq (תחנת הפיתוח);
+`jsonq.sh` עצמו קיים כדי שיהיה מקום אחד לזייף (ראו ראשו).
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
-from test_final_report import (  # noqa: F401 — ‏`reports` הוא fixture
+from test_final_report import (  # noqa: F401 — `reports` הוא fixture
     IMAGE,
     PRESS_OFF,
     REPO,
@@ -59,8 +59,8 @@ TASK_1 = "tsk_310a"
 TASK_2 = "tsk_f0fe"
 TOKEN = "f0" * 24
 
-#: ‏`json_get` בלי jq: נתיב נקודות פשוט, ופלט כמו `jq -r` (מחרוזת גולמית,
-#: ‏`null` על חסר). מספיק לכל מה שהמסלולים כאן קוראים.
+#: `json_get` בלי jq: נתיב נקודות פשוט, ופלט כמו `jq -r` (מחרוזת גולמית,
+#: `null` על חסר). מספיק לכל מה שהמסלולים כאן קוראים.
 JGET = r'''
 import json, sys
 try:
@@ -82,14 +82,14 @@ else:
 '''
 
 #: הצילום: מה שהלולאה האמיתית הייתה שולחת ברגע שעלתה, שורה לכל משימה.
-#: ‏`snap.ready` הוא האות לעבודה המזויפת שהצילום קיים.
+#: `snap.ready` הוא האות לעבודה המזויפת שהצילום קיים.
 SNAP = (
     'json_get() { "$PYBIN" "$JGET" "$1" "$2"; }; '
     '_await_snap() { _n=0; while [ ! -f "$RUN_DIR/snap.ready" ] && [ "$_n" -lt 200 ]; '
     'do sleep 0.05; _n=$((_n + 1)); done; rm -f "$RUN_DIR/snap.ready"; }; '
 )
 
-#: מוגדר בתוך הקריאה עצמה: ‏`run_path` מוסיף את הזיוף שלו (‏`LOOP_STUB`)
+#: מוגדר בתוך הקריאה עצמה: `run_path` מוסיף את הזיוף שלו (`LOOP_STUB`)
 #: אחרי ה-stubs, והאחרון שהוגדר הוא שרץ.
 SNAP_LOOP = (
     'progress_loop() { _s=$(build_progress "$1" "$2" "$4"); '
@@ -118,7 +118,7 @@ def answer(task_id: str, kind: str = "capture") -> dict:
 
 def run_jobs(tmp_path: Path, server: str, call: str, *, stubs: str = "",
              first_answer: dict | None = None, env: str = "") -> dict:
-    """‏`run_path` של #101, עם הצילום ובלי jq."""
+    """`run_path` של #101, עם הצילום ובלי jq."""
     jget = tmp_path / "jget.py"
     jget.write_text(JGET, encoding="utf-8")
     env = (f"PYBIN={shlex.quote(posix(Path(sys.executable)))} "
@@ -143,18 +143,18 @@ def assert_reports_only_itself(snap: dict, out: str) -> None:
         assert "source_progress" not in target, (
             f"התקדמות קריאה של המשימה הקודמת: {target}")
     assert "stage" not in snap, f"שלב של המשימה הקודמת: {snap}"
-    # ‏rc7 (17/10): ‏`udp_drops.json` עליון נכנס לכל דיווח, ומתאפס רק בתוך
-    # ‏`run_restore_drawers` — אחרי שהדווח של הסבב החדש כבר עלה.
+    # rc7 (17/10): `udp_drops.json` עליון נכנס לכל דיווח, ומתאפס רק בתוך
+    # `run_restore_drawers` — אחרי שהדווח של הסבב החדש כבר עלה.
     assert "udp_drops" not in snap, f"ספירת ה-drops של הסבב הקודם: {snap}"
 
 
-# --- ‏#1916 עצמו: קליטה אחרי קליטה שנכשלה ---------------------------------
+# --- #1916 עצמו: קליטה אחרי קליטה שנכשלה ---------------------------------
 
 
 def test_a_second_capture_reports_only_itself(tmp_path, reports):
-    """**לב #1916.** הקליטה הראשונה נכשלת באמת (‏`do_task` האמיתי), ואז
+    """**לב #1916.** הקליטה הראשונה נכשלת באמת (`do_task` האמיתי), ואז
     באותו `RUN_DIR` מגיעה קליטה שנייה. הדיווח הראשון שלה — מה שסגר את
-    ‏tsk_f0fe בשרת — אינו נושא `failed`, שגיאה, שלב או `source_progress`."""
+    tsk_f0fe בשרת — אינו נושא `failed`, שגיאה, שלב או `source_progress`."""
     run = tmp_path / "run"
     (run / "targets").mkdir(parents=True)
     (run / "resp2.json").write_text(json.dumps(answer(TASK_2)), encoding="utf-8")
@@ -168,14 +168,14 @@ def test_a_second_capture_reports_only_itself(tmp_path, reports):
     first, second = result["snaps"]
     assert first["task_id"] == TASK_1 and second["task_id"] == TASK_2
     assert_reports_only_itself(second, result["out"])
-    # ‏capture_disk עוד לא קרא ל-target_init: יעד של המשימה הקודמת אינו יעד שלה.
+    # capture_disk עוד לא קרא ל-target_init: יעד של המשימה הקודמת אינו יעד שלה.
     assert second["targets"] == [], second
 
 
 def test_a_second_capture_after_a_held_failure_reports_only_itself(
         tmp_path, reports):
     """**המסלול שנמצא על ברזל, כפי שהוא ב-rc7.** הקליטה הראשונה נכשלת,
-    והמכונה עומדת ב-`ui_error_hold` האמיתי (‏`hold_watch`, לא ה-`TEST-HOLD`
+    והמכונה עומדת ב-`ui_error_hold` האמיתי (`hold_watch`, לא ה-`TEST-HOLD`
     המקוצר). הפעימה הראשונה עונה באותה משימה — ההמתנה נמשכת; השנייה
     עונה במשימה חדשה, ו-`hold_new_task` (#1575) משחרר. ה-hello הבא של
     הלולאה הראשית מביא את tsk_f0fe ל-`do_task` באותו `RUN_DIR` — וזה
@@ -187,12 +187,12 @@ def test_a_second_capture_after_a_held_failure_reports_only_itself(
     resp2.write_text(json.dumps(answer(TASK_2)), encoding="utf-8")
 
     beat = (
-        # ‏hold_watch קורא לפעימה בלי תת-מעטפת, ולכן המונה נשמר בין פעימות.
+        # hold_watch קורא לפעימה בלי תת-מעטפת, ולכן המונה נשמר בין פעימות.
         'hold_beat() { _hb=$((${_hb:-0} + 1)); echo "BEAT $_hb" >> "$RUN_DIR/trace"; '
         '[ "$_hb" -le 20 ] || { echo "BEAT-CEILING"; exit 99; }; '
         f'if [ "$_hb" -lt 2 ]; then cp {shlex.quote(posix(resp1))} "$RUN_DIR/attended.resp"; '
         f'else cp {shlex.quote(posix(resp2))} "$RUN_DIR/attended.resp"; fi; }}; '
-        # ‏IMAGESRV_TEST=0 בהמתנה בלבד: שום פקודה אמיתית לא יוצאת מכאן.
+        # IMAGESRV_TEST=0 בהמתנה בלבד: שום פקודה אמיתית לא יוצאת מכאן.
         'reboot() { echo "REAL-REBOOT"; exit 98; }; '
         'poweroff() { echo "REAL-POWEROFF"; exit 98; }; '
     )
@@ -221,7 +221,7 @@ def test_a_second_capture_after_a_held_failure_reports_only_itself(
 
 def test_shrink_state_survives_the_reset(tmp_path, reports):
     """הניקוי אינו מוחק את מה שחייב לשרוד בין משימות: דיסק שנשאר מכווץ
-    (‏`shrunk_pending`, ‏`shrinkoffer.sh`) מוצע בחזרה פעם אחת באתחול —
+    (`shrunk_pending`, `shrinkoffer.sh`) מוצע בחזרה פעם אחת באתחול —
     ואם הסימון נמחק, המפעיל לא ישמע עליו לעולם."""
     target = tmp_path / "run" / "targets" / "sda"
     target.mkdir(parents=True)
@@ -248,7 +248,7 @@ def test_a_second_drawer_round_after_a_failed_one_reports_only_itself(
         f"do_restore_drawers {IMAGE} ses_1; do_restore_drawers {IMAGE} ses_2",
         stubs='resolve_target_drawers() { _disks="sdb sdc"; }; '
               'smart_gate() { _await_snap; shift; echo "$@"; }; '
-              # ‏rc7: הסבב הראשון משאיר את ספירת ה-drops שלו (waits.sh, udp_drops_add)
+              # rc7: הסבב הראשון משאיר את ספירת ה-drops שלו (waits.sh, udp_drops_add)
               'run_restore_drawers() { '
               'echo \'{"rcvbuf":3,"inerrors":0}\' > "$RUN_DIR/udp_drops.json"; '
               'echo "3 0" > "$RUN_DIR/udp_drops.sum"; '
@@ -280,7 +280,7 @@ def test_a_direct_send_after_a_completed_one_does_not_report_done(
         tmp_path, reports):
     """הצורה החמורה: הפצה ישירה שהושלמה משאירה `done`, והשרת סוגר
     משימת `direct_send` כ-`done` לפי הדיווח (#715). דיווח ראשון שנושא
-    ‏`done` ישן היה סוגר הפצה חדשה כמוצלחת לפני שבייט אחד שודר."""
+    `done` ישן היה סוגר הפצה חדשה כמוצלחת לפני שבייט אחד שודר."""
     run = tmp_path / "run"
     target = run / "targets" / "sda"
     target.mkdir(parents=True)
@@ -298,7 +298,7 @@ def test_a_direct_send_after_a_completed_one_does_not_report_done(
     assert_reports_only_itself(result["snaps"][0], result["out"])
 
 
-# --- ‏404 על בדיקת המקום: "המשימה נסגרה", לא "המקום לא נבדק" ---------------
+# --- 404 על בדיקת המקום: "המשימה נסגרה", לא "המקום לא נבדק" ---------------
 
 
 class _Fixed(BaseHTTPRequestHandler):
@@ -356,8 +356,8 @@ def preflight(tmp_path: Path, server: str) -> str:
 
 
 def test_a_404_on_the_space_check_says_the_task_was_closed(tmp_path, fixed_server):
-    """‏#1916, הבעיה השנייה: ‏404 הוא "המשימה אינה פתוחה בשרת"
-    (‏`capture.task_for`), ולא "המקום הפנוי לא נבדק". הסיבה השקרית שלחה
+    """#1916, הבעיה השנייה: 404 הוא "המשימה אינה פתוחה בשרת"
+    (`capture.task_for`), ולא "המקום הפנוי לא נבדק". הסיבה השקרית שלחה
     את המפעיל לבדוק דיסק של שרת שהיו בו 564GB פנויים."""
     fixed_server.reply = (404, b'{"detail":"no such open task"}')
     out = preflight(tmp_path, url_of(fixed_server))

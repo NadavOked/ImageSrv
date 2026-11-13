@@ -1,7 +1,7 @@
 """כלים — תחום disk (#649): רשימה, חסר→rc2, destroy בלי אישור→rc3.
 
-‏#1050: נשארו רק חמשת כלי המחיקה שנדב סימן ב-`server/tools_catalog.json`;
-‏12 כלי הקריאה של המודול המקורי נמחקו, והטסטים שלהם איתם. האריזה
+#1050: נשארו רק חמשת כלי המחיקה שנדב סימן ב-`server/tools_catalog.json`;
+12 כלי הקריאה של המודול המקורי נמחקו, והטסטים שלהם איתם. האריזה
 עצמה — `tests/test_tools_packing.py`.
 
 הבינארים מזויפים ב-PATH; אין דיסקים אמיתיים ואין initrd כאן (ווינדוס).
@@ -132,7 +132,7 @@ def test_tools_disk_sh_within_sizelimit():
 
 
 def test_build_initramfs_has_no_unconditional_disk_block():
-    """‏#1050: הבנאי אורז לפי הבחירה (`--tools-selection`), לא בלוק קבוע
+    """#1050: הבנאי אורז לפי הבחירה (`--tools-selection`), לא בלוק קבוע
     לכל תחום — בלי הדגל לא נארז אף בינארי של ארגז הכלים."""
     text = BUILDER.read_text(encoding="utf-8")
     assert "REQUIRED_DISK_TOOLS" not in text

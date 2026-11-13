@@ -26,7 +26,7 @@ _lc_gpt_why() {
 ' "$PLAN_ERROR"; return; }
     printf 'טבלת המחיצות לא נכתבה: %s
 ' "$(tail -n 3 "$LOG_FILE" 2>/dev/null | tr '
-' ' ' | cut -c1-240)"
+' ' ' | sed 's/[0-9A-Fa-f]\{8\}-[0-9A-Fa-f]\{4\}-[0-9A-Fa-f]\{4\}-[0-9A-Fa-f]\{4\}-[0-9A-Fa-f]\{12\}/<guid>/g' | cut -c1-240)"   # #2834: it reaches the server's journal -- no GUID of the source (-u/-U)
 }
 
 lc_prepare_target() {

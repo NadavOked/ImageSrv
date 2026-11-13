@@ -1,25 +1,25 @@
-"""‏#1846 — אבדן חבילות ברשת ההפצה מול הבסיס שלה: "קפץ — סוויץ'/כבל/IGMP".
+"""#1846 — אבדן חבילות ברשת ההפצה מול הבסיס שלה: "קפץ — סוויץ'/כבל/IGMP".
 
 הכרעת נדב 19/10: השרת לומד **ממדידה שלו**, ושום דבר אינו נחסם בגלל הלמידה —
 כאן זו שורת יומן ושורה במסך הבריאות.
 
-השידורים החוזרים של udp-sender (‏`loss_blocks`, ‏`record_stream` — המונה של
+השידורים החוזרים של udp-sender (`loss_blocks`, `record_stream` — המונה של
 השולח עצמו) תלויים בקצב, במספר המגירות ובמקלטים — ולכן "1% אבדן" לבדו אינו
 אומר דבר. מה שאומר משהו הוא **קפיצה** מול מה שאותה רשת עשתה באותם תנאים:
 
-    יחס האבדן   = ‏`loss_blocks` / הבלוקים שנשלחו (‏`sent_bytes` / ‏`UDPCAST_BLOCK`)
+    יחס האבדן   = `loss_blocks` / הבלוקים שנשלחו (`sent_bytes` / `UDPCAST_BLOCK`)
     הבסיס       = חציון היחס של עד `WINDOW` הגלים הקודמים **על אותו כרטיס הפצה**
-                  (‏`decision.link.interface`), **עם אותו מספר מגירות ואותו קצב**
+                  (`decision.link.interface`), **עם אותו מספר מגירות ואותו קצב**
     קפץ         = יחס ≥ `JUMP` × הבסיס, **וגם** מעל `drive_rates.LOSS_DOWN_RATIO`
 
 "באותו מספר מגירות ובאותו קצב" הוא מה שה-Issue מבקש ("בלי שינוי במספר המגירות
 או בקצב"): קפיצה שבאה עם קצב גבוה יותר היא חיפוש השיא של #1758, לא תקלה ברשת.
-הרצפה ‏`LOSS_DOWN_RATIO` (‏0.1%) — מתחתיה udp-sender עצמו מדפיס "0.0%", ובסיס
+הרצפה `LOSS_DOWN_RATIO` (0.1%) — מתחתיה udp-sender עצמו מדפיס "0.0%", ובסיס
 של אפס היה הופך כל בלוק לקפיצה.
 
-בלי בסיס — פחות מ-`MIN_WAVES` גלים כאלה — ‏`state: "unchecked"` ("לא נבדק"),
-**לא** "תקין". גם `rcvbuf` (הקרנל של המקלטים, ‏`record_wave`) ו-`timeouts`
-(‏`Timeout notAnswered` לכל GB) מחושבים לאותו בסיס ומוצגים — ההתראה רק על האבדן.
+בלי בסיס — פחות מ-`MIN_WAVES` גלים כאלה — `state: "unchecked"` ("לא נבדק"),
+**לא** "תקין". גם `rcvbuf` (הקרנל של המקלטים, `record_wave`) ו-`timeouts`
+(`Timeout notAnswered` לכל GB) מחושבים לאותו בסיס ומוצגים — ההתראה רק על האבדן.
 
 מה שנשמר: אין טבלה חדשה — הכול נגזר מ-`wave_rates` (#447/#1758). לעולם אינו זורק.
 """
@@ -38,7 +38,7 @@ from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.learn_netloss")
 
-#: כמה גלים קודמים באותם תנאים נכנסים לבסיס — כמו חלון הכוננים (‏`drive_rates.WINDOW`).
+#: כמה גלים קודמים באותם תנאים נכנסים לבסיס — כמו חלון הכוננים (`drive_rates.WINDOW`).
 WINDOW = 5
 #: בלי לפחות כמה גלים כאלה אין בסיס — "N" של ה-Issue. ⚠️ ניחוש מנומק: שלושה הם
 #: המינימום שבו חציון אינו גל בודד.
@@ -77,10 +77,10 @@ def _load(row) -> dict | None:
 
 
 def assess(conn: sqlite3.Connection, session_id: str) -> dict | None:
-    """הגל `session_id` מול הבסיס שלו. ‏None — הגל אינו מדידה (ישיר, המונה לא
+    """הגל `session_id` מול הבסיס שלו. None — הגל אינו מדידה (ישיר, המונה לא
     נקרא, אין שורה). אחרת `{"session_id", "interface", "drawers", "rate", "loss",
     "baseline", "waves", "rcvbuf", "rcvbuf_baseline", "timeouts_per_gb",
-    "timeouts_baseline", "state"}` — ‏`state`: ‏`jump` / ‏`ok` / ‏`unchecked`."""
+    "timeouts_baseline", "state"}` — `state`: `jump` / `ok` / `unchecked`."""
     rows = conn.execute(
         "SELECT session_id, decision, stream, drops FROM wave_rates"
         " ORDER BY rowid DESC LIMIT ?", (SCAN,)).fetchall()
@@ -88,7 +88,7 @@ def assess(conn: sqlite3.Connection, session_id: str) -> dict | None:
     me = next((w for w in loaded if w["session_id"] == session_id), None)
     if me is None:
         return None
-    if server_io.bound(conn, session_id):          # ‏#1884: השרת האט, לא הרשת
+    if server_io.bound(conn, session_id):          # #1884: השרת האט, לא הרשת
         return {**me, "waves": 0, "baseline": None, "rcvbuf_baseline": None,
                 "timeouts_baseline": None, "state": "server_disk"}
     later = True
@@ -101,7 +101,7 @@ def assess(conn: sqlite3.Connection, session_id: str) -> dict | None:
             continue
         if (w["interface"], w["drawers"], w["rate"]) == (me["interface"], me["drawers"],
                                                          me["rate"]) \
-                and not server_io.bound(conn, w["session_id"]):   # ‏#1884: לא בסיס
+                and not server_io.bound(conn, w["session_id"]):   # #1884: לא בסיס
             same.append(w)
     out = {**me, "waves": len(same), "baseline": None, "rcvbuf_baseline": None,
            "timeouts_baseline": None, "state": "unchecked"}
@@ -118,7 +118,7 @@ def assess(conn: sqlite3.Connection, session_id: str) -> dict | None:
 
 
 def evaluate(conn: sqlite3.Connection, session_id: str) -> dict | None:
-    """נקרא כשהשולח סיים גל (‏`app.on_sender_event`, אחרי `record_stream`).
+    """נקרא כשהשולח סיים גל (`app.on_sender_event`, אחרי `record_stream`).
     קפיצה — שורת יומן `net_loss_jump`. לעולם אינו זורק."""
     try:
         got = assess(conn, session_id)
@@ -136,7 +136,7 @@ def evaluate(conn: sqlite3.Connection, session_id: str) -> dict | None:
 
 def health_checks(conn: sqlite3.Connection) -> list[dict]:
     """שורה במסך הבריאות לכל כרטיס הפצה — לפי הגל האחרון שנמדד עליו.
-    ‏`warn` = קפץ; ‏`ok` = בתוך הבסיס; ‏`off` = "לא נבדק" (אין בסיס עדיין).
+    `warn` = קפץ; `ok` = בתוך הבסיס; `off` = "לא נבדק" (אין בסיס עדיין).
     בלי אף גל שנמדד — אין שורה. כשל בשאילתה — שורה `off` שאומרת זאת."""
     try:
         rows = conn.execute(
@@ -153,7 +153,7 @@ def health_checks(conn: sqlite3.Connection) -> list[dict]:
                 continue
             label = f"אבדן ברשת ההפצה ({interface or 'כרטיס לא נקרא'})"
             now = f"{100 * got['loss']:.2f}%"
-            if got["state"] == "server_disk":                # ‏#1884
+            if got["state"] == "server_disk":                # #1884
                 out.append(check(f"net_loss:{interface}", label, "off",
                                  f"לא נבדק — הגל האחרון היה מוגבל בדיסק הספרייה בשרת; {now}"))
             elif got["state"] == "unchecked":

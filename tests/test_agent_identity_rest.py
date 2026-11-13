@@ -1,9 +1,9 @@
-"""‏#997 — שומר הזהות של #855 על **שאר** נתיבי הסוכן.
+"""#997 — שומר הזהות של #855 על **שאר** נתיבי הסוכן.
 
-‏#855 סגר hello ו-progress. הנתיבים שנשארו לפי MAC מוצהר: ‏login, ‏pulls,
-‏sessions (station.py), ‏disk-event, ‏shrink-open/close/note, ו-PUT המניפסט
+#855 סגר hello ו-progress. הנתיבים שנשארו לפי MAC מוצהר: login, pulls,
+sessions (station.py), disk-event, shrink-open/close/note, ו-PUT המניפסט
 החי (direct.py). ו-`manifest`/`files` — בלי זהות בכלל: הסוכן לא שולח בהם
-MAC (‏`http_get` ב-`agent/lib/core/common.sh`), ולכן הזהות שם היא **הפוכה**:
+MAC (`http_get` ב-`agent/lib/core/common.sh`), ולכן הזהות שם היא **הפוכה**:
 כתובת המקור → חכירת ה-DHCP שיושבת עליה → ה-MAC של החכירה רשום ב-`machines`.
 בלי שינוי בסוכן, בלי initrd חדש.
 
@@ -274,7 +274,7 @@ def _capture_request(server, client, task_id, kind):
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "p1.esp.pcl.zst").write_bytes(PART_A)
     (folder / "p3.windows.pcl.zst").write_bytes(PART_B)
-    # ‏#1470: מה שההעלאה הייתה רושמת — ה-sha256 שחושב בזמן הקבלה.
+    # #1470: מה שההעלאה הייתה רושמת — ה-sha256 שחושב בזמן הקבלה.
     (folder / "p1.esp.pcl.zst.upload-sha256").write_text(sha(PART_A), encoding="ascii")
     (folder / "p3.windows.pcl.zst.upload-sha256").write_text(sha(PART_B), encoding="ascii")
     return client.put(f"/api/v1/capture/{task_id}/manifest",
@@ -291,7 +291,7 @@ def test_capture_with_the_task_token_still_needs_the_task_macs_lease(
                                      created["id"], kind))
     assert any(f"({where})" in d for d in journal_where(identity_server,
                                                          "identity_refused"))
-    # ‏#1470: המניפסט עונה 202 — התקבל, והאימות רץ ברקע.
+    # #1470: המניפסט עונה 202 — התקבל, והאימות רץ ברקע.
     assert _capture_request(identity_server, identity_server["station"],
                             created["id"], kind).status_code == ACCEPTED[kind]
 
@@ -357,7 +357,7 @@ def test_the_live_manifest_needs_the_token_and_the_identity(identity_server):
 
 
 def test_the_agent_sends_a_mac_on_every_gated_post_and_none_on_manifest_gets():
-    """הראיה שההכרעה על manifest/files נכונה: ‏`http_get` ב-common.sh אינו
+    """הראיה שההכרעה על manifest/files נכונה: `http_get` ב-common.sh אינו
     מוסיף MAC ולא כותרת, וכל POST שנחסם לפי MAC מוצהר אכן נושא אותו."""
     root = flat_lib()
     common = (root / "common.sh").read_text(encoding="utf-8")

@@ -1,11 +1,11 @@
-"""כמה מקום אימג' באמת צריך — ‏#82.
+"""כמה מקום אימג' באמת צריך — #82.
 
 עד כאן `min_target_bytes` היה **גודל דיסק המקור כפי שהוא**, ולכן אימג'
 שנקלט ממכונה וירטואלית לא נכנס לאף מחשב פיזי מאותה מחלקת גודל: דיסק VM
-‏"256GB" נוצר כ-256 GiB, וכונן פיזי "256GB" הוא 256 מיליארד בייט —
+"256GB" נוצר כ-256 GiB, וכונן פיזי "256GB" הוא 256 מיליארד בייט —
 שבעה אחוזים פחות. הדרישה היא עכשיו **סוף הפריסה**, נגזרת מגיאומטריית
 טבלת המחיצות, ומחושבת באותו כלל בשלושה מקומות: השרת (פייתון), בדיקת
-‏2.7 של הסוכן (jq) והקליטה (awk). יש כאן בדיקה שמריצה את שלושתם על
+2.7 של הסוכן (jq) והקליטה (awk). יש כאן בדיקה שמריצה את שלושתם על
 אותם מניפסטים ומשווה מספר למספר.
 
 מה שהבדיקות האלה שומרות עליו יותר מכל: **החישוב אינו נוגע ב-`used_bytes`.**
@@ -40,7 +40,7 @@ needs_shell = pytest.mark.skipif(
 def manifest(parts, source=VM_256, declared=None, **extra):
     """מניפסט ממשק 1 מינימלי. `parts` = זוגות (start_sector, size_bytes).
 
-    ‏`used_bytes` נכתב 0 בכל מחיצה בכוונה — זה בדיוק מה שיש בספרייה.
+    `used_bytes` נכתב 0 בכל מחיצה בכוונה — זה בדיוק מה שיש בספרייה.
     """
     return {
         "schema": 1, "id": "img_t", "name": "t", "family": 256,
@@ -64,7 +64,7 @@ def manifest(parts, source=VM_256, declared=None, **extra):
 #: מערכת מותקנת במחיצה של ~39GB, והשאר לא מוקצה.
 GOLDEN_FROM_VM = manifest([(2048, 314572800), (616448, 41875931136)])
 
-#: ‏tiny11 של המעבדה (img_6f28b0), מספרים אמיתיים: אותו דיסק VM, אבל
+#: tiny11 של המעבדה (img_6f28b0), מספרים אמיתיים: אותו דיסק VM, אבל
 #: המחיצות ממלאות אותו עד הסוף. ה-NTFS לבדו הוא 273.7GB.
 TINY11 = manifest([
     (2048, 314572800), (616448, 16777216),
@@ -88,7 +88,7 @@ def test_an_image_built_in_a_vm_fits_a_physical_drive_of_its_class():
 
 
 def test_a_drive_that_really_is_too_small_is_still_refused():
-    """‏tiny11 של המעבדה **אינו** נכנס ל-NVMe של 256, וזה נכון.
+    """tiny11 של המעבדה **אינו** נכנס ל-NVMe של 256, וזה נכון.
 
     ה-NTFS שלו הוא 273.7GB — גדול מהכונן כולו. הדרישה ירדה בשני
     מגה-בייט בלבד, וזה כל מה שאפשר: partclone מסרב לשחזר מערכת קבצים
@@ -100,7 +100,7 @@ def test_a_drive_that_really_is_too_small_is_still_refused():
 
 
 def test_the_requirement_never_reads_used_bytes():
-    """הנקודה המסוכנת ביותר: ‏`used_bytes` הוא 0 בכל מניפסט קיים.
+    """הנקודה המסוכנת ביותר: `used_bytes` הוא 0 בכל מניפסט קיים.
 
     אותה פריסה בדיוק, פעם עם 0 ופעם עם ערכים מלאים — אותו מספר. אילו
     החישוב היה נשען על השדה, הגרסה עם ה-0 הייתה מחזירה דרישה אפסית
@@ -122,10 +122,10 @@ def test_the_requirement_never_exceeds_the_disk_it_was_captured_from():
 
 
 def test_the_gpt_backup_gets_room_at_the_tail():
-    """‏sgdisk -e מזיז את עותק הגיבוי לסוף הכונן, וצריך לו מקום. כונן
+    """sgdisk -e מזיז את עותק הגיבוי לסוף הכונן, וצריך לו מקום. כונן
     בדיוק בגודל המחיצה האחרונה אינו מספיק.
 
-    ‏#1171: המקום הזה הוא 256KiB — עותק הגיבוי הוא 33 סקטורים (135,168
+    #1171: המקום הזה הוא 256KiB — עותק הגיבוי הוא 33 סקטורים (135,168
     בייט בכונן 4Kn, הגרוע שבשניים) — ו**לא** מגה-בייט מעוגל כלפי מעלה
     למגה. הכמות היא דרישה על גודל הכונן; היישור של `sgdisk` הוא של
     המחיצות, ואינו שייך לכאן.
@@ -136,7 +136,7 @@ def test_the_gpt_backup_gets_room_at_the_tail():
 
 
 def test_a_layout_from_a_byte_identical_drive_no_longer_needs_the_source_clamp():
-    """‏#1171, נמדד על ברזל: דיסק ווינדוס אמיתי של 256,060,514,304 בייט —
+    """#1171, נמדד על ברזל: דיסק ווינדוס אמיתי של 256,060,514,304 בייט —
     בדיוק גודל ה-Samsung שפסלנו — נגמר ב-256,060,162,048, כלומר 344KB
     לפני הסוף. הדרישה הישנה (מגה ועיגול למגה) הייתה 256,061,210,624,
     גדולה מהכונן עצמו: הפריסה עברה **רק** דרך ההצמדה ל-`source_disk_bytes`,
@@ -159,7 +159,7 @@ def test_a_manifest_without_geometry_falls_back_to_the_declared_value():
 
 def test_a_requirement_that_cannot_be_determined_is_not_a_pass():
     """בלי גיאומטריה **ובלי** ערך מוצהר תקין — None, והקורא חוסם.
-    ‏"לא הצלחנו לחשב" אינו "אז נניח שזה בסדר" (עיקרון 5)."""
+    "לא הצלחנו לחשב" אינו "אז נניח שזה בסדר" (עיקרון 5)."""
     broken = manifest([(2048, 104857600)])
     broken["partitions"][0].pop("size_bytes")
     broken["min_target_bytes"] = "רבע טרה"
@@ -179,7 +179,7 @@ def test_one_partition_without_geometry_disqualifies_the_whole_layout():
 def library_with(tmp_path, *manifests):
     for i, image in enumerate(manifests):
         copy = json.loads(json.dumps(image))
-        copy["id"] = f"img_{i:06x}"           # ‏#1407: מזהה תקין, אחרת `_validate` מדלג
+        copy["id"] = f"img_{i:06x}"           # #1407: מזהה תקין, אחרת `_validate` מדלג
         write_image(tmp_path, copy)
     return ImageLibrary(tmp_path)
 
@@ -193,7 +193,7 @@ def test_the_golden_vm_image_is_offered_to_the_physical_lenovo(tmp_path):
 
 
 def test_a_five_hundred_image_that_fits_a_smaller_drive_is_offered(tmp_path):
-    """‏#1863 (נדב 20/10) הופך את הכלל הישן: המשפחה **אינה** תקרה. אימג' 500
+    """#1863 (נדב 20/10) הופך את הכלל הישן: המשפחה **אינה** תקרה. אימג' 500
     שהגיאומטריה שלו נכנסת לכונן 256 מוצע לו — מאז הכיווץ (#1171) זה המקרה
     הרגיל, והמשפחה הסתירה אותו ממסך המשכפל בזמן שהקונסולה אישרה."""
     small_500 = json.loads(json.dumps(GOLDEN_FROM_VM))
@@ -208,7 +208,7 @@ def test_a_five_hundred_image_that_fits_a_smaller_drive_is_offered(tmp_path):
 
 
 def test_the_list_counts_the_minimum_free_space_as_the_console_does(tmp_path):
-    """‏#1863: "נכנס" ברשימה = ‏`required_bytes` + ‏min_free (‏#1354), אותו מספר
+    """#1863: "נכנס" ברשימה = `required_bytes` + min_free (#1354), אותו מספר
     שהקונסולה מציגה ("נכנס לדיסק מ-X") ו-`fit_refusal` אוכף. מחיצת Windows
     עם 10GB פנויים: עם min_free=20 היא צריכה לגדול, ולכן דיסק שגדול מהפריסה
     ב-5GB אינו מספיק, ודיסק שגדול ב-15GB כן."""
@@ -225,7 +225,7 @@ def test_the_list_counts_the_minimum_free_space_as_the_console_does(tmp_path):
 
 
 def test_an_unmeasured_system_partition_is_not_offered_while_min_free_is_on(tmp_path):
-    """‏#1494/#1863: ‏`used_bytes` חסר = הכלל אינו ניתן לבדיקה — הסוכן מסרב בכל
+    """#1494/#1863: `used_bytes` חסר = הכלל אינו ניתן לבדיקה — הסוכן מסרב בכל
     מגירה והקונסולה משביתה. גם הרשימה לא מציעה (עיקרון 5); בכלל כבוי — כן."""
     image = json.loads(json.dumps(GOLDEN_FROM_VM))
     image["partitions"][1]["used_bytes"] = None
@@ -238,7 +238,7 @@ def test_an_unmeasured_system_partition_is_not_offered_while_min_free_is_on(tmp_
 def test_the_family_alone_would_have_admitted_an_image_that_does_not_fit(tmp_path):
     """למה לא סיננו לפי `family` בלבד, כפי שהאיסיו מציע כחלופה.
 
-    ‏tiny11 והכונן הפיזי שניהם `256` — סינון לפי המשפחה היה מציע אותו,
+    tiny11 והכונן הפיזי שניהם `256` — סינון לפי המשפחה היה מציע אותו,
     והשחזור היה מת על הדיסק. המשפחה היא תווית בת שתי מחלקות, לא מידה.
     """
     library = library_with(tmp_path, TINY11)
@@ -360,7 +360,7 @@ def test_the_vm_image_passes_the_same_check_on_the_same_drive(tmp_path):
 
 @needs_shell
 def test_a_disk_whose_size_cannot_be_read_fails_instead_of_writing(tmp_path):
-    """עיקרון 5 בשורה אחת: ‏blockdev שנכשל אינו "הכונן גדול מספיק".
+    """עיקרון 5 בשורה אחת: blockdev שנכשל אינו "הכונן גדול מספיק".
 
     קודם לכן ההשוואה כולה ישבה תחת `2>/dev/null`, וערך לא מספרי דילג
     על הבדיקה והמשיך לכתוב על הדיסק.
@@ -379,7 +379,7 @@ def test_both_restore_paths_check_before_they_write_the_table():
     הסדר נמדד על הקריאות בפועל: שורות הערה שמזכירות את שני השמות אינן
     עדות על מה שרץ קודם.
     """
-    # ‏#1366: the cloning room asks disk_fits through write_check_round (writecheck.sh),
+    # #1366: the cloning room asks disk_fits through write_check_round (writecheck.sh),
     # which asks it first -- before the write check, and both before any table.
     for name, entry, check, then in (("restore.sh", "run_restore() {", "disk_fits", "apply_gpt"),
                                       ("drawers.sh", "run_restore_drawers() {", "write_check_round", "apply_gpt"),

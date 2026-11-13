@@ -1,23 +1,23 @@
-"""‏#2001: מיפוי החיבורים לפי דגם — "כל מחשבי הדגם" בחלון "מיפוי חיבורים".
+"""#2001: מיפוי החיבורים לפי דגם — "כל מחשבי הדגם" בחלון "מיפוי חיבורים".
 
 **הדגם** הוא ``dmi.product_name`` מהמלאי האחרון שהמכונה שלחה ב-hello
-(‏`server/agent/inventory.py`) — אותו מפתח שה-USB שומר לפיו (#1962).
+(`server/agent/inventory.py`) — אותו מפתח שה-USB שומר לפיו (#1962).
 
 **כשאין ``product_name`` שימושי** (ריק, או גנרי כמו "To Be Filled By O.E.M.";
 HP i5-4590, 22/10) נופלים ל-``board_name`` — אבל רק יחד עם ``sys_vendor``
 (מספר לוח לבדו חוזר אצל יצרנים שונים), ובמפתח נפרד ("<יצרן> (board <לוח>)") כדי
-שלא יתנגש בשם דגם אמיתי. מה שנאסף ונשלח הוא רק ארבעת שדות ה-DMI (‏`DMI_FIELDS`)
+שלא יתנגש בשם דגם אמיתי. מה שנאסף ונשלח הוא רק ארבעת שדות ה-DMI (`DMI_FIELDS`)
 ו-PCI בלי subsystem, ולכן אלה כל המקורות. **ערך גנרי אינו מפתח**: הוא היה
 מאחד מכונות שונות לדגם אחד, ומיפוי שגוי של מגירות כותב לדיסק הלא נכון (עיקרון 1
 ו-5). אין שום מקור שימושי — אין דגם: רק "המחשב הזה".
 
 **מיפוי** = החיבורים הפעילים בסדר החיבורים (``drawer_slots.order``) ושם
-לכל אחד (‏``{key: name}``; בלי שם — "דיסק N" לפי הסדר).
+לכל אחד (``{key: name}``; בלי שם — "דיסק N" לפי הסדר).
 
 **העדיפות: מכונה ← דגם ← ברירת מחדל.** למכונה יש מיפוי משלה כשהעמודה
 ``machines.drawer_slots`` אינה ``NULL``; אז השמות הם רק שלה. בלעדיו — מיפוי
 הדגם, והשמות של הדגם עם שמות ישנים של המכונה מעליהם (#704, שנשמרו לפני
-החלון). בלי שניהם — "מגירה k = ‏sata:k" כמו קודם.
+החלון). בלי שניהם — "מגירה k = sata:k" כמו קודם.
 
 שמירה "לכל מחשבי הדגם" מנקה את המיפוי האישי של כל מחשב רשום מהדגם —
 המתג אומר "חל על N מחשבים", ומחשב שמיפוי ישן שלו גובר היה הופך את המשפט
@@ -51,7 +51,7 @@ def _norm(text: str) -> str:
 
 
 def _specific(value: object) -> str | None:
-    """הערך מקוצץ, או ``None`` כשהוא ריק או גנרי (‏"To Be Filled By O.E.M.")."""
+    """הערך מקוצץ, או ``None`` כשהוא ריק או גנרי ("To Be Filled By O.E.M.")."""
     if not isinstance(value, str):
         return None
     text = value.strip()
@@ -142,7 +142,7 @@ def machines_of(conn: sqlite3.Connection, model: str) -> list[str]:
 
 
 def clean(slots_raw, names_raw) -> tuple[list[str], dict[str, str]]:
-    """מאמת מיפוי מהחלון. ‏ValueError = 400, בעברית שהמפעיל קורא."""
+    """מאמת מיפוי מהחלון. ValueError = 400, בעברית שהמפעיל קורא."""
     from server.disks import slot_names   # slot_names מייבא את המודול הזה
     slots = sorted(drawer_slots.parse(slots_raw), key=drawer_slots.order)
     if names_raw is None:
@@ -166,7 +166,7 @@ def clean(slots_raw, names_raw) -> tuple[list[str], dict[str, str]]:
 
 
 class MachineMaps(Exception):
-    """‏שמירה לדגם שהייתה מוחקת מיפוי אישי של מחשבים מהדגם — נדב 22/10: שואלים
+    """שמירה לדגם שהייתה מוחקת מיפוי אישי של מחשבים מהדגם — נדב 22/10: שואלים
     קודם. ``macs`` = המחשבים שיש להם מיפוי משלהם."""
 
     def __init__(self, macs: list[str]):
@@ -188,8 +188,8 @@ def _replace_machine(conn, mac, slots, names, user, now) -> None:
 def save(conn: sqlite3.Connection, mac: str, scope: str, slots: list[str] | None,
          names: dict[str, str] | None, user: str, replace_machine_maps: bool = False) -> dict:
     """שומר (או, ``slots=None``, מחזיר לברירת המחדל) את המיפוי בהיקף שנבחר.
-    ‏LookupError = המכונה לא רשומה; ValueError = אין לה דגם (היקף ``model``);
-    ‏MachineMaps = שמירה לדגם תמחק מיפוי אישי, ולא נשלח ``replace_machine_maps``."""
+    LookupError = המכונה לא רשומה; ValueError = אין לה דגם (היקף ``model``);
+    MachineMaps = שמירה לדגם תמחק מיפוי אישי, ולא נשלח ``replace_machine_maps``."""
     if conn.execute("SELECT 1 FROM machines WHERE mac = ?", (mac,)).fetchone() is None:
         raise LookupError("מכונה לא רשומה")
     now = now_iso()
@@ -232,7 +232,7 @@ def _complete(slots, names, disks):
 
 
 def complete_ordinals(conn: sqlite3.Connection, mac: str, disks) -> bool:
-    """‏hello: ‏"NVMe n" שנוסף ידנית מקבל את כתובת ה-PCI כשהמכונה מדווחת NVMe
+    """hello: "NVMe n" שנוסף ידנית מקבל את כתובת ה-PCI כשהמכונה מדווחת NVMe
     n-י (נדב 22/10: "הכתובת נשלמת אוטומטית"). כתיבה רק כשיש מה להשלים."""
     changed = False
     row = conn.execute("SELECT drawer_slots FROM machines WHERE mac = ?", (mac,)).fetchone()

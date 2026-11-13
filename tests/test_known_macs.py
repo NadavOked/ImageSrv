@@ -1,11 +1,11 @@
-"""‏#141: מכונה לא רשומה לא מקבלת GRUB בכלל — לא רק דיסק מקומי בתוכו.
+"""#141: מכונה לא רשומה לא מקבלת GRUB בכלל — לא רק דיסק מקומי בתוכו.
 
-‏dhcp.render() (‏test_server_dhcp.py) מוכיח את הצד הטהור: dhcp-boot דורש
+dhcp.render() (test_server_dhcp.py) מוכיח את הצד הטהור: dhcp-boot דורש
 tag:known. הבדיקות כאן מוכיחות את הצד השני — שהוספה/ייבוא/מחיקה של
 מכונה מהקונסולה באמת כותבות מחדש את KNOWN_MACS_CONF ומבקשות מ-dnsmasq
 לקרוא אותו מחדש, וש-**אף בדיקה אחרת בחבילה אינה נוגעת במכונה** כשהיא
 לא ביקשה זאת במפורש: ה-hook הוא `None` כברירת מחדל, בדיוק כדי שהוספת
-מכונה בעשרות בדיקות קיימות (‏setup_classroom) לא תכתוב ל-
+מכונה בעשרות בדיקות קיימות (setup_classroom) לא תכתוב ל-
 /etc/imagesrv/known-macs ולא תריץ systemctl בכל ריצת pytest.
 """
 
@@ -36,7 +36,7 @@ def _events(server) -> list[str]:
 @pytest.fixture()
 def known_macs_server(tmp_path, images_root, clock):
     """כמו הפיקסטורה `server` הרגילה, אבל עם known_macs_hooks מוזרק —
-    ‏hook מזויף שרק רושם מה נכתב, ולעולם לא נוגע במכונה."""
+    hook מזויף שרק רושם מה נכתב, ולעולם לא נוגע במכונה."""
     fake = {"applied": [], "error": None}
     hooks = {"apply": lambda text: (fake["applied"].append(text), fake["error"])[1]}
     app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
@@ -97,7 +97,7 @@ def test_import_syncs_known_macs_once_for_the_whole_batch(known_macs_server):
 def test_import_that_saves_nothing_does_not_sync(known_macs_server):
     """כל השורות נדחו — אף MAC לא השתנה, ואין טעם לכתוב ולבקש reload.
 
-    ‏fake["applied"] אינו ריק כשהבדיקה מתחילה: create_runtime עצמו כבר
+    fake["applied"] אינו ריק כשהבדיקה מתחילה: create_runtime עצמו כבר
     כתב סנכרון ראשוני ריק (עיקרון 5 — הקובץ נכתב מחדש בעליית השרת).
     מה שנבדק כאן הוא שהניסיון-שנכשל לא **הוסיף** כתיבה נוספת."""
     admin, fake = known_macs_server["admin"], known_macs_server["fake"]
@@ -137,16 +137,16 @@ def test_a_sync_failure_is_journaled_in_hebrew(known_macs_server):
     rows = admin.get("/api/console/journal").json()
     row = next(r for r in rows if r["event"] == "known_macs_apply_failed")
     assert "dnsmasq" in row["text"]
-    # ‏#857: היומן לבדו קיבע שתיקה — התשובה חייבת להגיד את זה גם היא.
+    # #857: היומן לבדו קיבע שתיקה — התשובה חייבת להגיד את זה גם היא.
     assert r.status_code == 200 and r.json()["network"]["applied"] is False
 
 
-# --- ‏#857: כשל ה-apply אינו נבלע ב-200 נקי ----------------------------------
+# --- #857: כשל ה-apply אינו נבלע ב-200 נקי ----------------------------------
 #
 # ה-DB עודכן והרשת לא: מכונה חדשה **לא תקבל GRUB** (fail-closed של #141
 # פועל "נגדנו" בשקט), ומכונה שנמחקה עדיין תקבל. המפעיל ראה הצלחה. לא
 # מגלגלים את ה-DB אחורה (המפעיל ביקש את המכונה) ולא מקפלים ל-500 סתמי:
-# ‏200, והתשובה **מבחינה** — `network` אומר אם ה-DHCP עודכן ולמה לא.
+# 200, והתשובה **מבחינה** — `network` אומר אם ה-DHCP עודכן ולמה לא.
 
 
 def _add(admin, mac="aa:bb:cc:dd:ee:01"):
@@ -223,7 +223,7 @@ def test_import_that_saves_nothing_reports_network_null(known_macs_server):
     assert r.json()["saved"] == 0 and r.json()["network"] is None
 
 
-# --- ‏#857: הקונסולה מציגה את זה --------------------------------------------
+# --- #857: הקונסולה מציגה את זה --------------------------------------------
 
 
 STATIC = Path(__file__).resolve().parent.parent / "server" / "static"
@@ -233,7 +233,7 @@ WARNING = "המכונה נשמרה, אבל ה-DHCP לא עודכן"
 def test_both_console_screens_warn_when_the_dhcp_update_failed():
     """כל זרימה שמוסיפה/מוחקת מכונה — הוספה, הדבקה, הסרה מהמגירה, הסרה
     מרובה — קוראת את `network.error` ומציגה את האזהרה. מאז #954 גל 3 כולן
-    ב-`console.js` (‏`machines.js` נמחק). בדיקת תוכן: אין דפדפן בחבילה,
+    ב-`console.js` (`machines.js` נמחק). בדיקת תוכן: אין דפדפן בחבילה,
     וה-JS הוא vanilla."""
     console_js = read_console_js()
     assert "r.network" in console_js and WARNING in console_js
@@ -243,7 +243,7 @@ def test_both_console_screens_warn_when_the_dhcp_update_failed():
 
 
 def test_the_console_assets_were_bumped_together():
-    """‏gotcha ידוע: JS ישן מול API חדש. כל ה-`?v=` ב-index.html זהים
+    """gotcha ידוע: JS ישן מול API חדש. כל ה-`?v=` ב-index.html זהים
     ו-≥ 4.6 (הבאמפ של #857)."""
     import re   # noqa: PLC0415
     page = (STATIC / "index.html").read_text(encoding="utf-8")
@@ -258,7 +258,7 @@ def test_the_console_assets_were_bumped_together():
 
 
 def test_menu_request_for_an_unknown_mac_is_journaled_on_the_deploy_vlan(server):
-    """‏#141: גם אם DHCP לא עצר אותה (תרחיש 3 — proxy מרשת זרה), בקשת
+    """#141: גם אם DHCP לא עצר אותה (תרחיש 3 — proxy מרשת זרה), בקשת
     התפריט על וילן ההפצה עצמה עדיין נרשמת ביומן — לא רק hello."""
     r = server["anon"].get("/boot/menu?mac=aa:bb:cc:dd:ee:99")
     assert r.status_code == 200

@@ -22,13 +22,13 @@ from server.library.images import inside, valid_image_id
 
 from test_capture import make_task, setup_build_machine
 
-#: ארבעת האימג'ים שמונחים בספרייה של שרת המעבדה (‏docs/lab/lab-test-plan.md,
-#: ‏docs/handoffs/handoff-2026-08-29.md) נכון ל-2026-08-29.
+#: ארבעת האימג'ים שמונחים בספרייה של שרת המעבדה (docs/lab/lab-test-plan.md,
+#: docs/handoffs/handoff-2026-08-29.md) נכון ל-2026-08-29.
 LAB_LIBRARY = ("img_6f28b0", "img_9c0b87", "img_b6bfd4", "img_f9879d")
 
 
 def test_every_image_in_the_lab_library_still_passes():
-    """‏regex צר מדי אינו "מחמיר יותר": הוא מעלים אימג'ים קיימים."""
+    """regex צר מדי אינו "מחמיר יותר": הוא מעלים אימג'ים קיימים."""
     assert [name for name in LAB_LIBRARY if not valid_image_id(name)] == []
 
 
@@ -53,7 +53,7 @@ def test_the_id_the_server_hands_out_is_an_id_the_server_accepts(server):
     "img_7F3A91",                 # השרת מייצר אותיות קטנות
     "img_7f3a9", "img_7f3a912",   # לא שש ספרות
     "img_zzzzzz", "img_", "7f3a91", "img7f3a91", "",
-    "img_7f3a91\n",               # ‏fullmatch ולא `$`: שורה שנייה אינה סוף
+    "img_7f3a91\n",               # fullmatch ולא `$`: שורה שנייה אינה סוף
     "img_7f3a91\x00",
     None, 7, True, ["img_7f3a91"], {"id": "img_7f3a91"},
 ])
@@ -91,7 +91,7 @@ def test_a_path_that_climbs_out_of_the_root_is_refused(tmp_path):
 
 
 def test_the_boundary_does_not_depend_on_the_id_rule(tmp_path, monkeypatch):
-    """‏regex שמישהו ירחיב בעתיד לא ישבור את הגבול — הן בדיקות נפרדות."""
+    """regex שמישהו ירחיב בעתיד לא ישבור את הגבול — הן בדיקות נפרדות."""
     monkeypatch.setattr(images, "IMAGE_ID", re.compile(r"[^\x00]*"))
     root = tmp_path / "images"
     root.mkdir()

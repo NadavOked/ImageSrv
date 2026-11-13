@@ -1,16 +1,16 @@
-"""‏#649 תחום 1 — המסגרת של ארגז הכלים (agent/lib/tools/tools.sh), בהזרקת מעטפת.
+"""#649 תחום 1 — המסגרת של ארגז הכלים (agent/lib/tools/tools.sh), בהזרקת מעטפת.
 
 החוזה (התגובה האחרונה ב-#649): כל `tools_<domain>.sh` מגדיר
 `tools_<domain>_list` (שורה לכלי `id|domain|title|risk|args`) ו-
 `tools_<domain>_run <id> [arg]`. המסגרת מאחדת את הרשימה, **חוסמת
-‏rw/destroy לפני שהמודול נקרא** כשההקלדה אינה שם המכונה (עיקרון 7),
+rw/destroy לפני שהמודול נקרא** כשההקלדה אינה שם המכונה (עיקרון 7),
 וכותבת את הפלט ל-`$RUN_DIR/tool-<id>.out`.
 
-הבקרות השליליות המובנות: מודול מזויף מסמן קובץ כשהוא נקרא — ‏rc 3
-בלי הקובץ הוא ההוכחה שהשומר יושב במסגרת ולא במודול; ‏rc 2 מהמודול
+הבקרות השליליות המובנות: מודול מזויף מסמן קובץ כשהוא נקרא — rc 3
+בלי הקובץ הוא ההוכחה שהשומר יושב במסגרת ולא במודול; rc 2 מהמודול
 יוצא החוצה כ-2 ולא מקופל ל-0/1 (עיקרון 5).
 
-‏#1050: הבחירה שנשמרה בקונסולה היא רשימת-היתר. ‏`setup` כותב קובץ
+#1050: הבחירה שנשמרה בקונסולה היא רשימת-היתר. `setup` כותב קובץ
 בחירה עם כל המזהים המזויפים (ומצביע עליו ב-`TOOLS_SELECTION`), כי
 בלעדיו המסגרת מציעה **כלום** — וזה נבדק בנפרד למטה.
 """
@@ -51,14 +51,14 @@ def posix(p: Path) -> str:
 
 
 def msys(p: Path) -> str:
-    """‏`/c/...` — הצורה היחידה ש-PATH של bash-של-Git מחפש בה (‏`C:/` עובד
+    """`/c/...` — הצורה היחידה ש-PATH של bash-של-Git מחפש בה (`C:/` עובד
     כארגומנט, לא כרכיב PATH)."""
     s = posix(p)
     return f"/{s[0].lower()}{s[2:]}" if len(s) > 1 and s[1] == ":" else s
 
 
 def last(out: subprocess.CompletedProcess) -> str:
-    """השורה האחרונה של stdout — ‏`echo rc=$?` של הטסט. לא `in`: ‏`log`
+    """השורה האחרונה של stdout — `echo rc=$?` של הטסט. לא `in`: `log`
     מדפיס `tool x finished rc=2` לאותו stdout, ו-`"rc=2" in out.stdout` היה
     עובר גם כשהמסגרת קיפלה את 2 ל-0 (נמדד בבקרה השלילית, מוטציה B)."""
     lines = out.stdout.splitlines()
@@ -112,7 +112,7 @@ ALL_FAKE_IDS = ["sysinfo", "diskinfo", "smart-health", "wipe", "fsck", "lsblk", 
 
 
 def write_selection(tmp_path: Path, build: list[str]) -> Path:
-    """‏tools-selection.json בצורה שהשרת כותב (interfaces.md §23)."""
+    """tools-selection.json בצורה שהשרת כותב (interfaces.md §23)."""
     sel = tmp_path / "tools-selection.json"
     sel.write_text(json.dumps({"schema": 1, "build": build, "student": []}, indent=1),
                    encoding="utf-8", newline="\n")
@@ -125,10 +125,10 @@ def setup(tmp_path: Path, modules: dict[str, str] | None = None,
           tools: bool = True) -> tuple[Path, Path, Path, str]:
     """LIB_DIR מזויף עם המודולים, RUN_DIR, GUI_DIR, ו-PATH עם כלים מזויפים.
 
-    ‏PATH מתחיל בתיקייה **ריקה** של כלים מזויפים כדי ש-`dmidecode`/`smartctl`
+    PATH מתחיל בתיקייה **ריקה** של כלים מזויפים כדי ש-`dmidecode`/`smartctl`
     של התחנה לא יזלגו פנימה: המובנים מופיעים רק כשהבינארי שלהם ארוז.
-    ‏`selection` — מזהי ה-build בקובץ הבחירה; ברירת המחדל כולם (#1050).
-    ‏`tools` — היכולת ב-hello (‏`tools_on`, ‏#1303); ברירת המחדל דלוקה (v1.1)."""
+    `selection` — מזהי ה-build בקובץ הבחירה; ברירת המחדל כולם (#1050).
+    `tools` — היכולת ב-hello (`tools_on`, #1303); ברירת המחדל דלוקה (v1.1)."""
     lib = tmp_path / "lib"; lib.mkdir()
     run = tmp_path / "run"; run.mkdir()
     gui = tmp_path / "gui"; gui.mkdir()
@@ -143,10 +143,10 @@ def setup(tmp_path: Path, modules: dict[str, str] | None = None,
         f = fake / name
         f.write_text("#!/bin/sh\n" + body, encoding="utf-8", newline="\n")
         f.chmod(0o755)
-    # ‏PATH סגור: הכלים המזויפים, ואחריהם רק /usr/bin ו-/bin של bash — כך
-    # ‏dmidecode/smartctl של התחנה (אם יש) אינם מופיעים, והמובנים נרשמים
-    # רק כשהבינארי שלהם "ארוז" (מזויף כאן). ‏jq (לצד הקיוסק) חייב להיות
-    # אחד משני אלה — ‏requires_native("jq") על הטסטים שצריכים אותו.
+    # PATH סגור: הכלים המזויפים, ואחריהם רק /usr/bin ו-/bin של bash — כך
+    # dmidecode/smartctl של התחנה (אם יש) אינם מופיעים, והמובנים נרשמים
+    # רק כשהבינארי שלהם "ארוז" (מזויף כאן). jq (לצד הקיוסק) חייב להיות
+    # אחד משני אלה — requires_native("jq") על הטסטים שצריכים אותו.
     jq_dir = Path(shutil.which("jq")).parent if shutil.which("jq") else None
     path = ":".join([msys(fake), *([msys(jq_dir)] if jq_dir else []), "/usr/bin", "/bin"])
     prelude = (
@@ -200,7 +200,7 @@ def test_an_unselected_tool_is_not_listed(tmp_path):
 
 
 def test_an_unselected_tool_does_not_run_even_with_the_machine_name(tmp_path):
-    """הסינון אינו רק ברשימה: ‏tool-run עם מזהה שהמודול מכיר אך השרת לא
+    """הסינון אינו רק ברשימה: tool-run עם מזהה שהמודול מכיר אך השרת לא
     בחר הוא rc 4 — והמודול אינו נקרא. אחרת המסך היה מסתיר והפקודה מריצה."""
     _, run, _, pre = setup(tmp_path, {"disk": DISK_MODULE}, selection=["lsblk"])
     out = sh(pre + "export MACHINE_NAME=B; tools_run wipe /dev/sda B; echo rc=$?")
@@ -210,7 +210,7 @@ def test_an_unselected_tool_does_not_run_even_with_the_machine_name(tmp_path):
 
 
 def test_a_built_in_needs_the_selection_too(tmp_path):
-    """‏sysinfo/smart-health אינם בקטלוג של נדב: הבינארי ארוז, אבל בלי
+    """sysinfo/smart-health אינם בקטלוג של נדב: הבינארי ארוז, אבל בלי
     המזהה בבחירה הם לא מוצעים ולא רצים."""
     _, run, _, pre = setup(tmp_path, fakes={"dmidecode": DMIDECODE_OK}, selection=["lsblk"])
     out = sh(pre + "tools_list; tools_run sysinfo; echo rc=$?")
@@ -239,7 +239,7 @@ def test_an_empty_build_list_offers_nothing_without_the_missing_file_message(tmp
 
 
 def test_the_confirm_reaches_the_module(tmp_path):
-    """‏#1050: המודולים האמיתיים שומרים בעצמם עם ההקלדה (‏$3); מסגרת שמעבירה
+    """#1050: המודולים האמיתיים שומרים בעצמם עם ההקלדה ($3); מסגרת שמעבירה
     רק שני ארגומנטים הייתה מכשילה כל destroy ב-rc 3 גם עם השם הנכון."""
     module = """\
 tools_x_list() { printf 'echo3|x|t|destroy|\\n'; }
@@ -368,7 +368,7 @@ def test_sysinfo_with_a_failing_dmidecode_is_rc_2_not_a_clean_answer(tmp_path):
 
 
 def smart_setup(tmp_path: Path, disks: dict[str, int]) -> tuple[Path, str]:
-    """‏/sys/block מזויף (SYSROOT) ו-smartctl שמחזיר קוד יציאה לפי הדיסק."""
+    """/sys/block מזויף (SYSROOT) ו-smartctl שמחזיר קוד יציאה לפי הדיסק."""
     sysroot = tmp_path / "sysroot"
     for name in disks:
         (sysroot / "sys" / "block" / name / "device").mkdir(parents=True)
@@ -432,7 +432,7 @@ def test_tool_run_token_writes_the_result_record_and_the_output(tmp_path):
 
 @requires_native("jq", why="tools_gui_run קורא את שם המכונה מ-station.json עם jq")
 def test_the_bridge_takes_the_name_from_station_json_not_from_the_gui(tmp_path):
-    """‏#649/עיקרון 7: ה-GUI מקליד, השרת קובע את השם. ‏station.json הוא העותק
+    """#649/עיקרון 7: ה-GUI מקליד, השרת קובע את השם. station.json הוא העותק
     הטרי של /agent/state; שם אחר בהקלדה = rc 3 ברשומה, והמודול לא נקרא."""
     _, run, gui, pre = setup(tmp_path, {"disk": DISK_MODULE})
     (gui / "station.json").write_text('{"name":"BUILD-01"}')
@@ -450,10 +450,10 @@ def test_a_second_run_gets_a_new_sequence_number(tmp_path):
 
 
 def test_tool_run_is_refused_while_the_toolbox_is_off(tmp_path):
-    """‏#1303: הגואי מסתיר את הכפתור לפי `menu_tools`, אבל רשומת `tool-run`
+    """#1303: הגואי מסתיר את הכפתור לפי `menu_tools`, אבל רשומת `tool-run`
     שמגיעה בכל זאת (גואי ישן, כתיבה ידנית ל-fifo) הריצה את הכלי — גם
     במהדורה בלי ארגז הכלים. הגשר עצמו הוא השער: יכולת כבויה, או כזו שלא
-    נקראה, = אין ריצה ואין רשומת תוצאה. ‏lsblk הוא ro, כדי שרק השער יעצור."""
+    נקראה, = אין ריצה ואין רשומת תוצאה. lsblk הוא ro, כדי שרק השער יעצור."""
     _, run, gui, pre = setup(tmp_path, {"disk": DISK_MODULE}, tools=False)
     out = sh(pre + "tools_gui_run 'tool-run|lsblk||'; echo rc=$?")
     assert last(out) == "rc=1", out.stdout

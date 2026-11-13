@@ -1,4 +1,4 @@
-"""‏#1973: הגדרת ה-UPS מהקונסולה — ‏GET/POST ‎/api/console/ups (admin)."""
+"""#1973: הגדרת ה-UPS מהקונסולה — GET/POST /api/console/ups (admin)."""
 
 import logging
 
@@ -9,6 +9,7 @@ from server.system import ups
 from server.db import get_setting, journal
 
 log = logging.getLogger("imagesrv.console_ups")
+CONFIG_FAILED = "הגדרת ה-UPS נכשלה ולא נשמרה — הפרטים ביומן השרת"
 
 
 def create_ups_router(ctx, supplied_hooks: dict | None = None) -> APIRouter:
@@ -22,7 +23,7 @@ def create_ups_router(ctx, supplied_hooks: dict | None = None) -> APIRouter:
         state, detail = monitor.health() if monitor is not None else (None, None)
         return {"mode": mode, "target": get_setting(ctx.conn, ups.TARGET) or "",
                 "modes": ups.MODES_HE, "usb_target": ups.USB_TARGET,
-                # ‏None = אין מנטר בתהליך הזה (בדיקות/הרצה ישירה) — "לא נבדק", לא "תקין".
+                # None = אין מנטר בתהליך הזה (בדיקות/הרצה ישירה) — "לא נבדק", לא "תקין".
                 "state": state, "detail": detail,
                 "reading": monitor.snapshot() if monitor is not None else None}
 
@@ -38,10 +39,11 @@ def create_ups_router(ctx, supplied_hooks: dict | None = None) -> APIRouter:
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         except Exception as exc:  # noqa: BLE001 — ההחלה נכשלה: נאמר, ולא נשמר
-            # ‏#2510: טקסט החריגה (systemctl, כתיבת קובץ) ליומן השרת; ללקוח — משפט קבוע.
+            # #2510: טקסט החריגה (systemctl, כתיבת קובץ) ליומן השרת; ללקוח — משפט קבוע.
+            # #2543: גם ביומן האירועים (מוצג בקונסולה) — המשפט שלנו; הטקסט ביומן השרת בלבד.
             log.warning("ups config failed: %s", exc)
-            journal(ctx.conn, "ups_config_failed", str(exc), user[0])
-            raise HTTPException(500, "הגדרת ה-UPS נכשלה ולא נשמרה — הפרטים ביומן השרת") from exc
+            journal(ctx.conn, "ups_config_failed", CONFIG_FAILED, user[0])
+            raise HTTPException(500, CONFIG_FAILED) from exc
         monitor = getattr(ctx, "ups", None)
         if monitor is not None:
             monitor.tick()       # המצב החדש נקרא עכשיו, לא בדגימה הבאה

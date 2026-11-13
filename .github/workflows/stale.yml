@@ -1,0 +1,49 @@
+# stale — סוגר דיווח שביקשנו עליו פרטים ולא קיבלנו (הכרעת נדב, 13/11).
+#
+# **רק Issues עם התווית `needs-info`.** באג שאושר מחכה לתיקון, ולא נסגר
+# בגלל זמן; דיווח בלי `needs-info` לא נבדק כאן כלל. ‏PRs אינם נבדקים
+# לעולם: ‏`days-before-pr-stale` ו-`days-before-pr-close` הם ‎-1.
+# 14 ימים בלי תגובה עד הודעה, ועוד 7 עד סגירה. תגובה של המדווח מאפסת
+# את הספירה (`remove-stale-when-updated`, ברירת המחדל).
+#
+# רץ בריפו הציבורי בלבד: התנאי על `github.repository` עוצר אותו בריפו
+# הפיתוח, שבו התווית והדיווחים מבחוץ אינם קיימים.
+# הפעולה נעולה ל-SHA מלא של התג, ולא לתג עצמו: תג אפשר להזיז.
+
+name: stale
+
+on:
+  schedule:
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  stale:
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93  # v11.0.0
+        with:
+          only-labels: needs-info
+          days-before-stale: 14
+          days-before-close: 7
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+          stale-issue-label: stale
+          close-issue-reason: not_planned
+          stale-issue-message: |
+            לא קיבלנו עדיין את הפרטים שביקשנו. אם לא יגיעו בשבעת הימים הקרובים, נסגור את הדיווח. אפשר לפתוח אותו מחדש בכל עת.
+
+            We have not received the details we asked for yet. If they do not arrive within 7 days, we will close this report. Reply here and we will reopen it.
+          close-issue-message: |
+            סגרנו כי לא קיבלנו את הפרטים. אפשר להגיב כאן, ונפתח מחדש.
+
+            Closed because we did not receive the details. Reply here and we will reopen it.

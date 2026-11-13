@@ -120,7 +120,7 @@ drawer_lpm_hint() {
     # No record (not a cloner, not set yet) = nothing said, not "fine".
     _lh=$(cat "$RUN_DIR/sata_lpm" 2>/dev/null) || return 0
     case "$_lh" in max_performance|none|'') return 0 ;; esac
-    printf ' (מדיניות החשמל של SATA: %s, לא max_performance -- ייתכן שהכונן נרדם)' "$_lh"
+    printf ' (מדיניות החשמל של SATA: %s, לא max_performance — ייתכן שהכונן נרדם)' "$_lh"
 }
 
 drawer_dead_reason() {
@@ -181,13 +181,16 @@ drawer_watch() {
             _dw_why=$(drawer_dead_reason "$_dw_d" "$_dw_s" "$_dw_k") || continue
             echo "$_dw_why" > "$_dw_t/dead"; [ "$_dw_why" != "$DRAWER_GONE_WHY" ] || : > "$_dw_t/pulled"
             if [ "$_dw_why" = "$DRAWER_GONE_WHY" ]; then event_beep pulled; else event_beep failure; fi
-            [ "$_dw_why" != "$DRAWER_GONE_WHY" ] || _dw_why="$_dw_why$(drawer_lpm_hint)"   # #1827
+            # #1827: the slumber is a suspect only with no sign of a pull (#2987: Nadav pulled it by hand) -- the detail, never the screen (opsay.sh)
+            [ "$_dw_why" != "$DRAWER_GONE_WHY" ] || drawer_port_gone "$_dw_d" "$_dw_k" || _dw_why="$_dw_why$(drawer_lpm_hint)"
             log "$_dw_d: $_dw_why -- out of the stream now, the other drawers carry on"
             kill -9 "$(cat "$_dw_t/reader.pid" 2>/dev/null)" 2>/dev/null \
                 || log "WARNING: $_dw_d: its fifo's reader was not stopped -- fanout drops it on its own stall ceiling"
             fail_written_target "$_dw_d" "מחיצה $2: $_dw_why"
         done
+        if command -v drawer_stall_tick > /dev/null; then drawer_stall_tick "$3"; fi   # #2988: standing is said in seconds (stall.sh; display only)
     done
+    if command -v drawer_stall_clear > /dev/null; then drawer_stall_clear "$3"; fi
     rm -f "$_dw_k"
 }
 

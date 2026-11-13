@@ -1,4 +1,4 @@
-"""‏#411 — פיוס בעליית השרת: מה שהיה `running` כשהשרת נפל אינו נשאר תלוי.
+"""#411 — פיוס בעליית השרת: מה שהיה `running` כשהשרת נפל אינו נשאר תלוי.
 
 הכרעת נדב (06/09, אפשרות 1): סבב `running` יתום הופך לכישלון בעליית
 השרת — לא ממשיך, לא נשאר תלוי. עד כאן איש לא רץ בעלייה על הטבלאות:
@@ -10,7 +10,7 @@
 הבדיקות מריצות שרת, מביאות אותו למצב, ובונות שרת **שני** על אותו
 `--data-dir` — זו "עלייה מחדש". ההבחנה שנבדקת: כישלון **בשם**, לא
 מחיקה; חבר שכבר `done` נשאר `done`; משימה שהאימג' שלה כבר בספרייה
-(‏`rename` קרה, ה-`UPDATE` אבד) היא `done`, לא כישלון (עיקרון 3/5).
+(`rename` קרה, ה-`UPDATE` אבד) היא `done`, לא כישלון (עיקרון 3/5).
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ except ImportError:   # בקרה שלילית: בלי המודול הטסטים 
 
 
 def _boot(tmp_path: Path, monkeypatch, *, seed: bool, **runtime_options):
-    """שרת על `tmp_path/data`. ‏`seed=True` בפעם הראשונה: משתמשים ומכונות."""
+    """שרת על `tmp_path/data`. `seed=True` בפעם הראשונה: משתמשים ומכונות."""
     from server.rounds import sender as sender_module
     from server.console import users
     from server.app import create_app
@@ -68,7 +68,7 @@ def _events(ctx) -> list[str]:
 def _running_wave(first) -> str:
     """סבב חדר עם גל `running`: מכונה 1 כותבת, מכונה 2 כבר סיימה."""
     admin, anon = first["admin"], first["anon"]
-    # ‏#1410: בחירת המגירות מפורשת וחובה, והיא נבדקת מול מגירות מחוברות —
+    # #1410: בחירת המגירות מפורשת וחובה, והיא נבדקת מול מגירות מחוברות —
     # ולכן hello ראשון לפני הפתיחה, והשני מצרף לגל.
     cloner_hello(anon, CLONER1, ["S1", "S2"])
     cloner_hello(anon, CLONER2, ["S3", "S4"])
@@ -135,7 +135,7 @@ def test_the_room_round_survives_and_the_next_pulse_opens_a_fresh_wave(tmp_path,
     second = _boot(tmp_path, monkeypatch, seed=False)
     view = room(second["admin"])
     assert view["round"] is not None and view["round"]["wave_state"] == "closed"
-    # דופק לא-מצטרף: ‏hello מצטרף של מכונה 1 גם היה מצרף אותה לגל החדש
+    # דופק לא-מצטרף: hello מצטרף של מכונה 1 גם היה מצרף אותה לגל החדש
     # ומוציא אותו לדרך באותה תשובה (#1703) — כאן נבדק רק שהגל נפתח.
     cloner_hello(second["anon"], CLONER1, ["S1", "S2"], joining=False)   # דופק
     view = room(second["admin"])
@@ -198,7 +198,7 @@ def test_startup_timezone_reconcile_and_next_wave_store_real_utc(tmp_path, monke
 
 def test_an_open_session_waiting_for_joiners_is_not_touched(tmp_path, monkeypatch):
     first = _boot(tmp_path, monkeypatch, seed=True)
-    cloner_hello(first["anon"], CLONER1, ["S1"])       # ‏#1410: המגירה מחוברת לפני הבחירה
+    cloner_hello(first["anon"], CLONER1, ["S1"])       # #1410: המגירה מחוברת לפני הבחירה
     assert first["admin"].post("/api/console/room", json={
         "image_id": "img_7f3a91", "target_drives": 4,
         "target_slots": [{"mac": CLONER1, "ports": [1]}]}).status_code == 200
@@ -230,7 +230,7 @@ def test_a_running_capture_whose_upload_died_with_the_server_fails_by_name(tmp_p
 
 
 def test_a_capture_whose_image_already_landed_in_the_library_is_done_not_failed(tmp_path, monkeypatch):
-    """‏`capture.py`: ‏`rename` ואז `UPDATE 'done'` — נפילה ביניהם משאירה
+    """`capture.py`: `rename` ואז `UPDATE 'done'` — נפילה ביניהם משאירה
     `running` עם אימג' שלם בספרייה. הדיסק הוא מקור האמת (עיקרון 3)."""
     first = _boot(tmp_path, monkeypatch, seed=True)
     _insert_task(first["ctx"], "tsk_land", "img_7f3a91")      # האימג' הזה כבר בספרייה

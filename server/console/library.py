@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import shutil
 
 import tempfile
@@ -28,19 +29,28 @@ from server.db import get_setting, journal, set_setting
 from server.rounds.sessions import ROOM_PREFIX
 from server.system import inflight
 
+log = logging.getLogger("imagesrv.console_library")
+
 FOLDERS_KEY = "image_folders"
-#: ‏#1737: הקובץ הזמני של העלאה — בשורש הספרייה, בשם שמתחיל בנקודה
-#: (אזור עבודה: הספרייה מדלגת עליו, ‏`work_areas` סוחף אותו כשננטש).
+#: #1737: הקובץ הזמני של העלאה — בשורש הספרייה, בשם שמתחיל בנקודה
+#: (אזור עבודה: הספרייה מדלגת עליו, `work_areas` סוחף אותו כשננטש).
 UPLOAD_PREFIX = ".upload-"
 #: חלון "סבבים לאחרונה" במגירת האימג' (#972, המוקאפ: "ב-30 הימים האחרונים").
 ROUNDS_WINDOW = timedelta(days=30)
-#: ‏#1811: ההעלאה נכתבת בתהליכון באצוות בגודל הזה, כמו הקליטה (‏capture.CHUNK, ‏#1488) —
-#: לא קפיצה לתהליכון על כל מקטע של 64KB מהזרם. הזיכרון תחום לאצווה אחת (‏#15).
+#: #1811: ההעלאה נכתבת בתהליכון באצוות בגודל הזה, כמו הקליטה (capture.CHUNK, #1488) —
+#: לא קפיצה לתהליכון על כל מקטע של 64KB מהזרם. הזיכרון תחום לאצווה אחת (#15).
 UPLOAD_BATCH = 1024 * 1024
 
 
+def free_unmeasured(exc: OSError) -> HTTPException:
+    """#2543: המקום הפנוי לא נמדד (לא נמדד ≠ יש מקום, עיקרון 5). ה-strerror והנתיב
+    ליומן השרת; ללקוח — משפט קבוע. משותף להעלאת אימג', ISO ודרייבר."""
+    log.warning("free space unreadable: %s", exc)
+    return HTTPException(507, "לא ניתן לקרוא כמה מקום פנוי בשרת — הפרטים ביומן השרת")
+
+
 def _write_chunk(handle, guard, chunk: bytes) -> None:
-    """‏#1811: אצווה אחת של ההעלאה — רצה בתהליכון (`asyncio.to_thread`)."""
+    """#1811: אצווה אחת של ההעלאה — רצה בתהליכון (`asyncio.to_thread`)."""
     handle.write(chunk)
     guard.wrote(len(chunk))
 
@@ -60,7 +70,7 @@ def recent_rounds(conn, now: datetime | None = None) -> dict[str, int | None]:
     ``room_rounds``. כל גל של סבב חדר הוא גם שורה ב-``sessions`` (קבוצת
     המשכפלים, קידומת ``ROOM``) — אלה לא נספרים שוב, אחרת סבב של שלושה
     גלים היה נראה כשלושה סבבים. אימג' שאינו במילון = 0 (הטבלאות אינן
-    נמחקות לעולם, ולכן היעדר הוא מדידה). ‏``None`` = לפחות שורה אחת
+    נמחקות לעולם, ולכן היעדר הוא מדידה). ``None`` = לפחות שורה אחת
     שחותמת הזמן שלה אינה נקראת — אי אפשר לדעת אם היא בחלון, וספירה
     בלעדיה הייתה מספר קטן שנראה אמיתי (עיקרון 5)."""
     from server.rounds.room import CLONERS_GROUP  # noqa: PLC0415 — נמנע ממעגל ייבוא, כמו במחיקה
@@ -86,7 +96,7 @@ def _library_free(root: Path) -> int:
 
 def _checked_name(value: str, what: str) -> str:
     """שם תצוגה תקין, או 400 בעברית. הכלל עצמו יושב ב-
-    ‏`images.validate_display_name` — מקום אחד שכל נקודות הכניסה עוברות
+    `images.validate_display_name` — מקום אחד שכל נקודות הכניסה עוברות
     דרכו (#138), בנוסח `_checked_name` של console_dhcp (#102)."""
     try:
         return validate_display_name(value, what)
@@ -100,8 +110,8 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
 
     @router.get("/images")
     def images(user=Depends(current_user)):
-        # ‏#972: שני שדות מה-DB לצד מה שמהדיסק — ‏`last_scrub` (‏null = לא
-        # אומת מאז הכניסה) ו-`rounds_30d` (‏null = לא ניתן לספור).
+        # #972: שני שדות מה-DB לצד מה שמהדיסק — `last_scrub` (null = לא
+        # אומת מאז הכניסה) ו-`rounds_30d` (null = לא ניתן לספור).
         scrubs, rounds = last_scrubs(ctx.conn), recent_rounds(ctx.conn)
         listed = ctx.library.public_list(minfree.min_free_gb(ctx.conn))   # #1354
         for image in listed:
@@ -111,8 +121,8 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
 
     @router.get("/images/{image_id}")
     def image_manifest(image_id: str, user=Depends(current_user)):
-        """‏#972: המניפסט הציבורי למגירת האימג' — בלי מפתחות `_` (‏`_dir`
-        ונתיבי הדיסק). ‏`/api/v1/.../manifest` נשאר של הסוכן (#738)."""
+        """#972: המניפסט הציבורי למגירת האימג' — בלי מפתחות `_` (`_dir`
+        ונתיבי הדיסק). `/api/v1/.../manifest` נשאר של הסוכן (#738)."""
         manifest = ctx.library.get(image_id)
         if manifest is None:
             raise HTTPException(404, "אימג' לא קיים")
@@ -147,9 +157,9 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
 
     @router.post("/images/{image_id}/system-partition")
     async def mark_system_partition(image_id: str, request: Request, user=Depends(current_user)):
-        """‏#1896 (הכרעת נדב 22/10): איזו מחיצה היא C: באימג' ישן שבו שתי מחיצות
+        """#1896 (הכרעת נדב 22/10): איזו מחיצה היא C: באימג' ישן שבו שתי מחיצות
         windows שוות. גוף ``{"index": N}``. גם ממחשב הבנייה (פורט הסוכן,
-        ‏`kiosk.KIOSK_CONSOLE_ROUTES`): ‏deploy מסמן **רק אימג' שעוד לא סומן** —
+        `kiosk.KIOSK_CONSOLE_ROUTES`): deploy מסמן **רק אימג' שעוד לא סומן** —
         כמו המשכפל; שינוי סימון — admin. לא באמצע סבב של האימג' (409)."""
         body = await request.json()
         index = body.get("index") if isinstance(body, dict) else None
@@ -197,7 +207,7 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
             raise HTTPException(404, "אימג' לא קיים")
         journal(ctx.conn, "image_download", f'{image_id} "{manifest["name"]}"', user[0])
         headers = {"Content-Disposition": f'attachment; filename="{image_id}.tar"'}
-        # ‏#2851: האורך ידוע מראש (tar_size = אותם קבצים וריפוד כמו tar_stream), ואז הדפדפן
+        # #2851: האורך ידוע מראש (tar_size = אותם קבצים וריפוד כמו tar_stream), ואז הדפדפן
         # מראה אחוזים ומזהה הורדה קטועה. לא הצלחנו לחשב = בלי כותרת, לא ניחוש.
         try:
             headers["Content-Length"] = str(tar_size(Path(manifest["_dir"])))
@@ -216,8 +226,8 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
         נכתב לדיסק תוך כדי קבלה — אימג' שוקל עשרות ג'יגה ואסור שייכנס
         לזיכרון.
 
-        ‏#1891: כל ההעלאה — הזרם, החילוץ והאימות — היא "עסוק" ל"החל עדכון"
-        ולאתחול המתוזמן (‏`inflight`), כי restart באמצע חותך אותה.
+        #1891: כל ההעלאה — הזרם, החילוץ והאימות — היא "עסוק" ל"החל עדכון"
+        ולאתחול המתוזמן (`inflight`), כי restart באמצע חותך אותה.
         """
         with inflight.holding("העלאת אימג'"):
             return await _upload_image(request, user)
@@ -225,14 +235,14 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
     async def _upload_image(request: Request, user):
         root = ctx.library.root
         root.mkdir(parents=True, exist_ok=True)
-        # ‏#1737: הרזרבה למערכת. השיא הוא פעמיים הארכיון — הקובץ הזמני והחילוץ
-        # שלו (‏`import_tar`) — ולכן אורך מוצהר נבדק פעמיים. בלעדיו: תוך כדי הזרם
-        # (‏`StreamGuard`), ושוב לפני החילוץ, מול הגודל שהגיע בפועל.
+        # #1737: הרזרבה למערכת. השיא הוא פעמיים הארכיון — הקובץ הזמני והחילוץ
+        # שלו (`import_tar`) — ולכן אורך מוצהר נבדק פעמיים. בלעדיו: תוך כדי הזרם
+        # (`StreamGuard`), ושוב לפני החילוץ, מול הגודל שהגיע בפועל.
         def room_for(need: int, what: str) -> None:
             try:
                 free = _library_free(root)
             except OSError as exc:      # לא נמדד ≠ יש מקום (עיקרון 5)
-                raise HTTPException(507, f"לא ניתן לקרוא כמה מקום פנוי בשרת: {exc}")
+                raise free_unmeasured(exc)
             refused = disk_reserve.refusal(free, need, what)
             if refused is not None:
                 raise HTTPException(507, refused)
@@ -242,14 +252,14 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
             await asyncio.to_thread(
                 room_for, 2 * int(declared), "העלאת האימג' (הקובץ ועוד החילוץ שלו)")
         guard = disk_reserve.StreamGuard(lambda: _library_free(root), "העלאת האימג'")
-        # שם שמתחיל בנקודה: אזור עבודה, שהסחיפה היומית (‏`work_areas`) מכירה.
+        # שם שמתחיל בנקודה: אזור עבודה, שהסחיפה היומית (`work_areas`) מכירה.
         handle = tempfile.NamedTemporaryFile(
             delete=False, dir=root, prefix=UPLOAD_PREFIX, suffix=".upload"
         )
         temp = Path(handle.name)
         try:
             with handle:
-                # ‏#1811: ה-await על כל אצווה הוא הלחץ-החוזר — הזרם אינו נקרא הלאה
+                # #1811: ה-await על כל אצווה הוא הלחץ-החוזר — הזרם אינו נקרא הלאה
                 # לפני שהדיסק (אולי NAS איטי) קיבל את הקודמת, והלולאה פנויה בינתיים.
                 batch = bytearray()
                 async for chunk in request.stream():
@@ -277,9 +287,9 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
             raise HTTPException(400, unreadable_message(exc))
         finally:
             await asyncio.to_thread(temp.unlink, missing_ok=True)
-        # ‏#138, נקודת הכניסה שה-Issue מסמן כמסוכנת ביותר: השם והתיקייה
+        # #138, נקודת הכניסה שה-Issue מסמן כמסוכנת ביותר: השם והתיקייה
         # מגיעים **מקובץ שמישהו העלה**, לא מטופס — זה בדיוק המסלול של
-        # ‏#110. הבדיקה כאן ולא ב-`import_tar`, כדי ש-sha256 יאמת קודם
+        # #110. הבדיקה כאן ולא ב-`import_tar`, כדי ש-sha256 יאמת קודם
         # (עיקרון 6) ואז השם; אימג' שנדחה על שמו מוסר מהספרייה.
         try:
             validate_display_name(manifest["name"], "שם האימג'")
@@ -341,7 +351,7 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
     async def rename_folder(name: str, request: Request, user=Depends(admin_only)):
         """שינוי שם תיקייה — מעדכן גם את כל המניפסטים שמצביעים עליה."""
         body = await request.json()
-        # הערך **הגולמי**: ‏strip לפני הבדיקה הופך "‏LAB1 " לתקין ושומר
+        # הערך **הגולמי**: strip לפני הבדיקה הופך "LAB1 " לתקין ושומר
         # אותו מקוצץ — וזה בדיוק הניקוי השקט שהאכיפה באה למנוע.
         new_name = body.get("name") or ""
         if new_name:

@@ -1,7 +1,7 @@
 """מחשב שפונה לשרת מרשת שאינה וילן ההפצה — שורה אדומה עד שהוא משתתק (#137).
 
 זו **אינה** לולאה, ואינה נספרת כלולאה: מחוץ לווילן ההפצה השרת אינו
-מגיש את שרשרת האתחול, ואין לו ראיה שהמכונה עברה בתפריט שלו (‏#42).
+מגיש את שרשרת האתחול, ואין לו ראיה שהמכונה עברה בתפריט שלו (#42).
 היא כן אירוע שצריך להיראות — או שנדב עומד ליד המחשב ומושך אימג'
 בכוונה, או שמחשב מחובר לשקע הלא נכון והוא ייראה תקין ולא יעבוד.
 
@@ -63,7 +63,7 @@ def vlan_server(tmp_path: Path, images_root: Path, clock):
         "ss": lambda: "",
         "unit_active": lambda name: "active",
         "http_get": lambda url: 200,
-        # ‏/boot/vmlinuz ו-/boot/initrd.img (#333) — מוזרקים כאן כדי
+        # /boot/vmlinuz ו-/boot/initrd.img (#333) — מוזרקים כאן כדי
         # שהבדיקה לא תפנה לרשת אמיתית.
         "http_size": lambda url: (200, 31_000_000),
         "interfaces": lambda: [],
@@ -126,7 +126,7 @@ def test_a_machine_on_the_deployment_vlan_makes_no_red_row(vlan_server):
 def test_a_scope_that_says_nothing_useful_makes_no_red_row(vlan_server):
     """ברירת המחדל של TestClient היא ("testserver", 80) — לא כתובת.
 
-    ‏`off_deploy_vlan` מחזיר False בכל ספק, וזו בדיוק ההתנהגות שנדרשת
+    `off_deploy_vlan` מחזיר False בכל ספק, וזו בדיוק ההתנהגות שנדרשת
     כאן: "לא ידענו מאיזו רשת" אינו "מרשת זרה".
     """
     ids = setup_classroom(vlan_server)
@@ -276,7 +276,7 @@ def test_the_answer_from_another_network_is_untouched(vlan_server):
 
 
 def test_the_loop_row_stays_out_of_it(vlan_server):
-    """‏`agent_loops` לא השתנה: פנייה מרשת אחרת אינה לולאה, ואינה נספרת
+    """`agent_loops` לא השתנה: פנייה מרשת אחרת אינה לולאה, ואינה נספרת
     כאחת. שתי השורות נפרדות במסך ובקוד."""
     ids = setup_classroom(vlan_server)
 

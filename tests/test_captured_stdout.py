@@ -1,14 +1,14 @@
-"""‏#876: פונקציה שהפלט שלה נלכד ב-`$( )` — ה-stdout שלה הוא הערך בלבד.
+"""#876: פונקציה שהפלט שלה נלכד ב-`$( )` — ה-stdout שלה הוא הערך בלבד.
 
-‏`log()` (common.sh) כותב גם ליומן וגם ל-stdout. פונקציה שנלכדת ב-`$( )`
-וקוראת ל-`log` מכניסה את שורת היומן לתוך הערך שהקורא לוכד: ‏`hostname.json`
+`log()` (common.sh) כותב גם ליומן וגם ל-stdout. פונקציה שנלכדת ב-`$( )`
+וקוראת ל-`log` מכניסה את שורת היומן לתוך הערך שהקורא לוכד: `hostname.json`
 קיבל `imagesrv: writing hostname ...` **לפני** ה-JSON — בהצלחה, לא רק
 בכשל. התיקון מקומי (`log ... >&2` בפונקציה), לא ב-`log()` עצמו.
 
 הרשימה כאן **מפורשת** — כל פונקציה שנמצאה נלכדת ב-`$( )` בסריקת
 `agent/lib` (16/09) — ולא היוריסטיקה שסורקת קוד: כל פונקציה מורצת בפועל עם
 זיופים של הכלים שהיא קוראת (mount/ntfs-3g/hivewrite/umount/jq/od), וה-stdout
-המלא שלה מושווה לערך. ‏`.splitlines()[-1]` — הצורה שבה הטסטים הישנים קראו
+המלא שלה מושווה לערך. `.splitlines()[-1]` — הצורה שבה הטסטים הישנים קראו
 את התוצאה — היא בדיוק מה שהסתיר את הזיהום, ולכן כאן קוראים את **כל** הפלט.
 """
 
@@ -28,7 +28,7 @@ pytestmark = requires_native(("bash", BASH))
 
 #: הפונקציות הנלכדות ב-`$( )` שקוראות ל-`log` (ישירות או דרך עוזרות) —
 #: (קובץ, שם). הסריקה: `grep -n '=\$(' agent/lib/*.sh agent/imagesrv-agent`
-#: + קריאת כל פונקציה ומה שהיא קוראת. ‏smart_send_event (#875) אינה כאן —
+#: + קריאת כל פונקציה ומה שהיא קוראת. smart_send_event (#875) אינה כאן —
 #: תוקנה ב-PR #879 ונבדקת ב-test_smart.
 CAPTURED_LOGGERS = [
     ("hostname.sh", "_mount_windows"),
@@ -37,7 +37,7 @@ CAPTURED_LOGGERS = [
     ("hostname_linux.sh", "_write_hostname_linux"),
     ("hostname.sh", "_control_set"),
     ("hostname.sh", "write_hostname"),
-    ("hostname.sh", "_write_hostname_windows"),  # ‏#107: נלכד ב-dual-boot
+    ("hostname.sh", "_write_hostname_windows"),  # #107: נלכד ב-dual-boot
     ("restore.sh", "manifest_plan"),
     ("monitor.sh", "monitor_secret"),
 ]
@@ -52,7 +52,7 @@ def sh(script: str) -> subprocess.CompletedProcess:
 
 
 def stub(path: Path, body: str) -> str:
-    # ‏chmod דרך bash: ‏os.chmod של פייתון על ווינדוס אינו קובע את סיבית
+    # chmod דרך bash: os.chmod של פייתון על ווינדוס אינו קובע את סיבית
     # ה-exec ש-Git Bash קורא (כמו ב-test_agent._stub).
     return (f"cat > {posix(path)} <<'STUB'\n#!/bin/sh\n{body}\nSTUB\n"
             f"chmod 0755 {posix(path)}\n")
@@ -61,7 +61,7 @@ def stub(path: Path, body: str) -> str:
 WIN_PLAN = "1|EBD0A0A2-B9E5-4433-87C0-68B6B72699C7|windows|ntfs|4096|1|p1|y|false|u"
 LINUX_PLAN = "2|0FC63DAF-8483-4772-8E79-3D69D8477DE4|linux|ext4|4096|1|p2|y|false|u"
 
-#: ‏hivewrite מזויף: קריאת Select\Current מחזירה 1, כל קריאה אחרת את השם
+#: hivewrite מזויף: קריאת Select\Current מחזירה 1, כל קריאה אחרת את השם
 #: שנכתב (האימות עובר); כתיבה יוצאת 0.
 HIVEWRITE_OK = (
     'if [ "$1" = "-g" ]; then\n'
@@ -70,7 +70,7 @@ HIVEWRITE_OK = (
 
 
 def box(tmp_path: Path, stubs: dict[str, str], plan: str = WIN_PLAN) -> tuple[str, Path]:
-    """‏RUN_DIR + PATH עם הזיופים; manifest_plan ו-partition_node נדרסים אחרי
+    """RUN_DIR + PATH עם הזיופים; manifest_plan ו-partition_node נדרסים אחרי
     ה-source (כמו בטסטי hostname הקיימים) כדי לא לדרוש jq."""
     stub_dir = tmp_path / "stubs"; stub_dir.mkdir()
     run = tmp_path / "run"; run.mkdir(exist_ok=True)
@@ -135,8 +135,8 @@ def test_linux_hostname_success_prints_only_the_result(tmp_path):
 
 
 def test_hostname_json_is_valid_json_after_a_successful_name(tmp_path):
-    """‏name_this_machine כותב את מה ש-write_hostname הדפיס ל-hostname.json;
-    ‏#856 מציע לשלוח אותו לשרת — הוא חייב להיות JSON תקין. ‏json_get נדרס
+    """name_this_machine כותב את מה ש-write_hostname הדפיס ל-hostname.json;
+    #856 מציע לשלוח אותו לשרת — הוא חייב להיות JSON תקין. json_get נדרס
     (אין jq בבדיקה); השם עצמו מורכב ע"י compose_hostname האמיתית."""
     script, run = windows_box(tmp_path)
     (run / "response.json").write_text("{}", encoding="utf-8")
@@ -162,7 +162,7 @@ def test_a_failed_verify_prints_only_the_error_object(tmp_path):
 
 
 def test_a_failed_umount_prints_only_the_error_object(tmp_path):
-    # ‏_umount_checked רושמת `log "umount of ... failed"` בתוך הפונקציה הנלכדת.
+    # _umount_checked רושמת `log "umount of ... failed"` בתוך הפונקציה הנלכדת.
     for make in (windows_box, linux_box):
         script, _ = make(tmp_path / make.__name__, umount="exit 1")
         out = sh(script + 'write_hostname sda /dev/null LAB1-05')
@@ -183,8 +183,8 @@ def test_mount_helpers_print_nothing_on_failure(tmp_path):
     for name, (make, over, call) in cases.items():
         script, _ = make(tmp_path / name, **over)
         out = sh(script + call)
-        # ‏#89: ‏_mount_linux מחזיר קוד שאומר *למה* — 2 = עוגן אבל אין /etc.
-        # ‏#2586: 5 = אין מחיצת לינוקס בתוכנית (לא נעשה ניסיון עגינה).
+        # #89: _mount_linux מחזיר קוד שאומר *למה* — 2 = עוגן אבל אין /etc.
+        # #2586: 5 = אין מחיצת לינוקס בתוכנית (לא נעשה ניסיון עגינה).
         want = {"lin-noetc": 2, "lin-noplan": 5}.get(name, 1)
         assert out.returncode == want, (name, out.stdout, out.stderr)
         assert out.stdout == "", (name, out.stdout)
@@ -200,8 +200,8 @@ def test_control_set_prints_nothing_when_select_current_is_unreadable(tmp_path):
 
 
 def test_manifest_plan_prints_nothing_on_a_partial_plan(tmp_path):
-    """‏#51: jq רינדר 1 מתוך 3 מחיצות → manifest_plan נכשל בקול. השורה
-    ‏`plan: 1 of 3 partitions rendered` הולכת ליומן, לא לתוכנית שהקורא לוכד
+    """#51: jq רינדר 1 מתוך 3 מחיצות → manifest_plan נכשל בקול. השורה
+    `plan: 1 of 3 partitions rendered` הולכת ליומן, לא לתוכנית שהקורא לוכד
     (הקוראים מסננים ב-awk, ולכן זה לא נראה — אותו דפוס בדיוק)."""
     run = tmp_path / "run"; run.mkdir()
     stub_dir = tmp_path / "stubs"; stub_dir.mkdir()
@@ -217,7 +217,7 @@ def test_manifest_plan_prints_nothing_on_a_partial_plan(tmp_path):
 
 
 def test_monitor_secret_prints_nothing_when_no_secret_can_be_drawn(tmp_path):
-    # ‏od מזויף שמדפיס כלום = אין סוד; sysinfo לוכד `_ms=$(monitor_secret)`.
+    # od מזויף שמדפיס כלום = אין סוד; sysinfo לוכד `_ms=$(monitor_secret)`.
     run = tmp_path / "run"; run.mkdir()
     stub_dir = tmp_path / "stubs"; stub_dir.mkdir()
     out = sh(stub(stub_dir / "od", "exit 0")

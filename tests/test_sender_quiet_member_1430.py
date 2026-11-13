@@ -1,13 +1,13 @@
-"""‏#1430 — לא לחכות 10 דקות למכונה שמתה בשקט.
+"""#1430 — לא לחכות 10 דקות למכונה שמתה בשקט.
 
 מצב לפני התיקון: חבר שמת **בלי** דיווח `failed` נספר ב-`--min-receivers`
-עד ש-`client_lost` נרשם (‏`room.LOST_SECONDS`, 180ש' או ההגדרה בקונסולה).
+עד ש-`client_lost` נרשם (`room.LOST_SECONDS`, 180ש' או ההגדרה בקונסולה).
 מחיצה 2+ שהשולח פתח לפני כן ממתינה לו עד `LATER_MAX_WAIT` (600ש'), כי
 השולח כבר רץ עם המספר הקודם.
 
 הכרעת נדב (02/11): חבר שלא שלח hello/progress בדקה האחרונה **אינו נספר**
 ב-`--min-receivers` של המחיצה הבאה — השולח יוצא ברגע שכל המדווחים
-מחוברים. ‏`--max-wait` נשאר 600 (#957): מגירה איטית ותקינה מדווחת progress
+מחוברים. `--max-wait` נשאר 600 (#957): מגירה איטית ותקינה מדווחת progress
 כל ~2 שניות (#449), ולכן נספרת ומחכים לה. חבר שחזר לדווח — נספר שוב.
 
 הכרעת המתאם (02/11), כמו `lost` ב-#1950: חבר שקט שקיבל את המחיצה הקודמת
@@ -25,10 +25,10 @@ pytest.importorskip("fastapi")
 
 from server.rounds.sender import SenderEngine
 
-from conftest import hello_body, setup_classroom
+from conftest import HANG_S, hello_body, setup_classroom
 from test_sender import Recorder, free_ports, library, wait_for  # noqa: F401
 
-#: כתובות החברים A, ‏B, ‏C — לפי הסדר.
+#: כתובות החברים A, B, C — לפי הסדר.
 IPS = ("10.44.0.11", "10.44.0.12", "10.44.0.13")
 MAC3 = "b4:2e:99:07:1a:c6"
 
@@ -65,9 +65,9 @@ def _second_partition(server, recorder, quiet: dict[int, int], members: int = 2,
                       finished: list[int] | None = None, dropped: list[int] = (),
                       reports_again: list[int] = ()) -> list[str]:
     """`members` חברים כותבים; ל-`quiet[i]` הדיווח האחרון של חבר i לפני כך
-    וכך שניות. ‏`finished` — מי קיבל את מחיצה 1 עד סופה לפי הלוג (ברירת
-    מחדל: מי שאינו שקט — מכונה שמתה); ‏`dropped` — מי ש-udp-sender זרק;
-    ‏`reports_again` — מי ששולח progress אחרי השקט. מחזיר את פקודת מחיצה 2."""
+    וכך שניות. `finished` — מי קיבל את מחיצה 1 עד סופה לפי הלוג (ברירת
+    מחדל: מי שאינו שקט — מכונה שמתה); `dropped` — מי ש-udp-sender זרק;
+    `reports_again` — מי ששולח progress אחרי השקט. מחזיר את פקודת מחיצה 2."""
     ids = setup_classroom(server)
     macs = [ids["mac1"], ids["mac2"]]
     if members == 3:
@@ -85,7 +85,7 @@ def _second_partition(server, recorder, quiet: dict[int, int], members: int = 2,
     recorder.log_text = _p1_log([IPS[i] for i in finished], [IPS[i] for i in dropped])
     for mac in macs + macs[:1]:
         server["anon"].post("/api/v1/agent/hello", json=hello_body(mac))
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     first = recorder.commands[0]
     assert _arg(first, "--min-receivers") == str(members)
     assert _arg(first, "--max-wait") == "120"
@@ -95,7 +95,7 @@ def _second_partition(server, recorder, quiet: dict[int, int], members: int = 2,
     conn = server["ctx"].conn
     for mac, ip in zip(macs, IPS):
         conn.execute("UPDATE net_devices SET ip = ? WHERE mac = ?", (ip, mac))
-    # הגל רץ כבר חמש דקות — הגרייס של תחילת הגל (‏`started_at`) מאחורינו.
+    # הגל רץ כבר חמש דקות — הגרייס של תחילת הגל (`started_at`) מאחורינו.
     conn.execute("UPDATE sessions SET started_at = ? WHERE id = ?", (_ago(300), session))
     for i, seconds in quiet.items():
         conn.execute("UPDATE session_members SET updated_at = ?"
@@ -119,12 +119,12 @@ def _quiet_events(server) -> list[str]:
 
 def test_a_quiet_member_does_not_hold_the_next_partition(
         server_with_sender, free_ports):  # noqa: F811
-    """‏B לא דיווח 90 שניות (עוד לא `lost`, שקורה ב-180) ולא קיבל את מחיצה 1
-    עד סופה: מחיצה 2 אינה סופרת אותו — ‏udp-sender יוצא ברגע ש-A מחובר.
+    """B לא דיווח 90 שניות (עוד לא `lost`, שקורה ב-180) ולא קיבל את מחיצה 1
+    עד סופה: מחיצה 2 אינה סופרת אותו — udp-sender יוצא ברגע ש-A מחובר.
     וההמתנה **אינה** מתקצרת: אין עוד מסלול של 120 למחיצה 2+.
 
-    **בקרה שלילית:** על הקוד שלפני #1430 — ‏`--min-receivers 2`; על
-    הגרסה הראשונה של ה-PR — ‏`--min-receivers 2` ו-`--max-wait 120`."""
+    **בקרה שלילית:** על הקוד שלפני #1430 — `--min-receivers 2`; על
+    הגרסה הראשונה של ה-PR — `--min-receivers 2` ו-`--max-wait 120`."""
     server, recorder = server_with_sender
     second = _second_partition(server, recorder, quiet={1: 90})
     assert _arg(second, "--min-receivers") == "1", second
@@ -138,9 +138,9 @@ def test_a_quiet_member_that_finished_the_last_partition_is_still_counted(
         server_with_sender, free_ports):  # noqa: F811
     """שלושה חברים: A שקט, אבל ה-udp-receiver שלו קיבל את מחיצה 1 עד סופה —
     הוא חי מבחינת הזרם ויתחבר גם לבאה; B איטי ומדווח; C תקין. אם A לא נספר
-    הוא ממלא את הספירה ו-B מפספס את המחיצה. ‏`--min-receivers 3`, ‏600.
+    הוא ממלא את הספירה ו-B מפספס את המחיצה. `--min-receivers 3`, 600.
 
-    **בקרה שלילית:** על הגרסה בלי ההצלבה — ‏`--min-receivers 2`."""
+    **בקרה שלילית:** על הגרסה בלי ההצלבה — `--min-receivers 2`."""
     server, recorder = server_with_sender
     second = _second_partition(server, recorder, quiet={0: 90}, members=3,
                                finished=[0, 1, 2])
@@ -152,7 +152,7 @@ def test_a_quiet_member_that_finished_the_last_partition_is_still_counted(
 def test_a_quiet_member_that_did_not_finish_the_last_partition_is_not_counted(
         server_with_sender, free_ports):  # noqa: F811
     """שלושה חברים: A שקט, ו-udp-sender זרק אותו באמצע מחיצה 1 — הוא לא
-    יתחבר שוב. ‏B ו-C נספרים: ‏`--min-receivers 2`, ‏600."""
+    יתחבר שוב. B ו-C נספרים: `--min-receivers 2`, 600."""
     server, recorder = server_with_sender
     second = _second_partition(server, recorder, quiet={0: 90}, members=3,
                                finished=[1, 2], dropped=[0])
@@ -164,7 +164,7 @@ def test_a_quiet_member_that_did_not_finish_the_last_partition_is_not_counted(
 
 def test_a_member_that_reports_is_counted_and_waited_for_600s(
         server_with_sender, free_ports):  # noqa: F811
-    """‏#957/#449: מגירה איטית ותקינה מדווחת progress כל ~2 שניות — היא אינה
+    """#957/#449: מגירה איטית ותקינה מדווחת progress כל ~2 שניות — היא אינה
     שקטה, נספרת, ומחיצה 2 ממתינה לה עד 600 שניות — גם כשהיא עוד לא סיימה
     לקבל את הקודמת לפי הלוג."""
     server, recorder = server_with_sender

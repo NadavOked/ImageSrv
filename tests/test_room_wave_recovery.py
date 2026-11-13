@@ -1,17 +1,17 @@
-"""‏#217 — הסבב אינו נשאר תלוי כשהגל שלו נעלם מתחתיו.
+"""#217 — הסבב אינו נשאר תלוי כשהגל שלו נעלם מתחתיו.
 
-‏`tick` הכיר בשני מצבי גל בלבד, `open` ו-`running`, וכל מסלול נסיגה
+`tick` הכיר בשני מצבי גל בלבד, `open` ו-`running`, וכל מסלול נסיגה
 ב-`_finish_wave` יצא **בלי לגעת ב-`room_rounds`**. מכאן מצב יציב אחד
-שאין ממנו יציאה: הסבב `active`, ‏`wave_session_id` מצביע על סשן
+שאין ממנו יציאה: הסבב `active`, `wave_session_id` מצביע על סשן
 **סגור**, וכל דופק עתידי נוסג באותה נקודה בדיוק. החדר נראה פתוח, אף גל
-לא נפתח, ‏`open_round` מסרב ("כבר יש סבב חדר פעיל"), והדרך היחידה החוצה
+לא נפתח, `open_round` מסרב ("כבר יש סבב חדר פעיל"), והדרך היחידה החוצה
 היא שהמפעיל יסגור את הסבב ביד — אם יבין שזה מה שקרה.
 
 **שלוש דרכים נמדדות להגיע לשם**, וכל אחת היא טסט כאן:
 
 1. **בלי שום תקלה** — סגירת הגל מ-endpoint הסבבים הכללי של הקונסולה.
-   ‏`close_session` אינו יודע שהסשן הזה הוא גל של חדר, והסבב נשאר פעיל.
-2. **כשל בין סגירת הגל לכתיבת הסבב** (מסלול "היעד הושג"): ‏`store.close`
+   `close_session` אינו יודע שהסשן הזה הוא גל של חדר, והסבב נשאר פעיל.
+2. **כשל בין סגירת הגל לכתיבת הסבב** (מסלול "היעד הושג"): `store.close`
    כבר בוצע לו commit, וה-UPDATE של `room_rounds` נופל. זה בדיוק
    "המנצח מת אחרי ה-commit של sessions ולפני כתיבת הסבב" מגוף ה-Issue,
    ו-`pulse` מבטיח שהשרת ימשיך לרוץ אחריו.
@@ -20,8 +20,8 @@
    הריפוי הוא לאמץ את הקיים.
 
 טסט רביעי שומר על ההכרעה שהריפוי דורש: כשחריץ המולטיקאסט תפוס בידי
-סבב אחר, החדר **ממתין** — ‏`room_wave_lost` נרשם פעם אחת ולא בכל
-‏hello, ואין `room_tick_failed` בכלל. שקט מוחלט היה מסתיר את המצב;
+סבב אחר, החדר **ממתין** — `room_wave_lost` נרשם פעם אחת ולא בכל
+hello, ואין `room_tick_failed` בכלל. שקט מוחלט היה מסתיר את המצב;
 שורה לכל דופק הייתה מכסה עליו באותה מידה.
 
 שאר הטסטים בקובץ הם שני הממצאים האחרים של #217, ששניהם **הופרכו**
@@ -38,7 +38,7 @@ import pytest
 from server.rounds import room, sessions
 
 from conftest import room_slots
-from test_server_room import (          # noqa: F401 — ‏room_server הוא fixture
+from test_server_room import (          # noqa: F401 — room_server הוא fixture
     CLONER1, CLONER2, cloner_hello, report, room_server,
 )
 
@@ -69,7 +69,7 @@ def _events(ctx, event: str) -> int:
 
 
 def _open_round(room_server, target: int, drawers=None) -> None:
-    """‏#1410: הסבב נפתח על בחירה מפורשת — כאן כל מגירות שני המשכפלים."""
+    """#1410: הסבב נפתח על בחירה מפורשת — כאן כל מגירות שני המשכפלים."""
     drawers = drawers or {CLONER1: ["S1", "S2"], CLONER2: ["S3", "S4"]}
     opened = room_server["deploy"].post("/api/console/room", json={
         "image_id": IMAGE, "target_drives": target,
@@ -96,8 +96,8 @@ def _wave_done(room_server, target: int) -> str:
 class _Boom:
     """מפיל משפט מסומן פעם אחת — התקלה שמפרידה בין שתי הכתיבות.
 
-    ‏`ctx.conn` הוא `db.Database`, שאותו חולקים כל התהליכונים של
-    ‏`TestClient`; החלפת ה-`execute` שלו היא הדרך היחידה להגיע לכתיבה
+    `ctx.conn` הוא `db.Database`, שאותו חולקים כל התהליכונים של
+    `TestClient`; החלפת ה-`execute` שלו היא הדרך היחידה להגיע לכתיבה
     שקורית **בתוך** בקשה.
     """
 
@@ -117,13 +117,13 @@ class _Boom:
         return self._execute(sql, parameters)
 
 
-# --- ‏1: הגל נסגר מבחוץ -------------------------------------------------------
+# --- 1: הגל נסגר מבחוץ -------------------------------------------------------
 
 
 def test_a_wave_closed_from_the_console_does_not_strand_the_round(room_server):
     """בלי שום תקלה מוזרקת: סגירת הגל דרך endpoint הסבבים הכללי.
 
-    ‏`close_session` בקונסולה מקבל **כל** מזהה סבב, וגל חדר הוא סבב
+    `close_session` בקונסולה מקבל **כל** מזהה סבב, וגל חדר הוא סבב
     רגיל לכל דבר. אחריו הסבב פעיל, הגל סגור, ואף דופק אינו מתקדם.
     """
     anon, ctx = room_server["anon"], room_server["ctx"]
@@ -146,14 +146,14 @@ def test_a_wave_closed_from_the_console_does_not_strand_the_round(room_server):
     assert _events(ctx, "room_tick_failed") == 0
 
 
-# --- ‏2: כשל בין סגירת הגל לכתיבת הסבב ----------------------------------------
+# --- 2: כשל בין סגירת הגל לכתיבת הסבב ----------------------------------------
 
 
 def test_a_failure_after_closing_the_wave_is_recovered_by_the_next_pulse(
         room_server, monkeypatch):
     """מסלול "היעד הושג": הסבב חייב להיסגר, גם אם הכתיבה נפלה פעם אחת.
 
-    ‏`pulse` מבטיח ש-hello ימשיך לענות 200 והכישלון יירשם ביומן — ומה
+    `pulse` מבטיח ש-hello ימשיך לענות 200 והכישלון יירשם ביומן — ומה
     ש-#217 מוסיף הוא שהדופק **הבא** מסיים את מה שנקטע.
     """
     anon, ctx = room_server["anon"], room_server["ctx"]
@@ -177,7 +177,7 @@ def test_a_failure_after_closing_the_wave_is_recovered_by_the_next_pulse(
     assert _events(ctx, "room_done") == 1, "הסבב נסגר ביומן פעמיים או בכלל לא"
 
 
-# --- ‏3: יורש יתום ------------------------------------------------------------
+# --- 3: יורש יתום ------------------------------------------------------------
 
 
 def test_a_successor_wave_is_adopted_and_not_duplicated(room_server, monkeypatch):
@@ -191,7 +191,7 @@ def test_a_successor_wave_is_adopted_and_not_duplicated(room_server, monkeypatch
     wave1 = _wave_done(room_server, target=6)
     monkeypatch.setattr(ctx.conn, "execute", boom)
 
-    # דופק לא-מצטרף: ‏hello **מצטרף** מריץ דופק שני אחרי ההצטרפות (#1703),
+    # דופק לא-מצטרף: hello **מצטרף** מריץ דופק שני אחרי ההצטרפות (#1703),
     # והוא כבר היה מאמץ את היורש באותה בקשה — כאן נבדק הדופק הבא בנפרד.
     cloner_hello(anon, CLONER1, ["S1", "S2"], joining=False)   # הדופק שנקטע
     assert boom.fired == 1, "התקלה לא נורתה — הטסט לא בדק דבר"
@@ -220,8 +220,8 @@ def test_a_taken_slot_leaves_the_round_waiting_without_flooding_the_journal(
     """אין חריץ פנוי לגל חדש — החדר ממתין, ולא צועק בכל hello.
 
     זו ההכרעה שהריפוי דורש: כישלון פתיחה **אינו** חריגה שתגיע לכל
-    ‏hello כ-`room_tick_failed` (רעש שמכסה על השורה שכן אומרת משהו),
-    אבל גם אינו שקט — ‏`room_wave_lost` נרשם **פעם אחת**, כי התביעה
+    hello כ-`room_tick_failed` (רעש שמכסה על השורה שכן אומרת משהו),
+    אבל גם אינו שקט — `room_wave_lost` נרשם **פעם אחת**, כי התביעה
     שמאפסת את המצביע מצליחה פעם אחת. וכשהחריץ מתפנה, הדופק הבא פותח.
     """
     anon, ctx, deploy = room_server["anon"], room_server["ctx"], room_server["deploy"]
@@ -256,9 +256,9 @@ def test_a_taken_slot_leaves_the_round_waiting_without_flooding_the_journal(
 
 
 def _lose_the_attach(monkeypatch, ctx, meddle) -> dict:
-    """מפיל את התביעה של `_attach_wave` — ‏`meddle` הוא "התהליכון האחר".
+    """מפיל את התביעה של `_attach_wave` — `meddle` הוא "התהליכון האחר".
 
-    ‏`meddle(conn, wave_id, round_id)` רץ **אחרי** שהגל כבר נפתח ולפני
+    `meddle(conn, wave_id, round_id)` רץ **אחרי** שהגל כבר נפתח ולפני
     ה-UPDATE המותנה, ולכן ה-UPDATE אינו תואם שורה. ככה נפתח החלון ביד,
     ולא בתקווה למתזמן.
     """
@@ -330,19 +330,19 @@ def test_a_wave_nobody_points_at_is_not_left_holding_the_slot(
     assert not _actives(ctx), "הגל שאיש אינו מצביע עליו נשאר מחזיק את החריץ"
 
 
-# --- ממצא ‏2 ב-#217: `on_closed` והיורש (הופרך) --------------------------------
+# --- ממצא 2 ב-#217: `on_closed` והיורש (הופרך) --------------------------------
 
 
 def test_the_successor_wave_is_never_broadcasting_when_on_closed_fires(
         room_server, monkeypatch):
-    """‏`SenderEngine.stop` מתעלם ממזהה הסבב — ולכן נמדד **מי** יכול
+    """`SenderEngine.stop` מתעלם ממזהה הסבב — ולכן נמדד **מי** יכול
     להיות משדר ברגע ש-`on_closed(replaces)` רץ.
 
     הממצא היה שהקריאה רצה אחרי שהיורש כבר קיים, ולכן היא עלולה לעצור
     את שולח הגל החדש. מה שנמדד: היורש נולד `open`, והמסלול היחיד
     שמעביר גל חדר ל-`running` הוא `room.tick` — שקורא את מצביע הגל
     מ-`room_rounds`, והוא עדיין מצביע על **הישן** באותו רגע.
-    ‏`maybe_start` (מסלול ה-hello) מחריג קבוצת `cloner` במפורש ולעולם
+    `maybe_start` (מסלול ה-hello) מחריג קבוצת `cloner` במפורש ולעולם
     אינו מתניע גל חדר. אין רגע שבו היורש משדר לפני ה-`stop`.
 
     זה שומר רגרסיה, לא תיקון: ברגע שמישהו יתניע גל חדר ממסלול אחר,
@@ -379,12 +379,12 @@ def test_the_successor_wave_is_never_broadcasting_when_on_closed_fires(
 def test_hello_never_starts_a_room_wave(room_server):
     """הצלע השנייה של אותה מדידה: מסלול ה-hello אינו מתניע גל חדר.
 
-    ‏`maybe_start` הוא מה ש-hello, מסך התחנה ומבט-העל של הקונסולה
+    `maybe_start` הוא מה ש-hello, מסך התחנה ומבט-העל של הקונסולה
     מריצים על הסבב הפעיל, והוא **חוזר כמו שהוא** על קבוצת `cloner` —
     גם כשהמצטרפים מכסים את המספר שהוצהר וגם כשהטיימר פקע.
     """
     ctx = room_server["ctx"]
-    # ‏#1703: hello שמכסה את היעד מוציא את הגל בעצמו (`room.tick`, לא
+    # #1703: hello שמכסה את היעד מוציא את הגל בעצמו (`room.tick`, לא
     # `maybe_start`) — לכן כאן CLONER2 עוד בדרך, והגל נשאר פתוח.
     _open_round(room_server, target=4)
     cloner_hello(room_server["anon"], CLONER1, ["S1", "S2"])
@@ -403,23 +403,23 @@ def test_hello_never_starts_a_room_wave(room_server):
     assert after["state"] == "open", "מסלול ה-hello התניע גל של חדר השיכפולים"
 
 
-# --- ממצא ‏3 ב-#217: ה-rollback של `update_one` (הופרך) ------------------------
+# --- ממצא 3 ב-#217: ה-rollback של `update_one` (הופרך) ------------------------
 
 
 def _in_transaction(conn) -> bool:
-    """‏`db.Database` מתחזה לחיבור; הטרנזאקציה יושבת על החיבור שמתחתיו."""
+    """`db.Database` מתחזה לחיבור; הטרנזאקציה יושבת על החיבור שמתחתיו."""
     return getattr(conn, "connection", conn).in_transaction
 
 
 def test_no_rollback_in_the_room_path_can_discard_an_earlier_write(
         room_server, monkeypatch):
-    """‏`update_one` עושה `rollback` כשה-UPDATE לא תאם שורה — והשאלה
+    """`update_one` עושה `rollback` כשה-UPDATE לא תאם שורה — והשאלה
     היחידה היא **מה עוד** יושב באותה טרנזאקציה.
 
     התשובה נמדדת ולא מונחת: כל קריאה ל-`update_one` שמגיעה ממסלולי
     ה-hello, ה-tick והקונסולה נכנסת כשהחיבור ב-**autocommit** — כלומר
     אין שום כתיבה קודמת להפסיד. היוצא היחיד הוא הקריאה מתוך
-    ‏`SessionStore.open`, ושם הטרנזאקציה נפתחה במשפט שלפניה
+    `SessionStore.open`, ושם הטרנזאקציה נפתחה במשפט שלפניה
     (`BEGIN IMMEDIATE`) ואין בה עוד דבר — נסיגה מלאה שלה היא בדיוק
     ההתנהגות הרצויה, והיא מה ש-#200 מודד.
 
@@ -440,7 +440,7 @@ def test_no_rollback_in_the_room_path_can_discard_an_earlier_write(
     wave1 = _wave_done(room_server, target=6)
     cloner_hello(anon, CLONER1, ["S1", "S2"])      # סיום גל ופתיחת הבא
     # קודם עושים, ואז מאמתים: עם `-O` ה-assert נעלם ואיתו הפעולה עצמה
-    # (‏`py/side-effect-in-assert`), והסגירה שלא תאמה שורה היא **הקריאה**
+    # (`py/side-effect-in-assert`), והסגירה שלא תאמה שורה היא **הקריאה**
     # שהטסט הזה קיים כדי למדוד.
     closed_again = ctx.store.close(wave1, "noc")
     assert closed_again is False

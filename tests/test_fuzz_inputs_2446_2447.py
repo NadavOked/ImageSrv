@@ -1,16 +1,16 @@
-"""‏#2446 ו-#2447 — ממצאי fuzz מ-04/11 (‏`lab/security-scan-1104/fable2/fuzz`).
+"""#2446 ו-#2447 — ממצאי fuzz מ-04/11 (`lab/security-scan-1104/fable2/fuzz`).
 
-* **#2446** — ‏`console/login.py:finish_login` החזיר 500 **לפני** האימות: גוף פגום
-  (`{`, ‏`\\xff\\xfe`, ריק), גוף שאינו אובייקט, ושם/סיסמה שאינם מחרוזת. הנתיב חשוף
+* **#2446** — `console/login.py:finish_login` החזיר 500 **לפני** האימות: גוף פגום
+  (`{`, `\\xff\\xfe`, ריק), גוף שאינו אובייקט, ושם/סיסמה שאינם מחרוזת. הנתיב חשוף
   גם בפורט הסוכן (הקיוסק), וכך גם `/api/v1/agent/login` עם שם שאינו מחרוזת.
-  עכשיו ‏400 — בלי לגעת ב-`login_guard` ובלי לשנות כניסה תקינה.
-* **#2447** — ‏`images.py`: ‏`_unsafe_agent_string` רקורסיבית בלי תקרה (‏description
-  מקונן ~3000 — RecursionError); ‏role/fs מטיפוס list/dict — TypeError על `in set`;
+  עכשיו 400 — בלי לגעת ב-`login_guard` ובלי לשנות כניסה תקינה.
+* **#2447** — `images.py`: `_unsafe_agent_string` רקורסיבית בלי תקרה (description
+  מקונן ~3000 — RecursionError); role/fs מטיפוס list/dict — TypeError על `in set`;
   ו-`_scan_root` עטף רק את `json.loads`, כך שמניפסט אחד הפיל את סריקת הספרייה
   כולה. עכשיו `_validate` מחזיר סיבה, והסריקה מדלגת על הפגום בגלוי (עיקרון 5).
 
-בקרה שלילית: עם `server/console/login.py`, ‏`server/agent/api.py`,
-‏`server/library/images.py`, ‏`server/library/capture.py` ו-`server/rounds/direct.py`
+בקרה שלילית: עם `server/console/login.py`, `server/agent/api.py`,
+`server/library/images.py`, `server/library/capture.py` ו-`server/rounds/direct.py`
 של הקומיט הקודם — כל הטסטים כאן חוץ מהבקרות נופלים.
 """
 
@@ -109,7 +109,7 @@ def test_the_real_manifest_still_validates():
 
 
 def test_one_broken_manifest_does_not_take_the_library_down(tmp_path: Path):
-    """שני מניפסטים פגומים לצד אחד תקין: עומק שמפיל את הבודק (600, ‏json נקרא)
+    """שני מניפסטים פגומים לצד אחד תקין: עומק שמפיל את הבודק (600, json נקרא)
     ועומק שמפיל את `json.loads` עצמו (5000). הסריקה מחזירה את התקין, ומדווחת
     על השניים (`_report_invalid`) — לא קורסת ולא מסתירה."""
     root = tmp_path / "images"

@@ -1,22 +1,22 @@
-"""מינימום מקום פנוי במחיצת המערכת אחרי שחזור (‏#1354).
+"""מינימום מקום פנוי במחיצת המערכת אחרי שחזור (#1354).
 
 הכרעת נדב 13/10: אימג' מכווץ שמשוחזר לדיסק קטן יכול "להיכנס" ולהשאיר
 ל-Windows כמה GB בודדים — זה לא תקין. יעד שאחרי השחזור יישארו בו פחות
 מ-`min_free_gb` פנויים במחיצת המערכת **אינו נכנס**, בדיוק כמו יעד קטן מדי.
 
-הערך הוא **הגדרה בקונסולה** (‏`settings.min_free_gb`, ברירת מחדל 20, ‏0–500),
+הערך הוא **הגדרה בקונסולה** (`settings.min_free_gb`, ברירת מחדל 20, 0–500),
 ולא קבוע בקוד: נדב רוצה לשנות אותו בלי עדכון גרסה. הסוכן מקבל אותו בכל
-תשובת hello (‏`min_free_gb`), והאכיפה היא שלו (‏`agent/lib/restore/diskfit.sh`,
-‏`min_free_check`) — מה שכאן הוא התאום שהקונסולה מציגה ממנו "נכנס לדיסק
+תשובת hello (`min_free_gb`), והאכיפה היא שלו (`agent/lib/restore/diskfit.sh`,
+`min_free_check`) — מה שכאן הוא התאום שהקונסולה מציגה ממנו "נכנס לדיסק
 מ-X GB", וחדר השיכפולים מסרב ממנו לפני שנפתח גל.
 
-**מחיצת המערכת** = `system_partition` (‏#1875): המסומנת `"system": true`
+**מחיצת המערכת** = `system_partition` (#1875): המסומנת `"system": true`
 בקליטה, אחרת מחיצת ה-`windows` הגדולה ביותר, ואם אין — ה-`linux` הראשונה.
-אותו כלל בסוכן (`system_part`, ‏diskfit.sh) וב-hostname.sh. היא גדלה על היעד רק כשהיא
-המחיצה שהשחזור מותח (‏`expandable_candidate`) ורק מעבר לסף של 1GiB של
-`expand_last`. ‏#1897 (הכרעת נדב 04/11): כל מחיצה אחרת שהקליטה כיווצה (‏D:, ‏E:)
+אותו כלל בסוכן (`system_part`, diskfit.sh) וב-hostname.sh. היא גדלה על היעד רק כשהיא
+המחיצה שהשחזור מותח (`expandable_candidate`) ורק מעבר לסף של 1GiB של
+`expand_last`. #1897 (הכרעת נדב 04/11): כל מחיצה אחרת שהקליטה כיווצה (D:, E:)
 חוזרת לגודלה במקור (`returning`), והמועמד לוקח את מה שנשאר (`cand_room`) — כל
-המקום הנוסף בדיסק גדול, ובדיסק קטן רק הוא מתפשר. ‏`used_bytes` חסר = **לא
+המקום הנוסף בדיסק גדול, ובדיסק קטן רק הוא מתפשר. `used_bytes` חסר = **לא
 נבדק**, לא "נכנס" (עיקרון 5).
 """
 
@@ -36,13 +36,13 @@ SETTING = "min_free_gb"
 MIN_FREE_GB_DEFAULT = 20
 MIN_FREE_GB_MAX = 500
 GIB = 1 << 30
-#: ‏`expand_last` מותח רק כשהיעד גדול מהפריסה ביותר מ-2097152 סקטורים.
+#: `expand_last` מותח רק כשהיעד גדול מהפריסה ביותר מ-2097152 סקטורים.
 EXPAND_THRESHOLD = 1 << 30
 
 
 def parse_gb(raw: object) -> int | None:
-    """ערך הגדרה תקין — מספר שלם 0–500 — או `None`. ‏`bool` אינו מספר כאן,
-    ומחרוזת עם אפס מוביל נדחית כמו בסוכן (‏ash קורא ‎020 כאוקטלי)."""
+    """ערך הגדרה תקין — מספר שלם 0–500 — או `None`. `bool` אינו מספר כאן,
+    ומחרוזת עם אפס מוביל נדחית כמו בסוכן (ash קורא 020 כאוקטלי)."""
     if isinstance(raw, bool):
         return None
     if isinstance(raw, int):
@@ -69,23 +69,23 @@ def min_free_gb(conn: sqlite3.Connection) -> int:
     return value
 
 
-#: ‏#1875: "לא ידוע איזו מחיצה היא C:" — ספק אמיתי, ולא ניחוש. הסוכן מחזיר
-#: באותו מצב `ambiguous`, ושניהם אומרים את אותן מילים (‏AMBIGUOUS_WHY).
+#: #1875: "לא ידוע איזו מחיצה היא C:" — ספק אמיתי, ולא ניחוש. הסוכן מחזיר
+#: באותו מצב `ambiguous`, ושניהם אומרים את אותן מילים (AMBIGUOUS_WHY).
 AMBIGUOUS: dict = {"role": "windows", "ambiguous": True}
 AMBIGUOUS_WHY = "לא ידוע איזו מחיצת windows היא C: (אין סימון מהקליטה, ואין אחת גדולה מכולן)"
-#: ‏#1899: יותר ממחיצת linux אחת בלי סימון — ‏/boot נפרד. "הראשונה" הייתה /boot.
+#: #1899: יותר ממחיצת linux אחת בלי סימון — /boot נפרד. "הראשונה" הייתה /boot.
 AMBIGUOUS_LINUX: dict = {"role": "linux", "ambiguous": True}
 AMBIGUOUS_LINUX_WHY = "לא ידוע איזו מחיצת לינוקס היא השורש (אין סימון מהקליטה, ויש יותר מאחת)"
 
 
 def system_partition(manifest: dict) -> dict | None:
-    """מחיצת המערכת — התאום של `system_part` ב-`agent/lib/restore/diskfit.sh` (‏#1875).
+    """מחיצת המערכת — התאום של `system_part` ב-`agent/lib/restore/diskfit.sh` (#1875).
 
     ראיה קודם: הקליטה מסמנת `"system": true` על המחיצה שכוורת
-    ‏`Windows/System32/config/SYSTEM` יושבת בה. מניפסט בלי הסימון (נקלט לפני
-    #1875): מחיצת ה-`windows` **הגדולה ביותר** — מחיצת OEM/כלים קטנה, ‏C:
-    מחזיקה את המערכת (‏Vm: ‏3GB לפני 223GB). שתיים בגודל העליון, או אחת בלי
-    גודל = ‏`AMBIGUOUS`, שהקוראים מדווחים "לא נבדק" ולא "לא נכנס" שגוי
+    `Windows/System32/config/SYSTEM` יושבת בה. מניפסט בלי הסימון (נקלט לפני
+    #1875): מחיצת ה-`windows` **הגדולה ביותר** — מחיצת OEM/כלים קטנה, C:
+    מחזיקה את המערכת (Vm: 3GB לפני 223GB). שתיים בגודל העליון, או אחת בלי
+    גודל = `AMBIGUOUS`, שהקוראים מדווחים "לא נבדק" ולא "לא נכנס" שגוי
     (עיקרון 5). אין `windows` — ה-`linux` הראשונה על הפלטה. אין — `None`."""
     parts = [p for p in manifest.get("partitions") or []
              if isinstance(p, dict) and _whole(p.get("start_sector")) is not None]
@@ -102,18 +102,18 @@ def system_partition(manifest: dict) -> dict | None:
         return top[0] if len(top) == 1 else doubt
     linux = [p for p in parts if p.get("role") == "linux"]
     if len(linux) > 1:
-        return AMBIGUOUS_LINUX     # ‏#1899: לא "הראשונה על הדיסק" — היא /boot
+        return AMBIGUOUS_LINUX     # #1899: לא "הראשונה על הדיסק" — היא /boot
     return linux[0] if linux else None
 
 
-#: ‏#1896: הסימון של המפעיל (`system_source`). סימון בלי השדה — של הקליטה, מראיה (‏#1875).
+#: #1896: הסימון של המפעיל (`system_source`). סימון בלי השדה — של הקליטה, מראיה (#1875).
 OPERATOR = "operator"
 
 
 def system_candidates(manifest: dict) -> list[dict]:
-    """‏#1896 (הכרעת נדב 22/10): המחיצות שהמפעיל בוחר ביניהן את C: — אותו ספק
+    """#1896 (הכרעת נדב 22/10): המחיצות שהמפעיל בוחר ביניהן את C: — אותו ספק
     של `system_partition`, **בלי** הסימון: מחיצות ה-`windows` בגודל העליון (או
-    כולן, כשלאחת אין גודל); בלי `windows` — כל מחיצות ה-`linux` (‏#1899, ‏/boot
+    כולן, כשלאחת אין גודל); בלי `windows` — כל מחיצות ה-`linux` (#1899, /boot
     נפרד). פחות משתיים = אין בין מה לבחור, `[]`. בסדר שעל הדיסק."""
     parts = [p for p in manifest.get("partitions") or []
              if isinstance(p, dict) and _whole(p.get("start_sector")) is not None]
@@ -136,7 +136,7 @@ def markable(manifest: dict) -> bool:
 
 
 def unmarked(manifest: dict) -> bool:
-    """‏#1896: "לא נבדק" עד שמסמנים — אפשר לסמן, ועוד לא סומן."""
+    """#1896: "לא נבדק" עד שמסמנים — אפשר לסמן, ועוד לא סומן."""
     return markable(manifest) and not any(
         isinstance(p, dict) and p.get("system") is True for p in manifest.get("partitions") or [])
 
@@ -150,11 +150,11 @@ def candidates_view(manifest: dict) -> list[dict]:
 
 
 def returning(manifest: dict, cand: dict | None) -> list[dict]:
-    """‏#1897 (הכרעת נדב 04/11): המחיצות שהשחזור מחזיר לגודלן במקור — כל מחיצה
+    """#1897 (הכרעת נדב 04/11): המחיצות שהשחזור מחזיר לגודלן במקור — כל מחיצה
     שהקליטה כיווצה (`shrunk_from_bytes` גדול מ-`size_bytes`), חוץ מהמועמד, שלוקח
-    את מה שנשאר. ‏#1898: גם **לפני** המועמד (‏C: לפני שורש הלינוקס) — השרת מחשב
+    את מה שנשאר. #1898: גם **לפני** המועמד (C: לפני שורש הלינוקס) — השרת מחשב
     כמו הסבב המאושר. אין מועמד — אין הרחבה, ואף אחת אינה חוזרת. התאום של `back`
-    (‏RETURN_JQ, ‏agent/lib/restore/diskfit.sh)."""
+    (RETURN_JQ, agent/lib/restore/diskfit.sh)."""
     if cand is None:
         return []
     return [p for p in manifest.get("partitions") or []
@@ -169,12 +169,12 @@ def _mib_up(sector: int) -> int:
 
 
 def cand_room(manifest: dict, cand: dict, disk_sectors: int) -> int:
-    """‏#1897: כמה סקטורים המועמד מקבל על דיסק בן `disk_sectors`, כשכל מחיצה
+    """#1897: כמה סקטורים המועמד מקבל על דיסק בן `disk_sectors`, כשכל מחיצה
     ב-`returning` חוזרת לגודלה במקור — בדיוק מה ש-`expand_last` כותב: הראש גדל
-    במקומו ומה שאחריו זז קדימה ומיושר ל-MiB (‏`share_head`), המועמד מתחיל על MiB
-    (‏#2016), והזנב נארז מסוף הדיסק פנימה, כל התחלה מיושרת מטה (‏`_move_to_tail`).
+    במקומו ומה שאחריו זז קדימה ומיושר ל-MiB (`share_head`), המועמד מתחיל על MiB
+    (#2016), והזנב נארז מסוף הדיסק פנימה, כל התחלה מיושרת מטה (`_move_to_tail`).
     יכול לצאת קטן מגודל המועמד באימג' — אז הדיסק אינו נכנס. התאום של
-    `cand_room` (‏RETURN_JQ, ‏diskfit.sh)."""
+    `cand_room` (RETURN_JQ, diskfit.sh)."""
     back = {p["index"] for p in returning(manifest, cand)}
     parts = [p for p in manifest.get("partitions") or []
              if isinstance(p, dict) and _whole(p.get("start_sector")) is not None]
@@ -194,7 +194,7 @@ def cand_room(manifest: dict, cand: dict, disk_sectors: int) -> int:
 
 def _smallest_disk(manifest: dict, cand: dict, want_bytes: int) -> int:
     """הדיסק הקטן ביותר (בבייטים, כפולה של סקטור) שבו המועמד מקבל `want_bytes`.
-    ‏`cand_room` עולה עם הדיסק (היישור מטה רק מתעכב), ולכן חיפוש בינארי."""
+    `cand_room` עולה עם הדיסק (היישור מטה רק מתעכב), ולכן חיפוש בינארי."""
     want = -(-want_bytes // 512)
     hi = 1 << 21
     while cand_room(manifest, cand, hi) < want:
@@ -211,10 +211,10 @@ def _smallest_disk(manifest: dict, cand: dict, want_bytes: int) -> int:
 
 def free_after(manifest: dict, disk_bytes: int) -> tuple[int | None, str] | None:
     """(בייטים פנויים במחיצת המערכת אחרי שחזור לדיסק בגודל `disk_bytes`,
-    התפקיד שלה). ‏`(None, role)` = ‏`used_bytes` לא נמדד. ‏`None` = אין מחיצת
+    התפקיד שלה). `(None, role)` = `used_bytes` לא נמדד. `None` = אין מחיצת
     מערכת, והכלל אינו חל. התאום של `system_free_after` בסוכן.
 
-    ‏#1897: כשמחיצות מכווצות חוזרות לגודלן במקור, מחיצת המערכת היא המועמד —
+    #1897: כשמחיצות מכווצות חוזרות לגודלן במקור, מחיצת המערכת היא המועמד —
     והיא מקבלת את `cand_room` — או אחת מהן, בגודלה במקור. אחרת היא גדלה רק
     כשהיא המועמד, ומעבר לסף של 1GiB, כמו קודם."""
     sys_part = system_partition(manifest)
@@ -240,11 +240,11 @@ def free_after(manifest: dict, disk_bytes: int) -> tuple[int | None, str] | None
 
 def min_disk_bytes(manifest: dict, gb: int) -> int | None:
     """הדיסק הקטן ביותר שהאימג' נכנס אליו **כולל** `gb` פנויים במחיצת
-    המערכת — מה שהקונסולה מציגה כ"נכנס לדיסק מ-X". ‏`None` = לא ניתן לקבוע
+    המערכת — מה שהקונסולה מציגה כ"נכנס לדיסק מ-X". `None` = לא ניתן לקבוע
     (גיאומטריה חסרה, או `used_bytes` שלא נמדד כשהכלל דלוק).
 
-    ‏#1897: כשמחיצות מכווצות חוזרות לגודלן במקור, הדיסק צריך להכיל אותן
-    בגודלן במקור ואת המועמד בגודלו באימג' (‏`volumes_fit` בסוכן) — וגם את
+    #1897: כשמחיצות מכווצות חוזרות לגודלן במקור, הדיסק צריך להכיל אותן
+    בגודלן במקור ואת המועמד בגודלו באימג' (`volumes_fit` בסוכן) — וגם את
     `gb` במחיצת המערכת: כשהיא המועמד, היא לבדה מתפשרת; כשהיא אחת מהחוזרות,
     המקום שבה קבוע, ואם הוא קטן מ-`gb` — אין דיסק שבו האימג' נכנס."""
     need = required_bytes(manifest)
@@ -287,8 +287,8 @@ def _unchecked_text(gb: int, role: str, ambiguous: bool = False) -> str:
 
 
 def unchecked(manifest: dict, gb: int) -> str | None:
-    """‏#1494: הסיבה שהכלל **אינו ניתן לבדיקה** על האימג' הזה בכל דיסק שהוא —
-    ‏`used_bytes` של מחיצת המערכת לא נמדד — או `None`. הסוכן מסרב לזה בכל
+    """#1494: הסיבה שהכלל **אינו ניתן לבדיקה** על האימג' הזה בכל דיסק שהוא —
+    `used_bytes` של מחיצת המערכת לא נמדד — או `None`. הסוכן מסרב לזה בכל
     מגירה (`min_free_check`), ולכן הקונסולה משביתה את האימג' וחדר השיכפולים
     אינו פותח לו סבב: סבב שוודאי ייכשל בכל מגירה אינו "לא ידוע". אותה
     מחרוזת של הסוכן."""
@@ -301,7 +301,7 @@ def unchecked(manifest: dict, gb: int) -> str | None:
 
 
 def refusal(manifest: dict, disk_bytes: int, gb: int) -> str | None:
-    """המחרוזת של הסוכן (‏`min_free_check`) לדיסק בגודל נתון, או `None`
+    """המחרוזת של הסוכן (`min_free_check`) לדיסק בגודל נתון, או `None`
     כשנשאר מספיק. אותה מחרוזת בדיוק, כדי שהמפעיל יראה סיבה אחת."""
     if gb <= 0:
         return None

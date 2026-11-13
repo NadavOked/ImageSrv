@@ -517,6 +517,17 @@ test('#1263 DHCP off keeps the typed NIC name; the forget/description sheets are
 
 /* ---------- לשונית 2: רשת הפצה ---------- */
 
+test('#3002: the deploy tab always opens with the fixed isolation warning -- configured, no deploy NIC, NICs not read; and only there',async()=>{
+  const WARN=/^<div class="page aligned">[^]*?<div class="body"><div class="c12"><div class="note warn"><span aria-hidden="true">●<\/span><span><b>רשת ההפצה חייבת להיות מבודדת — זה חלק מהאבטחה\.<\/b>[^<]*port security[^<]*DHCP snooping[^<]*אינו חוסם אותו\.[^<]*פרק 4\.<\/span><\/div><\/div>/;
+  let t=await loaded(); assert.match(t.run('networkPage(2)'),WARN,'configured');
+  const none=NICS.map(n=>({...n,enabled:false,proxy:false,dhcp_live:{state:'off',checked:true,detail:''},dhcp_live_label:'כבוי'}));
+  t=await loaded({'/net/interfaces':none}); assert.match(t.run('networkPage(2)'),WARN,'before a deploy NIC is chosen');
+  t=await loaded({'/net/interfaces':new Error('boom')}); const unread=t.run('networkPage(2)');
+  assert.match(unread,/לא הצלחתי לקרוא את כרטיסי הרשת/); assert.match(unread,WARN,'NICs not read: the warning does not depend on them');
+  t=await loaded();
+  for(const tab of [0,1]) assert.doesNotMatch(t.run(`networkPage(${tab})`),/רשת ההפצה חייבת להיות מבודדת/,'one place, the deploy tab');
+});
+
 test('deploy network (#1300, console-full.html P.network "dist" 1:1): "רשת ההפצה" dl.kv (network, server address, DHCP, range, lease + "who else answers" with "בדוק") with edit / DHCP off; "כרטיסים ברשת ההפצה"; "חכירות פעילות" (address · MAC · name · expires)',async()=>{
   const {run}=await loaded();
   const html=run('networkPage(2)'); balanced(html);
@@ -847,4 +858,91 @@ test('#1274 a completed deploy network has no "השלם הגדרה" — on the b
     const t=await loaded(over);
     assert.equal(completeBtn(card(t.run('networkPage(2)'),'כרטיסים ברשת ההפצה')),null);
   }
+});
+
+/* ---------- אשכול ד', 12/11: חלון רשת ההפצה ---------- */
+
+// ‏#2889 (fd1111, 11/11): טווח שנגמר בכתובת השידור וחכירה של 99999999 שעות עברו בלי הערה; טווח של
+// כתובת אחת ושינוי כתובת של רשת קיימת (#2883) — אזהרה גלויה, לא חסימה.
+test('#2889 #2883 deploy window: the broadcast/network address and an endless lease stop the save; one address and a move are warned',async()=>{
+  const t=await loaded();
+  const p=(v)=>JSON.parse(t.run(`JSON.stringify(deployFormProblems(${JSON.stringify(v)}))`));
+  const w=(v,b=null)=>JSON.parse(t.run(`JSON.stringify(deployFormWarnings(${JSON.stringify(v)},${JSON.stringify(b)}))`));
+  const good={network:'10.111.1.0',netmask:'255.255.255.0',range_start:'10.111.1.100',range_end:'10.111.1.200',lease_n:'12',lease_u:'h'};
+  assert.deepEqual(p(good),[]);
+  assert.deepEqual(p({...good,range_end:'10.111.1.255'}),['הטווח מסתיים בכתובת השידור (10.111.1.255)']);
+  assert.ok(p({...good,range_start:'10.111.1.0'}).includes('הטווח מתחיל בכתובת הרשת (10.111.1.0)'));
+  assert.deepEqual(p({...good,range_end:'10.111.1.254'}),[]);
+  assert.deepEqual(p({...good,lease_n:'99999999'}),['משך חכירה ארוך מדי — עד 365 ימים']);
+  assert.deepEqual(p({...good,lease_n:'366',lease_u:'d'}),['משך חכירה ארוך מדי — עד 365 ימים']);
+  assert.deepEqual(p({...good,lease_n:'365',lease_u:'d'}),[]);
+  assert.deepEqual(p({...good,lease_n:'8760',lease_u:'h'}),[]);
+  // אזהרות — הכפתור נשאר פעיל
+  assert.deepEqual(w(good),[]);
+  assert.deepEqual(w({...good,range_start:'10.111.1.120',range_end:'10.111.1.120'}),['הטווח הוא כתובת אחת — רק מחשב אחד יקבל כתובת בכל פעם']);
+  t.run('MACHINES=[{},{},{}]');
+  assert.deepEqual(w({...good,range_start:'10.111.1.120',range_end:'10.111.1.121'}),['בטווח 2 כתובות, ורשומים 3 מחשבים — לא כולם יקבלו כתובת יחד']);
+  const moved=w(good,{enabled:true,network:'10.44.9.0',netmask:'255.255.255.0'});
+  assert.equal(moved.length,1); assert.match(moved[0],/^שינוי כתובת רשת ההפצה: .*יאבדו את השרת עד שיאותחלו.*בזמן סבב או קליטה השרת מסרב/);
+  assert.deepEqual(w(good,{enabled:true,network:'10.111.1.0',netmask:'255.255.255.0'}),[],'same network — no move');
+  // החלון עצמו נושא את מקום האזהרות ואת מקום האישור (#2970)
+  t.run("netEditDeploy('ens19')");
+  const sh=sheetAt(t.run,0);
+  assert.match(sh.note,/<div class="sheet-note danger" id="deploy-warn" hidden><\/div>/);
+  assert.ok(sh.fields.some(f=>f.type==='html'&&/id="deploy-confirm"[^>]*hidden/.test(f.html)));
+});
+
+// ‏#2970 (ברזל בעבודה, 12/11): "ממתינה לאישור" בלי כפתור אישור בחלון. עכשיו: האישור בתוך החלון,
+// ספירה לאחור גלויה, ואחרי האישור אותה שמירה ממשיכה ל-DHCP לבד.
+test('#2970 deploy window: an address that awaits confirmation is confirmed in the window, and the save goes on to the DHCP by itself',async()=>{
+  const t=await loaded();
+  t.run("netEditDeploy('ens19')");
+  t.fixtures['/net/config/ens19/deploy']={ok:false,server_ip:'10.44.30.1',dhcp:null,
+    address:{ok:true,verified:true,rollback:{pending:true,interface:'ens19',seconds_left:57}},
+    apply_error:'הכתובת 10.44.30.1 על ens19 ממתינה לאישור שהקונסולה עדיין נגישה — אשרו, ואז שמרו שוב את רשת ההפצה — ה-DHCP לא שונה'};
+  const good={network:'10.44.30.0',netmask:'255.255.255.0',range_start:'10.44.30.50',range_end:'10.44.30.200',lease_n:'12',lease_u:'h'};
+  const scrolled=[]; t.node('#deploy-confirm').scrollIntoView=(o)=>scrolled.push(o);
+  const msg=await t.run(`sheets[0].onSubmit(${JSON.stringify(good)}).then(()=>null,e=>e.message)`);
+  assert.equal(msg,'ה-DHCP עוד לא הוחל: אשרו כאן בחלון שהקונסולה עדיין נגישה, והשמירה תמשיך לבד');
+  const box=t.node('#deploy-confirm');
+  assert.equal(box.hidden,false); assert.equal(scrolled.length,1);
+  assert.match(box.innerHTML,/הכתובת <span dir="ltr">10\.44\.30\.1<\/span> הוחלה על ens19 וממתינה לאישור/);
+  assert.match(box.innerHTML,/תחזור בעוד <b id="deploy-confirm-count">57<\/b> שניות/);
+  const click=box.innerHTML.match(/onclick="([^"]+)"[^>]*>אשר שהחיבור עובד והמשך<\/button>/);
+  assert.ok(click,'the confirm button is inside the window');
+  let submitted=0; t.node('#sheet').requestSubmit=()=>{ submitted+=1; };
+  t.fixtures['/net/config/confirm']={ok:true,interface:'ens19',rollback:{pending:false}};
+  await t.run(unesc(click[1]));
+  const post=t.requests.filter(r=>r.method==='POST').pop();
+  assert.equal(post.url,'/net/config/confirm'); assert.deepEqual(post.body,{interface:'ens19'});
+  assert.equal(submitted,1,'the same save is sent again by itself — no second click on "שמירה והחלה"');
+  assert.equal(box.hidden,true);
+  // הזמן נגמר בלי אישור — נאמר שההגדרה הקודמת חוזרת
+  t.run("showDeployConfirm({pending:true,interface:'ens19',seconds_left:1},'10.44.30.1')");
+  t.run('deployConfirmTick()');
+  assert.match(box.innerHTML,/חלון האישור נסגר — ההגדרה הקודמת של הכרטיס חוזרת/);
+  // אישור שנכשל — הכפתור חוזר, הסיבה בחלון, ושום דבר לא נשלח שוב
+  t.run("showDeployConfirm({pending:true,interface:'ens19',seconds_left:30},'10.44.30.1')");
+  t.fixtures['/net/config/confirm']=new Error('חלון האישור על ens19 נסגר');
+  await t.run("confirmDeployAndContinue('ens19')");
+  assert.equal(submitted,1); assert.equal(t.node('#deploy-confirm-btn').disabled,false);
+  assert.match(t.node('#sf-error').textContent,/חלון האישור על ens19 נסגר/);
+});
+
+// ‏#2891 (fd1111, 11/11): הסירוב אמר "שלחו ignore_existing" ולא הייתה בחלון דרך לשלוח אותו.
+test('#2891 deploy window: "כרטיס 2" has the skip-the-probe box, off by default; checked, /second carries ignore_existing',async()=>{
+  const t=await loaded({'/net/deploy':DEPLOY_CONSOLE,'/net/interfaces':NICS_FREE,'/net/config':NETCFG_FREE});
+  t.run("netEditDeploy('ens19')");
+  const sh=sheetAt(t.run,0);
+  const box=sh.fields.find(f=>f.id==='second_only_deploy');
+  assert.ok(box,'the box is in the cards section');
+  assert.equal(box.type,'checkbox'); assert.equal(box.value,false);
+  assert.equal(box.label,t.run('SECOND_ONLY_DEPLOY_LABEL'));
+  assert.match(box.help,/רק אם השרת אמר שהבדיקה לא רצה/);
+  t.fixtures['/net/config/ens19/second']={ok:true,interface:'bond0',server_ip:'10.44.9.10',apply_error:null,deploy:{ok:true,url:'http://10.44.9.10:8080'},bond:{state:'ok'}};
+  const v={network:'10.44.9.0',netmask:'255.255.255.0',range_start:'10.44.9.100',range_end:'10.44.9.200',lease_n:'12',lease_u:'h',card1:'ens19',second:'ens22'};
+  assert.equal(await t.run(`sheets[0].onSubmit(${JSON.stringify({...v,second_only_deploy:false})}).then(()=>null,e=>e.message)`),null);
+  assert.equal(await t.run(`sheets[0].onSubmit(${JSON.stringify({...v,second_only_deploy:true})}).then(()=>null,e=>e.message)`),null);
+  const bodies=t.requests.filter(r=>r.method==='PUT').map(r=>r.body);
+  assert.deepEqual(bodies,[{second:'ens22'},{second:'ens22',ignore_existing:true}]);
 });

@@ -1,17 +1,17 @@
-"""‏#1979 (ו-#1978): זהות הלינוקס של כל משוכפל, על המגירה שלו.
+"""#1979 (ו-#1978): זהות הלינוקס של כל משוכפל, על המגירה שלו.
 
-‏#1979 — אימג' לינוקס שנקלט בלי ניקוי נושא את `/etc/machine-id` שלו: לכל
+#1979 — אימג' לינוקס שנקלט בלי ניקוי נושא את `/etc/machine-id` שלו: לכל
 המשוכפלים אותו DUID ב-DHCP, ולכן אותה כתובת — ואותם מפתחות SSH של המארח.
-‏`finish_grow` (כל מגירה, כל סבב, כל שיכפול מקומי) מרוקן עכשיו את
+`finish_grow` (כל מגירה, כל סבב, כל שיכפול מקומי) מרוקן עכשיו את
 machine-id, מוחק את `ssh_host_*`, ומתקין יחידה חד-פעמית שמריצה
 `ssh-keygen -A` לפני sshd — דביאן ואובונטו אינן יוצרות מפתח חסר בעצמן.
 
-‏#1978 — אחרי שיכפול לכל המגירות אותו UUID; גישה לפי UUID הייתה עלולה לנחות
+#1978 — אחרי שיכפול לכל המגירות אותו UUID; גישה לפי UUID הייתה עלולה לנחות
 במגירה אחרת. הראיה כאן היא שלוש מגירות **זהות לחלוטין**, וכל אחת מעוגנת
 דרך הצומת שלה (`/dev/sdX2`) ומשתנה לבדה. הסריקה הסטטית בסוף שומרת שאיש
 לא יוסיף חיפוש לפי UUID/LABEL לנתיב הכתיבה.
 
-‏`mount`/`umount` מזויפים: העיגון מעתיק את "הדיסק" (`disks/<צומת>`) לנקודת
+`mount`/`umount` מזויפים: העיגון מעתיק את "הדיסק" (`disks/<צומת>`) לנקודת
 העיגון ורושם את הצומת; הניתוק מחזיר את התוכן לאותו דיסק. כך מה שנכתב
 לנקודת העיגון נוחת בדיוק בדיסק שעוגן — ושום דבר אחר.
 """
@@ -102,7 +102,7 @@ def error_of(run: Path, node: str) -> str:
 def test_three_identical_drawers_each_get_their_own_identity(tmp_path):
     setup, run = box(tmp_path)
     finish_all(setup)
-    # ‏#1978: כל מגירה עוגנה דרך הצומת שלה — אחת, פעם אחת, בסדר.
+    # #1978: כל מגירה עוגנה דרך הצומת שלה — אחת, פעם אחת, בסדר.
     assert mounted(run) == [f"mount /dev/{n}2" for n in DRAWERS]
     for node in DRAWERS:
         etc = run / "disks" / f"{node}2" / "etc"
@@ -146,7 +146,7 @@ BOOT_PLAN = LINUX_PLAN.replace("2|", "1|", 1).replace("|p2|", "|p1|") + "\n" + L
 
 
 def test_a_boot_partition_before_the_root_is_mounted_and_passed_over(tmp_path):
-    """פדורה: ‏/boot (ext4, אותו type GUID) לפני השורש. הראשונה אינה השורש."""
+    """פדורה: /boot (ext4, אותו type GUID) לפני השורש. הראשונה אינה השורש."""
     setup, run = box(tmp_path, plan=BOOT_PLAN)
     for node in DRAWERS:
         (run / "disks" / f"{node}1" / "grub").mkdir(parents=True)
@@ -172,7 +172,7 @@ def test_a_linux_data_disk_without_etc_is_not_a_failure(tmp_path):
 def test_a_linux_partition_that_does_not_mount_is_said(tmp_path):
     setup, run = box(tmp_path)
     import shutil
-    shutil.rmtree(run / "disks/sdc2")          # ‏mount המזויף נכשל על צומת בלי דיסק
+    shutil.rmtree(run / "disks/sdc2")          # mount המזויף נכשל על צומת בלי דיסק
     finish_all(setup)
     assert "לא הצלחנו לעגן" in error_of(run, "sdc")
     assert error_of(run, "sdb") == "" and error_of(run, "sdd") == ""
@@ -181,7 +181,7 @@ def test_a_linux_partition_that_does_not_mount_is_said(tmp_path):
 # --- החיווט: כל מסלול כתיבה מעביר את המניפסט --------------------------------
 
 def test_every_finish_grow_call_in_the_agent_passes_the_manifest():
-    """‏`finish_grow` בלי מניפסט מדלג על האיפוס — ולכן כל קורא מעביר אותו."""
+    """`finish_grow` בלי מניפסט מדלג על האיפוס — ולכן כל קורא מעביר אותו."""
     calls = []
     for f in lib_files(AGENT / "lib") + [AGENT / "imagesrv-agent"]:
         for line in f.read_text(encoding="utf-8").splitlines():
@@ -193,9 +193,9 @@ def test_every_finish_grow_call_in_the_agent_passes_the_manifest():
         assert len(re.findall(r'"[^"]*"', args)) == 3, (name, args)
 
 
-# --- ‏#1978: אין חיפוש לפי UUID/LABEL בסוכן ----------------------------------
+# --- #1978: אין חיפוש לפי UUID/LABEL בסוכן ----------------------------------
 
-#: חיפוש התקן לפי זהות שהשיכפול משכפל. ‏`blkid -s UUID <צומת>` **קורא** ערך
+#: חיפוש התקן לפי זהות שהשיכפול משכפל. `blkid -s UUID <צומת>` **קורא** ערך
 #: מצומת ידוע — זה מותר; אלה **מוצאים** צומת לפי ערך, וזה מה שאסור.
 LOOKUP = re.compile(r"blkid\s+(-[a-zA-Z]+\s+)*-[UL]\b|\bfindfs\b|/dev/disk/by-|"
                     r"\bmount\b[^#\n]*\b(PART)?(UUID|LABEL)=")

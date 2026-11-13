@@ -1,8 +1,8 @@
-"""‏#2843 — הפעלה מחדש וכיבוי של השרת מהקונסולה (‏``POST /api/console/server-power``).
+"""#2843 — הפעלה מחדש וכיבוי של השרת מהקונסולה (``POST /api/console/server-power``).
 
 שום טסט כאן לא מכבה מכונה: הפעולה עוברת דרך ``host_hooks["power"]``, וכאן
-מוזרק רושם. בלי hook מוזרק הנתיב עונה ‏503 — וזה עצמו נבדק, כי זה מה שמגן
-על כל הרצת בדיקות אחרת. ‏``schedule_later`` נבדק מול ‏``deploy_net._run``
+מוזרק רושם. בלי hook מוזרק הנתיב עונה 503 — וזה עצמו נבדק, כי זה מה שמגן
+על כל הרצת בדיקות אחרת. ``schedule_later`` נבדק מול ``deploy_net._run``
 מזויף: הפקודה נבנית, ולא רצה.
 """
 
@@ -110,7 +110,7 @@ def test_unknown_action_is_refused_before_the_hook(host, body):
 
 
 def test_cross_site_request_is_refused_on_the_console_app(host):
-    """CSRF: אפליקציית הקונסולה (‎:8081) — השומר של #1633 חל גם על הנתיב הזה."""
+    """CSRF: אפליקציית הקונסולה (:8081) — השומר של #1633 חל גם על הנתיב הזה."""
     from server.app import create_console_app
     console = TestClient(create_console_app(host["app"].state.runtime))
     complete_console_login(console, host["ctx"].conn, "noc", "admin-pass-123")
@@ -167,7 +167,7 @@ def test_without_an_installed_hook_the_route_refuses_503(tmp_path, images_root, 
 
 
 def test_schedule_later_runs_systemctl_in_a_transient_unit_after_the_reply(monkeypatch):
-    """התשובה יוצאת לפני שהשרת יורד: ‏systemd-run ‏--on-active, שם יחידה ייחודי."""
+    """התשובה יוצאת לפני שהשרת יורד: systemd-run --on-active, שם יחידה ייחודי."""
     server_power = _sp()
     seen = []
     monkeypatch.setattr(server_power.deploy_net, "_run",
@@ -185,7 +185,7 @@ def test_schedule_later_runs_systemctl_in_a_transient_unit_after_the_reply(monke
 
 
 def test_main_installs_the_real_hook(tmp_path, monkeypatch):
-    """הייצור: ‏``server.main`` — ורק הוא — מעביר את ``schedule_later``."""
+    """הייצור: ``server.main`` — ורק הוא — מעביר את ``schedule_later``."""
     from test_dev_station_no_etc_2267 import _run_main
     seen = _run_main(tmp_path, monkeypatch, "linux")
     assert "power" in (seen.get("host_hooks") or {}), seen.get("host_hooks")

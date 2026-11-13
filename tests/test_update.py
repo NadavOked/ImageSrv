@@ -1,6 +1,6 @@
-"""כפתור "עדכן" בהגדרות השרת (‏#748) — בדיקת-עדכון ואפליקציה מול הריפו
+"""כפתור "עדכן" בהגדרות השרת (#748) — בדיקת-עדכון ואפליקציה מול הריפו
 הציבורי. אף פקודת git/systemd-run אמיתית לא רצה כאן: ה-hooks
-(‏describe/ls_remote_tags/run_upgrade) מוזרקים דרך
+(describe/ls_remote_tags/run_upgrade) מוזרקים דרך
 ``update_hooks``, ומחליפים לגמרי את server.update.default_hooks().
 """
 
@@ -114,7 +114,7 @@ def test_check_update_carries_a_signed_state_as_is():
     assert result["available"] is True
 
 
-# ‏#2469: תג שאינו ``signed`` אינו מוצע — מצבו נשמר כמו שהוא ב-``skipped``.
+# #2469: תג שאינו ``signed`` אינו מוצע — מצבו נשמר כמו שהוא ב-``skipped``.
 @pytest.mark.parametrize("state", ["unsigned", "unchecked"])
 def test_check_update_carries_each_unsigned_state_as_is_without_an_offer(state):
     result = _check_with(lambda *_: {"state": state, "detail": "d"})
@@ -172,7 +172,7 @@ def test_check_update_timeout_is_classified_as_no_network(monkeypatch):
 
 
 def test_check_update_dns_failure_is_classified_as_no_network(monkeypatch):
-    """‏עיקרון 5: הרצה שנכשלה אינה 'אין גרסאות' — שני מסלולים נבדלים."""
+    """עיקרון 5: הרצה שנכשלה אינה 'אין גרסאות' — שני מסלולים נבדלים."""
     def dns_failure(cmd, **_kwargs):
         return subprocess.CompletedProcess(cmd, 128, "", "fatal: unable to access: Could not resolve host: github.com")
 
@@ -211,7 +211,7 @@ def update_server(tmp_path: Path, images_root: Path, clock):
     calls = {"fetch": 0, "checkout": 0, "run": 0, "run_args": None}
 
     hooks = {
-        # ‏#1273: ``on_describe`` — וו לבדיקת המרוץ (עצירה בין השומר לכתיבת הסטטוס).
+        # #1273: ``on_describe`` — וו לבדיקת המרוץ (עצירה בין השומר לכתיבת הסטטוס).
         "describe": lambda repo_dir: (state.get("on_describe") or (lambda: None))()
                                      or state["current"],
         "ls_remote_tags": lambda url: (True, state["remote"], ""),
@@ -221,7 +221,7 @@ def update_server(tmp_path: Path, images_root: Path, clock):
                                         or (True, "")),
         "checkout": lambda repo_dir, tag: (calls.__setitem__("checkout", calls["checkout"] + 1)
                                            or (True, "")),
-        # ‏#1277: בלי זה, ההוק האמיתי היה משכפל מהרשת בכל בדיקה שמוצאת גרסה.
+        # #1277: בלי זה, ההוק האמיתי היה משכפל מהרשת בכל בדיקה שמוצאת גרסה.
         "verify_tag": lambda url, tag, repo_dir: {"state": "signed", "detail": "test"},
         "run_upgrade": lambda repo_dir, tag: (
             calls.__setitem__("run", calls["run"] + 1)
@@ -243,8 +243,8 @@ def _enable(client):
 
 
 def test_me_reports_the_server_version_from_the_same_source_as_update(update_server):
-    """‏#915: שורת הסטטוס בקונסולה מציגה את תג ה-git של העץ — מאותו hook
-    ‏`describe` כמו `/update` — ולא `v0.9` קשיח ב-HTML. לכל משתמש מחובר,
+    """#915: שורת הסטטוס בקונסולה מציגה את תג ה-git של העץ — מאותו hook
+    `describe` כמו `/update` — ולא `v0.9` קשיח ב-HTML. לכל משתמש מחובר,
     (הפצה — #1073 — לא נכנסת לקונסולה בכלל)."""
     from server.console import users
     admin, app, state = update_server["admin"], update_server["app"], update_server["state"]
@@ -254,7 +254,7 @@ def test_me_reports_the_server_version_from_the_same_source_as_update(update_ser
     assert admin.get("/api/console/me").json()["version"] == "v0.25.0-2-gabc123"
     users.create(app.state.ctx.conn, "dep", "deploy-pass-123", "deploy", by="test", check_policy=False)
     deploy = TestClient(app)
-    # ‏#1073 (18/09): למשתמש הפצה אין קונסולה — הכניסה מסורבת, ואין שורת סטטוס.
+    # #1073 (18/09): למשתמש הפצה אין קונסולה — הכניסה מסורבת, ואין שורת סטטוס.
     # (ב-`create_app` המאוחד של הטסטים הכניסה של הקיוסק קודמת — ולכן הבדיקה
     # היא על הנתיב: `console_only` חוסם גם עם עוגייה. בייצור — `create_console_app`.)
     deploy.post("/api/console/login", json={"username": "dep", "password": "deploy-pass-123"})
@@ -288,7 +288,7 @@ def test_check_returns_available_once_enabled(update_server):
     _enable(admin)
     update_server["state"]["remote"] = "x\trefs/tags/v0.25.0\n"
     result = admin.post("/api/console/update/check").json()
-    # ‏#1000: התשובה היא המסמך שנשמר — עם חותמת `at` של השרת.
+    # #1000: התשובה היא המסמך שנשמר — עם חותמת `at` של השרת.
     assert result.pop("at")
     assert result == {"current": "v0.24.0", "latest": "v0.25.0",
                       "available": True, "reason": None,
@@ -404,7 +404,7 @@ def test_revert_uses_the_version_saved_before_the_last_apply(update_server):
 
 
 def test_revert_needs_no_typed_name_and_ignores_a_stale_one(update_server):
-    """‏#1778 (הכרעת #1270): "חזור ל-…" הוא חלון אישור עם כפתור אדום, בלי הקלדה —
+    """#1778 (הכרעת #1270): "חזור ל-…" הוא חלון אישור עם כפתור אדום, בלי הקלדה —
     כמו "החל עדכון" (#1192), כי גם החזרה הפיכה. השרת אינו בודק `confirm_name`:
     קונסולה ישנה ששולחת שם שהתיישן (POST /hostname אחרי טעינת /me) אינה נדחית
     ב-403 "השם שהוקלד אינו תואם" על שם שאיש לא הקליד."""
@@ -464,7 +464,7 @@ def test_deploy_user_cannot_reach_update_endpoints(update_server, images_root, c
 
 
 def test_a_missing_git_binary_is_named_not_errno_2(monkeypatch):
-    """‏#1185: השרת הראשון מה-ISO הציג "[Errno 2] No such file or directory:
+    """#1185: השרת הראשון מה-ISO הציג "[Errno 2] No such file or directory:
     'git'". הכלי החסר נקרא בשמו, עם הכיוון לתיקון."""
     from server import update
     def boom(*a, **k):
@@ -476,7 +476,7 @@ def test_a_missing_git_binary_is_named_not_errno_2(monkeypatch):
     assert "Errno" not in err
 
 
-# --- ‏#1273: לחיצה כפולה על "החל" ---------------------------------------------
+# --- #1273: לחיצה כפולה על "החל" ---------------------------------------------
 
 #: מה ש-systemd-run מדפיס כשהיחידה הקודמת עוד חיה (systemd 257, דביאן 13; וגם
 #: הנוסח הישן "already exists").
@@ -510,7 +510,7 @@ def test_revert_while_an_update_is_running_is_409(update_server):
 
 
 def test_apply_after_a_verified_update_is_allowed_again(update_server):
-    """‏running שאומת (השרת עלה על התג) הוא done — לא חוסם את העדכון הבא."""
+    """running שאומת (השרת עלה על התג) הוא done — לא חוסם את העדכון הבא."""
     admin = update_server["admin"]
     _enable(admin)
     admin.post("/api/console/update/apply", json={"tag": "v0.25.0"})
@@ -544,7 +544,7 @@ def test_any_other_launch_failure_is_still_failed(update_server):
 
 
 def test_a_launch_failure_answers_with_the_real_error_not_the_409_of_a_running_unit(update_server):
-    """‏#2160: כשל הפעלה שאינו "היחידה כבר רצה" נכתב failed — והתשובה לבקשה
+    """#2160: כשל הפעלה שאינו "היחידה כבר רצה" נכתב failed — והתשובה לבקשה
     אמרה בכל זאת 409 "יחידת השדרוג כבר רצה" (``return`` בלי ערך = None = "לא
     התחיל"). המפעיל קיבל הסבר הפוך מהאמת, באותה בקשה שבה הסטטוס כבר היה failed."""
     admin = update_server["admin"]
@@ -563,7 +563,7 @@ BUS_DOWN = "Failed to connect to bus: No such file or directory"
 
 @pytest.mark.parametrize("err", [BUS_DOWN, UNIT_EXISTS], ids=["launch-failed", "unit-already-runs"])
 def test_2916_a_launch_that_did_not_start_keeps_the_revert_target(update_server, err):
-    """‏#2916 §1: השרת על v0.24.0 ו-`update_previous=v0.23.0`. "החל v0.25.0" והשיגור
+    """#2916 §1: השרת על v0.24.0 ו-`update_previous=v0.23.0`. "החל v0.25.0" והשיגור
     נכשל — `update_previous` נכתב לפני `systemd-run` והפך ל-v0.24.0, ו"חזור לגרסה קודמת"
     היה מחיל את הגרסה **הנוכחית**. הדרך חזרה ל-v0.23.0 אבדה."""
     from server.db import set_setting

@@ -1,10 +1,10 @@
-"""הדיווח האחרון של עבודה נשלח ונקרא, לא נשלח ונשכח — ‏issue #101.
+"""הדיווח האחרון של עבודה נשלח ונקרא, לא נשלח ונשכח — issue #101.
 
-‏`progress.sh` הצהיר על הכלל הנכון בהערה שלו, ויישם אותו במקום אחד
-מתוך שלושה: ‏`pull_close` שלח את דיווח הסיום סינכרונית ובדק את קוד
+`progress.sh` הצהיר על הכלל הנכון בהערה שלו, ויישם אותו במקום אחד
+מתוך שלושה: `pull_close` שלח את דיווח הסיום סינכרונית ובדק את קוד
 היציאה, בעוד **מסלול סבב הכיתה ומסלול המגירות** הוציאו אותו דרך לולאת
 ה"שלח ושכח" והמתינו ב-`sleep 6`. שש שניות אינן ראיה: עם
-‏`--max-time 10 --retry 3` הן לא מחזיקות בהכרח אפילו ניסיון אחד שהושלם.
+`--max-time 10 --retry 3` הן לא מחזיקות בהכרח אפילו ניסיון אחד שהושלם.
 
 המחיר של הניחוש הזה הוא לא שורה חסרה במסך. מכונה שסיימה שחזור ושה-`done`
 שלה לא הגיע נשארת `session_members.done = 0`, הסבב נשאר `running`,
@@ -13,7 +13,7 @@
 
 מה שנבדק כאן:
 
-* **ראיה חיובית** — ‏`report_final` מחזיר 0 רק כשהשרת ענה 200 (`curl -sfS`
+* **ראיה חיובית** — `report_final` מחזיר 0 רק כשהשרת ענה 200 (`curl -sfS`
   הופך 400 לקוד יציאה), ועוצר את לולאת הדיווח לפני הדיווח האחרון כדי
   שיהיה כותב אחד ל-`progress.json`.
 * **תקרת ניסיונות ולא תקרת שניות** — כל ניסיון הוא curl שלם עם ה-retry
@@ -46,7 +46,7 @@ from agentlib import flat_lib, lib_path, agent_sources
 
 REPO = Path(__file__).resolve().parent.parent
 
-#: ‏curl הוא המנגנון שנבדק — קוד היציאה שלו *הוא* הראיה החיובית — ו-jq
+#: curl הוא המנגנון שנבדק — קוד היציאה שלו *הוא* הראיה החיובית — ו-jq
 #: קורא את תשובת השרת שממנה נגזרים מזהה הסבב והאימג'. בלעדיהם אין מה
 #: לבדוק, ובמקום שבו הם אמורים להיות זה כישלון ולא דילוג (#52).
 native_tools = requires_native(("bash", BASH), "curl", "jq")
@@ -60,7 +60,7 @@ MANIFEST = {"id": IMAGE, "name": "Windows 11 Lab", "family": 256,
 ANSWER = {"schema": 1, "known": True, "role": "classroom",
           "session": {"id": SESSION, "state": "running", "image_id": IMAGE,
                       "prefix": "LAB1",
-                      # ‏#1410: סבב חדר בלי בחירת מגירות מפורשת נעצר ב-die_local
+                      # #1410: סבב חדר בלי בחירת מגירות מפורשת נעצר ב-die_local
                       "target_ports": [1, 2]},
           "group": {"suffix": "05"}}
 
@@ -75,8 +75,8 @@ RUN_TIMEOUT_S = 90
 class Reports(HTTPServer):
     """מקבל דיווחים ומחזיר את מה שהוגדר לו.
 
-    ‏`refuse_first` הוא ההשהיה של האיסיו בצורתה המדידה: השרת לא עונה
-    כמו שצריך על N הדיווחים הראשונים ואז חוזר לעצמו. ‏`refuse_first`
+    `refuse_first` הוא ההשהיה של האיסיו בצורתה המדידה: השרת לא עונה
+    כמו שצריך על N הדיווחים הראשונים ואז חוזר לעצמו. `refuse_first`
     שלילי = לא עונה כמו שצריך אף פעם.
     """
 
@@ -133,15 +133,15 @@ def url_of(httpd: HTTPServer) -> str:
 
 # --- הרצת הפונקציות של הסוכן הראשי ------------------------------------------
 #
-# ‏`imagesrv-agent` הוא סקריפט ולא ספרייה: ה-source שלו מריץ את הלולאה
+# `imagesrv-agent` הוא סקריפט ולא ספרייה: ה-source שלו מריץ את הלולאה
 # הראשית. הפונקציות נחתכות ממנו לפי הגבול שהקובץ עצמו מגדיר — הגדרה
 # בעמודה 0 ו-`}` בעמודה 0 — ונטענות לבד. החיתוך נכשל בקול אם השם השתנה:
 # בדיקה שלא מצאה את מה שהיא בודקת אינה בדיקה שעברה.
 
 
 def cut_function(name: str) -> str | None:
-    # ‏#1217: ‏`do_task` עבר ל-`lib/task.sh` (קיר 300). נחתך משם באותו גבול;
-    # שהקובץ נטען בסוכן — ‏test_every_lib_file_is_loaded_and_packed.
+    # #1217: `do_task` עבר ל-`lib/task.sh` (קיר 300). נחתך משם באותו גבול;
+    # שהקובץ נטען בסוכן — test_every_lib_file_is_loaded_and_packed.
     task = AGENT / "lib" / "core" / "task.sh"
     source = (AGENT / "imagesrv-agent").read_text(encoding="utf-8") \
         + (task.read_text(encoding="utf-8") if task.exists() else "")
@@ -150,7 +150,7 @@ def cut_function(name: str) -> str | None:
     if start == -1:
         return None
     end = source.find("\n}\n", start + len(marker))
-    assert end != -1, f"‏{name} אינה נסגרת ב-}} בעמודה 0"
+    assert end != -1, f"\u200f{name} אינה נסגרת ב-}} בעמודה 0"
     return source[start + 1:end + 3]
 
 
@@ -159,19 +159,19 @@ def agent_functions(*names: str) -> str:
     chunks = []
     for name in names:
         body = cut_function(name)
-        assert body is not None, f"‏{name} אינה מוגדרת בעמודה 0 ב-imagesrv-agent"
+        assert body is not None, f"\u200f{name} אינה מוגדרת בעמודה 0 ב-imagesrv-agent"
         chunks.append(body)
     return "\n".join(chunks)
 
 
 def loadable_functions() -> str:
-    """מה שנטען להרצה. ‏`hold_unheard` נלקחת רק אם היא קיימת — לא כדי
+    """מה שנטען להרצה. `hold_unheard` נלקחת רק אם היא קיימת — לא כדי
     לסלוח על היעדרה אלא ההפך: כך בקרה שלילית מול הקוד שלפני התיקון
     מריצה את **המסלול האמיתי** שלו ונופלת על ההתנהגות (המכונה אתחלה
     בלי אישור), ולא על קובץ שלא נחתך.
 
     מ-#109 ואילך `hold_unheard` ו-`hold_beat` יושבות ב-`agent/lib/core/hold.sh`,
-    ולכן החיתוך מ-`imagesrv-agent` מחזיר `None` — ‏`sourced_libs` מביאה
+    ולכן החיתוך מ-`imagesrv-agent` מחזיר `None` — `sourced_libs` מביאה
     אותן משם. שתי הדרכים חיות זו לצד זו בכוונה: זה מה שמאפשר להריץ את
     אותו טסט בדיוק מול הקוד שלפני התיקון ומול זה שאחריו."""
     # capture_end_ask (#409) was removed on 11/10 -- GUI only.
@@ -184,7 +184,7 @@ def loadable_functions() -> str:
 
 
 def sourced_libs() -> str:
-    """ספריות הסוכן שהמסלולים צריכים. ‏`hold.sh` נטענת **רק אם היא
+    """ספריות הסוכן שהמסלולים צריכים. `hold.sh` נטענת **רק אם היא
     קיימת**: בקרה שלילית ש-`git stash` הוריד בה את קוד הסוכן חייבת
     ליפול על ההתנהגות ולא על קובץ חסר."""
     names = ["common.sh", "waits.sh", "jsonq.sh", "progress.sh", "pull.sh",   # waits: capped_run (#1367)
@@ -207,7 +207,7 @@ def journal(run: Path) -> str:
 #: הלולאה מזויפת בכל בדיקה של המסלולים: מה שנבדק שם הוא הדיווח האחרון,
 #: וכל POST אמיתי שמגיע לשרת המזויף הוא שלו ושל אף אחד אחר. הזיוף גם
 #: מונע לולאת רקע אינסופית ששורדת את הריצה — `hold_unheard` מרימה אחת.
-#: ‏`$1$4` ולא `$1 $4`: מסלול הסבב מזוהה ב-session ומסלול הקליטה
+#: `$1$4` ולא `$1 $4`: מסלול הסבב מזוהה ב-session ומסלול הקליטה
 #: ב-task, ותמיד בדיוק אחד מהם מלא (ממשק 4) — כך העקבה נושאת את המזהה
 #: של שני המסלולים בלי רווח תלוי-מסלול בסוף השורה.
 LOOP_STUB = 'progress_loop() { echo "LOOP $1$4" >> "$RUN_DIR/trace"; }; '
@@ -250,7 +250,7 @@ def _power_stub_prefix(tmp_path: Path) -> str:
     )
 
 STUBS = (
-    # ‏#652: הסוכן האמיתי טוען את smartgate.sh (imagesrv-agent), ולכן `smart_gate`
+    # #652: הסוכן האמיתי טוען את smartgate.sh (imagesrv-agent), ולכן `smart_gate`
     # מוגדר שם. כאן, כמו `run_restore` ו-`progress_loop`, הוא מזויף כדי
     # לבודד את מסלול הדיווח מבדיקת ה-SMART: מעביר את כל הדיסקים הלאה
     # (בריאים) ומחזיר 0. ה-SMART עצמו נבדק ב-test_smart.py.
@@ -264,7 +264,7 @@ STUBS = (
     'session_open_gate() { :; }; '
     'pick_internal_disk() { echo sda; }; '
     'list_drawers() { echo "sdb sdc"; }; '
-    # ‏#1410: resolve_target_drawers ממפה כל פורט שנבחר לדיסק אחד בדיוק
+    # #1410: resolve_target_drawers ממפה כל פורט שנבחר לדיסק אחד בדיוק
     'disk_port() { case "$1" in sdb) echo 1 ;; sdc) echo 2 ;; esac; }; '
     'http_get() { cat "$RUN_DIR/manifest.src.json"; }; '
     'name_this_machine() { echo "NAMED" >> "$RUN_DIR/trace"; '
@@ -293,13 +293,13 @@ def run_path(tmp_path: Path, server: str, call: str, *, tries: int = 2,
              stubs: str = "", env: str = "") -> dict:
     """מריץ מסלול אחד של הסוכן ומחזיר מה שיצא ממנו.
 
-    ‏`call` הוא הקריאה עצמה — ‏`do_restore`, ‏`do_restore_drawers ...`
-    או `do_task`. ‏`answer` מחליף את תשובת השרת (מסלול הקליטה קורא
-    ‏`.task.*` ולא `.session.*`), ‏`stubs` ו-`env` מוסיפים למסלול הזה
+    `call` הוא הקריאה עצמה — `do_restore`, `do_restore_drawers ...`
+    או `do_task`. `answer` מחליף את תשובת השרת (מסלול הקליטה קורא
+    `.task.*` ולא `.session.*`), `stubs` ו-`env` מוסיפים למסלול הזה
     בלבד. הפלט הולך לקובץ: תהליך רקע ששרד מחזיק צינור פתוח, וההמתנה
     עליו נראית כמו באג בקוד שנבדק ולא בכלי הבדיקה.
 
-    ‏#2077: ‏`reboot`, ‏`poweroff` ו-`safe_poweroff` בראש ה-PATH הם זיוף
+    #2077: `reboot`, `poweroff` ו-`safe_poweroff` בראש ה-PATH הם זיוף
     שנכשל (127) ורושם ל-`power.calls`. סוף משימה של כיתה קורא ל-`reboot -f`.
     """
     run = tmp_path / "run"
@@ -322,7 +322,7 @@ def run_path(tmp_path: Path, server: str, call: str, *, tries: int = 2,
         + stubs
         + LOOP_STUB
         + f". {posix(funcs)}; "
-        # ‏`wait` ולא `sleep`: ‏`hold_unheard` מרימה את הדווח ברקע, ופייתון
+        # `wait` ולא `sleep`: `hold_unheard` מרימה את הדווח ברקע, ופייתון
         # קורא את העקבה רק אחרי שכל תהליכי הרקע של המעטפת באמת יצאו.
         # במסלול המוצלח הוא לא נחוץ ולא נקרא — שם המעטפת יוצאת ב-exit 0.
         + f'{call}; echo "RETURNED rc=$?"; wait'
@@ -379,7 +379,7 @@ def test_a_class_round_does_not_reboot_when_the_final_report_was_refused(
 def test_the_cloning_room_powers_off_even_when_the_final_report_was_refused(
         tmp_path, reports):
     """נדב 17/10: מחשב שיכפול נכבה בכל מצב — גם כשה-`done` לא אושר.
-    לפני כן המסלול נעצר כאן על מסך ההמתנה (‏hold_unheard), והמחשב נשאר
+    לפני כן המסלול נעצר כאן על מסך ההמתנה (hold_unheard), והמחשב נשאר
     דלוק גם אחרי שהשרת חזר לענות (ברזל, room_72308383). הדיסקים כתובים;
     הדיווח ממשיך ברקע עד הכיבוי, ואם השרת לא שמע — גל שלא נספר בו דבר
     נסגר אצלו כנכשל (#1672) ולא חוסם את הסבב הבא."""
@@ -406,7 +406,7 @@ def test_the_held_machine_stays_visible_instead_of_going_quiet(tmp_path, reports
     result = run_path(tmp_path, url_of(reports), "do_restore")
 
     assert "Leave the computer on and contact IT." in result["out"]
-    # ‏`hold_unheard` מרימה את הדווח מחדש — הזיוף רושם את הקריאה השנייה.
+    # `hold_unheard` מרימה את הדווח מחדש — הזיוף רושם את הקריאה השנייה.
     assert result["trace"].count(f"LOOP {SESSION}") == 2
 
 
@@ -415,7 +415,7 @@ def test_the_held_machine_stays_visible_instead_of_going_quiet(tmp_path, reports
 
 @native_tools
 def test_a_class_round_reboots_once_the_server_took_the_report(tmp_path, reports):
-    """אישור הוא אישור: ‏200 → המכונה מסיימת את דרכה כרגיל."""
+    """אישור הוא אישור: 200 → המכונה מסיימת את דרכה כרגיל."""
     result = run_path(tmp_path, url_of(reports), "do_restore")
 
     assert "TEST-HOLD" not in result["out"]
@@ -451,7 +451,7 @@ def test_a_restore_that_failed_still_holds_on_its_own_message(tmp_path, reports)
     assert HOLD not in result["out"]
 
 
-# --- ‏report_final עצמו: עוצר את הלולאה, וקורא את התשובה ---------------------
+# --- report_final עצמו: עוצר את הלולאה, וקורא את התשובה ---------------------
 
 
 def report_final_probe(tmp_path: Path, sender: str, *, tries: int = 2) -> dict:
@@ -493,7 +493,7 @@ def test_the_reporter_is_stopped_before_the_closing_report_is_sent(tmp_path):
 
 @native_tools
 def test_a_report_the_server_refused_is_not_a_report_that_arrived(tmp_path):
-    """עיקרון 5 בצורתו הצרופה: קוד היציאה הוא הראיה. ‏`curl -sfS` נותן
+    """עיקרון 5 בצורתו הצרופה: קוד היציאה הוא הראיה. `curl -sfS` נותן
     ל-400 של השרת קוד יציאה, ולכן "לא הייתה שגיאה" אינו "התקבל"."""
     result = report_final_probe(tmp_path, "http_post_json() { return 22; }; ")
 
@@ -536,11 +536,11 @@ def test_the_ceiling_is_tries_and_the_journal_says_which_one(tmp_path):
 
 @native_tools
 def test_no_restore_path_sleeps_instead_of_reading_the_answer():
-    """‏`sleep 6` לא חוזר, בשום צורה ובשום מסלול — הוא היה ההימור."""
+    """`sleep 6` לא חוזר, בשום צורה ובשום מסלול — הוא היה ההימור."""
     for name in ("do_restore", "do_restore_drawers"):
         body = agent_functions(name)
-        assert "sleep 6" not in body, f"‏{name} עדיין מהמרת על שעון"
-        assert "report_final" in body, f"‏{name} אינה קוראת את התשובה"
+        assert "sleep 6" not in body, f"\u200f{name} עדיין מהמרת על שעון"
+        assert "report_final" in body, f"\u200f{name} אינה קוראת את התשובה"
 
 
 def test_the_answer_is_read_before_the_machine_leaves():
@@ -548,9 +548,9 @@ def test_the_answer_is_read_before_the_machine_leaves():
     station = agent_functions("do_restore")
     assert station.index("report_final") < station.index("reboot -f")
     room = agent_functions("do_restore_drawers")
-    # ‏rindex ולא index: שער ה-SMART (#652) מוסיף `finish_and_stop` *מוקדם*
+    # rindex ולא index: שער ה-SMART (#652) מוסיף `finish_and_stop` *מוקדם*
     # במסלול "החלף דיסק" — כיבוי לפני שנכתב בייט, שאין עליו דיווח סיום.
-    # הכלל של #101 הוא על הכיבוי שאחרי שחזור שהושלם — האחרון. ‏#1560: הכיבוי
+    # הכלל של #101 הוא על הכיבוי שאחרי שחזור שהושלם — האחרון. #1560: הכיבוי
     # הזה הוא ספירה לאחור (idle.sh end_countdown -> finish_and_stop).
     assert room.index("report_final") < room.rindex("end_countdown")
 
@@ -558,7 +558,7 @@ def test_the_answer_is_read_before_the_machine_leaves():
 @native_tools
 def test_all_three_closing_reports_go_through_one_mechanism():
     """הכלל הנכון היה מיושם במקום אחד מתוך שלושה, וכך הוא נשחק.
-    ‏`pull_close` עובר עכשיו דרך אותה פונקציה בדיוק."""
+    `pull_close` עובר עכשיו דרך אותה פונקציה בדיוק."""
     pull = (AGENT / "lib" / "restore" / "pull.sh").read_text(encoding="utf-8")
     close = pull[pull.index("pull_close() {"):]
     assert "report_final" in close
@@ -568,7 +568,7 @@ def test_all_three_closing_reports_go_through_one_mechanism():
 
 @native_tools
 def test_the_periodic_loop_keeps_its_forgiveness():
-    """מה שאסור לתקן: ‏`|| true` בלולאה התקופתית נכון ומתועד — דיווח
+    """מה שאסור לתקן: `|| true` בלולאה התקופתית נכון ומתועד — דיווח
     שייחזור בעוד שתי שניות אינו חייב תשובה. הבעיה מעולם לא הייתה
     הלולאה אלא שהדיווח *האחרון* עבר דרכה."""
     progress = (AGENT / "lib" / "core" / "progress.sh").read_text(encoding="utf-8")
@@ -605,7 +605,7 @@ def test_a_machine_that_reported_done_is_not_sent_the_round_again(server):
         return server["anon"].post("/api/v1/agent/hello",
                                    json=hello_body(ids["mac1"])).json()
 
-    # הזרוע המסוכנת: המכונה סיימה, ה-`done` לא הגיע — ‏hello מחזיר לה
+    # הזרוע המסוכנת: המכונה סיימה, ה-`done` לא הגיע — hello מחזיר לה
     # את אותו הסבב, והיא תשחזר שוב. זה מה שהשינוי בסוכן מונע.
     assert hello_again()["session"] is not None
 

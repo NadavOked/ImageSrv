@@ -1,13 +1,13 @@
-"""‏#989 (1): קצב ואיבוד של הגל — ממה ש-`udp-sender` עצמו מדפיס.
+"""#989 (1): קצב ואיבוד של הגל — ממה ש-`udp-sender` עצמו מדפיס.
 
-הצורה של שורת ההתקדמות נלקחה מקוד המקור של udpcast (‏`statistics.c`
-‏`displaySenderStats`, ‏`log.c` ‏`printLongNum`; עותק ב-github
-‏elisescu/udpcast, נקרא 24/09):
+הצורה של שורת ההתקדמות נלקחה מקוד המקור של udpcast (`statistics.c`
+`displaySenderStats`, `log.c` `printLongNum`; עותק ב-github
+elisescu/udpcast, נקרא 24/09):
 
     bytes=<printLongNum> re-xmits=%07llu (%3u.%01u%%) slice=%04d - %3d\\r
 
-ושורה כזו נכתבת לכל היותר פעם ב-`DEFLT_STAT_PERIOD` (‏500ms) לתוך
-הלוג הפר-מחיצתי (‏`run_process` מפנה אליו את ה-stderr). ⚠️ **לא נמדד
+ושורה כזו נכתבת לכל היותר פעם ב-`DEFLT_STAT_PERIOD` (500ms) לתוך
+הלוג הפר-מחיצתי (`run_process` מפנה אליו את ה-stderr). ⚠️ **לא נמדד
 על ברזל** — אין בריפו לוג אמיתי של udp-sender בזמן גל. הצורה כאן היא
 של הקוד, לא של מדידה; מה שלא מתאים לה הוא `None`, לא אפס.
 """
@@ -33,7 +33,7 @@ from test_server_room import CLONER1, cloner_hello, room, room_body, room_server
 
 
 def long_num(x: int) -> str:
-    """‏`printLongNum` של udpcast (‏log.c), שורה-בשורה — כדי שהטסט יבנה
+    """`printLongNum` של udpcast (log.c), שורה-בשורה — כדי שהטסט יבנה
     את השורה כפי ש-udp-sender כותב אותה, כולל הרווחים והסיומת."""
     if x > 1_000_000_000_000:
         min_div, suffix = 1_048_576, "M"
@@ -183,7 +183,7 @@ def test_loss_is_summed_over_the_partitions_of_the_wave(engine_env):
 
 
 def test_a_started_partition_without_a_readable_line_makes_loss_unknown(engine_env):
-    """שידור שהתחיל ואין בו שורה שאנחנו יודעים לקרוא — ‏udpcast אחר, או
+    """שידור שהתחיל ואין בו שורה שאנחנו יודעים לקרוא — udpcast אחר, או
     לוג שנמחק — אינו "אפס שידורים חוזרים"."""
     engine, recorder = engine_env
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
@@ -259,7 +259,7 @@ def test_the_stream_rate_is_the_bytes_moved_over_the_time_they_moved(
     השולח דוגם אותו בזמן שהוא ממתין לתהליך — ההמתנה למקבלים (מונה 0)
     אינה זרם, ולכן הספירה מתחילה בדגימה הראשונה שמעל אפס.
 
-    השעון מוזרק (#2689): המונה 0 נדגם ב-4.0, ‏1MB ב-10.0 ו-6MB ב-10.5. הזרם
+    השעון מוזרק (#2689): המונה 0 נדגם ב-4.0, 1MB ב-10.0 ו-6MB ב-10.5. הזרם
     הוא 0.5 שנייה ו-5MB, בדיוק; ספירה מהדגימה שלפני הבייט הראשון הייתה
     נותנת 6.5."""
     stamps, seen = sample_clock
@@ -278,7 +278,7 @@ def test_the_stream_rate_is_the_bytes_moved_over_the_time_they_moved(
 
 
 def test_a_partition_that_never_moved_between_samples_has_no_stream_rate(engine_env):
-    """מונה שנראה פעם אחת בלבד — אין שני זמנים, אין קצב. ‏None, לא אפס."""
+    """מונה שנראה פעם אחת בלבד — אין שני זמנים, אין קצב. None, לא אפס."""
     engine, recorder = engine_env
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
     assert wait_for(lambda: len(recorder.processes) == 1)
@@ -298,7 +298,7 @@ def test_a_started_partition_without_a_line_makes_the_outcome_unknown(engine_env
     assert _counts(engine.wave_outcome("ses_1")) == {"sent_bytes": None, "loss_blocks": None}
 
 
-# --- ‏GET /api/console/room ----------------------------------------------------
+# --- GET /api/console/room ----------------------------------------------------
 
 
 def test_the_room_round_carries_the_stream_numbers(room_server, tmp_path, monkeypatch):

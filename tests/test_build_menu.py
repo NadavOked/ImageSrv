@@ -1,24 +1,24 @@
-"""מסך מחשב הבנייה — מאז 11/10 גואי בלבד (‏#135, ‏#1073, הכרעת נדב 11/10).
+"""מסך מחשב הבנייה — מאז 11/10 גואי בלבד (#135, #1073, הכרעת נדב 11/10).
 
 עד 11/10 הקובץ הזה בדק את **תפריט הטקסט** של מחשב הבנייה: כניסה בטקסט,
 ארבע-חמש אפשרויות ממוספרות לפי התפקיד, בחירת תיקייה, "Type this computer's
 name" ו-standby. נדב הכריע: אין מסך טקסט חלופי במכונות — רק הגואי — והקוד
 נמחק. הבדיקות של התפריט נמחקו איתו, והשומר שהוא לא חוזר הוא
-‏`tests/test_gui_only_no_text_fallback.py`.
+`tests/test_gui_only_no_text_fallback.py`.
 
 מה שנשאר כאן הוא מה שהגואי עצמו עובר דרכו, מול שרת HTTP אמיתי בתהליכון
 (כמו `test_final_report.py`):
 
-1. ‏`build_console_screen` בלי גואי — הודעה ואתחול מהדיסק המקומי, **בלי**
+1. `build_console_screen` בלי גואי — הודעה ואתחול מהדיסק המקומי, **בלי**
    כניסה, בלי בקשה אחת לקונסולה ובלי לקרוא את המקשים שחיכו ב-stdin.
    בקרה שלילית: על הקוד הישן היא נכנסת לכניסה בטקסט ושולחת
-   ‏`POST /api/v1/agent/login`.
-2. הקליטה מהגואי (‏`gui_capture`, ‏`guibridge.sh`) מגיעה ל-
-   ‏`POST /api/console/tasks/capture` עם הגוף של הקונסולה, ה-cookie,
+   `POST /api/v1/agent/login`.
+2. הקליטה מהגואי (`gui_capture`, `guibridge.sh`) מגיעה ל-
+   `POST /api/console/tasks/capture` עם הגוף של הקונסולה, ה-cookie,
    והתיקייה — קיימת, או חדשה שנוצרת קודם. שם בעברית מגיע לשרת (#2842), וסירוב השרת מגיע למסך.
-3. ‏`gui_role` קורא את התפקיד מתשובת הכניסה (#947).
+3. `gui_role` קורא את התפקיד מתשובת הכניסה (#947).
 
-הפלט של כל הרצה הולך לקובץ ולא ל-PIPE (‏`capture_output` ממתין לסגירת
+הפלט של כל הרצה הולך לקובץ ולא ל-PIPE (`capture_output` ממתין לסגירת
 הצינור, לא ליציאת התהליך).
 """
 
@@ -41,7 +41,7 @@ from agentlib import flat_lib, lib_path
 
 REPO = Path(__file__).resolve().parent.parent
 
-#: ‏curl הוא המנגנון שנבדק (קוד התשובה וה-cookie הם הראיה החיובית), ו-jq
+#: curl הוא המנגנון שנבדק (קוד התשובה וה-cookie הם הראיה החיובית), ו-jq
 #: קורא את מצב המכונה. בלעדיהם אין מה לבדוק, ובמקום שבו הם אמורים להיות
 #: זה כישלון ולא דילוג (#52).
 native_tools = requires_native(("bash", BASH), "curl", "jq")
@@ -55,7 +55,7 @@ FOLDERS = [
     {"name": "Classrooms", "description": "", "images": 5},
 ]
 
-#: מצב המכונה מ-`/api/v1/agent/state` — ‏`gui_capture` בודק מולו את הדיסק.
+#: מצב המכונה מ-`/api/v1/agent/state` — `gui_capture` בודק מולו את הדיסק.
 STATE = {"mac": MAC, "known": True, "role": "build", "name": "BUILD-01",
          "disks": [{"dev": "/dev/sda", "removable": False}],
          "allowed_images": [], "task": None}
@@ -70,7 +70,7 @@ class Console(HTTPServer):
     """מחזיר את מה שהוגדר לו, וזוכר כל בקשה שהגיעה."""
 
     role = "admin"
-    #: ‏#2842: (status, body) שהשרת המזויף מחזיר ל-POST של קליטה; None = 200 רגיל.
+    #: #2842: (status, body) שהשרת המזויף מחזיר ל-POST של קליטה; None = 200 רגיל.
     capture_answer: tuple[int, dict] | None = None
     folders: list[dict] = []
     requests: list[dict] = []
@@ -165,7 +165,7 @@ def posted(console: Console, path: str) -> list[dict]:
             if r["method"] == "POST" and r["path"] == path]
 
 
-#: הספריות שהמסך והגשר טוענים (‏gui_libs ב-guibridge.sh, והסוכן).
+#: הספריות שהמסך והגשר טוענים (gui_libs ב-guibridge.sh, והסוכן).
 LIBS = ("common.sh", "jsonq.sh", "waits.sh", "ui.sh", "hold.sh", "attended.sh",
         "buildmenuitems.sh", "buildmenu.sh", "buildcapture.sh", "roomflow.sh",
         "localboot.sh", "guiparent.sh", "guibridge.sh")
@@ -218,7 +218,7 @@ def test_the_build_screen_without_a_gui_boots_local_and_asks_nothing(tmp_path, c
     if Path("/usr/bin/imagesrv-kiosk").exists():
         pytest.fail("/usr/bin/imagesrv-kiosk קיים על המכונה המריצה — הטסט מניח גואי חסר")
     screen = cut_function("build_console_screen")
-    assert screen is not None, "‏build_console_screen אינה מוגדרת ב-imagesrv-agent"
+    assert screen is not None, "\u200fbuild_console_screen אינה מוגדרת ב-imagesrv-agent"
     result = run_shell(
         tmp_path, url_of(console),
         # 11/10: no efivars here -- BootNext "skipped", the host untouched.
@@ -246,7 +246,7 @@ def test_the_build_screen_without_a_gui_boots_local_and_asks_nothing(tmp_path, c
 
 def gui_capture_call(name: str, folder: str, folder_new: str, desc: str = "") -> str:
     """הפעולה `capture-start` כפי שהגשר מריץ אותה: כניסה, תפקיד, ואז
-    ‏`gui_capture` עם שדות הרשומה."""
+    `gui_capture` עם שדות הרשומה."""
     return (
         "RECOVERY_USER=admin RECOVERY_PASS=pw; console_signin || exit 11; "
         "gui_role || exit 12; "
@@ -283,7 +283,7 @@ def test_a_gui_capture_into_a_new_folder_creates_it_first(tmp_path, console):
 
 @native_tools
 def test_a_hebrew_folder_and_image_name_reach_the_server(tmp_path, console):
-    """‏#2842: הכלל של הכרעת 30/08 ("אנגלית או מספרים") הוחלף בשרת ב-#327 —
+    """#2842: הכלל של הכרעת 30/08 ("אנגלית או מספרים") הוחלף בשרת ב-#327 —
     `validate_display_name` מתיר עברית — אבל בדיקה בסוכן המשיכה לחסום בשקט.
     השם נשלח כמו שהוקלד, והשרת הוא הפוסק."""
     result = run_shell(tmp_path, url_of(console),
@@ -296,7 +296,7 @@ def test_a_hebrew_folder_and_image_name_reach_the_server(tmp_path, console):
 
 @native_tools
 def test_a_server_refusal_of_the_name_reaches_the_screen_in_its_own_words(tmp_path, console):
-    """‏#2842: השם נדחה בשרת → ה-`detail` שלו (איזה תו אסור) בשורת השגיאה של
+    """#2842: השם נדחה בשרת → ה-`detail` שלו (איזה תו אסור) בשורת השגיאה של
     המסך. עד אז `gui_capture` החזיר 1 בלי מילה, והמסך נראה "חסום"."""
     detail = "שם האימג' 'a—b' אינו תקין — מותרים אותיות אנגליות או עבריות"
     console.capture_answer = (400, {"detail": detail})
@@ -321,7 +321,7 @@ def test_the_capture_request_carries_the_console_session_cookie(tmp_path, consol
 
 @native_tools
 def test_a_deploy_session_cannot_capture(tmp_path, console):
-    """‏`gui_capture` הוא admin בלבד — גם כשהשרת היה מסרב ממילא."""
+    """`gui_capture` הוא admin בלבד — גם כשהשרת היה מסרב ממילא."""
     console.role = "deploy"
     result = run_shell(tmp_path, url_of(console), gui_capture_call("Base", "Lab", "no"))
     assert "CAPTURE rc=1" in result["out"], result["out"]
@@ -331,7 +331,7 @@ def test_a_deploy_session_cannot_capture(tmp_path, console):
 # --- הכלל הסטטי: אין עברית על המסך של הסוכן ---------------------------------
 
 
-#: ‏`gui_error "<למסך>" "<ללוג>"` — קבוצה 1 היא הארגומנט של המסך; אחריה
+#: `gui_error "<למסך>" "<ללוג>"` — קבוצה 1 היא הארגומנט של המסך; אחריה
 #: חייב לבוא ארגומנט שני לא-ריק, וממנו והלאה אין עברית.
 SCREEN_ONLY = re.compile(r'^\s*gui_error\s+("[^"]*")\s+"[^"]+"')
 
@@ -339,14 +339,14 @@ SCREEN_ONLY = re.compile(r'^\s*gui_error\s+("[^"]*")\s+"[^"]+"')
 @pytest.mark.parametrize("name", ("buildmenuitems.sh", "buildmenu.sh",
                                   "buildcapture.sh", "roomflow.sh", "guiparent.sh"))
 def test_the_agent_libs_print_no_hebrew(name):
-    """לקונסולת Linux אין פונט עברי ואין RTL — ‏0 שורות עברית, כמו ui.sh.
+    """לקונסולת Linux אין פונט עברי ואין RTL — 0 שורות עברית, כמו ui.sh.
 
-    חריג אחד, צר (#1503): ‏`gui_error "<עברית>" "<אנגלית>"`. הארגומנט
+    חריג אחד, צר (#1503): `gui_error "<עברית>" "<אנגלית>"`. הארגומנט
     הראשון נכתב רק לקובץ ה-error של הגואי הנייטיב (שהוא עברית RTL),
     והשני הוא מה שהולך ל-stderr/ללוג. בלי ארגומנט שני `gui_error` כותב
     ללוג את הראשון — ולכן שורה כזו אינה חריג והיא נופלת כאן."""
     path = lib_path(name)
-    assert path.exists(), f"‏{name} חסר"
+    assert path.exists(), f"\u200f{name} חסר"
     hebrew = [line for line in path.read_text(encoding="utf-8").splitlines()
               if any("֐" <= ch <= "ת" for ch in line)]
     hebrew = [line for line in hebrew
@@ -357,7 +357,7 @@ def test_the_agent_libs_print_no_hebrew(name):
 
 @native_tools
 def test_gui_role_comes_from_the_login_answer_not_from_me(tmp_path):
-    """‏17/09 (#947): הכניסה במסך הבנייה נדחתה גם אחרי login=200 — `gui_role`
+    """17/09 (#947): הכניסה במסך הבנייה נדחתה גם אחרי login=200 — `gui_role`
     קרא `/api/console/me`, שאינו ב-allowlist הקיוסק (רשימת אסטרה) ולכן 404
     על פורט הסוכן. התשובה של login כבר נושאת את התפקיד; ממנה קוראים.
     בקרה שלילית: על הקוד הישן הטסט נופל — אין `console_get`/רשת כאן, ורק

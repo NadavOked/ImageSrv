@@ -1,9 +1,9 @@
-"""‏#1390 — בדיקת המקום של ה-VM לפי מה שנתפס בפועל.
+"""#1390 — בדיקת המקום של ה-VM לפי מה שנתפס בפועל.
 
 ברזל, שרת ת"א 13/10: אימג' של 146.4GB דחוס סורב — "נדרשים 479.3GB (227.4 תפוס
-במחיצות + 32.2 מרווח + 219.7 גרסה חדשה), פנויים 449.9". ‏`disk.raw` דליל (לוגי
-500.1GB, ‏26GB תפוסים אחרי 9GB שחזור), והגרסה החדשה נכתבת דחוסה — לא פי 1.5.
-וה-227.4 לא היה "תפוס": ‏`used_bytes` היה null ב-NTFS (‏#1368), והחישוב לקח את
+במחיצות + 32.2 מרווח + 219.7 גרסה חדשה), פנויים 449.9". `disk.raw` דליל (לוגי
+500.1GB, 26GB תפוסים אחרי 9GB שחזור), והגרסה החדשה נכתבת דחוסה — לא פי 1.5.
+וה-227.4 לא היה "תפוס": `used_bytes` היה null ב-NTFS (#1368), והחישוב לקח את
 גודל המחיצה בשקט וקרא לזה תפוס.
 """
 
@@ -26,11 +26,11 @@ GIB = 1 << 30
 
 
 def tel_aviv(*, measured: bool) -> dict:
-    """הצורה של האימג' מ-13/10: ‏ESP מלא, שלוש מחיצות NTFS, ‏146.4GB דחוס."""
+    """הצורה של האימג' מ-13/10: ESP מלא, שלוש מחיצות NTFS, 146.4GB דחוס."""
     manifest = copy.deepcopy(SOURCE)
     manifest.update(id="img_5790e4", name="Win11 Lab", total_compressed_bytes=int(146.4 * GB))
     esp = {**manifest["partitions"][0], "size_bytes": 100 * 1024**2, "used_bytes": 30 * 1024**2}
-    # ‏#1407: גיאומטריה אמיתית — מחיצות עוקבות, בגודל של סקטורים שלמים.
+    # #1407: גיאומטריה אמיתית — מחיצות עוקבות, בגודל של סקטורים שלמים.
     # בלי זה הספרייה מדלגת על המניפסט (חפיפה/לא מיושר) ואין מה לבדוק.
     start = esp["start_sector"] + esp["size_bytes"] // 512
     ntfs = []
@@ -60,7 +60,7 @@ def test_the_tel_aviv_image_fits_on_the_tel_aviv_server(lab):
 def test_the_new_version_is_counted_compressed_not_one_and_a_half_times(lab):
     manifest = tel_aviv(measured=True)
     used = sum(p["used_bytes"] for p in manifest["partitions"])
-    # ‏#1737: ועוד הרזרבה למערכת — היא נוספת על מרווח הגדילה, לא בתוכו.
+    # #1737: ועוד הרזרבה למערכת — היא נוספת על מרווח הגדילה, לא בתוכו.
     need = used + 30 * GIB + manifest["total_compressed_bytes"] + SYSTEM_RESERVE_BYTES
     engine, image = start_or_refusal(lab, manifest, need - 1)
     exc = refusal(engine, image)
@@ -71,7 +71,7 @@ def test_the_new_version_is_counted_compressed_not_one_and_a_half_times(lab):
 
 
 def test_partitions_without_used_bytes_count_their_full_size_and_say_so(lab):
-    """לא ממציאים מספר (‏#1368): גודל המחיצה — שמרני — וההודעה אומרת היכן ולמה."""
+    """לא ממציאים מספר (#1368): גודל המחיצה — שמרני — וההודעה אומרת היכן ולמה."""
     manifest = tel_aviv(measured=False)
     sizes = sum(p["size_bytes"] for p in manifest["partitions"][1:]) + manifest["partitions"][0]["used_bytes"]
     need = sizes + 30 * GIB + manifest["total_compressed_bytes"] + SYSTEM_RESERVE_BYTES
@@ -94,7 +94,7 @@ def test_a_missing_used_bytes_is_not_a_measurement(lab):
 
 @pytest.mark.parametrize("bad", [-1, "84509376512", True])
 def test_a_used_bytes_that_is_not_a_count_never_reaches_the_vm_update(lab, bad):
-    """‏#1407 (77557596): ‏used_bytes שאינו מונה הוא מניפסט פגום — הספרייה
+    """#1407 (77557596): used_bytes שאינו מונה הוא מניפסט פגום — הספרייה
     דוחה אותו בשמו, והעדכון אינו מגיע לחשב עליו מקום."""
     from server.library.images import ImageLibrary
 
@@ -107,7 +107,7 @@ def test_a_used_bytes_that_is_not_a_count_never_reaches_the_vm_update(lab, bad):
     assert exc.status == 404
 
 
-# --- ‏#1737: גם השמירה — לא רק הפתיחה ------------------------------------------
+# --- #1737: גם השמירה — לא רק הפתיחה ------------------------------------------
 
 
 @pytest.mark.parametrize("spare,saved", [(-1, False), (0, True)])

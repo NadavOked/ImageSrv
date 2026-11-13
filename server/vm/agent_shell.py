@@ -1,4 +1,4 @@
-"""גשר לפונקציות של הסוכן — השרת מריץ את `agent/lib/*.sh` עצמם (‏#1334).
+"""גשר לפונקציות של הסוכן — השרת מריץ את `agent/lib/*.sh` עצמם (#1334).
 
 עדכון אימג' ב-VM (`server/vm/vmupdate.py`) צריך לבנות טבלת מחיצות מהמניפסט,
 למתוח את מחיצת Windows, לכווץ ולגזור `boot_ca` — בדיוק מה שהסוכן כבר עושה
@@ -9,11 +9,11 @@
 
 **מה הגשר מוסיף על הסוכן, ותו לא:**
 
-* ‏`log` נדרס **אחרי** הטעינה כך שיכתוב רק ל-`$LOG_FILE`. ב-`common.sh`
-  הוא מדפיס גם ל-stdout, ופונקציה שמחזירה ערך ב-stdout (‏`_shrink_entry`,
-  ‏`boot_ca_json`) הייתה מחזירה אותו מעורבב בשורות יומן.
-* משתני השגיאה שהסוכן ממלא (‏`PLAN_ERROR`, ‏`GROW_ERROR`, ‏`SHRINK_ERROR`,
-  ‏`BOOTCA_ERROR`) נכתבים לקובץ ונקראים בחזרה — הם הסיבה בשמה, וקוד יציאה
+* `log` נדרס **אחרי** הטעינה כך שיכתוב רק ל-`$LOG_FILE`. ב-`common.sh`
+  הוא מדפיס גם ל-stdout, ופונקציה שמחזירה ערך ב-stdout (`_shrink_entry`,
+  `boot_ca_json`) הייתה מחזירה אותו מעורבב בשורות יומן.
+* משתני השגיאה שהסוכן ממלא (`PLAN_ERROR`, `GROW_ERROR`, `SHRINK_ERROR`,
+  `BOOTCA_ERROR`) נכתבים לקובץ ונקראים בחזרה — הם הסיבה בשמה, וקוד יציאה
   לבדו אינו אומר לטכנאי מה נפל (עיקרון 4).
 """
 
@@ -31,10 +31,10 @@ from pathlib import Path
 
 from server.paths import AGENT_LIB
 
-#: ‏#1610: מעבר/קריאה למשתמש ה-VM **בשמו** (ACL), לא דרך קבוצה ולא דרך
-#: `os.chmod`. ‏CodeQL (‏`py/overly-permissive-file`) מסמן כל ביט שאינו של
+#: #1610: מעבר/קריאה למשתמש ה-VM **בשמו** (ACL), לא דרך קבוצה ולא דרך
+#: `os.chmod`. CodeQL (`py/overly-permissive-file`) מסמן כל ביט שאינו של
 #: הבעלים — גם 0o710 — וההערה `codeql[...]` אינה סוגרת התראה בשער (נמדד
-#: 17/10: ‏#341 נשארה פתוחה). ‏ACL עם ערך אחד בשם ה-uid הוא גם **מינימלי
+#: 17/10: #341 נשארה פתוחה). ACL עם ערך אחד בשם ה-uid הוא גם **מינימלי
 #: יותר** מקבוצה: חבר אחר בקבוצה של משתמש ה-VM אינו עובר.
 ACL_X, ACL_R = 1, 4
 _ACL_XATTR = "system.posix_acl_access"
@@ -43,10 +43,10 @@ _ACL_NO_ID = 0xFFFFFFFF
 
 
 def grant_user(path: str | Path, uid: int, perm: int) -> None:
-    """`uid` (בלבד) מקבל `perm` (‏`ACL_X`/`ACL_R`) על `path`. הבעלים והקבוצה
+    """`uid` (בלבד) מקבל `perm` (`ACL_X`/`ACL_R`) על `path`. הבעלים והקבוצה
     הבעלת נשארים כפי שהם, והקבוצה ו"אחרים" — אפס. ביטי הבעלים נשמרים.
 
-    כשל — ‏OSError עם הסיבה, לא הרשאה רחבה יותר בשקט (עיקרון 5): מערכת קבצים
+    כשל — OSError עם הסיבה, לא הרשאה רחבה יותר בשקט (עיקרון 5): מערכת קבצים
     בלי ACL אינה ממשיכה בלי הגנה."""
     owner = (os.lstat(path).st_mode >> 6) & 7
     entries = [(_ACL_USER_OBJ, owner, _ACL_NO_ID), (_ACL_USER, perm, uid),
@@ -65,7 +65,7 @@ LIBS = (
     "common.sh", "waits.sh", "jsonq.sh", "sysinfo.sh", "diskinfo.sh", "progress.sh", "restore.sh",   # diskinfo: #2434's identity (disk_serial/disk_port), from sysinfo.sh since #2385
     "expand.sh", "grow.sh", "ntfsunhib.sh", "failmark.sh", "diskfit.sh", "manifest.sh",
     "hibernation.sh", "shrinkplan.sh", "shrink.sh", "bootca.sh",
-    "lcsnap.sh",    # ‏#1491: ‏`_lc_relocs` — כמה `ntfsresize -n` אומר שיוזז
+    "lcsnap.sh",    # #1491: `_lc_relocs` — כמה `ntfsresize -n` אומר שיוזז
 )
 
 #: משתני הסיבה שהסוכן ממלא, והגשר מחזיר.
@@ -130,8 +130,8 @@ class Call:
 def _env(run_dir: Path, extra: dict[str, str] | None) -> dict[str, str]:
     env = dict(os.environ)
     path = env.get("PATH", "")
-    # ‏sgdisk/losetup/blkid/partclone יושבים ב-sbin. השירות רץ כ-root ושם
-    # הם ב-PATH; ‏`sudo` בבדיקות מאפס PATH ל-secure_path, שגם בו הם.
+    # sgdisk/losetup/blkid/partclone יושבים ב-sbin. השירות רץ כ-root ושם
+    # הם ב-PATH; `sudo` בבדיקות מאפס PATH ל-secure_path, שגם בו הם.
     # מוסיפים בכל זאת: כלי שלא נמצא הוא 127 שנראה כמו "הטבלה נכשלה".
     for extra_dir in ("/usr/sbin", "/sbin"):
         if extra_dir not in path.split(os.pathsep):
@@ -146,7 +146,7 @@ def _env(run_dir: Path, extra: dict[str, str] | None) -> dict[str, str]:
     return env
 
 
-#: תקרה לקריאה אחת. הפונקציות הארוכות (‏ntfsresize בהגדלה) מסתיימות בדקות.
+#: תקרה לקריאה אחת. הפונקציות הארוכות (ntfsresize בהגדלה) מסתיימות בדקות.
 CALL_TIMEOUT = 3 * 3600
 
 
@@ -154,15 +154,15 @@ def fresh_user_dir(parent: Path, uid: int, gid: int) -> Path:
     """תיקייה **חדשה** שמשתמש ה-VM כותב אליה — בלי ש-root ייגע בשום נתיב
     שהמשתמש יכול לשנות.
 
-    ‏`chown` כ-root על נתיב בתוך תיקייה שהמשתמש כותב אליה הוא העלאת הרשאות:
+    `chown` כ-root על נתיב בתוך תיקייה שהמשתמש כותב אליה הוא העלאת הרשאות:
     הוא מחליף את הנתיב ב-symlink ל-`/etc/shadow` לפני ה-chown. לכן: ההורה
     חייב להיות תיקייה אמיתית (lstat, לא symlink) של root שאיש אחר אינו כותב
-    אליה; הילד נוצר ב-`mkdtemp` (שם ייחודי, ‏0700, אטומי); ה-chown נעשה על
+    אליה; הילד נוצר ב-`mkdtemp` (שם ייחודי, 0700, אטומי); ה-chown נעשה על
     ה-fd שנפתח ב-`O_NOFOLLOW|O_DIRECTORY` — לא על נתיב."""
     parent = Path(parent)
     if not parent.exists():
-        # ‏#1535/#1610: המשתמש רק **עובר** דרך ההורה אל הילד שלו — בשמו (ACL),
-        # לא כ"אחרים" ולא לפי ה-umask. ‏root נשאר הבעלים.
+        # #1535/#1610: המשתמש רק **עובר** דרך ההורה אל הילד שלו — בשמו (ACL),
+        # לא כ"אחרים" ולא לפי ה-umask. root נשאר הבעלים.
         parent.mkdir(parents=True, mode=0o700)
         grant_user(parent, uid, ACL_X)
     st = os.lstat(parent)
@@ -181,7 +181,7 @@ def fresh_user_dir(parent: Path, uid: int, gid: int) -> Path:
 def _read_vars(path: Path) -> dict[str, str]:
     """קובץ הסיבות — בלי לעקוב אחרי symlink (המשתמש כתב את התיקייה)."""
     errors: dict[str, str] = {}
-    # ‏O_NONBLOCK: ‏FIFO שנשתל במקום הקובץ היה חוסם את ה-open לנצח (תהליכון
+    # O_NONBLOCK: FIFO שנשתל במקום הקובץ היה חוסם את ה-open לנצח (תהליכון
     # של השרת תקוע). נפתח בלי לחסום, נבדק שהוא קובץ רגיל, ורק אז נקרא.
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
     try:
@@ -206,13 +206,13 @@ def _read_vars(path: Path) -> dict[str, str]:
 def call(func: str, *args: str, run_dir: str | Path, env: dict[str, str] | None = None,
          timeout: float | None = CALL_TIMEOUT, shell: str = "sh",
          as_user: tuple[int, int] | None = None, runner=subprocess.run) -> Call:
-    """מפעיל את `func` של הסוכן עם `args`. ‏`run_dir` הוא ה-RUN_DIR שלה
-    (שם היומן `agent.log` והקבצים הזמניים), ונשמר בין קריאות — ‏`expand_last`
+    """מפעיל את `func` של הסוכן עם `args`. `run_dir` הוא ה-RUN_DIR שלה
+    (שם היומן `agent.log` והקבצים הזמניים), ונשמר בין קריאות — `expand_last`
     משאיר סימון ש-`grow_expanded` קורא.
 
     **הארגומנטים עוברים כפרמטרים מיקומיים** (`"$@"`) ולא משורשרים לסקריפט —
-    ערך שנקרא מהדיסק אינו יכול להפוך לפקודה. ‏`as_user=(uid, gid)` — כמשתמש
-    ה-VM (‏setpriv, ‏no-new-privs), למה שמפרסר קלט של האורח (#1334); אז
+    ערך שנקרא מהדיסק אינו יכול להפוך לפקודה. `as_user=(uid, gid)` — כמשתמש
+    ה-VM (setpriv, no-new-privs), למה שמפרסר קלט של האורח (#1334); אז
     `run_dir` הוא **הורה** של root, ובתוכו נוצרת תיקייה חדשה לקריאה הזו
     (`fresh_user_dir`) ונמחקת אחריה."""
     prefix: list[str] = []
@@ -237,5 +237,5 @@ def call(func: str, *args: str, run_dir: str | Path, env: dict[str, str] | None 
         errors = _read_vars(vars_file)
     finally:
         if scratch is not None:
-            shutil.rmtree(scratch, ignore_errors=True)   # ‏rmtree אינו עוקב אחרי symlinks
+            shutil.rmtree(scratch, ignore_errors=True)   # rmtree אינו עוקב אחרי symlinks
     return Call(proc.returncode, proc.stdout, proc.stderr, errors)

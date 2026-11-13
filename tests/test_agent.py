@@ -30,8 +30,8 @@ REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
 INSTALLER = REPO / "installer"
 
-#: ‏#1821: כותרת regf של כוורת מסונכרנת — רצף ראשי (offset 4) = משני (8).
-#: ‏`_write_hostname_windows` קורא אותה לפני כתיבה, ו"hive" הישן היה "לא נקרא".
+#: #1821: כותרת regf של כוורת מסונכרנת — רצף ראשי (offset 4) = משני (8).
+#: `_write_hostname_windows` קורא אותה לפני כתיבה, ו"hive" הישן היה "לא נקרא".
 CLEAN_HIVE = b"regf" + (7).to_bytes(4, "little") * 2
 
 
@@ -66,7 +66,7 @@ def sh(script: str, cwd: Path | None = None) -> str:
         [BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + script],
         capture_output=True,
         text=True,
-        encoding="utf-8",  # הסוכן מדפיס UTF-8; ‏cp1255 של ווינדוס נופל על א (D7 90)
+        encoding="utf-8",  # הסוכן מדפיס UTF-8; cp1255 של ווינדוס נופל על א (D7 90)
         cwd=str(cwd or REPO),
         stdin=subprocess.DEVNULL,  # לא יורשים את ה-stdin של pytest — בווינדוס
         # ה-handle שלו נשבר בריצה רב-קבצית ו-DuplicateHandle נופל (WinError 50)
@@ -85,16 +85,16 @@ def posix(p: Path) -> str:
 @pytest.mark.parametrize("path", SH_FILES + [REPO / "tools" / "build_initramfs.sh"],
                          ids=lambda p: p.name)
 def test_script_parses(path):
-    # ‏#573: גם `stderr` נלכד, ולא רק `stdin`. תת-תהליך שיורש את
-    # ‏`stderr` של pytest תחת capture נכשל ב-`DuplicateHandle` ברגע
-    # שה-handle כבר אינו תקף — ‏`OSError: [WinError 6]` — וכל 27
+    # #573: גם `stderr` נלכד, ולא רק `stdin`. תת-תהליך שיורש את
+    # `stderr` של pytest תחת capture נכשל ב-`DuplicateHandle` ברגע
+    # שה-handle כבר אינו תקף — `OSError: [WinError 6]` — וכל 27
     # הפרמטרים נופלים יחד על קבצים שאיש לא נגע בהם.
     #
     # ⚠️ **נמדד בשני הכיוונים, משתנה אחד:** אותה פקודה לבדה נותנת
-    # ‏179 עוברים; עם `pytest` שני שרץ במקביל — ‏27 נכשלים. זו
+    # 179 עוברים; עם `pytest` שני שרץ במקביל — 27 נכשלים. זו
     # המשפחה של #14, שבה `stdin=DEVNULL` כבר סגר את הצד האחד.
     #
-    # ‏`check=True` נשמר, ו-`stderr` נכנס לחריגה במקום להיעלם —
+    # `check=True` נשמר, ו-`stderr` נכנס לחריגה במקום להיעלם —
     # שגיאת תחביר של `bash -n` היא בדיוק מה שהטסט הזה קיים בשבילו.
     proc = subprocess.run([BASH, "-n", posix(path)],
                           stdin=subprocess.DEVNULL,
@@ -126,7 +126,7 @@ def decide(schema="1", known="true", role="classroom",
 @pytest.mark.parametrize(
     ("kwargs", "expected"),
     [
-        # גרסת ממשק לא מוכרת — לא מנחשים, גם כשיש סבב רץ. ‏#2666: אומרים את
+        # גרסת ממשק לא מוכרת — לא מנחשים, גם כשיש סבב רץ. #2666: אומרים את
         # זה על מסך הכישלון (die_local), ולא "אין משימה"; לאן האתחול — השרת.
         (dict(schema="2", session="running"), "bad_answer"),
         # MAC לא רשום — לא מציעים דבר, גם לא במצב recovery.
@@ -193,7 +193,7 @@ def fake_machine(tmp_path):
     (blk / "sda/removable").write_text("0\n")
     (blk / "sda/ro").write_text("0\n")   # #1742: לכל התקן בלוק יש אותו; בלעדיו "לא נבדק"
     (blk / "sda/queue").mkdir()
-    # גודל הסקטור הלוגי — ממנו נגזר איפה יושבת כותרת ה-GPT (‏#126).
+    # גודל הסקטור הלוגי — ממנו נגזר איפה יושבת כותרת ה-GPT (#126).
     # לכל כונן אמיתי יש את הקובץ הזה, ולכן גם למכונה המזויפת.
     (blk / "sda/queue/logical_block_size").write_text("512\n")
     (blk / "sda/device").mkdir()
@@ -239,7 +239,7 @@ def test_hello_matches_the_interface(fake_machine):
     assert "scheme" not in disk and "has_data" not in disk
     # אין ataN בנתיב (כמו על VM עם SCSI) — אין חריץ, והדיווח יוצא כרגיל.
     assert disk["port"] is None
-    # ‏#652: בלי smart.sh (ובלי probe) שדה הבריאות הוא `unchecked` —
+    # #652: בלי smart.sh (ובלי probe) שדה הבריאות הוא `unchecked` —
     # לא-נבדק, לא נכשל. ה-probe עצמו רץ רק בצד השחזור.
     assert disk["smart"] == "unchecked"
 
@@ -261,7 +261,7 @@ def _hello_with_monitor_lib(fake_machine) -> dict:
 
 
 def test_hello_carries_a_boot_monitor_secret_that_is_stable_per_boot(fake_machine):
-    """‏32 ספרות hex, מוגרלות פעם אחת ל-RUN_DIR (= לאתחול): שני hello
+    """32 ספרות hex, מוגרלות פעם אחת ל-RUN_DIR (= לאתחול): שני hello
     באותו אתחול נושאים את אותו סוד, והקובץ שהמוניטור יקרא מכיל בדיוק
     אותו. זה הסוד שהפרוקסי יחשב ממנו HMAC ל-challenge של 5900."""
     first = _hello_with_monitor_lib(fake_machine)
@@ -316,16 +316,16 @@ def secure_boot_of(sysroot: Path) -> str:
 
 
 def test_a_bios_machine_reports_secure_boot_off_because_it_really_is(tmp_path):
-    """אין ‏/sys/firmware/efi — אין Secure Boot, ו-`false` הוא ידיעה."""
+    """אין /sys/firmware/efi — אין Secure Boot, ו-`false` הוא ידיעה."""
     assert secure_boot_of(tmp_path) == "false"
 
 
 def test_a_uefi_machine_whose_efivars_cannot_be_read_reports_unknown(tmp_path):
     """זה השדה ששיקר חודשים.
 
-    ‏`efivarfs` הוא מודול (‏CONFIG_EFIVAR_FS=m) שלא נארז ב-initramfs,
+    `efivarfs` הוא מודול (CONFIG_EFIVAR_FS=m) שלא נארז ב-initramfs,
     ולכן המאונט נכשל בשקט — ומכונה שה-Secure Boot **דלוק** בה דיווחה
-    "כבוי". ‏`false` שם היה טענה חיובית שגויה; `null` הוא מה שידענו.
+    "כבוי". `false` שם היה טענה חיובית שגויה; `null` הוא מה שידענו.
     """
     (tmp_path / "sys/firmware/efi").mkdir(parents=True)
     assert secure_boot_of(tmp_path) == "null"
@@ -333,7 +333,7 @@ def test_a_uefi_machine_whose_efivars_cannot_be_read_reports_unknown(tmp_path):
 
 @pytest.mark.parametrize("data_byte, expected", [(1, "true"), (0, "false")])
 def test_the_efi_variable_is_read_when_it_is_there(tmp_path, data_byte, expected):
-    """‏4 בייטי מאפיינים ואז בייט הנתון — כשאפשר לקרוא, קוראים."""
+    """4 בייטי מאפיינים ואז בייט הנתון — כשאפשר לקרוא, קוראים."""
     efivars = tmp_path / "sys/firmware/efi/efivars"
     efivars.mkdir(parents=True)
     (efivars / "SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c").write_bytes(
@@ -342,7 +342,7 @@ def test_the_efi_variable_is_read_when_it_is_there(tmp_path, data_byte, expected
 
 
 def test_unknown_reaches_hello_as_a_bare_null_not_a_string(fake_machine):
-    """‏`null` חייב להגיע כ-JSON null — המחרוזת "null" היא ערך, לא היעדרו."""
+    """`null` חייב להגיע כ-JSON null — המחרוזת "null" היא ערך, לא היעדרו."""
     efivars = fake_machine["sysroot"] / "sys/firmware/efi/efivars"
     for leftover in efivars.iterdir():
         leftover.unlink()
@@ -404,7 +404,7 @@ def test_the_sata_slot_is_read_from_the_sysfs_link(path, expected):
 @pytest.mark.parametrize(
     ("driver", "expected"),
     # ה-scsi host הראשון של בקר ATA הוא ata1 — hostN הוא חריץ N+1.
-    # ‏storvsc של VM מספר תורים, לא מגירות: עדיף בלי מספר מאשר מספר שגוי.
+    # storvsc של VM מספר תורים, לא מגירות: עדיף בלי מספר מאשר מספר שגוי.
     [("ahci", "2"), ("sata_nv", "2"), ("storvsc", ""), ("mptspi", "")],
 )
 def test_the_host_fallback_counts_only_ata_controllers(tmp_path, driver, expected):
@@ -522,7 +522,7 @@ def test_cmdline_reads_only_server_and_mode(tmp_path):
 
 
 def test_debug_flag_is_an_unknown_parameter(tmp_path):
-    """‏#1303: מעטפת הניפוי `imagesrv.debug=1` נמחקה מהמוצר. מי שמוסיף
+    """#1303: מעטפת הניפוי `imagesrv.debug=1` נמחקה מהמוצר. מי שמוסיף
     אותה בעריכת GRUB ליד המחשב מקבל את מה שמקבל כל פרמטר imagesrv לא
     מוכר — אזהרה ביומן, ושום משתנה סביבה שקוד כלשהו יכול להישען עליו."""
     cmdline = tmp_path / "cmdline"
@@ -538,16 +538,16 @@ def test_debug_flag_is_an_unknown_parameter(tmp_path):
     assert "IMAGESRV_DEBUG" not in out
 
 
-# מעטפת שקוראת פקודות ממסוף: `sh < /dev/tty2`, ‏`ash </dev/ttyS0`, או getty.
+# מעטפת שקוראת פקודות ממסוף: `sh < /dev/tty2`, `ash </dev/ttyS0`, או getty.
 TERMINAL_SHELL = re.compile(
     r"\b(?:ba|a|da)?sh\b[^|;&\n]*<\s*/dev/tty|\bgetty\b|\bcttyhack\b")
 
 
 def test_agent_offers_no_shell_on_any_terminal():
-    """‏#1303: הסוכן רץ כ-root על מכונה שעומדת בכיתה. אף קובץ של הסוכן
+    """#1303: הסוכן רץ כ-root על מכונה שעומדת בכיתה. אף קובץ של הסוכן
     שנארז ל-initramfs אינו פותח מעטפת על מסוף — לא מאחורי דגל בשורת
     הקרנל ולא בלעדיו (עיקרון 2: שורת הקרנל נושאת רק את השרת ואת מצב
-    השחזור). ‏`init` ו-`imagesrv-agent` נכללים ברשימה."""
+    השחזור). `init` ו-`imagesrv-agent` נכללים ברשימה."""
     agent_files = [p for p in SH_FILES if p.is_relative_to(AGENT)]
     assert {p.name for p in agent_files} >= {"init", "imagesrv-agent", "common.sh"}
     offenders = [
@@ -559,12 +559,12 @@ def test_agent_offers_no_shell_on_any_terminal():
 
 
 # --- hooks של overlay מעבדה/אתר (#1266) ----------------------------------------
-# ‏SSH יצא מהמוצר. הגישה לטכנאי במעבדה היא overlay מחוץ לריפו; המוצר נותן
-# רק מנגנון כללי: ‏IMAGESRV_EXTRA_OVERLAY בבנאי, ו-hooks שרצים אחרי DHCP.
+# SSH יצא מהמוצר. הגישה לטכנאי במעבדה היא overlay מחוץ לריפו; המוצר נותן
+# רק מנגנון כללי: IMAGESRV_EXTRA_OVERLAY בבנאי, ו-hooks שרצים אחרי DHCP.
 
 
 def run_site_hooks_in(tmp_path, hooks: dict[str, str] | None):
-    """מריץ run_site_hooks מול תיקיית hooks זמנית; ‏None = אין תיקייה בכלל.
+    """מריץ run_site_hooks מול תיקיית hooks זמנית; None = אין תיקייה בכלל.
     מחזיר (stdout, תוכן היומן, תיקיית הריצה)."""
     run = tmp_path / "run"
     run.mkdir()
@@ -605,7 +605,7 @@ def test_no_overlay_means_no_hook_and_no_noise(tmp_path):
 
 
 def test_the_agent_runs_site_hooks_once_after_the_network_is_known():
-    """אחרי ש-net.conf נטען (‏$IP ידוע) ולפני ה-hello הראשון."""
+    """אחרי ש-net.conf נטען ($IP ידוע) ולפני ה-hello הראשון."""
     text = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     calls = [ln for ln in text.splitlines()
              if ln.strip().startswith("run_site_hooks")]
@@ -646,7 +646,7 @@ def test_the_product_image_packs_no_ssh():
     assert not hits, "\n".join(hits)
 
 
-#: ‏#1979: ‏`grow.sh` מוחק את מפתחות ה-SSH **של המערכת המשוחזרת** ומתקין לה יחידה
+#: #1979: `grow.sh` מוחק את מפתחות ה-SSH **של המערכת המשוחזרת** ומתקין לה יחידה
 #: שיוצרת חדשים — זה ניקוי המשוכפל, לא SSH במוצר. רק האסימונים האלה, ורק שם;
 #: כל אזכור אחר באותה שורה עדיין נתפס.
 CLONE_HOSTKEYS = re.compile(r"/ssh/ssh_host_\*|ssh-keygen|ssh-hostkeys|sshd?\.service"
@@ -666,7 +666,7 @@ def test_the_clone_hostkeys_allowance_still_catches_packing_ssh():
 
 def test_the_builder_copies_the_overlay_and_packs_its_binaries(tmp_path):
     """הקטע של IMAGESRV_EXTRA_OVERLAY, מורץ לבדו: העץ מועתק מעל השורש,
-    ‏`.binaries` נארז דרך copy_bin (הערות ושורות ריקות מדולגות) ואינו
+    `.binaries` נארז דרך copy_bin (הערות ושורות ריקות מדולגות) ואינו
     נכנס לאימג' בעצמו."""
     builder = (REPO / "tools" / "build_initramfs.sh").read_text(encoding="utf-8")
     start = builder.index("# --- site/lab overlay (#1266)")
@@ -704,15 +704,15 @@ def test_the_builder_packs_the_account_nss_resolves():
 # --- אשף השחזור בטקסט וסבב הכיתה בטקסט — הוסרו (11/10) ---------------------
 #
 # כאן ישבו הבדיקות של `recovery_flow` (כניסה לפני התפריט, #80; שלושת מצבי
-# הכניסה; ‏#912) ושל `classround.sh` (גוף הפתיחה, ‏#96). נדב, 11/10: GUI בלבד,
+# הכניסה; #912) ושל `classround.sh` (גוף הפתיחה, #96). נדב, 11/10: GUI בלבד,
 # בלי מסך טקסט חלופי — והקוד נמחק. השומר: test_gui_only_no_text_fallback.py.
 # התכונה של #96 — הסיסמה לא נוגעת במערכת הקבצים — עברה לכניסה של הגואי
-# (‏`console_signin`), ונבדקת כאן עליה.
+# (`console_signin`), ונבדקת כאן עליה.
 
 
 def test_the_gui_sign_in_leaves_no_password_on_tmpfs(tmp_path):
-    """‏#96 על הכניסה של הגואי: הגוף עם הסיסמה מגיע ל-curl בצינור
-    (‏`--data-binary @-`) ואינו נכתב לשום קובץ ב-`$RUN_DIR`."""
+    """#96 על הכניסה של הגואי: הגוף עם הסיסמה מגיע ל-curl בצינור
+    (`--data-binary @-`) ואינו נכתב לשום קובץ ב-`$RUN_DIR`."""
     box = tmp_path / "box"
     stub_dir = box / "bin"
     stub_dir.mkdir(parents=True)
@@ -836,7 +836,7 @@ def test_swap_is_recreated_not_streamed():
     capture = (AGENT / "lib" / "capture" / "capture.sh").read_text(encoding="utf-8")
     assert "mkswap" in restore
     assert '"role\\":\\"swap\\"' in capture and '"file\\":null' in capture
-    # ‏mkswap מוחק את החתימה הישנה, ולכן ה-UUID של מערכת הקבצים חייב
+    # mkswap מוחק את החתימה הישנה, ולכן ה-UUID של מערכת הקבצים חייב
     # להיכנס למניפסט — אחרת אין ממה לשחזר אותו (#48).
     assert '"uuid\\":' in capture
 
@@ -890,7 +890,7 @@ def test_linux_hosts_line_is_added_when_missing(tmp_path):
 
 
 def _stub(path: Path, body: str) -> str:
-    # ‏chmod חובה: `cat >` יוצר קובץ בלי סיבית הרצה, וזיוף שלא ניתן להרצה
+    # chmod חובה: `cat >` יוצר קובץ בלי סיבית הרצה, וזיוף שלא ניתן להרצה
     # עובר בווינדוס (שם כל קובץ "בר-הרצה") ונופל ב-CI בלבד — כמו ב-run_expand.
     return (f"cat > {posix(path)} <<'STUB'\n#!/bin/sh\n{body}\nSTUB\n"
             f"chmod 0755 {posix(path)}\n")
@@ -961,7 +961,7 @@ def test_a_windows_hostname_write_that_cannot_unmount_is_not_success(tmp_path):
 
 
 def test_an_unreadable_control_set_fails_instead_of_defaulting_to_001(tmp_path):
-    """‏#505, עיקרון 5: קריאת Select\\Current נכשלת (יציאה לא-אפסית, פלט
+    """#505, עיקרון 5: קריאת Select\\Current נכשלת (יציאה לא-אפסית, פלט
     ריק). המכונה האמיתית על ControlSet002 (LKG אחרי אתחול כושל), אבל
     הקוד הישן נפל בשקט ל-001, כתב לשם, קרא בחזרה **מ-001** — כך שהאימות
     אישר את ההנחה של עצמו — ודיווח ok:true. ה-umount כאן מצליח, כדי
@@ -1016,7 +1016,7 @@ def test_a_linux_root_that_is_last_is_expandable():
 
 
 def test_a_root_with_swap_behind_it_is_still_expandable():
-    """הפריסה שמתקין דביאן מייצר — ‏ESP · root · swap. ה-swap מתועדת
+    """הפריסה שמתקין דביאן מייצר — ESP · root · swap. ה-swap מתועדת
     במניפסט ולא משודרת, ולכן השחזור מעביר אותה לזנב ומרחיב את מה
     שלפניה: המועמד הוא המחיצה האחרונה שאינה swap (#46). זה גם בדיוק
     הכלל שהקליטה בשרת אוכפת."""
@@ -1031,7 +1031,7 @@ def test_a_root_with_swap_behind_it_is_still_expandable():
 
 
 #: הפריסה הרגילה של Windows 11, כפי שהיא בשני האימג'ים שבספרייה (#58):
-#: ‏esp · msr · windows · recovery, וה-recovery אחרונה על הדיסק.
+#: esp · msr · windows · recovery, וה-recovery אחרונה על הדיסק.
 WINDOWS_PARTS = (
     '{"index":1,"role":"esp","start_sector":2048,"expandable":false},'
     '{"index":2,"role":"msr","start_sector":616448,"expandable":false},'
@@ -1039,7 +1039,7 @@ WINDOWS_PARTS = (
     '{"index":4,"role":"recovery","start_sector":535267328,"expandable":false}'
 )
 
-#: אימג' הענן של דביאן שבספרייה. ‏`sgdisk -p` מונה לפי אינדקסים, ולכן
+#: אימג' הענן של דביאן שבספרייה. `sgdisk -p` מונה לפי אינדקסים, ולכן
 #: השורש — מחיצה **1** — הוא ה*ראשון* ברשימה ובכל זאת האחרון על הדיסק.
 #: האחרונה ברשימה היא 16, שתפקידה `data`: ולכן לא סומן דבר.
 CLOUD_LINUX_PARTS = (
@@ -1051,7 +1051,7 @@ CLOUD_LINUX_PARTS = (
 
 
 def test_the_candidate_is_the_last_one_on_the_disk_not_in_the_list():
-    """‏#58, הבאג הראשון: הסימון קרא את סדר המערך ולא את הסדר על הדיסק.
+    """#58, הבאג הראשון: הסימון קרא את סדר המערך ולא את הסדר על הדיסק.
     באימג' הענן השורש הוא מחיצה 1, האחרון ברשימה הוא 16 (`data`) — ולכן
     לא סומן דבר, ושחזור 256→500 נגמר בשקט עם 244GB לא מוקצים."""
     lib = f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/capture/manifest.sh; '
@@ -1061,7 +1061,7 @@ def test_the_candidate_is_the_last_one_on_the_disk_not_in_the_list():
 
 
 def test_a_recovery_partition_behind_the_windows_one_no_longer_blocks_it():
-    """‏#58, הבאג השני — והיפוך מכוון של השומר הקודם. ‏recovery אחרונה
+    """#58, הבאג השני — והיפוך מכוון של השומר הקודם. recovery אחרונה
     היא ברירת המחדל של Windows 11, והשומר שנועד למנוע את *ניפוחה* מנע
     כל הרחבה של Windows בכלל. עכשיו היא עוברת לזנב בשחזור ונכתבת שם
     מקובץ הזרם שלה, בדיוק כמו ה-swap שלפניה (#46)."""
@@ -1127,7 +1127,7 @@ CLOUD_PLAN = [
 
 
 def test_dev(tmp_path) -> str:
-    """‏`$DEVROOT` של הטסט — תיקייה בתוך tmp_path, לעולם לא ‏`/dev` של המארח
+    """`$DEVROOT` של הטסט — תיקייה בתוך tmp_path, לעולם לא `/dev` של המארח
     (ראה test_tests_never_touch_host_dev.py)."""
     return f"{posix(tmp_path / 'box' / 'run')}/dev"
 
@@ -1135,12 +1135,12 @@ def test_dev(tmp_path) -> str:
 def run_expand(tmp_path, plan, disk_sectors, override=None, manifest=None, share_ok=False):
     """מריץ expand_last מול sgdisk מזויף ומחזיר (rc, שורות הפקודה, סימון).
 
-    ‏manifest_plan נדרס אחרי ה-source כדי לא לדרוש jq בסביבת הבדיקה —
+    manifest_plan נדרס אחרי ה-source כדי לא לדרוש jq בסביבת הבדיקה —
     אותו דפוס של דריסת פונקציה אחרי ה-source.
 
-    ‏`override` = ``EXPAND_OVERRIDE`` (#59) — הבחירה מהקונסולה, שמגיעה
+    `override` = ``EXPAND_OVERRIDE`` (#59) — הבחירה מהקונסולה, שמגיעה
     ל-`_expand_candidate` בדיוק כפי ש-`imagesrv-agent` מציב אותה לפני
-    שהוא קורא ל-`run_restore`/`run_restore_drawers`. ‏`None` (ברירת
+    שהוא קורא ל-`run_restore`/`run_restore_drawers`. `None` (ברירת
     המחדל) משאיר אותו **בלתי מוצב** — זה בדיוק סוכן ישן, או `pulls.py`/
     `station.py` שלא עודכנו: אותה ריצה בדיוק כמו לפני #59."""
     box = tmp_path / "box"
@@ -1155,13 +1155,13 @@ def run_expand(tmp_path, plan, disk_sectors, override=None, manifest=None, share
         (run / "targets" / "sda" / "share.ok").write_text("")
     plan_file = box / "plan"
     plan_file.write_text("\n".join(plan) + "\n")
-    # ‏#1897: ‏share_tail קורא את `shrunk_from_bytes` מהמניפסט עצמו; בלי מניפסט — /dev/null.
+    # #1897: share_tail קורא את `shrunk_from_bytes` מהמניפסט עצמו; בלי מניפסט — /dev/null.
     manifest_path = "/dev/null"
     if manifest is not None:
         (box / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
         manifest_path = posix(box / "manifest.json")
     calls = box / "calls"
-    # ‏chmod חובה: ‏cat > יוצר קובץ בלי סיבית הרצה, וזיוף שלא ניתן להרצה
+    # chmod חובה: cat > יוצר קובץ בלי סיבית הרצה, וזיוף שלא ניתן להרצה
     # עובר בווינדוס (שם כל קובץ "בר-הרצה") ונופל ב-CI בלבד.
     stubs = (
         f"cat > {posix(stub_dir)}/sgdisk <<'STUB'\n"
@@ -1224,12 +1224,12 @@ def one_call(calls):
     return calls[0]
 
 def test_a_trailing_swap_is_rebuilt_at_the_tail_and_the_root_takes_the_rest(tmp_path):
-    """‏256→500 עם swap אחרונה: ה-swap נמחקת, נבראת מחדש בזנב בגודל
+    """256→500 עם swap אחרונה: ה-swap נמחקת, נבראת מחדש בזנב בגודל
     שהמניפסט מצהיר, והשורש נמתח עד תחילתה (#46)."""
     rc, calls, marker = run_expand(tmp_path, DEBIAN_PLAN, disk_sectors=976773168)
     assert rc == "rc=0"
     # מחיקת הזנב, בנייתו בסוף הכונן, ואז המועמד עד תחילתו — באותו סדר
-    # שבו רצו שלוש הקריאות הנפרדות לפני #1714. ‏0 = סוף השטח הפנוי.
+    # שבו רצו שלוש הקריאות הנפרדות לפני #1714. 0 = סוף השטח הפנוי.
     assert one_call(calls) == (
         f"-a 1 -d 3 {tail_n(3, SWAP_SECTORS)[0]} -t 3:0657FD6D-A4AB-43C4-84E5-0933C84B4F4F "
         "-u 3:33333333-3333-3333-3333-333333333333 "
@@ -1277,7 +1277,7 @@ def unmarked(plan):
 
 
 def test_an_unmarked_debian_manifest_is_expanded_all_the_same(tmp_path):
-    """‏#58 אחרי הרחבת הדרישה: הבחירה נגזרת מהמניפסט בכל שחזור ולא
+    """#58 אחרי הרחבת הדרישה: הבחירה נגזרת מהמניפסט בכל שחזור ולא
     נקראת מהסימון. הסימון נעשה בקליטה בלבד, ולכן "אף אחד לא סימן"
     נראה בדיוק כמו "אל תרחיב" — ואת שני המצבים האלה אסור לקפל לאחד
     (עיקרון 5). התוצאה זהה לחלוטין לתוכנית המסומנת."""
@@ -1293,7 +1293,7 @@ def test_an_unmarked_debian_manifest_is_expanded_all_the_same(tmp_path):
 
 
 def test_an_unmarked_windows_manifest_picks_the_system_partition(tmp_path):
-    """האימג'ים שבספרייה: ‏esp · msr · windows · recovery, כולן `false`.
+    """האימג'ים שבספרייה: esp · msr · windows · recovery, כולן `false`.
     ה-windows נבחרת מעצמה וה-recovery עוברת לזנב — בלי קליטה מחדש."""
     rc, calls, marker = run_expand(tmp_path, unmarked(WINDOWS_PLAN),
                                    disk_sectors=976773168)
@@ -1345,7 +1345,7 @@ def test_a_manifest_that_marks_exactly_one_partition_overrides_the_choice(tmp_pa
 
 def test_an_image_with_no_system_partition_is_left_alone(tmp_path):
     """עיקרון 1: אין מחיצת windows/linux — אין מועמד, אין הרחבה, ואין
-    שגיאה. ‏`recovery` לעולם אינה מועמדת, כי היא אינה windows/linux."""
+    שגיאה. `recovery` לעולם אינה מועמדת, כי היא אינה windows/linux."""
     plan = unmarked([WINDOWS_PLAN[0], WINDOWS_PLAN[3]])
     rc, calls, marker = run_expand(tmp_path, plan, disk_sectors=976773168)
     assert (rc, calls, marker) == ("rc=0", [], None)
@@ -1409,7 +1409,7 @@ def test_an_override_for_a_partition_not_in_this_manifest_falls_back_to_auto(tmp
 
 
 def test_a_trailing_recovery_moves_to_the_tail_and_windows_takes_the_rest(tmp_path):
-    """‏#58 על הפריסה השכיחה ביותר: ה-recovery נמחקת, נבראת מחדש בזנב
+    """#58 על הפריסה השכיחה ביותר: ה-recovery נמחקת, נבראת מחדש בזנב
     **באותו אינדקס ובאותו גודל**, ומחיצת המערכת נמתחת עד תחילתה. אותה
     צורה בדיוק כמו ה-swap של #46 — רק שאת ה-recovery יכתוב הזרם."""
     rc, calls, marker = run_expand(tmp_path, WINDOWS_PLAN, disk_sectors=976773168)
@@ -1508,9 +1508,9 @@ def test_the_table_is_widened_before_the_data_arrives():
 def test_the_stream_lands_on_the_node_of_the_index_not_on_a_start_sector(tmp_path):
     """החוליה שבזכותה מחיצה נגררת שאינה swap אפשרית בכלל (#58).
 
-    ‏expand_last בורא את ה-recovery מחדש בזנב *באותו אינדקס*, והזרם כותב
+    expand_last בורא את ה-recovery מחדש בזנב *באותו אינדקס*, והזרם כותב
     לפי אינדקס בלבד: הצינור של מחיצה 4 נפתח על `/dev/sda4` — שהיא כבר
-    המחיצה שהוזזה. ‏`start_sector` שבמניפסט אינו מגיע לכאן כלל, ולכן אין
+    המחיצה שהוזזה. `start_sector` שבמניפסט אינו מגיע לכאן כלל, ולכן אין
     מה להעתיק ואין מה לתקן אחרי הזרם. הבדיקה מריצה את הצינור האמיתי
     ולוכדת את מה ש-partclone קיבל."""
     box = tmp_path / "box"
@@ -1525,7 +1525,7 @@ def test_the_stream_lands_on_the_node_of_the_index_not_on_a_start_sector(tmp_pat
     calls = box / "partclone.calls"
     payload = b"recovery-bytes"
     digest = hashlib.sha256(payload).hexdigest()
-    # ‏chmod חובה: ‏cat > יוצר קובץ בלי סיבית הרצה, וזיוף שלא ניתן להרצה
+    # chmod חובה: cat > יוצר קובץ בלי סיבית הרצה, וזיוף שלא ניתן להרצה
     # עובר בווינדוס (שם כל קובץ "בר-הרצה") ונופל ב-CI בלבד.
     # #1444: the station counts and hashes inside fanout (-S <sha> -P <counter>
     # <buffer> <feed>), not pv | tee | sha256sum.
@@ -1552,10 +1552,10 @@ def test_the_stream_lands_on_the_node_of_the_index_not_on_a_start_sector(tmp_pat
         f'LOG_FILE={posix(run / "log")!r} WAIT_POLL_S=1; '
         + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "failmark", "restore", "writeback", "drawers")   # #1906: restore_pipe; #2272: imagesrv-agent's order
         + "stream_source() { printf 'recovery-bytes'; }; "
-        # ‏/dev/sda4 אינו קיים בסביבת הבדיקה, ובדיקת ההתקן היא הבדיקה
+        # /dev/sda4 אינו קיים בסביבת הבדיקה, ובדיקת ההתקן היא הבדיקה
         # הראשונה בצינור (#51). היא מוחלפת כאן ונבדקת בנפרד.
         "node_is_block() { true; }; "
-        # ‏#1487: סקטור אתחול הגיבוי נבדק ב-test_ntfs_backup_boot_1487.py; ה-partclone כאן זורק את הזרם.
+        # #1487: סקטור אתחול הגיבוי נבדק ב-test_ntfs_backup_boot_1487.py; ה-partclone כאן זורק את הזרם.
         "ntfs_boot_target() { true; }; "
         "target_bind sda; "   # #2434: the disk chosen, as target_init binds it
         f"restore_partition unicast http://s img sda 4 ntfs p4.recovery.pcl.zst "
@@ -1576,7 +1576,7 @@ SWAP_UUID = "9f2c1a44-6b1e-4d55-8e73-0c5a1b2d3e4f"
 def swap_box(tmp_path, disks=("sda",)):
     """קופסה עם mkswap מזויף שמתעד כל קריאה, ומגירות במצב writing.
 
-    ‏mkswap נכשל על התקן שרשום ב-box/fail — ככה נבדק שכשל במגירה אחת
+    mkswap נכשל על התקן שרשום ב-box/fail — ככה נבדק שכשל במגירה אחת
     לא גורר את השאר. שאר הכלים (fanout, udp-receiver, partclone) *לא*
     מזויפים בכוונה: אם מסלול ה-swap ינסה בכל זאת להזרים, זה ייפול כאן."""
     box = tmp_path / "box"
@@ -1590,7 +1590,7 @@ def swap_box(tmp_path, disks=("sda",)):
         (target / "base").write_text("0\n")
         (target / "bytes.raw").write_text("")
     calls = box / "mkswap.calls"
-    # ‏chmod חובה: ‏cat > יוצר קובץ בלי סיבית הרצה, וזיוף שלא ניתן להרצה
+    # chmod חובה: cat > יוצר קובץ בלי סיבית הרצה, וזיוף שלא ניתן להרצה
     # עובר בווינדוס (שם כל קובץ "בר-הרצה") ונופל ב-CI בלבד.
     prelude = (
         f"cat > {posix(stub_dir)}/mkswap <<'STUB'\n"
@@ -1606,7 +1606,7 @@ def swap_box(tmp_path, disks=("sda",)):
         f'export MKSWAP_BIN={posix(stub_dir / "mkswap")!r}; '   # #2818: make_swap calls it by path
         + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + "log() { :; }; "
-        # ‏/dev/sdaN אינו קיים כאן, ומסלול ה-swap עובר באותה בדיקת התקן
+        # /dev/sdaN אינו קיים כאן, ומסלול ה-swap עובר באותה בדיקת התקן
         # של כל כתיבה (#51). היא נבדקת בנפרד ב-test_restore_evidence.py.
         "node_is_block() { true; }; "
         + "".join(f"target_bind {d}; " for d in disks)   # #2434: the drawers chosen, as target_init binds them
@@ -1623,8 +1623,8 @@ def state_of(run: Path, dev: str) -> str:
 
 
 def test_a_swap_with_a_uuid_in_the_manifest_gets_it_back(tmp_path):
-    """‏#48: ‏/etc/fstab של מתקין דביאן מפנה לשורת ה-swap ב-`UUID=`. בלי
-    ‏-U כל שחזור חותם UUID חדש, ו-swapon --show חוזר ריק במערכת שעלתה."""
+    """#48: /etc/fstab של מתקין דביאן מפנה לשורת ה-swap ב-`UUID=`. בלי
+    -U כל שחזור חותם UUID חדש, ו-swapon --show חוזר ריק במערכת שעלתה."""
     _box, _run, calls, prelude = swap_box(tmp_path)
     out = sh(prelude + "restore_partition multicast http://s img sda 3 swap "
              f'null null "{SWAP_UUID}"; echo "rc=$?"')
@@ -1644,8 +1644,8 @@ def test_an_old_manifest_without_a_uuid_falls_back_to_a_plain_mkswap(tmp_path, u
 
 
 def test_every_drawer_gets_exactly_one_mkswap_and_nothing_is_streamed(tmp_path):
-    """‏#49: רשומת swap במניפסט הוזנה עד היום ל-fanout כמו כל מחיצה, עם
-    ‏file=null — זרם ריק ואי-התאמת sha256. עכשיו כל מגירה בוראת אותה
+    """#49: רשומת swap במניפסט הוזנה עד היום ל-fanout כמו כל מחיצה, עם
+    file=null — זרם ריק ואי-התאמת sha256. עכשיו כל מגירה בוראת אותה
     בעצמה, פעם אחת בדיוק, ואף fifo לא נפתח."""
     _box, run, calls, prelude = swap_box(tmp_path, disks=("sda", "sdb"))
     out = sh(prelude + "restore_partition_drawers multicast http://s img 3 swap "
@@ -1672,8 +1672,8 @@ def test_a_drawer_that_cannot_make_swap_does_not_stop_the_others(tmp_path):
 
 
 def test_the_drawers_settle_the_table_before_the_swap_is_made():
-    """‏#49 מעל #46: ההרחבה — שמזיזה swap נגררת לזנב — רצה לפני לולאת
-    המחיצות, ולכן ה-mkswap של החדר נוחת על המיקום הסופי. ‏mkswap עצמו
+    """#49 מעל #46: ההרחבה — שמזיזה swap נגררת לזנב — רצה לפני לולאת
+    המחיצות, ולכן ה-mkswap של החדר נוחת על המיקום הסופי. mkswap עצמו
     אינו מופיע כאן בכלל: הוא עובר דרך make_swap של restore.sh, שהיא
     הכתיבה היחידה למחיצה."""
     source = (AGENT / "lib" / "restore" / "drawers.sh").read_text(encoding="utf-8")
@@ -1684,7 +1684,7 @@ def test_the_drawers_settle_the_table_before_the_swap_is_made():
 
 
 def test_the_capture_reads_the_filesystem_uuid_not_the_gpt_guid(tmp_path):
-    """ה-UUID שמעניין את fstab הוא של מערכת הקבצים (‏blkid -s UUID), לא
+    """ה-UUID שמעניין את fstab הוא של מערכת הקבצים (blkid -s UUID), לא
     ה-`unique_guid` של רשומת ה-GPT — שני מספרים שונים לגמרי."""
     stub_dir = tmp_path / "stubs"
     stub_dir.mkdir()
@@ -1717,7 +1717,7 @@ def test_the_agent_writes_the_name_after_a_restore():
 def test_every_lib_file_is_loaded_and_packed():
     """קובץ lib חדש שאיש לא טוען הוא פונקציה חסרה **בשקט** על מכונה
     אמיתית — בדיוק הצורה של #84, שם עץ מודולים שלא נארז הפיל
-    ‏used_bytes ואת שם המחשב בלי מילה. שני השערים נבדקים כאן: הבנאי
+    used_bytes ואת שם המחשב בלי מילה. שני השערים נבדקים כאן: הבנאי
     אורז את `lib/*.sh` בגלוב (ולכן קובץ חדש נתפס מאליו), אבל הטעינה
     ב-`imagesrv-agent` היא **רשימה מפורשת** — ורשימה מפורשת שוכחת."""
     # A lib file is loaded by imagesrv-agent, or by init when it must run
@@ -1770,24 +1770,24 @@ REAL_BINARIES_USED = {
     "curl", "jq", "zstd", "pv", "sgdisk", "blockdev", "sha256sum", "od",
     "hdparm", "ntfsresize", "ntfs-3g", "ntfs-3g.probe", "ntfsfix", "umount",
     "blkid", "df", "mount", "udp-receiver",
-    # ‏#715 — מחשב הבנייה משדר מהדיסק שלו ישירות למחשבי השיכפול
-    # (‏directsend.sh); אותה חבילה (udpcast) כמו udp-receiver.
+    # #715 — מחשב הבנייה משדר מהדיסק שלו ישירות למחשבי השיכפול
+    # (directsend.sh); אותה חבילה (udpcast) כמו udp-receiver.
     "udp-sender",
     "e2fsck", "resize2fs", "btrfs",
     # #667 — XFS grow on RHEL/Fedora golden images (mounted, xfs_growfs).
     "xfs_growfs",
     "partclone.ntfs", "partclone.fat", "partclone.ext4", "partclone.btrfs",
     "partclone.dd",
-    # ‏#85 — קריאת החותם של מטעני האתחול שעל ה-ESP בזמן הקליטה. הוא גם
+    # #85 — קריאת החותם של מטעני האתחול שעל ה-ESP בזמן הקליטה. הוא גם
     # אחד מארבעת הכלים החסרים שרשומים ב-#86 (הכשרת מכונה בזמן שחזור).
     "openssl",
-    # ‏#652 — שער בריאות SMART על דיסק היעד לפני כתיבה (smart.sh).
+    # #652 — שער בריאות SMART על דיסק היעד לפני כתיבה (smart.sh).
     "smartctl",
-    # ‏#649 — ארגז הכלים: הכלי המובנה "זיהוי המחשב" (tools.sh).
+    # #649 — ארגז הכלים: הכלי המובנה "זיהוי המחשב" (tools.sh).
     "dmidecode",
-    # ‏#433 — רשומת Boot#### לווינדוס המשוחזר על UEFI (bootentry.sh).
+    # #433 — רשומת Boot#### לווינדוס המשוחזר על UEFI (bootentry.sh).
     "efibootmgr",
-    # ‏#1466 — שיכפול מקומי: כיווץ עותק copy-on-write בזיכרון ולא את המקור (lcsnap.sh).
+    # #1466 — שיכפול מקומי: כיווץ עותק copy-on-write בזיכרון ולא את המקור (lcsnap.sh).
     "dmsetup",
     # #1493 — the GUI starts under /usr/bin/nice (guibridge.sh); Debian 13's
     # busybox-static has no nice applet, so coreutils' binary is packed.
@@ -1835,7 +1835,7 @@ def test_the_builder_compiles_what_it_cannot_install():
 def test_the_builder_packs_gconv_for_hivex():
     """libhivex ממיר שמות מפתחות עם iconv של glibc; בלי מודולי gconv
     ב-initramfs כל חיפוש מפתח נכשל בשקט — כך שם המחשב לא נכתב חודשים
-    (‏#33). הבדיקה מצמידה את האריזה לבנאי."""
+    (#33). הבדיקה מצמידה את האריזה לבנאי."""
     builder = (REPO / "tools" / "build_initramfs.sh").read_text(encoding="utf-8")
     for needed in ("gconv-modules", "ISO8859-1.so", "UTF-16.so"):
         assert needed in builder, f"הבנאי לא אורז את {needed}"
@@ -1889,7 +1889,7 @@ def _finish_and_stop(tmp_path, after_task, role=None):
     הזיוף הוא **פונקציות מעטפת** ולא קבצים ב-PATH: על ווינדוס `chmod`
     אינו מסמן ביצוע, וסטאב שאינו נמצא נראה בדיוק כמו סטאב שלא נקרא.
 
-    ‏`role` מזריק את D_ROLE — המשתנה שהסוכן קובע מתשובת ה-hello —
+    `role` מזריק את D_ROLE — המשתנה שהסוכן קובע מתשובת ה-hello —
     כדי לבדוק את הברירה תלוית-התפקיד בלי override מפורש."""
     box = tmp_path / "box"
     (box / "etc" / "imagesrv").mkdir(parents=True, exist_ok=True)
@@ -1923,7 +1923,7 @@ def test_the_default_is_still_powering_off(tmp_path):
 
 
 def test_reboot_is_chosen_only_when_the_file_says_so(tmp_path):
-    """‏`reboot` הוא בחירה מפורשת בזמן בנייה, לא ברירת מחדל."""
+    """`reboot` הוא בחירה מפורשת בזמן בנייה, לא ברירת מחדל."""
     called = _finish_and_stop(tmp_path, "reboot")
     assert "reboot" in called and "poweroff" not in called
 
@@ -1955,7 +1955,7 @@ def test_explicit_override_beats_the_role(tmp_path):
     assert "poweroff" in _finish_and_stop(tmp_path, "poweroff", role="classroom")
 
 
-# ‏#690: גיון התפקיד של monitor.sh — מי מפעיל את ה-RFB, ומי בלי --input.
+# #690: גיון התפקיד של monitor.sh — מי מפעיל את ה-RFB, ומי בלי --input.
 
 
 def _monitor_spawn_args(tmp_path, role=None, flag="1", ip="10.0.0.9",
@@ -1963,11 +1963,11 @@ def _monitor_spawn_args(tmp_path, role=None, flag="1", ip="10.0.0.9",
     """מריץ monitor_start עם _monitor_spawn מזויף ומחזיר את הארגומנטים
     שנמסרו ל-imagesrv-monitor, או None אם המוניטור לא הופעל בכלל.
 
-    ‏_monitor_spawn מוגדר-מחדש **אחרי** טעינת monitor.sh (הטעינה מגדירה
-    את האמיתי). ‏MONITOR_BIN=/bin/sh רק כדי לעבור את בדיקת `[ -x ]`; הוא
-    לעולם לא מורץ, כי ה-spawn מזויף. ‏#839: סוד האתחול מונח ב-RUN_DIR
-    כמו ש-build_hello משאיר אותו; ‏secret=False מדמה hello שלא הגריל.
-    ‏FB_DEV=/dev/null — התקן תווים בכל מקום — אומר "יש מסך"; המסלול בלי
+    _monitor_spawn מוגדר-מחדש **אחרי** טעינת monitor.sh (הטעינה מגדירה
+    את האמיתי). MONITOR_BIN=/bin/sh רק כדי לעבור את בדיקת `[ -x ]`; הוא
+    לעולם לא מורץ, כי ה-spawn מזויף. #839: סוד האתחול מונח ב-RUN_DIR
+    כמו ש-build_hello משאיר אותו; secret=False מדמה hello שלא הגריל.
+    FB_DEV=/dev/null — התקן תווים בכל מקום — אומר "יש מסך"; המסלול בלי
     מסך (#835) נבדק ב-test_headless_framebuffer.py."""
     out = tmp_path / "spawn-args"
     run = tmp_path / "run"
@@ -2021,7 +2021,7 @@ def test_monitor_stays_off_without_the_boot_flag(tmp_path):
 
 
 def test_monitor_gets_the_boot_secret_file(tmp_path):
-    """‏#839: המוניטור מקבל את קובץ הסוד — בלעדיו אין לו במה לאמת את
+    """#839: המוניטור מקבל את קובץ הסוד — בלעדיו אין לו במה לאמת את
     הפרוקסי, ו-5900 היה נפתח לכל הווילן."""
     args = _monitor_spawn_args(tmp_path, role="cloner").split()
     assert "--secret-file" in args, args
@@ -2030,7 +2030,7 @@ def test_monitor_gets_the_boot_secret_file(tmp_path):
 
 
 def test_monitor_gets_allow_from_the_server_ip(tmp_path):
-    """‏#1077: peer-check — רק IP השרת מ-imagesrv.server. בלי זה 5900
+    """#1077: peer-check — רק IP השרת מ-imagesrv.server. בלי זה 5900
     היה פתוח לכל הווילן גם עם HMAC."""
     args = _monitor_spawn_args(tmp_path, role="cloner").split()
     assert "--allow-from" in args, args
@@ -2046,7 +2046,7 @@ def test_monitor_does_not_start_without_a_boot_secret(tmp_path):
 def test_monitor_does_not_start_without_a_server_ip(tmp_path):
     """בלי imagesrv.server אין למי להגביל את 5900 — לא עולים.
 
-    ‏MONITOR_MIRROR_WAIT_S=0 כמו ב-`_monitor_spawn_args` (#1475): בלעדיו,
+    MONITOR_MIRROR_WAIT_S=0 כמו ב-`_monitor_spawn_args` (#1475): בלעדיו,
     מוניטור שעולה בטעות ממתין קודם למראת ה-GUI, וה-`assert` רץ לפני ה-spawn
     ועובר. בבקרה הרטרואקטיבית של #1077 (24/10) הסרת השומר לא הפילה את
     הטסט — רק את ניקוי התהליכים בסופו."""
@@ -2070,7 +2070,7 @@ def test_monitor_does_not_start_without_a_server_ip(tmp_path):
 
 
 def test_the_build_refuses_an_after_task_it_does_not_know():
-    """‏`--after-task nonsense` נכשל בבנייה, לא מול מכונה שלא עשתה דבר."""
+    """`--after-task nonsense` נכשל בבנייה, לא מול מכונה שלא עשתה דבר."""
     src = (REPO / "tools" / "build_initramfs.sh").read_text(encoding="utf-8")
     assert "--after-task must be auto, poweroff or reboot" in src
 
@@ -2081,9 +2081,9 @@ def test_the_build_refuses_an_after_task_it_does_not_know():
 def _used_bytes(tmp_path, mount_rc, used_kib=None):
     """מריץ את `_used_bytes` מול mount/df/umount מזויפים ומחזיר את stdout.
 
-    ‏mount_rc = קוד היציאה של mount (שני הניסיונות, עם ובלי `-t`). כש-
-    ‏used_kib נתון, ‏df מצליח ומחזיר את העמודה Used בערך הזה (ב-1024-בלוקים);
-    ‏None = ‏df אינו רלוונטי (העגינה נכשלה לפני שהגיעו אליו)."""
+    mount_rc = קוד היציאה של mount (שני הניסיונות, עם ובלי `-t`). כש-
+    used_kib נתון, df מצליח ומחזיר את העמודה Used בערך הזה (ב-1024-בלוקים);
+    None = df אינו רלוונטי (העגינה נכשלה לפני שהגיעו אליו)."""
     box = tmp_path / "box"
     stub_dir = box / "stubs"
     stub_dir.mkdir(parents=True)
@@ -2092,7 +2092,7 @@ def _used_bytes(tmp_path, mount_rc, used_kib=None):
     stubs = _stub(stub_dir / "mount", f"exit {mount_rc}")
     stubs += _stub(stub_dir / "umount", "exit 0")
     if used_kib is not None:
-        # פורמט `df -kP`: שורת כותרת ואז שורת נתונים; ‎$3 הוא Used ב-1024-בלוקים.
+        # פורמט `df -kP`: שורת כותרת ואז שורת נתונים; $3 הוא Used ב-1024-בלוקים.
         stubs += _stub(
             stub_dir / "df",
             'echo "Filesystem 1024-blocks Used Available Capacity Mounted on"\n'
@@ -2107,14 +2107,14 @@ def _used_bytes(tmp_path, mount_rc, used_kib=None):
 
 
 def test_a_partition_that_will_not_mount_is_null_not_zero(tmp_path):
-    """עיקרון 5: העגינה נכשלה — לא הצלחנו למדוד. זה `null`, לא `0`. ‏`0`
+    """עיקרון 5: העגינה נכשלה — לא הצלחנו למדוד. זה `null`, לא `0`. `0`
     היה נראה במניפסט זהה למחיצה ריקה שנמדדה, ושני המצבים שונים (#298)."""
     assert _used_bytes(tmp_path, mount_rc=1) == "null"
 
 
 def test_a_measured_empty_partition_is_zero_not_null(tmp_path):
     """הצד השני של אותו מטבע: העגינה הצליחה ו-`df` מדד 0 תפוס — זו מדידה
-    אמיתית של מחיצה ריקה, ולכן `0`. ‏null שמור למי שלא נמדד."""
+    אמיתית של מחיצה ריקה, ולכן `0`. null שמור למי שלא נמדד."""
     assert _used_bytes(tmp_path, mount_rc=0, used_kib=0) == "0"
 
 
@@ -2124,7 +2124,7 @@ def test_a_measured_partition_reports_the_bytes_it_measured(tmp_path):
 
 
 def test_hello_reports_whether_this_boot_started_the_monitor(fake_machine):
-    """‏#2844: השער נקבע באתחול בלבד (שורת הקרנל), וה-hello אומר אותו בגלוי —
+    """#2844: השער נקבע באתחול בלבד (שורת הקרנל), וה-hello אומר אותו בגלוי —
     כדי שהשרת יבדיל "עלתה לפני שהופעל" מ"דלוק ומסרב"."""
     def hello(flag):
         return json.loads(sh(

@@ -1,10 +1,10 @@
 """#2354 (הכרעת נדב 04/11, אפשרות א): קליטה שהתוכנית שלה לא נכנסת בזיכרון מכווצת
 חלקית, עד מה שנכנס, והאימג' יוצא קצת גדול יותר. בלי אזהרה בחלון האישור.
 
-ברזל 03/11, ‏HP-BUILD-2 (‏v0.80.6): "להזזת 27706 MB נדרשים 30860 MB זיכרון, ויש
+ברזל 03/11, HP-BUILD-2 (v0.80.6): "להזזת 27706 MB נדרשים 30860 MB זיכרון, ויש
 15156 MB". הטסטים מריצים את `capture_disk` האמיתי מול ntfsresize מזויף, שעקומת
-ההזזה שלו היא זו שנמדדה על ברזל ב-26/10 (‏lab/metal-1026-shrink/reloc-curve.txt):
-מתחת לסף, כל MB שהמחיצה מתכווצת הוא MB להזיז (‏16,639 ב-94.4GB, ‏21,882 ב-89.1GB).
+ההזזה שלו היא זו שנמדדה על ברזל ב-26/10 (lab/metal-1026-shrink/reloc-curve.txt):
+מתחת לסף, כל MB שהמחיצה מתכווצת הוא MB להזיז (16,639 ב-94.4GB, 21,882 ב-89.1GB).
 הסף כאן נבחר כך שבגודל התוכנית יוצאים 27,706 MB של ה-Issue.
 """
 
@@ -36,10 +36,10 @@ ZERO = PLAN + PLAN_MOVES * 10**6         # מעל הגודל הזה אין מה 
 STORE_MB = 15156                         # ה-Issue: מה שיש ל-brd אחרי השמירה של ההעתקה
 RESERVE_MB = 1024
 MEM_16GB = {"MEM_KIB": str((STORE_MB + RESERVE_MB) * 1024)}
-#: ‏LC_SNAP_FIT_MB: הכיווץ החלקי נעצר במרחק הזה מהזיכרון
+#: LC_SNAP_FIT_MB: הכיווץ החלקי נעצר במרחק הזה מהזיכרון
 STEP = 1024 * MIB
 
-#: ‏NO_MEASURE_ON = המדידה ה-N של `-n` נכשלת (2 = הראשונה של החיפוש).
+#: NO_MEASURE_ON = המדידה ה-N של `-n` נכשלת (2 = הראשונה של החיפוש).
 MEASURE = f'''  "-n "*) n=$(grep -c '^ntfsresize -n' "$RUN_DIR/order.log")
           [ "$n" != "${{NO_MEASURE_ON:-0}}" ] || {{ echo "ERROR: Could not read the MFT"; exit 1; }}
           left=$((${{ZERO_AT:-{ZERO}}} - $3)); [ "$left" -gt 0 ] || left=0
@@ -48,7 +48,7 @@ MEASURE = f'''  "-n "*) n=$(grep -c '^ntfsresize -n' "$RUN_DIR/order.log")
 CURVE = NTFSRESIZE_OK.replace(
     '  "-n "*) echo "Needed relocations : 2560 (${RELOC_MB:-10} MB)"; exit 0 ;;\n', MEASURE)
 assert CURVE != NTFSRESIZE_OK, "הזיוף לא הוחלף: הטסטים היו רצים על הזזה קבועה"
-#: ‏C: על העקומה, ‏D: מזיזה 10 MB -- לכל מחיצה מאגר משלה.
+#: C: על העקומה, D: מזיזה 10 MB -- לכל מחיצה מאגר משלה.
 CURVE_C = NTFSRESIZE_TWO.replace(
     '  "-n "*) echo "Needed relocations : 2560 (10 MB)"; exit 0 ;;\n',
     '  "-n "*lc-src-4) echo "Needed relocations : 2560 (10 MB)"; exit 0 ;;\n' + MEASURE)
@@ -100,7 +100,7 @@ def test_16gb_against_27_7gb_shrinks_partly_instead_of_failing(tmp_path):
     assert f"ntfsresize -s {size} --no-progress-bar {dev}/mapper/lc-src-3" in steps, steps
     assert f"dmsetup create lc-cut-3 --table 0 {size // 512} linear {dev}/mapper/lc-src-3 0" in steps, steps
     assert any(s.startswith("partclone") and "lc-cut-3" in s for s in steps), steps
-    # ‏recovery שאחריה זז אחורה בהפרש של הכיווץ החלקי, לא של התוכנית
+    # recovery שאחריה זז אחורה בהפרש של הכיווץ החלקי, לא של התוכנית
     assert part(manifest(run), 4)["start_sector"] == REC_START - (CUR - size) // 512
     assert source_writes(steps, box) == [] and not rewrites(run), source_writes(steps, box)
     assert "rmmod brd" in steps
@@ -116,7 +116,7 @@ def test_the_search_is_a_few_measures_and_not_a_walk_of_the_disk(tmp_path):
 
 
 def test_the_machine_of_the_issue_hibernated_as_on_metal(tmp_path):
-    """המספרים של הברזל כוללים את 128 ה-MB של ביטול ההשהיה (‏30860). כאן המאגר
+    """המספרים של הברזל כוללים את 128 ה-MB של ביטול ההשהיה (30860). כאן המאגר
     משרת גם את הביטול וגם את ההזזה, והכיווץ החלקי רץ אחרי הביטול, על העותק."""
     table = TWO_PARTITIONS.replace("204800 sectors", f"{WIN_SECTORS} sectors")
     table = table.replace(f"{WIN_SECTORS} sectors", "204800 sectors", 1)   # ה-ESP נשארת קטנה
@@ -134,7 +134,7 @@ def test_the_machine_of_the_issue_hibernated_as_on_metal(tmp_path):
 
 
 def test_each_view_fits_its_own_store_and_d_keeps_its_plan(tmp_path):
-    """שתי מחיצות: לכל אחת מאגר משלה. ‏D: נכנסת כמתוכנן, ורק C: מתכווצת חלקית,
+    """שתי מחיצות: לכל אחת מאגר משלה. D: נכנסת כמתוכנן, ורק C: מתכווצת חלקית,
     ו-D: זזה אחורה בהפרש האמיתי של C:."""
     box, run, out = capture_run(tmp_path, stubs=stubs(sgdisk=SGDISK_C_THEN_D, ntfsresize=CURVE_C), shell_pre=FS_MAP_C_D + SAY_YES,
                                 env={"MEM_KIB": str((2 * STORE_MB + RESERVE_MB) * 1024)})
@@ -193,8 +193,8 @@ def test_a_direct_sends_tail_is_whole_or_not_at_all(tmp_path):
 
 
 # --- הבהרת נדב 07/11: דינמי לפי ה-RAM שנמדד במכונה, לא 16GB ---------------------------
-#: מה שהקרנל וה-initramfs לקחו מ-16GiB על ברזל (03/11, ‏HP-BUILD-2): ‏MemAvailable היה
-#: ‏15,156 + ‏1,024 = ‏16,180MiB מתוך 16,384. אותו הפרש לכל גודל זיכרון -- הנחה של הטסט, לא מדידה.
+#: מה שהקרנל וה-initramfs לקחו מ-16GiB על ברזל (03/11, HP-BUILD-2): MemAvailable היה
+#: 15,156 + 1,024 = 16,180MiB מתוך 16,384. אותו הפרש לכל גודל זיכרון -- הנחה של הטסט, לא מדידה.
 LOST_MIB = 16 * 1024 - (STORE_MB + RESERVE_MB)
 
 
@@ -208,7 +208,7 @@ def store_of(gib: float) -> int:
 
 @pytest.mark.parametrize("gib", [4, 8, 16, 32, 64])
 def test_the_shrink_follows_the_machines_own_ram(tmp_path, gib):
-    """אותו דיסק (התוכנית של ה-Issue, ‏27,706MB להזיז) על מחשב של 4, ‏8, ‏16, ‏32 ו-64GB:
+    """אותו דיסק (התוכנית של ה-Issue, 27,706MB להזיז) על מחשב של 4, 8, 16, 32 ו-64GB:
     המאגר נגזר מ-MemAvailable של המכונה. מה שנכנס -- כיווץ מלא, במדידה אחת; מה שלא --
     חלקי, עד מה שהזיכרון של **המכונה הזו** מחזיק. אף גודל אינו מקודד."""
     box, run, out = capture_run(tmp_path, stubs=stubs(ntfsresize=CURVE), shell_pre=FS_MAP + SAY_YES, env=mem_of(gib))
@@ -222,7 +222,7 @@ def test_the_shrink_follows_the_machines_own_ram(tmp_path, gib):
         assert size == PLAN and probes(run) == [PLAN], (size, probes(run))
     else:
         as_far_as_the_memory_goes(size, store)
-    # המאגר הוא מה שהמכונה הזו מחזיקה: ‏MemAvailable פחות השמירה של ההעתקה
+    # המאגר הוא מה שהמכונה הזו מחזיקה: MemAvailable פחות השמירה של ההעתקה
     assert f"modprobe brd rd_nr=1 rd_size={store * 1024}" in order(run), order(run)
     assert not (run / "targets" / "sda" / "error").exists()
 

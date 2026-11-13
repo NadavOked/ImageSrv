@@ -1,19 +1,19 @@
-"""‏#126: ‏LBA1 הוא הסקטור הלוגי השני, לא "בייט 512".
+"""#126: LBA1 הוא הסקטור הלוגי השני, לא "בייט 512".
 
-‏`disk_scheme` חיפש את `EFI PART` בבייט 512 קבוע. על כונן **4Kn**
-(‏`logical_block_size=4096`) כותרת ה-GPT יושבת בבייט 4096, והקריאה
+`disk_scheme` חיפש את `EFI PART` בבייט 512 קבוע. על כונן **4Kn**
+(`logical_block_size=4096`) כותרת ה-GPT יושבת בבייט 4096, והקריאה
 הקבועה נחתה בתוך ה-MBR המגונן — ומצאה שם אפסים. ואז השורה הבאה מצאה
 `55aa` בבייט 510, כי **לכל** דיסק GPT יש MBR מגונן עם החתימה הזו,
 והכריזה על כונן GPT תקין ומאותחל: `mbr`.
 
-למה זה נשמע כמו פרט ונדלק דווקא עכשיו: ‏#106 (מוזג ב-30/08) הביא את
+למה זה נשמע כמו פרט ונדלק דווקא עכשיו: #106 (מוזג ב-30/08) הביא את
 סירוב הקליטה לקונסולה **עם סיבה**. על כונן 4Kn ההודעה תהיה "הכונן אינו
 GPT (נמצא: mbr)" — סיבה ספציפית, משכנעת ושגויה, על כונן תקין. מפעיל
 שקורא אותה מחליף כבל, מחליף מגירה, ובסוף מחליף כונן. כשל סתום הוא בעיה;
 כשל מטעה הוא בעיה שעולה שעת עבודה של טכנאי.
 
 הבדיקות כאן בונות את הכונן כקובץ, בייט-בייט, כי בדיוק הבייטים האלה הם
-הבאג — ולא מזייפות את `dd`: ‏`dd` על קובץ רגיל קורא בדיוק כמו על צומת
+הבאג — ולא מזייפות את `dd`: `dd` על קובץ רגיל קורא בדיוק כמו על צומת
 בלוקים, ולכן מה שהפונקציה מחזירה כאן הוא מה שהיא תחזיר מול חומרה.
 
 מה **לא** מוכח כאן, ולכן ה-Issue מסומן `needs:metal`: שכונן 4Kn אמיתי
@@ -40,8 +40,8 @@ MBR_SIG = b"\x55\xaa"
 def gpt_image(block_size: int) -> bytes:
     """דיסק GPT כפי שהוא באמת מונח על הפלטה.
 
-    ‏LBA0 הוא ה-MBR המגונן — ‏`55aa` בבייט 510, בכל גודל סקטור, כי ה-MBR
-    הוא מבנה קשיח של 512 בייט. ‏LBA1 — כלומר הבייט ה-`block_size` — הוא
+    LBA0 הוא ה-MBR המגונן — `55aa` בבייט 510, בכל גודל סקטור, כי ה-MBR
+    הוא מבנה קשיח של 512 בייט. LBA1 — כלומר הבייט ה-`block_size` — הוא
     כותרת ה-GPT. שני אלה יחד הם המלכודת: החתימה שנראית כמו MBR נמצאת על
     כל דיסק GPT בעולם, וכל מי שיפספס את הכותרת יימשך אליה.
     """
@@ -52,7 +52,7 @@ def gpt_image(block_size: int) -> bytes:
 
 
 def mbr_image(block_size: int) -> bytes:
-    """‏MBR ותו לא: החתימה בבייט 510, ואין כותרת GPT באף סקטור."""
+    """MBR ותו לא: החתימה בבייט 510, ואין כותרת GPT באף סקטור."""
     head = bytearray(block_size * 3)
     head[510:512] = MBR_SIG
     return bytes(head)
@@ -67,7 +67,7 @@ def disk_box(tmp_path: Path, image: bytes, block_size: str | None = "512",
              name: str = "sda") -> Path:
     """עץ `/sys` ו-`/dev` מזערי לכונן אחד, בדיוק כמו שאר בדיקות הסוכן.
 
-    ‏`block_size=None` = אין `queue/logical_block_size` בכלל, כלומר סקטור
+    `block_size=None` = אין `queue/logical_block_size` בכלל, כלומר סקטור
     שאי אפשר לקרוא.
     """
     (tmp_path / "dev").mkdir(parents=True, exist_ok=True)
@@ -119,7 +119,7 @@ def test_the_4kn_image_carries_the_very_trap_that_fooled_the_old_code():
 
 
 def test_a_4kn_gpt_disk_is_gpt_and_not_mbr(tmp_path):
-    """‏#126 מילה במילה. על הקוד הלא-מתוקן הטסט הזה מחזיר `mbr`."""
+    """#126 מילה במילה. על הקוד הלא-מתוקן הטסט הזה מחזיר `mbr`."""
     box = disk_box(tmp_path, gpt_image(4096), block_size="4096")
     assert scheme_of(box) == "gpt"
 
@@ -162,14 +162,14 @@ def test_a_sector_size_that_cannot_be_read_is_unknown_and_never_a_guess(
         tmp_path, block_size):
     """הלב של התיקון, ולא ה-offset עצמו.
 
-    ‏512 כברירת מחדל הוא בדיוק מה שיצר את #126 — ההנחה השקטה שסקטור הוא
+    512 כברירת מחדל הוא בדיוק מה שיצר את #126 — ההנחה השקטה שסקטור הוא
     512. הוא היה "עובד" על כל המעבדה, ואז חוזר בדיוק על הכונן שבגללו
     התיקון נכתב. ו-`none` גרוע ממנו: הוא טענה חיובית — "אין כאן טבלת
-    מחיצות" — שמסמנת כונן מלא נתונים כריק (‏`has_data:false`), ו"ריק"
+    מחיצות" — שמסמנת כונן מלא נתונים כריק (`has_data:false`), ו"ריק"
     בקונסולה הוא כונן שמותר לדרוס.
 
-    ‏`unknown` הוא מה שידענו: לא ידענו. אותה הכרעה בדיוק כמו `null`
-    של ‏`secure_boot` (‏#84).
+    `unknown` הוא מה שידענו: לא ידענו. אותה הכרעה בדיוק כמו `null`
+    של `secure_boot` (#84).
     """
     box = disk_box(tmp_path, gpt_image(512), block_size=block_size)
     scheme = scheme_of(box)
@@ -215,14 +215,14 @@ def test_hello_of_a_4kn_machine_reports_a_gpt_disk(fake_machine):  # noqa: F811
     (disk,) = hello_of(fake_machine)["disks"]
     assert disk["scheme"] == "gpt"
     assert disk["has_data"] is True
-    # ‏`size_bytes` **לא** משתנה: `/sys/block/<dev>/size` הוא ביחידות של
+    # `size_bytes` **לא** משתנה: `/sys/block/<dev>/size` הוא ביחידות של
     # 512 בכל כונן, גם 4Kn — זו מוסכמה של הקרנל ולא גודל הסקטור.
     assert disk["size_bytes"] == 500118192 * 512
 
 
 def test_an_unknown_scheme_reaches_hello_as_a_disk_that_may_hold_data(
         fake_machine):  # noqa: F811
-    """‏`unknown` חייב לשמור על `has_data: true`. הכיוון השני — לסמן
+    """`unknown` חייב לשמור על `has_data: true`. הכיוון השני — לסמן
     כונן שלא ידענו לקרוא כ"ריק" — הוא הכיוון שמוחק נתונים."""
     (fake_machine["sysroot"] / "sys/block/sda/queue/logical_block_size").unlink()
 

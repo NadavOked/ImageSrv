@@ -279,7 +279,8 @@ def cancel(tmp_path: Path, serial_now: str | None, size_now: str = "1000215216")
     run = tmp_path / "run"; (run / "gui").mkdir(parents=True, exist_ok=True)
     root = tmp_path / "sysroot"; d = root / "sys" / "block" / "sda"; (d / "device").mkdir(parents=True)
     (d / "device" / "serial").write_text("S6PNNS0T\n", newline="\n"); (d / "size").write_text("1000215216\n", newline="\n")
-    src = " ".join(f". {posix(flat_lib())}/{n}.sh;" for n in ("common", "sysinfo", "diskinfo", "srgui"))
+    # #2486: failmark.sh -- the cancel asks assert_target, as every destructive step does
+    src = " ".join(f". {posix(flat_lib())}/{n}.sh;" for n in ("common", "sysinfo", "diskinfo", "failmark", "srgui"))
     swap = ""
     if serial_now is not None:
         swap = (f'printf "%s\\n" {serial_now!r} > {posix(d / "device" / "serial")!r}; '
@@ -288,7 +289,7 @@ def cancel(tmp_path: Path, serial_now: str | None, size_now: str = "1000215216")
              'sgdisk() { echo "SGDISK $*" >> "$RUN_DIR/trace"; }; blockdev() { :; }; pull_close() { :; }; '
              'target_set() { echo "TARGET $*" >> "$RUN_DIR/trace"; }; sr_gui_message() { echo "MSG $1" >> "$RUN_DIR/trace"; }; '
              "sr_gui_open() { :; }; json_get() { echo null; }; sr_disk_label() { printf x; }; "
-             'sr_gui_start /dev/null sda; ' + swap + 'sr_cancelled sda ""; echo "rc=$?"')
+             'target_bind sda; sr_gui_start /dev/null sda; ' + swap + 'sr_cancelled sda ""; echo "rc=$?"')   # target_init binds first
     trace = (run / "trace").read_text(encoding="utf-8").splitlines() if (run / "trace").exists() else []
     return out.strip().splitlines()[-1], trace
 

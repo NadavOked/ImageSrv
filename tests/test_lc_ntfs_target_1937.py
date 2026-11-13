@@ -58,12 +58,15 @@ def test_a_target_with_an_inconsistent_ntfs_is_offered(tmp_path):
     assert "sdb" not in res["read"], res                # the target's file system is never read
 
 
-def test_an_inconsistent_source_is_refused_and_says_it_is_the_source(tmp_path):
+def test_an_inconsistent_source_is_not_shrunk_and_says_it_is_the_source(tmp_path):
+    """#2972: the measure no longer fails ("unchecked") on it -- the partition stays at its
+    full size, so a drawer smaller than the source is short, and says why: not "missing
+    N GB even after shrinking the source" (screens_local.c), since nothing was shrunk."""
     res = measure(tmp_path, "sda1")
     v = res["verdict"].split("|")
-    assert v[0] == "unchecked", res
-    assert v[2].startswith("במקור (דיסק 3) — מחיצה 1 בדיסק sda לא עקבית (NTFS)"), v[2]   # #2084: the disk by its number
-    assert "chkdsk /f" in v[2] and not v[2].endswith("."), v[2]   # the screen adds ". לא ישמש כיעד."
+    assert v[0] == "short", res
+    assert v[2] == "במקור (דיסק 3) — מחיצה 1: NTFS לא נסגר כראוי (לא עקבי), ולכן לא כווצה", v[2]   # #2084: the disk by its number
+    assert not v[2].endswith("."), v[2]   # the screen adds ". לא ישמש כיעד."
 
 
 def test_the_screen_never_draws_two_dots():
@@ -79,5 +82,5 @@ def test_a_hibernated_source_says_it_in_the_words_of_mockup_09_without_a_device_
     v = measure(tmp_path, "", hib="sda1")["verdict"].split("|")
     assert v[0] == "unchecked", v
     assert v[2] == ("המקור (דיסק 3) במצב שינה של Windows — אי אפשר לכווץ אותו לדיסק הזה, שקטן ממנו. "
-                    "ב-Windows של המקור: ⁦powercfg /h off⁩, ואז כיבוי"), v[2]
+                    "ב-Windows של המקור: \u2066powercfg /h off\u2069, ואז כיבוי"), v[2]
     assert "sda" not in v[2] and "קלטו" not in v[2]

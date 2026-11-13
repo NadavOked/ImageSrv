@@ -40,6 +40,33 @@ def test_lint_checks_that_it_saw_files():
     assert "--show-files" in _code("lint.yml")
 
 
+# #199: the characters ruff PLE2502 flags. Source files spell them as \uXXXX escapes.
+BIDI_CONTROLS = {chr(c) for c in (0x200E, 0x200F, *range(0x202A, 0x202F), *range(0x2066, 0x206A))}
+
+
+def test_lint_gates_bidi_controls_in_every_python_file_199():
+    """PLE2502 is a blocking step and, unlike the F step, does not skip tests/."""
+    code = _code("lint.yml")
+    step = code.split("ruff PLE2502", 1)[1]
+    assert "--select PLE2502" in step
+    assert "--extend-exclude" not in step, "tests/ must be inside the PLE2502 gate"
+    assert "--show-files" in step
+
+
+def test_python_sources_have_no_bidi_control_characters_199():
+    """A raw RLM/LRM/isolate in a .py file is invisible in review; write it as an escape."""
+    root = WORKFLOWS.parent.parent
+    found = []
+    for path in root.rglob("*.py"):
+        if ".git" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8")
+        hits = sorted({hex(ord(c)) for c in text if c in BIDI_CONTROLS})
+        if hits:
+            found.append(f"{path.relative_to(root).as_posix()}: {', '.join(hits)}")
+    assert not found, "bidirectional control characters in: " + "; ".join(found[:20])
+
+
 def test_nightly_grants_issues_write_to_the_report_job_only():
     code = _code("nightly.yml")
     top, jobs = code.split("\njobs:", 1)

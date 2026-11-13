@@ -42,7 +42,7 @@ def run(data_dir, images_dir) -> SimpleNamespace:
 
     status, _ = console.json("POST", "/api/console/users", dict(DEPLOY, role="deploy"))
     check("משתמש הפצה נוצר", status == 200, str(status))
-    # ‏#1073: למשתמש הפצה אין קונסולה וובית — הכניסה בקונסולה נדחית בשם,
+    # #1073: למשתמש הפצה אין קונסולה וובית — הכניסה בקונסולה נדחית בשם,
     # והוא נכנס דרך פורט הסוכן (פני מחשב הבנייה), שנושא את allowlist הקיוסק.
     web = Client()
     status, body = web.json("POST", "/api/console/login", DEPLOY)
@@ -55,7 +55,7 @@ def run(data_dir, images_dir) -> SimpleNamespace:
     status, _ = console.json("POST", "/api/console/groups",
                              {"id": "grp_LAB1", "label": "כיתה LAB1", "role": "classroom"})
     check("קבוצת כיתה נוצרה", status == 200)
-    # ‏#880: v1 מדליק "הפצה לכיתות" רק מהקונסולה — הסימולציה מדליקה
+    # #880: v1 מדליק "הפצה לכיתות" רק מהקונסולה — הסימולציה מדליקה
     # אותה כמו המפעיל, אחרת שלב 6 (סבב מהתחנה) היה נדחה ב-409.
     status, _ = console.json("POST", "/api/console/settings",
                              {"class_deploy_enabled": "true"})

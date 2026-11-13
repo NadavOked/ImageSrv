@@ -1,14 +1,14 @@
-"""‏#1159: ‏`/api/console/health/live` אחרי התקנה מה-ISO.
+"""#1159: `/api/console/health/live` אחרי התקנה מה-ISO.
 
 השורש המקורי (19/09): ה-ISO ארז את העץ ב-`git archive`, בלי `.git`, ו-`git
-describe` החזיר כלום → ‏`version: null`. ‏#1185 (‏3b0052f3) אורז מאז את ה-`.git`
+describe` החזיר כלום → `version: null`. #1185 (3b0052f3) אורז מאז את ה-`.git`
 של clone רדוד מהציבורי **בתג** (`git clone --branch <tag> --depth 1`), ושני
-ה-`cp -a` בדרך (המתקין ל-/opt/imagesrv-src, ‏setup-boot-server.sh ל-/opt/imagesrv)
+ה-`cp -a` בדרך (המתקין ל-/opt/imagesrv-src, setup-boot-server.sh ל-/opt/imagesrv)
 מעתיקים אותו כמו שהוא. הטסטים כאן מריצים **git אמיתי** על אותה צורה בדיוק —
 ה-hooks של השרת אינם מוזרקים — כדי שהראיה תהיה הגרסה שנקראה, לא mock.
 
 והחצי השני של ה-Issue: גרסה שלא נקראה אינה `null` שקט. היא `null` עם
-‏`version_error` בשם, ושורת אזהרה ביומן (עיקרון 5).
+`version_error` בשם, ושורת אזהרה ביומן (עיקרון 5).
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def _git(*args: str, cwd: Path) -> str:
 
 @pytest.fixture
 def no_parent_repo(tmp_path, monkeypatch):
-    """‏git מטפס למעלה עד שהוא מוצא `.git`; התקרה כאן מבטיחה ש"לא ריפו"
+    """git מטפס למעלה עד שהוא מוצא `.git`; התקרה כאן מבטיחה ש"לא ריפו"
     הוא באמת לא ריפו, גם אם tmp יושב בתוך עץ git כלשהו."""
     monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
     return tmp_path
@@ -63,8 +63,8 @@ def _public_repo(root: Path) -> Path:
 
 
 def _iso_install(root: Path, src: Path, tag: str) -> Path:
-    """אותה שרשרת כמו ה-ISO: ‏build-iso.sh (clone רדוד בתג) → ‏bootstrap.sh
-    (‏`cp -a` ל-/opt/imagesrv-src) → ‏setup-boot-server.sh (‏`cp -a` ל-/opt/imagesrv)."""
+    """אותה שרשרת כמו ה-ISO: build-iso.sh (clone רדוד בתג) → bootstrap.sh
+    (`cp -a` ל-/opt/imagesrv-src) → setup-boot-server.sh (`cp -a` ל-/opt/imagesrv)."""
     clone = root / "public-src"
     _git("clone", "-q", "--branch", tag, "--depth", "1", src.resolve().as_uri(), str(clone), cwd=root)
     assert (clone / ".git" / "shallow").is_file(), "ה-clone אינו רדוד — הטסט אינו מודד את מה שה-ISO עושה"
@@ -88,8 +88,8 @@ def test_health_live_reads_the_tag_from_a_shallow_clone_at_that_tag(
 
 def test_a_tree_without_git_is_a_fixed_category_unauthenticated_and_the_detail_goes_to_log_and_admin(
         no_parent_repo, images_root, clock, caplog):
-    """‏ה-ISO שלפני #1185 (או ‏`build-iso --source`): עץ בלי `.git`.
-    ‏`/health/live` אינו דורש הזדהות — הוא מקבל קטגוריה קבועה בלבד, בלי
+    """ה-ISO שלפני #1185 (או `build-iso --source`): עץ בלי `.git`.
+    `/health/live` אינו דורש הזדהות — הוא מקבל קטגוריה קבועה בלבד, בלי
     נתיב ובלי stderr; הסיבה המלאה ביומן וב-`GET /update` של admin."""
     from server.console import users
     bare_tree = no_parent_repo / "opt" / "imagesrv"
@@ -136,7 +136,7 @@ def test_every_describe_failure_maps_to_a_fixed_category(monkeypatch, stderr, ca
 
 
 def test_read_version_never_returns_null_without_a_category():
-    """‏hook שמחזיר ריק, ו-hook שזורק חריגה זרה: שניהם גרסה `None` עם
+    """hook שמחזיר ריק, ו-hook שזורק חריגה זרה: שניהם גרסה `None` עם
     קטגוריה קבועה; גרסה שנקראה היא בלי שגיאה."""
     assert update_mod.read_version({"describe": lambda _d: "v0.53.0"}, "/r") == ("v0.53.0", None, None)
 
@@ -150,6 +150,6 @@ def test_read_version_never_returns_null_without_a_category():
 
 
 def test_current_version_still_folds_a_failure_to_none(no_parent_repo):
-    """‏`/me`, כפתור העדכון והגיבוי ממשיכים לקבל `None` — ‏`_describe` שזורק
+    """`/me`, כפתור העדכון והגיבוי ממשיכים לקבל `None` — `_describe` שזורק
     אינו מפיל אותם."""
     assert update_mod.current_version(update_mod.default_hooks(), no_parent_repo) is None

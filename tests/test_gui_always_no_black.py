@@ -1,15 +1,15 @@
 """אין מסך שחור בלי גואי (הכרעת נדב, 17/10).
 
-1. גואי שמת מופעל מחדש — ‏`GUI_RESPAWN_MAX` פעמים באתחול אחד
-   (‏guiparent.sh). קודם: מת פעם אחת, ‏`_gui_disabled=1` עד האתחול הבא.
+1. גואי שמת מופעל מחדש — `GUI_RESPAWN_MAX` פעמים באתחול אחד
+   (guiparent.sh). קודם: מת פעם אחת, `_gui_disabled=1` עד האתחול הבא.
    מאז #1726 מפעיל אותו מחדש `gui_keep`, ולא הקריאה הבאה ל-`gui_parent`
-   (‏test_gui_keeper_1726.py).
+   (test_gui_keeper_1726.py).
 2. כשגם ההפעלה מחדש נכשלת — מסך סטטי בעיצוב שלנו נצבע ישר על
-   ‏`/dev/fb0` (‏splash.sh), מבלוק raw שהגואי עצמו מרנדר בזמן הבנייה
-   (‏`--splash-raw`). לא טקסט ולא שחור.
-3. כשהגואי חי (או המסך הסטטי), ‏`log()` אינו כותב ל-tty0 — היומן והשרת
+   `/dev/fb0` (splash.sh), מבלוק raw שהגואי עצמו מרנדר בזמן הבנייה
+   (`--splash-raw`). לא טקסט ולא שחור.
+3. כשהגואי חי (או המסך הסטטי), `log()` אינו כותב ל-tty0 — היומן והשרת
    כרגיל. בלי גואי: כמו היום.
-4. ‏11 קריאות ה-log עם עברית קשיחה (‏non-gui-screens-audit.md, ‏17/10) הן
+4. 11 קריאות ה-log עם עברית קשיחה (non-gui-screens-audit.md, 17/10) הן
    קריאות `log` — ולכן סעיף 3 מוריד אותן מהמסך בלי לגעת בהן.
 """
 
@@ -256,7 +256,7 @@ def test_log_writes_the_tty_only_when_no_screen_of_ours_owns_it(tmp_path, owner,
     assert "פג הזמן: המגירה sda לא הסתיים" in log and "from a subshell" in log
 
 
-#: ‏non-gui-screens-audit.md (17/10), סעיף 1: עברית קשיחה בקריאות log.
+#: non-gui-screens-audit.md (17/10), סעיף 1: עברית קשיחה בקריאות log.
 #: (קובץ, קטע מהשורה) — לא מספר שורה, שזז.
 HEBREW_LOGS = [
     ("bootca.sh", '"boot_ca: $_p נקרא"'),

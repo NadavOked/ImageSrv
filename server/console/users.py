@@ -14,6 +14,7 @@ import re
 import secrets
 import sqlite3
 import string
+import time
 
 from server.db import _write_lock, journal, now_iso, writing
 
@@ -21,9 +22,9 @@ _log = logging.getLogger(__name__)
 
 #: מספר הסבבים ל**סיסמאות חדשות**. סיסמה קיימת נבדקת במספר שנשמר איתה,
 #: ובכניסה מוצלחת רשומה עם פחות סבבים משודרגת לערך הזה (#2591).
-#: ‏600,000 = המלצת OWASP ל-PBKDF2-HMAC-SHA256 (Password Storage Cheat Sheet,
-#: נקרא 07/11/2026). נמדד על ה-testrunner (i7-10700, ‏load ‏~4, ‏07/11/2026):
-#: ‏200K ‏82ms, ‏600K ‏252ms (חציון מ-7).
+#: 600,000 = המלצת OWASP ל-PBKDF2-HMAC-SHA256 (Password Storage Cheat Sheet,
+#: נקרא 07/11/2026). נמדד על ה-testrunner (i7-10700, load ~4, 07/11/2026):
+#: 200K 82ms, 600K 252ms (חציון מ-7).
 _ITERATIONS = 600_000
 _SCHEME = "pbkdf2"
 _DUMMY_SALT = "00000000000000000000000000000000"
@@ -31,13 +32,15 @@ _DUMMY_DIGEST = "00" * 32
 
 #: כל כתיבה כאן עוברת ב-``with _write_lock, writing(conn)`` — שני
 #: המנגנונים של `db.py`, מאותה סיבה שבגללה `net_seen` קיבל אותם (#272,
-#: ‏#356, ‏#313): כתיבה שנכשלה בלי ``rollback`` משאירה את החיבור בתוך
+#: #356, #313): כתיבה שנכשלה בלי ``rollback`` משאירה את החיבור בתוך
 #: טרנזאקציה, ומשם **כל** כתיבה עליו נכשלת מיד עד אתחול השרת — כלומר
-#: ניהול משתמשים שהפסיק לעבוד. ‏`journal` נוטל את אותה נעילה בעצמו,
+#: ניהול משתמשים שהפסיק לעבוד. `journal` נוטל את אותה נעילה בעצמו,
 #: והיא ``Lock`` ולא ``RLock``, ולכן הרישום ביומן נשאר **מחוץ** לבלוק.
 
 #: #1093: ערכת הנושא היא של המשתמש, לא של הדפדפן ולא של השרת.
 THEMES = frozenset({"auto", "light", "dark"})
+#: #3025: תצוגת הקונסולה — בסיסי (העבודה היומיומית) או מתקדם (כל הלשוניות).
+VIEWS = frozenset({"basic", "advanced"})
 
 
 def _derive(password: str, salt: str, iterations: int) -> str:
@@ -47,8 +50,8 @@ def _derive(password: str, salt: str, iterations: int) -> str:
 
 
 #: אנגלית בלבד, לפי הכרעת נדב (#111) ועדכון #1085: בלי רווח, 2–50.
-#: ‏#2505: מחלקה מפורשת **בלי** ‏IGNORECASE — על תבנית ‏str הדגל מקפל לפי
-#: יוניקוד, ו-`[a-z]` קיבל גם ‏`ſ` (U+017F) ו-‏`K` (U+212A), שאינם latin-1.
+#: #2505: מחלקה מפורשת **בלי** IGNORECASE — על תבנית str הדגל מקפל לפי
+#: יוניקוד, ו-`[a-z]` קיבל גם `ſ` (U+017F) ו-`K` (U+212A), שאינם latin-1.
 _USERNAME_RE = re.compile(r"[A-Za-z0-9._-]{2,50}")
 
 #: תו מיוחד — אותם תווים ואותה הודעה כמו באלפון (`users_helpers.validate_password`).
@@ -60,21 +63,21 @@ class UsernameTaken(ValueError):
 
 
 class WrongCurrentPassword(ValueError):
-    """‏#2414: הסיסמה הנוכחית שגויה ב-``change_own_password``. נפרד מהפרת נוהל:
+    """#2414: הסיסמה הנוכחית שגויה ב-``change_own_password``. נפרד מהפרת נוהל:
     רק זה ניחוש, ורק זה נספר ב-``login_guard``. ``ValueError`` — קורא ישן עדיין 400."""
 
 
 class BuiltinProtected(ValueError):
-    """‏#1262: המנהל שנוצר בהתקנה (``is_builtin=1``) הוא דלת החירום — בלי
+    """#1262: המנהל שנוצר בהתקנה (``is_builtin=1``) הוא דלת החירום — בלי
     MFA בכוונה (``builtin_no_mfa``), ולכן לא נמחק, לא מושבת ולא מורד
     מתפקיד מנהל, **גם כשיש מנהל פעיל אחר**. הקורא מתרגם ל-409.
 
-    ‏``ValueError`` כדי שקורא ישן שתופס רק אותו עדיין יסרב ולא יקרוס.
+    ``ValueError`` כדי שקורא ישן שתופס רק אותו עדיין יסרב ולא יקרוס.
     """
 
 
-#: ‏#1120: תקרה. PBKDF2 עם 200K סבבים על סיסמה של מגה-בייט הוא DoS;
-#: ‏NIST 800-63B דורש להתיר ≥64, ו-128 משאיר מרווח לביטויי-סיסמה.
+#: #1120: תקרה. PBKDF2 עם 200K סבבים על סיסמה של מגה-בייט הוא DoS;
+#: NIST 800-63B דורש להתיר ≥64, ו-128 משאיר מרווח לביטויי-סיסמה.
 MAX_PASSWORD_LEN = 128
 
 
@@ -118,17 +121,17 @@ def _hash(password: str, salt: str, iterations: int = _ITERATIONS) -> str:
 def _check_username(username: str) -> None:
     """שם משתמש הוא אנגלית בלבד — החלטה, לא עקיפה.
 
-    רשימת-היתר ולא רשימת-איסור: ‏`[A-Za-z0-9._-]`, 2 עד 50 תווים. שלושת
+    רשימת-היתר ולא רשימת-איסור: `[A-Za-z0-9._-]`, 2 עד 50 תווים. שלושת
     האיסורים שקדמו לה כיסו כל אחד באג אחר, ורשימת איסורים תמיד מפספסת
     את הבא בתור.
 
     מה שכל אחד מהם היה:
 
-    * ‏`|` — הטוקן הוא ``username|role|expiry|signature``, ו-`auth.check`
-      פותח בספירת מפרידים. שם עם `|` **עובר את הכניסה** (‏200 ו-cookie)
+    * `|` — הטוקן הוא ``username|role|expiry|signature``, ו-`auth.check`
+      פותח בספירת מפרידים. שם עם `|` **עובר את הכניסה** (200 ו-cookie)
       ונופל בבקשה הבאה: חשבון שנראה תקין ומתנהג כמו סיסמה שגויה.
     * תווי בקרה — שוברים את כותרת ה-cookie.
-    * שם שאינו latin-1 — ‏starlette מקודד את הכותרת ב-latin-1, ולכן שם
+    * שם שאינו latin-1 — starlette מקודד את הכותרת ב-latin-1, ולכן שם
       בעברית עבר את היצירה ואת בדיקת הסיסמה **ואז הפיל את `set_cookie`
       ב-500 — על הסיסמה הנכונה.** סיסמה שגויה החזירה 401 נקי, כלומר
       הכישלון היה ניתן לאבחון וההצלחה לא (#111).
@@ -190,24 +193,55 @@ def create(conn: sqlite3.Connection, username: str, password: str, role: str, by
         raise ValueError("סיסמה ריקה")
     if lookup(conn, username) is not None:
         raise UsernameTaken("משתמש בשם הזה כבר קיים")
+    # #2471: epoch התחלתי שאינו 0 — עוגייה של משתמש שנמחק אינה חוזרת לחיים כשנוצר מחדש
+    # משתמש באותו שם. עוגייה תקפה רק כשה-epoch שלה ≥ זה של השורה. ה-epoch החדש גדול
+    # **ממש** מכל epoch שנמחק או נוצר אי פעם (`AUTH_EPOCH_FLOOR`, נשמר ב-settings), ולכן
+    # הוא מונוטוני גם כשהשעון חוזר אחורה (שרת בלי NTP, סוללת RTC); השעון (מילישניות) רק
+    # מרחיק אותו מאפס.
     with _write_lock, writing(conn):
+        epoch = max(time.time_ns() // 1_000_000, _epoch_floor(conn) + 1)
         conn.execute(
             "INSERT INTO users (username, pw_hash, role, created_at,"
-            " must_change_password, is_builtin, mfa_required)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            " must_change_password, is_builtin, mfa_required, auth_epoch)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (username, _hash(password, secrets.token_hex(16)), role, now_iso(),
              1 if must_change_password else 0, 1 if is_builtin else 0,
-             1 if mfa_required else 0),
+             1 if mfa_required else 0, epoch),
         )
+        _raise_epoch_floor(conn, epoch)
     journal(conn, "user_create",
             f"{username} ({role})" + (" mfa_required" if mfa_required else ""), by)
+
+
+#: #2471: settings — ה-epoch הגבוה ביותר שניתן אי פעם, או של שורה שנמחקה.
+AUTH_EPOCH_FLOOR = "auth_epoch_floor"
+
+
+def _epoch_floor(conn: sqlite3.Connection) -> int:
+    """הרצפה, בתוך טרנזאקציית הכתיבה של הקורא. ערך פגום אינו "0" — הוא כשל בשם (עיקרון 5):
+    רצפה שנקראה כאפס מחזירה לחיים עוגייה של משתמש שנמחק."""
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (AUTH_EPOCH_FLOOR,)).fetchone()
+    if row is None:
+        return 0
+    if not re.fullmatch(r"[0-9]{1,19}", str(row["value"])):
+        raise RuntimeError("רצפת ה-epoch של המשתמשים פגומה — אי אפשר ליצור משתמש בבטחה")
+    return int(row["value"])
+
+
+def _raise_epoch_floor(conn: sqlite3.Connection, epoch: int) -> None:
+    """מרים את הרצפה ל-``epoch`` אם הוא גבוה ממנה. בתוך טרנזאקציית הכתיבה של הקורא."""
+    if epoch > _epoch_floor(conn):
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            (AUTH_EPOCH_FLOOR, str(epoch)))
 
 
 def verify(conn: sqlite3.Connection, username: str, password: str) -> str | None:
     """מחזיר את התפקיד אם הסיסמה נכונה, אחרת None. השוואה קבועת-זמן.
 
     הפרמטרים לגיבוב באים **מהרשומה** ולא מהקבועים של הקובץ. כאן ישבו
-    ‏`_scheme` ו-`_iters` — מפוענחים, ואז מושלכים לטובת `_ITERATIONS`
+    `_scheme` ו-`_iters` — מפוענחים, ואז מושלכים לטובת `_ITERATIONS`
     הקבוע. כל עוד לא שינו את הקבוע זה עבד; ביום שהוא היה עולה (וזה מה
     שקבוע כזה נועד לו) **כל הסיסמאות הקיימות היו נכשלות בשקט**, בהודעה
     "שם משתמש או סיסמה שגויים" שנראית כמו טעות הקלדה ולא כמו מיגרציה
@@ -216,7 +250,7 @@ def verify(conn: sqlite3.Connection, username: str, password: str) -> str | None
     ורשומה שלא ניתן לפענח נדחית, ולא נופלת חזרה לקבוע: "לא הבנו את
     הרשומה" איננו "הסיסמה שגויה במקרה", ובוודאי לא "ננחש 200,000".
     """
-    # ‏#186: חסום אינו נכנס. הבדיקה כאן **בנוסף** ל-`auth.check` ולא
+    # #186: חסום אינו נכנס. הבדיקה כאן **בנוסף** ל-`auth.check` ולא
     # במקומה — זו הכניסה, וזו הבקשה שאחריה.
     row = lookup(conn, username)
     if row is None or row["disabled_at"]:
@@ -246,12 +280,12 @@ def verify(conn: sqlite3.Connection, username: str, password: str) -> str | None
 
 
 def _upgrade_hash(conn: sqlite3.Connection, row: sqlite3.Row, password: str) -> None:
-    """‏#2591: כניסה מוצלחת = הסיסמה ביד, ולכן אפשר לגבב אותה מחדש בעלות
+    """#2591: כניסה מוצלחת = הסיסמה ביד, ולכן אפשר לגבב אותה מחדש בעלות
     הנוכחית. אף פעם לא בלי סיסמה, ואף פעם לא לערך נמוך מהקיים.
 
     ה-``WHERE pw_hash = <הישן>`` הוא השומר: סיסמה שהוחלפה (או שודרגה על ידי
-    כניסה מקבילה) בין הקריאה לכתיבה אינה נדרסת — ‏``rowcount == 0`` הוא תשובה,
-    לא כישלון. ‏``auth_epoch`` אינו זז: הסיסמה לא השתנתה, ושום session
+    כניסה מקבילה) בין הקריאה לכתיבה אינה נדרסת — ``rowcount == 0`` הוא תשובה,
+    לא כישלון. ``auth_epoch`` אינו זז: הסיסמה לא השתנתה, ושום session
     לא מתבטלת. כישלון כתיבה (דיסק, נעילה) אינו מפיל כניסה שהצליחה —
     הרשומה נשארת כפי שהייתה והשדרוג יחזור בכניסה הבאה — אבל נרשם ללוג.
     """
@@ -283,8 +317,8 @@ def update(
             validate_password(password)
         elif not password:
             raise ValueError("סיסמה ריקה")
-    # ‏#1262: לפני כל כתיבה — גם הסיסמה שנשלחה באותה בקשה לא נכתבת.
-    # ‏``is_builtin`` נכתב רק ב-INSERT ואינו משתנה, ולכן קריאה כאן אינה TOCTOU.
+    # #1262: לפני כל כתיבה — גם הסיסמה שנשלחה באותה בקשה לא נכתבת.
+    # ``is_builtin`` נכתב רק ב-INSERT ואינו משתנה, ולכן קריאה כאן אינה TOCTOU.
     if role == "deploy" and row["is_builtin"]:
         raise BuiltinProtected("המנהל שנוצר בהתקנה אינו ניתן להורדה מתפקיד מנהל")
     # הורדת המנהל האחרון מתפקידו נועלת את כולם מחוץ לניהול.
@@ -312,11 +346,11 @@ def update(
     if changed:
         journal(conn, "user_edit", f"{username} " + ", ".join(changed), by)
     if "password" in changed:
-        # ‏#1853 (סקירת אבטחה): סיסמה חדשה מכאן = כמו `reset_password` (#1120) — כל
-        # session ישנה וכל צופה פתוח (מוניטור/VM) מתבטלים. אחרי הכתיבה: ‏`still_admin`.
+        # #1853 (סקירת אבטחה): סיסמה חדשה מכאן = כמו `reset_password` (#1120) — כל
+        # session ישנה וכל צופה פתוח (מוניטור/VM) מתבטלים. אחרי הכתיבה: `still_admin`.
         bump_auth_epoch(conn, username)
     elif f"role={role}" in changed and role == "deploy":
-        # ‏#1853: מי שהורד ל-deploy אינו מנהל — גשר מוניטור/VM פתוח שלו נסגר עכשיו.
+        # #1853: מי שהורד ל-deploy אינו מנהל — גשר מוניטור/VM פתוח שלו נסגר עכשיו.
         from server.console import viewer_sessions
         viewer_sessions.revoke_user(username)
 
@@ -333,7 +367,7 @@ def set_disabled(conn: sqlite3.Connection, username: str, disabled: bool,
     if row is None:
         raise ValueError("משתמש לא קיים")
     username = row["username"]
-    # ‏#1262: רק הכיוון שנועל. builtin חסום ממצב ישן עדיין ניתן לשחרור.
+    # #1262: רק הכיוון שנועל. builtin חסום ממצב ישן עדיין ניתן לשחרור.
     if disabled and row["is_builtin"]:
         raise BuiltinProtected("המנהל שנוצר בהתקנה אינו ניתן להשבתה")
     if disabled and row["role"] == "admin" and active_admin_count(conn) <= 1:
@@ -343,14 +377,15 @@ def set_disabled(conn: sqlite3.Connection, username: str, disabled: bool,
                      (now_iso() if disabled else None, username))
     journal(conn, "user_disabled" if disabled else "user_enabled", username, by)
     if disabled:
-        # ‏#1853 (סקירת אבטחה): מי שנחסם — גשר מוניטור/VM פתוח שלו נסגר עכשיו. אחרי
+        # #1853 (סקירת אבטחה): מי שנחסם — גשר מוניטור/VM פתוח שלו נסגר עכשיו. אחרי
         # הכתיבה, כדי ש-`still_admin` (שקורא את החסימה) יסגור את המרוץ מול גשר שנפתח.
-        from server.console import viewer_sessions
-        viewer_sessions.revoke_user(username)
+        # #2471: `bump_auth_epoch` ולא רק `revoke_user` — החסימה דוחה עוגיות רק כל עוד
+        # היא בתוקף, ועוגיית קיוסק (פטורה מ-idle) חזרה לחיים בשחרור, עד 12 שעות.
+        bump_auth_epoch(conn, username)
 
 
 def active_admin_count(conn: sqlite3.Connection) -> int:
-    """מנהלים שאינם חסומים. ‏`admin_count` סופר גם חסומים, ולכן הוא
+    """מנהלים שאינם חסומים. `admin_count` סופר גם חסומים, ולכן הוא
     התשובה הלא נכונה לשאלה "האם יישאר מי שינהל"."""
     return conn.execute(
         "SELECT COUNT(*) AS n FROM users"
@@ -367,19 +402,22 @@ def admin_count(conn: sqlite3.Connection) -> int:
 def delete(conn: sqlite3.Connection, username: str, by: str) -> None:
     """מחיקה שתובעת את השארית באותה כתיבה.
 
-    השומר על "יישאר מי שינהל" ישב עד ‏#521 ב-``console_api.del_user``
-    כ**קריאה לפני הכתיבה**: ‏``active_admin_count`` נקרא, ואז המחיקה
+    השומר על "יישאר מי שינהל" ישב עד #521 ב-``console_api.del_user``
+    כ**קריאה לפני הכתיבה**: ``active_admin_count`` נקרא, ואז המחיקה
     רצה. בין השניים אין נעילה, ולכן שני מנהלים שנמחקים בו-זמנית ראו
     שניהם "יש שניים", שניהם דילגו על השומר, ושניהם נמחקו.
 
     כאן התנאי הוא **חלק מה-DELETE**: השורה נמחקת רק אם היא אינה מנהל
-    פעיל, או אם יישאר עוד אחד. ‏``rowcount == 0`` הוא **התשובה** — לא
+    פעיל, או אם יישאר עוד אחד. ``rowcount == 0`` הוא **התשובה** — לא
     כישלון — והקורא מבחין בין "לא היה" ל"היה, ולא מוחקים אותו".
 
-    ‏#1262: ``is_builtin = 0`` באותו WHERE. בניגוד לשומר המנהל האחרון,
+    #1262: ``is_builtin = 0`` באותו WHERE. בניגוד לשומר המנהל האחרון,
     הוא חל גם על builtin **חסום** — דלת החירום אינה נמחקת לעולם.
     """
     with _write_lock, writing(conn):
+        # #2471: ה-epoch של השורה שנמחקת נכנס לרצפה, כדי שמשתמש חדש באותו שם יתחיל מעליו.
+        gone = conn.execute("SELECT auth_epoch FROM users WHERE username = ?",
+                            (username,)).fetchone()
         cur = conn.execute(
             "DELETE FROM users WHERE username = ? AND is_builtin = 0"
             "  AND (role != 'admin' OR disabled_at IS NOT NULL"
@@ -388,6 +426,8 @@ def delete(conn: sqlite3.Connection, username: str, by: str) -> None:
             (username,),
         )
         removed = cur.rowcount == 1
+        if removed and gone is not None:
+            _raise_epoch_floor(conn, int(gone["auth_epoch"] or 0))
     if not removed:
         # שלושה מצבים שונים, ואסור לקפל אותם: משתמש שאינו קיים, המנהל
         # שנוצר בהתקנה (#1262), והמנהל הפעיל האחרון שהשומר עצר. הקורא
@@ -401,7 +441,7 @@ def delete(conn: sqlite3.Connection, username: str, by: str) -> None:
             raise BuiltinProtected("המנהל שנוצר בהתקנה אינו ניתן למחיקה")
         raise ValueError("זה המנהל האחרון — מחיקתו תנעל את הקונסולה")
     journal(conn, "user_delete", username, by)
-    # ‏#1853: גשר מוניטור/VM פתוח של מי שנמחק — נסגר עכשיו, לא ב-idle.
+    # #1853: גשר מוניטור/VM פתוח של מי שנמחק — נסגר עכשיו, לא ב-idle.
     from server.console import viewer_sessions
     viewer_sessions.revoke_user(username)
 
@@ -424,9 +464,9 @@ def list_users(conn: sqlite3.Connection) -> list[dict]:
 
 
 def record_login(conn: sqlite3.Connection, username: str, ip: str) -> None:
-    """‏#1008: כניסה שהנפיקה עוגייה — מתי ומאיזו כתובת (``request.client.host``).
+    """#1008: כניסה שהנפיקה עוגייה — מתי ומאיזו כתובת (``request.client.host``).
 
-    נקרא ליד כל ``attach_cookie`` של כניסה (``console_login``, ‏``/login/mfa``),
+    נקרא ליד כל ``attach_cookie`` של כניסה (``console_login``, ``/login/mfa``),
     ולא ב-``mfa_required``: סיסמה בלי הגורם השני אינה כניסה. זה המקור של
     ``last_login_*`` ב-``GET /users`` — לא ``console_sessions`` (#1039), שהשורה
     שלה נמחקת ביציאה ובתפוגה."""
@@ -458,6 +498,30 @@ def set_theme(conn: sqlite3.Connection, username: str, theme: str) -> None:
         )
 
 
+def get_view(conn: sqlite3.Connection, username: str) -> str:
+    """#3025: הבחירה השמורה, ואם אין — המנהל מההתקנה (``is_builtin``) מתקדם
+    וכל השאר בסיסי (הכרעת נדב). שורה חסרה או ערך זר → בסיסי, לא קריסה."""
+    row = conn.execute(
+        "SELECT view, is_builtin FROM users WHERE username = ?", (username,)
+    ).fetchone()
+    if row is None:
+        return "basic"
+    if row["view"] in VIEWS:
+        return row["view"]
+    return "advanced" if row["is_builtin"] else "basic"
+
+
+def set_view(conn: sqlite3.Connection, username: str, view: str) -> None:
+    """המשתמש על עצמו, כמו ``set_theme``. בלי יומן — זו העדפה, לא פעולת ניהול."""
+    if view not in VIEWS:
+        raise ValueError("view חייב להיות basic או advanced")
+    with _write_lock, writing(conn):
+        conn.execute(
+            "UPDATE users SET view = ? WHERE username = ?",
+            (view, username),
+        )
+
+
 def change_own_password(conn: sqlite3.Connection, username: str,
                         current: str, new: str) -> None:
     """החלפת סיסמה עצמית. מאמתת את הנוכחית, אוכפת נוהל, מורידה כפייה."""
@@ -471,7 +535,7 @@ def change_own_password(conn: sqlite3.Connection, username: str,
             " WHERE username = ?",
             (_hash(new, secrets.token_hex(16)), stored),
         )
-    # ‏#1120: סיסמה חדשה = כל session ישנה וכל דפדפן "זכור" מתבטלים.
+    # #1120: סיסמה חדשה = כל session ישנה וכל דפדפן "זכור" מתבטלים.
     # הקורא (`/me/password`) מנפיק לעצמו עוגייה חדשה אחרי הקריאה הזו.
     # מחוץ ל-`_write_lock` — הוא נוטל אותה בעצמו והיא ``Lock``, לא ``RLock``.
     bump_auth_epoch(conn, stored)
@@ -491,7 +555,7 @@ def reset_password(conn: sqlite3.Connection, username: str, by: str) -> str:
             " WHERE username = ?",
             (_hash(new, secrets.token_hex(16)), stored),
         )
-    # ‏#1120: איפוס הוא התגובה לחשבון שנפרץ — ה-session של התוקף והדפדפן
+    # #1120: איפוס הוא התגובה לחשבון שנפרץ — ה-session של התוקף והדפדפן
     # ה"זכור" שלו (שעוקף MFA) חייבים למות יחד עם הסיסמה הישנה.
     bump_auth_epoch(conn, stored)
     journal(conn, "password_reset", stored, by)
@@ -516,7 +580,7 @@ def bump_auth_epoch(conn: sqlite3.Connection, username: str) -> None:
 def ensure_admin(conn: sqlite3.Connection, password: str | None = None) -> str | None:
     """בהתקנה טרייה נוצר admin/admin עם החלפה כפויה, is_builtin=1.
 
-    אם כבר יש מנהל — לא נוגעים. `password` (‏`--admin-pass`) מדלג על הכפייה.
+    אם כבר יש מנהל — לא נוגעים. `password` (`--admin-pass`) מדלג על הכפייה.
     מחזיר את הסיסמה המודפסת אם נוצר ברירת-המחדל, אחרת None.
     """
     row = conn.execute("SELECT 1 FROM users WHERE role = 'admin' LIMIT 1").fetchone()

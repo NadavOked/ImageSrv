@@ -27,7 +27,7 @@ from test_cloner_gui import _build_gui, _count_color, _png, _png_rgb, _token
 
 pytestmark = pytest.mark.skipif(BASH is None, reason="bash נדרש לסוכן ה-POSIX")
 
-#: מה שאסור שיופיע במסך כשל (#2068, ‏#2084)
+#: מה שאסור שיופיע במסך כשל (#2068, #2084)
 FORBIDDEN = ("פנו ל-IT", "לאיש IT", "לטכנאי", "טכנאי", "פרטים טכניים")
 #: הפעולות שהסוכן יודע לבצע (hold.sh hold_action) -- כפתור שאינו כאן לא עושה דבר
 ACTIONS = {"off", "retry", "reboot", "standby", "beat", "smart", "windows"}
@@ -157,7 +157,7 @@ def test_start_windows_sets_bootnext_or_says_why_not(tmp_path):
 
 
 def test_die_local_reboots_at_once_on_the_button(tmp_path):
-    """‏`fail_fatal` מחכה FAIL_SHOW_S שניות -- "אתחל עכשיו" מקצר את ההמתנה."""
+    """`fail_fatal` מחכה FAIL_SHOW_S שניות -- "אתחל עכשיו" מקצר את ההמתנה."""
     fs = AGENT / "lib" / "gui" / "failscreen.sh"
     script = (f'. {shlex.quote(posix(fs))}; RUN_DIR={shlex.quote(posix(tmp_path))}; mkdir -p "$RUN_DIR/gui"; '
               'FAIL_SHOW_S=30; fail_screen() { :; }; echo reboot > "$RUN_DIR/gui/fail.action"; '
@@ -171,7 +171,7 @@ def test_die_local_reboots_at_once_on_the_button(tmp_path):
 
 @GUI_BUILD
 def test_the_gui_draws_the_buttons_of_the_records(tmp_path):
-    """אותן רשומות, עם ובלי `fail_btn=`: עם הכפתורים יש כפתור ראשי מלא (‏--clr-action),
+    """אותן רשומות, עם ובלי `fail_btn=`: עם הכפתורים יש כפתור ראשי מלא (--clr-action),
     ובלעדיהם אין. גואי שמתעלם מ-fail_btn מצייר את שתיהן זהות."""
     binary = _build_gui(tmp_path)
     r = run_agent(tmp_path, 'ui_error_hold "no drawer completed" hold_beat', env="D_ROLE=cloner",

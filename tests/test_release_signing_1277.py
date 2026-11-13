@@ -1,4 +1,4 @@
-"""‏#1277 — כפתור העדכון מסרב לגרסה שאינה חתומה במפתח שהשרת סומך עליו.
+"""#1277 — כפתור העדכון מסרב לגרסה שאינה חתומה במפתח שהשרת סומך עליו.
 
 חתימות **אמיתיות**: מפתחות זמניים מ-``ssh-keygen`` ותגים מ-``git tag -s``,
 כמו בפרסום עצמו. המאמת (``tools/verify-release-tag.py``) הוא מימוש עצמאי
@@ -117,7 +117,7 @@ def test_a_tag_signed_by_the_release_key_passes_with_its_fingerprint(world):
 
 
 def test_an_rsa_release_key_is_accepted_too(world):
-    """אם FIPS במארח חוסם ed25519 — RSA (‏rsa-sha2-512) עובד באותו מסלול."""
+    """אם FIPS במארח חוסם ed25519 — RSA (rsa-sha2-512) עובד באותו מסלול."""
     rsa = make_key(world["tmp"], "release-rsa", "rsa")
     signers = signers_file(world["tmp"], rsa, name="signers-rsa")
     sign(world["repo"], "v1.0.0", rsa)
@@ -162,8 +162,8 @@ def test_a_tag_edited_after_signing_is_refused(world):
 
 
 def test_a_signed_old_release_under_a_new_name_is_refused(world):
-    """הפניה ‏refs/tags/v9.9.9 לאובייקט התג החתום של v1.0.0 — החתימה תקפה,
-    אבל היא על v1.0.0. ‏git verify-tag לבדו היה מקבל את זה."""
+    """הפניה refs/tags/v9.9.9 לאובייקט התג החתום של v1.0.0 — החתימה תקפה,
+    אבל היא על v1.0.0. git verify-tag לבדו היה מקבל את זה."""
     repo = world["repo"]
     sign(repo, "v1.0.0", world["release"])
     git(repo, "update-ref", "refs/tags/v9.9.9", git(repo, "rev-parse", "refs/tags/v1.0.0").strip())
@@ -369,7 +369,7 @@ BUILD_ISO = ROOT / "tools" / "iso" / "build-iso.sh"
 
 def _iso_signer_check() -> str:
     text = BUILD_ISO.read_text(encoding="utf-8")
-    start = text.index("# ‏#1277:")
+    start = text.index("# \u200f#1277:")
     end = text.index("\n", text.index('say "release-signers:'))
     return text[start:end + 1]
 

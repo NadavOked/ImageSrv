@@ -1,16 +1,16 @@
-"""‏#1235 (המשך #105): כונן בלי serial בגואי הנייטיב של מחשב הבנייה.
+"""#1235 (המשך #105): כונן בלי serial בגואי הנייטיב של מחשב הבנייה.
 
-‏`GET /room` מחזיר לכונן כזה `fresh: null` — הסבב סופר לפי serial ואינו
+`GET /room` מחזיר לכונן כזה `fresh: null` — הסבב סופר לפי serial ואינו
 יכול לדעת אם הוא נכתב. מסך הטקסט והקיוסק כבר אומרים "לא ניתן לזהות";
 כאן שתי החוליות של הגואי הנייטיב:
 
-* ‏`gui_state` (‏`agent/lib/gui/guistate.sh`) כותב בשדה ה-fresh של
-  ‏`room_drawer=` את הערך ‏`-1` עבור `null` — ולא `0`, שהוא "נכתב".
-* ‏`state.c` מפרסר את `-1` ו-`screens_room.c` כותב "לא ניתן לזהות את
+* `gui_state` (`agent/lib/gui/guistate.sh`) כותב בשדה ה-fresh של
+  `room_drawer=` את הערך `-1` עבור `null` — ולא `0`, שהוא "נכתב".
+* `state.c` מפרסר את `-1` ו-`screens_room.c` כותב "לא ניתן לזהות את
   הכונן בחריץ N" בצבע האזהרה, במסך ההכנה ובמסך הסבב החי — נמדד
   בפיקסלים של `--png` (על המעבדה וב-CI; בווינדוס אין מהדר).
 
-**בקרה שלילית:** על main ‏`gui_state` כותב `0` ל-`fresh: null`, והגואי
+**בקרה שלילית:** על main `gui_state` כותב `0` ל-`fresh: null`, והגואי
 אינו מצייר שום שורת אזהרה — שני הטסטים נופלים על התנהגות.
 """
 
@@ -43,7 +43,7 @@ ROOM = {"round": None, "machines": [{
 
 
 def room_drawer_fresh(tmp_path: Path) -> dict[str, str]:
-    """‏gui_state במצב `direct` (מסך החדר בלי בחירת אימג') מול room.json
+    """gui_state במצב `direct` (מסך החדר בלי בחירת אימג') מול room.json
     קבוע; מחזיר port → שדה ה-fresh של כל רשומת `room_drawer=`."""
     run = tmp_path / "run"; run.mkdir()
     gui = tmp_path / "gui"; gui.mkdir()
@@ -110,8 +110,8 @@ def _render(binary: Path, state: Path, prefix: Path) -> None:
     why="native-gui נבנה על המעבדה בלבד",
 )
 def test_room_screens_say_cannot_identify_for_a_drive_with_no_serial(tmp_path):
-    """אותו מצב פעמיים, ההבדל היחיד הוא שדה ה-fresh של חריץ 2: ‏`1` מול
-    ‏`-1`. כל המגירות `passed` (ירוק), כך שבמסך ההכנה אין צבע אזהרה
+    """אותו מצב פעמיים, ההבדל היחיד הוא שדה ה-fresh של חריץ 2: `1` מול
+    `-1`. כל המגירות `passed` (ירוק), כך שבמסך ההכנה אין צבע אזהרה
     כלל; במסך החי יש התראת גל כתומה זהה בשני הרינדורים. השורה "לא ניתן
     לזהות את הכונן בחריץ 2" מוסיפה פיקסלים בצבע `--clr-warning` בשניהם."""
     binary = _build_gui(tmp_path)

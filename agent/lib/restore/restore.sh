@@ -115,9 +115,9 @@ node_is_block() {
 stream_source() {
     # $1 = mode, $2 = server URL, $3 = image id, $4 = file, $5 = תקרה עד הבייט הראשון.
     if [ "$1" = "multicast" ]; then   # #2039: the NIC DHCP answered on (net.conf), as directsend's sender; >&2: stdout is the stream
-        [ -n "${IFACE:-}" ] || log "udp-receiver: IFACE is empty -- no --interface, udpcast picks its default NIC (#2039)" >&2
+        [ -n "${IFACE:-}" ] || log "udp-receiver: IFACE is empty -- no --interface, udpcast picks its default NIC (#2039)" >&2; if command -v rcvbuf_check >/dev/null 2>&1; then rcvbuf_check >&2; fi   # #2994: RCVBUF_ASK (rcvbuf.sh)
         udp-receiver --nokbd ${IFACE:+--interface "$IFACE"} --portbase "$UDPCAST_PORTBASE" \
-            --start-timeout "${5:-${WAIT_STREAM_START_S:-600}}" --receive-timeout "$UDPCAST_STALL_TIMEOUT" 2>> "$LOG_FILE"
+            --start-timeout "${5:-${WAIT_STREAM_START_S:-600}}" --receive-timeout "$UDPCAST_STALL_TIMEOUT" ${RCVBUF_ASK:+--rcvbuf "$RCVBUF_ASK"} 2>> "$LOG_FILE"
     else
         http_get_stream "$2/api/v1/images/$3/files/$4" "$UDPCAST_STALL_TIMEOUT"   # #2644: the cloner's ceiling (timing.sh moves it), not HTTP's 120
     fi

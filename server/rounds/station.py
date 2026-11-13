@@ -24,7 +24,7 @@ from server.library import minfree
 from server.net import ports
 from server.system import timezone
 from server.storage import locations as storage_locations
-from server.agent.api import ServerContext, _error, agent_credentials, identity_gate
+from server.agent.api import ServerContext, _error, agent_credentials, identity_gate, source_gate
 from server.agent import body as agent_body   # #2410
 from server.db import journal
 from server.agent.hello import class_deploy_enabled
@@ -44,9 +44,9 @@ ROUND_OPENER_ROLES = ("admin", "deploy")
 
 def classrooms_off() -> JSONResponse | None:
     """הכרעת נדב 11/10: "השרת מסרב לפקודות כיתות כל עוד הכיתות כבויות" —
-    גם בנתיבי הסוכן, ובלי תלות במתג ‏`class_deploy_enabled` (#880). ‏409
+    גם בנתיבי הסוכן, ובלי תלות במתג `class_deploy_enabled` (#880). 409
     בשם, **לפני** כל בדיקה אחרת (MAC, זהות, סיסמה): נתיב שאין מאחוריו כלום
-    לא בודק סיסמאות (#1282). ‏`None` = הכיתות דלוקות (v1.2)."""
+    לא בודק סיסמאות (#1282). `None` = הכיתות דלוקות (v1.2)."""
     if capabilities.classrooms():
         return None
     return _error(409, "כיתות אינן במהדורה זו (v2)", "classrooms_off")
@@ -58,8 +58,8 @@ def default_prefix(group_id: str) -> str:
 
 def create_station_router(ctx: ServerContext,
                           version: Callable[[], str | None] | None = None) -> APIRouter:
-    """‏`version` (‏#1252) — תג ה-git של השרת, אותו מקור כמו `/me.version`;
-    ‏`None` (בדיקות ישנות) = לא ידוע, ואז `server_version` הוא `null`."""
+    """`version` (#1252) — תג ה-git של השרת, אותו מקור כמו `/me.version`;
+    `None` (בדיקות ישנות) = לא ידוע, ואז `server_version` הוא `null`."""
     router = APIRouter(prefix="/api/v1/agent")
     # Populate before concurrent polls arrive; cache also retains None.
     # #1252's injected reader (tests, /me's source) wins, read once here too (#1257).
@@ -97,7 +97,7 @@ def create_station_router(ctx: ServerContext,
         return [dict(r) for r in rows]
 
     @router.get("/sessions/active")
-    def active_session_view():
+    def active_session_view(request: Request):
         """תצוגת הסבב הפעיל למסכי התחנה — בלי כניסה.
 
         עמוד התחנה רץ כקיוסק, בלי אדם ליד: ההתנתקות האוטומטית של
@@ -105,7 +105,14 @@ def create_station_router(ctx: ServerContext,
         שנשען עליו קפא באמצע סבב והציג מצב ישן (#34). זו תצוגה בלבד —
         אותו מידע שחברי הסבב מקבלים ומציגים על המסכים בכיתה ממילא;
         כל פעולה (פתיחה, התחלה, עצירה) עדיין דורשת כניסה.
+
+        #2489 (2): בלי כניסה, אבל לא בלי זהות — התשובה נוקבת ב-MAC, בשם ובאירועי
+        הדיסק של כל חבר. `source_gate`: הכתובת חכורה למכונה רשומה, כמו המניפסט
+        שהסוכן מושך באותה צורה (`http_get` ב-`guistate.sh`, בלי MAC).
         """
+        refused = source_gate(ctx, request, "sessions/active", None)
+        if refused is not None:
+            return refused
         session = ctx.store.active()
         if session is None:
             return {"session": None}
@@ -159,8 +166,8 @@ def create_station_router(ctx: ServerContext,
             "group_label": machine["label"] if machine else None,
             "disks": disks,
             "allowed_images": allowed_images,
-            # ‏#1896: אימג' ישן עם שתי מחיצות windows שוות — "לא נבדק" במסך, עם
-            # סימון C: (‏{id,name,folder,candidates}); מסומן — עובר ל-allowed_images.
+            # #1896: אימג' ישן עם שתי מחיצות windows שוות — "לא נבדק" במסך, עם
+            # סימון C: ({id,name,folder,candidates}); מסומן — עובר ל-allowed_images.
             "unchecked_images": ctx.library.unmarked_images(minfree.min_free_gb(ctx.conn)),
             # #1081: edition flag, same as hello. Missing = off. v2 turns this on.
             "classrooms": capabilities.classrooms(),
@@ -193,11 +200,11 @@ def create_station_router(ctx: ServerContext,
             return _error(exc.status, exc.message, exc.code)
         if not isinstance(body, dict):
             return _error(400, "body is not an object", "bad_json")
-        # ‏#2750: כמו #2748 — הגוף נקרא על הלולאה, עבודת ה-sqlite בתהליכון מהמאגר.
+        # #2750: כמו #2748 — הגוף נקרא על הלולאה, עבודת ה-sqlite בתהליכון מהמאגר.
         return await run_in_threadpool(_open_from_station_body, request, body)
 
     def _open_from_station_body(request: Request, body: dict) -> JSONResponse:
-        # ‏#997: המכונה שפותחת — לפני הסיסמה. זר בוילן אינו פותח סבב על
+        # #997: המכונה שפותחת — לפני הסיסמה. זר בוילן אינו פותח סבב על
         # כיתה שלמה בשם תחנה, גם עם סיסמה שדלפה (ו-`bad_mac` קודם לזהות).
         opener = normalize_mac(body.get("mac"))
         if opener is None:
@@ -207,15 +214,15 @@ def create_station_router(ctx: ServerContext,
             return refused
 
         if not class_deploy_enabled(ctx.conn):
-            # ‏#880: v1 "מהדורת שיכפול" — הסוכן מסתיר את הכרטיס, והשרת
-            # מסרב גם למי שלא הסתיר. ‏#1282: **לפני** הסיסמה — אחרת נתיב
+            # #880: v1 "מהדורת שיכפול" — הסוכן מסתיר את הכרטיס, והשרת
+            # מסרב גם למי שלא הסתיר. #1282: **לפני** הסיסמה — אחרת נתיב
             # שאין מאחוריו שום פתיחה היה עונה 409 לנכונה ו-401 לשגויה,
             # כלומר בודק סיסמאות לכל מי שבוילן.
             journal(ctx.conn, "class_deploy_refused",
                     f'{body.get("username", "")} at station round open', machine=opener)
             return _error(409, "הפצה לכיתות כבויה (v1 מהדורת שיכפול)",
                           "class_deploy_disabled")
-        # ‏#1282: אותו שער כמו `/agent/login` — ‏login_guard + החלפה כפויה.
+        # #1282: אותו שער כמו `/agent/login` — login_guard + החלפה כפויה.
         role, refused = agent_credentials(
             ctx, request, body.get("username", ""), body.get("password", ""),
             f'{body.get("username", "")} at station round open', machine=opener)
@@ -256,7 +263,7 @@ def create_station_router(ctx: ServerContext,
                 return _error(400, "missing or malformed mac in macs", "bad_macs")
             roster = sorted(set(roster))     # בחירה כפולה אינה שני מחשבים
 
-        # ‏#381, אחרי שה-roster ידוע: אימג' קשור נפרס רק על המכונה שלו,
+        # #381, אחרי שה-roster ידוע: אימג' קשור נפרס רק על המכונה שלו,
         # וכיתה שלמה בלי בחירת מחשבים אינה "רק היא".
         refusal = restore_refusal(manifest, roster)
         if refusal is not None:
@@ -264,7 +271,7 @@ def create_station_router(ctx: ServerContext,
                     f'{body.get("image_id", "")} — {refusal}')
             return _error(400, refusal, "image_bound_to_another_machine")
 
-        # ‏#1500 (המשך #1494): כלל המקום הפנוי (#1354) שאינו ניתן לבדיקה על
+        # #1500 (המשך #1494): כלל המקום הפנוי (#1354) שאינו ניתן לבדיקה על
         # האימג' הזה — הסוכן מסרב לו בכל מחשב, אז סבב שנפתח עליו מעיר את
         # הכיתה ונכשל בכולה. אותה מחרוזת של הסוכן; כלל כבוי (0) אינו חוסם.
         blocked = minfree.unchecked(manifest, minfree.min_free_gb(ctx.conn))

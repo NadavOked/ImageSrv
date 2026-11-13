@@ -1,4 +1,4 @@
-"""‏#1886 — מקום פנוי בשרת לאורך זמן, ובדיקה לפני קליטה לפי גודל הגרסה הקודמת.
+"""#1886 — מקום פנוי בשרת לאורך זמן, ובדיקה לפני קליטה לפי גודל הגרסה הקודמת.
 
 הכלל: אין מקום לגרסה הקודמת + מרווח + הרזרבה — **סירוב לפני שהקליטה מתחילה**, עם המספרים. בלי גרסה
 קודמת — אזהרה, לא סירוב. מחיקה רק **מוצעת** (עיקרון 7) — שום דבר כאן אינו מוחק.
@@ -144,7 +144,7 @@ def test_an_image_used_lately_is_not_suggested(conn):
 
 
 def test_the_console_refuses_before_the_task_exists(server, monkeypatch):
-    """‏`POST /api/console/tasks/capture` — 409 עם ההסבר, ואין משימה; הדגימה נשמרת."""
+    """`POST /api/console/tasks/capture` — 409 עם ההסבר, ואין משימה; הדגימה נשמרת."""
     from server.library import capture
     ctx, admin = server["ctx"], server["admin"]
     registry.add_machine(ctx.conn, MAC, "build-1", "grp_BUILD", "test")

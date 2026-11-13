@@ -41,7 +41,7 @@ def fanout(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def fanout_clocked(tmp_path_factory):
-    """fanout שהשעון שלו נקרא מקובץ שהטסט מזיז (‏IMAGESRV_TEST_CLOCK, ‏#2808).
+    """fanout שהשעון שלו נקרא מקובץ שהטסט מזיז (IMAGESRV_TEST_CLOCK, #2808).
     רק הטסטים של שעון הפינוי משתמשים בו; כל השאר רצים על הבנייה הרגילה."""
     binary = tmp_path_factory.mktemp("build-clocked") / "fanout"
     subprocess.run(
@@ -452,7 +452,7 @@ def counter_of(fifo: Path) -> int:
 
 @needs_fanout
 def test_each_target_gets_a_counter_of_its_own(fanout, tmp_path):
-    """‏#25: ה-pv שלפני fanout מודד את הזרם של המכונה — מספר אחד לכל
+    """#25: ה-pv שלפני fanout מודד את הזרם של המכונה — מספר אחד לכל
     המגירות, שאינו מדידה של אף אחת מהן. fanout הוא היחיד שיודע כמה
     נכנס לכל מגירה, ולכן הוא זה שסופר."""
     data = os.urandom(3 * 1024 * 1024)
@@ -561,7 +561,7 @@ def test_room_grace_ms_is_gone_so_slow_is_not_dead():
 
 def test_slow_reader_timeouts_dwarf_sleep_so_vm_load_is_not_a_failed_drive():
     """#353: join=30 מול ~6.4s שינה נכשל תחת load 6.78 ונחקר שלוש פעמים
-    כבאג ב-fanout. ‏ROOM_GRACE_MS הוסר ב-#660; מה שנשאר הוא תקרת הטסט.
+    כבאג ב-fanout. ROOM_GRACE_MS הוסר ב-#660; מה שנשאר הוא תקרת הטסט.
     skip שקט אינו פתרון (#52). רץ בלי gcc — זה שומר על התקציב, לא על fifo.
     """
     every = SLOW_ALL_BYTES / READER_CHUNK * SLOW_ALL_DELAY_S
@@ -576,11 +576,11 @@ def test_slow_reader_timeouts_dwarf_sleep_so_vm_load_is_not_a_failed_drive():
 
 @needs_fanout
 def test_when_every_drive_is_slower_than_the_stream_nobody_is_failed(fanout, tmp_path):
-    """‏"איטי מדי" הוא יחסי: כשכל החוצצים מלאים, הזרם עצמו מהיר מכל
+    """"איטי מדי" הוא יחסי: כשכל החוצצים מלאים, הזרם עצמו מהיר מכל
     הכוננים (רשת מהירה, או VM שבו הרשת היא זיכרון) — חוסמים ומאיטים את
     המקור, לא פוסלים את כל החדר (#23).
 
-    ‏#353: join=30 היה צמוד ל-~6.4s שינה ונכשל תחת load 6.78. התקרה כאן
+    #353: join=30 היה צמוד ל-~6.4s שינה ונכשל תחת load 6.78. התקרה כאן
     פי ~18 מזמן השינה, וקורא שלא סיים נכשל בשם ולא ב-hash חסר.
     """
     data = os.urandom(SLOW_ALL_BYTES)
@@ -610,7 +610,7 @@ def test_a_laggard_among_slow_peers_is_not_dropped_either(fanout, tmp_path):
     כל השלושה מקבלים כל בייט, והזרם מתקדם בקצב האיטי ביותר. זו בקרה
     שלילית נוספת: על הקוד הישן report["sdc"] היה "failed".
 
-    ‏#353: 4MiB×250ms/64KiB ≈ 16s שינה מול join=60 — אותו משטח רעידה.
+    #353: 4MiB×250ms/64KiB ≈ 16s שינה מול join=60 — אותו משטח רעידה.
     """
     data = os.urandom(LAGGARD_BYTES)
     peer_a, peer_b, laggard = [], [], []
@@ -703,7 +703,7 @@ def test_when_every_target_fails_the_run_ends_instead_of_spinning(fanout, tmp_pa
 
 @needs_fanout
 def test_a_hung_drive_is_evicted_and_the_healthy_siblings_finish(fanout, tmp_path):
-    """‏#674, כשל הברזל של 12/09: כונן שנתקע — ‏I/O timeout של ~180s, לא
+    """#674, כשל הברזל של 12/09: כונן שנתקע — I/O timeout של ~180s, לא
     EIO מיידי — מפסיק לרוקן את ה-fifo שלו אבל אינו מחזיר שגיאה. הקוד
     הישן היה נחסם ב-make_room לנצח בהמתנה לחדר בטבעת שלו, האחים הבריאים
     לא היו מתנקזים, וכל השכפולים על המחשב היו נופלים. עכשיו הכונן התקוע
@@ -740,7 +740,7 @@ def test_a_hung_drive_is_evicted_and_the_healthy_siblings_finish(fanout, tmp_pat
 
 @needs_fanout
 def test_a_slow_but_draining_drive_is_not_evicted_even_past_the_threshold(fanout, tmp_path):
-    """הצד השני של #674, והשמירה על ‏#660: מגירה איטית שממשיכה לקבל
+    """הצד השני של #674, והשמירה על #660: מגירה איטית שממשיכה לקבל
     בייטים אינה נתקעת. כל כתיבה מוצלחת מאפסת את last_progress_ms, ולכן
     גם כשסף הפינוי נמוך (500ms) והריצה כולה ארוכה ממנו בהרבה — האיטית
     אינה מפונה. הזמן הכולל אינו הקריטריון; היעדר התקדמות הוא.
@@ -776,7 +776,7 @@ def test_a_slow_but_draining_drive_is_not_evicted_even_past_the_threshold(fanout
 
 @needs_fanout
 def test_an_overflowing_stall_threshold_is_rejected_not_taken_as_disabled(fanout, tmp_path):
-    """‏errno/ERANGE: ‏`999999999999999999999` גולש ב-strtoll ל-LLONG_MAX,
+    """errno/ERANGE: `999999999999999999999` גולש ב-strtoll ל-LLONG_MAX,
     ובלי בדיקת errno היה עובר את `configured > 0` ומנטרל בפועל את הפינוי
     (סף של מיליוני שנים) — בדיוק ההיפוך של #674. הוא חייב להידחות, לחזור
     לברירת המחדל, ולומר זאת ב-stderr. ריצה בריאה רגילה, בלי תלות בתזמון.
@@ -931,21 +931,23 @@ def test_sigpipe_does_not_kill_the_whole_machine(fanout, tmp_path):
 
 # --- #1796: מגירה תקועה מחזיקה את ה-stdin (ברזל 19/10, משכפל 2) -------------
 #
-# ‏zstd של מגירה אחת נעצר ב-SIGSTOP באמצע מחיצה 3, ושתי המגירות נכשלו
-# ב"פג הזמן -- הזרם לא הגיע": ‏udp-sender ניתק את המכונה (~190ש' בלי ACK,
-# ‏--retries-until-drop 200) לפני שהזרם חזר. מה שקובע את זה בצד שלנו אינו
+# zstd של מגירה אחת נעצר ב-SIGSTOP באמצע מחיצה 3, ושתי המגירות נכשלו
+# ב"פג הזמן -- הזרם לא הגיע": udp-sender ניתק את המכונה (~190ש' בלי ACK,
+# --retries-until-drop 200) לפני שהזרם חזר. מה שקובע את זה בצד שלנו אינו
 # הפינוי של המגירה אלא **כמה זמן fanout אינו קורא את ה-stdin שלו** -- זה
 # הזמן שבו udp-receiver חסום בכתיבה ואינו עונה לשולח. הטסטים מודדים אותו
 # ישירות: כותב שמזין את fanout ורושם מתי כל כתיבה הסתיימה.
 #
-# התיקון (#1796) הוא שעון נפרד על ה-stdin החסום, ‏FANOUT_BLOCK_EVICT_MS.
+# התיקון (#1796) הוא שעון נפרד על ה-stdin החסום, FANOUT_BLOCK_EVICT_MS.
 # הטסטים כאן מקצרים **רק** אותו ומרחיקים את שעון ההתקדמות (#674), כדי שמה
 # שמשחרר את ה-stdin יהיה השעון החדש ולא הישן.
 
 EVICT_MS = 2000
-#: עומס של VM, תזמון תהליכונים בפייתון, ‏ROOM_POLL_MS. הסף עצמו הוא EVICT_MS.
+#: עומס של VM, תזמון תהליכונים בפייתון, ROOM_POLL_MS. הסף עצמו הוא EVICT_MS.
 STDIN_SLACK_S = 2.0
 FEED_PIECE = 64 * 1024
+#: sdb של הטסט שנעצר קורא כל כך הרבה ואז נעצר ב-SIGSTOP (self_stopping_reader).
+STOP_AFTER = 1024 * 1024
 #: השעון החדש קצר, שעון ההתקדמות (#674) רחוק מכל טסט כאן.
 BLOCK_ONLY = {"FANOUT_BLOCK_EVICT_MS": str(EVICT_MS), "FANOUT_STALL_EVICT_MS": "600000"}
 #: הסיבה ש-fanout.c כותבת למגירה שפונתה בשעון החדש.
@@ -979,20 +981,28 @@ class StdinFeeder:
         self.thread.start()
         return self
 
-    def longest_block(self, now: float | None = None) -> tuple[float, float, int]:
-        """(משך, תחילת הפער, בייטים שנשלחו לפניו). כולל פער שעדיין פתוח."""
+    def longest_block(self, now: float | None = None,
+                      after_bytes: int = 0) -> tuple[float, float, int]:
+        """(משך, תחילת הפער, בייטים שנשלחו לפניו). כולל פער שעדיין פתוח.
+
+        `after_bytes` (#2837): רק פער שהתחיל אחרי שנשלחו לפחות כל כך בייטים.
+        הפער הראשון של הזנה נמדד מההתחלה -- מהכתיבה הראשונה (64KiB, כל מה
+        שהצינור מחזיק) ועד שה-fanout, שעדיין עולה, קורא. זה זמן עלייה של
+        תהליך, שתחת עומס יוצא שניות, ואינו חסימה של ה-stdin. בטסט שמחכה
+        שמגירה תיעצר, שום פער לפני ש-`stop_after` בייטים נשלחו אינו החסימה
+        הנבדקת: הטבעת אינה יכולה להתמלא כל עוד הקורא עוד קורא."""
         marks = list(self.marks)
         if now is not None and self.thread.is_alive():
             marks.append((now, marks[-1][1]))
         best = (0.0, marks[0][0], 0)
         for (t0, b0), (t1, _) in zip(marks, marks[1:]):
-            if t1 - t0 > best[0]:
+            if b0 >= after_bytes and t1 - t0 > best[0]:
                 best = (t1 - t0, t0, b0)
         return best
 
 
 def proc_state(pid: int) -> str:
-    """האות של /proc/<pid>/stat: ‏T = נעצר (SIGSTOP)."""
+    """האות של /proc/<pid>/stat: T = נעצר (SIGSTOP)."""
     stat = Path(f"/proc/{pid}/stat").read_text()
     return stat.rsplit(")", 1)[1].split()[0]
 
@@ -1053,9 +1063,9 @@ def stop_all(*processes):
 @needs_fanout
 def test_a_sigstopped_drawer_holds_stdin_no_longer_than_the_block_ceiling(fanout, tmp_path):
     """שחזור הניסוי מהברזל (19/10): מגירה sdb נעצרת ב-SIGSTOP אחרי 1MiB,
-    ‏sda קוראת כרגיל. נבדקות שלוש טענות, כל אחת עם מספר:
+    sda קוראת כרגיל. נבדקות שלוש טענות, כל אחת עם מספר:
 
-    1. ‏sdb מפונה בשמה (HELD_REASON) ו-sda מקבלת כל בייט.
+    1. sdb מפונה בשמה (HELD_REASON) ו-sda מקבלת כל בייט.
     2. ה-stdin של fanout **אכן** נחסם (הטבעת התמלאה) -- אחרת הטסט לא הוכיח
        כלום: פער של לפחות חצי EVICT_MS.
     3. ה-stdin אינו חסום יותר מ-FANOUT_BLOCK_EVICT_MS (+ מרווח), ונפתח לכל
@@ -1066,11 +1076,11 @@ def test_a_sigstopped_drawer_holds_stdin_no_longer_than_the_block_ceiling(fanout
     ה-stdin נשאר חסום והטסט נופל ב"ה-stdin לא נפתח מחדש" אחרי 32ש'.
     """
     data = os.urandom(24 * 1024 * 1024)
-    ring = 2 * 1024 * 1024                      # מול 256MiB בברזל: ‏~34ms כאן, ~4.3ש' שם
+    ring = 2 * 1024 * 1024                      # מול 256MiB בברזל: ~34ms כאן, ~4.3ש' שם
     fifos = [make_fifo(tmp_path, "sda"), make_fifo(tmp_path, "sdb")]
     good: list[bytes] = []
     good_thread = reader(fifos[0], good)
-    stopper = self_stopping_reader(fifos[1], stop_after=1024 * 1024)
+    stopper = self_stopping_reader(fifos[1], stop_after=STOP_AFTER)
     process = None
     try:
         process, fd = start_fanout(fanout, tmp_path, fifos, ring, BLOCK_ONLY)
@@ -1090,7 +1100,7 @@ def test_a_sigstopped_drawer_holds_stdin_no_longer_than_the_block_ceiling(fanout
     finally:
         stop_all(process, stopper)
 
-    held, began, sent_before = feeder.longest_block()
+    held, began, sent_before = feeder.longest_block(after_bytes=STOP_AFTER)
     reopened_after = began + held - stopped_at
     numbers = (f"stdin חסום {held:.2f}s (מ-{sent_before} בייטים), נפתח {reopened_after:.2f}s "
                f"אחרי העצירה; EVICT_MS={EVICT_MS}; stderr: {err!r}")
@@ -1106,7 +1116,7 @@ def test_a_sigstopped_drawer_holds_stdin_no_longer_than_the_block_ceiling(fanout
 
 
 def trickling_reader(path: Path, stop: threading.Event, piece: int, every_s: float):
-    """מגירה שמקבלת בייטים בודדים: ‏`piece` כל `every_s` -- הרבה מתחת ל-EVICT_MS,
+    """מגירה שמקבלת בייטים בודדים: `piece` כל `every_s` -- הרבה מתחת ל-EVICT_MS,
     ולכן כל כתיבה של fanout שמצליחה מאפסת את last_progress_ms (flush_target).
     יוצאת כש-fanout סוגר את ה-fifo (פינוי) או כש-`stop` נדלק."""
     def run():
@@ -1120,19 +1130,38 @@ def trickling_reader(path: Path, stop: threading.Event, piece: int, every_s: flo
     return thread
 
 
+def test_the_start_up_gap_of_the_feeder_is_not_a_stdin_hold():
+    """#2837: 11/11, בשלב המקבילי של השער, הטסט של SIGSTOP נכשל על "stdin חסום 4.57s
+    (מ-65536 בייטים)" ו-fanout עצמו דיווח 2337ms. הפער הארוך התחיל אחרי הכתיבה
+    הראשונה: זה ה-fanout שעולה תחת עומס, לא ה-stdin שנחסם. פער שהתחיל לפני
+    ש-`after_bytes` נשלחו אינו נספר; החסימה האמיתית, וגם חסימה ארוכה מדי, כן.
+
+    בלי `fanout` ובלי gcc, ולכן רץ בכל מקום (השומר הדו-צדדי: הפער האמיתי נשאר נמדד)."""
+    feeder = StdinFeeder(-1, b"")
+    startup, ring_full, real = 100.0, 100.0 + 4.57, 100.0 + 4.57 + 0.03
+    feeder.marks = [(startup, 0), (startup + 0.001, 65536), (ring_full, 3 * 1024 * 1024),
+                    (real + 2.34, 3 * 1024 * 1024 + 65536)]
+    assert feeder.longest_block()[0] == pytest.approx(4.569, abs=0.01)           # unfiltered: the artefact
+    held, began, sent = feeder.longest_block(after_bytes=STOP_AFTER)
+    assert held == pytest.approx(real + 2.34 - ring_full, abs=1e-9) and sent == 3 * 1024 * 1024
+    feeder.marks.append((real + 2.34 + 9.0, 3 * 1024 * 1024 + 2 * 65536))      # a real, too-long hold
+    held, _, _ = feeder.longest_block(after_bytes=STOP_AFTER)
+    assert held > EVICT_MS / 1000 + STDIN_SLACK_S
+
+
 @needs_fanout
 def test_a_trickling_drawer_holds_stdin_no_longer_than_the_block_ceiling(fanout, tmp_path):
-    """שאלה 3 של החקירה: מגירה שמקבלת 4KiB כל 500ms (‏8KiB/s) אינה "תקועה"
+    """שאלה 3 של החקירה: מגירה שמקבלת 4KiB כל 500ms (8KiB/s) אינה "תקועה"
     לפי שעון ההתקדמות -- כל כתיבה מצליחה מאפסת אותו -- אבל fanout קורא stdin
-    רק כשיש בטבעת שלה מקום לקריאה שלמה (‏make_room: עד 1MiB = ‏READ_CHUNK).
+    רק כשיש בטבעת שלה מקום לקריאה שלמה (make_room: עד 1MiB = READ_CHUNK).
     ב-8KiB/s זה ~128ש' לקריאה של 1MiB, ובברזל, מגירה כזו מנתקת את המכונה
     כולה אצל udp-sender (~190ש') בלי שאף מגירה פונתה.
 
-    עם #1796: ה-stdin אינו חסום יותר מ-EVICT_MS, ‏sdb מפונה בשמה, ו-sda
+    עם #1796: ה-stdin אינו חסום יותר מ-EVICT_MS, sdb מפונה בשמה, ו-sda
     מסיימת כל בייט. על הקוד שלפני #1796 (זה היה xfail strict בענף החקירה)
     ה-stdin חסום כל 12 השניות של התצפית."""
-    # 12s: גם אם הקריאה הראשונה שחיכתה קטנה (64KiB = ‏~4ש'), הפער הפתוח שאחריה
-    # (‏~8ש') עדיין פי 2 מהסף+המרווח -- והשאר מחכה לקריאה של 1MiB (‏~128ש').
+    # 12s: גם אם הקריאה הראשונה שחיכתה קטנה (64KiB = ~4ש'), הפער הפתוח שאחריה
+    # (~8ש') עדיין פי 2 מהסף+המרווח -- והשאר מחכה לקריאה של 1MiB (~128ש').
     observe_s = EVICT_MS / 1000 * 6
     data = os.urandom(24 * 1024 * 1024)
     fifos = [make_fifo(tmp_path, "sda"), make_fifo(tmp_path, "sdb")]
@@ -1166,13 +1195,13 @@ def test_a_trickling_drawer_holds_stdin_no_longer_than_the_block_ceiling(fanout,
 
 @needs_fanout
 def test_a_slow_but_steady_drawer_is_not_evicted_by_the_block_clock(fanout_clocked, tmp_path):
-    """השומר מפני תיקון-יתר של #1796: מגירה של ~2MiB/s (‏64KiB כל ~31ms)
+    """השומר מפני תיקון-יתר של #1796: מגירה של ~2MiB/s (64KiB כל ~31ms)
     מעכבת את הזרם -- היא זו שקובעת את הקצב, וזה בדיוק #660 -- אבל מפנה
     קריאה שלמה (≤1MiB) בתוך ~0.5ש', הרבה לפני EVICT_MS (2ש'). הסף האפקטיבי
     בטסט הוא 1MiB/2s = 512KiB/s, פי ~4 מתחתיה (בייצור 1MiB/45s ≈ 23KB/s).
 
     שתיהן מסיימות זהות לקלט (sha), ואין שום פינוי. הוכחה שהאיטית אכן עיכבה
-    את הזרם, אחרת לא נבדק דבר: חלק מהבייטים שלה עברו בטבעת (‏`through its
+    את הזרם, אחרת לא נבדק דבר: חלק מהבייטים שלה עברו בטבעת (`through its
     queue` ב-stderr) והמשך הריצה ≥ 4ש'. על הקוד שלפני #1796 הטסט עובר
     (אין שעון); הוא נופל על מוטציה שסופרת את זמן החסימה במצטבר ולא לכל
     המתנה רצופה -- ראו הבקרה השלילית ב-PR.
@@ -1354,9 +1383,9 @@ def test_a_lone_drawer_that_pauses_past_the_block_clock_is_not_evicted(fanout, t
 
 
 def test_every_test_that_compiles_fanout_skips_by_name_without_gcc():
-    """‏#1283: חמישה טסטים ביקשו את ה-fixture `fanout` בלי `@needs_fanout`,
+    """#1283: חמישה טסטים ביקשו את ה-fixture `fanout` בלי `@needs_fanout`,
     ובווינדוס (אין gcc) הם נפלו ב-ERROR של setup — לא דילוג מוצהר
-    שנספר בשמו (וכישלון תחת ‏IMAGESRV_REQUIRE_NATIVE=1, #52), אלא רעש
+    שנספר בשמו (וכישלון תחת IMAGESRV_REQUIRE_NATIVE=1, #52), אלא רעש
     שמסתיר כישלון אמיתי. השומר הזה רץ בכל מקום, גם בלי gcc."""
     import inspect
 

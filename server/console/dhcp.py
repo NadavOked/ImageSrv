@@ -32,21 +32,21 @@ Hooks = dict[str, Callable]
 
 log = logging.getLogger("imagesrv.console_dhcp")
 
-#: ‏#1121 ס' 4: נעילה סביב ההדלקה הראשונה של DHCP (השלמת ההתקנה) — תהליכית,
+#: #1121 ס' 4: נעילה סביב ההדלקה הראשונה של DHCP (השלמת ההתקנה) — תהליכית,
 #: כי כל הראוטרים באותו תהליך; שתי בקשות מקבילות לא ישלימו פעמיים.
 _first_enable_lock = threading.Lock()
 
 #: תיאור חופשי לכרטיס (settings) — "700" בשביל וילן 700, וכדומה.
 DESC_PREFIX = "nicdesc:"
 
-#: ‏#2805: אחרי `ip link set up` על כרטיס הפצה מושבת — כמה זמן מחכים ל-carrier
+#: #2805: אחרי `ip link set up` על כרטיס הפצה מושבת — כמה זמן מחכים ל-carrier
 #: לפני "מי כבר עונה". כרטיס פיזי צריך כמה שניות למשא ומתן על מהירות; בלי
 #: carrier ה-DISCOVER אינו יוצא, והבדיקה הייתה נכשלת בסיבה שאינה אומרת "כבל".
 CARRIER_WAIT_S = 10.0
 CARRIER_POLL_S = 0.5
 
 
-# --- ה-render מה-DB — מקום אחד לראוטר, למתג ה-TFTP ולעליית השרת (‏#1013) ---
+# --- ה-render מה-DB — מקום אחד לראוטר, למתג ה-TFTP ולעליית השרת (#1013) ---
 
 
 def load_configs(conn) -> list[dhcp.InterfaceConfig]:
@@ -61,14 +61,14 @@ def load_configs(conn) -> list[dhcp.InterfaceConfig]:
 
 
 def proxy_configs(configs: list[dhcp.InterfaceConfig]) -> list[dhcp.InterfaceConfig]:
-    """מה שאינסטנס ה-proxy רשאי לראות. הכרעת נדב 11/10: ‏proxy שייך לכיתות —
+    """מה שאינסטנס ה-proxy רשאי לראות. הכרעת נדב 11/10: proxy שייך לכיתות —
     כשהן כבויות (v1) גם רשומת proxy=true שנשמרה לפני הגידור אינה מוחלת
-    (‏#1303), ולא רק ה-PUT מסרב לכתוב חדשה."""
+    (#1303), ולא רק ה-PUT מסרב לכתוב חדשה."""
     return configs if capabilities.classrooms() else []
 
 
 def _proxy_gate() -> None:
-    """‏v1 בלי proxy: נתיבי הקריאה שלו אינם קיימים — 404 לכל קורא, לפני
+    """v1 בלי proxy: נתיבי הקריאה שלו אינם קיימים — 404 לכל קורא, לפני
     auth, כמו ארגז הכלים (`console_tools._edition_gate`)."""
     if not capabilities.classrooms():
         raise HTTPException(404, "PXE proxy שייך לכיתות, וכיתות אינן במהדורה זו (v2)")
@@ -76,30 +76,30 @@ def _proxy_gate() -> None:
 
 def console_deploy_interface(deploy: "deploy_net.DeployContext | None") -> str | None:
     """כרטיס ההפצה **שהוגדר מהקונסולה** — ורק הוא נכנס לקובץ ה-dnsmasq
-    שהקונסולה כותבת (‏`imagesrv.conf` של המתקין אינו נושא אותו)."""
+    שהקונסולה כותבת (`imagesrv.conf` של המתקין אינו נושא אותו)."""
     state = deploy.state if deploy is not None else None
     return state.interface if state is not None and state.source == "console" else None
 
 
 def render_dnsmasq(ctx: ServerContext,
                    deploy: "deploy_net.DeployContext | None") -> tuple[str, str]:
-    """‏(הראשי, ה-proxy) מה-DB: הגדרות הכרטיסים, כרטיס ההפצה מהקונסולה,
-    ומתג ה-TFTP (‏#1013, ‏`port:tftp`; חסר = דלוק). ‏`tftp_root` מגיע
-    מההתקנה (‏`--tftp-root` → ‏`DeployContext`), ובלי deploy — ברירת המחדל
+    """(הראשי, ה-proxy) מה-DB: הגדרות הכרטיסים, כרטיס ההפצה מהקונסולה,
+    ומתג ה-TFTP (#1013, `port:tftp`; חסר = דלוק). `tftp_root` מגיע
+    מההתקנה (`--tftp-root` → `DeployContext`), ובלי deploy — ברירת המחדל
     של המתקין. מעלה ValueError על רשומה פסולה שנשמרה לפני #102."""
     configs = load_configs(ctx.conn)
-    # ‏as_posix: זה נתיב בקובץ dnsmasq של השרת (לינוקס) — לא נתיב של המכונה
+    # as_posix: זה נתיב בקובץ dnsmasq של השרת (לינוקס) — לא נתיב של המכונה
     # שהקוד רץ עליה (תחנת הפיתוח היא ווינדוס, ו-str(Path) שם נותן לוכסן הפוך).
     root = (Path(deploy.tftp_root).as_posix() if deploy is not None else dhcp.DEFAULT_TFTP_ROOT)         if ports.enabled(ctx.conn, "tftp") else None
-    # ‏#1078: רק `cli` נושא `interface=<הפצה>` בקובץ המתקין — בכל מקור אחר
+    # #1078: רק `cli` נושא `interface=<הפצה>` בקובץ המתקין — בכל מקור אחר
     # הקובץ הזה הוא היחיד, ובלי שם בו TFTP נצמד ל-loopback (`dhcp._pinned`).
     pin = deploy is not None and deploy.state.source != "cli"
-    # ‏#705: "אתחול מהרשת" לכל כרטיס — רק כשהמפעיל ערך שירותים (אחרת None,
+    # #705: "אתחול מהרשת" לכל כרטיס — רק כשהמפעיל ערך שירותים (אחרת None,
     # והקובץ זהה לקודם). כרטיס שבו הוא כבוי מוחרג גם כשה-DHCP שלו דלוק.
     gate = getattr(ctx, "nic_services", None)
     netboot = gate.netboot() if gate is not None else None
     per_nic = ({"netboot": netboot[0], "nics": netboot[1]} if netboot is not None else {})
-    # ‏#1802: כרטיס ההפצה מכל מקור — `cli` כשהיחידה נושאת ‎--interface‏ (המתקין
+    # #1802: כרטיס ההפצה מכל מקור — `cli` כשהיחידה נושאת --interface (המתקין
     # מעביר אותו כשיש כרטיס הפצה), או מה שנרשם מהקונסולה. בלי שם — כמו היום.
     unregistered_if = (deploy.state.interface
                        if deploy is not None and deploy.state.configured else None)
@@ -109,20 +109,24 @@ def render_dnsmasq(ctx: ServerContext,
             dhcp.render_proxy(proxy_configs(configs), tftp_root=root))
 
 
+#: #2543: רשומה שמורה שאינה מתרנדרת — מה שהלקוח ויומן האירועים רואים.
+RENDER_FAILED = "הגדרת DHCP שמורה אינה תקינה ולא הוחלה — הפרטים ביומן השרת"
+
+
 def apply_dnsmasq(ctx: ServerContext, hooks: Hooks,
                   deploy: "deploy_net.DeployContext | None",
                   what: str, user_id) -> str | None:
-    """מחילים על שני האינסטנסים (‏#36): הראשי מחלק כתובות, וה-proxy רץ
+    """מחילים על שני האינסטנסים (#36): הראשי מחלק כתובות, וה-proxy רץ
     בתהליך משלו כדי שקפיאה שלו לא תוריד את וילן ההפצה. כשל באחד לא
     מסתיר את השני — שתי ההודעות חוזרות לקונסולה וליומן. מחזיר הודעת
     שגיאה או None."""
     try:
         text, proxy_text = render_dnsmasq(ctx, deploy)
     except ValueError as exc:      # רשומה פסולה שנשמרה לפני #102
-        journal(ctx.conn, "dhcp_apply_failed", f"{what} {exc}", user_id)
-        # ‏#2510: הטקסט (גם של ipaddress) ביומן; ללקוח — משפט קבוע.
+        # #2510/#2543: הטקסט (גם של ipaddress) ביומן השרת; ללקוח וליומן האירועים — משפט קבוע.
         log.warning("dhcp render failed (%s): %s", one_line(what), exc)
-        return "הגדרת DHCP שמורה אינה תקינה ולא הוחלה — הפרטים ביומן השרת"
+        journal(ctx.conn, "dhcp_apply_failed", f"{what} {RENDER_FAILED}", user_id)
+        return RENDER_FAILED
     errors = [
         hooks["apply"](text),
         hooks["apply_proxy"](proxy_text,
@@ -136,25 +140,26 @@ def apply_dnsmasq(ctx: ServerContext, hooks: Hooks,
 
 def sync_main_conf(ctx: ServerContext, hooks: Hooks,
                    deploy: "deploy_net.DeployContext | None") -> str | None:
-    """עליית השרת (‏#1013): הקובץ הראשי הוא **נגזרת של ה-DB**, כמו
-    known-macs (‏#141) — ואם מה שעל הדיסק שונה ממה שה-DB אומר, כותבים
+    """עליית השרת (#1013): הקובץ הראשי הוא **נגזרת של ה-DB**, כמו
+    known-macs (#141) — ואם מה שעל הדיסק שונה ממה שה-DB אומר, כותבים
     ומפעילים את dnsmasq מחדש. זה מה שמעלה TFTP בהתקנה טרייה (המתקין
     אינו כותב עוד `enable-tftp`, ו-dnsmasq שלו עלה בלי TFTP) ואחרי הרצת
     המתקין מחדש על שרת שהקובץ שלו נכתב לפני v0.48.
 
-    שני סייגים, בכוונה: רק כשרשת ההפצה **מוגדרת** (‏#1088 — בלעדיה dnsmasq
+    שני סייגים, בכוונה: רק כשרשת ההפצה **מוגדרת** (#1088 — בלעדיה dnsmasq
     נשאר כבוי עד ההדלקה הראשונה, ו-`restart` היה מעלה אותו על כל
     הכרטיסים), ורק כשהתוכן **שונה** — אתחול שגרתי של השרת אינו מפיל את
     dnsmasq. ה-proxy אינו נוגע כאן: היחידה שלו עולה ויורדת עם ההגדרה
-    (‏`apply_dnsmasq`), ולעלייה אין מה לשנות בה.
+    (`apply_dnsmasq`), ולעלייה אין מה לשנות בה.
     """
     if deploy is None or not deploy.state.configured:
         return None
     try:
         text, _proxy = render_dnsmasq(ctx, deploy)
     except ValueError as exc:
-        journal(ctx.conn, "dhcp_apply_failed", f"startup {exc}")
-        return str(exc)
+        log.warning("dhcp render failed at startup: %s", exc)       # #2543
+        journal(ctx.conn, "dhcp_apply_failed", f"startup {RENDER_FAILED}")
+        return RENDER_FAILED
     if hooks["read_active_conf"]() == text:
         return None
     error = hooks["apply"](text)
@@ -167,7 +172,7 @@ def sync_main_conf(ctx: ServerContext, hooks: Hooks,
 
 def _checked_name(name: str) -> str:
     """שם כרטיס תקין, או 400 בעברית. הכלל עצמו יושב ב-`dhcp.validate_name`
-    ‏— מקום אחד שכל הכותבים עוברים דרכו, ולא עותק שני של הביטוי כאן."""
+    — מקום אחד שכל הכותבים עוברים דרכו, ולא עותק שני של הביטוי כאן."""
     try:
         dhcp.validate_name(name)
     except ValueError as exc:
@@ -175,10 +180,10 @@ def _checked_name(name: str) -> str:
     return name
 
 
-#: יחידת ה-systemd של האינסטנס הראשי — ‏#762, לצד PROXY_UNIT הקיים.
+#: יחידת ה-systemd של האינסטנס הראשי — #762, לצד PROXY_UNIT הקיים.
 DNSMASQ_UNIT = "dnsmasq"
 
-#: ניסוח עברי לארבעת מצבי ה-DHCP החי (‏#762). ‏"unknown" הוא ברירת המחדל
+#: ניסוח עברי לארבעת מצבי ה-DHCP החי (#762). "unknown" הוא ברירת המחדל
 #: הבטוחה — לעולם לא "כבוי" כשלא הצלחנו לבדוק (עיקרון 5, הרחבה 5א).
 DHCP_LIVE_LABELS = {
     "serving": "משרת",
@@ -197,9 +202,9 @@ def default_hooks() -> Hooks:
         "dnsmasq_version": dhcp.dnsmasq_version,
         "read_active_conf": dhcp.read_active_conf,
         "service_active": dhcp.service_active,
-        # ‏#1263: כרטיס הניהול שהמתקין רשם — אותו hook של ראוטר הכתובות.
+        # #1263: כרטיס הניהול שהמתקין רשם — אותו hook של ראוטר הכתובות.
         "netcfg_management": console_netcfg.installed_management,
-        # ‏#2805: העלאת כרטיס הפצה מושבת לפני "מי כבר עונה", והחזרתו בסירוב.
+        # #2805: העלאת כרטיס הפצה מושבת לפני "מי כבר עונה", והחזרתו בסירוב.
         "link_set": dhcp.set_link,
         "sleep": time.sleep,
     }
@@ -207,7 +212,7 @@ def default_hooks() -> Hooks:
 
 def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                        deploy: "deploy_net.DeployContext | None" = None) -> APIRouter:
-    """‏`deploy` (‏#1088): מצב רשת ההפצה בריצה הזו. ‏None = אין השלמת
+    """`deploy` (#1088): מצב רשת ההפצה בריצה הזו. None = אין השלמת
     התקנה מכאן (בדיקות/קוד ישן) — ההדלקה מתנהגת כמו לפני #1088."""
     router = APIRouter(prefix="/api/console/net")
     current_user, admin_only = auth.dependencies(ctx.conn)
@@ -234,7 +239,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                 fw_error = (firewall(nic) if firewall is not None
                             else "אין מנגנון אכיפה לחומת האש בתהליך הזה")
             except Exception as exc:                          # noqa: BLE001
-                # ‏#2510: טקסט החריגה ליומן השרת; ללקוח — משפט קבוע.
+                # #2510: טקסט החריגה ליומן השרת; ללקוח — משפט קבוע.
                 log.warning("dhcp proxy firewall failed: %s", exc)
                 fw_error = "עדכון חומת האש נכשל — הפרטים ביומן השרת"
             if fw_error:
@@ -244,7 +249,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
 
     def dhcp_live_state(name: str, cfg: dhcp.InterfaceConfig,
                         conf_text: str | None, svc_active: bool | None) -> dict:
-        """‏#762: מה **באמת** מוגש על הממשק, לא מה שה-DB אומר שרצינו.
+        """#762: מה **באמת** מוגש על הממשק, לא מה שה-DB אומר שרצינו.
 
         ארבעה מצבים בלבד, ואף אחד מהם אינו ניחוש: קריאת הקובץ או בירור
         השירות שנכשלו מחזירים `unknown` — לעולם לא `off`, כי `off` הוא
@@ -310,7 +315,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
             "add_refused_reason": (
                 f"הכרטיס {cfg.name} מושבת מנהלית; שמירת רשת ההפצה תנסה להפעיל אותו"
                 if live is not None and (live or {}).get("admin_up") is False else None),
-            # מהירות הכרטיס — ‏None כשלא נקרא; לעולם לא ניחוש לפי השם (‏#762).
+            # מהירות הכרטיס — None כשלא נקרא; לעולם לא ניחוש לפי השם (#762).
             "speed_mbps": (live or {}).get("speed_mbps"),
             "dhcp_configured": cfg.enabled,
             "dhcp_live": dhcp_live,
@@ -346,13 +351,13 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
 
     @router.get("/interfaces/{name}/leases")
     def leases(name: str, user=Depends(admin_only)):
-        """‏#1039: "מי קיבל כתובת" — קובץ החכירות של dnsmasq, מסונן לרשתות
+        """#1039: "מי קיבל כתובת" — קובץ החכירות של dnsmasq, מסונן לרשתות
         שעל הכרטיס בפועל. מכונה שקיבלה DHCP ולא הגיעה ל-hello נראית רק כאן.
 
-        עיקרון 5: ‏``checked:false`` + ‏``reason`` + ‏``leases:null`` כשהקובץ
+        עיקרון 5: ``checked:false`` + ``reason`` + ``leases:null`` כשהקובץ
         לא נקרא, כשאין מקור חכירות בריצה הזו (``ctx.leases``, מוזרק כמו
         ``dhcp_hooks``), או כשלכרטיס אין כתובת IPv4 שאפשר לשייך אליה —
-        ‏``[]`` רק כשנקרא ואין חכירה ברשת שלו."""
+        ``[]`` רק כשנקרא ואין חכירה ברשת שלו."""
         _checked_name(name)
 
         def unchecked(reason: str, path: str | None = None) -> dict:
@@ -375,7 +380,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         try:
             rows = ctx.leases.rows()
         except OSError as exc:
-            # ‏#595: טקסט של OSError (נתיב, strerror) נשאר ביומן השרת; ללקוח — משפט קבוע.
+            # #595: טקסט של OSError (נתיב, strerror) נשאר ביומן השרת; ללקוח — משפט קבוע.
             log.warning("dhcp leases %s unreadable: %s", path, exc)
             return unchecked("קובץ החכירות של dnsmasq לא נקרא — הפרטים ביומן השרת", path)
         mine = [dict(row, expires=_lease_expiry(row["expires"])) for row in rows
@@ -385,7 +390,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
 
     @router.get("/proxy-support", dependencies=[Depends(_proxy_gate)])
     def proxy_support(user=Depends(admin_only)):
-        """מה גרסת ה-dnsmasq המותקנת אומרת על מצב proxy (‏#36).
+        """מה גרסת ה-dnsmasq המותקנת אומרת על מצב proxy (#36).
 
         המסך מציג את `reason` כלשונו ולא מנסח משלו — כך שההסבר שהמפעיל
         רואה הוא בדיוק זה שה-API יסרב בו, ושניהם לא יכולים להתפצל.
@@ -399,7 +404,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
     async def configure(name: str, request: Request, user=Depends(admin_only)):
         # השם מגיע מנתיב ה-URL, ו-uvicorn מפענח %0A לשורה חדשה. הבדיקה
         # ראשונה בכוונה: עם allow_missing אין שום שלב אחר שרואה את השם
-        # לפני שהוא נכתב לקובץ של dnsmasq (‏#102).
+        # לפני שהוא נכתב לקובץ של dnsmasq (#102).
         _checked_name(name)
         body = await request.json()
         live = {i["name"]: i for i in hooks["interfaces"]()}
@@ -431,27 +436,27 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                before: dhcp.InterfaceConfig, body: dict,
                management_ok: bool = False, raise_link: bool = False) -> str | None:
         """כל השומרים שלפני הכתיבה — זורק HTTPException, או מחזיר את
-        גרסת ה-dnsmasq כשה-proxy הודלק על גרסה שלא נבדקה. ‏#1263: נקרא גם
+        גרסת ה-dnsmasq כשה-proxy הודלק על גרסה שלא נבדקה. #1263: נקרא גם
         מ-`PUT /net/config/{שם}/deploy` **לפני** שהכתובת של הכרטיס זזה.
 
-        ‏`management_ok` (‏#2668, שרת עם כרטיס יחיד): רק חלון רשת ההפצה מעביר
+        `management_ok` (#2668, שרת עם כרטיס יחיד): רק חלון רשת ההפצה מעביר
         אותו, אחרי אישור מפורש של המפעיל. הוא ארגומנט ולא שדה בגוף הבקשה —
         כדי שאף בקשה ל-`PUT /net/interfaces/{שם}` לא תוכל לפתוח אותו.
 
-        ‏`raise_link` (‏#2805): רק מ-`/deploy`, על כרטיס מושבת — הקישור מועלה
+        `raise_link` (#2805): רק מ-`/deploy`, על כרטיס מושבת — הקישור מועלה
         (בלי כתובת) כשהבדיקה "מי כבר עונה" אמרה `link_down`, ואז היא רצה שוב.
         ההחזרה בסירוב — אצל הקורא, שיודע מה היה המצב לפני הבקשה."""
         if cfg.enabled and cfg.proxy:
             raise HTTPException(400, "DHCP מלא ו-proxy על אותו ממשק סותרים זה את זה")
-        # הכרעת נדב 11/10: ‏proxy קיים בשביל תחנות כיתה שמקבלות כתובת מה-DHCP
+        # הכרעת נדב 11/10: proxy קיים בשביל תחנות כיתה שמקבלות כתובת מה-DHCP
         # של המכללה — כלומר הוא חלק מהכיתות. כשהן כבויות (v1) השרת מסרב, לא
         # רק הממשק מסתיר. כיבוי (proxy=false) תמיד מותר.
         if cfg.proxy and not capabilities.classrooms():
             raise HTTPException(
                 409, "PXE proxy שייך לכיתות, וכיתות אינן במהדורה זו (v2)")
-        # ‏#1263: כרטיס הניהול (נבחר בהתקנה) הוא לקוח DHCP או כתובת ידנית — לא
+        # #1263: כרטיס הניהול (נבחר בהתקנה) הוא לקוח DHCP או כתובת ידנית — לא
         # מחלק כתובות ולא עונה ל-PXE. כיבוי (enabled=false) תמיד מותר.
-        # ‏#2668: החריג — DHCP מלא (לא proxy) מחלון רשת ההפצה, וגם אז בלי
+        # #2668: החריג — DHCP מלא (לא proxy) מחלון רשת ההפצה, וגם אז בלי
         # דילוג על "מי כבר עונה": על כרטיס הניהול הבדיקה היא הראיה היחידה
         # שהרשת שלו אינה רשת המכללה (#53, עיקרון 5).
         management = (cfg.enabled or cfg.proxy) and _is_management(name)
@@ -466,7 +471,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                 409, f"{name} הוא כרטיס הניהול (נבחר בהתקנה) — אין עליו DHCP "
                      "ואין proxy; הוא לקוח DHCP או כתובת ידנית בלבד")
 
-        # שכבה 5 (‏#36): מצב proxy נשען על תכונה שבורה ב-dnsmasq המותקן.
+        # שכבה 5 (#36): מצב proxy נשען על תכונה שבורה ב-dnsmasq המותקן.
         # ההגנה היא אישור מפורש, לא כפתור מנוטרל — במעבדה *חייבים* להיות
         # מסוגלים להדליק אותו כדי לבדוק גרסה חדשה, וכפתור אטום בלי דרך
         # חוקית עובר בקלות ל-curl ישיר. גם המסך וגם ה-API עוברים כאן.
@@ -500,11 +505,11 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                 found = hooks["probe"](name)
                 if raise_link and not found.checked and found.reason == "link_down":
                     found = _probe_on_raised_link(name)
-                # בדיקה שלא רצה אינה "נקי" — היא "לא יודעים" (‏#53), וברשת
+                # בדיקה שלא רצה אינה "נקי" — היא "לא יודעים" (#53), וברשת
                 # המכללה "לא יודעים" עולה רשת שלמה. פורט 68 תפוס הוא בדיוק
                 # מה שקורה על כרטיס trunk שמקבל כתובת מהמכללה.
                 if not found.checked:
-                    # ‏#2668: על כרטיס הניהול אין עקיפה — לא מציעים אותה.
+                    # #2668: על כרטיס הניהול אין עקיפה — לא מציעים אותה.
                     bypass = (" על כרטיס הניהול אין דילוג על הבדיקה." if management else
                               " אם אתה יודע שהכרטיס אינו מחובר לרשת המכללה, "
                               "הדלק עם ignore_existing.")
@@ -514,7 +519,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                             "לא ניתן לבדוק אם כבר יש DHCP על הכרטיס. הבדיקה לא רצה."
                             + bypass,
                         )
-                    # ‏#2417: הסיבה מהבדיקה עצמה (האזנה, שליחה, ראיה שלא נמצאה).
+                    # #2417: הסיבה מהבדיקה עצמה (האזנה, שליחה, ראיה שלא נמצאה).
                     why = {
                         "permission": "נדרשות הרשאות root להאזנה ברמת הקישור (AF_PACKET)",
                         "port_busy": "כתובת ההאזנה תפוסה. יש לפנות אותה לפני הבדיקה",
@@ -538,7 +543,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         return risky_proxy
 
     def _probe_on_raised_link(name: str) -> dhcp.ProbeResult:
-        """‏#2805: ‏`ip link set up` בלי כתובת, המתנה ל-carrier, ו"מי כבר עונה" על
+        """#2805: `ip link set up` בלי כתובת, המתנה ל-carrier, ו"מי כבר עונה" על
         הקישור המורם. כל מה שאינו קישור עם carrier — סירוב בשם, והבדיקה **לא**
         נחשבת (עיקרון 5); תוצאת הבדיקה עצמה נשפטת אצל הקורא כמו תמיד."""
         error = hooks["link_set"](name, True)
@@ -562,15 +567,15 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                 before: dhcp.InterfaceConfig, user, live: dict,
                 risky_proxy: str | None, management_ok: bool = False) -> dict:
         turning_on = (cfg.enabled or cfg.proxy) and not (before.enabled or before.proxy)
-        # ‏#1088: הדלקת DHCP על כרטיס כשרשת ההפצה טרם הוגדרה **משלימה את
-        # ההתקנה** — grub.cfg, ‏dnsmasq באתחול, חומת אש, ואתחול השרת עם
+        # #1088: הדלקת DHCP על כרטיס כשרשת ההפצה טרם הוגדרה **משלימה את
+        # ההתקנה** — grub.cfg, dnsmasq באתחול, חומת אש, ואתחול השרת עם
         # כתובת ההפצה. השומרים לפני הכתיבה ל-DB: הכרטיס באמת נושא את
         # `server_ip` (אחרת השרת לא יעלה אחרי האתחול — "כתובת → DHCP" הוא
         # הסדר של נדב), והכתובת אינה מוגדרת ביחידה (אז ההגדרה כאן לא
         # הייתה משפיעה על דבר).
-        # ‏#1121 ס' 4: שתי הדלקות ראשונות במקביל — רק אחת נכנסת; השנייה
+        # #1121 ס' 4: שתי הדלקות ראשונות במקביל — רק אחת נכנסת; השנייה
         # רואה כבר `source=console` ונשפטת לפי הכרטיס (409 אם אינו ההפצה).
-        # ‏non-blocking: מי שלא קיבל את הנעילה מקבל 409, לא ממתין.
+        # non-blocking: מי שלא קיבל את הנעילה מקבל 409, לא ממתין.
         if not _first_enable_lock.acquire(blocking=False):
             raise HTTPException(409, "הדלקת DHCP אחרת בעיצומה — נסה שוב בעוד רגע")
         try:
@@ -581,7 +586,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
                 completion = _deploy_completion_or_409(name, cfg.server_ip, live.get(name))
             result = None
             if completion is not None:
-                # ‏#1121: ההשלמה רצה **לפני** הכתיבה של `dhcp:<כרטיס>` — apply
+                # #1121: ההשלמה רצה **לפני** הכתיבה של `dhcp:<כרטיס>` — apply
                 # ואז commit. כשל בה = שום דבר לא נרשם (לא deploy ולא DHCP),
                 # אחרת ההדלקה הבאה לא הייתה "הדלקה ראשונה" ולא הייתה מנסה שוב.
                 result = deploy_net.complete(deploy, ctx.conn, interface=name,
@@ -621,24 +626,26 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
             out["deploy"] = result
         return out
 
-    # ‏#1263: השלבים של ההדלקה, לשימוש `PUT /net/config/{שם}/deploy` — אותם
+    # #1263: השלבים של ההדלקה, לשימוש `PUT /net/config/{שם}/deploy` — אותם
     # שומרים ואותה השלמת התקנה, לא עותק שני שלהם בראוטר הכתובות.
     router.dhcp_steps = {
         "load": load, "build": _build, "gates": _gates, "commit": _commit,
         "live": lambda: {i["name"]: i for i in hooks["interfaces"]()},
-        # ‏#1264: הכרטיס השני — אותו "מי כבר עונה" (‏#53) על הכרטיס שמצטרף,
-        # אותה השלמת התקנה (‏deploy) ואותו dnsmasq אחרי שה-DHCP עבר ל-bond.
+        # #1264: הכרטיס השני — אותו "מי כבר עונה" (#53) על הכרטיס שמצטרף,
+        # אותה השלמת התקנה (deploy) ואותו dnsmasq אחרי שה-DHCP עבר ל-bond.
         "probe": lambda name: hooks["probe"](name),
         "deploy": lambda: deploy,
-        # ‏#2668: אותה הגדרה של "כרטיס הניהול" (הרישום + כרטיס הקונסולה) לשני הראוטרים.
+        # #2668: אותה הגדרה של "כרטיס הניהול" (הרישום + כרטיס הקונסולה) לשני הראוטרים.
         "is_management": lambda name: _is_management(name),
         "apply": apply_all,
-        "link_set": lambda name, up: hooks["link_set"](name, up),   # ‏#2805
+        "link_set": lambda name, up: hooks["link_set"](name, up),   # #2805
+        # #2824: אותה העלאה + המתנה ל-carrier + בדיקה, לכרטיס השני ב-/second.
+        "probe_raised": lambda name: _probe_on_raised_link(name),
     }
 
     def _is_management(name: str) -> bool:
-        """‏#2428: כרטיס הניהול משני מקורות — מה שהמתקין/מסך השרת רשם, **וגם**
-        הכרטיס שהקונסולה נקשרת אליו (‏`--console-host`, ‏`deploy.servers_interface`).
+        """#2428: כרטיס הניהול משני מקורות — מה שהמתקין/מסך השרת רשם, **וגם**
+        הכרטיס שהקונסולה נקשרת אליו (`--console-host`, `deploy.servers_interface`).
         כשהרישום חסר או לא נקרא ("" = לא ידוע) הכרטיס של הקונסולה עדיין ידוע,
         והדלקה ראשונה בלשונית ה-DHCP הייתה הופכת אותו לרשת ההפצה."""
         recorded = console_netcfg.management_interface(ctx.conn, hooks["netcfg_management"])
@@ -646,9 +653,9 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         return name in {n for n in (recorded, console_nic) if n}
 
     def _only_the_deploy_nic_or_409(name: str) -> None:
-        """‏#1121 ס' 4: אחרי שרשת ההפצה הוגדרה מהקונסולה, DHCP **מלא** מותר רק
+        """#1121 ס' 4: אחרי שרשת ההפצה הוגדרה מהקונסולה, DHCP **מלא** מותר רק
         על כרטיס ההפצה — כרטיס אחר הוא רשת המכללה, ו-dnsmasq שעונה שם
-        הוא התקלה ש-#53 נועד למנוע. ‏proxy אינו נחסם כאן (אינו מחלק כתובות)."""
+        הוא התקלה ש-#53 נועד למנוע. proxy אינו נחסם כאן (אינו מחלק כתובות)."""
         state = deploy_state()
         if state is None or state.source != "console" or state.interface == name:
             return
@@ -677,7 +684,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
 
     @router.get("/deploy")
     def deploy_view(user=Depends(current_user)):
-        """‏#1088: מקור כתובת ההפצה — יחידה / קונסולה / לא הוגדרה."""
+        """#1088: מקור כתובת ההפצה — יחידה / קונסולה / לא הוגדרה."""
         state = deploy_state()
         if state is None:
             return {"configured": True, "source": "cli", "interface": None,
@@ -708,8 +715,8 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
         """תיאור חופשי לכרטיס — למשל איזה VLAN מחובר אליו.
 
         השם עובר את אותה בדיקה כמו בשני המסלולים האחרים (#102). כאן זו
-        אינה הזרקה ל-dnsmasq — ‏`all_configs()` קוראת רק מפתחות
-        ‏`dhcp:` — אלא **כישלון שקט**: ‏``nicdesc:eth0 `` (עם רווח) הוא
+        אינה הזרקה ל-dnsmasq — `all_configs()` קוראת רק מפתחות
+        `dhcp:` — אלא **כישלון שקט**: ``nicdesc:eth0 `` (עם רווח) הוא
         מפתח אחר מ-``nicdesc:eth0``, ולכן התיאור נשמר, מוחזר
         ``{"ok": true}``, ולעולם אינו מוצג.
         """
@@ -746,7 +753,7 @@ def create_dhcp_router(ctx: ServerContext, hooks: Hooks | None = None,
 
 
 def _lease_expiry(epoch: int) -> str | None:
-    """‏dnsmasq כותב שניות epoch; ‏``0`` = חכירה בלי תפוגה → ``None``."""
+    """dnsmasq כותב שניות epoch; ``0`` = חכירה בלי תפוגה → ``None``."""
     if not epoch:
         return None
     return datetime.fromtimestamp(epoch, timezone.utc).isoformat(timespec="seconds")

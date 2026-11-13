@@ -1,6 +1,6 @@
 """#1732 — הצד של השרת והקונסולה: דיסק אדום (SMART נכשל) לעולם אינו יעד.
 
-* `_validate_target_slots` (‏room.py) — סבב חדר מהקונסולה, סבב ממסך משכפל
+* `_validate_target_slots` (room.py) — סבב חדר מהקונסולה, סבב ממסך משכפל
   (lcpull) והפצה ישירה עוברים שם — דוחה מגירה שה-hello דיווח עליה `smart: fail`.
 * שאלת ה-SMART והתשובה מהקונסולה הוסרו ב-#2044 (test_smart_ask_removed_2044.py):
   אין עוד שורה אדומה שאפשר לענות עליה "כתוב".
@@ -29,7 +29,7 @@ RED = "SMART נכשל — לא כותבים על הדיסק הזה; אפשר ל�
 # --- השרת ---------------------------------------------------------------------------
 
 def _red_hello(client, mac: str, red_port: int, n: int = 3) -> None:
-    """hello של משכפל: n מגירות, ‏`red_port` עם SMART fail (כפי ש-sysinfo.sh שולח)."""
+    """hello של משכפל: n מגירות, `red_port` עם SMART fail (כפי ש-sysinfo.sh שולח)."""
     body = hello_body(mac)
     body["disks"] = [
         {"dev": f"sd{chr(ord('a') + i)}", "size_bytes": 256060514304, "port": i + 1,
@@ -53,7 +53,7 @@ def test_server_room_round_refuses_a_red_drawer(room_server):
 
 
 def test_server_direct_deploy_refuses_a_red_drawer(room_server):
-    """RED: הפצה ישירה ממחשב בנייה — אותה בדיקה (‏_validate_target_slots)."""
+    """RED: הפצה ישירה ממחשב בנייה — אותה בדיקה (_validate_target_slots)."""
     from test_direct_server import _open_direct, _register_build
     from test_server_room import CLONER1
     _register_build(room_server)

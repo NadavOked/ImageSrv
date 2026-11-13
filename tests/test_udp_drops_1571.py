@@ -1,6 +1,6 @@
-"""‏#1571 — מה הקרנל של מחשב השיכפול עצמו זרק בזמן זרם מולטיקאסט.
+"""#1571 — מה הקרנל של מחשב השיכפול עצמו זרק בזמן זרם מולטיקאסט.
 
-‏re-xmit שהשולח סופר יכול להיוולד ברשת או במקבל: ‏`udp-receiver` שלא קיבל
+re-xmit שהשולח סופר יכול להיוולד ברשת או במקבל: `udp-receiver` שלא קיבל
 מעבד בזמן ממלא את חוצץ הסוקט, והקרנל זורק (`RcvbufErrors`). הקצב האוטומטי
 מוריד על re-xmits בלי לדעת ממי — ולכן הסוכן רושם את ההפרש סביב כל זרם.
 
@@ -50,7 +50,7 @@ def test_the_counters_are_read_by_name_not_by_position(tmp_path):
                                      "Udp: InDatagrams NoPorts\nUdp: 1 2\n"])
 def test_not_read_is_not_zero(tmp_path, content):
     """קובץ חסר, ריק, בלי שורת ערכים, ערכים לא מספריים, או בלי העמודות —
-    ‏rc 1 ושום מספר. ‏"0 0" כאן היה אומר "בדקנו, אין drops"."""
+    rc 1 ושום מספר. "0 0" כאן היה אומר "בדקנו, אין drops"."""
     (tmp_path / "proc/net").mkdir(parents=True)
     if content is not None:
         (tmp_path / "proc/net/snmp").write_text(content, newline="\n")
@@ -58,7 +58,7 @@ def test_not_read_is_not_zero(tmp_path, content):
 
 
 def _stream(tmp_path: Path, mode: str, before: str | None, after: str | None) -> str:
-    """מחיצה אחת לשתי מגירות במסלול המגירות האמיתי; ‏stream_source מזויף
+    """מחיצה אחת לשתי מגירות במסלול המגירות האמיתי; stream_source מזויף
     מחליף את /proc/net/snmp באמצע הזרם — כאילו הקרנל זרק בזמן הזרם."""
     box = tmp_path / "box"
     run = box / "run"

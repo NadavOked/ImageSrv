@@ -35,7 +35,7 @@ from test_cloner_gui import AGENT, BASH, posix, sh
 SERVER_NOW = 1_760_600_000
 SHELL = requires_native(("bash", BASH), why="the agent is POSIX sh")
 
-#: ‏jq stand-in for `.now` only -- what jsonq.sh's json_get prints: the raw
+#: jq stand-in for `.now` only -- what jsonq.sh's json_get prints: the raw
 #: value, and "null" for a missing key or JSON null.
 FAKE_JSON_GET = (
     "json_get() { _v=$(sed -n 's/.*\"now\": *\\([^,}]*\\).*/\\1/p' \"$1\" | tr -d '\"'); "

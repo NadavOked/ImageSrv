@@ -1,24 +1,24 @@
-"""‏#1887 — מה ש-dnsmasq ראה לפני GRUB: להבחין בין "נעצר במסך F1/כבוי" לבין כשל PXE/TFTP.
+"""#1887 — מה ש-dnsmasq ראה לפני GRUB: להבחין בין "נעצר במסך F1/כבוי" לבין כשל PXE/TFTP.
 
 **הבעיה.** משכפל שנעצר על F1 לא מגיע ל-PXE בכלל; משכפל עם בעיית רשת שולח DISCOVER ולא ממשיך. היום שניהם
-נראים כמו "WoL ← שתיקה" (#1847, ‏#1858) — הסקה משתיקה, לא ראיה (עיקרון 5א).
+נראים כמו "WoL ← שתיקה" (#1847, #1858) — הסקה משתיקה, לא ראיה (עיקרון 5א).
 
-**קריאה בלבד.** ⚠️ שום דבר כאן אינו נוגע בהגדרות dnsmasq (‏#53: שינוי DHCP דורש הכרעה). dnsmasq רושם
-ל-journal כברירת מחדל (בלי `quiet-dhcp`/`quiet-tftp` — ‏`server/net/dhcp.py` אינו כותב אותם) את ‏DHCPDISCOVER/
-OFFER/REQUEST/ACK עם ה-MAC, ואת ה-TFTP (‏`sent <קובץ> to <IP>`) עם ה-IP בלבד — ולכן TFTP נקשר ל-MAC
-לפי ה-OFFER/ACK האחרון לאותו IP. הקורא (‏`journal_reader`) מריץ ‏`journalctl -u dnsmasq -o short-iso
---show-cursor` מהסמן האחרון (‏`settings.pxe_log_cursor`); בלי סמן — `PXE_FIRST_SINCE` אחורה.
+**קריאה בלבד.** ⚠️ שום דבר כאן אינו נוגע בהגדרות dnsmasq (#53: שינוי DHCP דורש הכרעה). dnsmasq רושם
+ל-journal כברירת מחדל (בלי `quiet-dhcp`/`quiet-tftp` — `server/net/dhcp.py` אינו כותב אותם) את DHCPDISCOVER/
+OFFER/REQUEST/ACK עם ה-MAC, ואת ה-TFTP (`sent <קובץ> to <IP>`) עם ה-IP בלבד — ולכן TFTP נקשר ל-MAC
+לפי ה-OFFER/ACK האחרון לאותו IP. הקורא (`journal_reader`) מריץ `journalctl -u dnsmasq -o short-iso
+--show-cursor` מהסמן האחרון (`settings.pxe_log_cursor`); בלי סמן — `PXE_FIRST_SINCE` אחורה.
 
-**נשמר** (‏`pxe_events`): ‏`mac`, ‏`kind` (‏`discover`/`offer`/`request`/`ack`/`tftp`/`tftp_error`), ‏`at`
-(השעה ש-journald רשם), ‏`ip`, ‏`detail` (שם הקובץ שנשלח / השגיאה — שמות קבצי האתחול שלנו, לא תוכן דיסק).
-‏`sweep` רץ משעון החדר כל `EVERY_S`; קריאה שנכשלה נרשמת (‏`settings.pxe_log_state`) ומחזירה "לא נבדק".
+**נשמר** (`pxe_events`): `mac`, `kind` (`discover`/`offer`/`request`/`ack`/`tftp`/`tftp_error`), `at`
+(השעה ש-journald רשם), `ip`, `detail` (שם הקובץ שנשלח / השגיאה — שמות קבצי האתחול שלנו, לא תוכן דיסק).
+`sweep` רץ משעון החדר כל `EVERY_S`; קריאה שנכשלה נרשמת (`settings.pxe_log_state`) ומחזירה "לא נבדק".
 
-**ההכרעה** (‏`verdict`), למכונה מאז רגע (ההערה האחרונה / חצי שעה):
-‏`no_dhcp` — "לא שלח DHCP (כנראה BIOS/F1/כבוי)"; ‏`no_tftp` — "קיבל DHCP ולא טען את קובץ האתחול";
-‏`no_hello` — "טען את קובץ האתחול ולא הגיע לסוכן (GRUB/קרנל)"; ‏`hello` — הגיע; ‏`unchecked` — הלוג לא
+**ההכרעה** (`verdict`), למכונה מאז רגע (ההערה האחרונה / חצי שעה):
+`no_dhcp` — "לא שלח DHCP (כנראה BIOS/F1/כבוי)"; `no_tftp` — "קיבל DHCP ולא טען את קובץ האתחול";
+`no_hello` — "טען את קובץ האתחול ולא הגיע לסוכן (GRUB/קרנל)"; `hello` — הגיע; `unchecked` — הלוג לא
 נקרא (לא "לא שלח"). מידע בלבד — שום דבר אינו נחסם או מוחלט אוטומטית.
 
-תקרות: ‏`KEEP_ROWS` בכל הכנסה, ‏`housekeeping` — ‏`KEEP_DAYS`. לעולם אינו זורק.
+תקרות: `KEEP_ROWS` בכל הכנסה, `housekeeping` — `KEEP_DAYS`. לעולם אינו זורק.
 """
 
 from __future__ import annotations
@@ -72,7 +72,7 @@ def _iso(stamp: str) -> str | None:
 
 
 def parse(lines: list[str]) -> list[dict]:
-    """שורות journal → אירועים. ‏TFTP — ‏`mac: None` עד שנקשר (‏`_bind`)."""
+    """שורות journal → אירועים. TFTP — `mac: None` עד שנקשר (`_bind`)."""
     out = []
     for line in lines:
         m = _DHCP.search(line)
@@ -119,7 +119,7 @@ def _bind(conn: sqlite3.Connection, events: list[dict]) -> list[dict]:
 
 
 def journal_reader(cursor: str | None) -> tuple[list[str], str | None]:
-    """‏journalctl, קריאה בלבד. זורק על כשל (‏`sweep` תופס ורושם "לא נבדק")."""
+    """journalctl, קריאה בלבד. זורק על כשל (`sweep` תופס ורושם "לא נבדק")."""
     cmd = ["journalctl", "-u", "dnsmasq", "-o", "short-iso", "--no-pager", "--show-cursor"]
     cmd += [f"--after-cursor={cursor}"] if cursor else [f"--since={PXE_FIRST_SINCE}"]
     got = subprocess.run(cmd, capture_output=True, text=True, timeout=20,
@@ -132,7 +132,7 @@ def journal_reader(cursor: str | None) -> tuple[list[str], str | None]:
 
 
 def sweep(conn: sqlite3.Connection, reader: Callable = journal_reader) -> int:
-    """קורא מה שנוסף מאז הסמן, ושומר. מחזיר כמה אירועים נשמרו; ‏-1 — הקריאה נכשלה."""
+    """קורא מה שנוסף מאז הסמן, ושומר. מחזיר כמה אירועים נשמרו; -1 — הקריאה נכשלה."""
     try:
         lines, cursor = reader(get_setting(conn, CURSOR_KEY))
         events = _bind(conn, parse(lines))
@@ -189,7 +189,7 @@ def verdict(conn: sqlite3.Connection, mac: str, since: str | None = None) -> dic
 
 
 def since_last_wake(conn: sqlite3.Connection, mac: str) -> str | None:
-    """רגע ההערה האחרונה (‏`wol_wakes`, #1847), או None."""
+    """רגע ההערה האחרונה (`wol_wakes`, #1847), או None."""
     row = conn.execute("SELECT sent_at FROM wol_wakes WHERE mac = ? ORDER BY sent_epoch DESC LIMIT 1",
                        (mac,)).fetchone()
     return row["sent_at"] if row else None

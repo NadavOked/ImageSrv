@@ -1,16 +1,16 @@
 """#1912: שומרי רגרסיה לתשתית ה-CI — #1210 ו-#1356.
 
-‏#1210: ‏tests.yml/nightly.yml הריצו `apt-get install` בלי `apt-get update`,
+#1210: tests.yml/nightly.yml הריצו `apt-get install` בלי `apt-get update`,
 נשענו על אינדקס החבילות השמור בתמונת ה-runner, וכשהמראה של Ubuntu התקדמה
 — 404, ו-pytest לא רץ בכלל (אדום שפירושו "לא נבדק", לא "שבור").
 
-‏#1356: מנוע השיכפול המקומי (#1322) צריך partclone/sgdisk/ntfs-3g/mkfs.vfat/pv,
-וה-runner הציבורי לא התקין אותם; ‏IMAGESRV_REQUIRE_NATIVE הפך את זה לאדום
+#1356: מנוע השיכפול המקומי (#1322) צריך partclone/sgdisk/ntfs-3g/mkfs.vfat/pv,
+וה-runner הציבורי לא התקין אותם; IMAGESRV_REQUIRE_NATIVE הפך את זה לאדום
 רק **אחרי** פרסום. כאן זה נתפס לפני: כל כלי שהטסט של המנוע דורש ממופה
 לחבילה שה-workflow מתקין, או מוצהר כחלק מתמונת ה-runner.
 
 בקרה שלילית (מוטציות על tests.yml/nightly.yml, ראו גוף ה-PR):
-  ‏`sudo apt-get update -qq` הוסר → טסט #1210 נופל, בשמו של הקובץ.
+  `sudo apt-get update -qq` הוסר → טסט #1210 נופל, בשמו של הקובץ.
   שורת `partclone gdisk ntfs-3g …` הוסרה (tests.yml שלפני #1356) → טסט #1356 נופל.
 """
 

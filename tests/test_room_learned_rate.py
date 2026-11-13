@@ -1,14 +1,15 @@
-"""‏#447 קצה-לקצה: הכוננים שבגל קובעים את `--max-bitrate`, והמפעיל רואה למה.
+"""#447 קצה-לקצה: הכוננים שבגל קובעים את `--max-bitrate`, והמפעיל רואה למה.
 
 הבקרה השלילית של ה-Issue, מול ה-API האמיתי: כונן עם היסטוריה של 15MB/s
 מצטרף לגל. **היום** הגל יוצא בתקרה הגלובלית (200m) והמגירה הזו לא עומדת
-בה. **אחרי** — ‏udp-sender מקבל 108m, ומסך החדר אומר "נקבע לפי" אותו כונן.
+בה. **אחרי** — udp-sender מקבל 108m, ומסך החדר אומר "נקבע לפי" אותו כונן.
 והצד השני: גל בלי היסטוריה יוצא בדיוק בתקרה של היום — שום דבר לא זז.
 """
 
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -35,14 +36,14 @@ def _history(ctx, serial, rate_bps, cap_bps=25 * MB, model="Drawer SSD"):
 
 
 def _clean_receivers() -> str:
-    """‏`wave_rates.drops` של גל ששני המקלטים דיווחו בו אפס זריקות (17/10)."""
+    """`wave_rates.drops` של גל ששני המקלטים דיווחו בו אפס זריקות (17/10)."""
     return json.dumps({mac: {"rcvbuf": 0, "inerrors": 0} for mac in (CLONER1, CLONER2)})
 
 
 def _open_and_join(room_server):
     admin, anon = room_server["admin"], room_server["anon"]
     # יעד 5 מול ארבע מגירות: הגל נשאר `open` (מוצג `projected`) עד ההתחלה
-    # הידנית. ‏#1703: hello שמכסה את היעד מוציא את הגל בעצמו.
+    # הידנית. #1703: hello שמכסה את היעד מוציא את הגל בעצמו.
     assert admin.post("/api/console/room", json=room_body(room_server, 5, {
         CLONER1: ["S1", "S2"], CLONER2: ["S3", "S4"]})).status_code == 200
     wave = cloner_hello(anon, CLONER1, ["S1", "S2"])["session"]["id"]
@@ -163,6 +164,7 @@ def test_the_end_of_the_stream_is_remembered_for_the_next_wave(room_server):
     ctx, admin, recorder = room_server["ctx"], room_server["admin"], room_server["recorder"]
     recorder.log_text = "Starting transfer: f\n" + line(64_000, 0)
     wave = _open_and_join(room_server)
+    began = time.monotonic()
     assert admin.post("/api/console/room/start").status_code == 200
     assert wait_for(lambda: ctx.sender.status()["state"] == "done")
 
@@ -172,17 +174,21 @@ def test_the_end_of_the_stream_is_remembered_for_the_next_wave(room_server):
         return json.loads(row["stream"]) if row and row["stream"] else None
 
     assert wait_for(lambda: stream() is not None)
-    # ‏udp-sender המזויף מסיים מיד — המונה לא זז בין שתי דגימות, ולכן קצב
+    # udp-sender המזויף מסיים מיד — המונה לא זז בין שתי דגימות, ולכן קצב
     # הזרם "לא נמדד" (None), לא אפס.
-    # ‏#1758: ‏`ended` — איך השולח סיים; ‏`wall_s` — משך הזרם בשעון, וכאן
-    # ‏udp-sender המזויף מסיים לפני דגימה שזזה, ולכן גם הוא "לא נמדד".
-    # ‏#1761: יומן השולח נקרא ואין בו `Dropping client` / ‏`Timeout notAnswered`
+    # #1758: `ended` — איך השולח סיים; `wall_s` — משך הזרם בשעון, וכאן
+    # udp-sender המזויף מסיים לפני דגימה שזזה, ולכן גם הוא "לא נמדד".
+    # #1761: יומן השולח נקרא ואין בו `Dropping client` / `Timeout notAnswered`
     # — אפס שנקרא, לא None.
     got = stream()
     assert got == {"sent_bytes": 64_000 * len(recorder.commands), "loss_blocks": 0,
                    "stream_bps": None, "stream_s": None, "ended": "send_done",
                    "wall_s": got["wall_s"], "dropped_clients": 0, "timeouts": 0}
-    assert got["wall_s"] is None or got["wall_s"] < 5
+    # #2918: wall_s is a span measured inside the wave, so it cannot exceed the test's own
+    # elapsed time since the start -- true however loaded the machine is. The fixed "< 5" that
+    # stood here asserted speed, not the origin of the span, and had the same wall-clock
+    # dependence as the `wait_for` above that did fail in the gate.
+    assert got["wall_s"] is None or 0 <= got["wall_s"] <= time.monotonic() - began, got
 
 
 def test_a_clean_wave_with_the_same_drives_raises_the_next_one(room_server):
@@ -198,7 +204,7 @@ def test_a_clean_wave_with_the_same_drives_raises_the_next_one(room_server):
         ("ses_before", json.dumps({"max_bitrate": "600m", "roster": roster}),
          "2026-10-11T09:00:00+00:00",
          json.dumps({"sent_bytes": 10 ** 10, "loss_blocks": 0,
-                     "stream_bps": 71 * MB, "stream_s": 140.8}),   # ‏95% מ-600m
+                     "stream_bps": 71 * MB, "stream_s": 140.8}),   # 95% מ-600m
          _clean_receivers()))
     for d in roster:
         ctx.conn.execute(

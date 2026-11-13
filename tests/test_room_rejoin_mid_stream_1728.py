@@ -1,10 +1,10 @@
-"""‏#1728 — משכפל שאותחל באמצע הזרם אינו מצטרף שוב לאותו גל.
+"""#1728 — משכפל שאותחל באמצע הזרם אינו מצטרף שוב לאותו גל.
 
-ברזל rc5, ‏18/10 (journal 707–719): ‏`reboot -f` במשכפל באמצע מחיצה 3. הוא
+ברזל rc5, 18/10 (journal 707–719): `reboot -f` במשכפל באמצע מחיצה 3. הוא
 עלה תוך 27 שניות, שלח hello, וקיבל את **אותו גל `running`** — כי הוא כבר
-היה חבר בו. הוא ניסה לכתוב את מחיצה 1 מזרם שכבר היה במחיצה 3, ‏fanout החזיר
+היה חבר בו. הוא ניסה לכתוב את מחיצה 1 מזרם שכבר היה במחיצה 3, fanout החזיר
 `empty stream`, שני הדיסקים התקינים נרשמו `disk_failure`, והגל נגמר בלי
-שנכתב דבר — ‏`room_failed written=0/2` (‏#1672), אף שהמשכפל חי ומוכן.
+שנכתב דבר — `room_failed written=0/2` (#1672), אף שהמשכפל חי ומוכן.
 
 מה שנדרש:
 
@@ -18,15 +18,15 @@
 - ה-hello הראשון אחרי שהגל יצא, מחבר שעוד לא דיווח (`waiting`), עדיין מקבל
   את הגל — זו הדרך היחידה שבה הסוכן לומד שהגל יצא.
 - דופק לא-מצטרף (`joining: false`) מחבר שכותב אינו מוציא אותו מהגל.
-- ‏#1672 נשמר: חבר שנעלם ולא חזר → הסבב `failed`
-  (‏`test_room_dead_wave_fails_round.py`).
+- #1672 נשמר: חבר שנעלם ולא חזר → הסבב `failed`
+  (`test_room_dead_wave_fails_round.py`).
 """
 
 from __future__ import annotations
 
 import pytest
 
-from test_server_room import (           # noqa: F401 — ‏room_server הוא fixture
+from test_server_room import (           # noqa: F401 — room_server הוא fixture
     CLONER1, cloner_hello, heartbeat, room, room_body, room_server,
 )
 
@@ -95,7 +95,7 @@ def test_the_round_goes_on_to_wave_2_when_the_rebooted_cloner_is_alive(room_serv
     assert "room_failed" not in _events(ctx)
     assert room(deploy)["round"]["wave_state"] == "open"
 
-    # ‏#1703: ה-hello שמצרף אותו מכסה את היעד — גל 2 יוצא באותה תשובה.
+    # #1703: ה-hello שמצרף אותו מכסה את היעד — גל 2 יוצא באותה תשובה.
     joined = cloner_hello(anon, CLONER1, ["S1", "S2"])["session"]
     assert joined is not None and joined["id"] != wave and joined["state"] == "running", joined
 

@@ -1,9 +1,9 @@
-"""‏#2904 — סבב חדר שנשאר `closing` כי השרת מת באמצע "עצור סבב".
+"""#2904 — סבב חדר שנשאר `closing` כי השרת מת באמצע "עצור סבב".
 
-‏`close_round` כותב `closing` ועושה commit **לפני** שהוא סוגר את הגל ועוצר את
-המשדר. שרת שמת בחלון הזה השאיר את הסבב `closing` לנצח: ‏`tick` טוען רק `active`,
+`close_round` כותב `closing` ועושה commit **לפני** שהוא סוגר את הגל ועוצר את
+המשדר. שרת שמת בחלון הזה השאיר את הסבב `closing` לנצח: `tick` טוען רק `active`,
 "עצור סבב" שני מסורב ("כבר בתהליך סגירה"), ו-`reconcile_on_start` לא נגע
-ב-`room_rounds`. ‏`busy_db.reason` ראה "יש סבב חדר פתוח או רץ" — והגיבוי היומי,
+ב-`room_rounds`. `busy_db.reason` ראה "יש סבב חדר פתוח או רץ" — והגיבוי היומי,
 האתחול המתוזמן ו"החל עדכון" נעצרו.
 
 כמו #411/#2373: עלייה מחדש = שרת **שני** על אותו `--data-dir`. ההבחנה שנבדקת:
@@ -46,7 +46,7 @@ def _round(ctx, round_id: str):
 @pytest.mark.parametrize("wave_state", ["closed", "running"])
 def test_a_round_cut_while_closing_is_closed_on_start_and_the_server_is_not_busy(
         tmp_path, monkeypatch, wave_state):
-    """‏`closed`: השרת מת בתוך `sender.stop` (החלון הארוך, שניות). ‏`running`: מת
+    """`closed`: השרת מת בתוך `sender.stop` (החלון הארוך, שניות). `running`: מת
     בין ה-CAS ל-`store.close` — הגל נסגר ככישלון בשם (#411), והסבב נסגר איתו."""
     first = _boot(tmp_path, monkeypatch, seed=True)
     _running_wave(first)
@@ -62,7 +62,7 @@ def test_a_round_cut_while_closing_is_closed_on_start_and_the_server_is_not_busy
     assert wave["state"] == "closed"
     assert "room_close" in _events(ctx)
     assert busy_db.reason(ctx.conn) is None
-    # ‏tick (‏hello) לא פותח את הסבב מחדש: המפעיל ביקש לעצור.
+    # tick (hello) לא פותח את הסבב מחדש: המפעיל ביקש לעצור.
     cloner_hello(second["anon"], CLONER1, ["S1", "S2"], joining=False)
     assert _round(ctx, round_id)["state"] == "closed"
     second["ctx"].sender.stop()
@@ -70,7 +70,7 @@ def test_a_round_cut_while_closing_is_closed_on_start_and_the_server_is_not_busy
 
 def test_a_round_cut_while_closing_with_its_wave_still_open_closes_the_wave_too(
         tmp_path, monkeypatch):
-    """גל `open` (ממתין למצטרפים) — ‏#411 אינו נוגע בו בכוונה, ולכן בלי הסגירה
+    """גל `open` (ממתין למצטרפים) — #411 אינו נוגע בו בכוונה, ולכן בלי הסגירה
     כאן הוא היה נשאר פתוח תחת סבב סגור, ו-`busy_db` היה אומר "סבב הפצה פתוח"."""
     first = _boot(tmp_path, monkeypatch, seed=True)
     admin, anon = first["admin"], first["anon"]

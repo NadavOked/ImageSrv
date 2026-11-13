@@ -1,19 +1,19 @@
-"""‏#1125 — קובץ חסר עוצר את בניית ה-initramfs; שתי בניות = אותם בייטים.
+"""#1125 — קובץ חסר עוצר את בניית ה-initramfs; שתי בניות = אותם בייטים.
 
 הדפוס של #33/#78/#84 חזר בארבעה מקומות ב-`tools/build_initramfs.sh`:
-הלודר ו-libnss (`cp … 2>/dev/null || true`), ‏`modules.order`/`modules.builtin`
-(‏`|| true`), תת-עצי מודולים (`if [ -d ]`) ו-firmware (`if [ -d ]`). בכולם
+הלודר ו-libnss (`cp … 2>/dev/null || true`), `modules.order`/`modules.builtin`
+(`|| true`), תת-עצי מודולים (`if [ -d ]`) ו-firmware (`if [ -d ]`). בכולם
 קובץ חסר הוא בנייה שיצאה 0 והכשל מתגלה מול מכונה — curl בלי DNS,
-‏"N modules did not load", ‏NIC בלי קושחה — בלי רמז למה.
+"N modules did not load", NIC בלי קושחה — בלי רמז למה.
 
-והחמישי: ‏`find . | cpio | gzip -9` ארז לפי סדר inode, עם mtime של הבנייה
+והחמישי: `find . | cpio | gzip -9` ארז לפי סדר inode, עם mtime של הבנייה
 ועם חותמת זמן של gzip, ולכן שתי בניות מאותו מקור נתנו hash שונה — ו-#1078
-(‏hash של initrd ב-grub.cfg) לא יכול לעמוד על זה.
+(hash של initrd ב-grub.cfg) לא יכול לעמוד על זה.
 
 הבדיקות מריצות את הקטעים האמיתיים מתוך הבנאי על עצים מזויפים ולא
 בודקות את הטקסט: ניסוח אחר שיבלע קובץ חסר צריך להיכשל כאן. נתיבים
-מוחלטים (`/lib64/…`, ‏`/lib/firmware`) מוחלפים בנתיב זמני — כמו
-‏`run_native_pack` ב-`test_initramfs_gui.py`.
+מוחלטים (`/lib64/…`, `/lib/firmware`) מוחלפים בנתיב זמני — כמו
+`run_native_pack` ב-`test_initramfs_gui.py`.
 """
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ def test_a_missing_loader_stops_the_build(tmp_path: Path):
 
 @pytest.mark.parametrize("prepacked", [False, True])
 def test_all_four_present_are_packed_byte_for_byte(tmp_path: Path, prepacked: bool):
-    """הצד החיובי, גם כשהלודר כבר נארז דרך copy_libs (‏`cp -n` מדלג ב-0)."""
+    """הצד החיובי, גם כשהלודר כבר נארז דרך copy_libs (`cp -n` מדלג ב-0)."""
     done, root, fake = run_loader(tmp_path, prepacked=prepacked)
     assert done.returncode == 0, done.stderr
     for a, path in fake.items():
@@ -170,8 +170,8 @@ def test_the_depmod_inputs_are_all_copied(tmp_path: Path):
 
 
 def declared_subdirs() -> list[str]:
-    """‏`MODULE_SUBDIRS` — ההערות בתוכו מכילות `)` ("(issue #12)"), ולכן
-    ‏`declared()` של test_initramfs_modules נחתך אחרי שבעה; כאן קודם
+    """`MODULE_SUBDIRS` — ההערות בתוכו מכילות `)` ("(issue #12)"), ולכן
+    `declared()` של test_initramfs_modules נחתך אחרי שבעה; כאן קודם
     מסירים הערות, ורק אז מחפשים את הסוגר."""
     lines = _lines()
     start = next(i for i, l in enumerate(lines) if l.startswith("MODULE_SUBDIRS=("))
@@ -206,7 +206,7 @@ def run_subdirs(tmp_path: Path, *, hide: tuple[str, ...] = ()):
     for sub in declared_subdirs():
         if sub not in hide:
             (src / sub).mkdir(parents=True, exist_ok=True)
-    # ‏FUSE built-in, כמו בקרנל דביאן 13 — אחרת שער ה-FUSE (#1368) עוצר.
+    # FUSE built-in, כמו בקרנל דביאן 13 — אחרת שער ה-FUSE (#1368) עוצר.
     (src / "modules.builtin").write_text("kernel/fs/fuse/fuse.ko\n", encoding="utf-8")
     (root / "lib" / "modules" / KVER).mkdir(parents=True)
     done = run(tmp_path, f"ROOT={bash_path(root)!r}\nKVER={KVER!r}\n"
@@ -216,7 +216,7 @@ def run_subdirs(tmp_path: Path, *, hide: tuple[str, ...] = ()):
 
 def test_a_declared_tree_that_is_missing_stops_the_build(tmp_path: Path):
     """הבאג: `if [ -d ]` דילג על kernel/drivers/usb/host בשקט — מקלדת USB
-    בלי בקר, ‏#77 מחדש, ובנייה שיצאה 0."""
+    בלי בקר, #77 מחדש, ובנייה שיצאה 0."""
     done, _ = run_subdirs(tmp_path, hide=("kernel/drivers/usb/host",))
     assert done.returncode != 0, (
         "תת-עץ מוצהר חסר עבר את הבנייה: "
@@ -234,7 +234,7 @@ def test_every_missing_tree_is_named_at_once(tmp_path: Path):
 
 def test_all_declared_trees_present_is_a_clean_build(tmp_path: Path):
     """הצד החיובי — כל 21 העצים קיימים בקרנל דביאן 13 הרגיל (20 נמדדו
-    19/09, ‏kernel/drivers/input/mouse נוסף ב-#1204), ולכן אין רשימת
+    19/09, kernel/drivers/input/mouse נוסף ב-#1204), ולכן אין רשימת
     אופציונליים: הרשימה המוצהרת היא כולה חובה."""
     done, packed = run_subdirs(tmp_path)
     assert done.returncode == 0, done.stderr
@@ -277,7 +277,7 @@ def test_missing_rtl_nic_firmware_stops_the_build(tmp_path: Path):
 
 
 def test_missing_i915_firmware_stops_the_gui_build(tmp_path: Path):
-    """‏`--with-gui` מוסיף i915 ל-FIRMWARE_DIRS; חסר → מסך שחור, לא בנייה נקייה."""
+    """`--with-gui` מוסיף i915 ל-FIRMWARE_DIRS; חסר → מסך שחור, לא בנייה נקייה."""
     done, _ = run_firmware(tmp_path, ["rtl_nic", "i915"], present=["rtl_nic"])
     assert done.returncode != 0, done.stderr
     assert "i915" in done.stderr, done.stderr

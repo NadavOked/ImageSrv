@@ -1,4 +1,4 @@
-"""‏#1081 — v1 בלי כיתות: דגל `classrooms` קבוע False, הקונסולה והסוכן מסתירים.
+"""#1081 — v1 בלי כיתות: דגל `classrooms` קבוע False, הקונסולה והסוכן מסתירים.
 
 הדגל אינו הגדרה למפעיל. v2 מדליק אותו בקוד. **בקרה שלילית:** הדגל True
 בלי שינוי הטסטים → הטסטים נופלים על False is True / על מחרוזות כיתה ב-DOM.
@@ -44,7 +44,7 @@ def test_agent_state_carries_classrooms_false(server):
 def test_index_html_gates_the_classrooms_tree_node_behind_data_cap():
     page = (STATIC / "index.html").read_text(encoding="utf-8")
     assert 'data-cap="classrooms"' in page
-    assert "selectMachinesRole('classroom',this)" in page   # ‏#1300: עלה כמו במוקאפ — העלה עצמו מודגש
+    assert "selectMachinesRole('classroom',this)" in page   # #1300: עלה כמו במוקאפ — העלה עצמו מודגש
     # מתחיל מוסתר — כמו סניפים — עד ש-/me אומר true.
     assert 'class="inventory-node hidden" data-cap="classrooms"' in page
 

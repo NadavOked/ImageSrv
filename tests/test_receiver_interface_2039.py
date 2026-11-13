@@ -1,12 +1,12 @@
-"""‏#2039: ‏`udp-receiver` מצטרף לזרם על הכרטיס שקיבל DHCP — לא על ברירת המחדל.
+"""#2039: `udp-receiver` מצטרף לזרם על הכרטיס שקיבל DHCP — לא על ברירת המחדל.
 
-‏`udp-sender` של ההפצה הישירה כבר קיבל `--interface "$IFACE"`
-(‏`agent/lib/capture/directsend.sh`), אבל המקלט (‏`stream_source`, ‏`agent/lib/restore/restore.sh`)
-— שמשמש גם את התחנה (‏`restore_partition`) וגם את המגירות (‏`drawers.sh`) —
+`udp-sender` של ההפצה הישירה כבר קיבל `--interface "$IFACE"`
+(`agent/lib/capture/directsend.sh`), אבל המקלט (`stream_source`, `agent/lib/restore/restore.sh`)
+— שמשמש גם את התחנה (`restore_partition`) וגם את המגירות (`drawers.sh`) —
 נקרא בלי הדגל, ו-udpcast בחר כרטיס בעצמו. במחשב עם שני כרטיסי רשת (מחשבי
 הבנייה במכללה) ההצטרפות לקבוצת ה-multicast יכלה לקרות על הכרטיס הלא נכון.
 
-‏`$IFACE` נקבע ב-`agent/init`: הכרטיס הראשון עם carrier ש-`udhcpc` קיבל
+`$IFACE` נקבע ב-`agent/init`: הכרטיס הראשון עם carrier ש-`udhcpc` קיבל
 עליו חכירה, נכתב ל-`net.conf` ונטען בסוכן. הטסטים בודקים את ה-argv של
 המקלט, ואת המסלול מלולאת ה-DHCP של init ועד הדגל.
 """
@@ -25,7 +25,7 @@ EMPTY_LINE = "udp-receiver: IFACE is empty"
 
 
 def _receiver_stub(stub_dir, argv) -> str:
-    """‏udp-receiver מזויף שרושם את ה-argv שלו ולא כותב דבר ל-stdout. נכתב
+    """udp-receiver מזויף שרושם את ה-argv שלו ולא כותב דבר ל-stdout. נכתב
     מתוך bash (קובץ שנוצר מווינדוס אינו בר-הרצה ב-Git Bash)."""
     return (f"mkdir -p {posix(stub_dir)!r}\n"
             f"cat > {posix(stub_dir)}/udp-receiver <<'STUB'\n"
@@ -66,7 +66,7 @@ def test_the_receiver_joins_on_the_nic_dhcp_answered_on(tmp_path):
 
 
 def test_without_iface_no_flag_and_the_log_says_so(tmp_path):
-    """‏`IFACE` ריק: ההתנהגות של לפני #2039 (בלי הדגל — ‏`--interface ""` היה
+    """`IFACE` ריק: ההתנהגות של לפני #2039 (בלי הדגל — `--interface ""` היה
     נכשל), ושורה ביומן. השורה לא נכתבת ל-stdout: שם עובר הזרם עצמו."""
     args, stream, log = _receive(tmp_path, "unset IFACE")
     assert "--interface" not in args, args

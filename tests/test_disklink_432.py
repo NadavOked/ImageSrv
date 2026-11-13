@@ -1,4 +1,4 @@
-"""‏#432 — מהירות קישור ה-SATA ומונה ה-CRC של כל מגירה, ב-hello.
+"""#432 — מהירות קישור ה-SATA ומונה ה-CRC של כל מגירה, ב-hello.
 
 הסוכן קורא מ-sysfs מזויף (`SYSROOT`) על ה-sh האמיתי, וה-JSON נטען
 בפייתון. שלושה מצבים ולא שניים (עיקרון 5): קישור שנקרא, קישור שנקרא
@@ -20,9 +20,9 @@ from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
-#: CAP של בקר AHCI אמיתי (Intel, ISS=3 בסיביות 23:20 = ‏6 Gbps).
+#: CAP של בקר AHCI אמיתי (Intel, ISS=3 בסיביות 23:20 = 6 Gbps).
 CAP_GEN3 = "c734ff45"
-CAP_GEN2 = "c724ff45"        # ISS=2 = ‏3 Gbps
+CAP_GEN2 = "c724ff45"        # ISS=2 = 3 Gbps
 
 
 def _sata(sysroot: Path, ata: int = 2, host: int = 1, spd: str | None = "6.0 Gbps",
@@ -70,7 +70,7 @@ def test_a_drawer_at_full_speed_reports_speed_and_port_max(fake_machine):
 
 @pytest.mark.parametrize("spd, expected", [("1.5 Gbps", 1.5), ("3.0 Gbps", 3.0)])
 def test_a_drawer_below_the_port_max_reports_both_numbers(fake_machine, spd, expected):
-    """05/09: ‏`ata1: SATA link up 1.5 Gbps` על פורט של 6 — זה הנתון שחסר."""
+    """05/09: `ata1: SATA link up 1.5 Gbps` על פורט של 6 — זה הנתון שחסר."""
     _sata(fake_machine["sysroot"], spd=spd)
     disk = _disk(fake_machine)
     assert (disk["link_gbps"], disk["link_max_gbps"]) == (expected, 6.0)

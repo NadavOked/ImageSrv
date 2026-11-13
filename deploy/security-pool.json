@@ -1,9 +1,9 @@
 {
- "asset": "imagesrv-security-pool-2026-11-04.tar",
- "date": "2026-11-04",
- "packages": 974,
- "security": 112,
- "sha256": "d6687ab3a04038c3259c63416c87383f4139f58741b8f99a617fffd1c3b0e7c4",
- "size": 749250560,
+ "asset": "imagesrv-security-pool-2026-11-13.tar",
+ "date": "2026-11-13",
+ "packages": 1019,
+ "security": 125,
+ "sha256": "448e7199e9cab478535107ce46e5b98373f7c09bc1efad9a08a5f1adfbf3d5cd",
+ "size": 772014080,
  "suite": "trixie+trixie-security"
 }

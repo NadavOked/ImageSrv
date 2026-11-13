@@ -1,4 +1,4 @@
-"""‏#1843 — זמן סיום צפוי לגל, למשיכה (שחזור) ולקליטה, **לפי היסטוריה**.
+"""#1843 — זמן סיום צפוי לגל, למשיכה (שחזור) ולקליטה, **לפי היסטוריה**.
 
 הכרעת נדב 19/10: "זאת הולכת להיות רשת של הפצה ואני רוצה שילמד את המחשבי
 שיכפול ובניה". הכלל: השרת לומד **רק ממדידה שלו**, והלמידה **לעולם אינה
@@ -7,32 +7,32 @@
 
 שלוש הערכות, ולכל אחת המקור שלה בשם:
 
-**גל** (‏`wave`) — לכל מחשב שיכפול בגל, עם מספר המגירות שלו בגל:
+**גל** (`wave`) — לכל מחשב שיכפול בגל, עם מספר המגירות שלו בגל:
 
-    goodput     = הבייטים שהמגירות כתבו / מגירות / משך הזרם      (‏`wave_rates`,
+    goodput     = הבייטים שהמגירות כתבו / מגירות / משך הזרם      (`wave_rates`,
                   אותו מונה של #1758 — `delivered` ו-`stream.wall_s`)
-    שלבים קבועים = (‏`closed_at` − ‏`started_at` של הגל) − משך הזרם   (‏`sessions`:
+    שלבים קבועים = (`closed_at` − `started_at` של הגל) − משך הזרם   (`sessions`:
                   ההמתנה לבייט הראשון, האימות וההרחבה אחרי הזרם — מה שנמדד, לא מנוחש)
     המכונה      = חציון השלבים + גודל האימג' / חציון ה-goodput
     הגל         = המכונה האיטית (הגל נגמר כשהאחרונה נגמרת)
 
-  נלמד רק מגל שהסתיים כולו: ‏`send_done`, ‏כל מגירה של המכונה `done`, ונסגר
+  נלמד רק מגל שהסתיים כולו: `send_done`, כל מגירה של המכונה `done`, ונסגר
   (`closed`). מכונה אחת בגל בלי גל כזה **עם אותו מספר מגירות** — אין הערכה
-  לגל כולו (‏`why: "no_history"`, ו-`missing` אומר מי). קצב של 2 מגירות אינו
+  לגל כולו (`why: "no_history"`, ו-`missing` אומר מי). קצב של 2 מגירות אינו
   זמן של 4 (#1842) — ולכן אין גזירה ממספר מגירות אחר.
 
-**משיכה** (‏`pull`, שחזור תחנה) — משיכות קודמות של **אותה מכונה** שהסתיימו
-(`closed`, וכל חבר `done`): קצב = ‏`bytes_total` / ‏(`closed_at` − ‏`started_at`).
+**משיכה** (`pull`, שחזור תחנה) — משיכות קודמות של **אותה מכונה** שהסתיימו
+(`closed`, וכל חבר `done`): קצב = `bytes_total` / (`closed_at` − `started_at`).
 הזמן הצפוי = גודל האימג' / חציון הקצב.
 
-**קליטה** (‏`capture`) — קליטות קודמות של **אותה מכונה** (`done`):
-קצב = ‏`used_bytes_total` של האימג' שנקלט / ‏(`updated_at` − ‏`started_at` של
+**קליטה** (`capture`) — קליטות קודמות של **אותה מכונה** (`done`):
+קצב = `used_bytes_total` של האימג' שנקלט / (`updated_at` − `started_at` של
 המשימה). הזמן הצפוי = הבייטים בשימוש שהסוכן דיווח בקליטה הזו
-(‏`capture_detail.total_used_bytes`) / חציון הקצב. לפני שהסוכן דיווח את
-המחיצות — ‏`why: "size_unknown"`.
+(`capture_detail.total_used_bytes`) / חציון הקצב. לפני שהסוכן דיווח את
+המחיצות — `why: "size_unknown"`.
 
-מה שהמסך עושה עם זה: גל פתוח — "לפי היסטוריה: כ-X"; גל שרץ — ‏`ends_at`
-(‏`started_at` + ההערכה), **וכשהקצב בפועל נמדד** (‏`eta_s` של #410) הוא
+מה שהמסך עושה עם זה: גל פתוח — "לפי היסטוריה: כ-X"; גל שרץ — `ends_at`
+(`started_at` + ההערכה), **וכשהקצב בפועל נמדד** (`eta_s` של #410) הוא
 גובר, כך שההערכה מתעדכנת לפי מה שקורה עכשיו.
 
 מה שנשמר: מספרים ותוצאות בלבד (#1924) — אין כאן שום דבר מתוכן הדיסקים.
@@ -52,23 +52,23 @@ from server.agent import restore_stages
 log = logging.getLogger("imagesrv.learn_eta")
 
 #: כמה מדידות אחרונות נחשבות לכל (מכונה, מגירות) / מכונה. אותו חלון כמו
-#: הזיכרון של הכוננים (‏`drive_rates.WINDOW`): מספיק כדי שחציון יבלע גל
+#: הזיכרון של הכוננים (`drive_rates.WINDOW`): מספיק כדי שחציון יבלע גל
 #: חריג אחד, וקצר מספיק כדי שאימג'ים ומגירות שהתחלפו ייכנסו באותו שבוע.
 WINDOW = 5
 #: כמה גלים אחרונים סורקים כדי למצוא את החלון של כל מכונה — כמו
-#: ‏`drive_rates.MEMORY_SCAN`; ‏`housekeeping` אינו מוחק את אלה.
+#: `drive_rates.MEMORY_SCAN`; `housekeeping` אינו מוחק את אלה.
 SCAN = 50
 #: מדידה קצרה או קטנה מדי היא רעש של התחלה וסוף — אותם ספים כמו
-#: ‏`drive_rates.MIN_SAMPLE_S` / ‏`MIN_SAMPLE_BYTES` (‏#447).
+#: `drive_rates.MIN_SAMPLE_S` / `MIN_SAMPLE_BYTES` (#447).
 MIN_SECONDS = 60
 MIN_BYTES = 10 ** 9
 
 
 def with_clock(forecast: dict | None, trust: object | None) -> dict | None:
-    """‏#2684: ‏`forecast` + ‏`clock` -- האם מותר לצייר ממנו **שעה** (`ends_at`).
-    ‏`clock` הוא `True` רק על ראיה חיובית (`trust.ok()`, ‏`hello_eta.ClockTrust`: chrony
-    מסונכרן, טרי); ‏`trust` שלא הוזרק, או שזרק -- ‏`False`. אותו שדה ואותה משמעות כמו
-    `session.forecast.clock` ב-hello. ‏`None` נשאר `None` (אין הערכה לצייר)."""
+    """#2684: `forecast` + `clock` -- האם מותר לצייר ממנו **שעה** (`ends_at`).
+    `clock` הוא `True` רק על ראיה חיובית (`trust.ok()`, `hello_eta.ClockTrust`: chrony
+    מסונכרן, טרי); `trust` שלא הוזרק, או שזרק -- `False`. אותו שדה ואותה משמעות כמו
+    `session.forecast.clock` ב-hello. `None` נשאר `None` (אין הערכה לצייר)."""
     if forecast is None:
         return None
     try:
@@ -153,15 +153,15 @@ def _wave_samples(conn: sqlite3.Connection, want: dict[str, int],
 
 def wave(conn: sqlite3.Connection, drives: list[dict], image_bytes: object,
          started_at: str | None = None, session_id: str | None = None) -> dict:
-    """ההערכה לגל של `drives` (‏`mac` לכל מגירה) על אימג' של `image_bytes`
-    בייטים דחוסים (‏`total_compressed_bytes` — אותו ציר כמו `bytes_written`).
+    """ההערכה לגל של `drives` (`mac` לכל מגירה) על אימג' של `image_bytes`
+    בייטים דחוסים (`total_compressed_bytes` — אותו ציר כמו `bytes_written`).
 
-    ‏`{"seconds", "ends_at", "why", "machines": [...], "missing": [...]}`:
-    ‏`seconds` — הזמן הצפוי לגל כולו; ‏`ends_at` — ‏`started_at` + ‏`seconds`
-    (‏None לגל שעוד לא יצא); ‏`machines` — לכל מכונה: ‏`drawers`, ‏`waves`
-    (כמה גלים נמדדו), ‏`sessions`, ‏`goodput_bps`, ‏`fixed_s`, ‏`seconds`.
-    ‏`why`: ‏None (יש הערכה) · ‏`no_drives` · ‏`no_image_size` · ‏`no_history`
-    (‏`missing` — המכונות בלי גל קודם עם אותו מספר מגירות) · ‏`error`."""
+    `{"seconds", "ends_at", "why", "machines": [...], "missing": [...]}`:
+    `seconds` — הזמן הצפוי לגל כולו; `ends_at` — `started_at` + `seconds`
+    (None לגל שעוד לא יצא); `machines` — לכל מכונה: `drawers`, `waves`
+    (כמה גלים נמדדו), `sessions`, `goodput_bps`, `fixed_s`, `seconds`.
+    `why`: None (יש הערכה) · `no_drives` · `no_image_size` · `no_history`
+    (`missing` — המכונות בלי גל קודם עם אותו מספר מגירות) · `error`."""
     try:
         want: dict[str, int] = {}
         for d in drives or []:
@@ -184,7 +184,7 @@ def wave(conn: sqlite3.Connection, drives: list[dict], image_bytes: object,
             sessions = [s["session_id"] for s in got]
             machines.append({"mac": mac, "drawers": want[mac], "waves": len(got),
                              "sessions": sessions,
-                             # ‏#1883: השלבים שנמדדו (חציון; ‏None = הגלים לא נשאו ציר זמן)
+                             # #1883: השלבים שנמדדו (חציון; None = הגלים לא נשאו ציר זמן)
                              "stages_s": restore_stages.medians(conn, mac, sessions),
                              "goodput_bps": int(goodput), "fixed_s": int(fixed),
                              "seconds": int(fixed + image_bytes / goodput)})
@@ -201,8 +201,8 @@ def wave(conn: sqlite3.Connection, drives: list[dict], image_bytes: object,
 
 def pull(conn: sqlite3.Connection, mac: str, image_bytes: object,
          started_at: str | None = None, session_id: str | None = None) -> dict:
-    """ההערכה למשיכה (שחזור) של `mac`: ‏`{"seconds", "ends_at", "why", "pulls",
-    "sessions", "rate_bps"}`. ‏`why`: ‏None · ‏`no_image_size` · ‏`no_history` · ‏`error`."""
+    """ההערכה למשיכה (שחזור) של `mac`: `{"seconds", "ends_at", "why", "pulls",
+    "sessions", "rate_bps"}`. `why`: None · `no_image_size` · `no_history` · `error`."""
     try:
         if not _count(image_bytes) or image_bytes <= 0:
             return _none("no_image_size")
@@ -239,9 +239,9 @@ def pull(conn: sqlite3.Connection, mac: str, image_bytes: object,
 def capture(conn: sqlite3.Connection, library, mac: str, used_bytes: object,
             started_at: str | None = None, task_id: str | None = None) -> dict:
     """ההערכה לקליטה של `mac` כשהסוכן כבר דיווח כמה בשימוש (`used_bytes`):
-    ‏`{"seconds", "ends_at", "why", "captures", "tasks", "rate_bps"}`. ‏`why`:
-    ‏None · ‏`size_unknown` (המחיצות טרם נמדדו) · ‏`no_history` · ‏`error`.
-    ‏`library` — הספרייה (‏`get(image_id)` → מניפסט), ממנה ה-`used_bytes` של
+    `{"seconds", "ends_at", "why", "captures", "tasks", "rate_bps"}`. `why`:
+    None · `size_unknown` (המחיצות טרם נמדדו) · `no_history` · `error`.
+    `library` — הספרייה (`get(image_id)` → מניפסט), ממנה ה-`used_bytes` של
     כל קליטה קודמת; אימג' שנמחק או מחיצה שלא נמדדה — אינה מדידה."""
     try:
         if not _count(used_bytes) or used_bytes <= 0:

@@ -1,6 +1,6 @@
-"""‏#2510: טקסט של ``OSError``/``Exception`` אינו יוצא ללקוח — בכל האתרים ש-#595 לא כיסה.
+"""#2510: טקסט של ``OSError``/``Exception`` אינו יוצא ללקוח — בכל האתרים ש-#595 לא כיסה.
 
-הכלל (‏SECURITY.md, "מה הלקוח רואה כשפעולה נכשלת", #595): ללקוח עוברת הודעה רק
+הכלל (SECURITY.md, "מה הלקוח רואה כשפעולה נכשלת", #595): ללקוח עוברת הודעה רק
 מחריגה שאנחנו כותבים. הטקסט הגולמי (נתיב, strerror) נכתב ליומן השרת, והלקוח מקבל
 משפט קבוע — והכישלון עצמו נשאר גלוי (עיקרון 5): כל טסט כאן בודק גם שהמצב נשאר
 "נכשל"/"לא נבדק", ולא רק שהטקסט נעלם.
@@ -60,7 +60,7 @@ def test_an_unknown_errno_is_the_fixed_send_failed_sentence(caplog):
 
 
 def test_our_own_refusal_still_reaches_the_screen_word_for_word():
-    """‏#74: "אין carrier על eth0" הוא משפט שלנו — הוא נשאר על המסך."""
+    """#74: "אין carrier על eth0" הוא משפט שלנו — הוא נשאר על המסך."""
     from server.net import wol
 
     def no_carrier(_packet):
@@ -216,7 +216,7 @@ def test_the_ups_console_500_is_a_fixed_sentence(server, caplog):
     assert SECRET in logged(caplog)
 
 
-# --- בריאות: TFTP, ‏RAID, גיבוי ------------------------------------------------------
+# --- בריאות: TFTP, RAID, גיבוי ------------------------------------------------------
 
 def test_an_unchecked_tftp_file_names_our_path_not_the_strerror(tmp_path, monkeypatch, caplog):
     from server.system import health

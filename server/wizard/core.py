@@ -183,7 +183,7 @@ def validate_config(config: WizardConfig, interface_names: set[str], *, rerun: b
     elif not HOSTNAME_RE.fullmatch(config.hostname):
         errors["hostname"] = "שם השרת יכול להכיל אותיות אנגליות קטנות, ספרות ומקפים בלבד; אסור להתחיל או לסיים במקף."
     elif hostname_rule.refusal(config.hostname):
-        # ‏#1997: שם השרת הוא שם מחשב — עד 15 תווים, כמו בקונסולה ובמתקין.
+        # #1997: שם השרת הוא שם מחשב — עד 15 תווים, כמו בקונסולה ובמתקין.
         errors["hostname"] = hostname_rule.refusal(config.hostname, "שם השרת")
     try:
         users.validate_password(config.password)
@@ -337,7 +337,7 @@ class WizardState:
     def _verify_current_admin(self, password: str) -> str | None:
         """None = הסיסמה אומתה; אחרת ההודעה למפעיל.
 
-        ‏#1631: דרך ``login_guard``, עם אותו מפתח (משתמש+IP) של כניסת הקונסולה
+        #1631: דרך ``login_guard``, עם אותו מפתח (משתמש+IP) של כניסת הקונסולה
         — ההרצה החוזרת אינה ערוץ ניחוש סיסמה בלי השהיה ונעילה, וכשלונות
         בשני הערוצים נספרים יחד."""
         wrong = "סיסמת admin הקיימת שגויה."

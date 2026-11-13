@@ -1,15 +1,15 @@
-"""‏#1987 — אף התקנת apt של השרת אינה מתקינה Recommends.
+"""#1987 — אף התקנת apt של השרת אינה מתקינה Recommends.
 
-הכרעת נדב 22/10: השרת במכללה בלי חבילות שאיש לא ביקש. ‏#1975 מצא בהן חולשות
-(‏python3-python-multipart, ‏python3-h2 ועוד) בנתיבים שאינם בשימוש — הן הגיעו
+הכרעת נדב 22/10: השרת במכללה בלי חבילות שאיש לא ביקש. #1975 מצא בהן חולשות
+(python3-python-multipart, python3-h2 ועוד) בנתיבים שאינם בשימוש — הן הגיעו
 רק כ-Recommends. לכן כל `apt-get install` בסקריפטים (המתקין, כפתור העדכון,
 מארח ה-VM, ה-ISO, בניית ה-initramfs) נושא `--no-install-recommends`, ותלות
-שבאמת נדרשת נרשמת במפורש (‏PKGS / ‏tools/iso/packages.txt).
+שבאמת נדרשת נרשמת במפורש (PKGS / tools/iso/packages.txt).
 
 הטסט **סורק** את הסקריפטים ולא מחזיק רשימה של שורות: התקנה חדשה בלי הדגל
 נופלת כאן גם אם איש לא זכר להוסיף אותה לטסט. טקסט בתוך מחרוזת (הודעה
 למפעיל: "apt-get install נכשל") אינו פקודה ואינו נספר. ראיה חיובית שהסריקה
-עובדת: כל אתרי ההתקנה הידועים נמצאו בה (‏`KNOWN_SITES`), אחרת סריקה שנשברה
+עובדת: כל אתרי ההתקנה הידועים נמצאו בה (`KNOWN_SITES`), אחרת סריקה שנשברה
 ומצאה אפס הייתה ירוקה (עיקרון 5).
 """
 
@@ -31,10 +31,10 @@ KNOWN_SITES = {
     "deploy/security-upgrade.sh": 1,      # כפתור העדכון: המפגרות + החדשות (#1803)
     "deploy/timesync-swap.sh": 2,         # כפתור העדכון: chrony, ודרך החזרה ל-systemd-timesyncd (#1773)
     "installer/lib/bootstrap.sh": 1,       # המתקין החי של ה-ISO
-    "tools/build_initramfs.sh": 5,         # בסיס, ארגז כלים, GUI, ‏firmware-amd, כלי בנייה
+    "tools/build_initramfs.sh": 5,         # בסיס, ארגז כלים, GUI, firmware-amd, כלי בנייה
 }
 
-#: קוד Python שמריץ apt ‏(רשימת argv) — אותו כלל, **כולל סימולציה**. היום יש רק אחת:
+#: קוד Python שמריץ apt (רשימת argv) — אותו כלל, **כולל סימולציה**. היום יש רק אחת:
 #: הסגירה של בדיקת האבטחה, שחייבת לחשב את מה שהשרת באמת מתקין (בלי Recommends).
 PY_SCAN_ROOTS = ("server", "deploy", "installer", "tools")
 KNOWN_PY_SITES = {"tools/security-recheck.py": 1}
@@ -46,7 +46,7 @@ _NOT_AN_INSTALL = {"--download-only", "-s", "--simulate", "--dry-run", "--just-p
 
 def code_only(line: str) -> str:
     """השורה בלי הערה ובלי טקסט מילולי במחרוזות. נשארים: הקוד, הרחבות
-    ‏`$VAR`/‏`${...}`, וגוף `$( ... )` גם כשהוא בתוך מרכאות."""
+    `$VAR`/`${...}`, וגוף `$( ... )` גם כשהוא בתוך מרכאות."""
     out: list[str] = []
     stack: list[list] = [["code", None]]          # [סוג, עומק סוגריים | None ברמה העליונה]
     i = 0
@@ -210,7 +210,7 @@ def test_no_apt_install_brings_recommends() -> None:
 
 def py_apt_calls(text: str) -> list[tuple[int, list[str]]]:
     """כל רשימת/tuple argv בקוד Python שיש בה `apt-get`/`apt` ו-`install`:
-    השורה והמחרוזות הקבועות שבה (‏`*pkgs` ושמות משתנים אינם נספרים)."""
+    השורה והמחרוזות הקבועות שבה (`*pkgs` ושמות משתנים אינם נספרים)."""
     found = []
     for node in ast.walk(ast.parse(text)):
         if isinstance(node, (ast.List, ast.Tuple)):
@@ -257,8 +257,8 @@ def test_no_python_apt_install_brings_recommends() -> None:
 
 
 def test_what_only_recommends_brought_and_the_server_uses_is_explicit() -> None:
-    """שתי החבילות שנמדדו (‏testrunner, ‏22/10) כנשמטות עם הדגל ובשימוש השרת:
-    ‏dbus (‏hostnamectl/timedatectl) ו-linux-image-amd64 (‏#904 ומכשיר ה-guestfs)."""
+    """שתי החבילות שנמדדו (testrunner, 22/10) כנשמטות עם הדגל ובשימוש השרת:
+    dbus (hostnamectl/timedatectl) ו-linux-image-amd64 (#904 ומכשיר ה-guestfs)."""
     pkgs = set(installer_pkgs())
     missing = {"dbus", "linux-image-amd64"} - pkgs
     assert not missing, f"חסר ב-PKGS של deploy/setup-boot-server.sh: {sorted(missing)}"

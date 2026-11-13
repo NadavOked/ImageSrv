@@ -1,9 +1,9 @@
-"""‏#1812: NFS נשאר `soft`, עם תקרת זמן כתובה בקוד ולא של הקרנל.
+"""#1812: NFS נשאר `soft`, עם תקרת זמן כתובה בקוד ולא של הקרנל.
 
-ב-NFS שמעוגן `soft`, ‏`write()` מחזיר הצלחה ל-page cache, והכשל מול הנאס
+ב-NFS שמעוגן `soft`, `write()` מחזיר הצלחה ל-page cache, והכשל מול הנאס
 מגיע רק ב-`fsync`. מי שתופס אותו הוא הכותב: כל נתיב שמכניס אימג' לספרייה
 עושה fsync לכל קובץ לפני הפרסום, וכשל fsync הוא כשל בשם (#1813,
-`server/core/atomicfile.py`, ‏`tests/test_library_fsync_1813.py`).
+`server/core/atomicfile.py`, `tests/test_library_fsync_1813.py`).
 
 הטסטים נלקחו מ-PR #1836 (`tests/test_durable_writes_1813.py` שם); חלק
 ה-#1813 של אותו קובץ לא נכלל, כי #1813 כבר מומש בבסיס בדרך אחרת.
@@ -34,7 +34,7 @@ def test_the_fstab_line_carries_the_same_nfs_ceiling(monkeypatch):
            "mount_point": "/var/lib/imagesrv/storage/nas",
            "params_json": json.dumps({"server": "10.44.10.20", "export": "/pool/images"})}
     monkeypatch.setattr(storage_locations, "list_rows", lambda _conn: [row])
-    # ‏#1956: the backup target joins the same block from the settings -- none here (no DB).
+    # #1956: the backup target joins the same block from the settings -- none here (no DB).
     from server.system import backup_target
     monkeypatch.setattr(backup_target, "fstab_entry", lambda _conn: None)
     entries = storage_locations.fstab_entries(None)

@@ -267,6 +267,7 @@ async function updRetry() {
   catch (e) { updFlash(`הניסיון החוזר נכשל: ${e.message}`); return; }
   updStart({ tag, from, by: ME && ME.username });
 }
+updRetry = guarded("updRetry", updRetry);   // ‏#2840: לחיצה כפולה = בקשה אחת
 function updCopy() {
   const st = UPD && UPD.status;
   const text = [`ImageSrv: עדכון ל-${UPD && UPD.tag} מ-${(UPD && UPD.from) || "?"}`,

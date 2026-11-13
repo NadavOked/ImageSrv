@@ -21,7 +21,7 @@ def label(session: sqlite3.Row, library) -> str:
 
     לסבב אין שם משלו: יש `id` אקראי שאינו מופיע על שום מסך. מה שהמפעיל
     **קורא** בכותרת (`image_name` למטה, ובמסך התחנה "משדר: ...") הוא שם
-    האימג', וזה מה שהוא מקליד כדי לעצור (עיקרון 7, ‏#581). הנפילה חזרה
+    האימג', וזה מה שהוא מקליד כדי לעצור (עיקרון 7, #581). הנפילה חזרה
     ל-`image_id` היא אותה נפילה שב-`round_label` של חדר השיכפולים,
     ומאותה סיבה: **מקום אחד**, אחרת סבב שהאימג' שלו נמחק באמצע היה
     בלתי-ניתן לעצירה — תיקון שגרוע מהבאג.
@@ -41,9 +41,9 @@ def role_of(conn, username):
 
 
 def console_extras(store, row: sqlite3.Row) -> dict:
-    """‏#1255: שדות "משימות אחרונות" — **רק** לתשובת הקונסולה המאומתת (`/overview`).
+    """#1255: שדות "משימות אחרונות" — **רק** לתשובת הקונסולה המאומתת (`/overview`).
 
-    ‏`build()` משותף גם ל-`station.active_session_view`, שמוגש לסוכן על 8080 בלי הרשאת קונסולה:
+    `build()` משותף גם ל-`station.active_session_view`, שמוגש לסוכן על 8080 בלי הרשאת קונסולה:
     שם המשתמש שפתח את הסבב ותפקידו לא יוצאים לשם. כאן: מי פתח (`None` = לא ידוע), מתי התחיל ומתי נסגר."""
     return {
         "opened_by": row["opened_by"] or None,
@@ -97,7 +97,7 @@ def build(store, session: sqlite3.Row, library) -> dict:
             "error": m["error"],
             "updated_at": m["updated_at"],
             "disks": disks_by_mac.get(m["mac"], []),
-            # ‏#720: תוצאת ה-staging של הדרייברים; null = השלב לא דיווח.
+            # #720: תוצאת ה-staging של הדרייברים; null = השלב לא דיווח.
             "drivers": json.loads(m["drivers_json"]) if m["drivers_json"] else None,
         })
 
@@ -134,9 +134,9 @@ def build(store, session: sqlite3.Row, library) -> dict:
 
 
 def pull_forecast(store, session: sqlite3.Row, library) -> dict | None:
-    """‏#1843: משיכה (שחזור) שרצה — כמה זמן היא צפויה לקחת לפי המשיכות הקודמות
-    של אותה מכונה (‏`learn_eta.pull`). לקונסולה בלבד (‏`/overview.pulls[]`), לא
-    לתשובה שמוגשת לסוכן. ‏None = אינה משיכה רצה של מכונה אחת."""
+    """#1843: משיכה (שחזור) שרצה — כמה זמן היא צפויה לקחת לפי המשיכות הקודמות
+    של אותה מכונה (`learn_eta.pull`). לקונסולה בלבד (`/overview.pulls[]`), לא
+    לתשובה שמוגשת לסוכן. None = אינה משיכה רצה של מכונה אחת."""
     members = store.members(session["id"])
     if session["kind"] == MULTICAST or session["state"] != "running" or len(members) != 1:
         return None

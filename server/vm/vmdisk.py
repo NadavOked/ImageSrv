@@ -1,14 +1,14 @@
-"""אימג' → דיסק וירטואלי, ודיסק → גרסה חדשה של האימג' (‏#1334).
+"""אימג' → דיסק וירטואלי, ודיסק → גרסה חדשה של האימג' (#1334).
 
 שני הכיוונים הם **שחזור וקליטה**, לא משהו שדומה להם: הטבלה, ההרחבה,
 הכיווץ, שערי ההברנציה ו-`boot_ca` רצים בפונקציות של הסוכן
 עצמן (`server/vm/agent_shell.py`) מול `/dev/loopN`. כאן נשאר רק מה שבסוכן
-קשור לרשת/למסך: הזרם (קובץ ↔ ‏zstd ↔ ‏partclone, עם sha256 על הבייטים
-הדחוסים — אותו מקום מדידה כמו בסוכן, ‏#73), קריאת הטבלה בחזרה, והרכבת
+קשור לרשת/למסך: הזרם (קובץ ↔ zstd ↔ partclone, עם sha256 על הבייטים
+הדחוסים — אותו מקום מדידה כמו בסוכן, #73), קריאת הטבלה בחזרה, והרכבת
 המניפסט.
 
-ארבעת המיפויים הקטנים (`partclone_for_fs`, ‏`partclone_mode`,
-‏`partition_role`, ‏`mark_expandable`) הם העתקים — ולכן יש להם טסט
+ארבעת המיפויים הקטנים (`partclone_for_fs`, `partclone_mode`,
+`partition_role`, `mark_expandable`) הם העתקים — ולכן יש להם טסט
 (`tests/test_vmdisk_agent_parity.py`) שמריץ את גרסת הסוכן ואת זו על אותו
 קלט ומשווה. סטייה ביניהם היא טסט אדום.
 """
@@ -75,7 +75,7 @@ def partclone_for_fs(fs: str) -> str:
 
 
 def partclone_mode(tool: str, flag: str) -> list[str]:
-    """`partclone_mode`: ‏partclone.dd אינו מכיר -c/-r."""
+    """`partclone_mode`: partclone.dd אינו מכיר -c/-r."""
     return [] if tool == "partclone.dd" else [flag]
 
 
@@ -96,8 +96,8 @@ def partition_role(type_guid: str) -> str:
 
 
 def mark_expandable(parts: list[dict]) -> None:
-    """`_mark_expandable`: ‏windows/linux עם ה-`start_sector` הגדול ביותר;
-    בשוויון — האחרונה ברשימה (‏`s >= best`). במקום."""
+    """`_mark_expandable`: windows/linux עם ה-`start_sector` הגדול ביותר;
+    בשוויון — האחרונה ברשימה (`s >= best`). במקום."""
     pick = None
     best = 0
     for i, part in enumerate(parts):
@@ -115,7 +115,7 @@ def mark_expandable(parts: list[dict]) -> None:
 
 
 class Host:
-    """כל מה שנוגע במכונה. ‏`tests/` מחליף אותו בזיוף."""
+    """כל מה שנוגע במכונה. `tests/` מחליף אותו בזיוף."""
 
     def __init__(self, sbin_path: bool = True):
         env = dict(os.environ)
@@ -136,7 +136,7 @@ class Host:
         return subprocess.Popen(argv, env=self.env, **kw)
 
     def free_bytes(self, path: Path) -> int | None:
-        """פנוי למי שאינו root (‏f_bavail). ‏None = לא נקרא — לא 0 ולא "מספיק"."""
+        """פנוי למי שאינו root (f_bavail). None = לא נקרא — לא 0 ולא "מספיק"."""
         try:
             stat = os.statvfs(path)
         except (OSError, AttributeError):
@@ -158,7 +158,7 @@ def _loop_name(text: str) -> str | None:
 
 
 def loops_of(host: Host, disk: Path) -> list[str]:
-    """כל התקני ה-loop שמחוברים לקובץ. ‏losetup שנכשל אינו "אין" (עיקרון 5)."""
+    """כל התקני ה-loop שמחוברים לקובץ. losetup שנכשל אינו "אין" (עיקרון 5)."""
     proc = host.run(["losetup", "-j", str(disk)])
     if proc.returncode != 0:
         raise DiskError("loop", f"לא ניתן לבדוק אילו התקני loop מחוברים לדיסק העבודה "
@@ -212,7 +212,7 @@ def _finish(procs: list[subprocess.Popen], what: str) -> list[int]:
 def restore_partition(host: Host, part: dict, src: Path, target: str, run_dir: Path,
                       progress: Progress) -> None:
     """`zstd -dc | partclone -r` כמו `restore_partition` בסוכן, וה-sha256 על
-    הדחוס, תוך כדי. כשל — ‏DiskError בשם המחיצה."""
+    הדחוס, תוך כדי. כשל — DiskError בשם המחיצה."""
     index = part["index"]
     tool = partclone_for_fs(part.get("fs") or "")
     err = run_dir / f"restore.{index}.err"
@@ -260,15 +260,15 @@ def restore_partition(host: Host, part: dict, src: Path, target: str, run_dir: P
 def capture_partition(host: Host, fs: str, source: str, out: Path, log_dir: Path,
                       index: int, progress: Progress, *, user: "VmUser | None" = None,
                       limit: int | None = None, err_dir: Path | None = None) -> tuple[str, int]:
-    """`partclone -c | zstd` כמו `capture_disk` בסוכן, ל-out. ‏(sha256, בייטים).
+    """`partclone -c | zstd` כמו `capture_disk` בסוכן, ל-out. (sha256, בייטים).
 
-    ‏`user` — ‏partclone (המפרסר של מערכת הקבצים) רץ כמשתמש ה-VM ולא כ-root.
-    ‏`limit` — זרם שגדל מעבר לזה נעצר: מחיצה אינה נדחסת ליותר מגודלה."""
+    `user` — partclone (המפרסר של מערכת הקבצים) רץ כמשתמש ה-VM ולא כ-root.
+    `limit` — זרם שגדל מעבר לזה נעצר: מחיצה אינה נדחסת ליותר מגודלה."""
     tool = partclone_for_fs(fs)
     ignore = ["-I"] if fs == "ntfs" else []
     # ה-stderr נפתח כאן, כ-root — ולכן **לא** בתיקייה של משתמש ה-VM.
     err = (err_dir or log_dir) / f"capture.{index}.err"
-    # כמשתמש ה-VM — ‏`-L /dev/null`: היומן של partclone הוא התקדמות; השגיאות
+    # כמשתמש ה-VM — `-L /dev/null`: היומן של partclone הוא התקדמות; השגיאות
     # יוצאות ב-stderr, שנאסף כאן (כ-root) ל-err. כך אין תיקייה שמשתמש ה-VM
     # צריך לכתוב אליה, ואין תלות בהרשאות המעבר בדרך לספרייה (נמדד: partclone
     # נפל על "open logfile" כשהספרייה ישבה מתחת ל-/home/test).
@@ -405,15 +405,15 @@ def build_disk(host: Host, manifest: dict, image_dir: Path, workdir: Path,
 #
 # * הטבלה, סוגי מערכות הקבצים, BitLocker, מצב השינה, המינימום לכיווץ, הכיווץ
 #   עצמו, הנפח התפוס וקובצי האתחול של ה-ESP — **בתוך ה-appliance של
-#   libguestfs** (קרנל משלו, ב-VM משלו). הכיווץ — על עותק (‏#1491, `shrink_view`).
-# * ‏`partclone -c`, ‏`ntfsfix -d` ו-`ntfsresize -n` — על המארח, אבל **כמשתמש ה-VM** (‏setpriv,
-#   ‏no-new-privs) על התקן loop של מחיצה אחת בהיסט שה-appliance מסר ושעבר
+#   libguestfs** (קרנל משלו, ב-VM משלו). הכיווץ — על עותק (#1491, `shrink_view`).
+# * `partclone -c`, `ntfsfix -d` ו-`ntfsresize -n` — על המארח, אבל **כמשתמש ה-VM** (setpriv,
+#   no-new-privs) על התקן loop של מחיצה אחת בהיסט שה-appliance מסר ושעבר
 #   אימות — בלי `--partscan`, כך שהקרנל אינו קורא את ה-GPT של האורח.
 # * חתימות ה-PE של קובצי האתחול (`boot_ca_json` של הסוכן, עם ESPROOT) —
 #   כמשתמש ה-VM.
 # * כל ערך שנקרא מהדיסק עובר אימות פורמט לפני שהוא נוגע בפקודה, ומושווה
 #   למניפסט המקור: מחיצה שסוג מערכת הקבצים שלה השתנה, מחיצה חדשה או חסרה,
-#   ‏GUID של דיסק אחר — סירוב בשם.
+#   GUID של דיסק אחר — סירוב בשם.
 
 # BitLocker detection runs in the appliance; matching encrypted volumes are copied
 # raw with a warning, never mounted, shrunk or grown (#2690, #1840).
@@ -443,7 +443,7 @@ class VmUser:
 
 
 def as_user(user: VmUser, argv: list[str]) -> list[str]:
-    """`argv` כמשתמש ה-VM: בלי קבוצות, ‏no-new-privs."""
+    """`argv` כמשתמש ה-VM: בלי קבוצות, no-new-privs."""
     return ["setpriv", f"--reuid={user.uid}", f"--regid={user.gid}", "--clear-groups",
             "--no-new-privs", "--", *argv]
 
@@ -456,12 +456,12 @@ class Appliance:
 
     def __init__(self, disk: Path, *, factory: Callable[[], object] | None = None,
                  memsize: int = 1024, writable: bool = False):
-        """‏`writable=False` (‏#1491): ‏libguestfs פותח את הדיסק לקריאה בלבד —
-        כתיבה של ה-appliance (‏ext4 שמשחזר יומן ב-mount_ro) נוחתת ב-overlay
-        זמני שלו. ‏`writable=True` — רק על העותק של הכיווץ (`shrink_view`)."""
+        """`writable=False` (#1491): libguestfs פותח את הדיסק לקריאה בלבד —
+        כתיבה של ה-appliance (ext4 שמשחזר יומן ב-mount_ro) נוחתת ב-overlay
+        זמני שלו. `writable=True` — רק על העותק של הכיווץ (`shrink_view`)."""
         if factory is None:
             try:
-                import guestfs   # noqa: PLC0415 — רק בשרת; ‏python3-guestfs
+                import guestfs   # noqa: PLC0415 — רק בשרת; python3-guestfs
             except ImportError as exc:
                 raise DiskError("missing_tool", "python3-guestfs אינו מותקן בשרת") from exc
 
@@ -503,7 +503,7 @@ class Appliance:
             attrs = g.part_get_gpt_attributes(self.DEV, index)
             if not GUID_RE.fullmatch(type_guid) or not (unique == "" or GUID_RE.fullmatch(unique)):
                 raise DiskError("table", f"מחיצה {index}: GUID שאינו GUID")
-            # ‏#1421: libguestfs מחזיר int64 עם סימן — ביט 63 (ESP/Recovery) שלילי
+            # #1421: libguestfs מחזיר int64 עם סימן — ביט 63 (ESP/Recovery) שלילי
             if type(attrs) is not int or not -(1 << 63) <= attrs < 1 << 64:
                 raise DiskError("table", f"מחיצה {index}: דגלים לא תקינים")
             attrs &= (1 << 64) - 1
@@ -545,15 +545,15 @@ class Appliance:
         return value
 
     def shrink(self, index: int, first: int, new_bytes: int, keep: dict) -> None:
-        """‏ntfsresize ואז הכניסה בטבלה, וקריאה בחזרה של התחילה, הגודל,
+        """ntfsresize ואז הכניסה בטבלה, וקריאה בחזרה של התחילה, הגודל,
         וה-GUIDים והדגלים (אותה ראיה כמו `_shrink_gpt`)."""
         g = self.g
         try:
             g.ntfsresize_opts(self.dev(index), size=new_bytes)
             # הכניסה נכתבת מחדש באותו מקום ובאותו אינדקס — כמו `_shrink_gpt`
-            # (‏sgdisk -d/-n). ‏`part_resize` של libguestfs הוא parted resizepart,
+            # (sgdisk -d/-n). `part_resize` של libguestfs הוא parted resizepart,
             # שעוצר על "Shrinking a partition can cause data loss" (נמדד ב-Testrunner).
-            # ‏parted נותן למחיצה החדשה את האינדקס הפנוי הנמוך — זה שנמחק.
+            # parted נותן למחיצה החדשה את האינדקס הפנוי הנמוך — זה שנמחק.
             g.part_del(self.DEV, index)
             g.part_add(self.DEV, "p", first, first + new_bytes // SECTOR - 1)
             g.part_set_gpt_type(self.DEV, index, keep["type_guid"])
@@ -570,7 +570,7 @@ class Appliance:
             raise DiskError("shrink", f"מחיצה {index} כווצה אך הטבלה לא אושרה בקריאה חוזרת")
 
     def used_bytes(self, index: int) -> int | None:
-        """‏df בתוך ה-appliance. ‏None = לא נמדד (לא נעגן) — לא 0."""
+        """df בתוך ה-appliance. None = לא נמדד (לא נעגן) — לא 0."""
         g = self.g
         try:
             g.mount_ro(self.dev(index), "/")
@@ -635,7 +635,7 @@ def check_against_source(source: dict, disk_guid: str, table: list[dict],
             raise DiskError("fs_changed", f"מחיצה {part['index']}: מערכת קבצים לא מוכרת")
 
 
-#: מי שמחזיק את התקני ה-loop כשאיש אינו משתמש בהם (‏udev של דביאן).
+#: מי שמחזיק את התקני ה-loop כשאיש אינו משתמש בהם (udev של דביאן).
 LOOP_OWNER = "root:disk"
 LOOP_MODE = "0660"
 
@@ -643,7 +643,7 @@ LOOP_MODE = "0660"
 @contextmanager
 def partition_loop(host: Host, disk: Path | str, part: dict, user: VmUser, *, writable: bool):
     """התקן loop על מחיצה **אחת** — היסט וגודל מהטבלה שאומתה, בלי partscan —
-    שנמסר למשתמש ה-VM למשך העבודה בלבד. ‏`partclone`/`ntfsfix` פותחים נתיב
+    שנמסר למשתמש ה-VM למשך העבודה בלבד. `partclone`/`ntfsfix` פותחים נתיב
     (פתיחה חוזרת של `/dev/fd/N` בודקת הרשאות מחדש), ולכן מעבירים בעלות
     ולא fd; וב-`finally` — גם בכשל — הבעלות וההרשאות **חוזרות** לפני
     `losetup -d`, כדי שהתקן loop שיחזור לשימוש לא יישאר בידי המשתמש."""
@@ -671,28 +671,28 @@ def partition_loop(host: Host, disk: Path | str, part: dict, user: VmUser, *, wr
         raise DiskError("loop", f"הבעלות על {node} לא הוחזרה ל-{LOOP_OWNER} — בדקו ידנית")
 
 
-# --- ‏#1491: הכיווץ נעשה על עותק, ודיסק ה-VM אינו נכתב ------------------------------
+# --- #1491: הכיווץ נעשה על עותק, ודיסק ה-VM אינו נכתב ------------------------------
 #
 # הכלל של #1466 (נדב 16/10) גם כאן: דיסק המקור של שמירה — `disk.raw`, הדיסק
-# שה-VM רץ עליו — **אינו נכתב**. ‏`ntfsresize`, הטבלה החדשה ו-`ntfsfix -d` רצים
+# שה-VM רץ עליו — **אינו נכתב**. `ntfsresize`, הטבלה החדשה ו-`ntfsfix -d` רצים
 # על dm-snapshot מעליו: המקור מחובר ל-loop **לקריאה בלבד** (נבדק ב-`blockdev
 # --getro`), וה-copy-on-write הוא קובץ דליל ב-`run/` בגודל התקציב — עותק שחורג
-# ממנו נפסל (‏I/O error בקול), ולא ממלא את דיסק השרת. ‏partclone קורא מהעותק,
+# ממנו נפסל (I/O error בקול), ולא ממלא את דיסק השרת. partclone קורא מהעותק,
 # וכשל בכל שלב משאיר את הדיסק שלם: מדליקים שוב, מתקנים ושומרים.
 
 VIEW_NAME = "imagesrv-vmsave"
-#: סקטורים — ‏4KiB, אשכול NTFS (‏`LC_SNAP_CHUNK` של הסוכן).
+#: סקטורים — 4KiB, אשכול NTFS (`LC_SNAP_CHUNK` של הסוכן).
 VIEW_CHUNK = 8
-#: ‏`LC_SNAP_META_MB` של הסוכן: ‏$LogFile, ‏$MFT/$Bitmap, הטבלה וגיבויה.
+#: `LC_SNAP_META_MB` של הסוכן: $LogFile, $MFT/$Bitmap, הטבלה וגיבויה.
 VIEW_META = 256 * MIB
-#: ה-"MB" של ‏`ntfsresize` (‏NTFS_MBYTE) הוא 10^6.
+#: ה-"MB" של `ntfsresize` (NTFS_MBYTE) הוא 10^6.
 NTFS_MB = 10**6
 
 
 def view_budget(host: Host, disk: Path, todo: list[tuple[dict, int]], user: VmUser,
                 run_dir: Path) -> int:
-    """כמה בייטים העותק צריך. ‏`ntfsresize -n` (ריצת בדיקה; כמשתמש ה-VM, על loop
-    **לקריאה בלבד** של המחיצה) אומר כמה יוזז — ‏M + M/10 + VIEW_META לכל מחיצה,
+    """כמה בייטים העותק צריך. `ntfsresize -n` (ריצת בדיקה; כמשתמש ה-VM, על loop
+    **לקריאה בלבד** של המחיצה) אומר כמה יוזז — M + M/10 + VIEW_META לכל מחיצה,
     כמו `_snap_views` של הסוכן, ו-`_lc_relocs` שלו קורא את המספר. לא נמדד =
     נכשל, לא "מספיק" (עיקרון 5)."""
     need = 0
@@ -717,8 +717,8 @@ def _dm_names(text: str) -> list[str]:
 
 
 def view_valid(host: Host) -> bool:
-    """‏`dmsetup status`: ‏`0 <len> snapshot <בשימוש>/<סה"כ> <meta>` = תקין.
-    ‏Invalid, ‏Overflow, או שאין תשובה — לא תקין (כמו `_snap_valid`)."""
+    """`dmsetup status`: `0 <len> snapshot <בשימוש>/<סה"כ> <meta>` = תקין.
+    Invalid, Overflow, או שאין תשובה — לא תקין (כמו `_snap_valid`)."""
     proc = host.run(["dmsetup", "status", VIEW_NAME])
     fields = proc.stdout.split() if proc.returncode == 0 else []
     return (len(fields) >= 4 and fields[2] == "snapshot"
@@ -727,7 +727,7 @@ def view_valid(host: Host) -> bool:
 
 def _release_view(host: Host, disk: Path, cow: Path) -> list[str]:
     """העותק, ה-loop של המקור וה-loop של ה-copy-on-write — מוסרים, וכל אחד
-    נקרא בחזרה. ‏[] = לא נשאר דבר (או שלא היה); אחרת — מה שנשאר."""
+    נקרא בחזרה. [] = לא נשאר דבר (או שלא היה); אחרת — מה שנשאר."""
     problems = []
     listed = host.run(["dmsetup", "ls"])
     if listed.returncode != 0:
@@ -751,11 +751,11 @@ def _release_view(host: Host, disk: Path, cow: Path) -> list[str]:
 
 
 def clear_leftovers(host: Host, workdir: Path) -> None:
-    """‏#1649: שאריות של שמירה שנקטעה (אתחול השרת באמצע כיווץ) — העותק
+    """#1649: שאריות של שמירה שנקטעה (אתחול השרת באמצע כיווץ) — העותק
     `imagesrv-vmsave`, ה-loop של `disk.raw`, ה-loop של `run/shrink.cow` והקובץ
-    עצמו. מזהים **לפי השם והנתיב** (`dmsetup ls`, ‏`losetup -j`) — לא נוגעים
-    בדיסקים אחרים. ‏`_release_view` מסיר וקורא בחזרה כל אחד; מה שנשאר, או
-    כלי שלא רץ (‏OSError) = ‏DiskError בשם, לא "אין מה לנקות" (עיקרון 5)."""
+    עצמו. מזהים **לפי השם והנתיב** (`dmsetup ls`, `losetup -j`) — לא נוגעים
+    בדיסקים אחרים. `_release_view` מסיר וקורא בחזרה כל אחד; מה שנשאר, או
+    כלי שלא רץ (OSError) = DiskError בשם, לא "אין מה לנקות" (עיקרון 5)."""
     try:
         left = _release_view(host, workdir / "disk.raw", workdir / "run" / "shrink.cow")
     except OSError as exc:
@@ -766,10 +766,10 @@ def clear_leftovers(host: Host, workdir: Path) -> None:
 
 @contextmanager
 def shrink_view(host: Host, disk: Path, need: int, run_dir: Path):
-    """עותק copy-on-write של `disk` — ‏`/dev/mapper/imagesrv-vmsave` — שכל
+    """עותק copy-on-write של `disk` — `/dev/mapper/imagesrv-vmsave` — שכל
     כתיבה אליו נוחתת ב-`run/shrink.cow` (דליל, בגודל `need`), ולא בדיסק.
-    לפני שנוצר דבר: המקום הפנוי (‏`disk_space` כשחסר). ביציאה — גם בכשל —
-    הכול מוסר ונקרא בחזרה; מה שנשאר = ‏DiskError("loop")."""
+    לפני שנוצר דבר: המקום הפנוי (`disk_space` כשחסר). ביציאה — גם בכשל —
+    הכול מוסר ונקרא בחזרה; מה שנשאר = DiskError("loop")."""
     free = host.free_bytes(run_dir)
     if free is None:
         raise DiskError("unchecked", "לא ניתן לקרוא כמה מקום פנוי לעותק הזמני של הכיווץ")
@@ -811,17 +811,17 @@ def shrink_view(host: Host, disk: Path, need: int, run_dir: Path):
         raise DiskError("loop", "העותק הזמני של הכיווץ לא שוחרר: " + "; ".join(left))
 
 
-#: ‏#1535/#1610: משתמש ה-VM מגיע לאזור העבודה **בשמו בלבד** (ACL של ה-uid;
-#: ‏`agent_shell.grant_user`). ‏root נשאר הבעלים (הוא כותב כאן, ולכן אסור
+#: #1535/#1610: משתמש ה-VM מגיע לאזור העבודה **בשמו בלבד** (ACL של ה-uid;
+#: `agent_shell.grant_user`). root נשאר הבעלים (הוא כותב כאן, ולכן אסור
 #: שמשתמש ה-VM ישתול symlink), והקבוצה ו"אחרים" — אפס.
-#: תיקייה: מעבר בלבד (‏`[ -f "$ESPROOT$p" ]` על נתיבים ידועים; אין רשימה).
+#: תיקייה: מעבר בלבד (`[ -f "$ESPROOT$p" ]` על נתיבים ידועים; אין רשימה).
 VM_PASS = agent_shell.ACL_X
 #: קובץ אתחול שהורד: קריאה, לחתימות של `boot_ca_json`.
 VM_READ = agent_shell.ACL_R
 
 
 def boot_files(box: "Appliance", esp: int, paths: list[str], run_dir: Path, uid: int) -> Path:
-    """קובצי האתחול של ה-ESP, בתיקייה **חדשה של root** (‏mkdtemp) — root
+    """קובצי האתחול של ה-ESP, בתיקייה **חדשה של root** (mkdtemp) — root
     כותב רק לשם, ואיש אחר אינו יכול לשתול בה symlink. אחרי ההורדה היא
     נפתחת **למשתמש ה-VM בלבד** (בעלות root נשארת), והוא קורא ממנה
     את החתימות."""
@@ -837,7 +837,7 @@ def boot_files(box: "Appliance", esp: int, paths: list[str], run_dir: Path, uid:
 
 
 def _clear_stale(workdir: Path, run_dir: Path) -> None:
-    """שאריות של שמירה קודמת שמשתמש ה-VM החזיק — נמחקות (‏rmtree אינו עוקב
+    """שאריות של שמירה קודמת שמשתמש ה-VM החזיק — נמחקות (rmtree אינו עוקב
     אחרי symlinks) לפני ש-root כותב משהו בסביבה."""
     stale = workdir / "unpriv"
     if stale.is_symlink():
@@ -862,12 +862,12 @@ def capture_disk(host: Host, workdir: Path, out_dir: Path, progress: Progress,
                  on_partition: Callable[[int, int], None] | None = None, *,
                  user: VmUser, appliance: Callable[..., "Appliance"] = Appliance) -> dict:
     """קולט את `workdir/disk.raw` ל-`out_dir` — מחזיר את חלק המניפסט שנגזר
-    מהדיסק. הכיווץ נעשה על עותק (`shrink_view`) — ‏`disk.raw` אינו נכתב (‏#1491)."""
+    מהדיסק. הכיווץ נעשה על עותק (`shrink_view`) — `disk.raw` אינו נכתב (#1491)."""
     disk = workdir / "disk.raw"
     run_dir = workdir / "run"
     run_dir.mkdir(parents=True, exist_ok=True)
-    # ‏root בלבד כותב כאן (משתמש ה-VM מקבל תת-תיקיות חדשות בלבד, ‏fresh_user_dir),
-    # בלי תלות ב-umask של התהליך. משתמש ה-VM רק עובר כאן (‏#1535) — ‏QEMU פותח
+    # root בלבד כותב כאן (משתמש ה-VM מקבל תת-תיקיות חדשות בלבד, fresh_user_dir),
+    # בלי תלות ב-umask של התהליך. משתמש ה-VM רק עובר כאן (#1535) — QEMU פותח
     # את הדיסק כ-root לפני `-run-with`, והשמירה רצה כשהוא כבוי.
     for folder in (workdir, run_dir):
         if hasattr(os, "setxattr"):
@@ -955,7 +955,7 @@ def capture_disk(host: Host, workdir: Path, out_dir: Path, progress: Progress,
     finally:
         box.close()
 
-    # ‏#1649: שאריות משמירה שנקטעה (עותק, ‏loop-ים, ‏shrink.cow) מנקים **לפני** כל
+    # #1649: שאריות משמירה שנקטעה (עותק, loop-ים, shrink.cow) מנקים **לפני** כל
     # שימוש בדיסק — גם כשאין מה לכווץ, כי ה-`detach_all` שבסוף נכשל על loop
     # שהעותק הישן עוד מחזיק. אחרי האימות: לפני שהוא עבר, המארח אינו נגוע.
     clear_leftovers(host, workdir)
@@ -964,7 +964,7 @@ def capture_disk(host: Host, workdir: Path, out_dir: Path, progress: Progress,
     total = 0
     views = ExitStack()
     try:
-        # 2. הכיווץ — על העותק בלבד (‏#1491). ‏`reads` הוא מה ש-ntfsfix ו-partclone
+        # 2. הכיווץ — על העותק בלבד (#1491). `reads` הוא מה ש-ntfsfix ו-partclone
         # פותחים; בלי כיווץ אין עותק, ו-partclone קורא את הדיסק לקריאה בלבד.
         reads: Path | str = disk
         if todo:
@@ -987,7 +987,7 @@ def capture_disk(host: Host, workdir: Path, out_dir: Path, progress: Progress,
                                           "התמלא?) — דיסק ה-VM לא נכתב")
 
         # 3. הפריסה המצומצמת — `_shrink_compact`/`shrink_json_extra` של הסוכן, על
-        # קבצים שלנו בלבד (מספרים שאומתו). ‏parts.orig.txt = לפני הכיווץ.
+        # קבצים שלנו בלבד (מספרים שאומתו). parts.orig.txt = לפני הכיווץ.
         on_disk = {p["index"]: dict(p) for p in table}
         if shrunk:
             orig = run_dir / "parts.orig.txt"
@@ -1049,7 +1049,7 @@ def capture_disk(host: Host, workdir: Path, out_dir: Path, progress: Progress,
             detach_all(host, disk)
     mark_expandable(parts)
 
-    # 5. ‏boot_ca — `boot_ca_json` של הסוכן, כמשתמש ה-VM, על הקבצים שהורדו.
+    # 5. boot_ca — `boot_ca_json` של הסוכן, כמשתמש ה-VM, על הקבצים שהורדו.
     boot: dict = {}
     if boot_dir is not None:
         got = host.agent("boot_ca_json", "esp", run_dir=run_dir,
@@ -1103,7 +1103,7 @@ def compose_manifest(source: dict, captured: dict, *, new_id: str, name: str,
                 "folder": source.get("folder", ""), "created": now, "created_by": user,
                 **captured, "target_floor_bytes": None,
                 "version": version + 1, "previous_id": source.get("id"),
-                # ‏#1334: השושלת — מזהה הגרסה הראשונה; ‏origin — איך נוצרה הגרסה.
+                # #1334: השושלת — מזהה הגרסה הראשונה; origin — איך נוצרה הגרסה.
                 "lineage": lineage_of(source), "origin": "vm"}
     owner = bound_mac(source)
     if owner is not None:

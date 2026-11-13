@@ -115,7 +115,7 @@ def test_no_lease_by_the_cap_fails_and_names_the_seconds(tmp_path, images_root, 
     result = admin.put(f"{CONF}/eth1", json=DHCP_BODY).json()
     assert result["ok"] is False and result["verified"] is False
     assert result["mismatches"] == [
-        f"‏eth1: לא התקבלה כתובת מ-DHCP אחרי {netcfg_host.DHCP_LEASE_WAIT_S} שניות"]
+        f"\u200feth1: לא התקבלה כתובת מ-DHCP אחרי {netcfg_host.DHCP_LEASE_WAIT_S} שניות"]
     assert machine.now >= netcfg_host.DHCP_LEASE_WAIT_S        # it did wait
     assert machine.reads > 1
     events = [r["event"] for r in app.state.ctx.conn.execute(
@@ -227,4 +227,4 @@ def test_the_dcui_apply_without_a_lease_says_how_long_it_waited(tmp_path):
 def test_mismatches_without_a_wait_keeps_the_old_words():
     cfg = netcfg.NetConfig("eth1", mode=netcfg.MODE_DHCP)
     state = netcfg_host.LiveState(True, {"eth1": []})
-    assert netcfg_host.mismatches(cfg, state) == ["‏eth1 לא קיבל שום כתובת מ-DHCP"]
+    assert netcfg_host.mismatches(cfg, state) == ["\u200feth1 לא קיבל שום כתובת מ-DHCP"]

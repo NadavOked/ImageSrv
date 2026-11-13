@@ -3,15 +3,15 @@
 הדיסק הוא מקור האמת לאימג'ים (תיקייה + manifest) — הם **אינם** כאן: הם
 מועתקים ב-rsync כתיקיות, ומאומתים ב-`tools/verify-images.py`. כאן: ה-DB
 (מכונות, משתמשים, סודות TOTP, מיקומי אחסון) דרך
-‏`sqlite3.Connection.backup()` — עותק עקבי גם תחת WAL, בניגוד ל-`cp` בזמן
+`sqlite3.Connection.backup()` — עותק עקבי גם תחת WAL, בניגוד ל-`cp` בזמן
 ריצה (R40 #8) — ושאר `data_dir` (תעודת הקונסולה, netcfg,
-known_hosts). ‏`MANIFEST.txt` אומר איזו גרסה ומתי; ‏`SHA256SUMS` על כל
+known_hosts). `MANIFEST.txt` אומר איזו גרסה ומתי; `SHA256SUMS` על כל
 קובץ. הארכיון **מכיל סודות** — מי שמוריד אותו מקבל אזהרה בקונסולה.
 
-‏**‏`console_secret` אינו בגיבוי** (#2424, הכרעת נדב 04/11): מי שקורא את שיתוף
+**`console_secret` אינו בגיבוי** (#2424, הכרעת נדב 04/11): מי שקורא את שיתוף
 הגיבוי היה חותם בו עוגיית admin בלי סיסמה ובלי MFA. העותק נמחק ממנו ו-`VACUUM`
 (כדי שהבייטים לא יישארו בדף פנוי); שרת שעולה על DB משוחזר מקבל סוד חדש
-מ-`db._initialize` (‏`INSERT OR IGNORE`), וכל מי שהיה מחובר נכנס מחדש.
+מ-`db._initialize` (`INSERT OR IGNORE`), וכל מי שהיה מחובר נכנס מחדש.
 """
 
 from __future__ import annotations
@@ -26,15 +26,15 @@ from pathlib import Path
 
 #: קבצים שאינם נכנסים לארכיון: **כל** קובץ ששמו מתחיל ב-``imagesrv.db`` — ה-DB
 #: עצמו (נכנס רק דרך `consistent_db_copy`, בלי ``console_secret``), קובצי ה-WAL שלו,
-#: ועותק ה-DB שלפני עדכון (``imagesrv.db.pre-upgrade`` ו-``.tmp`` שלו, ‏#1894) שנושא
+#: ועותק ה-DB שלפני עדכון (``imagesrv.db.pre-upgrade`` ו-``.tmp`` שלו, #1894) שנושא
 #: את הסוד כמות שהוא (#2504). תבנית ולא רשימת שמות: עותק DB שיתווסף מחר ל-data_dir
-#: לא ייכנס לגיבוי בלי שאיש החליט על כך. ‏`tools/backup-server.sh` מדלג על אותה תבנית.
-#: ומה שאינו הגדרה (בדיקות אחסון זמניות; ‏`branding/` — לוגו מוסד שהועלה לפני
-#: שהיכולת הוסרה, #1302 — שארית שאיש אינו קורא). ‏`backups/` (#1956) — תיקיית גיבויי המסד
+#: לא ייכנס לגיבוי בלי שאיש החליט על כך. `tools/backup-server.sh` מדלג על אותה תבנית.
+#: ומה שאינו הגדרה (בדיקות אחסון זמניות; `branding/` — לוגו מוסד שהועלה לפני
+#: שהיכולת הוסרה, #1302 — שארית שאיש אינו קורא). `backups/` (#1956) — תיקיית גיבויי המסד
 #: שעל כונן השרת: עותקי DB, ולכן לא בארכיון, מאותה סיבה כמו ``imagesrv.db*``.
 DB_PREFIX = "imagesrv.db"
 SKIP_DIRS = {"storage-test", "storage", "branding", "backups"}
-#: ‏#2424: ``server.console.auth.SECRET_KEY`` — חותם העוגיות, שאינו נכנס לשום גיבוי.
+#: #2424: ``server.console.auth.SECRET_KEY`` — חותם העוגיות, שאינו נכנס לשום גיבוי.
 SECRET_SETTING = "console_secret"
 BACKUP_WARNING = "מכיל סודות: סיסמאות מגובבות, סודות MFA, מפתח התעודה. לשמור כמו סיסמה."
 
@@ -45,12 +45,12 @@ def _integrity(conn: sqlite3.Connection) -> str:
 
 
 def _drop_console_secret(copy: sqlite3.Connection) -> None:
-    """‏#2424: הסוד יוצא מהעותק — לא מהמקור — ו-`VACUUM` בונה את הקובץ מחדש, כך
+    """#2424: הסוד יוצא מהעותק — לא מהמקור — ו-`VACUUM` בונה את הקובץ מחדש, כך
     שה-hex אינו נשאר בדף שהשורה התפנתה ממנו. DB בלי טבלת `settings` (בדיקות) — כמות שהוא.
 
-    ‏#2460 (הכרעת נדב 06/11): באותו מעבר יוצאים גם הסודות של מיקומי האחסון — סיסמת SMB
-    וסוד CHAP (‏`storage.locations.SECRET_KEYS`) — מ-`params_json` של כל מיקום. אחרי שחזור
-    המיקום מבקש אותם מחדש (‏`secret_missing`). ‏`params_json` שאינו JSON נקרא — אין דרך לדעת
+    #2460 (הכרעת נדב 06/11): באותו מעבר יוצאים גם הסודות של מיקומי האחסון — סיסמת SMB
+    וסוד CHAP (`storage.locations.SECRET_KEYS`) — מ-`params_json` של כל מיקום. אחרי שחזור
+    המיקום מבקש אותם מחדש (`secret_missing`). `params_json` שאינו JSON נקרא — אין דרך לדעת
     מה יש בו, ולכן הוא אינו נשמר (`{}`); מיקום כזה ממילא לא עבד (`params_of` מחזיר `{}`)."""
     import json   # noqa: PLC0415
     from server.storage.locations import SECRET_KEYS   # noqa: PLC0415 — מקור אחד לרשימת הסודות
@@ -81,9 +81,9 @@ def _drop_console_secret(copy: sqlite3.Connection) -> None:
 def consistent_db_copy(conn: sqlite3.Connection) -> bytes:
     """עותק עקבי של ה-DB כבייטים, דרך ה-backup API של sqlite (לא cp).
 
-    ‏`db.Database` הוא עטיפה לכל-תהליכון — הגיבוי צריך את החיבור הגולמי.
-    היעד הוא קובץ זמני ולא `:memory:`: ‏backup מעתיק גם את כותרת ה-WAL של
-    המקור, ועותק כזה בזיכרון אינו נפתח; על קובץ ‏`journal_mode=DELETE`
+    `db.Database` הוא עטיפה לכל-תהליכון — הגיבוי צריך את החיבור הגולמי.
+    היעד הוא קובץ זמני ולא `:memory:`: backup מעתיק גם את כותרת ה-WAL של
+    המקור, ועותק כזה בזיכרון אינו נפתח; על קובץ `journal_mode=DELETE`
     מיישר את הכותרת כך שהארכיון נפתח בכל מקום, גם ב-`sqlite3` מהשורה."""
     raw = getattr(conn, "connection", conn)
     with tempfile.TemporaryDirectory(prefix="imagesrv-backup-") as tmp:
@@ -93,7 +93,7 @@ def consistent_db_copy(conn: sqlite3.Connection) -> bytes:
             raw.backup(target)
             target.execute("PRAGMA journal_mode=DELETE")
             _drop_console_secret(target)
-            # ‏integrity_check על העותק הוא הראיה החיובית שהגיבוי קריא,
+            # integrity_check על העותק הוא הראיה החיובית שהגיבוי קריא,
             # לא רק שהוא נכתב (עיקרון 5).
             verdict = _integrity(target)
             if verdict != "ok":
@@ -105,8 +105,8 @@ def consistent_db_copy(conn: sqlite3.Connection) -> bytes:
 
 def build_archive(conn: sqlite3.Connection, data_dir: Path, version: str | None,
                   now: datetime | None = None) -> tuple[bytes, str]:
-    """‏tar.gz של ההגדרות: ‏`imagesrv.db` (עותק עקבי), שאר `data_dir`,
-    ‏`MANIFEST.txt`, ‏`SHA256SUMS`. מחזיר (bytes, שם קובץ)."""
+    """tar.gz של ההגדרות: `imagesrv.db` (עותק עקבי), שאר `data_dir`,
+    `MANIFEST.txt`, `SHA256SUMS`. מחזיר (bytes, שם קובץ)."""
     now = now or datetime.now(timezone.utc)
     stamp = now.strftime("%Y%m%d-%H%M%S")
     name = f"imagesrv-settings-{stamp}.tar.gz"
@@ -123,7 +123,7 @@ def build_archive(conn: sqlite3.Connection, data_dir: Path, version: str | None,
             sums.append(f"{hashlib.sha256(payload).hexdigest()}  {arcname}")
 
         add_bytes("data/imagesrv.db", db_bytes)
-        # ‏#2426: ‏symlink אינו נארז — הוא היה מכניס לארכיון תוכן מחוץ ל-data_dir.
+        # #2426: symlink אינו נארז — הוא היה מכניס לארכיון תוכן מחוץ ל-data_dir.
         for path in sorted(p for p in data_dir.rglob("*") if p.is_file() and not p.is_symlink()):
             rel = path.relative_to(data_dir)
             if rel.name.startswith(DB_PREFIX) or rel.parts[0] in SKIP_DIRS:

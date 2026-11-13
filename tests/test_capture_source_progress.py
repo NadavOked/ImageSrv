@@ -1,11 +1,11 @@
-"""‏#435 — פס ההתקדמות של קליטה: מכנה אמיתי, או "לא ידוע" בגלוי.
+"""#435 — פס ההתקדמות של קליטה: מכנה אמיתי, או "לא ידוע" בגלוי.
 
 בקליטה ה-`pv` סופר בייטים **דחוסים** (אחרי zstd), ואת הגודל הדחוס אי
 אפשר לדעת מראש — ולכן `bytes_total` נשאר אפס. הבאג לא היה האפס, אלא
 שהאפס **הוצג כאחוז**: ``bytes_total = 0`` רונדר בדיוק כמו ``width:0%``,
 ומפעיל ראה קליטה תקינה של 20 דקות עם פס ריק (עיקרון 5, בצורתו התצוגתית).
 
-המכנה הכן קיים — בציר הלא-דחוס. ‏partclone יודע כמה בלוקים במחיצה
+המכנה הכן קיים — בציר הלא-דחוס. partclone יודע כמה בלוקים במחיצה
 ומדפיס אחוז ל-`-L logfile`. הסוכן קורא אותו ומדווח `source_progress`
 נפרד (מחיצה, בלוקים-שנקראו, בלוקים-בסך), והשרת מעביר אותו לקונסולה.
 **"לא הצלחנו לקרוא" מדווח כהיעדר** — לא כאפס — והקונסולה מציגה אז פס
@@ -15,7 +15,7 @@
 * השרת — הדיווח נשמר ל-`tasks.targets_json` ו-`/api/console/tasks`
   מוציא `source_progress` למעלה, או `None` כשאין. נבדק בווינדוס.
 * הסוכן — `build_progress` גוזר את המכנה מ-`partclone.log`. נבדק תחת
-  ‏`busybox ash` (מדולג על תחנת ווינדוס — הסוכן רץ תחת busybox, לא awk
+  `busybox ash` (מדולג על תחנת ווינדוס — הסוכן רץ תחת busybox, לא awk
   של המכונה).
 """
 
@@ -69,8 +69,8 @@ def test_a_capture_report_carrying_source_progress_reaches_the_console(server):
 
 
 def test_a_capture_without_a_denominator_reports_absent_not_zero(server):
-    """‏`bytes_total = 0` ו-`source_progress` חסר → הקונסולה מקבלת
-    ‏`None` בשניהם. זה מה שמונע את הקיפול ל-`0%` (עיקרון 5, ה-DoD)."""
+    """`bytes_total = 0` ו-`source_progress` חסר → הקונסולה מקבלת
+    `None` בשניהם. זה מה שמונע את הקיפול ל-`0%` (עיקרון 5, ה-DoD)."""
     mac = setup_build_machine(server)
     task_id = make_task(server, mac).json()["id"]
     report = _report(task_id, mac, {
@@ -101,8 +101,8 @@ requires_busybox = requires_native(
     ("busybox", BUSYBOX), posix=True,
     why="הסוכן רץ תחת busybox ash, לא תחת awk של המכונה")
 
-#: לוג partclone אמיתי באמצע קריאת מחיצה. הפורמט — ‏`Starting to clone
-#: device (/dev/sdaN)`, ‏`Space in use: ... = N Blocks`, ‏`Completed: P%`
+#: לוג partclone אמיתי באמצע קריאת מחיצה. הפורמט — `Starting to clone
+#: device (/dev/sdaN)`, `Space in use: ... = N Blocks`, `Completed: P%`
 #: — הוא זה ש-FOG/Clonezilla קוראים אף הם. ⚠️ **הפורמט המדויק אומת מול
 #: partclone אמיתי במעבדה** (ראה דוח המשימה): אם גרסה עתידית תשנה שורה,
 #: הפרסר מחזיר היעדר, והקונסולה נופלת לפס בלתי-מוגדר — לא לאחוז שגוי.
@@ -121,7 +121,7 @@ Elapsed: 00:00:03, Remaining: 00:00:22, Completed:  11.80%, Rate: 2.10GB/min
 def _build_progress(tmp_path, log=None, who="task", partclone=True):
     """מריץ את `build_progress` האמיתי מ-`progress.sh` ומחזיר את ה-JSON.
 
-    ‏`who="task"` = קליטה (task id), ‏`who="session"` = סבב כיתה. רק
+    `who="task"` = קליטה (task id), `who="session"` = סבב כיתה. רק
     לקליטה אמור לצאת `source_progress`.
     """
     run = tmp_path / "run"
@@ -146,13 +146,13 @@ def test_build_progress_emits_the_partclone_block_denominator(tmp_path):
     sp = body["targets"][0]["source_progress"]
     assert sp["partition"] == 3
     assert sp["blocks_total"] == 1665979
-    # ‏11.80% מתוך 1,665,979 = 196,585. הבלוקים, לא הבייטים הדחוסים.
+    # 11.80% מתוך 1,665,979 = 196,585. הבלוקים, לא הבייטים הדחוסים.
     assert sp["blocks_read"] == int(0.118 * 1665979)
 
 
 @requires_busybox
 def test_a_partition_still_reading_its_super_block_reports_no_progress(tmp_path):
-    """‏`Starting to clone` נכתב, אבל אין עדיין `Completed:` — היעדר,
+    """`Starting to clone` נכתב, אבל אין עדיין `Completed:` — היעדר,
     לא אפס. זה מה שמונע פס שקופץ ל-0% ברגע שהמחיצה נפתחת."""
     early = "\n".join(PCL_LOG.splitlines()[:-1]) + "\n"
     body = _build_progress(tmp_path, early)
@@ -173,7 +173,7 @@ def test_a_new_partition_never_inherits_the_previous_block_percent(tmp_path):
 
 @requires_busybox
 def test_a_round_report_never_carries_source_progress(tmp_path):
-    """‏`source_progress` הוא ציר הקליטה בלבד. בסבב כיתה/חדר `bytes_total`
+    """`source_progress` הוא ציר הקליטה בלבד. בסבב כיתה/חדר `bytes_total`
     אמיתי, ומכנה-בלוקים היה גובר עליו בטעות (guistate.sh). גם כשקובץ
     לוג נוכח — דיווח סבב אינו נושא אותו."""
     body = _build_progress(tmp_path, PCL_LOG, who="session")
@@ -183,12 +183,12 @@ def test_a_round_report_never_carries_source_progress(tmp_path):
 # --- #1254: האחוז של partclone יוצא ל-stderr, לא ל-`-L` ----------------------
 #
 # נמדד על ברזל 10/10 (קליטה tsk_749e מ-HP-BUILD): דף האימג'ים הראה "נקראו
-# בייטים · הסך לא ידוע" אחרי 50.8GB — `source_progress` לא הגיע. ‏partclone
-# כותב ל-`-L` את שורות הכותרת (‏`Starting to clone`, ‏`Space in use`), ואת
-# שורת ההתקדמות (‏`\rElapsed: … Completed: P%`) הוא מדפיס ל-**stderr** — שם
+# בייטים · הסך לא ידוע" אחרי 50.8GB — `source_progress` לא הגיע. partclone
+# כותב ל-`-L` את שורות הכותרת (`Starting to clone`, `Space in use`), ואת
+# שורת ההתקדמות (`\rElapsed: … Completed: P%`) הוא מדפיס ל-**stderr** — שם
 # FOG קורא אותה. הסוכן שלח את ה-stderr ליומן הכללי, ולכן לפרסר לא הגיע
 # אחוז. ⚠️ זו מסקנה מהקוד ומהסימפטום, לא מדידה של partclone חי — האימות
-# הוא קליטה על ברזל (‏needs:metal).
+# הוא קליטה על ברזל (needs:metal).
 
 PCL_HEADER = "\n".join(PCL_LOG.splitlines()[:-1]) + "\n"
 #: ה-stderr כמו שהוא: ריפוד ו-`\r` לפני כל עדכון, בלי שורה חדשה ביניהם.
@@ -226,7 +226,7 @@ def test_the_percent_partclone_prints_to_stderr_is_the_one_reported(tmp_path):
 
 @requires_busybox
 def test_the_partition_is_numbered_k_of_m_from_the_captured_table(tmp_path):
-    """‏`parts.txt` היא הטבלה שהקליטה עוברת עליה (`idx|guid|…`). ‏K הוא
+    """`parts.txt` היא הטבלה שהקליטה עוברת עליה (`idx|guid|…`). K הוא
     המקום של המחיצה בה, לא האינדקס — טבלה 1,2,5 היא "3 מתוך 3", לא "5 מתוך 3"."""
     parts = "1|g|u|2048|204800\n2|g|u|206848|32768\n3|g|u|239616|104857600\n4|g|u|105097216|1024000\n"
     sp = _build_progress_with(tmp_path, PCL_HEADER, PCL_STDERR, parts)["source_progress"]
@@ -244,7 +244,7 @@ def test_without_the_table_the_percent_still_goes_out_but_k_of_m_does_not(tmp_pa
     assert sp["blocks_total"] == 1665979
 
 
-#: ‏partclone מזויף שמתנהג כמו האמיתי בשני הערוצים: כותרת ל-`-L`, אחוז ל-stderr.
+#: partclone מזויף שמתנהג כמו האמיתי בשני הערוצים: כותרת ל-`-L`, אחוז ל-stderr.
 PARTCLONE_TWO_CHANNELS = (
     '#!/bin/sh\n'
     'log=""\n'
@@ -258,7 +258,7 @@ PARTCLONE_TWO_CHANNELS = (
 
 
 def test_a_real_capture_reports_the_stderr_percent_and_k_of_m(tmp_path):
-    """‏`capture_disk` האמיתי עם partclone דו-ערוצי, ואחריו `build_progress`
+    """`capture_disk` האמיתי עם partclone דו-ערוצי, ואחריו `build_progress`
     של אותה ריצה: האחוז מה-stderr מגיע לדיווח, עם "מחיצה 1 מתוך 1"."""
     from test_capture_refusals import CURL_SINK, ONE_PARTITION, capture_run
     box, run, out = capture_run(tmp_path, stubs={

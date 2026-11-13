@@ -22,6 +22,7 @@ function ctx({admin = true, role = 'cloner', state = null, fail = null, secondar
     api: async () => { if (fail) throw new Error(fail); return state; },
     post: async (url, body) => { calls.posts.push([url, body]); if (fail) throw new Error(fail); return {}; },
     loadSettingsData: async () => { calls.reloads += 1; }, loadMachines: async () => {},
+    guarded: (_name, fn) => fn,   // console-core.js (#2840): the double-click guard is not what this file tests
     findMachine: (mac) => ({mac}), setDrawerBody: (h) => calls.drawer.push(h), machineDrawerHtml: () => 'drawer',
   });
   vm.runInContext(js, c);

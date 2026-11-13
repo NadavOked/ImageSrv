@@ -13,6 +13,9 @@
 # כלי שיש לו ממצאים לא נכנס כחוסם ולא מוסתר ב-`continue-on-error`
 # (שהיה הופך אדום ל"נראה כמו הצלחה", עיקרון 5): הוא נשאר בחוץ עד שהוא נקי.
 #
+# חוסם גם: ‏`PLE2502` (תווי בקרת-כיווניות: ‏RLM/LRM/‏isolates) על כל ה-`.py`
+# **כולל `tests/`** — ‏#199, הכרעת נדב (מיון 07/09): ההערות וה-docstrings נקיים מהם,
+# ובמחרוזות הם נכתבים כ-escape של פייתון (אותו ערך, לא תו בלתי-נראה בקוד). אפס ממצאים.
 # `--isolated`: אין קובץ תצורה של ruff בריפו (‏pyproject.toml מצהיר במכוון
 # שאין בו הגדרות כלים), וערכי ברירת המחדל של ruff נודדים עם הגרסה. כל מה
 # שקובע את סט החוקים כתוב כאן בשורת הפקודה, והגרסה מוצמדת.
@@ -68,3 +71,16 @@ jobs:
           fi
           ruff check "${flags[@]}" --output-format=github .
           echo "ruff F (tests/ excluded): $files files, no findings" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: ruff PLE2502 -- bidi control characters, tests/ included (#199)
+        run: |
+          set -euo pipefail
+          flags=(--isolated --target-version py312 --select PLE2502)
+          files=$(ruff check "${flags[@]}" --show-files | wc -l)
+          echo "python files checked: $files"
+          if [ "$files" -lt 1 ]; then
+            echo "::error::ruff found no python files -- the check did not run"
+            exit 1
+          fi
+          ruff check "${flags[@]}" --output-format=github .
+          echo "ruff PLE2502 (tests/ included): $files files, no findings" >> "$GITHUB_STEP_SUMMARY"

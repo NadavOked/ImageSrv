@@ -1,17 +1,17 @@
-"""‏#1269 שלב 2 — הגואי הנייטיב: "להוסיף דרייברים" במסך החדר והפצה ישירה.
+"""#1269 שלב 2 — הגואי הנייטיב: "להוסיף דרייברים" במסך החדר והפצה ישירה.
 
-הצד של ה-C, לפי המוקאפ (‏`docs/design/apple-mockups/native-full.html`,
-‏drvBlock/dtag/dmap): מתג כבוי כברירת מחדל; רשימת הדגמים מקובץ המצב
-(‏`driver_models=` / `driver_model=`, החוזה ב-`test_room_drivers_gui_contract.py`);
+הצד של ה-C, לפי המוקאפ (`docs/design/apple-mockups/native-full.html`,
+drvBlock/dtag/dmap): מתג כבוי כברירת מחדל; רשימת הדגמים מקובץ המצב
+(`driver_models=` / `driver_model=`, החוזה ב-`test_room_drivers_gui_contract.py`);
 שני מצבים — "כל הדיסקים שנבחרו" (דגם אחד) או "לבחור דיסקים", שבו לחיצה על
 תגית של דיסק מחילה את "דגם לסימון" ולחיצה נוספת — "בלי"; שורת סיכום; הרשומה
-‏`drivers=` בפתיחת הסבב; ותוצאת הנחת הדרייברים לכל מגירה בסבב החי.
+`drivers=` בפתיחת הסבב; ותוצאת הנחת הדרייברים לכל מגירה בסבב החי.
 
 **אין "אוטומטי"**: החומרה שזוהתה היא של המשכפל, לא של המכונה שתקבל את
 הדיסק — אין לזה בסיס. רק דגם מפורש או "בלי".
 
-בווינדוס אין מהדר: טסטי המקור רצים כאן, טסטי הרינדור (‏`--png`) על
-ה-Testrunner/מעבדה (‏`requires_native`).
+בווינדוס אין מהדר: טסטי המקור רצים כאן, טסטי הרינדור (`--png`) על
+ה-Testrunner/מעבדה (`requires_native`).
 
 **בקרה שלילית:** על הבסיס אין `driver_model` בפרסר, אין `drivers=` ברשומה,
 אין כרטיס `room-drivers` ואין קובץ `screens_drivers.c` — כל הטסטים כאן נופלים.
@@ -76,7 +76,7 @@ def test_the_parser_reads_the_models_and_says_unread_by_default():
     assert "s->driver_models_read = -1;" in parse, "absent = not read, never 'no models'"
     assert 'KEY("driver_models")' in parse and 'KEY("driver_model")' in parse
     # שדות 9–10 של room_drawer: מצב ופירוט; מצב לא מוכר אינו מוצג כאילו הונח.
-    # ‏#704: שדה 11 (שם החריץ) נוסף אחריהם, ו-#432 שדה 12 (מצב הקישור) — עדיין אופציונלי מ-8.
+    # #704: שדה 11 (שם החריץ) נוסף אחריהם, ו-#432 שדה 12 (מצב הקישור) — עדיין אופציונלי מ-8.
     # #1366: a 13th field, the CRC count; #1495: 14-15, the drawer and the connection
     # #1386: 18-20 = dev, cancel text, done; #1331: 21-23 = drivers.boot; T8: 24-26 = drivers.linux; #1742: 27 = smart reason
     assert "int nf = split(val, f, 27);" in parse and "if (nf < 8) continue;" in parse
@@ -93,7 +93,7 @@ def test_opening_emits_drivers_only_when_the_switch_is_on():
     for fn in (lib, direct):
         assert 'emit_kv("drivers", drivers)' in fn
         assert "room_drv_active(a)" in fn
-    # בסבב מהספרייה הבדיקה של המתג קודמת לרשומה. ‏#1275: ‏slots= נשלח בכל בחירה,
+    # בסבב מהספרייה הבדיקה של המתג קודמת לרשומה. #1275: slots= נשלח בכל בחירה,
     # עם דרייברים או בלי (test_room_target_slots_1275.py) — רק drivers= תלוי במתג.
     assert lib.index("room_drv_active(a)") < lib.index('emit_kv("slots", slots)')
 
@@ -195,7 +195,7 @@ def _room_state(tmp_path: Path, name: str, models: int, drv: str = "") -> Path:
 @GUI_BUILD
 def test_the_switch_is_drawn_on_only_when_the_library_has_models(tmp_path):
     """אותו מצב פעמיים, ההבדל היחיד הוא `driver_models=2` מול `=0`. בכרטיס
-    ‏`room-drivers` המתג דלוק — מסילה בצבע הפעולה, הבורר והמקטעים — רק כשיש
+    `room-drivers` המתג דלוק — מסילה בצבע הפעולה, הבורר והמקטעים — רק כשיש
     דגמים; עם 0 הוא מושבת עם הסיבה, ואין בו צבע פעולה."""
     binary = _build_gui(tmp_path)
     _render(binary, _room_state(tmp_path, "two", 2), tmp_path / "two")

@@ -1,20 +1,20 @@
-"""‏#1947: קפיצת שעון קיר בתהליך השרת — זיהוי, וכיול מחדש של חותמות הסבבים.
+"""#1947: קפיצת שעון קיר בתהליך השרת — זיהוי, וכיול מחדש של חותמות הסבבים.
 
-נמדד במעבדה (‏22/10, ‏QA-G16): השעון של השרת זז 3 שעות קדימה באמצע גל,
-וכל מכונה בגל "אבדה" מיד — ‏`client_lost`, ואחריו ‏`room_failed 0/2`. המכונות
+נמדד במעבדה (22/10, QA-G16): השעון של השרת זז 3 שעות קדימה באמצע גל,
+וכל מכונה בגל "אבדה" מיד — `client_lost`, ואחריו `room_failed 0/2`. המכונות
 דיווחו כל הזמן; מה שהשתנה הוא רק השעון. כל טיימר בנתיב הסבב משווה את
-שעון הקיר לחותמת **שמורה** (‏`updated_at`, ‏`started_at`, ‏`created_at`,
-‏`last_seen`), וקפיצה מזיזה את "עכשיו" בלי להזיז את החותמות.
+שעון הקיר לחותמת **שמורה** (`updated_at`, `started_at`, `created_at`,
+`last_seen`), וקפיצה מזיזה את "עכשיו" בלי להזיז את החותמות.
 
 **הגלאי:** ההפרש בין שעון הקיר ל-``time.monotonic()`` קבוע כל עוד איש אינו
-מזיז את השעון (‏NTP slew איטי זז בשברירי שנייה, וההשוואה היא מול הדגימה
+מזיז את השעון (NTP slew איטי זז בשברירי שנייה, וההשוואה היא מול הדגימה
 הקודמת ולכן אינו מצטבר). שינוי שלו מעל `JUMP_SECONDS` בין שתי דגימות הוא
 קפיצה, וגודלו הוא גודל הקפיצה. השהיית VM נראית כאן כקפיצה קדימה — ובצדק:
 השרת לא שמע איש בזמן הזה, ואין לזה משמעות של "המכונות שתקו".
 
 **הכיול:** החותמות של הסבבים הפעילים מוזזות לבסיס הזמן החדש (`rebase`),
-וכך כל הטיימרים שקוראים אותן — אובדן, ‏rewake, גיל הגל, ההמתנה לשאלה
-למפעיל (‏`last_seen`, ‏`started_at`), ‏`last_join_at` — נשארים נכונים בלי שכל אחד מהם יכיר את הקפיצה.
+וכך כל הטיימרים שקוראים אותן — אובדן, rewake, גיל הגל, ההמתנה לשאלה
+למפעיל (`last_seen`, `started_at`), `last_join_at` — נשארים נכונים בלי שכל אחד מהם יכיר את הקפיצה.
 
 הגלאי שייך ל-`SessionStore` (תהליך = runtime אחד = store אחד); בבדיקות כל
 שרת מקבל גלאי משלו, ולכן קפיצה מזויפת בטסט אחד אינה זולגת לבא אחריו.
@@ -43,7 +43,7 @@ class Detector:
     """הדגימה האחרונה של (קיר − מונוטוני), והנעילה שמסדרת זיהוי + כיול.
 
     הנעילה מוחזקת לאורך `observe` **וגם** הכיול שאחריו: תהליכון אחר
-    (hello, ‏overview, שעון הרקע) שנכנס ל-`tick` באותו רגע ממתין עד שהחותמות
+    (hello, overview, שעון הרקע) שנכנס ל-`tick` באותו רגע ממתין עד שהחותמות
     כבר בבסיס החדש, ולא מפקיע מכונה מול חותמת ישנה."""
 
     def __init__(self) -> None:
@@ -102,7 +102,7 @@ def rebase(conn: sqlite3.Connection, store, step: float, now: datetime) -> list[
     """מזיז ב-`step` שניות את החותמות שהטיימרים של הסבבים הפעילים קוראים.
 
     כל עדכון מותנה בערך שנקרא: דיווח שהגיע בינתיים כבר כתב חותמת בבסיס
-    החדש, והוא מנצח. הכול ברצף אחד בתוך `writing` (‏#54, ‏#525).
+    החדש, והוא מנצח. הכול ברצף אחד בתוך `writing` (#54, #525).
     מחזיר את מזהי הסבבים שכוילו."""
     sessions = conn.execute(
         "SELECT id, created_at, started_at, last_join_at FROM sessions"
@@ -113,7 +113,7 @@ def rebase(conn: sqlite3.Connection, store, step: float, now: datetime) -> list[
         f"SELECT session_id, mac, updated_at FROM session_members WHERE session_id IN ({marks})"
         " AND state NOT IN ('done', 'failed', 'partial', 'lost')", ids).fetchall() if ids else []
     devices = conn.execute("SELECT mac, last_seen FROM net_devices").fetchall()
-    # ‏#2905: ‏`silent_tasks` מודד שקט של משימה מ-`updated_at` שלה.
+    # #2905: `silent_tasks` מודד שקט של משימה מ-`updated_at` שלה.
     tasks = conn.execute("SELECT id, updated_at FROM tasks WHERE state = 'running'").fetchall()
     now_epoch = store.now()
     with writing(conn):
@@ -150,7 +150,7 @@ def guard(conn: sqlite3.Connection, store, now: datetime) -> float | None:
     """נקרא בראש כל דופק שמחשב זמן מול חותמת שמורה. מחזיר את הקפיצה, אם הייתה.
 
     קפיצה נרשמת ביומן (`clock_jump`) **תמיד** — גם בלי סבב פעיל זו ראיה
-    שהמפעיל צריך לראות (סוללת BIOS, ‏snapshot, סנכרון מהמארח)."""
+    שהמפעיל צריך לראות (סוללת BIOS, snapshot, סנכרון מהמארח)."""
     found = detector_for(store)
     with found.lock:
         step = found.observe(now)

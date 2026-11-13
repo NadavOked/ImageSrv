@@ -1,12 +1,12 @@
-"""‏#972: מה שמגירת האימג' בקונסולה צריכה, ושלא היה לו מקור ב-``/api/console``.
+"""#972: מה שמגירת האימג' בקונסולה צריכה, ושלא היה לו מקור ב-``/api/console``.
 
 שלושה נתונים, כל אחד עם "לא נמדד" נפרד מ"אפס" (עיקרון 5):
 
-1. ‏``GET /api/console/images/{id}`` — המניפסט הציבורי (בלי ``_dir``).
-   ‏``/api/v1`` נשאר של הסוכן בלבד (#738).
-2. ‏``last_scrub`` ב-``/images`` — תוצאת האימות האחרונה, שמורה ב-DB
-   (אין לה ייצוג טבעי כקובץ, עיקרון 3). ‏``null`` = לא אומת מאז שנכנס.
-3. ‏``rounds_30d`` ב-``/images`` — כמה סבבים השתמשו באימג' ב-30 הימים
+1. ``GET /api/console/images/{id}`` — המניפסט הציבורי (בלי ``_dir``).
+   ``/api/v1`` נשאר של הסוכן בלבד (#738).
+2. ``last_scrub`` ב-``/images`` — תוצאת האימות האחרונה, שמורה ב-DB
+   (אין לה ייצוג טבעי כקובץ, עיקרון 3). ``null`` = לא אומת מאז שנכנס.
+3. ``rounds_30d`` ב-``/images`` — כמה סבבים השתמשו באימג' ב-30 הימים
    האחרונים: סבבי ``sessions`` **וגם** סבבי חדר השיכפולים. סבב חדר הוא
    סבב אחד גם כשהוא רץ בכמה גלים — וכל גל הוא שורה ב-``sessions``.
 """
@@ -82,7 +82,7 @@ def test_the_console_serves_the_public_manifest_without_internal_paths(server, i
 
 
 def test_the_manifest_keeps_null_as_null_and_passes_boot_ca_through(server, images_root):
-    """‏``used_bytes: null`` (לא נמדד) אינו הופך ל-0, ו-``boot_ca``/‏``shrunk_from_bytes``
+    """``used_bytes: null`` (לא נמדד) אינו הופך ל-0, ו-``boot_ca``/``shrunk_from_bytes``
     מגיעים כמו שנכתבו — הקונסולה היא זו שמתרגמת, לא השרת."""
     manifest = json.loads(json.dumps(MANIFEST_256))
     manifest.update(id="img_0dd123", name="Unmeasured",
@@ -138,7 +138,7 @@ def test_a_drifted_image_is_saved_as_drift_and_a_later_scrub_replaces_it(server,
 
 def test_the_scrub_result_lives_in_the_database_file(server, tmp_path):
     """שמור = נקרא מחיבור אחר לאותו קובץ, כמו אחרי אתחול שרת — לא מזיכרון
-    התהליך ולא מזיכרון הדפדפן (עיקרון 3: ‏DB, כי אין לזה ייצוג כקובץ)."""
+    התהליך ולא מזיכרון הדפדפן (עיקרון 3: DB, כי אין לזה ייצוג כקובץ)."""
     server["admin"].post("/api/console/images/img_7f3a91/scrub")
     raw = sqlite3.connect(tmp_path / "data" / "imagesrv.db")
     try:
@@ -164,7 +164,7 @@ def test_deleting_an_image_forgets_its_scrub(server, images_root, tmp_path):
 
 
 def test_an_image_in_use_is_still_refused_and_keeps_its_scrub(server, images_root):
-    """‏#784 לא נשבר: 409, והתוצאה השמורה לא נמחקת על מחיקה שלא קרתה."""
+    """#784 לא נשבר: 409, והתוצאה השמורה לא נמחקת על מחיקה שלא קרתה."""
     admin, ctx = server["admin"], server["ctx"]
     admin.post("/api/console/images/img_7f3a91/scrub")
     _group(ctx.conn, "g1", "classroom")
@@ -256,7 +256,7 @@ def test_classroom_rounds_inside_the_window_are_counted(server):
 
 
 def test_a_room_round_counts_once_however_many_waves_it_ran(server):
-    """סבב חדר עם שלושה גלים = שלוש שורות ``sessions`` (‏``ROOM``, קבוצת
+    """סבב חדר עם שלושה גלים = שלוש שורות ``sessions`` (``ROOM``, קבוצת
     המשכפלים) + שורה אחת ב-``room_rounds``. הספירה היא 1."""
     conn = server["ctx"].conn
     _room_round(conn, "room_1", "img_2c8e04", _ago(3))

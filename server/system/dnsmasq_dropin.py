@@ -1,26 +1,26 @@
-"""‏#2174: הניסיון החוזר של dnsmasq (‏#1816) מותאם בכל עליית שרת.
+"""#2174: הניסיון החוזר של dnsmasq (#1816) מותאם בכל עליית שרת.
 
-‏`deploy/dnsmasq-imagesrv-restart.conf` הוא drop-in של systemd
-(‏`Restart=on-failure`): כרטיס הפצה שעולה אחרי `network.target` (‏USB, ‏VLAN)
+`deploy/dnsmasq-imagesrv-restart.conf` הוא drop-in של systemd
+(`Restart=on-failure`): כרטיס הפצה שעולה אחרי `network.target` (USB, VLAN)
 מחזיר את dnsmasq בלי לוותר על `bind-interfaces`. המתקין כותב אותו, ו-
-‏`tools/server-upgrade.sh` כותב אותו בעדכון — אבל עדכון מהכפתור מריץ את
-הסקריפט של התג **הישן** (‏#2350), ולכן שרת שמשתדרג מגרסה שאין בה את הצעד
+`tools/server-upgrade.sh` כותב אותו בעדכון — אבל עדכון מהכפתור מריץ את
+הסקריפט של התג **הישן** (#2350), ולכן שרת שמשתדרג מגרסה שאין בה את הצעד
 לא היה מקבל אותו לעולם. הקוד ב-/opt/imagesrv כן מתחלף בכל עדכון, ולכן
 ההתאמה יושבת כאן: בעלייה, הקובץ מושווה למקור שבעץ — זהה ו-systemd רואה
 אותו = כלום; חסר/שונה = כתיבה אטומית ו-`daemon-reload`.
 
-‏`daemon-reload` ולא restart ל-dnsmasq: מדיניות ה-Restart נקראת בטעינת
+`daemon-reload` ולא restart ל-dnsmasq: מדיניות ה-Restart נקראת בטעינת
 היחידה, ו-restart היה מנתק DHCP בלי צורך.
 
-הצלחה נקבעת לפי **ראיה חיובית** (עיקרון 5): ‏`DropInPaths` של dnsmasq,
+הצלחה נקבעת לפי **ראיה חיובית** (עיקרון 5): `DropInPaths` של dnsmasq,
 כפי ש-systemd מדווח, מכיל את הקובץ — לא היעדר שגיאה. כך גם reload שנכשל
 בעלייה קודמת (הקובץ זהה, systemd לא טען) מתוקן בעלייה הבאה ולא נקרא "זהה".
 כל תוצאה שאינה "כבר תקין" היא שורת יומן; כשל אינו מפיל את השרת —
-‏dnsmasq עובד גם בלעדיו כשהכרטיס כבר קיים — אבל נאמר בשם.
+dnsmasq עובד גם בלעדיו כשהכרטיס כבר קיים — אבל נאמר בשם.
 
-הקובץ הוא שלנו (‏`imagesrv-restart.conf`) ונדרס, כמו במתקין ובעדכון.
+הקובץ הוא שלנו (`imagesrv-restart.conf`) ונדרס, כמו במתקין ובעדכון.
 מי שרוצה מדיניות אחרת כותב drop-in בשם משלו ב-`dnsmasq.service.d/`.
-‏`IMAGESRV_UNIT_DIR` — אותו משתנה כמו ב-server-upgrade.sh — לבדיקות.
+`IMAGESRV_UNIT_DIR` — אותו משתנה כמו ב-server-upgrade.sh — לבדיקות.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ def default_hooks() -> Hooks:
 
 
 def ensure(hooks: Hooks, repo_dir: str | Path | None = None) -> tuple[str, str]:
-    """(event, detail): ‏`""` = כבר תקין; אחרת אירוע היומן ופירוטו."""
+    """(event, detail): `""` = כבר תקין; אחרת אירוע היומן ופירוטו."""
     source = Path(repo_dir or REPO_ROOT) / SOURCE
     target = unit_dir() / TARGET
     try:

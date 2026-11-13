@@ -1,6 +1,6 @@
-"""‏#1974: השידור והכתיבה של הקליטה בעדיפות נמוכה מהקונסולה.
+"""#1974: השידור והכתיבה של הקליטה בעדיפות נמוכה מהקונסולה.
 
-המדידה (זמן התגובה של ‎/api/console/overview בזמן שידור) בגוף ה-PR; כאן —
+המדידה (זמן התגובה של /api/console/overview בזמן שידור) בגוף ה-PR; כאן —
 שהעדיפות באמת מוחלת, בכל אחד משלושת המקומות, ונקראת בחזרה מהקרנל כשאפשר.
 """
 
@@ -18,7 +18,7 @@ from server.system import priority
 from server.rounds import sender
 
 LINUX = sys.platform.startswith("linux")
-#: ‏ioprio_get(2) — לקריאה בחזרה של מה ש-`lower_this_thread` כתב.
+#: ioprio_get(2) — לקריאה בחזרה של מה ש-`lower_this_thread` כתב.
 IOPRIO_GET = {"x86_64": 252, "aarch64": 31}.get(platform.machine())
 
 
@@ -35,7 +35,7 @@ def test_udp_sender_runs_under_nice_and_ionice(monkeypatch, tmp_path):
     cmd = ["udp-sender", "--file", str(tmp_path / "img" / "p1.esp.pcl.zst"), "--portbase", "9000"]  # פורט-הפצה-מכוון: argv ל-Popen מזויף
     sender.run_process(cmd)
     assert seen["argv"] == [*priority.BACKGROUND_PREFIX, *cmd]
-    # ‏best-effort 7 ולא idle: idle מרעיב את השידור לכיתה כשיש עבודת דיסק אחרת.
+    # best-effort 7 ולא idle: idle מרעיב את השידור לכיתה כשיש עבודת דיסק אחרת.
     assert seen["argv"][:8] == ["nice", "-n", "10", "ionice", "-c", "2", "-n", "7"]
 
 

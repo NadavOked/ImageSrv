@@ -1,6 +1,6 @@
-"""‏#649 שלב 1: ‏API ארגז הכלים — `GET /tools/catalog`, `PUT /tools/selection`.
+"""#649 שלב 1: API ארגז הכלים — `GET /tools/catalog`, `PUT /tools/selection`.
 
-admin בלבד (deploy → 403, אנונימי → 401); שמירה = ‏settings **וגם**
+admin בלבד (deploy → 403, אנונימי → 401); שמירה = settings **וגם**
 `<data_dir>/tools-selection.json` (מה שבניית ה-initrd תקרא בשלב 2) ורשומת
 יומן אחת עם הספירות; id שאינו בקטלוג → 422 **בשמו** (לא נזרק בשקט).
 

@@ -23,7 +23,7 @@ def create_net_router(ctx: ServerContext) -> APIRouter:
     def devices(user=Depends(current_user)):
         """ההתקנים + האם הם רשומים, ובאיזו קבוצה.
 
-        ‏#400: וגם **היכן באתחול** כל מכונה נמצאת. זו הרשימה שכל מכונה
+        #400: וגם **היכן באתחול** כל מכונה נמצאת. זו הרשימה שכל מכונה
         שדיברה עם השרת מופיעה בה, ולכן זה המקום היחיד שבו מחשב שיכפול
         חסר-ראש שנתקע בין התפריט ל-hello יכול להיראות בכלל.
         """
@@ -46,12 +46,12 @@ def create_net_router(ctx: ServerContext) -> APIRouter:
                 "name": r["suffix"], "group_id": r["group_id"],
                 "group_label": r["group_label"], "role": r["role"],
                 "boot": boottrace.describe(r["boot_step"], r["boot_at"]),
-                # ‏#402: drives/no_disks/no_ports/unchecked; null = סוכן ישן
+                # #402: drives/no_disks/no_ports/unchecked; null = סוכן ישן
                 "disk_probe": r["disk_probe"],
-                # ‏#500: uefi/bios ו-true/false כפי שנמדדו; null = לא דווח
+                # #500: uefi/bios ו-true/false כפי שנמדדו; null = לא דווח
                 "firmware": r["firmware"],
                 "secure_boot": None if r["secure_boot"] is None else bool(r["secure_boot"]),
-                # ‏#1257: גרסת ה-initrd שהמכונה דיווחה; null = לא דווח
+                # #1257: גרסת ה-initrd שהמכונה דיווחה; null = לא דווח
                 "agent_version": r["agent_version"],
             }
             for r in rows

@@ -1,13 +1,13 @@
-"""‏#1898 — הכרעת נדב (22/10): הכלל של #1897 חל גם כש-C: יושבת **לפני** הלינוקס.
+"""#1898 — הכרעת נדב (22/10): הכלל של #1897 חל גם כש-C: יושבת **לפני** הלינוקס.
 
-dual-boot שנקלט עם כיווץ: ‏C: מכווצת (‏60→20GiB), ואחריה שורש הלינוקס — המועמד
+dual-boot שנקלט עם כיווץ: C: מכווצת (60→20GiB), ואחריה שורש הלינוקס — המועמד
 להרחבה, כי הוא ה-windows/linux האחרון על הדיסק. עד כאן כל המקום הנוסף הלך
-ללינוקס, ‏C: נשארה עם ~5GiB פנויים לתמיד, ו-`min_disk_bytes` החזיר `None`: האימג'
+ללינוקס, C: נשארה עם ~5GiB פנויים לתמיד, ו-`min_disk_bytes` החזיר `None`: האימג'
 לא הוצע לשום דיסק, בלי אזהרה.
 
-עכשיו C: חוזרת **במקומה** לגודלה במקור (‏#1897, הכרעת נדב 04/11 — עד אז: חלקה
+עכשיו C: חוזרת **במקומה** לגודלה במקור (#1897, הכרעת נדב 04/11 — עד אז: חלקה
 לפי היחס במקור), והלינוקס (וכל מה שבין השתיים) זז קדימה — בטוח, כי הטבלה
-נכתבת לפני הבייט הראשון והזרם כותב לפי אינדקס. ‏min-free רואה את C: בגודלה
+נכתבת לפני הבייט הראשון והזרם כותב לפי אינדקס. min-free רואה את C: בגודלה
 במקור בשני התאומים. **והמשכפל שואל לפני**: `share_plan` מחשב את החלוקה
 שתיכתב, והשאלה (`share`) מציגה אותה.
 """
@@ -30,7 +30,7 @@ needs_shell = pytest.mark.skipif(
     BASH is None or shutil.which("jq") is None, reason="bash and jq are required")
 
 GIB = 1 << 30
-DISK = 976773168                  # ‏500GB, בסקטורים
+DISK = 976773168                  # 500GB, בסקטורים
 WIN = "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"
 LIN = "0FC63DAF-8483-4772-8E79-3D69D8477DE4"
 SWAP = "0657FD6D-A4AB-43C4-84E5-0933C84B4F4F"
@@ -42,7 +42,7 @@ FITS_EXACTLY = S_START + 2 * GIB // 512 + 2048   # the layout and a MiB: nothing
 
 
 def dual_boot(shrunk: bool = True) -> dict:
-    """ESP, ‏C: ‏60→20GiB (‏used 15), שורש לינוקס 30GiB שלא כווץ, swap 2GiB."""
+    """ESP, C: 60→20GiB (used 15), שורש לינוקס 30GiB שלא כווץ, swap 2GiB."""
     parts = [
         dict(index=1, type_guid=ESP, role="esp", fs="vfat", start_sector=2048,
              size_bytes=100 << 20, used_bytes=30 << 20),
@@ -72,7 +72,7 @@ def plan_of(m: dict) -> list[str]:
             for p in m["partitions"]]
 
 
-#: ‏#1897 (04/11): what C: takes back -- its source size, not a share of the room.
+#: #1897 (04/11): what C: takes back -- its source size, not a share of the room.
 BACK = 40 * GIB // 512
 
 
@@ -122,7 +122,7 @@ def _agent_free(tmp_path, m: dict, disk: int, approved: bool = True) -> str:
 @needs_shell
 @pytest.mark.parametrize("disk", [DISK * 512, 256060514304, 128 * GIB])
 def test_the_agent_and_the_server_give_c_before_the_root_its_source_size(tmp_path, disk):
-    """‏#1897 (04/11): C: חוזרת ל-60GiB בכל דיסק שהאימג' נכנס אליו — 45 פנויים."""
+    """#1897 (04/11): C: חוזרת ל-60GiB בכל דיסק שהאימג' נכנס אליו — 45 פנויים."""
     m = dual_boot()
     free, role = minfree.free_after(m, disk)
     assert role == "windows" and free == 45 * GIB, free
@@ -137,12 +137,12 @@ def test_without_the_approval_the_agent_counts_no_growth_for_c(tmp_path):
 
 
 def test_the_image_is_offered_from_the_disk_where_c_is_back_at_its_source_size():
-    """‏#1897 (04/11): ‏C: חוזרת ל-60GiB (‏45 פנויים, מעל 20) — הדיסק צריך את 40GiB
+    """#1897 (04/11): C: חוזרת ל-60GiB (45 פנויים, מעל 20) — הדיסק צריך את 40GiB
     שהיא לוקחת בחזרה ועוד השורש בגודלו באימג'; ה-min-free אינו מוסיף דבר."""
     m = dual_boot()
     need = required_bytes(m)
     smallest = minfree.min_disk_bytes(m, 20)
-    assert smallest is not None, "‏#1898: האימג' לא הוצע לשום דיסק"
+    assert smallest is not None, "\u200f#1898: האימג' לא הוצע לשום דיסק"
     assert abs(smallest - (need + BACK * 512)) <= 2 * (1 << 20), smallest - need   # the GPT and a MiB's alignment
     assert smallest == minfree.min_disk_bytes(m, 0)
     assert minfree.refusal(m, smallest, 20) is None

@@ -41,12 +41,16 @@ def test_the_hello_answer_carries_each_chosen_slots_disk(room_server):
                                        {"port": 2, "serial": "S2", "size_bytes": SIZE}]
 
 
-def test_the_field_follows_this_hellos_inventory(room_server):
+def test_the_field_follows_this_hellos_inventory_from_wave_2(room_server):
     """The disk now in slot 1 is S9: that is what the console shows, and what is sent --
-    the agent then compares it with what it binds at target_init."""
+    the agent then compares it with what it binds at target_init. #2458: in the wave the
+    choice opened (wave 1) it is what the console showed **at the choice** instead
+    (test_target_from_selection_2458.py); from wave 2 on, this hello's inventory."""
     deploy, anon = room_server["deploy"], room_server["anon"]
     cloner_hello(anon, CLONER1, ["S1", "S2"])     # awake when chosen: no #1954 `expect` to drop the slot
     deploy.post("/api/console/room", json=room_body(room_server, 2, {CLONER1: ["S1", "S2"]}))
+    room_server["ctx"].conn.execute("UPDATE room_rounds SET wave_number = 2")
+    room_server["ctx"].conn.commit()
     session = cloner_hello(anon, CLONER1, ["S9", "S2"])["session"]
     assert session["target_disks"][0] == {"port": 1, "serial": "S9", "size_bytes": SIZE}
 

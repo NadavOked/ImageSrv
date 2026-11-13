@@ -1,25 +1,25 @@
-"""‏#1269 שלב 2 — החוזה בין הגואי הנייטיב לסוכן: דרייברים לפי דיסק יעד.
+"""#1269 שלב 2 — החוזה בין הגואי הנייטיב לסוכן: דרייברים לפי דיסק יעד.
 
 שתי החוליות של הסוכן, בלי מהדר ובלי שרת:
 
-* ‏`gui_state` (‏`agent/lib/gui/guistate.sh`) כותב לקובץ המצב את רשימת הדגמים
-  מ-`GET /api/console/room/driver-models` — ‏`driver_models=<n>` ושורת
-  ‏`driver_model=<vendor>|<model>` לכל דגם — ו**`driver_models=-1`** כשהרשימה
-  לא נקראה. ‏"לא נקרא" ו"אין דגמים" הם שני מצבים (עיקרון 5): המתג מושבת
+* `gui_state` (`agent/lib/gui/guistate.sh`) כותב לקובץ המצב את רשימת הדגמים
+  מ-`GET /api/console/room/driver-models` — `driver_models=<n>` ושורת
+  `driver_model=<vendor>|<model>` לכל דגם — ו**`driver_models=-1`** כשהרשימה
+  לא נקראה. "לא נקרא" ו"אין דגמים" הם שני מצבים (עיקרון 5): המתג מושבת
   בשניהם, אבל עם סיבה אחרת. ולכל מגירה בסבב — תוצאת הנחת הדרייברים
-  (‏`drawer_list[].drivers`) בשדות 9–10 של `room_drawer=`.
-* ‏`gui_records`/`gui_dispatch` (‏`agent/lib/gui/guibridge.sh`) מתרגמים את רשומת
-  ‏`room-open` / `direct-open` עם `drivers=` לגוף ה-POST: ‏`driver_models`,
+  (`drawer_list[].drivers`) בשדות 9–10 של `room_drawer=`.
+* `gui_records`/`gui_dispatch` (`agent/lib/gui/guibridge.sh`) מתרגמים את רשומת
+  `room-open` / `direct-open` עם `drivers=` לגוף ה-POST: `driver_models`,
   ובסבב מהספרייה גם `target_slots` — השרת קושר דגם רק לדיסק שנבחר כיעד.
   בלי `drivers=` (המתג כבוי) הגוף **זהה** למה שהיה לפני #1269.
 
 אין כאן "אוטומטי": החומרה שזוהתה היא של המשכפל, לא של המכונה שתקבל את
-הדיסק (‏interfaces.md סעיף 17) — דגם מפורש או "בלי".
+הדיסק (interfaces.md סעיף 17) — דגם מפורש או "בלי".
 
 הצד של ה-C (הפרסר, המסך, הרשומה שנפלטת) — ב-`test_room_drivers_native.py`.
 
-**בקרה שלילית:** על הבסיס (‏feat/1269-drivers-per-disk) ‏`gui_state` אינו כותב
-‏`driver_models` כלל, ‏`room_drawer=` נגמר בשדה 8, ו-`gui_records` דוחה את
+**בקרה שלילית:** על הבסיס (feat/1269-drivers-per-disk) `gui_state` אינו כותב
+`driver_models` כלל, `room_drawer=` נגמר בשדה 8, ו-`gui_records` דוחה את
 המפתח `drivers=` כרשומה פגומה — כל הטסטים כאן נופלים על התנהגות.
 """
 
@@ -64,8 +64,8 @@ ROOM_LIVE = {
 
 
 def _state(tmp_path: Path, room: dict, models: list | None) -> list[str]:
-    """‏gui_state במצב `room` מול room.json קבוע; ‏`models=None` = הקריאה של
-    רשימת הדגמים נכשלה (‏gui_get מחזיר 1, כמו HTTP שאינו 200)."""
+    """gui_state במצב `room` מול room.json קבוע; `models=None` = הקריאה של
+    רשימת הדגמים נכשלה (gui_get מחזיר 1, כמו HTTP שאינו 200)."""
     run = tmp_path / "run"; run.mkdir()
     gui = tmp_path / "gui"; gui.mkdir()
     (run / "station.json").write_text(json.dumps(STATION), newline="\n")
@@ -116,8 +116,8 @@ def test_an_empty_library_is_zero_models_not_unread(tmp_path):
 
 @JQ
 def test_an_unread_model_list_is_minus_one_and_the_room_screen_still_draws(tmp_path):
-    """‏HTTP שאינו 200 על רשימת הדגמים אינו מפיל את מסך החדר כולו (‏message=),
-    ואינו נכתב כ"אין דגמים" — ‏`-1`, והמתג אומר שהרשימה לא נקראה."""
+    """HTTP שאינו 200 על רשימת הדגמים אינו מפיל את מסך החדר כולו (message=),
+    ואינו נכתב כ"אין דגמים" — `-1`, והמתג אומר שהרשימה לא נקראה."""
     lines = _state(tmp_path, {"round": None, "machines": []}, None)
     assert "driver_models=-1" in lines
     assert not [line for line in lines if line.startswith("driver_models=0")]
@@ -126,7 +126,7 @@ def test_an_unread_model_list_is_minus_one_and_the_room_screen_still_draws(tmp_p
 
 @JQ
 def test_a_model_name_cannot_break_the_record(tmp_path):
-    """‏`|` ושורה חדשה אינם יכולים לעבור בקובץ המצב — הם מוחלפים ברווח, כמו
+    """`|` ושורה חדשה אינם יכולים לעבור בקובץ המצב — הם מוחלפים ברווח, כמו
     בכל רשומה, כך ש-`<vendor>|<model>` נשאר שני שדות בדיוק."""
     lines = _state(tmp_path, {"round": None, "machines": []},
                    [{"vendor": "A|B", "model": "M\nN", "packages": ["x"]}])
@@ -152,7 +152,7 @@ def test_room_drawer_carries_the_drivers_outcome_of_each_drawer(tmp_path):
 
 def _bridge(tmp_path: Path, record: str) -> dict | None:
     """מריץ את `gui_records` האמיתי על רשומה אחת; מחזיר את גוף ה-POST, או
-    ‏None כששום דבר לא נשלח. רק התעבורה מוחלפת (console_post, http_get)."""
+    None כששום דבר לא נשלח. רק התעבורה מוחלפת (console_post, http_get)."""
     run = tmp_path / "run"; run.mkdir(exist_ok=True)
     gui = tmp_path / "gui"; gui.mkdir(exist_ok=True)
     posted = run / "posted.json"

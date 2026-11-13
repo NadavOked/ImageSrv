@@ -1,5 +1,5 @@
-"""‏#1017 — פערי ה-API של "סניפים": ‏`POST /storage-nodes/{id}/check` (בדיקת
-חיבור בלבד, ‏`/ping` המאומת), ו-`last_seen_at`/`last_error`/`last_error_at`
+"""#1017 — פערי ה-API של "סניפים": `POST /storage-nodes/{id}/check` (בדיקת
+חיבור בלבד, `/ping` המאומת), ו-`last_seen_at`/`last_error`/`last_error_at`
 על `storage_nodes` — נכתבים בכל קריאה בין-שרתית ומוחזרים ב-`GET
 /storage-nodes` ובתשובות הפרוקסי, כדי ש"ענתה לאחרונה HH:MM" יהיה זמן
 השרת ולא שעון הדפדפן.
@@ -60,7 +60,7 @@ def test_record_contact_success_clears_the_error_and_failure_keeps_last_seen(tmp
 
 
 def test_migration_adds_the_contact_columns_to_an_older_table(tmp_path):
-    """‏ADDED_COLUMNS: DB שנוצר לפני #1017 מקבל את שלוש העמודות, NULL בכולן."""
+    """ADDED_COLUMNS: DB שנוצר לפני #1017 מקבל את שלוש העמודות, NULL בכולן."""
     import sqlite3
     path = tmp_path / "old.db"
     raw = sqlite3.connect(path)
@@ -112,7 +112,7 @@ def test_check_of_an_unreachable_secondary_records_the_failure_not_a_5xx(server,
     assert body["node_id"] is None and body["protocol_version"] is None
     assert body["last_error"] == body["error"] and ISO.match(body["last_error_at"])
     assert body["last_seen_at"] == seen, "when it last answered is kept alongside the failure"
-    # ‏#595: טקסט ה-OSError (‏refused/WinError/Errno) ליומן; ללקוח — המשפט של #1016.
+    # #595: טקסט ה-OSError (refused/WinError/Errno) ליומן; ללקוח — המשפט של #1016.
     assert "שרת המשנה לא עונה" in body["error"], body["error"]
     assert not re.search(r"WinError|refused|Errno", body["error"], re.I), body["error"]
     row = _row(server, paired)
@@ -144,7 +144,7 @@ def test_check_guards(server, paired):
     assert admin.post(f"/api/console/storage-nodes/{paired}/check").status_code == 409
 
 
-# --- ‏#1300: גרסת המשני לכרטיס "סניפים" בסקירה ---------------------------------
+# --- #1300: גרסת המשני לכרטיס "סניפים" בסקירה ---------------------------------
 
 def test_record_version_only_when_the_field_was_in_the_answer(tmp_path):
     conn = db.connect(tmp_path / "v.db")

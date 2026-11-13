@@ -1,10 +1,10 @@
-"""‏#434: מכונה שממתינה לאיש נכבית אחרי חמש דקות — ולעולם לא כשמוצג כשל.
+"""#434: מכונה שממתינה לאיש נכבית אחרי חמש דקות — ולעולם לא כשמוצג כשל.
 
 שלושה מצבים שנראו זהים מבחוץ (מחשב בנייה על מסך כניסה 35 דקות, מחשב
 שיכפול `failed` שעות, תחנה שהפסיקה hello): רק הראשון הוא "ממתין". הכלל:
 המתנה מעבר לסף → אזהרה של IDLE_WARN_S שניות → כיבוי דרך arm_wol; פעילות
 (מקש בגואי, תשובת hello שהשתנתה, סבב פתוח, `stay_on`) מאפסת; מסך כשל
-אינו מגיע ל-`poll_sleep` בכלל, ולכן אינו מגיע לשעון. ‏`poweroff` מזויף."""
+אינו מגיע ל-`poll_sleep` בכלל, ולכן אינו מגיע לשעון. `poweroff` מזויף."""
 
 from __future__ import annotations
 
@@ -117,10 +117,10 @@ def test_the_clock_beats_only_in_poll_sleep_and_the_failure_hold_never_reaches_i
     assert 'if (a->st.idle_poweroff_at <= 0 && now - last < 10) return;' in gui, "בזמן ספירה כל מקש נשלח, אחרת עד אחד ל-10 שניות"
 
 
-# --- ‏#980: "כיבוי כולם" מהקונסולה נוסע ב-hello (`power_action`) ---------------
-# ‏json_get מזויף: jq אינו מותקן בתחנת הווינדוס, והמסלול הנבדק הוא ההחלטה
+# --- #980: "כיבוי כולם" מהקונסולה נוסע ב-hello (`power_action`) ---------------
+# json_get מזויף: jq אינו מותקן בתחנת הווינדוס, והמסלול הנבדק הוא ההחלטה
 # ב-idle.sh. שם השדה נעוץ משני הצדדים: כאן בטקסט של idle.sh, ובשרת
-# ב-`test_room_console.py` (‏`power_action` בתשובת ה-hello).
+# ב-`test_room_console.py` (`power_action` בתשובת ה-hello).
 _PA = ('json_get() { [ "$2" = ".power_action" ] && [ -s "$RUN_DIR/pa" ] '
        '&& { cat "$RUN_DIR/pa"; return 0; }; echo null; }; RESP=/dev/null')
 
@@ -141,7 +141,7 @@ def test_a_console_poweroff_without_wol_stays_on_and_says_so(tmp_path):
     assert not calls.exists()
 
 
-# ‏#977 §4: "אתחול מרחוק" ממגירת המחשב — אותו ערוץ, ערך אחר. בלי arm_wol:
+# #977 §4: "אתחול מרחוק" ממגירת המחשב — אותו ערוץ, ערך אחר. בלי arm_wol:
 # מכונה שמאותחלת קמה בעצמה, ואין מה להעיר אחר כך.
 def test_a_console_reboot_in_the_answer_reboots_without_arming_wol(tmp_path):
     out, calls = run_idle(tmp_path, _since(tmp_path, 0) + "; " + _PA

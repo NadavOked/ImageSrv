@@ -1,14 +1,14 @@
-"""‏#2668 ס' 3: שרת עם כרטיס רשת יחיד — אותו כרטיס הוא כרטיס הניהול וגם רשת ההפצה.
+"""#2668 ס' 3: שרת עם כרטיס רשת יחיד — אותו כרטיס הוא כרטיס הניהול וגם רשת ההפצה.
 
-ברזל 09/11 (v0.91.5, כרטיס יחיד `enp0s31f6`, ‏10.0.0.2/24 סטטי): "רשת הפצה" על
+ברזל 09/11 (v0.91.5, כרטיס יחיד `enp0s31f6`, 10.0.0.2/24 סטטי): "רשת הפצה" על
 כרטיס הניהול סורב תמיד (#1263, #2428), ולא הייתה שום דרך להגדיר הפצה.
 
 DHCP על כרטיס הניהול הוא ההגדרה המסוכנת ביותר במערכת (#53): אם הרשת שלו היא
-רשת המכללה, ‏dnsmasq מחלק כתובות לכל המכללה. לכן זה **מעבר מפורש** ולא הסרת
+רשת המכללה, dnsmasq מחלק כתובות לכל המכללה. לכן זה **מעבר מפורש** ולא הסרת
 חסימה, ורק בחלון רשת ההפצה (`PUT /net/config/{שם}/deploy`):
 
-- המפעיל אישר במפורש (‏`confirm_management`, כפתור אדום — בלי הקלדת מילה, #1270);
-- השומר של DHCP קיים (#53, ‏#2417) רץ והחזיר **ראיה חיובית** שאין שרת אחר.
+- המפעיל אישר במפורש (`confirm_management`, כפתור אדום — בלי הקלדת מילה, #1270);
+- השומר של DHCP קיים (#53, #2417) רץ והחזיר **ראיה חיובית** שאין שרת אחר.
   "לא הצלחנו לבדוק" = סירוב (עיקרון 5), ואין `ignore_existing` על כרטיס הניהול;
 - הכרטיס בכתובת ידנית, ו**הכתובת שלו נשארת** כתובת השרת ברשת ההפצה — הקונסולה
   ממשיכה באותה כתובת, אין `ifdown`/`ifup`, ואין מה להחזיר אחרי 60 שניות.
@@ -43,8 +43,8 @@ BODY = {"network": "10.0.0.0", "netmask": "255.255.255.0",
 
 @pytest.fixture()
 def single(tmp_path: Path, images_root: Path, clock):
-    """שרת עם כרטיס אחד, eth0: כרטיס הניהול (נרשם בהתקנה), ‏10.0.0.2/24 סטטי,
-    והקונסולה נקשרת אליו (‏`servers_interface`). רשת ההפצה טרם הוגדרה."""
+    """שרת עם כרטיס אחד, eth0: כרטיס הניהול (נרשם בהתקנה), 10.0.0.2/24 סטטי,
+    והקונסולה נקשרת אליו (`servers_interface`). רשת ההפצה טרם הוגדרה."""
     from server.app import create_app
     from server.console import users
 
@@ -140,7 +140,7 @@ def test_a_clean_probe_and_an_explicit_ok_make_the_one_card_the_deploy_network(s
     out = response.json()
     fake = single["fake"]
     assert out["ok"] is True, out
-    assert out["server_ip"] == ADDR, "כתובת הניהול נשארת כתובת השרת — לא ‎.1 של הרשת"
+    assert out["server_ip"] == ADDR, "כתובת הניהול נשארת כתובת השרת — לא \u200e.1 של הרשת"
     assert fake["probed"] == ["eth0"], "השומר של DHCP קיים חייב לרוץ על הכרטיס"
     # הכתובת לא זזה: אין קובץ חדש, אין ifdown/ifup, ואין סמן החזרה של #56.
     assert out["address"] is None
@@ -182,7 +182,7 @@ def test_a_probe_that_could_not_run_is_a_refusal_not_clean(single, reason):
 
 
 def test_skipping_the_probe_is_refused_on_the_management_card(single):
-    """‏`ignore_existing` קיים לכרטיס שהמפעיל יודע שאינו ברשת המכללה. כרטיס הניהול
+    """`ignore_existing` קיים לכרטיס שהמפעיל יודע שאינו ברשת המכללה. כרטיס הניהול
     הוא בדיוק הכרטיס שכן — אין לו עקיפה."""
     response = _put(single, ignore_existing=True)
     assert response.status_code == 409, response.text
@@ -232,8 +232,8 @@ def test_the_address_inside_the_range_is_refused(single):
 
 
 def test_the_dhcp_tab_still_refuses_the_management_card_even_with_the_ok(single):
-    """המעבר קיים **רק** בחלון רשת ההפצה. ‏`confirm_management` בגוף של
-    ‏`PUT /net/interfaces/{שם}` (דף הפורטים, API ישיר) אינו פותח דבר — אחרת
+    """המעבר קיים **רק** בחלון רשת ההפצה. `confirm_management` בגוף של
+    `PUT /net/interfaces/{שם}` (דף הפורטים, API ישיר) אינו פותח דבר — אחרת
     ההגנה של #2428 הייתה במרחק שדה אחד בבקשה."""
     response = single["client"].put("/api/console/net/interfaces/eth0", json={
         "enabled": True, "range_start": "10.0.0.100", "range_end": "10.0.0.200",
@@ -245,7 +245,7 @@ def test_the_dhcp_tab_still_refuses_the_management_card_even_with_the_ok(single)
 
 
 def test_complete_still_refuses_the_console_card_unless_the_caller_confirmed(tmp_path):
-    """‏`complete` נשאר השומר האחרון (#2428): בלי האישור — סירוב לפני כל צעד."""
+    """`complete` נשאר השומר האחרון (#2428): בלי האישור — סירוב לפני כל צעד."""
     from server.db import connect
     from test_servers_dhcp_1088 import _complete_ctx, _complete_hooks
     conn = connect(tmp_path / "x.db")
@@ -261,8 +261,8 @@ def test_complete_still_refuses_the_console_card_unless_the_caller_confirmed(tmp
 
 
 def test_no_second_card_bond_over_the_management_card(single):
-    """bond מעביר את הכתובת מ-eth0 ל-bond0 — הקונסולה (‏`--console-host eth0`)
-    הייתה מאבדת את הכתובת שלה. גם כשהבקשה מגיעה מ-loopback (‏ssh -L)."""
+    """bond מעביר את הכתובת מ-eth0 ל-bond0 — הקונסולה (`--console-host eth0`)
+    הייתה מאבדת את הכתובת שלה. גם כשהבקשה מגיעה מ-loopback (ssh -L)."""
     conn, fake = single["conn"], single["fake"]
     set_setting(conn, dhcp.SETTING_PREFIX + "eth0", dhcp.InterfaceConfig(
         "eth0", enabled=True, range_start="10.0.0.100", range_end="10.0.0.200",
@@ -283,7 +283,7 @@ def test_no_second_card_bond_over_the_management_card(single):
 
 
 def test_console_and_deploy_services_share_the_card_by_default():
-    """‏#705 בלי עריכה: כרטיס שהוא גם הקונסולה וגם ההפצה נותן את שניהם, וכל
+    """#705 בלי עריכה: כרטיס שהוא גם הקונסולה וגם ההפצה נותן את שניהם, וכל
     המאזינים נקשרים לאותה כתובת — הקונסולה אינה נעלמת כשההפצה נוספת."""
     base = nic_services.Baseline(console="eth0", deploy="eth0", interserver="eth0")
     eff = nic_services.effective(["eth0"], {}, base)
@@ -305,7 +305,7 @@ def test_the_firewall_opens_console_and_deploy_on_the_same_card():
 
 
 def test_after_the_restart_agent_and_console_both_bind_the_one_address(tmp_path, monkeypatch):
-    """העלייה שאחרי ההשלמה: ‏`--console-host eth0` ו-`deploy:interface=eth0` —
+    """העלייה שאחרי ההשלמה: `--console-host eth0` ו-`deploy:interface=eth0` —
     הסוכן (8080) והקונסולה על 10.0.0.2, וכרטיס השרתים של ההשלמה הוא eth0."""
     import uvicorn
 

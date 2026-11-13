@@ -1,14 +1,14 @@
-"""‏#1821: שם לא נכתב לכוורת SYSTEM שלא סונכרנה.
+"""#1821: שם לא נכתב לכוורת SYSTEM שלא סונכרנה.
 
 כוורת regf "מלוכלכת" — רצף ראשי (offset 4) שונה מהמשני (offset 8) — היא
 כוורת ש-Windows התחיל לכתוב אליה ולא סיים. בעלייה הבאה הוא משחזר אותה
-מ-SYSTEM.LOG1/LOG2, מעל מה שנכתב. ‏hivewrite כותב לקובץ הראשי בלבד, ו-commit
+מ-SYSTEM.LOG1/LOG2, מעל מה שנכתב. hivewrite כותב לקובץ הראשי בלבד, ו-commit
 של hivex מציב את שני המספרים שווים (`lib/handle.c`) — כך שהסימן נמחק,
 והקריאה החוזרת (`hivewrite -g`, מאותו קובץ) "מאשרת" שם שאולי לא ייכנס לתוקף.
 
 לוגים לא ריקים ליד כוורת **נקייה** אינם סיבה לסרב: לפי מפרט regf של
-Suhanov, ‏Windows מתעלם מרשומות לוג כשהכוורת אינה מלוכלכת — ולוג "ישן" הוא
-המצב הרגיל. ‏`test_logs_beside_a_clean_hive_do_not_block_the_name` שומר על זה.
+Suhanov, Windows מתעלם מרשומות לוג כשהכוורת אינה מלוכלכת — ולוג "ישן" הוא
+המצב הרגיל. `test_logs_beside_a_clean_hive_do_not_block_the_name` שומר על זה.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from test_smart import BASH
 
 pytestmark = requires_native(("bash", BASH))
 
-#: ‏hivewrite שרושם כל קריאה — "לא נכתב" נמדד ברשימה, לא בהיעדר שגיאה.
+#: hivewrite שרושם כל קריאה — "לא נכתב" נמדד ברשימה, לא בהיעדר שגיאה.
 HIVEWRITE_LOGGED = 'echo "$*" >> "$RUN_DIR/hivewrites"\n' + HIVEWRITE_OK
 
 

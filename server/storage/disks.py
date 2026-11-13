@@ -1,13 +1,13 @@
 """"הוסף כונן" (#1988) — כונן ריק בשרת הופך למיקום אחסון `local`.
 
-הכרעת נדב 22/10: ברשימה רק כוננים ריקים לפי ראיה (‏`blkid -p` וקריאת ראש
+הכרעת נדב 22/10: ברשימה רק כוננים ריקים לפי ראיה (`blkid -p` וקריאת ראש
 הכונן וסופו); אישור בכפתור אדום "כל המידע בכונן יימחק"; השרת מחלק, מכין
 ext4 ומחבר קבוע לפי UUID (fstab עם `nofail`); המיקום נבדק בקריאה חוזרת;
 כשל באמצע מוצג בגלוי ולא נשאר מיקום חלקי.
 
 הזרימה כאן משותפת לקונסולה (`console_storage_locations`) ולמסך השרת
-(`dcui`). כלי המערכת רק דרך ה-hooks של `storage_locations` — ‏`blank_disks`,
-‏`prepare_disk`, ‏`mount`, ‏`umount`, ‏`df`, ‏`fstab_write` — והבדיקות מזייפות
+(`dcui`). כלי המערכת רק דרך ה-hooks של `storage_locations` — `blank_disks`,
+`prepare_disk`, `mount`, `umount`, `df`, `fstab_write` — והבדיקות מזייפות
 את כולם.
 """
 
@@ -75,7 +75,7 @@ def _acquire(data_dir: Path) -> Path:
         try:
             os.write(fd, str(os.getpid()).encode())
         except OSError:
-            # ‏#2160: הקובץ כבר קיים (O_EXCL) וריק. בלי להסיר אותו, כל הוספה עד
+            # #2160: הקובץ כבר קיים (O_EXCL) וריק. בלי להסיר אותו, כל הוספה עד
             # LOCK_STALE_S הייתה חוטפת "כונן אחר נוסף עכשיו" על מנעול ללא בעלים.
             lock.unlink(missing_ok=True)
             raise

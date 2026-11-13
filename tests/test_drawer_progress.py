@@ -3,10 +3,10 @@
 שני באגים שהיו מונחים באותו קובץ ומספרים את אותו סיפור — מה שקורה לכל
 מגירה בנפרד נבלע בדרך לרמת המחשב:
 
-- ‏#25: ‏`pv` אחד לפני הכותב המקבילי מודד את הזרם של המכונה. זה מספר
+- #25: `pv` אחד לפני הכותב המקבילי מודד את הזרם של המכונה. זה מספר
   אחד לשלוש מגירות, ולכן הוא לא מדידה של אף אחת מהן — והמונה של כל
   מגירה נשאר ריק. הפסים בקונסולה עמדו על 0% לאורך סבבים שלמים.
-- ‏#67: ‏`_any_alive` אמת גם על מגירה אחת ששרדה מתוך שלוש, ומחשב
+- #67: `_any_alive` אמת גם על מגירה אחת ששרדה מתוך שלוש, ומחשב
   שאיבד מגירה דיווח `done` — בדיוק כמו מחשב שכל מגירותיו נכתבו.
 
 הבדיקות רצות את הסקריפטים עצמם, לא חיקוי שלהם.
@@ -33,7 +33,7 @@ pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required")
 REPO = Path(__file__).resolve().parent.parent
 STATION = REPO / "server" / "static" / "station"
 
-#: ‏fanout מזויף. הוא עושה בדיוק שני דברים כמו הבינארי האמיתי: מזין כל
+#: fanout מזויף. הוא עושה בדיוק שני דברים כמו הבינארי האמיתי: מזין כל
 #: fifo, וכותב לכל יעד מונה בייטים משלו ב-`<fifo>.bytes`. מה שהוא עושה
 #: *אחרת* בכוונה — נותן למגירה השנייה מספר אחר — הוא כל העניין: מונה
 #: שאינו יכול להיות שונה בין המגירות אינו מדידה שלהן. ההתנהגות
@@ -59,7 +59,7 @@ COUNTING_FANOUT = (
 
 
 def test_each_drawer_reports_the_bytes_that_were_written_to_it(tmp_path):
-    """‏#25: המונה שמגיע לשרת הוא של המגירה, לא של הזרם של המכונה.
+    """#25: המונה שמגיע לשרת הוא של המגירה, לא של הזרם של המכונה.
 
     שתי מגירות מקבלות כמויות שונות מאותו זרם. הקוד שלפני התיקון קרא
     לשתיהן את `targets/<dev>/bytes.raw` — קובץ שאיש לא כתב אליו במסלול
@@ -137,7 +137,7 @@ def test_the_compiled_fanout_writes_the_counter_the_agent_reads(tmp_path):
 
 
 def drawer_box(tmp_path, disks=("sda", "sdb", "sdc"), failed=()) -> tuple[Path, str]:
-    """‏run_restore_drawers מסביב לזרם מזויף: מה שנבדק כאן הוא רק המצב
+    """run_restore_drawers מסביב לזרם מזויף: מה שנבדק כאן הוא רק המצב
     שהמחשב מדווח בסוף, לפי מה שקרה לכל מגירה. הכתיבה עצמה (טבלה,
     הרחבה, זרם) מוחלפת בפונקציות ריקות — היא נבדקת במקומות אחרים."""
     run = tmp_path / "run"
@@ -165,16 +165,16 @@ def drawer_box(tmp_path, disks=("sda", "sdb", "sdc"), failed=()) -> tuple[Path, 
     (("sda", "sdb", "sdc"), "failed", 1),
 ])
 def test_the_machine_state_says_how_many_drawers_survived(tmp_path, failed, state, rc):
-    """‏#67: שלושה מצבים ברמת המחשב, לא שניים.
+    """#67: שלושה מצבים ברמת המחשב, לא שניים.
 
     לפני התיקון שתי השורות האמצעיות החזירו `done` — מגירה אחת ששרדה
     מתוך שלוש נראתה בדיוק כמו שלוש מתוך שלוש, והמחשב יצא מהחדר עם כונן
     ריק בתוכו. `partial` מסיים את הגל כמו `done` (rc=0) אבל אינו נספר
     כהצלחה מלאה.
     """
-    # ‏#1935: ‏run_restore_drawers משאיר מילה לא-סופית (`verifying`) כשמשהו
+    # #1935: run_restore_drawers משאיר מילה לא-סופית (`verifying`) כשמשהו
     # שרד — המילה הסופית (`done`/`partial`) נכתבת ב-do_restore_drawers רק אחרי
-    # הדרייברים והסימן; השרת נועל חבר שדיווח מצב סופי. ‏`failed` נכתב כאן.
+    # הדרייברים והסימן; השרת נועל חבר שדיווח מצב סופי. `failed` נכתב כאן.
     run, prelude = drawer_box(tmp_path, failed=failed)
     out = sh(prelude + 'run_restore_drawers multicast http://s img m.json '
              'sda sdb sdc; echo "rc=$?"; echo "machine=$(_machine_state "sda sdb sdc")"')
@@ -202,6 +202,6 @@ def test_a_partial_machine_still_names_the_drawer_that_failed(tmp_path):
 
 
 def test_the_web_station_screen_is_gone():
-    """‏#1247: מסך התחנה בדפדפן הוסר; מצב 'partial' (#67) מוצג בגואי
+    """#1247: מסך התחנה בדפדפן הוסר; מצב 'partial' (#67) מוצג בגואי
     הנייטיב ובקונסולה, לא בדף שאין מי שפותח."""
     assert not STATION.exists()

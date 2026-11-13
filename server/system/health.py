@@ -38,15 +38,15 @@ from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.health")
 
-#: ‏#1000: מתי `/health` נמדד — כותרת HTTP (ISO, שעון השרת), כי הגוף הוא
-#: מערך ש-`HOME`, ‏`updateAlertBadge` וטסטי node קוראים כמות שהוא; מעטפת
+#: #1000: מתי `/health` נמדד — כותרת HTTP (ISO, שעון השרת), כי הגוף הוא
+#: מערך ש-`HOME`, `updateAlertBadge` וטסטי node קוראים כמות שהוא; מעטפת
 #: הייתה שוברת את כולם. הקונסולה קוראת אותה ב-`loadHealth` (fetch ישיר,
 #: כמו `X-Journal-Search-Truncated`) ומציגה "נבדק HH:MM" מזמן השרת.
 CHECKED_AT_HEADER = "X-Health-Checked-At"
 
 BOOT_FILES = ("bootx64.efi", "grubx64.efi", "grub/grub.cfg")
 
-#: ‏#976: הסימון של הבדיקה העצמית על בקשות `/boot/*` — הצד השולח של
+#: #976: הסימון של הבדיקה העצמית על בקשות `/boot/*` — הצד השולח של
 #: `hello.PROBE_HEADER`, מאותו מקור אמת (שמות כותרות אינם תלויי-רישיות).
 PROBE_HEADER = hello.PROBE_HEADER.decode("ascii")
 
@@ -55,13 +55,13 @@ PROBE_HEADER = hello.PROBE_HEADER.decode("ascii")
 BOOT_ASSETS = ("vmlinuz", "initrd.img")
 NOT_APPLICABLE = "לא ישים עד שתוגדר רשת ההפצה"
 
-#: רצפה גסה. קרנל ו-initramfs אמיתיים גדולים בהרבה, וגוף ה-404 של ‎/boot
+#: רצפה גסה. קרנל ו-initramfs אמיתיים גדולים בהרבה, וגוף ה-404 של /boot
 #: הוא **תשעה** בייטים — ולכן "יש תשובה ויש גודל" אינו "יש קובץ" (#332).
 MIN_ASSET_BYTES = 1 << 20
 
 
 def _sha256(path) -> str:
-    """‏"" כשאי-אפשר לקרוא — נבדל מ-hash שנקרא, ואינו "תואם"."""
+    """"" כשאי-אפשר לקרוא — נבדל מ-hash שנקרא, ואינו "תואם"."""
     try:
         return hashlib.sha256(Path(path).read_bytes()).hexdigest()
     except OSError:
@@ -79,12 +79,12 @@ def _run(cmd: list[str], *, check: bool = False) -> str:
 def default_hooks() -> dict:
     return {
         "ss": lambda: _run(["ss", "-ulnp"]),
-        # ‏#996: גם TCP — המאזינים של השרת עצמו (8080/8081/8443) נקראים
-        # מטבלת הסוקטים, לא מההגדרה. ‏`port_listeners` (מנהל המאזינים,
-        # ‏`ports.Listeners`) מוזרק מ-main.py; ‏None = אין מנהל בתהליך הזה.
+        # #996: גם TCP — המאזינים של השרת עצמו (8080/8081/8443) נקראים
+        # מטבלת הסוקטים, לא מההגדרה. `port_listeners` (מנהל המאזינים,
+        # `ports.Listeners`) מוזרק מ-main.py; None = אין מנהל בתהליך הזה.
         "ss_tcp": lambda: _run(["ss", "-ltnp"]),
         "port_listeners": None,
-        # ‏#1013: קובץ ה-dnsmasq של המתקין — אם הוא עדיין נושא enable-tftp,
+        # #1013: קובץ ה-dnsmasq של המתקין — אם הוא עדיין נושא enable-tftp,
         # אין מתג ל-69 (dnsmasq מצטבר). שלושה מצבים: טקסט / "" (אין קובץ) /
         # None (לא נקרא) — ראה dhcp.read_installer_conf.
         "installer_conf": dhcp.read_installer_conf,
@@ -100,35 +100,38 @@ def default_hooks() -> dict:
         "interfaces": dhcp.list_interfaces,
         "tftp_root": lambda: Path("/srv/tftp"),
         "udp_sender_pids": live_udp_sender_pids,
-        # ‏#1074: חומת האש נקראת מ-nft, לא מההגדרה. ‏None מה-hook =
+        # #1074: חומת האש נקראת מ-nft, לא מההגדרה. None מה-hook =
         # לא הצלחנו לבדוק; מחרוזת בלי טבלת imagesrv = לא נטענה.
         "nft_ruleset": ports.read_nft_ruleset,
-        # ‏#1088: מצב רשת ההפצה (‏`deploy_net.DeployState`) ושורת "כתובת
-        # השרתים" (‏`(state, detail)` מ-`ifaddr.servers_nic_status`). ‏None =
-        # לא הוזרק — אין שורה, לא "הכול בסדר". ‏main מזריק את שניהם.
+        # #1088: מצב רשת ההפצה (`deploy_net.DeployState`) ושורת "כתובת
+        # השרתים" (`(state, detail)` מ-`ifaddr.servers_nic_status`). None =
+        # לא הוזרק — אין שורה, לא "הכול בסדר". main מזריק את שניהם.
         "deploy": None,
         "servers_nic": None,
-        # ‏#1372: המארח של "עדכון ב-VM" — ‏`(state, detail)` מ-`vmhost.VmHost.health`.
-        # ‏None = לא הוזרק (בדיקות, הרצה ישירה) — אין שורה; ‏main מזריק.
+        # #1372: המארח של "עדכון ב-VM" — `(state, detail)` מ-`vmhost.VmHost.health`.
+        # None = לא הוזרק (בדיקות, הרצה ישירה) — אין שורה; main מזריק.
         "vm_host": None,
-        # ‏#1972: ה-querier בכרטיס ההפצה (‏`igmp_querier.Querier.health`), ו-#1973:
-        # ה-UPS (‏`ups.UpsMonitor.health`) — ‏`(state, detail)`. ‏None = לא הוזרק
-        # (בדיקות, הרצה ישירה) — אין שורה; ‏main מזריק את שניהם.
+        # #1972: ה-querier בכרטיס ההפצה (`igmp_querier.Querier.health`), ו-#1973:
+        # ה-UPS (`ups.UpsMonitor.health`) — `(state, detail)`. None = לא הוזרק
+        # (בדיקות, הרצה ישירה) — אין שורה; main מזריק את שניהם.
         "igmp_querier": None,
-        # ‏#2442 (א): ‏`rogue_dhcp.Watch.health` — שרת DHCP/proxyDHCP זר ברשת ההפצה.
+        # #2442 (א): `rogue_dhcp.Watch.health` — שרת DHCP/proxyDHCP זר ברשת ההפצה.
         "rogue_dhcp": None,
         "ups": None,
-        # ‏#968: זמן הפעילות של **המכונה** (‏`/proc/uptime`), ל-`/me`. ‏None =
+        # #968: זמן הפעילות של **המכונה** (`/proc/uptime`), ל-`/me`. None =
         # לא נקרא (ווינדוס, קובץ חסר) — הקונסולה מציגה "לא נבדק", לא 0.
         "uptime": read_uptime,
-        # ‏#1892: הפנוי במחיצת ה-DB (‏data_dir); ‏None = לא נמדד.
+        # #1892: הפנוי במחיצת ה-DB (data_dir); None = לא נמדד.
         "db_free": _db_free,
-        # ‏#1989: מערכי ה-RAID — ‏/proc/mdstat הוא הראיה, ‏/etc/imagesrv/raid
-        # הוא מה שהמתקין יצר. ‏None מה-hook = אין קובץ; ‏OSError = לא נקרא.
+        # #1989: מערכי ה-RAID — /proc/mdstat הוא הראיה, /etc/imagesrv/raid
+        # הוא מה שהמתקין יצר. None מה-hook = אין קובץ; OSError = לא נקרא.
         "mdstat": lambda: raid_status.read_optional(raid_status.MDSTAT_PATH),
         "raid_declared": lambda: raid_status.read_optional(raid_status.RAID_FACT_PATH),
-        # ‏#2627: ‏/proc/mounts — האם ה-ESP (‏nofail בשרת RAID) באמת מעוגן.
+        # #2627: /proc/mounts — האם ה-ESP (nofail בשרת RAID) באמת מעוגן.
         "mounts": lambda: raid_status.read_optional(raid_status.MOUNTS_PATH),
+        # #3007: שורות SMART של דיסקי השרת (`server_disks.Cached`). None = לא הוזרק
+        # (בדיקות, הרצה ישירה) — אין שורה; main מזריק: smartctl אמיתי רק בשרת.
+        "server_disks": None,
     }
 
 
@@ -158,13 +161,13 @@ def _db_free(data_dir) -> int | None:
         return None
 
 
-#: ‏#1892: מתחת לזה — אדום. ‏1 GiB הוא נתח "ה-DB ו-/var/tmp" ברזרבת המערכת
-#: (`disk_reserve`, ‏#1737); מתחת לרזרבה כולה — כתום.
+#: #1892: מתחת לזה — אדום. 1 GiB הוא נתח "ה-DB ו-/var/tmp" ברזרבת המערכת
+#: (`disk_reserve`, #1737); מתחת לרזרבה כולה — כתום.
 DB_FREE_BAD_BYTES = 1024 ** 3
 
 
 def db_space_check(free: int | None, full: dict | None) -> dict:
-    """‏#1892: מחיצת ה-DB. כתיבה שכבר נכשלה ב-SQLITE_FULL אדומה גם אם
+    """#1892: מחיצת ה-DB. כתיבה שכבר נכשלה ב-SQLITE_FULL אדומה גם אם
     המדידה עכשיו מראה מקום — היא הראיה, והיא מתנקה בכתיבה המוצלחת הבאה."""
     label = "מקום פנוי ל-DB"
     if full is not None:
@@ -182,7 +185,7 @@ def db_space_check(free: int | None, full: dict | None) -> dict:
     return check("db_space", label, "ok", f"פנויים {shown}")
 
 
-#: ‏#968: המחשב, לא התהליך — למפעיל "השרת פעיל X" הוא המכונה; זמן
+#: #968: המחשב, לא התהליך — למפעיל "השרת פעיל X" הוא המכונה; זמן
 #: התהליך היה מתאפס בכל `systemctl restart` ומטעה (הערת ה-Issue).
 UPTIME_PATH = "/proc/uptime"
 
@@ -198,12 +201,12 @@ def read_uptime(path: str = UPTIME_PATH) -> int | None:
 
 
 def _probe_request(url: str) -> urllib.request.Request:
-    """הבקשה של הבדיקה העצמית — מסומנת (‏#976).
+    """הבקשה של הבדיקה העצמית — מסומנת (#976).
 
-    בלי הסימון השרת רשם את הבדיקה של עצמו כמכונה: ‏`net_seen` עם
+    בלי הסימון השרת רשם את הבדיקה של עצמו כמכונה: `net_seen` עם
     `127.0.0.1`, פירור `menu` שאיפס שביל אמיתי, והתקן "לא רשום"
     `00:00:00:00:00:00`. הסימון מכובד רק כשהפונה הוא השרת עצמו
-    (‏`hello.self_probe`), ולכן הוא אינו דרך לאתחל בלי להירשם.
+    (`hello.self_probe`), ולכן הוא אינו דרך לאתחל בלי להירשם.
     """
     return urllib.request.Request(url, headers={PROBE_HEADER: "1"})
 
@@ -233,7 +236,7 @@ def _http_size(url: str) -> tuple[int | None, int | None]:
 
 
 def boot_asset_problems(probe, server_base: str) -> list[str]:
-    """‏vmlinuz ו-initrd.img — כפי שהתחנה מושכת אותם, לא כפי שהם בדיסק.
+    """vmlinuz ו-initrd.img — כפי שהתחנה מושכת אותם, לא כפי שהם בדיסק.
 
     בהתקנה נקייה (#332) שניהם החזירו 404 בזמן שהשורה הייתה ירוקה.
     הראיה כאן חיובית ומורכבת משניים — **200 וגם** גודל שאינו יכול
@@ -334,7 +337,7 @@ def time_sync_check(status: dict | str, legacy_sync: str | None = None) -> dict:
 
 
 def live_udp_sender_pids() -> list[int] | None:
-    """PIDs של udp-sender חיים. ‏None = לא הצלחנו לסרוק (#439)."""
+    """PIDs של udp-sender חיים. None = לא הצלחנו לסרוק (#439)."""
     root = Path("/proc")
     if not root.is_dir():
         return None
@@ -386,7 +389,7 @@ def _send_in_progress(ctx) -> bool:
 def sender_check(pids: list[int] | None, live_round: bool) -> dict:
     """רץ עם סבב → warn; רץ בלי סבב → bad; לא רץ → ok. לא הורג (#439).
 
-    ‏None (הבדיקה לא רצה) אינו ok: "לא רץ" הוא הירוק, ואי-בדיקה שנראית
+    None (הבדיקה לא רצה) אינו ok: "לא רץ" הוא הירוק, ואי-בדיקה שנראית
     כמו ירוק היא בדיוק עיקרון 5.
     """
     label = "משדר udp-sender"
@@ -421,7 +424,7 @@ def tftp_file_problems(root: Path) -> list[str]:
             missing.append(name)     # the pre-#1817 message, by name
             continue
         except (OSError, RuntimeError) as exc:
-            # ‏#2510: ה-strerror ליומן השרת; בשורת הבריאות — הנתיב שלנו ומשפט קבוע.
+            # #2510: ה-strerror ליומן השרת; בשורת הבריאות — הנתיב שלנו ומשפט קבוע.
             log.warning("tftp check of %s: %s", path, exc)
             problems.append(f"לא ניתן לבדוק {path} — הפרטים ביומן השרת")
         for directory in directories:
@@ -472,13 +475,13 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
         results.append(time_sync_check(sync))
     results.append(db_space_check(hooks["db_free"](getattr(ctx, "data_dir", None)),
                                   last_disk_full()))
-    # ‏#1895/#1956: גיבוי המסד — "ישן" אחרי יום ושעתיים, אדום על כשל, כתום כשהוא על כונן המסד.
+    # #1895/#1956: גיבוי המסד — "ישן" אחרי יום ושעתיים, אדום על כשל, כתום כשהוא על כונן המסד.
     results.append(backup_job.health_check(ctx.conn, getattr(ctx, "data_dir", None),
                                            hooks["unit_active"](backup_job.TIMER_UNIT)))
 
-    # ‏#1088: רשת ההפצה — טרם הוגדרה היא מצב **מוצהר** אחרי התקנה נקייה,
+    # #1088: רשת ההפצה — טרם הוגדרה היא מצב **מוצהר** אחרי התקנה נקייה,
     # לא כשל: השורה אומרת מה לעשות, ובדיקות ה-PXE שתלויות בה (TFTP,
-    # ‏dnsmasq, השרת בכתובת ההפצה) הופכות ל"לא רלוונטי עדיין" ולא לאדום
+    # dnsmasq, השרת בכתובת ההפצה) הופכות ל"לא רלוונטי עדיין" ולא לאדום
     # שמכסה על הבעיה האמיתית. כשהיא מוגדרת — אין שורה, והבדיקות כרגיל.
     deploy_state = hooks.get("deploy")() if hooks.get("deploy") else None
     unconfigured = deploy_state is not None and not deploy_state.configured
@@ -486,7 +489,7 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
         results.append(check("deploy_net", "הגדר את רשת ההפצה", "warn",
                              deploy_state.public()["hint"]))
 
-    # ‏#1088: כתובת כרטיס השרתים — DHCP ומתי החכירה פגה, או סטטי.
+    # #1088: כתובת כרטיס השרתים — DHCP ומתי החכירה פגה, או סטטי.
     servers_nic = hooks.get("servers_nic")() if hooks.get("servers_nic") else None
     if servers_nic is not None:
         results.append(check("servers_nic", "כתובת השרתים", *servers_nic))
@@ -553,9 +556,9 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
         results.append(check("boot_files", "קבצי האתחול", "bad",
                              " · ".join(problems) + " — הריצו את המתקין"))
 
-    # ‏#329: המתקין מעתיק את ה-shim פעם אחת ולא מעדכן. מיקרוסופט
+    # #329: המתקין מעתיק את ה-shim פעם אחת ולא מעדכן. מיקרוסופט
     # דוחפת עדכוני SBAT שמבטלים shim ישן, ואז **כל הצי** מפסיק לעלות
-    # ב-PXE בבת אחת — בלי שנגענו בכלום. ‏`apt upgrade` אינו מספיק:
+    # ב-PXE בבת אחת — בלי שנגענו בכלום. `apt upgrade` אינו מספיק:
     # הוא מעדכן את /usr/lib/shim, לא את העותק כאן.
     src, tftp = hooks["shim_src"](), root / "bootx64.efi"
     a, b = _sha256(src), _sha256(tftp)
@@ -571,7 +574,7 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
 
     # השרת עצמו, בכתובת שהלקוחות רואים. הקונסולה שקוראת את זה כבר מדברת
     # איתנו — הבדיקה היא שהכתובת הציבורית (זו שב-GRUB) אכן עונה.
-    # ‏#996: פורט שהמפעיל כיבה בדף הפורטים הוא "כבוי", לא "לא עונה" —
+    # #996: פורט שהמפעיל כיבה בדף הפורטים הוא "כבוי", לא "לא עונה" —
     # שני מצבים שונים, ורק השני הוא תקלה.
     if unconfigured:
         status = "unconfigured"
@@ -622,11 +625,11 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
             else " · DHCP לא הודלק על אף כרטיס"
         results.append(check("nics", "כרטיסי רשת", "ok", detail))
 
-    # ‏#1810: כרטיס ההפצה נשמר **כשם** (nft, ‏dnsmasq, ‏udp-sender). שם שהשתנה
+    # #1810: כרטיס ההפצה נשמר **כשם** (nft, dnsmasq, udp-sender). שם שהשתנה
     # (שדרוג דביאן, vNIC חדש, כרטיס שהוחלף) — הכול נטען ושום דבר לא נתפס.
     # כרטיס שנשמר ב-DB (`deploy:interface`) בלי שהמצב "הוגדר" הוא בדיוק המקרה
-    # שבו השם השתנה באתחול: ‏`resolve` רואה שאין כתובת על אף כרטיס ומחזיר
-    # "לא הוגדר". ‏"לא הוגדר" ו"הוגדר על כרטיס שאינו קיים" הם שני מצבים שונים,
+    # שבו השם השתנה באתחול: `resolve` רואה שאין כתובת על אף כרטיס ומחזיר
+    # "לא הוגדר". "לא הוגדר" ו"הוגדר על כרטיס שאינו קיים" הם שני מצבים שונים,
     # והשני תקלה גלויה (עיקרון 5) — לא נקפל אותו לאזהרה "לא הוגדרה".
     configured_if = deploy_state.interface if deploy_state is not None and deploy_state.configured else None
     stored_if = deploy_net.stored(ctx.conn)[0] if unconfigured else None
@@ -644,11 +647,11 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
         results.append(check("deploy_nic", "כרטיס ההפצה", "ok",
                              f"{configured_if} קיים במערכת"))
 
-    # ‏#1074: חומת האש שהמתקין כותב — שלושה מצבים, לא "חסר = כבוי".
+    # #1074: חומת האש שהמתקין כותב — שלושה מצבים, לא "חסר = כבוי".
     fw_state, fw_detail = ports.firewall_status(hooks["nft_ruleset"](), names)
     results.append(check("firewall", "חומת אש", fw_state, fw_detail))
 
-    # ‏#1972: querier ברשת ההפצה — פעיל / יש querier אחר / כבוי. ‏#1973: מצב ה-UPS.
+    # #1972: querier ברשת ההפצה — פעיל / יש querier אחר / כבוי. #1973: מצב ה-UPS.
     if hooks.get("igmp_querier"):
         results.append(check("igmp_querier", "IGMP querier", *hooks["igmp_querier"]()))
     if hooks.get("rogue_dhcp"):
@@ -656,41 +659,44 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     if hooks.get("ups"):
         results.append(check("ups", "UPS", *hooks["ups"]()))
 
-    # ‏#2454: סיסמת ה-GRUB של השרת — צהוב עד שמנהל סימן שנשמרה מחוץ לשרת.
+    # #2454: סיסמת ה-GRUB של השרת — צהוב עד שמנהל סימן שנשמרה מחוץ לשרת.
     grub_reminder = hooks["grub_password"]() if hooks.get("grub_password") else None
     if grub_reminder:
         results.append(check("grub_password", "סיסמת GRUB", *grub_reminder))
 
-    # ‏#1372: מארח שאינו מוכן ל-VM הוא אזהרה בשם — לא שקט ירוק אחרי עדכון.
+    # #1372: מארח שאינו מוכן ל-VM הוא אזהרה בשם — לא שקט ירוק אחרי עדכון.
     if hooks.get("vm_host"):
         results.append(check("vm_host", "עדכון ב-VM", *hooks["vm_host"]()))
 
-    # ‏#1846: האבדן ברשת ההפצה מול הבסיס שלה — שורה לכל כרטיס הפצה שנמדד עליו גל.
+    # #1846: האבדן ברשת ההפצה מול הבסיס שלה — שורה לכל כרטיס הפצה שנמדד עליו גל.
     from server.learn import netloss as _learn_netloss
     results.extend(_learn_netloss.health_checks(ctx.conn))
-    # ‏#1847: מכונה שלא מתעוררת מ-WoL — רצף של הערות בלי תשובה.
+    # #1847: מכונה שלא מתעוררת מ-WoL — רצף של הערות בלי תשובה.
     from server.learn import wol as _learn_wol
     results.extend(_learn_wol.health_checks(ctx.conn))
-    # ‏#1848: שלב אתחול שהתארך פי 2 מהבסיס של המכונה, ולפני/אחרי עדכון.
+    # #1848: שלב אתחול שהתארך פי 2 מהבסיס של המכונה, ולפני/אחרי עדכון.
     from server.learn import boot as _learn_boot
     results.extend(_learn_boot.health_checks(ctx.conn))
-    # ‏#1884: דיסק הספרייה בגל האחרון — קצב ולחץ I/O.
+    # #1884: דיסק הספרייה בגל האחרון — קצב ולחץ I/O.
     from server.learn import server_io as _server_io
     results.extend(_server_io.health_checks(ctx.conn))
-    # ‏#1886: המקום הפנוי לאורך זמן — "מתמלא בעוד ~N ימים".
+    # #1886: המקום הפנוי לאורך זמן — "מתמלא בעוד ~N ימים".
     from server.storage import history as _storage_history
     results.extend(_storage_history.health_checks(ctx.conn))
-    # ‏#1889: סיכום שבועי של ההמתנה למפעיל — המלצה לאדם, לא פעולה.
+    # #1889: סיכום שבועי של ההמתנה למפעיל — המלצה לאדם, לא פעולה.
     from server.learn import waits as _learn_waits
     results.extend(_learn_waits.health_checks(ctx.conn))
 
     # #1066: שורה לכל מיקום אחסון — מחובר / לא נגיש / מנותק / לא נבדק.
     from server.storage import locations as _storage_locations
     results.extend(_storage_locations.health_checks(ctx))
-    # ‏#1989: שורה לכל מערך RAID — תקין / פגוע / בבנייה מחדש (עם אחוז).
+    # #1989: שורה לכל מערך RAID — תקין / פגוע / בבנייה מחדש (עם אחוז).
     results.extend(raid_status.health_checks(hooks.get("mdstat"), hooks.get("raid_declared"), hooks.get("mounts")))
+    # #3007: SMART של הדיסקים של השרת עצמו (מערכת, ספרייה) — `server_disks.Cached`; None = לא הוזרק.
+    if hooks.get("server_disks"):
+        results.extend(hooks["server_disks"]())
 
-    # ‏#855: שומר הזהות — מתג כבוי הוא מצב מוצהר שנאמר כאן, וקובץ חכירות
+    # #855: שומר הזהות — מתג כבוי הוא מצב מוצהר שנאמר כאן, וקובץ חכירות
     # שאינו נקרא הוא "כל hello מסורב", לא שקט.
     if unconfigured:
         results.append(check("identity", "זהות מכונה", "not_applicable",
@@ -718,8 +724,8 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     return results
 
 
-#: הפורטים של השרת עצמו כשאין מנהל מאזינים בתהליך (‏create_app של
-#: הבדיקות): מה ש-main.py קושר כברירת מחדל. עם מנהל (‏#996) הפורט
+#: הפורטים של השרת עצמו כשאין מנהל מאזינים בתהליך (create_app של
+#: הבדיקות): מה ש-main.py קושר כברירת מחדל. עם מנהל (#996) הפורט
 #: והכתובות נקראים ממנו, ומה שבאמת מאזין — מטבלת הסוקטים.
 DEFAULT_OWN_PORTS = {"http_boot": 8080, "http_console": 8081,
                      "interserver": 8443}
@@ -732,13 +738,13 @@ def _port(port_id: str, name: str, port: str, proto: str, desc: str,
           toggle_url: str | None = None, confirm_word: str | None = None,
           confirm_when: str | None = None, off_means: str = "",
           **extra) -> dict:
-    """שורה ב-/ports. ‏#996 הוסיף את המתג: ‏`enabled` (המתג השמור; None =
-    אין מתג), ‏`listening` (נמדד: True/False, ‏None = לא נקרא כאן),
-    ‏`bind` (כתובות ההאזנה מטבלת הסוקטים; ‏#1039: ‏None = הטבלה לא
-    נקראה ≠ ‏`[]` = נקראה ואף אחד לא מאזין; שורה בלי סוקט בשרת לא מעבירה
-    ומקבלת `[]`), ‏`toggle` (`api`/`confirm`/
-    ‏`none`), ‏`toggle_url` (איפה המתג חי), ‏`confirm_word`/`confirm_when`
-    (מה מקלידים ומתי: `on`/`off`), ‏`off_means`."""
+    """שורה ב-/ports. #996 הוסיף את המתג: `enabled` (המתג השמור; None =
+    אין מתג), `listening` (נמדד: True/False, None = לא נקרא כאן),
+    `bind` (כתובות ההאזנה מטבלת הסוקטים; #1039: None = הטבלה לא
+    נקראה ≠ `[]` = נקראה ואף אחד לא מאזין; שורה בלי סוקט בשרת לא מעבירה
+    ומקבלת `[]`), `toggle` (`api`/`confirm`/
+    `none`), `toggle_url` (איפה המתג חי), `confirm_word`/`confirm_when`
+    (מה מקלידים ומתי: `on`/`off`), `off_means`."""
     # אזהרה לפני כיבוי לכל פורט עם מתג (נדב 19/09) — מהטבלה, אלא אם השורה
     # הביאה משלה (TFTP במצב שדרוג, למשל).
     extra.setdefault("warning_he", ports.warning_for(port_id) if toggle != "none" else None)
@@ -751,7 +757,7 @@ def _port(port_id: str, name: str, port: str, proto: str, desc: str,
 
 
 def _dhcp_flags(ctx) -> list[dict]:
-    """‏(שם, enabled, proxy) לכל כרטיס עם הגדרת DHCP שמורה — אותה קריאה
+    """(שם, enabled, proxy) לכל כרטיס עם הגדרת DHCP שמורה — אותה קריאה
     כמו `collect`, כדי ששני המסכים יסכימו מי משרת."""
     rows = []
     for row in ctx.conn.execute(
@@ -765,7 +771,7 @@ def _dhcp_flags(ctx) -> list[dict]:
 
 def _own_row(ctx, hooks: dict, port_id: str, ss_tcp: str, *,
              name: str, desc: str, target: str, note: str) -> dict:
-    """שורה של מאזין של השרת עצמו (‏#996): הפורט מהמנהל (או ברירת המחדל),
+    """שורה של מאזין של השרת עצמו (#996): הפורט מהמנהל (או ברירת המחדל),
     ההאזנה מטבלת הסוקטים, המתג מה-DB — ושלושת המצבים נצבעים בנפרד."""
     listeners = hooks.get("port_listeners")
     registered = listeners is not None and port_id in listeners.ids()
@@ -774,7 +780,7 @@ def _own_row(ctx, hooks: dict, port_id: str, ss_tcp: str, *,
     listening = None if bind is None else bool(bind)
     toggle, off_means = ports.OWN[port_id]
     if port_id == "interserver" and not registered:
-        # ‏8443 עולה על משני עם --interserver-host, ועל ראשי שהקונסולה שלו על
+        # 8443 עולה על משני עם --interserver-host, ועל ראשי שהקונסולה שלו על
         # כרטיס שרתים ("אתה שם?" בלבד, #1310); בלעדיהם אין מה לכבות.
         state, detail = ports.measured_state(None, listening)
         return _port(port_id, name, str(port), "tcp", desc, target, state,
@@ -792,20 +798,20 @@ def _own_row(ctx, hooks: dict, port_id: str, ss_tcp: str, *,
 
 
 def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
-    """‏#822: מסך "פורטים" בקונסולה. כל שורה נקראת מהשרת — לא רשימה
+    """#822: מסך "פורטים" בקונסולה. כל שורה נקראת מהשרת — לא רשימה
     קבועה ב-JS — ומצב "לא נקרא" נאמר בפירוש כשטבלת הסוקטים לא נקראה
     (עיקרון 5: לא לצייר ירוק על מה שלא נבדק).
 
-    ‏#996: לכל שורה מתג — ‏`enabled`/`bind`/`toggle`/`toggle_url`/
-    ‏`off_means` (ראה `_port`) — והשורות שחסרו: DHCP 67, בין-שרתים
-    8443. ‏`listening` ו-`bind` באים מ-`ss` (‏udp
+    #996: לכל שורה מתג — `enabled`/`bind`/`toggle`/`toggle_url`/
+    `off_means` (ראה `_port`) — והשורות שחסרו: DHCP 67, בין-שרתים
+    8443. `listening` ו-`bind` באים מ-`ss` (udp
     ו-tcp), לא מההגדרה."""
     ss_out = hooks["ss"]()
     ss_tcp = hooks["ss_tcp"]()
     entries = []
     dhcp_flags = _dhcp_flags(ctx)
 
-    # ‏TFTP 69 (‏#1013): המתג נשמר כ-`port:tftp` ומוחל דרך ה-render של
+    # TFTP 69 (#1013): המתג נשמר כ-`port:tftp` ומוחל דרך ה-render של
     # dnsmasq; `ports.tftp_switch` מחליט אם יש מתג בכלל (קובץ המתקין).
     # המצב הנמדד נשאר `ss`: "כבוי" (המתג) ≠ "לא מאזין" ≠ "לא נקרא".
     tftp_bind = ports.bind_addresses(ss_out, 69)
@@ -829,7 +835,7 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
         "bootloader — shim/GRUB והתפריט", "תחנות (PXE)", state, detail, tftp_note,
         listening=listening, bind=tftp_bind, **switch))
 
-    # ‏DHCP 67 — המתג חי ב-PUT /net/interfaces/{n} (enabled, +confirm = שם
+    # DHCP 67 — המתג חי ב-PUT /net/interfaces/{n} (enabled, +confirm = שם
     # הכרטיס); כאן רק החיווי וההפניה. proxy גם הוא מאזין על 67.
     dhcp_bind = ports.bind_addresses(ss_out, 67)
     dhcp_on = any(f["enabled"] or f["proxy"] for f in dhcp_flags)
@@ -864,12 +870,12 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
             http["state"], http["detail"] = "warn", f"{server_base} החזיר {status}"
     entries.append(http)
 
-    # ‏#703 (tracer 5): הקונסולה מוגשת ב-HTTPS בלבד (תעודה חתומה-עצמית).
+    # #703 (tracer 5): הקונסולה מוגשת ב-HTTPS בלבד (תעודה חתומה-עצמית).
     entries.append(_own_row(ctx, hooks, "http_console", ss_tcp, name="HTTPS",
         desc="קונסולת הניהול (TLS, תעודה עצמית)", target="דפדפן (מנהל)",
         note="לפתוח ב-FW: TCP 8081 (HTTPS) מתחנת הניהול בלבד — לא לוילן הכיתות"))
 
-    # ‏#1303 (נדב 12/10): ‏PXE proxy שייך לכיתות (v1.2) — ‏`PUT /net/interfaces` מסרב לו ב-409
+    # #1303 (נדב 12/10): PXE proxy שייך לכיתות (v1.2) — `PUT /net/interfaces` מסרב לו ב-409
     # כשהן כבויות. ב-v1 אין שורת 4011 בדף הפורטים (שארית מוצגת של יכולת שאין).
     if capabilities.classrooms():
         proxy_bind = ports.bind_addresses(ss_out, 4011)
@@ -922,7 +928,7 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
 
     ruleset = hooks["nft_ruleset"]()
     fw_state, fw_detail = ports.firewall_status(
-        ruleset, [n["name"] for n in hooks["interfaces"]()])   # ‏#1810
+        ruleset, [n["name"] for n in hooks["interfaces"]()])   # #1810
     entries.append(_port("firewall", "חומת אש", "—", "nft",
         "מדיניות nftables לפי וילן שהמתקין כותב (#1074)", "השרת (host)",
         fw_state, fw_detail,
@@ -932,7 +938,7 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
                   "(deploy/nftables-rules.sh). כיבוי = nft flush / "
                   "systemctl stop nftables — מחוץ לקונסולה"))
 
-    # ‏#1267: לכל שורה — לאיזו רשת היא שייכת; ולשורות שחוצות רשתות (ניהול,
+    # #1267: לכל שורה — לאיזו רשת היא שייכת; ולשורות שחוצות רשתות (ניהול,
     # בין שרתים) — מה טבלת imagesrv של השרת אומרת על הפורט הזה. ברשת ההפצה
     # השרת מנהל את הפורטים ואין חומת אש של המכללה — אין שם ערך.
     for row in entries:
@@ -945,22 +951,22 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
 
 def create_health_router(ctx, server_base: str, hooks: dict | None = None,
                          dnsmasq_apply=None, version=None) -> APIRouter:
-    """‏`dnsmasq_apply(what, user_id)` (‏#1013): מה שמתג ה-TFTP מפעיל —
-    ‏`console_dhcp.apply_dnsmasq` עם ה-hooks של ה-DHCP; ‏None = אין.
-    ‏`version()` (‏#1131): תג ה-git של העץ, אותו מקור כמו `/me` — ל-`/health/live`;
-    ‏#1159: מחזיר ``update.VersionRead`` — ``update.read_version``."""
+    """`dnsmasq_apply(what, user_id)` (#1013): מה שמתג ה-TFTP מפעיל —
+    `console_dhcp.apply_dnsmasq` עם ה-hooks של ה-DHCP; None = אין.
+    `version()` (#1131): תג ה-git של העץ, אותו מקור כמו `/me` — ל-`/health/live`;
+    #1159: מחזיר ``update.VersionRead`` — ``update.read_version``."""
     router = APIRouter(prefix="/api/console")
     current_user, admin_only = auth.dependencies(ctx.conn)
     hooks = {**default_hooks(), **(hooks or {})}
 
     @router.get("/health/live")
     def live():
-        """‏#1131: liveness **ללא הזדהות** — המתקין (לפני שהוא מפעיל חומת אש)
+        """#1131: liveness **ללא הזדהות** — המתקין (לפני שהוא מפעיל חומת אש)
         ו-`tools/server-upgrade.sh` (אחרי restart) שואלים כאן מ-loopback אם
         השרת החדש עונה, ואיזו גרסה רצה. רק `ok` וגרסה — לא מצב הבדיקות
-        (‏`/health` נשאר admin בלבד). ‏#1159: ‏`version: null` תמיד בא עם
-        ‏`version_error` — "לא נקרא" אינו "אין גרסה" (עיקרון 5). **רק
-        הקטגוריה** (‏`update.VERSION_ERRORS`): ה-endpoint ללא הזדהות, והסיבה
+        (`/health` נשאר admin בלבד). #1159: `version: null` תמיד בא עם
+        `version_error` — "לא נקרא" אינו "אין גרסה" (עיקרון 5). **רק
+        הקטגוריה** (`update.VERSION_ERRORS`): ה-endpoint ללא הזדהות, והסיבה
         המלאה — נתיבים ו-stderr — ביומן וב-`GET /update` (admin)."""
         if version is None:
             return {"ok": True, "version": None, "version_error": "not-wired"}
@@ -976,12 +982,12 @@ def create_health_router(ctx, server_base: str, hooks: dict | None = None,
 
     @router.get("/ports")
     def list_ports(user=Depends(current_user)):
-        """‏#822: מסך הפורטים. מחובר בלבד — בניגוד ל-/health, admin
+        """#822: מסך הפורטים. מחובר בלבד — בניגוד ל-/health, admin
         אינו נדרש: אלה פורטי תשתית ולא רשימת דלתות פתוחות למנהל בלבד."""
         del user
         return ports_snapshot(ctx, hooks, server_base)
 
-    # ‏#996: המתג לכל פורט — אותם hooks (ss/ss_tcp/port_listeners) כמו החיווי.
+    # #996: המתג לכל פורט — אותם hooks (ss/ss_tcp/port_listeners) כמו החיווי.
     router.include_router(ports.create_ports_router(
         ctx, lambda: ports_snapshot(ctx, hooks, server_base),
         hooks.get("port_listeners"), dnsmasq_apply))

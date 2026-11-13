@@ -115,6 +115,8 @@ fail() {
     install -d "$ETC"
     printf 'state=%s\ntimestamp=%s\nmessage=%s\n' "$state" "$(date -u +%FT%TZ)" "$message" > "$STATUS"
     printf 'imagesrv-firstboot: [%s] %s\n' "$state" "$message" >&2
+    # #2634: outside the recovery entry getty@ runs only with this mark (deploy/getty-recovery-only.conf)
+    : > /run/imagesrv-login-open || printf 'imagesrv-firstboot: could not open the tty2 login (/run)\n' >&2
     printf '\nImageSrv: first boot failed [%s]\n%s\nPress Alt+F2 to log in on tty2.\n' \
         "$state" "$message" > "$FIRSTBOOT_TTY"
     # #1741 (S3): the same failure on the GUI, over that line; without it the line is the screen
@@ -306,8 +308,11 @@ printf '%s\n' "$wizard_guard" | nft -f - \
     || fail wizard-guard-failed "nft could not load the wizard firewall guard; the wizard was not started"
 guard_listed=$(nft list chain inet imagesrv_wizard input) \
     || fail wizard-guard-failed "The wizard firewall guard is not in the kernel ruleset; the wizard was not started"
-[[ "$guard_listed" == *"tcp dport 8081"*"drop"* ]] \
-    || fail wizard-guard-failed "The wizard firewall guard has no drop rule for port 8081; the wizard was not started"
+# ‏#2518: גם ה-drop של DNS (53) ו-rpcbind (111) מחוץ ל-lo — נקרא בחזרה, לא מונח.
+[[ "$guard_listed" == *"tcp dport 8081"*"drop"* && "$guard_listed" == *"udp dport 53"*"drop"* \
+   && "$guard_listed" == *"tcp dport 53"*"drop"* && "$guard_listed" == *"udp dport 111"*"drop"* \
+   && "$guard_listed" == *"tcp dport 111"*"drop"* ]] \
+    || fail wizard-guard-failed "The wizard firewall guard has no drop rule for port 8081, 53 or 111; the wizard was not started"
 guard_summary=${wizard_guard#*"# open on: "}
 log "wizard guard: port 8081 open on ${guard_summary%%$'\n'*}, dropped on every other NIC"
 

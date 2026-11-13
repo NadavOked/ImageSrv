@@ -65,6 +65,9 @@ async function saveNic(name, body) {
    הכתובת ואת ה-DHCP יחד, כדי שלא יהיה רגע של כרטיס שמכריז על כתובת
    שאינה שלו. שער/DNS שנשמרו בהגדרה קיימת נשארים בשרת כפי שהם. */
 const LEASE_UNITS = [["h", "שעות"], ["m", "דקות"], ["d", "ימים"]];
+/* ‏#2889: תקרת החכירה — אותה של השרת (‏dhcp.MAX_LEASE_DAYS). */
+const MAX_LEASE_DAYS = 365;
+const LEASE_DAYS_PER = { m: 1 / 1440, h: 1 / 24, d: 1 };
 
 function deployFormProblems(v) {
   const found = [];
@@ -88,9 +91,38 @@ function deployFormProblems(v) {
       found.push("הטווח חייב להיות בתוך הרשת");
     }
     if (start <= me && me <= end) found.push(`כתובת השרת (${server}) נמצאת בתוך הטווח`);
+    // ‏#2889: כתובת הרשת והשידור אינן כתובות של מחשב (כמו dhcp.validate בשרת).
+    const base = ipNum(networkOf(net, mask)), bcast = (base | (~ipNum(mask) >>> 0)) >>> 0;
+    if (ipNum(mask) < 0xfffffffe) {
+      if (start === base) found.push(`הטווח מתחיל בכתובת הרשת (${numIp(base)})`);
+      if (end === bcast) found.push(`הטווח מסתיים בכתובת השידור (${numIp(bcast)})`);
+    }
   }
   if (!/^\d+$/.test(String(v.lease_n || "").trim()) || Number(v.lease_n) < 1) {
     found.push("משך חכירה: מספר שלם חיובי");
+  } else if (Number(v.lease_n) * (LEASE_DAYS_PER[v.lease_u || "h"] || 1 / 24) > MAX_LEASE_DAYS) {
+    found.push(`משך חכירה ארוך מדי — עד ${MAX_LEASE_DAYS} ימים`);
+  }
+  return found;
+}
+
+/* ‏#2889 + ‏#2883: מה שאינו חוסם את השמירה אבל המפעיל חייב לראות לפניה. */
+function deployFormWarnings(v, before) {
+  const found = [];
+  const server = v.server || firstHost(v.network, v.netmask);
+  if (server && validIp(v.range_start) && validIp(v.range_end)) {
+    const size = ipNum(v.range_end) - ipNum(v.range_start) + 1;
+    const known = typeof MACHINES !== "undefined" && Array.isArray(MACHINES) ? MACHINES.length : null;
+    if (size === 1) found.push("הטווח הוא כתובת אחת — רק מחשב אחד יקבל כתובת בכל פעם");
+    if (known !== null && size > 0 && size < known) {
+      found.push(`בטווח ${size} כתובות, ורשומים ${known} מחשבים — לא כולם יקבלו כתובת יחד`);
+    }
+  }
+  // ‏#2883: רשת הפצה קיימת שעוברת לכתובת אחרת.
+  if (before && before.enabled && (String(v.network || "").trim() !== String(before.network || "").trim()
+      || String(v.netmask || "").trim() !== String(before.netmask || "").trim())) {
+    found.push("שינוי כתובת רשת ההפצה: מחשבים שכבר קיבלו כתובת ברשת הישנה יאבדו את השרת עד שיאותחלו, "
+      + "והשרת יאותחל על הכתובת החדשה. בזמן סבב או קליטה השרת מסרב לשינוי.");
   }
   return found;
 }
@@ -135,7 +167,8 @@ function editDeployNet(name) {
     note: mgmt ? mgmtNote : (nic.trunk ? `<div class="sheet-note danger">הכרטיס מסומן כמחובר לרשת המכללה. DHCP כאן ישבית את הרשת.</div>`
       : !nic.enabled ? `<div class="sheet-note">ההגדרה המסוכנת ביותר במערכת: DHCP על רשת שכבר יש בה שרת משבית אותה. השרת יבדוק לפני ההדלקה אם מישהו כבר עונה.</div>` : "")
       + (firstTime ? `<div class="sheet-note">רשת ההפצה מוגדרת כאן <b>בפעם הראשונה</b>: השמירה משלימה את ההתקנה (grub.cfg, dnsmasq, חומת אש) ומאתחלת את השרת על כתובת ההפצה — הקונסולה תחזור תוך כמה שניות.</div>` : "")
-      + `<div class="sheet-note" id="deploy-server-ip">${deployServerNote(network, netmask)}</div>`,
+      + `<div class="sheet-note" id="deploy-server-ip">${deployServerNote(network, netmask)}</div>`
+      + `<div class="sheet-note danger" id="deploy-warn" hidden></div>`,
     size: "mid",
     fields: [
       ...(mgmt ? [] : [{ type: "section", label: "רשת ההפצה" },
@@ -150,6 +183,8 @@ function editDeployNet(name) {
       ...(nic.trunk && !nic.enabled ? [{ id: "confirm_trunk", type: "checkbox", value: false,
         label: "אני מבין שזו רשת המכללה ורוצה להדליק בכל זאת" }] : []),
       ...(cards ? cards.fields : []),
+      // ‏#2970: כתובת שהוחלה וממתינה לאישור — האישור כאן, בחלון, וממשיכים ממנו ל-DHCP.
+      { type: "html", html: `<div class="sheet-note danger" id="deploy-confirm" role="alert" hidden></div>` },
     ],
     submitLabel: mgmt ? "הדלקת רשת הפצה על כרטיס הניהול" : "שמירה והחלה",
     // ‏#2840: השמירה היא בקשה אחת שאורכת שניות (בהגדרה הראשונה — עד כדקה); המפעיל רואה שהיא רצה.
@@ -173,7 +208,7 @@ function editDeployNet(name) {
           ...(mgmt ? { confirm_management: true } : {}),
         });
       }
-      if (cards && second !== cards.current) await saveDeploySecond(name, second);
+      if (cards && second !== cards.current) await saveDeploySecond(name, second, v.second_only_deploy === true);
     },
   });
   // כתובת השרת מתעדכנת תוך כדי הקלדה, והכפתור נדלק כשהשדות תקינים.
@@ -183,9 +218,15 @@ function editDeployNet(name) {
   const value = (id) => { const el = document.getElementById("sf-" + id); return el ? el.value : ""; };
   const sync = () => {
     const v = { network: value("network"), netmask: value("netmask"), range_start: value("range_start"),
-                range_end: value("range_end"), lease_n: value("lease_n"), ...fixed };
+                range_end: value("range_end"), lease_n: value("lease_n"), lease_u: value("lease_u"), ...fixed };
     const note = !mgmt && document.getElementById("deploy-server-ip");
     if (note) note.innerHTML = deployServerNote(v.network, v.netmask);
+    const warn = document.getElementById("deploy-warn");
+    if (warn) {
+      const warnings = deployFormWarnings(v, nic.enabled ? { enabled: true, network, netmask } : null);
+      warn.innerHTML = warnings.map(esc).join("<br>");
+      warn.hidden = warnings.length === 0;
+    }
     const problems = deployFormProblems(v);
     const submit = form.querySelector('button[type="submit"]');
     if (submit) submit.disabled = problems.length > 0;
@@ -221,11 +262,19 @@ function deployCardsFields(name, nic) {
       help: "כרטיס ההפצה — החלפתו דורשת התקנה מחדש" },
     { id: "second", label: "כרטיס 2 (רשות)", type: "select", value: current, options,
       help: "שני הכרטיסים עובדים יחד על אותה כתובת: תעבורה למחשבים שונים מתחלקת ביניהם (סבב שיכפול יוצא בכרטיס אחד), ואם אחד נופל השני ממשיך — סבב שרץ נעצר לשניות ספורות ומסתיים כרגיל" },
+    // ‏#2891: כשהבדיקה "האם כבר יש DHCP" לא יכולה לרוץ על הכרטיס (בלי קישור), השרת מסרב ומפנה
+    // לתיבה הזו בשמה — זו הדרך היחידה להמשיך, והיא כבויה עד שמסמנים אותה.
+    { id: "second_only_deploy", type: "checkbox", value: false, label: SECOND_ONLY_DEPLOY_LABEL,
+      help: "רק אם השרת אמר שהבדיקה לא רצה, ורק אם הכרטיס מחובר לרשת ההפצה בלבד: DHCP על רשת שכבר יש בה שרת משבית אותה" },
   ] };
 }
 
-async function saveDeploySecond(name, second) {
-  const result = await put(`/net/config/${encodeURIComponent(name)}/second`, { second });
+/* ‏#2891: אותה תווית שהשרת מצטט בסירוב (‏console/netcfg.py, ‏SECOND_ONLY_DEPLOY_LABEL). */
+const SECOND_ONLY_DEPLOY_LABEL = "הכרטיס השני מחובר רק לרשת ההפצה — לדלג על הבדיקה";
+
+async function saveDeploySecond(name, second, ignoreExisting = false) {
+  const result = await put(`/net/config/${encodeURIComponent(name)}/second`,
+                           ignoreExisting && second ? { second, ignore_existing: true } : { second });
   if (typeof refreshNetPages === "function") refreshNetPages();
   // ההעברה על המכונה לא אומתה — השרת החזיר את הקבצים הקודמים; החלון נשאר פתוח עם הסיבה.
   if (!result.deploy) throw new Error(result.apply_error || "הכרטיסים לא הוחלפו");
@@ -265,15 +314,78 @@ async function saveDeployNet(name, body) {
   const result = await put(`/net/config/${encodeURIComponent(name)}/deploy`, body);
   if (typeof refreshNetPages === "function") refreshNetPages();
   // הכתובת לא הוחלה/לא אומתה/ממתינה לאישור — ה-DHCP לא שונה, והחלון נשאר פתוח עם הסיבה.
-  if (!result.dhcp) throw new Error(result.apply_error || "הכתובת לא הוחלה — ה-DHCP לא שונה");
-  if (result.apply_error) toast("נשמר, אבל dnsmasq לא עודכן: " + result.apply_error);
-  else toast(`רשת ההפצה נשמרה על ${name} — כתובת השרת ${result.server_ip}`);
+  if (!result.dhcp) {
+    // ‏#2970: הכתובת הוחלה וממתינה לאישור — האישור בחלון הזה, והשמירה ממשיכה ממנו לבד.
+    const rb = result.address && result.address.ok && result.address.rollback;
+    if (rb && rb.pending) {
+      showDeployConfirm(rb, result.server_ip);
+      throw new Error("ה-DHCP עוד לא הוחל: אשרו כאן בחלון שהקונסולה עדיין נגישה, והשמירה תמשיך לבד");
+    }
+    throw new Error(result.apply_error || "הכתובת לא הוחלה — ה-DHCP לא שונה");
+  }
   const d = result.deploy;
+  // ‏#2883: השלמת הכתובת החדשה (grub.cfg, חומת אש, אתחול) נכשלה — זו לא תקלת dnsmasq.
+  if (result.apply_error) toast((d && !d.ok ? "נשמר, אבל: " : "נשמר, אבל dnsmasq לא עודכן: ") + result.apply_error);
+  else toast(`רשת ההפצה נשמרה על ${name} — כתובת השרת ${result.server_ip}`);
   if (d && d.ok) {
     toast(`רשת ההפצה הוגדרה על ${name} (${d.url}) — השרת מתאתחל, הקונסולה תחזור תוך כמה שניות`);
     if (typeof NET_DEPLOY !== "undefined") NET_DEPLOY = { configured: true, source: "console", interface: name, url: d.url, hint: null };
   }
   await loadNet();
+}
+
+/* ‏#2970: "ממתינה לאישור" בתוך חלון רשת ההפצה. האישור (‏/net/config/confirm) ואז אותה
+   שמירה שוב, לבד (`requestSubmit`): הכתובת כבר שמורה, ולכן השמירה החוזרת ממשיכה ישר ל-DHCP.
+   הספירה לאחור מהשרת (‏seconds_left), וכשהיא נגמרת — נאמר שההגדרה הקודמת חוזרת. */
+let DEPLOY_CONFIRM_TICK = null;
+
+function deployConfirmHtml(rb, ip) {
+  return `<b>הכתובת <span dir="ltr">${esc(ip || "")}</span> הוחלה על ${esc(rb.interface)} וממתינה לאישור.</b> `
+    + "אשרו שהקונסולה עדיין נגישה, והשמירה תמשיך ל-DHCP מיד, בלי לשמור שוב. בלי אישור, ההגדרה הקודמת "
+    + `תחזור בעוד <b id="deploy-confirm-count">${Math.max(0, Number(rb.seconds_left) || 0)}</b> שניות. `
+    + `<button class="btn primary" id="deploy-confirm-btn" type="button" onclick="confirmDeployAndContinue('${encodeId(rb.interface)}')">אשר שהחיבור עובד והמשך</button>`;
+}
+
+function showDeployConfirm(rb, ip) {
+  const box = document.getElementById("deploy-confirm");
+  if (!box) return;
+  box.innerHTML = deployConfirmHtml(rb, ip);
+  box.hidden = false;
+  if (box.scrollIntoView) box.scrollIntoView({ block: "nearest" });
+  clearInterval(DEPLOY_CONFIRM_TICK);
+  DEPLOY_CONFIRM_TICK = setInterval(deployConfirmTick, 1000);
+}
+
+function deployConfirmTick() {
+  const box = document.getElementById("deploy-confirm");
+  const count = document.getElementById("deploy-confirm-count");
+  if (!box || box.hidden || !count) { clearInterval(DEPLOY_CONFIRM_TICK); return; }   // החלון נסגר
+  const left = Math.max(0, Number(count.textContent) - 1);
+  count.textContent = left;
+  if (left > 0) return;
+  clearInterval(DEPLOY_CONFIRM_TICK);
+  box.innerHTML = "<b>חלון האישור נסגר — ההגדרה הקודמת של הכרטיס חוזרת.</b> ה-DHCP לא שונה. סגרו את החלון, "
+    + "בדקו בלשונית הרשת שהכתובת חזרה, ורק אז שמרו שוב.";
+}
+
+async function confirmDeployAndContinue(ifaceEnc) {
+  const iface = decodeURIComponent(ifaceEnc);
+  const button = document.getElementById("deploy-confirm-btn");
+  if (button) button.disabled = true;
+  try {
+    await post("/net/config/confirm", { interface: iface });
+  } catch (error) {
+    if (button) button.disabled = false;
+    const shown = document.getElementById("sf-error");
+    if (shown) shown.textContent = error.message;
+    return;
+  }
+  clearInterval(DEPLOY_CONFIRM_TICK);
+  const box = document.getElementById("deploy-confirm");
+  if (box) { box.hidden = true; box.innerHTML = ""; }
+  toast("אושר — הכתובת נשארת, ממשיכים ל-DHCP");
+  const form = document.getElementById("sheet");
+  if (form && form.requestSubmit) form.requestSubmit();
 }
 
 async function loadNet() {

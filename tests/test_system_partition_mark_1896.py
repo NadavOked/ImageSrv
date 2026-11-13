@@ -1,4 +1,4 @@
-"""‏#1896 — הכרעת נדב (22/10): סימון מחיצת המערכת (C:) באימג' ישן.
+"""#1896 — הכרעת נדב (22/10): סימון מחיצת המערכת (C:) באימג' ישן.
 
 אימג' שנקלט לפני #1875 ובו שתי מחיצות windows בגודל שווה: אין סימון
 `"system": true` מהקליטה, ואי אפשר להבחין ביניהן — min-free "לא נבדק" בכל
@@ -8,9 +8,9 @@
   מסך מחשב הבנייה (אותו נתיב, בכניסה שלו) ומסך המשכפל
   (`POST /api/v1/agent/cloner-round/system-partition`, בשער של פתיחת סבב מהמסך).
 * **נשמר באימג'** — `"system": true` ו-`"system_source": "operator"` ב-manifest.json,
-  **בכתיבה אטומית** (`write_atomic`, ‏#1908). הסוכן קורא אותו מהמניפסט שהשרת מגיש.
+  **בכתיבה אטומית** (`write_atomic`, #1908). הסוכן קורא אותו מהמניפסט שהשרת מגיש.
 * **עד שמסמנים — "לא נבדק"** עם המחיצות לבחירה: ב-`/images` (`system_unmarked`,
-  ‏`system_candidates`) ובמצב הסוכן (`unchecked_images`).
+  `system_candidates`) ובמצב הסוכן (`unchecked_images`).
 * ראיה מהקליטה אינה נדרסת; המשכפל מסמן רק אימג' שעוד לא סומן.
 """
 
@@ -127,7 +127,7 @@ def test_a_capture_mark_is_evidence_and_is_not_overwritten(server):
 
 
 def test_the_build_machine_marks_first_and_only_the_admin_changes_it(server):
-    """מחשב הבנייה: פורט הסוכן, ברשימת ההיתר (‏`KIOSK_CONSOLE_ROUTES`). ‏deploy
+    """מחשב הבנייה: פורט הסוכן, ברשימת ההיתר (`KIOSK_CONSOLE_ROUTES`). deploy
     מסמן אימג' שעוד לא סומן — כמו המשכפל; שינוי — admin בקונסולה."""
     from fastapi.testclient import TestClient
     from server.app import create_agent_app
@@ -146,7 +146,7 @@ def test_the_build_machine_marks_first_and_only_the_admin_changes_it(server):
 
 
 def test_the_write_is_atomic(server, monkeypatch):
-    """‏#1908: מניפסט חתוך הוא אימג' שבור — הכתיבה דרך `write_atomic`, ונפילה
+    """#1908: מניפסט חתוך הוא אימג' שבור — הכתיבה דרך `write_atomic`, ונפילה
     באמצע משאירה את הישן שלם."""
     _image(server)
     before = _on_disk(server)
@@ -166,8 +166,8 @@ def test_the_write_is_atomic(server, monkeypatch):
 
 
 def test_the_agent_state_lists_the_unchecked_image_until_it_is_marked(identity_server):
-    """allowed_images של המכונה מסונן לדיסקים שלה (‏#1863) — כאן מגירות של 256GB, והאימג'
-    (‏120+120GiB) נכנס ל-500: לכן מכונה עם דיסק גדול."""
+    """allowed_images של המכונה מסונן לדיסקים שלה (#1863) — כאן מגירות של 256GB, והאימג'
+    (120+120GiB) נכנס ל-500: לכן מכונה עם דיסק גדול."""
     from conftest import hello_body
     srv = identity_server
     _image(srv)

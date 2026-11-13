@@ -469,6 +469,19 @@ test('the monitor button on the branch (single secondary) page opens monitor.htm
   assert.equal(opened.length, 1, 'deploy: nothing opens');
 });
 
+test('#2493 (h4): the machine card monitor button encodes a Hebrew name once, not twice', () => {
+  const {run, opened} = setup(base);
+  const html = run(`branchMachineHtml("${NODE}", {mac: "aa:bb:cc:dd:ee:01", name: "בנייה-1", role: "build"}, {})`);
+  const onclick = /onclick="(branchMonitor\([^"]*\))"/.exec(html);
+  assert.ok(onclick, html);
+  run(onclick[1]);
+  assert.equal(opened.length, 1);
+  const query = new URLSearchParams(opened[0][0].split('?')[1]);   // what monitor.js reads (monitor.js:15)
+  assert.equal(query.get('name'), 'בנייה-1', opened[0][0]);
+  assert.equal(query.get('mac'), 'aa:bb:cc:dd:ee:01');
+  assert.equal(query.get('node'), NODE);
+});
+
 test('monitor.js connects to the remote path when node= is present, and to the local one otherwise', () => {
   const urls = [];
   const mk = (search) => {

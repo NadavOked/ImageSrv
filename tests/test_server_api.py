@@ -373,7 +373,7 @@ def test_console_machine_list_distinguishes_never_reported_from_empty(server):
 def test_malformed_disks_do_not_crash_and_do_not_record_empty_inventory(server):
     """בקרה שלילית מתוך הגדרת הגמור של #417: hello עם `disks` פגום
     (לא רשימה) לא מפיל את הבקשה, ואסור שהוא ירשום מלאי ריק בשקט —
-    ‏`[]` הוא ממצא ("דיווחה אפס"), לא "לא ידענו מה היא דיווחה"."""
+    `[]` הוא ממצא ("דיווחה אפס"), לא "לא ידענו מה היא דיווחה"."""
     ids = setup_classroom(server)
     mac = ids["mac1"]
     body = hello_body(mac)
@@ -407,9 +407,9 @@ def test_manual_start_and_close(server):
 
 
 def test_manual_start_with_no_members_is_refused_and_round_stays_open(server):
-    """‏#843: "התחל" לפני שמישהו הצטרף אינו מתקבל בשקט.
+    """#843: "התחל" לפני שמישהו הצטרף אינו מתקבל בשקט.
 
-    ‏`record_hello` מצרף רק לסבב `open`, ולכן סבב שהותחל עם 0 חברים
+    `record_hello` מצרף רק לסבב `open`, ולכן סבב שהותחל עם 0 חברים
     הוא גל שאיש אינו יכול להצטרף אליו: ה-sender ממתין 180ש', רושם
     `send_failed`, והסבב נשאר `running` ריק. נמדד במעבדה 15/09
     (`room_e6951214`/`ses_58f96d6d`). הגבול הוא ה-API — 409, הסבב
@@ -471,7 +471,7 @@ def test_extra_cmdline_reaches_the_boot_menu(tmp_path, images_root, clock):
     """תוספות מפעיל לשורת הקרנל (קונסולה טורית) עוברות כהגדרה — לא
     בעריכת קוד על השרת, שהולידה fork חי (#18).
 
-    ‏`imagesrv.debug` יוצא מן הכלל: מעטפת הניפוי של הסוכן אינה מוגשת
+    `imagesrv.debug` יוצא מן הכלל: מעטפת הניפוי של הסוכן אינה מוגשת
     מ-PXE לעולם. עד #1266 רק מתג ה-SSH בקונסולה הכניס אותו; המתג יצא
     מהמוצר, והדגל נשאר מוסר גם כשהמפעיל מעביר אותו כאן."""
     from fastapi.testclient import TestClient
@@ -511,7 +511,7 @@ def test_anonymous_gets_401_everywhere(server):
 
 
 def test_deploy_user_is_fenced_in(server):
-    """סעיף 11 + ‏#1073: לבחור אימג' ולהפיץ — כן, **ממחשב הבנייה** (allowlist
+    """סעיף 11 + #1073: לבחור אימג' ולהפיץ — כן, **ממחשב הבנייה** (allowlist
     הקיוסק, שקודם לקונסולה ב-`create_app`). לנהל את המערכת — לא, וגם לא
     לראות אותה: `/overview` הוא קונסולה בלבד → 403 `deploy_no_console`."""
     deploy = server["deploy"]
@@ -592,16 +592,16 @@ def register_build_machine(server, mac="b4:2e:99:07:1a:aa") -> str:
 
 
 def test_class_deploy_is_off_by_default_and_the_console_can_switch_it(server):
-    """ברירת המחדל של v1 היא כבוי — במכוון, גם על שרת שכבר פרוס. ‏GET
-    מחזיר אותה, ‏POST (מחרוזת או JSON bool) הופך אותה. **בקרה שלילית:**
-    על main ההגדרה אינה ב-`WRITE_SETTINGS` — ‏GET לא מחזיר אותה ו-POST
+    """ברירת המחדל של v1 היא כבוי — במכוון, גם על שרת שכבר פרוס. GET
+    מחזיר אותה, POST (מחרוזת או JSON bool) הופך אותה. **בקרה שלילית:**
+    על main ההגדרה אינה ב-`WRITE_SETTINGS` — GET לא מחזיר אותה ו-POST
     נופל ב-400 "הגדרה לא מוכרת"."""
     admin = server["admin"]
     assert admin.get("/api/console/settings").json()["class_deploy_enabled"] == "false"
     assert admin.post("/api/console/settings",
                       json={"class_deploy_enabled": "true"}).status_code == 200
     assert admin.get("/api/console/settings").json()["class_deploy_enabled"] == "true"
-    # ‏JSON bool אינו נשמר כ-"True" שנקרא ככבוי — עיקרון 5.
+    # JSON bool אינו נשמר כ-"True" שנקרא ככבוי — עיקרון 5.
     assert admin.post("/api/console/settings",
                       json={"class_deploy_enabled": False}).status_code == 200
     assert admin.get("/api/console/settings").json()["class_deploy_enabled"] == "false"
@@ -613,7 +613,7 @@ def test_class_deploy_is_off_by_default_and_the_console_can_switch_it(server):
 
 
 def test_the_build_machine_hello_carries_the_class_deploy_switch(server):
-    """‏hello למחשב הבנייה נושא `class_deploy_enabled` (bool) — הסוכן
+    """hello למחשב הבנייה נושא `class_deploy_enabled` (bool) — הסוכן
     מסיר לפיו את "הפצה לכיתות" מהתפריט. מכונת כיתה אינה מקבלת את השדה
     (אין לה תפריט). **בקרה שלילית:** על main השדה אינו קיים."""
     mac = register_build_machine(server)
@@ -634,9 +634,9 @@ def test_the_console_settings_screen_wires_the_class_deploy_switch():
     from pathlib import Path   # noqa: PLC0415
     static = Path(__file__).resolve().parent.parent / "server" / "static"
     js = console_js()
-    # ‏#954 גל 6: מסך ההגדרות הוא טבלת שורות (`SETTING_ROWS`); המתג הוא שורה
+    # #954 גל 6: מסך ההגדרות הוא טבלת שורות (`SETTING_ROWS`); המתג הוא שורה
     # מסוג switch, הקריאה/כתיבה משותפות לכל המתגים ("true"/"false" כמחרוזת).
-    # ‏#1685 (cc2ece3f, עמוד ההגדרות לפי המוקאפ): המתג עבר לכרטיס "deploy",
+    # #1685 (cc2ece3f, עמוד ההגדרות לפי המוקאפ): המתג עבר לכרטיס "deploy",
     # ומתג נשמר מיד בלחיצה (`settingsSwitch`) — לא בטופס השמירה של הכרטיס.
     assert '{ key: "class_deploy_enabled", card: "deploy", label:' in js
     rows = js[js.index("const SETTING_ROWS"):js.index("];", js.index("const SETTING_ROWS"))]
@@ -740,7 +740,7 @@ def test_journal_filters_require_admin(server):
 
 
 def test_close_without_typing_the_image_name_does_not_stop_the_class_round(server):
-    """‏#581: ‏POST ריק עצר סבב כיתה חי — בלי גוף ובלי שום אימות בשרת.
+    """#581: POST ריק עצר סבב כיתה חי — בלי גוף ובלי שום אימות בשרת.
 
     זו אותה חולשה שנסגרה לחדר השיכפולים ב-#533, שנשארה פתוחה לסבב
     הכיתה. עיקרון 7 נוקב ב"עצירת סבב" במפורש, והאכיפה היחידה ישבה
@@ -755,15 +755,15 @@ def test_close_without_typing_the_image_name_does_not_stop_the_class_round(serve
     deploy = server["deploy"]
     path = f"/api/console/sessions/{ids['session']}/close"
 
-    # ‏1. גוף ריק — זו בדיוק הקריאה שסגרה סבב לפני #581.
+    # 1. גוף ריק — זו בדיוק הקריאה שסגרה סבב לפני #581.
     assert deploy.post(path).status_code == 400
     assert hello(server, ids["mac1"])["session"] is not None, "סבב נסגר בלי אישור"
 
-    # ‏2. הטקסט שהמסך אכף לבדו אינו האישור
+    # 2. הטקסט שהמסך אכף לבדו אינו האישור
     assert deploy.post(path, json={"confirm_name": "עצור"}).status_code == 400
     assert hello(server, ids["mac1"])["session"] is not None, "סבב נסגר על שם שגוי"
 
-    # ‏3. השם המדויק — וזה עוצר
+    # 3. השם המדויק — וזה עוצר
     stopped = deploy.post(path, json={"confirm_name": "Office 2024 Standard"})
     assert stopped.status_code == 200 and stopped.json()["ok"] is True
     assert hello(server, ids["mac1"])["session"] is None
@@ -772,7 +772,7 @@ def test_close_without_typing_the_image_name_does_not_stop_the_class_round(serve
 def test_a_class_round_whose_image_was_deleted_can_still_be_stopped(server):
     """מה שמוקלד הוא מה שהמסך מציג — גם כשהמניפסט כבר איננו.
 
-    ‏`session_view` נופל חזרה ל-`image_id` כשהאימג' נמחק מהספרייה תוך
+    `session_view` נופל חזרה ל-`image_id` כשהאימג' נמחק מהספרייה תוך
     כדי סבב, ולכן גם האימות חייב ליפול לשם — מאותה פונקציה. בלי זה
     עצירת חירום של שידור חי הייתה בלתי אפשרית, כלומר תיקון שגרוע
     מהבאג.
@@ -829,9 +829,9 @@ def test_a_role_that_is_not_on_the_list_cannot_drive_a_class_round(server):
 def test_a_role_that_is_not_on_the_list_cannot_open_a_class_round(server):
     """הבקרה השלילית של #592 — פתיחת הסבב עצמה, לא רק start/close.
 
-    ‏#581 סגר את ``start``/``close`` מאחורי ``round_operator``, אבל
-    ‏``POST /api/console/sessions`` — **פתיחת** הסבב מהקונסולה — נשארה
-    ‏``current_user`` בלבד: כל חשבון מחובר יכול היה לפתוח שידור חי
+    #581 סגר את ``start``/``close`` מאחורי ``round_operator``, אבל
+    ``POST /api/console/sessions`` — **פתיחת** הסבב מהקונסולה — נשארה
+    ``current_user`` בלבד: כל חשבון מחובר יכול היה לפתוח שידור חי
     לכיתה. אותה סכימת-מחר כמו #581: ``auditor`` אינו ברשימה, והשאלה
     אינה מי מורשה עכשיו אלא האם הקוד **שואל** על התפקיד.
     """

@@ -44,7 +44,7 @@ LOCAL_NAME = "מקומי"
 TYPES = ("local", "nfs", "smb", "iscsi")
 STATES = ("connected", "unreachable", "disconnected", "unchecked")
 SECRET_KEYS = ("secret", "chap_secret")
-#: ‏#2460: הסודות יוצאים מכל עותק גיבוי של ה-DB (‏`backup._drop_console_secret`). על שרת
+#: #2460: הסודות יוצאים מכל עותק גיבוי של ה-DB (`backup._drop_console_secret`). על שרת
 #: ששוחזר יש משתמש ואין סיסמה — והמפעיל מקליד אותה מחדש ב-`/connect`. לכל סוג: (המשתמש,
 #: הסוד, ההודעה שהמפעיל רואה).
 SECRET_OF = {
@@ -61,35 +61,35 @@ STATE_LABELS = {
 FSTAB_BEGIN = "# BEGIN imagesrv-storage"
 FSTAB_END = "# END imagesrv-storage"
 FSTAB_PATH = Path("/etc/fstab")
-#: ‏#1123: קובצי credentials של SMB (פורמט mount.cifs / `smbclient -A`),
-#: ‏0600, אחד למיקום. ‏`-/etc/imagesrv` כבר ב-ReadWritePaths של היחידה.
+#: #1123: קובצי credentials של SMB (פורמט mount.cifs / `smbclient -A`),
+#: 0600, אחד למיקום. `-/etc/imagesrv` כבר ב-ReadWritePaths של היחידה.
 CREDS_DIR = Path("/etc/imagesrv/creds")
-#: ‏#1983: ‏DB הרשומות של open-iscsi מאז 2.1.10, ובהן סוד ה-CHAP (‏root, ‏0600).
+#: #1983: DB הרשומות של open-iscsi מאז 2.1.10, ובהן סוד ה-CHAP (root, 0600).
 ISCSI_NODES_DIR = Path("/var/lib/iscsi/nodes")
-#: ‏`ISCSI_ERR_NO_OBJS_FOUND` — ‏"No records found"; כל קוד אחר הוא הבדיקה שנכשלה.
+#: `ISCSI_ERR_NO_OBJS_FOUND` — "No records found"; כל קוד אחר הוא הבדיקה שנכשלה.
 ISCSI_NO_RECORDS = 21
-ISCSI_BYPATH_WAIT_S = 5.0      # ‏#2649: תקרת ההמתנה לקישור by-path אחרי login
+ISCSI_BYPATH_WAIT_S = 5.0      # #2649: תקרת ההמתנה לקישור by-path אחרי login
 ISCSI_BYPATH_POLL_S = 0.1
 ISCSI_PASSWORD_KEY = "node.session.auth.password"
 SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 CHECK_INTERVAL = 60.0
 
-# ‏#1123 (3): מה שמגיע מהקונסולה נכנס ל-argv של mount/showmount/iscsiadm
+# #1123 (3): מה שמגיע מהקונסולה נכנס ל-argv של mount/showmount/iscsiadm
 # ול-opts של fstab. subprocess בלי shell — אבל רווח/פסיק בתוך opts הם
 # הזרקת אפשרות, ורווח ב-fstab הוא שדה חדש. לכן whitelist, לא blacklist.
 _HOST_LABEL = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 _SHARE_RE = re.compile(r"^[A-Za-z0-9_.$-]+$")
 _VERSION_RE = re.compile(r"^[0-9]+(\.[0-9]+)?$")
-# ‏RFC 3720 §3.2.6.3: iqn.YYYY-MM.reverse.domain[:id] · eui.<16 hex> ·
-# ‏naa.<16|32 hex> (RFC 3980). ה-id אחרי הנקודתיים — בלי רווח/פסיק.
+# RFC 3720 §3.2.6.3: iqn.YYYY-MM.reverse.domain[:id] · eui.<16 hex> ·
+# naa.<16|32 hex> (RFC 3980). ה-id אחרי הנקודתיים — בלי רווח/פסיק.
 _IQN_RE = re.compile(
     r"^(iqn\.[0-9]{4}-[0-9]{2}\.[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*(:[A-Za-z0-9._:-]+)?"
     r"|eui\.[0-9A-Fa-f]{16}|naa\.([0-9A-Fa-f]{16}|[0-9A-Fa-f]{32}))$"
 )
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
-#: ‏#2468: המפתחות שהלקוח רשאי לשלוח ב-`params`, לכל סוג (interfaces.md). כל השאר —
-#: ‏`device_by_path`, ‏`fs_type`, ‏`fs_label`, ‏`fs_size`, ‏`uuid` — נקבע בשרת בלבד:
+#: #2468: המפתחות שהלקוח רשאי לשלוח ב-`params`, לכל סוג (interfaces.md). כל השאר —
+#: `device_by_path`, `fs_type`, `fs_label`, `fs_size`, `uuid` — נקבע בשרת בלבד:
 #: הם מגיעים לפירמוט ול-`/etc/fstab` כ-root, ולכן נזרקים ביצירה ובבדיקה.
 CLIENT_PARAMS = {
     "local": ("path", "mount_point"),
@@ -97,17 +97,17 @@ CLIENT_PARAMS = {
     "smb": ("server", "share", "username", "secret", "domain", "readonly"),
     "iscsi": ("portal", "iqn", "chap_user", "chap_secret", "auto"),
 }
-#: ‏#2468: מערכות הקבצים שמיקום iSCSI מעוגן בהן (ונכתבות ל-fstab).
+#: #2468: מערכות הקבצים שמיקום iSCSI מעוגן בהן (ונכתבות ל-fstab).
 FS_TYPES = ("ext4", "xfs", "btrfs")
-#: ‏#2468: הקישור ש-udev יוצר ל-LUN שלם של סשן iSCSI — לא `/dev/sdX`, ולא מחיצה.
-#: ‏CodeQL #866: הפורטל (כתובת IP ופורט) בלי `-` — אחרת `-iscsi-` יכול ליפול בתוך
+#: #2468: הקישור ש-udev יוצר ל-LUN שלם של סשן iSCSI — לא `/dev/sdX`, ולא מחיצה.
+#: CodeQL #866: הפורטל (כתובת IP ופורט) בלי `-` — אחרת `-iscsi-` יכול ליפול בתוך
 #: המקטע הראשון או השני, והחיפוש אחר הגבול ביניהם ריבועי באורך המחרוזת.
 _ISCSI_BY_PATH_RE = re.compile(
     r"^/dev/disk/by-path/ip-[^\s/\x00-\x1f\x7f-]+-iscsi-[^\s/\x00-\x1f\x7f]+-lun-[0-9]+$")
 
 
 def client_params(kind: str, params) -> dict:
-    """‏#2468: רק המפתחות של `CLIENT_PARAMS[kind]` — מה שהשרת קובע לא מגיע מהלקוח."""
+    """#2468: רק המפתחות של `CLIENT_PARAMS[kind]` — מה שהשרת קובע לא מגיע מהלקוח."""
     if not isinstance(params, dict):
         return {}
     keys = CLIENT_PARAMS.get(kind, ())
@@ -119,14 +119,14 @@ def valid_iscsi_device(value) -> bool:
 
 
 def iscsi_device(params: dict) -> str:
-    """‏#2468: ההתקן של מיקום iSCSI, רק אם הוא קישור by-path של LUN; אחרת ריק.
-    ערך ישן (‏`/dev/sdX`, או מה שנשמר מהלקוח לפני התיקון) = "אין התקן" עד login."""
+    """#2468: ההתקן של מיקום iSCSI, רק אם הוא קישור by-path של LUN; אחרת ריק.
+    ערך ישן (`/dev/sdX`, או מה שנשמר מהלקוח לפני התיקון) = "אין התקן" עד login."""
     device = params.get("device_by_path")
     return device if valid_iscsi_device(device) else ""
 
 
 def valid_host(value: str) -> bool:
-    """‏IP (v4/v6) או hostname לפי RFC 1123. ריק = לא תקין."""
+    """IP (v4/v6) או hostname לפי RFC 1123. ריק = לא תקין."""
     host = (value or "").strip()
     if not host or host != value:
         return False
@@ -141,7 +141,7 @@ def valid_host(value: str) -> bool:
 
 
 def valid_portal(value: str) -> bool:
-    """‏`host[:port]`; ‏IPv6 בסוגריים: ‏`[fd00::75]:3260`."""
+    """`host[:port]`; IPv6 בסוגריים: `[fd00::75]:3260`."""
     portal = value or ""
     host, port = portal, ""
     if portal.startswith("["):
@@ -159,7 +159,7 @@ def valid_portal(value: str) -> bool:
     elif portal.count(":") == 1:
         host, port = portal.split(":", 1)
     elif ":" in portal:
-        # ‏IPv6 חשוף בלי סוגריים — כתובת בלבד, בלי פורט
+        # IPv6 חשוף בלי סוגריים — כתובת בלבד, בלי פורט
         return valid_host(portal)
     if port and not (port.isdigit() and 1 <= int(port) <= 65535):
         return False
@@ -167,7 +167,7 @@ def valid_portal(value: str) -> bool:
 
 
 def validate_params(kind: str, params: dict) -> str | None:
-    """‏None = תקין; מחרוזת = סיבת ה-400 (בשם השדה, בעברית)."""
+    """None = תקין; מחרוזת = סיבת ה-400 (בשם השדה, בעברית)."""
     def clean(key: str) -> bool:
         return not _CONTROL_CHARS.search(str(params.get(key) or ""))
 
@@ -206,20 +206,20 @@ def validate_params(kind: str, params: dict) -> str | None:
     return None
 
 
-#: ‏#2444: מיקום `local` — תיקיות שמותרות בלי עיגון משלהן, וענפי מערכת שאסורים גם
-#: כשהם מעוגנים (‏`/boot`, ‏`/proc`…). השרת רץ כ-root ויוצר שם `images/`.
+#: #2444: מיקום `local` — תיקיות שמותרות בלי עיגון משלהן, וענפי מערכת שאסורים גם
+#: כשהם מעוגנים (`/boot`, `/proc`…). השרת רץ כ-root ויוצר שם `images/`.
 LOCAL_ROOTS = ("/srv",)
-#: ‏Fable על #2444: ‏`/var` (אחרי `data_dir`, שיושב בתוכו), ‏`/tmp`, ‏`/opt` (קוד השרת)
-#: ועצי האתחול של השרת עצמו (‏`--boot-dir`, ‏`--tftp-root` בברירת המחדל) — נבדקים
+#: Fable על #2444: `/var` (אחרי `data_dir`, שיושב בתוכו), `/tmp`, `/opt` (קוד השרת)
+#: ועצי האתחול של השרת עצמו (`--boot-dir`, `--tftp-root` בברירת המחדל) — נבדקים
 #: **לפי prefix אחרי realpath, לפני כל כלל היתר**, ולכן `/var` מעוגן בנפרד אינו פותח
 #: את `/var/lib/dpkg`, ו-`/srv` המותר אינו פותח את `/srv/tftp`.
 LOCAL_SYSTEM_TREES = ("/proc", "/sys", "/dev", "/run", "/boot", "/etc", "/usr", "/bin",
                       "/sbin", "/lib", "/lib32", "/lib64", "/root", "/var", "/tmp", "/opt")
-#: ‏#2462: עצי האתחול בברירת המחדל. ה-router מוסיף את `--boot-dir`/`--tftp-root` בפועל,
+#: #2462: עצי האתחול בברירת המחדל. ה-router מוסיף את `--boot-dir`/`--tftp-root` בפועל,
 #: וכולם נדחים **לפני** כל כלל היתר — גם כשהם בתוך `data_dir`.
 DEFAULT_BOOT_TREES = ("/srv/imagesrv/boot", "/srv/tftp")
-#: ‏#2462: מה שהשרת מחזיק בתוך `data_dir` — ה-DB, סודות ותעודות, מצב ונקודות עיגון.
-#: נדחה לפי realpath, לפני ההיתר של `data_dir`. ‏`data_dir` עצמו ותיקייה חדשה בתוכו מותרים.
+#: #2462: מה שהשרת מחזיק בתוך `data_dir` — ה-DB, סודות ותעודות, מצב ונקודות עיגון.
+#: נדחה לפי realpath, לפני ההיתר של `data_dir`. `data_dir` עצמו ותיקייה חדשה בתוכו מותרים.
 #: רשימת דחייה: שם חדש שהשרת יתחיל לכתוב ב-`data_dir` צריך להיכנס גם לכאן.
 DATA_DIR_RESERVED = (
     "imagesrv.db", "imagesrv.db-wal", "imagesrv.db-shm", "imagesrv.db-journal",
@@ -242,14 +242,14 @@ def _under(path: str, root: str) -> bool:
 
 
 def local_path_problem(path, data_dir, is_mount, boot_trees=()) -> str | None:
-    """‏#2444: ‏None = מותר; מחרוזת = סיבת ה-400. נקרא ביצירה ובבדיקת חיבור בלבד —
+    """#2444: None = מותר; מחרוזת = סיבת ה-400. נקרא ביצירה ובבדיקת חיבור בלבד —
     מיקום ששמור ב-DB לא נבדק מחדש, ולכן שרת קיים לא נשבר.
 
-    קודם כול אסור (‏#2462): עצי האתחול (‏`DEFAULT_BOOT_TREES` ו-`boot_trees` — הערכים
+    קודם כול אסור (#2462): עצי האתחול (`DEFAULT_BOOT_TREES` ו-`boot_trees` — הערכים
     בפועל) והרשומות של `DATA_DIR_RESERVED` בתוך `data_dir`.
     מותר: בתוך `data_dir`; אחרת אסור כל מה שתחת `LOCAL_SYSTEM_TREES` (לפי prefix, גם
     כשהוא מעוגן); ומהשאר — תחת `/srv`, או על/מתחת לנקודת עיגון קיימת שאינה `/`
-    (‏`is_mount` — ההוק, אצל PID 1 וגם אצל השירות). ההשוואה אחרי `realpath`, כלומר
+    (`is_mount` — ההוק, אצל PID 1 וגם אצל השירות). ההשוואה אחרי `realpath`, כלומר
     `..` וקישורים סימבוליים כבר נפתרו. עיגון שאי אפשר היה לבדוק = לא עיגון."""
     raw = str(path or "")
     if not raw or _CONTROL_CHARS.search(raw) or not (os.path.isabs(raw) or raw.startswith("/")):
@@ -337,7 +337,7 @@ def smb_scan(server: str, creds: dict | None = None) -> HookResult:
     creds = smb_creds(creds or {})
     auth_file = ""
     if creds.get("username"):
-        # ‏#1123: ‏`-A <קובץ>` ולא `-U user%password` — הסיסמה לא ב-argv/ps.
+        # #1123: `-A <קובץ>` ולא `-U user%password` — הסיסמה לא ב-argv/ps.
         auth_file = creds_path("scan-" + secrets.token_hex(3))
         written = creds_write(auth_file, creds)
         if written.status != OK:
@@ -371,11 +371,18 @@ def smb_scan(server: str, creds: dict | None = None) -> HookResult:
     return HookResult(OK, payload={"items": shares})
 
 
-def iscsi_discover(portal: str, chap: dict | None = None) -> HookResult:
-    """`iscsiadm -m discovery -t st -p` — SendTargets, ‏`-o nonpersistent` (#1983).
+def iscsi_discover(portal: str) -> HookResult:
+    """`iscsiadm -m discovery -t st -p` — SendTargets, `-o nonpersistent` (#1983).
 
     בלי הדגל iscsiadm כותב כ-root רשומה לכל יעד בשם שהיעד בחר, ו-`../` יוצא מה-DB
-    (‏CVE-2026-44943). כאן רק קוראים; הרשומה נכתבת ב-`iscsi_login`, אחרי בדיקת ה-IQN."""
+    (CVE-2026-44943). כאן רק קוראים; הרשומה נכתבת ב-`iscsi_login`, אחרי בדיקת ה-IQN.
+
+    #2606: **בלי CHAP**, ובכוונה. ה-CHAP של המיקום הוא `node.session.auth.*` — אימות
+    ה-session ב-`iscsi_login` — ולא של הגילוי. `-m discovery` אינו מקבל פרמטרי אימות;
+    `discovery.sendtargets.auth.*` דורש `-m discoverydb`, שכותב רשומה לדיסק ושהסוד שלו
+    עובר ב-`-v`, ושילובו עם `-o nonpersistent` לא נמדד מול יעד. יעד שדורש CHAP כבר בגילוי
+    אינו נתמך: הגילוי נכשל בגלוי, והאשף אומר שה-CHAP חל על ההתחברות בלבד. הפרמטר `chap`
+    שהיה כאן לא שימש מעולם, ולכן הוסר — שום פרט אימות אינו נשלח לגילוי."""
     if not portal:
         return HookResult(FAILED, "חסר פורטל")
     cmd = ["iscsiadm", "-m", "discovery", "-t", "st", "-p", portal, "-o", "nonpersistent"]
@@ -394,7 +401,7 @@ def iscsi_discover(portal: str, chap: dict | None = None) -> HookResult:
             log.warning("iSCSI: היעד %s החזיר שם לא תקין: %r", portal, line[:120])
             continue
         found = parts[0].split(",")[0] if len(parts) == 2 else portal
-        # הפורטל שהיעד דיווח מוצג בלבד, ורק אם הוא תקין; ‏`[nas]:3260` אינו, וזה לא יעד זדוני
+        # הפורטל שהיעד דיווח מוצג בלבד, ורק אם הוא תקין; `[nas]:3260` אינו, וזה לא יעד זדוני
         targets.append({"portal": found if valid_portal(found) else portal, "iqn": parts[-1]})
     if rejected and not targets:
         return HookResult(FAILED, f"היעד החזיר {rejected} שמות לא תקינים ואף יעד תקין")
@@ -410,7 +417,7 @@ def _node_update(iqn: str, portal: str, name: str, value: str) -> HookResult:
 
 
 def _node_ensure(iqn: str, portal: str) -> HookResult:
-    """רשומת node ל-IQN שכבר נבדק. קיימת — נשארת: ‏`-o new` מוחק אותה ואת הסוד שבה,
+    """רשומת node ל-IQN שכבר נבדק. קיימת — נשארת: `-o new` מוחק אותה ואת הסוד שבה,
     שאולי אין לו מקור אחר (#2460)."""
     shown = _run(_node_cmd(iqn, portal))
     if (shown.payload or {}).get("returncode") == ISCSI_NO_RECORDS:
@@ -422,7 +429,7 @@ def _node_password(iqn: str, portal: str, secret: str) -> HookResult:
     """הסוד אל הרשומה בלי argv (#1983): ל-iscsiadm אין ערוץ אחר מ-`-v`, וב-`ps` הוא גלוי.
 
     iscsiadm כותב לרשומות אסימון אקראי, וכאן מחליפים אותו בסוד. כך הוא זה שבוחר אילו
-    רשומות תואמות, והמיקום שלהן נשאר שלו: ‏`-o new` כותב `<iqn>/<host>,<port>` ו-discovery
+    רשומות תואמות, והמיקום שלהן נשאר שלו: `-o new` כותב `<iqn>/<host>,<port>` ו-discovery
     ישן `<iqn>/<host>,<port>,<tpgt>/<iface>`. אף רשומה לא הוחלפה = כישלון, לא login בלי סוד."""
     if _CONTROL_CHARS.search(secret):
         return HookResult(FAILED, "סוד CHAP לא תקין — בלי תווי בקרה")
@@ -449,7 +456,7 @@ def iscsi_login(iqn: str, portal: str, chap: dict | None = None,
                 auto: bool = True) -> HookResult:
     """התחברות ליעד. `auto` = node.startup=automatic.
 
-    ‏#1983: הרשומה נוצרת כאן, ורק ל-IQN ולפורטל שעברו בדיקה. שלב שנכשל עוצר את ה-login."""
+    #1983: הרשומה נוצרת כאן, ורק ל-IQN ולפורטל שעברו בדיקה. שלב שנכשל עוצר את ה-login."""
     if not iqn or not portal:
         return HookResult(FAILED, "חסר IQN או פורטל")
     if not _IQN_RE.fullmatch(iqn) or not valid_portal(portal):
@@ -476,7 +483,7 @@ def iscsi_login(iqn: str, portal: str, chap: dict | None = None,
         return result
     by_path = _wait_iscsi_by_path(portal, iqn)
     if not by_path:
-        # ‏#2649: ה-login עלה אבל קישור ה-LUN לא הופיע בתקרה — לא `ok` עם נתיב ריק.
+        # #2649: ה-login עלה אבל קישור ה-LUN לא הופיע בתקרה — לא `ok` עם נתיב ריק.
         return HookResult(FAILED, f"ההתחברות ליעד הצליחה אבל ההתקן (קישור by-path) לא הופיע "
                                   f"תוך {ISCSI_BYPATH_WAIT_S:g} שניות — לבדוק שיש LUN ליעד",
                           {"iqn": iqn, "portal": portal})
@@ -496,10 +503,10 @@ def iscsi_logout(iqn: str, portal: str, chap: dict | None = None,
 
 
 def _wait_iscsi_by_path(portal: str, iqn: str) -> str:
-    """‏#2649: ‏`iscsiadm -l` חוזר לפני שה-udev יצר את הקישור (נמדד 40-100ms). ממתינים
+    """#2649: `iscsiadm -l` חוזר לפני שה-udev יצר את הקישור (נמדד 40-100ms). ממתינים
     עד `ISCSI_BYPATH_WAIT_S` (`udevadm settle` ואז polling), ומחזירים ריק רק אחרי התקרה."""
     deadline = time.monotonic() + ISCSI_BYPATH_WAIT_S
-    # ‏settle כושל או חסר אינו ראיה לכלום — ה-polling למטה הוא הבדיקה.
+    # settle כושל או חסר אינו ראיה לכלום — ה-polling למטה הוא הבדיקה.
     _run(["udevadm", "settle", f"--timeout={int(ISCSI_BYPATH_WAIT_S)}"],
          timeout=int(ISCSI_BYPATH_WAIT_S) + 5)
     while True:
@@ -522,7 +529,7 @@ def _iscsi_by_path(portal: str, iqn: str) -> str:
     needle = f"ip-{host}"
     for entry in entries:
         name = entry.name
-        # ‏#2468: הקישור עצמו (יציב בין אתחולים, ומעיד שזה LUN של iSCSI), ורק LUN שלם —
+        # #2468: הקישור עצמו (יציב בין אתחולים, ומעיד שזה LUN של iSCSI), ורק LUN שלם —
         # לא `-partN`, ולא `/dev/sdX` אחרי resolve.
         link = f"{root.as_posix()}/{name}"
         if needle in name and iqn in name and valid_iscsi_device(link):
@@ -591,7 +598,7 @@ def disk_probe(device: str) -> HookResult:
 def _zeros_evidence(device: str, *, strict_tail: bool = False) -> bool | str:
     """True = 1MB בהתחלה ובסוף אפסים. False = יש נתונים. str = לא הצלחנו.
 
-    ‏`strict_tail` (#1988): זנב שלא נקרא אינו "אפסים" — שם יושבת טבלת ה-GPT
+    `strict_tail` (#1988): זנב שלא נקרא אינו "אפסים" — שם יושבת טבלת ה-GPT
     המשנית, ו"הוסף כונן" מחליט לפי זה אם להציע את הכונן למחיקה."""
     try:
         with open(device, "rb") as fh:
@@ -626,7 +633,7 @@ def make_fs(device: str, label: str = "") -> HookResult:
 
 
 # ---------------------------------------------------------------------------
-# ‏#1988: "הוסף כונן" — כונן ריק בשרת. כאן רק כלי המערכת (hooks); הזרימה
+# #1988: "הוסף כונן" — כונן ריק בשרת. כאן רק כלי המערכת (hooks); הזרימה
 # עצמה — אימות מול הרשימה, עיגון, קריאה חוזרת, השורה ו-fstab — היא
 # `storage_disks.add_disk`, המשותפת לקונסולה ולמסך השרת.
 # ---------------------------------------------------------------------------
@@ -643,7 +650,7 @@ def _flag(value: object) -> bool:
 
 
 def classify_disks(tree: dict) -> tuple[list[dict], list[dict]]:
-    """‏`lsblk -J` → (מועמדים, מוסתרים עם סיבה). לא קורא את הכונן עצמו.
+    """`lsblk -J` → (מועמדים, מוסתרים עם סיבה). לא קורא את הכונן עצמו.
 
     מועמד = דיסק שלם, כתיב, לא נשלף/USB, בלי ילדים, בלי טבלת מחיצות ובלי
     חתימה ש-lsblk מכיר. זה תנאי הכרחי בלבד — "ריק" נקבע ב-`probe_blank`."""
@@ -699,7 +706,7 @@ def _export_fields(text: str) -> dict:
 
 
 def probe_blank(device: str, run=None, zeros=None) -> tuple[bool, str]:
-    """ראיה חיובית לריק (#1988): ‏`blkid -p` לא מצא שום חתימה — מערכת קבצים,
+    """ראיה חיובית לריק (#1988): `blkid -p` לא מצא שום חתימה — מערכת קבצים,
     טבלת מחיצות, RAID — (יציאה 2), **וגם** 1MB בראש הכונן ובסופו אפסים.
 
     כל דבר אחר הוא "לא ריק" עם הסיבה — כולל כשל בקריאה (עיקרון 5): כונן
@@ -725,7 +732,7 @@ def probe_blank(device: str, run=None, zeros=None) -> tuple[bool, str]:
 
 
 def list_blank_disks(run=None, probe=None) -> HookResult:
-    """hook ‏`blank_disks`: ‏`items` = כוננים ריקים לפי ראיה, ‏`hidden` = כל
+    """hook `blank_disks`: `items` = כוננים ריקים לפי ראיה, `hidden` = כל
     השאר עם הסיבה (המפעיל רואה למה כונן חסר — לא רשימה שקטה)."""
     run = run or _run
     probe = probe or probe_blank
@@ -752,7 +759,7 @@ def list_blank_disks(run=None, probe=None) -> HookResult:
 def _partitions_of(run, device: str) -> tuple[list[str] | None, str]:
     """המחיצות הישירות של `device`, או (None, הסיבה שלא נקראו).
 
-    ‏#2102: בלי עמודת NAME, ‏lsblk 2.41 (דביאן 13) מחזיר רשימה **שטוחה**;
+    #2102: בלי עמודת NAME, lsblk 2.41 (דביאן 13) מחזיר רשימה **שטוחה**;
     עם NAME — עץ עם `children`. לא מנחשים צורה: מבקשים PKNAME במפורש,
     משטחים את שתי הצורות, ובוחרים `type=part` שההורה שלה הוא הכונן.
     פלט שאי אפשר לפרש הוא סיבה בשם, לא רשימה ריקה (עיקרון 5)."""
@@ -789,10 +796,10 @@ def _partitions_of(run, device: str) -> tuple[list[str] | None, str]:
 
 
 def prepare_disk(device: str, label: str, run=None, sleep=None) -> HookResult:
-    """hook ‏`prepare_disk` (#1988): ‏GPT עם מחיצה אחת על כל הכונן, ‏ext4
+    """hook `prepare_disk` (#1988): GPT עם מחיצה אחת על כל הכונן, ext4
     עליה, ו-UUID שנקרא בחזרה. הפעולה ההרסנית — רק אחרי `probe_blank`.
 
-    הצלחה = ‏`blkid -p` על המחיצה מחזיר ‏TYPE=ext4 ו-UUID תקין (ראיה), לא
+    הצלחה = `blkid -p` על המחיצה מחזיר TYPE=ext4 ו-UUID תקין (ראיה), לא
     היעדר שגיאה מ-mkfs."""
     run = run or _run
     sleep = sleep or time.sleep
@@ -829,8 +836,8 @@ def prepare_disk(device: str, label: str, run=None, sleep=None) -> HookResult:
                                    "fs_type": "ext4"})
 
 
-# ‏#2122: ‏imagesrv-server (וגם imagesrv-dcui) רץ עם `ProtectSystem=strict`, כלומר
-# במרחב עיגון **משלו**. ‏`mount` שרץ משם נשאר שם: ‏PID 1 לא רואה אותו, ‏restart של
+# #2122: imagesrv-server (וגם imagesrv-dcui) רץ עם `ProtectSystem=strict`, כלומר
+# במרחב עיגון **משלו**. `mount` שרץ משם נשאר שם: PID 1 לא רואה אותו, restart של
 # השירות מוחק אותו, ו-`storage/<שם>` חוזר להיות תיקייה על דיסק המערכת — שאימג'ים
 # נכתבים אליה בשקט. לכן mount/umount רצים במרחב העיגון של PID 1 (המארח), ומשם
 # מתפשטים לשירות (slave). הראיה להצלחה היא שני קובצי mountinfo — לא קוד היציאה.
@@ -845,7 +852,7 @@ def _on_host(cmd: list[str]) -> list[str]:
 
 
 def _mount_points(path: str) -> set[str] | None:
-    """נקודות העיגון בקובץ mountinfo (שדה 5, עם `\\040` וחבריו). ‏None = לא נקרא."""
+    """נקודות העיגון בקובץ mountinfo (שדה 5, עם `\\040` וחבריו). None = לא נקרא."""
     try:
         text = Path(path).read_text(encoding="utf-8", errors="surrogateescape")
     except OSError:
@@ -859,8 +866,8 @@ def _mount_points(path: str) -> set[str] | None:
 
 
 def mount_presence(target: str) -> HookResult:
-    """‏ok = מעוגן גם אצל PID 1 וגם אצל השירות; failed = חסר אצל אחד מהם לפחות
-    (‏`payload["missing"]`); unchecked = קובץ mountinfo לא נקרא — אינו "לא מעוגן"."""
+    """ok = מעוגן גם אצל PID 1 וגם אצל השירות; failed = חסר אצל אחד מהם לפחות
+    (`payload["missing"]`); unchecked = קובץ mountinfo לא נקרא — אינו "לא מעוגן"."""
     want = posixpath.normpath(str(target))
     missing = []
     for label, path in (("PID 1", HOST_MOUNTINFO), ("השירות", OWN_MOUNTINFO)):
@@ -916,19 +923,19 @@ def umount(target: str) -> HookResult:
 
 
 def daemon_reload() -> HookResult:
-    """‏#2122: ‏fstab שהשתנה בלי daemon-reload משאיר ל-PID 1 יחידת mount ישנה; עיגון
+    """#2122: fstab שהשתנה בלי daemon-reload משאיר ל-PID 1 יחידת mount ישנה; עיגון
     באותה נקודה עם כונן אחר נקשר אליה — ו-systemd מנתק אותו כשההתקן הישן איננו."""
     return _run(["systemctl", "daemon-reload"], timeout=60)
 
 
-#: ‏#2468: רווח או תו בקרה בשדה של fstab = שדה או שורה מוזרקים.
+#: #2468: רווח או תו בקרה בשדה של fstab = שדה או שורה מוזרקים.
 _FSTAB_UNSAFE = re.compile(r"[\s\x00-\x1f\x7f]")
 
 
 def fstab_write(entries: list[dict]) -> HookResult:
     """כותב את בלוק ImageSrv ב-fstab עם `_netdev,nofail`.
 
-    ‏#1123 (2): אטומי — קובץ זמני ליד fstab ו-`os.replace`. קריסה באמצע
+    #1123 (2): אטומי — קובץ זמני ליד fstab ו-`os.replace`. קריסה באמצע
     כתיבה ישירה = fstab חצי-כתוב = שרת שלא עולה.
     """
     path = FSTAB_PATH
@@ -953,14 +960,14 @@ def fstab_write(entries: list[dict]) -> HookResult:
     block = [FSTAB_BEGIN + "\n"]
     for entry in entries:
         opts = entry.get("opts") or "defaults"
-        # ‏#1988: כונן מקומי אינו התקן רשת — `_netdev` היה דוחה אותו לאחרי הרשת.
+        # #1988: כונן מקומי אינו התקן רשת — `_netdev` היה דוחה אותו לאחרי הרשת.
         if "_netdev" not in opts and not entry.get("local"):
             opts = opts + ",_netdev"
         if "nofail" not in opts:
             opts = opts + ",nofail"
         fields = (str(entry["source"]), str(entry["target"]),
                   str(entry.get("fstype", "auto")), opts)
-        # ‏#2468: רווח הוא שדה חדש ושורה חדשה היא רשומה חדשה — לא כותבים כלום.
+        # #2468: רווח הוא שדה חדש ושורה חדשה היא רשומה חדשה — לא כותבים כלום.
         bad = next((f for f in fields if not f or _FSTAB_UNSAFE.search(f)), None)
         if bad is not None:
             return HookResult(FAILED, f"שדה לא תקין לשורת fstab (רווח או תו בקרה): {bad!r}")
@@ -979,7 +986,7 @@ def fstab_write(entries: list[dict]) -> HookResult:
 
 
 def creds_path(loc_id: str) -> str:
-    """‏#1123: איפה קובץ ה-credentials של מיקום SMB חי — נגזר מה-id, לא נשמר."""
+    """#1123: איפה קובץ ה-credentials של מיקום SMB חי — נגזר מה-id, לא נשמר."""
     return (CREDS_DIR / loc_id).as_posix()
 
 
@@ -996,7 +1003,7 @@ def smb_creds(params: dict) -> dict:
 
 
 def creds_write(path: str, creds: dict) -> HookResult:
-    """קובץ credentials ‏0600 (פורמט mount.cifs / smbclient -A), אטומי."""
+    """קובץ credentials 0600 (פורמט mount.cifs / smbclient -A), אטומי."""
     target = Path(path)
     text = "".join(f"{key}={creds[key]}\n" for key in ("username", "password", "domain")
                    if creds.get(key))
@@ -1009,7 +1016,7 @@ def creds_write(path: str, creds: dict) -> HookResult:
 
 
 def creds_password_present(path: str) -> HookResult:
-    """‏#2460: יש בקובץ שורת `password=` לא ריקה? ‏ok = כן · failed = אין קובץ או אין סיסמה ·
+    """#2460: יש בקובץ שורת `password=` לא ריקה? ok = כן · failed = אין קובץ או אין סיסמה ·
     unchecked = הקובץ קיים ולא נקרא. שחזור על אותה מכונה משאיר את הקובץ, וה-DB בלי הסיסמה."""
     try:
         text = Path(path).read_text(encoding="utf-8")
@@ -1061,12 +1068,12 @@ def default_hooks() -> dict:
         "fstab_write": fstab_write,
         "creds_write": creds_write,
         "creds_remove": creds_remove,
-        "creds_password_present": creds_password_present,   # ‏#2460
+        "creds_password_present": creds_password_present,   # #2460
         "df": df,
         "interfaces": lambda: [],
-        "blank_disks": list_blank_disks,     # ‏#1988
-        "prepare_disk": prepare_disk,        # ‏#1988 — ההרסני
-        "is_mount": is_mounted,              # ‏#1988/#2122 — עיגון כראיה, אצל PID 1 ואצל השירות
+        "blank_disks": list_blank_disks,     # #1988
+        "prepare_disk": prepare_disk,        # #1988 — ההרסני
+        "is_mount": is_mounted,              # #1988/#2122 — עיגון כראיה, אצל PID 1 ואצל השירות
     }
 
 
@@ -1124,7 +1131,7 @@ def public_params(params: dict) -> dict:
 
 
 def secret_missing(kind: str, params: dict) -> bool:
-    """‏#2460: יש משתמש (SMB) או משתמש CHAP (iSCSI), ואין סוד ב-DB — שרת ששוחזר מגיבוי."""
+    """#2460: יש משתמש (SMB) או משתמש CHAP (iSCSI), ואין סוד ב-DB — שרת ששוחזר מגיבוי."""
     keys = SECRET_OF.get(kind)
     return bool(keys and params.get(keys[0]) and not params.get(keys[1]))
 
@@ -1177,8 +1184,8 @@ def last_images(row: dict) -> list[dict]:
 def images_dir(row: dict) -> Path:
     """איפה האימג'ים חיים: `--images` עצמו, ובשאר — `images/` תחת ה-mount.
 
-    כונן שנוסף ב"הוסף כונן" (#1988, ‏`uuid` ב-params) הוא mount כמו כל השאר:
-    ‏`images/` תחתיו, כך ש-`lost+found` של ext4 אינו נסרק כאימג'."""
+    כונן שנוסף ב"הוסף כונן" (#1988, `uuid` ב-params) הוא mount כמו כל השאר:
+    `images/` תחתיו, כך ש-`lost+found` של ext4 אינו נסרק כאימג'."""
     mount = Path(row["mount_point"])
     if row["type"] == "local" and not is_disk(row):
         return mount
@@ -1214,7 +1221,7 @@ def new_id() -> str:
 
 
 def mount_point_for(data_dir: Path, name: str, loc_id: str) -> Path:
-    # ‏#1956: שם שמתחיל בנקודה מקבל את ה-id — ‏`storage/.db-backup` הוא נקודת העיגון של גיבוי המסד.
+    # #1956: שם שמתחיל בנקודה מקבל את ה-id — `storage/.db-backup` הוא נקודת העיגון של גיבוי המסד.
     token = name if SAFE_NAME.fullmatch(name) and not name.startswith(".") else loc_id
     return Path(data_dir) / "storage" / token
 
@@ -1291,7 +1298,7 @@ def public_row(row: dict, library) -> dict:
         "unavailable_images": unavailable,
         "subtitle": subtitle_of(row),
         "params": public_params(params),
-        "secret_missing": secret_missing(row["type"], params),   # ‏#2460
+        "secret_missing": secret_missing(row["type"], params),   # #2460
         "removable": row["id"] != LOCAL_ID,
         "created_at": row["created_at"],
         "created_by": row["created_by"],
@@ -1417,28 +1424,28 @@ def shared_nic_warning(server: str, interfaces: list, server_base: str = "") -> 
 # בדיקת חיבור (test) לפי סוג
 # ---------------------------------------------------------------------------
 
-#: ‏#1812: תקרת הזמן של בקשת NFS תקועה — כתובה כאן ולא נשענת על ברירת
-#: המחדל של הקרנל. ‏`timeo` בעשיריות שנייה; ב-TCP הקרנל מגדיל את ההמתנה
+#: #1812: תקרת הזמן של בקשת NFS תקועה — כתובה כאן ולא נשענת על ברירת
+#: המחדל של הקרנל. `timeo` בעשיריות שנייה; ב-TCP הקרנל מגדיל את ההמתנה
 #: ליניארית אחרי כל ניסיון חוזר, ולכן בקשה מוותרת אחרי 60+120+180 ≈ 6 דקות
-#: (‏nfs(5) — חישוב, לא מדידה) ומחזירה EIO/ETIMEDOUT. אלה **ערכי ברירת
+#: (nfs(5) — חישוב, לא מדידה) ומחזירה EIO/ETIMEDOUT. אלה **ערכי ברירת
 #: המחדל של הקרנל ל-TCP** — מיקום קיים מתנהג בדיוק כמו קודם; מה שהשתנה
-#: הוא שהתקרה כתובה ונבדקת. ‏NAS שמאותחל (2–5 דקות) עובר בלי כשל.
+#: הוא שהתקרה כתובה ונבדקת. NAS שמאותחל (2–5 דקות) עובר בלי כשל.
 NFS_TIMEO_DECISECONDS = 600
 NFS_RETRANS = 2
 
 
 def _nfs_opts(params: dict) -> str:
-    """אפשרויות העיגון של NFS — ‏`soft` נשאר, בהכרעה מנומקת (#1812).
+    """אפשרויות העיגון של NFS — `soft` נשאר, בהכרעה מנומקת (#1812).
 
-    ‏**הבעיה של `soft`:** אחרי `timeo×retrans` הקרנל מוותר, ו-`write()` שכבר
+    **הבעיה של `soft`:** אחרי `timeo×retrans` הקרנל מוותר, ו-`write()` שכבר
     החזיר הצלחה (ל-page cache) מאבד את הבייטים שלו. **אבל הוויתור אינו
     שקט למי ששואל:** השגיאה נשמרת על הקובץ ומוחזרת ב-`fsync`/`close` של
-    ה-fd שכתב. לכן התיקון הוא בצד הכותב (#1813, ‏`server/core/atomicfile.py`):
+    ה-fd שכתב. לכן התיקון הוא בצד הכותב (#1813, `server/core/atomicfile.py`):
     כל נתיב שמכניס אימג' לספרייה עושה fsync לכל קובץ לפני הפרסום, וכשל
     fsync הוא חריגה שהופכת לכשל בשם — לא אימג' "תקין".
 
-    ‏**למה לא `hard`:** בקשה תקועה ב-`hard` לא נגמרת לעולם — התהליכון
-    נתקע ב-D-state, ‏`systemctl stop` ממתין עד SIGKILL (‏SVR-27), והמפעיל
+    **למה לא `hard`:** בקשה תקועה ב-`hard` לא נגמרת לעולם — התהליכון
+    נתקע ב-D-state, `systemctl stop` ממתין עד SIGKILL (SVR-27), והמפעיל
     רואה קליטה "רצה" בלי סוף ובלי הודעה. תקרת זמן ברמת האפליקציה לא
     משחררת את התהליכון התקוע ולא את הקובץ שהוא מחזיק. ב-`soft` הקרנל
     עצמו מחזיר שגיאה אחרי `NFS_TIMEO_DECISECONDS`/`NFS_RETRANS`, והקוד
@@ -1453,7 +1460,7 @@ def _nfs_opts(params: dict) -> str:
 
 
 def _smb_opts(params: dict, creds_file: str = "") -> str:
-    """‏#1123: הסיסמה לעולם לא כאן — רק `credentials=<קובץ>` (0600)."""
+    """#1123: הסיסמה לעולם לא כאן — רק `credentials=<קובץ>` (0600)."""
     opts = ["vers=3.0"]
     if creds_file:
         opts.append(f"credentials={creds_file}")
@@ -1567,10 +1574,7 @@ def test_connection(kind: str, params: dict, hooks: dict, *,
         iqn = params.get("iqn") or ""
         if not portal:
             return {"ok": False, "reason": "חסר פורטל", "warnings": warnings}
-        chap = None
-        if params.get("chap_user"):
-            chap = {"user": params.get("chap_user"), "secret": params.get("chap_secret")}
-        discovered = hooks["iscsi_discover"](portal, chap)
+        discovered = hooks["iscsi_discover"](portal)   # #2606: בלי CHAP — הוא של ה-login
         if discovered.status != OK:
             return {"ok": False, "reason": discovered.reason, "status": discovered.status,
                     "warnings": warnings}
@@ -1582,7 +1586,7 @@ def test_connection(kind: str, params: dict, hooks: dict, *,
             return {"ok": False, "reason": "הגילוי הצליח אבל לא חזר אף יעד",
                     "warnings": warnings}
         rejected = (discovered.payload or {}).get("rejected") or 0
-        if rejected:   # ‏#1983: מי שעונה בפורטל החזיר שם שאינו IQN — המנהל צריך לדעת
+        if rejected:   # #1983: מי שעונה בפורטל החזיר שם שאינו IQN — המנהל צריך לדעת
             warnings.append(f"היעד החזיר {rejected} שמות לא תקינים — נדחו")
         return {"ok": True, "free_bytes": None, "total_bytes": None,
                 "warnings": warnings, "targets": items}
@@ -1611,7 +1615,7 @@ def apply_mount(row: dict, hooks: dict) -> HookResult:
         creds = smb_creds(params)
         creds_file = creds_path(row["id"]) if creds else ""
         if creds_file and secret_missing(kind, params):
-            # ‏#2460: הסיסמה לא שוחזרה מהגיבוי. קובץ מלפני השחזור (אותה מכונה) שיש בו
+            # #2460: הסיסמה לא שוחזרה מהגיבוי. קובץ מלפני השחזור (אותה מכונה) שיש בו
             # סיסמה — נשאר כמו שהוא; בלעדיו — כישלון בשם, לא mount.cifs בלי סיסמה.
             kept = hooks["creds_password_present"](creds_file)
             if kept.status == UNCHECKED:
@@ -1624,7 +1628,7 @@ def apply_mount(row: dict, hooks: dict) -> HookResult:
                 return written
         result = hooks["mount"]("cifs", source, target, _smb_opts(params, creds_file))
     elif kind == "iscsi":
-        device = iscsi_device(params)   # ‏#2468
+        device = iscsi_device(params)   # #2468
         if not device:
             return HookResult(FAILED, "אין התקן — יש להתחבר ליעד קודם")
         fs_type = params.get("fs_type") or "ext4"
@@ -1642,7 +1646,7 @@ def apply_mount(row: dict, hooks: dict) -> HookResult:
 
 
 def fstab_entries(conn, include: str | None = None) -> list[dict]:
-    """‏`include` — מיקום שמחובר עכשיו (#1993): מצבו עוד `disconnected` כשהבלוק
+    """`include` — מיקום שמחובר עכשיו (#1993): מצבו עוד `disconnected` כשהבלוק
     נכתב, כי `connected` נקבע רק אחרי ש-fstab נכתב בהצלחה (#1123 (4))."""
     entries = []
     for row in list_rows(conn):
@@ -1652,7 +1656,7 @@ def fstab_entries(conn, include: str | None = None) -> list[dict]:
             continue
         params = params_of(row)
         if row["type"] == "local":
-            # ‏#1988: לפי UUID (שם ההתקן זז בין אתחולים), ו-nofail — כונן שמת
+            # #1988: לפי UUID (שם ההתקן זז בין אתחולים), ו-nofail — כונן שמת
             # לא עוצר את עליית השרת; המנטר מסמן אותו "לא נגיש".
             entries.append({
                 "source": f"UUID={params['uuid']}",
@@ -1676,7 +1680,7 @@ def fstab_entries(conn, include: str | None = None) -> list[dict]:
                 "fstype": "cifs",
                 "opts": _smb_opts(params, creds_file) + ",_netdev,nofail",
             })
-        elif (row["type"] == "iscsi" and iscsi_device(params)        # ‏#2468
+        elif (row["type"] == "iscsi" and iscsi_device(params)        # #2468
               and (params.get("fs_type") or "ext4") in FS_TYPES):
             entries.append({
                 "source": iscsi_device(params),
@@ -1684,8 +1688,8 @@ def fstab_entries(conn, include: str | None = None) -> list[dict]:
                 "fstype": params.get("fs_type") or "ext4",
                 "opts": "defaults,_netdev,nofail",
             })
-    # ‏#1956: יעד הגיבוי (SMB/NFS) חי באותו בלוק — כל כתיבה מחדש של fstab שומרת אותו.
-    from server.system.backup_target import fstab_entry   # noqa: PLC0415 — ‏backup_target מייבא את המודול הזה
+    # #1956: יעד הגיבוי (SMB/NFS) חי באותו בלוק — כל כתיבה מחדש של fstab שומרת אותו.
+    from server.system.backup_target import fstab_entry   # noqa: PLC0415 — backup_target מייבא את המודול הזה
     backup = fstab_entry(conn)
     if backup:
         entries.append(backup)
@@ -1700,12 +1704,12 @@ def rewrite_fstab(conn, hooks: dict, include: str | None = None) -> HookResult:
 # מנטר — כל 60ש', רק connected/unreachable
 # ---------------------------------------------------------------------------
 
-#: ‏#1994: סוגים שהם עיגון (תמיד עם `nofail`) — לא תיקייה כמו `loc_local`.
+#: #1994: סוגים שהם עיגון (תמיד עם `nofail`) — לא תיקייה כמו `loc_local`.
 MOUNTED_TYPES = ("nfs", "smb", "iscsi")
 
 
 def measure(row: dict, hooks: dict) -> HookResult:
-    """‏df של מיקום — רק כשהוא באמת מעוגן: ‏df על נקודת עיגון ריקה מודד את
+    """df של מיקום — רק כשהוא באמת מעוגן: df על נקודת עיגון ריקה מודד את
     דיסק המערכת ו"מצליח", ומיקום שלא עלה באתחול (nofail) היה נראה "מחובר"
     עם מספרים של דיסק אחר. כונן (#1988) ומיקום רשת (#1994) כאחד."""
     disk = is_disk(row)
@@ -1714,12 +1718,12 @@ def measure(row: dict, hooks: dict) -> HookResult:
     return hooks["df"](row["mount_point"])
 
 
-#: ‏#2123: מה שהרשימה מראה בין עליית השרת לבדיקה הראשונה שלו.
+#: #2123: מה שהרשימה מראה בין עליית השרת לבדיקה הראשונה שלו.
 AFTER_START_DETAIL = "לא נבדק מאז הפעלת השרת"
 
 
 def mark_unchecked_after_start(conn) -> int:
-    """‏#2123: מצב שמור של עיגון אינו ראיה אחרי restart או אתחול — העיגון יכול
+    """#2123: מצב שמור של עיגון אינו ראיה אחרי restart או אתחול — העיגון יכול
     היה להיעלם (#2122) או לחזור (fstab). עד הבדיקה הראשונה של התהליך הזה
     מיקום-עיגון הוא `unchecked`, לא "מחובר" (ולא "לא נגיש") מהזיכרון; וגם
     הספרייה אינה כותבת אליו בינתיים (`library_roots`). מחזיר כמה סומנו."""

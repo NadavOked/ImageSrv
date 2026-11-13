@@ -1,8 +1,8 @@
-"""‏#1830: קובץ מחיצה ריק עם גיבוב "תואם" אינו נכנס לספרייה.
+"""#1830: קובץ מחיצה ריק עם גיבוב "תואם" אינו נכנס לספרייה.
 
 הסוכן מגבב את מה שהוא שלח. זרם שנקטע לפני הבייט הראשון יוצא קובץ של אפס
 בייט, וה-sha256 שלו (של מחרוזת ריקה) תואם בדיוק את מה שהשרת קיבל — כל
-בדיקת גיבוב עוברת. עד #1830 ‏`manifest_problem` בדק רק שהקובץ **קיים**.
+בדיקת גיבוב עוברת. עד #1830 `manifest_problem` בדק רק שהקובץ **קיים**.
 
 זרם של partclone אינו ריק לעולם — גם מערכת קבצים ריקה נושאת כותרת ומפת
 סיביות, ו-partclone.dd נושא את המחיצה כולה — ולכן אפס בייט הוא "לא הגיע
@@ -68,7 +68,7 @@ def test_a_capture_whose_files_carry_bytes_is_still_accepted(server, images_root
 # --- ראיה חיובית לנפח מול used_bytes (הכרעת נדב 01/11) ------------------------
 #
 # קובץ שאינו ריק עדיין יכול להיות זרם שנקטע: כותרת של partclone ומעט בלוקים,
-# עם גיבוב "תואם" כי הסוכן גיבב את מה שנשלח. הסף (`MIN_STREAM_TO_USED`, ‏1%)
+# עם גיבוב "תואם" כי הסוכן גיבב את מה שנשלח. הסף (`MIN_STREAM_TO_USED`, 1%)
 # נגזר ממדידה — ההערה בקוד נוקבת במקור.
 
 
@@ -80,7 +80,7 @@ def _with_used(used):
 
 def test_a_stream_far_smaller_than_what_the_partition_holds_is_refused_by_name(
         server, images_root):
-    """‏p3 נושא 21 בייט, ובמחיצה תפוסים 10,000: ‏0.21% — מתחת ל-1%.
+    """p3 נושא 21 בייט, ובמחיצה תפוסים 10,000: 0.21% — מתחת ל-1%.
 
     **בקרה שלילית:** על הקוד הישן (רק אפס בייט נדחה) — 202, והאימג' נכנס."""
     tid, image_id, r = _capture(server, {"p1.esp.pcl.zst": PART_A, "p3.windows.pcl.zst": PART_B},
@@ -111,7 +111,7 @@ def test_a_stream_at_one_percent_of_the_used_space_is_accepted(server, images_ro
 @pytest.mark.parametrize("used", [None, 0])
 def test_without_a_measured_used_space_only_the_empty_file_rule_applies(
         server, images_root, used):
-    """‏`null` = לא נמדד (partclone.dd, מחיצה שלא נעגנה); ‏0 = נמדד וריק. בשניהם
+    """`null` = לא נמדד (partclone.dd, מחיצה שלא נעגנה); 0 = נמדד וריק. בשניהם
     אין מכנה ליחס — הקליטה אינה נדחית בגללו (וקובץ ריק עדיין נדחה, למעלה)."""
     tid, _image_id, r = _capture(
         server, {"p1.esp.pcl.zst": PART_A, "p3.windows.pcl.zst": PART_B}, _with_used(used))

@@ -1,36 +1,36 @@
-"""‏#2442 (א): שרת DHCP או proxyDHCP **זר** ברשת ההפצה, בזמן ריצה.
+"""#2442 (א): שרת DHCP או proxyDHCP **זר** ברשת ההפצה, בזמן ריצה.
 
 מחשב ברשת ההפצה יכול להרים DHCP ו-TFTP משלו, ותחנה תאתחל ממנו. ההגנה
 האמיתית היא DHCP snooping בסוויץ' (משימה של נדב, לא כאן); כאן רק **מתריעים**:
 השרת מקשיב על כרטיס ההפצה, ו-DHCPOFFER (או proxyDHCP — תשובה עם אפשרויות PXE)
 שמגיע ממי שאינו השרת עצמו הוא אירוע ביומן ושורה אדומה במסך הבריאות.
 
-**האזנה פסיבית, אותה שכבה כמו השומר של #2417** — ‏AF_PACKET עם מסנן BPF בקרנל
-(‏`dhcp_host._open_tap`), כך שחומת האש של השרת אינה מסתירה את ה-OFFER, והמסנן
+**האזנה פסיבית, אותה שכבה כמו השומר של #2417** — AF_PACKET עם מסנן BPF בקרנל
+(`dhcp_host._open_tap`), כך שחומת האש של השרת אינה מסתירה את ה-OFFER, והמסנן
 מסנן בקרנל. בלי polling: הקריאה חוסמת עד שמסגרת מגיעה או עד סוף הפרוסה
-(‏`SLICE_SECONDS`); בפרוסה נבדקים מחדש השער וזהות הכרטיס, בלי לסגור את הסוקט.
+(`SLICE_SECONDS`); בפרוסה נבדקים מחדש השער וזהות הכרטיס, בלי לסגור את הסוקט.
 
 **מי "אני".** מה שה-dnsmasq שלנו באמת שלח: מסגרת שיצאה מהמארח
-(‏PACKET_OUTGOING — הקרנל אומר זאת, לא החבילה). ה-MAC וה-IP שבמסגרת הם מה
+(PACKET_OUTGOING — הקרנל אומר זאת, לא החבילה). ה-MAC וה-IP שבמסגרת הם מה
 שהשולח כתב, ומחשב ברשת כותב שם את שלנו בלי מאמץ — ולכן מסגרת **נכנסת** עם
-ה-MAC או ה-IP של הכרטיס היא התחזות לשרת (‏`as=server`), לא "אני". החריג היחיד:
-עותק של תשובה שיצאה מכאן בשניות האחרונות (‏`ECHO_SECONDS`, לפי גוף ה-BOOTP) —
+ה-MAC או ה-IP של הכרטיס היא התחזות לשרת (`as=server`), לא "אני". החריג היחיד:
+עותק של תשובה שיצאה מכאן בשניות האחרונות (`ECHO_SECONDS`, לפי גוף ה-BOOTP) —
 לולאה בסוויץ' שהחזירה אותה אלינו.
 
-**הצפה (#2442, ‏05/11).** כל MAC+IP אקראי הוא מקור חדש, ובלי תקרה ‏20,000
+**הצפה (#2442, 05/11).** כל MAC+IP אקראי הוא מקור חדש, ובלי תקרה 20,000
 OFFERs מזויפים היו 20,000 שורות יומן ורשומות בזיכרון. נשמרים עד
 `MAX_SOURCES` מקורות; הראשונים נשארים (תוקף אינו דוחק שרת זר אמיתי מהמסך),
-ומה שמעבר נספר בלבד — שורת סיכום ‏`foreign_dhcp_more` לכל היותר פעם
+ומה שמעבר נספר בלבד — שורת סיכום `foreign_dhcp_more` לכל היותר פעם
 ב-`SUMMARY_EVERY`, והשורה במסך **נשארת אדומה** ואומרת כמה עוד (עיקרון 5).
 
 **מה אינו נראה, בכוונה מוצהר.** האזנה פסיבית רואה רק תשובות שמגיעות לכרטיס:
-‏OFFER משודר (דגל broadcast, כמו אצל לקוחות PXE ברובם) ו-proxyDHCP. תשובת
+OFFER משודר (דגל broadcast, כמו אצל לקוחות PXE ברובם) ו-proxyDHCP. תשובת
 unicast ללקוח אחר בסוויץ' לא מגיעה אלינו. ולכן "לא נראה שרת זר" אינו "אין
 שרת זר", והטקסט במסך אומר זאת; זו עוד סיבה שההגנה היא ה-snooping.
 
 **עיקרון 5.** ההאזנה שנכשלה (אין הרשאה, הכרטיס לא קיים) היא "לא הצלחנו
 להאזין", לא "אין שרת זר". השומר פעיל רק כש-DHCP שלנו דלוק בכרטיס ההפצה
-(‏`gate`) — בלי זה שרת אחר הוא אולי בדיוק מה שמתוכנן.
+(`gate`) — בלי זה שרת אחר הוא אולי בדיוק מה שמתוכנן.
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ EVENT = "foreign_dhcp_seen"
 EVENT_MORE = "foreign_dhcp_more"
 #: מקורות שנשמרים בזיכרון (ולכן גם נרשמים ביומן אחד-אחד). מעבר לזה — נספרים.
 MAX_SOURCES = 32
-#: שורת סיכום לכל היותר פעם בזמן הזה (בהצפה מתמשכת: ‏6 בשעה).
+#: שורת סיכום לכל היותר פעם בזמן הזה (בהצפה מתמשכת: 6 בשעה).
 SUMMARY_EVERY = 600.0
 #: כמה זמן תשובה שיצאה מכאן נחשבת "שלנו" כשהיא חוזרת (לולאה בסוויץ').
 ECHO_SECONDS = 5.0
@@ -117,9 +117,9 @@ def _options(data: bytes) -> dict[int, bytes]:
 
 
 def parse_reply(frame: bytes) -> Reply | None:
-    """מסגרת Ethernet → ‏`Reply` אם היא DHCPOFFER (שרת 67 → לקוח 68), אחרת None.
+    """מסגרת Ethernet → `Reply` אם היא DHCPOFFER (שרת 67 → לקוח 68), אחרת None.
 
-    ‏proxyDHCP: ‏yiaddr ריק ואפשרויות PXE (60 = PXEClient או 43). כל מסגרת קצרה,
+    proxyDHCP: yiaddr ריק ואפשרויות PXE (60 = PXEClient או 43). כל מסגרת קצרה,
     מקוטעת או פגומה היא None."""
     if len(frame) < 14 + 20 + 8 + 240 or frame[12:14] != b"\x08\x00":
         return None
@@ -151,7 +151,7 @@ def _digest(reply: Reply) -> bytes:
 
 def own_identity(interface: str, sys_root: str | Path = "/sys/class/net"
                  ) -> tuple[frozenset[str], frozenset[str]]:
-    """‏(ה-MAC, כתובות ה-IPv4) של הכרטיס. כרטיס שאינו קיים — OSError, כלומר
+    """(ה-MAC, כתובות ה-IPv4) של הכרטיס. כרטיס שאינו קיים — OSError, כלומר
     "לא הצלחנו להאזין", לא "נקי"."""
     mac = Path(sys_root, interface, "address").read_text().strip().lower()
     ips = {a.split("/")[0] for a in dhcp_host._addresses(interface)}
@@ -163,10 +163,10 @@ def _ago(seconds: float) -> str:
 
 
 class Watch:
-    """מצב הזיהוי בכרטיס אחד. ‏`run_forever` בתהליכון daemon (‏main בלבד).
+    """מצב הזיהוי בכרטיס אחד. `run_forever` בתהליכון daemon (main בלבד).
 
-    ‏`gate()` — None כש-DHCP שלנו דלוק בכרטיס, אחרת הסיבה בעברית.
-    ‏`own()` — ‏(MACs, IPs) של הכרטיס. ‏`opener(interface)` — הסוקט המסונן."""
+    `gate()` — None כש-DHCP שלנו דלוק בכרטיס, אחרת הסיבה בעברית.
+    `own()` — (MACs, IPs) של הכרטיס. `opener(interface)` — הסוקט המסונן."""
 
     def __init__(self, conn, interface: str, *, gate: Callable[[], str | None],
                  own: Callable[[], tuple[frozenset[str], frozenset[str]]] | None = None,
@@ -182,7 +182,7 @@ class Watch:
         self._tap = None
         self.sent: dict[bytes, float] = {}
         #: תשובות ממקורות מעבר ל-`MAX_SOURCES`: כמה מאז שורת הסיכום האחרונה
-        #: (‏unlogged), כמה בחלון ההחזקה (‏overflow), מתי האחרונה ומי.
+        #: (unlogged), כמה בחלון ההחזקה (overflow), מתי האחרונה ומי.
         self.unlogged = 0
         self.overflow = 0
         self.overflow_seen: float | None = None
@@ -193,7 +193,7 @@ class Watch:
     # --- אחרי אתחול: מי שנראה לפני ההפעלה מחדש עדיין חי ----------------------
 
     def _seed(self, wall_now: float) -> None:
-        """שורה אדומה שנעלמת באתחול השרת היא ירוק שקרי: ‏`foreign_dhcp_seen`
+        """שורה אדומה שנעלמת באתחול השרת היא ירוק שקרי: `foreign_dhcp_seen`
         שביומן, בתוך `HOLD_SECONDS`, חוזר כמי שנראה."""
         try:
             rows = self.conn.execute(

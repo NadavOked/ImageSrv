@@ -1,4 +1,4 @@
-"""‏#720 — ספריית חבילות הדרייברים: ייבוא מאומת (sha256 של **כל** קובץ
+"""#720 — ספריית חבילות הדרייברים: ייבוא מאומת (sha256 של **כל** קובץ
 לפני הכניסה, עיקרון 6), חבילה בלתי-משתנה, התאמה דטרמיניסטית שורה-שורה,
 ו-endpoints לקונסולה ולסוכן.
 """
@@ -103,7 +103,7 @@ def test_safe_relative(raw, expected):
 
 
 # --- #959: מזהה בלי class, וכלל "אחד מ-" ------------------------------------
-# ‏INF של דרייבר נוקב ב-`PCI\VEN_8086&DEV_15BC` בלבד — אין בו קוד class,
+# INF של דרייבר נוקב ב-`PCI\VEN_8086&DEV_15BC` בלבד — אין בו קוד class,
 # וחבילת דגם מתאימה כשאחד מבקריה נמצא במכונה, לא כשכולם נמצאים.
 
 
@@ -115,7 +115,7 @@ def test_a_pci_id_may_omit_the_class_and_pci_any_needs_one_hit():
             {"name": "all-of-short", "match": [{"pci": ["8086:15bc", "8086:a352"]}]}]
     assert match(INVENTORY, pkgs) == [{"name": "all-of-short", "by": "pci"},
                                       {"name": "any-of", "by": "pci"}]
-    # ‏`8086:15bc` תואם רק בקר שה-vendor:device שלו זהים — לא כל מוצר של Intel.
+    # `8086:15bc` תואם רק בקר שה-vendor:device שלו זהים — לא כל מוצר של Intel.
     assert match({**INVENTORY, "pci": ["8086:15bd:020000"]}, pkgs) == []
     assert match({**INVENTORY, "pci": ["10ec:8168:020000"]}, pkgs) == [
         {"name": "any-of", "by": "pci"}]

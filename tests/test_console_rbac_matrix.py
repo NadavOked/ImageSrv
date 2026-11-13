@@ -1,8 +1,8 @@
-"""‏#555: מטריצה מלאה נתיב × תפקיד deploy — על **כל** נתיב קונסולה, לא על רשימה.
+"""#555: מטריצה מלאה נתיב × תפקיד deploy — על **כל** נתיב קונסולה, לא על רשימה.
 
 הכלל (CLAUDE.md): "משתמש deploy: אימג'ים וסבבים בלבד, כל השאר 403". ומאז
-‏#1073 הוא חד יותר: בקונסולה (‏8081) deploy מסורב **בכל** נתיב
-(‏`deploy_no_console`), ובפורט הסוכן (‏8080) הוא מקבל רק את ה-allowlist של
+#1073 הוא חד יותר: בקונסולה (8081) deploy מסורב **בכל** נתיב
+(`deploy_no_console`), ובפורט הסוכן (8080) הוא מקבל רק את ה-allowlist של
 `kiosk.KIOSK_CONSOLE_ROUTES`. הנתיבים נמנים כאן **מהאפליקציה עצמה**, ולכן
 נתיב חדש נכנס למטריצה בלי שאיש יזכור לרשום אותו — וזה השער: נתיב קונסולה
 שמשיב ל-deploy משהו שאינו 403 מפיל את הבדיקה בשם."""
@@ -114,7 +114,7 @@ def test_the_kiosk_allowlist_is_exactly_what_deploy_can_reach(server, monkeypatc
 
 
 def test_an_anonymous_client_gets_401_not_403_on_the_console(server):
-    """‏401 ו-403 הם שני מצבים: בלי עוגייה = לא מחובר; deploy = מחובר ומסורב."""
+    """401 ו-403 הם שני מצבים: בלי עוגייה = לא מחובר; deploy = מחובר ומסורב."""
     rt = server["app"].state.runtime
     console = TestClient(create_console_app(rt))
     for method, path in _routes(console.app):

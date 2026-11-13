@@ -1,4 +1,4 @@
-"""‏#2786 (נדב 09/11) — שם מחשב לכל דיסק יעד בסבב חדר השיכפול.
+"""#2786 (נדב 09/11) — שם מחשב לכל דיסק יעד בסבב חדר השיכפול.
 
 הקונסולה מחשבת את השמות (תבנית או פרטני, לפי סדר המשכפל ואז SATA) ומציגה
 אותם בתצוגה המקדימה; מה שנשלח הוא **השם לכל `(mac, port)`**, בדיוק כמו
@@ -13,7 +13,7 @@
 ```
 
 חסר / ``null`` = בלי שמות — הסבב בדיוק כמו לפני ה-Issue (המתג כבוי: השם
-שבאימג' נשאר). ‏``os`` רק לאימג' שיש בו גם Windows וגם לינוקס; ``null`` =
+שבאימג' נשאר). ``os`` רק לאימג' שיש בו גם Windows וגם לינוקס; ``null`` =
 שתיהן (ברירת המחדל במסך).
 """
 
@@ -67,7 +67,7 @@ def instructor(conn: sqlite3.Connection) -> str:
 
 
 def settings_view(conn: sqlite3.Connection) -> dict:
-    """מה שהקונסולה צריכה כדי לחשב תבנית — גם למפעיל הפצה (‏`/settings` הוא admin)."""
+    """מה שהקונסולה צריכה כדי לחשב תבנית — גם למפעיל הפצה (`/settings` הוא admin)."""
     return {"pad": pad(conn), "instructor": instructor(conn),
             "max_len": hostname_rule.HOSTNAME_MAX}
 
@@ -133,7 +133,7 @@ def view(round_row: sqlite3.Row) -> dict | None:
 
 
 def for_mac(round_row: sqlite3.Row | None, mac: str) -> dict[str, str] | None:
-    """‏`session.hostnames` של המכונה: ‏``{"<port>": name}``. ‏``None`` = הסבב בלי שמות."""
+    """`session.hostnames` של המכונה: ``{"<port>": name}``. ``None`` = הסבב בלי שמות."""
     chosen = _loaded(round_row)
     if chosen is None:
         return None
@@ -141,6 +141,6 @@ def for_mac(round_row: sqlite3.Row | None, mac: str) -> dict[str, str] | None:
 
 
 def os_for(round_row: sqlite3.Row | None) -> list[str] | None:
-    """‏`session.hostname_os`: ``null`` = כל מערכת שבאימג' (כמו לפני ה-Issue)."""
+    """`session.hostname_os`: ``null`` = כל מערכת שבאימג' (כמו לפני ה-Issue)."""
     chosen = _loaded(round_row)
     return None if chosen is None else chosen.get("os")

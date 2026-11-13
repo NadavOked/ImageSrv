@@ -207,7 +207,7 @@ def test_console_failures_do_not_cap_the_station_login(identity_server, guard_cl
 
 
 def test_station_login_failures_never_reach_the_console_cap(identity_server, guard_clock):  # noqa: F811
-    """‏PoC4 של Fable: תחנה עם MAC וחכירה תקינים מנסה את סיסמת המנהל עד הנעילה
+    """PoC4 של Fable: תחנה עם MAC וחכירה תקינים מנסה את סיסמת המנהל עד הנעילה
     לפי (שם, IP), ויחד איתה 40 כשלונות בקונסולה — 50 על אותו שם, אבל לא בקונסולה."""
     server = identity_server
     for _ in range(login_guard.LOCK_AFTER):
@@ -250,7 +250,7 @@ def _agent_login(app, ip: str):
 
 
 def test_kiosk_login_on_the_agent_port_does_not_lock_the_console(split_apps, guard_clock):
-    """‏`/api/console/login` חי גם בפורט הסוכן (מחשב הבנייה) — המשטח נקבע לפי הפורט."""
+    """`/api/console/login` חי גם בפורט הסוכן (מחשב הבנייה) — המשטח נקבע לפי הפורט."""
     agent_app, console_app = split_apps
     _wrong_logins_on(agent_app)
     r = TestClient(console_app, client=("10.50.0.77", 42000)).post("/api/console/login", json=GOOD)

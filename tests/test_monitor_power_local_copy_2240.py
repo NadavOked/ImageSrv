@@ -1,14 +1,14 @@
-"""‏#2240 — כפתורי הכוח של המוניטור באמצע שיכפול מקומי (הכרעה 03/11, אפשרות ב׳).
+"""#2240 — כפתורי הכוח של המוניטור באמצע שיכפול מקומי (הכרעה 03/11, אפשרות ב׳).
 
 עד כאן `POST /monitor/{mac}/power` כתב את אסימון הכוח ל-monitor.c, שמריץ
-‏`poweroff -f` — בלי האזהרה של חלון המחשב (#1367) ובלי `lc_power_commit`: על
-משכפל 2 (‏31/10) יעד שהיה באמצע אימות עלה כ-Windows תקין. עכשיו:
+`poweroff -f` — בלי האזהרה של חלון המחשב (#1367) ובלי `lc_power_commit`: על
+משכפל 2 (31/10) יעד שהיה באמצע אימות עלה כ-Windows תקין. עכשיו:
 
-* ‏`…/power` מסרב (409, ‏`local_copy: true`) כשהמחשב באמצע שיכפול מקומי, והפריים
-  אינו נכתב — אלא אם המפעיל בחר "המחשב לא עונה" (‏`immediate: true`, כפתור החירום).
-* ‏`…/agent-power` = "כבה/אתחל בכל זאת": ‏`request_power(confirmed=True)` — ה-hello הבא
+* `…/power` מסרב (409, `local_copy: true`) כשהמחשב באמצע שיכפול מקומי, והפריים
+  אינו נכתב — אלא אם המפעיל בחר "המחשב לא עונה" (`immediate: true`, כפתור החירום).
+* `…/agent-power` = "כבה/אתחל בכל זאת": `request_power(confirmed=True)` — ה-hello הבא
   נושא `power_action` + `power_confirmed`, והסוכן מסמן את היעדים לפני הכיבוי.
-* ‏`local_copy` ברשימת המוניטור — הדף מזהיר כבר בלחיצה הראשונה.
+* `local_copy` ברשימת המוניטור — הדף מזהיר כבר בלחיצה הראשונה.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from test_monitor import (  # noqa: E402
 
 
 def _copying(server, copying: bool = True) -> None:
-    """מה ש-hello עם `local_clone: "copying"` משאיר ב-net_devices (‏attended.sh)."""
+    """מה ש-hello עם `local_clone: "copying"` משאיר ב-net_devices (attended.sh)."""
     conn = server["ctx"].conn
     conn.execute("UPDATE net_devices SET local_clone = ?, last_seen = ? WHERE mac = ?",
                  ("copying" if copying else None, datetime.now(timezone.utc).isoformat(), MAC))
@@ -158,8 +158,8 @@ def test_the_monitor_list_says_a_local_copy_is_writing(server):
 
 @pytest.mark.parametrize(("path", "allowed"), [
     ("/monitor/aa-bb-cc-dd-ee-01/agent-power", True),
-    ("/monitor/aa-bb-cc-dd-ee-01/power", False),       # ‏poweroff -f נשאר במנהרה בלבד
-    ("/monitor/aa:bb:cc:dd:ee:01/agent-power", False),  # ‏`:` אינו עובר את בדיקת הנתיב
+    ("/monitor/aa-bb-cc-dd-ee-01/power", False),       # poweroff -f נשאר במנהרה בלבד
+    ("/monitor/aa:bb:cc:dd:ee:01/agent-power", False),  # `:` אינו עובר את בדיקת הנתיב
 ])
 def test_only_the_agent_path_is_open_to_the_primary(path, allowed):
     assert interserver_api.console_write_allowed("POST", path) is allowed

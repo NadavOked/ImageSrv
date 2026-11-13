@@ -1,22 +1,22 @@
 """מוניטור וגואי בלי מסך מחובר (#835) — framebuffer בזיכרון.
 
-מחשב שיכפול 2 (.59): כל המחברים מנותקים, ‏i915 לא יוצר ‏`/dev/fb0`,
+מחשב שיכפול 2 (.59): כל המחברים מנותקים, i915 לא יוצר `/dev/fb0`,
 הגואי נופל ב-"cannot open a display" והמוניטור — שנועד בדיוק למכונה
 בלי מסך — נופל ב-"open framebuffer" בלולאת restart. הפתרון (הכרעת נדב
-15/09): הגואי מצייר לקובץ ממופה, ‏`imagesrv-monitor --fb <קובץ>` מגיש
+15/09): הגואי מצייר לקובץ ממופה, `imagesrv-monitor --fb <קובץ>` מגיש
 אותו.
 
 מה נבדק כאן, ואיפה:
 
-* **החוזה בין הרכיבים** (‏`docs/architecture/interfaces.md` סעיף 15) — כותרת של 4096
+* **החוזה בין הרכיבים** (`docs/architecture/interfaces.md` סעיף 15) — כותרת של 4096
   בייטים ואז פיקסלים. הקסם, גודל הכותרת והנתיב מופיעים בשני קובצי ה-C
   ובשני קובצי ה-sh; הטסטים **נועלים אותם זהים**, כי סטייה של אחד
   מהם היא מוניטור שקורא זבל ולא נופל.
-* **הסוכן (sh)** — ‏`monitor_start` ו-`gui_backend_args` מול ‏`FB_DEV`
-  שקיים (‏`/dev/null` הוא התקן תווים בכל מקום) או חסר: עם מסך המסלול
-  זהה להיום (בלי `--fb`, ‏`--backend fbdev`); בלי מסך — ‏`mem` והקובץ.
-* **הצד המקומפל** (‏`requires_native`, מעבדה בלבד): הגואי ב-`--backend
-  mem` כותב כותרת תקינה ופיקסלים שאינם אפס; ‏`imagesrv-monitor --fb`
+* **הסוכן (sh)** — `monitor_start` ו-`gui_backend_args` מול `FB_DEV`
+  שקיים (`/dev/null` הוא התקן תווים בכל מקום) או חסר: עם מסך המסלול
+  זהה להיום (בלי `--fb`, `--backend fbdev`); בלי מסך — `mem` והקובץ.
+* **הצד המקומפל** (`requires_native`, מעבדה בלבד): הגואי ב-`--backend
+  mem` כותב כותרת תקינה ופיקסלים שאינם אפס; `imagesrv-monitor --fb`
   על הקובץ מאזין ב-RFB ומגיש את הבאנר, ונופל בגלוי על קובץ פגום.
 
 בקרה שלילית לכל אחד — ראה גוף ה-PR.
@@ -51,7 +51,7 @@ MONITOR_SH = AGENT / "lib" / "core" / "monitor.sh"
 GUIBRIDGE_SH = AGENT / "lib" / "gui" / "guibridge.sh"
 INTERFACES = REPO / "docs" / "architecture" / "interfaces.md"
 
-#: החוזה (‏interfaces.md סעיף 15). מקור יחיד לצורה בטסט — שני צידי ה-C
+#: החוזה (interfaces.md סעיף 15). מקור יחיד לצורה בטסט — שני צידי ה-C
 #: חייבים להסכים עליו בדיוק.
 MAGIC = b"IMCTLFB1"
 HEADER_BYTES = 4096
@@ -111,7 +111,7 @@ def test_monitor_and_gui_agree_on_the_header():
 
 def test_the_memory_framebuffer_is_one_file_everywhere():
     """הגואי כותב ל-`$RUN_DIR/fb.mem`, המוניטור מקבל את **אותו** נתיב,
-    וברירת המחדל ב-C היא `/run/imagesrv/fb.mem` (‏`RUN_DIR` של common.sh).
+    וברירת המחדל ב-C היא `/run/imagesrv/fb.mem` (`RUN_DIR` של common.sh).
     שם אחר באחד מהם = מוניטור שמחכה לקובץ שלא ייווצר לעולם."""
     for path in (MONITOR_SH, GUIBRIDGE_SH):
         assert f'"$RUN_DIR/{FILE_NAME}"' in path.read_text(encoding="utf-8"), path.name
@@ -119,7 +119,7 @@ def test_the_memory_framebuffer_is_one_file_everywhere():
 
 
 def test_monitor_c_serves_a_regular_file_without_ioctl():
-    """‏monitor.c מבחין בין התקן (ioctl) לקובץ רגיל (כותרת) לפי `fstat`,
+    """monitor.c מבחין בין התקן (ioctl) לקובץ רגיל (כותרת) לפי `fstat`,
     ובודק את הקסם — לא מניח שכל קובץ הוא framebuffer."""
     text = MONITOR_C.read_text(encoding="utf-8")
     assert "S_ISREG" in text
@@ -129,8 +129,8 @@ def test_monitor_c_serves_a_regular_file_without_ioctl():
 
 
 def test_backend_auto_falls_through_to_mem():
-    """‏`auto` = drm → fbdev → mem: בלי מסך הגואי לא נופל אלא מצייר לקובץ.
-    ‏`mem` מפורש קיים גם הוא, ו-`--fb-file` בוחר את הקובץ."""
+    """`auto` = drm → fbdev → mem: בלי מסך הגואי לא נופל אלא מצייר לקובץ.
+    `mem` מפורש קיים גם הוא, ו-`--fb-file` בוחר את הקובץ."""
     text = BACKEND_C.read_text(encoding="utf-8")
     assert "KIND_MEM" in text
     assert re.search(r'strcmp\(kind,\s*"mem"\)', text)
@@ -153,7 +153,7 @@ def test_interfaces_documents_the_memory_framebuffer():
 
 def _monitor_start(tmp_path, fb_dev, role="cloner", mem_file=False, env=""):
     """מריץ monitor_start עם `_monitor_spawn` מזויף (כמו test_agent) ומחזיר
-    ‏(ארגומנטים או None, מה שנרשם ליומן)."""
+    (ארגומנטים או None, מה שנרשם ליומן)."""
     out = tmp_path / "spawn-args"
     logf = tmp_path / "log"
     run_dir = tmp_path / "run"
@@ -182,10 +182,10 @@ def _monitor_start(tmp_path, fb_dev, role="cloner", mem_file=False, env=""):
 
 @requires_native(("bash", BASH))
 def test_monitor_with_a_screen_serves_the_guis_mirror(tmp_path):
-    """‏#1475: יש `/dev/fb0` (כאן `/dev/null`) **וגם** המראה של הגואי
-    (‏`--fb-mirror`): המוניטור מגיש את `fb.mem` — זיכרון רגיל עם seq — ולא קורא
+    """#1475: יש `/dev/fb0` (כאן `/dev/null`) **וגם** המראה של הגואי
+    (`--fb-mirror`): המוניטור מגיש את `fb.mem` — זיכרון רגיל עם seq — ולא קורא
     את זיכרון הווידאו של fb0 בכל טיק (60% מתהליכון על משכפל 2, 16/10).
-    בקרה שלילית: על הקוד שלפני #1475 ‏`--fb` אינו בשורה כשיש fb0."""
+    בקרה שלילית: על הקוד שלפני #1475 `--fb` אינו בשורה כשיש fb0."""
     args, _ = _monitor_start(tmp_path, "/dev/null", role="build", mem_file=True)
     assert args is not None
     words = args.split()
@@ -196,8 +196,8 @@ def test_monitor_with_a_screen_serves_the_guis_mirror(tmp_path):
 
 @requires_native(("bash", BASH))
 def test_monitor_with_a_screen_waits_for_the_mirror_then_falls_back(tmp_path):
-    """‏#1475: יש fb0 ועוד אין מראה — ממתינים (פעם אחת ביומן); אחרי
-    ‏MONITOR_MIRROR_WAIT_S בלי מראה (גואי שלא עלה) — ‏`/dev/fb0` עצמו, והיומן
+    """#1475: יש fb0 ועוד אין מראה — ממתינים (פעם אחת ביומן); אחרי
+    MONITOR_MIRROR_WAIT_S בלי מראה (גואי שלא עלה) — `/dev/fb0` עצמו, והיומן
     אומר שזה המסלול היקר. מסך ריק בקונסולה אינו ברירת המחדל."""
     args, log = _monitor_start(tmp_path, "/dev/null", role="build")
     assert args is None, args
@@ -220,7 +220,7 @@ def test_monitor_without_a_screen_waits_for_the_gui_file(tmp_path):
 
 @requires_native(("bash", BASH))
 def test_a_round_that_blocks_the_loop_still_gets_its_monitor(tmp_path):
-    """‏#1849 (משכפל 2, ‏19/10): תשובת ה-hello הראשונה היא `restore`, והלולאה
+    """#1849 (משכפל 2, 19/10): תשובת ה-hello הראשונה היא `restore`, והלולאה
     נחסמת ב-`do_restore` — אחרי ש-`monitor_start` כבר מצא שאין `fb.mem` ולפני
     שהגואי יצר אותו. 5900 לא נפתח כל השחזור, גם בזמן שאלת SMART. כאן: הקובץ
     נוצר שנייה אחרי הקריאה, הלולאה **לא** חוזרת — והמוניטור עולה בכל זאת,
@@ -297,8 +297,8 @@ def _gui_backend_args(tmp_path, fb_dev, backend_env=None, monitor=False):
 
 @requires_native(("bash", BASH))
 def test_gui_keeps_fbdev_when_a_screen_is_attached(tmp_path):
-    """‏#641: על i915 עם מסך ‏fbdev הוא הפלט המוכח — נשאר ברירת המחדל, בלי
-    ‏`--fb-file` (שורת הפקודה של המסלול הקיים זהה)."""
+    """#641: על i915 עם מסך fbdev הוא הפלט המוכח — נשאר ברירת המחדל, בלי
+    `--fb-file` (שורת הפקודה של המסלול הקיים זהה)."""
     assert _gui_backend_args(tmp_path, "/dev/null") == "--backend fbdev"
 
 
@@ -310,7 +310,7 @@ def test_gui_draws_to_memory_without_a_screen(tmp_path):
 
 @requires_native(("bash", BASH))
 def test_gui_backend_override_still_wins(tmp_path):
-    """‏GUI_BACKEND=drm|auto|mem מפורש גובר על בדיקת ההתקן, כמו היום."""
+    """GUI_BACKEND=drm|auto|mem מפורש גובר על בדיקת ההתקן, כמו היום."""
     assert _gui_backend_args(tmp_path, "/dev/null", "drm") == "--backend drm"
     assert _gui_backend_args(tmp_path, "/dev/null", "mem") == \
         f"--backend mem --fb-file /run/imagesrv/{FILE_NAME}"
@@ -333,8 +333,8 @@ def _read_header(path: Path):
     posix=True, why="native-gui נבנה על המעבדה בלבד",
 )
 def test_native_gui_mem_backend_writes_a_valid_frame(tmp_path):
-    """‏`--backend mem` בלי מסך, בלי tty0, בלי קלט: הקובץ נוצר בגודל הנכון,
-    הכותרת תקינה, ‏`seq` זוגי (פריים שלם) והפיקסלים אינם כולם אפס — משהו
+    """`--backend mem` בלי מסך, בלי tty0, בלי קלט: הקובץ נוצר בגודל הנכון,
+    הכותרת תקינה, `seq` זוגי (פריים שלם) והפיקסלים אינם כולם אפס — משהו
     צויר. בקרה שלילית: backend.c בלי `mem` → "cannot open a display", rc=1."""
     binary = tmp_path / "gui-bin"
     build = subprocess.run(
@@ -416,7 +416,7 @@ def _write_memfb(path: Path, magic: bytes = MAGIC, seq: int = 0) -> None:
     posix=True, why="imagesrv-monitor נבנה על המעבדה בלבד",
 )
 def test_monitor_serves_a_memory_framebuffer_file_over_rfb(tmp_path):
-    """‏`--fb <קובץ רגיל>`: בלי ioctl — הגיאומטריה מהכותרת, ‏RFB מאזין ומגיש
+    """`--fb <קובץ רגיל>`: בלי ioctl — הגיאומטריה מהכותרת, RFB מאזין ומגיש
     את הבאנר. זה מה שנכשל היום על .59 (FATAL: open framebuffer)."""
     binary = _build_monitor(tmp_path)
     fb = tmp_path / FILE_NAME
@@ -472,8 +472,8 @@ def test_monitor_refuses_a_file_that_is_not_a_framebuffer(tmp_path):
 
 @requires_native(("bash", BASH))
 def test_gui_mirrors_its_frames_when_the_monitor_is_on(tmp_path):
-    """‏#1475: עם מסך ועם המוניטור דלוק הגואי גם כותב כל פריים ל-`fb.mem`
-    (‏`--fb-mirror`); המוניטור כבוי — שורת הפקודה כמו היום, בלי עלות.
+    """#1475: עם מסך ועם המוניטור דלוק הגואי גם כותב כל פריים ל-`fb.mem`
+    (`--fb-mirror`); המוניטור כבוי — שורת הפקודה כמו היום, בלי עלות.
     בקרה שלילית: על הקוד שלפני #1475 אין `--fb-mirror` בכלל."""
     assert _gui_backend_args(tmp_path, "/dev/null", monitor=True) == (
         f"--backend fbdev --fb-mirror /run/imagesrv/{FILE_NAME}")
@@ -492,7 +492,7 @@ def test_gui_source_mirrors_under_the_seqlock_and_keeps_one_shared_cursor():
     (3) הסריקה לא נעצרת לפני שהתקן המוניטור (לפי **השם**, זהה ל-monitor.c)
     נתפס.
     בקרה שלילית: על הקוד שלפני #1475 המראה ו-(3) אינם בקבצים; על הגרסה
-    הקודמת של הענף (‏e8e1ef19) — (2) נכשל על `ptr_remote`."""
+    הקודמת של הענף (e8e1ef19) — (2) נכשל על `ptr_remote`."""
     gui = REPO / "native-gui" / "src"
     backend = (gui / "backend.c").read_text(encoding="utf-8")
     present = backend[backend.index("if (b->mir_map) {"):]

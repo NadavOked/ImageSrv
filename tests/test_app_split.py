@@ -1,12 +1,12 @@
-"""‏#731 (tracer 1 של #703): פיצול המאזינים — סוכן מול קונסולה.
+"""#731 (tracer 1 של #703): פיצול המאזינים — סוכן מול קונסולה.
 
 מה שנבדק כאן, וזה **התנהגות** ולא מבנה:
 - **מלאי-נתיבים**: כל נתיב עונה באפליקציה הנכונה, ומחזיר 404 באחרת.
 - **זהות משותפת**: שתי האפליקציות חולקות `ctx`/`conn` **אחד** — לא שני
-  ‏DB (‏CLAUDE.md gotcha: שני חיבורי sqlite = "cannot commit").
+  DB (CLAUDE.md gotcha: שני חיבורי sqlite = "cannot commit").
 - **אתחול חד-פעמי**: ה-sweep רץ **פעם אחת** לכל runtime, לא לכל אפליקציה.
-- **כיבוי מתואם / כשל bind**: ‏`serve_all` מוריד את כל השרתים כשאחד יצא,
-  ומגלגל החוצה חריגת bind במקום להיראות כאילו עלה (עיקרון 5) — ‏#996
+- **כיבוי מתואם / כשל bind**: `serve_all` מוריד את כל השרתים כשאחד יצא,
+  ומגלגל החוצה חריגת bind במקום להיראות כאילו עלה (עיקרון 5) — #996
   העביר את זה ל-`ports.Listeners`, ונבדק ב-`test_port_listeners.py`.
 
 הבקרה השלילית (בגוף ה-PR): מוטציה שבה כל אפליקציה בונה runtime משלה —
@@ -32,7 +32,7 @@ from server.app import (create_agent_app, create_console_app,
 
 def _runtime(tmp_path: Path, images_root: Path):
     """runtime עם שולח מזויף — אף round לא נפתח כאן, אבל השולח נבנה
-    בכל מקרה, וריאל אחד היה מגיע ל-udp-sender (‏conftest חוסם ומכשיל)."""
+    בכל מקרה, וריאל אחד היה מגיע ל-udp-sender (conftest חוסם ומכשיל)."""
     from test_sender import Recorder                       # noqa: PLC0415
     return create_runtime(
         tmp_path / "data", images_root, "http://10.44.12.10:8080",
@@ -71,7 +71,7 @@ def test_agent_routes_only_on_agent_app(split):
     rt, agent_app, console_app = split
     agent, console = TestClient(agent_app), TestClient(console_app)
 
-    # ‎/api/v1 של הסוכן + capture + מאזין ‎/boot — כאן, לא בקונסולה.
+    # /api/v1 של הסוכן + capture + מאזין /boot — כאן, לא בקונסולה.
     assert _present(agent, "POST", "/api/v1/agent/hello")
     assert _absent(console, "POST", "/api/v1/agent/hello")
     # capture-manifest מחזיר 404 גם כשהנתיב קיים (המשימה לא נמצאה), ולכן
@@ -86,7 +86,7 @@ def test_console_routes_only_on_console_app(split):
     rt, agent_app, console_app = split
     agent, console = TestClient(agent_app), TestClient(console_app)
 
-    # קונסולה + סטטי ‎/console — כאן, לא בסוכן. ‏login עצמו הוא allowlist
+    # קונסולה + סטטי /console — כאן, לא בסוכן. login עצמו הוא allowlist
     # הקיוסק ולכן חי גם על הסוכן (ראו test_build_flow_console_calls_on_agent_app);
     # מה שאסור על הסוכן הוא נתיב ניהול.
     assert _present(console, "POST", "/api/console/login")
@@ -100,11 +100,11 @@ def test_console_routes_only_on_console_app(split):
 
 
 def test_station_router_on_agent_not_console(split):
-    # ‏#738 (tracer 2 של #703): `create_station_router` (‏prefix
+    # #738 (tracer 2 של #703): `create_station_router` (prefix
     # `/api/v1/agent/{groups,state,sessions}`) חולץ מהקונסולה — ואפליקציית
-    # הניהול אינה מאזינה בוילן ההפצה. ‏#1247: אפליקציית הקיוסק (:8082) הוסרה.
-    # ‏#824: אותם נתיבים הם גם ה-API שהסוכן על המכונה צורך (‏guistate.sh,
-    # ‏guibridge.sh, ‏guiparent.sh) דרך `$SERVER` = פורט
+    # הניהול אינה מאזינה בוילן ההפצה. #1247: אפליקציית הקיוסק (:8082) הוסרה.
+    # #824: אותם נתיבים הם גם ה-API שהסוכן על המכונה צורך (guistate.sh,
+    # guibridge.sh, guiparent.sh) דרך `$SERVER` = פורט
     # הסוכן — ולכן הם חיים גם על הסוכן. על הקונסולה — לא.
     rt, agent_app, console_app = split
     agent, console = TestClient(agent_app), TestClient(console_app)
@@ -115,11 +115,11 @@ def test_station_router_on_agent_not_console(split):
 
 
 def test_agent_app_alone_serves_station_state(split):
-    """‏#824: הסוכן הגרפי קורא `$SERVER/api/v1/agent/state?mac=…` על פורט
+    """#824: הסוכן הגרפי קורא `$SERVER/api/v1/agent/state?mac=…` על פורט
     הסוכן, ומאז #738 קיבל 404 בכל דגימה (53,770 × 404 על השרת החי).
     המעטפת המשולבת `create_app` הסתירה זאת — שם הכול על אפליקציה אחת.
-    כאן `agent_app` **לבד**, כמו בייצור: הקריאה המדויקת של ‏guistate.sh:8
-    ושל ‏guibridge.sh:38, ומה שהמכונה צריכה לראות — 200 עם המידע שלה."""
+    כאן `agent_app` **לבד**, כמו בייצור: הקריאה המדויקת של guistate.sh:8
+    ושל guibridge.sh:38, ומה שהמכונה צריכה לראות — 200 עם המידע שלה."""
     rt, agent_app, _console_app = split
     agent = TestClient(agent_app)
     mac = "aa:bb:cc:dd:ee:ff"
@@ -128,7 +128,7 @@ def test_agent_app_alone_serves_station_state(split):
     state = r.json()
     assert state["mac"] == mac and state["known"] is False
     assert state["disks"] == [] and state["task"] is None
-    # ומה שהגואי צורך לרשימת הכיתות/ההפצה (‏guistate.sh:76-77) — גם כאן.
+    # ומה שהגואי צורך לרשימת הכיתות/ההפצה (guistate.sh:76-77) — גם כאן.
     # ב-v1 (כיתות כבויות, הכרעת נדב 11/10) הנתיב מוגש ומסרב בשם — 409, לא
     # ה-404 של #824.
     groups = agent.get("/api/v1/agent/groups")
@@ -141,8 +141,8 @@ def test_agent_app_alone_serves_station_state(split):
 def test_build_flow_console_calls_on_agent_app(split):
     """17/09 01:06, מדוד על השרת החי: מחשב הבנייה (10.44.0.88) שלח
     `POST /api/console/login` ל-`$SERVER` = פורט הסוכן וקיבל **404** — הכניסה
-    במסך הבנייה נכשלה עם סיסמה נכונה. ‏#738 העביר את allowlist מחשב הבנייה ל-‎:8082
-    בלבד (הוסר ב-#1247), והסוכן (`buildmenu.sh:59,95,105`, ‏`roomflow.sh`) קורא את אותם
+    במסך הבנייה נכשלה עם סיסמה נכונה. #738 העביר את allowlist מחשב הבנייה ל-:8082
+    בלבד (הוסר ב-#1247), והסוכן (`buildmenu.sh:59,95,105`, `roomflow.sh`) קורא את אותם
     נתיבים דרך `$SERVER` — אותה משפחה כמו #824. ה-allowlist של הקיוסק (login,
     folders, images, tasks/capture, room) חי גם על הסוכן; נתיבי ניהול — לא."""
     rt, agent_app, _console_app = split
@@ -195,8 +195,8 @@ def test_startup_sweep_runs_once_per_runtime(tmp_path, images_root, monkeypatch)
 
 
 def test_the_real_lifespan_shutdown_closes_the_sender(split, monkeypatch):
-    """‏#1426: ה-lifespan קרא ל-`rt.sender.close`, ול-ServerRuntime אין
-    ‏`sender` — כל עצירה נגמרה ב-"Application shutdown failed" והשולח לא
+    """#1426: ה-lifespan קרא ל-`rt.sender.close`, ול-ServerRuntime אין
+    `sender` — כל עצירה נגמרה ב-"Application shutdown failed" והשולח לא
     נסגר. ה-runtime כאן הוא האמיתי (`create_runtime`), לא מדומה."""
     rt, _agent_app, console_app = split
     closed = []

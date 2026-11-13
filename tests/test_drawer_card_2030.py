@@ -253,7 +253,7 @@ def words(binary: Path, tmp: Path, state: str | None, card: str, theme: str = "l
         if l.startswith("@@ "):
             on = l == f"@@ {card}-{theme}"
         elif on:
-            out.append(re.sub("[‎‏⁦-⁩]", "", l))
+            out.append(re.sub("[\u200e\u200f\u2066-\u2069]", "", l))
     assert out, f"no text logged for {card}-{theme}"
     return out
 

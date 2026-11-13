@@ -1,4 +1,4 @@
-"""‏#177 — שני דופקים בו-זמנית בסוף גל בחדר השיכפולים.
+"""#177 — שני דופקים בו-זמנית בסוף גל בחדר השיכפולים.
 
 מחשבי השיכפול דוגמים כל הזמן, ו-`hello` שלהם הוא שמקדם את הסבב. בסוף
 גל שכולם דיווחו בו, שני hello שנכנסו יחד הם **שני `room.tick`** — וזה
@@ -35,7 +35,7 @@ from conftest import hello_body
 from server.rounds import room
 from server.rounds.sessions import SessionStore
 
-from test_server_room import (          # noqa: F401 — ‏room_server הוא fixture
+from test_server_room import (          # noqa: F401 — room_server הוא fixture
     CLONER1, CLONER2, cloner_hello, room_body, report, room_server,
 )
 from test_session_claim_race import Gate, _both
@@ -79,20 +79,20 @@ def _gate_the_wave(monkeypatch, gate: Gate, wave_id: str) -> None:
 def _wave_ready_to_finish(room_server, target: int = 6) -> str:
     """סבב חדר וגל שכל חבריו דיווחו סיום — הדופק הבא הוא שמסיים אותו.
 
-    ‏4 מגירות נכתבות. ‏`target=6` הוא מסלול "היעד לא הושג" (נפתח גל
+    4 מגירות נכתבות. `target=6` הוא מסלול "היעד לא הושג" (נפתח גל
     שני), ו-`target=4` הוא מסלול "היעד הושג" (הסבב נסגר). שני
     המסלולים נכנסים ל-`_finish_wave`, ולכל אחד מהם מרוץ משלו.
     """
     deploy, anon = room_server["deploy"], room_server["anon"]
-    # ‏`assert` אינו המקום לפעולה: עם `-O` הוא נעלם, ואיתו הבקשה עצמה
-    # (‏`py/side-effect-in-assert`). קודם עושים, ואז מאמתים.
+    # `assert` אינו המקום לפעולה: עם `-O` הוא נעלם, ואיתו הבקשה עצמה
+    # (`py/side-effect-in-assert`). קודם עושים, ואז מאמתים.
     opened = deploy.post("/api/console/room",
                          json=room_body(room_server, target, {CLONER1: ["S1", "S2"], CLONER2: ["S3", "S4"]}))
     assert opened.status_code == 200, opened.text
     wave1 = cloner_hello(anon, CLONER1, ["S1", "S2"])["session"]["id"]
     cloner_hello(anon, CLONER2, ["S3", "S4"])
-    # ‏target=4: המוכנות כיסתה את היתרה וה-tick כבר הוציא את הגל.
-    # ‏target=6: היא לא כיסתה, ולכן צריך "התחל עכשיו".
+    # target=4: המוכנות כיסתה את היתרה וה-tick כבר הוציא את הגל.
+    # target=6: היא לא כיסתה, ולכן צריך "התחל עכשיו".
     started = ctx_wave_state(room_server) == "running"
     if not started:
         started_now = deploy.post("/api/console/room/start")
@@ -164,7 +164,7 @@ def test_two_cloners_finishing_together_open_exactly_one_next_wave(
     """שני hello בו-זמנית בסוף גל: **שניהם נענים**, ונפתח גל אחד.
 
     לפני התיקון המפסיד קיבל `SessionError` שברחה מ-`tick`, והבקשה
-    הסתיימה ב-500. ‏`wave_number` ו-`room_wave` נבדקים כאן כשומרי
+    הסתיימה ב-500. `wave_number` ו-`room_wave` נבדקים כאן כשומרי
     רגרסיה — הם עברו גם על הקוד הישן (ראו ה-docstring של הקובץ).
     """
     if TestClient is None:
@@ -192,7 +192,7 @@ def test_two_cloners_reaching_the_target_together_close_the_round_once(
     """המסלול השני של `_finish_wave`: היעד הושג.
 
     כאן אין `TAKEN` ואין 500 — שני הדופקים פשוט סגרו את אותו סבב
-    ושניהם כתבו את השורה התחתונה. ‏`room_done` כפול ביומן הוא סבב
+    ושניהם כתבו את השורה התחתונה. `room_done` כפול ביומן הוא סבב
     שנגמר פעמיים במסך של המפעיל, ובראיה החיובית של `close` יש בדיוק
     סוגר אחד.
     """
@@ -228,7 +228,7 @@ def test_a_tick_that_cannot_run_is_journaled_and_hello_still_answers(
 
     monkeypatch.setattr(room, "tick", boom)
 
-    answer = cloner_hello(anon, CLONER1, ["S1", "S2"])     # ‏200, לא 500
+    answer = cloner_hello(anon, CLONER1, ["S1", "S2"])     # 200, לא 500
     assert answer["known"] is True
 
     rows = ctx.conn.execute(
@@ -238,7 +238,7 @@ def test_a_tick_that_cannot_run_is_journaled_and_hello_still_answers(
 
 
 def test_the_pulse_reports_whether_it_ran(room_server, monkeypatch):
-    """‏`pulse` מחזיר ראיה חיובית ולא "לא נזרקה חריגה"."""
+    """`pulse` מחזיר ראיה חיובית ולא "לא נזרקה חריגה"."""
     ctx = room_server["ctx"]
     ran = room.pulse(ctx.conn, ctx.store, CLONER1)
     assert ran is True
@@ -265,7 +265,7 @@ def test_an_exception_message_cannot_forge_a_line_in_the_systemd_journal(
         room_server, monkeypatch, caplog):
     """שורה חדשה בהודעת חריגה לא תיראה כרשומה נפרדת ביומן ה-systemd.
 
-    **המנגנון חשוב, כי הוא לא זה שנראה מובן מאליו.** ‏`journal()` מעביר
+    **המנגנון חשוב, כי הוא לא זה שנראה מובן מאליו.** `journal()` מעביר
     את `detail` כפרמטר קשור לעמודת TEXT, ולכן שורה חדשה שם **אינה**
     מזייפת רשומה בטבלה — טסט שהיה בודק "שתי שורות בטבלה" היה עובר
     בשני המצבים, כלומר נכשל להיכשל.

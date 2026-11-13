@@ -335,7 +335,7 @@ def test_a_two_disk_cloner_shows_two_cards(tmp_path):
     assert _track_runs(tmp_path / "two-cloner-light.png") == 2      # two rows, not three
 
 
-# ‏#2347: פס שאלת ה-SMART הוסר מגואי המשכפל — הטסט שבדק את הצבעים שלו הוסר איתו.
+# #2347: פס שאלת ה-SMART הוסר מגואי המשכפל — הטסט שבדק את הצבעים שלו הוסר איתו.
 
 
 def _theme_hex(field: str) -> tuple[int, int, int]:

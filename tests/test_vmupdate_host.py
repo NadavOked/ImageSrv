@@ -1,8 +1,8 @@
-"""‏#1334 — המארח מוכן לעדכון ב-VM גם כשהשרת מתעדכן מהכפתור ולא מה-ISO.
+"""#1334 — המארח מוכן לעדכון ב-VM גם כשהשרת מתעדכן מהכפתור ולא מה-ISO.
 
-‏`deploy/vmupdate-host.sh` מתקין את deploy/vmupdate-packages.txt (המקור היחיד)
+`deploy/vmupdate-host.sh` מתקין את deploy/vmupdate-packages.txt (המקור היחיד)
 ויוצר את imagesrv-vm, באופן אידמפוטנטי, ומצליח רק על **ראיה חיובית** (dpkg-query
-לכל חבילה, ‏id למשתמש). ‏`tools/server-upgrade.sh` מריץ אותו אחרי ה-checkout:
+לכל חבילה, id למשתמש). `tools/server-upgrade.sh` מריץ אותו אחרי ה-checkout:
 כשל **אינו** מפיל את העדכון וגם **אינו** נבלע — הסיבה בסטטוס (`warning`), והעדכון
 מגיע ל-"אומת — אבל עדכון ב-VM לא זמין".
 """
@@ -42,10 +42,10 @@ def packages() -> list[str]:
 
 
 def tools(bindir: Path, *, apt="exit 0", installed=None, user_exists=False, useradd="true"):
-    """‏apt/dpkg-query/id/useradd מדומים. ‏`installed` — מה dpkg-query מכיר (ברירת
+    """apt/dpkg-query/id/useradd מדומים. `installed` — מה dpkg-query מכיר (ברירת
     מחדל: הכול). המשתמש "נוצר" ב-useradd: id מצליח אחריו."""
     done = posix(bindir / "apt.done")
-    if apt == "exit 0":   # ‏apt מצליח: אחרי install מה שביקשנו מותקן (כמו apt אמיתי)
+    if apt == "exit 0":   # apt מצליח: אחרי install מה שביקשנו מותקן (כמו apt אמיתי)
         apt = f'[ "$1" = install ] && touch "{done}"; exit 0'
     fake_tool(bindir, "fakeapt", apt)
     known = packages() if installed is None else installed
@@ -60,7 +60,7 @@ def tools(bindir: Path, *, apt="exit 0", installed=None, user_exists=False, user
 
 
 def host_env(bindir: Path) -> dict:
-    """‏/etc/apt של הטסט — תיקייה ריקה (שרת שאינו מה-ISO), לעולם לא של המכונה."""
+    """/etc/apt של הטסט — תיקייה ריקה (שרת שאינו מה-ISO), לעולם לא של המכונה."""
     apt_etc = bindir.parent / "etc-apt"
     (apt_etc / "sources.list.d").mkdir(parents=True, exist_ok=True)
     return {"IMAGESRV_APT": "fakeapt", "IMAGESRV_DPKG_QUERY": "fakedpkg",
@@ -85,9 +85,9 @@ def test_installs_the_list_and_creates_the_user(tmp_path, bindir):
     log = calls(tmp_path)
     assert proc.returncode == 0, proc.stdout
     apt = [row for row in log if row.startswith("fakeapt ")]
-    # ‏#1459: רשימות עדכניות, ואז התקנה של מה ש-dpkg-query אומר שחסר (כאן: הכול)
+    # #1459: רשימות עדכניות, ואז התקנה של מה ש-dpkg-query אומר שחסר (כאן: הכול)
     assert apt[0].split()[1:3] == ["update", "-qq"] and not any("https" in a for a in apt)
-    # ‏#1987: בלי Recommends — רק הרשימה ומה שהיא חייבת.
+    # #1987: בלי Recommends — רק הרשימה ומה שהיא חייבת.
     assert apt[1].split()[1:5] == ["install", "-y", "-qq", "--no-install-recommends"] and apt[1].split()[5:] == packages()
     assert any(row.startswith("fakeuseradd --system") and row.endswith("imagesrv-vm") for row in log)
 
@@ -107,7 +107,7 @@ def test_apt_failure_is_named_and_creates_nothing(tmp_path, bindir):
 
 
 def test_apt_exit_0_is_not_evidence(tmp_path, bindir):
-    """‏apt יצא 0 אבל ovmf אינו מותקן — "יצא 0" אינו "מותקן" (עיקרון 5)."""
+    """apt יצא 0 אבל ovmf אינו מותקן — "יצא 0" אינו "מותקן" (עיקרון 5)."""
     tools(bindir, installed=[p for p in packages() if p != "ovmf"], apt="exit 0  # no marker")
     proc = run_host(tmp_path, bindir)
 
@@ -118,12 +118,12 @@ def test_a_user_that_was_not_created_fails(tmp_path, bindir):
     assert proc.returncode == 5 and "imagesrv-vm" in proc.stdout.splitlines()[-1]
 
 
-# --- ‏#1371/#1459: שרת מה-ISO — המאגר המקומי עקבי, ואין מקור apt חי ---------
+# --- #1371/#1459: שרת מה-ISO — המאגר המקומי עקבי, ואין מקור apt חי ---------
 
 
 def iso_server(tmp_path: Path, bindir: Path) -> tuple[dict, Path, Path]:
-    """שרת מה-ISO כמו שרת ת"א (‏13/10): imagesrv-iso.list, ומאגר מקומי שהאינדקס
-    שלו מונה חבילה (‏openssh-server) שהקובץ שלה לא הועתק."""
+    """שרת מה-ISO כמו שרת ת"א (13/10): imagesrv-iso.list, ומאגר מקומי שהאינדקס
+    שלו מונה חבילה (openssh-server) שהקובץ שלה לא הועתק."""
     env = host_env(bindir)
     apt_etc = Path(env["IMAGESRV_APT_ETC"])
     (apt_etc / "sources.list.d" / "imagesrv-iso.list").write_text(
@@ -141,7 +141,7 @@ def iso_server(tmp_path: Path, bindir: Path) -> tuple[dict, Path, Path]:
 
 
 def test_an_iso_server_gets_no_live_apt_source(tmp_path, bindir):
-    """‏#1459: שרת מה-ISO לא מקבל deb.debian.org — לא קובץ מקור ולא pin."""
+    """#1459: שרת מה-ISO לא מקבל deb.debian.org — לא קובץ מקור ולא pin."""
     tools(bindir, installed=[])
     env, apt_etc, _index = iso_server(tmp_path, bindir)
     proc = run_bash(f'bash "{posix(HOST)}"', tmp_path, bindir, env=env)
@@ -168,7 +168,7 @@ def test_an_iso_server_that_got_the_live_source_before_has_it_removed(tmp_path, 
 
 
 def test_everything_installed_never_touches_apt(tmp_path, bindir):
-    """‏#1459: dpkg-query קודם — כשהכול מותקן אין update ואין install (גם לא רשת)."""
+    """#1459: dpkg-query קודם — כשהכול מותקן אין update ואין install (גם לא רשת)."""
     tools(bindir)
     proc = run_host(tmp_path, bindir)
     assert proc.returncode == 0, proc.stdout
@@ -264,7 +264,7 @@ def test_a_failed_host_preparation_does_not_fail_the_upgrade_and_is_reported(tmp
     assert "systemctl restart imagesrv-server" in log
     assert not any(" checkout --detach v0.48.0" in row for row in log)   # לא חזר לתג הקודם
     status = _status(data)
-    # ‏#1301: העדכון הסתיים ואומת (state/stage done) — והאזהרה נשמרת עד הסוף.
+    # #1301: העדכון הסתיים ואומת (state/stage done) — והאזהרה נשמרת עד הסוף.
     assert status["state"] == "done" and status["stage"] == "done" and status["tag"] == "v0.73.0"
     assert status["warning"].startswith("עדכון ב-VM לא זמין: apt-get install נכשל")
     assert "קוד 3" in status["warning"]

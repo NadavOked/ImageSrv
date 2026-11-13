@@ -2,9 +2,9 @@
 ובהפצה ישירה (כולם עוברים ב-`smart_gate`, smartgate.sh). בסוף הוא מקבל הערה כתומה עם הסיבה.
 **אדום** (SMART נכשל / F1) — ללא שינוי: אסור כיעד (#1732). **ירוק** — ללא שינוי.
 
-למה: בבדיקת קנה המידה (23/10, ‏room_8c6bf26c) שאלת ה-SMART על WD כתום (‏187=1682) עצרה את
-כל הגל 113 שניות עד תשובה מהקונסולה (‏`send_held_smart`, ‏sender._hold_for_asks). השולח
-עוצר רק על שאלה פתוחה (‏smart_ask.waiting_in_wave) — שער שאינו שואל אינו עוצר גל.
+למה: בבדיקת קנה המידה (23/10, room_8c6bf26c) שאלת ה-SMART על WD כתום (187=1682) עצרה את
+כל הגל 113 שניות עד תשובה מהקונסולה (`send_held_smart`, sender._hold_for_asks). השולח
+עוצר רק על שאלה פתוחה (smart_ask.waiting_in_wave) — שער שאינו שואל אינו עוצר גל.
 
 בקרה שלילית (מעבדה, משורש העץ, אחרי commit):
   git checkout 4f6068e8 -- agent/lib/smart/smartgate.sh agent/imagesrv-agent server/static/console.js \
@@ -189,10 +189,12 @@ def test_the_round_reports_the_orange_drawer_done_with_its_note(tmp_path, report
 
 def test_the_room_page_shows_a_done_drawers_warning():
     """RED: roundDskHtml drew a done drawer as a green 100% and dropped its `error` -- the
-    orange note reached the server and no one saw it. Static: the line exists, on done only."""
+    orange note reached the server and no one saw it. Static: the line exists, on done only.
+    #2987: the line shows the short sentence (`error_short`, else the whole error) and keeps the
+    whole error in the hover -- both still go through esc()."""
     js = console_js()
     body = js[js.index("function roundDskHtml("):]
     body = body[:body.index("\n}\n")]
-    m = re.search(r'const (\w+) = live && d\.state === "done" && d\.error \? `<span class="dline warn">\$\{esc\(d\.error\)\}</span>` : "";', body)
+    m = re.search(r'const (\w+) = live && d\.state === "done" && d\.error \? `<span class="dline warn" title="\$\{esc\(d\.error\)\}">\$\{esc\(d\.error_short \|\| d\.error\)\}</span>` : "";', body)
     assert m, "no done-with-warning line in roundDskHtml"
     assert "${" + m.group(1) + "}" in body.split("return `", 1)[1], "the line is built and not drawn"

@@ -61,20 +61,21 @@ const busyRoom = (url) => {
   return idle(url);
 };
 
-test('the menu: separator, reboot, red poweroff, separator, logout -- after "פרטי session", admin-only and hidden by default', () => {
+test('the menu: separator, reboot, red poweroff, separator, logout -- after "פרטי ההתחברות" and the view switch (#3025), admin-only and hidden by default', () => {
   const start = index.indexOf('<div class="user-menu" id="userMenu">');
   const end = index.indexOf('התנתקות</button></div>', start);
   assert.ok(start > 0 && end > start, 'the user menu is in index.html');
   const html = index.slice(start, end);
   const at = (re) => { const m = html.match(re); assert.ok(m, String(re)); return html.indexOf(m[0]); };
-  const session = at(/openSessionInfo\(\)">פרטי session<\/button>/);
+  const session = at(/openSessionInfo\(\)">פרטי ההתחברות<\/button>/);   // #3025: was "פרטי session"
+  const view = at(/id="viewToggle"/);   // #3025: its own section, before the server items
   const reboot = at(/<button class="hidden" data-admin type="button" onclick="openServerPower\('reboot'\)">הפעלה מחדש של השרת…<\/button>/);
   const off = at(/<button class="danger-item hidden" data-admin type="button" onclick="openServerPower\('poweroff'\)">כיבוי השרת…<\/button>/);
   const logout = at(/<button id="logout"/);
   const seps = [...html.matchAll(/<div class="user-menu-sep[^"]*"[^>]*role="separator"><\/div>/g)].map((m) => m.index);
-  assert.equal(seps.length, 2);
-  assert.ok(session < seps[0] && seps[0] < reboot && reboot < off && off < seps[1] && seps[1] < logout, 'order as in the mockup');
-  assert.match(html, /<div class="user-menu-sep hidden" data-admin role="separator">/, 'the first separator goes with the admin items');
+  assert.equal(seps.length, 3);
+  assert.ok(session < seps[0] && seps[0] < view && view < seps[1] && seps[1] < reboot && reboot < off && off < seps[2] && seps[2] < logout, 'order as in the mockup');
+  assert.match(html, /<div class="user-menu-sep hidden" data-admin role="separator">/, 'the separator before reboot goes with the admin items');
 });
 
 test('the items are admin-only: showApp() hides every [data-admin] for a non-admin', () => {

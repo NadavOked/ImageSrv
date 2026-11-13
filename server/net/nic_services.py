@@ -1,26 +1,26 @@
-"""השירותים שהשרת נותן דרך כל כרטיס רשת — **והשרת אוכף אותם** (‏#705).
+"""השירותים שהשרת נותן דרך כל כרטיס רשת — **והשרת אוכף אותם** (#705).
 
 הכרעת נדב (13/10): לכל כרטיס בוחרים בקונסולה אילו שירותים ניתנים דרכו.
 "כבוי" אינו הסתרה בממשק — השרת **לא מאזין ולא משדר** על הכרטיס:
 
 | שירות | מה נאכף |
 |---|---|
-| ‏`console` | מאזין הקונסולה (8081) נקשר לכתובת הכרטיס או לא; כלל nft |
-| ‏`monitor` | ה-WebSocket של המוניטור עובר ב-8081 (אין לו מאזין משלו — ‏`monitor.py`); השרת מסרב לו לפי הכתובת המקומית של החיבור |
-| ‏`multicast` | ‏`udp-sender` משדר רק על כרטיס שבו השידור דלוק; אחרת הסבב נכשל בשם; כלל nft |
-| ‏`netboot` | ‏dnsmasq (‏`except-interface=`/`interface=`), ערוץ הסוכן 8080 נקשר לכתובת הכרטיס; כללי nft ל-67/69/8080 |
-| ‏`interserver` | מאזין 8443 (ה-"אתה שם?" של הראשי / ה-mTLS של המשני); כלל nft |
+| `console` | מאזין הקונסולה (8081) נקשר לכתובת הכרטיס או לא; כלל nft |
+| `monitor` | ה-WebSocket של המוניטור עובר ב-8081 (אין לו מאזין משלו — `monitor.py`); השרת מסרב לו לפי הכתובת המקומית של החיבור |
+| `multicast` | `udp-sender` משדר רק על כרטיס שבו השידור דלוק; אחרת הסבב נכשל בשם; כלל nft |
+| `netboot` | dnsmasq (`except-interface=`/`interface=`), ערוץ הסוכן 8080 נקשר לכתובת הכרטיס; כללי nft ל-67/69/8080 |
+| `interserver` | מאזין 8443 (ה-"אתה שם?" של הראשי / ה-mTLS של המשני); כלל nft |
 
-**ברירת המחדל היא היום** (‏`defaults`): כל עוד המפעיל לא שמר אף כרטיס
-(`edited` = ‏False) הקוד הישן קושר הכול בדיוק כמו קודם — שדרוג אינו משנה
+**ברירת המחדל היא היום** (`defaults`): כל עוד המפעיל לא שמר אף כרטיס
+(`edited` = False) הקוד הישן קושר הכול בדיוק כמו קודם — שדרוג אינו משנה
 כלום. כרטיס שלא נשמר מקבל את מה שהשרת נותן דרכו היום: הניהול — קונסולה,
 מוניטור ובין-שרתים; ההפצה — שידור ואתחול; כל השאר — "לא הוגדר", הכול כבוי.
 
 **נעילה עצמית.** אי אפשר לכבות את הקונסולה בכרטיס האחרון שהיא פתוחה בו
-(409 ‏`last_console`). כיבוי הקונסולה בכרטיס שדרכו המפעיל מחובר (כשיש
+(409 `last_console`). כיבוי הקונסולה בכרטיס שדרכו המפעיל מחובר (כשיש
 כרטיס אחר איתה) דורש `handoff` — ואז השינוי מוחל אחרי שהתשובה יצאה, וחוזר
 לבד תוך `WINDOW_SECONDS` אם לא אושר מהכתובת האחרת. זה אותו חלון ואותה
-החלטה (‏`netcfg_rollback.decide`: אתחול לפני פקיעה) של ‏#56. ההבדל המכוון:
+החלטה (`netcfg_rollback.decide`: אתחול לפני פקיעה) של #56. ההבדל המכוון:
 ההחזרה כאן היא בתהליך השרת ולא ב-`imagesrv-netrollback.service` — היחידה
 ההיא אינה נוגעת ב-DB בכוונה, וכל מה שנסגר כאן הוא מאזין **של התהליך הזה**.
 אם התהליך מת, אין מאזין ממילא; בעלייה הבאה הסמן ב-DB נקרא **לפני** שמאזין
@@ -84,8 +84,8 @@ class ServiceError(Exception):
 class Baseline:
     """על איזה כרטיס כל דבר מאזין **היום** — ממה ש-`main` קשר בעלייה."""
 
-    console: str | None = None       # ‏--console-host (שם כרטיס, או הכרטיס של הכתובת)
-    deploy: str | None = None        # כרטיס ההפצה (‏udp-sender ‎--interface, dnsmasq, 8080)
+    console: str | None = None       # --console-host (שם כרטיס, או הכרטיס של הכתובת)
+    deploy: str | None = None        # כרטיס ההפצה (udp-sender --interface, dnsmasq, 8080)
     interserver: str | None = None   # הכרטיס שמאזין 8443 נקשר אליו, אם יש
 
 
@@ -131,9 +131,9 @@ def first_ipv4(nic: dict) -> str | None:
 
 
 def plan(eff: dict[str, list[str]], addresses: dict[str, str | None]) -> dict[str, dict]:
-    """‏`hosts`: לכל מאזין (מזהה הפורט) — הכתובות שהוא נקשר אליהן.
-    ‏`nics`: לכל שירות — הכרטיסים שבהם הוא דלוק. שני מרחבי שמות, בכוונה:
-    ‏"interserver" הוא גם שירות וגם מזהה מאזין."""
+    """`hosts`: לכל מאזין (מזהה הפורט) — הכתובות שהוא נקשר אליהן.
+    `nics`: לכל שירות — הכרטיסים שבהם הוא דלוק. שני מרחבי שמות, בכוונה:
+    "interserver" הוא גם שירות וגם מזהה מאזין."""
     hosts = {}
     for service, listener in LISTENER_OF.items():
         found = [addresses[n] for n in eff if service in eff[n] and addresses.get(n)]
@@ -150,8 +150,8 @@ def is_loopback(address: str | None) -> bool:
 
 
 def via(address: str | None, interfaces: list[dict]) -> str | None:
-    """הכרטיס שדרכו הגיעה הבקשה: שם, ‏"lo" ל-loopback, או None כשלא ניתן
-    לקבוע. ‏None **אינו** "לא הכרטיס הזה" — הקורא מניח שזה הכרטיס שלו."""
+    """הכרטיס שדרכו הגיעה הבקשה: שם, "lo" ל-loopback, או None כשלא ניתן
+    לקבוע. None **אינו** "לא הכרטיס הזה" — הקורא מניח שזה הכרטיס שלו."""
     if is_loopback(address):
         return "lo"
     for nic in interfaces:
@@ -170,10 +170,10 @@ def _now_iso(epoch: float) -> str:
 class NicServices:
     """השירותים לכל כרטיס: קריאה, שמירה, נעילה עצמית, החלה וחזרה.
 
-    ‏hooks: ‏`interfaces` (כמו לשונית ה-DHCP), ‏`now`, ‏`boot_id`,
-    ‏`schedule(seconds, fn)` (טיימר), ושלושת שלבי האכיפה — ‏`listeners`,
-    ‏`dnsmasq`, ‏`firewall` — כל אחד ‏`fn(self) → שגיאה | None`. שלב שאינו
-    מחובר (‏None) הוא **שגיאה**, לא דילוג: שמירה שאינה נאכפת היא "נשמר"
+    hooks: `interfaces` (כמו לשונית ה-DHCP), `now`, `boot_id`,
+    `schedule(seconds, fn)` (טיימר), ושלושת שלבי האכיפה — `listeners`,
+    `dnsmasq`, `firewall` — כל אחד `fn(self) → שגיאה | None`. שלב שאינו
+    מחובר (None) הוא **שגיאה**, לא דילוג: שמירה שאינה נאכפת היא "נשמר"
     שאינו "נכנס לתוקף"."""
 
     def __init__(self, conn, base: Baseline | None = None, hooks: Hooks | None = None):
@@ -190,7 +190,7 @@ class NicServices:
     # -- קריאה --
 
     def saved(self) -> tuple[dict[str, list[str]], list[str]]:
-        """‏(שמור, שמות שלא ניתן לקרוא). רשומה פגומה נופלת לברירת המחדל —
+        """(שמור, שמות שלא ניתן לקרוא). רשומה פגומה נופלת לברירת המחדל —
         ונאמרת (`unreadable`) ולא נבלעת."""
         rows = self.conn.execute("SELECT key, value FROM settings WHERE key LIKE ?",
                                  (SETTING_PREFIX + "%",)).fetchall()
@@ -222,7 +222,7 @@ class NicServices:
         return plan(eff, {n["name"]: first_ipv4(n) for n in interfaces})
 
     def firewall_services(self, deploy_if: str | None = None) -> list | None:
-        """‏[(כרטיס, [שירותים])] לחומת האש — או None כשהמפעיל לא ערך (היום)."""
+        """[(כרטיס, [שירותים])] לחומת האש — או None כשהמפעיל לא ערך (היום)."""
         if not self.edited():
             return None
         base = self.base
@@ -234,7 +234,7 @@ class NicServices:
         return [(n, s) for n, s in eff.items()]
 
     def netboot(self) -> tuple[list[str], list[str]] | None:
-        """‏(כרטיסים עם אתחול, כל הכרטיסים) ל-dnsmasq — או None (היום)."""
+        """(כרטיסים עם אתחול, כל הכרטיסים) ל-dnsmasq — או None (היום)."""
         if not self.edited():
             return None
         interfaces, eff = self.state()
@@ -267,7 +267,7 @@ class NicServices:
 
     def listening(self, address: str | None, bound: dict | None) -> dict:
         """לכל שירות שיש לו מאזין: האם השרת **באמת** מאזין בכתובת של הכרטיס —
-        מהסוקטים (`Listeners.bound`), לא מההגדרה. ‏None = לא נמדד (אין מאזין
+        מהסוקטים (`Listeners.bound`), לא מההגדרה. None = לא נמדד (אין מאזין
         לשירות — שידור; אין מנהל מאזינים בתהליך; כרטיס בלי כתובת)."""
         out = {s: None for s in SERVICES}
         if not bound or not address:
@@ -442,8 +442,8 @@ class NicServices:
             journal(self.conn, "nic_services_set", detail, user_id or "")
             if risky:
                 now = self.hooks["now"]()
-                # ‏previous = הרשומה הגולמית (None = ברירת מחדל) — מה שהחזרה כותבת;
-                # ‏before = מה שהכרטיס נתן בפועל — מה שהקונסולה מציגה ("קונסולה כובתה").
+                # previous = הרשומה הגולמית (None = ברירת מחדל) — מה שהחזרה כותבת;
+                # before = מה שהכרטיס נתן בפועל — מה שהקונסולה מציגה ("קונסולה כובתה").
                 marker = {"interface": name, "previous": previous, "before": before[name],
                           "applied": wanted,
                           "deadline": now + WINDOW_SECONDS, "boot": self.hooks["boot_id"](),
@@ -612,13 +612,13 @@ def _schedule(seconds: float, fn: Callable[[], object]) -> None:
     timer.start()
 
 
-# --- ה-API (‏/api/console/net/services, ‏admin בלבד) -----------------------------
+# --- ה-API (/api/console/net/services, admin בלבד) -----------------------------
 
 
 def create_nic_services_router(ctx):
-    """‏`def` ולא `async def`: ההחלה ממתינה למנהל המאזינים, שרץ על לולאת
+    """`def` ולא `async def`: ההחלה ממתינה למנהל המאזינים, שרץ על לולאת
     האירועים — endpoint אסינכרוני היה חוסם את הלולאה שהוא ממתין לה.
-    ‏`Request` מיובא בראש המודול ולא כאן: עם `from __future__ import
+    `Request` מיובא בראש המודול ולא כאן: עם `from __future__ import
     annotations` אנוטציה שמיובאת בתוך פונקציה הופכת כל endpoint ל-422."""
     from server.console import auth
 

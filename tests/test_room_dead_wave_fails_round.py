@@ -2,7 +2,7 @@
 
 מה קרה: סבב `room_72308383` (מחשב שיכפול 2, שתי מגירות). ממשק הרשת של
 המשכפל הורד באמצע הזרם; השרת סימן אותו `lost`, ו-`_finish_wave` פתח גל 2
-(‏`room_wave wave=2 written=0/2`) ועצר את השולח (`send_stopped`). שתי
+(`room_wave wave=2 written=0/2`) ועצר את השולח (`send_stopped`). שתי
 המגירות נכשלו בגלוי — אבל הסבב נשאר `active` וגל 2 נשאר פתוח וממתין, בלי
 שאיש יבחין: "הגל הבא נפתח מעצמו וממתין למגירות מוחלפות" נכון לגל שכתב
 **משהו**, לא לגל שכל יעדיו נכשלו או נותקו.
@@ -23,7 +23,7 @@ import pytest
 
 from server.rounds import room as room_mod
 
-from test_server_room import (           # noqa: F401 — ‏room_server הוא fixture
+from test_server_room import (           # noqa: F401 — room_server הוא fixture
     CLONER1, cloner_hello, heartbeat, report, room, room_body, room_server,
 )
 

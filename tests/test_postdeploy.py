@@ -1,11 +1,11 @@
-"""‏#720 — staging של דרייברים ב-NTFS המשוחזר (`agent/lib/postdeploy/postdeploy.sh`).
+"""#720 — staging של דרייברים ב-NTFS המשוחזר (`agent/lib/postdeploy/postdeploy.sh`).
 
-הפונקציה רצה על ה-sh האמיתי עם זיופים של הכלים שהיא קוראת: ‏curl (השרת),
-‏ntfs-3g/umount (המאונט), ‏hivewrite (הרג'יסטרי, עם "hive" שהוא קובץ טקסט
+הפונקציה רצה על ה-sh האמיתי עם זיופים של הכלים שהיא קוראת: curl (השרת),
+ntfs-3g/umount (המאונט), hivewrite (הרג'יסטרי, עם "hive" שהוא קובץ טקסט
 של DevicePath) ו-`json_get` (אין jq בווינדוס — הפילטרים האמיתיים נבדקים
 בנפרד תחת `requires jq`). מה שנבדק הוא **מה נשאר על הדיסק** ו**מה דווח**:
-הקבצים נמצאים בייט-בייט, ‏DevicePath נכתב כ-REG_EXPAND_SZ (‏`-x`) ושומר
-את הערך הקיים, ו-`drivers.json` אומר את האמת — ‏staged / no_match / skipped
+הקבצים נמצאים בייט-בייט, DevicePath נכתב כ-REG_EXPAND_SZ (`-x`) ושומר
+את הערך הקיים, ו-`drivers.json` אומר את האמת — staged / no_match / skipped
 / failed — ובכל מקרה השחזור נשאר `done` (עיקרון 5: "הושלם, דרייברים לא
 הונחו" הוא מצב, לא כשל שקט).
 """
@@ -35,7 +35,7 @@ ENTRY = r"%SystemRoot%\..\ImageSrv\Drivers"
 FILES = {"intel-nic": {"e1d68x64.inf": b"[Version]\n", "x64/e1d68x64.sys": b"\x4d\x5a sys"},
          "ahci-fix": {"storahci.inf": b"[Version] ahci\n"}}
 
-#: ‏curl מזויף: ‏`?mac=` → תשובת השרת מהקובץ; ‏`/files/<pkg>/<path>` → הקובץ
+#: curl מזויף: `?mac=` → תשובת השרת מהקובץ; `/files/<pkg>/<path>` → הקובץ
 #: מתיקיית "השרת". כל URL אחר — 22 (כמו `curl -f` על 404).
 CURL = r'''
 for a in "$@"; do url="$a"; done
@@ -49,10 +49,10 @@ case "$url" in
 esac
 '''
 
-#: ‏hivewrite מזויף: DevicePath יושב ב-`SOFTWARE.d/DevicePath` — קובץ ה-hive
-#: עצמו הוא כותרת regf, שממנה ‏#2363 קורא את מספרי הרצף. ‏-g
+#: hivewrite מזויף: DevicePath יושב ב-`SOFTWARE.d/DevicePath` — קובץ ה-hive
+#: עצמו הוא כותרת regf, שממנה #2363 קורא את מספרי הרצף. -g
 #: מדפיס אותו; כתיבה עם -x מחליפה אותו ורושמת את הקריאה; כתיבה **בלי** -x
-#: יוצאת 9 — ‏REG_SZ היה שובר את %SystemRoot%, ולכן הזיוף מסרב לה.
+#: יוצאת 9 — REG_SZ היה שובר את %SystemRoot%, ולכן הזיוף מסרב לה.
 HIVEWRITE = r'''
 echo "$*" >> "$FAKE_SERVER/hivewrite.calls"
 case "$2" in */SYSTEM)
@@ -80,8 +80,8 @@ printf '%s\n' "$5" > "$2.d/DevicePath"
 '''
 
 
-#: ‏#1331: ה-SYSTEM של אימג' שנקלט ממכונה שהותקנה במצב RAID — ‏storahci
-#: ‏Start=3 עם ‏StartOverride\0=3, ‏stornvme ‏Start=3. ‏ControlSet002 קיים כדי
+#: #1331: ה-SYSTEM של אימג' שנקלט ממכונה שהותקנה במצב RAID — storahci
+#: Start=3 עם StartOverride\0=3, stornvme Start=3. ControlSet002 קיים כדי
 #: שכתיבה ל-ControlSet001 הקבוע (במקום Select\Current) תיתפס.
 SYSTEM_RAID = {
     "Select/Current": "2",
@@ -138,8 +138,8 @@ class Box:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(data)
         (self.server / "answer.json").write_text(json.dumps(self.answer), encoding="utf-8")
-        # ‏json_get מזויף מהתשובה — אותן שורות שהפילטרים האמיתיים היו נותנים.
-        # ‏LF בלבד: write_text בווינדוס היה כותב CRLF, ו-`read` בסוכן היה
+        # json_get מזויף מהתשובה — אותן שורות שהפילטרים האמיתיים היו נותנים.
+        # LF בלבד: write_text בווינדוס היה כותב CRLF, ו-`read` בסוכן היה
         # משאיר \r בסוף ה-URL — כשל שאינו קיים מול jq אמיתי.
         pk = self.answer.get("packages", [])
         (self.server / "names").write_text("".join(p["name"] + "\n" for p in pk), newline="\n")
@@ -153,7 +153,7 @@ class Box:
             f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
             f'export RUN_DIR={posix(self.run)!r} DEVROOT={posix(self.run)!r}/dev '
             f'LOG_FILE={posix(self.run / "agent.log")!r} FAKE_SERVER={posix(self.server)!r} '
-            # ‏#433: SYSROOT ריק היה מפנה את bootentry.sh ל-efivars **האמיתי** של
+            # #433: SYSROOT ריק היה מפנה את bootentry.sh ל-efivars **האמיתי** של
             # מכונת הבדיקות (מעבדת ה-VM היא UEFI) — ו-efibootmgr היה כותב ל-NVRAM שלה.
             f'SYSROOT={posix(self.run)!r}/sys LIB_DIR={posix(AGENT)!r}/lib '
             f'SERVER=http://10.44.12.10:8080 MAC=b4:2e:99:07:1a:c4 {env}; '
@@ -236,7 +236,7 @@ def test_a_file_the_server_cannot_serve_is_a_failure_not_a_partial_stage(tmp_pat
 
 
 def test_a_copy_that_does_not_read_back_is_a_failure(tmp_path):
-    """‏cp יצא 0 והבייטים על הדיסק שונים — הראיה היא הקריאה חזרה, לא קוד היציאה."""
+    """cp יצא 0 והבייטים על הדיסק שונים — הראיה היא הקריאה חזרה, לא קוד היציאה."""
     box = Box(tmp_path, stubs={"cp": 'printf garbage > "$2"; exit 0',
                                "umount": 'echo umount "$@" >> "$FAKE_SERVER/umounts"; exit 0'})
     _, result = box.stage()
@@ -268,7 +268,7 @@ def test_a_server_that_does_not_answer_is_failed(tmp_path):
 
 
 def test_a_linux_image_is_skipped_by_name(tmp_path):
-    # ‏#1331: ה-initramfs נבדק (`drivers.linux`, ‏test_linuxdrivers.py) — כאן
+    # #1331: ה-initramfs נבדק (`drivers.linux`, test_linuxdrivers.py) — כאן
     # העיגון נכשל, וה-staging עצמו נשאר skipped/not_windows.
     box = Box(tmp_path, plan=LINUX_PLAN, stubs={"mount": "exit 32"})
     _, result = box.stage()

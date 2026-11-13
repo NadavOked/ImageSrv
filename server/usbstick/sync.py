@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import sqlite3
 import threading
@@ -33,6 +34,8 @@ from pathlib import Path
 from server.db import _settle, _write_lock, journal, now_iso, writing
 from server.usbstick import knowledge, records
 from server.usbstick.device import Stick, StickError
+
+log = logging.getLogger("imagesrv.usbstick")
 
 #: one reader or writer of the stick at a time: it is one mount point and one device.
 LOCK = threading.Lock()
@@ -207,8 +210,11 @@ def _to_stick(conn, hooks, stick, plan_: Plan, server_version: str) -> dict:
             write_bundle(root, files)
         with hooks["open"](stick, write=False) as root:
             bad = verify_bundle(root, files)
-    except (StickError, OSError) as exc:
+    except StickError as exc:
         return {"error": f"הכתיבה להתקן נכשלה: {exc}"}
+    except OSError as exc:      # #2543: ה-strerror ליומן השרת; בתשובה — משפט שלנו
+        log.warning("usb stick write failed: %s", exc)
+        return {"error": "הכתיבה להתקן נכשלה — הפרטים ביומן השרת"}
     if bad:
         return {"error": "הקריאה החוזרת מההתקן לא תאמה למה שנכתב: " + ", ".join(bad)}
     return {"skipped": False, "written": sorted(files), "verified": True,
@@ -228,7 +234,9 @@ def run(conn: sqlite3.Connection, hooks: dict, stick: Stick, digest: str, user: 
             out["to_server"] = {"imported": imported, "already": current.already + (len(current.new) - imported),
                                 "rejected": [{"name": r.name, "reason": r.reason} for r in current.reading.rejected]}
         except sqlite3.Error as exc:
-            out["to_server"] = {"imported": 0, "already": current.already, "error": f"הרישום בשרת נכשל: {exc}",
+            log.warning("usb stick import failed: %s", exc)        # #2543: טקסט sqlite ליומן
+            out["to_server"] = {"imported": 0, "already": current.already,
+                                "error": "הרישום בשרת נכשל — הפרטים ביומן השרת",
                                 "rejected": [{"name": r.name, "reason": r.reason} for r in current.reading.rejected]}
         out["to_stick"] = ({"error": "לא כתבתי להתקן: הקליטה בשרת נכשלה, והידע שנכתב נגזר ממנה"}
                            if out["to_server"].get("error")

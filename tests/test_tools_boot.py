@@ -1,6 +1,6 @@
 """טסטי תחום boot (#649) — כלים מזויפים ב-PATH, בלי חומרה אמיתית.
 
-‏#1050: נשאר רק `esp-fsck-repair`, הכלי היחיד של התחום שנדב סימן
+#1050: נשאר רק `esp-fsck-repair`, הכלי היחיד של התחום שנדב סימן
 ב-`server/tools_catalog.json`; שמונת האחרים נמחקו, והטסטים שלהם איתם.
 האריזה — `tests/test_tools_packing.py`.
 
@@ -44,6 +44,18 @@ def write_stub(bin_dir: Path, name: str, body: str, rc: int = 0) -> None:
     )
 
 
+def fake_sysroot(tmp_path: Path) -> Path:
+    """#2486: the partitions the kernel lists -- sda1 on the internal disk, sdb1
+    on the clone stick (usb-media.disks), loop0p1 on a loop device. Never the
+    host's /sys: the ESP check reads $SYSROOT."""
+    root = tmp_path / "sysroot"
+    for disk, part in (("sda", "sda1"), ("sdb", "sdb1"), ("loop0", "loop0p1")):
+        (root / "sys" / "block" / disk / part).mkdir(parents=True, exist_ok=True)
+        for name in (disk, part):
+            (root / "sys" / "class" / "block" / name).mkdir(parents=True, exist_ok=True)
+    return root
+
+
 def run_boot(
     tmp_path: Path,
     tool_id: str,
@@ -51,9 +63,12 @@ def run_boot(
     confirm: str = "",
     *,
     stubs: dict[str, tuple[str, int]] | None = None,
+    pre: str = "",
 ) -> subprocess.CompletedProcess:
     run_dir = tmp_path / "run"
     run_dir.mkdir(exist_ok=True)
+    (run_dir / "usb-media.disks").write_text("sdb\n", encoding="utf-8", newline="\n")
+    sysroot = fake_sysroot(tmp_path)
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(exist_ok=True)
 
@@ -74,10 +89,12 @@ chmod +x *
 BIN_PWD=$(pwd)
 export PATH="$BIN_PWD:$PATH"
 export RUN_DIR={posix(run_dir)!r}
+export SYSROOT={posix(sysroot)!r}
 export MACHINE_NAME=lab-pc-01
 export IMAGESRV_TEST=1
 . {posix(BOOT_SH)!r}
 set +e
+{pre}
 tools_boot_run {tool_id!r} {arg!r} {confirm!r}
 exit $?
 """
@@ -201,7 +218,7 @@ def test_esp_fsck_repair_without_a_device_is_rc1(tmp_path: Path):
 
 
 def test_build_initramfs_has_no_unconditional_boot_block():
-    """‏#1050: הבנאי אורז לפי הבחירה, לא בלוק קבוע לכל תחום."""
+    """#1050: הבנאי אורז לפי הבחירה, לא בלוק קבוע לכל תחום."""
     text = BUILDER.read_text(encoding="utf-8")
     assert "REQUIRED_TOOLS_BOOT=" not in text
     assert "memtest86+x64.efi" not in text

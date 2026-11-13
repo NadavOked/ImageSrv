@@ -1,8 +1,8 @@
-"""‏#926 — הפריסה המקורית של מחיצת המקור שכווצה בקליטה: זיכרון בשרת.
+"""#926 — הפריסה המקורית של מחיצת המקור שכווצה בקליטה: זיכרון בשרת.
 
-‏#87 שמר את הגודל המקורי ב-`targets/<disk>/shrunk` — ‏tmpfs. אובדן חשמל
+#87 שמר את הגודל המקורי ב-`targets/<disk>/shrunk` — tmpfs. אובדן חשמל
 או אתחול בין `ntfsresize -s` לבין ההחזרה השאיר את דיסק הבנייה מכווץ בלי
-שאיש יודע: ווינדוס עולה, ‏C: קטן, והסוכן כבר לא זוכר מה היה. אותה
+שאיש יודע: ווינדוס עולה, C: קטן, והסוכן כבר לא זוכר מה היה. אותה
 משפחה כמו #856 ו-#874, ואותו פתרון: **השרת זוכר**, לפי סידורי.
 
 * **`POST /api/v1/agent/shrink-open`** — נשלח **לפני** הכתיבה הראשונה
@@ -13,11 +13,11 @@
   הדיסק כבר מכווץ לפי הזיכרון, ואין מכווצים פעמיים.
 * **`POST /api/v1/agent/shrink-close`** — אחרי החזרה מוצלחת. סגירת רשומה
   שאינה פתוחה היא 404, לא "ok" (עיקרון 5).
-* **‏hello (ממשק 3, `shrink_open`)** — הרשומות הפתוחות שהסידורי שלהן הוא
-  אחד מהדיסקים שהמכונה דיווחה. הסידורי הוא הזהות; ‏`port` ו-`mac` הם
+* **hello (ממשק 3, `shrink_open`)** — הרשומות הפתוחות שהסידורי שלהן הוא
+  אחד מהדיסקים שהמכונה דיווחה. הסידורי הוא הזהות; `port` ו-`mac` הם
   המקום, לתצוגה.
 * **הקונסולה** — `GET /api/console/shrink-records` (מחובר) ו-"נקה"
-  (‏`POST …/{id}/clear`, admin).
+  (`POST …/{id}/clear`, admin).
 """
 
 from __future__ import annotations
@@ -56,8 +56,8 @@ def conn(tmp_path: Path):
 
 
 def report_serial(client, mac: str, serial: str = SERIAL) -> None:
-    """‏#2492: ה-hello של הסוכן לפני הקליטה — הדיסק שיכווץ, לפי dev וסידורי.
-    ‏`shrink-open` מקבל רק סידורי שה-MAC הזה דיווח ל-`dev` הזה."""
+    """#2492: ה-hello של הסוכן לפני הקליטה — הדיסק שיכווץ, לפי dev וסידורי.
+    `shrink-open` מקבל רק סידורי שה-MAC הזה דיווח ל-`dev` הזה."""
     from conftest import hello_body
     body = hello_body(mac)
     body["disks"][0]["serial"] = serial
@@ -143,7 +143,7 @@ def test_the_agent_opens_before_the_shrink_and_closes_after_the_restore(server):
     # פעם שנייה על אותו סידורי: 409 בשם, לא רשומה כפולה.
     twice = agent.post("/api/v1/agent/shrink-open", json=layout(mac=ids["mac1"]))
     assert twice.status_code == 409 and twice.json()["code"] == "already_open"
-    # ‏hello של המכונה שמדווחת את הסידורי הזה מקבל את הרשומה.
+    # hello של המכונה שמדווחת את הסידורי הזה מקבל את הרשומה.
     from conftest import hello_body
     body = hello_body(ids["mac1"])
     body["disks"][0]["serial"] = SERIAL
@@ -152,7 +152,7 @@ def test_the_agent_opens_before_the_shrink_and_closes_after_the_restore(server):
     assert rec["id"] == rid and rec["size_sectors"] == 998244352 and rec["idx"] == 3
     # מכונה עם סידורי אחר — כלום.
     assert hello(server, ids["mac2"])["shrink_open"] == []
-    # הקונסולה רואה את הרשומה (admin; ‏#1073: ל-deploy אין קונסולה).
+    # הקונסולה רואה את הרשומה (admin; #1073: ל-deploy אין קונסולה).
     rows = server["admin"].get("/api/console/shrink-records").json()
     assert len(rows) == 1 and rows[0]["id"] == rid and rows[0]["serial"] == SERIAL
     assert rows[0]["mac"] == ids["mac1"] and rows[0]["port"] == 1
@@ -200,7 +200,7 @@ def test_clear_from_the_console_is_admin_only_and_once(server):
 
 @pytest.mark.parametrize("field", ["idx", "size_sectors"])
 def test_a_zero_index_or_size_is_not_a_layout(conn, field):
-    """‏GPT מתחיל מכניסה 1, ומחיצה בת 0 סקטורים אינה מחיצה: 0 היה עובר את
+    """GPT מתחיל מכניסה 1, ומחיצה בת 0 סקטורים אינה מחיצה: 0 היה עובר את
     `_int` ונרשם כרשומה שאי-אפשר להחזיר ממנה."""
     with pytest.raises(shrink_records.BadRecord) as exc:
         shrink_records.open_record(conn, layout(**{field: 0}))
@@ -232,11 +232,11 @@ def test_a_note_explains_an_open_record_and_reaches_the_console(server):
     assert gone.status_code == 404 and gone.json()["code"] == "not_open"
 
 
-# --- ‏#929: רשומה אחת לדיסק, עם רשימת מחיצות ------------------------------------
+# --- #929: רשומה אחת לדיסק, עם רשימת מחיצות ------------------------------------
 
 
 def two_layout(**over) -> dict:
-    """הגוף שהסוכן שולח מ-#929: השדות של הדיסק, ו-`partitions` — ‏C: ואז D:."""
+    """הגוף שהסוכן שולח מ-#929: השדות של הדיסק, ו-`partitions` — C: ואז D:."""
     body = {k: v for k, v in layout().items()
             if k in ("mac", "dev", "serial", "port", "model", "image_name", "task_id")}
     body["partitions"] = [
@@ -254,8 +254,8 @@ def two_layout(**over) -> dict:
 
 
 def test_open_keeps_every_partition_and_the_first_in_the_legacy_columns(conn):
-    """‏`partitions` נשמרת בשלמותה וחוזרת כרשימה; השדות העליונים (‏idx,
-    ‏start_sector, …) הם של המחיצה הראשונה — לקורא ישן (הכרטיס בקונסולה)."""
+    """`partitions` נשמרת בשלמותה וחוזרת כרשימה; השדות העליונים (idx,
+    start_sector, …) הם של המחיצה הראשונה — לקורא ישן (הכרטיס בקונסולה)."""
     row = shrink_records.open_record(conn, two_layout())
     assert [p["idx"] for p in row["partitions"]] == [3, 4]
     (rec,) = shrink_records.list_open(conn)
@@ -277,7 +277,7 @@ def test_a_legacy_single_partition_body_is_a_list_of_one(conn):
 
 @pytest.mark.parametrize("partitions", [[], "x", [{"idx": 3}], [{"idx": 0, "start_sector": 1, "size_sectors": 1, "type_guid": "g"}]])
 def test_partitions_must_be_a_non_empty_list_of_whole_entries(conn, partitions):
-    """רשימה ריקה, לא-רשימה, מחיצה חסרה או מחיצה 0 — ‏bad_layout, ושום דבר לא נרשם:
+    """רשימה ריקה, לא-רשימה, מחיצה חסרה או מחיצה 0 — bad_layout, ושום דבר לא נרשם:
     רשומה שאי-אפשר להחזיר ממנה את **כל** המחיצות היא רשומה שאין לפתוח."""
     with pytest.raises(shrink_records.BadRecord) as exc:
         shrink_records.open_record(conn, two_layout(partitions=partitions))

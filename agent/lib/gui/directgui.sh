@@ -5,8 +5,10 @@
 # of the round's targets, from each cloner's reports) and are written as the
 # cloner's own records (clonergui.sh): one cloner_group=name|mac per cloner, then
 # its drawer=port|dev|state|bytes|total|error|rate|eta|drawer|conn|cancel|
-# records. A room that could not be read is direct_targets=unread -- said on the
-# screen, never an empty list (principle 5); it never fails the rest of the state.
+# records -- a failed one's error is error_short (#2987) -- and drawer_stall=
+# while one stands (#2988). A room that could not be read is
+# direct_targets=unread -- said on the screen, never an empty list (principle
+# 5); it never fails the rest of the state.
 
 direct_gui_records() {
     # $GUI_DIR/station.json: this tick's /agent/state. Not a direct send = nothing.
@@ -36,10 +38,14 @@ direct_gui_records() {
       (.machines[] | . as $m | [($m.drawer_list // [])[] | select(.state != null or .selected == true)] as $d
         | select($d | length > 0) |
         "cloner_group=" + ([$m.name, $m.mac] | map(clean) | join("|")),
-        ($d[] | "drawer=" + ([(.port // 0), .dev, (.state // "waiting"), ((.bytes_written // 0) | num | if . < 0 then 0 else . end),
-            ((.bytes_total // 0) | num | if . < 0 then 0 else . end), .error, (.rate_bps | num), (.eta_s | num), (.drawer // ""),
+        ($d[] | ("drawer=" + ([(.port // 0), .dev, (.state // "waiting"), ((.bytes_written // 0) | num | if . < 0 then 0 else . end),
+            ((.bytes_total // 0) | num | if . < 0 then 0 else . end),
+            (if .state == "failed" and (.error_short | type) == "string" then .error_short else .error end),   # #2987: the operator sentence, as on the cloner
+            (if (.stall | type) == "string" then 0, -1 else (.rate_bps | num), (.eta_s | num) end), (.drawer // ""),   # #2988: it stands -- rate 0, no ETA
             (if (.port | type) == "number" then "sata:\(.port)" elif (.pci | type) == "string" then "nvme:\(.pci)" else "" end | conn),
-            (.cancel.text_he? // ""), ""] | map(clean) | join("|"))))
+            (.cancel.text_he? // ""), ""] | map(clean) | join("|"))),
+          (select(.stall == "waiting_disk" or .stall == "waiting_net") | "drawer_stall=" + ([.dev, .stall, (.stall_s | num),
+            (if (.stall_limit_s | type) == "number" then (.stall_limit_s | floor) else "" end)] | map(clean) | join("|")))))
       end' "$GUI_DIR/room.json" 2> /dev/null > "$GUI_DIR/direct.next" || { printf 'direct_targets=unread\n'; return 0; }
     cat "$GUI_DIR/direct.next"
 }

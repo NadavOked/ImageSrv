@@ -17,7 +17,7 @@ from .core import WizardConfig, WizardState, check_primary, validate_config
 
 STATIC = Path(__file__).with_name("static")
 DESIGN_TOKENS = STATIC_DIR / "design-tokens.css"
-#: ‏#1302: ה-favicon של ImageSrv — אותם קבצים שהקונסולה מגישה.
+#: #1302: ה-favicon של ImageSrv — אותם קבצים שהקונסולה מגישה.
 FAVICONS = {f"/{name}": STATIC_DIR / name for name in ("favicon.svg", "favicon.ico")}
 
 

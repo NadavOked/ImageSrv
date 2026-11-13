@@ -6,7 +6,7 @@
 * ``cloner_gui_state`` בונה את קובץ המצב **מהאמת המקומית** — קובצי
   ``$RUN_DIR/targets/<dev>``, מסודרים לפי port בצד ה-C — ולא מהשרת.
 
-תפריט ה-SMART הגרפי (``gui_smart_choice``, ‏``smart-request``/``smart-decision``)
+תפריט ה-SMART הגרפי (``gui_smart_choice``, ``smart-request``/``smart-decision``)
 הוסר ב-#2044: אדום אינו נשאל (#1732) וכתום נכתב בלי שאלה (#2042) — ראו
 test_smart_ask_removed_2044.py.
 
@@ -82,10 +82,10 @@ def env(run: Path, gui: Path) -> str:
 def target(run: Path, dev: str, state: str, total: int, base: int, cur: str) -> None:
     """יעד פר-מגירה, בדיוק במבנה של target_init/progress.sh.
 
-    ‏#1657: ‏`target_bytes` סוכם את מוני המחיצות `bytes.<N>` — לא `base` ולא
-    ‏`bytes.raw`. ‏`base` (המחיצות שהסתיימו) נכתב ל-`bytes.0`, ו-`cur` (המחיצה
+    #1657: `target_bytes` סוכם את מוני המחיצות `bytes.<N>` — לא `base` ולא
+    `bytes.raw`. `base` (המחיצות שהסתיימו) נכתב ל-`bytes.0`, ו-`cur` (המחיצה
     הנוכחית) ל-`bytes.1`, שאליו מצביע `counter`. עד התיקון הפיקסטורה כתבה
-    ‏`bytes.raw`, והרשומה אמרה 0 בייטים לכל מגירה (Testrunner 18/10)."""
+    `bytes.raw`, והרשומה אמרה 0 בייטים לכל מגירה (Testrunner 18/10)."""
     d = run / "targets" / dev
     d.mkdir(parents=True, exist_ok=True)
     (d / "state").write_text(state + "\n", newline="\n")
@@ -180,14 +180,14 @@ def test_a_drawer_record_reports_the_local_bytes_and_port(tmp_path):
     ולא פר-מגירה, שדה הבייטים היה שווה לכל המגירות (#25). כאן sda הוא
     45 (40+5) ו-sdb הוא 0 — שני מספרים שונים, מהקבצים המקומיים."""
     lines = state_lines(tmp_path)
-    # ‏#410: שדות 7–8 הם קצב ו-ETA; ‏-1 = לא נמדד (דגימה ראשונה / לא כותבת).
+    # #410: שדות 7–8 הם קצב ו-ETA; -1 = לא נמדד (דגימה ראשונה / לא כותבת).
     assert "drawer=1|sda|writing|45|100||-1|-1|1|SATA 0||" in lines
     assert "drawer=2|sdb|waiting|0|100||-1|-1|2|SATA 1||" in lines
 
 
 def test_a_second_sample_carries_the_rate_and_eta_from_the_local_counter(tmp_path):
-    """‏#410: הקצב הוא ממוצע מאז הדגימה הראשונה עם בייטים על המגירה
-    (‏`$GUI_DIR/pace.<dev>` = "epoch bytes"). העוגן מוזז 10 שניות אחורה
+    """#410: הקצב הוא ממוצע מאז הדגימה הראשונה עם בייטים על המגירה
+    (`$GUI_DIR/pace.<dev>` = "epoch bytes"). העוגן מוזז 10 שניות אחורה
     כי שתי הריצות קורות באותה שנייה — ואפס שניות הוא בצדק "לא נמדד"."""
     run = tmp_path / "run"; run.mkdir()
     gui = tmp_path / "gui"; gui.mkdir()
@@ -225,7 +225,7 @@ def test_a_drawer_that_stopped_writing_drops_its_anchor_and_reports_unmeasured(t
 
 @requires_native("jq", why="the shared GUI state reads the cached hello reply")
 def test_a_leftover_smart_request_draws_no_smart_prompt(tmp_path):
-    """‏#2044: שאלת ה-SMART של המשכפל הוסרה. קובץ `smart-request` שנשאר (סוכן
+    """#2044: שאלת ה-SMART של המשכפל הוסרה. קובץ `smart-request` שנשאר (סוכן
     ישן, ריצה קודמת) אינו הופך לפאנל `smart_prompt=` — אין מי שיענה עליו.
 
     **בקרה שלילית:** על clonergui.sh של הבסיס (v0.80.6) המצב נושא
@@ -235,7 +235,7 @@ def test_a_leftover_smart_request_draws_no_smart_prompt(tmp_path):
 
 
 def test_an_error_pipe_cannot_corrupt_the_record(tmp_path):
-    """‏`|` או שורה חדשה בתוך הודעת השגיאה היו שוברים את פורמט הרשומה —
+    """`|` או שורה חדשה בתוך הודעת השגיאה היו שוברים את פורמט הרשומה —
     הם מקופלים לרווחים לפני שהערך נכתב."""
     run = tmp_path / "run"; run.mkdir()
     gui = tmp_path / "gui"; gui.mkdir()
@@ -249,17 +249,17 @@ def test_an_error_pipe_cannot_corrupt_the_record(tmp_path):
 
 
 def test_the_kiosk_load_chain_carries_the_cached_smart_verdict(tmp_path):
-    """‏#834: הקיוסק הוא תהליך נפרד עם שרשרת טעינה משלו (‏`gui_libs`), ועל
-    הברזל היא לא כללה את ‏`smart.sh` — ‏`cloner_gui_state` הדפיס
-    ‏`smart_hello_field: not found` פעם בשנייה, ושדה ה-SMART של כל ‏cdisk
-    הפך ל-`unchecked` גם כשהמטמון אמר ‏`ok`. "לא הצלחנו לבדוק" הוצג כ"לא
+    """#834: הקיוסק הוא תהליך נפרד עם שרשרת טעינה משלו (`gui_libs`), ועל
+    הברזל היא לא כללה את `smart.sh` — `cloner_gui_state` הדפיס
+    `smart_hello_field: not found` פעם בשנייה, ושדה ה-SMART של כל cdisk
+    הפך ל-`unchecked` גם כשהמטמון אמר `ok`. "לא הצלחנו לבדוק" הוצג כ"לא
     נבדק" (עיקרון 5).
 
-    כאן רצה **שרשרת הקיוסק עצמה** (‏`gui_libs`, לא PRELUDE של הטסט) על
+    כאן רצה **שרשרת הקיוסק עצמה** (`gui_libs`, לא PRELUDE של הטסט) על
     משכפל ממתין — בלי יעדים, עם דיסק אחד ב-sysfs מזויף ומטמון SMART
-    ‏`ok`. הראיה החיובית: ‏`cdisk=...|passed` — הערך שנקרא מהמטמון, לא
-    ברירת המחדל. בקרה שלילית: הסרת ‏`. smart.sh` מ-`gui_libs` מחזירה את
-    ‏`not found` ל-stderr ואת ‏`unchecked` לרשומה — שתי הבדיקות נופלות."""
+    `ok`. הראיה החיובית: `cdisk=...|passed` — הערך שנקרא מהמטמון, לא
+    ברירת המחדל. בקרה שלילית: הסרת `. smart.sh` מ-`gui_libs` מחזירה את
+    `not found` ל-stderr ואת `unchecked` לרשומה — שתי הבדיקות נופלות."""
     run = tmp_path / "run"; run.mkdir()
     gui = tmp_path / "gui"; gui.mkdir()
     sysroot = tmp_path / "sysroot"
@@ -274,17 +274,17 @@ def test_the_kiosk_load_chain_carries_the_cached_smart_verdict(tmp_path):
     assert out.returncode == 0, out.stderr
     assert "not found" not in out.stderr, out.stderr
     lines = (gui / "state").read_text().splitlines()
-    # ‏#874: השדה השישי (הסיבה מזיכרון השרת) ריק על דיסק ירוק.
-    # ‏#432: 7/8 = הקישור — ‏null כשהדיסק אינו מאחורי libata (כאן: תיקייה, לא קישור).
+    # #874: השדה השישי (הסיבה מזיכרון השרת) ריק על דיסק ירוק.
+    # #432: 7/8 = הקישור — null כשהדיסק אינו מאחורי libata (כאן: תיקייה, לא קישור).
     # #1495: 10/11 = the drawer and the connection -- a disk with no ATA port and no
     # NVMe address is not in any mapping: 0, connection unknown (never a guessed number)
     assert any(l.startswith("cdisk=") and l.endswith("|passed||null|null||0||unchecked|||||") for l in lines), lines   # #1366: field 9, no CRC colour; #1798: 12 -- no disk to read the mark from = unchecked; #1921: 13 -- no hw note; #1858: 14-16 empty -- no F1 mark
 
 
-# --- ‏#867/#874: המלאי הממתין — ממוין לפי מספר הדיסק, ונושא את זיכרון השרת ----
+# --- #867/#874: המלאי הממתין — ממוין לפי מספר הדיסק, ונושא את זיכרון השרת ----
 
-#: ‏sgdisk מזויף למסך הממתין: רושם בלבד. עד #874 המסך קרא ממנו את הסימון
-#: של #845 (‏`sgdisk -p`); מאז הזיכרון בשרת. ‏#1798 (נדב 19/10): המסך קורא
+#: sgdisk מזויף למסך הממתין: רושם בלבד. עד #874 המסך קרא ממנו את הסימון
+#: של #845 (`sgdisk -p`); מאז הזיכרון בשרת. #1798 (נדב 19/10): המסך קורא
 #: שוב `sgdisk -p` -- **קריאה בלבד** -- לסימן "כתיבה לא הושלמה" (שדה 12);
 #: טבלה ריקה = `clean`. הוא לעולם אינו כותב.
 IDLE_SGDISK = """#!/bin/sh
@@ -296,9 +296,9 @@ exit 0
 def idle_state(tmp_path: Path, ports: dict[str, str], failed: dict[str, str] | None = None,
                runs: int = 1) -> list[str]:
     """משכפל ממתין (בלי יעדים) עם הדיסקים ב-`ports` (dev → מספר דיסק, ריק =
-    אין חריץ) ב-sysfs מזויף, ‏SMART ‏`ok` במטמון לכולם, וזיכרון השרת (#874)
-    כפי ש-jq היה מדפיס אותו מתשובת ה-hello: ‏`failed` = dev → cause, לפי
-    סידורי (‏S-<dev>). רץ בשרשרת הקיוסק עצמה (‏`gui_libs`), ‏`runs` פעמים."""
+    אין חריץ) ב-sysfs מזויף, SMART `ok` במטמון לכולם, וזיכרון השרת (#874)
+    כפי ש-jq היה מדפיס אותו מתשובת ה-hello: `failed` = dev → cause, לפי
+    סידורי (S-<dev>). רץ בשרשרת הקיוסק עצמה (`gui_libs`), `runs` פעמים."""
     run = tmp_path / "run"; run.mkdir()
     gui = tmp_path / "gui"; gui.mkdir()
     box = tmp_path / "box"; box.mkdir()
@@ -318,7 +318,7 @@ def idle_state(tmp_path: Path, ports: dict[str, str], failed: dict[str, str] | N
         f"mkdir -p {posix(box)}/bin\n"
         f"cat > {posix(box)}/bin/sgdisk <<'STUB'\n{IDLE_SGDISK.format(box=posix(box))}STUB\n"
         f"chmod 0755 {posix(box)}/bin/sgdisk\n"
-        f'export PATH="$(cd {posix(box)}/bin && pwd):$PATH"\n'   # ‏C: בתוך PATH נשבר ב-MSYS
+        f'export PATH="$(cd {posix(box)}/bin && pwd):$PATH"\n'   # C: בתוך PATH נשבר ב-MSYS
         + env(run, gui)
         + f'export SYSROOT={posix(sysroot)!r} LIB_DIR={posix(flat_lib())!r}; '
         f'. {posix(AGENT)}/lib/gui/guibridge.sh; gui_libs; ' + port_fn
@@ -336,7 +336,7 @@ def idle_state(tmp_path: Path, ports: dict[str, str], failed: dict[str, str] | N
 
 @requires_native("jq", why="the shared GUI state reads the cached hello reply")
 def test_idle_disks_are_sorted_by_disk_number_not_device_name(tmp_path):
-    """‏#867: במחשב 2 המיפוי הוא sda→3, sdb→1, sdc→2, והמסך הציג "דיסק 3,
+    """#867: במחשב 2 המיפוי הוא sda→3, sdb→1, sdc→2, והמסך הציג "דיסק 3,
     1, 2". נדב מדבר ב"דיסק 1/2/3 לפי SATA" — הרשומות ממוינות לפי השדה
     הראשון, לא לפי סדר הגילוי של `list_disks`. בקרה שלילית: על main הסדר
     נשאר 3,1,2."""
@@ -356,10 +356,10 @@ def test_an_idle_disk_without_a_slot_sorts_last_and_keeps_the_others_ordered(tmp
 
 @requires_native("jq", why="the shared GUI state reads the cached hello reply")
 def test_a_disk_the_server_remembers_reports_failed_last_with_its_cause(tmp_path):
-    """‏#867/#874: דיסק 1 במחשב 2 נכשל בלילה (כבל, לפי שורות ה-ATA), והוא
-    עובר SMART (‏`ok` במטמון). המסך הציג אותו ירוק. שדה ה-smart של הרשומה
+    """#867/#874: דיסק 1 במחשב 2 נכשל בלילה (כבל, לפי שורות ה-ATA), והוא
+    עובר SMART (`ok` במטמון). המסך הציג אותו ירוק. שדה ה-smart של הרשומה
     חייב להיות `failed_last` והשדה השישי הסיבה שהשרת סיווג; הדיסק הנקי
-    לצדו נשאר `passed` בלי סיבה. ‏sgdisk אינו נקרא. בקרה שלילית: על main
+    לצדו נשאר `passed` בלי סיבה. sgdisk אינו נקרא. בקרה שלילית: על main
     שניהם `passed` (הזיוף לא מדפיס טבלה), ו-`sgdisk -p` נקרא."""
     lines = idle_state(tmp_path, {"sda": "1", "sdb": "2"}, failed={"sda": "cable"})
     assert lines[0] == "cdisk=1|sda|Model sda|512000|failed_last|cable|null|null||1|SATA 0|clean|||||", lines   # #2848: 17 -- the hw words; #1921: 13 -- no hw note; #1858: 14-16 empty -- no F1 mark
@@ -368,7 +368,7 @@ def test_a_disk_the_server_remembers_reports_failed_last_with_its_cause(tmp_path
 
 @requires_native("jq", why="the shared GUI state reads the cached hello reply")
 def test_the_memory_is_read_from_the_last_hello_every_second(tmp_path):
-    """‏cloner_gui_state רץ פעם בשנייה וקורא את זיכרון השרת מתשובת ה-hello
+    """cloner_gui_state רץ פעם בשנייה וקורא את זיכרון השרת מתשובת ה-hello
     האחרונה — "נקה" בקונסולה מגיע למסך בלי ריבוט. שתי ריצות: האדום נשאר
     אדום כל עוד הרשומה בתשובה."""
     lines = idle_state(tmp_path, {"sda": "1", "sdb": "2"}, failed={"sdb": "disk"}, runs=2)
@@ -398,7 +398,7 @@ def bridge_setup(tmp_path: Path, screen: str) -> tuple[str, Path]:
 
 
 def test_the_bridge_turns_no_smart_click_into_a_decision(tmp_path):
-    """‏#2044: אין עוד הכרעת SMART במסך המשכפל. אסימון `smart-<action>|<nonce>`
+    """#2044: אין עוד הכרעת SMART במסך המשכפל. אסימון `smart-<action>|<nonce>`
     (GUI ישן) אינו נכתב ל-`smart-decision`, גם כשיש `smart-request` שנשאר עם
     אותו nonce.
 
@@ -433,7 +433,7 @@ def test_native_gui_builds_and_routes_the_cloner_screen(tmp_path):
     יוצאת ב-rc≠0 אם לא. זו הבקרה השלילית של הצד הגרפי: קוד ישן בלי
     ה-screen/הפרסר נכשל כאן.
 
-    ‏#2347: ‏`smart_prompt=` (סוכן ישן) כבר אינו נקרא — הפרסר אומר שהתעלם
+    #2347: `smart_prompt=` (סוכן ישן) כבר אינו נקרא — הפרסר אומר שהתעלם
     ממנו (על הקוד הישן אין שורת "ignored"). המקשים — ב-test_smart_warning_window."""
     binary = tmp_path / "gui-bin"
     build = subprocess.run(
@@ -449,7 +449,7 @@ def test_native_gui_builds_and_routes_the_cloner_screen(tmp_path):
     assert build.returncode == 0, build.stderr
     assert binary.exists()
 
-    # ‏--png מרנדר את **כל** הכרטיסים מהמצב הזה, וה-want[] מאמת ניתוב לכל
+    # --png מרנדר את **כל** הכרטיסים מהמצב הזה, וה-want[] מאמת ניתוב לכל
     # אחד. כרטיס message דורש msg_title, אחרת הוא נופל ל-menu וה-self-check
     # נכשל — לכן שורת message כאן, לצד רשומות ה-cloner שהפרסר צריך לפרוס.
     state = tmp_path / "state.txt"
@@ -708,7 +708,7 @@ def test_approved_emphasis_at_standby_and_local_result_calls(emphasis_driver, tm
         for rect in frames:
             _assert_emphasized_frame(image, rect, colour, soft)
     if mode == "standby":   # mockup 07: the cage's caption counts the drawers the frames mark
-        assert "T 2 מתוך 2 עם דיסק · ‏2 עם בעיה" in lines, [l for l in lines if "עם דיסק" in l]
+        assert "T 2 מתוך 2 עם דיסק · \u200f2 עם בעיה" in lines, [l for l in lines if "עם דיסק" in l]
 
 
 @EMPHASIS_NATIVE
@@ -741,14 +741,14 @@ def test_empty_disks_tile_does_not_invent_written_disks(emphasis_driver, tmp_pat
     assert not any("נכתבו" in text for text in lines)
 
 
-# ‏#1090: לגואי אין פלטה משלו — כל צבע הוא טוקן של הקונסולה (design-tokens.css),
+# #1090: לגואי אין פלטה משלו — כל צבע הוא טוקן של הקונסולה (design-tokens.css),
 # ו-theme.c מעתיק אותו. הטסטים קוראים את הטוקן מהקובץ, לא ערך קשיח: כשהקונסולה
 # תשנה צבע, הטסט ייפול אם הגואי לא זז איתה.
 TOKENS_CSS = REPO / "server" / "static" / "design-tokens.css"
 
 
 def _token(name: str, theme: str = "light") -> tuple[int, int, int]:
-    """‏`--clr-*` מהבלוק של `:root` (בהיר) או `:root[data-theme="dark"]` (כהה)."""
+    """`--clr-*` מהבלוק של `:root` (בהיר) או `:root[data-theme="dark"]` (כהה)."""
     import re
     css = TOKENS_CSS.read_text(encoding="utf-8")
     start = css.index(':root[data-theme="dark"]{' if theme == "dark" else ":root{")
@@ -760,7 +760,7 @@ def _token(name: str, theme: str = "light") -> tuple[int, int, int]:
 
 
 def _screen_enum() -> dict[str, int]:
-    """‏`typedef enum { SCREEN_... } Screen;` מ-ui.h — שם→מספר, כדי שהודעת
+    """`typedef enum { SCREEN_... } Screen;` מ-ui.h — שם→מספר, כדי שהודעת
     "routed to screen 8, not 7" של `--png` תיקרא בשמות ולא במספרים קשיחים."""
     import re
     src = (REPO / "native-gui" / "src" / "ui.h").read_text(encoding="utf-8")
@@ -825,7 +825,7 @@ def _color_bounds(px, ch, w, x0, x1, y0, y1, rgb, tol=6):
     why="native-gui נבנה על המעבדה בלבד",
 )
 def test_standby_shows_connected_disks_and_empty_cloner_port(tmp_path):
-    """‏#1170: standby מציג את פורטים 1–3 גם כשפורט 2 חסר מהמלאי.
+    """#1170: standby מציג את פורטים 1–3 גם כשפורט 2 חסר מהמלאי.
 
     שתי תמונות נבדלות רק בשורות cdisk: שמות הדגם והגדלים של פורטים 1 ו-3
     מוסיפים דיו כהה לעומת שלוש שורות ריקות. בקרה שלילית: screens.c שלפני
@@ -870,7 +870,7 @@ def test_standby_shows_connected_disks_and_empty_cloner_port(tmp_path):
     why="native-gui נבנה על המעבדה בלבד",
 )
 def test_login_show_password_toggle_is_at_the_right_of_the_field(tmp_path):
-    """‏#1167: "הצג" יושב בקצה הימני של שדה הסיסמה.
+    """#1167: "הצג" יושב בקצה הימני של שדה הסיסמה.
 
     שדה הסיסמה ריק ברינדור, ולכן **כל הדיו** בתוך תיבת השדה (בין המסגרת
     העליונה לתחתונה ובין שתי הצלעות — מאז 10/10 שדות ממוסגרים כמו בקונסולה,
@@ -949,9 +949,9 @@ def _ink_bounds_x(px, ch, w, x0, x1, y0, y1, bg, tol=12):
     why="native-gui נבנה על המעבדה בלבד",
 )
 def test_room_grid_paints_healthy_drawers_green(tmp_path):
-    """‏#695: מסך "הפצה למחשבי שיכפול" מצייר מלבן לכל מחשב עם הדיסקים בפנים.
-    ‏disk בריא (`smart=passed`) נצבע ב-`led_ok` ירוק, ו-`smart=fail` ב-**אדום**
-    (‏#1580, נדב 17/10: SMART תקול = אדום; ‏`failed_last` כתום). ‏#1090: שלושת הצבעים הם
+    """#695: מסך "הפצה למחשבי שיכפול" מצייר מלבן לכל מחשב עם הדיסקים בפנים.
+    disk בריא (`smart=passed`) נצבע ב-`led_ok` ירוק, ו-`smart=fail` ב-**אדום**
+    (#1580, נדב 17/10: SMART תקול = אדום; `failed_last` כתום). #1090: שלושת הצבעים הם
     טוקני הקונסולה `--clr-success`/`--clr-warning`/`--clr-danger` (בהיר).
     הטסט מזין `machine`/`machine_drawers`/`room_drawer` דרך `--state`, מרנדר
     את כרטיס החדר, וסופר פיקסלים ירוקים ואדומים. **בקרה שלילית:** בלי הפרסר
@@ -993,7 +993,7 @@ def test_room_grid_paints_healthy_drawers_green(tmp_path):
     why="native-gui נבנה על המעבדה בלבד",
 )
 def test_cloner_idle_disks_show_smart_health_color(tmp_path):
-    """‏#709: מסך מחשב השיכפול הממתין מצייר ריבוע סטטוס לכל דיסק במלאי —
+    """#709: מסך מחשב השיכפול הממתין מצייר ריבוע סטטוס לכל דיסק במלאי —
     ירוק ל-`passed`, אדום ל-`fail` (אותה מוסכמה כמו גריד החדר). מזין
     `cdisk=...|smart` דרך `--state`, מרנדר את כרטיס ה-cloner, וסופר
     פיקסלים ב-`led_ok`/`ROOM_BAD`. **בקרה שלילית:** בלי השדה החמישי
@@ -1033,10 +1033,10 @@ def test_cloner_idle_disks_show_smart_health_color(tmp_path):
     why="native-gui נבנה על המעבדה בלבד",
 )
 def test_cloner_idle_disk_that_failed_last_clone_is_painted_yellow(tmp_path):
-    """‏#867: דיסק שנושא את הסימון של #845 מגיע ב-`cdisk=` כ-`failed_last`,
-    והמסך מצייר אותו **כתום** (‏#1580, נדב 17/10: "נסה שוב") עם "נכשל
+    """#867: דיסק שנושא את הסימון של #845 מגיע ב-`cdisk=` כ-`failed_last`,
+    והמסך מצייר אותו **כתום** (#1580, נדב 17/10: "נסה שוב") עם "נכשל
     בשיכפול הקודם" — גם כש-SMART שלו נקי. כאן הדיסק היחיד הוא `failed_last`.
-    **בקרה שלילית:** ‏`state.c` על main מקפל ערך לא-מוכר ל-`unchecked`
+    **בקרה שלילית:** `state.c` על main מקפל ערך לא-מוכר ל-`unchecked`
     והריבוע נצבע ירוק — אפס פיקסלים אדומים והטסט נופל."""
     binary = _build_gui(tmp_path)
     state = tmp_path / "cloner.txt"
@@ -1070,9 +1070,9 @@ def test_cloner_idle_disk_that_failed_last_clone_is_painted_yellow(tmp_path):
     why="native-gui נבנה על המעבדה בלבד",
 )
 def test_restore_card_routes_to_a_graphical_screen(tmp_path):
-    """‏#706: כרטיס 'משיכת אימג' לכונן המחשב הזה' חייב לפתוח מסך גרפי
-    (‏SCREEN_RESTORE) ולא ליפול לזרימת הטקסט שקורסת. מזין דיסק פנימי
-    (‏removable=0) ושני אימג'ים, מרנדר את כרטיס restore, ודורש שבדיקת
+    """#706: כרטיס 'משיכת אימג' לכונן המחשב הזה' חייב לפתוח מסך גרפי
+    (SCREEN_RESTORE) ולא ליפול לזרימת הטקסט שקורסת. מזין דיסק פנימי
+    (removable=0) ושני אימג'ים, מרנדר את כרטיס restore, ודורש שבדיקת
     הניתוב המובנית של --png תעבור (rc==0 => restore נותב ל-SCREEN_RESTORE).
     **בקרה שלילית:** החזרת HIT_RESTORE ל-`emit1("restore"); return 1`
     (בלי MODE_RESTORE/הניתוב) => הניתוב נוחת מחוץ ל-SCREEN_RESTORE
@@ -1107,10 +1107,10 @@ def test_restore_card_routes_to_a_graphical_screen(tmp_path):
     why="native-gui נבנה על המעבדה בלבד",
 )
 def test_png_renders_the_cloner_card_from_a_state_without_cloner_data(tmp_path):
-    """‏#1090: משכפל ממתין מנותב ל-`SCREEN_STANDBY` (מסך חדש), ולכן קובץ מצב
+    """#1090: משכפל ממתין מנותב ל-`SCREEN_STANDBY` (מסך חדש), ולכן קובץ מצב
     של **מחשב בנייה** — בלי `cloner=`/`drawer=`/`smart_prompt=` — הפיל את
     כל ה-`--png`: כרטיס `cloner` נחת על standby ובדיקת הניתוב יצאה rc≠0
-    ("routed to screen 8, not 7"). ‏`png_setup` מבטיח ש"קובץ מצב של המשתמש
+    ("routed to screen 8, not 7"). `png_setup` מבטיח ש"קובץ מצב של המשתמש
     מרנדר כל כרטיס" — ולכן הכרטיס מקבל נתוני דוגמה כשאין לו משלו, כמו
     שכרטיס `standby` מנקה אותם. **בקרה שלילית:** בלי הזריעה ב-`png_setup`
     ה-rc הוא 1 והכרטיס `cloner` אינו נכתב."""
@@ -1136,7 +1136,7 @@ def test_png_renders_the_cloner_card_from_a_state_without_cloner_data(tmp_path):
     assert "SCREEN_STANDBY" in screens and screens["SCREEN_STANDBY"] != screens["SCREEN_CLONER"]
 
 
-# --- ‏#765: מסך-מלא רספונסיבי + פלטת Clarity -------------------------------
+# --- #765: מסך-מלא רספונסיבי + פלטת Clarity -------------------------------
 
 
 def ui_scale(height: int) -> float:
@@ -1171,8 +1171,8 @@ def _render_all(binary: Path, tmp_path: Path, size: str):
 )
 @pytest.mark.parametrize("size", ["1920x1080", "1024x768"])
 def test_native_gui_fills_the_screen(tmp_path, size):
-    """‏#1090: המסך מלא — אין יותר פאנל ממורכז של #828. לפי הערות המוקאפ
-    (‏`.hdr height 48`, ‏`.sb height 36`, ‏`.body padding 28/32/24`):
+    """#1090: המסך מלא — אין יותר פאנל ממורכז של #828. לפי הערות המוקאפ
+    (`.hdr height 48`, `.sb height 36`, `.body padding 28/32/24`):
 
     * ה-header — 48 שורות בראש ב-`--clr-header` (כהה גם בבהיר, כמו vSphere),
       ושורה 48 כבר אינה header.
@@ -1202,7 +1202,7 @@ def test_native_gui_fills_the_screen(tmp_path, size):
     assert _row_frac(px, ch, w, hdr_h, header) < .05, f"the header is taller than {hdr_h}"
 
     # שורת הסטטוס: 36 שורות תחתונות — השורה העליונה שלהן היא קו השיער
-    # (‏draw_status מצייר אותו ב-bar.y), השאר ב---clr-nav, ומעליהן רקע הגוף.
+    # (draw_status מצייר אותו ב-bar.y), השאר ב---clr-nav, ומעליהן רקע הגוף.
     # the hairline is 1 logical px = s physical rows: the row after it may be a blend
     for y in (h - 1, h - sb_h // 2, h - sb_h + math.ceil(s)):
         assert _row_frac(px, ch, w, y, nav) > .85, f"row {y} is not the status bar"
@@ -1224,9 +1224,9 @@ def test_native_gui_fills_the_screen(tmp_path, size):
     why="native-gui נבנה על המעבדה בלבד",
 )
 def test_native_gui_uses_the_console_action_blue(tmp_path):
-    """‏#1090: כפתור "כניסה" צבוע ב-`--clr-action` של הקונסולה — ‏#0079B8
+    """#1090: כפתור "כניסה" צבוע ב-`--clr-action` של הקונסולה — #0079B8
     בבהיר ו-#2f78a8 בכהה (שלב 1 של הקונסולה, 10/10), כפי שהם ב-design-tokens.css (ולא הכחול הישן
-    ‏#2d668a של מוקאפ #828). הערך נקרא מהקובץ, לא מוקשח כאן."""
+    #2d668a של מוקאפ #828). הערך נקרא מהקובץ, לא מוקשח כאן."""
     binary = _build_gui(tmp_path)
     _render_all(binary, tmp_path, "1280x800")
     for theme in ("light", "dark"):
@@ -1237,14 +1237,14 @@ def test_native_gui_uses_the_console_action_blue(tmp_path):
 
 # --- #872: שלושה צבעים — אדום/כתום/ירוק — במסך הגרפי ובקונסולה ------------------
 #
-# ‏native-gui מתקמפל על המעבדה בלבד (אין cc בווינדוס), ולכן זה שומר על
+# native-gui מתקמפל על המעבדה בלבד (אין cc בווינדוס), ולכן זה שומר על
 # **המקור**: הכלל יושב במקום אחד (`smart_level` + `smart_color` ב-
-# ‏screens_rounds.c, מוצהרים ב-screens_rounds.h), והקבצים המפוצלים — הגריד
+# screens_rounds.c, מוצהרים ב-screens_rounds.h), והקבצים המפוצלים — הגריד
 # ב-screens_room.c וכרטיסי המשכפל ב-screens_cloner.c — קוראים לו ואינם
-# מקפלים fail לאדום בשום מקום אחר. ‏#1090: שלושת הצבעים הם טוקני ה-Theme
-# (‏danger/warn/led_ok = ‏--clr-danger/--clr-warning/--clr-success של הקונסולה),
+# מקפלים fail לאדום בשום מקום אחר. #1090: שלושת הצבעים הם טוקני ה-Theme
+# (danger/warn/led_ok = --clr-danger/--clr-warning/--clr-success של הקונסולה),
 # ואין יותר ROOM_BAD/ROOM_WARN מקומיים. הקונסולה נבדקת באותה צורה — המיפוי
-# ב-CSS/JS הוא טקסט. בקרה שלילית: לפני המיזוג ‏idle_smart_color/room_disk_healthy
+# ב-CSS/JS הוא טקסט. בקרה שלילית: לפני המיזוג idle_smart_color/room_disk_healthy
 # מקפלים warn/fail/failed_last לאדום, ואין failed_last בקונסולה.
 
 STATIC = REPO / "server" / "static"
@@ -1282,8 +1282,8 @@ def test_the_gui_maps_the_three_colours_in_one_place():
 
 
 def test_the_gui_says_unchecked_in_words_next_to_a_green_dot():
-    """‏unchecked נאמר במילים — "לא נבדק" ב-`smart_he`, שתא "בריאות" בכרטיס
-    הדיסק מציג — ונצבע ירוק: ‏`smart_level` אינו מכיר אותו ולכן הוא רמה 0
+    """unchecked נאמר במילים — "לא נבדק" ב-`smart_he`, שתא "בריאות" בכרטיס
+    הדיסק מציג — ונצבע ירוק: `smart_level` אינו מכיר אותו ולכן הוא רמה 0
     כמו passed. "לא הצלחנו לבדוק" מוצג, לא מוסתר (עיקרון 5)."""
     cloner = (GUI_SRC / "screens_cloner.c").read_text(encoding="utf-8")
     rounds = (GUI_SRC / "screens_rounds.c").read_text(encoding="utf-8")
@@ -1294,7 +1294,7 @@ def test_the_gui_says_unchecked_in_words_next_to_a_green_dot():
 
 
 def test_the_console_paints_fail_red_and_failed_last_orange():
-    # ‏#1247: מסך התחנה בדפדפן (station.css / room.js) הוסר — נשארת הקונסולה.
+    # #1247: מסך התחנה בדפדפן (station.css / room.js) הוסר — נשארת הקונסולה.
     css = (STATIC / "console.css").read_text(encoding="utf-8")
     # #1580 (17/10): SMART fail is red; failed_last is the orange default of .disk-smart
     assert ".disk-smart.fail{background:var(--danger-line); color:var(--clr-danger-fg)}" in css
@@ -1304,7 +1304,7 @@ def test_the_console_paints_fail_red_and_failed_last_orange():
 
 
 def test_the_native_gui_paints_done_with_warning_orange_not_red_or_green():
-    """‏#943: `done` שעדיין נושא `error` (שם לא נכתב #856, grow deferred #648)
+    """#943: `done` שעדיין נושא `error` (שם לא נכתב #856, grow deferred #648)
     הוא "הסתיים · עם אזהרה" בכתום — לא ירוק נקי ולא אדום; אדום רק ל-`failed`.
     בשורת המגירה של מחשב השיכפול אותו כלל: שגיאה של דיסק `done` בכתום."""
     rounds = (REPO / "native-gui" / "src" / "screens_rounds.c").read_text(encoding="utf-8")

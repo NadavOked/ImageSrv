@@ -24,7 +24,7 @@ from server.rounds.sender import (
 )
 from server.rounds.sessions import SessionError
 
-from conftest import MANIFEST_256, hello_body, setup_classroom, write_image
+from conftest import HANG_S, MANIFEST_256, hello_body, setup_classroom, write_image
 
 #: לוג של שידור שהתחיל באמת — ברירת המחדל ל-Recorder, כדי שטסט שמצפה
 #: ל-`done` לא ייכשל אחרי #438 רק כי לא כתב את הראיה החיובית.
@@ -125,7 +125,7 @@ class FakeProcess:
         self.wait_calls += 1
         if self.delay:
             threading.Event().wait(self.delay)
-        self._gate.wait(timeout=5)
+        self._gate.wait(timeout=HANG_S)     # a leaked, never-released fake must not outlive the run
         return self.code
 
     def poll(self):
@@ -171,7 +171,7 @@ class Recorder:
             cmd, self.code, self.block, self.delay,
             self.ignore_term, self.ignore_kill,
         )
-        # ‏processes לפני commands: טסט שמחכה ל-len(commands) ומיד ניגש ל-processes[n]
+        # processes לפני commands: טסט שמחכה ל-len(commands) ומיד ניגש ל-processes[n]
         # נפל ב-IndexError תחת עומס (שער סבב 14 ו-15, 30/10) -- התהליך עוד לא נרשם.
         self.processes.append(process)
         self.commands.append(cmd)
@@ -181,7 +181,7 @@ class Recorder:
 
 @pytest.fixture()
 def free_ports(monkeypatch):
-    """‏`port_holders` קורא את `/proc/net/udp`, שאינו קיים בווינדוס — ושם
+    """`port_holders` קורא את `/proc/net/udp`, שאינו קיים בווינדוס — ושם
     כל טסט כאן מת בכשל **סביבתי** (#312) שקובר את ההתנהגות הנבדקת.
 
     מוחלף כאן **רק מקור האמת על הפורטים**: הלוגיקה של `_ports_are_free`
@@ -197,7 +197,7 @@ def library(tmp_path):
     return ImageLibrary(tmp_path)
 
 
-def wait_for(predicate, timeout=5.0):
+def wait_for(predicate, timeout=HANG_S):
     deadline = threading.Event()
     for _ in range(int(timeout / 0.02)):
         if predicate():
@@ -224,7 +224,7 @@ def test_one_transmission_per_partition_in_manifest_order(library, free_ports):
 
 
 def test_the_command_carries_the_receiver_count_and_portbase(library, free_ports):
-    # ‏portbase גבוה ולא זה של ההפצה: אפילו טסט שמעביר אותו במפורש לא
+    # portbase גבוה ולא זה של ההפצה: אפילו טסט שמעביר אותו במפורש לא
     # נוגע בפורטים שמכונה אמיתית מאזינה להם (#156).
     recorder = Recorder()
     engine = SenderEngine(library, runner=recorder, portbase=21000, interface="eth1")
@@ -257,7 +257,7 @@ def test_every_partition_sender_announces_itself_fast(library, free_ports):
 
 
 def test_the_bitrate_cap_reaches_the_command_when_configured(library, free_ports):
-    """רשת מהירה מהדיסקים מפילה מקבלים ("Dropped by server", ‏#24) —
+    """רשת מהירה מהדיסקים מפילה מקבלים ("Dropped by server", #24) —
     הרסן עובר ל-udp-sender רק כשהוגדר, וברירת המחדל נקייה ממנו."""
     recorder = Recorder()
     engine = SenderEngine(library, runner=recorder, max_bitrate="200m")
@@ -289,10 +289,10 @@ def test_the_bitrate_cap_is_tunable_by_env(library, free_ports, monkeypatch):
 def test_the_drop_ceiling_keeps_the_slow_receiver_and_is_not_udpcast_default(
     library, free_ports,
 ):
-    """‏11/09/2026 (הכרעת נדב): מאמצים את FOG/Clonezilla — **להאט למקבל
+    """11/09/2026 (הכרעת נדב): מאמצים את FOG/Clonezilla — **להאט למקבל
     האיטי ולא להפיל אותו** ("dynamic bitrate"). אימג' גדול (67GB דחוס)
-    נפל ב-~90% בשידור: ‏back-pressure בזנב הפיל מקבלים איטיים-אך-חיים אחרי
-    ‏15 בקשות ACK, המקבל שהופל המתין לנצח, ה---receive-timeout שלו נורה,
+    נפל ב-~90% בשידור: back-pressure בזנב הפיל מקבלים איטיים-אך-חיים אחרי
+    15 בקשות ACK, המקבל שהופל המתין לנצח, ה---receive-timeout שלו נורה,
     והזרם נקטע. תקרת נטישה **גבוהה** משאירה את האיטי בקבוצה.
 
     ⚠️ **היפוך מודע של #437.** הערך היה 15 כדי שמקבל *מת* ייזרק תוך
@@ -323,14 +323,14 @@ def test_the_drop_ceiling_keeps_the_slow_receiver_and_is_not_udpcast_default(
         f"{dropped_after} בקשות ACK נמוך מדי: מקבל איטי-אך-חי נזרק בזנב "
         "אימג' גדול, וזה הכשל של ~90% ש-11/09 בא לתקן"
     )
-    # ‏--async מוותר על ה-ACK לגמרי: דאטגרם אבוד הופך לדיסק פגום בשקט,
+    # --async מוותר על ה-ACK לגמרי: דאטגרם אבוד הופך לדיסק פגום בשקט,
     # וזה בדיוק מה שעיקרון 4 ("אין זריקת בלוק בשקט") אוסר. תקרה גבוהה
     # אינה ויתור על ה-ACK — היא רק ממתינה לאיטי יותר לפני שמוותרים עליו.
     assert "--async" not in cmd
 
 
 def test_the_drop_ceiling_is_tunable_by_env(library, free_ports, monkeypatch):
-    """‏`IMAGESRV_RETRIES_UNTIL_DROP` מאפשר למפעיל להחזיר את התקרה אם
+    """`IMAGESRV_RETRIES_UNTIL_DROP` מאפשר למפעיל להחזיר את התקרה אם
     הקפיאה בת ה-190ש' על מקבל מת (מחיר ההיפוך של #437) גרועה מהתקלה
     שהיא מונעת — בלי בנייה מחדש.
 
@@ -348,7 +348,7 @@ def test_the_drop_ceiling_is_tunable_by_env(library, free_ports, monkeypatch):
 def test_a_nonpositive_retry_ceiling_falls_back_to_the_default(
     library, free_ports, monkeypatch,
 ):
-    """‏`IMAGESRV_RETRIES_UNTIL_DROP=0` או `-5` הוא הגדרה שגויה, לא בקשה:
+    """`IMAGESRV_RETRIES_UNTIL_DROP=0` או `-5` הוא הגדרה שגויה, לא בקשה:
     udp-sender סופר int חתום, ו-`0`/שלילי זורקים את המקבל הראשון שמפספס
     ACK כמעט מיד — בדיוק כשל ה-90% שהערך קיים כדי למנוע. הערך נופל
     לברירת המחדל (200), לא עובר כמו-שהוא לפקודה.
@@ -365,7 +365,7 @@ def test_a_nonpositive_retry_ceiling_falls_back_to_the_default(
         got = cmd[cmd.index("--retries-until-drop") + 1]
         assert got == str(DEFAULT_RETRIES_UNTIL_DROP), (
             f"IMAGESRV_RETRIES_UNTIL_DROP={bad!r} הגיע לפקודה כ-{got!r} — "
-            "‏0/שלילי זורק מקבל מיד ומחזיר את כשל ה-90%"
+            "\u200f0/שלילי זורק מקבל מיד ומחזיר את כשל ה-90%"
         )
 
 
@@ -382,8 +382,8 @@ def test_a_round_with_no_joiners_still_asks_for_one_receiver(library, free_ports
 
 
 def test_the_command_caps_the_wait_for_the_first_receiver(library, free_ports):
-    """‏#341: בלי `--start-timeout` שידור שאיש לא הצטרף אליו נתקע לנצח —
-    ‏`--max-wait` מתחיל לספור רק מהמקבל הראשון."""
+    """#341: בלי `--start-timeout` שידור שאיש לא הצטרף אליו נתקע לנצח —
+    `--max-wait` מתחיל לספור רק מהמקבל הראשון."""
     recorder = Recorder()
     engine = SenderEngine(library, runner=recorder)
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 3})
@@ -395,7 +395,7 @@ def test_the_command_caps_the_wait_for_the_first_receiver(library, free_ports):
 
 
 def test_later_partitions_wait_longer_for_the_room_than_the_first(library, free_ports):
-    """‏#957 (FOG GH-536): למחיצה הראשונה כל המכונות מגיעות יחד מהרשת,
+    """#957 (FOG GH-536): למחיצה הראשונה כל המכונות מגיעות יחד מהרשת,
     וההמתנה שם היא "המפעיל לא התחיל" — 120 מהמקבל הראשון, 180 בסך הכול.
     מהשנייה כל מכונה מגיעה כשסיימה **לכתוב** את הקודמת, ומגירה איטית
     מאחרת ביותר מ-120 שניות אחרי המהירה; השולח היה מתחיל את ה-ESP
@@ -428,7 +428,7 @@ def test_later_partitions_wait_longer_for_the_room_than_the_first(library, free_
 
 
 def test_a_first_wait_longer_than_ten_minutes_is_not_shortened_for_later_partitions():
-    """‏`max(600, max_wait)`: מפעיל שהגדיר המתנה ארוכה מעשר דקות לראשונה
+    """`max(600, max_wait)`: מפעיל שהגדיר המתנה ארוכה מעשר דקות לראשונה
     מקבל לפחות אותה גם לבאות — הבאות לעולם אינן קצרות מהראשונה."""
     engine = SenderEngine(library=None, max_wait=900, start_timeout=180)
     later = engine.command_for(Path("p2.pcl.zst"), 2, number=2)
@@ -443,7 +443,7 @@ def test_a_first_wait_longer_than_ten_minutes_is_not_shortened_for_later_partiti
 
 
 def test_nobody_joining_fails_and_says_that_nobody_joined(library, free_ports):
-    """‏#438: udp-sender יוצא 0 בלי Starting transfer כשאיש לא הצטרף.
+    """#438: udp-sender יוצא 0 בלי Starting transfer כשאיש לא הצטרף.
 
     זה הצורה שנמדדה מול udpcast 20120424 — לא קוד 1, ולא הזנב.
     """
@@ -477,7 +477,7 @@ def test_a_started_transfer_that_then_fails_is_not_blamed_on_nobody_joining(
     library, free_ports,
 ):
     """מחיצה שכן התחילה להשתדר ונפלה — הלוג מכיל Starting transfer —
-    אינה 'אף מחשב לא הצטרף'. זה אבחון שלא נבדק (עיקרון 5, ‏#438)."""
+    אינה 'אף מחשב לא הצטרף'. זה אבחון שלא נבדק (עיקרון 5, #438)."""
     recorder = Recorder(code=1, log_text="Starting transfer: /x\nbroken\n")
     engine = SenderEngine(library, runner=recorder)
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
@@ -517,12 +517,12 @@ def test_a_failed_partition_stops_the_round(library, free_ports):
 def test_each_partition_writes_its_own_log_so_earlier_evidence_survives(
     library, free_ports,
 ):
-    """באג הראיות (11/09): ‏run_process פתח קובץ לוג יחיד ב-"wb" לכל
+    """באג הראיות (11/09): run_process פתח קובץ לוג יחיד ב-"wb" לכל
     מחיצה, ולכן תחילת המחיצה השנייה מחקה את לוג הראשונה — הראיה מדוע נפל
     השידור הגדול נמחקה במחיצה שאחריה. כעת לוג נפרד לכל מחיצה.
 
     **בקרה שלילית:** החזרת הגזירה כך ש-`partition_log` תחזיר תמיד את
-    ‏`SENDER_LOG` (קובץ יחיד, ההתנהגות הישנה) גורמת ל-log1 == log2,
+    `SENDER_LOG` (קובץ יחיד, ההתנהגות הישנה) גורמת ל-log1 == log2,
     ומחיצה 2 שכותבת 'boom' דורסת את ה-Starting transfer של מחיצה 1 —
     ואז שתי הטענות למטה נופלות."""
     calls: list[str] = []
@@ -594,7 +594,7 @@ def test_stopping_terminates_the_running_transmission(library, free_ports):
     recorder = Recorder(block=True)
     engine = SenderEngine(library, runner=recorder)
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     assert wait_for(lambda: engine.status()["state"] == "sending")
 
     engine.stop("ses_1")
@@ -612,7 +612,7 @@ def test_stop_escalates_to_sigkill_when_sigterm_is_ignored(
     recorder = Recorder(block=True, ignore_term=True)
     engine = SenderEngine(library, runner=recorder)
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     assert wait_for(lambda: engine._process is not None)
 
     left = engine.stop("ses_1")
@@ -626,13 +626,13 @@ def test_stop_escalates_to_sigkill_when_sigterm_is_ignored(
 def test_stop_does_not_claim_success_when_the_pid_is_still_alive(
     library, free_ports, monkeypatch,
 ):
-    """‏"שלחנו SIGKILL" אינו "התהליך מת" — בלי ראיה זו אינה הצלחה (#439)."""
+    """"שלחנו SIGKILL" אינו "התהליך מת" — בלי ראיה זו אינה הצלחה (#439)."""
     monkeypatch.setattr(sender_module, "STOP_TERM_WAIT", 0.05, raising=False)
     monkeypatch.setattr(sender_module, "STOP_KILL_WAIT", 0.05, raising=False)
     recorder = Recorder(block=True, ignore_term=True, ignore_kill=True)
     engine = SenderEngine(library, runner=recorder)
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     assert wait_for(lambda: engine._process is not None)
 
     left = engine.stop("ses_1")
@@ -657,7 +657,7 @@ def test_the_round_starts_the_sender_and_closing_stops_it(server_with_sender, fr
     # ה-hello הראשון מצרף; הבא כבר מוצא סבב בשל ומפעיל את השידור.
     server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
     server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     assert wait_for(lambda: len(recorder.commands) >= 1)
 
     status = server["admin"].get("/api/console/overview").json()["sender"]
@@ -672,7 +672,7 @@ def test_the_round_starts_the_sender_and_closing_stops_it(server_with_sender, fr
 def test_a_member_that_failed_is_not_waited_for_in_the_next_partition(
     server_with_sender, free_ports,
 ):
-    """‏#1430 (מעבדת ה-VM, 15/10, ‏`ses_989ab0ed`): מכונה אחת מתוך שתיים
+    """#1430 (מעבדת ה-VM, 15/10, `ses_989ab0ed`): מכונה אחת מתוך שתיים
     דיווחה `failed` (שתי המגירות שלה נפסלו בבדיקת הכתיבה), והשולח המשיך
     לבקש **2** מקבלים: 120ש' במחיצה 1, ו-600ש' במחיצה 2 — שבהן המכונה
     התקינה פקעה. כשל במכונה אחת עצר את השנייה.
@@ -680,7 +680,7 @@ def test_a_member_that_failed_is_not_waited_for_in_the_next_partition(
     כאן: שני חברים, השידור של מחיצה 1 יצא עם 2, ואחד מהם מדווח `failed`
     לפני שמחיצה 2 יוצאת — ומחיצה 2 מבקשת מקבל אחד.
 
-    **בקרה שלילית:** על הקוד הישן ‏`receivers` נקבע פעם אחת מ-`joined`,
+    **בקרה שלילית:** על הקוד הישן `receivers` נקבע פעם אחת מ-`joined`,
     ומחיצה 2 יוצאת עם `--min-receivers 2`."""
     server, recorder = server_with_sender
     ids = setup_classroom(server)
@@ -693,7 +693,7 @@ def test_a_member_that_failed_is_not_waited_for_in_the_next_partition(
 
     for mac in (ids["mac1"], ids["mac2"], ids["mac1"]):
         server["anon"].post("/api/v1/agent/hello", json=hello_body(mac))
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     first = recorder.commands[0]
     assert first[first.index("--min-receivers") + 1] == "2"
 
@@ -713,7 +713,7 @@ def test_a_member_that_failed_is_not_waited_for_in_the_next_partition(
 
 
 def test_an_unreadable_live_count_keeps_the_waves_count(library, free_ports):
-    """‏#1430, עיקרון 5: ספירה שנכשלה אינה "אף אחד לא חי" ואינה 1 — היא
+    """#1430, עיקרון 5: ספירה שנכשלה אינה "אף אחד לא חי" ואינה 1 — היא
     הצילום של הגל, כמו לפני התיקון. **ושומר:** ספירה תקינה כן מגיעה לפקודה."""
     recorder = Recorder()
 
@@ -736,7 +736,7 @@ def test_an_unreadable_live_count_keeps_the_waves_count(library, free_ports):
 def test_sender_failure_is_a_terminal_round_and_member_boots_local(
     server_with_sender, free_ports,
 ):
-    """בקרה שלילית #854: על main ‏``send_failed`` רק נרשם ביומן;
+    """בקרה שלילית #854: על main ``send_failed`` רק נרשם ביומן;
     הטענות למטה מוצאות ``running`` ושידור פעיל, ולכן נכשלות."""
     server, recorder = server_with_sender
     ids = setup_classroom(server)
@@ -749,7 +749,7 @@ def test_sender_failure_is_a_terminal_round_and_member_boots_local(
 
     server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
     server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     recorder.processes[0].release()
     ctx = server["ctx"]
     assert wait_for(lambda: ctx.conn.execute(
@@ -820,12 +820,12 @@ def test_close_round_stops_the_sender_even_when_the_wave_is_already_closed(
     ).json()["id"]
     server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
     server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     ctx = server["ctx"]
     assert wait_for(lambda: ctx.sender._process is not None)
 
     _active_room_with_closed_wave(ctx, session)
-    # ‏#533: הסגירה דורשת את שם האימג'. נגזר מהסבב דרך `round_label`
+    # #533: הסגירה דורשת את שם האימג'. נגזר מהסבב דרך `round_label`
     # ולא מחרוזת קבועה — טסט שמקבע תווית נשבר כשהתווית משתנה,
     # ומסתיר בדיוק את מה שהוא אמור לשמור עליו.
     close_round(ctx, "noc", round_label(ctx, active_round(ctx.conn)))
@@ -839,7 +839,7 @@ def test_close_round_stops_the_sender_even_when_the_wave_is_already_closed(
 def test_close_round_does_not_report_ok_when_the_sender_is_still_alive(
     server_with_sender, monkeypatch, free_ports,
 ):
-    """‏{"ok": true} כשהמשדר חי הוא בדיוק עיקרון 5 בכיוון ההפוך (#439)."""
+    """{"ok": true} כשהמשדר חי הוא בדיוק עיקרון 5 בכיוון ההפוך (#439)."""
     monkeypatch.setattr(sender_module, "STOP_TERM_WAIT", 0.05, raising=False)
     monkeypatch.setattr(sender_module, "STOP_KILL_WAIT", 0.05, raising=False)
     server, recorder = server_with_sender
@@ -853,7 +853,7 @@ def test_close_round_does_not_report_ok_when_the_sender_is_still_alive(
     ).json()["id"]
     server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
     server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     ctx = server["ctx"]
     assert wait_for(lambda: ctx.sender._process is not None)
 
@@ -879,15 +879,15 @@ def test_a_stale_stop_does_not_kill_a_newer_session(library, free_ports):
     recorder = Recorder(block=True)
     engine = SenderEngine(library, runner=recorder)
     engine.start({"id": "ses_B", "image_id": "img_7f3a91", "joined": 2})
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     assert wait_for(lambda: engine.status()["state"] == "sending")
 
     # הסגירה הישנה של session A — אסור שתיגע ב-B.
     left = engine.stop("ses_A")
     assert left is None                              # no-op, לא הרג כלום
-    assert not recorder.processes[0].terminated, "‏stop ישן הרג שידור חי"
+    assert not recorder.processes[0].terminated, "\u200fstop ישן הרג שידור חי"
     assert engine.status()["state"] == "sending"
-    assert not engine._stop.is_set(), "‏stop ישן הדליק את דגל העצירה של B"
+    assert not engine._stop.is_set(), "\u200fstop ישן הדליק את דגל העצירה של B"
 
     # והסגירה הנכונה של B עדיין עובדת.
     engine.stop("ses_B")
@@ -902,7 +902,7 @@ def test_stop_with_no_session_id_still_stops_unconditionally(library, free_ports
     recorder = Recorder(block=True)
     engine = SenderEngine(library, runner=recorder)
     engine.start({"id": "ses_C", "image_id": "img_7f3a91", "joined": 2})
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     assert wait_for(lambda: engine.status()["state"] == "sending")
 
     engine.stop()
@@ -922,13 +922,13 @@ def test_shutdown_reaps_a_sender_that_has_already_exited(library):
 
 
 def test_a_simulated_sender_never_runs_udp_sender_and_never_fails(library, monkeypatch):
-    """‏#854 המשך: בסימולציה (ווינדוס, ‏CI בלי udpcast) אין udp-sender ואין
-    טבלת ‎/proc/net/udp — ומאז שכשל השולח הוא כשל הסבב, הסימולציה הייתה
-    נופלת. ‏`simulate=True`: אף בדיקת פורט, אף תהליך, אירוע `send_simulated`
+    """#854 המשך: בסימולציה (ווינדוס, CI בלי udpcast) אין udp-sender ואין
+    טבלת /proc/net/udp — ומאז שכשל השולח הוא כשל הסבב, הסימולציה הייתה
+    נופלת. `simulate=True`: אף בדיקת פורט, אף תהליך, אירוע `send_simulated`
     ביומן, "משדר" עד שהסבב נסגר — ואז `send_stopped`, לא `send_failed`."""
     events = []
     recorder = Recorder()
-    # בדיקת הפורט חייבת לא לרוץ בכלל — ‏OSError כאן היה כישלון
+    # בדיקת הפורט חייבת לא לרוץ בכלל — OSError כאן היה כישלון
     monkeypatch.setattr(sender_module, "_inodes_on_port", lambda port: None)
     engine = SenderEngine(library, runner=recorder, simulate=True,
                           on_event=lambda e, d: events.append(e))
@@ -942,11 +942,11 @@ def test_a_simulated_sender_never_runs_udp_sender_and_never_fails(library, monke
 
 
 # --- ברזל 17/10: שאלה פתוחה למפעיל עוצרת את שעון השולח -----------------------
-# ‏#2044: עד אז הבדיקות כאן נשענו על שאלת ה-SMART (‏`ask` ב-hello, ‏`smart_asks`),
+# #2044: עד אז הבדיקות כאן נשענו על שאלת ה-SMART (`ask` ב-hello, `smart_asks`),
 # שהוסרה. אותה עצירה, עם אותן תקרות, עוברת היום רק דרך `prompt` של ה-hello
-# (‏#2202, ‏`prompt_hold.py`); ההחזקה הבסיסית והשחרור — ב-test_prompt_hold_2202.py.
+# (#2202, `prompt_hold.py`); ההחזקה הבסיסית והשחרור — ב-test_prompt_hold_2202.py.
 
-#: השאלה כפי שהסוכן שולח אותה בזמן שאלת מגירה (‏attended.sh).
+#: השאלה כפי שהסוכן שולח אותה בזמן שאלת מגירה (attended.sh).
 OPERATOR_PROMPT = {"waiting_for": "operator", "prompt": "Disk 2: share question"}
 
 
@@ -955,7 +955,7 @@ def _journal_events(ctx) -> list[str]:
 
 
 def test_closing_the_round_during_the_hold_never_starts_udp_sender(library, free_ports, monkeypatch):
-    """עצירה בזמן ההמתנה: ‏send_stopped, ואף תהליך לא הופעל."""
+    """עצירה בזמן ההמתנה: send_stopped, ואף תהליך לא הופעל."""
     monkeypatch.setattr(sender_module, "ASK_HOLD_POLL_S", 0.02)
     events = []
     recorder = Recorder()
@@ -988,9 +988,9 @@ def test_a_question_open_past_its_ceiling_releases_only_that_machine(
     server_with_sender, free_ports, monkeypatch,
 ):
     """סקירת אבטחה 17/10: שאלה שאיש לא עונה עליה אינה מחזיקה את הגל לנצח.
-    התקרה (‏`ASK_HOLD_MAX_SECONDS`) נספרת מתחילת הגל; מעליה **רק המכונה
-    ששואלת** משתחררת — ‏`failed` עם הסיבה, ‏`prompt_hold_expired` ביומן — והשולח
-    יוצא לשאר הגל (‏`--min-receivers 1`)."""
+    התקרה (`ASK_HOLD_MAX_SECONDS`) נספרת מתחילת הגל; מעליה **רק המכונה
+    ששואלת** משתחררת — `failed` עם הסיבה, `prompt_hold_expired` ביומן — והשולח
+    יוצא לשאר הגל (`--min-receivers 1`)."""
     from server.rounds import prompt_hold
     monkeypatch.setattr(sender_module, "ASK_HOLD_POLL_S", 0.02)
     server, recorder = server_with_sender
@@ -1011,7 +1011,7 @@ def test_a_question_open_past_its_ceiling_releases_only_that_machine(
          - timedelta(seconds=prompt_hold.ASK_HOLD_MAX_SECONDS + 60)).isoformat(), session))
     ctx.conn.commit()
 
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     first = recorder.commands[0]
     assert first[first.index("--min-receivers") + 1] == "1", first
     states = {r["mac"]: (r["state"], r["error"] or "") for r in ctx.conn.execute(
@@ -1026,7 +1026,7 @@ def test_a_question_open_past_its_ceiling_releases_only_that_machine(
 def test_a_question_that_arrives_after_udp_sender_started_rewinds_partition_one(
     server_with_sender, free_ports, monkeypatch, delay,
 ):
-    """ברזל rc2 (17/10, ‏ses_80844e82): ‏send_start ב-14:08:10 והשאלה נרשמה
+    """ברזל rc2 (17/10, ses_80844e82): send_start ב-14:08:10 והשאלה נרשמה
     **באותה שנייה** — ההמתנה לפני ההפעלה כבר עברה, udp-sender עלה, ו-send_failed
     ב-14:11:10. שאלה שמגיעה 0–2 שניות **אחרי** שהשולח עלה, כל עוד הוא לא התחיל
     לשדר (אין Starting transfer), הורגת אותו, הגל ממתין, והתשובה מפעילה את
@@ -1044,7 +1044,7 @@ def test_a_question_that_arrives_after_udp_sender_started_rewinds_partition_one(
     )
     for _ in range(2):
         server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     assert "send_held_prompt" not in _journal_events(ctx)      # לא הייתה שאלה כשעלה
     threading.Event().wait(delay)
     server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), **OPERATOR_PROMPT})
@@ -1073,7 +1073,7 @@ def test_a_question_after_the_transfer_started_does_not_kill_it(library, free_po
     engine = SenderEngine(library, runner=recorder)
     engine.pending_prompts = lambda _sid: list(asks)
     engine.start({"id": "ses_t", "image_id": "img_7f3a91", "joined": 1})
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     asks.append("78:ac:c0:9b:11:c2")
     threading.Event().wait(0.3)
     assert not recorder.processes[0].terminated

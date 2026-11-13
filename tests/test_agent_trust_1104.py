@@ -1,13 +1,13 @@
 """השרת סומך פחות על מה שמגיע מרשת ההפצה — סריקת האבטחה של 04/11.
 
 כל פעולה נקשרת לזהות שכבר יש לשרת: ה-MAC הרשום, הכתובת שממנה הבקשה באה
-בפועל (מול חכירת ה-DHCP, ‏#855), וה-session של הסבב. מה שדורש מפתח לכל
+בפועל (מול חכירת ה-DHCP, #855), וה-session של הסבב. מה שדורש מפתח לכל
 מכונה או TLS הוא #1076, ואינו כאן.
 
-* **#2410** — גוף JSON מהסוכן נקרא עם תקרה (‏`server/agent/body.py`): 413 לפני
+* **#2410** — גוף JSON מהסוכן נקרא עם תקרה (`server/agent/body.py`): 413 לפני
   הפרסור, גם בלי `Content-Length`.
-* **#2416** — JSON מקונן עמוק ו-surrogate בודד: ‏400/נרמול, לא 500.
-* **#2411** — ‏`GET /boot/menu?mac=` ממכונה אחרת אינו נספר בתקציב האתחולים של
+* **#2416** — JSON מקונן עמוק ו-surrogate בודד: 400/נרמול, לא 500.
+* **#2411** — `GET /boot/menu?mac=` ממכונה אחרת אינו נספר בתקציב האתחולים של
   התחנה (#75), אינו רושם אותה, ואינו שולח את הפונה לסוכן.
 * **#2413** — רשומת כיווץ נסגרת (ומקבלת הערה) רק בידי המכונה שפתחה אותה.
 * **#2421** — חדר המשכפלים: מגירה נסגרת ("נכתב"/"בוטל"/"דולג") לפי הסידורי
@@ -16,8 +16,8 @@
   ה-`ip` שבגוף ה-hello.
 
 בקרה שלילית: כל טסט כאן נופל כשקובצי הייצור (`server/agent/api.py`,
-‏`server/agent/body.py`, ‏`server/agent/hello.py`, ‏`server/disks/shrink_records.py`,
-‏`server/rounds/room.py`) חוזרים ל-main ‏a000bec7 — חוץ מהבקרות לכיוון השני,
+`server/agent/body.py`, `server/agent/hello.py`, `server/disks/shrink_records.py`,
+`server/rounds/room.py`) חוזרים ל-main a000bec7 — חוץ מהבקרות לכיוון השני,
 שמסומנות "בקרה".
 """
 
@@ -110,7 +110,7 @@ def test_json_nested_ten_thousand_deep_is_400_not_500(server, path):
 
 def test_json_deeper_than_the_cap_but_parseable_is_400(server):
     """עומק 40 נפרס בלי RecursionError — ועדיין נדחה, לפני שקוד רקורסיבי בהמשך
-    (‏`hello._json_depth`) מגיע אליו."""
+    (`hello._json_depth`) מגיע אליו."""
     deep: object = "x"
     for _ in range(40):
         deep = [deep]
@@ -120,11 +120,11 @@ def test_json_deeper_than_the_cap_but_parseable_is_400(server):
 
 
 def test_a_lone_surrogate_in_the_prompt_is_stored_replaced_not_a_500(server):
-    """‏`"\\ud800bad"` — אין לו קידוד UTF-8, ו-sqlite נפל עליו. עכשיו: 200, והשאלה
-    נשמרת עם `?` במקום התו (‏`errors="replace"`)."""
+    """`"\\ud800bad"` — אין לו קידוד UTF-8, ו-sqlite נפל עליו. עכשיו: 200, והשאלה
+    נשמרת עם `?` במקום התו (`errors="replace"`)."""
     mac = "aa:bb:cc:11:22:33"
     body = {**hello_body(mac), "waiting_for": "operator", "prompt": "\ud800bad"}
-    raw = json.dumps(body).encode("ascii")            # ‏`\ud800` כ-escape, כמו על הכבל
+    raw = json.dumps(body).encode("ascii")            # `\ud800` כ-escape, כמו על הכבל
     assert b"\\ud800bad" in raw
     response = _lenient(server).post("/api/v1/agent/hello", content=raw,
                                      headers={"Content-Type": "application/json"})
@@ -155,7 +155,7 @@ def _attempts(server, mac: str) -> int:
 
 
 def test_a_stranger_cannot_spend_a_stations_boot_budget(identity_server):
-    """המעבדה, 04/11: ‏identity_refused נרשם, ובכל זאת attempts הגיע ל-5. עכשיו
+    """המעבדה, 04/11: identity_refused נרשם, ובכל זאת attempts הגיע ל-5. עכשיו
     הבקשות של הזר אינן נספרות, והתחנה מקבלת את הסבב באתחול שלה."""
     _open_round(identity_server)
     for _ in range(ATTEMPT_LIMIT + 2):
@@ -177,8 +177,8 @@ def test_a_stranger_menu_does_not_record_the_station(identity_server):
 
 
 def test_an_unverifiable_station_is_not_sent_to_the_agent_without_a_count(identity_server):
-    """עיקרון 1: ‏MAC2 אין לו חכירה (‏`identity_unverifiable`). בלי הסימון, תפריט
-    שאינו נספר היה שולח אותו לסוכן שוב ושוב — ‏hello נדחה, אתחול, וחוזר חלילה."""
+    """עיקרון 1: MAC2 אין לו חכירה (`identity_unverifiable`). בלי הסימון, תפריט
+    שאינו נספר היה שולח אותו לסוכן שוב ושוב — hello נדחה, אתחול, וחוזר חלילה."""
     ids = _open_round(identity_server)
     for _ in range(ATTEMPT_LIMIT + 2):
         assert "set default=local" in identity_server["station"].get(
@@ -200,14 +200,14 @@ def test_the_station_itself_is_still_counted(identity_server):
 
 
 def _build_reports_its_disk(identity_server) -> None:
-    """‏#2487/#2492: ‏shrink-open — רק ממכונה רשומה, ורק על הסידורי שדיווחה."""
+    """#2487/#2492: shrink-open — רק ממכונה רשומה, ורק על הסידורי שדיווחה."""
     from test_capture import setup_build_machine
     setup_build_machine(identity_server, BUILD)
     report_serial(identity_server["station"], BUILD)
 
 
 def test_another_machine_cannot_close_or_note_a_shrink_record(identity_server):
-    """‏MAC1 ו-BUILD חכורים שניהם ל-STATION_IP — שתיהן עוברות את שער הזהות.
+    """MAC1 ו-BUILD חכורים שניהם ל-STATION_IP — שתיהן עוברות את שער הזהות.
     המעבדה, 04/11: תחנה 2 סגרה את הרשומה של תחנה 1 וקיבלה 200."""
     station = identity_server["station"]
     _build_reports_its_disk(identity_server)
@@ -337,7 +337,7 @@ def test_a_normal_done_counts(room_db):
 
 
 def test_cancelled_with_another_machines_serial_closes_nothing(room_db):
-    """‏`cancelled` נשא סידורי שהתחנה בחרה. עכשיו הסידורי הוא זה שבמלאי של המדווחת."""
+    """`cancelled` נשא סידורי שהתחנה בחרה. עכשיו הסידורי הוא זה שבמלאי של המדווחת."""
     _inventory(room_db, A, S_A, 1, _iso(-5))
     _inventory(room_db, B, S_B, 2, _iso(-5))
     _total, _w, _s, cancelled = _tally(

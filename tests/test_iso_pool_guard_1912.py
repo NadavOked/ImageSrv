@@ -1,8 +1,8 @@
-"""#1912: שומר רגרסיה התנהגותי ל-#1162 — ‏build-iso.sh מוכיח שה-pool מכסה את packages.txt.
+"""#1912: שומר רגרסיה התנהגותי ל-#1162 — build-iso.sh מוכיח שה-pool מכסה את packages.txt.
 
-‏#1162: ה-ISO נבנה גם כשחבילה מ-packages.txt חסרה מה-pool, וההתקנה offline
+#1162: ה-ISO נבנה גם כשחבילה מ-packages.txt חסרה מה-pool, וההתקנה offline
 נכשלת על החבילה הראשונה שחסרה — מול שרת אמיתי בלי אינטרנט. הטסט הקיים
-(‏`test_iso_build.py::test_build_iso_proves_every_requested_package_is_in_the_merged_pool`)
+(`test_iso_build.py::test_build_iso_proves_every_requested_package_is_in_the_merged_pool`)
 בודק מחרוזות בלבד, והבקרה השלילית שלו נכתבה "ידנית, טרם הורצה".
 
 כאן **מורץ** קטע ה-pool של build-iso.sh עצמו (ממיזוג ה-pool ועד האינדוקס),
@@ -88,7 +88,7 @@ def test_a_package_missing_from_the_merged_pool_stops_the_build_by_name(tmp_path
 
 
 def test_the_package_field_counts_not_the_file_name(tmp_path):
-    """השומר מפני תיקון-יתר: שם הקובץ אינו ראיה — ‏libfoo2_*.deb שבתוכו Package: libfoo מכסה את libfoo."""
+    """השומר מפני תיקון-יתר: שם הקובץ אינו ראיה — libfoo2_*.deb שבתוכו Package: libfoo מכסה את libfoo."""
     proc = _run(tmp_path, ["libfoo"],
                 supplied={"main/libf/libfoo/libfoo2_2.0-1_amd64.deb": "libfoo"}, netinst={})
     assert proc.returncode == 0 and "POOL_BLOCK_DONE" in proc.stdout, proc.stderr

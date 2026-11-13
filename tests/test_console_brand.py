@@ -1,8 +1,8 @@
-"""‏#1302 שלב ב' (נדב 12/10): לוגו ImageSrv בקונסולה, ובלי אפשרות להחליף לוגו.
+"""#1302 שלב ב' (נדב 12/10): לוגו ImageSrv בקונסולה, ובלי אפשרות להחליף לוגו.
 
 "שלא תהיה אפשרות כזאת" — הסרה מהקוד, לא הסתרה ב-UI: הנתיבים של לוגו המוסד
-(‏`/api/console/branding/logo` ו-`/api/v1/agent/branding/logo`) אינם קיימים,
-‏`server/branding.py` אינו קיים, ובקונסולה אין כרטיס העלאה. הסמל הקבוע מוגש
+(`/api/console/branding/logo` ו-`/api/v1/agent/branding/logo`) אינם קיימים,
+`server/branding.py` אינו קיים, ובקונסולה אין כרטיס העלאה. הסמל הקבוע מוגש
 מ-server/static, והכותרת, מסך הכניסה וה-favicon מצביעים עליו.
 """
 
@@ -63,7 +63,7 @@ def test_the_top_bar_and_login_show_the_imagesrv_lockup():
     login = login[:login.index('id="login-body"')]
     assert re.search(r'<img[^>]+class="lockup lockup-light"[^>]+src="logo-lockup\.svg\?v=[\d.]+"', login)
     assert re.search(r'<img[^>]+class="lockup lockup-dark"[^>]+src="logo-lockup-dark\.svg\?v=[\d.]+"', login)
-    # ‏SVG עם viewBox בלבד קורס ל-0 תחת max-height (CLAUDE.md) — גובה מפורש.
+    # SVG עם viewBox בלבד קורס ל-0 תחת max-height (CLAUDE.md) — גובה מפורש.
     for tag in re.findall(r"<img[^>]+logo-lockup[^>]*>", page):
         assert re.search(r'\sheight="\d+"', tag), tag
     css = (STATIC / "console.css").read_text(encoding="utf-8")
@@ -82,7 +82,7 @@ def test_favicons_and_title_say_imagesrv(page):
 
 
 def test_the_static_symbol_is_the_k_mark():
-    """‏logo.svg הוא הסמל K (12 ריבועים בגריד 64) — לא הלוגו הווקטורי הישן."""
+    """logo.svg הוא הסמל K (12 ריבועים בגריד 64) — לא הלוגו הווקטורי הישן."""
     svg = (STATIC / "logo.svg").read_text(encoding="utf-8")
     assert "<title>ImageSrv</title>" in svg and "ImageCtl" not in svg
     assert len(re.findall(r"<rect ", svg)) == 12

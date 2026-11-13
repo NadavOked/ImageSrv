@@ -597,15 +597,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PKGS=(shim-signed grub-efi-amd64-signed grub-pc-bin dnsmasq dhcpcd-base
       chrony                                  # #1773: client + NTP server; conflicts with systemd-timesyncd
+      util-linux-extra                        # #2400: hwclock -- the installer writes the synced time to the hardware clock (UTC); #2765 sets it from the typed time
       python3-fastapi python3-uvicorn
       python3-qrcode                          # #1150: QR במסך הגדרת ה-MFA — בלעדיו הקונסולה מציגה סוד להקלדה ידנית
       python3-websockets                      # #904: uvicorn WebSocket — בלעדיו המוניטור (#690) מחזיר 500
       python3-cryptography python3-openssl    # #740: mTLS enrollment בין-שרתי
       open-iscsi nfs-common cifs-utils        # #1066: יוזם iSCSI + לקוח NFS/SMB
+      smbclient                               # #2382: סריקת שיתופי SMB (smbclient -L, server/storage/locations.py) — cifs-utils רק מציע אותו (Suggests)
       git                                     # #1185: כפתור העדכון = git describe/fetch/checkout על /opt/imagesrv — גם כשהקוד הגיע מה-ISO
       rsync                                   # #1128: tools/backup-server.sh — אימג'ים ותיקיית הנתונים ליעד הגיבוי, מצטבר
       nut-client nut-server                   # #1973: UPS — upsd ודרייבר ה-USB; השרת קורא בפרוטוקול NUT ומגדיר מהקונסולה
       ifenslave                               # #1264: כרטיס שני לרשת ההפצה — bond-slaves ב-ifupdown; בלעדיו ifup bond0 נופל
+      smartmontools                           # #3007: smartctl — SMART של דיסקי השרת עצמו בעמוד הבריאות (server/system/server_disks.py)
       dbus                                    # #1987: hostnamectl/timedatectl (‏console_hostcfg, ‏#1447) — עד היום הגיע רק כ-Recommends של libdbus-1-3
       linux-image-amd64)                      # #1987: קרנל לא-cloud ל-build_initramfs (#904) ולמכשיר ה-guestfs — עד היום רק Recommends של supermin
 
@@ -1148,6 +1151,10 @@ run install -m 0644 "$APP_DIR/deploy/imagesrv-backup.timer" \
 run rm -f /etc/systemd/system/imagesrv-dcui.service.d/firstboot.conf
 run install -m 0644 "$APP_DIR/deploy/imagesrv-dcui.service" \
     /etc/systemd/system/imagesrv-dcui.service
+# #2634: tty2-tty6 get an OS login only in the recovery entry or after a failed first
+# boot (the reasoning is in the file). Before the daemon-reload below.
+run install -D -m 0644 "$APP_DIR/deploy/getty-recovery-only.conf" \
+    /etc/systemd/system/getty@.service.d/imagesrv-recovery-only.conf
 run install -m 0644 "$APP_DIR/deploy/imagesrv-installer-gui.service" \
     /etc/systemd/system/imagesrv-installer-gui.service
 # ‏#1741 (‏S7): אתחול או כיבוי של השרת בגואי לתצוגה בלבד, במקום tty1 שחור או

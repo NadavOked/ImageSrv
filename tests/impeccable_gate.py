@@ -1,6 +1,6 @@
-"""‏#2064: שער Impeccable על הקונסולה — גלאי בגרסה נעולה, ומחגר.
+"""#2064: שער Impeccable על הקונסולה — גלאי בגרסה נעולה, ומחגר.
 
-הכלי (github.com/pbakaus/impeccable, ‏Apache-2.0) מזהה דפוסי "עיצוב AI
+הכלי (github.com/pbakaus/impeccable, Apache-2.0) מזהה דפוסי "עיצוב AI
 גנרי" ב-HTML/CSS. כאן רץ **רק** `detect` על `server/static`, מקומית, בלי
 מודל ובלי רשת. המחגר:
 
@@ -11,12 +11,12 @@
 זהות ממצא היא (קובץ, כלל, snippet) — **בלי** מספר השורה. שורה זזה בכל
 עריכה מעליה, ושער שנופל על כל עריכה כזאת מכבים אחרי יומיים. השורה נשמרת
 ברשימה לקריאה בלבד, כפי שהייתה בריצה שכתבה אותה. ממצאים זהים נספרים
-(‏multiset): עוד `border-inline-start: 4px solid` זהה לקיים הוא ממצא חדש.
+(multiset): עוד `border-inline-start: 4px solid` זהה לקיים הוא ממצא חדש.
 
-‏`--no-config` תמיד: הוא מכבה גם הערות `impeccable-disable` בתוך הקוד,
+`--no-config` תמיד: הוא מכבה גם הערות `impeccable-disable` בתוך הקוד,
 ולכן אי-אפשר לעבור את השער בהערה (ה-Issue אוסר זאת במפורש).
 
-עיקרון 5 לאורך כל הדרך: ‏sha256 נבדק לפני **כל** הרצה, ו-sha שאינו תואם,
+עיקרון 5 לאורך כל הדרך: sha256 נבדק לפני **כל** הרצה, ו-sha שאינו תואם,
 יציאה 1 של הגלאי ("יעד לא נסרק"), פלט שאינו JSON או פקיעת זמן — כולם
 `GateError`, לא "אין ממצאים".
 
@@ -41,8 +41,8 @@ REPO = Path(__file__).resolve().parent.parent
 STATIC = REPO / "server" / "static"
 BASELINE = Path(__file__).resolve().parent / "impeccable_baseline.json"
 
-#: הגרסה הנעולה. ה-sha הוא של הנכס ב-release (‏`digest` ב-API של GitHub,
-#: ‏04/11) וזהה לזה שאומת מול ה-sidecar על ה-testrunner ב-23/10 (#2061).
+#: הגרסה הנעולה. ה-sha הוא של הנכס ב-release (`digest` ב-API של GitHub,
+#: 04/11) וזהה לזה שאומת מול ה-sidecar על ה-testrunner ב-23/10 (#2061).
 ENGINE = "0.1.16"
 ASSET = "impeccable-linux-x64"
 SHA256 = "a890a5b4b7d9d79ec54aa74612b5e924e5f5b422600a25fde8bcbda11b031787"
@@ -78,7 +78,7 @@ def sha256_of(path: Path) -> str:
 
 
 def resolve_binary(env: dict | None = None, lab: Path = LAB_BIN) -> Path | None:
-    """איפה הבינארי. ‏None = אין בסביבה הזו (דילוג מוצהר, או כישלון כשהכלים
+    """איפה הבינארי. None = אין בסביבה הזו (דילוג מוצהר, או כישלון כשהכלים
     אמורים להיות). נתיב שהוצהר ב-`ENV_BIN` ואינו קיים הוא שגיאה: מי שהצהיר
     עליו אמר שהוריד אותו."""
     env = os.environ if env is None else env
@@ -102,7 +102,7 @@ def verify(path: Path, expected: str = SHA256) -> None:
 def run_detect(cmd: list[str], target: Path = STATIC, timeout: float = TIMEOUT_S) -> list[dict]:
     """מריץ `detect --json --no-config` ומחזיר את רשימת הממצאים הגולמית.
 
-    קודי היציאה של הגלאי (engine 0.1.16, ‏`crates/detect/src/cli.rs`):
+    קודי היציאה של הגלאי (engine 0.1.16, `crates/detect/src/cli.rs`):
     0 — אין ממצאים ראשיים, 2 — יש, 1 — יעד שלא נסרק. רק 0 ו-2 הם סריקה
     שהושלמה; כל השאר שגיאה, גם אם stdout נראה תקין.
     """
@@ -173,8 +173,8 @@ def load_baseline(path: Path = BASELINE) -> dict:
 
 
 def fetch(dest: Path, url: str = URL, expected: str = SHA256, opener=urllib.request.urlopen) -> str:
-    """ה-CI: הבינארי בנתיב `dest`, מאומת. ‏"cache" כשהעותק השמור תואם,
-    ‏"downloaded" אחרי הורדה. קובץ שלא תאם אינו נשאר בנתיב לעולם."""
+    """ה-CI: הבינארי בנתיב `dest`, מאומת. "cache" כשהעותק השמור תואם,
+    "downloaded" אחרי הורדה. קובץ שלא תאם אינו נשאר בנתיב לעולם."""
     if dest.is_file() and sha256_of(dest) == expected:
         return "cache"
     dest.parent.mkdir(parents=True, exist_ok=True)

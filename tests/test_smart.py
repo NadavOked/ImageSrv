@@ -1,10 +1,10 @@
 """בדיקות שער ה-SMART בצד השחזור (#652) -- כמו Clonezilla.
 
 הסוכן בודק בריאות דיסק יעד לפני כתיבה. הכלל שאסור לשבור (עיקרון 5):
-**‏`unchecked` לעולם לא חוסם** -- דיסק בלי SMART / USB / RAID / probe
+**`unchecked` לעולם לא חוסם** -- דיסק בלי SMART / USB / RAID / probe
 שנכשל לפתוח נכתב בלי שאלה, כי "לא הצלחנו לבדוק" איננו "בדקנו ונכשל".
 
-‏smartctl אמיתי אינו זמין (ואין דיסקים פגומים במעבדה), ולכן `smartctl`
+smartctl אמיתי אינו זמין (ואין דיסקים פגומים במעבדה), ולכן `smartctl`
 מזויף: סקריפט שפולט פלט קנוני וקוד יציאה נבחר -- בדיוק הדפוס של
 "לזייף שלב אחד ולהריץ את הפונקציה האמיתית".
 """
@@ -63,10 +63,10 @@ PRELUDE = (
     f'. {posix(AGENT)}/lib/smart/smart.sh; '
     f'. {posix(AGENT)}/lib/smart/smartgate.sh; '   # #1211: השער (smart_preflight/smart_gate) פוצל מ-smart.sh
     f'. {posix(AGENT)}/lib/gui/clonergui.sh; . {posix(AGENT)}/lib/restore/writemark.sh; '   # כמו בסוכן האמיתי
-    # ‏#906: hello בזמן ההמתנה לאדם. **רק אם הקובץ קיים**: הבקרה השלילית
+    # #906: hello בזמן ההמתנה לאדם. **רק אם הקובץ קיים**: הבקרה השלילית
     # מחזירה את main, ושם הטסט חייב ליפול על ההתנהגות ולא על `.` של קובץ חסר.
     + (f'. {posix(AGENT)}/lib/core/attended.sh; ' if (AGENT / "lib" / "core" / "attended.sh").exists() else "")
-    # ‏#1859: every attribute and the orange -- the same "only if it exists", for the same reason.
+    # #1859: every attribute and the orange -- the same "only if it exists", for the same reason.
     + (f'. {posix(AGENT)}/lib/smart/smartattrs.sh; ' if (AGENT / "lib" / "smart" / "smartattrs.sh").exists() else "")
     # #1921: the knowledge tables -- the same "only if it exists": without them smart_probe judges
     # nothing and says so (unchecked no_table), which is the negative control's failure on behaviour.
@@ -97,15 +97,15 @@ def env(run: Path, dev: Path, sysroot: Path | None = None, smartctl: str = "") -
 
 
 def make_smartctl(tmp_path: Path, body: str, rc: int = 0) -> str:
-    """‏smartctl מזויף: מדפיס `body`, יוצא ב-`rc`.
+    """smartctl מזויף: מדפיס `body`, יוצא ב-`rc`.
 
-    ‏rc הוא מפת-סיביות אמיתית: bit 3 (8) = הדיסק נכשל, וזה קוד היציאה
+    rc הוא מפת-סיביות אמיתית: bit 3 (8) = הדיסק נכשל, וזה קוד היציאה
     ש-smartctl אמיתי מחזיר על `-H` שראה FAILED. הפונקציה שנבדקת חייבת
     לקרוא את הפלט, לא להסיק מ-rc."""
     p = tmp_path / "smartctl"
     p.write_text("#!/bin/sh\ncat <<'EOF'\n" + body + "\nEOF\nexit " + str(rc) + "\n",
                  newline="\n")
-    # chmod דרך bash: ‏os.chmod של פייתון על ווינדוס אינו קובע את סיבית
+    # chmod דרך bash: os.chmod של פייתון על ווינדוס אינו קובע את סיבית
     # ה-exec ש-Git Bash קורא, ו-`command -v` לא היה מוצא את הקובץ.
     subprocess.run([BASH, "-c", f'chmod +x {posix(p)!r}'], check=True,
                    stdin=subprocess.DEVNULL)
@@ -139,12 +139,12 @@ def full(health: str, **kw) -> str:
 
 CLASSIFY = [
     # health, realloc, pending, uncorr, crc -> "verdict reason"
-    # ‏#872: שורת הבריאות (‏-H) לבדה מכריעה. המונים 5/197/198/199 נקראים
+    # #872: שורת הבריאות (-H) לבדה מכריעה. המונים 5/197/198/199 נקראים
     # ונשמרים (מידע), ואינם צובעים: על 6 דיסקי הכיתה CRC הוא 137–55,242
     # (15/09) והם משכפלים מושלם. מונה מצטבר מספר על הכבלים, לא על הדיסק.
     ("PASSED", 0, 0, 0, 0, "ok ok"),
     ("FAILED", 0, 0, 0, 0, "fail health_failed"),
-    # ‏#1921 (נדב 20/10, סופי): אדום = הדיסק עצמו מדווח FAILED. ‏197/198 מעל 0 הם כתום מטבלת
+    # #1921 (נדב 20/10, סופי): אדום = הדיסק עצמו מדווח FAILED. 197/198 מעל 0 הם כתום מטבלת
     # הידע (smartjudge.sh) -- לא כאן: שורת הבריאות לבדה מכריעה את הסיווג הזה.
     ("PASSED", 0, 0, 1, 0, "ok ok"),
     ("PASSED", 0, 4, 0, 0, "ok ok"),
@@ -170,7 +170,7 @@ def probe(tmp_path, body, rc=0, dev="sda"):
     run = tmp_path / "run"; run.mkdir(exist_ok=True)
     dev_dir = tmp_path / "dev"; dev_dir.mkdir(exist_ok=True)
     (dev_dir / dev).write_bytes(b"\x00")
-    # ‏#1742: ‏/sys/block/<d>/ro נקרא לפני smartctl, ו-ro שלא נקרא אינו "תקין" --
+    # #1742: /sys/block/<d>/ro נקרא לפני smartctl, ו-ro שלא נקרא אינו "תקין" --
     # הדיסק כאן כתיב (ro=0), כדי שהבדיקה תהיה על smartctl בלבד.
     blk = tmp_path / "sysro" / "sys" / "block" / dev; blk.mkdir(parents=True, exist_ok=True)
     (blk / "ro").write_text("0\n", newline="\n")
@@ -236,7 +236,7 @@ def test_health_probe_asks_smartctl_not_to_wake_the_disk(tmp_path):
 
 
 def test_probe_pending_sectors_are_orange_and_recorded(tmp_path):
-    # ‏#1921 (נדב 20/10): 197 מעל 0 = כתום (סימן מוקדם, הדיסק עובד), לא אדום; הערך נשמר במטמון.
+    # #1921 (נדב 20/10): 197 מעל 0 = כתום (סימן מוקדם, הדיסק עובד), לא אדום; הערך נשמר במטמון.
     assert probe(tmp_path, full(HEALTH_OK, pending=4)) == "warn"
     assert (tmp_path / "run/smart/sda.v").read_text().split() == ["warn", "pending_sectors", "0", "4", "0", "0"]
 
@@ -263,7 +263,7 @@ def test_probe_crc_is_found_by_attribute_id_not_vendor_name(tmp_path):
         "199 CRC_Error_Count         0x003e   045   045   000    Old_age   "
         "Always       -       55242")
     assert "UDMA" not in samsung
-    # ‏#872: הערך עדיין חייב להיקרא נכון (55242 במטמון) — רק לא לצבוע.
+    # #872: הערך עדיין חייב להיקרא נכון (55242 במטמון) — רק לא לצבוע.
     assert probe(tmp_path, full(HEALTH_OK).replace(attrs(), samsung)) == "ok"
     assert (tmp_path / "run/smart/sda.v").read_text().split()[5] == "55242"
 
@@ -287,7 +287,7 @@ def test_probe_without_smartctl_is_unchecked(tmp_path):
 
 # --- #858: ניסוחי בריאות שאינם PASSED/FAILED, קוד היציאה, ו-NVMe ---------------
 
-#: ‏SCSI/SAS (וגשרי USB מסוימים): smartctl מדפיס `SMART Health Status:` ולא
+#: SCSI/SAS (וגשרי USB מסוימים): smartctl מדפיס `SMART Health Status:` ולא
 #: `overall-health`, ובכשל — תיאור ה-asc/ascq של החיישן (5d/00), לא המילה
 #: FAILED. הגוף — מבנה הפלט של smartctl 7.4 ל-`-H -A` על דיסק SAS; אין SAS
 #: במעבדה, ולכן הטקסט מטבלת התיאורים של smartmontools ולא מצילום.
@@ -313,7 +313,7 @@ SCSI_OK = SCSI_FAILURE.replace(
 
 
 def nvme(critical: str, media_errors: int) -> str:
-    """‏smartctl 7.x על NVMe: `Critical Warning != 0` הופך את שורת הבריאות
+    """smartctl 7.x על NVMe: `Critical Warning != 0` הופך את שורת הבריאות
     ל-`FAILED!` (bit 3 = read-only → "media has been placed in read only
     mode"), והמונים הם שורות `שם:    ערך` עם רווחים ופסיקי-אלפים — לא
     הטבלה של ATA. אין NVMe במעבדה: המבנה לפי nvmeprint.cpp, לא מצילום."""
@@ -340,7 +340,7 @@ def nvme(critical: str, media_errors: int) -> str:
 
 
 def test_scsi_health_failure_is_fail(tmp_path):
-    """‏#858: `FAILURE` אינו `FAILED` — על main הדיסק היה `unchecked no_health`
+    """#858: `FAILURE` אינו `FAILED` — על main הדיסק היה `unchecked no_health`
     ונכתב בלי שאלה. rc=8 (bit 3) כמו ש-smartctl אמיתי מחזיר."""
     assert probe(tmp_path, SCSI_FAILURE, rc=8) == "fail"
     assert (tmp_path / "run/smart/sda.v").read_text().split()[:2] == ["fail", "health_failed"]
@@ -351,7 +351,7 @@ def test_scsi_health_ok_is_ok(tmp_path):
 
 
 def test_exit_bit_3_alone_is_fail_when_the_health_line_is_not_recognised(tmp_path):
-    """‏smartctl אמר "הדיסק נכשל" (bit 3) בניסוח ששורת הבריאות שלנו אינה
+    """smartctl אמר "הדיסק נכשל" (bit 3) בניסוח ששורת הבריאות שלנו אינה
     מכירה — הסיבית היא ראיה חיובית (עיקרון 5), לא `unchecked`."""
     body = "SMART Health Status: UNKNOWN SENSE [asc=5d, ascq=ff]\n\n" + attrs()
     assert probe(tmp_path, body, rc=8) == "fail"
@@ -363,16 +363,16 @@ def test_exit_bit_3_does_not_override_a_clean_open_failure(tmp_path):
 
 
 def test_nvme_read_only_media_is_fail_and_integrity_errors_are_recorded(tmp_path):
-    """‏#858: Critical Warning 0x08 (read-only) → FAILED! + rc=8 → fail; ומונה
+    """#858: Critical Warning 0x08 (read-only) → FAILED! + rc=8 → fail; ומונה
     `Media and Data Integrity Errors` (המקבילה של 198) נקרא לאחסון — על main
-    ‏`_smart_int` חיפש אותו כעמודה בטבלה ורשם 0 תמיד. ‏#872: המונה אינו מכריע."""
+    `_smart_int` חיפש אותו כעמודה בטבלה ורשם 0 תמיד. #872: המונה אינו מכריע."""
     assert probe(tmp_path, nvme("0x08", 3), rc=8, dev="nvme0n1") == "fail"
     assert (tmp_path / "run/smart/nvme0n1.v").read_text().split() == \
         ["fail", "media_readonly", "0", "0", "3", "0"]   # #1921 ס1: read-only is red, and says so
 
 
 def test_nvme_healthy_with_integrity_errors_is_orange_and_the_counter_is_kept(tmp_path):
-    # פסיקי-אלפים (1,234) — כך smartctl מדפיס מונים ב-NVMe. ‏#1921 (נדב 20/10, המלצה 10): מעל 0 = כתום.
+    # פסיקי-אלפים (1,234) — כך smartctl מדפיס מונים ב-NVMe. #1921 (נדב 20/10, המלצה 10): מעל 0 = כתום.
     assert probe(tmp_path, nvme("0x00", 1234), dev="nvme0n1") == "warn"
     assert (tmp_path / "run/smart/nvme0n1.v").read_text().split()[1] == "media_errors"
     assert (tmp_path / "run/smart/nvme0n1.v").read_text().split()[4] == "1234"
@@ -396,8 +396,8 @@ def test_unchecked_disk_is_written_without_asking(tmp_path):
 
 # --- התפריט על fail/warn: החלטות בתור ---------------------------------------
 
-#: ‏sgdisk מזויף לשער: רושם בלבד. עד #874 השער קרא ממנו את הסימון של #845
-#: (‏`sgdisk -p`); מאז הזיכרון בשרת, ו-`sgdisk.calls` חייב להישאר ריק.
+#: sgdisk מזויף לשער: רושם בלבד. עד #874 השער קרא ממנו את הסימון של #845
+#: (`sgdisk -p`); מאז הזיכרון בשרת, ו-`sgdisk.calls` חייב להישאר ריק.
 GATE_SGDISK = """#!/bin/sh
 printf '%s\\n' "$*" >> "{box}/sgdisk.calls"
 exit 0
@@ -407,14 +407,14 @@ exit 0
 def fake_memory(failed: dict[str, str]) -> str:
     """זיכרון השרת (#874) כפי ש-jq היה מדפיס אותו מתשובת ה-hello: "ok" ואז
     serial|port|cause לכל דיסק ב-`failed` (dev → cause). הסידורי מוזרק
-    (‏S-<dev>) — אין sysfs אמיתי בבדיקה. ‏jq עצמו: test_failmark (requires_jq)."""
+    (S-<dev>) — אין sysfs אמיתי בבדיקה. jq עצמו: test_failmark (requires_jq)."""
     lines = " ".join(f"echo 'S-{dev}||{cause}';" for dev, cause in failed.items())
     return ('disk_serial() {{ printf "S-%s" "$1"; }}; '
             'json_get_join() {{ [ -s "$1" ] || return 1; echo ok; {lines} }}; ').format(lines=lines)
 
 
-#: ‏11/10 (GUI בלבד): תפריט ה-SMART בטקסט הוסר, וההכרעה הגיעה **רק** מהמסך
-#: הגרפי (‏gui_smart_choice). מאז #2042 השער אינו שואל, וב-#2044 הפונקציה עצמה
+#: 11/10 (GUI בלבד): תפריט ה-SMART בטקסט הוסר, וההכרעה הגיעה **רק** מהמסך
+#: הגרפי (gui_smart_choice). מאז #2042 השער אינו שואל, וב-#2044 הפונקציה עצמה
 #: הוסרה. הזיוף נשאר כמלכודת: שער שהיה חוזר לשאול היה רושם ב-`asked`.
 GUI_STUB = (
     'gui_smart_choice() { echo "$1" >> "$RUN_DIR/asked"; '
@@ -426,7 +426,7 @@ GUI_STUB = (
 
 
 def preflight(tmp_path, body, gui=(), disks="sda", failed=(), extra="", keys="1\n", *, ro: str | None = "0"):
-    """‏`gui` = התשובות שהמסך הגרפי נותן, לפי הסדר. ‏`keys` הם מקשים שמחכים
+    """`gui` = התשובות שהמסך הגרפי נותן, לפי הסדר. `keys` הם מקשים שמחכים
     ב-stdin — הם **אינם** נקראים יותר (בקוד הישן "1" היה "החלף")."""
     run = tmp_path / "run"; run.mkdir(exist_ok=True)
     dev = tmp_path / "dev"; dev.mkdir(exist_ok=True)
@@ -441,7 +441,7 @@ def preflight(tmp_path, body, gui=(), disks="sda", failed=(), extra="", keys="1\
         blk = sysro / "sys" / "block" / d; blk.mkdir(parents=True, exist_ok=True)
         if ro is not None:
             (blk / "ro").write_text(f"{ro}\n", newline="\n")
-    # ‏#874: `failed` הוא dev → cause (מחרוזת = cable); הרשומה מגיעה מהשרת.
+    # #874: `failed` הוא dev → cause (מחרוזת = cable); הרשומה מגיעה מהשרת.
     failed = {d: "cable" for d in failed} if not isinstance(failed, dict) else failed
     (run / "response.json").write_text('{"schema":1}', newline="\n")
     (run / "gui_answers").write_text("".join(f"{a}\n" for a in gui), newline="\n")
@@ -462,7 +462,7 @@ def asked(run: Path) -> list[str]:
 
 
 def test_skip_from_the_screen_no_longer_removes_an_orange_disk(tmp_path):
-    # ‏#2042 (נדב 23/10): כתום אינו נשאל -- "דלג" של המסך אינו נקרא, והדיסק נכתב.
+    # #2042 (נדב 23/10): כתום אינו נשאל -- "דלג" של המסך אינו נקרא, והדיסק נכתב.
     # (עד 23/10: נשאל, ו"דלג" הוריד אותו מהכתיבה.)
     written, run, _ = preflight(tmp_path, full(HEALTH_OK), gui=["skip"], failed=("sda",))
     assert written == "sda"
@@ -477,8 +477,8 @@ def test_rescue_keeps_the_disk(tmp_path):
 
 
 def test_a_disk_with_bad_cable_counters_but_passed_health_is_written_without_asking(tmp_path):
-    """‏#872: 199 אינו עוצר. הראיה החיובית: לא נשאלה שאלה (‏`asked` ריק) והדיסק
-    ברשימת הכתיבה. (‏5 — מאז #1859 כתום: נשאל, ובלי תשובה נכתב — test_smart_full_1859.)"""
+    """#872: 199 אינו עוצר. הראיה החיובית: לא נשאלה שאלה (`asked` ריק) והדיסק
+    ברשימת הכתיבה. (5 — מאז #1859 כתום: נשאל, ובלי תשובה נכתב — test_smart_full_1859.)"""
     written, run, err = preflight(tmp_path, full(HEALTH_OK, crc=55242))
     assert written == "sda"
     assert asked(run) == [], err
@@ -486,7 +486,7 @@ def test_a_disk_with_bad_cable_counters_but_passed_health_is_written_without_ask
 
 @pytest.mark.parametrize("pending, uncorr", [(4, 0), (0, 2)])
 def test_197_198_are_orange_and_written_without_a_question(tmp_path, pending, uncorr):
-    """‏#1921 (נדב 20/10, סופי): אדום הוא רק FAILED של הדיסק עצמו (ה-F1). ‏197/198 מעל 0 בדיסק
+    """#1921 (נדב 20/10, סופי): אדום הוא רק FAILED של הדיסק עצמו (ה-F1). 197/198 מעל 0 בדיסק
     ש-PASSED הם **כתום** — #2042 (נדב 23/10): נכתב בלי שאלה (עד 23/10 נשאל ובלי תשובה נכתב;
     עד 20/10 -- #1366/#1732 -- אדום ומדולג)."""
     written, run, err = preflight(tmp_path, full(HEALTH_OK, pending=pending, uncorr=uncorr))
@@ -504,8 +504,8 @@ def test_replace_from_the_screen_is_never_read_on_orange(tmp_path):
 
 
 def test_without_a_gui_the_keyboard_is_never_read(tmp_path):
-    """‏11/10: אין תפריט טקסט. "1" שמחכה ב-stdin היה "החלף" בקוד הישן;
-    עכשיו — ברירת הכתום (כותב; ‏#1732: אדום אינו נשאל בכלל), והמקש נשאר במקומו."""
+    """11/10: אין תפריט טקסט. "1" שמחכה ב-stdin היה "החלף" בקוד הישן;
+    עכשיו — ברירת הכתום (כותב; #1732: אדום אינו נשאל בכלל), והמקש נשאר במקומו."""
     written, run, err = preflight(tmp_path, full(HEALTH_OK), keys="1\n", failed=("sda",))
     assert written == "sda"
     assert not (run / "smart/awaiting_replace").exists()
@@ -524,9 +524,9 @@ def test_a_failing_disk_does_not_stop_a_healthy_sibling(tmp_path):
 # --- #872: דיסק אדום (נכשל בשיכפול הקודם) — החלף או המשך (=דלג), לא רק צבע ---
 
 def test_a_disk_that_failed_the_previous_clone_is_written_with_its_note(tmp_path):
-    """‏#872 (נדב 16/09): זיכרון השרת (#874: לפי סידורי) גובר על SMART נקי.
+    """#872 (נדב 16/09): זיכרון השרת (#874: לפי סידורי) גובר על SMART נקי.
     #2042 (נדב 23/10): הדיסק הכתום נכתב בלי שאלה, וההערה עם הסיבה שהשרת סיווג
-    (cable) נשמרת לסוף; השכן הבריא נכתב בלי הערה. ‏sgdisk אינו נקרא."""
+    (cable) נשמרת לסוף; השכן הבריא נכתב בלי הערה. sgdisk אינו נקרא."""
     written, run, err = preflight(tmp_path, full(HEALTH_OK), gui=["skip"],
                                   disks="sda sdb", failed=("sda",))
     assert written == "sda sdb"
@@ -547,7 +547,7 @@ def test_a_disk_the_server_blamed_is_written_without_a_swap(tmp_path):
 
 
 def test_a_red_disk_by_slot_is_red_even_with_a_new_serial(tmp_path):
-    """‏#874: הרשומה לפי החריץ (מכונה+פורט) — הדיסק הוחלף, הכבל לא. הסידורי
+    """#874: הרשומה לפי החריץ (מכונה+פורט) — הדיסק הוחלף, הכבל לא. הסידורי
     כאן אחר (S-sda מול הרשומה על X), והחריץ 1 תואם → אדום, כמו לפי סידורי."""
     written, run, err = preflight(
         tmp_path, full(HEALTH_OK), gui=["skip"],
@@ -574,8 +574,8 @@ def event(run: Path) -> dict:
 
 def test_rescue_on_a_red_disk_writes_it(tmp_path):
     """ברזל 17/10 (מחשב שיכפול 2, מגירה 2 = sdb, failed_last): המפעיל ענה
-    "rescue" (‏`smart_answered … rescue machine`), והשער הנמיך את התשובה
-    בשקט ל-skip (‏`disk_decision … sdb (failed_last): skip`) — אף מגירה לא
+    "rescue" (`smart_answered … rescue machine`), והשער הנמיך את התשובה
+    בשקט ל-skip (`disk_decision … sdb (failed_last): skip`) — אף מגירה לא
     הצטרפה והשליחה נכשלה אחרי 180 ש'. תשובה מפורשת מבוצעת כמות שהיא."""
     written, run, err = preflight(tmp_path, full(HEALTH_OK), gui=["rescue"],
                                   disks="sda sdb", failed=("sdb",))
@@ -588,7 +588,7 @@ def test_rescue_on_a_red_disk_writes_it(tmp_path):
 
 
 def test_no_answer_on_a_disk_that_failed_last_time_writes_it(tmp_path):
-    """‏#1580 (נדב 17/10): נכשל בשיכפול הקודם ו-SMART תקין = **כתום** — נשאל
+    """#1580 (נדב 17/10): נכשל בשיכפול הקודם ו-SMART תקין = **כתום** — נשאל
     ("נסה שוב"), ובלי תשובה כותב, כמו כל כתום. אותה צורה כמו בברזל — sda
     תקין, sdb נכשל בפעם הקודמת. עד 17/10 זה היה אדום שמדלג."""
     written, run, err = preflight(tmp_path, full(HEALTH_OK), disks="sda sdb",
@@ -600,7 +600,7 @@ def test_no_answer_on_a_disk_that_failed_last_time_writes_it(tmp_path):
 
 
 def test_rescue_from_the_gui_never_writes_a_smart_failed_disk(tmp_path):
-    """‏#1732 (נדב 18/10, מחליף את "כתוב בכל זאת" של #1580): אדום (SMART
+    """#1732 (נדב 18/10, מחליף את "כתוב בכל זאת" של #1580): אדום (SMART
     תקול) לעולם אינו יעד. מסך שהיה עונה "rescue" אינו נשאל — התשובה נשארת
     בתור, הדיסק מדולג בגלוי עם המשפט, וה-event אומר skip."""
     written, run, err = preflight(tmp_path, full(HEALTH_FAIL), gui=["rescue"])
@@ -624,7 +624,7 @@ def test_a_smart_failed_disk_that_also_failed_last_time_is_red(tmp_path):
 # --- #872: בלי תשובה — "המשך" של אותו צבע: כתום כותב, אדום מדלג ---------------
 
 def test_no_answer_on_an_orange_disk_writes_it(tmp_path):
-    """בלי גואי / בלי תשובה על כתום (‏#1580: נכשל בשיכפול הקודם) = המשך = כותב."""
+    """בלי גואי / בלי תשובה על כתום (#1580: נכשל בשיכפול הקודם) = המשך = כותב."""
     written, run, err = preflight(tmp_path, full(HEALTH_OK), failed=("sda",))
     assert asked(run) == [], err                  # #2042 (נדב 23/10): not even asked
     assert "written without asking" in err, err
@@ -632,7 +632,7 @@ def test_no_answer_on_an_orange_disk_writes_it(tmp_path):
 
 
 def test_no_answer_on_a_red_disk_skips_it(tmp_path):
-    """אדום = SMART תקול; ‏#1732: לא נשאל בכלל, ומדולג."""
+    """אדום = SMART תקול; #1732: לא נשאל בכלל, ומדולג."""
     written, run, err = preflight(tmp_path, full(HEALTH_FAIL))
     assert asked(run) == [], err                   # #1732: not even asked
     assert written == ""
@@ -642,8 +642,8 @@ def test_no_answer_on_a_red_disk_skips_it(tmp_path):
 # --- #875: log() בתוך הלכידה -- disk_event שלא נמסר אינו "דיסק" ------------------
 
 def test_an_undelivered_disk_event_does_not_leak_into_the_write_list(tmp_path):
-    """‏#875: ‏`smart_gate` לוכד את `smart_preflight` ב-`$( )`, ובתוכו
-    ‏`smart_send_event` מדווח על disk_event שלא נמסר דרך `log` -- שכותב גם
+    """#875: `smart_gate` לוכד את `smart_preflight` ב-`$( )`, ובתוכו
+    `smart_send_event` מדווח על disk_event שלא נמסר דרך `log` -- שכותב גם
     ל-stdout. עם curl כושל (שרת בעדכון, 5xx) הרשימה חייבת להיות **בדיוק**
     שמות הדיסקים, וההודעה בלוג. בקרה שלילית: על main הרשימה מכילה
     `imagesrv: disk_event for sda was not delivered`."""
@@ -663,7 +663,7 @@ def test_an_undelivered_disk_event_does_not_leak_into_the_write_list(tmp_path):
 # --- #1216: smart_gate כשלא נשאר מה לכתוב -----------------------------------
 
 def test_smart_gate_returns_1_when_all_disks_are_skipped(tmp_path):
-    """‏smart_gate הוא השער שמונע התחלת כתיבה (#652, cloning-always-attended)
+    """smart_gate הוא השער שמונע התחלת כתיבה (#652, cloning-always-attended)
     כשהמפעיל דילג על **כל** הדיסקים -- לא רק חלקם. #1216: זה נמדד כפער
     כיסוי, לא כבאג -- ההתנהגות היום נכונה, ונמצא במוטציה בפיצול #1211
     (24/09) שעברה בשקט. בקרה שלילית: `return 0` בסוף smart_gate מפיל
@@ -685,7 +685,7 @@ def test_smart_gate_returns_1_when_all_disks_are_skipped(tmp_path):
 # --- תווית הדיסק: לפי חריץ, לא לפי שם ההתקן ----------------------------------
 
 def test_disk_label_uses_the_slot_number(tmp_path):
-    # ‏disk_port מוזרק (מקורו נבדק ב-test_agent) -- כאן נבדקת התווית עצמו.
+    # disk_port מוזרק (מקורו נבדק ב-test_agent) -- כאן נבדקת התווית עצמו.
     out = sh(PRELUDE + 'disk_port() { echo 3; }; smart_disk_label sda')
     assert out.stdout.strip() == "Disk 3"
 
@@ -734,8 +734,8 @@ def test_event_json_is_valid_and_carries_the_contract(tmp_path):
 
 # --- #906: hello ממשיך בזמן שהשאלה ממתינה למפעיל -------------------------------
 
-#: ‏build_hello מזויף: הבדיקה היא על *מה שנוסף* לגוף ועל הקצב, לא על sysfs.
-#: ‏joining מועבר כפי ש-attended_hello מבקש (false), כדי שייבדק בגוף.
+#: build_hello מזויף: הבדיקה היא על *מה שנוסף* לגוף ועל הקצב, לא על sysfs.
+#: joining מועבר כפי ש-attended_hello מבקש (false), כדי שייבדק בגוף.
 FAKE_HELLO = (
     'build_hello() { printf %s "{\\"schema\\":2,\\"mac\\":\\"$MAC\\",\\"joining\\":$1}"; }; '
 )
@@ -743,10 +743,10 @@ FAKE_HELLO = (
 
 def test_hello_keeps_going_while_the_operator_is_asked(tmp_path):
     """נמדד 16/09 על מחשב 2: בזמן שאלה למפעיל (אז — `smart_choice`, שהוסר ב-#2044)
-    אף hello לא יצא, ‏`last_seen`
+    אף hello לא יצא, `last_seen`
     קפא והמוניטור נחסם (403) בדיוק כשהמפעיל צריך לראות את השאלה. כאן
-    ‏`http_post_json` מזויף רושם כל גוף שנשלח; התשובה מגיעה רק אחרי
-    שנספרו 2 hello (לא אחרי זמן קבוע — #2733; ‏ATTENDED_BEAT_S=1, שניות שלמות,
+    `http_post_json` מזויף רושם כל גוף שנשלח; התשובה מגיעה רק אחרי
+    שנספרו 2 hello (לא אחרי זמן קבוע — #2733; ATTENDED_BEAT_S=1, שניות שלמות,
     #1333), ולכן חייבים להיספר ≥2 hello — כל
     אחד עם `waiting_for: operator`, השאלה ב-`prompt`, ו-`joining: false`
     (ממתין אינו מצטרף לגל). בקרה שלילית: על main נספרים 0."""
@@ -765,7 +765,7 @@ def test_hello_keeps_going_while_the_operator_is_asked(tmp_path):
     lines = (run / "hellos").read_text().splitlines() if (run / "hellos").exists() else []
     hellos = [json.loads(line) for line in lines if line]
     assert len(hellos) >= 3, hellos
-    # ‏#2202: האחרון הוא ה-hello שמנקה את השאלה בשרת אחרי התשובה — בלי prompt.
+    # #2202: האחרון הוא ה-hello שמנקה את השאלה בשרת אחרי התשובה — בלי prompt.
     assert "prompt" not in hellos[-1] and "waiting_for" not in hellos[-1], hellos
     for h in hellos[:-1]:
         assert h["waiting_for"] == "operator"
@@ -775,7 +775,7 @@ def test_hello_keeps_going_while_the_operator_is_asked(tmp_path):
 
 
 def test_the_beat_stops_with_the_answer(tmp_path):
-    """אחרי שהמפעיל ענה, הפעימה מפסיקה: ‏`$( )` של הקורא (‏drawergate.sh)
+    """אחרי שהמפעיל ענה, הפעימה מפסיקה: `$( )` של הקורא (drawergate.sh)
     אינו נתקע על תת-מעטפת שעוד מחזיקה את stdout, ואף hello נוסף אינו
     נשלח אחרי ההכרעה."""
     run = tmp_path / "run"; run.mkdir()
@@ -793,7 +793,7 @@ def test_the_beat_stops_with_the_answer(tmp_path):
 
 
 def test_a_question_inside_a_question_beats_once_and_hands_back(tmp_path):
-    """‏#912: ‏`attended` בתוך `attended` — למשל שאלה שנשאלת בזמן שמסך אחר
+    """#912: `attended` בתוך `attended` — למשל שאלה שנשאלת בזמן שמסך אחר
     כבר ממתין. נמדד 16/09 על הקוד של #906: שתי פעימות במקביל (ה-prompt
     מתחלף על השרת בכל פעימה), והחיצונית נשארת יתומה אחרי שתי העצירות.
     הנדרש: בזמן הפנימית נשלחת **רק** השאלה הפנימית; כשהיא נענתה, פעימת
@@ -821,7 +821,7 @@ def test_a_question_inside_a_question_beats_once_and_hands_back(tmp_path):
     assert (run / "inner-end").exists() and (run / "outer-end").exists()
     raw = (run / "hellos").read_bytes()
     lines = [ln for ln in raw.split(b"\n")[:-1] if ln]  # ignore a partial final append
-    # ‏#2202: כשהחיצונית נענתה — hello אחד בלי prompt מנקה אותה בשרת; לא בין שתיהן.
+    # #2202: כשהחיצונית נענתה — hello אחד בלי prompt מנקה אותה בשרת; לא בין שתיהן.
     assert "prompt" not in json.loads(lines[-1]), lines[-1]
     prompts = [json.loads(line)["prompt"] for line in lines[:-1]]
     inner_count = prompts.count("inner")
@@ -851,7 +851,7 @@ def test_a_beat_that_is_not_whole_seconds_is_named_not_a_hello_storm(tmp_path, b
 
 
 def test_a_plain_beat_carries_no_prompt(tmp_path):
-    """‏attended_hello בלי שאלה = דופק רגיל (hold_beat בלי HOLD_PROMPT): בלי
+    """attended_hello בלי שאלה = דופק רגיל (hold_beat בלי HOLD_PROMPT): בלי
     `waiting_for` ובלי `prompt`, כך שהשרת מנקה שאלה קודמת. עם שאלה —
     שני השדות, והשאלה עוברת json_escape."""
     run = tmp_path / "run"; run.mkdir()

@@ -1,19 +1,19 @@
 """סקריפט ארוך ב-`bash -c` בווינדוס נקטע בשקט — והטסט "עובר" (#893).
 
-נמדד 03/11/2026, ‏bash של Git for Windows (‏MSYS): מחרוזת `-c` שורדת עד
+נמדד 03/11/2026, bash של Git for Windows (MSYS): מחרוזת `-c` שורדת עד
 **8,186 תווים** בדיוק — אותו מספר בעברית ובאנגלית, כלומר תווים ולא
-בייטים — ומה שמעבר נחתך. ‏bash מריץ את מה שנשאר ו**יוצא 0**, גם תחת
+בייטים — ומה שמעבר נחתך. bash מריץ את מה שנשאר ו**יוצא 0**, גם תחת
 `-e`: סקריפט של 12,000 תווים שנגמר ב-`echo END` לא מדפיס כלום ומדווח
-הצלחה. ארגומנט רגיל (‏`$1`) של 20,000 תווים עובר שלם — זה `-c` בלבד.
+הצלחה. ארגומנט רגיל (`$1`) של 20,000 תווים עובר שלם — זה `-c` בלבד.
 
 ולכן טסט עם קטע גדול מהבנאי או stub גדול רץ בווינדוס על **חצי סקריפט**,
-ומה שהוא מודד הוא החיתוך ולא הקוד (‏#893: כ-25 טסטים של `run_required`
+ומה שהוא מודד הוא החיתוך ולא הקוד (#893: כ-25 טסטים של `run_required`
 נכשלו ב-`unexpected EOF`; טסטים אחרים באותו מצב פשוט עוברים). בלינוקס
 אין חיתוך, ולכן זה עוד "ירוק בווינדוס, אחר במעבדה".
 
 השומר: בווינדוס, כל תהליך-בן של מעטפת שמקבל סקריפט `-c` ארוך מהסף
 **מכשיל את הטסט בשמו** לפני שהוא רץ — לא מתקן אותו בשקט. התיקון בכל אתר
-הוא לכתוב את הסקריפט לקובץ ולהריץ `bash <קובץ>` (‏`run_script_file`).
+הוא לכתוב את הסקריפט לקובץ ולהריץ `bash <קובץ>` (`run_script_file`).
 בלינוקס השומר אינו מותקן: שם אין מה לתפוס, וזה נבדק ב-`test_msys_guard_893`.
 """
 
@@ -25,7 +25,7 @@ from pathlib import Path, PurePath
 
 import pytest
 
-#: הארוך ביותר ששורד (‏8,186 עובר, ‏8,187 נחתך) — נמדד 03/11/2026, Git for Windows.
+#: הארוך ביותר ששורד (8,186 עובר, 8,187 נחתך) — נמדד 03/11/2026, Git for Windows.
 MSYS_C_LIMIT = 8186
 
 SHELLS = frozenset({"bash", "sh", "dash", "ash"})
@@ -79,7 +79,7 @@ def check(argv, platform: str = os.name) -> None:
     pytest.fail(
         f"סקריפט `-c` של {len(script):,} תווים — מעל {MSYS_C_LIMIT:,}, ש-bash של "
         "Git for Windows חותך בשקט ויוצא 0 (#893). כתבו אותו לקובץ והריצו "
-        "`bash <קובץ>` (‏msys_guard.run_script_file).",
+        "`bash <קובץ>` (\u200fmsys_guard.run_script_file).",
         pytrace=False,
     )
 
@@ -93,7 +93,7 @@ _installed: list[bool] = []
 
 
 def install() -> bool:
-    """מתקין את השומר על `subprocess.Popen` — בווינדוס בלבד. ‏True = הותקן.
+    """מתקין את השומר על `subprocess.Popen` — בווינדוס בלבד. True = הותקן.
 
     עוטף את מה שמותקן **עכשיו** ולא את מה שהיה ביבוא: שומר אחר שנעטף לפני
     כן נשאר בשרשרת. ההוכחה שהשומר פעיל היא התנהגותית (`test_msys_guard_893`)."""
@@ -111,7 +111,7 @@ def installed() -> bool:
 
 
 def bash_path(path: Path) -> str:
-    """נתיב ש-bash מבין בשתי הסביבות (‏`C:/x` ← ‏`/c/x` בווינדוס)."""
+    """נתיב ש-bash מבין בשתי הסביבות (`C:/x` ← `/c/x` בווינדוס)."""
     text = path.as_posix()
     if os.name == "nt" and len(text) > 1 and text[1] == ":":
         return "/" + text[0].lower() + text[2:]
@@ -122,7 +122,7 @@ def run_script_file(shell: str, script: str, script_file: Path,
                     **kwargs) -> subprocess.CompletedProcess:
     """מריץ `script` מקובץ ולא ב-`-c` — שלם בכל אורך, בשתי הסביבות.
 
-    ‏`newline="\\n"`: ‏`\\r` בסוף שורה הוא חלק מהפקודה בעיני המעטפת."""
+    `newline="\\n"`: `\\r` בסוף שורה הוא חלק מהפקודה בעיני המעטפת."""
     script_file.write_text(script, encoding="utf-8", newline="\n")
     kwargs.setdefault("stdin", subprocess.DEVNULL)
     return subprocess.run([shell, bash_path(script_file)], **kwargs)

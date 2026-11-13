@@ -1,4 +1,4 @@
-"""‏#704 — שם לכל חיבור של כונן במחשב השיכפול.
+"""#704 — שם לכל חיבור של כונן במחשב השיכפול.
 
 **הבקשה של נדב (11/10):** "אני רוצה בהגדרות של מחשב השיכפול שיראה לי
 לאיזה חריצים מחוברים כוננים ... ואז אני אתן שם לכל התקן, נגיד דיסקים
@@ -7,15 +7,15 @@
 
 **מפתח השם — החיבור, לא הדיסק:**
 
-- כונן שהסוכן דיווח לו `port` (‏SATA, ‏`ataN`) → ‏`sata:<port>`. דיסק
+- כונן שהסוכן דיווח לו `port` (SATA, `ataN`) → `sata:<port>`. דיסק
   שהוחלף באותו חריץ **שומר את השם** — זה כל העניין.
-- כונן בלי `port` (‏NVMe, ‏USB, בקר SCSI) → ‏`serial:<serial>`. הסוכן אינו
+- כונן בלי `port` (NVMe, USB, בקר SCSI) → `serial:<serial>`. הסוכן אינו
   מדווח היום שום מזהה יציב של חיבור ל-NVMe (אין כתובת PCI ב-hello), ולכן
   השם צמוד **לכונן** — הקונסולה אומרת את זה ליד השדה, לא מסתירה.
 - בלי `port` ובלי `serial` → אין מפתח, ואין שם (לא ממציאים מזהה).
 
-**השם הוא תווית בלבד.** הבחירה, ‏`target_slots` והמספור נשארים לפי
-`port` (הכרעת נדב 09/09: ‏SATA 0 → דיסק 1); בלי שם התצוגה כמו היום.
+**השם הוא תווית בלבד.** הבחירה, `target_slots` והמספור נשארים לפי
+`port` (הכרעת נדב 09/09: SATA 0 → דיסק 1); בלי שם התצוגה כמו היום.
 """
 
 from __future__ import annotations
@@ -180,7 +180,7 @@ def test_an_nvme_without_port_is_named_by_serial(room_server):
 
 
 def test_a_serial_name_does_not_cover_a_disk_with_a_port(room_server):
-    """מפתח אחד לכל כונן: יש `port` → ‏`sata:N` בלבד. שם לפי סידורי של
+    """מפתח אחד לכל כונן: יש `port` → `sata:N` בלבד. שם לפי סידורי של
     כונן SATA היה הולך עם הדיסק, וזה בדיוק מה שהבקשה פוסלת."""
     admin = room_server["admin"]
     _put(admin, CLONER1, "serial:S-1", "לפי סידורי")
@@ -206,7 +206,7 @@ def test_hello_answer_carries_this_machines_names(room_server):
 
 
 def test_names_do_not_change_target_selection(room_server):
-    """השם הוא תווית: ‏`selected` ו-`port` של המגירה לא זזים בגללו."""
+    """השם הוא תווית: `selected` ו-`port` של המגירה לא זזים בגללו."""
     admin = room_server["admin"]
     _hello(admin, CLONER1, [_disk("sda", "S-1", 1), _disk("sdb", "S-2", 2)])
     before = _room_machine(admin, CLONER1)["drawer_list"]

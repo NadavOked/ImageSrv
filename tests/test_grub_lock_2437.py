@@ -307,12 +307,15 @@ def test_an_upgraded_server_locks_the_bootstrap_it_left_on_the_tftp_root(tmp_pat
         GrubConfig(server_base="http://10.44.9.10:8080", password_hash=HASH))
 
 
-def test_a_locked_bootstrap_is_not_rewritten_on_every_start(tmp_path):
+def test_a_locked_bootstrap_is_rewritten_with_this_starts_hash(tmp_path):
+    """#2491 reversed the old "not rewritten on every start": a locked file kept
+    the hash of whatever password was current when it was written."""
     deploy_net.write_grub_cfg(BASE, tmp_path, password_hash=HASH)
     path = tmp_path / "grub" / "grub.cfg"
-    before = path.read_text(encoding="ascii")
-    assert deploy_net.refresh_grub_cfg(tmp_path, grub_lock.pbkdf2_hash(PASSWORD, iterations=1000)) is None
-    assert path.read_text(encoding="ascii") == before
+    fresh = grub_lock.pbkdf2_hash(PASSWORD, iterations=1000)
+    assert deploy_net.refresh_grub_cfg(tmp_path, fresh) is None
+    assert path.read_text(encoding="ascii") == render_bootstrap(
+        GrubConfig(server_base=BASE, password_hash=fresh))
 
 
 def test_the_installers_lock_without_a_password_gets_one_on_the_first_start(tmp_path):

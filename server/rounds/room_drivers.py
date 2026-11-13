@@ -1,9 +1,9 @@
-"""‏#1269 — דרייברים לפי דגם מחשב, לכל דיסק יעד בסבב החדר.
+"""#1269 — דרייברים לפי דגם מחשב, לכל דיסק יעד בסבב החדר.
 
 המגירות של מחשב שיכפול הולכות למכונות אחרות, ולכן המלאי של המשכפל אינו
-אומר דבר עליהן (‏interfaces.md סעיף 17) — אין כאן "אוטומטי". המפעיל בוחר
-**דגם** מתוך מה שיש בספרייה (‏`drivers.models`), לכל `(mac, port)` שנבחר
-כיעד. הבחירה נשמרת ברמת ה-round (‏`room_rounds.driver_models_json`), כמו
+אומר דבר עליהן (interfaces.md סעיף 17) — אין כאן "אוטומטי". המפעיל בוחר
+**דגם** מתוך מה שיש בספרייה (`drivers.models`), לכל `(mac, port)` שנבחר
+כיעד. הבחירה נשמרת ברמת ה-round (`room_rounds.driver_models_json`), כמו
 `target_slots`: היא חלה על כל גלי הסבב.
 
 ```json
@@ -25,7 +25,7 @@ from server.agent import registry
 def validate(raw, selected: list[dict] | None, packages: list[dict]) -> list[dict] | None:
     """הבחירה בצורתה הקנונית, ``None`` כשאין בחירה, או ``ValueError`` בשמו.
 
-    כל פריט: ‏MAC קנוני, חריץ שנמצא ב-`target_slots` (‏`selected` — כבר
+    כל פריט: MAC קנוני, חריץ שנמצא ב-`target_slots` (`selected` — כבר
     מאומת), ודגם **שיש לו חבילה בספרייה עכשיו**. השם שנשמר הוא זה של
     הספרייה, לא מה שהוקלד. אין "כל הדיסקים": בלי בחירת דיסקים אין למה
     לקשור דגם — ונכשלים בקול במקום לנחש.
@@ -70,7 +70,7 @@ def view(round_row: sqlite3.Row) -> list[dict] | None:
 
 
 def ports_for(round_row: sqlite3.Row | None, mac: str) -> list[int] | None:
-    """החריצים של המכונה הזו שנבחר להם דגם. ‏``None`` = הסבב בלי דרייברים."""
+    """החריצים של המכונה הזו שנבחר להם דגם. ``None`` = הסבב בלי דרייברים."""
     chosen = _loaded(round_row)
     if chosen is None:
         return None

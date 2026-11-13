@@ -66,6 +66,7 @@ capture_unhib_note() {
     # Existing local-clone wording; the task's error field carries warnings
     # even on success. Reapply after direct send initializes its second pass.
     capture_bitlocker_note "$1" || return 1   # #1840 (hibernation.sh), the same field
+    capture_ntfs_note "$1" || return 1        # #2972, the same field
     case "$(cat "$RUN_DIR/src_unhib" 2>/dev/null)" in
         unhibernated) _cv_note=$LC_NTFS_UNHIB ;;
         unhibernated_logfile) _cv_note=$LC_NTFS_UNHIB_LOGFILE ;;
@@ -76,6 +77,21 @@ capture_unhib_note() {
     case "$_cv_existing" in *"$_cv_note"*) return 0 ;; esac
     printf '%s\n' "${_cv_existing:+$_cv_existing · }$_cv_note" > "$RUN_DIR/targets/$1/error" || return 1
     log "WARNING: $1: done, orange -- $_cv_note"
+}
+
+# #2972: the card's words (server/static/console.js NTFS_NOTE) -- orange, never a refusal.
+CAPTURE_NTFS_NOTE="NTFS לא נסגר כראוי (לא עקבי) — לא כווץ; Windows יריץ chkdsk באתחול הראשון"
+
+capture_ntfs_note() {
+    # $1=disk. The partitions shrink_plan found inconsistent were read at their
+    # full size (shrink.dirty): said in the target's error field, like BitLocker's. Idempotent.
+    [ -s "$RUN_DIR/shrink.dirty" ] || return 0
+    _cn="מחיצה $(awk 'NR > 1 { printf ", " } { printf "%s", $0 }' "$RUN_DIR/shrink.dirty"): $CAPTURE_NTFS_NOTE"
+    _cn_old=""; [ ! -f "$RUN_DIR/targets/$1/error" ] || _cn_old=$(cat "$RUN_DIR/targets/$1/error") || return 1
+    case "$_cn_old" in *"$CAPTURE_NTFS_NOTE"*) return 0 ;; esac
+    printf '%s
+' "${_cn_old:+$_cn_old · }$_cn" > "$RUN_DIR/targets/$1/error" || return 1
+    log "WARNING: $1: $_cn"
 }
 
 capture_unhib_json() {

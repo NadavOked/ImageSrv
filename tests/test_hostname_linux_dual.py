@@ -1,17 +1,17 @@
-"""‏#89 ו-#107: שם המחשב בצד הלינוקס.
+"""#89 ו-#107: שם המחשב בצד הלינוקס.
 
-‏#89 — שורש btrfs ב-subvolume ששמו אינו `@` (פדורה: `root`, התקנה ידנית:
+#89 — שורש btrfs ב-subvolume ששמו אינו `@` (פדורה: `root`, התקנה ידנית:
 כל שם). הקוד הישן ניחש `subvol=@` בלבד, נכשל, והמכונה עלתה עם השם
 שבאימג'. עכשיו ה-top level מעוגן והילד היחיד שיש בו `etc/` הוא השורש;
 אפס או כמה — כישלון בשם, לא בחירה.
 
-‏#107 — דיסק dual-boot. הקוד הישן כתב רק לצד ה-Windows. עכשיו שני הצדדים
+#107 — דיסק dual-boot. הקוד הישן כתב רק לצד ה-Windows. עכשיו שני הצדדים
 נכתבים, והתוצאה אומרת בנפרד: שניהם / רק Windows / רק לינוקס / אף אחד.
 
-‏`mount` מזויף: עיגון רגיל (ה-subvolume ברירת המחדל) יוצר `etc/` רק כש-
-`DEFAULT_ETC` דלוק; ‏`subvol=X` יוצר `etc/` כש-X ב-`SUBVOLS`; ‏`subvolid=5`
+`mount` מזויף: עיגון רגיל (ה-subvolume ברירת המחדל) יוצר `etc/` רק כש-
+`DEFAULT_ETC` דלוק; `subvol=X` יוצר `etc/` כש-X ב-`SUBVOLS`; `subvolid=5`
 (ה-top level) חושף `X/etc` לכל X ב-`SUBVOLS` ו-`X` בלי etc לכל X
-ב-`OTHER_SUBVOLS` (‏`home` כברירת מחדל). כך `subvol=@` של הקוד הישן
+ב-`OTHER_SUBVOLS` (`home` כברירת מחדל). כך `subvol=@` של הקוד הישן
 עובד באמת כשיש `@` — והבקרה השלילית נופלת רק על מה שהקוד הישן באמת לא ידע.
 """
 
@@ -41,7 +41,7 @@ case "$*" in
 esac
 exit 0"""
 UMOUNT = 'echo "umount $*" >> "$RUN_DIR/mounts"; exit 0'
-#: ‏hivewrite שמתעד כל כתיבה — הראיה שצד ה-Windows באמת נכתב.
+#: hivewrite שמתעד כל כתיבה — הראיה שצד ה-Windows באמת נכתב.
 HIVEWRITE_LOGGED = 'echo "$*" >> "$RUN_DIR/hivewrites"\n' + HIVEWRITE_OK
 
 
@@ -93,8 +93,8 @@ def test_a_btrfs_root_in_any_subvolume_gets_the_name(tmp_path, subvol):
 
 
 def test_the_default_subvolume_is_used_when_it_holds_etc(tmp_path):
-    """‏openSUSE: ה-default subvolume הוא ה-snapshot, והעיגון הרגיל כבר רואה
-    ‏/etc — אין סיבה לחפש, ואין עיגון שני."""
+    """openSUSE: ה-default subvolume הוא ה-snapshot, והעיגון הרגיל כבר רואה
+    /etc — אין סיבה לחפש, ואין עיגון שני."""
     script, run = box(tmp_path, [BTRFS_PLAN], default_etc=True)
     rc, result = name(script)
     assert (rc, result["ok"]) == (0, True)
@@ -176,7 +176,7 @@ def test_dual_boot_both_failed_says_neither_with_both_reasons(tmp_path):
 
 
 def test_a_partial_dual_boot_name_reaches_the_report_as_a_warning(tmp_path):
-    """הדרך לשרת (סעיף 4, ‏#856): ‏done + ‏error. הצד שנכשל נקרא בשמו."""
+    """הדרך לשרת (סעיף 4, #856): done + error. הצד שנכשל נקרא בשמו."""
     script, run = box(tmp_path, [WIN_PLAN, LINUX_PLAN], mount="exit 1")
     (run / "response.json").write_text("{}", encoding="utf-8")
     out = sh(script

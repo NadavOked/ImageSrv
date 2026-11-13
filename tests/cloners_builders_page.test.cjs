@@ -99,7 +99,7 @@ test('#2201 a selected drawer with no disk stays on the round card as failed: "�
     assert.doesNotMatch(got[1][1],/role="progressbar"|בטל…/);
     assert.match(got[0][1],/<b>100%<\/b>/); assert.match(got[2][1],/<b>נכשל<\/b>/); assert.doesNotMatch(got[2][1],/אין דיסק/);
     const card=run(`roomMachHtml({mac:'${C2}',drawer_count:3},ROOM.round)`);   // the card is red and says why, as for a failed drawer
-    assert.match(card,/^<div class="mach err"/); assert.match(card,/דיסק אדום/); assert.match(card,/דיסק 2 אדום — אין דיסק במגירה/);
+    assert.match(card,/^<div class="mach err"/); assert.match(card,/2 דיסקים אדומים/); assert.match(card,/דיסק 2 — אין דיסק במגירה/);   // #2987: two red disks, counted
   }
   // without no_disk (a round before #2201, or nothing missing): the row of an unselected port is not drawn
   run(`ROOM.round.target_slots[0].no_disk=undefined`);

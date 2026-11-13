@@ -1,4 +1,4 @@
-"""‏#1846 — אבדן חבילות ברשת ההפצה מול הבסיס שלה.
+"""#1846 — אבדן חבילות ברשת ההפצה מול הבסיס שלה.
 
 הבסיס = חציון הגלים הקודמים **על אותו כרטיס, באותו מספר מגירות ובאותו קצב**.
 קפיצה = פי 3 מהבסיס וגם מעל 0.1%. בלי בסיס — "לא נבדק", לא "תקין".
@@ -121,7 +121,7 @@ def test_the_health_screen_row(conn):
 
 
 def test_the_health_screen_carries_it():
-    """‏`health.collect` מוסיף את השורות — נבדק על המקור, כי collect דורש שרת שלם."""
+    """`health.collect` מוסיף את השורות — נבדק על המקור, כי collect דורש שרת שלם."""
     import inspect
     assert "_learn_netloss.health_checks(ctx.conn)" in inspect.getsource(health.collect)
 

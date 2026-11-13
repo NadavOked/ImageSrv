@@ -1,9 +1,9 @@
-"""‏#2786 (נדב 09/11) — שם מחשב לכל דיסק בסבב חדר השיכפול (השרת).
+"""#2786 (נדב 09/11) — שם מחשב לכל דיסק בסבב חדר השיכפול (השרת).
 
 הקונסולה מחשבת את השמות ושולחת שם לכל `(mac, port)` שנבחר; השרת מאמת
 (הכלל של Windows ולינוקס יחד — אנגלית, ספרות ומקף, עד 15, לא כולו
 ספרות), שומר ברמת ה-round, ומוסר לכל משכפל את השמות של החריצים שלו
-(‏`session.hostnames`). בלי שמות — הסבב בדיוק כמו קודם (`null`).
+(`session.hostnames`). בלי שמות — הסבב בדיוק כמו קודם (`null`).
 
 הכול כאן עובר דרך ה-API (פתיחה, hello, הגדרות), כדי שהבקרה השלילית תיפול
 על התנהגות ולא על ייבוא.
@@ -246,7 +246,7 @@ console.log(JSON.stringify(JSON.parse(process.argv[2]).map((n) => rule(n) !== ''
 
 
 def test_the_console_refuses_exactly_what_the_server_refuses():
-    """הכלל אחד: ‏`cloneNameRefusal` (‏console.js) מול `computer_name_refusal` על אותם שמות."""
+    """הכלל אחד: `cloneNameRefusal` (console.js) מול `computer_name_refusal` על אותם שמות."""
     import json                                                      # noqa: PLC0415
     import shutil                                                    # noqa: PLC0415
     import subprocess                                                # noqa: PLC0415

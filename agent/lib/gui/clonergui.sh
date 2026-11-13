@@ -154,6 +154,8 @@ cloner_gui_state() {
         _cg_bytes=$(target_bytes "$_cg_dev")
         _cg_error=
         [ -f "$_cg_dir/error" ] && _cg_error=$(cat "$_cg_dir/error")
+        # #2987: a failed drawer's field 6 is the operator's sentence (opsay.sh); the diagnosis stays in error, the log and the console's hover
+        if [ "$_cg_state" = failed ] && [ -n "$_cg_error" ] && command -v op_say > /dev/null; then _cg_error=$(op_say "$_cg_dev" "$_cg_error"); fi
 
         case "$_cg_port" in ''|*[!0-9]*) _cg_port=0 ;; esac
         case "$_cg_bytes" in ''|*[!0-9]*) _cg_bytes=0 ;; esac
@@ -166,6 +168,7 @@ cloner_gui_state() {
         # asked to cancel ("" = nobody) and when it was done (epoch; "" = not yet).
         cloner_gui_pace "$_cg_dev" "$_cg_state" "$_cg_bytes" "$_cg_total"
         gui_rb_state "$_cg_dev" "$_cg_state" && _cg_rb=1 || _cg_rb=0   # #2046: after the write's pace -- a read-back's rate replaces it
+        _cg_st=0; if command -v stall_fields > /dev/null && stall_fields "$_cg_dev"; then _cg_st=1; _cg_rate=0; _cg_eta=-1; fi   # #2988: it stands -- rate 0, measured, at once (not after CLONER_STALL_S)
         _cg_drv=''; [ ! -e "$_cg_dir/drivers.json" ] || _cg_drv=$(drivers_gui_fields "$_cg_dir/drivers.json") || return 1   # #1331: fields 13-17 (+18-20 for Linux)
         printf 'drawer=%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s%s\n' \
             "$_cg_port" "$_cg_dev" "$_cg_state" \
@@ -174,6 +177,8 @@ cloner_gui_state() {
             "$(cat "$_cg_dir/cancel" 2>/dev/null | tr -d '\r\n|')" "$(cat "$_cg_dir/cancelled_at" 2>/dev/null)" "$_cg_drv" >> "$_cg_next" ||
             return 1
         [ -z "$_cg_moved" ] || printf 'drawer_moved=%s|%s\n' "$_cg_dev" "$_cg_moved" >> "$_cg_next" || return 1   # #2055: the screen's age
+        # #2988: drawer_stall=dev|waiting_disk|waiting_net|<s it stands>|<limit s, "" = none> -- while it stands (stall.sh)
+        [ "$_cg_st" = 0 ] || printf 'drawer_stall=%s|%s|%s|%s\n' "$_cg_dev" "$_sf_k" "$_sf_s" "$_sf_l" >> "$_cg_next" || return 1
         # #1907: done, not verified -- the server's check list did not come down (readback.sh): orange on the row
         [ "$(cat "$_cg_dir/readback_why" 2>/dev/null)" != list_not_fetched ] || printf 'drawer_rb=%s|list_not_fetched\n' "$_cg_dev" >> "$_cg_next" || return 1
         [ "$_cg_rb" = 0 ] || gui_rb_print drawer_rbp "$_cg_dev" >> "$_cg_next" || return 1   # #2046: the read-back's bar and verdict

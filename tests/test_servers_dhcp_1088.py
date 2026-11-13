@@ -1,14 +1,14 @@
-"""‏#1088: כרטיס וילן השרתים = לקוח DHCP; הקונסולה נקשרת לפי **שם כרטיס**
+"""#1088: כרטיס וילן השרתים = לקוח DHCP; הקונסולה נקשרת לפי **שם כרטיס**
 ומאזינה מחדש בהחלפת כתובת; רשת ההפצה מוגדרת **מהקונסולה** ולא במתקין.
 
 ארבע קבוצות, כל אחת עם הראיה שלה:
 
-1. ‏`ifaddr` — שם כרטיס → כתובת (שלושה מצבים), הדוגם, וקובץ החכירות.
-2. ‏`ports.Listeners.rebind` — על סוקט אמיתי (loopback), כמו #996.
-3. ‏`main` — ‏`--console-host eth0` מגיע למאזין הקונסולה כ**כתובת**; בלי
+1. `ifaddr` — שם כרטיס → כתובת (שלושה מצבים), הדוגם, וקובץ החכירות.
+2. `ports.Listeners.rebind` — על סוקט אמיתי (loopback), כמו #996.
+3. `main` — `--console-host eth0` מגיע למאזין הקונסולה כ**כתובת**; בלי
    `--server-url` השרת עולה במצב "לא הוגדרה" או מהרשומה בקונסולה.
-4. ‏`deploy_net` + הקונסולה — הדלקת ה-DHCP הראשונה משלימה את ההתקנה, ורק
-   כשהכרטיס נושא את הכתובת; ‏health, המתקין, היחידה, ו-pairing לפי שם.
+4. `deploy_net` + הקונסולה — הדלקת ה-DHCP הראשונה משלימה את ההתקנה, ורק
+   כשהכרטיס נושא את הכתובת; health, המתקין, היחידה, ו-pairing לפי שם.
 """
 
 from __future__ import annotations
@@ -73,8 +73,8 @@ def test_read_ipv4_three_states():
 
 
 def test_ipv4_of_prefers_a_global_non_deprecated_address():
-    """‏#1121 ס' 5: חידוש lease = שתי כתובות לרגע, הישנה deprecated — לוקחים
-    את החדשה; ‏scope link (169.254) נסוג מפני global; deprecated לבדה = None."""
+    """#1121 ס' 5: חידוש lease = שתי כתובות לרגע, הישנה deprecated — לוקחים
+    את החדשה; scope link (169.254) נסוג מפני global; deprecated לבדה = None."""
     def nic(*addrs):
         return [{"ifname": "eth0", "addr_info": [{"family": "inet", **a} for a in addrs]}]
     old = {"local": "10.1.2.3", "scope": "global", "deprecated": True}
@@ -118,7 +118,7 @@ def test_watcher_reports_changes_including_first_lease_and_retries_failed_rebind
 
 
 def test_watcher_lookup_failure_is_not_an_address_change():
-    """‏`ip` שנפל פעם אחת אינו "אין כתובת" — המאזין נשאר על הכתובת."""
+    """`ip` שנפל פעם אחת אינו "אין כתובת" — המאזין נשאר על הכתובת."""
     errors, changes = [], []
 
     def failing(name):
@@ -131,7 +131,7 @@ def test_watcher_lookup_failure_is_not_an_address_change():
 
 
 def test_watcher_thread_survives_an_exception_in_on_change():
-    """‏#1121 ס' 6: `on_change` שזרק (למשל journal על DB נעול) אינו הורג את
+    """#1121 ס' 6: `on_change` שזרק (למשל journal על DB נעול) אינו הורג את
     הדוגם — השגיאה נרשמת, והדגימה הבאה מדווחת את השינוי."""
     import time
     errors, changes = [], []
@@ -258,7 +258,7 @@ def second_loopback():
 
 
 def test_rebind_moves_the_listener_to_the_new_address(second_loopback):
-    """‏#1088: אותו פורט, כתובת אחרת — הישנה משוחררת (bind מצליח), החדשה
+    """#1088: אותו פורט, כתובת אחרת — הישנה משוחררת (bind מצליח), החדשה
     עונה (connect מצליח). ראיה בסוקט, לא בהגדרה."""
     port = _free_port()
 
@@ -283,7 +283,7 @@ def test_rebind_moves_the_listener_to_the_new_address(second_loopback):
 
 
 def test_queued_rebinds_only_the_last_address_takes_effect(second_loopback):
-    """‏#1121 ס' 6: שני rebinds בתור מאחורי הנעילה — הישן (127.0.0.1) מוותר,
+    """#1121 ס' 6: שני rebinds בתור מאחורי הנעילה — הישן (127.0.0.1) מוותר,
     והמאזין עולה פעם אחת על הכתובת האחרונה."""
     port = _free_port()
 
@@ -367,11 +367,11 @@ def test_console_host_by_name_resolves_and_watches(tmp_path, monkeypatch):
     assert all("ssl_certfile" in c for c in configs["console"])  # TLS דלוק על כרטיס
     assert [c["host"] for c in configs["agent"]] == ["10.44.12.10"]
     assert [w.name for w in started] == ["eth0"] and started[0].current == "10.1.2.3"
-    # ‏SAN: הכתובת הנוכחית + שם המארח, לא שם הכרטיס.
+    # SAN: הכתובת הנוכחית + שם המארח, לא שם הכרטיס.
     tls = captured["kwargs"]["console_tls"]
     assert "10.1.2.3" in tls.sans and "eth0" not in tls.sans
     assert socket.gethostname() in tls.sans
-    # ‏health מקבל את שורת כתובת השרתים.
+    # health מקבל את שורת כתובת השרתים.
     assert callable(captured["kwargs"]["health_hooks"]["servers_nic"])
 
 
@@ -485,7 +485,7 @@ def test_a_console_record_whose_address_left_the_nic_degrades_instead_of_dying(
 
 
 def test_server_url_flag_still_wins_and_is_still_ip_only(tmp_path, monkeypatch):
-    """‏#498 לא נשבר: עם הדגל — אותה בדיקה, אותה דחייה."""
+    """#498 לא נשבר: עם הדגל — אותה בדיקה, אותה דחייה."""
     monkeypatch.setattr(server.app, "create_runtime", lambda *a, **k: pytest.fail("הגיע ל-runtime"))
     monkeypatch.setattr("sys.argv", [
         "server.main", "--server-url", "http://imagesrv.college:8080",
@@ -552,7 +552,7 @@ def test_1817_write_grub_cfg_creates_a_traversable_grub_dir_under_private_umask(
 
 
 def test_regenerate_firewall_skips_when_the_installer_wrote_none(tmp_path):
-    """‏#2440: לא נוגעים בקובץ — אבל זה אינו "הצליח": התשובה אומרת שלא נכתב כלל."""
+    """#2440: לא נוגעים בקובץ — אבל זה אינו "הצליח": התשובה אומרת שלא נכתב כלל."""
     assert deploy_net.regenerate_firewall(REPO, deploy_if="eth1", servers_if="eth0",
                                           conf=tmp_path / "nftables.conf") == deploy_net.NO_FIREWALL
     assert not (tmp_path / "nftables.conf").exists()
@@ -577,8 +577,8 @@ def _complete_hooks(calls, *, fw="", restart=None):
 
 
 def _fake_nft(calls, *, load_fails=False):
-    """‏`_run` מדומה: המחולל מחזיר ruleset, ‏`nft -c` עובר, ‏`nft -f` על
-    ה-candidate נכשל לפי `load_fails`; ‏`nft -f` על הקובץ הישן (החזרה) עובר."""
+    """`_run` מדומה: המחולל מחזיר ruleset, `nft -c` עובר, `nft -f` על
+    ה-candidate נכשל לפי `load_fails`; `nft -f` על הקובץ הישן (החזרה) עובר."""
     def run(cmd, **kw):
         calls.append(list(cmd))
         if cmd[0] == "sh":
@@ -594,7 +594,7 @@ def _fake_nft(calls, *, load_fails=False):
 
 
 def test_regenerate_firewall_replaces_the_file_only_after_the_kernel_took_it(tmp_path, monkeypatch):
-    """‏#1121 ס' 2: הקובץ הישן נדרס רק אחרי `nft -f` שהצליח — ודרך candidate."""
+    """#1121 ס' 2: הקובץ הישן נדרס רק אחרי `nft -f` שהצליח — ודרך candidate."""
     conf = tmp_path / "nftables.conf"
     conf.write_text("# ImageSrv old\n", encoding="utf-8")
     calls = []
@@ -610,7 +610,7 @@ def test_regenerate_firewall_replaces_the_file_only_after_the_kernel_took_it(tmp
 
 def test_regenerate_firewall_keeps_the_old_file_and_restores_the_old_ruleset_when_load_fails(
         tmp_path, monkeypatch):
-    """‏`nft -c` עובר ו-`nft -f` נכשל → /etc/nftables.conf הישן נשאר, ה-ruleset
+    """`nft -c` עובר ו-`nft -f` נכשל → /etc/nftables.conf הישן נשאר, ה-ruleset
     הישן נטען חזרה ממנו, וה-candidate אינו נשאר על הדיסק."""
     conf = tmp_path / "nftables.conf"
     conf.write_text("# ImageSrv old\n", encoding="utf-8")
@@ -697,7 +697,7 @@ def test_proxy_1829_completion_preserves_existing_proxy_rules(tmp_path, monkeypa
 
 
 def test_restart_is_scheduled_under_a_unique_transient_unit(monkeypatch):
-    """‏#1121 ס' 3: שתי השלמות בתוך חלון ה-3 ש' — שתי יחידות שונות, לא
+    """#1121 ס' 3: שתי השלמות בתוך חלון ה-3 ש' — שתי יחידות שונות, לא
     "Unit imagesrv-deploy-restart already exists"."""
     calls = []
     monkeypatch.setattr(deploy_net, "_run", lambda cmd, **kw: calls.append(cmd) or (True, "", ""))
@@ -711,7 +711,7 @@ def test_restart_is_scheduled_under_a_unique_transient_unit(monkeypatch):
 
 
 def test_complete_applies_every_step_and_commits_last(tmp_path):
-    """‏#1121: ‏`deploy:*` נרשם **אחרי** שכל השלבים הצליחו, לא לפניהם."""
+    """#1121: `deploy:*` נרשם **אחרי** שכל השלבים הצליחו, לא לפניהם."""
     from server.db import connect
     conn = connect(tmp_path / "x.db")
     calls = []
@@ -755,8 +755,8 @@ def test_complete_restart_failure_is_not_committed_either(tmp_path):
 
 
 def test_complete_without_a_servers_nic_stops_only_when_a_firewall_is_installed(tmp_path):
-    """‏`--console-host` שאינו שם כרטיס: עם חומת אש מותקנת — עוצר בשם; בלי
-    חומת אש (‏--no-firewall) — אין מה לחולל, וההשלמה ממשיכה (באזהרה, #2440)."""
+    """`--console-host` שאינו שם כרטיס: עם חומת אש מותקנת — עוצר בשם; בלי
+    חומת אש (--no-firewall) — אין מה לחולל, וההשלמה ממשיכה (באזהרה, #2440)."""
     conf = tmp_path / "nftables.conf"
     assert deploy_net.regenerate_firewall(REPO, deploy_if="eth1", servers_if=None,
                                           conf=conf) == deploy_net.NO_FIREWALL
@@ -767,7 +767,7 @@ def test_complete_without_a_servers_nic_stops_only_when_a_firewall_is_installed(
 
 
 def test_render_adds_the_deploy_interface_line_when_set_from_the_console():
-    """‏R20-F1 במסירה: imagesrv.conf של המתקין בלי interface= — השורה
+    """R20-F1 במסירה: imagesrv.conf של המתקין בלי interface= — השורה
     נכתבת בקובץ של הקונסולה, גם בלי אף DHCP דלוק, ולא פעמיים."""
     text = dhcp.render([], deploy_interface="eth1")
     assert "bind-interfaces" in text and "interface=eth1" in text
@@ -781,10 +781,10 @@ def test_render_adds_the_deploy_interface_line_when_set_from_the_console():
 
 
 def test_render_pins_tftp_to_loopback_when_no_file_names_an_interface():
-    """‏#1078-S / R20-F5: dnsmasq בלי אף `interface=` מאזין על **כל**
+    """#1078-S / R20-F5: dnsmasq בלי אף `interface=` מאזין על **כל**
     הכרטיסים חוץ מה-`except-interface` — ו-`restart` (שהקונסולה מריצה)
-    מעלה גם יחידה כבויה. ‏`pin_tftp` = אין קובץ אחר שנושא את כרטיס ההפצה
-    (‏source ≠ cli), ולכן בלי שם — loopback בלבד, לא כרטיס השרתים."""
+    מעלה גם יחידה כבויה. `pin_tftp` = אין קובץ אחר שנושא את כרטיס ההפצה
+    (source ≠ cli), ולכן בלי שם — loopback בלבד, לא כרטיס השרתים."""
     proxied = dhcp.InterfaceConfig("eth1", proxy=True, server_ip="10.44.9.10")
     good = dhcp.InterfaceConfig("eth1", enabled=True, range_start="10.44.9.50",
                                 range_end="10.44.9.200", server_ip="10.44.9.10")
@@ -809,8 +809,8 @@ def test_render_pins_tftp_to_loopback_when_no_file_names_an_interface():
                                             ("cli", False)])
 def test_render_dnsmasq_pins_tftp_unless_the_unit_names_the_deploy_nic(
         tmp_path, images_root, clock, source, pinned):
-    """‏cli = המתקין כתב `interface=<הפצה>` ב-imagesrv.conf (המעבדה) — לא
-    נוגעים בנתיב שעובד. ‏console/none = הקובץ של הקונסולה הוא היחיד, ובלי
+    """cli = המתקין כתב `interface=<הפצה>` ב-imagesrv.conf (המעבדה) — לא
+    נוגעים בנתיב שעובד. console/none = הקובץ של הקונסולה הוא היחיד, ובלי
     שם בו dnsmasq היה מגיש TFTP על כרטיס השרתים."""
     from server.console import dhcp as console_dhcp
     from server.app import create_app
@@ -960,9 +960,9 @@ def test_first_dhcp_enable_completes_the_install_and_restarts(console):
 
 
 def test_first_deploy_from_the_deploy_window_derives_the_address_then_completes(tmp_path, images_root, clock):
-    """‏#1263 על שרת נקי (מסירה): חלון "רשת הפצה" שולח רשת + טווח בלבד. השרת
+    """#1263 על שרת נקי (מסירה): חלון "רשת הפצה" שולח רשת + טווח בלבד. השרת
     גוזר את הכתובת הראשונה, כותב ומחיל אותה על הכרטיס, ורק **אחרי** שהכרטיס
-    נושא אותה — ההדלקה הראשונה משלימה את ההתקנה (‏#1088), שדורשת בדיוק את זה.
+    נושא אותה — ההדלקה הראשונה משלימה את ההתקנה (#1088), שדורשת בדיוק את זה.
     בעבר זה היה שני מסכים ("עריכת כתובת" ואז "DHCP") בסדר שהמפעיל היה צריך לדעת."""
     if TestClient is None:
         pytest.skip("fastapi is required")
@@ -1034,7 +1034,7 @@ def test_first_deploy_from_the_deploy_window_derives_the_address_then_completes(
     assert refused.status_code == 409 and "כרטיס הניהול" in refused.json()["detail"]
 
 def test_first_dhcp_enable_that_fails_to_complete_writes_nothing_and_can_be_retried(console):
-    """‏#1121: חומת האש נפלה באמצע ההשלמה → 500 בשם, **שום דבר** לא נרשם
+    """#1121: חומת האש נפלה באמצע ההשלמה → 500 בשם, **שום דבר** לא נרשם
     (לא `deploy:*`, לא `dhcp:eth1`), dnsmasq לא נכתב, השרת לא מאותחל —
     והניסיון הבא הוא שוב "הדלקה ראשונה" שמשלימה."""
     from server.db import get_setting
@@ -1060,11 +1060,11 @@ def test_first_dhcp_enable_that_fails_to_complete_writes_nothing_and_can_be_retr
 
 
 def test_full_dhcp_on_another_nic_after_console_deploy_is_409(console, classrooms_on):
-    """‏#1121 ס' 4: אחרי `source=console` על eth1, DHCP **מלא** על eth0 (רשת
-    המכללה) נדחה בשם — ושום דבר לא נכתב; ‏proxy על eth0 מותר."""
+    """#1121 ס' 4: אחרי `source=console` על eth1, DHCP **מלא** על eth0 (רשת
+    המכללה) נדחה בשם — ושום דבר לא נכתב; proxy על eth0 מותר."""
     from server.db import get_setting
     build, fake = console
-    # ‏#2428: eth0 כאן הוא כרטיס הקונסולה (servers_interface) ונדחה לפני כן ככרטיס
+    # #2428: eth0 כאן הוא כרטיס הקונסולה (servers_interface) ונדחה לפני כן ככרטיס
     # הניהול — "כרטיס אחר" הוא eth2.
     fake["interfaces"].append({"name": "eth2", "state": "up", "mac": "aa:aa:aa:aa:aa:02",
                                "addresses": ["10.1.3.3/24"]})
@@ -1103,7 +1103,7 @@ def test_first_dhcp_enable_refuses_a_nic_that_does_not_carry_the_address(console
     """הסדר של נדב: כתובת → DHCP. בלי הכתובת על הכרטיס — 409, ושום דבר
     לא נרשם (לא deploy ולא dhcp:eth0), כי אחרת השרת לא היה עולה."""
     build, fake = console
-    # ‏#2428: eth0 כאן הוא כרטיס הקונסולה (servers_interface) ונדחה לפני כן ככרטיס
+    # #2428: eth0 כאן הוא כרטיס הקונסולה (servers_interface) ונדחה לפני כן ככרטיס
     # הניהול — "כרטיס אחר" הוא eth2.
     fake["interfaces"].append({"name": "eth2", "state": "up", "mac": "aa:aa:aa:aa:aa:02",
                                "addresses": ["10.1.2.3/24"]})
@@ -1306,7 +1306,7 @@ def test_installer_netcfg_block_refuses_a_bad_static_address(tmp_path, monkeypat
 
 
 def _netcfg_block(tmp_path, monkeypatch, mode: str, dns: str, resolv_text: str | None = None):
-    """‏#2138: הבלוק NETEOF כמו שהוא, מול resolv.conf בתיקייה זמנית (‏RESOLV_CONF
+    """#2138: הבלוק NETEOF כמו שהוא, מול resolv.conf בתיקייה זמנית (RESOLV_CONF
     מוחלף במודול — הבלוק מעביר אותו במפורש, ולא נשען על ברירת המחדל)."""
     code = _installer_block("NETEOF").replace("$APP_DIR", REPO.as_posix()) \
         .replace("$DATA_DIR", tmp_path.as_posix())
@@ -1328,8 +1328,8 @@ def _netcfg_block(tmp_path, monkeypatch, mode: str, dns: str, resolv_text: str |
 
 
 def test_installer_static_nic_writes_the_dns_from_the_screen_to_resolv_conf(tmp_path, monkeypatch, capsys):
-    """rc3 (Hyper-V, 24/10): ‏servers_dns=10.68.0.1 ב-answers, ואין
-    ‏`/etc/resolv.conf` אחרי firstboot — ‏`getent hosts` החזיר 2. ברשת בלי DHCP
+    """rc3 (Hyper-V, 24/10): servers_dns=10.68.0.1 ב-answers, ואין
+    `/etc/resolv.conf` אחרי firstboot — `getent hosts` החזיר 2. ברשת בלי DHCP
     אף אחד אחר לא כותב אותו."""
     code, resolv = _netcfg_block(tmp_path, monkeypatch, "static", "10.68.0.1, 1.1.1.1")
     exec(compile(code, "deploy/setup-boot-server.sh", "exec"), {})
@@ -1341,7 +1341,7 @@ def test_installer_static_nic_writes_the_dns_from_the_screen_to_resolv_conf(tmp_
 
 @pytest.mark.parametrize("mode, dns", [("dhcp", ""), ("static", "")])
 def test_installer_leaves_resolv_conf_to_dhcpcd_or_alone_without_dns(tmp_path, monkeypatch, mode, dns):
-    """‏DHCP: ה-hook של dhcpcd הוא הבעלים של הקובץ. סטטי בלי DNS: אין מה
+    """DHCP: ה-hook של dhcpcd הוא הבעלים של הקובץ. סטטי בלי DNS: אין מה
     לכתוב, ומה שיש (lease זמני של firstboot) אינו נמחק."""
     before = "# Generated by dhcpcd from eth0.dhcp\nnameserver 192.168.68.1\n"
     code, resolv = _netcfg_block(tmp_path, monkeypatch, mode, dns, resolv_text=before)
@@ -1365,11 +1365,11 @@ def test_installer_text_deploy_is_optional_and_servers_nic_is_dhcp_by_default():
     assert "לא עכשיו" in text
     assert 'CONSOLE_HOST="${CONSOLE_HOST:-$SERVERS_IF}"' in text
     # בלי כרטיס הפצה: אין interface=, dnsmasq כבוי, grub.cfg לא נכתב, חומת אש בלי --deploy-if.
-    assert 'NFT_ARGS+=(--deploy-if "$DEPLOY_FOR_NFT")' in text          # ‏#1121 ס' 7
+    assert 'NFT_ARGS+=(--deploy-if "$DEPLOY_FOR_NFT")' in text          # #1121 ס' 7
     assert "systemctl disable --now dnsmasq" in text
     assert "grub/grub.cfg לא נכתב" in text
     assert 'VERIFY_URL="${SERVER_URL:-http://127.0.0.1:${PORT:-8080}}"' in text
-    # ‏--interface ליחידה רק כשיש כרטיס; --console-host תמיד.
+    # --interface ליחידה רק כשיש כרטיס; --console-host תמיד.
     assert re.search(r'if \[\[ -n "\$IFACE" \]\]; then\n\s+STORAGE_ARGS\+=" --interface \$IFACE"', text)
     assert 'STORAGE_ARGS+=" --console-host $CONSOLE_HOST"' in text
     assert "getent ahostsv4" in text                                # ראשי בשם → כתובת לחומת האש
@@ -1419,13 +1419,13 @@ def test_the_parent_is_authenticated_by_certificate_not_by_address():
         "https://imagesrv.college.local:8443"
 
 
-# --- ‏#1013: קובץ ה-dnsmasq הראשי נגזר מה-DB בעליית השרת --------------------------
+# --- #1013: קובץ ה-dnsmasq הראשי נגזר מה-DB בעליית השרת --------------------------
 
 
 def _startup(tmp_path, images_root, clock, *, source: str, on_disk: str | None,
              sync: bool = True, tftp_root: Path | None = None):
     """מרים runtime כמו main (sync_dnsmasq=True) עם dnsmasq מזויף, ומחזיר
-    מה נכתב. ‏`on_disk` = מה ש-read_active_conf "רואה" (None = אין קובץ)."""
+    מה נכתב. `on_disk` = מה ש-read_active_conf "רואה" (None = אין קובץ)."""
     from server.app import create_app
     applied: list[str] = []
     hooks = {
@@ -1469,7 +1469,7 @@ def test_startup_does_not_touch_dnsmasq_when_the_file_already_matches(tmp_path, 
 
 
 def test_startup_leaves_dnsmasq_alone_until_the_deploy_network_is_configured(tmp_path, images_root, clock):
-    """‏#1088: בלי רשת הפצה dnsmasq נשאר כבוי עד ההדלקה הראשונה — restart
+    """#1088: בלי רשת הפצה dnsmasq נשאר כבוי עד ההדלקה הראשונה — restart
     מהעלייה היה מעלה אותו על כל הכרטיסים (בלי interface=)."""
     applied, _ = _startup(tmp_path, images_root, clock, source="none", on_disk=None)
     assert applied == []

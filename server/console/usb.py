@@ -1,12 +1,12 @@
 """הדיסק-און-קי לשיכפול בלי שרת (#1914) — ההורדה מהקונסולה.
 
-‏`tools/build_usb_clone.sh --publish <data_dir>` כותב שלושה קבצים
-ל-`<data_dir>/usb/`: ‏`imagesrv-usb.img`, ‏`imagesrv-usb.img.sha256`
+`tools/build_usb_clone.sh --publish <data_dir>` כותב שלושה קבצים
+ל-`<data_dir>/usb/`: `imagesrv-usb.img`, `imagesrv-usb.img.sha256`
 (``<sha>  <שם>``) ו-`imagesrv-usb.json` (גרסה, גודל, מתי נבנה). השרת
 **אינו** בונה ואינו משנה אותם — הוא מגיש.
 
 למנהל בלבד (`admin_only`); משתמש הפצה מקבל 403 גם מ-`console_only`
-ב-app.py. ‏sha256 שאינו 64 תווי hex, או מניפסט שהגודל שבו אינו גודל הקובץ —
+ב-app.py. sha256 שאינו 64 תווי hex, או מניפסט שהגודל שבו אינו גודל הקובץ —
 "לא זמין" עם הסיבה, לא הורדה של קובץ שאין לו ראיה (עיקרון 5/6). הגיבוב
 של הקובץ עצמו מחושב פעם אחת לכל (גודל, mtime) ונשמר בזיכרון — מאות MB אינם
 נקראים בכל רענון של דף ההגדרות — וקובץ שאינו תואם לשורה אינו מוגש.
@@ -55,7 +55,7 @@ BUILD_HINT = "sudo tools/build_usb_clone.sh --out /var/tmp/usb --publish <data_d
 
 
 def usb_status(data_dir: Path) -> dict:
-    """מה שהקונסולה מציגה. ‏`available` רק כשהקובץ, ה-sha256 והמניפסט כולם
+    """מה שהקונסולה מציגה. `available` רק כשהקובץ, ה-sha256 והמניפסט כולם
     נקראו ותואמים זה לזה; אחרת `reason` אומר מה חסר."""
     base = Path(data_dir) / USB_DIR
     img, sha, man = base / IMG, base / SHA, base / MANIFEST
@@ -64,7 +64,7 @@ def usb_status(data_dir: Path) -> dict:
     try:
         m = _SHA_LINE.match(sha.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError) as exc:
-        # ‏#2510: טקסט החריגה (נתיב, strerror) ליומן השרת; ללקוח — משפט קבוע.
+        # #2510: טקסט החריגה (נתיב, strerror) ליומן השרת; ללקוח — משפט קבוע.
         log.warning("usb clone: %s unreadable: %s", sha, exc)
         return {"available": False, "reason": "קובץ ה-SHA256 לא נקרא — הפרטים ביומן השרת"}
     if not m:

@@ -1,35 +1,35 @@
-"""‏#833: המוניטור ב-view-only חייב לשרוד לקוח ששולח קלט.
+"""#833: המוניטור ב-view-only חייב לשרוד לקוח ששולח קלט.
 
-‏`monitor.sh` נותן `--input` לבנייה ולמשכפל (#1454); view-only נשאר מצב של monitor.c. שם
-‏`agent/monitor.c` השאיר את ‏`kbdAddEvent`/`ptrAddEvent` כ-`NULL`,
-‏ו-LibVNCServer קורא להם **בלי בדיקה** — הלקוח של הקונסולה שולח
-‏PointerEvent מיד אחרי ה-handshake, והתהליך קפץ לכתובת 0 (‏`segfault at 0
-ip 0`, ‏rc=139, נמדד על .118 ב-15/09). ה-supervisor הפעיל מחדש אחרי 5ש',
+`monitor.sh` נותן `--input` לבנייה ולמשכפל (#1454); view-only נשאר מצב של monitor.c. שם
+`agent/monitor.c` השאיר את `kbdAddEvent`/`ptrAddEvent` כ-`NULL`,
+ו-LibVNCServer קורא להם **בלי בדיקה** — הלקוח של הקונסולה שולח
+PointerEvent מיד אחרי ה-handshake, והתהליך קפץ לכתובת 0 (`segfault at 0
+ip 0`, rc=139, נמדד על .118 ב-15/09). ה-supervisor הפעיל מחדש אחרי 5ש',
 ולכן מהדפדפן זה נראה "פורט פתוח אבל החיבור נסגר".
 
 מה שנבדק כאן הוא **ההתנהגות**, לא הקוד: בונים את הבינארי מול ספריית
-‏libvncserver של המערכת, מריצים אותו על קובץ שמחליף את ‏`/dev/fb0`
-‏(`--fb FILE --geometry WxH`), ולקוח RFB מינימלי מבצע handshake, מבקש
-‏FramebufferUpdate, שולח ‏KeyEvent + PointerEvent, ומבקש שוב. התהליך חייב
+libvncserver של המערכת, מריצים אותו על קובץ שמחליף את `/dev/fb0`
+(`--fb FILE --geometry WxH`), ולקוח RFB מינימלי מבצע handshake, מבקש
+FramebufferUpdate, שולח KeyEvent + PointerEvent, ומבקש שוב. התהליך חייב
 להישאר חי ולהגיש את שתי התמונות. הראיה החיובית היא ה-FramebufferUpdate
 **השני** — אחרי הקלט (עיקרון 5): "החיבור לא נסגר" לבדו אינו ראיה.
 
-בקרה שלילית: על ‏`= NULL` (‏main ‏2ae4b11) הלקוח מקבל את התמונה הראשונה,
-ואחרי ה-KeyEvent הסוקט נסגר — ‏`_recv_exact` נופל בשם, והתהליך יוצא
-ב-SIGSEGV (‏rc=-11, ‏139 במעטפת). מה שנמדד על הברזל ב-15/09 הוא בדיוק
+בקרה שלילית: על `= NULL` (main 2ae4b11) הלקוח מקבל את התמונה הראשונה,
+ואחרי ה-KeyEvent הסוקט נסגר — `_recv_exact` נופל בשם, והתהליך יוצא
+ב-SIGSEGV (rc=-11, 139 במעטפת). מה שנמדד על הברזל ב-15/09 הוא בדיוק
 הרצף הזה; הבקרה עצמה רצה במעבדה, לא בווינדוס.
 
-‏gcc + libvncserver-dev יש רק במעבדה (‏`build_initramfs.sh` מתקין אותם);
-בווינדוס הבדיקה מדלגת בהצהרה — ‏`requires_native`, כמו ‏`test_cloner_gui`.
+gcc + libvncserver-dev יש רק במעבדה (`build_initramfs.sh` מתקין אותם);
+בווינדוס הבדיקה מדלגת בהצהרה — `requires_native`, כמו `test_cloner_gui`.
 
-‏#839 — האימות: ‏5900 קשוב לכל וילן ההפצה, ולכן לחיצת-היד של ה-RFB היא
+#839 — האימות: 5900 קשוב לכל וילן ההפצה, ולכן לחיצת-היד של ה-RFB היא
 השער. המוניטור מציע **רק** סוג-אבטחה 2 (מסגור VNC Authentication); התשובה
 ל-challenge היא 16 בייטי סוד-האתחול (`--secret-file`, 32 hex). לקוח בלי
 הסוד לא מקבל מסך, לא מזריק קלט, ו**לא מפעיל reboot** — גם אם דחף
 ClientCutText מיד אחרי התשובה השגויה. ההוכחה היא סטאב `reboot` ב-PATH
 שכותב קובץ: בלי סוד הקובץ לא נוצר, עם סוד הוא נוצר.
 
-בקרה שלילית (מעבדה, על `origin/main` שלפני #839, ‏f83eb4f): שם אין
+בקרה שלילית (מעבדה, על `origin/main` שלפני #839, f83eb4f): שם אין
 `--secret-file` (הבינארי מסרב לדגל — משמיטים אותו), הרשימה מציעה `1`,
 ו-`test_power_cut_text_needs_an_authenticated_session` נופל בשלב הראשון:
 הקובץ **נוצר** מחיבור שלא הזדהה. זו בדיוק החולשה.
@@ -137,14 +137,14 @@ def _answer_challenge(sock: socket.socket, response: bytes | None = None,
     return struct.unpack(">I", _recv_exact(sock, 4))[0]
 
 
-#: ‏PIXEL_FORMAT של RFB: ‏bpp, depth, big-endian, true-colour, שלושה max,
-#: שלושה shift, ‏3 ריפוד.
+#: PIXEL_FORMAT של RFB: bpp, depth, big-endian, true-colour, שלושה max,
+#: שלושה shift, 3 ריפוד.
 PIXEL_FORMAT = ">BBBBHHHBBB3x"
 
 
 def _server_init(sock: socket.socket) -> tuple[int, int, tuple[int, ...]]:
-    """‏RFB 3.8, סוג 2 עם HMAC-SHA256(סוד, challenge), ‏ClientInit משותף.
-    מחזיר את גודל המסך ואת פורמט הפיקסלים שהשרת הצהיר עליו. ‏None אסור
+    """RFB 3.8, סוג 2 עם HMAC-SHA256(סוד, challenge), ClientInit משותף.
+    מחזיר את גודל המסך ואת פורמט הפיקסלים שהשרת הצהיר עליו. None אסור
     שיוצע בכלל — זה השער של #839."""
     types = _security_types(sock)
     assert 1 not in types, f"None security offered: {list(types)}"
@@ -164,7 +164,7 @@ def _handshake(sock: socket.socket) -> tuple[int, int]:
 
 
 def _request_pixels(sock: socket.socket, width: int, height: int) -> bytes:
-    """‏FramebufferUpdateRequest מלא (לא incremental), וקריאת ה-Update.
+    """FramebufferUpdateRequest מלא (לא incremental), וקריאת ה-Update.
     מחזיר את בייטי הפיקסלים שהגיעו ב-Raw, בסדר המלבנים."""
     sock.sendall(struct.pack(">BBHHHH", 3, 0, 0, 0, width, height))
     kind = _recv_exact(sock, 1)[0]
@@ -185,7 +185,7 @@ def _request_update(sock: socket.socket, width: int, height: int) -> int:
 
 
 def _set_pixel_format(sock: socket.socket, red: int, green: int, blue: int) -> None:
-    """‏SetPixelFormat (msg 0): ‏32bpp, ‏depth 24, little-endian, true-colour,
+    """SetPixelFormat (msg 0): 32bpp, depth 24, little-endian, true-colour,
     עם ה-shifts שהלקוח מבקש — כמו `setPixelFormat()` ב-monitor.js."""
     sock.sendall(struct.pack(">B3x" + PIXEL_FORMAT[1:], 0, 32, 24, 0, 1,
                              255, 255, 255, red, green, blue))
@@ -212,12 +212,12 @@ def _pointer(sock: socket.socket, buttons: int, x: int, y: int) -> None:
 
 
 def _cut_text(text: bytes) -> bytes:
-    """‏ClientCutText (msg 6), כמו ש-monitor.js בונה אותו."""
+    """ClientCutText (msg 6), כמו ש-monitor.js בונה אותו."""
     return struct.pack(">BxxxI", 6, len(text)) + text
 
 
 class Monitor:
-    """מוניטור חי על קובץ-framebuffer, עם קובץ סוד, ולוג. ‏`env` מאפשר
+    """מוניטור חי על קובץ-framebuffer, עם קובץ סוד, ולוג. `env` מאפשר
     להחליף PATH — כך `reboot` הוא סטאב ולא המכונה."""
 
     def __init__(self, tmp_path: Path, binary: Path, *, secret: str | None = SECRET,
@@ -282,7 +282,7 @@ def test_view_only_monitor_survives_keyboard_and_pointer_events(tmp_path):
             width, height = _handshake(sock)
             assert (width, height) == (WIDTH, HEIGHT)
 
-            # (א) ‏FramebufferUpdateRequest לבד — לא מפיל (השאלה הפתוחה ב-#833).
+            # (א) FramebufferUpdateRequest לבד — לא מפיל (השאלה הפתוחה ב-#833).
             assert _request_update(sock, width, height) == WIDTH * HEIGHT * 4
 
             # (ב) קלט, כמו שהלקוח של הקונסולה שולח: מקש ולחיצת עכבר.
@@ -305,10 +305,10 @@ def test_view_only_monitor_survives_keyboard_and_pointer_events(tmp_path):
 
 
 def _reboot_stub(tmp_path: Path) -> tuple[dict, Path]:
-    """‏`reboot` מזויף ראשון ב-PATH: כותב את הארגומנטים שלו לקובץ. הקובץ
+    """`reboot` מזויף ראשון ב-PATH: כותב את הארגומנטים שלו לקובץ. הקובץ
     הוא הראיה החיובית ש-run_power רץ — ולא-קיומו הוא הראיה שלא.
     הכתיבה לקובץ זמני ואז `mv`: הקובץ מופיע רק שלם, כך ש"קיים" גורר
-    "הארגומנטים כבר בפנים" (‏`>` לבדו יוצר אותו ריק לפני ה-printf)."""
+    "הארגומנטים כבר בפנים" (`>` לבדו יוצר אותו ריק לפני ה-printf)."""
     stubs = tmp_path / "stubs"
     stubs.mkdir()
     marker = tmp_path / "reboot.called"
@@ -358,8 +358,8 @@ def test_monitor_offers_only_the_secret_type_and_rejects_a_wrong_secret(tmp_path
                 if not piece:
                     break
                 head += piece
-            # ‏3.8: ‏0 = "החיבור נכשל" + סיבה, או EOF. לעולם לא 0-אחרי-בחירה
-            # ‏= הצלחה, כי ההצלחה היחידה היא SecurityResult אחרי challenge.
+            # 3.8: 0 = "החיבור נכשל" + סיבה, או EOF. לעולם לא 0-אחרי-בחירה
+            # = הצלחה, כי ההצלחה היחידה היא SecurityResult אחרי challenge.
             assert head in (b"", b"\x00\x00\x00\x00"), head
             if head:
                 reason_len = struct.unpack(">I", _recv_exact(sock, 4))[0]
@@ -396,10 +396,10 @@ def test_power_cut_text_needs_an_authenticated_session(tmp_path):
             f"reboot ran for an unauthenticated client: {marker.read_text()}")
         assert monitor.alive()
 
-        # תקרה נגד תקיעה, לא הכרעה. בין ה-ClientCutText לקובץ יש ‏`sync()`
-        # של כל המערכת (‏run_power), ‏fork ו-exec של מעטפת. תקרה של 5 ש'
-        # נחצתה בשתיים משלוש ריצות מלאות (‏`-n auto`, ‏14 ליבות, 06/11)
-        # ועברה 10/10 לבד. ‏sync() — שממתין לכל מה שה-workers כתבו — הוא
+        # תקרה נגד תקיעה, לא הכרעה. בין ה-ClientCutText לקובץ יש `sync()`
+        # של כל המערכת (run_power), fork ו-exec של מעטפת. תקרה של 5 ש'
+        # נחצתה בשתיים משלוש ריצות מלאות (`-n auto`, 14 ליבות, 06/11)
+        # ועברה 10/10 לבד. sync() — שממתין לכל מה שה-workers כתבו — הוא
         # החשוד; זה לא נמדד.
         with monitor.connect() as sock:
             _handshake(sock)
@@ -444,10 +444,10 @@ def test_monitor_refuses_to_start_without_a_usable_secret(tmp_path):
 
 @NATIVE
 def test_monitor_refuses_to_start_without_a_usable_allow_from(tmp_path):
-    """#1077: ‏5900 נגיש רק לשרת, ולכן `--allow-from` חובה וכתובת IPv4 תקינה.
+    """#1077: 5900 נגיש רק לשרת, ולכן `--allow-from` חובה וכתובת IPv4 תקינה.
     בלי הדגל — usage ויציאה; כתובת לא תקינה — יציאה בשמה. עד כאן אף טסט לא
     הפיל את הסרת שני השומרים (בקרה רטרואקטיבית, 24/10): בלעדיהם המוניטור
-    עולה עם ‏`allow_from` = ‏0.0.0.0 — שער שאיש לא קבע."""
+    עולה עם `allow_from` = 0.0.0.0 — שער שאיש לא קבע."""
     binary = _build(tmp_path)
     fb = tmp_path / "fb0.raw"
     fb.write_bytes(bytes(WIDTH * HEIGHT * 4))
@@ -480,9 +480,9 @@ def test_monitor_refuses_to_start_without_a_usable_allow_from(tmp_path):
 
 
 def test_view_only_source_never_assigns_null_input_callbacks():
-    """שומר-מקור שרץ בכל תחנה, גם בלי gcc (ולכן בלי ‏NATIVE): ‏`kbdAddEvent`/`ptrAddEvent`
-    לעולם אינם `NULL`. זה בדיוק השורש של #833 — ‏LibVNCServer אינו בודק.
-    בקרה שלילית: החזרת ‏`screen->kbdAddEvent = NULL;` מפילה כאן."""
+    """שומר-מקור שרץ בכל תחנה, גם בלי gcc (ולכן בלי NATIVE): `kbdAddEvent`/`ptrAddEvent`
+    לעולם אינם `NULL`. זה בדיוק השורש של #833 — LibVNCServer אינו בודק.
+    בקרה שלילית: החזרת `screen->kbdAddEvent = NULL;` מפילה כאן."""
     import re
     source = MONITOR_C.read_text(encoding="utf-8")
     offenders = re.findall(r"(?:kbdAddEvent|ptrAddEvent)\s*=\s*NULL", source)
@@ -501,7 +501,7 @@ def _source() -> str:
 
 
 def test_source_gates_rfb_on_the_secret_not_on_none():
-    """‏authPasswdData לא-NULL + passwordCheck משלנו = None אינו מוצע.
+    """authPasswdData לא-NULL + passwordCheck משלנו = None אינו מוצע.
     בקרה שלילית: מחיקת שתי השורות מחזירה את 5900 הפתוח."""
     c = _source()
     assert "screen->authPasswdData = secret;" in c
@@ -531,7 +531,7 @@ def test_source_refuses_a_peer_that_is_not_the_server():
 
 
 def test_source_never_exits_from_a_client_callback():
-    """‏emit_event רץ מתוך callback של LibVNCServer; ‏fatal() שם היה
+    """emit_event רץ מתוך callback של LibVNCServer; fatal() שם היה
     קריסה מהצפת אירועים."""
     c = _source()
     assert 'fatal("write /dev/uinput")' not in c
@@ -613,14 +613,14 @@ def test_wrong_peer_is_closed_before_the_handshake(tmp_path):
 
 
 def _rekey(secret: bytes, challenge: bytes) -> bytes:
-    """‏#1837: ‏`rekey_secret` — כתוב כאן בנפרד מ-monitor.c ומהשרת."""
+    """#1837: `rekey_secret` — כתוב כאן בנפרד מ-monitor.c ומהשרת."""
     return hmaclib.new(secret, b"imagesrv-monitor-rekey" + challenge,
                        hashlib.sha256).digest()[:16]
 
 
 @NATIVE
 def test_authentication_moves_the_secret_to_the_derived_one(tmp_path):
-    """‏#1837: האימות מעביר את הסוד — בקובץ ובזיכרון — ל-HMAC(סוד,
+    """#1837: האימות מעביר את הסוד — בקובץ ובזיכרון — ל-HMAC(סוד,
     תווית‖challenge), מה שהשרת גוזר מאותו challenge. ראיה חיובית: הקובץ
     שווה בדיוק לגזירה, הסוד הבא מתקבל, והסוד הקודם נדחה. עד #1837 הוגרל
     סוד אקראי ביציאת הלקוח, ואיש מחוץ למכונה לא יכול היה לדעת אותו."""
@@ -650,10 +650,10 @@ def test_authentication_moves_the_secret_to_the_derived_one(tmp_path):
 
 @NATIVE
 def test_the_server_reconnects_to_the_real_monitor_without_a_hello(server, tmp_path):
-    """‏#1837 מקצה לקצה: הפרוקסי של השרת (‏`create_monitor_router`) מול
+    """#1837 מקצה לקצה: הפרוקסי של השרת (`create_monitor_router`) מול
     הבינארי האמיתי של הסוכן. hello אחד, ואז שלושה חיבורים ברצף — כמו מעבר
     מהיר בין מכונות בדף המוניטור. כל אחד מקבל ServerInit בניסיון הראשון.
-    על הקוד שלפני #1837 השני נסגר 4512 (‏"password check failed!")."""
+    על הקוד שלפני #1837 השני נסגר 4512 ("password check failed!")."""
     import asyncio
 
     from starlette.websockets import WebSocketDisconnect
@@ -676,9 +676,9 @@ def test_the_server_reconnects_to_the_real_monitor_without_a_hello(server, tmp_p
 
         client = monitor_client(server, "admin", connector)
         for attempt in range(3):
-            # ‏4409 = המנעול של החיבור הקודם לא שוחרר. נמדד 20/10: 5 מ-15 ריצות,
+            # 4409 = המנעול של החיבור הקודם לא שוחרר. נמדד 20/10: 5 מ-15 ריצות,
             # ונשאר לעולם — זה היה #1860 (ביטול בתוך wait_closed), שתוקף בנפרד;
-            # הניסיון החוזר נשאר כמו ב-monitor.js. ‏4512 — הבאג של #1837 —
+            # הניסיון החוזר נשאר כמו ב-monitor.js. 4512 — הבאג של #1837 —
             # לעולם אינו מנוסה שוב: הוא נכשל כאן מיד.
             for _ in range(50):
                 try:
@@ -700,16 +700,16 @@ def test_the_server_reconnects_to_the_real_monitor_without_a_hello(server, tmp_p
     assert "bad HMAC" not in text, text
 
 
-# --- ‏#949: מצביע מוחלט -----------------------------------------------------
+# --- #949: מצביע מוחלט -----------------------------------------------------
 #
-# הדפדפן שולח PointerEvent עם מיקום **מוחלט** בפריימבאפר (‏`monitor.js`,
-# ‏`fbCoords`). עד #949 ‏`monitor.c` הפך אותו לתזוזה יחסית (‏EV_REL) על התקן
+# הדפדפן שולח PointerEvent עם מיקום **מוחלט** בפריימבאפר (`monitor.js`,
+# `fbCoords`). עד #949 `monitor.c` הפך אותו לתזוזה יחסית (EV_REL) על התקן
 # "עכבר", והסמן של הגואי — שמצטבר בנפרד, עם gain וגבולות משלו — סטה ממנו:
 # "העכבר קופץ" (נדב, על מחשב הבנייה, 17/09). התיקון: ההתקן מצהיר ABS_X/ABS_Y
 # בטווח 0..w-1 / 0..h-1, וכל PointerEvent (x,y) נכתב כ-ABS_X=x, ABS_Y=y.
 #
 # הראיה כאן היא ההתקן **בקרנל**, לא הקוד: קוראים את `/dev/input/eventN`
-# שהמוניטור יצר, שואלים אותו (‏EVIOCGABS) על הטווח שהצהיר, ומקבלים ממנו את
+# שהמוניטור יצר, שואלים אותו (EVIOCGABS) על הטווח שהצהיר, ומקבלים ממנו את
 # האירועים שהמוניטור הזריק. דורש `/dev/uinput` כתיב — כלומר root במעבדה.
 
 import evdev_lab
@@ -762,8 +762,8 @@ def test_input_device_is_an_absolute_pointer_over_the_framebuffer(tmp_path):
 @pytest.mark.uinput
 @WITH_UINPUT
 def test_pointer_event_lands_as_the_same_absolute_position(tmp_path):
-    """‏PointerEvent ב-(x,y) → ‏`EV_ABS ABS_X=x, ABS_Y=y` על ההתקן, וכפתור
-    שמאלי → ‏BTN_LEFT; מיקום מעבר לקצה נצמד לפיקסל האחרון (#850). בקרה
+    """PointerEvent ב-(x,y) → `EV_ABS ABS_X=x, ABS_Y=y` על ההתקן, וכפתור
+    שמאלי → BTN_LEFT; מיקום מעבר לקצה נצמד לפיקסל האחרון (#850). בקרה
     שלילית: הקוד הישן מזריק EV_REL (הפרשים) ואף ABS_X אינו מגיע."""
     binary = _build(tmp_path)
     monitor = Monitor(tmp_path, binary, extra=("--input",))
@@ -797,26 +797,26 @@ def test_pointer_event_lands_as_the_same_absolute_position(tmp_path):
     assert buttons == [(BTN_LEFT, 1), (BTN_LEFT, 0)], buttons
 
 
-# --- ‏#850: פורמט הפיקסלים וגבולות ה-mmap ---------------------------------------
+# --- #850: פורמט הפיקסלים וגבולות ה-mmap ---------------------------------------
 #
-# ‏(1) הפורמט נגזר מה-framebuffer ולא מונח. ‏LibVNCServer מצהיר כברירת מחדל
-# על אדום בביט 0 (סדר R,G,B,X בזיכרון, ב-little-endian); ‏fbdev ‏XRGB8888
-# ו-framebuffer הזיכרון (‏interfaces.md §15) מחזיקים אדום בביט 16. עד #850
-# ‏monitor.c לא העתיק את ה-offsets ל-`serverFormat`, ולכן כל לקוח קיבל
+# (1) הפורמט נגזר מה-framebuffer ולא מונח. LibVNCServer מצהיר כברירת מחדל
+# על אדום בביט 0 (סדר R,G,B,X בזיכרון, ב-little-endian); fbdev XRGB8888
+# ו-framebuffer הזיכרון (interfaces.md §15) מחזיקים אדום בביט 16. עד #850
+# monitor.c לא העתיק את ה-offsets ל-`serverFormat`, ולכן כל לקוח קיבל
 # פיקסלים "מתורגמים" מפורמט שאינו שלהם. הראיה כאן היא מה שהלקוח מקבל:
-# ‏ה-ServerInit, ובייטי הפיקסל עצמם בשני פורמטי לקוח שונים.
+# ה-ServerInit, ובייטי הפיקסל עצמם בשני פורמטי לקוח שונים.
 #
-# ‏(2) כל בייט שלולאת ההעתקה קוראת נמצא בתוך המיפוי, והחשבון ב-64 ביט.
-# גיאומטריה שגלשה ב-‏`__u32` עברה את בדיקת הגודל עם קובץ זעיר.
+# (2) כל בייט שלולאת ההעתקה קוראת נמצא בתוך המיפוי, והחשבון ב-64 ביט.
+# גיאומטריה שגלשה ב-`__u32` עברה את בדיקת הגודל עם קובץ זעיר.
 
-#: ‏Monitor כותב את הקובץ כ-`10 20 30 00` לכל פיקסל: ב-XRGB8888 LE זה
-#: ‏B=0x10, ‏G=0x20, ‏R=0x30.
+#: Monitor כותב את הקובץ כ-`10 20 30 00` לכל פיקסל: ב-XRGB8888 LE זה
+#: B=0x10, G=0x20, R=0x30.
 FIXTURE_BGRX = bytes([0x10, 0x20, 0x30, 0x00])
 
 
 @NATIVE
 def test_pixel_format_is_the_framebuffers_own_xrgb8888(tmp_path):
-    """‏ServerInit מצהיר R@16 G@8 B@0; לקוח שמבקש את אותו פורמט (monitor.js)
+    """ServerInit מצהיר R@16 G@8 B@0; לקוח שמבקש את אותו פורמט (monitor.js)
     מקבל את הבייטים כמות שהם, ולקוח שמבקש R@0 מקבל אותם מתורגמים — כלומר
     השרת מתרגם **מהפורמט שהצהיר**, וההצהרה נכונה. מ-#1221 כל הפריים,
     כולל הפינה, נבדק בלי היתר — הסמן של LibVNCServer מבוטל.
@@ -829,10 +829,10 @@ def test_pixel_format_is_the_framebuffers_own_xrgb8888(tmp_path):
             width, height, fmt = _server_init(sock)
             bpp, depth, big_endian, true_colour, r_max, g_max, b_max, r, g, b = fmt
             assert (r, g, b) == (16, 8, 0), f"ServerInit shifts R@{r} G@{g} B@{b}"
-            # ‏true-colour הוא "nonzero" ב-RFB, ו-LibVNCServer שולח 0xFF
-            # ‏(TRUE מוגדר -1 ב-rfbproto.h). ‏depth הוא ברירת המחדל של
-            # ‏rfbGetScreen, ‏8*bytesPerPixel = 32 (נמדד ב-Testrunner עם #850,
-            # ‏24/09) — לא נגענו בו; הלקוח מפענח לפי max/shift, לא לפי depth.
+            # true-colour הוא "nonzero" ב-RFB, ו-LibVNCServer שולח 0xFF
+            # (TRUE מוגדר -1 ב-rfbproto.h). depth הוא ברירת המחדל של
+            # rfbGetScreen, 8*bytesPerPixel = 32 (נמדד ב-Testrunner עם #850,
+            # 24/09) — לא נגענו בו; הלקוח מפענח לפי max/shift, לא לפי depth.
             assert (bpp, big_endian) == (32, 0), fmt
             assert true_colour != 0, fmt
             assert 24 <= depth <= 32, fmt
@@ -840,7 +840,7 @@ def test_pixel_format_is_the_framebuffers_own_xrgb8888(tmp_path):
 
             # שלוש דגימות, כל אחת עם תקרה, כדי שריצה אחת תכריע בין
             # "העדכון הראשון יצא לפני ההעתקה" (תזמון, הטסט) לבין
-            # "ההעתקה או התרגום מחזירים אפס" (הקוד). ‏native = בלי
+            # "ההעתקה או התרגום מחזירים אפס" (הקוד). native = בלי
             # SetPixelFormat, כלומר בפורמט השרת, בלי תרגום ב-LibVNCServer.
             seen = {}
             seen["native"] = _pixels_until_content(sock, width, height)
@@ -859,11 +859,11 @@ def test_pixel_format_is_the_framebuffers_own_xrgb8888(tmp_path):
         assert wrong == [], f"{name}: {len(wrong)} pixels differ, first {wrong[:5]}\n{detail}"
 
 
-#: עד #1221 ‏LibVNCServer צייר לתוך הפריים את סמן ברירת המחדל שלו (‏X
-#: בגודל 8×7, hotspot ‏(3,3), שחור על לבן) ללקוח שלא הצהיר על קידודי
+#: עד #1221 LibVNCServer צייר לתוך הפריים את סמן ברירת המחדל שלו (X
+#: בגודל 8×7, hotspot (3,3), שחור על לבן) ללקוח שלא הצהיר על קידודי
 #: סמן — הלקוח כאן, וגם monitor.js, מבקשים Raw/CopyRect/DesktopSize
-#: בלבד. ‏monitor.c מחליף את ptrAddEvent, ולכן הסמן נשאר ב-(0,0). נמדד
-#: ב-Testrunner 24/09: ‏6132 = 6144 − 4 פיקסלים שחורים × 3, בדיוק החלק
+#: בלבד. monitor.c מחליף את ptrAddEvent, ולכן הסמן נשאר ב-(0,0). נמדד
+#: ב-Testrunner 24/09: 6132 = 6144 − 4 פיקסלים שחורים × 3, בדיוק החלק
 #: הנראה של הסמן. #1221 מבטל את הסמן (`screen->cursor = NULL`) —
 #: אין עוד היתר לפינה, כל הפריים חייב להיות צבע הפיקצ'ר.
 
@@ -925,11 +925,11 @@ def _base_argv(binary: Path, tmp_path: Path) -> list[str]:
 
 @NATIVE
 def test_geometry_that_wraps_u32_is_refused_by_name(tmp_path):
-    """‏65535×16385×4 = 4,295,163,900 — ב-`__u32` זה 196,604. קובץ בגודל
+    """65535×16385×4 = 4,295,163,900 — ב-`__u32` זה 196,604. קובץ בגודל
     הזה עבר את בדיקת הגודל, ולולאת ההעתקה קראה שורה של 262,140 בייט
     ממיפוי של 196,604. עכשיו: סירוב בשם, עם המספר האמיתי, לפני האזנה.
-    בקרה שלילית: על main שלפני #850 התהליך ממשיך — ‏SIGSEGV בהעתקה או
-    ‏FATAL על הקצאת 4GB — ואף אחד מהם אינו הסירוב הזה."""
+    בקרה שלילית: על main שלפני #850 התהליך ממשיך — SIGSEGV בהעתקה או
+    FATAL על הקצאת 4GB — ואף אחד מהם אינו הסירוב הזה."""
     binary = _build(tmp_path)
     fb = tmp_path / "wrapped.raw"
     fb.write_bytes(bytes(196_604))
@@ -942,8 +942,8 @@ def test_geometry_that_wraps_u32_is_refused_by_name(tmp_path):
 
 @NATIVE
 def test_size_past_rfb_u16_is_refused_by_name(tmp_path):
-    """‏ServerInit נושא רוחב וגובה כ-U16: מסך ברוחב 70000 היה מוצהר כ-4464.
-    בקרה שלילית: על main שלפני #850 המוניטור עולה ומגיש (‏_run_refused
+    """ServerInit נושא רוחב וגובה כ-U16: מסך ברוחב 70000 היה מוצהר כ-4464.
+    בקרה שלילית: על main שלפני #850 המוניטור עולה ומגיש (_run_refused
     נופל על "started instead of refusing")."""
     binary = _build(tmp_path)
     fb = tmp_path / "wide.raw"
@@ -956,7 +956,7 @@ def test_size_past_rfb_u16_is_refused_by_name(tmp_path):
 
 @NATIVE
 def test_memfb_header_whose_row_wraps_u32_is_refused(tmp_path):
-    """כותרת IMCTLFB1 עם width=0x40000001 ו-stride=4: ‏`width*4` ב-u32 הוא 4,
+    """כותרת IMCTLFB1 עם width=0x40000001 ו-stride=4: `width*4` ב-u32 הוא 4,
     ולכן `stride < width*4` לא תפס. בקרה שלילית: על main שלפני #850 הכותרת
     מתקבלת ("serving a memory framebuffer")."""
     binary = _build(tmp_path)
@@ -969,10 +969,10 @@ def test_memfb_header_whose_row_wraps_u32_is_refused(tmp_path):
     assert "serving a memory framebuffer" not in run.stderr, run.stderr
 
 
-# ‏/dev/fb0 עצמו — ‏yoffset, ‏xoffset, ‏offsets של ערוצים — אינו בר-זיוף בקובץ
-# (אין ‏FBIOGET_* על קובץ רגיל). לכן שתי הפונקציות שמחליטות נבדקות ישירות:
-# ‏driver שמכליל את monitor.c (‏main שלו בשם אחר) וקורא להן עם פריסות
-# מזויפות. ‏revert מלא של monitor.c הוא כאן שגיאת הידור, לא בקרה —
+# /dev/fb0 עצמו — yoffset, xoffset, offsets של ערוצים — אינו בר-זיוף בקובץ
+# (אין FBIOGET_* על קובץ רגיל). לכן שתי הפונקציות שמחליטות נבדקות ישירות:
+# driver שמכליל את monitor.c (main שלו בשם אחר) וקורא להן עם פריסות
+# מזויפות. revert מלא של monitor.c הוא כאן שגיאת הידור, לא בקרה —
 # הבקרה ההתנהגותית לדרייבר היא מוטציה ממוקדת (ראו גוף ה-PR).
 
 _DRIVER = r"""
@@ -1031,10 +1031,10 @@ int main(void) {
 
 @NATIVE
 def test_format_and_layout_checks_on_fake_fbdev_geometry(tmp_path):
-    """‏(א) פורמט: כל סידור של שלושה ערוצי 8 ביט על גבולות בייט מתקבל;
-    ‏16bpp, ‏offset שאינו כפולה של 8, ערוצים חופפים, ‏length≠8, ‏msb_right —
-    נדחים, כל אחד בשם. ‏(ב) גבולות: ‏double-buffer ב-yoffset=yres מתקבל כשה-
-    ‏smem_len מכיל אותו ונדחה כשלא — זה בדיוק תרחיש ה-Issue; הזנב המדויק
+    """(א) פורמט: כל סידור של שלושה ערוצי 8 ביט על גבולות בייט מתקבל;
+    16bpp, offset שאינו כפולה של 8, ערוצים חופפים, length≠8, msb_right —
+    נדחים, כל אחד בשם. (ב) גבולות: double-buffer ב-yoffset=yres מתקבל כשה-
+    smem_len מכיל אותו ונדחה כשלא — זה בדיוק תרחיש ה-Issue; הזנב המדויק
     (שורה אחרונה בלי ריפוד) מתקבל ובייט אחד פחות נדחה — הבדיקה אינה
     מחמירה מהקריאה עצמה."""
     driver = tmp_path / "layout_drv.c"
@@ -1066,7 +1066,7 @@ def test_format_and_layout_checks_on_fake_fbdev_geometry(tmp_path):
 
 
 def test_source_serves_the_framebuffers_own_format_and_bounds():
-    """שומר-מקור (רץ גם בלי gcc): ה-shifts מועתקים מה-fb, ‏layout_error
+    """שומר-מקור (רץ גם בלי gcc): ה-shifts מועתקים מה-fb, layout_error
     נקרא לפני ה-mmap, והקורא של ה-seqlock מגודר לפני הבדיקה החוזרת.
     בקרה שלילית: על main שלפני #850 אף אחת מהמחרוזות אינה בקובץ."""
     c = _source()
@@ -1077,7 +1077,7 @@ def test_source_serves_the_framebuffers_own_format_and_bounds():
         "__atomic_load_n(frame_seq, __ATOMIC_ACQUIRE)")
 
 
-# --- ‏#1475: רק מה שהשתנה יוצא לרשת -------------------------------------------
+# --- #1475: רק מה שהשתנה יוצא לרשת -------------------------------------------
 #
 # עד #1475 כל טיק העתיק את כל ה-fb וסימן את **כל** המסך כמשתנה, והלקוח
 # (Raw בלבד) קיבל 1920×1080×4 = 8.3MB בכל עדכון — גם כשרק הסמן זז. זה
@@ -1088,7 +1088,7 @@ TILE_W, TILE_H = 64, 32
 
 
 def _read_update(sock: socket.socket) -> list[tuple[int, int, int, int, bytes]]:
-    """‏FramebufferUpdate אחד: רשימת (x, y, w, h, פיקסלים) של מלבני Raw."""
+    """FramebufferUpdate אחד: רשימת (x, y, w, h, פיקסלים) של מלבני Raw."""
     kind = _recv_exact(sock, 1)[0]
     assert kind == 0, f"expected FramebufferUpdate (0), got message type {kind}"
     _recv_exact(sock, 1)
@@ -1103,13 +1103,13 @@ def _read_update(sock: socket.socket) -> list[tuple[int, int, int, int, bytes]]:
 
 @NATIVE
 def test_only_the_changed_tile_is_sent_and_an_idle_screen_sends_nothing(tmp_path):
-    """מסך 256×128 (‏4×4 אריחים). אחרי העדכון המלא: (א) בקשה incremental בלי
+    """מסך 256×128 (4×4 אריחים). אחרי העדכון המלא: (א) בקשה incremental בלי
     שום שינוי — **שום** עדכון בתוך 0.8 שנ' (שמונה טיקים ב-10fps); (ב) שינוי
     של 2×2 פיקסלים ב-(200,100) — אותה בקשה נענית במלבן אחד, האריח
     (192,96) 64×32, עם הפיקסלים החדשים. הראיה החיובית היא (ב): השתיקה
     ב-(א) אינה "החיבור מת".
-    בקרה שלילית: על הקוד שלפני #1475 (‏`rfbMarkRectAsModified(screen, 0, 0,
-    var.xres, var.yres)` בכל טיק) — (א) מקבל את כל המסך, ‏256×128, תוך טיק."""
+    בקרה שלילית: על הקוד שלפני #1475 (`rfbMarkRectAsModified(screen, 0, 0,
+    var.xres, var.yres)` בכל טיק) — (א) מקבל את כל המסך, 256×128, תוך טיק."""
     width, height = 256, 128
     binary = _build(tmp_path)
     monitor = Monitor(tmp_path, binary, width=width, height=height)
@@ -1145,7 +1145,7 @@ def test_only_the_changed_tile_is_sent_and_an_idle_screen_sends_nothing(tmp_path
 
 def test_source_scans_tiles_sends_at_once_and_speeds_up_on_input():
     """שומר-מקור (רץ גם בלי gcc) לשלושת חלקי #1475 שאין להם טסט התנהגות כאן:
-    שליחה מיד (‏deferUpdateTime 0), קצב פעיל אחרי קלט בשני ה-callbacks של
+    שליחה מיד (deferUpdateTime 0), קצב פעיל אחרי קלט בשני ה-callbacks של
     מצב הקלט בלבד, ואין עוד סימון של כל המסך בכל טיק.
     בקרה שלילית: על הקוד שלפני #1475 אף אחת מהמחרוזות החדשות אינה בקובץ,
     והסימון המלא קיים."""
@@ -1165,8 +1165,8 @@ def test_source_scans_tiles_sends_at_once_and_speeds_up_on_input():
     assert "seq_before == served_seq" in c
 
 
-#: ‏interfaces.md §15 — הכותרת של fb.mem: קסם, ואז width, height, stride,
-#: format, seq (‏u32 LE), מרופדת ל-4096.
+#: interfaces.md §15 — הכותרת של fb.mem: קסם, ואז width, height, stride,
+#: format, seq (u32 LE), מרופדת ל-4096.
 MEMFB_SEQ_AT = 24
 
 
@@ -1177,11 +1177,11 @@ def _memfb(path: Path, width: int, height: int, seq: int) -> None:
 
 @NATIVE
 def test_an_unchanged_memfb_seq_is_not_even_read(tmp_path):
-    """‏#1475, הדרישה מהמדידה על הברזל (60% מתהליכון בזמן שיכפול): כשהגואי לא
+    """#1475, הדרישה מהמדידה על הברזל (60% מתהליכון בזמן שיכפול): כשהגואי לא
     הציג פריים חדש, הטיק עולה קריאה אטומית אחת. הראיה: פיקסל משתנה בקובץ
     **בלי** ש-seq זז — שום עדכון בתוך 0.8 שנ' (המוניטור לא קרא את הפיקסלים);
-    ‏seq זז ב-2 (פריים שלם) — אותה בקשה נענית באריח שבו הפיקסל, ורק בו.
-    בקרה שלילית: על הקוד שלפני #1475 (‏`rfbMarkRectAsModified(screen, 0, 0,
+    seq זז ב-2 (פריים שלם) — אותה בקשה נענית באריח שבו הפיקסל, ורק בו.
+    בקרה שלילית: על הקוד שלפני #1475 (`rfbMarkRectAsModified(screen, 0, 0,
     var.xres, var.yres)` בכל טיק שה-seq זוגי) — עדכון מלא תוך טיק."""
     width, height = 128, 64
     mem = tmp_path / "fb.mem"
@@ -1219,11 +1219,11 @@ def test_an_unchanged_memfb_seq_is_not_even_read(tmp_path):
     assert pixels[at:at + 3] == bytes([0xAA, 0xBB, 0xCC]), pixels[at:at + 4].hex()
 
 
-# --- ‏#1475: מדידה — כמה עולה סריקה של 1920×1080 ----------------------------
+# --- #1475: מדידה — כמה עולה סריקה של 1920×1080 ----------------------------
 #
 # מיקרו-בנצ'מרק של לולאת הסריקה עצמה (`scan_tiles` מתוך monitor.c, מהודר
-# כמו שהוא) מול מה שהקוד הישן עשה בכל טיק (‏memcpy של כל הפריים). לא טסט
-# ביצועים עם סף הדוק — המספרים מודפסים לדוח (‏`-s`), והטסט נופל רק אם
+# כמו שהוא) מול מה שהקוד הישן עשה בכל טיק (memcpy של כל הפריים). לא טסט
+# ביצועים עם סף הדוק — המספרים מודפסים לדוח (`-s`), והטסט נופל רק אם
 # סריקה של מסך שלא השתנה יקרה פי 4 מההעתקה שהחליפה.
 
 BENCH_C = REPO / "tests" / "monitor_scan_bench.c"

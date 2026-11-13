@@ -1,11 +1,11 @@
-"""‏#2592 — הטבלה `trusted_browsers` (דפדפן זכור, #1085) הוצאה משימוש ונשארה בסכמה.
+"""#2592 — הטבלה `trusted_browsers` (דפדפן זכור, #1085) הוצאה משימוש ונשארה בסכמה.
 
-"דפדפן זכור" הוסר (63135798, ‏#1243): כל כניסה עם MFA דורשת קוד. הטבלה **נשארת**
+"דפדפן זכור" הוסר (63135798, #1243): כל כניסה עם MFA דורשת קוד. הטבלה **נשארת**
 בסכמה, כי הורדתה היא שינוי סכמה ו-"חזור לגרסה" תלוי בה — כמו `smart_asks`
-(‏`test_smart_ask_removed_2044.py`). מה שנעל כאן: אין לה קורא או כותב מחוץ להגדרה,
+(`test_smart_ask_removed_2044.py`). מה שנעל כאן: אין לה קורא או כותב מחוץ להגדרה,
 והתיעוד אינו אומר שמשהו נמחק ממנה.
 
-**בקרה שלילית:** הטסט השלישי נופל על main שלפני התיקון (‏`interfaces.md` כתב "מחיקת
+**בקרה שלילית:** הטסט השלישי נופל על main שלפני התיקון (`interfaces.md` כתב "מחיקת
 `trusted_browsers`"). הראשון נשמר ירוק בשני המצבים ונופל רק כשמוסיפים קורא או כותב
 לטבלה בקוד; שניהם נמדדו, והפקודות בגוף ה-PR.
 """
@@ -48,7 +48,7 @@ def test_the_table_stays_in_the_schema():
 
 
 def test_the_interface_doc_does_not_claim_anything_is_deleted_from_it():
-    """RED על main: ‏`interfaces.md` כתב שאיפוס סיסמה מוחק את `trusted_browsers` ושיש
+    """RED על main: `interfaces.md` כתב שאיפוס סיסמה מוחק את `trusted_browsers` ושיש
     עוגיית `imagesrv_trusted` שמדלגת על MFA; שניהם כבר לא קורים."""
     doc = (REPO / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert not re.search(r"מחיקת\s+`trusted_browsers`", doc)

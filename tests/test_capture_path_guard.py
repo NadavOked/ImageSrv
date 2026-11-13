@@ -2,7 +2,7 @@
 
 שני קלטים מהרשת הלימודית הופכים לנתיב בשרת: מזהה המשימה (נתיב ה-URL)
 ושם קובץ המחיצה (נתיב ה-URL של ההעלאה, ושדה `file` במניפסט). כאן נבדק
-שכל צורה של יציאה מהתיקייה — ‏`../`, נתיב מוחלט, לוכסן הפוך, קידוד URL
+שכל צורה של יציאה מהתיקייה — `../`, נתיב מוחלט, לוכסן הפוך, קידוד URL
 ושורה חדשה בסוף השם — נדחית, בצורת השגיאה הקיימת, ולא נכתב דבר מחוץ
 לאזור הביניים.
 """
@@ -60,12 +60,12 @@ def test_staged_file_is_a_direct_child_of_the_folder(tmp_path):
 # --- דרך ה-HTTP: ההעלאה --------------------------------------------------------
 
 ENCODED_NAMES = [
-    "..%2Fp1.esp.pcl.zst",            # ‏../ מקודד
+    "..%2Fp1.esp.pcl.zst",            # ../ מקודד
     "%2E%2E%2Fp1.esp.pcl.zst",        # גם הנקודות מקודדות
     "%2Fetc%2Fp1.esp.pcl.zst",        # נתיב מוחלט מקודד
     "..%5Cp1.esp.pcl.zst",            # לוכסן הפוך (Windows)
     "C:%5Cp1.esp.pcl.zst",            # כונן
-    "p1.esp.pcl.zst%0A",              # שורה חדשה בסוף — ‏`$` של re.match היה מקבל אותה
+    "p1.esp.pcl.zst%0A",              # שורה חדשה בסוף — `$` של re.match היה מקבל אותה
     "..",
 ]
 
@@ -89,7 +89,7 @@ def test_an_upload_name_that_leaves_the_folder_is_refused(server, images_root, n
                            content=PROBE,
                            headers={TOKEN_HEADER: task_token(server, created["id"])})
     # 404 = הנתיב המפוענח כבר אינו רכיב אחד, ואף route אינו תואם.
-    # ‏400 = הגיע ל-endpoint ונדחה ברשימה הלבנה — בהודעה הקיימת שלה.
+    # 400 = הגיע ל-endpoint ונדחה ברשימה הלבנה — בהודעה הקיימת שלה.
     assert r.status_code in (400, 404), (r.status_code, r.text)
     if r.status_code == 400:
         assert r.json()["detail"] == "unexpected partition file name"
@@ -125,7 +125,7 @@ def test_a_manifest_file_name_that_leaves_the_folder_is_refused(server, images_r
     manifest["partitions"][0]["file"] = bad
     r = anon.put(f"/api/v1/capture/{created['id']}/manifest",
                  content=json.dumps(manifest).encode(), headers=head)
-    # שלוש השכבות שכבר קיימות, כל אחת בהודעה שלה: ‏`_validate` של הספרייה
+    # שלוש השכבות שכבר קיימות, כל אחת בהודעה שלה: `_validate` של הספרייה
     # (שם לא בטוח / תו בקרה) ו-`SAFE_FILE` של הקליטה.
     assert r.status_code == 400, (r.status_code, r.text)
     assert r.json()["detail"].startswith((

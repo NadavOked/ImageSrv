@@ -1,20 +1,20 @@
-"""הגדרות הרשת של השרת — כל מה שנוגע במכונה עצמה (‏#55/#57).
+"""הגדרות הרשת של השרת — כל מה שנוגע במכונה עצמה (#55/#57).
 
-‏`netcfg.py` הוא הלוגיקה הטהורה: מקבל הגדרות, מחזיר טקסט. כאן יושב הצד
+`netcfg.py` הוא הלוגיקה הטהורה: מקבל הגדרות, מחזיר טקסט. כאן יושב הצד
 המלוכלך — לכתוב את הקובץ ל-`interfaces.d`, להריץ `ifdown`/`ifup`,
 ולקרוא בחזרה מה **באמת** קרה. ההפרדה היא גם מה שמאפשר לבדיקות להזריק
 hooks ולעולם לא לגעת ברשת האמיתית, בדיוק כמו `dhcp_hooks`.
 
 **שלושה מצבים, לא שניים** — הלב של המשימה:
 
-1. "כתבנו את הקובץ" — ‏`write_conf` הצליח.
-2. "ההגדרה הוחלה" — ‏`ifup` יצא באפס.
-3. "הכתובת באמת שם" — ‏`ip addr` מראה אותה.
+1. "כתבנו את הקובץ" — `write_conf` הצליח.
+2. "ההגדרה הוחלה" — `ifup` יצא באפס.
+3. "הכתובת באמת שם" — `ip addr` מראה אותה.
 
 רק השלישי הוא הצלחה. שניים הראשונים נכונים גם כשקובץ `interfaces`
 הראשי לא עושה `source interfaces.d/*`, כשהכרטיס מנוהל בפועל בידי משהו
 אחר, או כשהמסכה נדחתה בשקט — ובכל אלה המסך היה מציג "נשמר" ומפעיל
-היה מאמין לו. ‏`read_state()` היא הראיה החיובית: ‏`checked=False`
+היה מאמין לו. `read_state()` היא הראיה החיובית: `checked=False`
 פירושו "לא הצלחנו לשאול", ולא "אין".
 """
 
@@ -36,21 +36,21 @@ log = logging.getLogger("imagesrv.netcfg_host")
 
 
 def _os_failure(sentence: str, exc: BaseException) -> str:
-    """‏#2510: טקסט החריגה (strerror) ל-log; מה שחוזר לקונסולה ולמתקין — המשפט שלנו."""
+    """#2510: טקסט החריגה (strerror) ל-log; מה שחוזר לקונסולה ולמתקין — המשפט שלנו."""
     log.warning("%s: %s", one_line(sentence), exc)
     return f"{sentence} — הפרטים ביומן השרת"
 
 INTERFACES_DIR = "/etc/network/interfaces.d"
 INTERFACES_MAIN = "/etc/network/interfaces"
 RESOLV_CONF = "/etc/resolv.conf"
-#: איפה יושב סמן "ממתין לאישור" והפירורים שזרוע ההחזרה משאירה (‏#56).
+#: איפה יושב סמן "ממתין לאישור" והפירורים שזרוע ההחזרה משאירה (#56).
 STATE_DIR = "/var/lib/imagesrv/netcfg"
 #: היחידה שמחזירה הגדרה שלא אושרה — היא, ולא השרת, היא ההגנה.
 ROLLBACK_TIMER = "imagesrv-netrollback.timer"
-#: ‏#1264: מצב כל bond כפי שהקרנל מדווח עליו — הראיה, לא ההגדרה.
+#: #1264: מצב כל bond כפי שהקרנל מדווח עליו — הראיה, לא ההגדרה.
 BONDING_DIR = "/proc/net/bonding"
 BOND_MODULE_CONF = "/etc/modules-load.d/imagesrv-bond.conf"
-#: ‏#1264: הסקריפט של ifenslave שיוצר bond מתוך `bond-slaves` ב-ifupdown.
+#: #1264: הסקריפט של ifenslave שיוצר bond מתוך `bond-slaves` ב-ifupdown.
 #: בלעדיו `ifup bond0` נופל, ורשת ההפצה נשארת בלי כתובת.
 IFENSLAVE_HOOK = "/etc/network/if-pre-up.d/ifenslave"
 
@@ -65,7 +65,7 @@ def conf_path(name: str, root: str | Path = INTERFACES_DIR) -> Path:
 def read_conf(name: str, root: str | Path = INTERFACES_DIR) -> str | None:
     """הקובץ כפי שהוא עכשיו, או None אם אינו קיים.
 
-    ‏None אינו "ריק": זה מה שנשמר בסמן ההחזרה כדי שהחזרה תמחק את הקובץ
+    None אינו "ריק": זה מה שנשמר בסמן ההחזרה כדי שהחזרה תמחק את הקובץ
     במקום להשאיר אותו ריק ומנוהל.
     """
     try:
@@ -83,7 +83,7 @@ def write_conf(name: str, text: str | None,
             path.unlink(missing_ok=True)
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
-            write_atomic(path, text)   # ‏#1908
+            write_atomic(path, text)   # #1908
     except OSError as exc:
         return _os_failure(f"לא ניתן לכתוב את {path}", exc)
     return None
@@ -91,7 +91,7 @@ def write_conf(name: str, text: str | None,
 
 def write_resolv(text: str, path: str | Path = RESOLV_CONF) -> str | None:
     try:
-        write_atomic(path, text)   # ‏#1908
+        write_atomic(path, text)   # #1908
     except OSError as exc:
         return _os_failure(f"לא ניתן לכתוב את {path}", exc)
     return None
@@ -125,7 +125,7 @@ def sourced(main: str | Path = INTERFACES_MAIN,
     """האם `/etc/network/interfaces` בכלל טוען את `interfaces.d`.
 
     בלי זה כל מה שנכתב שם הוא קובץ שאיש לא קורא — הצורה הנקייה ביותר
-    של "כתבנו ולא קרה כלום". ‏None = לא הצלחנו לקרוא את הקובץ הראשי,
+    של "כתבנו ולא קרה כלום". None = לא הצלחנו לקרוא את הקובץ הראשי,
     וזה **אינו** "כן".
     """
     try:
@@ -137,7 +137,7 @@ def sourced(main: str | Path = INTERFACES_MAIN,
                for line in text.splitlines())
 
 
-#: ‏#1558: מנהלי רשת אחרים — כשהם מנהלים את המכונה, ifupdown (מה שהקונסולה
+#: #1558: מנהלי רשת אחרים — כשהם מנהלים את המכונה, ifupdown (מה שהקונסולה
 #: כותבת אליו) אינו מחיל דבר. המתקין שלנו (ISO) מתקין ifupdown בלבד.
 NETPLAN_DIR = "/etc/netplan"
 NETWORKD_DIR = "/etc/systemd/network"
@@ -146,10 +146,10 @@ NETWORKD_DIR = "/etc/systemd/network"
 def foreign_manager(netplan_dir: str | Path = NETPLAN_DIR,
                     networkd_dir: str | Path = NETWORKD_DIR,
                     resolv: str | Path = RESOLV_CONF) -> str | None:
-    """‏None = הרשת מנוהלת ב-ifupdown; אחרת — מה מנהל אותה, בעברית.
+    """None = הרשת מנוהלת ב-ifupdown; אחרת — מה מנהל אותה, בעברית.
 
     שרת חיפה (17/10): netplan + networkd + resolved. הקונסולה כתבה
-    ‏`interfaces.d`, ‏`ifup` לא הכיר את הכרטיס, ו-resolv.conf היה symlink
+    `interfaces.d`, `ifup` לא הכיר את הכרטיס, ו-resolv.conf היה symlink
     לקריאה-בלבד — והמפעיל ראה את התסמינים, לא את הסיבה. תיקייה שלא נקראה
     (חוץ מ"לא קיימת") היא "לא הצלחנו לבדוק" — ולכן גם היא תשובה שאינה None.
     """
@@ -170,7 +170,7 @@ def foreign_manager(netplan_dir: str | Path = NETPLAN_DIR,
         except OSError as exc:
             return _os_failure(f"לא ניתן לקרוא את {resolv}", exc)
         if "systemd/resolve" in target:
-            return f"‏{resolv} מנוהל ב-systemd-resolved (‏→ {target})"
+            return f"\u200f{resolv} מנוהל ב-systemd-resolved (\u200f→ {target})"
     return None
 
 
@@ -181,11 +181,11 @@ def comment_out_stanzas(main_text: str, name: str) -> tuple[str, bool]:
     """מסיר (בהערה, לא במחיקה) את ההגדרות של `name` מ-`/etc/network/interfaces`.
 
     שתי הגדרות לאותו כרטיס — של מתקין דביאן בקובץ הראשי ושלנו ב-
-    ‏`interfaces.d` — הן שני `ifup` על אותו כרטיס: ‏dhclient כפול, או
-    ‏`RTNETLINK: File exists` על כתובת סטטית שכבר שם. ההערה נשארת קריאה
+    `interfaces.d` — הן שני `ifup` על אותו כרטיס: dhclient כפול, או
+    `RTNETLINK: File exists` על כתובת סטטית שכבר שם. ההערה נשארת קריאה
     (`# imagesrv: ...`) כדי שמי שפותח את הקובץ ידע מה היה ולמה.
 
-    מחזיר ‏(הטקסט החדש, האם משהו השתנה). `auto`/`allow-hotplug` שמונים
+    מחזיר (הטקסט החדש, האם משהו השתנה). `auto`/`allow-hotplug` שמונים
     כמה כרטיסים — רק השם שלנו מוסר מהם.
     """
     out: list[str] = []
@@ -224,10 +224,10 @@ def comment_out_stanzas(main_text: str, name: str) -> tuple[str, bool]:
 def adopt_interface(name: str, text: str, *, main: str | Path = INTERFACES_MAIN,
                     root: str | Path = INTERFACES_DIR,
                     backup_suffix: str | None = None) -> tuple[list[str], str | None]:
-    """המתקין (‏#1088) מעביר את כרטיס השרתים לניהול ImageSrv: הקובץ הראשי
-    מפסיק להגדיר אותו (בהערה, עם גיבוי), ‏`interfaces.d` נטען אם לא היה,
-    והקובץ שלנו נכתב. מחזיר ‏(מה נעשה, שגיאה או None). **לא** מריץ
-    ‏`ifup` — המתקין מחובר דרך הכרטיס הזה; ההגדרה נכנסת באתחול הבא, או
+    """המתקין (#1088) מעביר את כרטיס השרתים לניהול ImageSrv: הקובץ הראשי
+    מפסיק להגדיר אותו (בהערה, עם גיבוי), `interfaces.d` נטען אם לא היה,
+    והקובץ שלנו נכתב. מחזיר (מה נעשה, שגיאה או None). **לא** מריץ
+    `ifup` — המתקין מחובר דרך הכרטיס הזה; ההגדרה נכנסת באתחול הבא, או
     מהקונסולה.
     """
     notes: list[str] = []
@@ -251,15 +251,15 @@ def adopt_interface(name: str, text: str, *, main: str | Path = INTERFACES_MAIN,
             suffix = backup_suffix or datetime.now().strftime("%Y%m%d%H%M%S")
             backup = main_path.with_name(main_path.name + f".pre-imagesrv.{suffix}")
             try:
-                # ‏#2160: ‏0600 — הגיבוי הוא קובץ חדש, ו-write_atomic נותן לקובץ חדש 0644;
-                # מקור שהמנהל נעל (‏wpa-psk וכו') היה מקבל עותק קריא לכולם.
-                write_atomic(backup, main_text, mode=0o600)   # ‏#1908
+                # #2160: 0600 — הגיבוי הוא קובץ חדש, ו-write_atomic נותן לקובץ חדש 0644;
+                # מקור שהמנהל נעל (wpa-psk וכו') היה מקבל עותק קריא לכולם.
+                write_atomic(backup, main_text, mode=0o600)   # #1908
             except OSError as exc:
                 return notes, _os_failure(f"לא ניתן לגבות את {main_path}", exc)
             notes.append(f"{main_path}: גיבוי ב-{backup.name}")
         try:
             main_path.parent.mkdir(parents=True, exist_ok=True)
-            write_atomic(main_path, new_text)   # ‏#1908
+            write_atomic(main_path, new_text)   # #1908
         except OSError as exc:
             return notes, _os_failure(f"לא ניתן לכתוב את {main_path}", exc)
         if stanza_changed:
@@ -283,15 +283,15 @@ def _run(cmd: list[str], timeout: int = 40) -> tuple[int | None, str]:
     return done.returncode, (done.stderr or done.stdout or "").strip()
 
 
-#: ‏#2105: ה-`ifup` רץ ביחידה חולפת משלו, לא בתוך מי שקרא לו. ‏``dhcpcd -b``
-#: (‏`netcfg.render`) נשאר ב-cgroup של מי שהריץ את ה-ifup; כשזה השירות
+#: #2105: ה-`ifup` רץ ביחידה חולפת משלו, לא בתוך מי שקרא לו. ``dhcpcd -b``
+#: (`netcfg.render`) נשאר ב-cgroup של מי שהריץ את ה-ifup; כשזה השירות
 #: (imagesrv-server, ה-DCUI, יחידת ה-oneshot של ההחזרה) — עצירה או הפעלה
-#: מחדש שלו שולחת SIGTERM ל-dhcpcd, והכתובת יורדת (#2094, ‏firstboot). היחידה
-#: החולפת היא ‏oneshot+RemainAfterExit, כמו networking.service שמחזיק אותו
+#: מחדש שלו שולחת SIGTERM ל-dhcpcd, והכתובת יורדת (#2094, firstboot). היחידה
+#: החולפת היא oneshot+RemainAfterExit, כמו networking.service שמחזיק אותו
 #: באתחול; ומחוץ לארגז החול של השירות — שם dhcpcd נכשל ב-"failed to drop
 #: privileges". שם קבוע לכל כרטיס: ההחלה הבאה עוצרת את הקודמת לפני שהיא עולה.
 IFUP_UNIT_PREFIX = "imagesrv-ifup-"
-#: ‏systemd הורג את ה-ifup לפני ש-`_run` מוותר (40 ש') — כך כשל מגיע כקוד, לא
+#: systemd הורג את ה-ifup לפני ש-`_run` מוותר (40 ש') — כך כשל מגיע כקוד, לא
 #: כ-systemd-run שנהרג ויחידה שממשיכה לרוץ בלי שאיש יודע.
 IFUP_TIMEOUT_S = 35
 
@@ -301,9 +301,9 @@ def ifup_unit(name: str) -> str:
 
 
 def _ifup_detached(name: str) -> tuple[int | None, str, str]:
-    """‏`ifup <name>` ביחידה חולפת. ‏(קוד, טקסט, הערת ה-stop).
+    """`ifup <name>` ביחידה חולפת. (קוד, טקסט, הערת ה-stop).
 
-    ‏`systemctl stop` של היחידה מההחלה הקודמת — אחרי ה-ifdown, שכבר שחרר את
+    `systemctl stop` של היחידה מההחלה הקודמת — אחרי ה-ifdown, שכבר שחרר את
     ה-lease. קוד היציאה שלו אינו קובע (יחידה שאינה קיימת היא המקרה הרגיל),
     אבל הוא נשמר: אם היחידה לא נעצרה, ה-systemd-run נכשל עליה בשם, וההערה
     אומרת למה."""
@@ -317,17 +317,17 @@ def _ifup_detached(name: str) -> tuple[int | None, str, str]:
     return code, text, stop_note
 
 
-#: ‏#2840: journald מקבל את הפלט של היחידה בזרם, ולפעמים מאנדקס אותו רגע אחרי
+#: #2840: journald מקבל את הפלט של היחידה בזרם, ולפעמים מאנדקס אותו רגע אחרי
 #: ש-systemd-run חוזר. קריאה ריקה נקראת שוב פעם אחת אחרי ההשהיה הזו.
 JOURNAL_LAG_S = 0.5
 
 
 def _unit_output(unit: str, since: float) -> str:
-    """‏#2840: מה ה-ifup עצמו כתב — הסיבה, ולא רק "קוד 1".
+    """#2840: מה ה-ifup עצמו כתב — הסיבה, ולא רק "קוד 1".
 
-    ‏`systemd-run --quiet` אינו מעביר את הפלט של היחידה: בשרת העבודה (11/11) ההודעה
+    `systemd-run --quiet` אינו מעביר את הפלט של היחידה: בשרת העבודה (11/11) ההודעה
     הייתה "(קוד 1):  —" והסיבה ("ifup: unknown interface enp2s0") הייתה רק ביומן.
-    ‏`_SYSTEMD_UNIT=` ולא `-u`: רק מה שהתהליך כתב, בלי שורות ה-"Starting/Failed" של
+    `_SYSTEMD_UNIT=` ולא `-u`: רק מה שהתהליך כתב, בלי שורות ה-"Starting/Failed" של
     systemd עצמו. שלושה מצבים בשמם (עיקרון 5): נקרא, נקרא וריק, ולא נקרא."""
     cmd = ["journalctl", f"_SYSTEMD_UNIT={unit}", "--since", f"@{int(since)}",
            "-o", "cat", "--no-pager", "-q", "-n", "20"]
@@ -344,14 +344,14 @@ def _unit_output(unit: str, since: float) -> str:
 
 
 def apply_interface(name: str) -> str | None:
-    """‏`ifdown` ואז `ifup`. מחזיר הודעת שגיאה או None.
+    """`ifdown` ואז `ifup`. מחזיר הודעת שגיאה או None.
 
-    ‏`ifdown` על כרטיס שאינו מוגדר כרגע יוצא בשגיאה לגיטימית ("not
+    `ifdown` על כרטיס שאינו מוגדר כרגע יוצא בשגיאה לגיטימית ("not
     configured"), ולכן קוד היציאה שלו אינו קובע — אבל הוא גם אינו
     נזרק: הוא נכנס להודעה שחוזרת לקונסולה, כדי ש"הורדנו ולא ירד" לא
-    ייעלם. ‏`ifup` הוא זה שכישלון שלו הוא שגיאה.
+    ייעלם. `ifup` הוא זה שכישלון שלו הוא שגיאה.
 
-    ‏**None כאן פירושו "הפקודות רצו", ולא "הכתובת השתנתה".** את זה
+    **None כאן פירושו "הפקודות רצו", ולא "הכתובת השתנתה".** את זה
     קובעת רק `read_state()`.
     """
     if name == netcfg.BOND_NAME:
@@ -385,7 +385,7 @@ def apply_interface(name: str) -> str | None:
 
 
 def down_interface(name: str) -> str | None:
-    """‏`ifdown --force` לבדו (‏#1264) — לפני שהכתובת עוברת מכרטיס ל-bond
+    """`ifdown --force` לבדו (#1264) — לפני שהכתובת עוברת מכרטיס ל-bond
     (או חזרה), כשהקובץ הישן עוד במקומו ו-ifdown יודע מה להוריד. מחזיר
     הודעה או None; ההצלחה עצמה נקבעת בקריאה החוזרת שאחרי ה-ifup."""
     code, text = _run(["ifdown", "--force", name])
@@ -395,11 +395,11 @@ def down_interface(name: str) -> str | None:
 
 
 def release_interface(name: str) -> str | None:
-    """‏#2855: מוריד את מה שהקונסולה שמה על כרטיס **שלא היה מנוהל** — בלי ifup.
+    """#2855: מוריד את מה שהקונסולה שמה על כרטיס **שלא היה מנוהל** — בלי ifup.
 
-    אחרי שהקובץ שלו נמחק, ifupdown כבר לא מכיר את הכרטיס (‏"unknown interface"),
+    אחרי שהקובץ שלו נמחק, ifupdown כבר לא מכיר את הכרטיס ("unknown interface"),
     ולכן ההחזרה למצב "לא מנוהל" היא עצירת יחידת ה-ifup שלו (ושל dhcpcd שבתוכה,
-    ‏#2105) ו-`ip -4 addr flush`. מחזיר הודעה או None; **ההצלחה נקבעת בקריאה
+    #2105) ו-`ip -4 addr flush`. מחזיר הודעה או None; **ההצלחה נקבעת בקריאה
     החוזרת** (`netcfg_rollback.restore`), לא כאן."""
     unit = ifup_unit(name)
     stop_code, stop_text = _run(["systemctl", "stop", unit])
@@ -411,7 +411,7 @@ def release_interface(name: str) -> str | None:
 
 
 def bond_supported(path: str | Path = IFENSLAVE_HOOK) -> bool:
-    """האם ifenslave מותקן (‏#1264). ‏False — גם כשלא ניתן לבדוק: "כנראה
+    """האם ifenslave מותקן (#1264). False — גם כשלא ניתן לבדוק: "כנראה
     מותקן" הוא בדיוק הניחוש שמשאיר את רשת ההפצה בלי כתובת."""
     try:
         return Path(path).is_file()
@@ -420,9 +420,9 @@ def bond_supported(path: str | Path = IFENSLAVE_HOOK) -> bool:
 
 
 def main_defines(name: str, main: str | Path = INTERFACES_MAIN) -> bool | None:
-    """האם `/etc/network/interfaces` עצמו מגדיר את הכרטיס (‏`iface <שם>`).
-    ‏None = לא נקרא, ואינו "לא". כרטיס שמוגדר שם וגם חבר ב-bond הוא שני
-    ‏`ifup` על אותו כרטיס באתחול (‏#1264)."""
+    """האם `/etc/network/interfaces` עצמו מגדיר את הכרטיס (`iface <שם>`).
+    None = לא נקרא, ואינו "לא". כרטיס שמוגדר שם וגם חבר ב-bond הוא שני
+    `ifup` על אותו כרטיס באתחול (#1264)."""
     try:
         text = Path(main).read_text(encoding="utf-8", errors="replace")
     except FileNotFoundError:
@@ -433,15 +433,15 @@ def main_defines(name: str, main: str | Path = INTERFACES_MAIN) -> bool | None:
 
 
 def timer_active(unit: str = ROLLBACK_TIMER) -> tuple[bool, str]:
-    """האם זרוע ההחזרה מותקנת ורצה — ‏(פעילה, מה נקרא).
+    """האם זרוע ההחזרה מותקנת ורצה — (פעילה, מה נקרא).
 
     שלושה מצבים מקופלים לשניים בכוונה **לצד הבטוח**: כל דבר שאינו
-    ‏`active` מדויק, כולל "לא הצלחנו להריץ systemctl", מחזיר False.
+    `active` מדויק, כולל "לא הצלחנו להריץ systemctl", מחזיר False.
     ההגנה שלא הוכחה אינה הגנה, ובלעדיה אסור להחיל שינוי שיכול לנתק.
     """
     code, text = _run(["systemctl", "is-active", unit], timeout=10)
     if code is None:
-        return False, f"‏systemctl לא רץ ({text[:120]})"
+        return False, f"\u200fsystemctl לא רץ ({text[:120]})"
     return text.strip() == "active", text.strip() or f"קוד {code}"
 
 
@@ -452,7 +452,7 @@ def timer_active(unit: str = ROLLBACK_TIMER) -> tuple[bool, str]:
 class LiveState:
     """מה שנקרא מהמכונה — או למה לא נקרא.
 
-    ‏`checked=False` אינו "אין כתובות". הוא "לא שאלנו", והוא לעולם אינו
+    `checked=False` אינו "אין כתובות". הוא "לא שאלנו", והוא לעולם אינו
     נחשב התאמה.
     """
 
@@ -468,7 +468,7 @@ def parse_addr(text: str) -> dict[str, list[str]]:
     found: dict[str, list[str]] = {}
     for line in text.splitlines():
         fields = line.split()
-        # ‎"2: eth0    inet 10.44.9.10/24 brd … scope global eth0"
+        # "2: eth0    inet 10.44.9.10/24 brd … scope global eth0"
         if len(fields) < 4 or fields[2] != "inet":
             continue
         found.setdefault(fields[1], []).append(fields[3])
@@ -476,9 +476,9 @@ def parse_addr(text: str) -> dict[str, list[str]]:
 
 
 def parse_routes(text: str) -> list[str]:
-    """פלט `ip -4 route show` → שורות מנורמלות, ‏"<יעד> via <שער>".
+    """פלט `ip -4 route show` → שורות מנורמלות, "<יעד> via <שער>".
 
-    ‏`default` נשמר כפי שהוא: זה השער, וזו הצורה שבה מחפשים אותו.
+    `default` נשמר כפי שהוא: זה השער, וזו הצורה שבה מחפשים אותו.
     """
     found = []
     for line in text.splitlines():
@@ -497,7 +497,7 @@ def parse_resolv(text: str) -> list[str]:
 
 
 def read_state(resolv: str | Path = RESOLV_CONF) -> LiveState:
-    """‏`ip addr`, ‏`ip route` ו-`/etc/resolv.conf` — המצב בפועל.
+    """`ip addr`, `ip route` ו-`/etc/resolv.conf` — המצב בפועל.
 
     כל שלושת המקורות חייבים להיקרא. אחד שנכשל מחזיר `checked=False`
     עם הסיבה: מצב שנקרא חלקית הוא בדיוק המקום שבו "לא בדקנו" מתחפש
@@ -506,12 +506,17 @@ def read_state(resolv: str | Path = RESOLV_CONF) -> LiveState:
     problems = []
     addr_code, addr_text = _run(["ip", "-4", "-o", "addr", "show"], timeout=10)
     if addr_code != 0:
-        problems.append(f"‏ip addr: {addr_text[:120] or 'לא רץ'}")
+        problems.append(f"\u200fip addr: {addr_text[:120] or 'לא רץ'}")
     route_code, route_text = _run(["ip", "-4", "route", "show"], timeout=10)
     if route_code != 0:
-        problems.append(f"‏ip route: {route_text[:120] or 'לא רץ'}")
+        problems.append(f"\u200fip route: {route_text[:120] or 'לא רץ'}")
     try:
         resolv_text = Path(resolv).read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        # #2824: קובץ שאינו קיים הוא תשובה ("אין שרתי DNS"), לא בדיקה שנכשלה —
+        # כרטיס ניהול סטטי בלי DNS לא כותב אותו (setup-boot-server, #2138). בלי
+        # זה כל שמירה של רשת ההפצה חימשה את ההחזרה כאילו המצב לא נקרא.
+        resolv_text = ""
     except OSError as exc:
         resolv_text = ""
         problems.append(_os_failure(f"{resolv} לא נקרא", exc))
@@ -535,8 +540,8 @@ def mismatches(cfg: netcfg.NetConfig, state: LiveState, *,
                waited_s: float = 0) -> list[str]:
     """מה שביקשנו ולא נמצא בקריאה החוזרת. רשימה ריקה = ראיה חיובית.
 
-    ‏`checked=False` מחזיר סיבה אחת ולא רשימה ריקה — "לא ידוע" נופל
-    לצד הכושל, תמיד. ‏`waited_s` (‏#2349): כמה זמן כבר חיכינו ל-lease —
+    `checked=False` מחזיר סיבה אחת ולא רשימה ריקה — "לא ידוע" נופל
+    לצד הכושל, תמיד. `waited_s` (#2349): כמה זמן כבר חיכינו ל-lease —
     "לא התקבלה כתובת אחרי N שניות" ולא "אין כתובת" כאילו לא חיכינו.
     """
     if not state.checked:
@@ -547,8 +552,8 @@ def mismatches(cfg: netcfg.NetConfig, state: LiveState, *,
     live = state.addresses.get(cfg.name, [])
     if cfg.mode == netcfg.MODE_STATIC:
         if not any(_same_address(cfg.cidr, seen) for seen in live):
-            found.append(f"‏{cfg.name} אינו נושא את {cfg.cidr} "
-                         f"(‏ip addr מראה: {', '.join(live) or 'כלום'})")
+            found.append(f"\u200f{cfg.name} אינו נושא את {cfg.cidr} "
+                         f"(\u200fip addr מראה: {', '.join(live) or 'כלום'})")
         if cfg.gateway and f"default via {cfg.gateway}" not in state.routes:
             found.append(f"שער ברירת המחדל {cfg.gateway} אינו בטבלת הניתוב")
         for route in cfg.routes:
@@ -556,22 +561,22 @@ def mismatches(cfg: netcfg.NetConfig, state: LiveState, *,
                 found.append(f"הנתיב {route.cidr} דרך {route.gateway} "
                              "אינו בטבלת הניתוב")
     elif not live and waited_s:
-        found.append(f"‏{cfg.name}: לא התקבלה כתובת מ-DHCP אחרי {waited_s:g} שניות")
+        found.append(f"\u200f{cfg.name}: לא התקבלה כתובת מ-DHCP אחרי {waited_s:g} שניות")
     elif not live:
-        found.append(f"‏{cfg.name} לא קיבל שום כתובת מ-DHCP")
+        found.append(f"\u200f{cfg.name} לא קיבל שום כתובת מ-DHCP")
     for server in cfg.dns:
         if server not in state.nameservers:
-            found.append(f"‏{server} אינו ב-{RESOLV_CONF}")
+            found.append(f"\u200f{server} אינו ב-{RESOLV_CONF}")
     return found
 
 
-#: ‏#2094: כמה זמן קריאה חוזרת של DHCP מחכה ל-lease. ‏``dhcpcd -b`` חוזר מיד
-#: (‏render), וה-lease הגיע ~7 שניות אחר כך (הצעה + 5 שניות של בדיקת ARP,
+#: #2094: כמה זמן קריאה חוזרת של DHCP מחכה ל-lease. ``dhcpcd -b`` חוזר מיד
+#: (render), וה-lease הגיע ~7 שניות אחר כך (הצעה + 5 שניות של בדיקת ARP,
 #: ESXi 24/10) — קריאה מיידית אמרה "לא אומת" על הפעלה מחדש שהצליחה.
 DHCP_LEASE_WAIT_S = 30
-#: ‏#2349: כל כמה זמן הקונסולה קוראת שוב בזמן ההמתנה ל-lease. ‏≥0.1 (‏CLAUDE.md:
+#: #2349: כל כמה זמן הקונסולה קוראת שוב בזמן ההמתנה ל-lease. ≥0.1 (CLAUDE.md:
 #: polling צפוף ממצה פורטים בווינדוס); כל קריאה היא `ip addr`+`ip route` מקומיים,
-#: ‏60 לכל היותר בהחלה אחת — לא עומס על השרת ולא על הרשת.
+#: 60 לכל היותר בהחלה אחת — לא עומס על השרת ולא על הרשת.
 DHCP_POLL_S = 0.5
 
 
@@ -582,7 +587,7 @@ def settled_mismatches(cfg: netcfg.NetConfig, read_state, *,
     עד ``wait_s``. סטטי נקרא פעם אחת: כתובת סטטית יושבת כשה-ifup חוזר.
     הפסקה בזמן היא עדיין הפער האחרון שנקרא, לא "בסדר" (עיקרון 5).
     סינכרוני — למסך השרת (DCUI), תהליך משלו; הקונסולה ממתינה ב-async
-    (‏`console/netcfg.py`, ‏#2349)."""
+    (`console/netcfg.py`, #2349)."""
     wait_s = wait_s if cfg.mode == netcfg.MODE_DHCP else 0
     deadline = clock() + wait_s
     while True:
@@ -594,7 +599,7 @@ def settled_mismatches(cfg: netcfg.NetConfig, read_state, *,
         sleep(1)
 
 
-# --- ‏#1264: מצב ה-bond -------------------------------------------------------
+# --- #1264: מצב ה-bond -------------------------------------------------------
 
 #: איך הקרנל קורא ל-balance-alb ב-`/proc/net/bonding/<bond>`.
 BOND_MODE_TEXT = "adaptive load balancing"
@@ -604,8 +609,8 @@ BOND_MODE_TEXT = "adaptive load balancing"
 class BondState:
     """מה שהקרנל מדווח על bond — או למה לא נקרא.
 
-    ‏`checked=False` הוא "לא נבדק", ולעולם לא "פעיל" (עיקרון 5).
-    ‏`slaves` הוא {כרטיס: ‏"up"/"down"} — ה-MII של כל חבר, כלומר הקישור."""
+    `checked=False` הוא "לא נבדק", ולעולם לא "פעיל" (עיקרון 5).
+    `slaves` הוא {כרטיס: "up"/"down"} — ה-MII של כל חבר, כלומר הקישור."""
 
     checked: bool
     mode: str = ""
@@ -615,8 +620,8 @@ class BondState:
 
 
 def parse_bonding(text: str) -> BondState:
-    """פלט `/proc/net/bonding/<bond>` → ‏BondState. שורות ה-MII שלפני
-    ‏`Slave Interface` הראשון הן של ה-bond; כל אחת אחריה — של החבר האחרון."""
+    """פלט `/proc/net/bonding/<bond>` → BondState. שורות ה-MII שלפני
+    `Slave Interface` הראשון הן של ה-bond; כל אחת אחריה — של החבר האחרון."""
     mode = mii = ""
     slaves: dict[str, str] = {}
     current = None
@@ -680,7 +685,7 @@ def default_hooks() -> dict:
         "netcfg_sourced": sourced,
         "netcfg_foreign_manager": foreign_manager,   # #1558
         "netcfg_timer_active": timer_active,
-        # ‏#1264: רשת הפצה על שני כרטיסים.
+        # #1264: רשת הפצה על שני כרטיסים.
         "netcfg_down": down_interface,
         "netcfg_bond_state": read_bond,
         "netcfg_bond_supported": bond_supported,

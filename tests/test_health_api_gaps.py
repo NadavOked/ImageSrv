@@ -1,6 +1,6 @@
-"""‏#1000 — פערי ה-API של דף "בריאות ושירותים": תוצאת בדיקת-העדכון האחרונה
+"""#1000 — פערי ה-API של דף "בריאות ושירותים": תוצאת בדיקת-העדכון האחרונה
 נשמרת בשרת (`settings.update_last_check`) ומוחזרת ב-`GET /update` כ-
-`last_check`; ‏`GET /health` נושא את זמן המדידה בכותרת `X-Health-Checked-At`
+`last_check`; `GET /health` נושא את זמן המדידה בכותרת `X-Health-Checked-At`
 — כותרת ולא מעטפת, כי הגוף הוא מערך שכל הקוראים הקיימים תלויים בו.
 """
 
@@ -55,7 +55,7 @@ def test_a_failed_check_is_recorded_as_failed_not_as_no_update(update_server):
         update_mod.check_update({"describe": lambda d: "v0.24.0", **hooks_fail},
                                 "/repo", "https://example/pub.git"))
     assert doc["available"] is False and doc["latest"] is None
-    # ‏#1281: הכשל נרשם ככשל בשם (`failed` — "no route to github" אינו
+    # #1281: הכשל נרשם ככשל בשם (`failed` — "no route to github" אינו
     # סמן רשת), הפלט הגולמי נשמר כפי שהוא ב-`detail`, והעברית ב-`message`
     # נושאת אותו. כשל אינו מתקפל ל"אין עדכון" (`reason=None`).
     assert doc["reason"] == "failed"

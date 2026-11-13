@@ -1,12 +1,12 @@
-"""‏#2916 §4 — הגדרת ה-UPS וקובצי NUT מתעדכנים יחד, או חוזרים יחד.
+"""#2916 §4 — הגדרת ה-UPS וקובצי NUT מתעדכנים יחד, או חוזרים יחד.
 
-**התרחיש:** usb → none, ו-`systemctl disable --now nut-server` נכשל. ‏`apply` כבר כתב
-`nut.conf` עם `MODE=none`, ‏`RuntimeError` מונע את `set_settings` — ב-DB `ups_mode=usb`
-ובקובץ `MODE=none`. ‏`UpsMonitor` ממשיך לפי ה-DB ולא משווה לקובץ; אחרי אתחול NUT לא
+**התרחיש:** usb → none, ו-`systemctl disable --now nut-server` נכשל. `apply` כבר כתב
+`nut.conf` עם `MODE=none`, `RuntimeError` מונע את `set_settings` — ב-DB `ups_mode=usb`
+ובקובץ `MODE=none`. `UpsMonitor` ממשיך לפי ה-DB ולא משווה לקובץ; אחרי אתחול NUT לא
 עולה, וה-UPS "לא נקרא" בלי שאיש שינה כלום.
 
 **התיקון:** כשל בהחלה מחזיר את הקבצים והשירות למצב הקודם, ורק אז נזרקת השגיאה (שהקונסולה
-אומרת "ולא נשמרה" — עכשיו זה נכון גם לגבי הקבצים). ‏`net` ו-`none` אינם נוגעים בקבצים.
+אומרת "ולא נשמרה" — עכשיו זה נכון גם לגבי הקבצים). `net` ו-`none` אינם נוגעים בקבצים.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ OL = {"ups.status": "OL", "battery.charge": "100"}
 
 class Host:
     """מארח מזויף עם **מצב**: הקבצים שעל הדיסק והאם השירות רץ — לא רק יומן קריאות.
-    ‏`fail` = אילו קריאות (בשם) נכשלות, ובכמה פעמים."""
+    `fail` = אילו קריאות (בשם) נכשלות, ובכמה פעמים."""
 
     def __init__(self, files=None, fail=()) -> None:
         self.files: dict[str, str] = dict(files or {})

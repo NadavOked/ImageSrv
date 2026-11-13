@@ -1,13 +1,13 @@
 """תחליף צר ל-`jq` לתחנת פיתוח בלי jq (ווינדוס) — **לבדיקות בלבד**.
 
-‏`tests/test_directsend.py` שם אותו ב-PATH בשם `jq` רק כש-`shutil.which("jq")`
+`tests/test_directsend.py` שם אותו ב-PATH בשם `jq` רק כש-`shutil.which("jq")`
 ריק. הוא מבין בדיוק את הביטויים שמסלול ההפצה הישירה של הסוכן מריץ:
 
-- ‏`json_get` (‏jsonq.sh): נתיב פשוט `.a.b.c` — ‏null/חסר מודפס `null`,
-  מחרוזת גולמית (‏`-r`), מספר/בוליאני כפי שהם.
-- ‏`manifest_plan` (‏restore.sh): ‏`.partitions[] | [...] | join("|")`.
-- ‏`.partitions | length`.
-- בלוק המולטיקאסט (‏directsend.sh): ‏`.task.direct.multicast | [...] | map(tostring) | join("|")`.
+- `json_get` (jsonq.sh): נתיב פשוט `.a.b.c` — null/חסר מודפס `null`,
+  מחרוזת גולמית (`-r`), מספר/בוליאני כפי שהם.
+- `manifest_plan` (restore.sh): `.partitions[] | [...] | join("|")`.
+- `.partitions | length`.
+- בלוק המולטיקאסט (directsend.sh): `.task.direct.multicast | [...] | map(tostring) | join("|")`.
 
 כל ביטוי אחר → קוד יציאה 5, כמו jq על שגיאת קומפילציה — לא פלט ריק
 שנראה כמו תשובה (עיקרון 5). זה **לא** jq: אין כאן פרסר של השפה.

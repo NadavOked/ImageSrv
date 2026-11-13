@@ -23,10 +23,10 @@ gui_auth() {
     rm -f "$CONSOLE_JAR" "$RUN_DIR/console_login.json" || return 1
     IFS= read -r RECOVERY_USER && IFS= read -r RECOVERY_PASS || return 1
     [ -n "$SERVER" ] && [ -n "$RECOVERY_USER" ] && [ -n "$RECOVERY_PASS" ] || return 1
-    # stdout: the role, then the saved theme (#1499); never persist the password.
+    # stdout: the role, the saved theme (#1499), the saved view (#3025); never persist the password.
     if console_signin >&2 && gui_role; then
         unset RECOVERY_PASS
-        printf '%s\n%s\n' "$GUI_ROLE" "$(gui_saved_theme)"
+        printf '%s\n%s\n%s\n' "$GUI_ROLE" "$(gui_saved_theme)" "$(gui_saved_view)"
         return 0
     fi
     unset RECOVERY_PASS
@@ -235,7 +235,7 @@ gui_libs() {
     . "$LIB_DIR/guistate.sh"
     . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"; . "$LIB_DIR/syspartgui.sh"; . "$LIB_DIR/guiearly.sh"   # 11/10: the question dialog; #1896: C: of an old image; #1709: the boot screen
     . "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/diskinfo.sh"; . "$LIB_DIR/disklink.sh"; . "$LIB_DIR/fwimage.sh"   # #2080: fw_warn_record/fw_accept_post; disk_port + disk_link (#432), for the cloner state producer
-    . "$LIB_DIR/progress.sh"; . "$LIB_DIR/diskfit.sh"; . "$LIB_DIR/expand.sh"; . "$LIB_DIR/restore.sh"  # target_bytes, the per-drawer local truth; #1484: lc_verdict_for's min-free rule; restore.sh: manifest_plan, which expand.sh's _expand_candidate calls (min_free_check)
+    . "$LIB_DIR/progress.sh"; . "$LIB_DIR/opsay.sh"; . "$LIB_DIR/stall.sh"; . "$LIB_DIR/diskfit.sh"; . "$LIB_DIR/expand.sh"; . "$LIB_DIR/restore.sh"  # target_bytes, the per-drawer local truth; #1484: lc_verdict_for's min-free rule; restore.sh: manifest_plan, which expand.sh's _expand_candidate calls (min_free_check)
     . "$LIB_DIR/smart.sh"; . "$LIB_DIR/smartjudge.sh"; . "$LIB_DIR/hwissues.sh"; . "$LIB_DIR/f1mark.sh"; . "$LIB_DIR/smarttable.sh"; . "$LIB_DIR/manifest.sh"     # #1921: the tables judge the disk, the hw note per drawer; smart_hello_field: the cached verdict per cdisk (#834); manifest.sh: _partition_role, lc_role's fallback (#1591); #1859: smarttable.sh -- every attribute, csmart= on the idle screen
     . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/slotnames.sh"; . "$LIB_DIR/writemark.sh"; . "$LIB_DIR/diskused.sh"; . "$LIB_DIR/disklabels.sh"   # #1857: cdisk_label= (the set and sticker of a disk); #2030: cused= (size, used) per disk; the server's memory per cdisk (#874); slot names (#704); #1798 the mark per cdisk/lc_disk
     . "$LIB_DIR/lcinv.sh"; . "$LIB_DIR/lcraw.sh"; . "$LIB_DIR/lcgui.sh"; . "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/directgui.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/drawers.sh"; . "$LIB_DIR/cancel.sh"; . "$LIB_DIR/lcpull.sh"; . "$LIB_DIR/usbclone.sh"; . "$LIB_DIR/usbset.sh"; . "$LIB_DIR/usbmap.sh"; . "$LIB_DIR/usbmapwin.sh"; . "$LIB_DIR/tools.sh"   # #649: the toolbox (tool-list / tool-run); tools_load pulls toolbins.sh + tools_*.sh itself (#1050)

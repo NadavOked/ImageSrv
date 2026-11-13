@@ -14,6 +14,9 @@
 #   כרטיס ההתקנה        — פתוח: הכרטיס ש-/etc/imagesrv/installer-nic נוקב בו,
 #                         לפי MAC (שם הכרטיס במתקין אינו בהכרח שמו כאן).
 #   כל כרטיס אחר        — drop.
+# ‏#2518: ‏dnsmasq (‏DNS, 53) ו-rpcbind (‏111) מאזינים בשלב הזה על 0.0.0.0, ואיש
+# ברשת אינו צריך אותם לפני ההתקנה (האשף נגיש בכתובת, בלי DNS; אין NFS) —
+# ‏drop על כל כרטיס חוץ מ-lo, גם על כרטיס ההתקנה. ‏lo נשאר פתוח לשרת עצמו.
 # שאר התעבורה (תשובות DHCP, ה-apt המקומי) אינה עניינה: policy accept.
 # אין `flush ruleset` — לא נוגעים בטבלאות של אחרים. חומת האש הקבועה
 # (deploy/nftables-rules.sh) כן פותחת ב-flush, ולכן מחליפה את השומר בסוף
@@ -121,6 +124,10 @@ table inet imagesrv_wizard {
 		iifname "lo" tcp dport ${PORT} accept
 ${NIC_RULE}
 		tcp dport ${PORT} counter drop
+		iifname != "lo" udp dport 53 counter drop
+		iifname != "lo" tcp dport 53 counter drop
+		iifname != "lo" udp dport 111 counter drop
+		iifname != "lo" tcp dport 111 counter drop
 	}
 }
 EOF

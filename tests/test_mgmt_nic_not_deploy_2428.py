@@ -1,12 +1,12 @@
-"""‏#2428: כרטיס הניהול אינו נעשה רשת ההפצה בשום מסלול, ו-WoL בלי כרטיס הפצה
+"""#2428: כרטיס הניהול אינו נעשה רשת ההפצה בשום מסלול, ו-WoL בלי כרטיס הפצה
 אינו יוצא לרשת המכללה.
 
-1. ‏`PUT /net/config/{n}/deploy` מסרב לכרטיס הניהול (#1263), אבל ההדלקה הראשונה
-   מלשונית ה-DHCP (‏`PUT /net/interfaces/{n}` → ‏`deploy_net.complete`) בדקה רק
+1. `PUT /net/config/{n}/deploy` מסרב לכרטיס הניהול (#1263), אבל ההדלקה הראשונה
+   מלשונית ה-DHCP (`PUT /net/interfaces/{n}` → `deploy_net.complete`) בדקה רק
    שהכרטיס נושא את `server_ip`. כשהמתקין לא רשם כרטיס ניהול (או שהרישום לא
-   נקרא), eth0 — הכרטיס שהקונסולה נקשרת אליו — נעשה רשת ההפצה: ‏dnsmasq,
-   ‏67/69/8080 ומולטיקאסט ברשת המכללה (ה-PoC של סריקה 6, ממצא F5).
-2. ‏WoL: כשרשת ההפצה לא הוגדרה (מצב המסירה) לא נבנה שולח כפוי, והשידור הלך
+   נקרא), eth0 — הכרטיס שהקונסולה נקשרת אליו — נעשה רשת ההפצה: dnsmasq,
+   67/69/8080 ומולטיקאסט ברשת המכללה (ה-PoC של סריקה 6, ממצא F5).
+2. WoL: כשרשת ההפצה לא הוגדרה (מצב המסירה) לא נבנה שולח כפוי, והשידור הלך
    לפי טבלת הניתוב — לרשת המכללה (ממצא F6).
 """
 
@@ -30,8 +30,8 @@ ON_ETH0 = {**GOOD, "range_start": "10.1.2.50", "range_end": "10.1.2.200",
 
 
 def test_first_dhcp_enable_on_the_console_nic_is_refused_and_nothing_moves(console):
-    """ה-PoC: הרישום של המתקין ריק, ‏`servers_interface="eth0"`. קודם — 200,
-    ‏`deploy:interface=eth0` וחומת אש עם deploy_if == servers_if == eth0."""
+    """ה-PoC: הרישום של המתקין ריק, `servers_interface="eth0"`. קודם — 200,
+    `deploy:interface=eth0` וחומת אש עם deploy_if == servers_if == eth0."""
     build, fake = console
     client, ctx, deploy = build("none")
     response = client.put("/api/console/net/interfaces/eth0", json=ON_ETH0)
@@ -43,7 +43,7 @@ def test_first_dhcp_enable_on_the_console_nic_is_refused_and_nothing_moves(conso
 
 
 def test_dhcp_on_the_console_nic_is_refused_after_install_too(console):
-    """לא רק בהדלקה הראשונה: גם כשרשת ההפצה ביחידה (cli), ‏DHCP על eth0 נדחה."""
+    """לא רק בהדלקה הראשונה: גם כשרשת ההפצה ביחידה (cli), DHCP על eth0 נדחה."""
     build, fake = console
     client, _ctx, _deploy = build("cli")
     response = client.put("/api/console/net/interfaces/eth0", json=ON_ETH0)

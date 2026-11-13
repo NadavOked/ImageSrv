@@ -1,4 +1,4 @@
-"""‏#2442 (א): שרת DHCP/proxyDHCP זר ברשת ההפצה — זיהוי, יומן, שורה אדומה.
+"""#2442 (א): שרת DHCP/proxyDHCP זר ברשת ההפצה — זיהוי, יומן, שורה אדומה.
 
 אין כאן רשת. הסוקט המסונן (AF_PACKET) מזויף בגבול המערכת: מסגרות Ethernet
 אמיתיות עוברות דרך `parse_reply` האמיתי וה-`Watch` האמיתי. מה שנבדק הוא ההחלטה:
@@ -91,7 +91,7 @@ class Clock:
 
 
 class FakeTap:
-    """פריט בתסריט: ‏`(frame, packet_type)`, או מספר = שניות שעוברות בלי מסגרת
+    """פריט בתסריט: `(frame, packet_type)`, או מספר = שניות שעוברות בלי מסגרת
     (פקיעת הפרוסה). כשהתסריט נגמר — פקיעה."""
 
     def __init__(self, clock: Clock, script: list, drops: int = 0) -> None:
@@ -429,7 +429,7 @@ def _flood(watch, clock, count, *, start=0):
 
 
 def test_a_flood_of_forged_sources_is_bounded_in_memory_and_in_the_journal(conn):
-    """‏PoC: ‏20,000 OFFERs, כל אחד מ-MAC+IP אקראי = ‏20,001 שורות יומן ורשומות."""
+    """PoC: 20,000 OFFERs, כל אחד מ-MAC+IP אקראי = 20,001 שורות יומן ורשומות."""
     clock = Clock()
     watch, _ = make(conn, clock)
     _flood(watch, clock, 2000)
@@ -495,7 +495,7 @@ def test_the_restart_memory_is_capped_too(conn):
 @pytest.mark.parametrize("mac, ip", [(ROGUE_MAC, CARD_IP), (CARD_MAC, ROGUE_IP), (CARD_MAC, CARD_IP)],
                          ids=["server-ip", "server-mac", "both"])
 def test_an_offer_that_forges_the_servers_address_is_not_the_server(conn, mac, ip):
-    """‏PoC ‏[evasion-ip]/[evasion-mac]: ה-MAC וה-IP שבמסגרת הם מה שהשולח כתב."""
+    """PoC [evasion-ip]/[evasion-mac]: ה-MAC וה-IP שבמסגרת הם מה שהשולח כתב."""
     watch, _ = make(conn, Clock(), [(reply_frame(mac=mac, ip=ip), BROADCAST)])
     run_step(watch)
     assert len(rows(conn)) == 1, rows(conn)
@@ -505,7 +505,7 @@ def test_an_offer_that_forges_the_servers_address_is_not_the_server(conn, mac, i
 
 
 def test_our_own_offer_seen_coming_back_is_still_ours(conn):
-    """מה שה-dnsmasq שלנו שלח (‏PACKET_OUTGOING) וחוזר אלינו — לולאה בסוויץ' — אינו זר."""
+    """מה שה-dnsmasq שלנו שלח (PACKET_OUTGOING) וחוזר אלינו — לולאה בסוויץ' — אינו זר."""
     ours = reply_frame(mac=CARD_MAC, ip=CARD_IP)
     watch, _ = make(conn, Clock(), [(ours, OUTGOING), (ours, BROADCAST)])
     run_step(watch)

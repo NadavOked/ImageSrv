@@ -1,4 +1,4 @@
-"""הכלל האחד: איזה צבע לדיסק, והאם מותר להעתיק ממנו (מקור) ולכתוב עליו (יעד) — ‏#2848.
+"""הכלל האחד: איזה צבע לדיסק, והאם מותר להעתיק ממנו (מקור) ולכתוב עליו (יעד) — #2848.
 
 הכרעת נדב 11/11 — **אין הבדל בין השרת, הקונסולה, מחשב הבנייה ומחשב השיכפול**:
 
@@ -12,14 +12,14 @@
 | קישור SATA איטי / בעיית SATA | אדום | ✅ | ❌ |
 
 שתי ההרשאות נפרדות: דיסק אדום **וגם** צהוב אינו מקור ואינו יעד, והצבע שלו אדום.
-‏"איטי" הוא של הסבב שבו נמדד בלבד: סבב חדש מודד מחדש, ומדידה מסבב קודם אינה עובדה כאן.
+"איטי" הוא של הסבב שבו נמדד בלבד: סבב חדש מודד מחדש, ומדידה מסבב קודם אינה עובדה כאן.
 
-**אותה טבלה בשלוש שפות** — ‏`diskRule` ב-`server/static/console.js` ו-`disk_rule()` ב-
-‏`native-gui/src/disk_rule.c` — ו-`tests/test_disk_rule_parity_2848.py` מריץ את שלושתן על אותה
+**אותה טבלה בשלוש שפות** — `diskRule` ב-`server/static/console.js` ו-`disk_rule()` ב-
+`native-gui/src/disk_rule.c` — ו-`tests/test_disk_rule_parity_2848.py` מריץ את שלושתן על אותה
 רשימת דיסקים ודורש הכרעה זהה, כולל הטקסט. מי ששינה צד אחד בלבד — נופל שם.
 
-הקלט (‏`facts`) הוא שמות פשוטים, אותם בשלוש השפות:
-``smart`` (‏ok/warn/fail/failed_last/unchecked), ``failed_last`` ו-``write_incomplete``,
+הקלט (`facts`) הוא שמות פשוטים, אותם בשלוש השפות:
+``smart`` (ok/warn/fail/failed_last/unchecked), ``failed_last`` ו-``write_incomplete``,
 ``link_slow``, ``sata_issue``, ``write_slow`` (בוליאניים). שדה חסר = לא ידוע = לא מחמיר.
 """
 
@@ -41,11 +41,11 @@ REASON_HE = {
 
 
 def judge(facts: dict) -> dict:
-    """‏`{"color", "source", "target", "reason", "source_reason", "target_reason"}`.
+    """`{"color", "source", "target", "reason", "source_reason", "target_reason"}`.
 
-    ‏`color`: ‏red / yellow / orange / green / grey (‏grey = SMART לא נבדק — לא ירוק, עיקרון 5).
-    ‏`reason` — הסיבה של הצבע (אדום או צהוב), ‏None בשאר. ‏`target_reason` — למה אינו יעד,
-    ‏`source_reason` — למה אינו מקור; ‏None = מותר."""
+    `color`: red / yellow / orange / green / grey (grey = SMART לא נבדק — לא ירוק, עיקרון 5).
+    `reason` — הסיבה של הצבע (אדום או צהוב), None בשאר. `target_reason` — למה אינו יעד,
+    `source_reason` — למה אינו מקור; None = מותר."""
     smart = facts.get("smart")
     on = {
         "smart_fail": smart == "fail",
@@ -67,11 +67,11 @@ def facts_of(disk: dict, *, failed_last: bool = False, readonly: bool = False,
              write_slow: bool = False) -> dict:
     """העובדות מרשומת דיסק של ה-hello (או מ-`drawer_list`, שנושא את אותם שדות).
 
-    ‏`failed_last` — לשרת יש רשומת כשל פתוחה על הדיסק (‏`disk_failures.open_for`); ‏`readonly` —
+    `failed_last` — לשרת יש רשומת כשל פתוחה על הדיסק (`disk_failures.open_for`); `readonly` —
     רשומה כזו שסיבתה קריאה-בלבד (#1742/#1760): אדום כמו SMART נכשל, גם לפני שה-hello אומר זאת;
-    ‏`write_slow` — בדיקת הכתיבה **של הסבב הזה** נפסלה. שניהם מהקורא: ה-hello אינו נושא אותם."""
+    `write_slow` — בדיקת הכתיבה **של הסבב הזה** נפסלה. שניהם מהקורא: ה-hello אינו נושא אותם."""
     gbps, top = disk.get("link_gbps"), disk.get("link_max_gbps")
-    # ‏`link_state` של השרת (‏drawer_list) כשיש; ב-hello — המספרים עצמם (‏linkSlow של הקונסולה, אותו דבר)
+    # `link_state` של השרת (drawer_list) כשיש; ב-hello — המספרים עצמם (linkSlow של הקונסולה, אותו דבר)
     link_slow = disk.get("link_state") == "slow" if disk.get("link_state") else (
         _num(gbps) is not None and _num(top) is not None and gbps < top)
     sata = disk.get("sata_issues")
@@ -92,8 +92,8 @@ def _num(value) -> float | None:
 
 
 def failures_of(failures: list[dict], disk: dict) -> dict:
-    """‏`{"failed_last", "readonly"}` של הדיסק לפי רשומות `open_for` של המכונה: אותו סידורי, או
-    אותו חריץ (‏`port` שאינו None — רק של המכונה הזו). ‏`readonly` אדום ולא צהוב (‏#1742)."""
+    """`{"failed_last", "readonly"}` של הדיסק לפי רשומות `open_for` של המכונה: אותו סידורי, או
+    אותו חריץ (`port` שאינו None — רק של המכונה הזו). `readonly` אדום ולא צהוב (#1742)."""
     serial, port = disk.get("serial"), disk.get("port")
     out = {"failed_last": False, "readonly": False}
     for f in failures or []:
@@ -103,8 +103,8 @@ def failures_of(failures: list[dict], disk: dict) -> dict:
 
 
 def judge_disk(disk: dict, failures: list[dict] | None = None, *, write_slow: bool = False) -> dict:
-    """‏`judge` על רשומת דיסק אחת: העובדות שלה, רשומות הכשל של המכונה (‏`open_for`) ובדיקת
-    הכתיבה של הסבב הזה. ‏`reason_he` / ‏`source_reason_he` / ‏`target_reason_he` — הטקסט."""
+    """`judge` על רשומת דיסק אחת: העובדות שלה, רשומות הכשל של המכונה (`open_for`) ובדיקת
+    הכתיבה של הסבב הזה. `reason_he` / `source_reason_he` / `target_reason_he` — הטקסט."""
     got = judge(facts_of(disk, **failures_of(failures or [], disk), write_slow=write_slow))
     for key in ("reason", "source_reason", "target_reason"):
         got[key + "_he"] = REASON_HE.get(got[key]) if got[key] else None
@@ -112,14 +112,14 @@ def judge_disk(disk: dict, failures: list[dict] | None = None, *, write_slow: bo
 
 
 def machine_failures(conn, mac: str, disks: list) -> list[dict]:
-    """רשומות הכשל הפתוחות שה-hello של המכונה עונה עליהן (‏`disk_failures.open_for`) —
+    """רשומות הכשל הפתוחות שה-hello של המכונה עונה עליהן (`disk_failures.open_for`) —
     אותן רשומות שמהן הסוכן מציב `failed_last`."""
     from server.disks import disk_failures   # noqa: PLC0415 -- disk_failures → db; this module stays light
     return disk_failures.open_for(conn, mac, [d for d in disks or [] if isinstance(d, dict)])
 
 
 def source_refusal(conn, mac: str, dev: str) -> str | None:
-    """למה הדיסק `dev` של המכונה אינו מקור (קליטה, הפצה ישירה) — ‏None = מותר, או שהדיסק לא
+    """למה הדיסק `dev` של המכונה אינו מקור (קליטה, הפצה ישירה) — None = מותר, או שהדיסק לא
     דווח (הקורא כבר מסרב לדיסק שלא דווח, או שהסוכן מכריע לפי הסידורי; לא נוחש כאן)."""
     from server.rounds import room   # noqa: PLC0415 -- room imports this module
     disks = [d for d in room._disks(conn, mac) if isinstance(d, dict)]

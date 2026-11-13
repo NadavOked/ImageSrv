@@ -1,11 +1,11 @@
 """השער שאומר אם תחנה יכולה בכלל לעלות דרך השרת שהותקן (#332).
 
 בהתקנה נקייה מאפס המתקין יצא **0** והדפיס `מוכן.` בזמן ש-`/srv/imagesrv/boot`
-הייתה ריקה, ושני הקבצים שתפריט ה-GRUB מפנה אליהם — ‏`/boot/vmlinuz`
+הייתה ריקה, ושני הקבצים שתפריט ה-GRUB מפנה אליהם — `/boot/vmlinuz`
 ו-`/boot/initrd.img` — החזירו **404**. שרת מוכן שאף מחשב לא עולה דרכו.
 
 הבדיקות כאן מריצות את `deploy/verify-boot-payload.sh` **בפועל**, מול שרת
-‏HTTP אמיתי, ובודקות **קוד יציאה והודעה**. בדיקת נוכחות טקסט בסקריפט
+HTTP אמיתי, ובודקות **קוד יציאה והודעה**. בדיקת נוכחות טקסט בסקריפט
 הייתה עוברת גם על שער שאינו רץ.
 """
 
@@ -29,7 +29,7 @@ SCRIPT = REPO / "deploy" / "verify-boot-payload.sh"
 INSTALLER = REPO / "deploy" / "setup-boot-server.sh"
 BASH = shutil.which("bash")
 
-#: גוף ה-404 של ‎/boot — **תשעה** בייטים. זה המספר שהוגש ב-200 מדומה
+#: גוף ה-404 של /boot — **תשעה** בייטים. זה המספר שהוגש ב-200 מדומה
 #: ונספר כהצלחה, וזו הסיבה ש"יש תשובה ויש גודל" אינו "יש קובץ".
 NOT_FOUND_BODY = b"Not Found"
 GUI_INITRD = "initrd.img.gui"
@@ -82,9 +82,9 @@ def dead_address() -> str:
 
 
 def run_gate(boot_dir: Path, base: str):
-    """מריץ את השער עצמו. ‏--wait 0: השרת כבר למעלה או כבר לא יעלה.
+    """מריץ את השער עצמו. --wait 0: השרת כבר למעלה או כבר לא יעלה.
 
-    ‏`PYTHONIOENCODING`: היעד הוא דביאן 13 עם UTF-8, וכך גם המעבדה. קונסולת
+    `PYTHONIOENCODING`: היעד הוא דביאן 13 עם UTF-8, וכך גם המעבדה. קונסולת
     הפיתוח בווינדוס היא cp1252, ובלי הדגל ההודעות היו חוזרות כ-`\\uXXXX`
     ומודדות את הקונסולה במקום את השער.
     """
@@ -122,7 +122,7 @@ def test_an_empty_boot_directory_is_refused(tmp_path: Path):
 
 
 def test_nine_bytes_served_with_200_is_not_success(tmp_path: Path):
-    """‏200 וגודל אינם ראיה. תשעה בייטים הם גוף שגיאה, לא קרנל."""
+    """200 וגודל אינם ראיה. תשעה בייטים הם גוף שגיאה, לא קרנל."""
     directory = boot_dir(tmp_path, len(NOT_FOUND_BODY))
     with serving(directory) as base:
         result = run_gate(directory, base)
@@ -132,7 +132,7 @@ def test_nine_bytes_served_with_200_is_not_success(tmp_path: Path):
 
 
 def test_files_on_disk_that_the_server_does_not_serve_are_refused(tmp_path: Path):
-    """הקבצים על הדיסק, השרת מגיש תיקייה אחרת. ‏`ls` אינו אימות —
+    """הקבצים על הדיסק, השרת מגיש תיקייה אחרת. `ls` אינו אימות —
     התחנה מושכת ב-HTTP, וזה מה שנבדק."""
     directory = boot_dir(tmp_path, MIN_ASSET_BYTES + 1)
     elsewhere = tmp_path / "elsewhere"
@@ -145,9 +145,9 @@ def test_files_on_disk_that_the_server_does_not_serve_are_refused(tmp_path: Path
 
 
 def test_a_boot_directory_that_is_not_the_one_being_served_is_refused(tmp_path: Path):
-    """‏200 וגודל מלא — ובכל זאת כישלון, כי התיקייה שנמסרה ריקה.
+    """200 וגודל מלא — ובכל זאת כישלון, כי התיקייה שנמסרה ריקה.
 
-    ‏`--boot-dir` של השרת הוא `/srv/imagesrv/boot` (server/main.py), וזה
+    `--boot-dir` של השרת הוא `/srv/imagesrv/boot` (server/main.py), וזה
     גם ה-`--http-root` של המתקין. כששניהם אינם אותו נתיב, המפעיל מילא
     תיקייה שאיש אינו מגיש — ו-HTTP לבדו היה מאשר את זה.
     """
@@ -162,7 +162,7 @@ def test_a_boot_directory_that_is_not_the_one_being_served_is_refused(tmp_path: 
 
 
 def test_a_server_that_did_not_answer_is_a_failure_not_a_pass(tmp_path: Path):
-    """‏"לא הצלחנו לבדוק" אינו "בדקנו, הכל תקין" — עיקרון 5."""
+    """"לא הצלחנו לבדוק" אינו "בדקנו, הכל תקין" — עיקרון 5."""
     directory = boot_dir(tmp_path, MIN_ASSET_BYTES + 1)
     result = run_gate(directory, dead_address())
 
@@ -207,7 +207,7 @@ def gate_block() -> str:
 
     מריצים את הקוד האמיתי ולא בודקים נוכחות טקסט: שער שרץ **אחרי**
     "מוכן." או שאינו מפיל את קוד היציאה עובר כל בדיקת grep, ומשאיר את
-    ‏#332 בדיוק כפי שנמדד.
+    #332 בדיוק כפי שנמדד.
     """
     lines = INSTALLER.read_text(encoding="utf-8").split("\n")
     start = next(i for i, line in enumerate(lines) if line == "READY=1")
@@ -255,7 +255,7 @@ def test_the_installer_does_say_ready_once_a_station_can_boot(tmp_path: Path):
 
 @pytest.mark.parametrize("name", BOOT_ASSETS)
 def test_the_gate_checks_exactly_what_the_grub_menu_points_at(name: str):
-    """‏boot/grub_menu.py מפנה לשני אלה. רשימה שנסחפת ממנו היא שער
+    """boot/grub_menu.py מפנה לשני אלה. רשימה שנסחפת ממנו היא שער
     שמאשר שרת שלא ניתן לעלות דרכו."""
     menu = (REPO / "boot" / "grub_menu.py").read_text(encoding="utf-8")
     assert f"/boot/{name}" in menu

@@ -1,8 +1,8 @@
-"""‏`/api/console/vmupdate/*` — עדכון אימג' ב-VM (‏#1334). ‏admin בלבד.
+"""`/api/console/vmupdate/*` — עדכון אימג' ב-VM (#1334). admin בלבד.
 
-ה-HTTP דרך `admin_only` (‏deploy → ‏403, לא מחובר → ‏401). ה-WebSocket של
-המסך עובר **באותו שער** של המוניטור (`monitor.py`, ‏#904/#1129): ‏Origin
-זר נסגר לפני accept, ‏cookie חסר → ‏4401, לא admin → ‏4403 — ושניהם
+ה-HTTP דרך `admin_only` (deploy → 403, לא מחובר → 401). ה-WebSocket של
+המסך עובר **באותו שער** של המוניטור (`monitor.py`, #904/#1129): Origin
+זר נסגר לפני accept, cookie חסר → 4401, לא admin → 4403 — ושניהם
 **לפני** שנפתח ה-socket של ה-VNC. מכאן הגשר הוא `monitor.bridge_browser`
 עצמו: הדפדפן רואה אותה לחיצת-יד, אותה תקרת חוסר-פעילות, ואותו סירוב
 ל-ClientCutText.
@@ -31,7 +31,7 @@ log = logging.getLogger("imagesrv.vmupdate_api")
 #: ה-VM אינו פתוח (או עוד לא הגיע לריצה) — אין מסך לחבר.
 WS_NO_VM = 4409
 
-#: ‏#1535: הסירובים של ה-API נבנים מהכללים עצמם, לא מטקסט של חריגה —
+#: #1535: הסירובים של ה-API נבנים מהכללים עצמם, לא מטקסט של חריגה —
 #: הטקסט המלא הולך ליומן השרת.
 SETTINGS_RULE = "הגדרות ה-VM לא נשמרו — מותרים רק " + ", ".join(
     f"{name} (מספר שלם בין {low} ל-{high})" for name, (_key, _default, low, high) in SETTINGS.items())
@@ -44,7 +44,7 @@ def _one_line(exc: Exception) -> str:
 
 
 def _refused(exc: Refusal) -> JSONResponse:
-    """המוסכמה הרוחבית (`api._error`): ‏`ok`/‏`error`/‏`code`, ועוד המספרים."""
+    """המוסכמה הרוחבית (`api._error`): `ok`/`error`/`code`, ועוד המספרים."""
     body = {"ok": False, "error": exc.message, "code": exc.reason}
     if exc.numbers:
         body["details"] = exc.numbers
@@ -76,13 +76,13 @@ async def qemu_handshake(reader, writer) -> None:
 
 
 def _open_unix(path: str):
-    # ‏`asyncio.open_unix_connection` אינו קיים בווינדוס (תחנת הפיתוח); השרת
+    # `asyncio.open_unix_connection` אינו קיים בווינדוס (תחנת הפיתוח); השרת
     # הוא דביאן. נפתר בזמן הקריאה ולא בייבוא, כדי שהמודול ייטען בכל מקום.
     return asyncio.open_unix_connection(path)
 
 
 def create_vmupdate_router(ctx: ServerContext, engine: VmUpdate) -> APIRouter:
-    """ה-HTTP. ‏app.py מוסיף אותו דרך `include` — עם `console_only`, כך שעוגיית
+    """ה-HTTP. app.py מוסיף אותו דרך `include` — עם `console_only`, כך שעוגיית
     deploy (גם זו שהקיוסק הנפיק) מקבלת את הסירוב האחיד של #1073 לפני admin_only."""
     router = APIRouter(prefix="/api/console/vmupdate")
     _, admin_only = auth.dependencies(ctx.conn)
@@ -111,7 +111,7 @@ def create_vmupdate_router(ctx: ServerContext, engine: VmUpdate) -> APIRouter:
 
     @router.get("/network")
     def get_network(user=Depends(admin_only)):
-        """‏#1468: "כרטיס לעדכוני VM", ה-MAC שנוצר לו, וה-lease האחרון."""
+        """#1468: "כרטיס לעדכוני VM", ה-MAC שנוצר לו, וה-lease האחרון."""
         return act(engine.network_view)
 
     @router.put("/network")
@@ -187,7 +187,7 @@ def create_vmupdate_router(ctx: ServerContext, engine: VmUpdate) -> APIRouter:
 def create_vmupdate_viewer_router(ctx: ServerContext, engine: VmUpdate, *,
                                   open_unix=_open_unix) -> APIRouter:
     """ה-WebSocket של המסך — מחוץ ל-`console_only` (שהוא Request בלבד), כמו
-    המוניטור: הוא סוגר בעצמו, אחרי accept, ‏4401 בלי עוגייה ו-4403 לכל מי שאינו
+    המוניטור: הוא סוגר בעצמו, אחרי accept, 4401 בלי עוגייה ו-4403 לכל מי שאינו
     admin — כולל deploy — **לפני** שנפתח ה-socket של ה-VNC."""
     router = APIRouter(prefix="/api/console/vmupdate")
     viewers: set[str] = set()
@@ -214,7 +214,7 @@ def create_vmupdate_viewer_router(ctx: ServerContext, engine: VmUpdate, *,
         token = websocket.cookies.get(auth.COOKIE_NAME) or ""
         task = asyncio.current_task()
         async with lock:
-            # צופה אחד לכל מנהל; כמה מנהלים — כן (‏share=force-shared). מי
+            # צופה אחד לכל מנהל; כמה מנהלים — כן (share=force-shared). מי
             # שאינו השולט רואה בלבד: הקלט שלו נזרק בגשר (הכרעה 6).
             if name in viewers:
                 await websocket.close(code=WS_NO_VM, reason="כבר פתוח אצלך מסך ל-VM")
@@ -225,6 +225,12 @@ def create_vmupdate_viewer_router(ctx: ServerContext, engine: VmUpdate, *,
         engine.touch(name)
         writer = None
         try:
+            # #2493: הבדיקה השנייה של המוניטור (#1853) — ביטול שקרה בין `auth.check`
+            # לרישום לא מצא את הגשר, ובלעדיה מקלדת ועכבר ל-VM נשארו פתוחים עד idle.
+            if not monitor.still_admin(ctx.conn, token):
+                await websocket.close(code=monitor.WS_UNAUTHENTICATED,
+                                      reason=monitor.SESSION_ENDED_REASON)
+                return
             try:
                 reader, writer = await asyncio.wait_for(open_unix(str(path)), timeout=3.0)
                 await asyncio.wait_for(qemu_handshake(reader, writer), timeout=5.0)
@@ -241,7 +247,7 @@ def create_vmupdate_viewer_router(ctx: ServerContext, engine: VmUpdate, *,
                     websocket, reader, writer, idle_seconds=monitor.IDLE_SECONDS,
                     allow_input=lambda: engine.controls(name))
             except asyncio.CancelledError:
-                # ‏#1394: רק ביטול ש-viewer_sessions עשה הוא ביטול התחברות.
+                # #1394: רק ביטול ש-viewer_sessions עשה הוא ביטול התחברות.
                 # כל ביטול אחר הוא פירוק החיבור (#725) — כמו לפני #1394.
                 if task is None or not viewer_sessions.was_revoked(task):
                     outcome = "browser"
@@ -256,7 +262,9 @@ def create_vmupdate_viewer_router(ctx: ServerContext, engine: VmUpdate, *,
                 engine.viewer_leave(presence)
                 journal(ctx.conn, "vmupdate_viewer_closed", outcome, found[0])
         except (WebSocketDisconnect, asyncio.CancelledError):
-            pass   # ראו monitor.py: ביטול ה-endpoint בפירוק החיבור אינו כשל (#725)
+            # ראו monitor.py: ביטול ה-endpoint בפירוק החיבור אינו כשל (#725). #2493: ביטול
+            # של `viewer_sessions` בזמן החיבור ל-VNC — 4401 בשמו, כמו במוניטור.
+            await monitor.close_if_revoked(websocket, task)
         finally:
             if writer is not None:
                 writer.close()

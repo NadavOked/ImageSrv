@@ -1,11 +1,11 @@
-"""‏#1860 — ביטול ה-endpoint בזמן `wait_closed` אינו משאיר את המכונה "כבר פתוח".
+"""#1860 — ביטול ה-endpoint בזמן `wait_closed` אינו משאיר את המכונה "כבר פתוח".
 
 ה-`finally` של ה-WebSocket סגר את ה-TCP למכונה (`await writer.wait_closed()`)
 ורק **אחריו** שחרר את המנעול (`release`). ה-runner של ASGI מבטל את משימת
 ה-endpoint בפירוק החיבור (#725), וביטול שנפל בתוך `wait_closed` דילג על
 השחרור: כל חיבור הבא למכונה נסגר 4409 "כבר פתוח מוניטור למכונה הזאת" — עד
-אתחול השרת. מול `FakeMachine` (‏`wait_closed` שחוזר מיד) זה לא נראה; מול
-המוניטור האמיתי זה נמדד 5 מתוך 15 ריצות (Testrunner, ‏20/10).
+אתחול השרת. מול `FakeMachine` (`wait_closed` שחוזר מיד) זה לא נראה; מול
+המוניטור האמיתי זה נמדד 5 מתוך 15 ריצות (Testrunner, 20/10).
 
 כאן `wait_closed` נתקע עד ביטול — הצורה הדטרמיניסטית של אותו מרוץ.
 בקרה שלילית: על הקוד שלפני התיקון החיבור השני נסגר 4409.
@@ -27,7 +27,7 @@ from test_monitor import (MAC, SERVER_INIT, FakeMachine, browser_handshake,
 
 
 def _another_admin(server, client):
-    """‏#1852: אותו מנהל שפותח שוב **מעביר** את הצפייה — ולכן החיבור השני כאן
+    """#1852: אותו מנהל שפותח שוב **מעביר** את הצפייה — ולכן החיבור השני כאן
     הוא של מנהל אחר: רק מנעול ששוחרר מכניס אותו."""
     users.create(server["ctx"].conn, "ada", "admin-pass-456", "admin", by="test",
                  check_policy=False)
@@ -74,7 +74,7 @@ class ResetOnCloseMachine(FakeMachine):
 
 
 def test_a_failed_close_of_a_vanished_machine_still_releases_it(server):
-    """סקירת אבטחה, 20/10: ‏`wait_closed` שזורק (בדיוק כשהמכונה נעלמה) דילג
+    """סקירת אבטחה, 20/10: `wait_closed` שזורק (בדיוק כשהמכונה נעלמה) דילג
     על `release` — וגם הפיל את ה-endpoint בחריגה. אחריו: חיבור חדש לאותה
     מכונה מתקבל, בלי 4409, ובלי שהחריגה יוצאת מה-endpoint."""
     prepare_secret_machine(server)

@@ -146,7 +146,9 @@ def test_room_that_cannot_be_measured_is_a_refusal_not_permission(server, monkey
         raise OSError("no such device")
     monkeypatch.setattr(console_isos, "_free", broken)
     response = _upload(server["admin"], _iso(), )
-    assert response.status_code == 507 and "no such device" in response.json()["detail"]
+    # #2543: the OS text goes to the server log; the operator reads our sentence.
+    assert response.status_code == 507 and "הפרטים ביומן השרת" in response.json()["detail"]
+    assert "no such device" not in response.json()["detail"]
 
 
 def test_a_second_iso_with_the_same_name_is_refused_and_the_first_is_untouched(server):

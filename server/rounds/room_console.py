@@ -1,15 +1,15 @@
-"""‏#980 — שתי פעולות של אובייקט "מחשבי שיכפול" בקונסולה שלא היה להן מקור.
+"""#980 — שתי פעולות של אובייקט "מחשבי שיכפול" בקונסולה שלא היה להן מקור.
 
-1. **כיבוי כל המשכפלים** (‏`POST /api/console/room/poweroff`). **דרך הסוכן,
-   לא `poweroff -f` מהשרת** (הכרעת נדב; ‏#587): מכונה שכובתה בלי
-   ‏`arm_wol` אינה מתעוררת ב-WoL. השרת רק **רושם בקשה** לכל משכפל; הבקשה
-   יוצאת בתשובת ה-hello הבא של המכונה (‏`power_action`, סעיף 3) — אותו
+1. **כיבוי כל המשכפלים** (`POST /api/console/room/poweroff`). **דרך הסוכן,
+   לא `poweroff -f` מהשרת** (הכרעת נדב; #587): מכונה שכובתה בלי
+   `arm_wol` אינה מתעוררת ב-WoL. השרת רק **רושם בקשה** לכל משכפל; הבקשה
+   יוצאת בתשובת ה-hello הבא של המכונה (`power_action`, סעיף 3) — אותו
    hello באותו קצב, בלי polling חדש — והסוכן מכבה באותו מסלול כמו כיבוי
-   ההמתנה (‏`idle.sh`: ‏`arm_wol` נקרא בחזרה, ורק אז `poweroff -f`).
+   ההמתנה (`idle.sh`: `arm_wol` נקרא בחזרה, ורק אז `poweroff -f`).
    בקשה נמסרת **פעם אחת** ופגה אחרי `POWEROFF_TTL_SECONDS`: מכונה שהייתה
    כבויה בזמן הלחיצה ועולה מחר אינה נכבית ברגע שהיא עולה.
-2. **היסטוריית סבבי החדר** (‏`GET /api/console/room/history`) — מטבלת
-   ‏`room_rounds`, שכבר שומרת כל סבב.
+2. **היסטוריית סבבי החדר** (`GET /api/console/room/history`) — מטבלת
+   `room_rounds`, שכבר שומרת כל סבב.
 
 **לא בראוטר של `room.py`**: הוא נכנס בשלמותו לקיוסק (`kiosk.py`), וכיבוי
 החדר הוא פעולת ניהול שאין לה מקום על וילן ההפצה.
@@ -28,12 +28,12 @@ from server.db import _write_lock, journal, now_iso, writing
 from server.agent.registry import ROOM_GROUPS
 from server.rounds.room import CLONERS_GROUP, round_label, visible_round
 
-#: מה שהשרת מבקש מסוכן דרך ה-hello. ‏reboot — "אתחול מרחוק" ממגירת המחשב
-#: (‏#977 §4, ‏`wake_api.py`): הצרכן שחסר כש-#980 פתח רק את הכיבוי.
+#: מה שהשרת מבקש מסוכן דרך ה-hello. reboot — "אתחול מרחוק" ממגירת המחשב
+#: (#977 §4, `wake_api.py`): הצרכן שחסר כש-#980 פתח רק את הכיבוי.
 POWEROFF = "poweroff"
 REBOOT = "reboot"
 #: כמה זמן בקשת כיבוי ממתינה ל-hello של המכונה. ה-hello של משכפל ממתין
-#: מגיע לכל המאוחר כל `POLL_MAX` (15 ש', ‏`agent/lib/core/poll.sh`); ‏120 ש' הם
+#: מגיע לכל המאוחר כל `POLL_MAX` (15 ש', `agent/lib/core/poll.sh`); 120 ש' הם
 #: שמונה פעימות — ומעבר לזה מכונה שלא ענתה אינה "תכבה אחר כך".
 POWEROFF_TTL_SECONDS = 120
 HISTORY_DEFAULT = 10
@@ -50,7 +50,7 @@ def request_power(conn: sqlite3.Connection, macs: list[str], action: str,
                   user: str, confirmed: bool = False) -> int:
     """בקשה אחת לכל MAC (בקשה קודמת שעוד ממתינה — נדרסת). מחזיר כמה נרשמו.
 
-    ‏#1367 (נדב 14/10): ``confirmed`` = המפעיל אישר מעל האזהרה "המחשב באמצע
+    #1367 (נדב 14/10): ``confirmed`` = המפעיל אישר מעל האזהרה "המחשב באמצע
     שיכפול מקומי". רק בקשה כזו מכבה מכונה שכותבת; בלעדיו הסוכן זורק אותה."""
     at = now_iso()
     with _write_lock, writing(conn):
@@ -66,7 +66,7 @@ def request_power(conn: sqlite3.Connection, macs: list[str], action: str,
 
 def take_power(conn: sqlite3.Connection, mac: str,
                now: datetime | None = None) -> tuple[str | None, bool]:
-    """מה שה-hello של `mac` נושא ב-`power_action`: ‏`"poweroff"`, ‏`"reboot"` או None.
+    """מה שה-hello של `mac` נושא ב-`power_action`: `"poweroff"`, `"reboot"` או None.
 
     הבקשה נמחקת בקריאה — נמסרת פעם אחת. סוכן שלא הצליח לדרוך WoL נשאר
     דולק ואומר זאת, ואינו מקבל את הבקשה שוב בכל פעימה. בקשה שפגה נמחקת
@@ -96,11 +96,11 @@ def take_power(conn: sqlite3.Connection, mac: str,
 
 
 def _leave_open_wave(conn: sqlite3.Connection, mac: str) -> None:
-    """‏#65: מכונה שנאמר לה לכבות יוצאת מהגל **הפתוח** — באותו hello שמוסר
+    """#65: מכונה שנאמר לה לכבות יוצאת מהגל **הפתוח** — באותו hello שמוסר
     את הכיבוי (ה-hello הזה עצמו כבר צירף אותה מחדש). אחרת המגירות שדיווחה
     לפני שכבתה נספרות ב-`ready_drives`, ו"התחל בכל זאת" היה משגר גל עם
     מכונה כבויה. כשתעלה אחרי החלפת המגירות — ה-hello שלה מצרף אותה שוב.
-    גל שכבר רץ אינו נוגע כאן: לא מכבים מכונה באמצע כתיבה (‏`/room/poweroff`
+    גל שכבר רץ אינו נוגע כאן: לא מכבים מכונה באמצע כתיבה (`/room/poweroff`
     ו-`/missing/{mac}/poweroff` מסרבים לזה)."""
     with _write_lock, writing(conn):
         conn.execute(
@@ -109,7 +109,7 @@ def _leave_open_wave(conn: sqlite3.Connection, mac: str) -> None:
 
 
 def round_history(ctx, limit: int) -> list[dict]:
-    """סבבי חדר שהסתיימו (‏`closed`/`failed`), מהחדש לישן. הסבב שמוצג
+    """סבבי חדר שהסתיימו (`closed`/`failed`), מהחדש לישן. הסבב שמוצג
     עכשיו ב-`GET /room` (פעיל, או כושל שעוד לא נסגר) אינו כאן."""
     shown = visible_round(ctx.conn)
     rows = ctx.conn.execute(
@@ -128,7 +128,7 @@ def round_history(ctx, limit: int) -> list[dict]:
         "created_at": r["created_at"],
         "closed_at": r["closed_at"],
         "failed_reason": r["failed_reason"],
-        # ‏#1889: כמה זמן הסבב חיכה לאדם, ועל מה (‏`learn_waits.round_waits`; ‏null = לא נמדד).
+        # #1889: כמה זמן הסבב חיכה לאדם, ועל מה (`learn_waits.round_waits`; null = לא נמדד).
         "waits": learn_waits.round_waits(ctx.conn, r["created_at"], r["closed_at"]),
     } for r in rows]
 

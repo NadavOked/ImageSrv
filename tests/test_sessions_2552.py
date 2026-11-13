@@ -1,4 +1,4 @@
-"""‏#2552: מסך סשנים פעילים למנהל -- רשימה, ניתוק סשן בודד, ו"צא מכל המכשירים".
+"""#2552: מסך סשנים פעילים למנהל -- רשימה, ניתוק סשן בודד, ו"צא מכל המכשירים".
 
 השרת כבר ידע לבטל עוגייה (``auth.revoke``, #1633) ולבטל את כל העוגיות של משתמש
 (``bump_auth_epoch``). מה שנוסף: ``GET /sessions`` מחזיר מזהה קצר (``sid``, ששה
@@ -106,7 +106,7 @@ def test_sessions_are_admin_only_on_read_and_on_revoke(net):
 
 
 def test_both_routes_demand_the_admin_dependency_not_only_the_console_wall(net):
-    """‏``console_only`` כבר מחזיר 403 ל-deploy בכל נתיב קונסולה, ולכן הבדיקה למעלה לא תיפול אם
+    """``console_only`` כבר מחזיר 403 ל-deploy בכל נתיב קונסולה, ולכן הבדיקה למעלה לא תיפול אם
     ``admin_only`` יוסר מהנתיב. ההרשאה נבדקת בשרת, בנתיב עצמו (הוראת ה-Issue) -- וכאן נבדק שהיא שם."""
     found = {}
     for route in net["app"].routes:

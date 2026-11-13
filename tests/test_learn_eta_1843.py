@@ -1,7 +1,7 @@
-"""‏#1843 — זמן סיום צפוי לגל, למשיכה ולקליטה, לפי ההיסטוריה של השרת.
+"""#1843 — זמן סיום צפוי לגל, למשיכה ולקליטה, לפי ההיסטוריה של השרת.
 
 הכלל (נדב 19/10): השרת לומד רק ממדידה שלו, והלמידה לעולם אינה חוסמת.
-בלי היסטוריה — "אין עדיין הערכה" (‏`seconds: None` + ‏`why`), לא מספר מומצא
+בלי היסטוריה — "אין עדיין הערכה" (`seconds: None` + `why`), לא מספר מומצא
 (עיקרון 5ב). הטסטים בודקים את המספר עצמו מול חישוב יד, ואת "אין היסטוריה"
 כמצב נפרד מ"נמדד".
 """
@@ -32,9 +32,9 @@ def conn(tmp_path):
 
 def _wave(conn, delivered: dict, *, wall: float, total: float, ended: str = "send_done",
           state: str = "closed", direct: bool = False) -> str:
-    """גל שהסתיים: ‏`sessions` (‏started_at → ‏closed_at = ‏`total` שניות) ושורת
-    ‏`wave_rates` עם `stream.wall_s` ו-`delivered` — הצורה ש-`drive_rates`
-    כותב (‏`record_stream` / ‏`record_wave`)."""
+    """גל שהסתיים: `sessions` (started_at → closed_at = `total` שניות) ושורת
+    `wave_rates` עם `stream.wall_s` ו-`delivered` — הצורה ש-`drive_rates`
+    כותב (`record_stream` / `record_wave`)."""
     sid = f"ses_eta{next(_seq):04d}"
     start = 1_700_000_000
     from datetime import datetime, timezone
@@ -70,9 +70,9 @@ def test_no_history_is_no_estimate_not_a_number(conn):
 
 
 def test_the_estimate_is_fixed_stages_plus_size_over_goodput(conn):
-    """שני גלים קודמים של 2 מגירות: ‏goodput ‏50MB/s ו-40MB/s למגירה, שלבים
-    קבועים 120ש' ו-100ש'. חציון של שניים = ממוצע: ‏45MB/s, ‏110ש'.
-    אימג' של 18GB → ‏110 + 18e9 / 45e6 = ‏510ש'."""
+    """שני גלים קודמים של 2 מגירות: goodput 50MB/s ו-40MB/s למגירה, שלבים
+    קבועים 120ש' ו-100ש'. חציון של שניים = ממוצע: 45MB/s, 110ש'.
+    אימג' של 18GB → 110 + 18e9 / 45e6 = 510ש'."""
     _wave(conn, {MAC: {"drawers": 2, "done": 2, "written_bytes": 2 * 20 * GB}},
           wall=400, total=520)                         # 50MB/s, 120s
     _wave(conn, {MAC: {"drawers": 2, "done": 2, "written_bytes": 2 * 20 * GB}},
@@ -100,7 +100,7 @@ def test_the_slowest_machine_sets_the_wave(conn):
     _wave(conn, {OTHER: {"drawers": 1, "done": 1, "written_bytes": 20 * GB}},
           wall=1000, total=1000)
     got = learn_eta.wave(conn, _drives(MAC, 1) + _drives(OTHER, 1), 20 * GB)
-    # ‏MAC: ‏50MB/s → 400ש'. ‏OTHER: חציון של 50 ו-20MB/s = 35MB/s → 571ש'.
+    # MAC: 50MB/s → 400ש'. OTHER: חציון של 50 ו-20MB/s = 35MB/s → 571ש'.
     assert got["seconds"] == 571, got
 
 
@@ -216,7 +216,7 @@ def test_capture_before_the_partitions_are_measured(conn):
 
 
 def test_the_first_report_stamps_started_at_once(tmp_path):
-    """‏`tasks.started_at` — הדיווח הראשון, ולא זז בדיווחים הבאים."""
+    """`tasks.started_at` — הדיווח הראשון, ולא זז בדיווחים הבאים."""
     from server.agent import reports
     conn = db.connect(tmp_path / "x.db")
     conn.execute("INSERT INTO machines (mac, suffix, group_id, added_at) VALUES"
@@ -252,18 +252,18 @@ def test_the_room_screen_says_no_estimate_then_the_learned_one(room_server):
     cloner_hello(anon, CLONER1, ["S1", "S2"])
     fc = room(deploy)["round"]["forecast"]
     assert fc["seconds"] is None and fc["why"] == "no_history" and fc["missing"] == [CLONER1]
-    # גל קודם של אותו משכפל עם 2 מגירות: 50MB/s, ‏100ש' קבועים
+    # גל קודם של אותו משכפל עם 2 מגירות: 50MB/s, 100ש' קבועים
     _wave(ctx.conn, {CLONER1: {"drawers": 2, "done": 2, "written_bytes": 2 * 20 * GB}},
           wall=400, total=500)
     fc = room(deploy)["round"]["forecast"]
-    # MANIFEST_256: ‏total_compressed_bytes = 57,982,058,496 → ‏100 + 1159.6 = 1259ש'
+    # MANIFEST_256: total_compressed_bytes = 57,982,058,496 → 100 + 1159.6 = 1259ש'
     assert fc["why"] is None and fc["seconds"] == 1259, fc
     assert fc["ends_at"] is None                    # הגל פתוח — עוד לא יצא
 
 
 def test_the_console_shows_the_forecast_from_the_server():
     """הקונסולה מציגה את ההערכה מהשרת — ולא מחשבת אחת משלה — ו"אין עדיין הערכה"
-    כשאין. בגל רץ, ‏"נותרו ~X" של #410 (הקצב שנמדד עכשיו) גובר: ההערכה מההיסטוריה
+    כשאין. בגל רץ, "נותרו ~X" של #410 (הקצב שנמדד עכשיו) גובר: ההערכה מההיסטוריה
     מוצגת רק עד שהוא נמדד — כך היא מתעדכנת לפי הקצב בפועל, והשורה נשארת זהה לגואי."""
     static = Path(__file__).resolve().parents[1] / "server" / "static"
     js = console_js()
@@ -277,8 +277,8 @@ def test_the_console_shows_the_forecast_from_the_server():
 
 
 def test_the_overview_gives_each_running_pull_its_forecast(room_server):
-    """‏`/overview.pulls[].forecast` — משיכה שרצה מקבלת את ההערכה מהמשיכות הקודמות
-    של אותה מכונה; בלי היסטוריה — ‏`no_history`, לא מספר."""
+    """`/overview.pulls[].forecast` — משיכה שרצה מקבלת את ההערכה מהמשיכות הקודמות
+    של אותה מכונה; בלי היסטוריה — `no_history`, לא מספר."""
     ctx, admin = room_server["ctx"], room_server["admin"]
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -300,8 +300,8 @@ def test_the_overview_gives_each_running_pull_its_forecast(room_server):
 
 
 def test_the_task_list_gives_a_running_capture_its_forecast(room_server):
-    """‏`/api/console/tasks[].forecast` — קליטה שרצה; לפני שהסוכן דיווח את המחיצות
-    — ‏`size_unknown`. משימה שאינה קליטה רצה — ‏None."""
+    """`/api/console/tasks[].forecast` — קליטה שרצה; לפני שהסוכן דיווח את המחיצות
+    — `size_unknown`. משימה שאינה קליטה רצה — None."""
     ctx, admin = room_server["ctx"], room_server["admin"]
     for tid, state in (("t_run", "running"), ("t_done", "done")):
         ctx.conn.execute(

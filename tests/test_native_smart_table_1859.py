@@ -135,7 +135,7 @@ def render(binary, tmp, text, size="1024x768"):
         if l.startswith("@@ "):
             cur = cards.setdefault(l[3:], [])
         elif cur is not None:
-            cur.append(re.sub("[‎‏⁦-⁩]", "", l))
+            cur.append(re.sub("[\u200e\u200f\u2066-\u2069]", "", l))
     return cards
 
 

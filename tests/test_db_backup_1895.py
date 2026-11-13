@@ -67,8 +67,9 @@ def test_a_backup_is_a_consistent_verified_copy_and_says_so(data):
         assert (target.stat().st_mode & 0o777) == 0o600                # it holds password hashes and MFA secrets
 
 
-def test_a_write_that_did_not_land_leaves_no_file_and_a_failed_status(data, monkeypatch):
+def test_a_write_that_did_not_land_leaves_no_file_and_a_failed_status(data, monkeypatch, caplog):
     data["dest"].mkdir()
+    caplog.set_level("WARNING", logger="imagesrv.backup")
 
     real = os.replace
 
@@ -78,7 +79,9 @@ def test_a_write_that_did_not_land_leaves_no_file_and_a_failed_status(data, monk
         return real(src, dst)
     monkeypatch.setattr(backup_job.os, "replace", refuse)
     status = backup_job.run(data["dir"], str(data["dest"]), NOW)
-    assert status["ok"] is False and "No space left" in status["error"], status
+    # #2543: ה-strerror ביומן השרת; בקובץ הסטטוס (שהקונסולה מציגה) — המשפט שלנו.
+    assert status["ok"] is False and status["error"] == "הגיבוי נכשל — הפרטים ביומן השרת", status
+    assert "No space left" in caplog.text
     assert list((data["dest"] / "db").iterdir()) == []                  # neither the copy nor its temp file
 
 

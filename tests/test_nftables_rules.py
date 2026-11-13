@@ -75,7 +75,7 @@ def test_custom_mcast_ports_snapshot_matches_fixture() -> None:
 
 @needs_bash
 def test_primary_opens_8443_on_the_servers_card_only() -> None:
-    """‏#1310: בראשי 8443 עונה ל"אתה שם?" של מתקין משני — על כרטיס השרתים
+    """#1310: בראשי 8443 עונה ל"אתה שם?" של מתקין משני — על כרטיס השרתים
     בלבד (לא על ההפצה), בלי `ip saddr`: הראשי אינו יודע מראש את המשניים,
     ו-FW האתר מגביל את המקור. לפני #1310 לא היה כאן כלל כלל, והבדיקה
     במתקין נכשלה תמיד בתצורה הנכונה."""
@@ -181,7 +181,7 @@ def test_proxy_1829_rules_are_accepted_by_nft(tmp_path, args) -> None:
 
 @needs_bash
 def test_without_deploy_if_only_the_servers_vlan_opens() -> None:
-    """‏#1088: במסירה רשת ההפצה טרם הוגדרה — המחולל רץ בלי --deploy-if,
+    """#1088: במסירה רשת ההפצה טרם הוגדרה — המחולל רץ בלי --deploy-if,
     פותח את הקונסולה בוילן השרתים ו**סוגר** את SSH ואת כל פורטי ההפצה.
     הקונסולה מריצה אותו שוב עם הכרטיס כשמודלק DHCP (deploy_net)."""
     text = generate("--servers-if", "eth-srv")
@@ -196,8 +196,8 @@ def test_without_deploy_if_only_the_servers_vlan_opens() -> None:
 
 @needs_bash
 def test_no_ruleset_can_open_ssh() -> None:
-    """‏#1266: SSH יצא מהמוצר — אין דגל שפותח 22, ואין כלל 22 בשום תצורה.
-    ‏`--ssh-if` (המתג שהיה) נדחה בשם, ולא מתעלמים ממנו בשקט."""
+    """#1266: SSH יצא מהמוצר — אין דגל שפותח 22, ואין כלל 22 בשום תצורה.
+    `--ssh-if` (המתג שהיה) נדחה בשם, ולא מתעלמים ממנו בשקט."""
     for args in (PRIMARY_ARGS, ("--servers-if", "eth-srv"),
                  (*PRIMARY_ARGS, "--primary-ip", "10.0.0.1")):
         assert "dport 22" not in generate(*args), args

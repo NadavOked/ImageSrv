@@ -183,6 +183,18 @@ test('#2840: a submit while onSubmit is still running sends nothing; the button 
   await again;
 });
 
+// ‏#2891 (fd1111, 11/11): בחלון רשת ההפצה (529px) הסירוב ישב ב-y=912 — מתחת לקפל, והלחיצה
+// נראתה כמו כלום. השגיאה נגללת לתוך התצוגה.
+test('#2891: a refusal is scrolled into view, inside the window', async () => {
+  const {run, get} = setup();
+  const scrolled = [];
+  get('sf-error').scrollIntoView = (o) => scrolled.push(o);
+  run('sheet({title:"רשת הפצה", fields:[{id:"n",label:"n",value:"a"}], onSubmit: async () => { throw new Error("לא ניתן לבדוק"); }})');
+  await get('sheet').onsubmit({preventDefault() {}});
+  assert.equal(get('sf-error').textContent, 'לא ניתן לבדוק');
+  assert.deepEqual(JSON.parse(JSON.stringify(scrolled)), [{block: 'nearest'}]);
+});
+
 // ‏#2840 (נדב: "הוא לא הציג כלום וחשבתי שזה תקוע"): כפתור כבוי לבדו אינו משוב — בזמן הבקשה
 // החלון אומר שהיא רצה, ואחרי כמה שניות גם מה צפוי לקרות.
 test('#2840: while the request runs the window says so, and after a few seconds what to expect', async () => {

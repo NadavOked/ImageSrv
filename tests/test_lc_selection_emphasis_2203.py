@@ -171,7 +171,7 @@ def test_selection_card_frame_fill_number_and_dividers(selection_driver, tmp_pat
         raw = {_token("--clr-" + k, theme) for k in ("danger", "warning", "success", "yellow")}
         inside = [(tuple(map(int, f[3:6])), " ".join(f[6:])) for f in (line.split() for line in lines)
                   if f[0] == "T" and x <= float(f[1]) <= x + w and y <= float(f[2]) <= y + h
-                  and " ".join(f[6:]).lstrip("‏") not in CHIPS]
+                  and " ".join(f[6:]).lstrip("\u200f") not in CHIPS]
         assert inside and not raw & {c for c, _ in inside}, inside
     if state.get("hw"):
         colour = "#%02X%02X%02X" % _token("--clr-warning-fg", theme)

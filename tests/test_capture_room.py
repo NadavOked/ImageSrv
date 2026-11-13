@@ -1,6 +1,6 @@
-"""‏#411: קליטה בודקת מקום — סירוב לפני הבייט הראשון, וכשל גלוי אם הדיסק מתמלא.
+"""#411: קליטה בודקת מקום — סירוב לפני הבייט הראשון, וכשל גלוי אם הדיסק מתמלא.
 
-שני חורים אומתו בקוד ב-#411. זה הקובץ של הראשון: ‏`server/library/capture.py`
+שני חורים אומתו בקוד ב-#411. זה הקובץ של הראשון: `server/library/capture.py`
 אינו בודק מקום פנוי לפני שהוא כותב מחיצה. בפועל (05/09) הקליטה רצה עד
 שהדיסק התמלא ב-13GB, והשרת החזיר `500` באמצע — עם קובץ מחיצה חלקי בתוך
 אזור ה-`.capture-<task>` ומשימה שנשארה `running`.
@@ -11,11 +11,11 @@
 1. **סירוב לפני הבייט הראשון** — אם ההעלאה מצהירה על גודל (Content-Length)
    שאין לו מקום פנוי, הקליטה נדחית **לפני** שנפתח קובץ, בדיוק כמו הסירוב
    על "דיסק קטן מדי" עובד היום: הסיבה נוקבת בשני המספרים (נדרש, פנוי).
-2. **דיסק שמתמלא תוך כדי זרם נכשל בגלוי, לא ב-500** — ‏ENOSPC נתפס,
+2. **דיסק שמתמלא תוך כדי זרם נכשל בגלוי, לא ב-500** — ENOSPC נתפס,
    הקובץ החלקי מוסר, המשימה מסומנת `failed` עם סיבה, והתשובה היא `507`
    ולא קריסת שרת.
 
-הסוכן מזרים ב-chunked (‏`curl -T` על fifo, כדי לא להיחנק ב-OOM — ראה
+הסוכן מזרים ב-chunked (`curl -T` על fifo, כדי לא להיחנק ב-OOM — ראה
 `agent/lib/capture/capture.sh`), ולכן אין תמיד גודל מוצהר; המסלול השני הוא מה
 שמגן על הזרם עצמו.
 """
@@ -71,8 +71,8 @@ def test_capture_is_refused_before_the_first_byte_when_there_is_no_room(
 
 def test_a_disk_that_fills_mid_capture_fails_loudly_not_500(
         server, images_root, monkeypatch):
-    """הסירוב השני: ‏ENOSPC תוך כדי זרם. הדיסק התמלא אחרי שהזרם התחיל,
-    והתשובה חייבת להיות כשל גלוי (507, ‏failed עם סיבה, קובץ חלקי מוסר) —
+    """הסירוב השני: ENOSPC תוך כדי זרם. הדיסק התמלא אחרי שהזרם התחיל,
+    והתשובה חייבת להיות כשל גלוי (507, failed עם סיבה, קובץ חלקי מוסר) —
     לא ה-500 שהשרת החזיר בפועל ב-05/09."""
     orig_open = Path.open
 
@@ -114,13 +114,13 @@ def test_a_disk_that_fills_mid_capture_fails_loudly_not_500(
     assert task["error"], task
 
 
-# --- ‏#1737: הרזרבה למערכת ------------------------------------------------------
+# --- #1737: הרזרבה למערכת ------------------------------------------------------
 
 
 @pytest.mark.system_reserve   # #1737: the real 10GiB (conftest _host_free_space)
 def test_a_capture_that_would_eat_into_the_system_reserve_is_refused(
         server, images_root, monkeypatch):
-    """‏#1737: לא "יש מקום לקובץ" אלא "יש מקום לקובץ **ועוד** הרזרבה". בית אחד
+    """#1737: לא "יש מקום לקובץ" אלא "יש מקום לקובץ **ועוד** הרזרבה". בית אחד
     פחות מזה — 507 לפני הבייט הראשון, ובהודעה מה נשמר למערכת."""
     import server.library.capture as capmod
     from server.storage.disk_reserve import SYSTEM_RESERVE_BYTES
@@ -156,7 +156,7 @@ def test_a_capture_that_leaves_exactly_the_reserve_is_accepted(server, monkeypat
 @pytest.mark.system_reserve   # #1737: the real 10GiB (conftest _host_free_space)
 def test_a_chunked_capture_stops_when_the_reserve_is_reached_mid_stream(
         server, images_root, monkeypatch):
-    """‏#1737: הסוכן מזרים ב-chunked, בלי אורך מוצהר — הבדיקה המוקדמת יודעת רק
+    """#1737: הסוכן מזרים ב-chunked, בלי אורך מוצהר — הבדיקה המוקדמת יודעת רק
     על מגה אחד. כשהדיסק מתמלא (קליטה אחרת במקביל) הזרם נעצר **ברזרבה**, לא
     באפס: 507, קובץ חלקי מוסר, ומשימה שנכשלה בשם."""
     import server.library.capture as capmod

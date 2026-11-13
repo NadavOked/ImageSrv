@@ -2,15 +2,15 @@
 
 מה נמצא בקריאת קוד (11/11, לא שוחזר על מכונה): השאלה מצוירת מעל כל מסך
 (`screens.c draw_ask_dialog`), אבל ב-`main.c handle` המסכים `SCREEN_LCBOOT` /
-‏`SCREEN_LOCAL` הולכים ל-`lc_handle` וחוזרים **לפני** `ask_modal`. לחיצה על
-"עצור", '2', ‏Esc או Enter לא הוציאו `ask-<answer>|<nonce>`, הסוכן
+`SCREEN_LOCAL` הולכים ל-`lc_handle` וחוזרים **לפני** `ask_modal`. לחיצה על
+"עצור", '2', Esc או Enter לא הוציאו `ask-<answer>|<nonce>`, הסוכן
 (`lcraw.sh lc_rescue_ask`) לא קיבל תשובה, ואחרי `LC_RESCUE_ASK_S` ההעתקה
 המשיכה עם אפסים במקום הסקטורים שלא נקראו: הבחירה של המפעיל אבדה.
 
 צד הסוכן נבדק ואינו השורש: `gui_ask_dispatch` מקבל `badsect` על
-‏`GUI_SCREEN=cloner`, וגם השיכפול המקומי וגם הדיסק-און-קי רצים כ-cloner
-(`guiparent.sh`, ‏`usbclone.sh`). זה נבדק ב-`test_lc_raw_2017.py`. הכרטיס
-‏`--png cloner-badsect` מצויר על `SCREEN_CLONER` (‏`png_drawer_ask`), ולא על
+`GUI_SCREEN=cloner`, וגם השיכפול המקומי וגם הדיסק-און-קי רצים כ-cloner
+(`guiparent.sh`, `usbclone.sh`). זה נבדק ב-`test_lc_raw_2017.py`. הכרטיס
+`--png cloner-badsect` מצויר על `SCREEN_CLONER` (`png_drawer_ask`), ולא על
 המסך שבו השאלה באמת עולה, ולכן הוא לא תפס את זה.
 
 הטסט מריץ את `handle()` האמיתי של main.c על מצב מקובץ: ציור אחד (המסך ומפת
@@ -72,7 +72,7 @@ int main(int argc, char **argv) {
 COPYING = ("screen=cloner\nlc_screen=local\nlc_inv=done\nlc_phase=copying\n"
            "lc_disk=1|sda|A|S1|500107862016|ok|ok|Windows|3|212000000000|500107862016|1|\n"
            "lc_disk=3|sdc|C|S3|480103981056|ok|ok|Windows|4|148600000000|480103981056|1|\n")
-#: השאלה של lcraw.sh: המקור sdc, מחיצה 3, ממשיכים לבד ב-epoch הזה (askgui.sh, ‏gui_ask_state).
+#: השאלה של lcraw.sh: המקור sdc, מחיצה 3, ממשיכים לבד ב-epoch הזה (askgui.sh, gui_ask_state).
 BADSECT = "ask_prompt=9-0|badsect|1|sdc\nask_row=3|3|4102444800\n"
 
 

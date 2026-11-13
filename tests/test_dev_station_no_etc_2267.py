@@ -1,9 +1,9 @@
-"""‏#2267 — שרת פיתוח בווינדוס יצר את `C:\\etc\\imagesrv` ואת `C:\\etc\\dnsmasq.d`.
+"""#2267 — שרת פיתוח בווינדוס יצר את `C:\\etc\\imagesrv` ואת `C:\\etc\\dnsmasq.d`.
 
-‏`server.main` מעביר ל-`create_runtime` את `known_macs_hooks` (‏#141) ואת
-‏`sync_dnsmasq=True` (‏#1013) תמיד, ו-`dhcp_host._write` עושה
-‏`path.parent.mkdir(parents=True)` על `/etc/imagesrv/known-macs` ועל
-‏`/etc/dnsmasq.d/imagesrv-dhcp.conf` — בווינדוס זה `C:\\etc\\…`. ‏systemctl נכשל
+`server.main` מעביר ל-`create_runtime` את `known_macs_hooks` (#141) ואת
+`sync_dnsmasq=True` (#1013) תמיד, ו-`dhcp_host._write` עושה
+`path.parent.mkdir(parents=True)` על `/etc/imagesrv/known-macs` ועל
+`/etc/dnsmasq.d/imagesrv-dhcp.conf` — בווינדוס זה `C:\\etc\\…`. systemctl נכשל
 והקובץ נמחק, אבל התיקיות נשארות.
 
 התיקון: שני הכותבים האלה מודלקים רק כשהשרת רץ על לינוקס — מערכת ההפעלה של

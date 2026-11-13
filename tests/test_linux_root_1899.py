@@ -1,12 +1,12 @@
-"""‏#1899 — לינוקס עם /boot נפרד: מחיצת המערכת היא השורש, לא /boot.
+"""#1899 — לינוקס עם /boot נפרד: מחיצת המערכת היא השורש, לא /boot.
 
-ברירת המחדל של Fedora (ונפוץ באובונטו עם LVM): ‏ESP, ‏/boot של 1GB, שורש
-‏btrfs — שתיים עם GUID של linux. "הראשונה על הדיסק" (min-free, ‏`diskfit.sh`
-ו-`server/library/minfree.py`) ו"הראשונה באינדקס" (שם המחשב, ‏`hostname_linux.sh`)
+ברירת המחדל של Fedora (ונפוץ באובונטו עם LVM): ESP, /boot של 1GB, שורש
+btrfs — שתיים עם GUID של linux. "הראשונה על הדיסק" (min-free, `diskfit.sh`
+ו-`server/library/minfree.py`) ו"הראשונה באינדקס" (שם המחשב, `hostname_linux.sh`)
 בחרו את /boot: האימג' נדחה בכל דיסק ("יישארו 0.8GB") ושם המחשב נכשל ב-no_etc.
 
-מעכשיו הקליטה מסמנת את השורש על ראיה (‏etc/os-release או etc/fstab בעיגון
-לקריאה בלבד; ב-btrfs גם רמה אחת מטה) — ‏`"system": true`, כמו #1875 ל-Windows
+מעכשיו הקליטה מסמנת את השורש על ראיה (etc/os-release או etc/fstab בעיגון
+לקריאה בלבד; ב-btrfs גם רמה אחת מטה) — `"system": true`, כמו #1875 ל-Windows
 — ושלושת הקוראים משתמשים בסימון. מניפסט ישן בלי סימון עם יותר ממחיצת linux
 אחת: "לא נבדק", לא `short` שגוי.
 """
@@ -72,9 +72,9 @@ def _probe(tmp_path: Path, fs: str, layout: str, mount_rc: int = 0) -> tuple[str
 @pytest.mark.skipif(BASH is None, reason="bash is required")
 @pytest.mark.parametrize("fs,layout,marked", [
     ("ext4", "etc/os-release", True),
-    ("btrfs", "root/etc/os-release", True),          # ‏Fedora: השורש ב-subvolume "root"
-    ("btrfs", "@/etc/fstab", True),                   # ‏Ubuntu: "@"
-    ("ext4", "grub2/grub.cfg", False),                # ‏/boot — אין /etc
+    ("btrfs", "root/etc/os-release", True),          # Fedora: השורש ב-subvolume "root"
+    ("btrfs", "@/etc/fstab", True),                   # Ubuntu: "@"
+    ("ext4", "grub2/grub.cfg", False),                # /boot — אין /etc
 ])
 def test_the_root_is_marked_on_evidence_and_boot_is_not(tmp_path, fs, layout, marked):
     rc, is_marked = _probe(tmp_path, fs, layout)
@@ -146,4 +146,4 @@ def test_the_hostname_mounts_the_marked_root(tmp_path):
              f'mount() {{ echo "$*" >> {posix(run)!r}/mounts; mkdir -p "$RUN_DIR/linux/etc"; }}; '
              f'_mount_linux sda {posix(path)!r} {posix(tmp_path / "plan")!r}')
     assert out.strip().splitlines()[-1].endswith("/linux")
-    assert "/dev/sda3" in (run / "mounts").read_text(), "עוגנה /boot (‏sda2) ולא השורש"
+    assert "/dev/sda3" in (run / "mounts").read_text(), "עוגנה /boot (\u200fsda2) ולא השורש"

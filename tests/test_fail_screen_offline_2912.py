@@ -10,10 +10,10 @@
 התיקון: ה-snapshot החלופי נושא גם את רשומות הכשל (כמו `gui_shrink_state`
 ו-`gui_ask_state`, שגם הם מקומיים), את גיל ה-hello ותשובתו (שורת המצב אומרת
 "אין קשר עם השרת"), ושורה אחת שאומרת למה שאר המצב חסר. לא "הכול תקין"
-(עיקרון 5): ‏`message=` נשאר.
+(עיקרון 5): `message=` נשאר.
 
 בקרה שלילית (bakara-shlilit): עם `agent/lib/gui/guistate.sh` ב-origin/main,
-‏`test_the_failure_screen_stays_when_the_server_does_not_answer` נכשל על
+`test_the_failure_screen_stays_when_the_server_does_not_answer` נכשל על
 התנהגות -- ב-state אין `fail=` ואין `fail_btn=`.
 """
 

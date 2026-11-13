@@ -1,14 +1,14 @@
-"""‏#1950 — חבר `lost` שעדיין מקבל את הזרם "תופס" את `--min-receivers`.
+"""#1950 — חבר `lost` שעדיין מקבל את הזרם "תופס" את `--min-receivers`.
 
-‏R2 (מעבדה, ‏22/10): ‏VCLONE-2 סומן `client_lost` (הדיווחים שלו נדחו —
-‏#1949), אבל ה-udp-receiver שלו המשיך. ‏#1430 מוציא `lost` מהספירה, ולכן
-מחיצה 4 יצאה עם `--min-receivers 1`; ‏VCLONE-2 הגיע אליה ראשון, השולח
+R2 (מעבדה, 22/10): VCLONE-2 סומן `client_lost` (הדיווחים שלו נדחו —
+#1949), אבל ה-udp-receiver שלו המשיך. #1430 מוציא `lost` מהספירה, ולכן
+מחיצה 4 יצאה עם `--min-receivers 1`; VCLONE-2 הגיע אליה ראשון, השולח
 התחיל, ומשכפל 2 — החבר החי היחיד — הצטרף 4 שניות אחריו וקיבל זרם ריק
-(‏`fanout … took 0 bytes`). ‏udpcast אינו מצרף מקלט באמצע מחיצה
-(‏`agent/lib/core/waits.sh`: מי שהצטרף באמצע ממתין לשידור הבא).
+(`fanout … took 0 bytes`). udpcast אינו מצרף מקלט באמצע מחיצה
+(`agent/lib/core/waits.sh`: מי שהצטרף באמצע ממתין לשידור הבא).
 
 התיקון: חבר `lost` שקיבל את המחיצה הקודמת **עד סופה** (התחבר, לא נזרק,
-לפי הלוג של udp-sender) נספר שוב. חבר שנזרק (‏`Dropping client`) — לא, כמו
+לפי הלוג של udp-sender) נספר שוב. חבר שנזרק (`Dropping client`) — לא, כמו
 ב-#1430.
 """
 
@@ -23,7 +23,7 @@ pytest.importorskip("fastapi")
 from server.rounds import sender as sender_module
 from server.rounds.sender import SenderEngine
 
-from conftest import hello_body, setup_classroom
+from conftest import HANG_S, hello_body, setup_classroom
 from test_sender import Recorder, free_ports, library, wait_for  # noqa: F401
 
 LIVE_IP = "10.44.0.59"
@@ -31,7 +31,7 @@ LOST_IP = "10.44.0.161"
 
 
 def _p1_log(dropped_lost: bool) -> str:
-    """לוג של מחיצה 1 בצורה שנמדדה מול udpcast 20120424 (testrunner, ‏22/10)."""
+    """לוג של מחיצה 1 בצורה שנמדדה מול udpcast 20120424 (testrunner, 22/10)."""
     lines = ["Udp-sender 20120424", "Using mcast address 234.44.0.1",
              f"New connection from {LIVE_IP}  (#0) 00000009",
              f"New connection from {LOST_IP}  (#1) 00000009",
@@ -55,7 +55,7 @@ def _second_partition_receivers(server, recorder, dropped_lost: bool) -> str:
     recorder.log_text = _p1_log(dropped_lost)
     for mac in (ids["mac1"], ids["mac2"], ids["mac1"]):
         server["anon"].post("/api/v1/agent/hello", json=hello_body(mac))
-    assert recorder.spawned.wait(timeout=5)
+    assert recorder.spawned.wait(timeout=HANG_S)
     first = recorder.commands[0]
     assert first[first.index("--min-receivers") + 1] == "2"
 
@@ -87,13 +87,13 @@ def test_a_lost_member_that_finished_the_last_partition_is_still_waited_for(
 def test_a_lost_member_the_sender_dropped_is_not_waited_for(
         server_with_sender, free_ports):  # noqa: F811
     """שומר #1430: מכונה שנפלה באמצע המחיצה (udp-sender זרק אותה) אינה
-    מתחברת שוב — ‏600 שניות של `--max-wait` עליה הן בדיוק מה ש-#1430 סגר."""
+    מתחברת שוב — 600 שניות של `--max-wait` עליה הן בדיוק מה ש-#1430 סגר."""
     server, recorder = server_with_sender
     assert _second_partition_receivers(server, recorder, dropped_lost=True) == "1"
 
 
 def test_finished_receivers_reads_the_log_in_order(tmp_path):
-    """‏#N ממוחזר אחרי ניתוק; ‏`Disconnecting` אחרי `Transfer complete` הוא
+    """#N ממוחזר אחרי ניתוק; `Disconnecting` אחרי `Transfer complete` הוא
     הסיום הרגיל; ולוג שלא נקרא הוא None — "לא נבדק", לא "אף אחד"."""
     log = tmp_path / "p.log"
     log.write_text(

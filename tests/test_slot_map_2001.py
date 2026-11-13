@@ -1,4 +1,4 @@
-"""‏#2001 — חלון "מיפוי חיבורים": מכונה ← דגם ← ברירת מחדל.
+"""#2001 — חלון "מיפוי חיבורים": מכונה ← דגם ← ברירת מחדל.
 
 הכרעות נדב (22/10, ההערה האחרונה ב-#2001):
 
@@ -104,7 +104,7 @@ def test_the_machine_beats_the_model_and_its_reset_falls_back_to_the_model(room_
 
 
 def test_saving_for_the_model_asks_before_it_replaces_the_machines_own_maps(room_server):
-    """נדב 22/10: שום דבר לא נמחק בשקט. מחשב מהדגם עם מיפוי משלו → ‏409 עם הרשימה,
+    """נדב 22/10: שום דבר לא נמחק בשקט. מחשב מהדגם עם מיפוי משלו → 409 עם הרשימה,
     ושום דבר לא נכתב; רק ``replace_machine_maps: true`` מחליף."""
     admin, ctx = room_server["admin"], room_server["ctx"]
     _two_hp(admin)
@@ -203,7 +203,7 @@ def test_model_save_without_own_maps_does_not_ask(room_server):
 
 def test_the_default_is_sata_0_disk_1_sata_1_disk_2(room_server):
     """נדב 22/10 (חיווט המשכפל, sata-wiring-convention): בלי מיפוי שמור SATA 0 =
-    דיסק 1, ‏SATA 1 = דיסק 2… ‏port הוא ataN מ-sysfs (‏ata1 = ‏SATA 0), ולכן ‏sata:k
+    דיסק 1, SATA 1 = דיסק 2… port הוא ataN מ-sysfs (ata1 = SATA 0), ולכן sata:k
     הוא דיסק k — בלי הזזה באחד."""
     admin = room_server["admin"]
     _hello(admin, CLONER1, [_disk("sda", "A1", 1), _disk("sdb", "A2", 2), _disk("sdc", "A3", 3)])

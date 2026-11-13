@@ -1,20 +1,20 @@
-"""‏#1886 — מקום פנוי בשרת לאורך זמן, ובדיקה לפני קליטה — לא 45 דקות שנכשלות בסוף.
+"""#1886 — מקום פנוי בשרת לאורך זמן, ובדיקה לפני קליטה — לא 45 דקות שנכשלות בסוף.
 
-**ההיסטוריה** (‏`storage_usage`): דגימה של ‏`total`/`free` לכל מיקום אחסון **מחובר** — פעם ביום
-(‏`housekeeping`), ובכל הזמנת קליטה ופתיחת סבב (‏`source`). מיקום שאינו מחובר אינו נדגם (אין מה
-לקרוא, וזה לא "0 פנוי"). ‏`trend`: הקצב שבו המקום הפנוי יורד, מהדגימה הישנה ביותר ב-`TREND_DAYS` הימים
+**ההיסטוריה** (`storage_usage`): דגימה של `total`/`free` לכל מיקום אחסון **מחובר** — פעם ביום
+(`housekeeping`), ובכל הזמנת קליטה ופתיחת סבב (`source`). מיקום שאינו מחובר אינו נדגם (אין מה
+לקרוא, וזה לא "0 פנוי"). `trend`: הקצב שבו המקום הפנוי יורד, מהדגימה הישנה ביותר ב-`TREND_DAYS` הימים
 האחרונים ועד החדשה — ו"מתמלא בעוד ~N ימים". פחות משתי דגימות ביום שונה — "לא נבדק".
 
-**לפני קליטה** (‏`capture_check`, מ-`capture.order_capture`, לפני שהמשימה נוצרת): הגרסה הקודמת של אותו
+**לפני קליטה** (`capture_check`, מ-`capture.order_capture`, לפני שהמשימה נוצרת): הגרסה הקודמת של אותו
 אימג' — אימג' בספרייה עם אותו שם ותיקייה (החדש ביותר); ובלעדיו — הקליטה האחרונה שהושלמה מאותה מכונה.
-הצורך = ‏`total_compressed_bytes` שלה × (1 + `MARGIN`) + הרזרבה למערכת (‏#1737). פנוי פחות מזה —
+הצורך = `total_compressed_bytes` שלה × (1 + `MARGIN`) + הרזרבה למערכת (#1737). פנוי פחות מזה —
 **סירוב לפני שמתחילים**, עם המספרים. בלי גרסה קודמת — **אזהרה, לא סירוב** (יומן `capture_space_unchecked`).
-לא נמדד המקום הפנוי — אזהרה, והקליטה ממשיכה לבדיקה שכבר קיימת (‏`preflight` של הסוכן, #1737).
+לא נמדד המקום הפנוי — אזהרה, והקליטה ממשיכה לבדיקה שכבר קיימת (`preflight` של הסוכן, #1737).
 
 **מחיקה רק מוצעת** (עיקרון 7): הסירוב והשורה בבריאות מציעים אימג'ים שלא שימשו בסבב `STALE_DAYS` יום,
 הגדולים קודם — אדם מחליט. שום דבר כאן אינו מוחק.
 
-תקרות: ‏`KEEP_PER_LOC` דגימות למיקום (בכל הכנסה) ו-`housekeeping` — ‏`KEEP_DAYS`. לעולם אינו זורק.
+תקרות: `KEEP_PER_LOC` דגימות למיקום (בכל הכנסה) ו-`housekeeping` — `KEEP_DAYS`. לעולם אינו זורק.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ WARN_DAYS = 30
 
 def sample(conn: sqlite3.Connection, loc_id: str, path, source: str,
            usage: Callable = shutil.disk_usage) -> dict | None:
-    """דגימה אחת. ‏None — לא נקרא (נרשם ב-log). לעולם אינו זורק."""
+    """דגימה אחת. None — לא נקרא (נרשם ב-log). לעולם אינו זורק."""
     try:
         got = usage(path)
         total, free = int(got.total), int(got.free)
@@ -62,7 +62,7 @@ def sample(conn: sqlite3.Connection, loc_id: str, path, source: str,
 
 
 def sample_local(conn: sqlite3.Connection, library, source: str) -> dict | None:
-    """הספרייה המקומית (‏`loc_local`) — בהזמנת קליטה ובפתיחת סבב. ‏library חסרה — כלום."""
+    """הספרייה המקומית (`loc_local`) — בהזמנת קליטה ובפתיחת סבב. library חסרה — כלום."""
     root = getattr(library, "root", None)
     return None if root is None else sample(conn, storage_locations.LOCAL_ID, root, source)
 
@@ -87,8 +87,8 @@ def _when(stamp: str) -> datetime | None:
 
 
 def trend(conn: sqlite3.Connection, loc_id: str, now: datetime | None = None) -> dict:
-    """‏`{"free_bytes", "total_bytes", "at", "per_day", "days_left", "samples"}`. ‏`per_day` — כמה
-    בייטים פנויים נעלמים ביום (שלילי = מתפנה); ‏None — פחות משתי דגימות ביום שונה. ‏`days_left` —
+    """`{"free_bytes", "total_bytes", "at", "per_day", "days_left", "samples"}`. `per_day` — כמה
+    בייטים פנויים נעלמים ביום (שלילי = מתפנה); None — פחות משתי דגימות ביום שונה. `days_left` —
     None כשהמקום אינו מתמלא או כשאין קצב."""
     now = now or datetime.now(timezone.utc)
     since = (now - timedelta(days=TREND_DAYS)).isoformat(timespec="seconds")
@@ -154,7 +154,7 @@ def _previous(conn: sqlite3.Connection, library, name: str, folder: str, mac: st
 
 def capture_check(conn: sqlite3.Connection, library, name: str, folder: str, mac: str,
                   free: int | None) -> dict:
-    """‏`{"status": "ok"|"warning"|"refused", "reason", "previous", "need_bytes", "free_bytes",
+    """`{"status": "ok"|"warning"|"refused", "reason", "previous", "need_bytes", "free_bytes",
     "suggest"}` — ראו את ראש המודול. לעולם אינו זורק (כשל = אזהרה)."""
     try:
         previous = _previous(conn, library, name, folder, mac)
@@ -185,7 +185,7 @@ def capture_check(conn: sqlite3.Connection, library, name: str, folder: str, mac
 
 
 def health_checks(conn: sqlite3.Connection) -> list[dict]:
-    """שורה לכל מיקום שנדגם: ‏`warn` — מתמלא בעוד פחות מ-`WARN_DAYS` ימים; ‏`ok`; ‏`off` — אין קצב עדיין."""
+    """שורה לכל מיקום שנדגם: `warn` — מתמלא בעוד פחות מ-`WARN_DAYS` ימים; `ok`; `off` — אין קצב עדיין."""
     try:
         out = []
         for row in conn.execute("SELECT DISTINCT location_id FROM storage_usage ORDER BY location_id"):

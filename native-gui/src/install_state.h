@@ -37,6 +37,7 @@ typedef struct {
     char path[48], model[96], bus[24], has[160];
     unsigned long long size_bytes;
     int removable, iso;
+    char smart[12];   /* #3007: the inventory's smart= -- passed / failed / unknown ("" = an older bridge); last: the demo's positional initializers */
 } InstallDisk;
 
 typedef struct {

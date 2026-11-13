@@ -1,9 +1,9 @@
-"""‏`hashFiles()` על נתיב מחוץ ל-`GITHUB_WORKSPACE` היא "ריק = דלג".
+"""`hashFiles()` על נתיב מחוץ ל-`GITHUB_WORKSPACE` היא "ריק = דלג".
 
-‏`hashFiles()` של GitHub Actions מסננת כל קובץ שאינו מתחת ל-
-‏`GITHUB_WORKSPACE` ("Ignore '...' since it is not under
+`hashFiles()` של GitHub Actions מסננת כל קובץ שאינו מתחת ל-
+`GITHUB_WORKSPACE` ("Ignore '...' since it is not under
 GITHUB_WORKSPACE"), ואם לא נותר אף קובץ היא מחזירה **מחרוזת ריקה** —
-לא שגיאה. ‏`if: hashFiles('/tmp/x') != ''` הוא לכן `false` **תמיד**,
+לא שגיאה. `if: hashFiles('/tmp/x') != ''` הוא לכן `false` **תמיד**,
 גם כשהקובץ קיים ומלא.
 
 זה הכשל הגרוע ביותר בעיקרון 5: השלב מדולג, שום דבר אינו אדום, וה-job
@@ -22,7 +22,7 @@ import pytest
 WORKFLOWS = sorted((Path(__file__).resolve().parent.parent /
                     ".github" / "workflows").glob("*.yml"))
 
-# ‏hashFiles('...') או hashFiles("..."), עם רווחים כרצונך.
+# hashFiles('...') או hashFiles("..."), עם רווחים כרצונך.
 HASHFILES = re.compile(r"""hashFiles\(\s*(['"])(.*?)\1""", re.S)
 
 
@@ -32,7 +32,7 @@ def _text(p):
 
 def _outside_workspace(pattern):
     """האם הדפוס הזה לעולם אינו יכול להימצא מתחת ל-GITHUB_WORKSPACE."""
-    # ‏hashFiles מקבלת כמה דפוסים מופרדים בשורות חדשות.
+    # hashFiles מקבלת כמה דפוסים מופרדים בשורות חדשות.
     for line in pattern.splitlines():
         p = line.strip()
         if not p:
@@ -66,8 +66,8 @@ def test_hashfiles_is_never_called_on_a_path_outside_the_workspace(path):
     for _quote, pattern in HASHFILES.findall(src):
         bad = _outside_workspace(pattern)
         assert bad is None, (
-            f"{path.name}: ‏hashFiles('{bad}') — נתיב מחוץ ל-"
-            f"GITHUB_WORKSPACE. ‏hashFiles מסננת אותו ומחזירה מחרוזת "
+            f"{path.name}: \u200fhashFiles('{bad}') — נתיב מחוץ ל-"
+            f"GITHUB_WORKSPACE. \u200fhashFiles מסננת אותו ומחזירה מחרוזת "
             f"ריקה **תמיד**, ולכן `if` שנשען עליה מדלג את השלב בשקט "
             f"וה-job יוצא ירוק בלי לעשות דבר. לבדיקת קיום: "
             f"`test -s {bad}` בתוך ה-run. ר' #538."

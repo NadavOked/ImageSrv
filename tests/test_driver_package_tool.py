@@ -1,4 +1,4 @@
-"""‏#959 — `tools/drivers/build-package.py`: מ-driver pack של היצרן לחבילה
+"""#959 — `tools/drivers/build-package.py`: מ-driver pack של היצרן לחבילה
 שהשרת מקבל. הראיה שהפורמט זהה אינה השוואת מבנה — היא **העלאה** של מה
 שהכלי בנה ל-`POST /api/console/drivers/upload` והתאמה ל-hello של מכונה
 עם אותו דגם / אותו בקר.
@@ -51,7 +51,7 @@ def fake_pack(root: Path) -> Path:
     (pack / "net" / "x64").mkdir(parents=True)
     (pack / "ahci").mkdir()
     (pack / "gpu").mkdir()
-    # ‏INF של Intel מגיע ב-UTF-16 עם BOM; השאר ASCII. שניהם חייבים להיקרא.
+    # INF של Intel מגיע ב-UTF-16 עם BOM; השאר ASCII. שניהם חייבים להיקרא.
     (pack / "net" / "e1d68x64.inf").write_bytes(b"\xff\xfe" + NET_INF.encode("utf-16-le"))
     (pack / "net" / "x64" / "e1d68x64.sys").write_bytes(b"MZ nic")
     (pack / "ahci" / "iaStorAC.inf").write_text(AHCI_INF, encoding="utf-8")
@@ -181,7 +181,7 @@ def _cab_extractor_present() -> bool:
 
 
 def test_the_cab_fixture_is_the_expected_one():
-    """המשקל נגד `skip`: הקובץ קיים ולא הוחלף בשקט. ‏makecab, ‏17/09."""
+    """המשקל נגד `skip`: הקובץ קיים ולא הוחלף בשקט. makecab, 17/09."""
     assert CAB.is_file() and CAB.stat().st_size == 371
     assert hashlib.sha256(CAB.read_bytes()).hexdigest() == (
         "a4ccabfb97100b423fff7f94d5c145e99f29cfa997c2715080cfbdef32d69071")

@@ -30,7 +30,7 @@ class SimMachine(threading.Thread):
         self.silent_after_join = False       # נופלת מיד אחרי שהצטרפה
         self.write_plans: list[list[tuple]] = []
         self.handled_sessions: set[str] = set()
-        #: ‏#2786: לכל גל — השם שהסוכן היה כותב לכל מגירה שנכתבה עד הסוף (dev → שם),
+        #: #2786: לכל גל — השם שהסוכן היה כותב לכל מגירה שנכתבה עד הסוף (dev → שם),
         #: מתוך `session.hostnames` לפי החריץ שלה, כמו `name_drawers` (drawernames.sh).
         self.named: list[dict[str, str]] = []
         self.error: Exception | None = None

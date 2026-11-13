@@ -1,6 +1,6 @@
-"""‏#87: אימג' שאינו נכנס לכונן היעד — נתפס בקליטה, לא מול כיתה.
+"""#87: אימג' שאינו נכנס לכונן היעד — נתפס בקליטה, לא מול כיתה.
 
-‏#82 תיקן את **החישוב**: הדרישה היא סוף הפריסה ולא גודל דיסק המקור.
+#82 תיקן את **החישוב**: הדרישה היא סוף הפריסה ולא גודל דיסק המקור.
 מה שהוא לא יכול היה לתקן הוא שלושת אימג'י ה-tiny11 שבספרייה, שבהם
 מחיצת ה-NTFS לבדה היא 273.7GB — גדולה מכונן ה-256 **כולו**. אין ערך
 של `min_target_bytes` שמשנה את זה. האימג' באמת לא נכנס.
@@ -42,13 +42,13 @@ from test_image_sizing import (NVME_256, GOLDEN_FROM_VM, fits_box,
 REPO = Path(__file__).resolve().parent.parent
 
 #: השער בקליטה אינו נוגע ב-jq — `capture_disk` קורא את הטבלה ב-sgdisk
-#: וב-awk בלבד. ‏`needs_shell` (שדורש גם jq) היה מדלג עליו על תחנת
+#: וב-awk בלבד. `needs_shell` (שדורש גם jq) היה מדלג עליו על תחנת
 #: הפיתוח, וזו בדיוק בדיקה שמדולגת בסביבה שבה כן אפשר להריץ אותה.
 needs_bash = pytest.mark.skipif(BASH is None, reason="bash is required")
 
-#: ‏tiny11 של המעבדה (`img_6f28b0`) עם **התפקידים האמיתיים** שלו, ולא
-#: רק עם הגיאומטריה: ‏ESP, ‏MSR, המערכת, ומחיצת השחזור של Windows 11
-#: שיושבת אחריה. ‏`TINY11` שב-`test_image_sizing` נבנה לחישוב הגודל
+#: tiny11 של המעבדה (`img_6f28b0`) עם **התפקידים האמיתיים** שלו, ולא
+#: רק עם הגיאומטריה: ESP, MSR, המערכת, ומחיצת השחזור של Windows 11
+#: שיושבת אחריה. `TINY11` שב-`test_image_sizing` נבנה לחישוב הגודל
 #: בלבד ומסמן שם `windows` על כל המחיצות — מספיק לשם, ומטעה כאן:
 #: בחירת המועמד היא בדיוק ההבחנה בין `windows` ל-`recovery`.
 LAB_TINY11 = manifest([
@@ -71,7 +71,7 @@ def variant(**marks: bool) -> dict:
 
 #: הפריסה של `ONE_PARTITION` (מחיצת ESP של 100MiB בסקטור 2048), כפי
 #: ש-`capture_disk` יחשב אותה: סוף המחיצה, ועוד 256KiB לעותק הגיבוי של
-#: ה-GPT (‏#1171 — קודם לכן מגה מעוגל למגה). המספר כתוב כאן במפורש כדי
+#: ה-GPT (#1171 — קודם לכן מגה מעוגל למגה). המספר כתוב כאן במפורש כדי
 #: שהטסטים למטה ישבו על **גבול** ולא על "בערך": רצפה אחת בדיוק מספיקה,
 #: ובייט אחד פחות אינה.
 ONE_PARTITION_NEED = (2048 * 512 + 100 * (1 << 20) + (256 << 10))
@@ -94,8 +94,8 @@ def test_the_lab_tiny11_needs_a_named_number_of_bytes_it_does_not_have():
 def test_the_amount_to_shrink_is_exactly_the_overflow():
     """מה שהיה כאן עד #1171, ולמה זה השתנה.
 
-    ‏`required_bytes` עיגל כלפי מעלה למגה-בייט, וכונן פיזי אינו כפולה של
-    מגה — ‏`256,060,514,304 mod 1MiB = 352,256`. אז ההפרש `דרישה − רצפה`
+    `required_bytes` עיגל כלפי מעלה למגה-בייט, וכונן פיזי אינו כפולה של
+    מגה — `256,060,514,304 mod 1MiB = 352,256`. אז ההפרש `דרישה − רצפה`
     **לא** היה התשובה: כיווץ בגודלו נחת ברזולוציה שהעיגול דחף בחזרה מעל
     הרצפה, והאימג' "שכווץ בדיוק" עדיין נחסם מול כיתה (ה-CI תפס את זה).
     העיגול הוסר, ומאז הדרישה והכיווץ הם ביטוי אחד — ולכן ההפרש **כן** הוא
@@ -113,7 +113,7 @@ def test_an_image_that_fits_needs_to_shrink_by_nothing():
 def test_a_requirement_that_cannot_be_determined_is_not_zero():
     """עיקרון 5 בשורה אחת: "לא ידענו לחשב" אינו "לא צריך לכווץ".
 
-    ‏`0` ו-`None` נראים דומה לקורא רשלני, והם שני מצבים הפוכים: האחד
+    `0` ו-`None` נראים דומה לקורא רשלני, והם שני מצבים הפוכים: האחד
     אומר "כתוב את האימג'", השני "אל תיגע בו".
     """
     broken = manifest([(2048, 104857600)])
@@ -125,7 +125,7 @@ def test_a_requirement_that_cannot_be_determined_is_not_zero():
 
 @pytest.mark.parametrize("floor", [None, "256GB", -1, True, 3.5])
 def test_a_floor_that_is_not_a_byte_count_is_not_a_pass(floor):
-    """רצפה פגומה חייבת להחזיר `None` ולא `0`. ‏`True` בפייתון הוא `1`,
+    """רצפה פגומה חייבת להחזיר `None` ולא `0`. `True` בפייתון הוא `1`,
     ורצפה של בייט אחד הייתה מכריזה שכל אימג' צריך כיווץ ענק — כלומר
     מספר שנראה תקין לחלוטין ואינו נכון."""
     assert shrink_bytes(GOLDEN_FROM_VM, floor) is None
@@ -144,7 +144,7 @@ def test_the_candidate_is_the_partition_the_restore_would_have_stretched():
 
 
 def test_recovery_is_never_the_candidate_even_though_it_sits_last():
-    """‏#58: מחיצת ה-`recovery` של Windows 11 יושבת **אחרי** המערכת, והיא
+    """#58: מחיצת ה-`recovery` של Windows 11 יושבת **אחרי** המערכת, והיא
     לעולם אינה המועמדת. לכווץ אותה היה מקטין את האימג' בלי לגעת במה
     שתופס אותו, ולהשאיר מחיצת שחזור ענקית ליד מערכת שלא זזה."""
     part = expandable_candidate(variant())
@@ -163,7 +163,7 @@ def test_two_marked_partitions_fall_back_instead_of_guessing_between_them():
 
 
 def test_the_last_system_partition_is_chosen_by_platter_order_not_list_order():
-    """‏#58 מילה במילה: באימג' ענן של דביאן השורש הוא מחיצה `1` —
+    """#58 מילה במילה: באימג' ענן של דביאן השורש הוא מחיצה `1` —
     ראשון ברשימה ואחרון על הפלטה."""
     cloud = manifest([(2048, 104857600), (616448, 41875931136)])
     cloud["partitions"][0].update(role="linux", fs="ext4", start_sector=616448 * 2)
@@ -174,7 +174,7 @@ def test_the_last_system_partition_is_chosen_by_platter_order_not_list_order():
 
 
 def test_an_image_with_no_system_partition_has_no_candidate():
-    """‏`None` הוא "לא ידוע מה לכווץ", והקורא אומר זאת במילים ולא ממציא
+    """`None` הוא "לא ידוע מה לכווץ", והקורא אומר זאת במילים ולא ממציא
     מחיצה. אימג' נתונים בלבד הוא בדיוק המקרה."""
     data_only = manifest([(2048, 104857600), (616448, 41875931136)])
     for part in data_only["partitions"]:
@@ -186,7 +186,7 @@ def test_an_image_with_no_system_partition_has_no_candidate():
 
 
 def shrunk_by(amount: int) -> dict:
-    """‏`LAB_TINY11` שהמחיצה המורחבת בו איבדה `amount` בייט.
+    """`LAB_TINY11` שהמחיצה המורחבת בו איבדה `amount` בייט.
 
     כל מה שיושב אחרי המועמד יורד באותו הפרש — הפריסה **מתכווצת**, לא
     נפערת. זה מה ש-`_move_to_tail` עושה בשחזור, מהכיוון ההפוך.
@@ -208,8 +208,8 @@ def test_shrinking_by_exactly_that_number_satisfies_the_requirement():
 
 
 def test_an_image_without_geometry_cannot_say_by_how_much_to_shrink():
-    """‏"אינו נכנס" ו"בכמה לכווץ" הן שתי שאלות. מניפסט ישן בלי
-    `start_sector` עונה על הראשונה (‏`required_bytes` נופל אחורה לערך
+    """"אינו נכנס" ו"בכמה לכווץ" הן שתי שאלות. מניפסט ישן בלי
+    `start_sector` עונה על הראשונה (`required_bytes` נופל אחורה לערך
     המוצהר) ולא על השנייה — ואז `None`, לא ניחוש."""
     old = manifest([(2048, 104857600)], declared=10 ** 15)
     old["partitions"][0].pop("start_sector")
@@ -221,7 +221,7 @@ def test_an_image_without_geometry_cannot_say_by_how_much_to_shrink():
 def test_shrinking_by_exactly_that_number_makes_the_restore_check_pass(tmp_path):
     """הבדיקה שמחברת את הקליטה לשחזור, ולב הקובץ הזה.
 
-    ‏`disk_fits` בסוכן **אינו משתנה כאן** — הוא נטען מהקובץ כמו שהוא.
+    `disk_fits` בסוכן **אינו משתנה כאן** — הוא נטען מהקובץ כמו שהוא.
     אותו tiny11 שנחסם על ה-NVMe עובר את אותה בדיקה בדיוק אחרי שהמחיצה
     המורחבת כווצה במדויק ב-`shrink_bytes`, ולא בייט יותר. אילו החישוב
     בקליטה והבדיקה בשחזור היו נגזרים משני כללים, המספר הזה היה מפספס
@@ -255,7 +255,7 @@ def test_shrinking_by_one_byte_less_is_still_refused():
 
 @needs_bash
 def test_a_layout_bigger_than_the_target_is_refused_before_a_byte_moves(tmp_path):
-    """‏#87 כפי שהוא נראה למפעיל: לא אימג' שנקלט שעה ואז נחסם על כל
+    """#87 כפי שהוא נראה למפעיל: לא אימג' שנקלט שעה ואז נחסם על כל
     תחנה בנפרד, אלא סירוב מיידי עם שלושת המספרים שהופכים אותו לפעולה.
     """
     floor = ONE_PARTITION_NEED - 1
@@ -292,7 +292,7 @@ def test_a_layout_that_fits_is_captured_and_the_floor_is_recorded(tmp_path, floo
 def test_a_floor_with_leading_zeros_is_refused_before_the_capture_runs(tmp_path):
     """רצפה שההשוואה המספרית מקבלת אבל JSON אינו.
 
-    ‏`010000000000` עובר `*[!0-9]*` ועובר את `-gt`, ולכן הקליטה הייתה
+    `010000000000` עובר `*[!0-9]*` ועובר את `-gt`, ולכן הקליטה הייתה
     רצה **עד סופה** — המניפסט נכתב אחרון — ואז נכתב
     `"target_floor_bytes":010000000000`, שאינו JSON תקין, והשרת היה
     דוחה את האימג'. שעה של קריאת דיסק, וכישלון שאין לו קשר נראה לערך
@@ -318,7 +318,7 @@ def test_a_floor_that_is_not_a_number_refuses_instead_of_skipping_the_check(tmp_
 
 
 def test_an_unset_floor_is_recorded_as_null_and_not_as_a_number():
-    """‏"לא נבדק" חייב להיות קריא במניפסט. שדה שנעדר או `0` היו שני
+    """"לא נבדק" חייב להיות קריא במניפסט. שדה שנעדר או `0` היו שני
     ניסוחים של "נבדק ונכנס", וזה בדיוק הקיפול שעיקרון 5 אוסר."""
     source = (AGENT / "lib" / "capture" / "capture.sh").read_text(encoding="utf-8")
     assert '_floor_json="null"' in source
@@ -341,7 +341,7 @@ def test_the_gate_runs_before_the_first_partition_is_read():
 
 
 def imagefit(*args: str) -> subprocess.CompletedProcess:
-    # ‏stdin=DEVNULL: בריצה רב-קבצית בווינדוס ה-handle נשבר תחת capture,
+    # stdin=DEVNULL: בריצה רב-קבצית בווינדוס ה-handle נשבר תחת capture,
     # וכל subprocess שיורש אותו נופל ב-WinError 50 (#14).
     return subprocess.run(
         [sys.executable, str(REPO / "tools" / "imagefit.py"), *args],
@@ -377,8 +377,8 @@ def test_without_a_measurement_the_tool_says_so_instead_of_deciding(tmp_path):
     result = imagefit("--manifest", str(written(tmp_path, GOLDEN_FROM_VM)))
     assert result.returncode == 1, result.stdout
     assert "לא הוכרע" in result.stdout
-    # ‏`blockdev` דווקא: זו הפקודה ש-`disk_fits` מריץ, והיחידה מבין
-    # השתיים שנארזת ב-initramfs. ‏`lsblk` אינו ב-`BINARIES`, וכלי
+    # `blockdev` דווקא: זו הפקודה ש-`disk_fits` מריץ, והיחידה מבין
+    # השתיים שנארזת ב-initramfs. `lsblk` אינו ב-`BINARIES`, וכלי
     # שמפנה לפקודה שאינה על המכונה אינו הופך את חמישי לחמש דקות.
     assert "blockdev" in result.stdout, "הכלי אינו אומר איזו פקודה למדוד"
     assert "lsblk" not in result.stdout
@@ -389,7 +389,7 @@ def test_the_command_the_tool_asks_for_is_actually_on_the_machine():
     שאין בה מה להריץ — וזה בדיוק ההפך מ"חמש דקות של אימות".
 
     הנעילה היא על `BINARIES` בפועל (`tools/build_initramfs.sh`), לא על
-    הערה: ‏`lsblk` **אינו** שם, ו-`blockdev` כן. שתי הפקודות נראות
+    הערה: `lsblk` **אינו** שם, ו-`blockdev` כן. שתי הפקודות נראות
     מתחלפות, ורק אחת מהן קיימת בסביבה שבה המדידה נעשית.
     """
     from tools.imagefit import MEASURE
@@ -397,9 +397,9 @@ def test_the_command_the_tool_asks_for_is_actually_on_the_machine():
     binaries = build[build.index("BINARIES=("):]
     binaries = binaries[:binaries.index(")")]
     assert MEASURE.split()[0] in binaries.split(), \
-        f"‏{MEASURE.split()[0]} אינו ב-BINARIES — הכלי מפנה לפקודה שאינה על המכונה"
+        f"\u200f{MEASURE.split()[0]} אינו ב-BINARIES — הכלי מפנה לפקודה שאינה על המכונה"
     assert "lsblk" not in binaries.split(), \
-        "‏lsblk נארז — כדאי לעדכן את MEASURE ואת הנימוק שלידו"
+        "\u200flsblk נארז — כדאי לעדכן את MEASURE ואת הנימוק שלידו"
 
 
 def test_an_empty_library_is_not_a_pass(tmp_path):

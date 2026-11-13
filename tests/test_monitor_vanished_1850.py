@@ -1,14 +1,14 @@
-"""‏#1850 — מכונה שנעלמה בלי FIN אינה "מחוברת" עם מסך קפוא 10 דקות.
+"""#1850 — מכונה שנעלמה בלי FIN אינה "מחוברת" עם מסך קפוא 10 דקות.
 
-משכפל 2, ‏18/10: כיבוי idle (‏`poweroff -f`) ב-17:52:55, והגשר נסגר `idle` רק
+משכפל 2, 18/10: כיבוי idle (`poweroff -f`) ב-17:52:55, והגשר נסגר `idle` רק
 ב-18:03:25 — עשר וחצי דקות שבהן המסך הציג אותו מחובר. בלי keepalive, הקורא
 מהמכונה ממתין ל-EOF שלא יגיע. התיקון: TCP keepalive על ה-socket אל המכונה
 (10 ש' שקט, 3 בדיקות כל 5 ש'), כאן ובמנהרה מהמשני (`test_storage_remote`).
 
 ה-peer המת עצמו אינו ניתן לשחזור בלי לשלוט ברשת (הקרנל המקומי עונה תמיד על
 loopback). מה שנבדק: (א) ה-socket האמיתי אל "המכונה" נושא את ההגדרות — קריאה
-בחזרה מהקרנל; (ב) כשל keepalive — ‏`TimeoutError` מהקורא — נסגר 4513, והדפדפן
-מתחבר מחדש (‏`monitor_power_1850.test.cjs`). בקרה שלילית: (א) נכשל על הקוד
+בחזרה מהקרנל; (ב) כשל keepalive — `TimeoutError` מהקורא — נסגר 4513, והדפדפן
+מתחבר מחדש (`monitor_power_1850.test.cjs`). בקרה שלילית: (א) נכשל על הקוד
 שלפני #1850 (SO_KEEPALIVE = 0); (ב) עובר בשני המצבים — שומר על המיפוי.
 """
 
@@ -128,7 +128,7 @@ def test_a_keepalive_failure_closes_4513_not_idle(server):
 
 
 def test_keep_alive_sets_what_it_says():
-    """יחידה: ‏`keep_alive` על socket רגיל — אותה קריאה-בחזרה, בלי שרת."""
+    """יחידה: `keep_alive` על socket רגיל — אותה קריאה-בחזרה, בלי שרת."""
     with socket.socket() as sock:
         monitor.keep_alive(sock)
         assert sock.getsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE) != 0

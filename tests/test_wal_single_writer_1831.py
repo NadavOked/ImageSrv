@@ -1,11 +1,11 @@
-"""‏#1831 — באג ה-WAL-reset של SQLite (sqlite.org/wal.html §11), ‏3.46.1 בדביאן 13.
+"""#1831 — באג ה-WAL-reset של SQLite (sqlite.org/wal.html §11), 3.46.1 בדביאן 13.
 
 הבאג: checkpoint שמתחיל בדיוק כשחיבור אחר מקמט טרנזאקציה שמאפסת את קובץ
 ה-WAL מפספס את האיפוס, וה-checkpoint הבא משחית את הקובץ. התנאי הוא **checkpoint
 בו-זמנית עם כתיבה** משני חיבורים — ואצלנו יש חיבור לכל תהליכון, וכל commit
 שמגיע ל-1000 דפים מריץ checkpoint אוטומטי על החיבור שלו, בלי שום תיאום.
 
-התיקון: כותבים אינם עושים checkpoint לעולם (‏``wal_autocheckpoint = 0``), וה-checkpoint
+התיקון: כותבים אינם עושים checkpoint לעולם (``wal_autocheckpoint = 0``), וה-checkpoint
 היחיד (``db.checkpoint``) רץ כשחיבור אחר מחזיק את נעילת הכתיבה של sqlite
 (``BEGIN IMMEDIATE``). כך אין commit שיכול לחפוף לו — מאף חיבור ומאף תהליך.
 
@@ -27,13 +27,13 @@ from server import db
 from server.db import connect, journal, set_setting
 from server.system import backup, backup_job
 
-#: ‏~4KB לשורה: 1200 שורות הן יותר מ-1000 דפים, הסף של ה-checkpoint האוטומטי.
+#: ~4KB לשורה: 1200 שורות הן יותר מ-1000 דפים, הסף של ה-checkpoint האוטומטי.
 BLOB = "x" * 4000
 
 
 class _CheckpointSpy:
     """חיבור שמתעד כל ``wal_checkpoint`` שעובר בו, ובודק **באותו רגע** אם כותב
-    מבחוץ מצליח להיכנס. ‏``timeout=0`` — אין המתנה: או שהנעילה פנויה, או שלא."""
+    מבחוץ מצליח להיכנס. ``timeout=0`` — אין המתנה: או שהנעילה פנויה, או שלא."""
 
     def __init__(self, conn: sqlite3.Connection, path: str, seen: list[str]):
         self._conn = conn
@@ -66,7 +66,7 @@ class _CheckpointSpy:
 
 @pytest.fixture
 def spied(monkeypatch, tmp_path):
-    """‏Database על קובץ זמני, כשכל חיבור ש-`db._open` פותח מרגל אחרי checkpoint."""
+    """Database על קובץ זמני, כשכל חיבור ש-`db._open` פותח מרגל אחרי checkpoint."""
     path = str(tmp_path / "imagesrv.db")
     seen: list[str] = []
     real_open = db._open
@@ -75,7 +75,7 @@ def spied(monkeypatch, tmp_path):
 
 
 def test_a_writer_never_checkpoints_on_its_own(tmp_path):
-    """‏commit של יותר מ-1000 דפים: בלי התיקון sqlite מריץ checkpoint אוטומטי על
+    """commit של יותר מ-1000 דפים: בלי התיקון sqlite מריץ checkpoint אוטומטי על
     החיבור הכותב — בלי תיאום עם שום חיבור אחר — והדפים נכתבים לקובץ ה-DB.
     הראיה היא גודל הקובץ עצמו, שנמדד לפני ואחרי."""
     path = tmp_path / "imagesrv.db"
@@ -109,12 +109,12 @@ def test_the_checkpoint_shuts_out_every_writer_while_it_runs(spied, monkeypatch)
     assert "locked" in seen[0]
     assert conn.execute("SELECT COUNT(*) FROM settings WHERE key = 'outsider'").fetchone()[0] == 0
     # הריגול רץ **לפני** ה-checkpoint האמיתי, ולכן הוא אינו ראיה שהתבצע. הראיה היא
-    # הקובץ: הדפים עברו מה-WAL אל ה-DB. ‏checkpoint שנכשל נרשם ביומן בלבד — ואז כאן נופל.
+    # הקובץ: הדפים עברו מה-WAL אל ה-DB. checkpoint שנכשל נרשם ביומן בלבד — ואז כאן נופל.
     assert os.path.getsize(path) > before, "ה-checkpoint רץ ולא העביר דף אחד לקובץ ה-DB"
 
 
 def test_a_checkpoint_reports_every_frame_it_moved(tmp_path):
-    """הראיה החיובית של `db.checkpoint`: ‏busy=0, והכול הועבר. ה-WAL לא ריק לפני."""
+    """הראיה החיובית של `db.checkpoint`: busy=0, והכול הועבר. ה-WAL לא ריק לפני."""
     path = tmp_path / "imagesrv.db"
     conn = connect(path)
     set_setting(conn, "k", BLOB)
@@ -143,8 +143,8 @@ def test_a_checkpoint_gives_up_rather_than_overlap_a_writer(tmp_path, monkeypatc
 
 
 def test_a_failed_checkpoint_does_not_fail_the_commit_before_it(tmp_path, monkeypatch, caplog):
-    """ה-commit כבר הצליח. ‏checkpoint שנכשל אחריו אינו הופך אותו לכישלון אצל הקורא
-    (‏`writing` היה עושה rollback ומדווח כתיבה שנכשלה) — אבל הוא נאמר ביומן השרת."""
+    """ה-commit כבר הצליח. checkpoint שנכשל אחריו אינו הופך אותו לכישלון אצל הקורא
+    (`writing` היה עושה rollback ומדווח כתיבה שנכשלה) — אבל הוא נאמר ביומן השרת."""
     conn = connect(tmp_path / "imagesrv.db")
     monkeypatch.setattr(db, "CHECKPOINT_EVERY_COMMITS", 1)
 
@@ -159,8 +159,8 @@ def test_a_failed_checkpoint_does_not_fail_the_commit_before_it(tmp_path, monkey
 
 
 def test_writers_and_backups_in_parallel_keep_the_database_whole(spied, monkeypatch):
-    """ארבעה תהליכונים כותבים ביומן, תהליכון חמישי מגבה בלולאה (‏backup API),
-    וה-checkpoint המתוזמן רץ ביניהם. בסוף: כל השורות שם, ‏``integrity_check`` נקי,
+    """ארבעה תהליכונים כותבים ביומן, תהליכון חמישי מגבה בלולאה (backup API),
+    וה-checkpoint המתוזמן רץ ביניהם. בסוף: כל השורות שם, ``integrity_check`` נקי,
     והיו checkpoints — כולם כשהכותבים נעולים בחוץ."""
     conn, path, seen = spied
     monkeypatch.setattr(db, "CHECKPOINT_EVERY_COMMITS", 10, raising=False)
@@ -207,7 +207,7 @@ def test_writers_and_backups_in_parallel_keep_the_database_whole(spied, monkeypa
 
 
 def test_the_hourly_backup_opens_the_database_read_only(tmp_path, monkeypatch):
-    """‏`backup_job` רץ כתהליך נפרד (טיימר systemd) לצד השרת. הוא אינו עובר
+    """`backup_job` רץ כתהליך נפרד (טיימר systemd) לצד השרת. הוא אינו עובר
     ב-`db.checkpoint`, ולכן הוא חייב להיות **קורא בלבד**: חיבור ``mode=ro`` אינו
     יכול לכתוב ואינו יכול לעשות checkpoint. שומר — אין כאן שינוי התנהגות."""
     data = tmp_path / "data"
@@ -228,7 +228,7 @@ def test_the_hourly_backup_opens_the_database_read_only(tmp_path, monkeypatch):
     backup_job.backup_once(data / "imagesrv.db", dest, db.datetime.now(db.timezone.utc))
 
     to_db = [t for t in opened if "imagesrv.db" in t and "dest" not in t]
-    assert to_db, f"‏backup_once לא פתח את המסד בכלל: {opened}"
+    assert to_db, f"\u200fbackup_once לא פתח את המסד בכלל: {opened}"
     assert all(t.startswith("file:") and t.endswith("?mode=ro") for t in to_db), to_db
 
     ro = real(f"file:{(data / 'imagesrv.db').as_posix()}?mode=ro", uri=True)

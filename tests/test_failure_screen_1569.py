@@ -1,21 +1,21 @@
 """מסך הכישלון האחיד של הגואי הנייטיבי (#1569; המוקאפ שנדב אישר ב-PR #1550).
 
 הכרעת נדב 17/10: אין מסך לא-גרפי ואין מסך שחור. עד כאן כל עצירה הייתה
-‏`ui_error_hold` — אנגלית על tty, מוסתרת מאחורי גואי חי או ריבועים
+`ui_error_hold` — אנגלית על tty, מוסתרת מאחורי גואי חי או ריבועים
 בלעדיו — ו-`die_local` היה שורת FATAL ושלוש שניות. עכשיו שתי הכניסות
-האלה קוראות ל-`fail_screen` (‏`agent/lib/gui/failscreen.sh`), שהופכת את
+האלה קוראות ל-`fail_screen` (`agent/lib/gui/failscreen.sh`), שהופכת את
 שורת האנגלית שכבר יש להן לרשומות `fail*` של מסך עברי אחד
-(‏`native-gui/src/screens_failure.c`): כותרת, "מה קרה" עם הסיבה של היעד,
+(`native-gui/src/screens_failure.c`): כותרת, "מה קרה" עם הסיבה של היעד,
 "מה עושים עכשיו", ופרטים טכניים מתקפלים.
 
 שלוש שכבות של בדיקות:
 
-* **התנהגות הסוכן** — ‏bash על הפונקציות האמיתיות (‏`ui_error_hold`,
-  ‏`die_local`, ‏`gui_hello_state`), מה שנכתב ל-`$RUN_DIR/fail.state` ומה
-  שגואי מזויף קיבל. ‏`failscreen.sh` נטען **רק אם הוא קיים**, כדי שבקרה
+* **התנהגות הסוכן** — bash על הפונקציות האמיתיות (`ui_error_hold`,
+  `die_local`, `gui_hello_state`), מה שנכתב ל-`$RUN_DIR/fail.state` ומה
+  שגואי מזויף קיבל. `failscreen.sh` נטען **רק אם הוא קיים**, כדי שבקרה
   שלילית תיפול על ההתנהגות (אין רשומות) ולא על קובץ חסר.
 * **חוזי מקור** — הניתוב, הפרסר, רשימת הכרטיסים.
-* **רינדור** — ‏`requires_native`: נבנה ומצויר על מעבדת ה-VM בלבד.
+* **רינדור** — `requires_native`: נבנה ומצויר על מעבדת ה-VM בלבד.
 """
 
 from __future__ import annotations
@@ -77,8 +77,8 @@ def values(recs, key: str) -> list[str]:
 
 def run_agent(tmp_path: Path, script: str, *, targets: dict[str, tuple[str, str]] | None = None,
               env: str = "", gui: bool = False, disks: dict[str, int] | None = None) -> dict:
-    """מריץ קטע סוכן אמיתי עם RUN_DIR משלו. ‏targets: dev -> (state, error);
-    ‏disks: dev -> sectors, ב-SYSROOT מזויף (תא "דיסק מקור · פנימי · NGB")."""
+    """מריץ קטע סוכן אמיתי עם RUN_DIR משלו. targets: dev -> (state, error);
+    disks: dev -> sectors, ב-SYSROOT מזויף (תא "דיסק מקור · פנימי · NGB")."""
     run = tmp_path / "run"
     (run / "targets").mkdir(parents=True, exist_ok=True)
     sysroot = tmp_path / "sys"
@@ -201,7 +201,7 @@ def test_a_pipe_or_newline_in_a_reason_cannot_break_a_record(tmp_path):
 
 def test_die_local_shows_the_hebrew_reason_with_a_reboot_count_then_reboots(tmp_path):
     """מקרה 5 בדוח: סירוב אחרי ה-handoff ולפני הכתיבה. היה `FATAL` באנגלית
-    ושלוש שניות; עכשיו המסך עם הסיבה בעברית ו"לא נכתב דבר", ‏`fail_at`
+    ושלוש שניות; עכשיו המסך עם הסיבה בעברית ו"לא נכתב דבר", `fail_at`
     (הפיל סופר), ורק אז האתחול -- שבמצב טסט הוא `TEST-REBOOT`."""
     r = run_agent(tmp_path, 'die_local "restore: not authorized -- nothing was written"', env="D_ROLE=build")
     assert "TEST-REBOOT: restore: not authorized -- nothing was written" in r["out"]
@@ -233,7 +233,7 @@ def test_every_known_fatal_line_has_hebrew_and_an_unknown_one_still_gets_a_scree
 
 def test_a_live_kiosk_gets_the_block_through_its_own_state_writer(tmp_path):
     """קיוסק חי (`_gui_pid`): לא מרימים גואי שני על אותו framebuffer. כותב
-    המצב של הקיוסק -- ‏`gui_hello_state`, שכל מסך קורא -- מצרף את הבלוק."""
+    המצב של הקיוסק -- `gui_hello_state`, שכל מסך קורא -- מצרף את הבלוק."""
     r = run_agent(tmp_path, '_gui_pid=$$; ui_error_hold "capture did not complete" hold_beat; '
                             'gui_hello_state > "$RUN_DIR/hello.out"', targets={"sda": ("failed", "x")}, gui=True)
     assert not (r["run"] / "gui.args").exists(), "גואי שני הופעל ליד קיוסק חי"
@@ -265,8 +265,8 @@ def test_a_build_machine_gui_is_started_without_the_cloner_screen(tmp_path):
 
 
 def test_the_1548_display_gui_is_reused_not_doubled(tmp_path):
-    """‏`single_restore_failed_screen` (#1548) כבר העלה גואי על `failed.state`
-    (‏`_sf_pid`); המסך האחיד נכתב לאותו קובץ והגואי ההוא מחליף תמונה."""
+    """`single_restore_failed_screen` (#1548) כבר העלה גואי על `failed.state`
+    (`_sf_pid`); המסך האחיד נכתב לאותו קובץ והגואי ההוא מחליף תמונה."""
     r = run_agent(tmp_path, 'sleep 20 & _sf_pid=$!; ui_error_hold "restore did not complete" hold_beat; sleep 1; '
                             'cat "$RUN_DIR/gui/failed.state" > "$RUN_DIR/after.state"; kill $_sf_pid',
                   targets={"sda": ("failed", "sgdisk דחה את תוכנית השחזור — הדיסק לא שונה")}, gui=True)
@@ -297,9 +297,9 @@ def test_the_two_entry_points_call_the_screen_and_the_agent_loads_it():
 
 
 def test_the_unknown_machine_is_not_a_failure_and_draws_its_own_records():
-    """‏#1550 השאיר את "מכונה לא מוכרת" פתוחה; ‏#1802 (נדב 19/10) הכריע: מקרה 8
-    במוקאפ, ‏tone ‏inf. היא אינה כישלון ולכן אינה עוברת ב-`fail_screen` (שם
-    הכותרת אדומה) -- ‏`ui_unknown` כותב את הרשומות ומציג אותן ב-`fail_show`."""
+    """#1550 השאיר את "מכונה לא מוכרת" פתוחה; #1802 (נדב 19/10) הכריע: מקרה 8
+    במוקאפ, tone inf. היא אינה כישלון ולכן אינה עוברת ב-`fail_screen` (שם
+    הכותרת אדומה) -- `ui_unknown` כותב את הרשומות ומציג אותן ב-`fail_show`."""
     assert "TODO (#1550" not in _lib("failscreen.sh")
     ui = _lib("ui.sh")
     unknown = ui[ui.index("ui_unknown() {"):ui.index("ui_error_hold() {")]
@@ -352,7 +352,7 @@ def _state_for_png(tmp_path: Path, english: str, hello_rc: str = "200") -> Path:
 @pytest.mark.parametrize("size", ["1920x1080", "1024x768"])
 def test_the_failure_screen_renders_in_both_themes_with_the_badge(tmp_path, size):
     """הרשומות שהסוכן האמיתי כתב, מצוירות: התג האדום (60×60 ב---clr-danger-soft),
-    שתי הערכות. ‏#2068: אין עוד כרטיס "פתוח" -- הפרטים הטכניים ירדו."""
+    שתי הערכות. #2068: אין עוד כרטיס "פתוח" -- הפרטים הטכניים ירדו."""
     binary = _build_gui(tmp_path)
     state = _state_for_png(tmp_path, "capture did not complete")
     _png(binary, tmp_path / "card", state, size=size)

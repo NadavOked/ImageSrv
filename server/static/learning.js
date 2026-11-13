@@ -138,3 +138,4 @@ async function learningMachine(macEnc, action) {
   const fresh = findMachine(mac);
   if (fresh) setDrawerBody(machineDrawerHtml(fresh));
 }
+learningMachine = guarded("learningMachine", learningMachine);   // ‏#2840: לחיצה כפולה = בקשה אחת

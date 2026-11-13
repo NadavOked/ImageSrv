@@ -1,34 +1,34 @@
-"""הגיבוב לקריאה החוזרת מהדיסק (‏#1805, ‏CLR-01).
+"""הגיבוב לקריאה החוזרת מהדיסק (#1805, CLR-01).
 
 עד #1805 מגירה הייתה `done` לפי ראיה מה**זרם** — ה-sha256 של הבייטים הדחוסים
 לפני zstd ו-partclone — ואיש לא קרא את הדיסק. עכשיו הסוכן קורא בחזרה מכל
-מחיצה שכתב את הבלוקים שבשימוש (‏O_DIRECT, ‏`fanout --readback`) ומשווה
+מחיצה שכתב את הבלוקים שבשימוש (O_DIRECT, `fanout --readback`) ומשווה
 לגיבוב **שאינו הזרם**: זה, שהשרת לוקח מהאימג' עצמו כשהוא בספרייה.
 
 **מה מגובב** — "זרם הנתונים": תוכן הבלוקים שבשימוש, לפי סדר הבלוקים, בדיוק
-כפי ש-`partclone -r` כותב אותם לדיסק: הזרם הפרוס של המחיצה (‏`zstd -dc`)
-בלי כותרת ה-`image_desc_v2` (‏110 בייט), בלי מפת הסיביות (וה-CRC-32 שלה) ובלי
-סכומי הבדיקה שבין הבלוקים (‏`checksum_size` בייט אחרי כל `blocks_per_checksum`
-בלוקים, ועוד אחד לשארית — ‏`src/main.c` של partclone). מחיצה שנקלטה ב-
+כפי ש-`partclone -r` כותב אותם לדיסק: הזרם הפרוס של המחיצה (`zstd -dc`)
+בלי כותרת ה-`image_desc_v2` (110 בייט), בלי מפת הסיביות (וה-CRC-32 שלה) ובלי
+סכומי הבדיקה שבין הבלוקים (`checksum_size` בייט אחרי כל `blocks_per_checksum`
+בלוקים, ועוד אחד לשארית — `src/main.c` של partclone). מחיצה שנקלטה ב-
 `partclone.dd` (אין כותרת) — הזרם הפרוס כולו.
 
-**הכרעת נדב 20/10 (#1864, ‏sha256 של הכול עלה ~8 דק' לסבב של 4 מגירות):** הזרם
+**הכרעת נדב 20/10 (#1864, sha256 של הכול עלה ~8 דק' לסבב של 4 מגירות):** הזרם
 נחתך ל-`CHUNK_BYTES` (4MiB), ולכל חתיכה XXH64 (זרע 0) — שורה של 16 ספרות hex.
-הרשימה נשמרת **ליד** קובץ המחיצה (`<file>.readback`, ‏`GET …/readback/<index>`),
-והמניפסט נושא `readback_xxh64` (ה-XXH64 של קובץ הרשימה עצמו), ‏`readback_chunks`,
-‏`readback_bytes` ו-`readback_chunk_bytes`. הסוכן משווה חתיכה מול חתיכה: מדגם
-(ברירת המחדל) או כולן (`readback_full` בהגדרות). ‏XXH64 בקרנל (‏AF_ALG
-‏`xxhash64`), ובלעדיו — מימוש Python מבוקר (איטי; בקול, ביומן). ‏`readback_sha256`
+הרשימה נשמרת **ליד** קובץ המחיצה (`<file>.readback`, `GET …/readback/<index>`),
+והמניפסט נושא `readback_xxh64` (ה-XXH64 של קובץ הרשימה עצמו), `readback_chunks`,
+`readback_bytes` ו-`readback_chunk_bytes`. הסוכן משווה חתיכה מול חתיכה: מדגם
+(ברירת המחדל) או כולן (`readback_full` בהגדרות). XXH64 בקרנל (AF_ALG
+`xxhash64`), ובלעדיו — מימוש Python מבוקר (איטי; בקול, ביומן). `readback_sha256`
 של מניפסטים קודמים נשאר כמו שהוא (הסוכן עוד מכיר אותו), ואינו מחושב עוד.
 
 **ראיה חיובית בכל שלב** (עיקרון 5): magic/גרסה/endianess/CRC של הכותרת,
-‏CRC-32 של המפה, ספירת הסיביות שווה ל-`usedblocks`, אורך קטע הנתונים שווה
-בדיוק למה שהכותרת מצהירה (‏EOF במקום הצפוי, לא לפניו ולא אחריו), ו-zstd
+CRC-32 של המפה, ספירת הסיביות שווה ל-`usedblocks`, אורך קטע הנתונים שווה
+בדיוק למה שהכותרת מצהירה (EOF במקום הצפוי, לא לפניו ולא אחריו), ו-zstd
 שיצא 0 (הוא בודק את סכום המסגרת). כל אחד מהם שלא עבר — **אין ערך** במניפסט,
 והסוכן מדווח על המחיצה "לא אומת" בשמה; לעולם לא ערך מנוחש.
 
 נכתב למניפסט עצמו (עיקרון 3: הסוכן קורא את המניפסט שהשרת מגיש), ליד
-המחיצה: `readback_sha256` ו-`readback_bytes`. ‏`ImageLibrary.record_readback`.
+המחיצה: `readback_sha256` ו-`readback_bytes`. `ImageLibrary.record_readback`.
 
 **מתי:** תהליכון רקע אחד (`run_forever`) — בעליית השרת על כל הספרייה (כולל
 אימג'ים שנקלטו לפני #1805), ומיד כשאימג' נכנס לספרייה (`kick()` מסוף אימות
@@ -67,24 +67,24 @@ _BM_BIT = 1              # partclone.h: BM_BIT = 0x01
 MAX_BITMAP = 1 << 31     # bytes -- fanout.c's own ceiling (readback())
 MAX_BLOCK = 64 << 20     # bytes -- likewise
 DECOMPRESS = ("zstd", "-dc", "--")
-#: ‏ברזל 20/10 (#1864): הגיבוב רץ עם הסבב והשידור הואט ~20%. עכשיו בעדיפות
+#: ברזל 20/10 (#1864): הגיבוב רץ עם הסבב והשידור הואט ~20%. עכשיו בעדיפות
 #: הכי נמוכה של המעבד ושל הדיסק — ובנוסף נעצר כשיש עבודה (`busy`, למטה).
 IDLE_PRIORITY = ("nice", "-n", "19", "ionice", "-c", "3")
 PAUSE_RETRY_S = 30.0     # הושהה בגלל עבודה פעילה: בודקים שוב בעוד חצי דקה, לא בעוד עשר
 STOP_EVERY_S = 2.0       # כל כמה זמן, תוך כדי קריאה, שואלים אם צריך לפנות את השרת
 
 
-#: ‏#1864 (נדב 20/10): מתג בהגדרות. כבוי (ברירת המחדל) = מדגם; "true" = כל החתיכות.
+#: #1864 (נדב 20/10): מתג בהגדרות. כבוי (ברירת המחדל) = מדגם; "true" = כל החתיכות.
 SETTING = "readback_full"
 
 
 def mode(conn) -> str:
-    """‏"full" או "sample" — מה שהשרת מוסיף למניפסט שהסוכן מושך (`readback_mode`)."""
+    """"full" או "sample" — מה שהשרת מוסיף למניפסט שהסוכן מושך (`readback_mode`)."""
     return "full" if get_setting(conn, SETTING) == "true" else "sample"
 
 
 def parse_setting(value) -> str | None:
-    """ערך שהקונסולה שלחה → ‏"true"/"false", או None = נדחה (‏#1794: אימות בשרת)."""
+    """ערך שהקונסולה שלחה → "true"/"false", או None = נדחה (#1794: אימות בשרת)."""
     if isinstance(value, bool):
         return "true" if value else "false"
     return value if value in ("true", "false") else None
@@ -97,7 +97,7 @@ class Underived(Exception):
 class Paused(Exception):
     """השרת עסוק (שידור, קליטה, העברה, סבב של אימג' אחר): הגיבוב פינה את
     הדרך. **אינו כישלון** — האימג' לא נרשם ב-`tried`, ויחזור כשהשרת שקט.
-    ‏`values` = מה שכבר גובב לפני ההשהיה (נרשם, לא נזרק)."""
+    `values` = מה שכבר גובב לפני ההשהיה (נרשם, לא נזרק)."""
 
     def __init__(self, reason: str, values: dict | None = None) -> None:
         super().__init__(reason)
@@ -105,7 +105,7 @@ class Paused(Exception):
 
 
 def decompress_cmd(which=shutil.which) -> tuple[str, ...]:
-    """‏zstd בעדיפות הסרק של המעבד והדיסק (‏nice 19, ‏ionice idle) כשהכלים קיימים;
+    """zstd בעדיפות הסרק של המעבד והדיסק (nice 19, ionice idle) כשהכלים קיימים;
     בלעדיהם — zstd לבדו, ובקול (ביומן): הגיבוב עדיין נעצר כשיש עבודה."""
     if which("nice") and which("ionice"):
         return (*IDLE_PRIORITY, *DECOMPRESS)
@@ -179,8 +179,8 @@ class PyXxh64:
 
 
 class KernelXxh64:
-    """XXH64 של הקרנל (‏AF_ALG ‏`xxhash64`, כמו ‏sha256 של fanout). הקרנל מחזיר
-    את המספר little-endian; ‏`hexdigest` כמו ‏`%016llx` של fanout."""
+    """XXH64 של הקרנל (AF_ALG `xxhash64`, כמו sha256 של fanout). הקרנל מחזיר
+    את המספר little-endian; `hexdigest` כמו `%016llx` של fanout."""
 
     def __init__(self, tfm) -> None:
         self.op, _ = tfm.accept()
@@ -209,7 +209,7 @@ def xxh64_factory():
 
 
 class ChunkLister:
-    """זרם הנתונים → רשימת XXH64, חתיכה של CHUNK_BYTES לשורה. ‏`update` כמו
+    """זרם הנתונים → רשימת XXH64, חתיכה של CHUNK_BYTES לשורה. `update` כמו
     של hashlib, כך שהקוראים בהמשך הקובץ (`_hash_exact`) אינם משתנים."""
 
     def __init__(self, new) -> None:
@@ -258,7 +258,7 @@ def _hash_exact(stream, n: int, sha) -> None:
 def digest_partclone(stream, limit: int | None = None, new=None) -> tuple[str, int]:
     """(רשימת XXH64 לחתיכה, בייטים) של הבלוקים שבשימוש בזרם partclone v2 פרוס.
 
-    ‏`limit` = גודל המחיצה במניפסט (`size_bytes`). הכותרת היא קלט: ערכים
+    `limit` = גודל המחיצה במניפסט (`size_bytes`). הכותרת היא קלט: ערכים
     שאינם יכולים להיות של המחיצה הזו נדחים **לפני** שנקרא בייט אחריה —
     אחרת כותרת פגומה הייתה מקצה זיכרון כגודלה ומפילה את מעבר הרקע (סקירת
     אבטחה, #1805). המפה נקראת במנות של CHUNK: CRC ומניין מצטברים."""
@@ -342,8 +342,8 @@ class _Counting:
 
 def digest_file(path: Path, raw: bool, limit: int | None = None, stop=None, *,
                 cmd: tuple[str, ...] | None = None, stall_s: float = STALL_S, new=None) -> tuple[str, int]:
-    """מפעיל את הפורס על קובץ המחיצה ומגבב. ‏`Underived` על כל דבר שאינו ראיה;
-    ‏`Paused` כש-`stop()` אומר שהשרת עסוק (ה-zstd נהרג מיד)."""
+    """מפעיל את הפורס על קובץ המחיצה ומגבב. `Underived` על כל דבר שאינו ראיה;
+    `Paused` כש-`stop()` אומר שהשרת עסוק (ה-zstd נהרג מיד)."""
     cmd = decompress_cmd() if cmd is None else cmd
     try:
         proc = subprocess.Popen([*cmd, str(path)], stdin=subprocess.DEVNULL,
@@ -373,7 +373,7 @@ def digest_file(path: Path, raw: bool, limit: int | None = None, stop=None, *,
 
 
 def list_path(image_dir, part: dict) -> Path | None:
-    """קובץ הרשימה של המחיצה: ליד קובץ הזרם (שעבר את `guarded_image_path`), ‏`<file>.readback`."""
+    """קובץ הרשימה של המחיצה: ליד קובץ הזרם (שעבר את `guarded_image_path`), `<file>.readback`."""
     base = guarded_image_path(image_dir, part.get("file"))
     return base.with_name(base.name + LIST_SUFFIX) if base is not None else None
 
@@ -397,8 +397,8 @@ def needs_list(manifest: dict) -> bool:
 
 
 def derive(manifest: dict, *, digest=digest_file, stop=None, new=None) -> tuple[dict, list[str]]:
-    """‏({index: (רשימה, בייטים, XXH64 של הרשימה)}, בעיות) למחיצות עם קובץ זרם שאין
-    להן עדיין רשימה. ‏`Paused` (עם מה שכבר גובב) עולה למעלה — אינו בעיה של המחיצה."""
+    """({index: (רשימה, בייטים, XXH64 של הרשימה)}, בעיות) למחיצות עם קובץ זרם שאין
+    להן עדיין רשימה. `Paused` (עם מה שכבר גובב) עולה למעלה — אינו בעיה של המחיצה."""
     image_dir = manifest.get("_dir")
     if not image_dir or not manifest.get("_available", True):
         return {}, []
@@ -434,8 +434,8 @@ def derive(manifest: dict, *, digest=digest_file, stop=None, new=None) -> tuple[
 
 
 def _order(pending: dict[str, dict], rank: dict[str, str]) -> list[str]:
-    """‏#1864: מי קודם. אימג' שנפתח לו סבב (`kick(image_id)`) — ראשון; אחריו לפי
-    השימוש האחרון (סבב/הפצה, `rank` = ‏{image_id: זמן ISO}), מהחדש לישן; מה שלא
+    """#1864: מי קודם. אימג' שנפתח לו סבב (`kick(image_id)`) — ראשון; אחריו לפי
+    השימוש האחרון (סבב/הפצה, `rank` = {image_id: זמן ISO}), מהחדש לישן; מה שלא
     שומש מעולם — בסוף; ובכל דרגה הקטן קודם (`total_compressed_bytes`). אימג'
     גדול שאיש לא פורס אינו עומד לפני האימג' שבסבב."""
     with _LOCK:
@@ -451,11 +451,11 @@ def fill(library, *, digest=digest_file, report=None, tried: dict | None = None,
          busy=None, rank=None, status: dict | None = None) -> list[dict]:
     """מעבר אחד על הספרייה. אימג' אחד שנכשל אינו עוצר את האחרים.
 
-    ‏`tried` = ‏{image_id: חתימת הקבצים} של מה שכבר נוסה ונכשל — לא שוב בכל
+    `tried` = {image_id: חתימת הקבצים} של מה שכבר נוסה ונכשל — לא שוב בכל
     מעבר (פריסה של 100GB כל עשר דקות), אלא רק כשהקבצים השתנו.
-    ‏`busy(image_id)` = סיבה (מחרוזת) כשהשרת צריך את הדיסק והמעבד, אחרת None —
+    `busy(image_id)` = סיבה (מחרוזת) כשהשרת צריך את הדיסק והמעבד, אחרת None —
     נשאל לפני כל אימג' ופעם ב-STOP_EVERY_S תוך כדי: אימג' שהושהה אינו נכשל.
-    ‏`rank()` = ‏{image_id: שימוש אחרון}. ‏`status["paused"]` = הסיבה, כשהושהה."""
+    `rank()` = {image_id: שימוש אחרון}. `status["paused"]` = הסיבה, כשהושהה."""
     tried = {} if tried is None else tried
     status = {} if status is None else status
     status.pop("paused", None)
@@ -532,7 +532,7 @@ _PRIORITY: dict[str, None] = {}      # סדר ההכנסה נשמר: הראשו�
 
 def kick(image_id: str | None = None) -> None:
     """המעבר הבא מתחיל עכשיו, לא בעוד עשר דקות: אימג' חדש נכנס לספרייה, או
-    (‏`image_id`, ‏#1864) נפתח לו סבב — והוא עובר לראש התור."""
+    (`image_id`, #1864) נפתח לו סבב — והוא עובר לראש התור."""
     if image_id:
         with _LOCK:
             _PRIORITY[image_id] = None
@@ -555,12 +555,12 @@ def run_forever(library, *, report=None, interval: float = INTERVAL_S,
 
 
 def server_busy(conn, sender=None):
-    """‏#1864 (ברזל 20/10): ‏`busy(image_id)` של התהליכון. סיבה = לפנות את הדרך:
+    """#1864 (ברזל 20/10): `busy(image_id)` של התהליכון. סיבה = לפנות את הדרך:
     שידור שזורם (`sender` במצב sending), קליטה או שליחה ישירה שרצות או מאומתות
     (`tasks`), העברה בין אתרים (`storage_transfers`), וסבב פתוח של **אימג' אחר**.
     סבב פתוח של האימג' הזה עצמו, לפני שהשידור התחיל (המכונות עוד עולות), אינו
     עוצר: זה החלון שבו הגיבוב שלו עוד יכול להגיע למניפסט שהסוכן קורא — ואם לא
-    הגיע, הסבב "לא אומת", כמו קודם. ‏None = שקט."""
+    הגיע, הסבב "לא אומת", כמו קודם. None = שקט."""
     def busy(image_id: str) -> str | None:
         status = sender.status() if sender is not None else None
         if status and status.get("state") == "sending":
@@ -579,7 +579,7 @@ def server_busy(conn, sender=None):
 
 
 def last_use(conn):
-    """‏`rank()` של התהליכון: ‏{image_id: הסבב או ההפצה האחרונים שנפתחו לו}."""
+    """`rank()` של התהליכון: {image_id: הסבב או ההפצה האחרונים שנפתחו לו}."""
     def rank() -> dict[str, str]:
         rows = conn.execute(
             "SELECT image_id, MAX(created_at) AS at FROM (SELECT image_id, created_at FROM room_rounds"

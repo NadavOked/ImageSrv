@@ -72,7 +72,7 @@ def test_render_puts_each_interface_under_its_own_tag():
 
 
 def test_the_main_instance_never_touches_a_proxy_interface():
-    """‏#36: ממשק ב-proxy מקפיא את dnsmasq 2.91 על בקשת PXE:4011. הוא רץ
+    """#36: ממשק ב-proxy מקפיא את dnsmasq 2.91 על בקשת PXE:4011. הוא רץ
     באינסטנס נפרד, ולכן אסור שיופיע בקובץ הראשי בשום צורה — לא כטווח,
     לא כ-pxe-service, ואפילו לא כ-interface להגשת TFTP: שני התהליכים
     היו נלחמים על אותם פורטים. except-interface מוציא אותו מפורשות."""
@@ -94,7 +94,7 @@ def test_a_proxy_only_setup_still_leaves_the_main_instance_serving_tftp():
 
 def test_the_proxy_file_is_a_standalone_instance():
     """קובץ ה-proxy אינו ב-/etc/dnsmasq.d — הוא נטען ביחידה משלו, ולכן
-    חייב להביא איתו הכל: בלי DNS, ‏TFTP משלו, ו-leasefile נפרד כדי ששני
+    חייב להביא איתו הכל: בלי DNS, TFTP משלו, ו-leasefile נפרד כדי ששני
     התהליכים לא יכתבו לאותו קובץ חכירות."""
     text = render_proxy(MIXED)
     assert "port=0" in text and "bind-interfaces" in text
@@ -112,8 +112,8 @@ def test_the_proxy_file_is_empty_when_no_interface_is_in_proxy_mode():
 
 
 def test_proxy_answers_legacy_bios_as_well_as_uefi():
-    """‏#40: בענף ה-proxy הייתה תשובת PXE ל-UEFI בלבד. מחשבי השיכפול הם
-    Legacy BIOS ‏(#38) — בלי שורת x86PC הם לא מקבלים תשובה כלל."""
+    """#40: בענף ה-proxy הייתה תשובת PXE ל-UEFI בלבד. מחשבי השיכפול הם
+    Legacy BIOS (#38) — בלי שורת x86PC הם לא מקבלים תשובה כלל."""
     text = render_proxy(MIXED)
     assert 'pxe-service=tag:if-eth1.101,tag:bios,x86PC,"ImageSrv",grub/i386-pc/core.0' in text
     assert ('pxe-service=tag:if-eth1.101,tag:efi-x86_64,x86-64_EFI,"ImageSrv",bootx64.efi'
@@ -122,7 +122,7 @@ def test_proxy_answers_legacy_bios_as_well_as_uefi():
 
 
 def test_proxy_lets_dnsmasq_answer_with_its_own_address():
-    """‏#37: ב-pxe-service אין שדה כתובת שרת — ואסור שיהיה. בלעדיו dnsmasq
+    """#37: ב-pxe-service אין שדה כתובת שרת — ואסור שיהיה. בלעדיו dnsmasq
     מגיש מה-TFTP שלו ושם ב-siaddr את כתובתו על הממשק שענה, וזו הכתובת
     שהתחנה באמת יכולה להגיע אליה. משם GRUB לוקח את net_default_server."""
     text = render_proxy([InterfaceConfig("eth1.101", proxy=True, server_ip="10.44.101.10")])
@@ -135,8 +135,8 @@ def test_proxy_lets_dnsmasq_answer_with_its_own_address():
 
 
 def test_render_splits_the_boot_loader_by_client_arch():
-    """‏#38: מחשבי השיכפול הם Legacy BIOS — אופציה 93 בוחרת את הטוען.
-    ‏BIOS ‏(arch 0) מקבל GRUB i386-pc, ‏UEFI ‏(7/9) את ה-shim החתום,
+    """#38: מחשבי השיכפול הם Legacy BIOS — אופציה 93 בוחרת את הטוען.
+    BIOS (arch 0) מקבל GRUB i386-pc, UEFI (7/9) את ה-shim החתום,
     באותה רשת. שניהם ממשיכים לאותו grub.cfg."""
     text = render([InterfaceConfig("eth0", **GOOD)])
     assert "dhcp-match=set:bios,option:client-arch,0" in text
@@ -149,8 +149,8 @@ def test_render_splits_the_boot_loader_by_client_arch():
 
 
 def test_dhcp_boot_requires_the_known_tag():
-    """‏#141: מכונה שאינה ב-KNOWN_MACS_CONF לא מקבלת dhcp-boot בכלל —
-    לא רק ערך GRUB בלי ImageSrv. ‏tag:known חייב להופיע על **כל** שורת
+    """#141: מכונה שאינה ב-KNOWN_MACS_CONF לא מקבלת dhcp-boot בכלל —
+    לא רק ערך GRUB בלי ImageSrv. tag:known חייב להופיע על **כל** שורת
     boot, לא רק חלק מהן (כשל חלקי כאן משאיר מסלול פתוח ל-arch אחד)."""
     text = render([InterfaceConfig("eth0", **GOOD)])
     boot_lines = [ln for ln in text.splitlines() if ln.startswith("dhcp-boot=")]
@@ -163,7 +163,7 @@ def test_render_with_nothing_enabled_is_an_empty_comment():
     assert "interface=" not in text and "dhcp-range" not in text
 
 
-# --- ‏#1013: TFTP הוא מתג, והוא בקובץ שהשרת מרנדר -----------------------------
+# --- #1013: TFTP הוא מתג, והוא בקובץ שהשרת מרנדר -----------------------------
 
 
 def _active(text: str) -> list[str]:
@@ -183,7 +183,7 @@ def test_render_writes_tftp_even_when_no_interface_has_dhcp():
 
 
 def test_render_without_tftp_root_is_tftp_off_and_says_so():
-    """‏`tftp_root=None` = המפעיל כיבה 69: אין שורה פעילה, ויש הערה שאומרת
+    """`tftp_root=None` = המפעיל כיבה 69: אין שורה פעילה, ויש הערה שאומרת
     שזה כיבוי מכוון — מי שקורא את הקובץ על השרת לא יחשוב ששורה נשמטה."""
     for configs in ([], [InterfaceConfig("eth0", **GOOD)]):
         text = render(configs, tftp_root=None)
@@ -254,7 +254,7 @@ def test_apply_reports_an_unwritable_path_instead_of_raising(tmp_path):
 
 
 def test_a_probe_result_is_never_falsey():
-    """‏#53: כל עוד "לא בדקנו" ו"בדקנו ושקט" הם שניהם falsey, `if found:`
+    """#53: כל עוד "לא בדקנו" ו"בדקנו ושקט" הם שניהם falsey, `if found:`
     מקפל אותם לאחד — ומדליק DHCP על רשת המכללה כשהבדיקה רק נכשלה. תוצאה
     אמיתית תמיד מפילה `if` מקרי לצד החוסם."""
     assert dhcp.ProbeResult(False)
@@ -271,7 +271,7 @@ def test_a_probe_that_cannot_open_the_socket_says_so_instead_of_reporting_silenc
 
 
 def test_the_proxy_conf_lives_outside_the_directory_dnsmasq_reads():
-    """‏#36 כולו תלוי בזה: קובץ ב-/etc/dnsmasq.d נטען לאינסטנס הראשי,
+    """#36 כולו תלוי בזה: קובץ ב-/etc/dnsmasq.d נטען לאינסטנס הראשי,
     וההפרדה מתבטלת בשקט."""
     assert "/etc/dnsmasq.d" not in dhcp.PROXY_CONF
     assert dhcp_host.DEFAULT_CONF.startswith("/etc/dnsmasq.d")
@@ -310,7 +310,7 @@ def test_render_known_macs_refuses_a_non_canonical_mac():
 
 
 def test_apply_known_macs_writes_then_reloads_not_restarts(tmp_path, monkeypatch):
-    """‏#141: reload (SIGHUP) ולא restart — #36 הוא התקדים למה restart על
+    """#141: reload (SIGHUP) ולא restart — #36 הוא התקדים למה restart על
     הגדרה הזו אסור. הבדיקה מוודאת גם את הכתיבה בפועל וגם את שם הפעולה."""
     from server.net import dhcp_host
 
@@ -348,10 +348,10 @@ def dhcp_server(tmp_path: Path, images_root: Path, clock):
         "proxy_applied": [],            # מה נכתב לאינסטנס ה-proxy: (טקסט, פעיל)
         "apply_error": None,
         "proxy_error": None,
-        # ‏#36: הגרסה שה-API "רואה". אף בדיקה לא מריצה dnsmasq אמיתי,
+        # #36: הגרסה שה-API "רואה". אף בדיקה לא מריצה dnsmasq אמיתי,
         # ובברירת המחדל זו הגרסה של המעבדה — זו שהקפיאה שוחזרה בה.
         "dnsmasq_version": "Dnsmasq version 2.91  Copyright (c) 2000-2024\n",
-        # ‏#762: אמת חיה ל-DHCP. ‏conf_readable/service_readable שולטים אם
+        # #762: אמת חיה ל-DHCP. conf_readable/service_readable שולטים אם
         # הקריאה "מצליחה" בכלל — ברירת המחדל היא הצלחה, כדי שהבדיקות
         # הקיימות (שלא עוסקות ב-#762) לא ייפגעו.
         "active_conf": "",
@@ -477,9 +477,9 @@ def test_an_existing_dhcp_server_blocks_the_switch(dhcp_server):
 
 
 def test_a_check_that_could_not_run_blocks_the_switch_too(dhcp_server):
-    """‏#53 — הבאג עצמו: `None` (לא הצלחנו לבדוק) נספר כ"נקי".
+    """#53 — הבאג עצמו: `None` (לא הצלחנו לבדוק) נספר כ"נקי".
 
-    ‏None חוזר בדיוק כשאין הרשאות או כשפורט 68 תפוס — המצב הרגיל של
+    None חוזר בדיוק כשאין הרשאות או כשפורט 68 תפוס — המצב הרגיל של
     כרטיס trunk שמקבל כתובת מרשת המכללה. כלומר: על הכרטיס המסוכן ביותר,
     שכבת הבטיחות שאמורה לעצור פשוט לא רצה, ודיווחה "נקי".
     """
@@ -497,7 +497,7 @@ def test_a_check_that_could_not_run_blocks_the_switch_too(dhcp_server):
 
 
 def test_the_refusal_says_why_the_check_could_not_run(dhcp_server):
-    """‏#2417: "לא נבדק" נושא את הסיבה של הבדיקה עצמה — אין קישור, אין
+    """#2417: "לא נבדק" נושא את הסיבה של הבדיקה עצמה — אין קישור, אין
     AF_PACKET, מסגרות שנזרקו — ולא רק "root ופורט 68" הקבועים."""
     fake = dhcp_server["fake"]
     fake["probe_checked"] = False
@@ -611,7 +611,7 @@ def test_proxy_mode_does_not_hand_out_addresses(dhcp_server, classrooms_on):
 
 
 def test_proxy_runs_in_its_own_instance_so_a_freeze_spares_the_main_dhcp(dhcp_server, classrooms_on):
-    """‏#36: ה-DHCP של וילן ההפצה וה-proxy הם שני תהליכים. הקובץ הראשי
+    """#36: ה-DHCP של וילן ההפצה וה-proxy הם שני תהליכים. הקובץ הראשי
     לא מכיל את ממשק ה-proxy, וכיבוי ה-proxy עוצר את היחידה שלו."""
     admin, fake = dhcp_server["admin"], dhcp_server["fake"]
     assert admin.put("/api/console/net/interfaces/eth0",
@@ -807,7 +807,7 @@ def test_dhcp_not_diverged_when_stored_matches_live(dhcp_server):
 
 def test_dhcp_live_endpoint_is_console_only(dhcp_server):
     """#762 לא פותח שום דבר חדש להרשאות — GET רגיל לכל משתמש מחובר **לקונסולה**;
-    ‏#1073: deploy אינו כזה (403 `deploy_no_console`)."""
+    #1073: deploy אינו כזה (403 `deploy_no_console`)."""
     r = dhcp_server["deploy"].get("/api/console/net/interfaces")
     assert r.status_code == 403 and "מחשב הבנייה" in r.json()["detail"]
     r = dhcp_server["admin"].get("/api/console/net/interfaces")

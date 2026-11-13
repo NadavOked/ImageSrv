@@ -150,8 +150,8 @@ def _lsblk(stdout):
 
 def _prepare_runner(tmp_path, *, parts=1, blkid="TYPE=ext4\nUUID=" + UUID + "\n", mkfs=None,
                     shape="flat", lsblk=None):
-    """‏`shape="flat"` היא הצורה ש-lsblk 2.41 (דביאן 13) מחזיר בלי NAME (#2102);
-    ‏`"tree"` — צורת `children`. ‏`lsblk` דורס את התשובה כולה."""
+    """`shape="flat"` היא הצורה ש-lsblk 2.41 (דביאן 13) מחזיר בלי NAME (#2102);
+    `"tree"` — צורת `children`. `lsblk` דורס את התשובה כולה."""
     nodes = []
     for n in range(1, parts + 1):
         node = tmp_path / f"sdb{n}"
@@ -180,7 +180,7 @@ def test_prepare_disk_partitions_formats_and_reads_the_uuid_back(tmp_path, shape
 
 
 # --- #2102: פלט lsblk אמיתי, לא צורה שהטסט המציא --------------------------------
-# נאסף 24/10 על ה-testrunner (דביאן 13, ‏util-linux 2.41.5) — ראו README שבתיקייה.
+# נאסף 24/10 על ה-testrunner (דביאן 13, util-linux 2.41.5) — ראו README שבתיקייה.
 LSBLK_REAL = Path(__file__).resolve().parent / "fixtures" / "lsblk-2102"
 
 
@@ -240,7 +240,7 @@ def test_fstab_line_for_a_disk_is_by_uuid_with_nofail_and_without_netdev(tmp_pat
     fstab = tmp_path / "fstab"
     fstab.write_text("UUID=root / ext4 defaults 0 1\n", encoding="utf-8")
     monkeypatch.setattr(sl, "FSTAB_PATH", fstab)
-    monkeypatch.setattr(sl, "daemon_reload", lambda: HookResult(OK), raising=False)   # ‏#2122: לא PID 1 של המריץ
+    monkeypatch.setattr(sl, "daemon_reload", lambda: HookResult(OK), raising=False)   # #2122: לא PID 1 של המריץ
     entries = [{"source": "UUID=" + UUID, "target": "/var/lib/imagesrv/storage/big",
                 "fstype": "ext4", "opts": "defaults,nofail,x-systemd.device-timeout=10s",
                 "local": True},
@@ -530,7 +530,7 @@ def test_disconnect_drops_the_fstab_line_and_connect_mounts_by_uuid_again(env):
 
 
 def test_connect_after_disconnect_puts_the_fstab_line_back(env):
-    """‏#1993: ‏connect כתב את fstab כשהמצב עוד היה `disconnected`, והשורה דולגה —
+    """#1993: connect כתב את fstab כשהמצב עוד היה `disconnected`, והשורה דולגה —
     המיקום "מחובר" ולא שרד אתחול."""
     row = _add(env).json()
     env["admin"].post(f"{BASE}/{row['id']}/disconnect")
@@ -540,7 +540,7 @@ def test_connect_after_disconnect_puts_the_fstab_line_back(env):
 
 
 def test_connect_whose_fstab_write_fails_stays_disconnected_and_unmounted(env):
-    """‏#1993 / ‏#1123 (4): עיגון בלי שורת fstab אינו `connected` — והמיקום
+    """#1993 / #1123 (4): עיגון בלי שורת fstab אינו `connected` — והמיקום
     נשאר מנותק, לא "לא נגיש" ולא מעוגן."""
     row = _add(env).json()
     fake = env["fake"]

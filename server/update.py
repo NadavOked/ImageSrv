@@ -1,11 +1,11 @@
-"""עדכון השרת מול הריפו הציבורי (‏#748).
+"""עדכון השרת מול הריפו הציבורי (#748).
 
 הכרעות נדב (16/09, תגובה אחרונה ב-#748): המתג **כבוי בברירת מחדל**,
 בדיקת-עדכון היא מול הריפו **הציבורי** בלבד (לא הפרטי — שם אין CI),
 המנהל בוחר אם לעדכן פר-עדכון, והחיבור היוצא נפתח **רק** בזמן הבדיקה/
 העדכון עצמם — לא חיבור קבוע.
 
-מקור הגרסה החדשה: `tag` אחרון ב-remote (‏`git ls-remote --tags`), לא
+מקור הגרסה החדשה: `tag` אחרון ב-remote (`git ls-remote --tags`), לא
 release API — הריפו הציבורי עדיין בלי releases. גרסה נוכחית: תג semver
 מאומת שמצביע על HEAD, עם fallback מסומן ל-`git describe --tags` בהתקנה
 ישנה (`--repo-dir`, ברירת מחדל תיקיית הקוד עצמה).
@@ -45,7 +45,7 @@ ENABLED_KEY = "update_enabled"
 PREVIOUS_KEY = "update_previous"
 #: מצב הרצת העדכון האחרון — נשרד את ה-restart כי הוא ב-DB, לא בזיכרון.
 STATUS_KEY = "update_status"
-#: ‏#1000: תוצאת בדיקת-העדכון האחרונה ``{at, current, latest, available,
+#: #1000: תוצאת בדיקת-העדכון האחרונה ``{at, current, latest, available,
 #: reason}`` — נכתבת ב-``POST /update/check`` ומוחזרת ב-``GET /update`` כ-
 #: ``last_check``, כדי שהדף יציג "בדיקה אחרונה: <זמן השרת> — <תוצאה>" גם
 #: אחרי רענון, ולא "לא נבדק בסשן הזה" משעון הדפדפן.
@@ -69,7 +69,7 @@ def semver_key(tag: str) -> tuple[int, int, int] | None:
 
 
 def _base_version(describe_output: str | None) -> str | None:
-    """‏`git describe --tags` מחזיר לפעמים `v0.24.0-3-gabc123` (עצי עבודה
+    """`git describe --tags` מחזיר לפעמים `v0.24.0-3-gabc123` (עצי עבודה
     שאינם *בדיוק* על תג) — משווים לפי התג הבסיסי, לא למחרוזת כולה."""
     if not describe_output:
         return None
@@ -78,7 +78,7 @@ def _base_version(describe_output: str | None) -> str | None:
 
 
 def parse_remote_tags(ls_remote_output: str) -> list[str]:
-    """‏`vX.Y.Z` בלבד, ממוינים מהישן לחדש. שורות `^{}` (תג מוער שהוצמד)
+    """`vX.Y.Z` בלבד, ממוינים מהישן לחדש. שורות `^{}` (תג מוער שהוצמד)
     ושורות שאינן תואמות תבנית semver נבדלות — לא כל שורה ב-ls-remote
     היא תג-מוצר."""
     names = set()
@@ -96,14 +96,14 @@ def parse_remote_tags(ls_remote_output: str) -> list[str]:
 
 
 def _run(cmd: list[str], timeout: int, cwd: str | Path | None = None) -> tuple[bool, str, str]:
-    """‏(הרצה עצמה הצליחה, stdout, stderr). קוד יציאה שאינו 0, וגם חריגה
+    """(הרצה עצמה הצליחה, stdout, stderr). קוד יציאה שאינו 0, וגם חריגה
     בהרצה עצמה, שניהם "לא הצלחנו" — לא "אין תוצאה" (עיקרון 5)."""
     try:
         done = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
                               check=False, cwd=str(cwd) if cwd else None,
                               stdin=subprocess.DEVNULL)
     except FileNotFoundError:
-        # ‏#1185: "[Errno 2] No such file or directory: 'git'" הוא הניחוש של
+        # #1185: "[Errno 2] No such file or directory: 'git'" הוא הניחוש של
         # המכונה על עצמה — למנהל זה אומר כלום. הכלי חסר, בשמו.
         return False, "", f"{cmd[0]} {_NOT_INSTALLED} — הותקן מ-ISO ישן (#1185)? התקנה מחדש מ-ISO עדכני"
     except (OSError, subprocess.SubprocessError) as exc:
@@ -115,7 +115,7 @@ def _run(cmd: list[str], timeout: int, cwd: str | Path | None = None) -> tuple[b
 
 _NOT_INSTALLED = "אינו מותקן בשרת הזה"
 
-#: ‏#1159: הקטגוריות של ``version_error`` ב-``/health/live``. ה-endpoint הזה
+#: #1159: הקטגוריות של ``version_error`` ב-``/health/live``. ה-endpoint הזה
 #: אינו דורש הזדהות, ולכן הוא מקבל **רק** את אחת המחרוזות הקבועות האלה —
 #: בלי נתיבים ובלי stderr. הסיבה המלאה הולכת ליומן ול-``GET /update``.
 VERSION_ERRORS = ("git-missing", "not-a-git-tree", "dubious-ownership",
@@ -123,7 +123,7 @@ VERSION_ERRORS = ("git-missing", "not-a-git-tree", "dubious-ownership",
 
 
 class UpgradeLaunchError(RuntimeError):
-    """‏#2160: ``systemd-run`` של סקריפט השדרוג נכשל, ולא בגלל "היחידה כבר
+    """#2160: ``systemd-run`` של סקריפט השדרוג נכשל, ולא בגלל "היחידה כבר
     רצה". הסטטוס כבר נכתב ``failed``; הנתיב מחזיר את זה כשגיאה בשם, לא 409
     "עדכון קודם עוד רץ"."""
 
@@ -138,9 +138,9 @@ class VersionError(RuntimeError):
 
 
 def downgrade_refusal(current: str | None, tag: str) -> str | None:
-    """‏#2419: ‏"החל עדכון" אינו מוריד גרסה. החזרה לגרסה ישנה היא "חזרה לגרסה
-    הקודמת" (‏``/revert``) בלבד — מפורשת, ועם חלון אישור משלה. אותה גרסה מותרת
-    (ניסיון חוזר, ‏``updRetry``). גרסה נוכחית שלא נקראה אינה ראיה לירידה: אותו
+    """#2419: "החל עדכון" אינו מוריד גרסה. החזרה לגרסה ישנה היא "חזרה לגרסה
+    הקודמת" (``/revert``) בלבד — מפורשת, ועם חלון אישור משלה. אותה גרסה מותרת
+    (ניסיון חוזר, ``updRetry``). גרסה נוכחית שלא נקראה אינה ראיה לירידה: אותו
     כלל כמו ``check_update``, שמציע את האחרונה כשהבסיס אינו ידוע."""
     base = _base_version(current)
     if base is None or semver_key(tag) is None:
@@ -165,8 +165,8 @@ def _describe_error(err: str) -> str:
 
 
 def _describe(repo_dir: str | Path) -> str:
-    """‏#1159: כישלון זורק ``VersionError`` — קטגוריה + הסיבה של git.
-    ‏``current_version`` מקפל אותו ל-``None`` כמו קודם."""
+    """#1159: כישלון זורק ``VersionError`` — קטגוריה + הסיבה של git.
+    ``current_version`` מקפל אותו ל-``None`` כמו קודם."""
     ok, out, err = _run(["git", "-C", str(repo_dir), "describe", "--tags"], timeout=10)
     if not ok:
         raise VersionError(_describe_error(err),
@@ -213,14 +213,14 @@ def _ls_remote_tags(url: str) -> tuple[bool, str, str]:
     return _run(["git", "ls-remote", "--tags", url], timeout=20)
 
 
-#: היחידה המנותקת שמריצה את השדרוג; ‏systemd-run שני נכשל עליה כל עוד היא חיה.
+#: היחידה המנותקת שמריצה את השדרוג; systemd-run שני נכשל עליה כל עוד היא חיה.
 UPGRADE_UNIT = "imagesrv-upgrade"
 
 
 def unit_already_exists(err: str) -> bool:
-    """‏#1273: ‏systemd-run נכשל כי יחידת שדרוג **כבר רצה** — זה "עדכון רץ", לא
+    """#1273: systemd-run נכשל כי יחידת שדרוג **כבר רצה** — זה "עדכון רץ", לא
     "עדכון נכשל". שני הנוסחים: "already exists" (ישן) ו-"was already loaded"
-    (‏systemd 257, דביאן 13). שם היחידה חייב להופיע — לא כל "already"."""
+    (systemd 257, דביאן 13). שם היחידה חייב להופיע — לא כל "already"."""
     return f"{UPGRADE_UNIT}.service" in (err or "") and "already" in (err or "")
 
 
@@ -237,19 +237,19 @@ def _run_upgrade_script(repo_dir: str | Path, tag: str) -> tuple[bool, str]:
     return ok, err
 
 
-#: ‏#1277: מצבי החתימה של תג בבדיקת-עדכון — "לא נבדק" אינו "לא חתום", ושניהם
+#: #1277: מצבי החתימה של תג בבדיקת-עדכון — "לא נבדק" אינו "לא חתום", ושניהם
 #: אינם "חתום" (עיקרון 5). השער עצמו הוא ``tools/server-upgrade.sh``; כאן
 #: המנהל רואה את התוצאה **לפני** שהוא לוחץ "החל".
 SIGNATURE_STATES = ("signed", "unsigned", "unchecked")
 _SIGNATURE_WORDS = {"signed": "חתום", "unsigned": "לא חתום", "unchecked": "לא נבדק"}
 
-#: ‏#2469: כמה תגים חדשים לכל היותר נבדקים בחיפוש החתום הגבוה ביותר. כל בדיקה
+#: #2469: כמה תגים חדשים לכל היותר נבדקים בחיפוש החתום הגבוה ביותר. כל בדיקה
 #: היא הורדת תג והרצת המאמת (עד 60+60 ש'); מה שמעבר לתקרה נאמר בהודעה, לא נבלע.
 MAX_SIGNATURE_CHECKS = 5
 
 
 def _verify_remote_tag(url: str, tag: str, repo_dir: str | Path) -> dict:
-    """‏#1277: מוריד את התג בלבד (clone חלקי ורדוד לתיקייה זמנית — לא לעץ
+    """#1277: מוריד את התג בלבד (clone חלקי ורדוד לתיקייה זמנית — לא לעץ
     הקוד, שתהליך ה-web אינו כותב אליו, #1193) ומריץ עליו את אותו מאמת
     ש-``server-upgrade.sh`` מריץ, מול ``deploy/release-signers`` של העץ
     המותקן. קוד יציאה 0 **וגם** שורת ``signed:`` = חתום; 1 = לא חתום; כל
@@ -345,8 +345,8 @@ def display_version(hooks: Hooks, repo_dir: str | Path) -> DisplayVersion:
 
 
 class VersionRead(NamedTuple):
-    """‏``version`` שנקרא ו-``error``/``detail`` שניהם ``None``; או ``version``
-    ‏``None`` עם ``error`` (קטגוריה קבועה, ל-endpoint ללא הזדהות) ו-``detail``
+    """``version`` שנקרא ו-``error``/``detail`` שניהם ``None``; או ``version``
+    ``None`` עם ``error`` (קטגוריה קבועה, ל-endpoint ללא הזדהות) ו-``detail``
     (הסיבה המלאה, ליומן ולמנהל)."""
     version: str | None
     error: str | None
@@ -354,7 +354,7 @@ class VersionRead(NamedTuple):
 
 
 def read_version(hooks: Hooks, repo_dir: str | Path) -> VersionRead:
-    """‏#1159: לעולם לא גרסה ``None`` בלי קטגוריה, ולעולם לא ניחוש (בלי
+    """#1159: לעולם לא גרסה ``None`` בלי קטגוריה, ולעולם לא ניחוש (בלי
     נפילה לתג של ה-ISO: אחרי עדכון הוא כבר לא נכון). גרסה שלא נקראה
     נכתבת גם ליומן, כי ``/health/live`` נשאל בדיוק ברגעים שבהם היא
     קובעת — סוף ההתקנה וסוף השדרוג."""
@@ -405,7 +405,7 @@ def check_update(hooks: Hooks, repo_dir: str | Path, public_url: str) -> dict:
     newer = [t for t in tags if base is None or semver_key(t) > semver_key(base)]
     if not newer:
         return {"current": current, "latest": tags[-1], "available": False, "reason": None}
-    # ‏#2469: מהגבוה לנמוך, וההצעה היא הגבוה ביותר שמצבו ``signed`` — תג לא
+    # #2469: מהגבוה לנמוך, וההצעה היא הגבוה ביותר שמצבו ``signed`` — תג לא
     # חתום (או שבדיקתו נכשלה) מעליו אינו מסתיר אותו, ומוצג רק כאזהרה.
     skipped = []
     for tag in reversed(newer[-MAX_SIGNATURE_CHECKS:]):
@@ -439,7 +439,7 @@ def check_update(hooks: Hooks, repo_dir: str | Path, public_url: str) -> dict:
 
 
 def tag_signature(hooks: Hooks, public_url: str, tag: str, repo_dir: str | Path) -> dict:
-    """‏``{state, detail}`` מתוך ``SIGNATURE_STATES``. כשל של הבדיקה עצמה —
+    """``{state, detail}`` מתוך ``SIGNATURE_STATES``. כשל של הבדיקה עצמה —
     חריגה, או תשובה שאינה אחד המצבים — הוא ``unchecked``, לעולם לא ``signed``."""
     try:
         doc = hooks["verify_tag"](public_url, tag, repo_dir)
@@ -454,7 +454,7 @@ def _set_status(conn, doc: dict) -> None:
     try:
         set_setting(conn, STATUS_KEY, json.dumps(doc))
     except Exception:                                    # noqa: BLE001
-        # ‏#1127: DB נעול = המפעיל רואה `idle` במקום `failed`; לפחות ביומן
+        # #1127: DB נעול = המפעיל רואה `idle` במקום `failed`; לפחות ביומן
         log.warning("update: status %s not written (db)", doc.get("state"), exc_info=True)
 
 
@@ -477,7 +477,7 @@ def _get_json_setting(conn, key: str) -> dict | None:
 
 
 def record_last_check(conn, result: dict) -> dict:
-    """‏#1000: שומר את תוצאת הבדיקה עם חותמת השרת. הכתיבה **אינה** נבלעת:
+    """#1000: שומר את תוצאת הבדיקה עם חותמת השרת. הכתיבה **אינה** נבלעת:
     בדיקה שרצה ולא נזכרה תציג "לא נבדק" — וזה שקר שקט (עיקרון 5)."""
     doc = {"at": now_iso(), **result}
     set_setting(conn, LAST_CHECK_KEY, json.dumps(doc))
@@ -485,7 +485,7 @@ def record_last_check(conn, result: dict) -> dict:
 
 
 def get_last_check(conn) -> dict | None:
-    """‏``None`` = מעולם לא נבדק (או רשומה פגומה) — לא "אין חדש"."""
+    """``None`` = מעולם לא נבדק (או רשומה פגומה) — לא "אין חדש"."""
     return _get_json_setting(conn, LAST_CHECK_KEY)
 
 
@@ -505,8 +505,8 @@ def running_verdict(doc: dict, current: str | None) -> bool | None:
 
 
 def last_progress(doc: dict) -> datetime | None:
-    """‏#1642: הרגע האחרון שבו ריצת העדכון זזה — ‏``started_at`` וחותמות
-    ‏``stages`` שהסקריפט כותב בכל מעבר שלב. ‏``None`` = אין חותמת, או שאחת
+    """#1642: הרגע האחרון שבו ריצת העדכון זזה — ``started_at`` וחותמות
+    ``stages`` שהסקריפט כותב בכל מעבר שלב. ``None`` = אין חותמת, או שאחת
     מהן אינה זמן עם אזור זמן: "לא ידוע" ולא "ישן" (עיקרון 5)."""
     stages = doc.get("stages")
     stamps = []
@@ -527,8 +527,8 @@ def status_with_verification(conn, hooks: Hooks, repo_dir: str | Path,
     היא התג שביקשנו. "לא ידוע עדיין" (השרת עוד לא עלה מחדש) שונה מפורשות
     מ"נכשל" — עיקרון 5.
 
-    ‏#1301: ``now`` — שעון השרת ברגע הקריאה, כדי שהקונסולה תחשב "זמן שעבר"
-    מ-``started_at``/``stages`` בלי להסתמך על שעון הדפדפן. ‏``done`` שהסקריפט
+    #1301: ``now`` — שעון השרת ברגע הקריאה, כדי שהקונסולה תחשב "זמן שעבר"
+    מ-``started_at``/``stages`` בלי להסתמך על שעון הדפדפן. ``done`` שהסקריפט
     כתב בעצמו מאומת באותה השוואה."""
     doc = get_status(conn) or {"state": "idle"}
     current = current_version(hooks, repo_dir)
@@ -540,7 +540,7 @@ def status_with_verification(conn, hooks: Hooks, repo_dir: str | Path,
             result["state"] = "done"
     elif doc.get("state") == "done" and doc.get("tag"):
         result["verified"] = current == doc["tag"]
-    # ‏#1372: עדכון שהסתיים ואומת על הגרסה שרצה — אבל המארח של "עדכון ב-VM" אינו
+    # #1372: עדכון שהסתיים ואומת על הגרסה שרצה — אבל המארח של "עדכון ב-VM" אינו
     # מוכן. נקרא עכשיו ולא נשמר: הסקריפט של התג הישן כותב `done` בלי אזהרה **אחרי**
     # שהשרת החדש עלה, וכשההכנה ברקע מסתיימת האזהרה נעלמת בלי לכתוב דבר.
     if (vm_warning is not None and result.get("state") == "done" and result.get("verified")
@@ -555,7 +555,7 @@ _UNSET = object()
 
 
 def _restore_previous(conn, kept) -> None:
-    """‏#2916: מחזיר את `update_previous` למה שהיה לפני ההפעלה שנכשלה (`_UNSET` — לא נכתב
+    """#2916: מחזיר את `update_previous` למה שהיה לפני ההפעלה שנכשלה (`_UNSET` — לא נכתב
     כלום, אין מה להחזיר; `None` — לא היה ערך, והוא נמחק). כשל בשחזור נאמר ביומן השרת."""
     if kept is _UNSET:
         return
@@ -570,7 +570,7 @@ def _restore_previous(conn, kept) -> None:
 
 def _apply_in_background(conn, hooks: Hooks, repo_dir: str | Path, tag: str,
                          user: str, forced: str | None = None) -> bool:
-    """‏``False`` = יחידת שדרוג כבר רצה (#1273): הסטטוס הקודם חוזר כמו שהיה,
+    """``False`` = יחידת שדרוג כבר רצה (#1273): הסטטוס הקודם חוזר כמו שהיה,
     ו-failed **אינו** נכתב — המפעיל היה רואה "נכשל" בזמן שהעדכון רץ.
     כל כשל אחר בהפעלה: ``failed`` נכתב ו-``UpgradeLaunchError`` נזרק (#2160)."""
     prior = get_status(conn)
@@ -584,16 +584,16 @@ def _apply_in_background(conn, hooks: Hooks, repo_dir: str | Path, tag: str,
         except Exception:                                # noqa: BLE001
             log.warning("update: previous version %s not recorded (db)", previous, exc_info=True)
 
-    # ‏#1193: תהליך ה-web רץ עם ProtectSystem=strict, ולכן אסור לו לכתוב
+    # #1193: תהליך ה-web רץ עם ProtectSystem=strict, ולכן אסור לו לכתוב
     # לעץ הקוד. ה-fetch וה-checkout נעשים בתוך server-upgrade.sh, ביחידה
     # המנותקת שמחוץ לארגז החול. הסטטוס נכתב לפני השיגור כדי שלא יהיה חלון
     # שבו בקשה שהתקבלה עדיין נראית idle.
-    # ‏#1301: ‏started_at/by/from — הסקריפט ממשיך את אותה ריצה (אותו שעון ואותו
+    # #1301: started_at/by/from — הסקריפט ממשיך את אותה ריצה (אותו שעון ואותו
     # מפעיל), ומסך העדכון בקונסולה מציג אותם גם אחרי רענון.
     doc = {"state": "running", "tag": tag, "started_at": now_iso(),
            "by": user, "from": previous}
     if forced:
-        # ‏#1891: המנהל אישר מעל חסימה — הסקריפט קורא את זה ואינו מסרב שוב.
+        # #1891: המנהל אישר מעל חסימה — הסקריפט קורא את זה ואינו מסרב שוב.
         doc["forced"] = forced
     try:
         _set_status(conn, doc)
@@ -602,7 +602,7 @@ def _apply_in_background(conn, hooks: Hooks, repo_dir: str | Path, tag: str,
         _restore_previous(conn, kept)
         raise
     if not ok:
-        # ‏#2916: השדרוג לא התחיל — "חזור לגרסה קודמת" ממשיך להצביע על הגרסה שהייתה
+        # #2916: השדרוג לא התחיל — "חזור לגרסה קודמת" ממשיך להצביע על הגרסה שהייתה
         # לפני השדרוג האחרון **שכן התחיל**, לא על הגרסה שרצה כשהכשל קרה.
         _restore_previous(conn, kept)
     if not ok and unit_already_exists(err):
@@ -615,7 +615,7 @@ def _apply_in_background(conn, hooks: Hooks, repo_dir: str | Path, tag: str,
         journal(conn, "update_apply_failed", f"{tag}: script — {err}", user)
         raise UpgradeLaunchError(f"הפעלת tools/server-upgrade.sh נכשלה: {err}")
 
-    # ‏#748 סעיף 5: "אומת" נקבע רק ב-``status_with_verification`` אחרי
+    # #748 סעיף 5: "אומת" נקבע רק ב-``status_with_verification`` אחרי
     # שהשרת עלה מחדש עם התג — לא כאן. ``running`` נשאר עד אז; הסקריפט
     # עצמו מחליף אותו ל-``failed`` אם אחד משלבי השדרוג נכשל.
     journal(conn, "update_apply_started", tag, user)
@@ -624,7 +624,7 @@ def _apply_in_background(conn, hooks: Hooks, repo_dir: str | Path, tag: str,
 
 def start_apply(ctx, hooks: Hooks, repo_dir: str | Path, tag: str, user: str,
                 forced: str | None = None) -> bool:
-    """שיגור הסקריפט המנותק (שניות ספורות, לא השדרוג עצמו). ‏FastAPI
+    """שיגור הסקריפט המנותק (שניות ספורות, לא השדרוג עצמו). FastAPI
     מריץ נתיבי `def` סינכרוניים בתוך thread pool משלו, כך שזה אינו חוסם
     את ה-event loop; אין צורך ב-``threading.Thread`` נוסף."""
     return _apply_in_background(ctx.conn, hooks, repo_dir, tag, user, forced)
@@ -634,9 +634,9 @@ def restart_blocker(rt) -> str | None:
     """מה מונע עכשיו פעולה שמסתיימת ב-restart של השרת, או None (#1891).
 
     ההגדרה היא `auto_reboot.busy_reason` — סבב, סבב חדר **גם בין גלים**
-    (‏`room_rounds` ‏active/closing, כש-`sessions` כבר סגור), קליטה רצה,
+    (`room_rounds` active/closing, כש-`sessions` כבר סגור), קליטה רצה,
     העברה בין אתרים, העלאת אימג' וקבלה משרת אחר, עדכון VM ושיכפול מקומי. עד כאן נבדקה כאן רק `sessions`, ו"החל עדכון"
-    התקבל בין גל לגל ובאמצע קליטה. ‏``rt`` הוא כל אובייקט עם ``conn`` (ובשרת
+    התקבל בין גל לגל ובאמצע קליטה. ``rt`` הוא כל אובייקט עם ``conn`` (ובשרת
     — גם ``vmupdate``).
 
     DB שלא נקרא אינו "לא עסוק": זה סירוב בשם (עיקרון 5)."""
@@ -653,8 +653,8 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
                          public_url: str = PUBLIC_UPDATE_URL,
                          vm_warning: Callable[[], str | None] | None = None,
                          busy_source=None) -> APIRouter:
-    """‏``busy_source`` (‏#1891): מה ש-`restart_blocker` שואל — בשרת, ה-runtime
-    (שנושא גם את ``vmupdate``); ‏None = ``ctx``."""
+    """``busy_source`` (#1891): מה ש-`restart_blocker` שואל — בשרת, ה-runtime
+    (שנושא גם את ``vmupdate``); None = ``ctx``."""
     from server.console import auth
 
     router = APIRouter(prefix="/api/console/update")
@@ -662,14 +662,14 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
     del current_user
     del server_base  # שם השרת מגיע מ-/me ומהגדרת server_name, לא מכתובת ההאזנה.
     hooks = {**default_hooks(), **(hooks or {})}
-    # ‏#1273: השומר "עדכון כבר רץ" וכתיבת running — פעולה אחת. בלעדיה שתי
+    # #1273: השומר "עדכון כבר רץ" וכתיבת running — פעולה אחת. בלעדיה שתי
     # בקשות מה-thread pool (לחיצה כפולה) עוברות שתיהן את השומר.
     apply_lock = threading.Lock()
 
     @router.get("/backup")
     def settings_backup(user=Depends(admin_only)):
-        """‏#1128: "הורד גיבוי הגדרות" — tar.gz של data_dir עם עותק עקבי של
-        ה-DB (backup API, לא cp), ‏MANIFEST.txt ו-SHA256SUMS; **בלי אימג'ים**.
+        """#1128: "הורד גיבוי הגדרות" — tar.gz של data_dir עם עותק עקבי של
+        ה-DB (backup API, לא cp), MANIFEST.txt ו-SHA256SUMS; **בלי אימג'ים**.
         הארכיון מכיל סודות — הקונסולה מזהירה לפני ההורדה."""
         from fastapi.responses import Response  # noqa: PLC0415
         from server.system import backup  # noqa: PLC0415
@@ -688,12 +688,12 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
         ver = read_version(hooks, repo_dir)
         return {
             "current": ver.version,
-            # ‏#1159: הסיבה המלאה (נתיב + stderr של git) — admin בלבד; ל-
-            # ‏`/health/live` ללא ההזדהות מגיעה רק הקטגוריה.
+            # #1159: הסיבה המלאה (נתיב + stderr של git) — admin בלבד; ל-
+            # `/health/live` ללא ההזדהות מגיעה רק הקטגוריה.
             "current_error": ver.detail,
             "enabled": enabled(ctx.conn),
             "previous": get_setting(ctx.conn, PREVIOUS_KEY),
-            # ‏#1000: ‏null = מעולם לא נבדק בשרת הזה; אחרת {at, current,
+            # #1000: null = מעולם לא נבדק בשרת הזה; אחרת {at, current,
             # latest, available, reason} כפי שנשמר ב-POST /update/check.
             "last_check": get_last_check(ctx.conn),
         }
@@ -717,7 +717,7 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
             raise HTTPException(404, "עדכון כבוי בהגדרות השרת")
         blocker = restart_blocker(busy_source or ctx)
         if blocker and not force:
-            # ‏#1891 (סקירה): חלק מהחסימות הן דיווח של מחשבים, ומחשב תקוע היה חוסם
+            # #1891 (סקירה): חלק מהחסימות הן דיווח של מחשבים, ומחשב תקוע היה חוסם
             # עדכון אבטחה לעד. לכן זו אזהרה עם סיבה ו-"עדכן בכל זאת" (`force`),
             # לא קיר. האתחול המתוזמן (`auto_reboot`) אינו עוקף — רק מנהל, בלחיצה.
             return JSONResponse(status_code=409, content={
@@ -725,12 +725,12 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
                           "יסתיים, או בלחיצה על \"עדכן בכל זאת\"",
                 "code": "update_busy", "busy": blocker})
         with apply_lock:
-            # ‏running שאומת כבר הוא done (status_with_verification) — לא חוסם.
+            # running שאומת כבר הוא done (status_with_verification) — לא חוסם.
             now = status_with_verification(ctx.conn, hooks, repo_dir)
             if now.get("state") == "running":
                 raise HTTPException(409, f"עדכון ל-{now.get('tag')} כבר רץ — ממתינים "
                                          "שיסתיים (השרת יאותחל) לפני עדכון נוסף")
-            # ‏#2419: ירידת גרסה רק דרך /revert. בתוך הנעילה, כמו השומר "כבר רץ".
+            # #2419: ירידת גרסה רק דרך /revert. בתוך הנעילה, כמו השומר "כבר רץ".
             older = None if revert else downgrade_refusal(current_version(hooks, repo_dir), tag)
             if older:
                 raise HTTPException(409, older)
@@ -742,11 +742,11 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
                 raise HTTPException(409, f"יחידת השדרוג ({UPGRADE_UNIT}) כבר רצה — "
                                          "עדכון קודם עוד לא הסתיים")
         if blocker:
-            # ‏#1891: העקיפה גלויה ביומן — מי, לאיזו גרסה, ומעל איזו חסימה.
+            # #1891: העקיפה גלויה ביומן — מי, לאיזו גרסה, ומעל איזו חסימה.
             journal(ctx.conn, "update_forced", f"{tag}: הוחל מעל חסימה — {blocker}", user[0])
         return {"ok": True, "started": True, "tag": tag}
 
-    # ‏def רגיל (לא async): FastAPI מריץ אותו ב-thread pool משלו. הקריאה
+    # def רגיל (לא async): FastAPI מריץ אותו ב-thread pool משלו. הקריאה
     # ממתינה רק ל-systemd-run שמקבל את היחידה; git והרסטארט רצים ביחידה
     # המנותקת, מחוץ לתהליך ולארגז החול של שרת ה-web.
     @router.post("/apply")
@@ -757,15 +757,15 @@ def create_update_router(ctx, repo_dir: str | Path, server_base: str,
         # עדכון הפיך דרך update_previous, ולכן אינו דורש הקלדת שם (#1192).
         return _apply_or_revert(user, tag, force=body.get("force") is True)
 
-    # ‏#1778 (הכרעת #1270): בלי הקלדת שם — חלון אישור עם כפתור אדום בקונסולה.
+    # #1778 (הכרעת #1270): בלי הקלדת שם — חלון אישור עם כפתור אדום בקונסולה.
     # החזרה הפיכה בדיוק כמו apply: היא עוברת באותו מסלול, ו-update_previous
-    # מקבל את הגרסה שממנה חזרנו. ‏confirm_name שנשלח (קונסולה ישנה) מתעלמים ממנו.
+    # מקבל את הגרסה שממנה חזרנו. confirm_name שנשלח (קונסולה ישנה) מתעלמים ממנו.
     @router.post("/revert")
     def revert(body: dict = Body(default={}), user=Depends(admin_only)):
         previous = get_setting(ctx.conn, PREVIOUS_KEY)
         if not previous:
             raise HTTPException(404, "אין גרסה קודמת לחזור אליה")
-        force = isinstance(body, dict) and body.get("force") is True   # ‏#1891
+        force = isinstance(body, dict) and body.get("force") is True   # #1891
         return _apply_or_revert(user, previous, force=force, revert=True)
 
     return router

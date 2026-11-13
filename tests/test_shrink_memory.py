@@ -1,15 +1,15 @@
-"""‏#926 — הצד של הסוכן: הרשומה בשרת לפני הכיווץ, וההצעה להחזיר באתחול.
+"""#926 — הצד של הסוכן: הרשומה בשרת לפני הכיווץ, וההצעה להחזיר באתחול.
 
-‏#87 שמר את הגודל המקורי של מחיצת המקור ב-`targets/<disk>/shrunk` — ‏tmpfs.
+#87 שמר את הגודל המקורי של מחיצת המקור ב-`targets/<disk>/shrunk` — tmpfs.
 אובדן חשמל בין `ntfsresize -s` לבין ההחזרה השאיר את דיסק הבנייה מכווץ
-בלי שאיש יודע. ‏`agent/lib/shrink/shrinkmem.sh`:
+בלי שאיש יודע. `agent/lib/shrink/shrinkmem.sh`:
 
-* **‏#1466 (16/10): הקליטה כבר אינה פותחת רשומה.** הכיווץ רץ על עותק
+* **#1466 (16/10): הקליטה כבר אינה פותחת רשומה.** הכיווץ רץ על עותק
   בזיכרון והמקור אינו נכתב -- אין מה לזכור. מה שנבדק כאן הוא לדיסקים
   שכווצו במקום **לפני** #1466: רשומה פתוחה ב-hello עוצרת קליטה, וההחזרה
   באתחול סוגרת אותה (`shrink-close`); החזרה שנכשלה משאירה אותה פתוחה.
-* **באתחול** (‏`shrink_offer_pending`, מלולאת מחשב הבנייה): הרשומה מה-hello
-  מושווית לכניסה **על הדיסק** (‏sgdisk -i), ורק אם התחילה וה-GUID הייחודי
+* **באתחול** (`shrink_offer_pending`, מלולאת מחשב הבנייה): הרשומה מה-hello
+  מושווית לכניסה **על הדיסק** (sgdisk -i), ורק אם התחילה וה-GUID הייחודי
   תואמים והגודל קטן — שאלה ליד המכונה: החזר / השאר. **בלי תשובה — השאר.**
   ההחזרה היא shrink_restore_source עם הנתונים מהרשומה, לא מ-tmpfs.
 
@@ -128,7 +128,7 @@ PART_KEYS = ("idx", "start_sector", "size_sectors", "type_guid", "unique_guid", 
 
 
 def two_part_record(**over) -> dict:
-    """‏#929: רשומה אחת לדיסק עם **שתי** מחיצות — ‏C: (3) ו-D: (4) — כפי שהשרת
+    """#929: רשומה אחת לדיסק עם **שתי** מחיצות — C: (3) ו-D: (4) — כפי שהשרת
     עונה ב-hello: השדות העליונים הם של הראשונה (תאימות), `partitions` את כולן."""
     rec = record(**over)
     d = {"idx": 4, "start_sector": DATA_START, "size_sectors": DATA_SECTORS, "type_guid": WIN_GUID,
@@ -145,13 +145,13 @@ def record_line(rec: dict, part: dict | None = None) -> str:
 
 
 def record_lines(rec: dict) -> list[str]:
-    """מה ש-shrink_records_refresh מפיק: שורה ל**מחיצה** (‏#929), עם ה-id
+    """מה ש-shrink_records_refresh מפיק: שורה ל**מחיצה** (#929), עם ה-id
     והסידורי של הרשומה בראשה; רשומה בלי `partitions` (שרת ישן) — שורה אחת."""
     return [record_line(rec, p) for p in rec.get("partitions") or [rec]]
 
 
 def fake_jq(*records: dict) -> str:
-    """‏json_get_join מזויף: מה ש-jq היה מדפיס על התשובה — "ok" ואז שורה
+    """json_get_join מזויף: מה ש-jq היה מדפיס על התשובה — "ok" ואז שורה
     למחיצה (הביטוי האמיתי נבדק ב-test_the_real_jq_expression…)."""
     lines = ["ok"]
     for r in records:
@@ -197,12 +197,12 @@ def offer_run(tmp_path, *, answer_records: list[dict] | None, keys: str = "",
         stub["jq"] = JQ_STUB
     libs = " ".join(f". {posix(flat_lib())}/{n}.sh;" for n in (
         "common", "sysinfo", "diskinfo", "waits", "jsonq", "restore", "ui", "attended",
-        "shrinkplan", "shrink", "shrinkmem", "shrinkoffer", "askgui"))   # ‏#929: ההצעה באתחול ב-shrinkoffer.sh
+        "shrinkplan", "shrink", "shrinkmem", "shrinkoffer", "askgui"))   # #929: ההצעה באתחול ב-shrinkoffer.sh
     # קלט מקובץ ולא מצינור: פונקציה בצינור רצה בתת-מעטפת, ו-`_shrink_offered`
     # (פעם אחת לאתחול) לא היה שורד — בסוכן הקריאה ישירה, כמו כאן.
     (run / "keys.txt").write_text(keys, encoding="utf-8", newline="\n")
     keys_sh = f"< {posix(run / 'keys.txt')!r} "
-    # ‏11/10 (GUI בלבד): השאלה היא דיאלוג של הגואי (askgui.sh). ‏`keys` הוא
+    # 11/10 (GUI בלבד): השאלה היא דיאלוג של הגואי (askgui.sh). `keys` הוא
     # כעת **תשובת הגואי** — "1" = restore, "2" = leave, ריק = אין תשובה —
     # והמקשים עצמם נשארים ב-stdin, שהקוד אינו קורא. הזיוף מדפיס את הבקשה
     # (ASK/ROW) — הראיה החיובית שהשאלה הוצגה ומה היה בה.
@@ -221,7 +221,7 @@ def offer_run(tmp_path, *, answer_records: list[dict] | None, keys: str = "",
 def test_a_pending_record_asks_and_one_grows_the_partition_back(tmp_path):
     """הדיסק עומד על הגודל המכווץ, הרשומה תואמת (תחילה + GUID ייחודי):
     השאלה מוצגת, "1" מחזיר — הטבלה **מהרשומה** (הגודל המקורי, GUID, שם,
-    דגלים), ואז ntfsresize -f -f, ‏ntfsfix -d, ואז shrink-close עם ה-id."""
+    דגלים), ואז ntfsresize -f -f, ntfsfix -d, ואז shrink-close עם ה-id."""
     box, run, out = offer_run(tmp_path, answer_records=[record()], keys="1\n", prelude=fake_jq(record()))
     assert "rc=0" in out, out
     assert "ASK growback sda" in out and "|table" in out, out
@@ -244,7 +244,7 @@ def test_a_pending_record_asks_and_one_grows_the_partition_back(tmp_path):
 
 @pytest.mark.parametrize("keys", ["2\n", ""])
 def test_leave_and_no_answer_write_nothing(tmp_path, keys):
-    """‏[2] וגם EOF (מסך שנעלם): שום דבר לא נכתב, הרשומה נשארת פתוחה —
+    """[2] וגם EOF (מסך שנעלם): שום דבר לא נכתב, הרשומה נשארת פתוחה —
     עיקרון 1, שום כתיבה על דיסק בלי אדם שאמר כן."""
     box, run, out = offer_run(tmp_path, answer_records=[record()], keys=keys, prelude=fake_jq(record()))
     assert "rc=0" in out, out
@@ -263,7 +263,7 @@ def test_a_partition_already_at_its_size_closes_the_record_without_asking(tmp_pa
     assert "rc=0" in out, out
     assert "asked" not in order(run)
     assert rewrites(run) == []
-    # ‏ntfsresize --info (קריאה בלבד) כן רץ: הוא מה שמוכיח שמערכת הקבצים ממלאת
+    # ntfsresize --info (קריאה בלבד) כן רץ: הוא מה שמוכיח שמערכת הקבצים ממלאת
     # את המחיצה (סקירת Fable) — כתיבה לא.
     assert not [s for s in order(run) if s.startswith(("ntfsresize -s", "ntfsresize -f", "ntfsfix"))]
     (body,) = sent(run, "shrink_close")
@@ -324,7 +324,7 @@ def test_a_disk_with_another_serial_is_not_the_one(tmp_path):
 
 # --- סקירת Fable (PR #946), ממצא 2: הטבלה הוחזרה אך מערכת הקבצים לא נמתחה ---------
 
-#: ‏ntfsresize שמדווח ב---info ווליום **קטן** בתוך מחיצה בגודלה המלא —
+#: ntfsresize שמדווח ב---info ווליום **קטן** בתוך מחיצה בגודלה המלא —
 #: המצב אחרי "טבלה נכתבה, ntfsresize -f -f נפל" (או אחרי אתחול באמצע):
 #: ווינדוס אינו יכול להרחיב (אין שטח לא-מוקצה), והמחיצה "בגודלה".
 NTFSRESIZE_SMALL_FS = f'''#!/bin/sh
@@ -337,7 +337,7 @@ case "$*" in
 esac
 exit 0
 '''
-#: ‏--info שלא הדפיס גודל ווליום כלל: "לא הצלחנו לבדוק" ≠ "מתאים".
+#: --info שלא הדפיס גודל ווליום כלל: "לא הצלחנו לבדוק" ≠ "מתאים".
 NTFSRESIZE_INFO_BLIND = '#!/bin/sh\necho "ntfsresize $*" >> "$RUN_DIR/order.log"\necho "ERROR: NTFS is inconsistent"\nexit 1\n'
 
 
@@ -374,7 +374,7 @@ def test_leaving_a_small_filesystem_keeps_the_record_open(tmp_path, keys):
 
 
 def test_a_failed_filesystem_grow_keeps_the_record_open_with_the_reason(tmp_path):
-    """‏[1] ו-ntfsresize -f -f נופל: אין close, המסך אומר FAILED, והסיבה
+    """[1] ו-ntfsresize -f -f נופל: אין close, המסך אומר FAILED, והסיבה
     נשלחת לשרת (shrink-note) כדי שהקונסולה תראה **למה** הרשומה פתוחה."""
     box, run, out = offer_run(tmp_path, answer_records=[record()], keys="1\n", disk_sectors=WIN_SECTORS,
                               prelude=fake_jq(record()) + "export NTFSRESIZE_GROW_RC=5; ",
@@ -388,7 +388,7 @@ def test_a_failed_filesystem_grow_keeps_the_record_open_with_the_reason(tmp_path
 
 
 def test_a_filesystem_size_that_cannot_be_read_is_not_a_fit(tmp_path):
-    """‏--info שלא הדפיס גודל: "לא הצלחנו לבדוק" אינו "מתאים" — לא סוגרים,
+    """--info שלא הדפיס גודל: "לא הצלחנו לבדוק" אינו "מתאים" — לא סוגרים,
     לא שואלים על מתיחה (אין מספר להציג), אזהרה ביומן והרשומה נשארת."""
     box, run, out = offer_run(tmp_path, answer_records=[record()], keys="1\n", disk_sectors=WIN_SECTORS,
                               prelude=fake_jq(record()), extra_stubs={"ntfsresize": NTFSRESIZE_INFO_BLIND})
@@ -399,7 +399,7 @@ def test_a_filesystem_size_that_cannot_be_read_is_not_a_fit(tmp_path):
 
 
 def test_two_disks_with_the_same_serial_are_ambiguous_and_neither_is_touched(tmp_path):
-    """שני דיסקים במכונה עם אותו סידורי ("0000000000000000" של גשר USB, ‏VM
+    """שני דיסקים במכונה עם אותו סידורי ("0000000000000000" של גשר USB, VM
     בלי סידורי אמיתי): הרשומה יכולה להיות של כל אחד מהם, והשער השני אינו
     מבחין — שחזור מאותו אימג' שומר תחילה ו-GUID ייחודי (#26), ודיסק שכבר
     "בגודלו" היה סוגר בשקט את הרשומה של אחיו המכווץ. לא שואלים, לא כותבים,
@@ -416,7 +416,7 @@ def test_two_disks_with_the_same_serial_are_ambiguous_and_neither_is_touched(tmp
 @requires_jq
 def test_the_real_jq_expression_reads_the_hello_answer(tmp_path):
     """הביטוי האמיתי של shrink_records_refresh מול jq אמיתי: "ok" ואז
-    שורה **למחיצה** (‏#929) בסדר השדות ש-shrink_offer_disk קורא — רשומה עם
+    שורה **למחיצה** (#929) בסדר השדות ש-shrink_offer_disk קורא — רשומה עם
     שתי מחיצות היא שתי שורות עם אותו id; רשומה ישנה בלי `partitions` (שרת
     שקדם ל-#929) עדיין שורה אחת מהשדות העליונים."""
     old = record(id=9, serial="Z", unique_guid=None, name=None)
@@ -431,10 +431,10 @@ def test_the_real_jq_expression_reads_the_hello_answer(tmp_path):
     assert "ASK growback" in out, "והרשומה של S926 אכן זוהתה מהשורה שנקראה"
 
 
-# --- ‏#929: רשומה אחת לדיסק עם כמה מחיצות — ההצעה מחזירה את כולן ------------------
+# --- #929: רשומה אחת לדיסק עם כמה מחיצות — ההצעה מחזירה את כולן ------------------
 
-#: ‏ntfsresize לפי מחיצה, לצד השחזור באתחול: ‏--info על sda3 מדווח ווליום מלא
-#: (‏C: כבר בגודלה) או קטן (NTFSRESIZE_SMALL_3=1), על sda4 — מלא; ‏-f -f נופל
+#: ntfsresize לפי מחיצה, לצד השחזור באתחול: --info על sda3 מדווח ווליום מלא
+#: (C: כבר בגודלה) או קטן (NTFSRESIZE_SMALL_3=1), על sda4 — מלא; -f -f נופל
 #: על המחיצה ב-NTFSRESIZE_GROW_FAIL_ON בלבד.
 NTFSRESIZE_BY_NODE = f'''#!/bin/sh
 echo "ntfsresize $*" >> "$RUN_DIR/order.log"
@@ -461,7 +461,7 @@ def two_part_run(tmp_path, *, sizes: str, keys: str = "1\n", prelude: str = "", 
 
 def test_a_two_partition_record_asks_once_and_grows_both_back_in_reverse(tmp_path):
     """שתי המחיצות עומדות על גודלן המכווץ, שתי הכניסות תואמות: שאלה **אחת**
-    שמציגה את שתיהן, "1" מחזיר — ‏D: ואז C: (סדר הפוך לכיווץ), כל אחת
+    שמציגה את שתיהן, "1" מחזיר — D: ואז C: (סדר הפוך לכיווץ), כל אחת
     טבלה → מתיחה → fix — ו-shrink-close אחד, אחרי ששתיהן חזרו."""
     box, run, out = two_part_run(tmp_path, sizes=f"3={SHRUNK_SECTORS}\n4={SHRUNK_D_SECTORS}\n")
     assert "rc=0" in out, out
@@ -483,8 +483,8 @@ def test_a_two_partition_record_asks_once_and_grows_both_back_in_reverse(tmp_pat
 
 
 def test_a_partition_that_is_already_back_is_skipped_and_the_other_is_offered(tmp_path):
-    """‏C: כבר בגודלה ומערכת הקבצים ממלאת אותה (החזרה שנקטעה אחרי C:);
-    ‏D: עדיין מכווצת. השאלה על D: בלבד, הטבלה של C: אינה נכתבת שוב, והרשומה
+    """C: כבר בגודלה ומערכת הקבצים ממלאת אותה (החזרה שנקטעה אחרי C:);
+    D: עדיין מכווצת. השאלה על D: בלבד, הטבלה של C: אינה נכתבת שוב, והרשומה
     נסגרת אחרי ש-D: חזרה."""
     box, run, out = two_part_run(tmp_path, sizes=f"3={WIN_SECTORS}\n4={SHRUNK_D_SECTORS}\n")
     assert "rc=0" in out, out
@@ -509,8 +509,8 @@ def test_one_entry_that_does_not_match_stops_the_whole_offer(tmp_path):
 
 
 def test_the_record_closes_only_when_every_partition_is_back(tmp_path):
-    """‏C: בטבלה בגודלה אך מערכת הקבצים קטנה (מתיחה שנפלה בפעם הקודמת);
-    ‏D: מכווצת בטבלה. "1" מותח את C: (בלי טבלה) ומחזיר את D: (טבלה+מתיחה);
+    """C: בטבלה בגודלה אך מערכת הקבצים קטנה (מתיחה שנפלה בפעם הקודמת);
+    D: מכווצת בטבלה. "1" מותח את C: (בלי טבלה) ומחזיר את D: (טבלה+מתיחה);
     כשהמתיחה של D: נופלת — אין shrink-close, המסך אומר FAILED, והסיבה
     (shrink-note) נוקבת במחיצה 4 — למרות ש-C: הצליחה."""
     box, run, out = two_part_run(tmp_path, sizes=f"3={WIN_SECTORS}\n4={SHRUNK_D_SECTORS}\n",
@@ -522,13 +522,13 @@ def test_the_record_closes_only_when_every_partition_is_back(tmp_path):
     steps = order(run)
     assert [c.split(" -d ")[1].split(" ")[0] for c in rewrites(run)] == ["4"], "הטבלה של C: כבר נכונה — לא נכתבת"
     grow3 = step(steps, f"ntfsresize -f -f --no-progress-bar {dev}/sda3")
-    assert steps.index(f"ntfsfix -d {dev}/sda3", grow3), "‏C: נמתחה ונוקתה"
+    assert steps.index(f"ntfsfix -d {dev}/sda3", grow3), "\u200fC: נמתחה ונוקתה"
     assert [s for s in steps if s.startswith(f"ntfsresize -f -f --no-progress-bar {dev}/sda4")]
     assert not [s for s in steps if s == f"ntfsfix -d {dev}/sda4"], "בלי ntfsfix אחרי מתיחה שנפלה"
     assert sent(run, "shrink_close") == [] and "FAILED:" in out and "The record stays in the console" in out
     (note,) = sent(run, "shrink_note")
     assert note["id"] == 5 and "מחיצה 4" in note["note"], note
-    assert "מחיצה 3" not in note["note"], "‏C: הצליחה — היא אינה הסיבה"
+    assert "מחיצה 3" not in note["note"], "\u200fC: הצליחה — היא אינה הסיבה"
 
 
 def test_a_pending_two_partition_record_in_the_hello_refuses_the_capture_naming_both(tmp_path):

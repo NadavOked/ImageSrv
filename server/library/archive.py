@@ -127,13 +127,18 @@ def _safe_name(member: tarfile.TarInfo) -> str:
     name = member.name.replace("\\", "/")
     if not member.isfile():
         raise ArchiveError(f"הארכיון מכיל פריט שאינו קובץ: {name}")
-    # ‏``isfile`` מקבל גם sparse ו-CONTTYPE. פריט sparse נפרש לבייטים רבים
+    # ``isfile`` מקבל גם sparse ו-CONTTYPE. פריט sparse נפרש לבייטים רבים
     # בהרבה ממה שנשלח, ועוקף את בדיקת המקום הפנוי ואת תקרת הגודל (#1457).
     if member.type not in (tarfile.REGTYPE, tarfile.AREGTYPE):
         raise ArchiveError(f"הארכיון מכיל פריט מסוג שאינו נתמך "
                            f"(sparse/contiguous): {name}")
     if name.startswith("/") or ".." in Path(name).parts:
         raise ArchiveError(f"נתיב לא בטוח בארכיון: {name}")
+    # #2489 (4): השם שהמניפסט שוכב תחתיו עד האימות. קובץ מחיצה בשם הזה נדרס
+    # ב-``replace`` של ``_admit``, וב-``import_tar_stream`` (ה-sha256 נשמר מהחילוץ)
+    # האימג' נכנס לספרייה בלי המחיצה — הפרה של עיקרון 6.
+    if Path(name).name == UNVERIFIED:
+        raise ArchiveError(f"שם שמור בארכיון: {name}")
     return name
 
 
@@ -174,7 +179,7 @@ def _refuse_taken(image_id: str, taken: set[str]) -> None:
 def _clear(staging: Path) -> None:
     """מנקה את אזור הביניים, ואומר ביומן אם לא הצליח.
 
-    ‏`ignore_errors` לבדו הופך "לא הצלחנו למחוק" ל"נמחק": מה שנשאר כבר
+    `ignore_errors` לבדו הופך "לא הצלחנו למחוק" ל"נמחק": מה שנשאר כבר
     אינו נראה כאימג', אבל הוא תופס מקום עד שמישהו יידע עליו (עיקרון 5).
     """
     shutil.rmtree(staging, ignore_errors=True)
@@ -190,7 +195,7 @@ def import_tar(archive: Path, images_root: Path, existing_ids: set[str], *,
     ה-sha256 שבמניפסט שלו לפני שהוא מוצע לכיתה. אימג' פגום שמתגלה רק
     באמצע שחזור הוא בדיוק מה שאסור.
 
-    לכן שלושה דברים קורים כאן ולא במקום אחר (‏#71): החילוץ הוא לאזור
+    לכן שלושה דברים קורים כאן ולא במקום אחר (#71): החילוץ הוא לאזור
     עבודה שהספרייה מדלגת עליו, המניפסט אינו קיים בשמו כל עוד לא נבדק,
     ובדיקת ההתנגשות חוזרת מול הספרייה **ברגע הכניסה** — לא רק מול צילום
     שצולם לפני האימות, שאורך דקות על אימג' אמיתי.
@@ -211,7 +216,7 @@ def import_tar(archive: Path, images_root: Path, existing_ids: set[str], *,
 
 def import_tar_stream(source, images_root: Path, existing_ids: set[str], *,
                       max_bytes: int) -> dict:
-    """כמו ``import_tar``, אבל מזרם שנקרא **פעם אחת** (‏#1457, קליטה במשני).
+    """כמו ``import_tar``, אבל מזרם שנקרא **פעם אחת** (#1457, קליטה במשני).
 
     כל קובץ נכתב ישר לאזור הביניים, וה-sha256 שלו מחושב **על אותם בייטים
     בזמן הכתיבה** — בלי קובץ ``.transfer`` זמני, בלי העתקה של ``extractall``
@@ -267,7 +272,7 @@ def import_tar_stream(source, images_root: Path, existing_ids: set[str], *,
 def _admit(staging: Path, names: list[str], images_root: Path,
            existing_ids: set[str], digest_of) -> dict:
     """מה שאחרי החילוץ, משותף ל-``import_tar`` ול-``import_tar_stream``:
-    מניפסט לא-מאומת, בדיקות מזהה/התנגשות/נתיב, ‏sha256 של כל מחיצה מול
+    מניפסט לא-מאומת, בדיקות מזהה/התנגשות/נתיב, sha256 של כל מחיצה מול
     המניפסט, ורק אז ``manifest.json``. ``digest_of(path, key)`` מחזיר את
     ה-sha256 של קובץ המחיצה (``key`` = הנתיב היחסי בתיקיית האימג'), או
     ``None`` אם לא חושב — וזה כשל, לא התאמה."""
@@ -291,9 +296,9 @@ def _admit(staging: Path, names: list[str], images_root: Path,
         raise ArchiveError(f"מניפסט לא תקין: {_shown(problem)}")
     # המזהה שבמניפסט הוא שם התיקייה שהאימג' ייכנס אליה, והמניפסט הזה
     # הגיע מקובץ שמישהו העלה: `../evil` בשדה הזה הוא כתיבה אל מחוץ
-    # לספרייה (‏#110). ‏`_validate` למעלה דוחה אותו בשמו — מזהה שאינו בצורת
+    # לספרייה (#110). `_validate` למעלה דוחה אותו בשמו — מזהה שאינו בצורת
     # המזהים הוא מניפסט לא תקין, לא מנוקה בשקט לצורה שכן תעבור. בדיקה
-    # נוספת כאן לא יכלה לרוץ לעולם (‏#1620).
+    # נוספת כאן לא יכלה לרוץ לעולם (#1620).
     _refuse_taken(manifest["id"], existing_ids)
 
     # קריאה טרייה, אחרי האימות: אימג' מאומת בעל אותו מזהה אינו נדחק
@@ -302,7 +307,7 @@ def _admit(staging: Path, names: list[str], images_root: Path,
     # מוצא התנגשות מזהים.
     _refuse_taken(manifest["id"], set(ImageLibrary(images_root).scan()))
     # חגורה שנייה, על הנתיב עצמו ולא על המזהה: מה שנכנס לספרייה חייב
-    # לנחות בתוכה. ‏`target.exists()` לבדו אינו גבול — יעד מחוץ לשורש
+    # לנחות בתוכה. `target.exists()` לבדו אינו גבול — יעד מחוץ לשורש
     # שאינו קיים עובר אותו בשקט, וזה בדיוק המקרה המסוכן.
     target = inside(images_root / manifest["id"], images_root)
     if target is None:
@@ -322,9 +327,9 @@ def _admit(staging: Path, names: list[str], images_root: Path,
     verified = False
     try:
         for part in streamed_partitions(manifest):
-            # ‏`_safe_members` שמר על מה שנכתב לדיסק, אבל השם הזה נקרא
+            # `_safe_members` שמר על מה שנכתב לדיסק, אבל השם הזה נקרא
             # מהמניפסט ולא מחברי ה-tar. הבדיקה קודמת לכל נגיעה בקובץ:
-            # ‏`is_file` על נתיב שהתוקף בחר הוא כבר תשובה על מה קיים בשרת.
+            # `is_file` על נתיב שהתוקף בחר הוא כבר תשובה על מה קיים בשרת.
             name = part["file"]
             path = inside(target / name, target) if isinstance(name, str) else None
             if path is None:
@@ -335,7 +340,7 @@ def _admit(staging: Path, names: list[str], images_root: Path,
             if digest_of(path, key) != part["sha256"]:
                 raise ArchiveError(f"אימות נכשל: {_shown(name)} אינו תואם ל-sha256")
 
-        # ‏#1813: המחיצות, המניפסט והתיקייה לדיסק **לפני** שהמניפסט מקבל את
+        # #1813: המחיצות, המניפסט והתיקייה לדיסק **לפני** שהמניפסט מקבל את
         # שמו — אחרת נפילת חשמל משאירה מניפסט תקין מעל קבצים באורך 0.
         for part in streamed_partitions(manifest):
             fsync_file(target / part["file"])

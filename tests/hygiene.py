@@ -2,21 +2,21 @@
 
 חבילת הטסטים הפעילה `udp-sender` **אמיתי** — על אותו portbase שהשרת
 מקצה להפצה — והוא נמצא רץ שעתיים וחצי אחרי שהריצה הסתיימה, משדר קובץ
-שכבר נמחק (#79). ‏`--max-wait 120` לא עזר: בלי מקבל אחד udpcast ממתין
+שכבר נמחק (#79). `--max-wait 120` לא עזר: בלי מקבל אחד udpcast ממתין
 בלי גבול, ותקרת המתנה שלא נבדקה היא הבטחה ולא ראיה. תהליך כזה על פורט
 ההפצה מפיל שידור אמיתי, והאבחון נראה כמו תקלת רשת.
 
 שלוש שכבות, וכולן על ראיה חיובית:
 
 1. **חסימה** — בתוך הטסטים מנוע השידור לא *יכול* להפעיל תהליך אמיתי.
-   ‏`block_real_processes` מחליף את `subprocess` בתוך `server.rounds.sender`
+   `block_real_processes` מחליף את `subprocess` בתוך `server.rounds.sender`
    בלבד. כל ניסיון נרשם ב-`blocked_spawns`, והטסט שגרם לו נכשל בשמו —
    כי טסט שמגיע לשולח האמיתי אינו בודק את מה שהוא חושב שהוא בודק.
-2. **‏portbase שאינו יכול להתנגש** — ‏`assign_test_portbase` מקצה לריצה
-   ‏portbase גבוה ואקראי. שתי השכבות האחרות מניחות שמישהו מנקה, ושתיהן
+2. **portbase שאינו יכול להתנגש** — `assign_test_portbase` מקצה לריצה
+   portbase גבוה ואקראי. שתי השכבות האחרות מניחות שמישהו מנקה, ושתיהן
    נשברות באותה נקודה: ריצה **שנקטעה** לא מריצה ניקוי, ויתום שלה אינו
    שייך לאף `basetemp` חי — ולכן אף ריצה עתידית לא תיגע בו לעולם.
-   ‏#156: יתום כזה שרד יום וחמש שעות והחזיק את פורטי ההפצה. יתום שאינו
+   #156: יתום כזה שרד יום וחמש שעות והחזיק את פורטי ההפצה. יתום שאינו
    יכול להתנגש הוא יתום לא מזיק, וזו ההגנה היחידה שאינה תלויה באיש.
 3. **סריקה בסוף הריצה** — קוראים ב-`/proc` מי חי ומזכיר את תיקיית
    ה-tmp של הריצה הזאת (ורק אותה — לא הורגים ריצה של מישהו אחר),
@@ -38,7 +38,7 @@ from pathlib import Path
 import mountleak
 
 #: הכלים שמזרימים בייטים ברשת. אלה שיכולים לשרוד את הריצה ולהפריע
-#: לשידור אמיתי; שאר תת-התהליכים בטסטים (gcc, ‏sh) מסיימים מעצמם.
+#: לשידור אמיתי; שאר תת-התהליכים בטסטים (gcc, sh) מסיימים מעצמם.
 STREAM_TOOLS = ("udp-sender", "udp-receiver")
 
 #: כל ניסיון להפעיל תהליך אמיתי ממנוע השידור, לפי הסדר.
@@ -48,7 +48,7 @@ blocked_spawns: list[list[str]] = []
 class _NoRealProcess:
     """מחליף את המודול `subprocess` — בתוך `server.rounds.sender` בלבד.
 
-    לא ‏`monkeypatch`: תהליכון השידור ממשיך לרוץ גם אחרי שהטסט נגמר,
+    לא `monkeypatch`: תהליכון השידור ממשיך לרוץ גם אחרי שהטסט נגמר,
     וכל החזרה של המקור בסוף טסט פותחת בדיוק את החלון שבו הוא מספיק
     להפעיל שולח אמיתי. החסימה מותקנת פעם אחת לריצה ואינה מוחזרת.
     """
@@ -64,7 +64,7 @@ class _NoRealProcess:
 
 
 def block_real_processes() -> bool:
-    """מתקין את החסימה. ‏False כשאין בכלל שרת לייבא (עמדה בלי fastapi)."""
+    """מתקין את החסימה. False כשאין בכלל שרת לייבא (עמדה בלי fastapi)."""
     try:
         from server.rounds import sender
     except ImportError:                        # pragma: no cover — עמדה חסרה
@@ -76,18 +76,18 @@ def block_real_processes() -> bool:
 #: הטווח שממנו נבחר ה-portbase של הריצה: גבוה, רחוק מפורטי ההפצה,
 #: ו**מתחת** לטווח הפורטים הארעיים של לינוקס (32768-60999) — סוקט יוצא
 #: מקרי שיושב שם רגע היה נראה לבדיקת הפורטים כמו יתום. הצעד 2 שומר
-#: שהזוג (`portbase`, ‏`portbase+1`) של ריצה אחת לא ייפול על ה-portbase
+#: שהזוג (`portbase`, `portbase+1`) של ריצה אחת לא ייפול על ה-portbase
 #: של ריצה מקבילה.
 TEST_PORTBASE_RANGE = (20000, 30000, 2)
 
-#: ה-portbase שהוקצה לריצה הזאת; ‏None כשלא הוקצה בכלל.
+#: ה-portbase שהוקצה לריצה הזאת; None כשלא הוקצה בכלל.
 test_portbase: int | None = None
 
 
 def assign_test_portbase() -> int | None:
     """נועל את **כל** מנועי השידור בריצה על portbase גבוה ואקראי (#156).
 
-    לא מספיק שכל טסט יעביר portbase משלו: ‏`create_app` בונה מנוע משלו
+    לא מספיק שכל טסט יעביר portbase משלו: `create_app` בונה מנוע משלו
     בלי לשאול, וזה המנוע שהשאיר יתום על פורטי ההפצה. לכן דורסים את
     ברירת המחדל של המודול — פעם אחת לריצה ובלי החזרה, מאותה סיבה
     שהחסימה אינה מוחזרת.
@@ -105,14 +105,14 @@ def assign_test_portbase() -> int | None:
 
 
 def isolate_sender_log(worker: str | None):
-    """‏#2099: לוג משלו לכל worker של pytest-xdist.
+    """#2099: לוג משלו לכל worker של pytest-xdist.
 
-    ‏`sender.SENDER_LOG` הוא `$TMPDIR/imagesrv-sender.log` ברמת המודול, ולוג
+    `sender.SENDER_LOG` הוא `$TMPDIR/imagesrv-sender.log` ברמת המודול, ולוג
     המחיצה נגזר ממנו ומשם הקובץ בלבד (`partition_log`) — כל טסט עם אותו
     מניפסט כותב **לאותו קובץ**. בריצה סדרתית זה בטוח (טסט אחד בכל רגע);
     במקביל, worker אחד כתב `Starting transfer` ללוג של טסט ב-worker אחר,
-    וזה ראה "השידור התחיל" ולא הריץ מחדש את מחיצה 1 (נמדד: ‏test_sender,
-    ‏test_sequence_scenarios_17_10, ‏test_sender_lost_receiver_1950).
+    וזה ראה "השידור התחיל" ולא הריץ מחדש את מחיצה 1 (נמדד: test_sender,
+    test_sequence_scenarios_17_10, test_sender_lost_receiver_1950).
     בתוך worker הסדר סדרתי כמו קודם, ולכן הקובץ שלו מתנהג בדיוק כמו פעם.
     בלי worker (ריצה סדרתית) — לא נוגעים. מחזיר את הנתיב, או `None`."""
     if not worker:
@@ -127,9 +127,9 @@ def isolate_sender_log(worker: str | None):
 
 
 def sender_log_under(basetemp: Path):
-    """‏#2180: הלוגים של השולח (`SENDER_LOG` ולוגי המחיצות שנגזרים ממנו) תחת
+    """#2180: הלוגים של השולח (`SENDER_LOG` ולוגי המחיצות שנגזרים ממנו) תחת
     ה-basetemp של הריצה, לא ב-`$TMPDIR` עצמו — שם הם נשארו אחרי כל ריצה
-    (‏`imagesrv-sender-gw*-img_7f3a91-p*.log` בסיכומי השער). השם נשמר, כולל
+    (`imagesrv-sender-gw*-img_7f3a91-p*.log` בסיכומי השער). השם נשמר, כולל
     הסיומת של ה-worker. מחזיר את הנתיב, או `None`."""
     try:
         from server.rounds import sender
@@ -148,7 +148,7 @@ def live_stream_processes(marker: str) -> list[tuple[int, str]]:
     """תהליכי שידור חיים ששורת הפקודה שלהם מזכירה את `marker`.
 
     הסינון הוא לפי שם התוכנית **וגם** לפי הנתיב, כדי ששורת פקודה
-    שסתם מכילה את הנתיב (מעטפת, ‏pytest עצמו) לא תיספר כתהליך יתום.
+    שסתם מכילה את הנתיב (מעטפת, pytest עצמו) לא תיספר כתהליך יתום.
     """
     found: list[tuple[int, str]] = []
     for entry in Path("/proc").iterdir():
@@ -188,15 +188,15 @@ def kill_and_confirm(marker: str, timeout: float = 5.0) -> list[tuple[int, str]]
     return live_stream_processes(marker)
 
 
-#: ‏#2702: כמה זמן לאפשר לפירוק אחרי SIGTERM לפני שהתהליך נהרג בכל זאת.
+#: #2702: כמה זמן לאפשר לפירוק אחרי SIGTERM לפני שהתהליך נהרג בכל זאת.
 SIGTERM_GRACE_S = 60
 
 
 def install_sigterm_as_interrupt() -> bool:
-    """‏SIGTERM (`timeout 5400 pytest`, ‏`kill`) הורג את pytest בלי להריץ אף
+    """SIGTERM (`timeout 5400 pytest`, `kill`) הורג את pytest בלי להריץ אף
     finalizer -- וה-fixtures של טסטי השיכפול המקומי הם אלה שמנתקים loops
     ו-tmpfs, כך שריצה שנקטעה השאירה אותם מעוגנים (#2702). כאן ה-SIGTERM הופך
-    ל-`KeyboardInterrupt`, ש-pytest מפרק לפיו כרגיל. ‏SIGTERM שני הורג מיד,
+    ל-`KeyboardInterrupt`, ש-pytest מפרק לפיו כרגיל. SIGTERM שני הורג מיד,
     ובכל מקרה התהליך נהרג אחרי `SIGTERM_GRACE_S`: פירוק שנתקע לא יהפוך את
     `timeout` לתלוי. מחזיר אם הותקן."""
     if os.name == "nt" or threading.current_thread() is not threading.main_thread():
@@ -216,8 +216,8 @@ def install_sigterm_as_interrupt() -> bool:
 
 
 def leftover_mount_lines(basetemp: str) -> list[str]:
-    """‏#2702: מעגן או loop שנשארו תחת ה-basetemp של הריצה אחרי שכל ה-fixtures
-    פורקו. ‏`rm -rf` על התיקייה דולג על עגינה, והמקום לא מתפנה. ננתק (רק מה
+    """#2702: מעגן או loop שנשארו תחת ה-basetemp של הריצה אחרי שכל ה-fixtures
+    פורקו. `rm -rf` על התיקייה דולג על עגינה, והמקום לא מתפנה. ננתק (רק מה
     שתחת הנתיב הזה) והריצה אדומה: הניקוי שלא נעשה הוא הכשל."""
     if not mountleak.supported():
         return []
@@ -251,14 +251,14 @@ def session_verdict(basetemp: str | None, native_required: bool) -> list[str]:
 
 # --- #1736: תהליך שהטסט הפעיל אינו נשאר אחרי שהטסט נגמר --------------------------
 #
-# ‏`subprocess.run([bash, "-c", ...])` מחכה לתהליך הישיר בלבד. כל מה שהסקריפט
-# הפעיל ברקע (`( ... ) &`, ‏`sleep 300 &`, ‏stub של fanout) נשאר חי אחריו --
+# `subprocess.run([bash, "-c", ...])` מחכה לתהליך הישיר בלבד. כל מה שהסקריפט
+# הפעיל ברקע (`( ... ) &`, `sleep 300 &`, stub של fanout) נשאר חי אחריו --
 # בלי `/proc` הם נראו כ-`bash -c` יתומים בני 23 שעות על ה-Testrunner. כאן
 # התהליך הישיר הוא ראש session משלו, ובסוף -- גם כשהטסט עבר, גם בפקיעה --
 # כל הקבוצה נהרגת.
 
 def _sudo_kill(target: str) -> None:
-    """‏#2702: תהליך של root אינו ניתן לסיגנל ממשתמש הטסטים. ‏`os.kill` נכשל שם
+    """#2702: תהליך של root אינו ניתן לסיגנל ממשתמש הטסטים. `os.kill` נכשל שם
     ב-`PermissionError`, וקוד שקרא לזה "כבר מת" השאיר ילדי `sudo` של ריצה
     שנקטעה חיים כ-root, מחזיקים את נעילת המנוע. ההורג הוא אותו `sudo -n` שהפעיל
     אותם, וה-PID (או הקבוצה) הם מה שנשמר בעת ההפעלה -- לעולם לא שם."""
@@ -280,7 +280,7 @@ def kill_pid(pid: int) -> None:
 def kill_group(pgid: int) -> None:
     """SIGKILL לכל הקבוצה. אין קבוצה (כולם כבר מתו) = לא שגיאה.
 
-    ‏#2702: ‏`killpg` הורג את ה-`sudo` (שלנו) ומשאיר את ילדיו של root באותה
+    #2702: `killpg` הורג את ה-`sudo` (שלנו) ומשאיר את ילדיו של root באותה
     קבוצה. אות 0 אחריו אומר אם נשאר חבר כלשהו (`ProcessLookupError` = הקבוצה ריקה);
     נשאר -- הקבוצה כולה נהרגת דרך `sudo -n kill -- -PGID`."""
     if not hasattr(os, "killpg"):              # ווינדוס: אין קבוצות

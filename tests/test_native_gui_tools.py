@@ -1,12 +1,12 @@
-"""‏#649 תחום 1 — מסך "כלים" ב-GUI הנייטיבי, נבדק על המקור (אין מהדר בווינדוס).
+"""#649 תחום 1 — מסך "כלים" ב-GUI הנייטיבי, נבדק על המקור (אין מהדר בווינדוס).
 
 מה שנאכף כאן בלי לקמפל: הכפתור "כלים" חי **רק** בתפריט מחשב הבנייה
-(‏`screen_menu` ב-`screens.c`) ולא במסכי הקלונר/הכיתה; שלושת המסכים
-(רשימה / אישור / פלט) קיימים עם המחרוזות שהמפעיל רואה; ‏rc 2 מוצג
+(`screen_menu` ב-`screens.c`) ולא במסכי הקלונר/הכיתה; שלושת המסכים
+(רשימה / אישור / פלט) קיימים עם המחרוזות שהמפעיל רואה; rc 2 מוצג
 כ"לא הצלחנו לבדוק" ו-rc 3 כ"האישור לא תואם"; המצב הריק אומר "אין כלים
 ארוזים"; והמסך צבוע **רק** בטוקנים הקיימים — אין `HEX(` בקובץ (כדי
-ש-`test_native_gui_theme` יישאר מקור האמת היחיד לצבעים). ‏`--png`
-מקבל שלושה כרטיסים חדשים, ו-`want[]` גדל איתם (‏#715 לימד).
+ש-`test_native_gui_theme` יישאר מקור האמת היחיד לצבעים). `--png`
+מקבל שלושה כרטיסים חדשים, ו-`want[]` גדל איתם (#715 לימד).
 
 הקומפילציה ו-`make png` — אצל המתאם במעבדה.
 """
@@ -109,7 +109,7 @@ def test_the_output_view_spins_while_running_and_offers_run_again():
 
 
 def test_run_again_never_replays_a_risky_run():
-    """‏rw/destroy (או כלי עם ארגומנט) חוזר למסך האישור — ומשם לחלון האישור
+    """rw/destroy (או כלי עם ארגומנט) חוזר למסך האישור — ומשם לחלון האישור
     (#1270); רק ro בלי ארגומנט רץ שוב מיד."""
     body = function_body(MAIN_C, "handle")
     again = body[body.index("case HIT_TOOL_AGAIN:"):body.index("case HIT_TOOL_DOWN:")]
@@ -157,9 +157,9 @@ def test_the_bridge_dispatches_both_tokens_behind_the_session_gate():
 
 # --- v1 בלי ארגז הכלים (הכרעת נדב 19/09; v1.1 = הכלים) ----------------------------
 #
-# הגואי יודע על יכולות השרת דרך קובץ המצב: hello/‏`/state` נושאים `tools`
-# (‏`server/core/capabilities.py`), ‏`tools_on` ב-`buildmenuitems.sh` קורא אותו
-# (חסר = כבוי), ‏`guistate.sh` כותב `menu_tools=0|1` **תמיד**, ו-`screens.c`
+# הגואי יודע על יכולות השרת דרך קובץ המצב: hello/`/state` נושאים `tools`
+# (`server/core/capabilities.py`), `tools_on` ב-`buildmenuitems.sh` קורא אותו
+# (חסר = כבוי), `guistate.sh` כותב `menu_tools=0|1` **תמיד**, ו-`screens.c`
 # מצייר את כפתור "כלים" רק על 1 — אותו ערוץ בדיוק כמו `menu_class` (#1081).
 
 import json
@@ -179,7 +179,7 @@ GUISTATE = (AGENT / "lib" / "gui" / "guistate.sh").read_text(encoding="utf-8")
 
 def test_the_tools_button_is_drawn_only_when_menu_tools_is_on():
     """הציור של HIT_TOOLS ב-`screen_menu` יושב בתוך `if (a->st.menu_tools)`,
-    ‏`state.c` מפרסר את הרשומה (היעדר = 0 מ-memset), והדגימה של `--png`
+    `state.c` מפרסר את הרשומה (היעדר = 0 מ-memset), והדגימה של `--png`
     מדליקה אותה כדי ששלושת כרטיסי הכלים יישארו ברי-רינדור."""
     body = function_body(SCREENS_C, "screen_menu")
     gate = body.index("if (a->st.menu_tools) {")
@@ -229,8 +229,8 @@ def _bash():
 
 @requires_native(_bash(), "jq", why="gui_state בונה את המצב ב-jq")
 def test_gui_state_writes_menu_tools_off_by_default_and_on_only_when_the_server_says_so(tmp_path):
-    """‏v1: hello בלי `tools` (ברירת המחדל) → `menu_tools=0` **נכתב**; גם
-    בלי קובץ hello. ‏v1.1: `tools: true` ב-hello, או ב-`/state` כשה-hello
+    """v1: hello בלי `tools` (ברירת המחדל) → `menu_tools=0` **נכתב**; גם
+    בלי קובץ hello. v1.1: `tools: true` ב-hello, או ב-`/state` כשה-hello
     שותק → `menu_tools=1`. **בקרה שלילית:** בלי `tools_on`/הרשומה — היא
     חסרה מהמצב, והטסט נופל."""
     absent = _state_records(tmp_path / "absent", {"role": "build"})
@@ -279,7 +279,7 @@ def _cc():
 
 @requires_native(*_cc(), why="native-gui נבנה על המעבדה בלבד")
 def test_the_tools_button_is_not_drawn_without_menu_tools(tmp_path):
-    """‏`menu_tools=1` מצייר את כפתור "כלים" בראש כרטיס התפריט; ‏0 לא, ורשומה
+    """`menu_tools=1` מצייר את כפתור "כלים" בראש כרטיס התפריט; 0 לא, ורשומה
     חסרה שווה ל-0 **פיקסל בפיקסל**. נמדד כהפרש בין שני רינדורים — לא בדיו
     הכהה לבדו: הכיתוב קטן ורוב פיקסליו גווני-ביניים של אנטי-אליאסינג
     (נמדד במעבדה 19/09: 2,166 פיקסלים שונים בתיבה של 57×38, ורק 13 כהים)."""

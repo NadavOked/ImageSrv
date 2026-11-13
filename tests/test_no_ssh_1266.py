@@ -1,7 +1,7 @@
-"""‏#1266 — SSH יצא מהמוצר, והתקנה ותיקה עדיין עולה.
+"""#1266 — SSH יצא מהמוצר, והתקנה ותיקה עדיין עולה.
 
-שרתים מותקנים נושאים את מה שמתגי ה-SSH (‏#83) ומפתחות ה-host (‏#1080)
-השאירו ב-DB: ‏`ssh:stations`, ‏`ssh:iface:<nic>` וטבלת `machine_ssh_hostkey`.
+שרתים מותקנים נושאים את מה שמתגי ה-SSH (#83) ומפתחות ה-host (#1080)
+השאירו ב-DB: `ssh:stations`, `ssh:iface:<nic>` וטבלת `machine_ssh_hostkey`.
 אין להם משמעות בלי הקוד — העלייה מוחקת אותם בשקט, ואינה נופלת עליהם.
 """
 
@@ -57,8 +57,8 @@ def test_an_old_install_starts_and_its_ssh_leftovers_are_gone(tmp_path):
 # שגילינו שקיים". השומר סורק את קוד המוצר כולו ונכשל על כל אזכור של
 # dropbear/sshd או של פורט 22, גם בהערה: הערה שמתארת שירות SSH היא
 # הצעד הראשון בחזרתו. גישת הטכנאי של המעבדה חיה ב-overlay שמחוץ לריפו
-# (‏IMAGESRV_EXTRA_OVERLAY ב-build_initramfs.sh) — המנגנון עצמו גנרי ואינו
-# נוקב ב-SSH, ולכן אין לו פטור כאן. ‏tools/lab (כלי מעבדה) ו-docs (תיעוד
+# (IMAGESRV_EXTRA_OVERLAY ב-build_initramfs.sh) — המנגנון עצמו גנרי ואינו
+# נוקב ב-SSH, ולכן אין לו פטור כאן. tools/lab (כלי מעבדה) ו-docs (תיעוד
 # והיסטוריה) אינם מוצר ואינם נסרקים.
 
 
@@ -114,12 +114,12 @@ def _hits(pattern: _re.Pattern, keep=lambda rel, line: True) -> list[str]:
     return out
 
 
-#: ה-migration שמוחק את מה שהתקנה ותיקה השאירה (‏db._initialize) — המקום
+#: ה-migration שמוחק את מה שהתקנה ותיקה השאירה (db._initialize) — המקום
 #: היחיד במוצר שנוקב בשמות הישנים, כדי למחוק אותם.
 _CLEANUP = ("server/db.py", ("ssh:stations", "ssh:iface:", "machine_ssh_hostkey", "#1266"))
 
 
-#: ‏#1979: שחזור לינוקס מוחק את מפתחות ה-SSH **של מערכת ההפעלה המשוחזרת** ומתקין בה
+#: #1979: שחזור לינוקס מוחק את מפתחות ה-SSH **של מערכת ההפעלה המשוחזרת** ומתקין בה
 #: יחידה חד-פעמית של `ssh-keygen -A` — כדי שמשוכפלים לא יחלקו מפתחות. זה אינו שרת SSH
 #: של ImageSrv ואינו מתג; המילים מותרות רק בפונקציה הזו (`_linux_id_files`, grow.sh).
 _TARGET_KEYS = ("agent/lib/restore/grow.sh", ("ssh_host_", "ssh-keygen", "sshd refuses", "ssh.service"))
@@ -132,12 +132,12 @@ def _not_the_cleanup(rel: str, line: str) -> bool:
 
 def test_no_ssh_server_or_its_switches_anywhere_in_the_product():
     hits = _hits(SSH_TERMS, _not_the_cleanup)
-    assert not hits, "‏SSH חזר לקוד המוצר (#1266):\n" + "\n".join(hits)
+    assert not hits, "\u200fSSH חזר לקוד המוצר (#1266):\n" + "\n".join(hits)
 
 
 def test_no_port_22_anywhere_in_the_product():
     hits = _hits(PORT_22)
-    assert not hits, "‏פורט 22 חזר לקוד המוצר (#1266):\n" + "\n".join(hits)
+    assert not hits, "\u200fפורט 22 חזר לקוד המוצר (#1266):\n" + "\n".join(hits)
 
 
 def test_the_server_exposes_no_ssh_route(tmp_path):

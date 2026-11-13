@@ -1,22 +1,22 @@
-"""השלמת `used_bytes` לאימג' ישן מכותרת partclone (‏#1494).
+"""השלמת `used_bytes` לאימג' ישן מכותרת partclone (#1494).
 
 אימג' שנקלט לפני #1368 נושא `used_bytes: null` על מחיצות ה-NTFS, ולכן
-כלל המקום הפנוי (‏#1354) "לא נבדק" — והסוכן מסרב לו בכל מגירה, בצדק
+כלל המקום הפנוי (#1354) "לא נבדק" — והסוכן מסרב לו בכל מגירה, בצדק
 (עיקרון 5). אבל המדידה **קיימת על הדיסק**: כל קובץ מחיצה הוא
 `partclone.<fs> -c | zstd`, ובראש הזרם הפרוס יושבת כותרת `image_desc_v2`
-של partclone (‏110 בייט) עם `usedblocks` ו-`block_size`. כאן קוראים אותה —
+של partclone (110 בייט) עם `usedblocks` ו-`block_size`. כאן קוראים אותה —
 פורסים רק את תחילת הזרם — וגוזרים `used_bytes = usedblocks × block_size`.
 
-**נגזר, לא מומצא:** כותרת שלא עברה magic, גרסה `0002`, ‏endianess ו-CRC,
+**נגזר, לא מומצא:** כותרת שלא עברה magic, גרסה `0002`, endianess ו-CRC,
 או שהערך שלה גדול מהמחיצה — המחיצה נשארת `null`. הערך נכתב ל-manifest.json
 עצמו (`ImageLibrary.record_used_bytes`) ולצידו `used_bytes_source` — עיקרון 3:
 הדיסק הוא מקור האמת, והסוכן קורא את `used_bytes` מהמניפסט שהשרת מגיש;
 קובץ צד היה דורש שכל קורא יזכור למזג אותו.
 
-הפורמט — מ-`src/partclone.h` ו-`src/checksum.c` של partclone (‏`pragma pack(1)`,
+הפורמט — מ-`src/partclone.h` ו-`src/checksum.c` של partclone (`pragma pack(1)`,
 little-endian): magic[16] · ptc_version[14] · version[4] · endianess u16 ·
 fs[16] · device_size u64 · totalblock u64 · superBlockUsedBlocks u64 ·
-usedblocks u64 · block_size u32 · image_options_v2[18] · crc u32. ‏CRC-32
+usedblocks u64 · block_size u32 · image_options_v2[18] · crc u32. CRC-32
 מוחזר (0xEDB88320), זרע 0xFFFFFFFF, **בלי** XOR סופי, על 106 הבייטים
 הראשונים — כלומר `zlib.crc32(x) ^ 0xFFFFFFFF`.
 
@@ -52,11 +52,11 @@ _ENDIAN = 0xC0DE
 
 
 def captured_raw(part: dict) -> bool:
-    """האם הסוכן קלט את המחיצה ב-`partclone.dd` — ולכן אין בזרם כותרת (‏#1641).
+    """האם הסוכן קלט את המחיצה ב-`partclone.dd` — ולכן אין בזרם כותרת (#1641).
 
-    ‏`partclone.dd` מעתיק בייטים וזהו; כותרת `image_desc_v2` יש רק לשאר
-    הכלים. הכלל הוא `partclone_for_fs` של הסוכן על `fs` שבמניפסט (‏MSR:
-    ‏`fs: ""`) — **לא** שם הקובץ, שהוא `.pcl.zst` בשני המקרים, ולא "לא
+    `partclone.dd` מעתיק בייטים וזהו; כותרת `image_desc_v2` יש רק לשאר
+    הכלים. הכלל הוא `partclone_for_fs` של הסוכן על `fs` שבמניפסט (MSR:
+    `fs: ""`) — **לא** שם הקובץ, שהוא `.pcl.zst` בשני המקרים, ולא "לא
     נמצאה כותרת": מחיצת NTFS/FAT שאין לה כותרת ממשיכה להיכשל בקול.
     """
     return partclone_for_fs(part.get("fs") or "") == "partclone.dd"
@@ -81,7 +81,7 @@ def parse_header(raw: bytes | None) -> dict | None:
 
 def read_head(path: Path, *, cmd: tuple[str, ...] = ("zstd", "-dc", "--"),
               timeout: float = 30.0) -> bytes | None:
-    """110 הבייטים הראשונים של הזרם הפרוס. ‏`None` = הפורס לא עלה (‏zstd חסר).
+    """110 הבייטים הראשונים של הזרם הפרוס. `None` = הפורס לא עלה (zstd חסר).
 
     התהליך נהרג אחרי הקריאה בכוונה — אין טעם לפרוס עשרות GB — ולכן קוד
     היציאה שלו אינו הראיה; ה-CRC של הכותרת הוא. הטיימר תוחם קריאה תקועה
@@ -111,7 +111,7 @@ def read_head(path: Path, *, cmd: tuple[str, ...] = ("zstd", "-dc", "--"),
 
 
 def derive(manifest: dict, *, read=read_head) -> tuple[dict[int, int], list[str]]:
-    """‏({index: used_bytes}, בעיות) למחיצות שלא נמדדו ויש להן קובץ זרם."""
+    """({index: used_bytes}, בעיות) למחיצות שלא נמדדו ויש להן קובץ זרם."""
     image_dir = manifest.get("_dir")
     if not image_dir or not manifest.get("_available", True):
         return {}, []

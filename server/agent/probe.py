@@ -1,8 +1,8 @@
-"""בדיקת המכונה שהסוכן נושא ב-hello (‏#1049 שלב ב') — שמירה, והשערים.
+"""בדיקת המכונה שהסוכן נושא ב-hello (#1049 שלב ב') — שמירה, והשערים.
 
-שלב א' (‏`agent/lib/hw/probe.sh`) אוסף: חשמל, שעון חומרה, מעבד, זיכרון,
+שלב א' (`agent/lib/hw/probe.sh`) אוסף: חשמל, שעון חומרה, מעבד, זיכרון,
 טמפרטורות, רשת, PCI בלי דרייבר, קרנל, pstore, מפתח OEM, NVMe/SMART,
-הצפנה. ‏#1048 מוסיף ``netprobe`` (כבל + LLDP) מ-hello כשדה אח, נשמר
+הצפנה. #1048 מוסיף ``netprobe`` (כבל + LLDP) מ-hello כשדה אח, נשמר
 באותה שורה. כל שדה הוא אחד משלושה מצבים (עיקרון 5): **נמדד** · **``None``** =
 לא בדקנו · **``{"error": …}``** = ניסינו ונכשל. השרת שומר את שלושתם כמו
 שהם — "לא נבדק" אינו "תקין", וגם לא "נכשל".
@@ -11,10 +11,10 @@
 שורה חדשה רק כשהתוכן **היציב** השתנה. חלק מהשדות משתנים בכל דגימה —
 ``probe_seconds``, שלושת מספרי ``rtc``, ``temp_c`` של כל אזור תרמי ומוני
 ``stats`` של כל כרטיס — והם **אינם** נכללים בהשוואה, אחרת כל רענון של
-מטמון הסוכן (‏``PROBE_TTL``, 10 דק') היה "גרסה". הם כן **נשמרים**:
-כשרק הם השתנו, השורה האחרונה מתעדכנת במקום (‏``sampled_at`` זז,
+מטמון הסוכן (``PROBE_TTL``, 10 דק') היה "גרסה". הם כן **נשמרים**:
+כשרק הם השתנו, השורה האחרונה מתעדכנת במקום (``sampled_at`` זז,
 ``seen_at`` נשאר), כי השערים — סטיית השעון, CRC — נמדדים מהדגימה
-האחרונה ולא מהראשונה. ‏hello עם אותו JSON בדיוק (בתוך ה-TTL) אינו
+האחרונה ולא מהראשונה. hello עם אותו JSON בדיוק (בתוך ה-TTL) אינו
 כותב דבר — ``SELECT`` בלבד, כמו #136.
 
 probe **חסר או פגום** (לא אובייקט) נזנח כשדה לא ידוע ואינו דורס גרסה
@@ -32,7 +32,7 @@ import sqlite3
 from server.learn import net_history
 from server.db import _settle, _write_lock, now_iso, writing
 
-#: המפתחות שהממשק מגדיר (‏docs/architecture/interfaces.md, hello → probe). מפתח אחר
+#: המפתחות שהממשק מגדיר (docs/architecture/interfaces.md, hello → probe). מפתח אחר
 #: ברמה העליונה נזנח; מפתח חסר נשמר כ-``None`` = לא דווח.
 KNOWN_KEYS = (
     "power", "rtc", "cpu", "memory", "thermal", "nic", "pci_without_driver",
@@ -41,7 +41,7 @@ KNOWN_KEYS = (
     "ntfs",  # #980 §6: hibernated/dirty per NTFS partition (ntfs-3g.probe), before a capture
     "display",  # #2849: fb0 size + DRM connectors (EDID bytes, first mode) -- the KVM switch case
 )
-#: תקרות — ‏hello אינו מאומת, ו-probe בן מגה-בייט אינו probe.
+#: תקרות — hello אינו מאומת, ו-probe בן מגה-בייט אינו probe.
 STR_LIMIT = 200
 LIST_LIMIT = 64
 KEYS_LIMIT = 64
@@ -49,7 +49,7 @@ DEPTH_LIMIT = 6
 
 #: סטיית שעון שמעליה "סוללת BIOS חשודה" (הכרעת נדב, #1049: > 5 דק').
 RTC_SKEW_SECONDS = 300
-#: בלאי NVMe שמעליו אזהרה (‏percentage_used הוא אחוז מהחיים המובטחים).
+#: בלאי NVMe שמעליו אזהרה (percentage_used הוא אחוז מהחיים המובטחים).
 NVME_USED_WARN = 90
 
 
@@ -112,13 +112,13 @@ def stable(probe: dict) -> dict:
 def record(conn: sqlite3.Connection, mac: str, probe: dict, history: bool = True) -> bool:
     """שומר. מחזיר האם נפתחה **גרסה** חדשה (שורה חדשה).
 
-    ‏#2487: ‏``history=False`` — מכונה לא רשומה: גם תוכן יציב שהשתנה מעדכן את
+    #2487: ``history=False`` — מכונה לא רשומה: גם תוכן יציב שהשתנה מעדכן את
     השורה הקיימת במקום (שורה אחת ל-MAC), ולא פותח גרסה.
 
-    ‏``probe`` חייב להיות מה ש-`well_formed` החזיר. אותו JSON → כלום;
+    ``probe`` חייב להיות מה ש-`well_formed` החזיר. אותו JSON → כלום;
     רק שדות נדיפים השתנו → עדכון השורה האחרונה במקום (``sampled_at``);
     תוכן יציב השתנה → שורה חדשה. אותו מסלול נעילות כמו ``net_seen``
-    (‏`_settle` → ‏`_write_lock` → ‏`writing`).
+    (`_settle` → `_write_lock` → `writing`).
     """
     text, key = _text(probe), _text(stable(probe))
     row = conn.execute(
@@ -140,7 +140,7 @@ def record(conn: sqlite3.Connection, mac: str, probe: dict, history: bool = True
                 "INSERT INTO machine_probe (mac, seen_at, sampled_at, probe_json)"
                 " VALUES (?, ?, ?, ?)", (mac, now, now, text))
             new = True
-    # ‏#1888: מוני הכרטיס כאן נדרסים — ההיסטוריה שלהם נשמרת בנפרד (אחרי הנעילה; אינו זורק).
+    # #1888: מוני הכרטיס כאן נדרסים — ההיסטוריה שלהם נשמרת בנפרד (אחרי הנעילה; אינו זורק).
     net_history.record_nic(conn, mac, probe)
     return new
 

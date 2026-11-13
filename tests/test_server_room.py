@@ -75,10 +75,10 @@ def cloner_hello(client, mac: str, serials: list[str], *, ports: bool = True,
                  joining: bool | None = None) -> dict:
     """hello של מחשב שיכפול: מגירה לכל serial.
 
-    ‏`ports=False` מדמה סוכן ישן (או VM עם SCSI) שאינו מדווח חריץ —
+    `ports=False` מדמה סוכן ישן (או VM עם SCSI) שאינו מדווח חריץ —
     השדה פשוט חסר, וזה חייב להמשיך לעבוד (עיקרון 1).
 
-    ‏`joining=None` הוא סוכן שאינו שולח את השדה בכלל — ברירת המחדל
+    `joining=None` הוא סוכן שאינו שולח את השדה בכלל — ברירת המחדל
     ההיסטורית, שחייבת להישאר "מצטרף".
     """
     body = hello_body(mac)
@@ -160,10 +160,10 @@ def test_round_wakes_room_and_autostarts_when_drives_cover_target(room_server):
 
 
 def test_room_start_with_no_members_is_refused_and_wave_stays_open(room_server):
-    """‏#843: "התחל עכשיו" על גל שאיש עוד לא הצטרף אליו — 409, לא 200.
+    """#843: "התחל עכשיו" על גל שאיש עוד לא הצטרף אליו — 409, לא 200.
 
     זה בדיוק מה שקרה במעבדה 15/09: `room_open` ו-`session_start_manual`
-    באותה שנייה, ‏180ש' אחר כך `send_failed` ("אף מחשב לא הצטרף"), והגל
+    באותה שנייה, 180ש' אחר כך `send_failed` ("אף מחשב לא הצטרף"), והגל
     נשאר `running` בלי חברים — המשכפלים קיבלו `session: null` לנצח.
     הגל חייב להישאר `open` כדי שה-hello הבא יצטרף, ו-udp-sender אסור
     שיצא לדרך.
@@ -365,9 +365,9 @@ def test_failed_drawer_is_not_counted_and_retries_next_wave(room_server):
 
 
 def test_a_machine_that_lost_one_drawer_is_partial_and_not_done(room_server):
-    """‏#67: המצב השלישי, לכל אורך הדרך — מהדיווח ועד המסך.
+    """#67: המצב השלישי, לכל אורך הדרך — מהדיווח ועד המסך.
 
-    ‏`partial` הוא **סופי**: הגל מסתיים ונפתח הבא, אחרת מכונה שאיבדה
+    `partial` הוא **סופי**: הגל מסתיים ונפתח הבא, אחרת מכונה שאיבדה
     מגירה הייתה תולה את החדר כולו. הוא **אינו** הצלחה מלאה: הדגל `done`
     של חבר הסבב לא נדלק, המסך מקבל את המילה, והמגירה שנכשלה לא נספרת.
     """
@@ -403,7 +403,7 @@ def test_a_machine_that_lost_one_drawer_is_partial_and_not_done(room_server):
     report(anon, wave1, CLONER2, {"sda": "done", "sdb": "done"})
     heartbeat(room_server)
     view = room(deploy)["round"]
-    assert view["written_drives"] == 4              # ‏S2 הכושלת לא נספרה
+    assert view["written_drives"] == 4              # S2 הכושלת לא נספרה
     assert view["wave_number"] == 2
 
     # והמגירה שנכשלה נשארת טרייה: הגל הבא כותב אותה שוב.
@@ -413,7 +413,7 @@ def test_a_machine_that_lost_one_drawer_is_partial_and_not_done(room_server):
 def test_an_old_agent_that_still_says_done_keeps_working(room_server):
     """תאימות לאחור (#67/#1126): סוכן ישן שולח `done` בלי קשירת serial.
 
-    ‏`schema` לא עלה, ולכן הוא חייב להמשיך לעבוד בדיוק כמו קודם —
+    `schema` לא עלה, ולכן הוא חייב להמשיך לעבוד בדיוק כמו קודם —
     השרת קושר serial כשהוא זמין, והיעדר החותמת החדשה אינו החלפת מגירה;
     הספירה היא ממילא יעד-יעד, והמגירה הכושלת עדיין אינה נספרת.
     """
@@ -451,9 +451,9 @@ def test_an_old_agent_that_still_says_done_keeps_working(room_server):
 
 
 def test_the_drawer_slot_travels_from_hello_to_the_console(room_server):
-    """‏#27: הקונסולה צריכה לדעת איזה חריץ לשלוף — לא באיזה סדר התגלה.
+    """#27: הקונסולה צריכה לדעת איזה חריץ לשלוף — לא באיזה סדר התגלה.
 
-    ‏`port` מדווח ב-hello (ממשק 2), נשמר כמו שהוא, וחוזר במסך החדר
+    `port` מדווח ב-hello (ממשק 2), נשמר כמו שהוא, וחוזר במסך החדר
     יחד עם שם ההתקן ומצב הכתיבה של אותה מגירה.
     """
     deploy, anon = room_server["deploy"], room_server["anon"]
@@ -495,8 +495,8 @@ def test_the_drawer_slot_travels_from_hello_to_the_console(room_server):
 
 
 def test_the_crc_rise_of_the_round_reaches_the_drawer_and_absence_is_not_zero(room_server):
-    """‏#872: הסוכן מדווח `crc_delta` ליעד שנמדד (199 לפני ואחרי הכתיבה),
-    ומשמיט אותו ליעד שלא נמדד. במסך החדר: 5 על מגירה 1, ‏None על מגירה 2 —
+    """#872: הסוכן מדווח `crc_delta` ליעד שנמדד (199 לפני ואחרי הכתיבה),
+    ומשמיט אותו ליעד שלא נמדד. במסך החדר: 5 על מגירה 1, None על מגירה 2 —
     לא 0, כי "לא נמדד" ו"לא עלה" הם שני מצבים (עיקרון 5). בקרה שלילית: על
     main השדה אינו קיים ב-`drawer_list` כלל."""
     deploy, anon = room_server["deploy"], room_server["anon"]
@@ -641,10 +641,10 @@ def test_an_agent_that_omits_joining_still_joins(room_server):
 
 
 def test_a_wave_closes_when_the_reports_come_in_another_mac_form(room_server):
-    """‏#108: הגל נסגר גם כשהדיווח מגיע ברישיות ובמקפים.
+    """#108: הגל נסגר גם כשהדיווח מגיע ברישיות ובמקפים.
 
     זו הבקרה השלילית של הבאג בצורתו החמורה ביותר: שורה שלא עודכנה
-    נשארת `waiting`, ‏`room.tick` לא מוצא שכל החברים במצב סופי, והגל
+    נשארת `waiting`, `room.tick` לא מוצא שכל החברים במצב סופי, והגל
     הבא לא נפתח — סבב שלם נעצר על מכונות שכתבו בהצלחה.
     """
     deploy, anon = room_server["deploy"], room_server["anon"]
@@ -709,7 +709,7 @@ def test_a_role_that_is_not_on_the_list_cannot_drive_the_room(room_server):
 
 
 def test_close_without_typing_the_image_name_does_not_stop_the_round(room_server):
-    """‏#533: ‏POST ריק עצר סבב פעיל — בלי גוף, בלי אישור, בלי בדיקה.
+    """#533: POST ריק עצר סבב פעיל — בלי גוף, בלי אישור, בלי בדיקה.
 
     עצירת סבב היא פעולה הרסנית לכל דבר: היא הורגת את המשדר באמצע
     כתיבה, וכל מגירה שהייתה תחת הזרם נשארת חצי-כתובה. עיקרון 7 מציב
@@ -726,16 +726,16 @@ def test_close_without_typing_the_image_name_does_not_stop_the_round(room_server
                        json=room_body(room_server, 8, {CLONER1: ["S1", "S2"]})).status_code == 200
     cloner_hello(anon, CLONER1, ["S1", "S2"])
 
-    # ‏1. גוף ריק — זו בדיוק הקריאה שסגרה סבב לפני #533.
+    # 1. גוף ריק — זו בדיוק הקריאה שסגרה סבב לפני #533.
     assert deploy.post("/api/console/room/close").status_code == 400
     assert room(deploy)["round"] is not None, "סבב נסגר בלי שום אישור"
 
-    # ‏2. גוף עם טקסט שאינו שם האימג'
+    # 2. גוף עם טקסט שאינו שם האימג'
     assert deploy.post("/api/console/room/close",
                        json={"confirm_name": "עצור"}).status_code == 400
     assert room(deploy)["round"] is not None, "סבב נסגר על שם שגוי"
 
-    # ‏3. השם המדויק — וזה עוצר
+    # 3. השם המדויק — וזה עוצר
     stopped = deploy.post("/api/console/room/close",
                           json={"confirm_name": "Office 2024 Standard"})
     assert stopped.status_code == 200 and stopped.json()["ok"] is True
@@ -746,7 +746,7 @@ def test_close_without_typing_the_image_name_does_not_stop_the_round(room_server
 def test_a_round_whose_image_was_deleted_can_still_be_stopped(room_server):
     """מה שמוקלד הוא מה שהמסך מציג — גם כשהמניפסט כבר איננו.
 
-    ‏`status_view` נופל חזרה ל-`image_id` כשהאימג' נמחק מהספרייה תוך
+    `status_view` נופל חזרה ל-`image_id` כשהאימג' נמחק מהספרייה תוך
     כדי סבב, ולכן גם האימות חייב ליפול לשם. אחרת עצירת חירום של
     שידור חי הייתה בלתי אפשרית — כלומר תיקון שגרוע מהבאג.
     """
@@ -830,7 +830,7 @@ def test_drawer_list_marks_selected_and_filters_fresh(room_server):
     sel = {d["port"]: d["selected"] for d in machine["drawer_list"]}
     assert sel == {1: False, 2: True, 3: False}       # רק פורט 2 נבחר
     assert sum(1 for d in machine["drawer_list"] if d["selected"]) == 1
-    # ‏fresh = נוכח פיזית (3); הבחירה נפרדת ומשפיעה על הספירה לגל.
+    # fresh = נוכח פיזית (3); הבחירה נפרדת ומשפיעה על הספירה לגל.
     assert machine["fresh_drawers"] == 3
     assert room(admin)["round"]["ready_drives"] == 1  # רק הנבחר נספר ליעד
 
@@ -885,7 +885,7 @@ def test_a_recent_last_seen_is_still_awake():
 def test_fresh_progress_keeps_a_machine_awake_without_hello():
     """**#449.** ``last_seen`` (hello) ישן, אבל דיווח progress טרי.
 
-    בזמן שחזור הסוכן חדל לפעום ומדווח progress בלבד. ‏`_is_awake` חייב
+    בזמן שחזור הסוכן חדל לפעום ומדווח progress בלבד. `_is_awake` חייב
     לקבל את שתי הראיות: חותמת progress עדכנית לצד hello ישן = ערה."""
     from datetime import datetime, timedelta, timezone         # noqa: PLC0415
 
@@ -901,7 +901,7 @@ def test_fresh_progress_keeps_a_machine_awake_without_hello():
 def test_a_writing_machine_reporting_progress_is_not_shown_asleep(room_server):
     """**#449.** מכונה כותבת ששולחת progress ולא hello נראתה ``awake=False``.
 
-    ‏`awake` נשען על `net_devices.last_seen` (hello) בחלון 30 שניות, אבל
+    `awake` נשען על `net_devices.last_seen` (hello) בחלון 30 שניות, אבל
     השחזור רץ סינכרונית והסוכן מדווח **progress** בלבד. אחרי 30 שניות
     של כתיבה מכונה בריאה לחלוטין קיבלה את אותו סימון כמו מכונה שנפלה או
     איבדה רשת (עיקרון 5). הטסט נופל אם כותבת נראית זהה לנעלמת."""
@@ -938,8 +938,8 @@ def test_a_writing_machine_reporting_progress_is_not_shown_asleep(room_server):
 
 
 def test_989_new_serials_rejoin_the_open_round_and_same_serials_do_not_until_the_target(room_server):
-    """‏#989 סעיף 3: סבב 7 על שתי מכונות (2+3 מגירות). הגל הראשון כותב 5; מכונה שחזרה
-    עם אותם דיסקים לא נכתבת שנית (‏`fresh_serials`, #695); מכונה שחזרה עם serials חדשים
+    """#989 סעיף 3: סבב 7 על שתי מכונות (2+3 מגירות). הגל הראשון כותב 5; מכונה שחזרה
+    עם אותם דיסקים לא נכתבת שנית (`fresh_serials`, #695); מכונה שחזרה עם serials חדשים
     מצטרפת לאותו סבב ל**גל הבא**, נכתבת עד 7, והסבב נסגר."""
     deploy, anon = room_server["deploy"], room_server["anon"]
 

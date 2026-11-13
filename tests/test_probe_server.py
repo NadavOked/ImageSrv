@@ -1,8 +1,8 @@
-"""‏#1049 שלב ב' — השרת שומר את ה-`probe` מה-hello, מציג אותו, ומחשב שערים.
+"""#1049 שלב ב' — השרת שומר את ה-`probe` מה-hello, מציג אותו, ומחשב שערים.
 
 צד הסוכן (שלב א') נבדק ב-`test_probe.py`. כאן: הצורה הקנונית, ההיסטוריה
 המגורסת (שדה נדיף אינו גרסה — אבל נשמר), הזנחת probe פגום,
-‏`GET /api/console/machines`, ‏RBAC (deploy רואה — זה מידע, לא פעולה),
+`GET /api/console/machines`, RBAC (deploy רואה — זה מידע, לא פעולה),
 וכל שער בשלושה מצבים: נמדד-רע / נמדד-טוב / לא-נבדק.
 """
 
@@ -103,7 +103,7 @@ def test_a_stable_change_opens_a_new_version(server):
 
 
 def test_only_volatile_fields_changing_is_one_row_but_the_sample_is_refreshed(server, monkeypatch):
-    """‏probe_seconds, מספרי rtc, temp_c ומוני הרשת משתנים בכל דגימה: הם
+    """probe_seconds, מספרי rtc, temp_c ומוני הרשת משתנים בכל דגימה: הם
     אינם גרסה — אבל השער (סטיית שעון, CRC) נמדד מהדגימה **האחרונה**."""
     conn = server["ctx"].conn
     probe.record(conn, MAC, probe.well_formed(GOOD))
@@ -164,7 +164,7 @@ def test_a_machine_that_never_reported_shows_null_not_empty(server):
 
 
 def test_deploy_has_no_console_so_the_probe_is_admin_only_on_the_web(server):
-    """‏#1073 (18/09): למשתמש הפצה אין קונסולה — הכניסה עצמה מסורבת (403), ולכן
+    """#1073 (18/09): למשתמש הפצה אין קונסולה — הכניסה עצמה מסורבת (403), ולכן
     ה-probe והחיוויים נראים בוובי רק ל-admin. (עד 18/09 הטסט הזה הוכיח ההפך.)"""
     setup_classroom(server)
     _hello(server, probe=_with(power={"on_battery": True, "supply": "BAT0"}))

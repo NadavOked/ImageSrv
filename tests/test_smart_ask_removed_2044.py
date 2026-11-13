@@ -1,23 +1,23 @@
-"""‏#2044 — שאלת ה-SMART של המשכפל הוסרה (הכרעה: הסרה, 03/11).
+"""#2044 — שאלת ה-SMART של המשכפל הוסרה (הכרעה: הסרה, 03/11).
 
 אחרי #1732 (אדום אינו נשאל) ו-#2042 (כתום נכתב בלי שאלה) לשאלה לא היה קורא:
-‏`smart_preflight` אינו קורא ל-`smart_choice`. השרשרת כולה הוסרה —
-‏`smart_choice`/`smart_ask`/`gui_smart_choice`, ‏`ask` ב-hello, ‏`ask_answered`/
-‏`ask_answer`, ‏`POST /api/console/room/answer`, ‏`pending_asks` של השולח ומסלול
-"החלף" (`smart_replace_stop`, ‏`awaiting_replace`).
+`smart_preflight` אינו קורא ל-`smart_choice`. השרשרת כולה הוסרה —
+`smart_choice`/`smart_ask`/`gui_smart_choice`, `ask` ב-hello, `ask_answered`/
+`ask_answer`, `POST /api/console/room/answer`, `pending_asks` של השולח ומסלול
+"החלף" (`smart_replace_stop`, `awaiting_replace`).
 
 טבלת `smart_asks` **נשארת בסכמה**, ריקה ובלי קורא (הכרעת המתאם 03/11): הורדתה
 היא שינוי סכמה ו-bump, והגרסה הקודמת הייתה מסרבת לפתוח את ה-DB (#1894) — "חזור
 לגרסה" נשבר. מה שנבדק כאן הוא שאף קוד אינו כותב או קורא אותה.
 
-**סוכן ישן** (initramfs שלא עודכן, ‏USB ישן) ששואל עדיין: ה-hello שלו מתקבל (200),
+**סוכן ישן** (initramfs שלא עודכן, USB ישן) ששואל עדיין: ה-hello שלו מתקבל (200),
 השדות `ask`/`ask_answered` נזנחים, ואין `ask_answer` בתשובה — ההחלטה המקומית שלו
 נשארת ("the server did not confirm the answer -- keeping the local choice"), ובלי
 תשובה הוא לוקח אחרי `WAIT_SMART_GUI_S` את ברירת הצבע. ה-`prompt` שהוא שולח באותו
-hello עדיין עוצר את השולח (#2202, ‏`prompt_hold.py`) עם אותן תקרות.
+hello עדיין עוצר את השולח (#2202, `prompt_hold.py`) עם אותן תקרות.
 
 **בקרה שלילית:** כל טסט כאן שמסומן RED נופל על v0.80.6 (origin/main לפני השינוי)
-על התנהגות — ה-hello מחזיר `ask_answer`, ‏`GET /room` נושא `ask`, ‏`/room/answer`
+על התנהגות — ה-hello מחזיר `ask_answer`, `GET /room` נושא `ask`, `/room/answer`
 עונה 200, קוד השרת קורא וכותב `smart_asks`, ו-`attended_hello` שולח `ask`. הפקודות — בגוף ה-PR.
 """
 
@@ -93,9 +93,9 @@ def test_the_console_answer_endpoint_is_gone(server):
 
 
 def test_no_code_writes_or_reads_the_smart_asks_table():
-    """הטבלה נשארת בסכמה (‏db.py — שם מותר לה להופיע, ב-CREATE ובהערה) ואין לה
+    """הטבלה נשארת בסכמה (db.py — שם מותר לה להופיע, ב-CREATE ובהערה) ואין לה
     קורא או כותב באף מקום אחר: לא בשרת, לא בכלים ולא בסוכן. RED: על v0.80.6
-    ‏`smart_ask.py`, ‏`prompt_hold.py` ו-`clockstep.py` מריצים SQL עליה."""
+    `smart_ask.py`, `prompt_hold.py` ו-`clockstep.py` מריצים SQL עליה."""
     hits = []
     for root in ("server", "tools", "agent", "boot"):
         for path in sorted((REPO / root).rglob("*")):
@@ -112,14 +112,14 @@ def test_no_code_writes_or_reads_the_smart_asks_table():
 
 def test_the_table_stays_in_the_schema_without_a_version_bump():
     """השומר של ההכרעה: הטבלה עדיין נוצרת ב-DB טרי (כך שגרסה קודמת פותחת אותו),
-    ו-`SCHEMA_VERSION` לא זז בשבילה (‏test_schema_version_1894 נועל את הטביעה)."""
+    ו-`SCHEMA_VERSION` לא זז בשבילה (test_schema_version_1894 נועל את הטביעה)."""
     from server import db
     assert "CREATE TABLE IF NOT EXISTS smart_asks (" in db.SCHEMA
     assert "DROP TABLE IF EXISTS smart_asks" not in (REPO / "server" / "db.py").read_text(encoding="utf-8")
 
 
 def test_the_server_ceiling_still_outlasts_the_agents():
-    """הסוכן מוותר ראשון (‏`WAIT_SMART_GUI_S`, היום התקרה של שאלות המגירה);
+    """הסוכן מוותר ראשון (`WAIT_SMART_GUI_S`, היום התקרה של שאלות המגירה);
     השרת הוא רשת הביטחון. עבר מ-test_smart_ask.py אל התקרה של `prompt_hold`."""
     from server.rounds import prompt_hold
     waits = (AGENT / "lib/core/waits.sh").read_text(encoding="utf-8")
@@ -151,7 +151,7 @@ def _bash():
 
 
 def test_a_leftover_gui_request_puts_no_ask_in_the_hello(tmp_path):
-    """‏`attended_hello` עם `smart-request` שנשאר בתיקיית הגואי: ה-hello נושא את
+    """`attended_hello` עם `smart-request` שנשאר בתיקיית הגואי: ה-hello נושא את
     ה-`prompt` (השאלה שעל המסך), ולא `ask`. RED: על v0.80.6 יש `ask`."""
     bash = _bash()
     if bash is None:

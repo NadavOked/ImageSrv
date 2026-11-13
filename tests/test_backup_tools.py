@@ -1,8 +1,8 @@
-"""‏#1128 (R41): כלי הגיבוי — `tools/verify-images.py`, ‏`tools/backup-server.sh`
+"""#1128 (R41): כלי הגיבוי — `tools/verify-images.py`, `tools/backup-server.sh`
 ו-`tools/restore-drill.sh`.
 
-‏verify-images רץ בכל מקום (Python בלבד). שני הסקריפטים הם bash עם rsync
-ו-sha256sum — רצים על לינוקס (מעבדת ה-VM / ‏CI הציבורי), ומדולגים בשמם
+verify-images רץ בכל מקום (Python בלבד). שני הסקריפטים הם bash עם rsync
+ו-sha256sum — רצים על לינוקס (מעבדת ה-VM / CI הציבורי), ומדולגים בשמם
 בווינדוס. תרגיל השחזור מרים `server.main` אמיתי על עותק — זו הראיה
 שהגיבוי משוחזר, לא רק שנכתב."""
 
@@ -77,7 +77,7 @@ def test_verify_images_names_a_missing_partition_and_unverified_import(tmp_path:
 
 
 def test_verify_images_zero_images_is_not_a_pass(tmp_path: Path):
-    """‏עיקרון 5: "לא היה מה לבדוק" ≠ "נבדק ותקין" — אלא בבקשה מפורשת."""
+    """עיקרון 5: "לא היה מה לבדוק" ≠ "נבדק ותקין" — אלא בבקשה מפורשת."""
     r = _verify(str(tmp_path))
     assert r.returncode == 3 and "NO IMAGES" in r.stderr
     assert _verify("--allow-empty", str(tmp_path)).returncode == 0
@@ -90,7 +90,7 @@ posix_tools = requires_native(("bash", BASH), "sha256sum", "curl", posix=True,
 
 
 def _seed_server(tmp_path: Path) -> tuple[Path, Path]:
-    """‏data_dir עם DB אמיתי של השרת (WAL, משתמש) ותיקיית אימג'ים עם אימג' אחד."""
+    """data_dir עם DB אמיתי של השרת (WAL, משתמש) ותיקיית אימג'ים עם אימג' אחד."""
     from server.agent import registry
     from server.console import users
     from server.db import connect
@@ -159,7 +159,7 @@ def test_backup_server_writes_a_consistent_db_data_dir_and_verified_images(tmp_p
 
 @posix_tools
 def test_backup_server_fails_when_a_backed_up_image_is_corrupt(tmp_path: Path):
-    """‏rsync שסיים אינו "גיבוי תקין": אימג' שהמניפסט שלו שקרי מפיל את הריצה."""
+    """rsync שסיים אינו "גיבוי תקין": אימג' שהמניפסט שלו שקרי מפיל את הריצה."""
     data, images = _seed_server(tmp_path)
     (images / "win-a" / "p1.img").write_bytes(b"corrupt")
     r = _sh(BACKUP_SH, "--dest", str(tmp_path / "dest"), "--data-dir", str(data),
@@ -193,11 +193,11 @@ SMB_PW = "smb-Secret-of-the-nas-77"
 
 @posix_tools
 def test_backup_server_carries_no_grub_password_and_no_smb_credentials(tmp_path: Path):
-    """‏#2450/#2455: ‏`/etc/imagesrv` נכנס לגיבוי — חוץ משני הסודות שבו.
+    """#2450/#2455: `/etc/imagesrv` נכנס לגיבוי — חוץ משני הסודות שבו.
 
-    ‏grub-password: התקנה נקייה (שלב 1 בשחזור) יוצרת סיסמה חדשה. ‏creds/: הסוד של מיקום
-    SMB שמור ב-DB (‏params_json), ו"התחבר" כותב את הקובץ מחדש; של יעד הגיבוי — מוזן מחדש.
-    שאר `/etc/imagesrv` (known-macs, ‏dnsmasq-proxy.conf, ‏raid) נשאר בגיבוי."""
+    grub-password: התקנה נקייה (שלב 1 בשחזור) יוצרת סיסמה חדשה. creds/: הסוד של מיקום
+    SMB שמור ב-DB (params_json), ו"התחבר" כותב את הקובץ מחדש; של יעד הגיבוי — מוזן מחדש.
+    שאר `/etc/imagesrv` (known-macs, dnsmasq-proxy.conf, raid) נשאר בגיבוי."""
     data, images = _seed_server(tmp_path)
     etc = tmp_path / "sysroot" / "etc" / "imagesrv"
     (etc / "creds").mkdir(parents=True)

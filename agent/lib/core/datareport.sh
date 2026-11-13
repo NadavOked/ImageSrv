@@ -71,6 +71,13 @@ stage_at() {
 }
 
 target_extra_json() {
+    # #2987/#2988: the operator's sentence and a drawer that stands (opsay.sh, stall.sh), then the stages.
+    if command -v target_say_json > /dev/null; then target_say_json "$1"; fi
+    if command -v stall_json > /dev/null; then stall_json "$1"; fi
+    _stages_json "$1"
+}
+
+_stages_json() {
     # #1883: ,"stages":[["gpt",12.3],...,["end",80.1]] -- only once the target is
     # final and its stages ended; a few dozen bytes per final target, repeated
     # with it because the server keeps the targets of the latest report. A target

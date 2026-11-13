@@ -1,4 +1,4 @@
-"""‏#457 — היפוך סדר נעילה בין נעילת הכתיבה של sqlite ל-``_write_lock``.
+"""#457 — היפוך סדר נעילה בין נעילת הכתיבה של sqlite ל-``_write_lock``.
 
 שתי נעילות, שני תהליכונים, וכל אחד מחזיק את מה שהשני מחכה לו:
 
@@ -13,7 +13,7 @@
 מכאן זה נראה כמו עומס חולף, ובדיוק לכן זה כמעט נזנח כרעש.
 
 **מה הטסטים כאן מוכיחים ומה לא.** האזהרה הבודדת שנצפתה בפיתוח
-‏#449+#450 אין לה traceback ואין לה תזמון, ולכן **אי אפשר לקבוע**
+#449+#450 אין לה traceback ואין לה תזמון, ולכן **אי אפשר לקבוע**
 שהמנגנון הזה הוא שייצר אותה — הקישור הוא השערה. מה שנבדק כאן הוא
 המנגנון עצמו, והוא נבנה **דטרמיניסטית**: ההמתנה של תהליכון ב' נשברת
 תמיד, כי היחיד שיכול לשחרר את נעילת sqlite הוא תהליכון א' — והוא ממתין
@@ -80,7 +80,7 @@ def test_a_journal_write_survives_a_holder_of_the_sqlite_write_lock(tmp_path):
         conn_a, "UPDATE settings SET value = ? WHERE key = ?", ("777", KEY)
     ) is True
     assert conn_a.in_transaction is True, (
-        "‏update_one שהצליח כבר אינו משאיר טרנזאקציה פתוחה — "
+        "\u200fupdate_one שהצליח כבר אינו משאיר טרנזאקציה פתוחה — "
         "הפיגום כאן אינו בונה את המצב שהוא מתיימר לבנות")
 
     writer = threading.Thread(target=background_journal, name="sender")
@@ -156,18 +156,18 @@ def test_no_write_lock_site_queues_while_holding_the_sqlite_lock(
     write(conn)
 
     assert probe.held_write_lock_of_sqlite == [False], (
-        "‏_write_lock נלקח כשנעילת הכתיבה של sqlite כבר ביד — "
+        "\u200f_write_lock נלקח כשנעילת הכתיבה של sqlite כבר ביד — "
         "זה בדיוק ההיפוך של #457, והוא מגיע כ-database is locked")
     conn.close()
 
 
 def test_a_failed_journal_write_still_reaches_its_caller_with_an_open_transaction(
         tmp_path):
-    """‏`_settle` אינו רשאי לבלוע כשל, גם כשהוא זה שעושה את ה-``commit``.
+    """`_settle` אינו רשאי לבלוע כשל, גם כשהוא זה שעושה את ה-``commit``.
 
-    ‏`journal` חייב לזרוק ולא לרשום שורה שקטה — עיקרון 5. הטרנזאקציה
+    `journal` חייב לזרוק ולא לרשום שורה שקטה — עיקרון 5. הטרנזאקציה
     הפתוחה כאן היא ``BEGIN`` בלבד (בלי כתיבה), ולכן ה-``commit`` של
-    ‏`_settle` מצליח ואילו הכתיבה עצמה נכשלת מול מחזיק חיצוני — בדיוק
+    `_settle` מצליח ואילו הכתיבה עצמה נכשלת מול מחזיק חיצוני — בדיוק
     החלוקה שרוצים לבדוק. חיבור שנשאר בטרנזאקציה אחרי הכשל הוא #272
     בכבודו: משם כל כתיבה עליו נכשלת מיד עד אתחול השרת.
     """

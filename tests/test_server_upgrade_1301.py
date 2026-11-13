@@ -1,4 +1,4 @@
-"""‏#1301 — the upgrade script writes a status the console screen can read.
+"""#1301 — the upgrade script writes a status the console screen can read.
 
 The console's "server is updating" screen shows the four steps of
 ``tools/server-upgrade.sh`` (fetch · verify · install · restart), a clock that
@@ -162,7 +162,7 @@ def test_new_server_not_answering_in_time_rolls_back_at_stage_restart(tmp_path, 
 
 
 def test_without_a_previous_tag_it_still_rolls_back_to_the_starting_commit(tmp_path, bindir):
-    """‏#1546: בלי `update_previous` (הרצה ידנית) יעד החזרה הוא הקומיט שהעץ
+    """#1546: בלי `update_previous` (הרצה ידנית) יעד החזרה הוא הקומיט שהעץ
     היה עליו — החזרה קרתה, ולכן ה-reason הוא rollback. כשל של החזרה עצמה
     שומר את הסיבה כ-reason (הטסט הבא)."""
     data, repo = _setup(tmp_path, live_ok=False, previous=None)

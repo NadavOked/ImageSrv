@@ -1,18 +1,18 @@
-"""‏`--with-gui`: החבילות והנתיבים של הקיוסק מוצהרים, והבנייה נעצרת בלעדיהם.
+"""`--with-gui`: החבילות והנתיבים של הקיוסק מוצהרים, והבנייה נעצרת בלעדיהם.
 
 מסלול ה-GUI לא היה בר-בנייה על דביאן 13 ואיש לא ידע, כי איש לא בנה
 אותו: ה-initramfs שהמעבדה הגישה בפועל לא הכיל `cage`, לא `chromium`
-ולא גופן (#120). כשניסו — ‏`apt-get install fonts-ibm-plex` ענה
-‏`E: Unable to locate package` ויצא 100.
+ולא גופן (#120). כשניסו — `apt-get install fonts-ibm-plex` ענה
+`E: Unable to locate package` ויצא 100.
 
 ההודעה ההיא היא הבאג האמיתי: היא אינה מבדילה בין "אין חבילה כזאת
 בדביאן" לבין "היא קיימת, אבל ה-sources.list כאן לא מכיל את הקומפוננטה
-שלה". ‏`fonts-ibm-plex` **קיימת** בדביאן 13 — ‏6.1.1-1, ב-contrib —
+שלה". `fonts-ibm-plex` **קיימת** בדביאן 13 — 6.1.1-1, ב-contrib —
 וה-sources.list של השרת מכיל `main non-free-firmware` בלבד.
 
 ומאחוריה הסתתר באג שני, שקט לגמרי: הסקריפט העתיק
-‏`/usr/share/fonts/opentype/ibm-plex`, והחבילה מתקינה ל-`truetype`.
-‏`if [ -d "$dir" ]` דילג על הנתיב שאינו קיים בלי מילה — כך שגם אחרי
+`/usr/share/fonts/opentype/ibm-plex`, והחבילה מתקינה ל-`truetype`.
+`if [ -d "$dir" ]` דילג על הנתיב שאינו קיים בלי מילה — כך שגם אחרי
 שהחבילה הייתה מותקנת, הקיוסק היה נבנה נקי ובלי גופן.
 
 הבדיקות מריצות את הקטעים האמיתיים מתוך `tools/build_initramfs.sh`
@@ -48,10 +48,10 @@ def _lines() -> list[str]:
 
 
 def bash_path(path: Path) -> str:
-    """נתיב שאפשר לשרשר: ‏`$ROOT$_p` מדביק שני נתיבים מוחלטים זה לזה.
+    """נתיב שאפשר לשרשר: `$ROOT$_p` מדביק שני נתיבים מוחלטים זה לזה.
 
-    ‏`C:/x` + `C:/y` הוא נתיב עם נקודתיים באמצע, שווינדוס דוחה; בצורת
-    ‏msys (‏`/c/x`) השרשור תקין, וזו גם הצורה שה-bash של Git מבין.
+    `C:/x` + `C:/y` הוא נתיב עם נקודתיים באמצע, שווינדוס דוחה; בצורת
+    msys (`/c/x`) השרשור תקין, וזו גם הצורה שה-bash של Git מבין.
     """
     text = path.as_posix()
     if os.name == "nt" and len(text) > 1 and text[1] == ":":
@@ -90,7 +90,7 @@ def run_preflight(with_gui: int = 1, unavailable: tuple[str, ...] = (),
                   no_version: tuple[str, ...] = ()):
     """מריץ את בדיקת הזמינות האמיתית מול apt-cache מזויף.
 
-    ‏`apt-cache` כאן היא פונקציית bash ולא סקריפט על ה-PATH: אין תלות
+    `apt-cache` כאן היא פונקציית bash ולא סקריפט על ה-PATH: אין תלות
     בהרשאת הרצה, בקצה שורה או בפרשנות shebang של הסביבה, והבדיקה
     מתנהגת אותו דבר במעבדה, ב-CI ועל עמדת הפיתוח בווינדוס.
     """
@@ -158,14 +158,14 @@ def test_the_message_says_which_component_the_package_needs():
 
 
 def test_a_package_apt_knows_but_cannot_install_counts_as_missing():
-    """‏`Candidate: (none)` הוא "אין", לא "יש".
+    """`Candidate: (none)` הוא "אין", לא "יש".
 
-    ‏`apt-cache policy` יוצא 0 גם על חבילה שאין ממנה גרסה בת-התקנה,
+    `apt-cache policy` יוצא 0 גם על חבילה שאין ממנה גרסה בת-התקנה,
     וגם על חבילה שאינה מוכרת בכלל. קוד היציאה אינו הראיה — שורת
     ה-Candidate היא (עיקרון 5).
     """
     done = run_preflight(no_version=(CONTRIB_ONLY,))
-    assert done.returncode != 0, "‏Candidate: (none) נספר כזמין"
+    assert done.returncode != 0, "\u200fCandidate: (none) נספר כזמין"
     assert CONTRIB_ONLY in done.stderr, done.stderr
 
 
@@ -199,9 +199,9 @@ def test_a_build_without_the_kiosk_never_looks_at_the_kiosk_packages():
 
 
 def test_the_build_stops_when_a_declared_path_is_missing_after_install(tmp_path: Path):
-    """הבאג השקט של #120: ‏`if [ -d "$dir" ]` דילג בלי מילה.
+    """הבאג השקט של #120: `if [ -d "$dir" ]` דילג בלי מילה.
 
-    ככה נתיב גופן שגוי — ‏`opentype` במקום `truetype` — ייצר קיוסק
+    ככה נתיב גופן שגוי — `opentype` במקום `truetype` — ייצר קיוסק
     בלי גופן עברי, מבנייה שנראתה נקייה לחלוטין.
     """
     done, _ = run_path_check(tmp_path, present=["usr/share/fontconfig", "etc/fonts"])
@@ -229,7 +229,7 @@ def test_every_declared_path_is_copied_when_they_are_all_there(tmp_path: Path):
 
 
 def test_the_font_path_is_the_one_debian_actually_installs():
-    """‏fonts-ibm-plex מתקינה ל-truetype. ‏opentype/ibm-plex לא היה קיים מעולם."""
+    """fonts-ibm-plex מתקינה ל-truetype. opentype/ibm-plex לא היה קיים מעולם."""
     assert "/usr/share/fonts/truetype/ibm-plex" in declared_array("GUI_PATHS")
     assert "opentype/ibm-plex" not in BUILDER.read_text(encoding="utf-8")
 
@@ -249,7 +249,7 @@ def test_the_fontconfig_configuration_travels_with_the_fonts():
 def test_the_hebrew_font_package_is_declared():
     """הקיוסק הוא עברית RTL — גופן שאינו מכסה עברית אינו גופן כאן.
 
-    ‏`fonts-ibm-plex` כוללת את `IBMPlexSansHebrew`, שהוא בדיוק מה
+    `fonts-ibm-plex` כוללת את `IBMPlexSansHebrew`, שהוא בדיוק מה
     ש-`console.css` מבקש. החלפתה בגופן אחר היא שינוי עיצוב, לא פרט
     בנייה — ולכן אם השם הזה משתנה, זה קורה בדיון ולא בשקט.
     """

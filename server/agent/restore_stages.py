@@ -1,19 +1,19 @@
-"""‏#1883 — ציר זמן לשלבי השחזור, לכל מכונה ודיסק: איפה הזמן הולך.
+"""#1883 — ציר זמן לשלבי השחזור, לכל מכונה ודיסק: איפה הזמן הולך.
 
-**המקור.** הסוכן (‏`agent/lib/core/datareport.sh: stage_at`) רושם לכל מגירה "השלב הזה מתחיל עכשיו" לפי
-‏`/proc/uptime` של המכונה — ‏`gpt` (טבלת המחיצות), ‏`expand` (ההרחבה), ‏`p<N>` (הזרם של מחיצה N, כולל
-ההמתנה לבייט הראשון שלה), ‏`readback` (הקריאה החוזרת, #1805), ‏`grow` (מתיחת מערכת הקבצים) ו-`end`.
-ברגע שהיעד סופי (‏`done`/`failed`/`cancelled`) הדיווח נושא אותם **פעם אחת**: ‏`"stages": [[שם, uptime], …]`.
+**המקור.** הסוכן (`agent/lib/core/datareport.sh: stage_at`) רושם לכל מגירה "השלב הזה מתחיל עכשיו" לפי
+`/proc/uptime` של המכונה — `gpt` (טבלת המחיצות), `expand` (ההרחבה), `p<N>` (הזרם של מחיצה N, כולל
+ההמתנה לבייט הראשון שלה), `readback` (הקריאה החוזרת, #1805), `grow` (מתיחת מערכת הקבצים) ו-`end`.
+ברגע שהיעד סופי (`done`/`failed`/`cancelled`) הדיווח נושא אותם **פעם אחת**: `"stages": [[שם, uptime], …]`.
 
-**מה נשמר.** ‏`clean` הופך את הסימנים למשכים — ‏`[{"stage", "seconds"}]` (כל שלב עד הבא אחריו; ‏`end`
+**מה נשמר.** `clean` הופך את הסימנים למשכים — `[{"stage", "seconds"}]` (כל שלב עד הבא אחריו; `end`
 סוגר) — וזה מה שנשמר ב-`targets_json` ומוצג. סימנים פגומים (שם לא מוכר, זמן שאינו מספר, זמן שחוזר
 אחורה, יותר מ-`MAX_MARKS`) — **השדה נזנח כולו**: "לא נמדד", לא ציר זמן חלקי שנראה שלם. בלי `end` —
 אין משך לשלב האחרון, ולכן גם הוא נזנח.
 
-‏`record` — שורה ב-**`restore_stages`** לכל שלב של יעד סופי: ‏`session_id`, ‏`mac`, ‏`dev`, ‏`serial`
-(מה-hello, ‏NULL = לא דווח), ‏`stage`, ‏`seconds`, ‏`at`. ממנה `learn_eta` (‏#1843) לומד את השלבים הקבועים.
-השעון הוא של המכונה, ולכן אין כאן חותמת קיר — רק משכים (‏`at` הוא שעון השרת בזמן הקליטה).
-חומרה ומדידות בלבד (#1924). ‏`housekeeping` — 90 יום. לעולם אינו זורק.
+`record` — שורה ב-**`restore_stages`** לכל שלב של יעד סופי: `session_id`, `mac`, `dev`, `serial`
+(מה-hello, NULL = לא דווח), `stage`, `seconds`, `at`. ממנה `learn_eta` (#1843) לומד את השלבים הקבועים.
+השעון הוא של המכונה, ולכן אין כאן חותמת קיר — רק משכים (`at` הוא שעון השרת בזמן הקליטה).
+חומרה ומדידות בלבד (#1924). `housekeeping` — 90 יום. לעולם אינו זורק.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from server.db import _settle, _write_lock, now_iso, writing
 
 log = logging.getLogger("imagesrv.restore_stages")
 
-#: שמות השלבים שהסוכן כותב. ‏`p<N>` = מחיצה N.
+#: שמות השלבים שהסוכן כותב. `p<N>` = מחיצה N.
 _NAME = re.compile(r"^(gpt|expand|p\d{1,3}|readback|grow|end)$")
 #: תקרה — 128 מחיצות + חמישה שלבים קבועים.
 MAX_MARKS = 140
@@ -56,7 +56,7 @@ def clean(raw: object) -> list[dict] | None:
 
 
 def clean_targets(targets: list) -> None:
-    """במקום: ‏`stages` של כל יעד → משכים, או נזנח (‏`reports.ingest`, לפני השמירה)."""
+    """במקום: `stages` של כל יעד → משכים, או נזנח (`reports.ingest`, לפני השמירה)."""
     for t in targets:
         if isinstance(t, dict) and "stages" in t:
             got = clean(t.get("stages"))
@@ -91,8 +91,8 @@ def _kind(stage: str) -> str:
 
 
 def medians(conn: sqlite3.Connection, mac: str, sessions: list[str]) -> dict[str, float] | None:
-    """‏#1843: לכל שלב קבוע (וסכום המחיצות כ-`partitions`) — החציון על הגלים `sessions` של המכונה,
-    כשבכל גל נלקחת המגירה **האיטית** (הגל נגמר כשהיא נגמרת). ‏None — אף גל לא נשא שלבים."""
+    """#1843: לכל שלב קבוע (וסכום המחיצות כ-`partitions`) — החציון על הגלים `sessions` של המכונה,
+    כשבכל גל נלקחת המגירה **האיטית** (הגל נגמר כשהיא נגמרת). None — אף גל לא נשא שלבים."""
     try:
         per: dict[str, list[float]] = {}
         for sid in sessions:

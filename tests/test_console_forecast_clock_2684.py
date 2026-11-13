@@ -1,8 +1,8 @@
-"""‏#2684 — כל forecast שהקונסולה מקבלת נושא `clock`, כמו `session.forecast` ב-hello.
+"""#2684 — כל forecast שהקונסולה מקבלת נושא `clock`, כמו `session.forecast` ב-hello.
 
-‏`forecastText` מצייר "צפוי להסתיים ב-HH:MM" מ-`ends_at`, שהוא שעון הקיר של השרת. כשהשרת
+`forecastText` מצייר "צפוי להסתיים ב-HH:MM" מ-`ends_at`, שהוא שעון הקיר של השרת. כשהשרת
 לא מסונכרן (#2144) זו שעה שגויה, וגרועה מהיעדר שעה. ה-hello כבר אומר למשכפל (`clock`)
-אם מותר לצייר שעה; כאן אותה ראיה (`ctx.clock_trust`, ‏chrony, ‏`synchronized is True`)
+אם מותר לצייר שעה; כאן אותה ראיה (`ctx.clock_trust`, chrony, `synchronized is True`)
 נוסעת גם ל-`/room.round.forecast`, ל-`/overview.pulls[].forecast` ול-`/tasks[].forecast`.
 העיצוב עצמו (שעה רק כש-`clock === true`) נבדק ב-`learn_eta_1843.test.cjs`.
 """
@@ -97,7 +97,7 @@ def test_a_wave_without_history_carries_the_clock_too(clocked):
 
 
 def test_the_console_and_the_hello_share_one_clock_reading(clocked):
-    """אותה ראיה: ‏`session.forecast.clock` (hello) ו-`round.forecast.clock` (קונסולה) באים מאותו
+    """אותה ראיה: `session.forecast.clock` (hello) ו-`round.forecast.clock` (קונסולה) באים מאותו
     `ClockTrust` -- שני קוראים אינם שתי קריאות chronyc, וגם אינם יכולים להחליט אחרת."""
     _history(clocked)
     hello = _running(clocked)["session"]["forecast"]

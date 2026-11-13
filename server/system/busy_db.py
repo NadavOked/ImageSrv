@@ -17,8 +17,8 @@ def reason(conn: sqlite3.Connection) -> str | None:
         return "יש סבב חדר פתוח או רץ"
     if conn.execute("SELECT 1 FROM tasks WHERE type = 'capture' AND state = 'running' LIMIT 1").fetchone():
         return "קליטת אימג' רצה"
-    # ‏#1891 (הכרעת נדב 01/11): שרת שמעביר לשרת אחר — עסוק. ‏queued כלול: התהליכון
-    # שלה כבר הופעל (‏start_transfer/start_pull), ו-restart מפיל אותו.
+    # #1891 (הכרעת נדב 01/11): שרת שמעביר לשרת אחר — עסוק. queued כלול: התהליכון
+    # שלה כבר הופעל (start_transfer/start_pull), ו-restart מפיל אותו.
     if conn.execute("SELECT 1 FROM storage_transfers WHERE state IN ('queued','sending','verifying')"
                     " LIMIT 1").fetchone():
         return "העברת אימג' בין אתרים רצה"

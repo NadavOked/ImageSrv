@@ -1,24 +1,24 @@
-"""‏#1884 — דיסק הספרייה בשרת בזמן גל וקליטה: קצב, ו-I/O pressure. שהלמידה לא תאשים את הרשת.
+"""#1884 — דיסק הספרייה בשרת בזמן גל וקליטה: קצב, ו-I/O pressure. שהלמידה לא תאשים את הרשת.
 
 **הראיה (20/10):** אימג' של 146GB (גדול מה-RAM) — השידור ירד ל-15–50MB/s כשה-NVMe המשותף ב-ESXi היה
-עמוס (‏psi full 48%), ועלה ל-98 כשנרגע. המשכפל היה 95% idle. בלי המדידה הזו #1842 היה לומד קצב נמוך,
+עמוס (psi full 48%), ועלה ל-98 כשנרגע. המשכפל היה 95% idle. בלי המדידה הזו #1842 היה לומד קצב נמוך,
 ו-#1846 היה מתריע "אבדן קפץ — סוויץ'/כבל".
 
-**מה נמדד** — צילום בתחילת העבודה (‏`begin`) ובסופה (‏`end`), מהקרנל של השרת, קריאה בלבד:
+**מה נמדד** — צילום בתחילת העבודה (`begin`) ובסופה (`end`), מהקרנל של השרת, קריאה בלבד:
 
-* ‏`/proc/diskstats` של **ההתקן שעליו יושבת הספרייה** (‏`st_dev` של השורש → ‏major:minor): סקטורים
-  שנקראו/נכתבו, ‏`io_ticks` (מ"ש שבהן ההתקן היה עסוק). ספרייה על NFS/SMB — אין התקן: ‏`device: null`.
-* ‏`/proc/pressure/io` (‏PSI): ‏`some`/`full` ‏`total=` במיקרו-שניות. ‏`full` = הזמן שבו **כל** המשימות
+* `/proc/diskstats` של **ההתקן שעליו יושבת הספרייה** (`st_dev` של השורש → major:minor): סקטורים
+  שנקראו/נכתבו, `io_ticks` (מ"ש שבהן ההתקן היה עסוק). ספרייה על NFS/SMB — אין התקן: `device: null`.
+* `/proc/pressure/io` (PSI): `some`/`full` `total=` במיקרו-שניות. `full` = הזמן שבו **כל** המשימות
   הרצות חיכו ל-I/O — "השרת ממתין לדיסק".
 
-**התוצאה** (‏`server_io`, שורה לכל (סוג, מזהה)): ‏`read_mbps`, ‏`write_mbps`, ‏`util` (‏io_ticks לשעון הקיר),
-‏`psi_some`/`psi_full` (שבר מזמן הזרם — ‏`seconds`, ‏`wall_s` של הגל; בלעדיו — השעון בין הצילומים),
-‏`seconds`, ‏`device`. מונה שלא נקרא באחד הצילומים — **‏null**, לא 0 (עיקרון 5ב).
+**התוצאה** (`server_io`, שורה לכל (סוג, מזהה)): `read_mbps`, `write_mbps`, `util` (io_ticks לשעון הקיר),
+`psi_some`/`psi_full` (שבר מזמן הזרם — `seconds`, `wall_s` של הגל; בלעדיו — השעון בין הצילומים),
+`seconds`, `device`. מונה שלא נקרא באחד הצילומים — **null**, לא 0 (עיקרון 5ב).
 
-**‏`basis`:** ‏`server_disk` — ‏`psi_full` ≥ `SERVER_DISK_FULL` (‏⚠️ ניחוש מנומק: 10% מזמן הזרם שבו השרת כולו
-חיכה לדיסק; הראיה היא 48%, ובשרת רגוע זה ≈0). ‏`ok` — נמדד ומתחת. ‏`null` — PSI לא נקרא ("לא נבדק").
-גל `server_disk`: ‏`drive_rates` (‏#1842) לא לומד ממנו קצב, ו-`learn_netloss` (‏#1846) לא מתריע עליו — ראו
-`bound`. יומן **`server_disk_slow`**. ‏לעולם אינו זורק ואינו חוסם: כשל הוא שורה בלי מספרים.
+**`basis`:** `server_disk` — `psi_full` ≥ `SERVER_DISK_FULL` (⚠️ ניחוש מנומק: 10% מזמן הזרם שבו השרת כולו
+חיכה לדיסק; הראיה היא 48%, ובשרת רגוע זה ≈0). `ok` — נמדד ומתחת. `null` — PSI לא נקרא ("לא נבדק").
+גל `server_disk`: `drive_rates` (#1842) לא לומד ממנו קצב, ו-`learn_netloss` (#1846) לא מתריע עליו — ראו
+`bound`. יומן **`server_disk_slow`**. לעולם אינו זורק ואינו חוסם: כשל הוא שורה בלי מספרים.
 """
 
 from __future__ import annotations
@@ -110,7 +110,7 @@ def _delta(a: dict, b: dict, key: str) -> int | None:
 
 
 def measure(start: dict, end: dict, seconds: float | None = None) -> dict:
-    """שני צילומים → התוצאה (ראו את ראש המודול). ‏`seconds` — משך הזרם; בלעדיו — השעון."""
+    """שני צילומים → התוצאה (ראו את ראש המודול). `seconds` — משך הזרם; בלעדיו — השעון."""
     wall = end["at"] - start["at"]
     span = seconds if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) \
         and seconds > 0 else wall
@@ -119,7 +119,7 @@ def measure(start: dict, end: dict, seconds: float | None = None) -> dict:
     writes = _delta(start, end, "write_sectors") if same else None
     busy = _delta(start, end, "io_ms") if same else None
     some, full = _delta(start, end, "psi_some_us"), _delta(start, end, "psi_full_us")
-    ok = span > 0                      # ‏util לשעון הקיר; השאר למשך הזרם
+    ok = span > 0                      # util לשעון הקיר; השאר למשך הזרם
     out = {
         "device": start.get("device") if same else None,
         "seconds": round(span, 1) if span > 0 else None,
@@ -136,7 +136,7 @@ def measure(start: dict, end: dict, seconds: float | None = None) -> dict:
 
 def end(conn: sqlite3.Connection, kind: str, ref: str, root: str | Path,
         seconds: float | None = None, proc: Path = PROC) -> dict | None:
-    """הצילום בסוף, והתוצאה. ‏None — אין צילום פתיחה (גל שלא נבחר לו קצב). לעולם אינו זורק."""
+    """הצילום בסוף, והתוצאה. None — אין צילום פתיחה (גל שלא נבחר לו קצב). לעולם אינו זורק."""
     try:
         row = conn.execute("SELECT start_json FROM server_io WHERE kind = ? AND ref = ?",
                            (kind, ref)).fetchone()
@@ -195,7 +195,7 @@ def health_checks(conn: sqlite3.Connection) -> list[dict]:
             return [check("server_disk", "דיסק הספרייה", "ok",
                           f"{mbps} בגל האחרון; המתנה לדיסק {full}% מזמן הזרם")]
         return [check("server_disk", "דיסק הספרייה", "off",
-                      f"לא נבדק — לחץ ה-I/O (‏/proc/pressure/io) לא נקרא; קריאה {mbps}")]
+                      f"לא נבדק — לחץ ה-I/O (\u200f/proc/pressure/io) לא נקרא; קריאה {mbps}")]
     except Exception:             # noqa: BLE001
         log.exception("server I/O health failed")
         return [check("server_disk", "דיסק הספרייה", "off", "לא נבדק — הקריאה נכשלה")]

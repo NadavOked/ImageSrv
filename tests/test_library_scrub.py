@@ -13,7 +13,7 @@ def _write_image(root, image_id="img_abc123"):
     folder = root / image_id
     folder.mkdir()
     contents = {"p1.esp.pcl.zst": b"esp", "p2.root.pcl.zst": b"root"}
-    # ‏role/type_guid/fs מהקבוצות הקבועות, ו-min_target_bytes שמחזיק את
+    # role/type_guid/fs מהקבוצות הקבועות, ו-min_target_bytes שמחזיק את
     # הפריסה — אחרת `_validate` דוחה את המניפסט מאז #1407 והספרייה ריקה.
     kinds = [("esp", ESP_GUID, "vfat"), ("linux", LINUX_GUID, "ext4")]
     partitions = [

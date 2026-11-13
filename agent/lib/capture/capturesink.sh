@@ -97,7 +97,7 @@ upload_manifest() {
     capture_stage verify
     # #2213: the manifest may close the task immediately. Deliver its warning
     # while the task is still open, before that PUT can win the reporter race.
-    if [ -s "$RUN_DIR/src_unhib" ] || [ -s "$RUN_DIR/capture.bitlocker" ]; then   # #1840: the BitLocker note too
+    if [ -s "$RUN_DIR/src_unhib" ] || [ -s "$RUN_DIR/capture.bitlocker" ] || [ -s "$RUN_DIR/shrink.dirty" ]; then   # #1840, #2972: their notes too
         report_final "${_ppid:-}" "" "$MAC" "$SERVER" "$1" || {
             printf '%s\n' network_server > "$RUN_DIR/capture.reason"; return 1; }
     fi

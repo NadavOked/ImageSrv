@@ -1,11 +1,11 @@
-"""‏#292: כל אירוע יומן שנכתב בקוד חייב תווית עברית ב-`EVENTS_HE`.
+"""#292: כל אירוע יומן שנכתב בקוד חייב תווית עברית ב-`EVENTS_HE`.
 
-‏`translate` נופל בכוונה למפתח עצמו (`EVENTS_HE.get(event, event)`) — ולכן
+`translate` נופל בכוונה למפתח עצמו (`EVENTS_HE.get(event, event)`) — ולכן
 אירוע חדש בלי תווית לא נשבר, הוא רק מגיע למפעיל כ-`room_tick_failed` בתוך
 ממשק עברי. כשנפתח ה-Issue היו ארבעה כאלה; כשנסגר — 54. ההצלבה כאן היא מה
 שמונע את הסחיפה: מפתח מילולי ב-`journal(conn, "…")` שאינו בטבלה מפיל את
-החבילה **בשם**. מפתחות שמגיעים ממשתנה (‏`verdict.event`, ‏`on_event` של
-השולח, ‏`sessions.py`) אינם נראים כאן — הם מכוסים במקום שבו הם מוגדרים."""
+החבילה **בשם**. מפתחות שמגיעים ממשתנה (`verdict.event`, `on_event` של
+השולח, `sessions.py`) אינם נראים כאן — הם מכוסים במקום שבו הם מוגדרים."""
 
 from __future__ import annotations
 
@@ -18,10 +18,10 @@ from server.console import journal_he
 
 REPO = Path(__file__).resolve().parent.parent
 SERVER = REPO / "server"
-# ‏journal(<conn>, "<event>" …) — הארגומנט הראשון הוא חיבור בכל צורותיו
-# (‏conn / ctx.conn / self.conn / runtime.conn), השני מחרוזת מילולית.
+# journal(<conn>, "<event>" …) — הארגומנט הראשון הוא חיבור בכל צורותיו
+# (conn / ctx.conn / self.conn / runtime.conn), השני מחרוזת מילולית.
 _CALL = re.compile(r'\bjournal\(\s*[A-Za-z_][\w.]*\s*,\s*(?:"([a-z0-9_]+)"|\'([a-z0-9_]+)\')')
-# ‏journal(conn, "a" if x else "b", …) — שני המפתחות נכתבים בפועל.
+# journal(conn, "a" if x else "b", …) — שני המפתחות נכתבים בפועל.
 _TERNARY = re.compile(r'\bjournal\(\s*[A-Za-z_][\w.]*\s*,\s*"([a-z0-9_]+)"\s+if\s+[^,]+?\s+else\s+"([a-z0-9_]+)"')
 
 
@@ -58,10 +58,10 @@ def test_labels_are_hebrew_and_not_the_key(event):
     assert re.search(r"[֐-׿]", label), f"{event}: התווית אינה בעברית: {label!r}"
 
 
-# --- ‏#1991: הגדרות שהקונסולה כותבת — `setting_change` מתרגם לפי SETTINGS_HE ---
+# --- #1991: הגדרות שהקונסולה כותבת — `setting_change` מתרגם לפי SETTINGS_HE ---
 
 def test_every_console_setting_has_a_hebrew_label():
-    """‏`SETTINGS_HE.get(key, key)` נופל למפתח עצמו, ולכן הגדרה חדשה בלי תווית
+    """`SETTINGS_HE.get(key, key)` נופל למפתח עצמו, ולכן הגדרה חדשה בלי תווית
     לא נשברת — היא מגיעה ליומן העברי כ-`readback_full: פעיל`. ההצלבה מול
     `WRITE_SETTINGS` (מה שהקונסולה באמת כותבת) היא מה שמונע את הסחיפה."""
     pytest.importorskip("fastapi")

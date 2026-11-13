@@ -1,17 +1,17 @@
-"""‏#704 — שמות החריצים בגואי הנייטיב: מסך מחשב השיכפול וגריד החדר של מחשב הבנייה.
+"""#704 — שמות החריצים בגואי הנייטיב: מסך מחשב השיכפול וגריד החדר של מחשב הבנייה.
 
-השרת (‏`test_slot_names_704.py`) מחזיר את השמות בשני מקומות:
+השרת (`test_slot_names_704.py`) מחזיר את השמות בשני מקומות:
 
-* ‏`hello` → ‏`slot_names` (‏`{"sata:1": "דיסק 1"}`). ‏`slotnames.sh` כותב אותם
+* `hello` → `slot_names` (`{"sata:1": "דיסק 1"}`). `slotnames.sh` כותב אותם
   ל-`$RUN_DIR/slot_names`, ו-`cloner_gui_state` מוסיף `cslot_name=<port>|<name>`
   לקובץ המצב של מחשב השיכפול.
-* ‏`GET /room` → ‏`drawer_list[].slot_name` + ‏`machines[].slot_names`. ‏`gui_state`
+* `GET /room` → `drawer_list[].slot_name` + `machines[].slot_names`. `gui_state`
   (מחשב הבנייה) כותב שדה 11 ב-`room_drawer=` ורשומת `room_slot_name=` לכל
   חריץ SATA בעל שם — גם ריק.
 
-‏`state.c` קורא את שלושתם, והמסכים מציירים את השם במקום "דיסק N"; בלי שם
-התצוגה כמו היום. אין מהדר בווינדוס: המקור נבדק כאן, הרינדור (‏`--png`) על
-ה-Testrunner — ‏`requires_native`.
+`state.c` קורא את שלושתם, והמסכים מציירים את השם במקום "דיסק N"; בלי שם
+התצוגה כמו היום. אין מהדר בווינדוס: המקור נבדק כאן, הרינדור (`--png`) על
+ה-Testrunner — `requires_native`.
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def _src(name: str) -> str:
 
 
 def _slotnames(tmp_path: Path, responses: list[object]) -> tuple[str, str]:
-    """‏slot_names_refresh על כל תשובה ברצף (כמו פעימות hello); מחזיר
+    """slot_names_refresh על כל תשובה ברצף (כמו פעימות hello); מחזיר
     (הרשומות אחרי הריצה האחרונה, הקובץ). אובייקט = JSON, מחרוזת = תוכן גולמי."""
     run = tmp_path / "run"; run.mkdir()
     steps = []
@@ -79,7 +79,7 @@ def test_hello_names_become_cloner_records_by_port(tmp_path):
 
 @JQ
 def test_an_answer_without_names_or_unreadable_keeps_the_last_file(tmp_path):
-    """תשובה בלי השדה (‏poll, שרת ישן) או JSON שבור אינם "אין שמות" (עיקרון 5)."""
+    """תשובה בלי השדה (poll, שרת ישן) או JSON שבור אינם "אין שמות" (עיקרון 5)."""
     out, _ = _slotnames(tmp_path, [{"slot_names": {"sata:2": "האמצעית"}},
                                    {"schema": 1}, "{broken"])
     assert out.splitlines() == ["cslot_name=2|האמצעית"]
@@ -112,14 +112,14 @@ def test_the_cloner_state_file_carries_the_names(tmp_path):
 
 
 def test_the_kiosk_load_chain_sources_slotnames():
-    """‏#834: lib שחסר ב-`gui_libs` הוא `not found` פעם בשנייה על הברזל."""
+    """#834: lib שחסר ב-`gui_libs` הוא `not found` פעם בשנייה על הברזל."""
     bridge = (AGENT / "lib" / "gui" / "guibridge.sh").read_text(encoding="utf-8")
     chain = bridge[bridge.index("gui_libs() {"):bridge.index("\n}", bridge.index("gui_libs() {"))]
     assert '. "$LIB_DIR/slotnames.sh"' in chain
     assert chain.index("slotnames.sh") < chain.index("clonergui.sh")
 
 
-# --- gui_state (מחשב הבנייה): ‏GET /room → רשומות ------------------------------
+# --- gui_state (מחשב הבנייה): GET /room → רשומות ------------------------------
 
 ROOM = {"round": None, "machines": [{
     "name": "CLONE-01", "mac": MAC, "awake": True, "joined": False, "fresh_drawers": 2,

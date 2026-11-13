@@ -41,7 +41,7 @@ def test_ingest_stores_the_event(conn):
     assert ev["verdict"] == "warn"
     assert ev["decision"] == "rescue"
     assert ev["realloc"] == 8
-    # ‏disk_number נגזר מ-port -> "דיסק 2" בקונסולה.
+    # disk_number נגזר מ-port -> "דיסק 2" בקונסולה.
     assert ev["disk_number"] == 2
 
 
@@ -64,8 +64,8 @@ def test_a_later_event_overwrites_the_earlier_one(conn):
 
 
 def test_failed_last_is_a_verdict_the_server_keeps(conn):
-    """‏#872: דיסק שנכשל בשיכפול הקודם (הסימון של #845) נכנס לשער כ-verdict
-    ‏`failed_last`, והמפעיל בחר "המשך" (= דלג). האירוע חייב להישמר כמות
+    """#872: דיסק שנכשל בשיכפול הקודם (הסימון של #845) נכנס לשער כ-verdict
+    `failed_last`, והמפעיל בחר "המשך" (= דלג). האירוע חייב להישמר כמות
     שהוא — הקונסולה מציגה "נכשל בשיכפול הקודם · דולג", לא `bad_verdict`.
     בקרה שלילית: על main הוא נדחה ולא נשמר."""
     ev = event(smart={"verdict": "failed_last", "reason": "failmark"},
@@ -135,7 +135,7 @@ def test_disk_events_reach_the_session_view(server):
 
 def test_room_drawer_list_carries_smart_for_before_start_health(room_server):
     """דרישת נדב #5: בריאות פר-מגירה מה-hello מגיעה לתצוגת החדר *לפני*
-    start. ‏smart_probe_idle של הסוכן מדווח אותה ב-hello, ו-room.drawer_list
+    start. smart_probe_idle של הסוכן מדווח אותה ב-hello, ו-room.drawer_list
     מעביר אותה הלאה כדי שהמפעיל יראה "מגירה N: SMART אזהרה"."""
     from server.rounds import room
     anon, ctx = room_server["anon"], room_server["ctx"]
@@ -159,8 +159,8 @@ def test_room_drawer_list_carries_smart_for_before_start_health(room_server):
 
 
 def test_room_view_carries_size_and_defaults_drawer_count(room_server):
-    """‏#710: הגריד הראה דיסק אחד לכל מחשב וקיבולת 0. הסיבה: drawer_list
-    לא העביר size_bytes, ו-drawer_count נפל ל-null (‏#704 טרם נבנה) →
+    """#710: הגריד הראה דיסק אחד לכל מחשב וקיבולת 0. הסיבה: drawer_list
+    לא העביר size_bytes, ו-drawer_count נפל ל-null (#704 טרם נבנה) →
     guistate נפל ל-1 → הפרסר דחה פורט>1. כאן: size_bytes עובר, ותצוגת
     החדר נופלת לברירת מחדל של הפורט הגבוה (3) כשהעמודה NULL."""
     from server.rounds import room

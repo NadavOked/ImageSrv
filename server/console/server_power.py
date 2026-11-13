@@ -1,11 +1,11 @@
-"""‏#2843: הפעלה מחדש וכיבוי של השרת מהקונסולה — ‏``POST /api/console/server-power``.
+"""#2843: הפעלה מחדש וכיבוי של השרת מהקונסולה — ``POST /api/console/server-power``.
 
-מנהל בלבד (deploy → 403), כמו ‏F12 במסך השרת (``dcui.actions.power_action``).
+מנהל בלבד (deploy → 403), כמו F12 במסך השרת (``dcui.actions.power_action``).
 עד כאן זה היה אפשרי רק משם.
 
 **הפעולה עוברת דרך hook אחד, ``schedule(action)``** — ``None`` בהצלחה, אחרת
-הודעת שגיאה. ‏``server.main`` מתקין את האמיתי (``schedule_later``), ורק הוא:
-בלי hook מוזרק הנתיב עונה ‏503, כדי שאף הרצת בדיקות לא תגיע ל-``systemctl
+הודעת שגיאה. ``server.main`` מתקין את האמיתי (``schedule_later``), ורק הוא:
+בלי hook מוזרק הנתיב עונה 503, כדי שאף הרצת בדיקות לא תגיע ל-``systemctl
 poweroff`` של המכונה שהיא רצה עליה (כמו ``_start_ups_monitor``).
 
 **התשובה יוצאת לפני שהשרת יורד:** ``systemctl reboot|poweroff`` רץ ביחידת
@@ -16,7 +16,7 @@ systemd חולפת עם ``--on-active`` — אותה דרך כמו ``deploy_net.
 ולכן אין כאן sudoers ואין polkit.
 
 **סבב או משימה פעילים** (``update.restart_blocker`` — אותה הגדרה כמו כפתור
-העדכון, ‏#1891): ‏409 ``{code: "power_busy", busy}``, אלא אם המנהל ראה את
+העדכון, #1891): 409 ``{code: "power_busy", busy}``, אלא אם המנהל ראה את
 האזהרה ולחץ על הכפתור האדום (``force: true``). השרת מכריע, לא הרשימה שבדפדפן:
 רשימה שנטענה לפני דקה אינה ראיה שאין עבודה (עיקרון 5).
 """
@@ -40,7 +40,7 @@ DELAY_SECONDS = 3
 
 def schedule_later(action: str, delay: int = DELAY_SECONDS) -> str | None:
     """``systemctl <action>`` בעוד ``delay`` שניות, ביחידה חולפת בשם ייחודי
-    (‏#1121: שם קבוע שעוד ממתין מכשיל את הבקשה הבאה ב-"Unit already exists")."""
+    (#1121: שם קבוע שעוד ממתין מכשיל את הבקשה הבאה ב-"Unit already exists")."""
     unit = f"imagesrv-power-{uuid.uuid4().hex[:12]}"
     ok, out, err = deploy_net._run(["systemd-run", f"--on-active={delay}",
                                     f"--unit={unit}", "--collect",
@@ -49,7 +49,7 @@ def schedule_later(action: str, delay: int = DELAY_SECONDS) -> str | None:
 
 
 def create_server_power_router(ctx, schedule=None, busy_source=None) -> APIRouter:
-    """``schedule`` — ה-hook (``None`` = לא הותקן → ‏503). ‏``busy_source`` — מה
+    """``schedule`` — ה-hook (``None`` = לא הותקן → 503). ``busy_source`` — מה
     ש-``restart_blocker`` שואל (בשרת: ה-runtime, שנושא גם את ``vmupdate``)."""
     router = APIRouter(prefix="/api/console")
     _current_user, admin_only = auth.dependencies(ctx.conn)

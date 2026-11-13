@@ -1,12 +1,12 @@
 """שני תהליכונים על ה-DB — הכשל שנראה בסימולציה כ-500 אקראי.
 
-‏uvicorn מריץ ‎`async def` על לולאת האירועים, אבל ‎`def` רגיל — וגם כל
-dependency סינכרוני, כולל ‎`current_user` של הקונסולה — בתהליכון מהמאגר.
+uvicorn מריץ `async def` על לולאת האירועים, אבל `def` רגיל — וגם כל
+dependency סינכרוני, כולל `current_user` של הקונסולה — בתהליכון מהמאגר.
 כלומר בכל בקשת קונסולה שמתרחשת תוך כדי hello יש שני תהליכונים על ה-DB
 באותו רגע. כשהם חלקו חיבור sqlite אחד הם חלקו גם *מצב טרנזאקציה* אחד,
 והתוצאה לא הייתה איטיות אלא חריגות אקראיות שיצאו כ-500.
 
-הבדיקות כאן נכשלו על הקוד שלפני ‎db.Database. הן איטיות במכוון: מרוץ
+הבדיקות כאן נכשלו על הקוד שלפני db.Database. הן איטיות במכוון: מרוץ
 מתגלה בחזרות, לא בקריאה אחת.
 """
 
@@ -25,7 +25,7 @@ from conftest import hello_body, setup_classroom
 
 
 def _admin_client(app):
-    """לקוח מחובר משלו לכל תהליכון — ‏TestClient אחד משני תהליכונים
+    """לקוח מחובר משלו לכל תהליכון — TestClient אחד משני תהליכונים
     הוא מרוץ בצד הבדיקה, וכאן בודקים את השרת."""
     from fastapi.testclient import TestClient
 
@@ -66,7 +66,7 @@ def _run(workers: int, body) -> list[Exception]:
 def test_each_thread_gets_its_own_connection(tmp_path):
     """אותו אובייקט Database, חיבור אחר בכל תהליכון."""
     db = connect(tmp_path / "t.db")
-    # שומרים את אובייקט החיבור עצמו ולא רק את `id()`: ‏id של אובייקט
+    # שומרים את אובייקט החיבור עצמו ולא רק את `id()`: id של אובייקט
     # שנאסף לזבל **ממוחזר**, ולכן תהליכון שסיים יכול לתרום id שחיבור
     # חדש יקבל אחריו — ושני תהליכונים ייראו זהים בלי שהיו. הכשל הזה
     # נצפה על main ב-`assert 4 == 5`.
@@ -129,9 +129,9 @@ def test_journal_survives_concurrent_writers(tmp_path):
 
 
 def test_a_rejected_conditional_update_releases_the_write_lock(tmp_path):
-    """‏UPDATE שלא תאם אף שורה חייב לשחרר את הנעילה — זה היה השורש.
+    """UPDATE שלא תאם אף שורה חייב לשחרר את הנעילה — זה היה השורש.
 
-    ‏sqlite פותח טרנזאקציה על כל DML ואוחז בנעילת הכתיבה מרגע ההצהרה,
+    sqlite פותח טרנזאקציה על כל DML ואוחז בנעילת הכתיבה מרגע ההצהרה,
     גם כשאף שורה לא תאמה. עם חיבור משותף איש לא הרגיש; עם חיבור לכל
     תהליכון, קורא שהפסיד במרוץ וזרק חריגה השאיר **נעילה יתומה**, וכל
     השאר קיבלו "database is locked" אחרי המתנת busy_timeout שלמה.
@@ -180,9 +180,9 @@ def test_a_rejected_conditional_update_releases_the_write_lock(tmp_path):
 def test_console_polling_during_hello_never_500s(server):
     """בדיוק מה שנפל ב-CI: מבט-על נדגם תוך כדי hello של הכיתה.
 
-    ‏`/api/console/overview` הוא ‎`def` (תהליכון מהמאגר) ו-‎`/agent/hello`
-    הוא ‎`async def` (לולאת האירועים). שניהם כותבים. כל תשובה שאינה
-    ‏200 כאן היא הכשל שהצריך הרצה חוזרת ב-GitHub Actions.
+    `/api/console/overview` הוא `def` (תהליכון מהמאגר) ו-`/agent/hello`
+    הוא `async def` (לולאת האירועים). שניהם כותבים. כל תשובה שאינה
+    200 כאן היא הכשל שהצריך הרצה חוזרת ב-GitHub Actions.
     """
     from fastapi.testclient import TestClient
 
@@ -243,7 +243,7 @@ def test_the_session_starts_once_when_two_threads_ripen_it(server):
     clients = [TestClient(app), _admin_client(app), _admin_client(app)]
 
     def ripen(index: int) -> None:
-        # ‏hello של מכונה אחת מספיק כדי להבשיל סבב של 1/1; המבט-על
+        # hello של מכונה אחת מספיק כדי להבשיל סבב של 1/1; המבט-על
         # והתחנה מגיעים לאותו maybe_start מתהליכונים אחרים.
         client = clients[index]
         for _ in range(30):

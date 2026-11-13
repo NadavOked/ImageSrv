@@ -1,7 +1,7 @@
 """המוניטור מרחוק (#690): שער ההגדרות (admin בלבד, הדלקה בהקלדה),
 ושער ה-WebSocket שסוגר אנונימי (4401) ו-deploy (4403) **לפני** שהוא
 פותח חיבור TCP למכונה — ואז מעביר בייטים גולמיים של RFB ל-admin.
-הסגירה קורית **אחרי** accept (‏#904 סעיף 4), כדי שהקוד והסיבה יגיעו
+הסגירה קורית **אחרי** accept (#904 סעיף 4), כדי שהקוד והסיבה יגיעו
 לדפדפן ולא ייבלעו ב-HTTP 403 של דחיית handshake.
 
 מה שנבדק כאן הוא לא "האם ההגדרה נשמרה" אלא **מי מגיע לשירות ה-RFB**.
@@ -33,8 +33,8 @@ from starlette.websockets import WebSocketDisconnect
 
 MAC = "aa:bb:cc:dd:ee:ff"
 IP = "10.44.12.50"
-#: ‏FramebufferUpdateRequest (סוג 3, 10 בייט) — הודעת לקוח תקינה ומלאה,
-#: מה ש-monitor.js שולח אחרי כל עדכון. ‏#1129: הגשר מעביר דפדפן→מכונה
+#: FramebufferUpdateRequest (סוג 3, 10 בייט) — הודעת לקוח תקינה ומלאה,
+#: מה ש-monitor.js שולח אחרי כל עדכון. #1129: הגשר מעביר דפדפן→מכונה
 #: בגבולות הודעה, ולכן "בייטים שרירותיים" אינם עוד קלט חוקי בטסטים.
 FB_REQUEST = b"\x03\x01\x00\x00\x00\x00\x04\x00\x03\x00"
 
@@ -42,7 +42,7 @@ FB_REQUEST = b"\x03\x01\x00\x00\x00\x00\x04\x00\x03\x00"
 class FakeReader:
     """קורא RFB מזויף: מגיש את הבאנר פעם אחת, ואז חוסם עד ביטול —
     כדי שהצד השני (browser_to_machine) יספיק להעביר את בייטי הלקוח
-    לפני שהזרם נסגר. ‏read שמחזיר מיד "" היה מסיים את הפרוקסי במרוץ."""
+    לפני שהזרם נסגר. read שמחזיר מיד "" היה מסיים את הפרוקסי במרוץ."""
 
     def __init__(self):
         self._sent = False
@@ -126,7 +126,7 @@ def test_monitor_is_off_by_default_and_cmdline_flag_follows_the_switch():
 
 def test_settings_page_warns_that_enabling_exposes_5900():
     js = console_js()
-    # ‏#1300: האזהרה עברה מהערה בראש הדף ל-title של המתג ולכרטיס הצפייה (console-full.html P.monitor)
+    # #1300: האזהרה עברה מהערה בראש הדף ל-title של המתג ולכרטיס הצפייה (console-full.html P.monitor)
     assert "כבוי כברירת מחדל — הדלקה חושפת 5900 על וילן ההפצה" in js
     assert "הדלקה חושפת 5900 על וילן ההפצה ותופסת באתחול הבא של כל מכונה" in js
 
@@ -167,7 +167,7 @@ def test_websocket_behaviorally_rejects_non_admin_before_tcp(
 
     with pytest.raises(WebSocketDisconnect) as caught:
         with client.websocket_connect(f"/api/console/monitor/{MAC}") as ws:
-            ws.receive_bytes()      # ‏#904: הסגירה מגיעה אחרי accept
+            ws.receive_bytes()      # #904: הסגירה מגיעה אחרי accept
 
     assert caught.value.code == expected_code
     assert called is False
@@ -193,17 +193,17 @@ def test_websocket_rejects_anonymous_before_tcp(server):
         with TestClient(app).websocket_connect(
             f"/api/console/monitor/{MAC}"
         ) as ws:
-            ws.receive_bytes()      # ‏#904: הסגירה מגיעה אחרי accept
+            ws.receive_bytes()      # #904: הסגירה מגיעה אחרי accept
 
     assert caught.value.code == 4401
     assert called is False
 
 
 def test_rejection_reaches_the_browser_as_a_close_code_not_http_403(server):
-    """‏#904 סעיף 4: ‏`websocket.close` **לפני** accept הוא דחיית handshake לפי
+    """#904 סעיף 4: `websocket.close` **לפני** accept הוא דחיית handshake לפי
     מפרט ASGI — uvicorn מגיש אותה כ-HTTP 403, והדפדפן רואה 1006 בלי קוד
     ובלי סיבה ("החיבור נסגר"). ה-TestClient מדמה את זה במדויק: סגירה לפני
-    accept זורקת כבר ב-`websocket_connect` (הכניסה ל-with, ‏`_raise_on_close`);
+    accept זורקת כבר ב-`websocket_connect` (הכניסה ל-with, `_raise_on_close`);
     סגירה אחרי accept — הכניסה מצליחה (101) והקוד והסיבה מגיעים ב-receive.
     הבקרה השלילית (monitor.py של main) מפילה את זה בכניסה, לא ב-assert."""
     called = False
@@ -229,7 +229,7 @@ def test_rejection_reaches_the_browser_as_a_close_code_not_http_403(server):
 ])
 def test_gate_rejection_also_arrives_after_accept_with_its_reason(
         server, role, code, reason):
-    """‏#859 נשמר: השער עדיין סוגר 4401/4403 לפני TCP — רק שעכשיו הקוד
+    """#859 נשמר: השער עדיין סוגר 4401/4403 לפני TCP — רק שעכשיו הקוד
     והסיבה מגיעים לדפדפן במקום 403 אילם."""
     client = monitor_client(server, role or "admin", None)
     if role is None:
@@ -241,9 +241,9 @@ def test_gate_rejection_also_arrives_after_accept_with_its_reason(
 
 
 def test_close_reason_fits_a_close_frame():
-    """‏RFC 6455: סיבת סגירה היא ≤123 בייט UTF-8 — עברית היא 2 בייט לתו,
+    """RFC 6455: סיבת סגירה היא ≤123 בייט UTF-8 — עברית היא 2 בייט לתו,
     ו-`websockets` זורק ProtocolError על סיבה ארוכה **אחרי** accept (לפני
-    ‏#904 היא נזרקה לפח יחד עם ה-403, ולכן האורך לא נבדק מעולם)."""
+    #904 היא נזרקה לפח יחד עם ה-403, ולכן האורך לא נבדק מעולם)."""
     assert monitor.close_reason("מכונה לא מוכרת") == "מכונה לא מוכרת"
     long = "המוניטור דחה את סוד השרת: " + "א" * 200
     cut = monitor.close_reason(long)
@@ -252,7 +252,7 @@ def test_close_reason_fits_a_close_frame():
 
 
 def test_admin_proxy_carries_raw_rfb_bytes(server):
-    """‏#839: לחיצת-היד היא של הפרוקסי (ראו למטה); מה שאחריה עובר גולמי."""
+    """#839: לחיצת-היד היא של הפרוקסי (ראו למטה); מה שאחריה עובר גולמי."""
     machine = prepare_secret_machine(server)
     opened = []
 
@@ -316,13 +316,13 @@ def test_proxy_caps_startup_retry_and_reports_the_last_reason(server, monkeypatc
 
 
 def test_monitor_client_does_not_require_a_subprotocol():
-    """‏#690: הלקוח פותח WebSocket **בלי** לבקש subprotocol.
+    """#690: הלקוח פותח WebSocket **בלי** לבקש subprotocol.
 
-    ‏`new WebSocket(url, "binary")` מחייב את השרת להחזיר "binary" בתשובת
-    ה-101; ‏uvicorn עם מימוש ה-WS ‎wsproto **אינו** מהדהד את ה-subprotocol
-    (‎websockets כן), ואז Chrome סוגר את החיבור מיד (1006 → "החיבור נסגר",
-    מסך ריק). נמדד על הברזל: מול אותו שרת, ‎ws=websockets החזיר "binary"
-    ו-ws=wsproto החזיר None. ‏RFB עובד על מסגרות בינאריות גולמיות בלי שום
+    `new WebSocket(url, "binary")` מחייב את השרת להחזיר "binary" בתשובת
+    ה-101; uvicorn עם מימוש ה-WS wsproto **אינו** מהדהד את ה-subprotocol
+    (websockets כן), ואז Chrome סוגר את החיבור מיד (1006 → "החיבור נסגר",
+    מסך ריק). נמדד על הברזל: מול אותו שרת, ws=websockets החזיר "binary"
+    ו-ws=wsproto החזיר None. RFB עובד על מסגרות בינאריות גולמיות בלי שום
     subprotocol, אז לא דורשים אותו — וזה חסין לשני המימושים.
 
     בקרה שלילית: החזרת ``, "binary"`` ל-new WebSocket מפילה את הבדיקה.
@@ -340,9 +340,9 @@ def test_monitor_client_does_not_require_a_subprotocol():
 
 
 def test_monitor_client_shows_the_servers_close_reason():
-    """‏#904 סעיף 4: הסיבה העברית שהשרת שולח ב-close היא מה שהמפעיל רואה —
+    """#904 סעיף 4: הסיבה העברית שהשרת שולח ב-close היא מה שהמפעיל רואה —
     הטבלה הקשיחה בלקוח היא גיבוי לסיבה ריקה בלבד. ו-`monitor.html` הוקפץ
-    (‏JS ישן מול שרת חדש — gotcha ידוע; ‏monitor.js נטען משם, לא מ-index)."""
+    (JS ישן מול שרת חדש — gotcha ידוע; monitor.js נטען משם, לא מ-index)."""
     import re
     from pathlib import Path
 
@@ -356,13 +356,13 @@ def test_monitor_client_shows_the_servers_close_reason():
 
 
 def test_monitor_machines_list_is_admin_only_and_server_decides_online(server):
-    """‏#822: דף המוניטור מציג רק build/cloner, ו"מחובר" מגיע מהשרת —
-    אותו חלון (90ש') שבו ‏`_target` מסכים לפתוח חיבור. מחשב כיתה אינו
-    ברשימה כלל, ומכונה שלא נראתה מעולם היא ‏`online: False` עם ‏`ip: None`
+    """#822: דף המוניטור מציג רק build/cloner, ו"מחובר" מגיע מהשרת —
+    אותו חלון (90ש') שבו `_target` מסכים לפתוח חיבור. מחשב כיתה אינו
+    ברשימה כלל, ומכונה שלא נראתה מעולם היא `online: False` עם `ip: None`
     — לא "לא ידוע שנראה כמחובר" (עיקרון 5).
 
-    בקרה שלילית: ‏`seen_within` שמחזירה תמיד True מפילה את ההשוואה עם
-    ‏`now_fn` המאוחר; הסרת ‏`WHERE g.role IN (...)` מכניסה את מכונת הכיתה.
+    בקרה שלילית: `seen_within` שמחזירה תמיד True מפילה את ההשוואה עם
+    `now_fn` המאוחר; הסרת `WHERE g.role IN (...)` מכניסה את מכונת הכיתה.
     """
     from datetime import datetime, timedelta, timezone
 
@@ -405,7 +405,7 @@ def test_monitor_machines_list_is_admin_only_and_server_decides_online(server):
 
 # --- #839/#1077: הפרוקסי מזדהה מול המוניטור ב-HMAC, לא בסוד גולמי ---------
 #
-# ‏5900 קשוב לכל הווילן, ולכן "רק ה-WebSocket של ה-admin מגיע לשם" לא היה
+# 5900 קשוב לכל הווילן, ולכן "רק ה-WebSocket של ה-admin מגיע לשם" לא היה
 # נכון מעולם. המוניטור מציע רק את סוג-אבטחה 2 (מסגור VNC Authentication),
 # והתשובה ל-challenge היא HMAC-SHA256(סוד, challenge) הקטום ל-16 בייטים.
 # סוכן בלי monitor_auth: hmac מסורב לפני TCP. הדפדפן רואה את אותה
@@ -426,7 +426,7 @@ def hmac16(secret: str, challenge: bytes) -> bytes:
 
 class FakeMachine:
     """מוניטור מזויף בצד המכונה: קורא + כותב על אותו אובייקט, ומגיב
-    ללחיצת-היד צעד-צעד לפי מה שהפרוקסי כתב. ‏`read` חוסם כשאין מה להגיש
+    ללחיצת-היד צעד-צעד לפי מה שהפרוקסי כתב. `read` חוסם כשאין מה להגיש
     (כמו FakeReader) — כך הממסר לא נסגר במרוץ."""
 
     def __init__(self, *, offered: bytes = b"\x02", result: int = 0,
@@ -493,7 +493,7 @@ def prepare_secret_machine(server, secret: str | None = SECRET,
 
 
 def browser_handshake(websocket) -> None:
-    """מה ש-monitor.js עושה, בייט-בייט: גרסה, None, ‏ClientInit."""
+    """מה ש-monitor.js עושה, בייט-בייט: גרסה, None, ClientInit."""
     assert websocket.receive_bytes() == b"RFB 003.008\n"
     websocket.send_bytes(b"RFB 003.008\n")
     assert websocket.receive_bytes() == b"\x01\x01"      # רק None מוצע לדפדפן
@@ -557,7 +557,7 @@ def test_input_sent_before_the_version_is_what_closes_unexpected_security_type(s
     """rc6, 18/10 (משכפל 2): "שגיאה: סוג אבטחה לא צפוי". הסיבה הזאת נכתבת
     רק **אחרי** שהפרוקסי הזדהה מול המכונה (סוד ישן היה נסגר 4512 לפני כן),
     והיא אומרת שהבייט ה-13 מהדפדפן אינו 1. כך בדיוק נראה זרם שבו monitor.js
-    שלח PointerEvent בזמן "מתחבר…" (‏#1686: עד 15 ש' כשהמכונה עולה) — הבייטים
+    שלח PointerEvent בזמן "מתחבר…" (#1686: עד 15 ש' כשהמכונה עולה) — הבייטים
     האלה הם מה ש-monitor_client.test.cjs תפס לפני התיקון. הלקוח הוא שתוקן
     (קלט רק אחרי לחיצת היד); הפרוקסי נשאר קפדן, וזה מה שהטסט הזה מקבע."""
     machine = prepare_secret_machine(server)
@@ -592,7 +592,7 @@ def test_proxy_never_falls_back_to_none_security(server):
     client = monitor_client(server, "admin", connector)
     with pytest.raises(WebSocketDisconnect) as caught:
         with client.websocket_connect(f"/api/console/monitor/{MAC}") as ws:
-            ws.receive_bytes()      # ‏#904: הסגירה מגיעה אחרי accept
+            ws.receive_bytes()      # #904: הסגירה מגיעה אחרי accept
 
     assert caught.value.code == monitor.WS_MACHINE_AUTH
     assert b"\x01" not in machine.writes
@@ -609,10 +609,10 @@ def test_proxy_closes_when_the_machine_rejects_the_secret(server):
     client = monitor_client(server, "admin", connector)
     with pytest.raises(WebSocketDisconnect) as caught:
         with client.websocket_connect(f"/api/console/monitor/{MAC}") as ws:
-            ws.receive_bytes()      # ‏#904: הסגירה מגיעה אחרי accept
+            ws.receive_bytes()      # #904: הסגירה מגיעה אחרי accept
 
     assert caught.value.code == monitor.WS_MACHINE_AUTH
-    # ‏#1837: בעברית, בלי הסיבה האנגלית של LibVNCServer.
+    # #1837: בעברית, בלי הסיבה האנגלית של LibVNCServer.
     assert caught.value.reason == monitor.MACHINE_REJECTED_SECRET
     assert "secret mismatch" not in caught.value.reason
     assert machine.closed is True
@@ -631,7 +631,7 @@ def test_proxy_refuses_before_tcp_when_the_machine_reported_no_secret(server):
     client = monitor_client(server, "admin", connector)
     with pytest.raises(WebSocketDisconnect) as caught:
         with client.websocket_connect(f"/api/console/monitor/{MAC}") as ws:
-            ws.receive_bytes()      # ‏#904: הסגירה מגיעה אחרי accept
+            ws.receive_bytes()      # #904: הסגירה מגיעה אחרי accept
 
     assert caught.value.code == monitor.WS_MACHINE_AUTH
     assert called is False
@@ -753,10 +753,10 @@ def monitor_row(server) -> dict:
 
 
 def test_a_waiting_hello_keeps_the_machine_seen_and_names_the_question(server):
-    """נמדד 16/09: בזמן השאלה האדומה `last_seen` קפא והמוניטור נחסם. ‏hello
+    """נמדד 16/09: בזמן השאלה האדומה `last_seen` קפא והמוניטור נחסם. hello
     עם `waiting_for: operator` מעדכן `last_seen` כרגיל (המכונה מחוברת,
     המוניטור נפתח) והשאלה מוצגת ב-`/api/console/machines` וב-`/monitor/machines`.
-    בקרה שלילית: על main ‏`prompt` אינו קיים בתשובה (KeyError)."""
+    בקרה שלילית: על main `prompt` אינו קיים בתשובה (KeyError)."""
     prepare_build_machine(server)
     hello_waiting(server, "Disk 1: failed the previous clone")
     assert console_prompt(server) == "Disk 1: failed the previous clone"
@@ -790,8 +790,8 @@ def test_a_malformed_waiting_hello_stores_no_question(server, prompt, waiting_fo
 
 
 def test_the_console_translates_only_the_agent_fixed_prompts():
-    """‏#908/#912: התפריט ומסך הכניסה של הסוכן שולחים מילה קבועה ב-ASCII
-    (‏`menu`, ‏`signin`) — הקונסולה מתרגמת אותה לעברית; כל שאלה אחרת היא
+    """#908/#912: התפריט ומסך הכניסה של הסוכן שולחים מילה קבועה ב-ASCII
+    (`menu`, `signin`) — הקונסולה מתרגמת אותה לעברית; כל שאלה אחרת היא
     השורה שעל המסך ומוצגת כמו שהיא. בדיקת תוכן — אין דפדפן בחבילה; וה-`?v=`
     הוקפץ (JS ישן מול API חדש — gotcha ידוע)."""
     import re   # noqa: PLC0415
@@ -817,9 +817,9 @@ def test_a_long_question_is_cut_not_refused(server):
 
 # --- #1129: Origin, כוח בשרת, יומן, idle ---------------------------------------
 #
-# ‏R48: האישור בהקלדת שם היה UI בלבד — הדפדפן שלח `imagesrv-power:` על ה-WS
+# R48: האישור בהקלדת שם היה UI בלבד — הדפדפן שלח `imagesrv-power:` על ה-WS
 # והשרת גישר גולמי. עכשיו הגשר מסרב ל-ClientCutText מהדפדפן, והפקודה עוברת
-# רק ב-`POST /monitor/{mac}/power` שמשווה את השם לשם **מהטבלה**. ‏Origin זר
+# רק ב-`POST /monitor/{mac}/power` שמשווה את השם לשם **מהטבלה**. Origin זר
 # נסגר לפני accept; חיבור וסגירה נרשמים ביומן; 10 דק' בלי תעבורה סוגרות.
 
 
@@ -831,8 +831,8 @@ def journal_rows(server, event: str) -> list[tuple[str, str]]:
 @pytest.mark.parametrize("origin", ["http://evil.example", "null",
                                     "http://testserver.evil.example"])
 def test_foreign_origin_is_refused_before_accept_and_before_tcp(server, origin):
-    """‏SameSite=lax אינו מגן על WebSocket cross-site בכל הדפדפנים: דף זר
-    עם ה-cookie של המנהל היה מקבל 101 ואת ה-RFB. ‏Origin שאינו ה-Host
+    """SameSite=lax אינו מגן על WebSocket cross-site בכל הדפדפנים: דף זר
+    עם ה-cookie של המנהל היה מקבל 101 ואת ה-RFB. Origin שאינו ה-Host
     נסגר 4403 **לפני** accept — ה-TestClient
     זורק כבר בכניסה ל-with — ולפני TCP. הבקרה השלילית: main בלי
     `origin_allowed` מגיע ל-4404 אחרי accept (המכונה אינה רשומה)."""
@@ -856,7 +856,7 @@ def test_foreign_origin_is_refused_before_accept_and_before_tcp(server, origin):
 @pytest.mark.parametrize("headers", [{}, {"origin": "http://testserver"},
                                      {"origin": "HTTP://TestServer"}])
 def test_same_origin_or_no_origin_passes_the_origin_gate(server, headers):
-    """‏monitor.js שולח את Origin של השרת עצמו; לקוח שאינו דפדפן (wsmon.py)
+    """monitor.js שולח את Origin של השרת עצמו; לקוח שאינו דפדפן (wsmon.py)
     אינו שולח כלל. שניהם עוברים את השער ומגיעים לשלב הבא (4404 — MAC
     לא מוכר — מגיע **אחרי** accept, כלומר השער לא עצר אותם)."""
     client = monitor_client(server, "admin", None)
@@ -879,7 +879,7 @@ def test_origin_allowed_matches_host_only():
 
 
 def test_power_token_over_the_websocket_is_refused_and_never_reaches_the_machine(server):
-    """‏ClientCutText (סוג 6) מהדפדפן — הערוץ הישן של `imagesrv-power:` —
+    """ClientCutText (סוג 6) מהדפדפן — הערוץ הישן של `imagesrv-power:` —
     נסגר 4403 בשם, והפריים אינו נכתב למכונה. הודעות לקוח רגילות לפניו
     (FramebufferUpdateRequest) כן מגיעות: הסינון הוא לפי סוג, לא "הכול"."""
     machine = prepare_secret_machine(server)
@@ -912,7 +912,7 @@ def test_power_token_over_the_websocket_is_refused_and_never_reaches_the_machine
     assert not any(w.startswith(b"\x06") for w in machine.writes)
     assert not any(b"imagesrv-power" in w for w in machine.writes)
     assert machine.closed is True
-    # ‏#1855: ‏refused נושא את הסיבה
+    # #1855: refused נושא את הסיבה
     assert journal_rows(server, "monitor_closed") == [
         (f"{MAC} refused — ClientCutText — {monitor.POWER_OVER_WS_REFUSED}", "noc")]
 
@@ -927,9 +927,9 @@ def test_power_token_over_the_websocket_is_refused_and_never_reaches_the_machine
 ])
 def test_client_cut_text_is_refused_on_its_header_not_after_its_body(
         server, header, close_code, close_reason, journaled):
-    """‏#1392: ההחלטה על ClientCutText נופלת כשהאורך ידוע (8 בייטים), ולא
+    """#1392: ההחלטה על ClientCutText נופלת כשהאורך ידוע (8 בייטים), ולא
     אחרי שכל הגוף הגיע — אורך שמבטיח 1GB אינו משאיר את הגשר ממתין ובולע
-    (רגיל → ‏4403 כמו תמיד; מורחב ענק → ‏1009 בשם)."""
+    (רגיל → 4403 כמו תמיד; מורחב ענק → 1009 בשם)."""
     machine = prepare_secret_machine(server)
 
     async def connector(_host, _port):
@@ -945,7 +945,7 @@ def test_client_cut_text_is_refused_on_its_header_not_after_its_body(
         with pytest.raises(WebSocketDisconnect) as caught:
             websocket.receive_bytes()
     assert (caught.value.code, caught.value.reason) == (close_code, close_reason)
-    assert journal_rows(server, "monitor_closed") == [(f"{MAC} {journaled}", "noc")]   # ‏#1855
+    assert journal_rows(server, "monitor_closed") == [(f"{MAC} {journaled}", "noc")]   # #1855
     assert not any(w.startswith(b"\x06") for w in machine.writes)
 
 
@@ -986,11 +986,11 @@ def test_client_message_length_table():
 
 
 def test_client_message_length_knows_what_novnc_1_6_sends():
-    """‏#1392: noVNC 1.6 (מסך ה-VM, #1334) שולח הודעות ש-monitor.js לא שלח
+    """#1392: noVNC 1.6 (מסך ה-VM, #1334) שולח הודעות ש-monitor.js לא שלח
     מעולם. כל אחת בגבול הנכון — אחרת הגשר ממתין לבייטים שלא יגיעו ובולע
     את כל מה שאחריה, בלי לסגור (המסך קופא, המקלדת לא עוברת)."""
     # ClientCutText מורחב (Extended Clipboard): אורך **שלילי** כ-s32. noVNC
-    # עונה כך ל-caps ש-QEMU 10 שולח מיד אחרי SetEncodings. ‏-8 אינו 4GB.
+    # עונה כך ל-caps ש-QEMU 10 שולח מיד אחרי SetEncodings. -8 אינו 4GB.
     caps = b"\x06\x00\x00\x00" + struct.pack(">i", -8) + b"\x1f\x00\x00\x01" + b"\x00" * 4
     assert monitor.client_message_length(caps) == 16
     # QEMU Extended Key Event (255, תת-סוג 0) — כל מקש אחרי ש-QEMU אישר -258.
@@ -999,7 +999,7 @@ def test_client_message_length_knows_what_novnc_1_6_sends():
     assert monitor.client_message_length(b"\xff") is None
     with pytest.raises(ValueError):
         monitor.client_message_length(b"\xff\x01\x00\x00")   # QEMU audio — לא נשלח
-    # ClientFence (248): ‏9 בייטים + מטען באורך הבייט התשיעי.
+    # ClientFence (248): 9 בייטים + מטען באורך הבייט התשיעי.
     assert monitor.client_message_length(b"\xf8\x00\x00\x00\x00\x00\x00\x00") is None
     assert monitor.client_message_length(b"\xf8" + b"\x00" * 7 + b"\x05") == 14
     # EnableContinuousUpdates (150): קבוע.
@@ -1013,7 +1013,7 @@ def test_power_frame_is_client_cut_text_with_the_token():
 
 
 def test_power_endpoint_is_admin_only_and_verifies_the_server_side_name(server):
-    """‏403 בלי השם הקנוני (`suffix` מהטבלה — לא `?name=` מהכתובת), גם
+    """403 בלי השם הקנוני (`suffix` מהטבלה — לא `?name=` מהכתובת), גם
     כשמוניטור פתוח; 409 בלי מוניטור פתוח; deploy → 403, אנונימי → 401;
     פעולה לא מוכרת → 400. שום דבר מזה אינו נוגע במכונה."""
     machine = prepare_secret_machine(server)
@@ -1048,8 +1048,8 @@ def test_power_endpoint_is_admin_only_and_verifies_the_server_side_name(server):
 
 def test_power_endpoint_writes_the_token_to_the_machine_and_journals_who(server):
     """הראיה החיובית: עם מוניטור פתוח והשם הנכון, הפריים
-    ‏ClientCutText(`imagesrv-power:reboot`) נכתב למכונה **מהשרת**,
-    ‏`monitor_power` נרשם עם המשתמש וה-MAC, וה-WS של הדפדפן נשאר פתוח."""
+    ClientCutText(`imagesrv-power:reboot`) נכתב למכונה **מהשרת**,
+    `monitor_power` נרשם עם המשתמש וה-MAC, וה-WS של הדפדפן נשאר פתוח."""
     machine = prepare_secret_machine(server)
 
     async def connector(_host, _port):
@@ -1116,8 +1116,8 @@ def test_machine_socket_closing_mid_session_gets_a_distinct_browser_close(server
 
 
 def test_idle_bridge_closes_both_sides_and_releases_the_machine(server, monkeypatch):
-    """‏WS שנשאר פתוח בלי בייט לאף כיוון: אחרי IDLE_SECONDS הדפדפן מקבל
-    4408 בשם, ה-TCP למכונה נסגר, ‏`monitor_closed … idle` נרשם — והמנעול
+    """WS שנשאר פתוח בלי בייט לאף כיוון: אחרי IDLE_SECONDS הדפדפן מקבל
+    4408 בשם, ה-TCP למכונה נסגר, `monitor_closed … idle` נרשם — והמנעול
     משתחרר: חיבור שני לאותה מכונה מתקבל (לא 4409)."""
     monkeypatch.setattr(monitor, "IDLE_SECONDS", 0.3, raising=False)
     machine = prepare_secret_machine(server)

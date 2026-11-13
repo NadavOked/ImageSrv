@@ -1,8 +1,8 @@
-"""‏#1131 / ‏#1121 — פונקציות המתקין וסקריפט השדרוג, מורצות **בפועל** ב-bash.
+"""#1131 / #1121 — פונקציות המתקין וסקריפט השדרוג, מורצות **בפועל** ב-bash.
 
 הפונקציות נשלפות מ-`deploy/setup-boot-server.sh` (לא עותק — סטייה בין
 הסקריפט לבדיקה היא בדיוק החור, כמו test_installer_admin) ורצות עם כלים
-מדומים על PATH (‏`ip`, ‏`nft`, ‏`systemctl`…) שרושמים מה נקרא. הבדיקה היא
+מדומים על PATH (`ip`, `nft`, `systemctl`…) שרושמים מה נקרא. הבדיקה היא
 קוד יציאה, קבצים שנכתבו, ומה **לא** נקרא.
 """
 
@@ -92,7 +92,7 @@ def posix(path: Path) -> str:
     return path.resolve().as_posix()
 
 
-# --- iface_ip (‏#1121 ס' 5) ----------------------------------------------------------
+# --- iface_ip (#1121 ס' 5) ----------------------------------------------------------
 
 IP_TWO_ADDRS = (
     "2: eth0    inet 10.1.2.3/24 brd 10.1.2.255 scope global deprecated dynamic eth0"
@@ -111,7 +111,7 @@ def test_iface_ip_skips_the_deprecated_address_during_renewal(tmp_path, bindir):
 
 
 def test_iface_ip_failure_of_ip_is_not_an_empty_address(tmp_path, bindir):
-    """‏`ip` שנפל: שגיאה ב-stderr ו-`set -o pipefail` מפיל את ההשמה — לא
+    """`ip` שנפל: שגיאה ב-stderr ו-`set -o pipefail` מפיל את ההשמה — לא
     "אין כתובת" בשקט (עיקרון 5)."""
     fake_tool(bindir, "ip", 'echo "Device \\"eth0\\" does not exist." >&2; exit 1')
     proc = run_bash("set -euo pipefail\n" + installer_function("iface_ip")
@@ -120,7 +120,7 @@ def test_iface_ip_failure_of_ip_is_not_an_empty_address(tmp_path, bindir):
     assert "does not exist" in proc.stderr and "got=" not in proc.stdout
 
 
-# --- write_file (‏#1131 ס' 2 / ס' 9) --------------------------------------------------
+# --- write_file (#1131 ס' 2 / ס' 9) --------------------------------------------------
 
 WRITE_FILE = HELPERS + "DRY_RUN=0\nLAST_BACKUP=''\n" + installer_function("write_file")
 
@@ -152,7 +152,7 @@ def test_write_file_first_write_has_no_backup_and_default_mode(tmp_path, bindir)
         assert stat.S_IMODE(target.stat().st_mode) == 0o644
 
 
-# --- שמות כרטיסים (‏#1131 ס' 8 / ס' 13) ------------------------------------------------
+# --- שמות כרטיסים (#1131 ס' 8 / ס' 13) ------------------------------------------------
 
 IFNAME = HELPERS + installer_function("require_ifname")
 
@@ -190,7 +190,7 @@ def test_installer_validates_every_name_that_reaches_a_command_line():
     assert 'ip link show "$SERVERS_IF"' not in text
 
 
-# --- כבר מותקן? (‏#1131 ס' 3 / ס' 10) + רשת ההפצה מה-DB (‏#1121 ס' 7) --------------
+# --- כבר מותקן? (#1131 ס' 3 / ס' 10) + רשת ההפצה מה-DB (#1121 ס' 7) --------------
 
 REFUSE = HELPERS + installer_function("refuse_if_installed")
 
@@ -214,7 +214,7 @@ def test_second_run_stops_in_name_unless_forced(tmp_path, bindir):
 
 
 def test_installer_reads_the_console_deploy_nic_from_the_db(tmp_path, bindir):
-    """‏#1121 ס' 7: ‏deploy:interface+deploy:url ב-DB → הכרטיס; חצי-רשומה → ריק."""
+    """#1121 ס' 7: deploy:interface+deploy:url ב-DB → הכרטיס; חצי-רשומה → ריק."""
     from server.net import deploy_net
     from server.db import connect
     data = tmp_path / "data"
@@ -239,7 +239,7 @@ def test_installer_keeps_dnsmasq_and_the_deploy_rules_when_the_console_configure
     assert '-z "$IFACE" && -z "$CONSOLE_DEPLOY_IF"' in text        # לא שואלים "לא עכשיו"
 
 
-# --- חומת האש אחרונה, עם החזרה (‏#1131 ס' 1 / ס' 8) -------------------------------------
+# --- חומת האש אחרונה, עם החזרה (#1131 ס' 1 / ס' 8) -------------------------------------
 
 def test_firewall_is_the_last_step_after_the_server_answers():
     text = INSTALLER.read_text(encoding="utf-8")
@@ -307,7 +307,7 @@ def test_failed_install_firewall_leaves_tmpdir_empty(tmp_path, bindir):
 
 def test_successful_install_firewall_leaves_tmpdir_empty(tmp_path, bindir):
     """#1912 / #1285: גם המסלול **המוצלח** מוחק את שני קובצי ה-mktemp (ה-ruleset
-    שנוצר ועותק ה-ruleset הקודם). ‏215 קבצי tmp.* מילאו את /tmp של ה-Testrunner."""
+    שנוצר ועותק ה-ruleset הקודם). 215 קבצי tmp.* מילאו את /tmp של ה-Testrunner."""
     temp = tmp_path / "tmp"
     temp.mkdir()
     (tmp_path / "nftables.conf").write_text("# debian default\n", encoding="utf-8")
@@ -319,7 +319,7 @@ def test_successful_install_firewall_leaves_tmpdir_empty(tmp_path, bindir):
 
 
 def test_a_firewall_syntax_failure_leaves_tmpdir_empty(tmp_path, bindir):
-    """#1912 / #1285: ‏`nft -c` דוחה — המתקין עוצר, וה-ruleset שנוצר אינו נשאר ב-/tmp."""
+    """#1912 / #1285: `nft -c` דוחה — המתקין עוצר, וה-ruleset שנוצר אינו נשאר ב-/tmp."""
     temp = tmp_path / "tmp"
     temp.mkdir()
     _firewall_fakes(bindir, enable_fails=False)
@@ -331,7 +331,7 @@ def test_a_firewall_syntax_failure_leaves_tmpdir_empty(tmp_path, bindir):
 
 
 def test_install_firewall_failure_restores_the_previous_ruleset_and_file(tmp_path, bindir):
-    """‏`systemctl enable --now nftables` נכשל → ה-ruleset הקודם נטען חזרה,
+    """`systemctl enable --now nftables` נכשל → ה-ruleset הקודם נטען חזרה,
     הקובץ הקודם חוזר מהגיבוי, והשגיאה נאמרת בלי `|| true` שמסתיר."""
     conf = tmp_path / "nftables.conf"
     conf.write_text("# debian default\n", encoding="utf-8")
@@ -348,7 +348,7 @@ def test_install_firewall_failure_restores_the_previous_ruleset_and_file(tmp_pat
     assert conf.read_text(encoding="utf-8") == "# debian default\n"
 
 
-# --- console-live.sh + /api/console/health/live (‏#1131 ס' 1 / ס' 5) ------------------
+# --- console-live.sh + /api/console/health/live (#1131 ס' 1 / ס' 5) ------------------
 
 class _LiveHandler(BaseHTTPRequestHandler):
     body: dict | None = None
@@ -382,7 +382,7 @@ def serving_live(body: dict | None, status: int = 200):
 
 
 def _live(url: str, want: str, wait: str = "2") -> subprocess.CompletedProcess:
-    # ‏stdin=DEVNULL: בריצה רב-קבצית בווינדוס ה-handle של stdin נשבר (#14).
+    # stdin=DEVNULL: בריצה רב-קבצית בווינדוס ה-handle של stdin נשבר (#14).
     return subprocess.run([BASH, str(LIVE), url, want, wait], capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=60, stdin=subprocess.DEVNULL,
                           env={**os.environ, "PYTHONIOENCODING": "utf-8"})
@@ -421,7 +421,7 @@ def test_health_live_is_unauthenticated_and_reports_the_version(tmp_path, images
 
 def test_health_live_reports_the_version_the_process_loaded_not_the_tree_on_disk(
         tmp_path, images_root, clock):
-    """‏#1546: בשרת חיפה העץ עבר ל-v0.75.0, השירות לא אותחל, ו-`/health/live`
+    """#1546: בשרת חיפה העץ עבר ל-v0.75.0, השירות לא אותחל, ו-`/health/live`
     אמר v0.75.0 — הוא קרא את הדיסק בכל בקשה. זו הראיה ש-server-upgrade.sh
     נשען עליה ("החדש רץ"), ולכן היא חייבת להיות של התהליך, לא של העץ."""
     pytest.importorskip("fastapi")
@@ -437,7 +437,7 @@ def test_health_live_reports_the_version_the_process_loaded_not_the_tree_on_disk
 
 def test_health_live_unread_at_startup_is_reread_until_it_succeeds_then_locked(
         tmp_path, images_root, clock):
-    """‏#1546: גרסה שלא נקראה בעלייה אינה ננעלת כ"לא ידוע" — `/health/live`
+    """#1546: גרסה שלא נקראה בעלייה אינה ננעלת כ"לא ידוע" — `/health/live`
     קורא שוב עד שהצליח (וכל עוד נכשל, מחזיר `version_error` בשם), ואז נועל."""
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
@@ -460,7 +460,7 @@ def test_health_live_unread_at_startup_is_reread_until_it_succeeds_then_locked(
     assert client.get("/api/console/health/live").json()["version"] == "v0.75.0"
 
 
-# --- tools/server-upgrade.sh (‏#1131 ס' 5–6 / ס' 12) ---------------------------------
+# --- tools/server-upgrade.sh (#1131 ס' 5–6 / ס' 12) ---------------------------------
 
 def _fake_repo(tmp_path: Path, *, live_ok: bool, payload_ok: bool = True) -> Path:
     repo = tmp_path / "repo"
@@ -479,11 +479,11 @@ def _fake_repo(tmp_path: Path, *, live_ok: bool, payload_ok: bool = True) -> Pat
     (repo / "deploy" / "boot-payload-release.sh").write_text(
         '#!/usr/bin/env bash\necho "rebuild release has no signed boot-payload manifest"\nexit 10\n',
         encoding="utf-8", newline="\n")
-    # ‏#1230: הבנייה עצמה נבדקת ב-test_boot_payload_1230; כאן רק שהיא נקראה.
+    # #1230: הבנייה עצמה נבדקת ב-test_boot_payload_1230; כאן רק שהיא נקראה.
     (repo / "tools" / "boot-payload-build.sh").write_text(
         '#!/usr/bin/env bash\nprintf "boot-payload-build %s\\n" "$*" >> "$FAKE_LOG"\n',
         encoding="utf-8", newline="\n")
-    # ‏#1277: אימות החתימה נבדק ב-test_release_signing_1277; כאן — תג "חתום".
+    # #1277: אימות החתימה נבדק ב-test_release_signing_1277; כאן — תג "חתום".
     (repo / "tools" / "verify-release-tag.py").write_text(
         'print("signed: stub SHA256:stub")\n', encoding="utf-8", newline="\n")
     return repo
@@ -607,7 +607,7 @@ def test_upgrade_refuses_while_a_round_is_open_even_when_run_by_hand(tmp_path, b
 
 
 def test_upgrade_without_a_saved_previous_tag_rolls_back_to_the_commit_it_started_from(tmp_path, bindir):
-    """‏#1546: בהרצה ידנית אין `update_previous` ב-DB. עד #1546 הכשל יצא בלי
+    """#1546: בהרצה ידנית אין `update_previous` ב-DB. עד #1546 הכשל יצא בלי
     checkout ובלי restart — העץ נשאר על התג החדש והתהליך הישן רץ (שרת חיפה,
     17/10). יעד החזרה הוא הקומיט שהעץ היה עליו לפני הריצה."""
     data = tmp_path / "data"
@@ -625,14 +625,14 @@ def test_upgrade_without_a_saved_previous_tag_rolls_back_to_the_commit_it_starte
 
 
 def test_a_stale_saved_previous_tag_is_not_the_rollback_target(tmp_path, bindir):
-    """‏#1546: ‏`update_previous` אינו נמחק לעולם. הרצה ידנית אחרי עדכון קודם
+    """#1546: `update_previous` אינו נמחק לעולם. הרצה ידנית אחרי עדכון קודם
     מהקונסולה הייתה "חוזרת" לתג שלפני **אותו** עדכון — לא למה שרץ. יעד
     החזרה הוא מה שהעץ עליו, ו-`update_previous` רק כשהוא מצביע עליו."""
     data = tmp_path / "data"
     _seed_db(data, previous="v0.47.0")
     repo = _fake_repo(tmp_path, live_ok=False)
     _upgrade_fakes(bindir)
-    git = bindir / "git"   # ‏v0.47.0 מצביע על קומיט אחר מזה שהעץ עליו
+    git = bindir / "git"   # v0.47.0 מצביע על קומיט אחר מזה שהעץ עליו
     git.write_text(git.read_text(encoding="utf-8").replace(
         'case "$1" in describe)',
         'case "$*" in *"v0.47.0^{commit}"*) echo "commit-of-v0.47.0"; exit 0 ;; esac\n'
@@ -647,7 +647,7 @@ def test_a_stale_saved_previous_tag_is_not_the_rollback_target(tmp_path, bindir)
     assert status and status["state"] == "failed" and "הוחזר ל-commit-of-v0.49.0" in status["error"]
 
 
-# --- ‏#1957: טיימרים — מותקנים ומופעלים בכל עדכון, ולא רק בהתקנה נקייה ---------------
+# --- #1957: טיימרים — מותקנים ומופעלים בכל עדכון, ולא רק בהתקנה נקייה ---------------
 
 TIMER = "imagesrv-backup.timer"
 
@@ -715,7 +715,7 @@ def test_rollback_disables_a_timer_the_previous_version_does_not_have(tmp_path, 
 
 
 def test_console_live_rereads_the_pinned_cert_on_every_attempt():
-    """‏#1417: השרת מחליף את התעודה בעלייה הראשונה (#1380); בודק שקרא את
+    """#1417: השרת מחליף את התעודה בעלייה הראשונה (#1380); בודק שקרא את
     ה-cafile פעם אחת נשאר מצמיד את הישנה ונכשל — והשדרוג נחזר."""
     text = LIVE.read_text(encoding="utf-8")
     loop = text.index("while True:")

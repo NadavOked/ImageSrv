@@ -85,7 +85,7 @@ def _unreadable_entry(tmp_path: Path, role: str) -> dict:
 
 def test_the_hello_of_an_unreadable_disk_has_data_and_an_unchecked_mark(tmp_path):
     """What the build capture screen sees: not an empty disk, not "clean".
-    ‏#1924 (נדב): ‏scheme/has_data נשלחים רק ממחשב בנייה — שם נבדק #1904."""
+    #1924 (נדב): scheme/has_data נשלחים רק ממחשב בנייה — שם נבדק #1904."""
     entry = _unreadable_entry(tmp_path, "build")
     assert entry["scheme"] == "unknown", entry
     assert entry["has_data"] is True, entry

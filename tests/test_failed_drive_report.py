@@ -1,6 +1,6 @@
-"""‏#553 — כונן שנכשל מדווח בשורה שאפשר לפעול לפיה.
+"""#553 — כונן שנכשל מדווח בשורה שאפשר לפעול לפיה.
 
-**נמדד על ברזל, 08/09/2026:** סבב על 5 מגירות נפל, ‏**המפעיל לא ראה
+**נמדד על ברזל, 08/09/2026:** סבב על 5 מגירות נפל, **המפעיל לא ראה
 שום דבר.** המסך הראה `0 of 5 written` ותו לא, ואיזה כונן נפל היה
 קיים בשרת ולא הוצג בשום מקום.
 
@@ -12,7 +12,7 @@
 sda → port 1     sdb → port 3     sdc → port 2
 ```
 
-שורה שאומרת "‏sdb נכשל" ומתורגמת ל"מגירה 2" **שולחת את הטכנאי
+שורה שאומרת "sdb נכשל" ומתורגמת ל"מגירה 2" **שולחת את הטכנאי
 למגירה הלא נכונה** — והוא מוציא כונן תקין ומשאיר את הפגום בפנים.
 **זה גרוע מלא לדווח בכלל.**
 
@@ -45,7 +45,7 @@ class _Member(dict):
 def _drawers(disks: list[dict], targets: list[dict], written=frozenset()):
     """קורא ל-`drawer_list` האמיתי עם DB מזויף מינימלי.
 
-    ‏**הפונקציה האמיתית ולא עותק שלה:** טסט שמשכפל את הלוגיקה עובר
+    **הפונקציה האמיתית ולא עותק שלה:** טסט שמשכפל את הלוגיקה עובר
     גם כשהמימוש נסחף.
     """
     class _Conn:
@@ -81,7 +81,7 @@ def test_the_drawer_carries_serial_and_model():
 def test_the_physical_port_is_not_the_device_order():
     """**המלכודת עצמה**, בדיוק כפי שנמדדה על HP2.
 
-    ‏`sdb` היא מגירה **3**. טסט שמניח `sda→1, sdb→2, sdc→3` היה
+    `sdb` היא מגירה **3**. טסט שמניח `sda→1, sdb→2, sdc→3` היה
     עובר על נתונים מומצאים ונכשל על המכונה.
     """
     disks = [_disk("sda", 1, "naa.1"), _disk("sdb", 3, "naa.2"),
@@ -91,9 +91,9 @@ def test_the_physical_port_is_not_the_device_order():
 
 
 def test_a_disk_without_a_port_reports_none_and_not_a_guess():
-    """‏NVMe, ‏VM ובקר לא-ATA אינם מדווחים חריץ.
+    """NVMe, VM ובקר לא-ATA אינם מדווחים חריץ.
 
-    **‏`None` ולא `0` ולא ניחוש** — מספר מגירה שגוי גרוע מהיעדר מספר,
+    **`None` ולא `0` ולא ניחוש** — מספר מגירה שגוי גרוע מהיעדר מספר,
     וזה בדיוק מה שההערה ב-`port_from_path` אומרת.
     """
     got = _drawers([_disk("nvme0n1", None, "nvme-1")], [])[0]
@@ -102,7 +102,7 @@ def test_a_disk_without_a_port_reports_none_and_not_a_guess():
 
 @pytest.mark.parametrize("bad", [True, False, "1", 1.0])
 def test_a_port_that_is_not_an_int_is_refused(bad):
-    """‏`True` הוא `int` בפייתון. בלי הסינון, "מגירה True" על המסך."""
+    """`True` הוא `int` בפייתון. בלי הסינון, "מגירה True" על המסך."""
     assert _drawers([_disk("sda", bad, "naa.1")], [])[0]["port"] is None
 
 
@@ -130,7 +130,7 @@ def test_a_drawer_that_finished_is_not_marked_failed():
 def test_a_disk_the_round_never_touched_has_no_state():
     """כונן שלא היה יעד אינו "לא נכשל" — הוא לא נבדק.
 
-    ‏`None` ולא `"ok"`: השניים נראים זהים על המסך ואינם זהים.
+    `None` ולא `"ok"`: השניים נראים זהים על המסך ואינם זהים.
     """
     got = _drawers([_disk("sdc", 2, "naa.3")], [])[0]
     assert got["state"] is None

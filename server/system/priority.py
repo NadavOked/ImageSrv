@@ -1,23 +1,23 @@
-"""עדיפות מעבד ודיסק לעבודה הכבדה של השרת (‏#1974, הכרעת נדב 22/10).
+"""עדיפות מעבד ודיסק לעבודה הכבדה של השרת (#1974, הכרעת נדב 22/10).
 
 בזמן שידור או קליטה הקונסולה וה-DB צריכים להישאר מהירים. השידור
-(‏udp-sender) והכתיבה של הקליטה רצים לכן **בעדיפות נמוכה מהשרת עצמו** —
-‏nice 10 למעבד, ‏ionice best-effort 7 לדיסק — ולא idle: עדיפות idle
+(udp-sender) והכתיבה של הקליטה רצים לכן **בעדיפות נמוכה מהשרת עצמו** —
+nice 10 למעבד, ionice best-effort 7 לדיסק — ולא idle: עדיפות idle
 עלולה להרעיב את השידור לכיתה כשיש עבודת דיסק אחרת, ו-"מהירות מרבית
 אצלנו" (נדב 17/10) אומר שהגבלה באה רק כהגנה. כשהמכונה פנויה העדיפות אינה
 משנה דבר; היא מכריעה רק כשיש תחרות, ואז הקונסולה קודמת.
 
 שני מנגנונים, לפי מי שמבצע את העבודה:
 
-* **תהליך-בן** (‏udp-sender): קידומת `nice`/`ionice` לשורת הפקודה. ‏`nice`
+* **תהליך-בן** (udp-sender): קידומת `nice`/`ionice` לשורת הפקודה. `nice`
   ו-`ionice` מבצעים `exec`, ולכן ה-PID שהשרת שומר הוא של udp-sender
   עצמו — העצירה וה-`/proc/<pid>/comm` של #439 אינם משתנים.
 * **תהליכון בתוך השרת** (הכתיבה והגיבוב של הקליטה, האימות שאחריה):
-  ‏`setpriority` ו-`ioprio_set` על ה-TID — בלינוקס כל תהליכון הוא משימה
+  `setpriority` ו-`ioprio_set` על ה-TID — בלינוקס כל תהליכון הוא משימה
   משלו, וההנמכה חלה עליו בלבד, לא על הלולאה של uvicorn.
 
-**גבול ידוע:** עדיפות הדיסק נאכפת רק במתזמן שמכבד אותה (‏BFQ; ‏mq-deadline
-מבחין במחלקה בלבד, ו-`none` — ‏NVMe ו-virtio — לא בכלל). עדיפות המעבד
+**גבול ידוע:** עדיפות הדיסק נאכפת רק במתזמן שמכבד אותה (BFQ; mq-deadline
+מבחין במחלקה בלבד, ו-`none` — NVMe ו-virtio — לא בכלל). עדיפות המעבד
 נאכפת תמיד. ההנמכה אינה נכשלת בשקט: כלי חסר או קריאת מערכת שנדחתה נרשמים
 ביומן השרת (עיקרון 5), והעבודה ממשיכה בעדיפות רגילה.
 """
@@ -35,11 +35,11 @@ from concurrent.futures import ThreadPoolExecutor
 log = logging.getLogger("imagesrv.priority")
 
 NICE = 10
-#: ‏ionice: מחלקה 2 (best-effort), רמה 7 — הנמוכה במחלקה, ואינה מרעיבה.
+#: ionice: מחלקה 2 (best-effort), רמה 7 — הנמוכה במחלקה, ואינה מרעיבה.
 IO_CLASS, IO_LEVEL = 2, 7
 BACKGROUND_PREFIX = ("nice", "-n", str(NICE), "ionice", "-c", str(IO_CLASS), "-n", str(IO_LEVEL))
 
-#: ‏ioprio_set(2) — אין לו עטיפה בספרייה התקנית. מספר קריאת המערכת לפי
+#: ioprio_set(2) — אין לו עטיפה בספרייה התקנית. מספר קריאת המערכת לפי
 #: ארכיטקטורה; ארכיטקטורה שאינה כאן — ההנמכה של הדיסק נאמרת ביומן ומדולגת.
 _IOPRIO_SET = {"x86_64": 251, "aarch64": 30, "i686": 289, "i386": 289}
 _IOPRIO_WHO_PROCESS = 1
@@ -47,7 +47,7 @@ _IOPRIO_CLASS_SHIFT = 13
 
 
 def background_cmd(cmd: list[str], which=None) -> list[str]:
-    """‏`cmd` בעדיפות הרקע — או `cmd` כמות שהוא, ובקול, כשאחד הכלים חסר."""
+    """`cmd` בעדיפות הרקע — או `cmd` כמות שהוא, ובקול, כשאחד הכלים חסר."""
     which = which or shutil.which
     if which("nice") and which("ionice"):
         return [*BACKGROUND_PREFIX, *cmd]
@@ -63,7 +63,7 @@ def lower_this_thread(*, setpriority=getattr(os, "setpriority", None),
                       syscall=None, machine: str | None = None) -> list[str]:
     """מנמיך את התהליכון **הנוכחי** בלבד. מחזיר את מה שלא הונמך (ריק = הכול).
 
-    ‏`setpriority`/`syscall`/`machine` מוזרקים בבדיקות. כשל אינו זורק — זו
+    `setpriority`/`syscall`/`machine` מוזרקים בבדיקות. כשל אינו זורק — זו
     עדיפות, לא תנאי לעבודה — אבל הוא נרשם ביומן ומוחזר."""
     problems: list[str] = []
     tid = threading.get_native_id()
@@ -88,8 +88,8 @@ def lower_this_thread(*, setpriority=getattr(os, "setpriority", None),
     return problems
 
 
-#: ‏#1974: הכתיבה והגיבוב של הקליטה — מאגר משלה, שכל תהליכון בו מונמך פעם
-#: אחת בהיווצרו. ‏`asyncio.to_thread` הוא מאגר **משותף** עם כל endpoint
+#: #1974: הכתיבה והגיבוב של הקליטה — מאגר משלה, שכל תהליכון בו מונמך פעם
+#: אחת בהיווצרו. `asyncio.to_thread` הוא מאגר **משותף** עם כל endpoint
 #: סינכרוני של הקונסולה, והנמכה שם הייתה מנמיכה גם את הקונסולה.
 CAPTURE_IO = ThreadPoolExecutor(max_workers=8, thread_name_prefix="capture-io",
                                 initializer=lower_this_thread)

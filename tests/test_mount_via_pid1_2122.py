@@ -1,11 +1,11 @@
-"""‏#2122 / ‏#2123 — עיגון במרחב של PID 1, ומצב שאינו "מחובר" מהזיכרון.
+"""#2122 / #2123 — עיגון במרחב של PID 1, ומצב שאינו "מחובר" מהזיכרון.
 
-‏#2122: ‏imagesrv-server רץ עם `ProtectSystem=strict` — במרחב עיגון משלו. ‏`mount`
-שרץ משם נשאר שם, ונעלם ב-restart של השירות; ‏`storage/<שם>` חוזר להיות תיקייה
-על דיסק המערכת (נמדד על rc2/ESXi, ‏24/10). כאן: mount/umount רצים דרך `nsenter`
+#2122: imagesrv-server רץ עם `ProtectSystem=strict` — במרחב עיגון משלו. `mount`
+שרץ משם נשאר שם, ונעלם ב-restart של השירות; `storage/<שם>` חוזר להיות תיקייה
+על דיסק המערכת (נמדד על rc2/ESXi, 24/10). כאן: mount/umount רצים דרך `nsenter`
 למרחב של PID 1, וההצלחה נקבעת לפי שני קובצי mountinfo, לא לפי קוד היציאה.
 
-‏#2123: אחרי restart הרשימה הראתה "מחובר" מהזיכרון. כאן: מיקום-עיגון הוא
+#2123: אחרי restart הרשימה הראתה "מחובר" מהזיכרון. כאן: מיקום-עיגון הוא
 "לא נבדק" מעליית התהליך ועד הבדיקה הראשונה שלו, שרצה כבר בפעימה הראשונה.
 
 אף טסט כאן אינו מריץ mount/nsenter/systemctl אמיתי — `_run` מזויף.
@@ -36,7 +36,7 @@ class Namespaces:
             path.write_text(LINE.format(n=1, point="/"), encoding="utf-8")
         self.propagate = propagate     # False = כמו לפני #2122: רק המרחב של השירות
         self.calls: list[list[str]] = []
-        # ‏raising=False: על הקוד שלפני #2122 אין את השמות — הבקרה השלילית נכשלת בהתנהגות
+        # raising=False: על הקוד שלפני #2122 אין את השמות — הבקרה השלילית נכשלת בהתנהגות
         monkeypatch.setattr(sl, "HOST_MOUNTINFO", str(self.host), raising=False)
         monkeypatch.setattr(sl, "OWN_MOUNTINFO", str(self.own), raising=False)
         monkeypatch.setattr(sl, "_run", self.run)
@@ -97,7 +97,7 @@ def test_mount_runs_in_pid1_mount_namespace_and_is_seen_by_both(tmp_path, monkey
 
 
 def test_a_mount_that_pid1_does_not_see_is_a_failure_and_is_undone(tmp_path, monkeypatch):
-    """בדיוק מה שנמדד ב-rc2: ‏sdb1 ב-`/proc/<השירות>/mountinfo` ו-0 פעמים אצל PID 1."""
+    """בדיוק מה שנמדד ב-rc2: sdb1 ב-`/proc/<השירות>/mountinfo` ו-0 פעמים אצל PID 1."""
     ns = Namespaces(tmp_path, monkeypatch)
     target = str(tmp_path / "storage" / "extra20")
 
@@ -132,7 +132,7 @@ def test_umount_runs_in_pid1_namespace_and_needs_both_to_lose_it(tmp_path, monke
 
 
 def test_umount_that_left_the_mount_at_pid1_is_a_failure(tmp_path, monkeypatch):
-    """‏umount מתוך מרחב פרטי מסיר רק את העותק של השירות — אצל המארח העיגון נשאר."""
+    """umount מתוך מרחב פרטי מסיר רק את העותק של השירות — אצל המארח העיגון נשאר."""
     ns = Namespaces(tmp_path, monkeypatch)
     ns.mount_both(TARGET)
 
@@ -156,7 +156,7 @@ def test_default_is_mount_needs_pid1_and_the_service(tmp_path, monkeypatch):
 
 
 def test_a_mount_that_could_not_be_verified_is_unchecked_not_ok(tmp_path, monkeypatch):
-    """‏mountinfo של PID 1 שלא נקרא אינו "מעוגן" — וגם אינו "לא מעוגן"."""
+    """mountinfo של PID 1 שלא נקרא אינו "מעוגן" — וגם אינו "לא מעוגן"."""
     Namespaces(tmp_path, monkeypatch)
     monkeypatch.setattr(sl, "HOST_MOUNTINFO", str(tmp_path / "missing"), raising=False)
     target = str(tmp_path / "storage" / "extra20")
@@ -173,7 +173,7 @@ def test_mount_point_with_a_space_is_read_from_its_mountinfo_escape(tmp_path, mo
 
 
 def test_fstab_write_reloads_systemd_after_the_file_is_written(tmp_path, monkeypatch):
-    """‏fstab שהשתנה בלי daemon-reload: ל-PID 1 נשארת יחידת mount ישנה לאותה נקודה."""
+    """fstab שהשתנה בלי daemon-reload: ל-PID 1 נשארת יחידת mount ישנה לאותה נקודה."""
     fstab = tmp_path / "fstab"
     fstab.write_text("UUID=root / ext4 defaults 0 1\n", encoding="utf-8")
     monkeypatch.setattr(sl, "FSTAB_PATH", fstab)
@@ -208,8 +208,8 @@ def _unit(name: str) -> dict[str, str]:
 
 @pytest.mark.parametrize("unit", ["imagesrv-server.service", "imagesrv-dcui.service"])
 def test_units_that_mount_storage_can_enter_pid1_namespace(unit):
-    """‏`nsenter --mount=/proc/1/ns/mnt` דורש root עם CAP_SYS_ADMIN+CAP_SYS_CHROOT,
-    setns שאינו חסום, ו-/proc/1 גלוי; ‏`systemctl daemon-reload` דורש AF_UNIX; והעיגון
+    """`nsenter --mount=/proc/1/ns/mnt` דורש root עם CAP_SYS_ADMIN+CAP_SYS_CHROOT,
+    setns שאינו חסום, ו-/proc/1 גלוי; `systemctl daemon-reload` דורש AF_UNIX; והעיגון
     של PID 1 מגיע לשירות רק כשההתפשטות אינה private. כל אחת מאלה, אם תתווסף ליחידה,
     מחזירה את #2122 — בשקט, כי ה-mount יכשל רק במכונה אמיתית."""
     values = _unit(unit)
@@ -335,7 +335,7 @@ def test_the_first_tick_after_start_checks_what_was_marked_unchecked(restart):
 
 
 def test_the_local_folder_and_disconnected_locations_are_not_marked(restart):
-    """רק מיקום שהוא עיגון. ‏`loc_local` הוא תיקייה; מנותק נשאר מנותק."""
+    """רק מיקום שהוא עיגון. `loc_local` הוא תיקייה; מנותק נשאר מנותק."""
     from test_add_disk_1988 import DiskFake
 
     again, added = restart

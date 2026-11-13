@@ -76,6 +76,15 @@ static inline void install_pick_disk(InstallState *s, int d) {
     if (d != s->disk) s->disk_ack = 0;
     s->disk = d;
 }
+/* #3007: the first disk to be erased -- the chosen one or a RAID member -- whose own
+ * SMART said FAILED (the inventory's smart=failed), or -1. Only "failed" is a
+ * warning: "unknown" (a VM, no smartctl) is not a verdict either way. */
+static inline int install_smart_failed(const InstallState *s) {
+    if (s->disk < 0 || s->disk >= s->ndisks) return -1;
+    for (int i = 0; i < s->ndisks; i++)
+        if ((i == s->disk || install_raid_member(s, i)) && !strcmp(s->disks[i].smart, "failed")) return i;
+    return -1;
+}
 /* answers: raid_disks is the chosen disk first, then every other member */
 static inline void install_raid_disks(const InstallState *s, char *out, size_t n) {
     size_t used = 0; out[0] = 0;
@@ -92,6 +101,27 @@ static inline int install_raid_count(const InstallState *s) {
     int n = 0;
     for (int i = 0; i < s->ndisks; i++) n += install_raid_member(s, i);
     return n;
+}
+/* #2792: what the server is installed on, in bytes -- the RAID array, not its
+ * first member (RAID5 of 3x16GB said "17 GB" and refused the proposed 5 GB).
+ * The engine's rule (installer/lib/backup.sh backup_install_cap_gb): the
+ * smallest member times the data members -- RAID1 1, RAID5 N-1, RAID6 N-2,
+ * RAID10 N/2, N the active members (a spare holds no data). 0 = no disk. */
+static inline double install_store_bytes(const InstallState *s) {
+    if (s->disk < 0 || s->disk >= s->ndisks) return 0;
+    if (s->raid == RAID_NONE) return (double)s->disks[s->disk].size_bytes;
+    double least = 0; int n = 0;
+    for (int i = 0; i < s->ndisks; i++) {
+        if (!install_raid_member(s, i)) continue;
+        double b = (double)s->disks[i].size_bytes;
+        if (!n || b < least) least = b;
+        n++;
+    }
+    n -= RAID_OPTS[s->raid].spares;
+    const char *level = RAID_OPTS[s->raid].level;
+    int data = !strcmp(level, "raid5") ? n - 1 : !strcmp(level, "raid6") ? n - 2
+             : !strcmp(level, "raid10") ? n / 2 : 1;
+    return data > 0 ? least * data : 0;
 }
 
 #endif

@@ -1,4 +1,4 @@
-"""‏#402 — `מגירות=0` אסור שיאמר שני דברים הפוכים.
+"""#402 — `מגירות=0` אסור שיאמר שני דברים הפוכים.
 
 מחשב שיכפול חסר-ראש עלה, הגיע לסוכן, ודיווח `מגירות=0`. נדב חיבר שישה
 דיסקים והמספר נשאר `0`. רק אחרי כניסת SSH ידנית התברר שבקר ה-SATA
@@ -45,7 +45,7 @@ def _dmesg_stub(bindir: str, body: str) -> str:
         f"mkdir -p {bindir!r}\n"
         f"cat > {bindir}/dmesg <<'STUB'\n#!/bin/sh\n{body}\nSTUB\n"
         f"chmod 0755 {bindir}/dmesg\n"
-        # ‏$(cd && pwd) הופך `C:/...` ל-`/c/...` — חיפוש PATH ב-Git Bash
+        # $(cd && pwd) הופך `C:/...` ל-`/c/...` — חיפוש PATH ב-Git Bash
         # לא מוצא רשומה בסגנון אות-כונן, בדיוק כמו ב-make_stubs.
         f'export PATH="$(cd {bindir!r} && pwd):$PATH"\n'
     )
@@ -73,7 +73,7 @@ def probe(sysroot: Path, dmesg_body: str, bindir: Path) -> str:
 NO_PORTS = "echo '[    1.234] ahci 0000:00:1f.2: 0/6 ports implemented (port mask 0x0)'"
 #: אותו בקר, פורטים מופעלים — פשוט אין כונן מחובר.
 PORTS_OK = "echo '[    1.234] ahci 0000:00:1f.2: 6/6 ports implemented (port mask 0x3f)'"
-#: ‏dmesg שרץ אך בלי שורת ahci כלל — הראיה נעדרת, לא שלילית.
+#: dmesg שרץ אך בלי שורת ahci כלל — הראיה נעדרת, לא שלילית.
 NO_AHCI = "echo '[    0.100] Linux version 6.1.0'"
 
 
@@ -93,9 +93,9 @@ def test_zero_drawers_from_disabled_ports_is_not_zero_drawers_from_no_disks(tmp_
 
 
 def test_no_ahci_line_is_unchecked_not_no_disks(tmp_path):
-    """‏dmesg בלי שורת ahci = "לא הצלחנו לספור", לא "אפס דיסקים" (עיקרון 5).
+    """dmesg בלי שורת ahci = "לא הצלחנו לספור", לא "אפס דיסקים" (עיקרון 5).
 
-    ‏`unchecked` נבדל גם מ-`no_disks` וגם מ-`no_ports`: היעדר ראיה אינו
+    `unchecked` נבדל גם מ-`no_disks` וגם מ-`no_ports`: היעדר ראיה אינו
     ראיה שלילית.
     """
     sysroot = _empty_sysroot(tmp_path)
@@ -106,7 +106,7 @@ def test_no_ahci_line_is_unchecked_not_no_disks(tmp_path):
 def test_a_disk_present_reports_drives_and_never_consults_dmesg(tmp_path):
     """רדיוס הפגיעה: כשיש דיסק, הזרימה הרגילה — ו-`dmesg` לא נקרא כלל.
 
-    ‏`dmesg` המזויף כאן **נכשל** אם הורץ; מכונה עם כונן חייבת להחזיר
+    `dmesg` המזויף כאן **נכשל** אם הורץ; מכונה עם כונן חייבת להחזיר
     `drives` בלי לגעת בו (הנתיב החם של כל תחנה רגילה).
     """
     sysroot = _empty_sysroot(tmp_path)

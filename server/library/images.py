@@ -18,6 +18,7 @@ import threading
 from pathlib import Path
 
 from server.core.atomicfile import write_atomic
+from server.db import journal
 
 log = logging.getLogger("imagesrv.images")
 
@@ -25,27 +26,27 @@ REQUIRED_FIELDS = ("id", "name", "family", "min_target_bytes", "partitions")
 REQUIRED_PARTITION_FIELDS = ("index", "file", "sha256")
 
 #: מזהה אימג' — בדיוק מה שהשרת מייצר בקליטה: `"img_" + secrets.token_hex(3)`
-#: (‏`create_capture` ב-capture.py), כלומר שש ספרות הקסה קטנות.
+#: (`create_capture` ב-capture.py), כלומר שש ספרות הקסה קטנות.
 #:
 #: המזהה אינו מחרוזת תצוגה: הוא **שם התיקייה** שהאימג' נכנס אליה, ולכן
 #: הוא הגבול בין "מזהה" לבין "נתיב". מניפסט מגיע גם מבחוץ (ייבוא ארכיון),
-#: ומזהה כמו `../evil` בו הוא בקשה לכתוב אל מחוץ לספרייה (‏#110).
+#: ומזהה כמו `../evil` בו הוא בקשה לכתוב אל מחוץ לספרייה (#110).
 IMAGE_ID = re.compile(r"img_[0-9a-f]{6}")
 GUID_RE = re.compile(r"[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}")
 UUID_RE = re.compile(r"(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9A-F]{4}-[0-9A-F]{4}|[0-9A-F]{16})")
 ATTRS_RE = re.compile(r"[0-9A-F]{16}")
 PARTITION_ROLES = {"esp", "msr", "windows", "recovery", "linux", "swap", "data"}
-# "" / "unknown" = מחיצה בלי מערכת קבצים (MSR, ‏BIOS boot) — הסוכן מזרים אותה ב-partclone.dd
-# (#1419). ‏"unknown" הוא מה ש-_fs_of (manifest.sh) כותב כש-blkid יוצא ≠0 — וזה בדיוק מה
-# ש-blkid עושה על מחיצה בלי חתימה. ‏"BitLocker" (#1840) — כרך מוצפן שנקלט גולמי, באותו partclone.dd.
+# "" / "unknown" = מחיצה בלי מערכת קבצים (MSR, BIOS boot) — הסוכן מזרים אותה ב-partclone.dd
+# (#1419). "unknown" הוא מה ש-_fs_of (manifest.sh) כותב כש-blkid יוצא ≠0 — וזה בדיוק מה
+# ש-blkid עושה על מחיצה בלי חתימה. "BitLocker" (#1840) — כרך מוצפן שנקלט גולמי, באותו partclone.dd.
 FILESYSTEMS = {"ntfs", "vfat", "ext4", "btrfs", "swap", "", "unknown", "BitLocker"}
 
 MIB = 1 << 20
 #: מה שהכונן חייב להחזיק **אחרי** סוף הפריסה: עותק הגיבוי של ה-GPT.
-#: הוא 33 סקטורים — 16,896 בייט בכונן 512, ‏135,168 בכונן 4Kn — ו-256KiB
+#: הוא 33 סקטורים — 16,896 בייט בכונן 512, 135,168 בכונן 4Kn — ו-256KiB
 #: נותן פי שניים מהגרוע שבהם. קודם לכן זה היה מגה-בייט **ועיגול כלפי
 #: מעלה למגה**, כלומר עד 2MiB בפועל: כונן פיזי אינו כפולה של מגה
-#: (‏256,060,514,304 mod 1MiB = 352,256), ולכן פריסה שנגמרה 1.3MB לפני
+#: (256,060,514,304 mod 1MiB = 352,256), ולכן פריסה שנגמרה 1.3MB לפני
 #: סוף היעד נפסלה למרות שהיא נכנסת — 1.32MB של פסילות שווא, נמדד ב-#1171
 #: מול שני כוננים שהם "256GB" משני יצרנים. היישור של `sgdisk` הוא של
 #: **המחיצות** ואינו דרישה על גודל הכונן.
@@ -69,10 +70,10 @@ def inside(path: Path, root: Path) -> Path | None:
     """הנתיב המלא אם הוא באמת בתוך `root`, ואחרת `None`.
 
     החגורה השנייה מתחת ל-`valid_image_id`, ובכוונה לא במקומה: היא בודקת
-    את מה שיוצא — הנתיב אחרי הצירוף — ולא את מה שנכנס. ‏regex שמישהו
+    את מה שיוצא — הנתיב אחרי הצירוף — ולא את מה שנכנס. regex שמישהו
     ירחיב בעתיד, או שדה נוסף שמישהו יצרף לנתיב, לא ישברו את הגבול.
 
-    ‏`resolve` פותח גם קישורים סימבוליים, ולכן "בתוך" כאן הוא היכן שהנתיב
+    `resolve` פותח גם קישורים סימבוליים, ולכן "בתוך" כאן הוא היכן שהנתיב
     באמת נוחת. אם לא הצלחנו לקבוע — אין ראיה חיובית שהוא בפנים, והתשובה
     היא `None` ולא "כנראה בסדר".
     """
@@ -91,14 +92,14 @@ def safe_partition_filename(value: object) -> bool:
             and "/" not in value and "\\" not in value and "\0" not in value)
 
 
-#: ‏#2447: עומק הקינון המרבי של מניפסט. המניפסט האמיתי עמוק 3–4 (‏partitions →
+#: #2447: עומק הקינון המרבי של מניפסט. המניפסט האמיתי עמוק 3–4 (partitions →
 #: מחיצה → `system_partition`); מעבר לזה — לא מניפסט, ולא RecursionError.
 MANIFEST_MAX_DEPTH = 16
 
 
 def _unsafe_agent_string(value: object) -> bool:
     """מחרוזת עם תו בקרה או `|` (המפריד של הסוכן) בכל עומק — **או** קינון עמוק
-    מ-`MANIFEST_MAX_DEPTH`. איטרטיבית (‏#2447): ‏description מקונן לעומק ~3000
+    מ-`MANIFEST_MAX_DEPTH`. איטרטיבית (#2447): description מקונן לעומק ~3000
     זרק RecursionError מתוך `_validate`, שחוזהו להחזיר סיבה."""
     stack = [(value, 1)]
     while stack:
@@ -135,7 +136,7 @@ def disk_family(size_bytes: int) -> int:
 
 
 def _whole(value: object) -> int | None:
-    """מספר שלם אמיתי, או None. ‏bool הוא int בפייתון ואינו גודל."""
+    """מספר שלם אמיתי, או None. bool הוא int בפייתון ואינו גודל."""
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         return None
     return value
@@ -172,21 +173,21 @@ def layout_end_bytes(manifest: dict) -> int | None:
 def required_bytes(manifest: dict) -> int | None:
     """כמה בייטים כונן יעד חייב להחזיק כדי שהאימג' ייכתב עליו.
 
-    ‏#82: הדרישה אינה גודל דיסק המקור אלא **סוף הפריסה** — המחיצה
+    #82: הדרישה אינה גודל דיסק המקור אלא **סוף הפריסה** — המחיצה
     האחרונה שהמניפסט מצהיר עליה, ועוד `GPT_TAIL_BYTES`. דיסק מקור עם
     שטח לא מוקצה בזנב אינו חלק ממה שהאימג' צריך, וזה כל ההבדל בין
     אימג' זהב שנבנה במכונה וירטואלית לבין אימג' שאינו נכנס לשום ברזל:
-    דיסק VM ‏"256GB" הוא 256 GiB, שבעה אחוזים יותר מכל כונן פיזי
+    דיסק VM "256GB" הוא 256 GiB, שבעה אחוזים יותר מכל כונן פיזי
     מאותה מחלקה.
 
     **הרצפה של המחיצה המורחבת היא הגודל שבו נקלטה, לא כמה תפוס בה.**
-    ‏partclone מסרב לשחזר מערכת קבצים לתוך מחיצה קטנה ממנה ("Target
+    partclone מסרב לשחזר מערכת קבצים לתוך מחיצה קטנה ממנה ("Target
     partition size is smaller than source"), ועם `-C` הוא כותב עד
     "No space left on device" ומשאיר superblock פגום. לכן החישוב אינו
     נוגע ב-`used_bytes` כלל — וממילא אינו נשען על שדה שבכל מניפסט
     שנקלט לפני #84 הוא 0.
 
-    ‏`None` = לא ניתן לקבוע. הקורא חוסם, לא מוותר (עיקרון 5).
+    `None` = לא ניתן לקבוע. הקורא חוסם, לא מוותר (עיקרון 5).
     """
     end = layout_end_bytes(manifest)
     if end is None:
@@ -202,9 +203,9 @@ def required_bytes(manifest: dict) -> int | None:
 
 def used_bytes_total(manifest: dict) -> int | None:
     """כמה תפוס בכל מערכות הקבצים של האימג' יחד — מה שהקונסולה מציגה
-    כ"בשימוש" (‏#953).
+    כ"בשימוש" (#953).
 
-    ‏`None` = לפחות מחיצה אחת **לא נמדדה** (‏`used_bytes: null`, סעיף 1
+    `None` = לפחות מחיצה אחת **לא נמדדה** (`used_bytes: null`, סעיף 1
     בממשקים — "would not mount", משפחת #84). סכום חלקי היה מספר שנראה
     אמיתי ואינו: אימג' שמחיצת ה-Windows שלו לא נמדדה היה מוצג "בשימוש
     30 MB" — ה-ESP בלבד — ואיש לא היה רואה שהמדידה חסרה (עיקרון 5).
@@ -219,7 +220,7 @@ def used_bytes_total(manifest: dict) -> int | None:
     return total
 
 
-#: ה-MAC שהאימג' קשור אליו — ‏#381, הצד הכותב של #69. אימג' שנקלט
+#: ה-MAC שהאימג' קשור אליו — #381, הצד הכותב של #69. אימג' שנקלט
 #: ממחשב כיתה שייך למכונה שנקלט ממנה, ומשוחזר **רק אליה**: "אני רוצה
 #: שאותו מחשב יקבל בשיעור הבא את הדיסק שלו".
 #:
@@ -243,11 +244,11 @@ def bound_mac(manifest: dict) -> str | None:
 def restore_refusal(manifest: dict, macs: list[str] | None) -> str | None:
     """ההודעה שמסרבת לשחזר אימג' קשור למכונה שאינה שלו, או `None`.
 
-    ‏`macs` — היעדים שהשחזור הזה יגיע אליהם: ‏`[mac]` למשיכת יוניקאסט,
+    `macs` — היעדים שהשחזור הזה יגיע אליהם: `[mac]` למשיכת יוניקאסט,
     בחירת המחשבים לסבב כיתה, ו-`None` כשהיעד אינו רשימה ידועה — כיתה
     שלמה בלי בחירה, או מגירות בחדר השיכפולים.
 
-    ‏`None` הוא **סירוב** לאימג' קשור, לא היתר: "לא ידענו לאן זה הולך"
+    `None` הוא **סירוב** לאימג' קשור, לא היתר: "לא ידענו לאן זה הולך"
     אינו "בדקנו והכל תקין" (עיקרון 5). ההיתר דורש ראיה חיובית —
     רשימת יעדים שאין בה אף אחד מלבד הבעלים.
 
@@ -266,7 +267,7 @@ def restore_refusal(manifest: dict, macs: list[str] | None) -> str | None:
 
 
 def lineage_of(manifest: dict) -> str:
-    """השושלת של האימג' — מזהה הגרסה הראשונה (‏#1334). גרסה שנשמרה מ-VM
+    """השושלת של האימג' — מזהה הגרסה הראשונה (#1334). גרסה שנשמרה מ-VM
     נושאת `lineage`; אימג' שלא נגזר מאף אחד הוא השושלת של עצמו."""
     value = manifest.get("lineage")
     return value if isinstance(value, str) and valid_image_id(value) else manifest["id"]
@@ -300,6 +301,28 @@ def streamed_partitions(manifest: dict) -> list[dict]:
     """המחיצות שיש להן קובץ בזרם. swap מתועד במניפסט אבל לא נשמר ולא
     משודר (אפיון סעיף 14) — הסוכן יוצר אותו מחדש; `file` שלו הוא null."""
     return [p for p in manifest["partitions"] if p.get("file")]
+
+
+def ntfs_inconsistent_parts(manifest: dict) -> list:
+    """#2972: המחיצות ש-ntfsresize מצא בהן NTFS לא עקבי, ולכן נקלטו בגודלן המלא
+    בלי כיווץ (`"ntfs_inconsistent": true` במניפסט). `[]` = אין, או מניפסט ישן
+    שלא רשם — לא טענה שהמקור נסגר כראוי."""
+    return [part.get("index") for part in (manifest.get("partitions") or [])
+            if isinstance(part, dict) and part.get("ntfs_inconsistent") is True]
+
+
+NTFS_INCONSISTENT_HE = "NTFS לא נסגר כראוי (לא עקבי) — לא כווץ; Windows יריץ chkdsk באתחול הראשון"
+
+
+def journal_ntfs_inconsistent(conn, manifest: dict, what: str, user: str = "",
+                              machine: str | None = None) -> None:
+    """#2972: שורת יומן כתומה, בעברית, כשמחיצת NTFS לא עקבית נקראה בגודלה המלא
+    בלי כיווץ — האימג' נכנס (או שודר), ו"לא כווץ" אינו "נכשל". בלי מחיצות כאלה — כלום."""
+    parts = ntfs_inconsistent_parts(manifest)
+    if parts:
+        journal(conn, "ntfs_not_shrunk",
+                f'{what} מחיצה {", ".join(str(p) for p in parts)}: {NTFS_INCONSISTENT_HE}',
+                user, machine=machine)
 
 
 def carries_a_stream_file(part: dict) -> bool:
@@ -345,7 +368,7 @@ def has_disk_guid(manifest: dict) -> bool:
     מפתח חסר או `None`, מחרוזת ריקה, המחרוזת `"null"`, וה-GUID
     האפס-מוחלט (nil UUID, `00000000-0000-...`). הסוכן גוזר את
     ה-GUID מ-`sgdisk -p` בקליטה (`capture.sh`), וכשהקריאה **נכשלת**
-    השדה יוצא מחרוזת ריקה — לא `null`. ‏`disk_guid` חסר אינו "אין צורך
+    השדה יוצא מחרוזת ריקה — לא `null`. `disk_guid` חסר אינו "אין צורך
     ב-GUID" אלא "לא ידענו מה ה-GUID", ושני המצבים שונים (עיקרון 5).
 
     האפס-המוחלט הוא ערך שנקרא כזבל — GPT פגום, דיסק שאופס עם חתימה
@@ -365,7 +388,7 @@ def has_disk_guid(manifest: dict) -> bool:
     return set(v.replace("-", "")) - {"0"} != set()
 
 
-#: מה ששם תיקייה או שם אימג' יכולים להיות. **‏ASCII בלבד, ובכוונה.**
+#: מה ששם תיקייה או שם אימג' יכולים להיות. **ASCII בלבד, ובכוונה.**
 #:
 #: מסך התחנה הוא קונסולת טקסט של לינוקס, ושם עברית אינה ניתנת להצגה
 #: משתי סיבות בלתי תלויות: ב-initrd אין `setfont` ואין קובץ פונט,
@@ -378,7 +401,7 @@ def has_disk_guid(manifest: dict) -> bool:
 #: היצירה ואת בדיקת הסיסמה, והפיל את `set_cookie` ב-500 על הסיסמה
 #: **הנכונה**: הכישלון היה ניתן לאבחון וההצלחה לא.
 #:
-#: ‏48 תווים: שורת התפריט בתחנה היא ``N) <שם>  [<משפחה> GB family]``
+#: 48 תווים: שורת התפריט בתחנה היא ``N) <שם>  [<משפחה> GB family]``
 #: על קונסולה של 80 עמודות.
 #: מתחיל **וגם מסתיים** באות או בספרה. רווח בסוף בלתי נראה על המסך,
 #: ו-`nicdesc:eth0 ` מ-#130 הוא בדיוק מה שהוא עושה: מפתח אחר לגמרי
@@ -388,7 +411,7 @@ def has_disk_guid(manifest: dict) -> bool:
 #: הגרש הלטיני ' נשאר אסור: שמות עוברים דרך printf/JSON בסקריפטי הסוכן וביומן בגרשיים.
 #: השם אינו נתיב (תיקיית האימג' היא ``img_xxxxxx``) ואינו נכנס לפלט GRUB.
 DISPLAY_NAME_RE = re.compile("[A-Za-z0-9א-ת]([A-Za-z0-9א-ת׳״— ._-]{0,46}[A-Za-z0-9א-ת׳״])?")
-#: הכלל במילים — לחריגה, ול-API שמחזיר אותו בלי טקסט של חריגה (‏#1535).
+#: הכלל במילים — לחריגה, ול-API שמחזיר אותו בלי טקסט של חריגה (#1535).
 DISPLAY_NAME_RULE = ("מותרים אותיות אנגליות או עבריות, ספרות, רווח, נקודה, מקף, מקף ארוך (—), גרש עברי (׳), גרשיים (״) וקו תחתון; "
                      "מתחיל באות או בספרה, עד 48 תווים")
 
@@ -423,12 +446,12 @@ class ImageLibrary:
         # #1066: מיקומים נוספים (NFS/SMB/iSCSI). None = רק `--images`,
         # כמו לפני המיקומים — בדיקות יחידה של הספרייה עצמה.
         self._locations = None
-        # ‏#1334: הצבעות "ברירת המחדל" לכל שושלת (טבלת settings). None = בלי
+        # #1334: הצבעות "ברירת המחדל" לכל שושלת (טבלת settings). None = בלי
         # הצבעות — הגרסה הגבוהה ביותר.
         self._default_pointers = None
         self._invalid_reporter = None
         self._reported_invalid: set[tuple[str, str]] = set()
-        # ‏#1494: שני כותבים ל-manifest.json — עריכת שדות תצוגה והשלמת
+        # #1494: שני כותבים ל-manifest.json — עריכת שדות תצוגה והשלמת
         # `used_bytes` מכותרת partclone. קריאה-שינוי-כתיבה של אחד בלי השני
         # הייתה מוחקת את מה שהשני כתב (שינוי שם של המפעיל, למשל).
         self._write_lock = threading.Lock()
@@ -444,7 +467,7 @@ class ImageLibrary:
             self._invalid_reporter(path, reason)
 
     def bind_defaults(self, provider) -> None:
-        """מזרים את הצבעות ברירת המחדל מה-DB (‏`image_versions.pointers`)."""
+        """מזרים את הצבעות ברירת המחדל מה-DB (`image_versions.pointers`)."""
         self._default_pointers = provider
 
     def defaults(self, images: dict[str, dict] | None = None) -> dict[str, str]:
@@ -486,7 +509,7 @@ class ImageLibrary:
                 continue
             try:
                 problem = self._validate(manifest)
-            except Exception as exc:  # noqa: BLE001 — ‏#2447: מניפסט אחד אינו מפיל את הספרייה
+            except Exception as exc:  # noqa: BLE001 — #2447: מניפסט אחד אינו מפיל את הספרייה
                 log.exception("validating manifest %s crashed -- skipping it", path)
                 problem = f"validation crashed: {type(exc).__name__}: {exc}"
             if problem:
@@ -573,7 +596,7 @@ class ImageLibrary:
             return "image id or name is malformed"
         # שני השדות שההחלטה "האם האימג' נכנס לכונן" נשענת עליהם. מניפסט
         # שהם פגומים בו נדחה כאן, ולא מגיע להשוואה שתשווה מחרוזת למספר.
-        # ‏#2420: ‏`version` מוצג בקונסולה (‏"VM רץ", גרסאות). שלם מ-1, או חסר — לא
+        # #2420: `version` מוצג בקונסולה ("VM רץ", גרסאות). שלם מ-1, או חסר — לא
         # מחרוזת שמגיעה מספרייה של שרת משנה, משיתוף NAS או מארכיון ונכנסת ל-HTML.
         version = manifest.get("version")
         if version is not None and not (type(version) is int and version >= 1):
@@ -603,7 +626,7 @@ class ImageLibrary:
             if index is None or not 1 <= index <= 128 or index in indexes:
                 return f"partition index must be unique and between 1 and 128: {part['index']!r}"
             indexes.add(index)
-            # ‏#2447: ‏list/dict אינם hashable — `in set` זרק TypeError במקום להחזיר סיבה.
+            # #2447: list/dict אינם hashable — `in set` זרק TypeError במקום להחזיר סיבה.
             if (not isinstance(part.get("role"), str) or not isinstance(part.get("fs"), str)
                     or part["role"] not in PARTITION_ROLES or part["fs"] not in FILESYSTEMS):
                 return f"partition {index} has an unsupported role or filesystem"
@@ -673,7 +696,7 @@ class ImageLibrary:
         return guarded_image_path(manifest["_dir"], filename)
 
     def unmarked_images(self, min_free_gb: int) -> list[dict]:
-        """‏#1896: האימג'ים שמסך מחשב הבנייה ומסך המשכפל מציגים "לא נבדק" עם
+        """#1896: האימג'ים שמסך מחשב הבנייה ומסך המשכפל מציגים "לא נבדק" עם
         סימון C: — ברירת המחדל של כל שושלת, זמינים, שאפשר לסמן בהם ועוד לא
         סומנו. רק כשהכלל דלוק (`min_free_gb` > 0): כבוי — הם כבר מוצעים."""
         from server.library.minfree import candidates_view, unmarked   # minfree ← images
@@ -690,23 +713,23 @@ class ImageLibrary:
     def allowed_for_disks(self, disks: list[dict] | None, min_free_gb: int = 0) -> list[str]:
         """מזהי האימג'ים שמתאימים לדיסקים שדווחו ב-hello.
 
-        **הכרעה אחת, לפי הגודל בלבד** (‏#1863, הכרעת נדב 20/10): אימג' מוצע
-        כשהוא נכנס לדיסק הפנימי הגדול ביותר — ‏`required_bytes` (‏#82) ועוד
-        ‏`min_free_gb` פנויים במחיצת המערכת (‏#1354, ‏`min_disk_bytes`). זו
+        **הכרעה אחת, לפי הגודל בלבד** (#1863, הכרעת נדב 20/10): אימג' מוצע
+        כשהוא נכנס לדיסק הפנימי הגדול ביותר — `required_bytes` (#82) ועוד
+        `min_free_gb` פנויים במחיצת המערכת (#1354, `min_disk_bytes`). זו
         אותה הכרעה ש-`room.fit_refusal` עושה מול המגירה שנבחרה: אימג' שנכנס
         לחלק מהמגירות מוצע, והמגירה הקטנה מדי נדחית בפתיחת הסבב.
 
-        ‏`family` (256/500) **אינה מסננת יותר** — היא תווית תצוגה. מאז הכיווץ
-        (‏#1171) אימג' "500" נכנס לדיסק 256, והמשפחה הסתירה אותו ממסך
+        `family` (256/500) **אינה מסננת יותר** — היא תווית תצוגה. מאז הכיווץ
+        (#1171) אימג' "500" נכנס לדיסק 256, והמשפחה הסתירה אותו ממסך
         המשכפל וממחשב הבנייה בזמן שהקונסולה אישרה אותו.
 
-        דרישה שאינה ניתנת לקביעה (‏`None`) — לא מוצע (עיקרון 5). הסוכן רק
+        דרישה שאינה ניתנת לקביעה (`None`) — לא מוצע (עיקרון 5). הסוכן רק
         מציג, הוא לא מסנן בעצמו (כלל ממשק 3).
         """
-        # ייבוא מקומי: ‏minfree ← imagefit ← images. במעלה הקובץ זה מעגל.
+        # ייבוא מקומי: minfree ← imagefit ← images. במעלה הקובץ זה מעגל.
         from server.library.minfree import min_disk_bytes
         scanned = self.scan()
-        # ‏#1334: למכונה מוצעת **ברירת המחדל** של כל שושלת בלבד — סבב חדש
+        # #1334: למכונה מוצעת **ברירת המחדל** של כל שושלת בלבד — סבב חדש
         # מקבל את הגרסה העדכנית (או זו שנקבעה); סבב פתוח ממשיך עם המזהה
         # שלו, כי הוא נשמר בסבב ולא נבחר מכאן.
         chosen = set(self.defaults(scanned).values())
@@ -737,9 +760,9 @@ class ImageLibrary:
         """מה שהקונסולה מציגה — בלי נתיבי דיסק פנימיים.
 
         הסדר בתוך תיקייה: קודם `sort` (שהקונסולה עורכת), ואז שם.
-        ‏`min_free_gb` (‏#1354) — ההגדרה, כדי ש"נכנס לדיסק מ-X" יכלול אותה.
+        `min_free_gb` (#1354) — ההגדרה, כדי ש"נכנס לדיסק מ-X" יכלול אותה.
         """
-        # ייבוא מקומי: ‏minfree ← imagefit ← images. במעלה הקובץ זה מעגל.
+        # ייבוא מקומי: minfree ← imagefit ← images. במעלה הקובץ זה מעגל.
         from server.library.minfree import candidates_view, markable, min_disk_bytes, unchecked, unmarked
         result = []
         scanned = self.scan()
@@ -756,24 +779,24 @@ class ImageLibrary:
                     "os": image_os(manifest),
                     "created": manifest.get("created", ""),
                     "source_disk_bytes": manifest.get("source_disk_bytes"),
-                    # ‏#953: "נכנס לדיסק מ-X" — הדרישה **הנגזרת** (`required_bytes`,
-                    # מה שבדיקה 2.7 אוכפת), לא השדה הגולמי; ‏None = לא ניתן לקבוע.
-                    # ‏#1354: כולל המינימום הפנוי במחיצת המערכת; ‏None גם כשה-
-                    # `used_bytes` שלה לא נמדד. ‏`layout_bytes` — הפריסה לבדה.
+                    # #953: "נכנס לדיסק מ-X" — הדרישה **הנגזרת** (`required_bytes`,
+                    # מה שבדיקה 2.7 אוכפת), לא השדה הגולמי; None = לא ניתן לקבוע.
+                    # #1354: כולל המינימום הפנוי במחיצת המערכת; None גם כשה-
+                    # `used_bytes` שלה לא נמדד. `layout_bytes` — הפריסה לבדה.
                     "min_target_bytes": min_disk_bytes(manifest, min_free_gb),
                     "layout_bytes": required_bytes(manifest),
                     "min_free_gb": min_free_gb,
-                    # ‏#1494: הכלל אינו ניתן לבדיקה (‏`used_bytes` של מחיצת
+                    # #1494: הכלל אינו ניתן לבדיקה (`used_bytes` של מחיצת
                     # המערכת לא נמדד) — הסוכן יסרב בכל מגירה. מחרוזת הסוכן, או None.
                     "min_free_unchecked": unchecked(manifest, min_free_gb),
-                    # ‏#1896: המחיצות שאפשר לסמן ביניהן את C: (‏[] = אין בין מה
+                    # #1896: המחיצות שאפשר לסמן ביניהן את C: ([] = אין בין מה
                     # לבחור, או שהקליטה סימנה), ו"לא נבדק" עד שמסמנים.
                     "system_candidates": candidates_view(manifest) if markable(manifest) else [],
                     "system_unmarked": unmarked(manifest),
                     "used_bytes": used_bytes_total(manifest),
                     "total_compressed_bytes": manifest.get("total_compressed_bytes", 0),
                     "partitions": len(manifest.get("partitions") or []),
-                    # ‏#1012: מסך התחנה צריך להציג את בחירת ההרחבה, אבל
+                    # #1012: מסך התחנה צריך להציג את בחירת ההרחבה, אבל
                     # הקיוסק אינו חושף את manifest endpoint בוילן. רק השדות
                     # הדרושים לתצוגה נוסעים בתשובת הקונסולה המאומתת.
                     "expand_partitions": [
@@ -785,16 +808,18 @@ class ImageLibrary:
                     # #1066: באיזה מיקום האימג' יושב, והאם המיקום נגיש.
                     "location_id": manifest.get("_location_id") or "loc_local",
                     "available": manifest.get("_available", True),
-                    # ‏#1334: גרסאות — השושלת, מספר הגרסה, והאם היא ברירת המחדל.
+                    # #1334: גרסאות — השושלת, מספר הגרסה, והאם היא ברירת המחדל.
                     "lineage": lineage_of(manifest),
                     "version": version_of(manifest),
                     "is_default": manifest["id"] in chosen,
-                    # ‏#2053: התג "מצב שינה" נגזר מהשדה הקיים (#2213) — כמו שהוא;
-                    # ‏None = השדה חסר, ואז אין תג (לא טענה שהמקור לא היה מושהה).
+                    # #2053: התג "מצב שינה" נגזר מהשדה הקיים (#2213) — כמו שהוא;
+                    # None = השדה חסר, ואז אין תג (לא טענה שהמקור לא היה מושהה).
                     "src_unhib": manifest.get("src_unhib"),
-                    # ‏#1840: מחיצות BitLocker שנקלטו גולמי — התג והשורה הכתומה בהפצה.
+                    # #1840: מחיצות BitLocker שנקלטו גולמי — התג והשורה הכתומה בהפצה.
                     "bitlocker": [part.get("index") for part in (manifest.get("partitions") or [])
                                   if isinstance(part, dict) and part.get("fs") == "BitLocker"],
+                    # #2972: מחיצות NTFS לא עקביות שנקלטו בלי כיווץ — תג כתום, לא חוסם.
+                    "ntfs_inconsistent": ntfs_inconsistent_parts(manifest),
                 }
             )
         return sorted(result, key=lambda m: (m["folder"], m["sort"], m["name"]))
@@ -821,11 +846,11 @@ class ImageLibrary:
         for key, value in changes.items():
             if key not in self.EDITABLE_FIELDS:
                 raise ValueError(f"השדה {key} אינו ניתן לעריכה")
-            # ‏`folder` ריק לגיטימי — אימג' שאינו בתיקייה. ‏`name` ריק
+            # `folder` ריק לגיטימי — אימג' שאינו בתיקייה. `name` ריק
             # אינו: אימג' בלי שם אינו ניתן לבחירה במסך התחנה, והוא
             # היה עובר כאן בשקט כי התנאי הקודם דילג על ערך ריק.
             if key == "name" or (key == "folder" and value not in (None, "")):
-                # ‏#138: כאן עוברים גם `PUT /images/{id}` וגם שינוי שם
+                # #138: כאן עוברים גם `PUT /images/{id}` וגם שינוי שם
                 # תיקייה, ששניהם כותבים דרך write_meta.
                 value = validate_display_name(
                     str(value), "שם האימג'" if key == "name" else "שם התיקייה")
@@ -833,13 +858,13 @@ class ImageLibrary:
         _replace_json(path, raw)
         return True
 
-    #: ‏#1494: המקור של `used_bytes` שלא נמדד בקליטה אלא נגזר אחריה.
+    #: #1494: המקור של `used_bytes` שלא נמדד בקליטה אלא נגזר אחריה.
     USED_BYTES_SOURCES = ("partclone_header",)
 
     def record_used_bytes(self, image_id: str, values: dict[int, int], source: str) -> list[int]:
-        """משלים `used_bytes` למחיצות שלא נמדדו בקליטה (‏#1494) — ורק להן.
+        """משלים `used_bytes` למחיצות שלא נמדדו בקליטה (#1494) — ורק להן.
 
-        ‏`values` = ‏{index: בייטים}. נכתב ל-manifest.json עצמו (עיקרון 3: הדיסק
+        `values` = {index: בייטים}. נכתב ל-manifest.json עצמו (עיקרון 3: הדיסק
         הוא מקור האמת, והסוכן קורא את `used_bytes` מהמניפסט שהשרת מגיש),
         אטומית, ולצד כל ערך `used_bytes_source` — ערך נגזר אינו מתחזה למדידה.
         מחיצה שכבר יש לה `used_bytes` אינה נדרסת. מניפסט שהשינוי היה הופך
@@ -876,11 +901,11 @@ class ImageLibrary:
 
     def record_system_partition(self, image_id: str, index: object, *,
                                 only_unmarked: bool = False) -> str | None:
-        """‏#1896 (הכרעת נדב 22/10): מסמן איזו מחיצה היא C: — `"system": true` ועמו
+        """#1896 (הכרעת נדב 22/10): מסמן איזו מחיצה היא C: — `"system": true` ועמו
         `"system_source": "operator"` — באימג' ישן שהקליטה לא סימנה בו, ושתי
-        מחיצות ה-windows שלו (או ה-linux, ‏#1899) אינן ניתנות להבחנה. נכתב
+        מחיצות ה-windows שלו (או ה-linux, #1899) אינן ניתנות להבחנה. נכתב
         ל-manifest.json עצמו (עיקרון 3: הסוכן והשרת קוראים אותו סימון), **אטומית
-        ועמיד** (`write_atomic`, ‏#1908). ‏`only_unmarked` — המשכפל: רק אימג' שעוד
+        ועמיד** (`write_atomic`, #1908). `only_unmarked` — המשכפל: רק אימג' שעוד
         לא סומן; שינוי סימון — מהקונסולה. מחזיר `None`, או את הסיבה שלא נכתב."""
         from server.library.minfree import OPERATOR, markable, system_candidates  # minfree ← images
         if isinstance(index, bool) or not isinstance(index, int):
@@ -912,19 +937,19 @@ class ImageLibrary:
             write_atomic(path, json.dumps(raw, ensure_ascii=False, indent=2))
         return None
 
-    #: ‏#1805/#1864: חתיכה של זרם הנתונים שהרשימה מגבבת — ‏RB_CHUNK של fanout.c.
+    #: #1805/#1864: חתיכה של זרם הנתונים שהרשימה מגבבת — RB_CHUNK של fanout.c.
     READBACK_CHUNK_BYTES = 4 * 1024 * 1024
 
     def record_readback(self, image_id: str, values: dict) -> list[int]:
-        """רושם את רשימת הקריאה החוזרת (‏#1805, הכרעת נדב 20/10) למחיצות שקיבלו.
+        """רושם את רשימת הקריאה החוזרת (#1805, הכרעת נדב 20/10) למחיצות שקיבלו.
 
-        ‏`values` = ‏{index: (רשימה, בייטים, XXH64 של הרשימה)} מ-`readbackhash.derive`.
+        `values` = {index: (רשימה, בייטים, XXH64 של הרשימה)} מ-`readbackhash.derive`.
         קודם קובץ הרשימה ליד קובץ המחיצה (`<file>.readback`, אטומית), ורק אז
-        המניפסט: ‏`readback_xxh64`, ‏`readback_chunks`, ‏`readback_bytes`,
-        ‏`readback_chunk_bytes` — הסוכן קורא את המניפסט שהשרת מגיש (עיקרון 3).
+        המניפסט: `readback_xxh64`, `readback_chunks`, `readback_bytes`,
+        `readback_chunk_bytes` — הסוכן קורא את המניפסט שהשרת מגיש (עיקרון 3).
         ערך שאינו עקבי — רשימה שאינה שורות של 16 ספרות hex, מספר שורות שאינו
-        תואם את הבייטים, בייטים מעל `size_bytes`, ‏XXH64 שאינו 16 ספרות — אינו
-        נכתב: הסוכן היה מכשיל עליו מגירות תקינות. ‏`readback_sha256` ישן נשאר כמו
+        תואם את הבייטים, בייטים מעל `size_bytes`, XXH64 שאינו 16 ספרות — אינו
+        נכתב: הסוכן היה מכשיל עליו מגירות תקינות. `readback_sha256` ישן נשאר כמו
         שהוא. מניפסט שהשינוי היה פוסל — לא נכתב כלל. מחזיר את האינדקסים שנכתבו."""
         manifest = self.get(image_id)
         if manifest is None or not manifest.get("_dir") or not manifest.get("_available", True):

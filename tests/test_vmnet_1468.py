@@ -1,13 +1,13 @@
-"""‏#1468 — ל-VM לעדכון זהות רשת משלו: macvtap על "כרטיס לעדכוני VM" עם MAC
+"""#1468 — ל-VM לעדכון זהות רשת משלו: macvtap על "כרטיס לעדכוני VM" עם MAC
 יציב שהשרת ייצר, ו-DHCPACK כראיה לכתובת (הכרעת נדב 16/10).
 
 מה נבדק כאן:
 * הבחירה: כרטיס ההפצה (וכל מה שמעליו/מתחתיו — bond/VLAN) מסורב בשם; כרטיס
   הניהול **מתקבל** (רשת הניהול יכולה להיות גם רשת הכיתות); לא נבחר = סירוב.
 * ה-MAC: unicast, מנוהל מקומית, נוצר פעם אחת ונשאר אותו אחרי "אתחול".
-* QEMU: ‏`-netdev tap,fd=` עם ה-MAC — בלי slirp, ‏hostfwd/guestfwd/smb.
+* QEMU: `-netdev tap,fd=` עם ה-MAC — בלי slirp, hostfwd/guestfwd/smb.
 * אין lease → סירוב בשם עם הרמז לפלטפורמה; יש lease → הכתובת במסך ובחומת האש.
-* הכלים עצמם (`vmnet`): פענוח DHCP, ההאזנה, ‏macvtap שלא נקרא בחזרה, ‏sysfs.
+* הכלים עצמם (`vmnet`): פענוח DHCP, ההאזנה, macvtap שלא נקרא בחזרה, sysfs.
 """
 
 from __future__ import annotations
@@ -253,7 +253,7 @@ def test_the_network_comes_down_when_the_vm_stops(lab):
 
 def dhcp_frame(*, op, chaddr, kind, yiaddr="0.0.0.0", server=None, ports=None, xid=None,
                src=None):
-    """מסגרת DHCP. ‏`src` — MAC המקור של ה-Ethernet (ברירת מחדל: ה-chaddr בבקשה,
+    """מסגרת DHCP. `src` — MAC המקור של ה-Ethernet (ברירת מחדל: ה-chaddr בבקשה,
     שרת DHCP בתשובה)."""
     ports = ports or ((68, 67) if op == 1 else (67, 68))
     src = src or (chaddr if op == 1 else "02:00:00:00:00:fe")
@@ -292,7 +292,7 @@ OUT, IN = 4, 0     # sll_pkttype: PACKET_OUTGOING / PACKET_HOST
 
 
 class FakeSock:
-    """‏(מסגרת, כיוון) — ‏OUT = האורח שלח, ‏IN = נמסר לו מהחוט."""
+    """(מסגרת, כיוון) — OUT = האורח שלח, IN = נמסר לו מהחוט."""
 
     def __init__(self, frames, stop_when_empty=None):
         self.frames = list(frames)
@@ -504,7 +504,7 @@ def test_get_flags_a_saved_card_that_became_the_deploy_card(server, api_vm):
 
 
 def test_status_path_still_documented_shape(lab):
-    """המפתחות החדשים של הסטטוס (`network`, ‏`vm_mac`) — בשמם, כמו ב-interfaces.md."""
+    """המפתחות החדשים של הסטטוס (`network`, `vm_mac`) — בשמם, כמו ב-interfaces.md."""
     engine = lab["make"]()
     engine.start("img_7f3a91", "noc")
     status = wait_for(engine, "running")

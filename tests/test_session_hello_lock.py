@@ -1,16 +1,16 @@
-"""‏#290 — רצף שתי הכתיבות ב-`record_hello` אינו משאיר נעילה יתומה.
+"""#290 — רצף שתי הכתיבות ב-`record_hello` אינו משאיר נעילה יתומה.
 
-זו אותה משפחה של #54, ‏#184 ו-#200, במקום שעוד לא נבדק: **רצף של שתי
-כתיבות ואז `commit`**. הכתיבה הראשונה (‏`INSERT INTO session_members`)
-תופסת את נעילת הכתיבה; אם השנייה (‏`UPDATE sessions`) זורקת, איש אינו
+זו אותה משפחה של #54, #184 ו-#200, במקום שעוד לא נבדק: **רצף של שתי
+כתיבות ואז `commit`**. הכתיבה הראשונה (`INSERT INTO session_members`)
+תופסת את נעילת הכתיבה; אם השנייה (`UPDATE sessions`) זורקת, איש אינו
 עושה `rollback`. החיבור הוא של התהליכון (`db.Database`) והוא **נשאר
 בחיים**, ולכן הנעילה נשארת תפוסה עד הכתיבה המוצלחת הבאה *באותו
 תהליכון* — ובינתיים כל השאר מקבלים ``database is locked``.
 
-זה ה**נתיב החם**: ‏`record_hello` הוא ההצטרפות לסבב, וכיתה שלמה דורכת
+זה ה**נתיב החם**: `record_hello` הוא ההצטרפות לסבב, וכיתה שלמה דורכת
 עליו במקביל. כשל כזה נראה כמו עומס, והוא בסך הכל מנעול שאיש לא שחרר.
 
-**מה נבדק כאן, ומה לא.** ‏`pytest.raises` על החריגה **אינו** בקרה
+**מה נבדק כאן, ומה לא.** `pytest.raises` על החריגה **אינו** בקרה
 שלילית: החריגה מתפשטת בשני המצבים. מה שנשבר בלי `writing()` הוא
 **הנעילה**, ולכן הראיה היא **כותב שני על חיבור שני** — כתיבה שהצליחה
 וערך שנקרא בחזרה, ולא היעדר סימן כישלון (עיקרון 5). ה-`busy_timeout`
@@ -47,10 +47,10 @@ FIRST_WRITE = "INSERT INTO session_members"
 
 class FailingWrite:
     """חיבור שמתנהג כרגיל עד שהמשפט המסומן מגיע — ואז חריגה שאינה
-    ‏`IntegrityError`, בדיוק כמו ``disk I/O error`` שמגיע מהעולם האמיתי
+    `IntegrityError`, בדיוק כמו ``disk I/O error`` שמגיע מהעולם האמיתי
     אל תוך רצף הכתיבות.
 
-    ‏`SessionStore` נוגע בחיבור רק דרך ``execute`` / ``commit`` /
+    `SessionStore` נוגע בחיבור רק דרך ``execute`` / ``commit`` /
     ``rollback``, ולכן זה כל מה שצריך לעטוף.
     """
 
@@ -76,7 +76,7 @@ class FailingWrite:
 def two_writers(tmp_path: Path):
     """שני חיבורים על אותו קובץ — המצב שבו הבאג חי.
 
-    ‏`db.Database` נותן חיבור לכל תהליכון, ולכן נעילה יתומה של אחד היא
+    `db.Database` נותן חיבור לכל תהליכון, ולכן נעילה יתומה של אחד היא
     ``database is locked`` אצל כל השאר. חיבור אחד לא היה מדגים דבר:
     הוא רואה את הטרנזאקציה של עצמו.
     """
@@ -101,7 +101,7 @@ def _open_round(store: SessionStore) -> sqlite3.Row:
 
 
 def _hello_with_failure(db, marker: str):
-    """‏hello אחד שנופל על המשפט המסומן. מוחזר ה-store וה-wrapper."""
+    """hello אחד שנופל על המשפט המסומן. מוחזר ה-store וה-wrapper."""
     store = SessionStore(db)
     session = _open_round(store)
     failing = FailingWrite(db, marker)
@@ -112,7 +112,7 @@ def _hello_with_failure(db, marker: str):
 
 
 def _second_writer_works(other: sqlite3.Connection, value: str) -> str:
-    """כותב שני: כתיבה, ‏commit, וקריאה חזרה — ראיה חיובית ולא היעדר סימן."""
+    """כותב שני: כתיבה, commit, וקריאה חזרה — ראיה חיובית ולא היעדר סימן."""
     other.execute("INSERT INTO settings (key, value) VALUES ('probe', ?)"
                   " ON CONFLICT (key) DO UPDATE SET value = excluded.value", (value,))
     other.commit()
@@ -130,7 +130,7 @@ def test_a_failed_second_write_releases_the_write_lock(two_writers):
     _hello_with_failure(db, SECOND_WRITE)
 
     # קודם כותבים, ואז מאמתים: עם `-O` ה-assert נעלם ואיתו הכתיבה עצמה
-    # (‏`py/side-effect-in-assert`), והכתיבה הזו **היא** המדידה.
+    # (`py/side-effect-in-assert`), והכתיבה הזו **היא** המדידה.
     read_back = _second_writer_works(other, "1")
     assert read_back == "1", \
         "הכותב השני נחסם — הנעילה של הכתיבה הראשונה נשארה יתומה"

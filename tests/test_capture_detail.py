@@ -1,8 +1,8 @@
 """#1505 — פירוט קליטה חי בקונסולה: טבלת מחיצות, קצב בחלון, ETA רק כשנמדד.
 
 שלוש שכבות:
-* ‏`server/library/capture_detail.py` — חישוב טהור עם שעון מוזרק: ‏done_bytes מ-source_progress,
-  קצב מחלון (לא ממוצע), `None` עד שנמדד, ‏`None` אחרי שתיקה, ETA רק כשכל המחיצות נמדדו.
+* `server/library/capture_detail.py` — חישוב טהור עם שעון מוזרק: done_bytes מ-source_progress,
+  קצב מחלון (לא ממוצע), `None` עד שנמדד, `None` אחרי שתיקה, ETA רק כשכל המחיצות נמדדו.
 * ה-API — דיווח עם `partitions` מגיע ל-`/api/console/tasks` כ-`capture_detail`; טבלה
   פגומה נזרקת בשלמותה; סוכן ישן (בלי טבלה) = `null`, לא טבלה ריקה.
 * הסוכן — `capturedetail.sh` בונה את הקובץ ו-`build_progress` נושא אותו (תחת bash;

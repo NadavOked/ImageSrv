@@ -1,23 +1,23 @@
-"""‏#1275 — סבב מהספרייה מהגואי הנייטיב: הדיסקים שסומנו בגריד (#695) הם
+"""#1275 — סבב מהספרייה מהגואי הנייטיב: הדיסקים שסומנו בגריד (#695) הם
 היעדים, ולא "כל המגירות".
 
-הבאג: ‏`open_round` ב-`main.c` שלח ל-`room-open` רק `image=` ו-`target=`,
+הבאג: `open_round` ב-`main.c` שלח ל-`room-open` רק `image=` ו-`target=`,
 והגשר (`guibridge.sh`) בנה `{"image_id","target_drives"}` בלבד. השרת קיבל
-סבב בלי `target_slots` — ‏`_selected_ports` = ‏`None` = כל המגירות — וכתב
+סבב בלי `target_slots` — `_selected_ports` = `None` = כל המגירות — וכתב
 לכל מגירה מוכנה בזמן שהמפעיל ראה בחירה בגריד (עיקרון 4/5).
 
 מה נבדק:
 
 1. **הגשר** (הרצה אמיתית של `gui_records` → `gui_dispatch` → `room_open`,
-   רק ה-POST מדומה): בחירה של 1 מ-3 → ‏`target_slots` באורך 1; בלי `slots=`
-   → הגוף **בדיוק** כמו היום (אין שדה); ‏`slots=` פגום → כלום לא נשלח.
+   רק ה-POST מדומה): בחירה של 1 מ-3 → `target_slots` באורך 1; בלי `slots=`
+   → הגוף **בדיוק** כמו היום (אין שדה); `slots=` פגום → כלום לא נשלח.
 2. **הגואי** (על המקור — אין מהדר בווינדוס; הקומפילציה על ה-Testrunner):
-   ‏`open_round` שולח `slots=` כשיש בחירה, וסירוב גלוי כשהבחירה לא נכנסה
+   `open_round` שולח `slots=` כשיש בחירה, וסירוב גלוי כשהבחירה לא נכנסה
    לרשומה — לא נפילה ל"בלי שדה" = כל המגירות.
 
-השרת כבר מכבד `target_slots` בסבב ספרייה — ‏`test_server_room.py`
-(‏`test_target_slots_stored_and_hello_returns_only_this_machines_ports`,
-‏`test_drawer_list_marks_selected_and_filters_fresh`); לא נדרש שינוי שם.
+השרת כבר מכבד `target_slots` בסבב ספרייה — `test_server_room.py`
+(`test_target_slots_stored_and_hello_returns_only_this_machines_ports`,
+`test_drawer_list_marks_selected_and_filters_fresh`); לא נדרש שינוי שם.
 """
 
 from __future__ import annotations
@@ -144,7 +144,7 @@ NEED_ONE = "יש לסמן לפחות דיסק אחד"
 
 def test_open_round_refuses_no_selection_and_a_selection_that_did_not_fit():
     """הכרעת נדב 11/10: בלי דיסק מסומן — הודעה ואין `room-open`. וקטיעה
-    (‏-1) אינה "אין בחירה" שנבלעת — גם היא מסורבת לפני השליחה."""
+    (-1) אינה "אין בחירה" שנבלעת — גם היא מסורבת לפני השליחה."""
     body = function_body(MAIN_C, "open_round")
     emit = body.index('emit("room-open")')
     refuse = body.index("drawers <= 0")

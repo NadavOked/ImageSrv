@@ -2,7 +2,7 @@
 
 **שני שרתים אמיתיים על loopback**: הראשי הוא האפליקציה המלאה (``server``
 fixture, standalone, עם ספריית אימג'ים), והמשני הוא ``InterserverTLSServer``
-(‏mTLS 1.3 של pyOpenSSL) עם ספרייה משלו. ה-pairing נעשה באמת (חלון + קוד
+(mTLS 1.3 של pyOpenSSL) עם ספרייה משלו. ה-pairing נעשה באמת (חלון + קוד
 + טוקן + קובץ 0600 + רשומה), ואז הקונסולה של הראשי מזמינה העברה, משימת
 הרקע דוחפת, והמשני מכניס דרך ``import_tar``.
 
@@ -71,7 +71,7 @@ def secondary(tmp_path):
 
 @pytest.fixture()
 def paired(server, secondary, tmp_path):
-    """‏pairing אמיתי: הראשי נרשם למשני, כותב טוקן 0600 ורושם את המשני.
+    """pairing אמיתי: הראשי נרשם למשני, כותב טוקן 0600 ורושם את המשני.
     מחזיר את מזהה רשומת המשני על הראשי."""
     data_dir = tmp_path / "data"
     ident = storage_nodes.ensure_identity(server["ctx"].conn, data_dir,
@@ -180,7 +180,7 @@ def _add_location(conn, loc_id: str, name: str, mount: Path, state: str = "conne
 
 def test_full_local_location_507_reaches_the_primary_console_then_second_location_lands(
         server, secondary, paired, tmp_path, monkeypatch):
-    """#1697, חיפה: ‏loc_local קטן ודיסק 200GB מחובר. העברה ל-loc_local נדחית
+    """#1697, חיפה: loc_local קטן ודיסק 200GB מחובר. העברה ל-loc_local נדחית
     ב-507 לפני שבייט נשלח, והשורה בקונסולת הראשי אומרת כמה פנוי **בכל**
     מיקום ואיזה מהם מספיק. העברה חדשה לדיסק הנוסף נוחתת שם, זהה בייט-בייט
     (sha256 אומת במשני לפני הכניסה, עיקרון 6), ולא ב-loc_local."""
@@ -468,8 +468,8 @@ def test_ingress_selected_location_controls_space_check_and_destination(
 
 
 def test_ingress_manifest_id_must_match_the_path(paired_ctx, tmp_path):
-    """‏tar כשר של אימג' A שנשלח בנתיב של B — נכנס לרגע דרך import_tar
-    (‏sha256 תקין), ומוסר מיד: לא נשאר בספרייה ולא בשם מטעה."""
+    """tar כשר של אימג' A שנשלח בנתיב של B — נכנס לרגע דרך import_tar
+    (sha256 תקין), ומוסר מיד: לא נשאר בספרייה ולא בשם מטעה."""
     ctx, peer, token = paired_ctx
     src = tmp_path / "src"
     write_image(src, MANIFEST_256)
@@ -509,7 +509,7 @@ def test_ingress_receive_via_fastapi_routes(paired_ctx, tmp_path):
         ctx.library.get(IMAGE)["partitions"][0]["sha256"]
 
 
-# --- (ו) ‏#1697: 507 אומר כמה פנוי בכל מיקום, ולאן כן אפשר להעביר ---------------
+# --- (ו) #1697: 507 אומר כמה פנוי בכל מיקום, ולאן כן אפשר להעביר ---------------
 
 GB = 10 ** 9
 
@@ -536,7 +536,7 @@ def _space_507(ctx, peer, token, monkeypatch, frees: dict, length: int,
 @pytest.mark.system_reserve   # #1737: the real 10GiB (conftest _host_free_space)
 def test_ingress_507_names_the_free_space_of_every_secondary_location(
         paired_ctx, tmp_path, monkeypatch):
-    """חיפה: ‏60GB מקומי (40 פנויים) ודיסק 200GB. אימג' של 50GB ל-loc_local —
+    """חיפה: 60GB מקומי (40 פנויים) ודיסק 200GB. אימג' של 50GB ל-loc_local —
     507 שאומר כמה נדרש, כמה פנוי בכל מיקום, ושהדיסק הנוסף מספיק. מיקום
     שאינו מחובר נקוב בשמו, לא נעלם מהרשימה."""
     ctx, peer, token = paired_ctx

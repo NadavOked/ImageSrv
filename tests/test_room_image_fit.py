@@ -1,8 +1,8 @@
-"""‏#953: אימג' שאינו נכנס למגירה הקטנה ביותר בחדר — מסורב בשרת, לא רק במסך.
+"""#953: אימג' שאינו נכנס למגירה הקטנה ביותר בחדר — מסורב בשרת, לא רק במסך.
 
 נדב, 17/09: "שמתי כונן 256, אימג' שלא נכנס ל-256 לא אמור להופיע
 באפשרויות." הרצפה היא המגירה הקטנה ביותר שדווחה ב-hello האחרון (או
-בין המגירות שנבחרו, ‏#695), והסיבה נוקבת במגירה ובמספרים. בלי דיווח —
+בין המגירות שנבחרו, #695), והסיבה נוקבת במגירה ובמספרים. בלי דיווח —
 אין סירוב (בדיקה 2.7 במכונה היא הקו האחרון), והמסך מקבל `disk_floor:
 null` כדי להגיד זאת. הספרייה חושפת `min_target_bytes` (הנגזר)
 ו-`used_bytes` (סכום, או `null` כשמחיצה לא נמדדה).
@@ -29,7 +29,7 @@ DISK_500 = 500_107_862_016          # 500.1 GB
 
 def _manifest(image_id: str, name: str, windows_bytes: int) -> dict:
     """אותה גיאומטריה כמו MANIFEST_256, עם מחיצת Windows בגודל אחר —
-    ‏`required_bytes` נגזר ממנה (‏#82), לא מהשדה המוצהר."""
+    `required_bytes` נגזר ממנה (#82), לא מהשדה המוצהר."""
     esp, win = MANIFEST_256["partitions"]
     return {
         **MANIFEST_256, "id": image_id, "name": name,
@@ -85,7 +85,7 @@ def hello_with_disks(client, mac: str, sizes: list[int]) -> None:
 
 
 def reported_slots(client) -> list[dict]:
-    """‏#1410: כל מגירה מזוהה שמסך החדר מציג — "בחר הכול" של המפעיל."""
+    """#1410: כל מגירה מזוהה שמסך החדר מציג — "בחר הכול" של המפעיל."""
     slots = []
     for m in client.get("/api/console/room").json()["machines"]:
         ports = sorted(d["port"] for d in m["drawer_list"] if d["serial"] and d["port"])
@@ -122,9 +122,9 @@ def test_an_image_that_fits_the_smallest_drawer_opens(fit_server):
 
 
 def test_without_any_disk_report_there_is_no_floor_and_nothing_to_select(fit_server):
-    """מכונות כבויות שטרם דיווחו — אין רצפה: המסך מקבל ‏`disk_floor: null`
+    """מכונות כבויות שטרם דיווחו — אין רצפה: המסך מקבל `disk_floor: null`
     ומציג "גודל הדיסקים לא ידוע". מאז #1410 גם אין מה לבחור, ולכן הסבב
-    נדחה על הבחירה (‏400) — לא על הגודל (‏409)."""
+    נדחה על הבחירה (400) — לא על הגודל (409)."""
     admin = fit_server["admin"]
     assert admin.get("/api/console/room").json()["disk_floor"] is None
     r = open_round(admin, "img_f17300")
@@ -151,7 +151,7 @@ def test_the_status_view_names_the_floor_the_screen_compares_against(fit_server)
 
 
 def test_selected_slots_that_exclude_the_small_drawer_let_the_image_through(fit_server):
-    """‏#695: כשנבחרו מגירות, רק הן הרצפה — הקטנה שלא נבחרה אינה חוסמת."""
+    """#695: כשנבחרו מגירות, רק הן הרצפה — הקטנה שלא נבחרה אינה חוסמת."""
     admin, anon = fit_server["admin"], fit_server["anon"]
     hello_with_disks(anon, CLONER1, [DISK_500, DISK_500])
     hello_with_disks(anon, CLONER2, [DISK_500, DISK_256])
@@ -188,9 +188,9 @@ def test_the_library_list_exposes_the_derived_requirement_and_used_bytes(tmp_pat
 
 @pytest.mark.parametrize("floor_bytes", [None, DISK_500])
 def test_an_image_that_fits_no_disk_size_is_refused_not_waved_through(floor_bytes):
-    """‏#1863: דרישה שאינה ניתנת לקביעה (`min_disk_bytes` = None) — כאן מחיצת
+    """#1863: דרישה שאינה ניתנת לקביעה (`min_disk_bytes` = None) — כאן מחיצת
     מערכת שאינה הניתנת להרחבה, עם 5GB פנויים מול מינימום 20 — **אינה "נכנס"**.
-    עד #1863 ‏`fit_refusal` החזיר כאן None, הסבב נפתח, והסוכן סירב בכל מגירה;
+    עד #1863 `fit_refusal` החזיר כאן None, הסבב נפתח, והסוכן סירב בכל מגירה;
     והרשימה של המכונה (`allowed_for_disks`) כבר הסתירה אותו — שתי הכרעות."""
     from server.library.minfree import min_disk_bytes
     from server.rounds.room import fit_refusal

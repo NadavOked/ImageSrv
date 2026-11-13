@@ -12,7 +12,7 @@ udpcast מותקן.
 שני הפורטים (`portbase` ו-`portbase+1`) נבדקים **לפני** השידור: תהליך
 יתום שמחזיק אותם מפיל את ההפצה הבאה, והאבחון נראה כמו תקלת רשת (#156).
 הבדיקה המקדימה היא צילום רגע ולא ערובה — ולכן מי שנכנס בחלון שאחריה
-נתפס בבדיקה שנייה **בנתיב הכישלון** (`_port_verdict`, ‏#202).
+נתפס בבדיקה שנייה **בנתיב הכישלון** (`_port_verdict`, #202).
 """
 
 from __future__ import annotations
@@ -44,9 +44,9 @@ DEFAULT_PORTBASE = PRODUCTION_PORTBASE
 #: כמה להמתין למקבלים שטרם התייצבו לפני שמשדרים בכל זאת. udpcast מחכה
 #: לכל אחד בנפרד, ומכונה שנתקעה באתחול לא אמורה לעצור כיתה שלמה.
 DEFAULT_MAX_WAIT = 120
-#: כמה להמתין ל**מקבל הראשון** לפני שמוותרים. ‏`--max-wait` מתחיל לספור רק
+#: כמה להמתין ל**מקבל הראשון** לפני שמוותרים. `--max-wait` מתחיל לספור רק
 #: מהמקבל הראשון, ולכן שידור שאיש לא הצטרף אליו אינו נכשל ואינו מסתיים —
-#: הוא נתקע, והמסך מול הכיתה פשוט לא זז (#341). ‏`--start-timeout` הוא
+#: הוא נתקע, והמסך מול הכיתה פשוט לא זז (#341). `--start-timeout` הוא
 #: התקרה על ההמתנה הזאת. שלוש דקות: מכונה שכבר אמרה hello צריכה פחות מזה
 #: כדי להתייצב כמקבל, והמפעיל אינו נשאר מול מסך קפוא יותר מזה.
 DEFAULT_START_TIMEOUT = 180
@@ -58,24 +58,24 @@ DEFAULT_START_TIMEOUT = 180
 #: בלעדיה, וה-`udp-receiver` שלה נופל על מחיצה שאיש לא שידר לה.
 #: הערך הוא `max(600, max_wait)` — לא פחות מעשר דקות, ולא פחות מהראשונה.
 #:
-#: ‏`--start-timeout` נע איתו: ב-udpcast הוא תקרה על **כל** שלב ההמתנה
-#: (‏`udps-negotiate.c`: ‏`time(0) - loopStart >= startTimeout` → יציאה
-#: בלי שידור), לא רק על המקבל הראשון — ‏max-wait של 600 מאחורי
-#: ‏start-timeout של 180 היה מת. לכן למחיצות 2+ הוא `max_wait_later +
+#: `--start-timeout` נע איתו: ב-udpcast הוא תקרה על **כל** שלב ההמתנה
+#: (`udps-negotiate.c`: `time(0) - loopStart >= startTimeout` → יציאה
+#: בלי שידור), לא רק על המקבל הראשון — max-wait של 600 מאחורי
+#: start-timeout של 180 היה מת. לכן למחיצות 2+ הוא `max_wait_later +
 #: start_timeout`: עד 180 שניות למקבל הראשון, ואז עד 600 לשאר.
 LATER_MAX_WAIT = 600
-#: ‏#1430 (הכרעת נדב 02/11): חבר שלא דיווח (‏hello/progress) יותר מזה נחשב
+#: #1430 (הכרעת נדב 02/11): חבר שלא דיווח (hello/progress) יותר מזה נחשב
 #: "שקט", ומחיצה 2+ אינה סופרת אותו ב-`--min-receivers`: השולח יוצא ברגע
-#: שכל החברים שמדווחים מחוברים. ‏`LATER_MAX_WAIT` **אינו** מתקצר — מגירה
+#: שכל החברים שמדווחים מחוברים. `LATER_MAX_WAIT` **אינו** מתקצר — מגירה
 #: איטית ותקינה (#957) מדווחת progress כל ~2 שניות (#449,
-#: ‏`PROGRESS_INTERVAL_S`), ולכן אינה שקטה, נספרת, ומחכים לה עד 600ש'.
-#: מכונה שמתה בשקט נספרת עד `client_lost` (‏`room.LOST_SECONDS`), ובלי זה
+#: `PROGRESS_INTERVAL_S`), ולכן אינה שקטה, נספרת, ומחכים לה עד 600ש'.
+#: מכונה שמתה בשקט נספרת עד `client_lost` (`room.LOST_SECONDS`), ובלי זה
 #: מחיצה שנפתחה בינתיים ממתינה לה 600ש'. חבר שחזר לדווח — נספר שוב: הספירה
 #: נעשית מחדש לפני כל מחיצה. וחבר שקט שקיבל את המחיצה הקודמת עד סופה (לוג
 #: udp-sender) — נספר: המקלט שלו חי, כמו `lost` ב-#1950.
 QUIET_SECONDS = 60
-#: ‏ברזל 17/10: כל כמה זמן השולח שואל אם מחשב שיכפול בגל עוד ממתין לתשובת
-#: אדם (‏`prompt_hold.open_in_wave`). קריאה אחת מה-DB, בלי תעבורה.
+#: ברזל 17/10: כל כמה זמן השולח שואל אם מחשב שיכפול בגל עוד ממתין לתשובת
+#: אדם (`prompt_hold.open_in_wave`). קריאה אחת מה-DB, בלי תעבורה.
 ASK_HOLD_POLL_S = 1.0
 
 
@@ -85,29 +85,29 @@ def later_max_wait(max_wait: int) -> int:
 
 def later_start_timeout(max_wait: int, start_timeout: float) -> int:
     return later_max_wait(max_wait) + int(start_timeout)
-#: ‏`--rexmit-hello-interval` (מילישניות): כל כמה זמן udp-sender משדר שוב את
+#: `--rexmit-hello-interval` (מילישניות): כל כמה זמן udp-sender משדר שוב את
 #: ה-hello שבו מקבל מתחבר. ברירת המחדל של udpcast היא 2000, וכל מחיצה היא
 #: udp-sender משלה — ארבע מחיצות = ארבע המתנות של 2ש' בין "התחבר" ל"משדר",
-#: על ברזל (‏17/10, ‏ses_fbd8f9ca: 08:24:46→48, 08:24:51→53, 08:24:56→58,
-#: 08:29:43→45) ובמדידה על loopback (‏2.83ש' בברירת המחדל, ‏1.02ש' ב-200).
+#: על ברזל (17/10, ses_fbd8f9ca: 08:24:46→48, 08:24:51→53, 08:24:56→58,
+#: 08:29:43→45) ובמדידה על loopback (2.83ש' בברירת המחדל, 1.02ש' ב-200).
 #: ה-hello הוא חבילה קטנה אחת; ב-5 לשנייה זו עלות אפסית גם במחכה של 600ש'.
 HELLO_INTERVAL_MS = 200
 #: אחרי כמה בקשות ACK ללא מענה udpcast מוותר על מקבל וממשיך בלעדיו.
 #: **בלי הדגל הזה udpcast מגדיר 200**.
 #:
-#: ‏11/09/2026 (הכרעת נדב): מאמצים את הגישה של FOG/Clonezilla —
+#: 11/09/2026 (הכרעת נדב): מאמצים את הגישה של FOG/Clonezilla —
 #: **"dynamic bitrate": להאט למקבל האיטי ולא להפיל אותו.** אימג' גדול
 #: (win-build 67GB דחוס) נפל ב-~90% בשידור, ואימג' קטן (20GB) הצליח:
-#: ‏back-pressure בזנב גרם ל-udp-sender להפיל מקבלים איטיים-אך-חיים אחרי
-#: ‏15 בקשות ACK, המקבל שהופל המתין לנצח, ‏`--receive-timeout` שלו נורה
+#: back-pressure בזנב גרם ל-udp-sender להפיל מקבלים איטיים-אך-חיים אחרי
+#: 15 בקשות ACK, המקבל שהופל המתין לנצח, `--receive-timeout` שלו נורה
 #: והזרם נקטע. הפתרון הוא לא להפיל את המקבל האיטי — כלומר תקרת נטישה
 #: גבוהה, שמשאירה אותו בקבוצה ומאיטה את כל הזרם אליו.
 #:
 #: **מחיר מודע (#437):** מקבל שבאמת *מת* (שותק) מקפיא כעת את החדר בערך
-#: ‏190 שניות לפני שהוא נזרק, במקום כ-15 קודם — כי אין דרך ל-udpcast
+#: 190 שניות לפני שהוא נזרק, במקום כ-15 קודם — כי אין דרך ל-udpcast
 #: להבחין בין "איטי-אך-חי" ל"מת". ההכרעה של נדב היא שכשל *מלא* של
 #: אימג' הדגל עדיף שלא יקרה, גם במחיר קפיאה של דקות כשמכונה קורסת.
-#: ‏**הערך ניתן לכוונון דרך `IMAGESRV_RETRIES_UNTIL_DROP`** כדי שהמפעיל
+#: **הערך ניתן לכוונון דרך `IMAGESRV_RETRIES_UNTIL_DROP`** כדי שהמפעיל
 #: יוכל להחזיר אותו אם הקפיאה הזו תתברר כגרועה מהתקלה שהיא מונעת.
 #: **לא `--async`** — ויתור על ACK פירושו דאטגרם אבוד שהופך לדיסק פגום,
 #: וזה בדיוק מה שהפרוטוקול הזה קיים כדי למנוע (עיקרון 4).
@@ -129,7 +129,7 @@ def _env_retries_until_drop() -> int:
         log.warning("IMAGESRV_RETRIES_UNTIL_DROP=%r אינו מספר — נופלים ל-%d",
                     raw, DEFAULT_RETRIES_UNTIL_DROP)
         return DEFAULT_RETRIES_UNTIL_DROP
-    # ‏udp-sender סופר את הערך כ-int חתום: `0`/שלילי אינם "אל תזרוק" אלא
+    # udp-sender סופר את הערך כ-int חתום: `0`/שלילי אינם "אל תזרוק" אלא
     # **זריקה כמעט מיידית** של המקבל הראשון שמפספס ACK — כלומר בדיוק כשל
     # ה-90% שהערך הזה קיים כדי למנוע, מוסווה כ"כוונון". מספר קטן מ-1 הוא
     # הגדרה שגויה, לא בקשה — נופלים לברירת המחדל עם אזהרה (עיקרון 5).
@@ -144,10 +144,10 @@ STOP_TERM_WAIT = 0.5
 STOP_KILL_WAIT = 1.0
 
 
-#: הפלט של udp-sender — הבסיס לשם הלוג. ‏Starting transfer: בכל הקובץ
+#: הפלט של udp-sender — הבסיס לשם הלוג. Starting transfer: בכל הקובץ
 #: היא הראיה שהשידור באמת התחיל (#438); הזנב נכנס להודעת שגיאה אחרת.
 #: **לוג נפרד לכל מחיצה** (`partition_log`) ולא קובץ יחיד: עד כאן
-#: ‏run_process פתח את הקובץ הזה ב-"wb" לכל מחיצה, וכל מחיצה מחקה את לוג
+#: run_process פתח את הקובץ הזה ב-"wb" לכל מחיצה, וכל מחיצה מחקה את לוג
 #: קודמתה — כשל במחיצה השנייה בלע את ה-Starting transfer של הראשונה,
 #: והראיה מדוע נפל השידור הגדול נמחקה במחיצה שאחריה (באג ראיות).
 SENDER_LOG = Path(tempfile.gettempdir()) / "imagesrv-sender.log"
@@ -174,7 +174,7 @@ def run_process(cmd: list[str]) -> subprocess.Popen:
     # נחסם על הפלט של עצמו והשידור קופא, והמקבלים מתים בזה אחר זה (#22).
     # אותו לקח בדיוק כמו שרת הסימולציה ב-#12: פלט של תהליך ארוך → קובץ.
     # לוג פר-מחיצה נגזר מ---file, כדי שראיית מחיצה קודמת לא תימחק.
-    # ‏#1974: בעדיפות הרקע (‏nice/ionice) — הקונסולה קודמת לשידור כשיש תחרות.
+    # #1974: בעדיפות הרקע (nice/ionice) — הקונסולה קודמת לשידור כשיש תחרות.
     with partition_log(cmd[cmd.index("--file") + 1]).open("wb") as handle:
         return subprocess.Popen(priority.background_cmd(cmd), stdout=handle,
                                 stderr=subprocess.STDOUT)
@@ -189,7 +189,7 @@ UNKNOWN_HOLDER = -1
 
 
 def _inodes_on_port(port: int) -> set[str] | None:
-    """ה-inodes של סוקטי UDP שקשורים ל-`port`; ‏None כשאין טבלה לקרוא."""
+    """ה-inodes של סוקטי UDP שקשורים ל-`port`; None כשאין טבלה לקרוא."""
     inodes: set[str] = set()
     read_any = False
     for table in UDP_TABLES:
@@ -249,7 +249,7 @@ def _pids_holding(inodes: set[str]) -> list[int]:
 def port_holders(port: int) -> list[int]:
     """מי מחזיק את `port`. רשימה ריקה = **נבדק ונמצא פנוי**.
 
-    ‏`OSError` פירושו *לא הצלחנו לבדוק*, וזה אינו "פנוי" (עיקרון 5):
+    `OSError` פירושו *לא הצלחנו לבדוק*, וזה אינו "פנוי" (עיקרון 5):
     מי שקורא חייב לטפל בשני המצבים בנפרד.
 
     שלוש תשובות ולא שתיים: פנוי, תפוס בידי PIDים ידועים, ותפוס בידי מי
@@ -257,7 +257,7 @@ def port_holders(port: int) -> list[int]:
     שלו סגור בפנינו. השלישית אינה "פנוי" ואינה שם של תהליך, והיא נאמרת
     ככזאת ולא מקופלת לאחת מהאחרות.
 
-    **ובלי טבלת קרנל אין תשובה בכלל.** ‏bind מוצלח אינו תחליף: סוקט
+    **ובלי טבלת קרנל אין תשובה בכלל.** bind מוצלח אינו תחליף: סוקט
     בדיקה חייב להיקשר לכתובת אחת, ולכן הוא מפספס מי שתפס את הפורט על
     כרטיס אחר — ו-bind לכל הכרטיסים הוא בדיוק מה שאסור לפתוח כאן. השרת
     רץ על דביאן, שם `/proc/net/udp` תמיד קיים; במקום שאין בו טבלה גם
@@ -277,8 +277,8 @@ def port_holders(port: int) -> list[int]:
 def holder_names(pids: list[int]) -> str:
     """"udp-sender (PID 1234)" — שם התהליך ולא רק מספרו.
 
-    ‏PID לבדו אינו אומר למפעיל **מה לעשות**; השם אומר לו אם מולו סבב
-    קודם שלא נסגר או כלי אחר לגמרי. ‏`UNKNOWN_HOLDER` אינו PID, ולכן
+    PID לבדו אינו אומר למפעיל **מה לעשות**; השם אומר לו אם מולו סבב
+    קודם שלא נסגר או כלי אחר לגמרי. `UNKNOWN_HOLDER` אינו PID, ולכן
     אינו מקבל שם ואינו נספר כאן — מי שקורא אומר "לא זיהינו" בעצמו.
     """
     names = []
@@ -325,30 +325,30 @@ def transfer_started_in_log(log_path: Path) -> bool | None:
     return TRANSFER_STARTED in text
 
 
-#: ‏#989: שורת ההתקדמות ש-udp-sender כותב ל-stderr (= הלוג הפר-מחיצתי) לכל
+#: #989: שורת ההתקדמות ש-udp-sender כותב ל-stderr (= הלוג הפר-מחיצתי) לכל
 #: היותר פעם ב-500ms. הצורה מקוד המקור של udpcast, לא ממדידה על ברזל
-#: (‏`statistics.c` ‏`displaySenderStats`: ‏`"bytes=" printLongNum
-#: " re-xmits=%07llu (%3u.%01u%%) slice=%04d ... - %3d\r"`). ‏`printLongNum`
-#: (‏log.c) מדפיס שלוש קבוצות של שלוש ספרות מופרדות ברווח, ואחריהן סיומת:
-#: רווח ביחידות בייט, ‏K (‏×1024) מ-10⁹ ומעלה, ‏M (‏×2²⁰) מעל 10¹².
-#: ‏re-xmits = בלוקים ששודרו שוב כי מקבל דיווח שחסרו לו — אובדן ברשת או
+#: (`statistics.c` `displaySenderStats`: `"bytes=" printLongNum
+#: " re-xmits=%07llu (%3u.%01u%%) slice=%04d ... - %3d\r"`). `printLongNum`
+#: (log.c) מדפיס שלוש קבוצות של שלוש ספרות מופרדות ברווח, ואחריהן סיומת:
+#: רווח ביחידות בייט, K (×1024) מ-10⁹ ומעלה, M (×2²⁰) מעל 10¹².
+#: re-xmits = בלוקים ששודרו שוב כי מקבל דיווח שחסרו לו — אובדן ברשת או
 #: במקבל שהפרוטוקול תיקן; לא בייט שאבד ליעד (עיקרון 4).
 _PROGRESS = re.compile(r"bytes=([ \d]*)([KM]?) re-xmits=(\d+) \(")
 _UNIT = {"": 1, "K": 1024, "M": 1_048_576}
-#: כמה מסוף הלוג קוראים כדי למצוא את השורה האחרונה (‏~80 בייט לשורה).
+#: כמה מסוף הלוג קוראים כדי למצוא את השורה האחרונה (~80 בייט לשורה).
 PROGRESS_TAIL = 4096
-#: ‏#989: בלי שורה חדשה זמן כזה — אין "קצב עכשיו" (udp-sender מדפיס כל 0.5ש').
+#: #989: בלי שורה חדשה זמן כזה — אין "קצב עכשיו" (udp-sender מדפיס כל 0.5ש').
 PACE_STALE_S = 10.0
 #: קצב אוטומטי (11/10): כל כמה זמן השולח דוגם את שורת ההתקדמות של
 #: udp-sender בזמן שהוא ממתין לו — קריאה מקומית של לוג, בלי תעבורה. מזה
-#: נגזר הקצב הממוצע של הזרם בגל (‏`wave_outcome`). ‏udp-sender כותב כל 0.5ש'.
+#: נגזר הקצב הממוצע של הזרם בגל (`wave_outcome`). udp-sender כותב כל 0.5ש'.
 PACE_POLL = 0.5
 
 
 def sender_progress(log_path: Path) -> tuple[int, int] | None:
-    """‏(בייטים שנשלחו, בלוקים ששודרו שוב) מהשורה השלמה האחרונה בלוג.
+    """(בייטים שנשלחו, בלוקים ששודרו שוב) מהשורה השלמה האחרונה בלוג.
 
-    ‏None = הקובץ לא נקרא, או שאין בו שורה בצורה שאנחנו מכירים — ‏"לא
+    None = הקובץ לא נקרא, או שאין בו שורה בצורה שאנחנו מכירים — "לא
     נמדד", לא אפס (עיקרון 5). שורה שנקטעה באמצע הכתיבה אינה תואמת
     (אין לה `(` אחרי המונה) ונופלת לשורה שלפניה.
     """
@@ -367,7 +367,7 @@ def sender_progress(log_path: Path) -> tuple[int, int] | None:
 
 
 def wave_totals(logs: list[Path]) -> tuple[int, int] | None:
-    """‏(בייטים, בלוקים ששודרו שוב) — סכום על כל המחיצות של גל.
+    """(בייטים, בלוקים ששודרו שוב) — סכום על כל המחיצות של גל.
 
     מחיצה שהלוג שלה נקרא ואין בו `Starting transfer` תורמת 0 (לא שודר
     כלום, אז לא שודר שוב); מחיצה שהשידור בה התחיל ואין בה שורה מוכרת,
@@ -384,7 +384,7 @@ def wave_totals(logs: list[Path]) -> tuple[int, int] | None:
     return sent, loss
 
 
-#: ‏#1761: שתי השורות ש-udp-sender כותב כשמקלט לא עונה (‏senddata.c:930-967).
+#: #1761: שתי השורות ש-udp-sender כותב כשמקלט לא עונה (senddata.c:930-967).
 #: כל פקיעה של המתנה ל-REQACK מדפיסה `Timeout notAnswered=...`; וכש-rxmitId
 #: עובר את `--retries-until-drop` הוא מנתק את המקלט: `Dropping client #N
 #: because of timeout`. ניתוק הוא האות הישיר שהקצב הפיל מקלט — לא rcvbuf.
@@ -393,10 +393,10 @@ SENDER_DROP = "Dropping client"
 
 
 def wave_events(logs: list[Path]) -> tuple[int, int] | None:
-    """‏(שורות `Dropping client`, שורות `Timeout notAnswered`) — סכום על כל
+    """(שורות `Dropping client`, שורות `Timeout notAnswered`) — סכום על כל
     המחיצות של גל, מהקובץ כולו (השורות נדחקות מהזנב ע"י ההתקדמות).
 
-    ‏None = לוג אחד לפחות לא נקרא: "לא נבדק", ולא "אפס ניתוקים" (עיקרון 5).
+    None = לוג אחד לפחות לא נקרא: "לא נבדק", ולא "אפס ניתוקים" (עיקרון 5).
     """
     drops = timeouts = 0
     for path in logs:
@@ -409,10 +409,10 @@ def wave_events(logs: list[Path]) -> tuple[int, int] | None:
     return drops, timeouts
 
 
-#: ‏#1950: השורות שבהן udp-sender אומר מי מקבל ממנו. נמדד מול udpcast
-#: 20120424 (testrunner, ‏22/10): ‏`New connection from 127.0.0.1  (#0) 00000009`,
+#: #1950: השורות שבהן udp-sender אומר מי מקבל ממנו. נמדד מול udpcast
+#: 20120424 (testrunner, 22/10): `New connection from 127.0.0.1  (#0) 00000009`,
 #: ובסוף `Transfer complete.` ואחריה `Disconnecting #0 (127.0.0.1)`.
-#: ‏`Dropping client #N because of timeout` — ‏senddata.c (ראו `SENDER_DROP`).
+#: `Dropping client #N because of timeout` — senddata.c (ראו `SENDER_DROP`).
 _RECEIVER_LINE = re.compile(
     r"New connection from (\S+)\s+\(#(\d+)\)"
     r"|Dropping client #(\d+)"
@@ -421,11 +421,11 @@ _RECEIVER_LINE = re.compile(
 
 
 def finished_receivers(log_path: Path) -> set[str] | None:
-    """‏#1950: הכתובות שקיבלו את המחיצה עד סופה — התחברו, ולא נזרקו ולא
+    """#1950: הכתובות שקיבלו את המחיצה עד סופה — התחברו, ולא נזרקו ולא
     התנתקו לפני `Transfer complete`. זו ראיה חיובית שהמקלט חי **עכשיו**:
     הוא ענה ל-ACK האחרון של השולח לפני שניות.
 
-    ‏None = הלוג לא נקרא — "לא נבדק", לא "אף אחד" (עיקרון 5). ‏udpcast
+    None = הלוג לא נקרא — "לא נבדק", לא "אף אחד" (עיקרון 5). udpcast
     ממחזר מספר `#N` אחרי ניתוק, ולכן השורות נקראות לפי הסדר."""
     try:
         text = log_path.read_text(errors="replace")
@@ -474,7 +474,7 @@ class SendState:
     # קצב אוטומטי: בייטים ושניות שבהם המונה של udp-sender זז, על כל המחיצות.
     moved_bytes: int = 0
     moved_s: float = 0.0
-    # ‏#1758: משך הזרם כולו — מהבייט הראשון של הגל (‏monotonic) ועד `send_done`.
+    # #1758: משך הזרם כולו — מהבייט הראשון של הגל (monotonic) ועד `send_done`.
     first_byte_at: float | None = None
     done_at: float | None = None
 
@@ -504,61 +504,61 @@ class SenderEngine:
     ):
         self.library = library
         self.runner = runner
-        # סימולציה (‏tools/e2e_simulation.py): אין udp-sender ואין ‎/proc/net/udp
+        # סימולציה (tools/e2e_simulation.py): אין udp-sender ואין /proc/net/udp
         # בתחנת פיתוח, ומאז #854 כישלון השולח הוא כישלון הסבב — בלי הדגל
         # הסימולציה הייתה "עוברת" רק כל עוד הכישלון נבלע בשקט. עם הדגל
         # השולח אינו משדר ואינו בודק פורטים; הוא נאמר ביומן ואינו בייצור.
         self.simulate = simulate
-        # ‏None ולא `DEFAULT_PORTBASE` כברירת מחדל בחתימה: ברירת מחדל
+        # None ולא `DEFAULT_PORTBASE` כברירת מחדל בחתימה: ברירת מחדל
         # נקשרת בהגדרת הפונקציה, וחבילת הטסטים דורסת את המודול אחריה.
         self.portbase = DEFAULT_PORTBASE if portbase is None else portbase
         self.interface = interface
         self.max_wait = max_wait
         self.start_timeout = start_timeout
-        # ‏None ולא הקבוע בחתימה: כך `IMAGESRV_RETRIES_UNTIL_DROP` נקרא
+        # None ולא הקבוע בחתימה: כך `IMAGESRV_RETRIES_UNTIL_DROP` נקרא
         # בזמן ההרצה (כמו max_bitrate), ומי שמעביר ערך מפורש עוקף אותו.
         self.retries_until_drop = (
             retries_until_drop if retries_until_drop is not None
             else _env_retries_until_drop()
         )
-        # ‏#2056: ההמתנה למחשב שהתנתק (הגדרה בקונסולה, בשניות). ‏None = ללא הגדרה: התקרה כמות שהיא.
+        # #2056: ההמתנה למחשב שהתנתק (הגדרה בקונסולה, בשניות). None = ללא הגדרה: התקרה כמות שהיא.
         self.lost_wait = lost_wait
         # ריסון קצב: מקבל חסום על כתיבה לדיסק גם שותק בפרוטוקול, וה-sender
         # זורק אותו ("Dropped by server"). ברשת 1G הכבל מרסן מעצמו; ברשת
-        # מהירה (מעבדת VM, ‏10G) חייבים רסן מפורש בקצב שהדיסקים מעכלים (#24).
+        # מהירה (מעבדת VM, 10G) חייבים רסן מפורש בקצב שהדיסקים מעכלים (#24).
         self.max_bitrate = max_bitrate or os.environ.get("IMAGESRV_MAX_BITRATE")
-        # ‏#447 + קצב אוטומטי (11/10): הקצב לגל הזה (`drive_rates.decide`).
+        # #447 + קצב אוטומטי (11/10): הקצב לגל הזה (`drive_rates.decide`).
         # מקבל את `max_bitrate` כגג ולעולם אינו מעליו (בלעדיו — 900m);
         # בלי `wave_bitrate` — `max_bitrate` כמות שהוא.
         self.wave_bitrate = wave_bitrate
-        # ‏#1430: כמה חברים בגל עוד יכולים לקבל — נשאל לפני **כל** מחיצה.
+        # #1430: כמה חברים בגל עוד יכולים לקבל — נשאל לפני **כל** מחיצה.
         # חבר שדיווח `failed` לא יתחבר לעולם, ו-`--min-receivers` שסופר
         # אותו מבזבז את כל `--max-wait` (600ש' במחיצה 2+) על מכונה מתה —
         # עד שהמכונה התקינה פוקעת. בלעדיו — הצילום של `joined` מתחילת הגל.
         self.live_receivers = live_receivers
-        # ‏#1950: הכתובות של חברי הגל שהשרת סימן `lost` (‏None = כתובת לא
-        # ידועה). ‏`lost` הוא הסקה של השרת ("לא דיווח"), לא דיווח של המכונה:
+        # #1950: הכתובות של חברי הגל שהשרת סימן `lost` (None = כתובת לא
+        # ידועה). `lost` הוא הסקה של השרת ("לא דיווח"), לא דיווח של המכונה:
         # מכונה שקיבלה את המחיצה הקודמת עד סופה עדיין מתחברת לשולח, ובלי
         # לספור אותה היא "ממלאת" את `--min-receivers` והמחיצה יוצאת בלי
-        # החבר החי. ‏None = לא מחובר: ההתנהגות של #1430.
+        # החבר החי. None = לא מחובר: ההתנהגות של #1430.
         self.lost_receivers = lost_receivers
-        # ‏#1430: הכתובות (‏None = לא ידועה) של החברים שאינם במצב סופי ולא
+        # #1430: הכתובות (None = לא ידועה) של החברים שאינם במצב סופי ולא
         # דיווחו `QUIET_SECONDS`. נשאל לפני מחיצה 2+; מי שלא סיים את הקודמת
-        # מופחת מ-`--min-receivers`. ‏None = לא מחובר: כולם נספרים.
+        # מופחת מ-`--min-receivers`. None = לא מחובר: כולם נספרים.
         self.quiet_receivers = quiet_receivers
-        # הכרעת נדב 15/10: מהירות הקישור של `interface` (‏`drive_rates.read_link`)
-        # — הגג והפתיחה של הקצב לפיה. ‏None = לא מחובר (בדיקות; ‏`server.main`
+        # הכרעת נדב 15/10: מהירות הקישור של `interface` (`drive_rates.read_link`)
+        # — הגג והפתיחה של הקצב לפיה. None = לא מחובר (בדיקות; `server.main`
         # מחבר תמיד): "לא נקרא", וההתנהגות של היום — לא ניחוש של 1GbE.
         self.link_speed = link_speed
-        # ברזל 17/10 / ‏#2202: מי בגל ממתין עכשיו לאדם (‏`net_devices.prompt` —
-        # חלוקת המקום, RAID). כל עוד יש כזה, ‏udp-sender של המחיצה הראשונה לא
+        # ברזל 17/10 / #2202: מי בגל ממתין עכשיו לאדם (`net_devices.prompt` —
+        # חלוקת המקום, RAID). כל עוד יש כזה, udp-sender של המחיצה הראשונה לא
         # מופעל — ה-`--start-timeout` שלו נספר מההפעלה, ושלוש דקות מול שאלה
-        # פתוחה נגמרו בשולח שיצא אחרי התשובה. ‏None = לא מחובר: ההתנהגות של
+        # פתוחה נגמרו בשולח שיצא אחרי התשובה. None = לא מחובר: ההתנהגות של
         # לפני. שאלת ה-SMART (`pending_asks`) הוסרה ב-#2044.
         self.pending_prompts = pending_prompts
         self.on_event = on_event or (lambda event, detail: None)
-        #: ‏#705: ‏`gate(interface)` → סיבת סירוב או None — השידור כבוי בכרטיס
-        #: (רשת ← חיבורים פיזיים ← שירותים). ‏`create_runtime` מתקין.
+        #: #705: `gate(interface)` → סיבת סירוב או None — השידור כבוי בכרטיס
+        #: (רשת ← חיבורים פיזיים ← שירותים). `create_runtime` מתקין.
         self.gate: Callable[[str | None], str | None] | None = None
         # Resolve before bitrate selection and spawning, once per round.
         self.select_interface: Callable[[dict], str | None] | None = None
@@ -567,11 +567,11 @@ class SenderEngine:
         self._process: subprocess.Popen | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
-        # ‏#2427: סבבים שנסגרו (``stop(id)``) לפני שה-``start`` שלהם הגיע. ה-commit
+        # #2427: סבבים שנסגרו (``stop(id)``) לפני שה-``start`` שלהם הגיע. ה-commit
         # ל-running קודם ל-``on_running``, וסגירה שנכנסה ביניהם הייתה no-op —
         # ו-udp-sender עלה אחריה לסבב סגור. חסום: מזהה ישן שלא יתחיל לעולם יוצא.
         self._closed_early: deque[str] = deque(maxlen=64)
-        # ‏#989: הדגימה הקודמת של הלוג הנוכחי — (נתיב, mtime, בייטים) —
+        # #989: הדגימה הקודמת של הלוג הנוכחי — (נתיב, mtime, בייטים) —
         # והקצב האחרון שנגזר ממנה. נדגם רק כשמישהו קורא את `/room`.
         self._pace_sample: tuple[Path, float, int] | None = None
         self._pace_rate: int | None = None
@@ -582,7 +582,7 @@ class SenderEngine:
     def start(self, session: dict) -> str | None:
         """נקרא כשסבב עובר ל-running. חוזר מיד; השידור רץ ברקע.
 
-        ‏#2427: מחזיר ``None`` כשהשידור הופעל, אחרת את הסיבה שלא — והקורא
+        #2427: מחזיר ``None`` כשהשידור הופעל, אחרת את הסיבה שלא — והקורא
         מכשיל את הסבב בשמו. עד כאן הסירוב נבלע ב-log, והסבב נשאר ``running``
         בלי משדר. שידור קודם שנעצר (``stop``) ועוד מסיים — ממתינים לו, בתקרה."""
         sid = session["id"]
@@ -624,11 +624,11 @@ class SenderEngine:
     def stop(self, session_id: str | None = None) -> int | None:
         """הורג את udp-sender וקורא בחזרה שהוא מת (#439).
 
-        ‏None = יש ראיה שהתהליך איננו. מספר = עדיין חי, ואינו הצלחה
+        None = יש ראיה שהתהליך איננו. מספר = עדיין חי, ואינו הצלחה
         — גם כשלא הצלחנו לבדוק. TERM לבד משאיר יתום: udpcast חוסם
         אותו ב-doTransfer. SIGKILL ואז קריאה בחזרה.
 
-        ‏`session_id` מגן מפני קריאת-סגירה ישנה (#773): thread שסוגר
+        `session_id` מגן מפני קריאת-סגירה ישנה (#773): thread שסוגר
         את session A ומתעכב לפני ה-callback אינו רשאי להרוג את השידור
         של session B שכבר התחיל. הסגירה פועלת רק כש-`session_id` הוא
         `None` (סגירה מפורשת) או תואם את ה-session הרץ; אחרת no-op.
@@ -640,7 +640,7 @@ class SenderEngine:
             if session_id is not None and session_id != current:
                 log.info("sender: ignoring stale stop of %s (current is %s)",
                          session_id, current)
-                # ‏#2427: ואם ה-start שלו עוד בדרך — הוא לא יפעיל udp-sender.
+                # #2427: ואם ה-start שלו עוד בדרך — הוא לא יפעיל udp-sender.
                 if session_id not in self._closed_early:
                     self._closed_early.append(session_id)
                 return None
@@ -694,16 +694,16 @@ class SenderEngine:
             }
 
     def stream_stats(self, session_id: str) -> dict:
-        """‏#989: ‏`throughput_bps` ו-`loss_blocks` של הגל `session_id`.
+        """#989: `throughput_bps` ו-`loss_blocks` של הגל `session_id`.
 
         שניהם נקראים מהלוגים הפר-מחיצתיים ש-udp-sender כבר כותב — שום
         תעבורה חדשה, ושום דגימה ברקע: הדגימה היא הקריאה של `/room` עצמה.
 
-        * ‏`throughput_bps` — בייטים לשנייה בין שתי השורות האחרונות שנדגמו
+        * `throughput_bps` — בייטים לשנייה בין שתי השורות האחרונות שנדגמו
           מהמחיצה המשודרת, על פני ה-mtime שלהן (הרגע שבו udp-sender כתב
-          אותן, לא הרגע שבו קראנו). ‏None: דגימה ראשונה, מחיצה חדשה, מונה
+          אותן, לא הרגע שבו קראנו). None: דגימה ראשונה, מחיצה חדשה, מונה
           שירד, או לוג שלא נכתב `PACE_STALE_S` שניות.
-        * ‏`loss_blocks` — סכום ה-re-xmits על כל המחיצות שהגל הזה הריץ.
+        * `loss_blocks` — סכום ה-re-xmits על כל המחיצות שהגל הזה הריץ.
           מחיצה שהלוג שלה נקרא ואין בו `Starting transfer` תורמת 0 (לא
           שודר כלום, אז לא שודר שוב); מחיצה שהשידור בה התחיל ואין בה
           שורה מוכרת, או לוג שלא נקרא — הסכום כולו None.
@@ -718,23 +718,23 @@ class SenderEngine:
                 "loss_blocks": totals[1] if totals is not None else None}
 
     def wave_outcome(self, session_id: str) -> dict:
-        """מה שהקצב האוטומטי לומד מהגל בסופו (‏`drive_rates.record_stream`).
+        """מה שהקצב האוטומטי לומד מהגל בסופו (`drive_rates.record_stream`).
 
-        * ‏`sent_bytes`, ‏`loss_blocks` — אותם כללים כמו `loss_blocks` של
-          `stream_stats`; ‏None בשניהם = "לא נמדד".
-        * ‏`stream_bps`, ‏`stream_s` — הקצב הממוצע של הזרם עצמו: הבייטים
+        * `sent_bytes`, `loss_blocks` — אותם כללים כמו `loss_blocks` של
+          `stream_stats`; None בשניהם = "לא נמדד".
+        * `stream_bps`, `stream_s` — הקצב הממוצע של הזרם עצמו: הבייטים
           שהמונה של udp-sender זז חלקי השניות שבהן זז, על כל המחיצות
-          (‏`_wait_sampling`). זה הקצב **בקו** — לפני פריסת הדחיסה, ולכן
-          בלי ההטיה של `bytes_written` בכוננים. ‏None = לא זז בין שתי דגימות.
-        * ‏`wall_s` (‏#1758) — משך הזרם של הגל כולו בשעון: מהדגימה הראשונה
+          (`_wait_sampling`). זה הקצב **בקו** — לפני פריסת הדחיסה, ולכן
+          בלי ההטיה של `bytes_written` בכוננים. None = לא זז בין שתי דגימות.
+        * `wall_s` (#1758) — משך הזרם של הגל כולו בשעון: מהדגימה הראשונה
           שבה המונה זז (הבייט הראשון של מחיצה 1) ועד `send_done`. כולל את
           הזנב של השידורים החוזרים, את ה-ACK האחרון ואת המעברים בין
           המחיצות — כל מה שהקצב יכול להאריך — ובלי ההמתנה למקבלים ולשאלות
-          SMART לפני הבייט הראשון (אדם, לא קצב). ‏None — הגל לא הגיע ל-
+          SMART לפני הבייט הראשון (אדם, לא קצב). None — הגל לא הגיע ל-
           `send_done` (נכשל / נעצר) או שהמונה לא זז.
-        * ‏`dropped_clients`, ‏`timeouts` (‏#1761) — כמה שורות `Dropping client`
+        * `dropped_clients`, `timeouts` (#1761) — כמה שורות `Dropping client`
           ו-`Timeout notAnswered` כתב udp-sender בכל המחיצות (`wave_events`).
-          ‏None בשניהם = לוג שלא נקרא — "לא נבדק", לא "נקי".
+          None בשניהם = לוג שלא נקרא — "לא נבדק", לא "נקי".
         """
         none = {"sent_bytes": None, "loss_blocks": None,
                 "stream_bps": None, "stream_s": None, "wall_s": None,
@@ -764,7 +764,7 @@ class SenderEngine:
         (ההמתנה ל-ACK האחרון אחרי הבייט האחרון גם אינה). דגימה אחרונה גם
         אחרי היציאה — השורה הסופית. מחיצה שזזה בדגימה אחת בלבד — לא תורמת.
 
-        ‏`asks_of` (ברזל rc2, 17/10): מזהה הגל — המחיצה הראשונה. שאלה למפעיל
+        `asks_of` (ברזל rc2, 17/10): מזהה הגל — המחיצה הראשונה. שאלה למפעיל
         שהגיעה **אחרי** ש-udp-sender עלה (באותה שנייה כמו `send_start`) לא
         נתפסה בהמתנה שלפניו, ו-`--start-timeout` רץ מתחתיה עד הכשל. כל עוד
         יש ראיה חיובית שהשידור **לא** התחיל (הלוג נקרא ואין Starting
@@ -788,7 +788,7 @@ class SenderEngine:
                 last = (time.monotonic(), got[0])
                 if first is None:
                     first = last
-                    with self._lock:      # ‏#1758: תחילת הזרם של הגל כולו
+                    with self._lock:      # #1758: תחילת הזרם של הגל כולו
                         if self._state.first_byte_at is None:
                             self._state.first_byte_at = first[0]
             if done:
@@ -839,16 +839,16 @@ class SenderEngine:
 
     @property
     def max_wait_later(self) -> int:
-        """‏`--max-wait` למחיצות 2+ (#957): ההמתנה שם היא לכתיבה של הקודמת."""
+        """`--max-wait` למחיצות 2+ (#957): ההמתנה שם היא לכתיבה של הקודמת."""
         return later_max_wait(self.max_wait)
 
     @property
     def start_timeout_later(self) -> int:
-        """‏`--start-timeout` למחיצות 2+ — חייב להכיל את `max_wait_later`."""
+        """`--start-timeout` למחיצות 2+ — חייב להכיל את `max_wait_later`."""
         return later_start_timeout(self.max_wait, self.start_timeout)
 
     def effective_retries_until_drop(self) -> int:
-        """‏#2056: התקרה שמועברת ל-udp-sender -- לא פחות מההמתנה שהוגדרה לאובדן, כדי שהשולח
+        """#2056: התקרה שמועברת ל-udp-sender -- לא פחות מההמתנה שהוגדרה לאובדן, כדי שהשולח
         לא יזרוק מקבל שהשרת עוד מחכה לו. ההמרה: 200 בקשות ≈ 190ש' (ראו למעלה)."""
         if self.lost_wait is None:
             return self.retries_until_drop
@@ -857,9 +857,9 @@ class SenderEngine:
 
     def command_for(self, path: Path, receivers: int, number: int = 1,
                     max_bitrate: str | None | bool = False) -> list[str]:
-        # ‏number = מספר המחיצה בסדר השידור (1 = הראשונה). מהשנייה והלאה
-        # ההמתנה ארוכה יותר — ראו LATER_MAX_WAIT. ‏`max_bitrate` — התקרה
-        # שנבחרה לגל (#447); ‏False = לא נבחרה, ואז התקרה הקבועה.
+        # number = מספר המחיצה בסדר השידור (1 = הראשונה). מהשנייה והלאה
+        # ההמתנה ארוכה יותר — ראו LATER_MAX_WAIT. `max_bitrate` — התקרה
+        # שנבחרה לגל (#447); False = לא נבחרה, ואז התקרה הקבועה.
         if max_bitrate is False:
             max_bitrate = self.max_bitrate
         later = number > 1
@@ -885,17 +885,17 @@ class SenderEngine:
         return cmd
 
     def link(self) -> dict:
-        """כרטיס ההפצה ומהירותו (‏`drive_rates.read_link`), או למה לא נקראה."""
+        """כרטיס ההפצה ומהירותו (`drive_rates.read_link`), או למה לא נקראה."""
         if self.link_speed is None:
             return {"interface": self.interface, "speed_mbps": None, "why": "not_wired"}
         return self.link_speed(self.interface)
 
     def multicast_params(self) -> dict:
-        """הפרמטרים שמחשב בנייה משדר בהם כשהוא המקור (‏#715, ממשק 3).
+        """הפרמטרים שמחשב בנייה משדר בהם כשהוא המקור (#715, ממשק 3).
 
         אותם ערכים בדיוק שהמנוע הזה היה נותן ל-`udp-sender` — כדי שזרם
-        מדיסק חי יתנהג כמו זרם מהספרייה (‏#437, ‏#438). ‏`min_receivers`
-        אינו כאן: הוא נגזר מהגל ברגע התשובה (‏`direct.task_block`).
+        מדיסק חי יתנהג כמו זרם מהספרייה (#437, #438). `min_receivers`
+        אינו כאן: הוא נגזר מהגל ברגע התשובה (`direct.task_block`).
         """
         return {
             "portbase": self.portbase,
@@ -977,7 +977,7 @@ class SenderEngine:
 
         שלוש תשובות ולא שתיים, ואף אחת אינה מקופלת לאחרת: נמצא מחזיק ·
         נבדק ונמצא פנוי, ולכן הסיבה אחרת ואינה ידועה · הבדיקה עצמה לא
-        רצה (עיקרון 5). ‏udp-sender נכשל גם מסיבות אחרות, ולכן אסור
+        רצה (עיקרון 5). udp-sender נכשל גם מסיבות אחרות, ולכן אסור
         להמציא מחזיק רק כדי שיהיה מה לכתוב.
         """
         busy, unchecked = [], []
@@ -1002,7 +1002,7 @@ class SenderEngine:
                 " על פורט, והסיבה אינה ידועה")
 
     def _prompts_waiting(self, session_id: str) -> list[str]:
-        """‏#2202: מי בגל עומד עכשיו על שאלה למפעיל. קריאה שנכשלה = אין (נרשם), לא "יש" לנצח."""
+        """#2202: מי בגל עומד עכשיו על שאלה למפעיל. קריאה שנכשלה = אין (נרשם), לא "יש" לנצח."""
         if self.pending_prompts is None:
             return []
         try:
@@ -1034,11 +1034,11 @@ class SenderEngine:
 
         רק לפני המחיצה הראשונה: השאלה נשאלת לפני שהמכונה כותבת בייט, ומי
         שכבר קיבל את המחיצה הראשונה עבר אותה. ההמתנה נגמרת כשאין שאלה
-        פתוחה של מכונה חיה (‏`open_in_wave` משחרר מכונה שנעלמה), או בעצירה
-        — ‏False. קריאה שנכשלה אינה "יש שאלה" לנצח: יומן, ומשדרים כמו לפני.
-        ביומן: ‏`send_held_prompt`, ובשחרור `send_prompt_released`.
-        ‏`send_held_smart`/`send_hold_released` של שאלת ה-SMART אינם נכתבים
-        עוד (#2044); ‏`learn/waits.py` קורא אותם מההיסטוריה בלבד.
+        פתוחה של מכונה חיה (`open_in_wave` משחרר מכונה שנעלמה), או בעצירה
+        — False. קריאה שנכשלה אינה "יש שאלה" לנצח: יומן, ומשדרים כמו לפני.
+        ביומן: `send_held_prompt`, ובשחרור `send_prompt_released`.
+        `send_held_smart`/`send_hold_released` של שאלת ה-SMART אינם נכתבים
+        עוד (#2044); `learn/waits.py` קורא אותם מההיסטוריה בלבד.
         """
         if self.pending_prompts is None:
             return True
@@ -1058,20 +1058,20 @@ class SenderEngine:
 
     def _receivers(self, session_id: str, joined: int,
                    previous_log: Path | None = None) -> int:
-        """‏`--min-receivers` למחיצה שעומדת לצאת: החברים החיים, לא פחות מ-1.
+        """`--min-receivers` למחיצה שעומדת לצאת: החברים החיים, לא פחות מ-1.
 
         בדיקה שנכשלה אינה "אף אחד לא חי" (עיקרון 5): נשארים על הצילום
         של `joined` — ההתנהגות שלפני #1430, שממתינה יותר אך אינה מפילה
         מקבל חי — ואומרים את זה ביומן.
 
-        ‏#1950: ועוד חבר `lost` שקיבל את המחיצה הקודמת (`previous_log`) עד
+        #1950: ועוד חבר `lost` שקיבל את המחיצה הקודמת (`previous_log`) עד
         סופה — הוא יתחבר גם לזו. בלי לספור אותו, הוא הגיע ראשון ל-p4 והשולח
         יצא לדרך בלי משכפל 2, שהצטרף 4 שניות אחריו וקיבל זרם ריק (R2,
-        ‏22/10). חבר שנזרק או שלא התחבר — אינו נספר, כמו ב-#1430. לוג שלא
+        22/10). חבר שנזרק או שלא התחבר — אינו נספר, כמו ב-#1430. לוג שלא
         נקרא או כתובת לא ידועה — נספר: המחיר הוא המתנה של `--max-wait`, לא
         מגירה חיה שנכשלת.
 
-        ‏#1430 (הכרעת נדב 02/11): במחיצה 2+ (`previous_log`) חבר שקט מעל
+        #1430 (הכרעת נדב 02/11): במחיצה 2+ (`previous_log`) חבר שקט מעל
         `QUIET_SECONDS` אינו נספר — השולח יוצא כשכל המדווחים מחוברים, ולא
         ממתין `--max-wait` למכונה שמתה בשקט. ההמתנה עצמה אינה מתקצרת.
         אבל כמו `lost` ב-#1950: חבר שקט שקיבל את הקודמת עד סופה — המקלט שלו
@@ -1105,8 +1105,8 @@ class SenderEngine:
         return max(1, live)
 
     def _quiet(self, session_id: str) -> list[str | None]:
-        """‏#1430: הכתובות של החברים בגל שקטים מעל `QUIET_SECONDS`. בדיקה
-        שנכשלה אינה "יש חבר מת" (עיקרון 5): ‏[] — כולם נספרים, והשולח ממתין
+        """#1430: הכתובות של החברים בגל שקטים מעל `QUIET_SECONDS`. בדיקה
+        שנכשלה אינה "יש חבר מת" (עיקרון 5): [] — כולם נספרים, והשולח ממתין
         להם כמו לפני #1430. המחיר הוא זמן, לא מגירה חיה שמפספסת מחיצה."""
         if self.quiet_receivers is None:
             return []
@@ -1118,7 +1118,7 @@ class SenderEngine:
             return []
 
     def _run(self, session: dict) -> None:
-        """‏#2427: שומר עליון. חריגה בתהליכון (למשל ``database is locked`` מ-
+        """#2427: שומר עליון. חריגה בתהליכון (למשל ``database is locked`` מ-
         ``journal`` דרך ``on_event``) השאירה ``starting`` לתמיד, בלי ``send_failed``
         ובלי שמישהו יעצור את udp-sender שכבר רץ."""
         try:
@@ -1170,14 +1170,14 @@ class SenderEngine:
             f'{session["id"]} {session["image_id"]} partitions={len(partitions)}',
         )
 
-        previous_log: Path | None = None        # ‏#1950: מי קיבל את הקודמת עד סופה
+        previous_log: Path | None = None        # #1950: מי קיבל את הקודמת עד סופה
         for number, part in enumerate(partitions, start=1):
             if self._stop.is_set():
                 self.on_event("send_stopped", session["id"])
                 return
             path = self.library.file_path(session["image_id"], part["file"])
             if path is None:
-                # ‏#1928: המפעיל צריך לדעת שהאימג' עצמו חסר — לא לנסות שוב ושוב
+                # #1928: המפעיל צריך לדעת שהאימג' עצמו חסר — לא לנסות שוב ושוב
                 self._fail(f"קובץ מחיצה חסר באימג' {session['image_id']}: {part['file']}"
                            " — האימג' חסר או פגום בשרת")
                 return
@@ -1195,7 +1195,7 @@ class SenderEngine:
                     number, bitrate)
                 log_path = partition_log(path)
                 log.info("sending partition %s/%s: %s", number, len(partitions), part["file"])
-                # ‏#2427: בדיקת העצירה וההפעלה הן צעד אחד, תחת הנעילה ש-``stop`` לוקח.
+                # #2427: בדיקת העצירה וההפעלה הן צעד אחד, תחת הנעילה ש-``stop`` לוקח.
                 # בלי זה ``stop`` בין מחיצות מצא ``_process=None``, החזיר "התהליך
                 # איננו", ו-udp-sender של המחיצה הבאה עלה אחריו לסבב שנסגר.
                 process, spawn_error = None, None
@@ -1240,7 +1240,7 @@ class SenderEngine:
                 return
             if not started and number == 1 and (
                     asking := self._prompts_waiting(session["id"])):
-                # ‏#2202: "יש לבדוק כבל רשת" שלח את המפעיל לחפש תקלה במכונה שחיכתה לו.
+                # #2202: "יש לבדוק כבל רשת" שלח את המפעיל לחפש תקלה במכונה שחיכתה לו.
                 self._fail(
                     f"udp-sender סיים בלי לשדר את {part['file']}: מחשב בגל עדיין ממתין"
                     f" לתשובת מפעיל ({' '.join(asking)}) — זה אינו כבל רשת או PXE"

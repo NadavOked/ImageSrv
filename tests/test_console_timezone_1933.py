@@ -1,13 +1,13 @@
-"""‏#1933 / #1932: זמנים למפעיל בשעון המקומי של השרת, לא ב-UTC כלשונו.
+"""#1933 / #1932: זמנים למפעיל בשעון המקומי של השרת, לא ב-UTC כלשונו.
 
-‏#1933 (נדב 21/10 05:33): הקונסולה כתבה "עודכן היום ב-02:22" כשהשעה בישראל
-הייתה 05:22 — ‏`fmtClock` חתך את מחרוזת ה-ISO (UTC). הקונסולה ממירה עכשיו
-לאזור של השרת, ולכן ‏`/me` מחזיר אותו (‏`timezone`, ‏#1447). ומסך השרת (DCUI)
+#1933 (נדב 21/10 05:33): הקונסולה כתבה "עודכן היום ב-02:22" כשהשעה בישראל
+הייתה 05:22 — `fmtClock` חתך את מחרוזת ה-ISO (UTC). הקונסולה ממירה עכשיו
+לאזור של השרת, ולכן `/me` מחזיר אותו (`timezone`, #1447). ומסך השרת (DCUI)
 חתך את אותה חותמת בשורת "סבב הפצה · התחיל HH:MM".
 
-‏#1932: מהראשי, הגדרות חיפה הראו "אזור זמן — לא נקרא: הנתיב אינו זמין דרך שרת
-המשנה", והסקירה "זמן פעילות לא נבדק". ‏`/timezone` (קריאה וכתיבה, כמו
-‏`/settings`) עובר בערוץ, וזמן הפעילות מגיע ב-`/overview` — ‏`/me` אינו עובר
+#1932: מהראשי, הגדרות חיפה הראו "אזור זמן — לא נקרא: הנתיב אינו זמין דרך שרת
+המשנה", והסקירה "זמן פעילות לא נבדק". `/timezone` (קריאה וכתיבה, כמו
+`/settings`) עובר בערוץ, וזמן הפעילות מגיע ב-`/overview` — `/me` אינו עובר
 בערוץ במכוון (הוא של המשתמש בראשי).
 """
 
@@ -22,7 +22,7 @@ import pytest
 from server import db
 from server.system import timezone
 
-# ‏fixtures של שני השרתים האמיתיים (‏#1179) — ייבוא, לא העתקה.
+# fixtures של שני השרתים האמיתיים (#1179) — ייבוא, לא העתקה.
 from test_secondary_console_relay import secondary                  # noqa: F401
 from test_storage_transfer import paired                             # noqa: F401
 
@@ -41,7 +41,7 @@ def test_me_carries_the_servers_zone_for_the_console_clock(server):
 
 @pytest.fixture()
 def jerusalem_process_tz():
-    """ה-DCUI מציג בשעון המכונה (‏datetime.now() מקומי). כאן המכונה = ירושלים."""
+    """ה-DCUI מציג בשעון המכונה (datetime.now() מקומי). כאן המכונה = ירושלים."""
     if not hasattr(time, "tzset"):
         pytest.skip("time.tzset אינו קיים בווינדוס — הטסט רץ על מעבדת הלינוקס")
     old = os.environ.get("TZ")
@@ -72,7 +72,7 @@ def test_dcui_round_start_is_the_machines_clock_not_utc(jerusalem_process_tz):
 
 @pytest.fixture()
 def fake_tz(monkeypatch):
-    """‏timedatectl ורשימת tzdata מזויפים לשני השרתים (שניהם באותו תהליך) —
+    """timedatectl ורשימת tzdata מזויפים לשני השרתים (שניהם באותו תהליך) —
     לעולם לא נוגעים במכונה (hostguard, #113)."""
     state = {"zone": "Asia/Jerusalem", "set": []}
 

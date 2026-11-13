@@ -73,6 +73,7 @@ static void disk_row(App *a,cairo_t *cr,Rect r,int i){
     char has[256];display_disk_contents(d->has[0]?d->has:"—",has,sizeof has);
     install_text_r(cr,t,d->iso?"מדיית ההתקנה":has,11,400,r.x+r.w*.28,r.y+(selected?9:14),r.w*.24,t->muted);
     if(selected)install_text_r(cr,t,"יימחק",11,600,r.x+r.w*.28,r.y+33,r.w*.24,t->danger_fg);   /* ui-audit: was r.x+68, on top of "has" at 1024 */
+    if(!strcmp(d->smart,"failed"))install_text_r(cr,t,"SMART נכשל",11,600,r.x+r.w*.58,r.y+37,r.w*.14,t->danger_fg);   /* #3007: under the size */
     if(!d->iso)hit_add(a,r,HIT_INSTALL_DISK_BASE+i);
 }
 
@@ -95,7 +96,7 @@ static double raid_row(App *a,cairo_t *cr,double x,double y,double w){
     double gap=8,cw=(w-gap*(shown-1))/shown,cx=x+w;
     for(int c=0;c<RAID_CHOICES;c++){if(!install_raid_allowed(s,c))continue;int on=s->raid==c;Rect r={cx-cw,y,cw,38};cx-=cw+gap;
         draw_fill_rrect(cr,r,t->radius_sm,on?t->indigo_soft:t->surface);draw_border_rrect(cr,r,t->radius_sm,on?t->indigo:t->hair,on?2:1);
-        Text q=text_make(cr,FONT_SANS,13,on?600:500,RAID_OPTS[c].label,(int)cw-8,DIR_RTL);text_draw(cr,&q,r.x+(r.w-q.w)/2,r.y+(r.h-q.h)/2,on?t->indigo:t->ink);text_free(&q);
+        Text q=text_make(cr,FONT_SANS,13,on?600:500,RAID_OPTS[c].label,(int)cw-8,DIR_RTL);text_draw_r(cr,&q,r.x+(r.w+q.w)/2,r.y+(r.h-q.h)/2,on?t->indigo:t->ink);text_free(&q);   /* #2791: an RTL block with a width is drawn at (width - span) -- centre its right edge */
         hit_add(a,r,HIT_INSTALL_RAID_BASE+c);if(on&&a->focus>=HIT_INSTALL_RAID_BASE&&a->focus<HIT_INSTALL_RAID_BASE+RAID_CHOICES)install_focus_ring(a,cr,r,a->focus);}   /* #2776: the choice is one stop */
     y+=46;
     if(s->virt==INSTALL_VIRT_UNKNOWN){install_text_r(cr,t,"לא זוהה אם השרת פיזי או וירטואלי — ברירת המחדל: בלי RAID",12,400,x+w,y,w,t->muted);y+=22;}
@@ -108,7 +109,9 @@ void install_draw_disk(App *a,cairo_t *cr,InstallLayout l){
     for(int i=0;i<s->ndisks;i++){disk_row(a,cr,(Rect){x+1,y+41+i*58,w-2,58},i);}if(a->focus>=HIT_INSTALL_DISK_BASE&&a->focus<HIT_INSTALL_DISK_BASE+INSTALL_MAX_DISKS)install_focus_ring(a,cr,table,a->focus);y+=table.h+16;   /* #2776: the list is one stop */
     y=raid_row(a,cr,x,y,w);
     int selectable=0;for(int i=0;i<s->ndisks;i++)selectable+=!s->disks[i].iso;
-    if(s->disk>=0&&s->disk<s->ndisks){char warning[320];const InstallDisk *d=&s->disks[s->disk];if(s->raid!=RAID_NONE)snprintf(warning,sizeof warning,"כל הנתונים ב-%d הכוננים יימחקו, והם יאוחדו למערך %s",install_raid_count(s),RAID_OPTS[s->raid].label);else snprintf(warning,sizeof warning,"כל הנתונים בדיסק %s · %.1f GiB · %s יימחקו",d->model[0]?d->model:"ללא שם",d->size_bytes/1073741824.0,d->path);install_text_r(cr,t,warning,14,600,x+w,y,w,t->danger_fg);y+=30;disk_ack(a,cr,(Rect){x+w-180,y,180,44},1);}   /* #2147: name, size and device */
+    if(s->disk>=0&&s->disk<s->ndisks){char warning[320];const InstallDisk *d=&s->disks[s->disk];if(s->raid!=RAID_NONE)snprintf(warning,sizeof warning,"כל הנתונים ב-%d הכוננים יימחקו, והם יאוחדו למערך %s",install_raid_count(s),RAID_OPTS[s->raid].label);else snprintf(warning,sizeof warning,"כל הנתונים בדיסק %s · %.1f GiB · %s יימחקו",d->model[0]?d->model:"ללא שם",d->size_bytes/1073741824.0,d->path);install_text_r(cr,t,warning,14,600,x+w,y,w,t->danger_fg);y+=30;
+        int bad=install_smart_failed(s);if(bad>=0){char dev[64],why[320];bidi_isolate(s->disks[bad].path,dev,sizeof dev);snprintf(why,sizeof why,"בדיקת SMART של הדיסק %s נכשלה: הדיסק עצמו מדווח שהוא עומד להיכשל. מומלץ לבחור דיסק אחר.",dev);   /* isolated: else "/dev/sda" reads "dev/sda/" */install_text_r(cr,t,why,13,600,x+w,y,w,t->danger_fg);y+=26;}   /* #3007 */
+        disk_ack(a,cr,(Rect){x+w-180,y,180,44},1);}   /* #2147: name, size and device */
     else if(selectable){install_text_r(cr,t,"בחר את הדיסק להתקנה — כל הנתונים בו יימחקו",14,600,x+w,y,w,t->ink);y+=30;disk_ack(a,cr,(Rect){x+w-180,y,180,44},0);}   /* #2147: more than one disk, none chosen */
     else{install_text_r(cr,t,"לא נמצא דיסק חוקי להתקנה.",13,600,x+w,y,w,t->danger_fg);y+=48;}
     if(s->field_error[0][0]){install_text_r(cr,t,s->field_error[0],12,600,x+w,y+50,w,t->danger_fg);}

@@ -1,6 +1,6 @@
-"""‏#1417 — `journal` בתוך `server.main.main()` קיים לפני השימוש הראשון בו.
+"""#1417 — `journal` בתוך `server.main.main()` קיים לפני השימוש הראשון בו.
 
-‏`from .db import journal` באמצע `main()` הופך את השם למקומי בכל הפונקציה,
+`from .db import journal` באמצע `main()` הופך את השם למקומי בכל הפונקציה,
 ושימוש בו לפני השורה הזאת זורק UnboundLocalError — בעלייה הראשונה אחרי
 שהתעודה הוחלפה (#1380), כלומר בדיוק בשדרוג מהכפתור, שאז נחזר.
 """
@@ -33,8 +33,8 @@ def test_every_local_name_imported_inside_main_is_bound_before_its_first_use():
 
 
 def test_runtime_is_not_used_before_create_runtime_assigns_it():
-    """‏#1417 (פתיחה מחדש): התיקון הראשון קשר את `journal`, ואז נפל על
-    ‏`runtime` — שורת היומן רצה לפני `create_runtime`."""
+    """#1417 (פתיחה מחדש): התיקון הראשון קשר את `journal`, ואז נפל על
+    `runtime` — שורת היומן רצה לפני `create_runtime`."""
     fn = _main_fn()
     assigned = min(n.lineno for n in ast.walk(fn) if isinstance(n, ast.Name)
                    and n.id == "runtime" and isinstance(n.ctx, ast.Store))

@@ -174,12 +174,15 @@ check_clock() {
     set +f
     if [ "$DRY_RUN" -eq 1 ]; then
         print_command chroot "$TARGET" timeout $((CLOCK_CHECK_S + 10)) chronyd -Q -t "$CLOCK_CHECK_S" "$@"
+        print_command chroot "$TARGET" timeout $((CLOCK_CHECK_S + 10)) chronyd -q -t "$CLOCK_CHECK_S" '<the same>'
+        print_command chroot "$TARGET" hwclock --systohc --utc
         return 0
     fi
     rm -f "$_ck_file" "$_ck_file.next"   # a stale answer is never read as this one
     _ck_out=$(chroot "$TARGET" timeout $((CLOCK_CHECK_S + 10)) chronyd -Q -t "$CLOCK_CHECK_S" "$@" 2>&1)
     _ck_rc=$?
     clock_verdict "$_ck_rc" "$_ck_out"
+    if [ "$CLOCK_STATE" = synced ]; then clock_to_rtc "$@"; fi   # #2400
     printf 'installer: clock %s (%s) chronyd=%s: %s\n' "$CLOCK_STATE" "$_ck_server" "$_ck_rc" \
         "$(printf '%s\n' "$_ck_out" | tail -n 1)" >&2
     { printf 'clock=%s\nclock_server=%s\n' "$CLOCK_STATE" "$_ck_server"
@@ -187,6 +190,27 @@ check_clock() {
     } > "$_ck_file.next" && mv "$_ck_file.next" "$_ck_file" \
         || printf 'installer: [clock-record-failed] cannot write %s; the done screen says "not checked"\n' "$_ck_file" >&2
     return 0
+}
+
+# #2400 (#2144 item 3): a source that answered sets the clock once -- `chronyd -q`, chrony's own
+# step, not an offset read off its text -- and the hardware clock takes it as UTC, so a server that
+# boots with no network starts from the right time. Like the check, never a reason to fail the
+# installation: a step or an RTC write that did not happen is said in the log by name.
+clock_to_rtc() {
+    _cr_out=$(chroot "$TARGET" timeout $((CLOCK_CHECK_S + 10)) chronyd -q -t "$CLOCK_CHECK_S" "$@" 2>&1)
+    _cr_rc=$?
+    if [ "$_cr_rc" -ne 0 ]; then
+        printf 'installer: [clock-step-failed] chronyd -q=%s: %s; the hardware clock was not written\n' \
+            "$_cr_rc" "$(printf '%s\n' "$_cr_out" | tail -n 1)" >&2
+        return 0
+    fi
+    _cr_out=$(chroot "$TARGET" hwclock --systohc --utc 2>&1)
+    _cr_rc=$?
+    if [ "$_cr_rc" -ne 0 ]; then
+        printf 'installer: [clock-rtc-failed] hwclock=%s: %s\n' "$_cr_rc" "$(printf '%s\n' "$_cr_out" | tail -n 1)" >&2
+        return 0
+    fi
+    printf 'installer: clock stepped and written to the hardware clock (UTC)\n' >&2
 }
 
 # chronyd's exit code and output -> CLOCK_STATE (+ CLOCK_OFFSET_MS when synced).

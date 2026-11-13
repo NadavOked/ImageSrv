@@ -11,7 +11,7 @@ The decision:
   * still none: the drawer is done, ``readback: unverified`` with its own reason,
     ``readback_why: list_not_fetched`` -- the round does not fail;
   * said in orange in the cloner's GUI (``drawer_rb=`` -> "הושלם · לא אומת — הרשימה
-    לא הורדה"), in the console ("לא אומת — הרשימה לא הורדה") and in Hebrew in the
+    לא הורדה"), in the console ("הושלם · לא נבדק — רשימת הבדיקה לא הורדה", #2987) and in Hebrew in the
     journal (``readback_list_not_fetched``).
 
 The stand-ins are test_readback_agent_1805.py's; ``http_get`` here fails the first N
@@ -33,7 +33,7 @@ from test_readback_agent_1805 import box_for, manifest, prelude, run
 from test_timeouts import run_sh
 
 REPO = Path(__file__).resolve().parent.parent
-NOLIST = "לא אומת — הרשימה לא הורדה"
+NOLIST = "לא נבדק — רשימת הבדיקה לא הורדה"   # #2987 (mockup 05/06, Nadav 12/11): the short words
 
 _SH = requires_native(("bash", BASH), "jq", why="the manifest is read with jq, as on the machine")
 
@@ -206,7 +206,7 @@ console.log(JSON.stringify({
     assert out.returncode == 0, out.stderr
     got = json.loads(out.stdout)
     assert NOLIST in got["nolist"] and 'class="dline warn"' in got["nolist"], got
-    assert NOLIST not in got["nohash"] and "אין עדיין רשימת בדיקה" in got["nohash"], got
+    assert NOLIST not in got["nohash"] and "הבדיקה אחרי הכתיבה לא רצה" in got["nohash"], got
 
 
 # --- the cloner's GUI: the row of that drawer, in orange -----------------------------

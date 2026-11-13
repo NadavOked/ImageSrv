@@ -1,4 +1,4 @@
-"""‏#1956 — לאן גיבוי המסד נכתב, כל כמה מקום שמור לו ובאיזו שעה (הכרעת נדב, 06/11).
+"""#1956 — לאן גיבוי המסד נכתב, כל כמה מקום שמור לו ובאיזו שעה (הכרעת נדב, 06/11).
 
 שני סוגי יעד:
 
@@ -9,19 +9,20 @@
 בכל אחד מהם נכתב **ונקרא בחזרה** קובץ בדיקה בזמן ההגדרה (`write_probe`) — כשל מתגלה עכשיו,
 לא בגיבוי הראשון (עיקרון 5: הצלחה = ראיה חיובית).
 
-**‏SMB ו-NFS אינם יעד** — הם לאחסון האימג'ים בלבד. שרת שנשמר בו יעד כזה לפני ההכרעה ממשיך בבטחה:
+**SMB ו-NFS אינם יעד** — הם לאחסון האימג'ים בלבד. שרת שנשמר בו יעד כזה לפני ההכרעה ממשיך בבטחה:
 הגיבוי עובר מיד לכונן השרת (`backup_job.effective_dest`), וההגדרה **נשארת** ב-DB — שורת ה-fstab
-(`fstab_entry`), קובץ ה-credentials והשיתוף עצמו לא נוגעים בהם, והגיבויים הישנים נשארים עליו. ‏`load`
+(`fstab_entry`), קובץ ה-credentials והשיתוף עצמו לא נוגעים בהם, והגיבויים הישנים נשארים עליו. `load`
 מחזיר את היעד הישן ב-`legacy`, והבריאות והקונסולה אומרות את זה בכתום עד שהמפעיל בוחר יעד
 בקונסולה. רק הבחירה הזו מפרקת את העיגון (`_leave_network`); מהשיתוף לא נמחק דבר בשום מצב.
 
 ההגדרות (key-value, בלי שינוי סכמה): `backup_dest` — התיקייה שנבחרה (ריק = כונן השרת),
-‏`backup_target` — JSON בלי סוד, ‏`backup_time` ו-`backup_reserve_gb` (`set_policy`).
+`backup_target` — JSON בלי סוד, `backup_time` ו-`backup_reserve_gb` (`set_policy`).
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 from pathlib import Path
@@ -30,7 +31,11 @@ from server.system import backup_job
 from server.storage import locations as sl
 from server.db import get_setting, journal, set_settings
 
+log = logging.getLogger("imagesrv.backup_target")
+
 SETTING = backup_job.TARGET_SETTING
+#: #2543: טקסט החריגה (נתיב, strerror) ליומן השרת; ללקוח — המשפט שלנו ומאחוריו זה.
+TAIL = "הפרטים ביומן השרת"
 KINDS = ("default", "local")
 KIND_LABELS = {"default": "כונן השרת", "local": "תיקייה", "smb": "SMB", "nfs": "NFS"}
 MOUNT_NAME = ".db-backup"
@@ -60,14 +65,14 @@ def _stored(conn) -> dict | None:
     return target if isinstance(target, dict) else None
 
 
-#: ‏#2916 §5: יעד רשת ישן שהפירוק שלו לא הושלם. נשמר בתוך `backup_target` החדש עד שפירוק מצליח.
+#: #2916 §5: יעד רשת ישן שהפירוק שלו לא הושלם. נשמר בתוך `backup_target` החדש עד שפירוק מצליח.
 LEFTOVER = "legacy_left"
 
 
 def load(conn) -> dict:
-    """היעד בתוקף. ‏`backup_dest` בלי `backup_target` (נבחר לפני #1956) = תיקייה שלא נבדק אם היא על
+    """היעד בתוקף. `backup_dest` בלי `backup_target` (נבחר לפני #1956) = תיקייה שלא נבדק אם היא על
     כונן המסד (`same_disk: None`), לא "תקין". יעד SMB/NFS שנשמר — כונן השרת, והישן ב-`legacy`
-    (גם יעד שנבחר מאז אבל הפירוק של הישן נכשל — `LEFTOVER`, ‏#2916)."""
+    (גם יעד שנבחר מאז אבל הפירוק של הישן נכשל — `LEFTOVER`, #2916)."""
     dest = (get_setting(conn, backup_job.SETTING) or "").strip()
     target = _stored(conn) or {}
     if target.get("type") in backup_job.LEGACY_KINDS:
@@ -88,7 +93,7 @@ def legacy_display(legacy: dict) -> str:
 
 
 def describe(conn) -> dict:
-    """מה שהקונסולה רואה (‏`GET /settings` → `backup_target`). אין כאן סוד — אין סוד ב-DB."""
+    """מה שהקונסולה רואה (`GET /settings` → `backup_target`). אין כאן סוד — אין סוד ב-DB."""
     target = load(conn)
     out = {"type": target["type"], "label": KIND_LABELS[target["type"]], "dest": target["dest"],
            "display": target["dest"], "same_disk": True if target["type"] == "default" else target.get("same_disk")}
@@ -100,7 +105,7 @@ def describe(conn) -> dict:
 
 
 def disk_warning(target: dict) -> str | None:
-    """האזהרה הכתומה: יעד רשת שהוסר; כונן השרת; תיקייה על כונן המסד, או שלא נבדק. ‏None — כונן אחר."""
+    """האזהרה הכתומה: יעד רשת שהוסר; כונן השרת; תיקייה על כונן המסד, או שלא נבדק. None — כונן אחר."""
     legacy = target.get("legacy")
     if legacy:
         return (f"יעד הגיבוי {KIND_LABELS[legacy['type']]} {legacy_display(legacy)} הוסר: מגבים לכונן השרת. "
@@ -131,7 +136,7 @@ def fstab_entry(conn) -> dict | None:
 
 
 def _disks(dev: int, sys_root: Path) -> set[str]:
-    """הדיסקים השלמים שמאחורי התקן — `/sys/dev/block/<maj>:<min>`; מחיצה → ההורה; ‏dm/LVM/RAID →
+    """הדיסקים השלמים שמאחורי התקן — `/sys/dev/block/<maj>:<min>`; מחיצה → ההורה; dm/LVM/RAID →
     דרך `slaves/`. קבוצה ריקה = לא נקרא (לא "אין דיסק")."""
     try:
         node = (sys_root / "dev" / "block" / f"{os.major(dev)}:{os.minor(dev)}").resolve(strict=True)
@@ -158,7 +163,7 @@ def _whole(node: Path, depth: int) -> set[str]:
 
 
 def same_disk_devs(dev_a: int, dev_b: int, sys_root: Path = Path("/sys")) -> bool | None:
-    """True/False לפי sysfs; ‏None = לא הצלחנו לקרוא אחד מהם (לא "דיסק אחר")."""
+    """True/False לפי sysfs; None = לא הצלחנו לקרוא אחד מהם (לא "דיסק אחר")."""
     if dev_a == dev_b:
         return True
     disks_a, disks_b = _disks(dev_a, sys_root), _disks(dev_b, sys_root)
@@ -182,7 +187,7 @@ def _read_back(path: Path) -> bytes:
 
 
 def write_probe(folder: Path) -> None:
-    """כותב קובץ בדיקה, ‏fsync, קורא אותו **בחזרה** ומשווה, ומוחק — ומוודא שנמחק. כל כשל — `TargetError` 409."""
+    """כותב קובץ בדיקה, fsync, קורא אותו **בחזרה** ומשווה, ומוחק — ומוודא שנמחק. כל כשל — `TargetError` 409."""
     probe = folder / f".imagesrv-backup-test-{secrets.token_hex(4)}"
     payload = f"imagesrv backup test {secrets.token_hex(16)}\n".encode()
     try:
@@ -192,18 +197,21 @@ def write_probe(folder: Path) -> None:
             out.flush()
             os.fsync(out.fileno())
     except OSError as exc:
-        raise TargetError(409, f"כתיבת קובץ הבדיקה ל-{folder} נכשלה: {exc}") from None
-    why = ""            # ‏CodeQL #693: ‏`got is None` רק אחרי ה-except שקובע אותו
+        log.warning("backup probe write to %s failed: %s", folder, exc)
+        raise TargetError(409, f"כתיבת קובץ הבדיקה ל-{folder} נכשלה — {TAIL}") from None
+    why = ""            # CodeQL #693: `got is None` רק אחרי ה-except שקובע אותו
     try:
         got = _read_back(probe)
     except OSError as exc:
         got = None
-        why = str(exc)
+        log.warning("backup probe read-back of %s failed: %s", probe, exc)
+        why = f"הקריאה נכשלה — {TAIL}"
     finally:
         try:
             probe.unlink()
         except OSError as exc:
-            raise TargetError(409, f"קובץ הבדיקה {probe} לא נמחק: {exc}") from None
+            log.warning("backup probe %s not removed: %s", probe, exc)
+            raise TargetError(409, f"קובץ הבדיקה {probe} לא נמחק — {TAIL}") from None
     if got != payload:
         detail = why if got is None else f"{len(got)} בתים במקום {len(payload)}, תוכן אחר"
         raise TargetError(409, f"קובץ הבדיקה ב-{folder} לא נקרא בחזרה כפי שנכתב ({detail})")
@@ -225,7 +233,7 @@ def _leave_network(conn, data_dir: Path, hooks: dict) -> list[str]:
 
 
 def configure(conn, data_dir: Path, body: object, hooks: dict, user: str = "") -> dict:
-    """‏`POST /api/console/backup-target`. מחזיר {target, warnings}; סירוב — `TargetError`."""
+    """`POST /api/console/backup-target`. מחזיר {target, warnings}; סירוב — `TargetError`."""
     kind = body.get("type") if isinstance(body, dict) else None
     if kind in backup_job.LEGACY_KINDS:
         raise TargetError(400, NO_NETWORK)
@@ -242,7 +250,8 @@ def configure(conn, data_dir: Path, body: object, hooks: dict, user: str = "") -
         try:
             folder.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            raise TargetError(409, f"התיקייה {folder} לא נוצרה: {exc}") from None
+            log.warning("backup folder %s not created: %s", folder, exc)
+            raise TargetError(409, f"התיקייה {folder} לא נוצרה — {TAIL}") from None
         write_probe(folder)
         target, dest = {"type": "default"}, ""
     else:
@@ -259,13 +268,14 @@ def configure(conn, data_dir: Path, body: object, hooks: dict, user: str = "") -
         failed = _leave_network(conn, data_dir, hooks)
         warnings += failed
         if failed:
-            # ‏#2916 §5: ההגדרה כבר הוחלפה, ו-`load` לא היה מסמן `legacy` — העיגון וקובץ ה-
+            # #2916 §5: ההגדרה כבר הוחלפה, ו-`load` לא היה מסמן `legacy` — העיגון וקובץ ה-
             # credentials נשארו בלי דרך לנסות שוב. הכשל נשמר עם היעד החדש ומוצג עד שפירוק מצליח
             # (בחירת יעד פעם נוספת מנסה שוב).
             try:
                 set_settings(conn, {SETTING: json.dumps({**target, LEFTOVER: legacy}, ensure_ascii=False)})
             except Exception as exc:  # noqa: BLE001 — לא נשמר שהפירוק נכשל: נאמר, לא נבלע
-                warnings.append(f"לא נשמר שפירוק היעד הישן נכשל — לא תוצג הבקשה לנסות שוב: {exc}")
+                log.warning("backup target leftover not saved: %s", exc)
+                warnings.append(f"לא נשמר שפירוק היעד הישן נכשל — לא תוצג הבקשה לנסות שוב; {TAIL}")
     journal(conn, "setting_change", f"{SETTING}={kind} — {dest or KIND_LABELS[kind]}", user)
     return {"target": describe(conn), "warnings": warnings}
 
@@ -274,7 +284,7 @@ def configure(conn, data_dir: Path, body: object, hooks: dict, user: str = "") -
 
 
 def _cap_gb(conn, data_dir: Path | None) -> int | None:
-    """התקרה ב-GB שלמים על הכונן של היעד; ‏None = לא נבדק."""
+    """התקרה ב-GB שלמים על הכונן של היעד; None = לא נבדק."""
     if data_dir is None:
         return None
     dest = backup_job.effective_dest(get_setting(conn, backup_job.SETTING), get_setting(conn, SETTING), data_dir)
@@ -285,12 +295,12 @@ def _cap_gb(conn, data_dir: Path | None) -> int | None:
 
 
 def enabled(conn) -> bool:
-    """‏#2865: המתג "גיבוי אוטומטי" (חסר = דלוק)."""
+    """#2865: המתג "גיבוי אוטומטי" (חסר = דלוק)."""
     return backup_job.parse_enabled(get_setting(conn, backup_job.ENABLED_SETTING))
 
 
 def policy(conn, data_dir: Path | None) -> dict:
-    """מה שהקונסולה רואה (‏`GET /settings` → `backup_policy`): הערכים שבתוקף, והתקרה לפי הכונן."""
+    """מה שהקונסולה רואה (`GET /settings` → `backup_policy`): הערכים שבתוקף, והתקרה לפי הכונן."""
     return {"enabled": enabled(conn),
             "time": backup_job.parse_time(get_setting(conn, backup_job.TIME_SETTING)) or backup_job.DEFAULT_TIME,
             "reserve_gb": backup_job.parse_reserve(get_setting(conn, backup_job.RESERVE_SETTING))
@@ -300,9 +310,9 @@ def policy(conn, data_dir: Path | None) -> dict:
 
 
 def set_policy(conn, data_dir: Path, body: object, user: str = "") -> dict:
-    """‏`POST /api/console/backup-policy`. סירוב — `TargetError`, ושום דבר לא נשמר.
+    """`POST /api/console/backup-policy`. סירוב — `TargetError`, ושום דבר לא נשמר.
 
-    ‏#2865: ‏`enabled` (בוליאני) הוא המתג. גוף עם `enabled` בלבד משנה רק אותו; עם `time`/`reserve_gb`
+    #2865: `enabled` (בוליאני) הוא המתג. גוף עם `enabled` בלבד משנה רק אותו; עם `time`/`reserve_gb`
     — שניהם נבדקים כמו תמיד, וכולם נשמרים יחד."""
     if not isinstance(body, dict):
         raise TargetError(400, "מדיניות הגיבוי: נדרש אובייקט")

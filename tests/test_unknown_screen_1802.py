@@ -1,14 +1,14 @@
-"""מחשב לא רשום ברשת ההפצה: "המחשב הזה לא רשום", והמחשב נשאר עליו (‏#1802).
+"""מחשב לא רשום ברשת ההפצה: "המחשב הזה לא רשום", והמחשב נשאר עליו (#1802).
 
 הכרעת נדב 19/10: מחשב שאינו רשום, בווילן ההפצה בלבד, מגיע לסוכן ורואה את
-המסך. נמדד על HP חדש (‏5c:60:ba:3e:b3:22): ‏dnsmasq נתן כתובת ולא קובץ אתחול
-(‏`dhcp-boot=...tag:known`, ‏#141), והמסך לא הגיע לאף מסלול.
+המסך. נמדד על HP חדש (5c:60:ba:3e:b3:22): dnsmasq נתן כתובת ולא קובץ אתחול
+(`dhcp-boot=...tag:known`, #141), והמסך לא הגיע לאף מסלול.
 
 **הכרעת נדב 04/11:** המחשב עולה לגואי, רואה את המסך עם MAC ו-IP, **ונשאר עליו**.
-‏**F2 = הפעלה מחדש בלבד** — הקושחה עולה שוב מהרשת והמחשב חוזר לאותו מסך; אין
+**F2 = הפעלה מחדש בלבד** — הקושחה עולה שוב מהרשת והמחשב חוזר לאותו מסך; אין
 אתחול מהדיסק דרך השרת ואין כתיבה לקושחה. ההגדרה "מחשב לא רשום: עלייה אוטומטית
 מהדיסק אחרי N שניות" (כבויה כברירת מחדל) חלה **על UEFI בלבד** — ב-BIOS לעולם
-לא, בגלל משכפלים לא רשומים (#323, ‏#345).
+לא, בגלל משכפלים לא רשומים (#323, #345).
 
 חמש שכבות, וכל אחת נבדקת כאן מהצד שלה:
 
@@ -16,9 +16,9 @@
 * **השרת** — ההגדרה כבויה: המסך בכל אתחול. דלוקה: המסך פעם אחת בחלון, ובתוך
   החלון `unregistered_autoboot`. מחוץ לווילן, או בכל ספק, כמו היום.
 * **GRUB** — ערך הסוכן בשורת קרנל נקייה (עיקרון 2); בחלון — רק `efi` בוחר בדיסק,
-  ‏BIOS שוב בסוכן. בשום קובץ אין `chainloader +1` (‏#323, ‏#345).
-* **הסוכן** — `ui_unknown` נשאר על המסך; ‏F2 = `reboot -f`; הספירה רק ב-UEFI.
-* **הגואי** — ‏F2 לוחץ על כפתור שהתווית שלו מתחילה ב-"F2 ", לא מחליף ערכת נושא.
+  BIOS שוב בסוכן. בשום קובץ אין `chainloader +1` (#323, #345).
+* **הסוכן** — `ui_unknown` נשאר על המסך; F2 = `reboot -f`; הספירה רק ב-UEFI.
+* **הגואי** — F2 לוחץ על כפתור שהתווית שלו מתחילה ב-"F2 ", לא מחליף ערכת נושא.
 
 בקרה שלילית: ראו גוף ה-PR — כל קובצי הייצור של ה-PR הוחזרו יחד ל-origin/main.
 """
@@ -109,7 +109,7 @@ def test_the_flag_boots_the_agent_with_a_clean_kernel_line():
 @pytest.mark.parametrize("key", ["unregistered_screen", "unregistered_autoboot"])
 @pytest.mark.parametrize("flag", [None, False, "true", 1, "yes"])
 def test_anything_but_true_is_today_local_disk(key, flag):
-    """בשני המצבים: רק `True` פותח. כל ערך אחר — ‏`timeout=0` לדיסק, כמו היום."""
+    """בשני המצבים: רק `True` פותח. כל ערך אחר — `timeout=0` לדיסק, כמו היום."""
     answer = {"schema": 1, "known": False, "task": None, "session": None}
     if flag is not None:
         answer[key] = flag
@@ -118,7 +118,7 @@ def test_anything_but_true_is_today_local_disk(key, flag):
 
 def test_the_autoboot_file_boots_the_disk_on_uefi_only():
     """ההגדרה דלוקה, בחלון: אותו קובץ סוכן, ושורה אחת — רק `efi` בוחר בדיסק.
-    ‏BIOS נשאר על `imagesrv`, כלומר שוב המסך (‏#345)."""
+    BIOS נשאר על `imagesrv`, כלומר שוב המסך (#345)."""
     answer = {"schema": 1, "known": False, "unregistered_autoboot": True, "unregistered_screen": True}
     assert (decide(answer).action, decide(answer).code) == (AGENT, "unregistered-autoboot")
     text = render(answer, CFG)
@@ -140,7 +140,7 @@ def test_the_autoboot_file_boots_the_disk_on_uefi_only():
     {"schema": 9},
 ], ids=["unregistered", "screen", "autoboot", "classroom", "cloner", "menu", "bad-schema"])
 def test_no_file_can_start_a_bios_disk(answer):
-    """בשני המצבים: ‏BIOS = משכפל (#323, ‏#345) — בכל קובץ, גם בקובץ הקבוע, ‏`try_local`
+    """בשני המצבים: BIOS = משכפל (#323, #345) — בכל קובץ, גם בקובץ הקבוע, `try_local`
     ב-BIOS הוא העצירה, ואין `chainloader +1`."""
     for text in (render(answer, CFG), render_bootstrap(CFG)):
         assert "chainloader +1" not in text and "chain_legacy" not in text
@@ -160,7 +160,7 @@ def test_the_screen_comes_on_every_boot(server):
         assert linux_args(text) == ["imagesrv.server=http://10.44.12.10:8080"]
         assert STRANGER not in text.split('menuentry "ImageSrv"')[1]   # ה-MAC אינו בערך הסוכן
         text.encode("ascii")
-    # ‏#1802 דרישה 5: היומן נשאר `unknown_mac`
+    # #1802 דרישה 5: היומן נשאר `unknown_mac`
     events = [r["event"] for r in server["ctx"].conn.execute(
         "SELECT event FROM journal WHERE detail LIKE ?", (f"{STRANGER}%",))]
     assert "unknown_mac" in events
@@ -202,8 +202,8 @@ def test_turning_the_setting_off_brings_the_screen_back_at_once(server):
 @pytest.mark.parametrize("base", [OFF_VLAN, None], ids=["other-local-address", "no-evidence"])
 def test_off_the_deploy_vlan_or_in_doubt_nothing_changes(server, base):
     """מחוץ לווילן — וגם ב-TestClient, שה-scope שלו אינו כתובת (ספק) — התשובה
-    של היום, בלי לרשום הגשה. ‏CLAUDE.md "תרחישי QA קריטיים" (#140, ‏#17): ערך
-    אחד, ‏`timeout=0`, בלי ImageSrv."""
+    של היום, בלי לרשום הגשה. CLAUDE.md "תרחישי QA קריטיים" (#140, #17): ערך
+    אחד, `timeout=0`, בלי ImageSrv."""
     setting(server, "30")
     for _ in range(3):
         text = menu(server, STRANGER, base)
@@ -228,8 +228,8 @@ def test_a_registered_machine_is_unchanged(server):
 
 
 def test_the_agent_hello_is_not_an_agent_loop(server):
-    """ה-hello שאחרי המסך: ‏`known: false`, בלי דגלי התפריט — והשרת עצמו שלח
-    אותו לסוכן, ולכן אין "לולאת סוכן" (‏#112). מכונה זרה שהגיעה לסוכן **בלי**
+    """ה-hello שאחרי המסך: `known: false`, בלי דגלי התפריט — והשרת עצמו שלח
+    אותו לסוכן, ולכן אין "לולאת סוכן" (#112). מכונה זרה שהגיעה לסוכן **בלי**
     שהמסך הוגש לה עדיין נספרת, כמו היום."""
     assert decision(menu(server, STRANGER)) == "# decision: unregistered-screen"
     answer = hello(server, STRANGER)
@@ -317,7 +317,7 @@ def test_only_the_deploy_nic_serves_the_boot_file_to_an_unregistered_machine(
 @pytest.mark.parametrize("source,interface", [("none", None), ("cli", None)])
 def test_without_a_named_deploy_nic_every_boot_line_still_needs_known(
         tmp_path, images_root, clock, source, interface):
-    """בשני המצבים: רשת הפצה שלא הוגדרה, או יחידה בלי ‎--interface‏ — אין
+    """בשני המצבים: רשת הפצה שלא הוגדרה, או יחידה בלי --interface — אין
     ראיה איזה כרטיס הוא ההפצה, ולכן כמו היום (עיקרון 1)."""
     text = _rendered(tmp_path, images_root, clock, source, interface)
     for nic in ("eth1", "eth2"):
@@ -326,8 +326,8 @@ def test_without_a_named_deploy_nic_every_boot_line_still_needs_known(
 
 # --- הסוכן ------------------------------------------------------------------------------
 
-#: ‏json_get של run_agent עונה null לכל דבר; כאן — ההגדרה מתשובת ה-hello (AUTO).
-#: ‏http_post_json מתועד: F2 אינו פונה לשרת.
+#: json_get של run_agent עונה null לכל דבר; כאן — ההגדרה מתשובת ה-hello (AUTO).
+#: http_post_json מתועד: F2 אינו פונה לשרת.
 STUBS = (
     'json_get() { case "$2" in .unregistered_autoboot_seconds) echo "${AUTO:-null}" ;; *) echo null ;; esac; }; '
     'SERVER=http://srv; http_post_json() { echo "$1" >> "$RUN_DIR/posted"; }; RESP="$RUN_DIR/response.json"; '
@@ -336,9 +336,9 @@ STUBS = (
 
 def _ui_unknown(tmp_path, *, env: str = "", press_after: float | None = None,
                 hold: float = 0, gui: bool = False, uefi: bool = False) -> tuple[dict, float]:
-    """הסוכן האמיתי: ‏ui_unknown, ו"לחיצה" על F2 (‏fail.action reboot, כמו הגואי)
-    אחרי `press_after` שניות. ‏`hold` > 0 = רץ ברקע, ונבדק שהוא עדיין שם אחריו.
-    ‏`uefi` — ‏`$SYSROOT/sys/firmware/efi` קיים (‏detect_firmware)."""
+    """הסוכן האמיתי: ui_unknown, ו"לחיצה" על F2 (fail.action reboot, כמו הגואי)
+    אחרי `press_after` שניות. `hold` > 0 = רץ ברקע, ונבדק שהוא עדיין שם אחריו.
+    `uefi` — `$SYSROOT/sys/firmware/efi` קיים (detect_firmware)."""
     if uefi:
         (tmp_path / "sys" / "sys" / "firmware" / "efi").mkdir(parents=True, exist_ok=True)
     press = "" if press_after is None else (
@@ -381,7 +381,7 @@ def test_ui_unknown_stays_on_the_screen(tmp_path, uefi):
 
 @pytest.mark.parametrize("uefi", [False, True], ids=["bios", "uefi"])
 def test_f2_only_restarts(tmp_path, uefi):
-    """F2 = הפעלה מחדש בלבד: ‏`reboot -f`, בלי בקשה לשרת ובלי לגעת בקושחה."""
+    """F2 = הפעלה מחדש בלבד: `reboot -f`, בלי בקשה לשרת ובלי לגעת בקושחה."""
     r, _ = _ui_unknown(tmp_path, press_after=1.5, uefi=uefi)
     assert "TEST-REBOOT: MAC not registered (F2)" in r["out"], r["out"]
     assert not (r["run"] / "posted").exists(), "F2 פנה לשרת"
@@ -438,7 +438,7 @@ def test_the_native_gui_knows_the_info_tone():
 def test_f2_presses_the_f2_button_not_the_theme():
     """F2 בכל מסך מחליף ערכת נושא (#1499). במסך כשל עם כפתור שהתווית שלו
     מתחילה ב-"F2 " — הוא הכפתור (ה-action שלו), ונבדק **לפני** ערכת הנושא.
-    ‏Enter אינו לוחץ עליו."""
+    Enter אינו לוחץ עליו."""
     main = _src("main.c")
     handle = main[main.index("static int handle(App *a, const Event *e"):]
     press = handle.index('power_drop(a, "fail.action", a->st.fail_btns[fail_f2_btn(a)].action)')
@@ -467,7 +467,7 @@ def test_the_unknown_screen_renders_a_blue_badge_not_a_red_one(tmp_path):
     binary = _build_gui(tmp_path)
     r = run_agent(tmp_path, f'ui_unknown_records {shlex.quote(STRANGER)} 0 > "$RUN_DIR/fail.state"')
     state = tmp_path / "state.txt"
-    # ‏`message=` כמו ב-`_state_for_png` (#1569): ‏`--png` מצייר את כל הכרטיסים,
+    # `message=` כמו ב-`_state_for_png` (#1569): `--png` מצייר את כל הכרטיסים,
     # וכרטיס ההודעה בלי הודעה מנותב לתפריט ונכשל לפני כרטיס הכשל
     state.write_text((r["run"] / "fail.state").read_text(encoding="utf-8")
                      + "message=x|y\nhello_age=4\nhello_rc=200\n", encoding="utf-8", newline="\n")

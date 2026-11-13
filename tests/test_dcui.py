@@ -381,9 +381,12 @@ def test_preinstall_snapshot_uses_status_without_creating_a_database(tmp_path):
                                  '"addr_info":[]}]')
         return CommandResult(1, "", "git unavailable")
 
+    # #2516: the browser address is the installer card's (by MAC) -- here ens33.
+    installer = tmp_path / "installer-nic"
+    installer.write_text("state=configured\nmac=00:50:56:01:02:01\n", encoding="utf-8")
     snapshot = collect_snapshot(
         data_dir, runner=fake, sys_net=sys_net, status_file=status,
-        repo_dir=tmp_path / "source", manifest_file=manifest)
+        repo_dir=tmp_path / "source", manifest_file=manifest, installer_fact=installer)
     assert snapshot.pre_install
     assert not (data_dir / "imagesrv.db").exists()
     screen = "\n".join(render_preinstall(snapshot))
@@ -414,7 +417,7 @@ def test_preinstall_static_address_is_temporary_ip_state_only():
     ]
 
 
-#: מקשי curses בלי curses — ‏get_wch מחזיר int למקשי פונקציה ו-str לתווים.
+#: מקשי curses בלי curses — get_wch מחזיר int למקשי פונקציה ו-str לתווים.
 KEYS = SimpleNamespace(KEY_ENTER=343, KEY_F2=266, KEY_F4=268, KEY_F5=269, KEY_F9=273,
                        KEY_F12=276, KEY_BACKSPACE=263, KEY_UP=259, KEY_DOWN=258,
                        KEY_LEFT=260, KEY_RIGHT=261, KEY_BTAB=353)   # #1203: F12's keys
@@ -480,7 +483,7 @@ def test_physical_reset_replaces_the_hash_ends_sessions_and_drops_mfa(tmp_path):
 
 
 def test_physical_reset_uses_the_server_password_policy(tmp_path, monkeypatch):
-    """אותה מדיניות כמו המתקין והקונסולה — ‏`users.validate_password`, לא עותק."""
+    """אותה מדיניות כמו המתקין והקונסולה — `users.validate_password`, לא עותק."""
     conn = _db(tmp_path)
     for weak in ("Aa1!", "abcdefgh!", "abcd1234", "12345678!", "Aa1!" + "x" * 125):
         result = actions.physical_reset_admin_password(conn, weak)

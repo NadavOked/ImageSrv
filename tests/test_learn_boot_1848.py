@@ -1,6 +1,6 @@
-"""‏#1848 — זמן אתחול לכל מכונה ולכל שלב: רגרסיה, ולפני/אחרי עדכון.
+"""#1848 — זמן אתחול לכל מכונה ולכל שלב: רגרסיה, ולפני/אחרי עדכון.
 
-הראיה ב-Issue: ‏10.7ש' של ACPI ‏`_PSL` ב-HP G6 נמצאו ביד. כאן: אותו שלב שהתארך
+הראיה ב-Issue: 10.7ש' של ACPI `_PSL` ב-HP G6 נמצאו ביד. כאן: אותו שלב שהתארך
 פי 2 מהבסיס של המכונה (ולפחות 3ש') נרשם ביומן ובמסך הבריאות, בשם השלב.
 """
 
@@ -39,14 +39,14 @@ class Clock:
 @pytest.fixture()
 def clock(monkeypatch):
     c = Clock()
-    # ‏`boottrace` משתמש רק ב-`time.time()`; ‏raising=False — כדי שהבקרה השלילית (קוד בלי
+    # `boottrace` משתמש רק ב-`time.time()`; raising=False — כדי שהבקרה השלילית (קוד בלי
     # המדידה, בלי `import time`) תיכשל על ההתנהגות ולא על ה-fixture.
     monkeypatch.setattr(boottrace, "time", SimpleNamespace(time=c), raising=False)
     return c
 
 
 def _boot(conn, clock, mac=MAC, kernel_s=2.0, steps=None):
-    """אתחול שלם, בשעון מזויף: כל מעבר 0.5ש', ‏`pre-initrd` (טעינת הקרנל) — `kernel_s`."""
+    """אתחול שלם, בשעון מזויף: כל מעבר 0.5ש', `pre-initrd` (טעינת הקרנל) — `kernel_s`."""
     for step in steps or ("menu", "entry", "http-ok", "pre-linux", "pre-initrd", "pre-boot",
                           "agent-net", "agent-start", "agent-hello"):
         clock.t += kernel_s if step == "pre-initrd" else 0.5
@@ -106,7 +106,7 @@ def test_a_regression_is_journaled_with_the_step_name(conn, clock):
 
 
 def test_twice_a_tiny_step_is_noise_not_a_regression(conn, clock):
-    """‏0.5ש' → 1.5ש' הוא פי 3, אבל רק שנייה — מתחת ל-MIN_DELTA_S."""
+    """0.5ש' → 1.5ש' הוא פי 3, אבל רק שנייה — מתחת ל-MIN_DELTA_S."""
     for _ in range(3):
         _boot(conn, clock, kernel_s=0.5)
     _boot(conn, clock, kernel_s=1.5)

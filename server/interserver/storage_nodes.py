@@ -16,7 +16,7 @@
 הוא ברירת המחדל הלגיטימית של שרת טרי — ``main`` כותב ערך מפורש בהפעלה —
 ולכן הוא ``standalone``. אבל ערך ש**נכתב** ואינו אחד מהתפקידים המוכרים
 (פגום, זר, או ``"primary"``) נכשל-סגור ל-``secondary`` — המצב שאינו
-מנהל משניים — ולא ``standalone`` המורשה-יותר (‏#746). שרת שההגדרה שלו
+מנהל משניים — ולא ``standalone`` המורשה-יותר (#746). שרת שההגדרה שלו
 פגומה אינו "מתקדם" להרשאות ניהול.
 """
 
@@ -55,8 +55,8 @@ PARENT_ID_KEY = "storage:parent_id"
 def role(conn) -> str:
     """התפקיד המותקן, נקרא fail-closed.
 
-    ‏#746: ערך **חסר** (``None``) הוא ברירת המחדל הלגיטימית של שרת טרי —
-    ‏``main`` כותב ערך מפורש בהפעלה, וזהו מצב "לא הוגדר עדיין", לא ערך
+    #746: ערך **חסר** (``None``) הוא ברירת המחדל הלגיטימית של שרת טרי —
+    ``main`` כותב ערך מפורש בהפעלה, וזהו מצב "לא הוגדר עדיין", לא ערך
     פגום — ולכן הוא מוכרע כ-``standalone``. אבל ערך ש**נכתב** ואינו אחד
     מהתפקידים המוכרים (פגום, זר, או ``"primary"``) **נכשל-סגור**
     ל-``secondary`` — המצב שאינו יכול לנהל משניים — ולא ל-``standalone``
@@ -141,7 +141,7 @@ def persist_config(conn, role_value: str, url: str | None) -> None:
     מאמת קודם דרך :func:`normalize_config` — קריאה עם תצורה סותרת
     זורקת :class:`StorageConfigError` ואינה כותבת דבר.
 
-    ‏#732: התפקיד והכתובת נכתבים ב**טרנזאקציה אחת** (``set_settings``).
+    #732: התפקיד והכתובת נכתבים ב**טרנזאקציה אחת** (``set_settings``).
     שתי כתיבות נפרדות היו יכולות להשאיר תפקיד חדש עם כתובת ישנה אם
     השנייה נכשלת (דיסק מלא, נעילה) — מצב לא-עקבי שנקרא כתצורה תקינה.
     """
@@ -184,9 +184,9 @@ def assert_can_manage_nodes(conn, user: tuple[str, str]) -> None:
     """השומר של **כל** פעולת ניהול משניים, כולל ה-listings (#732).
 
     שני תנאים, שניהם נאכפים בשכבת ה-service ולא רק ב-route: המשתמש
-    הוא ``admin`` (אחרת :class:`NodeManagementUnauthorized`, ‏403),
+    הוא ``admin`` (אחרת :class:`NodeManagementUnauthorized`, 403),
     והשרת הוא ``standalone`` (אחרת :class:`NodeManagementForbidden`,
-    ‏409). האכיפה הכפולה היא עיקרון 5: route+service, לא route לבדו.
+    409). האכיפה הכפולה היא עיקרון 5: route+service, לא route לבדו.
     """
     if user[1] != "admin":
         raise NodeManagementUnauthorized(
@@ -201,7 +201,7 @@ def assert_can_manage_nodes(conn, user: tuple[str, str]) -> None:
 def list_groups(conn, user: tuple[str, str]) -> list[dict]:
     """הקבוצות עם מספר המשניים בכל אחת, לפי סדר התצוגה.
 
-    ‏#732: גם קריאה אוכפת admin+standalone בשכבת ה-service — לא רק
+    #732: גם קריאה אוכפת admin+standalone בשכבת ה-service — לא רק
     ה-route. רשימת המשניים היא מידע ניהולי בין-סניפי, ואין סיבה
     שתיחשף למי שאסור לו לנהל אותם.
     """
@@ -293,13 +293,13 @@ def delete_group(conn, group_id: str, user: tuple[str, str]) -> None:
 def list_nodes(conn, user: tuple[str, str]) -> list[dict]:
     """כל המשניים הרשומים עם שם הקבוצה ומצב ההשבתה.
 
-    ‏#732: אוכף admin+standalone בשכבת ה-service כמו כל פעולת ניהול.
-    ‏#954 גל 7: ``node_id`` (המזהה הנגזר מ-SPKI, ``sn_<hex>``) נוסף
+    #732: אוכף admin+standalone בשכבת ה-service כמו כל פעולת ניהול.
+    #954 גל 7: ``node_id`` (המזהה הנגזר מ-SPKI, ``sn_<hex>``) נוסף
     לתשובה — קיים בעמודה מאז ה-enrollment (#883) אך לא נחשף; טבלת
     "סניפים" מציגה אותו ליד השם.
     """
     assert_can_manage_nodes(conn, user)
-    # ‏#1017: ``last_seen_at``/``last_error``/``last_error_at`` — זמן התגובה
+    # #1017: ``last_seen_at``/``last_error``/``last_error_at`` — זמן התגובה
     # האחרון כפי שהשרת רשם (``record_contact``), כדי שהטבלה תציג "ענתה
     # לאחרונה HH:MM" משעון השרת גם לפני שהדף בדק בעצמו.
     rows = conn.execute(
@@ -311,14 +311,14 @@ def list_nodes(conn, user: tuple[str, str]) -> list[dict]:
         " LEFT JOIN storage_node_groups g ON g.id = n.group_id"
         " ORDER BY n.label, n.id"
     ).fetchall()
-    # ‏#1997: שם שנרשם לפני הכלל ואינו שם מחשב ("חיפה") — מוצג כמו שהוא, וכאן
-    # הסיבה, ל"דורש טיפול" בסקירה. ‏null = חוקי. אין מיגרציה שמשנה שם.
+    # #1997: שם שנרשם לפני הכלל ואינו שם מחשב ("חיפה") — מוצג כמו שהוא, וכאן
+    # הסיבה, ל"דורש טיפול" בסקירה. null = חוקי. אין מיגרציה שמשנה שם.
     return [{**dict(r), "label_problem": hostname_rule.refusal(r["label"], "שם שרת המשנה")}
             for r in rows]
 
 
 def check_label(label: str | None) -> str:
-    """‏#1997 (נדב, 22/10): שם של שרת משנה הוא שם מחשב — `hostname_rule`.
+    """#1997 (נדב, 22/10): שם של שרת משנה הוא שם מחשב — `hostname_rule`.
     מחזיר את השם אחרי ``strip``, או ``ValueError`` בעברית שנוקבת בכלל.
     נקרא ברישום (גם ב-route, **לפני** ה-pairing) ובעריכה."""
     label = (label or "").strip()
@@ -349,7 +349,7 @@ def edit_node(conn, node_id: str, user: tuple[str, str], *,
     """
     assert_can_manage_nodes(conn, user)
     if label is not _UNSET:
-        # ‏#1997: שם קיים שאינו חוקי ("חיפה") שנשלח שוב כמו שהוא — עם שינוי
+        # #1997: שם קיים שאינו חוקי ("חיפה") שנשלח שוב כמו שהוא — עם שינוי
         # הקבוצה בלבד — אינו נחסם; שם **חדש** חייב לעמוד בכלל.
         current = conn.execute(
             "SELECT label FROM storage_nodes WHERE id = ?", (node_id,)).fetchone()
@@ -464,7 +464,7 @@ def parent_last_contact(conn) -> str | None:
 def assert_local_pairing_allowed(conn, user: tuple[str, str]) -> None:
     """השומר של פעולות ה-pairing המקומיות: admin **וגם** secondary.
 
-    ‏deploy נחסם ב-``NodeManagementUnauthorized`` (403 ב-route), וראשי/
+    deploy נחסם ב-``NodeManagementUnauthorized`` (403 ב-route), וראשי/
     עצמאי ב-``NotSecondaryError`` (409). האכיפה כפולה — route+service."""
     if user[1] != "admin":
         raise NodeManagementUnauthorized("פעולת pairing מותרת למנהל בלבד")
@@ -527,14 +527,14 @@ def _unbind(conn, actor: str) -> None:
     journal(conn, "storage_parent_unbind", node_id(conn), actor)
 
 
-# --- אותן פעולות ממסך השרת הפיזי (DCUI, ‏F4) — הכרעת נדב 16/10 -------------
+# --- אותן פעולות ממסך השרת הפיזי (DCUI, F4) — הכרעת נדב 16/10 -------------
 #
 # וריאנט א' של המוקאפ (#1525): **בלי סיסמה** — הנוכחות ליד המקלדת של השרת
 # היא ההרשאה, כמו איפוס הסיסמה ב-F9. אין כאן route ואין כתובת רשת: הפונקציות
 # נקראות רק מתהליך ה-DCUI, root על tty1, ישירות מול ה-DB — אותו ערוץ של
 # כל פעולה אחרת שלו (server/dcui/actions.py). שומר התפקיד נשאר: ראשי/עצמאי
 # נכשל ב-``NotSecondaryError`` כמו ה-API (409). הסיכון שהוצג לנדב ואושר: הקוד
-# לבדו אינו מספיק — חד-פעמי, ‏10 דקות, 5 ניסיונות, ותקף רק כשמנהל מחובר
+# לבדו אינו מספיק — חד-פעמי, 10 דקות, 5 ניסיונות, ותקף רק כשמנהל מחובר
 # בקונסולת הראשי מקליד אותו (ואחרי שהשווה את הטביעה).
 
 PHYSICAL_ACTOR = "dcui"
@@ -593,7 +593,7 @@ def parent_info(conn) -> dict | None:
 
 
 def identity_display(conn) -> tuple[str, str] | None:
-    """‏(node_id, SPKI) של זהות ה-TLS — מה שהראשי קורא ב-preview — או
+    """(node_id, SPKI) של זהות ה-TLS — מה שהראשי קורא ב-preview — או
     ``None`` כשעדיין לא נוצרה (השרת לא עלה עם המאזין הבין-שרתי)."""
     row = _identity_row(conn)
     return (row["node_id"], row["server_spki"]) if row is not None else None
@@ -656,8 +656,8 @@ def _is_ip(host: str) -> bool:
 def _write_0600(path: Path, data: bytes) -> None:
     """כותב חומר רגיש (מפתח פרטי) ב-0600, בכתיבה אטומית.
 
-    ‏#1828: עד כאן התיעוד אמר "אטומית" והקוד היה ``O_TRUNC`` על הקובץ עצמו —
-    כתיבה שנקטעה השאירה מפתח חתוך. עכשיו זה ``write_atomic`` (‏#1908)."""
+    #1828: עד כאן התיעוד אמר "אטומית" והקוד היה ``O_TRUNC`` על הקובץ עצמו —
+    כתיבה שנקטעה השאירה מפתח חתוך. עכשיו זה ``write_atomic`` (#1908)."""
     write_atomic(path, data, mode=0o600)
 
 
@@ -683,7 +683,7 @@ def _identity_with_pem(row: dict) -> dict:
 
 
 def ensure_identity(conn, data_dir, *, host_sans=()) -> dict:
-    """מחזיר את זהות ה-TLS, ויוצר אותה פעם אחת אם אין. ‏node_id נגזר מ-SPKI."""
+    """מחזיר את זהות ה-TLS, ויוצר אותה פעם אחת אם אין. node_id נגזר מ-SPKI."""
     row = _identity_row(conn)
     if row is not None:
         return _identity_with_pem(dict(row))
@@ -735,16 +735,16 @@ def node_row(conn, node_id: str):
 
 # --- #1017: מתי המשני ענה לאחרונה ------------------------------------------
 #
-# כל קריאה בין-שרתית — ‏/check, ‏/machines, ‏/images, ‏push ו-pull — רושמת
+# כל קריאה בין-שרתית — /check, /machines, /images, push ו-pull — רושמת
 # את תוצאתה על השורה: תשובה = ``last_seen_at`` עכשיו וניקוי הכשל; כשל =
-# ‏``last_error``/``last_error_at`` עכשיו, ו-``last_seen_at`` נשאר מה שהיה.
+# ``last_error``/``last_error_at`` עכשיו, ו-``last_seen_at`` נשאר מה שהיה.
 # כך "לא ענה — 08:12" הוא זמן השרת, לא שעון הדפדפן שקרא את הדף.
 
 CONTACT_FIELDS = ("last_seen_at", "last_error", "last_error_at")
 
 
 def record_contact(conn, node_id: str, *, error: str | None) -> None:
-    """‏``error=None`` = המשני ענה; אחרת הכשל (כבר בלי סודות)."""
+    """``error=None`` = המשני ענה; אחרת הכשל (כבר בלי סודות)."""
     now = now_iso()
     with _write_lock, writing(conn):
         if error is None:
@@ -758,7 +758,7 @@ def record_contact(conn, node_id: str, *, error: str | None) -> None:
 
 
 def record_version(conn, node_id: str, answer) -> None:
-    """‏#1300: גרסת המשני מתשובה מוצלחת שלו (`/ping`, `/machines`). רק כשהשדה
+    """#1300: גרסת המשני מתשובה מוצלחת שלו (`/ping`, `/machines`). רק כשהשדה
     **נכח** בתשובה — משני ישן בלי השדה אינו מוחק גרסה שנקראה, ואינו נרשם
     כ"נבדק". ערך שאינו מחרוזת = "לא ידועה" (NULL עם זמן), לא ניחוש."""
     if not isinstance(answer, dict) or "server_version" not in answer:
@@ -783,10 +783,10 @@ def contact_fields(conn, node_id: str) -> dict:
 
 
 def node_client(conn, data_dir, node, *, timeout: float | None = None) -> tuple:
-    """‏``(PinnedMTLSClient לא-פתוח, token)`` למשני רשום: הטוקן מקובץ ה-0600,
+    """``(PinnedMTLSClient לא-פתוח, token)`` למשני רשום: הטוקן מקובץ ה-0600,
     תעודת-הלקוח מזהות השרת, וה-SPKI המוצמד מהרשומה. הקורא פותח ב-``with``.
-    ‏``timeout`` (‏#1564, הדופק) = תקרה קצרה גם ל-handshake וגם לבקשה;
-    ‏``None`` = ברירות המחדל של הלקוח."""
+    ``timeout`` (#1564, הדופק) = תקרה קצרה גם ל-handshake וגם לבקשה;
+    ``None`` = ברירות המחדל של הלקוח."""
     from server.interserver import storage_client
     token = interserver_auth.load_credential(node["credential_ref"])
     ident = identity(conn, data_dir=data_dir)
@@ -824,9 +824,9 @@ def record_parent(conn, *, parent_id: str, token_hash: bytes, bound_cert_ref: st
 
 
 def rebind_parent_cert(conn, *, bound_cert_ref: str) -> None:
-    """‏#1122: האב חידש תעודה על **אותו** מפתח — מעדכנים את הכריכה לתעודה
+    """#1122: האב חידש תעודה על **אותו** מפתח — מעדכנים את הכריכה לתעודה
     החדשה. ה-SPKI המוצמד והטוקן אינם משתנים; זו לא רשומת-אב חדשה.
-    ‏0 שורות שעודכנו = אין אב רשום = כשל בקול, לא "כנראה בסדר" (עיקרון 5)."""
+    0 שורות שעודכנו = אין אב רשום = כשל בקול, לא "כנראה בסדר" (עיקרון 5)."""
     with _write_lock, writing(conn):
         cur = conn.execute(
             "UPDATE parent_credentials SET bound_cert_ref = ? WHERE singleton = 1",
@@ -845,7 +845,7 @@ def record_parent_contact(conn) -> None:
             raise ValueError("אין אב רשום לעדכון מגע")
 
 
-#: ‏#883: צורת מזהה המשני — ``sn_`` + 16 הקסה (``node_id_from_spki``). זה
+#: #883: צורת מזהה המשני — ``sn_`` + 16 הקסה (``node_id_from_spki``). זה
 #: גם שם קובץ הטוקן ב-``secondaries/``, ולכן הצורה נאכפת כאן ולא רק
 #: בנקודת הגזירה.
 _NODE_ID_RE = re.compile(r"^sn_[0-9a-f]{16}$")
@@ -861,9 +861,9 @@ def enroll_node(conn, user: tuple[str, str], *, label: str, base_url: str,
                 group_id: str | None = None) -> str:
     """רושם משני חדש על הראשי אחרי שה-pairing הצליח והטוקן נכתב לקובץ.
 
-    ‏admin+standalone נאכף (כמו כל ניהול). ה-SPKI המוצמד וההפניה
+    admin+standalone נאכף (כמו כל ניהול). ה-SPKI המוצמד וההפניה
     לתעודת-הלקוח נשמרים כחומר האמון; הטוקן עצמו **אינו** ב-DB — רק
-    ``credential_ref`` לקובץ ה-0600 שכבר נכתב. ‏#883: ``node_id`` חייב
+    ``credential_ref`` לקובץ ה-0600 שכבר נכתב. #883: ``node_id`` חייב
     להיות בצורת ``sn_<16 hex>`` — הוא נגזר מ-SPKI, לא מהצהרה."""
     assert_can_manage_nodes(conn, user)
     label = check_label(label)

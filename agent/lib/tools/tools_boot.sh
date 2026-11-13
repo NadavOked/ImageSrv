@@ -23,9 +23,30 @@ _tb_need() {
     return 2
 }
 
+_tb_part_ok() {
+    # #2486: like _tools_disk_dev_ok (#2431), for a partition -- its plain
+    # name (never ../), listed in /sys/class/block, on exactly one disk the
+    # kernel lists that is not loop/md/... and not the clone stick.
+    case "${1:-}" in /dev/*) ;; *) return 1 ;; esac
+    _tbp=${1#/dev/}
+    case "$_tbp" in ''|*[!a-z0-9]*) return 1 ;; esac
+    [ -e "${SYSROOT:-}/sys/class/block/$_tbp" ] || return 1
+    _tbd=""
+    for _tbx in "${SYSROOT:-}"/sys/block/*/"$_tbp"; do
+        [ -d "$_tbx" ] || continue
+        [ -z "$_tbd" ] || return 1
+        _tbd=${_tbx%/*}; _tbd=${_tbd##*/}
+    done
+    case "$_tbd" in ''|loop*|ram*|zram*|md*|sr*|fd*|nbd*|dm-*) return 1 ;; esac
+    _tbl="${RUN_DIR:-/nonexistent}/usb-media.disks"
+    [ -e "$_tbl" ] || return 0   # not booted from the stick: no list
+    # grep: 0 = the stick (refuse), 1 = not listed, else the list did not read -- refused (#231)
+    grep -qx "$_tbd" "$_tbl"; [ $? -eq 1 ]
+}
+
 _tb_esp_fsck_repair() {
     _tb_need fsck.vfat || return 2
-    case "${1:-}" in /dev/*) ;; *) echo "חסרה מחיצת ESP (/dev/...)"; return 1 ;; esac
+    _tb_part_ok "${1:-}" || { echo "מחיצת ESP לא חוקית: ${1:-"(ריק)"} — נדרשת מחיצה (/dev/sda1) שהקרנל מכיר, לא מקל השיכפול"; return 1; }
     _tb_confirm "${2:-}" || {
         echo "=== תיקון ESP ==="; echo "יעד: $1"; echo "פעולה: fsck.vfat -a"
         echo "הקלד שם מכונה."; _tb_say "בלי אישור לא כותבים."; return 3

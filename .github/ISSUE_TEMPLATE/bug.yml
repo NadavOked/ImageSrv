@@ -1,0 +1,65 @@
+name: "באג / Bug report"
+description: "משהו ב-ImageSrv לא עובד כמו שצריך. / Something in ImageSrv does not work as it should."
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        כאן מדווחים על באגים בלבד. הפיתוח מתנהל בנפרד, ולא מתקבלים כאן PRs או בקשות יכולת.
+        **חולשת אבטחה לא מדווחים כאן:** מדווחים בפרטיות לפי [SECURITY.md](https://github.com/NadavOked/ImageSrv/blob/main/SECURITY.md).
+
+        This form is for bug reports only. Development happens separately, and pull requests or feature requests are not accepted here.
+        **Do not report a security vulnerability here:** report it privately, as [SECURITY.md](https://github.com/NadavOked/ImageSrv/blob/main/SECURITY.md) describes.
+
+  - type: input
+    id: version
+    attributes:
+      label: "גרסה"
+      description: |
+        הגרסה שמופיעה בקונסולה או בפינת המסך, למשל v0.94.1.
+        **Version:** as shown in the console or in the corner of the screen, for example v0.94.1.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: machine
+    attributes:
+      label: "סוג המחשב"
+      description: |
+        איפה זה קרה.
+        **Machine type:** where it happened.
+      options:
+        - "שרת / Server"
+        - "משכפל / Cloner"
+        - "מחשב בנייה / Build machine"
+        - "תחנה / Station"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "מה ציפית שיקרה"
+      description: |
+        מה היה אמור לקרות.
+        **What did you expect:** what should have happened.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: "מה קרה בפועל"
+      description: |
+        מה קרה, ומה עשית לפני כן.
+        **What happened:** what happened instead, and what you did before it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: "יומן או צילום"
+      description: |
+        יומן מהשרת או מהמחשב, או צילום מסך. אפשר לגרור קובץ לכאן. הסירו סיסמאות וכתובות פרטיות.
+        **Log or screenshot:** a log from the server or the machine, or a screenshot. You can drag a file here. Remove passwords and private addresses.

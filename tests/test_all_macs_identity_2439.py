@@ -1,16 +1,16 @@
-"""‏#2439 — ‏`all_macs` ב-hello עקף את שער הזהות (#855).
+"""#2439 — `all_macs` ב-hello עקף את שער הזהות (#855).
 
-השער בדק רק את `mac`; ‏`registry.lookup` מזהה גם לפי `all_macs` (‏#524). תחנה
-עם חכירה משלה הוסיפה לרשימה MAC של מכונה רשומה אחרת, וקיבלה ‏200 עם
-‏`known: true`, ה-role, השם וה-`allowed_images` שלה. עכשיו כרטיס רשום מהרשימה
-מזהה רק כשהוא אינו נמצא עכשיו במקום אחר (‏`identity.verify_extra`): חכירה שלו על
+השער בדק רק את `mac`; `registry.lookup` מזהה גם לפי `all_macs` (#524). תחנה
+עם חכירה משלה הוסיפה לרשימה MAC של מכונה רשומה אחרת, וקיבלה 200 עם
+`known: true`, ה-role, השם וה-`allowed_images` שלה. עכשיו כרטיס רשום מהרשימה
+מזהה רק כשהוא אינו נמצא עכשיו במקום אחר (`identity.verify_extra`): חכירה שלו על
 כתובת אחרת, או `net_devices` שראה אותו מכתובת אחרת ב-10 הדקות האחרונות.
 
 ו-#524 נשאר: מכונה שרשומה לפי כרטיס שאינו כרטיס האתחול — שאין לו חכירה ולא
 נראה מכתובת אחרת לאחרונה — מזוהה כמו תמיד.
 
 בקרה שלילית: עם `server/agent/api.py` ו-`server/agent/identity.py` של הקומיט
-הקודם, שני טסטי ההתחזות נופלים (‏`known: true`); טסטי #524 עוברים בשני המצבים.
+הקודם, שני טסטי ההתחזות נופלים (`known: true`); טסטי #524 עוברים בשני המצבים.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def _refusals(server) -> list[str]:
 
 
 def test_the_poc_a_leased_victim_in_all_macs_does_not_identify_the_attacker(identity_server):
-    """ה-PoC של 04/11: ‏MAC1 רשום וחכור ל-STATION_IP; התוקף, עם חכירה משלו,
+    """ה-PoC של 04/11: MAC1 רשום וחכור ל-STATION_IP; התוקף, עם חכירה משלו,
     שולח את ה-MAC שלו ומוסיף את MAC1."""
     setup_classroom(identity_server)
     _lease(identity_server, ATTACKER, ATTACKER_IP)
@@ -70,7 +70,7 @@ def test_the_poc_a_leased_victim_in_all_macs_does_not_identify_the_attacker(iden
 
 
 def test_a_victim_seen_recently_from_another_address_does_not_identify_the_attacker(identity_server):
-    """בלי חכירה לקורבן (‏MAC2), אבל ה-hello שלו נרשם לפני דקה מכתובת אחרת."""
+    """בלי חכירה לקורבן (MAC2), אבל ה-hello שלו נרשם לפני דקה מכתובת אחרת."""
     ids = setup_classroom(identity_server)
     _lease(identity_server, ATTACKER, ATTACKER_IP)
     _seen(identity_server, ids["mac2"], "10.44.12.88", ago_s=60)
@@ -80,7 +80,7 @@ def test_a_victim_seen_recently_from_another_address_does_not_identify_the_attac
 
 
 def test_524_a_machine_registered_by_another_nic_is_still_identified(identity_server):
-    """בקרה: ‏MAC2 רשום, אין לו חכירה ולא נראה. המכונה עלתה על כרטיס אחר שחכור
+    """בקרה: MAC2 רשום, אין לו חכירה ולא נראה. המכונה עלתה על כרטיס אחר שחכור
     לכתובת שממנה היא פונה — היא מזוהה, בלי סירוב ביומן."""
     ids = setup_classroom(identity_server)
     _lease(identity_server, SECOND_NIC, SECOND_NIC_IP)

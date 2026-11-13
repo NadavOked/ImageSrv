@@ -1,17 +1,17 @@
 """#1721 — גל שנפתח בזמן שהמשכפל עוד בספירת הכיבוי אינו נשאר תקוע.
 
-מה קרה על ברזל (rc5, ‏18/10, מחשב שיכפול 2): גל 1 כתב מגירה אחת מתוך שתיים
+מה קרה על ברזל (rc5, 18/10, מחשב שיכפול 2): גל 1 כתב מגירה אחת מתוך שתיים
 (sdb נשלפה באמצע), המשכפל ספר 20 שניות וכבה (נדב: "משכפל נכבה אחרי 20 ש'
 בכל מצב"). השרת פתח את גל 2 **באותה שנייה** ושלח WoL — למכונה שעוד הייתה
 דלוקה, והחבילה נבלעה. אף אחד לא העיר אותה שוב, והסבב נשאר `active`
-(‏written 1/2) בלי שום פעולה.
+(written 1/2) בלי שום פעולה.
 
 התיקון: כל עוד הגל פתוח ומחשב שיכפול **שנבחר ושיש לו מה לכתוב** לא נראה
 מאז שהגל נפתח — WoL חוזר כל `REWAKE_SECONDS`, עד `REWAKE_MAX` פעמים (לא
 לולאה בלי תקרה — הרשת, memory: server-must-not-congest-network). מכונה
 שלא חזרה גם אחרי התקרה והמתנה לאתחול — הסבב נכשל **בגלוי**, בשמה.
 
-השעון מזויף: ‏`room._utcnow` מוחלף, והדופק הוא `room.sweep` (שעון הרקע) —
+השעון מזויף: `room._utcnow` מוחלף, והדופק הוא `room.sweep` (שעון הרקע) —
 לא hello, כי hello של המשכפל הוא בדיוק הראיה שהוא חזר.
 """
 
@@ -29,7 +29,7 @@ try:
 except ImportError:                       # pragma: no cover — negative control
     clockstep = None
 
-from test_server_room import (           # noqa: F401 — ‏room_server הוא fixture
+from test_server_room import (           # noqa: F401 — room_server הוא fixture
     CLONER1, CLONER2, cloner_hello, report, room, room_body, room_server,
 )
 
@@ -58,7 +58,7 @@ def _round(ctx) -> dict:
 class _Clock:
     """השעון של `room._utcnow`: מתחיל ברגע שגל 2 נפתח, ומתקדם ביד.
 
-    ‏#1947: התקדמות ביד היא זמן שעובר, ולא קפיצת שעון — ולכן גם השעון
+    #1947: התקדמות ביד היא זמן שעובר, ולא קפיצת שעון — ולכן גם השעון
     המונוטוני של גלאי הקפיצות (`clockstep._mono`) זז איתו."""
 
     def __init__(self, start: datetime):
@@ -75,7 +75,7 @@ class _Clock:
 def _wave1_partial(room_server, monkeypatch, drawers=None, target=2, partial_mac=CLONER1):
     """גל 1 כותב חלק, המשכפל "בספירת הכיבוי" — וגל 2 נפתח מהשעון של הרקע.
 
-    ‏`last_seen` מוחזר לפני תחילת הגל: ה-hello האחרון של משכפל שכתב הוא
+    `last_seen` מוחזר לפני תחילת הגל: ה-hello האחרון של משכפל שכתב הוא
     מלפני הכתיבה (בזמן הכתיבה הוא מדווח progress ולא hello, #449)."""
     ctx, deploy, anon = room_server["ctx"], room_server["deploy"], room_server["anon"]
     drawers = drawers or {CLONER1: ["S1", "S2"]}
@@ -125,7 +125,7 @@ def test_a_wol_swallowed_during_the_countdown_is_sent_again(room_server, monkeyp
         "המשכפל כבה אחרי שה-WoL של גל 2 נבלע, ואיש לא העיר אותו שוב — הסבב תקוע (#1721)")
     room_mod.sweep(ctx.conn, ctx.store)
     assert _packets_to(woken, CLONER1) == before1 + 1, "שני דופקים באותו חלון שלחו פעמיים"
-    # ‏#1580: רק מי שנבחר — CLONER2 רשום בחדר ולא נבחר לסבב.
+    # #1580: רק מי שנבחר — CLONER2 רשום בחדר ולא נבחר לסבב.
     assert _packets_to(woken, CLONER2) == before2
     assert _events(ctx, "room_rewake"), "WoL חוזר בלי שורה ביומן (עיקרון 5)"
     assert _round(ctx)["state"] == "active"

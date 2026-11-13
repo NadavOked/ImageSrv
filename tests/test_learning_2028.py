@@ -1,4 +1,4 @@
-"""‏#2028 — למידה אוטומטית והמלצת חיווט (מוקאפ 2028-learning, אושר 06/11).
+"""#2028 — למידה אוטומטית והמלצת חיווט (מוקאפ 2028-learning, אושר 06/11).
 
 מה שמוגן כאן: כבוי כברירת מחדל · למידה מ-2 השיכפולים הבאים בלי שום כתיבה למדידה · לא
 הגיעה למספר = לא משתנה כלום ("לא נלמד") · כל שינוי עם קודם/חדש ומקור, וחוזר · שינוי ידני
@@ -46,7 +46,7 @@ def _on(conn):
 def _wave(conn, *, rate="700m", speeds=(140, 150), loss=0, ended="send_done", dropped=0,
           bps=700_000_000 // 8, direct=False, done=1, wall=600, sent=20 * 10 ** 9, mac=CLONER1,
           roster=None):
-    """גל שהסתיים, כפי שהשרת משאיר אותו: ‏`wave_rates`, ‏`model_speeds`, ‏`port_history`."""
+    """גל שהסתיים, כפי שהשרת משאיר אותו: `wave_rates`, `model_speeds`, `port_history`."""
     session = f"ses_{next(_seq):05d}"
     decision = {"max_bitrate": rate, "basis": "climb", "link": {"interface": "ens224"},
                 "roster": [{"mac": mac, "serial": f"D{i}", "model": "SSD"} for i in range(len(speeds))]

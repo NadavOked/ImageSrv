@@ -365,7 +365,9 @@ def test_a_db_failure_on_import_does_not_write_the_stick_and_is_failed(env, monk
     three_reports(env["fake"])
     monkeypatch.setattr(sync, "import_records", lambda *a, **k: (_ for _ in ()).throw(sqlite3.OperationalError("disk I/O error")))
     out = sync_now(env).json()
-    assert out["state"] == "failed" and "disk I/O error" in out["to_server"]["error"]
+    # #2543: the sqlite text goes to the server log; the operator reads our sentence.
+    assert out["state"] == "failed" and "הפרטים ביומן השרת" in out["to_server"]["error"]
+    assert "disk I/O error" not in out["to_server"]["error"]
     assert "הקליטה בשרת נכשלה" in out["to_stick"]["error"] and not (env["fake"].root / "server-sync").exists()
 
 

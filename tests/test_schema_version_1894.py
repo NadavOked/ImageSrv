@@ -1,8 +1,8 @@
-"""‏#1894 — גרסת סכמה ב-DB, סירוב לעלות על DB חדש מהקוד, והחזרת ה-DB ב-rollback.
+"""#1894 — גרסת סכמה ב-DB, סירוב לעלות על DB חדש מהקוד, והחזרת ה-DB ב-rollback.
 
-‏`PRAGMA user_version` נכתב בכל `_initialize`. קוד שפוגש DB מגרסה גבוהה משלו
+`PRAGMA user_version` נכתב בכל `_initialize`. קוד שפוגש DB מגרסה גבוהה משלו
 (חזרה לגרסה קודמת אחרי שהחדשה כבר מיגרה) מסרב בשם — **לפני** שהוא מריץ עליו
-את המיגרציות שלו. ‏`server-upgrade.sh` מעתיק את ה-DB לפני ה-checkout, ומחזיר
+את המיגרציות שלו. `server-upgrade.sh` מעתיק את ה-DB לפני ה-checkout, ומחזיר
 את העותק רק אם הגרסה החדשה באמת מיגרה.
 """
 
@@ -18,8 +18,8 @@ from server import db
 from server.db import SchemaError, connect
 
 #: טביעת הסכמה של DB טרי ב-SCHEMA_VERSION הנוכחי. שינית סכמה? העלה את
-#: ‏`db.SCHEMA_VERSION` **ועדכן כאן** — אחרת קוד ישן לא יזהה DB שמיגרת.
-#: ‏getattr: בבקרה השלילית (קוד בלי הקבוע) הטסטים נכשלים על ההתנהגות, לא על ייבוא.
+#: `db.SCHEMA_VERSION` **ועדכן כאן** — אחרת קוד ישן לא יזהה DB שמיגרת.
+#: getattr: בבקרה השלילית (קוד בלי הקבוע) הטסטים נכשלים על ההתנהגות, לא על ייבוא.
 VERSION = getattr(db, "SCHEMA_VERSION", 1)
 
 FINGERPRINTS = {1: "f35aff9de1e2da2378ec9825cedb3248626acaa849d6e23d2209ace73279eb5a",
@@ -52,7 +52,11 @@ FINGERPRINTS = {1: "f35aff9de1e2da2378ec9825cedb3248626acaa849d6e23d2209ace73279
                 # 15: net_devices.monitor_on (#2844; bumped in release/v0.91.11, Refs #2850)
                 15: "e85bb3510829eaed4560191fd9521eb991f48c78fda25e105309101906780264",
                 # 16: room_rounds.hostnames_json (#2786, 09/11; 15 in its PR -- net_devices.monitor_on took 15 first)
-                16: "4a1651485542b31598a47bb8a738aa505d8b1a19e0b11785c22620cf7995a1bb"}
+                16: "4a1651485542b31598a47bb8a738aa505d8b1a19e0b11785c22620cf7995a1bb",
+                # 17: boot_marks (#2830, 12/11)
+                17: "7a065e2cea6d15bb789f8021c871cbbc3511a985acfafeb9db3c1e9573158448",
+                # 18: users.view (#3025, 12/11; 17 in its PR -- boot_marks took 17 first in release/v0.94.0)
+                18: "e34ce6efdab706618544e310c0723f57dd2e8a2003018d61ed59ec9ce96316d5"}
 
 
 def _fingerprint(conn) -> str:
@@ -91,7 +95,7 @@ def test_both_lab_int_1022_migrations_run_from_3_and_from_4(tmp_path, found):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 18
     assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'model_slot_maps'").fetchone()
     assert "disk_serial" in [r[1] for r in conn.execute("PRAGMA table_info(tasks)")]
 
@@ -112,7 +116,7 @@ def test_both_round_1107c_migrations_run_from_12_and_from_13(tmp_path, found):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 18
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"usb_records", "usb_syncs", "disk_f1_marks"} <= names
 
@@ -129,7 +133,7 @@ def test_a_database_on_5_gains_the_held_columns_and_is_stamped_6(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 18
     columns = [r[1] for r in conn.execute("PRAGMA table_info(net_devices)")]
     assert "held_at" in columns and "held_json" in columns
 
@@ -146,9 +150,26 @@ def test_a_database_on_14_gains_monitor_on_and_is_stamped_15(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 18
     columns = [r[1] for r in conn.execute("PRAGMA table_info(net_devices)")]
     assert "monitor_on" in columns
+
+
+def test_a_database_on_16_gains_users_view_and_keeps_every_user_on_the_default(tmp_path):
+    """#3025: users.view is a new column. A server on 16 gains it and is stamped 17,
+    and no existing user gets a written value: NULL = the default by is_builtin."""
+    path = tmp_path / "imagesrv.db"
+    connect(path).close()
+    raw = sqlite3.connect(path)
+    raw.execute("ALTER TABLE users DROP COLUMN view")
+    raw.execute("INSERT INTO users (username, pw_hash, role, created_at)"
+                " VALUES ('old', 'x', 'admin', '2026-01-01')")
+    raw.execute("PRAGMA user_version = 16")
+    raw.commit()
+    raw.close()
+    conn = connect(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 18
+    assert conn.execute("SELECT view FROM users WHERE username = 'old'").fetchone()[0] is None
 
 
 def test_a_database_on_7_gains_the_email_queue_and_is_stamped_8(tmp_path):
@@ -162,7 +183,7 @@ def test_a_database_on_7_gains_the_email_queue_and_is_stamped_8(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 18
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
     assert {"email_queue", "email_queue_one_pending"} <= names
 
@@ -201,7 +222,7 @@ def _upgrade_with_live(tmp_path, live_script: str):
     data = tmp_path / "data"
     _seed_db(data)
     repo = _fake_repo(tmp_path, live_ok=False)
-    # ‏"השרת החדש" — כותב ל-DB (ואולי מיגר) ואינו עונה ב-/health/live.
+    # "השרת החדש" — כותב ל-DB (ואולי מיגר) ואינו עונה ב-/health/live.
     (repo / "deploy" / "console-live.sh").write_text(
         "#!/usr/bin/env bash\n" + live_script + "\nexit 1\n", encoding="utf-8", newline="\n")
     _upgrade_fakes(bindir)
@@ -245,7 +266,7 @@ def test_a_database_on_8_gains_the_account_lockout_table_and_is_stamped_9(tmp_pa
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 18
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
     assert {"login_account_failures", "idx_login_account_failures"} <= names
 
@@ -264,5 +285,22 @@ def test_a_database_on_9_gains_the_cap_surface_and_old_rows_are_the_console(tmp_
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 16
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 18
     assert conn.execute("SELECT surface FROM login_account_failures").fetchone()[0] == "console"
+
+
+def test_a_database_on_16_gains_boot_marks_and_is_stamped_17(tmp_path):
+    """#2830: the `up=` boot marks are a new table. A server already on 16 gains it
+    (with its index), empty, and is stamped 17."""
+    path = tmp_path / "imagesrv.db"
+    connect(path).close()
+    raw = sqlite3.connect(path)
+    raw.execute("DROP TABLE boot_marks")
+    raw.execute("PRAGMA user_version = 16")
+    raw.commit()
+    raw.close()
+    conn = connect(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 18
+    names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
+    assert {"boot_marks", "boot_marks_mac"} <= names
+    assert conn.execute("SELECT COUNT(*) FROM boot_marks").fetchone()[0] == 0

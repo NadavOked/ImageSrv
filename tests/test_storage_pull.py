@@ -16,7 +16,7 @@ import pytest
 
 pytest.importorskip("OpenSSL", reason="pyOpenSSL נדרש ל-mTLS הבין-שרתי (#740)")
 
-from conftest import MANIFEST_256, PARTITION_BYTES, write_image
+from conftest import HANG_S, MANIFEST_256, PARTITION_BYTES, write_image
 from server import db
 from server.storage import disk_reserve, locations as storage_locations
 from server.interserver import (api as interserver_api, auth as interserver_auth, storage_client, storage_nodes, 
@@ -91,7 +91,8 @@ def paired(server, secondary, tmp_path):
     return nid
 
 
-def _wait(admin, nid, tid, timeout=30.0) -> dict:
+def _wait(admin, nid, tid, timeout=HANG_S) -> dict:
+    # a hang detector (conftest.HANG_S): the loop returns the moment the transfer ends (#2827)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         rows = admin.get("/api/console/storage-transfers").json()
@@ -489,7 +490,7 @@ def test_416_on_a_file_that_is_not_the_secondary_size_is_a_failure(
 
 def test_416_without_a_reported_size_is_a_failure(
         server, secondary, paired, tmp_path, monkeypatch):
-    """משני שלא אמר מה גודל הקובץ (‏416 בלי ``Content-Range``, משני ישן) —
+    """משני שלא אמר מה גודל הקובץ (416 בלי ``Content-Range``, משני ישן) —
     לא בדקנו, ולכן לא "שלם"."""
     write_image(secondary["root"], PULL3)
 
@@ -508,7 +509,7 @@ def test_416_without_a_reported_size_is_a_failure(
 
 @pytest.mark.parametrize("via", ["tls", "fastapi"])
 def test_secondary_416_reports_the_file_size(paired_ctx, via):
-    """RFC 9110 §15.5.17: ‏416 נושא ``Content-Range: bytes */<size>``."""
+    """RFC 9110 §15.5.17: 416 נושא ``Content-Range: bytes */<size>``."""
     ctx, peer, token = paired_ctx
     write_image(Path(ctx.library.root), PULL)
     headers = {"Authorization": f"Bearer {token}",
@@ -549,7 +550,7 @@ def _pull_with_free(server, paired, monkeypatch, free):
 
 
 def _pull_need(already=0):
-    # ‏#1737: ועוד הרזרבה למערכת (`disk_reserve`).
+    # #1737: ועוד הרזרבה למערכת (`disk_reserve`).
     return (3 * len(PARTITION_BYTES) - already + storage_transfer.PULL_FREE_SPACE_MARGIN
             + disk_reserve.SYSTEM_RESERVE_BYTES)
 
@@ -606,7 +607,7 @@ def test_pull_fails_when_free_space_cannot_be_read(
 @pytest.mark.system_reserve   # #1737: the real 10GiB (conftest _host_free_space)
 def test_pull_stops_at_the_system_reserve_when_the_disk_fills_mid_transfer(
         server, secondary, paired, monkeypatch):
-    """‏#1737: הבדיקה המוקדמת עברה, ואז הדיסק התמלא (קליטה במקביל). ההורדה נעצרת
+    """#1737: הבדיקה המוקדמת עברה, ואז הדיסק התמלא (קליטה במקביל). ההורדה נעצרת
     ברזרבה, בשמה — לא ממשיכה עד ENOSPC, והאימג' לא נכנס לספרייה."""
     write_image(secondary["root"], PULL3)
     calls = {"n": 0}
@@ -684,7 +685,7 @@ def test_secondary_manifest_cannot_write_outside_incoming(
 
 def test_a_secondary_manifest_that_fails_validate_is_refused_before_any_byte(
         server, secondary, paired, monkeypatch):
-    """‏#1627, החצי השני של "גמור": מניפסט המשני עובר `ImageLibrary._validate`
+    """#1627, החצי השני של "גמור": מניפסט המשני עובר `ImageLibrary._validate`
     **לפני** ההורדה. שמות הקבצים כאן תקינים — רק `family` פסול — ולכן השומר
     על `file` לבדו אינו עוצר אותו; בלי `_validate` ההורדה מתחילה."""
     write_image(secondary["root"], PULL)

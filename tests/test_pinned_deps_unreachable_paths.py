@@ -1,7 +1,7 @@
 """נתיבי הקוד הפגיעים בהתראות Dependabot של cryptography/pyOpenSSL — אינם בשימוש.
 
 שמונה התראות על ``server/requirements.txt`` נסגרות בטענה אחת: "הקוד שלנו לא
-מגיע לנתיב הפגיע" (‏``SECURITY.md``, סעיף "התראות Dependabot על תלויות
+מגיע לנתיב הפגיע" (``SECURITY.md``, סעיף "התראות Dependabot על תלויות
 מוצמדות"). טענה כזו היא **ציטוט** עד שמישהו בודק אותה — והיא נשברת בשקט ביום
 שמישהו מוסיף ``x509.verification`` "כי זה נוח". הטסט הזה הופך אותה לראיה:
 הוא קורא את עץ ``server/`` ונופל כשנתיב מהרשימה מופיע, ואז מי שהוסיף אותו
@@ -11,39 +11,39 @@
 |---|---|---|
 | cryptography CVE-2026-69249 | בניית שרשרת ב-``x509.verification`` | כל שימוש במודול |
 | cryptography CVE-2026-34073 | name constraints ב-``x509.verification`` | כל שימוש במודול |
-| cryptography CVE-2026-26007 | נקודות על עקומות SECT | ‏``ec.SECT*`` |
-| pyOpenSSL CVE-2026-27459 | ‏``set_cookie_generate_callback`` (DTLS) | הקריאה לה |
-| pyOpenSSL CVE-2026-27448 | ‏``set_tlsext_servername_callback`` | הקריאה לה |
+| cryptography CVE-2026-26007 | נקודות על עקומות SECT | ``ec.SECT*`` |
+| pyOpenSSL CVE-2026-27459 | ``set_cookie_generate_callback`` (DTLS) | הקריאה לה |
+| pyOpenSSL CVE-2026-27448 | ``set_tlsext_servername_callback`` | הקריאה לה |
 | cryptography CVE-2026-69248 | wildcard מול name constraints ב-``x509.verification`` | כל שימוש במודול |
 
 #1975 הרחיב את אותה טענה לחולשות **שפתוחות ב-Debian 13** בחבילות שהשרת
-מקבל מ-apt (‏``tools/security-recheck.py`` מוצא אותן; כאן נעול שהקוד שלנו
+מקבל מ-apt (``tools/security-recheck.py`` מוצא אותן; כאן נעול שהקוד שלנו
 לא מגיע אליהן):
 
 | חבילה (trixie) | חולשות פתוחות | מה נאסר כאן |
 |---|---|---|
-| python3-python-multipart 0.0.20 (Recommends של starlette) | CVE-2026-40347, ‏42561, ‏53537–53540 | ‏``Form``/``File``/``UploadFile`` של FastAPI ו-``request.form()`` — רק הם מפעילים את המפענח |
-| python3-h2 / python3-hpack | CVE-2025-57804, ‏CVE-2026-71554, ‏CVE-2026-59980 | ייבוא ``h2``/``hpack`` (‏uvicorn אינו מדבר HTTP/2) |
-| python3-anyio 4.8.0 | CVE-2026-63349, ‏63374, ‏64847 | ייבוא ישיר של ``anyio`` (‏run_process/to_process/connect_tcp) |
-| python3-anyio 4.8.0 (Dependabot #11, ‏#10) | CVE-2026-63374 (‏``TLSStream.wrap``), ‏64847 (‏``to_process``) | גם בלי ייבוא ישיר: ‏``TLSStream``/``start_tls``/``connect_tcp``/``to_process``, השם ``anyio`` שמיובא דרך מודול אחר, ו-``httpx``/``httpcore`` (‏ה-backend האסינכרוני שלהם הוא ``TLSStream.wrap``) |
-| python3.13 | CVE-2026-19445, ‏19553, ‏15308, ‏18503, ‏15806 | ‏``sni_callback``, ‏``wrap_bio``, ‏``HTMLParser``, ‏``Sniffer``, ‏``HTTPPasswordMgr*`` |
+| python3-python-multipart 0.0.20 (Recommends של starlette) | CVE-2026-40347, 42561, 53537–53540 | ``Form``/``File``/``UploadFile`` של FastAPI ו-``request.form()`` — רק הם מפעילים את המפענח |
+| python3-h2 / python3-hpack | CVE-2025-57804, CVE-2026-71554, CVE-2026-59980 | ייבוא ``h2``/``hpack`` (uvicorn אינו מדבר HTTP/2) |
+| python3-anyio 4.8.0 | CVE-2026-63349, 63374, 64847 | ייבוא ישיר של ``anyio`` (run_process/to_process/connect_tcp) |
+| python3-anyio 4.8.0 (Dependabot #11, #10) | CVE-2026-63374 (``TLSStream.wrap``), 64847 (``to_process``) | גם בלי ייבוא ישיר: ``TLSStream``/``start_tls``/``connect_tcp``/``to_process``, השם ``anyio`` שמיובא דרך מודול אחר, ו-``httpx``/``httpcore`` (ה-backend האסינכרוני שלהם הוא ``TLSStream.wrap``) |
+| python3.13 | CVE-2026-19445, 19553, 15308, 18503, 15806 | ``sni_callback``, ``wrap_bio``, ``HTMLParser``, ``Sniffer``, ``HTTPPasswordMgr*`` |
 
-#326: ‏starlette — שבע החולשות שה-CI (‏PyPI 0.46.2) מדווח מוטלאות ב-Debian
-(‏0.46.1-3+deb13u3, מה שה-ISO אורז). שתיים מהן נוגעות לתכונה שקל להכניס
+#326: starlette — שבע החולשות שה-CI (PyPI 0.46.2) מדווח מוטלאות ב-Debian
+(0.46.1-3+deb13u3, מה שה-ISO אורז). שתיים מהן נוגעות לתכונה שקל להכניס
 "כי זה נוח", ולכן גם הן נעולות כאן:
 
 | חולשה | נתיב פגיע | מה נאסר כאן |
 |---|---|---|
-| CVE-2026-48710 / 54282 | ‏``request.url`` נבנה מכותרת ``Host`` ומהנתיב בלי אימות | ‏``.url.path``/``.url.hostname``/``.url.netloc`` — ``scope["path"]`` במקום |
-| CVE-2026-48817 | ‏``HTTPEndpoint`` מפעיל כל מתודה ששמה תואם פועל HTTP | ‏``HTTPEndpoint`` |
+| CVE-2026-48710 / 54282 | ``request.url`` נבנה מכותרת ``Host`` ומהנתיב בלי אימות | ``.url.path``/``.url.hostname``/``.url.netloc`` — ``scope["path"]`` במקום |
+| CVE-2026-48817 | ``HTTPEndpoint`` מפעיל כל מתודה ששמה תואם פועל HTTP | ``HTTPEndpoint`` |
 
-התראות ה-OpenSSL שבתוך ה-wheels (‏GHSA-537c, ‏CVE-2024-12797 ועוד) אינן כאן:
+התראות ה-OpenSSL שבתוך ה-wheels (GHSA-537c, CVE-2024-12797 ועוד) אינן כאן:
 הן לא עניין של קוד אלא של **מאיפה הספרייה מגיעה** — בשרת היא ``apt``
-שמקשר ל-libssl של המערכת (‏``Depends: libssl3t64``).
+שמקשר ל-libssl של המערכת (``Depends: libssl3t64``).
 
 מגבלה, במפורש: הסריקה היא AST על קוד פייתון ב-``server/``. שימוש דינמי
-(‏``importlib``, ‏``getattr`` עם מחרוזת) אינו נתפס, וקוד מחוץ ל-``server/``
-לא נסרק — ‏``agent/`` הוא sh, ו-``tools/`` אינו רץ בשרת הייצור.
+(``importlib``, ``getattr`` עם מחרוזת) אינו נתפס, וקוד מחוץ ל-``server/``
+לא נסרק — ``agent/`` הוא sh, ו-``tools/`` אינו רץ בשרת הייצור.
 """
 
 from __future__ import annotations
@@ -83,9 +83,9 @@ FORBIDDEN_NAMES = {
     "to_process": "anyio CVE-2026-64847 (process-pool worker stderr deadlock)",
     "anyio": "python-anyio CVE-2026-63374/64847 (anyio reached via another module)",
 }
-#: ‏#326: חלקי ``request.url`` ש-starlette לא מוטלא בונה מ-Host/מהנתיב בלי אימות.
+#: #326: חלקי ``request.url`` ש-starlette לא מוטלא בונה מ-Host/מהנתיב בלי אימות.
 POISONED_URL_PARTS = {"path", "hostname", "netloc"}
-#: ‏#1975: מודולים שאסור לייבא — אין לנו שימוש בהם, וחולשותיהם פתוחות ב-Debian 13.
+#: #1975: מודולים שאסור לייבא — אין לנו שימוש בהם, וחולשותיהם פתוחות ב-Debian 13.
 FORBIDDEN_MODULES = {
     "multipart": "python-multipart CVE-2026-40347/42561/5353x",
     "python_multipart": "python-multipart CVE-2026-40347/42561/5353x",
@@ -95,7 +95,7 @@ FORBIDDEN_MODULES = {
     "httpx": "anyio CVE-2026-63374 (httpx.AsyncClient https -> TLSStream.wrap)",
     "httpcore": "anyio CVE-2026-63374 (AnyIO backend start_tls -> TLSStream.wrap)",
 }
-#: ‏FastAPI מפעיל את מפענח ה-multipart רק לנקודת קצה שמצהירה עליהם.
+#: FastAPI מפעיל את מפענח ה-multipart רק לנקודת קצה שמצהירה עליהם.
 FASTAPI_FORM_PARAMS = {"Form", "File", "UploadFile"}
 SECT_CURVE = re.compile(r"^SECT\d+[KR]\d$")
 VERIFICATION_MODULE = "cryptography.x509.verification"
@@ -184,7 +184,7 @@ def test_the_only_curve_we_generate_is_p256() -> None:
 
 def test_scanner_catches_each_forbidden_path() -> None:
     """בקרה שלילית של הסורק עצמו: על קוד שמכיל כל נתיב — הוא חייב לצעוק.
-    בלי זה, ‏``find_forbidden`` שמחזיר תמיד ``[]`` היה "מוכיח" הכול."""
+    בלי זה, ``find_forbidden`` שמחזיר תמיד ``[]`` היה "מוכיח" הכול."""
     cases = {
         "import cryptography.x509.verification": "verification",
         "from cryptography.x509.verification import PolicyBuilder": "verification",
@@ -253,13 +253,13 @@ def test_scanner_is_quiet_on_what_we_do_use() -> None:
     assert find_forbidden(clean) == []
 
 
-# --- #1975: busybox ב-initramfs (‏busybox-static 1:1.37.0-6+b9) ------------------
+# --- #1975: busybox ב-initramfs (busybox-static 1:1.37.0-6+b9) ------------------
 #
 # ב-trixie פתוחות 24 חולשות ב-busybox. רובן ב-applets שהסוכן לא מריץ — וזה
 # נעול כאן, כי הסוכן רץ ברשת ההפצה ו-applet שנכנס "כי הוא כבר שם" פותח אותן:
-#   udhcpc6 CVE-2026-29004 · ‏wget CVE-2025-60876 · ‏ssl_client (TLS)
-#   CVE-2026-88830 · ‏httpd CVE-2026-88829/88831/88834/88837 · ‏unzip CVE-2026-26157
-# ‏udhcpc (IPv4) **כן** בשימוש — ההכרעה עליו בטריאז' הפרטי, לא כאן.
+#   udhcpc6 CVE-2026-29004 · wget CVE-2025-60876 · ssl_client (TLS)
+#   CVE-2026-88830 · httpd CVE-2026-88829/88831/88834/88837 · unzip CVE-2026-26157
+# udhcpc (IPv4) **כן** בשימוש — ההכרעה עליו בטריאז' הפרטי, לא כאן.
 
 AGENT = REPO / "agent"
 BUSYBOX_FORBIDDEN = re.compile(r"(?<![\w./-])(udhcpc6|wget|ssl_client|httpd|unzip)(?![\w.-])")

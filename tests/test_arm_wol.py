@@ -116,7 +116,7 @@ def test_ethtool_is_installed_and_packed():
     src = (REPO / "tools/build_initramfs.sh").read_text(encoding="utf-8")
     binaries = re.search(r"BINARIES=\((.*?)\)", src, re.S).group(1).split()
     assert "ethtool" in binaries
-    # ⚠️ **הפקודה, לא ההערה שמזכירה אותה.** ‏`src.index("apt-get install")`
+    # ⚠️ **הפקודה, לא ההערה שמזכירה אותה.** `src.index("apt-get install")`
     # נופל על הערה בעברית שמסבירה מה קורה כשהחבילה חסרה, והטסט היה
     # נכשל על מילות ההערה בזמן ש-`ethtool` **כן** ברשימה. טסט שנכשל
     # על הדבר הלא נכון אינו מעיד גם כשהוא אדום.
@@ -124,7 +124,7 @@ def test_ethtool_is_installed_and_packed():
     # העוגן הוא `busybox-static` — חבילה שחייבת להיות באותה שורת
     # התקנה, ולכן היא מזהה את הפקודה האמיתית ולא טקסט חופשי.
     # מאתרים את החבילה-העוגן ומטפסים אחורה אל ה-`apt-get install`
-    # שלה. ‏regex עם המשכי-שורה נבלע ב-backslash ולא מצא כלום —
+    # שלה. regex עם המשכי-שורה נבלע ב-backslash ולא מצא כלום —
     # ונתפס בבקרה השלילית, לא בקריאה.
     anchor = src.index("busybox-static")
     start = src.rindex("apt-get install", 0, anchor)

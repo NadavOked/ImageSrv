@@ -3,8 +3,8 @@
 הראשי **דוחף**: משימת רקע קוראת את תיקיית האימג' מהספרייה שעל הדיסק
 (``archive.tar_stream`` — אותו tar של "הורדה למחשב"), ומזרימה אותה למשני
 דרך הערוץ הבין-שרתי המאומת (mTLS 1.3, SPKI-pin, טוקן כרוך לתעודה —
-‏#740). המשני מכניס דרך ``import_tar_stream`` (‏#1457: חילוץ ו-sha256 תוך כדי
-הזרם) — ‏sha256 של כל מחיצה מול המניפסט
+#740). המשני מכניס דרך ``import_tar_stream`` (#1457: חילוץ ו-sha256 תוך כדי
+הזרם) — sha256 של כל מחיצה מול המניפסט
 **לפני** שהאימג' נכנס לספרייה (עיקרון 6); הראשי לא מקבל "הצלחה" אלא
 מתשובת 200 שאחרי האימות.
 
@@ -48,7 +48,7 @@ PROGRESS_STEP = 64 * 1024 * 1024
 LIST_LIMIT = 20
 #: תיקיית הביניים של pull — אזור עבודה (מתחיל בנקודה) שהספרייה מדלגת עליו.
 INCOMING = ".incoming"
-#: ‏#1458: שוליים מעל קבצי המחיצה ב-pull — כמו ``FREE_SPACE_MARGIN`` של
+#: #1458: שוליים מעל קבצי המחיצה ב-pull — כמו ``FREE_SPACE_MARGIN`` של
 #: הקליטה במשני. בלי מכפיל: הקבצים נכתבים ל-``.incoming`` ונכנסים לספרייה
 #: ב-``rename`` על אותה מערכת קבצים, בלי עותק.
 PULL_FREE_SPACE_MARGIN = 256 * 1024 * 1024
@@ -71,7 +71,7 @@ class TransferError(ValueError):
 
 
 def _note_contact_failure(conn, node_id: str, exc: BaseException, detail: str) -> None:
-    """‏#1017: כשל **בערוץ** (חיבור/TLS/תשובה שאינה 200) נרשם על השורה של
+    """#1017: כשל **בערוץ** (חיבור/TLS/תשובה שאינה 200) נרשם על השורה של
     המשני — "לא ענה — HH:MM" בטבלת הסניפים. כשל לוגי של ההעברה ("האימג'
     כבר קיים", sha256) אינו כשל חיבור, והמשני שענה עליו כבר נרשם כ"ענה"."""
     if isinstance(exc, (storage_client.InterserverClientError, OSError)):
@@ -100,10 +100,10 @@ def list_transfers(conn, user: tuple[str, str], *,
 
 
 def _seconds_since(stamp: str | None, now: datetime) -> int | None:
-    """‏#1462: כמה שניות עברו מאז העדכון האחרון של השורה — בשעון **השרת**, כדי
+    """#1462: כמה שניות עברו מאז העדכון האחרון של השורה — בשעון **השרת**, כדי
     שהקונסולה לא תחסיר את שעון הדפדפן מזמן של השרת. בשלב ``verifying`` זה
     הזמן שעבר מאז הכניסה לשלב (אין עדכון באמצעו); ב-``sending`` — מאז מנת
-    ה-64MiB האחרונה. ‏``None`` = חותמת שלא נקראה, לא 0."""
+    ה-64MiB האחרונה. ``None`` = חותמת שלא נקראה, לא 0."""
     try:
         then = datetime.fromisoformat(stamp)
     except (TypeError, ValueError):
@@ -215,7 +215,7 @@ def _push(ctx, data_dir, transfer_id: str, row) -> None:
     client, token = storage_nodes.node_client(conn, data_dir, node)
     image_id = row["image_id"]
     last = {"mark": 0}
-    # ‏#1473: ‏put_stream קורא לזה אחרי כל מנה שנשלחה — ההמתנה כאן היא הקצב.
+    # #1473: put_stream קורא לזה אחרי כל מנה שנשלחה — ההמתנה כאן היא הקצב.
     pace = transfer_cap.pacer(conn)
 
     def on_progress(sent: int) -> None:
@@ -269,7 +269,7 @@ def _free_bytes(path: Path) -> int:
 
 
 def _pull_root(ctx, location_id: str) -> tuple[Path, str]:
-    """‏#1781: שורש הספרייה של המיקום שנבחר בראשי, ותווית לשגיאות — אותם כללים
+    """#1781: שורש הספרייה של המיקום שנבחר בראשי, ותווית לשגיאות — אותם כללים
     כמו יעד ה-push במשני (``receive_image_precheck``): מיקום שאינו קיים, אינו
     מחובר או אינו מעוגן נדחה בשמו; אין נפילה בשקט אל ``loc_local``."""
     from server.storage import locations as storage_locations
@@ -292,9 +292,9 @@ def _pull_root(ctx, location_id: str) -> tuple[Path, str]:
 
 def _check_pull_space(root: Path, incoming: Path, files: list[str], total: int,
                       where: str = "") -> None:
-    """‏#1458: לפני הבייט הראשון — האם מה שנשאר להוריד נכנס לספרייה.
+    """#1458: לפני הבייט הראשון — האם מה שנשאר להוריד נכנס לספרייה.
 
-    ‏``total`` הוא ``size_bytes`` של המשני (סכום קבצי המחיצה). מה שכבר
+    ``total`` הוא ``size_bytes`` של המשני (סכום קבצי המחיצה). מה שכבר
     ב-``.incoming`` מניסיון קודם כבר תופס מקום, ולכן מנוכה. "לא הצלחנו
     לבדוק" — גודל שלא דווח או מקום שלא נקרא — הוא כשל, לא "נכנס" (עיקרון 5)."""
     if total <= 0:
@@ -302,7 +302,7 @@ def _check_pull_space(root: Path, incoming: Path, files: list[str], total: int,
                            " לא ניתן לבדוק אם יש מקום בראשי")
     already = sum((incoming / name).stat().st_size for name in files
                   if (incoming / name).is_file())
-    # ‏#1737: ועוד הרזרבה למערכת (`disk_reserve`).
+    # #1737: ועוד הרזרבה למערכת (`disk_reserve`).
     keep = disk_reserve.reserve()
     need = max(total - already, 0) + PULL_FREE_SPACE_MARGIN + keep
     try:
@@ -343,7 +343,8 @@ def cancel_transfer(conn, transfer_id: str, user: tuple[str, str]) -> dict:
 def start_pull(ctx, data_dir, node_id: str, image_id: str,
                user: tuple[str, str], *, location_id: str = "loc_local",
                run_in_thread: bool = True) -> str:
-    """מאמת (משני קיים ופעיל, האימג' אינו בראשי, אין העברה פעילה לאותו זוג, מיקום
+    """מאמת (משני קיים ופעיל, האימג' אינו בראשי, אין העברה פעילה לאותו זוג ואין משיכה
+    פעילה של אותו אימג' מכל משני — #2489, מיקום
     היעד בראשי קיים ומחובר — #1781), רושם שורה ``queued`` עם ``direction=pull``
     ו-``location_id``, ומפעיל את המשיכה ברקע."""
     from server.library.images import valid_image_id
@@ -369,6 +370,14 @@ def start_pull(ctx, data_dir, node_id: str, image_id: str,
             (node_id, image_id)).fetchone()
         if active is not None:
             raise TransferError(409, "כבר רצה העברה של האימג' הזה עם שרת המשנה הזה")
+        # #2489 (8): תיקיית הביניים היא ``.incoming/<image_id>`` — לפי האימג' בלבד.
+        # שתי משיכות של אותו אימג' משני משניים כתבו לאותה תיקייה, ובייטים של
+        # השנייה נכנסו אחרי שה-sha256 של הראשונה כבר נבדק.
+        other = conn.execute(
+            "SELECT 1 FROM storage_transfers WHERE image_id = ? AND direction = 'pull'"
+            " AND state IN ('queued', 'sending', 'verifying')", (image_id,)).fetchone()
+        if other is not None:
+            raise TransferError(409, "כבר רצה משיכה של האימג' הזה משרת משנה אחר")
         stamp = now_iso()
         conn.execute(
             "INSERT INTO storage_transfers (id, node_id, image_id, image_name,"
@@ -397,7 +406,7 @@ def run_pull(ctx, data_dir, transfer_id: str) -> None:
     incoming = None
     image_id = row["image_id"]
     try:
-        # ‏#1781: אזור הביניים בתוך המיקום שנבחר — הכניסה לספרייה היא ``rename``
+        # #1781: אזור הביניים בתוך המיקום שנבחר — הכניסה לספרייה היא ``rename``
         # על אותה מערכת קבצים. מיקום שנעלם מאז הפתיחה נכשל כאן, בשמו.
         root, where = _pull_root(ctx, row["location_id"])
         if valid_image_id(image_id):
@@ -445,9 +454,9 @@ def _pull(ctx, data_dir, transfer_id: str, row, root: Path, where: str,
     if incoming is None:
         raise RuntimeError("תיקיית הביניים יוצאת משורש הספרייה")
     last = {"mark": 0, "seen": 0}
-    # ‏#1473: הקריאה בקצב התקרה — חלון ה-TCP מאט את המשני ששולח (`transfer_cap`).
+    # #1473: הקריאה בקצב התקרה — חלון ה-TCP מאט את המשני ששולח (`transfer_cap`).
     pace = transfer_cap.pacer(conn)
-    # ‏#1737: הבדיקה המוקדמת סופרת את מה שהמשני הצהיר; כותב אחר (קליטה במקביל)
+    # #1737: הבדיקה המוקדמת סופרת את מה שהמשני הצהיר; כותב אחר (קליטה במקביל)
     # או קובץ ארוך מההצהרה נעצרים כאן, ברזרבה ולא באפס.
     guard = disk_reserve.StreamGuard(lambda: _free_bytes(root), "ההעברה משרת המשנה")
 
@@ -488,8 +497,8 @@ def _pull(ctx, data_dir, transfer_id: str, row, root: Path, where: str,
         validate_display_name(str(manifest.get("name") or ""), "שם האימג'")
         if manifest.get("folder"):
             validate_display_name(str(manifest["folder"]), "שם התיקייה")
-        # ‏#1340: המניפסט הוא של המשני — אותו שער כמו מניפסט בספרייה, **לפני**
-        # שנוגעים בדיסק. ``file`` הוא שם קובץ יחיד בתוך ``.incoming``: ‏"../" או
+        # #1340: המניפסט הוא של המשני — אותו שער כמו מניפסט בספרייה, **לפני**
+        # שנוגעים בדיסק. ``file`` הוא שם קובץ יחיד בתוך ``.incoming``: "../" או
         # נתיב מוחלט היו כותבים כ-root מחוץ לספרייה, וה-sha256 נבדק רק אחרי הכתיבה.
         problem = ImageLibrary._validate(manifest)
         if problem is not None:
@@ -499,7 +508,7 @@ def _pull(ctx, data_dir, transfer_id: str, row, root: Path, where: str,
             if not safe_partition_filename(filename) or inside(
                     incoming / filename, incoming) is None:
                 raise RuntimeError(f"שם קובץ מחיצה לא תקין במניפסט המשני: {filename!r}")
-        root.mkdir(parents=True, exist_ok=True)   # ‏images/ של מיקום נוסף נוצר בכתיבה הראשונה
+        root.mkdir(parents=True, exist_ok=True)   # images/ של מיקום נוסף נוצר בכתיבה הראשונה
         _check_pull_space(root, incoming, files, total, where)
         incoming.mkdir(parents=True, exist_ok=True)
         completed = 0
@@ -528,7 +537,7 @@ def _pull(ctx, data_dir, transfer_id: str, row, root: Path, where: str,
             _clear_incoming(incoming)
             raise
         public = {k: v for k, v in manifest.items() if not str(k).startswith("_")}
-        # ‏#1813: המחיצות לדיסק, ואז המניפסט (אטומי, עם fsync) והתיקייה —
+        # #1813: המחיצות לדיסק, ואז המניפסט (אטומי, עם fsync) והתיקייה —
         # כל אלה לפני ה-rename שמכניס את האימג' לספרייה.
         for filename in files:
             fsync_file(incoming / filename)

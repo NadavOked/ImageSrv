@@ -1,12 +1,12 @@
-"""‏#1252 (נמדד על ברזל 10/10, ‏HP-BUILD מול שרת TA ב-v0.59.2): כותרת הגואי
+"""#1252 (נמדד על ברזל 10/10, HP-BUILD מול שרת TA ב-v0.59.2): כותרת הגואי
 הנייטיב הציגה "imagesrv-srv · 10.10.10.1" ו-"v0.48.1" — מחרוזות מוקאפ
-מקודדות. הצד של השרת: ‏`GET /api/v1/agent/state?mac=` (מה ש-guistate.sh
+מקודדות. הצד של השרת: `GET /api/v1/agent/state?mac=` (מה ש-guistate.sh
 קורא כל 2 שניות) נושא עכשיו `server_name` ו-`server_version`.
 
-* ‏`server_name` — ההגדרה `server_name` אם המנהל קבע אחת, אחרת שם המארח:
-  אותו מקור כמו `/me.server_name` (‏#936).
-* ‏`server_version` — תג ה-git (`update.current_version`), אותו מקור כמו
-  ‏`/me.version` (‏#915). ‏`null` כשהתג לא נקרא — והמסך כותב "לא ידוע",
+* `server_name` — ההגדרה `server_name` אם המנהל קבע אחת, אחרת שם המארח:
+  אותו מקור כמו `/me.server_name` (#936).
+* `server_version` — תג ה-git (`update.current_version`), אותו מקור כמו
+  `/me.version` (#915). `null` כשהתג לא נקרא — והמסך כותב "לא ידוע",
   לא מספר.
 
 הבדיקה עוברת דרך **אפליקציית הסוכן והקיוסק המפוצלות** — לא רק המעטפת

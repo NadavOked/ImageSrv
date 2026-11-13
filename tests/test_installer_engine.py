@@ -286,7 +286,7 @@ def test_inventory_has_the_documented_line_from_sysfs_and_blkid(tmp_path):
     assert got.returncode == 0, got.stderr
     assert got.stdout.strip() == (
         "disk=/dev/sda|model=VMware Virtual disk|size=64424509440|bus=sata|"
-        "removable=0|has=gpt:2 partitions (vfat, ext4)|iso=0"
+        "removable=0|has=gpt:2 partitions (vfat, ext4)|iso=0|smart=unknown"   # #3007: a file, not a disk
     )
 
 
@@ -332,6 +332,7 @@ def test_dry_run_prints_the_exact_command_sequence_and_redacts_secrets(tmp_path)
         "write-target",   # #2144: /etc/chrony/conf.d/imagesrv.conf
         "write-target", "write-target-secret",
         "chroot",         # #2144: the clock check (chronyd -Q), before the target is released
+        "chroot", "chroot",   # #2400: a synced source steps the clock (chronyd -q) and hwclock writes it, UTC
         "umount", "umount", "umount", "umount",
         "umount", "umount", "sync",
     ]
@@ -773,9 +774,9 @@ def test_removing_the_iso_guard_makes_the_destructive_dry_run_reachable(tmp_path
 
 
 def _copy_repo(tmp_path: Path, packages: dict[str, str], on_cd: tuple[str, ...]):
-    """‏copy_local_repo עצמו (לא dry-run) מול ‏/cdrom מדומה: ‏pool של ה-netinst
-    (‏pool/main/o/...) לצד pool/main/imagesrv, ו-dists/ שמאנדקס את שניהם — כמו
-    ה-ISO אחרי `make-pool.sh --index-only` (‏#1371)."""
+    """copy_local_repo עצמו (לא dry-run) מול /cdrom מדומה: pool של ה-netinst
+    (pool/main/o/...) לצד pool/main/imagesrv, ו-dists/ שמאנדקס את שניהם — כמו
+    ה-ISO אחרי `make-pool.sh --index-only` (#1371)."""
     import gzip
     cdrom, target = tmp_path / "cdrom", tmp_path / "target"
     for rel in on_cd:
@@ -809,8 +810,8 @@ NETINST_AND_OURS = {
 
 
 def test_the_local_repo_has_every_package_its_index_lists(tmp_path):
-    """שרת ת"א 13/10: ‏495 מתוך 1134 החבילות באינדקס היו בלי קובץ (openssh-server,
-    ‏dbus-user-session) — רק pool/*/imagesrv הועתק, ו-dists/ כולו."""
+    """שרת ת"א 13/10: 495 מתוך 1134 החבילות באינדקס היו בלי קובץ (openssh-server,
+    dbus-user-session) — רק pool/*/imagesrv הועתק, ו-dists/ כולו."""
     import gzip
     got, repo = _copy_repo(tmp_path, NETINST_AND_OURS, tuple(NETINST_AND_OURS.values()))
     assert got.returncode == 0, got.stdout + got.stderr

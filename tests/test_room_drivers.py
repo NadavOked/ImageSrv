@@ -1,4 +1,4 @@
-"""‏#1269 — דרייברים לפי דגם מחשב, לכל דיסק יעד בסבב החדר (השרת).
+"""#1269 — דרייברים לפי דגם מחשב, לכל דיסק יעד בסבב החדר (השרת).
 
 המתג "להוסיף דרייברים" כבוי = הסבב לא משתנה בכלום: אין שדה, אין שאלה
 מהסוכן. דלוק = המפעיל בוחר **דגם** מתוך מה שיש בספרייה (`drivers.models`,
@@ -169,8 +169,8 @@ def test_the_direct_round_takes_the_same_choice(room_server):
 
 
 def test_an_old_database_gets_the_column_and_keeps_it_through_the_state_rebuild(tmp_path):
-    """‏DB מלפני #1269 **וגם** עם CHECK ישן: ה-ALTER מוסיף את העמודה, ובניית
-    הטבלה מחדש (‏`_rebuild_state_tables`, שרצה אחריו) אינה מאבדת אותה."""
+    """DB מלפני #1269 **וגם** עם CHECK ישן: ה-ALTER מוסיף את העמודה, ובניית
+    הטבלה מחדש (`_rebuild_state_tables`, שרצה אחריו) אינה מאבדת אותה."""
     import sqlite3                                                # noqa: PLC0415
 
     from server import db as db_module                           # noqa: PLC0415

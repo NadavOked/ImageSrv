@@ -156,7 +156,7 @@ def test_public_list_marks_missing_source_disk_bytes_unknown(tmp_path):
 
 
 def test_a_work_area_is_not_part_of_the_library(tmp_path):
-    """‏#71: מה שיושב באזור עבודה של השרת — ייבוא או קליטה — עדיין לא
+    """#71: מה שיושב באזור עבודה של השרת — ייבוא או קליטה — עדיין לא
     אומת, ולכן אינו אימג': לא ברשימה, לא בבחירה, ולא כמועמד לסבב."""
     write_image(tmp_path, MANIFEST_256)
     write_image(tmp_path / ".import-9f2c14ab", MANIFEST_500)
@@ -172,7 +172,7 @@ def test_a_work_area_is_not_part_of_the_library(tmp_path):
 
 def test_two_folders_claiming_one_id_serve_neither(tmp_path):
     """מזהה ששתי תיקיות מצהירות עליו הוא מזהה שאיננו יודעים מה הוא.
-    ‏"הראשונה לפי הסדר" היא הכרעה שקטה לפי מיון נתיבים — והיא נפרסת על
+    "הראשונה לפי הסדר" היא הכרעה שקטה לפי מיון נתיבים — והיא נפרסת על
     כיתה שלמה (עיקרון 5)."""
     write_image(tmp_path / "a", MANIFEST_256)
     write_image(tmp_path / "z", MANIFEST_256)
@@ -224,7 +224,7 @@ def test_a_symlink_partition_file_is_never_served(tmp_path):
     "<img src=x onerror=alert(1)>", "3", 0, -1, 2.5, True, [], {},
 ])
 def test_2420_a_manifest_version_that_is_not_a_whole_number_from_1_is_rejected(version):
-    """#2420: ‏`version` מגיע לקונסולה. מניפסט משרת משנה, משיתוף NAS או מארכיון
+    """#2420: `version` מגיע לקונסולה. מניפסט משרת משנה, משיתוף NAS או מארכיון
     עם ערך אחר אינו נכנס לספרייה."""
     manifest = json.loads(json.dumps(MANIFEST_256))
     manifest["version"] = version
@@ -319,7 +319,7 @@ def test_zero_partition_geometry_is_not_served(tmp_path, field):
 
 
 def test_size_filtering_is_by_size_not_family(tmp_path, images_root):
-    """‏#1863 (נדב 20/10): הגודל האמיתי מכריע, לא המשפחה. אימג' "500" שהפריסה
+    """#1863 (נדב 20/10): הגודל האמיתי מכריע, לא המשפחה. אימג' "500" שהפריסה
     שלו (~255.4GB) נכנסת לכונן 256 — מוצע לו; כונן קטן מהפריסה — לא."""
     library = ImageLibrary(images_root)
     disk_240 = [{"size_bytes": 240057409536, "removable": False}]
@@ -421,7 +421,7 @@ def _finish_member(sessions, sid, mac, state="done"):
 
 
 def test_a_spent_round_yields_to_the_next_one(store):
-    """‏#35: סבב שכל חבריו סיימו (או נכשלו) נשאר מוצג לסיכום — אבל פתיחה
+    """#35: סבב שכל חבריו סיימו (או נכשלו) נשאר מוצג לסיכום — אבל פתיחה
     חדשה מפנה אותו במקום להיתקע על session_conflict לנצח."""
     sessions, _ = store
     sid = _running_round(sessions)
@@ -471,7 +471,7 @@ def test_a_spent_cloner_wave_is_left_to_the_room(store):
 
 
 def test_open_round_error_names_the_offending_machine(store):
-    """‏#405: שם ארוך שכבר במרשם (נרשם לפני שהאכיפה עברה לרישום) עדיין
+    """#405: שם ארוך שכבר במרשם (נרשם לפני שהאכיפה עברה לרישום) עדיין
     חוסם את פתיחת הסבב — אבל ההודעה נוקבת ב**מכונה**, לא רק במספר, כדי
     שמי שפותח את הסבב על כל הקבוצה ידע מי חוסם אותו."""
     sessions, _ = store
@@ -501,10 +501,10 @@ def test_short_passwords_are_refused(tmp_path):
 
 
 def test_a_partition_without_a_filesystem_msr_or_bios_boot_stays_valid():
-    """‏#1419: הסוכן רושם `fs=""` למחיצה בלי מערכת קבצים (MSR בכל Windows,
-    ‏BIOS boot בלינוקס) ומזרים אותה ב-partclone.dd. דחייה שלה העלימה את
+    """#1419: הסוכן רושם `fs=""` למחיצה בלי מערכת קבצים (MSR בכל Windows,
+    BIOS boot בלינוקס) ומזרים אותה ב-partclone.dd. דחייה שלה העלימה את
     האימג' מהספרייה ודחתה כל קליטה כזו."""
     manifest = json.loads(json.dumps(MANIFEST_256))
-    for fs in ("", "unknown"):       # ‏"unknown" = _fs_of כש-blkid יצא ≠0 (manifest.sh)
+    for fs in ("", "unknown"):       # "unknown" = _fs_of כש-blkid יצא ≠0 (manifest.sh)
         manifest["partitions"][0].update(role="msr", fs=fs)
         assert ImageLibrary._validate(manifest) is None, fs

@@ -1,7 +1,7 @@
-"""מה מחשב רשום יקבל כשידליקו אותו ברשת ההפצה — תצוגה בקונסולה (‏#2550).
+"""מה מחשב רשום יקבל כשידליקו אותו ברשת ההפצה — תצוגה בקונסולה (#2550).
 
 **קריאה בלבד, ולכן ההגבלה העיקרית כאן היא מה שהמודול אינו עושה.** התצוגה אינה
-אתחול: היא אינה נספרת בתקציב האתחולים (#75, ‏#2411), אינה מגינה לולאה, אינה
+אתחול: היא אינה נספרת בתקציב האתחולים (#75, #2411), אינה מגינה לולאה, אינה
 נרשמת כ-`hello` או כ-`net_seen`, אינה כותבת `unknown_mac` (#2498) ואינה מקדמת
 סבב. מי שמשנה מצב כשהוא עונה על "מה יקרה" משקר לגבי מה שקרה.
 
@@ -14,11 +14,11 @@
 2. `bootguard.peek` — מה `guard` היה עושה בבקשה **הבאה**, בלי לספור אותה;
 3. `boot.grub_menu.decide` — ההחלטה עצמה, הפונקציה שמייצרת את קובץ ה-GRUB.
 
-תשובה שהמחולל אינו מבין (`schema`, ‏#2666) עוברת בשלב 2 דרך `answer_failure.peek`
+תשובה שהמחולל אינו מבין (`schema`, #2666) עוברת בשלב 2 דרך `answer_failure.peek`
 במקום `bootguard.peek`: אותו סדר כמו `hello.make_resolver` (לפני `known`), אותו
 תקציב ואותו חלון, בלי לספור (#2682).
 
-**אי-ודאות היא תשובה** (עיקרון 5). ‏`decided: false` — ולא ניחוש — כשבניית
+**אי-ודאות היא תשובה** (עיקרון 5). `decided: false` — ולא ניחוש — כשבניית
 התשובה נכשלה, כשמונה האתחולים לא נקרא, או ש-`decide` החזירה קוד שהתצוגה אינה
 מכירה. "לא הצלחנו לבדוק" אינו "יעלה מהדיסק".
 
@@ -45,7 +45,7 @@ from server.rounds.sessions import SessionStore
 log = logging.getLogger("imagesrv.boot_preview")
 
 #: הסוגים שהקונסולה מציירת. סגורים בכוונה: קוד החלטה שאינו כאן הוא "לא ידוע",
-#: לא סוג שהקונסולה מנחשת. ‏AGENT → לפי `code`; ‏LOCAL → תפריט או דיסק.
+#: לא סוג שהקונסולה מנחשת. AGENT → לפי `code`; LOCAL → תפריט או דיסק.
 _AGENT_KINDS = {
     "task-assigned": "task",        # יש משימה פתוחה — עולה ל-ImageSrv לבצע אותה
     "session-joinable": "session",  # סבב פתוח או רץ — מצטרף
@@ -76,7 +76,7 @@ def _kind(action: str, code: str, show_menu: bool) -> str | None:
 def _offered(answer: dict) -> tuple[dict | None, dict | None]:
     """המשימה והסבב שהתשובה (לפני השומר) מציעה — **רק מה שהמפעיל רואה**.
 
-    ‏`token` של המשימה לעולם אינו יוצא: הוא הרשאת הכתיבה עליה (#530), והתצוגה
+    `token` של המשימה לעולם אינו יוצא: הוא הרשאת הכתיבה עליה (#530), והתצוגה
     פתוחה לכל מי שמחובר. הסבב מזוהה ב-`image_id`; את שם האימג' הקונסולה כבר
     מחזיקה (`/images`), ולכן אין כאן סריקת ספרייה לכל מכונה בחדר."""
     task = answer.get("task")
@@ -99,9 +99,9 @@ def preview(conn: sqlite3.Connection, library: ImageLibrary, store: SessionStore
     try:
         answer = build_answer(conn, library, store, mac, read_only=True)
         if answer_failure.failed(answer):
-            # ‏#2682: אותו סדר ואותה החלטה כמו `hello.make_resolver` -- תשובה שהמחולל אינו
+            # #2682: אותו סדר ואותה החלטה כמו `hello.make_resolver` -- תשובה שהמחולל אינו
             # מבין נבדקת לפני `known` ולפני `bootguard`, ובתקציב של `answer_failure`
-            # (‏#2666) מקבלת את הדגל. התצוגה מניחה בקשה שהגיעה לכרטיס מפיץ, כמו כל
+            # (#2666) מקבלת את הדגל. התצוגה מניחה בקשה שהגיעה לכרטיס מפיץ, כמו כל
             # שאר התצוגה (ראו "מה שהתצוגה אינה יודעת").
             offered = answer_failure.peek(conn, mac, answer)
             checked = None if offered is None else (offered, None)
@@ -138,7 +138,7 @@ def preview(conn: sqlite3.Connection, library: ImageLibrary, store: SessionStore
 
 def preview_all(conn: sqlite3.Connection, library: ImageLibrary,
                 store: SessionStore) -> dict:
-    """כל המכונות הרשומות בקריאה אחת — ‏`{checked_at, machines: {mac: פריט}}`."""
+    """כל המכונות הרשומות בקריאה אחת — `{checked_at, machines: {mac: פריט}}`."""
     macs = [row["mac"] for row in conn.execute("SELECT mac FROM machines ORDER BY mac")]
     return {
         "checked_at": now_iso(),

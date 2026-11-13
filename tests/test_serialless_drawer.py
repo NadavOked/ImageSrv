@@ -1,20 +1,20 @@
-"""‏#105 — כונן בלי serial הוא מצב שלישי: "לא ניתן לזהות את הכונן".
+"""#105 — כונן בלי serial הוא מצב שלישי: "לא ניתן לזהות את הכונן".
 
-סבב החדר סופר מגירות לפי `serial` (‏`room.py:_tally`). כונן שהסוכן לא
-הצליח לקרוא לו serial — מתאם USB-SATA, בקר RAID/HBA, ‏`hdparm` חסר —
+סבב החדר סופר מגירות לפי `serial` (`room.py:_tally`). כונן שהסוכן לא
+הצליח לקרוא לו serial — מתאם USB-SATA, בקר RAID/HBA, `hdparm` חסר —
 מגיע ב-hello עם `"serial": null`. לפני התיקון `drawer_list` החזיר לו
-‏`fresh: false`, **אותו ערך כמו כונן שנכתב**, ומסך מחשב הבנייה הציג
+`fresh: false`, **אותו ערך כמו כונן שנכתב**, ומסך מחשב הבנייה הציג
 אותו תחת WRITTEN. כונן ריק שנשלף כ"כתוב" הוא הנזק עצמו.
 
 שלושת המצבים שנבדקים כאן, ואסור לקפל אחד לשני (עיקרון 5):
 
-- ‏`fresh: true`  — יש serial, והוא עוד לא נכתב בסבב הזה.
-- ‏`fresh: false` — יש serial, והוא ב-`written_serials`: ראיה חיובית.
-- ‏`fresh: null`  — אין serial. הסבב אינו יכול לדעת אם נכתב.
+- `fresh: true`  — יש serial, והוא עוד לא נכתב בסבב הזה.
+- `fresh: false` — יש serial, והוא ב-`written_serials`: ראיה חיובית.
+- `fresh: null`  — אין serial. הסבב אינו יכול לדעת אם נכתב.
 
 והשער (`fresh_serials`) **ממשיך** להשאיר אותו בחוץ, בכוונה: כונן שנספר
 כ"טרי" בלי זהות היה מצרף את המכונה לכל גל וכותב אותו שוב ושוב, כי
-‏`_tally` לעולם לא יכול לסמן אותו ככתוב. מה שהשתנה הוא שהוא כבר אינו
+`_tally` לעולם לא יכול לסמן אותו ככתוב. מה שהשתנה הוא שהוא כבר אינו
 נעלם — הוא מוצג בשמו, ובחריץ שלו.
 """
 
@@ -74,14 +74,14 @@ def test_a_drawer_with_no_serial_is_not_reported_as_written():
 
 
 def test_an_empty_serial_string_is_the_same_as_no_serial():
-    """‏`""` מהסוכן אינו זהות. בלי זה מחרוזת ריקה אחת ב-`written` הייתה
+    """`""` מהסוכן אינו זהות. בלי זה מחרוזת ריקה אחת ב-`written` הייתה
     הופכת כל כונן חסר-serial ל"כתוב"."""
     got = room.drawer_list(_Conn([_disk("sda", 1, "")]), "m", {""})[0]
     assert got["fresh"] is None
 
 
 def test_the_two_identified_states_are_unchanged():
-    """שומר מפני תיקון-יתר: יש serial → ‏True/False כמו קודם."""
+    """שומר מפני תיקון-יתר: יש serial → True/False כמו קודם."""
     got = room.drawer_list(
         _Conn([_disk("sda", 1, "S1"), _disk("sdb", 2, "S2")]), "m", {"S2"})
     assert [d["fresh"] for d in got] == [True, False]
@@ -91,7 +91,7 @@ def test_the_two_identified_states_are_unchanged():
 
 
 def test_fresh_serials_leaves_out_a_drawer_with_no_serial_and_invents_nothing():
-    """אין "fallback" ל-`dev` (‏sda מתחלף בין אתחולים) ואין serial מומצא."""
+    """אין "fallback" ל-`dev` (sda מתחלף בין אתחולים) ואין serial מומצא."""
     got = room.fresh_serials(
         _Conn([_disk("sda", 1, None), _disk("sdb", 2, "S2")]), "m", set())
     assert got == ["S2"]
@@ -111,7 +111,7 @@ def _open(deploy, **extra) -> dict:
 
 
 def _open_on_s1(room_server):
-    """‏#1410: הסבב נפתח על בחירה מפורשת — חריץ 1 של shich-1, שזוהה (S1)
+    """#1410: הסבב נפתח על בחירה מפורשת — חריץ 1 של shich-1, שזוהה (S1)
     כשנבחר. ה-hello שאחריו הוא מה שהטסט בודק."""
     return _open(room_server["deploy"],
                  target_slots=room_slots(room_server["ctx"].conn, {CLONER1: ["S1"]}))
@@ -119,7 +119,7 @@ def _open_on_s1(room_server):
 
 def test_a_cloner_with_only_an_unidentifiable_drawer_is_shown_not_hidden(room_server):
     """המצב מה-Issue: מגירות מחוברות, "0 טריות", ואף מילה למה. עכשיו
-    ‏`drawer_list` נושא `fresh: null` בחריץ שלו — המסך יודע להגיד."""
+    `drawer_list` נושא `fresh: null` בחריץ שלו — המסך יודע להגיד."""
     deploy, anon = room_server["deploy"], room_server["anon"]
     assert _open_on_s1(room_server).status_code == 200
     answer = cloner_hello(anon, CLONER1, [None])     # אותו חריץ, וה-serial לא נקרא
@@ -143,7 +143,7 @@ def test_a_mixed_machine_joins_for_its_identified_drawer_only(room_server):
 
 
 def test_a_written_drawer_with_no_serial_is_journaled_as_unidentified(room_server):
-    """‏`_tally` אינו סופר אותו (עיקרון 4: ערך מומצא ב-`written_serials`
+    """`_tally` אינו סופר אותו (עיקרון 4: ערך מומצא ב-`written_serials`
     היה מדלג על כונן ריק בגל הבא) — וגם אינו אומר "המגירה הוחלפה", כי
     היא לא הוחלפה. היא פשוט לא ניתנת לזיהוי."""
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]

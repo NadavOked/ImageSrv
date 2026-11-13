@@ -1,15 +1,15 @@
-"""‏#32 — הקצה שמחליט אם יש בכלל initramfs גרפי, ומה שהתחנה מקבלת בפועל.
+"""#32 — הקצה שמחליט אם יש בכלל initramfs גרפי, ומה שהתחנה מקבלת בפועל.
 
-‏`boot/grub_menu.py` טהור ואינו נוגע בדיסק: הוא מקבל נתיב או `None`.
+`boot/grub_menu.py` טהור ואינו נוגע בדיסק: הוא מקבל נתיב או `None`.
 מי שמחליט מה מהשניים הוא `boot/http.py`, והוא מחליט לפי **ראיה חיובית**
-בלבד — ‏`is_file()` ענה True. כל היתר מחזיר `None`.
+בלבד — `is_file()` ענה True. כל היתר מחזיר `None`.
 
 הכשל שהקובץ הזה מונע הוא הגרוע ביותר של #32: התפריט מפנה את GRUB
 ל-`/boot/initrd.img.gui`, השרת מחזיר 404, ו**המכונה לא עולה בכלל** —
 לא לגואי, לא לטקסט, ולא לדיסק. מכונה בלי גואי עובדת. זו לא.
 
 הבדיקות התחתונות רצות דרך האפליקציה האמיתית ומודדות את התשובה של
-‏`/boot/menu`, לא ערך פנימי.
+`/boot/menu`, לא ערך פנימי.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def test_the_gui_path_is_offered_only_when_the_file_is_there(tmp_path):
 
 
 def test_no_boot_dir_at_all_means_no_gui():
-    """שרת פיתוח בלי `--boot-dir`. ‏None נכנס, ‏None יוצא — בלי חריגה."""
+    """שרת פיתוח בלי `--boot-dir`. None נכנס, None יוצא — בלי חריגה."""
     assert gui_initrd_path(None) is None
 
 
@@ -46,7 +46,7 @@ def test_a_missing_boot_dir_means_no_gui(tmp_path):
 
 
 def test_a_directory_named_like_the_gui_initramfs_is_not_a_file(tmp_path):
-    """‏`exists()` היה עונה True כאן. ‏`is_file()` הוא הבדיקה הנכונה:
+    """`exists()` היה עונה True כאן. `is_file()` הוא הבדיקה הנכונה:
     תיקייה בשם הזה אינה initramfs, ו-GRUB היה מקבל עליה 404."""
     boot = tmp_path / "boot"
     (boot / GUI_INITRD_NAME).mkdir(parents=True)
@@ -54,7 +54,7 @@ def test_a_directory_named_like_the_gui_initramfs_is_not_a_file(tmp_path):
 
 
 def test_an_unusable_path_means_no_gui_and_does_not_raise():
-    """הבדיקה עצמה יכולה להיכשל — נתיב פגום, הרשאה חסרה. ‏"לא הצלחנו
+    """הבדיקה עצמה יכולה להיכשל — נתיב פגום, הרשאה חסרה. "לא הצלחנו
     לבדוק" נספר כ"אין", לא כ"יש" (עיקרון 5)."""
     assert gui_initrd_path("\0/bad/path") is None
 
@@ -63,7 +63,7 @@ def test_an_unusable_path_means_no_gui_and_does_not_raise():
 
 
 def test_config_for_scope_keeps_the_gui_path(tmp_path):
-    """‏`config_for_scope` בונה `GrubConfig` **חדש** לכל בקשה שהגיעה
+    """`config_for_scope` בונה `GrubConfig` **חדש** לכל בקשה שהגיעה
     לכתובת אחרת (#39), שדה-שדה. שדה שנשכח שם נעלם בשקט — ותחנה שעלתה
     דרך proxy בווילן זר (תרחיש 3) הייתה מקבלת טקסט בזמן שהזהה לה
     בווילן ההפצה מקבלת גואי. אותה מכונה, שני מסכים שונים.
@@ -105,7 +105,7 @@ def make_client(tmp_path, *, with_gui: bool):
 
 
 def test_an_unregistered_mac_never_gets_the_gui_even_when_it_is_installed(tmp_path):
-    """‏MAC לא רשום = דיסק מקומי מיד, בלי ImageSrv ובלי initrd כלשהו
+    """MAC לא רשום = דיסק מקומי מיד, בלי ImageSrv ובלי initrd כלשהו
     (עיקרון 1). הקובץ הגרפי קיים כאן דווקא כדי שהבדיקה תהיה אמיתית."""
     client = make_client(tmp_path, with_gui=True)
     text = client.get(f"/boot/menu?mac={MAC}").text
@@ -132,7 +132,7 @@ def test_the_gui_initramfs_is_actually_served_when_present(tmp_path):
 
 def test_without_the_file_the_server_offers_no_gui_path_at_all(tmp_path):
     """בקרה שלילית על ההגשה: בלי הקובץ, גם הנתיב לא קיים — ולכן חייב
-    להיות בטוח שהתפריט לא מפנה אליו. ‏404 כאן הוא התוצאה הנכונה."""
+    להיות בטוח שהתפריט לא מפנה אליו. 404 כאן הוא התוצאה הנכונה."""
     client = make_client(tmp_path, with_gui=False)
     assert client.get(f"/boot/{GUI_INITRD_NAME}").status_code == 404
 
@@ -184,7 +184,7 @@ def registered_server(tmp_path, *, with_gui: bool):
 
 
 def test_a_registered_classroom_station_really_gets_the_gui_from_the_server(tmp_path, classrooms_on):
-    """הדרישה מקצה לקצה: ‏GRUB שואל, והשרת עונה בנתיב הגרפי.
+    """הדרישה מקצה לקצה: GRUB שואל, והשרת עונה בנתיב הגרפי.
 
     הכשל כשמסירים את החיווט מ-`server/app.py`:
 
@@ -198,11 +198,11 @@ def test_a_registered_classroom_station_really_gets_the_gui_from_the_server(tmp_
 
 def test_a_registered_cloner_really_gets_the_gui_initramfs_from_the_server(tmp_path, classrooms_on):
     """מאז שמחשב השיכפול קיבל מסך (#679, הכרעת הבעלים), הוא ב-
-    ‏ROLES_WITH_GUI — ולכן אותו שרת, אותו רגע, מחזיר לו את ה-initramfs
+    ROLES_WITH_GUI — ולכן אותו שרת, אותו רגע, מחזיר לו את ה-initramfs
     הגרפי, בדיוק כמו לתחנת כיתה. זה הטסט שקידד את ההחלטה **הישנה**
     שהופכה: קודם הוא אימת שהקלונר מקבל טקסט.
 
-    ‏#17 אינו נפגע — הבחירה כאן היא בשורת ה-initrd בלבד; הקלונר נשאר
+    #17 אינו נפגע — הבחירה כאן היא בשורת ה-initrd בלבד; הקלונר נשאר
     diskless (נבדק ב-test_cloner_boot_path.py)."""
     client = registered_server(tmp_path, with_gui=True)
     text = client.get(f"/boot/menu?mac={CLONER_MAC}").text

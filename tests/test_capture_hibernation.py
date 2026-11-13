@@ -108,7 +108,7 @@ def test_hibernated_capture_uses_a_view_but_clean_capture_proceeds_without_one(t
     from test_capture_fast_startup_2213 import fast_run, succeeded
 
     succeeded(fast_run(tmp_path / "hibernated"))
-    # ‏`_fs_of` מוחלף ל-ntfs, ולכן הזרם הוא partclone.ntfs האמיתי — על צומת
+    # `_fs_of` מוחלף ל-ntfs, ולכן הזרם הוא partclone.ntfs האמיתי — על צומת
     # מחיצה שאינו קיים בקופסה הוא נופל ב-`clone: open ... error` (stage=pcl
     # rc=1) גם כשהשומר אישר. הסטאב הוא אותו PIPE_INPUT של בדיקות אמצע-הצינור.
     common = {"sgdisk": ONE_PARTITION, "curl": CURL_SINK, "partclone.ntfs": PIPE_INPUT}

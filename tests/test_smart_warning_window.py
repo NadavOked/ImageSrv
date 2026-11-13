@@ -5,25 +5,25 @@
 הדיסק לפי המיפוי, הצבע, הסיבה, דגם ומספר סידורי, ושני כפתורים: "דלג"
 (ברירת מחדל, הפוקוס, Esc) ו"כתוב בכל זאת" אדום. רק הכפתור האדום שבחלון
 מבצע. היום (לפני התיקון) Enter על שאלת ה-SMART במחשב השיכפול שלח מיד
-‏`smart-rescue`; שחזור לדיסק מחשב הבנייה וקליטה ממנו לא ידעו בכלל על
+`smart-rescue`; שחזור לדיסק מחשב הבנייה וקליטה ממנו לא ידעו בכלל על
 SMART; ושיכפול מקומי הפך דיסק עם אזהרה ליעד בקליק, ומקור עם אזהרה עבר
 בלי מילה.
 
 שני חצאים:
 
-* **הסוכן** (bash, רץ גם בווינדוס כש-Git bash קיים): ‏`gui_state` כותב
+* **הסוכן** (bash, רץ גם בווינדוס כש-Git bash קיים): `gui_state` כותב
   `dsmart=` במסכי הקליטה והשחזור בלבד (צריך jq). הצד של המשכפל
-  (‏`gui_smart_choice` ו-`smart-request`) הוסר ב-#2044.
+  (`gui_smart_choice` ו-`smart-request`) הוסר ב-#2044.
 * **הגואי** (C, רק על לינוקס עם cc+pango): דרייבר שמכליל את `main.c`
   ומזין אירועים אמיתיים ל-`handle()` — כל מסלול: Enter על אזהרה פותח
   חלון ולא כותב; "דלג" לא כותב; האדום כותב; מקור עם אזהרה עובר חלון.
-  ו-W/N בלי סבב לא שולחים כלום. פס השאלה של המשכפל (‏`SDLG_CLONER`) הוסר
+  ו-W/N בלי סבב לא שולחים כלום. פס השאלה של המשכפל (`SDLG_CLONER`) הוסר
   ב-#2347 — הצד של C ב-#2044.
 
 **בקרה שלילית:** הטסטים של הגואי נופלים על הקוד הישן על התנהגות (רשומה
-‏`smart-rescue`/`restore-start`/`capture-start` שנשלחה בלי חלון, ‏`room-wake`
+`smart-rescue`/`restore-start`/`capture-start` שנשלחה בלי חלון, `room-wake`
 בלי סבב); טסטי הסוכן נופלים על `smart-request` של ארבעה שדות ועל
-‏`gui_state` בלי `dsmart=`. הפקודות — בגוף ה-PR.
+`gui_state` בלי `dsmart=`. הפקודות — בגוף ה-PR.
 """
 
 from __future__ import annotations
@@ -246,8 +246,8 @@ GONE = ("smart_pending", "smart_prompt", "HIT_SMART_", "SDLG_CLONER", "emit_smar
 
 
 def test_2347_no_gui_source_carries_the_cloner_smart_question():
-    """המקור בלבד — רץ גם בלי מהדר. על הקוד הישן: ‏`smart_pending` ב-main.c,
-    ‏screens.c, ‏screens_cloner.c, ‏state.c ו-ui.h."""
+    """המקור בלבד — רץ גם בלי מהדר. על הקוד הישן: `smart_pending` ב-main.c,
+    screens.c, screens_cloner.c, state.c ו-ui.h."""
     sources = sorted((GUI / "src").glob("*.[ch]"))
     assert len(sources) > 20, sources                     # the folder was read, not an empty glob
     found = [f"{p.name}: {sym}" for p in sources for sym in GONE if sym in p.read_text(encoding="utf-8")]
@@ -256,11 +256,11 @@ def test_2347_no_gui_source_carries_the_cloner_smart_question():
 
 @native_gui
 def test_2347_a_leftover_smart_prompt_draws_no_question_and_answers_nothing(driver, tmp_path):
-    """‏`smart_prompt=` במצב אינו מצייר פס, ו-S/R/Enter אינם שולחים דבר ואינם
+    """`smart_prompt=` במצב אינו מצייר פס, ו-S/R/Enter אינם שולחים דבר ואינם
     פותחים חלון. אין מי שיענה: הגשר לא מקבל `smart-<action>|<nonce>` מאז #2044.
 
     **בקרה שלילית:** על הקוד הישן S שלח `smart-skip|7-2`, R שלח
-    `smart-replace|7-2`, ו-Enter פתח את החלון (`sdlg=other` — ‏`SDLG_CLONER`)."""
+    `smart-replace|7-2`, ו-Enter פתח את החלון (`sdlg=other` — `SDLG_CLONER`)."""
     out = drive(driver, tmp_path, ["mode:cloner"], LEFTOVER, "char:S", "char:R", "key:ENTER", "key:TAB", "key:ENTER")
     assert records(out) == [], out
     assert all("sdlg=0" in line for line in states(out)), out

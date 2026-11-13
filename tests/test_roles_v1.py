@@ -1,10 +1,10 @@
-"""‏#1073 — מודל התפקידים ל-v1 (הכרעת נדב 18/09).
+"""#1073 — מודל התפקידים ל-v1 (הכרעת נדב 18/09).
 
-1. **למשתמש הפצה אין קונסולה.** ‏`POST /api/console/login` על אפליקציית
-   הקונסולה (‎:8081) מסרב ל-`deploy` ב-403 עם ``deploy_no_console`` והודעה
+1. **למשתמש הפצה אין קונסולה.** `POST /api/console/login` על אפליקציית
+   הקונסולה (:8081) מסרב ל-`deploy` ב-403 עם ``deploy_no_console`` והודעה
    שמסך הכניסה מציג; והסירוב יושב על **כל** נתיב ניהול, לא רק על הדלת —
    עוגייה שפורט הסוכן הנפיק חתומה באותו סוד ותקפה גם כאן.
-2. **מחשב הבנייה ממשיך לעבוד.** allowlist פורט הסוכן (‎:8080) וכניסת הסוכן
+2. **מחשב הבנייה ממשיך לעבוד.** allowlist פורט הסוכן (:8080) וכניסת הסוכן
    (`/api/v1/agent/login`) מקבלים deploy — משם `buildmenu.sh` וה-GUI נכנסים.
 3. **חיפה = ת"א.** שרת משני עונה לאדמין שלו בדיוק כמו standalone על כל
    נתיב, מלבד ההיררכיה (ניהול משניים — במשני אין צאצאים), והקונסולה
@@ -43,7 +43,7 @@ DEPLOY = ("labtech", "deploy-pass-1")
 MAC = "b4:2e:99:07:1a:c4"
 
 #: הנתיבים שמותר להם להשתנות בין standalone למשני — **ההיררכיה בלבד**
-#: (‏`require_standalone`, ‏#732), ופאנל ה-pairing המקומי שהוא הצד השני
+#: (`require_standalone`, #732), ופאנל ה-pairing המקומי שהוא הצד השני
 #: של אותה היררכיה (#740). כל נתיב אחר חייב לענות אותו דבר.
 HIERARCHY_ONLY = {
     "/api/console/storage-nodes",
@@ -55,7 +55,7 @@ HIERARCHY_ONLY = {
 #: דגלי `capabilities` שהקונסולה רשאית להסתיר לפיהם — היררכיה בלבד.
 HIERARCHY_CAPS = {"interbranch_transfer", "enroll_secondary", "open_local_pairing"}
 #: #1081: מהדורה (v1/v2), זהה בכל שרת. לא היררכיה — חיפה = ת"א.
-EDITION_CAPS = {"classrooms", "tools"}   # ‏tools: v1 בלי ארגז הכלים (נדב 19/09)
+EDITION_CAPS = {"classrooms", "tools"}   # tools: v1 בלי ארגז הכלים (נדב 19/09)
 
 
 def _login(client: TestClient, who: tuple[str, str]):
@@ -96,7 +96,7 @@ def _safe_hooks(tmp_path: Path) -> dict:
 
 @pytest.fixture()
 def split_env(tmp_path: Path, images_root: Path):
-    """‏console_app (‎:8081) + agent_app (‎:8080) על runtime אחד — כמו בייצור."""
+    """console_app (:8081) + agent_app (:8080) על runtime אחד — כמו בייצור."""
     from server.app import create_agent_app, create_console_app, create_runtime
     from test_sender import Recorder                       # noqa: PLC0415
 
@@ -147,7 +147,7 @@ def _kiosk_deploy_cookie(env) -> str:
 
 
 def _http_routes(app) -> list[tuple[str, str]]:
-    """(method, path) לכל נתיב ‎/api/console ב-HTTP — פרמטרים בנתיב
+    """(method, path) לכל נתיב /api/console ב-HTTP — פרמטרים בנתיב
     מוחלפים בערך דמה; הסירוב יושב לפני שהנתיב קורא אותם."""
     out = sorted((m, re.sub(r"\{[^}]+\}", "x", p)) for m, p in _api_routes(app)
                  if p.startswith("/api/console"))
@@ -156,9 +156,9 @@ def _http_routes(app) -> list[tuple[str, str]]:
 
 
 def test_a_kiosk_issued_deploy_cookie_is_refused_on_every_console_route(split_env):
-    """הסירוב אינו רק בדלת: העוגייה מ-‎:8080 תקפה קריפטוגרפית גם ב-‎:8081,
+    """הסירוב אינו רק בדלת: העוגייה מ-:8080 תקפה קריפטוגרפית גם ב-:8081,
     ולכן כל נתיב ניהול מחזיר 403 עם אותה הודעה — כולל מה שסעיף 11 הישן
-    פתח ל-deploy (‏`/overview`, ‏`/images`, ‏`/me`, ‏`/room`)."""
+    פתח ל-deploy (`/overview`, `/images`, `/me`, `/room`)."""
     cookie = _kiosk_deploy_cookie(split_env)
     console = TestClient(split_env["console_app"], cookies={auth.COOKIE_NAME: cookie})
     leaks = []
@@ -192,10 +192,10 @@ def test_the_refusal_is_deploy_only_admin_and_anonymous_are_untouched(split_env)
 
 
 def test_an_admin_demoted_to_deploy_loses_the_console_at_once(split_env):
-    """‏#91 באותו כיוון: ההרשאה נקראת מהטבלה בכל בקשה, לא מהעוגייה."""
+    """#91 באותו כיוון: ההרשאה נקראת מהטבלה בכל בקשה, לא מהעוגייה."""
     from conftest import complete_console_login
     console = TestClient(split_env["console_app"])
-    # ‏#1262: לא is_builtin — ה-builtin אינו ניתן להורדה, וזה מנהל רגיל.
+    # #1262: לא is_builtin — ה-builtin אינו ניתן להורדה, וזה מנהל רגיל.
     users.create(split_env["rt"].conn, "second", "admin-pass-456", "admin",
                  by="test", check_policy=False)
     complete_console_login(console, split_env["rt"].conn, "second", "admin-pass-456")
@@ -228,7 +228,7 @@ def test_agent_login_admits_deploy(server):
 
 
 def test_the_combined_test_app_keeps_deploy_on_the_kiosk_allowlist_only(server):
-    """‏`create_app` (הבדיקות) מרכיב את שני הצדדים על אפליקציה אחת: allowlist
+    """`create_app` (הבדיקות) מרכיב את שני הצדדים על אפליקציה אחת: allowlist
     הקיוסק קודם, הקונסולה אחריו. ולכן deploy עובד שם בדיוק כמו בייצור —
     מה שהקיוסק מגיש (אימג'ים, חדר) 200, וכל נתיב ניהול 403."""
     deploy = server["deploy"]
@@ -298,7 +298,7 @@ def test_a_secondary_answers_its_admin_exactly_like_a_standalone(tmp_path, image
 
 
 def test_the_console_hides_nothing_on_a_secondary_but_the_hierarchy():
-    """‏index.html/console.js מסתירים לפי `data-cap`/`capabilities` — ורק
+    """index.html/console.js מסתירים לפי `data-cap`/`capabilities` — ורק
     לפי דגלי ההיררכיה **או** דגל המהדורה (`classrooms`, זהה בכל שרת).
     דף שייתלה בדגל אחר יסתיר משהו בחיפה שרואים בת"א."""
     page = (STATIC / "index.html").read_text(encoding="utf-8")

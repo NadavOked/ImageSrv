@@ -1,15 +1,15 @@
-"""‏#2742: קליטה נכשלה 'העלאה=124' אחרי שכל הבייטים עברו.
+"""#2742: קליטה נכשלה 'העלאה=124' אחרי שכל הבייטים עברו.
 
-ברזל 08/11 19:03, ‏v0.91.3, ‏tsk_6909 מ-HP-BUILD-2: ‏partclone, ‏zstd ו-fanout
+ברזל 08/11 19:03, v0.91.3, tsk_6909 מ-HP-BUILD-2: partclone, zstd ו-fanout
 יצאו 0, וה-curl עוד חיכה לתשובת השרת. השרת עושה fsync לכל הקובץ לפני
-התשובה (#1951), והסוכן נתן לזה ‏WAIT_HELPER_S (30ש') — בזמן שה-curl עצמו
-מוכן לשקט של ‏HTTP_STALL_TIMEOUT (120ש').
+התשובה (#1951), והסוכן נתן לזה WAIT_HELPER_S (30ש') — בזמן שה-curl עצמו
+מוכן לשקט של HTTP_STALL_TIMEOUT (120ש').
 
 שני הצדדים נבדקים כאן:
-* הסוכן — ההמתנה להעלאה תחומה ב-‏HTTP_STALL_TIMEOUT + WAIT_HELPER_S. שרת
+* הסוכן — ההמתנה להעלאה תחומה ב-HTTP_STALL_TIMEOUT + WAIT_HELPER_S. שרת
   שעונה באיחור אחרי הבייט האחרון אינו מכשיל, ושרת שלא עונה גם בתוך הסכום
   עדיין נכשל בגלוי (עיקרון 5). הזמנים מקוצרים ב-env; היחס הוא שנבדק.
-* השרת — ‏fdatasync תקופתי תוך כדי הזרם, כך שה-fsync הסופי חסום במרווח.
+* השרת — fdatasync תקופתי תוך כדי הזרם, כך שה-fsync הסופי חסום במרווח.
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ import pytest
 from native import requires_native
 from test_agent import BASH
 
-#: ‏curl מזויף: מרוקן את ה-fifo של `-T` כמו CURL_SINK, ואז "השרת" מתעכב
-#: ‏UP_SLEEP שניות לפני התשובה — ה-fsync שאחרי הבייט האחרון.
+#: curl מזויף: מרוקן את ה-fifo של `-T` כמו CURL_SINK, ואז "השרת" מתעכב
+#: UP_SLEEP שניות לפני התשובה — ה-fsync שאחרי הבייט האחרון.
 CURL_SLOW_ANSWER = (
     '#!/bin/sh\n'
     'case "$*" in */preflight*) echo \'{"status":"ok","reason":"space checked"}\'; exit 0 ;; esac\n'
@@ -50,7 +50,7 @@ def _capture(tmp_path, helper, stall, sleep):
 
 @requires_bash
 def test_a_server_answering_after_the_helper_ceiling_does_not_fail_the_capture(tmp_path):
-    """תשובה 3ש' אחרי הבייט האחרון, ‏WAIT_HELPER_S=1: לפני התיקון — ‏124."""
+    """תשובה 3ש' אחרי הבייט האחרון, WAIT_HELPER_S=1: לפני התיקון — 124."""
     box, _run, out = _capture(tmp_path, helper=1, stall=6, sleep=3)
     assert out.strip().endswith("rc=0"), \
         out + (box / "capture.out").read_text(encoding="utf-8", errors="replace")
@@ -68,9 +68,9 @@ def test_the_upload_wait_is_still_capped_at_the_sum(tmp_path):
 
 
 def test_a_stream_larger_than_the_interval_is_synced_along_the_way(server, images_root, monkeypatch):
-    """ארבעה chunks של 1MiB, מרווח של 1MiB: ‏fdatasync באמצע, לא רק בסוף.
+    """ארבעה chunks של 1MiB, מרווח של 1MiB: fdatasync באמצע, לא רק בסוף.
 
-    ‏httpx ASGITransport ולא TestClient: ‏TestClient מאחד את הגוף להודעה אחת,
+    httpx ASGITransport ולא TestClient: TestClient מאחד את הגוף להודעה אחת,
     ואז הזרם הוא אצווה אחת — בלי "תוך כדי" שאפשר לבדוק."""
     httpx = pytest.importorskip("httpx")
     pytest.importorskip("fastapi")
@@ -83,7 +83,7 @@ def test_a_stream_larger_than_the_interval_is_synced_along_the_way(server, image
     def recording_fdatasync(fd):
         synced.append(os.fstat(fd).st_size)
 
-    # ‏raising=False: בקוד שלפני התיקון אין SYNC_EVERY — הבקרה נכשלת על ההתנהגות.
+    # raising=False: בקוד שלפני התיקון אין SYNC_EVERY — הבקרה נכשלת על ההתנהגות.
     monkeypatch.setattr(capture, "SYNC_EVERY", capture.CHUNK, raising=False)
     monkeypatch.setattr(capture.os, "fdatasync", recording_fdatasync, raising=False)
     mac = setup_build_machine(server)

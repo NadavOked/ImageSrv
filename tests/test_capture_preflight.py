@@ -34,13 +34,13 @@ def preflight(server, monkeypatch, parts, free=53_300_000_000, token=None):
     return task, response
 
 
-#: ‏#1737: מה שהקליטה רשאית לתפוס — הפנוי פחות הרזרבה למערכת (53.3GB − 10GiB).
+#: #1737: מה שהקליטה רשאית לתפוס — הפנוי פחות הרזרבה למערכת (53.3GB − 10GiB).
 ROOM = 53_300_000_000 - SYSTEM_RESERVE_BYTES
 
 
 @pytest.mark.parametrize("used,status", [
     (223_000_000_000, "refused"), (53_300_000_000, "refused"),
-    # ‏#1737: הגבול זז ברזרבה — בית אחד מעליו נדחה, בדיוק עליו מותר (עם אזהרה).
+    # #1737: הגבול זז ברזרבה — בית אחד מעליו נדחה, בדיוק עליו מותר (עם אזהרה).
     (ROOM + 1, "refused"), (ROOM, "warning"),
     (ROOM // 2 + 1, "warning"), (ROOM // 2, "ok"), (0, "ok"),
 ])

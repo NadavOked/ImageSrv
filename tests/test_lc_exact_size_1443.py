@@ -272,7 +272,7 @@ DISKS = ("lc_screen=local\nlc_inv=done\nlc_phase=idle\n"
          "lc_disk=1|sda|Samsung|S1|500107862016|ok|ok|Windows|3|212000000000|500107862016|1|\n"
          "lc_disk=3|sdc|Crucial|S3|480103981056|ok|ok|Windows|4|212400000000|480103981056|1|\n"
          "lc_fit=sda|fits|480103981056|\n")
-FSI, PDI, RLM = "⁨", "⁩", "‏"
+FSI, PDI, RLM = "\u2068", "\u2069", "\u200f"
 
 
 @needs_cc

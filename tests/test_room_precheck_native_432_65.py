@@ -1,14 +1,14 @@
-"""‏#432 + #65 בגואי הנייטיב — מחשב הבנייה (הכרעת נדב 05/09: "הפלט אמור להיות
+"""#432 + #65 בגואי הנייטיב — מחשב הבנייה (הכרעת נדב 05/09: "הפלט אמור להיות
 במחשב בנייה") ומסך ההמתנה של המשכפל (#1304).
 
 החוליות:
 
-* **הסוכן** (‏`guistate.sh`): ‏`round.precheck` → ‏`room_warn=`, ‏`round.missing` →
-  ‏`room_missing=`, ו-`link_state` כשדה 12 של `room_drawer=`.
-* **הגשר** (‏`guibridge.sh` → ‏`room_poweroff` ב-`roomflow.sh`): ‏`room-poweroff`
+* **הסוכן** (`guistate.sh`): `round.precheck` → `room_warn=`, `round.missing` →
+  `room_missing=`, ו-`link_state` כשדה 12 של `room_drawer=`.
+* **הגשר** (`guibridge.sh` → `room_poweroff` ב-`roomflow.sh`): `room-poweroff`
   עם `cloner=`/`confirm=` שולח POST ל-`/room/missing/<mac>/poweroff`; MAC פגום —
   כלום לא נשלח.
-* **הגואי** (‏`--png`, על המעבדה בלבד): הקופסה הכתומה במסך הגל החי, שני חלונות
+* **הגואי** (`--png`, על המעבדה בלבד): הקופסה הכתומה במסך הגל החי, שני חלונות
   האישור (התחל בכל זאת — כתום; כבה אותו — אדום), ומגירה איטית במסך ההמתנה.
 """
 
@@ -79,7 +79,7 @@ def test_gui_state_carries_the_warnings_the_missing_and_the_link(tmp_path):
     assert f"room_warn={WARN}" in lines, lines
     missing = [l for l in lines if l.startswith("room_missing=")]
     assert missing[0] == f"room_missing={C2}|CLONE-02|drawers|1|{MISSING}|0", missing
-    # ‏null שם → ריק; ‏"|" בטקסט אינו שובר את הרשומה
+    # null שם → ריק; "|" בטקסט אינו שובר את הרשומה
     assert missing[1] == "room_missing=3c:52:82:a1:00:23||off|0|CLONE-03 כבוי   או לא מחובר|0", missing
     machine = next(l for l in lines if l.startswith(f"machine=CLONE-02|{C2}|"))
     assert machine.endswith("|1"), machine
@@ -156,7 +156,7 @@ def test_a_malformed_machine_posts_nothing(tmp_path):
 
 @requires_native(("bash", BASH), "jq", "awk")
 def test_wake_and_start_still_reach_their_endpoints(tmp_path):
-    """‏room-wake/room-start אוחדו לזרוע אחת ב-guibridge (קיר 300) — אותה פעולה."""
+    """room-wake/room-start אוחדו לזרוע אחת ב-guibridge (קיר 300) — אותה פעולה."""
     # 17/10: room-wake carries the picked cloners (cloner=); without them it posts
     # nothing (test_failed_round_not_stuck.py)
     for token, extra in (("room-start", ""), ("room-wake", "cloner=3c:52:82:a1:00:21\n")):
@@ -210,7 +210,7 @@ def _count(path: Path, token: str, theme: str = "light") -> int:
 @_GUI
 def test_the_live_room_draws_the_orange_box_and_a_slow_slot(tmp_path):
     """אותו מצב פעמיים — עם הרשומות ובלעדיהן, וקישור `ok` מול `slow`: הקופסה
-    הכתומה (‏warning-soft) והפס הכתום של המגירה האיטית מוסיפים פיקסלים."""
+    הכתומה (warning-soft) והפס הכתום של המגירה האיטית מוסיפים פיקסלים."""
     binary = _build_gui(tmp_path)
     _render(binary, BASE.format(link="ok"), tmp_path / "plain")
     _render(binary, BASE.format(link="slow") + EXTRA, tmp_path / "pre")
@@ -240,7 +240,7 @@ def test_without_warnings_or_missing_there_is_no_box(tmp_path):
 
 @_GUI
 def test_the_two_dialogs_route_and_carry_their_colours(tmp_path):
-    """‏"התחל בכל זאת" כתום (‏BTN_WARN — שואל, לא חוסם), "כבה אותו" אדום (‏BTN_DANGER)."""
+    """"התחל בכל זאת" כתום (BTN_WARN — שואל, לא חוסם), "כבה אותו" אדום (BTN_DANGER)."""
     binary = _build_gui(tmp_path)
     _render(binary, BASE.format(link="slow") + EXTRA, tmp_path / "d")
     for theme in ("light", "dark"):

@@ -1,11 +1,12 @@
 """#1773: chrony client source, server ACLs, and measured clock status."""
 from __future__ import annotations
-import ipaddress, re, sqlite3, subprocess, time
+import ipaddress, logging, re, sqlite3, subprocess, time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 from server.db import get_setting, journal, set_settings
 
+log = logging.getLogger("imagesrv.timesync")
 SETTING = "ntp_servers"
 #: #2765: a third source -- no time server at all. "1" = the operator set the time by
 #: hand (the machine has no internet), and ``MANUAL_AT_SETTING`` is the UTC moment he did.
@@ -55,8 +56,10 @@ def parse_local(value: object, zone: str) -> int:
     try:
         from zoneinfo import ZoneInfo
         local = datetime(year, month, day, hour, minute, second, tzinfo=ZoneInfo(zone))
-    except ValueError as exc: raise ValueError(f"תאריך או שעה לא קיימים: {exc}") from exc
-    except Exception as exc: raise RuntimeError(f"אזור הזמן {zone} לא נקרא: {exc}") from exc
+    except ValueError as exc: raise ValueError("תאריך או שעה לא קיימים (למשל 31 בפברואר)") from exc
+    except Exception as exc:
+        log.warning("timesync: zone %s unreadable: %s", zone, exc)   # #2543
+        raise RuntimeError(f"אזור הזמן {zone} לא נקרא — הפרטים ביומן השרת") from exc
     return int(local.timestamp())
 
 def local_text(iso: str, zone: str) -> str:
@@ -81,8 +84,14 @@ def _run(command: list[str], timeout: int = 10) -> subprocess.CompletedProcess:
 
 def _read(command: list[str]) -> str:
     try: done = _run(command)
-    except (OSError, subprocess.TimeoutExpired) as exc: raise RuntimeError(f"הפקודה לא רצה: {exc}") from exc
-    if done.returncode: raise RuntimeError(f"הפקודה החזירה {done.returncode}: {(done.stderr or done.stdout).strip()}")
+    # #2543: the OS text and the command's own output go to the server log; the sentence is ours.
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        log.warning("timesync: %s could not run: %s", " ".join(command), exc)
+        raise RuntimeError(f"הפקודה {command[0]} לא רצה — הפרטים ביומן השרת") from exc
+    if done.returncode:
+        log.warning("timesync: %s rc=%s: %s", " ".join(command), done.returncode,
+                    (done.stderr or done.stdout).strip()[:300])
+        raise RuntimeError(f"הפקודה {command[0]} החזירה {done.returncode} — הפרטים ביומן השרת")
     return done.stdout
 
 def _ensure_confdir() -> None:
@@ -158,10 +167,17 @@ def default_hooks() -> Hooks:
             "sources": lambda: _read(["chronyc", "-n", "sources"]), "sleep": time.sleep,
             "now": lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")}
 
+def said(exc: BaseException) -> str:
+    """#2543: what the operator reads. A RuntimeError here is a sentence this module wrote;
+    any other text (OSError, sqlite3) goes to the server log and the operator gets ours."""
+    if isinstance(exc, RuntimeError): return str(exc)
+    log.warning("timesync: %s: %s", type(exc).__name__, exc)
+    return "שינוי מקור השעה נכשל — הפרטים ביומן השרת"
+
 def apply(value: str, hooks: Hooks) -> dict:
     value = validate(value)
     try: hooks["ensure_confdir"](); hooks["write"](value); hooks["restart"]()
-    except Exception as exc: raise RuntimeError(str(exc)) from exc
+    except Exception as exc: raise RuntimeError(said(exc)) from exc
     result = status(hooks)
     if result["synchronized"] is None: raise RuntimeError("מצב סנכרון השעון לא נקרא לאחר השינוי")
     return result
@@ -170,9 +186,9 @@ def apply_manual(epoch: int, hooks: Hooks) -> dict:
     """#2765: no time server; the time is the operator's. chrony is rewritten without sources and
     restarted FIRST -- a chrony that still had a source could step the clock back after we set it."""
     try: hooks["ensure_confdir"](); hooks["write_manual"](); hooks["restart"]()
-    except Exception as exc: raise RuntimeError(str(exc)) from exc
+    except Exception as exc: raise RuntimeError(said(exc)) from exc
     try: rtc = hooks["set_time"](epoch)
-    except Exception as exc: raise RuntimeError(str(exc)) from exc
+    except Exception as exc: raise RuntimeError(said(exc)) from exc
     return {"set_at": datetime.fromtimestamp(epoch, timezone.utc).isoformat(timespec="seconds"),
             "rtc_written": rtc, "status": status(hooks)}
 
@@ -242,12 +258,12 @@ def check_now(hooks: Hooks) -> dict:
 def apply_on_start(conn: sqlite3.Connection, hooks: Hooks) -> None:
     if is_manual(conn):   # #2765: the source is "none" -- the time itself is kept by the clock, not set again
         try: hooks["ensure_confdir"](); hooks["write_manual"](); hooks["restart"]()
-        except Exception as exc: journal(conn, "timesync_apply_failed", f"ידני: {exc}")
+        except Exception as exc: journal(conn, "timesync_apply_failed", f"ידני: {said(exc)}")
         else: journal(conn, "timesync_applied", "ידני — בלי שרת זמן")
         return
     value = configured(conn)
     try: apply(value, hooks)
-    except Exception as exc: journal(conn, "timesync_apply_failed", f"{value or 'אוטומטי'}: {exc}")
+    except Exception as exc: journal(conn, "timesync_apply_failed", f"{value or 'אוטומטי'}: {said(exc)}")
     else: journal(conn, "timesync_applied", value or "אוטומטי")
 
 def save(conn: sqlite3.Connection, value: str, set_at: str | None = None) -> None:

@@ -1,10 +1,10 @@
-"""‏#1810 — כרטיס ההפצה נשמר כשם; שם שאינו קיים במערכת אדום בבריאות.
+"""#1810 — כרטיס ההפצה נשמר כשם; שם שאינו קיים במערכת אדום בבריאות.
 
-שדרוג דביאן, ‏vNIC שנוסף ב-ESXi או כרטיס שהוחלף משנים את השם. חוקי nft,
-‏dnsmasq ו-udp-sender נטענים בלי שגיאה ואינם תופסים כלום — ועד כאן הבריאות
+שדרוג דביאן, vNIC שנוסף ב-ESXi או כרטיס שהוחלף משנים את השם. חוקי nft,
+dnsmasq ו-udp-sender נטענים בלי שגיאה ואינם תופסים כלום — ועד כאן הבריאות
 הייתה ירוקה ("כרטיסי רשת: מחוברים") וחומת האש "פעילה".
 
-כל מה שנוגע במכונה מוזרק (‏interfaces, ‏nft_ruleset, ‏deploy).
+כל מה שנוגע במכונה מוזרק (interfaces, nft_ruleset, deploy).
 """
 
 from __future__ import annotations
@@ -97,7 +97,7 @@ def test_an_empty_interface_list_is_not_checked_rather_than_ok(health):
 
 
 def test_a_stored_deploy_nic_that_vanished_is_red_not_just_unconfigured(health):
-    """הפער שנמדד במעבדה ב-04/11: אחרי אתחול שבו שם הכרטיס השתנה, ‏`resolve`
+    """הפער שנמדד במעבדה ב-04/11: אחרי אתחול שבו שם הכרטיס השתנה, `resolve`
     מחזיר "לא הוגדר" (אף כרטיס אינו נושא את ה-IP) — אבל `deploy:interface` עדיין
     ב-DB. "לא הוגדר" ו"הוגדר על כרטיס שאינו קיים" הם שני מצבים שונים."""
     from server.db import set_setting

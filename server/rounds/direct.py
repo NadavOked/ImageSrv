@@ -1,4 +1,4 @@
-"""הפצה ישירה — מחשב הבנייה כמקור המולטיקאסט (‏#715, ‏v1: ‏#888).
+"""הפצה ישירה — מחשב הבנייה כמקור המולטיקאסט (#715, v1: #888).
 
 "בלי לעבור בשרת" = האימג' **לא נכתב ולא נשמר** בשרת (הכרעת נדב 12/09).
 השרת נשאר המתזמר היחיד: סבב חדר (`room.py`) עם `source_kind =
@@ -8,15 +8,15 @@ build_disk`, גל רגיל על `grp_CLONERS`, אותם דיווחי התקדמ�
 הדיסק שלו, קריאה בלבד. הבייטים זורמים מחשב-בנייה → מגירות נבחרות.
 
 מה כן עובר בשרת: **המניפסט**. מחשב הבנייה קורא את הדיסק פעם אחת כמו
-בקליטה (‏`capture_disk` בלי העלאה), שולח את המניפסט ל-`PUT
+בקליטה (`capture_disk` בלי העלאה), שולח את המניפסט ל-`PUT
 /api/v1/direct/<task>/manifest`, והמקבלים מושכים אותו כ-`GET
 /api/v1/images/live_…/manifest` — אותו נתיב בדיוק כמו לאימג' מהספרייה,
 ולכן `restore.sh` **אינו משתנה**. הגל אינו מתחיל לפני שהמניפסט הגיע:
 מקבל שמתחיל בלי מניפסט אין לו מה לאמת מולו (עיקרון 5).
 
-סבב **יחיד**: הסט הנבחר קבוע (‏`target_slots` חובה, ‏`target_drives` =
+סבב **יחיד**: הסט הנבחר קבוע (`target_slots` חובה, `target_drives` =
 סכומו), ובסיום הגל הסבב נסגר — גם אם מגירה נכשלה. גלי-החלפה מדיסק חי
-נשארו הכרעה פתוחה (‏#715), והמלצת Astra — סבב יחיד — היא מה שנבנה.
+נשארו הכרעה פתוחה (#715), והמלצת Astra — סבב יחיד — היא מה שנבנה.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from server.rounds import drive_rates, prompt_hold, room, room_drivers, sender a
 from server.agent import registry
 from server.disks import disk_rule
 from server.db import _write_lock, journal, now_iso, update_one, writing
-from server.library.images import restore_refusal
+from server.library.images import journal_ntfs_inconsistent, restore_refusal
 from server.rounds.sessions import SessionError
 from server.core.tasks import (ORIGIN_CONSOLE, OPEN_STATES, TOKEN_HEADER, active_task, claim_task,
                                new_token)
@@ -45,10 +45,10 @@ log = logging.getLogger("imagesrv.direct")
 #: ערכי `room_rounds.source_kind`.
 LIBRARY = "library"
 BUILD_DISK = "build_disk"
-#: סוג המשימה של המקור (‏`tasks.type`).
+#: סוג המשימה של המקור (`tasks.type`).
 DIRECT_SEND = "direct_send"
 #: מזהה אימג' **חי** — לא בספרייה, לא בתיקייה. הצורה שונה מ-`img_` בכוונה:
-#: ‏`valid_image_id` דוחה אותו, ולכן שום נתיב שכותב לספרייה לא יקבל אותו.
+#: `valid_image_id` דוחה אותו, ולכן שום נתיב שכותב לספרייה לא יקבל אותו.
 LIVE_ID = re.compile(r"live_[0-9a-f]{8}")
 SHA256 = re.compile(r"[0-9a-f]{64}")
 
@@ -89,7 +89,7 @@ def open_direct_round(ctx, source: dict, target_slots, target_drives,
 
     כל הבדיקות לפני כל כתיבה (עיקרון 5/7): המקור חייב להיות מחשב
     **בנייה** רשום שדיווח את הדיסק הזה ב-hello, בלי משימה פתוחה; היעדים
-    הם בחירה מפורשת (‏`_validate_target_slots` — אין "כל הדיסקים"); ואם
+    הם בחירה מפורשת (`_validate_target_slots` — אין "כל הדיסקים"); ואם
     נמסר `target_drives` הוא חייב להיות בדיוק מספר הדיסקים שנבחרו — סבב
     יחיד, לא מצטבר.
     """
@@ -109,7 +109,7 @@ def open_direct_round(ctx, source: dict, target_slots, target_drives,
         raise ValueError(
             f"מחשב הבנייה לא דיווח דיסק בשם {disk!r}"
             + (f" (דיווח: {', '.join(sorted(devs))})" if devs else " (לא דיווח דיסקים)"))
-    # ‏#2848 (נדב 11/11): צהוב — נכשל בשיכפול הקודם / כתיבה לא הושלמה — אינו מקור, בכל מסלול
+    # #2848 (נדב 11/11): צהוב — נכשל בשיכפול הקודם / כתיבה לא הושלמה — אינו מקור, בכל מסלול
     # (קונסולה, קיוסק מחשב הבנייה), באותו טקסט שהמסכים כותבים (`disk_rule`).
     why = disk_rule.source_refusal(ctx.conn, mac, disk)
     if why:
@@ -119,7 +119,7 @@ def open_direct_round(ctx, source: dict, target_slots, target_drives,
     if target_drives is not None and int(target_drives) != count:
         raise ValueError(
             f"בהפצה ישירה היעד הוא בדיוק הדיסקים שנבחרו ({count}) — סבב יחיד")
-    # ‏#1269: אותה בחירת דרייברים לכל דיסק כמו בסבב מהספרייה.
+    # #1269: אותה בחירת דרייברים לכל דיסק כמו בסבב מהספרייה.
     chosen_drivers = room_drivers.validate(driver_models, selected,
                                            room.library_packages(ctx))
     if active_task(ctx.conn, mac) is not None:
@@ -127,12 +127,12 @@ def open_direct_round(ctx, source: dict, target_slots, target_drives,
     if room.active_round(ctx.conn) is not None:
         raise SessionError("כבר יש סבב חדר פעיל")
 
-    # ‏#1955: הזהות של הדיסק שנבחר, כמו בקליטה (#1901) — סדר `sda`/`sdb` מתחלף.
+    # #1955: הזהות של הדיסק שנבחר, כמו בקליטה (#1901) — סדר `sda`/`sdb` מתחלף.
     from server.library.capture import _reported_serial  # noqa: PLC0415 — capture→api→direct
     serial = _reported_serial(ctx.conn, mac, disk)
     image_id = new_live_id()
     roster = [item["mac"] for item in selected]
-    # הגל תופס את חריץ השידור היחיד ומעיר **רק את הנבחרים** — ‏roster הוא
+    # הגל תופס את חריץ השידור היחיד ומעיר **רק את הנבחרים** — roster הוא
     # מה ש-`wake_class` (app.py) מעביר ל-WoL, ומה ש-`in_roster` מסנן ב-hello.
     wave_id = ctx.store.open(
         room.CLONERS_GROUP, image_id, prefix="ROOM",
@@ -142,8 +142,8 @@ def open_direct_round(ctx, source: dict, target_slots, target_drives,
     round_id = "room_" + secrets.token_hex(4)
     now = now_iso()
     # המשימה והסבב הם כתיבה אחת: סבב בלי משימה הוא גל שאיש לא ישדר בו,
-    # ומשימה בלי סבב היא מקור בלי גל. ‏`_write_lock, writing` כמו כל כותב
-    # במסלול בקשה (#272/#313) — ‏store.open כבר סגר את הטרנזאקציה שלו.
+    # ומשימה בלי סבב היא מקור בלי גל. `_write_lock, writing` כמו כל כותב
+    # במסלול בקשה (#272/#313) — store.open כבר סגר את הטרנזאקציה שלו.
     with _write_lock, writing(ctx.conn):
         ctx.conn.execute(
             "INSERT INTO tasks (id, mac, type, disk, disk_serial, image_id, name, description,"
@@ -205,7 +205,7 @@ def store_live_manifest(conn: sqlite3.Connection, task_row: dict,
     """שומר את המניפסט על הסבב הפעיל של המשימה ומעביר אותה ל-running.
 
     שתי הכתיבות הן טרנזאקציה אחת; סבב שאינו פעיל עוד זורק **בתוך**
-    ‏`writing`, וה-rollback שלו הוא מה שמשחרר את הנעילה (#54).
+    `writing`, וה-rollback שלו הוא מה שמשחרר את הנעילה (#54).
     """
     with _write_lock, writing(conn):
         cur = conn.execute(
@@ -249,17 +249,17 @@ def round_for_task(conn: sqlite3.Connection, task_id: str) -> sqlite3.Row | None
     ).fetchone()
 
 
-#: ‏#1952: תקרה לרשימת הכתובות ב-`direct_finished` — גל אמיתי הוא עשרות.
+#: #1952: תקרה לרשימת הכתובות ב-`direct_finished` — גל אמיתי הוא עשרות.
 FINISHED_MAX = 256
 
 
 def clean_finished(body: dict) -> tuple[bool, list[str] | None]:
-    """‏#1952: השדה `direct_finished` של ה-hello (ממשק 2) — (דווח?, הכתובות).
+    """#1952: השדה `direct_finished` של ה-hello (ממשק 2) — (דווח?, הכתובות).
 
     מחשב הבנייה שולח אותו לפני כל מחיצה מהשנייה: מי קיבל את הקודמת עד
     סופה, מהלוג של ה-udp-sender **שלו** (לשרת אין את הלוג הזה במסלול
-    הישיר). היעדר = לא דווח (המחיצה הראשונה, סוכן ישן). ‏`null`, או צורה
-    פגומה — דווח ש"לא נבדק" (‏None): עיקרון 5, לא "אף אחד"."""
+    הישיר). היעדר = לא דווח (המחיצה הראשונה, סוכן ישן). `null`, או צורה
+    פגומה — דווח ש"לא נבדק" (None): עיקרון 5, לא "אף אחד"."""
     if "direct_finished" not in body:
         return False, None
     raw = body["direct_finished"]
@@ -274,10 +274,10 @@ def clean_finished(body: dict) -> tuple[bool, list[str] | None]:
 
 def _lost_still_receiving(conn: sqlite3.Connection, store, session_id: str,
                           finished: list[str] | None) -> int:
-    """‏#1952 — הכלל של #1950 (‏`SenderEngine._receivers`) במסלול הישיר: חבר
+    """#1952 — הכלל של #1950 (`SenderEngine._receivers`) במסלול הישיר: חבר
     `lost` שכתובתו קיבלה את המחיצה הקודמת עד סופה יתחבר גם לבאה, ובלי
     לספור אותו הוא "ממלא" את `--min-receivers` והשולח יוצא בלי החבר החי.
-    חבר שנזרק — לא נספר (‏#1432). ‏`finished` None (לא נבדק) או כתובת לא
+    חבר שנזרק — לא נספר (#1432). `finished` None (לא נבדק) או כתובת לא
     ידועה — נספר: המחיר הוא המתנה של `--max-wait`, לא מגירה חיה ריקה."""
     still = [ip for ip in store.lost_ips(session_id)
              if finished is None or ip is None or ip in finished]
@@ -292,9 +292,9 @@ def task_block(conn: sqlite3.Connection, store, task: dict,
                finished: list[str] | None = None) -> dict:
     """השדה `task.direct` של ממשק 3: מצב הגל, כמה הצטרפו, ופרמטרי השידור.
 
-    ‏`multicast` הוא `SenderEngine.multicast_params()` — אותם ערכים שהמנוע
-    היה משדר בהם; ‏`min_receivers` נגזר כאן, מהגל, כמו ב-`_run` של המנוע.
-    ‏`finished_reported`/`finished` — ‏`clean_finished` של ה-hello (‏#1952).
+    `multicast` הוא `SenderEngine.multicast_params()` — אותם ערכים שהמנוע
+    היה משדר בהם; `min_receivers` נגזר כאן, מהגל, כמו ב-`_run` של המנוע.
+    `finished_reported`/`finished` — `clean_finished` של ה-hello (#1952).
     """
     round_row = round_for_task(conn, task["id"])
     wave = None
@@ -304,7 +304,7 @@ def task_block(conn: sqlite3.Connection, store, task: dict,
             (round_row["wave_session_id"],),
         ).fetchone()
     receivers = store.live_count(wave["id"]) if wave is not None else 0
-    # ‏#1613: אפס חיים כי **מישהו סיים** (`done`/`partial` — מצבים שהסוכן
+    # #1613: אפס חיים כי **מישהו סיים** (`done`/`partial` — מצבים שהסוכן
     # מדווח רק אחרי הזרם האחרון) הוא גל שנכתב וממתין לדופק שיסגור אותו,
     # לא "לא נשאר מי שיקבל". רק כשאף חבר לא קיבל את הזרם כולו — כישלון.
     if (wave is not None and wave["state"] == "running" and receivers == 0
@@ -335,8 +335,8 @@ def task_block(conn: sqlite3.Connection, store, task: dict,
     # קצב אוטומטי: מה שנבחר לגל כשיצא, ולפני כן קצב הפתיחה — לא "בלי תקרה".
     params["max_bitrate"] = drive_rates.direct_bitrate(
         conn, wave["id"] if wave is not None else None, params.get("max_bitrate"))
-    # ‏#1581: מה ש-`SenderEngine._hold_for_asks` שואל — חברי הגל שעומדים עכשיו על
-    # שאלה למפעיל (‏`prompt_hold`, אותן תקרות). המקור אינו מפעיל את udp-sender של
+    # #1581: מה ש-`SenderEngine._hold_for_asks` שואל — חברי הגל שעומדים עכשיו על
+    # שאלה למפעיל (`prompt_hold`, אותן תקרות). המקור אינו מפעיל את udp-sender של
     # המחיצה הראשונה כל עוד המספר אינו 0, ועוצר אותו אם הוא עולה לפני הבייט הראשון.
     held = (len(prompt_hold.waiting_in_wave(conn, wave["id"]))
             if wave is not None and wave["state"] == "running" else 0)
@@ -351,7 +351,7 @@ def task_block(conn: sqlite3.Connection, store, task: dict,
 
 def is_direct_wave(conn: sqlite3.Connection, session_id: str) -> bool:
     """האם הגל הזה שייך לסבב שהמקור שלו הוא מחשב בנייה — ואז `SenderEngine`
-    של השרת **אינו** מתחיל (‏app.py)."""
+    של השרת **אינו** מתחיל (app.py)."""
     return conn.execute(
         "SELECT 1 FROM room_rounds WHERE wave_session_id = ? AND source_kind = ?",
         (session_id, BUILD_DISK),
@@ -402,15 +402,15 @@ def source_view(conn: sqlite3.Connection, round_row: sqlite3.Row) -> dict:
     }
 
 
-#: ‏#2906 — הסיבה על שורת הסבב כשמחשב הבנייה שלח מניפסט חי שהשרת דחה.
+#: #2906 — הסיבה על שורת הסבב כשמחשב הבנייה שלח מניפסט חי שהשרת דחה.
 MANIFEST_REJECTED = "מחשב הבנייה שלח מניפסט שנדחה"
 
 
 def fail_round_of_task(conn: sqlite3.Connection, store, task_id: str,
                        reason: str) -> bool:
-    """‏#2906: משימת המקור נכשלה — הסבב שלה והגל שלו נכשלים באותה טרנזאקציה.
+    """#2906: משימת המקור נכשלה — הסבב שלה והגל שלו נכשלים באותה טרנזאקציה.
 
-    בלי זה: `tasks=failed`, ‏`room_rounds=active`, ‏`sessions=open` לעד — `tick`
+    בלי זה: `tasks=failed`, `room_rounds=active`, `sessions=open` לעד — `tick`
     ממתין למניפסט שלא יגיע (`source_ready`), החריץ תפוס והמשכפלים ממתינים.
     החברים שעוד לא סיימו מקבלים `failed` עם הסיבה (`SessionStore.fail`).
     גל שכבר אינו open/running (נכשל או נסגר) לא נוגעים בו כאן: ה-`tick`
@@ -452,7 +452,7 @@ def cancel_source_task(conn: sqlite3.Connection, round_row: sqlite3.Row,
 
 
 def create_direct_router(ctx) -> APIRouter:
-    """מה שמחשב הבנייה מדבר איתו כמקור. הרשאה: אסימון המשימה (‏#530)."""
+    """מה שמחשב הבנייה מדבר איתו כמקור. הרשאה: אסימון המשימה (#530)."""
     router = APIRouter(prefix="/api/v1/direct")
 
     def task_for(task_id: str, request: Request) -> dict:
@@ -475,7 +475,7 @@ def create_direct_router(ctx) -> APIRouter:
 
     @router.put("/{task_id}/manifest")
     async def put_manifest(task_id: str, request: Request):
-        # ‏#2750: כמו #2748 — רק קריאת הגוף על הלולאה; כל עבודת ה-sqlite (לפניה
+        # #2750: כמו #2748 — רק קריאת הגוף על הלולאה; כל עבודת ה-sqlite (לפניה
         # ואחריה) בתהליכון מהמאגר.
         row, refused = await run_in_threadpool(_manifest_gate, task_id, request)
         if refused is not None:
@@ -485,7 +485,7 @@ def create_direct_router(ctx) -> APIRouter:
 
     def _manifest_gate(task_id: str, request: Request):
         row = task_for(task_id, request)
-        # ‏#997: שומר שני לצד האסימון — כתובת המקור מול חכירת ה-MAC של
+        # #997: שומר שני לצד האסימון — כתובת המקור מול חכירת ה-MAC של
         # המשימה. לפני קריאת הגוף, כדי שזר עם אסימון לא יכשיל את המשימה
         # (`_fail`) במניפסט פגום. ייבוא מקומי: `api` מייבא את המודול הזה.
         from server.agent.api import identity_gate
@@ -502,7 +502,7 @@ def create_direct_router(ctx) -> APIRouter:
         if problem:
             _fail(task_id, problem, row["mac"])
             raise HTTPException(400, problem)
-        # ‏#381 בנתיב הזה: מניפסט שנושא קשירה למכונה אחת (`machine_mac`)
+        # #381 בנתיב הזה: מניפסט שנושא קשירה למכונה אחת (`machine_mac`)
         # אינו נשפך על מגירות של מכונות אחרות. מחשב בנייה אינו קושר —
         # אבל השער יושב במי שפותח שחזור, לא בהנחה על מי ישלח (עיקרון 5).
         round_row = round_for_task(ctx.conn, task_id)
@@ -518,10 +518,11 @@ def create_direct_router(ctx) -> APIRouter:
             store_live_manifest(ctx.conn, row, manifest)
         except SessionError as exc:
             raise HTTPException(409, str(exc))
+        journal_ntfs_inconsistent(ctx.conn, manifest, f'{task_id} {row["image_id"]}', machine=row["mac"])
         return {"ok": True, "image_id": row["image_id"]}
 
     def _fail(task_id: str, message: str, mac: str) -> None:
-        # ‏#2916 §2: רק משימה פתוחה נכשלת — ביטול (או סגירת הסבב) שהקדים אותנו נשאר.
+        # #2916 §2: רק משימה פתוחה נכשלת — ביטול (או סגירת הסבב) שהקדים אותנו נשאר.
         with _write_lock, writing(ctx.conn):
             failed = update_one(
                 ctx.conn,
@@ -531,7 +532,7 @@ def create_direct_router(ctx) -> APIRouter:
             )
         if failed:
             journal(ctx.conn, "direct_failed", f"{task_id} {message}", machine=mac)
-            # ‏#2906: המשימה כבר נכשלה — והסבב והגל שלה לא נכשלים איתה בלי זה.
+            # #2906: המשימה כבר נכשלה — והסבב והגל שלה לא נכשלים איתה בלי זה.
             # release/v0.92.0 (#2916 §2): only when this call failed it -- a cancel that came first stays.
             fail_round_of_task(ctx.conn, ctx.store, task_id, f"{MANIFEST_REJECTED}: {message}")
 
