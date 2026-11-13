@@ -22,6 +22,12 @@
 
 ## [Unreleased]
 
+### v0.94.3 (13/11)
+
+v0.94.2 plus one line in the test workflow. The product is the same as v0.94.2. v0.94.2 reached the public repository, but its CI was red, so v0.94.3 is the first public release with a green CI.
+
+- **The public CI installs xorriso** (Fixed). `tests/test_iso_sbom_2999.py` (#2999, in v0.94.0) builds a small real ISO with xorriso, and `.github/workflows/tests.yml` did not install it. The lab runs, where xorriso is installed, were green. The public CI of v0.94.2 runs with `IMAGESRV_REQUIRE_NATIVE=1`, so the missing tool was 4 setup errors, not skips, in shards 1/4 and 4/4. That is the guard doing its job. `xorriso` is now in the workflow's `apt-get install` line. No product file changed.
+
 ### v0.94.2 (13/11)
 
 v0.94.1 plus one file. v0.94.1 stayed internal: its publish was refused before any push, and that refusal is what this version fixes.
