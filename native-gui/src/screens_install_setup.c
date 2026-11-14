@@ -105,15 +105,15 @@ static double raid_row(App *a,cairo_t *cr,double x,double y,double w){
 
 void install_draw_disk(App *a,cairo_t *cr,InstallLayout l){
     InstallState *s=&a->install;const Theme *t=a->theme;double x=l.body.x,w=l.body.w,y=l.body.y;
-    Rect table={x,y,w,42+s->ndisks*58};install_card(cr,t,table);disk_head(cr,t,(Rect){x+1,y+1,w-2,40});
-    for(int i=0;i<s->ndisks;i++){disk_row(a,cr,(Rect){x+1,y+41+i*58,w-2,58},i);}if(a->focus>=HIT_INSTALL_DISK_BASE&&a->focus<HIT_INSTALL_DISK_BASE+INSTALL_MAX_DISKS)install_focus_ring(a,cr,table,a->focus);y+=table.h+16;   /* #2776: the list is one stop */
+    if(s->ndisks){Rect table={x,y,w,42+s->ndisks*58};install_card(cr,t,table);disk_head(cr,t,(Rect){x+1,y+1,w-2,40});   /* #2968: no disks = no empty table */
+    for(int i=0;i<s->ndisks;i++){disk_row(a,cr,(Rect){x+1,y+41+i*58,w-2,58},i);}if(a->focus>=HIT_INSTALL_DISK_BASE&&a->focus<HIT_INSTALL_DISK_BASE+INSTALL_MAX_DISKS)install_focus_ring(a,cr,table,a->focus);y+=table.h+16;}   /* #2776: the list is one stop */
     y=raid_row(a,cr,x,y,w);
     int selectable=0;for(int i=0;i<s->ndisks;i++)selectable+=!s->disks[i].iso;
     if(s->disk>=0&&s->disk<s->ndisks){char warning[320];const InstallDisk *d=&s->disks[s->disk];if(s->raid!=RAID_NONE)snprintf(warning,sizeof warning,"כל הנתונים ב-%d הכוננים יימחקו, והם יאוחדו למערך %s",install_raid_count(s),RAID_OPTS[s->raid].label);else snprintf(warning,sizeof warning,"כל הנתונים בדיסק %s · %.1f GiB · %s יימחקו",d->model[0]?d->model:"ללא שם",d->size_bytes/1073741824.0,d->path);install_text_r(cr,t,warning,14,600,x+w,y,w,t->danger_fg);y+=30;
         int bad=install_smart_failed(s);if(bad>=0){char dev[64],why[320];bidi_isolate(s->disks[bad].path,dev,sizeof dev);snprintf(why,sizeof why,"בדיקת SMART של הדיסק %s נכשלה: הדיסק עצמו מדווח שהוא עומד להיכשל. מומלץ לבחור דיסק אחר.",dev);   /* isolated: else "/dev/sda" reads "dev/sda/" */install_text_r(cr,t,why,13,600,x+w,y,w,t->danger_fg);y+=26;}   /* #3007 */
         disk_ack(a,cr,(Rect){x+w-180,y,180,44},1);}   /* #2147: name, size and device */
     else if(selectable){install_text_r(cr,t,"בחר את הדיסק להתקנה — כל הנתונים בו יימחקו",14,600,x+w,y,w,t->ink);y+=30;disk_ack(a,cr,(Rect){x+w-180,y,180,44},0);}   /* #2147: more than one disk, none chosen */
-    else{install_text_r(cr,t,"לא נמצא דיסק חוקי להתקנה.",13,600,x+w,y,w,t->danger_fg);y+=48;}
+    else{install_text_r(cr,t,"לא נמצא דיסק להתקנה",13,600,x+w,y,w,t->danger_fg);y+=48;}
     if(s->field_error[0][0]){install_text_r(cr,t,s->field_error[0],12,600,x+w,y+50,w,t->danger_fg);}
     if(s->existing_disk>=0&&s->existing_disk<s->ndisks){InstallDisk *d=&s->disks[s->existing_disk];Rect card={x,y+58,w,72};install_card(cr,t,card);install_text_r(cr,t,"נמצאה התקנה קיימת — אתחל מהדיסק",14,600,x+w-16,card.y+14,w-220,t->ink);install_text_ltr(cr,d->model,11,400,x+180,card.y+42,w-210,t->muted);Text boot=btn_label(cr,"אתחל מהדיסק");draw_btn(a,cr,(Rect){x+16,card.y+17,150,38},&boot,BTN_PLAIN,HIT_INSTALL_BOOT_LOCAL);install_focus_ring(a,cr,(Rect){x+16,card.y+17,150,38},HIT_INSTALL_BOOT_LOCAL);text_free(&boot);}
     install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,0,s->disk>=0&&s->disk_ack);

@@ -37,6 +37,7 @@ typedef struct {
 #define HIT_INSTALL_MT_BASE        1160   /* #2866: the manual time's boxes, + MT_YEAR..MT_MINUTE */
 #define HIT_INSTALL_MT_UP_BASE     1165   /* their ▲ */
 #define HIT_INSTALL_MT_DOWN_BASE   1170   /* their ▼ */
+#define HIT_INSTALL_OSK_TOGGLE     1199   /* #2969: the footer button "מקלדת מסך" -- same as F5 */
 #define HIT_INSTALL_OSK_BASE       1200   /* #2778: + a key of install_osk.h; + OSK_KEYS = the panel itself */
 
 void install_demo(App *a, int view);

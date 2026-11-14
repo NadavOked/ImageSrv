@@ -159,9 +159,17 @@ function chain_local {
         ls
     fi
     echo "Contact IT. This computer will stay powered on."
+    unset stay_wait
+    if sleep 0; then
+        set stay_wait=y
+    else
+        echo "GRUB could not load its sleep command. This screen is held without it."
+    fi
     set stay_on=y
     while [ "$stay_on" = "y" ]; do
-        sleep --interruptible 60
+        if [ "$stay_wait" = "y" ]; then
+            sleep --interruptible 60
+        fi
     done
 }
 
@@ -181,9 +189,17 @@ function try_local {
     echo "Nothing will be started."
     echo "Fix the server or the network, then power-cycle this machine."
     echo "Contact IT. This computer will stay powered on."
+    unset stay_wait
+    if sleep 0; then
+        set stay_wait=y
+    else
+        echo "GRUB could not load its sleep command. This screen is held without it."
+    fi
     set stay_on=y
     while [ "$stay_on" = "y" ]; do
-        sleep --interruptible 60
+        if [ "$stay_wait" = "y" ]; then
+            sleep --interruptible 60
+        fi
     done
 }
 
@@ -682,13 +698,27 @@ run install -d -m 0755 "$TFTP_ROOT" "$TFTP_ROOT/grub" "$HTTP_ROOT" "$IMAGES_DIR"
 
 # #1066: initiator name ייחודי לשרת הזה — hostname + machine-id.
 # נכתב מחדש לאותו ערך בכל הרצת מתקין (יציב), כדי ש-ACL ב-NAS לא יזוז.
+# C-FIL-05: machine-id שלא נקרא אינו uuid אקראי בשקט — שם אקראי בכל הרצה היה
+# מזיז את השם, וה-ACL ב-NAS היה מפסיק להתאים בלי שאיש יידע. שם קיים נשאר
+# כמו שהוא; רק כשאין שם בכלל נכתב אקראי, ובגלוי.
+write_initiator_name() {   # $1 = initiatorname.iscsi, $2 = machine-id
+    local host uuid
+    host=$(hostname -s 2>/dev/null || echo imagesrv)
+    uuid=$(cat "$2" 2>/dev/null) || uuid=""
+    if [[ -z "$uuid" ]]; then
+        if [[ -s "$1" ]]; then
+            warn "$2 לא נקרא — שם ה-initiator הקיים נשאר כמו שהוא, כדי שה-ACL ב-NAS לא יזוז: $(cat "$1")"
+            return 0
+        fi
+        uuid=$(cat /proc/sys/kernel/random/uuid)
+        warn "$2 לא נקרא — נכתב שם initiator אקראי ($uuid). הוא יישאר בהרצות הבאות; ב-NAS צריך לאשר אותו"
+    fi
+    printf 'InitiatorName=iqn.2026-09.imagesrv.%s:%s\n' "$host" "$uuid" > "$1"
+    chmod 0644 "$1"
+}
 if (( ! DRY_RUN )); then
     run install -d -m 0755 /etc/iscsi
-    host=$(hostname -s 2>/dev/null || echo imagesrv)
-    uuid=$(cat /etc/machine-id 2>/dev/null || cat /proc/sys/kernel/random/uuid)
-    printf 'InitiatorName=iqn.2026-09.imagesrv.%s:%s\n' "$host" "$uuid" \
-        > /etc/iscsi/initiatorname.iscsi
-    chmod 0644 /etc/iscsi/initiatorname.iscsi
+    write_initiator_name /etc/iscsi/initiatorname.iscsi /etc/machine-id
 fi
 run install -m 0644 "$SHIM_SRC" "$TFTP_ROOT/bootx64.efi"
 run install -m 0644 "$GRUB_SRC" "$TFTP_ROOT/grubx64.efi"

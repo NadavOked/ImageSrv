@@ -1,0 +1,22 @@
+# ה-baseline של cppcheck על agent/*.c — ממצאים קיימים שאינם מאדימים.
+# (אין כאן שורת `#` בודדת: ‏cppcheck 2.13 קורא אותה כהשתקה בלי id ונופל,
+# "Failed to add suppression. No id" — נמדד 13/11. שורה ריקה מותרת.)
+
+# תחביר: `--suppressions-list` של cppcheck. שורה לממצא, `id:file`, ומעליה
+# שורת הערה עם הנימוק ומספר ה-Issue. ממצא שאינו כאן מאדים את ה-job
+# `cppcheck` ב-.github/workflows/c-hardening.yml.
+
+# נמדד ב-13/11 על ה-testrunner, ‏agent/*.c של main ‏8df77ed8, עם הדגלים
+# של ה-workflow (warning,performance,portability, ‏--inconclusive,
+# ‏--check-level=exhaustive): ‏cppcheck 2.13.0 (ubuntu-24.04) — אפס
+# ממצאים; ‏cppcheck 2.17.1 (דביאן 13) — אפס ממצאים. לכן הרשימה ריקה.
+
+# ‏`style` אינו חוסם ואינו כאן; הוא מודפס בסיכום הריצה. ב-13/11 על 2.13.0: 9
+# ממצאים, ונבדקו אחד-אחד. אף אחד מהם אינו באג:
+#   variableScope ×6 (fanout.c:1301, ‏monitor.c:403×2/458/460/775) — סגנון;
+#   unreadVariable fanout.c:1587 — ‏`progress_fd = -1` אחרי close, איפוס מגונן;
+#   unusedStructMember monitor.c:638 `seq` — נקרא דרך offsetof (monitor.c:957),
+#     שקר של הכלי;
+#   constParameterCallback monitor.c:606 — חתימת callback של libvncserver.
+
+# מוסיפים שורה רק עם Issue פתוח. השתקה בלי Issue היא ממצא שנעלם.

@@ -45,6 +45,10 @@ on:
 permissions:
   contents: read
 
+env:
+  SHELLCHECK_VERSION: "0.11.0"
+  SHELLCHECK_SHA256: "b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6"
+
 # ריצה אחת לכל ענף. דחיפה חדשה בזמן שקודמתה עוד רצה מבטלת אותה —
 # אבל **רק ב-PR**: על main כל ריצה היא הרשומה של מיזוג, ואין לבטל אותה.
 concurrency:
@@ -60,14 +64,33 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install shellcheck
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+      # 13/11: הבינארי הרשמי של 0.11.0 ולא apt. ‏apt של Ubuntu נותן 0.9.0, ושם
+      # אין את הניב `busybox` (נוסף ב-0.10.0) — והסוכן רץ ב-busybox ash, לא
+      # ב-POSIX sh מופשט. ‏sha256 נבדק מול הערך שכאן, כמו ב-gitleaks.yml;
+      # הערך זהה ל-digest ש-GitHub מפרסם לנכס, ונמדד גם בהורדה ב-13/11.
+      - name: Install shellcheck (official release, sha256-verified)
+        run: |
+          set -euo pipefail
+          F="shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/$F" \
+            "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/${F}"
+          echo "${SHELLCHECK_SHA256}  $RUNNER_TEMP/${F}" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/shellcheck"
+          tar xzf "$RUNNER_TEMP/$F" -C "$RUNNER_TEMP/shellcheck" --strip-components=1 \
+            "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          echo "$RUNNER_TEMP/shellcheck" >> "$GITHUB_PATH"
 
+      # הגרסה נקראת בחזרה מהבינארי שעל ה-PATH: ‏shellcheck של התמונה שקדם
+      # לו ב-PATH היה רץ במקומו, ו-`-s busybox` היה נופל עליו או מדלג.
       - name: Version
-        run: shellcheck --version
+        run: |
+          set -euo pipefail
+          command -v shellcheck
+          shellcheck --version
+          shellcheck --version | grep -qx "version: ${SHELLCHECK_VERSION}"
 
       # הגזירה עצמה. שני פלטים:
-      #   $RUNNER_TEMP/agent — נתיב לשורה, כולם `sh`
+      #   $RUNNER_TEMP/agent — נתיב לשורה, כולם `busybox` (עד 13/11: `sh`)
       #   $RUNNER_TEMP/rest  — "<ניב> <נתיב>" לשורה
       - name: Collect shell files from the tree
         run: |
@@ -118,10 +141,13 @@ jobs:
             exit 1
           fi
 
-      - name: Agent (POSIX sh) — blocking
+      # ‏`-s busybox` (13/11): זה הניב שהסוכן רץ בו בפועל ב-initramfs. נמדד ב-13/11
+      # על 146 קובצי הסוכן (0.11.0): אפס ממצאי warning גם ב-`sh` וגם ב-`busybox`,
+      # ואותם 330 ממצאי style בשניהם — המעבר אינו משתיק ואינו מוסיף דבר היום.
+      - name: Agent (busybox ash) — blocking
         run: |
           set -euo pipefail
-          xargs -r shellcheck -s sh --severity=warning \
+          xargs -r shellcheck -s busybox --severity=warning \
             --exclude=SC1090,SC2034,SC2154 < "$RUNNER_TEMP/agent"
 
       # כל השאר, כל קובץ בניב שנגזר לו. הלולאה אינה עוצרת בכשל הראשון:
@@ -147,7 +173,7 @@ jobs:
             echo "## ShellCheck — הדוח המלא"
             echo
             echo '```'
-            xargs -r shellcheck -s sh --severity=style -f gcc \
+            xargs -r shellcheck -s busybox --severity=style -f gcc \
               < "$RUNNER_TEMP/agent" || true
             while read -r sh f; do
               shellcheck -s "$sh" --severity=style -f gcc "$f" || true

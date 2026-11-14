@@ -23,6 +23,8 @@ mount -t devtmpfs devtmpfs /dev   2>/dev/null
 mkdir -p /dev/pts /run
 mount -t devpts   devpts   /dev/pts 2>/dev/null
 mount -t tmpfs    tmpfs    /run   2>/dev/null
+# B-SYS-01: a failed mount above is no evidence -- the kernel often mounts devtmpfs itself (EBUSY). What is there is.
+[ -r /proc/uptime ] && [ -d /sys/class ] && [ -c /dev/null ] || echo "ImageSrv: WARNING: /proc, /sys or /dev is missing -- drivers and NICs will not be found"
 mkdir -p /run/imagesrv
 # Boot markers (#1452): /proc/uptime at init, modules, nic, link and dhcp.
 # No network before DHCP, so they ride on the agent-net breadcrumb below.
@@ -161,7 +163,8 @@ fi
 # (principle 1). -V is how the deploy NIC's dnsmasq tells us from Windows
 # (AGENT_VENDOR_CLASS in server/dhcp.py).
 
-ip link set lo up 2>/dev/null
+ip link set lo up 2>/dev/null || { echo "ImageSrv: WARNING: lo did not come up -- nothing on 127.0.0.1 answers (B-NET-01)"
+    echo "[$(date -u +%H:%M:%S)] WARNING: lo did not come up (B-NET-01)" >> "${RUN_DIR:-/run/imagesrv}/agent.log"; }
 
 IFACE=""
 _foreign=""

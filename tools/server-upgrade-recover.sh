@@ -31,6 +31,7 @@ export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.fsync GIT_CONFIG_VALUE_0=objects
 DB="$DATA_DIR/imagesrv.db"
 [[ -f "$STATE" ]] || exit 0
 
+# C-SYS-24: logger is a second copy; the echo reaches the journal through the unit either way.
 say() { logger -t imagesrv-upgrade-recover "$*" 2>/dev/null || :; echo "upgrade-recover: $*"; }
 
 IFS=$'\t' read -r REPO PREV TAG STAGE HTTP_ROOT DB_SNAP_VER PAYLOAD_SAVED < <(python3 - "$STATE" <<'PYEOF'

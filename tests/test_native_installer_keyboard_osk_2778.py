@@ -71,6 +71,9 @@ static const struct { const char *name; int id; } NAMES[] = {
     { "root_password", HIT_INSTALL_ROOT_PASSWORD }, { "root_confirm", HIT_INSTALL_ROOT_CONFIRM },
     { "show_password", HIT_INSTALL_SHOW_PASSWORD }, { "show_confirm", HIT_INSTALL_SHOW_CONFIRM },
     { "show_root", HIT_INSTALL_SHOW_ROOT }, { "show_root_confirm", HIT_INSTALL_SHOW_ROOT_CONFIRM }, { "next", HIT_INSTALL_NEXT }, { "back", HIT_INSTALL_BACK },
+#ifdef HIT_INSTALL_OSK_TOGGLE
+    { "kbd_button", HIT_INSTALL_OSK_TOGGLE },   /* #2969: the footer's "מקלדת מסך" */
+#endif
     { "dhcp", HIT_INSTALL_DHCP }, { "static", HIT_INSTALL_STATIC }, { "check", HIT_INSTALL_CHECK_PRIMARY },
 };
 
@@ -161,6 +164,14 @@ int main(int argc, char **argv) {
             for (int h = a->nhits - 1; h >= 0 && found < 0; h--) if (!strcmp(name_of(a->hits[h].id), t + 6)) found = h;
             if (found < 0) { printf("nohit\t%s\n", t + 6); continue; }
             Rect r = a->hits[found].r; click_at(a, &b, r.x + r.w / 2, r.y + r.h / 2);
+        } else if (!strncmp(t, "open=", 5)) {
+            /* #2969: the mouse's way to the keyboard on the screen: a click on the field (focus only), then the footer's button */
+            for (int pass = 0; pass < 2; pass++) {
+                const char *want = pass ? "kbd_button" : t + 5; int found = -1;
+                for (int h = a->nhits - 1; h >= 0 && found < 0; h--) if (!strcmp(name_of(a->hits[h].id), want)) found = h;
+                if (found < 0) { printf("nohit\t%s\n", want); continue; }
+                Rect r = a->hits[found].r; click_at(a, &b, r.x + r.w / 2, r.y + r.h / 2);
+            }
         } else if (!strncmp(t, "drag=", 5)) {
             /* drag=NAME,DX,DY: press in the middle of NAME, move by half and by all of
              * (DX,DY) with the button held, let go, and move on 40px -- which must not drag */
@@ -274,11 +285,32 @@ FIELDS = [
 
 @NATIVE
 @pytest.mark.parametrize(("view", "setup", "field"), FIELDS, ids=[f[2] for f in FIELDS])
-def test_a_click_on_a_field_opens_the_keyboard_on_the_screen(driver, tmp_path, view, setup, field):
+def test_the_footer_button_after_a_click_on_a_field_opens_the_keyboard_on_the_screen(driver, tmp_path, view, setup, field):
+    states, hits, _ = _run(driver, tmp_path, f"view={view}", *setup, f"open={field}", "hits")
+    assert states[-1]["focus"] == field
+    assert states[-1]["osk"] == "1", f"{field}: the button did not open the keyboard"
+    assert "osk:done" in hits["keys"] and "osk:1" in hits["keys"], "the keyboard is not on the screen"
+
+
+@NATIVE
+@pytest.mark.parametrize(("view", "setup", "field"), FIELDS, ids=[f[2] for f in FIELDS])
+def test_a_click_on_a_field_only_moves_the_focus_2969(driver, tmp_path, view, setup, field):
+    """#2969 (נדב 12/11, v0.92.0 על ברזל): מי שיש לו עכבר יש לו מקלדת. לחיצה על שדה מעבירה פוקוס בלבד."""
     states, hits, _ = _run(driver, tmp_path, f"view={view}", *setup, f"click={field}", "hits")
     assert states[-1]["focus"] == field
-    assert states[-1]["osk"] == "1", f"{field}: a click did not open the keyboard"
-    assert "osk:done" in hits["keys"] and "osk:1" in hits["keys"], "the keyboard is not on the screen"
+    assert states[-1]["osk"] == "0", f"{field}: a click on the field opened the keyboard"
+    assert not [k for k in hits["keys"] if k.startswith("osk:")], "the keyboard is on the screen"
+
+
+@NATIVE
+def test_the_footer_button_toggles_it_and_is_there_only_where_a_field_is_2969(driver, tmp_path):
+    """הכפתור "מקלדת מסך" (גם למסך מגע, שאין לו F5): פותח וסוגר; במסך בלי שדות הוא אינו."""
+    states, hits, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "click=hostname", "click=kbd_button", "hits",
+                           "click=kbd_button", "hits")
+    assert [s["osk"] for s in states if s["tok"] in ("click=kbd_button",)] == ["1", "0"]
+    assert "kbd_button" in hits["snaps"][0]["keys"]
+    _, nofield, _ = _run(driver, tmp_path, f"view={SUMMARY}", "hits")
+    assert "kbd_button" not in nofield["keys"], "the button on a screen with no field"
 
 
 @NATIVE
@@ -299,7 +331,7 @@ def _keys(text: str) -> list[str]:
 @NATIVE
 def test_the_keys_type_an_address_over_the_seed(driver, tmp_path):
     """#2777 גם מהעכבר: השדה נבחר בהגעה, והמקש הראשון מחליף את ערך ה-DHCP."""
-    states, _, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "click=address", *_keys("10.0.0.2"),
+    states, _, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "open=address", *_keys("10.0.0.2"),
                         "key=TAB", *_keys("255.255.255.0"))   # in the middle of the screen the keyboard is over the mask
     assert states[2]["address"] == "10.44.10.37", "the demo NIC's lease seeds the field (#2096)"
     assert states[-1]["address"] == "10.0.0.2"
@@ -309,7 +341,7 @@ def test_the_keys_type_an_address_over_the_seed(driver, tmp_path):
 
 @NATIVE
 def test_shift_is_for_the_next_key_only(driver, tmp_path):
-    states, _, _ = _run(driver, tmp_path, f"view={ADMIN}", "click=password", "click=osk:shift", "click=osk:a",
+    states, _, _ = _run(driver, tmp_path, f"view={ADMIN}", "open=password", "click=osk:shift", "click=osk:a",
                         "click=osk:b", "click=osk:shift", "click=osk:1", "click=osk:shift", "click=osk:shift", "click=osk:c")
     assert _col(states, "shift")[2:] == ["1", "0", "0", "1", "0", "1", "0", "0"]
     assert states[-1]["password"] == "Ab!c"
@@ -318,13 +350,13 @@ def test_shift_is_for_the_next_key_only(driver, tmp_path):
 @NATIVE
 def test_every_ascii_character_a_password_may_hold_is_on_the_keyboard(driver, tmp_path):
     """הסיסמה דורשת תו מיוחד, וכל תו שאינו אות או ספרה נחשב (gui-bridge.sh) — אז כולם על המקלדת."""
-    _, hits, _ = _run(driver, tmp_path, f"view={ADMIN}", "click=password", "hits")
+    _, hits, _ = _run(driver, tmp_path, f"view={ADMIN}", "open=password", "hits")
     lower = {k[4:] for k in hits["keys"] if k.startswith("osk:") and len(k) == 5}
     upper = "~!@#$%^&*()_+QWERTYUIOP{}|ASDFGHJKL:\"ZXCVBNM<>?"
     assert lower == set("`1234567890-=qwertyuiop[]\\asdfghjkl;'zxcvbnm,./")
     assert {"osk:shift", "osk:bksp", "osk:space", "osk:done"} <= set(hits["keys"])
     # with Shift, every key of the 47 gives the other half of printable ASCII
-    states, _, _ = _run(driver, tmp_path, f"view={ADMIN}", "click=password",
+    states, _, _ = _run(driver, tmp_path, f"view={ADMIN}", "open=password",
                         *[t for c in "`1234567890-=qwertyuiop[]\\asdfghjkl;'zxcvbnm,./" for t in ("click=osk:shift", f"click=osk:{c}")])
     assert states[-1]["password"] == upper, "in the order the keys were pressed"
     assert len(set(states[-1]["password"])) == 47
@@ -332,14 +364,14 @@ def test_every_ascii_character_a_password_may_hold_is_on_the_keyboard(driver, tm
 
 @NATIVE
 def test_delete_empties_a_selected_field_then_takes_one(driver, tmp_path):
-    states, _, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "click=gateway", "click=osk:bksp",
+    states, _, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "open=gateway", "click=osk:bksp",
                         *_keys("10.1"), "click=osk:bksp")
     assert _col(states, "gateway")[3:] == ["", "1", "10", "10.", "10.1", "10."]
 
 
 @NATIVE
 def test_space_types_a_space_between_two_time_servers(driver, tmp_path):
-    states, _, _ = _run(driver, tmp_path, f"view={TIME}", "ntp-org", "click=ntp_servers", *_keys("a"),
+    states, _, _ = _run(driver, tmp_path, f"view={TIME}", "ntp-org", "open=ntp_servers", *_keys("a"),
                         "click=osk:space", *_keys("b"))
     assert states[-1]["ntp"] == "a b"
 
@@ -347,7 +379,7 @@ def test_space_types_a_space_between_two_time_servers(driver, tmp_path):
 @NATIVE
 def test_a_key_on_the_primary_address_forgets_the_green_check(driver, tmp_path):
     """#1310 דרך המקלדת על המסך: עריכה מבטלת את הבדיקה, כמו מקש פיזי."""
-    states, _, bridge = _run(driver, tmp_path, f"view={ROLE}", "click=primary_url", *_keys("1"), "key=ENTER")
+    states, _, bridge = _run(driver, tmp_path, f"view={ROLE}", "open=primary_url", *_keys("1"), "key=ENTER")
     assert (states[1]["ok"], states[1]["checked"]) == ("1", "1")
     assert (states[2]["ok"], states[2]["checked"]) == ("0", "0")
     assert bridge == [] and states[-1]["view"] == str(ROLE)
@@ -356,7 +388,7 @@ def test_a_key_on_the_primary_address_forgets_the_green_check(driver, tmp_path):
 @NATIVE
 def test_a_password_typed_on_the_screen_stays_hidden(driver, tmp_path):
     """המקלדת לא נוגעת ב"הצג": השדה נשאר ממוסך, כמו בהקלדה פיזית."""
-    states, _, _ = _run(driver, tmp_path, f"view={ADMIN}", "click=password", *_keys("abc"))
+    states, _, _ = _run(driver, tmp_path, f"view={ADMIN}", "open=password", *_keys("abc"))
     assert set(_col(states, "shown")) == {"0"}
     assert states[-1]["password"] == "abc"
 
@@ -365,7 +397,7 @@ def test_a_password_typed_on_the_screen_stays_hidden(driver, tmp_path):
 
 @NATIVE
 def test_the_physical_keyboard_types_while_the_keyboard_is_open(driver, tmp_path):
-    states, _, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "click=address", "T:10.1",
+    states, _, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "open=address", "T:10.1",
                         "click=osk:5", "key=BKSP", "T:7")
     assert _col(states, "address")[3:] == ["10.1", "10.15", "10.1", "10.17"]
     assert set(_col(states, "osk")[2:]) == {"1"}
@@ -373,7 +405,7 @@ def test_the_physical_keyboard_types_while_the_keyboard_is_open(driver, tmp_path
 
 @NATIVE
 def test_done_closes_it_and_its_keys_are_gone(driver, tmp_path):
-    states, hits, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "click=hostname", *_keys("srv"), "click=osk:done",
+    states, hits, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "open=hostname", *_keys("srv"), "click=osk:done",
                            "click=osk:x", "hits")
     assert _col(states, "osk")[1:] == ["1", "1", "1", "1", "0"]
     assert states[-1]["hostname"] == "srv" and states[-1]["focus"] == "hostname"
@@ -383,17 +415,17 @@ def test_done_closes_it_and_its_keys_are_gone(driver, tmp_path):
 
 @NATIVE
 def test_leaving_the_screen_closes_it(driver, tmp_path):
-    states, _, bridge = _run(driver, tmp_path, f"view={HOSTNAME}", "click=hostname", "key=ENTER")
+    states, _, bridge = _run(driver, tmp_path, f"view={HOSTNAME}", "open=hostname", "key=ENTER")
     assert bridge == ["validate"] and states[-1]["view"] == str(TIME)
     assert states[-1]["osk"] == "0"
-    states, _, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "click=hostname", "click=back")
+    states, _, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "open=hostname", "click=back")
     assert states[-1]["view"] == str(NETWORK) and states[-1]["osk"] == "0"
 
 
 @NATIVE
 def test_off_the_fields_it_hides_and_on_a_field_again_it_is_back(driver, tmp_path):
     """פתוחה נשארת פתוחה באותו מסך; היא מוסתרת כשאין שדה בפוקוס (DHCP לקח את השדות)."""
-    states, hits, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "click=address", "hits", "key=BTAB", "hits",
+    states, hits, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "open=address", "hits", "key=BTAB", "hits",
                            "T: ", "hits", "T: ", "hits")
     assert _col(states, "focus")[2:] == ["address", "static", "dhcp", "address"]
     assert set(_col(states, "osk")[2:]) == {"1"}, "on the same screen it stays open"
@@ -403,10 +435,10 @@ def test_off_the_fields_it_hides_and_on_a_field_again_it_is_back(driver, tmp_pat
 
 @NATIVE
 def test_a_click_between_the_keys_reaches_nothing_under_the_keyboard(driver, tmp_path):
-    _, hits, _ = _run(driver, tmp_path, f"view={ADMIN}", "click=password", "hits")
+    _, hits, _ = _run(driver, tmp_path, f"view={ADMIN}", "open=password", "hits")
     assert "osk:panel" in hits["keys"], "no keyboard on the screen"
     px, py, _, ph = hits["keys"]["osk:panel"]   # the bottom corner: below the keys, not the grip
-    states, _, _ = _run(driver, tmp_path, f"view={ADMIN}", "click=password", f"clickat={px + 3},{py + ph - 3}")
+    states, _, _ = _run(driver, tmp_path, f"view={ADMIN}", "open=password", f"clickat={px + 3},{py + ph - 3}")
     assert states[-1]["focus"] == "password" and states[-1]["osk"] == "1"
     assert states[-1]["password"] == states[1]["password"]
 
@@ -425,7 +457,7 @@ def _osk_keys(keys: dict) -> dict:
 @pytest.mark.parametrize(("view", "setup", "field"), FIELDS + [(ADMIN, ("lab",), "root_confirm")],
                          ids=[f[2] for f in FIELDS] + ["root_confirm-lab"])
 def test_it_opens_in_the_middle_of_the_whole_screen(driver, tmp_path, size, view, setup, field):
-    _, hits, _ = _run(driver, tmp_path, f"size={size}", f"view={view}", *setup, f"click={field}", "hits")
+    _, hits, _ = _run(driver, tmp_path, f"size={size}", f"view={view}", *setup, f"open={field}", "hits")
     keys = hits["keys"]
     sw, sh = hits["screen"]
     assert "osk:panel" in keys, f"{size} {field}: no keyboard on the screen"
@@ -446,7 +478,7 @@ def test_it_opens_in_the_middle_of_the_whole_screen(driver, tmp_path, size, view
 
 @NATIVE
 def test_the_keys_run_left_to_right_on_the_rtl_page(driver, tmp_path):
-    _, hits, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "click=address", "hits")
+    _, hits, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "open=address", "hits")
     keys = hits["keys"]
     for row in ("1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"):
         xs = [keys[f"osk:{c}"][0] for c in row]
@@ -458,7 +490,7 @@ def test_the_keys_run_left_to_right_on_the_rtl_page(driver, tmp_path):
 
 @NATIVE
 def test_the_dark_theme_draws_it_too(driver, tmp_path):
-    states, hits, _ = _run(driver, tmp_path, "dark", f"view={ADMIN}", "click=root_password", *_keys("x"), "hits")
+    states, hits, _ = _run(driver, tmp_path, "dark", f"view={ADMIN}", "open=root_password", *_keys("x"), "hits")
     assert states[-1]["root_password"] == "x" and "osk:done" in hits["keys"]
 
 
@@ -585,7 +617,7 @@ def test_a_click_from_field_to_field_shows_it_in_the_keyboard(driver, tmp_path, 
             if target == start:
                 continue
             states, hits, _ = _run(driver, tmp_path, f"size={size}", f"view={view}", *setup,
-                                   f"click={start}", "hits", f"click={target}", "hits")
+                                   f"open={start}", "hits", f"click={target}", "hits")
             before, after = hits["snaps"]
             tx, ty, tw, th = before["keys"][target]
             if _overlap(before["keys"]["osk:panel"], (tx + tw / 2, ty + th / 2, 0.001, 0.001)):
@@ -599,7 +631,7 @@ def test_a_click_from_field_to_field_shows_it_in_the_keyboard(driver, tmp_path, 
 def test_nadavs_case_the_root_password_under_the_keyboard_is_shown_in_it(driver, tmp_path):
     """הצילום של נדב: פוקוס בסיסמה, והלוח מעל "סיסמת root". Tab עד אליו: הלוח לא קופץ,
     והשדה מוצג בשורת התצוגה, ממוסך, עם התווית שלו."""
-    states, hits, _ = _run(driver, tmp_path, "size=1280x800", f"view={ADMIN}", "click=password", "hits",
+    states, hits, _ = _run(driver, tmp_path, "size=1280x800", f"view={ADMIN}", "open=password", "hits",
                            "key=TAB", "key=TAB", "key=TAB", "key=TAB", "hits")
     assert states[-1]["focus"] == "root_password"
     before, after = hits["snaps"]
@@ -613,10 +645,10 @@ def test_nadavs_case_the_root_password_under_the_keyboard_is_shown_in_it(driver,
 
 @NATIVE
 def test_the_preview_row_follows_typing_and_hides_a_password(driver, tmp_path):
-    states, _, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "click=address", *_keys("10.0"))
+    states, _, _ = _run(driver, tmp_path, f"view={NETWORK}", "static", "open=address", *_keys("10.0"))
     assert states[2]["label"] == "כתובת IP" and states[2]["preview"] == "10.44.10.37"
     assert states[-1]["preview"] == "10.0"
-    states, _, _ = _run(driver, tmp_path, f"view={ADMIN}", "click=password", *_keys("ab"), "click=show_password")
+    states, _, _ = _run(driver, tmp_path, f"view={ADMIN}", "open=password", *_keys("ab"), "click=show_password")
     assert states[-2]["preview"] == "••" and states[-2]["password"] == "ab"
     assert states[-1]["preview"] == "ab", "the eye shows it in the field and in the row alike"
 
@@ -626,7 +658,7 @@ def test_the_preview_row_follows_typing_and_hides_a_password(driver, tmp_path):
 @NATIVE
 @pytest.mark.parametrize("size", SIZES)
 def test_the_grip_drags_the_keyboard_and_letting_go_stops_it(driver, tmp_path, size):
-    _, hits, _ = _run(driver, tmp_path, f"size={size}", f"view={ADMIN}", "click=password", "hits",
+    _, hits, _ = _run(driver, tmp_path, f"size={size}", f"view={ADMIN}", "open=password", "hits",
                       "drag=osk:grip,-90,-70", "hits")
     before, after = (snap["keys"]["osk:panel"] for snap in hits["snaps"])
     assert after[0] == pytest.approx(before[0] - 90) and after[1] == pytest.approx(before[1] - 70), \
@@ -637,7 +669,7 @@ def test_the_grip_drags_the_keyboard_and_letting_go_stops_it(driver, tmp_path, s
 @NATIVE
 def test_a_drag_from_a_key_does_not_move_it(driver, tmp_path):
     """רק פס האחיזה גורר. לחיצה על מקש מקלידה, ותזוזה אחריה לא מזיזה את הלוח."""
-    states, hits, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "click=hostname", "hits", "drag=osk:q,-90,-70", "hits")
+    states, hits, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "open=hostname", "hits", "drag=osk:q,-90,-70", "hits")
     before, after = (snap["keys"]["osk:panel"] for snap in hits["snaps"])
     assert after == before and states[-1]["hostname"] == "q"
 
@@ -646,7 +678,7 @@ def test_a_drag_from_a_key_does_not_move_it(driver, tmp_path):
 @pytest.mark.parametrize("size", SIZES)
 @pytest.mark.parametrize(("dx", "dy"), [(-5000, -5000), (5000, 5000), (-5000, 5000), (5000, -5000)])
 def test_the_keyboard_never_leaves_the_screen(driver, tmp_path, size, dx, dy):
-    states, hits, _ = _run(driver, tmp_path, f"size={size}", f"view={NETWORK}", "static", "click=address",
+    states, hits, _ = _run(driver, tmp_path, f"size={size}", f"view={NETWORK}", "static", "open=address",
                            f"drag=osk:grip,{dx},{dy}", "hits")
     sw, sh = hits["screen"]
     assert "osk:panel" in hits["keys"]
@@ -659,11 +691,11 @@ def test_the_keyboard_never_leaves_the_screen(driver, tmp_path, size, dx, dy):
 @NATIVE
 def test_where_it_was_put_it_stays_across_done_f5_and_screens(driver, tmp_path):
     """זיכרון מיקום, כל עוד המתקין רץ: "סיום", F5 ומעבר מסך לא מחזירים אותו למרכז."""
-    _, hits, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "click=hostname", "drag=osk:grip,-120,-150", "hits",
+    _, hits, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "open=hostname", "drag=osk:grip,-120,-150", "hits",
                       "click=osk:done", "key=F5", "hits")
     moved, reopened = (snap["keys"].get("osk:panel") for snap in hits["snaps"])
     assert moved and reopened == moved, "'סיום' + F5 brought it back to the middle"
     # hostname -> time -> backup -> admin; F5 on the admin screen's first field
-    _, hits2, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "click=hostname", "drag=osk:grip,-120,-150",
+    _, hits2, _ = _run(driver, tmp_path, f"view={HOSTNAME}", "open=hostname", "drag=osk:grip,-120,-150",
                        "key=ENTER", "key=ENTER", "key=ENTER", "key=F5", "hits")
     assert hits2["keys"].get("osk:panel") == moved, "the next screens opened it elsewhere"

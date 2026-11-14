@@ -10,9 +10,10 @@ from __future__ import annotations
 import os
 import re
 import secrets
-import shutil
 import sqlite3
 from pathlib import Path
+
+from server.core.cleanup import remove_tree
 
 #: אורך האסימון בבתים. `token_hex(24)` = 48 תווים = 192 סיביות.
 #:
@@ -81,7 +82,7 @@ def discard_failed_staging(conn: sqlite3.Connection, library_root: Path, task_id
     שנכשל — רק בקליטה, ורק כשהיא באמת `failed` עכשיו (השורה, לא הדיווח)."""
     row = conn.execute("SELECT id, type, state FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if row is not None and row["type"] == "capture" and row["state"] == "failed":
-        shutil.rmtree(staging_dir(library_root, row["id"]), ignore_errors=True)
+        remove_tree(staging_dir(library_root, row["id"]), f"capture staging of {row['id']}")
 
 
 def active_task(conn: sqlite3.Connection, mac: str) -> dict | None:

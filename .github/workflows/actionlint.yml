@@ -1,0 +1,76 @@
+# actionlint — בדיקת תקינות של קובצי ה-workflow.
+#
+# למה זה כאן (13/11): workflow שבור אינו "אדום" — לפעמים הוא פשוט לא
+# נוצר. ביטוי `${{ }}` עם שם שגוי, ‏`needs` ל-job שאינו קיים או `if` שתמיד
+# שקר מייצרים בדיקה שאינה רצה, ו-`gate_verdict` מחכה לה עד שפג הזמן.
+# ‏actionlint תופס את אלה לפני הפרסום, ומריץ shellcheck על כל `run:`
+# (ה-runner מביא shellcheck; ‏shellcheck.yml סורק את קובצי המעטפת, לא את
+# ה-YAML).
+#
+# **הבדיקה הזו כן מאדימה**: נמדד מקומית ב-13/11 (actionlint 1.7.12,
+# ‏shellcheck 0.11.0) שה-workflows שיוצאים לציבורי נקיים חוץ מממצא אחד
+# ב-shellcheck.yml, שמוחרג בשמו למטה עד #3086. לכן ממצא חדש
+# הוא שינוי של היום, לא חוב ישן.
+#
+# הבינארי מאומת ב-sha256, כמו ב-gitleaks.yml: הורדה מהאינטרנט בתוך CI
+# היא בדיוק המקום שבו "זה עבד" אינו "זה מה שביקשנו".
+#
+# **רץ רק בציבורי** — התנאי על `github.repository`, כמו בשאר ה-workflows
+# החדשים: בפרטי workflow חדש נולד פעיל, ושם אין דקות.
+
+name: actionlint
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  ACTIONLINT_VERSION: "1.7.12"
+  ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  actionlint:
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch and verify actionlint
+        run: |
+          set -euo pipefail
+          F="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/$F" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${F}"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/${F}" | sha256sum -c -
+          tar xzf "$RUNNER_TEMP/$F" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -version
+
+      # כמו ב-shellcheck.yml: מתקינים במפורש ולא נשענים על תמונת ה-runner.
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+
+      # בלי shellcheck על ה-PATH הכלי מדלג על כל בלוקי ה-`run:` בשקט —
+      # "נקי" שלא בדק את המעטפת. לכן הנוכחות שלו נבדקת לפני ההרצה (עיקרון 5).
+      - name: Lint the workflows
+        run: |
+          set -euo pipefail
+          command -v shellcheck
+          shellcheck --version | sed -n 2p
+          # ההחרגה היחידה, ובשם: SC2209 על `sh=bash` ב-shellcheck.yml — מחרוזת
+          # שהוקצתה במכוון, לא פקודה. נמדד 13/11; #3086 יסיר
+          # את השורה הזו. כל ממצא אחר מאדים.
+          "$RUNNER_TEMP/actionlint" -color -shellcheck="$(command -v shellcheck)" \
+            -ignore 'SC2209:'

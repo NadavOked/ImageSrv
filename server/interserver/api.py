@@ -1461,7 +1461,11 @@ class InterserverTLSServer:
         while not self._stop.is_set():
             try:
                 raw, _addr = self._sock.accept()
-            except OSError:
+            except OSError as exc:
+                # A-NET-25: stop() closes the socket and lands here by design. Any other
+                # OSError (EMFILE, ...) ends the listener for good -- that is said.
+                if not self._stop.is_set():
+                    log.error("interserver: listener stopped accepting: %s", exc)
                 break
             # #2488: מעבר לתקרה — סגירה מיד, לפני ה-TLS ובלי תהליכון. שורת לוג
             # לראשון ואחר כך לכל מאה, כדי שהצפה לא תהפוך להצפת לוג.
@@ -1532,7 +1536,7 @@ class InterserverTLSServer:
             try:
                 conn.shutdown()
             except Exception:                                # noqa: BLE001
-                pass
+                pass  # TLS close_notify במאמץ; החיבור נסגר בשורה הבאה בכל מקרה
             conn.close()
             raw.close()
 

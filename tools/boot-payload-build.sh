@@ -236,7 +236,8 @@ say "Boot payload ready for $KVER: ${outputs[*]} $HTTP_ROOT/vmlinuz"
 # This is what makes a later "inputs unchanged" decision verifiable rather than
 # relying on timestamps or on the mere presence of files.
 if [[ -n "$WRITE_FLAGS" ]]; then
-    SOURCE_COMMIT=$(git -C "$APP_DIR" rev-parse HEAD 2>/dev/null || printf 'iso:%s' "$EPOCH")
+    # C-FIL-07: no checkout (an ISO install) is the expected fallback -- and it is said.
+    SOURCE_COMMIT=$(git -C "$APP_DIR" rev-parse HEAD 2>/dev/null)         || { SOURCE_COMMIT="iso:$EPOCH"; say "no git commit in $APP_DIR -- source_commit recorded as $SOURCE_COMMIT"; }
     python3 "$APP_DIR/deploy/boot-payload.py" create --source "$APP_DIR" \
         --kernel "$KVER" --flags "$WRITE_FLAGS" --payload-dir "$HTTP_ROOT" ${VERSION:+--version "$VERSION"} \
         --source-commit "$SOURCE_COMMIT" --output "$HTTP_ROOT/boot-payload.json"

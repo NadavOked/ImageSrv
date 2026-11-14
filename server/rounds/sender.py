@@ -296,7 +296,9 @@ def holder_names(pids: list[int]) -> str:
 def sender_log_tail(log_path: Path, limit: int = 400) -> str:
     try:
         text = log_path.read_text(errors="replace")
-    except OSError:
+    except OSError as exc:
+        # A-NET-04: an empty tail on the screen is "not read", not "nothing said".
+        log.warning("udp-sender log %s unreadable: %s", log_path, exc)
         return ""
     # Filter complete records before applying the display limit: cutting first
     # can turn a progress record into an unrecognizable fragment.

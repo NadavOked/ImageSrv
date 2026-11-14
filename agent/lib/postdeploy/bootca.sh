@@ -198,7 +198,7 @@ boot_ca_probe() {
             log "boot_ca: $_p -- לא הצלחנו לקרוא את החתימה" >&2
         fi
     done
-    [ -n "$ESPROOT" ] || umount "$_mnt" 2>/dev/null
+    [ -n "$ESPROOT" ] || umount "$_mnt" 2>>"$LOG_FILE" || log "boot_ca: WARNING: $_mnt (ro) left mounted" >&2   # B-DSK-47
     if [ "$_seen" -eq 0 ]; then
         BOOTCA_ERROR="לא נמצא מטען אתחול על ה-ESP"
         return 1

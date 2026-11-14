@@ -557,10 +557,24 @@ LOCAL_BOOT_PATHS: tuple[str, ...] = (
 #: `--interruptible` נשאר כדי שלחיצת מקש תיקלט (ב-`sleep` רגיל GRUB
 #: אינו קורא מהמקלדת כלל, והמסך נראה תקוע). היא אינה יציאה: הלולאה
 #: חוזרת אל ה-`sleep` בכל מקרה, ו-`stay_on` נקבע פעם אחת ולא נוגעים בו.
+#:
+#: #1734: `sleep` הוא מודול. כשהוא לא נטען (משכפל 2, 18/10: אחרי initrd שלא
+#: נטען), כל סיבוב ניסה לטעון אותו שוב — משיכה של `sleep.mod` מה-TFTP כל
+#: שנייה, בלי סוף. לכן בודקים פעם אחת (`sleep 0` חוזר מיד) ונכנסים להמתנה רק
+#: על ראיה שהוא נטען. בלעדיו המסך נשאר בלולאה שאינה טוענת דבר ואינה פונה לרשת
+#: (גם `sleep` של i386-pc הוא המתנה עסוקה), ואומר זאת.
 _STAY_POWERED_ON = """    echo "Contact IT. This computer will stay powered on."
+    unset stay_wait
+    if sleep 0; then
+        set stay_wait=y
+    else
+        echo "GRUB could not load its sleep command. This screen is held without it."
+    fi
     set stay_on=y
     while [ "$stay_on" = "y" ]; do
-        sleep --interruptible 60
+        if [ "$stay_wait" = "y" ]; then
+            sleep --interruptible 60
+        fi
     done"""
 
 # חיפוש מערכת ההפעלה המקומית. ה-ESP הוא FAT ולכן fat+part_gpt מספיקים;

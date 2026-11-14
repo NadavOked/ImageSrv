@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import socket
 import struct
 import threading
@@ -22,6 +23,8 @@ from server.console import auth, viewer_sessions
 from server.agent import registry
 from server.agent.api import ServerContext
 from server.db import get_setting, journal, monitor_rekeyed, set_setting
+
+log = logging.getLogger("imagesrv.monitor")
 
 MONITOR_PORT = 5900
 ONLINE_SECONDS = 90
@@ -638,7 +641,9 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
         while True:
             try:
                 payload = await reader.read(65536)
-            except (ConnectionError, OSError):
+            except (ConnectionError, OSError) as exc:
+                # A-NET-26: the outcome says "machine"; the line says why.
+                log.info("monitor: read from the machine failed: %s", exc)
                 outcome = "machine"
                 return
             if not payload:
@@ -669,8 +674,11 @@ async def bridge_browser(websocket: WebSocket, reader, writer, *,
         for task in not_done:
             if task is not evicted:
                 task.cancel()
-        await asyncio.gather(*(t for t in (*done, *not_done) if t is not evicted),
-                             return_exceptions=True)
+        results = await asyncio.gather(*(t for t in (*done, *not_done) if t is not evicted),
+                                       return_exceptions=True)
+        for failed in results:   # A-NET-26: a relay task that raised is said, not dropped
+            if isinstance(failed, Exception) and not isinstance(failed, WebSocketDisconnect):
+                log.info("monitor: relay task ended with %s: %s", type(failed).__name__, failed)
         if evicted is not None and evicted.done():
             code, reason = evicted.result()
             outcome = "moved"

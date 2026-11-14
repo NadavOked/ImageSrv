@@ -136,6 +136,7 @@ static void parse_disk(InstallState *s,char *value){
         else if(!strcmp(part,"bus"))snprintf(d->bus,sizeof d->bus,"%s",eq);else if(!strcmp(part,"removable"))d->removable=truth(eq);
         else if(!strcmp(part,"smart"))snprintf(d->smart,sizeof d->smart,"%s",eq);   /* #3007 */
         else if(!strcmp(part,"has"))snprintf(d->has,sizeof d->has,"%s",eq);else if(!strcmp(part,"iso"))d->iso=truth(eq);}
+    if(d->iso)return;   /* #2968: the medium being installed from is not a place to install to -- not listed at all */
     if(strstr(d->has,"imagesrv")||strstr(d->has,"ImageSrv"))s->existing_disk=s->ndisks;
     s->ndisks++;
 }
@@ -188,10 +189,10 @@ static void seed_from_nic(InstallState *s){if(s->nic<0||s->nic>=s->nnics)return;
 static void arm_reboot(InstallState *s,double now){s->reboot_at=now+INSTALL_AUTO_REBOOT_S;s->reboot_left=INSTALL_AUTO_REBOOT_S;}
 static void cancel_reboot(InstallState *s){s->reboot_at=0;s->reboot_left=0;}
 
-void install_demo(App *a,int view){InstallState *s=&a->install;memset(s,0,sizeof *s);s->active=s->demo=1;s->view=view;s->disk=0;s->disk_ack=1;s->existing_disk=1;s->ndisks=3;
+void install_demo(App *a,int view){InstallState *s=&a->install;memset(s,0,sizeof *s);s->active=s->demo=1;s->view=view;s->disk=0;s->disk_ack=1;s->existing_disk=1;s->ndisks=2;
     s->disks[0]=(InstallDisk){"/dev/sda","VMware Virtual disk","scsi","gpt:2 partitions (ext4, vfat)",64424509440ULL,0,0,""};
     s->disks[1]=(InstallDisk){"/dev/nvme0n1","Samsung SSD 980","nvme","imagesrv installation",1073741824000ULL,0,0,""};
-    s->disks[2]=(InstallDisk){"/dev/sr0","USB install media","usb","iso9660 filesystem",4294967296ULL,1,1,""};s->virt=INSTALL_VIRT_METAL;s->raid=RAID_1;   /* #1989: the RAID row on screen */
+    s->virt=INSTALL_VIRT_METAL;s->raid=RAID_1;   /* #1989: the RAID row on screen */
     s->nnics=3;s->nic=0;s->secondary=1;
     s->nics[0]=(InstallNic){"ens18","Intel I219-LM","52:54:00:aa:10:01","מחובר","10.44.10.37/24","DHCP · שער 10.44.10.254","10.44.10.37","255.255.255.0","10.44.10.254","10.44.10.2"};
     s->nics[1]=(InstallNic){"ens19","Intel I350","52:54:00:aa:12:01","מחובר","—","אין כתובת (אין DHCP ברשת הזו)","","","",""};s->nics[2]=(InstallNic){"ens20","Intel I350","52:54:00:aa:14:01","לא מודלק","—","—","","","",""};
@@ -416,7 +417,7 @@ static void osk_drag_to(App *a,const Event *e){InstallState *s=&a->install;doubl
     if(!e->down){s->osk_drag=0;return;}
     s->osk_x=fmax(0,fmin(e->x/k-s->osk_gx,s->osk_sw-s->osk_w));s->osk_y=fmax(0,fmin(e->y/k-s->osk_gy,s->osk_sh-s->osk_h));s->osk_placed=1;}
 static int install_event(App *a,InstallBridge *b,const Event *e){InstallState *s=&a->install;if(e->type==UIEV_MOVE){a->ptr_x=e->x;a->ptr_y=e->y;a->ptr_visible=!e->is_touch;osk_drag_to(a,e);return 0;}
-if(e->type==UIEV_CLICK){a->ptr_x=e->x;a->ptr_y=e->y;s->osk_drag=0;int id=app_hit(a,e->x,e->y);if(osk_press(a,b,id))return 0;choose(a,b,id);if(a->focus==id&&on_screen_field(s,id))s->osk=s->view;return 0;}
+if(e->type==UIEV_CLICK){a->ptr_x=e->x;a->ptr_y=e->y;s->osk_drag=0;int id=app_hit(a,e->x,e->y);if(osk_press(a,b,id))return 0;if(id==HIT_INSTALL_OSK_TOGGLE){osk_f5(a);return 0;}choose(a,b,id);return 0;}   /* #2969: a click on a field only moves the focus; the keyboard opens from F5 or the footer's button (a touch screen has that button too) */
 if(e->type==UIEV_KEY&&e->key==KEYSYM_F5){osk_f5(a);return 0;}   /* #2778 */if(e->type==UIEV_SCROLL&&(s->view==INSTALL_FAILED||(s->view==INSTALL_PROGRESS&&s->technical_open))){s->output_scroll-=e->delta*3;if(s->output_scroll<0)s->output_scroll=0;return 0;}/* keyboard-only servers (a rack has a keyboard, rarely a mouse): on the disk
  * screen Up/Down pick the disk, Space ticks "I understand"; Space also
  * toggles the technical details on the progress screen. */

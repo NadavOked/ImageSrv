@@ -169,6 +169,7 @@ drawer_feed_finish() {
     if ! wait_pid "$FEED_WATCH" "$_ff_max" "פענוח הזרם למגירות (מחיצה $_ff_i)"; then
         # No job control in ash: zstd and fanout outlive their subshell. Stopped
         # by pid, every partclone gets EOF and ends -- judged below, not left hanging.
+        # B-TIM-04: a kill that fails is a pid already gone; the rc files below are the evidence.
         kill -9 "$(cat "$RUN_DIR/zstd.pid" 2>/dev/null)" "$(cat "$RUN_DIR/dfanout.pid" 2>/dev/null)" 2>/dev/null
         unblock_fifo "$RUN_DIR/mid"
     fi

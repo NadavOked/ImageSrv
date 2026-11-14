@@ -811,6 +811,8 @@ def prepare_disk(device: str, label: str, run=None, sleep=None) -> HookResult:
         return HookResult(made.status, f"יצירת המחיצה נכשלה: {made.reason}")
     partition = ""
     for _ in range(PARTITION_WAIT_S):
+        # A-DSK-03: settle's result is not evidence either way -- the read of the
+        # partitions right below is the check, and its failure is returned by name.
         run(["udevadm", "settle", "--timeout=5"], timeout=10)
         parts, why = _partitions_of(run, device)
         if parts is None:

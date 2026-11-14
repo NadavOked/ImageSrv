@@ -1,0 +1,73 @@
+# OpenSSF Scorecard — ציון שרשרת האספקה של הריפו הציבורי.
+#
+# למה זה כאן (13/11, "כל מה שחינם ועוזר לנו מאושר"): Scorecard בודק את
+# מה שהסורקים האחרים אינם בודקים — הגנת ענפים, הרשאות של workflows,
+# actions שאינם נעולים ל-SHA, מדיניות אבטחה. התוצאה עולה כ-SARIF ללשונית
+# Security, ומתפרסמת ב-api.scorecard.dev בשביל ה-badge ב-README.
+#
+# **רץ רק בציבורי.** בפרטי ה-workflows כבויים ידנית (`disabled_manually`),
+# אבל workflow **חדש** נולד פעיל — ולכן התנאי על `github.repository` בכל
+# job. בלי SARIF חינמי ובלי דקות, בפרטי אין לו מה לעשות.
+#
+# ‏`publish_results: true` מגביל את ה-workflow (ראה README של
+# ossf/scorecard-action): אין `env`/`defaults` ברמת ה-workflow או ה-job,
+# אין שלבי `run` ב-job הזה, ורק actions מרשימה מאושרת. לכן אין כאן
+# שלב סיכום כמו בשאר הסורקים.
+#
+# הסריקה **אינה מפילה את ה-build**: ממצאים מגיעים ללשונית Security,
+# כמו ב-codeql.yml.
+
+name: scorecard
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  # Scorecard בודק את הגנת הענפים — שינוי בה הוא סיבה לסרוק מחדש.
+  branch_protection_rule:
+  schedule:
+    # פעם בשבוע: הבדיקות של Scorecard מתעדכנות גם כשהקוד לא השתנה.
+    - cron: "0 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  scorecard:
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # העלאת ה-SARIF ללשונית Security.
+      security-events: write
+      # ‏publish_results: אימות OIDC מול api.scorecard.dev (ה-badge).
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Keep the SARIF
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: results.sarif
+          category: scorecard

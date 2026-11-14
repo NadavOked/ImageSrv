@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
 from server.console import auth
+from server.core.cleanup import remove_tree
 from server.agent import registry
 from server.disks import disk_rule   # #2848
 from server.storage import disk_reserve, history as storage_history, locations as storage_locations
@@ -193,7 +194,7 @@ def _fail(conn, library_root: Path, task_id: str, message: str) -> None:
     ):
         return
     conn.commit()
-    shutil.rmtree(staging_dir(library_root, task_id), ignore_errors=True)
+    remove_tree(staging_dir(library_root, task_id), f"capture staging of {task_id}")
     journal(conn, "capture_failed", f"{task_id} {message}", machine=_task_mac(conn, task_id))
 
 
@@ -822,7 +823,7 @@ def _verify_failed(conn, library_root: Path, task_id: str, reason: str) -> str:
         )
     if not changed:
         return "gone"
-    shutil.rmtree(staging_dir(library_root, task_id), ignore_errors=True)
+    remove_tree(staging_dir(library_root, task_id), f"capture staging of {task_id}")
     journal(conn, "capture_failed", f"{task_id} {reason}", machine=_task_mac(conn, task_id))
     return "failed"
 
@@ -1001,7 +1002,7 @@ def create_console_capture_router(ctx: ServerContext) -> APIRouter:
         ):
             raise HTTPException(409, "המשימה כבר אינה פתוחה")
         ctx.conn.commit()
-        shutil.rmtree(staging_dir(ctx.library.root, task_id), ignore_errors=True)
+        remove_tree(staging_dir(ctx.library.root, task_id), f"capture staging of {task_id}")
         journal(ctx.conn, "capture_cancel", task_id, user[0], machine=_task_mac(ctx.conn, task_id))
         return {"ok": True}
 

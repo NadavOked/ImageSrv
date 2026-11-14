@@ -18,6 +18,7 @@ nic_model() {   # #2096: a readable name, never "VMware 0x07b0"; unknown = empty
 }
 
 nic_rows() {
+    # C-NET-01/02: display only. An unreadable sysfs value or a failed `ip` shows as empty/unknown; nothing decides from it.
     for _d in "$SYSROOT"/sys/class/net/*; do
         _n=${_d##*/}; [ "$_n" = lo ] && continue
         _mac=$(cat "$_d/address" 2>/dev/null || printf '')

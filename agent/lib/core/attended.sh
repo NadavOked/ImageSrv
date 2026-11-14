@@ -94,7 +94,9 @@ attended_secs() {
 
 attended_start() {
     # $1 = the question. A failed beat is not retried faster and not logged
-    # per beat: the screen the person is reading must not scroll.
+    # per beat: the screen the person is reading must not scroll. It is logged
+    # once when the beats stop being answered and once when they are again
+    # (B-SYS-13) -- the log file only: this loop's stdout is /dev/null.
     #
     # One beat at a time (#912): a question asked inside another one -- the
     # sign-in inside a menu, say -- replaces the running beat instead of
@@ -112,7 +114,12 @@ attended_start() {
             # watchdog never rebooted it.
             kill -0 "$_at_agent" 2>/dev/null || exit 0
             if command -v watchdog_beat >/dev/null; then watchdog_beat; fi
-            attended_hello "$1" || :
+            if attended_hello "$1"; then
+                [ -z "${_at_miss:-}" ] || log "attended: the server answers the beat again ($_at_miss missed)"; _at_miss=
+            else
+                _at_miss=$((${_at_miss:-0} + 1))
+                [ "$_at_miss" != 1 ] || log "WARNING: attended: a beat to the server was not answered -- said once, until one is"
+            fi
             _at_t=0
             while [ "$_at_t" -lt "$_at_beat" ]; do
                 sleep 1; _at_t=$((_at_t + 1))

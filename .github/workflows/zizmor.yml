@@ -1,0 +1,55 @@
+# zizmor — סריקת אבטחה של קובצי ה-workflow עצמם.
+#
+# למה זה כאן (13/11): ה-workflows רצים על כל PR עם טוקן של הריפו.
+# ‏CodeQL ו-Semgrep סורקים את הקוד, ואף אחד מהם אינו קורא את ה-YAML:
+# ‏action שאינו נעול ל-SHA, הזרקת `${{ }}` לתוך `run:`, הרשאות כתיבה
+# ברמת ה-workflow, ‏checkout שמשאיר את הטוקן על הדיסק. זה מה ש-zizmor
+# בודק.
+#
+# **רץ רק בציבורי** — אותו תנאי על `github.repository` כמו בשאר ה-workflows
+# החדשים: בפרטי workflow חדש נולד פעיל, ושם אין דקות ואין SARIF חינמי.
+#
+# הסריקה **אינה מפילה את ה-build**: עם `advanced-security` הכלי כותב SARIF
+# ויוצא 0 על ממצאים (נמדד מקומית ב-1.32.0: ‏`--format=sarif` → קוד 0;
+# כשל של הכלי עצמו עדיין יוצא אחרת). הממצאים מגיעים ללשונית Security,
+# כמו ב-codeql.yml — אדום שמור לבדיקות שנכשלו.
+
+name: zizmor
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  zizmor:
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # העלאת ה-SARIF ללשונית Security.
+      security-events: write
+      # ‏upload-sarif קורא את מצב הריצה.
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          # מוצמד: ברירת המחדל של ה-action היא `latest`, ושדרוג של סורק
+          # הוא החלטה, לא תוצאה של תאריך (כמו SEMGREP_VERSION).
+          version: "1.32.0"
+          advanced-security: true

@@ -9,6 +9,8 @@
 
 [![tests](https://github.com/NadavOked/ImageSrv/actions/workflows/tests.yml/badge.svg)](https://github.com/NadavOked/ImageSrv/actions/workflows/tests.yml)
 [![CodeQL](https://github.com/NadavOked/ImageSrv/actions/workflows/codeql.yml/badge.svg)](https://github.com/NadavOked/ImageSrv/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/NadavOked/ImageSrv/badge)](https://scorecard.dev/viewer/?uri=github.com/NadavOked/ImageSrv)
+[![codecov](https://codecov.io/gh/NadavOked/ImageSrv/branch/main/graph/badge.svg)](https://codecov.io/gh/NadavOked/ImageSrv)
 [![Release](https://img.shields.io/github/v/release/NadavOked/ImageSrv)](https://github.com/NadavOked/ImageSrv/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Python 3.12 | 3.13](https://img.shields.io/badge/python-3.12%20%7C%203.13-blue.svg)

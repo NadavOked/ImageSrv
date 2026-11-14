@@ -1,0 +1,278 @@
+# c-hardening — ‏sanitizers ו-cppcheck על קוד ה-C של הסוכן.
+#
+# למה זה כאן (13/11, "כל מה שחינם ועוזר"): חמשת קובצי ה-C של הסוכן רצים
+# כ-root ב-initramfs ומקבלים קלט מבחוץ — זרם השידור (fanout), מסגרות LLDP
+# מהמתג (lldpsniff), hive של Windows מהדיסק (hivewrite), חיבור RFB מהרשת
+# (monitor) והודעות netlink מהקרנל (uevent). שגיאת זיכרון שם אינה קריסה של
+# טסט: היא כתיבה לדיסק הלא נכון או קריסה של מחשב באמצע כיתה. ב-22/10 ‏ASan
+# כבר מצא קריאה מעבר למערך ב-uevent.c (tests/test_disk_uevent_1971.py), אבל
+# רק בבדיקה אחת שנכתבה בשבילו. כאן **כל** הטסטים שבונים את הקבצים האלה
+# רצים מול בנייה מכושרת.
+#
+# ‏chunkcast.c (#2533) אינו ב-main ב-13/11. הוא כבר ברשימה של sanitize-cc.sh,
+# ושלב הבדיקה דורש אותו מהרגע שהקובץ ייכנס ל-agent/.
+#
+# **שני ה-jobs מאדימים**:
+#   sanitizers — על כל דוח של ASan/UBSan, ועל מקור שלא נבנה מכושר.
+#   cppcheck   — רק על ממצא **חדש** (warning ומעלה). נמדד ב-13/11, על
+#                ‏2.13.0 (הגרסה של ubuntu-24.04) וגם על 2.17.1 (דביאן 13):
+#                אפס ממצאים, ולכן ה-baseline ריק. ממצאי `style` מדווחים
+#                בסיכום ואינם חוסמים.
+#
+# **רץ רק בציבורי**: בפרטי workflow חדש נולד פעיל, ושם אין דקות.
+
+name: c-hardening
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  # הגרסה ש-apt של ubuntu-24.04 נותן. גרסה אחרת היא baseline אחר, ולכן
+  # השלב נופל עליה במקום לדווח "נקי" מול ממצאים שלא נמדדו.
+  CPPCHECK_VERSION: "2.13.0"
+  CPPCHECK_ARGS: >-
+    --enable=warning,performance,portability --inconclusive --std=c11
+    --check-level=exhaustive --suppress=missingIncludeSystem --inline-suppr
+    --template={file}:{line}:{id}:{severity}:{message}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  sanitizers:
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      IMAGESRV_REQUIRE_NATIVE: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      # אותה רשימה כמו ב-tests.yml: הטסטים שבונים את ה-C מריצים גם את הסוכן
+      # סביבו (busybox, ‏partclone, ‏zstd), ו-IMAGESRV_REQUIRE_NATIVE מפיל דילוג.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r server/requirements.txt pytest httpx pytest-xdist==3.6.1
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libhivex-dev libhivex-bin dash busybox nodejs libpango1.0-dev libcairo2-dev libdrm-dev libharfbuzz-dev libfribidi-dev fonts-ibm-plex fontconfig libvncserver-dev \
+            partclone gdisk ntfs-3g dosfstools e2fsprogs pv jq curl \
+            mtools grub-pc-bin syslinux syslinux-common cpio zstd >/dev/null
+
+      # העוטף יושב ראשון ב-PATH בשמות gcc ו-cc. הבנייה של המוצר
+      # (tools/build_initramfs.sh) אינה משתנה; ראה .github/c-hardening/sanitize-cc.sh.
+      # ההגדרות נאפות לבינארי (`__asan_default_options`) ולא ב-ASAN_OPTIONS,
+      # כי טסטים שמריצים דרך `sudo -n env` מאבדים את הסביבה:
+      #   log_path                   — דוח נכתב לקובץ, ולא רק ל-stderr של טסט שבולע אותו;
+      #   verify_asan_link_order=0   — ה-LD_PRELOAD של הזרקת התקלות ב-
+      #                                test_inline_readback_2023 קודם ל-libasan;
+      #   detect_leaks=0             — ראה ההערה בשלב הבדיקה.
+      # אותו log_path בשתיהן: בבנייה משולבת ה-init של UBSan מאפס את הדגלים
+      # המשותפים, ובלי log_path אצלו גם דוח ASan חוזר ל-stderr (נמדד 13/11,
+      # gcc 14.2). דוחות UBSan עצמם הולכים ל-stderr תמיד; לכן הם קטלניים
+      # (`-fno-sanitize-recover=undefined` ב-sanitize-cc.sh, ‏halt_on_error=1 כאן).
+      - name: Put the sanitizing compiler first on PATH
+        run: |
+          set -euo pipefail
+          real=$(command -v gcc)
+          bin="$RUNNER_TEMP/san-bin"
+          san="$RUNNER_TEMP/san"
+          mkdir -p "$bin" "$san"
+          chmod 1777 "$san"   # ריצות דרך sudo כותבות לכאן כ-root
+          printf '%s\n' \
+            'const char *__asan_default_options(void);' \
+            'const char *__ubsan_default_options(void);' \
+            "const char *__asan_default_options(void) { return \"log_path=$san/asan:detect_leaks=0:verify_asan_link_order=0\"; }" \
+            "const char *__ubsan_default_options(void) { return \"log_path=$san/asan:print_stacktrace=1:halt_on_error=1\"; }" \
+            > "$RUNNER_TEMP/san-defaults.c"
+          cat "$RUNNER_TEMP/san-defaults.c"
+          ln -s "$GITHUB_WORKSPACE/.github/c-hardening/sanitize-cc.sh" "$bin/gcc"
+          ln -s "$GITHUB_WORKSPACE/.github/c-hardening/sanitize-cc.sh" "$bin/cc"
+          echo "$bin" >> "$GITHUB_PATH"
+          {
+            echo "IMAGESRV_SAN_REAL_CC=$real"
+            echo "IMAGESRV_SAN_LOG=$RUNNER_TEMP/san-compiled.log"
+            echo "IMAGESRV_SAN_ROOT=$GITHUB_WORKSPACE"
+            echo "IMAGESRV_SAN_DEFAULTS=$RUNNER_TEMP/san-defaults.c"
+          } >> "$GITHUB_ENV"
+
+      # שני קובצי canary, דרך העוטף ממש (נבנים כ-agent/uevent.c בתיקייה זמנית):
+      # ‏heap overflow חייב להשאיר קובץ דוח, ו-signed overflow חייב להרוג את
+      # התוכנית עם "runtime error". אם אחד מהם עובר בשקט, "אין דוחות" בסוף
+      # אינו ראיה לכלום. הדוח של ה-canary מועבר הצידה לפני הטסטים.
+      - name: The sanitizers can still report (canary)
+        run: |
+          set -euo pipefail
+          c="$RUNNER_TEMP/san-canary"
+          mkdir -p "$c/agent" "$c/out"
+          printf '%s\n' '#include <stdlib.h>' \
+            'int main(int argc, char **argv) { (void)argv; char *p = malloc(4); p[argc + 3] = 1; return p[0]; }' > "$c/agent/uevent.c"
+          printf '%s\n' '#include <limits.h>' \
+            'int main(int argc, char **argv) { (void)argv; int big = INT_MAX - 1 + argc; return (big + argc) & 1; }' > "$c/agent/fanout.c"
+          for t in uevent fanout; do
+            IMAGESRV_SAN_ROOT="$c" IMAGESRV_SAN_LOG="$c/compiled.log" gcc -O1 -o "$c/$t" "$c/agent/$t.c"
+            set +e
+            "$c/$t" 2> "$c/$t.err"
+            rc=$?
+            set -e
+            echo "$t: rc=$rc"
+            [ "$rc" -ne 0 ] || { echo "::error::the $t canary exited 0 -- the sanitizer did not stop it"; exit 1; }
+          done
+          grep -q 'runtime error' "$c/fanout.err" || { echo "::error::UBSan did not report the signed overflow"; exit 1; }
+          mapfile -t reports < <(find "$RUNNER_TEMP/san" -type f)
+          [ "${#reports[@]}" -gt 0 ] || { echo "::error::ASan wrote no report file for the heap overflow"; exit 1; }
+          grep -l 'ERROR: AddressSanitizer: heap-buffer-overflow' "${reports[@]}"
+          mv "${reports[@]}" "$c/out/"
+
+      # הרשימה נגזרת מהעץ ואינה נכתבת ביד (#247, ‏#371): כל קובץ טסט שנוקב
+      # באחד ממקורות ה-C. רצפה מפורשת — גזירה שבורה מחזירה כלום, ו-pytest
+      # על כלום יוצא ירוק.
+      - name: Run the tests that build the agent's C, under ASan and UBSan
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(grep -l -E '"(agent/)?(fanout|lldpsniff|hivewrite|monitor|uevent|chunkcast)\.c"' tests/test_*.py)
+          echo "${#files[@]} test files:"; printf '  %s\n' "${files[@]}"
+          if [ "${#files[@]}" -lt 20 ]; then
+            echo "::error::only ${#files[@]} test files name the agent's C sources -- the derivation broke"
+            exit 1
+          fi
+          base='not uinput and not vm_it'
+          python -m pytest -q -p no:cacheprovider -m "$base and not serial" -n auto --dist load \
+            "${files[@]}" < /dev/null
+          set +e
+          python -m pytest -q -p no:cacheprovider -m "$base and serial" "${files[@]}" < /dev/null
+          rc=$?
+          set -e
+          # 5 = לא נאסף כלום: אין בקבצים האלה טסט serial. כל קוד אחר הוא קוד.
+          if [ "$rc" -eq 5 ]; then echo "no serial tests in these files"; else exit "$rc"; fi
+
+      # שלוש ראיות חיוביות, ולא היעדר של כישלון (עיקרון 5):
+      #   1. כל מקור שקיים ב-agent/ נבנה דרך העוטף לפחות פעם אחת;
+      #   2. תיקיית הדוחות קיימת וריקה;
+      #   3. הדוח, אם יש, מודפס במלואו.
+      # ‏detect_leaks=0 במכוון: אלה תוכניות קצרות-חיים שמשחררות בציאה, ודליפה
+      # שם אינה שגיאת זיכרון. נמדד ב-13/11 על ה-testrunner עם detect_leaks=1.
+      - name: Every source was built sanitized, and no sanitizer reported
+        if: always()
+        run: |
+          set -euo pipefail
+          log="$IMAGESRV_SAN_LOG"
+          if [ ! -s "$log" ]; then
+            echo "::error::$log is empty -- nothing was built through sanitize-cc.sh"
+            exit 1
+          fi
+          echo "sanitized builds: $(wc -l < "$log")"
+          missing=0
+          for s in fanout lldpsniff hivewrite monitor uevent chunkcast; do
+            [ -f "agent/$s.c" ] || { echo "agent/$s.c: not in this tree"; continue; }
+            if grep -q " $s\.c" "$log"; then
+              echo "agent/$s.c: built sanitized $(grep -c " $s\.c" "$log") time(s)"
+            else
+              echo "::error::agent/$s.c was never built through sanitize-cc.sh"
+              missing=1
+            fi
+          done
+          [ -d "$RUNNER_TEMP/san" ] || { echo "::error::the report directory is gone"; exit 1; }
+          reports=$(find "$RUNNER_TEMP/san" -type f | sort)
+          if [ -n "$reports" ]; then
+            for r in $reports; do echo "===== $r"; cat "$r"; done
+            echo "::error::$(echo "$reports" | wc -l) sanitizer report(s)"
+            exit 1
+          fi
+          echo "no sanitizer reports"
+          exit "$missing"
+
+  cppcheck:
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install cppcheck
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cppcheck
+          v=$(cppcheck --version)
+          echo "$v"
+          if [ "$v" != "Cppcheck $CPPCHECK_VERSION" ]; then
+            echo "::error::expected Cppcheck $CPPCHECK_VERSION, got '$v' -- the baseline was measured on $CPPCHECK_VERSION"
+            exit 1
+          fi
+
+      # cppcheck שלא מצא את std.cfg יוצא 1 ושורה אחת; cppcheck שלא בדק כלום
+      # יוצא 0. לכן קודם קובץ שחייב להיכשל: אם הוא עובר, השלב הבא אינו ראיה.
+      - name: The check can still fail (canary)
+        run: |
+          set -euo pipefail
+          c="$RUNNER_TEMP/canary.c"
+          printf '%s\n' 'int f(void) { int a[3]; a[3] = 1; return a[0]; }' \
+                        'int g(void) { char *p = 0; return *p; }' > "$c"
+          set +e
+          # shellcheck disable=SC2086 # CPPCHECK_ARGS is a list of flags
+          out=$(cppcheck $CPPCHECK_ARGS --error-exitcode=1 "$c" 2>&1)
+          rc=$?
+          set -e
+          echo "$out"
+          if [ "$rc" -ne 1 ] || ! grep -q ':arrayIndexOutOfBounds:' <<<"$out" \
+                             || ! grep -q ':nullPointer:' <<<"$out"; then
+            echo "::error::cppcheck did not report the canary (rc=$rc)"
+            exit 1
+          fi
+
+      # ה-baseline הוא רשימת השתקות (`id:file`, שורה לממצא קיים, עם נימוק).
+      # ממצא שאינו בה מאדים. "נבדק" נקבע לפי שורת `Checking` לכל קובץ.
+      - name: cppcheck on agent/*.c -- blocking on a new finding
+        run: |
+          set -euo pipefail
+          mapfile -t srcs < <(find agent -maxdepth 1 -name '*.c' | LC_ALL=C sort)
+          if [ "${#srcs[@]}" -lt 5 ]; then
+            echo "::error::only ${#srcs[@]} C files in agent/"; exit 1
+          fi
+          set +e
+          # shellcheck disable=SC2086 # CPPCHECK_ARGS is a list of flags
+          cppcheck $CPPCHECK_ARGS --error-exitcode=1 \
+            --suppressions-list=.github/c-hardening/cppcheck-baseline.txt \
+            "${srcs[@]}" > "$RUNNER_TEMP/cppcheck.log" 2>&1
+          rc=$?
+          set -e
+          cat "$RUNNER_TEMP/cppcheck.log"
+          for f in "${srcs[@]}"; do
+            grep -q "^Checking $f \.\.\." "$RUNNER_TEMP/cppcheck.log" || {
+              echo "::error::$f was not checked"; exit 1; }
+          done
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::cppcheck: a finding that is not in .github/c-hardening/cppcheck-baseline.txt"
+            exit 1
+          fi
+
+      - name: Style report (non-blocking)
+        if: always()
+        run: |
+          {
+            echo "## cppcheck — style (non-blocking)"
+            echo
+            echo '```'
+            find agent -maxdepth 1 -name '*.c' -print0 | LC_ALL=C sort -z \
+              | xargs -0 cppcheck -q --enable=style --inconclusive --std=c11 \
+                  --check-level=exhaustive --suppress=missingIncludeSystem \
+                  --template='{file}:{line}:{id}:{severity}:{message}' 2>&1 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

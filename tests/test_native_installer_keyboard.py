@@ -115,10 +115,11 @@ static void show(const App *a, const char *tok) {
            s->primary_ok, s->primary_checked);
     /* #2776/#2777: the rest of the state, on a second line the parser joins */
     printf("+ raid=%%d technical=%%d scroll=%%d reboot=%%d shown=%%d%%d%%d%%d"
-           " address=%%s netmask=%%s gateway=%%s dns=%%s hostname=%%s\n",
+           " address=%%s netmask=%%s gateway=%%s dns=%%s hostname=%%s ndisks=%%d paths=%%s%%s%%s\n",
            s->raid, s->technical_open, s->output_scroll, s->reboot_at > 0,
            s->show_password, s->show_confirm, s->show_root, s->show_root_confirm,
-           s->address, s->netmask, s->gateway, s->dns, s->hostname);
+           s->address, s->netmask, s->gateway, s->dns, s->hostname,
+           s->ndisks, s->ndisks > 0 ? s->disks[0].path : "-", s->ndisks > 1 ? "," : "", s->ndisks > 1 ? s->disks[1].path : "");
 }
 
 static App app;
@@ -468,3 +469,29 @@ def test_one_disk_and_the_install_media_still_start_with_that_disk(driver, tmp_p
     assert _col(states, "disk") == ["0", "0", "0"]
     assert _col(states, "ack") == ["0", "0", "1"]
     assert bridge == ["inventory"]
+
+
+# --- #2968 (Nadav 12/11, v0.92.0 on metal): the disk we install FROM was in the list ----------
+USB_MEDIUM = "disk=/dev/sdc|model=Flash Disk|size=8000000000|bus=usb|removable=1|has=iso9660|iso=1"
+USB_OTHER = "disk=/dev/sdb|model=Backup stick|size=64000000000|bus=usb|removable=1|has=ntfs|iso=0"
+
+
+@NATIVE
+def test_the_install_medium_is_not_in_the_list_but_another_usb_disk_is(driver, tmp_path):
+    inv = (RC4_TWO_DISKS[0], USB_MEDIUM, USB_OTHER)
+    states, _, _ = _press_inventory(driver, tmp_path, inv, "TAB")
+    assert states[0]["ndisks"] == "2" and states[0]["paths"] == "/dev/sda,/dev/sdb", states[0]
+
+
+@NATIVE
+def test_only_the_medium_found_is_no_disk_and_nothing_is_chosen(driver, tmp_path):
+    states, _, _ = _press_inventory(driver, tmp_path, (USB_MEDIUM,), "ENTER", "SPACE")
+    assert _col(states, "ndisks") == ["0"] * 3 and _col(states, "disk") == ["-1"] * 3
+    assert _col(states, "view") == [str(DISK)] * 3, "Enter went past an empty disk list"
+
+
+def test_no_disk_says_so_and_draws_no_empty_table():
+    setup = (REPO / "native-gui" / "src" / "screens_install_setup.c").read_text(encoding="utf-8")
+    disk = setup[setup.index("void install_draw_disk"):]
+    assert "if(s->ndisks){Rect table" in disk, "a header and an empty card are drawn with no disks"
+    assert "לא נמצא דיסק להתקנה" in disk

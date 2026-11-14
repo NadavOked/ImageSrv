@@ -1,0 +1,49 @@
+# ברכה לדיווח הראשון — Issue ראשון של אדם בריפו הציבורי.
+#
+# למה זה כאן (13/11): מי שמדווח מבחוץ אינו מכיר את התהליך, ושתיקה נראית
+# כמו "אף אחד לא קורא". ההודעה אומרת שקראנו, מה חסר כדי שנוכל לשחזר,
+# ולאן **לא** מדווחים חולשת אבטחה.
+#
+# **רק על `issues: opened`.** לא על PR (הפרויקט אינו מקבל תרומות; ראו
+# CONTRIBUTING.md) ולא על `pull_request_target` — הטריגר ש-GitHub חוסם
+# בציבורי. ‏`pr_message` חובה בקלט של ה-action (`required: true`) גם כשאין
+# PR, ולכן יש לו ערך; הוא לא יפורסם לעולם כי הטריגר לא יתאים.
+#
+# הרשאה: `issues: write` בלבד, ברמת ה-job. ברמת ה-workflow אין כלום.
+# בעלי הריפו לא מקבלים ברכה על Issue של עצמם.
+#
+# **רץ רק בציבורי** — התנאי על `github.repository`, כמו בשאר ה-workflows
+# החדשים: בפרטי workflow חדש נולד פעיל.
+
+name: first-interaction
+
+on:
+  issues:
+    types: [opened]
+
+permissions: {}
+
+jobs:
+  greet:
+    if: github.repository == 'NadavOked/ImageSrv' && github.event.issue.author_association != 'OWNER'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/first-interaction@1c4688942c71f71d4f5502a26ea67c331730fa4d # v3.1.0
+        with:
+          repo_token: ${{ github.token }}
+          pr_message: "This repository does not take pull requests. Please open a bug report instead."
+          issue_message: |
+            **תודה על הדיווח הראשון שלך!** הוא נקרא, ונענה כשנוכל.
+            אם חסרים פרטים, נבקש אותם כאן: הגרסה (כפי שמופיעה בקונסולה), סוג המחשב (שרת, משכפל, מחשב בנייה או תחנה), ויומן רלוונטי. מה שתצרף כבר עכשיו יקצר את הדרך.
+
+            **חולשת אבטחה לא מדווחים ב-Issue**, כי הוא פומבי. מדווחים בפרטיות לפי [SECURITY.md](https://github.com/NadavOked/ImageSrv/blob/main/SECURITY.md).
+
+            ---
+
+            **Thank you for your first report!** It will be read and answered as soon as we can.
+            If details are missing we will ask for them here: the version (as shown in the console), the machine type (server, cloner, build machine or station), and a relevant log. Attaching them now saves a round trip.
+
+            **Do not report a security vulnerability in an issue**, because it is public. Report it privately, as [SECURITY.md](https://github.com/NadavOked/ImageSrv/blob/main/SECURITY.md) describes.

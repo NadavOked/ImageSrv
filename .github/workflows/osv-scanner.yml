@@ -1,0 +1,61 @@
+# OSV-Scanner — פגיעויות ידועות בתלויות, מול מאגר OSV.
+#
+# למה זה כאן (13/11): Dependabot כבר מתריע על התלויות, אבל רק מול מאגר
+# GitHub. ‏OSV מאחד כמה מאגרים (PyPA, ‏GHSA ועוד), וזו דעה שנייה בלי חשבון.
+#
+# מה נסרק: כל manifest/lockfile בעץ (`--recursive`). היום יש אחד בלבד,
+# ‏`server/requirements.txt` — נמדד מקומית ב-13/11 ב-osv-scanner 2.7.1:
+# שלושה קבצים נקראו, ורק הוא הניב חבילות. קובץ נעילה שיתווסף מחר ייסרק
+# בלי לגעת כאן.
+#
+# ‏`--no-resolve`: ההצמדות ב-requirements.txt הן הגרסאות שדביאן 13 מתקינה
+# ב-apt — זה מה שרץ על השרת. בלי הדגל הכלי **מנחש** תלויות עקיפות דרך
+# deps.dev, ובמדידה המקומית הניחוש הניב `h11 0.9.0` ו-`idna 3.9.0` — גרסאות
+# שאינן מותקנות בשום מקום. ממצא על גרסה מנוחשת הוא ציטוט, לא ראיה (5ב).
+#
+# הסריקה **אינה מפילה את ה-build** (`fail-on-vuln: false`): ההצמדות של
+# ‏anyio/cryptography/pyOpenSSL פגיעות ביודעין, ו-SECURITY.md (סעיף "התראות
+# Dependabot על תלויות מוצמדות") מסביר למה הן נשארות. הממצאים מגיעים
+# ללשונית Security, כמו ב-codeql.yml. סריקה **שנכשלה** כן מאדימה —
+# ה-workflow הרב-פעמי בודק שקובץ התוצאות נכתב.
+#
+# **רץ רק בציבורי** — התנאי על `github.repository`, כמו בשאר ה-workflows
+# החדשים: בפרטי workflow חדש נולד פעיל, ושם אין דקות ואין SARIF חינמי.
+
+name: osv-scanner
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # פעם בשבוע: פגיעות חדשה מתפרסמת גם כשהתלויות לא זזו.
+    - cron: "0 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  osv-scan:
+    if: github.repository == 'NadavOked/ImageSrv'
+    # ה-workflow הרב-פעמי הוא הדרך שהפרויקט ממליץ עליה (ה-action הפנימי
+    # "might change in a minor patch update"). הוא נועל בעצמו את ה-actions
+    # שלו ל-SHA.
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@32d3cd482bdadfb38b186c0ad1b031902d55d932 # v2.7.1
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    with:
+      runs-on: ubuntu-24.04
+      fail-on-vuln: false
+      scan-args: |-
+        --recursive
+        --no-resolve
+        ./

@@ -20,7 +20,6 @@ import json
 import logging
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 from contextlib import ExitStack, contextmanager
@@ -28,6 +27,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from server.core.cleanup import remove_tree
 from server.vm import agent_shell
 from server.library.images import (MACHINE_MAC, bound_mac, carries_a_stream_file, disk_family, image_os,
                            lineage_of, required_bytes, version_of)
@@ -843,13 +843,13 @@ def _clear_stale(workdir: Path, run_dir: Path) -> None:
     if stale.is_symlink():
         stale.unlink()
     else:
-        shutil.rmtree(stale, ignore_errors=True)
+        remove_tree(stale, "VM save leftover (unpriv)")
     for child in (run_dir.iterdir() if run_dir.exists() else []):
         if child.name.startswith(("u-", "esp-")):
             if child.is_symlink() or not child.is_dir():
                 child.unlink()
             else:
-                shutil.rmtree(child, ignore_errors=True)
+                remove_tree(child, "VM save leftover")
 
 
 def _boot_paths(host: Host, run_dir: Path) -> list[str]:

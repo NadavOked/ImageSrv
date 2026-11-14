@@ -103,8 +103,10 @@ static const char *install_keys(const App *a){
 void install_keys_line(App *a,char *out,size_t n){snprintf(out,n,"%s%s",install_keys(a),install_text_fields(&a->install)?"    F5  מקלדת מסך":"");}
 static void install_keys_draw(App *a,cairo_t *cr,InstallLayout l){
     double right=l.footer.w-32-118-12-100;if(right<120)return;
+    double kb=0;if(install_text_fields(&a->install)){   /* #2969: the keyboard on the screen opens from here (or F5), not from a click on a field */
+        Text q=btn_label(cr,"מקלדת מסך");kb=btn_width(&q);draw_btn(a,cr,(Rect){32,l.footer.y+(l.footer.h-N_BUTTON_H)/2,kb,N_BUTTON_H},&q,BTN_PLAIN,HIT_INSTALL_OSK_TOGGLE);text_free(&q);kb+=12;}
     char line[320];install_keys_line(a,line,sizeof line);
-    Text k=text_make(cr,FONT_SANS,12,400,line,(int)(right-32),DIR_RTL);
+    Text k=text_make(cr,FONT_SANS,12,400,line,(int)(right-32-kb),DIR_RTL);
     pango_layout_set_alignment(k.layout,PANGO_ALIGN_RIGHT);
     text_draw_r(cr,&k,right,l.footer.y+(l.footer.h-k.h)/2,a->theme->muted);text_free(&k);}
 

@@ -171,7 +171,7 @@ lc_reboot() {
     # The USB stick's result screen: "הפעל מחדש" (Nadav 20/10). The person asked.
     _lc_req run/notice "מפעיל מחדש…"; log "local clone: reboot -- operator request"
     if [ "${IMAGESRV_TEST:-0}" = 1 ]; then echo TEST-REBOOT; return 0; fi
-    umount "$USB_DATA_DIR" 2>/dev/null; sync; reboot -f
+    umount "$USB_DATA_DIR" 2>>"$LOG_FILE" || log "WARNING: $USB_DATA_DIR not unmounted before the reboot -- synced only (B-SYS-05)"; sync; reboot -f
 }
 
 usb_offline() {
@@ -192,7 +192,7 @@ usb_offline() {
         if [ -n "${2:-}" ]; then "$2" || return 1; fi
         log "${1:-power}: powering off (USB, no Wake-on-LAN)"
         if [ "${IMAGESRV_TEST:-0}" = 1 ]; then echo "TEST-POWEROFF"; return 0; fi
-        umount "$USB_DATA_DIR" 2>/dev/null; sync; poweroff -f
+        umount "$USB_DATA_DIR" 2>>"$LOG_FILE" || log "WARNING: $USB_DATA_DIR not unmounted before the power-off -- synced only (B-SYS-05)"; sync; poweroff -f
         echo "המחשב לא כובה: פקודת הכיבוי חזרה. כבו אותו בכפתור ההפעלה." > "$RUN_DIR/power.fail"
         POWEROFF_WHY=poweroff; return 1
     }

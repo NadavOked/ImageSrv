@@ -488,20 +488,46 @@ cat > "$ROOT/etc/imagesrv/udhcpc.script" << 'EOF'
 # an address that is already ours is never taken down -- a flush drops the
 # routes under a running restore. A lost lease keeps the address too; the
 # next bound replaces it if the server hands out a different one.
+#
+# C-NET-14 (principle 5): udhcpc's own output goes to /dev/null (agent/init),
+# so a failed ip/ifconfig/route that is not written to the agent log HERE
+# exists nowhere -- a renew that lost the address under a running restore
+# left no line at all. Every failure is a line with its rc and output. The
+# log write itself never stops the hook: the address comes first.
+LOG="${RUN_DIR:-/run/imagesrv}/agent.log"
+note() { echo "[$(date -u +%H:%M:%S 2>/dev/null)] dhcp $event $interface: $*" 2>/dev/null >> "$LOG" || :; }
+try() {
+    _out=$("$@" 2>&1) && return 0
+    _rc=$?
+    note "FAILED (rc=$_rc): $*${_out:+ -- $_out}"
+    return "$_rc"
+}
+event=$1
 case "$1" in
     deconfig)
-        ip link set "$interface" up
+        try ip link set "$interface" up
         ;;
     bound|renew)
+        # `ip addr show` that failed is "not ours" -- the safe way: configure.
         if ! ip -4 addr show dev "$interface" 2>/dev/null | grep -qF "inet $ip/"; then
-            ip addr flush dev "$interface" 2>/dev/null
-            ifconfig "$interface" "$ip" netmask "${subnet:-255.255.255.0}"
+            note "address $ip/${subnet:-255.255.255.0} (it was not on the NIC)"
+            try ip addr flush dev "$interface"
+            try ifconfig "$interface" "$ip" netmask "${subnet:-255.255.255.0}"
         fi
-        [ -n "${router:-}" ] && route add default gw "${router%% *}" 2>/dev/null
-        : > /etc/resolv.conf
+        _gw=${router:-}; _gw=${_gw%% *}
+        # Every renew of the same lease gets "File exists" from route add: the
+        # route is there, and that is no failure. Only a missing route is said.
+        if [ -n "$_gw" ] && ! _rt=$(route add default gw "$_gw" 2>&1) \
+            && ! ip -4 route show default 2>/dev/null | grep -qF "via $_gw "; then
+            note "FAILED: route add default gw $_gw${_rt:+ -- $_rt}"
+        fi
+        # printf, not `:` -- a failed redirection on a special builtin ends a POSIX sh.
+        { printf '' > /etc/resolv.conf; } 2>/dev/null || note "FAILED: /etc/resolv.conf not written"
         for d in ${dns:-}; do echo "nameserver $d" >> /etc/resolv.conf; done
         ;;
 esac
+# udhcpc does not act on this status (busybox udhcp_run_script discards it):
+# the evidence of a failure is the log line above, never the exit code.
 exit 0
 EOF
 chmod 0755 "$ROOT/etc/imagesrv/udhcpc.script"
@@ -1245,8 +1271,16 @@ for _packed in "${PACKED_FILES[@]}"; do
     _host_file="${_packed#"$ROOT"}"
     [ -e "$_host_file" ] || continue
     _host_file=$(readlink -f "$_host_file")
-    _owner=$(dpkg-query -S "$_host_file" 2>/dev/null \
-        | sed -n '1{s/: \/.*//;p;}') || true
+    # C-CFG-08: dpkg-query -S answers 1 for "no package owns it" (ImageSrv's own
+    # files) -- an answer. Anything else is the check broken: a notice that would
+    # be silently omitted, so the build stops (principle 5).
+    _dq_rc=0; _dq=$(dpkg-query -S "$_host_file" 2>/dev/null) || _dq_rc=$?
+    case $_dq_rc in
+        0) ;;
+        1) continue ;;
+        *) echo "license: dpkg-query -S $_host_file failed (rc=$_dq_rc) -- cannot tell its owner" >&2; exit 1 ;;
+    esac
+    _owner=$(printf '%s\n' "$_dq" | sed -n '1{s/: \/.*//;p;}')
     [ -n "$_owner" ] || continue
     _pkg="${_owner%%:*}"
     _copyright="/usr/share/doc/$_pkg/copyright"

@@ -1,0 +1,69 @@
+# lychee — קישורים שבורים ב-README וב-docs/**/*.md שמתפרסמים.
+#
+# למה זה כאן (13/11, "כל מה שחינם ועוזר לנו מאושר"): המסמכים נכתבים בריפו
+# הפרטי ויוצאים לציבורי בעץ מסונן. קישור לקובץ שלא יצא, או לריפו הפרטי
+# (שמחזיר 404 לכל מי שאינו נדב), נראה תקין בפרטי ושבור בציבורי. ‏lychee
+# בודק את העץ **כפי שהוא בציבורי**, שם הוא רץ.
+#
+# **לא פותח Issues.** הדוח נכתב לסיכום הריצה (`jobSummary`), וטריגר הקליטה
+# שלנו קורא אותו משם. ריצה אדומה = נמצא קישור שבור, או שהבדיקה עצמה נכשלה
+# (עיקרון 5: "לא נבדק" אינו "הכול תקין"). קישור פנימי לריפו הפרטי בעץ
+# הציבורי הוא ממצא אמיתי ולא רעש.
+#
+# פעם בשבוע ובהפעלה ידנית בלבד: קישור חיצוני יכול למות גם כשאיש לא נגע
+# בקוד, וריצה על כל PR הייתה מאדימה PR על אתר של מישהו אחר.
+#
+# **רץ רק בציבורי** — התנאי על `github.repository`, כמו בשאר ה-workflows
+# החדשים: בפרטי workflow חדש נולד פעיל, ושם אין דקות.
+
+name: lychee
+
+on:
+  workflow_dispatch:
+  schedule:
+    # יום ב' בבוקר, דקה שאינה על השעה העגולה.
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  links:
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # 429 = השרת השני הגביל אותנו, לא קישור שבור. ‏`--root-dir` בשביל
+      # קישורים שמתחילים ב-`/` (נתיב מתוך הריפו).
+      #
+      # שלושת האתרים ב-`--exclude` מחזירים 403 לכל לקוח אוטומטי (נמדד
+      # מקומית 13/11: 20 קישורים ב-admin-guide-he.md, כולם 403 ולא 404),
+      # ובלי ההחרגה הריצה השבועית אדומה תמיד ואיש לא יסתכל. ההחרגה בשמות
+      # המארחים ולא ב-`--accept 403`: 403 על GitHub הוא כן ממצא. הסיכום
+      # מדווח כמה קישורים הוחרגו.
+      - name: Check the links
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: >-
+            --no-progress
+            --max-retries 3
+            --timeout 30
+            --accept '100..=103,200..=299,429'
+            --exclude '^https://community[.]cisco[.]com/'
+            --exclude '^https://www[.]cisco[.]com/'
+            --exclude '^https://specopssoft[.]com/'
+            --root-dir "$GITHUB_WORKSPACE"
+            './README.md'
+            './docs/**/*.md'
+          lycheeVersion: v0.24.2
+          fail: true
+          failIfEmpty: true
+          jobSummary: true

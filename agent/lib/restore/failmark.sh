@@ -227,10 +227,12 @@ fail_written_target() {
 wipe_written_gpt() {
     # $1 = disk, $2 = why (the log line). #1388, and #1386's cancel: the primary
     # and backup GPT of the disk THIS run wrote -- write_started holds its serial;
-    # another disk, or one with no serial (#1427), is not touched. 0 = wiped.
+    # another disk, or one with no serial (#1427), is not touched -- and says so (B-DSK-06). 0 = wiped.
     # #2434: and only the disk chosen -- write_started alone recorded whoever was there.
-    _written_serial=$(cat "$RUN_DIR/targets/$1/write_started" 2>/dev/null)
-    [ -n "$_written_serial" ] && [ "$(disk_serial "$1")" = "$_written_serial" ] && target_same "$1" || return 1
+    [ -f "$RUN_DIR/targets/$1/write_started" ] || return 1   # this run wrote nothing here
+    _written_serial=$(cat "$RUN_DIR/targets/$1/write_started" 2>/dev/null); _wsn=$(disk_serial "$1")
+    if [ -z "$_written_serial" ] || [ "$_wsn" != "$_written_serial" ] || ! target_same "$1"; then
+        log "WARNING: $1: GPT NOT wiped after $2 -- not provably the disk this run wrote (serial then '$_written_serial', now '$_wsn'); it keeps a partial image"; return 1; fi
     if sgdisk --zap-all "$DEVROOT/$1" >> "$LOG_FILE" 2>&1; then
         blockdev --rereadpt "$DEVROOT/$1" >> "$LOG_FILE" 2>&1 || :
         log "$1: wiped primary and backup GPT after $2"

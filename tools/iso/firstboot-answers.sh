@@ -104,6 +104,8 @@ firstboot_from_answers() {
     set -e
     unset secret
     shred -u "$ANSWERS_SECRET" 2>/dev/null || rm -f "$ANSWERS_SECRET"
+    # C-FIL-03: "removed" is read back. Left behind (0600, root) it is said, not a failed boot.
+    [[ ! -e "$ANSWERS_SECRET" ]] || log "WARNING: $ANSWERS_SECRET (the admin password, 0600) was not removed -- delete it by hand"
     [[ $rc -eq 0 ]] || fail installer-failed "setup-boot-server.sh exited $rc; see $BUILD_LOG"
 
     # setup-boot-server writes interfaces.d/imagesrv-<nic> and deliberately does

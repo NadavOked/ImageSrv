@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from server.core.atomicfile import fsync_dir, fsync_file, write_atomic
+from server.core.cleanup import remove_tree
 
 log = logging.getLogger("imagesrv.isos")
 
@@ -211,7 +212,7 @@ class IsoStore:
                 fsync_dir(directory)
                 fsync_dir(self.dir)
             except BaseException:
-                shutil.rmtree(directory, ignore_errors=True)
+                remove_tree(directory, "half-written ISO folder")
                 raise
         return {**meta, "present": True}
 

@@ -1,0 +1,121 @@
+# Lighthouse CI — ביצועים, נגישות ו-best practices של דפי הקונסולה.
+#
+# למה זה כאן (13/11): הקונסולה היא vanilla JS בעברית RTL, ונגישות היא
+# דרישה (מסכי מפעיל, מצב בהיר ברירת מחדל). אף טסט קיים אינו מודד את
+# הדף כפי שדפדפן רואה אותו.
+#
+# **בלי שום שינוי בקוד המוצר.** השרת עולה כמו בשורת "שרת פיתוח" ב-CLAUDE.md,
+# עם תיקיות זמניות, ‏`--console-tls off` (מותר רק על loopback — כמו
+# ב-tools/e2e/harness.py) ופורטים משלו. נמדד מקומית ב-13/11: השרת עונה 200
+# על שני הדפים תוך 2 שניות, ו-Lighthouse (‏@lhci/cli 0.15.1) מריץ את שניהם.
+#
+# מה נמדד: `/console/` ו-`/console/monitor.html`. **בלי התחברות** — דף
+# הקונסולה מוצג כמסך הכניסה. המסכים שמאחורי הכניסה אינם נמדדים כאן.
+#
+# **אינו מאדים על ציון**: אין assertions, והציונים נכתבים לסיכום הריצה
+# ולארטיפקט. כן מאדים כשהמדידה עצמה לא קרתה — שרת שלא עלה, או ריצה בלי
+# דוח (עיקרון 5: "לא נמדד" אינו "ציון טוב"). ‏`temporaryPublicStorage`
+# כבוי: הדוחות נשארים ב-Actions ואינם נשלחים לשירות חיצוני.
+#
+# **רץ רק בציבורי** — התנאי על `github.repository`, כמו בשאר ה-workflows
+# החדשים: בפרטי workflow חדש נולד פעיל, ושם אין דקות.
+
+name: lighthouse
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lighthouse:
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04  # #2401: כמו tests.yml
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: server/requirements.txt
+
+      - name: Install the server dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r server/requirements.txt
+
+      # הלוג לקובץ ולא ל-PIPE (CLAUDE.md: תהליך-בן עם PIPE שאיש לא קורא נחסם).
+      - name: Start a development server
+        run: |
+          set -euo pipefail
+          T="$RUNNER_TEMP/srv"
+          mkdir -p "$T/data" "$T/images" "$T/tftp" "$T/boot"
+          nohup python -m server.main --server-url http://127.0.0.1:18080 \
+            --host 127.0.0.1 --port 18080 \
+            --console-host 127.0.0.1 --console-port 18081 --console-tls off \
+            --data-dir "$T/data" --images "$T/images" \
+            --tftp-root "$T/tftp" --boot-dir "$T/boot" \
+            < /dev/null > "$T/server.log" 2>&1 &
+          for url in http://127.0.0.1:18081/console/ http://127.0.0.1:18081/console/monitor.html; do
+            code=000
+            for _ in $(seq 1 60); do
+              code=$(curl -s -o /dev/null -w '%{http_code}' "$url") || code=000
+              [ "$code" = 200 ] && break
+              sleep 1
+            done
+            if [ "$code" != 200 ]; then
+              echo "::error::$url answered $code, not 200"
+              tail -n 40 "$T/server.log"
+              exit 1
+            fi
+            echo "$url: 200"
+          done
+
+      - name: Run Lighthouse
+        id: lhci
+        uses: treosh/lighthouse-ci-action@3e7e23fb74242897f95c0ba9cabad3d0227b9b18 # 12.6.2
+        with:
+          urls: |
+            http://127.0.0.1:18081/console/
+            http://127.0.0.1:18081/console/monitor.html
+          uploadArtifacts: true
+          temporaryPublicStorage: false
+
+      # הראיה החיובית: דוח לכל דף, עם ציון. דוח חסר = המדידה לא קרתה.
+      # התיקייה היא זו שה-action כותב אליה (`src/index.js` ב-12.6.2:
+      # `join(process.cwd(), '.lighthouseci')`, ו-cwd של action הוא ה-workspace),
+      # ולא ה-output שלו: tools/agents/doctor.py אינו מכיר outputs של `uses:`.
+      # נתיב שגוי לא עובר בשקט: פחות משני דוחות = השלב אדום.
+      - name: Summary
+        env:
+          RESULTS: ${{ github.workspace }}/.lighthouseci
+        run: |
+          python - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import glob, json, os, sys
+          reports = sorted(glob.glob(os.path.join(os.environ["RESULTS"], "lhr-*.json")))
+          if len(reports) < 2:
+              sys.exit(f"expected a report per page, found {len(reports)}")
+          print("## Lighthouse\n")
+          print("| page | " + " | ".join(("performance", "accessibility", "best-practices", "seo")) + " |")
+          print("|---|---|---|---|---|")
+          for path in reports:
+              lhr = json.load(open(path, encoding="utf-8"))
+              if lhr.get("runtimeError"):
+                  sys.exit(f"{lhr['finalDisplayedUrl']}: {lhr['runtimeError']}")
+              cats = lhr["categories"]
+              row = [str(round(cats[c]["score"] * 100)) for c in ("performance", "accessibility", "best-practices", "seo")]
+              print(f"| {lhr['finalDisplayedUrl']} | " + " | ".join(row) + " |")
+          EOF

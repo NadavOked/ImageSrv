@@ -369,6 +369,7 @@ fi
 
 # --- המניפסט (R61) --------------------------------------------------------------
 say "כותב imagesrv-iso.json"
+[[ -s "$POOL/pool-date" ]] || say "WARNING: $POOL/pool-date is missing -- the manifest's pool_date stays empty (C-CFG-10)"
 POOL_DATE="$(cat "$POOL/pool-date" 2>/dev/null || true)" KVER="$KVER" LAB_OVERLAY="$lab_overlay" SOURCE_GIT="$([[ -z "$SOURCE" ]] && echo true || echo false)" python3 - "$ISO_TREE" "$OUT/imagesrv-iso.json" "$TAG" "$COMMIT" "$EPOCH" "$(basename "$NETINST")" "$NETINST_SHA" "${PKGS[*]}" <<'PY'
 import hashlib, json, os, subprocess, sys
 tree, out, tag, commit, epoch, netinst, netinst_sha, pkgs = sys.argv[1:9]

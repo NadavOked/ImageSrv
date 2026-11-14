@@ -190,7 +190,7 @@ cloner_gui_state() {
     if [ "$_cg_any" = 0 ]; then
         cloner_cdisks "$(list_disks)" >> "$_cg_next" || return 1
         # #1859 (mockup 1859-smart-table): csmart= / csmartrow= -- every attribute, for the table behind a click. A table that cannot be built leaves the disk without its "all attributes" line
-        if command -v smart_tables_state > /dev/null 2>&1; then smart_tables_state "$(list_disks)" >> "$_cg_next" || :; fi
+        if command -v smart_tables_state > /dev/null 2>&1; then smart_tables_state "$(list_disks)" >> "$_cg_next" || :; fi   # B-HW-07: screen only; the gate reads disk_failures, not this record
     fi
     if command -v disk_used_records > /dev/null 2>&1; then disk_used_records "$(list_disks)" >> "$_cg_next" || return 1; fi   # #2030: cused= -- size and bytes in use per disk; none = "not measured" (guibridge.sh loads it, a test pins that)
 

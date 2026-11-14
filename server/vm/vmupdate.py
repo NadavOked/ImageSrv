@@ -38,6 +38,7 @@ from typing import Callable
 from server.storage import disk_reserve
 from server.vm import vmdisk, vmnet
 from server.core.atomicfile import write_atomic
+from server.core.cleanup import remove_tree
 from server.library.capture import validate_manifest_files
 from server.db import get_setting, journal, now_iso, set_setting, set_settings
 from server.library.images import (ImageLibrary, image_os, lineage_of, streamed_partitions,
@@ -674,6 +675,8 @@ class VmUpdate:
                     log.warning("expired work disk not removed: %s", exc.message)
                     return
                 if self.workdir.exists():
+                    # A-DSK-18: לא בליעה — הדיסק עדיין מוצג בקונסולה כלא-מוכרע, והסבב
+                    # הבא (MAINTENANCE_S) מנסה שוב. שורת יומן כאן הייתה חוזרת כל 30 שניות.
                     return
                 journal(self.conn, "vmupdate_expired",
                         f"{image} — דיסק עבודה שלא הוכרע 7 ימים נמחק")
@@ -1255,7 +1258,7 @@ class VmUpdate:
 
     def _save(self, user: str, name: str, description: str, ids: vmdisk.VmUser) -> None:
         out = self.workdir / "out"
-        shutil.rmtree(out, ignore_errors=True)
+        remove_tree(out, "previous VM save output")
         signature = self._disk_signature()
         try:
             source = json.loads((self.workdir / "source-manifest.json").read_text(encoding="utf-8"))
@@ -1298,13 +1301,13 @@ class VmUpdate:
                                    for p in manifest["partitions"] if p["fs"] == "BitLocker"],
                                "error": None}
         except vmdisk.DiskError as exc:
-            shutil.rmtree(out, ignore_errors=True)
+            remove_tree(out, "failed VM save output")
             # #1491: השמירה אינה כותבת לדיסק (הכיווץ על עותק) — כל כשל בשמו משאיר
             # אותו שלם: מדליקים שוב, מתקנים ושומרים.
             self._fail(exc.reason, exc.message, disk_ready=True, user=user)
         except Exception as exc:   # noqa: BLE001
             log.exception("vmupdate save failed")
-            shutil.rmtree(out, ignore_errors=True)
+            remove_tree(out, "failed VM save output")
             # #2915: גם כשל שאינו `DiskError` (למשל `OSError` בכתיבת המניפסט
             # לספרייה) לא נגע בדיסק העבודה — אבל לא מניחים: מוכן רק כשהגודל וה-mtime
             # זהים למה שהיו כשהשמירה התחילה. לא נקרא/השתנה = לא מוכן.

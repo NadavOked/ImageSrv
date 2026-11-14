@@ -66,6 +66,7 @@ jobs:
     env:
       IMAGESRV_REQUIRE_NATIVE: "1"
       SHARD: ${{ matrix.shard }}
+      PY: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -84,6 +85,10 @@ jobs:
           # ‏(דביאן 13, ‏#2121), שעליה נמדד ש-`--dist load` מדווח worker שקרס
           # ככישלון בשמו, ו-`loadgroup` נתקע.
           pip install -r server/requirements.txt pytest httpx pytest-xdist==3.6.1
+          # 13/11: הכיסוי ל-Codecov (שלבי "Coverage" למטה). מוצמד, ובלי .pth:
+          # מ-7.0 pytest-cov אינו מודד תהליכי-בן מעצמו, ולכן הטסטים שמריצים
+          # סקריפטים כתהליך-בן רצים בדיוק כמו בלעדיו.
+          pip install pytest-cov==7.1.0
           # ‏#1356: partclone/gdisk/ntfs-3g/dosfstools/pv — מנוע השיכפול המקומי (#1322)
           # רץ על loop devices כ-root; בלעדיהם REQUIRE_NATIVE מכשיל (v0.73.0 היה אדום).
           # ‏tests/test_hivewrite.py מקמפל את העוזר מול libhivex ומאמת
@@ -168,6 +173,16 @@ jobs:
           set -o pipefail
           args=(-p no:cacheprovider -m "not uinput and not vm_it")
           shard=(-p tools.git.ci_shard --ci-shard "$SHARD/4")
+          # 13/11: כיסוי ל-Codecov — ב-3.13 בלבד (הגרסה של דביאן 13), כדי לא
+          # להכפיל את מחיר המדידה על שתי הגרסאות. הנתונים מחוץ לעץ
+          # (`RUNNER_TEMP`), כמו פלטי השער: טסט שבודק את העץ לא יראה אותם.
+          # ‏`--cov-report=` ריק — הדוח נבנה בשלב נפרד אחרי הפסק.
+          cov=()
+          if [ "$PY" = "3.13" ]; then
+            mkdir -p "$RUNNER_TEMP/cov"
+            export COVERAGE_FILE="$RUNNER_TEMP/cov/.coverage"
+            cov=(--cov=server --cov=boot --cov=tools --cov-report= --cov-append)
+          fi
           gate="$RUNNER_TEMP/gate"
           mkdir -p "$gate"
           if ! python tools/git/lab_gate.py collect --out "$gate/collected.txt" -- "${args[@]}" "${shard[@]}" \
@@ -185,11 +200,11 @@ jobs:
           set +e
           IMAGESRV_SESSION_PROBLEMS="$gate/problems-parallel.json" \
             python -m pytest tests -q -p no:cacheprovider -m "$base and not serial" -n auto --dist load \
-            "${shard[@]}" --junitxml="$gate/run-parallel.xml" < /dev/null 2>&1 | tee pytest.log
+            "${shard[@]}" "${cov[@]}" --junitxml="$gate/run-parallel.xml" < /dev/null 2>&1 | tee pytest.log
           rc1=${PIPESTATUS[0]}
           IMAGESRV_SESSION_PROBLEMS="$gate/problems-serial.json" \
             python -m pytest tests -q -p no:cacheprovider -m "$base and serial" \
-            "${shard[@]}" --junitxml="$gate/run-serial.xml" < /dev/null 2>&1 | tee -a pytest.log
+            "${shard[@]}" "${cov[@]}" --junitxml="$gate/run-serial.xml" < /dev/null 2>&1 | tee -a pytest.log
           rc2=${PIPESTATUS[0]}
           set -e
           # ה-merge קורא את קודי היציאה מכאן — לפני הפסק, שעלול להכשיל את הצעד.
@@ -258,6 +273,29 @@ jobs:
           retention-days: 3
           if-no-files-found: warn
           overwrite: true
+
+      # 13/11: כיסוי ל-Codecov, מכל shard של 3.13 (Codecov מאחד את ארבע
+      # ההעלאות של אותו קומיט). בלי טוקן — הריפו הציבורי מעלה בלעדיו.
+      # ‏`continue-on-error`: כשל כאן נראה בשלב עצמו, אבל אינו צובע את ה-shard
+      # ואינו נוגע בפסק — ‏`pytest (3.12)`/‏`pytest (3.13)` נקבעים מה-junit למעלה.
+      # ‏`fail_ci_if_error: true` כדי שהעלאה שנכשלה תסומן ככזו ולא "תעבור".
+      - name: Coverage report (3.13)
+        if: matrix.python-version == '3.13'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          export COVERAGE_FILE="$RUNNER_TEMP/cov/.coverage"
+          python -m coverage xml -o "$RUNNER_TEMP/cov/coverage.xml"
+          python -m coverage report --format=total
+      - name: Coverage upload to Codecov (3.13)
+        if: matrix.python-version == '3.13'
+        continue-on-error: true
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          files: ${{ runner.temp }}/cov/coverage.xml
+          disable_search: true
+          name: py${{ matrix.python-version }}-shard-${{ matrix.shard }}
+          fail_ci_if_error: true
 
   # ‏#2952: הפסק על האיחוד, לכל גרסה — הסטטוס `pytest (3.12)` / ‏`pytest (3.13)`.
   # ‏`!cancelled()` ולא ברירת המחדל: כש-shard נכשל, ברירת המחדל הייתה מדלגת

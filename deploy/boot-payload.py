@@ -20,6 +20,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -80,17 +81,24 @@ def git(source: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
 def stamped_version(source: Path, explicit: str = "") -> str:
     """The same string tools/initramfs-version.sh stamps into the initrd."""
     version = explicit
+    why = "no version was given"
     if not version and (source / ".git").exists():
         out = git(source, "describe", "--tags", "--always")
         version = out.stdout.decode("utf-8", "replace").strip() if out.returncode == 0 else ""
+        why = f"git describe exited {out.returncode}: {out.stderr.decode('utf-8', 'replace').strip()}"
     elif not version:
         manifest = Path(os.environ.get("IMAGESRV_ISO_MANIFEST", "/etc/imagesrv/iso-release.json"))
+        why = f"{manifest} has no imagesrv_tag"
         try:
             tag = json.loads(manifest.read_text(encoding="utf-8")).get("imagesrv_tag")
             version = tag if isinstance(tag, str) else ""
-        except (OSError, ValueError, AttributeError):
-            version = ""
+        except (OSError, ValueError, AttributeError) as exc:
+            version, why = "", f"{manifest} unreadable: {exc}"
     if not version or len(version) > 128 or not set(version) <= VERSION_CHARS:
+        # C-FIL-06: "unknown" feeds the input hash and the initrd stamp -- said, on
+        # stderr (stdout carries the status line the caller reads).
+        print(f"boot-payload: version stamped as unknown -- {why if not version else 'not a version: ' + repr(version[:40])}",
+              file=sys.stderr)
         return "unknown"
     return version
 

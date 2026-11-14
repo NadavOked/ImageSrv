@@ -155,7 +155,7 @@ gui_dispatch() {
                 mv "$GUI_DIR/handoff.next" "$GUI_DIR/handoff" || return 1
             # #1561: the display is released next (gui_cleanup). While the GUI still holds it,
             # the VT's backlog is reset, so no English flashes before the restore's GUI.
-            printf '\033c\033[?25l' > "${IMAGESRV_TTY:-/dev/tty0}" 2>/dev/null || :
+            printf '\033c\033[?25l' > "${IMAGESRV_TTY:-/dev/tty0}" 2>/dev/null || :   # B-SYS-11: cosmetic; a VT not reset only shows old text a moment
             return 2
             ;;
         *) gui_error "פעולה לא מוכרת: $token" "Unknown action: $token" ;;

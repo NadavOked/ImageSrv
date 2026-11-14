@@ -26,7 +26,7 @@ detect_secure_boot() {
     [ -d "$SYSROOT/sys/firmware/efi" ] || { echo "false"; return; }
     _f="$SYSROOT/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c"
     [ -r "$_f" ] || { echo "null"; return; }
-    _b=$(dd if="$_f" bs=1 skip=4 count=1 2>/dev/null | od -An -tu1 | tr -d ' \n')
+    _b=$(dd if="$_f" bs=1 skip=4 count=1 2>/dev/null | od -An -tu1 | tr -d ' \n')   # B-HW-05: a failed read is empty -> null below
     case "$_b" in
         1) echo "true" ;;
         0) echo "false" ;;
