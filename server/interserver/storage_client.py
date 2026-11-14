@@ -14,12 +14,12 @@ from __future__ import annotations
 
 import json
 import logging
-import select
 import socket
 import time
 
 from server.interserver import auth as interserver_auth
 from server.interserver.auth import parse_interserver_url   # re-export לנוחות
+from server.interserver.fdwait import wait_io
 
 log = logging.getLogger("imagesrv.storage_client")
 
@@ -154,7 +154,7 @@ class _TimedConn:
         wait = self.idle
         if self.deadline is not None:
             wait = min(wait, self.deadline - time.monotonic())
-        if wait <= 0 or not any(select.select(rlist, wlist, [], wait)):
+        if wait <= 0 or not any(wait_io(rlist, wlist, wait)):
             raise InterserverTimeout(
                 f"המשני לא התקדם {self.idle:g} שניות ({self.waiting_for}) — נכשל, לא ממתינים")
 

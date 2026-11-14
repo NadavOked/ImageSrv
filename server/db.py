@@ -12,6 +12,7 @@ import os
 import secrets
 import sqlite3
 import threading
+import weakref
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1645,6 +1646,37 @@ def _initialize(conn: sqlite3.Connection) -> None:
         journal(conn, "setting_change", MFA_UPGRADE_NOTE, "")
 
 
+class _ThreadConnections:
+    """#3180: החיבורים שתהליכון אחד פתח, ונסגרים כשהתהליכון מת.
+
+    ``sqlite3.Connection`` שאיש לא סגר **אינו** נסגר כשהמונה שלו יורד לאפס:
+    מטמון ההצהרות שלו מחזיק אותו במעגל, ורק איסוף הזבל המחזורי משחרר אותו,
+    עם שלושת ה-fd שלו (הקובץ, ``-wal``, ``-shm``). נמדד 14/11 ב-3.12 וב-3.13.
+    כך כל תהליכון של מאגר הבקשות שמת השאיר חיבור פתוח, ו-worker של pytest
+    תחת כיסוי (שם איסוף הזבל המלא נדיר) עבר את 1024 ה-fd.
+
+    יש מופע אחד לכל תהליכון, ב-``_THREAD_CONNECTIONS``. הוא אינו במעגל, ולכן
+    התהליכון שמת משחרר אותו מיד, ו-``__del__`` סוגר. הסגירה קשורה **לחיי
+    התהליכון בלבד**, ולא לחיי ה-``Database``: ``connect(p).execute(...)
+    .fetchall()`` משחרר את ה-``Database`` לפני ה-``fetchall``, והחיבור חייב
+    להישאר פתוח. חיבור של ``Database`` שכבר נאסף יוצא מהרשימה בלי סגירה,
+    ונשאר לאיסוף הזבל כמו קודם."""
+
+    def __init__(self):
+        self.items: list = []
+
+    def add(self, database: "Database", conn: sqlite3.Connection) -> None:
+        self.items = [(ref, c) for ref, c in self.items if ref() is not None]
+        self.items.append((weakref.ref(database), conn))
+
+    def __del__(self) -> None:
+        for _ref, conn in self.items:
+            conn.close()
+
+
+_THREAD_CONNECTIONS = threading.local()
+
+
 class Database:
     """אובייקט אחד שמחזיק חיבור sqlite נפרד לכל תהליכון.
 
@@ -1665,7 +1697,8 @@ class Database:
 
     האובייקט מתחזה לחיבור (``execute``/``commit``/``close``) כדי שכל
     מי שמקבל ``conn`` ימשיך לעבוד בלי לדעת. תהליכון שמת משחרר את
-    החיבור שלו עם ה-``threading.local``.
+    החיבור שלו עם ה-``threading.local`` — וגם **סוגר** אותו (#3180,
+    ``_ThreadConnections``), ולא משאיר אותו פתוח עד איסוף הזבל.
     """
 
     def __init__(self, path: str | Path):
@@ -1688,6 +1721,10 @@ class Database:
                     _restrict_mode(self._path)
                     self._ready = True
             self._local.conn = conn
+            mine = getattr(_THREAD_CONNECTIONS, "mine", None)
+            if mine is None:
+                mine = _THREAD_CONNECTIONS.mine = _ThreadConnections()
+            mine.add(self, conn)
         return conn
 
     def execute(self, sql: str, parameters=()) -> sqlite3.Cursor:

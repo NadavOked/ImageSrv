@@ -18,7 +18,6 @@ terminator של pyOpenSSL (ראו ``interserver_auth`` — stdlib ssl אינו �
 import logging
 import re
 import secrets
-import select
 import shutil
 import socket
 import struct
@@ -32,6 +31,7 @@ from typing import Iterable
 from server.console import auth
 from server.storage import disk_reserve
 from server.interserver import auth as interserver_auth, storage_nodes
+from server.interserver.fdwait import wait_io
 from server.db import journal, monitor_rekeyed
 
 log = logging.getLogger("imagesrv.interserver")
@@ -1058,9 +1058,9 @@ def relay_tunnel(tls_conn, raw_sock: socket.socket, machine: socket.socket, *,
         if tls_conn.pending():
             readable, writable = [raw_sock], []
             if wlist:
-                _, writable, _ = select.select([], wlist, [], 0)
+                _, writable = wait_io([], wlist, 0)
         else:
-            readable, writable, _ = select.select(rlist, wlist, [], idle_seconds)
+            readable, writable = wait_io(rlist, wlist, idle_seconds)
             if not readable and not writable:
                 return f"idle {idle_seconds:g}s"
         if raw_sock in readable:
@@ -1301,7 +1301,7 @@ class _TimedRecv:
                 except SSL.WantWriteError:
                     wait_r, wait_w = [], [self._raw]
                 remaining = self.deadline - time.monotonic()
-                if remaining <= 0 or not any(select.select(wait_r, wait_w, [], remaining)):
+                if remaining <= 0 or not any(wait_io(wait_r, wait_w, remaining)):
                     self.timed_out = True
                     return b""
         finally:
@@ -1400,7 +1400,7 @@ def _handshake_within(conn, raw, seconds: float) -> bool:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return False
-            ready = select.select(wait_r, wait_w, [], remaining)
+            ready = wait_io(wait_r, wait_w, remaining)
             if not any(ready):
                 return False
     finally:

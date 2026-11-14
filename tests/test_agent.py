@@ -397,8 +397,16 @@ PCI = "/sys/devices/pci0000:00/0000:00:17.0"
     ],
     ids=lambda v: str(v),
 )
-def test_the_sata_slot_is_read_from_the_sysfs_link(path, expected):
-    assert port_from(path) == expected
+def test_the_sata_slot_is_read_from_the_sysfs_link(tmp_path, path, expected):
+    # #3142: הנפילה אחורה ל-hostN קוראת proc_name מ-$SYSROOT. בלי שורש מזויף
+    # היא קראה את ה-sysfs של המכונה שמריצה את הטסט: ahci על testrunner2
+    # (ברזל) הפך את ה-vmbus ל-"1", ועל VM הוא יצא "". שורש מזויף עם בקר
+    # לא-ATA (כמו storvsc) מקבע את התשובה — בלי תלות במכונה.
+    sysroot = tmp_path / "root"
+    host = sysroot / "sys/class/scsi_host/host0"
+    host.mkdir(parents=True)
+    (host / "proc_name").write_text("storvsc\n")
+    assert port_from(path, sysroot) == expected
 
 
 @pytest.mark.parametrize(

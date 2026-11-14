@@ -18,6 +18,7 @@ import msys_guard
 import native
 import orphan_guard as _orphan_guard
 import powertrap
+from db_close_guard import db_close_guard  # noqa: F401 -- autouse fixture (#3180)
 from orphan_guard import orphan_guard  # noqa: F401 -- autouse fixture (#1736)
 from powertrap import power_guard  # noqa: F401 -- autouse fixture (#2181)
 
