@@ -29,6 +29,7 @@ import json
 import math
 import sqlite3
 
+from server.brain import probejudge
 from server.learn import net_history
 from server.db import _settle, _write_lock, now_iso, writing
 
@@ -38,6 +39,7 @@ KNOWN_KEYS = (
     "power", "rtc", "cpu", "memory", "thermal", "nic", "pci_without_driver",
     "kernel", "pstore", "oem_key", "disks", "encryption", "probe_seconds",
     "netprobe",  # #1048: cable + LLDP, sibling in hello, stored in this row
+    "netwatch",  # #3064: what the distribution port hears (IGMP queries, foreign multicast), sibling in hello; volatile
     "ntfs",  # #980 §6: hibernated/dirty per NTFS partition (ntfs-3g.probe), before a capture
     "display",  # #2849: fb0 size + DRM connectors (EDID bytes, first mode) -- the KVM switch case
 )
@@ -46,11 +48,6 @@ STR_LIMIT = 200
 LIST_LIMIT = 64
 KEYS_LIMIT = 64
 DEPTH_LIMIT = 6
-
-#: סטיית שעון שמעליה "סוללת BIOS חשודה" (הכרעת נדב, #1049: > 5 דק').
-RTC_SKEW_SECONDS = 300
-#: בלאי NVMe שמעליו אזהרה (percentage_used הוא אחוז מהחיים המובטחים).
-NVME_USED_WARN = 90
 
 
 def _clean(value: object, depth: int = 0) -> object:
@@ -94,6 +91,7 @@ def stable(probe: dict) -> dict:
     """ה-probe בלי מה שמשתנה בכל דגימה — זה מה שמושווה בין גרסאות."""
     out = copy.deepcopy(probe)
     out.pop("probe_seconds", None)
+    out.pop("netwatch", None)   # #3064: counters of one listening window -- new every time, never a "version"
     rtc = out.get("rtc")
     if isinstance(rtc, dict):
         for k in ("hwclock_epoch", "system_epoch", "skew_seconds"):
@@ -180,104 +178,9 @@ def history(conn: sqlite3.Connection, mac: str) -> list[dict]:
 
 # --- השערים -----------------------------------------------------------------
 
-def _measured(value: object) -> dict | None:
-    """אובייקט **שנמדד**: לא ``None`` (לא נבדק) ולא ``{"error"}`` (נכשל).
-    שני אלה אינם שער — "לא נבדק" ≠ "תקין", אבל גם ≠ "רע"."""
-    if isinstance(value, dict) and "error" not in value:
-        return value
-    return None
-
-
-def _int(value: object) -> int | None:
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
-
-
-def _skew_text(seconds: int) -> str:
-    s = abs(seconds)
-    if s >= 86400:
-        return f"{s // 86400} ימים"
-    if s >= 3600:
-        return f"{s // 3600} שעות"
-    return f"{s // 60} דק'"
-
-
 def verdicts(probe: dict | None) -> list[dict]:
-    """מה שדורש עין ליד המכונה, לפי הדגימה האחרונה.
+    """מה שדורש עין ליד המכונה, לפי הדגימה האחרונה: ``{"key", "level": "warn"|"err", "text_he"}``.
 
-    כל פריט: ``{"key", "level": "warn"|"err", "text_he"}``. שדה שלא נמדד
-    (``None``/``error``) אינו מייצר פריט — ולכן רשימה ריקה אומרת "לא
-    נמצאה בעיה במה שנמדד", לא "הכול תקין".
-    """
-    out: list[dict] = []
-    if not isinstance(probe, dict):
-        return out
-
-    power = _measured(probe.get("power"))
-    if power is not None and power.get("on_battery") is True:
-        out.append({"key": "battery", "level": "err",
-                    "text_he": "המחשב על סוללה — שיכפול/קליטה עלולים להיקטע"})
-
-    rtc = _measured(probe.get("rtc"))
-    skew = _int(rtc.get("skew_seconds")) if rtc is not None else None
-    if skew is not None and abs(skew) > RTC_SKEW_SECONDS:
-        out.append({"key": "rtc", "level": "warn",
-                    "text_he": f"שעון החומרה סוטה ב-{_skew_text(skew)} — סוללת BIOS חשודה"})
-
-    for disk in probe.get("disks") or []:
-        if not isinstance(disk, dict):
-            continue
-        smart = _measured(disk.get("nvme_smart"))
-        if smart is None:
-            continue
-        name = str(disk.get("name") or "?")
-        crit, media, used = (_int(smart.get("critical_warning")),
-                             _int(smart.get("media_errors")), _int(smart.get("percentage_used")))
-        if (crit is not None and crit != 0) or (media is not None and media > 0):
-            out.append({"key": f"nvme:{name}", "level": "err",
-                        "text_he": f"NVMe {name}: " + " · ".join(
-                            p for p in (f"critical_warning={crit}" if crit else "",
-                                        f"{media} שגיאות מדיה" if media else "") if p)})
-        elif used is not None and used >= NVME_USED_WARN:
-            out.append({"key": f"nvme:{name}", "level": "warn",
-                        "text_he": f"NVMe {name}: {used}% מהבלאי המובטח נוצל"})
-
-    pstore = _measured(probe.get("pstore"))
-    if pstore is not None and pstore.get("crashed") is True:
-        out.append({"key": "pstore", "level": "warn",
-                    "text_he": "המחשב קרס לפני האתחול הזה"})
-
-    for nic in probe.get("nic") or []:
-        if not isinstance(nic, dict):
-            continue
-        name = str(nic.get("name") or "?")
-        conflict = _measured(nic.get("ip_conflict"))
-        if conflict is not None and conflict.get("duplicate") is True:
-            out.append({"key": f"ip_conflict:{name}", "level": "err",
-                        "text_he": f"כפילות IP על {name} — מחשב אחר ברשת עונה על הכתובת"})
-        stats = _measured(nic.get("stats"))
-        crc = _int(stats.get("rx_crc_errors")) if stats is not None else None
-        if crc is not None and crc > 0:
-            out.append({"key": f"crc:{name}", "level": "warn",
-                        "text_he": f"{crc} שגיאות CRC על {name} — כבל או פורט חשודים"})
-
-    # #1048: כבל פגום הוא שער. מתג שלא משדר (lldp.unheard) אינו תקלה.
-    netprobe = _measured(probe.get("netprobe"))
-    cable = _measured(netprobe.get("cable")) if netprobe is not None else None
-    if cable is not None and cable.get("status") in ("open", "short"):
-        pair, he, length = "?", ("פתוח" if cable["status"] == "open" else "קצר"), None
-        for item in cable.get("pairs") or []:
-            if not isinstance(item, dict):
-                continue
-            code = str(item.get("code") or "").lower()
-            if code in ("open", "short"):
-                pair = str(item.get("pair") or "?")
-                he = "פתוח" if code == "open" else "קצר"
-                length = item.get("length_m")
-                break
-        text = f"כבל פגום: זוג {pair} {he}"
-        if isinstance(length, int) and not isinstance(length, bool):
-            text += f" ב-{length} מטר"
-        elif isinstance(length, float) and math.isfinite(length):
-            text += f" ב-{int(length)} מטר"
-        out.append({"key": "cable", "level": "err", "text_he": text})
-    return out
+    #3662 (S41, B71): **ההכרעה היא של המוח** (`server/brain/probejudge.py`: מה נחשב סוללה, סטיית שעון, בלאי NVMe, קריסה, כפילות IP,
+    CRC וכבל פגום, באיזו חומרה ובאילו ספים). כאן רק המעטפת שהקונסולה והשערים כבר קוראים: אותו שם, אותו פלט."""
+    return probejudge.verdicts(probe)

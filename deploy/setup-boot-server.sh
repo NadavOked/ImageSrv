@@ -59,11 +59,9 @@ HTTP_ROOT="/srv/imagesrv/boot"
 APP_DIR="/opt/imagesrv"
 DATA_DIR="/var/lib/imagesrv"
 IMAGES_DIR="/srv/imagesrv/images"
-# ריפו העבודה (ImageSrv-dev) פרטי מאז 09/2026; השם
-# `NadavOked/ImageSrv` (בלי -dev) הוא הריפו הציבורי (פרסום נקי, קומיט יחיד, בלי היסטוריה), לא ריפו העבודה.
-# שרת האתחול מתקין מהארכיון הפרטי: ‏clone ממנו דורש אישורים ונכשל בקול
-# כשהם חסרים — וזה המצב הרצוי.
-REPO_URL="https://github.com/NadavOked/ImageSrv-dev"
+# ‏#3096: הסקריפט מתפרסם כמו שהוא, ולכן ה-clone מצביע על הריפו הציבורי
+# (פרסום נקי, קומיט יחיד לגרסה): הוא היחיד ש-clone אנונימי ממנו מצליח.
+REPO_URL="https://github.com/NadavOked/ImageSrv"
 DRY_RUN=0
 PORT=8080
 # ‏#1131 ס' 3: המתקין הוא התקנה; עדכון קוד הוא tools/server-upgrade.sh.
@@ -647,12 +645,10 @@ if [[ -f "$SCRIPT_DIR/../server/main.py" ]]; then
         run cp -a "$SRC/." "$APP_DIR/"
     fi
 else
-    # ‏git נכשל כאן בקול, אבל בהודעה **שלו**: "could not read Username for
-    # 'https://github.com'". למי שמתקין שרת ואינו מכיר את הריפו זו הודעה
-    # שאינה אומרת לא מה קרה ולא מה לעשות — ‏ImageSrv-dev הוא ריפו
-    # פרטי, ו-clone אנונימי ממנו לא יצליח לעולם. אותו דפוס כמו
-    # ‏`Unable to locate package` של fonts-ibm-plex (#120): כשל אמיתי,
-    # הודעה שמובילה לכיוון הלא נכון.
+    # ‏git נכשל כאן בקול, אבל בהודעה **שלו** ("Could not resolve host" וכד').
+    # למי שמתקין שרת ואינו מכיר את הריפו זו הודעה שאינה אומרת מה לעשות.
+    # אותו דפוס כמו `Unable to locate package` של fonts-ibm-plex (#120):
+    # כשל אמיתי, הודעה שמובילה לכיוון הלא נכון.
     say "מושך את הקוד מ-$REPO_URL"
     if [[ -d "$APP_DIR/.git" ]]; then
         run git -C "$APP_DIR" pull --ff-only || die "\
@@ -661,13 +657,13 @@ else
         run git clone --depth 1 "$REPO_URL" "$APP_DIR" || die "\
 ‏git clone מ-$REPO_URL נכשל.
 
-‏ImageSrv-dev הוא ריפו **פרטי**: ‏clone בלי אישורים נכשל תמיד, וזו
-הסיבה הסבירה ביותר לשגיאת git שמופיעה למעלה.
+הסיבה הסבירה ביותר לשגיאת git שמופיעה למעלה: לשרת אין גישה ל-github.com
+(רשת, DNS או proxy).
 
 הדרך המומלצת — להביא את הריפו אל השרת ולהריץ את המתקין מתוכו:
 
-  (מתחנה שיש לה גישה לריפו)
-  git clone https://github.com/NadavOked/ImageSrv-dev imagesrv
+  (מתחנה שיש לה גישה לרשת)
+  git clone https://github.com/NadavOked/ImageSrv imagesrv
   tar czf imagesrv.tgz imagesrv && scp imagesrv.tgz <שרת>:/tmp/
 
   (על השרת)
@@ -675,7 +671,7 @@ else
   sudo bash deploy/setup-boot-server.sh
 
 כשהריפו נמצא לצד הסקריפט המתקין מעתיק ממנו ואינו פונה לרשת כלל.
-לחלופין: הגדר אישורי git על השרת (credential helper או SSH) והרץ שוב."
+לחלופין: תן לשרת גישה ל-github.com והרץ שוב."
     fi
 fi
 
@@ -871,6 +867,40 @@ with sqlite3.connect(sys.argv[2]) as conn:
 PROXYFWEOF
 }
 
+# הכרטיסים שהמפעיל שמר בהם "שרת זמן" (nic_services, ntp). chrony ממשיך להגיש בהם אחרי התקנה
+# חוזרת, והכללים שהמחולל כותב כאן הם ברירת המחדל -- בלי הדגל הזה UDP 123 נסגר מתחת לשרת שעובד.
+# קריאה שנכשלה (רשומה פגומה) עוצרת את ההתקנה; היא אינה "אין כרטיסים".
+console_ntp_interfaces_from_db() {
+    [[ -f "$DATA_DIR/imagesrv.db" ]] || return 0
+    python3 - "$APP_DIR" "$DATA_DIR/imagesrv.db" <<'NTPFWEOF'
+import sqlite3, sys
+sys.path.insert(0, sys.argv[1])
+from server.net.nic_services import ntp_interfaces
+with sqlite3.connect(sys.argv[2]) as conn:
+    conn.row_factory = sqlite3.Row
+    for name in ntp_interfaces(conn):
+        print(name)
+NTPFWEOF
+}
+
+# #3489: השירותים שהמפעיל שמר לכל כרטיס (`nicsvc:*`), כשורות `כרטיס:שירות,שירות` -- בדיוק מה ש-
+# `NicServices.firewall_services()` נותן לקונסולה. ריק = המפעיל לא ערך. קריאה שנכשלה (רשומה פגומה,
+# אין כרטיסים) עוצרת את ההתקנה; היא אינה "אין שירותים שמורים".
+# SYS_NET: רק בשביל הטסטים (ברירת המחדל היא /sys/class/net האמיתי).
+console_nic_services_from_db() {   # $1=כרטיס השרתים  $2=כרטיס ההפצה
+    [[ -f "$DATA_DIR/imagesrv.db" ]] || return 0
+    python3 - "$APP_DIR" "$DATA_DIR/imagesrv.db" "$1" "$2" "${SYS_NET:-/sys/class/net}" <<'NICSVCEOF'
+import sqlite3, sys
+sys.path.insert(0, sys.argv[1])
+from server.net.nic_services import installer_firewall_services
+with sqlite3.connect(sys.argv[2]) as conn:
+    conn.row_factory = sqlite3.Row
+    for nic, services in installer_firewall_services(conn, sys.argv[3] or None, sys.argv[4] or None,
+                                                     sys.argv[5]) or []:
+        print(f"{nic}:{','.join(services)}")
+NICSVCEOF
+}
+
 install_firewall() {
     if (( NO_FIREWALL )); then
         warn "ללא חומת אש — R20-F1"
@@ -888,12 +918,29 @@ install_firewall() {
     # הייתה סוגרת את וילן ההפצה.
     NFT_ARGS=(--servers-if "$SERVERS_IF")
     [[ -n "$DEPLOY_FOR_NFT" ]] && NFT_ARGS+=(--deploy-if "$DEPLOY_FOR_NFT")
+    # #3489: שירותים שמורים לכל כרטיס מחליפים את שני התפקידים (`--per-nic`, כמו regenerate_firewall);
+    # בלעדיהם הרצה חוזרת כותבת כללים פתוחים יותר ממה שהמפעיל בחר.
+    local NICSVC_FOR_NFT NICSVC_SPEC NICSVC_ANY=""
+    NICSVC_FOR_NFT="$(console_nic_services_from_db "$SERVERS_IF" "$DEPLOY_FOR_NFT")"         || die "לא ניתן לקרוא את שירותי הכרטיסים לחומת האש"
+    if [[ -n "$NICSVC_FOR_NFT" ]]; then
+        NICSVC_ANY=1
+        NFT_ARGS=(--per-nic)
+        while IFS= read -r NICSVC_SPEC; do
+            [[ -z "$NICSVC_SPEC" ]] || NFT_ARGS+=(--service "$NICSVC_SPEC")
+        done <<< "$NICSVC_FOR_NFT"
+    fi
     # #1829: a reinstall must preserve proxy mode selected in the console.
     local PROXY_FOR_NFT PROXY_NIC
     PROXY_FOR_NFT="$(console_proxy_interfaces_from_db)" || die "לא ניתן לקרוא הגדרות proxy לחומת האש"
     while IFS= read -r PROXY_NIC; do
         [[ -z "$PROXY_NIC" ]] || NFT_ARGS+=(--proxy-if "$PROXY_NIC")
     done <<< "$PROXY_FOR_NFT"
+    local NTP_FOR_NFT NTP_NIC
+    NTP_FOR_NFT="$(console_ntp_interfaces_from_db)" || die "לא ניתן לקרוא את כרטיסי שרת הזמן לחומת האש"
+    # ב-`--per-nic` ה-ntp כבר בתוך `--service IF:...,ntp`; המחולל מסרב לשני הדגלים יחד.
+    while [[ -z "$NICSVC_ANY" ]] && IFS= read -r NTP_NIC; do
+        [[ -z "$NTP_NIC" ]] || NFT_ARGS+=(--ntp-if "$NTP_NIC")
+    done <<< "$NTP_FOR_NFT"
     if [[ "$STORAGE_ROLE" == "secondary" ]]; then
         PRIMARY_IP="${PRIMARY_URL#http://}"
         PRIMARY_IP="${PRIMARY_IP#https://}"

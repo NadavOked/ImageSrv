@@ -23,7 +23,7 @@ pytest.importorskip("fastapi")
 
 import server.app
 import server.main
-from server.net import dhcp_host
+from server.net import deploy_net, dhcp_host, known_fw
 
 #: the real one, before any test replaces it with a recorder
 REAL_CREATE_RUNTIME = server.app.create_runtime
@@ -63,7 +63,10 @@ def _run_main(tmp_path: Path, monkeypatch, platform: str) -> dict:
 def test_main_on_linux_hands_create_runtime_both_writers(tmp_path, monkeypatch):
     """The production side: the same two arguments as before #2267."""
     seen = _run_main(tmp_path, monkeypatch, "linux")
-    assert seen["known_macs_hooks"] == {"apply": dhcp_host.apply_known_macs}
+    # נדב 14/11 (#1079/#2485): ועוד `firewall` -- אותה רשימה ל-nftables של כרטיס ההפצה
+    # #3224: ועוד `firewall_stale` -- שרת שמשודרג כותב מחדש nftables.conf ישן בעלייה
+    assert seen["known_macs_hooks"] == {"apply": dhcp_host.apply_known_macs, "firewall": known_fw.apply,
+                                        "firewall_stale": deploy_net.stale_firewall}
     assert seen["sync_dnsmasq"] is True
 
 

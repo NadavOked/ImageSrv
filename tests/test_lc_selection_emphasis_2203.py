@@ -10,6 +10,7 @@ import subprocess
 
 import pytest
 
+from disk_rules_state import ruled_file, with_rules   # #3666: the verdicts the agent / the server add to a hand-written state
 from test_cloner_gui import BASH, GUI, _assert_emphasized_frame, _png_rgb, _token, posix
 from test_native_local_clone import pytestmark  # noqa: F401
 
@@ -109,6 +110,7 @@ def _render(binary, tmp_path, theme, usb, *, smart="ok", mark="", hw="", source=
         "lc_disk=2|sdb|Crucial|S2|500000000000|ok|ok|Windows|3|100000000000|500000000000|1||2|SATA||\n"
         f"lc_src={src}|done|100000000000|\nlc_fit=sda|{verdict}|100000000000|\n"
         "lc_fit=sdb|fits|100000000000|\n", encoding="utf-8", newline="\n")
+    ruled_file(state)   # #3666: the agent's verdicts for the drawers above
     run = subprocess.run([str(binary), posix(state), theme, posix(png), "0" if source else "1", str(int(focus))],
                          capture_output=True, text=True, encoding="utf-8", timeout=120,
                          stdin=subprocess.DEVNULL,

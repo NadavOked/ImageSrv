@@ -206,12 +206,11 @@ int room_selectable(const RoomDrawer *d) {
     return d->present && d->port >= 1 && eff_drawer(d->drawer, d->port) > 0;
 }
 
-/* #2848 (Nadav 11/11): red = SMART failed, a slow SATA link or a SATA problem (link_reset / drawer_gone),
+/* #2848 (Nadav 11/11): red = SMART failed or a SATA problem (link_reset / drawer_gone),
  * or slow in THIS round's write check -- never a target, still a source. The server decides (room_drawer_rule=,
  * drawer_list[].rule); the console's slotClass reads the same. */
 int room_drawer_red(const RoomDrawer *d) {
-    if (d->rule_set) return !d->rule_target;   /* the server's decision (room.py, disk_rule.py) -- shown, not re-made */
-    return smart_level(d->smart) == 2 || d->link_slow;   /* an older server: what the hello itself says */
+    return d->rule_set && !d->rule_target;   /* the server's decision (the brain's, #3666) -- shown, not re-made; none = not checked: the server is the gate (#3591: a link speed is not red) */
 }
 
 /* #1732 (Nadav 18/10): a red drawer is drawn in its colour but is never a target -- never

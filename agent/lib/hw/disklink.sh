@@ -78,6 +78,13 @@ disk_link_json() {
         fi
     fi
     printf ',"link_gbps":%s,"link_max_gbps":%s,"crc":%s' "${_dl_sm% *}" "${_dl_sm#* }" "$_dl_crc"
+    printf ',"rotational":%s' "$(disk_rotational "$1")"
+}
+
+disk_rotational() {
+    # Unknown is null, including malformed sysfs; never invent an SSD.
+    _dr_v=$(cat "$SYSROOT/sys/block/$1/queue/rotational" 2>/dev/null) || _dr_v=null
+    case "$_dr_v" in 0|1) printf '%s' "$_dr_v" ;; *) printf 'null' ;; esac
 }
 
 clone_link_gbps() {

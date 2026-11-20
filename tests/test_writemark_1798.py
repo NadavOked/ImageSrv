@@ -253,7 +253,7 @@ def test_the_local_clone_prepare_leaves_the_mark_on(tmp_path):
     (lc / "run").mkdir(parents=True)
     (lc / "run" / "entries").write_text("1|EFI system partition|0\n2|x|0\n3|y|0\n",
                                         encoding="utf-8", newline="\n")
-    out = sh(prelude + f'. {posix(AGENT)}/lib/localclone/lcplan.sh; . {posix(AGENT)}/lib/localclone/lccopy.sh; export LC={posix(lc)!r}; '
+    out = sh(prelude + f'. {posix(AGENT)}/lib/localclone/lcplan.sh; . {posix(AGENT)}/lib/localclone/lccopy.sh; . {posix(AGENT)}/lib/localclone/lchdd.sh; export LC={posix(lc)!r}; '   # #3064: lc_prepare_target asks lc_hdd_gate
              'disk_fits() { return 0; }; expand_last() { return 0; }; '
              'lc_prepare_target sda m.json; echo "rc=$?"; writemark_state sda')
     assert out.strip().splitlines()[-2:] == ["rc=0", "incomplete"], (out, log_of(run))
@@ -440,6 +440,10 @@ def test_the_room_drawer_list_carries_the_mark_and_an_old_agent_is_not_clean():
 def test_the_console_says_it_in_orange_and_still_offers_the_disk_as_a_target():
     js = console_js()
     assert f'const WRITE_MARK_HE = "{MARK_HE}";' in js
-    # #2848: the one rule reads the mark -- yellow: a target, never a source (the pick grid says the rule's words)
-    assert 'write_incomplete: d.write_mark === "incomplete"' in js and 'write_incomplete: "כתיבה לא הושלמה' in js
+    # #2848: the one rule reads the mark -- yellow: a target, never a source (the pick grid says the rule's words).
+    # #3666: the console does not read it for the colour any more: the brain's verdict arrives with the words, from the one table
+    from server.disks import disk_rule
+    assert 'write_incomplete: d.write_mark === "incomplete"' not in js and "diskFacts" not in js
+    assert disk_rule.REASON_HE["write_incomplete"].startswith("כתיבה לא הושלמה")
+    assert disk_rule.judge({"smart": "warn", "write_incomplete": True})["color"] == "yellow"   # yellow over orange: a target, never a source
     assert 'if (d.write_mark === "incomplete") return chip("y", WRITE_MARK_HE);' in js   # #2848: "y" = yellow, a target

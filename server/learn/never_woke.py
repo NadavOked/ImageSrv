@@ -32,11 +32,11 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-import time
 from datetime import datetime
 
 from server.disks import drawer_slots, f1_marks, model_slots
 from server.learn import wol as learn_wol
+from server.system import steadyclock
 
 log = logging.getLogger("imagesrv.never_woke")
 
@@ -65,7 +65,7 @@ def _epoch(stamp) -> float | None:
 def waiting(conn: sqlite3.Connection, now: float | None = None, mac: str | None = None) -> dict[str, dict] | None:
     """`{mac: {sent_at, waited_s, typical_s, after_s, resent}}` לכל מכונה שהערתה האחרונה לא נענתה, שלא
     נראתה מאז, ושעבר הסף (או רק `mac`). `None` = הקריאה נכשלה (לא "אין אף אחת")."""
-    now = time.time() if now is None else now
+    now = steadyclock.now() if now is None else now      # #3826: `sent_epoch` נכתב ב-steadyclock (#3768)
     try:
         out: dict[str, dict] = {}
         for row in conn.execute(

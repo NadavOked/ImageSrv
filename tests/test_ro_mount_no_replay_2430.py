@@ -66,7 +66,7 @@ def test_the_inventory_probe_of_every_drawer_never_replays(tmp_path, fs):
     assert options(got) == {WANT[fs]}, got
 
 
-@pytest.mark.parametrize("fs", ["ext4", "btrfs"])
+@pytest.mark.parametrize("fs", ["ext4", "btrfs", "xfs"])   # #3415: an xfs root is probed too
 def test_the_capture_source_root_probe_never_replays(tmp_path, fs):
     got = mounted_with(tmp_path, f"_linux_system 3 /dev/sda3 {fs}", ("common", "manifest"))
     assert got, "the probe did not mount at all -- the test checks nothing"

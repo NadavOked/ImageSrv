@@ -20,21 +20,21 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from server.console import auth, login as console_login, login_guard, mfa as console_mfa, presence as console_presence, users
-from server.core import capabilities, hostname_rule
+from server.core import capabilities, hostname_rule, machine_names
 from server.library import minfree
-from server.rounds import drive_rates, nic_speed, room, room_names
+from server.rounds import drive_rates, nic_live, nic_speed, room, room_names
 from server.agent import boot_preview, identity, inventory, probe, readbackhash, registry
 from server.system import backup_target, timezone
 from server.net import dhcp, ports
 from server.disks import (crcwarn, disk_events, disk_failures, disk_sets, drawer_slots, shrink_records, slot_names,
-                          smart_history)
+                          smart_history, disk_rule)
 from server.storage import disk_reserve, locations as storage_locations
 from server.interserver import storage_nodes, transfer_cap
 from server.agent.api import ServerContext
 from server.db import _write_lock, get_setting, journal, now_iso, set_settings, update_one, writing
 from server.library.images import restore_refusal, used_bytes_total
 from server.library.imagefit import validate_expand_choice
-from server.console.journal_he import EVENTS_HE, JournalTranslator, severity
+from server.console.journal_he import EVENTS_HE, JournalTranslator, events_of, severity
 from server.rounds.session_view import label as session_label
 from server.rounds.sessions import SessionError
 from server.rounds.station import ROUND_OPENER_ROLES
@@ -42,13 +42,24 @@ from server.agent import timing as agent_timing
 from server import auto_reboot
 from server.net import igmp_querier
 from server.console import disk_sets as console_disk_sets   # #1857
+from server.console import write_copies as console_write_copies   # #3284
 from server.console import learning as console_learning   # #2028
 from server.learn import never_woke, tuning as learn_tuning   # #2028, #1858
 from server.learn import eta as learn_eta   # #2684
+from server.learn import server_cap   # #3464
+from server.learn import netrate   # #3600: מרווח ההמלצה במפת החיבורים
 from server.agent import firmware_image# #2080
 from server.disks import model_slots   # #2001
 from server.disks import f1_marks   # #1858
-from server.disks import writefloor   # #2338
+from server.rounds import chunksend   # #2533
+from server.rounds import interrupt   # #2528
+from server.brain import budget as brain_budget, veto as brain_veto   # #3064: המתג והספים של המוח, והגבול העליון של תקציב הרשת
+from server.brain import shadowgate as brain_shadowgate   # #3563
+from server.brain import completing as brain_completing   # #3064 (B30): המתג
+from server.brain import drawerhold as brain_drawerhold   # #2023: ההגדרה `brain_drawer_hold` (ביצוע ההחלטה של המוח על השלמה איטית)
+from server.brain import diskcolor as brain_diskcolor   # #3666 (K3/DISK_COLOR): המוח מסווג דיסק; הקונסולה מציגה
+from server.brain import cpucap as brain_cpucap   # #3064 (K12): שער המעבד לפני פתיחת גל, מתג כבוי כברירת מחדל
+from server.brain import memory as brain_memory   # #3185: הזיכרון ארוך-הטווח, אותה קריאה של המוח
 from server.agent import unknown_screen   # #1802
 from server.agent import held# #2031
 
@@ -77,7 +88,7 @@ def _idle_seconds(raw) -> int | None:
 WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   # נדב 18/10: חיוב MFA למנהלים — כבוי כברירת מחדל.
                   console_mfa.SETTING,
-                  "console_idle_seconds", "class_deploy_enabled", "cloner_beep",
+                  "console_idle_seconds", "class_deploy_enabled", "cloner_beep", "hdd_support",
                   # #748: כפתור "עדכן" — כבוי כברירת מחדל (נדב, 16/09).
                   "update_enabled",
                   # #855: שומר הזהות (MAC + חכירת DHCP). חסר = דלוק; "false"
@@ -91,8 +102,17 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   crcwarn.SETTING,
                   # #1354: מינימום GB פנויים במחיצת המערכת אחרי שחזור (0–500).
                   minfree.SETTING,
-                  # #2338: סף מהירות הכתיבה לפני הזרם, MB/s (10–500; ברירת המחדל 50).
-                  writefloor.SETTING,
+                  # סף מהירות הכתיבה (`writecheck_min_mbps`) יצא מההגדרות (נדב 14/11 בערב): הלמידה (LR5) היא שכותבת אותו.
+                  # #2533: מנוע השידור — "udpcast" (ברירת המחדל) או "chunk" (ניסיוני).
+                  chunksend.SETTING,
+                  interrupt.SETTING,   # #2528 (נדב 12/11): כמה דקות שאלה על משכפל שכבה באמצע סבב מחכה
+                  # #3064 (שלב 2, נדב 14/11): המוח — מתג הווטו (off/shadow/enforce) והספים, עם ברירת מחדל כמו הגדרות הרשת.
+                  *brain_veto.KEYS,
+                  *brain_shadowgate.KEYS,   # #3563: ספי השער מצל לאכיפה (מינימום דגימות, אחוז הסכמה)
+                  brain_budget.SETTING,   # #3064 (שלב 3, נדב 14/11): הגבול העליון של תקציב הרשת. 0 = נמדד מהכרטיס
+                  brain_completing.SETTING,   # #3064 (B30): מתג, כבוי כברירת מחדל -- הורדה של חתיכות שלא תאמו בלבד. on/off
+                  brain_drawerhold.SETTING,   # #2023 (נדב 15/11): השלמה מעכבת רק את המגירה שנפגעה. slow (ברירת המחדל, #3605) = מבצע רק דיסק שהמוח סימן איטי; off = רק רישום בצל
+                  brain_cpucap.SETTING,   # #3064 (K12, נדב 15/11): מחזיק פתיחת סבב כשהשרת עמוס. כבוי; בלעדיו ההכרעה רק נרשמת
                   # #1802 (נדב 04/11): מחשב UEFI לא רשום עולה מהדיסק אחרי N שניות (0 = כבוי). BIOS — לעולם לא (#345).
                   unknown_screen.SETTING,
                   # #1473: תקרת קצב להעברות בין אתרים, Mb/s (0 = ללא הגבלה).
@@ -103,6 +123,9 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   igmp_querier.SETTING,
                   # #2056/#2059 (מוקאפ 05, נדב 24/10): זמני ההמתנה והכיבוי האוטומטי.
                   *agent_timing.KEYS,
+                  agent_timing.TAIL_SHRINK,   # #3262 (נדב 14/11): מתג, כבוי; בלי שורה בקונסולה
+                  server_cap.SETTING,   # #3464: מתג, כבוי; בלי שורה בקונסולה. בלעדיו תקרת הדיסק רק נרשמת בצל
+                  netrate.MARGIN_SETTING,   # #3600 (זאוס 18/11): פי כמה מהיר מהיציאה צריך להיות הרשת כדי להמליץ על יציאה אחרת. 1.1; בלי שורה בקונסולה
                   # #2786 (נדב 09/11): תבנית שמות המחשב בשיכפול — ריפוד וסיומת המרצה.
                   room_names.PAD_SETTING, room_names.INSTRUCTOR_SETTING,
                   auto_reboot.MODE, auto_reboot.TIME, auto_reboot.WEEKDAY}
@@ -112,10 +135,14 @@ BOOLEAN_SETTINGS = {
     console_mfa.SETTING: "חיוב אימות דו-שלבי למנהלים",
     "class_deploy_enabled": "הפצה לכיתה ממסך התחנה",
     "cloner_beep": "צלילי המשכפל ומחשב הבנייה",
+    "hdd_support": "תמיכה ב-HDD",   # #3268 (נדב 14/11): כבוי = HDD רק כמקור, וכיעד "איטי" כבר בבדיקה בהכנסה
     "update_enabled": "עדכון גרסה מהקונסולה",
     identity.SETTING: "אימות מחשבים לפי כתובת ה-DHCP",
     drive_rates.SETTING: "קצב שידור אוטומטי לפי הכוננים בחדר",
     learn_tuning.SETTING: "למידה אוטומטית של הרשת והמחשבים",
+    server_cap.SETTING: server_cap.LABEL_HE,   # #3464
+    agent_timing.TAIL_SHRINK: "הקטנת המחיצה האחרונה ביעד קטן עד 64MB",   # #3262
+    brain_cpucap.SETTING: brain_cpucap.LABEL_HE,   # #3064 (K12)
 }
 
 
@@ -164,12 +191,6 @@ def _validate_write_settings(body: dict) -> dict[str, str]:
                 raise HTTPException(
                     400, f"מינימום מקום פנוי: מספר שלם 0–{minfree.MIN_FREE_GB_MAX}")
             normalized[key] = str(gb)
-        elif key == writefloor.SETTING:
-            floor = writefloor.parse(value)
-            if floor is None:
-                raise HTTPException(
-                    400, f"סף מהירות כתיבה לדיסק: מספר שלם {writefloor.MINIMUM}–{writefloor.MAXIMUM} (MB/s)")
-            normalized[key] = str(floor)
         elif key == unknown_screen.SETTING:
             secs = unknown_screen.parse(value)
             if secs is None:
@@ -182,6 +203,16 @@ def _validate_write_settings(body: dict) -> dict[str, str]:
                 raise HTTPException(
                     400, f"הגבלת קצב בין אתרים: מספר שלם 0–{transfer_cap.MAXIMUM} (Mb/s)")
             normalized[key] = str(mbps)
+        elif key == netrate.MARGIN_SETTING:
+            factor = netrate.parse_margin(value)
+            if factor is None:
+                raise HTTPException(400, f"{netrate.LABEL_HE}: מספר {netrate.MARGIN_RANGE[0]:g}–{netrate.MARGIN_RANGE[1]:g}, עד שתי ספרות אחרי הנקודה")
+            normalized[key] = f"{factor:g}"
+        elif key == chunksend.SETTING:
+            engine = chunksend.parse_setting(value)
+            if engine is None:
+                raise HTTPException(400, "מנוע שידור: udpcast או chunk (ניסיוני)")
+            normalized[key] = engine
         elif key == readbackhash.SETTING:
             full = readbackhash.parse_setting(value)
             if full is None:
@@ -192,6 +223,39 @@ def _validate_write_settings(body: dict) -> dict[str, str]:
             if querier is None:
                 raise HTTPException(400, "IGMP querier: true או false")
             normalized[key] = querier
+        elif key == interrupt.SETTING:
+            minutes = interrupt.parse(value)
+            if minutes is None:
+                raise HTTPException(
+                    400, f"{interrupt.LABEL_HE}: מספר שלם של דקות, {interrupt.MINIMUM}–{interrupt.MAXIMUM}")
+            normalized[key] = str(minutes)
+        elif key == brain_veto.SETTING:
+            veto_mode = brain_veto.parse_mode(value)
+            if veto_mode is None:
+                raise HTTPException(400, f"{brain_veto.LABELS_HE[key]}: off, shadow או enforce")
+            normalized[key] = veto_mode
+        elif key == brain_completing.SETTING:
+            if value not in ("on", "off"):
+                raise HTTPException(400, "אימות והורדה של חתיכות שלא תאמו: on או off")
+            normalized[key] = value
+        elif key == brain_drawerhold.SETTING:
+            hold = brain_drawerhold.parse_mode(value)
+            if hold is None:
+                raise HTTPException(400, f"{brain_drawerhold.LABEL_HE}: off, slow או on")
+            normalized[key] = hold
+        elif key in brain_shadowgate.KEYS:
+            bounds = (brain_shadowgate.SAMPLES_RANGE if key == brain_shadowgate.SAMPLES_SETTING
+                      else brain_shadowgate.AGREEMENT_RANGE)
+            number = brain_shadowgate.parse(value, bounds)
+            if number is None:
+                raise HTTPException(400, f"{brain_shadowgate.LABELS_HE[key]}: מספר שלם {bounds[0]}–{bounds[1]}")
+            normalized[key] = str(number)
+        elif key == brain_budget.SETTING:
+            ceiling = brain_budget.parse_ceiling(value)
+            if ceiling is None:
+                low, high = brain_budget.CEILING_RANGE
+                raise HTTPException(400, f"{brain_budget.LABEL_HE}: מספר שלם של Mbps, {low}–{high}, או 0 לנמדד מהכרטיס")
+            normalized[key] = str(ceiling)
         elif key in agent_timing.KEYS:
             seconds = agent_timing.parse(key, value)
             if seconds is None:
@@ -349,11 +413,17 @@ def create_console_router(
         שקטה, כדי שהיא לא תיעלם באותה שקט שבו הייתה נדלקת."""
         if known_macs_hooks is None:
             return None
-        text = dhcp.render_known_macs(registry.all_macs(ctx.conn))
-        error = known_macs_hooks["apply"](text)
+        macs = registry.all_macs(ctx.conn)
+        error = known_macs_hooks["apply"](dhcp.render_known_macs(macs))
         if error:
             journal(ctx.conn, "known_macs_apply_failed", error, user_id)
-            return {"applied": False, "error": str(error)}
+        # הכרעת נדב 14/11 (#1079/#2485): אותה רשימה לחומת האש של כרטיס ההפצה
+        # (`known_fw.apply`) -- מכונה שנרשמה עכשיו נפתחת מיד, בלי אתחול של השרת.
+        fw_error = known_macs_hooks["firewall"](macs) if "firewall" in known_macs_hooks else None
+        if fw_error:
+            journal(ctx.conn, "known_macs_firewall_failed", fw_error, user_id)
+        if error or fw_error:
+            return {"applied": False, "error": " · ".join(str(e) for e in (error, fw_error) if e)}
         return {"applied": True, "error": None}
 
     @router.post("/login")
@@ -727,9 +797,14 @@ def create_console_router(
         woke_waits = never_woke.waiting(ctx.conn)
         f1_seen = f1_marks.all_marks(ctx.conn)   # #1858 (07/11): "נצפה F1" לפי serial. None = נכשל — אין ראיה שנייה
         round_smart = disk_events.last_by_serial(ctx.conn)   # #2706: מה שהסבב האחרון קרא, לתצוגה
+        group_roles = {g["id"]: g["role"] for g in ctx.conn.execute("SELECT id, role FROM groups")}
         result = []
         for r in rows:
             row = dict(r)
+            # #3123: המספר (ממה שהמוח קורא) ושם התצוגה; ``suffix`` נשאר השם הטכני.
+            # null = שם ישן/כיתה — מוצג כמו שהוא (``display_name`` = ה-suffix).
+            row["number"] = machine_names.number_of(group_roles.get(row["group_id"]), row["suffix"])
+            row["display_name"] = machine_names.label(group_roles.get(row["group_id"]), row["suffix"])
             disks_json = row.pop("disks_json")
             row["disks"] = json.loads(disks_json) if disks_json is not None else None
             stored_slots = row.pop("drawer_slots")
@@ -746,8 +821,12 @@ def create_console_router(
             optical_json = row.pop("optical_json")
             row["optical"] = json.loads(optical_json) if optical_json is not None else None
             # #2846: אין `crc_suspect` — מונה CRC מוחלט הוא היסטוריה, לא מצב של הדיסק (נדב 11/11).
-            for d in row["disks"] if isinstance(row["disks"], list) else []:
+            # #3666: הצבע של כל דיסק מגיע מהמוח (`rule`, K3/DISK_COLOR) עם רשומות הכשל הפתוחות של המכונה -- הקונסולה אינה מחשבת אותו.
+            reported = [d for d in row["disks"] if isinstance(d, dict)] if isinstance(row["disks"], list) else []
+            failures = disk_rule.machine_failures(ctx.conn, row["mac"], reported) if reported else []
+            for d in reported:
                 if isinstance(d, dict):
+                    d["rule"] = brain_diskcolor.decide(ctx.conn, d, failures, point="machines", mac=row["mac"])
                     # #1857 (מוקאפ 04): "קוריאים · xx-7" ליד הדיסק; None = בלי סט -- מוצג כמו היום.
                     d["set_text"] = disk_sets.text_of(set_labels, d.get("serial"))
                     serial = d.get("serial")
@@ -764,11 +843,15 @@ def create_console_router(
             row["probe_seen_at"] = sample["sampled_at"] if sample else None
             row["probe_verdicts"] = probe.verdicts(row["probe"])
             # 15/10: מהירות כרטיס ההפצה — ידנית / מדווחת / הונחה 1Gb/s.
-            row["nic_speed"] = nic_speed.view(ctx.conn, row["mac"], row["probe"], sampled=True)
+            row["nic_speed"] = nic_speed.view(ctx.conn, row["mac"], row["probe"], sampled=True,
+                                              sampled_at=row["probe_seen_at"])
             # #2847: מהירות הקישור **שנמדדה** (Mb/s), בלי ידני ובלי הנחה — כדי שקישור איטי לא יוסתר
             # בהגדרה ידנית. null = לא נמדד / לא חד-משמעי (עיקרון 5: "לא ידוע" אינו "תקין").
-            row["nic_link_mbps"] = nic_speed.reported(row["probe"])[0]
+            # #3277: חי מה-hello, או דגימה ראויה -- לא דגימה שנשארה מאתחול קודם
+            row["nic_link_mbps"] = nic_speed.measured(ctx.conn, row["mac"], row["probe"], sampled=True,
+                                                      sampled_at=row["probe_seen_at"])[0]
             row["last_capture"] = last_captures.get(row["mac"])
+            row["nic_bus"] = nic_live.bus(row["mac"])
             row["slot_names"] = names.get(row["mac"], {})
             # #1997: שם שנרשם לפני הכלל ואינו שם מחשב — מוצג כמו שהוא, וכאן
             # הסיבה, ל"דורש טיפול" בסקירה. null = חוקי. אין מיגרציה שמשנה שם.
@@ -1034,6 +1117,37 @@ def create_console_router(
                 "disks": None if not isinstance(disks, list) else
                 [smart_history.describe(ctx.conn, d) for d in disks if isinstance(d, dict)]}
 
+    # --- #3185: הזיכרון ארוך-הטווח של המוח -- `brain_memory.knowledge`/`decisions`, אותה קריאה של המוח ---
+
+    @router.get("/brain/decisions")
+    def brain_decisions(kind: str | None = None, key: str | None = None, rule: str | None = None,
+                        limit: int = brain_memory.RECENT, user=Depends(current_user)):
+        """ההחלטות האחרונות של המוח והתוצאה שלהן. ``kind=general`` = רק הכלליות (תקציב הרשת)."""
+        if kind is not None and kind != "general" and kind not in brain_memory.KINDS:
+            raise HTTPException(400, "סוג ישות לא מוכר")
+        return brain_memory.decisions(ctx.conn, kind=kind, key=key, rule=rule, limit=min(max(limit, 1), 500))
+
+    @router.get("/brain/memory/{kind}")
+    def brain_memory_entities(kind: str, user=Depends(current_user)):
+        """כל הישויות מסוג אחד שיש עליהן סיכום -- גם כאלה שלא נראו שנה."""
+        if kind not in brain_memory.KINDS:
+            raise HTTPException(400, "סוג ישות לא מוכר")
+        return brain_memory.entities(ctx.conn, kind)
+
+    @router.get("/brain/memory/{kind}/{key:path}")
+    def brain_memory_entity(kind: str, key: str, user=Depends(current_user)):
+        """כל מה שהשרת יודע על ישות אחת: השורות האחרונות, הסיכום, וההחלטות של המוח עליה."""
+        if kind not in brain_memory.KINDS:
+            raise HTTPException(400, "סוג ישות לא מוכר")
+        return brain_memory.knowledge(ctx.conn, kind, key)
+
+    @router.get("/brain/timeline/{serial}")
+    def brain_disk_timeline(serial: str, round_id: str | None = None, user=Depends(current_user)):
+        """#3064 (R4): ציר הזמן של דיסק בסבב -- נכנס, התקבל, הצטרף, השלים, קריאה חוזרת, נכתב (`joinwatch.timeline`)."""
+        from server.brain import joinwatch   # noqa: PLC0415 -- כמו `memory` בפס הייצור
+
+        return joinwatch.timeline(ctx.conn, serial, round_id)
+
     # --- #874: דיסקים אדומים — זיכרון כשלי הכתיבה בשרת ---------------------------
 
     @router.get("/disk-failures")
@@ -1192,9 +1306,13 @@ def create_console_router(
         # #2427: כמו `close_round` (#439) — "נסגר" רק עם ראיה שהמשדר מת.
         if row["kind"] == "multicast" and ctx.sender is not None:
             left = await run_in_threadpool(ctx.sender.stop, session_id)
-            if left is not None:
-                who = f"PID {left}" if left > 0 else "לא הצלחנו לוודא שהוא מת"
-                raise HTTPException(500, f"הסבב נסגר, אבל udp-sender עדיין רץ ({who})")
+            # #2533: ומנוע החתיכות — סבב שכבר היה `closed` אינו קורא ל-`on_closed`.
+            left_chunk = (await run_in_threadpool(ctx.chunk.stop, session_id)
+                          if ctx.chunk is not None else None)
+            for program, pid in (("udp-sender", left), ("chunkcast send", left_chunk)):
+                if pid is not None:
+                    who = f"PID {pid}" if pid > 0 else "לא הצלחנו לוודא שהוא מת"
+                    raise HTTPException(500, f"הסבב נסגר, אבל {program} עדיין רץ ({who})")
         return {"ok": True}
 
     # --- משתמשים, יומן, הגדרות (admin) --------------------------------------
@@ -1326,10 +1444,18 @@ def create_console_router(
 
     def _journal_rows(response: Response, *, limit: int, max_limit: int,
                       event: str, user_filter: str, date_from: str, date_to: str,
-                      machine: str, q: str, before: int | None) -> list[dict]:
+                      machine: str, q: str, before: int | None, level: str = "") -> list[dict]:
         limit = max(1, min(limit, max_limit))
         conditions = []
         params: list = []
+        # #3157: "דורש תשומת לב" = חומרה warn/err (journal_he.severity) — בשאילתה,
+        # כדי שהסך והדפדוף יהיו של הסינון. ערך אחר נדחה, לא מתעלמים ממנו בשקט.
+        if level == "attention":
+            attention = sorted(events_of("warn", "err"))
+            conditions.append(f"event IN ({', '.join('?' * len(attention))})")
+            params.extend(attention)
+        elif level:
+            raise HTTPException(400, f"level לא מוכר: {level} (attention, או ריק = הכול)")
         # אירוע, משתמש וטווח זמן הם עמודות אמיתיות — מסננים בשאילתה עצמה.
         if event:
             conditions.append("event = ?")
@@ -1420,12 +1546,13 @@ def create_console_router(
         machine: str = "",
         q: str = "",
         before: int | None = None,
+        level: str = "",
         user=Depends(admin_only),
     ):
         return _journal_rows(
             response, limit=limit, max_limit=1000, event=event,
             user_filter=user_filter, date_from=date_from, date_to=date_to,
-            machine=machine, q=q, before=before)
+            machine=machine, q=q, before=before, level=level)
 
     @router.get("/journal.csv")
     def journal_csv(
@@ -1437,6 +1564,7 @@ def create_console_router(
         machine: str = "",
         q: str = "",
         before: int | None = None,
+        level: str = "",
         user=Depends(admin_only),
     ):
         """#1008: אותם פרמטרים ואותן שורות כמו ``/journal``, אחרי אותה
@@ -1447,7 +1575,7 @@ def create_console_router(
         rows = _journal_rows(
             meta, limit=limit, max_limit=journal_scan_cap, event=event,
             user_filter=user_filter, date_from=date_from, date_to=date_to,
-            machine=machine, q=q, before=before)
+            machine=machine, q=q, before=before, level=level)
         out = io.StringIO()
         writer = csv.writer(out, lineterminator="\r\n")
         fields = ("id", "ts", "user", "event", "label", "text", "severity")
@@ -1470,8 +1598,14 @@ def create_console_router(
         values[crcwarn.SETTING] = str(crcwarn.threshold(ctx.conn))
         # #1354: הערך שבתוקף — ברירת המחדל כשלא נקבע, לא "לא נקבע".
         values[minfree.SETTING] = str(minfree.min_free_gb(ctx.conn))
-        # #2338: הערך שבתוקף — "50" כשלא נקבע או כשהשמור פגום.
-        values[writefloor.SETTING] = str(writefloor.mbps(ctx.conn))
+        # #2533: הערך שבתוקף — "udpcast" כשלא נקבע, וכשהשמור אינו מוכר.
+        values[chunksend.SETTING] = chunksend.engine_of(ctx.conn)
+        values[interrupt.SETTING] = str(interrupt.ask_minutes(ctx.conn))   # #2528: הערך שבתוקף
+        values.update(brain_veto.effective(ctx.conn))   # #3064: המצב (shadow כשלא נקבע); הספים אינם הגדרות
+        values.update(brain_shadowgate.effective(ctx.conn))   # #3563: ערך ההתחלה כשלא נקבע
+        values[brain_budget.SETTING] = brain_budget.effective(ctx.conn)   # #3064 (שלב 3): "0" = נמדד מהכרטיס
+        values[brain_completing.SETTING] = "on" if brain_completing.verify_enabled(ctx.conn) else "off"   # #3064 (B30): כבוי כשלא נקבע
+        values[brain_drawerhold.SETTING] = brain_drawerhold.mode(ctx.conn)   # #2023, #3605: "slow" כשלא נקבע
         # #1802: הערך שבתוקף — "0" (כבוי) כשלא נקבע או כשהשמור פגום.
         values[unknown_screen.SETTING] = str(unknown_screen.autoboot_seconds(ctx.conn))
         # #1473: הערך שבתוקף — "0" (ללא הגבלה) כשלא נקבע או כשהשמור פגום.
@@ -1487,6 +1621,9 @@ def create_console_router(
         for key in agent_timing.KEYS:
             values[key] = str(agent_timing.seconds(ctx.conn, key))
         values["agent_timing_applied"] = agent_timing.applied_counts(ctx.conn)
+        values[agent_timing.TAIL_SHRINK] = "true" if agent_timing.tail_shrink_enabled(ctx.conn) else "false"   # #3262
+        values[server_cap.SETTING] = "true" if server_cap.enabled(ctx.conn) else "false"   # #3464: הערך שבתוקף, כבוי כשלא נקבע
+        values[netrate.MARGIN_SETTING] = f"{netrate.margin(ctx.conn):g}"   # #3600: הערך שבתוקף (1.1 כשלא נקבע או כשהשמור פגום)
         # #2786: הערכים שבתוקף — ברירת המחדל (2, INS) כשלא נקבע או כשהשמור פגום.
         values[room_names.PAD_SETTING] = str(room_names.pad(ctx.conn))
         values[room_names.INSTRUCTOR_SETTING] = room_names.instructor(ctx.conn)
@@ -1509,6 +1646,11 @@ def create_console_router(
         # #1794: validate the complete request before writing any key. The
         # validator is deliberately exhaustive over WRITE_SETTINGS.
         normalized = _validate_write_settings(body)
+        # #2533: המתג "מנוע שידור" אינו נדלק בלי שולח — ואומר למה. בלי זה הוא נדלק, והגל הראשון נכשל.
+        if normalized.get(chunksend.SETTING) == chunksend.CHUNK and getattr(ctx, "chunk", None) is not None:
+            problem = await run_in_threadpool(ctx.chunk.binary_problem)
+            if problem:
+                raise HTTPException(409, f"מנוע השידור לא הודלק: {problem}")
         learning_was_on = learn_tuning.enabled(ctx.conn)
         set_settings(ctx.conn, normalized)
         learn_tuning.settings_written(ctx.conn, normalized, learning_was_on, user[0])   # #2028
@@ -1518,5 +1660,6 @@ def create_console_router(
 
     console_mfa.register(router, ctx, current_user, admin_only, tls, clock_status)
     console_disk_sets.register(router, ctx, admin_only)   # #1857
+    console_write_copies.register(router, ctx, admin_only)   # #3284
     console_learning.register(router, ctx, admin_only)   # #2028
     return router

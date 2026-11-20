@@ -55,7 +55,7 @@ def test_an_outage_is_a_red_record_with_the_moment_of_the_last_byte(tmp_path):
         stream_beep_tick 45; wait; rec             # 45 s since the last byte: it came at 1955
         t=2010; stream_beep_tick 55; wait; rec     # still the same outage, same moment
     """)
-    assert got == ["-", "net=lost|1955|300", "net=lost|1955|300"], got
+    assert got == ["-", "net=lost|1955|120", "net=lost|1955|120"], got
 
 
 @_ASH
@@ -86,7 +86,7 @@ def test_the_bar_does_not_wait_for_the_speaker(tmp_path):
         t=1000; date() { echo "$t"; }
         t=2000; stream_beep_tick 45; wait; stream_net_record
     """)
-    assert out.splitlines()[-1] == "net=lost|1955|300", out
+    assert out.splitlines()[-1] == "net=lost|1955|120", out
 
 
 @_ASH
@@ -97,7 +97,7 @@ def test_the_end_of_the_stream_phase_ends_the_red_bar(tmp_path):
         stream_beep_tick ''; wait; rec
         t=2500; stream_beep_tick 45; wait; rec           # a new outage starts from its own moment
     """)
-    assert got == ["net=lost|1955|300", "-", "net=lost|2455|300"], got
+    assert got == ["net=lost|1955|120", "-", "net=lost|2455|120"], got
 
 
 @_ASH
@@ -106,7 +106,7 @@ def test_a_moment_that_was_not_saved_is_absent_not_guessed(tmp_path):
         echo lost > "$RUN_DIR/beep.net"; rec             # lost, and the start was never saved
         t=2052; stream_beep_tick 0; wait; rec            # back; there is no start to measure from
     """)
-    assert got == ["net=lost||300", "net=back||2052"], got
+    assert got == ["net=lost||120", "net=back||2052"], got
 
 
 @_ASH
@@ -140,7 +140,7 @@ def test_cloner_gui_state_carries_the_record(tmp_path):
     out = sh(script)
     assert out.returncode == 0, out.stderr
     lines = (gui / "state").read_text(encoding="utf-8").splitlines()
-    assert "net=lost|1955|300" in lines, lines
+    assert "net=lost|1955|120" in lines, lines
 
 
 # --- the screen ---------------------------------------------------------------------------

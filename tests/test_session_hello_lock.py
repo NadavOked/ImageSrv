@@ -51,7 +51,7 @@ class FailingWrite:
     אל תוך רצף הכתיבות.
 
     `SessionStore` נוגע בחיבור רק דרך ``execute`` / ``commit`` /
-    ``rollback``, ולכן זה כל מה שצריך לעטוף.
+    ``rollback`` (ועכשיו גם ``in_transaction``, ל-`_settle`), ולכן זה כל מה שצריך לעטוף.
     """
 
     def __init__(self, conn, marker: str):
@@ -64,6 +64,10 @@ class FailingWrite:
             self.fired += 1
             raise sqlite3.OperationalError("disk I/O error")
         return self._conn.execute(sql, parameters)
+
+    @property
+    def in_transaction(self) -> bool:      # #3706: `_settle` asks before it takes `_write_lock`
+        return self._conn.in_transaction
 
     def commit(self) -> None:
         self._conn.commit()

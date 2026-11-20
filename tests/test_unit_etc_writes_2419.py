@@ -45,6 +45,7 @@ ETC_CONSTANTS: dict[str, str | None] = {
     "/etc/dnsmasq.d/imagesrv.conf": "/etc/dnsmasq.d",   # the TFTP switch rewrites it (#1013)
     "/etc/imagesrv/dnsmasq-proxy.conf": "/etc/imagesrv",
     "/etc/imagesrv/known-macs": "/etc/imagesrv",
+    "/etc/imagesrv/nft.d/known-macs.nft": "/etc/imagesrv",   # known_fw: mkdir + write_atomic, the nft include dir (#1079/#2485)
     "/etc/imagesrv/creds": "/etc/imagesrv",             # locations: SMB credentials, 0600 (#1123)
     "/etc/imagesrv/grub-password": "/etc/imagesrv",     # created when missing (#2437)
     # the server's own network (netcfg_host)

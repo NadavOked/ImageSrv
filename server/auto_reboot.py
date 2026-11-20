@@ -10,8 +10,9 @@ from pathlib import Path
 
 from server.paths import REPO_ROOT
 
+from server.brain import busy as brain_busy
 from server.rounds import room
-from server.system import busy_db, inflight
+from server.system import busy_db, inflight, steadyclock
 from . import update
 from server.core.atomicfile import write_atomic
 from .db import get_setting, journal
@@ -78,6 +79,27 @@ def next_occurrence(mode: str, at: str, weekday: int, now: datetime) -> datetime
     return candidate if candidate > now else candidate + timedelta(days=7)
 
 
+#: #3752: (חותמת ההתקדמות שנראתה, ה-monotonic שבו ראינו אותה לראשונה). חותמת ההתקדמות
+#: נכתבת בשעון קיר ע"י הסקריפט; קפיצת שעון קדימה גרמה לעדכון חי להיראות תקוע ולאתחול
+#: מתוזמן לרוץ באמצע. אחרי קפיצה, "תקוע" דורש שגם הקיר וגם מה שהשרת עצמו ראה (monotonic) יסכימו.
+_progress_seen: tuple[datetime, float] | None = None
+
+
+def _stale(seen: datetime, now: datetime) -> bool:
+    """חותמת ההתקדמות ישנה מ-`STALE_UPDATE_MINUTES` **בשעון הקיר וגם** כבר
+    `STALE_UPDATE_MINUTES` ש-**אותה** חותמת עומדת מול עיני השרת (monotonic).
+    רק כשהשעון קפץ מאז שהתהליך עלה (`steadyclock.skew`); בלי קפיצה — השוואת הקיר
+    כמו תמיד. חותמת חדשה מתחילה ספירה חדשה — "לא ידוע" נחשב עסוק (עיקרון 5)."""
+    global _progress_seen
+    limit = timedelta(minutes=STALE_UPDATE_MINUTES)
+    if abs(steadyclock.skew()) <= steadyclock.JUMP_SECONDS:
+        return now - seen > limit      # השעון לא קפץ: כמו תמיד (#1642)
+    mono = steadyclock.mono()
+    if _progress_seen is None or _progress_seen[0] != seen:
+        _progress_seen = (seen, mono)
+    return now - seen > limit and mono - _progress_seen[1] > limit.total_seconds()
+
+
 def update_verdict(rt, now: datetime | None = None) -> tuple[bool, str | None]:
     """(עסוק, הערה) לגבי ``update_status``. קורא בלבד (#1642).
 
@@ -96,33 +118,53 @@ def update_verdict(rt, now: datetime | None = None) -> tuple[bool, str | None]:
     if update.running_verdict(doc, current):
         return False, f"סטטוס עדכון {tag} נשאר 'רץ' אבל השרת כבר על הגרסה הזו"
     seen = update.last_progress(doc)
-    if seen is not None and (now or datetime.now(timezone.utc)) - seen > timedelta(minutes=STALE_UPDATE_MINUTES):
+    if seen is not None and _stale(seen, now or datetime.now(timezone.utc)):
         return False, (f"סטטוס עדכון {tag} 'רץ' בלי התקדמות מאז {seen.isoformat(timespec='seconds')}"
                        f" (מעל {STALE_UPDATE_MINUTES} דקות); הגרסה הרצה: {current or 'לא ידועה'}")
     return True, None
 
 
-def busy_reason(rt, now: datetime | None = None, *, include_update: bool = True) -> str | None:
+def busy_reason(rt, now: datetime | None = None, *, include_update: bool = True, site: str = "auto_reboot") -> str | None:
     """מה מונע restart של השרת עכשיו, או None. ההגדרה **היחידה** של "עסוק" —
     האתחול המתוזמן, "החל עדכון", שינויי הגדרות שמחייבים אתחול
     (`update.restart_blocker`) ו-`server-upgrade.sh` קוראים כולם כאן (#1891).
 
     ``include_update=False``: למי שהוא עצמו העדכון — "החל עדכון" בודק עדכון
-    רץ בנפרד (עם התג בהודעה), והסקריפט רץ **בתוך** מצב "רץ" של עצמו."""
+    רץ בנפרד (עם התג בהודעה), והסקריפט רץ **בתוך** מצב "רץ" של עצמו.
+
+    #3668: המוח (`server/brain/busy.py`, S50/T2) מחזיק את הפסק, והוא רץ **בצל**: כאן נקראים החושים והקוד הקיים מחליט,
+    והמוח רושם מה היה מחליט מאותם חושים (``site`` = מי שואל, לרישום). הערך שחוזר אינו משתנה."""
+    seen: dict[str, str | None] = {}
+    try:
+        reason = _busy_reason(rt, now, include_update, seen)
+    except Exception as exc:
+        brain_busy.shadow(rt.conn, site, seen, include_update=include_update, legacy=None, error=exc)
+        raise
+    brain_busy.shadow(rt.conn, site, seen, include_update=include_update, legacy=reason)
+    return reason
+
+
+def _busy_reason(rt, now: datetime | None, include_update: bool, seen: dict[str, str | None]) -> str | None:
+    """הקריאה של החושים לפי הסדר; ``seen`` נושא מה כל חוש שנקרא אמר, למוח."""
     conn = rt.conn
-    in_db = busy_db.reason(conn)
+    in_db = seen["db"] = busy_db.reason(conn)
     if in_db:
         return in_db
     streams = inflight.running()
+    seen["streams"] = " ו".join(streams) + " רצה" if streams else None
     if streams:
-        return " ו".join(streams) + " רצה"
-    if include_update and update_verdict(rt, now)[0]:
-        return "עדכון שרת רץ"
+        return seen["streams"]
+    if include_update:
+        seen["update"] = "עדכון שרת רץ" if update_verdict(rt, now)[0] else None
+        if seen["update"]:
+            return seen["update"]
     vm = getattr(rt, "vmupdate", None)
+    seen["vm"] = None
     if vm is not None:
         state = vm.status(None).get("state")
         if state not in ("idle", "saved", "error"):
-            return f"עדכון VM במצב {state}"
+            seen["vm"] = f"עדכון VM במצב {state}"
+            return seen["vm"]
     # #1891 (סקירה): האות הזה מגיע מהמחשב עצמו. רק מחשב **רשום** נספר — ה-hello
     # שכתב אותו עבר את שער הזהות (identity_gate) לפני net_seen; MAC לא רשום
     # אינו חוסם כלום. ורק דיווח טרי (`local_copy_now`, AWAKE_SECONDS): מחשב
@@ -132,9 +174,8 @@ def busy_reason(rt, now: datetime | None = None, *, include_update: bool = True)
         " JOIN machines m ON m.mac = n.mac WHERE n.local_clone IS NOT NULL")
     copying = [row["mac"] for row in rows
                if room.local_copy_now(row["local_clone"], row["last_seen"])]
-    if copying:
-        return f"מחשב מדווח על שיכפול מקומי: {', '.join(copying)}"
-    return None
+    seen["local_copy"] = f"מחשב מדווח על שיכפול מקומי: {', '.join(copying)}" if copying else None
+    return seen["local_copy"]
 
 
 def default_reboot() -> None:

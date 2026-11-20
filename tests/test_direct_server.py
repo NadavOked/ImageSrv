@@ -55,7 +55,7 @@ def _token(room_server, task_id):
 
 
 def _live_manifest(sha="ab" * 32):
-    return {"schema": 1, "family": 256, "scheme": "gpt", "sector_size": 512,
+    return {"schema": 1, "image_format": 2, "family": 256, "scheme": "gpt", "sector_size": 512,
             "source_disk_bytes": 256060514304, "min_target_bytes": 1073741824,
             "disk_guid": "047B3400-0000-0000-0000-0000003AEE00",
             "partitions": [{

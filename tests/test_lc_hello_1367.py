@@ -38,6 +38,13 @@ pytestmark = requires_native(("bash", BASH))
 
 #: the beat writes what it would have sent; nothing touches the network
 BEATS = 'attended_hello() { echo "$1" >> "$RUN_DIR/beats"; }; '
+#: #3201: a driver acts only after the agent said, in its own log or on its own files, that it is there. The wait
+#: has a bound (20 s) and the driver goes on when it is reached, so a broken agent fails an assertion, not the run().
+WAIT = ('wait_for() { _n=0; until "$@"; do sleep 0.1; _n=$((_n + 1)); [ "$_n" -lt 200 ] || return 1; done; }; '
+        '_logged() { grep -q "$1" "$LOG_FILE" 2>/dev/null; }; '
+        '_logged_n() { [ "$(grep -c "$2" "$LOG_FILE" 2>/dev/null)" -ge "$1" ]; }; '
+        '_beat_said() { grep -q "$1" "$RUN_DIR/beats" 2>/dev/null; }; '
+        '_screen_is() { grep -qx "$1" "$LC/screen" 2>/dev/null; }; ')
 #: power_check's real end is poweroff -f
 POWER = 'power_check() { echo "POWER $(json_get "$RESP" .power_action)"; attended_stop; kill $_gui_pid; exit 0; }; '
 
@@ -64,11 +71,20 @@ def test_the_paused_choice_keeps_saying_hello_and_stops_when_it_ends(tmp_path):
     assert "Local clone screen: from the server, or a local clone" in out.stdout
 
 
-def test_the_local_screen_says_hello_with_its_own_question(tmp_path):
-    out = run(tmp_path, BOOT + BEATS + 'lc_inventory() { :; }; local_clone_arm; '
-              '( sleep 1; echo local > "$LC/boot.decision"; sleep 4; echo back > "$LC/end.req"; '
-              '  sleep 2; echo server > "$LC/boot.decision" ) > /dev/null 2>&1 & '
-              'local_clone_offer; sort -u "$RUN_DIR/beats" 2>/dev/null; kill $_gui_pid',
+@pytest.mark.parametrize("hook,delay", [
+    ("", ""),
+    ("", "command sleep 1.5; "),                                  # the agent reaches the offer 1.5 s late
+    ("smart_selftest_cancel() { command sleep 5.5; }; ", ""),     # ...or the local screen's first line takes 5.5 s
+], ids=["on-time", "late-to-the-choice", "late-to-the-local-screen"])
+def test_the_local_screen_says_hello_with_its_own_question(tmp_path, hook, delay):
+    """#3201: every decision the person makes is written AFTER the agent said it is ready for it -- the agent
+    deletes a request that was already there when it enters a screen (right: an old request is no request).
+    A fixed `sleep 1` made the test the one that assumed the agent is on the screen in a second."""
+    out = run(tmp_path, BOOT + BEATS + WAIT + hook + 'lc_inventory() { :; }; local_clone_arm; '
+              '( wait_for _logged "boot choice offered"; echo local > "$LC/boot.decision"; '
+              '  wait_for _screen_is local; wait_for _beat_said "Local clone at the machine"; echo back > "$LC/end.req"; '
+              '  wait_for _logged_n 2 "boot choice offered"; echo server > "$LC/boot.decision" ) > /dev/null 2>&1 & '
+              + delay + 'local_clone_offer; sort -u "$RUN_DIR/beats" 2>/dev/null; kill $_gui_pid',
               LC_BOOT_S="20", ATTENDED_BEAT_S="1")
     assert out.returncode == 0, out.stderr
     assert "Local clone at the machine -- not from the server" in out.stdout, out.stdout
@@ -90,16 +106,21 @@ def test_a_paused_choice_nobody_makes_goes_on_from_the_server(tmp_path):
     assert time.monotonic() - t0 < 15
 
 
-def test_a_touch_on_the_screen_holds_the_paused_choice(tmp_path):
-    """The kiosk's idle.touch (a key or click) restarts the count."""
-    out = run(tmp_path, BOOT + BEATS + 'local_clone_arm; t0=$(date +%s); '
-              '( sleep 1; echo pause > "$LC/boot.decision"; for i in 1 2 3 4 5 6; do sleep 1; touch "$RUN_DIR/idle.touch"; done ) > /dev/null 2>&1 & '
-              + FALLBACK + 'local_clone_offer; echo "dt=$(( $(date +%s) - t0 ))"; kill $_gui_pid',
+@pytest.mark.parametrize("late", ["", "command sleep 1.5; "], ids=["on-time", "late-to-the-choice"])
+def test_a_touch_on_the_screen_holds_the_paused_choice(tmp_path, late):
+    """The kiosk's idle.touch (a key or click) restarts the count.
+    #3201: the touch is written after the agent said it took the pause ("touched -- the countdown stops"),
+    and the clock starts there, so the count is the touches and the quiet -- not how late the agent came."""
+    out = run(tmp_path, BOOT + BEATS + WAIT + 'local_clone_arm; '
+              '( wait_for _logged "boot choice offered"; echo pause > "$LC/boot.decision"; '
+              '  wait_for _logged "touched -- the countdown stops"; date +%s > "$RUN_DIR/t0"; '
+              '  for i in 1 2 3 4 5 6; do sleep 1; touch "$RUN_DIR/idle.touch"; done ) > /dev/null 2>&1 & '
+              + FALLBACK + late + 'local_clone_offer; echo "dt=$(( $(date +%s) - $(cat "$RUN_DIR/t0" 2>/dev/null || date +%s) ))"; kill $_gui_pid',
               LC_BOOT_S="3", LC_QUIET_S="3", ATTENDED_BEAT_S="1")
     assert out.returncode == 0, out.stderr
     assert "no touch for 3s on the paused choice" in out.stdout, out.stdout
     dt = int(next(l for l in out.stdout.splitlines() if l.startswith("dt="))[3:])
-    assert 9 <= dt < 15, out.stdout                # 1 + 6 s of touches + 3 s of quiet
+    assert 9 <= dt < 15, out.stdout                # 6 s of touches + 3 s of quiet, from the pause the agent took
 
 
 def test_the_local_screen_left_alone_goes_on_from_the_server(tmp_path):

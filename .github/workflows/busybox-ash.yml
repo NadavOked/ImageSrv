@@ -1,0 +1,114 @@
+# busybox-ash -- the agent's tests with busybox ash as the shell, not bash.
+#
+# Why (14/11): the agent runs as root under busybox ash in the initramfs.
+# shellcheck -s busybox is static; ~130 of the test files that run the agent's
+# code start it with `bash`, so a bashism -- or a place where ash and bash
+# behave differently (#2248: ash does not retry an interrupted fifo open) --
+# passes the suite and fails on a machine. Here .github/busybox/shim is `bash`,
+# `sh` and `dash` first on PATH: the agent's code gets busybox-static's ash, a
+# bash tool (a script whose first line names bash) still gets bash.
+#
+# A report while the baseline is measured: green when the run happened, every
+# failure listed in the summary and the junit kept. Red when the run proves
+# nothing: the canary did not see ash, fewer than 150 test files were derived,
+# or pytest itself broke (principle 5).
+#
+# Free: GitHub-hosted runners on a public repository; busybox-static from apt (GPL-2.0).
+# Runs only in the public repository (no minutes in the private one).
+
+name: busybox-ash
+
+on:
+  schedule:
+    - cron: "30 2 * * *"          # UTC, between order-and-repeat and mutation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  agent-tests:
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    # An absolute path: once the shim is first on PATH, a plain `bash` here would be ash too.
+    defaults:
+      run:
+        shell: /usr/bin/bash -e {0}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      # tests.yml's list, with busybox-static (what the initramfs carries) instead of busybox.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r server/requirements.txt pytest httpx pytest-xdist==3.6.1
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libhivex-dev libhivex-bin dash busybox-static nodejs libpango1.0-dev libcairo2-dev libdrm-dev libharfbuzz-dev libfribidi-dev fonts-ibm-plex fontconfig libvncserver-dev \
+            partclone gdisk ntfs-3g dosfstools e2fsprogs pv jq curl mtools grub-pc-bin syslinux syslinux-common cpio zstd >/dev/null
+          /bin/busybox | head -1
+
+      - name: Put the shim first on PATH as bash, sh and dash
+        run: |
+          set -euo pipefail
+          s="$RUNNER_TEMP/shim"
+          mkdir -p "$s"
+          for n in bash sh dash; do install -m 755 .github/busybox/shim "$s/$n"; done
+          echo "$s" >> "$GITHUB_PATH"
+
+      # Positive evidence that the shim is what the tests get: `bash -c` must be ash
+      # (no BASH_VERSION, and a bashism fails), and a bash tool must still be bash.
+      - name: The shell is busybox ash (canary)
+        run: |
+          set -euo pipefail
+          [ "$(command -v bash)" = "$RUNNER_TEMP/shim/bash" ] || { echo "::error::bash is $(command -v bash), not the shim"; exit 1; }
+          v=$(bash -c 'echo "${BASH_VERSION:-none}"')
+          [ "$v" = none ] || { echo "::error::bash -c is still bash ($v)"; exit 1; }
+          if bash -c '[[ 1 == 1 ]] && a=(x) && echo "${a[0]}"' 2>/dev/null; then
+            echo "::error::a bash array ran: the shell is not ash"; exit 1
+          fi
+          printf '#!/bin/bash\necho "$BASH_VERSION"\n' > "$RUNNER_TEMP/tool.sh"
+          [ -n "$(bash "$RUNNER_TEMP/tool.sh")" ] || { echo "::error::a bash tool did not get bash"; exit 1; }
+          echo "bash -c -> busybox ash; a #!/bin/bash tool -> bash"
+
+      # Every test file that runs the agent's shell code, derived from the tree (#247):
+      # a derivation that broke would return nothing, and pytest on nothing is green.
+      - name: The agent's tests under busybox ash
+        run: |
+          set -uo pipefail
+          mapfile -t files < <(grep -l -E 'agent/lib|agentlib|imagesrv-agent|"agent" / "lib"|AGENT_LIB|agent_sources|lib_path\(' tests/test_*.py)
+          echo "${#files[@]} test files"
+          if [ "${#files[@]}" -lt 150 ]; then echo "::error::only ${#files[@]} test files derived"; exit 1; fi
+          out="$RUNNER_TEMP/busybox"
+          mkdir -p "$out"
+          set +e
+          python -m pytest -q -p no:cacheprovider -n auto --dist load -m 'not uinput and not vm_it' -rfE \
+            --junitxml="$out/junit.xml" "${files[@]}" < /dev/null > "$out/pytest.log" 2>&1
+          rc=$?
+          set -e
+          tail -n 40 "$out/pytest.log"
+          {
+            echo "## The agent's tests under busybox ash -- pytest rc $rc"
+            echo
+            echo '```'
+            grep -E '^(FAILED|ERROR) ' "$out/pytest.log" | sed -E 's/ - .*//' | head -300
+            tail -n 1 "$out/pytest.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          # 0/1 = the run happened (1: failures, listed above). Anything else is no report.
+          case "$rc" in 0|1) ;; *) echo "::error::pytest exit $rc: the run itself broke"; exit 1 ;; esac
+
+      - name: Keep the log and the junit
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: busybox-ash
+          path: ${{ runner.temp }}/busybox
+          retention-days: 7
+          if-no-files-found: warn

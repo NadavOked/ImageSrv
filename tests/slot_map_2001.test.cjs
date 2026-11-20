@@ -240,10 +240,23 @@ test('#2028: the window names the advice, its evidence, and three info columns',
   assert.doesNotMatch(html,/יתעדכן לבד/,'the saved map never moves by itself');
   assert.match(html,/את המיפוי משנים כאן ושומרים/);
   assert.match(r[0].cls,/\buse\b/); assert.match(r[0].html,/<span class="n-chip">מומלץ<\/span>/);
-  assert.match(r[1].cls,/\bavoid\b/); assert.match(r[1].html,/חשוד: לא לחבר/); assert.match(r[1].html,/איטי מהמקובל בדגם/);
+  assert.match(r[1].cls,/\bavoid\b/); assert.match(r[1].html,/חשוד: לא לחבר/); assert.doesNotMatch(r[1].html,/איטי מהמקובל בדגם/,'#3600: a speed is no label');
   assert.match(r[1].html,/212<\/span><span class="sub">עלה ב-2 סבבים/);
   assert.match(r[2].html,/מומלץ: במקום SATA 1/);
   assert.match(r[2].html,/לא נמדד<\/span><span class="sub">בדגם: <bdi dir="ltr">6 Gb\/s/,'an empty port is not given a reading of its own');
+});
+
+test('#3600 (Nadav 17/11): a slower port says "better, if it is free" -- information, never "suspect, do not connect"', async () => {
+  const w=W({avoid:[],recommended:[1,2],move_notes_he:[],upgrade_notes_he:['המגירה הראשונה מחוברת היום ל-SATA 2 (3 Gb/s). עדיף SATA 0 (6 Gb/s) אם הוא פנוי — זו המלצה, לא תקלה.'],
+    ports:{'1':{link_gbps:6,model_link_gbps:6,crc:0,crc_waves:0,advice:'use',instead_of:null,slow_for_model:false,better_port:null,better_gbps:null},
+      '2':{link_gbps:3,model_link_gbps:3,crc:0,crc_waves:0,advice:null,instead_of:null,slow_for_model:true,better_port:1,better_gbps:6}}});
+  const {run,node}=setup({wiring:w});
+  run(`openSlotMap('${encodeURIComponent(C2)}')`); await tick(); await tick();
+  const html=win(node), r=rows(html);
+  assert.match(r[1].html,/<span class="n-chip">עדיף SATA 0 \(<bdi dir="ltr">6 Gb\/s<\/bdi>\) אם הוא פנוי<\/span>/);
+  assert.doesNotMatch(r[1].cls,/avoid/); assert.doesNotMatch(r[1].html,/חשוד|לא לחבר|איטי מהמקובל|n-chip w/);
+  assert.match(html,/<div class="smap-note">המגירה הראשונה מחוברת היום ל-SATA 2 \(3 Gb\/s\)\. עדיף SATA 0/);
+  assert.doesNotMatch(html,/smap-note warn[^]*עדיף SATA 0/,'the upgrade note is not a warning');
 });
 
 test('#2028: the advice changes nothing in the map; saving sends what the admin chose', async () => {

@@ -143,7 +143,7 @@ def drawer_box(tmp_path, disks=("sda", "sdb", "sdc"), failed=()) -> tuple[Path, 
     run = tmp_path / "run"
     run.mkdir()
     prelude = (
-        f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
+        f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev SYSROOT={posix(run)!r}/sys; "   # #3908: the host's /sys is not the test's (an HDD there is refused by writecheck.sh)
         + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
         + "log() { :; }; disk_fits() { return 0; }; plan_gate() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "

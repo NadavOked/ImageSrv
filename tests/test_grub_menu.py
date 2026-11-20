@@ -252,6 +252,42 @@ def test_network_load_failure_reaches_the_existing_safe_fallback():
     assert cloner.count("while [ \"$stay_on\" = \"y\" ]; do") == 2
 
 
+def _after_load_failure(text: str, label: str) -> list[str]:
+    """השורות (מנוקות מרווח) שאחרי הודעת הכישלון של טעינת `label`."""
+    lines = [line.strip() for line in text.splitlines()]
+    marker = f'echo "ImageSrv: {label} could not be loaded after 3 attempts."'
+    assert lines.count(marker) == 1, marker
+    return lines[lines.index(marker) + 1:]
+
+
+@pytest.mark.parametrize("a", [answer(role="cloner"),
+                               answer(role="cloner", task={"id": "tsk_1"})])
+@pytest.mark.parametrize("label", ["kernel", "initrd"])
+def test_cloner_does_not_promise_a_fallback_it_does_not_have(a, label):
+    """#3155: למשכפל אין מערכת מקומית. "Falling back" היה מודפס ומיד אחריו
+    "no local system to start" -- הבטחה וסתירתה. עכשיו ההודעה היא הראשונה."""
+    text = render(a, CFG)
+    after = _after_load_failure(text, label)
+    assert after[0] == 'echo "This Legacy BIOS cloning machine has no local system to start."'
+    assert after[1].startswith('echo "Nothing will be started.')
+    assert "Falling back" not in text
+    assert "sleep --interruptible 3" not in text    # וגם לא השהיה של "fallback" שאין
+    text.encode("ascii")
+
+
+@pytest.mark.parametrize("a", [answer(), answer(role="build"),
+                               answer(task={"id": "tsk_1"}), answer(session=OPEN_SESSION)])
+@pytest.mark.parametrize("label", ["kernel", "initrd"])
+def test_machine_with_a_local_disk_still_falls_back_after_a_delay(a, label):
+    """הכיוון ההפוך של #3155: למחשב עם דיסק מקומי יש לאן לחזור, וההודעה נשארת
+    -- ואחריה ההשהיה והנפילה לדיסק, באותו סדר."""
+    text = render(a, CFG)
+    after = _after_load_failure(text, label)
+    assert after[:3] == ['echo "Falling back after a short delay."',
+                         "sleep --interruptible 3", "try_local"]
+    text.encode("ascii")
+
+
 def test_retry_keeps_the_kernel_command_line_clean_and_the_menu_ascii():
     text = render(answer(task={"id": "tsk_1"}), CFG)
     linux = next(line for line in text.splitlines() if line.strip().startswith("if linux "))

@@ -15,6 +15,7 @@ from typing import NamedTuple
 
 import hashlib
 import hmac
+import re
 import sqlite3
 import threading
 import time
@@ -28,6 +29,8 @@ COOKIE_NAME = "imagesrv_session"
 #: שם אותו רק אחרי mTLS + טוקן כרוך (``authenticate_parent``).
 PEER_SCOPE_KEY = "imagesrv.peer_user"
 TTL_SECONDS = 12 * 3600
+#: #3752: מרווח לסטיית שעון קטנה בין הנפקה לאימות (NTP slew), לפני שתפוגה "רחוקה מדי" נדחית.
+CLOCK_SLACK_SECONDS = 300
 PURPOSE_PWCHANGE = "pwchange"
 PURPOSE_MFAENROLL = "mfaenroll"
 #: #1340: עוגייה שהקיוסק (פורט הסוכן, :8080) הנפיק — סיסמה בלבד, בלי MFA,
@@ -108,7 +111,7 @@ def dependencies(conn: sqlite3.Connection):
         token = request.cookies.get(COOKIE_NAME)
         found = read_session(conn, token,
                              ip=request.client.host if request.client else "",
-                             idle_exempt=_is_logout(request))
+                             idle_exempt=_is_logout(request), no_touch=_is_poll(request))
         if found is None:
             raise HTTPException(401, "לא מחובר")
         _enforce_purpose(request, found)
@@ -158,7 +161,7 @@ def console_only(conn: sqlite3.Connection):
             return
         token = connection.cookies.get(COOKIE_NAME)
         found = check(conn, token, ip=connection.client.host if connection.client else "",
-                      idle_exempt=_is_logout(connection))
+                      idle_exempt=_is_logout(connection), no_touch=_is_poll(connection))
         if found is None:
             # #1340: עוגיית קיוסק של deploy — אותו סירוב בדיוק כמו קודם. של
             # admin — עוברת לנתיב, ו-``current_user`` מחזיר 401 (לא "מחובר").
@@ -174,6 +177,17 @@ def console_only(conn: sqlite3.Connection):
 def _is_logout(connection) -> bool:
     return (connection.scope.get("method") == "POST"
             and connection.scope["path"].rstrip("/") == "/api/console/logout")
+
+
+_POLL_PATH = re.compile(r"/api/console/monitor/[^/]+/control/?")
+
+
+def _is_poll(connection) -> bool:
+    """#2493 (הכרעת נדב 12/11): חלון מוניטור פתוח אינו אדם ליד המקלדת. הדף שואל
+    `GET …/monitor/{mac}/control` כל כמה שניות, ובקשה כזו אינה פעילות: אין `touch`, ולכן
+    היא אינה מונעת את הניתוק בחוסר פעילות. היא כן נבדקת (חוסר פעילות שפג מבטל כרגיל)."""
+    return (connection.scope.get("method") == "GET"
+            and _POLL_PATH.fullmatch(connection.scope.get("path", "")) is not None)
 
 
 def _secret(conn: sqlite3.Connection) -> bytes:
@@ -245,7 +259,8 @@ def attach_cookie(response, conn: sqlite3.Connection, username: str, role: str,
 
 
 def read_session(conn: sqlite3.Connection, token: str | None, *,
-                 ip: str = "", idle_exempt: bool = False) -> Session | None:
+                 ip: str = "", idle_exempt: bool = False,
+                 no_touch: bool = False) -> Session | None:
     """מפענח עוגייה: 3 מפרידים (ישן) או 4 (purpose:epoch). None אם פסול.
 
     #2414: **השער היחיד** לחוסר פעילות. כל דרך לעוגייה עוברת כאן — ``current_user``
@@ -276,7 +291,14 @@ def read_session(conn: sqlite3.Connection, token: str | None, *,
             return None
     try:
         expiry_at = int(expiry)
-        if expiry_at < time.time():
+        current = time.time()
+        if expiry_at < current:
+            return None
+        # #3752: עוגייה אינה חיה יותר מ-`TTL_SECONDS` מרגע שהונפקה. תפוגה רחוקה מזה =
+        # השעון חזר אחורה מאז ההנפקה (או חותמת מוזרת), והעוגייה הייתה חיה שעות מעבר
+        # לתוקפה. נדחית — המפעיל נכנס שוב. קפיצה קדימה נשארת: התפוגה היא זמן אמת
+        # מול הדפדפן, והעוגייה שורדת אתחול, ולכן אין לה שעון monotonic.
+        if expiry_at - current > TTL_SECONDS + CLOCK_SLACK_SECONDS:
             return None
     except ValueError:
         return None
@@ -294,11 +316,11 @@ def read_session(conn: sqlite3.Connection, token: str | None, *,
     if epoch < int(row["auth_epoch"] or 0):
         return None
     session = Session(row["username"], row["role"], purpose, expiry_at, epoch)
-    return session if _active(conn, token, session, ip, idle_exempt) else None
+    return session if _active(conn, token, session, ip, idle_exempt, no_touch) else None
 
 
 def _active(conn: sqlite3.Connection, token: str, session: Session, ip: str,
-            idle_exempt: bool) -> bool:
+            idle_exempt: bool, no_touch: bool = False) -> bool:
     """#2414: ``console_idle_seconds`` בשרת, לכל עוגייה חוץ מהקיוסק.
 
     - **מלאה** — הפעילות האחרונה היא ``last_seen`` שלה ב-``console_sessions``; כל
@@ -323,7 +345,7 @@ def _active(conn: sqlite3.Connection, token: str, session: Session, ip: str,
         revoke(conn, token)
         presence.forget(conn, token)
         return False
-    if not session.purpose:
+    if not session.purpose and not no_touch:      # #2493: poll אינו פעילות
         presence.touch(conn, token, session.username, ip, TTL_SECONDS)
     return True
 
@@ -388,7 +410,7 @@ def revoke_hash(conn: sqlite3.Connection, token_hash: str, expires: float) -> No
 
 
 def check(conn: sqlite3.Connection, token: str | None, *, ip: str = "",
-          idle_exempt: bool = False) -> tuple[str, str] | None:
+          idle_exempt: bool = False, no_touch: bool = False) -> tuple[str, str] | None:
     """מחזיר (username, role) לטוקן תקף, אחרת None.
 
     החתימה מוכיחה **מי** — שהטוקן יצא מהשרת הזה ולא שונה בדרך. היא לא
@@ -406,7 +428,7 @@ def check(conn: sqlite3.Connection, token: str | None, *, ip: str = "",
     Session מוגבלת (החלפת סיסמה / הרשמת MFA) אינה session מלאה —
     WebSocket והקוראים הישנים מקבלים None, לא הרשאה חלקית בשקט.
     """
-    found = read_session(conn, token, ip=ip, idle_exempt=idle_exempt)
+    found = read_session(conn, token, ip=ip, idle_exempt=idle_exempt, no_touch=no_touch)
     if found is None or found.purpose:
         return None
     return found.username, found.role

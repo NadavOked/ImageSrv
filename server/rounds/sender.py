@@ -69,7 +69,7 @@ LATER_MAX_WAIT = 600
 #: שכל החברים שמדווחים מחוברים. `LATER_MAX_WAIT` **אינו** מתקצר — מגירה
 #: איטית ותקינה (#957) מדווחת progress כל ~2 שניות (#449,
 #: `PROGRESS_INTERVAL_S`), ולכן אינה שקטה, נספרת, ומחכים לה עד 600ש'.
-#: מכונה שמתה בשקט נספרת עד `client_lost` (`room.LOST_SECONDS`), ובלי זה
+#: מכונה שמתה בשקט נספרת עד `client_lost` (`lost_wait_seconds`, K-LOST), ובלי זה
 #: מחיצה שנפתחה בינתיים ממתינה לה 600ש'. חבר שחזר לדווח — נספר שוב: הספירה
 #: נעשית מחדש לפני כל מחיצה. וחבר שקט שקיבל את המחיצה הקודמת עד סופה (לוג
 #: udp-sender) — נספר: המקלט שלו חי, כמו `lost` ב-#1950.
@@ -888,9 +888,13 @@ class SenderEngine:
 
     def link(self) -> dict:
         """כרטיס ההפצה ומהירותו (`drive_rates.read_link`), או למה לא נקראה."""
+        return self.link_of(self.interface)
+
+    def link_of(self, interface: str | None) -> dict:
+        """The same reader, for another card: #3073 -- a chunk-engine wave picks its own (`ChunkEngine.interface`)."""
         if self.link_speed is None:
-            return {"interface": self.interface, "speed_mbps": None, "why": "not_wired"}
-        return self.link_speed(self.interface)
+            return {"interface": interface, "speed_mbps": None, "why": "not_wired"}
+        return self.link_speed(interface)
 
     def multicast_params(self) -> dict:
         """הפרמטרים שמחשב בנייה משדר בהם כשהוא המקור (#715, ממשק 3).

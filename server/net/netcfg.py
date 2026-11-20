@@ -381,6 +381,11 @@ def conf_name(name: str) -> str:
     return f"imagesrv-{name}"
 
 
+#: #2393: the prefix that moves a started client out of the cgroup of the unit
+#: that ran ifup (no `--unit`: a fixed name collides with the previous scope
+#: while its dhcpcd is still exiting after `dhcpcd -k`).
+DHCPCD_SCOPE = "/usr/bin/systemd-run --scope --quiet"
+
 _HEAD = [
     "# ImageSrv -- {name}, generated from the console (spec 24, issue #55).",
     "# Do not edit by hand: the next change in the console rewrites it.",
@@ -421,7 +426,14 @@ def render(cfg: NetConfig, hostname: str = "") -> str:
         # explicitly in background mode: it keeps retrying while ifup can
         # finish, and still leaves a missing address visible in live state.
         lines.append(f"iface {cfg.name} inet manual")
-        command = "/usr/sbin/dhcpcd -4 -b"
+        # #2393: in a scope of its own, not in the cgroup of networking.service.
+        # `ifup -a` exits 1 when ANOTHER card (a distribution card that was
+        # renamed or replaced) is missing, systemd then sends SIGTERM to the
+        # whole cgroup of the unit, and the management card's dhcpcd died with
+        # it -- the console was unreachable (lab 04/11, ImageSrv-LabRoot-1104).
+        # The scope is a unit of its own: the failure stays visible in
+        # `systemctl --failed` and in health, and the address stays.
+        command = f"{DHCPCD_SCOPE} /usr/sbin/dhcpcd -4 -b"
         # #2491: ifupdown hands this line to sh as root, and the name is the
         # kernel's hostname at write time.  A name outside `hostname_rule`
         # is left out, not quoted: no -h beats a quoted shell word.

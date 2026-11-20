@@ -32,6 +32,13 @@
 משאירה ראיה — היא תיספר "לא התעוררה". ההתראה אומרת זאת במפורש.
 
 מה שנשמר: MAC וזמנים בלבד (#1924). לעולם אינו זורק.
+
+**#3768 — שעון:** משך (`seconds`, גיל הערה, `2 × typical`) נמדד ב-`steadyclock.now`
+(קיר בתחילת התהליך + monotonic), ולכן קפיצת שעון בין השליחה לתשובה אינה מנפחת אותו ואינה
+הופכת הערה פתוחה ל"לא התעוררה". `sent_epoch` נכתב באותו בסיס; `sent_at`/`answered_at`
+(תצוגה) ו-`net_devices.last_seen` (`_awake`, מכויל ב-`clockstep.rebase`) נשארים שעון קיר.
+דגימה שהפרשה מחוץ ל-[0, ANSWER_S] (קפיצה בין אתחולי תהליך) נסגרת בלי `seconds` — המכונה
+התעוררה, אבל אין מדידה אמינה, והיא אינה נכנסת לחציון.
 """
 
 from __future__ import annotations
@@ -42,8 +49,10 @@ import statistics
 import time
 from datetime import datetime, timezone
 
+from server.agent import held
 from server.db import _write_lock, journal, writing
 from server.core.logtext import one_line
+from server.system import steadyclock
 from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.learn_wol")
@@ -52,7 +61,7 @@ log = logging.getLogger("imagesrv.learn_wol")
 #: `room.AWAKE_SECONDS` ("ערה" במסך החדר).
 AWAKE_S = 30
 #: אחרי כמה שניות בלי ראיה הערה "לא התעוררה" — הזמן שבו החדר עצמו מוותר
-#: (`room.REWAKE_MAX × REWAKE_SECONDS + REWAKE_BOOT_SECONDS` = 6×60+180).
+#: (`brain.silence.REWAKE_MAX × REWAKE_S + REWAKE_BOOT_S` = 6×60+180).
 ANSWER_S = 540
 #: כמה הערות אחרונות שהוכרעו נחשבות לכל מכונה.
 WINDOW = 10
@@ -83,9 +92,10 @@ def _awake(conn: sqlite3.Connection, mac: str, now: float) -> bool:
 
 def sent(conn: sqlite3.Connection, mac: str, now: float | None = None) -> None:
     """WoL נשלח בהצלחה ל-`mac`. לעולם אינו זורק."""
-    now = time.time() if now is None else now
+    wall = time.time() if now is None else now
+    now = steadyclock.now() if now is None else now
     try:
-        if _awake(conn, mac, now):
+        if _awake(conn, mac, wall):
             return
         with _write_lock, writing(conn):
             if not conn.execute(
@@ -93,22 +103,25 @@ def sent(conn: sqlite3.Connection, mac: str, now: float | None = None) -> None:
                     " AND answered_at IS NULL AND sent_epoch > ?",
                     (mac, now - ANSWER_S)).rowcount:
                 conn.execute("INSERT INTO wol_wakes (mac, sent_at, sent_epoch) VALUES (?,?,?)",
-                             (mac, _iso(now), now))
+                             (mac, _iso(wall), now))
     except Exception:             # noqa: BLE001 — הלמידה אינה מפילה הערה
         log.exception("recording a wake of %s failed", one_line(mac))
 
 
 def answered(conn: sqlite3.Connection, mac: str, now: float | None = None) -> None:
     """המכונה דיברה עם השרת (פירור אתחול / hello) — סוגר הערה פתוחה. לעולם אינו זורק."""
-    now = time.time() if now is None else now
+    wall = time.time() if now is None else now
+    now = steadyclock.now() if now is None else now
     try:
         if not conn.execute("SELECT 1 FROM wol_wakes WHERE mac = ? AND answered_at IS NULL"
                             " AND sent_epoch > ?", (mac, now - ANSWER_S)).fetchone():
             return
         with _write_lock, writing(conn):
-            conn.execute("UPDATE wol_wakes SET answered_at = ?, seconds = ? - sent_epoch"
+            # #3768: הפרש מחוץ ל-[0, ANSWER_S] הוא קפיצה בין אתחולי תהליך — נסגרת בלי seconds.
+            conn.execute("UPDATE wol_wakes SET answered_at = ?, seconds = CASE"
+                         " WHEN ? - sent_epoch BETWEEN 0 AND ? THEN ? - sent_epoch END"
                          " WHERE mac = ? AND answered_at IS NULL AND sent_epoch > ?",
-                         (_iso(now), now, mac, now - ANSWER_S))
+                         (_iso(wall), now, ANSWER_S, now, mac, now - ANSWER_S))
     except Exception:             # noqa: BLE001
         log.exception("recording the answer of %s failed", one_line(mac))
 
@@ -117,7 +130,7 @@ def stats(conn: sqlite3.Connection, mac: str, now: float | None = None) -> dict:
     """`{"decided", "answered", "rate", "typical_s", "streak"}` — `rate`/`typical_s`
     None כשאין על מה (אין הערות שהוכרעו / פחות מ-MIN_SAMPLES הצלחות). `streak` —
     כמה מההערות האחרונות שהוכרעו ברצף לא נענו."""
-    now = time.time() if now is None else now
+    now = steadyclock.now() if now is None else now
     rows = conn.execute(
         "SELECT answered_at, seconds FROM wol_wakes WHERE mac = ?"
         " AND (answered_at IS NOT NULL OR sent_epoch <= ?) ORDER BY sent_epoch DESC LIMIT ?",
@@ -137,7 +150,8 @@ def stats(conn: sqlite3.Connection, mac: str, now: float | None = None) -> dict:
 def sweep(conn: sqlite3.Connection, send=None, now: float | None = None) -> None:
     """משעון החדר: שליחה חוזרת מוקדמת, והתראה על רצף. לעולם אינו זורק."""
     from server.net import wol             # noqa: PLC0415 — wol מייבא אותנו
-    now = time.time() if now is None else now
+    wall = time.time() if now is None else now
+    now = steadyclock.now() if now is None else now
     send = send or wol._send_broadcast
     try:
         for row in conn.execute(
@@ -146,6 +160,8 @@ def sweep(conn: sqlite3.Connection, send=None, now: float | None = None) -> None
             typical = stats(conn, row["mac"], now)["typical_s"]
             if typical is None or now - row["sent_epoch"] < EARLY_FACTOR * typical:
                 continue
+            if held.is_held(conn, row["mac"], datetime.fromtimestamp(wall, timezone.utc)):
+                continue          # #3590: the hold began after the wave's WoL; it is lit, not asleep
             reason = wol._try_send(row["mac"], send)
             with _write_lock, writing(conn):
                 conn.execute("UPDATE wol_wakes SET early = 1 WHERE id = ?", (row["id"],))
@@ -173,7 +189,7 @@ def sweep(conn: sqlite3.Connection, send=None, now: float | None = None) -> None
 def health_checks(conn: sqlite3.Connection, now: float | None = None) -> list[dict]:
     """שורה כתומה לכל מכונה עם רצף של `FAIL_STREAK` הערות בלי תשובה. בלי הערות
     שנמדדו — אין שורה; עם הערות ובלי רצף — שורה ירוקה אחת."""
-    now = time.time() if now is None else now
+    now = steadyclock.now() if now is None else now
     try:
         macs = [r["mac"] for r in conn.execute("SELECT DISTINCT mac FROM wol_wakes ORDER BY mac")]
         if not macs:

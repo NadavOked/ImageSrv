@@ -43,7 +43,7 @@ def _obs(conn, mac, port, serial, *, crc=None, link=None, cable=0, at=None):
 
 def test_one_connection_with_two_different_bad_disks_is_the_cable(conn):
     _obs(conn, MAC, 1, "S1", crc=4)
-    _obs(conn, MAC, 1, "S2", link=(1.5, 6.0))
+    _obs(conn, MAC, 1, "S2", crc=3)    # #3591: a link speed (1.5 of 6.0) is not evidence of the cable -- a CRC is
     got = learn_ports.verdict(conn, MAC, 1, "S9")
     assert got["port_suspect"] is True and got["port_disks"] == 2
     assert got["disk_suspect"] is False

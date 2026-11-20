@@ -38,6 +38,7 @@ gui_ask_answers() {
         raid) echo "wipe skip" ;;     # #1808: a cloner drawer with old RAID metadata (drawergate.sh)
         share) echo "split skip" ;;   # #1898: the room shared with a shrunk partition before the one that grows
         badsect) echo "continue stop" ;;   # #2017: a local clone's source with bad sectors (lcraw.sh)
+        interrupt) echo "rewrite close later ok" ;;   # #2528: a cloner powered off mid-round (interrupt.sh)
         *) return 1 ;;
     esac
 }
@@ -73,6 +74,15 @@ gui_ask_choice() {
             END { if (bad || n < 1 || n > max) exit 1
                   print nonce "|growback|" n "|" subj; for (i = 1; i <= n; i++) print rows[i] }
         ' "$3" > "$GUI_DIR/ask-request.next" || { gui_ask_clear; return 1; }
+    elif [ "$1" = interrupt ]; then   # #2528: port now|port when written, 1..max rows; subject self|cloner
+        case "$2" in self|cloner) ;; *) return 1 ;; esac
+        [ -s "${3:-}" ] || return 1
+        awk -F'|' -v nonce="$_ag_nonce" -v subj="$2" -v max="$ASK_GUI_MAX_ROWS" '
+            NF != 2 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $1 + 0 > 99 || $2 + 0 < 1 || $2 + 0 > 99 { bad = 1; exit }
+            { rows[++n] = ($1 + 0) "|" ($2 + 0) }
+            END { if (bad || n < 1 || n > max) exit 1
+                  print nonce "|interrupt|" n "|" subj; for (i = 1; i <= n; i++) print rows[i] }
+        ' "$3" > "$GUI_DIR/ask-request.next" || { gui_ask_clear; return 1; }
     elif [ "$1" = raid ] || [ "$1" = share ] || [ "$1" = badsect ]; then   # #1808: port|type, one; #1898: port|idx|now|after; #2017: port|idx|epoch, one
         [ -s "${3:-}" ] || return 1
         awk -F'|' -v nonce="$_ag_nonce" -v subj="$2" -v kind="$1" -v max="$ASK_GUI_MAX_ROWS" '
@@ -91,6 +101,7 @@ gui_ask_choice() {
     _ag_waited=0
     while kill -0 "$_gui_pid" 2>/dev/null && [ -e "$GUI_DIR/ask-request" ]; do   # #1726: a bridge that died took the question with it
         case "$1" in raid|share) [ ! -e "$RUN_DIR/session-closed" ] || break ;; esac   # a closed round ends a drawer's question, as SMART's
+        case "$1" in interrupt) [ ! -e "$RUN_DIR/interrupt.gone" ] || break ;; esac   # #2528: answered elsewhere, or expired
         attended_power_check
         if [ -s "$GUI_DIR/ask-decision" ]; then
             IFS='|' read -r _ag_nonce_back _ag_answer < "$GUI_DIR/ask-decision" || {
@@ -127,7 +138,7 @@ gui_ask_dispatch() {
     [ -s "$GUI_DIR/ask-request" ] || return 1
     IFS='|' read -r _ad_active _ad_kind _ < "$GUI_DIR/ask-request" || return 1
     [ -n "$_ad_active" ] && [ "$_ad_click" = "$_ad_active" ] || return 1
-    case "$_ad_kind:${GUI_SCREEN:-}" in raid:cloner|share:cloner|badsect:cloner) ;; raid:*|share:*|badsect:*|*:?*) return 1 ;; esac   # a drawer's question on the cloner screen; the rest on the build screen
+    case "$_ad_kind:${GUI_SCREEN:-}" in raid:cloner|share:cloner|badsect:cloner|interrupt:cloner) ;; raid:*|share:*|badsect:*|*:?*) return 1 ;; esac   # a drawer's question on the cloner screen; the rest on the build screen; #2528: the round's on both
     _ad_ok=$(gui_ask_answers "$_ad_kind") || return 1
     case " $_ad_ok " in *" $_ad_answer "*) ;; *) return 1 ;; esac
     printf '%s|%s\n' "$_ad_active" "$_ad_answer" > "$GUI_DIR/ask-decision.next" &&

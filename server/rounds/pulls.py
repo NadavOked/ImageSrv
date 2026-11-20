@@ -26,6 +26,8 @@ import logging
 import sqlite3
 from datetime import datetime, timezone
 
+from server.agent import timing as agent_timing
+from server.brain import silence
 from server.system import clockstep
 from server.db import journal, now_iso
 from server.agent.reports import FINAL
@@ -33,14 +35,8 @@ from server.rounds.sessions import PULL_PREFIX, TAKEN, UNICAST, SessionError, Se
 
 log = logging.getLogger(__name__)
 
-#: מעל כמה שניות בלי **שום דיווח** מהמכונה משיכה נסגרת כ-`failed` (#1573).
-#: הסוכן מדווח כל ~2ש' לכל אורך המשיכה (`progress_loop`, גם בהנחת
-#: הדרייברים), ודיווח בודד יכול להימשך ~40ש' (`curl --max-time 10
-#: --retry 3`). החדר מפקיע אחרי 180ש' (`room.LOST_SECONDS`, אותו קצב);
-#: כאן השוליים רחבים יותר בכוונה, כי משיכות אינן נסגרות בעליית שרת
-#: (`reconcile` נוגע בשידור בלבד) — עדכון או אתחול של השרת בן כמה דקות
-#: עוצר את הדיווחים של משיכה בריאה, ואסור שיפיל אותה. נגזר, לא נמדד.
-SILENT_SECONDS = 600
+#: #1573, #3038, #3657: אחרי כמה שניות בלי **שום דיווח** מהמכונה משיכה נסגרת כ-`failed` -- 600, או `lost_wait_seconds` ועוד 180 כשזה יותר --
+#: הוא החלטה של המוח (`brain.silence.judge_pull`, כלל K-SILENT). כאן נאספים החברים והחותמות, ומתבצעת התוצאה.
 
 
 def _roster_macs(row: sqlite3.Row) -> list[str]:
@@ -138,40 +134,6 @@ def open_pull(conn: sqlite3.Connection, store: SessionStore, mac: str,
     return session_id
 
 
-def _parse(stamp: str | None) -> datetime | None:
-    """חותמת ISO **עם אזור זמן**, או `None`. חותמת בלי אזור (שורה ישנה או
-    ידנית) אינה נקראת: naive מול aware זורק `TypeError`, והוא היה מפיל את
-    `/overview` ואת `open_pull` עצמם (`now_iso` כותב תמיד עם אזור)."""
-    try:
-        parsed = datetime.fromisoformat(stamp) if stamp else None
-    except (TypeError, ValueError):
-        return None
-    return parsed if parsed is not None and parsed.tzinfo is not None else None
-
-
-def _failure(row: sqlite3.Row, members: list[sqlite3.Row],
-             now: datetime) -> str | None:
-    """למה המשיכה הזו נכשלה — או `None` אם אין ראיה שנכשלה.
-
-    שני מקורות בלבד: המכונה **אמרה** שנכשלה (כל החברים במצב סופי ולא
-    כולם `done`), או שהמכונה **שתקה** מעל `SILENT_SECONDS` מאז הדיווח
-    האחרון שלה (`updated_at` זז על כל דיווח שאינו סופי — כאן הוא בדיוק
-    הראיה, בניגוד לקיפאון בייטים, `reports.stamp_movement`). חבר שעוד
-    לא נכתב: נמדד מפתיחת המשיכה. חותמת שאינה נקראת אינה "שתיקה" — לא
-    נמדד, ולא מכריזים (אותה הכרעה כמו `room._mark_lost`).
-    """
-    if members and all(m["state"] in FINAL for m in members):
-        errors = "; ".join(m["error"] for m in members if m["error"])
-        return errors or "המכונה דיווחה " + ", ".join(m["state"] for m in members)
-    stamps = [_parse(m["updated_at"]) for m in members] or [_parse(row["created_at"])]
-    if None in stamps:
-        return None
-    last = max(stamps)
-    if (now - last).total_seconds() <= SILENT_SECONDS:
-        return None
-    return f"אין דיווח מהמכונה מאז {last.astimezone().strftime('%H:%M')}"
-
-
 def sweep(store: SessionStore) -> None:
     """סוגרת משיכות שהסתיימו — בהצלחה (`closed`) או בכישלון (`failed`).
 
@@ -180,18 +142,31 @@ def sweep(store: SessionStore) -> None:
     `pull_failed` ביומן נושאת אותה (עיקרון 4/5) — לצד `client_failed`
     שהדיווח עצמו כבר רשם. `store.fail` מותנה במצב, ולכן שני תהליכונים
     (הקונסולה, השעון, `open_pull`) רושמים שורה אחת בלבד.
+
+    **#3657: ההחלטה שמשיכה נכשלה — המכונה אמרה שנכשלה, או שתקה מעל התקרה —
+    היא של המוח** (`brain.silence.judge_pull`, K-SILENT), נרשמת ב-
+    `brain_decisions` עם הראיות לפני הכשלה והתוצאה אחריה. אין החלטה מהמוח
+    = המשיכה לא נכשלת (עיקרון 5).
     """
     now = datetime.now(timezone.utc)
-    clockstep.guard(store.conn, store, now)       # #1947: before `_failure` reads a stamp
+    clockstep.guard(store.conn, store, now)       # #1947: before the brain reads a stamp
+    silent = silence.pull_silent_s(agent_timing.lost_seconds(store.conn))   # #3038: the operator's lost_wait is the input, read once a sweep
     for row in store.active_pulls():
         members = store.members(row["id"])
         if members and all(m["done"] for m in members):
             store.close(row["id"], "", event="pull_done")
             continue
-        reason = _failure(row, members, now)
-        if reason is not None and store.fail(row["id"], reason):
-            journal(store.conn, "pull_failed", f"{row['id']} — {reason}",
+        call = silence.decide_pull(store.conn, pull_id=row["id"], members=members, created_at=row["created_at"],
+                                   now=now, final=FINAL, silent_s=silent)
+        if call is None or call.verdict not in (silence.FAIL_REPORTED, silence.FAIL_SILENT):
+            continue
+        rows = silence.record(store.conn, [call], round_id=row["id"], entity_kind="machine" if call.target else "")
+        if store.fail(row["id"], call.reason):
+            journal(store.conn, "pull_failed", f"{row['id']} — {call.reason}",
                     machine=members[0]["mac"] if members else None, round_id=row["id"])
+            silence.settle(store.conn, rows.get(call.target), "השרת הכשיל את המשיכה")
+        else:
+            silence.settle(store.conn, rows.get(call.target), "המשיכה כבר נסגרה בידי מי שקדם: לא הוכשלה שוב")
 
 
 def background_sweep(store: SessionStore) -> bool:

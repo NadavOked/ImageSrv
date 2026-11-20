@@ -12,6 +12,9 @@ EOF
 }
 
 _tb_say() { printf '\nמה זה אומר:\n%s\n' "$1"; }
+# $1 = the machine name the kiosk's confirm window sends after the red button
+# (#1270) -- the same API guard the framework (tools.sh) and the other agent
+# destructive actions use. Nothing here asks the operator to type anything.
 _tb_confirm() {
     _tbc=${MACHINE_NAME:-$(hostname 2>/dev/null || true)}
     [ -n "$_tbc" ] && [ "$1" = "$_tbc" ]
@@ -49,7 +52,7 @@ _tb_esp_fsck_repair() {
     _tb_part_ok "${1:-}" || { echo "מחיצת ESP לא חוקית: ${1:-"(ריק)"} — נדרשת מחיצה (/dev/sda1) שהקרנל מכיר, לא מקל השיכפול"; return 1; }
     _tb_confirm "${2:-}" || {
         echo "=== תיקון ESP ==="; echo "יעד: $1"; echo "פעולה: fsck.vfat -a"
-        echo "הקלד שם מכונה."; _tb_say "בלי אישור לא כותבים."; return 3
+        echo "לא אושר בחלון האישור."; _tb_say "בלי אישור לא כותבים. האישור הוא הכפתור האדום בחלון האישור."; return 3
     }
     echo "=== fsck.vfat -a $1 ==="; fsck.vfat -a "$1" 2>&1; _rc=$?
     _tb_say "קוד $_rc (0=נקי, 1=תוקן). אחרי תיקון — בדיקת ESP שוב."; return $_rc

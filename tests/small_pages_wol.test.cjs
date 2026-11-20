@@ -109,7 +109,7 @@ test('settings (סידור 17/10, המוקאפ settings-redesign): four groups, 
   assert.match(html,/<div class="obj-actions"><\/div>/,'every change saves at once — no save/cancel in the header');
   assert.doesNotMatch(html,/set-save|set-cancel|saveSettings|cancelSettings/);
   const groups=[...html.matchAll(/<section class="set-grp"><div class="c12 card"><div class="card-h"><span>([^<]+)</g)].map((m)=>m[1]);
-  assert.deepEqual(groups.map((g)=>g.trim()),['כללי','שיכפול והפצה','כיבוי אוטומטי בגואי','אבטחה','עדכונים ותחזוקה'],'"מראה" moved to my account; TLS is a row; no "שם המארח" card');
+  assert.deepEqual(groups.map((g)=>g.trim()),['כללי','שיכפול והפצה','המוח של השרת','כיבוי אוטומטי בגואי','אבטחה','עדכונים ותחזוקה'],'"מראה" moved to my account; TLS is a row; no "שם המארח" card; #3064: "המוח של השרת" after the deploy card');
   const groupOf=(c)=>{const i=html.indexOf('<span>'+c+'<'); return html.slice(i,html.indexOf('</section>',i));};
   // ‏#2059 (מוקאפ 05): כרטיס "כיבוי אוטומטי בגואי" בלי הערת תחתית — כך במוקאפ; לכל השאר ההערה גלויה
   for(const c of groups.filter((g)=>g.trim()!=='כיבוי אוטומטי בגואי')) assert.match(groupOf(c),/<\/div><\/div><p class="set-foot">[^<]{20,}<\/p>$/,c+': the explanation is visible under the group');
@@ -138,7 +138,7 @@ test('settings (סידור 17/10, המוקאפ settings-redesign): four groups, 
   assert.ok(groupOf('שיכפול והפצה').includes('id="srow-igmp_querier"')); assert.match(sw('igmp_querier'),/ checked /,'#1972: missing = on');
   // ‏#1967 (22/10): מתג "צליל בסיום סבב שיכפול" ב"שיכפול והפצה", דלוק כשלא נקבע.
   assert.ok(groupOf('שיכפול והפצה').includes('id="srow-cloner_beep"')); assert.match(sw('cloner_beep'),/ checked /,'#1967: missing = on');
-  assert.equal((html.match(/role="switch"/g)||[]).length,run('classroomsOn()')?11:10,'learned rate · learning (#2028) · full read-back (20/10) · IGMP querier (22/10) · cloner beep (22/10) · recovery · identity · update · idle logout · MFA for admins (18/10) (+ class deploy with classrooms)');
+  assert.equal((html.match(/role="switch"/g)||[]).length,run('classroomsOn()')?13:12,'learned rate · learning (#2028) · full read-back (20/10) · IGMP querier (22/10) · cloner beep (22/10) · recovery · identity · update · idle logout · MFA for admins (18/10) · HDD support (#3268, 14/11) · brain CPU gate (#3456) (+ class deploy with classrooms)');
   // תעודה ותחזוקה — שורה אחת כל אחת
   assert.match(groupOf('אבטחה'),/<dt>תעודת TLS<\/dt><dd><span class="muted">בלי TLS \(loopback בלבד\)<\/span><\/dd>/);
   assert.match(groupOf('עדכונים ותחזוקה'),/<dt title="[^"]*">הפעלה מחדש אוטומטית<\/dt><dd[^>]*><span class="sv">כבוי<\/span> <button[^>]*autoRebootSheet\(\)">שינוי…</);
@@ -328,8 +328,9 @@ test('logs: one table — time (hh:mm:ss today, date otherwise), severity dot fr
   await run('loadJournalData()');
   assert.ok(requests.some((r)=>r.url==='/journal/events'),'event types for the filter');
   const j=requests.find((r)=>r.url==='/journal'); assert.equal(new URL(j.full,'http://x').searchParams.get('limit'),'200'); assert.equal(new URL(j.full,'http://x').searchParams.get('from'),null,'no range by default');
+  assert.equal(new URL(j.full,'http://x').searchParams.get('level'),'attention','#3157: "needs attention" by default');
   const html=run('logs()'); balanced(html);
-  assert.match(html,/class="obj-name">יומן</); assert.match(html,/4 אירועים מוצגים \(הסך לא נמסר\) · בלי סינון — האחרונים/,'no X-Journal-Total → not a number');
+  assert.match(html,/class="obj-name">יומן</); assert.match(html,/4 אירועים מוצגים \(הסך לא נמסר\) · מסונן: דורש תשומת לב/,'no X-Journal-Total → not a number; #3157: the default filter is named');
   assert.match(html,/<th>מה קרה<\/th><th>מי<\/th><th>זמן<\/th><th>חומרה<\/th><th><\/th>/);
   assert.doesNotMatch(html,/role="tablist"|openLogFilter|<th>event<\/th>|עקרון התצוגה|Audit/);
   const r0=row(html,'LAB303-03');
@@ -344,7 +345,7 @@ test('logs: one table — time (hh:mm:ss today, date otherwise), severity dot fr
   assert.match(html,/<select aria-label="משתמש"[^>]*><option value="" selected>כל המשתמשים<\/option><option value="deployer">deployer<\/option><option value="nadav">nadav</,'users from the rows');
   assert.match(html,/<select aria-label="טווח זמן"[^>]*><option value="" selected>כל הזמן<\/option><option value="today">היום</);
   assert.match(html,/class="n">4 אירועים</); assert.match(html,/זה הכול לסינון הזה/,'fewer rows than the limit → nothing more to load');
-  assert.match(html,/<a class="btn" href="\/api\/console\/journal\.csv" download>ייצוא CSV</,'#1008: the export, same filter');
+  assert.match(html,/<a class="btn" href="\/api\/console\/journal\.csv\?level=attention" download>ייצוא CSV</,'#1008: the export, same filter');
   run('openLogDetail(2)');
   assert.match(run('drawer'),/פרטי אירוע\|/); assert.match(run('drawer'),/<span class="mono">storage_transfer_failed<\/span>/); assert.match(run('drawer'),/class="st err">כשל \/ סירוב/);
 });
@@ -362,9 +363,9 @@ test('logs: filters go to the server as query parameters (q, event, user, from f
   assert.equal(requests.length,before,'custom without dates: no request yet, the inputs appear'); assert.match(run('logs()'),/type="datetime-local" aria-label="מתאריך"/);
   run("logFilter('since','2026-09-01T10:00')"); await new Promise((r)=>setImmediate(r)); run("logFilter('until','2026-09-13T12:00')"); await new Promise((r)=>setImmediate(r));
   assert.equal(q().get('from'),'2026-09-01T10:00:00'); assert.equal(q().get('to'),'2026-09-13T12:00:59','inclusive end minute');
-  assert.match(run('logs()'),/מסונן: &quot;LAB303&quot; · סבב נפתח · nadav · 2026-09-01T10:00 – 2026-09-13T12:00/);
+  assert.match(run('logs()'),/מסונן: דורש תשומת לב · &quot;LAB303&quot; · סבב נפתח · nadav · 2026-09-01T10:00 – 2026-09-13T12:00/);
   // ‏#1008: "עוד" = הדף הבא עם before=<id האחרון>, ומוסיף — לא limit גדל
-  assert.match(run('logs()'),/href="\/api\/console\/journal\.csv\?q=LAB303&amp;event=session_open&amp;user=nadav&amp;from=2026-09-01T10%3A00%3A00&amp;to=2026-09-13T12%3A00%3A59" download>/,'the export carries the filter, without limit');
+  assert.match(run('logs()'),/href="\/api\/console\/journal\.csv\?level=attention&amp;q=LAB303&amp;event=session_open&amp;user=nadav&amp;from=2026-09-01T10%3A00%3A00&amp;to=2026-09-13T12%3A00%3A59" download>/,'the export carries the filter, without limit');
   fixtures['/journal']=Array.from({length:200},(_,i)=>({id:1000-i,ts:today+'T10:00:00',user:'u',event:'login',label:'L'+i,text:''}));
   fixtures.__total=350;
   run("logFilter('q','')"); await new Promise((r)=>setImmediate(r)); assert.equal(q().get('before'),null,'a filter change starts from the top');
@@ -386,7 +387,9 @@ test('logs: /journal unreadable is a red note (not an empty journal); /journal/e
   assert.match(s.run('toasts.join("|")'),/DB down/);
   s=setup({'/journal/events':new Error('no'),'/journal':[]}); s.run('current="logs"');
   await s.run('loadJournalData()'); html=s.run('logs()');
-  assert.match(html,/סוג: לא נקרא/); assert.match(html,/class="empty">היומן ריק/);
+  assert.match(html,/סוג: לא נקרא/);
+  assert.match(html,/class="empty">אין אירועים שדורשים תשומת לב/,'#3157: the default filter found nothing -- not "the journal is empty"');
+  s.run("LOG.level=''"); assert.match(s.run('logs()'),/class="empty">היומן ריק/);
   s.run("LOG.q='x'"); assert.match(s.run('logs()'),/אין אירועים שתואמים לסינון/);
 });
 

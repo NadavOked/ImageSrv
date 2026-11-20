@@ -35,11 +35,14 @@ smart_event_json() {
 smart_send_event() {
     # שולח disk_event לשרת. best-effort כמו trace_step: אבחון שמפיל
     # שחזור הוא נזק. לעולם מחזיר 0, ומדווח אם לא נמסר.
+    log "gap: smart_send_event $2 begin" >&2   # #3524: the stamps between confirmed and writing (stderr: this runs inside `$( )`)
     smart_event_json "$@" > "$RUN_DIR/disk_event.json" 2>/dev/null
     if http_post_json "$SERVER/api/v1/agent/disk-event" \
             "$RUN_DIR/disk_event.json" >/dev/null 2>&1; then
+        log "gap: smart_send_event $2 end delivered" >&2
         return 0
     fi
+    log "gap: smart_send_event $2 end not delivered" >&2
     # ‏#875: ל-stderr -- הפונקציה רצה בתוך smart_preflight, ש-smart_gate לוכד
     # ב-`$( )`; שורת יומן על stdout הייתה נכנסת לרשימת הדיסקים לכתיבה.
     log "disk_event for $2 was not delivered -- continuing" >&2
@@ -52,28 +55,38 @@ smart_preflight() {
     # בלי שאלה עם הערה (#2042). מדפיס את רשימת הדיסקים שייכתבו בפועל.
     # ‏ok/unchecked לא נשאלים — unchecked נכתב, זה קריטי (עיקרון 5).
     _pf_ses="$1"; shift
+    log "gap: disk_failures_refresh begin" >&2
     disk_failures_refresh || :   # #874: זיכרון השרת מה-hello האחרון; כשל = הקובץ הקודם
+    log "gap: disk_failures_refresh end" >&2
     # #1859/#2711: what rose since this serial's previous round -- compared with what is read NOW. A cloner
     # woken into a round sent its one hello before any probe (smart_attrs null: the cache is per boot), and the
     # server compares nothing it was not sent. Probe first, then one NON-joining hello (attended_hello: the beat
     # a running task sends -- a joining one mid-round marks the member lost, #1728 -- whose answer never touches
     # response.json), and read smart_learned from that answer. Not delivered = said (principle 5).
-    for _pf_d in "$@"; do smart_probe "$_pf_d" > /dev/null; done
+    for _pf_d in "$@"; do
+        log "gap: smart_probe $_pf_d begin cache=$([ -f "$RUN_DIR/smart/$_pf_d.v" ] && echo hit || echo miss)" >&2
+        smart_probe "$_pf_d" > /dev/null
+        log "gap: smart_probe $_pf_d end" >&2
+    done
     if command -v smart_learned_refresh > /dev/null 2>&1; then
+        GAP_TRACE=1   # #3524: attended_hello says its two halves (build, POST) -- only here: the beat of a waiting screen would fill the log
         if command -v attended_hello > /dev/null 2>&1 && attended_hello "" >&2 &&
                 smart_learned_refresh "$RUN_DIR/attended.resp"; then :
         else
             log "SMART: not compared with the previous round after the probe -- the hello did not go through; the boot answer stands" >&2
             smart_learned_refresh || :
         fi
+        GAP_TRACE=; log "gap: attended_hello + smart_learned_refresh end" >&2
     fi
     _pf_write=""
     for _pf_d in "$@"; do
         # תיקיית היעד קיימת כבר מ-target_init; ה-mkdir הופך את השער לעצמאי --
         # target_set חייב תיקייה, וקפיאה על היעדרה תהיה כשל שקט (עיקרון 5).
-        mkdir -p "$RUN_DIR/targets/$_pf_d"; rm -f "$RUN_DIR/targets/$_pf_d/smart_note"   # #2042: this round's note only
+        mkdir -p "$RUN_DIR/targets/$_pf_d"; rm -f "$RUN_DIR/targets/$_pf_d/smart_note" "$RUN_DIR/targets/$_pf_d/smart_note.done"   # #2042: this round's note only
+        log "gap: smart_probe2 $_pf_d begin" >&2
         _pf_v=$(smart_probe "$_pf_d")
         _pf_r=$(smart_field "$_pf_d" 2)
+        log "gap: smart_probe2 $_pf_d end $_pf_v" >&2
         # SMART תקול (‏fail) = **אדום**. נכשל בשיכפול הקודם (זיכרון השרת, ‏#874)
         # כש-SMART אינו fail = **כתום**, "נסה שוב". עצירה באמצע (הזרם לא הגיע, הסבב נעצר)
         # אינה צובעת -- השרת אינו מחזיר אותה (‏disk_failures.py).
@@ -81,6 +94,9 @@ smart_preflight() {
         # זאת" של #1580: אדום **לעולם אינו יעד** -- לא נשאל, לא ממתינים לו,
         # מדולג בגלוי. מותר רק כמקור (העתקה ממנו, קליטה, חילוץ).
         if [ "$_pf_v" != fail ] && _pf_c=$(disk_failure_cause "$_pf_d"); then
+            # #2995: a write that ends done answers "failed the previous clone" -- what stays on a
+            # done target is SMART's own warning, or nothing (smart_note_apply reads smart_note.done)
+            if [ "$_pf_v" = warn ]; then smart_note_he warn "$_pf_r"; fi > "$RUN_DIR/targets/$_pf_d/smart_note.done"
             _pf_v=failed_last; _pf_r="$_pf_c"
         # #1859: what rose since this serial's previous round (the server compared) -- orange, asked
         elif { [ "$_pf_v" = ok ] || [ "$_pf_v" = warn ]; } && command -v smart_learned_reason >/dev/null 2>&1 &&
@@ -130,11 +146,13 @@ smart_note_he() {
 smart_note_apply() {
     # $@ = disks. #2042: a target that ended done and was orange before the write carries
     # its note in `error` -- "done with a warning" (#856/#943), after an earlier warning.
-    # Not done (failed, cancelled) = its own reason stands.
+    # Not done (failed, cancelled) = its own reason stands. #2995: "failed the previous clone"
+    # is not a warning on a disk written now -- its smart_note.done (SMART's own note, or empty) rides instead.
     for _na_d in "$@"; do
-        _na_t="$RUN_DIR/targets/$_na_d"
-        [ -s "$_na_t/smart_note" ] && [ "$(cat "$_na_t/state" 2>/dev/null)" = "done" ] || continue
-        _na_w=$(cat "$_na_t/smart_note")
+        _na_t="$RUN_DIR/targets/$_na_d"; _na_n="$_na_t/smart_note"
+        [ ! -e "$_na_t/smart_note.done" ] || _na_n="$_na_t/smart_note.done"   # #2995: failed_last ends at done
+        [ -s "$_na_n" ] && [ "$(cat "$_na_t/state" 2>/dev/null)" = "done" ] || continue
+        _na_w=$(cat "$_na_n")
         [ -s "$_na_t/error" ] && _na_w="$(cat "$_na_t/error") | $_na_w"
         target_set "$_na_d" "done" "$_na_w"
     done
