@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from server.console import auth
 from server.system import backup_target
@@ -27,7 +28,7 @@ def create_backup_target_router(ctx: ServerContext, hooks: dict | None = None,
     async def choose(request: Request, user=Depends(admin_only)):
         body = await request.json()
         try:
-            return backup_target.configure(ctx.conn, data_dir, body, hooks, user[0])
+            return await run_in_threadpool(backup_target.configure, ctx.conn, data_dir, body, hooks, user[0])   # #2750
         except backup_target.TargetError as exc:
             raise HTTPException(exc.status, exc.reason) from None
 
@@ -35,7 +36,7 @@ def create_backup_target_router(ctx: ServerContext, hooks: dict | None = None,
     async def set_policy(request: Request, user=Depends(admin_only)):
         body = await request.json()
         try:
-            return backup_target.set_policy(ctx.conn, data_dir, body, user[0])
+            return await run_in_threadpool(backup_target.set_policy, ctx.conn, data_dir, body, user[0])   # #2750
         except backup_target.TargetError as exc:
             raise HTTPException(exc.status, exc.reason) from None
 

@@ -191,10 +191,12 @@ def test_a_direct_send_with_drawers_is_the_cloners_screen(driver, tmp_path):
 @requires_native(("cc", shutil.which("cc") or shutil.which("gcc")),
                  ("pango/cairo/libdrm", _pkgconfig("pangocairo", "cairo", "libdrm")), ("bash", BASH),
                  why="native-gui נבנה על המעבדה בלבד")
-def test_without_drawers_it_is_the_progress_card_as_before(driver, tmp_path):
+def test_without_drawers_it_is_still_the_cloners_screen_2984(driver, tmp_path):
+    # #2984 (was: the progress card with "sda" and three tiles): a running direct send is the round's screen from the
+    # first second -- speed, time and the targets' tile live there, and say "waiting" until the cloners join
     state = "\n".join(l for l in STATE.splitlines() if not l.startswith(("drawer=", "cloner_group="))) + "\n"
     head = drive(driver, tmp_path, state)[0]
-    assert head[1] == head[5], f"routed to {head[1]}, not SCREEN_PROGRESS ({head[5]})"
+    assert head[1] == head[3], f"routed to {head[1]}, not SCREEN_CLONER ({head[3]})"
     # a room that was not read is said on the cloner's screen, not hidden behind the progress card
     head = drive(driver, tmp_path, state + "direct_targets=unread\n")[0]
     assert head[1] == head[3]

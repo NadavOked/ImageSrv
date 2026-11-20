@@ -37,12 +37,18 @@ lc_gui_state() {
         lc_pull_state >> "$_gs_n" || return 1   # 16/10: the restore screen (lcpull.sh)
     else
         printf 'lc_inv=%s\nlc_phase=%s\n' "$(cat "$LC/inv.state" 2>/dev/null)" "$(cat "$LC/phase" 2>/dev/null)" >> "$_gs_n"
+        # #2991: the drawer being read now (lcscan.sh's inv/scan: dev|since|how many after it) -- drawer|seconds|left
+        if IFS='|' read -r _gs_sd _gs_st _gs_sl < "$LC/inv/scan" 2>/dev/null; then
+            case "$_gs_st:$_gs_sl" in *[!0-9:]*|:*|*:) ;; *) _gs_m=$(disk_drawer "$_gs_sd" "$(disk_port "$_gs_sd" 2>/dev/null || echo 0)")
+                _gs_m=${_gs_m%%|*}; case "$_gs_m" in ''|*[!0-9]*) _gs_m=0 ;; esac   # not mapped = 0: "בודק את הדיסק…"
+                printf 'lc_scan=%s|%s|%s\n' "$_gs_m" "$(($(date +%s) - _gs_st))" "$_gs_sl" >> "$_gs_n" ;; esac
+        fi
         # by the drawer of the mapping, a disk not in it last, then by port (#867).
         # #1495: fields 14-15 = disk_drawer (slotnames.sh), "<drawer>|<connection>".
         # #1798: field 16 = the incomplete-write mark (lcinv.sh): incomplete|clean|unchecked|"".
         # #1921: field 17 = the drawer's hardware note (hwissues.sh) -- CRC, link, reset, USB 2.0; never a colour.
         # #2001: field 18 = the name of its connection on the clone stick (usbmap.sh); "" = "דיסק N".
-        # #2848: field 19 = the hw words (hwissues.sh): link_slow / link_reset / drawer_gone make the drawer red.
+        # #2848: field 19 = the hw words (hwissues.sh): link_reset / drawer_gone make the drawer red (#3591: a slow link speed does not).
         { ! command -v usb_default_follow > /dev/null 2>&1 || usb_default_follow; } || :   # #2001: the stick's default follows the disks
         drawer_slots_refresh || :
         for _gs_f in "$LC"/inv/*.line; do
@@ -53,6 +59,7 @@ lc_gui_state() {
                 "$(command -v usb_drawer_name >/dev/null 2>&1 && usb_drawer_name "$_gs_d" "${_gs_p:-0}")" \
                 "$(command -v hw_words >/dev/null 2>&1 && hw_words "$_gs_d" | tr '\n|' '  ')"
         done | sort -t'|' -k1,1n -k2,2n -k3,3n | sed 's/^[01]|[0-9]*|/lc_disk=/' >> "$_gs_n"
+        disk_rule_lc_records >> "$_gs_n" || :   # #3666: lc_rule=dev|color|source|target|reason|sentence -- the one table's verdict (diskrule.sh); the GUI takes it, none = "not checked"
         _gs_src=$(cat "$LC/source" 2>/dev/null)
         if [ -n "$_gs_src" ]; then
             # #1443: + copy|why -- the bytes the copy moves (lcsize.sh); -1|why = not measured, empty = not yet
@@ -64,7 +71,7 @@ lc_gui_state() {
             for _gs_f in "$LC"/inv/*.line; do
                 [ -f "$_gs_f" ] || continue
                 _gs_d=$(basename "$_gs_f" .line); [ "$_gs_d" = "$_gs_src" ] && continue
-                printf 'lc_fit=%s|%s\n' "$_gs_d" "$(lc_verdict_for "$_gs_src" "$_gs_d" | tr -d '\r\n')" >> "$_gs_n"
+                printf 'lc_fit=%s|%s\n' "$_gs_d" "$(lc_fit_verdict "$_gs_src" "$_gs_d" | tr -d '\r\n')" >> "$_gs_n"
             done
         fi
         [ -d "$LC/run" ] && lc_gui_run >> "$_gs_n"
@@ -98,6 +105,11 @@ lc_gui_run() {
         "$_gr_cp" "$((_gr_t1 - _gr_t0))" "$([ -f "$_gr_r/shrunk" ] && echo 1 || echo 0)" \
         "$(cat "$_gr_r/report" 2>/dev/null | cut -d'|' -f1)" "${_gr_cur%%|*}" \
         "$(_lc_clean "$(cat "$_gr_r/source_restore" 2>/dev/null)")" "$_gr_sp"
+    # #2527: the retry of the unread sectors (lcraw.sh): lc_retry=round|of, only while rescuecat says it -- the status bar's grey line
+    if [ -f "$_gr_r/retry.round" ]; then
+        read -r _gr_r1 _gr_r2 < "$_gr_r/retry.round" || :
+        case "$_gr_r1$_gr_r2" in ''|*[!0-9]*) ;; *) [ -z "$_gr_r1" ] || [ -z "$_gr_r2" ] || printf 'lc_retry=%s|%s\n' "$_gr_r1" "$_gr_r2" ;; esac
+    fi
     # #1483: what became of "כבה את המחשב" -- powering off, or why not
     [ -s "$_gr_r/notice" ] && printf 'toast=%s\n' "$(_lc_clean "$(cat "$_gr_r/notice")")"
     if [ -f "$_gr_r/manifest.json" ]; then

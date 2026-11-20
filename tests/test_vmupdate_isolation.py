@@ -399,9 +399,13 @@ class RawCaptureHost(LoopHost):
 
         class Proc:
             stdout = io.BytesIO(b"raw encrypted bytes")
+            returncode = 0
 
             def wait(self, timeout=None):
                 return 0
+
+            def communicate(self, data=None, timeout=None):     # #2533: zstd, a chunk at a time -- here, as it is
+                return data, None
 
         return Proc()
 
@@ -439,6 +443,9 @@ def test_bitlocker_capture_is_raw_without_mount_shrink_or_growth(tmp_path, monke
     assert "shrunk_from_bytes" not in part and "source_start_sector" not in part
     assert json.loads(json.dumps(part))["used_bytes"] is None
     assert (work / "out" / part["file"]).read_bytes() == b"raw encrypted bytes"
+    squeezers = [c for c in host.calls if c[0] == "zstd"]     # #2533: one frame for the one chunk, its size said
+    assert squeezers == [["zstd", "-q", "-3", "--stream-size=19", "-c"]]
+    assert part["index_xxh64"] and result["image_format"] == 2
     readers = [c for c in host.calls if "partclone.dd" in c]
     assert len(readers) == 1 and "-c" not in readers[0] and "-I" not in readers[0]
     assert readers[0][:2] == ["setpriv", "--reuid=999"]
@@ -511,3 +518,53 @@ def test_gpt_attributes_come_back_as_signed_int64_and_are_read_as_bits(tmp_path,
     disk.write_bytes(b"")
     _guid, parts = vmdisk.Appliance(disk, factory=lambda: guest).table()
     assert {p["attrs"] for p in parts} == {hexed}
+
+
+def test_a_zstd_that_hangs_is_killed_and_partclone_does_not_outlive_the_capture(tmp_path, monkeypatch):
+    """The review of #3043 (2-ה): `communicate` timing out went past the cleanup, and
+    partclone and zstd stayed alive on the loop device. Both are ended by name, and
+    the capture fails with a reason -- for a zstd that hangs and for anything else."""
+    killed = []
+
+    class Reader:
+        returncode = 0
+
+        def __init__(self):
+            self.stdout = io.BytesIO(b"raw encrypted bytes")
+
+        def kill(self):
+            killed.append("partclone")
+
+        def wait(self, timeout=None):
+            return 0
+
+    class Hung:
+        returncode = None
+
+        def communicate(self, data=None, timeout=None):
+            if timeout is not None:
+                raise subprocess.TimeoutExpired("zstd", timeout)
+            return b"", None
+
+        def kill(self):
+            killed.append("zstd")
+
+    class Host:
+        def __init__(self, squeeze):
+            self.squeeze = squeeze
+
+        def popen(self, argv, **_kw):
+            return self.squeeze() if argv[0] == "zstd" else Reader()
+
+    with pytest.raises(vmdisk.DiskError, match="zstd did not finish a chunk"):
+        vmdisk.capture_partition(Host(Hung), "unknown", "/dev/loop7", tmp_path / "p2.msr.pcl.zst", tmp_path, 2,
+                                 lambda _n: None)
+    assert killed == ["zstd", "partclone"]
+
+    def broken():
+        raise OSError("no zstd on this host")
+    killed.clear()
+    with pytest.raises(OSError, match="no zstd on this host"):
+        vmdisk.capture_partition(Host(broken), "unknown", "/dev/loop7", tmp_path / "p2.msr.pcl.zst", tmp_path, 2,
+                                 lambda _n: None)
+    assert killed == ["partclone"]

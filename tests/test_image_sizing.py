@@ -43,7 +43,7 @@ def manifest(parts, source=VM_256, declared=None, **extra):
     `used_bytes` נכתב 0 בכל מחיצה בכוונה — זה בדיוק מה שיש בספרייה.
     """
     return {
-        "schema": 1, "id": "img_t", "name": "t", "family": 256,
+        "schema": 1, "image_format": 2, "id": "img_t", "name": "t", "family": 256,   # #2533: chunk frames
         "scheme": "gpt", "sector_size": 512,
         "source_disk_bytes": source,
         "min_target_bytes": source if declared is None else declared,

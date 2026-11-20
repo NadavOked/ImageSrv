@@ -78,23 +78,41 @@ function balanced(html) {
   assert.deepEqual(stack,[]);
 }
 
-test('table: a "שירותים" column with chips in the fixed order; your NIC is marked; an unset NIC says "לא הוגדר · הכול כבוי"',async()=>{
+test('ports card (#3028): "שירותים שרצים עליו" with chips in the fixed order; your NIC is marked; an unset NIC says "לא הוגדר · הכול כבוי"; each row has "עריכה…"',async()=>{
   const t=await loaded();
-  const html=t.run('networkPage(1)'); balanced(html);
-  assert.match(html,/<th>תפקיד<\/th><th>שירותים <span class="ns-help">· מה השרת נותן דרכו<\/span><\/th><th><span class="sr">פעולות/);
+  const html=t.run('nicsvcPortsCard()'); balanced(html);
+  assert.match(html,/<th>כרטיס<\/th><th>שירותים שרצים עליו <span class="ns-help">· מה השרת נותן דרכו<\/span><\/th><th><span class="sr">פעולות/);
   const r33=row(html,'data-nic="ens33"'), r34=row(html,'data-nic="ens34"'), r35=row(html,'data-nic="ens35"');
   assert.match(r33,/<small><i><\/i>החיבור שלך<\/small>/);
   assert.deepEqual([...r33.matchAll(/class="ns-sc"[^>]*>.*?<\/svg>([^<]+)</g)].map(m=>m[1]),['קונסולה','מוניטור','בין-שרתים']);
   assert.deepEqual([...r34.matchAll(/class="ns-sc"[^>]*>.*?<\/svg>([^<]+)</g)].map(m=>m[1]),['שידור','אתחול מהרשת']);
   assert.match(r35,/<span class="ns-sc unset">לא הוגדר · הכול כבוי<\/span>/);
   assert.match(r33,/onclick="nicsvcRowClick\(event,'ens33'\)"/,'the row opens the drawer');
+  assert.match(r33,/<button class="btn sm" type="button" onclick="nicsvcOpen\('ens33'\)">עריכה…<\/button>/);
+});
+
+test('#3028 physical connections: the NIC table has no services column, no "שירותים…" in ⋯, and no row click to the drawer; the ports page carries the services card',async()=>{
+  const t=await loaded();
+  const html=t.run('networkPage(1)'); balanced(html);
+  assert.doesNotMatch(html,/שירותים/); assert.doesNotMatch(html,/ns-sc|nicsvcRowClick|nicsvcOpen/);
+  const r33=row(html,'data-nic="ens33"');
   const menu=JSON.parse(r33.match(/data-menu="([^"]*)"/)[1].replaceAll('&quot;','"').replaceAll('&#39;',"'"));
-  assert.deepEqual(menu[0],['שירותים…',"nicsvcOpen('ens33')"],'"שירותים…" is the first item of ⋯');
+  assert.deepEqual(menu.map(m=>m[0]),['הגדרת כרטיס…','תיאור…','נתיבים סטטיים…']);
+  await t.run('loadPorts()');
+  const ports=t.run('ports()'); balanced(ports);
+  assert.match(ports,/שירותים לפי כרטיס/); assert.match(ports,/data-nic="ens33"/);
+  assert.ok(ports.indexOf('שירותים לפי כרטיס')<ports.indexOf('מאזין'),'the services card comes first');
+});
+
+test('#3028 ports card: /net/interfaces unread → says so, not an empty table',async()=>{
+  const t=setup({'/net/interfaces':new Error('boom')}); t.run('current="ports"'); await t.run('loadPorts()');
+  const html=t.run('nicsvcPortsCard()');
+  assert.match(html,/‏\/net\/interfaces לא נקרא/); assert.doesNotMatch(html,/data-nic=/);
 });
 
 test('/net/services unread → "לא נקרא" in the column and a note, never "אף שירות"',async()=>{
   const t=await loaded({'/net/services':new Error('db locked')});
-  const html=t.run('networkPage(1)');
+  const html=t.run('nicsvcPortsCard()');
   assert.match(row(html,'data-nic="ens33"'),/<span class="muted" title="db locked">לא נקרא<\/span>/);
   assert.match(html,/\/net\/services לא נקרא: db locked/);
   assert.doesNotMatch(html,/אף שירות/);
@@ -145,7 +163,7 @@ test('save on a NIC you are not cutting: one PUT, a toast, and a reload',async()
 test('warn-table: a saved odd combination is an orange chip and a note with "פתיחת השירותים…"',async()=>{
   const v=JSON.parse(JSON.stringify(TODAY)); v.nics[0].services=['console','monitor','netboot','interserver']; v.nics[0].source='saved'; v.edited=true;
   const t=await loaded({'/net/services':v});
-  const html=t.run('networkPage(1)');
+  const html=t.run('nicsvcPortsCard()');
   assert.match(row(html,'data-nic="ens33"'),/<span class="ns-sc w" title="ברשת השרתים כבר יש DHCP[^"]*">.*?אתחול מהרשת<span class="sr"> — צירוף חריג<\/span>/);
   assert.match(html,/<b>ens33 נותן אתחול מהרשת ברשת השרתים.<\/b> ברשת השרתים כבר יש DHCP.*onclick="nicsvcOpen\('ens33'\)">פתיחת השירותים…/);
 });
@@ -190,7 +208,7 @@ test('pending (from the other address): a banner on every page + a countdown chi
   assert.match(banner,/קונסולה כובתה ב-ens33 \(רשת השרתים\)/);
   assert.match(banner,/onclick="nicsvcKeep\(\)">השאר את השינוי<\/button><button class="btn" type="button" onclick="nicsvcUndo\(\)">החזר עכשיו/);
   assert.match(banner,/aria-live="polite"/,'announced at 30 and 10 seconds only');
-  assert.match(row(t.run('networkPage(1)'),'data-nic="ens33"'),/<span class="ns-sc w">.*קונסולה כובתה · <span data-ns-cd>47<\/span> שנ׳<\/span>/);
+  assert.match(row(t.run('nicsvcPortsCard()'),'data-nic="ens33"'),/<span class="ns-sc w">.*קונסולה כובתה · <span data-ns-cd>47<\/span> שנ׳<\/span>/);
   await t.run('nicsvcKeep()');
   assert.ok(t.requests.some(r=>r.method==='POST'&&r.url==='/net/services/confirm'));
   assert.match(t.run('toasts.at(-1)'),/השינוי נשמר — הקונסולה כבויה ב-ens33. נכנסים מ-10\.20\.0\.8/);
@@ -213,7 +231,7 @@ test('reverted: an info banner that says why, closable; kept: nothing lingers',a
 test('new + new-drawer: a connected NIC that was never set — a note, a tinted row, and a drawer with everything off',async()=>{
   const nics=NICS.map(n=>n.name==='ens35'?{...n,state:'up',speed_mbps:1000}:n);
   const t=await loaded({'/net/interfaces':nics});
-  const html=t.run('networkPage(1)');
+  const html=t.run('nicsvcPortsCard()');
   assert.match(html,/<b>כרטיס מחובר שלא הוגדר: ens35<\/b> — קישור 1 Gb. השרת לא מאזין עליו לשום דבר.*onclick="nicsvcOpen\('ens35'\)">בחירת שירותים…/);
   assert.match(row(html,'data-nic="ens35"'),/class="ns-new"/);
   t.run("nicsvcOpen('ens35')");

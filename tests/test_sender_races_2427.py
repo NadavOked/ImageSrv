@@ -268,7 +268,7 @@ def test_close_round_racing_the_next_wave_leaves_no_open_wave(tmp_path, library,
         return row
 
     monkeypatch.setattr(room, "visible_round", visible_then_next_wave)
-    ctx = SimpleNamespace(conn=db, store=store, sender=engine, library=library)
+    ctx = SimpleNamespace(conn=db, store=store, sender=engine, library=library, chunk=None)  # as `ServerContext`
     room.close_round(ctx, "noc", MANIFEST_256["name"])
 
     assert db.execute("SELECT state FROM room_rounds WHERE id = 'room_2427'"

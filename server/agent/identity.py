@@ -29,6 +29,7 @@ port-security בסוויץ' — מחוץ להיקף (#702).
 from __future__ import annotations
 
 import ipaddress
+import json
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -37,7 +38,7 @@ from pathlib import Path
 
 from boot.grub_menu import normalize_mac as lenient_mac
 
-from server.db import get_setting
+from server.db import get_setting, set_setting
 
 #: המתג בטבלת `settings`. **חסר = דלוק**: הבדיקה כבויה רק כשמישהו כתב
 #: "false" במפורש מהקונסולה (`setting_change` ביומן אומר מי).
@@ -251,6 +252,61 @@ def verify_extra(conn: sqlite3.Connection, leases: LeaseFile, mac: str, extra: s
                               f" at {row['last_seen']}",
                        message="")
     return Verdict(ok=True)
+
+
+#: #3225: מכונה שרשומה לפי כרטיס אחד ועולה מכרטיס אחר (#524). ה-DHCP חוכר לכרטיס
+#: האתחול, ו-`verify_source` (שער ההפצה, `source_gate`) רואה רק את חכירתו — אינו רשום.
+#: hello שעבר את `identity_gate` (הכרטיס חכור לכתובת הפונה) ואת `verify_extra`
+#: (הכרטיס הרשום אינו במקום אחר) הוא הראיה היחידה שהכרטיס הזה שייך למכונה הרשומה, ולכן
+#: נרשם כאן -- מקושר לכתובת, ופג אם hello לא חידש אותו. `all_macs` לבדו אינו נרשם.
+ALIAS_PREFIX = "nic_alias:"
+ALIAS_SECONDS = 6 * 3600
+#: hello חוזר כל כמה שניות במחשב שממתין בחדר; כתיבה לכל אחד מהם היא רעש.
+ALIAS_REFRESH_SECONDS = 600
+
+
+def _parse_alias(raw: str | None) -> tuple[str, str, datetime] | None:
+    """(מכונה, כתובת, מתי) -- או None על כל צורה אחרת. ערך פגום אינו "רשום" (עיקרון 5)."""
+    try:
+        doc = json.loads(raw) if raw else None
+        machine, ip, at = doc["machine"], doc["ip"], datetime.fromisoformat(doc["at"])
+    except (ValueError, TypeError, KeyError):
+        return None
+    if not isinstance(machine, str) or not isinstance(ip, str) or at.tzinfo is None:
+        return None
+    return machine, ip, at
+
+
+def learn_alias(conn: sqlite3.Connection, nic: str, machine: str, client_ip: str | None,
+                now: datetime | None = None) -> bool:
+    """#3225: `nic` (כרטיס האתחול, חכור לכתובת הפונה) הוא כרטיס של המכונה הרשומה `machine`.
+    הקורא קרא לכאן רק אחרי `identity_gate` ו-`verify_extra`. True = נכתב עכשיו."""
+    if not client_ip or nic == machine:
+        return False
+    now = now or datetime.now(timezone.utc)
+    old = _parse_alias(get_setting(conn, ALIAS_PREFIX + nic))
+    if (old is not None and old[0] == machine and _same_address(old[1], client_ip)
+            and timedelta(0) <= now - old[2] <= timedelta(seconds=ALIAS_REFRESH_SECONDS)):
+        return False
+    set_setting(conn, ALIAS_PREFIX + nic, json.dumps(
+        {"machine": machine, "ip": client_ip, "at": now.isoformat(timespec="seconds")}))
+    return True
+
+
+def holder_registered(conn: sqlite3.Connection, mac: str, client_ip: str | None,
+                      is_registered: Callable[[str], bool], now: datetime | None = None) -> bool:
+    """#3225: "החכירה על הכתובת היא של מכונה רשומה" -- ה-MAC רשום בעצמו, או שהוא כרטיס
+    אתחול ש-hello האחרון **מאותה כתובת** (עד `ALIAS_SECONDS`) צירף למכונה שעדיין רשומה.
+    כתובת אחרת, ראיה שפגה, מכונה שנמחקה או רשומה פגומה -- לא רשום."""
+    if is_registered(mac):
+        return True
+    alias = _parse_alias(get_setting(conn, ALIAS_PREFIX + mac)) if client_ip else None
+    if alias is None:
+        return False
+    machine, ip, at = alias
+    now = now or datetime.now(timezone.utc)
+    return (_same_address(ip, client_ip) and timedelta(0) <= now - at <= timedelta(seconds=ALIAS_SECONDS)
+            and is_registered(machine))
 
 
 def verify_source(conn: sqlite3.Connection, leases: LeaseFile, client_ip: str | None,

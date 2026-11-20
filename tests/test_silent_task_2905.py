@@ -48,7 +48,12 @@ try:                                   # negative control: without the module th
 except ImportError:                    # not on an ImportError
     silent_tasks = None
 
-SILENT = getattr(silent_tasks, "SILENT_SECONDS", 600)
+try:                                   # #3657: the ceiling moved to the brain (K-SILENT); 600 either way
+    from server.brain import silence as brain_silence
+except ImportError:                    # pragma: no cover
+    brain_silence = None
+
+SILENT = getattr(brain_silence, "SILENT_S", 600)
 QUIET = SILENT + 120                   # the machine went quiet this long ago
 
 
@@ -236,8 +241,8 @@ def test_the_room_clock_closes_a_silent_task_in_the_background(tmp_path, monkeyp
 
     images = tmp_path / "images"
     write_image(images, MANIFEST_256)
-    if silent_tasks is not None:                # the wait after startup, shortened
-        monkeypatch.setattr(silent_tasks, "SILENT_SECONDS", 1)
+    if brain_silence is not None:               # the wait after startup, shortened
+        monkeypatch.setattr(brain_silence, "SILENT_S", 1)
     app = create_app(tmp_path / "data", images, "http://10.44.12.10:8080",
                      now_fn=Clock(), room_clock_interval=0.02)
     ctx = app.state.ctx

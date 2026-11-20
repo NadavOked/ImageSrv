@@ -28,12 +28,30 @@ CRC-32 של המפה, ספירת הסיביות שווה ל-`usedblocks`, אור
 והסוכן מדווח על המחיצה "לא אומת" בשמה; לעולם לא ערך מנוחש.
 
 נכתב למניפסט עצמו (עיקרון 3: הסוכן קורא את המניפסט שהשרת מגיש), ליד
-המחיצה: `readback_sha256` ו-`readback_bytes`. `ImageLibrary.record_readback`.
+המחיצה: `readback_xxh64` ו-`readback_bytes`. `ImageLibrary.record_index`.
 
 **מתי:** תהליכון רקע אחד (`run_forever`) — בעליית השרת על כל הספרייה (כולל
 אימג'ים שנקלטו לפני #1805), ומיד כשאימג' נכנס לספרייה (`kick()` מסוף אימות
 הקליטה), ולפחות פעם ב-`INTERVAL_S` (העלאה, ייבוא, סנכרון משני). אימג' ישן
 שעוד לא גובב נפרס בינתיים בלי ערך — והסוכן אומר "לא אומת", לא "תקין".
+
+**#2533 — אימג' חתיכות (`image_format` 2):** הרשימה אינה מיוצרת כאן עוד. הסוכן
+שקולט חותך את הזרם לפריימים עצמאיים, בונה **אינדקס** (היסט, אורך ו-XXH64 לכל
+חתיכה) וחותם עליו במניפסט (`index_xxh64`). התהליכון **גוזר את אותו אינדקס
+מהקובץ שבספרייה** (`server/library/chunkformat.py`) ומשווה: תואם — האינדקס נכתב
+ליד קובץ המחיצה (`<file>.idx`), ושדות ה-`readback_*` נרשמים מתוכו; אינו תואם —
+`index_error` במניפסט, והאימג' אינו מופץ (`images.format_problem`). קובץ
+`.readback` נפרד אינו קיים עוד: הרשימה שהסוכן מושך היא העמודה השלישית של
+האינדקס. אימג' בפורמט ישן אינו מופץ, ולכן אינו מגובב.
+
+**#3332 — רשימת BLAKE3:** XXH64 מוצא חתיכה פגומה ואינו עוצר חתיכה שנבנתה בכוונה
+(XXH64 אינו קריפטוגרפי). באותה פריסה של הקובץ זרם הנתונים עובר גם ל-`chunkcast b3list`
+(`B3Lister`), ונוצרת רשימת BLAKE3 -- 32 בתים לחתיכה. היא נכתבת ליד קובץ המחיצה
+(`<file>.b3`, `GET …/b3/<index>`), וה-BLAKE3 של הרשימה עצמה נרשם במניפסט
+(`chunk_b3`). הסוכן בודק בה כל חתיכה לפני כתיבה, ו**אינו כותב בלעדיה** (נדב 15/11): אימג' קיים
+מקבל אותה בגזירה חוזרת ברקע, וגל של אימג' בלי רשימה ממתין לה (`server/rounds/indexprep.py`).
+`chunkcast` שאינו מותקן בשרת (או ישן, בלי `b3list`) -- אין רשימה, היומן אומר זאת פעם אחת
+(`b3_tool`), וגל של מנוע החתיכות אינו יוצא, בשמו.
 
 הרצה יבשה לאימות במעבדה: `python -m server.agent.readbackhash <תיקיית-אימג'>`.
 """
@@ -53,14 +71,14 @@ import zlib
 from pathlib import Path
 
 from server.db import get_setting
-from server.library.images import _whole, carries_a_stream_file, guarded_image_path
+from server.library.images import (_whole, carries_a_stream_file, format_problem, guarded_image_path,
+                                   has_index_xxh64)
 from server.library.usedbackfill import HEADER_SIZE, captured_raw, parse_header
 
 log = logging.getLogger("imagesrv.readbackhash")
 
 CHUNK = 4 * 1024 * 1024      # how much is read at a time
 CHUNK_BYTES = 4 * 1024 * 1024  # a chunk of the data stream -- fanout.c RB_CHUNK, the same number
-LIST_SUFFIX = ".readback"
 STALL_S = 300.0          # zstd שלא נתן בייט כל הזמן הזה (מיקום רשת שנפל) — נהרג
 INTERVAL_S = 600.0       # מעבר על הספרייה לפחות פעם בעשר דקות
 _BM_BIT = 1              # partclone.h: BM_BIT = 0x01
@@ -92,6 +110,14 @@ def parse_setting(value) -> str | None:
 
 class Underived(Exception):
     """אין ראיה לגיבוב — הסיבה בהודעה. ערך לא נרשם."""
+
+
+class BadImage(Underived):
+    """הבדיקה **רצה**, והקובץ אינו מה שהוא חייב להיות: zstd סירב לו, כותרת partclone או
+    ה-CRC של המפה אינם תקינים, הזרם נגמר לא במקום, הפריימים אינם פריימי חתיכות. זו ראיה
+    חיובית לקובץ פגום — לא "לא הצלחנו לבדוק" (עיקרון 5; סקירת 12/11, 2-ד). מי שגוזר
+    אינדקס רושם אותה כ-`index_error`, והאימג' אינו מופץ. `Underived` לבדו נשאר למה
+    שלא רץ: הפורס לא עלה, נהרג על תקיעה, או שהשרת פינה את הדרך."""
 
 
 class Paused(Exception):
@@ -197,6 +223,109 @@ class KernelXxh64:
         return f"{int.from_bytes(digest, 'little'):016x}"
 
 
+B3_EMPTY = "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"   # BLAKE3 of nothing (the spec's vector)
+#: the answer of `b3_tool`: `[path]` for good, `[None]` = "no tool" -- which is believed only for `B3_RETRY_S`.
+_B3_TOOL: list = []
+#: [when `b3_tool` itself said "no tool"]. Empty beside a `[None]` = the answer was put there, not found (tests): final.
+_B3_MISSED: list = []
+#: how long "no tool" stands before it is asked again. A server whose chunkcast is built after the process started
+#: (a deploy that builds it last, `tools/server-tools-build.sh` run by hand) must not need a restart to see it.
+B3_RETRY_S = 30.0
+
+
+def b3_tool(which=shutil.which, now=time.monotonic) -> str | None:
+    """#3332: the `chunkcast` that makes BLAKE3 lists -- or None, said once. It is the one the server sends
+    with (tools/server-tools-build.sh); it is believed only when it gives the spec's BLAKE3 of nothing.
+    A tool is remembered for good; "none" only for `B3_RETRY_S`: metal-1115-compare, a chunkcast built after the
+    server started was not seen until the server was restarted, and every wave failed "no chunkcast" meanwhile."""
+    asked_before = bool(_B3_MISSED)
+    if _B3_TOOL:
+        if _B3_TOOL[0] is not None or not _B3_MISSED or now() - _B3_MISSED[0] < B3_RETRY_S:
+            return _B3_TOOL[0]
+        _B3_TOOL.clear()
+        _B3_MISSED.clear()
+    path = which("chunkcast")
+    found = None
+    if path:
+        try:
+            done = subprocess.run([path, "b3sum"], input=b"", capture_output=True, timeout=10, check=False)
+            found = path if done.returncode == 0 and done.stdout.strip() == B3_EMPTY.encode() else None
+        except (OSError, subprocess.SubprocessError):
+            found = None
+    if found is None:
+        (log.debug if asked_before else log.warning)(
+            "readback digest: no chunkcast with b3list (%s) -- no BLAKE3 list is made, and no chunk"
+            " wave goes out without one", path or "not on PATH")
+        _B3_MISSED[:] = [now()]
+    _B3_TOOL.append(found)
+    return found
+
+
+class B3Problem(Exception):
+    """הרשימה לא נוצרה שלמה -- הסיבה בהודעה. האינדקס עצמו אינו נפגע ממנה."""
+
+
+def b3_hex(data: bytes, tool: str) -> str:
+    """ה-BLAKE3 של `data` -- של רשימה, למניפסט (`chunkcast b3sum`)."""
+    try:
+        done = subprocess.run([tool, "b3sum"], input=data, capture_output=True, timeout=120, check=False)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise B3Problem(f"chunkcast b3sum did not run: {exc}") from exc
+    text = done.stdout.decode("ascii", "replace").strip()
+    if done.returncode != 0 or len(text) != 64 or not set(text) <= set("0123456789abcdef"):
+        raise B3Problem(f"chunkcast b3sum exited {done.returncode}")
+    return text
+
+
+class B3Lister:
+    """#3332: זרם הנתונים → `chunkcast b3list` → 32 בתים לכל CHUNK_BYTES. מה ש-`ChunkLister` מגבב
+    ב-XXH64 עובר גם לכאן, באותם גבולות. הפלט לקובץ זמני ולא לצינור (צינור שאיש אינו קורא נחסם)."""
+
+    def __init__(self, tool: str) -> None:
+        import tempfile
+        self.tool, self.out = tool, tempfile.TemporaryFile()
+        self.failed: str | None = None
+        try:
+            self.proc = subprocess.Popen([tool, "b3list"], stdin=subprocess.PIPE, stdout=self.out,
+                                         stderr=subprocess.DEVNULL)
+        except OSError as exc:
+            self.proc, self.failed = None, f"chunkcast b3list did not start: {exc}"
+
+    def write(self, data) -> None:
+        if self.failed is None:
+            try:
+                self.proc.stdin.write(data)
+            except (BrokenPipeError, OSError) as exc:
+                self.failed = f"chunkcast b3list stopped taking the stream: {exc}"
+
+    def kill(self) -> None:
+        if self.proc is not None and self.proc.poll() is None:
+            self.proc.kill()
+            self.proc.wait()
+        self.out.close()
+
+    def finish(self, chunks: int) -> tuple[bytes, str]:
+        """(הרשימה, ה-BLAKE3 שלה) -- או `B3Problem`."""
+        try:
+            if self.failed is None:
+                try:
+                    self.proc.stdin.close()
+                except OSError as exc:
+                    self.failed = f"chunkcast b3list: {exc}"
+                rc = self.proc.wait(timeout=600)
+                if rc != 0 and self.failed is None:
+                    self.failed = f"chunkcast b3list exited {rc}"
+            if self.failed is not None:
+                raise B3Problem(self.failed)
+            self.out.seek(0)
+            data = self.out.read()
+            if len(data) != chunks * 32:
+                raise B3Problem(f"the BLAKE3 list holds {len(data)} bytes, not {chunks} chunks of 32")
+            return data, b3_hex(data, self.tool)
+        finally:
+            self.kill()
+
+
 def xxh64_factory():
     """מה שמייצר מגבב XXH64: הקרנל כשאפשר; אחרת המימוש המבוקר — ובקול."""
     try:
@@ -212,11 +341,14 @@ class ChunkLister:
     """זרם הנתונים → רשימת XXH64, חתיכה של CHUNK_BYTES לשורה. `update` כמו
     של hashlib, כך שהקוראים בהמשך הקובץ (`_hash_exact`) אינם משתנים."""
 
-    def __init__(self, new) -> None:
+    def __init__(self, new, b3=None) -> None:
         self.new, self.lines, self.in_chunk, self.total = new, [], 0, 0
         self.h = new()
+        self.b3 = b3                                    # #3332: a B3Lister, or None
 
     def update(self, data) -> None:
+        if self.b3 is not None:
+            self.b3.write(data)
         mv = memoryview(data)
         while len(mv):
             take = min(len(mv), CHUNK_BYTES - self.in_chunk)
@@ -242,7 +374,7 @@ def list_digest(text: str, new) -> str:
 def _exact(stream, n: int) -> bytes:
     data = stream.read(n)
     if len(data) != n:
-        raise Underived(f"the stream ended {n - len(data)} bytes early")
+        raise BadImage(f"the stream ended {n - len(data)} bytes early")
     return data
 
 
@@ -250,12 +382,12 @@ def _hash_exact(stream, n: int, sha) -> None:
     while n > 0:
         data = stream.read(min(n, CHUNK))
         if not data:
-            raise Underived(f"the stream ended {n} bytes early")
+            raise BadImage(f"the stream ended {n} bytes early")
         sha.update(data)
         n -= len(data)
 
 
-def digest_partclone(stream, limit: int | None = None, new=None) -> tuple[str, int]:
+def digest_partclone(stream, limit: int | None = None, new=None, b3=None) -> tuple[str, int]:
     """(רשימת XXH64 לחתיכה, בייטים) של הבלוקים שבשימוש בזרם partclone v2 פרוס.
 
     `limit` = גודל המחיצה במניפסט (`size_bytes`). הכותרת היא קלט: ערכים
@@ -265,18 +397,18 @@ def digest_partclone(stream, limit: int | None = None, new=None) -> tuple[str, i
     head = _exact(stream, HEADER_SIZE)
     header = parse_header(head)
     if header is None:
-        raise Underived("no valid partclone v2 header")
+        raise BadImage("no valid partclone v2 header")
     image_version = int.from_bytes(head[92:94], "little")
     checksum_mode = int.from_bytes(head[96:98], "little")
     checksum_size = int.from_bytes(head[98:100], "little")
     per_checksum = int.from_bytes(head[100:104], "little")
     if image_version != 2 or head[105] != _BM_BIT:
-        raise Underived(f"image version {image_version}, bitmap mode {head[105]} -- not a v2 bit map")
+        raise BadImage(f"image version {image_version}, bitmap mode {head[105]} -- not a v2 bit map")
     total, used, bs = header["total_blocks"], header["used_blocks"], header["block_size"]
     if bs > MAX_BLOCK or (total + 7) // 8 > MAX_BITMAP:
-        raise Underived(f"implausible header: {total} blocks of {bs} bytes")
+        raise BadImage(f"implausible header: {total} blocks of {bs} bytes")
     if limit is not None and ((total - 1) * bs >= limit or used * bs > limit):
-        raise Underived(f"the header describes {total} blocks of {bs} bytes ({used} used),"
+        raise BadImage(f"the header describes {total} blocks of {bs} bytes ({used} used),"
                         f" more than the partition ({limit})")
     left, crc, marked = (total + 7) // 8, 0, 0
     while left:
@@ -287,12 +419,12 @@ def digest_partclone(stream, limit: int | None = None, new=None) -> tuple[str, i
             chunk = chunk[:-1] + bytes([chunk[-1] & ((1 << (total % 8)) - 1)])
         marked += int.from_bytes(chunk, "little").bit_count()
     if int.from_bytes(_exact(stream, 4), "little") != crc ^ 0xFFFFFFFF:
-        raise Underived("the bit map failed its CRC")
+        raise BadImage("the bit map failed its CRC")
     if marked != used:
-        raise Underived(f"the bit map marks {marked} blocks, the header {used}")
+        raise BadImage(f"the bit map marks {marked} blocks, the header {used}")
     cs = checksum_size if checksum_mode else 0
     k = per_checksum if cs else 0
-    sha = ChunkLister(new or xxh64_factory())
+    sha = ChunkLister(new or xxh64_factory(), b3)
     if k:
         left = used
         while left:
@@ -303,13 +435,13 @@ def digest_partclone(stream, limit: int | None = None, new=None) -> tuple[str, i
     else:
         _hash_exact(stream, used * bs, sha)
     if stream.read(1):
-        raise Underived("bytes after the last block")
+        raise BadImage("bytes after the last block")
     return sha.finish()
 
 
-def digest_raw(stream, limit: int | None = None, new=None) -> tuple[str, int]:
+def digest_raw(stream, limit: int | None = None, new=None, b3=None) -> tuple[str, int]:
     """(רשימה, בייטים) של זרם partclone.dd פרוס — המחיצה כולה. יותר מ-`limit` = לא של המחיצה."""
-    sha, n = ChunkLister(new or xxh64_factory()), 0
+    sha, n = ChunkLister(new or xxh64_factory(), b3), 0
     while True:
         data = stream.read(CHUNK)
         if not data:
@@ -317,16 +449,17 @@ def digest_raw(stream, limit: int | None = None, new=None) -> tuple[str, int]:
         sha.update(data)
         n += len(data)
         if limit is not None and n > limit:
-            raise Underived(f"more than the partition ({limit} bytes) to read back")
+            raise BadImage(f"more than the partition ({limit} bytes) to read back")
 
 
 class _Counting:
     """עוטף את stdout של zstd: מתי זז בייט אחרון (לשומר התקיעה), ופעם
     ב-STOP_EVERY_S שואל את `stop` אם השרת צריך את הדיסק — ואז `Paused`."""
 
-    def __init__(self, raw, stop=None) -> None:
-        self.raw, self.moved, self.stop = raw, time.monotonic(), stop
-        self.asked = self.moved
+    def __init__(self, raw, stop=None, count=None) -> None:
+        # #3137: `count(n)` hears, after every read, how many decompressed bytes were read so far
+        self.raw, self.moved, self.stop, self.count = raw, time.monotonic(), stop, count
+        self.asked, self.read_bytes = self.moved, 0
 
     def read(self, n: int) -> bytes:
         now = time.monotonic()
@@ -337,11 +470,15 @@ class _Counting:
                 raise Paused(reason)
         data = self.raw.read(n)
         self.moved = time.monotonic()
+        if self.count is not None:
+            self.read_bytes += len(data)
+            self.count(self.read_bytes)
         return data
 
 
 def digest_file(path: Path, raw: bool, limit: int | None = None, stop=None, *,
-                cmd: tuple[str, ...] | None = None, stall_s: float = STALL_S, new=None) -> tuple[str, int]:
+                cmd: tuple[str, ...] | None = None, stall_s: float = STALL_S, new=None,
+                count=None, b3=None) -> tuple[str, int]:
     """מפעיל את הפורס על קובץ המחיצה ומגבב. `Underived` על כל דבר שאינו ראיה;
     `Paused` כש-`stop()` אומר שהשרת עסוק (ה-zstd נהרג מיד)."""
     cmd = decompress_cmd() if cmd is None else cmd
@@ -350,16 +487,19 @@ def digest_file(path: Path, raw: bool, limit: int | None = None, stop=None, *,
                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     except OSError as exc:
         raise Underived(f"cannot run {cmd[0]}: {exc}") from exc
-    stream, done = _Counting(proc.stdout, stop), threading.Event()
+    stream, done = _Counting(proc.stdout, stop, count), threading.Event()
+
+    stalled = threading.Event()
 
     def guard() -> None:
         while not done.wait(5.0):
             if time.monotonic() - stream.moved > stall_s:
+                stalled.set()
                 proc.kill()
                 return
     threading.Thread(target=guard, name="readback-hash-guard", daemon=True).start()
     try:
-        result = (digest_raw if raw else digest_partclone)(stream, limit, new)
+        result = (digest_raw if raw else digest_partclone)(stream, limit, new, b3)
     except BaseException:
         proc.kill()                                # הכרענו לפני EOF: אין טעם לפרוס את השאר
         raise
@@ -368,44 +508,109 @@ def digest_file(path: Path, raw: bool, limit: int | None = None, stop=None, *,
         proc.stdout.close()
         rc = proc.wait()
     if rc != 0:
-        raise Underived(f"{cmd[0]} exited {rc} -- the file did not decompress whole")
+        # a decompressor that RAN and refused the file is evidence about the file; one that was
+        # killed (a stalled read on a network location, a signal) is a check that did not run
+        kind = BadImage if rc > 0 and not stalled.is_set() else Underived
+        raise kind(f"{cmd[0]} exited {rc} -- the file did not decompress whole")
     return result
 
 
-def list_path(image_dir, part: dict) -> Path | None:
-    """קובץ הרשימה של המחיצה: ליד קובץ הזרם (שעבר את `guarded_image_path`), `<file>.readback`."""
+def part_index(image_dir, part: dict):
+    """האינדקס שליד קובץ המחיצה (`<file>.idx`, #2533) — או None כשאין אחד שלם
+    ועקבי. קובץ המחיצה עבר את `guarded_image_path`."""
+    from server.library import chunkformat           # chunkformat ← readbackhash: מעגל במעלה הקובץ
     base = guarded_image_path(image_dir, part.get("file"))
-    return base.with_name(base.name + LIST_SUFFIX) if base is not None else None
+    return chunkformat.read_index(base) if base is not None else None
 
 
 def has_list(image_dir, part: dict) -> bool:
-    """יש למחיצה רשימה שלמה: השדות במניפסט, וקובץ באורך שהם מצהירים (17 בייט
-    לשורה). מניפסט שהועתק בלי הקובץ (העברה, ייבוא) — אין רשימה, ומחשבים שוב."""
+    """יש למחיצה אינדקס שאומת: שדות ה-`readback_*` במניפסט (נרשמים רק כשהאינדקס
+    שנגזר תאם ל-`index_xxh64`), ואינדקס ליד הקובץ שמסכים איתם. מניפסט שהועתק
+    בלי האינדקס (העברה, ייבוא) — אין, וגוזרים שוב."""
     xxh, chunks = part.get("readback_xxh64"), _whole(part.get("readback_chunks"))
     if not (isinstance(xxh, str) and len(xxh) == 16) or chunks is None:
         return False
-    path = list_path(image_dir, part)
+    index = part_index(image_dir, part)
+    return index is not None and index.chunks == chunks and index.data_bytes == _whole(part.get("readback_bytes"))
+
+
+def b3_path(image_dir, part: dict):
+    """`<file>.b3` -- רשימת ה-BLAKE3 של המחיצה (#3332). None = קובץ המחיצה אינו בטוח."""
+    base = guarded_image_path(image_dir, part.get("file"))
+    return base.with_name(base.name + ".b3") if base is not None else None
+
+
+def has_b3(image_dir, part: dict) -> bool:
+    """#3332: למחיצה יש רשימת BLAKE3: `chunk_b3` במניפסט, וליד הקובץ רשימה באורך האינדקס.
+    ה-BLAKE3 שלה אינו נבדק כאן -- הסוכן בודק אותו בעצמו (chunkcast), ורשימה שאינה היא נכשלת שם בשמה."""
+    want, chunks = part.get("chunk_b3"), _whole(part.get("readback_chunks"))
+    if not (isinstance(want, str) and len(want) == 64 and set(want) <= set("0123456789abcdef")) or chunks is None:
+        return False
+    path = b3_path(image_dir, part)
     try:
-        return path is not None and not path.is_symlink() and path.is_file()             and path.stat().st_size == 17 * chunks
+        return path is not None and not path.is_symlink() and path.is_file() and path.stat().st_size == chunks * 32
     except OSError:
         return False
 
 
+def b3_bytes(image_dir, part: dict) -> bytes | None:
+    """הרשימה, למי שמבקש אותה (`GET …/b3/<index>`). None = אין רשימה מאומתת."""
+    if not has_list(image_dir, part) or not has_b3(image_dir, part):
+        return None
+    try:
+        return b3_path(image_dir, part).read_bytes()
+    except OSError:
+        return None
+
+
+def list_text(image_dir, part: dict) -> str | None:
+    """רשימת ה-readback של המחיצה (שורה לחתיכה) — העמודה השלישית של האינדקס.
+    None = אין אינדקס מאומת."""
+    if not has_list(image_dir, part):
+        return None
+    index = part_index(image_dir, part)
+    return index.readback_list() if index is not None else None
+
+
+def _awaits_index(image_dir, part: dict) -> bool:
+    """מחיצה של אימג' בפורמט 2 שהאינדקס שלה עוד לא נגזר (ולא נמצא שאינו תואם)."""
+    return (isinstance(part, dict) and carries_a_stream_file(part) and has_index_xxh64(part)
+            and not part.get("index_error")
+            and (not has_list(image_dir, part) or (b3_tool() is not None and not has_b3(image_dir, part))))
+
+
+def lacks_list(image_dir, part: dict) -> bool:
+    """#3502: למחיצה של אימג' בפורמט 2 אין עוד אינדקס או רשימת BLAKE3 -- **בלי קשר לכלי**: `_awaits_index` אינו
+    אומר "חסר" כשאין `chunkcast` (אין מה לגזור), וזה בדיוק מה שהמפעיל צריך לראות."""
+    return (isinstance(part, dict) and carries_a_stream_file(part) and has_index_xxh64(part)
+            and not part.get("index_error")
+            and (not has_list(image_dir, part) or not has_b3(image_dir, part)))
+
+
 def needs_list(manifest: dict) -> bool:
-    return any(isinstance(p, dict) and carries_a_stream_file(p) and not has_list(manifest.get("_dir") or "", p)
-               for p in manifest.get("partitions") or [])
+    """רק אימג' שמופץ: פורמט ישן (או אינדקס שכבר נמצא שאינו תואם) אינו מגובב —
+    פריסה של 100GB בשביל אימג' שאיש לא יפיץ."""
+    if format_problem(manifest) is not None:
+        return False
+    return any(_awaits_index(manifest.get("_dir") or "", p) for p in manifest.get("partitions") or [])
 
 
-def derive(manifest: dict, *, digest=digest_file, stop=None, new=None) -> tuple[dict, list[str]]:
-    """({index: (רשימה, בייטים, XXH64 של הרשימה)}, בעיות) למחיצות עם קובץ זרם שאין
-    להן עדיין רשימה. `Paused` (עם מה שכבר גובב) עולה למעלה — אינו בעיה של המחיצה."""
+def derive(manifest: dict, *, digest=None, stop=None, new=None, progress=None) -> tuple[dict, list[str]]:
+    """({index: ערך ל-`ImageLibrary.record_index`}, בעיות) למחיצות של אימג' בפורמט 2
+    שהאינדקס שלהן עוד לא נגזר. `digest` = `chunkformat.derive_index`. אינדקס שנגזר
+    ואינו ה-`index_xxh64` שבמניפסט הוא ערך (`{"error": …}`) **וגם** בעיה.
+    `Paused` (עם מה שכבר נגזר) עולה למעלה — אינו בעיה של המחיצה.
+    `progress(index, נקראו, מתוך)` (#3137, `tracker`) עובר ל-`digest` כמילת מפתח: רק מי
+    שגוזר ב-`chunkformat.derive_index` עצמו מעביר אותו."""
+    from server.library import chunkformat           # chunkformat ← readbackhash: מעגל במעלה הקובץ
+    digest = digest or chunkformat.derive_index
     image_dir = manifest.get("_dir")
-    if not image_dir or not manifest.get("_available", True):
+    if not image_dir or not manifest.get("_available", True) or format_problem(manifest) is not None:
         return {}, []
     values: dict = {}
     problems: list[str] = []
     for part in manifest.get("partitions") or []:
-        if not isinstance(part, dict) or not carries_a_stream_file(part) or has_list(image_dir, part):
+        if not _awaits_index(image_dir, part):
             continue
         index = part.get("index")
         path = guarded_image_path(image_dir, part.get("file"))
@@ -416,20 +621,41 @@ def derive(manifest: dict, *, digest=digest_file, stop=None, new=None) -> tuple[
         if size is None:
             problems.append(f"p{index}: no size_bytes -- nothing bounds what is read")
             continue
+        kw = {} if progress is None else {"progress": lambda done, total, i=index: progress(i, done, total)}
         try:
-            sha, count = (digest(path, captured_raw(part), size) if stop is None
-                          else digest(path, captured_raw(part), size, stop))
+            found = (digest(path, captured_raw(part), size, **kw) if stop is None
+                     else digest(path, captured_raw(part), size, stop, **kw))
         except Paused as exc:
             exc.values = values
             raise
-        except Underived as exc:
+        except BadImage as exc:                   # the check ran: the file is not what was captured
+            problems.append(f"p{index}: {exc}")
+            values[index] = {"error": str(exc)}
+            continue
+        except Underived as exc:                  # the check did not run: no verdict, tried again later
             problems.append(f"p{index}: {exc}")
             continue
-        if count > size:
-            problems.append(f"p{index}: {count} bytes to read back, more than the partition ({size})")
+        if found.data_bytes > size:
+            problems.append(f"p{index}: {found.data_bytes} bytes to read back, more than the partition ({size})")
             continue
         new = new or xxh64_factory()
-        values[index] = (sha, count, list_digest(sha, new))
+        text = found.render()
+        got = list_digest(text, new)
+        if got != part["index_xxh64"]:
+            why = (f"the index derived from the file (xxh64 {got}) is not the one the capture"
+                   f" signed (index_xxh64 {part['index_xxh64']})")
+            problems.append(f"p{index}: {why}")
+            values[index] = {"error": why}
+            continue
+        listing = found.readback_list()
+        values[index] = {"index": text, "list": listing, "list_xxh64": list_digest(listing, new),
+                         "bytes": found.data_bytes}
+        b3 = getattr(found, "b3", None)
+        if b3 is not None:                        # #3332: (the list, its BLAKE3)
+            values[index]["b3"], values[index]["b3_hash"] = b3
+        elif getattr(found, "b3_note", None):     # the tool is here and the list did not come out whole: the index
+            values[index]["b3_note"] = found.b3_note  # stands (a wave waits for it, #3137), the image stays unverified
+            log.warning("readback digest: p%s: no BLAKE3 list -- %s", index, found.b3_note)
     return values, problems
 
 
@@ -447,7 +673,7 @@ def _order(pending: dict[str, dict], rank: dict[str, str]) -> list[str]:
     return first + rest
 
 
-def fill(library, *, digest=digest_file, report=None, tried: dict | None = None,
+def fill(library, *, digest=None, report=None, tried: dict | None = None,
          busy=None, rank=None, status: dict | None = None) -> list[dict]:
     """מעבר אחד על הספרייה. אימג' אחד שנכשל אינו עוצר את האחרים.
 
@@ -479,18 +705,21 @@ def fill(library, *, digest=digest_file, report=None, tried: dict | None = None,
         if reason:
             status["paused"] = reason
             continue
+        if not claim(image_id, manifest):
+            continue            # #3137: a wave that waits for this image is deriving it right now
         stop = (lambda i=image_id: busy(i)) if busy is not None else None
-        written: dict[int, tuple[str, int]] = {}
+        written: dict[int, dict] = {}
         paused = None
         try:
             try:
-                values, problems = derive(manifest, digest=digest, stop=stop)
+                values, problems = derive(manifest, digest=digest, stop=stop,
+                                          progress=tracker(image_id) if digest is None else None)
             except Paused as exc:
                 paused = status["paused"] = exc.reason
                 values, problems = exc.values, []
                 log.info("readback digest of %s paused: %s", image_id, exc.reason)
             if values:
-                done = library.record_readback(image_id, values)
+                done = library.record_index(image_id, values)
                 written = {i: values[i] for i in done}
                 if not done:
                     problems.append("manifest not updated")
@@ -500,8 +729,16 @@ def fill(library, *, digest=digest_file, report=None, tried: dict | None = None,
         except Exception as exc:              # noqa: BLE001 — one image, by name; never "fine", never the end of the pass
             log.exception("readback digest of %s failed", image_id)
             values, problems = {}, [f"{type(exc).__name__}: {exc}"]
-        if problems:
-            tried[image_id] = stamp
+        finally:
+            release(image_id)
+        notes = [f"p{i}: {v['b3_note']}" for i, v in sorted(values.items()) if isinstance(v, dict) and v.get("b3_note")]
+        if problems or notes:
+            tried[image_id] = stamp           # #3332: a list that did not come out is not made again every pass
+            with _LOCK:
+                _FAILED[image_id] = "; ".join(problems + notes)
+        elif paused is None:
+            with _LOCK:
+                _FAILED.pop(image_id, None)
         if not written and not problems:
             continue
         result = {"image_id": image_id, "written": written, "problems": problems}
@@ -527,7 +764,67 @@ def _stamp(manifest: dict) -> tuple:
 
 _KICK = threading.Event()
 _LOCK = threading.Lock()
+#: #3502: {image_id: הסיבה} לאימג' שהמעבר ברקע ניסה ולא הצליח -- לא נבלע, והבריאות אומרת אותה
+#: (`failed()`). נמחק כשהגזירה הצליחה או כשהקבצים השתנו והניסיון נעשה שוב.
+_FAILED: dict[str, str] = {}
 _PRIORITY: dict[str, None] = {}      # סדר ההכנסה נשמר: הראשון שנפתח לו סבב — ראשון
+#: #3137: מי גוזר עכשיו את האינדקס של אימג' — המעבר ברקע (`fill`) או גל שממתין לו
+#: (`server.library.indexprep`). אחד בכל פעם: אותו אימג' אינו נפרס פעמיים במקביל.
+#: הערך: {מחיצה: [משקל = הבייטים הדחוסים של הקובץ, נקראו, מתוך]}, בשביל `percent`.
+_CLAIMED: dict[str, dict[int, list[int]]] = {}
+
+
+def claim(image_id: str, manifest: dict | None = None) -> bool:
+    """True = הקורא גוזר עכשיו את האינדקס של האימג', עד `release`. False = מישהו אחר גוזר אותו."""
+    weights: dict[int, list[int]] = {}
+    image_dir = (manifest or {}).get("_dir") or ""
+    for part in (manifest or {}).get("partitions") or []:
+        if not _awaits_index(image_dir, part):
+            continue
+        path = guarded_image_path(image_dir, part.get("file"))
+        try:
+            size = path.stat().st_size if path is not None else 0
+        except OSError:
+            size = 0
+        weights[part["index"]] = [max(size, 1), 0, 0]
+    with _LOCK:
+        if image_id in _CLAIMED:
+            return False
+        _CLAIMED[image_id] = weights
+    return True
+
+
+def release(image_id: str) -> None:
+    with _LOCK:
+        _CLAIMED.pop(image_id, None)
+
+
+def tracker(image_id: str):
+    """`progress` של `derive` שכותב ל-`_CLAIMED`, וממנו `percent` קורא."""
+    def update(index: int, done: int, total: int) -> None:
+        with _LOCK:
+            row = _CLAIMED.get(image_id, {}).get(index)
+            if row is not None:
+                row[1], row[2] = done, total
+    return update
+
+
+def failed() -> dict[str, str]:
+    """#3502: {image_id: סיבה} -- מה שהמעבר ברקע ניסה לגזור ולא הצליח, עד שיצליח."""
+    with _LOCK:
+        return dict(_FAILED)
+
+
+def percent(image_id: str) -> int | None:
+    """כמה מהגזירה של האימג' נעשה (0 עד 99, משוקלל בבייטים הדחוסים של כל מחיצה).
+    None = איש אינו גוזר אותו עכשיו."""
+    with _LOCK:
+        rows = _CLAIMED.get(image_id)
+        if rows is None:
+            return None
+        whole = sum(w for w, _, _ in rows.values())
+        got = sum(w * min(1.0, done / total) for w, done, total in rows.values() if total > 0)
+    return min(99, int(100 * got / whole)) if whole else 0
 
 
 def kick(image_id: str | None = None) -> None:
@@ -589,7 +886,8 @@ def last_use(conn):
 
 
 def main(argv: list[str] | None = None) -> int:
-    """הרצה יבשה: מה הגיבוב של כל מחיצה. אינה כותבת דבר."""
+    """הרצה יבשה: האינדקס שנגזר מכל מחיצה, מול המניפסט. אינה כותבת דבר."""
+    from server.library import chunkformat           # chunkformat ← readbackhash: מעגל במעלה הקובץ
     args = sys.argv[1:] if argv is None else argv
     if len(args) != 1:
         print("usage: python -m server.agent.readbackhash <image_dir>", file=sys.stderr)
@@ -609,14 +907,15 @@ def main(argv: list[str] | None = None) -> int:
         try:
             if path is None:
                 raise Underived("file missing or unsafe")
-            text, count = digest_file(path, captured_raw(part), _whole(part.get("size_bytes")))
+            found = chunkformat.derive_index(path, captured_raw(part), _whole(part.get("size_bytes")))
         except Underived as exc:
             ok = False
             print(f"p{index} {name} UNDERIVED: {exc}")
             continue
-        print(f"p{index} {name} readback_xxh64={list_digest(text, xxh64_factory())}"
-              f" readback_chunks={text.count(chr(10))} readback_bytes={count}"
-              f" manifest={part.get('readback_xxh64') or 'none'}")
+        got = list_digest(found.render(), xxh64_factory())
+        ok = ok and got == part.get("index_xxh64")
+        print(f"p{index} {name} index_xxh64={got} chunks={found.chunks} data_bytes={found.data_bytes}"
+              f" manifest={part.get('index_xxh64') or 'none'}")
     return 0 if ok else 1
 
 

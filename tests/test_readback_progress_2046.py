@@ -246,11 +246,11 @@ def test_a_new_round_forgets_the_last_one_bar():
 # --- the kiosk: the records ----------------------------------------------------------
 
 
-def _kiosk(tmp_path: Path, state: str, rb_prog: str | None, verdict: str = "", total: int = 1000, again: bool = False):
+def _kiosk(tmp_path: Path, state: str, rb_prog: str | None, verdict: str = "", total: int = 1000, again: bool = False, mode: str = "full"):
     run = tmp_path / "run"; run.mkdir(exist_ok=True)
     gui = tmp_path / "gui"; gui.mkdir(exist_ok=True)
     (run / "manifest.json").write_text('{"name":"Office 2024"}', newline="\n")
-    (run / "response.json").write_text('{"readback_mode":"full"}', newline="\n")
+    (run / "response.json").write_text('{"readback_mode":"%s"}' % mode, newline="\n")
     target(run, "sdb", state, total, total, "0")
     if rb_prog is not None:
         (run / "targets" / "sdb" / "rb_prog").write_text(rb_prog, newline="\n")
@@ -311,6 +311,39 @@ def test_the_rate_of_the_check_is_its_own_not_the_writes(tmp_path):
     assert 95000 <= int(rate) <= 100000, again                                  # 10 MB over 100 s (+ the second the test took)
     drawer = next(l for l in again if l.startswith("drawer=")).split("|")
     assert drawer[6] == rate and 880 <= int(drawer[7]) <= 920, drawer           # the drawer's own rate/eta: the check's, not the write's
+
+
+@requires_native("jq", why="json_get reads the hello for the mode")
+@pytest.mark.parametrize("mode", ["sample", ""])
+def test_a_sampled_check_has_no_rate_3071(tmp_path, mode):
+    """#3071: in a sample the bar also runs over the chunks nobody read, so bytes-per-second of the bar is not a
+    read speed ("קצב בדיקה 8249 MB/s" on a SATA disk). The same 4 GB/s bar that is a rate for a full check is
+    "not measured" (-1) -- in the bar's record and in the drawer's own rate/eta -- for a sample (and for a hello
+    that does not say: the sample is the default)."""
+    gb = 1 << 30
+    _kiosk(tmp_path, "verifying", f"{gb} {100 * gb}\n", mode=mode)
+    gui = tmp_path / "gui"
+    assert not (gui / "pace.rb.sdb").exists(), "a sample keeps no pace anchor"
+    (gui / "pace.rb.sdb").write_text(f"{int(time.time()) - 1} 0\n", newline="\n")   # what a full check turns into GB/s
+    (gui / "moved.rb.sdb").write_text(f"{int(time.time())} 0\n", newline="\n")
+    again, _ = _kiosk(tmp_path, "verifying", f"{4 * gb} {100 * gb}\n", mode=mode)
+    rec = next(l for l in again if l.startswith("drawer_rbp="))
+    assert rec.endswith("|-1"), again
+    drawer = next(l for l in again if l.startswith("drawer=")).split("|")
+    assert drawer[6] == "-1" and drawer[7] == "-1", drawer
+
+
+@requires_native("jq", why="json_get reads the hello for the mode")
+def test_the_same_bar_in_a_full_check_is_a_rate_3071(tmp_path):
+    """The control of the test above: the same anchors, mode full -> a real rate (GB/s over about 1 s)."""
+    gb = 1 << 30
+    _kiosk(tmp_path, "verifying", f"{gb} {100 * gb}\n")
+    gui = tmp_path / "gui"
+    (gui / "pace.rb.sdb").write_text(f"{int(time.time()) - 1} 0\n", newline="\n")
+    (gui / "moved.rb.sdb").write_text(f"{int(time.time())} 0\n", newline="\n")
+    again, _ = _kiosk(tmp_path, "verifying", f"{4 * gb} {100 * gb}\n")
+    rate = int(next(l for l in again if l.startswith("drawer_rbp=")).rsplit("|", 1)[1])
+    assert rate > 1_000_000_000, again
 
 
 @requires_native("jq", why="json_get reads the hello for the mode")
@@ -454,6 +487,18 @@ def test_a_check_that_stopped_has_a_tick_and_says_where_and_why(driver, tmp_path
     assert grew > 600, (with_bar, early)                           # the green stops where the check stopped: 62% is longer than 31%
     assert abs((early["blue"] - with_bar["blue"]) - grew) < 0.15 * grew, (with_bar, early)   # and the blue is what it did not reach
     assert plain["red"] - with_bar["red"] > 3000, (plain, with_bar)  # no red fill over the bar: only the tick
+
+
+@pytestmark_gui
+def test_a_sampled_check_says_it_has_no_speed_3071(driver, tmp_path):
+    """#3071: the speed tile of a sampled check says so in words ("לא נמדד במדגם"), never a number; a full
+    check that has no rate yet keeps "עוד לא נמדד"."""
+    rows = [("verifying", "350|1000||-1", ""), ("verifying", "800|1000||-1", "")]
+    _, sampled = show(driver, tmp_path, cloner(rows), "tile-sample")
+    assert "קצב בדיקה" in sampled and "לא נמדד במדגם" in sampled, sampled
+    assert not any("MB/s" in s for s in sampled), sampled
+    _, full = show(driver, tmp_path, cloner(rows, "rb_mode=full\n"), "tile-full")
+    assert "עוד לא נמדד" in full and "לא נמדד במדגם" not in full, full
 
 
 @pytestmark_gui

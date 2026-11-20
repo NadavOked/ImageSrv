@@ -748,7 +748,7 @@ def choose(conn: sqlite3.Connection, drives: list[dict],
     `down` (שידורים חוזרים בגל הקודם) · `held` (הגל הקודם לא הוכיח שאפשר
     לעלות) · `unmeasured` (המונה של הגל הקודם לא נקרא — נשאר) · `learned`
     (כונן מוכר הוריד, והוא ב-`by`) · `ceiling` (הגג עצר) · `disabled` (המתג
-    כבוי — הפתיחה, קבועה) · `bad_ceiling` (התקרה אינה מספר; עוברת כמות
+    כבוי — התקרה של הגל, קבועה; #3036) · `bad_ceiling` (התקרה אינה מספר; עוברת כמות
     שהיא). `session_id` — הגל שבוחרים לו; הוא אינו "הגל הקודם" של עצמו.
 
     `direct` — מחשב בנייה משדר (#715): אותה פתיחה, אותו גג ואותה ירידה
@@ -804,7 +804,9 @@ def choose(conn: sqlite3.Connection, drives: list[dict],
     start = min(start_at, ceiling)
     result = {**result, "max_bitrate": _fmt(start), "start": _fmt(start)}
     if not enabled(conn):
-        return {**result, "basis": "disabled"}
+        # #3036, הכרעת נדב 12/11: כבוי = קצב קבוע בתקרה (`IMAGESRV_MAX_BITRATE`, בלעדיו 900m, ולא מעל הכרטיס
+        # או המחשב האיטי), כמו שהנוסח בקונסולה אומר. לא קצב הפתיחה, והקצב הנלמד (`learned_start`) אינו משפיע.
+        return {**result, "max_bitrate": _fmt(ceiling), "basis": "disabled"}
     bits, basis, previous = ((start, "start", None) if direct
                              else _from_previous(conn, drives, start, session_id))
     slowest, limit, rate = None, None, None
@@ -845,10 +847,13 @@ def decision(conn: sqlite3.Connection, session_id: str | None) -> dict | None:
 def decide(conn: sqlite3.Connection, session_id: str,
            drives: Callable[[], list[dict]], ceiling_raw: str | None,
            direct: bool = False,
-           link: Callable[[], dict] | None = None) -> str | None:
+           link: Callable[[], dict] | None = None,
+           adjust: Callable[[dict, list[dict]], dict] | None = None) -> str | None:
     """נקרא כשהגל יוצא: בוחר, שומר, רושם ביומן, ומחזיר את `--max-bitrate`.
     `direct` — המשדר הוא מחשב בנייה (#715, `app.on_running`), ראו `choose`.
     `link` — קורא את כרטיס ההפצה (`SenderEngine.link`); נקרא פעם אחת לגל.
+    `adjust` (#3163) — (תשובת `choose`, הכוננים) → תשובה: גל של מנוע החתיכות מחליף בה את הקצב בנלמד
+    (`chunk_rate.adjust`, שאינו זורק). חסר = udpcast, כמו תמיד.
 
     לעולם אינו זורק: כשל כאן הוא "לא נלמד" — נרשם ביומן, והגל יוצא בקצב
     הפתיחה. הלמידה אינה סיבה שהשידור לא ייצא.
@@ -857,6 +862,10 @@ def decide(conn: sqlite3.Connection, session_id: str,
         wave = drives()
         chosen = choose(conn, wave, ceiling_raw, session_id, direct=direct,
                         link=link() if link is not None else None)
+        if adjust is not None:
+            # #3296: `engine` -- the drive memory of this wave is learned from its first passes (`record_wave`), and it
+            # must know that even when the room closes before the engine says how the wave ended
+            chosen = {**adjust(chosen, wave), "engine": "chunk"}
         # הכוננים שהגל יצא אליהם, כפי שהשרת ראה אותם **לפני** הגל — רק מהם
         # נלמד בסופו (`record_wave`), ולא ממה שמדווח בסוף.
         stored = {**chosen, "roster": [
@@ -995,12 +1004,46 @@ def _seconds(since: object, until: object) -> float | None:
         return None
 
 
+def _moved_seconds(t: dict) -> float | None:
+    """#3769: משך התנועה של יעד. כששתי החותמות נכתבו באותו תהליך שרת (אותו `*_boot`) -- הפרש ה-monotonic שלהן,
+    שקפיצת שעון קיר אינה זזה בו. אחרת (דיווח ישן, או אתחול שרת באמצע הגל) -- שעון הקיר כמו קודם, עם אותה הגנה
+    על ערך שלילי. ערך monotonic שלילי או פגום אינו נבדק מול הקיר: הוא "לא נמדד"."""
+    f, m = t.get("first_moved_mono"), t.get("moved_mono")
+    if (t.get("first_moved_boot") and t.get("first_moved_boot") == t.get("moved_boot")
+            and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (f, m))):
+        return float(m - f) if m >= f else None
+    return _seconds(t.get("first_moved_at"), t.get("moved_at"))
+
+
+def _from_stream(chunk: dict | None, mac: str, serial: str, written: int) -> tuple[int, float, int] | str:
+    """#3296: (bytes, seconds, offered bytes/s) -- what a drive of a chunk wave took from the multicast stream: the
+    compressed bytes durable on it when the first pass of each partition ended (`rate_outcome.drives`), over the
+    seconds the first passes ran (`first_pass_s`); offered = what those passes multicast over the same seconds
+    (`stream_zbytes`), the ceiling the drive kept up with or not. Or why there is no such number:
+    `no_first_pass` (the wave's first passes were not measured, or not yet: the room closed before `send_done`) ·
+    `not_in_first_pass` (this drive is not in them) · `http_majority` (most of what it wrote came by HTTP after the
+    first pass: it proves no rate the drive cannot do -- the wave does not teach it a drop). Not measured is not slow."""
+    chunk = chunk or {}
+    seconds, offered = chunk.get("first_pass_s"), chunk.get("stream_zbytes")
+    drives = chunk.get("drives")
+    if (not isinstance(drives, dict) or not _count(offered) or not offered
+            or not isinstance(seconds, (int, float)) or isinstance(seconds, bool) or seconds <= 0):
+        return "no_first_pass"
+    took = (drives.get(mac) or {}).get(serial) if isinstance(drives.get(mac), dict) else None
+    if not _count(took):
+        return "not_in_first_pass"
+    if 2 * took < written:
+        return "http_majority"
+    return took, float(seconds), int(offered / seconds)
+
+
 def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
     """כל מגירה שסיימה (`done`) בגל משאירה את הקצב שכתבה. מחזיר כמה נרשמו.
 
     הקצב = `bytes_written` חלקי הזמן בין התנועה הראשונה לאחרונה של המונה
     (`first_moved_at` → `moved_at`, `reports.stamp_movement`) — בלי ההמתנה
-    למקבלים לפני הבייט הראשון. חוזר על עצמו בבטחה (שורה לכל גל+סידורי),
+    למקבלים לפני הבייט הראשון. #3296: בגל חתיכות (`decision.engine`) — רק מה
+    שהכונן לקח מהשידור (`_from_stream`). חוזר על עצמו בבטחה (שורה לכל גל+סידורי),
     ולעולם אינו זורק: כשל כאן נרשם ביומן ואינו עוצר את סיום הגל. באותה
     כתיבה — `wave_rates.drops`: `udp_drops` של כל מכונה ברשימת הגל, שממנו
     הגל הבא יודע אם המקלטים נקיים (`_next_from`); ו-`wave_rates.delivered`
@@ -1043,7 +1086,18 @@ def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
                 got["cpu"] = cpu
         disk_failed = {(r["mac"], r["dev"]) for r in conn.execute(
             "SELECT mac, dev FROM disk_failures WHERE session_id = ?", (session_id,))}
+        # #3296: a chunk wave -- the drives learn from what they took from the first passes (`ChunkEngine.rate_outcome`,
+        # kept by `chunk_rate.record` at `send_done`), not from their counter's window: on 14/11 (ses_43eebdbc) a
+        # Samsung that took all of its chunks in the first pass by 20:15 waited 12 minutes for its neighbour's HTTP
+        # completion, wrote the last partition at 20:27, and was learned at 9MB/s
+        chunk = stream.get("chunk") if isinstance(stream, dict) and isinstance(stream.get("chunk"), dict) else None
+        chunk_wave = decided.get("engine") == "chunk" or chunk is not None
+        unmeasured: dict[str, str] = {}
         rows = []
+        # #3046: "קצב שידור אוטומטי" כבוי (`learned_rate_enabled`) = הזיכרון לא נכתב. `drops` ו-`delivered` למטה כן
+        # נכתבים: הם מונים של הגל (goodput, האבדן), לא למידה. נמדד ב-14/11 וב-15/11 (#3034): גלים שהושלמו כתבו
+        # שורות `drive_rates` של 10.3MB/s עם המתג כבוי.
+        learning = enabled(conn)
         for member in members:
             for t in json.loads(member["targets_json"] or "[]"):
                 serial = t.get("serial")
@@ -1066,22 +1120,69 @@ def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
                         got["stream_failed"] += 1
                     else:
                         got["unknown_failed"] += 1
-                seconds = _seconds(t.get("first_moved_at"), t.get("moved_at"))
-                if (t.get("state") != "done" or not serial or seconds is None
-                        or seconds < MIN_SAMPLE_S or not isinstance(written, int)
+                if (not learning or t.get("state") != "done" or not serial or not isinstance(written, int)
                         or written < MIN_SAMPLE_BYTES):
                     continue
+                if chunk_wave:
+                    measured = _from_stream(chunk, member["mac"], serial, written)
+                    if isinstance(measured, str):
+                        unmeasured[serial] = measured
+                        continue
+                    sample, seconds, offered = measured
+                else:
+                    sample, seconds, offered = written, _moved_seconds(t), cap // 8
+                if seconds is None or seconds < MIN_SAMPLE_S or sample < MIN_SAMPLE_BYTES:
+                    continue
                 rows.append((serial, roster[(member["mac"], serial)], session_id,
-                             int(written / seconds), cap // 8, written,
+                             int(sample / seconds), offered, sample,
                              int(seconds), now_iso()))
+        # #3269: a wave the server held back (`server_io`: the library disk, or its IO pressure) teaches the drives no
+        # DROP -- they wrote at what the server fed them. On 13-14/11 such a wave taught a 179MB/s SSD "21MB/s" and the
+        # next waves fell to the floor. A sample that kept up still counts: it proves at least the ceiling.
+        from server.rounds import chunk_rate          # here, not above: chunk_rate imports this module
+        pressure = chunk_rate.server_pressure(conn, session_id)
+        held = [r for r in rows if r[3] < KEEP_UP * r[4]] if pressure else []
+        rows = [r for r in rows if r not in held]
         with _write_lock, writing(conn):
             conn.execute("UPDATE wave_rates SET drops = ?, delivered = ? WHERE session_id = ?",
                          (json.dumps(drops), json.dumps(delivered), session_id))
+            if held or unmeasured:
+                got = conn.execute("SELECT stream FROM wave_rates WHERE session_id = ?", (session_id,)).fetchone()
+                try:
+                    now_stream = json.loads(got["stream"]) if got and got["stream"] else {}
+                except (TypeError, ValueError):
+                    now_stream = {}
+                now_stream = now_stream if isinstance(now_stream, dict) else {}
+                conn.execute("UPDATE wave_rates SET stream = ? WHERE session_id = ?",
+                             (json.dumps({**now_stream,
+                                          **({"drives_unlearned": {"reason": pressure,
+                                                                   "serials": sorted({r[0] for r in held})}}
+                                             if held else {}),
+                                          **({"drives_unmeasured": unmeasured} if unmeasured else {})}), session_id))
             _remember_unsafe(conn, session_id)
-            return sum(conn.execute(
+            written = sum(conn.execute(
                 "INSERT OR IGNORE INTO drive_rates (serial, model, session_id,"
                 " rate_bps, cap_bps, bytes, seconds, at) VALUES (?,?,?,?,?,?,?,?)",
                 row).rowcount for row in rows)
+        if held:
+            from server.brain import memory
+            journal(conn, "drive_rates_unlearned",
+                    f"{session_id} {pressure}: " + " ".join(f"{r[0]}={r[3] / 1e6:.0f}MB/s" for r in held),
+                    round_id=session_id)
+            memory.record(conn, mode="enforce", rule=chunk_rate.RULE, point="#3269", action="DRIVE_MEMORY",
+                          verdict="UNLEARNED", reason=pressure,
+                          evidence=[{"serial": r[0], "rate_bps": r[3], "cap_bps": r[4]} for r in held],
+                          round_id=session_id, entity=("round", session_id), outcome="applied")
+        if unmeasured:
+            from server.brain import memory
+            journal(conn, "drive_rates_unmeasured",
+                    f"{session_id}: " + " ".join(f"{s}={why}" for s, why in sorted(unmeasured.items())),
+                    round_id=session_id)
+            memory.record(conn, mode="enforce", rule=chunk_rate.RULE, point="#3296", action="DRIVE_MEMORY",
+                          verdict="UNLEARNED", reason=",".join(sorted(set(unmeasured.values()))),
+                          evidence=[{"serial": s, "why": why} for s, why in sorted(unmeasured.items())],
+                          round_id=session_id, entity=("round", session_id), outcome="applied")
+        return written
     except Exception as exc:      # noqa: BLE001 — הזיכרון אינו עוצר סיום גל
         log.exception("recording drive rates of %s failed", session_id)
         _failed(conn, f"{session_id} record — {exc}")

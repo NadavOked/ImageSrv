@@ -148,6 +148,23 @@ void draw_ask_dialog(App *a, cairo_t *cr, double W, double H) {
         snprintf(title_s, sizeof title_s, "%s", "חלוקת המקום הנוסף בין המחיצות");
         ask_share_words(&a->st, lead_s, sizeof lead_s, &secondary, &hint_s);   /* one disk or more */
         primary = "אשר וכתוב";
+    } else if (a->st.ask_kind == ASK_INTERRUPT) {
+        /* #2528 (Nadav 12/11): a cloner was powered off or rebooted mid-round and came back in time.
+           The server writes nothing without an answer. subject "cloner": the build machine that opened
+           the round -- whoever is signed in to its kiosk answers, with the two stage-1 answers in the
+           console's own words (server/rounds/interrupt.py BUTTONS_HE). subject "self": that cloner's
+           own screen -- nobody is signed in there, so it is told and answers nothing ("הבנתי"). */
+        const int self = !strcmp(a->st.ask_subject, "self");
+        const char *where = self ? " ההכרעה בקונסולה או במחשב הבנייה." : "";
+        snprintf(title_s, sizeof title_s, "%s", self ? "המחשב כבה או אותחל באמצע הסבב"
+                                                     : "מחשב שיכפול כבה או אותחל באמצע הסבב");
+        if (a->st.nask == 1) snprintf(lead_s, sizeof lead_s, "דיסק אחד לא הושלם. שום דיסק לא נכתב עד שתהיה הכרעה.%s", where);
+        else snprintf(lead_s, sizeof lead_s, "%d דיסקים לא הושלמו. שום דיסק לא נכתב עד שתהיה הכרעה.%s", a->st.nask, where);
+        primary = self ? "הבנתי" : "כתוב מחדש את הדיסקים שלא הושלמו";
+        if (self) primary_style = BTN_PLAIN;
+        secondary = "סגור את הסבב";
+        hint_s = self ? "בלי הכרעה הסבב ייסגר, ושום דבר לא ייכתב"
+                      : "דיסק שהושלם לא נכתב שוב. בלי תשובה הסבב ייסגר, ושום דבר לא ייכתב. Esc — לא עכשיו";
     } else if (a->st.ask_kind == ASK_CAPTURE_END) {
         /* #1470: the machine is released after the upload; the server re-reads every
            file before the image enters the library -- it is not there yet. */
@@ -178,7 +195,18 @@ void draw_ask_dialog(App *a, cairo_t *cr, double W, double H) {
         ask_gb(now_s, sizeof now_s, a->st.ask[i].now_bytes);
         ask_gb(orig_s, sizeof orig_s, a->st.ask[i].orig_bytes);
         if (a->st.ask_kind == ASK_RAID || a->st.ask_kind == ASK_BADSECT) continue;   /* its one row is the title */
-        if (a->st.ask_kind == ASK_SHARE) {
+        if (a->st.ask_kind == ASK_INTERRUPT) {
+            /* #2528: where the disk sits NOW (its identity, not its drawer); idx = where it was written */
+            char disk_s[LC_LABEL_MAX];
+            const int port = a->st.ask[i].port, was = a->st.ask[i].idx;
+            if (port <= 0) snprintf(line, sizeof line, "הדיסק שהיה בדיסק %d אינו מחובר עכשיו — לא הושלם", was);
+            else {
+                if (!strcmp(a->st.ask_subject, "self")) ask_disk_label(&a->st, port, disk_s, sizeof disk_s);
+                else snprintf(disk_s, sizeof disk_s, "דיסק %d", port);
+                if (was != port) snprintf(line, sizeof line, "%s (היה בדיסק %d) — לא הושלם", disk_s, was);
+                else snprintf(line, sizeof line, "%s — לא הושלם", disk_s);
+            }
+        } else if (a->st.ask_kind == ASK_SHARE) {
             char disk_s[LC_LABEL_MAX];
             if (a->st.ask[i].port > 0) ask_disk_label(&a->st, a->st.ask[i].port, disk_s, sizeof disk_s);
             else snprintf(disk_s, sizeof disk_s, "הדיסק");
@@ -193,7 +221,8 @@ void draw_ask_dialog(App *a, cairo_t *cr, double W, double H) {
     }
     Text hint = text_make(cr, FONT_SANS, ASK_HINT_PX, 400, hint_s, (int)inner, DIR_RTL);
     pango_layout_set_alignment(hint.layout, PANGO_ALIGN_CENTER);
-    double answers_h = ASK_BTN_H + ASK_GAP + ASK_BTN_H + ASK_HINT_GAP + hint.h;
+    const int one_btn = a->st.ask_kind == ASK_INTERRUPT && !strcmp(a->st.ask_subject, "self");   /* #2528: told, not asked */
+    double answers_h = ASK_BTN_H + (one_btn ? 0 : ASK_GAP + ASK_BTN_H) + ASK_HINT_GAP + hint.h;
     double dh = ASK_PAD + title.h + 8 + lead.h + 18 + rows_h + (nrows ? 18 : 0) + answers_h + ASK_PAD;
     if (dh > usable - 24) dh = usable - 24;   /* MAX_ASK_ROWS keeps this from clipping on 768 */
     Rect box = { (W - dw) / 2, (usable - dh) / 2, dw, dh };
@@ -214,10 +243,12 @@ void draw_ask_dialog(App *a, cairo_t *cr, double W, double H) {
     draw_btn(a, cr, (Rect){ box.x + ASK_PAD, y, inner, ASK_BTN_H }, &l, primary_style, HIT_ASK_PRIMARY);
     if (a->st.ask_kind == ASK_BADSECT) draw_focus_ring(a, cr, (Rect){ box.x + ASK_PAD, y, inner, ASK_BTN_H });   /* Enter = המשך */
     text_free(&l);
-    y += ASK_BTN_H + ASK_GAP;
-    l = btn_label(cr, secondary);
-    draw_btn(a, cr, (Rect){ box.x + ASK_PAD, y, inner, ASK_BTN_H }, &l, BTN_PLAIN, HIT_ASK_SECONDARY);
-    text_free(&l);
+    if (!one_btn) {
+        y += ASK_BTN_H + ASK_GAP;
+        l = btn_label(cr, secondary);
+        draw_btn(a, cr, (Rect){ box.x + ASK_PAD, y, inner, ASK_BTN_H }, &l, BTN_PLAIN, HIT_ASK_SECONDARY);
+        text_free(&l);
+    }
     y += ASK_BTN_H + ASK_HINT_GAP;
     text_draw(cr, &hint, box.x + ASK_PAD, y, t->muted);
     text_free(&title); text_free(&lead); text_free(&hint);

@@ -23,7 +23,11 @@ cmd=${1:-}; dir=${2:-}
 mkimg() {   # $1 name, $2 size, $3 directory of the backing file
     truncate -s "$2" "$3/$1.img" || return 1
     _d=$(losetup -fP --show "$3/$1.img") || return 1
-    echo "$1 $_d" >> "$dir/devs"; echo "$_d"
+    echo "$1 $_d" >> "$dir/devs"   # before anything that can fail: teardown detaches what devs lists
+    # #3908: a loop device is a file, a solid one. The kernel of a CI runner reports some of them rotational=1, and the engine
+    # refuses an HDD target by the HDD policy (writecheck.sh) -- the fixture says what the disk is, and reads it back.
+    echo 0 > "/sys/block/${_d#/dev/}/queue/rotational" && [ "$(cat "/sys/block/${_d#/dev/}/queue/rotational")" = 0 ] || return 1
+    echo "$_d"
 }
 
 put() {   # $1 node, $2 fs type, $3 tag: a few files, one of them 24M of random bytes

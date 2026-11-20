@@ -86,6 +86,11 @@ def stubs(tmp_path_factory) -> Path:
     built = subprocess.run(["gcc", "-O2", "-Wall", "-Wextra", "-o", str(d / "fanout"), str(REPO / "agent" / "fanout.c")],
                            capture_output=True, text=True, stdin=subprocess.DEVNULL)
     assert built.returncode == 0, built.stderr
+    # #2533: the capture's real cutter, built as the boot image builds it -- both reads go through it
+    built = subprocess.run(["gcc", "-O2", "-Wall", "-Wextra", "-pthread", "-o", str(d / "chunkcut"),
+                            str(REPO / "agent" / "chunkcut.c"), "-l:libzstd.so.1"],
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    assert built.returncode == 0, built.stderr
     for name, body in (("udp-sender", UDP_SENDER), ("curl", CURL)):
         (d / name).write_text(body, newline="\n")
         (d / name).chmod(0o755)
@@ -144,6 +149,11 @@ def test_direct_send_from_a_real_esp_sends_what_the_manifest_says(esp, stubs):
     manifest = json.loads(_root("cat", str(esp / "run" / "new-manifest.json")).stdout)
     assert manifest["partitions"][0]["role"] == "esp"
     assert _sha_file(esp, "dsha.1") == manifest["partitions"][0]["sha256"]
+    # #2533: both reads were cut by the real chunkcut, into the same frames -- the manifest
+    # says image_format 2, and the index of pass 2 is the one pass 1 signed.
+    assert manifest["image_format"] == 2
+    assert _sha_file(esp, "didx.1.xxh64") == manifest["partitions"][0]["index_xxh64"] == _sha_file(esp, "idx.1.xxh64")
+    assert len(manifest["partitions"][0]["index_xxh64"]) == 16
     # boot_ca ran between the passes, on a real mount (not a skipped probe)
     assert "boot_ca: /EFI/BOOT/bootx64.efi" in r["log"], r["log"]
     # and the source is the same disk it was: nothing in the session wrote it

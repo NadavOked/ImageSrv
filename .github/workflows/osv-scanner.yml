@@ -27,7 +27,7 @@ name: osv-scanner
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, "staging/**"]  # #3180: publish-to-public.sh stage -- the public CI before main, tag and Release
   pull_request:
     branches: [main]
   schedule:

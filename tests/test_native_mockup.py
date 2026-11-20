@@ -19,6 +19,7 @@ import re
 import shutil
 from pathlib import Path
 
+from disk_rules_state import ruled_file, with_rules   # #3666: the verdicts the agent / the server add to a hand-written state
 from native import requires_native
 from test_cloner_gui import (_build_gui, _count_color, _pkgconfig, _png, _png_rgb,
                              _render_all, _token)
@@ -587,7 +588,7 @@ def test_an_image_name_is_one_isolated_run_in_an_rtl_line():
     assert r'"\xE2\x81\xA8%s\xE2\x81\xA9"' in iso                      # FSI ... PDI
     assert r'#define RLM "\xE2\x80\x8F"' in _src("screens_rounds.h")
     title = code(body(_src("screens_cloner.c"), "screen_cloner"))
-    assert 'snprintf(label, sizeof label, RLM "%s · %s%s%s%s%s", head, image, speed,' in title   # #1331: + the drivers phrase; #2849: + the speed on a small screen
+    assert 'snprintf(label, sizeof label, RLM "%s%s%s%s%s%s%s", head, image[0] ? " · " : "", image, speed,' in title   # #1331: + the drivers phrase; #2849: + the speed on a small screen
     assert 'snprintf(head, sizeof head, "%s", "שיכפול במקביל");' in title   # #2849: the build machine's direct send says "הפצה ישירה" there
     assert "bidi_isolate(s->cloner_image[0] ? s->cloner_image" in title
     live = code(body(_src("screens_room.c"), "screen_room"))
@@ -781,6 +782,7 @@ def _room_png(binary, tmp_path: Path, name: str, selected: tuple[int, int]) -> t
                      f"room_drawer=0|1|SER-A|Model A|256060514304|passed|1|{selected[0]}\n"
                      f"room_drawer=0|2|SER-B|Model B|500107862016|passed|1|{selected[1]}\n"
                      "message=x|y\n", newline="\n")
+    ruled_file(state)   # #3666: the server's verdict for each slot (green: SMART passed)
     _png(binary, tmp_path / name, state, "1000x760")
     return _png_rgb(tmp_path / f"{name}-room-light.png")
 

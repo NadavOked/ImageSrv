@@ -17,20 +17,34 @@ CASES = [
     ("console_idle_seconds", "61", "60", "ניתוק בחוסר פעילות"),
     ("crc_warn_threshold", "1000001", "1000000", "סף CRC"),
     ("min_free_gb", "501", "500", "מינימום מקום פנוי"),
-    ("writecheck_min_mbps", "9", "10", "סף מהירות כתיבה לדיסק"),   # #2338
     ("unregistered_autoboot_seconds", "601", "600", "הערך חייב להיות בין 0 ל-600 שניות"),   # #1802
     ("cloner_beep", "yes", "true", "צלילי המשכפל ומחשב הבנייה"),
+    ("hdd_support", "yes", "true", "תמיכה ב-HDD"),   # #3268
     ("readback_full", "yes", "true", "אימות מלא אחרי הכתיבה"),
+    ("stream_engine", "fast", "chunk", "מנוע שידור"),   # #2533
     ("igmp_querier", "yes", "true", "IGMP querier"),
     ("lost_wait_seconds", "179", "180", "המתנה למחשב שהתנתק באמצע שיכפול"),   # #2056
     ("gui_idle_poweroff_seconds", "59", "60", "כיבוי כשאין פעילות"),   # #2059
     ("gui_end_poweroff_seconds", "9", "10", "ספירה לכיבוי בסוף משימה"),   # #2059
+    ("drawer_disk_wait_seconds", "29", "120", "המתנה של מגירה לדיסק"),   # #3658 (נדב 18/11)
+    ("drawer_net_wait_seconds", "901", "120", "המתנה של מגירה לרשת"),   # #3658 (נדב 18/11)
+    ("interrupt_ask_minutes", "4", "5", "המתנה להכרעה על משכפל שכבה באמצע סבב"),   # #2528
     ("intersite_rate_cap_mbps", "100001", "100000", "הגבלת קצב בין אתרים"),
     ("auto_reboot", "monthly", "daily", "הפעלה מחדש אוטומטית"),
     ("auto_reboot_time", "24:00", "23:59", "שעת הפעלה מחדש"),
     ("auto_reboot_weekday", "7", "6", "יום הפעלה מחדש"),
     ("clone_name_pad", "5", "3", "ריפוד שמות המחשב"),   # #2786
     ("clone_name_instructor", "IN-S", "TEACH", "סיומת המרצה"),   # #2786
+    ("brain_veto_mode", "on", "enforce", "המוח: וטו על פעולות הרסניות"),   # #3064
+    ("brain_net_ceiling_mbps", "9", "900", "המוח: תקרת רשת ההפצה"),   # #3064 (שלב 3)
+    ("brain_drawer_hold", "enforce", "on", "המוח: השלמה מעכבת רק את המגירה שנפגעה"),   # #2023
+    ("brain_verify_repair", "yes", "on", "אימות והורדה של חתיכות שלא תאמו"),   # #3064 (B30)
+    ("tail_shrink_enabled", "yes", "false", "הקטנת המחיצה האחרונה ביעד קטן"),   # #3262
+    ("brain_server_cap", "yes", "false", "המוח: הגבלת קצב הגל לתקרת הקריאה של דיסק הספרייה"),   # #3464
+    ("brain_cpu_gate", "on", "false", "המוח: שער מעבד לפני פתיחת גל"),   # #3064 (K12)
+    ("wiring_net_margin", "0.5", "1.5", "מפת החיבורים: פי כמה מהיר מהיציאה"),   # #3600
+    ("brain_gate_min_samples", "0", "50", "המוח: שער מצל לאכיפה, מינימום דגימות"),   # #3563
+    ("brain_gate_min_agreement", "101", "95", "המוח: שער מצל לאכיפה, מינימום הסכמה"),   # #3563
 ]
 
 

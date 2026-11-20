@@ -30,7 +30,20 @@ cancel_from_reply() {
     [ -s "$RUN_DIR/progress.reply" ] || return 0
     json_get_join "$RUN_DIR/progress.reply" '[(.cancel // [])[] | "\(.dev)|\(.who_he // "")"]' \
         | while IFS='|' read -r _cf_dev _cf_who; do
+            _cf_dev=$(cancel_target "$_cf_dev")
             if cancel_request "$_cf_dev" "$_cf_who"; then log "$_cf_dev: cancel asked $_cf_who"; fi
         done
     return 0
+}
+
+cancel_target() {
+    # $1 = the name the server knows a drawer by -> its target's name now. A
+    # drawer back under another name (drawerback.sh) is reported by the name
+    # the round chose it by (targets/<d>/dev, progress.sh), and that name may
+    # be another drawer's by now: the `dev` file decides, before the directory.
+    for _ct_f in "$RUN_DIR"/targets/*/dev; do
+        [ "$(cat "$_ct_f" 2>/dev/null)" = "$1" ] || continue
+        _ct_f=${_ct_f%/dev}; printf '%s' "${_ct_f##*/}"; return 0
+    done
+    printf '%s' "$1"
 }

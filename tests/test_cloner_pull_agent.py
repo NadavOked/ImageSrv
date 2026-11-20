@@ -219,9 +219,11 @@ def test_a_refused_open_stays_on_the_screen_and_back_leaves(tmp_path):
 
 
 def test_images_that_could_not_be_read_are_said_not_hidden(tmp_path):
-    out = run(tmp_path, 'sleep 300 & _gui_pid=$!; mkdir -p "$LC"; lc_pull_images() { return 1; }; lc_pull_nonce() { :; }; '
-              '( sleep 1; echo back > "$LC/end.req" ) & lc_pull_session; cat "$LC/pull.error"; kill $_gui_pid')
-    assert "לא ניתן לקרוא מהשרת את רשימת האימג׳ים" in out.stdout, out.stdout
+    out = run(tmp_path, 'mkdir -p "$LC"; echo "image=stale|Previous|" > "$LC/pull.images"; '
+              'http_get() { cat "$LC/pull.images" >&2; return 1; }; '
+              'lc_pull_images; echo "rc=$?"; cat "$LC/pull.images"')
+    assert "images_known=0" in out.stderr.splitlines()
+    assert out.stdout.splitlines() == ["rc=1", "images_known=-1"]
 
 
 # --- the screen's records (lcpull.sh lc_pull_state, lcgui.sh lc_gui_state) ---------------

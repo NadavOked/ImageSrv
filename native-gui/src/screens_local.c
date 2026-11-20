@@ -110,11 +110,11 @@ static const char *smart_chip(const LcDisk *d, Rgb *fg, Rgb *bg, const Theme *t)
     int lvl = smart_level(d->smart);
     /* #2848 (mockup disk-colors, Nadav 11/11): the chip says the rule's reason when it is not SMART's own */
     DiskRule r = lc_rule(d);
-    if (r.target_reason && strcmp(r.target_reason, "smart_fail")) {
+    if (!r.target && r.reason[0] && strcmp(r.reason, "smart_fail")) {
         *fg = t->danger; *bg = t->danger_soft;
-        return !strcmp(r.target_reason, "link_slow") ? "קישור SATA איטי" : !strcmp(r.target_reason, "write_slow") ? "איטי בסבב הזה" : "בעיית SATA";
+        return !strcmp(r.reason, "write_slow") ? "איטי בסבב הזה" : "בעיית SATA";
     }
-    if (lvl < 2 && r.source_reason && !strcmp(r.source_reason, "write_incomplete")) { *fg = t->yellow_fg; *bg = t->yellow_soft; return "כתיבה לא הושלמה"; }
+    if (lvl < 2 && r.color == DR_YELLOW && !strcmp(r.reason, "write_incomplete")) { *fg = t->yellow_fg; *bg = t->yellow_soft; return "כתיבה לא הושלמה"; }
     if (lvl == 2) { *fg = t->danger; *bg = t->danger_soft;   /* #1580; #1742: read-only says so */
                     return !strcmp(d->smart_reason, "readonly") ? "קריאה בלבד" : "SMART תקול"; }
     if (lvl == 1 && !strcmp(d->smart, "failed_last")) { *fg = t->yellow_fg; *bg = t->yellow_soft; return "נכשל בשיכפול הקודם"; }   /* #2848: yellow */
@@ -137,10 +137,15 @@ static void verdict_text(App *a, const LcDisk *d, const LcDisk *src, char *out, 
     char need[48], have[48], miss[48], why[sizeof f->reason];
     if (f) lc_no_dot(f->reason, why, sizeof why);
     *c = t->muted;
-    /* #1732 (Nadav 18/10): a red disk is a source or nothing -- "יעד" is grey (lc_target_ok) */
-    if (smart_level(d->smart) == 2) { *c = t->danger; snprintf(out, n, "%s", red_refusal_he(d->smart_reason)); return; }   /* #1742: by the reason */
+    /* #2991: a drawer whose size was not read (it did not answer its check) says why, never "לא נבדק אם נכנס" */
+    if (!d->size) { *c = t->danger; snprintf(out, n, "%s", d->why[0] ? d->why : "הגודל שלו לא נקרא — לא ישמש כיעד"); return; }
+    /* #1732 (Nadav 18/10): a red disk is a source or nothing -- "יעד" is grey (lc_target_ok). #3666: red is the delivered verdict's */
     DiskRule rule = lc_rule(d);   /* #2848: red says the rule's words -- the sentence the server refuses with */
-    if (!rule.target) { *c = t->danger; snprintf(out, n, "%s", disk_rule_he(rule.target_reason)); return; }
+    if (!rule.target) {
+        *c = t->danger;   /* #1742: a SMART red says its own reason (read-only / F1); any other red, the table's sentence as delivered */
+        snprintf(out, n, "%s", !strcmp(rule.reason, "smart_fail") ? red_refusal_he(d->smart_reason) : rule.he);
+        return;
+    }
     if (!f || f->verdict == LCV_MEASURING) { snprintf(out, n, "בודק אם נכנס…"); return; }
     lc_gb(need, sizeof need, (double)f->need); lc_gb(have, sizeof have, (double)d->size);
     switch (f->verdict) {
@@ -271,7 +276,7 @@ static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
     cairo_pop_group_to_source(cr); cairo_paint_with_alpha(cr, alpha);
     double rw = role3(a, cr, fl, cy, i);
     cairo_push_group(cr);
-    char size[32]; disk_size(d->size, size, sizeof size);
+    char size[32]; if (d->size) disk_size(d->size, size, sizeof size); else snprintf(size, sizeof size, "—");   /* #2991: not read, not "0 GB" */
     Text sz = text_make(cr, FONT_MONO, 20, 600, size, 0, DIR_LTR);
     Text md = text_make(cr, FONT_MONO, 12, 400, d->model[0] ? d->model : "—", 0, DIR_LTR);   /* #2030: never the device name */
     double mx = fl + rw + 18, mw = fmax(sz.w, md.w);
@@ -388,9 +393,10 @@ void lc_draw_source(App *a, cairo_t *cr, double W, double H, double head_h) {
     y += hh + 16;
     /* .cage */
     int n = l->ndisks; double foot = 16 + 40, chrome = 14 + 16 + 10 + 14;
-    double bay_h = LS_BAY_H, room = H - N_STATUS_H - 16 - y - foot - chrome - (n > 1 ? (n - 1) * 10 : 0);
+    double scan_h = !l->inv_done && n ? 34 : 0;   /* #2991: the line under the drawers that are ready -- the one being read */
+    double bay_h = LS_BAY_H, room = H - N_STATUS_H - 16 - y - foot - chrome - scan_h - (n > 1 ? (n - 1) * 10 : 0);
     if (n && n * bay_h > room) bay_h = fmax(76, floor(room / n));
-    Rect cage = { x0, y, cw, chrome + (n ? n * bay_h + (n - 1) * 10 : 120) };
+    Rect cage = { x0, y, cw, chrome + scan_h + (n ? n * bay_h + (n - 1) * 10 : 120) };
     int dark = t == &THEME_DARK;
     draw_box_shadow(cr, cage, 6, 10, 24, -14, dark ? (Rgb){ 0, 0, 0 } : t->header, dark ? .40 : .14);
     draw_fill_rrect(cr, cage, 6, t->surface); draw_border_rrect(cr, cage, 6, t->hair, 1);
@@ -399,8 +405,9 @@ void lc_draw_source(App *a, cairo_t *cr, double W, double H, double head_h) {
     Text lr = text_make(cr, FONT_SANS, 12, 400, "מגירות הדיסקים במחשב — מלמעלה למטה", 0, DIR_RTL), ll = text_make(cr, FONT_SANS, 12, 400, cnt, 0, DIR_RTL);
     text_draw_r(cr, &lr, xr - 18, y + 14, t->muted); text_draw(cr, &ll, x0 + 18, y + 14, t->muted); text_free(&lr); text_free(&ll);
     double by = y + 14 + 16 + 10;
-    if (!l->inv_done || !n) {
-        Text w = text_make(cr, FONT_SANS, 15, 400, l->inv_done ? "לא נמצאו דיסקים במחשב" : "בודק את הדיסקים במחשב…", 0, DIR_RTL);
+    char scan[160]; lc_scan_text(l, scan, sizeof scan);
+    if (!n) {
+        Text w = text_make(cr, FONT_SANS, 15, 400, l->inv_done ? "לא נמצאו דיסקים במחשב" : scan, 0, DIR_RTL);
         text_draw(cr, &w, x0 + (cw - w.w) / 2, by + 50, t->muted); text_free(&w);
         if (l->inv_done && l->usb && l->diag[0]) {   /* #1914 (college 20/10): something to send back */
             char dm[160]; snprintf(dm, sizeof dm, "דוח אבחון נשמר על הדיסק-און-קי (\xE2\x81\xA8%s\xE2\x81\xA9)", l->diag);
@@ -408,7 +415,8 @@ void lc_draw_source(App *a, cairo_t *cr, double W, double H, double head_h) {
             text_draw(cr, &dt, x0 + (cw - dt.w) / 2, by + 50 + 26, t->muted); text_free(&dt);
         }
     }
-    for (int i = 0; l->inv_done && i < n; i++) { bay(a, cr, (Rect){ x0 + 14, by, cw - 28, bay_h }, i, src); by += bay_h + 10; }
+    for (int i = 0; i < n; i++) { bay(a, cr, (Rect){ x0 + 14, by, cw - 28, bay_h }, i, src); by += bay_h + 10; }   /* #2991: each as soon as it is read */
+    if (scan_h) { Text w = text_make(cr, FONT_SANS, 14, 400, scan, (int)(cw - 56), DIR_RTL); text_draw_r(cr, &w, xr - 28, by + 4, t->muted); text_free(&w); }
     y = cage.y + cage.h + 16;
     /* .foot: the message at the right, "המשך לאישור" at the far left */
     int can = lc_can_go(a); double bx = x0;

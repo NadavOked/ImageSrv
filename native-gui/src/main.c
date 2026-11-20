@@ -70,6 +70,7 @@ static void gui_heartbeat(void) {
 #include "splash.h"         /* 17/10: the last-resort screen */
 #include "canceldlg.h"       /* #1386: "בטל דיסק זה" */
 #include "smarttbl.h"        /* #1859: the table of every SMART attribute (--png card "standby-smart") */
+#include "brain_ask.h"       /* #3654: the brain's question */
 
 static volatile sig_atomic_t stop_now = 0;
 static void on_signal(int sig) { (void)sig; stop_now = 1; }
@@ -238,17 +239,19 @@ static int ask_modal(App *a, const Event *e) {
     const int grow = a->st.ask_kind == ASK_GROWBACK;
     const int drawer = a->st.ask_kind == ASK_RAID || a->st.ask_kind == ASK_SHARE;   /* #1808/#1898: no answer = no write */
     const int bad = a->st.ask_kind == ASK_BADSECT;   /* #2017: no answer = the copy goes on (Nadav 22/10) */
-    const char *first = grow ? "restore" : a->st.ask_kind == ASK_RAID ? "wipe" : a->st.ask_kind == ASK_SHARE ? "split" : bad ? "continue" : "poweroff";
-    const char *second = grow ? "leave" : drawer ? "skip" : bad ? "stop" : "menu";
-    const char *safe = grow ? "leave" : drawer ? "skip" : bad ? "stop" : "poweroff";
+    const int intr = a->st.ask_kind == ASK_INTERRUPT;   /* #2528: no answer = nothing is written; Esc is not an answer */
+    const int told = intr && !strcmp(a->st.ask_subject, "self");   /* the cloner's own screen: "הבנתי" only */
+    const char *first = grow ? "restore" : a->st.ask_kind == ASK_RAID ? "wipe" : a->st.ask_kind == ASK_SHARE ? "split" : told ? "ok" : intr ? "rewrite" : bad ? "continue" : "poweroff";
+    const char *second = grow ? "leave" : drawer ? "skip" : told ? "ok" : intr ? "close" : bad ? "stop" : "menu";
+    const char *safe = grow ? "leave" : drawer ? "skip" : bad ? "stop" : told ? "ok" : intr ? "later" : "poweroff";   /* #2528: "later" answers nothing */
     switch (e->type) {
     case UIEV_CHAR:
         if (e->ch == '1') emit_ask(a, first);
         else if (e->ch == '2') emit_ask(a, second);
         return 1;
     case UIEV_KEY:
-        if (e->key == KEYSYM_ESC) emit_ask(a, safe);
-        else if (e->key == KEYSYM_ENTER && bad) emit_ask(a, first);
+        if (e->key == KEYSYM_ESC) emit_ask(a, safe);   /* #2528: on the round's question Esc is "not now" -- it never closes the round */
+        else if (e->key == KEYSYM_ENTER && (bad || told)) emit_ask(a, first);
         return 1;
     case UIEV_CLICK:
         a->ptr_x = e->x; a->ptr_y = e->y;
@@ -979,7 +982,8 @@ static void emit_touch(App *a, int demo) {
 static int counting(const App *a) {
     const int end_ask = a->st.ask_pending && (a->st.ask_kind == ASK_CAPTURE_END ||
         a->st.ask_kind == ASK_SEND_END || a->st.ask_kind == ASK_ROUND_END || a->st.ask_kind == ASK_BADSECT);
-    return a->st.idle_poweroff_at > 0 || a->st.end_poweroff_at > 0 || end_ask;
+    return a->st.idle_poweroff_at > 0 || a->st.end_poweroff_at > 0 || end_ask ||
+           bask_current(a);   /* #3654: the brain's question counts to its default; its result closes in 5 s */
 }
 
 /* #1560: while the end-of-task count shows (screens_ask.c draw_end_dialog) it
@@ -1071,7 +1075,7 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
     if (a->screen == SCREEN_LCBOOT || a->screen == SCREEN_LOCAL) {   /* #1322: its own keys and clicks */
         /* #2911: a question drawn over it takes the input first, as over the failure
          * screen (#2743) -- #2017's "עצור" went to lc_handle, and the copy went on */
-        if (shrink_modal(a, e) || ask_modal(a, e)) return 0;
+        if (shrink_modal(a, e) || ask_modal(a, e) || bask_modal(a, e)) return 0;
         if (e->type == UIEV_MOVE || e->type == UIEV_CLICK) { a->ptr_x = e->x; a->ptr_y = e->y; }
         if (e->type == UIEV_MOVE) a->ptr_visible = !e->is_touch;
         lc_handle(a, e);
@@ -1082,7 +1086,7 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
     if (a->screen == SCREEN_FAILURE) {             /* #2068: its buttons -- Enter is the first; the agent acts (hold.sh) */
         /* #2743 (metal 08-09/11): a question drawn over this screen takes the input
          * first -- its click and '1' were the screen's, and Enter a fail.action */
-        if (shrink_modal(a, e) || ask_modal(a, e)) return 0;
+        if (shrink_modal(a, e) || ask_modal(a, e) || bask_modal(a, e)) return 0;
         if (e->type == UIEV_MOVE || e->type == UIEV_CLICK) { a->ptr_x = e->x; a->ptr_y = e->y; }
         if (e->type == UIEV_MOVE) a->ptr_visible = !e->is_touch;
         int b = -1, h = e->type == UIEV_CLICK ? app_hit(a, e->x, e->y) : -1;
@@ -1104,6 +1108,7 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
     }
     if (shrink_modal(a, e)) return 0;              /* #928 */
     if (ask_modal(a, e)) return 0;                 /* 11/10 */
+    if (bask_modal(a, e)) return 0;                /* #3654: the brain's question */
     if (logout_modal(a, e)) return 0;              /* mockup 10/10 */
     if (confirm_modal(a, e)) return 0;             /* #1270 */
     switch (e->type) {
@@ -1396,12 +1401,16 @@ static void after_reload(App *a) {
     cdlg_after_reload(a);                                 /* #1386: a drawer that stopped writing closes it */
     room_drv_after_reload(a);                             /* #1269: the first model is the default */
     lc_after_reload(a);                                   /* #1322: default roles, the source to measure */
+    if (bask_after_reload(a)) toast(a, "השאלה מהמוח בוטלה");   /* #3654: the rule that asked withdrew it */
     /* #408: rate from consecutive reads; a counter that went backwards
      * (new task) or a clock that did not move resets, not divides. */
     if (a->st.updated > a->rate_prev_updated && a->st.bytes >= a->rate_prev_bytes && a->rate_prev_updated > 0)
         a->capture_rate_bps = (double)(a->st.bytes - a->rate_prev_bytes) / (double)(a->st.updated - a->rate_prev_updated);
     else if (a->st.bytes < a->rate_prev_bytes) a->capture_rate_bps = 0;
     a->rate_prev_bytes = a->st.bytes; a->rate_prev_updated = a->st.updated;
+    /* #2984: the direct send's clock -- from the first state that says it runs, until it does not */
+    if (a->st.task_direct && (a->st.task == TASK_PENDING || a->st.task == TASK_RUNNING)) { if (!a->direct_t0) a->direct_t0 = (long long)time(NULL); }
+    else a->direct_t0 = 0;
 }
 
 /* ---- --png: every card, both themes, to files -------------------------------------- */
@@ -1492,9 +1501,9 @@ static void sample_state(State *s) {
     snprintf(s->sess_group, sizeof s->sess_group, "כיתה 12");
     s->sess_open = 1; s->joined = 3; s->expected = 14; s->starts_in = 272;
     s->ndrawers = 3;
-    s->drawers[0] = (Drawer){ 1, "sda", "writing", "", 44814663680ULL, 85899345920ULL, 98000000, 419, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, -1 };   /* #410 */
-    s->drawers[1] = (Drawer){ 2, "sdb", "failed", "", 0, 85899345920ULL, -1, -1, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, -1 };
-    s->drawers[2] = (Drawer){ 3, "sdc", "waiting", "", 0, 85899345920ULL, -1, -1, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, -1 };
+    s->drawers[0] = (Drawer){ 1, "sda", "writing", "", 44814663680ULL, 85899345920ULL, 98000000, 419, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, 0, -1, -1, -1, -1, "", "", 0 };   /* #410 */
+    s->drawers[1] = (Drawer){ 2, "sdb", "failed", "", 0, 85899345920ULL, -1, -1, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, 0, -1, -1, -1, -1, "", "", 0 };
+    s->drawers[2] = (Drawer){ 3, "sdc", "waiting", "", 0, 85899345920ULL, -1, -1, 0, "", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, 0, -1, -1, -1, -1, "", "", 0 };
     s->cuseds[0] = (CUsed){ "sda", 500107862016ULL, 214748364800LL };   /* #2030: size, bytes in use (a failed write: not measured) */
     s->cuseds[1] = (CUsed){ "sdb", 500107862016ULL, -1 };
     s->cuseds[2] = (CUsed){ "sdc", 240057409536ULL, 61234567890LL };
@@ -1535,8 +1544,11 @@ static const char *PNG_CARDS[] = { "login", "menu", "pick", "progress", "done", 
                                    "failure",   /* #1569; #2068: no technical lines, buttons */
                                    "cloner-cancel", "cloner-canceled", "room-cancel", "room-canceled",   /* #1386 */
                                    "cloner-raid", "cloner-share", "cloner-badsect",   /* #1808/#1898; #2017 */
+                                   "cloner-interrupt", "build-interrupt",   /* #2528 */
                                    "restore-syspart",   /* #1896: the C: picker over the restore screen */
-                                   "standby-smart" };   /* #1859: the cloner's wait, the SMART table open */
+                                   "standby-smart",   /* #1859: the cloner's wait, the SMART table open */
+                                   "build-direct",   /* #2984: the build machine's direct send, before a cloner reports a drawer */
+                                   "brain-ask", "brain-ask-pick" };   /* #3654: the brain's question over the cloner */
 
 static int png_builtin;   /* #1386: --png on the built-in sample, not a --state file */
 
@@ -1572,6 +1584,27 @@ static void png_drawer_ask(App *a, const State *base, const char *card) {
     }
 }
 
+/* #2528: the question about a cloner that was powered off or rebooted mid-round -- the state file's
+ * own, or the sample: two disks not completed, one of them now in another drawer. "cloner-interrupt" is
+ * the cloner's own screen; "build-interrupt" the build machine that opened the round (over its menu). */
+static void png_interrupt_ask(App *a, const State *base, const char *card) {
+    const int self = !strcmp(card, "cloner-interrupt");
+    if (self) {
+        a->force_cloner = 1;
+        if (!base->ndrawers && !base->cloner_image[0])
+            snprintf(a->st.cloner_image, sizeof a->st.cloner_image, "Office 2024 — סטנדרט");
+    }
+    if (base->ask_pending && base->ask_kind == ASK_INTERRUPT && !strcmp(base->ask_subject, self ? "self" : "cloner")) {
+        a->st.ask_pending = 1; return; }
+    a->st.ask_pending = 1; a->st.ask_kind = ASK_INTERRUPT;
+    snprintf(a->st.ask_nonce, sizeof a->st.ask_nonce, "8-0");
+    snprintf(a->st.ask_subject, sizeof a->st.ask_subject, "%s", self ? "self" : "cloner");
+    memset(a->st.ask, 0, sizeof a->st.ask);
+    a->st.nask = 2;
+    a->st.ask[0].port = 2; a->st.ask[0].idx = 2;
+    a->st.ask[1].port = 1; a->st.ask[1].idx = 3;
+}
+
 /* #1386: the cancel cards -- the state's own writing drawers when it has them
  * (a --state file from a test), else the mockup's: cloner disks 1 and 2 writing
  * (63% / 41%); the build machine's two cloners writing. */
@@ -1604,8 +1637,8 @@ static void png_cancel_sample(App *a, const char *card) {
         snprintf(a->st.machine_name, sizeof a->st.machine_name, "CLONER-02");
         a->st.idisks[0] = (IdleDisk){ .port = 1, .dev = "sda", .model = "Samsung SSD 870 EVO", .size = 500107862016ULL, .smart = "ok" };
         a->st.idisks[1] = (IdleDisk){ .port = 2, .dev = "sdb", .model = "WDC WD5000AAKX", .size = 500107862016ULL, .smart = "ok" };
-        a->st.drawers[0] = (Drawer){ 1, "sda", "writing", "", 12285713408ULL, 19500000000ULL, 68000000, 120, 1, "SATA 0", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, -1 };
-        a->st.drawers[1] = (Drawer){ 2, "sdb", "writing", "", 7995000000ULL, 19500000000ULL, 68000000, 240, 2, "SATA 1", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, -1 };
+        a->st.drawers[0] = (Drawer){ 1, "sda", "writing", "", 12285713408ULL, 19500000000ULL, 68000000, 120, 1, "SATA 0", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, 0, -1, -1, -1, -1, "", "", 0 };
+        a->st.drawers[1] = (Drawer){ 2, "sdb", "writing", "", 7995000000ULL, 19500000000ULL, 68000000, 240, 2, "SATA 1", "", 0, "", "", "", "", "", "", "", "", 0, 0, { 0 }, 0, -1, -1, -1, -1, "", "", 0 };
     }
     int n = cloner_cancel_picks(a, p, MAX_CANCEL_PICKS);
     if (!strcmp(card, "cloner-canceled")) {
@@ -1715,6 +1748,20 @@ static void png_setup(App *a, const State *base, const char *card) {
                                           if (!base->ndrawers && !base->cloner_image[0])
                                               snprintf(a->st.cloner_image, sizeof a->st.cloner_image, "Office 2024 — סטנדרט"); }
     else if (!strcmp(card, "standby"))  { a->force_standby = 1; a->force_cloner = 1; a->st.ndrawers = 0; a->st.cloner_image[0] = 0; }
+    else if (!strcmp(card, "build-direct")) {   /* #2984: the source's own numbers; no cloner has reported a drawer */
+        a->st.task = TASK_RUNNING; a->st.task_direct = 1; a->st.ndrawers = 0; a->st.ncgroups = 0; a->st.direct_unread = 0;
+        a->st.cloner_image[0] = 0; a->watching = 1;
+        if (!base->bytes) { a->st.bytes = 2400000000ULL; a->st.pct = 5; a->st.partition = 1; }
+        int src_known = 0;
+        for (int i = 0; i < a->st.ndisks; i++) src_known |= !strcmp(a->st.disks[i].dev, a->st.task_disk[0] && !strncmp(a->st.task_disk, "/dev/", 5) ? a->st.task_disk + 5 : a->st.task_disk);
+        if (!src_known && a->st.ndisks < MAX_DISKS) {   /* sample data only: the disk the task names, in drawer 1 */
+            Disk *d = &a->st.disks[a->st.ndisks++]; memset(d, 0, sizeof *d);
+            snprintf(d->dev, sizeof d->dev, "sda"); snprintf(d->model, sizeof d->model, "SAMSUNG MZ7TE256HMHP");
+            d->size_bytes = 256060514304ULL; d->slot_known = 1; d->drawer = 1;
+            snprintf(a->st.task_disk, sizeof a->st.task_disk, "sda");
+        }
+        a->capture_rate_bps = 93e6; a->direct_t0 = (long long)time(NULL) - 207;   /* sample: 03:27 in */
+    }
     else if (!strcmp(card, "standby-smart")) { a->force_standby = 1; a->force_cloner = 1; a->st.ndrawers = 0; a->st.cloner_image[0] = 0; smt_png(a); }   /* #1859 */
     else if (!strcmp(card, "message"))  { snprintf(a->st.msg_title, sizeof a->st.msg_title, "%s", base->msg_title);
                                           snprintf(a->st.msg_sub, sizeof a->st.msg_sub, "%s", base->msg_sub); }
@@ -1763,6 +1810,12 @@ static void png_setup(App *a, const State *base, const char *card) {
     }
     else if (!strncmp(card, "cloner-cancel", 13) || !strncmp(card, "room-cancel", 11)) png_cancel_sample(a, card);   /* #1386 */
     else if (!strcmp(card, "cloner-raid") || !strcmp(card, "cloner-share") || !strcmp(card, "cloner-badsect")) png_drawer_ask(a, base, card);   /* #1808/#1898; #2017 */
+    else if (!strcmp(card, "cloner-interrupt") || !strcmp(card, "build-interrupt")) png_interrupt_ask(a, base, card);   /* #2528 */
+    else if (!strcmp(card, "brain-ask") || !strcmp(card, "brain-ask-pick")) {   /* #3654: over the cloner, as mockup n1/n2 */
+        a->force_cloner = 1;
+        if (!base->ndrawers && !base->cloner_image[0])
+            snprintf(a->st.cloner_image, sizeof a->st.cloner_image, "Office 2024 — סטנדרט");
+    }
     else if (!strcmp(card, "restore-syspart")) {                                  /* #1896 */
         a->mode = MODE_RESTORE;
         int at = -1;
@@ -1796,6 +1849,7 @@ static void png_setup(App *a, const State *base, const char *card) {
                                 "\nמה זה אומר: PASSED הוא הדיווח של הדיסק על עצמו, לא ערובה; כשל ב-SMART הוא ראיה מספקת להחלפה.\n");
         }
     }
+    bask_png(a, base, card);   /* #3654: a state that carries the brain's question shows it on every card */
 }
 
 static int render_png(App *a, const State *base, const char *prefix, int w, int h) {
@@ -1843,8 +1897,11 @@ static int render_png(App *a, const State *base, const char *prefix, int w, int 
                                        SCREEN_CLONER, SCREEN_CLONER, /* #1386: the window; a drawer cancelled */
                                        SCREEN_ROOM, SCREEN_ROOM,   /* #1386: X and its choice; cancelled */
                                        SCREEN_CLONER, SCREEN_CLONER, SCREEN_CLONER,   /* #1808/#1898: the drawer's question; #2017: badsect */
+                                       SCREEN_CLONER, SCREEN_MENU,   /* #2528: "cloner-interrupt" (told), "build-interrupt" (asked, over the menu) */
                                        SCREEN_RESTORE,   /* #1896: "restore-syspart" */
-                                       SCREEN_STANDBY };   /* #1859: "standby-smart" */
+                                       SCREEN_STANDBY,   /* #1859: "standby-smart" */
+                                       SCREEN_CLONER,    /* #2984: "build-direct" */
+                                       SCREEN_CLONER, SCREEN_CLONER };   /* #3654: "brain-ask", "brain-ask-pick" */
         /* One entry per card, or want[c] reads past the table -- that is exactly
          * what the lab saw when "direct" was added to PNG_CARDS alone. */
         _Static_assert(sizeof want / sizeof want[0] == sizeof PNG_CARDS / sizeof PNG_CARDS[0],
@@ -1892,7 +1949,7 @@ int main(int argc, char **argv) {
     a.st.hello_rc = -1;
     snprintf(a.title, sizeof a.title, "מחשב בניית אימג'ים");
     const char *auth_cmd = NULL, *png = NULL, *splash = NULL, *backend = "auto", *fb_file = NULL, *fb_mirror = NULL, *screen = NULL, *role = "deploy";
-    InstallBridge wizard = { "python3 -m server.wizard.bridge", "/opt/imagesrv-src", 0 };
+    InstallBridge wizard = { NULL, "/opt/imagesrv-src", 0 };   /* #2763: no default bridge -- the browser wizard's was the wrong one for this screen */
     int install_screen = 0, dcui_screen = 0;
     StateFile sf_state; memset(&sf_state, 0, sizeof sf_state);
     int demo = 0, no_input = 0, pw = 1280, ph = 800;
@@ -1903,7 +1960,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(o, "--no-input")) no_input = 1;
         else if (!strcmp(o, "--help") || !strcmp(o, "-h")) { fputs(USAGE, stdout); return 0; }
         else if (!v) { fputs(USAGE, stderr); return 2; }
-        else if (!strcmp(o, "--mac")) snprintf(a.mac, sizeof a.mac, "%s", argv[++i]);
+        else if (!strcmp(o, "--mac")) { snprintf(a.mac, sizeof a.mac, "%s", argv[++i]); mac_upper(a.mac); }
         else if (!strcmp(o, "--ip")) snprintf(a.ip, sizeof a.ip, "%s", argv[++i]);
         else if (!strcmp(o, "--title")) snprintf(a.title, sizeof a.title, "%s", argv[++i]);
         else if (!strcmp(o, "--user")) snprintf(a.user, sizeof a.user, "%s", argv[++i]);
@@ -1973,6 +2030,10 @@ int main(int argc, char **argv) {
 
     a.tool_sel = -1; a.tool_disk_sel = -1; a.tool_rc = -1;
     if (install_screen) {
+        if (!demo && !wizard.cmd) {                 /* #2763: no engine to ask = no installer; never "inventory" on a bridge that has none */
+            fputs("native-gui: --screen install needs --install-cmd (the live installer's bridge); this screen does not install without one\n", stderr);
+            return 2;
+        }
         install_start(&a, &wizard, demo);
     } else if (sf_state.path[0]) {
         if (state_poll(&sf_state, &a.st) < 0) return 1;   /* a missing file at start is a wrong invocation, say so */
@@ -2017,6 +2078,7 @@ int main(int argc, char **argv) {
     while (!stop_now && !done) {
         if (a.toast[0] && now_s() >= a.toast_until) { a.toast[0] = 0; scene_dirty = 1; }
         if (a.pressed_id && now_s() >= a.pressed_until) { a.pressed_id = 0; scene_dirty = 1; }
+        if (bask_tick(&a)) scene_dirty = 1;             /* #3654: the result closes by itself after 5 s */
         if (scene_dirty) {
             cairo_t *cr = cairo_create(scene);
             app_draw(&a, cr, W, H);

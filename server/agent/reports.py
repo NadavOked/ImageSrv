@@ -9,15 +9,18 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
+import uuid
 from datetime import datetime
 
 from boot.grub_menu import normalize_mac as lenient_mac
 
 from server.library import capture_detail
-from server.agent import cloner_cpu, restore_stages
+from server.agent import beeps as beep_report, cloner_cpu, restore_stages
 from server.rounds import drawer_cancel
 from server.disks import disk_failures, slot_names, slow_write, smart_history
+from server.system import steadyclock
 from server.db import _settle, _write_lock, journal, now_iso, update_one, writing
 from server.core.tasks import CAPTURE_STAGES, OPEN_STATES, claim_task
 
@@ -73,6 +76,17 @@ def well_formed_drivers(value: object) -> dict | None:
     return out
 
 
+#: #3064 (G7, S42/S43): מפתחות אופציונליים של `udp_drops` שמסבירים אובדן, ואינם מונים: `rcvbuf_asked`/`rcvbuf_bytes` =
+#: ה-SO_RCVBUF שהתבקש ומה שהקרנל נתן באמת (`rcvbuf.sh` בגל udpcast, `chunkcast` בגל חתיכות); `pass_word` = איך המעבר
+#: האחרון של מקלט החתיכות נגמר (`chunkcast`: complete, ended, stalled, no-stream...). **נשמרים כמו שהם**, ואינם מסוננים
+#: לפי רשימה סגורה של מילים: מילה חדשה של `chunkcast` נשמרת, ורק צורה פגומה היא "לא נקרא".
+_UDP_DROPS_EXTRA = {
+    "rcvbuf_asked": lambda v: isinstance(v, int) and not isinstance(v, bool) and v >= 0,
+    "rcvbuf_bytes": lambda v: isinstance(v, int) and not isinstance(v, bool) and v >= 0,
+    "pass_word": lambda v: isinstance(v, str) and re.fullmatch(r"[a-z][a-z0-9-]{0,31}", v) is not None,
+}
+
+
 def well_formed_udp_drops(payload: dict) -> dict | None:
     """`udp_drops` של הדיווח (הכרעת נדב 17/10, `agent/lib/core/waits.sh`):
     `{"rcvbuf", "inerrors"}` — מספר שלם לא שלילי, או null = "לא נקרא".
@@ -85,16 +99,24 @@ def well_formed_udp_drops(payload: dict) -> dict | None:
         return None
     value = payload["udp_drops"]
     unread = {"rcvbuf": None, "inerrors": None}
+    if isinstance(value, dict) and "abandoned" in value:
+        # #3064 (G7): גל חתיכות מוסיף את החתיכות שהמקלט נטש באמצע (`agent/lib/restore/chunkloss.sh`).
+        # בגל udpcast השדה חסר -- וחסר נשאר חסר, לא "0 נטישות".
+        unread["abandoned"] = None
     if not isinstance(value, dict):
         return unread
+    # #3064 (G7): מה שנשלח נשמר; מה שלא נשלח חסר (לא 0 ולא null). שדה כזה שפגום הוא "לא נקרא" **לבדו**: הוא אינו
+    # מאבד את המונים (ש-K7 קורא), והמונים הפגומים אינם מוחקים אותו.
+    extra = {key: (value[key] if ok(value[key]) or value[key] is None else None)
+             for key, ok in _UDP_DROPS_EXTRA.items() if key in value}
     out = {}
     for key in unread:
         got = value.get(key)
         if got is not None and (not isinstance(got, int) or isinstance(got, bool)
                                 or got < 0):
-            return unread
+            return {**unread, **extra}
         out[key] = got
-    return out
+    return {**out, **extra}
 
 
 #: #1331: דרייבר האחסון ה-in-box של הדיסק שנכתב (`agent/lib/postdeploy/bootstorage.sh`).
@@ -257,7 +279,7 @@ def ingest(conn: sqlite3.Connection, payload: dict,
     _clean_target_drivers(targets)
     restore_stages.clean_targets(targets)   # #1883: marks → durations, or dropped
     targets = stamp_movement(previous_targets, targets)
-    targets = stamp_done_serials(conn, mac, previous_targets, targets)
+    targets = stamp_done_serials(conn, mac, previous_targets, targets, session_id)
     bytes_written = sum(_int(t.get("bytes_written")) for t in targets)
     bytes_total = sum(_int(t.get("bytes_total")) for t in targets)
     errors = "; ".join(
@@ -267,6 +289,7 @@ def ingest(conn: sqlite3.Connection, payload: dict,
     drivers = well_formed_drivers(payload.get("drivers"))
     drops = well_formed_udp_drops(payload)
     cpu = cloner_cpu.well_formed(payload.get("cpu"))   # #1885: רק בדיווח הסופי
+    beeps = beep_report.well_formed(payload.get("beeps"))   # #3125 (S62): הצלילים של הסבב, בכל דיווח
 
     previous = row["state"]
     # #2753/#54: ה-UPDATE וה-commit בתוך אותה נעילה (`agent_progress` רץ בתהליכון
@@ -280,7 +303,8 @@ def ingest(conn: sqlite3.Connection, payload: dict,
             " error = ?, done = ?, targets_json = ?, updated_at = ?,"
             " drivers_json = COALESCE(?, drivers_json),"
             " udp_drops_json = COALESCE(?, udp_drops_json),"
-            " cpu_json = COALESCE(?, cpu_json)"
+            " cpu_json = COALESCE(?, cpu_json),"
+            " beeps_json = COALESCE(?, beeps_json)"
             " WHERE session_id = ? AND mac = ?",
             (
                 state, bytes_written, bytes_total, errors or None,
@@ -289,9 +313,27 @@ def ingest(conn: sqlite3.Connection, payload: dict,
                 json.dumps(drivers, ensure_ascii=False) if drivers else None,
                 json.dumps(drops) if drops else None,
                 json.dumps(cpu) if cpu else None,
+                json.dumps(beeps) if beeps is not None else None,
                 session_id, mac,
             ),
         )
+
+    # #3041/#3125: what the machine itself felt in this chunk wave (S46-S50) -- kept per wave for the brain's learning.
+    # Absent = the agent did not measure (a udpcast wave, an older agent): nothing is written. Never raises.
+    from server.brain import wavesense                   # noqa: PLC0415
+    senses = wavesense.well_formed(payload.get("wave_senses"))
+    wavesense.record(conn, session_id, mac, senses)
+    # #3064 (B5, X13): would HTTP in parallel with the stream open for each drawer -- by its write queue. Shadow only
+    from server.brain import parallelhttp                # noqa: PLC0415
+    parallelhttp.observe(conn, session_id, mac, senses)
+    # #3125 (L12, U5, U6): sentences the agent knew and the journal did not -- once each, in the server's journal. Never raises.
+    from server.agent import round_notes                 # noqa: PLC0415
+    round_notes.record(conn, session_id, mac, payload.get("round_notes"))
+
+    if previous == LOST:
+        # #3064 שלב 5: חבר שסומן `lost` דיווח שוב באותו סבב -- תצפית לזיכרון של המוח. לעולם אינו זורק
+        from server.brain import recall                  # noqa: PLC0415
+        recall.returned(conn, mac, session_id)
 
     if state != previous and state in TERMINAL:
         target = {"machine": mac, "round_id": session_id}   # #1296
@@ -308,6 +350,15 @@ def ingest(conn: sqlite3.Connection, payload: dict,
         _journal_boot(conn, drivers, f"{mac} in {session_id}", **target)
         _journal_linux(conn, drivers, f"{mac} in {session_id}", **target)
         cloner_cpu.note_final(conn, mac, session_id, cpu)   # #1885: throttle שעלה — ביומן
+        beep_report.note_final(conn, mac, session_id, beeps)   # #3125: מה נשמע ומה לא — שורה אחת
+        from server.brain import agentsenses              # noqa: PLC0415 -- #3064: חושי הסוכן והזהות של האימג', בצל; אינו זורק
+        agentsenses.note_final(conn, mac, session_id, payload.get("senses"), targets)
+        from server.brain import rxlimit                  # noqa: PLC0415 -- B59: מה הגביל את הקצב בצד המקלט, בצל; אינו זורק
+        rxlimit.note_final(conn, mac, session_id, payload.get("senses"))
+        from server.brain import drawertune               # noqa: PLC0415 -- #3816 (K17): what the agent chose for the drawers, in shadow; אינו זורק
+        drawertune.note_final(conn, mac, session_id, payload.get("senses"))
+        from server.brain import capability               # noqa: PLC0415 -- #3041: מי עיכב את הגל, המכונה או הדיסק; אינו זורק
+        capability.learn(conn, mac, session_id, payload.get("senses"), state)
         # #1883: ציר הזמן של כל מגירה — פעם אחת, במעבר הטרמינלי של המכונה.
         for t in targets:
             if isinstance(t, dict) and isinstance(t.get("dev"), str):
@@ -328,6 +379,14 @@ def ingest(conn: sqlite3.Connection, payload: dict,
                         f" — {', '.join(outcome['packages'])}{named}", **target)
             _journal_boot(conn, outcome, f"{mac} {t.get('dev', '?')} in {session_id}", named, **target)
             _journal_linux(conn, outcome, f"{mac} {t.get('dev', '?')} in {session_id}", named, **target)
+        # #3167 (נדב 14/11): הערה על יעד שהושלם -- שם שנכתב לאימג' שלא כובה נקי. הערה, לא כשל (info):
+        # המפעיל יודע ללכוד את האימג' מחדש. פעם אחת, במעבר הטרמינלי, עם שם החריץ.
+        for t in targets:
+            if (isinstance(t, dict) and t.get("state") == "done" and isinstance(t.get("note"), str)
+                    and t["note"].strip()):
+                journal(conn, "target_note", f"{mac} {t.get('dev', '?')} in {session_id} — {t['note'].strip()}"
+                        + slot_names.journal_suffix(slot_names.label(conn, mac, dev=t.get("dev"))),
+                        **target)
         # #1907 (נדב 22/10): מגירה שהושלמה ולא אומתה כי רשימת הבדיקה לא הורדה — ביומן, בשמה.
         for t in targets:
             if (isinstance(t, dict) and t.get("state") == "done" and t.get("readback") == "unverified"
@@ -343,6 +402,9 @@ def ingest(conn: sqlite3.Connection, payload: dict,
             smart_history.record_temp(conn, smart_history.serial_of(conn, mac, t["dev"]), session_id, t["temp_c"], mac)
         if t.get("state") == "failed":
             disk_failures.record(conn, session_id, mac, _bound_serial(conn, session_id, mac, t))
+        # #3112: מגירה שנשלפה וחזרה והושלמה — הרשומה שנפתחה על השליפה נסגרת עכשיו.
+        elif t.get("state") == "done" and isinstance(t.get("dev"), str) and t.get("serial"):
+            disk_failures.clear_returned(conn, session_id, mac, t["dev"], t["serial"])
         # #1386: "בוטל" נרשם כשהסוכן דיווח אותו — פעם אחת, במעבר. לא disk_failure:
         # ביטול אינו כשל, ובסבב הבא הדיסק ירוק.
         elif t.get("state") == "cancelled" and isinstance(t.get("dev"), str)                 and t["dev"] not in was_cancelled:
@@ -422,13 +484,18 @@ def _clean_target_drivers(targets: list) -> None:
 
 
 def stamp_done_serials(conn: sqlite3.Connection, mac: str,
-                       previous_json: str | None, targets: list) -> list:
+                       previous_json: str | None, targets: list, session_id: str | None = None) -> list:
     """קושר יעד שהושלם למגירה הפיזית שהייתה בו ברגע ההשלמה.
 
     הסוכן מדווח נתיב התקן; מלאי ה-hello האחרון בשרת הוא מקור האמת ל-serial
     שהיה באותו נתיב. בלי serial החותמת נשארת חסרה; `_tally` שומר תאימות
     לשורות ישנות כאלה וסופר לפי ה-serial הנוכחי אם הוא זמין, אך אינו מנחש
     זהות כשגם המלאי הנוכחי חסר serial.
+
+    #3139: מגירה שחזרה תחת שם התקן חדש (sda -> sdc) מדווחת בשם שהסבב בחר לה (`dev`), אבל המלאי
+    מחזיק את הדיסק שלה בשם החדש. הזהות היא הסידורי: רשומת הכשל של (סבב, מכונה, יעד) נושאת אותו,
+    והוא מחליף את מה שהמלאי אומר על השם הזה **רק** כשהוא עצמו במלאי של המכונה (תחת שם אחר) --
+    ראיה שהמגירה הזו חזרה. בלי הראיה הזו המלאי קובע, כמו קודם.
     """
     row = conn.execute(
         "SELECT disks_json FROM net_devices WHERE mac = ?", (mac,)
@@ -460,10 +527,36 @@ def stamp_done_serials(conn: sqlite3.Connection, mac: str,
             item.pop("serial", None)
             dev = item.get("dev")
             serial = completed.get(dev) if dev in completed else serial_of.get(dev)
+            if dev not in completed:
+                serial = _returned_serial(conn, session_id, mac, dev, serial, serial_of) or serial
             if serial:
                 item["serial"] = serial
         stamped.append(item)
     return stamped
+
+
+def _returned_serial(conn: sqlite3.Connection, session_id: str | None, mac: str, dev: object,
+                     inventory_serial: str | None, serial_of: dict) -> str | None:
+    """#3139: הסידורי של מגירה שחזרה תחת שם אחר -- או None כשאין ראיה לכך.
+
+    הראיה: רשומת כשל של אותו (סבב, מכונה, יעד) עם סידורי שאינו מה שהמלאי אומר על השם, והסידורי
+    הזה עצמו במלאי של המכונה תחת שם **אחר**."""
+    if not session_id or not isinstance(dev, str):
+        return None
+    row = conn.execute("SELECT serial FROM disk_failures WHERE session_id = ? AND mac = ? AND dev = ?"
+                       " AND serial IS NOT NULL", (session_id, mac, dev)).fetchone()
+    if row is None or row["serial"] == inventory_serial:
+        return None
+    return row["serial"] if any(d != dev and s == row["serial"] for d, s in serial_of.items()) else None
+
+
+#: #3769: מזהה התהליך הזה. ערך monotonic תקף רק בתוך התהליך שכתב אותו (אחרי אתחול הוא מתחיל מחדש),
+#: ולכן כל חותמת נשמרת עם המזהה, והקורא משתמש בו רק כששני הצדדים נכתבו באותו תהליך.
+BOOT_ID = uuid.uuid4().hex
+
+
+def _stamp_mono(t: dict, name: str) -> dict:
+    return {**t, f"{name}_mono": steadyclock.mono(), f"{name}_boot": BOOT_ID}
 
 
 def stamp_movement(previous_json: str | None, targets: list) -> list:
@@ -494,12 +587,17 @@ def stamp_movement(previous_json: str | None, targets: list) -> list:
         if not isinstance(t, dict):
             continue
         before = was.get(t.get("dev"))
+        # חותמת שדה שהסוכן שלח באותו שם היא לא של השרת (כמו `first_moved_at`).
+        t = {k: v for k, v in t.items() if k not in ("moved_mono", "moved_boot")}
         if (before is not None
                 and _int(t.get("bytes_written")) == _int(before.get("bytes_written"))
                 and before.get("moved_at")):
             t = {**t, "moved_at": before["moved_at"]}
+            for k in ("moved_mono", "moved_boot"):    # דיווח ישן בלי monotonic נשאר בלעדיו
+                if k in before:
+                    t[k] = before[k]
         else:
-            t = {**t, "moved_at": now_iso()}
+            t = _stamp_mono({**t, "moved_at": now_iso()}, "moved")
         stamped.append(_stamp_window(before, _stamp_first_movement(before, t)))
     return stamped
 
@@ -540,14 +638,26 @@ def _stamp_first_movement(before: dict | None, t: dict) -> dict:
     לפני הבייט הראשון (`drive_rates.record_wave`). נשמר כל עוד המונה לא
     ירד; מונה שירד התחיל מחדש, והחותמת מתחילה איתו. חותמת השרת בלבד —
     שדה באותו שם שהגיע מהסוכן נזרק."""
-    t = {k: v for k, v in t.items() if k != "first_moved_at"}
+    t = {k: v for k, v in t.items()
+         if k not in ("first_moved_at", "first_moved_mono", "first_moved_boot")}
     written = _int(t.get("bytes_written"))
     if (before is not None and before.get("first_moved_at")
             and written >= _int(before.get("bytes_written"))):
         t["first_moved_at"] = before["first_moved_at"]
+        for k in ("first_moved_mono", "first_moved_boot"):
+            if k in before:
+                t[k] = before[k]
     elif written > 0:
-        t["first_moved_at"] = now_iso()
+        t = _stamp_mono({**t, "first_moved_at": now_iso()}, "first_moved")
     return t
+
+
+def _close_targets(targets: list, final: str) -> list:
+    """#2885: משימת `direct_send` שהגיעה למצב סופי -- כל יעד (דיסק המקור) שעוד אינו במצב סופי
+    מקבל את המצב של המשימה. סוכן לפני #2885 השאיר את המקור `waiting` (`target_init` לפני
+    `sending`) גם כשכל המחיצות נשלחו, והפס נשאר תקוע. יעד שכבר סופי (כולל `failed`) לא זז."""
+    return [{**t, "state": final} if isinstance(t, dict) and t.get("state") not in TERMINAL else t
+            for t in targets]
 
 
 def _ingest_task(conn: sqlite3.Connection, task_id: str, mac: str,
@@ -591,6 +701,8 @@ def _ingest_task(conn: sqlite3.Connection, task_id: str, mac: str,
         "done" if state == "done" and row["type"] == "direct_send" else
         "running" if row["state"] == "pending" else row["state"]
     )
+    if row["type"] == "direct_send" and new_state in ("done", "failed"):
+        targets = _close_targets(targets, new_state)   # #2885
     # #535: תביעת מצב ב-`WHERE`. עד כאן דיווח `failed` הפך משימה
     # ל-`failed` **בלי קשר למצבה** — גם `done`, גם `cancelled` —
     # ובלי אימות מי הדווח. מכאן, משימה שאינה פתוחה אינה משתנה,

@@ -35,9 +35,13 @@ firmware_json() {
     # ,"sata_mode":..,"bios":{..} -- the hello's fragment (build_hello); a part that could not be read is absent,
     # and the server keeps the previous value. Cached for the boot: neither changes while the machine is up.
     _fj_f="${RUN_DIR:-/nonexistent}/fwimage.hello"
+    if command -v ss_post_mark >/dev/null 2>&1; then ss_post_mark; fi   # #3064 S57: the disks that were here at the first hello (disksense.sh)
     if [ -s "$_fj_f" ]; then cat "$_fj_f"; return 0; fi
     _fj_m=$(fw_sata_mode); _fj_b=$(fw_bios_json); _fj_o=""
     [ -z "$_fj_m" ] || _fj_o=",\"sata_mode\":\"$_fj_m\""
+    # #3064 S65: and the driver bound to that controller (ahci / ata_piix / none) -- what the orange warning names (hostsense.sh)
+    _fj_dv=""; if [ -n "$_fj_m" ] && command -v ss_sata_driver >/dev/null 2>&1; then _fj_dv=$(ss_sata_driver "$_fj_m"); fi
+    case "$_fj_dv" in ''|*[!A-Za-z0-9_.-]*) ;; *) _fj_o="$_fj_o,\"sata_driver\":\"$_fj_dv\"" ;; esac
     [ -z "$_fj_b" ] || _fj_o="$_fj_o,\"bios\":$_fj_b"
     printf '%s' "$_fj_o"
     if [ -n "$_fj_o" ] && [ -d "${RUN_DIR:-/nonexistent}" ]; then printf '%s' "$_fj_o" > "$_fj_f.next" && mv "$_fj_f.next" "$_fj_f"; fi

@@ -514,7 +514,17 @@ def test_usb_build_refuses_uninspectable_initrd(tmp_path):
 
 def test_a_smaller_target_is_offered_the_shrink_on_the_stick_with_no_server_call(tmp_path):
     # the screen's records in usbclone mode: the 250 GB drawer "fits after a temporary shrink"
-    # of the 480 GB source, the same lc_fit as the cloner's -- and curl never ran
+    # of the 480 GB source, the same lc_fit as the cloner's -- and curl never ran.
+    # #2404: a shrink verdict is checked on the layouts the inventory (sdc.parts) and the
+    # measurement (sdc.compact) leave -- lc_measure never answers "done" below the source's
+    # need without writing the compacted layout. Only C: shrinks here (400 -> 190 GB), so
+    # nothing has to come back to its source size and the 250 GB drawer takes it.
+    esp, win = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B", "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7"
+    lc = tmp_path / "run" / "lc"; (lc / "inv").mkdir(parents=True); (lc / "measure").mkdir()
+    (lc / "inv" / "sdc.parts").write_text(f"1|{esp}|U1|2048|204800\n2|{win}|U2|206848|{400 * 10**9 // 512}\n", newline="\n")
+    (lc / "measure" / "sdc.compact").write_text(f"1|{esp}|U1|2048|204800\n2|{win}|U2|206848|{190 * 10**9 // 512}\n", newline="\n")
+    (lc / "inv" / "sdc.roles").write_text("1|esp\n2|windows\n", newline="\n")
+    (lc / "inv" / "sdc.used").write_text(f"1|{30 << 20}\n2|{100 * 10**9}\n", newline="\n")
     rec, log = curl_recorder(tmp_path)
     out = run(tmp_path, rec + 'usb_offline; LC="$RUN_DIR/lc"; export GUI_DIR=$RUN_DIR/gui; '
               'mkdir -p "$GUI_DIR" "$LC/inv" "$LC/measure"; echo 0 > "$RUN_DIR/min_free_gb"; '
@@ -819,36 +829,50 @@ PART_GUID = "c0ffee00-2222-4b3c-9d4e-abcdefabcdef"
 SWAP_UUID = "3f0a1b2c-1d2e-4f50-a1b2-c3d4e5f60718"
 
 
-def test_the_diag_keeps_no_identifier_from_the_disks(tmp_path):
-    # expand.sh logs the source's disk GUID ("came back from the disk"), mkswap its UUID= and
-    # LABEL=, ext4 in dmesg its filesystem UUID -- all in the agent.log tail / dmesg of the diag
-    root = sysroot(tmp_path, {"sda": ["sda1"], "sdb": ["sdb1"]})
+def _diag_on_stick(base: Path, log: str, ext4_line: bool) -> str:
+    root = sysroot(base, {"sda": ["sda1"], "sdb": ["sdb1"]})
     (root / "sys" / "block" / "sda" / "device").mkdir()
     (root / "sys" / "block" / "sda" / "device" / "serial").write_text("ZA1B2C3D\n")
     (root / "sys" / "block" / "sdb" / "device").mkdir()
     (root / "sys" / "block" / "sdb" / "device" / "serial").write_text("STICK0001\n")
-    data = tmp_path / "usbdata"; data.mkdir()
-    (tmp_path / "run").mkdir(exist_ok=True)
-    (tmp_path / "run" / "usb-media.disks").write_text("sdb\n")
-    (tmp_path / "run" / "agent.log").write_text(
-        f"[10:00:00] sdc: disk GUID {DISK_GUID} came back from the disk\n"
-        f"[10:00:01] Setting up swapspace version 1, size = 2 GiB, LABEL=OferSwap, UUID={SWAP_UUID}\n"
-        '[10:00:02] blkid: LABEL="Ofer PC" UUID="1234-ABCD" TYPE="ntfs"\n'
-        "[10:00:03] fat label: LABEL=Ofer Home Disk\n"                    # spaces, no quotes
-        "[10:00:04] swap UUID=7d1e2f30-aaaa-4bbb-8ccc-0123456789ab,x\n"   # unquoted
-        "[10:00:05] vfat volume ABCD-1234 on sda1\n"                      # a FAT volume serial, bare
-        "[10:00:06] ntfs 01D9A2B3C4D5E6F7 on sda2\n"                      # an NTFS volume serial, bare
-        "[10:00:07] local clone: sda -> sdc\n", encoding="utf-8", newline="\n")
-    out = run(tmp_path, f'dmesg() {{ echo "EXT4-fs (sda2): mounted filesystem {PART_GUID} ro"; '
-                        'echo "sd 0:0:0:0: [sda] 976773168 512-byte logical blocks"; }; '
-                        f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; usb_diag boot; echo "rc=$?"',
+    data = base / "usbdata"; data.mkdir()
+    (base / "run").mkdir(exist_ok=True)
+    (base / "run" / "usb-media.disks").write_text("sdb\n")
+    (base / "run" / "agent.log").write_text(log, encoding="utf-8", newline="\n")
+    ext4 = f'echo "EXT4-fs (sda2): mounted filesystem {PART_GUID} ro"; ' if ext4_line else ""
+    out = run(base, f'dmesg() {{ {ext4}echo "sd 0:0:0:0: [sda] 976773168 512-byte logical blocks"; }}; '
+                    f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; usb_diag boot; echo "rc=$?"',
               SYSROOT=posix(root), IMAGESRV_MODE="usbclone")
     assert "rc=0" in out.stdout, out.stdout + out.stderr
-    text = stick_files(data)
+    return stick_files(data)
+
+
+@pytest.mark.parametrize("sub", ["plain", "2062-2443", "sp ace 2062-2443", "0123456789abcdef"])
+def test_the_diag_keeps_no_identifier_from_the_disks(tmp_path, sub):
+    # expand.sh logs the source's disk GUID ("came back from the disk"), mkswap its UUID= and
+    # LABEL=, ext4 in dmesg its filesystem UUID -- all in the agent.log tail / dmesg of the diag.
+    # #3052: the report also prints the sysroot's path, and a path with a XXXX-XXXX in it (the
+    # testrunner's tmp dir is .../<MMDD-HHMMSS>-<who>-<RANDOM>/) loses those lines too, as it must
+    # (the scrub is fail-closed). So the count is 8 + what the same paths lose with no leak in the log.
+    log = (f"[10:00:00] sdc: disk GUID {DISK_GUID} came back from the disk\n"
+           f"[10:00:01] Setting up swapspace version 1, size = 2 GiB, LABEL=OferSwap, UUID={SWAP_UUID}\n"
+           '[10:00:02] blkid: LABEL="Ofer PC" UUID="1234-ABCD" TYPE="ntfs"\n'
+           "[10:00:03] fat label: LABEL=Ofer Home Disk\n"                    # spaces, no quotes
+           "[10:00:04] swap UUID=7d1e2f30-aaaa-4bbb-8ccc-0123456789ab,x\n"   # unquoted
+           "[10:00:05] vfat volume ABCD-1234 on sda1\n"                      # a FAT volume serial, bare
+           "[10:00:06] ntfs 01D9A2B3C4D5E6F7 on sda2\n"                      # an NTFS volume serial, bare
+           "[10:00:07] local clone: sda -> sdc\n")
+    gone = "[שורה הוסרה — מזהה דיסק]"
+    base = tmp_path / sub; base.mkdir()
+    text = _diag_on_stick(base, log, ext4_line=True)
+    ctl = tmp_path / "ctl" / sub; ctl.mkdir(parents=True)
+    from_paths = _diag_on_stick(ctl, "[10:00:07] local clone: sda -> sdc\n", ext4_line=False).count(gone)
+    if sub != "plain":
+        assert from_paths > 0, "the odd path must really be hit, or this case proves nothing"
     for leak in (DISK_GUID, PART_GUID, SWAP_UUID, "OferSwap", "Ofer PC", "1234-ABCD", "Ofer Home Disk",
                  "7d1e2f30-aaaa-4bbb-8ccc-0123456789ab", "ABCD-1234", "01D9A2B3C4D5E6F7"):
         assert leak not in text, (leak, text)
-    assert text.count("[שורה הוסרה — מזהה דיסק]") == 8, text   # each line said, not dropped in silence
+    assert text.count(gone) == 8 + from_paths, (from_paths, text)   # each line said, not dropped in silence
     assert "local clone: sda -> sdc" in text and "[sda] 976773168 512-byte logical blocks" in text, text
 
 

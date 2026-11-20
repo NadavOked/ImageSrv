@@ -26,12 +26,14 @@ LIBS = ("common", "waits", "sysinfo", "diskinfo", "progress", "failmark", "write
 
 def verdict(tmp_path, disks: dict[str, int | str | None], states: dict[str, str] | None = None,
             env: str = "", rot: dict[str, str | None] | None = None,
-            manifest: dict | str | None = None) -> dict:
+            manifest: dict | str | None = None, hello: dict | str | None = None) -> dict:
     """disks: name -> MB/s measured (None = no number; "x" = junk in the file).
     rot: name -> /sys/block/<d>/queue/rotational ("0" SSD, "1" HDD, None = no
     file); a disk not named there is an SSD. manifest (#2338): the one the
     verdict takes its floor from -- a dict as JSON, a str as raw text, None =
-    ``{}`` (no floor in it: the agent's own)."""
+    ``{}`` (no floor in it: the agent's own). hello (X16): the hello answer in
+    ``$RUN_DIR/response.json`` -- where the agent reads the "HDD support" switch
+    (#3268); a dict as JSON, a str as raw text, None = no file."""
     run = tmp_path / "run"
     man = tmp_path / "manifest.json"
     man.write_text(manifest if isinstance(manifest, str) else json.dumps(manifest or {}), encoding="utf-8")
@@ -48,6 +50,8 @@ def verdict(tmp_path, disks: dict[str, int | str | None], states: dict[str, str]
         (t / "write_check_state").write_text("ok")
         if mbps is not None:
             (t / "write_check_mbps").write_text(str(mbps))
+    if hello is not None:
+        (run / "response.json").write_text(hello if isinstance(hello, str) else json.dumps(hello), encoding="utf-8")
     prelude = "".join(f"[ ! -f {posix(flat_lib())}/{n}.sh ] || . {posix(flat_lib())}/{n}.sh; " for n in LIBS)
     out = sh(f"export RUN_DIR={posix(run)!r} SYSROOT={posix(tmp_path / 'sysroot')!r} {env}; {prelude}"
              f"write_speed_verdict {posix(man)!r} {' '.join(disks)}; echo \"RC $?\"")
@@ -102,6 +106,11 @@ def test_the_floor_is_a_setting(tmp_path):
 # --- #2037: the same kind only, and every median before any verdict --------
 
 HDD, SSD = "1", "0"
+#: X16: an HDD target needs "HDD support" on (off, the default, refuses it): the hello
+#: answer says so (#3268). 50 = the starting floor these #2037 rooms were judged by, so
+#: the numbers below keep their meaning.
+ON = {"hdd_floor_mbps": 50}
+HELLO_ON = {"hdd_support": True}
 
 
 def _states(r: dict, disks) -> dict:
@@ -112,7 +121,7 @@ def test_room_8c6bf26c_two_hdds_beside_an_ssd_both_pass(tmp_path):
     """Lab 23/10, cloner 2, ports 1/2/5. Before: sda (57) failed against the
     others' 131 and sdd (54) passed only because sda was already out."""
     disks = {"sda": 57, "sdc": 209, "sdd": 54}
-    r = verdict(tmp_path, disks, rot={"sda": HDD, "sdc": SSD, "sdd": HDD})
+    r = verdict(tmp_path, disks, rot={"sda": HDD, "sdc": SSD, "sdd": HDD}, manifest=ON, hello=HELLO_ON)
     assert _states(r, disks) == {"sda": "writing", "sdc": "writing", "sdd": "writing"}, r
     assert r["rc"] == 0
 
@@ -120,7 +129,7 @@ def test_room_8c6bf26c_two_hdds_beside_an_ssd_both_pass(tmp_path):
 def test_room_3d81439d_the_same_disks_reversed_both_pass(tmp_path):
     """The next round, 23/10 05:20Z: sdb (52) failed against 119, sda (59) passed."""
     disks = {"sda": 59, "sdb": 52, "sdd": 179}
-    r = verdict(tmp_path, disks, rot={"sda": HDD, "sdb": HDD, "sdd": SSD})
+    r = verdict(tmp_path, disks, rot={"sda": HDD, "sdb": HDD, "sdd": SSD}, manifest=ON, hello=HELLO_ON)
     assert _states(r, disks) == {"sda": "writing", "sdb": "writing", "sdd": "writing"}, r
     assert r["rc"] == 0
 
@@ -142,20 +151,20 @@ def test_a_lone_hdd_beside_ssds_meets_only_the_floor(tmp_path):
     """60 against SSDs at 400/380 was 'under half of 390'; alone of its kind it
     meets the fixed floor only, and 60 >= 50."""
     disks = {"sda": 60, "sdb": 400, "sdc": 380}
-    r = verdict(tmp_path, disks, rot={"sda": HDD})
+    r = verdict(tmp_path, disks, rot={"sda": HDD}, manifest=ON, hello=HELLO_ON)
     assert _states(r, disks) == {"sda": "writing", "sdb": "writing", "sdc": "writing"}, r
 
 
 def test_a_lone_hdd_under_the_floor_is_still_red(tmp_path):
-    r = verdict(tmp_path, {"sda": 40, "sdb": 400, "sdc": 380}, rot={"sda": HDD})
-    assert r["sda"] == ("failed", "slow", "איטי — 40 MB/s, מתחת לסף 50 MB/s"), r
+    r = verdict(tmp_path, {"sda": 40, "sdb": 400, "sdc": 380}, rot={"sda": HDD}, manifest=ON, hello=HELLO_ON)
+    assert r["sda"] == ("failed", "slow", "איטי — 40 MB/s, מתחת לסף 50 MB/s (הערכת פתיחה ל-HDD, לא נמדדה)"), r
 
 
 def test_hdds_are_compared_among_themselves(tmp_path):
     """Three HDDs and an SSD: the slow HDD is judged by the HDDs' median (111),
     not one the SSD pulled up, and the message says which kind."""
     disks = {"sda": 52, "sdb": 110, "sdc": 112, "sdd": 450}
-    r = verdict(tmp_path, disks, rot={"sda": HDD, "sdb": HDD, "sdc": HDD, "sdd": SSD})
+    r = verdict(tmp_path, disks, rot={"sda": HDD, "sdb": HDD, "sdc": HDD, "sdd": SSD}, manifest=ON, hello=HELLO_ON)
     assert r["sda"] == ("failed", "slow", "איטי — 52 MB/s, פחות מחצי מ-111 MB/s של שאר המגירות מאותו סוג (מכני)"), r
     assert _states(r, ("sdb", "sdc", "sdd")) == {"sdb": "writing", "sdc": "writing", "sdd": "writing"}, r
 

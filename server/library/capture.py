@@ -29,9 +29,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
 from server.console import auth
+from server.core import finite_json
 from server.core.cleanup import remove_tree
 from server.agent import registry
 from server.disks import disk_rule   # #2848
+from server.brain import ingest as brain_ingest   # #3669 (B6, B7), בצל
 from server.storage import disk_reserve, history as storage_history, locations as storage_locations
 from server.learn import server_io
 from server.core.atomicfile import fsync_dir, fsync_file, write_atomic
@@ -44,7 +46,8 @@ from server.learn import eta as learn_eta
 from server.system import priority
 from server.agent import readbackhash
 from server.core.progress_view import capture_progress
-from server.library.images import (ImageLibrary, MACHINE_MAC, carries_a_stream_file, has_disk_guid,
+from server.library.images import (ImageLibrary, LEGACY_FORMAT, MACHINE_MAC, carries_a_stream_file,
+                                   format_problem, has_disk_guid, has_index_xxh64,
                                    has_partition_geometry, image_os, inside, journal_ntfs_inconsistent,
                                    required_bytes, valid_image_id)
 # ⚠️ **לא `from . import tasks`.** יש כאן endpoint בשם `tasks`
@@ -351,6 +354,9 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
                 status, reason = "warning", "אזהרת מקום: " + numbers + " — יחס הדחיסה אינו ידוע; ניתן להמשיך"
             else:
                 status, reason = "ok", numbers
+        # #3669 (B7), בצל: המוח פוסק מאותם קלטים ורושם; הסטטוס שחוזר הוא של הקוד שלמעלה.
+        brain_ingest.space_shadow(ctx.conn, task_id, (status, reason), used=used, free=free,
+                                  keep=disk_reserve.reserve(), missing=missing)
         if status in ("refused", "unchecked", "warning"):
             # #54: every write inside the lock + writing(), never a bare commit.
             if status == "warning":
@@ -473,7 +479,7 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
     def _finish_capture_body(task_id: str, row, raw: bytes):
         folder = staging_dir(ctx.library.root, task_id)
         try:
-            manifest = json.loads(raw.decode("utf-8"))
+            manifest = finite_json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError, RecursionError):   # #2447: deep JSON is 400, not 500
             # קטע מהגוף נכנס ליומן: "לא JSON" בלי ראיה השאיר אותנו
             # מגששים מול סוכן שאי אפשר להיכנס אליו (מעבדה, #12).
@@ -487,6 +493,8 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
         if problem:
             _fail(ctx.conn, ctx.library.root, task_id, problem)
             raise HTTPException(400, problem)
+
+        brain_ingest.compression_shadow(ctx.conn, task_id, manifest, "capture")   # #3669 (B6), בצל
 
         # שמות התצוגה נקבעו בקונסולה ולא במחשב הבנייה.
         manifest["id"] = row["image_id"]
@@ -597,6 +605,18 @@ def manifest_problem(manifest: object, folder: Path) -> str | None:
     problem = ImageLibrary._validate(manifest, require_library_fields=False)
     if problem:
         return problem
+    # #2533: an image that would not be distributed does not enter the library to be
+    # refused there -- it is caught here, by name (principle 6). A manifest without
+    # image_format 2 is what an agent from before #2533 sends (one zstd stream a
+    # partition); one without index_xxh64 was not cut by chunkcut.
+    refused = format_problem(manifest)
+    if refused is not None and refused[0] == LEGACY_FORMAT:
+        return ("the manifest is not image_format 2 -- this machine booted an agent from"
+                " before #2533; rebuild the boot image on the server and capture again")
+    for part in manifest["partitions"]:
+        if carries_a_stream_file(part) and not has_index_xxh64(part):
+            return (f"partition {part.get('index')} carries no index_xxh64 -- its stream was not"
+                    " cut into chunks, and nothing ties its index to this capture")
     parts = manifest.get("partitions")
     if not isinstance(parts, list) or not parts:
         return "manifest has no partitions"
@@ -771,6 +791,7 @@ def _verify(conn, library_root: Path, task_id: str) -> str:
     if target.exists():
         return _verify_failed(conn, library_root, task_id,
                               "an image with this id already exists")
+    _index_at_ingest(conn, library_root, task_id, row, manifest, folder)   # #3502: before it enters
     for name, _ in files:
         upload_sha_path(staged_file(folder, name)).unlink(missing_ok=True)
     # #1813: הבייטים לדיסק לפני הפרסום — fsync אחד לכל קובץ (לא לכל chunk),
@@ -801,6 +822,52 @@ def _verify(conn, library_root: Path, task_id: str) -> str:
                               row["created_by"], _task_mac(conn, task_id))   # #2972
     readbackhash.kick()   # #1805: the read-back digest of the new image -- now, not in ten minutes
     return "done"
+
+
+def _index_at_ingest(conn, library_root: Path, task_id: str, row, manifest: dict, folder: Path) -> None:
+    """#3502: האינדקס ורשימת ה-BLAKE3 נגזרים **כאן**, מהקובץ שנקרא בדיסק השרת, לפני שהאימג' נכנס לספרייה --
+    ולא ברקע, אחרי שכבר נפתח לו גל (ברזל 15/11: 486 שניות של המתנה מול כיתה על img_3fa17f, 18.5GB).
+
+    ההתקדמות היא `verify_bytes`/`verify_total` של המשימה, עכשיו לפי הבייטים הדחוסים שנגזרו (הקריאה החוזרת של
+    ה-sha256 כבר הסתיימה). **אותה התנהגות כמו קודם כשהגזירה אינה מצליחה** (קובץ שאינו פורמט 2, אינדקס שאינו מה
+    שנחתם, אין כלי): דבר אינו נכתב, האימג' נכנס כמו עד היום, והמעבר ברקע (`readbackhash.fill`) גוזר אותו וקובע
+    `index_error` בשמו -- זו ההחלטה שלו, לא של הקליטה. חריגה כאן אינה מפילה קליטה שהקריאה החוזרת כבר אישרה."""
+    began = time.monotonic()
+    rows: dict[int, list[int]] = {}
+    seen = {"at": 0.0}
+
+    def progress(index: int, done: int, whole: int) -> None:
+        got = rows.get(index)
+        if got is None:
+            return
+        got[1], got[2] = done, whole
+        now = time.monotonic()
+        if now - seen["at"] >= VERIFY_PROGRESS_EVERY_S:
+            seen["at"] = now
+            _verify_progress(conn, task_id, int(sum(w * min(1.0, d / t) for w, d, t in rows.values() if t > 0)),
+                             sum(w for w, _d, _t in rows.values()))
+
+    for part in manifest.get("partitions") or []:
+        if carries_a_stream_file(part):
+            rows[part["index"]] = [max(staged_file(folder, part["file"]).stat().st_size, 1), 0, 0]
+    try:
+        values, problems = readbackhash.derive({**manifest, "_dir": str(folder)}, progress=progress)
+        if problems or not values:
+            log.warning("capture %s: the index was not derived at ingest (%s) -- the background pass will",
+                        task_id, "; ".join(problems) or "nothing to derive")
+            return
+        written = ImageLibrary(library_root).record_index_staged(folder, values)
+    except Exception:  # noqa: BLE001 -- the read-back above passed; the image is not lost to a check that did not run
+        log.exception("capture %s: deriving the index at ingest crashed -- the background pass will", task_id)
+        return
+    if sorted(values) != written:
+        log.warning("capture %s: the index of %s was recorded for %s, not %s -- the background pass does the rest",
+                    task_id, row["image_id"], written, sorted(values))
+        return
+    listed = ", ".join(f"p{i}" for i in written)
+    journal(conn, "capture_index_derived",
+            f'{row["image_id"]} "{row["name"]}": האינדקס ורשימת ה-BLAKE3 נגזרו בקליטה ({listed}) '
+            f"in {time.monotonic() - began:.0f}s", row["created_by"], machine=_task_mac(conn, task_id))
 
 
 def _verify_progress(conn, task_id: str, done: int, total: int) -> None:
@@ -941,6 +1008,25 @@ def create_console_capture_router(ctx: ServerContext) -> APIRouter:
             learn_eta.capture(ctx.conn, ctx.library, r["mac"], detail.get("total_used_bytes"),
                               r["started_at"], r["id"]), ctx.clock_trust)
 
+    def _direct_round(r) -> dict | None:
+        """#2885: הסבב שמשימת `direct_send` פתחה -- כמה מגירות נכתבו מתוך כמה, ולמה נכשל.
+        None = לא משימה כזו, או שאין לה סבב. `skipped_drives` None = הרשימה לא נקראה, לא 0."""
+        if r["type"] != "direct_send":
+            return None
+        row = ctx.conn.execute(
+            "SELECT id, state, target_drives, written_drives, skipped_serials, failed_reason"
+            " FROM room_rounds WHERE source_task_id = ? ORDER BY created_at DESC LIMIT 1", (r["id"],)).fetchone()
+        if row is None:
+            return None
+        try:
+            skipped = json.loads(row["skipped_serials"] or "[]")
+        except (TypeError, ValueError):
+            skipped = None
+        return {"id": row["id"], "state": row["state"], "target_drives": row["target_drives"],
+                "written_drives": row["written_drives"],
+                "skipped_drives": len(skipped) if isinstance(skipped, list) else None,
+                "failed_reason": row["failed_reason"]}
+
     @router.get("/tasks")
     def tasks(user=Depends(current_user)):
         rows = ctx.conn.execute(
@@ -979,6 +1065,8 @@ def create_console_capture_router(ctx: ServerContext) -> APIRouter:
                 # `None` = אין רשומה (משתמש שנמחק), לא "ריק".
                 "created_by": r["created_by"] or None,
                 "created_by_role": r["created_by_role"],
+                # #2885: הפצה ישירה -- תוצאת הסבב בשורה אחת בדוק המשימות; None = לא הפצה ישירה / אין סבב.
+                "round": _direct_round(r),
             }
             for r in rows
         ]

@@ -100,7 +100,11 @@ def test_every_installer_screen_renders_with_visible_ink_at_both_target_sizes(tm
              "install-4b-admin-lab", "install-5d-summary-lab",   # #1412: the lab strip
              "install-3f-time-manual", "install-6d-done-manual",   # #2765
              "install-3g-backup-off", "install-5e-summary-backup-off",   # #2865
-             "install-0e-disk-smart-failed")   # #3007
+             "install-0e-disk-smart-failed",   # #3007
+             "install-0f-disk-warn-nomodel", "install-0g-disk-warn-latin",   # #3054
+             "install-0h-disk-three-identical", "install-0i-disk-three-serial-only",
+             "install-5f-summary-three-identical",   # #3051
+             "install-0j-disk-smart-mix")   # #3131
     env = dict(os.environ)
     if (GUI / "fonts.conf").exists():
         env["FONTCONFIG_FILE"] = str(GUI / "fonts.conf")
@@ -333,3 +337,29 @@ def test_disk_screen_is_usable_from_the_keyboard_alone() -> None:
     assert "s->view==INSTALL_DISK&&e->type==UIEV_CHAR&&e->ch==' '" in src, "רווח מאשר"
     assert "s->view==INSTALL_DISK&&e->type==UIEV_KEY&&(e->key==KEYSYM_UP||e->key==KEYSYM_DOWN)" in src, "חצים בוחרים דיסק"
     assert "if(!s->disks[d].iso){s->disk=d;" in src, "המדיה עצמה אינה נבחרת גם מהמקלדת"
+
+
+@NATIVE
+def test_2763_the_install_screen_without_a_bridge_does_not_call_one(tmp_path) -> None:
+    """#2763: `--screen install` with no `--install-cmd` defaulted to the browser wizard's bridge, called
+    `inventory` on it ("usage: ... ACTION") and drew an empty disk list over a system that is installed.
+    Now it refuses to start; the bridge is never run (a marker proves it)."""
+    binary = _build(tmp_path)
+    fake = tmp_path / "bin"
+    fake.mkdir()
+    marker = tmp_path / "bridge-was-called"
+    py = fake / "python3"
+    py.write_text(f"#!/bin/sh\necho called >> '{marker.as_posix()}'\n", encoding="ascii", newline="\n")
+    py.chmod(0o755)
+    env = dict(os.environ, PATH=f"{fake}{os.pathsep}{os.environ['PATH']}")
+    if (GUI / "fonts.conf").exists():
+        env["FONTCONFIG_FILE"] = str(GUI / "fonts.conf")
+    try:
+        proc = subprocess.run([str(binary), "--screen", "install", "--wizard-cwd", str(tmp_path), "--backend", "mem",
+                               "--fb-file", str(tmp_path / "fb.mem"), "--no-input"],
+                              capture_output=True, text=True, timeout=30, env=env, stdin=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        raise AssertionError("the install screen started without a bridge and kept running")
+    assert not marker.exists(), "the screen ran a bridge it was not given"
+    assert proc.returncode == 2, (proc.returncode, proc.stderr)
+    assert "--install-cmd" in proc.stderr, proc.stderr

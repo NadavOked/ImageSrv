@@ -319,6 +319,23 @@ def dependabot_rows(enabled: bool, repo_slug: str) -> list:
             for n, sev, pkg, manifest, cve in (ln.split("\t") for ln in r.stdout.splitlines())]
 
 
+def origin_repo(repo: str) -> str:
+    """owner/name of `origin` in the checkout that is being checked (#3096).
+
+    The default used to be the private repository, so a checkout of the public
+    one asked GitHub for alerts it cannot see. No guess: an origin that is not
+    a github.com URL is "not checked", not a repository picked for the user.
+    """
+    r = subprocess.run(["git", "-C", repo, "remote", "get-url", "origin"],
+                       capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    if r.returncode != 0:
+        raise Unchecked(f"no origin remote in {repo}: pass --github-repo owner/name")
+    m = re.search(r"github\.com[:/]([\w.-]+/[\w.-]+?)(?:\.git)?/?$", r.stdout.strip())
+    if not m:
+        raise Unchecked(f"origin is not a github.com URL ({r.stdout.strip()[:100]}): pass --github-repo owner/name")
+    return m.group(1)
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--repo", default=".")
@@ -329,7 +346,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--dependabot", action="store_true")
     ap.add_argument("--dependabot-only", action="store_true",
                     help="only the Dependabot rows -- for the workstation, where gh is and apt is not")
-    ap.add_argument("--github-repo", default="NadavOked/ImageSrv-dev")
+    ap.add_argument("--github-repo", help="owner/name for the Dependabot rows (default: origin of --repo)")
     a = ap.parse_args(argv)
     if not a.dependabot_only and not a.tag:
         ap.error("--tag is required (or --dependabot-only)")
@@ -337,7 +354,7 @@ def main(argv: list[str]) -> int:
         if a.dependabot_only:
             if not shutil.which("gh"):
                 raise Unchecked("gh not found -- Dependabot needs the workstation")
-            rows = dependabot_rows(True, a.github_repo)
+            rows = dependabot_rows(True, a.github_repo or origin_repo(a.repo))
             print("	".join(["kind", "groups", "component", "version", "cve", "status",
                              "urgency", "note", "source"]))
             for row in rows:
@@ -370,7 +387,7 @@ def main(argv: list[str]) -> int:
         rows, unimportant = debian_rows(tracker, used)
         rows += pin_rows(git_show(a.repo, a.tag, "server/requirements.txt"), debver)
         rows += console_rows(a.repo, a.tag)
-        rows += dependabot_rows(a.dependabot, a.github_repo)
+        rows += dependabot_rows(a.dependabot, (a.github_repo or origin_repo(a.repo)) if a.dependabot else "")
         seen: set[tuple[str, str]] = set()
         if a.baseline:
             with open(a.baseline, encoding="utf-8") as fh:

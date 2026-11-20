@@ -21,7 +21,8 @@
    ומי שאינו דפדפן אינו נושא את העוגייה של המנהל שמולו — הוא יכול לשלוח רק
    עוגייה שכבר יש לו, ואז אין כאן זיוף בקשה.
 3. **סוג גוף מרשימה מותרת** — בקשה משנת-מצב עם ``Content-Type`` חייבת
-   ``application/json`` (או ``application/x-tar``, ההעלאות של אימג' ודרייבר);
+   ``application/json`` (או ``application/x-tar``, ההעלאות של אימג' ודרייבר;
+   ``application/octet-stream`` -- רק ל-``POST /api/console/isos/upload``, #404);
    בלי ``Content-Type`` — רק בלי גוף. Starlette ``request.json()`` קורא את
    הגוף בלי להסתכל על הכותרת, ו-``text/plain``/טופס הם בדיוק מה שדף זר
    שולח בלי preflight. סוג אחר מחייב preflight, והקונסולה אינה עונה ל-CORS.
@@ -46,6 +47,16 @@ ALLOWED_FETCH_SITES = frozenset({"same-origin", "none"})
 #: מה שהקונסולה שולחת בפועל: ``api()`` ב-console.js, monitor.js, vmupdate.js
 #: — JSON; ``images/upload`` ו-``drivers/upload`` (XHR) — tar.
 ALLOWED_BODY_TYPES = frozenset({"application/json", "application/x-tar"})
+
+#: #404: חריג **לנתיב אחד**, לא לכל הקונסולה. ``iso.js`` שולח את ה-ISO עצמו (גוף גולמי, לא
+#: tar) כ-``application/octet-stream``, והשומר דחה אותו תמיד 415 (``body_type``).
+#: המפתח הוא ``(שיטה, נתיב)`` בדיוק -- בלי תחילית ובלי תבנית: נתיב אחר, גם
+#: ``/api/console/isos/upload/`` או ``/api/console/isos``, נשאר תחת הרשימה הכללית.
+#: ``application/octet-stream`` אינו סוג "פשוט" של CORS (בניגוד ל-``text/plain`` ולטופס), ולכן
+#: דף זר עדיין צריך preflight, והקונסולה אינה עונה ל-CORS -- אותו נימוק כמו ``x-tar``.
+PATH_BODY_TYPES = {
+    ("POST", "/api/console/isos/upload"): frozenset({"application/octet-stream"}),
+}
 
 #: פורט ברירת המחדל לכל scheme — ``Origin`` ו-``Host`` משמיטים אותו.
 _DEFAULT_PORTS = {"http": 80, "https": 443}
@@ -118,7 +129,8 @@ def refusal(scope) -> tuple[int, str, str] | None:
     types = _values(scope, b"content-type")
     if types:
         media = {t.split(";", 1)[0].strip().lower() for t in types}
-        if len(types) != 1 or not media <= ALLOWED_BODY_TYPES:
+        allowed = ALLOWED_BODY_TYPES | PATH_BODY_TYPES.get((scope.get("method"), scope.get("path")), frozenset())
+        if len(types) != 1 or not media <= allowed:
             return 415, "body_type", BODY_TYPE_HE
     elif _has_body(scope):
         return 415, "body_type", BODY_TYPE_HE

@@ -98,6 +98,7 @@ held_beat_start() {
     [ -z "${HELD_PID:-}" ] || return 0
     _hb_s=$(attended_secs HELD_BEAT_S "$HELD_BEAT_S" 15); _hb_agent=$$
     (
+        bg_detach_fds   # #3548
         while kill -0 "$_hb_agent" 2>/dev/null; do   # #1929: no orphan beat for a dead agent
             held_report || :
             sleep "$_hb_s"

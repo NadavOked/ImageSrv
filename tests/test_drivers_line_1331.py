@@ -68,6 +68,27 @@ def test_room_drawer_carries_the_boot_storage_outcome(tmp_path):
     assert rows["3"][20:23] == ["", "", ""], "no boot object = not reported, never enabled"
 
 
+@JQ
+def test_room_drawer_carries_a_failed_boot_storage_next_to_every_drivers_state(tmp_path):
+    """#3418: the bridge never dropped drivers.boot next to a state that is not staged -- the screens did."""
+    room = {
+        "round": {"image_name": "office365", "wave_number": 2, "wave_state": "closed",
+                  "written_drives": 2, "target_drives": 2, "ready_drives": 0,
+                  "remaining_drives": 0, "elapsed_s": 842, "rate_bps": None, "eta_s": None},
+        "machines": [{
+            "name": "2", "mac": "78:ac:c0:9b:11:c2", "awake": True, "joined": True,
+            "fresh_drawers": 2, "state": "done", "drawer_count": 2,
+            "drawer_list": [
+                _drawer(1, "S1", {"state": "skipped", "packages": [], "reason": "no_model", "boot": FAILED_BOOT}),
+                _drawer(2, "S2", {"state": "failed", "packages": [], "error": "לא הצלחנו לעגן את מחיצת Windows",
+                                  "boot": FAILED_BOOT}),
+            ]}]}
+    rows = {r[1]: r for r in (line.split("=", 1)[1].split("|")
+                              for line in _state(tmp_path, room, []) if line.startswith("room_drawer="))}
+    assert rows["1"][8:10] == ["skipped", "no_model"] and rows["1"][20:23] == ["failed", "stornvme", "באימג' אין את השירות stornvme"]
+    assert rows["2"][8:10] == ["failed", "לא הצלחנו לעגן את מחיצת Windows"] and rows["2"][20:22] == ["failed", "stornvme"]
+
+
 # --- מחשב השיכפול: drawer= שדות 13-17 ---------------------------------------------
 
 
@@ -107,6 +128,19 @@ def test_the_cloner_drawer_record_carries_its_own_drivers(tmp_path):
 
 
 @JQ
+def test_the_cloner_drawer_record_carries_a_failed_boot_storage_next_to_every_drivers_state(tmp_path):
+    """#3418: boot_storage_alone (#1331) puts boot beside skipped/no_model and failed -- the record keeps it."""
+    rc, lines, err = _cloner_lines(tmp_path, {
+        "sda": json.dumps({"state": "skipped", "packages": [], "reason": "no_model", "boot": FAILED_BOOT}, ensure_ascii=False),
+        "sdb": json.dumps({"state": "failed", "packages": [], "error": "אין חבילה", "boot": FAILED_BOOT}, ensure_ascii=False),
+    })
+    assert rc == 0, err
+    by_dev = {line.split("|")[1]: line for line in lines}
+    assert by_dev["sda"].endswith("|skipped|no_model|failed|stornvme|באימג' אין את השירות stornvme"), by_dev["sda"]
+    assert by_dev["sdb"].endswith("|failed|אין חבילה|failed|stornvme|באימג' אין את השירות stornvme"), by_dev["sdb"]
+
+
+@JQ
 def test_a_drivers_file_jq_cannot_read_is_not_published_as_a_snapshot(tmp_path):
     rc, lines, _err = _cloner_lines(tmp_path, {"sda": "{not json"})
     assert rc != 0 and lines == [], "an unreadable outcome is not 'did not run' (principle 5)"
@@ -135,6 +169,13 @@ CLONER_PLAIN = _done(1, "sda") + _done(2, "sdb") + _done(3, "sdc")
 CLONER_DRV = (_done(1, "sda", "|staged|hp-800g6-win11, realtek-nic|enabled|stornvme|")
               + _done(2, "sdb", "|failed|לא הצלחנו לעגן את מחיצת Windows|||")
               + _done(3, "sdc", "|staged|hp-800g6-win11|failed|stornvme|באימג' אין את השירות stornvme"))
+BOOT_ERR = "באימג' אין את השירות stornvme"
+# #3418: no package at all (#1331: the storage driver is made boot-start anyway) -- the step failed / the step is not reported
+CLONER_NOPKG_BAD = (_done(1, "sda", f"|skipped|no_model|failed|stornvme|{BOOT_ERR}")
+                    + _done(2, "sdb", f"|failed|לא הצלחנו לעגן את מחיצת Windows|failed|stornvme|{BOOT_ERR}")
+                    + _done(3, "sdc", "|skipped|no_model|||"))
+CLONER_NOPKG_PLAIN = (_done(1, "sda", "|skipped|no_model|||") + _done(2, "sdb", "|skipped|no_model|enabled|stornvme|")
+                      + _done(3, "sdc", "|skipped|no_model|already|storahci|"))
 CLONER_ALL_OK = (_done(1, "sda", "|staged|a|enabled|stornvme|") + _done(2, "sdb", "|staged|a|enabled|stornvme|")
                  + _done(3, "sdc", "|staged|a|enabled|stornvme|"))
 
@@ -169,6 +210,18 @@ def test_the_cloner_rows_say_what_happened_to_the_drivers(tmp_path):
         assert _count(drv_dark, "--clr-danger", "dark") > _count(tmp_path / "plain-cloner-dark.png", "--clr-danger", "dark") + 500
 
 
+@_GUI
+def test_the_cloner_rows_say_a_failed_boot_storage_with_no_package_too(tmp_path):
+    """#3418: the red edge, strip and LED of a disk that may not boot were drawn only next to `staged`."""
+    binary = _build_gui(tmp_path)
+    plain = _cloner_png(binary, tmp_path, "nopkg-plain", CLONER_NOPKG_PLAIN)
+    bad = _cloner_png(binary, tmp_path, "nopkg-bad", CLONER_NOPKG_BAD)
+    assert _count(plain, "--clr-danger") < 100, "no package + enabled / already / nothing: grey, never red"
+    assert _count(plain, "--clr-warning") < 40
+    # two of the three rows are red (the disk with no model and the one whose drivers failed), the third stays as it was
+    assert _count(bad, "--clr-danger") > _count(plain, "--clr-danger") + 1000
+
+
 BUILD = ("room_label=מחשבי שיכפול\n"
          "machine=2|78:ac:c0:9b:11:c2|1|1|0|done|100|1|\nmachine_drawers=0|3\n"
          "room_drawer=0|2|S2|Samsung SSD 860 EVO|250059350016|passed|0|1|{d2}||ok||||100|done|sdb||0{b2}\n"
@@ -189,3 +242,14 @@ def test_the_build_screen_rows_say_what_happened_to_the_drivers(tmp_path):
     assert _count(drv, "--clr-warning") > _count(plain, "--clr-warning") + 40   # the orange LED
     # a boot word the agent never writes is not "failed" -- never red
     assert _count(bogus, "--clr-danger") < _count(plain, "--clr-danger") + 100
+
+
+@_GUI
+def test_the_build_screen_rows_say_a_failed_boot_storage_with_no_package_too(tmp_path):
+    binary = _build_gui(tmp_path)
+    _render(binary, BUILD.format(d2="skipped|no_model", d3="skipped|no_model", b2="|enabled|stornvme|", b3="|already|storahci|"), tmp_path / "np-plain")
+    _render(binary, BUILD.format(d2="skipped|no_model", b2=f"|failed|stornvme|{BOOT_ERR}",
+                                 d3="failed|לא הצלחנו לעגן את מחיצת Windows", b3=f"|failed|stornvme|{BOOT_ERR}"), tmp_path / "np-bad")
+    plain, bad = (tmp_path / f"{n}-room-live-light.png" for n in ("np-plain", "np-bad"))
+    assert _count(plain, "--clr-danger") < 100
+    assert _count(bad, "--clr-danger") > _count(plain, "--clr-danger") + 1000

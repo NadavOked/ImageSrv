@@ -17,6 +17,8 @@
 #      הקרנל שנגזר עכשיו. בלי דגלים — ברירת המחדל המתועדת (‏#1546), לא דילוג.
 #   5. restart, ואז **ראיה חיובית** שהחדש רץ: is-active + `/health/live`
 #      שמדווח בדיוק את התג + verify-boot-payload.sh.
+#   5א. ‏#3224: חומת האש שנכתבה בגרסה שקדמה ל-known_macs נכתבת מחדש בעליית השרת
+#      החדש; כאן הראיה — ההצהרה בקובץ והקבוצה בחומת האש החיה. כשל = חזרה לתג הקודם.
 #   5ב. ‏#1361: restart למסך השרת (imagesrv-dcui) — אחרי האימות; כשל = אזהרה.
 #   6. כשל בראיה → checkout לתג הקודם, יחידות, restart, וסטטוס `failed`
 #      עם הסיבה ב-DB (דרך update._set_status) — הקונסולה מציגה אותו.
@@ -214,7 +216,7 @@ sys.path.insert(0, repo)
 from server import auto_reboot, update
 from server.db import connect
 conn = connect(db)
-reason = auto_reboot.busy_reason(types.SimpleNamespace(conn=conn), include_update=False)
+reason = auto_reboot.busy_reason(types.SimpleNamespace(conn=conn), include_update=False, site="server_upgrade")
 doc = update.get_status(conn) or {}
 forced = doc.get("state") == "running" and doc.get("tag") == tag and doc.get("forced")
 if reason and forced:
@@ -479,6 +481,27 @@ PYEOF
     echo "DB:$DB_NOTE"
 }
 
+# #2533: השולח של מנוע החתיכות (`/usr/local/bin/chunkcast`) נבנה מהעץ, ולכן הוא חוזר איתו: שרת
+# שהוחזר לתג הקודם אינו נשאר עם בינארי של התג החדש (פרוטוקול אחר, דגלים אחרים).
+CHUNKCAST_BIN="${IMAGESRV_SERVER_BIN_DIR:-/usr/local/bin}/chunkcast"
+CHUNKCAST_SAVED=""   # "" = לא נגענו; none = לא היה בינארי לפני העדכון הזה; אחרת = העותק שנשמר
+save_chunkcast() {
+    if [[ -f "$CHUNKCAST_BIN" ]]; then
+        cp -p "$CHUNKCAST_BIN" "$CHUNKCAST_BIN.before-upgrade" && CHUNKCAST_SAVED="$CHUNKCAST_BIN.before-upgrade"
+    else
+        CHUNKCAST_SAVED=none
+    fi
+}
+restore_chunkcast() {
+    case "$CHUNKCAST_SAVED" in
+        "") ;;
+        none) rm -f "$CHUNKCAST_BIN" ;;
+        *) mv -f "$CHUNKCAST_SAVED" "$CHUNKCAST_BIN" \
+               || echo "server-upgrade: the previous chunkcast was not put back -- it is at $CHUNKCAST_SAVED" ;;
+    esac
+    CHUNKCAST_SAVED=""
+}
+
 rollback() {   # rollback <סיבה> [<סוג>]
     local why="$1" cause="${2:-install}"
     trap - ERR
@@ -488,6 +511,7 @@ rollback() {   # rollback <סיבה> [<סוג>]
     if git checkout --detach "$PREV"; then
         drop_new_timers
         restore_db_if_migrated
+        restore_chunkcast || :
         # המטען חוזר לפני ה-restart: השרת הישן עולה כבר מול ה-initrd שלו.
         if [[ "$PAYLOAD_SAVED" == 1 ]]; then
             if restore_payload; then
@@ -680,6 +704,13 @@ else
     rollback "החלטת מטען האתחול נכשלה: $payload_decision"
 fi
 
+# 4b. #2533: chunkcast על השרת עצמו -- השולח של מנוע החתיכות (ניסיוני, מאחורי מתג כבוי). גם כשהמטען
+# נלקח מוכן ולא נבנה: ה-initrd נושא את המקלט, והשרת צריך את השולח. כישלון כאן אינו מחזיר את העדכון
+# לאחור -- המנוע כבוי כברירת מחדל -- אבל הוא נאמר, ועם המתג דלוק גל בלי שולח נכשל בשמו.
+save_chunkcast || echo "server-upgrade: the chunkcast of before this upgrade was not saved; a rollback will leave the new one"
+bash tools/server-tools-build.sh --source "$REPO_DIR" \
+    || echo "server-upgrade: chunkcast (the experimental chunk engine's sender) was NOT built on this server; with the 'stream engine' switch on, a wave fails by name"
+
 # 5. restart + ראיה חיובית
 stage restart
 systemctl restart imagesrv-server || rollback "systemctl restart imagesrv-server נכשל"
@@ -703,6 +734,32 @@ PYEOF
 fi
 bash deploy/verify-boot-payload.sh --app-dir "$REPO_DIR" --http-root "$HTTP_ROOT" --server-url "$AGENT_URL" \
     || rollback "verify-boot-payload.sh נכשל מול $AGENT_URL"
+
+# 5א. ‏#3224: חומת האש של גרסה קודמת. השדרוג שומר את nftables.conf הישן, והקבוצה
+# known_macs (#1079/#2485) לא הייתה בו — פורטי udpcast נשארו פתוחים לכל מחשב. השרת
+# החדש כותב את הקובץ מחדש בעלייה (server/app.py, `_rewrite_stale_firewall`: `nft -c`
+# לפני הטעינה, והחזרה לקודם בכישלון, #1121), וכאן **ראיה חיובית** שזה קרה: ההצהרה
+# בקובץ שיעלה באתחול, והקבוצה בחומת האש החיה. ‏/health/live עונה רק אחרי העלייה, כלומר
+# אחרי הכתיבה. אין כאן הדלקה של nftables (#1074/#2440): חומת אש שהמפעיל כיבה או
+# שלא הותקנה (`--no-firewall`) נשארת כמו שהיא — נאמר בלוג, לא נבדק, ולא כשל.
+# כל תשובה אחרת מ-grep/nft היא כשל בשם, לא "בסדר": `1` = אין הצהרה (חומת אש ישנה),
+# `2` = לא הצלחנו לקרוא — ושתי הדרכים מחזירות לתג הקודם.
+NFT_CONF="${IMAGESRV_NFT_CONF:-/etc/nftables.conf}"
+if [[ ! -e "$NFT_CONF" ]]; then
+    echo "server-upgrade: אין $NFT_CONF — אין חומת אש של ImageSrv (--no-firewall), אין מה לאמת"
+else
+    fw_mine=0; grep -q ImageSrv "$NFT_CONF" || fw_mine=$?
+    case $fw_mine in
+        0)
+            fw_decl=0; grep -q 'set known_macs' "$NFT_CONF" || fw_decl=$?
+            [[ $fw_decl == 0 ]] \
+                || rollback "חומת האש לא נכתבה מחדש: $NFT_CONF נשאר של גרסה קודמת, בלי known_macs (קוד grep $fw_decl) — הסיבה ביומן השרת (firewall_rewrite_failed)" firewall
+            nft list set inet imagesrv known_macs >/dev/null 2>&1 \
+                || rollback "הקבוצה known_macs אינה טעונה בחומת האש החיה (nft list set inet imagesrv known_macs נכשל)" firewall ;;
+        1) echo "server-upgrade: $NFT_CONF אינו של ImageSrv — לא נוגעים (#2440)" ;;
+        *) rollback "לא ניתן לקרוא את $NFT_CONF (grep קוד $fw_mine) — אי אפשר לאמת שחומת האש עודכנה" firewall ;;
+    esac
+fi
 
 # 5ב. ‏#1361: מסך השרת (imagesrv-dcui על tty1) הוא תהליך python נפרד, והוא
 # מריץ את הקוד שנטען באתחול — בלי restart המפעיל רואה את המסך הישן עד
@@ -767,6 +824,21 @@ PYEOF
 }
 lock_server_grub || echo "server-upgrade: השדרוג ממשיך — הסיבה באזהרה וביומן"
 
+# 5ד. #3502: אימג'ים בלי אינדקס או רשימת BLAKE3 נגזרים ברקע מיד בעלייה, ואימג' ישן שמחכה לה הוא גל שימתין
+# (עד 486 שניות בברזל 15/11). נאמר כאן כמה ובערך כמה זמן. כשל בבדיקה אינו כשל שדרוג (השרת החדש רץ ואומת), אבל
+# "לא נבדק" נאמר בשמו, באזהרה -- לא נבלע ולא נקרא "אין מי שמחכה".
+INDEXWAIT=server/library/indexwait.py
+IMAGES_DIR="${IMAGESRV_IMAGES_DIR:-/srv/imagesrv/images}"
+if [[ ! -f "$INDEXWAIT" ]]; then
+    echo "$INDEXWAIT אינו בתג $TAG — גרסה בלי הדפסת אימג'ים שמחכים לרשימה"
+elif [[ ! -d "$IMAGES_DIR" ]]; then
+    echo "תיקיית הספרייה $IMAGES_DIR אינה קיימת — אין אימג'ים שמחכים לרשימה"
+elif ! python3 -m server.library.indexwait "$IMAGES_DIR" 2>&1; then
+    why="לא נבדק או חסר כלי: אימג'ים בלי רשימת BLAKE3 (#3502) -- הפירוט בשורות למעלה"
+    echo "server-upgrade: $why"
+    UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }$why"
+fi
+
 echo "--- $(date -Is) upgrade to $TAG done and verified ---"
 STAGE="done"
 # ‏#1893: הסמן יורד **לפני** "done" — חשמל שנופל ביניהם משאיר `running` (נעשה stale
@@ -777,3 +849,4 @@ set_status "done"
 # בלוג, והריצה הבאה מוחקת את העותק לפני שהיא שומרת חדש (PAYLOAD_SAVED).
 trap - ERR
 rm -rf "$PAYLOAD_SAVE" || echo "server-upgrade: לא נמחק $PAYLOAD_SAVE — העותק נשאר על הדיסק"
+rm -f "$CHUNKCAST_BIN.before-upgrade" || :

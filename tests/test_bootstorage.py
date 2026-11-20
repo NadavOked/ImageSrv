@@ -20,7 +20,7 @@ import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH
-from test_postdeploy import FILES, SVC, SYSTEM_RAID, Box, answer_for
+from test_postdeploy import FILES, STOCK, SVC, SYSTEM_RAID, Box, answer_for
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -137,13 +137,11 @@ def test_a_disk_without_a_mapping_is_skipped_by_name(tmp_path, disk):
     assert not [c for c in box.calls() if "SYSTEM" in c]
 
 
-@pytest.mark.parametrize("case", ["sha", "no_match", "linux"])
+@pytest.mark.parametrize("case", ["sha", "linux"])
 def test_an_earlier_exit_leaves_system_alone_and_reports_no_boot(tmp_path, case):
-    """השלב רץ רק כשהחבילות כבר על הדיסק: מסלול שעוצר לפני כן לא נוגע ב-SYSTEM."""
+    """חבילה שנכשלה באמצע ויעד לינוקס לא נוגעים ב-SYSTEM (אין חבילה בכלל: ראו למטה, #1331 15/11)."""
     if case == "sha":
         box = Box(tmp_path, answer=answer_for(FILES, tamper="intel-nic/x64/e1d68x64.sys"))
-    elif case == "no_match":
-        box = Box(tmp_path, packages={}, answer=answer_for({}))
     else:
         from test_postdeploy import LINUX_PLAN   # noqa: PLC0415
         box = Box(tmp_path, plan=LINUX_PLAN)
@@ -151,6 +149,57 @@ def test_an_earlier_exit_leaves_system_alone_and_reports_no_boot(tmp_path, case)
     assert "boot" not in result
     assert not [c for c in box.calls() if "SYSTEM" in c]
     assert box.sysval(f"{SVC}/storahci/Start") == "3"
+
+
+# --- #1331 (הכרעת הבעלים, 15/11): גם בלי חבילה תואמת הדרייבר הוא boot-start ----------
+
+def _no_package(tmp_path, **kw):
+    return Box(tmp_path, packages={}, answer=answer_for({}), **kw)
+
+
+@pytest.mark.parametrize("disk, service", [("sda", "storahci"), ("nvme0n1", "stornvme")])
+def test_no_match_still_boot_starts_the_storage_driver_of_the_disk(tmp_path, disk, service):
+    box = _no_package(tmp_path)
+    _, result = box.stage(disk)
+    assert result == {"state": "no_match", "packages": [], "boot": {"state": "enabled", "service": service}}
+    assert box.sysval(f"{SVC}/{service}/Start") == "0"
+    assert box.device_path() == STOCK and box.staged_files() == {}, "בלי חבילות ובלי DevicePath"
+    assert not [c for c in box.calls() if "SOFTWARE" in c]
+    assert box.state() == "staging"
+
+
+def test_no_match_on_a_disk_without_a_mapping_mounts_nothing(tmp_path):
+    box = _no_package(tmp_path, stubs={"ntfs-3g": 'echo mounted >> "$FAKE_SERVER/mounts"; exit 0'})
+    _, result = box.stage("vda")
+    assert result["boot"] == {"state": "skipped", "reason": "unknown_bus"}
+    assert not (box.server / "mounts").exists() and box.calls() == []
+
+
+def test_no_match_with_a_mount_that_fails_is_a_failed_boot_not_a_silent_one(tmp_path):
+    box = _no_package(tmp_path, stubs={"ntfs-3g": "exit 32"})
+    _, result = box.stage("sda")
+    assert result["state"] == "no_match", "מצב ה-staging נשאר"
+    assert result["boot"] == {"state": "failed", "service": "storahci", "error": "לא הצלחנו לעגן את מחיצת Windows"}
+
+
+def test_no_match_with_an_unsynced_system_hive_writes_nothing_and_says_why(tmp_path):
+    box = _no_package(tmp_path, system_head=b"regf" + (41).to_bytes(4, "little") + (40).to_bytes(4, "little"))
+    _, result = box.stage("sda")
+    assert result["boot"]["state"] == "failed" and "לא סונכרנה" in result["boot"]["error"]
+    assert sys_writes(box) == [] and box.sysval(f"{SVC}/storahci/Start") == "3"
+
+
+def test_no_match_releases_the_disk_once(tmp_path):
+    box = _no_package(tmp_path, stubs={"umount": 'echo umount "$@" >> "$FAKE_SERVER/umounts"; exit 0'})
+    box.stage("sda")
+    assert (box.server / "umounts").read_text().count("umount") == 1
+
+
+def test_no_match_with_an_umount_that_fails_is_a_failed_boot(tmp_path):
+    box = _no_package(tmp_path, stubs={"umount": "exit 16"})
+    _, result = box.stage("sda")
+    assert result["state"] == "no_match"
+    assert result["boot"]["state"] == "failed" and "rc=16" in result["boot"]["error"]
 
 
 def test_the_agent_loads_bootstorage_before_postdeploy():
