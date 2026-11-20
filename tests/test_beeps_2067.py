@@ -272,7 +272,7 @@ def test_stale_owner_check_does_not_remove_a_replacement_owners_lock(tmp_path):
     """, timeout=10)
     assert (tmp_path / "replacement-lock").read_text().split() == ["retained"]
     assert frequencies(tmp_path) == expected("failure")
-    assert log_lines(tmp_path) == []
+    assert log_lines(tmp_path) == ["beep failure: played"]    # #3106: the tune it played, and no word of the lock
     assert not (tmp_path / "beep.lock").exists()
 
 
@@ -490,6 +490,7 @@ def test_kiosk_uses_latest_moving_drawer_and_resets_when_idle(tmp_path):
         echo '100 100' > "$GUI_DIR/moved.sdb"
         echo 100 > "$RUN_DIR/clock"; stream_beep_tick; wait
         echo 130 > "$RUN_DIR/clock"; stream_beep_tick; wait
+        echo 131 > "$RUN_DIR/net.heard"   # #3106: the server answered a report since the outage (http_post_json)
         echo '131 200' > "$GUI_DIR/moved.sdb"
         echo 131 > "$RUN_DIR/clock"; stream_beep_tick; wait
         echo done > "$RUN_DIR/targets/sda/state"
@@ -536,6 +537,7 @@ def test_real_gui_state_feeds_the_stream_beeper(tmp_path):
         echo '70 100' > "$GUI_DIR/moved.sda"
         echo 100 > "$RUN_DIR/clock"; cloner_gui_state; wait
         echo 145 > "$RUN_DIR/clock"; cloner_gui_state; wait
+        echo 146 > "$RUN_DIR/net.heard"   # #3106: the server answered a report since the outage (http_post_json)
         echo 200 > "$RUN_DIR/targets/sda/bytes"
         echo 146 > "$RUN_DIR/clock"; cloner_gui_state; wait
     """)
@@ -593,6 +595,7 @@ def test_an_outage_mid_partition_after_a_wait_is_still_heard(tmp_path):
     # The same room, then partition 2's bytes stand 30 s mid-receive: lost; they move: back.
     run_ash(prelude(tmp_path) + agent_sources(*ROOM_LIBS) + ROOM + """
         tick 270 283
+        echo 284 > "$RUN_DIR/net.heard"   # #3106: the server answered a report since the outage (http_post_json)
         echo 900 > "$T/bytes.1"; echo 900 >> "$RUN_DIR/bytes.raw"; tick 284
     """)
     assert frequencies(tmp_path) == expected("netlost") + expected("netback")

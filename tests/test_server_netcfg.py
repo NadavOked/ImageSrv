@@ -233,7 +233,7 @@ def test_an_unmanaged_card_gets_no_configuration_at_all():
 def test_a_dhcp_client_keeps_retrying_after_the_initial_timeout():
     text = netcfg.render(cfg(mode=MODE_DHCP))
     assert "iface eth1 inet manual" in text
-    assert "up /usr/sbin/dhcpcd -4 -b eth1" in text
+    assert "up /usr/bin/systemd-run --scope --quiet /usr/sbin/dhcpcd -4 -b eth1" in text
     assert "down /usr/sbin/dhcpcd -4 -k eth1" in text
     assert "iface eth1 inet dhcp" not in text
     assert "address" not in text
@@ -990,7 +990,7 @@ def test_dhcp_client_mode_writes_a_persistent_dhcpcd_command(net_server):
     assert result.status_code == 200, result.text
     written = net_server["fake"]["confs"]["eth1"]
     assert "iface eth1 inet manual" in written
-    assert "up /usr/sbin/dhcpcd -4 -b" in written
+    assert "up /usr/bin/systemd-run --scope --quiet /usr/sbin/dhcpcd -4 -b" in written
 
 
 def test_static_mode_takes_a_primary_and_a_secondary_dns(net_server):

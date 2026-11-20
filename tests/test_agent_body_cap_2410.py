@@ -41,7 +41,14 @@ from test_machine_identity import MAC1, identity_server  # noqa: F401
 OVER_CAP = agent_body.MAX_BYTES + 1
 #: החוזה, כתוב כאן ולא נקרא מ-`body.STREAM_ROUTES`: נתיב העלאה חדש הוא הכרעה
 #: שמישהו כותב בשני המקומות, לא חריג שנפתח בשקט.
-STREAM = {("PUT", "/api/v1/capture/x1/files/x1")}
+STREAM = {("PUT", "/api/v1/capture/x1/files/x1"),
+          # #3161: a direct send's chunk index and head frame -- capped by their own route (INDEX_MAX, HEAD_MAX)
+          ("PUT", "/api/v1/direct/x1/index/x1"), ("PUT", "/api/v1/direct/x1/head/x1"),
+          ("PUT", "/api/v1/direct/x1/b3/x1"),      # #3332: its BLAKE3 list, capped by INDEX_MAX
+          # #3268: the waiting-screen write check's copy (binary, ~12MiB; write_backup.py caps it itself)
+          ("POST", "/api/v1/agent/write-backup"),
+          # #3268 (18/11): the sustained part's copy -- a region of hundreds of MiB, streamed to a file by the route itself
+          ("POST", "/api/v1/agent/write-backup/long")}
 WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 

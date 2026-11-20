@@ -14,23 +14,14 @@
 #      ו-tests/test_iso_build.py שומר). הבניות נרשמות ב-initrd.flags.
 #      גם שרת **משני** בונה בעצמו (R60): הסיבה לא לבנות — קרנל cloud —
 #      אינה תקפה כשה-ISO מביא linux-image-amd64.
-#   ב. האשף הזמני ב-HTTPS 8081. הוא מקבל את עובדות הכרטיס והתפקיד דרך
-#      הקבצים שכתב d-i, והמפעיל מאשר או משנה אותן. רק בלחיצה על "החל"
-#      הוא מריץ את setup-boot-server.sh; רשת ההפצה נשארת לקונסולה (#1088).
+#   ב. הגדרת השרת מהתשובות שהמתקין החי כתב (/etc/imagesrv/answers):
+#      firstboot-answers.sh מריץ את setup-boot-server.sh, מאמת את המטען,
+#      חותם, ומדליק את ה-DCUI. אין אשף, והכרטיס נקבע מהתשובות — לא heuristic.
 #
-# כרטיס השרתים — **לא heuristic** (R62 §12): ‏late-command.sh כתב
-# ל-/etc/imagesrv/installer-nic את הכרטיס ש-d-i עצמו הגדיר (שם + MAC).
-# כאן מאמתים שה-MAC עדיין יושב על כרטיס קיים. שלושה מצבים, ולא שניים:
-#   FOUND         → ‏--servers-if <הכרטיס שנושא את ה-MAC>
-#   UNDECIDABLE   → אין קובץ / d-i לא הגדיר רשת / ה-MAC אינו על אף כרטיס.
-#                   **לא מריצים את המתקין בלי הדגל** (הוא נעשה אינטראקטיבי).
-#   CHECK_ERROR   → הבדיקה עצמה לא רצה (ip/sysfs). אינו UNDECIDABLE.
-# ‏network-nic-undecidable / check-error אינם עוד סיבה לעצור: האשף מציג
-# את הרשימה החיה ומחייב בחירה. הם נכתבים ביומן בשם, לא מתקפלים לבחירה.
-#
-# תפקיד (R60): ‏/etc/imagesrv/installer-role — standalone או secondary.
-# secondary בלי כתובת ראשי הוא secondary-needs-primary באשף: השדה נשאר
-# ריק ונדרש למלאו; אין כתובת מומצאת ואין חסימה לפני שהמפעיל רואה מסך.
+# #2763 (נדב, 15/11/2026): שרת מותקן רק מה-ISO או מה-USB. מערכת שאין בה
+# /etc/imagesrv/answers לא הותקנה ככה, ולכן אין לה מסלול: לא אשף בדפדפן ולא
+# מתקין. הבדיקה היא הראשונה, לפני שלב א' (דקות של בנייה בשביל שרת שלא ישלים),
+# והמסך מציג הודעה בלבד — answers-missing, "יש להתקין מחדש מה-ISO או מה-USB".
 #
 # הכישלון גלוי: ‏`systemctl status imagesrv-firstboot` אדום, והיומן
 # אומר באיזה שלב. אין Restart ואין `|| true`. על tty1 הוא נכתב כשורה, ו-#1741
@@ -62,7 +53,6 @@ FB_DEV=/dev/fb0
 GUI_BINS="/usr/bin/imagesrv-station-gui $SRC/native-gui/imagesrv-station-gui"
 FAIL_GUI_STATE=/run/imagesrv-firstboot-failure.state
 FAIL_GUI_BEAT=/run/imagesrv-firstboot-failure.beat
-INSTALLER_GUI_BEAT=/run/imagesrv-installer-gui.beat   # deploy/imagesrv-installer-gui.service
 
 log() {
     printf 'imagesrv-firstboot: %s\n' "$*"
@@ -134,6 +124,9 @@ trap 'unexpected_failure "$LINENO" "$?"' ERR
 [[ $EUID -eq 0 ]] || fail check-error "Root privileges are required"
 [[ -f "$SRC/server/main.py" ]] || fail check-error "Source is missing from $SRC; late-command.sh did not copy it"
 install -d "$STAMP_DIR" "$ETC"
+# #2763: positive evidence that the ISO/USB installer ran -- its answers file. Not "no failure seen":
+# a system without it has no install path here, and the screen says so (failgui.sh, answers-missing).
+[[ -f "$ETC/answers" ]] || fail answers-missing "$ETC/answers is missing: this system was not installed by the ISO or USB installer; reinstall from the ISO or the USB"
 touch "$BUILD_LOG"
 chmod 0600 "$BUILD_LOG"
 
@@ -193,164 +186,33 @@ EOF
     fi
 fi
 
+# #2533: chunkcast on the server itself -- the sender of the experimental chunk
+# engine (behind a switch that is off). On a prebuilt payload too: the initrd
+# carries the receiver, the server needs the sender. A failure here does not
+# stop the installation; it is said, and with the switch on a wave without a
+# sender fails by name.
+# The reason is the script's own last line, and it is said here -- not swallowed: whoever
+# reads this log later is told why the switch in the console refuses to turn on.
+if ! tools_said=$(bash "$SRC/tools/server-tools-build.sh" --source "$SRC" 2>&1); then
+    log "chunkcast (the experimental chunk engine's sender) was NOT built on this server: ${tools_said##*$'\n'}"
+    log "the 'stream engine' switch will refuse to turn on until it is built (tools/server-tools-build.sh)"
+fi
+
 # ---------------------------------------------------------------------------
 # שלב ב' (#1190) — מהתשובות של המתקין החי: הכול כבר נענה על מסך השרת, אין
 # אשף. ‏setup-boot-server מהדגלים, אימות המטען, חותמת, ואז ה-DCUI.
 # ---------------------------------------------------------------------------
-if [[ -f "$ETC/answers" ]]; then
-    log "preparing the server - Stage B: applying installer answers and starting the DCUI"
-    [[ -f "$SRC/tools/iso/firstboot-answers.sh" ]] || fail check-error "$ETC/answers exists but $SRC/tools/iso/firstboot-answers.sh is missing"
-    # shellcheck source=tools/iso/firstboot-answers.sh
-    . "$SRC/tools/iso/firstboot-answers.sh"
-    firstboot_from_answers
-    install -m 0644 "$SRC/deploy/imagesrv-dcui.service" /etc/systemd/system/imagesrv-dcui.service
-    rm -f /etc/systemd/system/imagesrv-dcui.service.d/firstboot.conf
-    systemctl daemon-reload || fail check-error "systemctl daemon-reload failed before starting the DCUI"
-    systemctl mask getty@tty1.service || fail check-error "Could not mask getty@tty1.service"
-    systemctl enable imagesrv-dcui.service || fail check-error "Could not enable imagesrv-dcui.service"
-    TTY_PROGRESS=0
-    systemctl restart imagesrv-dcui.service || fail check-error "Could not start imagesrv-dcui.service"
-    rm -rf "$TMPDIR"
-    log "Stage B complete from the installer's answers: the DCUI is on tty1, the console on 8081"
-    exit 0
-fi
-
-# ---------------------------------------------------------------------------
-# שלב ב' (ללא תשובות — שרת בלי מסך) — קורא את עובדות ההתקנה, מדווח פערים,
-# ומוסר אותן לאשף בדפדפן כברירות מחדל
-# ---------------------------------------------------------------------------
-log "preparing the server - Stage B: starting the installation wizard"
-NIC_FILE="$ETC/installer-nic"
-ROLE_FILE="$ETC/installer-role"
-if [[ ! -f "$NIC_FILE" ]]; then
-    log "[network-nic-undecidable] $NIC_FILE is missing; the wizard will require a live-interface selection"
-else
-    nic_state=$(sed -n 's/^state=//p' "$NIC_FILE" | head -n1)
-    nic_mac=$(sed -n 's/^mac=//p' "$NIC_FILE" | head -n1 | tr 'A-F' 'a-f')
-    [[ "$nic_state" == "configured" && -n "$nic_mac" ]] \
-        || log "[network-nic-undecidable] installer-nic has no configured interface; the wizard will require a selection"
-fi
-
-ROLE=standalone; PRIMARY=""
-if [[ -f "$ROLE_FILE" ]]; then
-    ROLE=$(sed -n 's/^role=//p' "$ROLE_FILE" | head -n1)
-    PRIMARY=$(sed -n 's/^primary=//p' "$ROLE_FILE" | head -n1)
-fi
-case "$ROLE" in
-    standalone) ;;
-    secondary) [[ -n "$PRIMARY" ]] || log "[secondary-needs-primary] the wizard will require a primary server address" ;;
-    *) log "[check-error] unknown installer-role: $ROLE; the wizard will default to standalone" ;;
-esac
-
-# ה-repo המקומי שה-late_command השאיר (grub-pc-bin הוסר על ידי d-i בהתקנת
-# UEFI; המתקין מתקין אותו מחדש — בלי אינטרנט זה עובד רק מכאן). ראיה
-# חיובית לפני שהמתקין רץ: apt רואה מועמד.
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq || fail apt-repo-missing "apt-get update failed; /var/lib/imagesrv/apt-repo is missing or invalid"
-cand=$(apt-cache policy grub-pc-bin | awk '/Candidate:/ {print $2}')
-[[ -n "$cand" && "$cand" != "(none)" ]] || fail apt-repo-missing \
-    "apt cannot find grub-pc-bin; the ISO repository is missing and offline setup cannot continue"
-
-temporary_dhcp() {
-    local nic="$1" carrier="0" address
-    if ! ip link set dev "$nic" up; then
-        log "nic $nic: link setup failed"
-        return 0
-    fi
-    if [[ ! -r "/sys/class/net/$nic/carrier" ]]; then
-        log "nic $nic: carrier check failed"
-        return 0
-    fi
-    for _ in 1 2 3; do
-        carrier=$(<"/sys/class/net/$nic/carrier")
-        [[ "$carrier" == "1" ]] && break
-        sleep 1
-    done
-    if [[ "$carrier" != "1" ]]; then
-        log "nic $nic: no carrier"
-        return 0
-    fi
-    if ! dhcpcd -4 -1 -t 20 "$nic" >>"$BUILD_LOG" 2>&1; then
-        log "nic $nic: no dhcp offer"
-        return 0
-    fi
-    if ! address=$(ip -o -4 address show dev "$nic" scope global | awk 'NR == 1 {print $4}'); then
-        log "nic $nic: address check failed"
-        return 0
-    fi
-    # 169.254/16 is dhcpcd's link-local fallback, not an offer (seen on the
-    # deploy NIC, 21/09) -- naming it "dhcp" would send the operator there.
-    if [[ -z "$address" || "$address" == 169.254.* ]]; then
-        log "nic $nic: no dhcp offer"
-    else
-        log "nic $nic: $address (dhcp)"
-    fi
-}
-
-dhcp_pids=()
-for nic_path in /sys/class/net/*; do
-    nic=${nic_path##*/}
-    [[ "$nic" == "lo" ]] && continue
-    temporary_dhcp "$nic" &
-    dhcp_pids+=("$!")
-done
-for dhcp_pid in "${dhcp_pids[@]}"; do
-    wait "$dhcp_pid" || fail check-error "A temporary DHCP worker failed"
-done
-
-# ‏#2490: ה-apply של האשף אינו דורש הזדהות וקובע את סיסמת המנהל, ולכל כרטיס
-# יש עכשיו כתובת DHCP זמנית. שומר (deploy/nftables-wizard.sh) פותח את 8081 רק
-# על lo ועל כרטיס ההתקנה — נטען ונקרא בחזרה לפני שהאשף עולה; בלי ראיה, האשף
-# לא עולה. חומת האש הקבועה (setup-boot-server, ‏flush ruleset) מחליפה אותו.
-wizard_guard=$(sh "$SRC/deploy/nftables-wizard.sh" --nic-fact "$NIC_FILE") \
-    || fail wizard-guard-failed "Could not build the wizard firewall guard; the wizard was not started"
-printf '%s\n' "$wizard_guard" | nft -f - \
-    || fail wizard-guard-failed "nft could not load the wizard firewall guard; the wizard was not started"
-guard_listed=$(nft list chain inet imagesrv_wizard input) \
-    || fail wizard-guard-failed "The wizard firewall guard is not in the kernel ruleset; the wizard was not started"
-# ‏#2518: גם ה-drop של DNS (53) ו-rpcbind (111) מחוץ ל-lo — נקרא בחזרה, לא מונח.
-[[ "$guard_listed" == *"tcp dport 8081"*"drop"* && "$guard_listed" == *"udp dport 53"*"drop"* \
-   && "$guard_listed" == *"tcp dport 53"*"drop"* && "$guard_listed" == *"udp dport 111"*"drop"* \
-   && "$guard_listed" == *"tcp dport 111"*"drop"* ]] \
-    || fail wizard-guard-failed "The wizard firewall guard has no drop rule for port 8081, 53 or 111; the wizard was not started"
-guard_summary=${wizard_guard#*"# open on: "}
-log "wizard guard: port 8081 open on ${guard_summary%%$'\n'*}, dropped on every other NIC"
-
-install -m 0644 "$SRC/deploy/imagesrv-wizard.service" /etc/systemd/system/imagesrv-wizard.service
-install -m 0644 "$SRC/deploy/imagesrv-wizard-rerun.service" /etc/systemd/system/imagesrv-wizard-rerun.service
+log "preparing the server - Stage B: applying installer answers and starting the DCUI"
+[[ -f "$SRC/tools/iso/firstboot-answers.sh" ]] || fail check-error "$ETC/answers exists but $SRC/tools/iso/firstboot-answers.sh is missing"
+# shellcheck source=tools/iso/firstboot-answers.sh
+. "$SRC/tools/iso/firstboot-answers.sh"
+firstboot_from_answers
 install -m 0644 "$SRC/deploy/imagesrv-dcui.service" /etc/systemd/system/imagesrv-dcui.service
-install -m 0644 "$SRC/deploy/imagesrv-installer-gui.service" /etc/systemd/system/imagesrv-installer-gui.service
-install -d /etc/systemd/system/imagesrv-dcui.service.d
-printf '[Service]\nWorkingDirectory=/opt/imagesrv-src\n' \
-    > /etc/systemd/system/imagesrv-dcui.service.d/firstboot.conf
-printf 'state=wizard-running\ntimestamp=%s\nrole_default=%s\n' "$(date -u +%FT%TZ)" "$ROLE" > "$STATUS"
-systemctl daemon-reload || fail check-error "systemctl daemon-reload failed before starting the installer UI"
+rm -f /etc/systemd/system/imagesrv-dcui.service.d/firstboot.conf
+systemctl daemon-reload || fail check-error "systemctl daemon-reload failed before starting the DCUI"
 systemctl mask getty@tty1.service || fail check-error "Could not mask getty@tty1.service"
 systemctl enable imagesrv-dcui.service || fail check-error "Could not enable imagesrv-dcui.service"
-systemctl start imagesrv-wizard || fail wizard-failed "imagesrv-wizard did not start; see journalctl -u imagesrv-wizard"
-systemctl is-active --quiet imagesrv-wizard || fail wizard-failed "imagesrv-wizard is not active after systemctl start"
-
-has_keyboard=0
-for event in /dev/input/event*; do
-    [[ -e "$event" ]] || continue
-    if udevadm info --query=property --name="$event" | grep -qx 'ID_INPUT_KEYBOARD=1'; then
-        has_keyboard=1
-        break
-    fi
-done
-if [[ -e /dev/fb0 && "$has_keyboard" == 1 ]]; then
-    TTY_PROGRESS=0
-    rm -f "$INSTALLER_GUI_BEAT"
-    systemctl start imagesrv-installer-gui.service \
-        || fail installer-gui-failed "Could not start imagesrv-installer-gui.service; see journalctl -u imagesrv-installer-gui"
-    gui_drew "$INSTALLER_GUI_BEAT" imagesrv-installer-gui.service \
-        || fail installer-gui-failed "imagesrv-installer-gui.service drew no frame on tty1 within ${FAILGUI_WAIT_S}s; see journalctl -u imagesrv-installer-gui"
-    log "installer gui: on tty1 (it drew a frame)"
-else
-    TTY_PROGRESS=0
-    systemctl restart imagesrv-dcui.service || fail check-error "Could not start imagesrv-dcui.service"
-    systemctl is-active --quiet imagesrv-dcui.service || fail check-error "imagesrv-dcui.service is not active after restart"
-    log "installer gui: no framebuffer/keyboard, DCUI only"
-fi
+TTY_PROGRESS=0
+systemctl restart imagesrv-dcui.service || fail check-error "Could not start imagesrv-dcui.service"
 rm -rf "$TMPDIR"
-log "Stage B is ready: use tty1 or the HTTPS wizard on port 8081"
+log "Stage B complete from the installer's answers: the DCUI is on tty1, the console on 8081"

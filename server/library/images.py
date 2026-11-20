@@ -18,6 +18,7 @@ import threading
 from pathlib import Path
 
 from server.core.atomicfile import write_atomic
+from server.core import finite_json
 from server.db import journal
 
 log = logging.getLogger("imagesrv.images")
@@ -39,7 +40,7 @@ PARTITION_ROLES = {"esp", "msr", "windows", "recovery", "linux", "swap", "data"}
 # "" / "unknown" = מחיצה בלי מערכת קבצים (MSR, BIOS boot) — הסוכן מזרים אותה ב-partclone.dd
 # (#1419). "unknown" הוא מה ש-_fs_of (manifest.sh) כותב כש-blkid יוצא ≠0 — וזה בדיוק מה
 # ש-blkid עושה על מחיצה בלי חתימה. "BitLocker" (#1840) — כרך מוצפן שנקלט גולמי, באותו partclone.dd.
-FILESYSTEMS = {"ntfs", "vfat", "ext4", "btrfs", "swap", "", "unknown", "BitLocker"}
+FILESYSTEMS = {"ntfs", "vfat", "ext4", "btrfs", "xfs", "swap", "", "unknown", "BitLocker"}   # #3415: xfs
 
 MIB = 1 << 20
 #: מה שהכונן חייב להחזיק **אחרי** סוף הפריסה: עותק הגיבוי של ה-GPT.
@@ -241,6 +242,42 @@ def bound_mac(manifest: dict) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+#: #2533: אימג' חתיכות. מניפסט שאינו נושא `image_format: 2` הוא **פורמט ישן** —
+#: זרם zstd אחד למחיצה — ואינו מופץ עוד (הכרעת נדב 12/11: אין תאימות לאחור, ואין המרה).
+IMAGE_FORMAT = 2
+LEGACY_FORMAT = "legacy_format"
+LEGACY_FORMAT_LABEL = "פורמט ישן — יש לקלוט מחדש"
+LEGACY_FORMAT_REASON = "האימג' בפורמט ישן — יש לקלוט אותו מחדש"
+_HEX16 = re.compile(r"[0-9a-f]{16}")
+_HEX64 = re.compile(r"[0-9a-f]{64}")      # #3332: chunk_b3, the BLAKE3 of a partition's list
+
+
+def format_problem(manifest: dict) -> tuple[str, str] | None:
+    """(קוד, סיבה בעברית) כשהאימג' אינו בפורמט שמופץ — או `None`.
+
+    שני מצבים, ושניהם בשמם (עיקרון 5 — סירוב נוקב בסיבה, לא "נדחה"):
+    `legacy_format` — אין `image_format: 2`; `index_mismatch` — הגזירה של האינדקס
+    **רצה** ומצאה שהקובץ פגום (zstd סירב לו, המפה אינה תקינה, הפריימים אינם
+    חתיכות) או שהאינדקס שנגזר אינו זה שהקליטה חתמה עליו (`index_error`,
+    `record_index`): ראיה חיובית שהקובץ אינו מה שנחתך. אינדקס שעוד לא נגזר, או מחיצה בלי `index_xxh64`
+    (מניפסט שלא עבר בקליטה שלנו — היא מסרבת לו, `capture.manifest_problem`),
+    **אינם** בעיה כאן: הצינור של היום אינו נשען על האינדקס אלא על ה-`sha256`,
+    והקריאה החוזרת אומרת "לא אומת" כל עוד אין רשימה (`readbackhash.py`)."""
+    if type(manifest.get("image_format")) is not int or manifest["image_format"] != IMAGE_FORMAT:
+        return LEGACY_FORMAT, LEGACY_FORMAT_REASON
+    for part in manifest.get("partitions") or []:
+        if isinstance(part, dict) and carries_a_stream_file(part) and part.get("index_error"):
+            return "index_mismatch", (f"מחיצה {part.get('index')}: קובץ המחיצה פגום או אינו תואם"
+                                      " למניפסט — יש לקלוט את האימג' מחדש")
+    return None
+
+
+def has_index_xxh64(part: dict) -> bool:
+    """למחיצה יש חתימת אינדקס (`index_xxh64`) — 16 ספרות hex קטנות, לא "משהו"."""
+    value = part.get("index_xxh64")
+    return isinstance(value, str) and _HEX16.fullmatch(value) is not None
+
+
 def restore_refusal(manifest: dict, macs: list[str] | None) -> str | None:
     """ההודעה שמסרבת לשחזר אימג' קשור למכונה שאינה שלו, או `None`.
 
@@ -256,6 +293,10 @@ def restore_refusal(manifest: dict, macs: list[str] | None) -> str | None:
     שייך למכונה אחרת" בלי לדעת לאיזו, ובלי לדעת מה ביקש, אינו יודע מה
     לעשות — בדיוק הכשל של #106.
     """
+    # #2533: קודם הפורמט — אימג' שאינו מופץ אינו מופץ לאף יעד, גם לא לבעליו.
+    problem = format_problem(manifest)
+    if problem is not None:
+        return problem[1]
     owner = bound_mac(manifest)
     if owner is None:
         return None
@@ -502,7 +543,7 @@ class ImageLibrary:
             if self._in_work_area(path, root):
                 continue
             try:
-                manifest = json.loads(path.read_text(encoding="utf-8"))
+                manifest = finite_json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError, RecursionError) as exc:   # #2447: גם JSON עמוק מדי
                 log.warning("skipping unreadable manifest %s: %s", path, exc)
                 self._report_invalid(path, f"unreadable JSON: {exc}")
@@ -733,8 +774,10 @@ class ImageLibrary:
         # מקבל את הגרסה העדכנית (או זו שנקבעה); סבב פתוח ממשיך עם המזהה
         # שלו, כי הוא נשמר בסבב ולא נבחר מכאן.
         chosen = set(self.defaults(scanned).values())
+        # #2533: אימג' שאינו מופץ (פורמט ישן, אינדקס שאינו תואם) אינו מוצע למכונה —
+        # הפתיחה שלו הייתה מסורבת. הקונסולה מציגה אותו, עם התווית והסיבה.
         images = {iid: m for iid, m in scanned.items()
-                  if m.get("_available", True) and iid in chosen}
+                  if m.get("_available", True) and iid in chosen and format_problem(m) is None}
         if not disks:
             return sorted(images)
         internal = [
@@ -768,6 +811,7 @@ class ImageLibrary:
         scanned = self.scan()
         chosen = set(self.defaults(scanned).values())
         for manifest in scanned.values():
+            fmt_code, fmt_reason = format_problem(manifest) or (None, None)
             result.append(
                 {
                     "id": manifest["id"],
@@ -818,6 +862,10 @@ class ImageLibrary:
                     # #1840: מחיצות BitLocker שנקלטו גולמי — התג והשורה הכתומה בהפצה.
                     "bitlocker": [part.get("index") for part in (manifest.get("partitions") or [])
                                   if isinstance(part, dict) and part.get("fs") == "BitLocker"],
+                    # #2533: למה האימג' אינו מופץ — קוד (`legacy_format`, `index_mismatch`)
+                    # והנוסח להצגה; None/None = מופץ.
+                    "format_problem": fmt_code,
+                    "format_reason": LEGACY_FORMAT_LABEL if fmt_code == LEGACY_FORMAT else fmt_reason,
                     # #2972: מחיצות NTFS לא עקביות שנקלטו בלי כיווץ — תג כתום, לא חוסם.
                     "ntfs_inconsistent": ntfs_inconsistent_parts(manifest),
                 }
@@ -940,23 +988,35 @@ class ImageLibrary:
     #: #1805/#1864: חתיכה של זרם הנתונים שהרשימה מגבבת — RB_CHUNK של fanout.c.
     READBACK_CHUNK_BYTES = 4 * 1024 * 1024
 
-    def record_readback(self, image_id: str, values: dict) -> list[int]:
-        """רושם את רשימת הקריאה החוזרת (#1805, הכרעת נדב 20/10) למחיצות שקיבלו.
+    def record_index(self, image_id: str, values: dict) -> list[int]:
+        """רושם את מה שהשרת גזר מקובצי המחיצות של אימג' בפורמט 2 (#2533).
 
-        `values` = {index: (רשימה, בייטים, XXH64 של הרשימה)} מ-`readbackhash.derive`.
-        קודם קובץ הרשימה ליד קובץ המחיצה (`<file>.readback`, אטומית), ורק אז
-        המניפסט: `readback_xxh64`, `readback_chunks`, `readback_bytes`,
-        `readback_chunk_bytes` — הסוכן קורא את המניפסט שהשרת מגיש (עיקרון 3).
-        ערך שאינו עקבי — רשימה שאינה שורות של 16 ספרות hex, מספר שורות שאינו
-        תואם את הבייטים, בייטים מעל `size_bytes`, XXH64 שאינו 16 ספרות — אינו
-        נכתב: הסוכן היה מכשיל עליו מגירות תקינות. `readback_sha256` ישן נשאר כמו
-        שהוא. מניפסט שהשינוי היה פוסל — לא נכתב כלל. מחזיר את האינדקסים שנכתבו."""
+        `values` = {index: ערך} מ-`readbackhash.derive`. ערך הוא אחד משניים:
+
+        * `{"index": טקסט האינדקס, "list": רשימת ה-readback, "list_xxh64": …,
+          "bytes": אורך זרם הנתונים}` — האינדקס שנגזר **תואם** ל-`index_xxh64`
+          שבמניפסט. קודם קובץ האינדקס ליד קובץ המחיצה (`<file>.idx`, אטומית), ורק
+          אז המניפסט: `readback_xxh64`, `readback_chunks`, `readback_bytes`,
+          `readback_chunk_bytes` — הסוכן קורא את המניפסט שהשרת מגיש (עיקרון 3).
+        * `{"error": סיבה}` — האינדקס שנגזר **אינו** זה שהקליטה חתמה עליו. נרשם
+          `index_error` במחיצה, ו-`format_problem` מסרב להפיץ את האימג' בשמו.
+
+        ערך שאינו עקבי (רשימה שאינה שורות של 16 ספרות hex, מספר שורות שאינו
+        תואם את הבייטים, בייטים מעל `size_bytes`) אינו נכתב: הסוכן היה מכשיל
+        עליו מגירות תקינות. מניפסט שהשינוי היה פוסל — לא נכתב כלל. מחזיר את
+        האינדקסים שנכתבו."""
         manifest = self.get(image_id)
         if manifest is None or not manifest.get("_dir") or not manifest.get("_available", True):
             return []
-        folder = Path(manifest["_dir"])
+        return self._record_index_in(Path(manifest["_dir"]), values)
+
+    def record_index_staged(self, folder: Path, values: dict) -> list[int]:
+        """#3502: אותה רישום, בתיקיית הביניים של קליטה -- **לפני** שהאימג' נכנס לספרייה. המניפסט שם עוד
+        בלי שדות הספרייה (`id`, `name`...), ולכן נבדק כמו ש-`capture.manifest_problem` בודק אותו."""
+        return self._record_index_in(Path(folder), values, staged=True)
+
+    def _record_index_in(self, folder: Path, values: dict, *, staged: bool = False) -> list[int]:
         path = folder / "manifest.json"
-        hexd = set("0123456789abcdef")
         with self._write_lock:
             raw = json.loads(path.read_text(encoding="utf-8"))
             written = []
@@ -965,30 +1025,42 @@ class ImageLibrary:
                     continue
                 index = _whole(part.get("index"))
                 value = values.get(index) if index is not None else None
-                if not isinstance(value, tuple) or len(value) != 3:
+                if not isinstance(value, dict):
                     continue
-                text, count, xxh = value
+                error = value.get("error")
+                if isinstance(error, str) and error:
+                    part["index_error"] = error[:300]
+                    written.append(index)
+                    continue
+                text, listing, xxh, count = (value.get("index"), value.get("list"),
+                                             value.get("list_xxh64"), value.get("bytes"))
                 size = _whole(part.get("size_bytes"))
-                lines = text.split("\n")[:-1] if isinstance(text, str) and text.endswith("\n") else None
+                lines = listing.splitlines() if isinstance(listing, str) else None
                 chunk = self.READBACK_CHUNK_BYTES
-                if lines is None or _whole(count) is None or size is None or count > size \
-                        or len(lines) != (count + chunk - 1) // chunk \
-                        or any(len(x) != 16 or not set(x) <= hexd for x in lines) \
-                        or not (isinstance(xxh, str) and len(xxh) == 16 and set(xxh) <= hexd):
+                if lines is None or not isinstance(text, str) or _whole(count) is None or size is None \
+                        or count > size or len(lines) != (count + chunk - 1) // chunk \
+                        or any(_HEX16.fullmatch(x) is None for x in lines) \
+                        or not (isinstance(xxh, str) and _HEX16.fullmatch(xxh) is not None):
                     continue
                 base = guarded_image_path(folder, part.get("file"))
                 if base is None:
                     continue
-                target = base.with_name(base.name + ".readback")
-                write_atomic(target, text, encoding="ascii")
+                b3, b3_hash = value.get("b3"), value.get("b3_hash")
+                b3_ok = (isinstance(b3, bytes) and len(b3) == 32 * len(lines) and isinstance(b3_hash, str)
+                         and _HEX64.fullmatch(b3_hash) is not None)
+                write_atomic(base.with_name(base.name + ".idx"), text, encoding="ascii")
+                if b3_ok:                        # #3332: the list first, then the manifest that names it
+                    write_atomic(base.with_name(base.name + ".b3"), b3)
+                    part["chunk_b3"] = b3_hash
                 part.update({"readback_xxh64": xxh, "readback_chunks": len(lines),
                              "readback_bytes": count, "readback_chunk_bytes": chunk})
+                part.pop("index_error", None)
                 written.append(index)
             if not written:
                 return []
-            problem = self._validate(raw)
+            problem = self._validate(raw, require_library_fields=not staged)
             if problem:
-                log.warning("not recording readback for %s: %s", image_id, problem)
+                log.warning("not recording the index for %s: %s", folder, problem)
                 return []
             _replace_json(path, raw)
             return sorted(written)

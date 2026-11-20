@@ -155,7 +155,7 @@ def grow_drawers(tmp_path, *, fs="ntfs", disks=("sda",), stubs=None,
             for d in disks)
     out = run_sh(
         make_stubs(tmp_path / "stubs", extra)
-        + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
+        + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev SYSROOT={posix(run)!r}/sys; "   # #3908: no /sys here -- the host's disks are not the test's (writecheck.sh reads queue/rotational)
         + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
         + "disk_fits() { return 0; }; plan_gate() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
@@ -353,7 +353,7 @@ def test_xfs_grow_mounts_then_grows_the_mountpoint_not_the_device(tmp_path):
     mnt = posix(run / "grow")
     seq = (run / "order.log").read_text(encoding="utf-8").strip().splitlines()
     assert seq == [
-        f"mount -t xfs {posix(run)}/dev/sda2 {mnt}",
+        f"mount -t xfs -o nouuid {posix(run)}/dev/sda2 {mnt}",   # #3629
         f"xfs_growfs {mnt}",
         f"umount {mnt}",
     ], seq
@@ -383,7 +383,7 @@ def _plan_drawers(tmp_path, *, plan_cmd, restore_cmd="return 0",
     run.mkdir()
     out = run_sh(
         make_stubs(tmp_path / "stubs", {"ntfsfix": OK, "ntfsresize": OK, "sgdisk": OK})   # #1798: the mark's table read
-        + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; "
+        + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev SYSROOT={posix(run)!r}/sys; "   # #3908: as grow_drawers
         + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
         + "disk_fits() { return 0; }; plan_gate() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "

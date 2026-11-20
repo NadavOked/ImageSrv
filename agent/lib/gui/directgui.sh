@@ -6,7 +6,8 @@
 # cloner's own records (clonergui.sh): one cloner_group=name|mac per cloner, then
 # its drawer=port|dev|state|bytes|total|error|rate|eta|drawer|conn|cancel|
 # records -- a failed one's error is error_short (#2987) -- and drawer_stall=
-# while one stands (#2988). A room that could not be read is
+# while one stands (#2988); the word of a drawer the server says is `pulled` (#3209, the round still waits for it: its
+# state stays failed in the room) is `pulled`, grey on the screen like the cloner's own (#3270). A room that could not be read is
 # direct_targets=unread -- said on the screen, never an empty list (principle
 # 5); it never fails the rest of the state.
 
@@ -38,7 +39,7 @@ direct_gui_records() {
       (.machines[] | . as $m | [($m.drawer_list // [])[] | select(.state != null or .selected == true)] as $d
         | select($d | length > 0) |
         "cloner_group=" + ([$m.name, $m.mac] | map(clean) | join("|")),
-        ($d[] | ("drawer=" + ([(.port // 0), .dev, (.state // "waiting"), ((.bytes_written // 0) | num | if . < 0 then 0 else . end),
+        ($d[] | ("drawer=" + ([(.port // 0), .dev, (if .state == "failed" and .pulled == true then "pulled" else (.state // "waiting") end), ((.bytes_written // 0) | num | if . < 0 then 0 else . end),
             ((.bytes_total // 0) | num | if . < 0 then 0 else . end),
             (if .state == "failed" and (.error_short | type) == "string" then .error_short else .error end),   # #2987: the operator sentence, as on the cloner
             (if (.stall | type) == "string" then 0, -1 else (.rate_bps | num), (.eta_s | num) end), (.drawer // ""),   # #2988: it stands -- rate 0, no ETA

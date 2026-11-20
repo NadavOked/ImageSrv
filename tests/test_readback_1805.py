@@ -35,6 +35,7 @@ from agentlib import lib_files
 import pytest
 from conftest import MANIFEST_256, write_image
 
+import chunk_image as C
 import pcl_image as P
 from native import requires_native
 from server.agent import readbackhash as RB
@@ -172,12 +173,31 @@ def test_the_kernels_xxhash64_is_the_same_numbers():
     assert lister.finish() == P.expected_list(data)
 
 
-# --- the library: the list beside the file, the fields in the manifest -------------
+# --- the library: the index beside the file, the fields in the manifest ------------
+#
+# #2533: the server no longer MAKES the list -- it derives the partition's chunk index
+# from the file and writes it only when it is the one the capture signed
+# (`index_xxh64`). The list is the index's third column. These tests hand `fill` a
+# derived index (chunk_image.index_of); the derivation itself, on real frames, is in
+# test_chunk_format_2533.py.
 
 
-def _image(root: Path, image_id: str = "img_1805aa") -> dict:
-    manifest = {**MANIFEST_256, "id": image_id}
+@pytest.fixture(autouse=True)
+def _no_b3_tool(monkeypatch):
+    """These tests hand `fill` an index that a fake `digest` made -- the XXH64 list and the fields of #1864/#2533. The
+    BLAKE3 list (#3332) is made by the real `derive_index` with the server's `chunkcast`: with that tool present
+    (conftest builds it) `fill` rightly asks the fake for a list it cannot make, and derives again on every pass.
+    Its own tests are test_chunk_b3_server_3332.py."""
+    monkeypatch.setattr(RB, "_B3_TOOL", [None])
+
+
+def _image(root: Path, image_id: str = "img_1805aa", *, both_b: bool = False) -> dict:
+    """p1 signs INDEX_B and p3 INDEX_A; `both_b` -- both sign INDEX_B."""
+    manifest = C.signed({**MANIFEST_256, "id": image_id},
+                        {1: INDEX_B.render(), 3: (INDEX_B if both_b else INDEX_A).render()})
     write_image(root, manifest)
+    C.place(root / image_id, "p1.esp.pcl.zst", INDEX_B)      # an index describes a file of its length
+    C.place(root / image_id, "p3.win.pcl.zst", INDEX_B if both_b else INDEX_A)
     return manifest
 
 
@@ -189,6 +209,9 @@ LIST_A = "".join(f"{i:016x}\n" for i in range(3))      # 3 chunks: 8MiB < bytes 
 BYTES_A = 9 * 1024 * 1024
 LIST_B = "00000000000000aa\n"
 BYTES_B = 1000
+INDEX_A = C.index_of(LIST_A.split(), BYTES_A)
+INDEX_B = C.index_of(LIST_B.split(), BYTES_B)
+_INDEX = {(LIST_A, BYTES_A): INDEX_A, (LIST_B, BYTES_B): INDEX_B}
 
 
 def _digests(by_name: dict[str, object]):
@@ -197,7 +220,7 @@ def _digests(by_name: dict[str, object]):
         value = by_name[Path(path).name]
         if isinstance(value, Exception):
             raise value
-        return value
+        return _INDEX[value]
     return digest
 
 
@@ -210,45 +233,36 @@ def test_fill_writes_the_list_beside_the_file_and_the_fields_once(tmp_path):
     esp, win = _on_disk(tmp_path, "img_1805aa")["partitions"]
     assert (win["readback_chunks"], win["readback_bytes"], win["readback_chunk_bytes"]) == (3, BYTES_A, 4194304)
     assert win["readback_xxh64"] == xxh64_reference(LIST_A.encode("ascii"))       # the list file's own XXH64
-    assert (tmp_path / "img_1805aa" / "p3.win.pcl.zst.readback").read_text(encoding="ascii") == LIST_A
+    assert (tmp_path / "img_1805aa" / "p3.win.pcl.zst.idx").read_text(encoding="ascii") == INDEX_A.render()
+    assert not (tmp_path / "img_1805aa" / "p3.win.pcl.zst.readback").exists()    # #2533: the index replaced it
     assert esp["readback_chunks"] == 1 and "readback_sha256" not in win           # sha256 is no longer made
     assert lib.get("img_1805aa") is not None                                     # still a valid image
     assert RB.fill(lib, digest=_digests({})) == []                                # on the disk: not read again
 
 
-def test_a_manifest_that_came_without_its_list_is_made_again(tmp_path):
+def test_a_manifest_that_came_without_its_index_is_derived_again(tmp_path):
     """A transfer or an import copies manifest.json and the partition files --
-    not the list. The fields alone are not a list: it is made again."""
+    not the index. The fields alone are not an index: it is derived again."""
     _image(tmp_path)
     lib = ImageLibrary(tmp_path)
     RB.fill(lib, digest=_digests({"p1.esp.pcl.zst": (LIST_B, BYTES_B), "p3.win.pcl.zst": (LIST_A, BYTES_A)}))
-    (tmp_path / "img_1805aa" / "p3.win.pcl.zst.readback").unlink()
+    (tmp_path / "img_1805aa" / "p3.win.pcl.zst.idx").unlink()
     again = RB.fill(lib, digest=_digests({"p3.win.pcl.zst": (LIST_A, BYTES_A)}))
-    assert again[0]["written"] == {3: (LIST_A, BYTES_A, xxh64_reference(LIST_A.encode("ascii")))}
+    assert sorted(again[0]["written"]) == [3]
+    assert again[0]["written"][3]["list"] == LIST_A and again[0]["written"][3]["bytes"] == BYTES_A
+    assert again[0]["written"][3]["list_xxh64"] == xxh64_reference(LIST_A.encode("ascii"))
 
 
 def test_an_old_manifest_with_only_sha256_gets_a_list(tmp_path):
     m = {**MANIFEST_256, "id": "img_1805aa"}
     m["partitions"] = [{**p, "readback_sha256": "ab" * 32, "readback_bytes": 1} for p in m["partitions"]]
-    write_image(tmp_path, m)
+    write_image(tmp_path, C.signed(m, {1: INDEX_B.render(), 3: INDEX_A.render()}))
+    C.place(tmp_path / "img_1805aa", "p1.esp.pcl.zst", INDEX_B)
+    C.place(tmp_path / "img_1805aa", "p3.win.pcl.zst", INDEX_A)
     RB.fill(ImageLibrary(tmp_path), digest=_digests({"p1.esp.pcl.zst": (LIST_B, BYTES_B),
                                                     "p3.win.pcl.zst": (LIST_A, BYTES_A)}))
     win = _on_disk(tmp_path, "img_1805aa")["partitions"][1]
     assert win["readback_sha256"] == "ab" * 32 and win["readback_chunks"] == 3        # the old one stays
-
-
-@pytest.mark.parametrize("value", [
-    ("0000000000000001\n", 5 * 1024 * 1024, "a" * 16),          # 5MiB is two chunks, one line
-    ("XYZ\n", 10, "a" * 16),                                     # not hex
-    (LIST_B, 10 ** 15, "a" * 16),                                # more than the partition
-    (LIST_B, BYTES_B, "A" * 16),                                 # not the agent's lowercase
-    ("0000000000000001", BYTES_B, "a" * 16),                     # no newline: not a list file
-])
-def test_record_refuses_a_list_the_agent_would_fail_good_drawers_on(tmp_path, value):
-    _image(tmp_path)
-    assert ImageLibrary(tmp_path).record_readback("img_1805aa", {1: value}) == []
-    assert "readback_xxh64" not in _on_disk(tmp_path, "img_1805aa")["partitions"][0]
-    assert not (tmp_path / "img_1805aa" / "p1.esp.pcl.zst.readback").exists()
 
 
 def test_what_cannot_be_derived_is_reported_left_absent_and_retried_when_the_files_change(tmp_path):
@@ -304,12 +318,12 @@ def test_the_map_is_read_in_bounded_pieces():
 
 def test_one_image_that_breaks_the_reader_does_not_stop_the_pass(tmp_path):
     _image(tmp_path, "img_1805aa")
-    _image(tmp_path, "img_1805bb")
+    _image(tmp_path, "img_1805bb", both_b=True)
 
     def digest(path, raw, limit=None, stop=None):
         if "img_1805aa" in str(path):
             raise MemoryError("a header that asked for everything")
-        return (LIST_B, BYTES_B)
+        return INDEX_B
     tried: dict = {}
     results = {r["image_id"]: r for r in RB.fill(ImageLibrary(tmp_path), digest=digest, tried=tried)}
     assert results["img_1805aa"]["written"] == {} and results["img_1805aa"]["problems"][0].startswith("MemoryError")
@@ -353,7 +367,7 @@ def test_a_paused_image_keeps_what_it_finished_and_its_place(tmp_path, fresh_pri
     def digest(path, raw, limit, stop=None):
         if Path(path).name == "p3.win.pcl.zst":
             raise RB.Paused("שידור פעיל")
-        return (LIST_B, BYTES_B)
+        return INDEX_B
     tried, status = {}, {}
     results = RB.fill(ImageLibrary(tmp_path), digest=digest, tried=tried, busy=lambda i: None, status=status)
     assert sorted(results[0]["written"]) == [1] and results[0]["problems"] == []
@@ -362,7 +376,7 @@ def test_a_paused_image_keeps_what_it_finished_and_its_place(tmp_path, fresh_pri
 
 def test_the_rounds_image_first_then_last_used_then_the_big_idle_ones(tmp_path, fresh_priority):
     for i in ("img_00000a", "img_00000b", "img_00000c", "img_00000d", "img_00000e"):
-        _image(tmp_path, i)
+        _image(tmp_path, i, both_b=True)
     for image_id, size in {"img_00000c": 10, "img_00000d": 10 ** 11}.items():
         path = tmp_path / image_id / "manifest.json"
         m = json.loads(path.read_text(encoding="utf-8"))
@@ -371,7 +385,7 @@ def test_the_rounds_image_first_then_last_used_then_the_big_idle_ones(tmp_path, 
     RB.kick("img_00000e")
     order = []
     RB.fill(ImageLibrary(tmp_path),
-            digest=lambda path, raw, limit, stop=None: order.append(Path(path).parent.name) or (LIST_B, BYTES_B),
+            digest=lambda path, raw, limit, stop=None: order.append(Path(path).parent.name) or INDEX_B,
             busy=lambda i: None,
             rank=lambda: {"img_00000a": "2026-10-01T10:00:00", "img_00000b": "2026-10-19T10:00:00",
                           "img_00000e": "2026-09-01T00:00:00"})
@@ -487,9 +501,14 @@ def test_the_manifest_the_agent_reads_carries_the_mode(server):
 
 def test_the_list_is_served_only_when_it_is_whole(server):
     anon, ctx = server["anon"], server["ctx"]
-    assert anon.get("/api/v1/images/img_7f3a91/readback/3").status_code == 404     # not made yet
+    assert anon.get("/api/v1/images/img_7f3a91/readback/3").status_code == 404     # not derived yet
     xxh = xxh64_reference(LIST_A.encode("ascii"))
-    assert ctx.library.record_readback("img_7f3a91", {3: (LIST_A, BYTES_A, xxh)}) == [3]
+    path = Path(ctx.library.root) / "img_7f3a91" / "manifest.json"
+    path.write_text(json.dumps(C.signed(json.loads(path.read_text(encoding="utf-8")), {3: INDEX_A.render()}),
+                               ensure_ascii=False), encoding="utf-8")
+    C.place(path.parent, "p3.win.pcl.zst", INDEX_A)
+    assert ctx.library.record_index("img_7f3a91", {3: {
+        "index": INDEX_A.render(), "list": LIST_A, "list_xxh64": xxh, "bytes": BYTES_A}}) == [3]
     r = anon.get("/api/v1/images/img_7f3a91/readback/3")
     assert r.status_code == 200 and r.text == LIST_A
     assert anon.get("/api/v1/images/img_7f3a91/readback/1").status_code == 404     # p1 has none

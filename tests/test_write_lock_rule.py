@@ -66,11 +66,9 @@ STILL_BARE = frozenset({
     "room.py:_attach_wave",
     "room.py:_finish_wave",
     "room.py:_resume",
-    "room.py:close_round",
+    # close_round יצא מהחוב ב-#3707: שלוש כתיבותיו בתוך `_write_lock` + `writing()`.
     "room.py:open_round",
-    "sessions.py:_transition",
-    "sessions.py:close",
-    "sessions.py:open",
+    # sessions.py:_transition/close/open יצאו מהחוב ב-#3706: `_settle` + `_write_lock` + `writing()`.
 })
 
 #: אתרים שהסורק **חייב** למצוא כחשופים.
@@ -85,8 +83,8 @@ STILL_BARE = frozenset({
 #: הגרסה הראשונה של הקובץ הזה.
 MUST_BE_FOUND_BARE = frozenset({
     "dhcp.py:forget",
+    "net.py:forget_device",       # #3706: sessions.py:_transition was the third canary, and is wrapped now
     "room.py:open_round",
-    "sessions.py:_transition",
 })
 
 

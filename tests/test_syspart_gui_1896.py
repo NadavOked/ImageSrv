@@ -234,6 +234,7 @@ def test_the_cloner_pull_list_carries_the_unchecked_image(tmp_path):
     lines = out.stdout.splitlines()
     assert "rc=0" in lines, out.stdout + out.stderr
     assert "image=img_7f3a91|Office|Office" in lines
+    assert "images_known=1" in lines
     assert "image_unchecked=img_5790e4|Vm   old|ישן" in lines
     assert "image_cand=img_5790e4|2|223392075264|" in lines
 
@@ -253,6 +254,43 @@ def test_the_build_restore_state_carries_the_unchecked_image(tmp_path):
              'gui_state; echo "rc=$?"')
     assert out.stdout.strip().endswith("rc=0"), out.stdout + out.stderr
     lines = (gui / "state").read_text(encoding="utf-8").splitlines()
+    assert "images_known=1" in lines
     assert "image=img_7f3a91|Office|Office" in lines
     assert "image_unchecked=img_5790e4|Vm   old|ישן" in lines
     assert "image_cand=img_5790e4|1|223392075264|880222208" in lines
+
+
+def _restore_gui(tmp_path, mode, script):
+    """The real guistate.sh / syspartgui.sh in a scratch GUI_DIR; returns (result, state lines)."""
+    run_dir = tmp_path / "run"; gui = run_dir / "gui"; gui.mkdir(parents=True)
+    (gui / "mode").write_text(mode + "\n", newline="\n")
+    out = sh(f"export RUN_DIR={posix(run_dir)!r} GUI_DIR={posix(gui)!r} LOG_FILE={posix(run_dir)!r}/log; "
+             + "".join(f". {posix(flat_lib())}/{n}.sh; " for n in ("common", "jsonq", "guistate", "askgui", "syspartgui"))
+             + 'disk_slot_records() { :; }; class_deploy_on() { return 1; }; tools_on() { return 1; }; '
+               'gui_disk_smart() { :; }; ' + script)
+    state = gui / "state"
+    return out, (state.read_text(encoding="utf-8").splitlines() if state.exists() else [])
+
+
+@needs_jq
+def test_an_answer_without_allowed_images_is_not_an_empty_library_2656(tmp_path):
+    """/agent/state came back with no allowed_images: the picker says it could not read, never 'none'."""
+    st = {k: v for k, v in dict(STATE, known=True, disks=[], task=None, name="BUILD-01").items()
+          if k != "allowed_images"}
+    (tmp_path / "state.json").write_text(json.dumps(st), encoding="utf-8")
+    out, _ = _restore_gui(tmp_path, "restore", f'http_get() {{ cat {posix(tmp_path / "state.json")!r}; }}; '
+                          'gui_state; echo "rc=$?"; cp "$GUI_DIR/state.next" "$GUI_DIR/state"')
+    lines = (tmp_path / "run" / "gui" / "state").read_text(encoding="utf-8").splitlines()
+    assert "images_known=-1" in lines, out.stdout + out.stderr
+    assert "images_known=1" not in lines and not [x for x in lines if x.startswith("image=")]
+
+
+@needs_jq
+@pytest.mark.parametrize(("mode", "said"), [("restore", True), ("capture", False)])
+def test_a_state_that_could_not_be_verified_does_not_say_no_images_2656(tmp_path, mode, said):
+    """The state loop's failure record: in the restore picker it is 'could not read', not an empty list."""
+    out, lines = _restore_gui(tmp_path, mode, 'gui_state() { return 1; }; gui_server_addr() { :; }; '
+                              'gui_shrink_state() { :; }; gui_ask_state() { :; }; gui_fail_local() { :; }; '
+                              'sleep() { exit 0; }; gui_state_loop')
+    assert any(x.startswith("message=לא ניתן לאמת") for x in lines), out.stdout + out.stderr
+    assert ("images_known=-1" in lines) is said, lines

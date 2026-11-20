@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 import hygiene
-from agentlib import flat_lib
+from agentlib import agent_sources, flat_lib
 from native import requires_native
 from test_agent import AGENT, BASH, CLEAN_HIVE, _stub, posix, sh
 from test_bootca import FAKE_OPENSSL, NAME_2011, SOURCE_CHAIN, blob, make_pe, path_entry, put, toolbox
@@ -39,7 +39,7 @@ def _wipe(tmp_path: Path, written: str | None, now: str, same: bool) -> tuple[st
     (run / "targets" / "sda").mkdir(parents=True)
     if written is not None:
         (run / "targets" / "sda" / "write_started").write_text(written, newline="\n")
-    src = " ".join(f". {posix(flat_lib())}/{n}.sh;" for n in ("common", "sysinfo", "diskinfo", "failmark"))
+    src = agent_sources("common", "sysinfo", "failmark")   # the agent's own order, and what failmark runs with (waits.sh: capped_run, #3098)
     out = sh(f"export RUN_DIR={posix(run)!r} DEVROOT=/nonexistent IMAGESRV_TEST=1; {src} "
              f"disk_serial() {{ printf %s {now!r}; }}; "
              f"target_same() {{ {'return 0' if same else 'return 1'}; }}; "

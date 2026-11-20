@@ -4,6 +4,8 @@
 // עיקרון 5: "לא נבדק" ≠ ירוק; ROOM null (לא נקרא) ≠ חדר בלי סבב; /tasks שלא נקרא ≠ אין קליטות.
 // מוסכמת נדב: "דיסק N · SATA N-1", לעולם לא sd*.
 const {consoleFiles} = require('./console_src.cjs');
+const {decorate,ruled,ruleOf}=require('./disk_rule_fixture.cjs');   // #3666: the server sends `rule` on every disk; the console decides nothing
+const served=(fixtures,key)=>{const v=fixtures[key]; return v&&typeof v==='object'&&!v.__status?decorate(JSON.parse(JSON.stringify(v)),fixtures['/disk-failures']):v;};
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -18,7 +20,7 @@ const GB256=256060514304;
 test('#2050 drawer emphasis: red/orange problems and read-back green get the frame; a healthy, writing or merely "done" disk does not', () => {
   const {run}=setup();
   const cls=(render,disk)=>{
-    const h=run(`${render}({mac:'test',drawer_count:1}, {n:1,disk:${JSON.stringify(disk)},live:true}, false)`);
+    const h=run(`${render}({mac:'test',drawer_count:1}, {n:1,disk:${JSON.stringify(ruled(disk))},live:true}, false)`);
     const m=h.match(/^<div class="(?:dsk|disk)([^"]*)"/); assert.ok(m,h); return [m[1],h];
   };
   const cases=[
@@ -47,15 +49,16 @@ test('#2050 drawer emphasis: red/orange problems and read-back green get the fra
   assert.match(cls('slotHtml',{smart:'warn'})[1],/<span class="bay-chip">אזהרה<\/span>/);
 });
 
-// #2848 (Nadav 11/11): red = SMART failed, a slow SATA link, slow in THIS round -- never a target; orange = SMART
+// #2848 (Nadav 11/11): red = SMART failed, a SATA problem, slow in THIS round -- never a target; orange = SMART
 // half-good; yellow (its own colour) = failed the last clone / a cut write -- a target, never a source. A slow
 // write of a past round (last_write_check) colours nothing. A CRC rise, the learned port/disk and "slow for its
 // model" are words in the title, not a colour.
-test('#2848 slot colours: a slow SATA link or write is red; CRC rise and learning findings colour nothing', () => {
+test('#2848/#3591 slot colours: a slow write is red; a SATA link speed, a CRC rise and learning findings colour nothing', () => {
   const {run}=setup();
-  const c=(d,fail)=>run(`slotClass({disk:${JSON.stringify(d)}${fail ? `,fail:${JSON.stringify(fail)}` : ''}})`);
-  assert.equal(c({smart:'ok',link_gbps:1.5,link_max_gbps:6}),'err');
-  assert.equal(c({smart:'ok',link_state:'slow'}),'err');
+  const c=(d,fail)=>run(`slotClass({disk:${JSON.stringify(ruled(d,{fail}))}${fail ? `,fail:${JSON.stringify(fail)}` : ''}})`);   // #3666: the disk arrives with the server's rule
+  assert.equal(c({smart:'ok',link_gbps:1.5,link_max_gbps:6}),'ok');      // #3591 (Nadav 17/11): no link speed is a colour
+  assert.equal(c({smart:'ok',link_state:'slow'}),'ok');                  // ...and an old server's word is not read
+  assert.equal(c({smart:'ok',sata_issues:['link_reset']}),'err');        // a SATA problem still is
   assert.equal(c({smart:'ok',write_slow:true}),'err');                      // this round's write check
   assert.equal(c({smart:'ok',last_write_check:{slow:true}}),'ok');          // a past round's: nothing
   assert.equal(c({smart:'warn'}),'warn');
@@ -66,19 +69,19 @@ test('#2848 slot colours: a slow SATA link or write is red; CRC rise and learnin
   assert.equal(c({smart:'ok',rule:{color:'red',target:false,source:true}}),'err');   // the server's own rule wins
   for (const d of [{crc_rise:12},{crc_delta:3},{port_suspect:true},{disk_suspect:true},{smart_learned:'critical_rose'},{model_speed:{slow:true}}])
     assert.equal(c({smart:'ok',...d}),'ok',JSON.stringify(d));
-  assert.match(run(`diskTitle({mac:'t',drawer_count:1},{n:1,disk:{smart:'ok',crc_rise:12}},{smart:'ok',crc_rise:12})`),/שגיאות CRC עלו בשיכפול האחרון — כבל או מגירה חשודים/,'the rise is still said, as words (#2848: one wording)');
+  assert.match(run(`diskTitle({mac:'t',drawer_count:1},{n:1,disk:${JSON.stringify(ruled({smart:'ok',crc_rise:12}))}},{smart:'ok',crc_rise:12})`),/שגיאות CRC עלו בשיכפול האחרון — כבל או מגירה חשודים/,'the rise is still said, as words (#2848: one wording)');
 });
 
 // #2848: a SATA problem the hello says (hwissues.sh: link_reset / drawer_gone) is red too, and its words are said;
 // [] (read, none), null (not read) and a word that is not a SATA problem colour nothing.
 test('#2848 slot colours: the hello sata_issues are red; [] / null / a note are not', () => {
   const {run}=setup();
-  const c=(d)=>run(`slotClass({disk:${JSON.stringify(d)}})`);
+  const c=(d)=>run(`slotClass({disk:${JSON.stringify(ruled(d))}})`);
   assert.equal(c({smart:'ok',sata_issues:['link_reset']}),'err');
   assert.equal(c({smart:'ok',sata_issues:['drawer_gone']}),'err');
   for (const v of [[],null,['usb2'],'link_reset']) assert.equal(c({smart:'ok',sata_issues:v}),'ok',JSON.stringify(v));
-  assert.match(run(`diskTitle({mac:'t',drawer_count:1},{n:1,disk:{smart:'ok',sata_issues:['link_reset']}},{smart:'ok',sata_issues:['link_reset']})`),/הקישור למגירה התאפס/);
-  assert.match(run(`diskTitle({mac:'t',drawer_count:1},{n:1,disk:{smart:'ok',write_slow:true}},{smart:'ok',write_slow:true})`),/נפסל כאיטי בבדיקת הכתיבה בסבב הזה/,'the red says why');
+  assert.match(run(`diskTitle({mac:'t',drawer_count:1},{n:1,disk:${JSON.stringify(ruled({smart:'ok',sata_issues:['link_reset']}))}},{smart:'ok',sata_issues:['link_reset']})`),/הקישור למגירה התאפס/);
+  assert.match(run(`diskTitle({mac:'t',drawer_count:1},{n:1,disk:${JSON.stringify(ruled({smart:'ok',write_slow:true}))}},{smart:'ok',write_slow:true})`),/נפסל כאיטי בבדיקת הכתיבה בסבב הזה/,'the red says why');
   assert.doesNotMatch(run(`diskTitle({mac:'t',drawer_count:1},{n:1,disk:{smart:'ok',last_write_check:{slow:true,text_he:'בבדיקת הכתיבה הקודמת נמדד איטי'}}},{smart:'ok',last_write_check:{slow:true,text_he:'בבדיקת הכתיבה הקודמת נמדד איטי'}})`),/איטי/,'a past round leaves no mark');
 });
 
@@ -198,12 +201,12 @@ function setup({roundOpen=false}={}) {
     fetch:async(url,options={})=>{
       const key=url.replace('/api/console','').split('?')[0]; requests.push({url,options});
       if(fixtures[key]===403) return {status:403,ok:false,json:async()=>({detail:'admin only'})};
-      return {status:200,ok:true,headers:{get:()=>null},json:async()=>fixtures[key] ?? {ok:true}};
+      return {status:200,ok:true,headers:{get:()=>null},json:async()=>served(fixtures,key) ?? {ok:true}};
     }});
   for(const f of ['progress.js',...consoleFiles(),'net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run('ME={timezone:"UTC",username:"admin",role:"admin",server_name:"srv",version:"v0.32.1",capabilities:{}}; current="machines"; sheet = o => { globalThis.formOptions=o; }; confirmSheet=(t,s,l,fn)=>{ globalThis.confirmFn=fn; }; selectPageById=(id)=>{ globalThis.selected=id; current=id; }; toast=(m)=>{ globalThis.toasted=m; }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; };');
-  for(const [name,key] of [['OVERVIEW','/overview'],['MACHINES','/machines'],['GROUPS','/groups'],['DISK_FAILURES','/disk-failures'],['SHRINK_RECORDS','/shrink-records'],['NET','/net'],['MONITOR_ROWS','/monitor/machines'],['ROOM','/room'],['ROOM_HISTORY','/room/history'],['CAPTURE_TASKS','/tasks']]) run(name+'='+JSON.stringify(fixtures[key]));
+  for(const [name,key] of [['OVERVIEW','/overview'],['MACHINES','/machines'],['GROUPS','/groups'],['DISK_FAILURES','/disk-failures'],['SHRINK_RECORDS','/shrink-records'],['NET','/net'],['MONITOR_ROWS','/monitor/machines'],['ROOM','/room'],['ROOM_HISTORY','/room/history'],['CAPTURE_TASKS','/tasks']]) run(name+'='+JSON.stringify(served(fixtures,key)));
   run('CAPTURE_TASKS_READ=true; ROOM_KEY=JSON.stringify(ROOM);');
   return {run,node,requests,fixtures,ctx,opened};
 }
@@ -256,7 +259,7 @@ test('#1485/#2848 cloner cards (.mach): name + status pill, MAC, a drawer card p
   assert.match(dsk(c2,1),/^<div class="lbay" data-slot="1" title="SATA 0 · 870 EVO · S5Y30 · SMART תקין"><div class="lb-n"><b>1<\/b><span>מגירה<\/span><\/div><div class="lb-txt"><div class="lb-t"><b>SATA 0<\/b><\/div><\/div><div class="lb-meta"><span class="lb-chip c-green"><i><\/i>SMART תקין<\/span><div class="lb-sz"><b><bdi dir="ltr">256GB<\/bdi><\/b><span class="mono">870 EVO<\/span><\/div><\/div><\/div>/,'SMART ok = green: a plain card, read only -- no [יעד][דלג], no tag outside a round');
   assert.match(dsk(c2,2),/^<div class="lbay" data-slot="2"[^]*<span class="lb-chip c-grey"><i><\/i>SMART לא נבדק<\/span>/,'#2897: unchecked is grey, never green (principle 5)');
   assert.match(dsk(c2,3),/^<div class="lbay t-yellow" data-slot="3" title="SATA 2 · 870 EVO · S5Y2NX0R12345 · נכשל בשיכפול הקודם 15\/09\/2026 · כבל\/חריץ SATA 2">[^]*<div class="lb-l yel">נכשל בשיכפול הקודם — לא מעתיקים ממנו; אפשר לכתוב עליו<\/div>[^]*<span class="lb-chip c-yellow"><i><\/i>נכשל בשיכפול הקודם<\/span>/,'#2848: failed last time = yellow (#1580 was orange), the rule sentence on the card');
-  run(`MACHINES.find(m=>m.mac==='${C2}').disks.find(d=>d.serial==='S5Y2NX0R12345').smart='fail'`);   // #1580: SMART fail = red
+  run(`MACHINES.find(m=>m.mac==='${C2}').disks.find(d=>d.serial==='S5Y2NX0R12345').smart='fail'; MACHINES.find(m=>m.mac==='${C2}').disks.find(d=>d.serial==='S5Y2NX0R12345').rule=${JSON.stringify(ruleOf({smart:'fail'}))}`);   // #1580: SMART fail = red
   const c2r=mach(between(run('machines(0)'),'<div class="rgrid lbgrid">','מחשבים שלא דיווחו'),C2);
   assert.match(dsk(c2r,3),/^<div class="lbay t-red" data-slot="3"[^]*<div class="lb-l bad">אדום: SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת<\/div>[^]*<span class="lb-chip c-red"><i><\/i>SMART לא תקין<\/span>[^]*<span class="lb-st">לא משתתף<\/span>/,'SMART fail = red, never a target: the rule sentence and "לא משתתף"');
   assert.match(c2r,/^<div class="mach lbm"[^>]*><div class="mt"><span>מחשב 2<\/span><span class="pill err">דיסק אדום<\/span><\/div>/,'the drawer is red, the machine card stays neutral; its one pill says so (mockup CLONE-04 stPill: "דיסק אדום" instead of the state)');
@@ -313,7 +316,7 @@ test('#1033/#1485: a 12×3 fixture renders 36 disk rows, stacked by disk number'
     disks:[0,1,2].map(j=>({dev:'sd'+String.fromCharCode(97+j),size_bytes:GB256,model:'870 EVO',serial:'S'+i+'-'+j,port:j+1,smart:'ok'})),
     disks_reported_at:new Date().toISOString(),inventory:null,inventory_seen_at:null}));
   run(`GROUPS=[{id:'grp_CLONERS',label:'מחשבי שיכפול',role:'cloner',sort:1,machines:12}];`);
-  run(`MACHINES=${JSON.stringify(machines12)};`);
+  run(`MACHINES=${JSON.stringify(decorate(machines12))};`);   // #3666: the server's rule on every disk
   run("NET=[]; DISK_FAILURES=[]; MONITOR_ROWS=[]; ROOM=null;");
   run("openClass('grp_CLONERS')"); const html=run('machines(0)'); balanced(html);
   const grid=between(html,'<div class="rgrid lbgrid">','מחשבים שלא דיווחו');

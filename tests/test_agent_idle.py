@@ -23,8 +23,9 @@ LIB = flat_lib()
 def run_idle(tmp_path: Path, setup: str, script: str) -> str:
     run = tmp_path / "run"; run.mkdir(exist_ok=True)
     calls = tmp_path / "calls"
+    (run / "uptime").write_text("100000.50 0.00\n", encoding="utf-8", newline="\n")   # #3681: idle.since is uptime; `up N` moves it
     return sh(
-        f'export RUN_DIR={posix(run)!r} IDLE_POWEROFF_S=2 IDLE_WARN_S=1; '
+        f'export RUN_DIR={posix(run)!r} IDLE_POWEROFF_S=2 IDLE_WARN_S=1 UPTIME_FILE={posix(run / "uptime")!r}; '
         f'. {posix(LIB)}/common.sh; . {posix(LIB)}/idle.sh; '
         f'log() {{ printf "%s\\n" "$*"; }}; sync() {{ :; }}; '
         # #1483: poweroff -f does not return -- one that returns is a failed power-off
@@ -36,7 +37,7 @@ def run_idle(tmp_path: Path, setup: str, script: str) -> str:
 
 
 def _since(tmp_path: Path, ago: int) -> str:
-    return f'printf "%s\\n" "$(( $(date +%s) - {ago} ))" > "$RUN_DIR/idle.since"'
+    return f'printf "%s\\n" "$(( $(idle_up) - {ago} ))" > "$RUN_DIR/idle.since"'
 
 
 # #2457: what happens "while the window is up" was a background `sleep 0.3` (or 1)

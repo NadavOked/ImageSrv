@@ -163,7 +163,7 @@ def test_the_console_lets_a_sleeping_cloners_disk_be_ticked_and_says_wol(tmp_pat
     # a helper that does not exist (the code before #1954) says nothing -- the assertions below fail on what
     # the console shows, not on "not found"
     src = {n: m.group(0) if m else f'function {n}() {{ return ""; }}' for n, m in pick.items()}
-    grid = re.search(r"^function roomPickGrid\(kids\) \{.*?^\}", js, re.M | re.S)
+    grid = re.search(r"^function roomPickRow\(.*?^\}", js, re.M | re.S)   # #3181: the grid became a table, one row per drawer
     probe = tmp_path / "probe.cjs"
     probe.write_text("""
 const esc = (x) => String(x), ltr = (x) => String(x), machineName = (m) => m.name || m.mac;

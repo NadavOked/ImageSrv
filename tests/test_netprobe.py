@@ -44,9 +44,10 @@ def netprobe_of(sysroot: Path, extra: str = "", ethtool: Path | None = None,
     if lldp is not None:
         env += f"export LLDPSNIFF={posix(lldp)!r}; "
     fn = "_netprobe_fresh" if fresh else "netprobe_json"
+    cache = f". {posix(AGENT)}/lib/hw/netcache.sh; " if (AGENT / "lib/hw/netcache.sh").exists() else ""   # #3632
     out = sh(
         env + extra
-        + f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/netprobe.sh; "
+        + f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/hw/netprobe.sh; {cache}"
         + r'printf "{\"x\":0%s}" "$(' + fn + ')"'
     )
     return json.loads(out)["netprobe"]

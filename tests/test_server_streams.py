@@ -400,9 +400,9 @@ def test_a_pull_that_reports_within_the_ceiling_still_blocks(server):
 def test_the_ceiling_is_far_above_the_agents_report_gap():
     """התקרה מעל קצב הדיווח (~2ש', curl --max-time 10 --retry 3) וגם מעל
     אתחול שרת; מתחת לחדר (180) הייתה מפילה משיכה בריאה בעדכון שרת."""
-    from server.rounds import room                                # noqa: PLC0415
-    from server.rounds.pulls import SILENT_SECONDS                # noqa: PLC0415
-    assert room.LOST_SECONDS < SILENT_SECONDS <= 30 * 60
+    from server.agent import timing as agent_timing               # noqa: PLC0415
+    from server.brain import silence                              # noqa: PLC0415
+    assert agent_timing.RANGES[agent_timing.LOST][0] < silence.SILENT_S <= 30 * 60
 
 
 def test_the_background_clock_sweeps_pulls(tmp_path, monkeypatch):

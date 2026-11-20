@@ -100,20 +100,20 @@ static RoomGrid room_grid_make(cairo_t *cr, double w, int n, int max_slots,
 }
 
 /* Any present disk of the machine that is not green (#872: fail or failed_last;
- * #432: a link slower than its port)? */
+ * #3591: a link SPEED is not a warning)? */
 static int room_machine_has_warn(const Machine *m) {
     for (int i = 0; i < m->nroom_drawers; i++)
         if (m->room_drawers[i].present && (smart_level(m->room_drawers[i].smart) || room_drawer_red(&m->room_drawers[i]))) return 1;
     return 0;
 }
 
-/* #432: the slot's colour -- SMART first (red wins), then a slow link is
- * orange like a SMART warning: it asks, it does not block. */
+/* #432: the slot's colour -- SMART first (red wins). #3591: a link speed (1.5 / 3.0 / 6.0) is not a colour. */
 static Rgb room_drawer_color(const Theme *t, const RoomDrawer *d) {
     if (room_drawer_red(d)) return t->danger;   /* #2848 (Nadav 11/11): a SATA problem or a slow write is red; #2846: a CRC count is not a colour */
-    if (d->rule_set) return d->rule_color == DR_YELLOW ? t->yellow : d->rule_color == DR_ORANGE ? t->warn   /* #2848: the server's colour */
-                          : d->rule_color == DR_GREEN ? t->led_ok : smart_color(t, d->smart);
-    return smart_color(t, d->smart);
+    /* #2848: the server's colour (#3666: the brain's). No verdict = not checked: grey, never green, whatever the SMART field says */
+    if (d->rule_set) return d->rule_color == DR_YELLOW ? t->yellow : d->rule_color == DR_ORANGE ? t->warn
+                          : d->rule_color == DR_GREEN ? t->led_ok : t->led_idle;
+    return t->led_idle;
 }
 
 /* The node's box, its .top row (name, dot) and small line; returns the
@@ -368,12 +368,12 @@ static void live_bay(const Theme *t, const State *s, const Machine *m, const Roo
     if (d->model[0]) bidi_isolate(d->model, mi, sizeof mi);
     snprintf(y->sub, sizeof y->sub, "%s%s%s", sz, mi[0] ? " · " : "", mi);
     /* #432/#1366/#652: the drawer's health, the grid's colour (room_drawer_color: SMART
-     * first, then a slow link or a risen CRC); words only when it is not green */
+     * first); words only when it is not green */
     y->toned = 1; y->tone = room_drawer_color(t, d);
-    /* #2848: red / yellow say the server's rule in its words (disk_rule.c, the same sentence as its refusal) */
+    /* #2848: red / yellow say the server's rule in its words (#3666: the sentence arrives with the verdict -- the same as its refusal) */
     y->note = smart_level(d->smart) == 2 ? smart_he_why(d->smart, d->smart_reason)   /* #1742 */
-            : d->rule_set && (d->rule_color == DR_RED || d->rule_color == DR_YELLOW) && d->rule_reason[0] ? disk_rule_he(d->rule_reason)
-            : d->link_slow ? "קישור SATA איטי" : smart_level(d->smart) ? smart_he_why(d->smart, d->smart_reason) : NULL;
+            : d->rule_set && (d->rule_color == DR_RED || d->rule_color == DR_YELLOW) && d->rule_he[0] ? d->rule_he
+            : smart_level(d->smart) ? smart_he_why(d->smart, d->smart_reason) : NULL;
     int pct = live_pct(m, d);
     if (pct >= 0) { snprintf(y->pct, sizeof y->pct, "%d%%", pct > 100 ? 100 : pct); y->share = pct / 100.0; }
     else { snprintf(y->pct, sizeof y->pct, "%s", "—"); y->share = -1; }
@@ -383,7 +383,16 @@ static void live_bay(const Theme *t, const State *s, const Machine *m, const Roo
             bidi_isolate(r, ri, sizeof ri); snprintf(y->line, sizeof y->line, "כותב · %s", ri); }
         else snprintf(y->line, sizeof y->line, "כותב");
         break;
-    case BAY_DONE:   y->pill = "הושלם"; snprintf(y->line, sizeof y->line, "הושלם · נבדק"); break;   /* #1331 mockup v2 */
+    case BAY_DONE:
+        /* #2996/#2633: the words of the cloner's screen (screens_cloner.c, #2613), from the server's verdict for this drawer --
+         * "נבדק" only for what it says was read back; a verdict that is not there says nothing about a check */
+        y->pill = "הושלם";
+        if (!strcmp(d->rb_verdict, "unverified")) {
+            snprintf(y->line, sizeof y->line, d->rb_nolist ? "הושלם · לא אומת — הרשימה לא הורדה" : "הושלם · לא אומת"); y->line_warn = 1;
+        } else if (!strcmp(d->rb_verdict, "sampled")) snprintf(y->line, sizeof y->line, "הושלם · נבדק במדגם");
+        else if (!strcmp(d->rb_verdict, "verified")) snprintf(y->line, sizeof y->line, "הושלם · נבדק");
+        else snprintf(y->line, sizeof y->line, "הושלם");
+        break;
     case BAY_FAILED:
         y->pill = "נכשל";
         {   /* the machine's error is "sdb: <why>; sdc: <why>" -- the why, without the device */
@@ -495,7 +504,7 @@ static void live_footer(App *a, cairo_t *cr, Rect foot, int boot_red) {
 
 /* #432 + #65: what an open wave says before it starts, in one orange box
  * (the standby note's language: warning_soft, a warn line, orange dots).
- *   - round.precheck: a drawer on a slow link or a risen CRC -- a warning,
+ *   - round.precheck: a drawer with a risen CRC -- a warning,
  *     never a block; "התחל" then asks (CONFIRM_ROOM_START_WARN).
  *   - round.missing: who the wave is waiting for, with "כבה אותו" for one
  *     that still answers, and the other two choices of the spec: "התחל בכל
@@ -536,7 +545,9 @@ static double room_pre_block(App *a, cairo_t *cr, double x, double y, double w, 
             if (draw) text_draw_r(cr, &l, right - 14, cy, t->warning_ink);
             cy += l.h + 4; text_free(&l);
         }
-        Text f = rtl_block_make(cr, N_SUB, 400, "הגל ייכתב גם כך — אזהרה, לא חסימה. התחלה עם האזהרה נרשמת ביומן.", inner + 14);
+        /* #2871: what the agent does with a drawer measured slow (writecheck.sh write_speed_verdict) -- the same
+         * sentence as the console's (roomPrecheckHtml); "a warning, not a block" was not true of it */
+        Text f = rtl_block_make(cr, N_SUB, 400, "הגל יוצא גם כך, אבל לפני הכתיבה כל מגירה עוברת בדיקת כתיבה: מגירה שתימדד איטית — מתחת למהירות המינימלית לכונן שהשרת קובע, או פחות מחצי מהמגירות האחרות מאותו סוג במחשב — תיכשל בשמה, והשאר ימשיכו. התחלה עם האזהרה נרשמת ביומן.", inner + 14);
         if (draw) text_draw_r(cr, &f, right, cy, t->muted);
         cy += f.h + (s->nroom_missing ? N_ACTION_GAP : 0); text_free(&f);
     }

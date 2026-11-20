@@ -37,6 +37,7 @@ int lc_unmeasured(const LcState *l);              /* #1440: a partition not meas
 void lc_disk_label(const LcDisk *d, char *out, size_t n);   /* visible drawer, or an unmapped label */
 #define LC_LABEL_MAX (SLOT_NAME_MAX + 16)  /* #2001: a buffer for lc_disk_label -- a name of 24 Hebrew letters is 48 bytes */
 void lc_has_text(const LcDisk *d, char *out, size_t n);     /* "Windows · 3 מחיצות · 212 GB בשימוש" */
+void lc_scan_text(const LcState *l, char *out, size_t n);   /* #2991: "בודק את דיסק 2… 0:12 · עוד דיסק אחד ממתין" */
 void lc_copy_text(const LcState *l, const LcDisk *src, char *out, size_t n);   /* #1443: "203.1 GB יועתקו" */
 void lc_sample(State *s, const char *card);       /* --png: the mockup's scenario */
 int lc_png_setup(App *a, const char *card);       /* 1 = card is a local clone card */
@@ -76,8 +77,10 @@ const char *lc_status_keys(const App *a);
  * hero and cage -- shared with the build machine's distribution screen and
  * the cloner's "שיכפול במקביל" */
 enum { BAY_WAITING, BAY_WRITING, BAY_SMART, BAY_SKIPPED, BAY_FAILED, BAY_DONE,
+       BAY_PULLED,      /* #3270: pulled mid-write (or back, not yet rejoined) -- grey, a state of the process, not a failure */
        BAY_CANCELED,    /* #1386: grey like skipped, an empty bar -- the disk is empty now, not "16%" */
-       BAY_CANCELING }; /* #1386: the seconds in between -- an orange LED, the bar emptied */
+       BAY_CANCELING,   /* #1386: the seconds in between -- an orange LED, the bar emptied */
+       BAY_INSERT };    /* #3181: a production line's empty drawer -- "הכנס דיסק", the next name big, a grey LED */
 typedef struct {
     int kind, drawer;            /* BAY_*; the drawer number, 0 = "—" */
     char name[SLOT_NAME_MAX + 64], sub[200];
@@ -91,6 +94,7 @@ typedef struct {
      * orange or red tone colours the bar too: it asks, it does not stop. */
     const char *note; int toned; Rgb tone; char note_buf[64];
     int line_warn;               /* #943: a done disk that carries an error -- its line in orange */
+    int line2;                   /* #3167: the line may take two lines (a done disk's note after it) */
     int done_warn;               /* #2009: done, but orange -- its pill, LED and bar (Fast Startup, dirty, not checked) */
     int flag;                    /* #2024: holds the end (end_problem_of): 1 orange, 2 red -- the row tinted, its edge thick, the line is the reason */
     /* #1386: the fifth column -- "בטל…" on a writing row, red words, its key in a chip
@@ -105,6 +109,7 @@ typedef struct {
     /* #2046 (mockup 11): the check after the write -- the bar stays blue and whole (the write is done), the green
      * is how much of the disk was read back, filling from the start side; a red tick where a check stopped */
     int rb, rb_mark; double rb_share;
+    int ready;                   /* #3181: "אפשר להוציא" -- the name in the row's green (mockup c1, .rdy) */
 } LcBay;
 /* DRV_LGREY / DRV_LWARN (#1331 T8): the Linux initramfs line -- kept apart from
  * the Windows tones so the screens'' "N placed / N without" summaries never count it */
@@ -128,8 +133,13 @@ void lc_met(App *a, cairo_t *cr, Rect r, const char *l, const char *v, const cha
 void lc_disks_met(App *a, cairo_t *cr, Rect r, const char *value, const char *hint);
 double lc_hero(App *a, cairo_t *cr, double x0, double xr, double y, const char *label, const char *h1,
                const char *s2, const char *big, const char *left, int alarm);   /* alarm: the title in red */
-/* #1843: under the number "צפוי להסתיים ב-<at>" (at "" = no time line), then the small lines l1 / l2 */
-typedef struct { char at[8]; const char *l1, *l2; } LcEta;
+/* #1843: under the number "צפוי להסתיים ב-<at>" (at "" = no time line), then the small lines l1 / l2.
+ * #3270: keep = the end side keeps the room of the most it can say, and the number stays put -- a stream that
+ * stops and starts must not move the screen under it. LC_KEEP_LINES: two small lines (no hour can be drawn --
+ * the clock is not proven); LC_KEEP_HOUR: the hour and two small lines. Never more than the screen can say,
+ * so a small screen does not give up a drawer's row for an hour it will never draw (#2849) */
+enum { LC_KEEP_NONE, LC_KEEP_LINES, LC_KEEP_HOUR };
+typedef struct { char at[8]; const char *l1, *l2; int keep; } LcEta;
 double lc_hero_eta(App *a, cairo_t *cr, double x0, double xr, double y, const char *label, const char *h1,
                    const char *s2, const char *big, const LcEta *e, int alarm);
 /* the wall-clock "HH:MM" of <age> seconds ago (a negative age = from now); --png counts from the header's 12:45 */

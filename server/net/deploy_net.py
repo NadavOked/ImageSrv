@@ -255,11 +255,41 @@ def firewall_installed(conf: str | Path = NFTABLES_CONF) -> bool | None:
         return None
 
 
+#: #3224: מה שהמחולל כותב כשהוא מצהיר על הקבוצה (`deploy/nftables-rules.sh`).
+KNOWN_MACS_DECL = "set known_macs"
+#: #3512: the range before the chunk engine's feedback port joined it (`deploy/nftables-rules.sh`, MCAST_PORTS).
+OLD_MCAST_RANGE = "udp dport 9000-9001"
+
+
+def stale_firewall(conf: str | Path = NFTABLES_CONF) -> str | None:
+    """#3224: האם `/etc/nftables.conf` הוא של גרסה שקדמה ל-`known_macs`.
+
+    None = אין מה לכתוב מחדש: אין חומת אש של ImageSrv (`--no-firewall`, #2440 --
+    שדרוג אינו מדליק אותה), או שהקובץ כבר מצהיר על הקבוצה. אחרת הסיבה, בעברית.
+    קובץ שלא ניתן לקרוא אינו "תקין" (עיקרון 5): הסיבה חוזרת, והקורא לא מדלג."""
+    try:
+        text = Path(conf).read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        return f"לא ניתן לקרוא את {conf} ({exc.__class__.__name__}) — לא ידוע אם חומת האש מעודכנת"
+    if "ImageSrv" not in text:
+        return None
+    if KNOWN_MACS_DECL in text:
+        if OLD_MCAST_RANGE in text:         # #3512: with known_macs, but without the feedback port (portbase+3)
+            return (f"{conf} פותח רק {OLD_MCAST_RANGE.split()[-1]}: חסר פורט משוב הקצב של מנוע החתיכות (portbase+3), "
+                    "והמשוב לא יגיע לשרת")
+        return None
+    return (f"{conf} הוא של גרסה קודמת: אין בו את הקבוצה known_macs, ופורטי udpcast "
+            "פתוחים לכל מחשב בכרטיס ההפצה")
+
+
 def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_if: str | None,
                         primary_ip: str | None = None,
                         conf: str | Path = NFTABLES_CONF,
                         services: list[tuple[str, list[str]]] | None = None,
-                        proxy_interfaces: list[str] | None = None) -> str | None:
+                        proxy_interfaces: list[str] | None = None,
+                        sender_portbase: int | None = None) -> str | None:
     """מריץ שוב את `deploy/nftables-rules.sh` עם שני הכרטיסים, בודק תחביר
     (`nft -c`), כותב ומטעין. חומת אש שלא הותקנה — לא נוגעים; הותקנה
     וכרטיס השרתים אינו ידוע — שגיאה בשם (הכללים לוילן ההפצה לא ייכתבו).
@@ -267,7 +297,9 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
     `services` (#705): [(כרטיס, [שירותים])] — המפעיל בחר שירותים לכל כרטיס,
     והכללים נגזרים מהם בלבד (`--per-nic`); אז שני הכרטיסים אינם נדרשים.
     `proxy_interfaces` (#1829) names the interfaces configured for PXE proxy;
-    UDP 4011 additionally requires a deploy/netboot rule for that interface."""
+    UDP 4011 additionally requires a deploy/netboot rule for that interface.
+    `sender_portbase`: the portbase `udp-sender` really takes (`--sender-portbase`); the
+    generator opens `portbase`..`portbase+3` (udpcast, the chunk engine, its feedback port: #3512). None = the generator's 9000-9003."""
     installed = firewall_installed(conf)
     if installed is None:
         return f"לא ניתן לקרוא את {conf} — חומת האש לא עודכנה"
@@ -289,6 +321,9 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
         args += ["--primary-ip", primary_ip]
     for nic in proxy_interfaces or []:
         args += ["--proxy-if", nic]
+    if sender_portbase is not None:
+        # P..P+3: udpcast (P, P+1), מנוע החתיכות (P+2) ומשוב הקצב שלו (P+3, #3512)
+        args += ["--mcast-ports", f"{sender_portbase}-{sender_portbase + 3}"]
     ok, ruleset, err = _run(args)
     if not ok or not ruleset.strip():
         return f"מחולל חומת האש נכשל: {err or 'פלט ריק'}"

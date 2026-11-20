@@ -31,8 +31,10 @@ import sqlite3
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
+from server.brain import ingest as brain_ingest   # #3669 (B6, B8), בצל
 from server.rounds import drive_rates, prompt_hold, room, room_drivers, sender as sender_module
 from server.agent import registry
+from server.core import finite_json
 from server.disks import disk_rule
 from server.db import _write_lock, journal, now_iso, update_one, writing
 from server.library.images import journal_ntfs_inconsistent, restore_refusal
@@ -166,6 +168,7 @@ def open_direct_round(ctx, source: dict, target_slots, target_drives,
             f"{round_id} source={mac}:{disk} serial={serial or '-'} task={task_id} target={count}"
             + (f" drivers={len(chosen_drivers)}" if chosen_drivers else ""), user,
             machine=mac, round_id=round_id)
+    brain_ingest.silence_shadow(ctx.conn, round_id, task_id)   # #3669 (B8), בצל
     return {"id": round_id, "wave_session_id": wave_id,
             "task_id": task_id, "image_id": image_id}
 
@@ -322,7 +325,10 @@ def task_block(conn: sqlite3.Connection, store, task: dict,
                 (reason, now_iso(), task["id"]),
             )
 
-        store.fail(wave["id"], reason, related=fail_direct_round)
+        # #3842: `fail` אינו קורא ל-`on_closed` — בלי זה שולח מנוע החתיכות של הגל נשאר חי עד "אף מחשב לא
+        # התייצב" (180 ש'), וכל גל חדש נדחה. `on_closed` מוגבל למזהה הגל (#773), ועצירה כפולה בטוחה.
+        if store.fail(wave["id"], reason, related=fail_direct_round):
+            store.on_closed(wave["id"])
         wave = conn.execute(
             "SELECT id, state FROM sessions WHERE id = ?", (wave["id"],)
         ).fetchone()
@@ -424,6 +430,7 @@ def fail_round_of_task(conn: sqlite3.Connection, store, task_id: str,
         wave_id, reason,
         related=lambda: room.fail_wave(conn, wave_id, reason, commit=False))
     if failed:
+        store.on_closed(wave_id)                # #3842: כמו ב-`task_block`
         journal(conn, "room_failed", f'{round_row["id"]} {wave_id} {reason}'
                 f' written={round_row["written_drives"]}/{round_row["target_drives"]}',
                 round_id=round_row["id"])
@@ -493,7 +500,7 @@ def create_direct_router(ctx) -> APIRouter:
 
     def _put_manifest_body(task_id: str, row, raw: bytes):
         try:
-            manifest = json.loads(raw.decode("utf-8"))
+            manifest = finite_json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError, RecursionError):   # #2447: deep JSON is 400, not 500
             snippet = raw[:160].decode("utf-8", "replace")
             _fail(task_id, f"manifest is not valid JSON: {snippet}", row["mac"])
@@ -512,12 +519,21 @@ def create_direct_router(ctx) -> APIRouter:
         if refusal is not None:
             _fail(task_id, refusal, row["mac"])
             raise HTTPException(400, refusal)
+        # #3161: מקור שהעלה אינדקסים של חתיכות לפני המניפסט -- כולם תואמים לו, או שהוא מסורב.
+        live = getattr(ctx, "direct_chunk", None)
+        if live is not None:
+            from server.rounds import directchunk   # noqa: PLC0415 — directchunk imports this module
+            unsealed = directchunk.seal(live.store, row["image_id"], manifest)
+            if unsealed is not None:
+                _fail(task_id, unsealed, row["mac"])
+                raise HTTPException(400, unsealed)
         manifest["id"] = row["image_id"]
         manifest["name"] = row["name"]
         try:
             store_live_manifest(ctx.conn, row, manifest)
         except SessionError as exc:
             raise HTTPException(409, str(exc))
+        brain_ingest.compression_shadow(ctx.conn, task_id, manifest, "direct")   # #3669 (B6), בצל
         journal_ntfs_inconsistent(ctx.conn, manifest, f'{task_id} {row["image_id"]}', machine=row["mac"])
         return {"ok": True, "image_id": row["image_id"]}
 
@@ -536,4 +552,7 @@ def create_direct_router(ctx) -> APIRouter:
             # release/v0.92.0 (#2916 §2): only when this call failed it -- a cancel that came first stays.
             fail_round_of_task(ctx.conn, ctx.store, task_id, f"{MANIFEST_REJECTED}: {message}")
 
+    # #3161: האינדקס, הראש, רשימת החתיכות של מעבר השלמה ותוצאת המעבר -- אותו אסימון ואותו שער.
+    from server.rounds import directchunk   # noqa: PLC0415 — directchunk imports this module
+    directchunk.add_routes(router, ctx, task_for, _fail)
     return router

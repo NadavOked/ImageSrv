@@ -30,13 +30,14 @@ set -eu
 DEPLOY_IF=""
 SERVERS_IF=""
 PRIMARY_IP=""
-MCAST_PORTS="9000-9001"
+MCAST_PORTS="9000-9003"
 CONSOLE_PORT="8081"
 AGENT_PORT="8080"
 INTERSERVER_PORT="8443"
 PER_NIC=""
 SERVICE_SPECS=""
 PROXY_IFS=" "
+NTP_IFS=" "
 
 die() { printf '%s\n' "nftables-rules: $*" >&2; exit 2; }
 
@@ -50,7 +51,11 @@ Usage: nftables-rules.sh --servers-if IF [--deploy-if IF] [options]
   --primary-ip IP         כתובת הראשי — רק במשני; פותח 8443 ממנה בלבד
   --proxy-if IF           PXE proxy enabled on IF (repeatable); opens UDP 4011
                           only on --deploy-if or a per-NIC netboot interface
-  --mcast-ports A-B       טווח UDP של udpcast (ברירת מחדל 9000-9001)
+  --mcast-ports A-B       טווח UDP של udpcast ושל מנוע החתיכות: portbase..portbase+3
+                          (ברירת מחדל 9000-9003; שרת שרץ עם --sender-portbase P
+                          מקבל כאן P-(P+3), וה-Python שקורא למחולל גוזר אותו)
+  --ntp-if IF             (ברירת המחדל, לא --per-nic) הכרטיס ש-chrony מגיש בו זמן:
+                          פותח UDP 123 עליו (חוזר לכל כרטיס). ב-per-nic: IF:ntp
   --console-port N        קונסולה (ברירת מחדל 8081)
   --agent-port N          סוכן (ברירת מחדל 8080)
   --interserver-port N    בין-שרתים (ברירת מחדל 8443)
@@ -71,6 +76,12 @@ while [ $# -gt 0 ]; do
                 *[!A-Za-z0-9_.:-]*) die "proxy interface name is not safe for nftables" ;;
             esac
             PROXY_IFS="${PROXY_IFS}${proxy_if} "; shift 2 ;;
+        --ntp-if)
+            ntp_if="${2:?}"
+            case "$ntp_if" in
+                *[!A-Za-z0-9_.:-]*) die "ntp interface name is not safe for nftables" ;;
+            esac
+            NTP_IFS="${NTP_IFS}${ntp_if} "; shift 2 ;;
         --mcast-ports)      MCAST_PORTS="${2:?}"; shift 2 ;;
         --console-port)     CONSOLE_PORT="${2:?}"; shift 2 ;;
         --agent-port)       AGENT_PORT="${2:?}"; shift 2 ;;
@@ -84,6 +95,9 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$SERVERS_IF" ] || [ -n "$PER_NIC" ] || die "--servers-if is required"
+# --ntp-if שייך לברירת המחדל. ב-per-nic השירות הוא `--service IF:ntp`; שני הדגלים יחד
+# היו שני מקורות לאותו כלל, וכלל שנשמט בשקט הוא בדיוק מה שהדגל הזה בא לתקן.
+[ "$NTP_IFS" = " " ] || [ -z "$PER_NIC" ] || die "--ntp-if is for the default mode; with --per-nic use --service IF:ntp"
 
 # שמות כרטיסים נכנסים ל-nft כמחרוזת מצוטטת. תו שיכול לשבור את הציטוט
 # או את הדקדוק — סירוב, לא "ניקוי" בשקט.
@@ -91,7 +105,7 @@ case "$DEPLOY_IF$SERVERS_IF" in
     *[!A-Za-z0-9_.:-]*|*"'"*|*"\""*) die "interface name is not safe for nftables" ;;
 esac
 # ‏#2441: גלוב **שלילי** קודם. ב-sh ה-`*` של `[0-9]*-[0-9]*` תופס גם רווח ושורה
-# חדשה, ו-"9000-9001 accept<LF>iifname ... accept" עבר ונכתב לחומת האש.
+# חדשה, ו-"9000-9003 accept<LF>iifname ... accept" עבר ונכתב לחומת האש.
 case "$MCAST_PORTS" in
     *[!0-9-]*|*-*-*) die "--mcast-ports must be A-B (got: $MCAST_PORTS)" ;;
     [0-9]*-[0-9]*) ;;
@@ -155,7 +169,10 @@ if [ -n "$PER_NIC" ]; then
                     esac
                     add_rule "iifname \"${nic}\" tcp dport ${AGENT_PORT} accept" ;;
                 multicast)
-                    add_rule "iifname \"${nic}\" udp dport ${MCAST_PORTS} accept"
+                    # נדב 14/11 (#2485): המשוב של udpcast רק ממחשב רשום (known_macs, server/net/known_fw.py)
+                    add_rule "iifname \"${nic}\" udp dport ${MCAST_PORTS} ether saddr @known_macs accept"
+                    add_rule "iifname \"${nic}\" udp dport ${MCAST_PORTS} limit rate 5/minute log prefix \"imagesrv-unregistered \" level info"
+                    add_rule "iifname \"${nic}\" udp dport ${MCAST_PORTS} drop"
                     # ‏#1972: שאילתות IGMP של querier אחר — בלעדיהן השרת לא שומע אותו.
                     add_rule "iifname \"${nic}\" ip protocol igmp accept" ;;
                 interserver)
@@ -185,8 +202,14 @@ if [ -n "$DEPLOY_IF" ]; then
 		iifname \"${DEPLOY_IF}\" udp dport 69 accept
 		# סוכן (hello/boot/images) — HTTP על כרטיס ההפצה בלבד.
 		iifname \"${DEPLOY_IF}\" tcp dport ${AGENT_PORT} accept
-		# מולטיקאסט udpcast: portbase ו-portbase+1 (ברירת מחדל 9000-9001, server/rounds/sender.py).
-		iifname \"${DEPLOY_IF}\" udp dport ${MCAST_PORTS} accept
+		# מולטיקאסט: udpcast portbase ו-portbase+1, מנוע החתיכות portbase+2 ומשוב הקצב (feedback) שלו portbase+3 (ברירת מחדל 9000-9003, #3512).
+		# נדב 14/11 (#2485): רק ממחשב רשום -- ה-MAC שלו בקבוצה known_macs, שהשרת כותב בכל שינוי
+		# ברשימת המכונות (server/net/known_fw.py). מחשב לא רשום: שורת יומן מרוסנת, ו-drop.
+		# DHCP/TFTP/סוכן נשארים פתוחים לכולם: מחשב לא רשום מקבל מהם רק את הדרך לדיסק המקומי
+		# או למסך \"לא רשום\" (#1802); שער ה-HTTP של הסוכן סוגר את השאר (server/agent/deploy_gate.py).
+		iifname \"${DEPLOY_IF}\" udp dport ${MCAST_PORTS} ether saddr @known_macs accept
+		iifname \"${DEPLOY_IF}\" udp dport ${MCAST_PORTS} limit rate 5/minute log prefix \"imagesrv-unregistered \" level info
+		iifname \"${DEPLOY_IF}\" udp dport ${MCAST_PORTS} drop
 		# IGMP (#1972): השרת הוא ה-querier, ושומע querier אחר לפי השאילתות שלו.
 		iifname \"${DEPLOY_IF}\" ip protocol igmp accept
 		# WoL (UDP 9) הוא יוצא — chain output ב-accept, אין כלל כניסה."
@@ -220,6 +243,15 @@ if [ -z "$PER_NIC" ]; then
 		# קונסולה HTTPS — לא על כרטיס ההפצה.
 		iifname \"${SERVERS_IF}\" tcp dport ${CONSOLE_PORT} accept
 ${INTERSERVER_RULE}"
+    # NTP: chrony מאזין על 0.0.0.0:123 ברגע שיש לו רשת להגיש לה (server/system/timesync.py,
+    # `_write_server`), ובלי כלל כאן ה-policy drop זורק את השאלות. נפתח רק בכרטיס שנקרא במפורש.
+    ntp_left="$NTP_IFS"
+    while [ -n "${ntp_left# }" ]; do
+        ntp_left="${ntp_left# }"
+        MIDDLE="${MIDDLE}
+		iifname \"${ntp_left%% *}\" udp dport 123 accept"
+        ntp_left="${ntp_left#* }"
+    done
 else
     MIDDLE="${PER_NIC_RULES}"
 fi
@@ -233,6 +265,11 @@ cat <<EOF
 flush ruleset
 
 table inet imagesrv {
+	# המחשבים הרשומים (נדב 14/11, #1079/#2485): השרת ממלא, מהקובץ שבסוף (known_fw.py).
+	set known_macs {
+		type ether_addr
+	}
+
 	chain input {
 		type filter hook input priority filter; policy drop;
 
@@ -262,4 +299,8 @@ ${MIDDLE}
 		type filter hook forward priority filter; policy drop;
 	}
 }
+
+# הרשימה שהשרת כותב (server/net/known_fw.py) -- כל טעינה של הקובץ הזה ממלאת את
+# known_macs מחדש. תבנית שאינה תואמת אף קובץ (התקנה טרייה) אינה שגיאה.
+include "/etc/imagesrv/nft.d/*.nft"
 EOF

@@ -17,9 +17,10 @@ from fastapi import APIRouter
 from conftest import hello_body
 from server import db
 from server.console import journal_he, learning as console_learning
+from server.brain import floorrule
 from server.disks import writefloor
 from server.learn import tuning, wiring
-from server.rounds import drive_rates
+from server.rounds import drive_rates, nic_live
 
 from test_server_room import (CLONER1, CLONER2, cloner_hello, heartbeat, room,  # noqa: F401
                               room_body, room_server)
@@ -118,7 +119,7 @@ def test_turning_the_switch_off_cancels_the_run_and_leaves_the_settings(room_ser
     for _ in range(2):
         tuning.record_wave(ctx.conn, _wave(ctx.conn))
     learned = writefloor.mbps(ctx.conn)
-    assert learned > writefloor.DEFAULT
+    assert learned > floorrule.DEFAULT
     admin.post("/api/console/settings", json={tuning.SETTING: "true"})
     assert admin.post("/api/console/settings", json={tuning.SETTING: "false"}).status_code == 200
     tuning.record_wave(ctx.conn, _wave(ctx.conn, speeds=(400, 410)))
@@ -132,7 +133,7 @@ def test_two_clean_waves_adjust_with_previous_new_and_the_number_behind_it(conn)
     _on(conn)
     tuning.record_wave(conn, _wave(conn, speeds=(140, 150, 200)))
     assert tuning.status(conn)["run"]["state"] == "collecting"
-    assert writefloor.mbps(conn) == writefloor.DEFAULT, "אחרי גל אחד לא משתנה דבר"
+    assert writefloor.mbps(conn) == floorrule.DEFAULT, "אחרי גל אחד לא משתנה דבר"
     tuning.record_wave(conn, _wave(conn, speeds=(140, 150, 200)))
     state = tuning.status(conn)
     assert state["run"]["state"] == "done" and state["run"]["learned"] == 2
@@ -240,7 +241,7 @@ def test_too_few_disk_measurements_leave_the_floor(conn):
     _on(conn)
     for _ in range(2):
         tuning.record_wave(conn, _wave(conn, speeds=(300,)))
-    assert writefloor.mbps(conn) == writefloor.DEFAULT
+    assert writefloor.mbps(conn) == floorrule.DEFAULT
     row = next(u for u in tuning.status(conn)["run"]["unchanged"] if u["key"] == writefloor.SETTING)
     assert row["why_he"] == "אין מספיק מדידות: 2 מ-1 דיסקים"
 
@@ -306,7 +307,7 @@ def test_a_stream_that_was_not_measured_moves_no_floor(conn):
     _on(conn)
     for _ in range(2):
         tuning.record_wave(conn, _wave(conn, bps=None, speeds=(500, 520, 540)))
-    assert writefloor.mbps(conn) == writefloor.DEFAULT
+    assert writefloor.mbps(conn) == floorrule.DEFAULT
     row = next(u for u in tuning.status(conn)["run"]["unchanged"] if u["key"] == writefloor.SETTING)
     assert row["why_he"] == "קצב הזרם לא נמדד בכל השיכפולים"
 
@@ -529,18 +530,20 @@ def test_revert_of_a_value_that_moved_refuses_loudly(conn):
     assert writefloor.mbps(conn) == 123
 
 
-def test_a_manual_change_wins_and_removes_the_tag(room_server):
+def test_the_write_floor_is_the_learnings_alone_and_the_operator_cannot_write_it(room_server):
+    """נדב 14/11 בערב: `writecheck_min_mbps` יצא מההגדרות. הכתיבה אליו נדחית, והשינוי הנלמד נשאר ואפשר לבטל אותו."""
     admin, ctx = room_server["admin"], room_server["ctx"]
     ids = _learned(ctx.conn)
-    assert admin.post("/api/console/settings", json={writefloor.SETTING: "77"}).status_code == 200
+    learned = writefloor.mbps(ctx.conn)
+    r = admin.post("/api/console/settings", json={writefloor.SETTING: "77"})
+    assert r.status_code == 400 and r.json()["detail"] == f"הגדרה לא מוכרת: {writefloor.SETTING}"
+    assert writefloor.SETTING not in admin.get("/api/console/settings").json()
     state = admin.get("/api/console/learning").json()
-    assert writefloor.SETTING not in state["adjusted_keys"]
-    assert drive_rates.START_SETTING in state["adjusted_keys"]
+    assert writefloor.SETTING in state["adjusted_keys"] and drive_rates.START_SETTING in state["adjusted_keys"]
+    assert writefloor.mbps(ctx.conn) == learned != 77
     url = f"/api/console/learning/changes/{ids[writefloor.SETTING]}/revert"
-    assert admin.post(url).status_code == 404
-    assert writefloor.mbps(ctx.conn) == 77
-    assert ctx.conn.execute("SELECT state, ended_by FROM learning_changes WHERE id = ?",
-                            (ids[writefloor.SETTING],)).fetchone()["ended_by"] == "noc"
+    assert admin.post(url).status_code == 200
+    assert writefloor.mbps(ctx.conn) != learned
 
 
 def test_a_later_run_replaces_and_revert_goes_back_to_the_value_before_it(conn):
@@ -662,6 +665,25 @@ def _wiring(client, mac):
     return r.json()
 
 
+@pytest.fixture()
+def wire_net(room_server):
+    """#3600: the network as the brain measured it -- the cloner's card (`nic_live`, its hello) and the server's card (the last wave's
+    decision). `put(mac, cloner_mbps, server_mbps)`; `None` = that card was not measured. Call it AFTER `_hello`: a hello without
+    `nic_link` makes the cloner's speed "unknown" again."""
+    conn = room_server["ctx"].conn
+
+    def put(mac, cloner_mbps, server_mbps):
+        if cloner_mbps is not None:
+            nic_live.note(mac, {"iface": "eth0", "speed_mbps": cloner_mbps}, "boot-a")
+        if server_mbps is not None:
+            decision = {"max_bitrate": "900m", "link": {"interface": "eth1", "speed_mbps": server_mbps, "why": None, "applied": True}}
+            conn.execute("INSERT INTO wave_rates (session_id, decision, at) VALUES (?,?,?)",
+                         (f"ses_net{next(_seq):05d}", json.dumps(decision), db.now_iso()))
+            conn.commit()
+    yield put
+    nic_live.forget()
+
+
 def _fleet(room_server, *, drawers=4):
     """שני משכפלים מאותו דגם, 6 גלים: SATA 0-2 נקיים בשניהם, SATA 3 רע בשניהם, SATA 4 נקי ב-CLONER2."""
     admin, anon, conn = room_server["admin"], room_server["anon"], room_server["ctx"].conn
@@ -728,13 +750,13 @@ def test_not_measured_is_not_clean_and_not_zero(room_server):
 
 
 def test_the_recommendation_names_ports_reason_and_its_evidence(room_server):
+    """#3647: no network was measured, so no speed recommendation ("חברו את N המגירות ל-SATA ..."): only the cable's -- what to leave free, and the move."""
     admin = _fleet(room_server)
     got = _wiring(admin, CLONER1)
     assert got["enough"] is True and (got["machines"], got["waves"]) == (2, 6)
-    assert got["recommended"] == [1, 2, 3, 5] and 4 in got["avoid"]
+    assert got["recommended"] == [5] and 4 in got["avoid"] and got["speed"] is False, "only the target of the cable's move"
     assert got["head_he"] == f"המלצת חיווט לדגם {HP}:"
-    assert got["text_he"] == ("חברו את 4 המגירות ל-SATA 0, 1, 2 ו-4. SATA 3 איטי (3 Gb/s) ויש עליו"
-                              " היסטוריית CRC, ולכן מומלץ להשאיר אותו פנוי."
+    assert got["text_he"] == ("SATA 3 יש עליו היסטוריית CRC, ולכן מומלץ להשאיר אותו פנוי."
                               " מבוסס על 2 מחשבים מהדגם, 6 שיכפולים.")
     assert got["ports"]["4"]["advice"] == "avoid"
     assert (got["ports"]["4"]["crc"], got["ports"]["4"]["crc_waves"]) == (300, 3)
@@ -750,7 +772,7 @@ def test_a_port_never_measured_in_the_model_is_not_recommended(room_server):
     _hello(anon, CLONER1, [1, 2, 3, 4, 6])     # SATA 5: דיסק מחובר, בלי שום תצפית
     got = _wiring(admin, CLONER1)
     assert 6 not in got["recommended"] and got["ports"]["6"]["advice"] is None
-    assert got["text_he"].startswith("רק 4 חיבורים נמדדו נקיים: SATA 0, 1, 2 ו-4. אין ראיה על השאר.")
+    assert "חברו" not in got["text_he"] and "נמדדו נקיים" not in got["text_he"], "#3647: no speed recommendation without a measured network"
 
 
 def test_a_bad_port_on_one_machine_is_that_machine_only(room_server):
@@ -758,10 +780,12 @@ def test_a_bad_port_on_one_machine_is_that_machine_only(room_server):
     _obs(conn, CLONER1, 2, crc=9)
     mine, other = _wiring(admin, CLONER1), _wiring(admin, CLONER2)
     assert mine["ports"]["2"]["advice"] == "avoid"
-    assert 2 in other["recommended"] and other["ports"]["2"]["advice"] == "use"
+    assert other["ports"]["2"]["advice"] is None and other["avoid"] != mine["avoid"], "#3647: the other machine's port 2 is no cable's target"
 
 
-def test_a_slower_port_stays_out_when_there_are_enough_fast_ones(room_server):
+def test_a_slower_port_is_not_avoided_it_gets_a_better_if_free_note_when_it_is_the_bottleneck(room_server, wire_net):
+    """#3600 (Nadav 17/11, 18/11): a port that is always 3.0 is the board's, not "suspect, do not connect"; a faster FREE port is "better,
+    if free" -- and only when the network that was measured (10G on both cards) is faster than the port."""
     admin, anon, conn = room_server["admin"], room_server["anon"], room_server["ctx"].conn
     conn.execute("UPDATE machines SET drawer_count = 2")
     conn.commit()
@@ -772,10 +796,17 @@ def test_a_slower_port_stays_out_when_there_are_enough_fast_ones(room_server):
             _obs(conn, mac, 1, session=f"s{mac}{i}")
             _obs(conn, mac, 2, session=f"s{mac}{i}")
             _obs(conn, mac, 3, link=(3.0, 3.0), session=f"s{mac}{i}")   # תקרת הפורט: לא תקלה
+    wire_net(CLONER1, 10000, 10000)
     got = _wiring(admin, CLONER1)
-    assert got["recommended"] == [1, 2] and got["avoid"] == [3]
-    assert "SATA 2 איטי (3 Gb/s)" in got["text_he"]
-    assert got["moves"] == [{"from": 3, "to": 2, "drawer": 2}]
+    assert got["recommended"] == [1, 2] and got["avoid"] == [], "a speed is no evidence of a cable"
+    assert "איטי" not in got["text_he"] and "להשאיר אותו פנוי" not in got["text_he"], got["text_he"]
+    assert got["moves"] == [], "a move is for a cable only"
+    assert got["upgrades"] == [{"from": 3, "to": 2, "drawer": 2, "from_gbps": 3.0, "to_gbps": 6.0, "from_mbs": 280, "net_mbs": 1125}]
+    assert got["upgrade_notes_he"] == ["המגירה השנייה מחוברת היום ל-SATA 2 (3 Gb/s), והיא מגבילה את הקצב: עד 280 MB/s מול כ-1125 MB/s שהרשת נותנת."
+                                       " עדיף SATA 1 (6 Gb/s) אם הוא פנוי — זו המלצה, לא תקלה."]
+    assert got["network"] == {"mbs": 1125.0, "mbps": 10000, "by": "cloner", "cloner_mbps": 10000, "server_mbps": 10000, "why": None, "margin": 1.1}
+    assert got["ports"]["3"]["advice"] is None and (got["ports"]["3"]["better_port"], got["ports"]["3"]["better_gbps"]) == (2, 6.0)
+    assert got["ports"]["2"]["advice"] == "use" and got["ports"]["2"]["better_port"] is None
 
 
 def test_the_advice_changes_no_mapping(room_server):
@@ -807,3 +838,156 @@ def test_a_machine_without_a_model_gets_no_model_advice_but_keeps_its_suspect(ro
 def test_wiring_of_an_unknown_machine_is_404(room_server):
     assert room_server["admin"].get("/api/console/machines/00:00:00:00:00:99/wiring").status_code == 404
     assert wiring.MIN_MACHINES == 2 and wiring.MIN_WAVES == 5
+
+
+# ---------- #3443: גל חתיכות -- לומד, ורק לפי ראיה חיובית שלו ----------
+
+#: ה-sample של גל חתיכות שלימד (`chunk_rate.sample_of` + `skip`/`teaches`): 700Mb/s שודרו 10 דקות, בלי אבדן.
+CHUNK_OK = {"asked_bps": 700_000_000, "sent_bps": 700_000_000, "stream_zbytes": 52_500_000_000,
+            "first_pass_s": 600, "loss_permille": 0.0, "ended": "send_done", "skip": None, "teaches": True}
+
+
+def _chunk_wave(conn, *, finished=("D0", "D1"), speeds=(140, 150), done=1, **sample):
+    """גל של מנוע החתיכות כפי ש-`chunk_rate.record` משאיר אותו: ב-`stream` רק המפתח `chunk`, בלי מוני udp-sender.
+    `finished`: הסידוריים שהמגירה שלהם `done` עם `bytes_written` (`session_members.targets_json`); השאר נכשלו."""
+    session = _wave(conn, speeds=speeds, done=done)
+    conn.execute("UPDATE wave_rates SET stream = ? WHERE session_id = ?",
+                 (json.dumps({tuning.CHUNK_KEY: {**CHUNK_OK, **sample}}), session))
+    conn.execute("INSERT INTO sessions (id, group_id, image_id, prefix, expected_clients, wait_seconds, state,"
+                 " opened_by, created_at, last_join_at) VALUES (?, 'g', 'img', 'P', 1, 60, 'closed', 'noc', ?, 0)",
+                 (session, db.now_iso()))
+    targets = [{"serial": f"D{i}", "dev": f"sd{i}", "state": "done" if f"D{i}" in finished else "failed",
+                "bytes_written": 18 * 10 ** 9 if f"D{i}" in finished else 0} for i in range(len(speeds))]
+    conn.execute("INSERT INTO session_members (session_id, mac, state, updated_at, targets_json)"
+                 " VALUES (?, ?, 'done', ?, ?)", (session, CLONER1, db.now_iso(), json.dumps(targets)))
+    conn.commit()
+    return session
+
+
+def test_the_chunk_stream_key_is_the_one_chunk_rate_writes():
+    from server.rounds import chunk_rate
+    assert tuning.CHUNK_KEY == chunk_rate.STREAM_KEY
+
+
+def test_two_chunk_waves_learn_like_two_udpcast_waves(conn):
+    """ברזל 15/11: בשלושה סבבים ה-Samsung סיים, ו-`learning_runs` נסגרה `not_learned` כי `ok` היה 0 לכל גל חתיכות."""
+    _on(conn)
+    tuning.record_wave(conn, _chunk_wave(conn, speeds=(140, 150, 200), finished=("D0", "D1", "D2")))
+    tuning.record_wave(conn, _chunk_wave(conn, speeds=(140, 150, 200), finished=("D0", "D1", "D2")))
+    state = tuning.status(conn)
+    assert (state["run"]["state"], state["run"]["learned"]) == ("done", 2)
+    assert [w["ok"] for w in state["run"]["waves"]] == [True, True]
+    assert writefloor.mbps(conn) == 75                          # אותו חציון כמו בגל udpcast: 150 ← 75
+    assert drive_rates.learned_start(conn) == 700_000_000       # הזרם עמד ב-700m, בלי אבדן
+    rows = {c["key"]: c for c in state["changes"]}
+    assert "2 שיכפולים" in rows[drive_rates.START_SETTING]["why_he"]
+
+
+def test_a_chunk_wave_held_back_by_the_library_disk_still_counts_and_raises_nothing(conn):
+    """ברזל 15/11: `skip=server_disk` בכל שלושת הסבבים. הזרם שנמדד (263Mb/s) הוא מה שהשרת שידר: הוא התקרה, ולא מעלה."""
+    _on(conn)
+    db.set_setting(conn, writefloor.SETTING, "74")
+    held = dict(skip="server_disk", sent_bps=263_000_000, asked_bps=892_000_000, stream_zbytes=19_725_000_000)
+    for _ in range(2):
+        tuning.record_wave(conn, _chunk_wave(conn, **held))
+    state = tuning.status(conn)["run"]
+    assert (state["state"], state["learned"]) == ("done", 2)
+    assert writefloor.mbps(conn) == 74, "הזרם 32MB/s: מתחת לסף, התקרה אינה מעלה"
+    assert drive_rates.learned_start(conn) is None
+
+
+def test_a_wave_where_only_some_drives_finished_learns_from_those_alone(conn):
+    """D1 נכשל באותה מכונה שבה D0 סיים: ה-`delivered` הוא לכל מכונה, והמדידה של D1 (999) אינה נספרת."""
+    _on(conn)
+    for _ in range(2):
+        tuning.record_wave(conn, _chunk_wave(conn, speeds=(140, 999), finished=("D0",)))
+    assert writefloor.mbps(conn) == floorrule.DEFAULT, "דיסק אחד שסיים: אין מספיק מדידות"
+    row = next(u for u in tuning.status(conn)["run"]["unchanged"] if u["key"] == writefloor.SETTING)
+    assert row["why_he"] == "אין מספיק מדידות: 2 מ-1 דיסקים"
+    levels = tuning.status(conn)["run"]["levels"]["disks"]
+    assert (levels["count"], levels["max_mbps"]) == (1, 140), "999 של הדיסק שנכשל אינו בשום מספר"
+
+
+def test_the_same_partial_wave_of_udpcast_is_untouched(conn):
+    """(בקרה) גל udpcast לא עבר שינוי: ה-`delivered` שלו לכל מכונה, כמו קודם."""
+    _on(conn)
+    for _ in range(2):
+        tuning.record_wave(conn, _wave(conn, speeds=(140, 150)))
+    assert tuning.status(conn)["run"]["levels"]["disks"]["count"] == 2
+
+
+@pytest.mark.parametrize("sample,why", [
+    ({"skip": "chunk_net_gap"}, "מנוע החתיכות: מחשב אבד באמצע המעבר הראשון"),
+    ({"skip": "too_short"}, "מנוע החתיכות: הזרם קצר מדי למדידה"),
+    ({"skip": "no_first_pass"}, "מנוע החתיכות: אין מעבר ראשון שנמדד"),
+    ({"skip": "no_decision"}, "מנוע החתיכות: לא נבחר קצב לגל"),
+    ({"skip": "something_new"}, "מנוע החתיכות: something_new"),                       # קוד לא מוכר: כמות שהוא
+    ({"ended": "send_failed", "skip": "ended=send_failed"}, "השולח לא סיים את הזרם"),  # אמת: הוא באמת לא סיים
+    ({"ended": "send_stopped"}, "השולח לא סיים את הזרם"),
+    ({"ended": None}, "מנוע החתיכות: לא נקרא איך הזרם הסתיים"),
+    ({"stream_zbytes": None}, "מנוע החתיכות: מוני הזרם לא נמדדו"),
+    ({"first_pass_s": None}, "מנוע החתיכות: מוני הזרם לא נמדדו"),
+    ({"sent_bps": None}, "מנוע החתיכות: מוני הזרם לא נמדדו"),
+    ({"loss_permille": None}, "מנוע החתיכות: מוני הזרם לא נמדדו"),               # "לא נמדד" אינו "אפס אבדן"
+    ({"first_pass_s": 10}, "הזרם קצר מדי למדידה"),
+    ({"stream_zbytes": 1000}, "הזרם קצר מדי למדידה"),
+])
+def test_a_chunk_wave_without_positive_evidence_is_not_counted_and_says_why(conn, sample, why):
+    """(neg) אין מונה = הגל לא לומד והסיבה נרשמת; שום ערך אינו מומצא."""
+    _on(conn)
+    tuning.record_wave(conn, _chunk_wave(conn, **sample))
+    wave = tuning.status(conn)["run"]["waves"][0]
+    assert wave["ok"] is False and wave["why_he"] == why
+
+
+def test_a_chunk_wave_with_an_empty_sample_is_not_counted(conn):
+    _on(conn)
+    tuning.record_wave(conn, _chunk_wave(conn, **{k: None for k in CHUNK_OK}))
+    assert tuning.status(conn)["run"]["waves"][0]["why_he"] == "מנוע החתיכות: לא נקרא איך הזרם הסתיים"
+
+
+def test_a_chunk_wave_with_no_drive_that_finished_is_not_counted(conn):
+    _on(conn)
+    tuning.record_wave(conn, _chunk_wave(conn, finished=(), done=0))
+    session = _chunk_wave(conn)
+    conn.execute("UPDATE wave_rates SET delivered = ? WHERE session_id = ?",
+                 (json.dumps({CLONER1: {"drawers": 2, "done": 1, "written_bytes": 0}}), session))
+    conn.commit()
+    tuning.record_wave(conn, session)
+    assert [w["why_he"] for w in tuning.status(conn)["run"]["waves"]] == [
+        "אף מגירה לא סיימה", "אף מגירה לא סיימה עם בייטים שנכתבו"]
+
+
+def test_a_chunk_wave_that_lost_a_machine_teaches_no_rate_even_with_a_finished_drive(conn):
+    _on(conn)
+    before = _settings(conn)
+    for _ in range(2):
+        tuning.record_wave(conn, _chunk_wave(conn, skip="chunk_net_gap"))
+    assert tuning.status(conn)["run"]["state"] == "not_learned" and _settings(conn) == before
+
+
+def test_chunk_loss_above_the_limit_leaves_the_start_rate(conn):
+    _on(conn)
+    tuning.record_wave(conn, _chunk_wave(conn))
+    tuning.record_wave(conn, _chunk_wave(conn, loss_permille=5.0))      # 0.5% > 0.1%
+    assert drive_rates.learned_start(conn) is None
+    row = next(u for u in tuning.status(conn)["run"]["unchanged"] if u["key"] == drive_rates.START_SETTING)
+    assert "אבדן 0.50%" in row["why_he"]
+
+
+def test_a_chunk_wave_with_a_finished_drive_but_no_member_rows_changes_no_floor(conn):
+    """הראיה לכל דיסק היא `session_members`; בלעדיה `delivered` לבדו אינו מכניס מדידה."""
+    _on(conn)
+    for _ in range(2):
+        session = _chunk_wave(conn)
+        conn.execute("DELETE FROM session_members WHERE session_id = ?", (session,))
+        conn.commit()
+        tuning.record_wave(conn, session)
+    assert writefloor.mbps(conn) == floorrule.DEFAULT
+    assert tuning.status(conn)["run"]["levels"]["disks"]["count"] == 0
+
+
+def test_a_udpcast_wave_keeps_its_old_words(conn):
+    _on(conn)
+    tuning.record_wave(conn, _wave(conn, ended="send_failed"))
+    assert tuning.status(conn)["run"]["waves"][0]["why_he"] == "השולח לא סיים את הזרם"

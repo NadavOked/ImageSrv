@@ -216,7 +216,7 @@ BINARIES=(curl jq zstd pv sgdisk blockdev sha256sum od hdparm ntfsresize openssl
           ntfs-3g ntfs-3g.probe ntfsfix umount blkid df mount ethtool smartctl
           e2fsck resize2fs btrfs xfs_growfs
           udp-receiver udp-sender partclone.ntfs partclone.fat partclone.ext4
-          partclone.btrfs partclone.dd
+          partclone.btrfs partclone.xfs partclone.dd
           dmidecode lspci efibootmgr dmsetup nice mkswap)
 
 if [ "$SKIP_APT" -eq 0 ]; then
@@ -334,7 +334,7 @@ bash "$SCRIPT_DIR/agent-lib-flatten.sh" "$AGENT_DIR/lib" "$ROOT/usr/lib/imagesrv
 # #1921: the two knowledge tables (SMART, hardware) -- smartjudge.sh reads them from here, and the
 # server reads the same files from the repo. A build without them would judge nothing: stop.
 install -d "$ROOT/usr/lib/imagesrv/data"
-for _kb in smart-knowledge.tsv hw-issues.tsv; do
+for _kb in smart-knowledge.tsv hw-issues.tsv disk-rule.tsv; do   # #3666: disk-rule.tsv -- the disk's colour, the one table (diskrule.sh)
     [ -s "$AGENT_DIR/lib/data/$_kb" ] || { echo "build_initramfs: agent/lib/data/$_kb missing" >&2; exit 1; }
     install -m 0644 "$AGENT_DIR/lib/data/$_kb" "$ROOT/usr/lib/imagesrv/data/$_kb"
 done
@@ -390,10 +390,25 @@ fi
 echo "compiling fanout..."
 gcc -O2 -Wall -Wextra -static -o "$ROOT/usr/bin/fanout" "$AGENT_DIR/fanout.c"
 
+# rescuecat (#2527): the source reader of a local clone that goes on through bad sectors -- the
+# unread ranges in a map, a second ask for them afterwards, and a short stream (not zeros) when
+# the disk stops answering. busybox dd could do none of the three.
+echo "compiling rescuecat..."
+gcc -O2 -Wall -Wextra -static -o "$ROOT/usr/bin/rescuecat" "$AGENT_DIR/rescuecat.c"
+[ -x "$ROOT/usr/bin/rescuecat" ] || { echo "rescuecat missing" >&2; exit 1; }
+
 # #1971: netlink KOBJECT_UEVENT listener for immediate drawer changes.
 echo "compiling uevent listener..."
 gcc -O2 -Wall -Wextra -static -o "$ROOT/usr/bin/imagesrv-uevent" "$AGENT_DIR/uevent.c"
 [ -x "$ROOT/usr/bin/imagesrv-uevent" ] || { echo "imagesrv-uevent missing" >&2; exit 1; }
+
+# chunkcut (#2533): cuts a capture into zstd frames that stand alone. It links
+# the libzstd every Debian carries by its FILE name (-l:libzstd.so.1) and
+# declares the calls itself: no libzstd-dev, so a server in the field rebuilds
+# this image offline without a new package. Its library rides along through ldd.
+echo "compiling chunkcut..."
+gcc -O2 -Wall -Wextra -pthread -o "$ROOT/usr/bin/chunkcut" "$AGENT_DIR/chunkcut.c" -l:libzstd.so.1
+copy_libs "$ROOT/usr/bin/chunkcut"
 
 # hivewrite: single-value registry reads/writes that preserve the key's
 # other values (#33). Links against libhivex (no static build shipped),
@@ -402,12 +417,30 @@ echo "compiling hivewrite..."
 gcc -O2 -Wall -Wextra -o "$ROOT/usr/bin/hivewrite" "$AGENT_DIR/hivewrite.c" -lhivex
 copy_libs "$ROOT/usr/bin/hivewrite"
 
+# chunkcast: the chunk engine's receiver (#2533, behind the server's experimental
+# switch). It decompresses each chunk itself, so it links the libzstd every Debian
+# carries by its FILE name and declares the two calls itself -- no libzstd-dev, as
+# chunkcut (stage 2). Its library rides along through ldd. BLAKE3 (#3332) is the
+# official C implementation in agent/blake3/, built in: one C file and its SSE4.1
+# and SSE2 assembly -- no library, nothing more in the image.
+echo "compiling chunkcast..."
+gcc -O2 -Wall -Wextra -pthread -o "$ROOT/usr/bin/chunkcast" "$AGENT_DIR/chunkcast.c" "$AGENT_DIR/blake3/blake3_one.c" \
+    "$AGENT_DIR/blake3/blake3_sse41_x86-64_unix.S" "$AGENT_DIR/blake3/blake3_sse2_x86-64_unix.S" -l:libzstd.so.1
+copy_libs "$ROOT/usr/bin/chunkcast"
+[ -x "$ROOT/usr/bin/chunkcast" ] || { echo "chunkcast missing" >&2; exit 1; }
+
 # lldpsniff: one LLDP frame → JSON in hello (#1048). libc only; packed in
 # every image (classroom stations report switch/port too, not only GUI).
 echo "compiling lldpsniff..."
 gcc -O2 -Wall -Wextra -o "$ROOT/usr/bin/imagesrv-lldpsniff" "$AGENT_DIR/lldpsniff.c"
 [ -s "$ROOT/usr/bin/imagesrv-lldpsniff" ] && [ -x "$ROOT/usr/bin/imagesrv-lldpsniff" ] \
     || { echo "imagesrv-lldpsniff missing or not executable" >&2; exit 1; }
+
+# netwatch: what the distribution port hears -- IGMP queries, multicast the port never asked for, traffic that is
+# not ImageSrv's -- in hello as "netwatch" (#3064: N4, N6, N8). libc only; a cloner samples it while it idles.
+echo "compiling netwatch..."
+gcc -O2 -Wall -Wextra -o "$ROOT/usr/bin/imagesrv-netwatch" "$AGENT_DIR/netwatch.c"
+[ -s "$ROOT/usr/bin/imagesrv-netwatch" ] && [ -x "$ROOT/usr/bin/imagesrv-netwatch" ]     || { echo "imagesrv-netwatch missing or not executable" >&2; exit 1; }
 
 # libhivex converts registry key names with glibc's iconv, and iconv
 # loads its converters at runtime from the gconv directory. Without

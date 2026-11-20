@@ -73,7 +73,7 @@ capture_disk() {
     echo "capturing" > "$RUN_DIR/state"
     # מה שבאמת ירוץ, ליד ה-stderr של zstd ביומן: ‏zstd שהודר בלי ריבוי
     # תהליכונים מזהיר ומתעלם מ-`-T`, וזה ההפרש בין "ביקשנו" ל"רצנו".
-    log "compressing with zstd -$CAPTURE_LEVEL -T$CAPTURE_THREADS"
+    log "compressing with chunkcut -l $CAPTURE_LEVEL -T $CAPTURE_THREADS (zstd frames of 4MiB, #2533)"
 
     _parts="$RUN_DIR/parts.txt"
     # ה-GUID הייחודי של הדיסק ושל כל מחיצה חייבים לשרוד את השחזור:
@@ -202,7 +202,7 @@ capture_disk() {
           echo "$?" > "$RUN_DIR/up.$_idx.rc" ) &
         _uppid=$!
 
-        rm -f "$RUN_DIR/sha.$_idx" "$RUN_DIR/pcl.$_idx.rc" \
+        rm -f "$RUN_DIR/sha.$_idx" "$RUN_DIR/idx.$_idx" "$RUN_DIR/idx.$_idx.xxh64" "$RUN_DIR/pcl.$_idx.rc" \
             "$RUN_DIR/zstd.$_idx.rc" "$RUN_DIR/fanout.$_idx.rc" "$_out.bytes" \
             "$RUN_DIR/targets/$_disk/partclone.err"   # ‏#1254: האחוז של המחיצה הזו בלבד (progress.sh)
         _pcl=$(partclone_for_fs "$_fs")
@@ -220,7 +220,7 @@ capture_disk() {
             { "$_pcl" $(partclone_mode "$_pcl" -c) $_ignore -s "$_node" \
                   -L "$RUN_DIR/targets/$_disk/partclone.log" 2>> "$RUN_DIR/targets/$_disk/partclone.err"
               echo "$?" > "$RUN_DIR/pcl.$_idx.rc"; } \
-                | { zstd -"$CAPTURE_LEVEL" -T"$CAPTURE_THREADS" -c 2>> "$LOG_FILE"
+                | { capture_cut "$_pcl" "$RUN_DIR/idx.$_idx" 2>> "$LOG_FILE"   # #2533: zstd frames that stand alone, and their index
                     echo "$?" > "$RUN_DIR/zstd.$_idx.rc"; } \
                 | { fanout -S "$RUN_DIR/sha.$_idx" -P "$RUN_DIR/targets/$_disk/bytes.raw" \
                         16777216 "$_out" > "$RUN_DIR/fanout.$_idx.out" 2>> "$LOG_FILE"
@@ -262,17 +262,17 @@ capture_disk() {
         _sha=$(awk '{print $1}' "$RUN_DIR/sha.$_idx" 2>/dev/null)
         # ‏-S נכתב רק ב-EOF נקי (#1438): בלי ערך — אין ראיה, ואין "sha256":"" במניפסט.
         is_sha256 "$_sha" || { _capture_failed "$_disk" "partition $_idx: ה-sha256 לא חושב -- אין ראיה שהזרם הגיע שלם"; return 1; }
+        _ixj=$(capture_index_json "$RUN_DIR/idx.$_idx"); [ -n "$_ixj" ] || { _capture_failed "$_disk" "מחיצה $_idx: אינדקס החתיכות לא נבנה -- אין ראיה שהזרם נחתך שלם"; return 1; }   # #2533
         # הבייטים של המחיצה הזו בלבד — מונה ה-pv שלה. target_bytes מחזיר
         # מצטבר-סבב, וחיבורו בכל סיבוב ניפח את total_compressed_bytes
         # פי כמה (האימג' הראשון במעבדה: 1.8GB במקום 490MB, ‏#12).
-        _bytes=$(tr -d '\r' < "$RUN_DIR/targets/$_disk/bytes.raw" 2>/dev/null | tail -n 1)
-        [ -n "$_bytes" ] || _bytes=0
+        _bytes=$(tr -d '\r' < "$RUN_DIR/targets/$_disk/bytes.raw" 2>/dev/null | tail -n 1); [ -n "$_bytes" ] || _bytes=0
         _total=$((_total + _bytes))
         target_partition_done "$_disk"; cd_part "$_idx" "$_role" "$_fs" "done" 2>/dev/null || :
 
         # Every partition is written not expandable; _mark_expandable picks
         # the one candidate once the whole list is known.
-        _json_parts="$_json_parts{\"index\":$_idx,\"type_guid\":\"$_guid\",\"unique_guid\":\"$_uguid\",\"attrs\":\"$_attrs\",\"role\":\"$_role\",\"fs\":\"$_fs\",\"start_sector\":$_first,\"size_bytes\":$((_sizesec * _sector_size)),\"used_bytes\":$_used,\"file\":\"$_file\",\"sha256\":\"$_sha\",\"expandable\":false$(_system_json "$_role" "$_idx")$(shrink_json_extra "$_idx" "$_first" "$_sizesec" "$_sector_size")$(rb_capture_json "$_node" "$_fs" "$((_sizesec * _sector_size))")},"   # #1805: a direct send's digest
+        _json_parts="$_json_parts{\"index\":$_idx,\"type_guid\":\"$_guid\",\"unique_guid\":\"$_uguid\",\"attrs\":\"$_attrs\",\"role\":\"$_role\",\"fs\":\"$_fs\",\"start_sector\":$_first,\"size_bytes\":$((_sizesec * _sector_size)),\"used_bytes\":$_used,\"file\":\"$_file\",\"sha256\":\"$_sha\"$_ixj,\"expandable\":false$(_system_json "$_role" "$_idx")$(shrink_json_extra "$_idx" "$_first" "$_sizesec" "$_sector_size")$(rb_capture_json "$_node" "$_fs" "$((_sizesec * _sector_size))")},"   # #1805: a direct send's digest
     done < "$_parts"
     # ‏#1466: הבייטים עברו; העותק בזיכרון משוחרר (המקור לא נכתב). כשל = אזהרה בלבד.
     capture_stage restore_size
@@ -293,7 +293,7 @@ capture_disk() {
     # הנתיב קבוע והקורא מכיר אותו. בלי echo של הנתיב ל-stdout: log()
     # מדבר גם הוא ל-stdout, ולכידת $(capture_disk) החזירה פעם בליל
     # שורות לוג במקום נתיב — וה-curl של המניפסט נכשל בשקט (מעבדה, #12).
-    printf '{"schema":1,"family":%s,"os":"%s",%s,"source_disk_bytes":%s,"min_target_bytes":%s,"target_floor_bytes":%s,"scheme":"gpt","sector_size":%s,"disk_guid":"%s","partitions":[%s],"total_compressed_bytes":%s,"compression":"zstd-%s"%s}\n' \
+    printf '{"schema":1,"image_format":2,"family":%s,"os":"%s",%s,"source_disk_bytes":%s,"min_target_bytes":%s,"target_floor_bytes":%s,"scheme":"gpt","sector_size":%s,"disk_guid":"%s","partitions":[%s],"total_compressed_bytes":%s,"compression":"zstd-%s"%s}\n' \
         "$_family" "$_os" "$_bootca" "$_disk_bytes" "$_min_target" "$_floor_json" "$_sector_size" "$_disk_guid" "$_json_parts" "$_total" "$CAPTURE_LEVEL" "$(capture_unhib_json)$_boot_code" \
         > "$RUN_DIR/new-manifest.json"
 }

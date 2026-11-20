@@ -3,13 +3,20 @@
 שלושה ערכים שהיו קבועים בקוד:
 
 - ``lost_wait_seconds`` (#2056) — כמה זמן הסבב מחכה למשכפל שהפסיק לדווח לפני
-  שהוא מסומן "אבד". ברירת מחדל 180ש' (``room.LOST_SECONDS``), **מותר רק להגדיל**,
-  עד 30 דקות. ערך אחד שולט על השרת (``room._mark_lost``), על ``--retries-until-drop``
+  שהוא מסומן "אבד". ברירת מחדל 180ש', **מותר רק להגדיל**,
+  עד 30 דקות. ערך אחד שולט על השרת (K-LOST, ``brain.silence``, #3657), על ``--retries-until-drop``
   של השולח ועל הסוכן (שמקבל אותו ב-hello).
 - ``gui_idle_poweroff_seconds`` (#2059) — כיבוי אוטומטי בגואי הקטן כשאין פעילות.
   ברירת מחדל 300ש' (``IDLE_POWEROFF_S`` ב-``agent/lib/core/idle.sh``), טווח 1–60 דקות.
 - ``gui_end_poweroff_seconds`` (#2059) — ספירה לכיבוי בסוף משימה. ברירת מחדל 20ש'
   (``END_POWEROFF_S``), טווח 10–300ש'.
+- ``drawer_disk_wait_seconds`` / ``drawer_net_wait_seconds`` (#3658, #3675, הכרעת נדב 18/11 בתגובה ל-#2997: "גם דיסק
+  וגם רשת אחרי 2 דקות מוותר", ו"משהו שאני יכול לשנות בהגדרות") — כמה זמן מגירה שמחכה לדיסק שלה,
+  או לרשת, ממתינה לפני שהיא מוותרת. ברירת מחדל 120ש' לשניהם, טווח 30–900ש'. הסוכן מחיל אותם ב-
+  ``agent/lib/core/timing.sh``: הדיסק = ``FANOUT_STALL_EVICT_MS`` ו-``CHUNKCAST_WRITE_STALL_MS``,
+  הרשת = ``WAIT_STREAM_STALL_S`` ו-``--receive-timeout``. למטה 30: זה זמן ניסיונות החוזרים של הקרנל
+  על דיסק (#2988), ופחות ממנו ניתוק קצר של כבל מפיל סבב. למעלה 900: זו תקרת ההמתנה לבייט
+  הראשון של המחיצה השנייה (``WAIT_STREAM_START_LATER_S``); מגירה שעומדת יותר מזה כבר אינה "ממתינה".
 
 הגדרה אחת לכל סוגי המכונות (משכפל, מחשב בנייה, שחזור) — כמו במוקאפ. "מחשב עם דיסק
 בעייתי לא נכבה לבד" (#2024) הוא כלל קבוע בסוכן ואינו כאן.
@@ -34,20 +41,33 @@ log = logging.getLogger("imagesrv.agent_timing")
 LOST = "lost_wait_seconds"
 IDLE = "gui_idle_poweroff_seconds"
 END = "gui_end_poweroff_seconds"
-KEYS = (LOST, IDLE, END)
+DISK_WAIT = "drawer_disk_wait_seconds"
+NET_WAIT = "drawer_net_wait_seconds"
+KEYS = (LOST, IDLE, END, DISK_WAIT, NET_WAIT)
 
-#: (ברירת מחדל, מינימום, מקסימום) בשניות. LOST: התאום של ``room.LOST_SECONDS``;
+#: #3262 (נדב 14/11): מתג, לא זמן, ולכן **אינו** ב-``KEYS`` (אין לו טווח, ספירת "הוחל"
+#: או שורה בקונסולה). כבוי כברירת מחדל: יידלק רק אחרי שיש הוכחה שהמחשב מאתחל (#2526).
+#: דיסק יעד קטן מהאימג' עד 64MB ועם מקום פנוי במחיצה האחרונה — מערכת הקבצים מוקטנת
+#: ורק אחריה המחיצה (``agent/lib/restore/tailshrink.sh``).
+TAIL_SHRINK = "tail_shrink_enabled"
+
+#: (ברירת מחדל, מינימום, מקסימום) בשניות. LOST: הקלט של K-LOST (``brain.silence``);
 #: IDLE/END: התאומים של ``IDLE_POWEROFF_S`` / ``END_POWEROFF_S`` ב-``agent/lib/core/idle.sh``.
 RANGES: dict[str, tuple[int, int, int]] = {
     LOST: (180, 180, 30 * 60),
     IDLE: (300, 60, 60 * 60),
     END: (20, 10, 300),
+    DISK_WAIT: (120, 30, 900),
+    NET_WAIT: (120, 30, 900),
 }
 LABELS = {LOST: "המתנה למחשב שהתנתק באמצע שיכפול",
           IDLE: "כיבוי כשאין פעילות",
-          END: "ספירה לכיבוי בסוף משימה"}
+          END: "ספירה לכיבוי בסוף משימה",
+          DISK_WAIT: "המתנה של מגירה לדיסק",
+          NET_WAIT: "המתנה של מגירה לרשת"}
 #: מי נספר כ"מחובר" לכל ערך: הערך הראשון חל על משכפלים בלבד, האחרים גם על מחשב הבנייה.
-ROLES = {LOST: ("cloner",), IDLE: ("cloner", "build"), END: ("cloner", "build")}
+ROLES = {LOST: ("cloner",), IDLE: ("cloner", "build"), END: ("cloner", "build"),
+         DISK_WAIT: ("cloner", "build"), NET_WAIT: ("cloner", "build")}
 #: hello האחרון בן פחות מזה = מחובר (אותו חלון של "נראו ב-90 השניות האחרונות" במוניטור).
 CONNECTED_SECONDS = 90
 
@@ -87,6 +107,18 @@ def seconds(conn: sqlite3.Connection, key: str) -> int:
     return value
 
 
+def tail_shrink_enabled(conn: sqlite3.Connection) -> bool:
+    """המתג של #3262. רק ``"true"`` מדליק; חסר = כבוי; ערך פגום = כבוי **עם שורת יומן**
+    (לא "דלוק": הכיווץ כותב לדיסק, וספק אינו הרשאה)."""
+    raw = get_setting(conn, TAIL_SHRINK)
+    if raw is None:
+        return False
+    if raw not in ("true", "false"):
+        log.warning("setting %s=%r is not true/false -- off", TAIL_SHRINK, raw)
+        return False
+    return raw == "true"
+
+
 def lost_seconds(conn: sqlite3.Connection) -> int:
     return seconds(conn, LOST)
 
@@ -100,11 +132,14 @@ def hello_fields(conn: sqlite3.Connection) -> dict[str, int]:
     """השדות שנוספים לכל תשובת hello של מכונה רשומה (ממשק 3)."""
     return {"lost_wait_seconds": lost_seconds(conn),
             "idle_poweroff_seconds": seconds(conn, IDLE),
-            "end_poweroff_seconds": seconds(conn, END)}
+            "end_poweroff_seconds": seconds(conn, END),
+            DISK_WAIT: seconds(conn, DISK_WAIT),
+            NET_WAIT: seconds(conn, NET_WAIT)}
 
 
 #: שם השדה ב-hello/``applied_timing`` לכל מפתח הגדרה.
-WIRE = {LOST: "lost_wait_seconds", IDLE: "idle_poweroff_seconds", END: "end_poweroff_seconds"}
+WIRE = {LOST: "lost_wait_seconds", IDLE: "idle_poweroff_seconds", END: "end_poweroff_seconds",
+        DISK_WAIT: DISK_WAIT, NET_WAIT: NET_WAIT}
 
 
 def well_formed(raw: object) -> dict[str, int] | None:
