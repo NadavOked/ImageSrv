@@ -11,7 +11,7 @@ import re
 import sqlite3
 from dataclasses import dataclass
 
-from server.core import hostname_rule
+from server.core import hostname_rule, machine_names
 from server.db import _write_lock, journal, now_iso, writing
 from server.rounds.sessions import HOSTNAME_MAX, NONCLASSROOM_NAME_MAX
 
@@ -42,6 +42,8 @@ def name_error(role: str, text: object) -> str:
     if role == "classroom":
         return _SUFFIX_BAD
     name = text.strip() if isinstance(text, str) else text
+    if role in machine_names.PREFIX and machine_names.is_number_text(name):
+        return machine_names.refusal(name)   # #3123: "100" הוא מספר שגוי, לא שם חופשי
     return hostname_rule.refusal(name, "שם המחשב") or _NAME_TOO_LONG
 
 #: כל כתיבה כאן עוברת ב-``with _write_lock, writing(conn)`` — שני
@@ -104,6 +106,9 @@ def normalize_name(role: str, text: str) -> str | None:
     בכיתה השם הוא הסיומת שתיכנס לשם המחשב — ולכן החוקים נוקשים
     (01-99 או INS). מחשב בנייה ומחשב שיכפול מקבלים שם מחשב — #1997 (נדב,
     22/10): שם מחשב הוא hostname באנגלית (`hostname_rule`), לא שם חופשי.
+    #3123 (נדב, 14/11): **מספר** (ספרות בלבד) הופך לשם לפי התפקיד —
+    ``3`` ← ``cloner-3`` / ``build-3`` (`machine_names`); שם בצורה אחרת
+    נשאר מותר, כדי שמכונה שנרשמה קודם תמשיך להיערך.
     גם הוא נכנס לשם המחשב אחרי הקידומת והמקף בפתיחת הסבב, ולכן אורכו חסום
     כאן — ברישום — ולא מאוחר על כל הקבוצה (#405).
     """
@@ -112,7 +117,29 @@ def normalize_name(role: str, text: str) -> str | None:
     if not isinstance(text, str):
         return None
     s = text.strip()
+    if role in machine_names.PREFIX and machine_names.is_number_text(s):
+        # #3123: המפעיל נותן מספר, והשרת קובע את השם לפי התפקיד (cloner-N / build-N).
+        number = machine_names.parse_number(s)
+        return None if number is None else machine_names.technical(role, number)
     return s if hostname_rule.is_valid(s) and len(s) <= NONCLASSROOM_NAME_MAX else None
+
+
+def number_taken(conn: sqlite3.Connection, role: str, suffix: str, mac: str | None) -> str | None:
+    """#3123: שם ממוספר שמכונה **אחרת** כבר מחזיקה → הודעת סירוב, אחרת ``None``.
+
+    ``cloner-3`` הוא ה-hostname, ולכן שני מחשבים בשם הזה אינם "שני משכפלים
+    עם אותו מספר" אלא שני מחשבים עם אותו שם ברשת. הבדיקה לפי ה-``suffix``
+    בכל הטבלה, לא לפי קבוצה: קבוצות משכפלים נוספות ("חיפה — משכפלים")
+    חולקות את אותה סדרת מספרים."""
+    number = machine_names.number_of(role, suffix)
+    if number is None:
+        return None
+    other = conn.execute(
+        "SELECT mac FROM machines WHERE suffix = ? AND mac != ?", (suffix, mac or "")).fetchone()
+    if other is None:
+        return None
+    return (f"המספר {number} כבר תפוס — {machine_names.display(role, number)} "
+            f"רשום למחשב {other['mac']}")
 
 
 @dataclass
@@ -132,6 +159,7 @@ def parse_paste(text: str, role: str = "classroom") -> list[ImportLine]:
     """
     lines: list[ImportLine] = []
     seen: dict[str, int] = {}
+    seen_names: dict[str, int] = {}     # #3123: שם ממוספר פעמיים באותה הדבקה
     for i, raw in enumerate(text.splitlines(), start=1):
         stripped = raw.strip()
         if not stripped or stripped.startswith("#"):
@@ -152,8 +180,13 @@ def parse_paste(text: str, role: str = "classroom") -> list[ImportLine]:
                 item.error = name_error(role, name)
             elif item.mac in seen:
                 item.error = f"כפילות בהדבקה — כבר הופיע בשורה {seen[item.mac]}"
+            elif machine_names.number_of(role, item.suffix) is not None and item.suffix in seen_names:
+                item.error = (f"המספר {machine_names.number_of(role, item.suffix)} כבר מופיע "
+                              f"בהדבקה בשורה {seen_names[item.suffix]}")
             else:
                 seen[item.mac] = i
+                if machine_names.number_of(role, item.suffix) is not None:
+                    seen_names[item.suffix] = i
         lines.append(item)
     return lines
 
@@ -168,6 +201,7 @@ def import_lines(
     """
     saved = 0
     rejected: list[ImportLine] = []
+    role = group_role(conn, group_id)
     # כיתה שלמה היא **רצף** כתיבות אחד: שורה שנכשלה באמצע משאירה את
     # הנעילה של הקודמות יתומה, ו"נשמרו 12 מתוך 30" הוא בדיוק המצב
     # שאיש אינו יודע לתקן ידנית.
@@ -184,6 +218,11 @@ def import_lines(
                     f"רשום כבר עם הסיומת {row['suffix']} — "
                     "הסיומת קבועה למכונה; מחיקה מפורשת לפני שינוי"
                 )
+                rejected.append(item)
+                continue
+            taken = number_taken(conn, role, item.suffix, item.mac) if role else None
+            if taken:
+                item.error = taken
                 rejected.append(item)
                 continue
             conn.execute(
@@ -219,6 +258,9 @@ def add_machine(
         raise ValueError(name_error(role, name_raw))
     if conn.execute("SELECT 1 FROM machines WHERE mac = ?", (mac,)).fetchone():
         raise ValueError("ה-MAC כבר רשום — ערכו אותו במקום להוסיף שוב")
+    taken = number_taken(conn, role, name, mac)
+    if taken:
+        raise ValueError(taken)
     with _write_lock, writing(conn):
         conn.execute(
             "INSERT INTO machines (mac, suffix, group_id, added_at) VALUES (?, ?, ?, ?)",
@@ -247,6 +289,14 @@ def update_machine(
     name = row["suffix"] if name_raw is None else normalize_name(role, name_raw)
     if name is None:
         raise ValueError(name_error(role, name_raw))
+    if name_raw is None and role != row["role"] and role in machine_names.PREFIX:
+        # #3123: שינוי תפקיד (משכפל <-> בנייה) משנה את הקידומת, לא את המספר.
+        number = machine_names.number_of(row["role"], row["suffix"])
+        if number is not None:
+            name = machine_names.technical(role, number)
+    taken = number_taken(conn, role, name, mac)
+    if taken:
+        raise ValueError(taken)
     with _write_lock, writing(conn):
         conn.execute(
             "UPDATE machines SET suffix = ?, group_id = ? WHERE mac = ?",

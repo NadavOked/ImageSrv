@@ -36,6 +36,7 @@ from pathlib import Path
 
 import pytest
 
+from disk_rules_state import ruled_file, with_rules   # #3666: the verdicts the agent / the server add to a hand-written state
 from native import requires_native
 from test_cloner_gui import BASH, GUI, _build_gui, _pkgconfig, _png_rgb, posix, sh
 
@@ -212,11 +213,11 @@ def driver(tmp_path_factory) -> Path:
 
 def drive(driver: Path, tmp_path: Path, setup: list[str], state: str, *events: str) -> list[str]:
     path = tmp_path / "state.txt"
-    path.write_text(state, encoding="utf-8", newline="\n")
+    path.write_text(with_rules(state), encoding="utf-8", newline="\n")   # #3666
     extra = []
     for ev in events:
         if ev.startswith("state="):
-            p = tmp_path / f"s{len(extra)}.txt"; p.write_text(ev[6:], encoding="utf-8", newline="\n"); ev = f"state:{posix(p)}"
+            p = tmp_path / f"s{len(extra)}.txt"; p.write_text(with_rules(ev[6:]), encoding="utf-8", newline="\n"); ev = f"state:{posix(p)}"
         extra.append(ev)
     env_ = dict(os.environ, FONTCONFIG_FILE=str(GUI / "fonts.conf"))
     run = subprocess.run([str(driver), *setup, f"state:{posix(path)}", *extra], capture_output=True, text=True,

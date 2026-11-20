@@ -1,0 +1,3 @@
+# ResourceWarning sites known on main -- tests/resource_leaks.py report reads this.
+# One site a line (path::source line), each under a '# #<Issue>' line that tracks it.
+# Empty until the first measurement (14/11).

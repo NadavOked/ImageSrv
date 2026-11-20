@@ -92,6 +92,17 @@ void lc_disk_label(const LcDisk *d, char *out, size_t n) {
     else unmapped_label(d->name, d->conn, d->port, d->dev, out, n);
 }
 
+/* #2991 (metal 12/11): the drawers are read one by one, each under its own ceiling (lcscan.sh) --
+ * the one being read, and for how long, under the ones that are ready. No lc_scan: the old words. */
+void lc_scan_text(const LcState *l, char *out, size_t n) {
+    if (!l->has_scan) { snprintf(out, n, "בודק את הדיסקים במחשב…"); return; }
+    char who[32] = "הדיסק", left[64] = "";
+    if (l->scan_drawer > 0) snprintf(who, sizeof who, "דיסק %d", l->scan_drawer);
+    if (l->scan_left == 1) snprintf(left, sizeof left, " · עוד דיסק אחד ממתין");
+    else if (l->scan_left > 1) snprintf(left, sizeof left, " · עוד %d דיסקים ממתינים", l->scan_left);
+    snprintf(out, n, "בודק את %s… \xE2\x81\xA8%d:%02d\xE2\x81\xA9%s", who, l->scan_secs / 60, l->scan_secs % 60, left);
+}
+
 void lc_has_text(const LcDisk *d, char *out, size_t n) {
     char used[160], os[96], u[64];
     if (!d->nparts) { snprintf(out, n, "%s", d->why[0] ? d->why : "ריק"); return; }
@@ -163,6 +174,10 @@ static const char *lc_status_base(const App *a, Rgb *dot) {
     if (!strcmp(l->phase, "restoring")) return "מחזיר את המקור לגודלו";
     if (!strcmp(l->phase, "stopped")) { *dot = t->warn; return "נעצר"; }
     int alive = l->ntgts - nf;
+    if (!strcmp(l->phase, "copying") && l->retry_of > 0) {   /* #2527 (Nadav 15/11): a process state -- grey, in the status bar's own line */
+        *dot = t->led_idle;
+        snprintf(buf, sizeof buf, "מנסה שוב סקטורים שלא נקראו (סבב %d מתוך %d)", l->retry_round, l->retry_of); return buf;
+    }
     if (nf && alive) { *dot = t->warn; return alive == 1 ? "יעד אחד נכשל — השני ממשיך" : "יעד נכשל — האחרים ממשיכים"; }
     if (alive == 1) return "מעתיק ליעד אחד";
     if (alive == 2) return "מעתיק לשני יעדים";

@@ -499,6 +499,8 @@ def _upgrade_env(tmp_path: Path, repo: Path, data: Path) -> dict:
             "IMAGESRV_UPGRADE_LOG": posix(tmp_path / "upgrade.log"),
             "IMAGESRV_INITRD_FLAGS": posix(flags),
             "IMAGESRV_ISO_MANIFEST": posix(tmp_path / "no-iso-release.json"),
+            # #3224: never the machine's own /etc/nftables.conf
+            "IMAGESRV_NFT_CONF": posix(tmp_path / "no-nftables.conf"),
             "IMAGESRV_HTTP_ROOT": posix(tmp_path / "boot"),
             # #2795: the recovery script's copy outside the tree -- never /usr/local/sbin
             "IMAGESRV_RECOVER_COPY": posix(tmp_path / "sbin" / "imagesrv-upgrade-recover"),

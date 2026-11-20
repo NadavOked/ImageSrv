@@ -221,7 +221,8 @@ def test_the_restore_shows_its_progress_on_one_gui(tmp_path):
     assert "partition=" not in seen
     # measured only after two samples -- before that it says so, never 0
     assert "מודד את הקצב…" in seen
-    assert re.search(r"מחיצה 2 מתוך 3 · \d+\.\d MB/s · (כ-\d+ דק׳ נותרו|פחות מ)", seen), seen
+    # #3053: the rate is one LTR run inside the Hebrew line -- U+2066 ... U+2069, required, not optional
+    assert re.search(r"מחיצה 2 מתוך 3 · \u2066\d+\.\d MB/s\u2069 · (כ-\d+ דק׳ נותרו|פחות מ)", seen), seen
     # the GUI that owns the display now, for log() (#1569 reads gui.pid)
     assert (r["run"] / "gui.pid").read_text().strip().isdigit()
     # the header says which machine and server -- not "לא ידוע" for twenty minutes

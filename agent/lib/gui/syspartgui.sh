@@ -13,6 +13,15 @@
 #                  agent posts it with the screen's single-use nonce (lcpull.sh)
 # A refusal is said on the screen in the server's words; nothing is assumed.
 
+restore_image_records() {
+    # Publish these records together, only after both reads succeed.
+    jq -ers 'if length == 1 then .[0] else error("bad station state") end |
+        if (.allowed_images | type) != "array" then error("no allowed_images") else
+        "images_known=1", (.allowed_images[] | "image=" + ([.id, .name, .folder]
+          | map((. // "") | tostring | gsub("[\\r\\n|]"; " ")) | join("|"))) end' "$1" &&
+        syspart_records "$1"
+}
+
 syspart_records() {
     # $1 = an /agent/state answer. The picker's records: image_unchecked= and
     # image_cand=<id>|<idx>|<size>|<used>. No field (an older server) = none.
@@ -61,5 +70,5 @@ lc_pull_syspart() {
         case "$_ls_e" in ''|null) _ls_e="מחיצת המערכת לא נשמרה (http ${_ls_c:-000})" ;; esac
         _lc_req pull.error "$(_lc_clean "$_ls_e")"
     fi
-    lc_pull_images || _lc_req pull.error "לא ניתן לקרוא מהשרת את רשימת האימג׳ים למחשב הזה"
+    lc_pull_images
 }

@@ -6,34 +6,50 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from boot.grub_menu import normalize_mac as lenient_mac
 
 from server.agent import loops as agent_loops, identity, inventory, probe, registry, reports
+from server.agent.reportorder import STALE, STALE_REPLY, ReportOrder   # #3331 (I14)
 from server.console import login_guard, users
 from server.rounds import pulls
+from server.rounds.chunksend import CHUNK, engine_of
+from server.rounds import ledger   # #2528
+from server.rounds import nic_live   # #3277
+from server.brain import resume as brain_resume   # #2528 שלב 4 (K11)
 from server.net import foreign_vlan
 from server.disks import disk_events, drawer_slots, shrink_records
 from server.console.auth import COOKIE_NAME, PURPOSE_KIOSK, read_session
 from server.db import agent_seen, disk_full, journal, note_disk_full
-from server.rounds import direct, room_console
+from server.rounds import chunkledger, direct, room_console
+from server.rounds.durableseq import DurableSeq
+from server.rounds import prodline, room_state   # #3181
+from server.brain import agentsenses, fill as brain_fill   # #3064 (חושי הסוכן, שער AHCI); #3181 (K5)
+from server.brain import joinwatch as brain_join   # #3064: המצטרף (B1, B2, B4, B17-B46), צל
+from server.brain import peer as brain_peer   # B29: השלמה ממשכפל שכן, בצל
+from server.brain import completing as brain_completing   # #3064 (B16, B34, B30)
+from server.brain import slowdisk as brain_slowdisk   # #3268 (B62): דיסק איטי לפני הסבב -- היסטוריה + הבדיקה עכשיו
+from server.brain import linkverdict as brain_link   # #3663 (A10, G2): בדיקת כבל חיה ובאנר הקישור האיטי -- המוח מחליט
+from server.brain import nicbus
 from server.agent import gui_failure, local_clone_report, readbackhash
 from server.learn import wol as learn_wol
 from server.agent import logs as agent_logs   # #1882
 from server.agent import held# #2031
 from server.agent import timing as agent_timing   # #2056
 from server.disks import disk_sets   # #1857
-from server.disks import writefloor   # #2338
+from server.disks import writefloor, hdd_policy   # #2338; X16: the HDD policy switch
 from server.agent import firmware_image# #2080
 from server.agent import hello_eta   # #1843
 from server.agent import unknown_screen   # #1802
@@ -52,6 +68,9 @@ log = logging.getLogger("imagesrv.api")
 #: היא ~60 תווים; מעבר לזה נקצץ, לא נדחה.
 PROMPT_MAX_CHARS = 200
 
+#: #2533: כמה זמן נשמר הנתיב של קובץ מחיצה שהוגש (`image_file`), במקום סריקת הספרייה לכל בקשת Range.
+FILE_PATH_TTL_S = 10.0
+
 #: #402: הערכים של `disk_probe` בממשק 2. `unchecked` ≠ `no_disks`
 #: (עיקרון 5): "לא הצלחנו לספור פורטים" אינו "אפס פורטים". #2334: `no_driver`
 #: = בקר אחסון בלי מנהל התקן.
@@ -68,6 +87,25 @@ class ServerContext:
     library: ImageLibrary
     store: SessionStore
     sender: object | None = None      # SenderEngine; None בבדיקות יחידה
+    #: #2533: מנוע החתיכות (`chunksend.ChunkEngine`), מאחורי המתג הניסיוני. None = בדיקות
+    #: שבונות ctx ביד, ואז כל גל הוא udpcast.
+    chunk: object | None = None
+    #: #3161: הפצה ישירה במנוע החתיכות (`directchunk.DirectChunks`) -- מה שמחשב הבנייה העלה, וההזמנה
+    #: הפתוחה אליו. None = בדיקות שבונות ctx ביד, ואז הפצה ישירה היא udpcast.
+    direct_chunk: object | None = None
+    #: #2533: המספר הרץ של דיווחי `durable` בדלתא, לכל (סבב, מכונה, ערוץ). בזיכרון בלבד, במכוון:
+    #: שרת שאותחל אינו יודע מה קיבל, ולכן מבקש הכול מחדש (`durable_full`).
+    durable_seq: DurableSeq = field(default_factory=DurableSeq)
+    #: #3331 (I14): `(boot_id, seq)` האחרון שהתקבל לכל מכונה -- דיווח התקדמות ישן ממנו נזרק. בזיכרון בלבד, כמו `durable_seq`.
+    report_order: ReportOrder = field(default_factory=ReportOrder)
+    #: #3181 (K5): כמה חסר למגירה שחזרה ומאיפה להשלים -- המצב של המוח (תקציב לכל משכפל), בזיכרון בלבד.
+    fill: brain_fill.Brain = field(default_factory=brain_fill.Brain)
+    #: #3064: המוח של המצטרף (`joinwatch`) -- במצב צל בלבד, בזיכרון; אינו מוסיף דבר לתשובה לסוכן.
+    join: brain_join.Watch = field(default_factory=brain_join.Watch)
+    #: B29: מאיפה להשלים -- מגירה שכנה, משכפל שכן או השרת. במצב צל: נרשם ב-`brain_decisions`, והביצוע נשאר HTTP.
+    peer: brain_peer.Brain = field(default_factory=brain_peer.Brain)
+    #: #3064 (B16, B34, B30): מגירה שמשלימה נרשמת כהחזקה, ומגירה חשודה מאומתת ולא נמחקת. בזיכרון בלבד.
+    completing: brain_completing.Completing = field(default_factory=brain_completing.Completing)
     drivers: object | None = None     # DriverLibrary (#720); None בבדיקות ישנות
     #: #855: מקור חכירות ה-DHCP (`identity.LeaseFile`) — הצד שנוגע בקובץ,
     #: מוזרק כמו `dhcp_hooks`. `server.main` מתקין אותו תמיד; None =
@@ -91,6 +129,50 @@ class ServerContext:
     #: למשכפל (`clock`), וממנה גם ה-`clock` של ה-forecasts שהקונסולה מקבלת. None (בדיקות
     #: שבונות ctx ביד, שרת בלי הוק) = "לא הוכח": הקונסולה לא תצייר שעה.
     clock_trust: object | None = None
+    #: #3064 (V6, שלב 2): מונה הבייטים שהשרת הגיש ב-HTTP של קובצי האימג' (`brain.served.Served`) -- ראיית חיים
+    #: שאינה תלויה בסוכן. None (בדיקות שבונות ctx ביד) = לא סופרים, ושום דבר אחר לא משתנה.
+    served: object | None = None
+    #: #3064 (K7, שלב 3): תקציב הרשת של ההגשה (`brain.budget.Budget`). ב-`enforce` כל גוף של קובץ ממתין לתורו (הגינות
+    #: לפי משכפל, והשידור קודם); ב-`shadow` ו-`off` אינו משהה דבר. None (בדיקות שבונות ctx ביד) = אין תקציב.
+    budget: object | None = None
+    #: #3231: הכנת האינדקס של מנוע החתיכות (`indexprep.IndexPrep`) -- השער של משיכה, כמו של גל (#3137).
+    #: None (בדיקות שבונות ctx ביד) = אין שער, ומשיכה נפתחת כמו לפני.
+    index_prep: object | None = None
+    #: #3064 (K5): HTTP מול multicast בהשלמה (`brain.route.Tracker`) -- `ended` של `chunk-pass` סוגר את ההורדה (R9). צל בלבד
+    route: object | None = None
+    #: #3125 (V2, V6-V10, R8): החושים של השרת בזמן גל (`learn.server_senses.Senses`) -- חלון כל `WINDOW_S` שניות
+    #: (`_server_senses_clock`). None (בדיקות שבונות ctx ביד) = אין חלונות; ההתחלה והסוף של הגל לא משתנים.
+    senses: object | None = None
+
+
+class _CountedFile(FileResponse):
+    """`FileResponse` שסופר לכתובת הפונה כל גוף שנשלח (#3064, V6), ומחכה לתורו בתקציב הרשת כשהוא נאכף (K7). הספירה
+    בשכבת ה-ASGI `send`, לכן היא כוללת גם תשובות Range (206) של השלמה ב-HTTP, ולא רק קובץ שלם. `Served.note` ו-
+    `Budget.acquire` לעולם אינם מפילים הורדה."""
+
+    def __init__(self, path, *, served, ip: str, budget=None, **kw):
+        super().__init__(path, **kw)
+        self._served, self._ip, self._budget = served, ip, budget
+
+    async def __call__(self, scope, receive, send):
+        async def counting(message):
+            is_body = message.get("type") == "http.response.body"
+            if is_body and self._budget is not None:
+                await self._budget.acquire(self._ip, len(message.get("body") or b""))   # לא חוסם את הלולאה: האחרות ממשיכות
+            await send(message)             # אחרי ה-send: בייט שה-transport לא קיבל (הפונה נעלם) אינו ראיה
+            if is_body:
+                self._served.note(self._ip, len(message.get("body") or b""))
+        # #3064 (B10, KT7): כמה הורדות בדרך -- סופר בלבד, לעולם אינו ממתין (`Budget.enter`/`leave`)
+        enter, leave = getattr(self._budget, "enter", None), getattr(self._budget, "leave", None)
+        if enter is not None and leave is not None:
+            enter(self._ip)
+        self._served.opened(self._ip)                   # #3125 (V6): כמה הורדות פתוחות במקביל, לכל כתובת
+        try:
+            await super().__call__(scope, receive, counting)
+        finally:
+            self._served.closed(self._ip)
+            if enter is not None and leave is not None:
+                leave(self._ip)
 
 
 def _error(status: int, message: str, code: str) -> JSONResponse:
@@ -100,13 +182,59 @@ def _error(status: int, message: str, code: str) -> JSONResponse:
     )
 
 
-async def _read_body(request: Request) -> tuple[object, JSONResponse | None]:
+def _pull_index_gate(ctx: ServerContext, mac: str, image_id: str) -> JSONResponse | None:
+    """#3231: משיכה במנוע החתיכות אינה נפתחת לפני שהאינדקס של האימג' מוכן. הסוכן מוריד אותו
+    (`GET …/index/<n>`) **אחרי** שטבלת המחיצות נמחקה, ואימג' שנקלט זה עתה לא היה לו כזה: 404 על דיסק
+    ריק. None = מוכן (או שאין שער: מנוע udpcast). 503 `index_preparing` = עוד נגזר (`curl --retry` של
+    הסוכן שואל שוב); 409 `index_failed` = הגזירה נכשלה, עם הסיבה. בשניהם הדיסק לא נגע."""
+    prep = ctx.index_prep
+    if prep is None or engine_of(ctx.conn) != CHUNK:
+        return None
+    state = prep.pull_gate(image_id)
+    if state is None:
+        return None
+    if state["state"] == "preparing":
+        return JSONResponse({"ok": False, "error": state["he"], "code": "index_preparing",
+                             "percent": state["percent"]}, status_code=503, headers={"Retry-After": "2"})
+    pulls.journal_refusal(ctx.conn, mac, state["error"])
+    return _error(409, state["error"], "index_failed")
+
+
+#: #3633: hello שנדחה 400 `bad_json` — שורת יומן אחת (מרוסנת) למקור ולסיבה, בלי הגוף.
+HELLO_BAD_JSON = "hello_bad_json"
+
+
+def _note_bad_hello(ctx: ServerContext, request: Request, reason: str,
+                    length: int | None, pos: int | None = None) -> None:
+    """#3633: 18/11 משכפל 2 קיבל 400 על כל hello במשך דקות, ויומן השרת אמר רק
+    `POST /agent/hello 400` — בלי סיבה, בלי מקור, בלי אות לקונסולה (#3632 נתגלה
+    בתפיסת tcpdump). הגוף לא נקרא כדי לדעת מי שלח, ולכן המפתח הוא כתובת המקור
+    והסיבה; הגוף עצמו **לא** נרשם (ייתכנו בו סודות). ריסון כמו #1949/#2498:
+    שורה אחת בחלון, החוזרות נספרות. הכתיבה ל-DB רצה ב-`run_in_threadpool`."""
+    ip = request.client.host if request.client else "?"
+    repeats = _journal_repeats(ctx, (HELLO_BAD_JSON, f"{ip}: {reason}"), budgeted=True, source=ip)
+    if repeats is None:
+        return
+    facts = ["length unknown" if length is None else f"{length} bytes"]
+    if pos is not None:
+        facts.append(f"error at char {pos}")
+    suffix = f" [+{repeats[0]} identical requests in the last {repeats[1]}s not journaled]" if repeats[0] else ""
+    detail = f"{ip}: {reason} ({', '.join(facts)}){suffix}"
+    journal(ctx.conn, HELLO_BAD_JSON, detail)
+    log.warning("%s: %s", HELLO_BAD_JSON, detail)
+
+
+async def _read_body(request: Request, on_bad_json: Callable[[Request, agent_body.BodyError], None] | None = None
+                     ) -> tuple[object, JSONResponse | None]:
     """#2410/#2416: הגוף עם תקרת בייטים ונרמול (`body.read_json`). `(גוף, None)`,
     או `(None, תשובה)` — 413/400 בתבנית הרוחבית, **לפני** שער הזהות: גוף שלא
-    נקרא אינו מגיע לשום בדיקה."""
+    נקרא אינו מגיע לשום בדיקה. #3633: ``on_bad_json`` (ה-hello) נקרא על 400 `bad_json`
+    — תמיד ב-`run_in_threadpool`, כי הוא כותב ליומן (#2750); התשובה עצמה אינה משתנה."""
     try:
         return await agent_body.read_json(request), None
     except agent_body.BodyError as exc:
+        if on_bad_json is not None and exc.code == "bad_json":
+            await run_in_threadpool(on_bad_json, request, exc)
         return None, _error(exc.status, exc.message, exc.code)
 
 
@@ -248,6 +376,18 @@ def identity_gate(ctx: ServerContext, mac: str, request: Request,
         ctx, identity.verify(ctx.conn, ctx.leases, mac, client_ip), where, client_ip)
 
 
+def _nic_link_journal(conn, mac: str, change: tuple | None) -> None:
+    """#3277: שורה ביומן כשקישור כרטיס ההפצה ירד או חזר (`nic_live.note`). לעולם אינו זורק אל ה-hello."""
+    if change is None:
+        return
+    kind, mbps, top = change
+    try:
+        journal(conn, "nic_link_low" if kind == "low" else "nic_link_back",
+                f"{mac} {mbps}Mb/s" + (f" (max {top}Mb/s)" if top else ""), machine=mac)
+    except Exception:    # noqa: BLE001 -- the journal line is advice, not the hello
+        log.exception("nic link change of %s was not journaled", mac)
+
+
 def boot_identity_ok(ctx: ServerContext, mac: str, client_ip: str | None) -> bool:
     """#1629: the boot menu's `?mac=` is not identity. Before that MAC's GUI
     tasks are cancelled on boot (#1576), the same check as `identity_gate`,
@@ -287,6 +427,11 @@ def gui_session(ctx: ServerContext, request: Request):
     return session
 
 
+def _registered(ctx: ServerContext):
+    """#3225: "ה-MAC הזה רשום בטבלת המכונות" -- כרטיס הרישום, לא כרטיס אתחול אחר."""
+    return lambda mac: registry.lookup(ctx.conn, mac) is not None
+
+
 def source_gate(ctx: ServerContext, request: Request, where: str,
                 image_id: str | None) -> JSONResponse | None:
     """#997: זהות בלי MAC מוצהר — `GET /images/…/manifest|files|readback`. הסוכן
@@ -308,7 +453,7 @@ def source_gate(ctx: ServerContext, request: Request, where: str,
     signed_in = where == "manifest" and gui_session(ctx, request) is not None
     verdict = identity.verify_source(
         ctx.conn, ctx.leases, client_ip,
-        lambda mac: registry.lookup(ctx.conn, mac) is not None,
+        lambda mac: identity.holder_registered(ctx.conn, mac, client_ip, _registered(ctx)),   # #3225
         None if signed_in or image_id is None
         else (lambda mac: ctx.store.has_open_membership(mac, image_id)))
     return _identity_refusal(ctx, verdict, where, client_ip)
@@ -372,11 +517,18 @@ def create_agent_router(ctx: ServerContext,
             note_disk_full("hello")
             return _error(503, "the server's database partition is full", "db_full")
 
+    def _note_bad_hello_body(request: Request, exc: agent_body.BodyError) -> None:
+        """#3633: ה-`ctx` נשאר כאן, מחוץ ל-route האסינכרוני (#2750)."""
+        _note_bad_hello(ctx, request, exc.message, exc.length, exc.pos)
+
     async def _agent_hello(request: Request) -> JSONResponse:
-        body, refused = await _read_body(request)
+        body, refused = await _read_body(request, _note_bad_hello_body)
         if refused is not None:
             return refused
         if not isinstance(body, dict):
+            declared = request.headers.get("content-length", "")   # #3633: הגוף כבר נפרס; האורך — מה שהוצהר
+            await run_in_threadpool(_note_bad_hello, ctx, request, "body is not an object",
+                                    int(declared) if declared.isdigit() else None)
             return _error(400, "body is not an object", "bad_json")
 
         return await run_in_threadpool(_agent_hello_body, request, body)
@@ -390,6 +542,18 @@ def create_agent_router(ctx: ServerContext,
             return True
         verdict = identity.verify_extra(ctx.conn, ctx.leases, mac, extra, client_ip)
         return _identity_refusal(ctx, verdict, "hello all_macs", client_ip) is None
+
+    def _learn_boot_card(mac: str, all_macs: list[str], client_ip: str | None) -> None:
+        """#3225: מכונה שרשומה לפי כרטיס אחר (#524) -- כרטיס האתחול שלה (`mac`, חכור לכתובת
+        הפונה: `identity_gate` עבר) מקבל ראיה בשער ההפצה וב-`source_gate`. רק כרטיס רשום
+        שעבר `verify_extra` נשאר ב-`all_macs` כאן, ו-`all_macs` לבדו אינו נרשם. בלי שומר
+        זהות (`ctx.leases is None` או מתג כבוי) אין ראיה לכתובת, ולכן אין מה לרשום."""
+        if ctx.leases is None or not identity.enabled(ctx.conn) or registry.lookup(ctx.conn, mac) is not None:
+            return
+        machine = registry.lookup(ctx.conn, mac, all_macs)
+        if machine is not None and identity.learn_alias(ctx.conn, mac, machine["mac"], client_ip):
+            journal(ctx.conn, "nic_alias_learned", f"{mac} is a card of {machine['mac']} (from {client_ip})",
+                    machine=machine["mac"])
 
     def _agent_hello_body(request: Request, body: dict) -> JSONResponse:
         """All registry/session/sqlite work runs on a worker with its own connection."""
@@ -425,6 +589,7 @@ def create_agent_router(ctx: ServerContext,
         # את השער שלמעלה, שבודק את `mac` בלבד. כרטיס שנדחה נשמט מהרשימה (ונרשם
         # ביומן); ה-hello עצמו נענה, ומה שנשאר מזהה כמו תמיד.
         all_macs = [extra for extra in all_macs if extra == mac or _extra_ok(mac, extra, client_ip)]
+        _learn_boot_card(mac, all_macs, client_ip)
         disks = body.get("disks") if isinstance(body.get("disks"), list) else None
         optical = drawer_slots.clean_optical(body.get("optical")) if "optical" in body else None
         off_vlan = off_deploy_vlan(request.scope, server_base)
@@ -459,10 +624,10 @@ def create_agent_router(ctx: ServerContext,
         # netprobe מגיע ב-hello כשדה אח (מקביל ל-probe) ונשמר בתוך אותה
         # שורת machine_probe. חסר/פגום → None, הגרסה הקודמת נשארת.
         raw_probe = body.get("probe")
-        if isinstance(raw_probe, dict) and "netprobe" in body:
-            raw_probe = {**raw_probe, "netprobe": body.get("netprobe")}
-        elif raw_probe is None and "netprobe" in body:
-            raw_probe = {"netprobe": body.get("netprobe")}
+        # #3064: `netwatch` (האזנה פסיבית לרשת ההפצה: IGMP, מולטיקאסט זר) הוא אח באותה צורה
+        for sibling in ("netprobe", "netwatch"):
+            if sibling in body and (isinstance(raw_probe, dict) or raw_probe is None):
+                raw_probe = {**(raw_probe or {}), sibling: body.get(sibling)}
         hw_probe = probe.well_formed(raw_probe)
         # #906: המכונה ממתינה לאדם (שאלת SMART/אדום, מסך FAILED) ואומרת
         # על מה. רק `waiting_for: "operator"` עם `prompt` מחרוזת לא-ריקה
@@ -497,6 +662,14 @@ def create_agent_router(ctx: ServerContext,
                 or len(agent_version) > 128
                 or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-" for c in agent_version)):
             agent_version = "unknown"
+        # #2533: מה שהאימג' של הסוכן יודע לקבל (ממשק 2, `engines`) -- לפני `build_answer`: ה-hello הזה
+        # עצמו יכול להבשיל את הגל, והמנוע בודק את חבריו ברגע שהוא יוצא.
+        if ctx.chunk is not None:
+            ctx.chunk.note_agent(mac, body.get("engines"))
+        # #2528: מזהה האתחול של ה-hello הזה, לפני שהסבב קורא אותו (`interrupt.on_rejoin`).
+        ledger.note_boot(ctx.conn, mac, body.get("boot_id"))
+        _nic_link_journal(ctx.conn, mac, nic_live.note(mac, body.get("nic_link"), body.get("boot_id"),
+                                                       nic_bus=body.get("nic_bus")))
         answer = build_answer(
             ctx.conn, ctx.library, ctx.store, mac,
             disks=disks, client_ip=client_ip, joining=joining,
@@ -515,6 +688,14 @@ def create_agent_router(ctx: ServerContext,
             # #715: פרמטרי השידור למקור שהוא מחשב בנייה — של המנוע, אם יש.
             multicast=ctx.sender.multicast_params() if ctx.sender is not None else None,
         )
+        # #2533: גל שמנוע החתיכות משדר — `session.engine` ו-`session.chunk` (ממשק 3).
+        # גל של udpcast אינו מקבל אף שדה, והסוכן נשאר במסלול של היום.
+        if ctx.chunk is not None and isinstance(answer.get("session"), dict):
+            answer["session"].update(ctx.chunk.session_fields(answer["session"]["id"]))
+        # #3161: מחשב בנייה שהוא המקור של גל חתיכות -- `task.direct.engine` ו-`task.direct.chunk` (ממשק 3).
+        if (ctx.direct_chunk is not None and isinstance(answer.get("task"), dict)
+                and isinstance(answer["task"].get("direct"), dict)):
+            answer["task"]["direct"].update(ctx.direct_chunk.task_fields(answer["task"], answer["task"]["direct"]))
         # #980: בקשת כיבוי מהקונסולה נוסעת באותו hello, באותו קצב — בלי
         # polling חדש. רק ב-hello האמיתי (לא בתפריט האתחול), ורק למכונה
         # רשומה; השדה חסר כשאין בקשה, וסוכן ישן מתעלם ממנו.
@@ -528,11 +709,21 @@ def create_agent_router(ctx: ServerContext,
                 if not disk_full(exc):
                     raise
                 note_disk_full(f"hello firmware_image {mac}")
+            agentsenses.note_hello(ctx.conn, mac, body)   # #3064 B23: "בלי AHCI אין פס" -- נרשם בצל, אינו חוסם; אינו זורק
             # #2080 (מוקאפ 06 סעיף 2): חיבור שזז מאז ההדלקה הקודמת -- אזהרה במסך ההמתנה של המשכפל. אחרי `record`, כדי שתשקף את ה-hello הזה
             if answer.get("role") == "cloner":
                 fw_warning = firmware_image.cloner_warning(ctx.conn, mac)
                 if fw_warning is not None:
                     answer["fw_warning"] = fw_warning
+                # #3268 (B62): בדיקת הכתיבה של המסך הממתין + מה שהשרת זוכר על ה-serial = החלטה אחת, שהמסך מציג. אין החלטה = השדה חסר
+                write_decisions = brain_slowdisk.decide(ctx.conn, mac, body.get("write_check"), disks)
+                if write_decisions:
+                    answer["write_decisions"] = write_decisions
+                # #3663 (A10, G2): בדיקת הכבל החיה והבאנר "קישור איטי" -- המוח מחליט מעובדות ה-hello, הסוכן והגואי מבצעים ומציגים. אין החלטה = השדה חסר
+                link_verdict = brain_link.decide(ctx.conn, mac, body.get("nic_link"), answer) or {}
+                link_verdict.update(nicbus.decide(ctx.conn, mac, body.get("nic_bus"), body.get("nic_link")))
+                if link_verdict:
+                    answer["link_verdict"] = link_verdict
             # #1857: מלאי הדיסקים (דגם/גודל/מקום) של משכפל ושל מחשב בנייה -- לרשימת "כל הדיסקים" ולשיוך לסטים
             if answer.get("role") in ("cloner", "build"):
                 try:
@@ -699,6 +890,10 @@ def create_agent_router(ctx: ServerContext,
             # "admin" שמוצג במבט-העל כמנהל (`session_view.role_of`).
             username = ""
 
+        # #3231: after the login above (nobody unauthorised starts a derivation), before the pull exists
+        not_ready = _pull_index_gate(ctx, mac, image_id)
+        if not_ready is not None:
+            return not_ready
         try:
             session_id = pulls.open_pull(
                 ctx.conn, ctx.store, mac, machine["group_id"], image_id, username,
@@ -709,7 +904,7 @@ def create_agent_router(ctx: ServerContext,
         # codeql[py/log-injection] false positive: MAC מנורמל, image_id קיים בספרייה, session_id נוצר בשרת (#291)
         log.info("unicast pull %s for %s (%s)", session_id, mac, image_id)
         return JSONResponse({"id": session_id, "kind": "unicast",
-                             "image_id": image_id})
+                             "image_id": image_id, "engine": engine_of(ctx.conn)})
 
     @router.post("/agent/progress")
     async def agent_progress(request: Request) -> JSONResponse:
@@ -731,6 +926,10 @@ def create_agent_router(ctx: ServerContext,
             refused = identity_gate(ctx, mac, request, "progress")
             if refused is not None:
                 return refused
+            # #3331 (I14): דיווח שהתעכב ברשת ומגיע אחרי חדש ממנו נרשם ונזרק -- לפני `ingest`, כך שהוא לא מחזיר
+            # מצב ויומן אחורה ולא מרענן את `updated_at` (K1 קורא אותו כראיית חיים). הבסיס מתעדכן רק אחרי `ok`.
+            if ctx.report_order.check(mac, body) == STALE:
+                return JSONResponse(STALE_REPLY)
         if body.get("state") == "held" and "session_id" not in body and "task_id" not in body:
             # #2031: משכפל שמחזיק את התוצאות עד "כבה" (#2024) — בלי סבב ובלי משימה.
             # ראיית חיים (progress_seen), לא hello: אינו מצטרף לגל ואינו "נראה" ל-#1721.
@@ -753,16 +952,156 @@ def create_agent_router(ctx: ServerContext,
         # #1839: דיווח שהתקבל (זהות + חבר בסבב פתוח / אסימון משימה) הוא ראיה
         # שהמכונה חיה — בזמן כתיבה זה הקשר היחיד שלה, ובלעדיו "לא מחובר" אחרי 90ש'.
         if result.get("ok") and mac is not None:
+            ctx.report_order.note(mac, body)         # #3331: הדיווח התקבל, והוא הבסיס לבא
             agent_seen(ctx.conn, mac)
+            problems = chunkledger.note_report(ctx, mac, body)   # #2533: the durable chunks; a refused field is logged, the report stands
+            # #2533 (13/11): `durable` הוא דלתא ממוספרת. היומן הוא איחוד, ולכן מה שהגיע נרשם גם בפער;
+            # התשובה אומרת לסוכן אם זה אושר (`durable_seq`) או שעליו לשלוח הכול מחדש (`durable_full`).
+            # **המספר מתקדם רק על דיווח שהיומן רשם** (התפר ששלב 2 מצא; הכרעות המתאם 13/11). עם דלתא,
+            # טווחים שאושרו בלי שנרשמו לא יישלחו שוב, והדיסק ייראה לשלב ההשלמה חסר יותר ממה שהוא.
+            # לכן כשהיומן לא נכתב (`NOT_WRITTEN`: `database is locked`, כל חריגה), או שסורב בסיבה
+            # שתחלוף (`RETRY_LATER`: האינדקס עוד לא אומת, האימג' או הדיסק עוד לא ידועים) — התשובה אינה
+            # אומרת דבר על היומן. הסוכן אינו מסמן דבר כמאושר, ובדיווח הבא שולח שוב את כל מה שמאז
+            # האישור האחרון. לא `durable_full`: השרת לא איבד את מקומו, ואין סיבה לשלוח הכול כל מחזור.
+            # סירוב קבוע בשמו (תאומים, רשימה לא תקינה) כן מקדם: שליחה חוזרת לא תשנה אותו.
+            placed = ctx.durable_seq.admit(body.get("session_id"), mac, "progress", body)
+            if not (placed and (chunkledger.NOT_WRITTEN in problems or chunkledger.RETRY_LATER in problems)):
+                result.update(ctx.durable_seq.answer(body.get("session_id"), mac, "progress", placed))
+        if result.get("ok") and mac is not None and body.get("session_id"):
+            result.update(_round_extras(mac, body))      # #3181: פס ייצור והמוח של ההשלמה
         if result.get("ok") and body.get("task_id") and body.get("state") == "failed":
             discard_failed_staging(ctx.conn, ctx.library.root, body["task_id"])   # #1915
         return JSONResponse(result, status_code=200 if (result.get("ok") or result.get("code") == "not_open") else 400)
+
+    def _round_extras(mac: str, body: dict) -> dict:
+        """#3181: דיווח של חבר בגל הנוכחי של סבב החדר. ``production_line`` -- רק בפס ייצור (`prodline.reply`);
+        ``fill`` -- תוכנית ההשלמה של המוח (K5), רק במצב ``enforce``. בצל המוח מחליט ורושם, והסוכן לא שומע.
+        לעולם אינו מכשיל את הדיווח: כל חריגה נרשמת ביומן השרת והתשובה בלי התוספות."""
+        try:
+            round_row = room_state.active_round(ctx.conn)
+            if round_row is None or round_row["wave_session_id"] != body.get("session_id"):
+                return {}
+            extras: dict = {}
+            line = prodline.note_report(ctx.conn, round_row, mac, body.get("targets"), body.get("line_wait"))
+            if line is not None:
+                extras["production_line"] = line
+            from server.brain import veto          # noqa: PLC0415 -- כמו `budget.production`
+            pl = prodline.line_of(ctx.conn, round_row["id"])
+            drawers = pl["drawers"] if pl is not None else sum(
+                len(item.get("ports") or []) for item in json.loads(round_row["target_slots_json"] or "[]"))
+            plans = ctx.fill.observe(ctx.conn, round_row, mac, body, mode=veto.mode(ctx.conn), round_drawers=drawers,
+                                     stream_bps=_stream_bps())
+            if plans:
+                extras["fill"] = plans
+            extras.update(ctx.completing.observe(ctx.conn, round_row, mac, body, mode=veto.mode(ctx.conn)))   # #3064: `verify`, enforce + switch only
+            ctx.join.observe(ctx.conn, round_row, mac, body, mode=veto.mode(ctx.conn), engine=_engine_status(),
+                             stream_Bps=_stream_bps(), budget_bps=ctx.fill.budget(body.get("session_id"), mac),
+                             floor_mbps=_write_floor())
+            extras.update(ctx.peer.observe(ctx.conn, round_row, mac, body, fill_brain=ctx.fill, budget=ctx.budget))
+            return extras
+        except Exception:                           # noqa: BLE001
+            log.exception("prodline/fill: the extras for %s were not computed", mac)
+            return {}
+
+    def _engine_status() -> dict | None:
+        """#3064 (המצטרף): המחיצה, המעבר והמצב של גל החתיכות הפעיל. ``None`` = לא ידוע."""
+        try:
+            return ctx.chunk.status() if ctx.chunk is not None else None
+        except Exception:                           # noqa: BLE001
+            return None
+
+    def _write_floor() -> int | None:
+        """#3064 (B41): המהירות המינימלית לכונן שהמנוע שופט לפיה (`repair.slow_reason`). ``None`` = לא ידוע."""
+        try:
+            floor = ctx.chunk.write_floor() if ctx.chunk is not None else None
+            return floor if isinstance(floor, int) and floor > 0 else None
+        except Exception:                           # noqa: BLE001
+            return None
+
+    def _stream_bps() -> int | None:
+        """הקצב שהמנוע ביקש מהזרם, בבתים לשנייה -- לבדיקת השפיות של K5 בלבד. ``None`` = לא ידוע."""
+        try:
+            asked = ctx.chunk.sending_bps() if ctx.chunk is not None else None
+            return asked // 8 if isinstance(asked, int) and asked > 0 else None
+        except Exception:                           # noqa: BLE001
+            return None
+
+    #: (image_id, filename) -> (עד מתי, הנתיב). של האפליקציה הזו בלבד, ורק תשובות חיוביות.
+    _file_paths: dict[tuple[str, str], tuple[float, Path]] = {}
 
     def _in_round(session_id: object, mac: str) -> bool:
         """#2487: ה-MAC חבר בסבב הזה — hello צירף אותו, ולכן הוא מכונה רשומה."""
         return isinstance(session_id, str) and ctx.conn.execute(
             "SELECT 1 FROM session_members WHERE session_id = ? AND mac = ?",
             (session_id, mac)).fetchone() is not None
+
+    @router.post("/agent/chunk-pass")
+    async def agent_chunk_pass(request: Request) -> JSONResponse:
+        """#2533: הודעת הבקרה של מנוע החתיכות — "המקלט מאזין למעבר N" או "המעבר
+        נגמר, וזה מה שעמיד על כל דיסק". התשובה היא מה עושים עכשיו (`chunksend.report`).
+        אותו שער זהות כמו progress, ורק חבר בסבב שבגוף."""
+        body, refused = await _read_body(request)
+        if refused is not None:
+            return refused
+        if not isinstance(body, dict):
+            return _error(400, "body is not an object", "bad_json")
+        return await run_in_threadpool(_agent_chunk_pass_body, request, body)
+
+    def _agent_chunk_pass_body(request: Request, body: dict) -> JSONResponse:
+        mac = lenient_mac(body.get("mac"))
+        if mac is None:
+            return _error(400, "missing or malformed mac", "bad_mac")
+        refused = identity_gate(ctx, mac, request, "chunk-pass")
+        if refused is not None:
+            return refused
+        if not _in_round(body.get("session_id"), mac):
+            return _error(403, "this mac is not a member of that session", "not_member")
+        if ctx.chunk is None:
+            return JSONResponse({"ok": True, "action": "closed"})
+        # #2533 (13/11): `durable` הוא דלתא ממוספרת (`durableseq.py`). דלתא שהשרת אינו יכול למקם אינה
+        # מגיעה למנוע כלל: אין הכרעה על יומן שאולי חסר בו משהו. הסוכן שולח הכול מחדש, ואז שואל שוב.
+        placed = ctx.durable_seq.admit(body["session_id"], mac, "pass", body)
+        result = ({"ok": True, "action": "wait"} if placed is False
+                  else ctx.chunk.report(body["session_id"], mac, body))
+        if result.get("ok"):
+            result.update(ctx.durable_seq.answer(body["session_id"], mac, "pass", placed))
+            agent_seen(ctx.conn, mac)             # כמו progress (#1839): דיווח שהתקבל הוא ראיית חיים
+            if ctx.route is not None and placed is not False:
+                ctx.route.on_pass(body["session_id"], mac, body)     # #3064 (K5, R9): לעולם אינו זורק
+        return JSONResponse(result, status_code=200 if result.get("ok") else 400)
+
+    @router.post("/agent/resume")
+    async def agent_resume(request: Request) -> JSONResponse:
+        """#2528 שלב 4: משכפל שחזר אחרי כיבוי, בתחילת הגל של "כתוב מחדש" -- "אלה הדיסקים שעליהם סימן הכתיבה
+        שלא הושלמה, וכמה זמן תיקח הקריאה החוזרת שלהם". התשובה: לכל דיסק, להמשיך או להתחיל מחדש (`brain_resume`).
+        אותו שער זהות כמו chunk-pass, ורק חבר בסבב שבגוף."""
+        body, refused = await _read_body(request)
+        if refused is not None:
+            return refused
+        if not isinstance(body, dict):
+            return _error(400, "body is not an object", "bad_json")
+        return await run_in_threadpool(_agent_resume_body, request, body)
+
+    def _agent_resume_body(request: Request, body: dict) -> JSONResponse:
+        mac = lenient_mac(body.get("mac"))
+        if mac is None:
+            return _error(400, "missing or malformed mac", "bad_mac")
+        refused = identity_gate(ctx, mac, request, "resume")
+        if refused is not None:
+            return refused
+        if not _in_round(body.get("session_id"), mac):
+            return _error(403, "this mac is not a member of that session", "not_member")
+        targets = body.get("targets")
+        if not isinstance(targets, list) or len(targets) > 64 or not all(isinstance(t, dict) for t in targets):
+            return _error(400, "targets must be a list of objects", "bad_targets")
+        row = ctx.conn.execute("SELECT image_id FROM sessions WHERE id = ?", (body["session_id"],)).fetchone()
+        manifest = ctx.library.get(row["image_id"]) if row is not None else None
+        if manifest is None:
+            return _error(409, "the round's image is not in the library", "no_image")
+        answers = brain_resume.answer(ctx.conn, session_id=body["session_id"], image_id=row["image_id"],
+                                      manifest=manifest, targets=targets)
+        agent_seen(ctx.conn, mac)
+        return JSONResponse({"ok": True, "targets": answers})
 
     @router.post("/agent/disk-event")
     async def agent_disk_event(request: Request) -> JSONResponse:
@@ -1011,6 +1350,7 @@ def create_agent_router(ctx: ServerContext,
         # #2338 (נדב 03/11): סף המהירות של בדיקת הכתיבה לפני הזרם (writecheck.sh),
         # ההגדרה `writecheck_min_mbps`. נקבע כשהסוכן מושך את המניפסט: לכל הסבב.
         public[writefloor.SETTING] = writefloor.mbps(ctx.conn)
+        public.update(hdd_policy.manifest(ctx.conn))
         return JSONResponse(public)
 
     @router.get("/images/{image_id}/files/{filename}")
@@ -1018,17 +1358,35 @@ def create_agent_router(ctx: ServerContext,
         refused = source_gate(ctx, request, "files", image_id)         # #997
         if refused is not None:
             return refused
+        if ctx.direct_chunk is not None and direct.is_live_id(image_id):
+            # #3161: לאימג' חי אין קובץ בשרת -- רק פריים הראש שמחשב הבנייה העלה, בטווח מדויק
+            return ctx.direct_chunk.file_response(image_id, filename, request.headers.get("range"))
         # רשימה לבנה: מוגש רק קובץ שהמניפסט מכריז עליו בשמו המדויק.
-        path = ctx.library.file_path(image_id, filename)
-        if path is None:
+        # #2533: `file_path` סורק את הספרייה כולה (`scan`), והשלמה של חוסר מפוזר היא אלפי בקשות Range
+        # לאותו קובץ. התשובה נשמרת לכמה שניות — רק תשובה חיובית; שער הזהות למעלה נשאל בכל בקשה.
+        now = time.monotonic()
+        kept = _file_paths.get((image_id, filename))
+        if kept is None or kept[0] < now:
+            path = ctx.library.file_path(image_id, filename)
+            if path is None:
+                _file_paths.pop((image_id, filename), None)
+                return _error(404, "file not in this image's manifest", "no_file")
+            if len(_file_paths) > 256:
+                _file_paths.clear()
+            kept = _file_paths[(image_id, filename)] = (now + FILE_PATH_TTL_S, path)
+        if not Path(kept[1]).is_file():             # נמחק מאז: לא 500, ולא מהמטמון
+            _file_paths.pop((image_id, filename), None)
             return _error(404, "file not in this image's manifest", "no_file")
-        return FileResponse(path, media_type="application/octet-stream")
+        if ctx.served is not None and request.client:
+            return _CountedFile(kept[1], served=ctx.served, ip=request.client.host, budget=ctx.budget,
+                                media_type="application/octet-stream")
+        return FileResponse(kept[1], media_type="application/octet-stream")
 
     @router.get("/images/{image_id}/readback/{index}")
     def image_readback(image_id: str, index: int, request: Request):
         """#1805/#1864: רשימת ה-XXH64 של מחיצה — שורה לחתיכה של 4MiB של זרם הנתונים
         (`server/agent/readbackhash.py`). הסוכן בודק אותה בעצמו מול `readback_xxh64`
-        שבמניפסט; אין רשימה (טרם גובב, הפצה ישירה) — 404, והסוכן אומר "לא אומת"."""
+        שבמניפסט; אין רשימה (האינדקס טרם נגזר, הפצה ישירה) — 404, והסוכן אומר "לא אומת"."""
         refused = source_gate(ctx, request, "readback", image_id)
         if refused is not None:
             return refused
@@ -1037,8 +1395,53 @@ def create_agent_router(ctx: ServerContext,
             return _error(404, "unknown image", "no_image")
         part = next((p for p in manifest.get("partitions") or []
                      if isinstance(p, dict) and p.get("index") == index), None)
-        if part is None or not readbackhash.has_list(manifest["_dir"], part):
+        # #2533: the list is the third column of the partition's index -- there is no
+        # `.readback` file beside an image_format 2 file.
+        text = readbackhash.list_text(manifest["_dir"], part) if part is not None else None
+        if text is None:
             return _error(404, "no read-back list for this partition", "no_list")
-        return FileResponse(readbackhash.list_path(manifest["_dir"], part), media_type="text/plain")
+        return PlainTextResponse(text)
+
+    @router.get("/images/{image_id}/index/{index}")
+    def image_index(image_id: str, index: int, request: Request):
+        """#2533: the chunk index of a partition (`<file>.idx`) -- a header line, then
+        offset, frame length and XXH64 for every 4MiB chunk of the data stream. The
+        reader checks it against the manifest's `index_xxh64` itself. No verified
+        index (not derived yet, a direct send) -- 404, never a guessed one."""
+        refused = source_gate(ctx, request, "index", image_id)
+        if refused is not None:
+            return refused
+        if ctx.direct_chunk is not None and direct.is_live_id(image_id):
+            return ctx.direct_chunk.index_response(image_id, index)    # #3161: the index the source uploaded
+        manifest = ctx.library.get(image_id)
+        if manifest is None or not manifest.get("_dir") or not manifest.get("_available", True):
+            return _error(404, "unknown image", "no_image")
+        part = next((p for p in manifest.get("partitions") or []
+                     if isinstance(p, dict) and p.get("index") == index), None)
+        found = (readbackhash.part_index(manifest["_dir"], part)
+                 if part is not None and readbackhash.has_list(manifest["_dir"], part) else None)
+        if found is None:
+            return _error(404, "no chunk index for this partition", "no_index")
+        return PlainTextResponse(found.render())
+
+    @router.get("/images/{image_id}/b3/{index}")
+    def image_b3(image_id: str, index: int, request: Request):
+        """#3332: the BLAKE3 list of a partition (`<file>.b3`) -- 32 bytes for every chunk of its index.
+        The reader checks it against the manifest's `chunk_b3` itself. None (not derived yet) -- 404, and
+        the agent writes nothing of the partition (chunkb3.sh). A live image's is the one its source uploaded."""
+        refused = source_gate(ctx, request, "b3", image_id)
+        if refused is not None:
+            return refused
+        if ctx.direct_chunk is not None and direct.is_live_id(image_id):
+            return ctx.direct_chunk.b3_response(image_id, index)       # the list the source uploaded
+        manifest = ctx.library.get(image_id)
+        if manifest is None or not manifest.get("_dir") or not manifest.get("_available", True):
+            return _error(404, "unknown image", "no_image")
+        part = next((p for p in manifest.get("partitions") or []
+                     if isinstance(p, dict) and p.get("index") == index), None)
+        data = readbackhash.b3_bytes(manifest["_dir"], part) if part is not None else None
+        if data is None:
+            return _error(404, "no BLAKE3 list for this partition", "no_b3")
+        return Response(content=data, media_type="application/octet-stream")
 
     return router

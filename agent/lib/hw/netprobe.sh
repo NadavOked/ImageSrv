@@ -87,26 +87,29 @@ _np_lldp() {
 _netprobe_fresh() {
     _if=$(_np_iface) || _if=""
     if [ -z "$_if" ]; then
-        printf ',"netprobe":{"cable":null,"lldp":null}'; return
+        printf ',"netprobe":{"cable":null,"lldp":null,"report":null}'; return
     fi
-    printf ',"netprobe":{"cable":%s,"lldp":%s}' "$(_np_cable "$_if")" "$(_np_lldp "$_if")"
+    # #2234: "report" = the layers up to the server (netreport.sh); absent loader = not checked
+    _rep=null
+    if command -v netreport_json >/dev/null 2>&1; then _rep=$(netreport_json "$_if" "${SERVER:-}"); [ -n "$_rep" ] || _rep=null; fi
+    printf ',"netprobe":{"cable":%s,"lldp":%s,"report":%s}' "$(_np_cable "$_if")" "$(_np_lldp "$_if")" "$_rep"
 }
 
 # ,"netprobe":{...} — like probe_json. First hello must not wait 35s for LLDP:
-# no cache → pending + background; later hellos serve $RUN_DIR/netprobe.json.
+# no cache → pending + background; later hellos serve $RUN_DIR/netprobe.json. #3632 (netcache.sh): ONE job at a
+# time, and a cache that is not a whole fragment is dropped, never sent (a torn file made every hello 400 bad_json).
+# #3652: its stamps are uptime, not `date` (netcache.sh).
 netprobe_json() {
-    _pc="${RUN_DIR:-/run/imagesrv}/netprobe.json"; _now=$(date +%s 2>/dev/null) || _now=0
+    _pc="${RUN_DIR:-/run/imagesrv}/netprobe.json"; _now=$(_np_mono) || _now=""
     if [ -d "${_pc%/*}" ]; then
-        if [ -s "$_pc" ] && [ -s "$_pc.at" ] && [ $((_now - $(cat "$_pc.at"))) -lt "${NETPROBE_TTL:-900}" ]; then
+        if [ -s "$_pc" ] && ! _np_whole "$_pc"; then
+            log "netprobe: the cache is not whole JSON -- dropped, measured again" >&2; rm -f "$_pc" "$_pc.at"
+        fi
+        if [ -s "$_pc" ] && _age=$(_np_age "$_pc.at" "$_now") && [ "$_age" -lt "${NETPROBE_TTL:-900}" ]; then
             cat "$_pc"; return
         fi
-        if [ ! -s "$_pc" ]; then
-            printf ',"netprobe":{"pending":true}'
-            ( _netprobe_fresh > "$_pc.tmp" && mv "$_pc.tmp" "$_pc" && printf '%s' "$_now" > "$_pc.at" ) > /dev/null 2>&1 < /dev/null &
-            return
-        fi
-        cat "$_pc"
-        ( _netprobe_fresh > "$_pc.tmp" && mv "$_pc.tmp" "$_pc" && printf '%s' "$_now" > "$_pc.at" ) > /dev/null 2>&1 < /dev/null &
+        if [ -s "$_pc" ]; then cat "$_pc"; else printf ',"netprobe":{"pending":true}'; fi
+        _np_bg "$_pc" "$_now"
         return
     fi
     _netprobe_fresh

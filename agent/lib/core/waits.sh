@@ -38,12 +38,12 @@ WAIT_STREAM_START_S="${WAIT_STREAM_START_S:-600}"
 # שלו (‏`--start-timeout` של השולח שם הוא 780 = 600 + 180).
 WAIT_STREAM_START_LATER_S="${WAIT_STREAM_START_LATER_S:-900}"
 
-# אחרי שהזרם התחיל: כמה שקט מותר באמצעו. חמש דקות (11/09/2026, הכרעת
-# נדב): back-pressure בזנב של אימג' גדול (67GB) מאט את הזרם למקבל האיטי
-# במקום להפילו — גישת FOG/Clonezilla — ותקרת 120ש' חתכה אותו דווקא אז.
-# ה-watchdog (watchdog.sh) מוזן בכל דגימה כאן. זו הרצפה: ‏lost_wait_seconds של
-# השרת מעלה אותה ל-120 מעליו (timing.sh, #2056) — המשכפל לא מוותר לפני השרת.
-WAIT_STREAM_STALL_S="${WAIT_STREAM_STALL_S:-300}"
+# אחרי שהזרם התחיל: כמה שקט מותר באמצעו = כמה מגירה שממתינה לרשת ממתינה
+# לפני שהיא מוותרת. 120ש' (נדב 18/11: "גם דיסק וגם רשת אחרי 2 דקות מוותר";
+# 300 מ-11/09 היה בגלל back-pressure בזנב של אימג' גדול). ‏drawer_net_wait_seconds
+# בהגדרות הקונסולה (30–900) מחליף אותה (timing.sh) — זה רק "לא נאמר".
+# ה-watchdog (watchdog.sh) מוזן בכל דגימה כאן. ‏lost_wait_seconds כבר אינו מעלה אותה.
+WAIT_STREAM_STALL_S="${WAIT_STREAM_STALL_S:-120}"
 
 # מגירה שסיימה לקבל בייטים ועוד מרוקנת את החוצץ שלה (עד 256MB) אל
 # הכונן. חמש דקות (11/09/2026): מאז #660 ‏fanout **אינו** מוותר על מגירה
@@ -190,7 +190,7 @@ wait_progress() {
     _p_gopen=1
     [ -n "$_p_glog" ] && [ -n "$_p_gtxt" ] && _p_gopen=0
     shift 5
-    _p_seen=""; _p_still=0
+    _p_seen=""; _p_still=0; _sh_held=0
     while kill -0 "$_p_pid" 2>/dev/null; do
         if command -v watchdog_beat >/dev/null 2>&1; then watchdog_beat; fi
         _nap "$_p_pid"
@@ -217,11 +217,11 @@ wait_progress() {
         # שהגיע בייט, ושינוי ""→"0" החליף את תקרת ההתחלה בתקרת השקט.
         if [ "$_p_now" != "$_p_seen" ] && [ "$_p_now" != 0 ]; then
             _p_seen="$_p_now"
-            _p_still=0
+            _p_still=0; _sh_held=0
             [ "$_p_gopen" -eq 0 ] || _p_max="$_p_stall"
             continue
         fi
-        _p_still=$((_p_still + WAIT_POLL_S))
+        if command -v stream_still_tick >/dev/null 2>&1; then stream_still_tick; else _p_still=$((_p_still + WAIT_POLL_S)); fi   # #3731: stall.sh
         [ "$_p_still" -lt "$_p_max" ] && continue
         log "פג הזמן: $_p_what -- $_p_max שניות בלי התקדמות (עצר על ${_p_seen:-0} בייטים) -- נכשל"
         _p_kill "$@"; return 1
@@ -273,7 +273,7 @@ udp_drops_log() {   # $1 = mode, $2 = what was streamed
 # receiver reported rcvbuf=0. The sum over this restore's multicast partitions
 # rides in the progress report (udp_drops); one unread partition makes the whole
 # sum unread -- a partial sum would read as "no drops" (principle 5).
-udp_drops_reset() { rm -f "$RUN_DIR/udp_drops.sum" "$RUN_DIR/udp_drops.json" "$RUN_DIR/rcvbuf.min"; }   # rcvbuf.min: rcvbuf.sh (#2555)
+udp_drops_reset() { rm -f "$RUN_DIR/udp_drops.sum" "$RUN_DIR/udp_drops.json" "$RUN_DIR/rcvbuf.min" "$RUN_DIR/udp_drops.abandoned" "$RUN_DIR/udp_drops.rcvbuf"; }   # rcvbuf.min: rcvbuf.sh (#2555); abandoned, rcvbuf: a chunk round's (chunkloss.sh)
 udp_drops_add() {   # $1 = rcvbuf, $2 = inerrors of one partition ("null" = not read)
     _ua=$(cat "$RUN_DIR/udp_drops.sum" 2>/dev/null) || _ua="0 0"
     case "$1 $_ua" in

@@ -60,6 +60,18 @@ drawer_tune() {
         *) log "WARNING: IMAGESRV_DRAWER_DIRECTIO=$_dx is not 0|1 -- through the cache" ;;
     esac
     log "partition $_dt_i: decode=$DRAWER_DECODE drawers=$_dt_n${DRAWER_NICE:+ ($DRAWER_NICE)}${DRAWER_DIRECT:+ $DRAWER_DIRECT}"
+    drawer_tune_seen "$_dt_i" "$_dt_n"
+}
+drawer_tune_seen() {
+    # #3816: the EFFECTIVE choice of drawer_tune, for the brain to record in shadow (server/brain/drawertune.py);
+    # nothing here is decided by it. $1 = partition, $2 = live drawers. nice = 0 when not niced, direct = 1 when
+    # O_DIRECT. cpus = logical CPUs (/proc/cpuinfo); unreadable = null, never 0 (principle 5). The last partition's
+    # choice; job_reset clears it.
+    _ds_c=$(grep -c '^processor' "${SYSROOT:-}/proc/cpuinfo" 2>/dev/null); case "$_ds_c" in ''|0|*[!0-9]*) _ds_c=null ;; esac
+    _ds_n=0; [ -z "$DRAWER_NICE" ] || _ds_n=${DRAWER_NICE##* }
+    _ds_x=0; [ -z "$DRAWER_DIRECT" ] || _ds_x=1
+    printf '{"decode":"%s","nice":%s,"direct":%s,"drawers":%s,"cpus":%s,"partition":%s}\n' \
+        "$DRAWER_DECODE" "$_ds_n" "$_ds_x" "$2" "$_ds_c" "$1" > "$RUN_DIR/drawer_tune.json" 2>/dev/null || :
 }
 
 _drawer_pipeline() {
@@ -144,8 +156,8 @@ drawer_feed_start() {
     # drawer. A hung drawer is the drawers' fanout's to evict (fanout.c,
     # STALL_EVICT_MS); the stream's waits twice as long, so the two ceilings
     # never race and drop the whole machine for one drawer.
-    _fs_e="${FANOUT_STALL_EVICT_MS:-150000}"
-    case "$_fs_e" in ''|*[!0-9]*) _fs_e=150000 ;; esac
+    _fs_e="${FANOUT_STALL_EVICT_MS:-120000}"
+    case "$_fs_e" in ''|*[!0-9]*) _fs_e=120000 ;; esac
     FEED_EVICT=$((_fs_e * 2))
 }
 

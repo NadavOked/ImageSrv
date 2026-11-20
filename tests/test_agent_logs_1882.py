@@ -112,10 +112,10 @@ def test_a_body_that_is_not_a_log_is_refused(conn, body):
 
 
 def test_only_the_tail_is_kept(conn):
-    text = "".join(f"[10:00:00] line {i:06d} " + "x" * 80 + "\n" for i in range(2000))
+    text = "".join(f"[10:00:00] line {i:06d} " + "x" * 80 + "\n" for i in range(4000))   # #3125: MAX_TEXT is 256KB
     got = agent_logs.receive(conn, MAC, None, "round_end", _gz(text), known=True)
     kept = agent_logs.text_of(conn, got["id"])
-    assert kept["truncated"] is True and "line 001999" in kept["text"]
+    assert kept["truncated"] is True and "line 003999" in kept["text"]
     assert "line 000000" not in kept["text"]
     assert len(kept["text"].encode()) <= agent_logs.MAX_TEXT
     assert kept["text"].startswith("[10:00:00] line ")       # מתחילת שורה
@@ -231,7 +231,7 @@ def _send(tmp_path: Path, curl_rc: int, failed: bool) -> tuple[str, Path]:
         (run / "targets" / dev).mkdir(parents=True)
         (run / "targets" / dev / "state").write_text(state + "\n", encoding="utf-8", newline="\n")
     log = run / "agent.log"
-    log.write_text("".join(f"[10:00:00] line {i}\n" for i in range(600)), encoding="utf-8",
+    log.write_text("".join(f"[10:00:00] line {i}\n" for i in range(2600)), encoding="utf-8",
                    newline="\n")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
@@ -254,8 +254,8 @@ def test_the_agent_sends_the_gzipped_tail_once_with_the_reason(tmp_path):
     args = (tmp_path / "curl.args").read_text(encoding="utf-8").splitlines()
     assert f"http://10.0.0.1:8080/api/v1/agent/log?mac={MAC}&session_id=ses_9&reason=failed" in args
     body = gzip.decompress((tmp_path / "body.gz").read_bytes()).decode()
-    assert body.splitlines()[-1] == "[10:00:00] line 599"
-    assert len(body.splitlines()) == 400 and "line 199\n" not in body
+    assert body.splitlines()[-1] == "[10:00:00] line 2599"
+    assert len(body.splitlines()) == 2000 and "line 599\n" not in body   # #3125 (R13): 2000 lines, not 400
     assert "agent log: sent to the server (failed)" in log.read_text(encoding="utf-8")
 
 

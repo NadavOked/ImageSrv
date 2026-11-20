@@ -243,7 +243,7 @@ test('the secondary\'s tree is the primary\'s tree — same groups, pages and su
   const sidebar = index.slice(index.indexOf('<div class="tree" role="tree"'), index.indexOf('<div id="secondaryServers"'));
   const [primary] = readTree(sidebar);
   // down to the sub-nodes (Nadav: the same tree): מחשבים ▸ בנייה/שיכפול, רשת ▸ תרשים/חיבורים פיזיים/רשת הפצה/פורטים.
-  const want = ['סקירה כללית', 'סבב הפצה', ['מלאי', ["אימג'ים", ['מחשבים', ['מחשבי בנייה', 'מחשבי שיכפול']], 'דיסקים']],
+  const want = ['סקירה כללית', 'סבב הפצה', 'שאלות המוח', ['מלאי', ["אימג'ים", ['מחשבים', ['מחשבי בנייה', 'מחשבי שיכפול']], 'דיסקים']],
     ['תשתית', ['בריאות ושירותים', 'אחסון', ['רשת', ['תרשים', 'חיבורים פיזיים', 'רשת הפצה', 'פורטים']], 'מוניטור', 'דרייברים', 'דיסק-און-קי']],
     ['ניהול', ['משתמשים והרשאות', 'יומן', 'הגדרות', 'החשבון שלי']]];   // סניפים starts hidden (capability)
   assert.equal(JSON.stringify(skeleton(primary.kids, 3)), JSON.stringify(want), 'the reader sees the primary tree (a parser that sees nothing proves nothing)');
@@ -256,7 +256,8 @@ test('the secondary\'s tree is the primary\'s tree — same groups, pages and su
   // "סניפים" (a secondary has no children) and "החשבון שלי" (the primary user's) are not the server's pages.
   // #1920: "דיסק-און-קי" is the stick plugged into THIS server -- the relay (CONSOLE_GETS) carries no /usb-stick,
   // so the primary's console never reads or writes a secondary's stick.
-  const expected = skeleton(primary.kids, 3).map((x) => !Array.isArray(x) ? x
+  // #3654: "שאלות המוח" is the primary's own page (PRIMARY_ONLY_PAGES): a secondary server is out of scope for the brain's questions.
+  const expected = skeleton(primary.kids, 3).filter((x) => x !== 'שאלות המוח').map((x) => !Array.isArray(x) ? x
     : x[0] === 'תשתית' ? [x[0], x[1].filter((k) => k !== 'דיסק-און-קי')]
     : x[0] === 'ניהול' ? [x[0], x[1].filter((k) => k !== 'סניפים' && k !== 'החשבון שלי')] : x);
   assert.equal(JSON.stringify(skeleton(haifa.kids, 3)), JSON.stringify(expected));

@@ -64,8 +64,14 @@ function nicsvcBoot() { return nicsvcLoad().catch(() => null); }
 function nicsvcRow(name) { return ((NICSVC && NICSVC.nics) || []).find((r) => r.name === name) || null; }
 /* הכרטיס מ-/net/interfaces: של דף הרשת (NETW), ובכל דף אחר — מה ש-net.js כבר קרא (NICS) */
 function nicsvcNic(name) {
-  const list = (typeof NETW !== "undefined" && NETW.nics) || (typeof NICS !== "undefined" && Array.isArray(NICS) ? NICS : []);
-  return list.find((n) => n.name === name) || null;
+  return (nicsvcNics() || []).find((n) => n.name === name) || null;
+}
+/* הכרטיסים מ-/net/interfaces: של דף הרשת (NETW), ובכל דף אחר — מה ש-net.js כבר קרא (NICS). null = לא נקרא */
+function nicsvcNics() {
+  if (typeof NETW !== "undefined" && NETW.nics) return NETW.nics;
+  if (typeof portsNicsError !== "undefined" && portsNicsError) return null;   // הקריאה האחרונה נכשלה: "לא נקרא", לא רשימה ישנה או ריקה
+  if (typeof PORTS_NICS !== "undefined" && Array.isArray(PORTS_NICS)) return PORTS_NICS;
+  return typeof NICS !== "undefined" && Array.isArray(NICS) ? NICS : null;
 }
 function nicsvcPort(id, fallback) {
   const row = ((typeof NETW !== "undefined" && NETW.ports) || []).find((p) => p.id === id);
@@ -133,6 +139,17 @@ function nicsvcRowClick(event, enc) {
   const t = event && event.target;
   if (t && t.closest && t.closest("button,a,input,.kebab")) return;
   nicsvcOpen(enc);
+}
+/* ‏#3028 (נדב 12/11, מוקאפ m3028 מאושר): השירותים של כל כרטיס יושבים בדף "פורטים" (ולא ב"חיבורים פיזיים"):
+   כרטיס · השירותים שרצים עליו · "עריכה…" (אותה מגירה). הכרטיסים כפי ש-/net/interfaces החזיר; לא נקרא = "לא נקרא". */
+function nicsvcPortsCard() {
+  const nics = nicsvcNics();
+  if (nics === null) return UI.card({ title: "שירותים לפי כרטיס", cls: "c12", body: UI.note("warn", "‏/net/interfaces לא נקרא — השירותים לכל כרטיס אינם ידועים") });
+  const rows = nics.map((n) => ({ attrs: `data-nic="${esc(n.name)}"${nicsvcRowAttrs(n)}`,
+    cells: [nicsvcNameCell(n), nicsvcCell(n), `<button class="btn sm" type="button" onclick="nicsvcOpen('${encodeId(n.name)}')">עריכה…</button>`] }));
+  const table = UI.datagrid({ columns: ["כרטיס", { html: `שירותים שרצים עליו <span class="ns-help">· מה השרת נותן דרכו</span>` }, { html: `<span class="sr">פעולות</span>` }], rows,
+    empty: "לא נמצאו כרטיסי רשת — אין לאיזה כרטיס לתת שירותים" });
+  return nicsvcTableNotes() + UI.card({ title: "שירותים לפי כרטיס", cls: "c12", body: table, flush: rows.length > 0 });
 }
 /* פסים מעל הטבלה: כרטיס מחובר שלא הוגדר, וצירוף חריג שנשמר */
 function nicsvcTableNotes() {
@@ -254,7 +271,7 @@ async function nicsvcSave() {
 nicsvcSave = guarded("nicsvcSave", nicsvcSave);   // ‏#2840: לחיצה כפולה = בקשה אחת
 async function nicsvcRefresh() {
   try { await nicsvcLoad(); } catch (e) { toast("מצב השירותים לא נקרא: " + e.message); }
-  if (typeof current !== "undefined" && current === "network" && typeof renderCurrent === "function") renderCurrent();
+  if (typeof current !== "undefined" && (current === "network" || current === "ports") && typeof renderCurrent === "function") renderCurrent();
 }
 
 /* --- נעילה עצמית: חלון אישור (כפתור אדום, פוקוס על ביטול, בלי הקלדה — #1270) --- */

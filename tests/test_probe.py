@@ -63,7 +63,7 @@ def probe_of(sysroot: Path, extra: str = "", stubs: Path | None = None,
                 env += f"export {var}={posix(p)!r}; "
     out = sh(
         env + extra
-        + f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/probe.sh; . {posix(AGENT)}/lib/hw/probe_bg.sh; "   # #1367: capped_run
+        + f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/probe.sh; . {posix(AGENT)}/lib/core/bgfds.sh; . {posix(AGENT)}/lib/hw/probe_bg.sh; "   # #1367: capped_run
         r'printf "{\"x\":0%s}" "$(probe_json)"'
     )
     return json.loads(out)["probe"]
@@ -424,7 +424,7 @@ def test_missing_optional_tools_are_null_not_ok(fake_machine):
 
 
 def test_hello_schema_2_carries_probe(fake_machine):
-    libs = f'. {posix(AGENT)}/lib/hw/probe.sh; . {posix(AGENT)}/lib/hw/probe_bg.sh;'
+    libs = f'. {posix(AGENT)}/lib/hw/probe.sh; . {posix(AGENT)}/lib/core/bgfds.sh; . {posix(AGENT)}/lib/hw/probe_bg.sh;'
     (fake_machine["sysroot"] / "proc").mkdir(exist_ok=True)
     (fake_machine["sysroot"] / "proc" / "uptime").write_text("100.40 90.00" + chr(10))   # #2852: probe_seconds comes from /proc/uptime
     first = _agent_hello(fake_machine, libs)
@@ -457,7 +457,7 @@ def test_probe_is_cached_in_run_dir_between_hellos(fake_machine):
     run = f'export RUN_DIR={posix(fake_machine["run"])!r}; '
     sh(run + f'export SYSROOT={posix(sysroot)!r}; . {posix(AGENT)}/lib/core/common.sh; '
        f'. {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/probe.sh; '
-       f'. {posix(AGENT)}/lib/hw/probe_bg.sh; probe_json')
+       f'. {posix(AGENT)}/lib/core/bgfds.sh; . {posix(AGENT)}/lib/hw/probe_bg.sh; probe_json')
     _probe_done(fake_machine["run"])
     assert probe_of(sysroot, extra=run)["power"] == {"on_battery": False, "supply": "AC"}
     assert (fake_machine["run"] / "probe.json").exists()
@@ -466,7 +466,7 @@ def test_probe_is_cached_in_run_dir_between_hellos(fake_machine):
     (fake_machine["run"] / "probe.json.at").write_text("0")  # המטמון פקע
     sh(run + f'export SYSROOT={posix(sysroot)!r}; . {posix(AGENT)}/lib/core/common.sh; '
        f'. {posix(AGENT)}/lib/core/waits.sh; . {posix(AGENT)}/lib/hw/probe.sh; '
-       f'. {posix(AGENT)}/lib/hw/probe_bg.sh; probe_json')
+       f'. {posix(AGENT)}/lib/core/bgfds.sh; . {posix(AGENT)}/lib/hw/probe_bg.sh; probe_json')
     _probe_done(fake_machine["run"])
     assert probe_of(sysroot, extra=run)["power"] == {"on_battery": True, "supply": "BAT0"}
 
@@ -490,7 +490,7 @@ def test_probe_seconds_is_monotonic_when_the_wall_clock_jumps_back_2852(fake_mac
     def run() -> dict:
         out = sh(f"export SYSROOT={posix(sysroot)!r}; "
                  f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/waits.sh; "
-                 f". {posix(AGENT)}/lib/hw/probe.sh; . {posix(AGENT)}/lib/hw/probe_bg.sh; "
+                 f". {posix(AGENT)}/lib/hw/probe.sh; . {posix(AGENT)}/lib/core/bgfds.sh; . {posix(AGENT)}/lib/hw/probe_bg.sh; "
                  + jump + 'printf "{\\"x\\":0%s}" "$(_probe_fresh)"')
         return json.loads(out)["probe"]
 

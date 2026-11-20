@@ -3,14 +3,15 @@
 בלילה של 19/10 גל חיכה 16 דק' לתשובת SMART, ואיש לא ידע לספור את זה אחר כך. שני מקורות קיימים, בלי
 טבלה חדשה:
 
-* **ההמתנה לתשובת SMART** — השולח רושם ביומן **`send_held_smart`** (`<ses> <macs…>`) כשהוא עוצר לפני המחיצה
-  הראשונה, ו-**`send_hold_released`** (`<ses> <N>s`) כשהשאלה האחרונה נענתה (`sender._hold_for_asks`).
-  `smart_hold_s` = סכום ה-N של גלי הסבב. עצירה שלא שוחררה (הסבב נסגר בזמן ההמתנה) נספרת ב-`smart_unreleased`
-  — **בלי** שניות: לא ידוע כמה ארכה (עיקרון 5ב).
+* **ההמתנה לשאלה למפעיל** -- הגל עוצר לפני המחיצה הראשונה וכותב ביומן **`send_held_prompt`** (`<ses> <macs…>`) ו-
+  **`send_prompt_released`** (`<ses> <N>s`) כשהשאלה האחרונה נענתה (`sender._hold_for_asks` בשולח הישן,
+  `chunksend._wait_marks` במנוע החתיכות, #3470). הזוג הישן `send_held_smart`/`send_hold_released` (לפני #2044) נקרא
+  גם הוא, להיסטוריה. `smart_hold_s` = סכום ה-N של גלי הסבב. עצירה שלא שוחררה (הסבב נסגר בזמן ההמתנה) נספרת ב-`smart_unreleased`
+  -- **בלי** שניות: לא ידוע כמה ארכה (עיקרון 5ב). **אין אירוע שחרור בסבב = `None`, לא 0:** "אין אירוע" אינו "לא חיכו".
 * **הגל הפתוח** — `sessions.started_at − created_at` של כל גל (multicast של קבוצת השיכפול, בחלון הזמן של
   הסבב): מכונות שמצטרפות, החלפת מגירות, "התחל גל". `open_wait_s` — סכום; גל שלא יצא — אינו נספר.
 
-`None` = לא נמדד (אין גל שיצא לדרך), לא 0. ההמלצה ("שקלו לענות מראש…") מוצגת לאדם — שום דבר אינו
+`None` = לא נמדד (אין שחרור ביומן), לא 0. ההמלצה ("שקלו לענות מראש…") מוצגת לאדם — שום דבר אינו
 משתנה אוטומטית. לעולם אינו זורק.
 """
 
@@ -29,6 +30,10 @@ log = logging.getLogger("imagesrv.learn_waits")
 #: המתנה לתשובת SMART מעל זה (בשבוע) — שורת בריאות כתומה עם ההמלצה. ⚠️ ניחוש מנומק: 5 דק'.
 SMART_WARN_S = 300
 WEEK_DAYS = 7
+#: #3470: ההחזקה על שאלה למפעיל נרשמת היום כ-`send_held_prompt`/`send_prompt_released` (#2202); `send_held_smart` /
+#: `send_hold_released` הם של לפני #2044 ואינם נכתבים עוד. שניהם באותו פורמט (`<ses> <macs>` / `<ses> <N>s`).
+_HELD = ("send_held_smart", "send_held_prompt")
+_FREED = ("send_hold_released", "send_prompt_released")
 _RELEASED = re.compile(r"^(\S+)\s+(\d+)s\b")
 RECOMMEND_HE = "שקלו לענות מראש לדיסקים שנכשלו בעבר, או להיות ליד המחשבים בתחילת הגל"
 
@@ -55,26 +60,54 @@ def round_waits(conn: sqlite3.Connection, created_at: str, closed_at: str | None
         ids = {w["id"] for w in waves}
         held, released, secs = set(), set(), 0
         for row in conn.execute(
-                "SELECT event, detail FROM journal WHERE event IN ('send_held_smart', 'send_hold_released')"
+                "SELECT event, detail FROM journal WHERE event IN (?, ?, ?, ?)"
                 " AND julianday(ts) >= julianday(?) AND julianday(ts) <= julianday(?) ORDER BY id",
-                (created_at, until)):
+                (*_HELD, *_FREED, created_at, until)):
             sid = (row["detail"] or "").split(" ", 1)[0]
             if sid not in ids:
                 continue
-            if row["event"] == "send_held_smart":
+            if row["event"] in _HELD:
                 held.add(sid)
             elif m := _RELEASED.match(row["detail"] or ""):
                 released.add(sid)
                 secs += int(m.group(2))
         return {"waves": len(waves),
                 "open_wait_s": int(sum(opens)) if opens else None,
-                "smart_hold_s": secs if started else None,
+                "smart_hold_s": secs if released else None,
                 "smart_holds": len(released),
                 "smart_unreleased": len(held - released)}
     except Exception:             # noqa: BLE001
         log.exception("round waits failed")
         return {"waves": None, "open_wait_s": None, "smart_hold_s": None, "smart_holds": None,
                 "smart_unreleased": None}
+
+
+#: #3470: ההחזקה על שאלה למפעיל נרשמת היום כ-`send_held_prompt`/`send_prompt_released` (#2202); `send_held_smart` /
+#: `send_hold_released` הם של לפני #2044 ואינם נכתבים עוד. שניהם באותו פורמט (`<ses> <macs>` / `<ses> <N>s`).
+_HELD = ("send_held_smart", "send_held_prompt")
+_FREED = ("send_hold_released", "send_prompt_released")
+
+
+def wave_hold(conn: sqlite3.Connection, session_id: str) -> int | None:
+    """#3469: כמה שניות גל אחד עמד על שאלה למפעיל, משני זוגות האירועים. **`None` = לא נמדד**: אין שחרור ביומן
+    (גם כשאין החזקה בכלל: מנוע החתיכות מחזיק גל על שאלה בלי לכתוב אירוע, ולכן "אין אירוע" אינו "0"), או שהייתה
+    החזקה שלא שוחררה. אינו זורק."""
+    try:
+        held, freed, secs = 0, 0, 0
+        for row in conn.execute("SELECT event, detail FROM journal WHERE event IN (?, ?, ?, ?) ORDER BY id",
+                                (*_HELD, *_FREED)):
+            detail = row["detail"] or ""
+            if detail.split(" ", 1)[0] != session_id:
+                continue
+            if row["event"] in _HELD:
+                held += 1
+            elif m := _RELEASED.match(detail):
+                freed += 1
+                secs += int(m.group(2))
+        return secs if freed and freed >= held else None
+    except Exception:             # noqa: BLE001
+        log.exception("wave hold failed")
+        return None
 
 
 def week(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
@@ -107,6 +140,9 @@ def health_checks(conn: sqlite3.Connection) -> list[dict]:
         text = (f"{w['rounds']} סבבים: חיכו לתשובות SMART {hold}"
                 + (f" (בסבב אחד עד {_min(w['longest_s'])})" if w["longest_s"] else "")
                 + f"; גלים פתוחים עד היציאה {opened}")
+        if w["smart_hold_s"] is None:
+            # אין אירוע שחרור באף סבב: "לא נמדד" אינו "לא חיכו", ושורה ירוקה הייתה אומרת את השני
+            return [check("operator_waits", label, "off", f"{text} -- אין אירוע שחרור ביומן")]
         if w["longest_s"] is not None and w["longest_s"] >= SMART_WARN_S:
             return [check("operator_waits", label, "warn", f"{text} — {RECOMMEND_HE}")]
         return [check("operator_waits", label, "ok", text)]

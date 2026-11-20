@@ -28,13 +28,6 @@
 | [vm-update.md](guides/vm-update.md) | עדכון אימג' Windows בתוך מכונה וירטואלית על השרת |
 | [email-alerts.md](guides/email-alerts.md) | התראות במייל: הגדרת שליחה ו-OAuth |
 
-## מדידות (`measurements/`)
-
-| מסמך | מה יש בו |
-|---|---|
-| [measurements/README.md](measurements/README.md) | זמני וקצבי הפצה שנמדדו, עם מקור וסביבה לכל מספר |
-| [distribution.csv](measurements/distribution.csv) | הנתונים הגולמיים של אותן מדידות, שורה לכל מדידה |
-
 ## תרשימים ומיתוג
 
 | קובץ | מה יש בו |

@@ -94,3 +94,30 @@ def test_the_runner_installs_every_tool_the_local_clone_engine_requires():
         missing = [pkg for pkg in needed if pkg not in installed]
         assert missing == [], (f"{name}: חבילות של מנוע השיכפול המקומי אינן מותקנות — "
                                f"REQUIRE_NATIVE יאדים את הציבורי (#1356): {missing}")
+
+
+def _apt_packages(name: str) -> set[str]:
+    """כל חבילה שה-workflow מתקין ב-`apt-get install` — בלי דגלים ובלי הפניות פלט."""
+    packages: set[str] = set()
+    for line in _apt_installs(name):
+        words = line.split("apt-get install", 1)[1].split()
+        packages |= {w for w in words if not w.startswith(("-", ">", "2>"))}
+    return packages
+
+
+def test_the_nightly_installs_every_apt_package_the_pr_gate_installs():
+    """#3194: חבילה שנוספה ל-tests.yml ולא ל-nightly.yml מאדימה את הלילי בלבד.
+
+    xorriso נוספה ל-tests.yml ב-v0.94.3 (tests/test_iso_sbom_2999.py בונה ISO
+    אמיתי), ו-nightly.yml לא קיבלה אותה — הריצה הלילית בציבורי הייתה אדומה
+    מ-14/11 על ERROR של IMAGESRV_REQUIRE_NATIVE. ה-nightly רשאי להתקין יותר,
+    לא פחות.
+    """
+    gate = _apt_packages("tests.yml")
+    nightly = _apt_packages("nightly.yml")
+    # בלי זה הבדיקה עוברת בריק אם הפירוק ייתן קבוצה ריקה או חלקית
+    assert len(gate) >= 20 and "xorriso" in gate, sorted(gate)
+    assert len(nightly) >= 20, sorted(nightly)
+    missing = sorted(gate - nightly)
+    assert missing == [], (f"nightly.yml אינו מתקין חבילות ש-tests.yml מתקין — הלילי יאדים "
+                           f"בציבורי תחת IMAGESRV_REQUIRE_NATIVE (#3194): {missing}")

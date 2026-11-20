@@ -109,7 +109,9 @@ def _round(tmp_path: Path, blk_body: str, **env: str):
     prelude = (prelude + f"export PATH={posix(bindir)!r}:$PATH; "
                f". {posix(AGENT)}/lib/restore/discard.sh; "
                # a gate failed sdc before the tables (the write check, as #1366 does)
-               'write_check() { [ "$1" != sdc ] || { target_set sdc failed "gate"; return 1; }; }; ')
+               'write_check() { [ "$1" != sdc ] || { target_set sdc failed "gate"; return 1; }; }; '
+               # X16: sdb is an HDD the operator allowed ("HDD support" on); the policy has its own tests
+               'hdd_target_gate() { return 0; }; ')
     out = run_sh(prelude + 'run_restore_drawers multicast http://s img m.json sda sdb sdc sdd; echo "rc=$?"')
     lines = (tmp_path / "trim.calls").read_text(encoding="utf-8").splitlines()
     return run, out, lines

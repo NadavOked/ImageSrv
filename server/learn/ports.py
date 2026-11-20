@@ -16,6 +16,9 @@
                   None = לא נקרא
     cable_fail  — הכתיבה בחיבור הזה נכשלה בגל עם סיבה `cable` (`disk_failures`,
                   `ata_cause`: ICRC, "limiting SATA link speed", interface fatal)
+    failed      — #3125 (R15): הכתיבה בחיבור הזה נכשלה בגל, **מכל סיבה**; None = לא נרשם (שורה מלפני העמודה,
+                  או יעד בלי מצב). `verdict` סופר אותה לכל חריץ (`slot_failed` מתוך `slot_seen`): מגירה שנכשלת
+                  שוב ושוב. **אין כאן סף** -- "שוב ושוב" הוא החלטה של המוח (B33), לא של המודול הזה.
 
 תצפית **בעייתית** = `crc_delta > 0`, או קישור שנקרא מתחת למקסימום של הפורט,
 או כשל כתיבה בסיבת כבל. "לא נמדד" אינו "תקין" ואינו "בעייתי" — הוא פשוט
@@ -71,9 +74,11 @@ def _gbps(value: object) -> float | None:
 
 
 def _problem(crc_delta, link_gbps, link_max_gbps, cable_fail) -> bool:
-    """תצפית בעייתית — ראיה חיובית בלבד; None (לא נמדד) אינו בעיה."""
-    slow = link_gbps is not None and link_max_gbps is not None and link_gbps < link_max_gbps
-    return bool((crc_delta or 0) > 0 or slow or cable_fail)
+    """תצפית בעייתית — ראיה חיובית בלבד; None (לא נמדד) אינו בעיה.
+
+    #3591 (נדב 17/11): מהירות הקישור (`link_gbps`/`link_max_gbps`) **אינה** ראיה לכבל: יציאה של 3.0 (או 1.5) במחשב ישן
+    היא התקינה שלו. נשארו CRC שעלה וכשל שסווג ככבל. הפרמטרים נשארים בחתימה (הקוראים לא השתנו) ואינם נקראים."""
+    return bool((crc_delta or 0) > 0 or cable_fail)
 
 
 def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
@@ -98,15 +103,17 @@ def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
                 port = _int(disk.get("port"))
                 if not serial or port is None or disk.get("serial") != serial:
                     continue          # בלי זהות ומקום אין מה ללמוד
+                state = t.get("state")      # #3125: not a string = "not recorded", never "did not fail"
                 rows.append((session_id, mac, port, serial, _int(t.get("crc_delta")),
                              _gbps(disk.get("link_gbps")), _gbps(disk.get("link_max_gbps")),
-                             int(port in failed), now_iso()))
+                             int(port in failed), now_iso(),
+                             None if not isinstance(state, str) else int(state == "failed")))
         if not rows:
             return 0
         with _write_lock, writing(conn):
             return sum(conn.execute(
                 "INSERT OR REPLACE INTO port_history (session_id, mac, port, serial, crc_delta,"
-                " link_gbps, link_max_gbps, cable_fail, at) VALUES (?,?,?,?,?,?,?,?,?)",
+                " link_gbps, link_max_gbps, cable_fail, at, failed) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 row).rowcount for row in rows)
     except Exception:             # noqa: BLE001 — הלמידה אינה עוצרת סיום גל
         log.exception("recording port history of %s failed", session_id)
@@ -121,10 +128,12 @@ def _bad(rows) -> list[sqlite3.Row]:
 def verdict(conn: sqlite3.Connection, mac: str | None, port: object,
             serial: str | None) -> dict:
     """מה שנלמד על החיבור ועל הדיסק: `{"port_suspect", "port_disks", "disk_suspect",
-    "disk_ports", "text_he"}`. `port_suspect`/`disk_suspect` — None כשאין על מה
+    "disk_ports", "slot_failed", "slot_seen", "text_he"}`. #3125: `slot_failed` = בכמה מ-`slot_seen` הגלים האחרונים
+    בחריץ הזה (מכונה+חיבור) הכתיבה נכשלה, מכל סיבה; `slot_seen` סופר רק גלים שנרשמו להם (שורה בלי `failed` אינה
+    נספרת לא במונה ולא במכנה); None = אין על מה לשאול, או שהשאילתה נכשלה. `port_suspect`/`disk_suspect` — None כשאין על מה
     לשאול (אין MAC/חיבור/סידורי) או שהשאילתה נכשלה; False — נבדק, לא עבר את הסף."""
     out = {"port_suspect": None, "port_disks": None, "disk_suspect": None,
-           "disk_ports": None, "text_he": None}
+           "disk_ports": None, "slot_failed": None, "slot_seen": None, "text_he": None}
     try:
         port = _int(port)
         if mac and port is not None:
@@ -133,6 +142,8 @@ def verdict(conn: sqlite3.Connection, mac: str | None, port: object,
                 " LIMIT ?", (mac, port, WINDOW)).fetchall()
             n = len({r["serial"] for r in _bad(rows)})
             out["port_disks"], out["port_suspect"] = n, n >= MIN_DISKS
+            seen = [r["failed"] for r in rows if r["failed"] is not None]
+            out["slot_seen"], out["slot_failed"] = len(seen), sum(1 for f in seen if f)
         if serial:
             rows = conn.execute(
                 "SELECT * FROM port_history WHERE serial = ? ORDER BY at DESC, rowid DESC LIMIT ?",
@@ -141,7 +152,7 @@ def verdict(conn: sqlite3.Connection, mac: str | None, port: object,
             out["disk_ports"], out["disk_suspect"] = n, n >= MIN_DISKS
     except Exception:             # noqa: BLE001 — אין הכרעה, לא "תקין"
         log.exception("port verdict for %s:%s failed", mac, port)
-        return {**out, "port_suspect": None, "disk_suspect": None}
+        return {**out, "port_suspect": None, "disk_suspect": None, "slot_failed": None, "slot_seen": None}
     texts = []
     if out["disk_suspect"]:
         texts.append(DISK_HE.format(n=out["disk_ports"]))

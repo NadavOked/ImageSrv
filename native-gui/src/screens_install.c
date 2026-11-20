@@ -3,6 +3,7 @@
 #include <string.h>
 #include "screens_install.h"
 #include "install_raid.h"     /* #1989 */
+#include "screens_rounds.h"   /* bidi_isolate (#3051) */
 
 /* #2144 (Nadav 04/11): "שעון השרת" is a step of its own, after the name; #1956: "גיבוי" after it -- nine */
 static const char *STEP_NAMES[INSTALL_STEPS]={"דיסק","תפקיד השרת","כתובת השרת","שם השרת","שעון השרת","גיבוי","חשבון ניהול","החלה","סיום"};
@@ -12,6 +13,11 @@ void install_text_ltr(cairo_t *cr,const char *v,double px,int weight,double x,do
 /* #2096, #2129: a NIC by the name a person reads -- its model, or "כרטיס רשת N" -- on the
  * network screen and in the summary alike; never "VMware 0x07b0" and never eth0 */
 void install_nic_label(const InstallState *s,int i,char *out,size_t n){if(s->nics[i].model[0])snprintf(out,n,"%s",s->nics[i].model);else snprintf(out,n,"כרטיס רשת %d",i+1);}
+/* #3051: the name a person points at -- "דיסק 2" (the stick's mapping), or the name the stick gave that connection
+ * in its place; "" when the disk is not in the mapping. Never a number from the order of /dev/sdX. */
+void install_disk_slot_label(const InstallDisk *d,char *out,size_t n){
+    if(d->slot<=0){out[0]=0;return;}
+    if(d->slotname[0])bidi_isolate(d->slotname,out,n);else snprintf(out,n,"דיסק %d",d->slot);}
 void install_card(cairo_t *cr,const Theme *t,Rect r){draw_fill_rrect(cr,r,t->radius,t->surface);draw_border_rrect(cr,r,t->radius,t->hair,1);}
 
 #define APPLY_STEP (INSTALL_STEPS-1)   /* "החלה": the summary, the progress and a failed apply */
@@ -114,7 +120,17 @@ void screen_install(App *a,cairo_t *cr,double W,double H){a->install.osk_field=0
 
 /* #1310: the role step in its three states -- green (the demo), not yet
  * checked (next disabled), and a real failure with its reason. */
-static void role_variant(InstallState *s,const char *name){if(strstr(name,"-lab-unknown")){s->lab=INSTALL_LAB_UNCHECKED;return;}if(strstr(name,"-lab")){s->lab=INSTALL_LAB_YES;return;}   /* #1412: the strip, on the shortest and the longest steps */
+static void role_variant(InstallState *s,const char *name){if(strstr(name,"-smart-mix")){snprintf(s->disks[0].smart,sizeof s->disks[0].smart,"passed");snprintf(s->disks[1].smart,sizeof s->disks[1].smart,"unknown");return;}   /* #3131: one tested, one not */
+if(strstr(name,"-warn-")){InstallDisk *d=&s->disks[0];s->raid=RAID_NONE;s->disk=0;snprintf(d->path,sizeof d->path,"/dev/vda");d->size_bytes=40ULL*1073741824ULL;   /* #3054: the erase warning, with and without a model */
+        snprintf(d->model,sizeof d->model,"%s",strstr(name,"-nomodel")?"":"Samsung SSD 870 EVO");return;}
+if(strstr(name,"-three-")){   /* #3051: three identical disks, the second chosen -- with the stick's mapping, or with the serials alone */
+        static const char *serials[3]={"Z3T0AB12","Z3T0CD34","Z3T0EF56"};static const char *devs[3]={"/dev/sda","/dev/sdb","/dev/sdc"};
+        s->raid=RAID_NONE;s->ndisks=3;s->disk=1;s->disk_ack=1;s->existing_disk=-1;
+        for(int i=0;i<3;i++){InstallDisk *d=&s->disks[i];memset(d,0,sizeof *d);snprintf(d->path,sizeof d->path,"%s",devs[i]);snprintf(d->model,sizeof d->model,"ST500DM002-1BD142");
+            snprintf(d->bus,sizeof d->bus,"sata");snprintf(d->has,sizeof d->has,"gpt:2 partitions (ntfs, ntfs)");d->size_bytes=500107862016ULL;snprintf(d->serial,sizeof d->serial,"%s",serials[i]);
+            d->slot=strstr(name,"-serial-only")?0:i+1;}
+        return;}
+    if(strstr(name,"-lab-unknown")){s->lab=INSTALL_LAB_UNCHECKED;return;}if(strstr(name,"-lab")){s->lab=INSTALL_LAB_YES;return;}   /* #1412: the strip, on the shortest and the longest steps */
     if(strstr(name,"-unchosen")){s->disk=-1;s->disk_ack=0;return;}   /* #2147: two disks, none chosen yet */
     if(strstr(name,"-smart-failed")){if(s->disk>=0&&s->disk<s->ndisks)snprintf(s->disks[s->disk].smart,sizeof s->disks[s->disk].smart,"failed");return;}   /* #3007: before "-failed" below */
     if(strstr(name,"-time-org")){s->ntp_org=1;return;}   /* #2144: the mockup's five states */
@@ -126,5 +142,5 @@ static void role_variant(InstallState *s,const char *name){if(strstr(name,"-lab-
     if(strstr(name,"-done-unchecked")){s->clock=INSTALL_CLOCK_UNCHECKED;s->clock_offset[0]=0;return;}
     if(strstr(name,"-unchecked")){s->primary_checked=s->primary_ok=0;}
     else if(strstr(name,"-failed")){s->primary_checked=1;s->primary_ok=0;snprintf(s->primary_error,sizeof s->primary_error,"אין תשובה מ-192.168.68.250 בפורט 8443 תוך 5 שניות (timeout): חומת אש חוסמת בשקט, או שהכתובת שגויה");}}
-int install_render_png(App *a,const char *prefix,int w,int h){static const struct{const char *name;int view;} cards[]={{"install-0-disk",INSTALL_DISK},{"install-0b-disk-unchosen",INSTALL_DISK},{"install-0e-disk-smart-failed",INSTALL_DISK},{"install-1-role",INSTALL_ROLE},{"install-1b-role-unchecked",INSTALL_ROLE},{"install-1c-role-failed",INSTALL_ROLE},{"install-2-servers-net",INSTALL_NETWORK},{"install-3-hostname",INSTALL_HOSTNAME},{"install-3b-time",INSTALL_TIME},{"install-3c-time-org",INSTALL_TIME},{"install-3f-time-manual",INSTALL_TIME},{"install-3d-backup",INSTALL_BACKUP},{"install-3e-backup-other",INSTALL_BACKUP},{"install-3g-backup-off",INSTALL_BACKUP},{"install-4-admin",INSTALL_ADMIN},{"install-5-summary",INSTALL_SUMMARY},{"install-5c-progress",INSTALL_PROGRESS},{"install-5b-apply-failed",INSTALL_FAILED},{"install-6-done",INSTALL_DONE},{"install-6b-done-unsynced",INSTALL_DONE},{"install-6c-done-unchecked",INSTALL_DONE},{"install-6d-done-manual",INSTALL_DONE},{"install-0c-disk-lab",INSTALL_DISK},{"install-0d-disk-lab-unknown",INSTALL_DISK},{"install-4b-admin-lab",INSTALL_ADMIN},{"install-5d-summary-lab",INSTALL_SUMMARY},{"install-5e-summary-backup-off",INSTALL_SUMMARY}};const Theme *themes[]={&THEME_LIGHT,&THEME_DARK};
+int install_render_png(App *a,const char *prefix,int w,int h){static const struct{const char *name;int view;} cards[]={{"install-0-disk",INSTALL_DISK},{"install-0b-disk-unchosen",INSTALL_DISK},{"install-0e-disk-smart-failed",INSTALL_DISK},{"install-0j-disk-smart-mix",INSTALL_DISK},{"install-0f-disk-warn-nomodel",INSTALL_DISK},{"install-0g-disk-warn-latin",INSTALL_DISK},{"install-0h-disk-three-identical",INSTALL_DISK},{"install-0i-disk-three-serial-only",INSTALL_DISK},{"install-5f-summary-three-identical",INSTALL_SUMMARY},{"install-1-role",INSTALL_ROLE},{"install-1b-role-unchecked",INSTALL_ROLE},{"install-1c-role-failed",INSTALL_ROLE},{"install-2-servers-net",INSTALL_NETWORK},{"install-3-hostname",INSTALL_HOSTNAME},{"install-3b-time",INSTALL_TIME},{"install-3c-time-org",INSTALL_TIME},{"install-3f-time-manual",INSTALL_TIME},{"install-3d-backup",INSTALL_BACKUP},{"install-3e-backup-other",INSTALL_BACKUP},{"install-3g-backup-off",INSTALL_BACKUP},{"install-4-admin",INSTALL_ADMIN},{"install-5-summary",INSTALL_SUMMARY},{"install-5c-progress",INSTALL_PROGRESS},{"install-5b-apply-failed",INSTALL_FAILED},{"install-6-done",INSTALL_DONE},{"install-6b-done-unsynced",INSTALL_DONE},{"install-6c-done-unchecked",INSTALL_DONE},{"install-6d-done-manual",INSTALL_DONE},{"install-0c-disk-lab",INSTALL_DISK},{"install-0d-disk-lab-unknown",INSTALL_DISK},{"install-4b-admin-lab",INSTALL_ADMIN},{"install-5d-summary-lab",INSTALL_SUMMARY},{"install-5e-summary-backup-off",INSTALL_SUMMARY}};const Theme *themes[]={&THEME_LIGHT,&THEME_DARK};
     for(size_t i=0;i<sizeof cards/sizeof cards[0];i++){for(int t=0;t<2;t++){install_demo(a,cards[i].view);role_variant(&a->install,cards[i].name);a->theme=themes[t];cairo_surface_t *sf=cairo_image_surface_create(CAIRO_FORMAT_RGB24,w,h);cairo_t *cr=cairo_create(sf);double s=ui_scale(h);a->scale=s;cairo_scale(cr,s,s);screen_install(a,cr,w/s,h/s);cairo_destroy(cr);   /* the scale app_draw uses */char path[512];snprintf(path,sizeof path,"%s-%s-%s.png",prefix,cards[i].name,themes[t]->id);cairo_status_t st=cairo_surface_write_to_png(sf,path);cairo_surface_destroy(sf);if(st!=CAIRO_STATUS_SUCCESS){fprintf(stderr,"native-gui: %s: %s\n",path,cairo_status_to_string(st));return 1;}}}return 0;}

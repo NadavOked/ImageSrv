@@ -15,7 +15,7 @@ _mount_linux() {
     # at $RUN_DIR/linux or below it. Fails with a return code that names why:
     #   1 = could not mount, 2 = mounted but no /etc,
     #   3 = btrfs: no subvolume holds /etc, 4 = btrfs: several do,
-    #   5 = no linux partition in the plan (no mount attempted).
+    #   5 = no linux partition in the plan (no mount attempted), 6 = linked /etc.
     if [ -n "${3:-}" ]; then
         _mount_plan="$3"
     else
@@ -38,7 +38,13 @@ _mount_linux() {
     # never opened as one here. Nothing runs from this mount and nothing needs
     # its /dev: the name, the identity reset (grow.sh) and the initramfs check
     # (linuxdrivers.sh) only read and write plain files.
-    mount -t "$_fs" -o nodev,nosuid "$_node" "$_mnt" >> "$LOG_FILE" 2>&1 || { log "could not mount $_node" >&2; return 1; }
+    # #3415: nouuid on xfs -- every cloner's copy of an image carries the SAME xfs UUID, and a second one mounted while another is still up is refused
+    _mo=nodev,nosuid; [ "$_fs" != xfs ] || _mo=$_mo,nouuid
+    mount -t "$_fs" -o "$_mo" "$_node" "$_mnt" >> "$LOG_FILE" 2>&1 || { log "could not mount $_node" >&2; return 1; }
+    if [ -L "$_mnt/etc" ]; then
+        _umount_checked "$_mnt" >&2 || return 1
+        return 6
+    fi
     [ -d "$_mnt/etc" ] && { echo "$_mnt"; return 0; }
     if [ "$_fs" != "btrfs" ]; then
         umount "$_mnt" >> "$LOG_FILE" 2>&1
@@ -55,8 +61,13 @@ _mount_linux() {
     mount -t btrfs -o subvolid=5,nodev,nosuid "$_node" "$_mnt" >> "$LOG_FILE" 2>&1 \
         || { log "could not mount the btrfs top level of $_node" >&2; return 1; }
     _root=""; _n=0
-    for _d in "$_mnt"/*/etc; do
-        [ -d "$_d" ] && { _root="${_d%/etc}"; _n=$((_n + 1)); }
+    for _d in "$_mnt"/*; do
+        [ ! -L "$_d" ] || continue
+        if [ -L "$_d/etc" ]; then
+            _umount_checked "$_mnt" >&2 || return 1
+            return 6
+        fi
+        [ -d "$_d/etc" ] && { _root="$_d"; _n=$((_n + 1)); }
     done
     if [ "$_n" -eq 1 ]; then
         log "btrfs $_node: the root is subvolume $(basename "$_root")" >&2
@@ -85,12 +96,18 @@ _write_linux_files() {
         _linux_plain_file "$1/$_wlf" || { _wlf_bad="/etc/$_wlf"; return 2; }
     done
     printf '%s\n' "$2" > "$1/hostname" || return 1
+    _wlf_ok=0
     if [ -f "$1/hosts" ]; then
         awk -v n="$2" 'BEGIN { done = 0 }
             /^127\.0\.1\.1[ \t]/ { print "127.0.1.1\t" n; done = 1; next }
             { print }
             END { if (!done) print "127.0.1.1\t" n }' "$1/hosts" > "$1/hosts.new" \
-            && mv "$1/hosts.new" "$1/hosts" || return 1
+            && cat "$1/hosts.new" > "$1/hosts" && cmp -s "$1/hosts.new" "$1/hosts" && _wlf_ok=1
+        # #2787: written INTO the file that is there -- `mv` replaced the inode, and the new one
+        # had no security.selinux label (Fedora: chronyd and resolved were denied the read).
+        # Read back: a write that did not land is a failure (principle 5), not a quiet success.
+        rm -f "$1/hosts.new"
+        [ "$_wlf_ok" = 1 ] || return 1
     else
         printf '127.0.0.1\tlocalhost\n127.0.1.1\t%s\n' "$2" > "$1/hosts" || return 1
     fi
@@ -147,6 +164,7 @@ _write_linux_root() {
         3) printf '{"ok":false,"error":"אף תת-כרך btrfs אינו מחזיק את /etc","code":"no_root_subvolume"}\n'; return 1 ;;
         4) printf '{"ok":false,"error":"כמה תתי-כרכי btrfs מחזיקים את /etc","code":"ambiguous_root_subvolume"}\n'; return 1 ;;
         5) printf '{"ok":false,"error":"אין מחיצת לינוקס במניפסט","code":"no_linux_partition"}\n'; return 1 ;;
+        6) printf '{"ok":false,"error":"/etc בדיסק המשוחזר הוא קישור","code":"hostname_target_not_regular"}\n'; return 1 ;;
         *) printf '{"ok":false,"error":"לא הצלחנו לעגן את מחיצת הלינוקס","code":"mount_failed"}\n'; return 1 ;;
     esac
     log "writing hostname $3 into $_root/etc/hostname" >&2

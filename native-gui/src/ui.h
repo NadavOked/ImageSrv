@@ -15,6 +15,7 @@
 #include "draw.h"
 #include "install_state.h"
 #include "localclone.h"   /* #1322 */
+#include "disk_rule.h"    /* #3666: a verdict is delivered, never worked out here */
 #include "theme.h"
 
 #define MAX_HITS    640     /* #695: 30 machines x 8 disks need room-disk hit targets;
@@ -39,7 +40,23 @@
 /* 11/10: the kinds of question the agent asks through the dialog (ask_prompt=) */
 enum { ASK_NONE, ASK_GROWBACK, ASK_CAPTURE_END, ASK_SEND_END, ASK_ROUND_END,   /* #1560: send/round */
        ASK_RAID, ASK_SHARE,     /* #1808/#1898: a cloner drawer's question (drawergate.sh) */
-       ASK_BADSECT };           /* #2017: a local clone's source with bad sectors (lcraw.sh) */
+       ASK_BADSECT,             /* #2017: a local clone's source with bad sectors (lcraw.sh) */
+       ASK_INTERRUPT };         /* #2528: a cloner powered off or rebooted mid-round (interrupt.sh) */
+/* #3654 (mockup 18/11): the brain's questions about this machine (agent/lib/core/ask.sh ask_gui_records,
+ * on every screen through gui_hello_state) -- brain_ask.h. Up to 8 options (server/brain/ask.py MAX_OPTIONS),
+ * a label of 36 characters (MAX_LABEL), a verb of 24, a consequence/outcome of 120: the buffers hold them in
+ * UTF-8 with room, and a value that does not fit makes the question malformed -- never cut. */
+#define MAX_BASKS     8
+#define MAX_BASK_OPTS 8
+#define MAX_BASK_GONE 32
+enum { BASK_NONE, BASK_OPEN, BASK_ANSWERED, BASK_EXPIRED, BASK_CANCELLED };
+typedef struct { char id[33], label[160], verb[100], cons[400], outcome[400]; int destructive; } BaskOpt;
+typedef struct {
+    int id, state, declared, nopts, columns, admin_too, bad;   /* admin_too: the console may answer too */
+    long long ttl, deadline, closed_at;   /* deadline: this machine's epoch when the server's clock ends it */
+    char safe[33], answer[33], role[16], by[96], title[600], detail[1200];
+    BaskOpt opt[MAX_BASK_OPTS];
+} Bask;
 /* #1560: what ended before the count to power-off (end_poweroff=<epoch>|<kind>) */
 enum { END_NONE, END_DRAWERS, END_PARTIAL, END_LOCALCLONE, END_FAILED };
 /* #1269: the models the driver library has (GET /api/console/room/driver-models). */
@@ -175,6 +192,7 @@ enum {
     HIT_PWR_KEEP, HIT_PWR_STOP,   /* #1918: the power button's question -- "המשך" and the red "עצור וכבה" */
     HIT_SYSP_CANCEL,      /* #1896: "ביטול" in the C: picker */
     HIT_SMT_SCRIM, HIT_SMT_PANEL,   /* #1859: the dim behind the SMART table drawer (a click closes), and the drawer (it does not) */
+    HIT_BASK_GO, HIT_BASK_CLOSE,    /* #3654: the brain's question -- "אישור" / the red verb; "סגירה" after it closed */
     HIT_INSTALL_SUMMARY_BASE = 1000,
     HIT_INSTALL_NIC_BASE = 1020,
     /* ranges: base + index */
@@ -207,6 +225,7 @@ enum {
     HIT_SYSP_BASE = 3600,  /* #1896: a partition of the C: picker (+index into the image's cand) */
     HIT_IDENTIFY_BASE = 3700,  /* #1966: identify a drawer (+drawer index); not 3600 -- that is #1896's C: picker */
     HIT_SMT_BASE = 3800,       /* #1859: a drawer of the cloner's wait with a SMART table (+bay index) -- opens it */
+    HIT_BASK_OPT_BASE = 3900,  /* #3654: an option of the brain's question (+index, MAX_BASK_OPTS of them) */
 };
 
 typedef struct { Rect r; int id; } Hit;
@@ -300,11 +319,10 @@ typedef struct {
     char drv_boot[12], drv_bsvc[24], drv_berr[160];
     /* #1331 T8: room_drawer fields 24-26 -- drivers.linux: state, module, error|reason */
     char drv_lstate[12], drv_lmod[12], drv_ldet[160];
-    int link_slow;      /* #432: room_drawer field 12 = link_state "slow"; #2848 (Nadav 11/11): red, not a target */
-    /* #2848: room_drawer_rule=mi|serial|color|target|source|reason -- the server's one rule (disk_rule.py):
-     * rule_color DR_* (disk_rule.h), rule_target / rule_source 0/1, rule_reason its word. rule_set 0 = an
+    /* #2848: room_drawer_rule=mi|serial|color|target|source|reason|sentence -- the server's verdict (the brain's, K3/DISK_COLOR, #3666):
+     * rule_color DR_* (disk_rule.h), rule_target / rule_source 0/1, rule_reason its word, rule_he its sentence. rule_set 0 = an
      * older server: no line, the drawer's own SMART and link decide as before. */
-    int rule_set, rule_color, rule_target, rule_source; char rule_reason[24];
+    int rule_set, rule_color, rule_target, rule_source; char rule_reason[24], rule_he[200];
     char slot_name[SLOT_NAME_MAX];
     int drawer; char conn[32];
     /* 17/10: room_drawer fields 16-17 -- the drawer's own target in the wave:
@@ -315,6 +333,9 @@ typedef struct {
      * names), the server's "בוטל על ידי …" line ("" = not cancelled) and whether the
      * agent reported it (0 = asked, still "מבטל…") */
     char dev[32], cancel_text[120]; int cancel_done;
+    /* #2996/#2633: room_drawer_rb= -- the read-back's verdict the server serves per drawer (drawers[].readback):
+     * verified | sampled | unverified, "" = not reported; rb_nolist = unverified because the check list did not come down */
+    char rb_verdict[12]; int rb_nolist;
 } RoomDrawer;
 typedef struct { char conn[32], name[SLOT_NAME_MAX]; int set; } RoomSlot;
 /* #1269: one model the driver library has a package for, in its spelling. */
@@ -356,7 +377,16 @@ typedef struct {
     /* #2055: a drawer_moved= record -- when its bytes last moved (epoch; 0 = not said) */
     long long moved;
     RbBar rb;   /* #2046: a drawer_rbp= record -- the read-back's bar and verdict */
+    /* #3064 (R5): a drawer_fill= record -- a returned drawer still completing. fill = 1 when the record was read (missing is a
+     * count); part / chunks -1 = not said, and never drawn as 0 */
+    int fill; long long fill_part, fill_missing, fill_chunks;
     int group;  /* #2849: the cloner_group= it came under (build machine, direct send); -1 = none */
+    /* #3167: a drawer_note= record -- a note on a done drawer (the name written into an
+     * image not shut down clean): the row stays green, the note is said in its line */
+    char note[200];
+    /* #2988, #3680: a drawer_stall= record -- the drawer stands. stall "" = no record; stall_s -1 = not said. The agent's limit (the
+     * 4th field) is not kept: it is never shown (Nadav 12/11, #3726). Last: main.c's sample_state fills a Drawer by position */
+    char stall[16]; long long stall_s;
 } Drawer;
 /* A physically connected disk shown on the cloner's IDLE screen (no round yet),
  * so the operator sees what is plugged in before a broadcast starts. */
@@ -368,9 +398,9 @@ typedef struct { int port; char dev[32], model[48]; unsigned long long size; cha
                  char hw[240]; /* #1921: field 13 -- the drawer's hardware note (hw-issues.tsv), never the disk's colour */
                  char f1_date[12], f1_src[8]; /* #1858: fields 14/15 -- "נצפה F1" by serial: YYYY-MM-DD and manual|auto; "" = not marked */
                  char f1_smart[16]; /* #1858: field 16 -- the disk's own SMART beneath the F1 red (passed|warn|fail|unchecked); "" = not known */
-                 int sata_bad; /* #2848: field 17 (the hw words) has a SATA problem (hw_words_red) -- red */
-                 int sata_issue; /* #2848: of those, link_reset / drawer_gone (the slow link is link_slow()) */ } IdleDisk;
-/* #2848 (Nadav 11/11): hwissues.sh's words, space-separated -- link_slow / link_reset / drawer_gone is a SATA
+                 char wstate[12], wtext[160]; /* #3268: fields 18/19 -- the waiting-screen write check: checking|ok|slow|failed|unchecked and why; "" = an older agent */
+                 DiskRule rule; /* #3666: cdisk_rule=dev|color|source|target|reason|sentence -- the agent's verdict from the one table (diskrule.sh); set 0 = none */ } IdleDisk;
+/* #2848 (Nadav 11/11): hwissues.sh's words, space-separated -- link_reset / drawer_gone is a SATA
  * problem: the disk is red, never a target, still a source. usb2 and icrc_logged stay a note. */
 int hw_words_red(const char *words);
 int hw_words_has(const char *words, const char *word);   /* #2848: one word of hwissues.sh's, space-separated */
@@ -399,7 +429,7 @@ typedef struct { int open; char dev[32]; int top, vis; } SmTbl;   /* vis: the ro
 typedef struct State {
     Disk disks[MAX_DISKS];              int ndisks;
     char folders[MAX_FOLDERS][64];      int nfolders;
-    Image images[MAX_IMAGES];           int nimages;
+    Image images[MAX_IMAGES];           int nimages, images_known;
     Machine machines[MAX_MACHINES];     int nmachines;
     ClassGroup classes[MAX_CLASSES];    int nclasses;
     Drawer drawers[MAX_DRAWERS];        int ndrawers;
@@ -488,6 +518,11 @@ typedef struct State {
     char rb_mode[8];                 /* #2046: rb_mode= full|sample -- "אומתו" only for a check that read every chunk */
     /* #2080 (mockup 06): fw_warn=<count>|<text> -- the server's "the SATA connections changed" for the wait screen; "" = none */
     char fw_warn[320]; int fw_warn_count;
+    /* #3277: nic_link=<iface>|<Mb/s>|<max Mb/s>|<flag> -- the distribution card's link as the cloner reads it NOW. 0 = not read.
+     * #3663 (G2): nic_warn is the brain's verdict (flag 1 = SHOW, hello answer link_verdict.banner): the link banner
+     * (screens_standby.c) is drawn only on it -- the screen has no threshold. The numbers are the banner's text. */
+    int nic_mbps, nic_max, nic_warn;
+    int nic_bus;   /* #3776: nic_bus=1 -- the brain said the card sits on an old PCI bus (link_verdict.bus_banner = SHOW); 0 = anything else */
     int server_restarted_wave;       /* #1377: closed report after server restart */
     /* #2067 (mockup 08): net=lost|<last byte>|<ceiling s> / net=back|<s away>|<at> -- the
      * stream's outage bar (roundbeep.sh stream_net_record). -1 = the agent did not say. */
@@ -497,6 +532,13 @@ typedef struct State {
      * (clonergui.sh, from the hello's session.forecast). fc_clock: the server proved its clock synced, so an HH:MM may be
      * drawn at all; fc_at: the end from history, 0 = none; fc_nohist: the server said there is no history. All 0 = not said. */
     int fc_clock, fc_nohist; long long fc_at;
+    /* #3181 (Nadav 14/11): a production line -- a round that asks for more disks than the drawers (prodlinegui.sh,
+     * from the server's production_line). pl_on = a pline= record in shape; nothing else draws without it, and a
+     * regular round has none: its screen as it was. The counter ("נכתבו X מתוך Y"), whether the round has names,
+     * the slots the server counted removable (after a safe detach) and the empty slots that wait for a disk. */
+    int pl_on, pl_written, pl_target, pl_left, pl_named;
+    int pl_ready[MAX_DRAWERS], npl_ready;
+    struct { int port, drawer; char name[64]; } pl_insert[MAX_DRAWERS]; int npl_insert;
     /* #704: cslot_name=<port>|<name> -- [port-1], "" = "דיסק N" */
     char cslot_names[MAX_DRAWERS][SLOT_NAME_MAX];
 
@@ -536,7 +578,11 @@ typedef struct State {
     int hidden_disks, hidden_machines, rejected_lines, stale;
     char state_warning[160];
 
-    char form_error[160], class_error[160], toast[160];
+    char form_error[160], class_error[160];
+    /* #3152: 256, not 160 -- the power-off refusal of idle.sh is 180 bytes of Hebrew; at 160
+     * the toast lost its tail and ended on half a UTF-8 letter, drawn as a missing-glyph box.
+     * main.c toast() copies this into App.toast: both stay the same size. */
+    char toast[256];
     /* #1269: 256, not 160 -- "הדגם <model> כבר אינו בספריית הדרייברים..."
      * carries a model of up to 127 bytes (DriverModel.model); at 160 gcc
      * warns -Wformat-truncation, and a cut would split a UTF-8 letter. */
@@ -572,6 +618,8 @@ typedef struct State {
     char fail_steps[MAX_FAIL_STEPS][240]; int nfail_steps;
     char fail_code[MAX_FAIL_CODE][240]; int nfail_code;   /* not drawn (#2068): the log is in the console's drawer */
     struct { char action[16], label[64]; } fail_btns[MAX_FAIL_BTNS]; int nfail_btns;   /* #2068: fail_btn=<action>|<label> */
+    /* #3654: bask= / bask_opt= (brain_ask.c); bask_broken = how many arrived malformed and are not drawn */
+    Bask bask[MAX_BASKS]; int nbask, bask_broken;
 } State;
 
 /* #649: one row of $GUI_DIR/tools (id|domain|title|risk|args). risk is
@@ -626,6 +674,7 @@ typedef struct App {
      * "Is it alive?" needs only the counter; the rate answers it without a
      * denominator, which is exactly what a dirty NTFS (no used_bytes) lacks. */
     unsigned long long rate_prev_bytes; long long rate_prev_updated; double capture_rate_bps;
+    long long direct_t0;        /* #2984: when this GUI first saw the direct send run (wall clock); 0 = not one */
     int showing_done;           /* stay on #st-done until "קליטה נוספת" */
     char done_title[64], done_sub[1100];   /* holds task_error[1024] whole (gcc -Wformat-truncation) */
 
@@ -697,13 +746,18 @@ typedef struct App {
     char tool_out[TOOL_OUT_MAX];
     int tool_line_off[TOOL_OUT_LINES]; int tool_nlines;
 
-    char toast[160];            /* #toast; empty = hidden */
+    char toast[256];            /* #toast; empty = hidden. #3152: same size as State.toast */
     double toast_until;         /* monotonic seconds */
 
     char shrink_sent[32];       /* #928: the nonce already answered -- one answer per question */
     char ask_sent[32];          /* 11/10: the same, for the question dialog */
     char power_sent[24];        /* #1918: the power question already answered (its nonce) */
     int sysp_open;              /* #1896: the C: picker is open on image sysp_open-1; 0 = closed */
+    /* #3654: the brain's question on the screen (brain_ask.c) -- its id (0 = none), the option the keys chose,
+     * the answer already sent (one per question, again only after BASK_RESEND_S), when its result was first
+     * drawn (it closes 5 s later), and the questions closed here, never shown again */
+    int bask_id, bask_sel, bask_sent_id; double bask_sent_at, bask_closed_at;
+    int bask_gone[MAX_BASK_GONE], nbask_gone;
 
     State st;
 

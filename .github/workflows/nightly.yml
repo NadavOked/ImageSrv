@@ -52,9 +52,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r server/requirements.txt pytest httpx pytest-xdist==3.6.1
           # #1210: בלי update האינדקס השמור ב-runner מחזיר 404 כשהמראה מתקדמת.
+          # #3194: the package list is tests.yml's, name for name
+          # (tests/test_ci_workflow_1912.py fails when they drift). xorriso was added there in
+          # v0.94.3 and not here, so the public nightly was red from 14/11 on
+          # tests/test_iso_sbom_2999.py under IMAGESRV_REQUIRE_NATIVE.
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
-            libhivex-dev libhivex-bin dash busybox nodejs libpango1.0-dev libcairo2-dev libdrm-dev libharfbuzz-dev libfribidi-dev fonts-ibm-plex fontconfig libvncserver-dev             partclone gdisk ntfs-3g dosfstools e2fsprogs pv jq curl mtools grub-pc-bin syslinux syslinux-common cpio zstd >/dev/null
+            libhivex-dev libhivex-bin dash busybox nodejs libpango1.0-dev libcairo2-dev libdrm-dev libharfbuzz-dev libfribidi-dev fonts-ibm-plex fontconfig libvncserver-dev \
+            partclone gdisk ntfs-3g dosfstools e2fsprogs pv jq curl \
+            mtools grub-pc-bin syslinux syslinux-common cpio zstd xorriso >/dev/null
           busybox | head -1
       # ‏#2064: גלאי Impeccable בגרסה הנעולה, לשער tests/test_impeccable_gate.py.
       # ה-sha וה-URL נקראים מ-tests/impeccable_gate.py (מקור יחיד) ומפתחים את
@@ -78,6 +84,24 @@ jobs:
           dest="$HOME/.cache/impeccable/imp"
           python tests/impeccable_gate.py fetch "$dest"
           echo "IMAGESRV_IMPECCABLE_BIN=$dest" >> "$GITHUB_ENV"
+      # ‏#3943: gitleaks בגרסה הנעולה, לשער tests/test_gitleaks_test_fakes_1119.py.
+      # אותה גרסה ואותו sha256 כמו gitleaks.yml (הטסט מאמת שהצמדות שוות). בלי
+      # הבינארי הטסט מדלג, ותחת REQUIRE_NATIVE זה כישלון בשמו; הורדה שנכשלה או
+      # sha שאינו תואם -- השלב אדום.
+      - name: Fetch and verify the pinned gitleaks (#3943)
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+          GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+        run: |
+          set -euo pipefail
+          dest="$RUNNER_TEMP/gitleaks"
+          mkdir -p "$dest"
+          F="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$dest/$F"             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${F}"
+          echo "${GITLEAKS_SHA256}  $dest/$F" | sha256sum -c -
+          tar xzf "$dest/$F" -C "$dest" gitleaks
+          "$dest/gitleaks" version
+          echo "IMAGESRV_GITLEAKS=$dest/gitleaks" >> "$GITHUB_ENV"
 
       # מה שהותקן בפועל, לא מה שביקשנו. כשריצה לילית נכשלת בלי שהקוד
       # זז, זו השורה הראשונה שמסבירה למה.
@@ -111,10 +135,16 @@ jobs:
       # כעת אותם שני שלבים כמו tests.yml: מקבילי, ואז serial, עם פסק משותף.
       # #2952: על shard אחד -- `shard=(...)` ב-collect ובשתי הריצות, כמו tests.yml.
       - name: Full suite
+        env:
+          PY: ${{ matrix.python-version }}
         run: |
           set -o pipefail
           args=(-p no:cacheprovider -m "not uinput and not vm_it")
           shard=(-p tools.git.ci_shard --ci-shard "$SHARD/4")
+          # 14/11: every ResourceWarning with the line that made the object (tests/resource_leaks.py),
+          # on 3.13 only -- tracemalloc doubles the run's memory, one version is the evidence.
+          leaks=()
+          if [ "$PY" = "3.13" ]; then leaks=(-p tests.resource_leaks --resource-leaks "$RUNNER_TEMP/gate/leaks"); fi
           gate="$RUNNER_TEMP/gate"
           mkdir -p "$gate"
           if ! python tools/git/lab_gate.py collect --out "$gate/collected.txt" -- "${args[@]}" "${shard[@]}" \
@@ -128,11 +158,11 @@ jobs:
           set +e
           IMAGESRV_SESSION_PROBLEMS="$gate/problems-parallel.json" \
             python -m pytest tests -q -p no:cacheprovider -m "$base and not serial" -n auto --dist load \
-            "${shard[@]}" --junitxml="$gate/run-parallel.xml" < /dev/null 2>&1 | tee pytest.log
+            "${shard[@]}" "${leaks[@]}" --junitxml="$gate/run-parallel.xml" < /dev/null 2>&1 | tee pytest.log
           rc1=${PIPESTATUS[0]}
           IMAGESRV_SESSION_PROBLEMS="$gate/problems-serial.json" \
             python -m pytest tests -q -p no:cacheprovider -m "$base and serial" \
-            "${shard[@]}" --junitxml="$gate/run-serial.xml" < /dev/null 2>&1 | tee -a pytest.log
+            "${shard[@]}" "${leaks[@]}" --junitxml="$gate/run-serial.xml" < /dev/null 2>&1 | tee -a pytest.log
           rc2=${PIPESTATUS[0]}
           set -e
           echo "$rc1 $rc2" > "$gate/rc"
@@ -140,6 +170,13 @@ jobs:
             --junit "$gate/run-parallel.xml" --junit "$gate/run-serial.xml" \
             --problems "$gate/problems-parallel.json" --problems "$gate/problems-serial.json" \
             --allowed .github/ci-gate-allowed.json --pytest-rc "$rc1" --pytest-rc "$rc2"
+
+      # 14/11: a report, not a gate -- a site not in the baseline is listed as NEW in the
+      # summary and gets an Issue by hand; blocking on it is a later decision (--block-new).
+      # No `active-*` file = the plugin never ran = red (exit 2), not "no leaks".
+      - name: Resource leaks (report)
+        if: always() && matrix.python-version == '3.13'
+        run: python tests/resource_leaks.py report "$RUNNER_TEMP/gate/leaks" --baseline .github/resource-leaks-baseline.txt
 
       - name: End-to-end simulation
         if: matrix.shard == 4
@@ -208,6 +245,10 @@ jobs:
           RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
+          # #3724: the label existed in the private repo only. Where it is missing, `gh issue create --label` fails
+          # ("could not add label") and nobody is told. --force makes this idempotent; a failure here stays visible.
+          gh label create nightly-failure --repo "$GITHUB_REPOSITORY" \
+            --color B60205 --description "The nightly run failed" --force
           EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" \
             --label nightly-failure --state open --limit 1 --json number -q '.[0].number' || true)
           if [ -n "$EXISTING" ]; then

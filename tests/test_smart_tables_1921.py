@@ -99,7 +99,7 @@ def test_both_files_are_well_formed_and_no_name_is_in_both():
     for i, n in ((199, "UDMA_CRC_Error_Count"), (199, "CRC_Error_Count"), (218, "CRC_Error_Count"), (210, "SATA_CRC_Error_Count")):
         r = smart_names.ATA[(i, n)]
         assert (r["table"], r["verdict"], r["op"], r["word"]) == ("hw", "info", None, "crc"), r
-    assert set(smart_names.HW) == {"link_slow", "link_reset", "drawer_gone", "usb2", "ide", "icrc_logged"}
+    assert set(smart_names.HW) == {"link_reset", "drawer_gone", "usb2", "ide", "icrc_logged"}   # #3591: no link_slow
 
 
 def test_every_orange_and_red_word_has_its_sentence_everywhere():
@@ -408,7 +408,7 @@ def test_the_hw_words_are_read_again_after_the_write():
 
 def test_the_hw_sentences_come_from_the_table():
     from server.disks import smart_names
-    for w in ("link_slow", "link_reset", "drawer_gone", "usb2", "ide", "icrc_logged"):
+    for w in ("link_reset", "drawer_gone", "usb2", "ide", "icrc_logged"):
         out = sh(f'export SMART_KB={posix(DATA)}; . {posix(AGENT)}/lib/smart/smartjudge.sh; smart_kb_he {w} | od -An -c | tr -d " \\n" | head -c 40')
         assert out.returncode == 0 and out.stdout.strip(), w   # bytes printed (od: no locale in the way)
         he = smart_names.hw_sentence(w)
@@ -435,17 +435,32 @@ def _sata_disk(sysroot: Path, ata: int, host: int, spd: str, caps: str) -> None:
     (shost / "ahci_host_caps").write_text(caps + "\n")
 
 
-@pytest.mark.parametrize("caps,disk_ver,slow", [
-    ("c734ff45", "SATA 3.1, 6.0 Gb/s", True),     # a 6 Gb/s port and disk, linked at 3.0: the cable
-    ("c724ff45", "SATA 3.1, 6.0 Gb/s", False),    # an HP 8100: a SATA II port -- 3.0 is its ceiling
-    ("c734ff45", "SATA 2.6, 3.0 Gb/s", False),    # a SATA II disk on a 6 Gb/s port
+@pytest.mark.parametrize("caps,disk_ver,spd", [
+    ("c734ff45", "SATA 3.1, 6.0 Gb/s", "3.0 Gbps"),   # #3591: a 6 Gb/s port and disk, linked at 3.0 -- an old board's port, not the cable
+    ("c734ff45", "SATA 3.1, 6.0 Gb/s", "1.5 Gbps"),   # #3591 (Nadav 17/11): nor is 1.5 a word -- no link SPEED is a hardware issue
+    ("c724ff45", "SATA 3.1, 6.0 Gb/s", "3.0 Gbps"),   # an HP 8100: a SATA II port -- 3.0 is its ceiling
+    ("c734ff45", "SATA 2.6, 3.0 Gb/s", "3.0 Gbps"),   # a SATA II disk on a 6 Gb/s port
 ])
-def test_link_slow_is_below_both_the_port_and_the_disk(tmp_path, caps, disk_ver, slow):
+def test_no_link_speed_is_a_hardware_word(tmp_path, caps, disk_ver, spd):
     sysroot = tmp_path / "sys0"
-    _sata_disk(sysroot, 3, 2, "3.0 Gbps", caps)
+    _sata_disk(sysroot, 3, 2, spd, caps)
     run = tmp_path / "run"; (run / "smart").mkdir(parents=True)
-    (run / "smart" / "sda.out").write_text(f"SATA Version is:  {disk_ver} (current: 3.0 Gb/s)\n", newline="\n")
+    (run / "smart" / "sda.out").write_text(f"SATA Version is:  {disk_ver} (current: {spd[:3]} Gb/s)\n", newline="\n")
     out = sh(f'export SYSROOT={posix(sysroot)!r} RUN_DIR={posix(run)!r} DMESG=true; '
              f'. {posix(AGENT)}/lib/hw/disklink.sh; . {posix(AGENT)}/lib/smart/hwissues.sh; hw_refresh sda; cat "$RUN_DIR/smart/sda.hw"')
     assert out.returncode == 0, out.stderr
-    assert ("link_slow" in out.stdout.split()) == slow, out.stdout
+    assert out.stdout.split() == [], out.stdout   # read, and nothing to say: the speed is in the hello, not a word
+
+
+def test_the_hardware_words_still_come_from_dmesg_so_the_check_above_can_fail(tmp_path):
+    """The control of the test above: the same machine at 1.5 with a libata link reset in dmesg says `link_reset`."""
+    sysroot = tmp_path / "sys0"
+    _sata_disk(sysroot, 3, 2, "1.5 Gbps", "c734ff45")
+    run = tmp_path / "run"; (run / "smart").mkdir(parents=True)
+    fake = tmp_path / "dmesg"
+    fake.write_text("#!/bin/sh\necho '[    5.000000] ata3: hard resetting link'\n", newline="\n")
+    fake.chmod(0o755)
+    out = sh(f'export SYSROOT={posix(sysroot)!r} RUN_DIR={posix(run)!r} DMESG={posix(fake)!r}; '
+             f'. {posix(AGENT)}/lib/hw/disklink.sh; . {posix(AGENT)}/lib/smart/hwissues.sh; hw_refresh sda; cat "$RUN_DIR/smart/sda.hw"')
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.split() == ["link_reset"], out.stdout

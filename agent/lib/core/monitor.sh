@@ -97,6 +97,7 @@ _monitor_waiter() {
     case "$_mw_cap" in ''|*[!0-9]*) _mw_cap=300 ;; esac
     [ "$_mw_cap" -gt 0 ] || return 0
     (
+        bg_detach_fds   # #3548
         _mw_t=0
         while [ "$_mw_t" -lt "$_mw_cap" ]; do
             sleep 1 || break

@@ -211,7 +211,7 @@ def test_run_restore_refuses_before_sgdisk_runs(tmp_path):
 def test_every_restore_path_goes_through_disk_fits():
     """Round (drawers, through #1366's write_check_round), build machine /
     single restore, local clone."""
-    for lib, call in (("drawers.sh", 'write_check_round "$_manifest" $_disks'),
+    for lib, call in (("drawers.sh", 'write_check_round "$_manifest" $RESUME_REST'),   # #2528: the drawers that resume are taken out first (resume.sh)
                       ("writecheck.sh", 'disk_fits "$_wr_d" "$_wr_m" && '),   # #1808: raid_wipe, then write_check
                       ("restore.sh", 'disk_fits "$2" "$5"'),
                       ("lccopy.sh", 'disk_fits "$1" "$2"')):

@@ -246,11 +246,14 @@ def test_a_copy_that_does_not_read_back_is_a_failure(tmp_path):
     assert (box.server / "umounts").read_text().count("umount") == 1, "הכשל משחרר את המאונט"
 
 
-def test_no_matching_package_is_no_match_and_touches_nothing(tmp_path):
+def test_no_matching_package_is_no_match_and_stages_nothing_but_the_boot_driver(tmp_path):
+    # #1331 (owner, 15/11): the in-box storage driver is boot-start on every Windows restore;
+    # what a no_match does NOT touch is the packages and DevicePath (test_bootstorage.py).
     box = Box(tmp_path, packages={}, answer=answer_for({}))
     _, result = box.stage()
-    assert result == {"state": "no_match", "packages": []}
-    assert box.calls() == [] and box.staged_files() == {}
+    assert result == {"state": "no_match", "packages": [], "boot": {"state": "enabled", "service": "storahci"}}
+    assert not [c for c in box.calls() if "SOFTWARE" in c] and box.staged_files() == {}
+    assert box.device_path() == STOCK
     assert box.state() == "staging"   # #1935: not terminal -- done is the caller's, after the mark
 
 

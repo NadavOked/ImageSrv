@@ -18,6 +18,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from boot.grub_menu import normalize_mac as lenient_mac
 
@@ -113,8 +114,8 @@ def create_drivers_router(ctx: ServerContext) -> APIRouter:
             raise HTTPException(400, unreadable_message(exc))
         finally:
             await asyncio.to_thread(temp.unlink, missing_ok=True)
-        journal(ctx.conn, "driver_upload",
-                f'{manifest["name"]} ({len(manifest["files"])} files)', user[0])
+        await run_in_threadpool(journal, ctx.conn, "driver_upload",
+                                f'{manifest["name"]} ({len(manifest["files"])} files)', user[0])   # #2750
         return {"name": manifest["name"], "files": len(manifest["files"])}
 
     @router.post("/drivers/{name}/delete")
@@ -125,7 +126,7 @@ def create_drivers_router(ctx: ServerContext) -> APIRouter:
         if body.get("confirm_name", "") != name:
             raise HTTPException(400, "השם שהוקלד אינו זהה לשם החבילה")
         library.delete(name)
-        journal(ctx.conn, "driver_delete", name, user[0])
+        await run_in_threadpool(journal, ctx.conn, "driver_delete", name, user[0])   # #2750
         return {"ok": True}
 
     return router
