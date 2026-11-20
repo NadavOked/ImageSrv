@@ -1,0 +1,70 @@
+# typecheck -- mypy on server/, red only on a finding that is not in the baseline.
+#
+# Why (14/11, "everything free that helps"): server/ had never been type-checked.
+# The first run found 591 errors; they are the baseline
+# (.github/typecheck/mypy-baseline.txt), and a PR that adds one more is red, with
+# the file and line. A PR that fixes some regenerates the baseline:
+#   python .github/typecheck/mypy_gate.py update
+#
+# Free: GitHub-hosted runners on a public repository; mypy is MIT, from PyPI.
+# Runs only in the public repository (no minutes in the private one).
+
+name: typecheck
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "staging/**"]  # #3180: publish-to-public.sh stage -- the public CI before main, tag and Release
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  mypy:
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      # The server's own pins, so mypy sees the fastapi/starlette the server runs.
+      # mypy is pinned: a new mypy is a new baseline, and that is a decision.
+      - name: Install mypy and the server's dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r server/requirements.txt mypy==2.4.1
+          pip freeze | grep -iE '^(mypy|fastapi|starlette|pydantic)=='
+
+      # A file with one planted error and an empty baseline must come back red (1).
+      # If it does not, a green check below is no evidence of anything.
+      - name: The gate can still fail (canary)
+        run: |
+          set -euo pipefail
+          c="$RUNNER_TEMP/canary"
+          mkdir -p "$c"
+          printf '%s\n' 'def f() -> int:' '    return "not an int"' > "$c/planted.py"
+          printf '# empty\n' > "$c/baseline.txt"
+          set +e
+          python .github/typecheck/mypy_gate.py check --baseline "$c/baseline.txt" "$c/planted.py"
+          rc=$?
+          set -e
+          [ "$rc" -eq 1 ] || { echo "::error::the planted type error gave rc $rc, not 1"; exit 1; }
+
+      # --min-files: server/ has 225 .py files (14/11); a run that checked far fewer
+      # found the wrong tree, and "no new finding" from it would mean nothing.
+      # 15/11 (#2810 item 7, owner): the first two weeks of the public CI, a new finding is a warning and
+      # the summary, not a red check. From 2026-11-29 (UTC) it is red, by the gate itself -- no edit needed.
+      # Not softened: a run that could not verify (exit 2), and the canary above.
+      - name: mypy on server/ -- red only on a new finding
+        run: python .github/typecheck/mypy_gate.py check --advisory-until 2026-11-29 --min-files 200 server

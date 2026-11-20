@@ -29,17 +29,17 @@ from typing import Callable
 
 from server.core.cleanup import remove_tree
 from server.vm import agent_shell
-from server.library.images import (MACHINE_MAC, bound_mac, carries_a_stream_file, disk_family, image_os,
-                           lineage_of, required_bytes, version_of)
+from server.library.images import (IMAGE_FORMAT, MACHINE_MAC, bound_mac, carries_a_stream_file, disk_family,
+                                   image_os, lineage_of, required_bytes, version_of)
 
 log = logging.getLogger("imagesrv.vmdisk")
 
 CHUNK = 1 << 20
 MIB = 1 << 20
 SECTOR = 512
-#: כמו `CAPTURE_LEVEL`/`CAPTURE_THREADS` של `agent/lib/capture/capture.sh`.
+#: כמו `CAPTURE_LEVEL` של `agent/lib/capture/capture.sh`. #2533: כל חתיכה של 4MiB נדחסת
+#: לבדה (`chunkformat.cut`), אחת אחרי השנייה — אין עוד מספר תהליכונים לדוחס.
 CAPTURE_LEVEL = 3
-CAPTURE_THREADS = 2
 # Kept in sync with CAPTURE_BITLOCKER_NOTE by the parity test (#2690, #1840).
 BITLOCKER_NOTE = "מוצפן ב-BitLocker: יועתק כמו שהוא, בלי כיווץ; במחשב אחר יידרש מפתח שחזור"
 #: תקרה לכל כלי בזרם. נגמר הזרם — הכלים יוצאים בשניות; כלי שלא יצא אחרי
@@ -71,6 +71,8 @@ def partclone_for_fs(fs: str) -> str:
         return "partclone.ext4"
     if fs == "btrfs":
         return "partclone.btrfs"
+    if fs == "xfs":
+        return "partclone.xfs"      # #3415
     return "partclone.dd"
 
 
@@ -259,13 +261,18 @@ def restore_partition(host: Host, part: dict, src: Path, target: str, run_dir: P
 
 def capture_partition(host: Host, fs: str, source: str, out: Path, log_dir: Path,
                       index: int, progress: Progress, *, user: "VmUser | None" = None,
-                      limit: int | None = None, err_dir: Path | None = None) -> tuple[str, int]:
-    """`partclone -c | zstd` כמו `capture_disk` בסוכן, ל-out. (sha256, בייטים).
+                      limit: int | None = None, err_dir: Path | None = None) -> tuple[str, int, str]:
+    """`partclone -c -a0`, חתוך לפריימי zstd עצמאיים (`image_format` 2, #2533) כמו
+    `capture_disk` בסוכן, ל-out. (sha256, בייטים, `index_xxh64`).
 
     `user` — partclone (המפרסר של מערכת הקבצים) רץ כמשתמש ה-VM ולא כ-root.
     `limit` — זרם שגדל מעבר לזה נעצר: מחיצה אינה נדחסת ליותר מגודלה."""
+    from server.agent import readbackhash             # chunkformat ← readbackhash ← usedbackfill ← vmdisk: מעגל במעלה הקובץ
+    from server.library import chunkformat
     tool = partclone_for_fs(fs)
-    ignore = ["-I"] if fs == "ntfs" else []
+    raw = tool == "partclone.dd"
+    # -a0 כמו `capture_pcl_flags` של הסוכן: גבול חתיכה הוא בייט של זרם הנתונים, בלי סכומי בדיקה ביניהם.
+    ignore = (["-I"] if fs == "ntfs" else []) + ([] if raw else ["-a0"])
     # ה-stderr נפתח כאן, כ-root — ולכן **לא** בתיקייה של משתמש ה-VM.
     err = (err_dir or log_dir) / f"capture.{index}.err"
     # כמשתמש ה-VM — `-L /dev/null`: היומן של partclone הוא התקדמות; השגיאות
@@ -277,31 +284,40 @@ def capture_partition(host: Host, fs: str, source: str, out: Path, log_dir: Path
     with err.open("wb") as errfh:
         reader = host.popen(as_user(user, argv) if user else argv,
                             stdout=subprocess.PIPE, stderr=errfh, stdin=subprocess.DEVNULL)
-        squeeze = host.popen(["zstd", f"-{CAPTURE_LEVEL}", f"-T{CAPTURE_THREADS}", "-c"],
-                             stdin=reader.stdout, stdout=subprocess.PIPE, stderr=errfh)
-        reader.stdout.close()
-        digest = hashlib.sha256()
-        total = 0
-        too_big = False
-        with out.open("wb") as fh:
-            while chunk := squeeze.stdout.read(CHUNK):
-                digest.update(chunk)
-                fh.write(chunk)
-                total += len(chunk)
-                progress(len(chunk))
-                if limit is not None and total > limit:
-                    too_big = True
-                    reader.kill()
-                    squeeze.kill()
-                    break
-        rc_read, rc_squeeze = _finish([reader, squeeze], f"מחיצה {index}")
-    if too_big:
-        raise DiskError("capture", f"מחיצה {index}: הזרם גדל מעבר לגודל המחיצה ({limit} בייט) — נעצר")
-    if rc_read or rc_squeeze:
+        problem = None
+
+        def compress(data: bytes) -> bytes:
+            squeeze = host.popen(chunkformat.frame_argv(data, CAPTURE_LEVEL), stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE, stderr=errfh)
+            try:
+                frame, _ = squeeze.communicate(data, timeout=TOOL_WAIT_S)
+            except subprocess.TimeoutExpired:
+                squeeze.kill()                    # a tool that did not end is ended by name -- never left on the loop
+                squeeze.communicate()
+                raise chunkformat.CutProblem(f"zstd did not finish a chunk within {TOOL_WAIT_S} seconds")
+            if squeeze.returncode != 0 or not frame:
+                raise chunkformat.CutProblem(f"zstd rc={squeeze.returncode}")
+            return frame
+        try:
+            with out.open("wb") as fh:
+                text, sha, total = chunkformat.cut(reader.stdout, fh, raw, limit=limit,
+                                                   on_bytes=progress, compress=compress)
+        except chunkformat.CutProblem as exc:
+            problem = str(exc)
+            reader.kill()
+        except BaseException:                     # anything else: partclone does not outlive this function
+            reader.kill()
+            reader.stdout.close()
+            reader.wait(timeout=30)
+            raise
+        finally:
+            reader.stdout.close()
+        rc_read, = _finish([reader], f"מחיצה {index}")
+    if problem is not None or rc_read:
         tail = err.read_text(encoding="utf-8", errors="replace").strip().splitlines()[-1:] or [""]
         raise DiskError("capture", f"מחיצה {index}: הקריאה מדיסק העבודה נכשלה "
-                                   f"({tool} rc={rc_read}, zstd rc={rc_squeeze}) {tail[0]}".strip())
-    return digest.hexdigest(), total
+                                   f"({tool} rc={rc_read}; {problem or 'הזרם נחתך שלם'}) {tail[0]}".strip())
+    return sha, total, readbackhash.list_digest(text, readbackhash.xxh64_factory())
 
 
 # --- אימג' → דיסק ---------------------------------------------------------------
@@ -1035,12 +1051,12 @@ def capture_disk(host: Host, workdir: Path, out_dir: Path, progress: Progress,
                                               "(המקום הזמני התמלא?) — דיסק ה-VM לא נכתב")
             name = f"p{idx}.{role}.pcl.zst"
             with partition_loop(host, reads, real, user, writable=False) as node:
-                sha, size = capture_partition(host, fs, node, out_dir / name, run_dir, idx,
-                                              progress, user=user, err_dir=run_dir,
-                                              limit=real["sectors"] * SECTOR + STREAM_SLACK)
+                sha, size, index_xxh = capture_partition(host, fs, node, out_dir / name, run_dir, idx,
+                                                         progress, user=user, err_dir=run_dir,
+                                                         limit=real["sectors"] * SECTOR + STREAM_SLACK)
             total += size
             entry.update({"used_bytes": used.get(idx), "file": name, "sha256": sha,
-                          "expandable": False, **extra})
+                          "index_xxh64": index_xxh, "expandable": False, **extra})
             parts.append(entry)
     finally:
         try:
@@ -1060,6 +1076,7 @@ def capture_disk(host: Host, workdir: Path, out_dir: Path, progress: Progress,
         boot = {"boot_ca": None, "boot_ca_error": "החותם לא נגזר בשמירה הזו"}
     disk_bytes = disk.stat().st_size
     return {
+        "image_format": IMAGE_FORMAT,          # #2533: chunk frames, like a capture from a build machine
         "family": disk_family(disk_bytes),
         "os": image_os({"partitions": parts}),
         **boot,

@@ -46,9 +46,14 @@ WINDOW_SECONDS = 60
 
 REASON_EXPIRED = "expired"
 REASON_BOOT = "boot"
+#: #3752: השעון חזר אחורה אחרי שהחלון נפתח — ראו `decide`.
+REASON_CLOCK = "clock"
+#: מרווח לסטיית שעון קטנה לפני שדדליין "רחוק מדי" נחשב קפיצה אחורה.
+CLOCK_SLACK_SECONDS = 5
 REASON_HE = {
     REASON_EXPIRED: "לא אושר בזמן",
     REASON_BOOT: "המכונה אותחלה לפני שהשינוי אושר",
+    REASON_CLOCK: "שעון המכונה חזר אחורה לפני שהשינוי אושר",
 }
 
 
@@ -165,12 +170,19 @@ def decide(marker: Pending | None, now: float, boot: str) -> str | None:
         return REASON_BOOT
     if now >= marker.deadline:
         return REASON_EXPIRED
+    # #3752: חלון האישור הוא `WINDOW_SECONDS`. תפוגה רחוקה מזה = השעון חזר אחורה, והמפעיל
+    # שנחתך היה מחכה שעות (ושל nic_services, שה-tick שלו לא נקבע מחדש, לא היה מחזיר עד
+    # אתחול). מחזירים עכשיו — החזרה היא הכיוון הבטוח. קפיצה קדימה פוקעת מוקדם, גם היא
+    # בכיוון הבטוח: ההגדרה הקודמת חוזרת, והמפעיל מחיל שוב (#3752, ראו ה-Issue של המשך).
+    if marker.deadline - now > WINDOW_SECONDS + CLOCK_SLACK_SECONDS:
+        return REASON_CLOCK
     return None
 
 
 def expired(marker: Pending | None, now: float) -> bool:
     """האם חלון האישור נסגר. אישור אחרי הרגע הזה אינו מבטל החזרה."""
-    return marker is not None and now >= marker.deadline
+    return marker is not None and (
+        now >= marker.deadline or marker.deadline - now > WINDOW_SECONDS + CLOCK_SLACK_SECONDS)
 
 
 # --- הפירור ------------------------------------------------------------------

@@ -37,6 +37,7 @@ MODULES = sorted((ROOT / "server" / "agent").glob("*.py")) + [
     ROOT / "server" / "rounds" / "station.py",
     ROOT / "server" / "rounds" / "direct.py",
     ROOT / "server" / "library" / "capture.py",
+    ROOT / "server" / "console" / "disk_sets.py",     # #2750 part B, slice 1 (console)
 ]
 ROUTE_METHODS = {"get", "post", "put", "delete", "patch", "api_route", "websocket"}
 

@@ -74,7 +74,8 @@ grow_filesystem() {
             # ההתקן (בניגוד ל-ext). RHEL/Fedora/Rocky/Alma (#667).
             _m="$RUN_DIR/grow"
             mkdir -p "$_m"
-            if ! mount -t xfs "$2" "$_m" >> "$LOG_FILE" 2>&1; then
+            # #3629: nouuid -- every copy of an image carries the same xfs UUID, and a second one is refused while another is mounted
+            if ! mount -t xfs -o nouuid "$2" "$_m" >> "$LOG_FILE" 2>&1; then
                 GROW_ERROR="לא הצלחנו לעגן את מערכת הקבצים xfs"
                 return 1
             fi
@@ -106,6 +107,7 @@ finish_grow() {
     # #2015: a moved NTFS/FAT partition says where it starts -- after the
     # read-back, before the grow (ntfsboot.sh). Not best-effort: BIOS/MBR boot.
     assert_target "$1" || return 1   # #2434: every write below is to the disk chosen
+    command -v tail_shrink_finish > /dev/null 2>&1 && { tail_shrink_finish "$1" || return 1; }   # #3262: the RAM copy is shrunk and written here, after the read-back
     if [ -n "${3:-}" ] && ! boot_hidden_disk "$1" "$3"; then
         fail_written_target "$1" "${BOOT_HIDDEN_ERROR:-מיקום ההתחלה בסקטורי האתחול לא נבדק (ntfsboot.sh לא נטען)}"; return 1
     fi
@@ -168,6 +170,15 @@ LINUX_ID_UNIT="imagesrv-ssh-hostkeys.service"
 _linux_id_files() {
     # $1 = the restored /etc. Empties machine-id, deletes the host keys and
     # installs the unit that remakes them. Returns 1 with the reason set.
+    # Check parents before children and before the first change (#3083).
+    for _lid_path in etc etc/ssh etc/systemd etc/systemd/system \
+            etc/systemd/system/multi-user.target.wants var var/lib var/lib/dbus \
+            etc/machine-id "etc/systemd/system/$LINUX_ID_UNIT"; do
+        if [ -L "${1%/etc}/$_lid_path" ]; then
+            LINUX_ID_ERROR="/$_lid_path בדיסק המשוחזר הוא קישור"
+            return 1
+        fi
+    done
     if [ -f "$1/machine-id" ]; then
         : > "$1/machine-id" || { LINUX_ID_ERROR="לא הצלחנו לרוקן את /etc/machine-id"; return 1; }
     fi
@@ -179,7 +190,8 @@ _linux_id_files() {
     mkdir -p "$1/systemd/system/multi-user.target.wants" \
         && printf '[Unit]\nDescription=ImageSrv: new SSH host keys for this clone (#1979)\nBefore=ssh.service sshd.service\nConditionPathExists=/usr/bin/ssh-keygen\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/ssh-keygen -A\n\n[Install]\nWantedBy=multi-user.target\n' \
             > "$1/systemd/system/$LINUX_ID_UNIT" \
-        && ln -sf "../$LINUX_ID_UNIT" "$1/systemd/system/multi-user.target.wants/$LINUX_ID_UNIT" \
+        && rm -f "$1/systemd/system/multi-user.target.wants/$LINUX_ID_UNIT" \
+        && ln -s "../$LINUX_ID_UNIT" "$1/systemd/system/multi-user.target.wants/$LINUX_ID_UNIT" \
         && rm -f "$1"/ssh/ssh_host_* \
         || { LINUX_ID_ERROR="לא הצלחנו להחליף את מפתחות ה-SSH"; return 1; }
 }
@@ -205,6 +217,7 @@ linux_identity_reset() {
         case $? in
             0) ;;
             2|3) continue ;;
+            6) LINUX_ID_ERROR="/etc בדיסק המשוחזר הוא קישור"; return 1 ;;
             *) LINUX_ID_ERROR="לא הצלחנו לעגן את מחיצת הלינוקס $_lid_i"; return 1 ;;
         esac
         _linux_id_files "$_lid_root/etc"; _lid_rc=$?

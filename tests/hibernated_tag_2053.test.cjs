@@ -92,8 +92,8 @@ test('the round window: " · מצב שינה" in the option, and the orange line
   assert.match(html,/<option value="img_hib" selected>Office 2024 — HP-BUILD-2 · נכנס לדיסק מ-238 GB · מצב שינה<\/option>/);
   assert.match(html,/<option value="img_old">Office 2024 — סטנדרט · נכנס לדיסק מ-238 GB<\/option>/,'untagged image: no suffix');
   assert.doesNotMatch(html,/<option value="img_hib"[^>]*disabled/,'the tag does not block');
-  // נדב 04/11: השדה ברוחב מלא, כדי שהסיומת לא תיחתך כשהרשימה סגורה (כמו במוקאפ); הגרסה אחרי ההסבר
-  assert.match(html,/<label class="full">אימג'<select id="rn-image"/);
+  // נדב 04/11: השדה ברוחב מלא, כדי שהסיומת לא תיחתך כשהרשימה סגורה; #3181 (המוקאפ המאושר 15/11): הוא רוחב מלא בפאנל הימני (label.f); הגרסה אחרי ההסבר
+  assert.match(html,/<label class="f">אימג'<select id="rn-image"/);
   assert.ok(html.indexOf('id="rn-hib"')<html.indexOf('id="rn-version"'),'the orange line sits right under the image, before the version');
   assert.ok(html.includes(`<div class="full rn-hib" id="rn-hib" aria-live="polite"><span class="n-chip w">מצב שינה</span><span>${esc(ROUND)}</span></div>`),html);
 });

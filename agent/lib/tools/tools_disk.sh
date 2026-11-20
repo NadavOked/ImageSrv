@@ -81,20 +81,64 @@ _tools_disk_destroy_gate() {
     {
         printf '=== פעולה הרסנית ===\n%s\n' "$2"
         _tools_disk_ident "$_arg"
-        printf 'יימחק לצמיתות על ההתקן. אין שחזור.\nלאישור הקלד שם מכונה: %s\n' "$_host"
+        printf 'יימחק לצמיתות על ההתקן. אין שחזור.\nהאישור הוא הכפתור האדום בחלון האישור. מכונה: %s\n' "$_host"
     } > "$1"
     if ! _tools_disk_confirm_ok "${3:-}"; then
-        printf '\nסורב — confirm אינו שם המכונה.\n' >> "$1"
-        _tools_disk_means 'לא בוצעה מחיקה. הקלד את שם המכונה המדויק.' >> "$1"
+        printf '\nסורב — לא אושר בחלון האישור.\n' >> "$1"
+        _tools_disk_means 'לא בוצעה מחיקה. האישור הוא הכפתור האדום בחלון האישור.' >> "$1"
         return 3
     fi
     return 0
 }
 
+# #2233: is the disk in use -- a partition mounted, active swap, or a holder (md/dm/LVM)
+# on the disk or on one of its partitions? $1 = disk name (sda). rc 0 = free: all three
+# sources were read and none names it; 1 = in use (prints which); 2 = a source could not
+# be read (prints which) -- "could not check" is not "free" (principle 5).
+_tools_disk_in_use() {
+    _tdu_r=${SYSROOT:-}; _tdu_b="$_tdu_r/sys/block/$1"
+    [ -d "$_tdu_b/holders" ] || { printf '/sys/block/%s/holders לא נקרא\n' "$1"; return 2; }
+    for _tdu_f in mounts swaps; do
+        [ -r "$_tdu_r/proc/$_tdu_f" ] || { printf '/proc/%s לא נקרא\n' "$_tdu_f"; return 2; }
+    done
+    # a mounted path may be a symlink (by-uuid, /dev/mapper): resolve it to the kernel name
+    for _tdu_f in mounts swaps; do
+        while read -r _tdu_dev _tdu_at _tdu_rest; do
+            case "$_tdu_dev" in /dev/*) ;; *) continue ;; esac
+            _tdu_n=$(readlink -f "$_tdu_r$_tdu_dev" 2>/dev/null) || _tdu_n=$_tdu_dev
+            _tdu_n=${_tdu_n##*/}
+            if [ "$_tdu_n" = "$1" ] || [ -d "$_tdu_b/$_tdu_n" ]; then
+                if [ "$_tdu_f" = mounts ]; then printf '%s מעוגן ב-%s\n' "$_tdu_dev" "$_tdu_at"
+                else printf '%s הוא swap פעיל\n' "$_tdu_dev"; fi
+                return 1
+            fi
+        done < "$_tdu_r/proc/$_tdu_f" || { printf '/proc/%s נפתח ונכשל בקריאה\n' "$_tdu_f"; return 2; }
+    done
+    for _tdu_h in "$_tdu_b"/holders/* "$_tdu_b"/*/holders/*; do
+        [ -e "$_tdu_h" ] || [ -L "$_tdu_h" ] || continue
+        printf '%s מוחזק על ידי %s (md/dm/LVM)\n' "$1" "${_tdu_h##*/}"; return 1
+    done
+    return 0
+}
+
+# $1 = /dev/<disk>, $2 = out file. 0 = free; 2 = refused, nothing ran (said in $2).
+_tools_disk_free() {
+    _tdf_rc=0; _tdf_why=$(_tools_disk_in_use "${1#/dev/}") || _tdf_rc=$?
+    [ "$_tdf_rc" -ne 0 ] || return 0
+    if [ "$_tdf_rc" -eq 1 ]; then
+        printf '=== הדיסק בשימוש ===\n%s\n\nמה זה אומר\nלא הורצה פעולה: מחיקה של דיסק מעוגן, swap או מוחזק הורסת מערכת שרצה. פנה את הדיסק ונסה שוב.\n' "$_tdf_why"
+    else
+        printf '=== לא נבדק אם הדיסק בשימוש ===\n%s\n\nמה זה אומר\nלא הורצה פעולה: "לא הצלחנו לבדוק" אינו "פנוי".\n' "$_tdf_why"
+    fi > "$2"
+    return 2
+}
+
 # Require binary + device; writes $_out on failure. Returns 2 on failure.
+# $2 = ro: a read-only tool -- the in-use gate (#2233) is for what writes.
 _tools_disk_prep() {
     _tools_disk_need "$1" "$_out" || return 2
     _tools_disk_dev_ok "$_arg" || { _tools_disk_bad_dev "$_arg" "$_out"; return 2; }
+    [ "${2:-}" = ro ] || _tools_disk_free "$_arg" "$_out" || return 2
     return 0
 }
 

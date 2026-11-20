@@ -80,7 +80,7 @@ build_end_ask() {
     # epoch of the power-off, and the dialog counts down to it each second.
     # Returns 0 on "back to the menu", or after a power-off that did not
     # take; a power-off that took never returns.
-    _be_s=${CAPTURE_END_ASK_S:-20}
+    _be_s=${CAPTURE_END_ASK_S:-${END_POWEROFF_S:-20}}   # #3037: the one "count to power-off" setting (gui_end_poweroff_seconds), not a fixed 20
     case "$(attended "$2" gui_ask_choice "$1" "$(( $(date +%s) + _be_s ))" "" "$_be_s")" in
         menu) log "$3 -- back to the menu (operator's choice)"; _build_standby=0; return 0 ;;
         poweroff) log "$3 -- powering off (operator's choice)" ;;

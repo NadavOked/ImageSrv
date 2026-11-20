@@ -75,7 +75,10 @@ AGENT_MAIN = REPO_ROOT / "agent" / "imagesrv-agent"
 #: progress.sh's target_init calls target_ident_keep (failmark.sh): without it the
 #: drawer's `seen` (serial|port|ata, #1602) is never written (#2289). The agent
 #: loads failmark after progress; the call is at run time, so presence is the rule.
-NEEDS = {"drawers": ("writeback",), "drawerfeed": ("writeback",),
+NEEDS = {"drawers": ("writeback",), "drawerfeed": ("writeback",), "neighborfill": ("waits",),   # wait_pid, the fill's ceiling
+         "chunkfeed": ("waits",),   # B5: wait_pid, for its curl
+         "peerfill": ("neighborfill", "waits"),   # B29: its list, piece, ceiling and re-read helpers
+         "peerwire": ("peerfill", "neighborfill", "waits"),   # B29: what the answers say, in the flow (#3064)
          "failmark": ("sysinfo",), "progress": ("sysinfo", "failmark")}
 _ORDER: list[str] = []
 
@@ -97,7 +100,28 @@ def agent_libs(*names: str) -> list[str]:
     # sysinfo and its disk collector are loaded together by every caller (#2385).
     if "sysinfo" in names and "diskinfo" not in names:
         names = (*names, "diskinfo")
+    # #3098: failmark's GPT wipe runs under capped_run (waits.sh) -- loaded with it, the agent's way, in
+    # every room that loads failmark (some 60 of them load it without waits: the failure path's own rooms).
+    if "failmark" in names and "waits" not in names:
+        names = (*names, "waits")
+    # #2991: lc_inventory moved from lcinv to lcscan, and runs each drawer under capped_run (waits.sh) --
+    # loaded with lcinv, the agent's way, in every room that loads lcinv (some 20 of them).
+    # An agent without lcscan (before #2991, the negative control) is loaded as it was.
+    if "lcinv" in names and "lcscan" in agent_order():
+        names = (*names, *(n for n in ("lcscan", "waits") if n not in names))
     order = agent_order()
+    # #3632: netprobe_json's one background job and its whole-JSON check live in netcache.sh -- loaded with netprobe,
+    # the agent's way (netprobe.sh stays under 120 lines). Only where the agent sources it.
+    if "netprobe" in names and "netcache" in order and "netcache" not in names:
+        names = (*names, "netcache")
+    # #3064: lc_run, lc_gui_state and lc_prepare_target ask lchdd.sh (the local clone's HDD rule), the
+    # agent's way; a room that loads any of them loads it. Only where the agent sources it.
+    if {"lccopy", "localclone", "lcgui"} & set(names) and "lchdd" in order and "lchdd" not in names:
+        names = (*names, "lchdd")
+    # #3548: every background job of these starts with bg_detach_fds (bgfds.sh) -- loaded with them, the agent's way.
+    # An agent without bgfds (before #3548, the negative control) is loaded as it was.
+    if {"attended", "hold", "monitor", "roundbeep", "netcache", "probe_bg"} & set(names) and "bgfds" in order and "bgfds" not in names:
+        names = (*names, "bgfds")
     unknown = sorted(set(names) - set(order))
     if unknown:
         raise ValueError(f"not sourced by {AGENT_MAIN.name}: {unknown}")

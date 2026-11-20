@@ -27,6 +27,7 @@ from pathlib import Path
 import pytest
 
 from console_src import console_js
+from disk_rules_state import ruled_file, with_rules   # #3666
 from native import requires_native
 from agentlib import flat_lib, agent_sources
 
@@ -278,7 +279,7 @@ def test_the_kiosk_load_chain_carries_the_cached_smart_verdict(tmp_path):
     # #432: 7/8 = הקישור — null כשהדיסק אינו מאחורי libata (כאן: תיקייה, לא קישור).
     # #1495: 10/11 = the drawer and the connection -- a disk with no ATA port and no
     # NVMe address is not in any mapping: 0, connection unknown (never a guessed number)
-    assert any(l.startswith("cdisk=") and l.endswith("|passed||null|null||0||unchecked|||||") for l in lines), lines   # #1366: field 9, no CRC colour; #1798: 12 -- no disk to read the mark from = unchecked; #1921: 13 -- no hw note; #1858: 14-16 empty -- no F1 mark
+    assert any(l.startswith("cdisk=") and l.endswith("|passed||null|null||0||unchecked||||||checking|") for l in lines), lines   # #3689: 18-19 "checking|" -- the kiosk chain carries idle_wc_field now, and no result yet is checking, not an empty field (#3268); #1366: field 9, no CRC colour; #1798: 12 -- no disk to read the mark from = unchecked; #1921: 13 -- no hw note; #1858: 14-16 empty -- no F1 mark
 
 
 # --- #867/#874: המלאי הממתין — ממוין לפי מספר הדיסק, ונושא את זיכרון השרת ----
@@ -362,8 +363,8 @@ def test_a_disk_the_server_remembers_reports_failed_last_with_its_cause(tmp_path
     לצדו נשאר `passed` בלי סיבה. sgdisk אינו נקרא. בקרה שלילית: על main
     שניהם `passed` (הזיוף לא מדפיס טבלה), ו-`sgdisk -p` נקרא."""
     lines = idle_state(tmp_path, {"sda": "1", "sdb": "2"}, failed={"sda": "cable"})
-    assert lines[0] == "cdisk=1|sda|Model sda|512000|failed_last|cable|null|null||1|SATA 0|clean|||||", lines   # #2848: 17 -- the hw words; #1921: 13 -- no hw note; #1858: 14-16 empty -- no F1 mark
-    assert lines[1] == "cdisk=2|sdb|Model sdb|512000|passed||null|null||2|SATA 1|clean|||||", lines   # #1858: fields 14-16 empty -- no F1 mark
+    assert lines[0] == "cdisk=1|sda|Model sda|512000|failed_last|cable|null|null||1|SATA 0|clean||||||checking|", lines   # #3689: 18-19 -- "checking|": no result yet (#3268); #2848: 17 -- the hw words; #1921: 13 -- no hw note; #1858: 14-16 empty -- no F1 mark
+    assert lines[1] == "cdisk=2|sdb|Model sdb|512000|passed||null|null||2|SATA 1|clean||||||checking|", lines   # #3689: 18-19 "checking|" (#3268); #1858: fields 14-16 empty -- no F1 mark
 
 
 @requires_native("jq", why="the shared GUI state reads the cached hello reply")
@@ -651,7 +652,7 @@ EMPHASIS_NATIVE = requires_native(
 
 def _emphasis_frame(binary, tmp_path, mode, theme="light", state=""):
     source, png = tmp_path / "state.txt", tmp_path / "emphasis.png"
-    source.write_text(state, encoding="utf-8", newline="\n")
+    source.write_text(with_rules(state), encoding="utf-8", newline="\n")   # #3666
     result = subprocess.run([str(binary), mode, theme, posix(source), posix(png)],
                             capture_output=True, text=True, encoding="utf-8", timeout=120,
                             stdin=subprocess.DEVNULL,
@@ -968,6 +969,7 @@ def test_room_grid_paints_healthy_drawers_green(tmp_path):
         "message=x|y\n",
         newline="\n",
     )
+    ruled_file(state)   # #3666: the room's verdicts (green for passed, red for fail) -- the GUI takes them, it does not work them out
     env2 = dict(os.environ)
     fonts_conf = GUI / "fonts.conf"
     if fonts_conf.exists():
@@ -1276,8 +1278,10 @@ def test_the_gui_maps_the_three_colours_in_one_place():
         assert "room_disk_healthy" not in text and "idle_smart_color" not in text
         assert "ROOM_BAD" not in text and "ROOM_WARN" not in text
     for text in (room, cloner):
-        assert text.count("smart_color(t,") >= 1
         assert "Rgb smart_color(" not in text and "int smart_level(" not in text
+    assert cloner.count("smart_color(t,") >= 1
+    # #3666: the room grid's colour is the server's verdict (rule_color, taken as delivered), not the SMART field's -- no SMART mapping there
+    assert "smart_color(t," not in room
     assert "smart_level(m->room_drawers[i].smart)" in room   # נקודת המכונה: לא-ירוק = אזהרה
 
 

@@ -27,7 +27,9 @@ attended_hello() {
     # always sent). Non-joining, like hold_beat: a waiting machine does not
     # ask into a wave. The answer is discarded -- the main loop's
     # response.json must not change under a running task.
+    [ -z "${GAP_TRACE:-}" ] || log "gap: attended_hello build begin" >&2   # #3524: smartgate.sh sets it for the one hello between confirmed and writing
     _ah_body=$(build_hello false) || return 1
+    [ -z "${GAP_TRACE:-}" ] || log "gap: attended_hello build end bg: probe=$([ -e "$RUN_DIR/probe.json.running" ] && echo running || echo -) netprobe=$([ -s "$RUN_DIR/netprobe.json" ] && echo cached || echo none)" >&2
     if [ -n "${1:-}" ]; then
         _ah_body="${_ah_body%\}},\"waiting_for\":\"operator\",\"prompt\":\"$(json_escape "$1")\"}"
     fi
@@ -37,7 +39,9 @@ attended_hello() {
         _ah_body="${_ah_body%\}},\"local_clone\":\"copying\"}"
     fi
     printf '%s' "$_ah_body" > "$RUN_DIR/attended.json" || return 1
-    http_post_json "$SERVER/api/v1/agent/hello" "$RUN_DIR/attended.json" > "$RUN_DIR/attended.resp" || return 1
+    http_post_json "$SERVER/api/v1/agent/hello" "$RUN_DIR/attended.json" > "$RUN_DIR/attended.resp"; _ah_rc=$?
+    [ -z "${GAP_TRACE:-}" ] || log "gap: attended_hello post end rc=$_ah_rc" >&2
+    [ "$_ah_rc" = 0 ] || return 1
     attended_keep "$RUN_DIR/attended.resp"
     if command -v lc_report_resend >/dev/null; then lc_report_resend; fi   # #1913: the server answers again
     return 0
@@ -59,6 +63,8 @@ attended_keep() {
                 lc_power_during_copy
             fi ;;
     esac
+    if command -v interrupt_keep >/dev/null; then interrupt_keep "$1"; fi   # #2528: the round's question was answered elsewhere
+    if command -v ask_keep >/dev/null; then ask_keep "$1"; fi   # #3654: the brain's questions about this machine, as of this beat
     _ak_s=$(jq -er '.session.state // "none"' "$1" 2>/dev/null) || _ak_s=""
     printf '%s\n' "$_ak_s" > "$RUN_DIR/attended.round.next" && mv "$RUN_DIR/attended.round.next" "$RUN_DIR/attended.round"
 }
@@ -107,6 +113,7 @@ attended_start() {
     _at_beat=$(attended_secs ATTENDED_BEAT_S "$ATTENDED_BEAT_S" 10)
     _at_agent=$$   # the agent's own shell, also from inside a $( ) (POSIX $$)
     (
+        bg_detach_fds   # #3548
         while :; do
             # #1929 (M3): a beat whose agent is gone (kill -9) stops. Orphaned
             # (ppid 1), it went on saying hello and feeding the watchdog's

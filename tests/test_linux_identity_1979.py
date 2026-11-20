@@ -188,7 +188,7 @@ def test_every_finish_grow_call_in_the_agent_passes_the_manifest():
             code = line.split("#", 1)[0]
             calls += [(f.name, m) for m in re.findall(r'finish_grow ("[^"]*" "[^"]*" "[^"]*"|[^;}|]*)', code)
                       if not code.lstrip().startswith("finish_grow()")]
-    assert len(calls) == 3, calls
+    assert len(calls) == 4, calls   # round (drawers.sh), single restore (restore.sh), local clone (lccopy.sh), a new disk's own end (prodline.sh, #3181)
     for name, args in calls:
         assert len(re.findall(r'"[^"]*"', args)) == 3, (name, args)
 

@@ -62,7 +62,7 @@ test("Nadav's marking (12/11, network moved to advanced): basic keeps the daily 
   const nodes = treeNodes();
   const basic = Object.keys(nodes).filter((k) => !nodes[k]).sort();
   const advanced = Object.keys(nodes).filter((k) => nodes[k]).sort();
-  assert.deepEqual(basic, ['account', 'deploy', 'disks', 'home', 'images', 'logs', 'machines', 'monitor', 'settings'].sort());
+  assert.deepEqual(basic, ['account', 'asks', 'deploy', 'disks', 'home', 'images', 'logs', 'machines', 'monitor', 'settings'].sort());
   assert.deepEqual(advanced, ['branches', 'drivers', 'health', 'net-0', 'net-1', 'net-2', 'network', 'permissions', 'ports', 'storage', 'tools', 'usbstick'].sort());
 });
 

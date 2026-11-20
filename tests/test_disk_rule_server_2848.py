@@ -19,7 +19,6 @@ from test_server_room import CLONER1, room, room_body, room_server  # noqa: E402
 
 REASON_HE = {
     "smart_fail": "SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת",
-    "link_slow": "קישור SATA איטי — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו",
     "sata_issue": "בעיית SATA (הקישור התאפס או המגירה התנתקה) — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו",
     "write_slow": "נפסל כאיטי בבדיקת הכתיבה בסבב הזה — לא כותבים עליו בסבב הזה; אפשר להעתיק ממנו",
     "failed_last": "נכשל בשיכפול הקודם — לא מעתיקים ממנו; אפשר לכתוב עליו",
@@ -42,7 +41,6 @@ def _open(room_server, serials: list[str]):
 
 @pytest.mark.parametrize("bad, reason", [
     ({"smart": "fail"}, "smart_fail"),
-    ({"link_gbps": 1.5, "link_max_gbps": 6.0}, "link_slow"),
     ({"sata_issues": ["drawer_gone"]}, "sata_issue"),
 ])
 def test_a_red_target_is_refused_with_the_rules_sentence(room_server, bad, reason):

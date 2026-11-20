@@ -38,7 +38,8 @@ static double bay_act(App *a, cairo_t *cr, double left, double cy, const LcBay *
 
 /* #1331 (mockup v2): the drivers line. Grey = placed or no package, orange =
  * not placed (the restore is done, #856), red = the storage driver of the
- * disk was not made boot-start -- the disk may not boot (0x7B).
+ * disk was not made boot-start -- the disk may not boot (0x7B); #3418: next to
+ * any drivers state, not only "staged".
  * Linux: lc_bay_linux below (drivers.linux, #1331 T8). */
 void lc_bay_drivers(LcBay *y, const char *state, const char *detail, const char *boot,
                     const char *bsvc, const char *berr) {
@@ -46,20 +47,20 @@ void lc_bay_drivers(LcBay *y, const char *state, const char *detail, const char 
     y->drv[0] = 0; y->drv_tone = DRV_NONE;
     if (!state || !state[0]) return;
     snprintf(sv, sizeof sv, "%s%s", bsvc && bsvc[0] ? " " : "", bsvc ? bsvc : "");
-    if (!strcmp(state, "staged")) {
+    if (boot && !strcmp(boot, "failed")) {
+        /* #3418: the storage driver is made boot-start next to every drivers state (#1331, also with no package) --
+         * the red line outranks the other words, as on the console (driversTone) */
+        snprintf(y->drv, sizeof y->drv, "דרייבר האחסון%s לא הוגדר לעלייה — %s · הדיסק עלול לא לעלות (0x7B) — לבדוק לפני שמחזירים לכיתה",
+                 sv, berr && berr[0] ? berr : "סיבה לא ידועה");
+        y->drv_tone = DRV_BAD;
+    } else if (!strcmp(state, "staged")) {
         int n = detail[0] ? 1 : 0;
         for (const char *p = detail; (p = strstr(p, ", ")); p += 2) n++;
         if (n == 1) snprintf(pk, sizeof pk, "%s", "חבילה אחת"); else snprintf(pk, sizeof pk, "%d חבילות", n);
-        if (boot && !strcmp(boot, "failed")) {
-            snprintf(y->drv, sizeof y->drv, "דרייבר האחסון%s לא הוגדר לעלייה — %s · הדיסק עלול לא לעלות (0x7B) — לבדוק לפני שמחזירים לכיתה",
-                     sv, berr && berr[0] ? berr : "סיבה לא ידועה");
-            y->drv_tone = DRV_BAD;
-        } else {
-            snprintf(y->drv, sizeof y->drv, "דרייברים הונחו (%s): %s%s%s%s", pk, detail,
-                     boot && !strcmp(boot, "enabled") ? " · דרייבר האחסון" : "", boot && !strcmp(boot, "enabled") ? sv : "",
-                     boot && !strcmp(boot, "enabled") ? " הוגדר לעלייה" : "");
-            y->drv_tone = DRV_OK;
-        }
+        snprintf(y->drv, sizeof y->drv, "דרייברים הונחו (%s): %s%s%s%s", pk, detail,
+                 boot && !strcmp(boot, "enabled") ? " · דרייבר האחסון" : "", boot && !strcmp(boot, "enabled") ? sv : "",
+                 boot && !strcmp(boot, "enabled") ? " הוגדר לעלייה" : "");
+        y->drv_tone = DRV_OK;
     } else if (!strcmp(state, "failed")) {
         snprintf(y->drv, sizeof y->drv, "דרייברים לא הונחו — %s · המחשב יעלה בלי הדרייברים של הדגם", detail[0] ? detail : "סיבה לא ידועה");
         y->drv_tone = DRV_WARN;
@@ -145,8 +146,10 @@ void lc_bay_number(App *a, cairo_t *cr, double right, double cy, double big, int
 void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     const Theme *t = a->theme;
     int dwarn = g->kind == BAY_DONE && g->done_warn;   /* #2009: done, orange -- drawn as the SMART question's orange */
+    int pulled = g->kind == BAY_PULLED;   /* #3270: grey -- the number, the bar and the LED are the idle grey */
     int bad = g->kind == BAY_FAILED, ok = g->kind == BAY_DONE && !dwarn, ask = g->kind == BAY_SMART || dwarn,
         off = g->kind == BAY_SKIPPED || g->kind == BAY_CANCELED, going = g->kind == BAY_CANCELING;   /* #1386 */
+    const int ins = g->kind == BAY_INSERT;   /* #3181 (mockup c1): no colour, the next name big where the percent is, a grey LED */
     int bootbad = g->drv_tone == DRV_BAD, drvwarn = g->drv_tone == DRV_WARN || g->drv_tone == DRV_LWARN;   /* #1331 */
     int toned = g->toned && (g->kind == BAY_WRITING || g->kind == BAY_WAITING);
     /* an orange/red tone (not the healthy green) also colours the bar */
@@ -174,7 +177,7 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     int emphasis = red || yellow || orange || ok;
     Rgb edge = red ? t->danger : yellow ? t->yellow : orange ? t->warn : ok ? t->led_ok : t->hair;
     Rgb fill = red ? t->danger_soft : yellow ? t->yellow_soft : orange ? t->warning_soft : ok ? t->success_soft : t->surface;
-    Rgb number = red ? t->danger_fg : yellow ? t->yellow_fg : orange ? t->warning_ink : ok ? t->success_ink : off ? t->muted : t->ink;
+    Rgb number = red ? t->danger_fg : yellow ? t->yellow_fg : orange ? t->warning_ink : ok ? t->success_ink : off || pulled ? t->muted : t->ink;
     cairo_save(cr); draw_rrect_path(cr, b, 4); cairo_clip(cr);
     draw_set(cr, fill); cairo_paint(cr);
     if (!emphasis) {
@@ -205,21 +208,23 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
         pango_layout_set_ellipsize(tsu.layout, PANGO_ELLIPSIZE_END); pango_layout_set_height(tsu.layout, 0);
     }
     const int pill_under = pill && narrow && !two && !tiny;   /* #2849: a squeezed row has no third line for it */
-    double pill_h = pill_under ? (emphasis ? 30 : 24) : 0, used_h = tsu.layout ? 3 + tsu.h : 0;
+    /* #3270 (Nadav 14/11, metal): every disk-state tag is the size of the wait screen's "SMART תקין" (24px, 12/600) --
+     * the emphasis keeps its colours (pfg/pbg above), never the bigger 28px pill */
+    double pill_h = pill_under ? 24 : 0, used_h = tsu.layout ? 3 + tsu.h : 0;
     double bh = tn.h + (tsb.layout ? 3 + tsb.h : 0) + used_h + pill_h;
-    text_draw_r(cr, &tn, fr, cy - bh / 2, off ? t->muted : t->ink);
+    text_draw_r(cr, &tn, fr, cy - bh / 2, off ? t->muted : g->ready && ok ? t->success_ink : t->ink);   /* #3181: .rdy */
     if (tsb.layout) text_draw_r(cr, &tsb, fr, cy - bh / 2 + tn.h + 3, t->muted);
     if (tsu.layout) { text_draw_r(cr, &tsu, fr, cy - bh / 2 + tn.h + 3 + tsb.h + 3, t->muted); text_free(&tsu); }
-    if (pill_under) sb_bay_pill(cr, fr, cy - bh / 2 + tn.h + 3 + tsb.h + used_h + pill_h / 2, pill, pfg, pbg, emphasis);
-    else if (pill) sb_bay_pill(cr, fr - tn.w - 10, cy - bh / 2 + tn.h / 2, pill, pfg, pbg, emphasis);
+    if (pill_under) sb_bay_pill(cr, fr, cy - bh / 2 + tn.h + 3 + tsb.h + used_h + pill_h / 2, pill, pfg, pbg, 0);
+    else if (pill) sb_bay_pill(cr, fr - tn.w - 10, cy - bh / 2 + tn.h / 2, pill, pfg, pbg, 0);
     text_free(&tn); text_free(&tsb);
 
     /* .prog: what is happening, the percent, the bar */
     double px = fl, pw = fr - namew - 16 - fl;
-    Text tp = text_make(cr, FONT_MONO, 14, 600, g->pct, 0, DIR_LTR);
+    Text tp = text_make(cr, FONT_MONO, ins ? 24 : 14, 600, g->pct, 0, DIR_LTR);   /* #3181: .pc.nx -- the next name */
     Text tl = text_make(cr, FONT_SANS, 12, bad || ask || going || hl ? 600 : 400, g->line, (int)fmax(10, pw - tp.w - 10), DIR_RTL);
-    pango_layout_set_ellipsize(tl.layout, PANGO_ELLIPSIZE_END); pango_layout_set_height(tl.layout, hl ? -2 : 0);
-    if (hl) pango_layout_get_pixel_size(tl.layout, NULL, &tl.h);   /* #2024: the reason gets two lines */
+    pango_layout_set_ellipsize(tl.layout, PANGO_ELLIPSIZE_END); pango_layout_set_height(tl.layout, hl || g->line2 ? -2 : 0);
+    if (hl || g->line2) pango_layout_get_pixel_size(tl.layout, NULL, &tl.h);   /* #2024: the reason gets two lines; #3167: a note too */
     Text td = { NULL, 0, 0 };   /* #1331: the drivers line under the bar */
     if (g->drv[0]) {
         td = text_make(cr, FONT_SANS, 12, g->drv_tone == DRV_WARN || g->drv_tone == DRV_BAD || g->drv_tone == DRV_LWARN ? 600 : 400, g->drv, (int)fmax(10, pw), DIR_RTL);
@@ -239,7 +244,7 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
         if (rs > 0) draw_fill_rrect(cr, (Rect){ bar.x + bar.w * (1 - rs), bar.y, bar.w * rs, 8 }, 4, t->led_ok);
         if (g->rb_mark) draw_fill_rrect(cr, (Rect){ bar.x + bar.w * (1 - rs) - 3, bar.y - 2, 6, 12 }, 2, t->danger);
     } else if (share > 0) draw_fill_rrect(cr, (Rect){ bar.x + bar.w * (1 - share), bar.y, bar.w * share, 8 }, 4,
-                                   bad ? t->danger : ok ? t->led_ok : dwarn ? t->warn : warn ? g->tone : t->led_write);
+                                   bad ? t->danger : ok ? t->led_ok : dwarn ? t->warn : warn ? g->tone : pulled ? t->led_idle : t->led_write);
     if (td.layout) {
         Rgb dc = g->drv_tone == DRV_BAD ? t->danger_fg : g->drv_tone == DRV_WARN || g->drv_tone == DRV_LWARN ? t->warning_ink : g->drv_tone == DRV_OK ? t->ink : t->muted;
         text_draw_r(cr, &td, px + pw, bar.y + 8 + 6, dc); text_free(&td);
@@ -248,10 +253,10 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
 
     /* the LED */
     double gx = b.x + ledw / 2;
-    Rgb led = bad || bootbad ? t->danger : drvwarn ? t->warn : ok ? t->led_ok : ask || going ? t->warn : off ? t->led_idle : toned ? g->tone : t->led_write;
-    Rgb soft = bad || bootbad ? t->danger_soft : drvwarn ? t->warning_soft : ok ? t->success_soft : ask || going ? t->warning_soft : toned ? tsoft : t->indigo_soft;
+    Rgb led = bad || bootbad ? t->danger : drvwarn ? t->warn : ok ? t->led_ok : ask || going ? t->warn : off || pulled || ins ? t->led_idle : toned ? g->tone : t->led_write;
+    Rgb soft = bad || bootbad ? t->danger_soft : drvwarn ? t->warning_soft : ok ? t->success_soft : ask || going ? t->warning_soft : ins ? t->hover : toned ? tsoft : t->indigo_soft;   /* #3181: .lv.idle */
     if (emphasis) { led = edge; soft = fill; }
-    sb_led(cr, gx, tiny ? cy : cy - 15, 10, led, soft, !off, 1);
+    sb_led(cr, gx, tiny ? cy : cy - 15, 10, led, soft, !off && !pulled, 1);   /* #3270: the grey dot and the two lines stay */
     for (int k = 0; k < (tiny ? 0 : 2); k++) draw_fill_rrect(cr, (Rect){ gx - 10, cy + 2 + k * 14, 20, 3 }, 1.5, t->mark_line);
 }
 
@@ -297,7 +302,7 @@ void lc_disks_met(App *a, cairo_t *cr, Rect r, const char *value, const char *hi
  * Returns its height. */
 double lc_hero(App *a, cairo_t *cr, double x0, double xr, double y, const char *label, const char *h1,
                const char *s2, const char *big, const char *left, int alarm) {
-    const LcEta e = { "", left, "" };
+    const LcEta e = { "", left, "", 0 };
     return lc_hero_eta(a, cr, x0, xr, y, label, h1, s2, big, &e, alarm);
 }
 
@@ -309,13 +314,13 @@ double lc_hero_eta(App *a, cairo_t *cr, double x0, double xr, double y, const ch
                    const char *s2, const char *big, const LcEta *e, int alarm) {
     const Theme *t = a->theme; double cw = xr - x0;
     const char *l1 = e->l1 ? e->l1 : "", *l2 = e->l2 ? e->l2 : "";
-    const int stack = e->at[0] || l2[0];
+    const int stack = e->at[0] || l2[0], col = stack || e->keep;   /* #3270: keep draws the column even for one line */
     Text tlb = text_make(cr, FONT_SANS, 12, 500, label, (int)(cw - 260), DIR_RTL), th1 = text_make(cr, FONT_SANS, 26, 600, h1, (int)(cw - 260), DIR_RTL);
     Text ts2 = text_make(cr, FONT_SANS, 13, 400, s2, (int)(cw - 260), DIR_RTL);
     Text tb = text_make(cr, FONT_MONO, 64, 400, big, 0, DIR_LTR), tlt = text_make(cr, FONT_SANS, stack ? 12 : 13, 400, l1, 0, DIR_RTL);
     Text tl2 = { 0 }, tpre = { 0 }, ttime = { 0 };
-    double at_w = 0, at_h = 0, right_h = tb.h + tlt.h;
-    if (stack) {
+    double at_w = 0, at_h = 0, right_h = tb.h + tlt.h, keep_h = 0, keep_w = 0;
+    if (col) {
         if (l2[0]) tl2 = text_make(cr, FONT_SANS, 12, 400, l2, 0, DIR_RTL);
         if (e->at[0]) {
             tpre = text_make(cr, FONT_SANS, 17, 600, "צפוי להסתיים ב-", 0, DIR_RTL);
@@ -323,14 +328,26 @@ double lc_hero_eta(App *a, cairo_t *cr, double x0, double xr, double y, const ch
             at_w = tpre.w + 2 + ttime.w; at_h = fmax(tpre.h, ttime.h);
         }
         right_h = tb.h + (e->at[0] ? 6 + at_h : l1[0] ? 4 : 0) + (l1[0] ? tlt.h : 0) + (l2[0] ? tl2.h : 0);
+        if (e->keep) {   /* #3270: the room of the tallest and widest saying -- (the hour and) two small lines; measured, not said */
+            int lw, lh;
+            text_measure(cr, FONT_SANS, 12, 400, "נותרו (0)", DIR_RTL, &lw, &lh);   /* both scripts: the line height of either */
+            keep_h = tb.h + 4 + 2 * lh;
+            if (e->keep == LC_KEEP_HOUR) {
+                int pw, ph, mw, mh;
+                text_measure(cr, FONT_SANS, 17, 600, "צפוי להסתיים ב-", DIR_RTL, &pw, &ph);
+                text_measure(cr, FONT_MONO, 24, 600, "00:00", DIR_LTR, &mw, &mh);
+                keep_h = tb.h + 6 + fmax(ph, mh) + 2 * lh; keep_w = pw + 2 + mw;
+            }
+        }
     }
-    double hh = fmax(tlb.h + 2 + th1.h + 3 + ts2.h, right_h);
+    double hh = fmax(tlb.h + 2 + th1.h + 3 + ts2.h, fmax(right_h, keep_h));
     double ty = y + hh - (tlb.h + 2 + th1.h + 3 + ts2.h);
     text_draw_r(cr, &tlb, xr, ty, t->muted); ty += tlb.h + 2; text_draw_r(cr, &th1, xr, ty, alarm ? t->danger_fg : t->ink); ty += th1.h + 3; text_draw_r(cr, &ts2, xr, ty, t->muted);
-    if (!stack) {
+    if (!col) {
         text_draw(cr, &tb, x0, y + hh - tlt.h - tb.h, t->ink); text_draw(cr, &tlt, x0 + tb.w - tlt.w, y + hh - tlt.h, t->muted);
     } else {
-        double cx = x0 + fmax(fmax(tb.w, at_w), fmax(tlt.w, tl2.w)) / 2, ry = y + hh - right_h;
+        /* #3270: kept -- the column's top and centre are those of its fullest saying, whatever it says now */
+        double cx = x0 + fmax(fmax(fmax(tb.w, at_w), fmax(tlt.w, tl2.w)), keep_w) / 2, ry = y + hh - fmax(right_h, keep_h);
         text_draw(cr, &tb, cx - tb.w / 2, ry, t->ink); ry += tb.h;
         if (e->at[0]) {
             double rx = cx - at_w / 2; ry += 6;

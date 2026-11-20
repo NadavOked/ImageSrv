@@ -23,6 +23,7 @@ import logging
 import sqlite3
 from datetime import datetime, timezone
 
+from server.brain import memory as brain_memory   # #3185
 from server.db import _settle, _write_lock, now_iso, writing
 
 log = logging.getLogger("imagesrv.net_history")
@@ -69,8 +70,10 @@ def record_nic(conn: sqlite3.Connection, mac: str, probe: dict) -> int:
         with _write_lock, writing(conn):
             conn.executemany("INSERT INTO nic_history (mac, iface, at, speed_mbps, rx_crc_errors,"
                              " rx_dropped) VALUES (?,?,?,?,?,?)", rows)
-            conn.execute("DELETE FROM nic_history WHERE mac = ? AND rowid NOT IN (SELECT rowid FROM"
-                         " nic_history WHERE mac = ? ORDER BY rowid DESC LIMIT ?)", (mac, mac, KEEP_NIC))
+            # #3185: מה שיוצא מעבר לתקרה מסוכם לזיכרון המוח (רשת, לפי MAC), ולא נמחק סתם
+            brain_memory.fold(conn, "nic_history_cap", "DELETE FROM nic_history WHERE mac = ? AND rowid NOT IN"
+                              " (SELECT rowid FROM nic_history WHERE mac = ? ORDER BY rowid DESC LIMIT ?)",
+                              (mac, mac, KEEP_NIC))
         return len(rows)
     except Exception:             # noqa: BLE001 — היסטוריה אינה מפילה hello
         log.exception("nic history of %s failed", mac)

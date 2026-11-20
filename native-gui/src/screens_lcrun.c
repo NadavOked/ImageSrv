@@ -66,6 +66,14 @@ static void part_box(App *a, cairo_t *cr, Rect r, const LcPart *p) {
     Text th = text_make(cr, FONT_SANS, 12, 600, head, 0, DIR_RTL), ts = text_make(cr, FONT_SANS, 12, 500, st, 0, DIR_RTL);
     Text td = text_make(cr, FONT_SANS, 11, 400, d, (int)(r.w - 24), DIR_RTL);
     pango_layout_set_ellipsize(td.layout, PANGO_ELLIPSIZE_END); pango_layout_set_height(td.layout, 0);
+    if (strcmp(p->fs, "swap") && (!fs || p->bytes >= 0) && pango_layout_is_ellipsized(td.layout)) {   /* #2903: a narrow card said "… בשימוש מתוך" -- the short line, whole */
+        text_free(&td);
+        if (!fs) snprintf(d, sizeof d, "%s · מועתקת מלאה", b2);
+        else if (p->bytes < p->size) snprintf(d, sizeof d, "%s · %s מתוך %s", fs, b1, b2);
+        else snprintf(d, sizeof d, "%s · %s", fs, b1);
+        td = text_make(cr, FONT_SANS, 11, 400, d, (int)(r.w - 24), DIR_RTL);
+        pango_layout_set_ellipsize(td.layout, PANGO_ELLIPSIZE_END); pango_layout_set_height(td.layout, 0);
+    }
     double right = r.x + r.w - 12;
     text_draw_r(cr, &th, right, r.y + 8, t->ink); text_draw(cr, &ts, r.x + 12, r.y + 8, t->muted);
     text_draw_r(cr, &td, right, r.y + 8 + th.h + 2, t->muted);
@@ -167,7 +175,7 @@ void lc_draw_progress(App *a, cairo_t *cr, double W, double H, double head_h) {
     mmss(l->elapsed, v3, sizeof v3);
     if (nf && alive) snprintf(hint, sizeof hint, "היעד שנכשל יצא מהזרם — הוא כבר לא מאט אותו");
     if (checking) {   /* #2046: the check's speed (all the targets together) */
-        if (rbs.rate > 0) snprintf(v1, sizeof v1, "%.0f MB/s", rbs.rate / 1e6); else snprintf(v1, sizeof v1, "עוד לא נמדד");
+        if (rbs.rate > 0) snprintf(v1, sizeof v1, "%.0f MB/s", rbs.rate / 1e6); else snprintf(v1, sizeof v1, full ? "עוד לא נמדד" : "לא נמדד במדגם");   /* #3071: a sample has no read speed */
         snprintf(hint, sizeof hint, "כל היעדים יחד");
     }
     met(a, cr, (Rect){ xr - mw, y, mw, mh }, checking ? "קצב בדיקה" : "מהירות", v1, hint, t->led_ok);

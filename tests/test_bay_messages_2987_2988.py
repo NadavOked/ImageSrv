@@ -156,9 +156,9 @@ DISK = [(100, 10, 10, 20), (101, 20, 20, 40), (102, 20, 30, 60), (103, 20, 40, 8
 
 def test_a_drawer_that_stops_while_the_stream_flows_is_waiting_for_its_disk(tmp_path):
     got = _stall_run(tmp_path, DISK, tail='stall_json sda; echo; stall_json sdb')
-    assert got["sda"] == ["waiting_disk", "101", "150"]   # since its last byte; fanout's no-progress ceiling
+    assert got["sda"] == ["waiting_disk", "101", "120"]   # since its last byte; fanout's no-progress ceiling, 120 since 18/11
     assert got["sdb"] is None
-    assert got["out"].strip() == ',"stall":"waiting_disk","stall_s":3,"stall_limit_s":150'
+    assert got["out"].strip() == ',"stall":"waiting_disk","stall_s":3,"stall_limit_s":120'
     assert "sda: no bytes for 3s -- waiting_disk" in got["log"]
 
 

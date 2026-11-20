@@ -23,7 +23,8 @@ capture_sink() {
     # ‏CAPTURE_SINK=discard (#715): הדיסק נקרא ומגובב בדיוק כמו בקליטה —
     # אותם שערים, אותו מניפסט — אבל אף בייט לא יוצא מהמכונה; מחשב הבנייה
     # משדר אותם בעצמו בקריאה השנייה (directsend.sh).
-    [ "${CAPTURE_SINK:-upload}" = discard ] && { cat "$1" > /dev/null; return; }
+    # #3161: and the beginning of the stream is kept -- the head frame a chunk-engine wave needs (directchunk.sh).
+    [ "${CAPTURE_SINK:-upload}" = discard ] && { if command -v direct_head_keep > /dev/null 2>&1; then direct_head_keep "$1" "$3"; else cat "$1" > /dev/null; fi; return; }
     # ‏-T ולא --data-binary: ‏--data-binary קורא את כל ה-FIFO לזיכרון כדי
     # לחשב Content-Length — מחיצה גדולה מה-RAM נהרגת ב-OOM (‏#15). ‏-T
     # מזרים ב-chunked. ‏--max-time 0 = בלי תקרת משך (100GB לוקחים זמן),
@@ -32,6 +33,34 @@ capture_sink() {
         -H "Content-Type: application/octet-stream" \
         -H "X-Imagesrv-Task-Token: ${TASK_TOKEN:-}" \
         -T "$1" "$SERVER/api/v1/capture/$2/files/$3"
+}
+
+capture_cut() {
+    # $1 = partclone tool, $2 = where the chunk index goes. stdin: partclone's stream;
+    # stdout: the partition file in image_format 2 (#2533) -- independent zstd frames,
+    # the head and then one for every 4MiB of data (agent/chunkcut.c). One place for
+    # both reads of a direct send, like capture_pcl_flags: pass 2 gives pass 1's bytes.
+    _cc_raw=""; [ "$1" != partclone.dd ] || _cc_raw=--raw
+    # shellcheck disable=SC2086 # the flag is one word or none
+    chunkcut $_cc_raw -l "$CAPTURE_LEVEL" -T "$CAPTURE_THREADS" -i "$2"
+}
+
+capture_index_json() {
+    # $1 = the index chunkcut wrote. The manifest's `index_xxh64` (#2533): the XXH64 of
+    # the index file as it is ("<index>.xxh64", written with it at a clean end only).
+    # The server derives the same index from the file it received, and the two must
+    # meet. Nothing that is not 16 hex digits is printed -- no guessed value, and the
+    # caller fails the partition on an empty answer. stdout is the JSON only.
+    [ -s "$1" ] && _ci_x=$(head -n 1 "$1.xxh64" 2>/dev/null) || return 0
+    case "$_ci_x" in *[!0-9a-f]*) return 0 ;; esac
+    [ "${#_ci_x}" -eq 16 ] || return 0
+    printf ',"index_xxh64":"%s"' "$_ci_x"
+    # #3332: and `chunk_b3`, the BLAKE3 of "<index>.b3" (chunkcut's BLAKE3 list) -- what a direct send's receivers
+    # check every chunk against. Not 64 hex digits = not said: the server then refuses a live manifest by name,
+    # and derives its own list for an image in the library.
+    _ci_b=$(chunkcast b3sum < "$1.b3" 2>> "${LOG_FILE:-/dev/stderr}")
+    case "$_ci_b" in *[!0-9a-f]*|'') return 0 ;; esac
+    [ "${#_ci_b}" -ne 64 ] || printf ',"chunk_b3":"%s"' "$_ci_b"
 }
 
 capture_space_preflight() {

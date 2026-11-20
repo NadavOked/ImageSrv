@@ -217,7 +217,16 @@ FAKES = {
     "id": '#!/bin/sh\n[ "$1" = -u ] && echo 0 && exit 0\nexit 1\n',
     "apt-cache": r'''#!/bin/sh
 case "$1" in
-  policy) if [ $# -eq 1 ]; then echo ' release o=Debian,n=trixie-security,c=main'; else echo '  Candidate: 1.0'; fi ;;
+  policy) if [ $# -eq 1 ]; then echo ' release o=Debian,n=trixie-security,c=main'
+          elif [ "$#" -gt 2 ] && [ -n "${FAKE_POLICY:-}" ]; then cat "$FAKE_POLICY"   # many names = the netinst's
+          elif [ "$#" -gt 2 ] && [ -n "${FAKE_POLICY_FAIL:-}" ]; then exit 100
+          else shift; for n in "$@"; do   # #3217: the real shape -- a block per package, candidate from trixie
+            printf '%s:
+  Candidate: 1.0
+  Version table:
+     1.0 500
+        500 http://x trixie/main amd64 Packages
+' "$n"; done; fi ;;
   dumpavail) [ -n "${FAKE_DUMPAVAIL_FAIL:-}" ] && exit 100; cat "$FAKE_DUMPAVAIL" ;;
   *) exit 2 ;;
 esac
@@ -227,7 +236,13 @@ esac
 dl=; seen=
 for a in "$@"; do
   case "$a" in Dir::Cache::archives=*) dl=${a#Dir::Cache::archives=} ;; esac
-  if [ -n "$seen" ]; then echo "$a" >> "$FAKE_LOG.download"; : > "$dl/${a}_1.0_amd64.deb"; fi
+  if [ -n "$seen" ]; then
+    echo "$a" >> "$FAKE_LOG.download"
+    case "$a" in   # #3217: name=version; FAKE_APT_NO_DEB = a download that ends without that .deb
+      *=*) [ "${a%%=*}" = "${FAKE_APT_NO_DEB:-}" ] || : > "$dl/${a%%=*}_${a#*=}_amd64.deb" ;;
+      *) : > "$dl/${a}_1.0_amd64.deb" ;;
+    esac
+  fi
   [ "$a" = install ] && seen=1 && echo "--- call" >> "$FAKE_LOG.download"
 done
 exit 0

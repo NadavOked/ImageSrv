@@ -30,9 +30,9 @@ from __future__ import annotations
 
 import math
 import sqlite3
-import time
 
 from server.db import _write_lock, journal, writing
+from server.system import steadyclock
 
 DELAY_AFTER = 5
 LOCK_AFTER = 10
@@ -66,8 +66,23 @@ class LoginBlocked(Exception):
 
 
 def now() -> float:
-    """נקודת הזרקה לטסטים — לא לישון, להזיז את השעון."""
-    return time.time()
+    """נקודת הזרקה לטסטים — לא לישון, להזיז את השעון.
+
+    #3752: `steadyclock` ולא שעון הקיר — קפיצה של שעות באמצע נעילה לא מקצרת אותה
+    (קדימה) ולא מאריכה אותה (אחורה)."""
+    return steadyclock.now()
+
+
+def _fence_key(conn: sqlite3.Connection, key: str, t: float) -> None:
+    """#3752: נעילה או השהיה **בעתיד** מעבר למשך האפשרי = השעון חזר אחורה בין
+    אתחולי השרת (חותמת שנכתבה בבסיס הזמן הישן). חותכים אותה לתקרת המשך: נעילה
+    של 15 דקות לכל היותר מעכשיו, ולא שלוש שעות ועוד 15 דקות."""
+    with _write_lock, writing(conn):
+        conn.execute(
+            "UPDATE login_attempts SET"
+            " locked_until = CASE WHEN locked_until > ? THEN ? ELSE locked_until END,"
+            " last_at = MIN(COALESCE(last_at, ?), ?) WHERE key = ?",
+            (t + LOCK_SECONDS, t + LOCK_SECONDS, t, t, key))
 
 
 def _key(username: str, ip: str) -> str:
@@ -90,9 +105,13 @@ def check(conn: sqlite3.Connection, username: str, ip: str, surface: str = CONSO
 
 def _check_key(conn: sqlite3.Connection, username: str, ip: str, t: float) -> None:
     """התקרה לפי (שם, IP): השהיה אקספוננציאלית, ואז נעילה."""
-    row = _row(conn, _key(username, ip))
+    key = _key(username, ip)
+    row = _row(conn, key)
     if row is None:
         return
+    if ((row["locked_until"] or 0) > t + LOCK_SECONDS) or ((row["last_at"] or 0) > t):
+        _fence_key(conn, key, t)
+        row = _row(conn, key)
     locked = row["locked_until"]
     if locked is not None and locked > t:
         wait = max(1, int(locked - t))
@@ -128,6 +147,13 @@ def _check_account(conn: sqlite3.Connection, username: str, ip: str, t: float,
         " ORDER BY at DESC LIMIT ?",
         (name, surface, t - ACCOUNT_WINDOW - ACCOUNT_LOCK_SECONDS, ACCOUNT_LIMIT),
     ).fetchall()
+    if rows and rows[0]["at"] > t:
+        # #3752: כשל "מהעתיד" — השעון חזר אחורה בין אתחולים. מכיילים ל-עכשיו, ולא
+        # נותנים לנעילה לשבת שעות מעבר ל-`ACCOUNT_LOCK_SECONDS`.
+        with _write_lock, writing(conn):
+            conn.execute("UPDATE login_account_failures SET at = ? WHERE username = ?"
+                         " AND surface = ? AND at > ?", (t, name, surface, t))
+        return _check_account(conn, username, ip, t, surface)
     # נעול כש-50 הכשלים האחרונים נפלו בתוך 15 דקות: 15 דקות מהכשל שהגיע לתקרה.
     # בזמן הנעילה `check` דוחה לפני הסיסמה, ולכן לא נרשם כשל חדש שיאריך אותה.
     if len(rows) < ACCOUNT_LIMIT or rows[-1]["at"] <= rows[0]["at"] - ACCOUNT_WINDOW:

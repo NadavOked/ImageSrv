@@ -7,7 +7,7 @@
 
 tools_hw_list() {
     cat <<'EOF'
-tpm-clear|hw|מחיקת בעלות ומפתחות TPM|destroy|machine-name confirmation
+tpm-clear|hw|מחיקת בעלות ומפתחות TPM|destroy|confirm window (red button)
 EOF
 }
 
@@ -32,7 +32,7 @@ tools_hw_run() {
             _out=$(_hw_out tpm-clear); printf '=== מחיקת TPM ===\n' > "$_out"
             printf 'יימחקו בעלות ה-TPM, מפתחות ונתונים חתומים התלויים בו; BitLocker עלול לדרוש מפתח שחזור.\n' >> "$_out"
             _name=${MACHINE_NAME:-$(hostname 2>/dev/null)}
-            [ -n "$_name" ] && [ "$_confirm" = "$_name" ] || { _hw_meaning 'הפעולה סורבה; דבר לא נמחק.' >> "$_out"; return 3; }
+            [ -n "$_name" ] && [ "$_confirm" = "$_name" ] || { _hw_meaning 'הפעולה סורבה: לא אושרה בחלון האישור; דבר לא נמחק.' >> "$_out"; return 3; }
             _hw_need tpm-clear tpm2_clear || return 2
             tpm2_clear >> "$_out" 2>&1 || { _rc=$?; _hw_failed tpm-clear "$_rc"; return 2; }
             _hw_meaning 'פקודת מחיקת ה-TPM הסתיימה בהצלחה; יש לאמת את מצב ה-TPM מחדש לאחר אתחול.' >> "$_out" ;;

@@ -40,6 +40,7 @@ GOOD = {
     "netprobe": None,
     "ntfs": None,    # #980 §6
     "display": None,  # #2849: the probe's screen field -- absent in this sample = not reported
+    "netwatch": None,  # #3064: the listening sibling -- absent in this sample = not reported
 }
 
 

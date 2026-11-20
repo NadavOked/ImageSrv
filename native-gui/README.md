@@ -292,13 +292,20 @@ hello_rc=<HTTP status>               # response code observed for that hello
 image=<id>|<name>|<folder>          # /api/console/images
 machine=<name>|<mac>|<awake>|<joined>|<fresh_drawers>|<state>|<pct>|<moving>|<error>
 room_drawer=<machine-index>|<port or 0>|<serial>|<model>|<size>|<smart>|<fresh>|<selected>|<drivers>|<detail>
-room_drawer_rule=<machine-index>|<serial>|<color>|<target 1/0>|<source 1/0>|<reason>
+room_drawer_rule=<machine-index>|<serial>|<color>|<target 1/0>|<source 1/0>|<reason>|<sentence>
                                     # #2848 (Nadav 11/11): right after its room_drawer=, matched by serial -- the
-                                    # server's one rule (drawer_list[].rule, server/disks/disk_rule.py), shown and not
-                                    # re-made: color red|yellow|orange|green|grey (disk_rule.h DR_*); target 0 = never
-                                    # picked; reason the rule's word, said with disk_rule_he() -- the sentence the server
-                                    # refuses with. An empty or unknown color = no rule (an older server): the drawer's
-                                    # own SMART and link decide, as before
+                                    # server's verdict (drawer_list[].rule; #3666: the brain's, K3/DISK_COLOR, from
+                                    # agent/lib/data/disk-rule.tsv), shown and not re-made: color red|yellow|orange|green|grey
+                                    # (disk_rule.h DR_*); target 0 = never picked; reason the rule's word and sentence the
+                                    # table's words for it, said as they came (#3666: the GUI holds no table and no sentence
+                                    # -- the one the server refuses with). An empty or unknown color = no verdict: the drawer is
+                                    # "not checked" -- grey, never green, whatever its SMART field says
+room_drawer_rb=<machine-index>|<serial>|<verdict>|<why>
+                                    # #2996/#2633: after the drawer's room_drawer=, matched by serial -- the read-back's
+                                    # verdict the server serves (drawer_list[].readback): verified | sampled | unverified;
+                                    # why = list_not_fetched (#1907) or empty. The done row says "נבדק" / "נבדק במדגם" /
+                                    # "לא אומת" (orange) from it, as the cloner's screen does (#2613); no record, or a
+                                    # word that is not one of the three = "הושלם", with no claim about a check
                                     # #1235: fresh 1 = ready, 0 = written, -1 = no serial (GET /room
                                     # fresh:null, #105) -- shown as "לא ניתן לזהות את הכונן בחריץ N"
                                     # #1269: drivers = staged / skipped / failed from drawer_list[].drivers,
@@ -388,6 +395,14 @@ net=back|<seconds>|<epoch>          # #2067: the bytes moved again -- it was gon
                                     # #2644: the build machine's restore card (--screen progress, srgui.sh) carries
                                     # the same two records and draws the same bar over the card; <seconds> there is
                                     # also the ceiling of its HTTP stream (restore.sh stream_source)
+cdisk_rule=<dev>|<color>|<source 1/0>|<target 1/0>|<reason>|<sentence>
+                                    # #3666 (Nadav 18/11, epic #3653): after the cdisk= lines, matched by dev -- the verdict
+                                    # of the one table (agent/lib/smart/diskrule.sh reads agent/lib/data/disk-rule.tsv, the
+                                    # file the server's brain applies) on the facts this machine holds: SMART, the cut-write
+                                    # mark, the hw words, the waiting screen's write check. The waiting screen takes it
+                                    # (disk_rule_take) and works nothing out: no record = "not checked", never green.
+lc_rule=<dev>|<color>|<source 1/0>|<target 1/0>|<reason>|<sentence>
+                                    # #3666: the same for the local clone (no server, no brain), after the lc_disk= lines.
 cdisk=<port>|<dev>|<model>|<size>|<smart>|<cause>|<link>|<link_max>|<crc>|<drawer>|<conn>|<mark>|<hw>|<f1date>|<f1src>|<f1smart>|<hwwords>
                                     # #2848 (Nadav 11/11): <hwwords> = hwissues.sh's words, space-separated --
                                     # link_slow / link_reset / drawer_gone = red (not a target, still a source);

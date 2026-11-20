@@ -9,35 +9,64 @@
 | נכשל בשיכפול הקודם / כתיבה לא הושלמה | צהוב | ❌ | ✅ |
 | SMART לא תקין | אדום | ✅ | ❌ |
 | איטי **בסבב הזה** | אדום | ✅ | ❌ |
-| קישור SATA איטי / בעיית SATA | אדום | ✅ | ❌ |
+| בעיית SATA (הקישור התאפס / המגירה התנתקה) | אדום | ✅ | ❌ |
+
+**#3591 (נדב 17/11): מהירות קישור SATA אינה סיבה לצבע ולא לחסימה -- לא 1.5, לא 3.0 ולא 6.0.** "הקישור 3.0 מתוך 6.0" הוא
+מידע על המחשב הישן שלנו, לא כבל גרוע. הקישור נרשם כ"סיבה לאיטיות" רק כשהוא באמת צוואר הבקבוק מול קיבולת הרשת שנמדדה
+(המוח, #3591 חלק ב'). מה שכן ראיה לכבל: `sata_issue` (איפוס קישור / ניתוק מגירה) ו-CRC שעולה בזמן כתיבה.
 
 שתי ההרשאות נפרדות: דיסק אדום **וגם** צהוב אינו מקור ואינו יעד, והצבע שלו אדום.
 "איטי" הוא של הסבב שבו נמדד בלבד: סבב חדש מודד מחדש, ומדידה מסבב קודם אינה עובדה כאן.
 
-**אותה טבלה בשלוש שפות** — `diskRule` ב-`server/static/console.js` ו-`disk_rule()` ב-
-`native-gui/src/disk_rule.c` — ו-`tests/test_disk_rule_parity_2848.py` מריץ את שלושתן על אותה
-רשימת דיסקים ודורש הכרעה זהה, כולל הטקסט. מי ששינה צד אחד בלבד — נופל שם.
+**#3666 (הכרעת נדב 18/11, אפיק #3653): הטבלה היא קובץ אחד** -- ``agent/lib/data/disk-rule.tsv`` -- והיא קבוצה (ג): מדיניות
+קבועה, בטיחות קשיחה (דיסק אדום לא נכתב). הקובץ הזה רק טוען אותה ומחיל אותה (`judge`); **מי שמחליט מה הדיסק הוא המוח**
+(``server/brain/diskcolor.py``, K3/DISK_COLOR): הוא קורא ל-`judge_disk`, רושם את הסיווג והראיות ב-``brain_decisions``, והקונסולה
+והגואי מקבלים ממנו את הצבע והסיבה מוכנים ואינם מחשבים אותם. אין עותק של הטבלה ב-JS וב-C; סוכן במצב בלי שרת (שיכפול מקומי,
+אין מוח) קורא את אותו קובץ (``agent/lib/smart/diskrule.sh``).
 
-הקלט (`facts`) הוא שמות פשוטים, אותם בשלוש השפות:
-``smart`` (ok/warn/fail/failed_last/unchecked), ``failed_last`` ו-``write_incomplete``,
-``link_slow``, ``sata_issue``, ``write_slow`` (בוליאניים). שדה חסר = לא ידוע = לא מחמיר.
+הקלט (`facts`) הוא שמות פשוטים: ``smart`` (ok/warn/fail/failed_last/unchecked), ``failed_last`` ו-``write_incomplete``,
+``sata_issue``, ``write_slow`` (בוליאניים). שדה חסר = לא ידוע = לא מחמיר.
 """
 
 from __future__ import annotations
 
-#: הסיבות לפי סדר הקדימות — הראשונה שחלה היא שנאמרת. אדום: לא יעד; צהוב: לא מקור.
-RED = ("smart_fail", "link_slow", "sata_issue", "write_slow")
-YELLOW = ("failed_last", "write_incomplete")
+from server.paths import AGENT_LIB_DATA
 
-#: הטקסט של כל סיבה — **אותו טקסט** בסירוב של השרת, בקונסולה ובגואי (טסט ה-parity).
-REASON_HE = {
-    "smart_fail": "SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת",   # smart.sh SMART_RED_HE
-    "link_slow": "קישור SATA איטי — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו",
-    "sata_issue": "בעיית SATA (הקישור התאפס או המגירה התנתקה) — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו",
-    "write_slow": "נפסל כאיטי בבדיקת הכתיבה בסבב הזה — לא כותבים עליו בסבב הזה; אפשר להעתיק ממנו",
-    "failed_last": "נכשל בשיכפול הקודם — לא מעתיקים ממנו; אפשר לכתוב עליו",
-    "write_incomplete": "כתיבה לא הושלמה — לא מעתיקים ממנו; אפשר לכתוב עליו",
-}
+TABLE = AGENT_LIB_DATA / "disk-rule.tsv"
+COLUMNS = ("kind", "word", "fact", "color", "short_he", "he")
+
+
+def _load(path) -> list[dict]:
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line or line.startswith("#"):
+            continue
+        cells = line.split("\t")
+        if len(cells) != len(COLUMNS):
+            raise ValueError(f"{path.name}: {len(cells)} columns, not {len(COLUMNS)}: {line[:60]!r}")
+        rows.append({k: (None if v == "-" else v) for k, v in zip(COLUMNS, cells)})
+    if not rows or rows[-1]["kind"] != "smart" or rows[-1]["fact"] != "*":
+        raise ValueError(f"{path.name}: the last row must be the smart default (fact *): not read is not green")
+    return rows
+
+
+ROWS = _load(TABLE)
+#: הסיבות לפי סדר הקדימות -- הראשונה שחלה היא שנאמרת. אדום: לא יעד; צהוב: לא מקור.
+RED = tuple(r["word"] for r in ROWS if r["kind"] == "red")
+YELLOW = tuple(r["word"] for r in ROWS if r["kind"] == "yellow")
+#: הטקסט של כל סיבה -- **אותו טקסט** בסירוב של השרת, בקונסולה ובגואי: הוא יוצא מכאן מוכן, ואין לו עותק.
+REASON_HE = {r["word"]: r["he"] for r in ROWS if r["kind"] in ("red", "yellow")}
+#: הסיבה בקצרה -- לכרטיס המכונה.
+REASON_SHORT_HE = {r["word"]: r["short_he"] for r in ROWS if r["kind"] in ("red", "yellow")}
+
+
+def _holds(fact: str, facts: dict) -> bool:
+    """`name` = בוליאנית נכונה, `name=value` = שווה, `a|b` = אחת מהן, `*` = תמיד. עובדה חסרה אינה מחמירה."""
+    for alt in fact.split("|"):
+        name, eq, value = alt.partition("=")
+        if alt == "*" or (facts.get(name) == value if eq else facts.get(name) is True):
+            return True
+    return False
 
 
 def judge(facts: dict) -> dict:
@@ -46,21 +75,15 @@ def judge(facts: dict) -> dict:
     `color`: red / yellow / orange / green / grey (grey = SMART לא נבדק — לא ירוק, עיקרון 5).
     `reason` — הסיבה של הצבע (אדום או צהוב), None בשאר. `target_reason` — למה אינו יעד,
     `source_reason` — למה אינו מקור; None = מותר."""
-    smart = facts.get("smart")
-    on = {
-        "smart_fail": smart == "fail",
-        "link_slow": facts.get("link_slow") is True,
-        "sata_issue": facts.get("sata_issue") is True,
-        "write_slow": facts.get("write_slow") is True,
-        "failed_last": facts.get("failed_last") is True or smart == "failed_last",
-        "write_incomplete": facts.get("write_incomplete") is True,
-    }
-    red = next((r for r in RED if on[r]), None)
-    yellow = next((r for r in YELLOW if on[r]), None)
-    color = ("red" if red else "yellow" if yellow else "orange" if smart == "warn"
-             else "green" if smart == "ok" else "grey")
+    first = {kind: next((r for r in ROWS if r["kind"] == kind and _holds(r["fact"], facts)), None)
+             for kind in ("red", "yellow", "smart")}
+    red = first["red"]["word"] if first["red"] else None
+    yellow = first["yellow"]["word"] if first["yellow"] else None
+    color = "red" if red else "yellow" if yellow else first["smart"]["color"]
     return {"color": color, "source": yellow is None, "target": red is None,
-            "reason": red or yellow, "source_reason": yellow, "target_reason": red}
+            "reason": red or yellow, "source_reason": yellow, "target_reason": red,
+            #: #3666: **כל** הסיבות שחלות, לפי סדר הטבלה -- `reason` היא הראשונה בלבד (זו שנקבע לפיה הצבע).
+            "reasons": [r["word"] for r in ROWS if r["kind"] in ("red", "yellow") and _holds(r["fact"], facts)]}
 
 
 def facts_of(disk: dict, *, failed_last: bool = False, readonly: bool = False,
@@ -70,25 +93,14 @@ def facts_of(disk: dict, *, failed_last: bool = False, readonly: bool = False,
     `failed_last` — לשרת יש רשומת כשל פתוחה על הדיסק (`disk_failures.open_for`); `readonly` —
     רשומה כזו שסיבתה קריאה-בלבד (#1742/#1760): אדום כמו SMART נכשל, גם לפני שה-hello אומר זאת;
     `write_slow` — בדיקת הכתיבה **של הסבב הזה** נפסלה. שניהם מהקורא: ה-hello אינו נושא אותם."""
-    gbps, top = disk.get("link_gbps"), disk.get("link_max_gbps")
-    # `link_state` של השרת (drawer_list) כשיש; ב-hello — המספרים עצמם (linkSlow של הקונסולה, אותו דבר)
-    link_slow = disk.get("link_state") == "slow" if disk.get("link_state") else (
-        _num(gbps) is not None and _num(top) is not None and gbps < top)
     sata = disk.get("sata_issues")
     return {
         "smart": "fail" if readonly else disk.get("smart") or "unchecked",
         "failed_last": bool(failed_last),
         "write_incomplete": disk.get("write_mark") == "incomplete",
-        "link_slow": bool(link_slow),
         "sata_issue": isinstance(sata, list) and any(w in ("link_reset", "drawer_gone") for w in sata),
         "write_slow": bool(write_slow),
     }
-
-
-def _num(value) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
-        return None
-    return float(value)
 
 
 def failures_of(failures: list[dict], disk: dict) -> dict:
@@ -108,6 +120,8 @@ def judge_disk(disk: dict, failures: list[dict] | None = None, *, write_slow: bo
     got = judge(facts_of(disk, **failures_of(failures or [], disk), write_slow=write_slow))
     for key in ("reason", "source_reason", "target_reason"):
         got[key + "_he"] = REASON_HE.get(got[key]) if got[key] else None
+        got[key + "_short_he"] = REASON_SHORT_HE.get(got[key]) if got[key] else None   # #3666: the card's words come ready
+    got["reasons"] = [{"word": w, "he": REASON_HE[w], "short_he": REASON_SHORT_HE[w]} for w in got["reasons"]]
     return got
 
 
@@ -127,4 +141,5 @@ def source_refusal(conn, mac: str, dev: str) -> str | None:
                  and d["dev"].removeprefix("/dev/") == dev.removeprefix("/dev/")), None)
     if disk is None:
         return None
-    return judge_disk(disk, machine_failures(conn, mac, disks))["source_reason_he"]
+    from server.brain import diskcolor   # noqa: PLC0415 -- the brain imports this module; the classification is its (#3666)
+    return diskcolor.decide(conn, disk, machine_failures(conn, mac, disks), point="source_refusal", mac=mac)["source_reason_he"]

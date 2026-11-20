@@ -68,14 +68,15 @@ void screen_pick(App *a, cairo_t *cr, double W, double H, double head_h) {
     }
     for (int k = 0; k < n; k++) {
         const Disk *d = &s->disks[idx[k]];
-        char size[32], small[256], label[128];
+        char size[32], small[256], label[128], dev_i[40];
         fmt_bytes(size, sizeof size, (double)d->size_bytes);
-        if (!d->slot_known) snprintf(small, sizeof small, "%s · %s", d->dev, size);
+        bidi_isolate(d->dev, dev_i, sizeof dev_i);   /* #3053: "/dev/sda" is one LTR run, not "dev/sda/" */
+        if (!d->slot_known) snprintf(small, sizeof small, "%s · %s", dev_i, size);
         else if (eff_drawer(d->drawer, 0) > 0)
-            snprintf(small, sizeof small, "דיסק %d · %s · %s", eff_drawer(d->drawer, 0), d->dev, size);
+            snprintf(small, sizeof small, "דיסק %d · %s · %s", eff_drawer(d->drawer, 0), dev_i, size);
         else {
             unmapped_label("", d->conn, 0, d->dev, label, sizeof label);
-            snprintf(small, sizeof small, "%s · %s · %s", label, d->dev, size);
+            snprintf(small, sizeof small, "%s · %s · %s", label, dev_i, size);
         }
         dd[k] = text_make(cr, FONT_SANS, N_DISK_SIDE, 400, d->has_data ? "יש מערכת על הכונן" : "ריק", 0, DIR_RTL);
         text_w[k] = inner - 2 * N_DISK_PAD - N_DISK_ICON_COL - 2 * N_DISK_COL_GAP - dd[k].w;
@@ -192,6 +193,27 @@ void screen_pick(App *a, cairo_t *cr, double W, double H, double head_h) {
     }
 }
 
+/* ---- the source disk's name ---------------------------------------------------- */
+
+/* #2984 (Nadav 12/11: "sda" is a Linux device, not something the operator knows): the drawer number and the model,
+ * the same pair the picker shows. A disk the state does not list (or an older agent) falls back to the device. */
+void direct_src_name(const State *s, char *out, size_t n) {
+    const char *dev = s->task_disk;
+    if (!strncmp(dev, "/dev/", 5)) dev += 5;
+    for (int i = 0; i < s->ndisks; i++) {
+        const Disk *d = &s->disks[i];
+        if (strcmp(d->dev, dev)) continue;
+        int bay = d->slot_known ? eff_drawer(d->drawer, 0) : 0;
+        char size[32]; fmt_bytes(size, sizeof size, (double)d->size_bytes);
+        if (bay > 0 && d->model[0]) snprintf(out, n, "דיסק %d · %s", bay, d->model);
+        else if (bay > 0)           snprintf(out, n, "דיסק %d · %s", bay, size);
+        else if (d->model[0])       snprintf(out, n, "%s · %s", d->model, size);
+        else                        snprintf(out, n, "%s", dev);
+        return;
+    }
+    snprintf(out, n, "%s", dev[0] ? dev : "—");
+}
+
 /* ---- #st-progress ----------------------------------------------------------- */
 
 /* nativeProgress: .native-progress-top (label / title 23px / subtitle at the
@@ -208,16 +230,17 @@ void screen_progress(App *a, cairo_t *cr, double W, double H, double head_h) {
     /* drawProgress, unless the agent set the texts itself (a cloning
      * machine or a class receiver shows this card with no operator). The
      * old "קולט: <name>" head is now label "קליטת אימג׳" + the name. */
-    char title[160], sub[1100], pct[96], bytes[64] = "—", total[64] = "—", rate[64] = "—";   /* sub: RLM + task_error[1024] whole, like done_sub (#1502) */
+    char title[240], sub[1100], pct[96], bytes[64] = "—", total[64] = "—", rate[64] = "—";   /* sub: RLM + task_error[1024] whole, like done_sub (#1502) */
+    char src[160]; direct_src_name(s, src, sizeof src);
     const char *label = s->title[0] ? "משימה" : s->task_direct ? "הפצה ישירה" : "קליטת אימג׳";
     if (s->title[0])              snprintf(title, sizeof title, "%s", s->title);
-    else if (s->task_direct)      snprintf(title, sizeof title, "משדר מהדיסק %s למחשבי השיכפול", s->task_disk);   /* #715 */
+    else if (s->task_direct)      snprintf(title, sizeof title, "משדר את %s למחשבי השיכפול", src);   /* #715 */
     else if (s->task_name[0])     snprintf(title, sizeof title, "%s", s->task_name);
     else                          snprintf(title, sizeof title, "קולט…");          /* index.html default */
     if (s->task_error[0])         snprintf(sub, sizeof sub, "\xE2\x80\x8F%s", s->task_error);   /* #1502: RLM -- "sda: ..." would lay the line out LTR */
     else if (s->sub[0])           snprintf(sub, sizeof sub, "%s", s->sub);
     else if (s->task == TASK_PENDING) snprintf(sub, sizeof sub, "ממתין לסוכן — ודאו שהמחשב עלה ב-PXE");
-    else if (s->task_disk[0])     snprintf(sub, sizeof sub, "כונן המקור: %s", s->task_disk);
+    else if (s->task_disk[0])     snprintf(sub, sizeof sub, "כונן המקור: %s", src);
     else                          sub[0] = 0;
     progress_label(pct, sizeof pct, s->pct, s->moving, s->partition);
     if (s->bytes) {
@@ -341,7 +364,8 @@ void screen_done(App *a, cairo_t *cr, double W, double H, double head_h) {
     text_draw(cr,&title,x,y,t->ink);                          y += title.h+N_TITLE_GAP;
     text_draw(cr,&sub,x,y,t->muted);                          y += sub.h+N_LOGO_GAP;
     draw_metric(cr,t,(Rect){x+tw-mw,y,mw,mh},"נקראו",bytes);
-    draw_metric(cr,t,(Rect){x,y,mw,mh},"כונן המקור",s->task_disk[0] ? s->task_disk : "—");
+    char src[160]; direct_src_name(s,src,sizeof src);
+    draw_metric(cr,t,(Rect){x,y,mw,mh},"כונן המקור",s->task_disk[0] ? src : "—");
     y += mh+N_ACTION_TOP;
     double bw=btn_width(&button);
     draw_btn(a,cr,(Rect){x+tw-bw,y,bw,N_BUTTON_H},&button,failed || warning ? BTN_PRIMARY : BTN_SUCCESS,HIT_AGAIN);

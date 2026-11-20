@@ -9,7 +9,7 @@ LOG_FILE="$RUN_DIR/agent.log"
 
 log() {
     # Timestamped line to the log file; to the console only while no screen of ours owns it (owner 17/10): the live GUI (gui.pid, guiparent.sh) or the static one (splash.on).
-    _ts=$(date -u +%H:%M:%S 2>/dev/null || echo "--:--:--")
+    _ts=$(date -u +%H:%M:%S 2>/dev/null || echo "--:--:--"); [ -e "$RUN_DIR/clock.ok" ] || _ts="$_ts rtc"   # #3850: before the server vouched for the clock
     echo "[$_ts] $*" >> "$LOG_FILE" 2>/dev/null
     { read -r _lp < "$RUN_DIR/gui.pid" && kill -0 "$_lp"; } 2>/dev/null || [ -e "$RUN_DIR/splash.on" ] || echo "imagesrv: $*"
 }
@@ -197,11 +197,11 @@ HTTP_TIMEOUT="${HTTP_TIMEOUT:-10}"
 HTTP_STALL_TIMEOUT="${HTTP_STALL_TIMEOUT:-120}"
 
 http_post_json() {
-    # $1 = URL, $2 = file holding the JSON body, $3 = one extra header
-    # (optional; #855 -- the task token on a capture report), $4 = where to dump the response headers (optional; #1916). Response on stdout.
+    # $1 = URL, $2 = JSON body file, $3 = one extra header (optional; #855 -- a capture report's task token), $4 = where to dump the response headers (optional; #1916). Response on stdout.
     curl -sfS --max-time "$HTTP_TIMEOUT" --retry "$HTTP_RETRIES" \
         -H "Content-Type: application/json" ${3:+-H "$3"} ${4:+-D "$4"} \
-        --data-binary "@$2" "$1"
+        --data-binary "@$2" "$1" || return
+    { date +%s > "$RUN_DIR/net.heard"; } 2>/dev/null || :   # #3106: the server answered -- the network's own evidence (roundbeep.sh: "back")
 }
 
 http_get() {

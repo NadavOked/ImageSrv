@@ -42,7 +42,13 @@ DRIVER = r'''
 #include <string.h>
 #include "lcui.h"
 #include "state.h"
+#include "widgets.h"
 int app_typing_lang(const App *a) { (void)a; return LANG_NONE; }
+Text __real_rtl_block_make(cairo_t *, double, int, const char *, double);
+Text __wrap_rtl_block_make(cairo_t *cr, double px, int weight, const char *s, double w) {
+    if (getenv("TRACE_RESTORE_TEXT")) printf("@ text %s\n", s);
+    return __real_rtl_block_make(cr, px, weight, s, w);
+}
 static void draw_to(App *a, const char *png) {
     cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 1280, 800);
     cairo_t *cr = cairo_create(s); app_draw(a, cr, 1280, 800); cairo_destroy(cr);
@@ -76,6 +82,10 @@ int main(int argc, char **argv) {
         Event e; memset(&e, 0, sizeof e); const char *v = argv[i];
         if (!strncmp(v, "state:", 6)) { load(&a, v + 6); app_route(&a); draw(&a); printf("@ reload\n"); continue; }
         if (!strcmp(v, "hits")) { hits(&a); continue; }
+        if (!strcmp(v, "station")) {
+            a.force_cloner = 0; a.signed_in = 1; a.mode = MODE_RESTORE;
+            app_route(&a); draw(&a); continue;
+        }
         if (!strcmp(v, "dark")) { a.theme = &THEME_DARK; draw(&a); continue; }
         if (!strncmp(v, "png:", 4)) {
             draw_to(&a, v + 4);
@@ -113,7 +123,7 @@ def driver(tmp_path_factory) -> Path:
     assert "src/lc_pull.c" in srcs, srcs
     srcs = [str(GUI / s) for s in srcs if not s.endswith("main.c")]
     build = subprocess.run([BASH, "-c", 'cc -O1 -Wall -Wextra -std=c11 -D_GNU_SOURCE -I"$1/src" $(pkg-config --cflags pangocairo cairo libdrm) '
-                            '-o "$2" "$3" ${@:4} $(pkg-config --libs pangocairo cairo libdrm) -lm',
+                            '-Wl,--wrap=rtl_block_make -o "$2" "$3" ${@:4} $(pkg-config --libs pangocairo cairo libdrm) -lm',
                             "_", posix(GUI), posix(d / "drv"), posix(d / "driver.c"), *srcs],
                            capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
     assert build.returncode == 0, build.stderr
@@ -164,6 +174,22 @@ PULL = ("lc_screen=pull\nmachine_name=CLONER-02\n"
         "cdisk=3|sdb|WDC|500107862016|failed_last|disk|6.0|6.0|\n"
         "cdisk=0|nvme0n1|NVMe|512110190592|passed||||\n")
 SCREEN_RESTORE = 10   # ui.h Screen
+
+
+@pytest.mark.parametrize(("record", "expected"), [
+    ("", "טוען את רשימת האימג'ים…"),
+    ("images_known=0", "טוען את רשימת האימג'ים…"),
+    ("images_known=1", "אין אימג'ים זמינים לשחזור."),
+    ("images_known=-1", "לא הצלחנו לקרוא את רשימת האימג'ים."),
+])
+@pytest.mark.parametrize("station", [True, False])
+def test_restore_image_list_message(driver, tmp_path, monkeypatch, record, expected, station):
+    monkeypatch.setenv("TRACE_RESTORE_TEXT", "1")
+    state = "" if station else "lc_screen=pull\n"
+    lines = drive(driver, tmp_path, state + record + "\n", "station" if station else "hits")
+    assert f"@ text {expected}" in lines
+    if record != "images_known=1":
+        assert "@ text אין אימג'ים זמינים לשחזור." not in lines
 
 
 # --- the boot choice ----------------------------------------------------------------------

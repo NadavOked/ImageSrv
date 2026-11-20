@@ -26,7 +26,7 @@ function setup({cloneNames={pad:2,instructor:'INS',max_len:15}}={}) {
       const cls=new Set();
       nodes.set(key,{value:'',innerHTML:'',textContent:'',hidden:false,dataset:{},style:{},
         classList:{add:(c)=>cls.add(c),remove:(c)=>cls.delete(c),toggle:(c,on)=>{(on===undefined?!cls.has(c):on)?cls.add(c):cls.delete(c);},contains:(c)=>cls.has(c)},
-        setAttribute(){},getAttribute(){return null;},removeAttribute(){},addEventListener(){},removeEventListener(){},querySelector:()=>null,querySelectorAll:()=>[],focus(){}});
+        setAttribute(){},getAttribute(){return null;},removeAttribute(){},addEventListener(){},removeEventListener(){},querySelector:()=>null,querySelectorAll:()=>[],focus(){},appendChild(c){ if(c&&c.tag==='small') this.textContent+=c.textContent; return c; }});
     }
     return nodes.get(key);
   };
@@ -37,7 +37,7 @@ function setup({cloneNames={pad:2,instructor:'INS',max_len:15}}={}) {
   const machines=room.machines.map((m)=>({mac:m.mac,suffix:m.name,group_id:'grp_CLONERS',drawer_count:3,disks:m.drawer_list,prompt:null}));
   const ctx=vm.createContext({console,URLSearchParams,URL,Date,Set,Map,Number,Math,JSON,Promise,String,Array,Object,RegExp,Error,encodeURIComponent,decodeURIComponent,
     document:{hidden:false,querySelector:()=>node('?'),querySelectorAll:()=>[],getElementById:(id)=>node('#'+id),
-      createElement:()=>node('new'),documentElement:{setAttribute(){},getAttribute:()=>'rtl'},addEventListener(){},removeEventListener(){},body:{appendChild(){}}},
+      createElement:(t)=>(t==='small'||t==='br')?{tag:t,textContent:''}:node('new'),documentElement:{setAttribute(){},getAttribute:()=>'rtl'},addEventListener(){},removeEventListener(){},body:{appendChild(){}}},
     window:{addEventListener(){},matchMedia:()=>({matches:false}),open(){}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},
     fetch:async(url,options={})=>{ requests.push({url,options}); return {status:200,ok:true,headers:{get:()=>null},json:async()=>({ok:true})}; }});
@@ -60,7 +60,7 @@ test('the order: the number in the cloner name first (2 before 10), then SATA 0,
 test('off is the default: one line that says the name in the image stays, and nothing is sent', async () => {
   const {run,requests}=setup(); pick(run,ALL);
   const html=run('roomNewWindow(roomMachines())');
-  assert.match(html,/<div class="full nm" id="nm"><div class="nm-h"><h5>שמות מחשב<\/h5><label class="n-sw nm-sw"><input type="checkbox" role="switch" id="nm-on" aria-label="לכתוב שמות מחשב חדשים"[^>]*><span class="track"><\/span><\/label><span class="sub">כבוי: כל מחשב נשאר עם השם שבאימג'<\/span><\/div><\/div>/);
+  assert.match(html,/<div class="full nm" id="nm"><div class="nm-h"><label class="n-sw nm-sw"><input type="checkbox" role="switch" id="nm-on" aria-label="לכתוב שמות מחשב חדשים"[^>]*><span class="track"><\/span><\/label><h5>שמות מחשב<\/h5><span class="sub">כבוי: כל מחשב נשאר עם השם שבאימג'<\/span><\/div><\/div>/);
   await run('openRoomRoundSubmit()');
   const body=JSON.parse(requests.find((r)=>r.url==='/api/console/room'&&r.options.method==='POST').options.body);
   assert.equal('hostnames' in body,false,'the body is the one from before the Issue');
@@ -159,8 +159,13 @@ test('per disk: typing filters the field and marks it in place', () => {
 
 test('more than one wave blocks the names: disks of the next wave would get the same names', () => {
   const {run}=setup(); pick(run,ALL);
-  run(`nmSet('on',true); nmForm().prefix='100'; DEPLOY.form.target='8'`);
+  // ‏#3181: המגירות כמו שהשרת שולח אותן (drawer_slots, שלוש לכל משכפל = 6). ארבעה סומנו ו-6 בסך הכול:
+  // סבב רגיל של שני גלים, והחסימה של #2786 נשארת
+  run(`ROOM.machines.forEach((m)=>{m.drawer_slots=['sata:1','sata:2','sata:3'];}); nmSet('on',true); nmForm().prefix='100'; DEPLOY.form.target='6'`);
   assert.match(run('nmProblem(roomMachines())'),/^שמות מחשב רק לסבב של גל אחד/);
+  // יותר דיסקים ממגירות (8 מול 6) הוא פס ייצור (#3181): שם לכל דיסק שביקשו, והבאים בתור — לא חסימה
+  run(`DEPLOY.form.target='8'`);
+  assert.equal(run('nmProblem(roomMachines())'),'');
 });
 
 test('an image with Windows and Linux asks where to write; neither blocks; one is sent', async () => {

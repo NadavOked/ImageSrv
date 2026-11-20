@@ -90,7 +90,7 @@ Assistant, Cascadia Mono, ...) are system-font fallbacks; no font file is shippe
 | udpcast (`udp-sender`, `udp-receiver`) | GPL-2.0; `fec.c` BSD-2-Clause |
 | ntfs-3g (`ntfs-3g`, `libntfs-3g89t64`) | GPL-2.0+; the bundled fuse-lite LGPL-2.0+ |
 | hivex (`libhivex0`, `libhivex-dev`) | LGPL-2.1 (library), GPL-2.0+ (tools such as `hivexsh`) |
-| zstd | BSD-3-Clause OR GPL-2.0 |
+| zstd (the `zstd` tool; `libzstd1`, which `chunkcast` links dynamically) | BSD-3-Clause OR GPL-2.0 |
 | curl / libcurl | curl license (MIT-style) |
 | gdisk (`sgdisk`) | LGPL-2.0+ (as stated in Debian's copyright file) |
 | jq | MIT |
@@ -120,9 +120,28 @@ Assistant, Cascadia Mono, ...) are system-font fallbacks; no font file is shippe
 | Live installer only: eject | GPL-2.0+ (from util-linux) |
 | Dropbear SSH server | **not in release builds**: only in a lab build (`build-iso.sh --lab`), and not in the release pool |
 
-Our own programs in the initramfs (`fanout`, `hivewrite`, `lldpsniff`,
+Our own programs in the initramfs (`fanout`, `hivewrite`, `lldpsniff`, `chunkcast`,
 `imagesrv-monitor`, `native-gui`, the agent shell scripts) are MIT. Note that
 `imagesrv-monitor` links LibVNCServer (section D), see the note there.
+
+`chunkcast` (the chunk engine, #2533) contains one piece of third-party code: the
+**BLAKE3** reference C implementation, version 1.8.1
+(https://github.com/BLAKE3-team/BLAKE3, tag `1.8.1`, commit `ad639b126ef9`), in
+`agent/blake3/` (#3332). It is dual-licensed **CC0-1.0 OR Apache-2.0** (the
+Apache-2.0 text also with the LLVM exception); the three license files sit beside
+it (`LICENSE_CC0`, `LICENSE_A2`, `LICENSE_A2LLVM`). The C and assembly files there
+are that release's `c/` directory byte for byte (`blake3.c`, `blake3.h`,
+`blake3_impl.h`, `blake3_dispatch.c`, `blake3_portable.c`,
+`blake3_sse41_x86-64_unix.S`, `blake3_sse2_x86-64_unix.S`); `blake3_one.c` is ours
+(MIT) and only includes them. It is built into `chunkcast` in the initramfs and on
+the server (SSE4.1/SSE2 and portable), and into `chunkcut` (its portable C only, by
+inclusion), which writes the BLAKE3 list of a direct send.
+
+Three ideas in chunkcast come from reading filecast (https://github.com/gistrec/filecast,
+MIT, Copyright its authors): the announce / data / end packet shape with a session
+id in every packet, a stall clock that only the receiver's own session resets, and
+ignoring an announcement that contradicts what the receiver already holds. No line
+of filecast was copied, and nothing of udpcast or partclone (GPL) was used.
 
 ### D. Kiosk / GUI libraries and font (`--with-gui`)
 

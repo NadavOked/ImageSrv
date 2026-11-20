@@ -39,7 +39,8 @@ def test_a_held_cloner_that_keeps_saying_hello_does_not_hold_the_round_for_ever(
         assert CLONER1 not in {m["mac"] for m in ctx.store.members(wave2)}, "a non-joining hello joined the wave"
         room_mod.sweep(ctx.conn, ctx.store)
 
-    assert _packets_to(woken, CLONER1) - before == CAP, "no re-wake: the beat made the cloner 'seen'"
+    # #3590: not re-woken (it is lit), yet not "seen" either: the round fails in its name on the same clock
+    assert _packets_to(woken, CLONER1) == before, "a WoL to a held cloner"
     row = _round(ctx)
     assert row["state"] == "failed", row
     assert "shich-1" in row["failed_reason"] and "מחכה ללחיצה על 'כבה'" in row["failed_reason"], row["failed_reason"]

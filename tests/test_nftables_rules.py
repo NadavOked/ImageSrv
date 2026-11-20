@@ -118,7 +118,7 @@ def test_input_and_forward_are_drop_output_is_accept() -> None:
 @needs_bash
 def test_custom_mcast_replaces_production_ports() -> None:
     got = generate(*PRIMARY_ARGS, "--mcast-ports", "2232-2233")
-    assert "udp dport 2232-2233 accept" in got
+    assert "udp dport 2232-2233 ether saddr @known_macs accept" in got   # נדב 14/11: רק רשומים
     assert "udp dport 9000-9001" not in got   # פורט-הפצה-מכוון: מוודא שברירת המחדל הוחלפה
 
 
@@ -266,3 +266,24 @@ def test_upgrade_does_not_enable_nftables() -> None:
     text = UPGRADE.read_text(encoding="utf-8")
     assert "enable --now nftables" not in text
     assert "nftables-rules.sh" not in text
+
+
+def _known_macs_range(rules: str) -> tuple[int, int]:
+    import re
+    found = re.findall(r"udp dport (\d+)-(\d+) ether saddr @known_macs accept", rules)
+    assert len(found) == 1, rules
+    return int(found[0][0]), int(found[0][1])
+
+
+@needs_bash
+@pytest.mark.parametrize("args", [PRIMARY_ARGS, ("--per-nic", "--service", "ens34:multicast,netboot")])
+def test_default_mcast_range_reaches_the_chunk_engines_feedback_port_3512(args) -> None:
+    """The receivers' feedback datagram goes to portbase + PORT_OFFSET + 1 on the server (#3512): the generator's
+    default range must let it in, from registered machines only, and no further than that."""
+    from server.rounds import chunksend, sender
+
+    got = generate(*args)
+    low, high = _known_macs_range(got)
+    feedback_port = sender.PRODUCTION_PORTBASE + chunksend.PORT_OFFSET + 1
+    assert (low, high) == (sender.PRODUCTION_PORTBASE, feedback_port)
+    assert f"udp dport {low}-{high} drop" in got       # an unregistered machine meets the same range and is dropped

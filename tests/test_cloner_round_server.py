@@ -116,7 +116,7 @@ def test_a_cloner_opens_a_round_on_its_own_chosen_drawers(identity_server):
     row = room.active_round(srv["ctx"].conn)
     assert _without_shown(row["target_slots_json"]) == [{"mac": MAC1, "ports": [1, 3]}]
     assert row["target_drives"] == 2 and row["image_id"] == IMG_256
-    assert row["opened_by"] == "מחשב שיכפול 1"
+    assert row["opened_by"] == "משכפל-1"
     # the machine's next hello is the ordinary round answer, for ports 1 and 3 only
     answer = srv["station"].post("/api/v1/agent/hello", json={
         **hello_body(MAC1), "disks": json.loads(srv["ctx"].conn.execute(
@@ -131,10 +131,10 @@ def test_the_journal_says_which_cloner_opened_it(identity_server):
     lines = journal_details(srv, "room_open_cloner")
     assert len(lines) == 1, lines
     user, detail = lines[0]
-    assert user == "מחשב שיכפול 1"
-    assert "נפתח ממחשב שיכפול 1" in detail and MAC1 in detail and "מגירות 1,3" in detail
+    assert user == "משכפל-1"
+    assert "נפתח על ידי משכפל-1" in detail and MAC1 in detail and "מגירות 1,3" in detail
     # the round itself is journaled as every room round, in the machine's name
-    assert [u for u, _d in journal_details(srv, "room_open")] == ["מחשב שיכפול 1"]
+    assert [u for u, _d in journal_details(srv, "room_open")] == ["משכפל-1"]
 
 
 def test_another_cloner_is_not_written(identity_server):
@@ -396,7 +396,7 @@ def test_drawers_and_images_come_from_the_server_not_the_request(identity_server
     write_image(srv["ctx"].library.root, big)
     r = ask(srv, image_id=big["id"], disks=fake)
     assert r.status_code == 409 and r.json()["code"] == "fit", r.text
-    assert r.json()["error"] == "דיסק 1 במחשב 1 הוא 256GB, האימג' צריך 401GB", r.text
+    assert r.json()["error"] == "דיסק 1 במחשב משכפל-1 הוא 256GB, האימג' צריך 401GB", r.text
     assert no_round(srv)
 
 
@@ -475,7 +475,7 @@ def test_the_console_and_the_cloner_screen_decide_alike_by_size(identity_server,
     assert console[0] is (3 not in ports)
     if not console[0]:
         assert r.status_code == 409 and r.json()["code"] == "fit", r.text
-        assert r.json()["error"] == "דיסק 3 במחשב 1 הוא 43GB, האימג' צריך 61GB"
+        assert r.json()["error"] == "דיסק 3 במחשב משכפל-1 הוא 43GB, האימג' צריך 61GB"
 
 
 def test_an_image_from_a_500_disk_is_offered_where_a_drawer_holds_it(identity_server):

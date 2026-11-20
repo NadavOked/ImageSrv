@@ -38,9 +38,10 @@ from native import requires_native
 from test_agent import BASH, posix, sh
 from test_capture_gates import NO_PARTITIONS, SGDISK_MARK, _serial_pre
 from test_capture_refusals import capture_run, refusal_reason
-from test_captured_stdout import LINUX_PLAN
+from test_captured_stdout import LINUX_PLAN, sh as run_shell
 from test_hostname_linux_dual import BTRFS_PLAN, box as name_box, name
 from test_linuxdrivers import AHCI, NVME, initrd, linux_box, stage_linux
+from test_linux_identity_1979 import box as identity_box
 from test_tools_boot import out_text as boot_out, run_boot
 
 pytestmark = requires_native(("bash", BASH))
@@ -50,7 +51,7 @@ NOT_REGULAR = "hostname_target_not_regular"
 
 def _symlink(target: Path, link: Path) -> None:
     try:
-        os.symlink(target, link)
+        os.symlink(target, link, target_is_directory=(link.parent / target).is_dir())
     except (OSError, NotImplementedError):
         pytest.skip("no symlinks here (Windows without the privilege) -- runs on the Testrunner")
 
@@ -79,10 +80,8 @@ def test_an_os_release_link_out_of_the_image_is_not_followed(tmp_path):
 def test_the_debian_layout_still_names_the_os(tmp_path):
     """usr/lib/os-release is the file; /etc/os-release, a link to it, is not needed."""
     box = linux_box(tmp_path, image=initrd([AHCI, NVME]))
-    try:
-        os.symlink("../usr/lib/os-release", box.root / "etc/os-release")
-    except (OSError, NotImplementedError):
-        pass   # the file alone is the same case
+    _symlink(Path("../usr/lib/os-release"), box.root / "etc/os-release")
+    _symlink(Path("usr/lib"), box.root / "lib")
     assert stage_linux(box, "sda")["os"] == "Debian GNU/Linux 13 (trixie)"
 
 
@@ -139,6 +138,49 @@ def test_a_directory_named_hostname_is_refused_by_name(tmp_path):
     assert (rc, result["code"]) == (1, NOT_REGULAR), result
     assert "/etc/hostname" in result["error"], result
     assert not (etc / "hosts").exists(), "written before the refusal"
+
+
+def test_hostname_refuses_linked_etc(tmp_path):
+    script, _, etc = _etc(tmp_path)
+    target = tmp_path / "fixture-etc"
+    etc.rename(target)
+    _symlink(target, etc)
+    rc, result = name(script)
+    assert (rc, result.get("code")) == (1, NOT_REGULAR), result
+    assert "/etc" in result["error"]
+    assert list(target.iterdir()) == []
+
+
+@pytest.mark.parametrize("directory", ["etc", "etc/ssh", "etc/systemd", "etc/systemd/system",
+                                       "etc/systemd/system/multi-user.target.wants", "var", "var/lib/dbus"])
+def test_identity_refuses_linked_directory_before_reset(tmp_path, directory):
+    setup, run = identity_box(tmp_path)
+    root = run / "disks/sdb2"
+    link = root / directory
+    link.mkdir(parents=True, exist_ok=True)   # wants/ is made by the reset itself when absent
+    target = tmp_path / "fixture-directory"
+    link.rename(target)
+    _symlink(target, link)
+    identity = (root / "etc/machine-id").read_bytes()
+    key = (root / "etc/ssh/ssh_host_rsa_key").read_bytes()
+    result = run_shell(setup + 'linux_identity_reset sdb m.json; rc=$?; echo "$LINUX_ID_ERROR"; exit "$rc"')
+    assert result.returncode == 1 and f"/{directory}" in result.stdout, result
+    assert (root / "etc/machine-id").read_bytes() == identity
+    assert (root / "etc/ssh/ssh_host_rsa_key").read_bytes() == key
+    assert not (root / "etc/systemd/system/imagesrv-ssh-hostkeys.service").exists()
+    assert (root / "var/lib/dbus/machine-id").is_file()
+
+
+@pytest.mark.parametrize("directory", ["usr", "usr/lib"])
+def test_linux_check_refuses_linked_os_directory(tmp_path, directory):
+    box = linux_box(tmp_path, kernels=())
+    link = box.root / directory
+    target = tmp_path / "fixture-directory"
+    link.rename(target)
+    _symlink(target, link)
+    result = stage_linux(box, "sda")
+    assert result["state"] == "failed" and f"/{directory}" in result["error"], result
+    assert "os" not in result
 
 
 def test_absent_files_are_still_created(tmp_path):

@@ -84,3 +84,49 @@ test('#1331 drawer line (mockup v2): the words and the colour of each state', ()
   assert.deepEqual(line({state: 'skipped', packages: [], reason: 'no_model'}), ['דרייברים: לא נבחר דגם למגירה — לא הונחו', 'muted']);
   assert.deepEqual(line({state: 'no_match', packages: []}), ['דרייברים: אין חבילה תואמת לחומרה', 'muted']);
 });
+
+// #3418: since #1331 (owner's decision 15/11) the storage driver is made boot-start next to EVERY drivers
+// state, also with no package (boot_storage_alone). The console drew drivers.boot only next to `staged`, so a
+// failed step beside no_match / no_model / failed was a journal line and nothing next to the machine (principle 5).
+// The backslashes are doubled on purpose: RISK and the template go into a RegExp, and a single backslash in a JS
+// string literal is dropped, which left "(0x7B)" as a capture group matching "0x7B" without the parentheses the console prints.
+const RISK = 'הדיסק עלול לא לעלות \\(0x7B\\) — לבדוק לפני שמחזירים לכיתה';
+const ERR_LINE = new RegExp(`<div class="err">דרייבר האחסון stornvme לא הוגדר לעלייה — באימג&#39; אין את השירות stornvme\\. ${RISK}\\.</div>$`);
+
+test('#3418 member row: a failed boot-storage is the same red line next to no_match / no_model / failed -- the existing line stays above it', () => {
+  const run = setup();
+  const nm = run(`driversHtml(${JSON.stringify({state: 'no_match', packages: [], boot: FAILED_BOOT})})`);
+  assert.match(nm, /^<div class="sub">דרייברים: אין חבילה תואמת לחומרה<\/div>/);
+  assert.match(nm, ERR_LINE);
+  const skipped = run(`driversHtml(${JSON.stringify({state: 'skipped', packages: [], reason: 'no_model', boot: FAILED_BOOT})})`);
+  assert.match(skipped, /^<div class="err">/, 'skipped drew nothing before: now only the red line');
+  assert.match(skipped, ERR_LINE);
+  const failed = run(`driversHtml(${JSON.stringify({state: 'failed', packages: [], error: 'לא הצלחנו לעגן', boot: FAILED_BOOT})})`);
+  assert.match(failed, /^<div class="notice warn">דרייברים לא הונחו — לא הצלחנו לעגן\./);
+  assert.match(failed, ERR_LINE);
+});
+
+test('#3418 member row: enabled / already / skipped beside a state that is not staged add nothing (the grey stays)', () => {
+  const run = setup();
+  for (const state of [{state: 'no_match', packages: []}, {state: 'skipped', packages: [], reason: 'no_model'},
+                       {state: 'failed', packages: [], error: 'x'}]) {
+    const plain = run(`driversHtml(${JSON.stringify(state)})`);
+    for (const boot of [{state: 'enabled', service: 'stornvme'}, {state: 'already', service: 'storahci'}, {state: 'skipped', reason: 'unknown_bus'}]) {
+      assert.equal(run(`driversHtml(${JSON.stringify({...state, boot})})`), plain, `${state.state} + boot ${boot.state}`);
+    }
+  }
+});
+
+test('#3418 drawer line: the red words and the red tone for every state; the other tones do not move', () => {
+  const run = setup();
+  const line = (o) => [run(`driversOutcomeText(${JSON.stringify(o)})`), run(`driversTone(${JSON.stringify(o)})`)];
+  const boot = "דרייבר האחסון stornvme לא הוגדר לעלייה — באימג' אין את השירות stornvme";
+  assert.deepEqual(line({state: 'no_match', packages: [], boot: FAILED_BOOT}), [`דרייברים: אין חבילה תואמת לחומרה · ${boot}`, 'bad']);
+  assert.deepEqual(line({state: 'skipped', packages: [], reason: 'no_model', boot: FAILED_BOOT}), [`דרייברים: לא נבחר דגם למגירה — לא הונחו · ${boot}`, 'bad']);
+  assert.deepEqual(line({state: 'failed', packages: [], error: 'לא הצלחנו לעגן', boot: FAILED_BOOT}), [`דרייברים לא הונחו — לא הצלחנו לעגן · ${boot}`, 'bad']);
+  assert.deepEqual(line({state: 'skipped', packages: [], reason: 'not_windows', boot: FAILED_BOOT}), [`דרייברים דולגו — האימג' אינו Windows · ${boot}`, 'bad']);
+  assert.deepEqual(line({state: 'no_match', packages: [], boot: {state: 'enabled', service: 'stornvme'}}), ['דרייברים: אין חבילה תואמת לחומרה', 'muted']);
+  assert.deepEqual(line({state: 'failed', packages: [], error: 'x', boot: {state: 'already'}}), ['דרייברים לא הונחו — x', 'warn']);
+  assert.equal(run('bayEmphasis({disk:{rule:{color:"green"},drivers:{state:"no_match",boot:{state:"failed"}}},live:{}})'), ' bay-emphasis err',
+    'the bay of a disk whose boot-storage failed is red whatever the drivers state');
+});
