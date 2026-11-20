@@ -18,6 +18,7 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from server.agent.api import ServerContext
 from server.console import auth
@@ -95,7 +96,7 @@ def create_iso_router(ctx: ServerContext) -> APIRouter:
         filename = isos.clean_filename(query.get("filename", ""))
         name = _checked(query.get("name") or Path(filename).stem, "שם ה-ISO")
         folder = query.get("folder", "")
-        if folder and folder not in known_folders(store.list()):
+        if folder and folder not in await run_in_threadpool(known_folders, store.list()):   # #2750
             raise HTTPException(400, f"התיקייה {folder!r} לא קיימת")
         expected = (request.headers.get("x-expected-sha256") or "").strip().lower()
         if expected and not SHA256.fullmatch(expected):
@@ -151,7 +152,8 @@ def create_iso_router(ctx: ServerContext) -> APIRouter:
                                      size=size, sha256=on_disk, user=user[0]))
         finally:
             await asyncio.to_thread(temp.unlink, missing_ok=True)
-        journal(ctx.conn, "iso_upload", f'{meta["id"]} "{name}" {meta["size"]} {meta["sha256"]}', user[0])
+        await run_in_threadpool(journal, ctx.conn, "iso_upload",
+                                f'{meta["id"]} "{name}" {meta["size"]} {meta["sha256"]}', user[0])   # #2750
         return public(meta)
 
     @router.post("/isos/{iso_id}/delete")
@@ -166,10 +168,13 @@ def create_iso_router(ctx: ServerContext) -> APIRouter:
     @router.post("/iso-folders")
     async def add_folder(request: Request, user=Depends(admin_only)):
         name = _checked((await request.json()).get("name") or "", "שם התיקייה")
-        if name in known_folders(store.list()):
+        if name in await run_in_threadpool(known_folders, store.list()):   # #2750
             raise HTTPException(409, "כבר יש תיקייה בשם הזה")
-        set_setting(ctx.conn, FOLDERS_KEY, json.dumps(stored_folders() + [name], ensure_ascii=False))
-        journal(ctx.conn, "iso_folder_create", name, user[0])
+
+        def create() -> None:
+            set_setting(ctx.conn, FOLDERS_KEY, json.dumps(stored_folders() + [name], ensure_ascii=False))
+            journal(ctx.conn, "iso_folder_create", name, user[0])
+        await run_in_threadpool(create)   # #2750
         return {"ok": True}
 
     @router.post("/iso-folders/{name}/delete")

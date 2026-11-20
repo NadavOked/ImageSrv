@@ -11,28 +11,38 @@
 # applied = the agent's own constant (waits.sh, idle.sh) -- never 0, never
 # "forever" -- with a log line when that changes, not one per hello.
 #
-#   lost_wait_seconds     -> the stream stall ceiling WAIT_STREAM_STALL_S and
+#   lost_wait_seconds     -> DRAWER_HOLD_S (drawerhold.sh, #3140): how long a cloner
+#                            whose last drawer was pulled stays in the round for it.
+#                            Its own: 180, the server's default. (Until 18/11 it also
+#                            raised the stream ceiling to its value + 120; it no longer
+#                            does -- drawer_net_wait_seconds is that ceiling's setting.)
+#   drawer_net_wait_seconds  -> the stream stall ceiling WAIT_STREAM_STALL_S and
 #                            udp-receiver's --receive-timeout (UDPCAST_STALL_TIMEOUT,
-#                            restore.sh). The server waits that long for a silent
-#                            cloner before it calls it lost; the agent must not give
-#                            up first, so its ceiling is the server's value +
-#                            TIMING_STALL_MARGIN_S, never below its own (300).
-#                            120 = 300 - 180: the margin the two defaults always
-#                            had, so the default changes nothing. The watchdog
-#                            lease (600) is no limit here: wait_progress feeds it
-#                            on every sample, still counter or not.
+#                            restore.sh): how long a drawer that waits for the NETWORK
+#                            waits before it gives up. Nadav 18/11: 120.
+#   drawer_disk_wait_seconds -> DISK_STALL_S, and with it fanout's
+#                            FANOUT_STALL_EVICT_MS and chunkcast's CHUNKCAST_WRITE_STALL_MS
+#                            (both exported, in ms): how long a drawer that waits for its
+#                            DISK waits before it is failed. Nadav 18/11: 120.
 #   idle_poweroff_seconds -> IDLE_POWEROFF_S (idle.sh: idle_check)
 #   end_poweroff_seconds  -> END_POWEROFF_S  (idle.sh: end_countdown)
 #
 # A variable the environment set (the tests' short ceilings) wins and is not
 # reported -- the server's value was not applied. That is read HERE, at load,
 # so imagesrv-agent sources this file before waits.sh, restore.sh and idle.sh
-# fill the variables in (a test holds the order). Left alone on purpose: the
-# local clone's LC_STALL_S (lccopy.sh) and WAIT_DRAWER_S -- a disk-to-disk
-# copy and a drawer's drain; no server waits on either.
+# fill the variables in (a test holds the order). Left alone on purpose:
+# WAIT_DRAWER_S -- a drawer's drain; no server waits on it. The local clone's
+# stall ceiling (lccopy.sh) is DISK_STALL_S since 18/11: the setting if an answer
+# brought it, else 120 (a local clone may have no server at all).
+#
+# The disk ceiling's own default (120, none said = this) lives HERE and not in
+# waits.sh (at its 300-line wall; and it is not a WAIT_* a shell function waits on): it is exported into the environment of fanout and chunkcast, which read
+# it there. A value the environment already holds (the tests') wins, as above.
 
-TIMING_ENV="${WAIT_STREAM_STALL_S:+lost }${UDPCAST_STALL_TIMEOUT:+lost }${IDLE_POWEROFF_S:+idle }${END_POWEROFF_S:+end }"
-TIMING_STALL_MARGIN_S=120
+TIMING_ENV="${WAIT_STREAM_STALL_S:+net }${UDPCAST_STALL_TIMEOUT:+net }${IDLE_POWEROFF_S:+idle }${END_POWEROFF_S:+end }${DRAWER_HOLD_S:+hold }${DISK_STALL_S:+disk }${FANOUT_STALL_EVICT_MS:+disk }${CHUNKCAST_WRITE_STALL_MS:+disk }"
+DISK_STALL_S="${DISK_STALL_S:-120}"
+: "${FANOUT_STALL_EVICT_MS:=$((DISK_STALL_S * 1000))}" "${CHUNKCAST_WRITE_STALL_MS:=$((DISK_STALL_S * 1000))}"
+export FANOUT_STALL_EVICT_MS CHUNKCAST_WRITE_STALL_MS
 TIMING_APPLIED=""   # "<field>":N,... -- what the last answer applied
 TIMING_SAID=""      # the last log line, so it is written once per change
 
@@ -65,22 +75,27 @@ _timing_pick() {
 timing_take() {
     # $1 = the hello answer (read_answer, every answer). The agent's own values
     # are what the variables hold before the first one.
-    : "${TIMING_OWN_STALL:=$WAIT_STREAM_STALL_S}" "${TIMING_OWN_IDLE:=$IDLE_POWEROFF_S}" "${TIMING_OWN_END:=$END_POWEROFF_S}"
+    : "${TIMING_OWN_STALL:=$WAIT_STREAM_STALL_S}" "${TIMING_OWN_IDLE:=$IDLE_POWEROFF_S}" "${TIMING_OWN_END:=$END_POWEROFF_S}" "${TIMING_OWN_HOLD:=${DRAWER_HOLD_S:-180}}" "${TIMING_OWN_DISK:=$DISK_STALL_S}"
     TIMING_APPLIED=""; _tp_line=""
-    _timing_pick lost_wait_seconds "$1" 180 1800 lost
-    _tm_stall=$TIMING_OWN_STALL
-    if [ -n "$_tp" ] && [ $((_tp + TIMING_STALL_MARGIN_S)) -gt "$_tm_stall" ]; then
-        _tm_stall=$((_tp + TIMING_STALL_MARGIN_S))
-    fi
+    # #3140: how long a cloner whose last drawer was pulled waits for it (drawerhold.sh) is the server's wait for a machine
+    _timing_pick lost_wait_seconds "$1" 180 1800 hold
+    case " $TIMING_ENV " in *" hold "*) ;; *) DRAWER_HOLD_S=${_tp:-$TIMING_OWN_HOLD} ;; esac
+    _timing_pick drawer_net_wait_seconds "$1" 30 900 net
     case " $TIMING_ENV " in
-        *" lost "*) ;;
-        *) WAIT_STREAM_STALL_S=$_tm_stall; UDPCAST_STALL_TIMEOUT=$_tm_stall ;;
+        *" net "*) ;;
+        *) WAIT_STREAM_STALL_S=${_tp:-$TIMING_OWN_STALL}; UDPCAST_STALL_TIMEOUT=$WAIT_STREAM_STALL_S ;;
+    esac
+    _timing_pick drawer_disk_wait_seconds "$1" 30 900 disk
+    case " $TIMING_ENV " in
+        *" disk "*) ;;
+        *) DISK_STALL_S=${_tp:-$TIMING_OWN_DISK}; FANOUT_STALL_EVICT_MS=$((DISK_STALL_S * 1000))
+           CHUNKCAST_WRITE_STALL_MS=$FANOUT_STALL_EVICT_MS; export FANOUT_STALL_EVICT_MS CHUNKCAST_WRITE_STALL_MS ;;
     esac
     _timing_pick idle_poweroff_seconds "$1" 60 3600 idle
     IDLE_POWEROFF_S=${_tp:-$TIMING_OWN_IDLE}
     _timing_pick end_poweroff_seconds "$1" 10 300 end
     END_POWEROFF_S=${_tp:-$TIMING_OWN_END}
-    _tp_line="timing:$_tp_line stall ceiling ${WAIT_STREAM_STALL_S}s"
+    _tp_line="timing:$_tp_line net ceiling ${WAIT_STREAM_STALL_S}s, disk ceiling ${FANOUT_STALL_EVICT_MS}ms"
     [ "$_tp_line" = "$TIMING_SAID" ] && return 0
     TIMING_SAID=$_tp_line
     log "$_tp_line"

@@ -31,6 +31,7 @@ enum { LCR_SKIP, LCR_SOURCE, LCR_TARGET };
 typedef struct { int has; long long done, total, rate; char verdict[12]; } RbBar;
 void rb_set(RbBar *r, const char *done, const char *total, const char *verdict, const char *rate);
 
+#include "disk_rule.h"
 /* lc_disk=port|dev|model|serial|size|smart|smart_reason|os|nparts|used|need|usable|why|drawer|conn|mark|hw|name|hwwords */
 typedef struct {
     int port; char dev[16], model[64], serial[64];
@@ -40,12 +41,9 @@ typedef struct {
     char mark[12];   /* #1798: incomplete|unchecked; "" = clean or not a GPT */
     char hw[240];    /* #1921: the drawer's hardware note (hw-issues.tsv); "" = none -- never the disk's colour */
     char name[104];  /* #2001: the name of its connection (the USB stick's mapping window); "" = "דיסק N" */
-    int sata_bad;    /* #2848 (Nadav 11/11): field 19 has link_slow, link_reset or drawer_gone -- red: never a
-                      * target, still a source. An older agent without the field = 0 (as before) */
-    int link_slow, sata_issue;   /* #2848: of those, link_slow; link_reset / drawer_gone */
+    DiskRule rule;    /* #3666: lc_rule=dev|color|source|target|reason|sentence -- the agent's verdict from the one table (diskrule.sh); set 0 = none */
 } LcDisk;
-#include "disk_rule.h"
-DiskRule lc_rule(const LcDisk *d);   /* #2848: the one rule (disk_rule.c) on this drawer */
+DiskRule lc_rule(const LcDisk *d);   /* #2848: the verdict the agent delivered for this drawer (#3666: not worked out here); none = not checked */
 int lc_red(const LcDisk *d);         /* #2848: not a target -- SMART failed, a bad SATA link */
 int lc_source_ok(const LcDisk *d);   /* #2848: usable, and not yellow (failed the last clone / a cut write) */
 /* lc_fit=dev|verdict|need|reason */
@@ -73,7 +71,9 @@ typedef struct {
     char diag[64];                               /* #1914: lc_diag= the diagnostic report kept on the stick */
     int ide;                                     /* #1914: lc_ide=ide -- the drawers' controller is in IDE mode */
     int survey;                                  /* #1914/#1921: lc_survey=1 -- the survey stick keeps each disk's SMART */
+    int retry_round, retry_of;                   /* #2527: lc_retry=round|of -- the unread sectors are asked again; 0 = not now */
     int inv_done; char phase[16];                /* idle|shrinking|copying|verifying|restoring|done|stopped */
+    int has_scan, scan_drawer, scan_secs, scan_left;   /* #2991: lc_scan= -- the drawer being read (0 = not mapped), since, how many after it */
     LcDisk disks[LC_MAX_DISKS]; int ndisks;
     char src[16]; char src_measure[12];          /* the source the verdicts are about */
     int src_hibernated;                          /* #2069: lc_src's 5th field -- the agent saw Fast Startup on it; "" = say nothing */

@@ -12,6 +12,7 @@
 # is named on both sides (#107).
 
 HOSTNAME_METHOD="offline-registry"
+HIVE_DIRTY_NOTE="האימג' לא כובה נקי, ייתכן ש-Windows יחזיר את השם הישן."   # #3167: a note, not a failure
 
 _mount_windows() {
     # $1 = disk, $2 = manifest, $3 = an already verified plan (optional).
@@ -151,7 +152,8 @@ _write_hostname_both() {
     [ -n "$_werr" ] || _werr="rc=$_wrc"
     [ -n "$_lerr" ] || _lerr="rc=$_lrc"
     if [ "$_wrc" -eq 0 ] && [ "$_lrc" -eq 0 ]; then
-        printf '{"ok":true,"hostname":"%s","method":"%s+%s"}\n' "$_name" "$HOSTNAME_METHOD" "$HOSTNAME_METHOD_LINUX"
+        _wn=$(printf '%s' "$_w" | sed -n 's/.*"method":"[^"]*"\(,"note":.*\)}$/\1/p')   # #3167: the Windows side's note stays
+        printf '{"ok":true,"hostname":"%s","method":"%s+%s"%s}\n' "$_name" "$HOSTNAME_METHOD" "$HOSTNAME_METHOD_LINUX" "$_wn"
         return 0
     elif [ "$_wrc" -eq 0 ]; then
         printf '{"ok":false,"error":"צד הלינוקס לא קיבל שם (צד Windows קיבל): %s","code":"named_windows_only"}\n' "$_lerr"
@@ -184,14 +186,11 @@ _write_hostname_windows() {
         return 1
     }
     log "writing hostname $_name into $_cs" >&2
-    # ‏#1821: רצף ראשי (offset 4) ≠ משני (8) = Windows לא סיים כתיבה; בעלייה הוא משחזר מ-SYSTEM.LOG1/2, ו-commit של hivex
-    # משווה את השניים ומסתיר זאת. לוגים ליד כוורת נקייה Windows מתעלם מהם (מפרט regf של Suhanov) — אינם סירוב.
+    # ‏#1821: רצף ראשי (offset 4) ≠ משני (8) = Windows לא סיים כתיבה; בעלייה הוא משחזר מ-SYSTEM.LOG1/2. ‏#3167 (נדב 14/11,
+    # כמו FOG/Clonezilla): נכתב בכל מקרה ונקרא בחזרה כרגיל -- הצלחה עם הערה (note), לא כשל. כותרת שלא נקראה = סירוב, כמו קודם.
     _seq=$(od -An -tu4 -j4 -N8 "$_hive" 2>> "$LOG_FILE" | awk 'NF == 2 { if ($1 == $2) print "clean"; else print $1 "/" $2 }')
-    [ "$_seq" = clean ] || {
-        _umount_checked "$_mnt" >&2   # B-DSK-43: a disk left mounted is said
-        if [ -n "$_seq" ]; then _hv="כוורת SYSTEM באימג' לא סונכרנה (רצף $_seq) — Windows עלול לדרוס את השם בעלייה. הפעילו את Windows במחשב הבנייה, כבו כרגיל, וקלטו מחדש"; _hc=hive_dirty
-        else _hv="לא הצלחנו לקרוא את מספרי הרצף של כוורת SYSTEM — השם לא נכתב"; _hc=hive_unchecked; fi
-        printf '{"ok":false,"error":"%s","code":"%s"}\n' "$(json_escape "$_hv")" "$_hc"; return 1; }
+    [ -n "$_seq" ] || { _umount_checked "$_mnt" >&2; printf '{"ok":false,"error":"%s","code":"hive_unchecked"}\n' "$(json_escape "לא הצלחנו לקרוא את מספרי הרצף של כוורת SYSTEM — השם לא נכתב")"; return 1; }   # B-DSK-43
+    _hnote=; [ "$_seq" = clean ] || { log "SYSTEM hive not synced (sequence $_seq) -- writing the name anyway" >&2; _hnote=",\"note\":\"$(json_escape "$HIVE_DIRTY_NOTE")\",\"note_code\":\"hive_dirty\""; }   # #3167 (the number lives here: a `#` inside the log line reads as a comment to test_captured_stdout)
 
     # שלושה ערכים בשני מפתחות, כולם דרך hivewrite (‏agent/hivewrite.c):
     # כתיבה משמרת-ערכים — ‏setval של hivexsh מחליף את *כל* רשימת ערכי
@@ -232,7 +231,7 @@ _write_hostname_windows() {
         printf '{"ok":false,"error":"%s","code":"unattend_failed"}\n' "$(json_escape "השם נכתב לרג׳יסטרי, אך לא לקובץ התשובות של sysprep: ${UNATTEND_ERROR:-rc=$_sprc}")"
         return 1
     fi
-    printf '{"ok":true,"hostname":"%s","method":"%s"}\n' "$_name" "$HOSTNAME_METHOD"
+    printf '{"ok":true,"hostname":"%s","method":"%s"%s}\n' "$_name" "$HOSTNAME_METHOD" "$_hnote"
 }
 
 compose_hostname() {
@@ -264,6 +263,7 @@ name_this_machine() {
     _hrc=$?
     echo "$_result" > "$RUN_DIR/hostname.json"
     log "hostname: $_result"
+    [ "$_hrc" -ne 0 ] || { _hn=$(json_get "$RUN_DIR/hostname.json" ".note // empty"); [ -z "$_hn" ] || printf '%s\n' "$_hn" > "$RUN_DIR/targets/$1/note"; }   # #3167: a note, not `error` -- green, no hold
     # ‏#856: "לא הצלחנו לכתוב שם" אינו "הכול תקין" (עיקרון 5). היעד נשאר
     # done -- השחזור הושלם -- אבל נושא את הסיבה בשדה `error`, כמו
     # "done (grow deferred)" של finish_grow: זה מה שמגיע לשרת ולקונסולה;

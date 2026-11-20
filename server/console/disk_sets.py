@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
-from server.disks import disk_sets, f1_marks
+from server.disks import disk_card, disk_sets, f1_marks
 from server.agent import registry
 from server.agent.api import ServerContext
 
@@ -31,8 +32,8 @@ def register(router: APIRouter, ctx: ServerContext, admin_only) -> None:
     @router.post("/disk-sets")
     async def create_set(request: Request, user=Depends(admin_only)):
         b = await _body(request)
-        set_id = _guard(disk_sets.create, ctx.conn, b.get("name"), b.get("prefix"), b.get("students"),
-                        b.get("instructor", True), user[0])
+        set_id = await run_in_threadpool(_guard, disk_sets.create, ctx.conn, b.get("name"), b.get("prefix"),
+                                         b.get("students"), b.get("instructor", True), user[0])   # #2750
         return {"ok": True, "id": set_id}
 
     # לפני `{set_id}`: "rounds" אינו מספר
@@ -47,12 +48,14 @@ def register(router: APIRouter, ctx: ServerContext, admin_only) -> None:
     @router.post("/disk-sets/{set_id}/assign")
     async def assign(set_id: int, request: Request, user=Depends(admin_only)):
         b = await _body(request)
-        return {"ok": True, "assigned": _guard(disk_sets.assign, ctx.conn, set_id, b.get("items"), user[0])}
+        assigned = await run_in_threadpool(_guard, disk_sets.assign, ctx.conn, set_id, b.get("items"), user[0])   # #2750
+        return {"ok": True, "assigned": assigned}
 
     @router.post("/disk-sets/{set_id}/replace")
     async def replace(set_id: int, request: Request, user=Depends(admin_only)):
         b = await _body(request)
-        _guard(disk_sets.replace, ctx.conn, set_id, b.get("suffix"), b.get("new_serial"), user[0])
+        await run_in_threadpool(_guard, disk_sets.replace, ctx.conn, set_id, b.get("suffix"), b.get("new_serial"),
+                                user[0])   # #2750
         return {"ok": True}
 
     @router.delete("/disk-sets/members/{serial}")
@@ -65,7 +68,16 @@ def register(router: APIRouter, ctx: ServerContext, admin_only) -> None:
         """כל הדיסקים שהשרת מכיר + האפשרויות לסינון; הסינון עצמו בקונסולה (רשימה של מאות לכל היותר)."""
         rows = _guard(disk_sets.disks, ctx.conn)
         rows.sort(key=disk_sets.sort_key)
-        return {"disks": rows}
+        trends = disk_card.trends(ctx.conn, [d["serial"] for d in rows])   # #3185: עמודת "מגמה"
+        return {"disks": [{**d, "trend": trends[d["serial"]]} for d in rows]}
+
+    @router.get("/disks/{serial}/card")
+    def disk_card_view(serial: str, user=Depends(admin_only)):
+        """#3185: כרטיס הדיסק -- מה השרת יודע עליו, מהחלון ומהסיכום, וההחלטות של המוח עליו."""
+        got = disk_card.card(ctx.conn, serial)
+        if got is None:
+            raise HTTPException(404, "השרת לא מכיר דיסק כזה")
+        return got
 
     # #1858 (מוקאפ 07/11): "נצפה F1" לדיסק לפי serial. `mac` (אופציונלי) = המכונה שבה הדיסק היה כשסומן.
     @router.post("/disks/{serial}/f1")
@@ -76,7 +88,8 @@ def register(router: APIRouter, ctx: ServerContext, admin_only) -> None:
             mac = registry.normalize_mac(mac) if isinstance(mac, str) else None
             if mac is None:
                 raise HTTPException(400, "mac לא תקין")
-        return {"ok": True, "f1": _guard(f1_marks.mark, ctx.conn, serial, f1_marks.MANUAL, user[0], mac)}
+        marked = await run_in_threadpool(_guard, f1_marks.mark, ctx.conn, serial, f1_marks.MANUAL, user[0], mac)   # #2750
+        return {"ok": True, "f1": marked}
 
     @router.delete("/disks/{serial}/f1")
     def clear_f1(serial: str, user=Depends(admin_only)):

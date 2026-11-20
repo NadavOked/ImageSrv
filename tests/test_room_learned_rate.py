@@ -126,7 +126,10 @@ def test_a_finished_wave_teaches_the_next_one(room_server):
     ago = (datetime.now(timezone.utc) - timedelta(seconds=1000)).isoformat(timespec="seconds")
     for row in ctx.conn.execute("SELECT mac, targets_json FROM session_members"
                                 " WHERE session_id = ?", (wave,)).fetchall():
-        targets = [{**t, "first_moved_at": ago} for t in json.loads(row["targets_json"])]
+        # #3769: הגל נמדד בשעון ה-monotonic כששתי החותמות מאותו תהליך. הזזת שעון הקיר לבדה
+        # משאירה את `first_moved_mono` על הערך האמיתי (הפרש ~0, "לא נמדד"), ולכן מזיזים את שניהם.
+        targets = [{**t, "first_moved_at": ago, "first_moved_mono": t["first_moved_mono"] - 1000}
+                   for t in json.loads(row["targets_json"])]
         ctx.conn.execute("UPDATE session_members SET targets_json = ? WHERE session_id = ?"
                          " AND mac = ?", (json.dumps(targets), wave, row["mac"]))
     ctx.conn.commit()

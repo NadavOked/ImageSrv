@@ -21,9 +21,10 @@ import socket
 from pathlib import Path
 from typing import Callable
 
+from server.agent import held
 from server.learn import wol as learn_wol
 from server.core.logtext import one_line
-from server.db import journal
+from server.db import _write_lock, journal, writing
 from server.agent.registry import CLONERS_GROUP, ROOM_GROUPS, normalize_mac
 
 log = logging.getLogger("imagesrv.wol")
@@ -254,6 +255,20 @@ def _try_send(mac: str, send: Callable[[bytes], None]) -> str | None:
         return ERRNO_REASONS.get(exc.errno, SEND_FAILED)
 
 
+def _cancel_pending_power(conn, mac: str) -> None:
+    """#3504: a WoL means "this machine should come up now" -- a poweroff/reboot
+    request still waiting from before (not yet delivered) would be handed to its
+    first hello and shut it down in the middle of the new round's boot (metal 15/11,
+    cloner 2). The newer intent wins, by name in the journal (`power_cancelled`).
+    A request that was already delivered or expired is gone and untouched here."""
+    row = conn.execute("SELECT action FROM power_requests WHERE mac = ?", (mac,)).fetchone()
+    if row is None:
+        return
+    with _write_lock, writing(conn):
+        conn.execute("DELETE FROM power_requests WHERE mac = ?", (mac,))
+    journal(conn, "power_cancelled", f"{mac} {row['action']}", machine=mac)
+
+
 def wake_machine(
     conn, mac: str, send: Callable[[bytes], None] = _send_broadcast,
 ) -> WakeResult:
@@ -266,6 +281,7 @@ def wake_machine(
     reason = _try_send(canonical, send)
     if reason is None:
         learn_wol.sent(conn, canonical)          # #1847: מכאן נמדד אם התעוררה
+        _cancel_pending_power(conn, canonical)   # #3504
         return WakeResult(1)
     detail = f"{canonical} failed=1"
     if reason:
@@ -284,7 +300,8 @@ def wake_group(
     """מעיר את מכונות הקבוצה **מטבלת ה-MAC**. מחזיר כמה חבילות נשלחו.
 
     `exclude_mac` — המכונה שפתחה את הסבב: היא כבר דולקת, ואין טעם
-    להרעיש עליה. `only` — סבב עם בחירת מחשבים מעיר רק את הנבחרים.
+    להרעיש עליה. כך גם משכפל שמחזיק תוצאות (`held`, #2031) — ראיה חיובית
+    שהוא דלוק ומדווח, וה-WoL אליו לשווא (#3590). `only` — סבב עם בחירת מחשבים מעיר רק את הנבחרים.
 
     כשל שליחה לא עוצר את השאר — מוטב 29 ערות ואחת לא מאשר אפס — אבל
     הוא גם לא נבלע: מי שנכשל נרשם ביומן (`wol_failed`), כדי שמפעיל
@@ -320,10 +337,13 @@ def wake_group(
             continue
         if chosen is not None and mac not in chosen:
             continue
+        if held.is_held(conn, mac):
+            continue          # #3590: lit and reporting -- it waits for a human, not for a packet
         reason = _try_send(mac, send)
         if reason is None:
             sent += 1
             learn_wol.sent(conn, mac)            # #1847
+            _cancel_pending_power(conn, mac)     # #3504
             continue
         failed.append(mac)
         if reason and reason not in reasons:

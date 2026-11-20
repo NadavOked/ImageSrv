@@ -64,7 +64,7 @@ pull_open() {
     # caller does with that (the restore goes on; a person is standing there
     # and the disk is already being erased), but a pull that failed to open
     # silently would be the same blindness #60 set out to end.
-    PULL_SESSION=""
+    PULL_SESSION=""; PULL_WHY=""; PULL_ENGINE=udpcast
     _resp="$RUN_DIR/pull_resp.json"
     : > "$_resp"
     pull_body "$2" "$3" "$4" "$5" > "$RUN_DIR/pull.json"
@@ -75,6 +75,7 @@ pull_open() {
         _sid=$(json_get "$_resp" ".id")
         if [ -n "$_sid" ] && [ "$_sid" != "null" ]; then
             PULL_SESSION="$_sid"
+            PULL_ENGINE=$(json_get "$_resp" ".engine")   # #3171: absent on older servers keeps the legacy writer
             log "unicast pull registered as $_sid"
             return 0
         fi
@@ -93,6 +94,9 @@ pull_open() {
     else
         log "pull not opened: the server refused it (http $_code, $_why)" \
             "-- restoring unwatched"
+        # #3231: the image's index is still being derived, or failed: the server says so in Hebrew and
+        # nothing was written -- the caller puts these words on the screen, not a generic refusal.
+        case "$_why" in index_*|image_bound_to_another_machine) PULL_WHY=$(json_get "$_resp" ".error") ;; esac   # the second: a derivation that found the file damaged leaves the image refused by name (images.format_problem)
     fi
     return 1
 }

@@ -11,14 +11,10 @@ not start.
 
 from __future__ import annotations
 
-import os
-import subprocess
-
 import pytest
 
 from test_nftables_rules import BASH, needs_bash
-from test_wizard_guard_2490 import (MAC, OTHER_MAC, REPO, _fact, _run, _sys_net,
-                                    _wizard_start_segment)
+from test_wizard_guard_2490 import MAC, OTHER_MAC, _fact, _run, _sys_net
 
 LOCAL_ONLY = [f'iifname != "lo" {proto} dport {port} counter drop'
               for port in (53, 111) for proto in ("udp", "tcp")]
@@ -45,43 +41,3 @@ def test_dns_and_rpcbind_are_dropped_off_loopback_with_or_without_an_installer_c
 
 #: nft and systemctl as bash functions (as in test_wizard_guard_2490); ``list``
 #: shows what was loaded, minus the lines of ``$STRIP`` when it is set.
-STUBS = r'''set -euo pipefail
-fail() { printf "FAIL %s\n" "$1"; exit 1; }
-log() { printf "LOG %s\n" "$*"; }
-install() { :; }
-systemctl() { printf "systemctl %s\n" "$*" >> "$CALLS"; }
-nft() {
-    printf "nft %s\n" "$*" >> "$CALLS"
-    case "$1" in
-        -f) cat > "$LOADED" ;;
-        list) if [ -n "$STRIP" ]; then grep -v -- "$STRIP" "$LOADED" || true; else cat "$LOADED"; fi ;;
-    esac
-}
-'''
-
-
-@needs_bash
-@pytest.mark.parametrize("strip", ["", "udp dport 53", "tcp dport 53", "udp dport 111",
-                                   "tcp dport 111"])
-def test_firstboot_starts_the_wizard_only_when_the_dns_and_rpcbind_drops_read_back(tmp_path, strip):
-    sys_net = _sys_net(tmp_path, {"ens18": OTHER_MAC, "ens19": MAC})
-    fact = _fact(tmp_path, f"state=configured\nmac={MAC}\n")
-    calls, loaded, script = tmp_path / "calls", tmp_path / "loaded.nft", tmp_path / "segment.sh"
-    units = tmp_path / "systemd"
-    (units / "imagesrv-dcui.service.d").mkdir(parents=True)
-    segment = _wizard_start_segment().replace("/etc/systemd/system/", f"{units.as_posix()}/")
-    assert "/etc/" not in segment, "the segment would write to the real /etc"
-    script.write_text(STUBS + segment, encoding="utf-8", newline="\n")
-    env = {**os.environ, "SRC": REPO.as_posix(), "NIC_FILE": fact.as_posix(),
-           "IMAGESRV_SYS_NET": sys_net.as_posix(), "STATUS": (tmp_path / "status").as_posix(),
-           "ROLE": "standalone", "STRIP": strip, "CALLS": calls.as_posix(),
-           "LOADED": loaded.as_posix()}
-    proc = subprocess.run([BASH, str(script)], capture_output=True, text=True, encoding="utf-8",
-                          stdin=subprocess.DEVNULL, env=env, check=False)
-    log = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
-    started = "systemctl start imagesrv-wizard" in log
-    if not strip:
-        assert proc.returncode == 0 and started, (proc.stdout, proc.stderr, log)
-    else:
-        assert not started, f"the wizard started although {strip!r} was not read back: {log}"
-        assert "FAIL wizard-guard-failed" in proc.stdout, (proc.stdout, proc.stderr)

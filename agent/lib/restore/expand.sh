@@ -128,9 +128,9 @@ plan_preflight() {
 
 apply_gpt() {
     # $1 = disk name, $2 = manifest file.
-    # The partition table never travels in the stream -- it is derived
-    # from the manifest alone, then the GPT backup is pushed to the real
-    # end of the disk (matters when restoring onto a bigger drive).
+    # The table never travels in the stream: it is derived from the manifest, the GPT backup is pushed to the real end of the disk.
+    # #3262: a disk admitted by tailshrink.sh gets the manifest with its last partition cut (and the RAM node opened).
+    if command -v tail_shrink_prepare > /dev/null 2>&1; then tail_shrink_prepare "$1" "$2" || return 1; set -- "$1" "${TS_MANIFEST:-$2}"; fi
     plan_preflight "$1" "$2" || return 1
     target_write_started "$1" || { PLAN_ERROR="לא הצלחנו לתעד את זהות היעד לפני הכתיבה"; return 1; }
     # ‏#1545: על טבלה ישנה פגומה --zap-all מוחק ויוצא 2 (gptcl.cc); השני רץ על דיסק נקי וחייב 0

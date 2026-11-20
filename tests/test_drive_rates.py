@@ -276,6 +276,23 @@ def test_a_finished_drawer_leaves_its_rate(conn):
     assert row["seconds"] == 1000
 
 
+@pytest.mark.parametrize("value", ["false", "", "True "])
+def test_a_wave_with_learning_off_leaves_no_drive_rate_but_keeps_the_wave_counters(conn, value):
+    """#3046: ב-14/11 וב-15/11 גלים שהושלמו כתבו שורות `drive_rates` של 10.3MB/s כשהמתג כבוי. המונים של הגל
+    (`delivered`: כמה מגירות סיימו, כמה בייטים) אינם למידה, ונשארים. ערך פגום = כבוי (עיקרון 5)."""
+    _with_disks(conn)
+    _decided(conn)
+    db.set_setting(conn, drive_rates.SETTING, value)
+    assert drive_rates.record_wave(conn, "ses_w1", [_member([_done()])]) == 0
+    assert conn.execute("SELECT COUNT(*) FROM drive_rates").fetchone()[0] == 0
+    delivered = json.loads(conn.execute("SELECT delivered FROM wave_rates WHERE session_id = 'ses_w1'")
+                           .fetchone()[0])
+    assert delivered["aa:bb:cc:00:00:21"]["done"] == 1
+    assert delivered["aa:bb:cc:00:00:21"]["written_bytes"] == 15_000 * MB
+    db.set_setting(conn, drive_rates.SETTING, "true")         # והגל נרשם כרגיל כשהמתג חוזר
+    assert drive_rates.record_wave(conn, "ses_w1", [_member([_done()])]) == 1
+
+
 def test_recording_twice_is_one_sample(conn):
     _with_disks(conn)
     _decided(conn)

@@ -10,7 +10,7 @@
 #: ‏#1900: התאום של `server/images.py:FILESYSTEMS` (בלי ""; ‏_fs_of לא מדפיס
 #: ריק). ‏`tests/test_capture_gates.py` משווה את שתי הרשימות — מקור אחד, לא שניים.
 #: ‏#1840: ‏BitLocker נקלט גולמי (partclone.dd), כמו unknown — hibernation.sh.
-CAPTURE_FILESYSTEMS="ntfs vfat ext4 btrfs swap unknown BitLocker"
+CAPTURE_FILESYSTEMS="ntfs vfat ext4 btrfs xfs swap unknown BitLocker"   # #3415: xfs (partclone.xfs)
 
 capture_identity_reason() {
     # $1 = disk, $2 = the serial the server recorded when the capture was
@@ -35,6 +35,7 @@ capture_identity_reason() {
 capture_source_reason() {
     # $1 = disk; $2 (a capture task, and a direct send since #1955) = the
     # serial it was ordered for. Prints the refusal, or nothing.
+    if command -v idle_wc_ready > /dev/null 2>&1; then _cs=$(idle_wc_ready "$1" src) || { echo "$_cs — לא נקלט"; return; }; fi   # #3271 H2: never a disk under the waiting-screen write check, or with its pattern left on it (idlegate.sh)
     if [ $# -ge 2 ]; then
         _cs=$(capture_identity_reason "$1" "$2"); [ -z "$_cs" ] || { echo "$_cs"; return; }
     fi
@@ -51,7 +52,7 @@ capture_fs_reason() {
     # before the space check and the first byte -- not by the server at the end.
     [ "$2" != vfat ] || { capture_fat_reason "$1" "$3"; return; }   # #1823
     case " $CAPTURE_FILESYSTEMS " in *" $2 "*) return 0 ;; esac
-    echo "מחיצה $1: מערכת הקבצים $2 אינה נתמכת לקליטה (נתמכות: ntfs, vfat, ext4, btrfs) — לא נקלט"
+    echo "מחיצה $1: מערכת הקבצים $2 אינה נתמכת לקליטה (נתמכות: ntfs, vfat, ext4, btrfs, xfs) — לא נקלט"
 }
 
 _cg_le() { # $1 file, $2 offset, $3 bytes -- little-endian unsigned; rc 1 = a short read

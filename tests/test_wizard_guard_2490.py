@@ -18,7 +18,6 @@ host) — ``iifname`` בודק את כרטיס הכניסה, bind לא.
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -30,7 +29,6 @@ from test_nftables_rules import BASH, GEN as FULL_GEN, _nft_check, needs_bash
 
 REPO = Path(__file__).resolve().parent.parent
 GUARD = REPO / "deploy" / "nftables-wizard.sh"
-FIRSTBOOT = REPO / "tools" / "iso" / "firstboot.sh"
 WIZARD_UNIT = REPO / "deploy" / "imagesrv-wizard.service"
 
 SHELLS = [s for s in (BASH, shutil.which("dash")) if s]
@@ -152,19 +150,7 @@ def test_nft_accepts_the_guard(tmp_path, with_nic) -> None:
     assert check.returncode == 0, check.stderr
 
 
-# --- firstboot והיחידה ----------------------------------------------------------
-
-def test_firstboot_loads_and_reads_back_the_guard_before_the_wizard_starts() -> None:
-    code = FIRSTBOOT.read_text(encoding="utf-8")
-    headless = code[code.index('NIC_FILE="$ETC/installer-nic"'):]
-    dhcp = headless.index('temporary_dhcp "$nic" &')
-    build = headless.index('deploy/nftables-wizard.sh" --nic-fact "$NIC_FILE"')
-    load = headless.index("nft -f -")
-    readback = headless.index("nft list chain inet imagesrv_wizard input")
-    start = headless.index("systemctl start imagesrv-wizard")
-    assert dhcp < build < load < readback < start
-    assert headless[build:start].count("fail wizard-guard-failed") == 4, "כל שלב בשומר נכשל בשמו"
-
+# --- היחידה (firstboot כבר אינו מפעיל אותה: #2763) -----------------------------------------------------------
 
 def test_wizard_unit_refuses_to_start_without_the_guard() -> None:
     """גם `systemctl start` מכל מקום אחר (Wants= של הגואי) — לא בלי הטבלה."""
@@ -177,68 +163,3 @@ def test_the_local_gui_reaches_the_wizard_through_loopback() -> None:
     """המסלול הלגיטימי על מסך השרת: הגשר מתחבר ל-127.0.0.1, ו-lo פתוח בטבלה."""
     from server.wizard import bridge
     assert bridge.API_BASE.startswith("https://127.0.0.1:8081/")
-
-
-# --- הרצת firstboot (מסוף ה-DHCP ועד שהאשף עולה) מול nft/systemctl מדומים ----
-
-#: nft ו-systemctl כפונקציות bash: עוברות גם לתת-מעטפות ולצינורות, ובלי PATH.
-STUBS = r'''set -euo pipefail
-fail() { printf "FAIL %s\n" "$1"; exit 1; }
-log() { printf "LOG %s\n" "$*"; }
-install() { :; }
-systemctl() { printf "systemctl %s\n" "$*" >> "$CALLS"; }
-nft() {
-    printf "nft %s\n" "$*" >> "$CALLS"
-    case "$1" in
-        -f) [ "$MODE" = load-fails ] && return 1; cat > "$LOADED" ;;
-        list) [ "$MODE" = not-listed ] && return 1
-              if [ "$MODE" = no-drop ]; then grep -v drop "$LOADED"; else cat "$LOADED"; fi ;;
-    esac
-}
-'''
-
-
-def _wizard_start_segment() -> str:
-    """הקטע האמיתי מ-firstboot: מסוף לולאת ה-DHCP הזמני ועד בדיקת is-active
-    של האשף. שני הסמנים קיימים גם לפני התיקון — כך שבבקרה השלילית הטסט רץ
-    ונכשל על התנהגות ("האשף עלה בלי שומר"), לא על סמן חסר."""
-    code = FIRSTBOOT.read_text(encoding="utf-8")
-    head = 'wait "$dhcp_pid" || fail check-error "A temporary DHCP worker failed"\ndone\n'
-    start = code.index(head) + len(head)
-    tail = code.index("systemctl is-active --quiet imagesrv-wizard", start)
-    return code[start:code.index("\n", tail) + 1]
-
-
-@needs_bash
-@pytest.mark.parametrize("nft_mode", ["ok", "load-fails", "not-listed", "no-drop"])
-def test_firstboot_starts_the_wizard_only_after_the_guard_is_read_back(tmp_path, nft_mode) -> None:
-    sys_net = _sys_net(tmp_path, {"ens18": OTHER_MAC, "ens19": MAC})
-    fact = _fact(tmp_path, f"state=configured\nmac={MAC}\n")
-    calls, loaded = tmp_path / "calls", tmp_path / "loaded.nft"
-    script = tmp_path / "segment.sh"
-    # הקטע כותב drop-in ל-/etc/systemd/system — מופנה לתיקיית הטסט, לעולם לא למכונה.
-    units = tmp_path / "systemd"
-    (units / "imagesrv-dcui.service.d").mkdir(parents=True)
-    segment = _wizard_start_segment().replace("/etc/systemd/system/", f"{units.as_posix()}/")
-    assert "/etc/" not in segment, "the segment would write to the real /etc"
-    script.write_text(STUBS + segment, encoding="utf-8", newline="\n")
-    env = {**os.environ, "SRC": REPO.as_posix(), "NIC_FILE": fact.as_posix(),
-           "IMAGESRV_SYS_NET": sys_net.as_posix(), "STATUS": (tmp_path / "status").as_posix(),
-           "ROLE": "standalone", "MODE": nft_mode, "CALLS": calls.as_posix(),
-           "LOADED": loaded.as_posix()}
-    proc = subprocess.run([BASH, str(script)], capture_output=True, text=True, encoding="utf-8",
-                          stdin=subprocess.DEVNULL, env=env, check=False)
-    log = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
-    started = "systemctl start imagesrv-wizard" in log
-    if nft_mode == "ok":
-        assert proc.returncode == 0, (proc.stdout, proc.stderr)
-        assert started, log
-        before = log[:log.index("systemctl start imagesrv-wizard")]
-        assert "nft -f -" in before and "nft list chain inet imagesrv_wizard input" in before, \
-            f"the wizard started with no firewall guard loaded and read back: {log}"
-        guard = loaded.read_text(encoding="utf-8")
-        assert 'iifname "ens19" tcp dport 8081 accept' in guard and "ens18" not in guard
-        assert "LOG wizard guard: port 8081 open on loopback and ens19" in proc.stdout
-    else:
-        assert not started, f"the wizard started although the guard was not proven: {log}"
-        assert "FAIL wizard-guard-failed" in proc.stdout, (proc.stdout, proc.stderr)

@@ -95,3 +95,33 @@ def test_closure_resolves_without_recommends_like_every_install(monkeypatch) -> 
     (argv,) = seen
     assert argv[:2] == ["apt-get", "-s"] and "install" in argv, argv
     assert "--no-install-recommends" in argv, argv
+
+
+def _repo_with_origin(tmp_path, url):
+    import subprocess
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True, stdin=subprocess.DEVNULL)
+    if url:
+        subprocess.run(["git", "-C", str(tmp_path), "remote", "add", "origin", url], check=True,
+                       stdin=subprocess.DEVNULL)
+    return str(tmp_path)
+
+
+def test_the_dependabot_repo_is_the_origin_of_the_checkout_not_a_fixed_private_one(tmp_path) -> None:
+    """#3096: a public checkout used to ask GitHub for the private repo's alerts."""
+    for url, want in (("https://github.com/NadavOked/ImageSrv", "NadavOked/ImageSrv"),
+                      ("git@github.com:NadavOked/ImageSrv.git", "NadavOked/ImageSrv"),
+                      ("https://github.com/o/some.repo.git", "o/some.repo")):
+        d = tmp_path / url.replace("/", "_").replace(":", "_")
+        d.mkdir()
+        assert sr.origin_repo(_repo_with_origin(d, url)) == want
+
+
+def test_no_origin_or_a_foreign_origin_is_unchecked_not_a_guess(tmp_path) -> None:
+    import pytest
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    with pytest.raises(sr.Unchecked):
+        sr.origin_repo(_repo_with_origin(a, ""))
+    with pytest.raises(sr.Unchecked):
+        sr.origin_repo(_repo_with_origin(b, "https://example.org/x/y.git"))

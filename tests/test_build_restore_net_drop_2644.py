@@ -5,8 +5,8 @@ same screen. On metal the night before, a cloner's NIC was down 75 s and its str
 from 30% to 32%. The cloner's code is the reference, and the build machine now runs it:
 
 * **the wait and its ceiling.** The cloner's receiver (udp-receiver) holds a cut for
-  ``--receive-timeout $UDPCAST_STALL_TIMEOUT`` (300 s, or the console's lost wait + 120 --
-  timing.sh). The build machine's restore streams over HTTP, and its curl gave up after
+  ``--receive-timeout $UDPCAST_STALL_TIMEOUT`` (120 s, or the console's drawer_net_wait_seconds --
+  timing.sh; until 18/11: 300, or the lost wait + 120). The build machine's restore streams over HTTP, and its curl gave up after
   ``HTTP_STALL_TIMEOUT`` (120 s, a constant the console never moved). Now that curl waits
   out the cloner's ceiling: the TCP connection survives the cut and the stream goes on from
   the byte it stopped at -- the same request, nothing written twice or skipped (the sha and
@@ -59,6 +59,7 @@ PARTCLONE = '#!/bin/sh\nwhile [ "$#" -gt 0 ]; do [ "$1" = -O ] && o=$2; shift; d
 class _Server(ThreadingHTTPServer):
     daemon_threads = True               # a handler asleep in its cut does not hold the shutdown
     pause = 0.0
+    cut = False                         # #3106: inside the cut the agent's reports are not answered either
     gets: list[str]
 
 
@@ -72,11 +73,20 @@ class _Handler(BaseHTTPRequestHandler):
         try:
             for i in range(HEAD + TAIL):
                 if i == HEAD:
+                    self.server.cut = True
                     time.sleep(self.server.pause)   # the cut: not a byte, the connection kept
+                    self.server.cut = False
                 self.wfile.write(PAYLOAD[i * CHUNK:(i + 1) * CHUNK]); self.wfile.flush()
                 time.sleep(0.3 if i < HEAD else 0.4)
         except (BrokenPipeError, ConnectionResetError):
             pass                        # the client gave up -- what the old ceiling did
+
+    def do_POST(self) -> None:          # noqa: N802 -- the progress report (progress_loop), its answer or none
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        self.send_response(404 if self.server.cut else 200)
+        self.send_header("Content-Length", "2")
+        self.end_headers()
+        self.wfile.write(b"{}")
 
     def log_message(self, *_args) -> None:
         """No noise on the run's stderr."""
@@ -118,6 +128,10 @@ def _restore(box: Path, stubs: Path, server: _Server, *, ceiling: int, http: int
         'mkdir -p "$RUN_DIR/gui"; printf "sda\\nשחזור: Lab\\nדיסק 1\\n1\\nLab\\n" > "$RUN_DIR/gui/restore.head"\n'
         '( while [ ! -e "$RUN_DIR/stop" ]; do sr_gui_state > "$RUN_DIR/s.next" 2>> "$RUN_DIR/s.err"\n'
         '  { cat "$RUN_DIR/s.next"; echo --; } >> "$RUN_DIR/samples"; sleep 0.3; done; wait ) & sp=$!\n'
+        # #3106: the agent's reports, as progress_loop sends them -- the server's answer is what says "back"
+        'echo "{}" > "$RUN_DIR/report.json"\n'
+        f'( while [ ! -e "$RUN_DIR/stop" ]; do http_post_json {url}/api/v1/agent/progress "$RUN_DIR/report.json" > /dev/null 2>&1; '
+        'sleep 0.3; done ) &\n'
     ) if sample else "sp=\n"
     script = (
         make_stubs(stubs, {"fanout": None, "partclone.dd": PARTCLONE})
@@ -194,12 +208,14 @@ def _flag(argv: list[str], flag: str) -> str:
 
 @requires_native(("busybox", BUSYBOX), "jq", posix=True, why="timing_take reads the answer with jq")
 @pytest.mark.parametrize("answer, ceiling", [
-    ("{}", "300"),                              # the agent's own: the cloner's 300, not HTTP's 120
-    ('{"lost_wait_seconds": 600}', "720"),      # the console's lost wait + 120, as udp-receiver's
+    ("{}", "120"),                              # the agent's own: the cloner's 120 (18/11, Nadav; was 300)
+    ('{"lost_wait_seconds": 600}', "120"),      # the lost wait no longer moves it (it was lost + 120)
+    ('{"drawer_net_wait_seconds": 200}', "200"),   # the console's network wait, as udp-receiver's; HTTP's own is 120
 ])
 def test_the_restore_streams_under_the_cloners_ceiling(tmp_path, answer, ceiling):
     """The one number: udp-receiver's --receive-timeout is curl's --speed-time, and the console
-    moves both (timing.sh). Negative control: on main --speed-time is 120 in both rows."""
+    moves both (timing.sh). Negative control: HTTP's own --speed-time is 120, so only the 200 row tells it from the
+    cloner's ceiling; on the code before 18/11 the {} row gave 300 and the 200 row gave 300."""
     (tmp_path / "answer.json").write_text(answer, encoding="utf-8")
     argv = _argv(tmp_path, f"timing_take {posix(tmp_path / 'answer.json')!r} > /dev/null; "
                            "stream_source unicast http://s img p2.zst 600")
@@ -252,7 +268,7 @@ def test_the_restore_card_carries_the_record(tmp_path):
     out = subprocess.run([BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + script], capture_output=True,
                          text=True, encoding="utf-8", stdin=subprocess.DEVNULL, timeout=60)
     assert out.returncode == 0, out.stderr
-    assert "net=lost|1955|300" in out.stdout.splitlines(), out.stdout
+    assert "net=lost|1955|120" in out.stdout.splitlines(), out.stdout
 
 
 # --- the screen: the real parser and the progress card, every text it made -------------

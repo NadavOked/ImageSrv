@@ -98,7 +98,7 @@ def view(held_at: str | None, held_json: str | None,
     return {"at": held_at, "problems": problems}
 
 
-def is_held(conn: sqlite3.Connection, mac: str) -> bool:
+def is_held(conn: sqlite3.Connection, mac: str, now: datetime | None = None) -> bool:
     row = conn.execute("SELECT held_at, held_json FROM net_devices WHERE mac = ?",
                        (mac,)).fetchone()
-    return row is not None and view(row["held_at"], row["held_json"]) is not None
+    return row is not None and view(row["held_at"], row["held_json"], now) is not None

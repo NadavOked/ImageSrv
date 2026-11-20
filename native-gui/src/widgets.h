@@ -94,6 +94,8 @@ void draw_cls_bars(cairo_t *cr, const Theme *t, double x, double y, double w, in
 void draw_toast(App *a, cairo_t *cr, double W, double H);
 
 /* station.js fmtBytes / progress.js Progress.view label, ported. */
+/* #2903: a MAC in capitals, like the console and the machine's card -- the kernel's own is lowercase */
+void mac_upper(char *mac);
 void fmt_bytes(char *out, size_t n, double v);
 void progress_label(char *out, size_t n, int pct, int moving, int partition);
 

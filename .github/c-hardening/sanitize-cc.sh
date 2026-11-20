@@ -30,7 +30,7 @@
 #   IMAGESRV_SAN_ROOT      שורש הריפו; רק מקור שתחתיו נחשב
 #   IMAGESRV_SAN_DEFAULTS  קובץ ה-C של __asan/__ubsan_default_options
 
-SAN_SOURCES="fanout.c lldpsniff.c hivewrite.c monitor.c uevent.c chunkcast.c"
+SAN_SOURCES="fanout.c lldpsniff.c hivewrite.c monitor.c uevent.c chunkcast.c netwatch.c"
 # ‏`-fno-sanitize-recover=undefined`: ב-gcc 14 (testrunner, 13/11) דוח של UBSan בבנייה
 # משולבת עם ASan הולך ל-stderr **תמיד**, גם עם log_path, והתוכנית ממשיכה ויוצאת 0.
 # טסט שבולע stderr היה עובר ירוק על UB. כך UB הורג את התוכנית, כמו ASan.

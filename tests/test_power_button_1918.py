@@ -74,7 +74,8 @@ def run(tmp_path: Path, setup: str, during: str, *, role: str = "cloner",
     script = (
         pre +
         'export LOG_FILE="$RUN_DIR/agent.log"; mkdir -p "$RUN_DIR/gui" "$RUN_DIR/targets" "$LC"; '
-        'watchdog_start() { :; }; monitor_start() { :; }; arm_wol() { return 0; }; sync() { :; }; '
+        # idle_wc_start (#3268) spawns a `while :` loop that nobody here stops: it would hold the pipe until the timeout
+        'watchdog_start() { :; }; monitor_start() { :; }; idle_wc_start() { :; }; arm_wol() { return 0; }; sync() { :; }; '
         + setup + '\n'
         # A ticket is read BEFORE the real tick and acknowledged AFTER it.
         # power.press.taken alone is too early: power_tick moves the press

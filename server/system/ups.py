@@ -213,6 +213,8 @@ def stop_all_work(ctx, reason: str) -> list[str]:
             journal(conn, "ups_work_stopped", f"{sid}: {reason}", round_id=sid)
         if row["kind"] == "multicast":
             ctx.sender.stop(sid)
+            if ctx.chunk is not None:           # #2533: `store.fail` אינו קורא ל-`on_closed`
+                ctx.chunk.stop(sid)
     for table, where, column in (("room_rounds", "state IN ('active', 'closing')", "failed_reason"),
                                  ("tasks", "state = 'running'", "error")):
         ids = [r["id"] for r in conn.execute(f"SELECT id FROM {table} WHERE {where}")]

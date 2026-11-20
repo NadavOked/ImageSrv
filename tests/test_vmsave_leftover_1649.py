@@ -108,7 +108,7 @@ def work(tmp_path):
 
 def save(host, folder, monkeypatch):
     monkeypatch.setattr(vmdisk, "capture_partition",
-                        lambda *_a, **_k: ("ab" * 32, 123))
+                        lambda *_a, **_k: ("ab" * 32, 123, "0" * 16))   # (sha256, bytes, index_xxh64) since #2533
     return vmdisk.capture_disk(
         host, folder, folder / "out", lambda n: None, user=USER,
         appliance=lambda disk, **_k: vmdisk.Appliance(disk, factory=ExtGuest))

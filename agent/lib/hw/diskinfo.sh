@@ -121,6 +121,12 @@ build_disk_entry() {
     _port_json="null"
     [ -n "$_port" ] && _port_json="$_port"
 
+    # #2528: the disk's world-wide id, when sysfs has one (NVMe: the block device's; SATA/SCSI:
+    # the device's). With serial and size it is the identity the server's write ledger keeps --
+    # not the drawer. No file = the field is absent ("not known"), never "".
+    _wwid=$(trim "$(cat "$SYSROOT/sys/block/$_name/wwid" "$SYSROOT/sys/block/$_name/device/wwid" 2>/dev/null | head -n 1)")
+    [ -z "$_wwid" ] || _content="$_content,\"wwid\":\"$(json_escape "$_wwid")\""
+
     # בריאות SMART (#652), **ממטמון בלבד** — smart.sh מריץ probe בצד
     # השחזור ובהמתנת מחשב השיכפול, לא כאן: אחרת כל אתחול של תחנת כיתה
     # שעולה לדיסק מקומי היה משלם שנייה על smartctl מיותר. בלי smart.sh
