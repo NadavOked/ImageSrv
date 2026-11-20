@@ -48,6 +48,7 @@ from fastapi.responses import JSONResponse
 
 from server.net import dhcp, netcfg_rollback
 from server.db import get_setting, journal, set_setting, set_settings
+from server.system import steadyclock
 
 SERVICES = ("console", "monitor", "multicast", "netboot", "interserver", "ntp")
 SERVICES_HE = {"console": "קונסולה", "monitor": "מוניטור", "multicast": "שידור",
@@ -119,6 +120,15 @@ def effective(names: list[str], saved: dict[str, list[str]],
     return {n: list(saved[n]) if n in saved else defaults(n, base) for n in names}
 
 
+def ntp_interfaces(conn) -> list[str]:
+    """הכרטיסים ששמורים עם `ntp` -- מה שהמתקין צריך כדי שחומת האש של ברירת המחדל לא תסגור 123 מתחת
+    ל-chrony שממשיך להגיש. רשומה שאי אפשר לקרוא היא חריגה, לא "אין כרטיסים" (עיקרון 5)."""
+    saved, bad = NicServices(conn).saved()
+    if bad:
+        raise ValueError(f"רשומת שירותי כרטיס שאי אפשר לקרוא: {', '.join(sorted(bad))}")
+    return sorted(name for name, services in saved.items() if "ntp" in services)
+
+
 def first_ipv4(nic: dict) -> str | None:
     for cidr in nic.get("addresses") or []:
         address = str(cidr).split("/")[0]
@@ -167,6 +177,23 @@ def _now_iso(epoch: float) -> str:
 # --- המצב השמור + האכיפה -------------------------------------------------------
 
 
+def installer_firewall_services(conn, servers_if: str | None, deploy_if: str | None,
+                                sys_root: str = "/sys/class/net") -> list[tuple[str, list[str]]] | None:
+    """מה שהמתקין (התקנה חוזרת, #3489) צריך כדי שחומת האש תכיל את מה שהמפעיל שמר: אותו
+    `firewall_services()` שהקונסולה קוראת, ולא עותק שלו. None = המפעיל לא ערך כלום (כללי ברירת המחדל).
+    כל מה שאי אפשר לקרוא הוא חריגה, לא "ברירת מחדל" (עיקרון 5): רשומה פגומה, או רשימת כרטיסים
+    ריקה בשרת שיש בו רשומות -- בשני המקרים חומת אש שנכתבה בשקט תהיה פתוחה יותר ממה שנבחר."""
+    service = NicServices(conn, Baseline(console=servers_if, deploy=deploy_if),
+                          {"interfaces": lambda: dhcp.list_interfaces(sys_root)})
+    _saved, bad = service.saved()
+    if bad:
+        raise ValueError(f"רשומת שירותי כרטיס שאי אפשר לקרוא: {', '.join(sorted(bad))}")
+    per = service.firewall_services()
+    if per is not None and not per:
+        raise ValueError(f"שירותי כרטיס שמורים, אבל לא נמצא אף כרטיס רשת ב-{sys_root}")
+    return per
+
+
 class NicServices:
     """השירותים לכל כרטיס: קריאה, שמירה, נעילה עצמית, החלה וחזרה.
 
@@ -180,7 +207,7 @@ class NicServices:
         self.conn = conn
         self.base = base or Baseline()
         self.hooks: dict = {
-            "interfaces": dhcp.list_interfaces, "now": time.time,
+            "interfaces": dhcp.list_interfaces, "now": steadyclock.now,
             "boot_id": netcfg_rollback.boot_id, "schedule": _schedule,
             "listeners": None, "dnsmasq": None, "firewall": None,
             "apply_delay": APPLY_DELAY, **(hooks or {})}

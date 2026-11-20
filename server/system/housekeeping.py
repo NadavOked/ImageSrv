@@ -16,7 +16,9 @@
 
 * `journal` — **שנה** (`JOURNAL_DAYS`). יומן ביקורת. הקוראים הפנימיים
   (`room.py`: `room_rewake`/`room_rejoin` לגל מסוים) מחפשים אירועים של
-  הגל הנוכחי — דקות, לא חודשים.
+  הגל הנוכחי — דקות, לא חודשים. **חוץ** משורה בחומרה שגיאה
+  (`journal_he.events_of("err")`), שלא נמחקת לעולם (#3157, נדב 14/11): היא
+  ראיה, והיא מעט (675 שורות בסך הכול ב-LabRoot ב-14/11).
 * `machine_probe`, `machine_inventory` — **גרסאות** (שורה חדשה רק כשהתוכן
   השתנה). `latest`/`latest_all` קוראים את השורה האחרונה לכל MAC — היא
   **לעולם** אינה נמחקת. גרסה ישנה נמחקת כשהגרסה שאחריה כבר נראתה לפני יותר
@@ -46,7 +48,7 @@
   (מכונה, שלב) — הבסיס והאחרונה.
 * `agent_logs` (#1882) — 90 יום. התקרה במספר שורות (למכונה ובסך הכול) — בכל הכנסה.
 * `restore_stages` (#1883) — 90 יום.
-* `server_io` (#1884) — 90 יום.
+* `server_io` (#1884) — 90 יום. #3125: שורת הגל מסוכמת (`memory.SOURCES`); חלונות הגל והקליטות נמחקים.
 * `storage_usage` (#1886) — `storage_history.KEEP_DAYS` (400) יום; 1000 דגימות למיקום בכל הכנסה.
   **וגם** הדגימה היומית עצמה: `run` דוגם כל מיקום מחובר (`storage_history.sample_all`).
 * `pxe_events` (#1887) — `pxe_log.KEEP_DAYS` (14) יום; 20000 שורות בכל הכנסה.
@@ -59,13 +61,24 @@
 **מה במכוון לא כאן:** טבלאות הפעולות (`tasks`, `sessions`,
 `session_members`, `room_rounds`, `storage_transfers`,
 `drawer_cancels`, `smart_asks`, `power_requests`) — הן גדלות בשורה לכל
-**פעולה של אדם** (קליטה, גל, העברה), לא לכל hello; `work_areas` נשען על
+**פעולה של אדם** (קליטה, גל, העברה), לא לכל hello; `room_rounds` מסוכמת
+(#3185, `brain_memory` kind=round, `ROUND_DAYS` אחרי הסגירה) ואינה נמחקת; `work_areas` נשען על
 שורת המשימה כראיה; ורשומת כיווץ פתוחה היא הדרך היחידה לדעת שדיסק בנייה
 נשאר מכווץ (#926). ושורה אחת לכל מכונה (`net_devices`, `machines`) תחומה
 במספר המכונות.
 
 כל מחיקה נרשמת ביומן במספרים (`retention_purged`), וכשל בטבלה אחת נרשם
 בשמו (`retention_failed`) ואינו עוצר את השאר — ולא נבלע.
+
+**#3185 (המוח, שלב 4): מה שיוצא מהחלון של טבלאות הידע אינו נמחק — הוא מסוכם.** לכל טבלה שרשומה ב-
+`server.brain.memory.SOURCES` (drive_rates, wave_rates, model_speeds, smart_history, port_history,
+nic_history, wol_wakes, boot_step_times, disk_failures, machine_inventory, wave_senses, brain_decisions, ושינויי
+ההגדרות ב-journal) הכלל כאן נשאר אותו כלל, אבל במקום DELETE רץ `memory.fold`: בדיוק אותן שורות
+מסוכמות לשורה לכל ישות ב-brain_memory (נשמרת לתמיד), ורק אז יוצאות מהטבלה. הקוראים הקיימים רואים
+אותו דבר, והספירה ב-`retention_purged` היא אותה ספירה.
+* brain_decisions — 90 יום, **חוץ** מ-`memory.WINDOW` האחרונות לכל ישות (ולכל כלל, בהחלטות
+  הכלליות), וחוץ מהחלטה שעוד פתוחה. של ישות — מסוכמת; כללית — יוצאת (הכרעת נדב 14/11).
+* שינויי הגדרות (journal, setting_change) — שנה, כמו היומן, ואז מסוכמים לפי שם ההגדרה.
 """
 
 from __future__ import annotations
@@ -75,6 +88,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
+from server.brain import memory as brain_memory   # #3185
 from server.rounds import drive_rates, room_precheck
 from server.console import login_guard
 from server.library import work_areas
@@ -82,6 +96,7 @@ from server.learn import boot as learn_boot, models as learn_models, ports as le
 from server.net import pxe_log  # #1886, #1887
 from server.storage import history as storage_history  # #1886, #1887
 from server.db import _write_lock, journal, writing
+from server.console.journal_he import events_of
 
 log = logging.getLogger("imagesrv.housekeeping")
 
@@ -91,7 +106,10 @@ EVERY_S = 24 * 3600
 FIRST_RUN_S = 10 * 60
 #: טבלאות המדידה והמצב החי — 90 יום (נדב, 18/10).
 RETENTION_DAYS = 90
-#: יומן האירועים — שנה. יומן ביקורת (נדב, 18/10).
+#: #3185: סבב חדר מסוכם (`brain_memory`, kind=round) שבוע **לפני** שהדגימות שלו (`wave_rates`, `drive_rates`) יוצאות מ-90
+#: הימים: הגל הראשון של סבב ארוך כבר ישן מהסגירה, ובסיכום ביום ה-90 הוא כבר לא היה שם.
+ROUND_DAYS = RETENTION_DAYS - 7
+#: יומן האירועים — שנה. יומן ביקורת (נדב, 18/10). שורת שגיאה — לעולם לא (#3157).
 JOURNAL_DAYS = 365
 
 _CRC_READ = (*room_precheck._CRC_READ_VERDICTS, *room_precheck._CRC_READ_FAIL_REASONS)   # #2083
@@ -130,9 +148,19 @@ def _rules(now: datetime) -> list[tuple[str, str, tuple]]:
     qual = ("{t}.serial IS NOT NULL AND ({t}.verdict IN (?, ?)"
             " OR ({t}.verdict = 'fail' AND COALESCE({t}.reason, '') IN (?, ?))"   # #2083
             " OR ({t}.verdict = 'unchecked' AND COALESCE({t}.reason, '') = 'no_health'))")
+    errors = sorted(events_of("err"))   # #3157: שורת שגיאה ביומן לא נמחקת לעולם
     return [
-        ("journal", "DELETE FROM journal WHERE julianday(ts) < julianday(?)",
-         (_iso(now, JOURNAL_DAYS),)),
+        # #3185: סבב חדר שנסגר -- מסוכם, והטבלה אינה נוגעת (`Source.keep`); לא מסוכם שוב (הסיכום קיים). **ראשון**,
+        # לפני `wave_rates` ו-`drive_rates` שהקצב והאיבוד שלו מגיעים מהם.
+        ("room_rounds", "DELETE FROM room_rounds WHERE state IN ('closed', 'failed') AND closed_at IS NOT NULL"
+         " AND julianday(closed_at) < julianday(?) AND NOT EXISTS (SELECT 1 FROM brain_memory m WHERE"
+         " m.kind = 'round' AND m.key = room_rounds.id AND m.source = 'room_rounds')", (_iso(now, ROUND_DAYS),)),
+        # #3185: לפני כלל היומן -- שינוי הגדרה שיוצא מהשנה מסוכם לפי שם ההגדרה (`memory.fold`), לא נמחק
+        ("settings_history", "DELETE FROM journal WHERE event = 'setting_change'"
+         " AND julianday(ts) < julianday(?)", (_iso(now, JOURNAL_DAYS),)),
+        ("journal", "DELETE FROM journal WHERE julianday(ts) < julianday(?)"
+         f" AND event NOT IN ({', '.join('?' * len(errors))})",
+         (_iso(now, JOURNAL_DAYS), *errors)),
         *[(table,
            f"DELETE FROM {table} WHERE id IN (SELECT id FROM (SELECT id, LEAD(seen_at)"
            f" OVER (PARTITION BY mac ORDER BY id) AS next_seen FROM {table})"
@@ -207,6 +235,11 @@ def _rules(now: datetime) -> list[tuple[str, str, tuple]]:
         # #1888: היסטוריית IP — שנה; מוני הכרטיס — 90 יום. התקרה בשורות בכל הכנסה.
         ("ip_history", "DELETE FROM ip_history WHERE julianday(at) < julianday(?)", (_iso(now, 365),)),
         ("nic_history", "DELETE FROM nic_history WHERE julianday(at) < julianday(?)", (old,)),
+        # #3125: שדות המעברים של גל חתיכות -- 90 יום, כמו היומן של אותם גלים
+        ("chunk_pass_rates", "DELETE FROM chunk_pass_rates WHERE julianday(at) < julianday(?)", (old,)),
+        ("chunk_pass_counters", "DELETE FROM chunk_pass_counters WHERE julianday(at) < julianday(?)", (old,)),
+        # #3041/#3125: חושי המשכפל בגל חתיכות -- 90 יום, ואז מסוכמים לזיכרון המוח (`memory.SOURCES`), לא נמחקים
+        ("wave_senses", "DELETE FROM wave_senses WHERE julianday(at) < julianday(?)", (old,)),
         # #2830: סמני `up=` של האתחול — 90 יום; התקרה בשורות (`boot_marks.KEEP`) בכל הכנסה.
         ("boot_marks", "DELETE FROM boot_marks WHERE julianday(at) < julianday(?)", (old,)),
         ("shrink_records",
@@ -214,6 +247,12 @@ def _rules(now: datetime) -> list[tuple[str, str, tuple]]:
          " AND julianday(closed_at) < julianday(?)", (old,)),
         ("mfa_challenges", "DELETE FROM mfa_challenges WHERE expires_at < ?",
          (now.timestamp(),)),
+        # #3185: החלטות המוח -- 90 יום, חוץ מ-WINDOW האחרונות לכל ישות (ולכל כלל בכלליות) ומהפתוחות
+        ("brain_decisions",
+         "DELETE FROM brain_decisions WHERE julianday(at) < julianday(?) AND outcome IS NOT NULL"
+         " AND id NOT IN (SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY"
+         " COALESCE(entity_kind, ''), COALESCE(entity_key, rule) ORDER BY id DESC) AS rn"
+         " FROM brain_decisions) WHERE rn <= ?)", (old, brain_memory.WINDOW)),
     ]
 
 
@@ -223,10 +262,20 @@ def purge_tables(conn, now: datetime | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     deleted: dict[str, int] = {}
     failed: dict[str, str] = {}
+    folded: list[str] = []
+    summed: dict[str, int] = {}                  # #3185: טבלאות פעולות -- סוכמו ולא נמחקו (`Source.keep`)
     for table, sql, params in _rules(now):
         try:
             with _write_lock, writing(conn):
-                count = conn.execute(sql, params).rowcount
+                if table in brain_memory.SOURCES:      # #3185: מסוכם לפני שהוא יוצא, לא נמחק
+                    count = brain_memory.fold(conn, table, sql, params)
+                    if count and brain_memory.SOURCES[table].keep:
+                        summed[table] = count
+                        continue
+                    if count:
+                        folded.append(table)
+                else:
+                    count = conn.execute(sql, params).rowcount
         except Exception as exc:                             # noqa: BLE001
             failed[table] = f"{type(exc).__name__}: {exc}"
             continue
@@ -242,7 +291,11 @@ def purge_tables(conn, now: datetime | None = None) -> dict:
     if deleted:
         journal(conn, "retention_purged",
                 " ".join(f"{t}={n}" for t, n in deleted.items())
-                + f" (מדידה/מצב: {RETENTION_DAYS} יום · יומן: {JOURNAL_DAYS} יום)")
+                + f" (מדידה/מצב: {RETENTION_DAYS} יום · יומן: {JOURNAL_DAYS} יום, שגיאות לא נמחקות)"
+                + (f" · סוכמו לזיכרון המוח, לא אבדו: {', '.join(folded)}" if folded else ""))
+    if summed:
+        journal(conn, "retention_summed",
+                " ".join(f"{t}={n}" for t, n in summed.items()) + " (סוכמו לזיכרון המוח, הטבלה לא נוגעה)")
     if failed:
         journal(conn, "retention_failed",
                 "; ".join(f"{t}: {why}" for t, why in failed.items()))

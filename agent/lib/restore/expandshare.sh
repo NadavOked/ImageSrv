@@ -143,3 +143,25 @@ _cand_end() {
     printf '%s\n' "$1" | awk -v e=$(($2 - 34)) '{ for (i = 1; i < NF; i++) if ($i == "-n") {
         split($(i + 1), a, ":"); if (a[2] - 1 < e) e = a[2] - 1 } } END { printf "%.0f\n", e }'
 }
+
+expand_fallback() {
+    # $1 disk, $2 manifest. expand_last failed (#2405). Until #1897 the way back was the
+    # manifest's own table: C: kept its image size and the system booted. Now the partitions
+    # capture shrank would arrive SHRUNK -- D:/E: with ~2GB free -- and the operator saw a log
+    # line ("never shrink D: and hide it", Nadav 04/11). So an image that owes such a return
+    # fails THIS target, by name (PLAN_ERROR, rc 1); one that owes none keeps the way back
+    # (apply_gpt, its rc). The candidate and the head are disk_fits' own (RETURN_JQ, diskfit.sh).
+    _ef_h=""; [ ! -e "$RUN_DIR/targets/$1/share.ok" ] || _ef_h=1
+    _ef_b=$(jq -r --arg c "$(_expand_candidate "$2" | cut -d'|' -f1)" --arg head "$_ef_h" "$RETURN_JQ"'
+        def gb: . / 1e8 | floor / 10;
+        ([.partitions[] | select((.index | tostring) == $c)] | .[0]) as $cp
+        | if $cp == null then empty
+          else [back($cp; $head)[] | "מחיצה \(.index) (\(.shrunk_from_bytes | gb) GB)"] | join(", ") end' "$2" 2>> "$LOG_FILE") \
+        || { PLAN_ERROR="ההרחבה נכשלה, ולא הצלחנו לבדוק אם מחיצות שכווצו בקליטה היו מגיעות מכווצות — היעד נכשל"; return 1; }
+    if [ -n "$_ef_b" ]; then
+        log "$1: expansion failed -- $_ef_b would arrive shrunk; the target fails (#2405)"
+        PLAN_ERROR="ההרחבה נכשלה (הסיבה ביומן הסוכן), והמחיצות האלה היו מגיעות מכווצות במקום בגודלן במקור: $_ef_b — היעד נכשל"; return 1
+    fi
+    log "WARNING: expansion failed on $1 -- writing at the image's own size"
+    apply_gpt "$1" "$2"
+}

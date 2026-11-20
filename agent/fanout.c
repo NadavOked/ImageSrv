@@ -109,7 +109,7 @@
 #define READ_CHUNK (1024 * 1024)
 #define OPEN_RETRY_MS 5000      /* how long to wait for a reader on a fifo */
 #define ROOM_POLL_MS 20
-#define STALL_EVICT_MS 150000   /* full drawer, no FIFO write progress; override for tests */
+#define STALL_EVICT_MS 120000   /* full drawer, no FIFO write progress; override for tests */
 #define BLOCK_EVICT_MS 45000    /* stdin held by full drawers (#1796); FANOUT_BLOCK_EVICT_MS */
 #define COUNTER_SUFFIX ".bytes" /* the per-target progress counter, next to the fifo */
 #define COUNTER_MS 1000         /* how often it is refreshed (the report goes out every 2s) */

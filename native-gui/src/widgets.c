@@ -587,6 +587,10 @@ void draw_metric(cairo_t *cr, const Theme *t, Rect box, const char *label, const
 }
 
 
+void mac_upper(char *mac) {
+    for (; *mac; mac++) if (*mac >= 'a' && *mac <= 'f') *mac -= 'a' - 'A';
+}
+
 void fmt_bytes(char *out, size_t n, double v) {
     static const char *U[] = { "B", "KB", "MB", "GB", "TB" };
     if (!(v > 0)) { snprintf(out, n, "0"); return; }
@@ -598,7 +602,7 @@ void fmt_bytes(char *out, size_t n, double v) {
 
 void progress_label(char *out, size_t n, int pct, int moving, int partition) {
     if (pct >= 0) {
-        if (partition > 0) snprintf(out, n, "%d%% · מחיצה %d (בלוקים)", pct > 100 ? 100 : pct, partition);
+        if (partition > 0) snprintf(out, n, "%d%% · מחיצה %d", pct > 100 ? 100 : pct, partition);
         else               snprintf(out, n, "%d%%", pct > 100 ? 100 : pct);
     } else {
         snprintf(out, n, "%s", moving ? "נקראו בייטים · הסך לא ידוע" : "טרם נקראו בייטים · הסך לא ידוע");

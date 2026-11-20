@@ -61,6 +61,7 @@ gui_dispatch() {
     # cloner screen, and only the three valid tokens.
     case "$token" in
         shrink-*) gui_shrink_dispatch; return $? ;;   ask-*) gui_ask_dispatch; return $? ;;   # 11/10: askgui.sh
+        "brain-ask|"*) ask_gui_answer "$token"; return $? ;;   # #3654: the brain's question -- `machine` is whoever is here (ask.sh)
         fw-accept) [ "${GUI_SCREEN:-}" = cloner ] || return 1; fw_accept_post; return $? ;;   # #2080 (Nadav 25/10): "זה מכוון" on the cloner
         end-poweroff) [ -s "$RUN_DIR/end.poweroff" ] && : > "$RUN_DIR/end.now"; return $? ;;
         idle-poweroff) [ -s "$RUN_DIR/idle.warn" ] && : > "$RUN_DIR/idle.now"; return $? ;;
@@ -228,17 +229,17 @@ gui_libs() {
     # nothing imagesrv-agent sourced is here unless listed. A lib missing
     # from this list is "<fn>: not found" on the metal, once a second (#834).
     . "$LIB_DIR/common.sh"; . "$LIB_DIR/jsonq.sh"; . "$LIB_DIR/waits.sh"
-    . "$LIB_DIR/roundbeep.sh"   # #2067: the kiosk owns the stream-age samples
+    . "$LIB_DIR/bgfds.sh"; . "$LIB_DIR/roundbeep.sh"   # #2067: the kiosk owns the stream-age samples
     . "$LIB_DIR/buildmenuitems.sh"; . "$LIB_DIR/buildmenu.sh"   # #1073: items + gates, then the menu
     . "$LIB_DIR/buildcapture.sh"
     . "$LIB_DIR/roomflow.sh"   # #418: the room round (open/wake/start)
     . "$LIB_DIR/guistate.sh"
-    . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"; . "$LIB_DIR/syspartgui.sh"; . "$LIB_DIR/guiearly.sh"   # 11/10: the question dialog; #1896: C: of an old image; #1709: the boot screen
+    . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"; . "$LIB_DIR/ask.sh"; . "$LIB_DIR/syspartgui.sh"; . "$LIB_DIR/guiearly.sh"   # 11/10: the question dialog; #3654: the brain's questions; #1896: C: of an old image; #1709: the boot screen
     . "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/diskinfo.sh"; . "$LIB_DIR/disklink.sh"; . "$LIB_DIR/fwimage.sh"   # #2080: fw_warn_record/fw_accept_post; disk_port + disk_link (#432), for the cloner state producer
-    . "$LIB_DIR/progress.sh"; . "$LIB_DIR/opsay.sh"; . "$LIB_DIR/stall.sh"; . "$LIB_DIR/diskfit.sh"; . "$LIB_DIR/expand.sh"; . "$LIB_DIR/restore.sh"  # target_bytes, the per-drawer local truth; #1484: lc_verdict_for's min-free rule; restore.sh: manifest_plan, which expand.sh's _expand_candidate calls (min_free_check)
-    . "$LIB_DIR/smart.sh"; . "$LIB_DIR/smartjudge.sh"; . "$LIB_DIR/hwissues.sh"; . "$LIB_DIR/f1mark.sh"; . "$LIB_DIR/smarttable.sh"; . "$LIB_DIR/manifest.sh"     # #1921: the tables judge the disk, the hw note per drawer; smart_hello_field: the cached verdict per cdisk (#834); manifest.sh: _partition_role, lc_role's fallback (#1591); #1859: smarttable.sh -- every attribute, csmart= on the idle screen
-    . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/slotnames.sh"; . "$LIB_DIR/writemark.sh"; . "$LIB_DIR/diskused.sh"; . "$LIB_DIR/disklabels.sh"   # #1857: cdisk_label= (the set and sticker of a disk); #2030: cused= (size, used) per disk; the server's memory per cdisk (#874); slot names (#704); #1798 the mark per cdisk/lc_disk
-    . "$LIB_DIR/lcinv.sh"; . "$LIB_DIR/lcraw.sh"; . "$LIB_DIR/lcgui.sh"; . "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/directgui.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/drawers.sh"; . "$LIB_DIR/cancel.sh"; . "$LIB_DIR/lcpull.sh"; . "$LIB_DIR/usbclone.sh"; . "$LIB_DIR/usbset.sh"; . "$LIB_DIR/usbmap.sh"; . "$LIB_DIR/usbmapwin.sh"; . "$LIB_DIR/tools.sh"   # #649: the toolbox (tool-list / tool-run); tools_load pulls toolbins.sh + tools_*.sh itself (#1050)
+    . "$LIB_DIR/progress.sh"; . "$LIB_DIR/chunkprog.sh"; . "$LIB_DIR/opsay.sh"; . "$LIB_DIR/stall.sh"; . "$LIB_DIR/diskfit.sh"; . "$LIB_DIR/tailshrink.sh"; . "$LIB_DIR/expand.sh"; . "$LIB_DIR/restore.sh"  # target_bytes, the per-drawer local truth; #1484: lc_verdict_for's min-free rule; restore.sh: manifest_plan, which expand.sh's _expand_candidate calls (min_free_check)
+    . "$LIB_DIR/smart.sh"; . "$LIB_DIR/smartjudge.sh"; . "$LIB_DIR/hwissues.sh"; . "$LIB_DIR/f1mark.sh"; . "$LIB_DIR/smarttable.sh"; . "$LIB_DIR/diskrule.sh"; . "$LIB_DIR/manifest.sh"     # #3666: diskrule.sh -- cdisk_rule= / lc_rule=, the verdict from the one table (no server, no brain); #1921: the tables judge the disk, the hw note per drawer; smart_hello_field: the cached verdict per cdisk (#834); manifest.sh: _partition_role, lc_role's fallback (#1591); #1859: smarttable.sh -- every attribute, csmart= on the idle screen
+    . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/slotnames.sh"; . "$LIB_DIR/writemark.sh"; . "$LIB_DIR/diskused.sh"; . "$LIB_DIR/disklabels.sh"; . "$LIB_DIR/writecheck.sh"; . "$LIB_DIR/idlecheck.sh"; . "$LIB_DIR/idlebrain.sh"   # #3689: cdisk= fields 18-19 (idle_wc_field, the brain's decision) -- the kiosk, not imagesrv-agent, writes them; #1857: cdisk_label= (the set and sticker of a disk); #2030: cused= (size, used) per disk; the server's memory per cdisk (#874); slot names (#704); #1798 the mark per cdisk/lc_disk
+    . "$LIB_DIR/lcinv.sh"; . "$LIB_DIR/lcscan.sh"; . "$LIB_DIR/lchdd.sh"; . "$LIB_DIR/lcraw.sh"; . "$LIB_DIR/lcgui.sh"; . "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/prodlinegui.sh"; . "$LIB_DIR/directgui.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/drawers.sh"; . "$LIB_DIR/cancel.sh"; . "$LIB_DIR/lcpull.sh"; . "$LIB_DIR/usbclone.sh"; . "$LIB_DIR/usbset.sh"; . "$LIB_DIR/usbmap.sh"; . "$LIB_DIR/usbmapwin.sh"; . "$LIB_DIR/tools.sh"   # #649: the toolbox (tool-list / tool-run); tools_load pulls toolbins.sh + tools_*.sh itself (#1050)
 }
 
 gui_main() {

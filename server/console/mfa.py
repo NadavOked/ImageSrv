@@ -19,6 +19,7 @@ from server.agent import body as agent_body   # #2471
 from server.console import auth, login_guard, totp, users
 from server.agent.api import ServerContext
 from server.db import _write_lock, get_setting, journal, now_iso, writing
+from server.system import steadyclock
 
 #: נדב 18/10: "תכלס לא צריך לזה MFA. אם בנוי, אפשר להפעיל או לא". "true" = כל מנהל
 #: שאינו המקומי (is_builtin) חייב לרשום MFA בכניסה ובהחלפת סיסמה — ההתנהגות שהייתה
@@ -56,7 +57,7 @@ PENDING_TTL = 15 * 60
 #: #2101: מתי הוגרל הסוד הממתין של כל משתמש. בזיכרון ולא בעמודה: בלי שינוי
 #: סכמה, ואתחול שרת באמצע הגדרה פשוט מגריל סוד חדש — כמו לפני התיקון.
 _pending_since: dict[str, float] = {}
-_now = time.time
+_now = steadyclock.now
 BACKUP_COUNT = 8
 BACKUP_LEN = 10
 BACKUP_ALPHABET = string.ascii_uppercase + string.digits
@@ -98,7 +99,11 @@ def _challenge_user(conn: sqlite3.Connection, raw: str) -> str | None:
         "SELECT username, expires_at FROM mfa_challenges WHERE token_hash = ?",
         (_hash_token(raw or ""),),
     ).fetchone()
-    if row is None or row["expires_at"] < time.time():
+    now = time.time()
+    if row is None or row["expires_at"] < now:
+        return None
+    # #3752: אתגר לא חי יותר מ-`CHALLENGE_TTL` מהנפקתו; רחוק מזה = השעון חזר אחורה.
+    if row["expires_at"] - now > CHALLENGE_TTL + auth.CLOCK_SLACK_SECONDS:
         return None
     return row["username"]
 

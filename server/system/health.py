@@ -34,6 +34,7 @@ from server.db import last_disk_full, now_iso
 from server import auto_reboot
 from server.system import backup_job
 from server.system import raid_status
+from server.brain import gate_core   # #3064 (B51): מקור הבריאות של שער המוח
 from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.health")
@@ -494,6 +495,18 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     if servers_nic is not None:
         results.append(check("servers_nic", "כתובת השרתים", *servers_nic))
 
+    # #3064 (K12/K13): המוח מסביר — כמה גלים השרת מחזיק לפי המעבד, ואם השירותים שהסבב צריך פעילים. hook שלא הוזרק
+    # (בדיקות, הרצה ישירה) = אין שורה; כשל = "לא נבדק", לא שורה ירוקה.
+    for key, label, applicable in (("brain_cpu", "כוח העיבוד של השרת (המוח)", True),
+                                   ("brain_services", "שירותי השרת שהסבב צריך", not unconfigured)):
+        if hooks.get(key) is None:
+            continue
+        try:
+            results.append(hooks[key]() if applicable else check(key, label, "not_applicable", NOT_APPLICABLE))
+        except Exception:                      # noqa: BLE001 -- שורה אחת אינה מפילה את מסך הבריאות
+            log.exception("health: %s failed", key)
+            results.append(check(key, label, "unknown", "הבדיקה נכשלה — הפרטים ביומן השרת"))
+
     # פורט 67 — DHCP. פנוי זה מצב לגיטימי (עוד לא הוגדר מהקונסולה).
     owner = port_owner(ss_out, 67) if ss_out else None
     if unconfigured:
@@ -667,6 +680,10 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     # #1372: מארח שאינו מוכן ל-VM הוא אזהרה בשם — לא שקט ירוק אחרי עדכון.
     if hooks.get("vm_host"):
         results.append(check("vm_host", "עדכון ב-VM", *hooks["vm_host"]()))
+
+    # #3502: אימג'ים בלי אינדקס או רשימת BLAKE3 -- הגל שלהם ימתין, והמפעיל רואה כמה ובערך כמה זמן.
+    from server.library import indexwait as _indexwait
+    results.extend(_indexwait.health_checks(ctx))
 
     # #1846: האבדן ברשת ההפצה מול הבסיס שלה — שורה לכל כרטיס הפצה שנמדד עליו גל.
     from server.learn import netloss as _learn_netloss
@@ -958,6 +975,8 @@ def create_health_router(ctx, server_base: str, hooks: dict | None = None,
     router = APIRouter(prefix="/api/console")
     current_user, admin_only = auth.dependencies(ctx.conn)
     hooks = {**default_hooks(), **(hooks or {})}
+    # #3064 (K3, B51): שער הבריאות של המוח קורא את אותן שורות בדיוק, עם אותם hooks. כל קריאה מודדת מחדש, כמו `GET /health`.
+    gate_core.attach_health(ctx.conn, lambda: collect(ctx, hooks, server_base))
 
     @router.get("/health/live")
     def live():

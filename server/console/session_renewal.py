@@ -41,7 +41,8 @@ def propose(request, conn: sqlite3.Connection, session: auth.Session, token: str
     """רושם ב-scope חידוש ``(ישן, חדש)`` אם מגיע לו. ללא תופעות לוואי אחרות --
     באפליקציה בלי ``SessionRenewal`` (פורט הסוכן) הרישום לא נקרא, ושום דבר לא מבוטל."""
     # מלאה בלבד: קיוסק (פטור מכל מנגנון ה-TTL של הקונסולה), pwchange ו-mfaenroll.
-    if session.purpose or auth._is_logout(request) or RENEW_SCOPE_KEY in request.scope:
+    if (session.purpose or auth._is_logout(request) or auth._is_poll(request)     # #2493: poll אינו שימוש פעיל
+            or RENEW_SCOPE_KEY in request.scope):
         return
     if session.expiry - auth.time.time() >= RENEW_BELOW_SECONDS or auth.in_grace(token):
         return

@@ -5,8 +5,10 @@
 # every two-second progress tick.
 # POSIX sh (busybox ash).
 
-AGENT_LOG_LINES="${AGENT_LOG_LINES:-400}"
-AGENT_LOG_BYTES="${AGENT_LOG_BYTES:-65536}"
+# #3125 (R13): a long chunk wave wrote more than 400 lines / 64KB, and the tail lost the start of the wave. 2000 lines /
+# 256KB is five times that; the server keeps the same (`agent_logs.MAX_TEXT`) and says `truncated` when it still cut.
+AGENT_LOG_LINES="${AGENT_LOG_LINES:-2000}"
+AGENT_LOG_BYTES="${AGENT_LOG_BYTES:-262144}"
 
 agent_log_send() {
     # #1882: the tail of this machine's log, gzip, to the server -- /run is gone
@@ -74,7 +76,11 @@ target_extra_json() {
     # #2987/#2988: the operator's sentence and a drawer that stands (opsay.sh, stall.sh), then the stages.
     if command -v target_say_json > /dev/null; then target_say_json "$1"; fi
     if command -v stall_json > /dev/null; then stall_json "$1"; fi
+    # #3167: a note on a done target (the name written into an image not shut down clean) -- not `error`
+    [ ! -s "$RUN_DIR/targets/$1/note" ] || printf ',"note":"%s"' "$(json_escape "$(cat "$RUN_DIR/targets/$1/note")")"
+    if command -v rb_chunks_json > /dev/null; then rb_chunks_json "$1"; fi   # #3287: the chunks the read-back found different (rbchunks.sh)
     _stages_json "$1"
+    if command -v senses_target_json > /dev/null; then senses_target_json "$1"; fi   # #3064: the link, the temperature, the connection (sensecore.sh)
 }
 
 _stages_json() {
@@ -120,10 +126,21 @@ _cpu_temp() {
 }
 
 machine_extra_json() {
+    # #1885: the CPU's; #3064: and the brain's senses (sensecore.sh) -- each fragment is its own, a failure of one costs only it.
+    _cpu_machine_json "$@"
+    if command -v senses_machine_json > /dev/null; then senses_machine_json "$@"; fi
+}
+
+_cpu_machine_json() {
     # #1885: $1 = session id, $2 = task id (a capture: nothing). From the moment this machine
     # writes: the /proc/stat and throttle counters once (cpu.start), the peak temperature on
     # every tick (local reads, no network); ,"cpu":{...} only once the machine's round is final.
+    report_seq_json 2>/dev/null   # #3331 (I14): which boot and how far into it -- every progress report, session or task (reportseq.sh)
     [ -n "${1:-}" ] && [ -z "${2:-}" ] || return 0
+    if command -v wave_sense_json > /dev/null; then wave_sense_json "$1"; fi   # #3041: S46-S50 of a chunk wave, while it runs (wavesense.sh)
+    beeps_json "$1"   # #3125 (S62)
+    if command -v line_wait_json > /dev/null 2>&1; then line_wait_json; fi   # #3181: a production line's cloner that waits for the next disk (linewait.sh)
+    if command -v round_notes_json > /dev/null; then round_notes_json "$1"; fi   # #3125: what the agent knows and the journal did not (roundnote.sh)
     _cs="$RUN_DIR/cpu.start"
     [ "$(head -n 1 "$_cs" 2>/dev/null)" = "$1" ] || rm -f "$_cs" "$RUN_DIR/cpu.peak"
     _cst=$(cat "$RUN_DIR/state" 2>/dev/null)
@@ -152,4 +169,22 @@ machine_extra_json() {
             if (pk ~ /^[0-9]+$/) tmp = pk
             printf ",\"cpu\":{\"busy_pct\":%s,\"iowait_pct\":%s,\"throttle_delta\":%s,\"temp_max_c\":%s,\"seconds\":%s}", busy, iow, thr, tmp, secs
         }' "$_cs"
+}
+
+beeps_json() {
+    # #3125 (S62): $1 = session id. ,"beeps":[{"at","kind","outcome"[,"why"]}] -- the round's tunes as
+    # roundbeep.sh noted them ($RUN_DIR/beeps), the last 50; outcome requested | played | unheard (with why).
+    # The first report of a round starts the file afresh: what an earlier round heard is not this one's.
+    [ "$(cat "$RUN_DIR/beeps.session" 2>/dev/null)" = "$1" ] || {
+        rm -f "$RUN_DIR/beeps"; echo "$1" > "$RUN_DIR/beeps.session" || log "beeps: the round was not kept -- a later report may carry another round's tunes"; return 0; }
+    [ -s "$RUN_DIR/beeps" ] || return 0
+    tail -n 50 "$RUN_DIR/beeps" | awk -F'|' -v q='"' '
+        $1 !~ /^[0-9]+$/ || $2 !~ /^[a-z]+$/ { next }
+        { o = $3; w = ""; if (o ~ /^unheard:/) { w = substr(o, 9); o = "unheard" }
+          if (o !~ /^(requested|played|unheard)$/) next
+          gsub(/[\\"[:cntrl:]]/, "", w)   # the why is in roundbeep.sh words: nothing in it that JSON would escape is kept
+          e = "{" q "at" q ":" $1 "," q "kind" q ":" q $2 q "," q "outcome" q ":" q o q
+          if (o == "unheard") e = e "," q "why" q ":" q w q
+          out = out (n++ ? "," : "") e "}" }
+        END { if (n) printf ",%sbeeps%s:[%s]", q, q, out }'
 }

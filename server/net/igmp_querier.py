@@ -19,11 +19,14 @@ RFC 2236 הכתובת הנמוכה מנצחת: querier אחר עם כתובת נ
 
 **עיקרון 5.** "פעיל" רק אחרי `sendto` שהחזיר את אורך החבילה; שאילתה
 שלא נשלחה מזה פי שניים מהמרווח — אדום, לא ירוק ישן.
+
+**#3663 (S49, אפיק #3653): המוח מחליט, ה-`Querier` מבצע.** "שולחים עכשיו?" -- ההגדרה והשער, הכתובת הנמוכה מנצחת (RFC 2236), ש-querier אחר "נוכח"
+בתוך `OTHER_PRESENT`, והמרווח בין שאילתות -- הוא כלל `K-QUERIER` ב-`server/brain/igmpquery.py`. כאן נשארו איסוף העובדות, השליחה והשמיעה,
+ושני קבועי הפרוטוקול (`QUERY_INTERVAL`, `OTHER_PRESENT`) שהם קלט לכלל. כלל שנפל = לא נשלחת שאילתה, והמסך אדום (`undecided`).
 """
 
 from __future__ import annotations
 
-import ipaddress
 import logging
 import socket
 import struct
@@ -128,29 +131,40 @@ class Querier:
         self.error: str | None = None
         self.other: str | None = None
         self.other_seen: float | None = None
+        #: #3064 (N4): מאז מתי הסוקט פתוח ומקשיב ברצף. נאפס בכל כשל -- "לא שמענו querier" נמדד מכאן, לא מהעלייה.
+        self.listening_since: float | None = None
+        #: #3663: המוח לא הכריע בבדיקה האחרונה (הכלל נפל): לא נשלחת שאילתה, ושורת הבריאות אדומה.
+        self.undecided = False
 
-    # --- ההכרעה -------------------------------------------------------------
+    # --- ההכרעה (המוח, #3663 S49) ------------------------------------------
 
     def other_present(self, now: float) -> str | None:
-        if self.other_seen is None or now - self.other_seen > OTHER_PRESENT:
-            return None
-        return self.other
+        from server.brain import igmpquery      # ייבוא מאוחר: ה-brain אינו נטען עם הרשת בעליית השרת
+        return igmpquery.present(self.other, None if self.other_seen is None else now - self.other_seen, OTHER_PRESENT)
 
     def other_wins(self, now: float) -> bool:
-        other = self.other_present(now)
-        if other is None or self.own is None:
-            return False
-        return ipaddress.ip_address(other) < ipaddress.ip_address(self.own)
+        from server.brain import igmpquery
+        return igmpquery.other_wins(self.own, self.other_present(now))
 
     def refused(self) -> str | None:
         if not enabled(self.conn):
             return "כבוי בהגדרות"
         return self.gate(self.interface) if self.gate else None
 
+    def decide(self, now: float):
+        """הפסק של המוח (`igmpquery.Verdict`): ``SEND`` / ``WAIT`` / ``YIELD`` / ``REFUSED`` / ``UNDECIDED``. כאן רק נאספות העובדות."""
+        from server.brain import igmpquery
+        verdict = igmpquery.decide(
+            self.conn, self.interface, refused=self.refused(), own=self.own, other=self.other,
+            other_age_s=None if self.other_seen is None else now - self.other_seen,
+            last_sent_age_s=None if self.last_sent is None else now - self.last_sent,
+            interval_s=QUERY_INTERVAL, other_present_s=OTHER_PRESENT)
+        self.undecided = verdict.verdict == igmpquery.UNDECIDED
+        return verdict
+
     def should_send(self, now: float) -> bool:
-        if self.refused() is not None or self.other_wins(now):
-            return False
-        return self.last_sent is None or now - self.last_sent >= QUERY_INTERVAL
+        from server.brain import igmpquery
+        return self.decide(now).verdict == igmpquery.SEND
 
     def observe(self, datagram: bytes, now: float) -> None:
         source = query_source(datagram)
@@ -168,6 +182,8 @@ class Querier:
         self.own = own
         sock = self.opener(self.interface, own)
         self.error = None
+        if self.listening_since is None:
+            self.listening_since = self.clock()
         try:
             end = self.clock() + seconds
             while not stop.is_set() and self.clock() < end:
@@ -195,7 +211,26 @@ class Querier:
                 if str(exc) != self.error:
                     log.warning("igmp querier on %s: %s", self.interface, exc)
                 self.error = str(exc)
+                self.listening_since = None
                 stop.wait(RETRY_SECONDS)
+
+    # --- N4 (#3064, צל) -------------------------------------------------------
+
+    def sending(self, now: float) -> bool:
+        """השרת שולח שאילתות **עכשיו**: לא מסורב, אין querier אחר שמנצח, והאחרונה יצאה בתוך שני מרווחים."""
+        return (self.refused() is None and not self.other_wins(now) and self.error is None
+                and self.last_sent is not None and now - self.last_sent <= 2 * QUERY_INTERVAL)
+
+    def sense(self):
+        """החוש N4 (`server.brain.l2sense`): יש querier ברשת ההפצה? רושם בלבד."""
+        from server.brain import l2sense        # ייבוא מאוחר: ה-brain אינו נטען עם הרשת בעליית השרת
+        now = self.clock()
+        other = self.other_present(now)
+        hears = self.hears() if self.hears else True
+        return l2sense.n4_server(
+            error=self.error, sending=self.sending(now), other=other,
+            other_age_s=None if other is None or self.other_seen is None else now - self.other_seen,
+            listening_s=None if self.listening_since is None else now - self.listening_since, hears=hears)
 
     # --- מסך הבריאות ----------------------------------------------------------
 
@@ -207,6 +242,8 @@ class Querier:
             seen = (f" · querier אחר ברשת: {other}" if other else
                     " · לא נשמע querier אחר — סוויץ' עם IGMP snooping עלול להציף או לחסום את השידור")
             return "off", refused + seen
+        if self.undecided:
+            return "bad", f"המוח לא הוכרע אם לשלוח שאילתה על {self.interface} (הכלל נפל): לא נשלחת שאילתה"
         if self.error is not None:
             return "bad", f"לא פועל על {self.interface}: {self.error}"
         if self.other_wins(now):

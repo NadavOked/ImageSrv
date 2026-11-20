@@ -304,10 +304,10 @@ def test_isolinux_templates_boot_the_live_installer_only() -> None:
 
 # --- firstboot -----------------------------------------------------------------
 
-def test_firstboot_never_passes_deploy_if_builds_payload_and_starts_wizard() -> None:
+def test_firstboot_never_passes_deploy_if_builds_payload_and_never_starts_the_wizard() -> None:
     code = _strip_comments(FIRSTBOOT.read_text(encoding="utf-8"))
     assert "--deploy-if" not in code, "כרטיס הפצה שנוחש = dnsmasq על הרשת הלא נכונה (R25 §2.5)"
-    assert "setup-boot-server.sh" not in code, "שלב ב' שייך לאשף ואינו עוד התקנה לא-אינטראקטיבית"
+    assert "setup-boot-server.sh" not in code, "firstboot-answers.sh מריץ אותו, לא firstboot.sh עצמו"
     # #1230: הבנייה עברה ל-tools/boot-payload-build.sh — אותו קוד שכפתור העדכון
     # מריץ. שני ה-initrd, --skip-apt וה-epoch נבדקים בהרצה ב-test_boot_payload_1230.
     assert "tools/boot-payload-build.sh" in code and "--iso-default" in code
@@ -322,9 +322,14 @@ def test_firstboot_never_passes_deploy_if_builds_payload_and_starts_wizard() -> 
     assert iso_default.group(1).count("--skip-apt") == 2, "שני initrd (טקסט + GUI), שניהם בלי apt — החבילות מה-ISO"
     assert '--source-date-epoch "$EPOCH"' in helper and "source_date_epoch" in helper
     assert "--with-gui" in helper
-    assert 'systemctl start imagesrv-wizard' in code
-    assert 'deploy/imagesrv-wizard.service' in code
-    assert 'deploy/imagesrv-wizard-rerun.service' in code
+    # #2763 (Nadav 15/11): there is no install over the network and no browser wizard to finish it
+    for gone in ("imagesrv-wizard", "nftables-wizard", "dhcpcd", "installer-nic", "installer-role"):
+        assert gone not in code, f"firstboot starts or prepares {gone}: a system without answers is not an install path"
+    # the installer screen: firstboot may only ASK whether it holds tty1 (tty1_taken, never two GUIs on one framebuffer, #1741);
+    # it must not start, enable, install or wait for it.
+    assert not re.search(r"(start|restart|enable|enable --now)\s+imagesrv-installer-gui", code), "firstboot starts the installer screen"
+    assert "INSTALLER_GUI_BEAT" not in code and "install -m 0644 \"$SRC/deploy/imagesrv-installer-gui.service\"" not in code
+    assert code.count("imagesrv-installer-gui") == 1 and "systemctl is-active \"$unit\"" in code, "only the tty1_taken query may name it"
     unit = WIZARD_SERVICE.read_text(encoding="utf-8")
     assert "After=network-online.target" in unit
     assert "--installer-nic /etc/imagesrv/installer-nic" in unit
@@ -333,12 +338,16 @@ def test_firstboot_never_passes_deploy_if_builds_payload_and_starts_wizard() -> 
     assert "--rerun --host 0.0.0.0" in rerun_unit
 
 
-def test_firstboot_reads_the_installer_facts_and_never_guesses_a_nic() -> None:
+def test_firstboot_without_answers_stops_first_and_by_name() -> None:
+    """#2763 (Nadav 15/11): the ISO/USB installer is the only way in, and its proof is the answers file.
+    No answers = no install path: the check is first (before minutes of stage A), it is a failure with a
+    name, and nothing of the browser wizard / the first-boot installer screen is started."""
     code = _strip_comments(FIRSTBOOT.read_text(encoding="utf-8"))
-    assert "/etc/imagesrv" in code and "installer-nic" in code and "installer-role" in code
-    for state in ("network-nic-undecidable", "check-error", "secondary-needs-primary"):
-        assert state in code, f"המצב {state} אינו מדווח"
+    guard = code.index('[[ -f "$ETC/answers" ]] || fail answers-missing')
+    assert guard < code.index("tools/boot-payload-build.sh"), "the check comes before stage A"
+    assert guard < code.index("boot-payload.py"), "and before the prebuilt payload is decided"
     assert "firstboot.status" in code
+    assert "reinstall from the ISO or the USB" in code
     # ה-heuristic של R25 — "הראשון עם IPv4" — אסור שיחזור.
     assert not re.search(r"addr show scope global.*\|\s*awk.*exit", code), "בחירת 'הראשון עם IPv4' חזרה"
 
@@ -357,7 +366,7 @@ def test_firstboot_owns_tty1_shows_progress_and_leaves_failure_visible() -> None
     assert 'printf \'ImageSrv: %s\\n\' "$*" > "$FIRSTBOOT_TTY"' in code
     assert "ImageSrv: first boot failed" in code, "#1302: the visible name on tty1"
     assert "Stage A: building boot files (several minutes)" in code
-    assert code.count("preparing the server - Stage B:") == 2
+    assert code.count("preparing the server - Stage B:") == 1
     failure = code[code.index("fail() {"):code.index("[[ -f \"$STAMP\" ]]")]
     assert 'message="$*"' in failure
     assert 'message=%s\\n\' "$state" "$(date -u +%FT%TZ)" "$message"' in failure
@@ -373,32 +382,16 @@ def test_installer_console_runtime_text_is_ascii_only() -> None:
         assert runtime_text.isascii(), f"{script.name} has non-ASCII runtime text"
 
 
-def test_firstboot_brings_up_dhcp_then_wizard_gui_and_dcui_fallback_on_the_headless_path() -> None:
+def test_firstboot_after_stage_a_only_applies_the_answers_and_lights_the_dcui() -> None:
     full = _strip_comments(FIRSTBOOT.read_text(encoding="utf-8"))
-    # #1190: המסלול הראשון (תשובות) מדליק את ה-DCUI ויוצא; המסלול ללא תשובות
-    # (שרת בלי מסך) מתחיל ב-NIC_FILE — בודקים את הסדר שם.
-    code = full[full.index('NIC_FILE="$ETC/installer-nic"'):]
-    dhcp = code.index('dhcpcd -4 -1 -t 20 "$nic"')
-    wizard = code.index("systemctl start imagesrv-wizard")
-    gui = code.index("systemctl start imagesrv-installer-gui.service")
-    fallback = code.index("systemctl restart imagesrv-dcui.service")
-    assert dhcp < wizard < gui < fallback
-    assert 'for nic_path in /sys/class/net/*' in code
-    assert 'temporary_dhcp "$nic" &' in code and 'wait "$dhcp_pid"' in code
-    assert '/sys/class/net/$nic/carrier' in code and "sleep 1" in code
-    assert "for _ in 1 2 3" in code  # shellcheck SC2034: המשתנה אינו בשימוש
-    for outcome in ("(dhcp)", "no carrier", "no dhcp offer"):
-        assert outcome in code
-    assert full.count('>>"$BUILD_LOG" 2>&1') >= 1 and '--build-log "$BUILD_LOG"' in full
-    assert "WorkingDirectory=/opt/imagesrv-src" in code
-    assert "imagesrv-dcui.service.d/firstboot.conf" in code
+    code = full[full.index("firstboot_from_answers"):]
     assert 'systemctl mask getty@tty1.service' in code
-    assert 'systemctl is-active --quiet imagesrv-dcui.service' in code
-    assert "[[ -e /dev/fb0" in code
-    assert "ID_INPUT_KEYBOARD=1" in code and "/dev/input/event*" in code
-    # #2517: on tty1 only once it drew a frame (test_failure_gui_server_1741.py runs it)
-    assert 'installer gui: on tty1 (it drew a frame)' in code
-    assert 'installer gui: no framebuffer/keyboard, DCUI only' in code
+    assert "imagesrv-dcui.service.d/firstboot.conf" in code
+    assert 'systemctl enable imagesrv-dcui.service' in code
+    assert code.index("systemctl daemon-reload") < code.index("systemctl restart imagesrv-dcui.service")
+    assert full.count('--build-log "$BUILD_LOG"') == 1
+    for gone in ("/dev/fb0", "/dev/input/event", "ID_INPUT_KEYBOARD", "temporary_dhcp", "wizard guard"):
+        assert gone not in full.replace("FB_DEV=/dev/fb0", ""), gone
 
 
 def test_native_installer_unit_owns_tty1_then_hands_it_to_dcui() -> None:
@@ -410,7 +403,8 @@ def test_native_installer_unit_owns_tty1_then_hands_it_to_dcui() -> None:
     assert "ExecStopPost=systemctl start imagesrv-dcui.service" in unit
     first = FIRSTBOOT.read_text(encoding="utf-8")
     setup = (REPO / "deploy" / "setup-boot-server.sh").read_text(encoding="utf-8")
-    assert 'deploy/imagesrv-installer-gui.service' in first
+    # #2763: a system without answers gets a message, not this screen: firstboot only asks whether it holds tty1
+    assert not re.search(r"(start|restart|enable)\s+imagesrv-installer-gui", _strip_comments(first)), "#2763: firstboot starts the installer screen"
     assert 'deploy/imagesrv-installer-gui.service' in setup
     assert "enable imagesrv-installer-gui" not in first + setup
 
@@ -475,13 +469,11 @@ def test_build_iso_packs_the_public_clone_with_its_git_dir_and_never_a_private_o
 
 def test_firstboot_completes_from_the_installers_answers_without_the_wizard() -> None:
     """הגואי על מסך השרת כבר שאל הכול: firstboot מריץ את setup-boot-server מהתשובות,
-    מאמת את המטען, חותם, מדליק את ה-DCUI — ולא את האשף. בלי תשובות: המסלול הישן."""
+    מאמת את המטען, חותם, מדליק את ה-DCUI — ולא את האשף. בלי תשובות: הודעה (#2763)."""
     fb = _strip_comments(FIRSTBOOT.read_text(encoding="utf-8"))
-    answers = fb.index('if [[ -f "$ETC/answers" ]]')
-    assert answers < fb.index('NIC_FILE="$ETC/installer-nic"'), "מסלול התשובות קודם למסלול האשף"
-    branch = fb[answers:fb.index("NIC_FILE=")]
-    assert "firstboot_from_answers" in branch and "systemctl restart imagesrv-dcui.service" in branch
-    assert "imagesrv-wizard" not in branch and "exit 0" in branch
+    branch = fb[fb.index("firstboot_from_answers"):]
+    assert "systemctl restart imagesrv-dcui.service" in branch
+    assert "imagesrv-wizard" not in fb, "#2763: אין אשף בשום מסלול"
     fa = FIRSTBOOT_ANSWERS.read_text(encoding="utf-8")
     for flag in ("--servers-if", "--servers-mode", "--console-host", "--storage-role", '--admin-user "$(answers_get admin_user)"', "--admin-pass-fd 3"):
         assert flag in fa, flag

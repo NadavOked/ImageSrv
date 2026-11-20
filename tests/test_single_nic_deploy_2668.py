@@ -298,7 +298,7 @@ def test_the_firewall_opens_console_and_deploy_on_the_same_card():
     text = generate("--deploy-if", "eth0", "--servers-if", "eth0", "--mcast-ports", "2232-2233")
     for rule in ('iifname "eth0" udp dport 67 accept', 'iifname "eth0" udp dport 69 accept',
                  'iifname "eth0" tcp dport 8080 accept',
-                 'iifname "eth0" udp dport 2232-2233 accept',
+                 'iifname "eth0" udp dport 2232-2233 ether saddr @known_macs accept',   # נדב 14/11: רק רשומים
                  'iifname "eth0" tcp dport 8081 accept'):
         assert rule in text, rule
     assert "policy drop" in text

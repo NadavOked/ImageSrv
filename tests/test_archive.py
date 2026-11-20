@@ -321,6 +321,18 @@ def test_a_manifest_id_that_is_not_an_id_is_refused_by_name(tmp_path, bad_id):
         "source", "target", "upload.tar"]
 
 
+@pytest.mark.parametrize("number", [float("nan"), float("inf"), float("-inf")])
+def test_a_manifest_with_a_non_finite_number_is_refused_and_nothing_is_written(tmp_path, number):
+    """#3090: NaN/Infinity pass `json.loads`, and `ImageLibrary.scan` then refuses the folder that was
+    just admitted -- an import that said yes and an image nobody can open (principle 6)."""
+    raw = tar_with_manifest(tmp_path, {"x_extra": number})
+    target = tmp_path / "target"
+    target.mkdir()
+    with pytest.raises(ValueError, match="non-finite"):
+        import_bytes(raw, target)
+    assert list(target.iterdir()) == []
+
+
 def test_the_library_root_holds_even_if_the_id_rule_is_widened(tmp_path, monkeypatch):
     """החגורה השנייה, לבדה: הכלל הורחב עד שהוא מקבל הכל, והיעד עדיין
     חייב לנחות בתוך השורש. `target.exists()` אינו גבול — היעד כאן

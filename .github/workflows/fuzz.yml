@@ -1,0 +1,133 @@
+# fuzz -- libFuzzer, with ASan and UBSan, on the agent's C that parses what
+# arrives from outside (.github/fuzz/).
+#
+# Why (13/11, "everything free that helps"): c-hardening runs the agent's C
+# under the sanitizers, but only on the inputs the tests wrote by hand. A parser
+# is wrong on the input nobody thought of; the fuzzer writes those. The harnesses
+# include the agent source whole and call it the way its main() does -- the
+# product build is not changed.
+#
+#   pull_request / push   2 minutes a harness: a PR that breaks a parser is red.
+#   schedule (nightly)    30 minutes a harness, from the same seeds.
+#
+# A finding fails the run, prints the reproducer, and uploads the crash input
+# for 5 days. Issues are opened by hand in the private repository: a crash in a
+# network parser is a security report (SECURITY.md), not a public issue.
+#
+# Free: GitHub-hosted runners and actions/upload-artifact cost nothing on a
+# public repository; clang and libFuzzer come from the runner image (apt).
+#
+# Runs only in the public repository: in the private one a new workflow is born
+# active, and there are no minutes there.
+
+name: fuzz
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 1 * * *"          # after nightly (01:00 UTC)
+  push:
+    branches: [main, "staging/**"]  # #3180: publish-to-public.sh stage -- the public CI before main, tag and Release
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  libfuzzer:
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      SECONDS_EACH: ${{ github.event_name == 'schedule' && '1800' || '120' }}
+      # LeakSanitizer runs again at exit whatever -detect_leaks says; these are one-shot
+      # programs that exit on a refusal, as in c-hardening (measured 14/11: cc_head_load).
+      ASAN_OPTIONS: detect_leaks=0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install clang and zstd
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends clang libzstd1 >/dev/null
+          clang --version | head -1
+
+      - name: Build the harnesses
+        run: bash .github/fuzz/build.sh "$RUNNER_TEMP/fuzz"
+
+      # The canary has a heap overflow behind "FUZZ". If the fuzzer does not find
+      # it, or ASan does not report it, a clean run below is no evidence of anything.
+      - name: The fuzzer and ASan can still fail (canary)
+        run: |
+          set -euo pipefail
+          c="$RUNNER_TEMP/fuzz/canary-run"
+          mkdir -p "$c"
+          set +e
+          (cd "$c" && "$RUNNER_TEMP/fuzz/canary" -max_total_time=120 -artifact_prefix=./ > canary.log 2>&1)
+          rc=$?
+          set -e
+          tail -5 "$c/canary.log"
+          [ "$rc" -ne 0 ] || { echo "::error::the canary ran clean (rc 0): the fuzzer did not find a planted overflow"; exit 1; }
+          grep -q 'ERROR: AddressSanitizer: heap-buffer-overflow' "$c/canary.log" \
+            || { echo "::error::the canary failed (rc $rc) without an ASan heap-buffer-overflow report"; exit 1; }
+          compgen -G "$c/crash-*" > /dev/null || { echo "::error::the canary left no crash-* file"; exit 1; }
+          echo "canary: found and reported (rc $rc)"
+
+      # Positive evidence that each harness reaches the end of its parser: its
+      # valid seed alone must end in rc 0 (FUZZ_STATS=1 prints the count).
+      - name: Each harness gets through its parser on the valid seed
+        run: |
+          set -euo pipefail
+          o="$RUNNER_TEMP/fuzz"
+          mapfile -t hs < "$o/harnesses"
+          [ "${#hs[@]}" -gt 0 ] || { echo "::error::no harness was built"; exit 1; }
+          for h in "${hs[@]}"; do
+            line=$(FUZZ_STATS=1 "$o/$h" "$o/seeds/$h"/* 2>&1 | grep "^$h rc counts:")
+            echo "$line"
+            grep -Eq ' 0:[1-9]' <<<"$line" || { echo "::error::$h: no seed got through the parser (rc 0)"; exit 1; }
+          done
+
+      - name: Fuzz each harness
+        run: |
+          set -euo pipefail
+          o="$RUNNER_TEMP/fuzz"
+          mapfile -t hs < "$o/harnesses"
+          fail=0
+          for h in "${hs[@]}"; do
+            mkdir -p "$o/run/$h/corpus" "$o/run/$h/found"
+            cp "$o/seeds/$h"/* "$o/run/$h/corpus/"
+            echo "== $h, ${SECONDS_EACH}s"
+            set +e
+            # -malloc_limit_mb: readback takes a map of up to 2GiB by design (#2433).
+            # -detect_leaks=0: as in c-hardening, a one-shot program that frees at exit.
+            "$o/$h" "$o/run/$h/corpus" -max_total_time="$SECONDS_EACH" -max_len=65536 \
+              -rss_limit_mb=4096 -malloc_limit_mb=2100 -detect_leaks=0 -close_fd_mask=3 \
+              -print_final_stats=1 -artifact_prefix="$o/run/$h/found/" > "$o/run/$h/fuzz.log" 2>&1
+            rc=$?
+            set -e
+            tail -15 "$o/run/$h/fuzz.log"
+            if [ "$rc" -ne 0 ]; then
+              echo "::error::$h: libFuzzer exit $rc"
+              fail=1
+            fi
+            # libFuzzer exits 0 only after running to the time limit; say how far it got.
+            grep -E '^stat::number_of_executed_units' "$o/run/$h/fuzz.log" || { echo "::error::$h: no final stats"; fail=1; }
+          done
+          exit "$fail"
+
+      - name: Upload what the fuzzer found
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-findings
+          path: ${{ runner.temp }}/fuzz/run/*/found/
+          retention-days: 5
+          if-no-files-found: ignore

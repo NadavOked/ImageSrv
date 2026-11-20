@@ -10,27 +10,29 @@
 # POSIX sh (busybox ash).
 
 LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
-. "$LIB_DIR/common.sh"
+. "$LIB_DIR/common.sh"; . "$LIB_DIR/bgfds.sh"   # #3548: what a background job lets go of (attended, hold, monitor, roundbeep, netcache, probe_bg)
 . "$LIB_DIR/hello.sh"; . "$LIB_DIR/timing.sh"   # #2056/#2059: before waits/restore/idle -- it reads which ceilings the environment set
 # waits.sh לפני כל מי שמזרים: התקרות שלו נקראות כבר בטעינה של restore.sh.
 . "$LIB_DIR/waits.sh"
 . "$LIB_DIR/jsonq.sh"
 . "$LIB_DIR/gptboot.sh"
-. "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/diskinfo.sh"; . "$LIB_DIR/inventory.sh"; . "$LIB_DIR/fwimage.sh"; . "$LIB_DIR/probe.sh"; . "$LIB_DIR/probedisplay.sh"; . "$LIB_DIR/probe_bg.sh"; . "$LIB_DIR/netprobe.sh"; . "$LIB_DIR/cablelive.sh"; . "$LIB_DIR/disklink.sh"   # #720+#1049+#1048(+#1968); #432 link speed per disk
+. "$LIB_DIR/sysinfo.sh"; . "$LIB_DIR/diskinfo.sh"; . "$LIB_DIR/inventory.sh"; . "$LIB_DIR/fwimage.sh"; . "$LIB_DIR/probe.sh"; . "$LIB_DIR/probedisplay.sh"; . "$LIB_DIR/probe_bg.sh"; . "$LIB_DIR/netprobe.sh"; . "$LIB_DIR/netcache.sh"; . "$LIB_DIR/netreport.sh"; . "$LIB_DIR/netwatch.sh"; . "$LIB_DIR/cablelive.sh"; . "$LIB_DIR/disklink.sh"   # #720+#1049+#1048(+#1968, #3064 netwatch, #3632 netcache); #432 link speed per disk
 . "$LIB_DIR/decide.sh"
-. "$LIB_DIR/progress.sh"; . "$LIB_DIR/datareport.sh"; . "$LIB_DIR/opsay.sh"   # #1882-#1889: what the server keeps beyond the report; #2987: the operator's sentence
+. "$LIB_DIR/progress.sh"; . "$LIB_DIR/datareport.sh"; . "$LIB_DIR/reportseq.sh"; . "$LIB_DIR/chunkledger.sh"; . "$LIB_DIR/opsay.sh"   # #2533: the durable chunks of a target;  #1882-#1889: what the server keeps beyond the report; #2987: the operator's sentence
+. "$LIB_DIR/rbchunks.sh"   # #3287 (S63): the chunks a read-back found different, in the report (readback.sh calls it, datareport.sh sends it)
 . "$LIB_DIR/pull.sh"; . "$LIB_DIR/opengate.sh"   # אחרי progress.sh: pull_close קורא ל-report_final (#562); #2657: the open-round gate sends a report
 . "$LIB_DIR/expand.sh"; . "$LIB_DIR/grow.sh"; . "$LIB_DIR/ntfsunhib.sh"; . "$LIB_DIR/expandshare.sh"; . "$LIB_DIR/writemark.sh"   # ההרחבה: לפני הזרם ואחריו (#478); diskfit calls _expand_candidate (#1354); #1798 the mark
-. "$LIB_DIR/bootcadb.sh"; . "$LIB_DIR/discard.sh"; . "$LIB_DIR/restore.sh"; . "$LIB_DIR/streamid.sh"; . "$LIB_DIR/rcvbuf.sh"; . "$LIB_DIR/diskfit.sh"; . "$LIB_DIR/writecheck.sh"; . "$LIB_DIR/writeback.sh"   # #672/#1217/#1366/#1969: restore preflights; #1826 session_stream; #1841 early EIO
-. "$LIB_DIR/drawers.sh"; . "$LIB_DIR/drawerfeed.sh"; . "$LIB_DIR/verdict.sh"; . "$LIB_DIR/stall.sh"; . "$LIB_DIR/cancel.sh"; . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/slotnames.sh"; . "$LIB_DIR/ntfsboot.sh"; . "$LIB_DIR/readback.sh"; . "$LIB_DIR/rbprog.sh"; . "$LIB_DIR/readbacklc.sh"; . "$LIB_DIR/readbackinline.sh"   # #1805 read-back after the write; (#704 slot names; #1487 NTFS backup boot) הזרם, הפסק עליו (#520), והראיה על כשל (#874)
+. "$LIB_DIR/bootcadb.sh"; . "$LIB_DIR/discard.sh"; . "$LIB_DIR/restore.sh"; . "$LIB_DIR/streamid.sh"; . "$LIB_DIR/rcvbuf.sh"; . "$LIB_DIR/diskfit.sh"; . "$LIB_DIR/tailshrink.sh"; . "$LIB_DIR/writecheck.sh"; . "$LIB_DIR/idlecheck.sh"; . "$LIB_DIR/idlerecover.sh"; . "$LIB_DIR/idlelong.sh"; . "$LIB_DIR/idlebrain.sh"; . "$LIB_DIR/idlegate.sh"; . "$LIB_DIR/writeback.sh"   # #672/#1217/#1366/#1969: restore preflights; #1826 session_stream; #1841 early EIO
+. "$LIB_DIR/drawers.sh"; . "$LIB_DIR/drawerfeed.sh"; . "$LIB_DIR/verdict.sh"; . "$LIB_DIR/stall.sh"; . "$LIB_DIR/cancel.sh"; . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/slotnames.sh"; . "$LIB_DIR/ntfsboot.sh"; . "$LIB_DIR/readback.sh"; . "$LIB_DIR/rbprog.sh"; . "$LIB_DIR/readbacklc.sh"; . "$LIB_DIR/readbackinline.sh"; . "$LIB_DIR/chunkgate.sh"; . "$LIB_DIR/chunkrc.sh"; . "$LIB_DIR/chunkb3.sh"; . "$LIB_DIR/chunkrecv.sh"; . "$LIB_DIR/chunkprog.sh"; . "$LIB_DIR/chunkfetch.sh"; . "$LIB_DIR/chunksingle.sh"; . "$LIB_DIR/chunkfeed.sh"; . "$LIB_DIR/chunkwatch.sh"; . "$LIB_DIR/chunkstall.sh"; . "$LIB_DIR/drawerback.sh"; . "$LIB_DIR/neighborfill.sh"; . "$LIB_DIR/peerfill.sh"; . "$LIB_DIR/peerwire.sh"; . "$LIB_DIR/drawerhold.sh"; . "$LIB_DIR/chunkloss.sh"; . "$LIB_DIR/chunkhold.sh"; . "$LIB_DIR/wavesense.sh"; . "$LIB_DIR/roundnote.sh"   # #2533 the chunk engine (#3332: its BLAKE3 list, chunkb3.sh; #3336: a drawer that stands still is said in seconds, chunkstall.sh; #3064: what its receiver lost, chunkloss.sh; #3181: a drawer filled from its neighbours, neighborfill.sh; B29: from a neighbour cloner, peerfill.sh, and its place in the flow, peerwire.sh; #3140: the last drawer pulled, drawerhold.sh; #2023: the server holds a completing drawer, chunkhold.sh); #1805 read-back after the write; (#704 slot names; #1487 NTFS backup boot) הזרם, הפסק עליו (#520), והראיה על כשל (#874)
 . "$LIB_DIR/manifest.sh"
+. "$LIB_DIR/drawerplug.sh"; . "$LIB_DIR/drawerfill.sh"; . "$LIB_DIR/prodline.sh"; . "$LIB_DIR/drawerout.sh"; . "$LIB_DIR/fillword.sh"; . "$LIB_DIR/linewait.sh"; . "$LIB_DIR/resume.sh"   # #2528: a cloner back from a power cut goes on (resume.sh); #3181: a drawer pushed back in is found at the kernel's word, takes the pass on the air, and completes from a neighbour, then HTTP
 . "$LIB_DIR/bootca.sh"; . "$LIB_DIR/hibernation.sh"; . "$LIB_DIR/shrinkplan.sh"; . "$LIB_DIR/shrink.sh"; . "$LIB_DIR/shrinkmem.sh"; . "$LIB_DIR/shrinkoffer.sh"   # לפני capture.sh: capture_disk קורא להם (#85, #651, #87, #926, #929)
-. "$LIB_DIR/capturedetail.sh"; . "$LIB_DIR/capturegate.sh"; . "$LIB_DIR/captureview.sh"; . "$LIB_DIR/capture.sh"; . "$LIB_DIR/capturesink.sh"; . "$LIB_DIR/directsend.sh"; . "$LIB_DIR/directrecv.sh"   # #2213: the capture's RAM views; #1952: direct_finished; #715: pass 1 is capture_disk
-. "$LIB_DIR/hostname.sh"; . "$LIB_DIR/unattend.sh"; . "$LIB_DIR/hostname_linux.sh"; . "$LIB_DIR/drawernames.sh"; . "$LIB_DIR/bootentry.sh"; . "$LIB_DIR/bootstorage.sh"; . "$LIB_DIR/linuxdrivers.sh"; . "$LIB_DIR/postdeploy.sh"   # #720: driver staging, after the name; #2786: a drawer's name; #433: Boot#### before it; #1331: boot-start storage + Linux initramfs check
+. "$LIB_DIR/capturedetail.sh"; . "$LIB_DIR/capturegate.sh"; . "$LIB_DIR/captureview.sh"; . "$LIB_DIR/capture.sh"; . "$LIB_DIR/capturesink.sh"; . "$LIB_DIR/directsend.sh"; . "$LIB_DIR/directchunk.sh"; . "$LIB_DIR/directserve.sh"; . "$LIB_DIR/directrecv.sh"   # #2213: the capture's RAM views; #1952: direct_finished; #715: pass 1 is capture_disk
+. "$LIB_DIR/hostname.sh"; . "$LIB_DIR/unattend.sh"; . "$LIB_DIR/hostname_linux.sh"; . "$LIB_DIR/drawernames.sh"; . "$LIB_DIR/bootentry.sh"; . "$LIB_DIR/bootorphans.sh"; . "$LIB_DIR/bootstorage.sh"; . "$LIB_DIR/linuxdrivers.sh"; . "$LIB_DIR/postdeploy.sh"   # #720: driver staging, after the name; #2786: a drawer's name; #433: Boot#### before it; #1331: boot-start storage + Linux initramfs check
 . "$LIB_DIR/sitehooks.sh"   # #1266: a site/lab overlay's start hooks; the product ships none
 . "$LIB_DIR/watchdog.sh"; . "$LIB_DIR/monitor.sh"; . "$LIB_DIR/installer_boot.sh"   # #690: RFB, role+flag gated; #1190: init-only (inert here, load gate #84)
 . "$LIB_DIR/ui.sh"; . "$LIB_DIR/failscreen.sh"   # #1569: the one failure screen behind ui_error_hold and die_local
-. "$LIB_DIR/attended.sh"; . "$LIB_DIR/smart.sh"; . "$LIB_DIR/smartjudge.sh"; . "$LIB_DIR/hwissues.sh"; . "$LIB_DIR/f1mark.sh"; . "$LIB_DIR/smartattrs.sh"; . "$LIB_DIR/smarttable.sh"; . "$LIB_DIR/smartgate.sh"; . "$LIB_DIR/smartselftest.sh"; . "$LIB_DIR/crcdelta.sh"   # #652/#872/#1970 SMART paths; #1859: smarttable.sh runs in the kiosk, here for the load gate
+. "$LIB_DIR/attended.sh"; . "$LIB_DIR/smart.sh"; . "$LIB_DIR/smartjudge.sh"; . "$LIB_DIR/hwissues.sh"; . "$LIB_DIR/f1mark.sh"; . "$LIB_DIR/smartattrs.sh"; . "$LIB_DIR/smarttable.sh"; . "$LIB_DIR/diskrule.sh"; . "$LIB_DIR/smartgate.sh"; . "$LIB_DIR/smartselftest.sh"; . "$LIB_DIR/crcdelta.sh"   # #652/#872/#1970 SMART paths; #1859: smarttable.sh runs in the kiosk, here for the load gate; #3666: so does diskrule.sh (the one disk table, for the machine with no server)
 . "$LIB_DIR/single_restore.sh"; . "$LIB_DIR/srgui.sh"   # #706: the write behind the GUI restore screen; its progress on the GUI
 . "$LIB_DIR/buildmenuitems.sh"; . "$LIB_DIR/buildmenu.sh"   # #1073: the GUI menu gates; the console session
 . "$LIB_DIR/buildcapture.sh"
@@ -38,13 +40,14 @@ LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 . "$LIB_DIR/hold.sh"; . "$LIB_DIR/task.sh"   # #1217: do_task, split from this file
 . "$LIB_DIR/poll.sh"; . "$LIB_DIR/idle.sh"; . "$LIB_DIR/roundbeep.sh"   # #434/#1967: idle power-off and audible result
 . "$LIB_DIR/guiparent.sh"; . "$LIB_DIR/localboot.sh"; . "$LIB_DIR/splash.sh"; . "$LIB_DIR/guiearly.sh"   # 11/10: no GUI -> BootNext to the local disk + told to the server; 17/10: the static screen; #1709: the GUI init started
-. "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/directgui.sh"; . "$LIB_DIR/drawerselect.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/identify.sh"; . "$LIB_DIR/diskuevent.sh"; . "$LIB_DIR/diskused.sh"; . "$LIB_DIR/disklabels.sh"   # #1857: the set and sticker per disk (kiosk; here for the load gate); #2201: resolve_target_drawers; #1966/#1971: identify, uevents; #2030: cused= (runs in the kiosk; here for the load gate); #1331: a drawer's drivers outcome for the cloner screen (run in the kiosk)
-. "$LIB_DIR/lcinv.sh"; . "$LIB_DIR/lcsize.sh"; . "$LIB_DIR/lcplan.sh"; . "$LIB_DIR/lcsnap.sh"; . "$LIB_DIR/lctune.sh"; . "$LIB_DIR/lccopy.sh"; . "$LIB_DIR/lcraw.sh"; . "$LIB_DIR/localclone.sh"; . "$LIB_DIR/lcwait.sh"; . "$LIB_DIR/lcgui.sh"; . "$LIB_DIR/lcpull.sh"; . "$LIB_DIR/syspartgui.sh"   # #1896: C: from the screen; #1322: local clone (lcgui.sh runs in the kiosk); 16/10: restore from the server
+. "$LIB_DIR/clonergui.sh"; . "$LIB_DIR/prodlinegui.sh"; . "$LIB_DIR/directgui.sh"; . "$LIB_DIR/drawerselect.sh"; . "$LIB_DIR/drvgui.sh"; . "$LIB_DIR/identify.sh"; . "$LIB_DIR/diskuevent.sh"; . "$LIB_DIR/diskused.sh"; . "$LIB_DIR/disklabels.sh"   # #1857: the set and sticker per disk (kiosk; here for the load gate); #2201: resolve_target_drawers; #1966/#1971: identify, uevents; #2030: cused= (runs in the kiosk; here for the load gate); #1331: a drawer's drivers outcome for the cloner screen (run in the kiosk)
+. "$LIB_DIR/lcinv.sh"; . "$LIB_DIR/lcscan.sh"; . "$LIB_DIR/lchdd.sh"; . "$LIB_DIR/lcsize.sh"; . "$LIB_DIR/lcplan.sh"; . "$LIB_DIR/lcsnap.sh"; . "$LIB_DIR/lctune.sh"; . "$LIB_DIR/lccopy.sh"; . "$LIB_DIR/lcraw.sh"; . "$LIB_DIR/localclone.sh"; . "$LIB_DIR/lcwait.sh"; . "$LIB_DIR/lcgui.sh"; . "$LIB_DIR/lcpull.sh"; . "$LIB_DIR/syspartgui.sh"   # #1896: C: from the screen; #1322: local clone (lcgui.sh runs in the kiosk); 16/10: restore from the server
 . "$LIB_DIR/shrinkgui.sh"; . "$LIB_DIR/askgui.sh"; . "$LIB_DIR/drawergate.sh"   # #928: the shrink question; 11/10: grow-back / end-of-capture dialogs
 . "$LIB_DIR/guibridge.sh"   # run in imagesrv-kiosk; sourced here for the load gate
 . "$LIB_DIR/usbclone.sh"; . "$LIB_DIR/usbdiag.sh"; . "$LIB_DIR/usbsurvey.sh"; . "$LIB_DIR/usbset.sh"; . "$LIB_DIR/usbmap.sh"; . "$LIB_DIR/usbmapwin.sh"; . "$LIB_DIR/usbsync.sh"   # #2694: server-sync/ verified before use; #1962: the drawer mapping by model, #2001 its window; #1914: the clone stick, no server (imagesrv.mode=usbclone); the survey stick; its settings (kiosk)
+. "$LIB_DIR/sensecore.sh"; . "$LIB_DIR/hostsense.sh"; . "$LIB_DIR/linksense.sh"; . "$LIB_DIR/disksense.sh"; . "$LIB_DIR/rxsense.sh"   # #3064: the brain's senses (the machine, the SATA link, the disk, the receiver) -- joined into the progress report
 . "$LIB_DIR/cpufreq.sh"; . "$LIB_DIR/satalpm.sh"   # #1441: called from init; sourced here for the load gate; #1827: SATA LPM
-. "$LIB_DIR/powerbtn.sh"   # #1918: the power button (power_watch, started below)
+. "$LIB_DIR/powerbtn.sh"; . "$LIB_DIR/interrupt.sh"; . "$LIB_DIR/ask.sh"   # #1918: the power button (power_watch, started below); #2528: the round's question; #3654: the brain's questions to the user
 . "$LIB_DIR/guistate.sh"; . "$LIB_DIR/tools.sh"; . "$LIB_DIR/toolbins.sh"; . "$LIB_DIR/tools_disk.sh"; . "$LIB_DIR/tools_windows.sh"; . "$LIB_DIR/tools_boot.sh"; . "$LIB_DIR/tools_hw.sh"; . "$LIB_DIR/tools_erase.sh"; . "$LIB_DIR/tools_recover.sh"   # #649/#1050/#1104: toolbox (run in the kiosk; here for the load gate)
 
 mkdir -p "$RUN_DIR/targets"
@@ -87,7 +90,7 @@ read_answer() {
     D_MODE="$IMAGESRV_MODE"
     D_SESSION_ID=$(json_get "$RESP" ".session.id")     # for poll.sh (#136)
     D_REQUIRE_LOGIN=$(json_get "$RESP" ".ui.require_login")
-    min_free_take "$RESP"; timing_take "$RESP"   # #1354: the console's minimum free space (the local clone keeps the last one); #2056/#2059 waits, power-off
+    min_free_take "$RESP"; timing_take "$RESP"; tail_shrink_take "$RESP"; hdd_support_take "$RESP"; ask_keep "$RESP"   # #3654: the brain's questions about this machine; X16: the local clone keeps the last HDD switch; #1354: the console's minimum free space (the local clone keeps the last one); #2056/#2059 waits, power-off
 }
 
 build_console_screen() {
@@ -96,11 +99,11 @@ build_console_screen() {
         gui_unavailable_local build   # GUI only (11/10): no text menu behind it
     fi
     shrink_offer_pending   # #926: a disk left shrunk is offered back once per boot -- a GUI dialog (11/10)
-    build_round_end        # #1560: a round opened from this GUI ended -- power off, or the menu
+    build_round_end; interrupt_ask_build   # #1560: a round opened from this GUI ended -- power off, or the menu; #2528: or waits for a decision
 }
 do_restore_drawers() {
     # $1 = image id, $2 = session id. Cloning room: 2-3 drawers at once.
-    identify_watch_stop            # #1966: no identification read may overlap this round
+    identify_watch_stop; idle_wc_hold   # #1966: no identification read may overlap this round; #3271: nor a new waiting-screen write check (idlegate.sh)
     smart_selftest_cancel           # #1970: background diagnostics never overlap a round
     resolve_target_drawers          # #695: sets $_disks; die_local on a bad mapping (drawerselect.sh)
     rm -f "$RUN_DIR/server-restarted-wave" "$RUN_DIR/session-closed" "$RUN_DIR/session-closed.why"   # 17/10: progress_loop's mark (verdict.sh)
@@ -108,7 +111,7 @@ do_restore_drawers() {
 
     http_get "$SERVER/api/v1/images/$1/manifest" > "$RUN_DIR/manifest.json" \
         || die_local "manifest fetch failed"
-    session_stream "$1" "$RUN_DIR/manifest.json" "$RESP" || die_local "$STREAM_REFUSAL"   # #1826
+    session_stream "$1" "$RUN_DIR/manifest.json" "$RESP" || die_local "$STREAM_REFUSAL"; chunk_gate "$RESP" "$RUN_DIR/manifest.json" || die_local "$CHUNK_REFUSAL"   # #1826; #2533: STREAM_MODE
     _total=$(json_get "$RUN_DIR/manifest.json" ".total_compressed_bytes")
     job_reset   # #1916: a failed round's 'failed' would close this round's member at its first report
     for _d in $_disks; do
@@ -121,30 +124,30 @@ do_restore_drawers() {
 
     # שער SMART לפני כתיבה (#652); בלי שאלה (#2044).
     # shellcheck disable=SC2086 # the disk list is a word list on purpose
-    _all=$_disks; _disks=$(drawers_bound $_disks); _disks=$(smart_gate "$2" $_disks); _gr=$?   # #1760: _all = the end count's, red skips included; #2434: identity first (drawerselect.sh)
+    log "gap: drawers_bound begin" >&2; _all=$_disks; _disks=$(drawers_bound $_disks); log "gap: drawers_bound end" >&2; log "gap: smart_gate begin" >&2; _disks=$(smart_gate "$2" $_disks); _gr=$?; log "gap: smart_gate end rc=$_gr" >&2   # #1760: _all = the end count's, red skips included; #2434: identity first (drawerselect.sh)
     # #1560: a round where every drawer was skipped ended too -- reported, the count, power-off
     [ "$_gr" = 0 ] || { echo failed > "$RUN_DIR/state"; round_beep failure; end_failed_round "all drawers skipped" "$2" "$_ppid"; return 1; }   # #2910: job_reset left 'waiting' -- the report says what is the case
-    _disks=$(EXPAND_OVERRIDE=$(json_get "$RESP" ".session.expand_partition") drawer_gates $_disks)   # #1808 old RAID metadata, #1898 the split: asked (drawergate.sh)
+    log "gap: drawer_gates begin" >&2; _disks=$(EXPAND_OVERRIDE=$(json_get "$RESP" ".session.expand_partition") drawer_gates $_disks); log "gap: drawer_gates end" >&2   # #1808 old RAID metadata, #1898 the split: asked (drawergate.sh)
     [ -n "$_disks" ] || { echo failed > "$RUN_DIR/state"; round_beep failure; end_failed_round "all drawers skipped" "$2" "$_ppid"; return 1; }   # #2910
     log "writing $(echo "$_disks" | wc -w) drawers: $_disks"
 
     # shellcheck disable=SC2086 # the disk list is a word list on purpose
-    WRITEMARK_HOLD=1; EXPAND_OVERRIDE=$(json_get "$RESP" ".session.expand_partition") run_restore_drawers "multicast" "$SERVER" "$1" "$RUN_DIR/manifest.json" $_disks
+    WRITEMARK_HOLD=1; EXPAND_OVERRIDE=$(json_get "$RESP" ".session.expand_partition") run_restore_drawers "$STREAM_MODE" "$SERVER" "$1" "$RUN_DIR/manifest.json" $_disks
     _rc=$?; crc_delta_measure $_disks; smart_note_apply $_disks   # #872: 199 פעם אחת אחרי הכתיבה, בהצלחה ובכשל; #2042: the orange note
     # shellcheck disable=SC2086 # #2786: each drawer's computer name, then #1269: drivers by the chosen model, per drawer, before the report
     [ "$_rc" -eq 0 ] && { name_drawers $_disks; stage_drawer_drivers "$2" "$RUN_DIR/manifest.json" $_disks; }
     # shellcheck disable=SC2086 # #1877: each done drawer's mark comes off after its drivers; one that stays fails that drawer
     WRITEMARK_HOLD=0; writemark_release_done $_disks || { _f=$(_machine_state "$_disks"); echo "$_f" > "$RUN_DIR/state"; [ "$_f" != failed ] || _rc=1; }
-
+    EXPAND_OVERRIDE=$(json_get "$RESP" ".session.expand_partition") prodline_finish "$2" "$1" "$SERVER" && _rc=0   # #3181: a production line -- written drawers are detached; a disk that joined mid-round ends here, and the machine stays in the wave until it does
     if [ "$_rc" -eq 0 ]; then
         _f=$(_machine_state "$_disks"); echo "$_f" > "$RUN_DIR/state"
         # Nadav 17/10: a cloner powers off in every state, an unconfirmed
         # "done" too. The report goes on until the power-off.
+        # shellcheck disable=SC2086 # includes drawers skipped before writing. #3125: asked before the final
+        round_beep_result $_all   # report, so that it carries the end tune ("requested"; what came of it is in the log)
         report_final "$_ppid" "$2" "$MAC" "$SERVER" \
             || { log "the done report was not confirmed -- the count runs all the same"; progress_loop "$2" "$MAC" "$SERVER" & }
         agent_log_send "$2"   # #1882: the log tail, kept on the server (best effort)
-        # shellcheck disable=SC2086 # includes drawers skipped before writing
-        round_beep_result $_all
         # Drawers are swapped with the machine off (spec appendix A), so
         # powering down IS the next step of the round, not a failure.
         log "drawers complete -- powering off for the swap"
@@ -227,6 +230,7 @@ while :; do
     watchdog_start; monitor_start   # #690: RFB once role known; re-entrant, logged
     power_watch_start; sata_lpm_cloner   # #1918: the power button; #1827: SATA LPM -- once the role is known; re-entrant
     disk_uevent_start   # #1971: kernel-driven insert/remove detection
+    idle_wc_start   # #3268: the write check, with a copy, of every disk in the drawers -- at boot and on every insertion
 
     _dec=$(decide); gui_early_settle "$_dec"   # #1709: a path with no GUI closes the early one first
     case "$_dec" in
@@ -239,6 +243,7 @@ while :; do
             die_local "MAC not registered"   # only if that reboot did not happen
             ;;
         task)
+            netwatch_stop   # #3064: a sample that overlaps work is not an idle sample
             do_task
             ;;
         recovery)
@@ -247,6 +252,7 @@ while :; do
         wait_open)
             # A station on the class network waits for nothing -- the stream
             # never reaches its vlan. One hello is enough, no loop (#136).
+            netwatch_stop   # #3064: this machine is joining -- not an idle window any more
             poll_off_deploy_vlan && die_local "the round is on another vlan"
             if ! gui_parent; then ui_waiting_draw \
                 "$(json_get "$RESP" ".session.prefix")" \
@@ -265,9 +271,9 @@ while :; do
                 smart_probe_idle $(list_drawers)
                 _logged_wait=1
             fi
-            local_clone_arm   # #1322: the boot choice is the first thing the GUI draws
-            gui_cloner_parent; local_clone_offer   # מסך "ממתין לסבב" + התקדמות; 0 גם בלי מסך
-            identify_watch_start; smart_selftest_idle_start; cable_live_check   # #1966/#1970/#1968: idle only
+            idle_wc_release; local_clone_arm   # #3271: back on the waiting screen -- the write check may run again (idlegate.sh); #1322: the boot choice is the first thing the GUI draws
+            gui_cloner_parent; interrupt_told; local_clone_offer   # מסך "ממתין לסבב" + התקדמות; 0 גם בלי מסך; #2528: the round waits for a decision
+            identify_watch_start; smart_selftest_idle_start; cable_live_check; netwatch_idle_start   # #1966/#1970/#1968/#3064: idle only
             poll_sleep
             ;;
         build_console)
@@ -275,6 +281,7 @@ while :; do
             poll_sleep
             ;;
         restore)
+            netwatch_stop   # #3064
             gui_restore_parent
             do_restore
             ;;

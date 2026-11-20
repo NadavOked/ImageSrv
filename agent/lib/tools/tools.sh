@@ -3,7 +3,7 @@
 # The contract (issue #649, Nadav 17/09): every agent/lib/tools_<domain>.sh
 # defines tools_<domain>_list (one line per tool: id|domain|title|risk|args,
 # risk = ro / rw / destroy) and tools_<domain>_run <id> [arg]. This file loads
-# them, unifies the list, guards rw/destroy behind the typed machine name
+# them, unifies the list, guards rw/destroy behind the confirm window's machine name (an API guard: the operator types nothing, #1270)
 # BEFORE any module runs, and owns the output file $RUN_DIR/tool-<id>.out.
 #
 # Return codes of tools_run (the GUI shows each one differently):
@@ -58,7 +58,7 @@ $1
 }
 
 tools_machine_name() {
-    # The name the operator must type for rw/destroy: the server's name for
+    # The name the confirm window sends for rw/destroy (never typed, #1270): the server's name for
     # this machine when the caller knows it, else the kernel hostname. Empty
     # is allowed here -- tools_run then refuses everything (fail closed).
     if [ -n "${MACHINE_NAME:-}" ]; then printf '%s\n' "$MACHINE_NAME"; else hostname 2>/dev/null; fi
@@ -205,7 +205,7 @@ tools_run() {
 # --- the kiosk side (guibridge.sh dispatches here) ----------------------------------
 
 tools_gui_list() {
-    # $GUI_DIR/tools: first line machine=<name the operator must type>, then
+    # $GUI_DIR/tools: first line machine=<name the confirm window sends>, then
     # the tools_list rows. Atomic, like every file the GUI polls.
     { printf 'machine=%s\n' "$(tools_machine_name)"; tools_list; } > "$GUI_DIR/tools.next" &&
         mv "$GUI_DIR/tools.next" "$GUI_DIR/tools"

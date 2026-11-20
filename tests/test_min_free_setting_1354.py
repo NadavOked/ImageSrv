@@ -88,7 +88,7 @@ def library_image(manifest: dict, **fields) -> dict:
     (the captured disk, here exactly the layout), a valid `img_` + 6-hex id, and
     the MSR with `fs: ""` as the lab's captures carry it (2cc68464)."""
     parts = [{**p, "fs": ""} if p["role"] == "msr" else p for p in manifest["partitions"]]
-    return {**manifest, "partitions": parts,
+    return {**manifest, "partitions": parts, "image_format": 2,     # #2533: an image the library distributes
             "source_disk_bytes": manifest["min_target_bytes"], **fields}
 
 
@@ -131,7 +131,7 @@ def test_the_room_refuses_an_image_that_fits_by_size_but_leaves_too_little(fit_s
     r = open_round(fit_server["admin"], "img_7e1602")
     assert r.status_code == 409
     want = -(-minfree.min_disk_bytes(image, 20) // 10**9)
-    assert r.json()["detail"] == (f"דיסק 2 במחשב 2 הוא 256GB, האימג' צריך {want}GB"
+    assert r.json()["detail"] == (f"דיסק 2 במחשב משכפל-2 הוא 256GB, האימג' צריך {want}GB"
                                   " (כולל 20GB פנויים במחיצת המערכת)")
     fit_server["admin"].post("/api/console/settings", json={"min_free_gb": 0})
     assert open_round(fit_server["admin"], "img_7e1602").status_code == 200

@@ -153,7 +153,9 @@ def test_history_lists_finished_rounds_newest_first_without_the_one_on_screen(se
         "closed_at": "2026-09-15T08:20:00+00:00", "failed_reason": "send_failed",
         # #1889: אין גלים בחלון — לא נמדד (null), לא 0.
         "waits": {"waves": 0, "open_wait_s": None, "smart_hold_s": None, "smart_holds": 0,
-                  "smart_unreleased": 0}}
+                  "smart_unreleased": 0},
+        # #3185: "קצב ואיבוד" -- אין גל בחלון: לא נשמר (kept 0), לא קצב 0 ולא איבוד 0.
+        "flow": {"waves": 0, "kept": 0, "rate_bps": None, "loss_blocks": None}}
 
 
 def test_history_hides_a_failed_round_that_is_still_on_screen(server):
@@ -180,3 +182,35 @@ def test_history_empty_is_an_empty_list(server):
 
 def test_history_needs_a_login(server):
     assert server["anon"].get("/api/console/room/history").status_code == 401
+
+
+# --- #3504: a pending poweroff must not outlive a wake ----------------------------
+
+
+def test_a_pending_poweroff_is_cancelled_by_a_wake_and_does_not_shut_the_new_round_down(server):
+    """Metal 15/11: "power the room off", then at once "open a round" -> the WoL goes out, the
+    cloner boots, and its first hello took the old poweroff request. Wanted: the wake cancels
+    it, by name in the journal; the hello of the new round carries no power_action."""
+    assert server["admin"].post("/api/console/room/poweroff",
+                                json={"confirm_name": LABEL}).status_code == 200
+    assert server["admin"].post("/api/console/room/wake").status_code == 200
+    assert "power_action" not in hello(server, CLONER1)
+    assert "power_action" not in hello(server, CLONER2)
+    assert journal(server, "power_cancelled") == [f"{CLONER1} poweroff", f"{CLONER2} poweroff"]
+    assert journal(server, "power_delivered") == []
+
+
+def test_a_wake_of_one_cloner_cancels_only_its_own_pending_poweroff(server):
+    assert server["admin"].post("/api/console/room/poweroff",
+                                json={"confirm_name": LABEL}).status_code == 200
+    assert server["admin"].post(f"/api/console/machines/{CLONER1}/wake").status_code == 200
+    assert "power_action" not in hello(server, CLONER1)
+    assert hello(server, CLONER2)["power_action"] == "poweroff"
+
+
+def test_a_pending_poweroff_without_a_wake_is_still_delivered(server):
+    """The control: the same request and no wake -- as before the fix."""
+    assert server["admin"].post("/api/console/room/poweroff",
+                                json={"confirm_name": LABEL}).status_code == 200
+    assert hello(server, CLONER1)["power_action"] == "poweroff"
+    assert journal(server, "power_cancelled") == []

@@ -54,6 +54,7 @@ from typing import Callable
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.console import auth
+from server.core import shutdown
 from server.core.logtext import one_line
 from server.net import dhcp, dhcp_host
 from server.db import get_setting, journal, set_setting
@@ -69,6 +70,12 @@ SETTING_PREFIX = "port:"
 #: של uvicorn הוא None = בלי תקרה), ולכן יש לה תקרה משלה כאן.
 OPEN_TIMEOUT = 5.0
 CLOSE_TIMEOUT = 10.0
+#: #3151: ה-`started` של **עליית התהליך**. פתיחה בזמן ריצה (מתג בקונסולה) משאירה
+#: אדם ממתין, ולכן נכשלת אחרי OPEN_TIMEOUT כשגיאת בקשה. בעלייה אין מי שממתין, וגם
+#: אין כאן ראיה לכשל: bind שנכשל מסיים את משימת המאזין **מיד** (`_guarded`), ו-uvicorn
+#: מסמן `started` רק אחרי עבודת האתחול שלו — שעל דיסק שמשותף עם שישה כותבים מתארכת.
+#: 5 שניות של שעון הפכו "איטי" ל"נכשל": השרת יצא, systemd הרים אותו, והעומס נשאר.
+BOOT_OPEN_TIMEOUT = 60.0
 
 #: SIGBREAK קיים רק בווינדוס; uvicorn מטפל באותה שלישייה.
 _SIGNALS = tuple(s for s in (signal.SIGINT, signal.SIGTERM,
@@ -229,7 +236,7 @@ class Listeners:
             for port_id in self._specs:
                 if want_open(port_id):
                     try:
-                        await self._open(port_id)
+                        await self._open(port_id, BOOT_OPEN_TIMEOUT)
                     except ListenerError as exc:
                         # _task_done אולי כבר רשם את החריגה של המשימה עצמה.
                         if not self._failures:
@@ -390,7 +397,8 @@ class Listeners:
 
     # -- פנימי --
 
-    async def _open(self, port_id: str) -> None:
+    async def _open(self, port_id: str, timeout: float | None = None) -> None:
+        timeout = OPEN_TIMEOUT if timeout is None else timeout
         if port_id in self._threaded:
             start, _stop = self._threaded[port_id]
             try:
@@ -411,7 +419,8 @@ class Listeners:
         # הראיה החיובית: `started` — uvicorn מסמן אותו רק אחרי create_server.
         # עד אז המשימה שנגמרה היא כשל bind (uvicorn עושה sys.exit).
         try:
-            deadline = self._loop.time() + OPEN_TIMEOUT
+            began = self._loop.time()
+            deadline = began + timeout
             while not all(s.started for s in servers):
                 if any(t.done() for t in tasks) or self._loop.time() > deadline:
                     self._wanted.discard(port_id)
@@ -423,9 +432,16 @@ class Listeners:
                     cause = next((t.exception() for t in tasks
                                   if t.done() and not t.cancelled() and t.exception()), None)
                     raise ListenerError(
-                        f"{port_id}: המאזין לא עלה ({cause or 'לא דיווח started בזמן'})"
+                        f"{port_id}: המאזין לא עלה "
+                        f"({cause or f'לא דיווח started בזמן — {timeout:g} שניות'})"
                     ) from cause
                 await asyncio.sleep(0.01)
+            took = self._loop.time() - began
+            if took > OPEN_TIMEOUT:
+                # #3151: האיטיות עצמה ביומן — בלעדיה "עלה" אחרי 30 שניות נראה כמו "עלה".
+                log.warning("listener %s: started after %.1f s (a console toggle gives up "
+                            "after %.0f s) -- slow startup, check the disk load",
+                            one_line(port_id), took, OPEN_TIMEOUT)
         finally:
             self._opening.discard(port_id)
             self._install_signal_handlers()
@@ -468,6 +484,7 @@ class Listeners:
 
     def _on_signal(self, signum, frame) -> None:
         del signum, frame
+        shutdown.GOING_DOWN.set()        # #3094: before anything else -- a child that dies on the same signal asks
         for servers in self._servers.values():
             for s in servers:
                 s.should_exit = True

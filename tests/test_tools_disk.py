@@ -101,6 +101,10 @@ def run_disk(
     for disk in ("sda", "nvme0n1"):
         (root / "sys" / "block" / disk).mkdir(parents=True, exist_ok=True)
         (root / "sys" / "block" / disk / "size").write_text("1000215216\n", newline="\n")
+        (root / "sys" / "block" / disk / "holders").mkdir(exist_ok=True)       # #2233: the in-use gate reads these
+    (root / "proc").mkdir(exist_ok=True)
+    (root / "proc" / "mounts").write_text("tmpfs /run tmpfs rw 0 0\n", newline="\n")
+    (root / "proc" / "swaps").write_text("Filename Type Size Used Priority\n", newline="\n")
     # Git Bash needs a Unix pwd on PATH — a raw Windows path is invisible
     # to command -v (same pattern as test_smart / test_agent stubs).
     script = (

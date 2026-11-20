@@ -3,8 +3,8 @@
 **#432 — הקישור וה-CRC של כל מגירה.** ב-05/09 כל מגירה שנכשלה אמרה זאת
 לפני שהסבב התחיל (`SATA link up 1.5 Gbps`), והראיה ישבה ב-dmesg. הסוכן
 מדווח עכשיו ב-hello את מהירות הקישור, את המקסימום של הפורט ואת מונה ה-CRC
-(199); כאן הם הופכים למצב (`ok`/`slow`/`unknown`) ולאזהרה כתומה לפני
-"התחל". **אזהרה ולא חסימה** — שיכפול תמיד עם אדם ליד המכונות, וכתום שואל
+(199); כאן הם הופכים למצב (`ok`/`unknown`) ולאזהרה כתומה לפני
+"התחל" -- **על עליית CRC בלבד** (#3591: מהירות הקישור היא מידע, לא אזהרה). **אזהרה ולא חסימה** — שיכפול תמיד עם אדם ליד המכונות, וכתום שואל
 (כמו SMART, #872). `unknown` אינו `ok` (עיקרון 5): קישור שלא נקרא מוצג
 "לא ידוע", לעולם לא ירוק.
 
@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import sqlite3
 
-from server.disks import smart_history
+from server.brain import precheck
+from server.disks import drawer_slots, smart_history
+from server.learn import portcap
 from server.learn import ports as learn_ports
 
 #: verdict של disk_event שבו מונה ה-CRC נקרא באמת (`smart.sh`). `unchecked`
@@ -44,11 +46,14 @@ def _count(value) -> int | None:
 
 
 def link_state(gbps: float | None, max_gbps: float | None) -> str:
-    """`slow` = נקרא מתחת למקסימום של הפורט; `ok` = בו או מעליו;
-    `unknown` = אחד מהשניים לא נקרא — "לא הצלחנו לבדוק", לא "תקין"."""
+    """`ok` = שני המספרים נקראו; `unknown` = אחד מהם לא נקרא — "לא הצלחנו לבדוק", לא "תקין".
+
+    #3591 (נדב 17/11): **אין `slow`.** מהירות הקישור (1.5, 3.0, 6.0) היא מידע על המחשב, לא ראיה לכבל ולא סיבה לצבוע או
+    לחסום; היא נרשמת כסיבה לאיטיות רק כשהיא צוואר הבקבוק מול קיבולת הרשת שנמדדה (המוח). השדה נשאר ב-`drawer_list` כדי
+    שהקונסולה והגואי ימשיכו להציג "קישור X מתוך Y" ו"לא ידוע"."""
     if gbps is None or max_gbps is None:
         return "unknown"
-    return "slow" if gbps < max_gbps else "ok"
+    return "ok"
 
 
 def crc_baseline(conn: sqlite3.Connection, serial: str | None) -> int | None:
@@ -86,9 +91,26 @@ def drawer_fields(conn: sqlite3.Connection, disk: dict, mac: str | None = None) 
         # #1844: מה שהשרת למד על החיבור ועל הדיסק מהגלים הקודמים — "כנראה כבל/מחבר"
         # (`port_suspect`) או "הדיסק עצמו" (`disk_suspect`). המלצה, לא חסימה.
         **_ports(conn, disk, mac),
+        # #3591 ב'1: יכולת היציאה שנלמדה (לפי דגם ולפי הקישור שנצפה בה), והאם הקישור עכשיו ירד ממנה -- הראיה היחידה לכבל מהמהירות
+        **_portcap(conn, disk, mac, gbps, max_gbps),
         # #2848 (נדב 11/11): "איטי" הוא של הסבב שבו נמדד בלבד (`drawer_list[].write_slow`) — מדידה
         # מסבב קודם אינה מוזהרת ואינה צובעת (בוטל ה-`last_write_check` של #447).
     }
+
+
+def _portcap(conn: sqlite3.Connection, disk: dict, mac: str | None, gbps: float | None, max_gbps: float | None) -> dict:
+    """`port_cap_gbps` / `port_cap_known` / `port_cap_basis` / `port_drop` (`learn/portcap.py`). `None` = לא נשפט (אין MAC או חיבור, אין
+    נתון, או שהשאילתה נכשלה): לא "תקין" ולא "ירידה". לעולם אינו זורק אל ה-hello."""
+    out = {"port_cap_gbps": None, "port_cap_known": None, "port_cap_basis": None, "port_drop": None}
+    port = disk.get("port")
+    if mac is None or isinstance(port, bool) or not isinstance(port, int):
+        return out
+    try:
+        cap = portcap.capability(conn, mac, port)
+    except (sqlite3.Error, LookupError):   # a read that cannot be made (or a row of another shape) is "not judged", never "fine"
+        return out
+    return {"port_cap_gbps": cap["gbps"], "port_cap_known": cap["known"] if cap["gbps"] is not None else None,
+            "port_cap_basis": cap["basis"], "port_drop": portcap.drop(cap, gbps, max_gbps)}
 
 
 def _ports(conn: sqlite3.Connection, disk: dict, mac: str | None) -> dict:
@@ -109,11 +131,28 @@ def _learned(conn: sqlite3.Connection, disk: dict) -> dict:
     return {"smart_learned": smart_history.learned(attrs, prev), "smart_compared": prev is not None}
 
 
+def _drawer_no(m: dict, port: int | None, d: dict | None) -> int | None:
+    """#2945: מספר המגירה שהכרטיס מציג -- `d["drawer"]` (`status_view`, `drawer_slots.drawer_of`), ואם אין
+    כונן: המקום של `sata:<port>` ב-`m["drawer_slots"]`. None = לא ממופה -- אין מספר מנוחש."""
+    got = (d or {}).get("drawer")
+    if isinstance(got, int) and not isinstance(got, bool) and got > 0:
+        return got
+    slots = m.get("drawer_slots")
+    if isinstance(slots, list) and port is not None:
+        return drawer_slots.drawer_of(slots, {"port": port})
+    return None
+
+
 def _slot(m: dict, port: int | None, d: dict | None = None) -> str:
+    """#2945: כמו `portLabel` בקונסולה -- שם החריץ, אחריו "דיסק <מגירה>" לפי המיפוי, ורק כשהחיבור
+    אינו ממופה "דיסק <port>" (הטקסט הקודם, בלי ניחוש)."""
     names = m.get("slot_names") or {}
     name = (d or {}).get("slot_name") or (names.get(f"sata:{port}") if port else None)
     if name:
         return name
+    drawer = _drawer_no(m, port, d)
+    if drawer is not None:
+        return f"דיסק {drawer}"
     if port is not None:
         return f"דיסק {port}"
     return (d or {}).get("serial") or (d or {}).get("dev") or "דיסק"
@@ -134,10 +173,6 @@ def _held_where(m: dict) -> str:
     return ", ".join(dict.fromkeys(out))
 
 
-def _gbps(x: float) -> str:
-    return f"{x:.1f}"
-
-
 def warnings(machines: list[dict], selection: bool) -> list[dict]:
     """האזהרות הכתומות לפני "התחל": מגירה שהגל הזה יכתוב (טרייה, בחריץ שנבחר)
     שהקישור שלה איטי מהפורט, או שמונה ה-CRC שלה עלה מאז הסבב הקודם שלה.
@@ -151,21 +186,24 @@ def warnings(machines: list[dict], selection: bool) -> list[dict]:
     for m in machines:
         if not m.get("joined") and not selection:
             continue
+        # #3277 (המוח, K3): כרטיס ההפצה של המשכפל איטי -- כל מגירה שלו בגל תיכתב בקצב שלו (`linkwarn.attach`).
+        nic = m.get("nic_warn") if isinstance(m.get("nic_warn"), dict) else None
         for d in m.get("drawer_list") or []:
             if d.get("fresh") is not True or (selection and not d.get("selected")):
                 continue
-            slow = d.get("link_state") == "slow"
             rise = d.get("crc_rise") or 0
+            dropped = d.get("port_drop") is True                                    # #3591 ב'1
             learned = smart_history.LEARNED_HE.get(d.get("smart_learned") or "")   # #1859
             ported = d.get("learned_he")                                            # #1844
             speed = d.get("model_speed") if isinstance(d.get("model_speed"), dict) else {}
             model_slow = speed.get("slow") is True                                  # #1845
-            # #2846 (נדב 11/11): מונה CRC מוחלט הוא היסטוריה ולא מצב — רק עלייה (`rise`) מזהירה.
-            if not slow and rise <= 0 and not learned and not ported and not model_slow:
+            # #3662 (S28, B72): מה מצדיק אזהרה הוא של המוח (`brain.precheck.causes`; כולל #2846: מונה CRC מוחלט הוא היסטוריה, רק עלייה מזהירה).
+            # כאן נשארו הראיות והטקסט.
+            if not precheck.causes(d, nic=nic, learned=learned):
                 continue
             parts = []
-            if slow:
-                parts.append(f"קישור {_gbps(d['link_gbps'])} מתוך {_gbps(d['link_max_gbps'])} Gb/s")
+            if dropped:
+                parts.append(f"הקישור ירד ל-{d['link_gbps']:.1f} Gb/s (היציאה ראתה {d['port_cap_gbps']:.1f})")
             if rise > 0:
                 # עברית לפני "CRC": אחרת "6.0 Gb/s · CRC +12" הוא ריצת LTR אחת והסדר מתהפך
                 parts.append(f"מונה CRC עלה ב-{rise} מאז הסבב הקודם")
@@ -176,14 +214,19 @@ def warnings(machines: list[dict], selection: bool) -> list[dict]:
                 text = " · ".join(x for x in (ported, text) if x)
             if model_slow:
                 text = " · ".join(x for x in (speed.get("text_he"), text) if x)
+            if nic is not None:
+                text = " · ".join(x for x in (nic["text_he"], text) if x)
             out.append({
-                "mac": m["mac"], "machine": m.get("name"), "port": d.get("port"),
+                "mac": m["mac"], "machine": m.get("display_name") or m.get("name"), "port": d.get("port"),
                 "serial": d.get("serial"), "slot_name": d.get("slot_name"),
                 "link_gbps": d.get("link_gbps"), "link_max_gbps": d.get("link_max_gbps"),
                 "crc_rise": d.get("crc_rise"), "crc": d.get("crc"),
                 "smart_learned": d.get("smart_learned"),
                 "port_suspect": d.get("port_suspect"), "disk_suspect": d.get("disk_suspect"),
+                "port_drop": d.get("port_drop"), "port_cap_gbps": d.get("port_cap_gbps"),
                 "model_slow": model_slow,
+                # #3277: Mb/s של כרטיס ההפצה כשהוא איטי, וה-ETA החזוי בשניות (None = לא ידוע); None = לא אזהרה כזו
+                "nic_mbps": nic["mbps"] if nic else None, "eta_s": nic["eta_s"] if nic else None,
                 "text_he": f"{m.get('name') or m['mac']} · {_slot(m, d.get('port'), d)}: {text}",
             })
     return out
@@ -222,7 +265,7 @@ def missing(machines: list[dict], remaining: int, slots: list[dict] | None,
             reason = "drawers"
         else:
             continue
-        name = m.get("name") or mac
+        name = m.get("display_name") or m.get("name") or mac   # #3123: מה שהמפעיל רואה
         where = ", ".join(_slot(m, p) for p in (short if reason == "drawers" else ports))
         if reason == "held":
             where = _held_where(m)      # #2741: רק הדיסקים שנכשלו, לא כל מגירות הסבב
@@ -232,7 +275,8 @@ def missing(machines: list[dict], remaining: int, slots: list[dict] | None,
                 "drawers": f"{name}: אין דיסק חדש ב{where}"}[reason]
         if reason != "drawers" and where:
             text += f" ({where})"
-        out.append({"mac": mac, "name": m.get("name"), "reason": reason,
+        out.append({"mac": mac, "name": m.get("name"), "display_name": m.get("display_name"),
+                    "reason": reason,
                     "ports": short if reason == "drawers" else list(ports),
                     "awake": bool(m.get("awake")), "joined": bool(m.get("joined")),
                     # הכיבוי נמסר ב-hello (`power_action`): מכונה שאינה עונה לא תקבל אותו.

@@ -28,6 +28,7 @@ log() { echo "LOG $*" >> "$RUN_DIR/agent.log"; }
 json_get() { case "$2" in .session.image_id) echo img_1 ;; .session.id) echo ses_1 ;; *) echo 0 ;; esac; }
 http_get() { echo '{}'; }
 identify_watch_stop() { :; }; smart_selftest_cancel() { :; }; session_stream() { return 0; }
+chunk_gate() { STREAM_MODE=multicast; return 0; }   # #2533: the engine the server named; here, today's
 die_local() { echo "DIE $*" >> "$RUN_DIR/trace"; exit 1; }
 job_reset() { echo waiting > "$RUN_DIR/state"; }
 target_init() { mkdir -p "$RUN_DIR/targets/$1"; echo waiting > "$RUN_DIR/targets/$1/state"; }

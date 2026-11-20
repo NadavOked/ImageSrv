@@ -1,0 +1,139 @@
+# release-sbom -- the SBOM of a release's ISO, its vulnerability scan, and a signed
+# attestation that binds the SBOM to the ISO's digest.
+#
+# Why (14/11, "everything free that helps"): tools/iso/sbom.sh (#2999) makes the
+# SBOM, but no release step ran it -- no Release carries one (v0.92.0-v0.94.3).
+# Run by the release chain after the ISO is attached (sharsheret-shichrur):
+#   gh workflow run release-sbom.yml --repo NadavOked/ImageSrv -f tag=vX.Y.Z
+#
+#   1. the ISO and its .sha256 from the Release; sbom.sh stops on a mismatch
+#   2. syft 1.55.0 -> SPDX + CycloneDX of the 1,000-odd Debian packages in pool/,
+#      the Python packages and the live initramfs
+#   3. grype on the SPDX: Critical and High with the fixed version in the summary.
+#      A report -- each one gets an Issue by hand (SECURITY.md decides what is
+#      reachable). A canary SBOM with a known-vulnerable package must match first.
+#   4. the SBOM files uploaded to the Release, and actions/attest: an SBOM
+#      attestation on the ISO (`gh attestation verify ISO --repo NadavOked/ImageSrv
+#      --predicate-type https://spdx.dev/Document/v2.3`).
+#
+# NOT build provenance: the ISO is built on the testrunner, not here. A provenance
+# attestation from this workflow would name it as the builder -- a false statement
+# to whoever verifies it.
+#
+# Free: GitHub-hosted runners, artifact attestations (Sigstore public-good
+# instance) and Release assets on a public repository; syft and grype are
+# Apache-2.0, downloaded from their GitHub releases and checked against the
+# sha256 pinned below.
+
+name: release-sbom
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release tag, vX.Y.Z (its ISO must already be attached)"
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  SYFT_VERSION: "1.55.0"
+  SYFT_SHA256: "bb65249542db5fedeeb4d3f9b018b75e7264dbfbbb10486f044581a92f90490d"
+  GRYPE_VERSION: "0.121.3"
+  GRYPE_SHA256: "e9da18cc1429e786722e32161288103600efffd8e483c90761f90485bd1bec85"
+
+jobs:
+  sbom:
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: write        # gh release upload: the SBOM files go next to the ISO
+      id-token: write        # actions/attest: the Sigstore certificate
+      attestations: write    # actions/attest: store the attestation
+    env:
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.tag }}
+
+      - name: The tag is a version tag
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$TAG' is not vX.Y.Z"; exit 1; }
+
+      - name: Install syft, grype and the extraction tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends xorriso cpio zstd >/dev/null
+          mkdir -p "$RUNNER_TEMP/bin"
+          for t in "syft $SYFT_VERSION $SYFT_SHA256" "grype $GRYPE_VERSION $GRYPE_SHA256"; do
+            read -r n v s <<<"$t"
+            f="${n}_${v}_linux_amd64.tar.gz"
+            curl -fsSL -o "$RUNNER_TEMP/$f" "https://github.com/anchore/$n/releases/download/v$v/$f"
+            echo "$s  $RUNNER_TEMP/$f" | sha256sum -c -
+            tar -C "$RUNNER_TEMP/bin" -xzf "$RUNNER_TEMP/$f" "$n"
+          done
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: The ISO and its sha256 from the Release
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rel"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/rel" \
+            --pattern "imagesrv-$TAG-amd64.iso" --pattern "imagesrv-$TAG-amd64.iso.sha256"
+          ls -l "$RUNNER_TEMP/rel"
+
+      - name: The SBOM (tools/iso/sbom.sh)
+        run: |
+          IMAGESRV_SYFT="$RUNNER_TEMP/bin/syft" bash tools/iso/sbom.sh \
+            --iso "$RUNNER_TEMP/rel/imagesrv-$TAG-amd64.iso" --out "$RUNNER_TEMP/sbom"
+
+      # A CycloneDX SBOM with one package that has known CVEs (requests 2.5.0:
+      # CVE-2015-2296 and later). If grype matches nothing here, its database did not
+      # load, and "nothing found" on the ISO below would mean nothing.
+      - name: grype can still find a vulnerability (canary)
+        run: |
+          set -euo pipefail
+          c="$RUNNER_TEMP/canary"
+          mkdir -p "$c"
+          printf '%s\n' '{"bomFormat":"CycloneDX","specVersion":"1.5","version":1,"components":[' \
+            '{"type":"library","name":"requests","version":"2.5.0","purl":"pkg:pypi/requests@2.5.0"}]}' \
+            > "$c/canary.cdx.json"
+          GRYPE_CHECK_FOR_APP_UPDATE=false grype "sbom:$c/canary.cdx.json" -o json --file "$c/grype.json"
+          python3 -I tools/iso/grype_report.py "$c/grype.json" --min-matches 1 > /dev/null
+
+      # --distro: syft's deb purls carry no distro, and without it grype matched every
+      # Debian release -- 56,064 matches on v0.94.3, against 6,486 with it (14/11).
+      # --sbom: the old .deb next to its security update in pool/main/imagesrv/ is
+      # marked superseded, not listed (tools/iso/grype_report.py).
+      - name: grype on the ISO's SBOM (report)
+        run: |
+          set -euo pipefail
+          s="$RUNNER_TEMP/sbom/imagesrv-$TAG-amd64"
+          GRYPE_CHECK_FOR_APP_UPDATE=false grype "sbom:$s.spdx.json" --distro debian:13 -o json --file "$s.grype.json"
+          python3 -I tools/iso/grype_report.py "$s.grype.json" --sbom "$s.cdx.json"
+
+      - name: The SBOM files to the Release
+        run: |
+          s="$RUNNER_TEMP/sbom/imagesrv-$TAG-amd64"
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            "$s.spdx.json" "$s.cdx.json" "$s.sbom.txt" "$s.grype.json"
+
+      # actions/attest takes an SBOM of at most 16MB (v0.94.3's SPDX: 5.7MB, 14/11).
+      # Bigger = red: an unattested release is not one that was attested (principle 5).
+      - name: The SBOM fits an attestation
+        run: |
+          n=$(stat -c %s "$RUNNER_TEMP/sbom/imagesrv-$TAG-amd64.spdx.json")
+          echo "spdx bytes: $n"
+          [ "$n" -le 16777216 ] || { echo "::error::the SPDX is $n bytes, over actions/attest's 16MB"; exit 1; }
+
+      - name: Attest the SBOM on the ISO
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/rel/imagesrv-${{ inputs.tag }}-amd64.iso
+          sbom-path: ${{ runner.temp }}/sbom/imagesrv-${{ inputs.tag }}-amd64.spdx.json

@@ -90,9 +90,11 @@ def test_both_stay_overridable_from_the_environment():
 
 def test_zstd_is_invoked_with_both_of_them():
     """הדגלים חייבים להגיע לכלי. `-T` שנשאר בהערה ולא בשורת הפקודה הוא
-    בדיוק "החלטנו" בלי "ביצענו"."""
-    source = CAPTURE.read_text(encoding="utf-8")
-    assert 'zstd -"$CAPTURE_LEVEL" -T"$CAPTURE_THREADS" -c' in source
+    בדיוק "החלטנו" בלי "ביצענו". #2533: הכלי הוא chunkcut (פריימי zstd של 4MiB,
+    libzstd), והוא נקרא ממקום אחד — `capture_cut` ב-capturesink.sh."""
+    sink = (AGENT / "lib" / "capture" / "capturesink.sh").read_text(encoding="utf-8")
+    assert 'chunkcut $_cc_raw -l "$CAPTURE_LEVEL" -T "$CAPTURE_THREADS" -i "$2"' in sink
+    assert 'capture_cut "$_pcl" "$RUN_DIR/idx.$_idx"' in CAPTURE.read_text(encoding="utf-8")
 
 
 def test_the_manifest_records_the_level_that_was_actually_used():
@@ -113,26 +115,27 @@ def test_the_agent_says_which_options_it_asked_for():
     כבר הולכת ליומן; בלי הצהרה לצידה אי אפשר לדעת *מה ביקשנו*, ולכן אי
     אפשר לדעת ש-`-T2` לא רץ בכלל (עיקרון 5)."""
     source = CAPTURE.read_text(encoding="utf-8")
-    assert 'log "compressing with zstd -$CAPTURE_LEVEL -T$CAPTURE_THREADS"' in source
+    assert 'log "compressing with chunkcut -l $CAPTURE_LEVEL -T $CAPTURE_THREADS' in source
 
 
-@requires_native("zstd")
-def test_real_zstd_accepts_exactly_what_the_agent_will_hand_it(tmp_path):
+@requires_native("zstd", "gcc", posix=True)
+def test_the_real_tool_accepts_exactly_what_the_agent_will_hand_it(tmp_path):
     """הבדיקה היחידה כאן שמריצה את הכלי עצמו, ועם הערכים של הסוכן ולא עם
-    ערכים שהטסט המציא: דגל שגוי (`-T 2` עם רווח, רמה מחוץ לטווח) עובר כל
-    בדיקת מקור ונופל רק מול מחיצה אמיתית במעבדה. גם הלוך-חזור, כי דחיסה
-    שאי אפשר לפרוח היא אימג' שאבד."""
+    ערכים שהטסט המציא: דגל שגוי (רמה מחוץ לטווח) עובר כל בדיקת מקור ונופל
+    רק מול מחיצה אמיתית במעבדה. גם הלוך-חזור, כי דחיסה שאי אפשר לפרוס היא
+    אימג' שאבד. #2533: הכלי הוא chunkcut, והפורס הוא עדיין `zstd -dc`."""
     values = defaults()
     payload = b"imagesrv" * 4096
-    source = tmp_path / "part.raw"
-    source.write_bytes(payload)
+    tool = tmp_path / "chunkcut"
+    subprocess.run(["gcc", "-O2", "-pthread", "-o", str(tool), str(AGENT / "chunkcut.c"), "-l:libzstd.so.1"],
+                   check=True, stdin=subprocess.DEVNULL)
 
     packed = subprocess.run(
-        ["zstd", f"-{values['level']}", f"-T{values['threads']}", "-c", str(source)],
-        capture_output=True, stdin=subprocess.DEVNULL,
+        [str(tool), "--raw", "-l", values["level"], "-T", values["threads"], "-i", str(tmp_path / "idx")],
+        input=payload, capture_output=True,
     )
     assert packed.returncode == 0, packed.stderr.decode("utf-8", "replace")
-    assert packed.stdout, "zstd לא הוציא בייטים"
+    assert packed.stdout, "chunkcut לא הוציא בייטים"
 
     back = subprocess.run(["zstd", "-dc"], input=packed.stdout,
                           capture_output=True)

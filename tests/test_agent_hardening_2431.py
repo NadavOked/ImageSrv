@@ -58,12 +58,16 @@ def fake_sysroot(tmp_path: Path) -> Path:
                                 ("nvme0n1", "WD SN770", "22X1")):
         d = root / "sys" / "block" / name
         (d / "device").mkdir(parents=True)
+        (d / "holders").mkdir()                                  # #2233: the in-use gate reads these
         (d / "size").write_text("1000215216\n", newline="\n")
         (d / "device" / "model").write_text(model + "\n", newline="\n")
         (d / "device" / "serial").write_text(serial + "\n", newline="\n")
     (root / "sys" / "block" / "sda" / "sda1").mkdir()          # a partition lives under its disk
     for virt in ("loop0", "dm-0", "ram0", "md0", "sr0"):
         (root / "sys" / "block" / virt).mkdir(parents=True)
+    (root / "proc").mkdir()
+    (root / "proc" / "mounts").write_text("tmpfs /run tmpfs rw 0 0\n", newline="\n")
+    (root / "proc" / "swaps").write_text("Filename Type Size Used Priority\n", newline="\n")
     return root
 
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import time
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime
@@ -32,10 +33,18 @@ from boot.http import create_boot_asgi, gui_initrd_path
 from server.console import auth, session_renewal
 from . import auto_reboot
 from server.agent import boottrace, hello_eta, registry   # hello_eta: #2684
-from server.rounds import drive_rates, pulls
+from server.rounds import chunk_rate, drive_rates, pulls
+from server.brain import shadowgate as brain_shadowgate   # #3563: measurement for shadow -> enforce; moves nothing
+from server.brain import ask as brain_ask, ask_api as brain_ask_api   # #3654 (K14): the brain's one channel to the user -- expiry runs on the room clock; its console and machine answers
+from server.brain import carousel as brain_carousel   # #3064 (B7, B12, B47): one more full pass, in shadow; executed only behind `brain_carousel`
+from server.brain import waveeta as brain_waveeta   # #3295 (ב'): the ETA of a wave whose slow drive completes, and the actual
+from server.brain import capability as brain_capability   # #3041 (LR24): the capability the brain learns of each cloner, from every wave
+from server.brain import wavesplit as brain_wavesplit   # #1445 (B48): one wave or waves by the cloners' capacity, shadow
+from server.brain import drawerhold as brain_drawerhold   # #2023 (K3): does a slow drive's completion go on, or is it written again in the next wave -- shadow
 from server.net import deploy_net, dhcp
 from server.learn import netloss as learn_netloss, wol as learn_wol   # #1846, #1847
 from server.learn import server_io   # #1884
+from server.learn import server_senses   # #3125
 from server.learn import boot_marks   # #2830
 from server.learn import tuning as learn_tuning   # #2028
 from server.net import pxe_log   # #1887
@@ -44,6 +53,7 @@ from server.system import timezone, timesync   # #1447, #1773
 from server.system import dnsmasq_dropin as dnsmasq_dropin_mod   # #2174
 from server.agent.api import ServerContext, boot_identity_ok, boot_journal_unknown, create_agent_router
 from server.agent import body as agent_body   # #2410
+from server.agent import deploy_gate   # נדב 14/11: רק רשומים ברשת ההפצה
 from server.console.api import create_console_router
 from server.console.fetch_guard import ConsoleFetchGuard   # #1633
 from server.console.data import create_console_data_router   # #1882-#1889
@@ -64,14 +74,24 @@ from server.interserver import storage_heartbeat
 from server.system import housekeeping   # #1737
 from server.system import clockstep, silent_tasks   # #2905
 from server.system import grub_password   # #2437
+from server.system import accesslog   # #3184
 from .db import journal
 from server.net import wol
 from server.rounds import direct
 from server.rounds import prompt_hold
-from server.rounds.sender import QUIET_SECONDS, SenderEngine
+from server.rounds import chunksend   # #2533: the chunk engine, behind its experimental switch
+from server.rounds import indexprep   # #3137: a chunk wave waits for its image's index
+from server.brain import budget as brain_budget, cause as brain_cause, grace as brain_grace, recording as brain_recording, served as brain_served, veto as brain_veto   # #3064: the brain's veto, network budget and failure cause (K9), shadow by default
+from server.brain import wavesense as brain_wavesense   # #3064 (K9): the kernel lines of a drawer, from the wave's senses
+from server.brain import route as brain_route   # #3064 (K5): HTTP or a multicast pass in the completion, shadow only
+from server.brain import cpucap as brain_cpucap, services as brain_services   # #3064 (K12, K13): the server's CPU and the services a round needs, explained
+from server.rounds import directchunk   # #3161: a direct send through it -- the build machine sends
+from server.disks import hdd_policy   # X16: numeric sender floor plus per-disk repair policy
+from server.rounds.sender import DEFAULT_PORTBASE, QUIET_SECONDS, SenderEngine
 from server.console.library import create_library_router
 from server.console.isos import create_iso_router
 from server.console.drivers import create_agent_drivers_router, create_drivers_router   # #720
+from server.disks.write_backup import create_write_backup_router   # #3268
 from server.console.tools import create_tools_router   # #649 שלב 1
 from server.console.usb import create_usb_router   # #1914: the clone stick download
 from server.console.usb_stick import create_usb_stick_router   # #1920: the stick plugged into the server
@@ -84,11 +104,12 @@ from server.console import dhcp as console_dhcp
 from server.console.dhcp import create_dhcp_router
 from server.console.netcfg import create_netcfg_router, drain_crumbs
 from .db import connect
-from server.system.health import create_health_router
+from server.system.health import create_health_router, _dhcp_flags as health_dhcp_flags
+from server.system.health_rows import check as health_check
 from server.system.health import default_hooks as health_default_hooks
 from .update import (PUBLIC_UPDATE_URL, create_update_router, current_version, display_version,
                      default_hooks as default_update_hooks, read_version,
-                     VersionRead)
+                     reconcile_interrupted, VersionRead)
 from server.agent.hello import make_resolver, off_deploy_vlan, self_probe, server_source
 from server.library.images import ImageLibrary
 from server.agent.kiosk import create_kiosk_router, mark_build_gui
@@ -117,7 +138,7 @@ from server.paths import REPO_ROOT, STATIC_DIR
 
 #: כל כמה שניות שעון-הרקע מריץ את הדופק של חדר השיכפולים (#456). זהו רק
 #: רשת-הביטחון לחדר **שקט לגמרי**: כשמכונות מדברות, ה-hello שלהן מקדם את
-#: ה-tick בקצב ~2ש' ממילא. הסף להכרזת אובדן הוא `room.LOST_SECONDS` (180),
+#: ה-tick בקצב ~2ש' ממילא. הסף להכרזת אובדן הוא `lost_wait_seconds` (180, החלטת K-LOST),
 #: ולכן דגימה כל 5ש' מכריזה אובד תוך ~5ש' אחרי שהסף חלף — מספיק דק.
 ROOM_CLOCK_SECONDS = 5.0
 
@@ -289,6 +310,8 @@ async def _room_clock(rt: ServerRuntime, interval: float) -> None:
     while True:
         await asyncio.sleep(interval)
         await asyncio.to_thread(room.sweep, rt.conn, rt.store)
+        # #3654: שאלה למשתמש שהגיע זמנה נסגרת `expired` וחוזרת לברירת המחדל הבטוחה גם כשאיש אינו שואל עליה. לעולם אינו זורק.
+        await asyncio.to_thread(brain_ask.expire_due, rt.conn)
         # #1573: משיכה שנכשלה או שתקה נסגרת גם כשאיש אינו צופה.
         await asyncio.to_thread(pulls.background_sweep, rt.store)
         # #2905: משימה `running` שהמכונה שלה שקטה (קליטה שנעזבה, מקור של סבב ישיר שנסגר)
@@ -321,6 +344,22 @@ def _library_roots(rt: ServerRuntime) -> list[Path]:
         if loc.get("available"):
             roots.append(Path(loc["path"]))
     return roots
+
+
+async def _brain_budget_clock(budget, interval: float) -> None:
+    """#3064 (K7): מחזור תקציב הרשת של המוח, כל ``interval`` שניות. הקריאות (sysfs, DB) בתהליכון, לא בלולאת
+    האירועים שמגישה את ההורדות. `Budget.tick` לעולם אינו זורק; המשימה מתבטלת ב-shutdown."""
+    while True:
+        await asyncio.to_thread(budget.tick)
+        await asyncio.sleep(interval)
+
+
+async def _server_senses_clock(senses, interval: float) -> None:
+    """#3125: חלון של החושים של השרת לגל שמשדר עכשיו, כל ``interval`` שניות. הקריאות (proc, sysfs, DB) בתהליכון.
+    `Senses.tick` לעולם אינו זורק; המשימה מתבטלת ב-shutdown."""
+    while True:
+        await asyncio.sleep(interval)
+        await asyncio.to_thread(senses.tick)
 
 
 async def _storage_heartbeat(rt: ServerRuntime, interval: float) -> None:
@@ -361,13 +400,27 @@ def _install_room_clock(app: FastAPI, rt: ServerRuntime) -> None:
             if rt.vmupdate is not None:
                 # #1649: שמירת VM שנקטעה באתחול משאירה עותק dm ושני loop
                 await asyncio.to_thread(rt.vmupdate.clear_leftovers)
+            # #1893: `running` בלי סמן שחזור ובלי יחידה חיה — חשמל שנפל לפני `stage fetch`.
+            try:
+                await asyncio.to_thread(
+                    reconcile_interrupted, rt.conn,
+                    {**default_update_hooks(), **(rt.update_hooks or {})},
+                    rt.repo_dir or REPO_ROOT, rt.data_dir)
+            except Exception:                            # noqa: BLE001 -- השרת עולה; הכשל בשמו
+                log.warning("update: interrupted-upgrade reconcile failed", exc_info=True)
             task = asyncio.create_task(_room_clock(rt, interval))
             reboot_task = asyncio.create_task(
                 auto_reboot.run(rt, rt.auto_reboot_hook, rt.auto_reboot_interval))
             rt.ctx.auto_reboot_task = reboot_task
             heartbeat_task = asyncio.create_task(
                 _storage_heartbeat(rt, rt.heartbeat_interval))
-            live["tasks"] = (task, reboot_task, heartbeat_task)
+            budget = getattr(rt.ctx, "budget", None)
+            brain_tasks = ((asyncio.create_task(_brain_budget_clock(budget, brain_budget.TICK_S)),)
+                           if budget is not None else ())
+            senses = getattr(rt.ctx, "senses", None)
+            if senses is not None:
+                brain_tasks += (asyncio.create_task(_server_senses_clock(senses, server_senses.WINDOW_S)),)
+            live["tasks"] = (task, reboot_task, heartbeat_task, *brain_tasks)
             # #1751: התראות במייל — תהליכון משלו (SMTP איטי אינו נוגע בלולאה),
             # וגם הדופק לדיסק שממנו "הייתי למטה מ-X עד Y" נגזר.
             watcher = email_alerts.Watcher(rt.conn, rt.data_dir)
@@ -389,6 +442,7 @@ def _install_room_clock(app: FastAPI, rt: ServerRuntime) -> None:
                     await asyncio.to_thread(watcher.stop)
                 # #1426: השולח יושב על ctx; ל-ServerRuntime אין `sender`
                 await asyncio.to_thread(rt.ctx.sender.close)
+                await asyncio.to_thread(rt.ctx.chunk.close)
 
     app.router.lifespan_context = lifespan
 
@@ -413,7 +467,10 @@ def _backfill_used_bytes(conn: Connection, library: ImageLibrary) -> None:
 def _readback_reporter(conn: Connection):
     """#1805: שורת יומן לכל אימג' שנוסה — מה גובב לקריאה חוזרת, ומה לא ולמה."""
     def report(result: dict) -> None:
-        written = ", ".join(f"p{i}" for i in sorted(result["written"]))
+        # #3192: `written` הוא מה ש-`record_index` נגע בו, וגם `{"error": …}` נרשם שם
+        # (`index_error`) — מחיצה שהגזירה שלה נכשלה. "גובב" רק עם אינדקס שנכתב בפועל.
+        written = ", ".join(f"p{i}" for i, value in sorted(result["written"].items())
+                            if isinstance(value, dict) and not value.get("error"))
         if written:
             journal(conn, "image_readback_derived",
                     f"{result['image_id']}: גיבוב לקריאה חוזרת — {written}")
@@ -624,6 +681,8 @@ def create_runtime(
             drive_rates.record_stream(conn, session_id, outcome)
             # #1884: הדיסק של הספרייה בגל — לפני #1846, שלא יאשים את הרשת בגל שהשרת האט.
             server_io.end(conn, "wave", session_id, library.root, seconds=outcome.get("wall_s"))
+            # #3125: the last window, and the whole wave as the server saw it (`result_json.server`). Never raises.
+            wave_senses.end(session_id)
             # #1846: האבדן של הגל מול הבסיס של כרטיס ההפצה — קפיצה נרשמת ביומן.
             # לעולם אינו זורק.
             learn_netloss.evaluate(conn, session_id)
@@ -639,11 +698,23 @@ def create_runtime(
                 ),
             )
 
-    def wave_bitrate(session):
+    def wave_bitrate(session, link=None, adjust=None):
+        if direct.is_direct_wave(conn, session["id"]):
+            # #3161: גל ישיר במנוע החתיכות -- מחשב הבנייה משדר; אותה בחירה ש-`on_running` עושה לו ב-udpcast
+            return drive_rates.decide(conn, session["id"], lambda: room.wave_drives(conn, session["id"]),
+                                      sender.max_bitrate, direct=True)
         server_io.begin(conn, "wave", session["id"], library.root)
+        wave_senses.begin(session["id"])          # #3125: the first reading of the server's senses. Never raises.
         return drive_rates.decide(
             conn, session["id"], lambda: room.wave_drives(conn, session["id"]),
-            sender.max_bitrate, link=sender.link)
+            sender.max_bitrate, link=link or sender.link, adjust=adjust)
+
+    def chunk_wave_bitrate(session):
+        # #3073: the card the chunk wave goes out on (`chunk.select_interface`, chosen just before
+        # this call in chunksend `_send`) -- not udp-sender's, which is the last udpcast wave's
+        # #3163: and the rate the last chunk waves taught, inside the network budget (`chunk_rate.adjust`)
+        return wave_bitrate(session, link=lambda: sender.link_of(chunk.interface),
+                            adjust=lambda chosen, wave: chunk_rate.adjust(conn, chosen, wave))
 
     sender = SenderEngine(
         library,
@@ -677,6 +748,156 @@ def create_runtime(
         # משתחררת מהגל לבדה. שאלת ה-SMART שהייתה כאן הוסרה (#2044).
         pending_prompts=lambda session_id: prompt_hold.waiting_in_wave(conn, session_id),
     )
+    # #3064 (K5): HTTP מול multicast בהשלמה -- צל בלבד. המנוע ותקציב הרשת מחוברים אליו כשהם נבנים, למטה.
+    route_tracker = brain_route.Tracker(conn)
+
+    def on_chunk_event(event: str, detail: str, session_id: str) -> None:
+        # #2533: המנוע הניסיוני. ביומן כמו השולח; כישלון שלו הוא כישלון הסבב, בשמו.
+        # `drive_rates.record_stream` (המונה של udp-sender) אינו ניזון ממנו; קצב הרשת שלו נלמד ב-`chunk_rate` (#3163), למטה.
+        journal(conn, event, detail, round_id=session_id)
+        route_tracker.on_event(event, detail, session_id)      # לעולם אינו זורק
+        if event in ("send_done", "send_failed", "send_stopped"):
+            # #3064 (G4): דיסק הספרייה גם בגל החתיכות — `begin` כבר רץ ב-`wave_bitrate`, כמו ב-udp-sender.
+            # למנוע הזה אין `wall_s`: המשך הוא השעון בין שני הצילומים. לעולם אינו זורק.
+            # #3508: `server_disk` needs the sender's own evidence (`paced`) that it was not asleep for its own pacing
+            outcome = chunk.rate_outcome(session_id)
+            server_io.end(conn, "wave", session_id, library.root, sender=outcome, need_sender=True)
+            wave_senses.end(session_id)           # #3125: as in `on_sender_event`. Never raises.
+            # #3163: what the wave showed of the network's rate -- after `server_io.end`, which it reads. Never raises.
+            chunk_rate.record(conn, session_id, {**outcome, "ended": event})
+        if event == "send_done":
+            # #3164: אבדן הגל מול הבסיס של כרטיס ההפצה. ה-`drops` נרשם כשהחדר סוגר את הגל (`room`), וה-`send_done` נרשם
+            # כאן: מי שמגיע אחרון רואה את שניהם, ושורה אחת ביומן גם כששניהם מעריכים. לעולם אינו זורק.
+            learn_netloss.evaluate_chunk(conn, session_id)
+        if event == "send_failed":
+            store.fail(session_id, detail,
+                       related=lambda: room.fail_wave(conn, session_id, detail, commit=False))
+        wave_eta.on_event(event, detail, session_id)           # #3295 (ב'): לעולם אינו זורק
+        if event in ("send_done", "send_failed", "send_stopped"):
+            carousel.forget(session_id)                         # #3064 (B7)
+        drawer_hold.on_event(event, detail, session_id)        # #2023: סוגר את ההחלטות הפתוחות של הגל, ורושם את התקורה שלו
+
+    def chunk_wave(session_id: str) -> bool:
+        # #2533: המתג "מנוע שידור". כבוי (ברירת המחדל) = udp-sender, בדיוק כמו לפני. רק גל של חדר
+        # השיכפול שהמקור שלו הוא הספרייה: המקלט החדש כותב למגירות (`chunkrecv.sh`); תחנה בודדת
+        # (סבב כיתה, משיכה) והפצה ישירה נשארות ב-udpcast גם כשהמתג דלוק. hello ו-`on_running` שואלים
+        # את אותה שאלה, כדי שהסוכן והשולח לא יענו עליה אחרת.
+        if sender_simulate or chunksend.engine_of(conn) != chunksend.CHUNK:
+            return False
+        row = conn.execute("SELECT prefix FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        if row is None or row["prefix"] != "ROOM" or direct.is_direct_wave(conn, session_id):
+            return False
+        sending = sender.status()               # המתג הודלק אחרי שהגל הזה כבר יצא ב-udp-sender
+        return not (sending and sending["session_id"] == session_id
+                    and sending["state"] in ("starting", "sending"))
+
+    # #3161: הפצה ישירה במנוע החתיכות. `chunk_wave` למעלה נשאר של הספרייה בלבד; גל שהמקור שלו הוא מחשב
+    # בנייה נשאל כאן (`live.wants`): המתג דלוק, והמקור העלה אינדקס לכל מחיצה לפני המניפסט.
+    live = directchunk.DirectChunks(
+        conn, data_dir / "direct",
+        engine_on=lambda: not sender_simulate and chunksend.engine_of(conn) == chunksend.CHUNK,
+        silence=lambda: agent_timing.lost_seconds(conn) + directchunk.SILENCE_GRACE_S)
+    chunk_library = directchunk.LiveLibrary(library, conn, live.store)
+
+    chunk = chunksend.ChunkEngine(
+        chunk_library,
+        interface=interface,
+        on_event=on_chunk_event,
+        wants=lambda session_id: chunk_wave(session_id) or live.wants(session_id),
+        ledger=chunksend.DbLedger(conn, chunk_library),    # ההשלמה נשענת על `chunk_ledger`, לא על הזיכרון
+        # "השולח מותקן ורץ" נשאל לפני כל גל ולפני הדלקת המתג; מי שהזריק שולח משלו (בדיקות) אינו נשאל
+        binary_check=None if sender_runner else chunksend.binary_problem,
+        # מי שעוד יכול לקבל — אותה הגדרה של `store.live_count` (#1430).
+        live_members=lambda session_id: [
+            m["mac"] for m in store.members(session_id)
+            if m["state"] not in ("done", "failed", "partial", "lost")],
+        lost_wait=lambda: agent_timing.lost_seconds(conn),
+        write_floor=lambda: hdd_policy.RepairFloor(conn),
+        wave_bitrate=chunk_wave_bitrate,         # הקצב נקבע כמו היום (הכרעה 9, 12/11), מהכרטיס של הגל (#3073)
+        pending_prompts=lambda session_id: prompt_hold.waiting_in_wave(conn, session_id),
+        runner=live.runner(sender_runner),       # פקודה על אימג' חי היא הזמנה למחשב הבנייה, לא תהליך כאן
+        **({"portbase": sender_portbase} if sender_portbase is not None else {}),
+        **({"max_wait": sender_max_wait} if sender_max_wait is not None else {}),
+        **({"start_timeout": sender_start_timeout}
+           if sender_start_timeout is not None else {}),
+    )
+    live.engine = chunk
+    chunk.say = lambda: chunksend.say_ms(conn)   # #3532: --lead-ms / --tail-ms of every send
+    chunk.order = lambda: chunksend.chunk_order(conn)   # #3522: --order of every send (mixed unless the setting says seq)
+    chunk.no_file = lambda session_id: direct.is_direct_wave(conn, session_id)
+    # #3269: בסיס נלמד ישן או לא תואם מוחלף בבדיקת הכתיבה של הגל (עד התקרה), אחרי שהמגירות התייצבו. לעולם אינו זורק.
+    # #3295 (ב'): אחרי שקצב ההתחלה נקבע -- המוח חוזה את ה-ETA, כולל ההשלמה של כונן שפיגר. רושם בלבד, ומחזיר את הקצב כמו שהוא
+    # #3041 (LR24): what the brain learned of each cloner's capacity -- the ETA is also predicted at it (shadow: the wave itself keeps its rate)
+    wave_eta = brain_waveeta.WaveEta(conn, library=chunk_library, chunk=chunk,
+                                     learned_rate=lambda session_id, bits, macs: brain_capability.wave_rate(conn, session_id, bits, macs))
+    # #1445 (B48): and then whether splitting the round into waves by the cloners' capacity would be shorter. Shadow only
+    wave_split = brain_wavesplit.WaveSplit(conn, image=wave_eta._image, learned=lambda mac: brain_capability.learned(conn, mac))
+    chunk.wave_start = lambda session_id, bits, probes: wave_split.started(session_id, wave_eta.started(
+        session_id, chunk_rate.start(conn, session_id, bits, probes), probes), probes)
+    # #2023 (Nadav 15/11): a slow drive's completion -- goes on, or it is written again in the next wave. The brain decides, in
+    # shadow while `brain_drawer_hold` is off (the default): it records `DRAWER_HOLD` (K3) and moves nothing. On: the engine holds the drawer
+    # that completes (the others go on to the next partition) or fails it, once the brain said DROP twice in a row.
+    drawer_hold = brain_drawerhold.DrawerHold(conn)
+    chunk.drawer_hold = drawer_hold.evaluate
+    chunk.part_gap = drawer_hold.gap
+    chunk.drawer_held = drawer_hold.executed       # #2023: the engine did what the brain decided (`brain_drawer_hold` = on)
+    # #3295 (Nadav 15/11): `--write-kbps` at the pace of the fast drives -- a drive that was behind in a past wave is left out
+    chunk.write_history = lambda serial: chunk_rate.write_history(conn, serial)
+    # #3506 (K8): `--write-kbps` as a loop between the waves -- up when the drives kept up and the cap held the sender, down when
+    # one fell behind; the write check is only the start. In `enforce`, with every decision in `brain_decisions`
+    chunk.write_rate = lambda session_id, part, base, serials: chunk_rate.write_rate(conn, session_id, part, base, serials)
+    # #3511/#3512: the in-wave feedback's `--rate-max` is the most those drives were proven to write; none = 2 x the start
+    chunk.write_ceiling = lambda serials: chunk_rate.write_ceiling(conn, serials)
+    chunk.brain_conn = conn      # #3655 (S3, S4, K-WRITE, K-RATE-BOUNDS): `--write-kbps` and the feedback's room are the brain's decisions, recorded in `brain_decisions`
+    # #3064 (B7, B12, B47): after each pass, one more full multicast pass weighed against the plan -- recorded in
+    # `brain_decisions`; in place of the plan only when `brain_carousel` = on (off by default). Never raises
+    carousel = brain_carousel.Carousel(conn)
+    chunk.carousel, chunk.carousel_cut = carousel.consider, carousel.cut
+    chunk.veto = lambda **kw: brain_veto.check(conn, **kw).proceed   # #3064 (K2): `brain_veto_mode`, shadow
+    chunk.veto_settle = lambda **kw: brain_veto.settle(conn, **kw)
+    chunk.cause = lambda **kw: brain_cause.judge(conn, **kw)          # #3064 (K9): the cause of a disk it fails, recorded only
+    chunk.kernel_of = lambda sid, mac, serial: brain_wavesense.kernel_lines(conn, sid, mac, serial)   # #3064 (K9): the kernel lines of the wave
+    chunk.passlog.conn = conn      # #3125: the pass fields (`chunk_pass_rates`, `chunk_pass_counters`); never raises
+    # #3064 (V6, שלב 2): בייטים שהשרת הגיש ב-HTTP של קובצי האימג' = ראיית חיים; ה-MAC נגזר מקובץ החכירות ברגע ההחלטה
+    served_bytes = brain_served.Served()
+    _leases = (identity_hooks or {}).get("leases")
+
+    def _lease_macs(ip: str) -> tuple[str, ...] | None:
+        holders = _leases.holders(ip)
+        return holders.macs if holders.read else None       # None = הקובץ לא נקרא: "לא ידוע", לא "אין חכירה"
+
+    brain_grace.attach(conn, time.time())      # #3330 (KT5): 300 ש' אחרי העלייה בלי פעולה הרסנית שנשענת על שתיקה
+    brain_veto.attach(conn, lambda now, window: served_bytes.attribute(
+        now, window, _lease_macs if _leases is not None else None))
+    # #3320 (R14): הקלטה של כל גל -- הצילום המלא שכל החלטה נשענה עליו, לסימולציה חוזרת (`recording.replay`)
+    brain_recording.attach(conn, brain_recording.Recorder(data_dir / "brain" / "waves"))
+    brain_veto.note_retired(conn)               # KT2 (נדב 14/11 בערב): סף שיצא מההגדרות וערך שמור -- מתעלמים, לא מוחקים, ורושמים ביומן
+    # #3064 (K7, שלב 3): תקציב הרשת של ההגשה ב-HTTP -- מה שנשאר מהגבול העליון אחרי השידור; ב-`shadow` נרשם ולא נאכף
+    net_budget = brain_budget.production(conn, served=served_bytes, chunk=chunk, sender=sender, interface=interface)
+    route_tracker.chunk, route_tracker.budget = chunk, net_budget
+
+    # #3125 (V2, V6-V10, R8): what the server itself sees in a wave -- at its start (`wave_bitrate`), every
+    # `server_senses.WINDOW_S` (`_server_senses_clock`), and at its end (the two `on_*_event`), next to the wave in
+    # `server_io`. Measurement only: nothing decides on it yet.
+    def _senses_read(session_id: str) -> dict:
+        state, card = None, sender.interface
+        for engine in (chunk, sender):              # the wave's engine, and the card it goes out on
+            got = engine.status()
+            if got and got.get("session_id") == session_id:
+                state, card = ({"engine": "udpcast", **got}, sender.interface) if engine is sender                     else (got, chunk.interface)
+                break
+        return server_senses.reading(root=library.root, interface=card or interface, served=served_bytes,
+                                     conn=conn, session_id=session_id, engine=lambda: state)
+
+    def _live_wave() -> str | None:
+        got = chunk.status()
+        if got and got.get("state") in ("starting", "sending", "repairing"):
+            return got["session_id"]
+        got = sender.status()
+        return got["session_id"] if got and got.get("state") in ("starting", "sending") else None
+
+    wave_senses = server_senses.Senses(conn, _senses_read, _live_wave)
+
     def wake_class(group_id: str, opener_mac: str | None,
                    roster: list[str] | None = None) -> None:
         # סבב שנפתח — מכל מקור — מעיר את מחשבי הכיתה, חוץ מזה שפתח.
@@ -691,7 +912,15 @@ def create_runtime(
         # #715: גל שהמקור שלו הוא מחשב בנייה — המנוע של השרת **אינו**
         # משדר; מחשב הבנייה רואה `running` ב-hello הבא ומשדר בעצמו.
         # ביומן, כדי שגל שלא יצא ייראה כמה שהוא ולא כ"המנוע לא התחיל".
-        if direct.is_direct_wave(conn, session["id"]):
+        is_direct = direct.is_direct_wave(conn, session["id"])
+        unindexed = live.refusal(session["id"]) if is_direct else None
+        if unindexed:
+            # #3161: המתג דלוק והמקור לא העלה אינדקסים -- הגל נכשל בשמו, ואינו נופל ל-udpcast בשקט
+            if store.fail(session["id"], unindexed,
+                          related=lambda: room.fail_wave(conn, session["id"], unindexed, commit=False)):
+                journal(conn, "send_failed", unindexed, round_id=session["id"])
+            return
+        if is_direct and not live.wants(session["id"]):
             journal(conn, "send_delegated", f'{session["id"]} {session["image_id"]}',
                     round_id=session["id"])
             # קצב אוטומטי: גם הזרם ממחשב הבנייה עובר ברשת — אותה פתיחה, אותו
@@ -702,7 +931,22 @@ def create_runtime(
             return
         # #2427: שידור שלא הופעל אינו `running` שקט — הסבב נכשל בשמו. `fail` הוא
         # CAS על open/running: סבב שכבר נסגר (הסגירה הקדימה את ההתחלה) אינו משתנה.
-        refused = sender.start(session)
+        # #2533: נקרא ברגע שהגל יוצא, ואינו מתחלף באמצע סבב; מנוע שנכשל אינו נופל לשני.
+        engine = chunk if is_direct or chunk_wave(session["id"]) else sender
+        if is_direct:                           # #3161: המנוע מתזמר, ומחשב הבנייה משדר
+            journal(conn, "send_delegated", f'{session["id"]} {session["image_id"]} engine=chunk',
+                    round_id=session["id"])
+        # שני המנועים אינם משדרים במקביל: אותה רשת, אותם דיסקים בשרת, וקצב גל שנקבע לשולח אחד.
+        # כל מנוע כבר מסרב לסבב שני משלו; כאן הוא מסרב גם כשהמנוע **האחר** משדר סבב אחר, בשמו.
+        other = sender if engine is chunk else chunk
+        busy = other.status()
+        if busy and busy["session_id"] != session["id"] and busy["state"] in ("starting", "sending", "repairing"):
+            refused = (f"השידור של {session['id']} לא הופעל: "
+                       + (f"udp-sender של הסבב {busy['session_id']} עדיין משדר, ומנוע החתיכות אינו משדר במקביל לו"
+                          if engine is chunk else
+                          f"מנוע החתיכות עדיין משדר את הסבב {busy['session_id']}, ו-udp-sender אינו משדר במקביל לו"))
+        else:
+            refused = engine.start(session)
         if refused and store.fail(
                 session["id"], refused,
                 related=lambda: room.fail_wave(conn, session["id"], refused, commit=False)):
@@ -711,10 +955,18 @@ def create_runtime(
     store = SessionStore(
         conn,
         on_running=on_running,
-        on_closed=lambda session_id: sender.stop(session_id),
+        on_closed=lambda session_id: (sender.stop(session_id), chunk.stop(session_id)),
         on_opened=wake_class,
         **({"now_fn": now_fn} if now_fn else {}),
     )
+    # #3137: a wave of the chunk engine does not leave before the index its engine checks is beside every
+    # file -- derived now, while the cloners boot. A udpcast wave needs no index and waits for nothing.
+    prep = indexprep.IndexPrep(library, on_event=lambda event, detail, wave_id: journal(
+        conn, event, detail, round_id=None if wave_id.startswith(indexprep.PULL_KEY) else wave_id))   # #3231: a pull's key is no session
+    store.start_gate = lambda session_id, image_id, start=True: (
+        prep.gate(session_id, image_id, start=start) if chunk_wave(session_id) else None)
+    # #3277: the image size for the brain's link ETA (`linkwarn.image_bytes`) -- the pulse has no library of its own.
+    store.image_bytes = lambda image_id: (library.get(image_id) or {}).get("total_compressed_bytes")
     # #411: מה שנשאר `running` מהריצה הקודמת — משימת קליטה, סבב שידור —
     # מסומן כישלון **בשם** לפני שהקונסולה עונה (הכרעת נדב 06/09, אפשרות
     # 1). `sender.status()` הוא הראיה החיובית היחידה שסבב עדיין משודר;
@@ -726,10 +978,11 @@ def create_runtime(
     for task_id in reconciled["tasks_reverify"]:
         start_verification(conn, library.root, task_id)
     # #720: ספריית חבילות הדרייברים — תיקייה ליד ה-DB, לא בספריית האימג'ים.
-    ctx = ServerContext(conn=conn, library=library, store=store, sender=sender,
+    ctx = ServerContext(conn=conn, library=library, store=store, sender=sender, chunk=chunk, direct_chunk=live,
                         drivers=DriverLibrary(data_dir / "drivers"),
                         leases=(identity_hooks or {}).get("leases"),
-                        data_dir=data_dir)
+                        data_dir=data_dir, served=served_bytes, budget=net_budget, index_prep=prep,
+                        route=route_tracker, senses=wave_senses)
     # #2684: ראיה אחת לשעון השרת (chrony) -- למשכפל ב-hello ולקונסולה ב-forecasts.
     ctx.clock_trust = hello_eta.ClockTrust(
         {**health_default_hooks(), **(health_hooks or {})}["timesync_status"])
@@ -740,10 +993,14 @@ def create_runtime(
                                      nic_hooks, netcfg_hooks, health_hooks,
                                      apply_timesync=apply_timesync)
     ctx.nic_services.startup()
-    sender.gate = ctx.nic_services.multicast_refused
+    # #2533: מנוע החתיכות — אותו שער ואותה בחירה לכל גל; בלעדיהם הוא שידר על הכרטיס מזמן הבנייה.
+    sender.gate = chunk.gate = ctx.nic_services.multicast_refused
     sender.select_interface = lambda session: ctx.nic_services.multicast_interface(
         lambda: _multicast_addresses(ctx, session["id"]), multicast_interface_override,
         default=interface)
+    # #3161: גל ישיר יוצא מהכרטיס של מחשב הבנייה, לא של השרת: אין כרטיס לבחור ואין שער לשאול (כמו ב-udpcast)
+    chunk.select_interface = lambda session: (
+        None if direct.is_direct_wave(conn, session["id"]) else sender.select_interface(session))
 
     # בהתקנה טרייה: admin/admin עם החלפה כפויה (#1085). אם כבר יש מנהל — לא נוגעים.
     password = ensure_admin(conn)
@@ -761,6 +1018,12 @@ def create_runtime(
         error = known_macs_hooks["apply"](dhcp.render_known_macs(registry.all_macs(conn)))
         if error:
             journal(conn, "known_macs_apply_failed", error)
+        # הכרעת נדב 14/11 (#1079/#2485): המחשבים הרשומים בחומת האש של כרטיס ההפצה.
+        if "firewall" in known_macs_hooks:
+            _rewrite_stale_firewall(ctx, conn, known_macs_hooks)      # #3224 -- לפני הטעינה
+            fw_error = known_macs_hooks["firewall"](registry.all_macs(conn))
+            if fw_error:
+                journal(conn, "known_macs_firewall_failed", fw_error)
     if sync_dnsmasq:
         console_dhcp.sync_main_conf(
             ctx, {**console_dhcp.default_hooks(), **(dhcp_hooks or {})}, deploy)
@@ -850,6 +1113,30 @@ def _multicast_addresses(ctx, session_id: str) -> list[str | None]:
     return addresses
 
 
+def _rewrite_stale_firewall(ctx, conn, known_macs_hooks) -> None:
+    """#3224: שדרוג שומר את `/etc/nftables.conf` הישן -- בלי הקבוצה `known_macs`
+    (#1079/#2485), ופורטי udpcast נשארים פתוחים לכל מחשב. כאן, בעליית השרת שאחרי
+    השדרוג, הכללים נכתבים מחדש בדיוק כמו בשינוי שירותי כרטיס מהקונסולה (אותו
+    `firewall` של `NicServices`: `nft -c` לפני הטעינה, והחזרה לקודם בכישלון, #1121).
+
+    רק כשהקובץ ישן (`known_macs_hooks["firewall_stale"]`): עלייה רגילה אינה נוגעת
+    בחומת האש. כשל נכתב ליומן בשמו, והשדרוג עצמו מאמת את הקבוצה ונכשל בגלוי
+    (`tools/server-upgrade.sh`, שלב `firewall`)."""
+    stale = known_macs_hooks.get("firewall_stale")
+    reason = stale() if stale is not None else None
+    if reason is None:
+        return
+    step = ctx.nic_services.hooks.get("firewall")
+    try:
+        error = step(ctx.nic_services) if step is not None else "אין מנגנון אכיפה לחומת האש בתהליך הזה"
+    except Exception as exc:                                              # noqa: BLE001
+        error = str(exc) or type(exc).__name__
+    if error:
+        journal(conn, "firewall_rewrite_failed", f"{reason} — {error}")
+    else:
+        journal(conn, "firewall_rewritten", reason)
+
+
 def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
                   netcfg_hooks=None, health_hooks=None, apply_timesync=False):
     """#705: `NicServices` עם הבסיס של היום (כרטיס הניהול מה-`DeployContext`,
@@ -884,7 +1171,12 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
             regenerate = (deploy.hooks or {}).get("firewall", deploy_net.regenerate_firewall)
             per = nic.firewall_services()
             proxy = deploy_net.firewall_proxy_interfaces(ctx.conn)
-            proxy_args = {"proxy_interfaces": proxy} if proxy else {}
+            fw_extra = {"proxy_interfaces": proxy} if proxy else {}
+            # --sender-portbase: the multicast rule must follow the port udp-sender really takes.
+            # Only a non-default value is passed, so a server on 9000 calls exactly as before.
+            portbase = getattr(getattr(ctx, "sender", None), "portbase", None)
+            if portbase is not None and portbase != DEFAULT_PORTBASE:
+                fw_extra["sender_portbase"] = portbase
             if per is None:      # חזרנו ל"היום" — הכללים לפי שני התפקידים
                 if deploy.state.interface:
                     error = deploy_net.missing_nic(deploy.state.interface, nic.interfaces())
@@ -892,10 +1184,10 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
                         return error
                 error = regenerate(deploy.repo_dir, deploy_if=deploy.state.interface,
                                    servers_if=deploy.servers_interface,
-                                   primary_ip=deploy.primary_ip, **proxy_args)
+                                   primary_ip=deploy.primary_ip, **fw_extra)
             else:
                 error = regenerate(deploy.repo_dir, deploy_if=None, servers_if=None,
-                                   primary_ip=deploy.primary_ip, services=per, **proxy_args)
+                                   primary_ip=deploy.primary_ip, services=per, **fw_extra)
             if error == deploy_net.NO_FIREWALL:
                 # #2440: שרת בלי חומת אש — שינוי השירותים אינו מוחזר בגללה, אבל
                 # היומן אומר שאין כלל שנכתב (ומסך הבריאות: "לא נטענה").
@@ -1032,6 +1324,8 @@ def _add_agent_routes(app: FastAPI, rt: ServerRuntime, *, gui_channel: bool = Tr
         rt.ctx, rt.server_base, rt.data_dir,
         clock_status={**health_default_hooks(), **(rt.health_hooks or {})}["timesync_status"]))   # #1843
     app.include_router(create_agent_drivers_router(rt.ctx))   # #720
+    app.include_router(create_write_backup_router(rt.ctx))   # #3268: the waiting-screen write check's copy
+    app.include_router(brain_ask_api.create_agent_router(rt.ctx))   # #3654: the person at a machine's screen answers the brain's question
     app.include_router(create_cloner_round_router(rt.ctx))   # 16/10: a cloner opens a round on its own drawers
     app.include_router(create_agent_capture_router(rt.ctx))
     app.include_router(direct.create_direct_router(rt.ctx))   # #715
@@ -1151,6 +1445,27 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     include(create_netcfg_router(ctx, rt.netcfg_dir, rt.netcfg_hooks,
                                  dhcp_steps=dhcp_router.dhcp_steps))   # #1263
     include(create_nic_services_router(ctx))   # #705
+    include(brain_ask_api.create_console_router(ctx))   # #3654: the brain's questions to the user, and the answer
+    include(brain_shadowgate.create_console_router(ctx))   # #3563: per rule, samples/agreement/state; read-only
+    # #3064 (K12, K13): המוח מסביר את כוח העיבוד ואת השירותים שהסבב צריך -- שורות בבריאות, וכפתור "להדליק" לרשימה סגורה.
+    # מדליק רק main.py (`brain_host`), כמו `known_macs_hooks`: בלעדיו בדיקות לא קוראות systemctl ו-ss ולא נוגעות ב-dnsmasq.
+    if health_hooks.get("brain_host"):
+        _full = {**health_default_hooks(), **health_hooks}
+        _listeners = _full.get("port_listeners")
+        _svc = {"ss": _full["ss"], "ss_tcp": _full["ss_tcp"],
+                "unit": _full.get("brain_unit", brain_services.default_unit),
+                "dhcp_on": lambda: any(f["enabled"] or f["proxy"] for f in health_dhcp_flags(ctx)),
+                "http_port": lambda: (_listeners.spec("http_boot")["port"]
+                                      if _listeners is not None and "http_boot" in _listeners.ids() else None)}
+        read_services = lambda: brain_services.read(_svc)       # noqa: E731
+        brain_services.attach(ctx.conn, read_services)
+        health_hooks["brain_cpu"] = lambda: health_check("brain_cpu", "כוח העיבוד של השרת (המוח)",
+                                                         *brain_cpucap.summary(ctx.conn))
+        health_hooks["brain_services"] = lambda: brain_services.health_check(read_services(), brain_services.busy_reason(ctx))
+        include(brain_services.create_router(ctx, read_services, {
+            "tftp": lambda user_id: console_dhcp.apply_dnsmasq(ctx, dhcp_hooks, rt.deploy, "tftp on", user_id),
+            "http_boot": brain_services.listener_apply(_listeners, "http_boot")},
+            busy=lambda: brain_services.busy_reason(ctx)))
     include(create_health_router(
         ctx, rt.server_base, health_hooks,
         dnsmasq_apply=lambda what, user_id: console_dhcp.apply_dnsmasq(
@@ -1205,6 +1520,10 @@ def create_agent_app(rt: ServerRuntime) -> FastAPI:
     _add_agent_routes(app, rt)
     # #2410: תקרת גוף לכל נתיבי הכתיבה בפורט הסוכן, חוץ מהעלאת נתוני האימג'.
     app.add_middleware(agent_body.BodyCap)
+    accesslog.install(app)   # #3184: שורות הגישה -- חריגים בלבד
+    # הכרעת נדב 14/11 (#1079/#2485): ברשת ההפצה רק מחשב רשום מגיע לשירותי השיכפול.
+    # נוסף אחרון = עוטף ראשון: הסירוב קודם גם לקריאת הגוף.
+    app.add_middleware(deploy_gate.RegisteredOnly, ctx=rt.ctx, server_base=rt.server_base)
     return app
 
 
@@ -1223,6 +1542,7 @@ def create_console_app(rt: ServerRuntime) -> FastAPI:
     # #456: שעון-הרקע של החדר יושב על הקונסולה — היא האפליקציה שרצה תמיד
     # בייצור, והחדר הוא ממילא מסך ניהול. אפליקציה **אחת** בכל תהליך.
     _install_room_clock(app, rt)
+    accesslog.install(app)   # #3184
     return app
 
 
@@ -1272,4 +1592,5 @@ def create_app(
     # #456: המעטפת המשולבת (בדיקות/e2e) מריצה גם את שעון-הרקע של החדר,
     # כדי שההתנהגות תהיה זהה לייצור. אפליקציה אחת → שעון אחד.
     _install_room_clock(app, rt)
+    accesslog.install(app)   # #3184
     return app

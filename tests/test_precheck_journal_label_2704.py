@@ -60,11 +60,12 @@ def test_a_slow_write_alone_is_not_called_a_link_or_crc_warning(server):
     assert "איטי מהרגיל לדגם" in text, text
 
 
-def test_a_slow_link_is_a_link_warning(server):
+def test_a_link_speed_alone_is_not_a_link_warning(server):
+    """#3591 (Nadav 17/11): 1.5, 3.0 or 6.0 is information -- no `link=` token, and no "suspect link" kind."""
     setup_classroom(server)
     label, text = line(server, warning(link_gbps=1.5, link_max_gbps=6.0, model_slow=False))
-    assert "קישור חשוד" in label and "כתיבה איטית" not in label, label
-    assert "link=1.5/6.0" in text and "קישור 1.5 מתוך 6.0 Gb/s" in text, text
+    assert "קישור חשוד" not in label and "כתיבה איטית" not in label, label
+    assert "link=" not in text and "מתוך 6.0" not in text, text
 
 
 def test_a_crc_rise_is_a_link_warning_and_an_absolute_count_is_not_journaled(server):
@@ -75,18 +76,18 @@ def test_a_crc_rise_is_a_link_warning_and_an_absolute_count_is_not_journaled(ser
     assert "מונה CRC עלה ב-12 מאז הסבב הקודם" in text and "812 שגיאות" not in text, text
 
 
-def test_a_slow_write_on_a_slow_link_is_both(server):
-    """Like the room page: one drawer carrying a link sign is a link warning too (#2670)."""
+def test_a_slow_write_on_a_drawer_with_a_crc_rise_is_both(server):
+    """Like the room page: one drawer carrying a link sign (a CRC rise) is a link warning too (#2670)."""
     setup_classroom(server)
-    label, _ = line(server, warning(link_gbps=1.5, link_max_gbps=6.0))
+    label, _ = line(server, warning(crc_rise=12))
     assert "קישור חשוד או כתיבה איטית" in label, label
 
 
 def test_two_drawers_of_two_kinds_are_both(server):
     setup_classroom(server)
-    label, text = line(server, warning(), warning(port=3, link_gbps=1.5, link_max_gbps=6.0, model_slow=False))
+    label, text = line(server, warning(), warning(port=3, crc_rise=12, model_slow=False))
     assert "קישור חשוד או כתיבה איטית" in label, label
-    assert "קישור 1.5 מתוך 6.0 Gb/s" in text and "איטי מהרגיל לדגם" in text, text
+    assert "מונה CRC עלה ב-12" in text and "איטי מהרגיל לדגם" in text, text
 
 
 @pytest.mark.parametrize("flag,token,he", [

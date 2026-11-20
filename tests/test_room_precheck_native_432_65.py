@@ -20,6 +20,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from disk_rules_state import with_rules   # #3666
 from native import requires_native
 from test_agent import AGENT
 from test_class_deploy_switch import PRELUDE, STATION
@@ -28,7 +29,7 @@ from test_cloner_gui import (BASH, GUI, _build_gui, _count_color, _pkgconfig,
 from agentlib import flat_lib
 
 C1, C2 = "3c:52:82:a1:00:21", "3c:52:82:a1:00:22"
-WARN = "CLONE-01 · דיסק 2: קישור 1.5 מתוך 6.0 Gb/s — לבדוק כבל או מגירה"
+WARN = "CLONE-01 · דיסק 2: מונה CRC עלה ב-12 מאז הסבב הקודם — לבדוק כבל או מגירה"   # #3591: a link speed is not a warning
 MISSING = "CLONE-02: אין דיסק חדש בדיסק 3"
 
 
@@ -189,9 +190,9 @@ LOCAL_COPY = ("room_label=מחשבי שיכפול\n"
               f"room_missing={C2}|CLONE-02|drawers|1|{MISSING}|1\n")
 
 
-def _render(binary: Path, state_text: str, prefix: Path, size: str = "1280x800") -> None:
+def _render(binary: Path, state_text: str, prefix: Path, size: str = "1280x800", rules: bool = True) -> None:
     state = prefix.with_suffix(".txt")
-    state.write_text(state_text, encoding="utf-8", newline="\n")
+    state.write_text(with_rules(state_text) if rules else state_text, encoding="utf-8", newline="\n")   # #3666: the agent's verdicts for lc_disk= / cdisk=, from the one table
     env2 = dict(os.environ)
     if (GUI / "fonts.conf").exists():
         env2["FONTCONFIG_FILE"] = str(GUI / "fonts.conf")
@@ -289,15 +290,18 @@ STANDBY = ("hello_age=4\nhello_rc=200\nmachine_name=CLONE-01\nserver_name=images
 
 
 @_GUI
-def test_the_standby_bay_turns_red_on_a_slow_link(tmp_path):
-    """#2848 (Nadav 11/11): a slow SATA link is red -- never a target (it was orange, #432)."""
+def test_the_standby_bay_is_not_red_on_any_link_speed_but_is_on_a_sata_problem(tmp_path):
+    """#3591 (Nadav 17/11): 1.5, 3.0 and 6.0 draw the same bay -- the speed is on the sub line, never a colour. A SATA
+    problem (the agent's `link_reset` word) is still red, never a target (#2848): the control that the check can fail."""
     binary = _build_gui(tmp_path)
-    _render(binary, STANDBY.format(link="6.0"), tmp_path / "fast")
-    _render(binary, STANDBY.format(link="1.5"), tmp_path / "slow")
-    _render(binary, STANDBY.format(link="null"), tmp_path / "unknown")
+    for link in ("6.0", "3.0", "1.5", "null"):
+        _render(binary, STANDBY.format(link=link), tmp_path / f"l{link}")
+    reset = STANDBY.replace("passed||{link}|6.0\n", "passed||6.0|6.0|||||||||link_reset\n")
+    assert reset != STANDBY, "the template changed: the control did not apply"
+    _render(binary, reset.format(link="6.0"), tmp_path / "reset")
     for theme in ("light", "dark"):
-        fast = _count(tmp_path / f"fast-standby-{theme}.png", "--clr-danger", theme)
-        slow = _count(tmp_path / f"slow-standby-{theme}.png", "--clr-danger", theme)
-        unknown = _count(tmp_path / f"unknown-standby-{theme}.png", "--clr-danger", theme)
-        assert slow - fast > 300, (theme, fast, slow)
-        assert abs(unknown - fast) < 150, ("unknown is not slow", theme, fast, unknown)
+        fast = _count(tmp_path / f"l6.0-standby-{theme}.png", "--clr-danger", theme)
+        for link in ("3.0", "1.5", "null"):
+            got = _count(tmp_path / f"l{link}-standby-{theme}.png", "--clr-danger", theme)
+            assert abs(got - fast) < 150, ("a link speed is not red", link, theme, fast, got)
+        assert _count(tmp_path / f"reset-standby-{theme}.png", "--clr-danger", theme) - fast > 300, theme

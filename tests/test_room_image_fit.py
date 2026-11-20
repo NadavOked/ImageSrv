@@ -109,7 +109,7 @@ def test_an_image_bigger_than_the_smallest_drawer_is_refused_with_the_reason(fit
     r = open_round(admin, "img_f17300")
 
     assert r.status_code == 409
-    assert r.json()["detail"] == "דיסק 2 במחשב 2 הוא 256GB, האימג' צריך 300GB"
+    assert r.json()["detail"] == "דיסק 2 במחשב משכפל-2 הוא 256GB, האימג' צריך 300GB"
     assert admin.get("/api/console/room").json()["round"] is None   # לא נפתח
 
 
@@ -146,7 +146,7 @@ def test_the_status_view_names_the_floor_the_screen_compares_against(fit_server)
 
     floor = admin.get("/api/console/room").json()["disk_floor"]
 
-    assert floor == {"mac": CLONER2, "name": "2", "port": 2, "dev": "sdb",
+    assert floor == {"mac": CLONER2, "name": "משכפל-2", "port": 2, "dev": "sdb",
                      "size_bytes": DISK_256}
 
 
@@ -159,7 +159,7 @@ def test_selected_slots_that_exclude_the_small_drawer_let_the_image_through(fit_
     refused = open_round(admin, "img_f17300",
                          target_slots=[{"mac": CLONER2, "ports": [1, 2]}])
     assert refused.status_code == 409
-    assert refused.json()["detail"].startswith("דיסק 2 במחשב 2 הוא 256GB")
+    assert refused.json()["detail"].startswith("דיסק 2 במחשב משכפל-2 הוא 256GB")
 
     assert open_round(admin, "img_f17300",
                       target_slots=[{"mac": CLONER2, "ports": [1]}]).status_code == 200
@@ -202,7 +202,7 @@ def test_an_image_that_fits_no_disk_size_is_refused_not_waved_through(floor_byte
         {**win, "expandable": False, "used_bytes": win["size_bytes"] - 5 * GB}]}
     assert min_disk_bytes(stuck, 20) is None
     floor = None if floor_bytes is None else {
-        "mac": CLONER1, "name": "1", "port": 1, "dev": "sda", "size_bytes": floor_bytes}
+        "mac": CLONER1, "name": "משכפל-1", "port": 1, "dev": "sda", "size_bytes": floor_bytes}
     reason = fit_refusal(stuck, floor, 20)
     assert reason is not None and reason.startswith("לא נכנס — יישארו רק 4.7 GB פנויים ב-C:"), reason
     assert fit_refusal(stuck, floor, 0) is None     # the rule off: the layout fits 500GB

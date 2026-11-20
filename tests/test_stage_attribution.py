@@ -353,7 +353,7 @@ def test_xfs_grow_mounts_then_grows_the_mountpoint_not_the_device(tmp_path):
     mnt = posix(run / "grow")
     seq = (run / "order.log").read_text(encoding="utf-8").strip().splitlines()
     assert seq == [
-        f"mount -t xfs {posix(run)}/dev/sda2 {mnt}",
+        f"mount -t xfs -o nouuid {posix(run)}/dev/sda2 {mnt}",   # #3629
         f"xfs_growfs {mnt}",
         f"umount {mnt}",
     ], seq

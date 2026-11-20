@@ -125,7 +125,7 @@ def open_pull(tmp_path: Path, server: str, *, user: str = "labtech",
         f"{agent_sources('sysinfo', 'progress', 'failmark')}. {posix(AGENT)}/lib/restore/pull.sh; "
         f"if pull_open {args}; "
         f'then echo "OPENED=[$PULL_SESSION]"; '
-        f'else echo "NOT-OPENED=[$PULL_SESSION]"; fi'
+        f'else echo "NOT-OPENED=[$PULL_SESSION]"; fi; echo "WHY=[$PULL_WHY]"'   # #3231
     )
     proc = subprocess.run(
         [BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + script],
@@ -193,6 +193,34 @@ def test_a_refusal_the_server_did_make_keeps_its_reason(tmp_path, fake_server):
 
     assert "no_image" in log
     assert "older" not in log
+
+
+#: what the server says while it derives the index (server/rounds/indexprep.py PULL_PREPARING, with its percent)
+WORDS = "מכין את האימג' לשידור, 40% — נסו שוב בעוד רגע"
+
+
+@pytest.mark.parametrize("code, status", [("index_preparing", 503), ("index_failed", 409),
+                                          ("image_bound_to_another_machine", 403)])
+def test_the_servers_words_about_the_index_reach_the_caller(tmp_path, fake_server, code, status):
+    """#3231: the image's index is still being derived (503) or failed (409): the server says why in
+    Hebrew, and `pull_open` keeps its words (`PULL_WHY`) for the screen -- not a generic refusal."""
+    fake_server.status = status
+    fake_server.body = json.dumps({"ok": False, "error": WORDS, "code": code}, ensure_ascii=False).encode("utf-8")
+
+    out, log = open_pull(tmp_path, url_of(fake_server))
+
+    assert "NOT-OPENED=[]" in out and f"WHY=[{WORDS}]" in out, out
+    assert code in log
+
+
+def test_another_refusal_leaves_no_words_for_the_screen(tmp_path, fake_server):
+    """The screen keeps its own generic refusal for everything but the index (`PULL_WHY` empty)."""
+    fake_server.status = 404
+    fake_server.body = json.dumps({"ok": False, "error": "no such image", "code": "no_image"}).encode("utf-8")
+
+    out, _log = open_pull(tmp_path, url_of(fake_server))
+
+    assert "NOT-OPENED=[]" in out and "WHY=[]" in out, out
 
 
 def test_a_server_that_never_answered_has_its_own_line(tmp_path, fake_server):

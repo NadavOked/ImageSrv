@@ -59,21 +59,38 @@ static void disk_head(cairo_t *cr,const Theme *t,Rect r){
     install_text_r(cr,t,"מה נמצא בדיסק",12,600,r.x+r.w*.27,r.y+9,r.w*.25,t->muted);
 }
 
+/* #3051: a row carries one more line when a disk is in the stick's mapping -- all rows alike, so the table stays even */
+static double disk_row_h(const InstallState *s){for(int i=0;i<s->ndisks;i++)if(s->disks[i].slot>0)return 74;return 58;}
+/* #3131 (C-DSK-11): the disk's own health verdict, in words, for every disk -- "tested and fine" and "not tested"
+ * are two different sentences (principle 5). The inventory's smart= is passed / failed / unknown; "" is an older
+ * bridge and anything else is not a verdict: nothing is said. tone: 2 = failed, 1 = passed, 0 = not tested. */
+static const char *smart_words(const InstallDisk *d,int *tone){
+    if(!strcmp(d->smart,"failed")){*tone=2;return "SMART נכשל";}
+    if(!strcmp(d->smart,"passed")){*tone=1;return "SMART תקין";}
+    if(!strcmp(d->smart,"unknown")){*tone=0;return "SMART לא נבדק";}
+    return NULL;}
+
 static void disk_row(App *a,cairo_t *cr,Rect r,int i){
     InstallState *s=&a->install;InstallDisk *d=&s->disks[i];const Theme *t=a->theme;int selected=i==s->disk||(s->disk>=0&&install_raid_member(s,i));   /* #1989: every member is erased; #2147: once a disk is chosen */
     draw_fill_rrect(cr,r,0,d->iso?t->field:(selected?t->danger_soft:t->surface));
     cairo_rectangle(cr,r.x,r.y+r.h-1,r.w,1);draw_set(cr,t->hair);cairo_fill(cr);
     double cx=r.x+r.w-22,cy=r.y+r.h/2;cairo_arc(cr,cx,cy,7,0,6.283);draw_set(cr,d->iso?t->muted:(selected?t->danger:t->hair));cairo_set_line_width(cr,2);cairo_stroke(cr);
     if(selected){cairo_arc(cr,cx,cy,3.5,0,6.283);draw_set(cr,t->danger);cairo_fill(cr);}
-    install_text_ltr(cr,d->model[0]?d->model:d->path,13,600,r.x+r.w-285,r.y+9,220,d->iso?t->muted:t->ink);
-    install_text_ltr(cr,d->path,11,400,r.x+r.w-285,r.y+31,220,t->muted);
-    char size[32];snprintf(size,sizeof size,"%.1f GiB",d->size_bytes/1073741824.0);install_text_ltr(cr,size,12,500,r.x+r.w*.46,r.y+19,r.w*.14,d->iso?t->muted:t->ink);
-    if(!strcmp(d->bus,"unknown"))install_text_r(cr,t,"לא ידוע",12,400,r.x+r.w*.42,r.y+19,r.w*.12,t->muted);
-    else install_text_ltr(cr,d->bus[0]?d->bus:"—",12,400,r.x+r.w*.30,r.y+19,r.w*.12,t->muted);
+    /* #3051: which disk it is -- the stick's "דיסק N" on a line of its own (rows are then taller), the serial after the device */
+    char slot[96],ident[160];install_disk_slot_label(d,slot,sizeof slot);
+    if(d->serial[0])snprintf(ident,sizeof ident,"%s · SN %s",d->path,d->serial);else snprintf(ident,sizeof ident,"%s",d->path);
+    double off=(r.h-58)/2,dy=slot[0]?16:off;   /* off: the columns of a 58px row, centred in a taller one */
+    if(slot[0]){Text q=text_make(cr,FONT_SANS,12,700,slot,0,DIR_RTL);text_draw(cr,&q,r.x+r.w-285,r.y+7,d->iso?t->muted:t->indigo);text_free(&q);}
+    install_text_ltr(cr,d->model[0]?d->model:d->path,13,600,r.x+r.w-285,r.y+9+dy,300,d->iso?t->muted:t->ink);
+    install_text_ltr(cr,ident,11,400,r.x+r.w-285,r.y+31+dy,300,t->muted);
+    char size[32];snprintf(size,sizeof size,"%.1f GiB",d->size_bytes/1073741824.0);install_text_ltr(cr,size,12,500,r.x+r.w*.46,r.y+19+off,r.w*.14,d->iso?t->muted:t->ink);
+    if(!strcmp(d->bus,"unknown"))install_text_r(cr,t,"לא ידוע",12,400,r.x+r.w*.42,r.y+19+off,r.w*.12,t->muted);
+    else install_text_ltr(cr,d->bus[0]?d->bus:"—",12,400,r.x+r.w*.30,r.y+19+off,r.w*.12,t->muted);
     char has[256];display_disk_contents(d->has[0]?d->has:"—",has,sizeof has);
-    install_text_r(cr,t,d->iso?"מדיית ההתקנה":has,11,400,r.x+r.w*.28,r.y+(selected?9:14),r.w*.24,t->muted);
-    if(selected)install_text_r(cr,t,"יימחק",11,600,r.x+r.w*.28,r.y+33,r.w*.24,t->danger_fg);   /* ui-audit: was r.x+68, on top of "has" at 1024 */
-    if(!strcmp(d->smart,"failed"))install_text_r(cr,t,"SMART נכשל",11,600,r.x+r.w*.58,r.y+37,r.w*.14,t->danger_fg);   /* #3007: under the size */
+    install_text_r(cr,t,d->iso?"מדיית ההתקנה":has,11,400,r.x+r.w*.28,r.y+(selected?9:14)+off,r.w*.24,t->muted);
+    if(selected)install_text_r(cr,t,"יימחק",11,600,r.x+r.w*.28,r.y+33+off,r.w*.24,t->danger_fg);   /* ui-audit: was r.x+68, on top of "has" at 1024 */
+    int tone=0;const char *smart=d->iso?NULL:smart_words(d,&tone);   /* #3007: under the size; #3131: every verdict, not only the failed one */
+    if(smart)install_text_r(cr,t,smart,11,tone?600:400,r.x+r.w*.58,r.y+37+off,r.w*.2,tone==2?t->danger_fg:(tone==1?t->success_ink:t->muted));
     if(!d->iso)hit_add(a,r,HIT_INSTALL_DISK_BASE+i);
 }
 
@@ -103,13 +120,25 @@ static double raid_row(App *a,cairo_t *cr,double x,double y,double w){
     return y+4;
 }
 
+/* #3054: the line under the table names the disk that will be erased -- name, size, device (#2147). Each Latin
+ * part is its own isolated run: with no model "ללא שם" is Hebrew, and the number was then ordered apart from
+ * "GiB · /dev/vda" ("/dev/vda 40.0 · GiB"). The Hebrew words stay outside the isolates. */
+static void disk_warning(const InstallDisk *d,char *out,size_t n){
+    char model[200],size[48],path[112],raw[32];
+    if(d->model[0])bidi_isolate(d->model,model,sizeof model);else snprintf(model,sizeof model,"ללא שם");
+    snprintf(raw,sizeof raw,"%.1f GiB",d->size_bytes/1073741824.0);bidi_isolate(raw,size,sizeof size);
+    bidi_isolate(d->path,path,sizeof path);
+    snprintf(out,n,"כל הנתונים בדיסק %s · %s · %s יימחקו",model,size,path);
+}
+
 void install_draw_disk(App *a,cairo_t *cr,InstallLayout l){
     InstallState *s=&a->install;const Theme *t=a->theme;double x=l.body.x,w=l.body.w,y=l.body.y;
-    if(s->ndisks){Rect table={x,y,w,42+s->ndisks*58};install_card(cr,t,table);disk_head(cr,t,(Rect){x+1,y+1,w-2,40});   /* #2968: no disks = no empty table */
-    for(int i=0;i<s->ndisks;i++){disk_row(a,cr,(Rect){x+1,y+41+i*58,w-2,58},i);}if(a->focus>=HIT_INSTALL_DISK_BASE&&a->focus<HIT_INSTALL_DISK_BASE+INSTALL_MAX_DISKS)install_focus_ring(a,cr,table,a->focus);y+=table.h+16;}   /* #2776: the list is one stop */
+    double rh=disk_row_h(s);
+    if(s->ndisks){Rect table={x,y,w,42+s->ndisks*rh};install_card(cr,t,table);disk_head(cr,t,(Rect){x+1,y+1,w-2,40});   /* #2968: no disks = no empty table */
+    for(int i=0;i<s->ndisks;i++){disk_row(a,cr,(Rect){x+1,y+41+i*rh,w-2,rh},i);}if(a->focus>=HIT_INSTALL_DISK_BASE&&a->focus<HIT_INSTALL_DISK_BASE+INSTALL_MAX_DISKS)install_focus_ring(a,cr,table,a->focus);y+=table.h+16;}   /* #2776: the list is one stop */
     y=raid_row(a,cr,x,y,w);
     int selectable=0;for(int i=0;i<s->ndisks;i++)selectable+=!s->disks[i].iso;
-    if(s->disk>=0&&s->disk<s->ndisks){char warning[320];const InstallDisk *d=&s->disks[s->disk];if(s->raid!=RAID_NONE)snprintf(warning,sizeof warning,"כל הנתונים ב-%d הכוננים יימחקו, והם יאוחדו למערך %s",install_raid_count(s),RAID_OPTS[s->raid].label);else snprintf(warning,sizeof warning,"כל הנתונים בדיסק %s · %.1f GiB · %s יימחקו",d->model[0]?d->model:"ללא שם",d->size_bytes/1073741824.0,d->path);install_text_r(cr,t,warning,14,600,x+w,y,w,t->danger_fg);y+=30;
+    if(s->disk>=0&&s->disk<s->ndisks){char warning[480];const InstallDisk *d=&s->disks[s->disk];if(s->raid!=RAID_NONE)snprintf(warning,sizeof warning,"כל הנתונים ב-%d הכוננים יימחקו, והם יאוחדו למערך %s",install_raid_count(s),RAID_OPTS[s->raid].label);else disk_warning(d,warning,sizeof warning);install_text_r(cr,t,warning,14,600,x+w,y,w,t->danger_fg);y+=30;
         int bad=install_smart_failed(s);if(bad>=0){char dev[64],why[320];bidi_isolate(s->disks[bad].path,dev,sizeof dev);snprintf(why,sizeof why,"בדיקת SMART של הדיסק %s נכשלה: הדיסק עצמו מדווח שהוא עומד להיכשל. מומלץ לבחור דיסק אחר.",dev);   /* isolated: else "/dev/sda" reads "dev/sda/" */install_text_r(cr,t,why,13,600,x+w,y,w,t->danger_fg);y+=26;}   /* #3007 */
         disk_ack(a,cr,(Rect){x+w-180,y,180,44},1);}   /* #2147: name, size and device */
     else if(selectable){install_text_r(cr,t,"בחר את הדיסק להתקנה — כל הנתונים בו יימחקו",14,600,x+w,y,w,t->ink);y+=30;disk_ack(a,cr,(Rect){x+w-180,y,180,44},0);}   /* #2147: more than one disk, none chosen */

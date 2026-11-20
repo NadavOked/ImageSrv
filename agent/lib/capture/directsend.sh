@@ -73,7 +73,7 @@ direct_wait_running() {
                 || { log "direct: task $1 is no longer ours -- not sending"; return 1; }
             case "$(json_get "$RESP" ".task.direct.session_state")" in
                 running) direct_operator_wait "$RESP" || return 0 ;;   # #1581: not while a cloner waits for a person
-                closed)  log "direct: the wave closed before it started"; return 1 ;;
+                closed|failed) log "direct: the wave closed before it started"; return 1 ;;   # #3161: failed = refused by name before a byte (the round carries the reason)
             esac
             ui_clear; ui_header
             echo "  Waiting for the cloning machines to join the wave."
@@ -125,7 +125,7 @@ direct_send_one() {
         { "$_do_pcl" $(partclone_mode "$_do_pcl" -c) $_do_ignore -s "$_do_node" \
               -L "$RUN_DIR/targets/$1/partclone.log" 2>> "$LOG_FILE"
           echo "$?" > "$RUN_DIR/dpcl.$2.rc"; } \
-            | { zstd -"$CAPTURE_LEVEL" -T"$CAPTURE_THREADS" -c 2>> "$LOG_FILE"
+            | { capture_cut "$_do_pcl" "$RUN_DIR/didx.$2" 2>> "$LOG_FILE"   # #2533: pass 1's own cut, byte for byte
                 echo "$?" > "$RUN_DIR/dzstd.$2.rc"; } \
             | { FANOUT_STALL_EVICT_MS="$_do_evict" FANOUT_BLOCK_EVICT_MS="$_do_evict" fanout -S "$RUN_DIR/dsha.$2" \
                     -P "$RUN_DIR/targets/$1/bytes.raw" 16777216 "$_do_fifo" \
@@ -179,10 +179,12 @@ direct_send_run() {
     echo "capturing" > "$RUN_DIR/state"
     CAPTURE_SINK=discard capture_disk "$1" "$2" "${3:-}" || return 1   # #1955: #1901's identity gate, before the first datagram
     _dr_manifest="$RUN_DIR/new-manifest.json"
+    if command -v direct_chunk_offer > /dev/null 2>&1; then direct_chunk_offer "$1" "$2" "$_dr_manifest" || return 1; fi   # #3161: the chunk indexes and heads, before the manifest that signs them (directchunk.sh)
     direct_manifest_put "$1" "$_dr_manifest" \
         || { _direct_failed "$2" "השרת לא קיבל את המניפסט החי"; return 1; }
     echo "waiting" > "$RUN_DIR/state"
     direct_wait_running "$1" || { _direct_failed "$2" "הגל לא התחיל"; return 1; }
+    [ "$(json_get "$RESP" ".task.direct.engine")" != chunk ] || { direct_chunk_run "$1" "$2" "$_dr_manifest"; return; }   # #3161: the chunk engine's wave (directchunk.sh)
 
     # The multicast parameters come from the hello that said "running" --
     # the server's, so the stream behaves like a library round (#437/#438).
@@ -268,6 +270,7 @@ direct_send_task() {
     shrink_restore_source "$_dt_disk" || :   # #1171: the tail's RAM view, after both reads; not released = a warning in error
     [ "$_dt_rc" != 0 ] || capture_unhib_note "$_dt_disk" || { _direct_failed "$_dt_disk" "לא הצלחנו לרשום שההשהיה בוטלה בעותק — המקור לא נכתב"; _dt_rc=1; }
     if [ "$_dt_rc" -eq 0 ]; then
+        target_set "$_dt_disk" "done"   # #2885: the source's own state too -- target_init left it waiting, both engines
         echo "done" > "$RUN_DIR/state"
         report_final "$_dt_ppid" "" "$MAC" "$SERVER" "$1" \
             || { hold_unheard "" "$1"; return 1; }

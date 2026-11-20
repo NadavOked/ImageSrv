@@ -16,7 +16,7 @@
 # source. A failing target fails alone; the source failing fails every one.
 # #2023: opt-in inline full read-back; otherwise the after-copy check (#1805).
 
-LC_STALL_S="${LC_STALL_S:-${WAIT_STREAM_STALL_S:-300}}"
+# LC_STALL_S (a test's override) or DISK_STALL_S (timing.sh): the console's drawer_disk_wait_seconds if an answer brought it, else 120 -- Nadav 18/11, was 300; read at use, an answer can come later
 
 _lc_gpt_why() {
     # #1455: apply_gpt's own steps (zap, the one table call, rereadpt) log their cause
@@ -26,20 +26,20 @@ _lc_gpt_why() {
 ' "$PLAN_ERROR"; return; }
     printf 'טבלת המחיצות לא נכתבה: %s
 ' "$(tail -n 3 "$LOG_FILE" 2>/dev/null | tr '
-' ' ' | sed 's/[0-9A-Fa-f]\{8\}-[0-9A-Fa-f]\{4\}-[0-9A-Fa-f]\{4\}-[0-9A-Fa-f]\{4\}-[0-9A-Fa-f]\{12\}/<guid>/g' | cut -c1-240)"   # #2834: it reaches the server's journal -- no GUID of the source (-u/-U)
+' ' ' | sed -e 's/\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\( rtc\)\{0,1\}\] //g' -e 's/[0-9A-Fa-f]\{8\}-[0-9A-Fa-f]\{4\}-[0-9A-Fa-f]\{4\}-[0-9A-Fa-f]\{4\}-[0-9A-Fa-f]\{12\}/<guid>/g' | cut -c1-240)"   # #2834: it reaches the server's journal -- no GUID of the source (-u/-U); #3850: and no "[HH:MM:SS rtc]" stamp eating the 240 characters
 }
 
 lc_prepare_target() {
     # $1 = target, $2 = manifest. The table exactly as on the source (GUIDs
     # included), grown to a larger disk -- run_restore_drawers' own sequence.
     target_set "$1" writing
+    lc_hdd_gate "$1" || return 1   # X16 (#3064): an HDD with "HDD support" off, before anything is written
     disk_fits "$1" "$2" || return 1
     if ! apply_gpt "$1" "$2"; then
         fail_written_target "$1" "$(_lc_gpt_why)"; return 1
     fi
-    if ! EXPAND_OVERRIDE=auto expand_last "$1" "$2"; then
-        log "WARNING: expansion failed on $1 -- writing at the source's own size"
-        apply_gpt "$1" "$2" || { fail_written_target "$1" "$(_lc_gpt_why)"; return 1; }
+    if ! EXPAND_OVERRIDE=auto expand_last "$1" "$2"; then   # #2405: not a quiet way back when D:/E: would arrive shrunk
+        EXPAND_OVERRIDE=auto expand_fallback "$1" "$2" || { fail_written_target "$1" "$(_lc_gpt_why)"; return 1; }
     fi
     # #1798: the source's names come back only after the copy and the grow (finish_grow) -- until then the mark
     reread_table "$DEVROOT/$1" \
@@ -97,8 +97,8 @@ _lc_wait_stream() {
         _lw_now=$(_last_number "$2")
         if [ "$_lw_now" != "$_lw_seen" ]; then _lw_seen=$_lw_now; _lw_still=0; continue; fi
         _lw_still=$((_lw_still + 1))
-        if [ "$_lw_still" -ge "$LC_STALL_S" ] && [ "$_lw_rc" = 0 ]; then
-            log "local clone: no progress for $LC_STALL_S s -- ending the source reader"
+        if [ "$_lw_still" -ge "${LC_STALL_S:-${DISK_STALL_S:-120}}" ] && [ "$_lw_rc" = 0 ]; then
+            log "local clone: no progress for ${LC_STALL_S:-${DISK_STALL_S:-120}} s -- ending the source reader"
             kill "$(cat "$LC/run/src.pid" 2>/dev/null)" 2>/dev/null; _lw_rc=1
         fi
     done
@@ -145,10 +145,11 @@ lc_stream() {
     # #1466: a partition shrunk through a RAM view is read from the view (lc_src_node).
     # #2017: the operator's "continue anyway" (lcraw.sh) reads through bad sectors: zeros, counted.
     # #2158: direct -- via the page cache one bad sector zeroed the kernel's read unit (4096 on 6.18), not bs
-    rm -f "$_ls_r/rescue.err"
+    rm -f "$_ls_r/rescue.err" "$_ls_r/rescue.map"
     (
         if [ "${LC_RESCUE:-0}" = 1 ]; then
-            busybox dd if="$(lc_src_node "$_ls_src" "$_ls_i")" bs="$LC_RESCUE_BS" iflag=direct conv=noerror,sync > "$_ls_r/src.fifo" 2> "$_ls_r/rescue.err" &
+            # #2527: rescuecat, not dd -- the same O_DIRECT read, and the unread ranges in a map (lcraw.sh)
+            rescuecat read -s "$(lc_src_node "$_ls_src" "$_ls_i")" -b "$LC_RESCUE_BS" -m "$_ls_r/rescue.map" -n 1                 -L "${LC_RESCUE_MAXRUN:-67108864}" > "$_ls_r/src.fifo" 2> "$_ls_r/rescue.err" &
         else
             # shellcheck disable=SC2046 # partclone_mode flags are a word list
             "$_ls_pcl" $(partclone_mode "$_ls_pcl" -c) $_ls_ign -s "$(lc_src_node "$_ls_src" "$_ls_i")" \
@@ -181,10 +182,12 @@ lc_stream() {
     _ls_src_rc=$(cat "$_ls_r/src.rc" 2>/dev/null); _ls_sha=$(awk '{print $1}' "$_ls_r/sha.out" 2>/dev/null)
     _ls_why=""
     if [ "$_ls_w" = 2 ]; then _ls_why="השיכפול נעצר באמצע מחיצה $_ls_i — היעד אינו שמיש"
-    elif [ "$_ls_w" = 1 ]; then _ls_why="מחיצה $_ls_i: המקור לא התקדם $LC_STALL_S שניות"
+    elif [ "$_ls_w" = 1 ]; then _ls_why="מחיצה $_ls_i: המקור לא התקדם ${LC_STALL_S:-${DISK_STALL_S:-120}} שניות"
     elif [ "$_ls_src_rc" != 0 ] && [ "${LC_RESCUE:-0}" != 1 ] && grep -qE ' ok$| failed empty stream$' "$_ls_r/fanout.out" 2>/dev/null; then
         # #2017: the reader failed and a target took all it gave -- the source, not the targets (lcraw.sh)
         LC_SRC_RC=$_ls_src_rc; [ "$_ls_pcl" = partclone.dd ] && return 4; return 3
+    elif [ "$_ls_src_rc" != 0 ] && [ "${LC_RESCUE:-0}" = 1 ]; then   # #2527: the disk stopped answering -- a short stream is no copy
+        _ls_why="מחיצה $_ls_i: הדיסק הפסיק להגיב באמצע ההעתקה (rescuecat rc=$_ls_src_rc: $(tail -n 1 "$_ls_r/rescue.err" 2>/dev/null | cut -c1-120)) — היעד אינו שמיש; המקור לא שונה"
     elif [ "$_ls_src_rc" != 0 ]; then _ls_why="מחיצה $_ls_i: קריאת המקור נכשלה (partclone rc=${_ls_src_rc:-לא נרשם}) — המקור לא שונה"
     elif ! _lc_hash_ok "$_ls_sha"; then _ls_why="מחיצה $_ls_i: ה-xxh64 של המקור לא חושב — אין ראיה למה שנקרא"
     fi
