@@ -19,7 +19,7 @@ _win_need() { command -v "$1" >/dev/null 2>&1 || { _win_missing "$1"; return 2; 
 _win_confirm() {
     _expected=${MACHINE_NAME:-$(hostname 2>/dev/null)}
     [ -n "$_expected" ] && [ "$1" = "$_expected" ] && return 0
-    printf 'סירוב: פעולה הרסנית; יש להקליד את שם המכונה "%s".\n' "$_expected"
+    printf 'סירוב: פעולה הרסנית; לא אושרה בחלון האישור (הכפתור האדום).\n'
     _win_meaning 'דבר לא נמח ולא שונה.'
     return 3
 }

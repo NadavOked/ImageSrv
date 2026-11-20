@@ -21,11 +21,11 @@ surrogate בודד (`"\\ud800"`, שאין לו קידוד UTF-8) מוחלפת ב
 
 from __future__ import annotations
 
-import json
-import math
 import re
 
 from starlette.responses import JSONResponse
+
+from server.core import finite_json
 
 #: התקרה לגוף JSON אחד מהסוכן. hello הוא הגדול שבהם: ארבעת השדות שנשמרים
 #: כ-JSON חסומים ב-64KB כל אחד (`hello.HELLO_FIELD_MAX_BYTES`), ועוד המלאי
@@ -42,11 +42,17 @@ MAX_DEPTH = 32
 class BodyError(Exception):
     """גוף שאין להמשיך איתו. `status`/`code`/`message` — התשובה בתבנית הרוחבית."""
 
-    def __init__(self, status: int, code: str, message: str) -> None:
+    def __init__(self, status: int, code: str, message: str, *,
+                 length: int | None = None, pos: int | None = None) -> None:
         super().__init__(message)
         self.status = status
         self.code = code
         self.message = message
+        #: #3633: מה שאפשר לומר על גוף שנדחה בלי לשמור אותו — האורך בבייטים, והמקום
+        #: שבו הפרסור נפל (`JSONDecodeError.pos`, מנוי בתווים אחרי הפענוח). הגוף עצמו
+        #: אינו נשמר: יכולים להיות בו סודות (`monitor_secret`).
+        self.length = length
+        self.pos = pos
 
 
 async def read_json(request, limit: int = MAX_BYTES) -> object:
@@ -62,30 +68,18 @@ async def read_json(request, limit: int = MAX_BYTES) -> object:
     return parse(bytes(raw))
 
 
-def _no_constant(name: str) -> float:
-    """#2493: `NaN`/`Infinity` אינם JSON. `json.loads` מקבל אותם, `json.dumps` כותב אותם
-    כמו שהם ל-DB, ו-`JSONResponse` מסרב להם — `GET /machines` כולו נפל ב-500 על שורה אחת."""
-    raise ValueError(f"non-finite JSON constant {name}")
-
-
-def _finite(text: str) -> float:
-    """#2493: וכך גם `1e999` — מספר תקין בתחביר שהופך ל-`inf`."""
-    value = float(text)
-    if not math.isfinite(value):
-        raise ValueError("non-finite JSON number")
-    return value
-
-
 def parse(raw: bytes) -> object:
     """bytes → ערך JSON שאפשר לשמור. `BodyError` 400 על כל דבר אחר."""
     try:
-        value = json.loads(raw, parse_constant=_no_constant, parse_float=_finite)
+        value = finite_json.loads(raw)
     except RecursionError:
-        raise BodyError(400, "bad_json", "body is nested too deeply") from None
-    except ValueError:      # JSONDecodeError, וגם UnicodeDecodeError על bytes שאינם UTF-8
-        raise BodyError(400, "bad_json", "body is not JSON") from None
+        raise BodyError(400, "bad_json", "body is nested too deeply", length=len(raw)) from None
+    except ValueError as exc:      # JSONDecodeError, וגם UnicodeDecodeError על bytes שאינם UTF-8
+        # #3633: `pos` של JSONDecodeError; ב-UnicodeDecodeError זה `start` (בייט). אחר (NaN, 1e999) — אין מקום.
+        pos = getattr(exc, "pos", getattr(exc, "start", None))
+        raise BodyError(400, "bad_json", "body is not JSON", length=len(raw), pos=pos) from None
     if _too_deep(value):
-        raise BodyError(400, "bad_json", "body is nested too deeply")
+        raise BodyError(400, "bad_json", "body is nested too deeply", length=len(raw))
     return _clean(value)
 
 
@@ -131,6 +125,17 @@ def _clean(value: object) -> object:
 #: במפורש, ו-`tests/test_agent_body_cap_2410.py` נופל על כל נתיב שאינו כאן ואינו חסום.
 STREAM_ROUTES = (
     ("PUT", re.compile(r"^/api/v1/capture/[^/]+/files/[^/]+$")),
+    # #3161: the chunk index and the head frame of a partition of a direct send. Small next to an image
+    # (36 bytes a chunk; a bit map), and larger than MAX_BYTES on a big disk. `rounds/directchunk.py`
+    # reads them itself -- after the task's token and the identity gate, and up to INDEX_MAX / HEAD_MAX.
+    # #3332: and its BLAKE3 list (32 bytes a chunk), read the same way, up to INDEX_MAX.
+    ("PUT", re.compile(r"^/api/v1/direct/[^/]+/(index|head|b3)/[^/]+$")),
+    # #3268: the copy of the regions the waiting-screen write check overwrites (~12MiB, binary). `disks/write_backup.py`
+    # reads it itself, after the identity gate, up to its own MAX_BYTES, and refuses a body whose sha256 is not the one it came with.
+    ("POST", re.compile(r"^/api/v1/agent/write-backup$")),
+    # #3268 (18/11): the copy of the sustained part -- a region of some hundred MiB, streamed to a file by `disks/write_backup.py`
+    # (up to its own MAX_LONG_BYTES, with the sha256 it came with); it cannot be held in memory by this cap.
+    ("POST", re.compile(r"^/api/v1/agent/write-backup/long$")),
 )
 
 

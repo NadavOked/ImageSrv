@@ -51,17 +51,23 @@ cloner_gui_pace() {
     [ -r "$GUI_DIR/moved.$1" ] && read -r _cg_moved _cg_mb < "$GUI_DIR/moved.$1"
     case "$_cg_moved" in ''|*[!0-9]*) _cg_mb= ;; esac
     [ "$_cg_mb" = "$3" ] || { _cg_moved=$_cg_now; printf '%s %s\n' "$_cg_now" "$3" > "$GUI_DIR/moved.$1"; }
-    [ $((_cg_now - _cg_moved)) -lt "${CLONER_STALL_S:-10}" ] || { _cg_rate=0; return 0; }
+    cloner_gui_avg "$1" "$3" "$4"
+    # #3270 (Nadav 14/11): still = rate 0, but the end stays -- the wave's average so far, which the stall slows
+    [ $((_cg_now - _cg_moved)) -lt "${CLONER_STALL_S:-10}" ] || _cg_rate=0
+    return 0
+}
+
+cloner_gui_avg() {   # $1 = dev, $2 = bytes, $3 = total; the average since the anchor -> _cg_rate/_cg_eta
     _cg_t0=; _cg_b0=
     [ -r "$GUI_DIR/pace.$1" ] && read -r _cg_t0 _cg_b0 < "$GUI_DIR/pace.$1"
     case "$_cg_t0:$_cg_b0" in
-        *[!0-9:]*|:*|*:) printf '%s %s\n' "$_cg_now" "$3" > "$GUI_DIR/pace.$1"; return 0 ;;
+        *[!0-9:]*|:*|*:) printf '%s %s\n' "$_cg_now" "$2" > "$GUI_DIR/pace.$1"; return 0 ;;
     esac
-    _cg_dt=$((_cg_now - _cg_t0)); _cg_db=$(($3 - _cg_b0))
+    _cg_dt=$((_cg_now - _cg_t0)); _cg_db=$(($2 - _cg_b0))
     [ "$_cg_dt" -gt 0 ] && [ "$_cg_db" -gt 0 ] || return 0
     _cg_rate=$((_cg_db / _cg_dt))
     [ "$_cg_rate" -gt 0 ] || { _cg_rate=-1; return 0; }
-    [ "$4" -gt "$3" ] && _cg_eta=$((($4 - $3) / _cg_rate))
+    [ "$3" -gt "$2" ] && _cg_eta=$((($3 - $2) / _cg_rate))
     return 0
 }
 
@@ -84,9 +90,16 @@ gui_rb_state() {
     if gui_rb_fields "$1"; then
         _cg_rbp="$_cg_rbd|$_cg_rbt"
         if [ "$2" = verifying ]; then
-            cloner_gui_pace "rb.$1" writing "$_cg_rbd" "$_cg_rbt"
-            [ "$_cg_rate" != 0 ] || { _cg_rate=-1; _cg_eta=-1; }   # a bar that stands is "not measured", never "waiting for the stream"
-            _cg_rbr=$_cg_rate
+            # #3071: in a sampled check the bar also moves over the chunks the sample did not draw (rbprog.sh), so
+            # bytes-per-second of the bar is not a read speed (8249 MB/s on a SATA disk). Only a check that read every
+            # chunk has a rate; a sample says "not measured" (-1), never a number made of bytes nobody read.
+            case "$(json_get "$RUN_DIR/response.json" ".readback_mode" 2>/dev/null)" in
+                full|inline)
+                    cloner_gui_pace "rb.$1" writing "$_cg_rbd" "$_cg_rbt"
+                    [ "$_cg_rate" != 0 ] || { _cg_rate=-1; _cg_eta=-1; }   # a bar that stands is "not measured", never "waiting for the stream"
+                    _cg_rbr=$_cg_rate ;;
+                *) _cg_rate=-1; _cg_eta=-1 ;;
+            esac
         fi
     fi
     [ "$2" = verifying ] || rm -f "$GUI_DIR/pace.rb.$1" "$GUI_DIR/moved.rb.$1"
@@ -115,6 +128,25 @@ gui_forecast_record() {
     return 0
 }
 
+drawer_fill_record() {   # $1 = dev. #3064 (R5): drawer_fill=dev|part|missing|chunks while the drawer completes -- targets/<dev>/rejoin (drawerfill.sh _fl_note)
+    # `missing` is required and must be a JSON number that is a count (a string "7" is not one: `| numbers`); part/chunks that are not counts stay empty ("not said", never 0). No file, or no count = no record.
+    [ -s "$RUN_DIR/targets/$1/rejoin" ] || return 0
+    _df_m=$(json_get "$RUN_DIR/targets/$1/rejoin" ".missing | numbers"); _df_p=$(json_get "$RUN_DIR/targets/$1/rejoin" ".part | numbers"); _df_c=$(json_get "$RUN_DIR/targets/$1/rejoin" ".chunks | numbers")
+    case "$_df_m" in ''|*[!0-9]*) return 0 ;; esac
+    case "$_df_p" in ''|*[!0-9]*) _df_p= ;; esac
+    case "$_df_c" in ''|*[!0-9]*) _df_c= ;; esac
+    printf 'drawer_fill=%s|%s|%s|%s
+' "$1" "$_df_p" "$_df_m" "$_df_c"
+}
+
+cloner_nic_link() {   # #3644: the banner's record, or WHY there is none -- in the log once per reason, not every tick. Always rc 0: advice never freezes the drawers. log >&2: this function's stdout IS the state file (#3637)
+    if ! command -v nic_link_record > /dev/null 2>&1; then _cg_nlw='nic_link_record is not defined in this process (sysinfo.sh is not loaded)'
+    elif _cg_nlr=$(nic_link_record) && [ -n "$_cg_nlr" ]; then rm -f "$GUI_DIR/nic_link.why"; printf '%s\n' "$_cg_nlr"; ! command -v nic_bus_banner_record > /dev/null 2>&1 || nic_bus_banner_record; return 0
+    else _cg_nlw="no usable IFACE in this process (IFACE='${IFACE:-}')"; fi
+    [ "$(cat "$GUI_DIR/nic_link.why" 2>/dev/null)" = "$_cg_nlw" ] || { printf '%s' "$_cg_nlw" > "$GUI_DIR/nic_link.why"; log "cloner screen: no nic_link record, the 100 Mb/s banner cannot show -- $_cg_nlw (#3644)" >&2; }
+    return 0
+}
+
 cloner_gui_state() {
     # Written by the kiosk process. The per-drawer files are the local source
     # of truth (progress.sh), so the screen keeps updating even when a server
@@ -131,6 +163,7 @@ cloner_gui_state() {
     gui_header_state "$RUN_DIR/response.json" >> "$_cg_next" || return 1
     gui_rb_mode >> "$_cg_next" || return 1   # #2046
     gui_forecast_record >> "$_cg_next" || return 1   # #1843
+    if command -v gui_prodline_records > /dev/null 2>&1; then gui_prodline_records >> "$_cg_next" || :; fi   # #3181: a production line's three records (prodlinegui.sh); a regular round = none, the screen as it was
     _cg_count=$(json_get "$RUN_DIR/response.json" ".drawer_count")
     case "$_cg_count" in [1-8]) printf 'drawer_count=%s\n' "$_cg_count" >> "$_cg_next" || return 1 ;; esac
     # #1304: the standby screen's connection line. A hello.state the reader
@@ -141,6 +174,7 @@ cloner_gui_state() {
     slot_names_refresh || :; drawer_slots_refresh || :   # #1495: the drawer mapping, the same way
     if command -v disk_labels_refresh > /dev/null 2>&1; then disk_labels_refresh || :; fi   # #1857: the sets of the disks (disklabels.sh); a failed read keeps the last file
     { slot_names_records && drawer_slots_records; } >> "$_cg_next" || return 1
+    cloner_nic_link >> "$_cg_next" || return 1   # #3277: nic_link=<iface>|<Mb/s>|<max>, the link banner; #3644: no record is said in the log (never freezes the drawers)
     fw_warn_record >> "$_cg_next" || :   # #2080: fw_warn=<n>|<text>, the moved-connection warning; advice, never freezes the drawers
 
     _cg_any=0
@@ -150,8 +184,10 @@ cloner_gui_state() {
         _cg_dev=$(basename "$_cg_dir")
         _cg_port=$(disk_port "$_cg_dev"); [ -n "$_cg_port" ] || _cg_port=$(cut -d'|' -f2 "$_cg_dir/seen" 2>/dev/null)   # #1602: a pulled drawer keeps its slot
         _cg_state=$(cat "$_cg_dir/state" 2>/dev/null)
+        _cg_word=$_cg_state; if command -v drawer_gui_word > /dev/null; then _cg_word=$(drawer_gui_word "$_cg_dev" "$_cg_state"); fi   # #3270: pulled / returned are not failed
         _cg_total=$(cat "$_cg_dir/total" 2>/dev/null)
         _cg_bytes=$(target_bytes "$_cg_dev")
+        if command -v chunk_stream_pair >/dev/null 2>&1 && chunk_stream_pair "$_cg_dev"; then _cg_bytes=$_cpg_bytes; _cg_total=$_cpg_total; fi   # #3070: the chunk engine's bar and rate count the stream written, not the compressed bytes (chunkprog.sh)
         _cg_error=
         [ -f "$_cg_dir/error" ] && _cg_error=$(cat "$_cg_dir/error")
         # #2987: a failed drawer's field 6 is the operator's sentence (opsay.sh); the diagnosis stays in error, the log and the console's hover
@@ -168,10 +204,10 @@ cloner_gui_state() {
         # asked to cancel ("" = nobody) and when it was done (epoch; "" = not yet).
         cloner_gui_pace "$_cg_dev" "$_cg_state" "$_cg_bytes" "$_cg_total"
         gui_rb_state "$_cg_dev" "$_cg_state" && _cg_rb=1 || _cg_rb=0   # #2046: after the write's pace -- a read-back's rate replaces it
-        _cg_st=0; if command -v stall_fields > /dev/null && stall_fields "$_cg_dev"; then _cg_st=1; _cg_rate=0; _cg_eta=-1; fi   # #2988: it stands -- rate 0, measured, at once (not after CLONER_STALL_S)
+        _cg_st=0; if command -v stall_fields > /dev/null && stall_fields "$_cg_dev"; then _cg_st=1; _cg_rate=0; fi   # #2988: it stands -- rate 0, measured, at once (not after CLONER_STALL_S); #3270: the average's end stays
         _cg_drv=''; [ ! -e "$_cg_dir/drivers.json" ] || _cg_drv=$(drivers_gui_fields "$_cg_dir/drivers.json") || return 1   # #1331: fields 13-17 (+18-20 for Linux)
         printf 'drawer=%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s%s\n' \
-            "$_cg_port" "$_cg_dev" "$_cg_state" \
+            "$_cg_port" "$_cg_dev" "$_cg_word" \
             "$_cg_bytes" "$_cg_total" "$_cg_error" \
             "$_cg_rate" "$_cg_eta" "$(disk_drawer "$_cg_dev" "$_cg_port")" \
             "$(cat "$_cg_dir/cancel" 2>/dev/null | tr -d '\r\n|')" "$(cat "$_cg_dir/cancelled_at" 2>/dev/null)" "$_cg_drv" >> "$_cg_next" ||
@@ -182,6 +218,9 @@ cloner_gui_state() {
         # #1907: done, not verified -- the server's check list did not come down (readback.sh): orange on the row
         [ "$(cat "$_cg_dir/readback_why" 2>/dev/null)" != list_not_fetched ] || printf 'drawer_rb=%s|list_not_fetched\n' "$_cg_dev" >> "$_cg_next" || return 1
         [ "$_cg_rb" = 0 ] || gui_rb_print drawer_rbp "$_cg_dev" >> "$_cg_next" || return 1   # #2046: the read-back's bar and verdict
+        [ "$_cg_state" != writing ] || drawer_fill_record "$_cg_dev" >> "$_cg_next" || return 1   # #3064 (R5): a returned drawer still completing
+        # #3167: drawer_note=dev|text -- a note on a done drawer (drawernames.sh): green, a small line
+        [ ! -s "$_cg_dir/note" ] || printf 'drawer_note=%s|%s\n' "$_cg_dev" "$(tr '\r\n|' '   ' < "$_cg_dir/note" | sed 's/ *$//')" >> "$_cg_next" || return 1
     done
 
     stream_beep_tick   # #2067: one stream sample across all writing drawers, in the background
@@ -206,8 +245,9 @@ cloner_gui_state() {
 # #867: by disk number (sda can be disk 3), a disk with no slot last; the prefix after the sort.
 cloner_cdisks() {
     _cg_idle="$GUI_DIR/cdisk.unsorted"
-    : > "$_cg_idle" || return 1
+    : > "$_cg_idle" || return 1; : > "$_cg_idle.rules" || return 1
     disk_failures_refresh || :   # #874: זיכרון השרת מה-hello האחרון; כשל = הקובץ הקודם
+    command -v idle_wc_decisions_refresh > /dev/null 2>&1 && { idle_wc_decisions_refresh || :; }   # #3268 (B62, 18/11): the brain's decision on the write check, same rule
     for _cg_d in $1; do
         _cg_dport=$(disk_port "$_cg_d")
         case "$_cg_dport" in ''|*[!0-9]*) _cg_dport=0 ;; esac
@@ -231,14 +271,17 @@ cloner_cdisks() {
         _cg_f1=$(command -v disk_f1_observed >/dev/null 2>&1 && disk_f1_observed "$_cg_d") || _cg_f1="|"
         _cg_f1u=$(command -v disk_f1_under >/dev/null 2>&1 && [ "$_cg_f1" != "|" ] && disk_f1_under "$_cg_d")
         case "$_cg_f1u" in ok) _cg_f1u=passed ;; esac
-        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_cg_last" "${_cg_dn%%|*}" "$_cg_dport" "$_cg_d" \
+        _cg_wc="|"; if command -v idle_wc_field > /dev/null 2>&1; then _cg_wc=$(idle_wc_field "$_cg_d") || _cg_wc="|"; elif [ -z "${_cg_wcm:-}" ]; then _cg_wcm=1; printf 'native-gui: idle_wc_field is not in the kiosk load chain (gui_libs) -- fields 18-19 of cdisk= stay empty (#3689)\n' >&2; fi   # #3268: after the hw words, "state|text": checking|ok|slow|failed|unchecked and why. #3689: a library missing here is said once, never an empty field in silence
+        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_cg_last" "${_cg_dn%%|*}" "$_cg_dport" "$_cg_d" \
             "$_cg_dmodel" "$_cg_dsize" "$_cg_dsmart" "$_cg_dcause" "${_cg_link% *}" "${_cg_link#* }" "" "$_cg_dn" \
-            "$(writemark_state "$_cg_d")" "$(command -v hw_note_he >/dev/null 2>&1 && hw_note_he "$_cg_d" "link_slow")" "$_cg_f1" "$_cg_f1u" \
-            "$(command -v hw_words >/dev/null 2>&1 && hw_words "$_cg_d" | tr '\n|' '  ')" \
-            >> "$_cg_idle" || return 1   # #1798: field 12 -- incomplete|clean|unchecked; #1921: 13 -- the drawer's hw note (the link has 7-8; 9, #1366's absolute CRC, is empty since #2846); #2848: 17 -- the hw words
+            "$(writemark_state "$_cg_d")" "$(command -v hw_note_he >/dev/null 2>&1 && hw_note_he "$_cg_d")" "$_cg_f1" "$_cg_f1u" \
+            "$(command -v hw_words >/dev/null 2>&1 && hw_words "$_cg_d" | tr '\n|' '  ')" "$_cg_wc" \
+            >> "$_cg_idle" || return 1
+        disk_rule_record cdisk_rule "$_cg_d" "$_cg_dsmart" "$(writemark_state "$_cg_d")" "$(command -v hw_words >/dev/null 2>&1 && hw_words "$_cg_d" | tr '\n|' '  ')" "${_cg_wc%%|*}" >> "$_cg_idle.rules" || :   # #3666: cdisk_rule= -- the one table's verdict (diskrule.sh)
+        # #1798: field 12 -- incomplete|clean|unchecked; #1921: 13 -- the drawer's hw note (the link has 7-8; 9, #1366's absolute CRC, is empty since #2846); #2848: 17 -- the hw words
     done
     sort -t'|' -k1,1n -k2,2n -k3,3n "$_cg_idle" > "$_cg_idle.sorted" || return 1
-    sed 's/^[01]|[0-9]*|/cdisk=/' "$_cg_idle.sorted"
+    sed 's/^[01]|[0-9]*|/cdisk=/' "$_cg_idle.sorted"; cat "$_cg_idle.rules"
 }
 
 cloner_gui_state_loop() {

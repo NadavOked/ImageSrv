@@ -17,7 +17,7 @@ UDPCAST_PORTBASE="${UDPCAST_PORTBASE:-9000}"
 # ‏STALL=300 (11/09/2026): עד כאן 120, והיא נורתה כשהשולח האט למקבל איטי
 # בזנב אימג' גדול וקטע את הזרם ב-~90% (FOG/Clonezilla: לא להפיל את האיטי).
 # תקרת ההתחלה מגיעה לכל זרם בנפרד מ-next_stream_ceiling (waits.sh, #957).
-UDPCAST_STALL_TIMEOUT="${UDPCAST_STALL_TIMEOUT:-${WAIT_STREAM_STALL_S:-300}}"
+UDPCAST_STALL_TIMEOUT="${UDPCAST_STALL_TIMEOUT:-${WAIT_STREAM_STALL_S:-120}}"
 
 manifest_plan() {
     # $1 = manifest file. One line per partition:
@@ -77,7 +77,7 @@ validate_restore_plan() {
     done < "$_vp"
     _dg=$(json_get "$_vman" ".disk_guid"); [ -z "$_dg" ] || [ "$_dg" = null ] || set -- "$@" -U "$_dg"
     rm -f "$_vimg"; dd if=/dev/zero of="$_vimg" bs=512 count=0 seek="$_vsectors" 2>> "$LOG_FILE" || { PLAN_ERROR="לא ניתן להכין את בדיקת התוכנית — הדיסק לא שונה"; return 1; }
-    "$@" "$_vimg" >> "$LOG_FILE" 2>&1; _vrc=$?; rm -f "$_vimg"; [ "$_vrc" -eq 0 ] || { PLAN_ERROR="sgdisk דחה את תוכנית השחזור — הדיסק לא שונה"; return 1; }
+    log "gap: sgdisk pretend begin" >&2; "$@" "$_vimg" >> "$LOG_FILE" 2>&1; _vrc=$?; log "gap: sgdisk pretend end rc=$_vrc" >&2; rm -f "$_vimg"; [ "$_vrc" -eq 0 ] || { PLAN_ERROR="sgdisk דחה את תוכנית השחזור — הדיסק לא שונה"; return 1; }
 }
 
 partclone_for_fs() {
@@ -86,6 +86,7 @@ partclone_for_fs() {
         vfat|fat|fat32|fat16) echo "partclone.fat" ;;
         ext4|ext3|ext2)       echo "partclone.ext4" ;;
         btrfs)                echo "partclone.btrfs" ;;
+        xfs)                  echo "partclone.xfs" ;;   # #3415: RHEL's default; only the used blocks, not the whole partition
         *)                    echo "partclone.dd" ;;
     esac
 }
@@ -99,10 +100,9 @@ partclone_mode() {
 
 partition_node() {
     # sda 3 -> /dev/sda3, nvme0n1 3 -> /dev/nvme0n1p3.
-    case "$1" in
-        *[0-9]) echo "$DEVROOT/${1}p$2" ;;
-        *)      echo "$DEVROOT/$1$2" ;;
-    esac
+    # #3262: a partition that is restored through RAM (tailshrink.sh) answers with its RAM node until finish_grow
+    _pn=$(tail_shrink_node "$1" "$2" 2> /dev/null) && { echo "$_pn"; return 0; }
+    case "$1" in *[0-9]) echo "$DEVROOT/${1}p$2" ;; *) echo "$DEVROOT/$1$2" ;; esac
 }
 
 node_is_block() {
@@ -239,20 +239,19 @@ run_restore() {
         return 1
     fi
     # #1366: a disk that does not take a write, or writes below the floor, fails here by name -- after the plan (#2412).
-    { plan_gate "$2" "$5" && write_check "$2" && write_speed_verdict "$5" "$2"; } || { echo "failed" > "$RUN_DIR/state"; return 1; }   # #2412: the plan first
+    { plan_gate "$2" "$5" && write_check "$2" "$5" && write_speed_verdict "$5" "$2"; } || { echo "failed" > "$RUN_DIR/state"; return 1; }   # #2412: the plan first
     discard_before_restore "$2"; [ $? != 2 ] || { target_set "$2" failed "ה-TRIM לא הסתיים תוך $DISCARD_MAX_S שניות"; echo "failed" > "$RUN_DIR/state"; return 1; }   # #1969
 
     # הטבלה נקבעת עד תומה לפני שהנתונים מגיעים — כולל ההרחבה, כי היא זו
     # שמעבירה swap נגררת לזנב, וה-mkswap של הלולאה חייב לנחות על המקום
-    # הסופי. הרחבה שנכשלה באמצע חוזרת לטבלת המניפסט ומשחזרת בגודל המקורי:
-    # עוד לא נכתב בייט, ולכן הנסיגה הזו שלמה.
+    # הסופי. הרחבה שנכשלה חוזרת לטבלת המניפסט (עוד לא נכתב בייט) -- אלא אם
+    # מחיצות שכווצו בקליטה היו מגיעות מכווצות: אז היעד נכשל בשמן (#2405).
     _table=0
     if apply_gpt "$2" "$5"; then
         if expand_last "$2" "$5"; then
             _table=1
         else
-            log "WARNING: expansion failed -- restoring at the image's own size"
-            apply_gpt "$2" "$5" && _table=1
+            expand_fallback "$2" "$5" && _table=1
         fi
     fi
     if [ "$_table" -ne 1 ]; then
@@ -281,16 +280,16 @@ run_restore() {
         fail_written_target "$2" "לא הצלחנו לספור את המחיצות בתוכנית השחזור"
         echo "failed" > "$RUN_DIR/state"; return 1
     fi
-    _written=0; STREAMED_PARTITIONS=0; RESTORE_BLAME=""   # #957: הזרם הראשון של השחזור הזה; #1601
+    _written=0; STREAMED_PARTITIONS=0; RESTORE_BLAME=""; RESTORE_ERROR=""   # #957: הזרם הראשון של השחזור הזה; #1601
+    _restore_writer=restore_partition; [ "$1:${PULL_ENGINE:-}" != unicast:chunk ] || _restore_writer=single_partition   # #3171: the pull's engine (chunksingle.sh)
     while IFS='|' read -r _idx _guid _role _fs _start _size _f _sha _exp _uguid _uuid _attrs <&3; do
         log "partition $_idx ($_role, $_fs): receiving $_f"; echo "$_idx" > "$RUN_DIR/targets/$2/partition"   # the GUI's "מחיצה N" (srgui.sh)
-        restore_partition "$1" "$3" "$4" "$2" "$_idx" "$_fs" "$_f" "$_sha" "$_uuid" \
-            || break
+        "$_restore_writer" "$1" "$3" "$4" "$2" "$_idx" "$_fs" "$_f" "$_sha" "$_uuid" "$5" || break
         _written=$((_written + 1))
     done 3< "$_plan"
 
     if [ "$_expected" -lt 1 ] || [ "$_written" -ne "$_expected" ]; then
-        fail_written_target "$2" "נכתבו $_written מתוך $_expected מחיצות$(writeback_why "$2")" "$RESTORE_BLAME"   # #1841
+        fail_written_target "$2" "${RESTORE_ERROR:-נכתבו $_written מתוך $_expected מחיצות$(writeback_why "$2")}" "$RESTORE_BLAME"   # #3171: preserve the named chunk failure
         echo "failed" > "$RUN_DIR/state"
         return 1
     fi

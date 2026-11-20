@@ -52,7 +52,8 @@ def test_rate_is_the_recent_window_not_the_average_since_the_wave_started():
     הקצב העדכני (החלון האחרון) הוא מה שהמגירה עושה עכשיו."""
     pace = _pace(recent_bps=75_000_000)
     assert pace["rate_bps"] == 75_000_000
-    assert pace["eta_s"] == 133                    # 10GB נשארו / 75MB/s
+    # #3638: ה-ETA כבר אינו נגזר מקצב החלון (ראו `test_room_eta_3638.py`); ובלי `first_moved_at` -- "לא נמדד".
+    assert pace["eta_s"] is None
 
 
 def test_eta_is_unknown_without_a_total_but_the_rate_still_reads():
@@ -134,11 +135,76 @@ def test_the_wave_rate_is_the_slowest_drawer_and_the_eta_the_longest():
     assert 89 <= pace["elapsed_s"] <= 95
 
 
+def _j1_drawers():
+    """#3598, J1 (17/11, 17:22:10Z, `lab/metal-1117-night/runs/J1/poll.txt`): שתי מגירות נמדדות שכמעט
+    סיימו, ומגירת ה-APS (כתיבה, 3.05GB מתוך 18.55GB) בלי קצב בחלון -- `waiting_disk` / השלמה."""
+    return _machines(
+        {"state": "writing", "bytes_written": 18_500_000_000, "bytes_total": 18_545_476_822,
+         "rate_bps": 45_000_000, "eta_s": 1},
+        {"state": "writing", "bytes_written": 18_000_000_000, "bytes_total": 18_545_476_822,
+         "rate_bps": 40_000_000, "eta_s": 13},
+        {"state": "writing", "bytes_written": 3_051_478_030, "bytes_total": 18_545_476_822,
+         "rate_bps": None, "eta_s": None})
+
+
+def test_a_writing_drawer_with_bytes_left_and_no_rate_makes_the_wave_eta_unknown_not_the_others_max():
+    """#3598: המסך אמר "13 שניות" כשעל מגירה אחת נשארו 15.5GB (עוד 24 דקות). `None` = "לא נמדד"."""
+    pace = room_mod._wave_pace("2026-11-17T17:16:48+00:00", _j1_drawers())
+    assert pace["eta_s"] is None, pace["eta_s"]
+    assert pace["rate_bps"] == 40_000_000          # הקצב לא השתנה: האיטית מבין הנמדדות
+
+
+@pytest.mark.parametrize("quiet", [
+    {"state": "writing", "bytes_written": 18_545_476_822, "bytes_total": 18_545_476_822},   # אין מה לכתוב
+    {"state": "waiting", "bytes_written": 0, "bytes_total": 18_545_476_822},                # עוד לא כותבת
+    {"state": "done", "bytes_written": 18_545_476_822, "bytes_total": 18_545_476_822},
+    {"state": "failed", "bytes_written": 5, "bytes_total": 18_545_476_822},
+])
+def test_a_drawer_with_nothing_left_to_write_or_not_writing_does_not_hide_the_measured_eta(quiet):
+    """השומרים מפני תיקון-יתר: רק מגירה שכותבת, עם יתרה, ובלי קצב, מפילה את ה-ETA ל-None."""
+    pace = room_mod._wave_pace("2026-11-17T17:16:48+00:00", _machines(
+        {"state": "writing", "bytes_written": 1, "bytes_total": 10, "rate_bps": 5, "eta_s": 2},
+        {**quiet, "rate_bps": None, "eta_s": None}))
+    assert pace["eta_s"] == 2
+
+
+def test_an_unmeasured_drawer_on_another_machine_also_hides_it(room_server, monkeypatch):
+    """קצה-לקצה: `sda` נמדד (75MB/s), `sdb` דיווח פעם אחת (חלון נפתח, בלי קצב) -- GET /room לא אומר ETA של `sda`."""
+    admin, anon, ctx = room_server["admin"], room_server["anon"], room_server["ctx"]
+    assert admin.post("/api/console/room", json=room_body(
+        room_server, 4, {CLONER1: ["S1", "S2"]})).status_code == 200
+    cloner_hello(anon, CLONER1, ["S1", "S2"])
+    assert admin.post("/api/console/room/start").status_code == 200
+    wave = ctx.conn.execute("SELECT wave_session_id FROM room_rounds").fetchone()[0]
+    clock = datetime.now(timezone.utc)
+    ctx.conn.execute("UPDATE sessions SET started_at = ? WHERE id = ?", (_ago(100, clock), wave))
+    ctx.conn.commit()
+
+    def report(at: str, written: dict) -> None:
+        monkeypatch.setattr(reports, "now_iso", lambda: at)
+        assert anon.post("/api/v1/agent/progress", json={
+            "session_id": wave, "mac": CLONER1, "state": "writing",
+            "targets": [{"dev": dev, "bytes_written": n, "bytes_total": 15 * GB, "state": "writing"}
+                        for dev, n in written.items()],
+        }).status_code == 200
+
+    report(_ago(12, clock), {"sda": 100_000_000})
+    report(_ago(0, clock), {"sda": 1_000_000_000, "sdb": 200_000_000})   # sdb: הדיווח הראשון שלו
+    monkeypatch.undo()
+    monkeypatch.setattr(room_mod, "ETA_MIN_SAMPLE_S", 5)   # #3638: `sda` כותב 12 ש' -- נמדד גם בלי הסף הרגיל
+    rnd = room(admin)["round"]
+    m1 = next(m for m in room(admin)["machines"] if m["mac"] == CLONER1)
+    by_dev = {d["dev"]: d for d in m1["drawer_list"]}
+    assert by_dev["sda"]["eta_s"] is not None and by_dev["sdb"]["rate_bps"] is None   # ההנחה של הטסט
+    assert rnd["rate_bps"] == 75_000_000
+    assert rnd["eta_s"] is None, "מגירה שכותבת בלי קצב נמדד אינה נעלמת מה-ETA של הגל"
+
+
 def test_a_wave_that_did_not_start_has_no_elapsed_and_an_unmeasured_drawer_does_not_vote():
     pace = room_mod._wave_pace(
         None, _machines({"state": "writing", "rate_bps": None, "eta_s": None}))
     assert pace == {"started_at": None, "elapsed_s": None,
-                    "rate_bps": None, "eta_s": None}
+                    "rate_bps": None, "eta_s": None, "eta_verify_s": None}
 
 
 def test_the_numbers_reach_the_room_screen_from_a_real_wave(room_server, monkeypatch):
@@ -175,7 +241,13 @@ def test_the_numbers_reach_the_room_screen_from_a_real_wave(room_server, monkeyp
     assert rnd["started_at"] == ago
     assert 99 <= rnd["elapsed_s"] <= 105
     assert rnd["rate_bps"] == 75_000_000, rnd["rate_bps"]
-    assert rnd["eta_s"] == (15 * GB - GB) // 75_000_000
+    # #3638: 12 ש' מהבייט הראשון -- פחות מ-`ETA_MIN_SAMPLE_S`; הקצב נמדד וה-ETA עדיין לא
+    assert rnd["eta_s"] is None and rnd["eta_verify_s"] is None
+    monkeypatch.setattr(room_mod, "ETA_MIN_SAMPLE_S", 5)
+    view = room(admin)
+    rnd = view["round"]
+    # 1GB ב-12 ש' (הממוצע מהבייט הראשון, לא ה-75MB/s של החלון): 14GB נותרו -> 168 ש' (+ השניות שעברו מאז הדיווח)
+    assert 165 <= rnd["eta_s"] <= 185, rnd["eta_s"]
     m1 = next(m for m in view["machines"] if m["mac"] == CLONER1)
     sda = next(d for d in m1["drawer_list"] if d["dev"] == "sda")
     assert sda["rate_bps"] == rnd["rate_bps"] and sda["eta_s"] == rnd["eta_s"]

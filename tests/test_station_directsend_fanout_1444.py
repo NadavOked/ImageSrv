@@ -239,7 +239,7 @@ def test_a_wire_hash_that_was_never_written_fails_the_send_by_name(tmp_path):
 def test_fanout_eviction_is_pushed_past_the_shell_ceiling(tmp_path):
     """udp-sender reads nothing until its receivers join -- up to 780s on a
     later partition (#957). fanout's own default (150s, #674) would evict
-    that healthy reader; the shell's wait_progress (start 600 + stall 300 by
+    that healthy reader; the shell's wait_progress (start 600 + stall 120 by
     default) must stay the only ceiling, as it was with tee. The same holds
     for the held-stdin clock (45s, #1796): that wait IS a held stdin. Negative
     control: unset/150000/45000 fails the bound."""
@@ -252,7 +252,7 @@ def test_fanout_eviction_is_pushed_past_the_shell_ceiling(tmp_path):
     recorded = lines[0].split()
     assert len(recorded) == 2, recorded
     for ceiling in recorded:
-        assert ceiling.isdigit() and int(ceiling) >= (600 + 300) * 1000, recorded
+        assert ceiling.isdigit() and int(ceiling) >= (600 + 120) * 1000, recorded
 
 
 def test_a_send_whose_fanout_dies_before_open_fails_fast(tmp_path):

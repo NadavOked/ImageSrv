@@ -48,7 +48,7 @@ def _room(tmp_path: Path, apply_gpt: str, drawers=("sda", "sdb", "sdc"), **env) 
     (run / "targets").mkdir(parents=True)
     exports = " ".join(f"{k}={v}" for k, v in env.items())
     prelude = (
-        f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev {exports}; "
+        f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev SYSROOT={posix(run)!r}/sys {exports}; "   # #3908: the host's /sys is not the test's (an HDD there is refused by writecheck.sh)
         + agent_sources(*LIBS)   # #2272: imagesrv-agent's order
         + "log() { :; }; disk_fits() { return 0; }; write_check() { return 0; }; boot_hidden_disk() { return 0; }; "   # #2015
         "write_speed_verdict() { return 0; }; readback_drawers() { :; }; grow_expanded() { return 0; }; writemark_clear() { return 0; }; "   # #1798: the table is stubbed, so is its mark

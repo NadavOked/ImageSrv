@@ -1,0 +1,19 @@
+#!/bin/busybox ash
+# shim -- installed as `bash`, `sh` and `dash` first on PATH by busybox-ash.yml.
+#
+# The agent runs under busybox ash in the initramfs, but ~130 of the test files
+# that run its code start it with `bash` (tests/test_agent.py find_bash) -- so a
+# bashism, or a place where ash and bash behave differently (#2248: ash does not
+# retry an interrupted fifo open), passes the suite and fails on a machine.
+#
+# A script whose first line names bash is a bash TOOL (tools/agent-lib-flatten.sh,
+# the git hooks): it gets the real bash, as it would on any machine. Everything
+# else that asks for bash, sh or dash -- `-c` code, the agent's own files -- gets
+# busybox ash. Measured 14/11: without this exception, 1,124 of the 1,267 failures and errors
+# said agent-lib-flatten.sh: `mapfile: not found` -- the tool under ash, not the agent.
+for a in "$@"; do
+  case "$a" in -*) continue ;; esac
+  if [ -f "$a" ] && head -n1 "$a" | grep -q bash; then exec /bin/bash "$@"; fi
+  break
+done
+exec /bin/busybox ash "$@"

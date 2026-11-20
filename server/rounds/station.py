@@ -150,8 +150,12 @@ def create_station_router(ctx: ServerContext,
         # restore screen offers a picker instead of the crashing text flow.
         # {id,name,folder} per image; the server filters (interface rule 3).
         allowed_images = []
+        # Nadav 14/11 (#1079/#2485): an unregistered machine is shown nothing of the library --
+        # no image it could pick, no unmarked one. It has no restore to run here (pulls refuse
+        # an unknown mac), and the list was all the server had to tell a stranger.
+        known = machine is not None
         # #1863: by size only (required_bytes + min_free), as hello and the console.
-        for _iid in ctx.library.allowed_for_disks(disks, minfree.min_free_gb(ctx.conn)):
+        for _iid in ctx.library.allowed_for_disks(disks, minfree.min_free_gb(ctx.conn)) if known else ():
             _m = ctx.library.get(_iid)
             if _m:
                 allowed_images.append({"id": _iid, "name": _m["name"],
@@ -168,7 +172,7 @@ def create_station_router(ctx: ServerContext,
             "allowed_images": allowed_images,
             # #1896: אימג' ישן עם שתי מחיצות windows שוות — "לא נבדק" במסך, עם
             # סימון C: ({id,name,folder,candidates}); מסומן — עובר ל-allowed_images.
-            "unchecked_images": ctx.library.unmarked_images(minfree.min_free_gb(ctx.conn)),
+            "unchecked_images": ctx.library.unmarked_images(minfree.min_free_gb(ctx.conn)) if known else [],
             # #1081: edition flag, same as hello. Missing = off. v2 turns this on.
             "classrooms": capabilities.classrooms(),
             # v1 without the toolbox (Nadav, 19/09), same as hello. v1.1 turns this on.

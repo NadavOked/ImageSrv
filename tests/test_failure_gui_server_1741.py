@@ -84,7 +84,7 @@ def _firstboot_functions() -> str:
 
 
 def _firstboot_harness(tmp_path: Path, tail: str, *, fb: bool = True, gui: str | None = "beat",
-                       dcui: str = "inactive", start_rc: int = 0, start_beats: bool = False) -> dict:
+                       dcui: str = "inactive") -> dict:
     """firstboot's own functions (log .. fail) under bash -euo pipefail, with
     the tree under tmp_path and systemctl / systemd-run as recorded functions.
     gui: "beat" = a GUI that draws, "dead" = one that exits without a frame, None = no binary."""
@@ -105,15 +105,12 @@ T={posix(t)}
 ETC=$T/etc; STATUS=$ETC/firstboot.status; FIRSTBOOT_TTY=$T/tty1; TTY_PROGRESS=0
 SRC=$T/src; FAILGUI_LIB=$SRC/installer/lib/failgui.sh; FAILGUI_WAIT_S=2
 FB_DEV=$T/fb0; GUI_BINS="$T/gui $T/no-such-gui"
-FAIL_GUI_STATE=$T/fail.state; FAIL_GUI_BEAT=$T/fail.beat; INSTALLER_GUI_BEAT=$T/inst.beat
-has_keyboard=1
+FAIL_GUI_STATE=$T/fail.state; FAIL_GUI_BEAT=$T/fail.beat
 systemctl() {{
     printf 'systemctl %s\\n' "$*" >> {posix(calls)}
     case "$*" in
         "is-active imagesrv-dcui.service") echo {dcui}; [ {dcui} = active ]; return ;;
         "is-active imagesrv-installer-gui.service") echo inactive; return 3 ;;
-        "start imagesrv-installer-gui.service") {': > "$INSTALLER_GUI_BEAT"; ' if start_beats else ''}return {start_rc} ;;
-        "is-active --quiet imagesrv-installer-gui.service") return 0 ;;   # 'active': is-active before the exec (#2517)
         "is-active --quiet imagesrv-firstboot-failure.service") [ -f $T/gui.ran ] && [ -f $T/fail.beat ]; return ;;
     esac
     return 0
@@ -183,33 +180,34 @@ def test_s3_a_gui_that_drew_no_frame_is_not_called_shown(tmp_path):
     assert "first boot failed [payload-failed]" in r["tty"]
 
 
-def _installer_gui_block() -> str:
+def _answers_guard() -> str:
+    """The one line of firstboot.sh that decides: answers, or a message (#2763)."""
     code = FIRSTBOOT.read_text(encoding="utf-8")
-    start = code.index('if [[ -e /dev/fb0 && "$has_keyboard" == 1 ]]; then')
-    end = code.index("\nfi\n", start) + 4
-    return code[start:end].replace("/dev/fb0", "$T/fb0")
+    start = code.index('[[ -f "$ETC/answers" ]] || fail answers-missing')
+    return code[start:code.index("\n", start)]
 
 
-def test_2517_an_installer_gui_that_never_drew_is_a_failure_not_started(tmp_path):
-    """203/EXEC with Type=simple: start returned 0, is-active said active, and
-    nothing was on tty1 -- firstboot wrote "started on tty1"."""
-    r = _firstboot_harness(tmp_path, _installer_gui_block(), gui=None)
-    assert r["got"].returncode == 1, (r["got"].stdout, r["got"].stderr)
-    assert "started on tty1" not in r["got"].stdout and "on tty1 (it drew" not in r["got"].stdout
-    assert _values(r["status"], "state") == ["installer-gui-failed"], r["status"]
+def test_2763_without_answers_the_screen_says_reinstall_and_nothing_is_started(tmp_path):
+    """The installed system has no /etc/imagesrv/answers: tty1 shows the one message, display-only. No
+    installer screen, no browser wizard, no bridge call (the old path drew a disk list and "inventory" failed)."""
+    r = _firstboot_harness(tmp_path, _answers_guard())
+    assert r["got"].returncode == 1, r["got"].stderr
+    assert _values(r["status"], "state") == ["answers-missing"], r["status"]
+    assert _values(r["state"], "fail") == ["bad|1|חסר קובץ ההגדרה מההתקנה|first boot stopped · answers-missing|server"], r["state"]
+    assert "יש להתקין מחדש מה-ISO או מה-USB." in _values(r["state"], "fail_step"), r["state"]
+    assert "failure screen: on the GUI" in r["got"].stdout
+    assert "systemd-run --unit=imagesrv-firstboot-failure" in r["calls"], r["calls"]
+    # tty1_taken asks `systemctl is-active` about the installer screen (never two GUIs on one framebuffer); that is not starting it
+    for started in ("start imagesrv-installer-gui", "enable imagesrv-installer-gui", "imagesrv-wizard", "dhcpcd"):
+        assert started not in r["calls"], (started, r["calls"])
+    assert "first boot failed [answers-missing]" in r["tty"]
 
 
-def test_2517_an_installer_gui_that_cannot_exec_fails_by_name(tmp_path):
-    r = _firstboot_harness(tmp_path, _installer_gui_block(), gui=None, start_rc=1)
-    assert r["got"].returncode == 1
-    assert _values(r["status"], "state") == ["installer-gui-failed"]
-
-
-def test_2517_an_installer_gui_that_drew_a_frame_is_on_tty1(tmp_path):
-    r = _firstboot_harness(tmp_path, _installer_gui_block(), start_beats=True)
+def test_2763_with_answers_the_guard_lets_the_first_boot_go_on(tmp_path):
+    """The other side of the guard: an install made by the ISO/USB installer is not stopped by it."""
+    r = _firstboot_harness(tmp_path, 'mkdir -p "$ETC"; : > "$ETC/answers"\n' + _answers_guard() + "\necho PASSED")
     assert r["got"].returncode == 0, r["got"].stderr
-    assert "installer gui: on tty1 (it drew a frame)" in r["got"].stdout
-    assert r["status"] == []
+    assert "PASSED" in r["got"].stdout and r["status"] == [] and r["calls"] == ""
 
 
 def test_2517_the_unit_execs_the_installed_binary_and_names_its_beat():
@@ -217,8 +215,6 @@ def test_2517_the_unit_execs_the_installed_binary_and_names_its_beat():
     assert "Type=exec" in unit, "203/EXEC must be a failed start, not an active unit"
     assert "Environment=IMAGESRV_GUI_BEAT=/run/imagesrv-installer-gui.beat" in unit
     assert "ExecStart=/usr/bin/imagesrv-station-gui --screen install" in unit
-    code = FIRSTBOOT.read_text(encoding="utf-8")
-    assert "INSTALLER_GUI_BEAT=/run/imagesrv-installer-gui.beat" in code
 
 
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 
 ‏ISO אחד שמתקין דביאן 13 + ImageSrv על שרת פיזי או VM, ‏UEFI (Secure Boot
 דלוק) וגם BIOS, **בלי אינטרנט** בזמן ההתקנה. בסופו השרת עולה במצב "רשת
-ההפצה לא הוגדרה" — האשף (#910) / הקונסולה מקבלים את המנהל. התוכנית:
+ההפצה לא הוגדרה" — הקונסולה מקבלת את המנהל. התוכנית:
 `docs/research/answers/R25-installer-iso-external.md`; ההכרעות שנקלטו:
 ‏R57 (Secure Boot), ‏R58 (preseed), ‏R60 (משני), ‏R61 (reproducible),
 ‏R62 (זיהוי הכרטיס), ‏R63 (ה-repo).
@@ -15,7 +15,7 @@
 | `make-pool.sh` | ‏`apt-get download` של הרשימה **וכל התלויות**, ושל הבסיס של debootstrap (‏Priority required+important, ‏#2520), ועם `--netinst` גם חבילות ה-netinst שתלויות בדיוק בגרסה שהעלינו (vim מול vim-common) (מול status ריק — כלום לא "כבר מותקן") → `pool/{main,contrib}/imagesrv/`, ואינדקסי `dists/` (‏`--index-only` מאנדקס עץ ISO). נכשל בלי `trixie-security` במקורות של המארח (‏#1411). ‏`--security`: רק חבילות trixie-security של הסגירה, כ-tar + `security-pool.json` לכפתור העדכון |
 | `preseed.cfg` | ‏d-i אוטומטי: mirror כבוי, חבילות מה-ISO (מסלול ה-cdrom של d-i), הדיסק הראשון שאינו USB, root בלבד, `late_command` |
 | `late-command.sh` | רץ **בתוך המתקין**: מעתיק את הקוד ל-`/opt/imagesrv-src`, מתקין את היחידה, ורושם ל-`/etc/imagesrv/` **עובדות** — הכרטיס ש-d-i הגדיר (‏`installer-nic`), התפקיד (‏`installer-role`), המניפסט (‏`iso-release.json`) |
-| `firstboot.sh` + `imagesrv-firstboot.service` | האתחול הראשון: בונה `initrd.img`/`initrd.img.gui`/`vmlinuz`, ואז מפעיל את אשף ה-HTTPS עם עובדות הכרטיס והתפקיד כברירות מחדל |
+| `firstboot.sh` + `imagesrv-firstboot.service` | האתחול הראשון: בונה `initrd.img`/`initrd.img.gui`/`vmlinuz`, ואז `firstboot-answers.sh` מריץ את `setup-boot-server.sh` מהתשובות שהמתקין כתב. אין אשף בדפדפן |
 | `build-iso.sh` | ‏netinst רשמי (מאומת sha256) + pool + קוד (`git archive` של ה-ref) + preseed + תפריט → ISO hybrid ב-`xorriso -boot_image any replay`; מדפיס `-report_el_torito` |
 | `test-iso.sh` | ‏QEMU/OVMF עם Secure Boot, שני שלבים (התקנה → אתחול ראשון) — **טרם הורץ** (אין KVM במעבדה) |
 | `check-pool.py` | ‏#2520: האינדקס הממוזג עקבי — כל תלות-גרסה מתקיימת בגרסה הגבוהה של היעד (מה ש-debootstrap ו-apt בוחרים). ‏`build-iso.sh` נעצר בלעדיו |
@@ -64,14 +64,13 @@ sudo tools/iso/build-iso.sh      --out /srv/iso/out --pool /srv/iso/repo --ref v
 5. אתחול ראשון: ‏`imagesrv-firstboot` בונה את שני ה-initrd (שלב א'), ואז —
    כשיש `answers` — `firstboot-answers.sh` מריץ את `setup-boot-server.sh`
    מהתשובות (הסיסמה דרך FD 3 מ-`answers.secret`, שנמחק), מאמת את המטען,
-   חותם, ומדליק את ה-DCUI על tty1. **בלי אשף.** בלי `answers` (שרת בלי
-   מסך שהותקן אחרת) — המסלול הישן: DHCP זמני, DCUI טרום-התקנה, אשף ב-8081.
+   חותם, ומדליק את ה-DCUI על tty1. **בלי אשף.** מערכת בלי `answers` לא
+   הותקנה מהמתקין ואינה נתמכת: מתקינים מחדש מה-ISO או מה-USB.
 
-**מצבי האתחול הראשון** (`/etc/imagesrv/firstboot.status`): ‏`wizard-running`
-עד שהמפעיל מחיל; אחר כך `done` או מצב הכשל בשם. כרטיס חסר או MAC שלא נמצא
-הם `network-nic-undecidable` ביומן ומחייבים בחירה באשף — **לא מנחשים**.
-`check-error` הוא כשל בבדיקה עצמה. המתקין אינו רץ עד אישור המפעיל; כשל
-בהחלה נשאר במסך 5 עם המצב המדויק ב-`firstboot.status`.
+**מצבי האתחול הראשון** (`/etc/imagesrv/firstboot.status`): `done`
+או מצב הכשל בשם. כרטיס חסר או MAC שלא נמצא הם `network-nic-undecidable`
+ביומן — **לא מנחשים**. `check-error` הוא כשל בבדיקה עצמה. כשל בהחלה נשאר
+במסך 5 עם המצב המדויק ב-`firstboot.status`.
 
 ## מה נמדד (19/09, שרת המעבדה, QEMU 10.0 ב-TCG — אין KVM)
 
@@ -100,7 +99,7 @@ sudo tools/iso/build-iso.sh      --out /srv/iso/out --pool /srv/iso/repo --ref v
 * **Hyper-V Gen2 + Secure Boot וברזל** — הבנייה במעבדה, ה-boot אצל נדב
   (תבנית "Microsoft UEFI Certificate Authority").
 * **שרת משני**: המתקין מחייב `--primary-url`; בלי `imagesrv.primary=<url>`
-  בשורת האתחול האשף מציג שדה חובה ריק (`secondary-needs-primary`). האם
+  בשורת האתחול המתקין מציג שדה חובה ריק (`secondary-needs-primary`). האם
   המתקין צריך לקבל משני בלי primary (ה-pairing מהקונסולה) — הכרעת מוצר.
 * ‏reproducibility — אותו ref + netinst + pool → אותו sha256: לא נמדד.
 * ‏`test-iso.sh` — לא הורץ (הרצה ידנית מקבילה נעשתה ב-QEMU/TCG, ראה למעלה).

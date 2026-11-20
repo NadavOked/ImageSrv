@@ -95,10 +95,10 @@ _linux_system() {
     # A separate /boot holds neither. Only the filesystems we capture are
     # mounted (ext4, btrfs); rc 1 = not checked, stdout = the reason.
     rm -f "$RUN_DIR/system.$1"
-    case "$3" in ext4|btrfs) ;; *) return 0 ;; esac
+    case "$3" in ext4|btrfs|xfs) ;; *) return 0 ;; esac
     _lm="$RUN_DIR/sysprobe"; mkdir -p "$_lm"
     # #2430: the capture source -- a bare ro would replay its journal (writes)
-    _lm_o=ro,noload; [ "$3" = btrfs ] && _lm_o=ro,nologreplay
+    _lm_o=ro,noload; [ "$3" = btrfs ] && _lm_o=ro,nologreplay; [ "$3" = xfs ] && _lm_o=ro,norecovery   # #3415: xfs's journal too
     _probe_mount "$2" "$3" "$_lm_o" "$_lm" || {
         echo "מחיצה $1: לא הצלחנו לעגן לקריאה ולבדוק אם היא שורש הלינוקס (/etc)"; return 1; }
     for _le in "$_lm/etc" "$_lm"/*/etc; do

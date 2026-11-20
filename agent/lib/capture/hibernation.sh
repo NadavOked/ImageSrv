@@ -113,7 +113,7 @@ bitlocker_state() {
     # $1=idx $2=fs $3=node. FOG -FVE-FS- (#671). stdout: clear | encrypted |
     # why it could not be checked -- three states, never two (principle 5).
     case "$2" in *[Bb]it[Ll]ocker*) echo encrypted; return ;; esac
-    for _bltool in dd grep tr; do
+    for _bltool in dd grep tr mktemp; do
         command -v "$_bltool" >/dev/null 2>&1 || {
             echo "לא הצלחנו לבדוק BitLocker במחיצה $1: הכלי $_bltool חסר"
             return
@@ -122,7 +122,13 @@ bitlocker_state() {
     # ‏LC_ALL=C ו-F: החתימה בייטים קבועים, לא טקסט מקומי. בלי -i — היא
     # תמיד באותיות גדולות, ו-`grep -i` על קלט בינרי תחת locale של UTF-8
     # קורס (SIGABRT) ב-MSYS, מה שהיה הופך "לא נמצא" ל"לא הצלחנו לבדוק".
-    _blraw="$RUN_DIR/bitlocker.raw.$$"; _bltext="$RUN_DIR/bitlocker.text.$$"
+    # #3690: a file per call. `$$` is the PARENT shell's pid inside ( ... ) &, and idle_wc_scan runs one subshell per drawer side
+    # by side (#3646): they shared one name, and the first rm took the file out from under the next tr -- "tr rc=1" on a disk with no BitLocker.
+    _blraw=$(mktemp "$RUN_DIR/bitlocker.XXXXXX" 2>> "$LOG_FILE") && [ -n "$_blraw" ] || {
+        echo "לא הצלחנו לבדוק BitLocker במחיצה $1: לא נוצר קובץ זמני"
+        return
+    }
+    _bltext="$_blraw.text"
     dd if="$3" bs=512 count=1 > "$_blraw" 2>> "$LOG_FILE"; _blrc=$?
     if [ "$_blrc" -ne 0 ]; then
         rm -f "$_blraw" "$_bltext"

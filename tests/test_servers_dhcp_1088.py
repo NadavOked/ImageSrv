@@ -1195,7 +1195,7 @@ def test_health_servers_nic_row_only_when_injected(health_ctx):
 def test_dhcp_stanza_sends_the_hostname():
     cfg = netcfg.NetConfig("eth0", mode=netcfg.MODE_DHCP)
     text = netcfg.render(cfg, hostname="imagesrv")
-    assert "iface eth0 inet manual\n    up /usr/sbin/dhcpcd -4 -b -h imagesrv eth0\n" in text
+    assert "iface eth0 inet manual\n    up /usr/bin/systemd-run --scope --quiet /usr/sbin/dhcpcd -4 -b -h imagesrv eth0\n" in text
     assert "hostname" not in netcfg.render(cfg)
     assert "hostname" not in netcfg.render(
         netcfg.NetConfig("eth1", mode=netcfg.MODE_STATIC, address="10.44.9.10"), hostname="imagesrv")
@@ -1212,7 +1212,7 @@ def test_console_preview_writes_the_hostname_into_the_dhcp_file(tmp_path, images
     client.post("/api/console/login", json={"username": "noc", "password": "Admin-pass-123!"})
     r = client.post("/api/console/net/config/eth0/preview", json={"mode": "dhcp"})
     assert r.status_code == 200, r.text
-    assert "up /usr/sbin/dhcpcd -4 -b -h imagesrv-haifa eth0" in r.json()["after"]
+    assert "up /usr/bin/systemd-run --scope --quiet /usr/sbin/dhcpcd -4 -b -h imagesrv-haifa eth0" in r.json()["after"]
 
 
 MAIN_IFACES = """# The primary network interface
@@ -1286,7 +1286,7 @@ def test_installer_netcfg_block_writes_dhcp_with_hostname_and_records_it(tmp_pat
     exec(compile(code, "deploy/setup-boot-server.sh", "exec"), {})
     written = (root / "imagesrv-eth0").read_text(encoding="utf-8")
     assert "iface eth0 inet manual" in written
-    assert "up /usr/sbin/dhcpcd -4 -b -h imagesrv-haifa eth0" in written
+    assert "up /usr/bin/systemd-run --scope --quiet /usr/sbin/dhcpcd -4 -b -h imagesrv-haifa eth0" in written
     assert "# imagesrv: iface eth0 inet dhcp" in main.read_text(encoding="utf-8")
     conn = connect(tmp_path / "imagesrv.db")
     assert json.loads(get_setting(conn, netcfg.SETTING_PREFIX + "eth0"))["mode"] == "dhcp"

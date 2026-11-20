@@ -64,6 +64,11 @@ def build(prev: dict | None, hello: dict) -> dict:
     sb = sb if isinstance(sb, bool) else prev.get("secure_boot")
     mode = hello.get("sata_mode")
     mode = mode if mode in SATA_MODES else prev.get("sata_mode")
+    # #3064 S65: the driver bound to the controller (ahci / ata_piix / none). It belongs to the mode the same hello
+    # reported -- a mode with no driver word (an older agent) has none, never the previous mode's.
+    driver = hello.get("sata_driver")
+    driver = driver if isinstance(driver, str) and 0 < len(driver) <= 40 and all(c.isalnum() or c in "_.-" for c in driver) else None
+    driver = driver if hello.get("sata_mode") in SATA_MODES else prev.get("sata_driver")
     bios = well_formed_bios(hello.get("bios"))
     inv = hello.get("inventory") if isinstance(hello.get("inventory"), dict) else {}
     dmi = inv.get("dmi") if isinstance(inv.get("dmi"), dict) else {}
@@ -78,7 +83,7 @@ def build(prev: dict | None, hello: dict) -> dict:
                     "serial": _text(d.get("serial")), "model": _text(d.get("model")),
                     "size_bytes": d.get("size_bytes") if isinstance(d.get("size_bytes"), int) else None,
                     "link_gbps": d.get("link_gbps") if isinstance(d.get("link_gbps"), (int, float)) else None}
-    return {"boot": boot, "secure_boot": sb, "sata_mode": mode,
+    return {"boot": boot, "secure_boot": sb, "sata_mode": mode, "sata_driver": driver,
             "bios_version": bios["version"] if bios else prev.get("bios_version"),
             "bios_date": bios["date"] if bios else prev.get("bios_date"),
             "model": model, "slots": slots}
@@ -214,8 +219,10 @@ def view(conn: sqlite3.Connection, mac: str) -> dict:
                               "boot": snap.get("boot"), "sata_mode": snap.get("sata_mode"), "bios_version": snap.get("bios_version"),
                               "differs": [f for f in ("boot", "sata_mode", "bios_version")
                                           if snap.get(f) is not None and cur.get(f) is not None and snap.get(f) != cur.get(f)]})
+    from server.brain import agentsenses                 # noqa: PLC0415 -- #3064 R16: the orange warning, not a change
+    controller = agentsenses.controller_warning(cur.get("sata_mode"), cur.get("sata_driver")) if cur else None
     return {"mac": mac, "current": cur, "changes": v["changes"], "ref_at": v["ref_at"], "ref_kind": v["ref_kind"],
-            "slots": table, "gap_below_populated": view_gap, "peers": peers}
+            "slots": table, "gap_below_populated": view_gap, "peers": peers, "controller": controller}
 
 
 def cloner_warning(conn: sqlite3.Connection, mac: str) -> dict | None:

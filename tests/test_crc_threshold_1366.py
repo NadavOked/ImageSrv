@@ -79,21 +79,18 @@ def test_no_drawer_carries_an_absolute_crc_flag(room_server):
 
 
 def test_a_first_wave_does_not_warn_on_an_absolute_count(room_server):
-    """The 11/11 case: a first wave, no previous round -- a high count alone says nothing;
-    a slow link on the same drawer still does."""
+    """The 11/11 case: a first wave, no previous round -- a high count alone says nothing; and since #3591 (Nadav 17/11)
+    neither does a link speed (1.5 of 6.0) on the same drawer."""
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
     _turn_on(room_server["admin"])
     _open(deploy, target=4, slots=room_slots(ctx.conn, {CLONER1: ["S1", "S2"], CLONER2: ["S3"]}))
     drawers_hello(anon, CLONER1, [disk("S1", 1, crc=42355), disk("S2", 2, crc=2375)])
     drawers_hello(anon, CLONER2, [disk("S3", 1, crc=59165, link=1.5)])
     warn = {(w["mac"], w["port"]): w for w in room(deploy)["round"]["precheck"]}
-    assert set(warn) == {(CLONER2, 1)}, warn
-    assert "1.5 מתוך 6.0" in warn[(CLONER2, 1)]["text_he"]
-    assert TEXT.format(59165) not in warn[(CLONER2, 1)]["text_he"] and "crc_suspect" not in warn[(CLONER2, 1)]
+    assert warn == {}, warn
     r = deploy.post("/api/console/room/start")
-    assert r.status_code == 200 and r.json()["warned"] == 1, r.text
-    (detail,) = journal(ctx, "room_precheck_warned")
-    assert "crc=" not in detail, detail
+    assert r.status_code == 200 and r.json()["warned"] == 0, r.text
+    assert journal(ctx, "room_precheck_warned") == []
 
 
 def test_the_default_is_500_since_21_10():

@@ -21,6 +21,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from disk_rules_state import ruled_file, with_rules   # #3666: the verdicts the agent / the server add to a hand-written state
 from native import requires_native
 from test_cloner_gui import (BASH, GUI, PRELUDE, PORTS, _build_gui, _pkgconfig, _png, _png_rgb,
                              _token, env, posix, sh, target)
@@ -96,7 +97,7 @@ def _render(tmp_path: Path, name: str, body: str, size: str = "1280x800"):
     # past 10s before the first pixel. The stamp still has to lead the clock,
     # because fontconfig runs before state_poll (#2110).
     state = tmp_path / f"{name}.txt"
-    state.write_text(HEAD + body, encoding="utf-8", newline="\n")
+    state.write_text(with_rules(HEAD + body), encoding="utf-8", newline="\n")   # #3666
     _keep_fresh(state)
     _png(binary, tmp_path / name, state, size)
     return {t: _png_rgb(tmp_path / f"{name}-standby-{t}.png") for t in ("light", "dark")}

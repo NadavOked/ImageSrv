@@ -5,9 +5,9 @@
    מ-console.js (נטען אחריו). */
 "use strict";
 
-const DK = { disks: null, sets: null, rounds: null, err: "", tab: 0, selSet: null, members: null, membersErr: "",
+const DK = { disks: null, sets: null, rounds: null, err: "", copies: null, copiesErr: "", tab: 0, selSet: null, members: null, membersErr: "",
   filter: { q: "", mac: "", round: "", drawer: "", image: "", state: "", model: "", noset: false }, picked: new Set() };
-const DK_TABS = ["כל הדיסקים", "אדומים", "כתומים", "סטים"];
+const DK_TABS = ["כל הדיסקים", "אדומים", "כתומים", "סטים", "עותקי בדיקת כתיבה"];
 const DK_STATE = { red: ["err", "אדום"], orange: ["warn", "כתום"], ok: ["ok", "תקין"], unchecked: ["", "לא נבדק"] };
 
 async function loadDisks() {
@@ -18,12 +18,19 @@ async function loadDisks() {
     if (DK.selSet != null && !DK.sets.some((s) => s.id === DK.selSet)) DK.selSet = null;
     if (DK.selSet == null && DK.sets.length) DK.selSet = DK.sets[0].id;
     await loadDiskSetMembers();
+    await loadWriteCopies();
   } catch (e) {
     DK.disks = DK.sets = DK.rounds = null;   // לא נקרא ≠ אין דיסקים
     DK.err = e.message;
     toast("טעינת הדיסקים נכשלה: " + e.message);
   }
   if (current === "disks") renderCurrent();
+}
+/* #3284: כשל בקריאת העותקים אינו מפיל את שאר הדף, והוא לא "אין עותקים" (עיקרון 5). */
+async function loadWriteCopies() {
+  if (!isAdmin()) { DK.copies = []; DK.copiesErr = ""; return; }
+  try { DK.copies = await api("/write-copies"); DK.copiesErr = ""; }
+  catch (e) { DK.copies = null; DK.copiesErr = e.message; }
 }
 async function loadDiskSetMembers() {
   DK.members = null; DK.membersErr = "";
@@ -36,6 +43,19 @@ function dkImageName(id) {
   const img = Array.isArray(IMAGES) ? IMAGES.find((i) => i.id === id) : null;
   return img && img.name ? img.name : (id || "");
 }
+/* ---------------------------------------------------------------- #3185: עמודת "מגמה" (הכרטיס עצמו ב-memory_ui.js) */
+function dkRounds(n) { return n === 1 ? "סבב אחד" : `${n} סבבים`; }
+const DK_COUNTER_HE = { reallocated: "סקטורים מוחלפים", pending: "סקטורים ממתינים", media_errors: "שגיאות מדיה" };
+function dkTrendCell(t) {
+  if (!t) return `<span class="muted">לא נקרא</span>`;
+  const label = DK_COUNTER_HE[t.counter] || "מונה SMART";
+  const span = `מ-${ltr(t.from)} ל-${ltr(t.to)} ב-${esc(dkRounds(t.rounds))}`;
+  if (t.state === "rose") return `${UI.pill("warn", `${label} עלו`)}<span class="sub">${span}</span>`;
+  if (t.state === "fell") return `<span class="muted">${esc(label)} ירדו</span><span class="sub">${span}</span>`;
+  if (t.state === "stable") return `<span class="muted">${esc(`יציב · ${dkRounds(t.rounds)}`)}</span>`;
+  return `<span class="muted" title="פחות משתי מדידות SMART">אין עדיין מגמה</span>`;
+}
+
 function dkSize(b) { return Number.isFinite(b) && b > 0 ? `<bdi dir="ltr">${esc(fmtBytes(b))}</bdi>` : ""; }
 function dkDays(ts) {
   const ms = Date.parse(ts);
@@ -97,7 +117,7 @@ function dkCounts() {
 }
 function dkHeader() {
   const c = dkCounts();
-  const tabs = DK.disks ? [`${DK_TABS[0]} (${c.all})`, `${DK_TABS[1]} (${c.red})`, `${DK_TABS[2]} (${c.orange})`, `${DK_TABS[3]} (${c.sets})`] : DK_TABS;
+  const tabs = DK.disks ? [`${DK_TABS[0]} (${c.all})`, `${DK_TABS[1]} (${c.red})`, `${DK_TABS[2]} (${c.orange})`, `${DK_TABS[3]} (${c.sets})`, DK.copies && DK.copies.copies ? `${DK_TABS[4]} (${DK.copies.copies.length})` : DK_TABS[4]] : DK_TABS;
   const sub = DK.disks ? esc(`${c.all} דיסקים · ${c.sets} סטים · ${c.noset} דיסקים בלי סט`) : `‏/disks לא נקרא: ${esc(DK.err)}`;
   const pill = DK.disks && c.red ? UI.pill("err", `${c.red} אדומים`) : (DK.disks ? "" : UI.pill("err", "לא נקרא"));
   const actions = `<button class="btn" onclick="diskSetNewSheet()">+ סט חדש</button><button class="btn primary" onclick="diskAssignRoundSheet()">שייך מסבב</button>`
@@ -110,7 +130,7 @@ function disksTab(i) { DK.tab = i; if (current === "disks") renderCurrent(); }
 function disksPage() {
   if (!DK.disks && !DK.err) return pagePlaceholder();
   const body = !DK.disks ? UI.note("err", `לא הצלחתי לקרוא את הדיסקים: ${esc(DK.err)}`)
-    : DK.tab === 3 ? dkSetsTab() : dkListTab(DK.tab === 1 ? "red" : DK.tab === 2 ? "orange" : "");
+    : DK.tab === 4 ? dkCopiesTab() : DK.tab === 3 ? dkSetsTab() : dkListTab(DK.tab === 1 ? "red" : DK.tab === 2 ? "orange" : "");
   return `<div class="page aligned">${dkHeader()}<div class="body">${body}</div></div>`;
 }
 
@@ -157,13 +177,43 @@ function dkListTab(stateOnly) {
   const chosen = rows.filter((d) => DK.picked.has(d.serial));
   const allOn = rows.length && chosen.length === rows.length;
   const cols = [{ html: `<input type="checkbox" aria-label="סימון הכול"${allOn ? " checked" : ""} onchange="dkPickAll(this.checked,JSON.parse(${jsStr(JSON.stringify(serials))}))">` },   // #2352: the serials come from hello -- never raw JSON in an attribute
-    "מספר סידורי", "דגם", "סט", "מצב", "איפה עכשיו", "כתיבה תקינה אחרונה", ""];
-  const body = rows.map((d) => ({ attrs: DK.picked.has(d.serial) ? 'class="sel"' : "", cells: [
+    "מספר סידורי", "דגם", "סט", "מצב", "מגמה", "איפה עכשיו", "כתיבה תקינה אחרונה", ""];
+  /* #3185: לחיצה על שורה פותחת את כרטיס הדיסק (memory_ui.js), כמו מגירת המחשב; מקלדת: Enter / רווח. */
+  const body = rows.map((d) => ({ attrs: `class="clk${DK.picked.has(d.serial) ? " sel" : ""}" tabindex="0" onclick="dkRowClick(event,${jsStr(d.serial)})" onkeydown="if(event.target===this&&(event.key==='Enter'||event.key===' ')){event.preventDefault();dkOpenCard(${jsStr(d.serial)})}"`, cells: [
     `<input type="checkbox" aria-label="סימון ${esc(d.serial)}"${DK.picked.has(d.serial) ? " checked" : ""} onchange="dkPick(${jsStr(d.serial)},this.checked)">`,
     `<span class="mono" dir="ltr">${esc(d.serial)}</span>`, `${esc(d.model || "—")}${d.size_bytes ? ` · ${dkSize(d.size_bytes)}` : ""}`,
-    dkLabel(d), dkStateCell(d), dkWhere(d), dkLastGood(d), dkRowMenu(d)] }));
+    dkLabel(d), dkStateCell(d), dkTrendCell(d.trend), dkWhere(d), dkLastGood(d), dkRowMenu(d)] }));
   const assign = chosen.length ? `<div class="dk-pick"><button class="btn primary" onclick="diskAssignPickedSheet()">שייך ${chosen.length} נבחרים לסט…</button></div>` : "";
   return `<div class="c12 card">${dkFilterBar()}${assign}${UI.datagrid({ columns: cols, rows: body, empty: DK.disks.length ? "אין דיסקים שמתאימים לסינון" : "השרת עוד לא ראה אף דיסק — הם נרשמים כשמשכפל או מחשב בנייה מתחבר", cls: "kebab-col" })}</div>`;
+}
+
+/* ---------------------------------------------------------------- #3284: עותקי בדיקת כתיבה פתוחים (מוקאפ מאושר, נדב 15/11) */
+function dkCopyState(c) {
+  return c.stale ? UI.pill("warn", "יש בלוקים אחרים") + `<span class="sub">${esc(`${c.stale.blocks} בלוקים שאינם של הבדיקה`)}</span>`
+    : UI.pill("err", "לא הוחזר") + `<span class="sub">אולי דיסק תאום, או נפילת חשמל באמצע הבדיקה</span>`;
+}
+function dkCopiesTab() {
+  if (!isAdmin()) return UI.note("info", "שחרור עותקים הוא למנהל בלבד");
+  if (!DK.copies) return UI.note("err", `לא הצלחתי לקרוא את העותקים הפתוחים: ${esc(DK.copiesErr)}`);
+  const bad = DK.copies.unreadable.length ? UI.note("err", `יש ${DK.copies.unreadable.length} רשומות עותק שלא נקראו, ולכן אי אפשר לדעת אם לדיסק שלהן יש עותק פתוח. בדקו בשרת, בתיקיית write-backups.`) : "";
+  const rows = DK.copies.copies.map((c) => ({ cells: [`<span class="mono" dir="ltr">${esc(c.serial)}</span>`, esc(fmtWhenShort(new Date(c.created * 1000).toISOString())), dkCopyState(c),
+    c.machine ? esc(c.machine) : `<span class="muted">${esc(c.mac || "לא ידוע")}</span>`,
+    `<button class="btn danger sm" onclick="dkCopyRelease(${jsStr(c.key)},${jsStr(c.id)},${jsStr(c.serial)})">שחרור…</button>`] }));
+  return `<div class="c12 card"><div class="card-h"><span>עותקים פתוחים של בדיקת כתיבה</span></div><div class="card-b">`
+    + `<p class="muted">עותק נשאר כשהסוכן לא הצליח להחזיר את כל הבלוקים. כל עוד הוא פתוח, אי אפשר לשמור עותק חדש לדיסק הזה.</p>${bad}`
+    + UI.datagrid({ columns: ["סידורי", "מאז", "מצב", "מכונה", ""], rows, empty: "אין עותקים פתוחים" }) + `</div></div>`;
+}
+/* הפעולה הרסנית: העותק הוא הרשומה היחידה של מה שהיה על הדיסק. חלון אדום, בלי הקלדת מילה, ולא אוטומטי לעולם. */
+function dkCopyRelease(key, id, serial) {
+  if (!isAdmin()) return;
+  sheet({ title: "לשחרר את העותק?", danger: true, submitLabel: "שחרר עותק",
+    sub: `העותק הוא הרשומה היחידה של מה שהיה על הדיסק ${serial}. אחרי השחרור אי אפשר לשחזר אותו. הפעולה תירשם ביומן עם שמך.`,
+    onSubmit: async () => {
+      await del(`/write-copies/${encodeURIComponent(key)}/${encodeURIComponent(id)}`);
+      toast("העותק שוחרר — נרשם ביומן");
+      await loadWriteCopies();
+      if (current === "disks") renderCurrent();
+    } });
 }
 
 /* ---------------------------------------------------------------- סטים */

@@ -56,20 +56,27 @@ disk_fits() {
             "לא ניתן לדעת אם האימג' נכנס: נדרש ${_n:-לא ידוע} בייט, בדיסק ${_h:-לא ידוע}"
         return 1
     fi
-    if [ "$_h" -lt "$_n" ]; then    # #1171: the gap itself in MiB, before the two 12-digit numbers
+    # #3262 (Nadav 14/11): up to 64 MiB short, with room in the last partition and the switch ON
+    # (default off) -- admitted; the fs is shrunk first, then the partition (tailshrink.sh). Not loaded = refused.
+    if [ "$_h" -lt "$_n" ] && ! { command -v tail_shrink_admit > /dev/null 2>&1 && tail_shrink_admit "$1" "$2" "$_h"; }; then    # #1171: the gap itself in MiB, before the two 12-digit numbers
         target_set "$1" "failed" "הדיסק קטן מדי ב-$(( (_n - _h + 1048575) / 1048576 )) MiB\
  (נדרשים $_n בייט, בדיסק $_h; חסרים $((_n - _h)) בייט)$(fit_bitlocker_hint "$2")"
         return 1
     fi
-    # #1897 (נדב 04/11): כל מחיצה שכווצה בקליטה חוזרת לגודלה במקור, ורק C: מתפשרת.
-    # דיסק שקטן מזה נדחה כאן, בשם, לפני הטבלה. ‏#1898: הראש רק בחלוקה שהמפעיל אישר.
+    # #1897/#1354: ראש רק בחלוקה שהמפעיל אישר (#1898); ההכרעה עצמה ב-fit_layout_check.
     _sh=$([ ! -e "$RUN_DIR/targets/$1/share.ok" ] || echo 1)
-    _vf=$(SHARE_HEAD=$_sh volumes_fit "$2" "$_h" "$(_expand_candidate "$2" | cut -d'|' -f1)")
-    case "$_vf" in ok) ;; short\|*) target_set "$1" "failed" "${_vf#*|}"; return 1 ;;
-        *) target_set "$1" "failed" "לא הצלחנו לבדוק אם המחיצות המכווצות יחזרו לגודלן במקור — לא נכתב"; return 1 ;; esac
-    # #1354: נכנס = גם נשאר מקום לעבוד. אותו יעד, אותו רגע, לפני שנגענו בו.
-    _mf=$(SHARE_HEAD=$_sh min_free_check "$2" "$_h" "$_n")
-    [ "$_mf" = ok ] || { target_set "$1" "failed" "${_mf#*|}"; return 1; }
+    _fl=$(SHARE_HEAD=$_sh fit_layout_check "$2" "$_h" "$_n")
+    [ "$_fl" = ok ] || { target_set "$1" "failed" "${_fl#*|}"; return 1; }
+}
+
+fit_layout_check() {
+    # $1 manifest, $2 disk bytes, $3 required bytes. stdout: ok | short|<words> | unchecked|<words>.
+    # #1897 (נדב 04/11): כל מחיצה שכווצה בקליטה חוזרת לגודלה במקור, ורק C: מתפשרת --
+    # דיסק שקטן מזה נדחה בשם, לפני הטבלה; ואז #1354: נכנס = גם נשאר מקום לעבוד.
+    # disk_fits קורא לה ומסך השיכפול המקומי (lc_min_free, #2404) -- אותה הכרעה, לא תאום.
+    _fv=$(volumes_fit "$1" "$2" "$(_expand_candidate "$1" | cut -d'|' -f1)")
+    case "$_fv" in ok) min_free_check "$1" "$2" "$3" ;; short\|*) echo "$_fv" ;;
+        *) echo "unchecked|לא הצלחנו לבדוק אם המחיצות המכווצות יחזרו לגודלן במקור — לא נכתב" ;; esac
 }
 
 fit_bitlocker_hint() {   # $1 = manifest. #1840: an encrypted volume is copied as it is -- the refusal says so

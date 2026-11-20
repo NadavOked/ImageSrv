@@ -272,12 +272,12 @@ def _report(tmp: Path) -> str:
 
 @POSIX
 def test_the_agent_adopts_the_early_gui_and_hands_it_the_role_without_a_restart(tmp_path):
-    proc = _agent(tmp_path, "gui_early_adopt; D_ROLE=cloner; gui_parent; echo rc1=$?; "
+    proc = _agent(tmp_path, "IFACE=eth9; gui_early_adopt; D_ROLE=cloner; gui_parent; echo rc1=$?; "
                             "gui_parent; echo rc2=$?; sleep 300")
     try:
         role = tmp_path / "run" / "gui.screen"
         assert _await(role.exists, 10), _report(tmp_path)
-        assert role.read_text().splitlines() == ["cloner", "aa:bb:cc:dd:ee:01", "10.0.0.9"], _report(tmp_path)
+        assert role.read_text().splitlines() == ["cloner", "aa:bb:cc:dd:ee:01", "10.0.0.9", "eth9"], _report(tmp_path)   # #3754: + IFACE
         out = tmp_path / "out.txt"
         assert _await(lambda: "rc2=" in out.read_text(), 10), _report(tmp_path)
         assert "rc1=0" in out.read_text() and "rc2=0" in out.read_text(), _report(tmp_path)
@@ -457,5 +457,5 @@ def test_the_gui_process_goes_from_the_boot_screen_to_the_cloner_screen(tmp_path
     assert r.returncode == 0, r.stderr
     got = r.stdout.splitlines()
     assert got[0].startswith("1 screen=message cloner=0"), got
-    assert got[1] == "2 screen=standby cloner=1 mac=aa:bb:cc:dd:ee:01 ip=10.0.0.9", got
-    assert got[2] == "3 screen=standby cloner=1 mac=aa:bb:cc:dd:ee:01 ip=10.0.0.9", got
+    assert got[1] == "2 screen=standby cloner=1 mac=AA:BB:CC:DD:EE:01 ip=10.0.0.9", got   # #2903: the screen holds the MAC in capitals
+    assert got[2] == "3 screen=standby cloner=1 mac=AA:BB:CC:DD:EE:01 ip=10.0.0.9", got

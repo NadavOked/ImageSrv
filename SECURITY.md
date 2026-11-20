@@ -1,95 +1,43 @@
+<div dir="rtl">
+
 # מדיניות אבטחה
 
 ImageSrv מריץ שרת אתחול רשת: הוא מגיש שרשרת אתחול חתומה, יכול לחלק
-כתובות DHCP, וכותב לכוננים של כיתות שלמות. חולשה כאן אינה "באג באתר" —
+כתובות DHCP, וכותב לכוננים של כיתות שלמות. חולשה כאן אינה "באג באתר":
 היא גישה לכתיבה על מחשבים של אנשים אחרים.
 
-שני ריפואים, שני משטחי חשיפה:
+## איך מדווחים
 
-| ריפו | נראות | מה Issue שם עושה |
-|---|---|---|
-| `NadavOked/ImageSrv-dev` | **פרטי** | Issue אינו מפרסם דבר. זה מקום הדיווח. |
-| `NadavOked/ImageSrv` | ציבורי | ענף, PR או Issue שם מפרסמים את החולשה לפני שיש תיקון. |
+**חולשת אבטחה אינה Issue ואינה Pull Request.** Issue ציבורי מפרסם את
+החולשה לפני שיש תיקון. מדווחים בפרטיות דרך GitHub Security Advisories:
+לשונית **Security** ← **Report a vulnerability**, או
+<https://github.com/NadavOked/ImageSrv/security/advisories/new>.
 
-**דיווח על חולשה בארכיון הפרטי הוא Issue, והוא מותר ורצוי.** מה שאסור
-הוא לפרסם אותה לציבורי לפני שיש תיקון.
-
----
+אין כתובת דוא"ל לאבטחה, ואין תוכנית תגמול. הפרויקט מתוחזק על ידי אדם
+אחד; ערוץ שאין מי שיאייש אותו לא היה מוסיף דבר.
 
 ## גרסאות נתמכות
 
-הפרויקט מסומן ב-semver בתגים, נמצא לפני 1.0, ונפרס ב-`git checkout` של
-תג נקי. אין ענפי תחזוקה ואין backport.
-
-| גרסה | נתמכת | מה זה אומר |
-|---|---|---|
-| **התג האחרון** (דף ה-Releases של הריפו) | ✅ | תיקון אבטחה נכנס ל-`main` ומקבל תג חדש |
-| כל תג ישן יותר | ❌ | אין תיקון בגרסה הישנה. השדרוג הוא checkout של התג האחרון |
-
-מה שמחזיק את זה סביר: **המסלול קדימה קצר** — התגים יוצאים בקצב גבוה,
-והפרש של כמה תגים אינו שדרוג גדול.
-
-לפני 1.0, קפיצת minor עשויה לשנות התנהגות שהמפעיל רואה. הכלל המחייב
-לגזירת גרסאות כתוב ב-`CLAUDE.md`.
-
----
-
-## לאן מדווחים
-
-**אם יש גישה ל-`NadavOked/ImageSrv-dev` (הריפו הפרטי):** Issue שם,
-עם תווית `security`. הוא אינו מפרסם דבר. זה המסלול הרגיל.
-
-**אם נראה רק `NadavOked/ImageSrv` (הציבורי):** אין גישה לארכיון. דיווח
-דרך GitHub Security Advisories בלבד — לשונית **Security** ← **Report a
-vulnerability**, או
-<https://github.com/NadavOked/ImageSrv/security/advisories/new>.
-Issue או PR בציבורי מפרסם את החולשה לפני שיש תיקון.
-
-**אין כתובת דוא"ל לאבטחה, ואין תוכנית תגמול.** הפרויקט מתוחזק על ידי
-אדם אחד; ערוץ שאין מי שיאייש אותו לא היה מוסיף דבר.
-
-**מה שאסור לכולם:** לפרסם לציבורי — ענף, PR, Issue או פוסט — לפני שיש
-תיקון. `tools/git/publish-to-public.sh` מסרב ל-Issue/PR עם תווית
-`security`; זה השומר האמיתי, לא איסור על Issue בפרטי.
-
-## מתי Advisory בנוסף ל-Issue
-
-Advisory נדרש כשהחולשה נוגעת **למי שאינו נדב**:
-
-- תלמיד שכוננו נכתב.
-- מפעיל במכללה אחרת שפורס את המוצר הציבורי.
-- כל מי שיכול להגיע לשרת בלי להיות בעל הריפו.
-
-חולשה שחיה רק בכלי פנימי שאינו יוצא לציבורי (סוכנים, CI, סקילים,
-מעבדה) — Issue פרטי עם תווית `security` מספיק. אין משטח חשיפה חיצוני,
-ואין למי לחשוף בתיאום.
-
-בשני המקרים התווית `security` נשארת על ה-Issue, כדי שהפרסום לציבורי
-ייעצר.
-
----
+הפרויקט מסומן ב-semver בתגים ונמצא לפני 1.0. **רק התג האחרון** (דף
+ה-Releases) נתמך: תיקון אבטחה נכנס ל-`main` ומקבל תג חדש. אין ענפי
+תחזוקה ואין backport, והשדרוג הוא checkout של התג האחרון.
 
 ## מה כדאי שיהיה בדיווח
 
-אותו מבנה שבו נכתבים הבאגים כאן, כי הוא זה שמאפשר לתקן:
-
 - **התג או הקומיט** שנבדק (`git describe --tags`).
-- **השורש** — הקובץ והשורה, עם ציטוט הקוד. לא רק "יש path traversal".
-- **מה נשבר בפועל** — מה תוקף יכול לעשות, ובאיזו הרשאה הוא מתחיל
-  (אנונימי? משתמש `deploy`? גישה לוילן ההפצה?).
-- **שחזור** — הצעדים המדויקים, ומה נצפה מולם. הפרויקט מבחין בין
-  "לא הצלחנו לבדוק" ל"בדקנו"; אם לא שוחזר בפועל — לכתוב זאת.
-- **מה שאסור בתיקון**, אם ידוע — כיוון תיקון שייצור את הבאג ההפוך.
-
----
+- **השורש**: הקובץ והשורה, עם ציטוט הקוד. לא רק "יש path traversal".
+- **מה נשבר בפועל**: מה תוקף יכול לעשות, ובאיזו הרשאה הוא מתחיל (אנונימי?
+  משתמש `deploy`? גישה לוילן ההפצה?).
+- **שחזור**: הצעדים המדויקים, ומה נצפה מולם. אם לא שוחזר בפועל, כותבים זאת.
+- **מה שאסור בתיקון**, אם ידוע: כיוון תיקון שייצור את הבאג ההפוך.
 
 ## מה בתחום
 
-- **השרת** (`server/`) — אימות, הרשאות, חתימת עוגיות, העלאה וייבוא
-  של אימג'ים, ה-API של הקונסולה.
-- **הסוכן ושרשרת האתחול** (`agent/`, `boot/`) — מה שמריץ מכונה שעולה
-  ברשת, ומה שנכתב לכונן שלה.
-- **המתקין ויחידות ה-systemd** (`deploy/`) — הרשאות, `ReadWritePaths`,
+- **השרת** (`server/`): אימות, הרשאות, חתימת עוגיות, העלאה וייבוא של
+  אימג'ים, ה-API של הקונסולה.
+- **הסוכן ושרשרת האתחול** (`agent/`, `boot/`): מה שמריץ מכונה שעולה ברשת,
+  ומה שנכתב לכונן שלה.
+- **המתקין ויחידות ה-systemd** (`deploy/`): הרשאות, `ReadWritePaths`,
   קבצים שנוצרים על השרת.
 
 ## מה לא בתחום
@@ -99,120 +47,16 @@ Advisory נדרש כשהחולשה נוגעת **למי שאינו נדב**:
   ב-`docs/guides/server-install.md`. הדלקה מודעת שלו על הרשת הלא-נכונה היא
   תקלה תפעולית, לא חולשה.
 - **פעולות הרסניות שמפעיל מורשה ביקש** (מחיקת אימג', עצירת סבב). הן
-  מאחורי הקלדת שם בכוונה.
-- **דיווחי סורק בלי השפעה מוכחת.** פלט של כלי הוא התחלה של דיווח, לא
-  דיווח.
-- **המעבדה של הפרויקט** ותשתיות בדיקה — הן אינן חלק ממה שנפרס.
-
-## מה הלקוח רואה כשפעולה נכשלת
-
-הכרעת נדב (07/11/2026, #595): **כשפעולה נכשלת, המפעיל רואה רק הודעה
-שלנו, ברורה ובעברית. הטקסט הטכני הגולמי הולך ליומן השרת בלבד.**
-traceback אינו יוצא לשום לקוח — לא לקונסולה, לא לסוכן ולא לשרת אחר.
-
-- **מה עובר:** הודעה של חריגה שאנחנו כותבים, שהטקסט שלה נוסח למפעיל (למשל
-  ‏`SessionError`, ‏`BadReport`, ‏`BadRecord`, ‏`InterserverClientError`,
-  ‏`TargetError`, ‏`ValueError` של ולידציה). חריגה כזו **אינה עוטפת** טקסט
-  של מערכת: מחלקה שלנו עם `f"...{exc}"` בתוכה היא אותה דליפה בשם אחר (#2543).
-- **מה לא עובר:** הטקסט של `OSError` (נתיב, ‏strerror), של `sqlite3.Error`, של
-  ‏OpenSSL, של `Exception` כללי, ופלט של פקודה (‏stderr של `ip`, ‏`hostnamectl`,
-  ‏`timedatectl`). הוא נכתב ב-`log.warning` ליומן השרת (‏journald), והלקוח מקבל
-  משפט קבוע שמסתיים ב-"הפרטים ביומן השרת". נתיב שהוא **הגדרה שלנו** (תיקיית
-  היעד שהמפעיל בחר, שם כרטיס) מותר במשפט; טקסט החריגה — לא.
-- **על כל ערוץ שמגיע למפעיל, לא רק על תשובת HTTP:** ‏`detail` של
-  ‏`HTTPException`, סיבת סגירה של WebSocket, שדה בגוף התשובה (‏`reason` של
-  ‏`ProbeResult`, ‏`error`), קובץ סטטוס שהקונסולה קוראת (‏`last-backup.json`),
-  שורת בריאות — **וגם יומן האירועים** (טבלת `journal`, שהקונסולה מציגה). ביומן
-  האירועים נכתב המשפט שלנו; "יומן השרת" כאן הוא journald בלבד (#2543).
-- הכישלון עצמו נשאר גלוי (עיקרון 5) — המצב נשאר "נכשל"/"לא נבדק", רק הטקסט
-  הגולמי שלו עובר ליומן השרת.
-
-התראות `py/stack-trace-exposure` על הודעות מהסוג הראשון מבוטלות ב-code
-scanning עם הנימוק הזה; הערת `# codeql[...]` אינה משתיקה אותן כאן.
-
----
-
-## התראות Dependabot על תלויות מוצמדות
-
-‏`server/requirements.txt` מצמיד `cryptography==43.0.0` ו-`pyOpenSSL==25.0.0`
-במכוון: אלה גרסאות Debian 13, והשרת מקבל אותן מ-**apt**
-(‏`python3-cryptography`, ‏`python3-openssl`), לא מ-pip. ‏Dependabot קורא את
-**מחרוזת הגרסה** ולא את מה שנפרס, ולכן הוא מדווח על ‏`43.0.0` גם על תיקונים
-ש-Debian עשה ב-backport (‏`43.0.0-3+deb13u1`). **אין מעלים את ההצמדה כדי
-להשתיק התראה** — זה מנתק את ה-CI מהגרסה שנפרסת (#113; ‏PR 754/755
-נסגרו מהסיבה הזו ב-13/09).
-
-מצב ההתראות הפתוחות, מול security-tracker.debian.org (‏17/10/2026, נבדק שוב 22/10/2026 — ללא שינוי, #1975):
-
-| התראה | על מה | trixie | ניתן לניצול אצלנו? |
-|---|---|---|---|
-| #3 CVE-2026-26007 | נקודות על עקומות SECT | **תוקן** (‏`43.0.0-3+deb13u1`) | לא — רק `SECP256R1` |
-| #4 CVE-2026-27448 | `set_tlsext_servername_callback` | **תוקן** (‏`25.0.0-1+deb13u1`) | לא — אין callback כזה |
-| #5 CVE-2026-27459 | `set_cookie_generate_callback` (DTLS) | **תוקן** (‏`25.0.0-1+deb13u1`) | לא — אין DTLS |
-| #6 CVE-2026-34073 | name constraints ב-`x509.verification` | **vulnerable, no-DSA** | לא — אין `x509.verification` (#1639) |
-| #9 CVE-2026-69249 | בניית שרשרת ב-`x509.verification` | **vulnerable, no-DSA** | לא — אין `x509.verification` (#1639) |
-| — CVE-2026-69248 (אין התראה: GHSA מציין 45.0.0–48.0.0) | wildcard מול name constraints ב-`x509.verification` | **vulnerable, no-DSA** | לא — אין `x509.verification` |
-| #1, #2, #7 | OpenSSL **בתוך wheels** של PyPI | לא רלוונטי | לא — חבילת apt מקשרת ל-`libssl3t64` של המערכת (בדיקה: `trixie-security` ‏`openssl 3.5.7-1~deb13u3`); ה-wheel רץ רק ב-CI ובפיתוח |
-
-‏`anyio==4.8.0` מוצמד מאותה סיבה (‏`python3-anyio 4.8.0-3`, תלות של starlette;
-שדרוג ל-4.16 שבר שלושה טסטים, 01/11). שתי התראות, פגיע `< 4.14.2`
-(נבדק 08/11/2026):
-
-| התראה | על מה | trixie | ניתן לניצול אצלנו? |
-|---|---|---|---|
-| #11 CVE-2026-63374 (critical) | ‏`TLSStream.wrap(hostname=...)` מעביר שם מארח לא-ASCII ל-`wrap_bio` של ה-stdlib, שמקודד ב-IDNA 2003 — תעודה לגרסת ה-2003 של השם עוברת אימות. נכנסים אליו דרך `connect_tcp(tls=True)` ודרך `start_tls` של ה-backend של httpcore (‏`httpx.AsyncClient` ב-https) | **vulnerable** (‏security-tracker: ‏trixie `4.8.0-3`; תוקן ב-sid `4.15.1-1`, באג 1148561; אין `deb13u` ב-pool ולא ב-`debian-security`) | לא — אין ב-`server/` ייבוא של `anyio`/`httpx`/`httpcore`; ‏fastapi/starlette/uvicorn/websockets של trixie לא קוראים ל-`TLSStream`/`connect_tcp`. ה-TLS היוצא שלנו הוא stdlib/pyOpenSSL סינכרוני |
-| #10 CVE-2026-64847 (medium) | ‏`to_process.run_sync` — ה-stderr של עובד ה-pool לא מרוקן, והקריאה נתקעת | **vulnerable** (‏security-tracker: ‏trixie `4.8.0-3`; תוקן ב-sid `4.15.1-1`, באג 1148561) | לא — אין `to_process` ב-`server/`, וגם לא ב-fastapi/starlette/uvicorn (הם משתמשים ב-`to_thread` בלבד) |
-
-"אינו ניתן לניצול" אינו טענה שנשענים עליה בלי ראיה:
-‏`tests/test_pinned_deps_unreachable_paths.py` סורק את `server/` ונופל אם נכנס
-אליו אחד הנתיבים הפגיעים. אם הוא נופל — חוזרים לטבלה הזו ומחליטים, לא
-מתקנים את הטסט.
-
-**תיקון של Debian מגיע לשרת מותקן רק בתוך גרסה חתומה של ImageSrv** (הכרעת נדב
-15/10, #1411) — לא דרך `apt` חי בשרת. עד שהמנגנון הזה קיים, "תוקן ב-trixie"
-פירושו "תוקן במקור", לא "תוקן אצל המכללה".
-
-### חולשות פתוחות ב-Debian 13 בכל מה שהשרת וה-initramfs מתקינים
-
-‏Dependabot רואה רק את `server/requirements.txt`. השאר — חבילות המקור (כ-580 כשנספרו עם Recommends, לפני #1987)
-ש-`apt` מתקין מ-`tools/iso/packages.txt` (בלי Recommends, #1987) — נבדק ב-
-‏`tools/security-recheck.py` מול security-tracker.debian.org, על תג נתון,
-על מכונת Debian 13 (ה-testrunner). **מריצים אותו על התג של כל גרסה לפני
-השחרור** ומצרפים את התוצאה להערות השחרור (#1975):
-
-```sh
-# על ה-testrunner (Debian 13, ‏apt-get update טרי; בלי GitHub):
-python3 -I tools/security-recheck.py --repo . --tag vX.Y.Z \
-    [--baseline <הריצה הקודמת>.tsv] > security-vX.Y.Z.tsv
-# בתחנת הפיתוח (‏gh מחובר, בלי apt):
-python tools/security-recheck.py --dependabot-only
-```
-
-הכלי מדפיס **כל** CVE שלא תוקן ב-trixie; רובן בחבילות שאינן נגישות מהרשת
-(הקרנל לבדו כ-740, ארגז הכלים, ‏QEMU). ההכרעה "נגיש אצלנו?" אינה בכלי —
-היא נכתבת ב-#1975, והנתיבים שנקבע שאינם נגישים נעולים בטסט
-(‏`tests/test_pinned_deps_unreachable_paths.py`: ‏python-multipart, ‏h2/hpack,
-‏anyio, ‏python3.13, ו-applets של busybox בסוכן). נתיבים שנמצאו נגישים אצלנו נרשמים בטריאז' הפרטי של הפרויקט ומפורסמים אחרי תיקון, לא כאן.
-
-**‏starlette (‏#326).** ‏`pip-audit` על ה-CI מדווח שבע חולשות ב-`starlette
-0.46.2` מ-PyPI. השרת אינו מריץ אותה: ה-ISO אורז את `python3-starlette
-0.46.1-3+deb13u3`, ו-Debian הטליא בה את כל השבע (‏CVE-2026-48818 —
-‏Windows בלבד, "not-affected"). אחת נגעה בקוד שלנו: ‏`_enforce_purpose`
-הכריע לפי `request.url.path`, ועל starlette לא מוטלא כותרת `Host` עקפה
-את הרשמת ה-MFA (‏CVE-2026-48710). ההכרעה עברה ל-`scope["path"]`, ו-
-‏`.url.path`/`.url.hostname`/`.url.netloc` ו-`HTTPEndpoint` נעולים בטסט.
-
----
+  מאחורי אישור מפורש בממשק, בכוונה.
+- **דיווחי סורק בלי השפעה מוכחת.** פלט של כלי הוא התחלה של דיווח, לא דיווח.
 
 ## מה קורה אחרי הדיווח
 
-בעלים אחד, מאמץ סביר, **בלי SLA**. אין הבטחה לזמן תגובה, כי הבטחה כזו
-לא תיאמת. מה שכן:
-
-- כל דיווח נענה, גם כשהתשובה היא "זו לא חולשה" עם הסבר.
-- תיקון נכנס ל-`main` ומקבל **תג חדש**; ה-Advisory מפורסם אחריו, עם
-  קרדיט למדווח אלא אם ביקש אחרת.
-- אם התיקון נוגע בהתנהגות שמפעיל רואה, הוא נכתב גם ב-`CHANGELOG.md`.
+בעלים אחד, מאמץ סביר, **בלי SLA**. נשתדל לענות לכל דיווח, גם כשהתשובה היא
+"זו לא חולשה" עם הסבר. תיקון נכנס ל-`main` ומקבל תג חדש. ה-Advisory מפורסם
+ביום הגרסה, עם הגרסאות המושפעות, הגרסה המתוקנת והחומרה, וקרדיט למדווח אלא
+אם ביקש אחרת. אם התיקון נוגע בהתנהגות שמפעיל
+רואה, הוא נכתב גם ב-`CHANGELOG.md`.
 
 ---
 
@@ -220,30 +64,22 @@ python tools/security-recheck.py --dependabot-only
 
 ImageSrv is a network boot and disk-imaging server for a college lab.
 
-Two repositories, two disclosure surfaces:
-
-- `NadavOked/ImageSrv-dev` is **private**. An issue there does not
-  publish anything. That is the working repo — file the issue there, with
-  the `security` label.
-- `NadavOked/ImageSrv` is public. A branch, PR, or issue there discloses
-  the weakness before a fix exists. Do not file there.
-
-If you can only see the public repo, report through GitHub Security
-Advisories:
+**Do not report a vulnerability in an issue or a pull request.** A public
+issue discloses the weakness before a fix exists. Report it privately through
+GitHub Security Advisories (**Security** tab, **Report a vulnerability**):
 <https://github.com/NadavOked/ImageSrv/security/advisories/new>
 
-A Security Advisory is **also** required when the weakness affects someone
-other than the maintainer (a student whose disk is written, another college
-deploying the public product). A weakness only in private-only tooling
-(agents, CI, lab) that never ships publicly needs the private issue and
-label, not an Advisory.
-
-`publish-to-public.sh` refuses any issue or PR labelled `security`. That is
-the real guard — publishing is what discloses, not the private issue.
-
 Only the latest tag is supported; fixes land on `main` and get a new tag.
-There is no security email address and no bounty — this project has a single
+There is no security email address and no bounty: this project has a single
 maintainer, and responses are best effort with no SLA. Please include the tag
 you tested, the file and line, what an attacker gains and from which
 privilege level, and the exact steps you ran. If you did not actually
 reproduce it, say so.
+
+In scope: the server (`server/`), the agent and boot chain (`agent/`, `boot/`),
+and the installer and systemd units (`deploy/`). Out of scope: deliberate
+misconfiguration (for example turning DHCP on in the wrong network),
+destructive actions an authorized operator asked for, and scanner output
+without demonstrated impact.
+
+</div>

@@ -6,8 +6,11 @@
 # The words and their sentences are lib/data/hw-issues.tsv (the server reads the same
 # file). What each word means is measured here, from what the machine says about itself:
 #   icrc_logged -- an ICRC in the disk's own ATA error log (smartjudge.sh; Nadav 21/10)
-#   link_slow   -- the link below what BOTH the port and the disk support (#432; an HP
-#                  8100 is SATA II, so 3.0 Gb/s there is its ceiling, not slow)
+#   (no link_slow: #3591, Nadav 17/11 -- the SATA link SPEED, 1.5, 3.0 or 6.0, is information about the
+#   board -- the Q77 has two 6.0 ports and two 3.0 -- and neither a colour nor a reason to check the cable. It
+#   is in the hello as link_gbps / link_max_gbps; the brain names it a cause of slowness only when it is the
+#   bottleneck against the measured network. Evidence of a bad cable is link_reset, drawer_gone and a CRC
+#   that rises during a write.)
 #   link_reset  -- libata reset the link (dmesg: hard resetting link, COMRESET failed)
 #   drawer_gone -- the link went down after it was up, or the device was disabled, or the
 #                  disk left /sys/block -- only AFTER the drawer was identified (#1937): the
@@ -18,7 +21,7 @@
 #   usb2       -- the disk sits behind a USB port at 480 Mb/s
 # The machine's IDE mode is usbdiag.sh's (lc_ide), said on the source screen.
 # Each one is said only on positive evidence; one that cannot be read says nothing.
-# #2848 (Nadav 11/11): a SATA problem -- link_slow, link_reset, drawer_gone -- makes the disk RED
+# #2848 (Nadav 11/11): a SATA problem -- link_reset, drawer_gone -- makes the disk RED
 # (never a target, still a source), on the cloner and in the console alike; icrc_logged and usb2
 # stay a note. Nothing here ever turns a disk green.
 
@@ -57,13 +60,6 @@ hw_refresh() {
     _hr_t0=$(cat "$RUN_DIR/smart/$1.hw0" 2>/dev/null)
     {
         awk -F'|' '$1 == "hw" && !seen[$2]++ { print $2 }' "$RUN_DIR/smart/$1.find" 2>/dev/null   # icrc_logged (#2846: no absolute CRC)
-        if command -v disk_link >/dev/null 2>&1; then
-            _hr_l=$(disk_link "$1"); _hr_s=${_hr_l% *}; _hr_m=${_hr_l#* }
-            case "$_hr_s:$_hr_m" in
-                *null*) ;;   # either one not read: not slow, and not "fine" either
-                *) [ "${_hr_s%.*}${_hr_s#*.}" -lt "${_hr_m%.*}${_hr_m#*.}" ] && echo link_slow ;;
-            esac
-        fi
         _hr_a=$(_hw_ata "$1")
         [ -z "$_hr_a" ] || "$DMESG" 2>/dev/null | hw_link_words "$_hr_a" "$_hr_t0"
         [ -n "$_hr_t0" ] && [ ! -e "$SYSROOT/sys/block/$1" ] && echo drawer_gone   # it was here, and is not
@@ -77,7 +73,7 @@ hw_words() { cat "$RUN_DIR/smart/$1.hw" 2>/dev/null; }   # $1 = disk; the cached
 
 hw_sata_json() {
     # $1 = disk. #2848: the hello's ,"sata_issues":[...] -- link_reset / drawer_gone, the SATA problems
-    # the server cannot see (link_slow it reads from link_gbps itself). [] = read, none; null = not read
+    # the server cannot see. [] = read, none; null = not read
     # (no hw_refresh yet, or the file did not read) -- never [] for "could not look" (principle 5).
     _hs_w=$(awk '$0 == "link_reset" || $0 == "drawer_gone" { printf "%s\"%s\"", n++ ? "," : "", $0 }' \
         "$RUN_DIR/smart/$1.hw" 2>/dev/null) || { printf ',"sata_issues":null'; return 0; }

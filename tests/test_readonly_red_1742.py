@@ -292,25 +292,23 @@ def test_the_console_says_read_only_in_red(tmp_path):
     pick = [re.search(r"^const SMART_REASON_HE = .*$", js, re.M),
             re.search(r"^function smartF1Text\(reason\) \{.*?^\}", js, re.M | re.S),
             re.search(r"^const FAILURE_CAUSE_HE = .*$", js, re.M),
-            re.search(r"^function linkSlow\(d\) \{.*?^\}", js, re.M | re.S),
-            # #2848: slotClass reads the one rule (diskRule / diskFacts / slotRule)
+            # #2848: slotClass shows the one rule (slotRule); #3666: the server's, the console works nothing out
             re.search(r"^const SATA_ISSUE_HE = .*$", js, re.M),
             re.search(r"^function sataIssues\(d\) \{.*?^\}", js, re.M | re.S),
-            re.search(r"^const DISK_RULE_RED = .*$", js, re.M),
-            re.search(r"^const DISK_RULE_YELLOW = .*$", js, re.M),
-            re.search(r"^function diskRule\(f\) \{.*?^\}", js, re.M | re.S),
-            re.search(r"^function diskFacts\(s\) \{.*?^\}", js, re.M | re.S),
+            re.search(r"^const NOT_CHECKED_RULE = \{.*?\};$", js, re.M | re.S),   # #3666: no rule from the brain = not checked
             re.search(r"^function slotRule\(s\) \{.*?^\}", js, re.M | re.S),
             re.search(r"^function slotClass\(s\) \{.*?^\}", js, re.M | re.S)]
     assert all(pick), "a function this test reads is gone from console.js"
     probe = tmp_path / "probe.cjs"
-    probe.write_text("\n".join(m.group(0) for m in pick) + """
+    rule = {"red": {"color": "red", "source": True, "target": False}, "yellow": {"color": "yellow", "source": False, "target": True}}
+    probe.write_text(f"const RED = {json.dumps(rule['red'])}, YELLOW = {json.dumps(rule['yellow'])};\n"
+                     + "\n".join(m.group(0) for m in pick) + """
 const out = {
   ro: smartF1Text("readonly"),
   f1: smartF1Text("pending_sectors"),
   cause: FAILURE_CAUSE_HE.readonly,
-  memRed: slotClass({ disk: { smart: "ok" }, fail: { cause: "readonly" } }),
-  memCable: slotClass({ disk: { smart: "ok" }, fail: { cause: "cable" } }),
+  memRed: slotClass({ disk: { smart: "ok", rule: RED }, fail: { cause: "readonly" } }),
+  memCable: slotClass({ disk: { smart: "ok", rule: YELLOW }, fail: { cause: "cable" } }),
 };
 console.log(JSON.stringify(out));
 """, encoding="utf-8", newline="\n")
@@ -321,7 +319,12 @@ console.log(JSON.stringify(out));
     assert out["ro"] == READONLY_HE and "F1" not in out["ro"]
     assert out["f1"].startswith("ה-BIOS יעצור ב-F1"), "the SMART reds keep their words"
     assert out["cause"] == READONLY_HE
-    assert (out["memRed"], out["memCable"]) == ("err", "yel"), "read-only memory is red, a cable yellow (#2848)"
+    assert (out["memRed"], out["memCable"]) == ("err", "yel"), "the console shows the brain's red and yellow (#2848)"
+    # #3666: the deciding is the server's -- a read-only record is red, a cable record yellow, whatever the SMART says
+    from server.disks import disk_rule
+    disk = {"serial": "S1", "port": 1, "smart": "ok"}
+    assert disk_rule.judge_disk(disk, [{"serial": "S1", "port": 1, "cause": "readonly"}])["color"] == "red"
+    assert disk_rule.judge_disk(disk, [{"serial": "S1", "port": 1, "cause": "cable"}])["color"] == "yellow"
 
 
 # --- after #1735 (#1732 on rc6): every refusal says why --------------------------

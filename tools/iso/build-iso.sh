@@ -255,7 +255,7 @@ for deny in .claude .agents .otogit tools/agents AGENTS.md logs docs/research; d
 done
 if ((${#leaked[@]} > 0)); then
     printf 'build-iso: נתיב פרטי בתוך imagesrv-src: %s\n' "${leaked[@]}" >&2
-    die "המקור אינו העץ הציבורי (${#leaked[@]} נתיבים פרטיים) — בנה מהריפו הציבורי, לא מ-ImageSrv-dev"
+    die "המקור אינו העץ הציבורי (${#leaked[@]} נתיבים פרטיים) — בנה מהריפו הציבורי, לא מעץ העבודה הפרטי"
 fi
 say "imagesrv-src: אין נתיבים פרטיים ($(find "$ISO_TREE/imagesrv-src" -type f | wc -l) קבצים)"
 

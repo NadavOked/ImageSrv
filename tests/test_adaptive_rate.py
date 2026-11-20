@@ -421,11 +421,12 @@ def test_a_wave_is_not_its_own_previous(conn):
 # --- המתג, ההחלטה והרישום -------------------------------------------------------
 
 
-def test_with_the_switch_off_the_start_rate_is_fixed(conn):
+def test_with_the_switch_off_the_ceiling_is_fixed(conn):
+    """#3036 (הכרעת נדב 12/11): כבוי = התקרה הקבועה, כמו שהנוסח בקונסולה אומר -- לא קצב הפתיחה."""
     _wave(conn, "ses_1")
     db.set_setting(conn, drive_rates.SETTING, "false")
     got = _next(conn)
-    assert got["max_bitrate"] == "600m"
+    assert got["max_bitrate"] == "900m"
     assert got["basis"] == "disabled"
 
 

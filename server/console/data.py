@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from server.agent import logs as agent_logs, cloner_cpu, registry
+from server.brain import memory_view
 from server.console import auth
 from server.net import pxe_log
 from server.learn import boot_marks, net_history
@@ -36,6 +37,11 @@ def create_console_data_router(ctx) -> APIRouter:
                 "nic_history": net_history.nic_history(ctx.conn, canonical),
                 "boot_marks": boot_marks.history(ctx.conn, canonical),       # #2830
                 "wave_drops": net_history.wave_drops(ctx.conn, canonical)}
+
+    @router.get("/machines/{mac}/memory")
+    def machine_memory(mac: str, user=Depends(admin_only)):
+        """#3185: מה שהשרת זוכר על המכונה -- סיכום של מה שנאסף, מה היה בחריצים והחלטות המוח (`memory_view`)."""
+        return memory_view.machine(ctx.conn, _mac(mac))
 
     @router.get("/agent-logs/{log_id}")
     def agent_log_text(log_id: int, user=Depends(admin_only)):

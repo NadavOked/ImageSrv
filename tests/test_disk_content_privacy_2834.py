@@ -155,3 +155,4 @@ def test_a_refused_table_names_its_cause_without_the_sources_guids(tmp_path):
     assert why.startswith("טבלת המחיצות לא נכתבה: "), why
     assert "sgdisk refused the table" in why and "<guid>" in why, why   # #1455: the cause is still named
     assert not GUID.search(why), why
+    assert not re.search(r"\[\d\d:\d\d:\d\d", why), why   # #3850: no log stamp (rtc or not) in the error: it spends the 240 characters

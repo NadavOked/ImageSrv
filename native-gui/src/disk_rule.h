@@ -1,39 +1,37 @@
 /* #2848 (Nadav 11/11): the one rule -- a disk's colour, and whether it may be a SOURCE and a TARGET.
- * The same table as server/disks/disk_rule.py and diskRule() in server/static/console.js;
- * tests/test_disk_rule_parity_2848.py runs the three on the same disks and wants the same answer,
- * the words included. Pure C (no cairo): the test builds this file alone.
+ * #3666 (Nadav 18/11, epic #3653): the GUI does NOT work it out. The table is one file, agent/lib/data/disk-rule.tsv:
+ * the server's brain (server/brain/diskcolor.py, K3/DISK_COLOR) applies it and sends the verdict, and a machine with no
+ * server (the local clone, the cloner's waiting screen) gets the same verdict from the agent (agent/lib/smart/diskrule.sh,
+ * which reads the same file). This file only takes a verdict that was delivered -- colour, the two permissions, the reason
+ * word and the sentence -- and holds it for the screens. There is no table here, no sentence, and no "SMART ok, so green":
+ * a disk nobody classified is "not checked" (grey), never green (principle 5).
  *
  *   SMART ok                               green   source yes  target yes
  *   SMART half-good (warn)                 orange  source yes  target yes
  *   failed the last clone / cut write      yellow  source NO   target yes
  *   SMART failed                           red     source yes  target NO
  *   slow in THIS round's write check       red     source yes  target NO
- *   slow SATA link / a SATA problem        red     source yes  target NO
+ *   a SATA problem (link reset / gone)     red     source yes  target NO
+ *     (#3591, Nadav 17/11: no link SPEED -- 1.5, 3.0, 6.0 -- is a colour or a refusal; it is information)
  *
- * The two permissions are apart: red AND yellow is neither, and is drawn red. */
+ * The two permissions are apart: red AND yellow is neither, and is drawn red. Pure C (no cairo): a test builds this file alone. */
 #ifndef DISK_RULE_H
 #define DISK_RULE_H
-
-typedef struct {
-    const char *smart;      /* ok|warn|fail|failed_last|unchecked; NULL = unchecked */
-    int failed_last;        /* the server's open failure record (the hello's disk_failures) */
-    int write_incomplete;   /* #1798: write_mark incomplete */
-    int link_slow;          /* the SATA link below its port */
-    int sata_issue;         /* link_reset / drawer_gone (hwissues.sh) */
-    int write_slow;         /* this round's write check said slow -- never a past round's */
-} DiskFacts;
 
 enum { DR_GREY, DR_GREEN, DR_ORANGE, DR_YELLOW, DR_RED };
 
 typedef struct {
+    int set;                 /* 1 = a verdict was delivered; 0 = none: "not checked" -- grey, and nothing is said about it */
     int color, source, target;
-    const char *reason;          /* the colour's reason (red or yellow); NULL = none */
-    const char *source_reason;   /* why not a source; NULL = allowed */
-    const char *target_reason;   /* why not a target; NULL = allowed */
+    char reason[24];         /* the colour's reason word (red or yellow); "" = none */
+    char he[200];            /* its sentence -- the table's own, shown as it came */
 } DiskRule;
 
-DiskRule disk_rule(const DiskFacts *f);
-const char *disk_rule_he(const char *reason);    /* the sentence; "" for NULL or unknown */
+/* The verdict as delivered: colour word, "0"/"1" for source and target, the reason word and its sentence. 1 = taken;
+ * 0 = junk (an unknown colour, a permission that is not 0 or 1): *r is "no verdict", never a guess. */
+int disk_rule_take(DiskRule *r, const char *color, const char *source, const char *target, const char *reason, const char *he);
+/* No verdict: grey, allowed as the table's own "not checked" row allows (the server and the agent are the gate), set = 0. */
+DiskRule disk_rule_none(void);
 const char *disk_rule_color(int color);          /* "red" "yellow" "orange" "green" "grey" */
 
 #endif

@@ -107,20 +107,37 @@ def test_a_partition_that_became_raw_is_marked_and_does_not_grow(tmp_path):
     assert out.stdout.strip() == '["raw","partclone סירב",false]', out.stdout + out.stderr
 
 
-@pytest.mark.parametrize("text,bs,want", [
-    ("4095+1 records in\n4096+0 records out\n", 4096, "8"),     # measured: one 4KiB read lost = 8 sectors
-    ("dd: /dev/x: Input/output error\n32744+24 records in\n32768+0 records out\n", 512, "24"),
-    ("40960+0 records in\n40960+0 records out\n", 4096, "0"),
+def _map(path: Path, ranges: list[tuple[int, int, int]], tail: str = "# complete") -> Path:
+    """rescuecat's map (agent/rescuecat.c): start, length (bytes), errno -- and its last line."""
+    lines = ["# rescuecat map v1 -- unread ranges", "# size 167772160", "# unit 4096"]
+    lines += [f"{a} {n} {e}" for a, n, e in ranges]
+    path.write_text("\n".join(lines + ([tail] if tail else [])) + "\n", newline="\n")
+    return path
+
+
+@pytest.mark.parametrize("ranges,want", [
+    ([(51200000, 4096, 5)], "8"),                                 # one 4KiB unit lost = 8 sectors
+    ([(0, 4096, 5), (8192, 4096, 5), (1048576, 12288, 5)], "40"),   # ranges add up
+    ([(512, 512, 5)], "1"),                                        # a 512 B unit
+    ([], "0"),                                                     # complete, nothing lost
 ])
-def test_the_sectors_not_read_are_counted_from_dd(tmp_path, text, bs, want):
-    f = tmp_path / "err"; f.write_text(text, newline="\n")
-    out = run(tmp_path, f'lc_rescue_count {posix(f)!r} {bs}; echo "rc=$?"')
+def test_the_sectors_not_read_are_counted_from_the_map(tmp_path, ranges, want):
+    f = _map(tmp_path / "map", ranges)
+    out = run(tmp_path, f'lc_rescue_count {posix(f)!r}; echo "rc=$?"')
     assert out.stdout.split() == [want, "rc=0"], out.stdout
 
 
-def test_no_count_is_no_evidence(tmp_path):
-    f = tmp_path / "err"; f.write_text("dd: /dev/x: Input/output error\n", newline="\n")
-    out = run(tmp_path, f'lc_rescue_count {posix(f)!r} 4096; echo "rc=$?"')
+@pytest.mark.parametrize("tail", ["", "# aborted the disk stopped answering"])
+def test_a_map_that_did_not_end_is_no_evidence(tmp_path, tail):
+    """#2527: a read that stopped (the disk went, the run died) leaves a map without "# complete" --
+    what it lists is a lower bound, never the count of what was not read."""
+    f = _map(tmp_path / "map", [(0, 4096, 5)], tail)
+    out = run(tmp_path, f'lc_rescue_count {posix(f)!r}; echo "rc=$?"')
+    assert out.stdout.split() == ["rc=1"], out.stdout
+
+
+def test_no_map_is_no_evidence(tmp_path):
+    out = run(tmp_path, f'lc_rescue_count {posix(tmp_path / "nomap")!r}; echo "rc=$?"')
     assert out.stdout.split() == ["rc=1"], out.stdout
 
 
@@ -140,21 +157,36 @@ lc_stream() {
     _r=$(sed -n "$(wc -l < "$LC/run/calls")p" "$LC/run/rcs"); LC_SRC_RC=1
     if [ "$_r" = 0 ]; then
         for _t in "$@"; do case "$_t" in sd?) echo "$1" >> "$RUN_DIR/targets/$_t/lc_ok" ;; esac; done
-        [ "${LC_RESCUE:-0}" != 1 ] || printf '40957+3 records in\n40960+0 records out\n' > "$LC/run/rescue.err"
+        if [ "${LC_RESCUE:-0}" = 1 ]; then   # rescuecat read: three units not read, and its map
+            { echo "# rescuecat map v1"; for _k in 0 1 2; do echo "$((_k * 8192)) $LC_RESCUE_BS 5"; done; echo "# complete"; } > "$LC/run/rescue.map"
+        fi
     fi
     return "$_r"
+}
+# the retry (rescuecat retry ...): records its call; STUB_RETRY says what it does to the map
+rescuecat() {
+    echo "$*" >> "$LC/run/rescuecat.calls"
+    echo "1 3" > "$LC/run/retry.round"   # -P: the round that starts, of N
+    case "${STUB_RETRY:-nothing}" in
+        recover) { echo "# rescuecat map v1"; echo "8192 $LC_RESCUE_BS 5"; echo "# complete"; } > "$LC/run/rescue.map" ;;
+        lost) echo "# rescuecat map v1" > "$LC/run/rescue.map" ;;
+        failed-target) echo "failed $DEVROOT/sda4 28" ;;
+        dies) return 4 ;;
+    esac
+    return 0
 }
 '''
 
 
-def _any(tmp_path: Path, rcs: str, answer: str | None, fs: str = "ntfs", size: int = 167772160):
+def _any(tmp_path: Path, rcs: str, answer: str | None, fs: str = "ntfs", size: int = 167772160, retry: str = "nothing"):
     ask = ('gui_ask_choice() { echo "$*" > "$LC/run/asked"; return 1; }; ' if answer is None else
            f'gui_ask_choice() {{ echo "$*" > "$LC/run/asked"; echo {answer}; }}; ')
-    out = run(tmp_path, f'RCS="{rcs}"; FS={fs}; SIZE={size}; ' + STUB + ask
+    out = run(tmp_path, f'RCS="{rcs}"; FS={fs}; SIZE={size}; STUB_RETRY={retry}; ' + STUB + ask
               + 'lc_stream_any 4 "$FS" sdc sda sdb; echo "rc=$?"; '
               + 'for d in sda sdb; do echo "$d=$(cat $RUN_DIR/targets/$d/state)|$(cat $RUN_DIR/targets/$d/error 2>/dev/null)|$(cat $RUN_DIR/targets/$d/rescued 2>/dev/null)"; done; '
               + 'echo "calls=$(tr "\\n" " " < "$LC/run/calls")"; echo "asked=$(cat "$LC/run/asked" 2>/dev/null)"; '
-              + 'echo "rescued=$(cat "$LC/run/rescued" 2>/dev/null)"; jq -c ".partitions[0] | [.copy, .raw_why]" "$LC/run/manifest.json"')
+              + 'echo "rescued=$(cat "$LC/run/rescued" 2>/dev/null)"; jq -c ".partitions[0] | [.copy, .raw_why]" "$LC/run/manifest.json"; '
+              + 'echo "retry=$(cat "$LC/run/rescuecat.calls" 2>/dev/null)"; echo "roundfile=$([ -e "$LC/run/retry.round" ] && echo left || echo gone)"; echo "kept=$(ls $RUN_DIR/targets/sda/ | grep rescue.map | tr "\\n" " ")"')
     assert out.returncode == 0, out.stderr
     return out.stdout
 
@@ -203,6 +235,76 @@ def test_a_partition_not_of_whole_4kib_is_read_by_sector(tmp_path):
     assert "rescued=4|3\n" in out, out
 
 
+# --- #2527: after the stream, the unread sectors are asked again (lcraw.sh lc_rescue_retry) ---
+
+def test_the_unread_sectors_are_asked_again_into_every_target_that_took_the_partition(tmp_path):
+    out = _any(tmp_path, "4 0", "continue", fs="unknown")
+    assert "rc=0" in out, out
+    retry = next(l for l in out.splitlines() if l.startswith("retry="))
+    args = retry.split()
+    assert args[0].endswith("retry") and args[args.index("-b") + 1] == "4096", retry
+    assert args[args.index("-m") + 1].endswith("/run/rescue.map"), retry
+    assert args[args.index("-n") + 1] == "3" and args[args.index("-T") + 1] == "600", retry   # bounded: rounds and seconds
+    assert args.count("-t") == 2 and args[-1].endswith("sdb4") and args[-3].endswith("sda4"), retry
+    assert args[args.index("-P") + 1].endswith("/run/retry.round"), retry     # the screen's "round X of N"
+    assert "roundfile=gone\n" in out, out                                    # and it is not left behind: no line on a finished retry
+    assert "kept=rescue.map.4" in out, out                                  # the map stays beside the target
+    assert "rescued=4|24\n" in out, out                                     # the retry read nothing: the count stands
+
+
+def test_what_the_retry_read_leaves_the_count(tmp_path):
+    out = _any(tmp_path, "4 0", "continue", fs="unknown", retry="recover")
+    assert "rc=0" in out and "rescued=4|8\n" in out, out                    # 3 units lost, 2 recovered: 1 unit = 8 sectors
+    assert "sda=waiting||4|8" in out and "sdb=waiting||4|8" in out, out
+
+
+@pytest.mark.parametrize("retry", ["dies", "nothing"])
+def test_a_retry_that_did_not_finish_claims_nothing(tmp_path, retry):
+    """The map is as it was: more sectors unread than there may be, never fewer."""
+    out = _any(tmp_path, "4 0", "continue", fs="unknown", retry=retry)
+    assert "rc=0" in out and "rescued=4|24\n" in out, out
+
+
+def test_a_map_the_retry_lost_is_no_evidence_and_fails_the_copy(tmp_path):
+    out = _any(tmp_path, "4 0", "continue", fs="unknown", retry="lost")
+    assert "rc=1" in out, out
+    assert "מפת הסקטורים שלא נקראו אבדה אחרי הניסיון החוזר" in out and "sda=failed|" in out, out
+
+
+def test_a_target_the_retry_could_not_write_fails_alone(tmp_path):
+    out = _any(tmp_path, "4 0", "continue", fs="unknown", retry="failed-target")
+    assert "rc=0" in out, out
+    assert "sda=failed|" in out and "כתיבת סקטור ששוחזר נכשלה (errno 28)" in out, out
+    assert "sdb=waiting||4|24" in out, out
+
+
+def test_a_rescue_with_nothing_unread_is_not_retried(tmp_path):
+    """Nothing unread: nothing to ask again, and the disk is not touched twice."""
+    stub = STUB.replace("for _k in 0 1 2; do", "for _k in; do")
+    out = run(tmp_path, 'RCS="4 0"; FS=unknown; SIZE=167772160; STUB_RETRY=nothing; ' + stub
+              + 'gui_ask_choice() { echo continue; }; lc_stream_any 4 unknown sdc sda sdb; echo "rc=$?"; '
+              + 'echo "retry=$(cat "$LC/run/rescuecat.calls" 2>/dev/null)"; echo "rescued=$(cat "$LC/run/rescued")"')
+    assert "rc=0" in out.stdout and "retry=\n" in out.stdout and "rescued=4|0" in out.stdout, out.stdout + out.stderr
+
+
+@pytest.mark.parametrize("content,want", [
+    ("2 3\n", "lc_retry=2|3"),
+    ("1 3\n", "lc_retry=1|3"),
+    ("", None), ("2\n", None), ("x y\n", None), ("2 \n", None), ("-1 3\n", None),
+])
+def test_the_state_carries_the_retry_round_only_when_rescuecat_wrote_it_whole(tmp_path, content, want):
+    rr = tmp_path / "rr"; rr.write_bytes(content.encode())
+    out = run(tmp_path, f'mkdir -p "$LC/run"; cp {posix(rr)!r} "$LC/run/retry.round"; lc_gui_run')
+    assert out.returncode == 0, out.stderr
+    got = [l for l in out.stdout.splitlines() if l.startswith("lc_retry=")]
+    assert got == ([want] if want else []), out.stdout
+
+
+def test_no_round_file_no_retry_line(tmp_path):
+    out = run(tmp_path, 'mkdir -p "$LC/run"; lc_gui_run')
+    assert out.returncode == 0 and "lc_retry=" not in out.stdout, out.stdout + out.stderr
+
+
 def test_the_question_carries_the_disk_the_partition_and_a_minute(tmp_path):
     import time
     before = int(time.time())
@@ -230,7 +332,7 @@ def _stream(tmp_path: Path, fs: str, extra: dict[str, str], rescue: bool = False
     t += pre   # a test's own stubs (#2067: the beep)
     t += f'lc_stream 1 {fs} sdc sda sdb > {posix(box)}/stream.log 2>&1; echo "rc=$? src=$LC_SRC_RC"; '
     t += 'for d in sda sdb; do echo "$d=$(cat $RUN_DIR/targets/$d/state)|$(cat $RUN_DIR/targets/$d/error 2>/dev/null)"; done; '
-    t += 'echo "err=$(cat "$LC/run/rescue.err" 2>/dev/null | tr "\\n" " ")"'
+    t += 'echo "err=$(cat "$LC/run/rescue.err" 2>/dev/null | tr "\\n" " ")"; echo "map=$(tr "\\n" ";" < "$LC/run/rescue.map" 2>/dev/null)"'
     out = run(tmp_path, "LC_SRC_RC=; " + t, timeout=120, WAIT_HELPER_S="20", WAIT_DRAWER_S="20", **envs)
     assert out.returncode == 0, out.stderr
     return out.stdout
@@ -264,29 +366,53 @@ def test_a_reader_that_died_because_every_target_did_is_not_the_source(tmp_path)
     assert "sda=failed|" in out and "קריאת המקור נכשלה" in out, out
 
 
-BUSYBOX = r'''#!/bin/sh
-[ "$1" = dd ] || exit 99; shift
-for a in "$@"; do case "$a" in if=*) src=${a#if=} ;; esac; done
-cat "$src"; printf 'dd: %s: Input/output error\n7+1 records in\n8+0 records out\n' "$src" >&2
+RESCUECAT = r'''#!/bin/sh
+# the rescue read: one 4KiB unit not read -- its map, and the summary on stderr, as agent/rescuecat.c writes them
+[ "$1" = read ] || exit 99; shift
+echo "$*" > "$STUB_BOX/rescuecat.args"   # before the loop below: it shifts every argument away
+src=; map=
+while [ $# -gt 0 ]; do case "$1" in -s) src=$2; shift 2 ;; -m) map=$2; shift 2 ;; *) shift ;; esac; done
+cat "$src"; printf '# rescuecat map v1\n0 4096 5\n# complete\n' > "$map"
+printf 'rescuecat: read 262144 bytes, unread_sectors=8 ranges=1\n' >&2
 '''
 
 
-def test_continue_reads_with_dd_noerror_and_keeps_its_count(tmp_path):
-    out = _stream(tmp_path, "raw", {"busybox": BUSYBOX}, rescue=True)
+def test_continue_reads_with_rescuecat_and_keeps_its_map(tmp_path):
+    out = _stream(tmp_path, "raw", {"rescuecat": RESCUECAT}, rescue=True)
     assert "rc=0" in out, out
-    assert "err=dd: " in out and "7+1 records in" in out, out
+    assert "unread_sectors=8 ranges=1" in out and "map=# rescuecat map v1;0 4096 5;# complete;" in out, out
 
 
-def test_the_rescue_read_bypasses_the_page_cache(tmp_path):
-    """#2158: through the page cache a failed read loses the kernel's whole read unit, not bs --
-    2 bad sectors zeroed 4096 on kernel 6.18 (WSL, measured 25/10) and 256 on the public runner
-    (run 40159245308), 8 on the lab's 6.12. iflag=direct makes it bs on every kernel. The
-    behavioural test (test_bad_sectors_ask_...) only tells the two apart on a newer kernel."""
-    stub = BUSYBOX.replace('cat "$src";', 'echo "$*" > "$STUB_BOX/dd.args"; cat "$src";')
-    out = _stream(tmp_path, "raw", {"busybox": stub}, rescue=True)
+def test_the_rescue_read_is_one_ask_per_unit_direct_and_bounded(tmp_path):
+    '''#2158: through the page cache a failed read loses the kernel's whole read unit, not bs --
+    rescuecat opens O_DIRECT (test_rescuecat_2527.py: direct=1, read-only). #2527: the first pass
+    asks a bad unit once (-n 1); a disk that goes silent ends the read after 64MiB of unread bytes.'''
+    out = _stream(tmp_path, "raw", {"rescuecat": RESCUECAT}, rescue=True)
     assert "rc=0" in out, out
-    args = (tmp_path / "box" / "dd.args").read_text().split()
-    assert "iflag=direct" in args and "bs=4096" in args and "conv=noerror,sync" in args, args
+    args = (tmp_path / "box" / "rescuecat.args").read_text().split()
+    assert args[args.index("-b") + 1] == "4096" and args[args.index("-n") + 1] == "1", args
+    assert args[args.index("-L") + 1] == "67108864" and args[args.index("-m") + 1].endswith("/run/rescue.map"), args
+    assert args[args.index("-s") + 1].endswith("/sdc1"), args
+
+
+RESCUECAT_DIES = r'''#!/bin/sh
+[ "$1" = read ] || exit 99; shift
+src=; map=
+while [ $# -gt 0 ]; do case "$1" in -s) src=$2; shift 2 ;; -m) map=$2; shift 2 ;; *) shift ;; esac; done
+head -c 1000 "$src"; printf '# rescuecat map v1\n# aborted the disk stopped answering\n' > "$map"
+echo "rescuecat: the disk stopped answering: No such device -- the stream is short, the map says where" >&2
+exit 4
+'''
+
+
+def test_a_disk_that_stopped_answering_fails_every_target_and_says_so(tmp_path):
+    '''#2527 (principle 5): dd would have gone on to the end with zeros; a short stream is no copy.'''
+    out = _stream(tmp_path, "raw", {"rescuecat": RESCUECAT_DIES}, rescue=True, pre="source_failed_beep() { :; }; ")
+    assert "rc=1" in out, out
+    for d in ("sda", "sdb"):
+        assert f"{d}=failed|" in out, out
+    assert "הדיסק הפסיק להגיב באמצע ההעתקה (rescuecat rc=4: rescuecat: the disk stopped answering" in out, out
+    assert "היעד אינו שמיש" in out, out
 
 
 # --- after the copy: the note, and no grow (lcraw.sh) --------------------------------
@@ -453,11 +579,10 @@ int main(int argc, char **argv) {
 '''
 
 
-@pytest.fixture(scope="module")
-def ask_driver(tmp_path_factory) -> Path:
+def _build_driver(tmp_path_factory, name: str, source: str) -> Path:
     from test_native_local_clone import GUI
-    d = tmp_path_factory.mktemp("askdrv")
-    (d / "driver.c").write_text(ASK_DRIVER, newline="\n")
+    d = tmp_path_factory.mktemp(name)
+    (d / "driver.c").write_text(source, newline="\n")
     srcs = subprocess.run(["make", "-s", "-f", "Makefile", "print-gui-src"], cwd=str(GUI), capture_output=True,
                           text=True, stdin=subprocess.DEVNULL).stdout.split()
     srcs = [posix(GUI / s) for s in srcs if not s.endswith("main.c")]
@@ -467,6 +592,33 @@ def ask_driver(tmp_path_factory) -> Path:
                            capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
     assert build.returncode == 0, build.stderr
     return d / "drv"
+
+
+@pytest.fixture(scope="module")
+def ask_driver(tmp_path_factory) -> Path:
+    return _build_driver(tmp_path_factory, "askdrv", ASK_DRIVER)
+
+
+#: #2527: the local screen's status bar -- its text, and whether its dot is the idle grey
+STATUS_DRIVER = r"""
+#define main imagesrv_gui_main
+#include "main.c"
+#undef main
+int main(int argc, char **argv) {
+    static App a; a.theme = &THEME_LIGHT; a.screen = SCREEN_LOCAL;
+    FILE *f = fopen(argv[1], "r"); if (!f) { perror(argv[1]); return 2; }
+    state_parse(&a.st, f); fclose(f);
+    Rgb dot; const char *w = lc_status_word(&a, &dot);
+    const Rgb *g = &THEME_LIGHT.led_idle, *wr = &THEME_LIGHT.warn;
+    printf("%s|grey=%d|warn=%d\n", w, dot.r == g->r && dot.g == g->g && dot.b == g->b, dot.r == wr->r && dot.g == wr->g && dot.b == wr->b);
+    return 0;
+}
+"""
+
+
+@pytest.fixture(scope="module")
+def status_driver(tmp_path_factory) -> Path:
+    return _build_driver(tmp_path_factory, "statusdrv", STATUS_DRIVER)
 
 
 @GUI_TOOLS
@@ -711,3 +863,33 @@ def test_the_source_screen_says_the_unread_sectors_in_orange(tmp_path, unread_dr
 def test_no_line_for_another_disk_zero_or_a_broken_value(tmp_path, unread_driver, extra):
     said, _ = _unread_screen(unread_driver, tmp_path, extra)
     assert said == "[]", (extra, said)
+
+
+COPYING = "lc_screen=local\nlc_inv=done\nlc_phase=copying\nlc_tgt=sda|writing|1000||0||||0||-1,-1|0|0\nlc_tgt=sdb|writing|1000||0||||0||-1,-1|0|0\n"
+
+
+@GUI_TOOLS
+@pytest.mark.parametrize("extra,want", [
+    ("lc_retry=2|3\n", "מנסה שוב סקטורים שלא נקראו (סבב 2 מתוך 3)|grey=1|warn=0"),   # a process state: grey, the status bar's own line
+    ("lc_retry=1|3\n", "מנסה שוב סקטורים שלא נקראו (סבב 1 מתוך 3)|grey=1|warn=0"),
+    ("", "מעתיק לשני יעדים|grey=0|warn=0"),                                       # no retry: the line as it was
+    ("lc_retry=4|3\n", "מעתיק לשני יעדים|grey=0|warn=0"),                          # a round beyond the rounds says nothing
+    ("lc_retry=0|3\n", "מעתיק לשני יעדים|grey=0|warn=0"),
+    ("lc_retry=2|\n", "מעתיק לשני יעדים|grey=0|warn=0"),
+    ("lc_retry=a|3\n", "מעתיק לשני יעדים|grey=0|warn=0"),
+])
+def test_the_status_bar_says_the_retry_round_in_grey(tmp_path, status_driver, extra, want):
+    state = tmp_path / "s.txt"
+    state.write_text(COPYING + extra, newline="\n")
+    run = subprocess.run([str(status_driver), posix(state)], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+    assert run.returncode == 0, run.stderr
+    assert run.stdout.strip() == want, run.stdout
+
+
+@GUI_TOOLS
+def test_a_retry_line_is_only_while_copying(tmp_path, status_driver):
+    """The agent removes retry.round when the retry ends; a stale line must not outlive the phase."""
+    state = tmp_path / "s.txt"
+    state.write_text(COPYING.replace("copying", "verifying") + "lc_retry=2|3\n", newline="\n")
+    run = subprocess.run([str(status_driver), posix(state)], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+    assert run.stdout.strip() == "בודק את הדיסקים|grey=0|warn=0", run.stdout
