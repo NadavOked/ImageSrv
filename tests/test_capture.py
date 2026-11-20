@@ -52,17 +52,17 @@ def make_task(server, mac, **overrides):
 
 def manifest_for(parts=None):
     return {
-        "schema": 1, "family": 256,
+        "schema": 1, "image_format": 2, "family": 256,      # #2533: the capture cuts chunk frames
         "source_disk_bytes": 256060514304, "min_target_bytes": 256060514304,
         "scheme": "gpt", "sector_size": 512, "disk_guid": DISK_GUID,
         "partitions": parts if parts is not None else [
             {"index": 1, "type_guid": ESP_GUID, "role": "esp", "fs": "vfat",
              "start_sector": 2048, "size_bytes": 104857600, "used_bytes": USED_A,
-             "file": "p1.esp.pcl.zst", "sha256": sha(PART_A), "expandable": False},
+             "file": "p1.esp.pcl.zst", "sha256": sha(PART_A), "index_xxh64": "1" * 16, "expandable": False},
             {"index": 3, "type_guid": WINDOWS_GUID, "role": "windows", "fs": "ntfs",
              "start_sector": 1085440, "size_bytes": 254803968000,
              "used_bytes": USED_B,
-             "file": "p3.windows.pcl.zst", "sha256": sha(PART_B), "expandable": True},
+             "file": "p3.windows.pcl.zst", "sha256": sha(PART_B), "index_xxh64": "3" * 16, "expandable": True},
         ],
         "total_compressed_bytes": len(PART_A) + len(PART_B),
         "compression": "zstd-9",
@@ -361,10 +361,10 @@ def test_a_linux_image_without_disk_guid_is_accepted(server):
     parts = [
         {"index": 1, "type_guid": ESP_GUID, "role": "esp", "fs": "vfat",
          "start_sector": 2048, "size_bytes": 104857600, "used_bytes": USED_A,
-         "file": "p1.esp.pcl.zst", "sha256": sha(PART_A), "expandable": False},
+         "file": "p1.esp.pcl.zst", "sha256": sha(PART_A), "index_xxh64": "a" * 16, "expandable": False},
         {"index": 2, "type_guid": LINUX_GUID, "role": "linux", "fs": "ext4",
          "start_sector": 206848, "size_bytes": 254803968000, "used_bytes": 1,
-         "file": "p2.linux.pcl.zst", "sha256": sha(PART_B), "expandable": True},
+         "file": "p2.linux.pcl.zst", "sha256": sha(PART_B), "index_xxh64": "b" * 16, "expandable": True},
     ]
     linux = manifest_for(parts)
     linux.pop("disk_guid")
@@ -481,7 +481,7 @@ def test_a_recovery_partition_after_the_expandable_one_is_accepted(server):
     parts.append({"index": 4, "type_guid": RECOVERY_GUID, "role": "recovery",
                   "fs": "ntfs", "start_sector": 498888704,
                   "size_bytes": 536870912, "used_bytes": USED_A,
-                  "file": "p4.recovery.pcl.zst", "sha256": sha(PART_A),
+                  "file": "p4.recovery.pcl.zst", "sha256": sha(PART_A), "index_xxh64": "a" * 16,
                   "expandable": False})
     response = do_capture(
         server, created["id"], manifest=manifest_for(parts),
@@ -500,7 +500,7 @@ def test_a_system_partition_after_the_expandable_one_is_still_refused(server):
     parts.append({"index": 4, "type_guid": WINDOWS_GUID, "role": "windows",
                   "fs": "ntfs", "start_sector": 498888704,
                   "size_bytes": 536870912, "used_bytes": 524288000,
-                  "file": "p4.windows.pcl.zst", "sha256": sha(PART_A),
+                  "file": "p4.windows.pcl.zst", "sha256": sha(PART_A), "index_xxh64": "a" * 16,
                   "expandable": False})
     response = do_capture(server, created["id"], manifest=manifest_for(parts))
     assert response.status_code == 400
@@ -517,10 +517,10 @@ def test_the_line_is_drawn_by_start_sector_not_by_list_order(server):
         {"index": 1, "type_guid": LINUX_GUID, "role": "linux", "fs": "ext4",
          "start_sector": 2099200, "size_bytes": 45000687616,
          "used_bytes": USED_A, "file": "p1.linux.pcl.zst",
-         "sha256": sha(PART_A), "expandable": True},
+         "sha256": sha(PART_A), "index_xxh64": "a" * 16, "expandable": True},
         {"index": 15, "type_guid": ESP_GUID, "role": "esp", "fs": "vfat",
          "start_sector": 10240, "size_bytes": 111149056, "used_bytes": USED_B,
-         "file": "p15.esp.pcl.zst", "sha256": sha(PART_B), "expandable": False},
+         "file": "p15.esp.pcl.zst", "sha256": sha(PART_B), "index_xxh64": "b" * 16, "expandable": False},
     ]
     response = do_capture(
         server, created["id"], manifest=manifest_for(parts),

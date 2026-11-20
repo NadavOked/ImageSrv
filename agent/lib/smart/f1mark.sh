@@ -14,12 +14,12 @@ disk_f1_refresh() {
     # תשובת ה-hello האחרונה -> $RUN_DIR/disk_f1, שורה לדיסק: serial|date|source. השורה
     # הראשונה "ok" היא הראיה שהשדה נקרא; שדה חסר (שרת ישן / קריאה שנכשלה / קובץ באמצע
     # כתיבה) אינו "אין סימונים" -- הקובץ הקודם נשאר (עיקרון 5). 0 = רוענן.
-    _f1_n="$RUN_DIR/disk_f1.next"
+    _f1_n=$(mktemp "$RUN_DIR/disk_f1.XXXXXX" 2>> "$LOG_FILE") && [ -n "$_f1_n" ] || return 1   # #3721: its own name per call
     json_get_join "$RUN_DIR/response.json" \
         'if has("f1_observed") then ["ok"] + (.f1_observed | map("\(.serial // "")|\(.date // "")|\(.source // "")")) else [] end' \
         > "$_f1_n" 2>/dev/null
     [ "$(head -n 1 "$_f1_n" 2>/dev/null)" = ok ] || { rm -f "$_f1_n"; return 1; }
-    mv "$_f1_n" "$RUN_DIR/disk_f1"
+    mv "$_f1_n" "$RUN_DIR/disk_f1" || { rm -f "$_f1_n"; return 1; }
 }
 
 disk_f1_observed() {

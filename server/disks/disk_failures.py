@@ -64,8 +64,9 @@ def stream_fault(cause: str | None, error: str | None) -> bool:
     return any(p in error for p in STREAM_PHRASES)
 
 
-def _quiet(row: sqlite3.Row) -> bool:
-    """האם הרשומה אינה צובעת את הדיסק: עצירה באמצע (#1580), מגירה שנשלפה
+def quiet(row: sqlite3.Row) -> bool:
+    """האם הרשומה אינה צובעת את הדיסק -- ה-hello (`open_for`), הקונסולה (`list_open`) ובריאות הדיסק
+    (`disk_sets.health`, #3147) שואלים את אותה שאלה כאן, ולכן אינם יכולים להסתדר עם מילים שונות: עצירה באמצע (#1580), מגירה שנשלפה
     (`removed`, נדב 17/10), או כשל של הזרם (#1728). רשומה שנרשמה `unclassified`
     לפני הסיווג הזה (id=1241 במעבדה) נקראת שוב לפי הראיה שבה — אחרת היא
     נשארת כתומה עד "נקה"."""
@@ -101,7 +102,7 @@ def _int(value: object) -> int | None:
 
 
 def record(conn: sqlite3.Connection, session_id: str, mac: str, target: dict) -> dict | None:
-    """רושם כשל כתיבה של יעד אחד, פעם אחת לכל (סבב, מכונה, יעד).
+    """רושם כשל כתיבה של יעד אחד, פעם אחת לכל (סבב, מכונה, יעד) -- חוץ ממה ש-`_escalate` מתאר (#3148).
 
     נקרא מ-`reports.ingest` על יעד `failed` שנושא `ata_log` (סוכן חדש;
     סוכן ישן שאינו שולח אותו אינו נרשם — אין לו סידורי ולא פורט, ואין
@@ -131,9 +132,8 @@ def record(conn: sqlite3.Connection, session_id: str, mac: str, target: dict) ->
             (session_id, mac, dev, row["serial"], row["port"], row["ata_port"],
              row["at"], cause, error, json.dumps(lines)),
         )
-        inserted = cur.rowcount == 1
-        row["id"] = cur.lastrowid if inserted else None
-    if not inserted:
+        row["id"] = cur.lastrowid if cur.rowcount == 1 else _escalate(conn, row, lines)
+    if row["id"] is None:
         return None
     journal(conn, "disk_failure",
             f"{mac} {dev} serial={serial or '?'} port={row['port'] if row['port'] is not None else '?'}"
@@ -141,7 +141,45 @@ def record(conn: sqlite3.Connection, session_id: str, mac: str, target: dict) ->
             # #704: השם שהמפעיל נתן לחריץ; בלי שם — השורה כמו היום.
             + slot_names.journal_suffix(slot_names.label(conn, mac, port=row["port"], serial=serial)),
             machine=mac, round_id=session_id)
+    _brain_cause(conn, row, lines)
     return row
+
+
+def _brain_cause(conn: sqlite3.Connection, row: dict, lines: list[str]) -> None:
+    """#3064 (K9): הסיבה של הכשל שנרשם זה עתה, לפי הראיה -- פעם אחת לרשומה (חדשה, או שליפה שהפכה לכשל אמיתי,
+    `_escalate`), לא בכל דיווח חוזר. רושם בלבד: הרשומה, הסיבה שלה והצבע אינם משתנים. `ata_log` נשלח רק אחרי
+    שהכתיבה התחילה (`fail_written_target` בסוכן), ולכן ``wrote`` כאן הוא ראיה. לעולם אינו זורק."""
+    try:
+        from server.brain import cause      # כאן ולא למעלה: K9 קורא את המילים של המודול הזה
+        paints = not quiet({**row, "ata_log": json.dumps(lines)})
+        cause.judge(conn, point="disk_failure", round_id=row["session_id"], mac=row["mac"], serial=row["serial"],
+                    existing=f"disk_failure cause={row['cause']}, {'צובע את הדיסק' if paints else 'אינו צובע'}",
+                    kernel=tuple(lines), error=row["error"], wrote=True)
+    except Exception:                       # noqa: BLE001 — המוח אינו מפיל את רישום הכשל
+        log.exception("disk_failures: K9 of %s %s failed", row.get("mac"), row.get("dev"))
+
+
+def _escalate(conn: sqlite3.Connection, row: dict, lines: list[str]) -> int | None:
+    """#3148 (עיקרון 5): הרשומה של (סבב, מכונה, יעד) כבר קיימת, והיא **שקטה** (`quiet`: שליפה, עצירה באמצע) -- והכשל
+    שהגיע עכשיו **אינו**. מגירה שנשלפה, חזרה, ואז נכשלה כשל כתיבה אמיתי באותו סבב נבלעה ברשומת השליפה (`INSERT OR IGNORE`),
+    ולכן לא צבעה כלום -- וה-hello, הקונסולה ובריאות הדיסק לא ידעו על הכשל השני.
+
+    המפתח `(session_id, mac, dev)` נשאר (הדיווח חוזר כל 2 שניות, וכפילות נבלעת בו -- וכך גם דיווח שליפה מאוחר אחרי
+    הכשל האמיתי). לכן הרשומה השקטה **נפתחת מחדש בשם הכשל החדש**: סיבה, שגיאה, שורות ATA, סידורי וחריץ שלו,
+    `cleared_at` מתאפס. השליפה עצמה נשארת ביומן (`disk_failure ... cause=removed`, ו-`disk_failure_cleared` אם נסגרה).
+    רק מעבר משקט לאמיתי; אמיתי שנרשם נשאר כפי שהוא. מחזיר את מזהה הרשומה, או `None` כשאין מה לעשות."""
+    old = conn.execute("SELECT id, cause, error, ata_log FROM disk_failures WHERE session_id = ? AND mac = ? AND dev = ?",
+                       (row["session_id"], row["mac"], row["dev"])).fetchone()
+    if old is None or not quiet(old) or quiet({**row, "ata_log": json.dumps(lines)}):
+        return None
+    if conn.execute(
+        "UPDATE disk_failures SET serial = ?, port = ?, ata_port = ?, at = ?, cause = ?, error = ?, ata_log = ?,"
+        " cleared_at = NULL WHERE id = ? AND cause = ?",
+        (row["serial"], row["port"], row["ata_port"], row["at"], row["cause"], row["error"], json.dumps(lines),
+         old["id"], old["cause"]),
+    ).rowcount != 1:
+        return None
+    return old["id"]
 
 
 #: #1760: מה שהקונסולה קוראת ברשומה של דילוג אדום על דיסק לקריאה בלבד.
@@ -204,7 +242,7 @@ def open_for(conn: sqlite3.Connection, mac: str, disks: list | None) -> list[dic
     sql += ") ORDER BY at"
     out = []
     for r in conn.execute(sql, params).fetchall():
-        if _quiet(r):
+        if quiet(r):
             continue                      # #1580 / שליפה: אינם צובעים
         # #2492 (סקירה): `readonly` (אדום — הסוכן מדלג על הדיסק) חוזר רק ל-MAC
         # שכתב אותו. הקשירה בכתיבה נשענת על ה-hello של הכותב — מה שהוא טען על
@@ -229,7 +267,7 @@ def list_open(conn: sqlite3.Connection) -> list[dict]:
     ).fetchall()
     out = []
     for r in rows:
-        if _quiet(r):
+        if quiet(r):
             continue                      # #1580 / שליפה: אינם צובעים
         try:
             lines = json.loads(r["ata_log"] or "[]")
@@ -280,6 +318,50 @@ def clear_written(conn: sqlite3.Connection, serials, round_id: str) -> list[int]
         journal(conn, "disk_failure_cleared",
                 f"#{failure_id} serial={serial} " + AUTO_CLEARED_HE.format(round_id=round_id),
                 round_id=round_id)
+    return [failure_id for failure_id, _ in cleared]
+
+
+#: #3112: שורת היומן של רשומה שנסגרה כי אותה מגירה חזרה והושלמה באותו סבב.
+RETURNED_CLEARED_HE = "נוקה אוטומטית: המגירה חזרה והושלמה בסבב {session_id}"
+
+
+def clear_returned(conn: sqlite3.Connection, session_id: str, mac: str, dev: str,
+                   serial: str | None) -> list[int]:
+    """#3112: מגירה ש**נשלפה** (הרשומה נפתחה בכשל) וחזרה והושלמה — `done` באותו סבב, על
+    אותו יעד — סוגרת את הרשומה שלה **בדיווח עצמו**, לא רק בספירת הגל (`clear_written`):
+    עד הספירה (הגל שנמשך, סבב שנעצר בידי המפעיל לפניה) הדיסק שהושלם נשאר כתום ב-
+    `disk_sets.health`, ובסבב הבא נראה בעייתי.
+
+    הראיה: יעד `done` בדיווח, עם **סידורי** (בלעדיו אין זהות -- וזה הסידורי ש-`stamp_done_serials`
+    (#1126) חתם מהמלאי של ה-hello, כמו שה-`_tally` סופר, לא מה שהסוכן טוען), באותו (סבב, מכונה)
+    שבו נפתחה הרשומה, והסידורי שלה **זהה לו**. **המפתח הוא הסידורי, לא שם ההתקן (#3139):** מגירה
+    שחזרה תחת שם חדש (sda -> sdc) משלימה תחת השם החדש, והרשומה שנפתחה בשם הישן נסגרת בה -- אחרת היא
+    נשארת פתוחה על דיסק שנכתב במלואו עד ספירת הגל. רשומה של סידורי אחר (דיסק אחר תחת אותו שם)
+    או בלי סידורי (כמו ב-`clear_written`: הצלחה של דיסק אחד אינה ראיה על חריץ) אינה
+    נסגרת. **אדום אינו מתנקה** (#1742): `readonly` נשארת עד "נקה". חוזר על עצמו בבטחה;
+    מחזיר את המזהים שנסגרו עכשיו."""
+    if not serial:
+        return []
+    rows = conn.execute(
+        "SELECT id, dev, serial, cause, error, ata_log FROM disk_failures WHERE cleared_at IS NULL"
+        " AND session_id = ? AND mac = ? AND serial = ?",
+        (session_id, mac, serial)).fetchall()
+    if not rows:
+        return []                        # the report repeats every 2 s per done target: no write lock for nothing
+    cleared = []
+    with _write_lock, writing(conn):
+        for r in rows:
+            if _cause(r) == "readonly":
+                continue
+            if conn.execute("UPDATE disk_failures SET cleared_at = ? WHERE id = ? AND cleared_at IS NULL",
+                            (now_iso(), r["id"])).rowcount == 1:
+                cleared.append((r["id"], r["dev"]))
+    for failure_id, old_dev in cleared:
+        # #3139: a renamed drawer says so, in the journal line the operator reads next to the close.
+        renamed = f" ({old_dev} -> {dev})" if old_dev != dev else ""
+        journal(conn, "disk_failure_cleared",
+                f"#{failure_id} serial={serial} " + RETURNED_CLEARED_HE.format(session_id=session_id) + renamed,
+                machine=mac, round_id=session_id)
     return [failure_id for failure_id, _ in cleared]
 
 

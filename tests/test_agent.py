@@ -658,7 +658,7 @@ def test_the_product_image_packs_no_ssh():
 #: שיוצרת חדשים — זה ניקוי המשוכפל, לא SSH במוצר. רק האסימונים האלה, ורק שם;
 #: כל אזכור אחר באותה שורה עדיין נתפס.
 CLONE_HOSTKEYS = re.compile(r"/ssh/ssh_host_\*|ssh-keygen|ssh-hostkeys|sshd?\.service"
-                            r"|SSH host keys|מפתחות ה-SSH")
+                            r"|SSH host keys|מפתחות ה-SSH|etc/ssh(?!/ssh_host)")   # #3083: etc/ssh in the link check
 
 
 def _without_clone_hostkeys(name: str, line: str) -> str:
@@ -668,7 +668,7 @@ def _without_clone_hostkeys(name: str, line: str) -> str:
 def test_the_clone_hostkeys_allowance_still_catches_packing_ssh():
     """ההיתר של #1979 אינו פותח את grow.sh ל-dropbear או למפתח טכנאי."""
     for line in ('dropbear -R -p 22', 'cp authorized_keys "$ROOT"', 'ssh -i key root@x',
-                 'rm -f "$1"/ssh/ssh_host_* && dropbear'):
+                 'rm -f "$1"/ssh/ssh_host_* && dropbear', 'cp key etc/ssh/authorized_keys'):
         assert NO_SSH.search(_without_clone_hostkeys("agent/lib/restore/grow.sh", line)), line
 
 
@@ -818,7 +818,8 @@ LINUX_MANIFEST = {
 @pytest.mark.parametrize(
     ("fs", "tool"),
     [("ntfs", "partclone.ntfs"), ("ext4", "partclone.ext4"),
-     ("btrfs", "partclone.btrfs"), ("vfat", "partclone.fat"), ("xfs", "partclone.dd")],
+     ("btrfs", "partclone.btrfs"), ("vfat", "partclone.fat"), ("xfs", "partclone.xfs"),
+     ("f2fs", "partclone.dd")],   # #3415: xfs is partclone.xfs now; what is still unsupported is the raw copy
 )
 def test_every_supported_filesystem_has_a_partclone(fs, tool):
     out = sh(f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/restore/restore.sh; '
@@ -1785,6 +1786,7 @@ REAL_BINARIES_USED = {
     # #667 — XFS grow on RHEL/Fedora golden images (mounted, xfs_growfs).
     "xfs_growfs",
     "partclone.ntfs", "partclone.fat", "partclone.ext4", "partclone.btrfs",
+    "partclone.xfs",   # #3415
     "partclone.dd",
     # #85 — קריאת החותם של מטעני האתחול שעל ה-ESP בזמן הקליטה. הוא גם
     # אחד מארבעת הכלים החסרים שרשומים ב-#86 (הכשרת מכונה בזמן שחזור).
@@ -1806,7 +1808,7 @@ REAL_BINARIES_USED = {
 }
 
 #: מקומפל מהמקור בבנאי ולכן אינו ברשימת ה-BINARIES שנאספת מהמערכת.
-COMPILED_BINARIES = {"fanout", "hivewrite", "lldpsniff"}
+COMPILED_BINARIES = {"fanout", "hivewrite", "lldpsniff", "chunkcut", "chunkcast", "netwatch", "rescuecat"}   # #2533: chunkcut cuts the capture into zstd frames; chunkcast is the chunk engine; #2527: rescuecat reads a dying source
 DIAGNOSTIC_BINARIES = {"smartctl", "efibootmgr", "dmidecode", "lspci", "ntfsfix"}
 
 

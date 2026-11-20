@@ -13,6 +13,7 @@
 #include "canceldlg.h"  /* #1386 */
 #include "smarttbl.h"   /* #1859 */
 #include "dcui.h"       /* #1914: the USB stick's settings are the DCUI's settings screen */
+#include "brain_ask.h"  /* #3654 */
 
 /* #1252: a value the state file did not carry is said as unknown -- the
  * header once showed the mockup's server, address and version
@@ -197,7 +198,9 @@ static const char *status_word(const App *a,char *buf,size_t n,Rgb *dot){
     const State *s=&a->st; *dot=a->theme->led_ok;
     if(s->shrink_pending){*dot=a->theme->warn;return "ממתין להחלטת כיווץ";}   /* #928: the modal owns the screen */
     if(s->ask_pending){*dot=a->theme->warn;return s->ask_kind==ASK_GROWBACK||s->ask_kind==ASK_RAID?"ממתין להחלטה על הדיסק"
-                                                   :s->ask_kind==ASK_SHARE?"ממתין לאישור חלוקת המקום":s->ask_kind==ASK_BADSECT?"ממתין להחלטה על דיסק המקור":"הקליטה הסתיימה";}   /* 11/10; #1808/#1898 */
+                                                   :s->ask_kind==ASK_SHARE?"ממתין לאישור חלוקת המקום":s->ask_kind==ASK_BADSECT?"ממתין להחלטה על דיסק המקור"
+                                                   :s->ask_kind==ASK_INTERRUPT?"ממתין להכרעה על הסבב":"הקליטה הסתיימה";}   /* 11/10; #1808/#1898 */
+    {const char *bw=bask_status_word(a,dot,buf,n);if(bw)return bw;}   /* #3654: the brain's question */
     if(a->screen==SCREEN_LCBOOT||a->screen==SCREEN_LOCAL)return lc_status_word(a,dot);   /* #1322 */
     switch(a->screen){
     case SCREEN_LOGIN:return "ממתין לאימות";
@@ -223,6 +226,7 @@ static const char *status_word(const App *a,char *buf,size_t n,Rgb *dot){
             e+=!strcmp(s->drawers[i].state,"done")||!strcmp(s->drawers[i].state,"failed")||!strcmp(s->drawers[i].state,"skipped");}
          if(s->ndrawers&&e==s->ndrawers)return "שיכפול במקביל · הסתיים";   /* #1331 mockup v2 */
          if(v&&!w&&vb){snprintf(buf,n,"בודק את הדיסקים · %d מתוך %d %s",d,v+d+f,strcmp(s->rb_mode,"full")?"נבדקו":"אומתו");return buf;}   /* #2046 (mockup 11): the check has the screen */
+         if(!s->ndrawers&&s->task_direct)return s->task==TASK_PENDING?"ממתין לסוכן":"משימה פעילה";   /* #2984: the send runs; "כותב 0 דיסקים" was a sentence about a cloner */
          snprintf(buf,n,"כותב %d דיסקים במקביל",w);return buf;}
     case SCREEN_RESTORE:*dot=a->theme->warn;return "בחירת אימג' לשחזור";
     case SCREEN_TOOLS:return a->tool_running?"מריץ כלי":"ארגז הכלים";
@@ -244,7 +248,10 @@ static const char *status_keys(const App *a,char *buf,size_t n){
                                :a->st.ask_kind==ASK_RAID?"1  כתוב ומחק את המידע    2 / Esc  דלג על הדיסק"   /* #1808 */
                                :a->st.ask_kind==ASK_SHARE?"1  אשר וכתוב    2 / Esc  דלג"                     /* #1898 */
                                :a->st.ask_kind==ASK_BADSECT?"Enter / 1  המשך בכל זאת    2 / Esc  עצור"     /* #2017: Enter = the default */
+                               :a->st.ask_kind==ASK_INTERRUPT?(!strcmp(a->st.ask_subject,"self")?"Enter / Esc  הבנתי"
+                                                              :"1  כתוב מחדש את הדיסקים שלא הושלמו    2  סגור את הסבב    Esc  לא עכשיו")   /* #2528: Esc answers nothing */
                                :"1 / Esc  כבה    2  חזרה לתפריט";   /* 11/10 */
+    {const char *bk=bask_status_keys(a,buf,n);if(bk)return bk;}   /* #3654 */
     if(a->confirm)return "Enter  אישור    Esc  ביטול";   /* #1270: the confirm dialog */
     if(a->screen==SCREEN_LCBOOT||a->screen==SCREEN_LOCAL)return lc_status_keys(a);   /* #1322 */
     if(a->cdlg.open)return a->cdlg.picker?"↑ ↓  בחירת דיסק    Del  בטל את הדיסק    Esc  המשך לכתוב"
@@ -331,6 +338,7 @@ static void draw_status(App *a,cairo_t *cr,double W,double H){
     double rx=W-N_STATUS_PAD;
     cairo_arc(cr,rx-N_STATUS_DOT/2,bar.y+bar.h/2,N_STATUS_DOT/2,0,2*M_PI);draw_set(cr,dot);cairo_fill(cr);
     text_draw_r(cr,&w,rx-N_STATUS_DOT-N_STATUS_GAP,bar.y+(bar.h-w.h)/2,t->ink);text_free(&w);
+    if(bask_visible(a)){bask_draw_keys(a,cr,N_STATUS_PAD,bar.y+bar.h/2);return;}   /* #3654 (mockup 18/11): its keys in chips, on every screen */
     if(a->screen==SCREEN_STANDBY){standby_status_info(a,cr,N_STATUS_PAD,bar.y+bar.h/2);return;}   /* #1304: IP · MAC · hello */
     double kx=N_STATUS_PAD+draw_lang_chip(a,cr,N_STATUS_PAD,bar);   /* #1245 */
     char kb[200];const char *on=status_keys(a,kb,sizeof kb),*off=status_keys_off(a);Text keys;
@@ -577,7 +585,7 @@ static void draw_cursor(cairo_t *cr,double x,double y){
 void app_take_screen(App *a){
     const State *s=&a->st;
     if(s->ip[0])snprintf(a->ip,sizeof a->ip,"%s",s->ip);
-    if(s->mac[0])snprintf(a->mac,sizeof a->mac,"%s",s->mac);
+    if(s->mac[0]){snprintf(a->mac,sizeof a->mac,"%s",s->mac);mac_upper(a->mac);}   /* #2903: one case on the screen */
     if(a->screen_set||!s->screen[0]||!strcmp(s->screen,"boot"))return;
     a->screen_set=1;
     if(!strcmp(s->screen,"cloner"))a->force_cloner=1;
@@ -597,11 +605,12 @@ void app_route(App *a){
     if(s->msg_title[0]){a->screen=SCREEN_MESSAGE;return;}
     /* #2849 (Nadav 11/11): the direct send on the build machine is the cloner's own screen -- the same
      * drawer cards, the same data (directgui.sh writes the cloners' drawer= records); only the title differs */
-    if(!a->force_progress&&s->task_direct&&(s->task==TASK_PENDING||s->task==TASK_RUNNING)&&(s->ndrawers||s->direct_unread)){a->screen=SCREEN_CLONER;a->watching=1;return;}
+    if(!a->force_progress&&s->task_direct&&(s->task==TASK_PENDING||s->task==TASK_RUNNING)){a->screen=SCREEN_CLONER;a->watching=1;return;}
     if(a->force_progress||s->task==TASK_PENDING||s->task==TASK_RUNNING){a->screen=SCREEN_PROGRESS;a->watching=1;return;}
     if(a->watching&&(s->task==TASK_DONE||s->task==TASK_FAILED)){
         a->watching=0;a->showing_done=1;
-        if(s->task==TASK_DONE&&s->task_direct){snprintf(a->done_title,sizeof a->done_title,"ההפצה הישירה הושלמה");snprintf(a->done_sub,sizeof a->done_sub,"הדיסק %s שודר למגירות שנבחרו. שום דבר לא נשמר בשרת.",s->task_disk);}
+        char src[160];direct_src_name(s,src,sizeof src);
+        if(s->task==TASK_DONE&&s->task_direct){snprintf(a->done_title,sizeof a->done_title,"ההפצה הישירה הושלמה");snprintf(a->done_sub,sizeof a->done_sub,"הדיסק %s שודר למגירות שנבחרו. שום דבר לא נשמר בשרת.",src);}
         else if(s->task==TASK_DONE){snprintf(a->done_title,sizeof a->done_title,"הקליטה הושלמה");snprintf(a->done_sub,sizeof a->done_sub,"\"%s\" נכנס לספרייה.",s->task_name);}
         else{snprintf(a->done_title,sizeof a->done_title,"המשימה נכשלה");snprintf(a->done_sub,sizeof a->done_sub,RLM "%s",s->task_error[0]?s->task_error:"ראו את היומן בקונסולה.");}   /* #1502: the server sends "sda: ..." */
         if(s->task==TASK_DONE&&s->task_error[0])snprintf(a->done_sub,sizeof a->done_sub,RLM "%s",s->task_error); /* #2213: success with a warning */
@@ -842,6 +851,7 @@ static void app_draw_logical(App *a,cairo_t *cr,double W,double H){
     draw_state_warning(a,cr,W,H);draw_idle_countdown(a,cr,W,H);
     draw_shrink_dialog(a,cr,W,H);   /* #928: modal, over every screen but the status bar */
     draw_ask_dialog(a,cr,W,H);      /* 11/10: the agent's question, the same way */
+    draw_brain_ask(a,cr,W,H);       /* #3654: the brain's question -- when nothing else is in front */
     if(a->screen==SCREEN_RESTORE)draw_syspart_dialog(a,cr,W,H);   /* #1896: the C: picker */
     draw_confirm_dialog(a,cr,W,H);  /* #1270 */
     sdlg_draw(a,cr,W,H);            /* 16/10: the SMART warning window -- over all of them */

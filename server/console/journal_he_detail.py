@@ -36,6 +36,9 @@ _NET_NAME = r"^(\S+) "
 _REFUSALS = [(r" \[\+(\d+) identical refusals in the last (\d+)s not journaled\]$",
               r" [ועוד \1 סירובים זהים ב-\2 השניות האחרונות שלא נרשמו]")]
 
+# #3157: אזהרת שרת חוזרת (serverlog.JournalBridge) -- המונה באותה שורה
+_REPEATS = [(r" \[\+(\d+) identical in (\d+)s\]$", r" [חזרה עוד \1 פעמים ב-\2 השניות שאחריה]")]
+
 #: event -> [(regex, replacement)], applied in order with re.sub.
 RULES: dict[str, list[tuple[str, str]]] = {
     "task_token_refused": _FROM,
@@ -47,6 +50,15 @@ RULES: dict[str, list[tuple[str, str]]] = {
     # #2487/#2498: "<mac> from <ip>[ [+N identical requests in the last Ss not journaled]]"
     "unknown_mac": _FROM + [(r" \[\+(\d+) identical requests in the last (\d+)s not journaled\]$",
                              r" [ועוד \1 בקשות זהות ב-\2 השניות האחרונות שלא נרשמו]")],
+    # #3633: "<ip>: <סיבה> (<N> bytes, error at char <P>)[ [+N identical requests in the last Ss not journaled]]"
+    "hello_bad_json": [
+        (r"^(\S+): body is not JSON \((\d+) bytes, error at char (\d+)\)",
+         r"\1: הגוף אינו JSON (\2 בייטים, השגיאה בתו \3)"),
+        (r"^(\S+): body is nested too deeply \((\d+) bytes\)", r"\1: הגוף מקונן עמוק מדי (\2 בייטים)"),
+        (r"^(\S+): body is not an object \((\d+) bytes\)", r"\1: הגוף אינו אובייקט (\2 בייטים)"),
+        (r"^(\S+): (.+) \(length unknown\)", r"\1: \2 (אורך לא ידוע)"),
+        (r" \[\+(\d+) identical requests in the last (\d+)s not journaled\]$",
+         r" [ועוד \1 בקשות זהות ב-\2 השניות האחרונות שלא נרשמו]")],
     # #2498: "<event>: over <K> different in <W>s -- the rest are counted, not journaled one by one"
     #         "<event>: +<N> more different not journaled one by one in the last <S>s"
     "journal_flood": [
@@ -57,7 +69,13 @@ RULES: dict[str, list[tuple[str, str]]] = {
         # #2489: "<event>: over <K> different from <ip> in <W>s -- the rest from it are counted, …"
         (r"^(\S+): over (\d+) different from (\S+) in (\d+)s -- the rest from it are counted,"
          r" not journaled one by one$",
-         r"\1: יותר מ-\2 שונים מהכתובת \3 ב-\4 שניות — השאר ממנה נספרים ולא נרשמים אחד-אחד")],
+         r"\1: יותר מ-\2 שונים מהכתובת \3 ב-\4 שניות — השאר ממנה נספרים ולא נרשמים אחד-אחד"),
+        # #3157: "server_warning: +<N> lost, the queue was full" (serverlog.JournalBridge)
+        (r"^(\S+): \+(\d+) lost, the queue was full$",
+         r"\1: \2 הודעות לא נרשמו — התור היה מלא")],
+    # #3157: "<מקור>: <ההודעה> [+N identical in Ss]" -- רק המונה מתורגם; ההודעה כמו שהקוד כתב
+    "server_warning": _REPEATS,
+    "server_error": _REPEATS,
     # #1814: "code rejected (setup|enable|login) while the server clock is off by <N>s | is not synchronized"
     "mfa_clock_skew": [
         (r"^code rejected \(setup\)", "קוד נדחה בהגדרת MFA"),
@@ -86,7 +104,7 @@ RULES: dict[str, list[tuple[str, str]]] = {
     "shrink_open": [(r" partitions ", " מחיצות "), (r"(\d+) sectors", r"\1 סקטורים")],
     "class_deploy_refused": _AT_OPEN,
     "agent_role_refused": _AT_OPEN,
-    "update_apply_failed": [(r": script — ", ": הסקריפט — ")],
+    "update_apply_failed": [(r": script — ", ": הסקריפט — "), (r": interrupted — ", ": נקטע — ")],   # #1893
     "settings_backup_downloaded": [(r" (\d+) bytes$", r" \1 בייט")],
     "vmupdate_saved": [(r" from ", " מתוך ")],
     "nic_services_apply_failed": [(r" errors: ", " שגיאות: "), (r" · restore: ", " · שחזור: "),
@@ -128,12 +146,18 @@ RULES: dict[str, list[tuple[str, str]]] = {
     "dcui_net_rollback_requested": [(r"^no pending change$", "אין שינוי ממתין")],
     # #1848 / #1846: הלמידה — מזהים ומספרים נשארים, המילים בעברית
     "boot_step_slow": [(r" baseline=", " (רגיל: "), (r"s \((\d+) boots\)$", r"s, לפי \1 אתחולים)")],
-    "net_loss_jump": [(r" baseline=", " (רגיל: "), (r"% \((\d+) waves\)", r"%, לפי \1 גלים)")],
+    "net_loss_jump": [(r" baseline=", " (רגיל: "), (r"% \((\d+) waves\)", r"%, לפי \1 גלים)"),
+                      (r"/GB \((\d+) waves\)", r"/GB, לפי \1 גלים)")],     # #3164: גל חתיכות, חתיכות לכל GB
     # #2413: "<נתיב>: <mac> is not <mac>, which opened the record of serial=<סידורי>"
     "shrink_refused": [(r"^(\S+): (\S+) is not (\S+), which opened the record of ",
                         r"\1: \2 אינה \3, שפתחה את רשומת הכיווץ של ")],
     # #2421: "<סבב> <mac> <dev> serial=<סידורי> also on <mac>"
     "room_drawer_serial_conflict": [(r" also on ", " נמצא גם אצל ")],
+    # #3123: "<משתמש> (<תפקיד>) keep_on" -- בקשת פתיחת סבב עם "השאר דלוקים" מתפקיד שאינו מנהל (`room.open_`)
+    "room_role_denied": [(r" keep_on$", " · בקשה לכבות את המשכפלים שלא נבחרו (keep_on)")],
+    # #3225: "<mac> is a card of <mac> (from <ip>)" -- כרטיס האתחול שנלמד ככרטיס של מכונה רשומה (`agent.api._learn_boot_card`)
+    "nic_alias_learned": [(r"^(\S+) is a card of (\S+) \(from (\S+)\)$",
+                           r"\1 הוא כרטיס של \2 (מהכתובת \3)")],
     # #2443: "<שם> — <N> failures in <M> min from many addresses via console|agent (last ip=<ip>)"
     # (בלי "via" — שורות שנכתבו לפני שהתקרה פוצלה לפי משטח)
     "login_account_lockout": [
@@ -162,6 +186,10 @@ RULES: dict[str, list[tuple[str, str]]] = {
     "foreign_dhcp_more": [
         (r"^count=(\d+) last_mac=(\S+) last_ip=(\S+) nic=(\S+)$",
          r"\1 תשובות ממקורות שלא נרשמו אחד-אחד · האחרון: MAC \2, IP \3 · כרטיס \4")],
+    # #3268: "<mac> serial=<s> id=<id> -- restored and verified by the agent" (write_backup.py)
+    "write_backup_released": [(r" -- restored and verified by the agent$", " — הסוכן החזיר את הבלוקים ואימת אותם")],
+    # #3284: "<mac> serial=<s> id=<id> stale=<yes|no> -- released by <user>" (write_copies.py)
+    "write_backup_admin_released": [(r" -- released by (\S+)$", r" — שוחרר על ידי \1")],
     # #2218: "<אימג'> sample -> full: … (<כתובת המשכפל>)"
     "readback_mode_switched": [(r" sample -> full: a direct send has no list on the server;"
                                 r" every chunk is compared with the live manifest's readback_xxh64",

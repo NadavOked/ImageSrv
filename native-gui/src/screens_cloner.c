@@ -16,10 +16,13 @@ typedef struct {
     int port;
     const Drawer *drawer;
     const IdleDisk *idle;
+    const char *insert;   /* #3181: a production line's empty slot -- "הכנס דיסק" and the name the next disk takes */
+    int ins_drawer;       /* its drawer from the agent's mapping (pline_insert=), 0 = not mapped */
 } ClonerEntry;
 
 static int entry_drawer(const ClonerEntry *e) {
-    return e->drawer ? eff_drawer(e->drawer->drawer, e->port) :
+    return e->insert && !e->drawer ? (e->ins_drawer > 0 ? e->ins_drawer : 0) :
+           e->drawer ? eff_drawer(e->drawer->drawer, e->port) :
            e->idle ? eff_drawer(e->idle->drawer, e->port) : 0;
 }
 
@@ -31,15 +34,39 @@ static int entry_after(const ClonerEntry *a, const ClonerEntry *b) {
     return a->port > b->port;
 }
 
+static int drawer_active(const Drawer *d) {   /* #3181: a disk the agent is on now -- the local truth wins over the server's slot */
+    return !strcmp(d->state, "writing") || !strcmp(d->state, "verifying") || !strcmp(d->state, "asking") ||
+           !strcmp(d->state, "waiting") || !strcmp(d->state, "replacing") || !d->state[0];
+}
+
+/* #3181 (Nadav 14/11): the production line's empty slots (pline_insert=). A slot the server reserved for the next
+ * name is drawn as "הכנס דיסק": the row of the disk that left it, or a row of its own when the round never had a
+ * disk there. A slot where the agent writes, checks or waits is the agent's -- no insert row over it. */
+static int cloner_inserts(const State *s, ClonerEntry *out, int n) {
+    if (!s->pl_on || s->ndrawers <= 0) return n;
+    for (int k = 0; k < s->npl_insert; k++) {
+        int port = s->pl_insert[k].port, busy = 0, at = -1;
+        for (int i = 0; i < n; i++) {
+            if (out[i].port != port || !out[i].drawer) continue;
+            if (drawer_active(out[i].drawer)) busy = 1; else if (at < 0) at = i;
+        }
+        if (busy) continue;
+        if (at < 0 && n <= MAX_DRAWERS) { at = n++; out[at] = (ClonerEntry){ port, NULL, NULL, NULL, 0 }; }
+        if (at >= 0) { out[at].insert = s->pl_insert[k].name; out[at].ins_drawer = s->pl_insert[k].drawer; }
+    }
+    return n;
+}
+
 static int cloner_entries(const State *s, ClonerEntry *out) {
     int n = 0;
     if (s->ndrawers > 0) {
         for (int i = 0; i < s->ndrawers; i++)
             out[n++] = (ClonerEntry){ s->drawers[i].port, &s->drawers[i],
-                                      idle_for_port(s, s->drawers[i].port) };
+                                      idle_for_port(s, s->drawers[i].port), NULL, 0 };
+        n = cloner_inserts(s, out, n);
     } else {
         for (int i = 0; i < s->nidisks; i++)
-            out[n++] = (ClonerEntry){ s->idisks[i].port, NULL, &s->idisks[i] };
+            out[n++] = (ClonerEntry){ s->idisks[i].port, NULL, &s->idisks[i], NULL, 0 };
     }
     for (int i = 1; i < n; i++) {
         ClonerEntry v = out[i]; int j = i;
@@ -77,9 +104,14 @@ static void entry_card_name(const State *s, const ClonerEntry *e, char *out, siz
  * state in words: writing, waiting for a SMART decision, skipped, failed,
  * done -- the first metal day showed "ממתינה לשידור" while the machine was
  * waiting for an answer, and a failed round said nothing but "אין פעולה". */
-static int entry_kind(const ClonerEntry *e) {
+static int entry_kind(const State *s, const ClonerEntry *e) {
     const Drawer *d = e->drawer;
+    if (e->insert) return BAY_INSERT;   /* #3181 */
     if (!d) return BAY_WAITING;
+    /* #3270 (Nadav, metal 14/11): a drawer pulled mid-write is a state of the process -- grey, "pulled", and "returned" once its
+     * disk is in a drawer again. It is a failure only when it is one: the round ended with it still out (the agent's `pulled`
+     * word is not a verdict; once the end is recorded it reads as the failure it became). */
+    if (!strcmp(d->state, "pulled") || !strcmp(d->state, "returned")) return s->end_kind != END_NONE ? BAY_FAILED : BAY_PULLED;
     if (!strcmp(d->state, "asking")) return BAY_SMART;   /* #1808/#1898: orange, waiting for the operator */
     if (!strcmp(d->state, "cancelled")) return BAY_CANCELED;                    /* #1386 */
     if (!strcmp(d->state, "writing") && d->cancel[0]) return BAY_CANCELING;
@@ -92,6 +124,7 @@ static int entry_kind(const ClonerEntry *e) {
 
 static int entry_pct(const ClonerEntry *e) {
     const Drawer *d = e->drawer;
+    if (e->insert) return -1;   /* #3181: the disk that was here is gone */
     if (d && !strcmp(d->state, "done")) return 100;
     if (!d || !d->total) return -1;
     int pct = (int)floor(100.0 * d->bytes / d->total);
@@ -109,11 +142,23 @@ static void cut_to_whole_char(char *s) {
     if (n - (i - 1) < want) s[i - 1] = 0;
 }
 
+static int pl_ready(const State *s, int port) {   /* #3181: pline_ready= -- only in a production line */
+    for (int i = 0; s->pl_on && i < s->npl_ready; i++) if (s->pl_ready[i] == port) return 1;
+    return 0;
+}
+
 static void entry_bay(const App *a, const ClonerEntry *e, LcBay *y) {
     const Theme *t = a->theme; const Drawer *d = e->drawer; const IdleDisk *idle = e->idle;
     memset(y, 0, sizeof *y);
-    y->kind = entry_kind(e);
+    y->kind = entry_kind(&a->st, e);
     y->drawer = entry_drawer(e);
+    if (y->kind == BAY_INSERT) {   /* #3181 (mockup c1): the empty drawer, and the name its next disk takes */
+        snprintf(y->name, sizeof y->name, "%s", "הכנס דיסק");
+        snprintf(y->sub, sizeof y->sub, "%s", "הדיסק הבא יקבל את השם");
+        snprintf(y->line, sizeof y->line, "%s", "ממתין לדיסק");
+        snprintf(y->pct, sizeof y->pct, "%s", e->insert); y->share = -1;
+        return;
+    }
     entry_card_name(&a->st, e, y->name, sizeof y->name);   /* #2030: the connection, not "דיסק N" twice */
     /* #2030: the size -- from the cused record (any disk, round or idle), else the idle inventory's;
      * the model when the idle inventory has it. Never the device name. */
@@ -135,7 +180,7 @@ static void entry_bay(const App *a, const ClonerEntry *e, LcBay *y) {
     if (d || idle) {   /* #2030: before the write -- what it will erase; after -- what it wrote */
         int k = y->kind;
         if (k == BAY_DONE) card_used_text(USED_WRITTEN, d ? (long long)d->bytes : -1, y->used, sizeof y->used);
-        else if (k == BAY_WRITING || k == BAY_FAILED) card_used_text(USED_SO_FAR, d ? (long long)d->bytes : -1, y->used, sizeof y->used);
+        else if (k == BAY_WRITING || k == BAY_FAILED || k == BAY_PULLED) card_used_text(USED_SO_FAR, d ? (long long)d->bytes : -1, y->used, sizeof y->used);
         else if (k == BAY_CANCELED || k == BAY_CANCELING) card_used_text(USED_NOW, -1, y->used, sizeof y->used);   /* its table is gone: nothing measured since */
         else card_used_text(USED_NOW, cu ? cu->used : -1, y->used, sizeof y->used);
     }
@@ -153,11 +198,31 @@ static void entry_bay(const App *a, const ClonerEntry *e, LcBay *y) {
         snprintf(y->line, sizeof y->line, "%s", d->error[0] ? d->error : "ממתין להחלטת המפעיל");
         break;
     case BAY_WRITING:
-        if (!strcmp(d->state, "verifying")) snprintf(y->line, sizeof y->line, "בודק את מה שנכתב…");
+        if (d->fill && !strcmp(d->state, "writing")) {   /* #3064 (R5, the approved mockup): "מצטרף ומשלים" -- a returned drawer completing */
+            char part[40] = "", share[40] = "", n[24];
+            if (d->fill_part >= 0) snprintf(part, sizeof part, " מחיצה %lld", d->fill_part);
+            if (d->fill_chunks > 0 && d->fill_missing <= d->fill_chunks)   /* no share without the whole, and never over it */
+                snprintf(share, sizeof share, " (%lld%% מהמחיצה)", 100 * d->fill_missing / d->fill_chunks);
+            snprintf(n, sizeof n, "%lld", d->fill_missing);
+            y->pill = "מצטרף ומשלים";
+            snprintf(y->line, sizeof y->line, "משלים%s · חסרות %s חתיכות%s", part, n, share);
+        } else if (!strcmp(d->state, "verifying")) snprintf(y->line, sizeof y->line, "בודק את מה שנכתב…");
         else if (d->rate_bps > 0) { char r[48], ri[64]; snprintf(r, sizeof r, "%.0f MB/s", d->rate_bps / 1e6);
             bidi_isolate(r, ri, sizeof ri); snprintf(y->line, sizeof y->line, "כותב · %s", ri); }
-        else if (d->rate_bps == 0) { snprintf(y->line, sizeof y->line, "ממתין לזרם מהשרת · 0 MB/s"); y->line_warn = 1; }   /* #2055: measured still */
+        else if (d->rate_bps == 0) { char ri[32]; bidi_isolate("0 MB/s", ri, sizeof ri);   /* #2055: measured still */
+            snprintf(y->line, sizeof y->line, "ממתין לזרם מהשרת · %s", ri); y->line_warn = 1; }   /* #3274: isolated, or it reads "MB/s 0" */
         else snprintf(y->line, sizeof y->line, "כותב · הקצב טרם נמדד");
+        /* #2988, #3680 (the approved mockup 06-bay-states): the agent says this drawer stands -- drawer_stall= has which wait it is and
+         * how long it stands. Orange, the pill says it, and the speed is "—": measured still, not the last one. Only the time that
+         * has passed (Nadav 12/11, PR #2997, #3726): the agent's limit is never shown -- it is a number that mostly does not hold.
+         * No record = it moves, and nothing here is drawn */
+        if (strcmp(d->state, "verifying") && d->stall[0]) {
+            char st[48] = "", w[32];
+            if (d->stall_s >= 0) { he_secs(d->stall_s, w, sizeof w); snprintf(st, sizeof st, " %s", w); }
+            if (!strcmp(d->stall, "waiting_net")) { snprintf(y->line, sizeof y->line, "הרשת נותקה — ממתין%s · הדיסק לא נמחק", st); y->pill = "ממתין לרשת"; }
+            else { snprintf(y->line, sizeof y->line, "ממתין לדיסק…%s%s · מהירות —", st[0] ? " הכתיבה עומדת" : "", st); y->pill = "ממתין"; }
+            y->flag = 1; y->line_warn = 0;
+        }
         break;
     case BAY_CANCELED: {
         /* #1386: grey like skipped, the bar empty -- the disk is empty now, not "16%" */
@@ -186,7 +251,11 @@ static void entry_bay(const App *a, const ClonerEntry *e, LcBay *y) {
         break;
     case BAY_FAILED:
         y->pill = "נכשל";
-        snprintf(y->line, sizeof y->line, "נכשל: %s", d->error[0] ? d->error : "סיבה לא ידועה");
+        snprintf(y->line, sizeof y->line, "נכשל: %s", d->error[0] ? d->error : !strcmp(d->state, "failed") ? "סיבה לא ידועה" : "הדיסק נשלף ולא חזר בזמן");   /* #3270 */
+        break;
+    case BAY_PULLED:   /* #3270: grey, in the words of the process -- never "נכשל" while the disk may still come back */
+        if (!strcmp(d->state, "returned")) { y->pill = "הוחזר"; snprintf(y->line, sizeof y->line, "הוחזר · ממתין להצטרפות"); }
+        else { y->pill = "נשלף"; snprintf(y->line, sizeof y->line, "נשלף · ממתין להחזרה"); }
         break;
     case BAY_SKIPPED:
         y->pill = "דולג";
@@ -197,12 +266,27 @@ static void entry_bay(const App *a, const ClonerEntry *e, LcBay *y) {
     }
     /* #2046 (mockup 11): the check after the write -- green over the blue, "אומת" only for a full read */
     if (d && strcmp(d->state, "writing")) lc_bay_readback(y, &d->rb, "לאימג׳", d->error);
+    /* #3167 (Nadav 14/11): a note on a done drawer -- after its line, in the line's own grey; the row stays green */
+    if (d && y->kind == BAY_DONE && d->note[0]) {
+        size_t n = strlen(y->line);
+        snprintf(y->line + n, sizeof y->line - n, " · %s", d->note);
+        y->line2 = 1;
+    }
     /* #1331 (mockup v2): the drawer's drivers, under its bar */
     if (d && d->drv_state[0]) lc_bay_drivers(y, d->drv_state, d->drv_detail, d->drv_boot, d->drv_bsvc, d->drv_berr);
     if (d && d->drv_lstate[0]) lc_bay_linux(y, d->drv_lstate, d->drv_lmod, d->drv_ldet);   /* #1331 T8 */
     /* #2024: this drawer holds the end -- highlighted, and its line is the agent's reason */
     int red = 0; const char *why = d ? end_problem_of(&a->st, d->dev, &red) : NULL;
     if (why) { y->flag = red ? 2 : 1; snprintf(y->line, sizeof y->line, "%s", why); }
+    /* #3181 (mockup c1): a done disk the server counted removable -- the safe detach succeeded. The line says so;
+     * the green "אפשר להוציא" only on a plain green done row (a done row with a warning keeps its tag and colour) */
+    if (y->kind == BAY_DONE && pl_ready(&a->st, e->port)) {
+        size_t u = strlen(y->line);
+        snprintf(y->line + u, sizeof y->line - u, "%s", " · נותק בבטחה");
+        if (!y->done_warn && !y->line_warn && !y->flag && y->drv_tone != DRV_BAD && y->drv_tone != DRV_WARN && y->drv_tone != DRV_LWARN) {
+            y->pill = "אפשר להוציא"; y->ready = 1;
+        }
+    }
 }
 
 /* #1386: the drawers "בטל דיסק זה" can name -- writing now, not verifying, not
@@ -213,7 +297,7 @@ int cloner_cancel_picks(const App *a, CancelPick *out, int max) {
     ClonerEntry entries[MAX_DRAWERS + 1]; int n = cloner_entries(&a->st, entries), k = 0;
     for (int i = 0; i < n && k < max; i++) {
         const ClonerEntry *e = &entries[i];
-        if (entry_kind(e) != BAY_WRITING || strcmp(e->drawer->state, "writing")) continue;
+        if (entry_kind(&a->st, e) != BAY_WRITING || strcmp(e->drawer->state, "writing")) continue;
         CancelPick *p = &out[k++]; memset(p, 0, sizeof *p);
         snprintf(p->dev, sizeof p->dev, "%s", e->drawer->dev);
         entry_label(&a->st, e, p->label, sizeof p->label);
@@ -317,7 +401,8 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     const int compact = H < 700;
     double cw = fmin(980, W - 48), x0 = (W - cw) / 2, xr = x0 + cw, y = head_h + (compact ? 10 : 22);
     int nw = 0, nd = 0, nf = 0, ns = 0, nc = 0, ncg = 0, pend = 0, sum = 0, known = 0, eta = -1;   /* #1386: cancelled, cancelling */
-    int verifying = 0, waiting = 0, asking = 0, unchecked_done = 0;   /* display counts only; entry_kind is unchanged */
+    int verifying = 0, waiting = 0, asking = 0, unchecked_done = 0, npl = 0, nrt = 0;   /* #3270: pulled, returned */
+    char pulled_name[SLOT_NAME_MAX + 64] = "";   /* display counts only; entry_kind is unchanged */
     RbSum rbs = { 0 };                    /* #2046: the check, across the rows */
     int unproven = 0, unver = 0;          /* #2613: done rows whose check the agent did not vouch for / said it did not make */
     long long rate = -1, moved = 0; unsigned long long most = 0, whole = 0; int stalled = 0;   /* #2055 */
@@ -327,7 +412,7 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     int dv_line = 0, dv_any = 0, dv_ok = 0, dv_no = 0, dv_nomodel = 0, dv_bad = 0, dv_warn = 0;
     char bad_name[SLOT_NAME_MAX + 64] = "", warn_name[SLOT_NAME_MAX + 64] = "";
     for (int i = 0; i < n; i++) {
-        const ClonerEntry *e = &entries[i]; int k = entry_kind(e), pct = entry_pct(e);
+        const ClonerEntry *e = &entries[i]; int k = entry_kind(s, e), pct = entry_pct(e);
         char nm[SLOT_NAME_MAX + 64]; entry_label(s, e, nm, sizeof nm);
         LcBay dg; entry_bay(a, e, &dg);
         if (dg.drv_tone) dv_line = 1;   /* #1331 T8: the Linux line needs the tall row, not the Windows summary */
@@ -348,7 +433,7 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         if (k == BAY_DONE) nd++;
         if (k == BAY_DONE && (dg.line_warn || dg.done_warn || dg.flag)) unchecked_done++;
         if (k == BAY_WRITING && !strcmp(e->drawer->state, "verifying")) verifying++;
-        if (e->drawer) rb_sum_add(&rbs, &e->drawer->rb, e->drawer->state);
+        if (e->drawer && k != BAY_INSERT) rb_sum_add(&rbs, &e->drawer->rb, e->drawer->state);
         if (k == BAY_DONE) {
             const char *v = e->drawer->rb.verdict;
             unproven += strcmp(v, "verified") && strcmp(v, "sampled");
@@ -357,12 +442,13 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         if (k == BAY_WAITING) waiting++;
         if (k == BAY_SMART) asking++;
         if (k == BAY_FAILED) { nf++; snprintf(failed_name, sizeof failed_name, "%s", nm); }
+        if (k == BAY_PULLED) { if (!strcmp(e->drawer->state, "returned")) nrt++; else npl++; snprintf(pulled_name, sizeof pulled_name, "%s", nm); }
         if (k == BAY_SKIPPED) { ns++; snprintf(skipped_name, sizeof skipped_name, "%s", nm); }
         if (k == BAY_SMART) { pend = 1; snprintf(pdisk, sizeof pdisk, "%s", nm); }
         if (k == BAY_CANCELED) nc++;
         if (k == BAY_CANCELING) ncg++;
         if (pct >= 0 && (k == BAY_WRITING || k == BAY_DONE)) { sum += pct; known++; }
-        if (e->drawer && e->drawer->bytes > most) { most = e->drawer->bytes; whole = e->drawer->total; }
+        if (e->drawer && k != BAY_INSERT && e->drawer->bytes > most) { most = e->drawer->bytes; whole = e->drawer->total; }
     }
     int ended = s->ndrawers > 0 && !nw && !pend && !ncg && nd + nf + ns + nc == n;
     /* #2046: every disk still writing-kind is in its check -- the screen is about the check (mockup 11) */
@@ -374,22 +460,33 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     if (nbar > 0) y += nbar + 14;
 
     /* the hero */
-    char label[400], title[300], s2[620], big[24], left[96], age[64], image[112];
+    char label[512], title[300], s2[620], big[24], left[96], age[64], image[112];
     /* #2055: while writing, the age of the last progress -- not of the last redraw of this file */
     pace_age(nw && moved > 0 ? moved : s->updated, age, sizeof age);
     if (rate > 0) stalled = 0;            /* one drawer still moving: the stream is not standing */
     /* the name is an isolated run and the line opens with an RLM: a Latin-first
      * name ("Office 2024 — סטנדרט") made auto-dir turn the whole line LTR */
     bidi_isolate(s->cloner_image[0] ? s->cloner_image : "ממתין לשידור מהשרת", image, sizeof image);
+    /* #2984: the build machine's direct send, before any cloner reports a drawer -- the source's own numbers fill the
+     * hero (percent, speed, bytes, and the end from the clock), and the stage is said: no byte yet = still reading */
+    const int src_only = s->task_direct && !n;
+    long long elapsed = src_only && a->direct_t0 ? (long long)time(NULL) - a->direct_t0 : -1;
+    if (src_only) {
+        if (a->capture_rate_bps > 0) rate = (long long)a->capture_rate_bps;
+        most = s->bytes; if (s->pct > 0 && s->bytes) whole = (unsigned long long)((double)s->bytes * 100.0 / s->pct);
+        if (s->pct > 0 && elapsed >= 10) eta = (int)((double)elapsed * (100 - (s->pct > 100 ? 100 : s->pct)) / s->pct);
+    }
     char speed[48] = "";
     if (compact && rate > 0) snprintf(speed, sizeof speed, " · ⁦%.0f MB/s⁩", rate / 1e6);   /* the tile it came from is gone */
-    char head[96];   /* #2849 (Nadav 11/11): the build machine's direct send -- the one difference is the title */
-    if (s->task_direct) snprintf(head, sizeof head, "הפצה ישירה · משדר מהדיסק %s", s->task_disk);
+    char head[200], src[160];   /* #2849 (Nadav 11/11): the build machine's direct send -- the one difference is the title */
+    direct_src_name(s, src, sizeof src);
+    if (s->task_direct) snprintf(head, sizeof head, "הפצה ישירה · משדר את %s", src);   /* #2984: the drawer and model, not "sda" */
     else snprintf(head, sizeof head, "%s", "שיכפול במקביל");
-    snprintf(label, sizeof label, RLM "%s · %s%s%s%s%s", head, image, speed, dv_any ? " · חבילת דרייברים לפי דגם המגירה" : "",
+    if (src_only && !s->cloner_image[0]) image[0] = 0;   /* no round yet: no image to name */
+    snprintf(label, sizeof label, RLM "%s%s%s%s%s%s%s", head, image[0] ? " · " : "", image, speed, dv_any ? " · חבילת דרייברים לפי דגם המגירה" : "",
              age[0] ? " · " : "", age);
     snprintf(big, sizeof big, "%s", "—"); left[0] = 0;
-    LcEta fe = { "", left, "" };   /* #1843: what stands under the number; just `left` unless the writing branch adds an end */
+    LcEta fe = { "", left, "", 0 };   /* #1843: what stands under the number; just `left` unless the writing branch adds an end */
     /* #2081 (mockup 03 section 2, Nadav 24/10: "המשכפל צריך להיראות כמו 1"): a held end of a round
      * is the drawers' list -- a title, one line of what was written, no summary cards, no big number */
     const int held_end = ended && n && s->end_kind != END_NONE && s->end_held;
@@ -406,6 +503,12 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         snprintf(title, sizeof title, "%s", s->direct_unread ? "מצב המגירות לא נקרא מהשרת" : "ממתין למחשבי השיכפול");
         snprintf(s2, sizeof s2, "%s", s->direct_unread ? "השליחה ממשיכה. המגירות יוצגו כשהמצב שלהן ייקרא — אפשר לעקוב גם מהקונסולה."
                                                         : "המגירות יוצגו כשהמחשבים יצטרפו לסבב.");
+        /* #2984: the stage in words -- before the first byte the source is still being read, not sent */
+        if (!s->direct_unread) snprintf(title, sizeof title, "%s", s->bytes || s->pct > 0 ? "משדר — ממתין למחשבי השיכפול" : s->task == TASK_PENDING ? "מתחיל את השליחה" : "קורא את הדיסק לפני השידור");
+        if (s->pct >= 0) snprintf(big, sizeof big, "%d%%", s->pct > 100 ? 100 : s->pct);
+        if (eta >= 0 && eta < 60) snprintf(left, sizeof left, "פחות מדקה נותרה");
+        else if (eta >= 0) snprintf(left, sizeof left, "כ-%d דק' נותרו", (eta + 30) / 60);
+        else snprintf(left, sizeof left, "%s", s->pct > 0 ? "הזמן שנותר טרם נמדד" : "");
     } else if (!n) {
         snprintf(title, sizeof title, "לא נמצאו דיסקים");
         snprintf(s2, sizeof s2, "המחשב הזה לא דיווח על דיסקים מחוברים. חברו דיסק והפעילו מחדש.");
@@ -432,18 +535,27 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         if (nd) { snprintf(big, sizeof big, "100%%"); snprintf(left, sizeof left, "הסתיים"); }
     } else {
         if (nw) snprintf(title, sizeof title, "מעתיק %s%s", names, nw > 1 ? " במקביל" : "");
+        else if (npl + nrt) snprintf(title, sizeof title, "%s%s", nrt && !npl ? "ממתין להצטרפות " : "ממתין להחזרת ", pulled_name);   /* #3270 */
         else snprintf(title, sizeof title, "ממתין לתחילת הזרם");
         if (nc || ncg) snprintf(s2, sizeof s2, "%s", nc ? "דיסק שבוטל — ריק עכשיו, וייכתב רגיל בסבב הבא. השאר ממשיכים."
                                                            : "מבטל דיסק אחד — השאר ממשיכים בלי עצירה.");   /* #1386 */
         else if (ns == 1) snprintf(s2, sizeof s2, "%s דולג. השאר ממשיכים.", skipped_name);
         else if (ns) snprintf(s2, sizeof s2, "%d דיסקים דולגו. השאר ממשיכים.", ns);
+        else if (npl + nrt == 1) snprintf(s2, sizeof s2, nrt ? "%s הוחזר — ממתין להצטרפות. השאר ממשיכים." : "%s נשלף — ממתין להחזרה. השאר ממשיכים.", pulled_name);   /* #3270 */
+        else if (npl + nrt) snprintf(s2, sizeof s2, "%d דיסקים נשלפו או הוחזרו — ממתינים. השאר ממשיכים.", npl + nrt);
+        else if (s->pl_on) snprintf(s2, sizeof s2, s->pl_named ? "נכתבו %d מתוך %d שמות · נשארו %d" : "נכתבו %d מתוך %d · נשארו %d",
+                                    s->pl_written, s->pl_target, s->pl_left);   /* #3181 (mockup c1): the production line's counter */
         else snprintf(s2, sizeof s2, "%s", s->task_direct ? "הזרם מהדיסק הזה נכתב לכל היעדים יחד." : "הזרם מהשרת נכתב לכל היעדים יחד.");   /* #2849 */
+        if (s->pl_on) snprintf(title, sizeof title, "%s", "הכנס דיסק, חכה, הוצא");   /* #3181 (mockup c1): the line's own title */
         if (known) snprintf(big, sizeof big, "%d%%", sum / known);
-        if (stalled) snprintf(left, sizeof left, "ממתין לזרם מהשרת");   /* #2055 */
-        else if (eta >= 0) {
+        /* #3270 (Nadav 14/11): a standing stream keeps the end the agent still has -- the wave's average so far
+         * (clonergui.sh) -- and says it stands beside it; "ממתין לזרם מהשרת" alone only when there is no end */
+        if (eta >= 0) {
             if (eta < 60) snprintf(left, sizeof left, "פחות מדקה נותרה");
             else snprintf(left, sizeof left, "כ-%d דק' נותרו", (eta + 30) / 60);
-        } else if (nw) snprintf(left, sizeof left, "הזמן שנותר טרם נמדד");
+            if (stalled && !s->fc_clock) snprintf(left + strlen(left), sizeof left - strlen(left), " (הזרם ממתין)");
+        } else if (stalled) snprintf(left, sizeof left, "ממתין לזרם מהשרת");   /* #2055 */
+        else if (nw) snprintf(left, sizeof left, "הזמן שנותר טרם נמדד");
         if (checking) {   /* #2046 (mockup 11): the check has the screen -- its own title, its own number */
             snprintf(title, sizeof title, "בודק את הדיסקים — %d מתוך %d %s", rbs.done, rbs.n, full ? "אומתו" : "נבדקו");
             snprintf(s2, sizeof s2, "הכתיבה הסתיימה. כל דיסק נקרא עכשיו בחזרה ומושווה לאימג׳.");
@@ -452,15 +564,17 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
             else if (eta >= 0) snprintf(left, sizeof left, "נבדק · כ-%d דק' נותרו", (eta + 30) / 60);
             else snprintf(left, sizeof left, "נבדק");
         }
-        /* #1843 (mockup 07/11): the expected end under the number -- only on the write's own screen, and never while the
-         * stream stands ("waiting for the stream" has no end to promise). An HH:MM is drawn only when the server said its
+        /* #1843 (mockup 07/11): the expected end under the number -- only on the write's own screen; while the stream
+         * stands, only the end the agent still measured (#3270), never history's. An HH:MM is drawn only when the server said its
          * clock is proven synced (#2144): a wrong hour is worse than none. The measured rate decides, as in the console;
          * history speaks until it is measured; with neither, the screen says why there is no estimate. */
-        if (nw && !checking && !stalled) {
+        /* #3270: while writing the end side keeps its room -- a stream that stops and starts moves nothing */
+        fe.keep = !nw || checking ? LC_KEEP_NONE : s->fc_clock ? LC_KEEP_HOUR : LC_KEEP_LINES;   /* no hour room on an unproven clock (#2849) */
+        if (nw && !checking && eta >= 0 && s->fc_clock) {   /* #3270: the end stays while the stream stands */
+            clock_ago(a, -eta, fe.at, sizeof fe.at); fe.l1 = stalled ? "לפי הקצב הממוצע (הזרם ממתין)" : "לפי הקצב בפועל"; fe.l2 = left;
+        } else if (nw && !checking && !stalled) {
             long long now = (long long)time(NULL);
-            if (eta >= 0 && s->fc_clock) {
-                clock_ago(a, -eta, fe.at, sizeof fe.at); fe.l1 = "לפי הקצב בפועל"; fe.l2 = left;
-            } else if (eta < 0 && rate < 0 && s->fc_clock && s->fc_at > now) {
+            if (eta < 0 && rate < 0 && s->fc_clock && s->fc_at > now) {
                 time_t w = (time_t)s->fc_at; struct tm tm;
                 if (localtime_r(&w, &tm)) { strftime(fe.at, sizeof fe.at, "%H:%M", &tm); fe.l1 = "לפי היסטוריה · הקצב עוד לא נמדד"; fe.l2 = ""; }
             } else if (eta < 0 && rate < 0 && s->fc_nohist) {
@@ -488,15 +602,17 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         disk_count(v3, sizeof v3, asking, "ממתין להחלטה", "ממתינים להחלטה");
         disk_count(v3, sizeof v3, nd, "הושלם", "הושלמו");
     }
+    disk_count(v3, sizeof v3, npl, "נשלף", "נשלפו");   /* #3270: grey words, not the red "נכשל" */
+    disk_count(v3, sizeof v3, nrt, "הוחזר", "הוחזרו");
     disk_count(v3, sizeof v3, nf, "נכשל", "נכשלו");
     disk_count(v3, sizeof v3, ns, "דולג", "דולגו");
     disk_count(v3, sizeof v3, nc, "בוטל", "בוטלו");
     disk_count(v3, sizeof v3, ncg, "מבטל", "מבטלים");
-    if (!n) snprintf(v3, sizeof v3, "אין דיסקים");
-    snprintf(c3, sizeof c3, "%s", !n ? "לא נמצאו דיסקים" : !nd ? (ended ? "אף דיסק לא נכתב" : "עוד לא הסתיים אף דיסק") : "");
+    if (!n) snprintf(v3, sizeof v3, "%s", src_only ? "טרם הצטרפו" : "אין דיסקים");
+    snprintf(c3, sizeof c3, "%s", !n ? (src_only ? s->direct_unread ? "מצב המגירות לא נקרא מהשרת" : "היעדים יופיעו כשהמחשבים יצטרפו" : "לא נמצאו דיסקים") : !nd ? (ended ? "אף דיסק לא נכתב" : "עוד לא הסתיים אף דיסק") : "");
     if (ended && unchecked_done) snprintf(c3, sizeof c3, "הכתיבה הסתיימה — ראו את ההערות במגירות");
     else if (ended && nd == 1 && !unproven) {   /* #2613: no "נבדקה" over a verdict that is not there */
-        for (int i = 0; i < n; i++) if (entry_kind(&entries[i]) == BAY_DONE) {
+        for (int i = 0; i < n; i++) if (entry_kind(s, &entries[i]) == BAY_DONE) {
             int bay = entry_drawer(&entries[i]);
             if (bay > 0) snprintf(c3, sizeof c3, "מגירה %d נכתבה ונבדקה", bay);
             else snprintf(c3, sizeof c3, "דיסק אחד נכתב ונבדק");
@@ -516,17 +632,20 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     mh = fmax(mh, 30 + counts.h + caption.h + 12);
     text_free(&counts); text_free(&caption);
     if (checking) {   /* #2046: the check's speed (all the disks together) and the write that is behind us */
-        if (rbs.rate > 0) snprintf(v1, sizeof v1, "%.0f MB/s", rbs.rate / 1e6); else snprintf(v1, sizeof v1, "עוד לא נמדד");
+        if (rbs.rate > 0) snprintf(v1, sizeof v1, "%.0f MB/s", rbs.rate / 1e6); else snprintf(v1, sizeof v1, full ? "עוד לא נמדד" : "לא נמדד במדגם");   /* #3071: a sample has no read speed */
         lc_met(a, cr, (Rect){ xr - mw, y, mw, mh }, "קצב בדיקה", v1, "כל הדיסקים יחד", t->muted);
         lc_met(a, cr, (Rect){ xr - 2 * mw - 12, y, mw, mh }, "נכתב", v2, "הכתיבה הסתיימה בכל היעדים", t->muted);
     } else {
-    lc_met(a, cr, (Rect){ xr - mw, y, mw, mh }, "מהירות", v1, rate > 0 ? "הקצב שנמדד בדיסק הזה" : stalled ? "ממתין לזרם מהשרת" : "",
+    char el[48] = "";
+    if (elapsed >= 0) snprintf(el, sizeof el, "זמן שעבר %02lld:%02lld", elapsed / 60, elapsed % 60);   /* #2984: the clock the round's tile has */
+    lc_met(a, cr, (Rect){ xr - mw, y, mw, mh }, "מהירות", v1, src_only && el[0] ? el : rate > 0 ? "הקצב שנמדד בדיסק הזה" : stalled ? "ממתין לזרם מהשרת" : "",
            stalled ? t->warn : t->muted);   /* #2055: the stream stands -- orange, the write is not stopped */
-    lc_met(a, cr, (Rect){ xr - 2 * mw - 12, y, mw, mh }, "התקבלו", v2, whole ? "בזרם הדחוס" : "", t->muted);
+    lc_met(a, cr, (Rect){ xr - 2 * mw - 12, y, mw, mh }, src_only ? "נקראו מהמקור" : "התקבלו", v2, whole ? "בזרם הדחוס" : "", t->muted);
     }
     lc_disks_met(a, cr, (Rect){ x0, y, mw, mh }, v3, c3);
     }
     y += mh + 12;
+    { double nbh = sb_nic_banner(a, cr, x0, y, cw); if (nbh > 0) y += nbh + 12; }   /* #3776 (mockup 1119 clone-pci): between the cards and the table, above the "מהירות" it explains */
 
     /* the cage -- #2849: on the build machine's direct send, one per cloner (cloner_group=), its name on it */
     double foot_h = compact ? 24 : 40;
@@ -540,7 +659,7 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
         for (int i = 0; i < n; i++) {
             int grp = entries[i].drawer ? entries[i].drawer->group : -1;
             if (s->ncgroups && grp != gi) continue;
-            gn++; gw += entry_kind(&entries[i]) == BAY_WRITING; gd += entry_kind(&entries[i]) == BAY_DONE;
+            gn++; gw += entry_kind(s, &entries[i]) == BAY_WRITING; gd += entry_kind(s, &entries[i]) == BAY_DONE;
         }
         if (!gn) continue;
         Rect cage = { x0, y, cw, 10 + 16 + 8 + gn * bh + (gn - 1) * 10 + 10 };

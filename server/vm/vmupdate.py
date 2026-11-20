@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Callable
 
 from server.storage import disk_reserve
+from server.system import steadyclock
 from server.vm import vmdisk, vmnet
 from server.core.atomicfile import write_atomic
 from server.core.cleanup import remove_tree
@@ -391,7 +392,7 @@ class VmUpdate:
                  growth_reserve_bytes: int = GROWTH_RESERVE_BYTES,
                  popen: Callable[..., subprocess.Popen] = subprocess.Popen,
                  qmp_call: Callable[[Path, str], dict] = qmp,
-                 now: Callable[[], float] = time.time,
+                 now: Callable[[], float] = steadyclock.now,
                  maintenance_every: float | None = MAINTENANCE_S,
                  lease_timeout: float = vmnet.LEASE_TIMEOUT_S):
         self.conn = conn

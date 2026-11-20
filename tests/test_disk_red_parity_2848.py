@@ -43,7 +43,7 @@ def _sata_json(tmp_path, words: str | None) -> str:
 @pytest.mark.parametrize("words, want", [
     (None, None),                                         # no hw_refresh yet: not read, never []
     ("", []),
-    ("usb2\nicrc_logged\nlink_slow\n", []),               # notes, and the link the server reads itself
+    ("usb2\nicrc_logged\n", []),                          # notes (#3591: link_slow is no word any more)
     ("link_reset\ndrawer_gone\n", ["link_reset", "drawer_gone"]),
 ])
 def test_the_hello_says_the_sata_problems_or_that_it_did_not_look(tmp_path, words, want):
@@ -71,7 +71,7 @@ def test_the_standby_record_carries_the_hw_words_in_field_17(tmp_path, monkeypat
         return orig(cmd, *a, **k)
     monkeypatch.setattr(base, "proc_sh", with_words)
     f = _standby_record(tmp_path, "ok ok 0 0 0 0", None)
-    assert len(f) == 17 and f[16].split() == ["link_reset", "usb2"], f
+    assert len(f) == 19 and f[16].split() == ["link_reset", "usb2"], f   # #3268: 18-19 = the write check, after the words
 
 
 @requires_native(("bash", BASH), "jq", why="gui_state builds the state with jq")
@@ -83,8 +83,8 @@ def test_gui_state_carries_the_servers_rule_after_each_room_drawer(tmp_path, mon
     monkeypatch.setattr(precheck, "ROOM", room)
     lines = gui_state_lines(tmp_path)
     red = [l for l in lines if l.startswith("room_drawer_rule=0|")]
-    assert red == [f"room_drawer_rule=0|{first['serial']}|red|0|1|sata_issue",
-                   f"room_drawer_rule=0|{second['serial']}||||"], lines
+    assert red == [f"room_drawer_rule=0|{first['serial']}|red|0|1|sata_issue|",       # #3666: + the sentence (field 7; "" -- this rule has none)
+                   f"room_drawer_rule=0|{second['serial']}|||||"], lines
     i = lines.index(red[0])
     assert lines[i - 1].startswith("room_drawer=0|1|"), lines   # right after its own drawer
 

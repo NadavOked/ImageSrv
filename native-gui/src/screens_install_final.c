@@ -52,15 +52,36 @@ static int clock_warning(const InstallState *s,char *out,size_t n){
     return 1;
 }
 
+/* #3051: the disk that will be erased, as it was told apart on the disk step: "דיסק 2 · model · /dev/sdb · SN serial".
+ * The slot is the stick's mapping (none = not said); each Latin part is its own isolated run. */
+static void summary_disk(const InstallDisk *d,char *out,size_t n){
+    char slot[96],model[200],path[100],sn[100],raw[80];out[0]=0;if(!d){snprintf(out,n,"—");return;}
+    install_disk_slot_label(d,slot,sizeof slot);bidi_isolate(d->model[0]?d->model:"—",model,sizeof model);bidi_isolate(d->path,path,sizeof path);
+    snprintf(out,n,"%s%s%s · %s",slot,slot[0]?" · ":"",model,path);
+    if(d->serial[0]){snprintf(raw,sizeof raw,"SN %s",d->serial);bidi_isolate(raw,sn,sizeof sn);size_t u=strlen(out);snprintf(out+u,n-u," · %s",sn);}}
+/* #3496: the longest member is "<slot, <96> (<path, <100>)" + ", ", so INSTALL_MAX_DISKS of them fit whole -- the row is never cut
+ * (a cut could land inside a Hebrew letter), and the value buffer holds the label and the count besides. */
+#define SUMMARY_MEMBERS_MAX (INSTALL_MAX_DISKS*200)
+#define SUMMARY_VALUE_MAX (SUMMARY_MEMBERS_MAX+96)
+/* the RAID members, the chosen disk first (as install_raid_disks): "דיסק 1 (/dev/sda)" or the device alone */
+static void summary_members(const InstallState *s,char *out,size_t n){
+    size_t used=0;out[0]=0;
+    for(int pass=0;pass<2;pass++)for(int i=0;i<s->ndisks;i++){
+        if((pass==0)!=(i==s->disk)||!install_raid_member(s,i))continue;
+        const InstallDisk *d=&s->disks[i];char slot[96],path[100];install_disk_slot_label(d,slot,sizeof slot);bidi_isolate(d->path,path,sizeof path);
+        int w=slot[0]?snprintf(out+used,n-used,"%s%s (%s)",used?", ":"",slot,path):snprintf(out+used,n-used,"%s%s",used?", ":"",path);
+        if(w<0||(size_t)w>=n-used){out[0]=0;return;}
+        used+=(size_t)w;}}
+
 static void summary(App *a,cairo_t *cr,InstallLayout l){
-    InstallState *s=&a->install;const Theme *t=a->theme;double x=l.body.x,w=l.body.w,y=l.body.y;char value[400],url[192];
+    InstallState *s=&a->install;const Theme *t=a->theme;double x=l.body.x,w=l.body.w,y=l.body.y;char value[SUMMARY_VALUE_MAX],url[192];
     /* #2129: the network row is two lines (a third when one wraps); the rows below move down by what it grew */
     char one[200],two[512];net_lines(s,one,sizeof one,two,sizeof two);
     Text m1=text_make(cr,FONT_SANS,13,500,one,(int)(w-282),DIR_RTL),m2=text_make(cr,FONT_SANS,13,500,two,(int)(w-282),DIR_RTL);double nh=fmax(48,12+m1.h+4+m2.h+10),dy=nh-48;
     Rect card={x,y,w,386+dy};install_card(cr,t,card);
     InstallDisk *d=s->disk>=0&&s->disk<s->ndisks?&s->disks[s->disk]:NULL;
-    if(s->raid!=RAID_NONE){char members[INSTALL_MAX_DISKS*48];install_raid_disks(s,members,sizeof members);snprintf(value,sizeof value,"%s · %d כוננים · %s",RAID_OPTS[s->raid].label,install_raid_count(s),members);}   /* #1989 */
-    else{snprintf(value,sizeof value,"%s · %s",d&&d->model[0]?d->model:"—",d?d->path:"");}summary_row(a,cr,(Rect){x+1,y+1,w-2,48},"דיסק",value,0);
+    if(s->raid!=RAID_NONE){char members[SUMMARY_MEMBERS_MAX];summary_members(s,members,sizeof members);snprintf(value,sizeof value,"%s · %d כוננים · %s",RAID_OPTS[s->raid].label,install_raid_count(s),members);}   /* #1989 */
+    else{summary_disk(d,value,sizeof value);}summary_row(a,cr,(Rect){x+1,y+1,w-2,48},"דיסק",value,0);
     if(s->secondary)snprintf(value,sizeof value,"שרת משנה · ראשי: %s",s->primary_url);else snprintf(value,sizeof value,"שרת ראשי");summary_row(a,cr,(Rect){x+1,y+49,w-2,48},"תפקיד",value,1);
     summary_row(a,cr,(Rect){x+1,y+97,w-2,nh},"כתובת השרת",one,2);text_draw_r(cr,&m2,x+w-181,y+97+12+m1.h+4,t->ink);text_free(&m1);text_free(&m2);
     summary_row(a,cr,(Rect){x+1,y+145+dy,w-2,48},"שם השרת",s->hostname,3);   /* #2764: the zone is the clock's, below */
@@ -163,7 +184,9 @@ static void failed(App *a,cairo_t *cr,InstallLayout l){
     install_text_r(cr,t,said,14,600,x+w-14,y+(raw?10:20),w-28,t->danger_fg);
     if(raw)install_text_ltr(cr,s->error,11,400,x+14,y+36,w-28,t->muted);
     y+=76;
-    install_text_r(cr,t,"פרטים טכניים",13,600,x+w,y,w,t->ink);y+=30;output_box(a,cr,(Rect){x,y,w,250});
+    install_text_r(cr,t,"פרטים טכניים",13,600,x+w,y,w,t->ink);
+    /* #3131 (C-SYS-06): the log is on the live system's RAM disk and is not copied to the server; said, so it is read first */
+    install_text_r(cr,t,"היומן נשמר בזיכרון בלבד ויימחק בהפעלה מחדש",12,400,x+w-150,y+1,w-160,t->muted);y+=30;output_box(a,cr,(Rect){x,y,w,250});
     Text retry=btn_label(cr,"נסה שוב");double rw=btn_width(&retry);draw_btn(a,cr,(Rect){l.footer.w-32-rw,l.footer.y+(l.footer.h-N_BUTTON_H)/2,rw,N_BUTTON_H},&retry,BTN_PRIMARY,HIT_INSTALL_RETRY);install_focus_ring(a,cr,(Rect){l.footer.w-32-rw,l.footer.y+(l.footer.h-N_BUTTON_H)/2,rw,N_BUTTON_H},HIT_INSTALL_RETRY);text_free(&retry);
 }
 

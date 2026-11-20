@@ -67,7 +67,7 @@ pytestmark = requires_native(
 
 LIBS = ("common", "jsonq", "gptboot", "waits", "sysinfo", "diskinfo", "progress", "restore", "diskfit", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux", "writemark", "writeback", "drawers",
         "verdict", "failmark", "ntfsboot", "manifest", "hibernation", "shrinkplan", "shrink", "shrinkmem", "smart",
-        "lcinv", "lcsize", "lcplan", "lcsnap", "lctune", "lccopy", "lcraw", "localclone", "askgui", "readback", "readbacklc")
+        "lcinv", "lcscan", "lchdd", "lcsize", "lcplan", "lcsnap", "lctune", "lccopy", "lcraw", "localclone", "askgui", "readback", "readbacklc")   # lcscan: #2991; lchdd: #3064 (lc_fit_verdict, which localclone.sh and lcgui.sh call)
 
 DRIVER = r'''
 set -u
@@ -195,9 +195,10 @@ _root = lcfx.root     # #2702: its own process group, killed whole (root's child
 @pytest.fixture(scope="module")
 def fanout_bin(tmp_path_factory) -> Path:
     d = tmp_path_factory.mktemp("lcbin")
-    built = subprocess.run(["gcc", "-O2", "-Wall", "-Wextra", "-o", str(d / "fanout"), str(REPO / "agent" / "fanout.c")],
-                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
-    assert built.returncode == 0, built.stderr
+    for tool in ("fanout", "rescuecat"):   # #2527: the rescue copy's reader (lccopy.sh) is on the engine's PATH too
+        built = subprocess.run(["gcc", "-O2", "-Wall", "-Wextra", "-o", str(d / tool), str(REPO / "agent" / f"{tool}.c")],
+                               capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        assert built.returncode == 0, built.stderr
     return d
 
 

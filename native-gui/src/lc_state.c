@@ -71,7 +71,24 @@ int lc_state_line(State *s, const char *key, char *val) {
     }
     else if (!strcmp(key, "lc_boot")) { lc_split(val, f, 3); l->boot_deadline = ll(f[0]); l->boot_paused = atoi(f[1]) == 2 ? 2 : atoi(f[1]) == 1; l->boot_now = ll(f[2]); }
     else if (!strcmp(key, "lc_inv")) l->inv_done = !strcmp(val, "done");
+    else if (!strcmp(key, "lc_scan")) {   /* #2991: drawer|seconds|left, digits only -- anything else says nothing */
+        if (lc_split(val, f, 3) != 3) return 1;
+        for (int k = 0; k < 3; k++) if (!digits(f[k])) return 1;
+        l->has_scan = 1; l->scan_drawer = atoi(f[0]); l->scan_secs = atoi(f[1]); l->scan_left = atoi(f[2]);
+    }
     else if (!strcmp(key, "lc_phase")) cpy(l->phase, sizeof l->phase, val);
+    else if (!strcmp(key, "lc_retry")) {   /* #2527: round|of, digits only, 1 <= round <= of <= 20 -- anything else says nothing */
+        if (lc_split(val, f, 2) != 2 || strspn(f[0], "0123456789") != strlen(f[0]) || strspn(f[1], "0123456789") != strlen(f[1])
+            || !f[0][0] || !f[1][0] || strlen(f[0]) > 2 || strlen(f[1]) > 2) return 1;
+        int rd = atoi(f[0]), of = atoi(f[1]);
+        if (rd >= 1 && rd <= of && of <= 20) { l->retry_round = rd; l->retry_of = of; }
+    }
+    else if (!strcmp(key, "lc_rule")) {   /* #3666: dev|color|source|target|reason|sentence -- after its lc_disk=, matched by dev */
+        int nf = lc_split(val, f, 6);
+        if (nf < 5) return 1;
+        for (int i = l->ndisks - 1; i >= 0; i--)
+            if (!strcmp(l->disks[i].dev, f[0])) { disk_rule_take(&l->disks[i].rule, f[1], f[2], f[3], f[4], f[5]); break; }
+    }
     else if (!strcmp(key, "lc_disk") && l->ndisks < LC_MAX_DISKS) {
         int nf = lc_split(val, f, 19);   /* #1798: the mark is field 16; #1921: the hw note 17; #2001: the name 18; #2848: words 19 */
         if (nf < 13) return 1;
@@ -92,10 +109,6 @@ int lc_state_line(State *s, const char *key, char *val) {
             cpy(d->mark, sizeof d->mark, f[15]);   /* #1798: anything else draws nothing */
         if (nf >= 17) cpy(d->hw, sizeof d->hw, f[16]);
         if (nf >= 18) cpy(d->name, sizeof d->name, f[17]);
-        if (nf >= 19) {   /* #2848: hwissues.sh's words -- a SATA problem is red */
-            d->sata_bad = hw_words_red(f[18]); d->link_slow = hw_words_has(f[18], "link_slow");
-            d->sata_issue = hw_words_has(f[18], "link_reset") || hw_words_has(f[18], "drawer_gone");
-        }
     } else if (!strcmp(key, "lc_src")) {
         int nf = lc_split(val, f, 5); cpy(l->src, sizeof l->src, f[0]); cpy(l->src_measure, sizeof l->src_measure, f[1]);
         l->src_hibernated = nf >= 5 && !strcmp(f[4], "hibernated");   /* #2069: anything else says nothing */
@@ -181,14 +194,12 @@ const LcFit *lc_fit_of(const App *a, const char *dev) {
 }
 
 DiskRule lc_rule(const LcDisk *d) {
-    /* the agent's words: "passed" is ok; failed_last is the smart field (lcinv.sh); a local clone measures no
-     * write check of a round -- write_slow 0 */
-    DiskFacts f = { !strcmp(d->smart, "passed") ? "ok" : d->smart, 0, !strcmp(d->mark, "incomplete"),
-                    d->link_slow, d->sata_issue, 0 };
-    return disk_rule(&f);
+    /* #3666: delivered by the agent (diskrule.sh applies agent/lib/data/disk-rule.tsv, the one table) -- not worked out
+     * here. A drawer with no verdict is "not checked": grey, never green, and nothing is said about it. */
+    return d->rule.set ? d->rule : disk_rule_none();
 }
 
-int lc_red(const LcDisk *d) { return !lc_rule(d).target; }
+int lc_red(const LcDisk *d) { return !lc_rule(d).target || !d->size; }   /* #2991: a size not read (a drawer that did not answer) is never a target */
 
 int lc_source_ok(const LcDisk *d) { return d->usable && lc_rule(d).source; }
 
@@ -216,6 +227,7 @@ int lc_targets(const App *a, int *idx, int max) {
 
 int lc_can_go(const App *a) {
     int idx[LC_MAX_DISKS], n = lc_targets(a, idx, LC_MAX_DISKS), s = lc_source_index(a);
+    if (!a->st.lc.inv_done) return 0;   /* #2991: the drawers show while they are read -- nothing goes before the last one */
     if (!n || s < 0 || !lc_source_ok(&a->st.lc.disks[s])) return 0;   /* #2848: never a yellow source */
     for (int k = 0; k < n; k++) {
         const LcFit *f = lc_fit_of(a, a->st.lc.disks[idx[k]].dev);

@@ -24,6 +24,7 @@ from server.net import deploy_net
 from server.console import server_power
 from server.rounds import drive_rates
 from server.agent import identity
+from server.system import serverlog
 
 
 def _configure_stdio() -> None:
@@ -199,7 +200,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "פיתוח/e2e; ברירת מחדל on")
     # #201: הפורט שהשידור תופס בפועל (וגם portbase+1). בייצור לא נוגעים
     # בו — #1826: הסוכן מקבל אותו ב-`session.portbase`, אבל סוכן ישן מצפה
-    # ל-9000 וחומת האש של המתקין פותחת 9000-9001 בלבד (`--mcast-ports`).
+    # ל-9000, וחומת האש של המתקין פותחת 9000-9003 בלבד (portbase..portbase+3: ההפצה ומשוב הקצב של #3512).
+    # #3487: כשהקונסולה כותבת את חומת האש מחדש היא גוזרת את הטווח מהערך הזה (`--mcast-ports`).
     # הדגל קיים בשביל מי שמריץ שרת אמיתי במקום שאסור לו להתנגש בהפצה:
     # `tools/e2e/harness.py`. **בכוונה דגל ולא משתנה סביבה** — משתנה
     # סביבה שנשאר תקוע ב-shell או ביחידה משנה את פורט ההפצה של הייצור
@@ -362,10 +364,10 @@ def _start_igmp_querier(runtime, deploy, interface: str | None) -> None:
     from server.net import ifaddr, igmp_querier, ports
     hooks = getattr(runtime, "health_hooks", None)
     if hooks is None:          # בדיקות של main מחליפות את create_runtime
-        return
+        return None
     if not (deploy.configured and interface):
         hooks["igmp_querier"] = lambda: ("not_applicable", health.NOT_APPLICABLE)
-        return
+        return None
     nic_services = getattr(runtime.ctx, "nic_services", None)
     querier = igmp_querier.Querier(
         runtime.conn, interface, lambda: ifaddr.read_ipv4(interface),
@@ -373,6 +375,25 @@ def _start_igmp_querier(runtime, deploy, interface: str | None) -> None:
         hears=lambda: igmp_querier.firewall_hears(ports.read_nft_ruleset(), interface))
     hooks["igmp_querier"] = querier.health
     threading.Thread(target=querier.run_forever, daemon=True, name="igmp-querier").start()
+    return querier
+
+
+def _start_netwatch(runtime, deploy, interface: str | None, querier) -> None:
+    """#3064 (N4, N8, צל): האזנה פסיבית של השרת לתעבורה שאינה שלנו ברשת ההפצה, ורישום N4 מה-querier. כאן בלבד:
+    בבדיקות אין AF_PACKET ואין תהליכון. אין שורה במסך הבריאות -- החוש נרשם בלבד ואיש אינו נשען עליו."""
+    if getattr(runtime, "health_hooks", None) is None or getattr(runtime, "conn", None) is None             or not (deploy.configured and interface):
+        return              # בדיקות של main מחליפות את create_runtime, וכאן אין סוקט raw ואין תהליכון
+    import time
+    from server.brain import l2sense
+    from server.net import netwatch
+    from server.rounds import chunksend
+
+    def engine_group() -> str | None:
+        return chunksend.GROUP if chunksend.engine_of(runtime.conn) == chunksend.CHUNK else None
+
+    watch = netwatch.Watch(runtime.conn, interface, querier=querier, engine_group=engine_group)
+    l2sense.set_server_view(lambda: querier.sending(time.monotonic()) if querier is not None else None)
+    threading.Thread(target=watch.run_forever, daemon=True, name="netwatch").start()
 
 
 def _start_rogue_dhcp_watch(runtime, deploy, interface: str | None) -> None:
@@ -432,7 +453,7 @@ def _host_config_writes() -> dict:
     לינוקס, מערכת ההפעלה של השרת (דביאן 13). שם הם בדיוק כמו קודם, כולל
     כשל גלוי ביומן (עיקרון 5). על תחנת פיתוח (ווינדוס) אין /etc, אין systemctl ואין dnsmasq: הכתיבה רק יצרה `C:\\etc\\imagesrv`
     ו-`C:\\etc\\dnsmasq.d` מחוץ ל-data-dir — ולכן לא מדליקים אותם, ואומרים זאת."""
-    from server.net import dhcp_host
+    from server.net import dhcp_host, known_fw
     from server.system import grub_password
     if not sys.platform.startswith("linux"):
         print(f"dev station ({sys.platform}): /etc/imagesrv/known-macs, "
@@ -440,12 +461,18 @@ def _host_config_writes() -> dict:
         return {"known_macs_hooks": None, "sync_dnsmasq": False, "dnsmasq_dropin": False,
                 "grub_password_file": None}
     # #2437: סיסמת עורך ה-GRUB של התחנות — נוצרת בעלייה הראשונה אם חסרה.
-    return {"known_macs_hooks": {"apply": dhcp_host.apply_known_macs}, "sync_dnsmasq": True,
+    # הכרעת נדב 14/11 (#1079/#2485): `firewall` -- אותה רשימה ל-nftables של כרטיס ההפצה.
+    # #3224: `firewall_stale` -- שרת שמשודרג שומר nftables.conf ישן (בלי known_macs); הכללים נכתבים מחדש בעלייה.
+    return {"known_macs_hooks": {"apply": dhcp_host.apply_known_macs, "firewall": known_fw.apply,
+                                 "firewall_stale": deploy_net.stale_firewall},
+            "sync_dnsmasq": True,
             "dnsmasq_dropin": True, "grub_password_file": grub_password.PASSWORD_FILE}
 
 
 def main() -> None:
     _configure_stdio()
+    # #3157: הגדרת הלוגינג **היחידה** של השרת — root ב-INFO ל-stderr (journald).
+    serverlog.configure()
     parser = build_parser()
     args = parser.parse_args()
 
@@ -666,7 +693,9 @@ def main() -> None:
                              console_tls=console_tls,
                              health_hooks={"port_listeners": listeners,
                                            "deploy": lambda: deploy_ctx.state,
-                                           "servers_nic": servers_nic_status},
+                                           "servers_nic": servers_nic_status,
+                                           # #3064 (K12, K13): המוח קורא systemctl ו-ss -- כאן בלבד, כמו known_macs_hooks
+                                           "brain_host": True},
                              deploy=deploy_ctx,
                              # #1372: המארח של עדכון ה-VM — שואל, ומכין אם חסר.
                              vm_host=True,
@@ -689,7 +718,12 @@ def main() -> None:
                 f"old_sha256={console_tls.previous_fingerprint_sha256} "
                 f"new_sha256={console_tls.fingerprint_sha256}"
                 + (" legacy_migration=1" if console_tls.migrated_legacy else ""))
-    _start_igmp_querier(runtime, deploy, interface)   # #1972
+    # #3157: WARNING ומעלה של מודולי השרת — גם ליומן הקונסולה, כאירוע עם מקור.
+    # getattr: בדיקות של main מחליפות את create_runtime ברשומה משלהן.
+    if getattr(runtime, "conn", None) is not None:
+        serverlog.bridge_to_journal(runtime.conn)
+    querier = _start_igmp_querier(runtime, deploy, interface)   # #1972
+    _start_netwatch(runtime, deploy, interface, querier)   # #3064 (N4, N8)
     _start_rogue_dhcp_watch(runtime, deploy, interface)   # #2442
     _start_ups_monitor(runtime)   # #1973
     _wire_server_disks(runtime)   # #3007

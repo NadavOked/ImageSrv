@@ -21,7 +21,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from server.db import NET_SEEN_MIN_INTERVAL_SECONDS, _settle, _write_lock, journal, now_iso, writing
-from server.disks import f1_marks
+from server.disks import disk_failures, f1_marks
 
 log = logging.getLogger("imagesrv.disk_sets")
 
@@ -181,7 +181,8 @@ def health(conn: sqlite3.Connection, serials: list[str]) -> dict[str, dict]:
     """מצב כל סידורי: ``state`` (red/orange/ok/unchecked), ``reason`` (קוד, כמו ב-SMART), מתי נכשל, מתי נכתב.
 
     אדום = אירוע SMART ``fail`` אחרון, או כשל פתוח של דיסק (``disk_failures`` בלי ``cleared_at``,
-    cause=disk). כתום = ``warn``, או כשל פתוח אחר (כבל…). תקין = ``ok`` ואין כשל פתוח. אין אירוע = לא נבדק."""
+    cause=disk). כתום = ``warn``, או כשל פתוח אחר (כבל…). רשומה **שקטה** (שליפה, עצירה באמצע, כשל של הזרם --
+    ``disk_failures.quiet``) אינה כשל פתוח כאן, כמו שה-hello אינו מחזיר אותה (#3147). תקין = ``ok`` ואין כשל פתוח. אין אירוע = לא נבדק."""
     good = _written_at(conn)
     out: dict[str, dict] = {}
     for serial in serials:
@@ -189,8 +190,10 @@ def health(conn: sqlite3.Connection, serials: list[str]) -> dict[str, dict]:
             "SELECT verdict, reason, updated_at FROM disk_events WHERE serial = ? ORDER BY updated_at DESC LIMIT 1",
             (serial,)).fetchone()
         fails = conn.execute(
-            "SELECT cause, at, cleared_at FROM disk_failures WHERE serial = ? ORDER BY at DESC", (serial,)).fetchall()
-        open_fail = [f for f in fails if f["cleared_at"] is None]
+            "SELECT cause, error, ata_log, at, cleared_at FROM disk_failures WHERE serial = ? ORDER BY at DESC",
+            (serial,)).fetchall()
+        # #3147: a pull, an interruption, a stream fault: the hello does not paint them (`disk_failures.quiet`), so neither does this
+        open_fail = [f for f in fails if f["cleared_at"] is None and not disk_failures.quiet(f)]
         verdict = ev["verdict"] if ev else None
         if verdict == "fail" or any(f["cause"] == "disk" for f in open_fail):
             state = "red"
@@ -234,6 +237,7 @@ def _disk_view(conn, serial, inv, member, set_by_id, hl, places, names, f1=None)
         "in_machine": here,
         "mac": mac, "machine": names.get(mac) if mac else None, "port": port,
         "last_seen": inv["last_seen"] if inv else None,
+        "first_seen": inv["first_seen"] if inv else None,   # #3185: "נראה לראשונה" -- מ-disk_inventory
         "f1": f1,
     }
 
@@ -430,8 +434,30 @@ def all_labels(conn: sqlite3.Connection) -> dict[str, dict]:
         "SELECT m.serial, m.suffix, s.name, s.prefix FROM disk_set_members m JOIN disk_sets s ON s.id = m.set_id")}
 
 
+def serial_key(serial: object) -> str | None:
+    """#3576: סידורי בלי רווחים -- ``"t10.ATA     APS-SL3N-512"`` ו-``"t10.ATAAPS-SL3N-512"`` הם אותו דיסק.
+
+    הנרמול היחיד בין סידורי ה-DB (`note_hello`: ``strip()[:64]``, הרווחים הפנימיים נשמרים) לשורות
+    היומן: ``disk_write_slow`` כותב את `serial_key` (`slow_write.py`), ו-`text_of` משווה בו כשההתאמה
+    המדויקת אינה חד-משמעית. ה-DB עצמו לא משתנה. לא מחרוזת או ריק: ``None``."""
+    if not isinstance(serial, str):
+        return None
+    return "".join(serial.strip()[:64].split()) or None
+
+
 def text_of(labels: dict[str, dict], serial: object) -> str | None:
     """``all_labels`` -> הטקסט ("קוריאים · xx-7") של דיסק לפי הסידורי, או ``None``. סידורי שאינו מחרוזת
-    (JSON פגום ב-hello) אינו נחפש."""
-    entry = labels.get(serial) if isinstance(serial, str) else None
-    return entry["text"] if entry else None
+    (JSON פגום ב-hello) אינו נחפש.
+
+    #3576: שורת יומן של דיסק עם רווחים בסידורי (``disk_write_slow`` כותב אותו בלי רווחים) נמצאת לפי
+    `serial_key`. שני דיסקים שונים שחולקים אותו מפתח לא מקבלים תג של השני: מתקבל רק האיות המדויק של
+    השורה, ואם הוא אינו ביניהם -- ``None`` (בלי תג, לא תג של דיסק אחר)."""
+    if not isinstance(serial, str):
+        return None
+    key = serial_key(serial)
+    same = [s for s in labels if serial_key(s) == key] if key else []
+    if len(same) == 1:
+        return labels[same[0]]["text"]
+    if serial in same and serial != key:
+        return labels[serial]["text"]
+    return None

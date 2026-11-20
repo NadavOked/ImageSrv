@@ -49,8 +49,12 @@ def run(data_dir, images_dir) -> SimpleNamespace:
     check("למשתמש ההפצה אין קונסולה וובית (#1073)",
           status == 403 and body.get("error") == "deploy_no_console", f"{status} {body}")
     deploy = Client(console_base=BASE)
-    status, _ = deploy.json("POST", "/api/console/login", DEPLOY)
-    check("כניסת משתמש ההפצה דרך פורט הסוכן", status == 200, str(status))
+    # #3223: רשת ההפצה משרתת רק מחשבים רשומים. עד כאן לא נרשם אף אחד מהמחשבים
+    # שחכורים לכתובת הלולאה, ולכן גם כניסת משתמש ההפצה נענית ב-403 בשם —
+    # זו ההוכחה שהשער עובד, ולא רק שהסימולציה עוקפת אותו.
+    status, body = deploy.json("POST", "/api/console/login", DEPLOY)
+    check("כניסת משתמש הפצה מיחידה לא רשומה נדחית (#3223)",
+          status == 403 and body.get("code") == "deploy_unregistered", f"{status} {body}")
 
     status, _ = console.json("POST", "/api/console/groups",
                              {"id": "grp_LAB1", "label": "כיתה LAB1", "role": "classroom"})
@@ -68,6 +72,8 @@ def run(data_dir, images_dir) -> SimpleNamespace:
     status, _ = console.json("POST", "/api/console/machines", {
         "mac": BUILD_MAC, "name": "BUILD-PC", "group_id": "grp_BUILD"})   # #1997: שם מחשב באנגלית
     check("מחשב הבנייה נרשם (קבוצה קבועה)", status == 200, str(status))
+    status, _ = deploy.json("POST", "/api/console/login", DEPLOY)
+    check("כניסת משתמש ההפצה דרך פורט הסוכן, אחרי שהמחשב נרשם", status == 200, str(status))
     status, _ = console.json("POST", "/api/console/machines", {
         "mac": CLONER_MAC, "name": "01", "group_id": "grp_CLONERS"})
     check("מחשב השיכפול נרשם", status == 200, str(status))

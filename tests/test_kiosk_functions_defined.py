@@ -131,6 +131,9 @@ DYNAMIC_SITES: dict[tuple[str, str], str] = {
     ("hwissues.sh", "hw_refresh"): "\"$DMESG\", default `dmesg` (hwissues.sh; a busybox applet) -- "
                                    "the variable exists so a test can put a stub there (#1921)",
     ("hwissues.sh", "_hw_dmesg_t"): "the same \"$DMESG\" (dmesg), moved here by #1937: the time a drawer was identified at",
+    ("sysinfo.sh", "nic_max_mbps"): "\"${ETHTOOL:-ethtool}\" (#3277), default `ethtool`; optional like wavesense.sh's: a missing binary prints "
+                                   "nothing, the card's maximum is then null (the banner keeps only the 100 Mb/s floor) -- the variable exists so a test "
+                                   "can put a stub there",
     ("tools.sh", "tools_list"): "provider dispatch tools_${domain}_list; reachable() roots every defined provider",
     ("tools.sh", "_tools_find"): "same dispatch, tools_${domain}_list",
     ("tools.sh", "tools_run"): "provider dispatch tools_${domain}_run; reachable() roots every defined provider",

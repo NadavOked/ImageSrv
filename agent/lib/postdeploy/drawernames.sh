@@ -12,7 +12,8 @@
 # Never fatal and never silent, like name_this_machine (#856): a name that was
 # not written leaves the drawer "done" with the reason in its error -- the
 # image was written, the console colours it orange. No hostnames (null) = the
-# round without names: nothing is mounted and the image's name stays.
+# round without names: nothing is mounted and the image's name stays. A name
+# written with a note (#3167) keeps the note in targets/<dev>/note -- green.
 
 _nd_warn() {
     # $1 = disk, $2 = why. The drawer stays done; the reason joins its error.
@@ -36,14 +37,25 @@ name_drawers() {
             _nd_warn "$_nd" "שמות המחשב בתשובת השרת לא נקראו"; continue
         fi
         _nd_port=$(disk_port "$_nd")
-        _nd_name=$(jq -r --arg p "$_nd_port" '.session.hostnames[$p] // empty | strings' "$RESP" 2>> "$LOG_FILE")
-        [ -n "$_nd_name" ] || { _nd_warn "$_nd" "השרת לא שלח שם לחריץ ${_nd_port:-לא ידוע}"; continue; }
+        if [ -f "$RUN_DIR/targets/$_nd/newdisk" ]; then   # #3181: a disk that joined mid-round is named by its SERIAL (production_line.names) -- the slot's name is the disk's that was there
+            _nd_name=$(prodline_name "$_nd")
+            [ -n "$_nd_name" ] || { _nd_warn "$_nd" "השרת לא שלח שם לדיסק שהצטרף באמצע הסבב (serial $(target_bound_serial "$_nd"))"; continue; }
+        else
+            _nd_name=$(jq -r --arg p "$_nd_port" '.session.hostnames[$p] // empty | strings' "$RESP" 2>> "$LOG_FILE")
+            [ -n "$_nd_name" ] || { _nd_warn "$_nd" "השרת לא שלח שם לחריץ ${_nd_port:-לא ידוע}"; continue; }
+        fi
         assert_target "$_nd" || continue   # #2434: never mount a disk that is not the one chosen
         _nd_res=$(HOSTNAME_OS="$_nd_os" write_hostname "$_nd" "$RUN_DIR/manifest.json" "$_nd_name")
         _nd_rc=$?
         printf '%s\n' "$_nd_res" > "$RUN_DIR/targets/$_nd/hostname.json"
         log "hostname (drawer $_nd, port $_nd_port): $_nd_res"
-        [ "$_nd_rc" -eq 0 ] && continue
+        if [ "$_nd_rc" -eq 0 ]; then
+            # #3167 (Nadav 14/11): written into an image not shut down clean -- a note on a
+            # done drawer, not its error: the row stays green and the round powers off.
+            _nd_note=$(json_get "$RUN_DIR/targets/$_nd/hostname.json" ".note // empty")
+            [ -z "$_nd_note" ] || printf '%s\n' "$_nd_note" > "$RUN_DIR/targets/$_nd/note"
+            continue
+        fi
         _nd_err=$(json_get "$RUN_DIR/targets/$_nd/hostname.json" ".error")
         { [ -n "$_nd_err" ] && [ "$_nd_err" != "null" ]; } || _nd_err="סיבה לא ידועה (rc=$_nd_rc)"
         _nd_warn "$_nd" "$_nd_err"

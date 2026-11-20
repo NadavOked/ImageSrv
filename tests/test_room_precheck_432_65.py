@@ -55,7 +55,7 @@ def test_each_drawer_carries_its_link_and_a_state(room_server):
                                   disk("S3", 3, link=None), {"serial": "S4", "port": 4}])
     got = {d["serial"]: (d["link_gbps"], d["link_max_gbps"], d["link_state"])
            for d in machine(room(admin), CLONER1)["drawer_list"]}
-    assert got == {"S1": (6.0, 6.0, "ok"), "S2": (1.5, 6.0, "slow"),
+    assert got == {"S1": (6.0, 6.0, "ok"), "S2": (1.5, 6.0, "ok"),     # #3591: a link speed is not "slow"
                    "S3": (None, 6.0, "unknown"),
                    "S4": (None, None, "unknown")}          # סוכן ישן: לא "תקין"
 
@@ -108,15 +108,18 @@ def _open(client, target=2, slots=None):
     assert r.status_code == 200, r.text
 
 
-def test_an_open_wave_warns_on_a_slow_drawer_and_not_on_the_others(room_server):
-    deploy, anon = room_server["deploy"], room_server["anon"]
+def test_an_open_wave_warns_on_a_drawer_whose_crc_rose_and_not_on_the_others(room_server):
+    deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
+    _disk_event(ctx, "S2", 100)
     # #1703: target 5 -- four drawers do not cover it, the wave stays open
     _open(deploy, target=5, slots=room_slots(room_server["ctx"].conn, {CLONER1: ["S1", "S2"], CLONER2: ["S3", "S4"]}))
-    drawers_hello(anon, CLONER1, [disk("S1", 1), disk("S2", 2, link=1.5)])
+    # S2: the link at 1.5 of 6.0 is information (#3591) -- the CRC that rose is the warning
+    drawers_hello(anon, CLONER1, [disk("S1", 1), disk("S2", 2, link=1.5, crc=112)])
     drawers_hello(anon, CLONER2, [disk("S3", 1, link=None), disk("S4", 2, link=3.0, top=3.0)])
     warn = room(deploy)["round"]["precheck"]
     assert [(w["mac"], w["port"]) for w in warn] == [(CLONER1, 2)], warn
-    assert "shich-1" in warn[0]["text_he"] and "1.5 מתוך 6.0" in warn[0]["text_he"]
+    assert "shich-1" in warn[0]["text_he"] and "מונה CRC עלה ב-12" in warn[0]["text_he"]
+    assert "מתוך" not in warn[0]["text_he"], "the link speed is not in the warning"
 
 
 def test_a_crc_rise_warns_too(room_server):
@@ -138,23 +141,25 @@ def test_no_round_and_a_clean_wave_have_no_warning(room_server):
 
 
 def test_a_drawer_outside_the_selection_does_not_warn(room_server):
-    deploy, anon = room_server["deploy"], room_server["anon"]
-    drawers_hello(anon, CLONER1, [disk("S1", 1), disk("S2", 2, link=1.5)])
+    deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
+    _disk_event(ctx, "S2", 100)
+    drawers_hello(anon, CLONER1, [disk("S1", 1), disk("S2", 2, crc=112)])
     _open(deploy, target=1, slots=[{"mac": CLONER1, "ports": [1]}])
-    drawers_hello(anon, CLONER1, [disk("S1", 1), disk("S2", 2, link=1.5)])
+    drawers_hello(anon, CLONER1, [disk("S1", 1), disk("S2", 2, crc=112)])
     assert room(deploy)["round"]["precheck"] == []
 
 
 def test_start_is_a_warning_not_a_block_and_the_journal_keeps_it(room_server):
     """ה-Issue: "סבב שהתחיל בכל זאת חייב לרשום שהאזהרה הייתה שם"."""
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
+    _disk_event(ctx, "S2", 100)
     _open(deploy, target=4, slots=room_slots(room_server["ctx"].conn, {CLONER1: ["S1", "S2"]}))
-    drawers_hello(anon, CLONER1, [disk("S1", 1), disk("S2", 2, link=1.5)])
+    drawers_hello(anon, CLONER1, [disk("S1", 1), disk("S2", 2, link=1.5, crc=112)])
     r = deploy.post("/api/console/room/start")
     assert r.status_code == 200 and r.json()["warned"] == 1, r.text
     assert room(deploy)["round"]["wave_state"] == "running"
     (detail,) = journal(ctx, "room_precheck_warned")
-    assert f"{CLONER1}:2 link=1.5/6.0" in detail, detail
+    assert f"{CLONER1}:2 crc+12" in detail and "link=" not in detail, detail
 
 
 def test_a_clean_start_writes_no_warning_line(room_server):
@@ -167,11 +172,12 @@ def test_a_clean_start_writes_no_warning_line(room_server):
 
 def test_a_wave_that_starts_by_itself_keeps_the_warning_too(room_server):
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
+    _disk_event(ctx, "S1", 100)
     _open(deploy, target=1, slots=room_slots(room_server["ctx"].conn, {CLONER1: ["S1"]}))
-    drawers_hello(anon, CLONER1, [disk("S1", 1, link=3.0)])
-    drawers_hello(anon, CLONER1, [disk("S1", 1, link=3.0)])   # tick: 1 מוכנה מול יתרה 1
+    drawers_hello(anon, CLONER1, [disk("S1", 1, crc=112)])
+    drawers_hello(anon, CLONER1, [disk("S1", 1, crc=112)])   # tick: 1 מוכנה מול יתרה 1
     assert room(deploy)["round"]["wave_state"] == "running"
-    assert any("link=3.0/6.0" in d for d in journal(ctx, "room_precheck_warned"))
+    assert any("crc+12" in d for d in journal(ctx, "room_precheck_warned"))
 
 
 # --- #65: מי חסר ------------------------------------------------------------

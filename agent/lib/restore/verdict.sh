@@ -115,12 +115,21 @@ _machine_state() {
 DRAWER_GONE_WHY="הכונן נעלם מהמערכת (נשלף או נותק)"   # #2045: also `pulled` -- the local clone's card says so
 
 drawer_lpm_hint() {
-    # #1827: a gone drawer on a cloner whose SATA links did not read back
-    # max_performance (satalpm.sh) -- the slumber is a suspect, said as one.
-    # No record (not a cloner, not set yet) = nothing said, not "fine".
-    _lh=$(cat "$RUN_DIR/sata_lpm" 2>/dev/null) || return 0
-    case "$_lh" in max_performance|none|'') return 0 ;; esac
-    printf ' (מדיניות החשמל של SATA: %s, לא max_performance — ייתכן שהכונן נרדם)' "$_lh"
+    # $1 = disk, $2 = this tick's dmesg. #1827: a gone drawer whose OWN host reads a power-saving
+    # SATA policy (satalpm.sh) -- the slumber is a suspect, said as one. #3107 (metal 13/11): only
+    # that host (not the machine's list), only a policy that saves power (keep_firmware_settings,
+    # unreadable: unknown, not a suspect), and never beside a pull sign (drawer_port_gone: DevExch,
+    # link down) -- the pull wins. No ata port / host / record = nothing said, not "fine".
+    drawer_port_gone "$1" "$2" && return 0
+    _lh_a=$(cut -d'|' -f3 "$RUN_DIR/targets/$1/seen" 2>/dev/null)
+    case "$_lh_a" in ''|*[!0-9]*) return 0 ;; esac
+    _lh_r=$(readlink -f "$SYSROOT/sys/class/ata_port/ata$_lh_a" 2>/dev/null) || return 0
+    for _lh_p in "$_lh_r"/../../host[0-9]*; do
+        _lh_h=${_lh_p##*/}
+        for _lh_e in $(cat "$RUN_DIR/sata_lpm" 2>/dev/null); do
+            case "$_lh_e" in "$_lh_h"=med*|"$_lh_h"=min*) printf ' (חיסכון בחשמל פעיל בחריץ הזה — ייתכן שהכונן נרדם)'; return 0 ;; esac
+        done
+    done
 }
 
 drawer_dead_reason() {
@@ -158,6 +167,18 @@ drawer_port_gone() {
         END { exit !((gone || down) && !media) }' "$2" 2>/dev/null
 }
 
+drawer_dead_mark() {
+    # $1 = disk, $2 = 1 if /sys/block/$1 existed when the stream began, $3 = this
+    # tick's dmesg. 0 = the kernel says it is dead (drawer_dead_reason): it gets
+    # `dead` (and `pulled`), it is heard, and DRAWER_WHY is the operator's sentence.
+    # One answer for the udpcast stream (drawer_watch) and a chunk pass (chunkwatch.sh).
+    DRAWER_WHY=$(drawer_dead_reason "$1" "$2" "$3") || return 1
+    echo "$DRAWER_WHY" > "$RUN_DIR/targets/$1/dead"; [ "$DRAWER_WHY" != "$DRAWER_GONE_WHY" ] || : > "$RUN_DIR/targets/$1/pulled"
+    if [ "$DRAWER_WHY" = "$DRAWER_GONE_WHY" ]; then event_beep pulled; else event_beep failure; fi
+    [ "$DRAWER_WHY" != "$DRAWER_GONE_WHY" ] || DRAWER_WHY="$DRAWER_WHY$(drawer_lpm_hint "$1" "$3")"   # #1827, #3107
+    log "$1: $DRAWER_WHY -- out of the stream now, the other drawers carry on"
+}
+
 drawer_watch() {
     # $1 = the stream's pid, $2 = partition index, $3 = the disks. In the
     # background while the stream runs. A dead drawer gets `dead`, the reader of
@@ -178,15 +199,10 @@ drawer_watch() {
             case "$(cat "$_dw_t/state" 2>/dev/null)" in failed|cancelled) continue ;; esac
             [ -f "$_dw_t/cancel" ] && { cancel_drawer "$_dw_d" live || :; continue; }   # #1386
             case "$_dw_seen" in *" $_dw_d "*) _dw_s=1 ;; *) _dw_s=0 ;; esac
-            _dw_why=$(drawer_dead_reason "$_dw_d" "$_dw_s" "$_dw_k") || continue
-            echo "$_dw_why" > "$_dw_t/dead"; [ "$_dw_why" != "$DRAWER_GONE_WHY" ] || : > "$_dw_t/pulled"
-            if [ "$_dw_why" = "$DRAWER_GONE_WHY" ]; then event_beep pulled; else event_beep failure; fi
-            # #1827: the slumber is a suspect only with no sign of a pull (#2987: Nadav pulled it by hand) -- the detail, never the screen (opsay.sh)
-            [ "$_dw_why" != "$DRAWER_GONE_WHY" ] || drawer_port_gone "$_dw_d" "$_dw_k" || _dw_why="$_dw_why$(drawer_lpm_hint)"
-            log "$_dw_d: $_dw_why -- out of the stream now, the other drawers carry on"
+            drawer_dead_mark "$_dw_d" "$_dw_s" "$_dw_k" || continue
             kill -9 "$(cat "$_dw_t/reader.pid" 2>/dev/null)" 2>/dev/null \
                 || log "WARNING: $_dw_d: its fifo's reader was not stopped -- fanout drops it on its own stall ceiling"
-            fail_written_target "$_dw_d" "מחיצה $2: $_dw_why"
+            fail_written_target "$_dw_d" "מחיצה $2: $DRAWER_WHY"
         done
         if command -v drawer_stall_tick > /dev/null; then drawer_stall_tick "$3"; fi   # #2988: standing is said in seconds (stall.sh; display only)
     done
@@ -243,6 +259,7 @@ cancel_drawer() {
     case "$(cat "$_cd_t/state" 2>/dev/null)" in failed|cancelled) return 1 ;; esac
     echo "בוטל באמצע הכתיבה" > "$_cd_t/dead"
     log "$1: cancelled $(cat "$_cd_t/cancel") -- out of the stream, the other drawers carry on"
+    [ ! -f "$_cd_t/catchup" ] || drawer_catchup_stop "$1"   # #3112: a drawer completing in the background is stopped first (drawerback.sh)
     if [ "${2:-}" = live ]; then
         _cd_z=$(cat "$_cd_t/reader.pid" 2>/dev/null)
         { [ -n "$_cd_z" ] && kill -9 "$_cd_z" 2>/dev/null; }             || log "WARNING: $1: its fifo's reader was not stopped -- fanout drops it on its own stall ceiling"

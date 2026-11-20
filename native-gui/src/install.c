@@ -135,6 +135,8 @@ static void parse_disk(InstallState *s,char *value){
         if(!strcmp(part,"model"))snprintf(d->model,sizeof d->model,"%s",eq);else if(!strcmp(part,"size"))d->size_bytes=strtoull(eq,NULL,10);
         else if(!strcmp(part,"bus"))snprintf(d->bus,sizeof d->bus,"%s",eq);else if(!strcmp(part,"removable"))d->removable=truth(eq);
         else if(!strcmp(part,"smart"))snprintf(d->smart,sizeof d->smart,"%s",eq);   /* #3007 */
+        else if(!strcmp(part,"serial"))snprintf(d->serial,sizeof d->serial,"%s",eq);else if(!strcmp(part,"slotname"))snprintf(d->slotname,sizeof d->slotname,"%s",eq);   /* #3051 */
+        else if(!strcmp(part,"slot")){long n=strtol(eq,NULL,10);d->slot=n>0&&n<=99?(int)n:0;}   /* #3051: a number outside the mapping's range is no slot */
         else if(!strcmp(part,"has"))snprintf(d->has,sizeof d->has,"%s",eq);else if(!strcmp(part,"iso"))d->iso=truth(eq);}
     if(d->iso)return;   /* #2968: the medium being installed from is not a place to install to -- not listed at all */
     if(strstr(d->has,"imagesrv")||strstr(d->has,"ImageSrv"))s->existing_disk=s->ndisks;
@@ -190,8 +192,8 @@ static void arm_reboot(InstallState *s,double now){s->reboot_at=now+INSTALL_AUTO
 static void cancel_reboot(InstallState *s){s->reboot_at=0;s->reboot_left=0;}
 
 void install_demo(App *a,int view){InstallState *s=&a->install;memset(s,0,sizeof *s);s->active=s->demo=1;s->view=view;s->disk=0;s->disk_ack=1;s->existing_disk=1;s->ndisks=2;
-    s->disks[0]=(InstallDisk){"/dev/sda","VMware Virtual disk","scsi","gpt:2 partitions (ext4, vfat)",64424509440ULL,0,0,""};
-    s->disks[1]=(InstallDisk){"/dev/nvme0n1","Samsung SSD 980","nvme","imagesrv installation",1073741824000ULL,0,0,""};
+    s->disks[0]=(InstallDisk){"/dev/sda","VMware Virtual disk","scsi","gpt:2 partitions (ext4, vfat)",64424509440ULL,0,0,"","","",0};
+    s->disks[1]=(InstallDisk){"/dev/nvme0n1","Samsung SSD 980","nvme","imagesrv installation",1073741824000ULL,0,0,"","","",0};
     s->virt=INSTALL_VIRT_METAL;s->raid=RAID_1;   /* #1989: the RAID row on screen */
     s->nnics=3;s->nic=0;s->secondary=1;
     s->nics[0]=(InstallNic){"ens18","Intel I219-LM","52:54:00:aa:10:01","מחובר","10.44.10.37/24","DHCP · שער 10.44.10.254","10.44.10.37","255.255.255.0","10.44.10.254","10.44.10.2"};

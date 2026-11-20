@@ -736,8 +736,15 @@ def _entry_local() -> str:
 
 def _retry_load(command: str, label: str, *, fallback_local: bool) -> str:
     """GRUB 2.12-compatible retry loop for one HTTP boot payload."""
-    failure = """        try_local""" if fallback_local else (
-        """        echo "This Legacy BIOS cloning machine has no local system to start."
+    # #3155: "Falling back" רק כשיש לאן. למשכפל אין מערכת מקומית, ולכן אין
+    # הבטחה ואין השהיה -- ישר ההודעה שאין מה להפעיל.
+    if fallback_local:
+        failure = """        echo "Falling back after a short delay."
+        sleep --interruptible 3
+        try_local"""
+    else:
+        failure = (
+            """        echo "This Legacy BIOS cloning machine has no local system to start."
         echo "Nothing will be started. Fix the server or network, then power-cycle it."
 """ + _STAY_POWERED_ON)
     variable = f"imagesrv_{label}_loaded"
@@ -752,8 +759,6 @@ def _retry_load(command: str, label: str, *, fallback_local: bool) -> str:
     done
     if [ -z "${variable}" ]; then
         echo "ImageSrv: {label} could not be loaded after 3 attempts."
-        echo "Falling back after a short delay."
-        sleep --interruptible 3
 {failure}
     fi"""
 
