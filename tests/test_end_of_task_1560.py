@@ -524,13 +524,14 @@ def idle(tmp_path: Path, setup: dict[str, tuple[str, int]]) -> list[str]:
     run = tmp_path / "run"
     (run / "gui").mkdir(parents=True)
     now = int(time.time())
-    files = {"idle.since": (f"{now - 400}\n", 400), **setup}
+    (run / "uptime").write_text("100000.50 0.00" + chr(10), encoding="utf-8", newline=chr(10))   # #3681: idle.since is uptime
+    files = {"idle.since": (f"{100000 - 400}\n", 400), **setup}
     for name, (text, age) in files.items():
         f = run / name
         f.write_text(text, encoding="utf-8", newline="\n")
         os.utime(f, (now - age, now - age))
     out = bash(f"export RUN_DIR={q(run)} GUI_DIR={q(run / 'gui')} LOG_FILE={q(run / 'agent.log')} "
-               f"IDLE_POWEROFF_S=300 IDLE_WARN_S=3 D_SESSION_STATE=none D_TASK=null; "
+               f"IDLE_POWEROFF_S=300 IDLE_WARN_S=3 D_SESSION_STATE=none D_TASK=null UPTIME_FILE={q(run / 'uptime')}; "
                f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/idle.sh; "
                'power_check() { return 0; }; sleep() { :; }; '
                'safe_poweroff() { echo "POWEROFF" >> "$RUN_DIR/trace"; return 0; }; '

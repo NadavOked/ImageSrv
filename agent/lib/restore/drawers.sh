@@ -66,7 +66,7 @@ restore_partition_drawers() {
     # השאר — כמו כל כשל אחר של מגירה בודדת.
     if is_swap_partition "$_fs"; then
         for _d in $_disks; do
-            case "$(cat "$RUN_DIR/targets/$_d/state")" in failed|cancelled) continue ;; esac
+            case "$(cat "$RUN_DIR/targets/$_d/state")" in failed|cancelled) continue ;; esac; [ ! -e "$RUN_DIR/targets/$_d/catchup" ] || continue   # drawerback.sh makes its own
             if assert_target "$_d" && make_swap "$(partition_node "$_d" "$_idx")" "$_uuid"; then   # #2434
                 target_partition_done "$_d"
             else
@@ -76,7 +76,7 @@ restore_partition_drawers() {
         _any_alive "$_disks"
         return $?
     fi
-
+    [ "$_mode" != chunk ] || { chunk_partition_drawers "$_server" "$_image" "$_idx" "$_fs" "$_file" "$_manifest" $_disks; return; }   # #2533 (chunkrecv.sh)
     drawer_tune "$_idx" $_disks; _how="$DRAWER_DECODE"   # drawerfeed.sh: one decoder or one per drawer
     _feeds=""
     for _d in $_disks; do
@@ -223,14 +223,14 @@ run_restore_drawers() {
     # בדיקת הכתיבה והמהירות (writecheck.sh) — כל ההכרעות לפני הטבלה הראשונה.
     # רק מגירות הסבב מגיעות לכאן (#1275). מגירה שנפסלה אינה עוצרת את השאר.
     # shellcheck disable=SC2086 # the disk list is a word list on purpose
-    write_check_round "$_manifest" $_disks
+    RESUME_REST=$_disks; if command -v resume_round > /dev/null 2>&1; then resume_round "$_mode" "$_server" "$_image" "$_manifest" $_disks; fi; write_check_round "$_manifest" $RESUME_REST   # #2528: a drawer that resumes is not test-written (resume.sh)
     # #1704: all tables at once, a job per drawer (a writing sgdisk sleeps 1s, gdisk DiskSync:
     # ~11s a drawer in a row, metal 17/10). A job fails only its drawer; PREP_TAG = its own
     # scratch files.
     _tjobs=""
     for _d in $_disks; do
         case "$(cat "$RUN_DIR/targets/$_d/state")" in failed|cancelled) continue ;; esac
-        ( PREP_TAG=".$_d"; discard_before_restore "$_d"; [ $? != 2 ] || { fail_written_target "$_d" "ה-TRIM לא הסתיים תוך $DISCARD_MAX_S שניות"; exit 0; }   # #1969
+        ( PREP_TAG=".$_d"; resume_held "$_d" 2>/dev/null || discard_before_restore "$_d"; [ $? != 2 ] || { fail_written_target "$_d" "ה-TRIM לא הסתיים תוך $DISCARD_MAX_S שניות"; exit 0; }   # #1969
         stage_at "$_d" gpt 2>/dev/null   # #1883: the stage timeline (datareport.sh)
         if ! apply_gpt "$_d" "$_manifest"; then
             fail_written_target "$_d" "${PLAN_ERROR:-לא הצלחנו לכתוב את טבלת המחיצות}"
@@ -238,10 +238,9 @@ run_restore_drawers() {
         fi
         # ההרחבה קורית לפני הזרם, בדיוק כמו בתחנה בודדת: מחיצת swap
         # נגררת עוברת לזנב עכשיו כדי שלא תחסום את מה שלפניה (#46).
-        # מגירה שההרחבה נכשלה בה חוזרת לטבלת המניפסט ונכתבת בגודל המקורי.
+        # מגירה שההרחבה נכשלה בה חוזרת לטבלת המניפסט -- או נכשלת בשם, אם מחיצות מכווצות היו מגיעות כך (#2405).
         stage_at "$_d" expand 2>/dev/null; if ! expand_last "$_d" "$_manifest"; then
-            log "WARNING: expansion failed on $_d -- writing at the image's own size"
-            apply_gpt "$_d" "$_manifest" \
+            expand_fallback "$_d" "$_manifest" \
                 || fail_written_target "$_d" "${PLAN_ERROR:-לא הצלחנו לכתוב את טבלת המחיצות}"
         fi ) &
         _tjobs="$_tjobs $_d:$!"
@@ -269,7 +268,7 @@ run_restore_drawers() {
         else
             log "partition $_i ($_role): feeding $(echo "$_disks" | wc -w) drawers"
         fi
-        round_closed_fail "$_disks" && break   # 17/10: the server closed the round -- feed no more
+        drawer_back before "$_i" "$_server" "$_image" $_disks; round_closed_fail "$_disks" && break   # drawerback.sh: a drawer back before it; 17/10: the server closed the round -- feed no more
         stage_at "$_disks" "p$_i" 2>/dev/null; restore_partition_drawers "$_mode" "$_server" "$_image" \
             "$_i" "$_fs" "$_f" "$_sha" "$_uuid" $_disks || break
         _written=$((_written + 1))
@@ -280,7 +279,7 @@ run_restore_drawers() {
         [ "$_final" = "failed" ] && return 1; return 0
     fi
 
-    cancel_pending "$@"; echo "verifying" > "$RUN_DIR/state"   # #1386: one asked after the last partition
+    drawer_back all "" "$_server" "$_image" $_disks; cancel_pending $_disks; echo "verifying" > "$RUN_DIR/state"   # drawerback.sh, before the read-back; #1386: one asked after the last partition
     # shellcheck disable=SC2086 # #1805: what each disk holds, before the filesystem grows
     stage_at "$_disks" readback 2>/dev/null; RB_SERVER=$_server RB_IMAGE=$_image readback_drawers "$_manifest" $_disks   # one fails alone; _machine_state below
     [ "$?" -ne 127 ] || _fail_alive "$_disks" "האימות אחרי הכתיבה לא רץ — readback.sh לא נטען"   # missing is not "verified"

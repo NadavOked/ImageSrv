@@ -1,0 +1,123 @@
+# order-and-repeat -- the whole suite every night in a random order, each test three
+# times, to find the tests that depend on order or on timing.
+#
+# Why (14/11): four tests failed once under load and passed alone, in one day:
+# #3176, two in #3179, and test_lc_hello_1367. A test that fails and then passes is
+# not green (#3136); it is waiting for a release gate to fail. tests.yml runs each
+# test once, in file order -- it cannot see them.
+#
+#   pytest-randomly 5.1.0 (MIT)  a new order every night; the seed is the run id, in
+#                                the summary, so a night can be replayed exactly.
+#   pytest-repeat 0.9.4 (MPL-2.0) every test --count 3 times.
+#
+# A report, not a gate: the job is green when the run happened, and lists every
+# test that failed at least once (tests/flaky_report.py). Each of them gets an Issue,
+# by hand, in the private repository. Red only when the run proves nothing: the
+# canary did not fail, or a shard ran no test (principle 5).
+#
+# Free: GitHub-hosted runners on a public repository; both plugins from PyPI.
+# Runs only in the public repository (no minutes in the private one).
+
+name: order-and-repeat
+
+on:
+  schedule:
+    - cron: "0 2 * * *"           # after nightly (01:00) and fuzz (01:30), UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shard:
+    name: random order x3, shard ${{ matrix.shard }}/4
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      SHARD: ${{ matrix.shard }}
+      SEED: ${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      # The same list as nightly.yml; a tool that is missing here is a skip, not a
+      # failure -- this run looks for order and timing, not for the environment.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r server/requirements.txt pytest httpx pytest-xdist==3.6.1 \
+            pytest-randomly==5.1.0 pytest-repeat==0.9.4
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libhivex-dev libhivex-bin dash busybox nodejs libpango1.0-dev libcairo2-dev libdrm-dev libharfbuzz-dev libfribidi-dev fonts-ibm-plex fontconfig libvncserver-dev \
+            partclone gdisk ntfs-3g dosfstools e2fsprogs pv jq curl mtools grub-pc-bin syslinux syslinux-common cpio zstd >/dev/null
+
+      # Two planted tests: the first fails whenever it runs after the second. In file
+      # order, once each, they pass; shuffled and repeated five times they must fail.
+      # If they pass, the plugins did nothing and a clean night means nothing.
+      - name: Random order and repeats can still find a failure (canary)
+        run: |
+          set -euo pipefail
+          c="$RUNNER_TEMP/canary"
+          mkdir -p "$c"
+          printf '%s\n' 'STATE = []' '' \
+            'def test_needs_no_state():' '    assert not STATE' '' \
+            'def test_leaves_state():' '    STATE.append(1)' > "$c/test_order_canary.py"
+          printf '[pytest]\n' > "$c/pytest.ini"
+          python -m pytest -q -p no:cacheprovider -p no:randomly -c "$c/pytest.ini" "$c" \
+            || { echo "::error::the canary fails even in file order -- it is not a canary"; exit 1; }
+          set +e
+          python -m pytest -q -p no:cacheprovider -p randomly -p repeat --randomly-seed=1 --count 5 \
+            -c "$c/pytest.ini" "$c" > "$c/out.log" 2>&1
+          rc=$?
+          set -e
+          tail -3 "$c/out.log"
+          [ "$rc" -eq 1 ] || { echo "::error::shuffled and repeated, the canary gave rc $rc, not 1"; exit 1; }
+
+      - name: The suite, shuffled, each test three times
+        run: |
+          set -o pipefail
+          out="$RUNNER_TEMP/order"
+          mkdir -p "$out"
+          base='not uinput and not vm_it'
+          common=(-q -p no:cacheprovider -p randomly --randomly-seed="$SEED" -p repeat --count 3
+                  -p tools.git.ci_shard --ci-shard "$SHARD/4")
+          set +e
+          python -m pytest tests "${common[@]}" -m "$base and not serial" -n auto --dist load \
+            --junitxml="$out/parallel.xml" < /dev/null > "$out/parallel.log" 2>&1
+          rc1=$?
+          python -m pytest tests "${common[@]}" -m "$base and serial" \
+            --junitxml="$out/serial.xml" < /dev/null > "$out/serial.log" 2>&1
+          rc2=$?
+          set -e
+          tail -n 3 "$out/parallel.log" "$out/serial.log"
+          echo "pytest rc: parallel $rc1, serial $rc2 (1 = a test failed: the report lists it)"
+          # 0 passed, 1 a test failed, 5 nothing collected (shard 2-4 have no serial test).
+          # Anything else -- an interrupted run, an internal error, a usage error -- is no report.
+          for rc in "$rc1" "$rc2"; do
+            case "$rc" in 0|1|5) ;; *) echo "::error::pytest exit $rc: the run itself broke"; exit 1 ;; esac
+          done
+
+      - name: Report (each listed test gets an Issue)
+        run: |
+          files=("$RUNNER_TEMP/order/parallel.xml")
+          [ -s "$RUNNER_TEMP/order/serial.xml" ] && files+=("$RUNNER_TEMP/order/serial.xml")
+          python tests/flaky_report.py "${files[@]}" --seed "$SEED"
+
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: order-and-repeat-${{ matrix.shard }}
+          path: ${{ runner.temp }}/order
+          retention-days: 7
+          if-no-files-found: warn

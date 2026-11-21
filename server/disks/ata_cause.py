@@ -20,6 +20,12 @@ system``), לפני שפקודה הגיעה לדיסק. נמדד ב-D6 (משכפ
 --setro` על מגירה 3 נתן ``dd: error writing '/dev/sda': Operation not
 permitted`` ונרשם ``unclassified``. אדום, כמו SMART שנכשל (smart.sh).
 
+**שליפה גוברת על קו חלש (#3008, ברזל 12/11):** `10B8B`/`Handshk`/`ATA bus error`/
+`interface fatal error` מופיעים **גם** בשליפה — הקו נקטע באמצע פקודה. לכן כשיש
+ראיה חיובית לשליפה (`DevExch`, או הסוכן שראה את `/sys/block/<d>` נעלם), הם
+לבדם אינם "כבל". מה שכן נשאר כבל גם אז הוא ראיה **מלפני** הנפילה: `ICRC` (CRC
+בהעברה) ו-`limiting SATA link speed` (הקרנל מוריד מהירות רק אחרי ניסיונות חוזרים).
+
 עיקרון 5: מה שאינו מתאים לאף דפוס הוא ``unclassified`` — לא ניחוש.
 """
 
@@ -66,6 +72,11 @@ OFFLINE_PHRASES = ("device offline error", "הקרנל סימן את הכונן 
 READONLY_PHRASES = ("Operation not permitted", "Read-only file system")
 WRITE_ERROR_PHRASES = ("periodic fsync failed", "write_error")
 
+#: ראיה לכבל שקדמה לנפילה, ושליפה אינה מייצרת (#3008): CRC בהעברה, והורדת
+#: מהירות הקישור. עם ראיה כזו, גם סימן שליפה אינו מבטל את "כבל".
+CABLE_BEFORE_DROP_PHRASES = ("limiting SATA link speed",)
+CABLE_BEFORE_DROP_FLAGS = frozenset({"ICRC"})
+
 #: הדגלים שבתוך `{ ... }` — מה שהקרנל מדפיס כקבוצה, מופרד ברווחים.
 _BRACED = re.compile(r"\{([^}]*)\}")
 
@@ -104,11 +115,16 @@ def classify(lines: list[str], error: str = "") -> str:
         return "readonly"
     if any(p in text for p in WRITE_ERROR_PHRASES):
         return "write_error"
+    disk_signs = any(p in text for p in DISK_PHRASES) or bool(flags & DISK_FLAGS)
+    pulled = any(p in text for p in REMOVED_AGENT_PHRASES) or bool(flags & REMOVED_FLAGS)
+    before_drop = (any(p in text for p in CABLE_BEFORE_DROP_PHRASES)
+                   or bool(flags & CABLE_BEFORE_DROP_FLAGS))
+    if pulled and not before_drop and not disk_signs:
+        return "removed"          # #3008: קו חלש בשליפה אינו כבל
     if any(p in text for p in CABLE_PHRASES) or flags & CABLE_FLAGS:
         return "cable"
-    if any(p in text for p in DISK_PHRASES) or flags & DISK_FLAGS:
+    if disk_signs:
         return "disk"
-    if (any(p in text for p in REMOVED_AGENT_PHRASES) or flags & REMOVED_FLAGS
-            or (any(p in text for p in OFFLINE_PHRASES) and "exception Emask" not in text)):
+    if pulled or (any(p in text for p in OFFLINE_PHRASES) and "exception Emask" not in text):
         return "removed"
     return "unclassified"

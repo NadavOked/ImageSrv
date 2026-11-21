@@ -13,7 +13,7 @@
 |---|---|---|
 | F1 | קונסולה `8081/tcp` HTTPS, על כרטיס הניהול; השרת אינו בודק מקור | `server/main.py:153` (‏`--console-port` 8081), `server/main.py:167` (‏`--console-host`); `deploy/nftables-rules.sh:195` (פתוח על כרטיס השרתים, בלי `saddr`); `deploy/firewall-rules.md:3-7` ("אין בדיקת כתובת מקור בקוד"); `server/system/health.py:628-631` |
 | F2 | ראשי ← משני `8443/tcp` mTLS | `server/main.py:213` (‏`--interserver-port` 8443); `deploy/nftables-rules.sh:180-183` (במשני: רק `ip saddr` של הראשי); `server/interserver/storage_transfer.py:3-7` (דחיפה על הערוץ המאומת, ‏TLS 1.3); `server/interserver/storage_client.py:486` (‏TLSv1_3 מינימום); `server/interserver/api.py:1396` (המשני מתחבר ל-5900 של מכונה בשביל הראשי) |
-| F3 | משני ← ראשי `8443/tcp` "אתה שם?" | `server/interserver/primary_alive.py:30` (‏`/api/interserver/v1/alive`); `deploy/nftables-rules.sh:184-188`; `docs/guides/server-install.md:239-248` (DNAT באתר הראשי, 8081 לא בין אתרים) |
+| F3 | משני ← ראשי `8443/tcp` "אתה שם?" | `server/interserver/primary_alive.py:30` (‏`/api/interserver/v1/alive`); `deploy/nftables-rules.sh:184-188`; `docs/guides/server-install.md:214-224` (DNAT באתר הראשי, 8081 לא בין אתרים) |
 | F4 | ‏NTP ‏`123/udp` | `installer/lib/finish.sh:86-90` (‏`systemd-timesyncd` מופעל, בלי שרת מוגדר → ברירת המחדל של Debian); `server/system/health.py:190-197` (בדיקת "סנכרון שעון"); `deploy/firewall-rules.md` כלל L4 |
 | F5 | ‏DNS ‏`53` | `installer/lib/finish.sh:101` (‏`servers_dns` באשף); `server/update.py:55-58` ("חומת אש או DNS") |
 | F6 | ‏`github.com:443` לעדכון | `server/update.py:54` (‏`PUBLIC_UPDATE_URL = https://github.com/NadavOked/ImageSrv.git`), `server/update.py:191` (‏`git ls-remote --tags`); `tools/server-upgrade.sh:152` (‏`git fetch --tags`), `tools/server-upgrade.sh:162-164` (אימות חתימה מול `deploy/release-signers`); `deploy/firewall-rules.md` כלל L5 |
@@ -35,7 +35,7 @@
 
 | מה | מקור |
 |---|---|
-| DHCP ‏`67/68` | `deploy/nftables-rules.sh:162-163`; `server/system/health.py:592-612`; כבוי בהתקנה: `docs/guides/server-install.md:313-320` |
+| DHCP ‏`67/68` | `deploy/nftables-rules.sh:162-163`; `server/system/health.py:592-612`; כבוי בהתקנה: `docs/guides/server-install.md:296-304` |
 | TFTP ‏`69` + conntrack helper | `deploy/nftables-rules.sh:164-165`; `deploy/firewall-rules.md` §3 (אזהרת `nf_conntrack_tftp`); `server/system/health.py:574` |
 | HTTP ‏`8080` לתחנות, לא מוצפן | `server/main.py:149`; `deploy/nftables-rules.sh:166-167`; `README.md:290-296` (סיסמת משתמש ההפצה גלויה) |
 | מולטיקאסט `9000-9001/udp`, ‏TTL 1 | `server/rounds/sender.py:37,41` (‏`PRODUCTION_PORTBASE = 9000`, ‏portbase ו-portbase+1); `server/rounds/sender.py:659-685` (‏`udp-sender` בלי `--ttl`); `deploy/nftables-rules.sh:35,168-169`; `README.md:248-249`; מחשב הבנייה כמקור: `agent/lib/capture/directsend.sh:36` |

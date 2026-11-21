@@ -71,7 +71,7 @@ target_bind() {
     # $1 = disk. מה שיושב בשם הזה עכשיו -- מ-target_init, ומשם בלבד. ותאום שיושב כאן עכשיו (#2448).
     mkdir -p "$RUN_DIR/targets/$1" && _target_id "$1" > "$RUN_DIR/targets/$1/bound" || return 1
     rm -f "$RUN_DIR/targets/$1/twin"; _tb_tw=$(target_twin "$1") && printf '%s\n' "$_tb_tw" > "$RUN_DIR/targets/$1/twin"
-    return 0
+    if command -v target_wwn_bind >/dev/null 2>&1; then target_wwn_bind "$1"; fi   # #2529: its WWN beside `bound`, and one JSON line of what was approved (targetwwn.sh)
 }
 
 # --- #2448: serial זהה מהמפעל -------------------------------------------------------
@@ -123,9 +123,9 @@ target_foreign() {
 assert_target() {
     # $1 = disk. לפני כל שלב הרסני. 0 = זה הדיסק שנבחר; 1 = היעד נכשל בשמו ולא נכתב.
     target_unique "$1" || return 1   # #2448: a twin here -- "the same" would not tell them apart
-    target_same "$1" && return 0
-    target_foreign "$1" "הדיסק שבשם $1 אינו הדיסק שנבחר לכתיבה (הוחלף או נשלף) — לא נכתב עליו"
-    return 1
+    target_same "$1" || { target_foreign "$1" "הדיסק שבשם $1 אינו הדיסק שנבחר לכתיבה (הוחלף או נשלף) — לא נכתב עליו"; return 1; }
+    command -v target_wwn_same >/dev/null 2>&1 || { log "$1: WWN not compared -- targetwwn.sh is not loaded (#2529)" >&2; return 0; }
+    target_wwn_same "$1"   # #2529: stricter only -- another WWN fails by name; none on a side is said, not refused
 }
 
 ata_log_json() {
@@ -211,6 +211,10 @@ fail_written_target() {
     # ‏capture.sh נשאר על target_set: דיסק המקור של קליטה אינו יעד.
     _was=$(cat "$RUN_DIR/targets/$1/state" 2>/dev/null)
     target_set "$1" "failed" "$2"; [ "$_was" = failed ] || stage_at "$1" end 2>/dev/null   # #1883: its timeline ends here
+    # #2067 (mockup 08: "מגירה נכשלה — כשל באמצע"): a drawer that fails while it is written is heard now, not at the
+    # round's end. One the kernel named dead was heard by drawer_dead_mark (pulled / failure); one refused before a
+    # write (waiting) or failed in its read-back (verifying -- "בסוף" in the mockup) is the end's tune.
+    if [ "$_was" = writing ] && [ ! -e "$RUN_DIR/targets/$1/dead" ] && command -v event_beep >/dev/null 2>&1; then event_beep failmid; fi
     # ‏#1429: בלי write_started לא נוסתה כתיבה — כשל תוכנה (תוכנית שנדחתה),
     # לא של הכונן. בלי ראיה השרת אינו רושם disk_failure נגד כונן תקין.
     # ‏#1598: ואחרי כשל של הזרם (פג, נקטע, sha) -- בלי ata_log גם השרת אינו רושם.
@@ -233,8 +237,12 @@ wipe_written_gpt() {
     _written_serial=$(cat "$RUN_DIR/targets/$1/write_started" 2>/dev/null); _wsn=$(disk_serial "$1")
     if [ -z "$_written_serial" ] || [ "$_wsn" != "$_written_serial" ] || ! target_same "$1"; then
         log "WARNING: $1: GPT NOT wiped after $2 -- not provably the disk this run wrote (serial then '$_written_serial', now '$_wsn'); it keeps a partial image"; return 1; fi
-    if sgdisk --zap-all "$DEVROOT/$1" >> "$LOG_FILE" 2>&1; then
-        blockdev --rereadpt "$DEVROOT/$1" >> "$LOG_FILE" 2>&1 || :
+    # #3098: a dying disk can hold both in D state -- capped (waits.sh), never waited for; "did not end" is not "wiped"
+    _wg_o="$RUN_DIR/targets/$1/wipe.out"; capped_run "$WAIT_HELPER_S" "$_wg_o" sgdisk --zap-all "$DEVROOT/$1"; _wg_rc=$?
+    cat "$_wg_o" >> "$LOG_FILE" 2>/dev/null
+    [ "$CAPPED_TIMED_OUT" = 0 ] || { log "WARNING: $1: the GPT wipe did not end within ${WAIT_HELPER_S}s after $2 -- not wiped"; return 1; }
+    if [ "$_wg_rc" = 0 ]; then
+        capped_run "$WAIT_HELPER_S" /dev/null blockdev --rereadpt "$DEVROOT/$1" || :
         log "$1: wiped primary and backup GPT after $2"
         return 0
     fi
@@ -248,12 +256,13 @@ disk_failures_refresh() {
     # קובץ תשובה באמצע כתיבה (‏send_hello) או jq שנפל אינם "אין כשלים" —
     # הקובץ הקודם נשאר (עיקרון 5). 0 = רוענן.
     command -v disk_f1_refresh >/dev/null 2>&1 && { disk_f1_refresh || :; }   # #1858: "נצפה F1" לפי serial, מאותה תשובה
-    _dr_n="$RUN_DIR/disk_failures.next"
+    # #3721: a name of its own per call (the kiosk and the agent refresh together); a failed mktemp is "not read"
+    _dr_n=$(mktemp "$RUN_DIR/disk_failures.XXXXXX" 2>> "$LOG_FILE") && [ -n "$_dr_n" ] || return 1
     json_get_join "$RUN_DIR/response.json" \
         '["ok"] + ((.disk_failures // []) | map("\(.serial // "")|\(.port // "")|\(.cause // "")"))' \
         > "$_dr_n" 2>/dev/null
     [ "$(head -n 1 "$_dr_n" 2>/dev/null)" = ok ] || { rm -f "$_dr_n"; return 1; }
-    mv "$_dr_n" "$RUN_DIR/disk_failures"
+    mv "$_dr_n" "$RUN_DIR/disk_failures" || { rm -f "$_dr_n"; return 1; }
 }
 
 disk_failure_cause() {

@@ -70,23 +70,29 @@ LIBS = ("common", "jsonq", "waits", "sysinfo", "diskinfo", "progress", "failmark
 SETUP = r'''
 set -eu
 D=$1; ID=$2
+# #3908, #3943: a loop device is a file, a solid one. A CI runner's kernel reports some of them rotational=1, and the agent
+# refuses an HDD target by the HDD policy -- the fixture says what its disks are (the dm tables are made after their
+# backing loops, so they inherit it; the explicit write is for the ones that stack on nothing), and reads it back.
+nonrot() { _f=/sys/block/$(basename "$(readlink -f "$1")")/queue/rotational
+    echo 0 > "$_f" && [ "$(cat "$_f")" = 0 ]; }
 truncate -s 256M "$D/good.img"; truncate -s 64M "$D/back.img"
 head -c 67108864 /dev/urandom > "$D/unsel.img"
 mkdir -p "$D/full"; mount -t tmpfs -o size=6m "wc$ID" "$D/full"; truncate -s 64M "$D/full/full.img"
-for n in good unsel back; do echo "$n $(losetup -f --show "$D/$n.img")" >> "$D/devs"; done
-echo "full $(losetup -f --show "$D/full/full.img")" >> "$D/devs"
+for n in good unsel back; do echo "$n $(losetup -f --show "$D/$n.img")" >> "$D/devs"; nonrot "$(tail -n 1 "$D/devs" | cut -d' ' -f2)"; done
+echo "full $(losetup -f --show "$D/full/full.img")" >> "$D/devs"; nonrot "$(tail -n 1 "$D/devs" | cut -d' ' -f2)"
 bk=$(awk '$1 == "back" { print $2 }' "$D/devs")
 printf '0 65536 linear %s 0\n65536 32768 error\n98304 32768 linear %s 98304\n' "$bk" "$bk" \
     | dmsetup create "wcerr$ID"
-echo "err /dev/mapper/wcerr$ID" >> "$D/devs"
+echo "err /dev/mapper/wcerr$ID" >> "$D/devs"; nonrot "/dev/mapper/wcerr$ID"
 echo '0 131072 zero' | dmsetup create "wczero$ID"
-echo "zero /dev/mapper/wczero$ID" >> "$D/devs"
+echo "zero /dev/mapper/wczero$ID" >> "$D/devs"; nonrot "/dev/mapper/wczero$ID"
 # #1805 (CLR-02): 96MiB reported, 32MiB real -- three segments onto one backing
 truncate -s 32M "$D/wrapback.img"; echo "wrapback $(losetup -f --show "$D/wrapback.img")" >> "$D/devs"
+nonrot "$(tail -n 1 "$D/devs" | cut -d' ' -f2)"
 wb=$(awk '$1 == "wrapback" { print $2 }' "$D/devs")
 printf '0 65536 linear %s 0\n65536 65536 linear %s 0\n131072 65536 linear %s 0\n' "$wb" "$wb" "$wb" \
     | dmsetup create "wcwrap$ID"
-echo "wrap /dev/mapper/wcwrap$ID" >> "$D/devs"
+echo "wrap /dev/mapper/wcwrap$ID" >> "$D/devs"; nonrot "/dev/mapper/wcwrap$ID"
 '''
 
 TEARDOWN = r'''

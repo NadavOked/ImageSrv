@@ -501,7 +501,7 @@ def test_the_switch_still_turns_learning_off(conn):
     _seed(conn, "482m", loss=0.0147, wall=375)
     db.set_setting(conn, drive_rates.SETTING, "false")
     got = _next(conn)
-    assert got["basis"] == "disabled" and got["max_bitrate"] == "600m"
+    assert got["basis"] == "disabled" and got["max_bitrate"] == "900m"     # #3036: the fixed ceiling
 
 
 def test_the_ceiling_still_stops_the_climb(conn):

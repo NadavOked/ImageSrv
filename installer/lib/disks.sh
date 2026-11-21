@@ -116,8 +116,9 @@ print_inventory() {
         [ "$_pi_hrc" -eq 0 ] || fail inventory-blkid "could not inspect contents of /dev/$_pi_name"
         _pi_iso=0; disk_is_iso "$_pi_name" && _pi_iso=1
         _pi_smart=unknown; [ "$_pi_iso" -eq 1 ] || _pi_smart=$(disk_smart "$_pi_name")
-        printf 'disk=/dev/%s|model=%s|size=%s|bus=%s|removable=%s|has=%s|iso=%s|smart=%s\n' \
-            "$_pi_name" "$_pi_model" "$_pi_size" "$_pi_bus" "$_pi_rm" "$_pi_has" "$_pi_iso" "$_pi_smart"
+        _pi_id=; [ "$_pi_iso" -eq 1 ] || _pi_id="$(disk_serial_field "$_pi_name")$(disk_slot_fields "$_pi_name")"   # #3051
+        printf 'disk=/dev/%s|model=%s|size=%s|bus=%s|removable=%s|has=%s|iso=%s|smart=%s%s\n' \
+            "$_pi_name" "$_pi_model" "$_pi_size" "$_pi_bus" "$_pi_rm" "$_pi_has" "$_pi_iso" "$_pi_smart" "$_pi_id"
     done
 }
 

@@ -118,10 +118,28 @@ def test_the_agent_sets_it_once_the_role_is_known():
     assert "sata_lpm_cloner" in loop
 
 
+def drawer_on_host(tmp_path: Path, disk: str = "sda", ata: int = 1, host: int = 0) -> None:
+    """The drawer's identity as target_init kept it (serial|port|ata_port) and sysfs's ataN -> hostM
+    (/sys/class/ata_port/ataN -> .../ataN/ata_port/ataN, with the scsi host beside it). #3107."""
+    run = tmp_path / "run"
+    (run / "targets" / disk).mkdir(parents=True, exist_ok=True)
+    (run / "targets" / disk / "seen").write_text(f"SER-{disk}|{ata}|{ata}\n", encoding="utf-8", newline="\n")
+    port = tmp_path / f"root/sys/devices/pci0000:00/0000:00:1f.2/ata{ata}"
+    (port / "ata_port" / f"ata{ata}").mkdir(parents=True, exist_ok=True)
+    (port / f"host{host}").mkdir(exist_ok=True)
+    link = tmp_path / f"root/sys/class/ata_port/ata{ata}"
+    link.parent.mkdir(parents=True, exist_ok=True)
+    if not link.is_symlink():
+        try:
+            os.symlink(port / "ata_port" / f"ata{ata}", link)
+        except OSError:
+            pytest.skip("no symlinks here (the dev workstation) -- the lab runs it")
+
+
 def _watch(tmp_path: Path, recorded: str | None) -> str:
     """drawer_watch over one pulled drawer; returns the sentence it failed it with."""
     run = tmp_path / "run"
-    (run / "targets/sda").mkdir(parents=True)
+    drawer_on_host(tmp_path)
     (run / "targets/sda/state").write_text("writing\n", encoding="utf-8", newline="\n")
     if recorded is not None:
         (run / "sata_lpm").write_text(recorded + "\n", encoding="utf-8", newline="\n")
@@ -141,9 +159,9 @@ def _watch(tmp_path: Path, recorded: str | None) -> str:
 
 
 def test_a_pulled_drawer_names_a_policy_that_was_not_max_performance(tmp_path):
-    why = _watch(tmp_path, "host1=med_power_with_dipm")
+    why = _watch(tmp_path, "host0=med_power_with_dipm")    # the drawer's own host (#3107)
     assert why.startswith("מחיצה 1: הכונן נעלם מהמערכת")   # server/disks/ata_cause.py: still "removed"
-    assert "host1=med_power_with_dipm" in why
+    assert "ייתכן שהכונן נרדם" in why and "host" not in why   # Hebrew, not the raw string
 
 
 @pytest.mark.parametrize("recorded", ["max_performance", "none", None])

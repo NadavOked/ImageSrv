@@ -156,7 +156,10 @@ def pair_begin(conn, handles: dict, peer: TlsPeer, body: dict, *,
 
 
 def _sweep_handles(handles: dict, now: datetime) -> None:
-    for hid in [h for h, v in handles.items() if v["expires_at"] <= now]:
+    # #3752: handle לא חי יותר מ-`HANDLE_TTL_SECONDS`; תפוגה רחוקה מזה = השעון חזר אחורה.
+    # נמחק (המשני מתחיל pair-begin מחדש). קפיצה קדימה מוחקת מוקדם — כיוון בטוח.
+    limit = timedelta(seconds=HANDLE_TTL_SECONDS + 60)
+    for hid in [h for h, v in handles.items() if v["expires_at"] <= now or v["expires_at"] - now > limit]:
         del handles[hid]
 
 

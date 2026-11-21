@@ -15,16 +15,16 @@
 ~2ש' לכל אורך המשימה, גם בזמן שאלת הכיווץ) ובסוף כל העלאה — ובקליטה גם ה-mtime של
 קבצי אזור הביניים, שזז עם כל בייט שמגיע (העלאה של מחיצה גדולה נמשכת דקות). אף
 קורא אינו כותב `updated_at` של משימה. חותמת שאינה נקראת אינה "שקט": לא נמדד, ולא
-מכריזים (אותה הכרעה כמו `pulls._failure` ו-`room._mark_lost`).
+מכריזים (אותה הכרעה כמו K-SILENT של המשיכות ו-K-LOST של הגל, `brain.silence`).
 
 **מה לא נסגר כאן:** `pending` (מפעיל רשאי להזמין קליטה ממחשב כבוי — #1576),
 `verifying` (האימות של השרת עצמו), ומשימה שמכונה אותחלה באמצעה וחזרה בתוך
-`SILENT_SECONDS` — `active_task` מחזיר לה אותה כרגיל. וקפיצת שעון קיר אינה שקט:
+תקרת השקט (`silence.SILENT_S`, 600 ש') — `active_task` מחזיר לה אותה כרגיל. וקפיצת שעון קיר אינה שקט:
 `clockstep.rebase` מזיז גם את `updated_at` של משימות `running` (#1947).
 
 **ושקט של השרת אינו שקט של המכונה.** שרת שהיה למטה עשר דקות (עדכון, אתחול) לא
 שמע איש — וקליטה או מקור חיים ידווחו שוב שניות אחרי שהוא עונה. לכן השקט נמדד
-מ-`max(updated_at, עליית השרת)`: עד `SILENT_SECONDS` אחרי העלייה שום משימה אינה
+מ-`max(updated_at, עליית השרת)`: עד תקרת השקט אחרי העלייה שום משימה אינה
 נסגרת כאן. העלייה נמדדת בשעון שאינו קופץ (`clockstep._mono`), ולכן גם קפיצת שעון
 אינה מקצרת אותה.
 
@@ -40,17 +40,15 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from server.brain import silence
 from server.core.tasks import staging_dir
 from server.db import _write_lock, journal, now_iso, update_one, writing
 from server.system import clockstep
 
 log = logging.getLogger("imagesrv.silent_tasks")
 
-#: מעל כמה שניות בלי דיווח ובלי בייט חדש משימה `running` נסגרת `failed`. אותו
-#: נימוק כמו `pulls.SILENT_SECONDS` (#1573): הסוכן מדווח כל ~2ש', דיווח בודד עד
-#: ~40ש' (curl --max-time 10 --retry 3), ואתחול של מכונה שחוזרת ל-PXE באמצע
-#: משימה לוקח דקות — והיא אמורה לקבל את המשימה בחזרה. נגזר, לא נמדד.
-SILENT_SECONDS = 600
+#: #2905, #3657: מעל כמה שניות בלי דיווח ובלי בייט חדש משימה `running` נסגרת `failed` -- 600 ש', ההשוואה וחסד העלייה של השרת --
+#: הוא החלטה של המוח (`brain.silence.judge_task`, כלל K-SILENT). כאן נאסף הרגע האחרון שהמכונה הראתה חיים, ומתבצעת התוצאה.
 
 
 def _parse(stamp: object) -> datetime | None:
@@ -84,22 +82,28 @@ def _last_sign_of_life(row: sqlite3.Row, library_root: Path) -> datetime | None:
 
 def sweep(conn: sqlite3.Connection, store, library_root: str | Path, up_since: float,
           now: datetime | None = None) -> list[str]:
-    """סוגר כל משימה `running` ששקטה מעל `SILENT_SECONDS`. מחזיר את המזהים שנסגרו.
+    """סוגר כל משימה `running` ששקטה. מחזיר את המזהים שנסגרו.
+
+    **#3657: ההחלטה (התקרה, ההשוואה וחסד העלייה של השרת) היא של המוח** --
+    `brain.silence.judge_task`, K-SILENT -- נרשמת ב-`brain_decisions` עם הראיות
+    לפני הסגירה והתוצאה אחריה. כאן נאסף הרגע האחרון שהמכונה הראתה חיים, ומתבצעת
+    התוצאה. אין החלטה מהמוח = המשימה לא נסגרת (עיקרון 5).
 
     `up_since` — מתי השרת התחיל לענות, בשעון של `clockstep._mono`."""
     now = now or datetime.now(timezone.utc)
     clockstep.guard(conn, store, now)              # #1947: before any stamp is read
-    if clockstep._mono() - up_since <= SILENT_SECONDS:
+    if silence.silent_task_grace(clockstep._mono() - up_since):
         return []                                  # the server was the silent one
     root = Path(library_root)
     closed: list[str] = []
     for row in conn.execute(
             "SELECT id, mac, type, updated_at FROM tasks WHERE state = 'running'").fetchall():
-        last = _last_sign_of_life(row, root)
-        if last is None or (now - last).total_seconds() <= SILENT_SECONDS:
+        call = silence.decide_task(conn, task_id=row["id"], mac=row["mac"], task_type=row["type"],
+                                   last=_last_sign_of_life(row, root), now=now)
+        if call is None or call.verdict != silence.FAIL_SILENT:
             continue
-        reason = (f"המכונה הפסיקה לדווח — אין דיווח ואין בייטים חדשים מאז"
-                  f" {last.astimezone().strftime('%H:%M')} (מעל {SILENT_SECONDS // 60} דקות)")
+        reason = call.reason
+        rows = silence.record(conn, [call], round_id=row["id"], entity_kind="machine")
         # מותנה בחותמת שנקראה: דיווח שהגיע בינתיים מנצח (#54: update_one משחרר נעילה).
         with _write_lock, writing(conn):
             changed = update_one(
@@ -109,7 +113,9 @@ def sweep(conn: sqlite3.Connection, store, library_root: str | Path, up_since: f
                 (reason, now_iso(), row["id"], row["updated_at"]),
             )
         if not changed:
+            silence.settle(conn, rows.get(row["mac"]), "דיווח הגיע בין ההחלטה לסגירה: המשימה לא נסגרה")
             continue
+        silence.settle(conn, rows.get(row["mac"]), "השרת הכשיל את המשימה")
         capture = row["type"] == "capture"
         if capture:                                # #1915: like `capture._fail`
             shutil.rmtree(staging_dir(root, row["id"]), ignore_errors=True)

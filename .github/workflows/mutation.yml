@@ -1,0 +1,57 @@
+# mutation -- mutmut, every night, on the principle-5 guards. A report, not a gate.
+#
+# Why (13-14/11, #3104): bakara-shlilit proves by hand that ONE test catches ONE bug.
+# mutmut makes every small change it can to a guard and runs the guard's own tests:
+# a change none of them fails on ("survived") is a test that is missing. The first
+# run (lab, 13/11) left 106 logic mutants alive in the sha256/manifest gates, the
+# boot-loop budget and decide().
+#
+# Green when the run happened with positive evidence (enough mutants selected, some
+# killed); the survivors are in the summary and the artifact. A new survivor gets
+# an Issue, or a line in #3104, by hand. .github/mutation/mutmut-guards.sh.
+#
+# Free: GitHub-hosted runners on a public repository; mutmut is BSD-3-Clause (PyPI).
+# Runs only in the public repository (no minutes in the private one).
+
+name: mutation
+
+on:
+  schedule:
+    - cron: "0 3 * * *"           # after nightly, fuzz and order-and-repeat, UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    if: github.repository == 'NadavOked/ImageSrv'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+
+      - name: Install mutmut and the server's dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r server/requirements.txt pytest httpx mutmut==3.8.1
+
+      - name: mutmut on the guards (report)
+        run: bash .github/mutation/mutmut-guards.sh "$RUNNER_TEMP/mutation"
+
+      - name: Keep the survivors
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-survivors
+          path: |
+            ${{ runner.temp }}/mutation/survivors.txt
+            ${{ runner.temp }}/mutation/survivors/
+            ${{ runner.temp }}/mutation/run.log
+          retention-days: 14
+          if-no-files-found: warn

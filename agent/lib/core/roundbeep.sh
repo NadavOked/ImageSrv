@@ -39,7 +39,10 @@ _rb_beep() {
     _rb_tone "$1" 0 && [ "$_rb_rc" = 0 ]
 }
 
-_rb_unheard() { log "beep $1: $2 -- not heard"; }
+_rb_unheard() { log "beep $1: $2 -- not heard"; _rb_note "$1" "unheard:$2"; }
+# #3125 (S62): every tune for the round's report (datareport.sh beeps_json) -- epoch|kind|requested|played|unheard:<why>.
+# Not heard is said as such, never as played (principle 5); a line that could not be kept is said in the log.
+_rb_note() { printf '%s|%s|%s\n' "$(date +%s)" "$1" "$2" >> "$RUN_DIR/beeps" 2>/dev/null || log "beep $1: not kept for the server's report"; }
 
 _rb_alive() {
     # $1 = pid. Gone or a zombie = not alive. Builtins only.
@@ -104,20 +107,23 @@ _rb_play() {
     # One table: Hz, seconds on, silence after (BEEPS in the mockup).
     case "$1" in
         success) set -- 523 .1 .02 659 .1 .02 784 .1 .02 1047 .28 0 ;;
-        failure) set -- 880 .3 0 587 .3 0 880 .3 0 587 .3 0 880 .3 0 587 .3 0 ;;
+        failure|failmid) set -- 880 .3 0 587 .3 0 880 .3 0 587 .3 0 880 .3 0 587 .3 0 ;;   # mockup 08: mid-work and end, one tune
         netlost) set -- 880 .22 .04 660 .22 .04 494 .45 0 ;;
         netback) set -- 900 .15 .06 1400 .15 0 ;;
         pulled) set -- 440 .08 .12 440 .08 .12 440 .08 .12 440 .08 0 ;;
         *) _rb_unheard "$1" 'unknown tune'; return 0 ;;
     esac
-    # A repeat of the same notice within 5 s is one notice; a failure is never skipped.
+    # A repeat of the same notice within 5 s is one notice; a failure is never skipped. #2067: a drawer that
+    # fails mid-work (failmid) within 5 s of a failure tune is that tune -- all the drawers of a failed source,
+    # or of a partition the server closed, are heard once, not once each.
+    _rb_key=$_rb_kind; [ "$_rb_kind" != failmid ] || _rb_key=failure
     case "$_rb_kind" in
-        netlost|netback|pulled)
+        netlost|netback|pulled|failmid|failure)
             _rb_now=$(date +%s); _rb_last=0
-            [ ! -r "$RUN_DIR/beep.$_rb_kind" ] || read -r _rb_last < "$RUN_DIR/beep.$_rb_kind"
+            [ ! -r "$RUN_DIR/beep.$_rb_key" ] || read -r _rb_last < "$RUN_DIR/beep.$_rb_key"
             case "$_rb_last" in ''|*[!0-9]*) _rb_last=0 ;; esac
-            [ $((_rb_now - _rb_last)) -ge 5 ] || { _rb_unheard "$_rb_kind" 'repeat within 5 s'; return 0; }
-            printf '%s\n' "$_rb_now" > "$RUN_DIR/beep.$_rb_kind" || log 'beep: repeat timestamp not saved' ;;
+            [ "$_rb_kind" = failure ] || [ $((_rb_now - _rb_last)) -ge 5 ] || { _rb_unheard "$_rb_kind" 'repeat within 5 s'; return 0; }
+            printf '%s\n' "$_rb_now" > "$RUN_DIR/beep.$_rb_key" || log 'beep: repeat timestamp not saved' ;;
     esac
     _rb_cut=$_rb_d   # until the last tone is off
     while [ "$#" -gt 0 ]; do
@@ -127,11 +133,14 @@ _rb_play() {
         shift 3
     done
     _rb_cut=
+    # #3064 (G5), #3106: what the operator heard, and when (log's stamp: the tune's end, at most 2 s after it began)
+    log "beep $_rb_kind: played"; _rb_note "$_rb_kind" played
 }
 
 event_beep() {
-    # $1 = success | failure | netlost | netback | pulled. Returns at once.
-    ( _rb_lock "$1" && _rb_play "$1" ) < /dev/null &
+    # $1 = success | failure | failmid | netlost | netback | pulled. Returns at once.
+    _rb_note "$1" requested   # #3125: asked now -- what came of it is its own line, when it is known
+    ( bg_detach_fds; _rb_lock "$1" && _rb_play "$1" ) < /dev/null > /dev/null 2>&1 &   # #3548: 1-2 too -- the call can sit inside a $( )
     return 0
 }
 
@@ -189,6 +198,18 @@ _rb_stream_age() {
     esac
     [ "$_rb_latest" -ge "$_rb_rx" ] || _rb_latest=$_rb_rx
     _rb_age=$((_rb_now - _rb_latest))
+    # #3106 (metal 13/11: "back" heard while the card took nothing in, #3105): in an outage a drawer that moves is
+    # not the network back -- chunkcast flushing what came before it, a new pass's beep.rx. The server's answer
+    # since the outage began is (net.heard, http_post_json); until then the age is the last byte's (beep.netsince)
+    _rb_net=; [ ! -r "$RUN_DIR/beep.net" ] || read -r _rb_net < "$RUN_DIR/beep.net"
+    [ "$_rb_net" = lost ] || return 0
+    _rb_h=; _rb_l=; [ ! -r "$RUN_DIR/net.heard" ] || read -r _rb_h < "$RUN_DIR/net.heard"
+    [ ! -r "$RUN_DIR/beep.lostat" ] || read -r _rb_l < "$RUN_DIR/beep.lostat"
+    case "$_rb_h" in ''|*[!0-9]*) _rb_h=0 ;; esac
+    case "$_rb_l" in ''|*[!0-9]*) ;; *) [ "$_rb_h" -lt "$_rb_l" ] || return 0 ;; esac   # no moment of the outage = no answer since it
+    _rb_s=; [ ! -r "$RUN_DIR/beep.netsince" ] || read -r _rb_s < "$RUN_DIR/beep.netsince"
+    case "$_rb_s" in ''|*[!0-9]*) _rb_s=0 ;; esac
+    _rb_age=$((_rb_now - _rb_s))
 }
 
 stream_beep_tick() {
@@ -200,12 +221,14 @@ stream_beep_tick() {
     # stream_net_record: when the last byte came before the outage (beep.netsince)
     # and how long it lasted (beep.netend), so the bar and the tune never disagree.
     if [ "$#" -gt 0 ]; then _rb_age=$1; else _rb_stream_age; fi
-    case "$_rb_age" in ''|*[!0-9]*) [ ! -e "$RUN_DIR/beep.net" ] || rm -f "$RUN_DIR/beep.net" "$RUN_DIR/beep.netsince"; return 0 ;; esac
+    case "$_rb_age" in ''|*[!0-9]*) [ ! -e "$RUN_DIR/beep.net" ] || rm -f "$RUN_DIR/beep.net" "$RUN_DIR/beep.netsince" "$RUN_DIR/beep.lostat"; return 0 ;; esac
     _rb_limit=${NETLOST_AFTER_S:-30}; case "$_rb_limit" in ''|*[!0-9]*) _rb_limit=30 ;; esac
     _rb_net=up; [ ! -r "$RUN_DIR/beep.net" ] || read -r _rb_net < "$RUN_DIR/beep.net"
     if [ "$_rb_net" = lost ] && [ "$_rb_age" -lt "$_rb_limit" ]; then
         _rb_netmark back; event_beep netback; echo up > "$RUN_DIR/beep.net" || log 'beep: stream state not saved'
     elif [ "$_rb_net" != lost ] && [ "$_rb_age" -ge "$_rb_limit" ]; then
+        # #3594: standing bytes are not yet the network. A drawer standing for its own disk, the cable in (stall.sh), is silent.
+        if command -v stall_disk_holds > /dev/null && stall_disk_holds; then return 0; fi
         _rb_netmark lost; event_beep netlost; echo lost > "$RUN_DIR/beep.net" || log 'beep: stream state not saved'
     fi
     return 0
@@ -219,10 +242,11 @@ _rb_netmark() {
     if [ "$1" = lost ]; then
         rm -f "$RUN_DIR/beep.netend"
         echo $((_rb_now - _rb_age)) > "$RUN_DIR/beep.netsince" || log 'beep: outage start not saved'
+        echo "$_rb_now" > "$RUN_DIR/beep.lostat" || log 'beep: outage moment not saved -- "back" waits for the stream phase to end'   # #3106
         return 0
     fi
     _rb_since=; [ ! -r "$RUN_DIR/beep.netsince" ] || read -r _rb_since < "$RUN_DIR/beep.netsince"
-    rm -f "$RUN_DIR/beep.netsince"
+    rm -f "$RUN_DIR/beep.netsince" "$RUN_DIR/beep.lostat"
     case "$_rb_since" in ''|*[!0-9]*) _rb_since= ;; esac
     _rb_away=; [ -z "$_rb_since" ] || _rb_away=$((_rb_now - _rb_age - _rb_since))
     [ -z "$_rb_away" ] || [ "$_rb_away" -ge 0 ] || _rb_away=0
@@ -238,7 +262,7 @@ stream_net_record() {
     if [ "$_rb_net" = lost ]; then
         _rb_since=; [ ! -r "$RUN_DIR/beep.netsince" ] || read -r _rb_since < "$RUN_DIR/beep.netsince"
         case "$_rb_since" in *[!0-9]*) _rb_since= ;; esac
-        _rb_ceil=${UDPCAST_STALL_TIMEOUT:-300}; case "$_rb_ceil" in ''|*[!0-9]*) _rb_ceil= ;; esac
+        _rb_ceil=${UDPCAST_STALL_TIMEOUT:-120}; case "$_rb_ceil" in ''|*[!0-9]*) _rb_ceil= ;; esac
         printf 'net=lost|%s|%s\n' "$_rb_since" "$_rb_ceil"; return 0
     fi
     [ -r "$RUN_DIR/beep.netend" ] || return 0

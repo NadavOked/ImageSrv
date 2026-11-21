@@ -24,7 +24,7 @@
 
 SR_GUI_BIN="${SR_GUI_BIN:-/usr/bin/imagesrv-station-gui}"
 SR_GUI_TICK_S="${SR_GUI_TICK_S:-1}"     # the state is re-written this often
-SR_POWEROFF_S="${SR_POWEROFF_S:-20}"    # Nadav 17/10: after a success, then off
+# Nadav 17/10: after a success, then off. The count is END_POWEROFF_S (the console setting, #3037); SR_POWEROFF_S only overrides it.
 SR_RLM=$(printf '\342\200\217')         # U+200F: "SATA 0 ..." would lay the line out LTR (#1502)
 
 sr_disk_label() {
@@ -42,10 +42,11 @@ sr_disk_label() {
 sr_pace_text() {
     # From cloner_gui_pace: _cg_rate (bytes/s), _cg_eta (s); -1 = not measured
     # -- said in words, never drawn as 0 (principle 5); 0 = measured still.
-    [ "${_cg_rate:--1}" != 0 ] || { printf 'ממתין לזרם מהשרת · 0 MB/s'; return 0; }   # #2055: measured still
+    _sp_i=$(printf '\342\201\246'); _sp_p=$(printf '\342\201\251')   # #3053: U+2066/U+2069 -- "114.7 MB/s" stays one run inside the Hebrew line
+    [ "${_cg_rate:--1}" != 0 ] || { printf 'ממתין לזרם מהשרת · %s0 MB/s%s' "$_sp_i" "$_sp_p"; return 0; }   # #2055: measured still
     [ "${_cg_rate:--1}" -gt 0 ] || { printf 'מודד את הקצב…'; return 0; }
-    awk -v r="$_cg_rate" -v e="${_cg_eta:--1}" 'BEGIN {
-        printf "%.1f MB/s · ", r / 1000000
+    awk -v r="$_cg_rate" -v e="${_cg_eta:--1}" -v i="$_sp_i" -v p="$_sp_p" 'BEGIN {
+        printf "%s%.1f MB/s%s · ", i, r / 1000000, p
         if (e < 0) printf "הזמן שנותר לא ידוע"
         else if (e < 60) printf "פחות מדקה נותרה"
         else if (e < 90) printf "פחות מ-2 דק׳ נותרו"
@@ -83,7 +84,7 @@ sr_gui_state() {
         # #1560's count dialog (its button says end-poweroff); a GUI without it ignores the record
         [ "$_ss_l" -le 0 ] || printf 'end_poweroff=%s|restore\n' "$_ss_e"
         printf 'title=%sהשחזור הושלם%s\nsub=%s%s · %s\npct=100\nbytes=%s\nmoving=1\nupdated=%s\n' \
-            "$SR_RLM" "${_ss_name:+: $_ss_name}" "$SR_RLM" "$_ss_lbl" "$_ss_w" "$_ss_b" "$(date +%s)"
+            "$SR_RLM" "${_ss_name:+: $_ss_name}" "$SR_RLM" "$_ss_lbl" "$(cat "$_ss_g/restore.warn" 2>/dev/null)$_ss_w" "$_ss_b" "$(date +%s)"   # #3906: the name not written (or its note), before the count
         return
     fi
     _ss_z=$(cat "$_ss_t/total" 2>/dev/null); case "$_ss_z" in ''|*[!0-9]*) _ss_z=0 ;; esac
@@ -193,7 +194,7 @@ sr_refused() {
         session) _rf="הכניסה לקונסולה פגה או לא אומתה — היכנסו שוב ונסו שוב" ;;
         not-allowed) _rf="האימג׳ כבר אינו מותר למחשב הזה" ;;
         no-image) _rf="לא נבחר אימג׳" ;;
-        manifest) _rf="לא ניתן לקרוא מהשרת את פרטי האימג׳" ;; pull) _rf="השרת לא אישר את השחזור למחשב הזה" ;;   # #2657
+        manifest) _rf="לא ניתן לקרוא מהשרת את פרטי האימג׳" ;; pull) _rf="${PULL_WHY:-השרת לא אישר את השחזור למחשב הזה}" ;;   # #2657
         no-disk) _rf="לא נמצא דיסק פנימי במחשב" ;;
         many-disks) _rf="במחשב יותר מדיסק פנימי אחד — לא משחזרים בניחוש" ;;   # #1807
         share) _rf="חלוקת המקום בין המחיצות לא אושרה" ;; share-plan) _rf="לא הצלחנו לחשב את חלוקת המקום בין המחיצות" ;;   # #1898 (single_restore.sh)
@@ -214,12 +215,12 @@ sr_end_poweroff() {
     # at once on "כבה עכשיו" (the GUI says end-poweroff on its stdout). The
     # power-off is finish_and_stop -> safe_poweroff (WoL armed first, #587).
     # Returns only when the machine stayed on; the screen then says why.
-    _ep_at=$(( $(date +%s) + SR_POWEROFF_S ))
+    _ep_s=${SR_POWEROFF_S:-${END_POWEROFF_S:-20}}; _ep_at=$(( $(date +%s) + _ep_s ))   # #3037: read now, after the hello applied the setting
     echo "$_ep_at" > "$RUN_DIR/gui/restore.end" 2>/dev/null || :
     _ep_k="השחזור הושלם"; [ ! -f "$RUN_DIR/gui/restore.cancelled" ] || _ep_k="השחזור בוטל"
-    log "restore: ended -- powering off in ${SR_POWEROFF_S}s, or at once on 'כבה עכשיו'"
+    log "restore: ended -- powering off in ${_ep_s}s, or at once on 'כבה עכשיו'"
     _ep_n=0
-    while [ "$_ep_n" -lt "$SR_POWEROFF_S" ]; do
+    while [ "$_ep_n" -lt "$_ep_s" ]; do
         { grep -qx 'end-poweroff' "$RUN_DIR/gui/restore.out" 2>/dev/null || power_stop_for_restore "$(cat "$RUN_DIR/gui/restore.id" 2>/dev/null)"; } && { log "restore: 'כבה עכשיו' pressed (or the power button's stop, #1918)"; rm -f "$RUN_DIR/power.stop"; break; }
         if command -v watchdog_beat >/dev/null 2>&1; then watchdog_beat; fi
         sleep 1; _ep_n=$((_ep_n + 1))

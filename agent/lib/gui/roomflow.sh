@@ -67,7 +67,7 @@ room_end_watch() {
         return 1
     else return 1; fi
     case "$_rw" in
-        active) printf '%s|%s\n' "$_rw_id" "$(date +%s)" > "$RUN_DIR/room.watch" ;;
+        active) printf '%s|%s\n' "$_rw_id" "$(date +%s)" > "$RUN_DIR/room.watch"; interrupt_room_watch "$GUI_DIR/room-watch.json" ;;   # #2528: its open question (below)
         gone) mv "$RUN_DIR/room.watch" "$RUN_DIR/room.ended" ;;
         *) rm -f "$RUN_DIR/room.watch" ;;
     esac
@@ -186,4 +186,32 @@ room_drawer_cancel() {
     [ "$_rc" = 200 ] && { log "drawer cancel asked from the GUI: $1 $2"; return 0; }
     _why=$(jq -r '.detail // empty' "$RUN_DIR/gui-result.json" 2>/dev/null)   # the server's words; none = say so
     gui_error "הביטול נדחה: ${_why:-סיבה לא ידועה} (http $_rc)" "drawer cancel refused (http $_rc)"
+}
+
+# --- #2528: the question about a cloner that was powered off or rebooted mid-round ------------
+
+interrupt_rows() {
+    # $1 = a JSON file, $2 = the jq path of its disks array ({port, was_port}). PRINTS one
+    # "port now|port when written" row per disk (port now 0 = not connected now). Non-zero = no
+    # usable rows: nothing is drawn from a list that was not read whole.
+    jq -er "$2"' | if type != "array" or length < 1 or length > 16 then error("rows") else .[] |
+        if (.was_port | type) != "number" or .was_port < 1 or .was_port > 99 then error("was") else
+        "\(if (.port | type) == "number" and .port >= 1 and .port <= 99 then .port else 0 end)|\(.was_port)" end end' "$1"
+}
+
+interrupt_room_watch() {
+    # $1 = the kiosk's GET /room, already read whole by room_end_watch above. The round
+    # opened from this GUI has an open question -> room.interrupt for the agent's loop
+    # (interrupt.sh interrupt_ask_build): line 1 = the machines it is about (a JSON array of
+    # MACs, sent back with the answer), then the rows. No open question -> the file is gone, and
+    # a dialog still on the screen closes (interrupt.gone).
+    if _iw=$(jq -ce 'if (.round.interrupt | type) == "object" and .round.interrupt.answer == null
+               then [.round.interrupt.machines[].mac] else error("none") end' "$1" 2>/dev/null) &&
+        { printf '%s\n' "$_iw"; interrupt_rows "$1" '[.round.interrupt.machines[].disks[]]'; } > "$RUN_DIR/room.interrupt.next" 2>/dev/null; then
+        mv "$RUN_DIR/room.interrupt.next" "$RUN_DIR/room.interrupt"
+    else
+        rm -f "$RUN_DIR/room.interrupt.next"
+        [ ! -e "$RUN_DIR/room.interrupt" ] || { rm -f "$RUN_DIR/room.interrupt"; : > "$RUN_DIR/interrupt.gone"; }
+    fi
+    return 0
 }

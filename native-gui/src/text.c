@@ -49,9 +49,20 @@ static void textlog_line(const char *line) {
     fclose(f);
 }
 static void textlog(PangoLayout *l) { textlog_line(pango_layout_get_text(l)); }
+/* IMAGESRV_GUI_BOXLOG=<file> (#3738): where each string was DRAWN -- "x0 y0 x1 y1<TAB>text", the logical box in pixels --
+ * what a test asserts on to say that no two lines of a card are drawn over each other. Off unless set. */
+static void boxlog_line(const char *line) {
+    static const char *path; static int init;
+    if (!init) { path = getenv("IMAGESRV_GUI_BOXLOG"); init = 1; }
+    if (!path || !path[0]) return;
+    FILE *f = fopen(path, "a");
+    if (!f) return;
+    fprintf(f, "%s\n", line);
+    fclose(f);
+}
 /* --png: "@@ <card>-<theme>" before a card is drawn, so a test reads one card's words */
 void text_log_mark(const char *card, const char *theme) {
-    char line[160]; snprintf(line, sizeof line, "@@ %s-%s", card, theme); textlog_line(line);
+    char line[160]; snprintf(line, sizeof line, "@@ %s-%s", card, theme); textlog_line(line); boxlog_line(line);
 }
 
 static void layout_finish(Text *t, int width_px) {
@@ -105,6 +116,15 @@ Text text_make(cairo_t *cr, Font font, double px, int weight,
     return t;
 }
 
+/* #3270: the size a line WOULD take -- measured, never laid out for drawing: it is not logged (IMAGESRV_GUI_TEXTLOG)
+ * and goes past text_make, so a test that reads what the screen says does not read a room kept for words not said. */
+void text_measure(cairo_t *cr, Font font, double px, int weight, const char *utf8, Dir dir, int *w, int *h) {
+    Text t = layout_new(cr, font, px, weight, dir);
+    pango_layout_set_text(t.layout, utf8, -1);
+    pango_layout_get_pixel_size(t.layout, w, h);
+    text_free(&t);
+}
+
 Text text_make_ltr(cairo_t *cr, Font font, double px, int weight,
                    const char *utf8, int width_px) {
     Text t = layout_new(cr, font, px, weight, DIR_LTR);
@@ -116,6 +136,13 @@ Text text_make_ltr(cairo_t *cr, Font font, double px, int weight,
 }
 
 void text_draw(cairo_t *cr, Text *t, double x, double y, Rgb c) {
+    if (getenv("IMAGESRV_GUI_BOXLOG")) {
+        PangoRectangle lg; char line[2048];
+        pango_layout_get_pixel_extents(t->layout, NULL, &lg);
+        snprintf(line, sizeof line, "%.0f %.0f %.0f %.0f\t%s", x + lg.x, y + lg.y, x + lg.x + lg.width, y + lg.y + lg.height, pango_layout_get_text(t->layout));
+        for (char *p = line; *p; p++) if (*p == '\n') *p = ' ';
+        boxlog_line(line);
+    }
     cairo_move_to(cr, x, y);
     cairo_set_source_rgb(cr, c.r, c.g, c.b);
     pango_cairo_show_layout(cr, t->layout);

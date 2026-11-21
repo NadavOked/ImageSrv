@@ -5,7 +5,7 @@
 
 **מה מגיע.** הסוכן (`agent/lib/core/datareport.sh: agent_log_send`) שולח פעם אחת בסוף כל סבב —
 בהצלחה (`round_end`) ובכשל (`failed`: מגירה אחת לפחות נכשלה, או אף מגירה לא הושלמה) — את
-`AGENT_LOG_LINES` השורות האחרונות של הלוג, חתוכות ל-`AGENT_LOG_BYTES`, דחוסות ב-gzip.
+`AGENT_LOG_LINES` השורות האחרונות של הלוג, חתוכות ל-`AGENT_LOG_BYTES`, דחוסות ב-gzip. (#3125: 2000 שורות, 256KB.)
 בקשה אחת לסבב, אחרי הדיווח הסופי — לא בכל דיווח של 2 שניות (רשת ההפצה, #1882).
 
 **מה נשמר** (`agent_logs`): `mac`, `session_id`, `reason`, `at` (שעון השרת), `lines`,
@@ -44,8 +44,9 @@ log = logging.getLogger("imagesrv.agent_logs")
 MAX_BODY = 128 * 1024
 #: כמה בייטים פרוסים לכל היותר — מעבר לזה פצצת דחיסה, ונדחה.
 MAX_INFLATE = 512 * 1024
-#: כמה טקסט נשמר — הזנב (שם הכשל), מתחילת שורה.
-MAX_TEXT = 64 * 1024
+#: כמה טקסט נשמר — הזנב (שם הכשל), מתחילת שורה. #3125 (R13): 256KB, כמו מה שהסוכן שולח -- גל חתיכות ארוך כתב יותר
+#: מ-64KB, והזנב איבד את תחילת הגל. אם גם זה נחתך, `truncated` אומר את זה.
+MAX_TEXT = 256 * 1024
 #: רשומות לכל מכונה, ובסך הכול — נאכף בכל הכנסה (`_trim`).
 KEEP_PER_MAC = 30
 KEEP_ROWS = 1000
@@ -90,7 +91,11 @@ SIGNATURES: list[tuple[str, re.Pattern, str]] = [
      "הזרם הגיע פגום לפריסה (zstd) — רשת או מקור, לא הדיסק"),
     ("sha", re.compile(r"sha256 mismatch|ה-sha256 לא חושב"),
      "ה-sha256 של הזרם לא תאם — הזרם לא הגיע שלם (לא הדיסק)"),
-    ("stream_timeout", re.compile(r"(?i)receive-timeout|udp-receiver.*timed? ?out|פג הזמן"),
+    # #3593: "פג הזמן" לבדו תפס גם `capped_run` ("smartctl לא ענה תוך 5 שניות") והמתנות כלליות. רק
+    # שורות שאומרות שהזרם עצמו לא התקדם: wait_progress ("... שניות בלי התקדמות"), מקלט החתיכות
+    # ("לא הסתיים ולא התקדם") ו"פג הזמן -- הזרם לא הגיע" (drawers.sh).
+    ("stream_timeout", re.compile(r"(?i)receive-timeout|udp-receiver.*timed? ?out"
+                                  r"|פג הזמן.*(?:בלי התקדמות|ולא התקדם|הזרם לא הגיע)"),
      "הזרם נעצר — פקיעת המתנה לשרת או לרשת"),
     ("hivex", re.compile(r"(?i)key not found"),
      "קריאת הרישום של Windows נכשלה (hivex) — כנראה מודולי gconv חסרים (#33)"),

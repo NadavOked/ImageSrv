@@ -60,7 +60,7 @@ def test_wide_tables_use_the_kebab_pattern():
     """הרשאות, חיבורים פיזיים ופורטים: מחלקת kebab-col וכותרת sr-only לעמודת הפעולות.
     פורטים (#1267): רק בכרטיסים שבין רשתות יש תפריט — ברשת ההפצה אין פעולות."""
     js = _js()
-    for needle in ('cls: "kebab-col", opt: [2]', 'columns: ["כרטיס", "תיאור", "MAC", "קישור", "כתובת", "תפקיד", ...svc, { html: `<span class="sr">פעולות</span>` }], rows: nics.map(netNicRow), cls: "kebab-col", opt: [2]', 'cls: cross ? "kebab-col" : "", opt: cross ? [5] : []'):
+    for needle in ('cls: "kebab-col", opt: [2]', 'columns: ["כרטיס", "תיאור", "MAC", "קישור", "כתובת", "תפקיד", { html: `<span class="sr">פעולות</span>` }], rows: nics.map(netNicRow), cls: "kebab-col", opt: [2]', 'cls: cross ? "kebab-col" : "", opt: cross ? [5] : []'):
         assert needle in js, needle
     assert js.count('<span class="sr">פעולות</span>') >= 3
     assert "UI.rowMenu(u.username, items)" in js

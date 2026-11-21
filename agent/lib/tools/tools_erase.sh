@@ -79,7 +79,8 @@ tools_erase_run() {
         *) return 4 ;;
     esac
     : > "$_out" || return 2
-    _tools_disk_prep "$_tebin" || return 2
+    _teprep=""; [ "$_id" != nvme-sanitize-status ] || _teprep=ro   # #2233: the in-use gate is for what writes
+    _tools_disk_prep "$_tebin" "$_teprep" || return 2
     if [ "$_id" != nvme-sanitize-status ]; then
         _tools_disk_destroy_gate "$_out" "$_id on $_arg" "$_confirm" || return 3
     fi

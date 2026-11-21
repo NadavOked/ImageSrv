@@ -15,6 +15,7 @@ import subprocess
 
 import pytest
 
+from disk_rules_state import with_rules   # #3666: the verdicts the agent adds to a hand-written state
 from test_cloner_gui import BASH, GUI, posix
 from test_lc_card_fit_2205 import ROLE_BASE, ROLE_END, fit_driver  # noqa: F401 -- fixture
 from test_native_local_clone import pytestmark  # noqa: F401
@@ -33,7 +34,7 @@ WORK = ("lc_screen=local\nlc_inv=done\nlc_phase=idle\nlc_usb=0\n"
 def _draw(binary, tmp_path, size="1024x768"):
     w, h = size.split("x")
     path = tmp_path / "state.txt"
-    path.write_text(WORK, encoding="utf-8", newline="\n")
+    path.write_text(with_rules(WORK), encoding="utf-8", newline="\n")   # #3666: the agent's verdicts, from the same table
     run = subprocess.run([str(binary), posix(path), w, h, posix(tmp_path / "card.png"), "2"],
                          capture_output=True, text=True, encoding="utf-8", timeout=120,
                          stdin=subprocess.DEVNULL, env=dict(os.environ, FONTCONFIG_FILE=str(GUI / "fonts.conf")))
@@ -124,7 +125,7 @@ def _seq(binary, tmp_path, *steps):
     args = []
     for i, step in enumerate(steps):
         if isinstance(step, str):
-            p = tmp_path / f"s{i}.txt"; p.write_text(step, encoding="utf-8", newline="\n"); args.append(f"state={posix(p)}")
+            p = tmp_path / f"s{i}.txt"; p.write_text(with_rules(step), encoding="utf-8", newline="\n"); args.append(f"state={posix(p)}")   # #3666
         else:
             disk, role = step; args.append(f"click={ROLE_BASE + disk * 3 + role}")
     run = subprocess.run([str(binary), *args], capture_output=True, text=True, encoding="utf-8", timeout=120,

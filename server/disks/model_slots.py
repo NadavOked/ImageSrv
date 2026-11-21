@@ -170,7 +170,8 @@ class MachineMaps(Exception):
     קודם. ``macs`` = המחשבים שיש להם מיפוי משלהם."""
 
     def __init__(self, macs: list[str]):
-        super().__init__(f"ל-{len(macs)} מחשבים מהדגם יש מיפוי משלהם — הוא יוחלף")
+        self.message = f"ל-{len(macs)} מחשבים מהדגם יש מיפוי משלהם — הוא יוחלף"   # #3891: לתשובה, לא str(exc)
+        super().__init__(self.message)
         self.macs = macs
 
 

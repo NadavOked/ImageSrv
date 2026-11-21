@@ -75,6 +75,9 @@ void pace_text(int elapsed_s, long long rate_bps, int eta_s, int latin, char *ou
 void pace_age(long long updated, char *out, size_t n);
 /* <in> as an isolated bidi run (FSI/PDI) for an RTL line; <out> >= strlen+7. */
 void bidi_isolate(const char *in, char *out, size_t n);
+/* #2984: the build machine's source disk as the operator knows it -- "דיסק 1 · SAMSUNG MZ7TE256" (its drawer and model),
+ * else "SAMSUNG MZ7TE256 · 256 GB", else the device name last. task_disk may arrive as "/dev/sda". */
+void direct_src_name(const State *s, char *out, size_t n);
 /* U+200F RIGHT-TO-LEFT MARK: put first in a line that may start with a Latin
  * value, so auto-dir still resolves the paragraph RTL. */
 #define RLM "\xE2\x80\x8F"
@@ -86,6 +89,7 @@ void sb_led(cairo_t *cr, double cx, double cy, double d, Rgb c, Rgb soft, int ri
 double sb_pill(cairo_t *cr, double right, double cy, const char *label, Rgb fg, Rgb bg);
 double sb_bay_pill(cairo_t *cr, double right, double cy, const char *label, Rgb fg, Rgb bg, int emphasis);
 void sb_hatch(cairo_t *cr, const Theme *t, Rect r);
+double sb_nic_banner(App *a, cairo_t *cr, double x0, double y, double cw);   /* #3776: the card's link / bus banner, 0 = none; the wait screen and the clone screen */
 void foot_buttons(App *, cairo_t *, Rect, Text *, const int *, const int *, int);
 int image_options(const App *, const char **, char (*)[168], int);
 

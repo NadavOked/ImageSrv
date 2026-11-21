@@ -6,7 +6,7 @@ journal (#2704) took the same rule on purpose. So a drawer whose only warning is
 titled a link -- the operator goes to the cable when the server learned it is the disk (5א).
 
 The signs, one table in both places:
-* link -- a slow link, a CRC rise, CRC over the threshold, `port_suspect` (#1844: "כנראה כבל/מחבר"),
+* link -- a CRC rise, CRC over the threshold, `port_suspect` (#1844: "כנראה כבל/מחבר"),
   `smart_learned` downshift_rose / timeout_rose (183/188 -- "likely the cable", smart_history.ROSE_LINK);
 * slow write -- `model_slow` (#1845) (#2848: a past round's `write_slow`, #447, is no longer warned);
 * suspect disk -- `disk_suspect` (#1844), `smart_learned` critical_rose / hot (#1859);
@@ -73,7 +73,7 @@ def test_the_disk_itself_is_not_called_a_link(server):
 
 def test_kinds_join_in_one_order(server):
     setup_classroom(server)
-    got = label(server, warning(disk_suspect=True), warning(port=3, link_gbps=1.5, link_max_gbps=6.0),
+    got = label(server, warning(disk_suspect=True), warning(port=3, crc_rise=12),
                 warning(port=4, model_slow=True))
     assert got.endswith("עם קישור חשוד או כתיבה איטית או דיסק חשוד"), got
 

@@ -198,6 +198,22 @@ def test_esp_fsck_repair_refuses_without_confirm(tmp_path: Path):
     assert "מה זה אומר" in out_text(tmp_path, "esp-fsck-repair")
 
 
+def test_esp_fsck_repair_refusal_asks_for_no_typing(tmp_path: Path):
+    """#3313 (owner 10/10, "no typed word anywhere"): the refusal points at the
+    confirm window, never tells the operator to type the machine name; a
+    wrong name is still refused (the API guard stays)."""
+    ran = tmp_path / "fsck.ran"
+    stubs = {"fsck.vfat": (f'echo ran > {posix(ran)!r}; echo fsck', 0)}
+    for given in ("", "other-pc"):
+        proc = run_boot(tmp_path, "esp-fsck-repair", arg="/dev/sda1",
+                        confirm=given, stubs=stubs)
+        text = out_text(tmp_path, "esp-fsck-repair")
+        assert proc.returncode == 3, (given, text)
+        assert not ran.exists()
+        assert "הקלד" not in text
+        assert "חלון האישור" in text
+
+
 def test_esp_fsck_repair_with_confirm_runs(tmp_path: Path):
     ran = tmp_path / "fsck.ran"
     stubs = {

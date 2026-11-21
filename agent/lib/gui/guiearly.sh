@@ -74,7 +74,7 @@ gui_early_role() {
     # gui_parent, with the adopted GUI alive: the hello named the role. Once.
     [ ! -s "$RUN_DIR/gui.screen" ] || return 0
     case "$D_ROLE" in classroom) _ge_r=class ;; cloner) _ge_r=cloner ;; *) _ge_r=menu ;; esac
-    printf '%s\n%s\n%s\n' "$_ge_r" "$MAC" "$IP" > "$RUN_DIR/gui.screen.next" &&
+    printf '%s\n%s\n%s\n%s\n' "$_ge_r" "$MAC" "$IP" "${IFACE:-}" > "$RUN_DIR/gui.screen.next" &&   # #3754: IFACE like MAC and IP -- no environment of the early keeper has it
         mv "$RUN_DIR/gui.screen.next" "$RUN_DIR/gui.screen" ||
         log "native GUI: the role could not be handed over -- the boot screen stays"
 }
@@ -127,11 +127,11 @@ gui_early_state() {
 }
 
 gui_early_env() {
-    # The role, MAC and IP the bridge was started without, from gui_early_role.
-    { IFS= read -r _ge_r && IFS= read -r _ge_m && IFS= read -r _ge_i; } < "$RUN_DIR/gui.screen" 2>/dev/null || return 1
+    # The role, MAC, IP and IFACE the bridge was started without, from gui_early_role.
+    { IFS= read -r _ge_r && IFS= read -r _ge_m && IFS= read -r _ge_i && { IFS= read -r _ge_f || _ge_f=; }; } < "$RUN_DIR/gui.screen" 2>/dev/null || return 1
     case "$_ge_r" in menu) GUI_SCREEN= ;; class|cloner) GUI_SCREEN=$_ge_r ;; *) return 1 ;; esac
-    MAC=$_ge_m; IP=$_ge_i
-    export GUI_SCREEN MAC IP
+    MAC=$_ge_m; IP=$_ge_i; IFACE=$_ge_f   # #3754: the link banner's record needs it; none = the log line of #3644
+    export GUI_SCREEN MAC IP IFACE
 }
 
 gui_early_loop() {

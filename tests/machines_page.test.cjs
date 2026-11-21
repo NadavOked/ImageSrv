@@ -486,3 +486,57 @@ test('#1081 v1: classrooms flag off hides classes from the machines page', () =>
   run('addGroupSheet()');
   assert.equal(run('typeof formOptions'),'undefined','+ class sheet does not open');
 });
+
+// ‏#3123 (נדב 14/11): המפעיל נותן מספר, והשרת קובע את השם. הקונסולה מציגה "משכפל-N" / "בנייה-N" (display_name)
+// ושולחת לשרת את השם הטכני (suffix) כ-confirm_name; בטופס — "מספר" במשכפל ובבנייה, "סיומת" בכיתה.
+test('#3123: machineName shows the display name, the suffix stays the technical one, and "משכפל-2" sorts before "משכפל-10"', () => {
+  const {run}=setup();
+  assert.equal(run('machineName({suffix:"cloner-3",display_name:"משכפל-3"})'),'משכפל-3');
+  assert.equal(run('machineName({suffix:"shich-1",display_name:"shich-1"})'),'shich-1');
+  assert.equal(run('machineName({suffix:"01"})'),'01','a record without the field (an older server) is shown as it was');
+  const order=run(`sortMachinesBySuffix([{suffix:"cloner-10",display_name:"משכפל-10"},{suffix:"cloner-2",display_name:"משכפל-2"},{suffix:"cloner-1",display_name:"משכפל-1"}]).map(m=>m.suffix).join()`);
+  assert.equal(order,'cloner-1,cloner-2,cloner-10');
+});
+test('#3123: the room machines keep the technical suffix (the confirm_name the server compares) and carry the display name', () => {
+  const {run}=setup();
+  run('ROOM={machines:[{mac:"aa:bb:cc:00:00:23",name:"cloner-3",display_name:"משכפל-3",drawer_count:3,drawer_list:[]}]}; MACHINES=[]');
+  const m=JSON.parse(run('JSON.stringify(roomMachines()[0])'));
+  assert.equal(m.suffix,'cloner-3'); assert.equal(m.display_name,'משכפל-3');
+  assert.equal(run('machineName(roomMachines()[0])'),'משכפל-3');
+});
+test('#3123: the add dialog of a fixed cloner/build page asks for a NUMBER and says which name the server will set', () => {
+  const {run,node}=setup();
+  run("openAddMachine({role:'cloner'})");
+  const html=node('#modalBody').innerHTML; balanced(html);
+  assert.match(html,/<label for="am-name">מספר<\/label>/); assert.match(html,/השם ייקבע לבד: משכפל-N/);
+  assert.doesNotMatch(html,/שם מחשב — באנגלית/,'the free-hostname rule is not offered where a number is');
+  node('#am-name').value='7'; node('#am-group').value='grp_CLONERS'; run('amNameHint()');
+  assert.equal(node('#am-name-note').textContent,'יירשם בשם: משכפל-7');
+  node('#am-name').value='100'; run('amNameHint()');
+  assert.match(node('#am-name-note').textContent,/השם ייקבע לבד/,'out of range: the rule, not a name');
+  run("openAddMachine({role:'build'})"); assert.match(node('#modalBody').innerHTML,/בנייה-N/);
+  run("openAddMachine({role:'build',tab:1})"); assert.match(node('#modalBody').innerHTML,/MAC ואז מספר/);
+});
+test('#3123: the generic add dialog follows the chosen group (number for a cloner/build group, suffix for a class)', () => {
+  const {run,node}=setup();
+  run('openAddMachine({})');
+  node('#am-name').value='4'; node('#am-group').value='grp_BUILD'; run('amNameHint()');
+  assert.equal(node('#am-name-note').textContent,'יירשם בשם: בנייה-4');
+  node('#am-group').value='grp_LAB303'; run('amNameHint()');
+  assert.equal(node('#am-name-note').textContent,'סיומת: 01–99 או INS');
+});
+test('#3123: renaming a numbered machine edits the NUMBER; an old name is offered as it is, and can be replaced by a number', () => {
+  const {run}=setup();
+  run('MACHINES=MACHINES.concat([{mac:"aa:bb:cc:00:00:23",suffix:"cloner-3",number:3,display_name:"משכפל-3",group_id:"grp_CLONERS"}])');
+  run('renameMachine("aa%3Abb%3Acc%3A00%3A00%3A23")');
+  let f=run('formOptions').fields[0]; assert.equal(f.label,'מספר'); assert.equal(f.value,'3'); assert.match(f.help,/משכפל-N/);
+  run('renameMachine("a0%3A48%3A1c%3A8a%3A18%3A40")');   // an old name ("מחשב 1")
+  f=run('formOptions').fields[0]; assert.equal(f.label,'מספר'); assert.equal(f.value,'מחשב 1'); assert.match(f.help,/היום: מחשב 1/);
+  run('renameMachine("b4%3A2e%3A99%3A07%3A1a%3Ac1")');   // a class: the suffix, as before
+  f=run('formOptions').fields[0]; assert.match(f.label,/סיומת/); assert.equal(f.value,'01');
+});
+test('#3123: the paste preview shows the name the machine will have', () => {
+  const {run}=setup();
+  assert.equal(run('importedName("cloner-3")'),'משכפל-3'); assert.equal(run('importedName("build-12")'),'בנייה-12');
+  assert.equal(run('importedName("05")'),'05'); assert.equal(run('importedName("HP-cloner-1")'),'HP-cloner-1');
+});

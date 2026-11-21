@@ -22,7 +22,7 @@ from boot.grub_menu import GrubConfig, render_bootstrap
 from server.net import deploy_net, netcfg
 
 DHCP = netcfg.NetConfig("eth0", mode=netcfg.MODE_DHCP)
-BARE_UP = "    up /usr/sbin/dhcpcd -4 -b eth0\n"
+BARE_UP = "    up /usr/bin/systemd-run --scope --quiet /usr/sbin/dhcpcd -4 -b eth0\n"
 
 BAD_NAMES = [
     "x;touch /tmp/pwn",
@@ -51,7 +51,7 @@ def test_a_hostname_outside_the_rule_is_not_written_into_the_up_line(name):
 @pytest.mark.parametrize("name", ["imagesrv", "imagesrv-haifa", "srv2", "IMAGESRV-01"])
 def test_a_valid_hostname_is_still_sent(name):
     text = netcfg.render(DHCP, hostname=name)
-    assert f"    up /usr/sbin/dhcpcd -4 -b -h {name} eth0\n" in text
+    assert f"    up /usr/bin/systemd-run --scope --quiet /usr/sbin/dhcpcd -4 -b -h {name} eth0\n" in text
 
 
 def test_the_console_preview_drops_a_bad_kernel_hostname(tmp_path, images_root, clock):
@@ -73,7 +73,7 @@ def test_the_console_preview_drops_a_bad_kernel_hostname(tmp_path, images_root, 
     r = client.post("/api/console/net/config/eth0/preview", json={"mode": "dhcp"})
     assert r.status_code == 200, r.text
     after = r.json()["after"]
-    assert "up /usr/sbin/dhcpcd -4 -b eth0" in after
+    assert "up /usr/bin/systemd-run --scope --quiet /usr/sbin/dhcpcd -4 -b eth0" in after
     assert "pwn" not in after
 
 

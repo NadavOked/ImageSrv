@@ -139,6 +139,30 @@ test('unknown storage never displays zero',()=>{
 test('toast treats endpoint errors as text',()=>{
   const {run,node}=setup();run('toast("<img src=x onerror=alert(1)>")');assert.equal(node('#toast').innerHTML,'');assert.match(node('#toast').textContent,/<img/);
 });
+test('toast sets announcement priority before publishing each message (#2061)', () => {
+  const {ctx, node, run} = setup();
+  const el = node('#toast');
+  const attrs = new Map();
+  const announcements = [];
+  const delays = [];
+  el.setAttribute = (name, value) => attrs.set(name, value);
+  Object.defineProperty(el, 'textContent', {set(message) {
+    announcements.push([message, attrs.get('role'), attrs.get('aria-live')]);
+  }});
+  ctx.setTimeout = (_callback, ms) => delays.push(ms);
+
+  run('toast("Failed", 5000, "err")');
+  run('toast("Ready")');
+  run('noteApiFailure("Offline"); toast("Request failed: Offline")');
+  run('toast("Saved", 1800, "ok")');
+  assert.deepEqual(announcements, [
+    ['Failed', 'alert', 'assertive'],
+    ['Ready', 'status', 'polite'],
+    ['Request failed: Offline', 'alert', 'assertive'],
+    ['Saved', 'status', 'polite'],
+  ]);
+  assert.deepEqual(delays, [5000, 2600, 2600, 1800]);
+});
 test('existing upload posts tar bytes and reports progress',()=>{
   const {run,ctx,node}=setup();let request;
   ctx.XMLHttpRequest=class {constructor(){request=this;this.upload={};}open(method,url){this.method=method;this.url=url;}setRequestHeader(k,v){this.header=[k,v];}send(file){this.file=file;}};

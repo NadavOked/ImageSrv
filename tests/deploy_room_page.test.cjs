@@ -4,6 +4,8 @@
 // הכרעת נדב 16/09: כתום = בלי תשובה ממשיך לכתוב, אדום = בלי תשובה מדלג — לעולם לא "דלג בשניהם".
 // עיקרון 7: עצירת סבב מאחורי חלון אישור (#1270). "דיסק N · SATA N-1", לעולם לא sd*.
 const {consoleFiles} = require('./console_src.cjs');
+const {decorate,ruleOf}=require('./disk_rule_fixture.cjs');   // #3666: the server sends `rule` on every disk; the console decides nothing
+const served=(fixtures,key)=>{const v=fixtures[key]; return v&&typeof v==='object'&&!v.__status?decorate(JSON.parse(JSON.stringify(v)),fixtures['/disk-failures']):v;};
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -14,6 +16,9 @@ const minutesAgo=(n)=>new Date(Date.now()-n*60000).toISOString();
 const GB256=256060514304, GB512=512110190592;
 
 const B1='c8:d9:d2:0b:fe:32', C1='a0:48:1c:8a:18:40', C2='78:ac:c0:9b:11:c2', C3='78:ac:c0:9b:11:c3';
+/* ‏#3092: the console sends, per machine, what its card drew in each chosen slot (`displayed`); the serials are the fixture's drawers */
+const DRAWN={[C1]:{1:'S5Y10',2:'S5Y11'},[C2]:{1:'S5Y30',2:'S5Y31',3:'S5Y2NX0R12345'}};
+const slot=(mac,ports)=>({mac,ports,displayed:ports.map(p=>({port:p,serial:DRAWN[mac][p],size_bytes:GB256}))});
 const drawer=(dev,port,serial,extra={})=>({dev,port,serial,model:'870 EVO',size_bytes:GB256,fresh:true,selected:false,state:null,error:null,bytes_written:0,bytes_total:0,stalled_s:null,crc_delta:null,smart:'unchecked',...extra});
 const round=(extra={})=>({id:'rnd_1',image_id:'img_1',image_name:'office365',target_drives:12,written_drives:5,remaining_drives:7,wave_number:2,wave_state:'running',ready_drives:5,opened_by:'nadav',source:{kind:'library'},...extra});
 const floor={mac:C2,name:'מחשב 2',port:3,dev:'sdc',size_bytes:GB256};
@@ -45,7 +50,7 @@ function setup({room=roomIdle(),role='admin',session=null,prompts={}}={}) {
   function node(key) {
     if(!nodes.has(key)) nodes.set(key,{value:'',innerHTML:'',textContent:'',hidden:false,dataset:{},style:{removeProperty(){}},
       classList:{add(){},remove(){},toggle(){}},addEventListener(){},removeEventListener(){},
-      querySelector(){return null;},querySelectorAll(){return [];},insertAdjacentHTML(_p,html){this.innerHTML+=html;},setAttribute(){},removeAttribute(){},focus(){}});
+      querySelector(){return null;},querySelectorAll(){return [];},insertAdjacentHTML(_p,html){this.innerHTML+=html;},setAttribute(){},removeAttribute(){},focus(){},appendChild(c){ if(c&&c.tag==='small') this.textContent+=c.textContent; return c; }});
     return nodes.get(key);
   }
   const fixtures={
@@ -76,7 +81,7 @@ function setup({room=roomIdle(),role='admin',session=null,prompts={}}={}) {
   if(role==='deploy') for(const k of ['/health','/journal','/update','/monitor/machines','/tasks']) fixtures[k]=403;
   const ctx=vm.createContext({console,URLSearchParams,URL,Date,Set,Map,Number,Math,JSON,Promise,String,Array,Error,encodeURIComponent,decodeURIComponent,
     document:{hidden:false,querySelector:node,querySelectorAll:()=>[],getElementById:id=>node('#'+id),
-      createElement:()=>{let text='';return {set textContent(v){text=String(v)},get innerHTML(){return text.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;')}}},
+      createElement:(t)=>{if(t==='small'||t==='br')return {tag:t,textContent:''};let text='';return {set textContent(v){text=String(v)},get innerHTML(){return text.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;')}}},
       documentElement:{setAttribute(){}},addEventListener(){},removeEventListener(){}},
     window:{addEventListener(){},matchMedia:()=>({matches:false}),open(...a){opened.push(a);}},localStorage:{getItem:()=>null,setItem(){}},CSS:{escape:x=>x},
     setInterval:()=>1,clearInterval(){},setTimeout:()=>1,clearTimeout(){},
@@ -85,17 +90,17 @@ function setup({room=roomIdle(),role='admin',session=null,prompts={}}={}) {
       const v=fixtures[key];
       if(v===403) return {status:403,ok:false,json:async()=>({detail:'admin only'})};
       if(v&&v.__status) return {status:v.__status,ok:false,json:async()=>({detail:v.detail})};
-      return {status:200,ok:true,headers:{get:()=>null},json:async()=>v ?? {ok:true}};
+      return {status:200,ok:true,headers:{get:()=>null},json:async()=>served(fixtures,key) ?? {ok:true}};
     }});
   for(const f of ['progress.js',...consoleFiles(),'net.js']) vm.runInContext(fs.readFileSync(path.join(root,f),'utf8'),ctx);
   const run=s=>vm.runInContext(s,ctx);
   run(`ME={username:"${role}",role:"${role}",server_name:"srv",version:"v0.32.1",capabilities:{classrooms:true}}; current="deploy"; sheet = o => { globalThis.formOptions=o; }; selectPageById=(id)=>{ globalThis.selected=id; current=id; }; toast=(m)=>{ globalThis.toasted=m; }; renderCurrent=()=>{ globalThis.rendered=(globalThis.rendered||0)+1; }; activateTab=(i)=>{ globalThis.activated=i; }; monitorMachine=(mac)=>{ globalThis.monitored=mac; };`);
-  for(const [name,key] of [['OVERVIEW','/overview'],['MACHINES','/machines'],['GROUPS','/groups'],['DISK_FAILURES','/disk-failures'],['NET','/net'],['ROOM','/room'],['IMAGES','/images']]) run(name+'='+JSON.stringify(fixtures[key]));
+  for(const [name,key] of [['OVERVIEW','/overview'],['MACHINES','/machines'],['GROUPS','/groups'],['DISK_FAILURES','/disk-failures'],['NET','/net'],['ROOM','/room'],['IMAGES','/images']]) run(name+'='+JSON.stringify(served(fixtures,key)));
   run('ROOM_KEY=JSON.stringify([ROOM,MACHINES.map(m=>[m.mac,m.prompt])]);');
   return {run,node,requests,fixtures,ctx,opened};
 }
 function balanced(html) {
-  const stack=[]; const voids=new Set(['input','br','hr','img','meta','link','source','wbr','path','rect','circle']);
+  const stack=[]; const voids=new Set(['input','br','hr','img','meta','link','source','wbr','path','rect','circle','col']);   // col: the start-window table's <colgroup> (#3181)
   for(const m of html.matchAll(/<\/?([a-z][\w-]*)\b[^>]*>/gi)) {
     const tag=m[1].toLowerCase();
     if(m[0].endsWith('/>') || voids.has(tag)) continue;
@@ -137,7 +142,8 @@ test('no round (mockup console-full.html P.deploy): "סבב הפצה" + "פנו�
   assert.match(form,/aria-pressed="true"[^>]*>מהשרת \(הספרייה\)/); assert.match(form,/aria-pressed="false"[^>]*>מדיסק מחשב בנייה \(הפצה ישירה\)/,'a builder that reported disks → #715 offered');
   assert.match(form,/<select id="rn-image"/); assert.match(form,/<input type="number" id="rn-target" min="1" value="5"/,'default target = the ready drawers, like the GUI (5 awake)');
   assert.doesNotMatch(form,/openRoomRoundSubmit/,'#1485 (S350): the primary action is in the window footer, not at the end of the body');
-  assert.match(form,/class="rn-m" data-mac="a0:48:1c:8a:18:40"[^]*class="rn-m off" data-mac="78:ac:c0:9b:11:c3"/,'every cloner and its drawers are in the start window, off ones too');
+  assert.match(form,/<tr class="g" data-mac="a0:48:1c:8a:18:40"><td colspan="5"><span class="gh"><b>[^<]*<\/b><span class="tg m">ער<\/span>[^]*<tr class="g" data-mac="78:ac:c0:9b:11:c3"><td colspan="5"><span class="gh"><b>[^<]*<\/b><span class="tg m">כבוי · יידלק ב-WoL<\/span>/,'every cloner and its drawers are in the start window (one table, a group row per cloner since #3181), off ones too');
+  assert.doesNotMatch(form,/פס ייצור/,'nothing ticked is not a production line: no chip, no line text (plDrawers counts only the ticked drawers)');
   run('openRoomRound()');
   assert.equal(run("document.getElementById('modalOk').textContent"),'פתח סבב'); assert.equal(run("document.getElementById('modalOk').disabled"),true,'nothing ticked → the footer action waits');
   assert.equal(run("document.getElementById('modalHint').textContent"),'יש לסמן לפחות דיסק אחד'); assert.match(run("document.getElementById('modalHint').className"),/rn-sum need/);
@@ -165,7 +171,8 @@ test('#953: every image says "fits a disk from X GB"; one that does not fit the 
   assert.match(html,/<option value="img_3">kali · גודל נדרש לא ידוע<\/option>/,'min_target_bytes null ≠ 0');
   run("roomFormSet('folder','מרצים')"); html=run('roomNewWindow(roomMachines())');
   assert.match(html,/<option value="img_2" disabled>win512-full · נכנס לדיסק מ-300 GB — לא נכנס: דיסק 3 במחשב מחשב 2 הוא 256GB, האימג&#39; צריך 300GB<\/option>/);
-  assert.match(html,/המגירה הקטנה ביותר בחדר: 256GB \(דיסק 3 במחשב מחשב 2\)/);
+  // #3181 (המוקאפ המאושר 15/11): התווית והגודל בשורה אחת, ומתחתיהן איפה המגירה — לא משפט אחד
+  assert.match(html,/<div class="ln2"><span class="hn">המגירה הקטנה ביותר בחדר<\/span><span class="val"><bdi dir="ltr">256GB<\/bdi><\/span><\/div>\s*<div class="hn">דיסק 3 במחשב 2 · <bdi dir="ltr">256GB<\/bdi>\.<\/div>/);
   assert.equal(run("imageFitReason(IMAGES[1],ROOM.disk_floor)"),"דיסק 3 במחשב מחשב 2 הוא 256GB, האימג' צריך 300GB");
   assert.equal(run("imageFitReason(IMAGES[0],ROOM.disk_floor)"),null); assert.equal(run("imageFitReason(IMAGES[1],null)"),null);
   assert.equal(run("imageFitReason(IMAGES[1],{name:'מחשב 2',port:null,dev:'nvme0n1',size_bytes:256e9})"),"דיסק nvme0n1 במחשב מחשב 2 הוא 256GB, האימג' צריך 300GB",'no port → device name, as the server does');
@@ -217,7 +224,7 @@ test('new round: POST /room {image_id, target_drives}; a 409 fit refusal is show
   run("roomFormSet('image','img_1'); roomFormSet('target','6'); roomPickAll()");   // ‏#1275: בלי בחירה אין סבב
   await run('openRoomRoundSubmit()');
   let r=requests.find(x=>x.url==='/api/console/room'&&x.options.method==='POST');
-  assert.deepEqual(JSON.parse(r.options.body),{image_id:'img_1',target_drives:6,target_slots:[{mac:C1,ports:[1,2]},{mac:C2,ports:[1,3]}]});
+  assert.deepEqual(JSON.parse(r.options.body),{image_id:'img_1',target_drives:6,target_slots:[slot(C1,[1,2]),slot(C2,[1,3])]});
   assert.match(run('toasted'),/הסבב נפתח/); assert.equal(run('DEPLOY.err'),'');
   assert.ok(requests.some(x=>x.url==='/api/console/images')&&requests.some(x=>x.url==='/api/console/overview'),'loadDeploy re-reads after opening');
   fixtures['/room']={__status:409,detail:"דיסק 3 במחשב מחשב 2 הוא 256GB, האימג' צריך 300GB"};
@@ -227,10 +234,10 @@ test('new round: POST /room {image_id, target_drives}; a 409 fit refusal is show
   assert.match(html,/<div class="note err"><span aria-hidden="true">●<\/span><span>הסבב לא נפתח: דיסק 3 במחשב מחשב 2 הוא 256GB, האימג&#39; צריך 300GB<\/span><\/div>/);
   run("DEPLOY.err=''; roomFormSet('image','')"); await run('openRoomRoundSubmit()'); assert.equal(run('DEPLOY.err'),"בחר אימג'");
   requests.length=0; run("roomFormSet('src','build_disk'); roomFormSet('disk','sda')");
-  assert.match(run('roomNewWindow(roomMachines())'),/היעד: הדיסקים שסומנו בגריד למטה/);
+  assert.match(run('roomNewWindow(roomMachines())'),/היעד: הדיסקים שסומנו בגריד — הפצה ישירה דורשת בחירה מפורשת/);
   await run('openRoomRoundSubmit()');
   r=requests.find(x=>x.url==='/api/console/room'&&x.options.method==='POST');
-  assert.deepEqual(JSON.parse(r.options.body),{source:{kind:'build_disk',mac:B1,disk:'sda'},target_slots:[{mac:C1,ports:[1,2]},{mac:C2,ports:[1,3]}]});
+  assert.deepEqual(JSON.parse(r.options.body),{source:{kind:'build_disk',mac:B1,disk:'sda'},target_slots:[slot(C1,[1,2]),slot(C2,[1,3])]});
   const d=setup({role:'deploy'}); d.run("roomFormSet('image','img_1'); roomPickAll()"); await d.run('openRoomRoundSubmit()');
   assert.ok(d.requests.some(x=>x.url==='/api/console/room'&&x.options.method==='POST'),'deploy is a room operator');
 });
@@ -358,7 +365,8 @@ test('#1767: the red note says the red drawer\'s own reason -- the write failed 
   assert.equal(notes.length,1,notes);
   assert.match(notes[0],/<b>מחשב 2 · דיסק 3<\/b> — אדום: <b>SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת<\/b> \(#1732: מדולג בגלוי, בלי שאלה\)/);
   // (3) read-only (#1742): its own cause, not SMART
-  r=roomRunning(); r.machines[1].drawer_list[2]={...r.machines[1].drawer_list[2],state:null,error:null,bytes_written:0,bytes_total:0,smart:'ok'};
+  r=roomRunning(); r.machines[1].drawer_list[2]={...r.machines[1].drawer_list[2],state:null,error:null,bytes_written:0,bytes_total:0,smart:'ok',
+    rule:ruleOf({smart:'ok'},{fail:{cause:'readonly'}})};   // #3666: the server joins the read-only record and sends the red
   const k=setup({room:r});
   k.run(`DISK_FAILURES=[{id:9,session_id:'r15',mac:'${C2}',dev:'sdc',serial:'S5Y2NX0R12345',port:3,disk_number:3,ata_port:'ata3',at:'2026-09-15T14:22:00Z',cause:'readonly',error:'read-only',ata_log:[]}]`);
   notes=redNote(k.run('deploy(0)'));
@@ -382,8 +390,8 @@ test('the operator question (prompt) is a note in the page: orange machine → "
   const room=roomRunning();
   const prompts={[C1]:'Disk 2: SMART warn - write anyway? [y/n]',[C2]:'Disk 3: failed the previous clone - skip? [y/n]'};
   const {run}=setup({room,prompts});
-  run(`DISK_FAILURES=[{id:7,session_id:'r15',mac:'${C2}',dev:'sdc',serial:'S5Y2NX0R12345',port:3,disk_number:3,ata_port:'ata3',at:'2026-09-15T14:22:00Z',cause:'cable',error:'ATA bus error',ata_log:[]}]; ROOM.machines[0].drawer_list[1].smart='warn';`);
-  run(`ROOM.machines[1].drawer_list.find(d=>d.port===3).smart='fail'`);   // #1580: red is SMART fail (a failed-last record alone is orange)
+  run(`DISK_FAILURES=[{id:7,session_id:'r15',mac:'${C2}',dev:'sdc',serial:'S5Y2NX0R12345',port:3,disk_number:3,ata_port:'ata3',at:'2026-09-15T14:22:00Z',cause:'cable',error:'ATA bus error',ata_log:[]}]; ROOM.machines[0].drawer_list[1].smart='warn'; ROOM.machines[0].drawer_list[1].rule=${JSON.stringify(ruleOf({smart:'warn'}))};`);   // #3666: the rule is the server's
+  run(`ROOM.machines[1].drawer_list.find(d=>d.port===3).smart='fail'; ROOM.machines[1].drawer_list.find(d=>d.port===3).rule=${JSON.stringify(ruleOf({smart:'fail'}))}`);   // #1580: red is SMART fail (a failed-last record alone is orange)
   const html=run('deploy(0)'); balanced(html);
   const notes=between(html,'<div class="c12 rnotes">');
   const n1=between(notes,'<b>מחשב 1</b>','</div>'), n2=between(notes,'<b>מחשב 2</b>','</div>');
@@ -620,17 +628,17 @@ test('#1269 drivers: POST /room adds target_slots + driver_models (library) and 
   await run('openRoomRoundSubmit()');
   let r=requests.find(x=>x.url==='/api/console/room'&&x.options.method==='POST');
   assert.deepEqual(JSON.parse(r.options.body),{image_id:'img_1',target_drives:6,
-    target_slots:[{mac:C1,ports:[1,2]},{mac:C2,ports:[1,3]}],
+    target_slots:[slot(C1,[1,2]),slot(C2,[1,3])],
     driver_models:[{mac:C1,port:1,vendor:'LENOVO',model:'ThinkCentre M70q Gen 3'},{mac:C2,port:3,vendor:'HP',model:'HP EliteDesk 800 G6'}]});
   assert.equal(run('DEPLOY.form.drv'),false,'after opening the switch is off again');
   requests.length=0; run("roomFormSet('src','build_disk'); roomFormSet('disk','sda'); roomFormSet('drv',true); roomPickAll()"); run(`roomPick('${C2}@2'); roomDrvSet('${C2}@2','0')`);
   await run('openRoomRoundSubmit()');
   r=requests.find(x=>x.url==='/api/console/room'&&x.options.method==='POST');
-  assert.deepEqual(JSON.parse(r.options.body),{source:{kind:'build_disk',mac:B1,disk:'sda'},target_slots:[{mac:C1,ports:[1,2]},{mac:C2,ports:[1,2,3]}],
+  assert.deepEqual(JSON.parse(r.options.body),{source:{kind:'build_disk',mac:B1,disk:'sda'},target_slots:[slot(C1,[1,2]),slot(C2,[1,2,3])],
     driver_models:[{mac:C2,port:2,vendor:'HP',model:'HP EliteDesk 800 G6'}]});
   const s2=setup(); s2.run('DRIVER_MODELS='+JSON.stringify(MODELS)+"; roomFormSet('image','img_1'); roomFormSet('target','6'); roomPick('"+C1+"@2')");
   await s2.run('openRoomRoundSubmit()');
-  assert.deepEqual(JSON.parse(s2.requests.find(x=>x.url==='/api/console/room'&&x.options.method==='POST').options.body),{image_id:'img_1',target_drives:6,target_slots:[{mac:C1,ports:[2]}]},'switch off: no driver_models');
+  assert.deepEqual(JSON.parse(s2.requests.find(x=>x.url==='/api/console/room'&&x.options.method==='POST').options.body),{image_id:'img_1',target_drives:6,target_slots:[slot(C1,[2])]},'switch off: no driver_models');
 });
 
 test('#1269 drivers: loadDeploy reads /room/driver-models; a failed read is "unread" (null), not "no models"; the round shows each drawer\'s outcome in its title', async () => {
@@ -652,23 +660,24 @@ test('#1269 drivers: loadDeploy reads /room/driver-models; a failed read is "unr
   assert.doesNotMatch(c2,/data-slot="2" title="[^"]*דרייברים/,'drivers null = the step did not run — nothing said');
 });
 
-/* ‏#1275: גריד בחירת הדיסקים; אדום/כבוי/ריק חסומים. ‏#2848 (מוקאפ disk-colors, נדב 11/11): כל מגירה היא כרטיס
-   המגירה של המסך המקומי (.lbay), צבע מלא, ו-[יעד][דלג] כמו בגואי במקום checkbox. */
-const bay=(html,key)=>{ const m=html.split(/(?=<div class="lbay)/).find(x=>x.includes(`data-key="${key}"`)); assert.ok(m,'missing bay '+key); return m; };
-const pk=(html)=>between(html,'<div class="full rn-pick">','<details class="full rn-drv"');
-const pcard=(html,mac)=>(html.split('<section class="rn-m').find(c=>c.includes(`data-mac="${mac}"`))||'').split('<section class="rn-m')[0];
+/* ‏#1275: גריד בחירת הדיסקים; אדום/כבוי/ריק חסומים. ‏#2848 (מוקאפ disk-colors, נדב 11/11): כל מגירה היא שורה עם צבע ו-[יעד][דלג] כמו בגואי במקום checkbox.
+   ‏#3181 (המוקאפ המאושר 15/11): הגריד הוא טבלה אחת — שורת קבוצה (tr.g) לכל משכפל, שורה (tr.dr[data-key]) לכל דיסק, ומתחתיה שורת משפט (tr.sb2) כשיש מה לומר.
+   הצבע: תג (.tg ok/or/tbad/yl/gr) ונורה (.lcb); שורה כתומה/אדומה נושאת dwn/dbd. */
+const bay=(html,key)=>{ const rows=html.split(/(?=<tr class="(?:dr|g)[ "])/), i=rows.findIndex(x=>x.includes(`data-key="${key}"`)); assert.ok(i>=0,'missing row '+key); return rows[i]+(rows[i+1]&&rows[i+1].startsWith('<tr class="dr sb2')?rows[i+1]:''); };
+const pk=(html)=>between(html,'<div class="card tb rn-pick">','<details class="full rn-drv"');
+const pcard=(html,mac)=>{ const g=html.split(/(?=<tr class="g")/).find(c=>c.startsWith('<tr class="g"')&&c.includes(`data-mac="${mac}"`)); return g||''; };
 
-test('#1275/#2848 pick grid: one card per cloner and one drawer card per present disk, each with [יעד][דלג]; nothing selected by default', () => {
+test('#1275/#2848 pick grid (#3181: a table): a group row per cloner and a row per present disk, each with [יעד][דלג]; nothing selected by default', () => {
   const {run}=setup(); const html=run('roomNewWindow(roomMachines())'); balanced(html);
   const g=pk(html);
-  assert.equal((g.match(/<section class="rn-m/g)||[]).length,3,'a card per cloner, the off one included');
-  assert.equal((g.match(/<div class="lbay[^"]*" data-slot="\d" data-key="/g)||[]).length,5,'one drawer card per present disk');
-  assert.equal((g.match(/<span class="lb-seg" role="group"/g)||[]).length,5,'every present drawer has [יעד][דלג]');
-  assert.doesNotMatch(g,/class="lbay[^"]* sel"/,'no default selection'); assert.doesNotMatch(g,/aria-pressed="true"[^>]*>יעד</,'"דלג" is pressed everywhere');
-  assert.match(g,/<div class="lb-sz"><b><bdi[^>]*>256GB<\/bdi><\/b>/,'cards use the existing marketed disk size helper');
-  assert.match(g,/<div class="lb-l ok">נכנס<\/div>/,'green: "נכנס" in green, like the GUI line');
-  assert.match(g,/<span class="lb-chip c-orange"><i><\/i>SMART חצי תקין<\/span>/,'warning: the orange chip says SMART חצי תקין');
-  assert.doesNotMatch(g,/type="checkbox"|class="dk /,'no checkbox tiles left');
+  assert.equal((g.match(/<tr class="g" data-mac=/g)||[]).length,3,'a group row per cloner, the off one included');
+  assert.equal((g.match(/<tr class="dr[^"]*" data-key="/g)||[]).length,5,'one row per present disk');
+  assert.equal((g.match(/<span class="tsg" role="group"/g)||[]).length,5,'every present drawer has [יעד][דלג]');
+  assert.doesNotMatch(g,/<span class="tg m">יעד<\/span>/,'no default selection'); assert.doesNotMatch(g,/aria-pressed="true"[^>]*>יעד</,'"דלג" is pressed everywhere');
+  assert.match(g,/<span class="sz"><bdi[^>]*>256GB<\/bdi><\/span>/,'rows use the existing marketed disk size helper');
+  assert.match(g,/<span class="mut">נכנס<\/span>/,'green: "נכנס", like the GUI line');
+  assert.match(g,/<span class="tg or"><i><\/i>SMART חצי תקין<\/span>/,'warning: the orange tag says SMART חצי תקין');
+  assert.doesNotMatch(g,/type="checkbox"/,'no checkbox tiles left');
   assert.match(g,/5 מגירות ניתנות לבחירה/); assert.match(g,/בחר הכול/); assert.match(g,/נקה הכול/);
   assert.deepEqual(JSON.parse(run('JSON.stringify(roomSubmitState(roomMachines()))')),{n:0,text:'יש לסמן לפחות דיסק אחד'},'the footer summary; the action is disabled until a disk is ticked');
   assert.match(pcard(html,C3),/כבוי · יידלק ב-WoL/);
@@ -676,18 +685,23 @@ test('#1275/#2848 pick grid: one card per cloner and one drawer card per present
 
 test('#1275 pick grid: selection keeps warning colour, adds blue selection state, and machine/room select-all choose green only', () => {
   const {run}=setup();
-  run(`roomFormSet('target','5'); roomPick('${C2}@2')`); let html=run('roomNewWindow(roomMachines())'); balanced(html);
+  run(`ROOM.machines.find(m=>m.mac==='${C2}').drawer_slots=['sata:1','sata:2','sata:3']`);   // the server sends the slots; plDrawers counts them (#3181)
+  run(`roomFormSet('target','3'); roomPick('${C2}@2')`); let html=run('roomNewWindow(roomMachines())'); balanced(html);
   const c2=pcard(html,C2);
-  assert.match(c2,new RegExp(`<div class="lbay t-orange sel" data-slot="2" data-key="${C2}@2"`),'selected warning keeps orange and gains selection');
-  assert.match(bay(c2,`${C2}@2`),/<b>SATA 1<\/b><span class="lb-tag">יעד<\/span>/,'the "יעד" tag beside the connection, as in the GUI');
+  assert.match(bay(c2,`${C2}@2`),new RegExp(`^<tr class="dr dwn[^"]*" data-key="${C2}@2"`),'selected warning keeps orange');
+  assert.match(bay(c2,`${C2}@2`),/<bdi dir="ltr">SATA 1<\/bdi> <span class="tg m">יעד<\/span>/,'and gains the selection tag "יעד" beside the connection, as in the GUI');
   assert.match(bay(c2,`${C2}@2`),/<button type="button" aria-pressed="true" onclick="roomPickTo\([^"]+,true\)">יעד<\/button><button type="button" aria-pressed="false" onclick="roomPickTo\([^"]+,false\)">דלג<\/button>/);
-  assert.match(c2,/<b>1<\/b> מתוך 3 נבחרו/); assert.match(c2,/<div class="lbay" data-slot="1" data-key=/);
-  assert.equal(run('roomSubmitState(roomMachines()).text'),'נבחרו דיסק 1 ב-מחשב 1 · משוער 5 גלים'.replace('דיסק 1','1 דיסק').replace('מחשב 1','1 מחשב'));
+  assert.match(c2,/1 מתוך 3 נבחרו/); assert.match(c2,new RegExp(`<tr class="dr" data-key="${C2}@1"`));
+  assert.deepEqual(JSON.parse(run('JSON.stringify(roomSubmitState(roomMachines()))')),{n:1,text:'נבחרו 1 דיסק ב-1 מחשב',sub:'משוער 3 גלים'},'two lines since #3181: who, then the estimate');
+  run(`roomFormSet('target','5')`);   // more disks than the cloner has drawers: a production line, not waves (plIsLine)
+  assert.deepEqual(JSON.parse(run('JSON.stringify(roomSubmitState(roomMachines()))')),{n:1,text:'נבחרו 1 דיסק ב-1 מחשב · 5 דיסקים בסך הכול',sub:'פס ייצור: הסבב ייכנס אליו לבד'});
+  run(`roomFormSet('target','3')`);
   run('openRoomRound()'); assert.equal(run("document.getElementById('modalOk').disabled"),false,'a ticked disk enables the footer action');
-  run(`roomPickTo('${C2}@2',true)`); assert.match(pcard(run('roomNewWindow(roomMachines())'),C2),/t-orange sel/,'"יעד" again keeps it');
-  run(`roomPickTo('${C2}@2',false)`); assert.doesNotMatch(pcard(run('roomNewWindow(roomMachines())'),C2),/t-orange sel/,'"דלג" clears');
-  run(`roomPickMachine('${C2}')`); html=run('roomNewWindow(roomMachines())'); assert.match(pcard(html,C2),/<b>2<\/b> מתוך 3 נבחרו/,'machine select-all skips orange');
-  run(`roomPickClearMachine('${C2}')`); assert.match(pcard(run('roomNewWindow(roomMachines())'),C2),/<b>0<\/b> מתוך 3 נבחרו/);
+  const picked=(h)=>/aria-pressed="true"[^>]*>יעד</.test(bay(pcard(h,C2),`${C2}@2`));
+  run(`roomPickTo('${C2}@2',true)`); assert.ok(picked(run('roomNewWindow(roomMachines())')),'"יעד" again keeps it');
+  run(`roomPickTo('${C2}@2',false)`); assert.ok(!picked(run('roomNewWindow(roomMachines())')),'"דלג" clears');
+  run(`roomPickMachine('${C2}')`); html=run('roomNewWindow(roomMachines())'); assert.match(pcard(html,C2),/2 מתוך 3 נבחרו/,'machine select-all skips orange');
+  run(`roomPickClearMachine('${C2}')`); assert.match(pcard(run('roomNewWindow(roomMachines())'),C2),/0 מתוך 3 נבחרו/);
   run('roomPickAll()'); assert.match(run('roomSubmitState(roomMachines()).text'),/נבחרו 4 דיסקים ב-2 מחשבים/,'room select-all selects green only');
   run('roomPickClearAll()'); assert.equal(run('roomSubmitState(roomMachines()).n'),0);
 });
@@ -701,29 +715,30 @@ test('#1275 safety: off, empty, unidentified, and red drawers cannot be ticked; 
   run(`roomPick('${C3}@1'); roomPick('${C2}@2'); roomPick('${C2}@3'); roomPick('${C1}@2')`);   // כולם נדחים
   const html=run('roomNewWindow(roomMachines())'); balanced(html); assert.equal(run('roomSubmitState(roomMachines()).n'),0,'nothing selectable was selected');
   const c1=pcard(html,C1);
-  assert.match(c1,new RegExp(`<div class="lbay t-red" data-slot="1" data-key="${C1}@1"`),'red');
+  assert.match(bay(c1,`${C1}@1`),new RegExp(`^<tr class="dr dbd[^"]*" data-key="${C1}@1"`),'red');
   assert.match(bay(c1,`${C1}@1`),/<button type="button" aria-pressed="false" disabled title="לא יכול להיות יעד">יעד<\/button>/,'red: "יעד" is disabled and says why');
-  assert.match(bay(c1,`${C1}@1`),/<div class="lb-l bad">אדום: SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת<\/div>/,'red says the rule sentence');
-  assert.match(bay(c1,`${C1}@2`),/aria-pressed="false" disabled title="אינו ניתן לבחירה">יעד</,'no serial → disabled'); assert.match(bay(c1,`${C1}@2`),/<div class="lb-sz"><b>—<\/b>/);
+  assert.match(bay(c1,`${C1}@1`),/<span>אדום: SMART נכשל — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו או לחלץ לשרת<\/span>/,'red says the rule sentence');
+  assert.match(bay(c1,`${C1}@2`),/aria-pressed="false" disabled title="אינו ניתן לבחירה">יעד</,'no serial → disabled'); assert.match(bay(c1,`${C1}@2`),/<span class="sz">—<\/span>/);
   assert.match(bay(c1,`${C1}@2`),/אין מספר סידורי — אינו יעד/,'and says why');
-  assert.equal((pcard(html,C2).match(/class="lbay t-empty"/g)||[]).length,2,'two dashed empty slots');
-  assert.match(pcard(html,C2),/class="lbay t-yellow"[^>]*>[\s\S]*נכשל בשיכפול הקודם — לא מעתיקים ממנו; אפשר לכתוב עליו/,'#2848: failed last time is yellow -- a target, never a source');
+  assert.equal((pcard(html,C2).match(/<tr class="dr emp">/g)||[]).length,2,'two empty slots');
+  assert.match(bay(pcard(html,C2),`${C2}@1`),/<span class="tg yl"><i><\/i>נכשל בשיכפול הקודם<\/span>[^]*<span class="lcb yellow"[^]*נכשל בשיכפול הקודם — לא מעתיקים ממנו; אפשר לכתוב עליו/,'#2848: failed last time is yellow -- a target, never a source');
   run(`roomPick('${C1}@1')`); assert.equal(run('roomSubmitState(roomMachines()).n'),0,'red cannot enter selection state');
 });
 
-test('#1366/#2846/#2848 start-round colours: a slow SATA link and a slow write are red and cannot be ticked; an absolute CRC count says nothing', () => {
+test('#1366/#2846/#2848/#3591 start-round colours: a slow write is red and cannot be ticked; a SATA link SPEED and an absolute CRC count say nothing', () => {
   const room=roomIdle(); room.machines[0].drawer_count=3;
   room.machines[0].drawer_list=[
-    drawer('sda',1,'S5Y10',{smart:'ok',crc_suspect:true,crc:17,link_state:'slow',link_gbps:1.5,link_max_gbps:6}),
+    drawer('sda',1,'S5Y10',{smart:'ok',crc_suspect:true,crc:17,link_state:'ok',link_gbps:1.5,link_max_gbps:6}),   // #3591: 1.5 of 6.0 is information
     drawer('sdb',2,'S5Y11',{smart:'ok',write_slow:true}),   // #2848: this round's write check (the server's write_slow)
     drawer('sdc',3,'S5Y12',{smart:'ok',last_write_check:{slow:true,mbps:23,text_he:'בבדיקת הכתיבה הקודמת נמדד איטי'}}),   // a past round
   ];
   const {run}=setup({room}); const html=run('roomNewWindow(roomMachines())'); const c1=pcard(html,C1);
-  assert.match(bay(c1,`${C1}@1`),/^<div class="lbay t-red"[^]*<div class="lb-l red">קישור 1\.5 מתוך 6\.0 Gb\/s · לבדוק כבל או מגירה<\/div><div class="lb-l bad">אדום: קישור SATA איטי — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו<\/div>[^]*c-red"><i><\/i>קישור SATA איטי<[^]*disabled title="לא יכול להיות יעד">יעד</);
+  assert.match(bay(c1,`${C1}@1`),new RegExp(`^<tr class="dr" data-key="${C1}@1"[^]*onclick="roomPickTo\\([^"]+,true\\)">יעד<`),'#3591: a link at 1.5 of 6.0 is green and a target');
+  assert.doesNotMatch(bay(c1,`${C1}@1`),/קישור SATA איטי|לבדוק כבל|tbad/,'#3591: no red, no "check the cable" for a link speed');
   assert.doesNotMatch(c1,/מגירה חשודים|17 שגיאות/,'#2846: a crc_suspect from an old server is not drawn');
-  assert.match(bay(c1,`${C1}@2`),/^<div class="lbay t-red"[^]*<div class="lb-l red">איטי בסבב הזה — נמדד מחדש בסבב הבא<\/div><div class="lb-l bad">אדום: נפסל כאיטי בבדיקת הכתיבה בסבב הזה[^]*c-red"><i><\/i>איטי בסבב הזה<[^]*disabled title="לא יכול להיות יעד">יעד</);
-  assert.match(bay(c1,`${C1}@3`),/^<div class="lbay" data-slot="3"[^]*onclick="roomPickTo\([^"]+,true\)">יעד</,'#2848: a past round leaves no mark -- green, a target');
-  run(`roomPick('${C1}@2')`); assert.doesNotMatch(bay(run('roomNewWindow(roomMachines())'),`${C1}@2`),/ sel"|aria-pressed="true"[^>]*>יעד</);
+  assert.match(bay(c1,`${C1}@2`),/^<tr class="dr dbd[^"]*"[^]*<span class="tg tbad"><i><\/i>איטי בסבב הזה<\/span>[^]*disabled title="לא יכול להיות יעד">יעד<[^]*<span class="bd">איטי בסבב הזה — נמדד מחדש בסבב הבא\.<\/span> <span>אדום: נפסל כאיטי בבדיקת הכתיבה בסבב הזה/);
+  assert.match(bay(c1,`${C1}@3`),new RegExp(`^<tr class="dr" data-key="${C1}@3"[^]*onclick="roomPickTo\\([^"]+,true\\)">יעד<`),'#2848: a past round leaves no mark -- green, a target');
+  run(`roomPick('${C1}@2')`); assert.doesNotMatch(bay(run('roomNewWindow(roomMachines())'),`${C1}@2`),/<span class="tg m">יעד<\/span>|aria-pressed="true"[^>]*>יעד</);
 });
 
 test('#1275 pick grid: the round carries the selection as target_slots (library and direct); nothing selected is refused locally with the reason and posts nothing', async () => {
@@ -735,12 +750,12 @@ test('#1275 pick grid: the round carries the selection as target_slots (library 
   assert.equal(run('DEPLOY.err'),'','picking clears the message');
   await run('openRoomRoundSubmit()');
   let r=requests.find(x=>x.url==='/api/console/room'&&x.options.method==='POST');
-  assert.deepEqual(JSON.parse(r.options.body),{image_id:'img_1',target_drives:6,target_slots:[{mac:C1,ports:[1]},{mac:C2,ports:[1,3]}]},'grouped by machine, the GUI bridge format');
+  assert.deepEqual(JSON.parse(r.options.body),{image_id:'img_1',target_drives:6,target_slots:[slot(C1,[1]),slot(C2,[1,3])]},'grouped by machine, the GUI bridge format');
   assert.deepEqual(JSON.parse(run('JSON.stringify(DEPLOY.form.sel)')),{},'cleared after opening');
   requests.length=0; run(`roomFormSet('src','build_disk'); roomFormSet('disk','sda'); roomPick('${C2}@2')`);
   await run('openRoomRoundSubmit()');
   r=requests.find(x=>x.url==='/api/console/room'&&x.options.method==='POST');
-  assert.deepEqual(JSON.parse(r.options.body),{source:{kind:'build_disk',mac:B1,disk:'sda'},target_slots:[{mac:C2,ports:[2]}]});
+  assert.deepEqual(JSON.parse(r.options.body),{source:{kind:'build_disk',mac:B1,disk:'sda'},target_slots:[slot(C2,[2])]});
   run(`roomFormSet('src','library'); roomFormSet('image','img_1'); roomFormSet('target','1'); roomPickAll()`); requests.length=0;
   await run('openRoomRoundSubmit()'); assert.equal(requests.filter(x=>x.options&&x.options.method==='POST').length,0); assert.match(run('DEPLOY.err'),/היעד \(1\) קטן ממספר הדיסקים שסומנו \(4\)/);
   run("roomFormSet('target','')"); assert.match(newCard(run('roomNewWindow(roomMachines())')),/id="rn-target" min="1" value="4"/,'untyped target defaults to the four green ticked drawers');
@@ -766,33 +781,35 @@ test('#989 item 3: end of a wave with work left says so and offers the existing 
 });
 
 /* ‏#432: קישור ה-SATA לפני "התחל" — כתום שואל, לא חוסם; ‏#65: מי חסר בגל, וכבה אותו / התחל בכל זאת / בטל. */
-const WARN_TEXT='מחשב 2 · דיסק 2: קישור 1.5 מתוך 6.0 Gb/s — לבדוק כבל או מגירה';
+const WARN_TEXT='מחשב 2 · דיסק 2: מונה CRC עלה ב-12 מאז הסבב הקודם — לבדוק כבל או מגירה';   // #3591: a link speed is not a warning
 function roomOpenWave(extra={}) {
   const r=roomRunning({wave_state:'open',wave_number:1,written_drives:0,remaining_drives:6,ready_drives:4,...extra});
   r.machines[0]={...r.machines[0],drawer_list:[drawer('sda',1,'S5Y10',{smart:'ok',link_gbps:6,link_max_gbps:6,link_state:'ok'}),drawer('sdb',2,'S5Y11',{smart:'ok',link_gbps:null,link_max_gbps:null,link_state:'unknown'})]};
-  r.machines[1]={...r.machines[1],drawer_list:[drawer('sda',1,'S5Y30',{smart:'ok',link_gbps:6,link_max_gbps:6,link_state:'ok'}),drawer('sdb',2,'S5Y31',{smart:'ok',link_gbps:1.5,link_max_gbps:6,link_state:'slow',crc_rise:12})]};
+  r.machines[1]={...r.machines[1],drawer_list:[drawer('sda',1,'S5Y30',{smart:'ok',link_gbps:6,link_max_gbps:6,link_state:'ok'}),drawer('sdb',2,'S5Y31',{smart:'ok',link_gbps:1.5,link_max_gbps:6,link_state:'ok',crc_rise:12})]};
   return r;
 }
 
-test('#432/#2848: a slow drawer is red with the link and CRC rise in its tooltip; an unread link says "unknown" and is never called fine', () => {
+test('#432/#3591: a link speed is information in the tooltip, never red and never "check the cable"; an unread link says "unknown" and is never called fine', () => {
   const {run}=setup({room:roomOpenWave()});
   const html=run('deploy(0)'); balanced(html);
-  assert.match(mach(html,C2),/<div class="dsk bad bay-emphasis err" data-slot="2" title="[^"]*שגיאות CRC עלו בשיכפול האחרון — כבל או מגירה חשודים · קישור 1\.5 מתוך 6\.0 Gb\/s · לבדוק כבל או מגירה · SMART תקין">/);
+  assert.match(mach(html,C2),/<div class="dsk[^"]*" data-slot="2" title="[^"]*שגיאות CRC עלו בשיכפול האחרון — כבל או מגירה חשודים · קישור 1\.5 מתוך 6\.0 Gb\/s · SMART תקין">/);
+  assert.doesNotMatch(mach(html,C2),/class="dsk bad|bay-emphasis err|קישור 1\.5 מתוך 6\.0 Gb\/s · לבדוק כבל/,'#3591: 1.5 of 6.0 is not red and does not say to check the cable');
   assert.match(mach(html,C1),/<div class="dsk" data-slot="1" title="[^"]*קישור 6\.0 מתוך 6\.0 Gb\/s · SMART תקין">/);
-  assert.match(mach(html,C2),/דיסק 2 — קישור SATA איטי/,'#2848: the red line names the link, not "SMART נכשל"');
+  assert.doesNotMatch(mach(html,C2),/קישור SATA איטי/,'#3591: no "slow SATA link" line');
   assert.match(mach(html,C1),/<div class="dsk" data-slot="2" title="[^"]*קישור SATA לא ידוע · SMART תקין">/,'unknown is said, not hidden');
   assert.doesNotMatch(mach(html,C1),/לא ידוע · לבדוק כבל/);
-  assert.equal(run("linkSlow({link_gbps:3,link_max_gbps:6})"),true,'/machines carries only the numbers');
-  assert.equal(run("linkSlow({link_gbps:3,link_max_gbps:null})"),false,'an unknown max is not "slow" either');
+  assert.equal(run("typeof linkSlow"),'undefined','#3591: there is no "slow link" decision in the console any more');
+  assert.equal(run("linkText({link_gbps:3,link_max_gbps:6})"),'קישור 3.0 מתוך 6.0 Gb/s');
+  assert.equal(run("linkText({link_gbps:1.5,link_max_gbps:6})"),'קישור 1.5 מתוך 6.0 Gb/s');
 });
 
 test('#432: an open wave with a precheck warning shows it in orange; "start" asks first, and only "start anyway" posts', async () => {
-  const s=setup({room:roomOpenWave({precheck:[{mac:C2,machine:'מחשב 2',port:2,serial:'S5Y31',slot_name:null,link_gbps:1.5,link_max_gbps:6,crc_rise:null,text_he:WARN_TEXT}]})});
+  const s=setup({room:roomOpenWave({precheck:[{mac:C2,machine:'מחשב 2',port:2,serial:'S5Y31',slot_name:null,link_gbps:1.5,link_max_gbps:6,crc_rise:12,text_he:WARN_TEXT}]})});
   const html=s.run('deploy(0)'); balanced(html);
-  assert.match(html,/<div class="note warn">[^]*?לפני ההתחלה — מגירה אחת בגל עם קישור חשוד[^]*?מחשב 2 · דיסק 2: קישור 1\.5 מתוך 6\.0 Gb\/s[^]*?אזהרה, לא חסימה/);
+  assert.match(html,/<div class="note warn">[^]*?לפני ההתחלה — מגירה אחת בגל עם קישור חשוד[^]*?מחשב 2 · דיסק 2: מונה CRC עלה ב-12[^]*?תיכשל בשמה, והשאר ימשיכו/);
   s.requests.length=0; await s.run('startWave()');
   assert.equal(s.requests.filter(x=>x.options.method==='POST').length,0,'no POST before the operator chose');
-  assert.equal(s.run('formOptions.submitLabel'),'התחל בכל זאת'); assert.match(s.run('formOptions.note'),/קישור 1\.5 מתוך 6\.0/);
+  assert.equal(s.run('formOptions.submitLabel'),'התחל בכל זאת'); assert.match(s.run('formOptions.note'),/מונה CRC עלה ב-12/);
   await s.run('formOptions.onSubmit({})');
   assert.ok(s.requests.some(x=>x.url==='/api/console/room/start'&&x.options.method==='POST'));
   const clean=setup({room:roomOpenWave({precheck:[]})});
@@ -802,7 +819,7 @@ test('#432: an open wave with a precheck warning shows it in orange; "start" ask
 });
 
 test('#2670: the precheck title follows the kind of warning — link, slow write, or both — not always "suspect link"', () => {
-  const LINK={mac:C2,machine:'מחשב 2',port:2,serial:'S5Y31',link_gbps:1.5,link_max_gbps:6,crc_rise:null,model_slow:false,text_he:WARN_TEXT};
+  const LINK={mac:C2,machine:'מחשב 2',port:2,serial:'S5Y31',link_gbps:6,link_max_gbps:6,crc_rise:null,port_suspect:true,model_slow:false,text_he:WARN_TEXT};   // #3591: the learned port, not a speed
   const CRC={...LINK,port:3,serial:'S5Y32',link_gbps:6,crc_rise:12,text_he:'מחשב 2 · דיסק 3: מונה CRC עלה ב-12'};
   const WRITE={mac:C2,machine:'מחשב 2',port:4,serial:'S5Y33',link_gbps:6,link_max_gbps:6,crc_rise:null,crc_suspect:false,model_slow:true,text_he:'מחשב 2 · דיסק 4: כתיבה איטית'};
   const title=(precheck)=>{ const html=setup({room:roomOpenWave({precheck})}).run('deploy(0)'); balanced(html);
@@ -812,7 +829,8 @@ test('#2670: the precheck title follows the kind of warning — link, slow write
   assert.equal(title([WRITE]),'מגירה אחת בגל עם כתיבה איטית','a slow write alone says nothing about a cable');
   assert.equal(title([WRITE,{...WRITE,port:5}]),'2 מגירות בגל עם כתיבה איטית');
   assert.equal(title([LINK,WRITE]),'2 מגירות בגל עם קישור חשוד או כתיבה איטית');
-  assert.equal(title([{...WRITE,link_gbps:1.5}]),'מגירה אחת בגל עם קישור חשוד או כתיבה איטית','one drawer with both signs');
+  assert.equal(title([{...WRITE,crc_rise:12}]),'מגירה אחת בגל עם קישור חשוד או כתיבה איטית','one drawer with both signs');
+  assert.equal(title([{...WRITE,model_slow:false,link_gbps:1.5}]),'מגירה אחת בגל עם אזהרה','#3591: a link speed is no sign of a cable');
 });
 
 test('#2707: "the disk itself" and "slower than its model" are not a suspect link; no known sign is "a warning"', () => {
@@ -825,7 +843,7 @@ test('#2707: "the disk itself" and "slower than its model" are not a suspect lin
   assert.equal(title([{...BASE,smart_learned:'critical_rose'}]),'מגירה אחת בגל עם דיסק חשוד');
   assert.equal(title([{...BASE,smart_learned:'downshift_rose'}]),'מגירה אחת בגל עם קישור חשוד');
   assert.equal(title([{...BASE}]),'מגירה אחת בגל עם אזהרה','no sign it knows: never a guessed kind');
-  assert.equal(title([{...BASE,disk_suspect:true},{...BASE,port:3,link_gbps:1.5},{...BASE,port:4,model_slow:true}]),
+  assert.equal(title([{...BASE,disk_suspect:true},{...BASE,port:3,crc_rise:12},{...BASE,port:4,model_slow:true}]),
     '3 מגירות בגל עם קישור חשוד או כתיבה איטית או דיסק חשוד');
 });
 
@@ -928,14 +946,13 @@ test('#2848 start-round cards: yellow is a target but not in "בחר הכול"; 
   room.machines[0].drawer_count=3;
   const {run}=setup({room});
   run('roomPickAll()'); let html=run('roomNewWindow(roomMachines())'); balanced(html);
-  const c1=pcard(html,C1);
-  assert.match(bay(c1,`${C1}@1`),/^<div class="lbay t-yellow" data-slot="1"/,'yellow');
-  assert.doesNotMatch(bay(c1,`${C1}@1`),/ sel"/,'"בחר הכול" does not tick yellow');
-  assert.match(bay(c1,`${C1}@1`),/<span class="lb-chip c-yellow"><i><\/i>כתיבה לא הושלמה<\/span>/);
-  assert.match(bay(c1,`${C1}@2`),/^<div class="lbay sel" data-slot="2"/,'green is ticked');
-  assert.match(bay(c1,`${C1}@3`),/<span class="lb-chip c-grey"><i><\/i>SMART לא נבדק<\/span>/,'grey, never green (principle 5)');
-  run(`roomPickTo('${C1}@1',true)`); assert.match(bay(pcard(run('roomNewWindow(roomMachines())'),C1),`${C1}@1`),/^<div class="lbay t-yellow sel"/,'yellow is a target by hand');
-  assert.match(html,/<div class="lb-legend"><b>מקרא — צבע מלא: רקע בגוון \+ מסגרת עבה<\/b>[^]*אפור — SMART לא נבדק/);
+  const c1=pcard(html,C1), on=(row)=>/aria-pressed="true"[^>]*>יעד</.test(row);
+  assert.match(bay(c1,`${C1}@1`),/<span class="tg yl"><i><\/i>כתיבה לא הושלמה<\/span>[^]*<span class="lcb yellow"/,'yellow');
+  assert.ok(!on(bay(c1,`${C1}@1`)),'"בחר הכול" does not tick yellow');
+  assert.ok(on(bay(c1,`${C1}@2`)),'green is ticked');
+  assert.match(bay(c1,`${C1}@3`),/<span class="tg gr"><i><\/i>SMART לא נבדק<\/span>/,'grey, never green (principle 5)');
+  run(`roomPickTo('${C1}@1',true)`); assert.ok(on(bay(pcard(run('roomNewWindow(roomMachines())'),C1),`${C1}@1`)),'yellow is a target by hand');
+  assert.match(html,/<div class="lgd">[^]*<span class="tg gr"><i><\/i>SMART לא נבדק<\/span>/,'the legend is there');
 });
 
 test('#2987/#2988 (Nadav 12/11, mockup 06-bay-states): a line per red disk in the agent\'s short words, "2 דיסקים אדומים"; the diagnosis only in the hover; a drawer that stands says why at once', () => {
@@ -952,9 +969,15 @@ test('#2987/#2988 (Nadav 12/11, mockup 06-bay-states): a line per red disk in th
   assert.match(c2,/<div class="ms"><div class="ms-line">דיסק 1 — הדיסק נעלם באמצע הכתיבה \(74%\)\. בדקו שהמגירה סגורה והכבל מחובר, וכתבו אותו שוב בגל הבא\.<\/div><div class="ms-line">דיסק 3 — הדיסק לא עמד בקצב — אבדו בייטים<\/div><\/div>/,'a line per disk; error_short wins over error');
   assert.doesNotMatch(c2.replace(/title="[^"]*"/g,''),/host5|keep_firmware|max_performance|נרדם|הפרטים בריחוף|; /,'no diagnosis, no joined paragraph on the card');
   assert.match(c2,/title="[^"]*host5=keep_firmware_settings[^"]*"/,'the diagnosis is kept -- in the hover');
-  assert.match(c1,/<span class="dline warn">ממתין לדיסק… הכתיבה עומדת 6 ש&#39; · ייכשל אחרי 150 ש&#39;<\/span>/,'waiting for the disk, at once');
-  assert.match(c1,/<span class="dline warn">הרשת נותקה — ממתין \(עד 300 ש&#39;\) · הדיסק לא נמחק<\/span>/,'the network, at once');
+  assert.match(c1,/<span class="dline warn">ממתין לדיסק… הכתיבה עומדת 6 ש&#39;<\/span>/,'waiting for the disk, at once -- only the time that passed (#3726, Nadav 12/11)');
+  assert.match(c1,/<span class="dline warn">הרשת נותקה — ממתין 4 ש&#39; · הדיסק לא נמחק<\/span>/,'the network, at once -- only the time that passed');
+  assert.doesNotMatch(c1,/ייכשל אחרי|\(עד /,"the agent's ceiling (stall_limit_s) is on the wire and is not shown, whatever its value");
   assert.match(c1,/<div class="bar warn"[^>]*><i style="--w:38%">/,'a drawer that stands is orange, not a quiet blue');
+  r.machines[0].drawer_list[0]={...r.machines[0].drawer_list[0],stall_limit_s:null};
+  r.machines[0].drawer_list[1]={...r.machines[0].drawer_list[1],stall_limit_s:null};
+  const c1n=mach(between(setup({room:r}).run('deploy(0)'),'<div class="rgrid round">','<div class="c12 rnotes">'),C1);
+  assert.match(c1n,/ממתין לדיסק… הכתיבה עומדת 6 ש&#39;<\/span>/,'no ceiling reported: the same line');
+  assert.match(c1n,/הרשת נותקה — ממתין 4 ש&#39; · הדיסק לא נמחק/,'no ceiling reported: the same line');
   r.machines[0].drawer_list[0]={...r.machines[0].drawer_list[0],state:'done',stall:'waiting_disk',stall_s:6};
   assert.doesNotMatch(setup({room:r}).run('deploy(0)'),/ממתין לדיסק/,'only a writing drawer stands');
   r.machines[0].drawer_list[0]={...r.machines[0].drawer_list[0],state:'done',bytes_written:100,

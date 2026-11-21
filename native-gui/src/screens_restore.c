@@ -204,7 +204,10 @@ void screen_restore(App *a, cairo_t *cr, double W, double H, double head_h) {
         hit_add(a, box, in ? HIT_OPTION_BASE + items[i] : HIT_PICK_FOLDER_BASE + i);
     }
     if (shown == 0) {
-        Text none = rtl_block_make(cr, 13, 400, "אין אימג'ים זמינים לשחזור.", avail_w);
+        const char *message = s->nimages || s->images_known == 1 ? "אין אימג'ים זמינים לשחזור."
+            : s->images_known < 0 ? "לא הצלחנו לקרוא את רשימת האימג'ים."
+            : "טוען את רשימת האימג'ים…";
+        Text none = rtl_block_make(cr, 13, 400, message, avail_w);
         text_draw_r(cr, &none, W - N_PAD, y, t->muted);
         text_free(&none);
     }

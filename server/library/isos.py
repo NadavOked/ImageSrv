@@ -32,6 +32,7 @@ from pathlib import Path
 
 from server.core.atomicfile import fsync_dir, fsync_file, write_atomic
 from server.core.cleanup import remove_tree
+from server.core.logtext import one_line
 
 log = logging.getLogger("imagesrv.isos")
 
@@ -154,14 +155,14 @@ class IsoStore:
         try:
             meta = json.loads((directory / META).read_text(encoding="utf-8"))
         except (OSError, ValueError, RecursionError) as exc:
-            log.warning("skipping unreadable ISO record %s: %s", directory, exc)
+            log.warning("skipping unreadable ISO record %s: %s", one_line(directory), one_line(exc))
             return None
         if (not isinstance(meta, dict) or meta.get("id") != directory.name
                 or not ISO_ID.fullmatch(directory.name)
                 or not isinstance(meta.get("name"), str)
                 or not isinstance(meta.get("size"), int)
                 or not isinstance(meta.get("sha256"), str)):
-            log.warning("skipping malformed ISO record %s", directory)
+            log.warning("skipping malformed ISO record %s", one_line(directory))
             return None
         meta.setdefault("folder", "")
         meta.setdefault("filename", "")
@@ -180,11 +181,23 @@ class IsoStore:
                  if d.is_dir() and not d.is_symlink() and (m := self._read(d)) is not None]
         return sorted(found, key=lambda m: (m["name"].lower(), m["id"]))
 
-    def get(self, iso_id: object) -> dict | None:
-        if not isinstance(iso_id, str) or not ISO_ID.fullmatch(iso_id):
+    def _folder(self, iso_id: str) -> Path | None:
+        """תיקיית ה-ISO, או None. המזהה חייב להתאים ל-ISO_ID, והנתיב אחרי realpath חייב להיות
+        בדיוק `<ספרייה>/<מזהה>` ובתוך הספרייה: קישור סימלי (גם כזה שמצביע פנימה) נדחה."""
+        if not ISO_ID.fullmatch(iso_id):
             return None
-        directory = self.dir / iso_id
-        return self._read(directory) if directory.is_dir() and not directory.is_symlink() else None
+        base = os.path.realpath(self.dir)
+        candidate = os.path.join(base, iso_id)
+        full = os.path.realpath(candidate)
+        if full != candidate or not full.startswith(base + os.sep):
+            return None
+        return Path(full)
+
+    def get(self, iso_id: object) -> dict | None:
+        if not isinstance(iso_id, str):
+            return None
+        directory = self._folder(iso_id)
+        return self._read(directory) if directory is not None and directory.is_dir() else None
 
     def name_taken(self, name: str) -> bool:
         return any(m["name"].lower() == name.lower() for m in self.list())
@@ -221,11 +234,13 @@ class IsoStore:
         found = self.get(iso_id)
         if found is None:
             raise IsoError("ה-ISO לא קיים", 404)
-        directory = self.dir / iso_id
+        directory = self._folder(iso_id)
+        if directory is None:
+            raise IsoError("ה-ISO לא קיים", 404)
         try:
             shutil.rmtree(directory)
         except OSError as exc:
-            log.warning("ISO delete of %s failed: %s", directory, exc)
+            log.warning("ISO delete of %s failed: %s", one_line(directory), one_line(exc))
         if directory.exists():
             raise IsoError("המחיקה לא הושלמה -- הקבצים עדיין בדיסק. הפרטים ביומן השרת.", 500)
         return found

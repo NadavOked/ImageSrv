@@ -49,8 +49,12 @@ def run(data_dir, images_dir) -> SimpleNamespace:
     check("למשתמש ההפצה אין קונסולה וובית (#1073)",
           status == 403 and body.get("error") == "deploy_no_console", f"{status} {body}")
     deploy = Client(console_base=BASE)
-    status, _ = deploy.json("POST", "/api/console/login", DEPLOY)
-    check("כניסת משתמש ההפצה דרך פורט הסוכן", status == 200, str(status))
+    # #3223: רשת ההפצה משרתת רק מחשבים רשומים. עד כאן לא נרשם אף אחד מהמחשבים
+    # שחכורים לכתובת הלולאה, ולכן גם כניסת משתמש ההפצה נענית ב-403 בשם —
+    # זו ההוכחה שהשער עובד, ולא רק שהסימולציה עוקפת אותו.
+    status, body = deploy.json("POST", "/api/console/login", DEPLOY)
+    check("כניסת משתמש הפצה מיחידה לא רשומה נדחית (#3223)",
+          status == 403 and body.get("code") == "deploy_unregistered", f"{status} {body}")
 
     status, _ = console.json("POST", "/api/console/groups",
                              {"id": "grp_LAB1", "label": "כיתה LAB1", "role": "classroom"})
@@ -60,6 +64,10 @@ def run(data_dir, images_dir) -> SimpleNamespace:
     status, _ = console.json("POST", "/api/console/settings",
                              {"class_deploy_enabled": "true"})
     check("הפצה לכיתות הודלקה (#880)", status == 200, str(status))
+    # #3173: ברירת המחדל היא מנוע החתיכות, ול-`--sender-simulate` אין סימולטור שולח שלו
+    # (`chunk_wave` עונה udpcast תחתיו בכל מקרה). הסימולציה בוחרת udpcast במפורש, כמו מפעיל.
+    status, _ = console.json("POST", "/api/console/settings", {"stream_engine": "udpcast"})
+    check("מנוע השידור udpcast נבחר במפורש (#3173)", status == 200, str(status))
     status, imported = console.json("POST", "/api/console/machines/import", {
         "group_id": "grp_LAB1",
         "text": "\n".join(f"{m} {i:02d}" for i, m in enumerate(CLASS_MACS, start=5)),
@@ -68,6 +76,8 @@ def run(data_dir, images_dir) -> SimpleNamespace:
     status, _ = console.json("POST", "/api/console/machines", {
         "mac": BUILD_MAC, "name": "BUILD-PC", "group_id": "grp_BUILD"})   # #1997: שם מחשב באנגלית
     check("מחשב הבנייה נרשם (קבוצה קבועה)", status == 200, str(status))
+    status, _ = deploy.json("POST", "/api/console/login", DEPLOY)
+    check("כניסת משתמש ההפצה דרך פורט הסוכן, אחרי שהמחשב נרשם", status == 200, str(status))
     status, _ = console.json("POST", "/api/console/machines", {
         "mac": CLONER_MAC, "name": "01", "group_id": "grp_CLONERS"})
     check("מחשב השיכפול נרשם", status == 200, str(status))

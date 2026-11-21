@@ -3,7 +3,7 @@
 # POSIX sh (busybox ash).
 #
 # Three layers, each a file under $LC (the controller is localclone.sh):
-#   inv/<dev>      one line per disk, lc_inventory -- what the screen shows
+#   inv/<dev>      one line per disk, lc_inventory (lcscan.sh) -- what the screen shows
 #                  before anything is chosen (port, model, size, SMART, what
 #                  is on it, and how much room its layout needs);
 #   measure/<dev>  the shrink measurement of one SOURCE, lc_measure -- only
@@ -121,32 +121,13 @@ lc_inv_disk() {
         else _li_ok=1; fi
     fi
     echo "$_li_mark" > "$LC/inv/$1.mark"   # the screen's lc_disk field 16 (lcgui.sh); "" = not a GPT
+    cat "$SYSROOT/sys/block/$1/queue/rotational" > "$LC/inv/$1.rot" 2>/dev/null   # X16 (#3064): 1 = HDD; not 0/1 = "not read" (lchdd.sh logs it)
     printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' "$_li_port" "$1" "$_li_model" "$_li_ser" \
         "$_li_size" "$_li_smart" "$(_lc_clean "$_li_sr")" "$(_lc_clean "$_li_os")" "$_li_n" "$_li_used" \
         "$_li_need" "$_li_ok" "$(_lc_clean "$_li_why")"
 }
 
-lc_inventory() {
-    # Every drawer, once, into $LC/inv/. inv.state says when it is complete:
-    # a half-written inventory must never look like a machine with fewer disks.
-    mkdir -p "$LC/inv" || return 1
-    rm -f "$LC/inv/"* "$LC/measure/"* 2>/dev/null
-    echo scanning > "$LC/inv.state"
-    for _lv_d in $(list_drawers); do
-        lc_is_boot_media "$_lv_d" && continue   # #1914: the USB stick is never a source or a target
-        if command -v watchdog_beat >/dev/null 2>&1; then watchdog_beat; fi
-        lc_inv_disk "$_lv_d" > "$LC/inv/$_lv_d.next" && mv "$LC/inv/$_lv_d.next" "$LC/inv/$_lv_d.line"
-    done
-    echo "done" > "$LC/inv.state"
-}
-
-lc_is_boot_media() {
-    # #1914: 0 = $1 is the stick this machine booted from (usbclone.sh found it by
-    # label). In usbclone mode a list that was not written is every disk: fail closed.
-    [ "${IMAGESRV_MODE:-}" = usbclone ] || return 1
-    [ -s "$RUN_DIR/usb-media.disks" ] || return 0
-    grep -qx "$1" "$RUN_DIR/usb-media.disks"
-}
+# lc_inventory and lc_is_boot_media: lcscan.sh (#2991).
 
 lc_role() {
     # $1 = source, $2 = idx, $3 = type GUID. The inventory's role (System32
@@ -174,6 +155,8 @@ _lc_src_he() {   # $1 = source disk -> " (דיסק N)" by its drawer (slotnames.
     _ls_n=$(disk_drawer "$1" "$(disk_port "$1" 2>/dev/null || echo 0)" 2>/dev/null); _ls_n=${_ls_n%%|*}
     case "$_ls_n" in ''|0|*[!0-9]*) ;; *) printf ' (דיסק %s)' "$_ls_n" ;; esac
 }
+# $1 = disk, $2 = a tool's sentence for a TARGET's row: without the device's name (#2084, mockup 09); one that still names it is the log's
+_lc_nodev() { _ln_t=$(printf '%s' "$2" | sed -e "s# ב-/dev/$1[^ :]*##g" -e "s# בדיסק $1\([^a-z0-9]\)#\1#g" -e "s# בדיסק $1\$##"); case "$_ln_t" in *"$1"*) log "local clone: $2" >&2; printf '%s' "הבדיקה נכשלה — הפרטים ביומן" ;; *) printf '%s' "$_ln_t" ;; esac; }
 
 _lc_measure_fit() {
     # $1 = source disk. $LC/measure/$1: state|need_min|reason. state: none (no
@@ -200,12 +183,12 @@ _lc_measure_fit() {
         _lm_why=$(capture_ntfs_hibernation_reason "$_lm_pn" "$RUN_DIR/lc-probe") || {
             case "$_lm_why" in   # #2084 (mockup 09): the words of the mockup, a disk by its number; a hibernated source (14) never gets here (#2069)
                 *"Fast Startup"*) echo "failed||המקור$(_lc_src_he "$1") במצב שינה של Windows — אי אפשר לכווץ אותו לדיסק הזה, שקטן ממנו. ב-Windows של המקור: ⁦powercfg /h off⁩, ואז כיבוי" ;;
-                *) echo "failed||במקור$(_lc_src_he "$1") — מחיצה $_lm_i: $(_lc_clean "${_lm_why%.}")" ;;   # #1937: drawn on a TARGET's row
+                *) echo "failed||במקור$(_lc_src_he "$1") — מחיצה $_lm_i: $(_lc_nodev "$1" "$(_lc_clean "${_lm_why%.}")")" ;;   # #1937: drawn on a TARGET's row
             esac > "$_lm_out"; return 1; }
     done < "$_lm_parts"
     cp "$_lm_parts" "$LC/measure/$1.parts" || { echo "failed||לא הצלחנו להכין את המדידה" > "$_lm_out"; return 1; }
     if ! shrink_plan "$1" "$LC/measure/$1.parts" 512; then
-        echo "failed||במקור$(_lc_src_he "$1") — $(_lc_clean "${SHRINK_ERROR%.}")" > "$_lm_out"; return 1
+        echo "failed||במקור$(_lc_src_he "$1") — $(_lc_nodev "$1" "$(_lc_clean "${SHRINK_ERROR%.}")")" > "$_lm_out"; return 1
     fi
     # #1466 P2: the run reuses this plan (lc_shrink_plan) on the same disk and table.
     cp "$RUN_DIR/shrink.plan" "$LC/measure/$1.plan" && _lc_clean "$(disk_serial "$1")" > "$LC/measure/$1.serial" || rm -f "$LC/measure/$1.plan"
@@ -254,11 +237,11 @@ EOF
     # system partition -- the layout the target would get, the same check as
     # disk_fits. Not measured = unchecked, never fits.
     case "${_lf_v%%|*}" in
-        fits) _lf_p="$LC/inv/$1.parts" ;;
-        shrink) _lf_p="$LC/measure/$1.compact" ;;
+        fits) _lf_p="$LC/inv/$1.parts"; _lf_o="" ;;
+        shrink) _lf_p="$LC/measure/$1.compact"; _lf_o="$LC/inv/$1.parts" ;;   # #2404: the source's own sizes -- what comes back
         *) echo "$_lf_v"; return ;;
     esac
-    _lf_f=$(lc_min_free "$1" "$(lc_inv_field "$2" 5)" "$_lf_p")
+    _lf_f=$(lc_min_free "$1" "$(lc_inv_field "$2" 5)" "$_lf_p" "$_lf_o")
     _lf_n=${_lf_v#*|}; _lf_n=${_lf_n%%|*}
     case "$_lf_f" in
         ok) echo "$_lf_v" ;;
@@ -269,15 +252,18 @@ EOF
 
 lc_min_free() {
     # $1 = source, $2 = target bytes, $3 = the parts file of the layout the
-    # target gets (original or compacted). min_free_check's answer, on a
-    # manifest built from the inventory: roles as the inventory checked them (lc_role), used bytes
-    # from inv/<src>.used (an unread one stays null -- unchecked).
+    # target gets (original or compacted), $4 = the source's own parts file
+    # when $3 is compacted. fit_layout_check's answer (diskfit.sh -- the one
+    # disk_fits asks, #2404: volumes_fit too), on a manifest built from the
+    # inventory: roles as the inventory checked them (lc_role), used bytes
+    # from inv/<src>.used (an unread one stays null -- unchecked), and
+    # shrunk_from_bytes on every partition $3 made smaller than $4.
     _fm_m="$LC/fit.json"; _fm_p=""
     # #1484: a value that is not a number is "not checked", never "ok" -- in the
     # kiosk min_free_gb was "not found", "bad number" fell through to ok.
     _fm_g=$(min_free_gb); case "$_fm_g" in ''|*[!0-9]*) echo "unchecked|לא הצלחנו לקרוא כמה מקום פנוי נדרש"; return 0 ;; esac
-    [ "$_fm_g" -gt 0 ] || { echo ok; return 0; }   # 0 = the rule is off
-    [ -s "$3" ] || { echo "unchecked|לא הצלחנו לקרוא את פריסת המקור"; return 0; }
+    [ "$_fm_g" -gt 0 ] || [ -n "${4:-}" ] || { echo ok; return 0; }   # 0 = the rule is off; a shrink still owes volumes_fit
+    { [ -s "$3" ] && { [ -z "${4:-}" ] || [ -s "$4" ]; }; } || { echo "unchecked|לא הצלחנו לקרוא את פריסת המקור"; return 0; }   # $4 given and unread: nothing marks what comes back
     while IFS='|' read -r _fm_i _fm_t _fm_u _fm_f _fm_s; do
         _fm_b=$(awk -F'|' -v i="$_fm_i" '$1 == i { print $2; exit }' "$LC/inv/$1.used" 2>/dev/null)
         case "$_fm_b" in ''|*[!0-9]*) _fm_b=null ;; esac
@@ -285,10 +271,11 @@ lc_min_free() {
         # #1591: a role that is not one of the known ones (empty: its resolver was missing) is "not
         # checked" -- not "no system partition", which min_free_check answers with ok.
         case "$_fm_r" in esp|msr|recovery|linux|swap|windows|data) ;; *) echo "unchecked|מחיצה $_fm_i: לא הצלחנו לבדוק אם היא מחיצת המערכת"; return 0 ;; esac
-        _fm_p="$_fm_p{\"index\":$_fm_i,\"type_guid\":\"$_fm_t\",\"role\":\"$_fm_r\",\"fs\":null,\"start_sector\":$_fm_f,\"size_bytes\":$((_fm_s * 512)),\"used_bytes\":$_fm_b,\"file\":null,\"sha256\":null,\"expandable\":false},"
+        _fm_o=""; [ -z "${4:-}" ] || _fm_o=$(awk -F'|' -v i="$_fm_i" -v z="$_fm_s" '$1 == i && $5 + 0 > z + 0 { printf ",\"shrunk_from_bytes\":%.0f", $5 * 512 }' "$4")
+        _fm_p="$_fm_p{\"index\":$_fm_i,\"type_guid\":\"$_fm_t\",\"role\":\"$_fm_r\",\"fs\":null,\"start_sector\":$_fm_f,\"size_bytes\":$((_fm_s * 512)),\"used_bytes\":$_fm_b,\"file\":null,\"sha256\":null,\"expandable\":false$_fm_o},"
     done < "$3"
     printf '{"sector_size":512,"partitions":[%s]}\n' "${_fm_p%,}" > "$_fm_m"
     _fm_n=$(required_bytes "$_fm_m")
     case "$_fm_n:$2" in *[!0-9:]*|:*|*:) echo "unchecked|לא הצלחנו לחשב את הפריסה"; return 0 ;; esac
-    min_free_check "$_fm_m" "$2" "$_fm_n"
+    fit_layout_check "$_fm_m" "$2" "$_fm_n"
 }

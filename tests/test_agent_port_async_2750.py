@@ -37,6 +37,10 @@ MODULES = sorted((ROOT / "server" / "agent").glob("*.py")) + [
     ROOT / "server" / "rounds" / "station.py",
     ROOT / "server" / "rounds" / "direct.py",
     ROOT / "server" / "library" / "capture.py",
+    ROOT / "server" / "console" / "disk_sets.py",     # #2750 part B, slice 1 (console)
+    ROOT / "server" / "console" / "backup_target.py",  # #2750 part B, slice 2 (console)
+    ROOT / "server" / "console" / "drivers.py",
+    ROOT / "server" / "console" / "isos.py",
 ]
 ROUTE_METHODS = {"get", "post", "put", "delete", "patch", "api_route", "websocket"}
 
@@ -250,3 +254,62 @@ def test_a_disk_event_on_a_locked_db_does_not_block_another_request(server):
     assert server["ctx"].conn.execute(
         "SELECT COUNT(*) AS n FROM disk_events WHERE session_id = 'ses_2750' AND mac = ?",
         (MAC,)).fetchone()["n"] == 1
+
+
+def test_a_console_write_on_a_locked_db_does_not_block_another_request(server):
+    """Part B (console port): `POST /backup-policy` and `POST /iso-folders` write
+    settings. While another connection holds the write lock they wait for it --
+    and a light `/me` request must not wait with them."""
+    pytest.importorskip("fastapi")
+    httpx = pytest.importorskip("httpx")
+    admin = server["admin"]
+    assert admin.get("/api/console/me").status_code == 200      # warm-up, as above
+
+    locker = sqlite3.connect(server["ctx"].conn._path, isolation_level=None,
+                             check_same_thread=False)
+    locker.execute("BEGIN IMMEDIATE")
+    released = threading.Event()
+
+    def release():
+        locker.execute("ROLLBACK")
+        released.set()
+
+    timer = threading.Timer(LOCK_SECONDS, release)
+
+    async def scenario():
+        transport = httpx.ASGITransport(app=server["app"])
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver",
+                                     cookies=admin.cookies) as client:
+            t0 = time.monotonic()
+
+            async def policy():
+                r = await client.post("/api/console/backup-policy", json={"enabled": False})
+                return r, time.monotonic() - t0
+
+            async def folder():
+                r = await client.post("/api/console/iso-folders", json={"name": "lock2750"})
+                return r, time.monotonic() - t0
+
+            async def light():
+                await asyncio.sleep(0.2)          # both writes are already waiting on the lock
+                r = await client.get("/api/console/me")
+                return r, time.monotonic() - t0
+
+            return await asyncio.gather(policy(), folder(), light())
+
+    timer.start()
+    try:
+        (pol, pol_at), (fol, fol_at), (me, me_at) = asyncio.run(scenario())
+    finally:
+        timer.cancel()
+        if not released.is_set():
+            release()
+        locker.close()
+
+    assert me.status_code == 200, me.text
+    assert me_at < LOCK_SECONDS - 0.5, (
+        f"/me finished {me_at:.2f}s after the lock was taken; the lock was held"
+        f" {LOCK_SECONDS}s -- a console write blocked the event loop")
+    assert pol.status_code == 200, pol.text
+    assert fol.status_code == 200, fol.text
+    assert pol_at >= LOCK_SECONDS - 0.1 and fol_at >= LOCK_SECONDS - 0.1, (pol_at, fol_at)
