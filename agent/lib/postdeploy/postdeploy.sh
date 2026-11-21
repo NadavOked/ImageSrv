@@ -146,7 +146,8 @@ stage_drivers() {
     # #433: the boot entry comes after the drivers, on the same hook -- both
     # restore paths (the round, single_restore.sh) pass through here.
     _stage_drivers "$@"
-    assert_target "$1" && ensure_boot_entry "$@"   # #2434
+    # #2231: dead Boot#### entries are only LISTED here (bootorphans.json); deleting one needs an approval
+    assert_target "$1" && { ensure_boot_entry "$@"; bootorphans_scan; }   # #2434
     return 0
 }
 
@@ -188,7 +189,8 @@ _stage_drivers() {
     [ "$(json_get "$_ans" ".ok")" = "true" ] || { _drivers_fail "לא הצלחנו לקרוא את תשובת הדרייברים"; return 0; }
     if [ -n "${DR_PORT:-}" ]; then
         # #1269: no model for this port is a skip; a model with no package is a failure (below).
-        [ "$(json_get "$_ans" ".chosen")" != "null" ] || { _drivers_result "skipped" "" "no_model"; return 0; }
+        [ "$(json_get "$_ans" ".chosen")" != "null" ] || {
+            boot_storage_alone "$1" "$2" "$_dr_plan"; _drivers_result "skipped" "" "no_model"; return 0; }
     # עיקרון 5: "אין מלאי בשרת" אינו "אין חבילה תואמת" -- הראשון הוא כשל.
     elif [ "$(json_get "$_ans" ".inventory")" != "true" ]; then
         _drivers_fail "לשרת אין מלאי של המחשב הזה"; return 0
@@ -199,7 +201,8 @@ _stage_drivers() {
     _names=$(json_get "$_ans" '.packages[].name')
     case "$_names" in
         null) _drivers_fail "לא הצלחנו לקרוא את רשימת החבילות"; return 0 ;;
-        '')   if [ -n "${DR_PORT:-}" ]; then _drivers_fail "לשרת אין חבילת דרייברים לדגם שנבחר"
+        '')   boot_storage_alone "$1" "$2" "$_dr_plan"   # #1331: no package is no reason to leave the disk unbootable
+              if [ -n "${DR_PORT:-}" ]; then _drivers_fail "לשרת אין חבילת דרייברים לדגם שנבחר"
               else _drivers_result "no_match" ""; fi; return 0 ;;
     esac
     # #1635: every name is a folder under Drivers/ that is rm -rf'd below -- also a

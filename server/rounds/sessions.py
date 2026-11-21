@@ -25,7 +25,7 @@ import time
 from datetime import datetime, timezone
 from typing import Callable
 
-from server.db import get_setting, journal, now_iso, update_one, writing
+from server.db import _settle, _write_lock, get_setting, journal, now_iso, update_one, writing
 from server.agent import readbackhash
 from server.core.hostname_rule import HOSTNAME_MAX
 
@@ -75,7 +75,11 @@ TAKEN = {
 
 
 class SessionError(ValueError):
-    pass
+    """סירוב של סבב, בטקסט שלנו שנכתב למפעיל. `message` הוא מה שהתשובה נושאת."""
+
+    def __init__(self, message: str = "") -> None:
+        super().__init__(message)
+        self.message = message   # #3891: התשובה קוראת את השדה, לא str(exc) (CodeQL py/stack-trace-exposure)
 
 
 class SessionSuperseded(SessionError):
@@ -117,6 +121,10 @@ class SessionStore:
         self.on_running = on_running or (lambda session: None)
         self.on_closed = on_closed or (lambda session_id: None)
         self.on_opened = on_opened or (lambda group_id, opener_mac, roster: None)
+        #: #3137: `start_gate(session_id, image_id, start=True)` — למה הגל עוד אינו יוצא, או None.
+        #: `{"state": "preparing", "he": …}` (מכין את האימג') או `{"state": "failed", "error": …}`.
+        #: `server.app` מחבר אותו להכנת האינדקס של מנוע החתיכות (`indexprep`); None = אין שער.
+        self.start_gate: Callable[..., dict | None] | None = None
 
     # --- פתיחה וסגירה --------------------------------------------------------
 
@@ -222,35 +230,38 @@ class SessionStore:
         session_id = "ses_" + secrets.token_hex(4)
         state, started = ("open", None) if kind == MULTICAST else ("running", now_iso())
         try:
-            if replaces is not None:
-                # BEGIN IMMEDIATE תופס את נעילת הכתיבה **לפני** הקריאה־
-                # כתיבה, ולכן הסגירה וה-INSERT הם פעולה אחת מבחינת כל
-                # תהליכון אחר — ומי שהפסיד ממתין ב-`busy_timeout` ואז
-                # מגלה שהגל כבר נסגר, במקום לפתוח גל שני.
-                self.conn.execute("BEGIN IMMEDIATE")
-                # `update_one` הוא אותו דפוס בדיוק כמו ב-`_transition`,
-                # והוא גם זה שמשחרר את נעילת הכתיבה כשלא תאמה שורה (#54).
-                if not update_one(
-                    self.conn,
-                    "UPDATE sessions SET state = 'closed', closed_at = ?"
-                    " WHERE id = ? AND state != 'closed'",
-                    (now_iso(), replaces),
-                ):
-                    raise SessionSuperseded(
-                        f"הסבב {replaces} כבר נסגר — תהליכון אחר ממשיך אותו")
-            self.conn.execute(
-                "INSERT INTO sessions (id, group_id, image_id, prefix,"
-                " expected_clients, wait_seconds, state, opened_by, created_at,"
-                " last_join_at, roster_json, kind, started_at, expand_partition)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    session_id, group_id, image_id, prefix, expected_clients,
-                    wait_seconds, state, opened_by, now_iso(), self.now(),
-                    json.dumps(roster) if roster is not None else None, kind, started,
-                    expand_partition,
-                ),
-            )
-            self.conn.commit()
+            # #3706: `_settle` → `_write_lock` → `writing`, כמו כל כותב חם (#457, #272).
+            # ה-`BEGIN IMMEDIATE` שבפנים נלקח רק אחרי הנעילה שלנו, ולא לפניה.
+            _settle(self.conn)
+            with _write_lock, writing(self.conn):
+                if replaces is not None:
+                    # BEGIN IMMEDIATE תופס את נעילת הכתיבה **לפני** הקריאה־
+                    # כתיבה, ולכן הסגירה וה-INSERT הם פעולה אחת מבחינת כל
+                    # תהליכון אחר — ומי שהפסיד ממתין ב-`busy_timeout` ואז
+                    # מגלה שהגל כבר נסגר, במקום לפתוח גל שני.
+                    self.conn.execute("BEGIN IMMEDIATE")
+                    # `update_one` הוא אותו דפוס בדיוק כמו ב-`_transition`,
+                    # והוא גם זה שמשחרר את נעילת הכתיבה כשלא תאמה שורה (#54).
+                    if not update_one(
+                        self.conn,
+                        "UPDATE sessions SET state = 'closed', closed_at = ?"
+                        " WHERE id = ? AND state != 'closed'",
+                        (now_iso(), replaces),
+                    ):
+                        raise SessionSuperseded(
+                            f"הסבב {replaces} כבר נסגר — תהליכון אחר ממשיך אותו")
+                self.conn.execute(
+                    "INSERT INTO sessions (id, group_id, image_id, prefix,"
+                    " expected_clients, wait_seconds, state, opened_by, created_at,"
+                    " last_join_at, roster_json, kind, started_at, expand_partition)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        session_id, group_id, image_id, prefix, expected_clients,
+                        wait_seconds, state, opened_by, now_iso(), self.now(),
+                        json.dumps(roster) if roster is not None else None, kind, started,
+                        expand_partition,
+                    ),
+                )
         except sqlite3.IntegrityError as exc:
             # ההכרעה האמיתית על החריץ היא כאן ולא בבדיקה שלמעלה: בין
             # הקריאה לכתיבה רצות עוד שאילתות, ותהליכון אחר יכול לכתוב
@@ -331,6 +342,13 @@ class SessionStore:
         """
         if self.joined_count(session_id) == 0:
             raise SessionError("אין מכונות בסבב — המתן שיצטרפו")
+        # #3137: גל שהאימג' שלו עוד מוכן לשידור אינו יוצא גם ב"התחל עכשיו" — הוא יוצא מעצמו כשיסתיים
+        row = self.conn.execute("SELECT image_id FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        held = (self.start_gate(session_id, row["image_id"])
+                if self.start_gate is not None and row is not None else None)
+        if held is not None:
+            raise SessionError(held["he"] + " — הגל ייצא מעצמו כשההכנה תסתיים"
+                               if held["state"] == "preparing" else held["error"])
         self._transition(session_id, "open", "running", user, event)
 
     def start_auto(self, session_id: str) -> None:
@@ -367,14 +385,16 @@ class SessionStore:
         ).fetchone()
         if row is None:
             raise SessionError("סבב לא קיים")
-        if not update_one(
-            self.conn,
-            "UPDATE sessions SET state = 'closed', closed_at = ?"
-            " WHERE id = ? AND state != 'closed'",
-            (now_iso(), session_id),
-        ):
+        _settle(self.conn)                          # #3706
+        with _write_lock, writing(self.conn):
+            closed = update_one(
+                self.conn,
+                "UPDATE sessions SET state = 'closed', closed_at = ?"
+                " WHERE id = ? AND state != 'closed'",
+                (now_iso(), session_id),
+            )
+        if not closed:
             return False
-        self.conn.commit()
         journal(self.conn, event, session_id, user, round_id=session_id)
         # רק שידור מודיע למנוע. `SenderEngine.stop` מתעלם ממזהה הסבב
         # שהוא מקבל, ולכן סגירת משיכת יוניקאסט הייתה הורגת את השידור
@@ -392,7 +412,8 @@ class SessionStore:
         שנכשל אבל חבר שעדיין ממתין לזרם שאיננו.
         """
         stamp = now_iso()
-        with writing(self.conn):
+        _settle(self.conn)                          # #3706; `related` כותב בלי `_write_lock` (commit=False)
+        with _write_lock, writing(self.conn):
             changed = self.conn.execute(
                 "UPDATE sessions SET state = 'failed', failed_reason = ?, closed_at = ?"
                 " WHERE id = ? AND state IN ('open', 'running')",
@@ -427,14 +448,15 @@ class SessionStore:
         )
 
     def _transition(self, session_id: str, from_state: str, to_state: str, user: str, event: str) -> None:
-        changed = update_one(
-            self.conn,
-            "UPDATE sessions SET state = ?, started_at = ? WHERE id = ? AND state = ?",
-            (to_state, now_iso(), session_id, from_state),
-        )
+        _settle(self.conn)                          # #3706
+        with _write_lock, writing(self.conn):
+            changed = update_one(
+                self.conn,
+                "UPDATE sessions SET state = ?, started_at = ? WHERE id = ? AND state = ?",
+                (to_state, now_iso(), session_id, from_state),
+            )
         if not changed:
             raise SessionError(f"הסבב אינו במצב {from_state}")
-        self.conn.commit()
         journal(self.conn, event, session_id, user, round_id=session_id)
         if to_state == "running":
             row = self.conn.execute(
@@ -581,7 +603,8 @@ class SessionStore:
         # שתי הכתיבות הן טרנזאקציה אחת: הצטרפות שנרשמה בלי לאפס את
         # הטיימר היא סבב שיוצא מוקדם מדי. `writing` מוודא שכישלון של
         # השנייה אינו משאיר את הנעילה של הראשונה יתומה (#290).
-        with writing(self.conn):
+        _settle(self.conn)                          # #3706: `_settle` → `_write_lock` → `writing`
+        with _write_lock, writing(self.conn):
             inserted = self.conn.execute(
                 "INSERT INTO session_members (session_id, mac, updated_at)"
                 " SELECT id, ?, ? FROM sessions"

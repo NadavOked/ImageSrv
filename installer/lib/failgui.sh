@@ -66,6 +66,15 @@ failgui_records() {
 
 failgui_firstboot() {
     # $1 = firstboot's state word, $2 = its English message: the S3 screen.
+    if [ "$1" = answers-missing ]; then
+        # #2763: not a failure to repair -- this system was not installed from the ISO or the USB, and
+        # there is no other install path. The screen says that and what to do; it offers nothing else.
+        failgui_records bad 1 server "חסר קובץ ההגדרה מההתקנה" "first boot stopped · answers-missing" \
+            "השרת לא הותקן מה-ISO או מה-USB, ולכן אין לו קובץ הגדרה מההתקנה, ואין דרך אחרת להתקין אותו." "$2" \
+            "יש להתקין מחדש מה-ISO או מה-USB."
+        printf 'fail_ctx=שלב|%s\n' "$(failgui_clean "$1")"
+        return 0
+    fi
     case "$1" in
         payload-failed)      _gf_w="בניית קובצי האתחול של השרת (שלב א׳) נכשלה, ולכן מחשבים ברשת עוד לא יכולים לעלות ממנו." ;;
         apt-repo-missing)    _gf_w="מאגר החבילות שהמתקין השאיר בשרת חסר או פגום, והגדרת השרת בלי אינטרנט לא יכולה להמשיך." ;;

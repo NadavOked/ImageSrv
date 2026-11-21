@@ -25,8 +25,9 @@
 # (Intel VMD/RST, PVSCSI) is NOT covered: that needs DriverDatabase entries
 # and is not built until a VM experiment proves it (#1331).
 #
-# Called from _stage_drivers with the Windows partition already mounted;
-# sets $_dr_boot to the JSON object that rides in drivers.json as "boot".
+# Called from _stage_drivers with the Windows partition already mounted
+# (boot_storage_alone mounts it itself when no package was staged -- #1331,
+# owner 15/11); sets $_dr_boot to the JSON object that rides in drivers.json as "boot".
 # Never fatal, never silent (עיקרון 5): enabled / already / skipped / failed.
 
 boot_storage_service() {
@@ -117,5 +118,24 @@ boot_storage_enable() {
             _boot_result failed "$_bs_svc" "$_bs_why"; return 0; }
     fi
     _boot_result enabled "$_bs_svc"
+    return 0
+}
+
+boot_storage_alone() {
+    # $1 = disk name, $2 = manifest, $3 = the verified plan. #1331 (owner, 15/11): the
+    # in-box storage driver is boot-start on EVERY Windows restore, not only when packages
+    # were staged -- whether the disk boots on this bus does not depend on whether the server
+    # had a package for the machine. The paths with no package (no_match, no_model, a model
+    # with none) take their own mount, because there is none open. The mount is the only
+    # thing this adds; boot_storage_enable does the work. Fills $_dr_boot, always returns 0.
+    _dr_boot=""
+    _ba_svc=$(boot_storage_service "$1") || { _boot_result skipped "" "unknown_bus"; return 0; }
+    _dr_mnt=$(_mount_windows "$1" "$2" "$3") || {
+        _dr_mnt=""; _boot_result failed "$_ba_svc" "לא הצלחנו לעגן את מחיצת Windows"; return 0; }
+    boot_storage_enable "$1" "$_dr_mnt"
+    _umount_checked "$_dr_mnt"
+    _ba_rc=$?
+    _dr_mnt=""
+    [ "$_ba_rc" -eq 0 ] || _boot_result failed "$_ba_svc" "לא הצלחנו לנתק את המחיצה אחרי הגדרת דרייבר האחסון (rc=$_ba_rc)"
     return 0
 }

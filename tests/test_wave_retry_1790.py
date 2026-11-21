@@ -140,30 +140,31 @@ def test_the_console_card_shows_a_drawer_written_in_an_earlier_wave_as_written(t
     """Wave 2 has no target on port 1: the card said "—" (as for "no report"). It is
     written -- "נכתב", green, 100% -- while a red skip stays "דולג" and a fresh one "—"."""
     js = console_js()
-    pick = [re.search(r"^function linkSlow\(d\) \{.*?^\}", js, re.M | re.S),
-            # #2848: slotClass reads the one rule (diskRule / diskFacts / slotRule)
+    pick = [
+            # #2848: slotClass shows the one rule (slotRule); #3666: the server's, the console works nothing out
             re.search(r"^const SATA_ISSUE_HE = .*$", js, re.M),
             re.search(r"^function sataIssues\(d\) \{.*?^\}", js, re.M | re.S),
-            re.search(r"^const DISK_RULE_RED = .*$", js, re.M),
-            re.search(r"^const DISK_RULE_YELLOW = .*$", js, re.M),
-            re.search(r"^function diskRule\(f\) \{.*?^\}", js, re.M | re.S),
-            re.search(r"^function diskFacts\(s\) \{.*?^\}", js, re.M | re.S),
+            re.search(r"^const NOT_CHECKED_RULE = \{.*?\};$", js, re.M | re.S),   # #3666: no rule from the brain = not checked
             re.search(r"^function slotRule\(s\) \{.*?^\}", js, re.M | re.S),
             re.search(r"^function slotClass\(s\) \{.*?^\}", js, re.M | re.S),
             re.search(r"^function bayEmphasis\(s\) \{.*?^\}", js, re.M | re.S),   # #2050: the row's emphasis class
+            # #3209: slotClass / roundDskHtml ask drawerPulled first (a pulled drawer is grey, not red)
+            re.search(r"^const PULLED_HE = .*$", js, re.M),
+            re.search(r"^function drawerPulled\(d\) \{.*?^\}", js, re.M | re.S),
             re.search(r"^function roundDskHtml\(m, s\) \{.*?^\}", js, re.M | re.S)]
     assert all(pick), "a function this test reads is gone from console.js"
     probe = tmp_path / "probe.cjs"
     probe.write_text("""
 const esc = (x) => String(x), encodeId = (x) => x, roomOperator = () => false;
 const slotLabel = (m, n) => `דיסק ${n}`, rowLabel = () => "?", diskTitle = () => "";
+const GREEN = { color: "green", source: true, target: true }, RED = { color: "red", source: true, target: false };   // the brain's words (#3666)
 """ + "\n".join(m.group(0) for m in pick) + """
 const cell = (disk) => roundDskHtml({ mac: "m" }, { n: 1, disk, live: disk, fail: null });
 const text = (html) => html.match(/<b>(.*?)<\\/b>/)[1];
 console.log(JSON.stringify({
-  written: cell({ fresh: false, skipped_red: false, state: null, smart: "ok" }),
-  red: text(cell({ fresh: false, skipped_red: true, state: null, smart: "fail" })),
-  fresh: text(cell({ fresh: true, skipped_red: false, state: null, smart: "ok" })),
+  written: cell({ fresh: false, skipped_red: false, state: null, smart: "ok", rule: GREEN }),
+  red: text(cell({ fresh: false, skipped_red: true, state: null, smart: "fail", rule: RED })),
+  fresh: text(cell({ fresh: true, skipped_red: false, state: null, smart: "ok", rule: GREEN })),
 }));
 """, encoding="utf-8", newline="\n")
     run = subprocess.run([NODE, str(probe)], capture_output=True, text=True, encoding="utf-8",

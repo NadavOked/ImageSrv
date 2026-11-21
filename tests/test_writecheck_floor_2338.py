@@ -31,49 +31,26 @@ from native import requires_native
 
 REPO = Path(__file__).resolve().parent.parent
 KEY = "writecheck_min_mbps"
-LABEL = "סף מהירות כתיבה לדיסק"
 
 needs_agent = requires_native(("bash", BASH), ("jq", shutil.which("jq")))
 
 
-# --- the server: the setting, its range, 400 before a write, the default ------
+# --- the server: not a setting any more; the learning's store, read by the manifest ------
 
 
-def test_unset_reads_50(server):
-    assert server["admin"].get("/api/console/settings").json()[KEY] == "50"
-
-
-def test_an_admin_sets_40_and_it_is_journaled(server):
-    admin, ctx = server["admin"], server["ctx"]
-    assert admin.post("/api/console/settings", json={KEY: "40"}).status_code == 200
-    assert admin.get("/api/console/settings").json()[KEY] == "40"
-    details = [r["detail"] for r in ctx.conn.execute(
-        "SELECT detail FROM journal WHERE event = 'setting_change' ORDER BY id")]
-    assert f"{KEY}=40" in details, details
-
-
-@pytest.mark.parametrize("edge", ["10", "500", 10, 500])
-def test_the_range_edges_are_taken(server, edge):
+def test_it_is_not_a_console_setting(server):
+    """Nadav 14/11 evening: technical thresholds are not settings. Not in GET, and a write is refused as unknown."""
     admin = server["admin"]
-    assert admin.post("/api/console/settings", json={KEY: edge}).status_code == 200
-    assert admin.get("/api/console/settings").json()[KEY] == str(edge)
+    assert KEY not in admin.get("/api/console/settings").json()
+    for value in ("40", "9", 40, True):
+        r = admin.post("/api/console/settings", json={KEY: value})
+        assert r.status_code == 400 and r.json()["detail"] == f"הגדרה לא מוכרת: {KEY}", (value, r.text)
+    assert KEY not in admin.get("/api/console/settings").json()
 
 
-@pytest.mark.parametrize("bad", ["9", "501", "0", "-40", "040", "40.5", 40.5, "abc", "", True, None, [40]])
-def test_anything_else_is_400_and_nothing_is_written(server, bad):
-    """The whole body is refused before any key: min_free_gb beside it is not stored either."""
-    admin = server["admin"]
-    assert admin.post("/api/console/settings", json={KEY: "40", "min_free_gb": "20"}).status_code == 200
-    r = admin.post("/api/console/settings", json={"min_free_gb": "30", KEY: bad})
-    assert r.status_code == 400, r.text
-    assert r.json()["detail"] == f"{LABEL}: מספר שלם 10–500 (MB/s)"
-    after = admin.get("/api/console/settings").json()
-    assert (after[KEY], after["min_free_gb"]) == ("40", "20"), after
-
-
-def test_a_deploy_user_cannot_set_it(server):
-    assert server["deploy"].post("/api/console/settings", json={KEY: "40"}).status_code == 403
-    assert server["admin"].get("/api/console/settings").json()[KEY] == "50"
+def test_unset_is_the_start_value_50():
+    from server.brain import floorrule                          # noqa: PLC0415
+    assert floorrule.DEFAULT == 50
 
 
 def test_a_corrupt_stored_value_reads_50_never_0(server):
@@ -81,24 +58,24 @@ def test_a_corrupt_stored_value_reads_50_never_0(server):
     from server.disks import writefloor                         # noqa: PLC0415
     set_settings(server["ctx"].conn, {KEY: "zero"})
     assert writefloor.mbps(server["ctx"].conn) == 50
-    assert server["admin"].get("/api/console/settings").json()[KEY] == "50"
 
 
-def test_the_manifest_the_agent_pulls_carries_the_floor(server):
-    anon, admin = server["anon"], server["admin"]
+def test_the_manifest_the_agent_pulls_carries_the_floor_the_learning_stored(server):
+    from server.db import set_settings                          # noqa: PLC0415
+    anon = server["anon"]
     assert anon.get("/api/v1/images/img_7f3a91/manifest").json()[KEY] == 50
-    assert admin.post("/api/console/settings", json={KEY: "40"}).status_code == 200
+    set_settings(server["ctx"].conn, {KEY: "40"})                # what the learning (LR5) writes
     served = anon.get("/api/v1/images/img_7f3a91/manifest").json()
     assert served[KEY] == 40 and isinstance(served[KEY], int), served
 
 
 def test_the_server_default_is_the_agents_own():
     """Twins: the server's 50 and the agent's fallback must not drift apart."""
-    from server.disks import writefloor                         # noqa: PLC0415
+    from server.brain import floorrule                          # noqa: PLC0415
     sh = (REPO / "agent/lib/restore/writecheck.sh").read_text(encoding="utf-8")
     m = re.search(r'^WRITECHECK_MIN_MBPS="\$\{WRITECHECK_MIN_MBPS:-(\d+)\}"$', sh, re.M)
     assert m, "the agent's fallback floor is not where it was"
-    assert int(m.group(1)) == writefloor.DEFAULT == 50
+    assert int(m.group(1)) == floorrule.DEFAULT == 50
 
 
 # --- the agent: the floor from the manifest, or 50 and a log line -------------

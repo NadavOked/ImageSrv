@@ -452,6 +452,25 @@ CREATE TABLE IF NOT EXISTS disk_f1_marks (
     mac         TEXT
 );
 
+-- \u200f#2533/#2528 (הכרעת נדב 12/11: היומן בשרת בלבד): אילו חתיכות (4MiB של זרם הנתונים, image_format 2)
+-- כבר עמידות על דיסק יעד -- נכתבו לפני fsync שהצליח. שורה לכל (דיסק לפי המספר הסידורי והגודל, מחיצה);
+-- \u200f`ranges_json` = טווחים סגורים [[ראשונה, אחרונה], ...], איחוד בלבד. \u200f`round_id`/`image_id`/`index_xxh64` =
+-- הכתיבה שהשורה שייכת לה: כתיבה אחרת על אותו דיסק מחליפה אותה (server/rounds/chunkledger.py).
+-- \u200f`part` = -1: שני דיסקים ענו לאותה זהות באותו סבב (תאומים) -- אין יומן לאף אחד מהם.
+CREATE TABLE IF NOT EXISTS chunk_ledger (
+    serial      TEXT NOT NULL,
+    size_bytes  INTEGER NOT NULL,
+    part        INTEGER NOT NULL,
+    round_id    TEXT NOT NULL,
+    mac         TEXT NOT NULL,
+    image_id    TEXT NOT NULL,
+    index_xxh64 TEXT NOT NULL,
+    chunks      INTEGER NOT NULL,
+    ranges_json TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (serial, size_bytes, part)
+);
+
 -- \u200f#2080 (מוקאפ 06, נדב 24/10): תמונת הקושחה של כל מכונה -- שורה חדשה רק כשהתמונה השתנתה
 -- (מצב אתחול, מצב בקר הדיסקים, גרסת BIOS, דיסק בכל חיבור SATA). \u200f`fw_baseline` = "זו ההגדרה הנכונה".
 CREATE TABLE IF NOT EXISTS fw_snapshots (
@@ -942,6 +961,112 @@ CREATE TABLE IF NOT EXISTS unsafe_rates (
     PRIMARY KEY (mac, drawers, rate_bps)
 );
 
+-- #3041/#3125: מה שהמשכפל עצמו חש בגל חתיכות (S46-S50: מעבד לכל ליבה, IRQ/softirq, מוני הכרטיס, diskstats לכל
+-- מגירה) -- שורה לכל (גל, מכונה), מוחלפת בכל דיווח (`server/brain/wavesense.py` -- הכותב היחיד). מסוכמת לזיכרון
+-- המוח ולא נמחקת (`memory.SOURCES`).
+CREATE TABLE IF NOT EXISTS wave_senses (
+    session_id  TEXT NOT NULL,
+    mac         TEXT NOT NULL,
+    at          TEXT NOT NULL,
+    senses_json TEXT NOT NULL,
+    PRIMARY KEY (session_id, mac)
+);
+
+-- #3185 (#3064 שלב 4): הזיכרון ארוך-הטווח של המוח (`server/brain/memory.py` -- הכותב והקורא היחיד).
+-- `brain_decisions` -- החלטה של המוח ומה יצא ממנה. `entity_kind`/`entity_key` = הישות שההחלטה נוגעת בה
+-- (machine/mac, round/id), NULL = החלטה כללית (תקציב הרשת). `outcome` NULL = עוד פתוחה (החזקה שנמשכת).
+CREATE TABLE IF NOT EXISTS brain_decisions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    at            TEXT NOT NULL,
+    mode          TEXT NOT NULL,            -- shadow / enforce
+    rule          TEXT NOT NULL,            -- K2, K7...
+    point         TEXT,                     -- הנקודה בקוד הקיים (D16, D21...)
+    action        TEXT NOT NULL,
+    verdict       TEXT NOT NULL,            -- HOLD / PROCEED / CUT / RAISE...
+    reason        TEXT NOT NULL,
+    evidence_json TEXT NOT NULL DEFAULT '[]',
+    round_id      TEXT,
+    entity_kind   TEXT,
+    entity_key    TEXT,
+    outcome       TEXT,
+    outcome_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS brain_decisions_entity ON brain_decisions (entity_kind, entity_key, id);
+-- `brain_memory` -- הסיכום של מה שיצא מחלון השמירה, לכל ישות ולכל מקור: נשמר לתמיד (הכרעת נדב 14/11).
+-- `stats_json` = לכל שדה מספרי {n, sum, min, max, first, last}, ו-`text` = הערך האחרון של שדות טקסט.
+CREATE TABLE IF NOT EXISTS brain_memory (
+    kind       TEXT NOT NULL,               -- machine / disk / slot / model / network / round / settings
+    key        TEXT NOT NULL,
+    source     TEXT NOT NULL,               -- הטבלה שסוכמה
+    rows       INTEGER NOT NULL,
+    first_at   TEXT,
+    last_at    TEXT,
+    stats_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (kind, key, source)
+);
+
+-- #3125: מה שהמנוע ראה בכל מעבר של גל חתיכות, כשדות (`server/rounds/chunkpass.py` -- הכותב היחיד).
+-- `chunk_pass_rates` = שורה לכל (גל, מחיצה, מעבר): `kbps` (הקצב שהשולח קיבל) ו-`write_kbps` (מה שהדיסקים נדרשו
+-- לכתוב), `basis` = `probe` (נמדד בבדיקת הכתיבה) / `floor` (דיסק אחד לא נמדד: הסף שכולם עברו) / `unmeasured`
+-- (אין דיסק בגל), `probe_mbps` = המדידה האיטית ביותר, ו-`slow_mac`/`slow_serial` = הדיסק שקבע אותה. NULL = לא נמדד.
+-- `chunk_pass_counters` = שורה לכל (גל, מחיצה, מעבר, מחשב) כשהמחשב דיווח `ended`: `skipped` (סכום מה שהדיסקים
+-- ויתרו עליו, `skipped_json` לפי serial), `stray`, `received`, `fetched`, ובהורדה -- `fetch_s` ו-`fetch_mbps`.
+-- NULL = המחשב לא אמר, **לא** אפס.
+CREATE TABLE IF NOT EXISTS chunk_pass_rates (
+    session_id   TEXT NOT NULL,
+    part         INTEGER NOT NULL,
+    pass         INTEGER NOT NULL,
+    kbps         INTEGER,
+    write_kbps   INTEGER,
+    basis        TEXT NOT NULL,
+    probe_mbps   INTEGER,
+    floor_mbps   INTEGER,
+    slow_mac     TEXT,
+    slow_serial  TEXT,
+    at           TEXT NOT NULL,
+    PRIMARY KEY (session_id, part, pass)
+);
+CREATE TABLE IF NOT EXISTS chunk_pass_counters (
+    session_id   TEXT NOT NULL,
+    part         INTEGER NOT NULL,
+    pass         INTEGER NOT NULL,
+    mac          TEXT NOT NULL,
+    kind         TEXT,
+    skipped      INTEGER,
+    skipped_json TEXT,
+    stray        INTEGER,
+    received     INTEGER,
+    fetched      INTEGER,
+    fetch_s      REAL,
+    fetch_mbps   REAL,
+    at           TEXT NOT NULL,
+    PRIMARY KEY (session_id, part, pass, mac)
+);
+
+-- #3181: פס ייצור -- סבב שמבקשים בו יותר דיסקים ממספר המגירות במשכפלים (`server/rounds/prodline.py`, הכותב
+-- והקורא היחיד). `prodline_rounds` = שורה לכל סבב כזה: כמה מגירות היו בפתיחה. `prodline_disks` = שורה לכל
+-- דיסק שהסבב ביקש (`seq` 0..target-1, לפי סדר השמות): השם (NULL = בלי שמות), ואיפה הוא עכשיו. מצבים:
+-- queued (בתור, אין לו מגירה) / reserved (שמור למגירה ריקה: "הכנס דיסק") / writing / done / removable
+-- ("אפשר להוציא", אחרי ניתוק בטוח) / removed (הוצא אחרי שנכתב) / failed (נכשל: הדיסק הבא במגירה מקבל את השם).
+CREATE TABLE IF NOT EXISTS prodline_rounds (
+    round_id   TEXT PRIMARY KEY,
+    drawers    INTEGER NOT NULL,
+    target     INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS prodline_disks (
+    round_id   TEXT NOT NULL,
+    seq        INTEGER NOT NULL,
+    name       TEXT,
+    mac        TEXT,
+    port       INTEGER,
+    serial     TEXT,
+    state      TEXT NOT NULL,
+    changed_at TEXT NOT NULL,
+    PRIMARY KEY (round_id, seq)
+);
+
 -- \u200f#1751: תור ההתראות במייל (`server/system/email_alerts.py`). שורה = מייל אחד
 -- ל-(כלל, סוג אירוע, שפה); \u200f`items_json` = שורות האירוע שאוחדו לתוכו, ו-
 -- \u200f`dropped` = כמה נוספו מעבר לתקרת השורות. \u200f`pending` אחת לכל צירוף לכל
@@ -998,6 +1123,69 @@ CREATE TABLE IF NOT EXISTS usb_syncs (
     state        TEXT NOT NULL CHECK (state IN ('ok', 'partial', 'failed')),
     summary_json TEXT NOT NULL
 );
+
+-- \u200f#2528 (שלב 1): יומן הכתיבה — שורה לכל דיסק יעד שמשכפל קיבל לכתוב בגל של סבב חדר, עם מזהה
+-- האתחול של הריצה שכותבת. **רמת דיסק בלבד** (אין כאן חתיכות — שלב 2). הזהות היא
+-- serial + גודל + wwid (כשדווח), לא החריץ: \u200f`port` הוא איפה הדיסק ישב כשנמסר, לתצוגה.
+-- נמחק כשהמכונה לא חזרה בתוך `lost_wait_seconds`, וכשהשאלה נענתה. `server/rounds/ledger.py`.
+CREATE TABLE IF NOT EXISTS write_ledger (
+    round_id   TEXT NOT NULL,
+    wave_id    TEXT NOT NULL,
+    mac        TEXT NOT NULL,
+    serial     TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    wwid       TEXT,
+    port       INTEGER,
+    model      TEXT,
+    boot_id    TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (round_id, mac, serial)
+);
+
+-- \u200f#2528 (שלב 1): מכונה שכבתה או אותחלה באמצע סבב וחזרה בזמן — השאלה למפעיל. שורה למכונה
+-- בסבב; \u200f`answer` NULL = ממתין להכרעה, ושום דבר לא נכתב. `server/rounds/interrupt.py`.
+CREATE TABLE IF NOT EXISTS round_interrupts (
+    round_id      TEXT NOT NULL,
+    mac           TEXT NOT NULL,
+    wave_id       TEXT NOT NULL,
+    raised_at     TEXT NOT NULL,
+    answer        TEXT CHECK (answer IN ('rewrite', 'close')),
+    answered_by   TEXT,
+    answered_from TEXT,
+    answered_at   TEXT,
+    PRIMARY KEY (round_id, mac)
+);
+
+-- #3654: הערוץ האחיד של המוח למשתמש (`server/brain/ask.py` -- הכותב היחיד): המוח מציע, אדם מכריע. שורה לכל שאלה.
+-- `point` = מזהה הקטלוג של הכלל ששואל, `dedupe` = (נקודה, ישות, סבב), ושאלה **פתוחה** אחת בלבד לכל מפתח.
+-- `options_json` = [{id, label_he, destructive}], `safe_default` = מזהה אפשרות שאינה הרסנית: מה שקורה כשאין תשובה.
+-- `state`: open / answered / expired (פקעה בלי תשובה -- **לא** תשובה) / cancelled. `who_json` = מי רשאי לענות
+-- (admin / machine). `opened_decision`/`closed_decision` = השורות ב-`brain_decisions`. שאלה פתוחה שורדת הפעלה מחדש.
+CREATE TABLE IF NOT EXISTS brain_asks (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    point           TEXT NOT NULL,
+    dedupe          TEXT NOT NULL,
+    title_he        TEXT NOT NULL,
+    detail_he       TEXT NOT NULL DEFAULT '',
+    options_json    TEXT NOT NULL,
+    safe_default    TEXT NOT NULL,
+    who_json        TEXT NOT NULL,
+    mode            TEXT NOT NULL,
+    entity_kind     TEXT,
+    entity_key      TEXT,
+    round_id        TEXT,
+    created_at      TEXT NOT NULL,
+    expires_at      TEXT NOT NULL,
+    state           TEXT NOT NULL CHECK (state IN ('open', 'answered', 'expired', 'cancelled')),
+    answer          TEXT,
+    answered_by     TEXT,
+    answered_role   TEXT,
+    closed_at       TEXT,
+    opened_decision INTEGER,
+    closed_decision INTEGER
+);
+CREATE UNIQUE INDEX IF NOT EXISTS brain_asks_one_open ON brain_asks (dedupe) WHERE state = 'open';
+CREATE INDEX IF NOT EXISTS brain_asks_state ON brain_asks (state, id);
 """
 
 #: הקבוצות הקבועות: חדר שיכפולים ומחשב הבנייה הם יחידים במערכת —
@@ -1020,9 +1208,10 @@ DEFAULT_SETTINGS = {
     "class_deploy_enabled": "false",
     # #1967: audible result on cloning machines; an explicit false disables it.
     "cloner_beep": "true",
+    "hdd_support": "false",   # #3268 (נדב 14/11): כבוי -- HDD נתמך כמקור בלבד
     # #447 + הכרעת נדב 11/10: קצב אוטומטי לכל גל — עולה על גל נקי, יורד על
     # שידורים חוזרים וכוננים איטיים, לעולם לא מעל `IMAGESRV_MAX_BITRATE`
-    # (בלעדיו 900m). "false" = קצב הפתיחה (600m), קבוע.
+    # (בלעדיו 900m). "false" = התקרה הזו, קבועה (#3036, הכרעת נדב 12/11).
     "learned_rate_enabled": "true",
     # #2028 (נדב 23/10): למידה אוטומטית של הרשת והמחשבים. כבוי = הכול ידני, כמו היום.
     "learning_enabled": "false",
@@ -1110,11 +1299,21 @@ ADDED_COLUMNS = [
     # (staged / no_match / skipped / failed + סיבה). NULL = השלב לא רץ
     # (סוכן ישן, או שהדיווח הסופי הגיע בלי השדה) — לא "אין התאמה".
     ("session_members", "drivers_json", "TEXT"),
+    # #3125/#3321: תחזית מול מה שקרה, כשדות -- לא רק בטקסט החופשי של `outcome`. `predicted`/`actual` באותה
+    # יחידה (`unit`, למשל `s`), `matched` = 1 התאים / 0 לא התאים / NULL לא נמדד (עיקרון 5). NULL = לא נרשם.
+    ("brain_decisions", "predicted", "REAL"),
+    ("brain_decisions", "actual", "REAL"),
+    ("brain_decisions", "unit", "TEXT"),
+    ("brain_decisions", "matched", "INTEGER CHECK (matched IN (0, 1))"),
+    # #3125 (R15): הכתיבה בחיבור הזה נכשלה בגל, מכל סיבה (`cable_fail` הוא רק סיבת כבל). NULL = לפני העמודה.
+    ("port_history", "failed", "INTEGER"),
     # הכרעת נדב 17/10: מה שהקרנל של המקלט זרק בזמן הזרם (`udp_drops` בדיווח,
     # סכום על מחיצות המולטיקאסט). NULL = לא דווח — לא "אפס", והקצב לא עולה.
     ("session_members", "udp_drops_json", "TEXT"),
     # #1885: מעבד/throttle/טמפ' של המשכפל בגל (`cloner_cpu.well_formed`). NULL = לא דווח.
     ("session_members", "cpu_json", "TEXT"),
+    # #3125 (S62): הצלילים של המכונה בסבב (`server/agent/beeps.well_formed`). NULL = לא דווח.
+    ("session_members", "beeps_json", "TEXT"),
     # סבב לחלק מהכיתה: רשימת ה-MAC שנבחרו. NULL = כל הקבוצה.
     # רק הנבחרים מוערים ב-WoL ורק הם מצטרפים — השאר עולים מהדיסק.
     ("sessions", "roster_json", "TEXT"),
@@ -1248,6 +1447,9 @@ ADDED_COLUMNS = [
     ("journal", "machine", "TEXT"),
     ("journal", "round_id", "TEXT"),
     ("journal", "class_id", "TEXT"),
+    # #2528: מזהה האתחול מה-hello האחרון (`/proc/sys/kernel/random/boot_id`). NULL = סוכן
+    # שאינו שולח אותו — "לא ידוע", ואינו ראיה לאתחול. נכתב ב-`ledger.note_boot`.
+    ("net_devices", "boot_id", "TEXT"),
 ]
 
 
@@ -1582,7 +1784,7 @@ def _restrict_mode(path: str) -> None:
 #: ``tests/test_schema_version_1894.py`` נכשל כשהסכמה השתנתה והמספר לא. קוד
 #: ישן שפוגש DB מגרסה גבוהה משלו (חזרה לגרסה קודמת אחרי שהחדשה כבר מיגרה)
 #: מסרב לעלות — ואינו מריץ עליו את המיגרציות שלו.
-SCHEMA_VERSION = 18  # 18: users.view (#3025; 17 in its PR -- boot_marks took 17 first in release/v0.94.0) · 17: boot_marks (#2830) · 16: room_rounds.hostnames_json (#2786; 15 in its PR -- net_devices.monitor_on took 15 first in release/v0.91.11) · 15: net_devices.monitor_on (#2850/#2844, in release/v0.91.11 -- the PR added the column without the bump) · 14: disk_f1_marks (#1858; 13 in its PR -- #1920 took 13 first in round/1107c) · 13: usb_records/usb_syncs (#1920) · 12: learning_runs/learning_waves/learning_changes/learning_machines (#2028) · 11: journal.machine/round_id/class_id (#1296) ·10: login_account_failures.surface (#2443, Fable) · 9: login_account_failures (#2443) · 8: email_queue (#1751) · 7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
+SCHEMA_VERSION = 26  # 26: brain_asks (#3654, the brain's channel to the user) · 25: session_members.beeps_json (#3125, S62) · 24: chunk_pass_rates + chunk_pass_counters + brain_decisions.predicted/actual/unit/matched + port_history.failed (#3125, on top of #3324's 23) · 23: wave_senses (#3041/#3125, S46-S50) · 22: prodline_rounds + prodline_disks (#3181, lab/vm-1114d) · 21: lab/vm-1114c joins main (17 boot_marks, 18 users.view) and the lab (write_ledger/round_interrupts/net_devices.boot_id, 19 chunk_ledger, 20 brain_decisions + brain_memory) -- one number above both; every table and column is CREATE/ADD IF missing, so 18 (main) and 20 (lab) both reach it · 20: brain_decisions + brain_memory (#3185, #3064 stage 4; lab only) · 19: chunk_ledger (#2533/#2528 stage 2; lab only) · 18: users.view (#3025; 17 in its PR -- boot_marks took 17 first in release/v0.94.0) · 17: boot_marks (#2830) · 16: room_rounds.hostnames_json (#2786; 15 in its PR -- net_devices.monitor_on took 15 first in release/v0.91.11) · 15: net_devices.monitor_on (#2850/#2844, in release/v0.91.11 -- the PR added the column without the bump) · 14: disk_f1_marks (#1858; 13 in its PR -- #1920 took 13 first in round/1107c) · 13: usb_records/usb_syncs (#1920) · 12: learning_runs/learning_waves/learning_changes/learning_machines (#2028) · 11: journal.machine/round_id/class_id (#1296) ·10: login_account_failures.surface (#2443, Fable) · 9: login_account_failures (#2443) · 8: email_queue (#1751) · 7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
 
 
 def _initialize(conn: sqlite3.Connection) -> None:
@@ -2177,7 +2379,7 @@ def last_disk_full() -> dict | None:
 
 def journal(conn: sqlite3.Connection, event: str, detail: str = "", user: str = "", *,
             machine: str | None = None, round_id: str | None = None,
-            class_id: str | None = None) -> None:
+            class_id: str | None = None) -> int | None:
     """שורת יומן. נובע ישירות מריבוי המשתמשים — מי עשה מה ומתי.
 
     #1296: ``machine``/``round_id``/``class_id`` — היעד המבני של השורה, כשהכותב
@@ -2200,11 +2402,14 @@ def journal(conn: sqlite3.Connection, event: str, detail: str = "", user: str = 
     אחר: `journal` הוא מה שנקרא **מיד אחרי** כתיבה מותנית שהצליחה, וגם
     מה שתהליכון הרקע של השידור כותב — כלומר שני הצדדים של הנעילה
     המשולבת נפגשים כאן.
+
+    #3157: מחזיר את ``id`` של השורה (``None`` = המחיצה מלאה ולא נכתבה), כדי
+    ש-`server.system.serverlog` יעדכן את המונה של אזהרה חוזרת באותה שורה.
     """
     _settle(conn)
     try:
         with _write_lock, writing(conn):
-            conn.execute(
+            cur = conn.execute(
                 "INSERT INTO journal (ts, user, event, detail, machine, round_id, class_id)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (now_iso(), user, event, detail, machine or None, round_id or None,
@@ -2218,5 +2423,24 @@ def journal(conn: sqlite3.Connection, event: str, detail: str = "", user: str = 
         if not disk_full(exc):
             raise
         note_disk_full(f"journal {event}")
-        return
+        return None
     _last_full.clear()   # ראיה חיובית שהכתיבה חזרה לעבוד
+    return cur.lastrowid
+
+
+def journal_detail(conn: sqlite3.Connection, row_id: int, detail: str) -> bool:
+    """#3157: מחליף את ``detail`` של שורת יומן קיימת -- רק המונה של אזהרת שרת
+    חוזרת (`server.system.serverlog`) כותב כך. אותה נעילה ואותו טיפול במחיצה
+    מלאה כמו ב-`journal`. ``True`` = שורה אחת עודכנה; ``False`` = השורה לא
+    עודכנה (נמחקה, או מחיצה מלאה) -- לא "עודכן"."""
+    _settle(conn)
+    try:
+        with _write_lock, writing(conn):
+            cur = conn.execute("UPDATE journal SET detail = ? WHERE id = ?", (detail, row_id))
+    except sqlite3.OperationalError as exc:
+        if not disk_full(exc):
+            raise
+        note_disk_full("journal detail")
+        return False
+    _last_full.clear()
+    return cur.rowcount == 1

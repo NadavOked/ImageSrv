@@ -33,6 +33,8 @@ typedef struct {
  * <= 0 measures the natural single-line size. */
 Text text_make(cairo_t *cr, Font font, double px, int weight,
                const char *utf8, int width_px, Dir dir);
+/* #3270: the natural single-line size of <utf8>, without laying it out to draw (not in the text log). */
+void text_measure(cairo_t *cr, Font font, double px, int weight, const char *utf8, Dir dir, int *w, int *h);
 /* A left-to-right line whose direction does not follow its first letter
  * (auto-dir off, like CSS direction:ltr): the menu's "a → b → c" flow, where
  * a Hebrew-first value must still read left to right. With a width it is

@@ -144,7 +144,8 @@ def test_a_held_report_from_an_unknown_machine_is_refused(room_server):
 def test_a_held_cloner_does_not_join_the_wave_and_the_wave_fails_in_its_name(room_server, monkeypatch):
     """The cloner held after wave 1 (a drawer failed). Wave 2 waits for it: it is
     'missing' as held -- with "כבה אותו" -- never a member, and after the
-    re-wake cap the round fails naming it and saying it waits for "כבה"."""
+    re-wake ceiling (no WoL is sent to it, #3590) the round fails naming it and
+    saying it waits for "כבה"."""
     ctx, anon, deploy, woken = room_server["ctx"], room_server["anon"], room_server["deploy"], room_server["woken"]
     clock, wave2 = _wave1_partial(room_server, monkeypatch)
     before = _packets_to(woken, CLONER1)
@@ -160,7 +161,7 @@ def test_a_held_cloner_does_not_join_the_wave_and_the_wave_fails_in_its_name(roo
         assert CLONER1 not in {m["mac"] for m in ctx.store.members(wave2)}, "a held report joined the wave"
         room_mod.sweep(ctx.conn, ctx.store)
 
-    assert _packets_to(woken, CLONER1) - before == CAP                # #1721 as it was
+    assert _packets_to(woken, CLONER1) == before                      # #3590: lit and waiting -- no WoL, same ceiling
     row = _round(ctx)
     assert row["state"] == "failed", row
     assert "shich-1" in row["failed_reason"] and "מחכה ללחיצה על 'כבה'" in row["failed_reason"], row["failed_reason"]

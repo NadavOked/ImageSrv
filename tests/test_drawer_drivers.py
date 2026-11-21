@@ -130,15 +130,18 @@ def test_a_chosen_model_without_packages_is_failed_openly_not_no_match(tmp_path)
     box.stage_drawers()
     result = box.outcome("sdb")
     assert result["state"] == "failed" and "לדגם שנבחר" in result["error"]
-    assert box.staged_files() == {} and box.calls() == []
+    # #1331 (owner, 15/11): no package, and the drawer's disk still gets its storage driver at boot
+    assert result["boot"] == {"state": "enabled", "service": "storahci"}
+    assert box.staged_files() == {} and not [c for c in box.calls() if "SOFTWARE" in c]
     assert box.state() == "partial"
 
 
 def test_a_port_the_server_has_no_model_for_is_skipped_by_name(tmp_path):
     box = Drawers(tmp_path, ports=[2], chosen=None)
     box.stage_drawers()
-    assert box.outcome("sdb") == {"state": "skipped", "packages": [], "reason": "no_model"}
-    assert box.calls() == []
+    assert box.outcome("sdb") == {"state": "skipped", "packages": [], "reason": "no_model",
+                                  "boot": {"state": "enabled", "service": "storahci"}}   # #1331 (owner, 15/11)
+    assert not [c for c in box.calls() if "SOFTWARE" in c]
 
 
 # --- הדיווח והחיווט ----------------------------------------------------------

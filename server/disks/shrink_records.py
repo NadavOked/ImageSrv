@@ -41,6 +41,7 @@ class BadRecord(ValueError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+        self.message = message   # #3891: התשובה קוראת את השדה, לא str(exc) (CodeQL py/stack-trace-exposure)
 
 
 class AlreadyOpen(Exception):

@@ -39,13 +39,13 @@ target_init() {
     echo "$_t/bytes.raw" > "$_t/counter"
     echo "$2" > "$_t/total"
     rm -f "$_t/error" "$_t/crc_delta" "$_t/temp_after" "$_t/ata_log" "$_t/ata_log.json" "$_t/ident" "$_t/evidence_only" \
-        "$_t/boot_ca_state" "$_t/boot_ca_reason" "$_t/write_check_state" "$_t/write_check_reason" "$_t/write_check_mbps" \
-        "$_t/write_started" "$_t/foreign" "$_t/ntfs_boot" "$_t/dead" "$_t/pulled" "$_t/readback" "$_t/readback_reason" "$_t/readback_why" "$_t/rb_prog" "$_t/plan_why" "$_t/stages" "$_t/raid_wipe" "$_t/share.ok"   # #1805; #1883; #1907; #1808/#1898; #2046: rb_prog
+        "$_t/boot_ca_state" "$_t/boot_ca_reason" "$_t/write_check_state" "$_t/write_check_reason" "$_t/write_check_mbps" "$_t/refused_before_write" \
+        "$_t/write_started" "$_t/foreign" "$_t/ntfs_boot" "$_t/dead" "$_t/pulled" "$_t/readback" "$_t/readback_reason" "$_t/readback_why" "$_t/rb_chunks" "$_t/rb_prog" "$_t/plan_why" "$_t/stages" "$_t/raid_wipe" "$_t/share.ok" "$_t/skip.chosen" "$_t/note"   # #1805; #1883; #1907; #1808/#1898; #2046: rb_prog; #2943: skip.chosen; #3167: note
     target_ident_keep "$1"; target_bind "$1"   # #1602: serial|port|ata while it is still in sysfs; #2434: the disk chosen (failmark.sh)
     # ‏#874: מאיפה dmesg נספר בכשל -- ריק (אין /proc/uptime) = מההתחלה.
     cut -d' ' -f1 "$SYSROOT/proc/uptime" > "$_t/since" 2>/dev/null
 }
-job_reset() { echo waiting > "$RUN_DIR/state"; rm -f "$RUN_DIR/stage" "$RUN_DIR/drivers.json" "$RUN_DIR/udp_drops.json" "$RUN_DIR/udp_drops.sum" "$RUN_DIR/cdetail.txt" "$RUN_DIR/cdetail.txt.old"; for _jr in "$RUN_DIR"/targets/*/*; do case "${_jr##*/}" in shrunk*|shrink_id) ;; *) rm -rf "$_jr" ;; esac; done; }   # #1916: before a job's reporter starts, nothing of the last job's report is left (a disk left shrunk is not report: shrinkoffer.sh); udp_drops = the last round's (waits.sh); #1931: cdetail = the last capture's table (capturedetail.sh)
+job_reset() { echo waiting > "$RUN_DIR/state"; rm -f "$RUN_DIR/stage" "$RUN_DIR/drivers.json" "$RUN_DIR/udp_drops.json" "$RUN_DIR/udp_drops.sum" "$RUN_DIR/drawer_tune.json" "$RUN_DIR/cdetail.txt" "$RUN_DIR/cdetail.txt.old"; for _jr in "$RUN_DIR"/targets/*/*; do case "${_jr##*/}" in shrunk*|shrink_id) ;; *) rm -rf "$_jr" ;; esac; done; if command -v round_notes_reset > /dev/null; then round_notes_reset; fi; }   # #1916: before a job's reporter starts, nothing of the last job's report is left (a disk left shrunk is not report: shrinkoffer.sh); udp_drops = the last round's (waits.sh); #1931: cdetail = the last capture's table (capturedetail.sh)
 
 target_write_started() {
     # The serial binds later failure cleanup to the disk this run wrote -- #2434: the one chosen, compared (failmark.sh).
@@ -163,7 +163,7 @@ build_progress() {
         _tstate=$(cat "$_d/state" 2>/dev/null || echo "waiting")
         _total=$(cat "$_d/total" 2>/dev/null || echo 0)
         _entry=$(printf '{"dev":"%s","bytes_written":%s,"bytes_total":%s,"state":"%s"' \
-            "$_dev" "$(target_bytes "$_dev")" "$_total" "$_tstate")
+            "$(cat "$_d/dev" 2>/dev/null || echo "$_dev")" "$(target_bytes "$_dev")" "$_total" "$_tstate")   # `dev`: the name the round chose it by -- a drawer back under another name keeps it (drawerback.sh)
         # ‏#435: רק בקליטה (task id). המכנה בציר הבלוקים, לצד bytes_* הדחוסים.
         [ -n "${3:-}" ] && _entry="$_entry$(_source_progress_json "$_dev")$(cd_json 2>/dev/null)"
         [ -f "$_d/error" ] && _entry="$_entry,\"error\":\"$(json_escape "$(cat "$_d/error")")\""; [ "$(cat "$_d/plan_why" 2>/dev/null)" != windows_no_partition_guid ] || _entry="$_entry,\"plan_why\":\"windows_no_partition_guid\""   # #1212: a fixed code beside the operator's words
@@ -178,7 +178,7 @@ build_progress() {
         # ‏#874: יעד שנכשל נושא סידורי, חריץ ושורות ה-ATA (failmark.sh) -- הראיה, לא סיווג.
         [ -f "$_d/ata_log.json" ] && _entry="$_entry$(failure_json "$_dev")"
         [ -s "$_d/drivers.json" ] && _entry="$_entry,\"drivers\":$(tr -d '\n' < "$_d/drivers.json")"   # #1269
-        _entry="$_entry$(target_extra_json "$_dev" 2>/dev/null)}"   # #1883: the stages, once final (datareport.sh)
+        _entry="$_entry$(ledger_json "$_dev" 2>/dev/null)$(target_extra_json "$_dev" 2>/dev/null)$(drawer_back_json "$_dev" 2>/dev/null)$(peerfill_result_json "$_dev" 2>/dev/null)}"   # #2533: the durable chunks (chunkledger.sh); #1883: the stages, once final (datareport.sh); B29: what a neighbour cloner gave (peerfill.sh)
         [ -n "$_targets" ] && _targets="$_targets,"
         _targets="$_targets$_entry"
     done
@@ -192,7 +192,7 @@ build_progress() {
     [ -s "$RUN_DIR/drivers.json" ] && _drivers="$_drivers,\"drivers\":$(tr -d '\n' < "$RUN_DIR/drivers.json")"
     [ -n "${3:-}" ] && [ -s "$RUN_DIR/stage" ] && _drivers="$_drivers,\"stage\":\"$(json_escape "$(cat "$RUN_DIR/stage")")\""   # #980 §4: task reports only
     printf '{%s,"mac":"%s","state":"%s","targets":[%s]%s}' \
-        "$_who" "$2" "$_state" "$_targets" "$_drivers$(machine_extra_json "$1" "${3:-}" 2>/dev/null)"   # #1885: cpu, once final
+        "$_who" "$2" "$_state" "$_targets" "$_drivers$(machine_extra_json "$1" "${3:-}" 2>/dev/null)$(ledger_seq_json progress 2>/dev/null)"   # #1885: cpu, once final; #2533: the ledger's seq, when the report carries ranges
 }
 
 progress_send() {
@@ -202,7 +202,7 @@ progress_send() {
     # The loop below sends and forgets, which is right for a report that will
     # be repeated in two seconds. The *last* report of a job is not repeated:
     # it is what tells the server the work ended. That one gets an answer read.
-    build_progress "$1" "$2" "${4:-}" > "$RUN_DIR/progress.json"
+    LEDGER_SESSION="$1" build_progress "$1" "$2" "${4:-}" > "$RUN_DIR/progress.json"   # #2533: `durable` is a delta of this round's ledger (chunkledger.sh)
     # ‏#557: התשובה נשמרת במקום להיזרק. הקוד היוצא נשאר הקוד היוצא —
     # מי שקורא לזה בלולאה ממשיך להתעלם ממנו — אבל **גוף התשובה זמין
     # למי שכן צריך לדעת**, וזה מה שעוצר לולאה על סבב שנסגר.
@@ -210,7 +210,7 @@ progress_send() {
     # ‏#530) — אותה כותרת שההעלאה שולחת. לסבב (session) אין אסימון.
     http_post_json "$3/api/v1/agent/progress" "$RUN_DIR/progress.json" \
         "${4:+X-Imagesrv-Task-Token: ${TASK_TOKEN:-}}" \
-        > "$RUN_DIR/progress.reply" 2>/dev/null
+        > "$RUN_DIR/progress.reply" 2>/dev/null; _ps_rc=$?; ledger_ack progress "$RUN_DIR/progress.reply" "$1" "$_ps_rc" 2>/dev/null; return "$_ps_rc"   # #2533: what was sent is the server's only on its word
 }
 
 progress_refused_for_good() {
@@ -244,7 +244,7 @@ progress_loop() {
             _pl_w=$(json_get "$RUN_DIR/progress.reply" ".reason"); log "progress: the server says this session is closed ($_pl_w) -- stopping"
             [ "$_pl_w" = null ] || printf '%s\n' "$_pl_w" > "$RUN_DIR/session-closed.why"; printf '%s\n' "$1" > "$RUN_DIR/session-closed"; return 0
         fi
-        cancel_from_reply; sleep "${PROGRESS_INTERVAL_S:-2}"   # #1386: "בטל דיסק זה" (cancel.sh)
+        cancel_from_reply; if command -v peer_reply_take > /dev/null 2>&1; then peer_reply_take "$RUN_DIR/progress.reply"; fi; sleep "${PROGRESS_INTERVAL_S:-2}"   # #1386: "בטל דיסק זה" (cancel.sh); B29: what the server tells a neighbour or the cloner that lacks (peerwire.sh -- in shadow, nothing)
     done
 }
 

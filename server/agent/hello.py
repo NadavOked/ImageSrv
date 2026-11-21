@@ -21,7 +21,10 @@ from urllib.parse import urlsplit
 from server.agent import timing as agent_timing, bootguard, inventory, probe, registry, unknown_screen
 from server.agent import answer_failure   # #2666
 from server.core import capabilities
-from server.rounds import direct, room, room_drivers, room_names
+from server.rounds import direct, prodline, room, room_drivers, room_names
+from server.rounds import interrupt   # #2528
+from server.brain import ask as brain_ask   # #3654 (K14)
+from server.brain import idleceil as brain_idle   # #3672 (A15): תקרות בדיקת הכתיבה של מסך ההמתנה -- המוח מחליט
 from server.library import minfree
 from server.system import timezone
 from server.disks import (disk_sets, crcwarn, disk_failures, drawer_slots, shrink_records,
@@ -31,6 +34,7 @@ from server.agent.boot_cancel import cancel_gui_tasks_on_boot
 from server.db import disk_full, get_setting, journal, net_seen, note_disk_full, note_monitor_on
 from server.agent import readbackhash
 from server.disks import f1_marks, model_slots   # #2001; #1858
+from server.disks import writefloor   # #3268
 from server.learn import never_woke   # #1858
 from server.library.images import ImageLibrary
 from server.net.ports import server_name
@@ -120,7 +124,7 @@ PROBE_HEADER = b"x-imagesrv-probe"
 #: 64KB/שדה ועומק 8 — הסוכן שלנו שולח קילובייטים בודדים ועומק 3.
 HELLO_FIELD_MAX_BYTES = 64 * 1024
 HELLO_FIELD_MAX_DEPTH = 8
-HELLO_CAPPED_FIELDS = ("inventory", "probe", "netprobe", "optical")
+HELLO_CAPPED_FIELDS = ("inventory", "probe", "netprobe", "netwatch", "optical")
 
 
 def _json_depth(value: object, depth: int = 1) -> int:
@@ -294,6 +298,22 @@ def _record_seen(conn, mac, ip, disks, monitor_secret, monitor_auth, prompt,
     # פותח גרסה.
     if hw_probe is not None:
         probe.record(conn, mac, hw_probe, history=history)
+        if history:    # #3064 (N4/N6/N8, צל): רק מכונה רשומה; אינו זורק ואינו משפיע על ה-hello
+            from server.brain import l2sense
+            l2sense.note_hello(conn, mac, hw_probe.get("netwatch"))
+
+
+def _asks(conn: sqlite3.Connection, mac: str, read_only: bool) -> list[dict] | None:
+    """#3654 (K14): שאלות המוח למכונה הזו -- הפתוחות עליה, ואלה שנסגרו ברבע השעה האחרונה (מה שנענה או פקע, ומה ברירת
+    המחדל). ``[]`` = נקרא ואין; ``None`` = **לא נקרא** (קריאת-בלבד בלי תופעות לוואי, או כשל): המסך משאיר מה שיש לו, ואינו
+    מסיק "אין שאלה" -- עיקרון 5. כשל כאן אינו מפיל hello."""
+    if read_only:
+        return None
+    try:
+        return brain_ask.for_machine(conn, mac)
+    except Exception:                       # noqa: BLE001 -- שאלה שלא נקראה אינה מונעת מהמכונה לקבל את התשובה
+        log.exception("hello: the brain's questions for %s were not read", mac)
+        return None
 
 
 def build_answer(
@@ -404,6 +424,10 @@ def build_answer(
         # לסידוריים שהמכונה שלחה או לחריץ באותה מכונה. הסוכן צובע מהן אדום
         # לפני הסבב; סוכן ישן מתעלם משדה שאינו מכיר (schema נשאר 1).
         "disk_failures": disk_failures.open_for(conn, mac, disks),
+        # #3268: the write check runs on the waiting screen, before any manifest -- its floor comes here
+        "writecheck_min_mbps": writefloor.mbps(conn),
+        # #3268 (נדב 14/11): מתג המדיניות "תמיכה ב-HDD" (כבוי כברירת מחדל): כבוי = דיסק מכני הוא מקור בלבד, וכיעד "איטי" כבר בהכנסה
+        "hdd_support": get_setting(conn, "hdd_support") == "true",
         # #1859: מה שהשרת למד מאז הסבב הקודם של כל סידורי (183/188 שעלו, מאפיין קריטי
         # שעלה, חום בכתיבה) — [{"serial", "reason"}]. הסוכן הופך את המילה לשאלה כתומה.
         "smart_learned": smart_history.learned_for(conn, disks),
@@ -434,9 +458,19 @@ def build_answer(
         # #2056/#2059: זמני ההמתנה והכיבוי האוטומטי (הגדרות בקונסולה). בכל תשובה לרשומה,
         # ולכל תפקיד. הסוכן מחזיר את מה שהחיל ב-`applied_timing` (ראו interfaces.md).
         **agent_timing.hello_fields(conn),
+        # #3262 (נדב 14/11): מתג הקטנת המחיצה האחרונה ביעד קטן עד 64MB. כבוי כברירת מחדל;
+        # שדה אחר מ-hello_fields כי הוא מתג ולא זמן (אין לו "הוחל").
+        agent_timing.TAIL_SHRINK: agent_timing.tail_shrink_enabled(conn),
     }
     if machine["role"] == "cloner" and machine["drawer_count"] is not None:
         answer["drawer_count"] = machine["drawer_count"]
+    if machine["role"] == "cloner":
+        # #3672 (A15, אפיק #3653): תקרות הזמן של בדיקת הכתיבה במסך ההמתנה -- כמה מחכים לפני שמוותרים בשם. המוח מחליט, הסוכן מבצע.
+        # אין החלטה (כלל שנפל) = השדה חסר, והסוכן נשאר עם הערכים של היום. hello בקריאה בלבד אינו רושם.
+        idle_ceilings = brain_idle.decide(conn, mac, machine["role"], record=not read_only)
+        if idle_ceilings is not None:
+            answer["idle_ceilings"] = idle_ceilings
+    answer["asks"] = _asks(conn, mac, read_only)
     if machine["role"] in ("cloner", "build"):
         model_map = model_slots.for_mac(conn, mac)   # #2001: מכונה ← דגם ← ברירת מחדל
         answer["drawer_slots"] = drawer_slots.effective(
@@ -464,6 +498,10 @@ def build_answer(
             room.pulse(conn, store, mac)
             # #1954: דיסק שנבחר כשהמשכפל היה כבוי — אותו דיסק נכתב, אחר או חסר מדולג בגלוי.
             room.wake_check(conn, mac, disks)
+            # #2528: השאלה הפתוחה על המשכפל הזה — המסך שלו מציג אותה (בלי כפתורי תשובה: אין שם משתמש מחובר).
+            told = interrupt.for_cloner(conn, mac)
+            if told is not None:
+                answer["interrupt"] = told
         if not room.has_fresh_drawers(conn, mac):
             # המגירות של המכונה כבר נכתבו בסבב הזה ולא הוחלפו —
             # היא לא מצטרפת לגל, וממשיכה להמתין (wait_poll).
@@ -554,6 +592,15 @@ def build_answer(
         # הפעלה לכתוב אותו. null = הסבב בלי שמות, והסוכן אינו נוגע בשם שבאימג'.
         answer["session"]["hostnames"] = room_names.for_mac(round_row, mac)
         answer["session"]["hostname_os"] = room_names.os_for(round_row)
+        # #3181: פס ייצור -- המונה, השם הבא ומה אפשר להוציא, כמו בתשובת progress. null = סבב רגיל.
+        answer["session"]["production_line"] = (prodline.reply(conn, round_row, mac)
+                                                if round_row is not None else None)
+        # #2528: המשכפל מקבל עכשיו גל רץ — היומן רושם אילו דיסקים הוא כותב, ובאיזה אתחול.
+        # יומן שלא נכתב = הגל אינו נמסר ב-hello הזה (סקירה 1-ז); החבר `waiting`, וה-hello הבא מנסה שוב.
+        if (session["state"] == "running" and joining and not read_only and not interrupt.handed(
+                conn, session["id"], mac, answer["session"]["target_ports"], disks)):
+            answer["session"] = None
+            return answer
     answer["ui"] = _ui(conn, has_open_session=session["state"] == "open",
                        off_vlan=off_vlan, role=machine["role"])
     return answer

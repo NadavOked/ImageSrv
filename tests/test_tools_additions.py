@@ -37,6 +37,7 @@ def room(tmp_path):
     for name in ("sda", "nvme0n1"):
         disk = tmp_path / "sysroot/sys/block" / name
         (disk / "device").mkdir(parents=True)
+        (disk / "holders").mkdir()                       # #2233: the in-use gate reads these
         (disk / "size").write_text("1024\n")
         for field in ("model", "serial"):
             (disk / "device" / field).write_text("test\n")
@@ -44,6 +45,8 @@ def room(tmp_path):
     (tmp_path / "sysroot/sys/class/nvme/nvme0/nvme0n1").mkdir(parents=True)
     (tmp_path / "sysroot/proc").mkdir(parents=True)
     (tmp_path / "sysroot/proc/meminfo").write_text("MemAvailable:    1048576 kB\n")
+    (tmp_path / "sysroot/proc/mounts").write_text("tmpfs /run tmpfs rw 0 0\n")
+    (tmp_path / "sysroot/proc/swaps").write_text("Filename Type Size Used Priority\n")
     ctrl = bytearray(4096)
     ctrl[516] = 1
     (tmp_path / "controller").write_bytes(ctrl)

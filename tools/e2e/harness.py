@@ -8,13 +8,16 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import re
+import struct
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+import zlib
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
@@ -64,11 +67,51 @@ SIM_MACS = (BUILD_MAC, CLONER_MAC, UNKNOWN_MAC, *CLASS_MACS)
 ADMIN = {"username": "noc", "password": "Sim-pass-1234!"}
 DEPLOY = {"username": "madrich", "password": "Sim-deploy-99!"}
 
+#: #2533: ה-XXH64 של האינדקס של כל קובץ מחיצה שנבנה כאן — `index_xxh64` במניפסט.
+INDEX_XXH64: dict[bytes, str] = {}
+
+
+def chunk_file(payload: bytes) -> bytes:
+    """קובץ מחיצה בפורמט 2 (#2533) ש-`payload` הוא זרם הנתונים שלו: זרם partclone v2
+    אמיתי (כותרת עם CRC, מפת סיביות, בלוקים של 512) חתוך לפריימי zstd — כאן פריימים
+    "מאוחסנים" (Raw_Blocks), ש-`zstd -dc` קורא כמו כל פריים. השרת הרץ גוזר ממנו את
+    האינדקס ברקע, בדיוק כמו מקליטה אמיתית; קובץ שאינו כזה היה מסומן פגום ולא מופץ."""
+    from server.agent.readbackhash import PyXxh64, list_digest
+    from server.library import chunkformat
+
+    def xxh(data: bytes) -> str:
+        h = PyXxh64()
+        h.update(data)
+        return h.hexdigest()
+
+    def stored(data: bytes) -> bytes:
+        blocks = [data[i:i + 131072] for i in range(0, len(data), 131072)] or [b""]
+        body = b"".join(((len(b) << 3) | (i == len(blocks) - 1)).to_bytes(3, "little") + b
+                        for i, b in enumerate(blocks))
+        return (b"\x28\xb5\x2f\xfd\xe4" + len(data).to_bytes(8, "little") + body
+                + bytes.fromhex(xxh(data))[::-1][:4])
+
+    data = payload + bytes(-len(payload) % 512)
+    blocks = len(data) // 512
+    head = struct.pack("<15sx14s4sH16sQQQQI", b"partclone-image", b"0.3.36", b"0002", 0xC0DE, b"SIM",
+                       blocks * 512, blocks, blocks, blocks, 512)
+    head += struct.pack("<IHHHHIBB", 4, 2, 64, 0, 0, 0, 1, 1)
+    head += struct.pack("<I", zlib.crc32(head) ^ 0xFFFFFFFF)
+    bits = bytearray(b"\xff" * ((blocks + 7) // 8))
+    if blocks % 8:
+        bits[-1] = (1 << (blocks % 8)) - 1
+    stream = head + bytes(bits) + struct.pack("<I", zlib.crc32(bytes(bits)) ^ 0xFFFFFFFF) + data
+    out = io.BytesIO()
+    index, _sha, _total = chunkformat.cut(io.BytesIO(stream), out, False, compress=stored, new=PyXxh64)
+    INDEX_XXH64[out.getvalue()] = list_digest(index, PyXxh64)
+    return out.getvalue()
+
+
 #: תוכן המחיצות של שני האימג'ים — קטן, אבל עובר את אותו מסלול בדיוק.
-FILES_A = {"p1.esp.pcl.zst": b"esp-a-payload" * 300,
-           "p3.windows.pcl.zst": b"windows-a-payload" * 900}
-FILES_B = {"p1.esp.pcl.zst": b"esp-b-payload" * 250,
-           "p3.windows.pcl.zst": b"windows-b-payload" * 1400}
+FILES_A = {"p1.esp.pcl.zst": chunk_file(b"esp-a-payload" * 300),
+           "p3.windows.pcl.zst": chunk_file(b"windows-a-payload" * 900)}
+FILES_B = {"p1.esp.pcl.zst": chunk_file(b"esp-b-payload" * 250),
+           "p3.windows.pcl.zst": chunk_file(b"windows-b-payload" * 1400)}
 
 passed = 0
 
@@ -182,7 +225,8 @@ def make_manifest(source_bytes: int, files: dict[str, bytes]) -> dict:
     במחיצה (#1830, `capture.MIN_STREAM_TO_USED`)."""
     esp_name, win_name = sorted(files)          # p1 לפני p3
     return {
-        "schema": 1, "family": 256 if source_bytes == GB256 else 500,
+        "schema": 1, "image_format": 2,          # #2533: what the agent's capture sends
+        "family": 256 if source_bytes == GB256 else 500,
         "source_disk_bytes": source_bytes, "min_target_bytes": source_bytes,
         "scheme": "gpt", "sector_size": 512,
         "disk_guid": "B8A3C1D2-4E5F-6A7B-8C9D-0E1F2A3B4C5D",   # קנוני (#1407)
@@ -190,11 +234,13 @@ def make_manifest(source_bytes: int, files: dict[str, bytes]) -> dict:
             {"index": 1, "type_guid": ESP_GUID, "role": "esp", "fs": "vfat",
              "start_sector": 2048, "size_bytes": 104857600,
              "used_bytes": 50 * len(files[esp_name]), "file": esp_name,
-             "sha256": sha(files[esp_name]), "expandable": False},
+             "sha256": sha(files[esp_name]), "index_xxh64": INDEX_XXH64[files[esp_name]],
+             "expandable": False},
             {"index": 3, "type_guid": WINDOWS_GUID, "role": "windows", "fs": "ntfs",
              "start_sector": 1085440, "size_bytes": source_bytes - 1085440 * 512,
              "used_bytes": 50 * len(files[win_name]), "file": win_name,
-             "sha256": sha(files[win_name]), "expandable": True},
+             "sha256": sha(files[win_name]), "index_xxh64": INDEX_XXH64[files[win_name]],
+             "expandable": True},
         ],
         "total_compressed_bytes": sum(len(v) for v in files.values()),
         "compression": "zstd-9",

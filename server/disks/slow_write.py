@@ -17,7 +17,7 @@ import logging
 import sqlite3
 
 from server.db import journal
-from server.disks import drawer_slots, model_slots, slot_names
+from server.disks import disk_sets, drawer_slots, model_slots, slot_names
 
 log = logging.getLogger("imagesrv.slow_write")
 
@@ -93,7 +93,7 @@ def journal_new(conn: sqlite3.Connection, session_id: str, mac: str,
             serial = t.get("serial") if isinstance(t.get("serial"), str) and t.get("serial") else disk.get("serial")
             port = disk.get("port")
             reason = " ".join(str(pre.get("reason") or "").split())
-            detail = (f"{mac} {dev} serial={''.join(_word(serial).split())}"
+            detail = (f"{mac} {dev} serial={disk_sets.serial_key(serial) or '?'}"   # #3576: the key text_of matches by
                       f" port={port if isinstance(port, int) and not isinstance(port, bool) else '?'}"
                       f" drawer={_drawer(conn, mac, disk) or '?'}"
                       f"{slot_names.journal_suffix(slot_names.label(conn, mac, dev=dev))}"

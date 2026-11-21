@@ -255,6 +255,18 @@ STUBS = {
     # ל-bytes.raw). שני ערכים שונים — אחרת wait_progress רואה מונה עומד.
     "pv": '#!/bin/sh\necho 0 >&2\ncat\necho 65536 >&2\n',
     "zstd": '#!/bin/sh\nexec cat\n',
+    # #2533: stands where agent/chunkcut.c stands in the capture's pipe and in a direct
+    # send's -- [--raw] -l <level> -T <threads> -i <index>. The bytes go through this
+    # box's `zstd` (a test's own stand-in, or the one above), so a test that makes the
+    # compressor fail, frame the stream or record its flags still sees exactly that; the
+    # index and its digest are written at a clean end only, as the real tool does. The
+    # real tool is in test_chunkcut_2533.py.
+    "chunkcut": (
+        '#!/bin/sh\n'
+        'while [ $# -gt 0 ]; do case "$1" in -l) l=$2; shift ;; -T) t=$2; shift ;; -i) i=$2; shift ;; esac; shift; done\n'
+        'zstd -"$l" -T"$t" -c || exit $?\n'
+        "printf 'IMAGESRV-IDX 2 raw 4194304 0 0 - 0 0 0\\n' > \"$i\"; printf '0123456789abcdef\\n' > \"$i.xxh64\"\n"
+    ),
     "partclone.dd": '#!/bin/sh\ncat > /dev/null\n',
     # #1438: הקליטה והחדר מגבבים ומונים בתוך fanout (-S/-P), לא ב-tee.
     "fanout": (
@@ -641,19 +653,170 @@ def test_the_later_ceiling_outlasts_the_senders_later_wait():
 # --- שמירה על הכלל: אין המתנה בלי תקרה ---------------------------------------
 
 
+#: What may stand between the last separator and a command word: keywords, `!`, the builtins that
+#: run another command, and assignments (`x=1 wait`).
+_WAIT_PREFIX = re.compile(r"^(?:\s*(?:if|then|else|elif|do|while|until|!|command|builtin|exec|time|[A-Za-z_]\w*=\S*))*\s*$")
+#: The mechanisms a `# wait-bounded:` permit may name. A closed list: free text is not a permit.
+WAIT_MECHANISMS = ("after-kill-0-gone", "after-kill", "subshell-exit-file")
+_WAIT_PERMIT = re.compile(r"#\s*wait-bounded:\s*([a-z0-9-]+)")
+
+
+def _masked(code: str) -> str:
+    """`code` with what stands inside quotes replaced by underscores, the same length: a `wait` inside a
+    string is not a command, and the positions still line up with the original."""
+    out, quote, i = [], None, 0
+    while i < len(code):
+        c = code[i]
+        if quote:
+            if c == "\\" and quote == '"' and i + 1 < len(code):
+                out.append("__")
+                i += 2
+                continue
+            out.append(c if c == quote else "_")
+            quote = None if c == quote else quote
+        else:
+            quote = c if c in "\"'" else None
+            out.append(c)
+        i += 1
+    return "".join(out)
+
+
+def _wait_commands(code: str):
+    """Every `wait` that is a command on this line, wherever it stands: at its start, after `;`, `&`, `|`,
+    `(`, `{`, a backtick or a case pattern's `)`, and after if / while / until / elif / then / do / else,
+    `!`, `command`, or an assignment. Not `wait_pid`, not `x=wait`, not `[ "$a" = wait ]`, not a case label."""
+    masked = _masked(code)
+    for hit in re.finditer(r"(?<![\w$.\-/=])wait(?![\w=\-.])", masked):
+        if re.match(r"\s*\)", masked[hit.end():]):
+            continue
+        if _WAIT_PREFIX.match(re.split(r"[;&|({`)]", masked[:hit.start()])[-1]):
+            yield hit
+
+
+def bare_waits(text: str) -> list[tuple[int, str]]:
+    """The lines of a shell file that wait for a process with no ceiling: (number, line).
+
+    A `wait` is let through only when the guard itself can see why it cannot hang -- one of three
+    mechanisms, by name (`WAIT_MECHANISMS`), and each is CHECKED, not believed:
+
+    - ``after-kill``: this very line killed the same process first (``kill "$p"; wait "$p"``).
+      ``kill -0`` kills nothing and is not that.
+    - ``subshell-exit-file``: the wrapper that records its child's exit code,
+      ``wait "$!"; echo "$?" > file`` -- a background job, watched by its caller through the pid file.
+    - ``after-kill-0-gone``: the line carries ``# wait-bounded: after-kill-0-gone`` AND a loop above it
+      (``while kill -0 "$p"``, within 40 lines) has already waited for that process to be gone, with its
+      own ceiling. The permit names the mechanism; the guard looks for the loop.
+
+    Anything else is a bare wait -- a permit with free text, or one whose mechanism is not there, included.
+    The first version of this guard looked at the first word of a line only; the second one could still be
+    walked around (``if wait``, ``! wait``, ``command wait``, a backtick, ``kill -0`` as "the kill", any
+    text as "the permit"): both were found by review of #3063."""
+    lines = text.splitlines()
+    found = []
+    for number, line in enumerate(lines, start=1):
+        code = re.sub(r"(^|\s)#.*$", "", line)
+        for hit in _wait_commands(code):
+            rest = code[hit.end():]
+            target = re.match(r'\s*("\$[!\w{}]+"|\$[!\w{}]+)', rest)
+            name = target.group(1).strip('"') if target else ""
+            killed = bool(name) and re.search(r"\bkill\b(?!\s+-0\b)[^;&|]*" + re.escape(name), code[:hit.start()]) is not None
+            collected = name == "$!" and re.match(r'\s*"?\$!"?\s*;\s*echo\s+"\$\?"\s*>', rest) is not None
+            permit = _WAIT_PERMIT.search(line)
+            gone = (bool(name) and permit is not None and permit.group(1) == "after-kill-0-gone"
+                    and any(re.search(r"\b(?:while|until)\b[^#]*\bkill -0 \"?" + re.escape(name), earlier)
+                            for earlier in lines[max(0, number - 41):number - 1]))
+            if not (killed or collected or gone):
+                found.append((number, line.strip()))
+                break
+    return found
+
+
 def test_no_bare_wait_is_left_anywhere_in_the_agent():
     """`wait <pid>` חשוף הוא המתנה בלי תקרה. כל אחת כזו עוברת דרך
     wait_pid/wait_progress, ולכן ההופעות היחידות של ה-builtin הן בתוך
-    waits.sh עצמו."""
+    waits.sh עצמו -- או אחד משלושת המנגנונים ש-`bare_waits` מכיר ובודק."""
     offenders = []
     for path in SH_FILES:
         if path.name == "waits.sh":
             continue
-        for number, line in enumerate(
-                path.read_text(encoding="utf-8").splitlines(), start=1):
-            if re.match(r"\s*wait\b", line):
-                offenders.append(f"{path.name}:{number}: {line.strip()}")
+        offenders += [f"{path.name}:{number}: {line}" for number, line in bare_waits(path.read_text(encoding="utf-8"))]
     assert offenders == [], "המתנות בלי תקרה: " + "; ".join(offenders)
+
+
+def test_every_permit_in_the_agent_names_a_mechanism_from_the_closed_list():
+    """`# wait-bounded:` עם טקסט חופשי אינו היתר. כל היתר בסוכן נוקב באחד מ-`WAIT_MECHANISMS`."""
+    permits = [(path.name, number, m.group(1))
+               for path in SH_FILES for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1)
+               for m in [_WAIT_PERMIT.search(line)] if m]
+    assert permits, "the chunk engine's permit is gone -- and this test with it"
+    assert [p for p in permits if p[2] not in WAIT_MECHANISMS] == []
+
+
+@pytest.mark.parametrize("line", [
+    'wait "$pid"',
+    '    wait "$_cr_pid" 2>/dev/null',
+    '_cr_rc=0; wait "$_cr_pid" 2>/dev/null || _cr_rc=$?; return "$_cr_rc"',     # the line the first review found
+    '{ wait "$pid"; } 2>/dev/null',
+    'true && wait "$pid"',
+    'if x; then wait "$pid"; fi',
+    'kill "$other" 2>/dev/null; wait "$pid"',                                   # it killed another process
+    'cmd & wait "$!"',                                                          # no exit code is recorded
+    # the shapes the second review walked through the guard (scratchpad guard.py)
+    'if wait "$pid"; then rc=0; fi',
+    '! wait "$pid"',
+    'while ! wait "$pid"; do :; done',
+    'until wait "$p"; do :; done',
+    'elif wait "$pid"; then',
+    'rc=`wait "$pid"`',
+    'rc=$(wait "$pid")',
+    'command wait "$pid"',
+    'x=1 wait "$pid"',
+    'cmd & wait',
+    'foo |& wait "$p"',
+    'case x in a) wait "$pid" ;; esac',
+    'kill -0 "$pid" 2>/dev/null && x=1; wait "$pid"',                           # kill -0 kills nothing
+    # permits that are not permits
+    'wait "$pid"   # wait-bounded:',
+    'wait "$pid"   # bounded, trust me',
+    'wait "$pid" # wait-bounded: because I say so, honestly',
+    'wait "$pid" # wait-bounded: after-kill',                                   # it names a mechanism that is not here
+    'wait "$pid" # wait-bounded: after-kill-0-gone',                            # ...and so does this: no loop above it
+])
+def test_the_guard_sees_a_wait_wherever_it_stands_on_the_line(line):
+    assert bare_waits(line) == [(1, line.strip())]
+
+
+@pytest.mark.parametrize("line", [
+    'wait_pid "$pid" 30 "the helper"',
+    'WAIT_HELPER_S="${WAIT_HELPER_S:-30}"',
+    '# wait "$pid" is what this used to do',
+    'log "we wait for the stream"',
+    "log 'and then wait'",
+    '[ "$_cp_action" = wait ] || break',
+    'case "$a" in wait) x ;; esac',
+    '_cp_action="wait"; state=wait',
+    'kill "$_w" 2>/dev/null; wait "$_w" 2>/dev/null',
+    'kill -9 "$_lz_pid" 2>/dev/null; wait "$_lz_pid" 2>/dev/null; _lz_rc=$?',
+    '_rc=$?; exec 3<&-; kill "$_dp_w" 2>/dev/null; wait "$_dp_w" 2>/dev/null',
+    'cmd & echo "$!" > "$d/pid"; wait "$!"; echo "$?" > "$d/rc"',
+])
+def test_the_guard_lets_through_only_what_it_can_name(line):
+    assert bare_waits(line) == []
+
+
+def test_the_permit_is_checked_against_the_loop_it_names():
+    """`after-kill-0-gone` אינו הצהרה: השומר מחפש את הלולאה שחיכתה לתהליך. אותה שורה בלי הלולאה, עם
+    לולאה על תהליך אחר, או עם `if kill -0` במקום לולאה -- נתפסת."""
+    permit = '    wait "$_cr_pid" 2>/dev/null   # wait-bounded: after-kill-0-gone -- collects its exit code'
+    loop = ['    while kill -0 "$_cr_pid" 2>/dev/null; do', "        sleep 1", "    done"]
+    assert bare_waits("\n".join([*loop, permit])) == []
+    assert bare_waits(permit) == [(1, permit.strip())]
+    other = ['    while kill -0 "$_other" 2>/dev/null; do', "        sleep 1", "    done"]
+    assert bare_waits("\n".join([*other, permit])) == [(4, permit.strip())]
+    once = ['    if kill -0 "$_cr_pid" 2>/dev/null; then :; fi']
+    assert bare_waits("\n".join([*once, permit])) == [(2, permit.strip())]
+    far = [*loop, *["    :"] * 60]
+    assert bare_waits("\n".join([*far, permit])) == [(len(far) + 1, permit.strip())]
 
 
 @pytest.mark.parametrize("name", ["restore.sh", "drawers.sh", "capture.sh"])
@@ -704,8 +867,9 @@ def _sh_default(path: Path, var: str) -> int:
     return int(m.group(1))
 
 
-def test_the_stream_stall_ceiling_is_300_and_stays_under_the_watchdog_lease():
-    """11/09/2026 (הכרעת נדב): תקרת השקט באמצע הזרם הועלתה מ-120 ל-300ש'
+def test_the_stream_stall_ceiling_is_120_and_stays_under_the_watchdog_lease():
+    """18/11/2026 (הכרעת נדב, #3658): "גם דיסק וגם רשת אחרי 2 דקות מוותר" -- תקרת הרשת חזרה ל-120ש' (וההגדרה
+    `drawer_net_wait_seconds`, 30–900, מחליפה אותה). עד אז, מ-11/09/2026 (הכרעת נדב): תקרת השקט באמצע הזרם הועלתה מ-120 ל-300ש'
     — השולח מאט למקבל איטי בזנב אימג' גדול (גישת FOG/Clonezilla) במקום
     להפילו, ותקרת 120 חתכה אותו דווקא אז (כשל ~90%). udp-receiver
     (`--receive-timeout` ב-restore.sh) נגזר מאותו ערך, ולכן הם נעים יחד.
@@ -714,15 +878,70 @@ def test_the_stream_stall_ceiling_is_300_and_stays_under_the_watchdog_lease():
     (watchdog.sh, 600ש'), שמוזן בכל דגימה של wait_progress/wait_pid — אחרת
     ה-watchdog יאתחל את המכונה לפני שהשקט מדווח ככישלון גלוי. 300 < 600.
 
-    **בקרה שלילית:** החזרת ברירת המחדל ל-120 מפילה את `== 300`; העלאתה
+    **בקרה שלילית:** החזרת ברירת המחדל ל-300 מפילה את `== 120`; העלאתה
     מעל ה-lease מפילה את בדיקת `< lease`."""
     stall = _sh_default(WAITS, "WAIT_STREAM_STALL_S")
-    assert stall == 300
+    assert stall == 120
     # הנפילה-אחורה של udp-receiver ב-restore.sh נעה יחד עם waits.sh.
     m = re.search(r'WAIT_STREAM_STALL_S:-(\d+)', RESTORE.read_text(encoding="utf-8"))
-    assert m and int(m.group(1)) == 300, "ה---receive-timeout ב-restore.sh לא תואם"
+    assert m and int(m.group(1)) == 120, "ה---receive-timeout ב-restore.sh לא תואם"
     lease = int(re.search(r'-ge (\d+)', WATCHDOG.read_text(encoding="utf-8")).group(1))
     assert stall < lease, f"תקרת השקט {stall} חייבת להיות מתחת ל-lease {lease}"
+
+
+def _lease() -> int:
+    return int(re.search(r'-ge (\d+)', WATCHDOG.read_text(encoding="utf-8")).group(1))
+
+
+def test_every_wait_of_the_chunk_engine_feeds_the_watchdog_or_ends_under_its_lease():
+    """סקירה על #3063, ממצא 2. ה-lease של ה-watchdog הוא 600 שניות, ו-`reboot -f` אחריו אינו אומר למה.
+    במנוע החתיכות כל המתנה היא אחת משתיים: לולאה שמזינה אותו (`_chunk_beat`), או המתנה שנגמרת בעצמה,
+    בשם, לפני ה-lease. עד כאן רק תקרת השקט של הזרם נבדקה מולו; לולאת השאלה (900 שניות בלי הזנה)
+    וההורדה (בלי הזנה כלל) לא נבדקו.
+
+    **בקרה שלילית:** הסרת `_chunk_beat` מ-`_chunk_tell` או מ-`_chunk_run`, או החלפת התקרה של שרת
+    שותק ב-900 השניות הישנות, מפילות את הטסט הזה."""
+    lease = _lease()
+    common = (AGENT / "lib" / "core" / "common.sh").read_text(encoding="utf-8")
+    recv = lib_path("chunkrecv.sh").read_text(encoding="utf-8")
+    fetch = lib_path("chunkfetch.sh").read_text(encoding="utf-8")
+    stall, drawer = _sh_default(WAITS, "WAIT_STREAM_STALL_S"), _sh_default(WAITS, "WAIT_DRAWER_S")
+    http_timeout = int(re.search(r'HTTP_TIMEOUT="\$\{HTTP_TIMEOUT:-(\d+)\}"', common).group(1))
+    http_retries = int(re.search(r'HTTP_RETRIES="\$\{HTTP_RETRIES:-(\d+)\}"', common).group(1))
+
+    def body(source: str, name: str) -> str:
+        start = source.index(f"\n{name}() {{")
+        return source[start:source.index("\n}\n", start)]
+
+    # 1. the loops that feed it: the receiver's and the fetch's watcher, and every answered question
+    assert "_chunk_beat" in body(recv, "_chunk_run"), "the watcher of a receiver or a fetch does not feed the watchdog"
+    assert "_chunk_beat" in body(recv, "_chunk_tell"), "an answered question does not feed the watchdog"
+    assert "_chunk_run " in body(fetch, "_chunk_fetch"), "the fetch is not watched by the loop that feeds the watchdog"
+
+    # 2. one question, with curl's own ceiling and retries (and 1+2+4... seconds between them): under the lease
+    one_question = http_timeout * (http_retries + 1) + (2 ** http_retries - 1)
+    assert one_question < lease
+
+    # 3. a server that does not answer: the ceiling the loop itself names, plus the question that was in
+    #    flight when it passed. This was 2 x stall + drawer = 900 seconds, with nothing feeding the watchdog.
+    silent = re.search(r'\[ "\$_cp_silent" -le "\$(\w+)" \] \|\| _cp_why=', body(recv, "chunk_partition_drawers"))
+    assert silent and silent.group(1) == "WAIT_STREAM_STALL_S", "the ceiling of a silent server is not the stream's stall"
+    assert stall + one_question < lease, f"{stall} + {one_question} is not under the lease of {lease}"
+    # the old ceiling was measured with the 300 s stall of 11/09 -- 18/11 moved it to 120, the finding stays what it was
+    assert 2 * 300 + drawer >= lease, "the old ceiling would have been safe: this test proves nothing"
+
+    # 4. the receiver that never says it listens: 300 naps of a tenth of a second (or of a second)
+    naps = re.search(r'\[ "\$_cp_n" -ge (\d+) \]', recv)
+    assert naps and int(naps.group(1)) < lease
+
+    # 5. chunkcast's own ceiling for a disk that stopped taking writes -- recv and apply alike
+    source = (AGENT / "chunkcast.c").read_text(encoding="utf-8")
+    write_stall_ms = int(re.search(r"#define CC_WRITE_STALL_MS (\d+)", source).group(1))
+    assert write_stall_ms < lease * 1000
+    assert source.count('env_ll("CHUNKCAST_WRITE_STALL_MS", CC_WRITE_STALL_MS)') == 2, "recv or apply has no write ceiling"
+
+    # 6. the fetch's stream: each transfer carries curl's no-progress ceiling, the stream's
+    assert "speed-limit = 1" in fetch and "speed-time = %s" in fetch and 'stall="$WAIT_STREAM_STALL_S"' in fetch
 
 
 def test_fanout_bounds_the_fifo_open_itself():

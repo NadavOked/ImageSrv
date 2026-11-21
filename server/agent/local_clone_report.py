@@ -19,7 +19,11 @@ ERROR_MAX = 200
 
 
 class BadReport(ValueError):
-    """The body is not a local clone report."""
+    """The body is not a local clone report. `message` is what the answer carries."""
+
+    def __init__(self, message: str = "") -> None:
+        super().__init__(message)
+        self.message = message   # #3891: the answer reads the field, not str(exc) (CodeQL py/stack-trace-exposure)
 
 
 def _drawer(item: Any) -> str:

@@ -97,15 +97,17 @@ def test_the_slowest_machine_sets_the_wave(conn):
     _wave(conn, {MAC: {"drawers": 1, "done": 1, "written_bytes": 20 * GB},
                  OTHER: {"drawers": 1, "done": 1, "written_bytes": 20 * GB}},
           wall=400, total=400)
-    _wave(conn, {OTHER: {"drawers": 1, "done": 1, "written_bytes": 20 * GB}},
-          wall=1000, total=1000)
+    _wave(conn, {MAC: {"drawers": 1, "done": 1, "written_bytes": 20 * GB},
+                 OTHER: {"drawers": 1, "done": 1, "written_bytes": 20 * GB}},
+          wall=1000, total=1000)             # #3572: שני הגלים של שני משכפלים
     got = learn_eta.wave(conn, _drives(MAC, 1) + _drives(OTHER, 1), 20 * GB)
-    # MAC: 50MB/s → 400ש'. OTHER: חציון של 50 ו-20MB/s = 35MB/s → 571ש'.
+    # שתי המכונות: חציון של 50 ו-20MB/s = 35MB/s → 571ש'.
     assert got["seconds"] == 571, got
 
 
 def test_one_machine_without_history_means_no_estimate_for_the_wave(conn):
-    _wave(conn, {MAC: {"drawers": 1, "done": 1, "written_bytes": 20 * GB}},
+    _wave(conn, {MAC: {"drawers": 1, "done": 1, "written_bytes": 20 * GB},
+                 OTHER: {"drawers": 1, "done": 0, "written_bytes": 0}},   # #3572: a wave of two cloners, one lost
           wall=400, total=400)
     got = learn_eta.wave(conn, _drives(MAC, 1) + _drives(OTHER, 1), 20 * GB)
     assert got["seconds"] is None and got["missing"] == [OTHER]

@@ -52,9 +52,10 @@ from boot.grub_menu import normalize_mac as lenient_mac
 from server.agent import identity, registry
 from server.agent.api import ServerContext, _error, identity_gate
 from server.agent import body as agent_body   # #2410
+from server.core import machine_names
 from server.core.logtext import one_line
 from server.db import journal
-from server.rounds.room import FitRefusal, open_round
+from server.rounds.room import FitRefusal, RoundRefusal, open_round
 from server.rounds.sessions import SessionError
 
 log = logging.getLogger("imagesrv.cloner_round")
@@ -76,7 +77,21 @@ def _journal_image_id(image_id: str) -> str:
 
 def initiator(machine) -> str:
     """היוזם כפי שהוא נרשם ביומן וב-``opened_by`` של הסבב."""
-    return f"מחשב שיכפול {machine['suffix'] or machine['mac']}"
+    return _who(machine)
+
+
+def _who(machine) -> str:
+    """#3123: `משכפל-3` למשכפל ממוספר (השם כבר אומר שזה משכפל), אחרת `מחשב שיכפול <שם ישן>`."""
+    suffix = machine["suffix"]
+    if machine_names.number_of("cloner", suffix) is not None:
+        return machine_names.label("cloner", suffix)
+    return f"מחשב שיכפול {suffix or machine['mac']}"
+
+
+def _origin(machine) -> str:
+    """"ממחשב שיכפול 1" (שם ישן) או "על ידי משכפל-3" — המשפט שביומן."""
+    who = _who(machine)
+    return f"על ידי {who}" if who.startswith("משכפל-") else f"מ{who}"
 
 
 def create_cloner_round_router(ctx: ServerContext) -> APIRouter:
@@ -181,16 +196,16 @@ def create_cloner_round_router(ctx: ServerContext) -> APIRouter:
             opened = open_round(ctx, image_id, len(ports), who,
                                 [{"mac": machine["mac"], "ports": ports}])
         except FitRefusal as exc:            # לפני SessionError — הוא יורש ממנו
-            return refuse(mac, 409, str(exc), "fit")
+            return refuse(mac, 409, exc.message, "fit")
         except SessionError as exc:          # לפני ValueError — הוא יורש ממנו
-            return refuse(mac, 409, str(exc), "round_conflict")
-        except ValueError as exc:            # ולידציה שלנו (SECURITY.md, #595)
-            return refuse(mac, 400, str(exc) or "בקשה לא תקינה", "bad_round")
-        except TypeError as exc:             # #2510 (CodeQL #859): טקסט של פייתון — ליומן השרת
+            return refuse(mac, 409, exc.message, "round_conflict")
+        except RoundRefusal as exc:          # ולידציה שלנו (SECURITY.md, #595); לפני ValueError — הוא יורש ממנו
+            return refuse(mac, 400, exc.message or "בקשה לא תקינה", "bad_round")
+        except (ValueError, TypeError) as exc:   # #2510 (CodeQL #859), #3891: טקסט של פייתון — ליומן השרת
             log.warning("cloner round from %s: %s", one_line(mac), one_line(exc))
             return refuse(mac, 400, "בקשה לא תקינה", "bad_round")
         journal(ctx.conn, "room_open_cloner",
-                f"{opened['id']} — נפתח ממחשב שיכפול {machine['suffix'] or mac}"
+                f"{opened['id']} — נפתח {_origin(machine)}"
                 f" ({mac}), {_journal_image_id(image_id)}, מגירות {','.join(str(p) for p in sorted(ports))}",
                 who, machine=mac, round_id=opened["id"])
         return JSONResponse({"ok": True, **opened})
@@ -221,7 +236,7 @@ def create_cloner_round_router(ctx: ServerContext) -> APIRouter:
         if why is not None:
             return refuse(mac, 409, why, "not_marked")
         journal(ctx.conn, "image_system_partition",
-                f"{_journal_image_id(image_id)} system={index} (ממחשב שיכפול {machine['suffix'] or mac})", initiator(machine),
+                f"{_journal_image_id(image_id)} system={index} ({_origin(machine)})", initiator(machine),
                 machine=mac)
         return JSONResponse({"ok": True, "index": index})
 

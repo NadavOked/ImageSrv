@@ -313,6 +313,9 @@ def test_the_state_file_carries_the_verdicts_against_the_measured_source(tmp_pat
               'echo "3|sdc|C|s3|480000000000|ok|ok|Windows|4|1|480000000000|1|" > "$LC/inv/sdc.line"; '
               'echo "2|sdb|B|s2|500000000000|fail|health_failed||0|0|-1|0|" > "$LC/inv/sdb.line"; '
               'echo sdc > "$LC/source"; echo "done|200000000000|" > "$LC/measure/sdc"; '
+              # #2404: "shrink" now also owes volumes_fit, which reads the source's and the compacted layout: a single C: (the one that gives way) of each
+              'echo "1|EBD0A0A2-B9E5-4433-87C0-68B6B72699C7|U1|2048|937000000" > "$LC/inv/sdc.parts"; echo "1|windows" > "$LC/inv/sdc.roles"; '
+              'echo "1|40000000000" > "$LC/inv/sdc.used"; echo "1|EBD0A0A2-B9E5-4433-87C0-68B6B72699C7|U1|2048|390000000" > "$LC/measure/sdc.compact"; '
               'lc_gui_state; cat "$GUI_DIR/state"')
     assert out.returncode == 0, out.stderr
     lines = out.stdout.splitlines()

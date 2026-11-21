@@ -73,11 +73,11 @@ gui_state() {
             # #706: the images allowed for THIS machine (server-filtered, in
             # station.json from /state) become the picker's image= records. The
             # non-removable disk= records are already emitted above (target panel).
-            jq -r 'if (.allowed_images | type) != "array" then empty else
-                .allowed_images[] |
-                "image=" + ([.id, .name, .folder]
-                  | map((. // "") | tostring | gsub("[\\r\\n|]"; " ")) | join("|"))
-              end' "$GUI_DIR/station.json" >> "$GUI_DIR/state.next" && syspart_records "$GUI_DIR/station.json" >> "$GUI_DIR/state.next" || return 1 ;;   # #1896
+            if restore_image_records "$GUI_DIR/station.json" > "$GUI_DIR/images.next"; then
+                cat "$GUI_DIR/images.next" >> "$GUI_DIR/state.next" || return 1
+            else
+                printf 'images_known=-1\n' >> "$GUI_DIR/state.next" || return 1
+            fi ;;
         capture)
             gui_get folders "$GUI_DIR/folders.json" || return 1
             jq -r 'if type != "array" then error("bad folders") else .[] |
@@ -173,7 +173,8 @@ gui_state() {
                       # #1331: the storage driver made boot-start (bootstorage.sh) -- state, service, error; T8: then drivers.linux (state, module, error|reason; no object = no fields). #1742: 27 = smart_reason, only when there is one (24-26 then empty).
                       (.drivers.boot.state // ""), (.drivers.boot.service // ""), (.drivers.boot.error // .drivers.boot.reason // ""), (if (.drivers.linux | type) == "object" then (.drivers.linux | (.state // ""), (.module // ""), (.error // .reason // "")) elif (.smart_reason // "") != "" then "", "", "" else empty end), (.smart_reason // "" | select(. != ""))]
                      | map(clean) | join("|")),
-                  "room_drawer_rule=" + ([$mi, .serial] + (.rule | if type == "object" then [(.color // ""), (if .target == true then 1 elif .target == false then 0 else "" end), (if .source == true then 1 elif .source == false then 0 else "" end), (.reason // "")] else ["", "", "", ""] end) | map(clean) | join("|"))),   # #2848 (Nadav 11/11): the server one rule (disk_rule.py), shown and not re-made
+                  "room_drawer_rule=" + ([$mi, .serial] + (.rule | if type == "object" then [(.color // ""), (if .target == true then 1 elif .target == false then 0 else "" end), (if .source == true then 1 elif .source == false then 0 else "" end), (.reason // ""), (.reason_he // "")] else ["", "", "", "", ""] end) | map(clean) | join("|")),   # #2848 (Nadav 11/11): the server one rule (the brain, #3666: + its sentence as field 7), shown and not re-made
+                  "room_drawer_rb=" + ([$mi, .serial, (.readback // ""), (.readback_why // "")] | map(clean) | join("|"))),   # #2996/#2633: the read-back verdict as the server says it ("" = not reported)
                 # #1495: every drawer of the mapping, empty ones too, with its slot name.
                 (($m.drawer_slots // []) | to_entries[] | .value as $k |
                   "room_slot=" + ([$mi, (.key + 1), ($k | conn), (($m.slot_names // {})[$k] // "")]
@@ -253,6 +254,7 @@ gui_hello_state() {
     # #1560: the end-of-task count to power-off (idle.sh end_countdown) -- on every screen; #2024: held, the problem disks
     [ -s "$RUN_DIR/end.poweroff" ] && printf 'end_poweroff=%s\n' "$(tr -d '\r\n' < "$RUN_DIR/end.poweroff")" && sed 's/^/end_problem=/' "$RUN_DIR/end.problems" 2>/dev/null
     [ -s "$RUN_DIR/fail.state" ] && cat "$RUN_DIR/fail.state"   # #1569: the failure screen's records (failscreen.sh), on the live kiosk
+    if command -v ask_gui_records > /dev/null 2>&1; then ask_gui_records; fi   # #3654: the brain's questions, on every screen (ask.sh)
     return 0
 }
 
@@ -286,6 +288,8 @@ gui_state_loop() {
         if ! gui_state; then
             printf 'native-gui: state could not be verified\n' >&2
             { printf 'message=לא ניתן לאמת את מצב התחנה|בדקו את החיבור לשרת. הפרטים ביומן הסוכן\n' &&
+                # #2656: no state this pass = the image list was not read, never "no images"
+                { [ "$(cat "$GUI_DIR/mode" 2>/dev/null)" != restore ] || printf 'images_known=-1\n'; } &&
                 gui_server_addr && gui_shrink_state && gui_ask_state && gui_fail_local; } > "$GUI_DIR/state.next" &&
                 mv "$GUI_DIR/state.next" "$GUI_DIR/state" || return 1
         fi

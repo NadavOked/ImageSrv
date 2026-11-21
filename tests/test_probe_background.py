@@ -21,7 +21,7 @@ def run(script: str, timeout: int = 10) -> subprocess.CompletedProcess:
 def prelude(run_dir: Path) -> str:
     return (f'export RUN_DIR={posix(run_dir)!r} LOG_FILE={posix(run_dir / "agent.log")!r}; '
             f'. {posix(AGENT / "lib/core/common.sh")!r}; . {posix(AGENT / "lib/core/waits.sh")!r}; '
-            f'. {posix(AGENT / "lib/hw/probe.sh")!r}; . {posix(AGENT / "lib/hw/probe_bg.sh")!r}; ')
+            f'. {posix(AGENT / "lib/hw/probe.sh")!r}; . {posix(AGENT / "lib/core/bgfds.sh")!r}; . {posix(AGENT / "lib/hw/probe_bg.sh")!r}; ')
 
 
 def test_first_hello_precedes_slow_probe_and_next_hello_carries_it(tmp_path):

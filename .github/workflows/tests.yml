@@ -9,7 +9,7 @@ on:
   # את כל המטריצה פעמיים. נמדד ב-2026-08-31: ארבע ריצות pytest
   # במקום שתיים, על כל דחיפה.
   push:
-    branches: [main]
+    branches: [main, "staging/**"]  # #3180: publish-to-public.sh stage -- the public CI before main, tag and Release
   pull_request:
     branches: [main]
 
@@ -131,6 +131,24 @@ jobs:
           dest="$HOME/.cache/impeccable/imp"
           python tests/impeccable_gate.py fetch "$dest"
           echo "IMAGESRV_IMPECCABLE_BIN=$dest" >> "$GITHUB_ENV"
+      # ‏#3943: gitleaks בגרסה הנעולה, לשער tests/test_gitleaks_test_fakes_1119.py.
+      # אותה גרסה ואותו sha256 כמו gitleaks.yml (הטסט מאמת שהצמדות שוות). בלי
+      # הבינארי הטסט מדלג, ותחת REQUIRE_NATIVE זה כישלון בשמו; הורדה שנכשלה או
+      # sha שאינו תואם -- השלב אדום.
+      - name: Fetch and verify the pinned gitleaks (#3943)
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+          GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+        run: |
+          set -euo pipefail
+          dest="$RUNNER_TEMP/gitleaks"
+          mkdir -p "$dest"
+          F="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$dest/$F"             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${F}"
+          echo "${GITLEAKS_SHA256}  $dest/$F" | sha256sum -c -
+          tar xzf "$dest/$F" -C "$dest" gitleaks
+          "$dest/gitleaks" version
+          echo "IMAGESRV_GITLEAKS=$dest/gitleaks" >> "$GITHUB_ENV"
       # ‏#2952: רק ה-shard האחרון אוסף את **כל** העץ, בלי התוסף — המדד
       # הבלתי תלוי שה-merge משווה אליו את איחוד ה-junit של ארבעת ה-shards.
       # לפני הסוויטה: כשל באיסוף עוצר כאן, ואין עם מה להשוות.

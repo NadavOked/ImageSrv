@@ -128,7 +128,7 @@ EOF
         [ "$_rp_t" = "$_rp_b $_rp_c" ] \
             || { echo "failed|מחיצה $_rp_i: $READBACK_FAIL (מפת הבלוקים בדיסק: ${_rp_t#* } בייט, באימג': $_rp_c)"; return; }
         _rp_x=$(rb_list_xxh "$2/rb.out") || { echo "unchecked|מחיצה $_rp_i: ה-XXH64 של הרשימה לא חושב"; return; }
-        [ "$_rp_x" = "$_rp_a" ] || { echo "failed|מחיצה $_rp_i: $READBACK_FAIL"; return; }
+        [ "$_rp_x" = "$_rp_a" ] || { if command -v rb_bad_full > /dev/null; then rb_bad_full "$_rp_i" "$_rp_a" "$_rp_b" "$2"; fi; echo "failed|מחיצה $_rp_i: $READBACK_FAIL"; return; }   # #3287: which chunks (rbchunks.sh)
         echo "ok-full|" ;;
     sample)     # _rp_a = the server's list (a file), _rp_b = chunks, _rp_c = bytes
         rb_digest "$_rp_n" "$_rp_fs" "$_rp_c" "$2" -x -s "$RB_SEED" "$RB_PERMILLE" \
@@ -149,7 +149,7 @@ EOF
                      END { if (!bad && n) print "ok " n }' "$_rp_a" "$2/rb.out")   # END runs after exit too
         case "$_rp_v" in
             "ok "*) echo "ok-sample|${_rp_v#ok } מתוך $_rp_b" ;;
-            "bad "*) echo "failed|מחיצה $_rp_i: $READBACK_FAIL (חתיכה ${_rp_v#bad } של 4MiB מתוך $_rp_b)" ;;
+            "bad "*) if command -v rb_bad_list > /dev/null; then rb_bad_list "$_rp_i" "$_rp_a" "$2/rb.out" "$2"; fi; echo "failed|מחיצה $_rp_i: $READBACK_FAIL (חתיכה ${_rp_v#bad } של 4MiB מתוך $_rp_b)" ;;   # #3287: every drawn chunk that differs (rbchunks.sh)
             *) echo "unchecked|מחיצה $_rp_i: המדגם לא הושווה" ;;
         esac ;;
     sha)        # a manifest from before #1864, full mode: _rp_a = sha256, _rp_c = bytes
@@ -189,7 +189,7 @@ _rb_read() {
 
 _rb_apply() {
     # $1 = disk, $2 = its result line. The one place a result becomes a state.
-    _ra_t="$RUN_DIR/targets/$1"; rm -f "$_ra_t/readback" "$_ra_t/readback_reason" "$_ra_t/readback_why"
+    _ra_t="$RUN_DIR/targets/$1"; rm -f "$_ra_t/readback" "$_ra_t/readback_reason" "$_ra_t/readback_why"; if command -v rb_chunks_keep > /dev/null; then rb_chunks_keep "$1" "$2"; fi   # #3287
     case "$2" in
         verified\|*|sampled\|*|unverified\|*|unfetched\|*|repaired\|*)
             _ra_s=${2%%|*}; [ "$_ra_s" != unfetched ] || { _ra_s=unverified; echo list_not_fetched > "$_ra_t/readback_why"; }   # #1907

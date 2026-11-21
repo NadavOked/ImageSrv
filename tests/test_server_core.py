@@ -256,7 +256,7 @@ def _invalid_manifest(mutator):
     lambda m: m["partitions"][0].update(uuid="not-a-uuid"),
     lambda m: m["partitions"][0].update(attrs="1"),
     lambda m: m["partitions"][0].update(role="root"),
-    lambda m: m["partitions"][0].update(fs="xfs"),
+    lambda m: m["partitions"][0].update(fs="zfs"),   # #3415: xfs is now accepted, an unknown fs is not
     lambda m: m["partitions"][0].update(role="esp|windows"),
     lambda m: m["partitions"][0].update(uuid="BAD\nUUID"),
 ])

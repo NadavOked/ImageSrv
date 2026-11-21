@@ -8,7 +8,6 @@
 # write is said (crcdelta.sh, crc_delta), as the cable or the drawer
 # verdict when the rule holds: orange | red | hw | info ; a name in neither table = 'לא מוכר'
 # word: the reason word the agent stores (smart.sh SMART_WARN_REASONS) ; media: ssd|hdd|any
-hw	link_slow	drawer	-	-	-	hw	link_slow	any	מהירות קישור שירדה	הקישור למגירה איטי ממה שהבקר והדיסק תומכים בו — כבל או מגירה, לא הדיסק
 hw	link_reset	drawer	-	-	-	hw	link_reset	any	קישור שמתאפס	הקישור למגירה התאפס — כבל או מגירה, לא הדיסק
 hw	drawer_gone	drawer	-	-	-	hw	drawer_gone	any	מגירה שמתנתקת	המגירה התנתקה בזמן העבודה — מגירה או כבל, לא הדיסק
 hw	usb2	drawer	-	-	-	hw	usb2	any	USB 2.0	מחובר ב-USB 2.0 — איטי; לחבר ליציאת USB 3

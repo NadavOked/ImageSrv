@@ -41,7 +41,7 @@ def test_rules_follow_the_services_of_each_nic(shell) -> None:
     assert 'iifname "ens33" tcp dport 8443 accept' in got
     assert {'iifname "ens34" udp dport 67 accept', 'iifname "ens34" udp dport 69 accept',
             'iifname "ens34" tcp dport 8080 accept',
-            'iifname "ens34" udp dport 7000-7001 accept'} <= set(got)
+            'iifname "ens34" udp dport 7000-7001 ether saddr @known_macs accept'} <= set(got)   # נדב 14/11: רק רשומים
     assert not any('"ens36"' in r for r in got)
     assert "policy drop" in proc.stdout and "flush ruleset" in proc.stdout
 

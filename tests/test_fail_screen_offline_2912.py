@@ -70,7 +70,9 @@ def test_the_failure_screen_stays_when_the_server_does_not_answer(tmp_path):
     assert keys.index("fail") < keys.index("fail_step"), keys
     assert values(st, "fail_step")[-1] == notes[0], values(st, "fail_step")
     # the status line's evidence: a hello that is 30 s old and had no answer
-    assert values(st, "hello_age") == ["30"], st
+    # הגיל = עכשיו פחות חותמת שנכתבה 30 ש' אחורה, בשתי קריאות `date` נפרדות: מעבר שנייה ביניהן נותן 31.
+    # זה עדיין הערך מהקובץ (לא ברירת מחדל ולא ריק). נפל כך ב-CI הציבורי, shard 2/4 (3.13), 21/11.
+    assert values(st, "hello_age") in (["30"], ["31"]), st
     assert values(st, "hello_rc") == [""], st
 
 
