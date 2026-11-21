@@ -26,7 +26,7 @@ name: c-hardening
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, "staging/**"]  # #3180: publish-to-public.sh stage -- the public CI before main, tag and Release
   pull_request:
     branches: [main]
 
@@ -144,7 +144,7 @@ jobs:
       - name: Run the tests that build the agent's C, under ASan and UBSan
         run: |
           set -euo pipefail
-          mapfile -t files < <(grep -l -E '"(agent/)?(fanout|lldpsniff|hivewrite|monitor|uevent|chunkcast)\.c"' tests/test_*.py)
+          mapfile -t files < <(grep -l -E '"(agent/)?(fanout|lldpsniff|hivewrite|monitor|uevent|chunkcast|netwatch)\.c"' tests/test_*.py)
           echo "${#files[@]} test files:"; printf '  %s\n' "${files[@]}"
           if [ "${#files[@]}" -lt 20 ]; then
             echo "::error::only ${#files[@]} test files name the agent's C sources -- the derivation broke"
@@ -177,7 +177,7 @@ jobs:
           fi
           echo "sanitized builds: $(wc -l < "$log")"
           missing=0
-          for s in fanout lldpsniff hivewrite monitor uevent chunkcast; do
+          for s in fanout lldpsniff hivewrite monitor uevent chunkcast netwatch; do
             [ -f "agent/$s.c" ] || { echo "agent/$s.c: not in this tree"; continue; }
             if grep -q " $s\.c" "$log"; then
               echo "agent/$s.c: built sanitized $(grep -c " $s\.c" "$log") time(s)"

@@ -166,6 +166,7 @@ def restore(tmp_path: Path, run_restore: str, *, gui: str | None = "live", manif
         f". {posix(AGENT)}/lib/restore/single_restore.sh; . {posix(AGENT)}/lib/gui/srgui.sh; "
         f". {posix(AGENT)}/lib/gui/guistate.sh; "   # gui_header_state: the header's machine and server
         "disk_port() { echo 1; }; pick_internal_disk() { echo sda; }; stage_drivers() { :; }; "
+        "sr_name_machine() { :; }; "   # #3906: the name -- its own tests (test_build_restore_hostname_3906.py)
         # #2431: the disk the cancel may wipe, by serial|size -- never the host's /sys/block/sda;
         # another disk in its place has its own tests (test_agent_hardening_2431.py)
         "sr_disk_ident() { echo 'S2431|1000215216'; }; "
@@ -221,7 +222,8 @@ def test_the_restore_shows_its_progress_on_one_gui(tmp_path):
     assert "partition=" not in seen
     # measured only after two samples -- before that it says so, never 0
     assert "מודד את הקצב…" in seen
-    assert re.search(r"מחיצה 2 מתוך 3 · \d+\.\d MB/s · (כ-\d+ דק׳ נותרו|פחות מ)", seen), seen
+    # #3053: the rate is one LTR run inside the Hebrew line -- U+2066 ... U+2069, required, not optional
+    assert re.search(r"מחיצה 2 מתוך 3 · \u2066\d+\.\d MB/s\u2069 · (כ-\d+ דק׳ נותרו|פחות מ)", seen), seen
     # the GUI that owns the display now, for log() (#1569 reads gui.pid)
     assert (r["run"] / "gui.pid").read_text().strip().isdigit()
     # the header says which machine and server -- not "לא ידוע" for twenty minutes

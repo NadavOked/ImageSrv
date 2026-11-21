@@ -10,9 +10,17 @@ from __future__ import annotations
 import re
 import sqlite3
 
+from server.brain import budget as brain_budget, veto as brain_veto   # #3064: תוויות המתג, הספים והגבול העליון
+from server.brain import shadowgate as brain_shadowgate   # #3563
+from server.brain import recall as brain_recall   # #3064 שלב 5: תוויות ספי הזיכרון
+from server.brain import drawerhold as brain_drawerhold   # #2023: תווית ההגדרה brain_drawer_hold
+from server.brain import cpucap as brain_cpucap   # #3064 (K12): תווית המתג
+from server.brain import completing as brain_completing   # #3064 (B30): תווית המתג
 from server.disks import crcwarn, disk_sets, smart_history
+from server.learn import netrate, server_cap   # #3464: תווית ההגדרה; #3600
 from server.library.images import ImageLibrary
 from server.console.journal_he_detail import he_detail
+from server.core import machine_names
 
 EVENTS_HE = {
     "login": "כניסה לקונסולה",
@@ -83,8 +91,12 @@ EVENTS_HE = {
     "ip_changed": "כתובת ה-IP של המכונה השתנתה",
     # #1885: ה-throttle של מעבד המשכפל עלה בגל — הגל לא נכנס ללמידת הקצב.
     "cloner_throttled": "המשכפל התחמם/הואט בגל — בדקו אוורור; הגל לא נכנס ללמידת הקצב",
+    # #3125: אילו צלילים המכונה השמיעה בסבב, ואילו לא נשמעו ולמה.
+    "round_beeps": "הצלילים של המכונה בסבב — מה נשמע, ומה לא נשמע ולמה",
     # #1884: השרת חיכה לדיסק של הספרייה חלק ניכר מזמן הזרם — הגל לא נכנס ללמידה.
     "server_disk_slow": "דיסק הספרייה בשרת היה צוואר הבקבוק — הגל לא נכנס ללמידת הקצב",
+    # #3508: הדיסק נראה עסוק, אבל אין ראיה שהשולח חיכה לו (#3553: `sendstats` של השולח לא נקרא; שורות ישנות: הוא ישן לקצב שלו) — לא נקבע.
+    "server_disk_undecided": "דיסק הספרייה נראה עסוק, אבל אין ראיה שהשולח חיכה לו — לא נקבע שהוא צוואר הבקבוק",
     # #1886: לפני שהקליטה נוצרה — אין מקום לגרסה הקודמת של האימג' (סירוב), או שאין למה להשוות.
     "capture_space_refused": "קליטה סורבה לפני שהתחילה — אין מקום בשרת לגרסה הקודמת של האימג'",
     "capture_space_unchecked": "קליטה התחילה בלי השוואה לגרסה קודמת — המקום ייבדק כשהסוכן ימדוד",
@@ -92,6 +104,13 @@ EVENTS_HE = {
     "room_open_cloner": "סבב חדר נפתח ממסך מחשב שיכפול (המגירות שלו בלבד)",   # 16/10
     "cloner_round_refused": "פתיחת סבב ממסך מחשב שיכפול נדחתה",   # 16/10
     "room_wave": "גל חדש בחדר השיכפולים",
+    # #3181: פס ייצור — דיסק הצטרף באמצע הסבב, נכתב, נותק בבטחה, הוצא, או שמגירה ריקה קיבלה את השם הבא.
+    "prodline": "פס ייצור: שינוי במגירה (הצטרף, נכתב, אפשר להוציא, הוצא, או ממתין לדיסק עם השם הבא)",
+    "prodline_full": "פס ייצור: דיסק נוסף הוכנס, והסבב כבר קיבל את כל הדיסקים שביקשו — לא נכתב",
+    "prodline_unnamed": "פס ייצור: דיסק נכתב בלי שם — אין שם פנוי, כי דיסק שנכשל שומר את שמו",
+    # #3137: גל של מנוע החתיכות ממתין לאינדקס של האימג' (קליטה טרייה, העתקה, ייבוא) — השרת גוזר אותו עכשיו.
+    "room_index_wait": "הגל ממתין: השרת מכין את האימג' לשידור (גוזר את האינדקס)",
+    "room_index_ready": "האימג' מוכן לשידור — הגל יוצא כשהמגירות מוכנות",
     "room_wave_lost": "הגל של סבב החדר נסגר לפני הזמן — ממתין לגל הבא",
     "room_drawer_changed": "המגירה הוחלפה אחרי סיום הכתיבה",
     # #1386: "בטל דיסק זה" — הבקשה, ואחריה הראיה מהסוכן (המגירה דיווחה cancelled).
@@ -116,12 +135,17 @@ EVENTS_HE = {
     # #65: "כבה אותו" — מחשב שיכפול אחד שחסר בגל הפתוח, כדי להחליף בו מגירות.
     "room_missing_poweroff": "התבקש כיבוי מחשב שיכפול שחסר בגל",
     "held_poweroff": "התבקש כיבוי משכפל שמחכה ללחיצה (דיסק עם בעיה)",   # #2031
+    # #3123 (#3064, G13): "השאר דלוקים" — מי כובה ולמה, ומי דולג כי היה באמצע סבב.
+    "room_keep_on": "השאר דלוקים — נבחרו משכפלים להישאר, והשאר התבקשו להיכבות",
+    "room_keep_on_off": "התבקש כיבוי משכפל שלא נבחר להישאר דלוק",
+    "room_keep_on_busy": "משכפל שלא נבחר להישאר דלוק לא נכבה — הוא באמצע סבב",
     # #432: הגל יצא לדרך עם אזהרת precheck על מגירה. #2704: בלי סיבה בתווית הכללית (רשימת הסינון,
     # ושורה שאי-אפשר לקרוא) -- מאז #1844/#1845/#447 האזהרה היא גם למידה וכתיבה איטית, לא רק קישור/CRC.
     # הסוג לפי הפירוט: `precheck_he`.
     "room_precheck_warned": "הגל יצא לדרך למרות אזהרה על מגירה",
     "power_delivered": "בקשה מהקונסולה נמסרה לסוכן",
     "power_expired": "בקשה מהקונסולה פגה — המכונה לא ענתה בזמן, והבקשה בוטלה",
+    "power_cancelled": "בקשת כיבוי/אתחול שהמתינה בוטלה — המכונה הועררה (WoL) והבקשה הישנה לא תכבה אותה",
     "send_start": "השידור יצא לדרך",
     # ברזל 17/10: מחשב שיכפול בגל עומד על שאלת SMART — השולח לא מתחיל עד התשובה.
     "send_held_smart": "השידור ממתין לתשובה על דיסק (SMART) — הזמן לא נספר",
@@ -137,19 +161,52 @@ EVENTS_HE = {
     "smart_ask_expired": "שאלת SMART לא נענתה בזמן — המכונה שוחררה מהגל, השאר ממשיכים",
     "wave_rate": "נקבע קצב לגל",
     "machine_nic_speed": "מהירות כרטיס הרשת של מכונה נקבעה ידנית",
+    # #3277: כרטיס ההפצה של משכפל ירד (או חזר) -- שורה אחת לשינוי, לא לכל hello; המשכפל עצמו מציג את אותה הודעה על המסך
+    "nic_link_low": "כרטיס ההפצה של משכפל בקישור נמוך (100Mb/s ומטה, או מתחת ליכולת הכרטיס) -- לבדוק כבל או את היציאה בסוויץ'",
+    "nic_link_back": "כרטיס ההפצה של משכפל חזר לקישור מלא",
     "drive_rates_failed": "קצב אוטומטי: בחירה או רישום נכשלו — בחירה שנכשלה יוצאת בקצב הפתיחה",
+    "drive_rates_unlearned": "קצב אוטומטי: השרת עיכב את הגל — הדיסקים לא נלמדו כאיטיים",   # #3269
+    "drive_rates_unmeasured": "קצב אוטומטי: כונן לא נלמד — הקצב שלו לא נמדד מהשידור (רוב הנתונים הגיעו בהשלמה, או שהמעבר הראשון לא נמדד)",   # #3296
+    "chunk_rate_recorded": "גל חתיכות: נרשמו הקצב שהושג, האובדן ומספר המשכפלים (ומה הגל לימד)",   # #3163
+    "chunk_rate_failed": "גל חתיכות: רישום או חישוב הקצב הנלמד נכשלו — הגל יוצא בקצב של היום",   # #3163
+    "chunk_write_behind": "גל חתיכות: כונן שפיגר בגל קודם אינו קובע את קצב השידור — הוא יפספס חתיכות וישלים אותן אחר כך",   # #3295
+    "capability_reset": "המוח: כרטיס הרשת או מהירות הקישור של משכפל השתנו — היכולת שנלמדה עליו נזרקה, והוא ילמד אותה מחדש בגל הבא",   # #3041
     "send_done": "השידור הסתיים",
     "send_failed": "השידור נכשל",
     "send_stopped": "השידור נעצר",
     # #715: הפצה ישירה — המקור הוא מחשב הבנייה, השרת מתזמר בלבד.
     "room_open_direct": "סבב הפצה ישירה ממחשב הבנייה נפתח",
     "send_delegated": "הגל יצא — מחשב הבנייה משדר מהדיסק שלו",
+    "chunk_repair": "שלב השלמה: משודר או מורד רק מה שחסר",          # #2533
+    "chunk_disk_failed": "דיסק לא הושלם בשלב ההשלמה ונכשל",          # #2533
+    "chunk_net_gap": "חלקים לא הגיעו למחשב ברשת — מושלמים מהשרת",     # #3141
+    "chunk_first_pass_from_ledger": "משכפל שחזר ממשיך: המעבר הראשון משדר רק את מה שחסר",   # #2528
+    # #3268: בדיקת הכתיבה במסך ההמתנה -- העותק של הבלוקים המקוריים נשמר בשרת לפני שנכתב עליהם
+    "write_backup_saved": "עותק הבלוקים של בדיקת הכתיבה נשמר בשרת",
+    "write_backup_released": "עותק הבלוקים של בדיקת הכתיבה נמחק — הדיסק הוחזר ואומת",
+    "write_backup_stale": "עותק הבלוקים של בדיקת הכתיבה התיישן — הוחזר רק מה שהיה של הבדיקה, והעותק נשמר",
+    "chunk_disk_held": "מגירה איטית משלימה ברקע — המגירות האחרות עוברות למחיצה הבאה",   # #2023 (brain_drawer_hold=on)
+    "chunk_disk_slow": "דיסק איטי בהשלמה — ממשיכים לחכות לו",   # #3170 (נדב 15/11, אפשרות ב'): ההפצה בקצב של המהירים
+    "write_backup_admin_released": "מנהל שחרר עותק פתוח של בדיקת הכתיבה",
+    "chunk_stray_source": "מקלט זרק חבילות שהגיעו מכתובת שאינה של השרת",   # #1079/#2485
+    "chunk_write_rate": "גל חתיכות: הקצב שהדיסקים נדרשים לכתוב, ולפי איזה דיסק נקבע",   # #3125
+    "chunk_drive_behind": "דיסק פיגר אחרי הזרם — חלקים שדולגו מושלמים אחר כך",   # #3125
+    "chunk_no_show": "מחשב חי לא התייצב למחיצה — השרת ויתר עליו",   # #3125
+    "drawer_back": "מגירה שנשלפה באמצע סבב חזרה — המשכפל משלים אותה ברקע",   # #3125 (L12)
+    "drawer_back_part": "מגירה שחזרה: המשכפל החליט להשלים מחיצה ב-HTTP",   # #3125 (U5)
+    "drawer_stranger": "דיסק אחר הוכנס לחריץ באמצע הסבב — הוא אינו מצטרף",   # #3125 (U6)
+    "chunk_fetch_rate": "קצב ההורדה ב-HTTP של מחשב בגל חתיכות",   # #3125
+    "chunk_peer_failed": "משכפל שכן לא מסר חתיכות שלמות — הוצא מההשלמה בסבב",   # B29
+    "brain_veto": "המוח: וטו על פעולה הרסנית — הוחזקה או שוחררה",   # #3064 (רק במצב enforce)
+    "brain_setting_retired": "המוח: סף שיצא מההגדרות אינו נקרא יותר — הערך השמור נשאר ולא פועל",   # KT2 (נדב 14/11 בערב)
     "direct_manifest": "מחשב הבנייה סיים לקרוא את הדיסק — המניפסט הגיע",
     "direct_done": "השידור ממחשב הבנייה הסתיים",
     "direct_failed": "השידור ממחשב הבנייה נכשל",
     "direct_cancel": "השידור ממחשב הבנייה בוטל",
+    "direct_source_closed": "הסבב הישיר נסגר — משימת מחשב הבנייה נסגרה איתו",   # #2985
     "task_boot_cancel": "משימה מהגואי בוטלה: המכונה אותחלה לפני תחילתה",
     "unknown_mac": "מחשב לא רשום ניסה לעלות",
+    "hello_bad_json": "מחשב שלח hello שאינו JSON תקין — נדחה (400); המחשב אינו נראה בשרת (#3633)",
     "journal_flood": "הצפה ביומן — אירועים ממקורות שונים נספרים ולא נרשמים אחד-אחד (#2498)",
     "disk_failure": "דיסק נכשל בכתיבה — נרשם לזיכרון הכשלים",
     "disk_failure_cleared": "רשומת כשל דיסק נוקתה",
@@ -244,10 +301,12 @@ EVENTS_HE = {
     "image_readback_derived": "גיבוב לקריאה חוזרת נרשם לאימג'",                  # #1805
     "image_readback_underived": "גיבוב לקריאה חוזרת לא נרשם לאימג'",              # #1805
     "readback_list_not_fetched": "הדיסק הושלם ולא אומת — רשימת הבדיקה לא הורדה מהשרת",   # #1907
+    "target_note": "הדיסק הושלם, עם הערה",   # #3167: info -- a note, not a failure
     "readback_mode_switched": "האימות אחרי הכתיבה עבר ממדגם למלא — בהפצה ישירה אין לשרת רשימת בדיקה",   # #2218
     "capture_start": "קליטת אימג' הוזמנה",
     "capture_verifying": "אימג' התקבל — מאמת לפני הכניסה לספרייה",
     "capture_done": "אימג' נקלט",
+    "capture_index_derived": "האינדקס ורשימת ה-BLAKE3 של האימג' נגזרו בקליטה, לפני הכניסה לספרייה",   # #3502
     "capture_failed": "קליטת אימג' נכשלה",
     "ntfs_not_shrunk": "מחיצת NTFS לא נסגרה כראוי — נקראה בגודלה המלא, בלי כיווץ",   # #2972
     "capture_space_warning": "אזהרת מקום בקליטה — יחס הדחיסה אינו ידוע",
@@ -256,6 +315,7 @@ EVENTS_HE = {
     "work_area_kept": "אזורי עבודה נשארו — לא הוכח שהם יתומים",
     "retention_purged": "ניקוי יומי: רשומות ישנות נמחקו (#1737)",
     "retention_failed": "ניקוי יומי: חלק לא בוצע (#1737)",
+    "retention_summed": "ניקוי יומי: סבבים סוכמו לזיכרון המוח, הטבלה לא נוגעה (#3185)",
     "image_download": "אימג' הורד למחשב",
     "image_upload": "אימג' הועלה מהמחשב",
     "iso_upload": "ISO הועלה לשרת",   # #404
@@ -284,6 +344,11 @@ EVENTS_HE = {
     "nic_forget": "הגדרות כרטיס רשת הוסרו",
     "dhcp_apply_failed": "החלת הגדרת DHCP נכשלה",
     "known_macs_apply_failed": "עדכון רשימת המכונות הרשומות ל-dnsmasq נכשל",
+    "known_macs_firewall_failed": "עדכון רשימת המכונות הרשומות בחומת האש של כרטיס ההפצה נכשל",   # נדב 14/11
+    "firewall_rewritten": "חומת האש של גרסה קודמת נכתבה מחדש (נוספה הקבוצה known_macs)",   # #3224
+    "firewall_rewrite_failed": "כתיבת חומת האש מחדש אחרי שדרוג נכשלה — פורטי udpcast פתוחים לכל מחשב",   # #3224
+    "deploy_unregistered": "פנייה משירותי השיכפול ממחשב לא רשום ברשת ההפצה — סורבה",   # נדב 14/11
+    "nic_alias_learned": "כרטיס האתחול של מכונה שרשומה לפי כרטיס אחר זוהה (#524) -- ועובר את שער ההפצה",   # #3225
     "dnsmasq_dropin_applied": "הניסיון החוזר של dnsmasq הותקן ונטען בעליית השרת",   # #2174
     "dnsmasq_dropin_failed": "התקנת הניסיון החוזר של dnsmasq בעליית השרת נכשלה",   # #2174
     "net_config": "הגדרת הרשת של כרטיס בשרת שונתה",
@@ -308,6 +373,16 @@ EVENTS_HE = {
     "clock_jump": "שעון השרת קפץ — זמני הסבבים הפעילים כוילו מחדש",
     # #1728: אתחול באמצע הזרם — יצא מהגל וממתין לגל הבא.
     "room_rejoin": "מחשב שיכפול אותחל באמצע הזרם — ממתין לגל הבא",
+    # #2528: מכונה שכבתה או אותחלה באמצע סבב — השרת שואל ואינו כותב בלי תשובה.
+    "round_interrupted": "מחשב שיכפול כבה או אותחל באמצע סבב — הסבב ממתין להכרעת המפעיל",
+    "round_interrupt_answer": "המפעיל הכריע על סבב שנקטע בכיבוי של מחשב שיכפול",
+    "round_interrupt_unanswered": "לא התקבלה הכרעה על סבב שנקטע — הסבב נסגר בלי לכתוב",
+    "write_ledger_expired": "מחשב שיכפול לא חזר בזמן — אין המשך, והמידע על מה שנכתב נמחק",
+    "round_interrupt_check_failed": "הבדיקה אם מחשב שיכפול אותחל באמצע סבב נכשלה — המחשב לא קיבל את הגל, והבדיקה תחזור",
+    "write_ledger_failed": "יומן הכתיבה של מחשב שיכפול לא נפתח — הגל לא נמסר לו, והניסיון יחזור",
+    "boot_id_not_recorded": "מזהה האתחול של מחשב לא נרשם — אתחול שלו באמצע סבב לא יזוהה",
+    "round_disk_followed": "דיסק שלא הושלם הוחזר למגירה שלא נבחרה לסבב — ייכתב במגירה שבה הוא יושב עכשיו",
+    "round_disk_counted_by_identity": "דיסק שהושלם לפני הכיבוי הוחזר למגירה אחרת — נספר לפי המספר הסידורי, ולא נכתב שוב",
     "console_tls_by_name_only": "תעודת הקונסולה תקפה לשם בלבד, לא לכתובת",
     "dcui_auth_failure": "ניסיון כניסה כושל במסך השרת (DCUI)",
     "dcui_auth_locked": "מסך השרת ננעל אחרי ניסיונות כושלים",
@@ -447,6 +522,9 @@ EVENTS_HE = {
     "grub_password_created": "נוצרה סיסמת GRUB לנעילת תפריט האתחול (#2437)",
     "grub_password_failed": "יצירת סיסמת GRUB נכשלה — התפריט נעול בלי סיסמה (#2437)",
     "grub_cfg_lock_failed": "נעילת grub.cfg הקיים על ה-TFTP נכשלה (#2437)",
+    # #3157: WARNING/ERROR של מודולי השרת (server/system/serverlog.py), עם המקור בפירוט
+    "server_warning": "הודעת שרת — אזהרה",
+    "server_error": "הודעת שרת — שגיאה",
 }
 
 #: #968: חומרת האירוע לציר-הזמן ולעמודת הצבע ביומן — נקבעת **כאן**, לצד
@@ -462,27 +540,44 @@ _SEVERITY_ERR = {
     "room_wave_lost", "room_failed", "room_wake_failed", "room_drawer_no_disk", "send_failed", "direct_failed", "disk_failure", "disk_write_slow",
     "session_orphaned", "identity_refused", "storage_transfer_failed", "storage_disk_prepare_failed", "storage_disk_add_failed", "storage_location_disconnect_failed", "logo_refused",
     "capture_failed", "drivers_failed", "boot_storage_failed", "dhcp_apply_failed", "nic_services_apply_failed",
-    "known_macs_apply_failed", "dnsmasq_dropin_failed", "vmupdate_failed", "vmupdate_firewall_lost", "retention_failed",
+    "known_macs_apply_failed", "known_macs_firewall_failed", "firewall_rewrite_failed", "deploy_unregistered", "dnsmasq_dropin_failed", "vmupdate_failed", "vmupdate_firewall_lost", "retention_failed",
     "vmupdate_no_lease", "vmupdate_net_teardown_failed",
     "foreign_dhcp_seen", "foreign_dhcp_more",   # #2442
     "ups_low_battery", "ups_shutdown", "ups_shutdown_failed", "ups_unreachable", "ups_config_failed",
     "peer_unreachable", "email_alert_gave_up", "email_alerts_step_failed", "email_oauth_failed",   # #1751
     "smart_red",   # #1751
+    "chunk_disk_failed",   # #2533, #3188: דיסק נכשל בשלב ההשלמה -- כמו disk_failure; היה info ונעלם מ"דורש תשומת לב"
     "server_power_failed",   # #2843
+    "round_interrupt_unanswered",   # #2528
+    "server_error",   # #3157
+    # #3188: היו info, ולכן נעלמו מ"דורש תשומת לב". אדום = משהו לא עובד עכשיו, או ניסיון שנדחה:
+    "room_tick_failed",         # שעון החדר נפל -- הסבב אינו מתקדם
+    "update_apply_failed",      # העדכון לא הוחל (וגם שולח מייל update_failed)
+    "deploy_net_failed",        # רשת ההפצה לא הוגדרה -- אין שיכפול ברשת
+    "grub_password_failed",     # התפריט נעול בלי סיסמה (#2437)
+    "grub_cfg_lock_failed",     # ה-bootstrap על ה-TFTP לא ננעל (#2437)
+    "grub_server_lock_failed",  # ה-GRUB של השרת לא ננעל בעדכון (#2452)
+    "mfa_disable_failed",       # ביטול MFA בקוד שגוי -- כמו login_failed
 }
 _SEVERITY_WARN = {
+    "nic_link_low",   # #3277: the distribution card's link is low -- orange, information only
+    "chunk_peer_failed",   # B29: ההשלמה עברה לשרת, הסבב ממשיך
+    "prodline_full",   # #3181: a disk the round did not need was not written
+    "prodline_unnamed",   # B22: a disk written without a name, the failed one kept its own
     "mfa_clock_skew",   # #1814
     "ntfs_not_shrunk",   # #2972: orange, the image is in
     "fw_changed",   # #2080
     "login_attempts_trimmed",   # #2459
     "login_account_failures_trimmed", "journal_flood",   # #2478, #2498
-    "unknown_mac", "drive_rates_failed", "boot_loop_local", "boot_loop_unverified", "agent_loop",
+    "hello_bad_json",   # #3633: מחשב שאינו מדווח — אזהרה, לא מידע
+    "unknown_mac", "drive_rates_failed", "chunk_rate_failed", "boot_loop_local", "boot_loop_unverified", "agent_loop",
     "agent_loop_unverified", "report_from_nonmember", "identity_unverifiable", "room_rejoin",
     "image_fetch_refused",   # #2657
     "capture_cancel", "direct_cancel", "task_boot_cancel", "send_stopped", "dhcp_proxy_risk",
     "net_config_unverified", "net_rollback_armed", "net_rollback",
     "net_rollback_unreadable", "net_rollback_marker_stuck", "work_area_kept", "nic_services_armed", "nic_services_reverted",
     "storage_node_disable",
+    "chunk_drive_behind", "chunk_no_show", "drawer_stranger",   # #3125
     "room_drawer_changed", "room_drawer_unidentified", "room_drawer_wake_mismatch", "room_rewake", "clock_jump",
     "room_drawer_serial_conflict", "shrink_refused",   # #2421, #2413
     "power_expired", "gui_failed", "wol_arm_failed", "net_loss_jump", "model_speed_dropped", "wol_no_wake", "wol_resent", "boot_step_slow", "server_disk_slow", "capture_space_refused", "capture_space_unchecked", "cloner_throttled", "vmupdate_force_off", "vmupdate_expired", "vmupdate_control_auto",
@@ -494,8 +589,21 @@ _SEVERITY_WARN = {
     "update_available", "email_alert_failed", "email_alert_refused", "low_space",   # #1751
     "email_alert_requeued", "email_alerts_password_cleared",
     "server_power",   # #2843
+    "round_interrupted", "write_ledger_expired",   # #2528
+    "round_interrupt_check_failed", "write_ledger_failed", "boot_id_not_recorded", "round_disk_followed",   # #2528
+    "server_warning",   # #3157
+    # #3188: היו info. כתום = שינוי שלא נכנס או לא הושלם, והשרת ממשיך במצב הקודם:
+    "net_deploy_bond_failed",       # הכרטיס השני לא עודכן -- ההגדרה הקודמת הוחזרה
+    "hostname_change_failed",       # השם לא שונה -- הישן בתוקף
+    "hostname_restart_failed",      # השם שונה, האתחול לא תוזמן -- ייכנס באתחול הבא
+    "console_tls_restart_failed",   # התעודה נכתבה, האתחול לא תוזמן -- הישנה בשימוש
+    "timesync_change_failed",       # שינוי מקור השעה לא נכנס -- הקודם בתוקף
+    "timezone_change_failed",       # שינוי אזור הזמן לא נכנס -- הקודם בתוקף
+    "timesync_apply_failed",        # מקור השעה לא הוחל בעלייה -- הקודם של המערכת נשאר
+    "timezone_apply_failed",        # אזור הזמן לא יושר בעלייה -- הקודם של המערכת נשאר
 }
 _SEVERITY_OK = {
+    "nic_link_back",   # #3277: the card is back at a full link
     "login", "capture_done", "client_done", "pull_done", "room_done",
     "send_done", "direct_done", "storage_transfer_done", "net_confirmed", "nic_services_confirmed",
     "disk_failure_cleared", "drivers_staged", "storage_image_received",
@@ -515,6 +623,13 @@ def severity(event: str) -> str:
     if event in _SEVERITY_OK:
         return "ok"
     return "info"
+
+
+def events_of(*levels: str) -> frozenset[str]:
+    """#3157: כל האירועים שהחומרה שלהם (`severity`) אחת מ-``levels`` -- לסינון
+    "דורש תשומת לב" ב-SQL ולכלל "שגיאה לא נמחקת". ``info`` אינו רשימה (ברירת מחדל)."""
+    sets = {"err": _SEVERITY_ERR, "warn": _SEVERITY_WARN, "ok": _SEVERITY_OK}
+    return frozenset().union(*(sets[level] for level in levels))
 
 
 def idle_minutes_he(seconds: str) -> str:
@@ -540,6 +655,17 @@ SETTINGS_HE = {
     "crc_warn_threshold": "סף שגיאות CRC לאזהרה",   # #1366
     "min_free_gb": "מינימום מקום פנוי אחרי שחזור (GB)",   # #1354
     "writecheck_min_mbps": "סף מהירות כתיבה לדיסק (MB/s)",   # #2338
+    "interrupt_ask_minutes": "המתנה להכרעה על משכפל שכבה באמצע סבב (דקות)",   # #2528
+    "tail_shrink_enabled": "הקטנת המחיצה האחרונה ביעד קטן עד 64MB",   # #3262 (נדב 14/11)
+    server_cap.SETTING: server_cap.LABEL_HE,   # #3464
+    netrate.MARGIN_SETTING: netrate.LABEL_HE,   # #3600
+    **brain_veto.LABELS_HE,   # #3064 (שלב 2): המתג והספים של המוח
+    **brain_shadowgate.LABELS_HE,   # #3563
+    brain_budget.SETTING: brain_budget.LABEL_HE,   # #3064 (שלב 3): הגבול העליון של תקציב הרשת
+    brain_drawerhold.SETTING: brain_drawerhold.LABEL_HE,   # #2023: השלמה מעכבת רק את המגירה שנפגעה
+    brain_cpucap.SETTING: brain_cpucap.LABEL_HE,   # #3064 (K12): שער המעבד
+    brain_completing.SETTING: "המוח: אימות והורדה מחדש של חתיכות שלא תאמו (במקום כתיבה מחדש של כל הדיסק)",   # #3064 (B30)
+    **brain_recall.LABELS_HE,   # #3064 (שלב 5): ספי ההחלטות לפי הזיכרון
     "unregistered_autoboot_seconds": "מחשב לא רשום: עלייה אוטומטית מהדיסק (שניות)",   # #1802
     "clone_name_pad": "שמות מחשב: מספר ספרות בריפוד",   # #2786
     "clone_name_instructor": "שמות מחשב: סיומת הדיסק של המרצה",   # #2786
@@ -549,16 +675,20 @@ SETTINGS_HE = {
     "lost_wait_seconds": "המתנה למחשב שהתנתק באמצע שיכפול (שניות)",
     "gui_idle_poweroff_seconds": "כיבוי כשאין פעילות (שניות)",
     "gui_end_poweroff_seconds": "ספירה לכיבוי בסוף משימה (שניות)",
+    "drawer_disk_wait_seconds": "המתנה של מגירה לדיסק (שניות)",   # #3658, נדב 18/11
+    "drawer_net_wait_seconds": "המתנה של מגירה לרשת (שניות)",   # #3658, נדב 18/11
     "auto_reboot": "הפעלה מחדש אוטומטית",
     "auto_reboot_time": "שעה",
     "auto_reboot_weekday": "יום",
     "cloner_beep": "צלילי המשכפל ומחשב הבנייה",   # #1967, as in console.js
+    "hdd_support": "תמיכה ב-HDD",   # #3268, as in console.js
     "backup_target": "יעד גיבוי המסד",   # #1956: הסוג, ואחריו היעד (בלי סיסמה)
     "backup_policy": "מדיניות גיבוי המסד",   # #1956: השעה והמקום השמור
     "backup:enabled": "גיבוי אוטומטי",   # #2865: המתג בהגדרות ← גיבוי המסד
     # #1991: אותן תוויות כמו בהגדרות הקונסולה (console.js)
     "identity_check": "אימות מחשבים לפי כתובת ה-DHCP",
     "readback_full": "אימות מלא אחרי הכתיבה",
+    "stream_engine": "מנוע שידור (ניסיוני)",
     "update_enabled": "עדכון גרסה מהקונסולה",
 }
 
@@ -578,7 +708,10 @@ _IMG = re.compile(r"\b(img_[0-9a-f]+)\b")
 _SES = re.compile(r"\b(ses_[0-9a-f]+)\b")
 _GRP = re.compile(r"\b(grp_\w+)\b")
 _EXPAND = re.compile(r"expand=(\S+)")
-_SERIAL = re.compile(r"\bserial=(\S+)")
+#: #3576: סידורי יכול להכיל רווחים ("t10.ATA     APS-SL3N-512 ... SICSD40302WL"); `disk_failure` כותב אותו גולמי,
+#: ולכן הוא נגמר במה שבא אחריו: ` port=` (disk_failure, disk_write_slow) או נוסח הניקוי האוטומטי
+#: (`disk_failure_cleared`, disk_failures.py). `\S+` חתך אותו ברווח הראשון והתג לא נמצא.
+_SERIAL = re.compile(r"\bserial=(.+?)(?= port=| נוקה אוטומטית|$)")
 #: #1857: שורות יומן על דיסק לפי הסידורי -- מקבלות בקריאה את הסט והמדבקה הנוכחיים ("קוריאים · xx-7"),
 #: כדי שמי שקורא "דיסק נכשל" יידע איזה דיסק לשלוף. בקריאה ולא בכתיבה: דיסק ששויך אחרי הכשל מקבל שם גם בשורה הישנה.
 _SET_EVENTS = ("disk_failure", "disk_failure_cleared", "disk_write_slow")
@@ -614,17 +747,21 @@ def precheck_he(detail: str) -> tuple[str, list[str]] | None:
     reasons: list[str] = []
     for item in _PRECHECK_ITEM.split(m.group(3)):
         tokens = item.split()[1:]
-        kinds.update("link" if t.startswith(("link=", "crc+", "crc=")) else _PRECHECK_SIGN.get(t, "")
+        kinds.update("link" if t.startswith(("link=", "crc+", "crc=", "drop=")) else _PRECHECK_SIGN.get(t, "")
                      for t in tokens)
         for t in tokens:
             if t.startswith("link=") and "/" in t:
                 said = "קישור {} מתוך {} Gb/s".format(*t[5:].split("/", 1))
+            elif t.startswith("drop=") and ">" in t:
+                said = "הקישור ירד ל-{1} Gb/s (היציאה ראתה {0})".format(*t[5:].split(">", 1))   # #3591 ב'1
             elif t.startswith("crc+"):
                 said = f"מונה CRC עלה ב-{t[4:]} מאז הסבב הקודם"
             elif t.startswith("crc=") and t[4:].isdigit():
                 said = crcwarn.text_he(int(t[4:]))
             elif t.startswith("smart="):
                 said = smart_history.LEARNED_HE.get(t[6:])   # #2707: #1859's word, as the room note says it
+            elif t.startswith("nic=") and t[4:].isdigit():
+                said = f"כרטיס הרשת של המשכפל מקושר ב-{t[4:]}Mb/s"   # #3277: the brain's slow link -- no kind (as the room note)
             else:
                 said = PRECHECK_REASON_HE.get(t)
             if said and said not in reasons:
@@ -681,9 +818,9 @@ class JournalTranslator:
 
     def __init__(self, conn: sqlite3.Connection, library: ImageLibrary):
         self._machines = {
-            row["mac"]: f'{row["suffix"]} · {row["label"]}'
+            row["mac"]: f'{machine_names.label(row["role"], row["suffix"])} · {row["label"]}'   # #3123
             for row in conn.execute(
-                "SELECT m.mac, m.suffix, g.label FROM machines m"
+                "SELECT m.mac, m.suffix, g.label, g.role FROM machines m"
                 " JOIN groups g ON g.id = m.group_id"
             )
         }
@@ -831,11 +968,15 @@ class JournalTranslator:
                 value = {"true": "פעיל", "false": "כבוי"}.get(m.group(2), m.group(2))
                 if m.group(1) == "console_idle_seconds":   # נדב 18/10: דקות, לא שניות
                     value = idle_minutes_he(m.group(2))
+                if m.group(1) == brain_veto.SETTING:   # #3064: "צל (רושם בלבד)", לא "shadow"
+                    value = brain_veto.MODES_HE.get(m.group(2), m.group(2))
+                if m.group(1) == brain_drawerhold.SETTING:   # #2023: "on"/"off", לא נוסח אנגלי
+                    value = {"on": "פעיל", "off": "כבוי"}.get(m.group(2), m.group(2))
                 text = f"{name}: {value}"
                 rest = detail[m.end():].strip(" —")
                 if rest:                               # שורה עם הסבר (השדרוג של MFA, 18/10)
                     text += f" — {rest}"
-        elif event in ("power_delivered", "power_expired"):
+        elif event in ("power_delivered", "power_expired", "power_cancelled"):
             # "<mac> <poweroff|reboot>" — המכונה בשמה, הפעולה בעברית.
             m = re.match(r"(\S+) (\S+)$", detail)
             if m:

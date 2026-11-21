@@ -72,6 +72,8 @@ EXPECTED_KIOSK_ROUTES = frozenset({
     ("POST", "/api/console/room/missing/{mac}/poweroff"),
     # #1386: "בטל דיסק זה" ממסך ההפצה במחשב הבנייה — מגירה אחת בגל חי.
     ("POST", "/api/console/room/drawer/cancel"),
+    # #2528 (נדב 12/11): התשובה על משכפל שכבה באמצע סבב — כל מי שמחובר לקיוסק עונה ממחשב הבנייה.
+    ("POST", "/api/console/room/interrupt"),
 })
 
 #: נתיבי התחנה (`create_station_router`) שחיים על הסוכן — הגואי הנייטיב צורך.

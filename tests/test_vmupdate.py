@@ -191,15 +191,16 @@ def fake_capture(sha=None):
         parts = [
             {"index": 1, "type_guid": "C12A7328-F81F-11D2-BA4B-00A0C93EC93B", "role": "esp",
              "fs": "vfat", "start_sector": 2048, "size_bytes": 104857600, "used_bytes": 1,
-             "file": "p1.esp.pcl.zst", "sha256": good, "expandable": False,
+             "file": "p1.esp.pcl.zst", "sha256": good, "index_xxh64": "1" * 16, "expandable": False,
              "unique_guid": "6C2E9F71-1A3B-4F0A-9C1D-2E7B85A0C3D4", "attrs": "0" * 16},
             {"index": 3, "type_guid": "EBD0A0A2-B9E5-4433-87C0-68B6B72699C7",
              "role": "windows", "fs": "ntfs", "start_sector": 1085440,
              "size_bytes": 40 << 30, "used_bytes": 1, "file": "p3.windows.pcl.zst",
-             "sha256": sha or good, "expandable": True,
+             "sha256": sha or good, "index_xxh64": "3" * 16, "expandable": True,
              "unique_guid": "6C2E9F71-1A3B-4F0A-9C1D-2E7B85A0C3D5", "attrs": "0" * 16},
         ]
-        return {"family": 256, "os": "windows", "boot_ca": [], "boot_ca_error": None,
+        return {"image_format": 2,                    # #2533: what vmdisk.capture_disk returns
+                "family": 256, "os": "windows", "boot_ca": [], "boot_ca_error": None,
                 "source_disk_bytes": 256060514304, "scheme": "gpt", "sector_size": 512,
                 "disk_guid": DISK_GUID, "partitions": parts,
                 "total_compressed_bytes": 2 * len(NEW_BYTES), "compression": "zstd-3"}

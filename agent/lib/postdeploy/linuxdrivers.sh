@@ -135,6 +135,12 @@ _linux_check_root() {
     # and so would an absolute /lib (#1331: never the agent's modules).
     # #2486: a plain file only (never a link, a device or a FIFO), and 64 KiB
     # of it -- /dev/zero in the image is one endless line for sed.
+    for _ld_dir in usr usr/lib; do
+        if [ -L "$1/$_ld_dir" ]; then
+            _linux_result failed "/$_ld_dir בדיסק המשוחזר הוא קישור"
+            return
+        fi
+    done
     _ld_os=$(for _ldo in "$1/usr/lib/os-release" "$1/etc/os-release"; do
             [ -f "$_ldo" ] && [ ! -L "$_ldo" ] && head -c 65536 "$_ldo"
         done 2>/dev/null | sed -n 's/^PRETTY_NAME=//p' | head -n 1 | tr -d "\"'")
@@ -174,6 +180,7 @@ linux_initramfs_check() {
     case $? in
         0) ;;
         2) _linux_result failed "אין תיקיית /etc במחיצת הלינוקס"; return 0 ;;
+        6) _linux_result failed "/etc בדיסק המשוחזר הוא קישור"; return 0 ;;
         3|4) _linux_result failed "לא ברור איזה תת-כרך btrfs הוא השורש"; return 0 ;;
         *) _linux_result failed "לא הצלחנו לעגן את מחיצת הלינוקס"; return 0 ;;
     esac

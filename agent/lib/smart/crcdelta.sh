@@ -38,6 +38,7 @@ crc_delta_measure() {
         _cd_t=$(command -v smart_temp_after >/dev/null 2>&1 && smart_temp_after "$_cd_out")
         [ -z "$_cd_t" ] || echo "$_cd_t" > "$RUN_DIR/targets/$_cd_d/temp_after"
         echo $((_cd_after - $(smart_field "$_cd_d" 6))) > "$RUN_DIR/targets/$_cd_d/crc_delta"
+        if command -v ls_phy_after >/dev/null 2>&1; then ls_phy_after "$_cd_d"; fi   # #3064 S52: the SATA phy counters, against the first read (linksense.sh)
     done
 }
 

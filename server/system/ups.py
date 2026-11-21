@@ -59,14 +59,18 @@ _VAR = re.compile(r'^VAR (\S+) (\S+) "(.*)"$')
 
 
 class UpsError(RuntimeError):
-    """הקריאה מה-UPS לא הצליחה — הסיבה בשמה."""
+    """הקריאה מה-UPS לא הצליחה — הסיבה בשמה, ב-`message`."""
+
+    def __init__(self, message: str = "") -> None:
+        super().__init__(message)
+        self.message = message   # #3891: התשובה קוראת את השדה, לא str(exc) (CodeQL py/stack-trace-exposure)
 
 
 def _our_text(exc: Exception, fallback: str) -> str:
     """#2510: הודעה של `UpsError` (שלנו) עוברת כמו שהיא; כל חריגה אחרת — ל-log,
     וללקוח `fallback`."""
     if isinstance(exc, UpsError):
-        return str(exc)
+        return exc.message
     log.warning("ups: %s", exc)
     return fallback
 
@@ -213,6 +217,8 @@ def stop_all_work(ctx, reason: str) -> list[str]:
             journal(conn, "ups_work_stopped", f"{sid}: {reason}", round_id=sid)
         if row["kind"] == "multicast":
             ctx.sender.stop(sid)
+            if ctx.chunk is not None:           # #2533: `store.fail` אינו קורא ל-`on_closed`
+                ctx.chunk.stop(sid)
     for table, where, column in (("room_rounds", "state IN ('active', 'closing')", "failed_reason"),
                                  ("tasks", "state = 'running'", "error")):
         ids = [r["id"] for r in conn.execute(f"SELECT id FROM {table} WHERE {where}")]

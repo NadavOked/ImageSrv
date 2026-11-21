@@ -9,9 +9,14 @@
 #      partition is streamed again, raw (lc_stream_any);
 #   3. the raw read itself failed -- bad sectors. The operator is asked (askgui.sh,
 #      kind badsect) for a minute, and the copy goes on (Nadav 22/10): "continue",
-#      no answer in LC_RESCUE_ASK_S, or no GUI to ask copy it with busybox dd
-#      conv=noerror,sync: the sectors not read are counted and are zeros on the
-#      targets, which are then NOT identical to the source and say so in orange.
+#      no answer in LC_RESCUE_ASK_S, or no GUI to ask copy it with rescuecat
+#      (#2527; was busybox dd conv=noerror,sync): the sectors not read are zeros
+#      on the targets, which are then NOT identical to the source and say so in
+#      orange. rescuecat leaves a MAP of the unread ranges (rescue.map, kept per
+#      target and in the log), and after the stream the unread sectors are asked
+#      again (lc_rescue_retry, bounded in rounds and seconds): one that reads is
+#      written into the targets and leaves the map. A disk that stops answering
+#      ends the copy -- a short stream, never zeros to the end.
 #      Only an explicit "stop" fails the copy. The source is never written.
 # An MSR and a BIOS boot partition have no filesystem by design: raw, no note.
 # A disk with an MBR table is still refused (lcinv.sh): MBR is v1.1.
@@ -64,12 +69,50 @@ lc_rescue_ask() {
 }
 
 lc_rescue_count() {
-    # $1 = dd's stderr, $2 = bs. stdout = the sectors not read: the partial records
-    # of "A+B records in" -- with bs a divisor of the partition, each is a read that
-    # failed (busybox dd: one per error, zeros in its place). 1 = no such line.
-    _rc_b=$(sed -n 's/^[0-9][0-9]*+\([0-9][0-9]*\) records in$/\1/p' "$1" 2>/dev/null | tail -n 1)
-    case "$_rc_b" in ''|*[!0-9]*) return 1 ;; esac
-    echo $((_rc_b * $2 / 512))
+    # $1 = rescuecat's map. stdout = the sectors (512 B) not read. 1 = no evidence: no map,
+    # or one without its "# complete" line (an aborted read, a run that never ended).
+    grep -qx '# complete' "$1" 2>/dev/null || return 1
+    awk '!/^#/ && NF >= 3 { n += $2 } END { printf "%.0f\n", n / 512 }' "$1"
+}
+
+lc_rescue_retry() {
+    # $1 = idx, $2 = source, $3.. = targets. #2527: the unread sectors asked again, LC_RESCUE_ROUNDS
+    # rounds over all of them and LC_RESCUE_RETRY_S seconds at most; a sector that reads is written into
+    # every target that took the partition, and leaves the map. Best effort: when it does not finish the
+    # map stays as it was -- more unread than there is, never fewer.
+    _rr_i=$1; _rr_s=$(lc_src_node "$2" "$1"); shift 2; _rr_a=""; _rr_o="$LC/run/retry.out"
+    for _rr_t in "$@"; do
+        grep -qx "$_rr_i" "$RUN_DIR/targets/$_rr_t/lc_ok" 2>/dev/null && _rr_a="$_rr_a -t $(partition_node "$_rr_t" "$_rr_i")"
+    done
+    [ -n "$_rr_a" ] || return 0
+    : > "$_rr_o"
+    # shellcheck disable=SC2086 # the target list is a word list on purpose
+    rescuecat retry -s "$_rr_s" -b "$LC_RESCUE_BS" -m "$LC/run/rescue.map" -n "${LC_RESCUE_ROUNDS:-3}" \
+        -T "${LC_RESCUE_RETRY_S:-600}" -P "$LC/run/retry.round" $_rr_a > "$_rr_o" 2>> "$LOG_FILE" &   # -P: the screen's "סבב X מתוך N"
+    _rr_p=$!
+    while kill -0 "$_rr_p" 2>/dev/null; do
+        if command -v watchdog_beat >/dev/null 2>&1; then watchdog_beat; fi
+        _nap "$_rr_p"
+        [ ! -f "$LC/stop.req" ] || kill "$_rr_p" 2>/dev/null
+    done
+    wait "$_rr_p"; _rr_rc=$?; rm -f "$LC/run/retry.round"   # wait-bounded: after-kill-0-gone -- the loop above left once it was gone (rescuecat has its own -T ceiling); this collects its exit code
+    [ "$_rr_rc" = 0 ] || log "local clone: partition $_rr_i: the retry of the unread sectors ended rc=$_rr_rc -- the map is as it was"
+    for _rr_t in "$@"; do
+        _rr_e=$(awk -v n="$(partition_node "$_rr_t" "$_rr_i")" '$1 == "failed" && $2 == n { print $3; exit }' "$_rr_o")
+        [ -z "$_rr_e" ] || fail_written_target "$_rr_t" "מחיצה $_rr_i: כתיבת סקטור ששוחזר נכשלה (errno $_rr_e)"
+    done
+}
+
+lc_rescue_keep() {
+    # $1 = idx, $2.. = targets. #2527: what was not read, by address: the map beside each target that took the
+    # partition, and the first ranges in the log (the screen keeps its count -- 400 bytes of note, lc_raw_note).
+    _rk_i=$1; shift
+    for _rk_t in "$@"; do
+        grep -qx "$_rk_i" "$RUN_DIR/targets/$_rk_t/lc_ok" 2>/dev/null \
+            && cp "$LC/run/rescue.map" "$RUN_DIR/targets/$_rk_t/rescue.map.$_rk_i" 2>> "$LOG_FILE"
+    done
+    awk '!/^#/ && NF >= 3 && ++n <= 10 { printf "unread: %s bytes at byte %s (errno %s)\n", $2, $1, $3 }' "$LC/run/rescue.map" \
+        | while IFS= read -r _rk_l; do log "local clone: partition $_rk_i: $_rk_l"; done
 }
 
 lc_stream_any() {
@@ -98,13 +141,20 @@ lc_stream_any() {
     case "$_sa_z" in ''|*[!0-9]*) _fail_alive "$*" "מחיצה $_sa_i: גודל המחיצה לא נקרא — ההמשך לא בוצע"; return 1 ;; esac
     LC_RESCUE_BS=512; [ $((_sa_z % 4096)) -ne 0 ] || LC_RESCUE_BS=4096
     lc_raw_mark "$_sa_m" "$_sa_i" "rescue" || { _fail_alive "$*" "מחיצה $_sa_i: מצב ההצלה לא נרשם — ההמשך לא בוצע"; return 1; }
-    log "local clone: partition $_sa_i: continued (${_sa_a:-no answer}) -- dd conv=noerror,sync bs=$LC_RESCUE_BS (#2017)"
+    log "local clone: partition $_sa_i: continued (${_sa_a:-no answer}) -- rescuecat bs=$LC_RESCUE_BS (#2017, #2527)"
     LC_RESCUE=1; lc_stream "$_sa_i" raw "$_sa_src" "$@"; _sa_rc=$?; LC_RESCUE=0
     [ "$_sa_rc" = 0 ] || return "$_sa_rc"
-    _sa_n=$(lc_rescue_count "$LC/run/rescue.err" "$LC_RESCUE_BS") \
+    _sa_n=$(lc_rescue_count "$LC/run/rescue.map") \
         || { _fail_alive "$*" "מחיצה $_sa_i: לא נספר כמה סקטורים לא נקראו — אין ראיה למה שנכתב"; return 1; }
+    _sa_b=$_sa_n
+    if [ "$_sa_n" -gt 0 ]; then   # #2527: asked again, now that every readable sector is in
+        lc_rescue_retry "$_sa_i" "$_sa_src" "$@"
+        _sa_n=$(lc_rescue_count "$LC/run/rescue.map") \
+            || { _fail_alive "$*" "מחיצה $_sa_i: מפת הסקטורים שלא נקראו אבדה אחרי הניסיון החוזר — אין ראיה למה שנכתב"; return 1; }
+    fi
+    lc_rescue_keep "$_sa_i" "$@"
     echo "$_sa_i|$_sa_n" >> "$LC/run/rescued"
-    log "local clone: partition $_sa_i: $_sa_n sector(s) not read -- zeros on the targets"
+    log "local clone: partition $_sa_i: $_sa_n sector(s) not read, $((_sa_b - _sa_n)) read by the retry -- zeros on the targets (#2527)"
     for _sa_t in "$@"; do
         grep -qx "$_sa_i" "$RUN_DIR/targets/$_sa_t/lc_ok" 2>/dev/null && echo "$_sa_i|$_sa_n" >> "$RUN_DIR/targets/$_sa_t/rescued"
     done

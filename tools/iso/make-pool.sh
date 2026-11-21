@@ -42,6 +42,11 @@
 # לכן אחרי ההורדה מריצים את check-pool.py על ה-netinst + מה שהורד, ומורידים את
 # הגרסה החדשה של כל חבילה שנמצאה תלויה בגרסה שאינה עוד — עד שהאינדקס עקבי.
 #
+# ‏#3217: גם מה שה-netinst נושא ואינו בסגירה. ‏apt-transport-https (חבילת מעבר, ‏Priority optional)
+# נשארה 3.0.3 בעוד apt/apt-utils/libapt-pkg7.0 עלו ל-3.0.4 — אף אחד לא ביקש אותה ואף אחד לא
+# מצמיד אותה בגרסה מדויקת. ‏--netinst מוריד גם כל חבילה שלו שהמועמד שלה מ-trixie-security ונושא גרסה
+# חדשה יותר (‏tools/iso/netinst-lift.py), כדי שבסריקת ה-SBOM הגרסה הישנה תהיה "superseded".
+#
 # ‏Recommends נכללים ב-pool — אבל **אף התקנה אינה מתקינה אותם** (‏#1987:
 # ‏`--no-install-recommends` בכל מקום, נבדק ב-tests/test_no_install_recommends_1987.py).
 # ה-pool נשאר על-קבוצה בכוונה: שרת רגיל שהותקן לפני #1987 עם Recommends ממשיך
@@ -105,6 +110,7 @@ rel_tmp=""
 cleanup() {
     [[ -z "$tmp_plain" ]] || rm -f "$tmp_plain" "$tmp_plain.err"
     [[ -z "$rel_tmp" ]] || rm -f "$rel_tmp"
+    [[ -z "$OUT" ]] || rm -f "$OUT/.netinst-lift.err"
 }
 trap cleanup EXIT
 
@@ -338,6 +344,41 @@ if [[ -n "$NETINST" ]]; then
     mapfile -t NI_INDEX < <(find "$NI" -path '*/binary-amd64/Packages.gz' ! -path '*/debian-installer/*' | LC_ALL=C sort)
     [[ " ${NI_INDEX[*]} " == *"/main/binary-amd64/Packages.gz "* ]] \
         || die "אין main/binary-amd64/Packages.gz ב-$NETINST — זה לא netinst של דביאן amd64?"
+    # ‏#3217: מה שה-netinst נושא ואין בסגירה — אף אחד לא ביקש אותו ואף אחד לא מצמיד אותו בגרסה
+    # מדויקת, ולכן נשאר בגרסת ה-netinst גם כש-trixie-security תיקנה אותו (apt-transport-https
+    # 3.0.3 מול 3.0.4, CVE-2026-109518, בזמן ש-apt/apt-utils/libapt-pkg7.0 כבר עלו). כל חבילה
+    # של ה-netinst שהמועמד שלה מ-*-security ונושא גרסה חדשה יותר — מורידים. "apt-cache policy"
+    # שלא ענה, או שאינו מכיר אף חבילה, אינו "אין מה להעלות" (netinst-lift.py יוצא 2).
+    ni_names=$(python3 -I "$SCRIPT_DIR/netinst-lift.py" names "${NI_INDEX[@]}" 2>&1) \
+        || die "netinst-lift.py לא קרא את החבילות של ה-netinst: $ni_names"
+    mapfile -t NI_NAMES <<<"$ni_names"
+    ni_policy=$(apt-cache policy "${NI_NAMES[@]}") \
+        || die "apt-cache policy נכשל על ${#NI_NAMES[@]} חבילות ה-netinst — לא נבדק מה עודכן ב-trixie-security (#3217)"
+    ni_lift_rc=0
+    ni_lift=$(python3 -I "$SCRIPT_DIR/netinst-lift.py" lift "${NI_INDEX[@]}" <<<"$ni_policy" 2>"$OUT/.netinst-lift.err") \
+        || ni_lift_rc=$?
+    (( ni_lift_rc == 0 )) || die "netinst-lift.py לא בדק מה עודכן ב-trixie-security: $(cat "$OUT/.netinst-lift.err")"
+    [[ ! -s "$OUT/.netinst-lift.err" ]] || { printf 'make-pool: '; cat "$OUT/.netinst-lift.err"; }
+    rm -f "$OUT/.netinst-lift.err"
+    mapfile -t SECLIFT < <(printf '%s\n' "$ni_lift" | sed '/^$/d')
+    if (( ${#SECLIFT[@]} )); then
+        printf 'make-pool: %d חבילות של ה-netinst שיש להן עדכון ב-trixie-security: %s\n' \
+            "${#SECLIFT[@]}" "${SECLIFT[*]}"
+        apt-get -y --download-only \
+            -o Dir::State::status="$EMPTY_STATUS" \
+            -o Dir::Cache::archives="$DL" \
+            -o Debug::NoLocking=1 \
+            -o APT::Install-Recommends=false \
+            install "${SECLIFT[@]}" \
+            || die "apt-get --download-only של ${SECLIFT[*]} נכשל"
+        for spec in "${SECLIFT[@]}"; do      # ראיה חיובית: קובץ לכל חבילה=גרסה (נקודתיים = %3a)
+            p=${spec%%=*}; v=${spec#*=}
+            found=$(find "$DL" -maxdepth 1 -name "${p}_${v//:/%3a}_*.deb" -print -quit)
+            [[ -n "$found" ]] || die "ההורדה הסתיימה בלי $p $v (עדכון אבטחה של חבילת netinst, #3217)"
+        done
+    else
+        printf 'make-pool: אין חבילה של ה-netinst עם עדכון ב-trixie-security שלא בסגירה\n'
+    fi
     for round in 1 2 3 4 5; do
         ( cd "$OUT" && dpkg-scanpackages -m --arch "$ARCH" download /dev/null ) > "$OUT/.download-Packages" 2>/dev/null \
             || die "dpkg-scanpackages נכשל על $DL"

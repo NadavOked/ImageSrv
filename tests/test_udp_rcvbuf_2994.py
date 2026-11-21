@@ -160,8 +160,9 @@ def test_unicast_asks_nothing(tmp_path):
 
 def test_the_server_keeps_the_drops_of_a_report_that_carries_the_buffer():
     """The two new keys ride beside the counters; the server's check of udp_drops
-    must not read them as a malformed value ("not read", principle 5)."""
+    must not read them as a malformed value ("not read", principle 5) -- and since
+    #3064 (G7) it keeps them, as sent: the buffer is the evidence beside the loss."""
     from server.agent.reports import well_formed_udp_drops
     got = well_formed_udp_drops({"udp_drops": {"rcvbuf": 37, "inerrors": 40,
                                                "rcvbuf_asked": ASK, "rcvbuf_bytes": None}})
-    assert got == {"rcvbuf": 37, "inerrors": 40}
+    assert got == {"rcvbuf": 37, "inerrors": 40, "rcvbuf_asked": ASK, "rcvbuf_bytes": None}

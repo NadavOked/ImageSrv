@@ -211,6 +211,50 @@ def _run_basetemp(tmp_path_factory) -> None:
     hygiene.sender_log_under(tmp_path_factory.getbasetemp())   # #2180
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _b3_tool(tmp_path_factory):
+    """#3332: the server's BLAKE3 tool is the `chunkcast` it sends with (`readbackhash.b3_tool`), and a chunk wave
+    does not go out without the list it makes (`indexprep.missing`). The tests' server has none on PATH -- so the
+    real one is built here, once, as the builder builds it, and checked as `b3_tool` checks it. Where it cannot be
+    built (no gcc: the Windows workstation) the server has no tool, and says so by name (principle 5)."""
+    import shutil
+    import subprocess
+
+    from server.agent import readbackhash
+    if not hasattr(readbackhash, "_B3_TOOL"):       # a tree without #3332 (a negative control): nothing to provide
+        yield
+        return
+    found = None
+    if os.name != "nt" and shutil.which("gcc"):
+        import chunkcast_rig
+        tool = chunkcast_rig.build_binaries(tmp_path_factory.mktemp("b3-tool")) / "chunkcast"
+        done = subprocess.run([str(tool), "b3sum"], input=b"", capture_output=True, timeout=30)
+        assert done.returncode == 0 and done.stdout.strip() == readbackhash.B3_EMPTY.encode(), done.stderr
+        found = str(tool)
+    readbackhash._B3_TOOL[:] = [found]
+    yield
+    readbackhash._B3_TOOL[:] = []
+
+
+@pytest.fixture(autouse=True)
+def _root_logging_restored():
+    """#3157: `server.main.main()` מגדיר את ה-root (INFO, stderr) ומחבר את גשר היומן
+    ל-DB של הטסט. בלי שחזור, הגשר של טסט אחד היה כותב ל-DB של הטסט הבא."""
+    import logging
+
+    from server.system import serverlog
+    root = logging.getLogger()
+    handlers, level = root.handlers[:], root.level
+    yield
+    # רק ה-handlers שלנו: את אלה של pytest (caplog, הדיווח) pytest מחליף בכל שלב בעצמו.
+    for handler in root.handlers[:]:
+        if handler not in handlers and isinstance(handler, (serverlog._LiveStderr,
+                                                            serverlog.JournalBridge)):
+            root.removeHandler(handler)
+            handler.close()
+    root.setLevel(level)
+
+
 @pytest.fixture(autouse=True)
 def _no_real_sender():
     """טסט שהגיע לשולח האמיתי נכשל בשמו, ולא בשקט אחרי הריצה."""
@@ -229,6 +273,7 @@ ESP_GUID = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B"
 
 MANIFEST_256 = {
     "schema": 1,
+    "image_format": 2,   # #2533: chunk frames; a manifest without it is the old format and is not distributed
     "id": "img_7f3a91",
     "name": "Office 2024 Standard",
     "description": "האימג' הנפוץ ביותר",
@@ -435,6 +480,33 @@ def server_with_sender(server: dict):
 
 
 @pytest.fixture(autouse=True)
+def _fake_udp_sender_means_udpcast(monkeypatch):
+    """#3173 (נדב 21/11): ברירת המחדל של `stream_engine` היא מנוע החתיכות. אפליקציה של בדיקה שהוזרק לה
+    `sender_runner` (ה-Recorder של `test_sender`, udp-sender מזויף) בודקת את udpcast, ולכן היא **בוחרת udpcast
+    במפורש** כאן, מיד אחרי שנבנתה -- כמו מפעיל שבחר בו בהגדרות. טסט שמדליק `chunk` ממשיך לעשות זאת בעצמו, וטסט
+    של ברירת המחדל מוחק את ההגדרה (`set_settings(conn, {}, remove=("stream_engine",))`) ובודק את מה שבתוקף."""
+    import sys                                                    # noqa: PLC0415
+    try:
+        from server import app as app_module                      # noqa: PLC0415
+        from server.db import set_setting                         # noqa: PLC0415
+    except ImportError:                                           # בלי fastapi: אין אפליקציה לבנות
+        yield
+        return
+    real = app_module.create_runtime
+
+    def create_runtime(*args, **kwargs):
+        rt = real(*args, **kwargs)
+        if kwargs.get("sender_runner") is not None:
+            set_setting(rt.ctx.conn, "stream_engine", "udpcast")
+        return rt
+
+    # גם מודול בדיקה שייבא את `create_runtime` בשמו (`from server.app import create_runtime`) מקבל את העטיפה
+    for module in [app_module, *(m for m in list(sys.modules.values()) if getattr(m, "create_runtime", None) is real)]:
+        monkeypatch.setattr(module, "create_runtime", create_runtime)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _classrooms_restore():
     """הכרעת נדב 11/10: השרת מסרב לכיתות כש-`capabilities.classrooms()` כבוי
     (v1). `setup_classroom` בודק את זרימת v1.2 ולכן מדליק את היכולת לטסט
@@ -446,6 +518,21 @@ def _classrooms_restore():
     before = capabilities.CLASSROOMS
     yield
     capabilities.CLASSROOMS = before
+
+
+@pytest.fixture(autouse=True)
+def _no_slow_health_gate(request, monkeypatch):
+    """#3064 (B51): שער הבריאות של המוח קורא את ה-`collect` של `/health`, ובטסטים של חדר זה בדיקות HTTP לכתובת שאינה נגישה
+    (13 שניות לכל פתיחת סבב; 33 טסטים של `test_server_room` = 385 שניות). השערים רצים ברקע ואינם מעכבים את `open_round`, אבל הפירוק
+    היה מחכה להם. כאן `gate_core.health_rows` מחזיר `None` ("המקור לא חובר": השער `UNDECIDED`, מיד). מודול שבודק את המקור האמיתי מצהיר `REAL_HEALTH_GATE = True`."""
+    import sys                                                      # noqa: PLC0415
+    from server.brain import gate_core                              # noqa: PLC0415
+    if not getattr(request.module, "REAL_HEALTH_GATE", False):
+        monkeypatch.setattr(gate_core, "health_rows", lambda conn: None)
+    yield
+    # השערים רצים ברקע אחרי `open_round`: לא משאירים תהליכון שממשיך לשאול DB של טסט שנגמר (נשאר חי = הטסט נכשל בשמו)
+    gates = sys.modules.get("server.brain.gates")                   # לא נטען = אף טסט לא פתח סבב (ואין מה לייבא לכל טסט)
+    assert gates is None or gates.wait_idle(30.0), "תהליכון של שערי פתיחת הסבב נשאר חי אחרי הטסט"
 
 
 @pytest.fixture(autouse=True)

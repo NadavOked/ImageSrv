@@ -55,6 +55,7 @@ local_clone_offer() {
     rm -f "$RUN_DIR/power.resp" "$RUN_DIR/attended.round"
     while :; do
         lc_boot_choice
+        case "$LC_CHOICE" in local|pull) if command -v idle_wc_settle_all > /dev/null 2>&1; then idle_wc_settle_all; fi ;; esac   # #3271 H2: no waiting-screen write check under a copy, and none left on a disk (idlegate.sh)
         case "$LC_CHOICE" in local) lc_session ;; pull) lc_pull_session ;; *) break ;; esac
         [ "$LC_END" = back ] || break
         LC_PAUSED=1      # back from the source screen: the choice, not counting
@@ -183,15 +184,17 @@ lc_run() {
     if [ "$(lc_inv_field "$_lr_src" 12)" != 1 ] || [ -z "$_lr_ss" ] || [ "$_lr_ss" != "$(lc_inv_field "$_lr_src" 4)" ]; then
         _fail_alive "$_lr_all" "דיסק המקור אינו מה שנבדק — חזרו ובחרו שוב. לא נכתב דבר"; lc_end; return 1
     fi
+    if command -v idle_wc_ready > /dev/null 2>&1 && ! _lr_why=$(idle_wc_ready "$_lr_src" src); then _fail_alive "$_lr_all" "דיסק המקור: $_lr_why. לא נכתב דבר"; lc_end; return 1; fi   # #3271 H2 (idlegate.sh)
     [ -f "$LC/measure/$_lr_src" ] && [ "$(cat "$LC/source" 2>/dev/null)" = "$_lr_src" ] || lc_measure "$_lr_src"
     for _lr_t in $_lr_all; do
         _lr_ts=$(_lc_clean "$(target_bound_serial "$_lr_t")")
         if [ "$_lr_t" = "$_lr_src" ] || [ ! -f "$LC/inv/$_lr_t.line" ] || [ -z "$_lr_ts" ] || [ "$_lr_ts" != "$(lc_inv_field "$_lr_t" 4)" ] || ! target_same "$_lr_t"; then
             fail_written_target "$_lr_t" "היעד אינו מה שנבדק — לא נכתב"; continue
         fi
+        if command -v idle_wc_ready > /dev/null 2>&1 && ! _lr_why=$(idle_wc_ready "$_lr_t" dst); then fail_written_target "$_lr_t" "$_lr_why — לא נכתב"; continue; fi   # #3271 H2: a put-back would land on the copy
         smart_red "$_lr_t" && { fail_written_target "$_lr_t" "$(smart_red_he "$_lr_t") — לא נכתב"; continue; }   # #1732: never a target; #1742: why
         IFS='|' read -r _lr_v _lr_n _lr_w <<EOF
-$(lc_verdict_for "$_lr_src" "$_lr_t")
+$(lc_fit_verdict "$_lr_src" "$_lr_t")
 EOF
         case "$_lr_v" in
             fits) ;;

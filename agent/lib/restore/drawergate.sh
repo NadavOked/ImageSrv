@@ -16,9 +16,24 @@
 drawer_gates() {
     # $1.. = the drawers the SMART gate left. PRINTS the ones to write (log on
     # stderr: this runs inside `$( )`). EXPAND_OVERRIDE as for the restore.
-    _dg_raid=$(drawer_raid_gate "$@")
+    # #2544: the plan first (read only) -- a question is never put for a drawer the plan refuses anyway
+    # shellcheck disable=SC2086 # a word list on purpose
+    _dg_plan=$(drawer_plan_gate "$RUN_DIR/manifest.json" "$@")
+    [ -n "$_dg_plan" ] || return 0
+    _dg_raid=$(drawer_raid_gate $_dg_plan)
     # shellcheck disable=SC2086 # a word list on purpose
     [ -z "$_dg_raid" ] || drawer_share_gate "$RUN_DIR/manifest.json" $_dg_raid
+}
+
+drawer_plan_gate() {
+    # $1 = manifest, $2.. = drawers. PRINTS the ones plan_gate (expand.sh, #2412) lets through; one it
+    # refuses is failed by name there. plan_preflight touches no disk (write_check_round asks it again).
+    _pg_m=$1; shift
+    for _pg_d in "$@"; do
+        log "gap: drawer_plan_gate $_pg_d begin" >&2   # #3524: the stamps between confirmed and writing
+        if plan_gate "$_pg_d" "$_pg_m" >&2; then log "gap: drawer_plan_gate $_pg_d end ok" >&2; echo "$_pg_d"   # >&2: plan_preflight's log() prints, and this runs inside $( )
+        else log "gap: drawer_plan_gate $_pg_d end refused" >&2; false; fi   # the loop keeps its old rc: the last disk refused = 1
+    done
 }
 
 _drawer_ask() {
@@ -33,13 +48,23 @@ _drawer_back() {
     rm -f "$RUN_DIR/targets/$1/error"; target_set "$1" waiting
 }
 
+_skip_chosen() {
+    # $1 = disk, $2 = the operator's answer. #2943: only an explicit "skip" is the person's choice -- the drawer is
+    # marked targets/<d>/skip.chosen and the end of the round (idle.sh end_problem, end_tally) does not call it a
+    # problem. No answer (the question expired) is not a choice: it stays a skipped drawer with no mark, held as before.
+    [ "$2" = skip ] || return 0
+    : > "$RUN_DIR/targets/$1/skip.chosen" || log "$1: the skip mark could not be written -- the end shows it as a problem" >&2
+}
+
 drawer_raid_gate() {
     # $1.. = drawers. A drawer with metadata of a RAID set is asked (raid);
     # "wipe" marks it targets/<d>/raid_wipe = the type, and disk_fits lets it
     # through. A probe that could not run is left to disk_fits, which refuses it
     # by name (principle 5) -- a question is only for what was found.
     for _rg_d in "$@"; do
+        log "gap: raid_member_probe $_rg_d begin" >&2
         _rg_t=$(raid_member_probe "$_rg_d")
+        log "gap: raid_member_probe $_rg_d end" >&2
         case "$_rg_t" in none|\?*|'') echo "$_rg_d"; continue ;; esac
         case "$_rg_t" in *[!a-z_]*) echo "$_rg_d"; continue ;; esac   # not a word: disk_fits refuses it
         _rg_p=$(disk_port "$_rg_d"); case "$_rg_p" in ''|*[!0-9]*) _rg_p=0 ;; esac
@@ -52,6 +77,7 @@ drawer_raid_gate() {
             _drawer_back "$_rg_d"; echo "$_rg_d"
         else
             target_set "$_rg_d" skipped "לא נכתב: $_rg_why, לא אושר"
+            _skip_chosen "$_rg_d" "$_rg_a"
             log "$_rg_d: $_rg_t on the disk -- not written (answer: ${_rg_a:-none})" >&2
         fi
     done
@@ -132,7 +158,7 @@ drawer_share_gate() {
     _sg_a=$(_drawer_ask "$1" share "$RUN_DIR/share.rows" "$_sg_why")
     for _sg_d in $_sg_ask; do
         if [ "$_sg_a" = split ] && : > "$RUN_DIR/targets/$_sg_d/share.ok"; then _drawer_back "$_sg_d"; echo "$_sg_d"   # expand_last reads it
-        else target_set "$_sg_d" skipped "לא נכתב: חלוקת המקום בין המחיצות לא אושרה"; fi
+        else target_set "$_sg_d" skipped "לא נכתב: חלוקת המקום בין המחיצות לא אושרה"; _skip_chosen "$_sg_d" "$_sg_a"; fi
     done
     log "share question (#1898):$_sg_ask -- ${_sg_a:-no answer}" >&2
 }

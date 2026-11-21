@@ -37,13 +37,13 @@ lc_pull_images() {
     # The images allowed for THIS machine -- the server filters them, the same
     # list the build machine's restore screen offers (allowed_images, #706) --
     # as the screen's image= records. Read once per visit, not every second.
-    http_get "$SERVER/api/v1/agent/state?mac=$MAC" > "$LC/pull.state.json" || return 1
-    jq -r 'if (.allowed_images | type) != "array" then error("no allowed_images") else
-        .allowed_images[] | "image=" + ([.id, .name, .folder]
-          | map((. // "") | tostring | gsub("[\\r\\n|]"; " ")) | join("|")) end' \
-        "$LC/pull.state.json" > "$LC/pull.images.next" 2>> "$LOG_FILE" || return 1
-    syspart_records "$LC/pull.state.json" >> "$LC/pull.images.next" 2>> "$LOG_FILE" || return 1   # #1896: "לא נבדק" + C:
-    mv "$LC/pull.images.next" "$LC/pull.images"
+    _lc_req pull.images 'images_known=0' || return 1
+    if http_get "$SERVER/api/v1/agent/state?mac=$MAC" > "$LC/pull.state.json" &&
+        restore_image_records "$LC/pull.state.json" > "$LC/pull.images.next" 2>> "$LOG_FILE"; then
+        mv "$LC/pull.images.next" "$LC/pull.images" && return 0
+    fi
+    _lc_req pull.images 'images_known=-1'
+    return 1
 }
 
 lc_pull_post() {
@@ -95,10 +95,9 @@ lc_pull_session() {
     # choice), opened (the round is open -- go on from the server), quiet, gone.
     LC_END=""
     rm -f "$LC/pull.req" "$LC/pull.error" "$LC/pull.images" "$LC/end.req" "$LC/syspart.req"
-    lc_pull_images || { log "pull: the allowed images could not be read"
-        _lc_req pull.error "לא ניתן לקרוא מהשרת את רשימת האימג׳ים למחשב הזה"; }
-    lc_pull_nonce || :   # none = the open is refused, aloud; asked again after each try
     echo pull > "$LC/screen"
+    lc_pull_images || log "pull: the allowed images could not be read"
+    lc_pull_nonce || :   # none = the open is refused, aloud; asked again after each try
     attended_start "Restore an image from the server onto this machine's drawers"; lc_quiet_reset
     while :; do
         if command -v watchdog_beat >/dev/null 2>&1; then watchdog_beat; fi

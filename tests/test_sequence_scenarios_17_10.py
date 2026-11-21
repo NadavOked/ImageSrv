@@ -21,6 +21,7 @@ pytest.importorskip("fastapi")
 
 from conftest import HANG_S, hello_body
 from native import requires_native
+from server.agent import timing as agent_timing
 from server.rounds import drive_rates, room as room_mod
 from test_class_deploy_switch import PRELUDE, STATION
 from test_cloner_gui import BASH, posix, sh
@@ -153,7 +154,7 @@ def test_lost_machine_advances_wave_without_disk_failure(room_server):
         {"dev": d, "bytes_written": 40, "bytes_total": 100, "state": "writing"}
         for d in ("sda", "sdb")]}
     assert anon.post("/api/v1/agent/progress", json=writing).status_code == 200
-    old = (datetime.now(timezone.utc) - timedelta(seconds=room_mod.LOST_SECONDS + 60)).isoformat()
+    old = (datetime.now(timezone.utc) - timedelta(seconds=agent_timing.RANGES[agent_timing.LOST][0] + 60)).isoformat()
     ctx.conn.execute("UPDATE sessions SET started_at = ? WHERE id = ?", (old, wave))
     ctx.conn.execute("UPDATE session_members SET updated_at = ? WHERE session_id = ? AND mac = ?",
                      (old, wave, CLONER2))

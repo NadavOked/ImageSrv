@@ -198,7 +198,7 @@ def _blkid_fs(fs: str) -> str:
             f'case " $* " in *" TYPE "*) echo {fs}; exit 0 ;; esac\nexit 2\n')
 
 
-@pytest.mark.parametrize("fs", ["xfs", "crypto_LUKS", "LVM2_member", "ext3", "ext2", "exfat", "ReFS"])
+@pytest.mark.parametrize("fs", ["crypto_LUKS", "LVM2_member", "ext3", "ext2", "exfat", "ReFS"])   # #3415: xfs is captured now (test_xfs_3415.py)
 def test_an_unsupported_filesystem_is_refused_before_the_space_check(tmp_path, fs):
     box, run, out = capture_run(tmp_path, raid=True, stubs={"sgdisk": ONE_PARTITION, "blkid": _blkid_fs(fs),
                                                  "curl": CURL_LOG})

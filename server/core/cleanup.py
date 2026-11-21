@@ -15,6 +15,8 @@ import os
 import shutil
 from pathlib import Path
 
+from server.core.logtext import one_line
+
 log = logging.getLogger("imagesrv.cleanup")
 
 
@@ -30,6 +32,6 @@ def remove_tree(path: str | Path, what: str) -> bool:
     shutil.rmtree(path, onexc=_note)
     if not os.path.lexists(path):
         return True
-    log.warning("%s left behind at %s: %s", what, path,
-                "; ".join(errors[:3]) or "no error was reported")
+    log.warning("%s left behind at %s: %s", one_line(what), one_line(path),
+                one_line("; ".join(errors[:3]) or "no error was reported"))
     return False

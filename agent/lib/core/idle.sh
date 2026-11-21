@@ -14,7 +14,10 @@
 IDLE_POWEROFF_S="${IDLE_POWEROFF_S:-300}"
 IDLE_WARN_S="${IDLE_WARN_S:-30}"
 
-idle_reset() { date +%s > "$RUN_DIR/idle.since"; rm -f "$RUN_DIR/idle.warn"; }
+# #3681: idle.since is whole seconds of UPTIME, not `date`: the hello answer steps the clock (hello.sh clock_from_server, a server
+# clock that moved) and a stamp from before the step is then off by the step -- an immediate power-off, or one that comes late.
+idle_up() { [ -r "${UPTIME_FILE:-/proc/uptime}" ] && IFS=' ' read -r _iu _ < "${UPTIME_FILE:-/proc/uptime}" && _iu=${_iu%%.*} && case "$_iu" in ''|*[!0-9]*) false ;; *) printf '%s' "$_iu" ;; esac; }
+idle_reset() { idle_up > "$RUN_DIR/idle.since"; rm -f "$RUN_DIR/idle.warn"; }
 
 idle_touched() {
     # The kiosk touches idle.touch on a key press; not older than the clock =
@@ -76,12 +79,16 @@ idle_check() {
     power_check || return 1
     [ -f "$RUN_DIR/idle.since" ] || { idle_reset; return 0; }
     if idle_exempt || idle_touched || [ "${POLL_MARK_CHANGED:-0}" = 1 ]; then idle_reset; return 0; fi
-    _now=$(date +%s); _since=$(cat "$RUN_DIR/idle.since" 2>/dev/null || echo "$_now")
+    # principle 5: no readable uptime, or a stamp that is not a number or is later than now, is no evidence of idleness -- the clock restarts
+    _now=$(idle_up) || { log "idle: no uptime -- the idle clock cannot run, the machine stays on"; return 0; }
+    _since=$(cat "$RUN_DIR/idle.since" 2>/dev/null); case "$_since" in ''|*[!0-9]*) idle_reset; return 0 ;; esac
+    [ "$_since" -le "$_now" ] || { idle_reset; return 0; }
     _idle=$((_now - _since))
     [ "$_idle" -ge "$IDLE_POWEROFF_S" ] || return 0
     # the warning: the GUI reads idle.warn (guistate.sh -> idle_poweroff_at=)
     # and any key press cancels it through idle.touch
-    _at=$((_now + IDLE_WARN_S)); rm -f "$RUN_DIR/idle.now"; printf '%s|%s\n' "$_at" "$IDLE_POWEROFF_S" > "$RUN_DIR/idle.warn"   # mockup 10: the window says how long
+    _at=$(( $(date +%s) + IDLE_WARN_S ));   # wall time: the GUI counts down to it on its own clock
+    rm -f "$RUN_DIR/idle.now"; printf '%s|%s\n' "$_at" "$IDLE_POWEROFF_S" > "$RUN_DIR/idle.warn"   # mockup 10: the window says how long
     log "idle: ${_idle}s without activity -- power-off in ${IDLE_WARN_S}s unless a key is pressed"
     _n=0
     while [ "$_n" -lt "$IDLE_WARN_S" ]; do
@@ -119,6 +126,8 @@ end_tally() {
     # $@ = target disks. _et_ok = how many ended "done", _et_n = how many.
     _et_ok=0; _et_n=0
     for _et_d in "$@"; do
+        # #2943: a drawer the operator chose to skip (drawergate.sh) is neither written nor failed -- not in the count
+        if [ -e "$RUN_DIR/targets/$_et_d/skip.chosen" ] && [ "$(cat "$RUN_DIR/targets/$_et_d/state" 2>/dev/null)" = skipped ]; then continue; fi
         _et_n=$((_et_n + 1))
         [ "$(cat "$RUN_DIR/targets/$_et_d/state" 2>/dev/null)" != "done" ] || _et_ok=$((_et_ok + 1))
     done
@@ -141,7 +150,7 @@ end_problem() {
     case "$_ep_s" in
         done) ;;
         '') _end_why r "מצב הדיסק לא נקרא — לא ידוע אם נכתב" ;;
-        skipped) _end_why r "${_ep_e:-הדיסק לא נכתב}" ;;
+        skipped) [ -e "$_ep_t/skip.chosen" ] || _end_why r "${_ep_e:-הדיסק לא נכתב}" ;;   # #2943: the operator's own skip is not a problem
         *) _end_why r "${_ep_e:-הכתיבה לא הסתיימה ($_ep_s)}" ;;
     esac
     if [ "$_ep_s" = "done" ]; then

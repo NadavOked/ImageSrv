@@ -228,25 +228,27 @@ def test_library_manifest_edit_is_durable(tmp_path, fsynced):
 
 
 def _readback_image(tmp_path):
-    from test_readback_1805 import BYTES_B, LIST_B, _image
+    from test_readback_1805 import BYTES_B, INDEX_B, LIST_B, _image
     from test_fanout import xxh64_reference
     _image(tmp_path)
-    return images.ImageLibrary(tmp_path), {1: (LIST_B, BYTES_B, xxh64_reference(LIST_B.encode("ascii")))}
+    return images.ImageLibrary(tmp_path), {1: {       # #2533: the index beside the file; the list is its third column
+        "index": INDEX_B.render(), "list": LIST_B, "list_xxh64": xxh64_reference(LIST_B.encode("ascii")),
+        "bytes": BYTES_B}}
 
 
 def test_readback_list_survives_a_write_that_dies_halfway(tmp_path, monkeypatch):
     library, values = _readback_image(tmp_path)
     folder = tmp_path / "img_1805aa"
     before = sorted(os.listdir(folder))
-    with torn_write(monkeypatch, ".readback"), pytest.raises(OSError):
-        library.record_readback("img_1805aa", values)
+    with torn_write(monkeypatch, ".idx"), pytest.raises(OSError):
+        library.record_index("img_1805aa", values)
     assert sorted(os.listdir(folder)) == before        # no torn list, no tmp
 
 
 def test_readback_list_is_durable(tmp_path, fsynced):
     library, values = _readback_image(tmp_path)
-    assert library.record_readback("img_1805aa", values) == [1]
-    assert_durable(tmp_path / "img_1805aa" / "p1.esp.pcl.zst.readback", fsynced)
+    assert library.record_index("img_1805aa", values) == [1]
+    assert_durable(tmp_path / "img_1805aa" / "p1.esp.pcl.zst.idx", fsynced)
 
 
 # --- wizard: firstboot.status (כישלון והצלחה) -----------------------------------

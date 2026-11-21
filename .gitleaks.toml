@@ -21,8 +21,15 @@ useDefault = true
     # ושני ערכים של נעילת ה-GRUB (#2452): האלפבית של סיסמת ה-GRUB ב-
     # installer/lib/grublock.sh (קבוע ציבורי, לא סיסמה), ודגל שורת הפקודה
     # של grub-mkpasswd-pbkdf2 ב-tests/test_grub_lock_2437.py.
+    # וחמש מחרוזות מזויפות של טסטי מנוע החתיכות (שער הפרסום 19/11, 17 ממצאים ב-12 קבצי tests/):
+    # מפתח הסבב `0123456789abcdef`, שלו הכפול, ושלו באותיות גדולות (קלט לא חוקי ב-test_chunk_gate_2533),
+    # וטוקני ההגשה `5ec7e7c0ffee0123456789abcdef0123` ו-`a1b2c3d4e5f60718293a4b5c6d7e8f90`.
+    # **מעוגנות במלואן** (^...$): מחרוזת דומה אך לא זהה (`0123456789abcdef1`) עדיין נתפסת.
     regexes = ['''aabbccddeeff00112233445566778899''', '''00112233445566778899aabbccddeeff''',
-               '''^abcdefghjkmnpqrstuvwxyz23456789$''', '''^--iteration-count=1000$''']
+               '''^abcdefghjkmnpqrstuvwxyz23456789$''', '''^--iteration-count=1000$''',
+               '''^0123456789abcdef$''', '''^0123456789abcdef0123456789abcdef$''',
+               '''^5ec7e7c0ffee0123456789abcdef0123$''',
+               '''^0123456789ABCDEF$''', '''^a1b2c3d4e5f60718293a4b5c6d7e8f90$''']
 
 [[rules]]
   # מפתחות Gemini/Google בפורמט החדש (2026): קידומת `AQ.` ו-~50 תווי

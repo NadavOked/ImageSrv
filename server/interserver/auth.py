@@ -165,13 +165,20 @@ def pairing_window_status(conn, *, now: datetime | None = None) -> dict:
     ).fetchone()
     if row is None:
         return {"open": False}
-    expired = _parse_iso(row["expires_at"]) <= now
+    expired = _parse_iso(row["expires_at"]) <= now or _beyond_max_ttl(row["expires_at"], now)
     return {
         "open": not expired,
         "opened_at": row["opened_at"],
         "expires_at": row["expires_at"],
         "attempts_remaining": row["attempts_remaining"],
     }
+
+
+def _beyond_max_ttl(expires_at: str, now: datetime) -> bool:
+    """#3752: חלון לא נפתח ליותר מ-`WINDOW_TTL_MAX`. תפוגה רחוקה מזה = השעון חזר
+    אחורה מאז הפתיחה, והחלון (קוד pairing חי) היה נשאר פתוח שעות מעבר לתוקפו.
+    נסגר. קפיצה קדימה סוגרת את החלון מוקדם — כיוון בטוח, והמפעיל פותח שוב."""
+    return _parse_iso(expires_at) - now > timedelta(seconds=WINDOW_TTL_MAX + 60)
 
 
 def _parse_iso(value: str) -> datetime:
@@ -202,7 +209,7 @@ def verify_and_consume_code(conn, code: str, *, now: datetime | None = None) -> 
         ).fetchone()
         if row is None:
             return False
-        if _parse_iso(row["expires_at"]) <= now:
+        if _parse_iso(row["expires_at"]) <= now or _beyond_max_ttl(row["expires_at"], now):
             conn.execute("DELETE FROM pairing_windows WHERE singleton = 1")
             return False
         if verify_pairing_code(code, row["code_salt"], row["code_hash"]):
@@ -578,8 +585,13 @@ def tls13_only_context():
     ctx = SSL.Context(SSL.TLS_METHOD)
     ctx.set_min_proto_version(SSL.TLS1_3_VERSION)
     ctx.set_max_proto_version(SSL.TLS1_3_VERSION)
-    ctx.set_options(SSL.OP_NO_SSLv2 | SSL.OP_NO_SSLv3 | SSL.OP_NO_TLSv1
-                    | SSL.OP_NO_TLSv1_1 | SSL.OP_NO_TLSv1_2)
+    # #2160: דגל אחד בכל קריאה. ``set_options(A | B | C)`` אינו מזוהה ב-CodeQL
+    # כהגבלה (ההתראות #652/#653 נשארו פתוחות גם אחרי e9c4b2ba5), וקריאה לכל דגל כן.
+    ctx.set_options(SSL.OP_NO_SSLv2)
+    ctx.set_options(SSL.OP_NO_SSLv3)
+    ctx.set_options(SSL.OP_NO_TLSv1)
+    ctx.set_options(SSL.OP_NO_TLSv1_1)
+    ctx.set_options(SSL.OP_NO_TLSv1_2)
     return ctx
 
 

@@ -100,11 +100,28 @@ shrink_plan() {
     # נחשב 0 -- הכיוון הבטוח: כיווץ קטן ששואלים עליו, לא פסילה מול כיתה.
     _sp_disk=$(cat "$SYSROOT/sys/block/$1/size" 2>/dev/null)
     case "$_sp_disk" in ''|*[!0-9]*) log "$1: disk size unknown -- the tail allowance assumes no room after the layout"; _sp_disk=0 ;; esac
-    _sp_slack=$(awk -F'|' -v d="$_sp_disk" -v ss="$3" '{ e = ($4 + $5) * ss; if (e > end) end = e }
-        END { s = d * 512 - end; printf "%.0f\n", (d > 0 && s > 0) ? s : 0 }' "$2")
+    _sp_neg=0; if _sp_t=$(_shrink_direct_target "$_sp_disk"); then   # #3942: the smallest drawer, when smaller than the source
+        log "direct send: the layout ends $SHRINK_TAIL_BYTES before the smallest target drawer ($CAPTURE_TARGET_BYTES bytes${CAPTURE_TARGET_NAME:+, $CAPTURE_TARGET_NAME}), not the source disk"; _sp_disk=$_sp_t; _sp_neg=1
+    fi
+    # שלילי רק מול מגירה (#3942): הפריסה חורגת מסופה, והחסר נלקח מהזנב כמו ה-64MiB. מול המקור -- 0, כמו קודם.
+    _sp_slack=$(awk -F'|' -v d="$_sp_disk" -v ss="$3" -v neg="$_sp_neg" '{ e = ($4 + $5) * ss; if (e > end) end = e }
+        END { s = d * 512 - end; printf "%.0f\n", (d > 0 && (s > 0 || neg == 1)) ? s : 0 }' "$2")
     _shrink_tail "$_sp_m" "${_sp_slack:-0}" > "$_sp" || return 1
     [ ! -s "$RUN_DIR/shrink.tail" ] \
         || log "partition $(cut -d'|' -f1 "$RUN_DIR/shrink.tail"): $(cut -d'|' -f2 "$RUN_DIR/shrink.tail") more bytes, so the layout ends $SHRINK_TAIL_BYTES before the disk end (#1202)"
+}
+
+_shrink_direct_target() {
+    # $1 = the source disk in 512-byte sectors (0 = unread). ‏#3942: הפצה ישירה
+    # (‏CAPTURE_SINK=discard) מסיימת את הפריסה לפני סוף המגירה **הקטנה שנבחרה**
+    # (‏CAPTURE_TARGET_BYTES, מ-task.direct.target_bytes) כשהיא קטנה מהמקור --
+    # ומדפיסה אותה בסקטורים. ‏1 = אין מה לשנות: לא הפצה ישירה, אין רצפה, היא
+    # גדולה מהמקור, או ערך שאינו ספרות (השער החמישי ב-capture.sh מסרב לו בשמו).
+    [ "${CAPTURE_SINK:-upload}" = discard ] || return 1
+    case "${CAPTURE_TARGET_BYTES:-}" in ''|*[!0-9]*|0*) return 1 ;; esac
+    _st_s=$((CAPTURE_TARGET_BYTES / 512))
+    [ "$1" -gt 0 ] && [ "$1" -le "$_st_s" ] && return 1
+    echo "$_st_s"
 }
 
 _shrink_tail() {

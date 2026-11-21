@@ -70,6 +70,8 @@ single_restore_run() {
         return 1
     fi
     if [ "$_sr_rc" -eq 0 ]; then
+        # #3906: the name first, as the class station (imagesrv-agent) -- never fatal, never silent.
+        sr_name_machine "$_sr_disk"
         # #720: driver staging before the closing report -- its outcome rides
         # in that report. Never fatal; a Linux image is skipped inside.
         stage_drivers "$_sr_disk" "$RUN_DIR/sr-manifest.json"
@@ -86,6 +88,55 @@ single_restore_run() {
     single_restore_failed_screen "$_sr_disk" || log "restore failed -- no GUI for the failure screen, the console line only"
     ui_error_hold "restore did not complete" hold_beat
     return 1
+}
+
+sr_name_machine() {
+    # $1 = disk. #3906 (metal 20/11): this restore wrote no name at all -- a
+    # Linux image came up as the machine it was captured from, and no line
+    # said so. The name is this machine's own, as the server holds it
+    # (machines.suffix): `name` of the /agent/state the bridge read just
+    # before the write (guiparent.sh). A pull has no session prefix
+    # (PULL_PREFIX, sessions.py), so nothing is composed. The same
+    # write_hostname as every path: Windows in the hive (a hive not synced
+    # is written, with a note -- #3167), Linux in /etc/hostname.
+    rm -f "$RUN_DIR/gui/restore.warn"
+    _sn=$(jq -r '.name // empty | strings' "$RUN_DIR/gui/restore-state.json" 2>> "$LOG_FILE"); _sn_q=$?
+    [ "$_sn_q" -eq 0 ] || { sr_name_said "$1" "השם בתשובת השרת לא נקרא"; return 0; }
+    [ -n "$_sn" ] || { sr_name_said "$1" "השרת לא שלח שם למחשב הזה"; return 0; }
+    assert_target "$1" || return 0   # #2434: it failed by name; the mark stays
+    _sn_r=$(write_hostname "$1" "$RUN_DIR/sr-manifest.json" "$_sn"); _sn_rc=$?
+    printf '%s\n' "$_sn_r" > "$RUN_DIR/hostname.json"
+    log "hostname: $_sn_r"
+    if [ "$_sn_rc" -eq 0 ]; then
+        _sn_n=$(json_get "$RUN_DIR/hostname.json" ".note // empty")
+        [ -z "$_sn_n" ] || { printf '%s\n' "$_sn_n" > "$RUN_DIR/targets/$1/note"; sr_name_card "$_sn_n"; }   # #3167: a note, not an error
+        return 0
+    fi
+    _sn_e=$(json_get "$RUN_DIR/hostname.json" ".error")
+    { [ -n "$_sn_e" ] && [ "$_sn_e" != null ]; } || _sn_e="סיבה לא ידועה (rc=$_sn_rc)"
+    sr_name_said "$1" "$_sn_e"
+}
+
+sr_name_said() {
+    # $1 = disk, $2 = why. Principle 5, as name_this_machine (#856): the
+    # restore is done, but "no name" is not "all fine" -- the target stays
+    # done with the reason in its error (the report, the console), in the
+    # log, and on the success card.
+    _sd_why="שם המחשב לא נכתב: $2"
+    log "hostname: $_sd_why"
+    sr_name_card "$_sd_why" "שם המחשב לא נכתב — הסיבה ביומן ובקונסולה"
+    [ -s "$RUN_DIR/targets/$1/error" ] && _sd_why="$(cat "$RUN_DIR/targets/$1/error") | $_sd_why"
+    target_set "$1" done "$_sd_why"
+}
+
+sr_name_card() {
+    # $1 = the words for the success card (srgui.sh puts them before the
+    # count), $2 = shorter ones when they do not fit. sub= is 200 bytes in
+    # the GUI and the label and the count take up to ~90: 100 here, never
+    # cut mid-letter.
+    _sc_t=$1; [ "$(printf '%s · ' "$_sc_t" | wc -c)" -le 100 ] || _sc_t=${2:-}
+    [ -n "$_sc_t" ] || return 0
+    mkdir -p "$RUN_DIR/gui" && printf '%s · ' "$_sc_t" > "$RUN_DIR/gui/restore.warn" || log "restore: the name's line was not put on the card"
 }
 
 sr_share_gate() {

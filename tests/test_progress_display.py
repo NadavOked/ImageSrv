@@ -47,6 +47,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from server.agent import reports
+from server.brain import silence
 from server.rounds import room
 
 
@@ -286,7 +287,7 @@ def test_drawers_that_finished_do_not_count():
 def _stall_threshold() -> int:
     # #418 put ROOM_STALL_S in roomdraw.sh, the text room screen; it was
     # removed on 11/10 (GUI only). The server's own threshold is the one left.
-    return room.STALL_SECONDS
+    return silence.STALL_S
 
 
 def test_the_threshold_clears_the_slowest_healthy_drawer_measured():

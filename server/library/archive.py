@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import lzma
 import secrets
@@ -21,6 +20,7 @@ import zlib
 from pathlib import Path
 from typing import Callable, Iterator
 
+from server.core import finite_json
 from server.core.atomicfile import fsync_dir, fsync_file
 
 from server.library.images import ImageLibrary, guarded_image_path, inside, streamed_partitions
@@ -290,7 +290,7 @@ def _admit(staging: Path, names: list[str], images_root: Path,
     # האמת, תיקייה חלקית שנראית כמו אימג' שלם.
     unverified = folder / UNVERIFIED
     manifest_path.replace(unverified)
-    manifest = json.loads(unverified.read_text(encoding="utf-8"))
+    manifest = finite_json.loads(unverified.read_text(encoding="utf-8"))   # #3090: NaN/Infinity are not a manifest
     problem = ImageLibrary._validate(manifest)
     if problem:
         raise ArchiveError(f"מניפסט לא תקין: {_shown(problem)}")

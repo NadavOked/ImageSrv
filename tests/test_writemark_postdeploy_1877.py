@@ -183,6 +183,7 @@ smart_red() { return 1; }; sr_gui_start() { :; }; pull_open() { PULL_SESSION=p; 
 sr_cancel_watch() { :; }; sr_cancel_requested() { return 1; }
 pull_close() { echo "CLOSE $(cat "$RUN_DIR/state")" >> "$RUN_DIR/trace"; }; sr_gui_done() { :; }
 single_restore_failed_screen() { echo "FAILSCREEN" >> "$RUN_DIR/trace"; }
+sr_name_machine() { echo "NAMED $1" >> "$RUN_DIR/trace"; }   # #3906: its own tests (test_build_restore_hostname_3906.py)
 '''
 
 
@@ -201,12 +202,13 @@ def _sr(tmp_path: Path, *, release_fails: bool = False) -> tuple[list[str], str]
 
 
 def test_the_gui_restore_releases_the_mark_after_the_drivers(tmp_path):
+    """#3906: and names the machine before them -- the path never did (metal 20/11)."""
     trace, state = _sr(tmp_path)
-    assert trace == ["RESTORE hold=1", "DRIVERS sda", "RELEASE sda", "CLOSE done", "rc=0"], trace
+    assert trace == ["RESTORE hold=1", "NAMED sda", "DRIVERS sda", "RELEASE sda", "CLOSE done", "rc=0"], trace   # #3906: the name too
     assert state == "done"
 
 
 def test_the_gui_restore_whose_mark_stays_is_failed(tmp_path):
     trace, state = _sr(tmp_path, release_fails=True)
-    assert trace == ["RESTORE hold=1", "DRIVERS sda", "RELEASE sda", "FAILSCREEN", "HOLD restore did not complete", "rc=1"], trace
+    assert trace == ["RESTORE hold=1", "NAMED sda", "DRIVERS sda", "RELEASE sda", "FAILSCREEN", "HOLD restore did not complete", "rc=1"], trace
     assert state == "failed"

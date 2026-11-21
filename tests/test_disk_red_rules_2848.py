@@ -2,7 +2,7 @@
 
 1. "SMART חצי תקין" (orange) starts as a TARGET, like green -- not "דלג", and no SMART window
    stands between the click on "יעד" and the target.
-2. A bad SATA link (``link_slow``, ``link_reset``, ``drawer_gone`` -- hwissues.sh's words) is RED:
+2. A bad SATA link (``link_reset``, ``drawer_gone`` -- hwissues.sh's words) is RED:
    never a target, the reason on the card, still a source. The agent carries the words in
    ``lc_disk=`` field 19 (lcgui.sh); field 17 stays the sentence.
 
@@ -48,8 +48,8 @@ def test_a_red_smart_drawer_still_starts_skipped(seq_driver, tmp_path):
     assert got[0]["0"] == got[-1]["0"] == str(LCR_SKIP), out
 
 
-def test_a_slow_sata_link_is_red_skipped_and_still_a_source(seq_driver, tmp_path):
-    state = _with(1, words="link_slow")
+def test_a_sata_link_reset_is_red_skipped_and_still_a_source(seq_driver, tmp_path):
+    state = _with(1, words="link_reset")
     got, out = _seq(seq_driver, tmp_path, state, (0, LCR_TARGET), state, (0, LCR_SOURCE), state)
     assert got[0]["0"] == str(LCR_SKIP), out            # never proposed as a target
     assert got[1]["0"] == str(LCR_SKIP), out            # "יעד" does nothing
@@ -81,14 +81,14 @@ def test_the_agent_sends_the_hw_words_as_field_19(tmp_path):
     for port, dev in ((1, "sda"), (2, "sdb")):
         (lc / "inv" / f"{dev}.line").write_text(
             f"{port}|{dev}|M|S{port}|1000|ok|ok|Windows|1|1|1000|1|\n", encoding="utf-8", newline="\n")
-    (run / "smart" / "sda.hw").write_text("link_slow\nlink_reset\n", newline="\n")
+    (run / "smart" / "sda.hw").write_text("link_reset\ndrawer_gone\n", newline="\n")
     out = sh(env(run, gui) + f"export LC={posix(lc)!r} SMART_KB={posix(AGENT / 'lib' / 'data')!r}; " + PRELUDE
              + f". {posix(AGENT)}/lib/smart/smartjudge.sh; . {posix(AGENT)}/lib/smart/hwissues.sh; "
              + f". {posix(AGENT)}/lib/localclone/lcgui.sh; lc_gui_state")
     assert out.returncode == 0, out.stderr
     disks = {l.split("|")[1]: l.split("|") for l in (gui / "state").read_text(encoding="utf-8").splitlines()
              if l.startswith("lc_disk=")}
-    assert len(disks["sda"]) == 19 and disks["sda"][18].split() == ["link_slow", "link_reset"], disks["sda"]
+    assert len(disks["sda"]) == 19 and disks["sda"][18].split() == ["link_reset", "drawer_gone"], disks["sda"]
     assert "כבל או מגירה" in disks["sda"][16], disks["sda"]   # field 17: still the sentence
     assert disks["sdb"][18].strip() == "", disks["sdb"]
 

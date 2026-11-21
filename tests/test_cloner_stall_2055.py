@@ -59,7 +59,10 @@ def _state(tmp_path: Path, moved_ago: int | None, cur: str) -> dict:
 @requires_native("jq", ("bash", BASH), why="json_get reads the image name with jq")
 def test_bytes_standing_past_the_ceiling_are_rate_zero_and_keep_their_moment(tmp_path):
     got = _state(tmp_path, 180, "16770380200")      # the metal cut: 3 minutes, not a byte
-    assert got["rate"] == 0 and got["eta"] == -1, got["lines"]
+    # #3270 (Nadav 14/11): rate 0 says it stands; the end stays -- the wave's average since the anchor (700 s ago)
+    remaining = 20 * G - 16770380200
+    ends = {remaining // ((16770380200 - 1000) // dt) for dt in (700, 701, 702)}   # the seconds the run itself takes
+    assert got["rate"] == 0 and got["eta"] in ends, (ends, got["lines"])
     assert got["moved"] == [f"drawer_moved=sda|{got['now'] - 180}"], got["moved"]
 
 
@@ -170,7 +173,7 @@ def texts(driver: Path, tmp_path: Path, rate: int, moved_ago: int | None) -> lis
 def test_the_standing_stream_reads_waiting_zero_and_the_age_of_the_last_byte(driver, tmp_path):
     got = texts(driver, tmp_path, 0, 180)
     joined = "\n".join(got)
-    assert "ממתין לזרם מהשרת · 0 MB/s" in got, got          # the drawer's line
+    assert "ממתין לזרם מהשרת · \u20680 MB/s\u2069" in got, got   # the drawer's line; #3274: "0 MB/s" isolated
     assert "0 MB/s" in got, got                              # the speed card: measured zero
     assert got.count("ממתין לזרם מהשרת") == 2, got           # the hero's "left", the speed card's caption
     assert "22 MB/s" not in joined and "כותב · " not in joined, got
@@ -200,7 +203,7 @@ def test_not_measured_is_not_zero(driver, tmp_path):
 
 
 @pytest.mark.parametrize("rate, said", [
-    ("0", "ממתין לזרם מהשרת · 0 MB/s"),   # measured still: not folded into "not measured"
+    ("0", "ממתין לזרם מהשרת · \u20660 MB/s\u2069"),   # measured still: not folded into "not measured"
     ("-1", "מודד את הקצב…"),               # the guard: not measured stays in words
 ])
 def test_the_restore_card_says_a_standing_stream_too(rate, said):

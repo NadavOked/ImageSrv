@@ -170,7 +170,7 @@ gui_parent() {
     GUI_SCREEN=
     [ "$D_ROLE" = classroom ] && GUI_SCREEN=class
     [ "$D_ROLE" = cloner ] && GUI_SCREEN=cloner
-    export SERVER MAC IP RUN_DIR LIB_DIR GUI_SCREEN
+    export SERVER MAC IP IFACE RUN_DIR LIB_DIR GUI_SCREEN   # #3644: IFACE too -- the kiosk is a process of its own, and net.conf's assignment is not exported (the link banner's record needs it)
     gui_keep &   # #1726: the GUI's owner from here on
     _gui_pid=$!
     echo "$_gui_pid" > "$RUN_DIR/gui.pid"   # log() keeps off the screen while it lives (common.sh)

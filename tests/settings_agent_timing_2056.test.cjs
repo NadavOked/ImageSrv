@@ -70,3 +70,23 @@ test('ranges in the sheet = the server ranges (3-30 min, 1-60 min, 10-300 s)', (
   assert.deepEqual([r('gui_end_poweroff_seconds').min, r('gui_end_poweroff_seconds').max, r('gui_end_poweroff_seconds').def], [10, 300, 20]);
   assert.match(js, /post\("\/settings", \{ \[key\]: String\(n \* div\) \}\)/);
 });
+
+// #3658 (Nadav 18/11): "גם דיסק וגם רשת אחרי 2 דקות מוותר" -- and "something I can change in the settings".
+test('the two drawer waits are rows of the cloning card, 30-900 s, default 120, shown as 2 דקות', () => {
+  const c = ctx({...base, drawer_disk_wait_seconds: '120', drawer_net_wait_seconds: '90'});
+  for (const k of ['drawer_disk_wait_seconds', 'drawer_net_wait_seconds']) {
+    const r = row(c, k);
+    assert.equal(r.card, 'deploy'); assert.equal(r.type, 'agenttime');
+    assert.deepEqual([r.unit, r.min, r.max, r.def], ['sec', 30, 900, 120]);
+  }
+  assert.equal(row(c, 'drawer_disk_wait_seconds').label, 'המתנה של מגירה לדיסק');
+  assert.equal(row(c, 'drawer_net_wait_seconds').label, 'המתנה של מגירה לרשת');
+  assert.match(c.agentTimeRowHtml(row(c, 'drawer_disk_wait_seconds')), /<bdi>2 דקות<\/bdi>/);
+  assert.match(c.agentTimeRowHtml(row(c, 'drawer_net_wait_seconds')), /<bdi>90 שניות<\/bdi>/);
+});
+
+test('"applied on N of M" counts machines for the drawer waits, not only cloners', () => {
+  const c = ctx({...base, drawer_disk_wait_seconds: '120', agent_timing_applied: {drawer_disk_wait_seconds: {applied: 2, connected: 3}}});
+  const html = c.agentTimeAppliedHtml(row(c, 'drawer_disk_wait_seconds'));
+  assert.match(html, /הוחל ב-2 מתוך 3 מכונות מחוברות/); assert.match(html, /הערך הקודם/);
+});

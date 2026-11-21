@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -237,6 +238,14 @@ def _run_upgrade_script(repo_dir: str | Path, tag: str) -> tuple[bool, str]:
     return ok, err
 
 
+def _upgrade_unit_state() -> str | None:
+    """#1893: מצב יחידת השדרוג לפי `systemctl is-active`, או None = לא נקרא.
+    `inactive` יוצא בקוד 3, ולכן הפלט נקרא גם כשהקוד אינו 0; פלט ריק או כלי
+    חסר אינם "לא רצה" (עיקרון 5)."""
+    _ok, out, _err = _run(["systemctl", "is-active", f"{UPGRADE_UNIT}.service"], timeout=10)
+    return (out or "").strip() or None
+
+
 #: #1277: מצבי החתימה של תג בבדיקת-עדכון — "לא נבדק" אינו "לא חתום", ושניהם
 #: אינם "חתום" (עיקרון 5). השער עצמו הוא ``tools/server-upgrade.sh``; כאן
 #: המנהל רואה את התוצאה **לפני** שהוא לוחץ "החל".
@@ -288,6 +297,7 @@ def default_hooks() -> Hooks:
         "_display_version_cache": _DISPLAY_VERSION_CACHE,
         "ls_remote_tags": _ls_remote_tags,
         "run_upgrade": _run_upgrade_script,
+        "upgrade_unit_state": _upgrade_unit_state,
         "verify_tag": _verify_remote_tag,
     }
 
@@ -551,6 +561,54 @@ def status_with_verification(conn, hooks: Hooks, repo_dir: str | Path,
     return result
 
 
+#: מצבי יחידה שהם ראיה חיובית ש"לא רצה"; כל מה שאחר (גם `active`, גם פלט לא מוכר) — לא.
+_UNIT_NOT_RUNNING = ("inactive", "failed")
+
+
+def upgrade_marker_path(data_dir: str | Path) -> Path:
+    """אותו נתיב כמו `UPGRADE_STATE` ב-`tools/server-upgrade.sh`."""
+    return Path(os.environ.get("IMAGESRV_UPGRADE_STATE") or Path(data_dir) / "server-upgrade.state")
+
+
+def reconcile_interrupted(conn, hooks: Hooks, repo_dir: str | Path, data_dir: str | Path) -> str | None:
+    """#1893: `running` שאף אחד כבר לא מריץ נכתב `failed` בעליית השרת.
+
+    `update.py` כותב `running` לפני ש-`server-upgrade.sh` רץ בכלל, והסמן של
+    `imagesrv-upgrade-recover` נכתב רק ב-`stage fetch`. חשמל שנפל בין השניים
+    משאיר `running` בלי סמן — הקונסולה "רץ" לעד, ו-`apply` נדחה ב-409.
+
+    נכתב `failed` רק על **ראיה חיובית**: סטטוס `running` שהגרסה הרצה אינה מאשרת,
+    אין סמן, והיחידה `inactive`/`failed`. סמן קיים = שחזור הוא עניינו
+    (או שהריצה בדרך ל-restart); יחידה פעילה או מצב שלא נקרא = לא נוגעים.
+    מחזיר את הסיבה שנכתבה, או None."""
+    doc = get_status(conn)
+    if not doc or doc.get("state") != "running":
+        return None
+    if upgrade_marker_path(data_dir).exists():
+        return None
+    if running_verdict(doc, current_version(hooks, repo_dir)):
+        return None   # השרת כבר על התג: `status_with_verification` מציג אותו כ-done
+    try:
+        unit = hooks["upgrade_unit_state"]()
+    except Exception:                                    # noqa: BLE001
+        log.warning("update: upgrade unit state not read; 'running' left as is", exc_info=True)
+        return None
+    if unit not in _UNIT_NOT_RUNNING:
+        return None
+    stage = doc.get("stage")
+    tag = doc.get("tag") or "ללא תג"
+    if stage in (None, "fetch"):
+        why = f"העדכון ל-{tag} נקטע לפני שהתחיל לשנות דבר בדיסק (כיבוי או הפסקת חשמל); השרת נשאר על הגרסה שלפניו"
+    else:
+        why = (f"העדכון ל-{tag} נקטע בשלב {stage} (כיבוי או הפסקת חשמל) וסמן השחזור חסר — "
+               "לא ידוע מה כבר נכתב לדיסק; נדרשת בדיקה ידנית של העץ והיחידות")
+    _set_status(conn, {"state": "failed", "tag": tag, "stage": stage, "from": doc.get("from"),
+                       "started_at": doc.get("started_at"), "reason": "interrupted",
+                       "error": why, "detail": "עדכון שנקטע", "finished_at": now_iso()})
+    journal(conn, "update_apply_failed", f"{tag}: interrupted — {why}", "server-start")
+    return why
+
+
 _UNSET = object()
 
 
@@ -642,7 +700,7 @@ def restart_blocker(rt) -> str | None:
     DB שלא נקרא אינו "לא עסוק": זה סירוב בשם (עיקרון 5)."""
     from . import auto_reboot
     try:
-        return auto_reboot.busy_reason(rt, include_update=False)
+        return auto_reboot.busy_reason(rt, include_update=False, site="update")
     except Exception as exc:                             # noqa: BLE001 — לא ידוע = סירוב
         log.warning("restart_blocker: could not read the busy state: %r", exc)
         return "לא ניתן היה לבדוק אם השרת עסוק (קריאת ה-DB נכשלה)"

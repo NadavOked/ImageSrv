@@ -8,6 +8,7 @@
 #include "state.h"
 
 int lc_state_line(State *s, const char *key, char *val);   /* #1322, lc_state.c */
+#include "brain_ask.h"   /* #3654: bask= / bask_opt= */
 
 static char EMPTY[1] = "";
 
@@ -92,7 +93,7 @@ int hw_words_has(const char *words, const char *word) {
 }
 
 int hw_words_red(const char *words) {
-    return hw_words_has(words, "link_slow") || hw_words_has(words, "link_reset") || hw_words_has(words, "drawer_gone");
+    return hw_words_has(words, "link_reset") || hw_words_has(words, "drawer_gone");
 }
 
 static Machine *machine_at(State *s, unsigned long long index) {
@@ -165,6 +166,7 @@ void state_parse(State *s, FILE *fp) {
         const char *key = line;
         char *val = eq + 1, *f[27];   /* #1386 + #1331 + #1742: room_drawer= has up to 27 fields (split writes f[0..max-1]) */
         if (lc_state_line(s, key, val)) continue;   /* #1322: lc_* records */
+        if (bask_state_line(s, key, val)) continue;   /* #3654: the brain's questions */
 #define KEY(k) (strcmp(key, k) == 0)
         if (KEY("disk")) {
             if (s->ndisks >= MAX_DISKS) {
@@ -208,6 +210,10 @@ void state_parse(State *s, FILE *fp) {
             disk_slots[at].known = 1;
         } else if (KEY("folder") && s->nfolders < MAX_FOLDERS) {
             cp(s->folders[s->nfolders++], sizeof s->folders[0], val);
+        } else if (KEY("images_known")) {
+            if (!strcmp(val, "1")) s->images_known = 1;
+            else if (!strcmp(val, "0")) s->images_known = 0;
+            else s->images_known = -1;
         } else if ((KEY("image") || KEY("image_unchecked")) && s->nimages < MAX_IMAGES) {
             split(val, f, 3);
             Image *im = &s->images[s->nimages++];
@@ -307,7 +313,6 @@ void state_parse(State *s, FILE *fp) {
              * slot's name is not its name. */
             else if (!mapped_record && port == 0) m->slot_names[actual_port - 1][0] = 0;
             d->fallback = mapped_record ? 0 : port == 0;
-            d->link_slow = !strcmp(f[11], "slow");
             /* f[12] was #1366's absolute CRC count -- not a state of the disk (Nadav 11/11, #2846); not read */
             d->drawer = mapped_record ? parse_drawer(f[13]) : 0;
             if (mapped_record) cp(d->conn, sizeof d->conn, f[14]);
@@ -324,10 +329,11 @@ void state_parse(State *s, FILE *fp) {
             if (nf >= 26 && d->drv_state[0]) drv_linux_fields(d->drv_lstate, d->drv_lmod, d->drv_ldet, f + 23);   /* #1331 T8 */
             if (nf >= 27) cp(d->smart_reason, sizeof d->smart_reason, f[26]);   /* #1742 */
         } else if (KEY("room_drawer_rule")) {
-            /* #2848: machine-index|serial|color|target|source|reason -- the server's rule, after its
+            /* #2848: machine-index|serial|color|target|source|reason|sentence -- the server's verdict (#3666: the brain's), after its
              * room_drawer=, matched by serial (an unidentified drawer has none, and is never a target anyway) */
             unsigned long long mi;
-            if (split(val, f, 6) != 6 || !parse_uint(f[0], &mi) || !f[1][0]) continue;
+            int nf = split(val, f, 7);
+            if (nf < 6 || !parse_uint(f[0], &mi) || !f[1][0]) continue;
             Machine *m = machine_at(s, mi);
             if (!m) continue;
             static const char *const colors[] = { "grey", "green", "orange", "yellow", "red" };
@@ -339,6 +345,20 @@ void state_parse(State *s, FILE *fp) {
                     RoomDrawer *d = &m->room_drawers[i];
                     d->rule_set = 1; d->rule_color = c; d->rule_target = f[3][0] == '1'; d->rule_source = f[4][0] == '1';
                     cp(d->rule_reason, sizeof d->rule_reason, f[5]);
+                    cp_utf8(d->rule_he, sizeof d->rule_he, nf >= 7 ? f[6] : "");
+                    break;
+                }
+        } else if (KEY("room_drawer_rb")) {
+            /* #2996/#2633: machine-index|serial|verdict|why -- after its room_drawer=, matched by serial. A word that is not one
+             * of the three says nothing: "not reported" is never read as "checked" (principle 5). */
+            unsigned long long mi;
+            if (split(val, f, 4) != 4 || !parse_uint(f[0], &mi) || !f[1][0]) continue;
+            Machine *m = machine_at(s, mi);
+            if (!m || (strcmp(f[2], "verified") && strcmp(f[2], "sampled") && strcmp(f[2], "unverified"))) continue;
+            for (int i = m->nroom_drawers - 1; i >= 0; i--)
+                if (!strcmp(m->room_drawers[i].serial, f[1])) {
+                    cp(m->room_drawers[i].rb_verdict, sizeof m->room_drawers[i].rb_verdict, f[2]);
+                    m->room_drawers[i].rb_nolist = !strcmp(f[2], "unverified") && !strcmp(f[3], "list_not_fetched");
                     break;
                 }
         } else if (KEY("room_warn")) {
@@ -464,12 +484,41 @@ void state_parse(State *s, FILE *fp) {
             if (split(val, f, 2) == 2 && f[1][0])
                 for (int i = 0; i < s->ndrawers; i++)
                     if (!strcmp(s->drawers[i].dev, f[0])) s->drawers[i].moved = strtoll(f[1], NULL, 10);
+        } else if (KEY("drawer_stall")) {
+            /* #2988, #3680: drawer_stall=dev|waiting_disk|waiting_net|<seconds>|<limit, "" = none> -- after its drawer=
+             * (clonergui.sh, directgui.sh). The limit is on the wire and not shown (Nadav 12/11, #3726). A record means the drawer stands; none means it moves. A word the agent does not
+             * say, or a number that is no number, is no record: never a "waiting" on a guess */
+            if (split(val, f, 5) == 4 && (!strcmp(f[1], "waiting_disk") || !strcmp(f[1], "waiting_net")))
+                for (int i = 0; i < s->ndrawers; i++)
+                    if (!strcmp(s->drawers[i].dev, f[0])) {
+                        unsigned long long v;
+                        cp(s->drawers[i].stall, sizeof s->drawers[i].stall, f[1]);
+                        s->drawers[i].stall_s = parse_uint(f[2], &v) ? (long long)v : -1;
+                    }
         } else if (KEY("drawer_rb")) {
             /* #1907: drawer_rb=dev|list_not_fetched -- that drawer is done and not
              * verified because the check list did not come down (clonergui.sh) */
             if (split(val, f, 2) == 2 && !strcmp(f[1], "list_not_fetched"))
                 for (int i = 0; i < s->ndrawers; i++)
                     if (!strcmp(s->drawers[i].dev, f[0])) s->drawers[i].rb_nolist = 1;
+        } else if (KEY("drawer_fill")) {
+            /* #3064 (R5): drawer_fill=dev|part|missing|chunks -- that drawer came back and still completes (clonergui.sh). `missing` is
+             * required and a count, or the record says nothing; part / chunks empty = not said (-1) */
+            int nf = split(val, f, 4);
+            unsigned long long part, missing, chunks;
+            if (nf >= 3 && parse_uint(f[2], &missing))
+                for (int i = 0; i < s->ndrawers; i++)
+                    if (!strcmp(s->drawers[i].dev, f[0])) {
+                        Drawer *d = &s->drawers[i];
+                        d->fill = 1; d->fill_missing = (long long)missing;
+                        d->fill_part = parse_uint(f[1], &part) ? (long long)part : -1;
+                        d->fill_chunks = nf >= 4 && parse_uint(f[3], &chunks) ? (long long)chunks : -1;
+                    }
+        } else if (KEY("drawer_note")) {
+            /* #3167: drawer_note=dev|text -- a note on that done drawer, not a problem (clonergui.sh) */
+            if (split(val, f, 2) == 2 && f[1][0])
+                for (int i = 0; i < s->ndrawers; i++)
+                    if (!strcmp(s->drawers[i].dev, f[0])) cp_utf8(s->drawers[i].note, sizeof s->drawers[i].note, f[1]);
         } else if (KEY("drawer_rbp")) {
             /* #2046: drawer_rbp=dev|done|total|verdict|rate -- the read-back's bar of that drawer (clonergui.sh) */
             int nf = split(val, f, 5);
@@ -483,7 +532,7 @@ void state_parse(State *s, FILE *fp) {
              * first (#688). The 5th field (#709) and the 6th (#874: the
              * server's cause for failed_last) are optional so an older agent
              * still parses. */
-            int nf = split(val, f, 17);   /* #1495: drawer and connection are fields 10/11; #1798: the mark 12; #1921: hw 13; #1858: F1 mark 14-16; #2848: hw words 17 */
+            int nf = split(val, f, 19);   /* #3268: write check 18-19; #1495: drawer and connection are fields 10/11; #1798: the mark 12; #1921: hw 13; #1858: F1 mark 14-16; #2848: hw words 17 */
             if (nf < 4) continue;
             unsigned long long port, size;
             if (!parse_uint(f[0], &port) || port > INT_MAX) continue;
@@ -535,8 +584,20 @@ void state_parse(State *s, FILE *fp) {
                 if (nf >= 16 && (!strcmp(f[15], "passed") || !strcmp(f[15], "warn") || !strcmp(f[15], "fail") || !strcmp(f[15], "unchecked")))
                     cp(id->f1_smart, sizeof id->f1_smart, f[15]);
             }
-            id->sata_bad = nf >= 17 && hw_words_red(f[16]);   /* #2848: an older agent without the field = 0, as before */
-            id->sata_issue = nf >= 17 && (hw_words_has(f[16], "link_reset") || hw_words_has(f[16], "drawer_gone"));
+            /* #3268: only the six words; anything else (an older agent, junk) = not said, never drawn as checked.
+             * "history" (18/11): it fell behind in a past wave and passes the check now -- a neutral line, no colour; "checking" may carry its line too */
+            if (nf >= 18 && (!strcmp(f[17], "checking") || !strcmp(f[17], "ok") || !strcmp(f[17], "slow")
+                             || !strcmp(f[17], "failed") || !strcmp(f[17], "unchecked") || !strcmp(f[17], "history"))) {
+                cp(id->wstate, sizeof id->wstate, f[17]);
+                if (nf >= 19) cp_utf8(id->wtext, sizeof id->wtext, f[18]);
+            }
+        } else if (KEY("cdisk_rule")) {
+            /* #3666: dev|color|source|target|reason|sentence -- the agent's verdict for an idle drawer (diskrule.sh, the one table),
+             * after its cdisk=, matched by dev. Junk or a dev that is not there = no verdict: "not checked", never green. */
+            int nf = split(val, f, 6);
+            if (nf < 5) continue;
+            for (int i = s->nidisks - 1; i >= 0; i--)
+                if (!strcmp(s->idisks[i].dev, f[0])) { disk_rule_take(&s->idisks[i].rule, f[1], f[2], f[3], f[4], nf >= 6 ? f[5] : ""); break; }
         } else if (KEY("cused") && s->ncuseds < MAX_DRAWERS + 4) {
             /* #2030: cused=dev|size|used -- used -1 (or anything unreadable) = not measured */
             if (split(val, f, 3) < 3) continue;
@@ -590,6 +651,19 @@ void state_parse(State *s, FILE *fp) {
             if (split(val, f, 2) == 2 && parse_uint(f[0], &n) && n > 0 && f[1][0]) {
                 cp_utf8(s->fw_warn, sizeof s->fw_warn, f[1]); s->fw_warn_count = (int)n;
             }
+        } else if (KEY("nic_link")) {
+            /* #3277: iface|speed|max|flag. A number that is not a whole number above 0 is 0 = "not read": never a banner
+             * on a half-read link (principle 5). #3663 (G2): the flag is the brain's verdict -- 1 = draw the banner. The screen
+             * decides nothing: a record without the fourth field (an old agent), or with anything but 1, draws none. */
+            unsigned long long sp, mx;
+            int nf = split(val, f, 4);
+            if (nf >= 3) {
+                s->nic_mbps = parse_uint(f[1], &sp) && sp > 0 && sp <= 400000 ? (int)sp : 0;
+                s->nic_max = parse_uint(f[2], &mx) && mx > 0 && mx <= 400000 ? (int)mx : 0;
+                s->nic_warn = nf == 4 && !strcmp(f[3], "1");
+            }
+        } else if (KEY("nic_bus")) {
+            s->nic_bus = !strcmp(val, "1");   /* #3776: the brain's verdict, no threshold here; anything but 1 draws nothing */
         } else if (KEY("drawer_count")) {
             unsigned long long count;
             if (parse_uint(val, &count) && count >= 1 && count <= MAX_DRAWERS)
@@ -616,6 +690,26 @@ void state_parse(State *s, FILE *fp) {
             if (f[1][0] && (!parse_uint(f[1], &u) || u > (unsigned long long)LLONG_MAX)) continue;
             if (f[2][0] && strcmp(f[2], "no_history")) continue;
             s->fc_clock = f[0][0] == '1'; s->fc_at = (long long)u; s->fc_nohist = f[2][0] != 0;
+        } else if (KEY("pline")) {
+            /* #3181: pline=<written>|<target>|<remaining>|<0|1> -- four whole numbers, written <= target, or not said */
+            unsigned long long w, tg, lf;
+            s->pl_on = 0;
+            if (split(val, f, 5) != 4 || !parse_uint(f[0], &w) || !parse_uint(f[1], &tg) || !parse_uint(f[2], &lf) ||
+                tg < 1 || tg > 100000 || w > tg || lf > tg || (strcmp(f[3], "0") && strcmp(f[3], "1"))) continue;
+            s->pl_on = 1; s->pl_written = (int)w; s->pl_target = (int)tg; s->pl_left = (int)lf; s->pl_named = f[3][0] == '1';
+        } else if (KEY("pline_ready")) {
+            /* #3181: pline_ready=<port> -- a slot the server counted removable */
+            unsigned long long port;
+            if (split(val, f, 2) != 1 || !parse_uint(f[0], &port) || port < 1 || port > 999 || s->npl_ready >= MAX_DRAWERS) continue;
+            s->pl_ready[s->npl_ready++] = (int)port;
+        } else if (KEY("pline_insert")) {
+            /* #3181: pline_insert=<port>|<drawer, 0 = not mapped>|<name> -- an empty slot and the name the next disk takes */
+            unsigned long long port, dr;
+            if (split(val, f, 4) != 3 || !parse_uint(f[0], &port) || port < 1 || port > 999 || !parse_uint(f[1], &dr) ||
+                dr > MAX_DRAWERS || !f[2][0] || s->npl_insert >= MAX_DRAWERS) continue;
+            s->pl_insert[s->npl_insert].port = (int)port; s->pl_insert[s->npl_insert].drawer = (int)dr;
+            cp_utf8(s->pl_insert[s->npl_insert].name, sizeof s->pl_insert[0].name, f[2]);
+            s->npl_insert++;
         } else if (KEY("shrink_prompt")) {
             /* nonce|count. The nonce is echoed back on the answer, so it is
              * kept only in the shape the bridge accepts: digits and '-'. */
@@ -652,14 +746,16 @@ void state_parse(State *s, FILE *fp) {
             else if (!strcmp(f[1], "raid")) kind = ASK_RAID;             /* #1808: exactly one row */
             else if (!strcmp(f[1], "share")) kind = ASK_SHARE;           /* #1898: 1..MAX_ASK_ROWS rows */
             else if (!strcmp(f[1], "badsect")) kind = ASK_BADSECT;       /* #2017: exactly one row */
+            else if (!strcmp(f[1], "interrupt")) kind = ASK_INTERRUPT;   /* #2528: 1..MAX_ASK_ROWS rows; subject self|cloner */
             if (kind == ASK_NONE || !f[0][0] ||
                 strspn(f[0], "0123456789-") != strlen(f[0]) ||
                 strlen(f[0]) >= sizeof s->ask_nonce ||
                 strspn(f[3], "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._/-") != strlen(f[3]) ||
                 strlen(f[3]) >= sizeof s->ask_subject ||
                 !parse_uint(f[2], &n) || n > MAX_ASK_ROWS ||
-                ((kind == ASK_GROWBACK || kind == ASK_SHARE) && n < 1) || ((kind == ASK_RAID || kind == ASK_BADSECT) && n != 1) ||
-                (kind != ASK_GROWBACK && kind != ASK_SHARE && kind != ASK_RAID && kind != ASK_BADSECT && n != 0)) { ask_bad = 1; continue; }
+                ((kind == ASK_GROWBACK || kind == ASK_SHARE || kind == ASK_INTERRUPT) && n < 1) || ((kind == ASK_RAID || kind == ASK_BADSECT) && n != 1) ||
+                (kind == ASK_INTERRUPT && strcmp(f[3], "self") && strcmp(f[3], "cloner")) ||
+                (kind != ASK_GROWBACK && kind != ASK_SHARE && kind != ASK_RAID && kind != ASK_BADSECT && kind != ASK_INTERRUPT && n != 0)) { ask_bad = 1; continue; }
             cp(s->ask_nonce, sizeof s->ask_nonce, f[0]);
             cp(s->ask_subject, sizeof s->ask_subject, f[3]);
             s->ask_kind = kind;
@@ -683,6 +779,15 @@ void state_parse(State *s, FILE *fp) {
                 !parse_uint(f[2], &until) || until < 1 || until > LLONG_MAX || s->nask >= MAX_ASK_ROWS) { ask_bad = 1; continue; }
             memset(&s->ask[s->nask], 0, sizeof s->ask[0]);
             s->ask[s->nask].port = (int)port; s->ask[s->nask].idx = (int)idx; s->ask[s->nask].until = (long long)until;
+            s->nask++;
+        } else if (KEY("ask_row") && s->ask_kind == ASK_INTERRUPT) {
+            /* #2528: port now|port when it was written -- a disk that was not completed. port now 0 = not
+               connected now (or its identity is not unique); the port it was written in is always known. */
+            unsigned long long port, was;
+            if (split(val, f, 3) != 2 || !parse_uint(f[0], &port) || port > 99 ||
+                !parse_uint(f[1], &was) || was < 1 || was > 99 || s->nask >= MAX_ASK_ROWS) { ask_bad = 1; continue; }
+            memset(&s->ask[s->nask], 0, sizeof s->ask[0]);
+            s->ask[s->nask].port = (int)port; s->ask[s->nask].idx = (int)was;
             s->nask++;
         } else if (KEY("ask_row") && s->ask_kind == ASK_SHARE) {
             /* #1898: port|idx|now bytes|after bytes -- the split grows each one */
@@ -814,7 +919,7 @@ void state_parse(State *s, FILE *fp) {
         else if (KEY("room_error"))    cp(s->room_error, sizeof s->room_error, val);
         else if (KEY("room_failed"))   cp(s->room_failed, sizeof s->room_failed, val);   /* 17/10 */
         else if (KEY("class_error"))   cp(s->class_error, sizeof s->class_error, val);
-        else if (KEY("toast"))         cp(s->toast, sizeof s->toast, val);
+        else if (KEY("toast"))         cp_utf8(s->toast, sizeof s->toast, val);   /* #3152: a cut never leaves half a letter */
         /* #1569: the failure screen (failscreen.sh). fail= opens the block and
          * empties the lists, so a writer that composes the records twice
          * (the kiosk's hello state and a display-only loop) draws them once. */
@@ -875,6 +980,7 @@ void state_parse(State *s, FILE *fp) {
         fprintf(stderr, "native-gui: state: question incomplete or malformed; not shown\n");
         s->nask = 0; s->ask_nonce[0] = 0; s->ask_subject[0] = 0; s->ask_kind = ASK_NONE;
     }
+    int bask_broken = bask_settle(s);   /* #3654: a question that is not whole is not drawn */
     int hidden = s->hidden_disks + s->hidden_machines + s->hidden_models;   /* #1269 */
     if (s->rejected_lines && hidden)
         snprintf(s->state_warning, sizeof s->state_warning,
@@ -895,6 +1001,10 @@ void state_parse(State *s, FILE *fp) {
     if (ask_broken && !s->state_warning[0])
         snprintf(s->state_warning, sizeof s->state_warning,
                  "שאלה מהסוכן הגיעה פגומה ולא מוצגת — בלי תשובה נבחרת ברירת המחדל הבטוחה");
+    /* #3654: the same for the brain's question -- no answer is the server's safe default, never destructive */
+    if (bask_broken && !s->state_warning[0])
+        snprintf(s->state_warning, sizeof s->state_warning,
+                 "שאלה מהמוח הגיעה פגומה ולא מוצגת — בלי תשובה תבוצע ברירת המחדל הבטוחה");
 }
 
 int state_poll(StateFile *f, State *s) {

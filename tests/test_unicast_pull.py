@@ -46,6 +46,8 @@ pytestmark = requires_native(("bash", BASH), "curl", "jq")
 
 MAC = "b4:2e:99:07:1a:c4"
 IMAGE = "img_7f3a91"
+#: #3906: the name the server holds for this machine (machines.suffix)
+STATION_NAME = "BUILD-01"
 
 MANIFEST = {
     "id": IMAGE,
@@ -125,7 +127,7 @@ def open_pull(tmp_path: Path, server: str, *, user: str = "labtech",
         f"{agent_sources('sysinfo', 'progress', 'failmark')}. {posix(AGENT)}/lib/restore/pull.sh; "
         f"if pull_open {args}; "
         f'then echo "OPENED=[$PULL_SESSION]"; '
-        f'else echo "NOT-OPENED=[$PULL_SESSION]"; fi'
+        f'else echo "NOT-OPENED=[$PULL_SESSION]"; fi; echo "WHY=[$PULL_WHY]"'   # #3231
     )
     proc = subprocess.run(
         [BASH, "-c", 'export PATH="/usr/bin:$PATH"; ' + script],
@@ -193,6 +195,34 @@ def test_a_refusal_the_server_did_make_keeps_its_reason(tmp_path, fake_server):
 
     assert "no_image" in log
     assert "older" not in log
+
+
+#: what the server says while it derives the index (server/rounds/indexprep.py PULL_PREPARING, with its percent)
+WORDS = "מכין את האימג' לשידור, 40% — נסו שוב בעוד רגע"
+
+
+@pytest.mark.parametrize("code, status", [("index_preparing", 503), ("index_failed", 409),
+                                          ("image_bound_to_another_machine", 403)])
+def test_the_servers_words_about_the_index_reach_the_caller(tmp_path, fake_server, code, status):
+    """#3231: the image's index is still being derived (503) or failed (409): the server says why in
+    Hebrew, and `pull_open` keeps its words (`PULL_WHY`) for the screen -- not a generic refusal."""
+    fake_server.status = status
+    fake_server.body = json.dumps({"ok": False, "error": WORDS, "code": code}, ensure_ascii=False).encode("utf-8")
+
+    out, log = open_pull(tmp_path, url_of(fake_server))
+
+    assert "NOT-OPENED=[]" in out and f"WHY=[{WORDS}]" in out, out
+    assert code in log
+
+
+def test_another_refusal_leaves_no_words_for_the_screen(tmp_path, fake_server):
+    """The screen keeps its own generic refusal for everything but the index (`PULL_WHY` empty)."""
+    fake_server.status = 404
+    fake_server.body = json.dumps({"ok": False, "error": "no such image", "code": "no_image"}).encode("utf-8")
+
+    out, _log = open_pull(tmp_path, url_of(fake_server))
+
+    assert "NOT-OPENED=[]" in out and "WHY=[]" in out, out
 
 
 def test_a_server_that_never_answered_has_its_own_line(tmp_path, fake_server):
@@ -350,6 +380,12 @@ def station(tmp_path, *, pull_code: str = "200",
     (run / "manifest.src.json").write_text(
         json.dumps(MANIFEST), encoding="utf-8")
     (run / "pull_answer.json").write_text(pull_answer, encoding="utf-8")
+    # #3906: what the bridge (guiparent.sh) leaves before single_restore_run -- the
+    # server's /agent/state (station.py), whose `name` is the machine's own
+    (run / "gui").mkdir(exist_ok=True)
+    (run / "gui" / "restore-state.json").write_text(json.dumps({
+        "mac": MAC, "known": True, "role": "build", "name": STATION_NAME,
+        "allowed_images": [{"id": IMAGE, "name": "Windows 11", "folder": ""}]}), encoding="utf-8")
     out_file = tmp_path / "out.txt"
 
     # על מה `run_restore` ממתין לפני שהוא "כותב". רק כשבאמת אמור לעלות
@@ -388,6 +424,9 @@ def station(tmp_path, *, pull_code: str = "200",
         f". {posix(AGENT)}/lib/hw/slotnames.sh; disk_port() {{ echo 1; }}; "
         'pick_internal_disk() { echo sda; }; '
         'sr_share_gate() { return 0; }; '   # #1898: the split question -- its own tests (test_single_restore_share_1898.py)
+        # #3906: the real sr_name_machine; the seam is the disk write (write_hostname mounts the disk) --
+        # its own tests: test_build_restore_hostname_3906.py, test_captured_stdout.py
+        'write_hostname() { echo "NAMED $1 $3" >> "$RUN_DIR/trace"; echo "{\\"ok\\":true,\\"hostname\\":\\"$3\\",\\"method\\":\\"offline-registry\\"}"; }; '
         'http_get() { cat "$RUN_DIR/manifest.src.json"; }; '
         'pull_post() { cp "$2" "$RUN_DIR/sent.json"; '
         'cp "$RUN_DIR/pull_answer.json" "$3"; '
@@ -508,6 +547,7 @@ def test_the_stream_is_closed_when_the_restore_finishes(tmp_path):
     assert last["targets"][0] == {"dev": "sda", "bytes_written": 0,
                                   "bytes_total": 40960, "state": "done"}
     assert "unicast pull ses_pull01 closed" in result["log"]
+    assert f"NAMED sda {STATION_NAME}" in result["trace"], result["trace"]   # #3906: the name, before the close
 
 
 def test_every_report_of_the_pull_carries_its_session(tmp_path):
