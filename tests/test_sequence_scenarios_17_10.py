@@ -12,14 +12,12 @@ the test XPASSes (strict -> red) and the marker must be dropped.
 from __future__ import annotations
 
 import json
-import threading
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 pytest.importorskip("fastapi")
 
-from conftest import HANG_S, hello_body
 from native import requires_native
 from server.agent import timing as agent_timing
 from server.rounds import drive_rates, room as room_mod
@@ -28,18 +26,11 @@ from test_cloner_gui import BASH, posix, sh
 from test_cloner_round_server import ask, cloner, now  # noqa: F401  (autouse: the route's clock)
 from test_kiosk_app import _login_kiosk, kiosk_env  # noqa: F401
 from test_machine_identity import identity_server  # noqa: F401
-from test_sender import free_ports  # noqa: F401
 from test_server_room import (CLONER1, CLONER2, cloner_hello, heartbeat,
                               report as room_report, room, room_body,
                               room_server)  # noqa: F401
 from test_server_streams import overview, pull, report, second_class
 from test_wol import macs_of
-
-
-#: A question to the operator as the agent sends it (attended.sh, `prompt`). Until
-#: #2044 this was the SMART question (`ask`), which no longer exists; the hold is
-#: the same (#2202, prompt_hold.py).
-OPERATOR_PROMPT = {"waiting_for": "operator", "prompt": "Disk 2: share question"}
 
 
 def _gui_state_lines(tmp_path, room_view: dict) -> list[str]:
@@ -105,37 +96,6 @@ def test_failed_pull_then_new_pull_closes_old(server):
         "SELECT state FROM sessions WHERE id = ?", (first.json()["id"],)).fetchone()
     assert old["state"] == "failed"
     assert [p["id"] for p in overview(server)["pulls"]] == [second.json()["id"]]
-
-
-@pytest.mark.parametrize("delay", [0.0, 5.0])
-def test_a_question_after_send_start_pauses_timeout_then_resumes(
-        server_with_sender, free_ports, monkeypatch, delay):
-    from server.rounds import sender as sender_module
-    from test_sender import NOBODY_JOINED_LOG, TRANSFER_LOG, wait_for
-    from test_server_streams import setup_classroom
-
-    monkeypatch.setattr(sender_module, "ASK_HOLD_POLL_S", 0.02, raising=False)
-    monkeypatch.setattr(sender_module, "PACE_POLL", 0.02)
-    server, recorder = server_with_sender
-    recorder.log_text = NOBODY_JOINED_LOG
-    ids = setup_classroom(server)
-    server["deploy"].post("/api/console/sessions", json={
-        "group_id": ids["group"], "image_id": "img_7f3a91",
-        "prefix": "LAB1", "expected_clients": 1})
-    for _ in range(2):
-        server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
-    assert recorder.spawned.wait(timeout=HANG_S)
-    threading.Event().wait(delay)
-    server["anon"].post("/api/v1/agent/hello", json={
-        **hello_body(ids["mac1"]), **OPERATOR_PROMPT})
-    assert wait_for(lambda: recorder.processes[0].terminated)
-    assert not any(r["event"] == "send_failed" for r in
-                   server["ctx"].conn.execute("SELECT event FROM journal"))
-    recorder.log_text = TRANSFER_LOG
-    server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), "joining": False})
-    assert wait_for(lambda: len(recorder.commands) == 2)
-    assert recorder.commands[0][recorder.commands[0].index("--file") + 1] == \
-        recorder.commands[1][recorder.commands[1].index("--file") + 1]
 
 
 # Server-side guard, green on main: #1603 fixes the agent (a drawer that died
@@ -204,11 +164,11 @@ def test_build_gui_task_boot_cancel_does_not_cancel_console_task(kiosk_env):
     # One open task per machine: the GUI order is cancelled by the boot first,
     # and only then can the operator order from the console.
     gui_id = gui.post("/api/console/tasks/capture", json=body).json()["id"]
-    assert kiosk_env["anon"].get("/boot/menu?mac=aa:bb:cc:00:00:10").status_code == 200
+    assert kiosk_env["boot_anon"].get("/boot/menu?mac=aa:bb:cc:00:00:10").status_code == 200
     console_response = console.post("/api/console/tasks/capture", json=body)
     assert console_response.status_code == 200, console_response.text
     console_id = console_response.json()["id"]
-    assert kiosk_env["anon"].get("/boot/menu?mac=aa:bb:cc:00:00:10").status_code == 200
+    assert kiosk_env["boot_anon"].get("/boot/menu?mac=aa:bb:cc:00:00:10").status_code == 200
     rows = {r["id"]: r for r in kiosk_env["rt"].conn.execute(
         "SELECT id, state, error FROM tasks WHERE id IN (?, ?)", (gui_id, console_id))}
     assert rows[gui_id]["state"] == "cancelled" and rows[gui_id]["error"]
@@ -230,26 +190,30 @@ def test_selective_wake_and_malformed_body_wakes_nothing(room_server):
 
 
 def test_three_clean_waves_raise_rate_even_with_one_failed_drawer(tmp_path):
+    """#3173: the waves are chunk waves -- the rate is `decide` with `chunk_rate.adjust` (K8), and "clean" is what
+    `chunk_rate.record` learns from the engine: no chunk lost, the stream kept its pace (95% of the rate asked)."""
     from server import db
+    from server.rounds import chunk_rate
 
     conn = db.connect(tmp_path / "rate.db")
-    sent = 10 ** 10
-    blocks = -(-sent // drive_rates.UDPCAST_BLOCK)
     mac = "aa:bb:cc:00:00:31"
     rates = []
     for number in range(3):
         sid = f"ses_{number}"
         drives = [{"serial": f"{sid}-good", "model": "EVO", "mac": mac, "port": 1},
                   {"serial": f"{sid}-bad", "model": "EVO", "mac": mac, "port": 2}]
-        rates.append(drive_rates.decide(conn, sid, lambda d=drives: d, None))
+        rates.append(drive_rates.decide(conn, sid, lambda d=drives: d, None,
+                                        adjust=lambda chosen, wave: chunk_rate.adjust(conn, chosen, wave)))
         cap = drive_rates.parse_bitrate(rates[-1]) // 8
         conn.execute("INSERT INTO drive_rates (serial,model,session_id,rate_bps,cap_bps,bytes,seconds,at) VALUES (?,?,?,?,?,?,?,?)",
                      (drives[0]["serial"], "EVO", sid, cap, cap, cap * 600, 600, "t"))
         conn.commit()
-        drive_rates.record_stream(conn, sid, {"sent_bytes": sent,
-            "loss_blocks": int(blocks * 0.001), "stream_bps": int(cap * .95), "stream_s": 600})
+        chunk_rate.record(conn, sid, {"ended": "send_done", "chunks": 2500, "lost_chunks": 0, "first_pass_s": 600,
+                                      "bytes": 10 ** 10, "stream_zbytes": int(cap * .95) * 600, "cloners": 1})
         drive_rates.record_wave(conn, sid, [{"mac": mac, "targets_json": json.dumps([
             {"dev": "sda", "state": "done"}, {"dev": "sdb", "state": "failed"}]),
-            "udp_drops_json": json.dumps({"rcvbuf": int(blocks * 0.001), "inerrors": 0})}])
+            "udp_drops_json": json.dumps({"rcvbuf": 10, "inerrors": 0})}])
     assert rates[0] < rates[1] < rates[2]
-    assert drive_rates.choose(conn, [{"serial": "next", "model": "EVO", "mac": mac, "port": 1}], None)["basis"] == "up"
+    last = chunk_rate.last_sample(conn)
+    assert last["session_id"] == "ses_2"
+    assert chunk_rate.next_rate(last, 1, chunk_rate.config(conn))[1] == "chunk_up"

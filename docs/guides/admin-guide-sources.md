@@ -11,9 +11,9 @@
 
 | כלל | מה | מקור בקוד |
 |---|---|---|
-| F1 | קונסולה `8081/tcp` HTTPS, על כרטיס הניהול; השרת אינו בודק מקור | `server/main.py:153` (‏`--console-port` 8081), `server/main.py:167` (‏`--console-host`); `deploy/nftables-rules.sh:195` (פתוח על כרטיס השרתים, בלי `saddr`); `deploy/firewall-rules.md:3-7` ("אין בדיקת כתובת מקור בקוד"); `server/system/health.py:628-631` |
-| F2 | ראשי ← משני `8443/tcp` mTLS | `server/main.py:213` (‏`--interserver-port` 8443); `deploy/nftables-rules.sh:180-183` (במשני: רק `ip saddr` של הראשי); `server/interserver/storage_transfer.py:3-7` (דחיפה על הערוץ המאומת, ‏TLS 1.3); `server/interserver/storage_client.py:486` (‏TLSv1_3 מינימום); `server/interserver/api.py:1396` (המשני מתחבר ל-5900 של מכונה בשביל הראשי) |
-| F3 | משני ← ראשי `8443/tcp` "אתה שם?" | `server/interserver/primary_alive.py:30` (‏`/api/interserver/v1/alive`); `deploy/nftables-rules.sh:184-188`; `docs/guides/server-install.md:214-224` (DNAT באתר הראשי, 8081 לא בין אתרים) |
+| F1 | קונסולה `443/tcp` HTTPS, על כרטיס הניהול; השרת אינו בודק מקור | `server/main.py:153` (‏`--console-port` 443), `server/main.py:167` (‏`--console-host`); `deploy/nftables-rules.sh:195` (פתוח על כרטיס השרתים, בלי `saddr`); `deploy/firewall-rules.md:3-7` ("אין בדיקת כתובת מקור בקוד"); `server/system/health.py:628-631` |
+| F2 | ראשי ← משני `7700/tcp` mTLS | `server/main.py:213` (‏`--interserver-port` 7700); `deploy/nftables-rules.sh:180-183` (במשני: רק `ip saddr` של הראשי); `server/interserver/storage_transfer.py:3-7` (דחיפה על הערוץ המאומת, ‏TLS 1.3); `server/interserver/storage_client.py:486` (‏TLSv1_3 מינימום); `server/interserver/api.py:1396` (המשני מתחבר ל-7710 של מכונה בשביל הראשי) |
+| F3 | משני ← ראשי `7700/tcp` "אתה שם?" | `server/interserver/primary_alive.py:30` (‏`/api/interserver/v1/alive`); `deploy/nftables-rules.sh:184-188`; `docs/guides/server-install.md:214-224` (DNAT באתר הראשי, 443 לא בין אתרים) |
 | F4 | ‏NTP ‏`123/udp` | `installer/lib/finish.sh:86-90` (‏`systemd-timesyncd` מופעל, בלי שרת מוגדר → ברירת המחדל של Debian); `server/system/health.py:190-197` (בדיקת "סנכרון שעון"); `deploy/firewall-rules.md` כלל L4 |
 | F5 | ‏DNS ‏`53` | `installer/lib/finish.sh:101` (‏`servers_dns` באשף); `server/update.py:55-58` ("חומת אש או DNS") |
 | F6 | ‏`github.com:443` לעדכון | `server/update.py:54` (‏`PUBLIC_UPDATE_URL = https://github.com/NadavOked/ImageSrv.git`), `server/update.py:191` (‏`git ls-remote --tags`); `tools/server-upgrade.sh:152` (‏`git fetch --tags`), `tools/server-upgrade.sh:162-164` (אימות חתימה מול `deploy/release-signers`); `deploy/firewall-rules.md` כלל L5 |
@@ -37,12 +37,12 @@
 |---|---|
 | DHCP ‏`67/68` | `deploy/nftables-rules.sh:162-163`; `server/system/health.py:592-612`; כבוי בהתקנה: `docs/guides/server-install.md:296-304` |
 | TFTP ‏`69` + conntrack helper | `deploy/nftables-rules.sh:164-165`; `deploy/firewall-rules.md` §3 (אזהרת `nf_conntrack_tftp`); `server/system/health.py:574` |
-| HTTP ‏`8080` לתחנות, לא מוצפן | `server/main.py:149`; `deploy/nftables-rules.sh:166-167`; `README.md:290-296` (סיסמת משתמש ההפצה גלויה) |
-| מולטיקאסט `9000-9001/udp`, ‏TTL 1 | `server/rounds/sender.py:37,41` (‏`PRODUCTION_PORTBASE = 9000`, ‏portbase ו-portbase+1); `server/rounds/sender.py:659-685` (‏`udp-sender` בלי `--ttl`); `deploy/nftables-rules.sh:35,168-169`; `README.md:248-249`; מחשב הבנייה כמקור: `agent/lib/capture/directsend.sh:36` |
+| HTTP ‏`7712` לתחנות, לא מוצפן | `server/main.py:149`; `deploy/nftables-rules.sh:166-167`; `README.md:290-296` (סיסמת משתמש ההפצה גלויה) |
+| מולטיקאסט `7713-7714/udp`, ‏TTL 1 | `server/rounds/chunkctx.py` (‏`PRODUCTION_PORTBASE`, נגזר מ-`server/core/ports.py`); `server/rounds/chunksend.py` (‏`GROUP = "239.84.82.1"`, ‏`PORT_OFFSET = 2`: הנתונים ב-portbase+2, משוב הקצב ב-portbase+3); `agent/chunkcast.c` (‏`ttl = 1`); `deploy/nftables-rules.sh:35,168-169`; `README.md:248-249`; מחשב הבנייה כמקור: `agent/lib/capture/directsend.sh:36` |
 | ‏WoL ‏`9/udp` ‏`255.255.255.255` | `server/net/wol.py:28-29`, `server/net/wol.py:140-150` (על הממשק בלבד); `deploy/nftables-rules.sh:170` |
-| מוניטור `5900/tcp` שרת ← תחנה, כבוי כברירת מחדל | `server/console/monitor.py:21` (‏`MONITOR_PORT`), `server/console/monitor.py:656` (השרת פותח את החיבור); `deploy/nftables-rules.sh:135-136` (הדפדפן דרך פורט הקונסולה); `server/system/health.py:653-666` |
+| מוניטור `7710/tcp` שרת ← תחנה, כבוי כברירת מחדל | `server/console/monitor.py:21` (‏`MONITOR_PORT`), `server/console/monitor.py:656` (השרת פותח את החיבור); `deploy/nftables-rules.sh:135-136` (הדפדפן דרך פורט הקונסולה); `server/system/health.py:653-666` |
 | ‏`4011` לא בגרסה 1 | `server/system/health.py:632-645` |
-| ‏`8082` הוסר | `server/app.py:660`, `server/agent/kiosk.py:3` (‏#1247) |
+| ‏מאזין הקיוסק הוסר | `server/app.py:660`, `server/agent/kiosk.py:3` (‏#1247) |
 | חומת האש על השרת: input drop, ‏output accept, ‏forward drop | `deploy/nftables-rules.sh:209-237` |
 
 ## מתגים, DHCP relay ורשת (פרקים 2, 4, 5)
@@ -145,11 +145,11 @@
 
 | מה | מקור |
 |---|---|
-| פורטי המולטיקאסט: `--portbase` (ברירת מחדל 9000, ו-`portbase+1`), `--interface`, בלי `--mcast-data-address` ובלי `--ttl` | `server/rounds/sender.py` (`command_for`, `DEFAULT_PORTBASE`) |
+| פורטי המולטיקאסט: portbase+2 (נתונים) ו-portbase+3 (משוב), ‏portbase ברירת מחדל: `chunkctx.PRODUCTION_PORTBASE` (‏7713 פחות 2); הכרטיס `--iface` | `server/rounds/chunksend.py` (`_command`, `PORT_OFFSET`); `server/rounds/chunkctx.py` (`DEFAULT_PORTBASE`) |
 | זרם מולטיקאסט אחד בכל המערכת | `server/rounds/sessions.py:54` |
 | WoL: UDP 9, broadcast `255.255.255.255`, מוצמד לכרטיס ההפצה | `server/net/wol.py` (`WOL_PORT`, `broadcast_sender`) |
 | אין IGMP querier בשרת (Issues #1543, #1972) | חיפוש `querier` ב-`server/`, `agent/` — אין תוצאות |
-| ערוץ הבקרה של udpcast ו-כתובת הקבוצה הנגזרת | דף man של `udp-sender` (Debian); לא נקבע בקוד |
+| כתובת הקבוצה | `server/rounds/chunksend.py` (‏`GROUP`) — קבועה בקוד |
 | TCN, תקלות DHCP snooping, EEE, duplex, LACP | `C:\ImageCtl-Lab\evening-1015
 esearch-new-failures-1022.md` (N01, N02, N05, N07, N09, N28) |
 | ~106MB/s, 1G, 10GbE בחדר השיכפולים | `docs/architecture/imagesrv-spec.md` סעיף 6 ושורה 351 |

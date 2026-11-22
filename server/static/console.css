@@ -1121,10 +1121,6 @@ th,.table th,.page .dg th{letter-spacing:.02em}
 .page .note .tech code{display:block;margin-top:4px;padding:6px 8px;border-radius:var(--rp);background:var(--surface);font-family:var(--font-mono);font-size:var(--t-xs);white-space:pre-wrap;overflow-wrap:anywhere;text-align:start;color:var(--ink)}
 
 
-/* שורת הסטטוס: הנקודה נגזרת מ-/health (ביקורת 10/10) — ירוק רק כשהבדיקה אמרה "תקין". */
-.statusbar-item.svc-warn i{background:var(--clr-warning)}
-.statusbar-item.svc-err i{background:var(--clr-danger)}
-.statusbar-item.svc-unk i,.statusbar-item.svc-off i{background:var(--led-idle)}
 
 /* ביקורת 10/10: המגירה נגמרה ב-bottom:0, ושורת המשימות (dock) + שורת הסטטוס, שהן מעליה, כיסו את 56 הפיקסלים
    התחתונים שלה — כולל פס הפעולות (שינוי שם / העבר / מחיקה) בפרטי אימג'. עכשיו היא נגמרת מעל ה-dock. */
@@ -1276,8 +1272,8 @@ th,.table th,.page .dg th{letter-spacing:.02em}
 *::-webkit-scrollbar{display:none;width:0;height:0}
 
 /* ---------- שלב 1: שלד — שורה אחת למשימות ולסטטוס (המוקאפ המאושר) ----------
-   .statusbar ישב מתחת ל-dock כשורה נפרדת בגובה 22px; עכשיו הוא בתוך ה-dock, בקצה ההפוך מ"משימות":
-   גרסה · TLS · Multicast · PXE · API. ה-dock הוא חומר מעבר-אור (apple-design 12): התוכן נגלל מתחתיו. */
+   .statusbar ישב מתחת ל-dock כשורה נפרדת בגובה 22px; עכשיו הוא בתוך ה-dock, בקצה ההפוך מ"משימות".
+   ‏#3967 (נדב 21/11): API/PXE/Multicast ו-TLS יצאו ממנו — נשארה רק הגרסה. ה-dock הוא חומר מעבר-אור (apple-design 12): התוכן נגלל מתחתיו. */
 .task-dock{bottom:0;height:34px;background:var(--mat);-webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);box-shadow:none}
 .task-dock .statusbar{height:100%;background:none;border:0;box-shadow:none;padding:3px 14px;margin-inline-start:auto;justify-content:flex-end;flex:none}
 .task-panel{bottom:34px}
@@ -2298,3 +2294,41 @@ body.tasks-open .scroll{padding-block-end:calc(44px + var(--task-h,220px))}
 .page .dg-bar .seg{flex:none}
 .page .dg-bar .grow{flex:1;min-width:180px}
 .page .empty .eic svg{width:22px;height:22px}
+
+/* ---------- #3978 (אפשרות א, נדב 21/11): כרטיס "מצב הרשת" בחדר המשכפלים — המוקאפ m3978-chunk-stats.html ---------- */
+.page .netc .nv{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.page .netc .nv b{font-size:var(--t-md);letter-spacing:-.01em}
+.page .netc .nv .tx{color:var(--clr-muted);font-size:var(--t-base)}
+.page .netc .kpis{margin-bottom:14px}
+.page .netc details{border-top:1px solid var(--clr-row-border);padding-top:10px}
+.page .netc summary{cursor:pointer;font-size:var(--t-sm);font-weight:600;color:var(--clr-action-fg);list-style:none;padding:4px 0}
+.page .netc summary::-webkit-details-marker{display:none}
+.page .netc summary::before{content:"◂ ";display:inline-block;transition:transform .2s ease}
+.page .netc details[open] summary::before{transform:rotate(-90deg)}
+.page .netc summary:focus-visible{outline:2px solid var(--clr-action);outline-offset:2px;border-radius:4px}
+.page .netc .kv{grid-template-columns:minmax(170px,240px) minmax(0,1fr);gap:0;margin-top:6px;align-items:stretch}
+.page .netc .kv .k,.page .netc .kv .v{border-bottom:1px solid var(--clr-row-border);padding:8px 0}
+.page .netc .kv small{display:block;margin-top:2px;color:var(--clr-muted);font-size:var(--t-xs)}
+.page .netc .wait{color:var(--clr-muted);font-size:var(--t-base);padding:4px 0;margin:0;display:flex;align-items:center;gap:6px}
+/* ---------- #3887: דף "שירותים" (m3887-services.html, מאושר 20/11) ----------
+   מתג כחול (--clr-action), "לא ידוע" במסגרת מקווקוות ולא אפור של "כבוי", "הסבב צריך" בכחול רך. */
+.svc-page .dg td{vertical-align:middle}
+.svc-page .dg th:nth-child(3),.svc-page .dg td:nth-child(3),.svc-page .dg th:nth-child(5),.svc-page .dg td:nth-child(5),
+.svc-page .dg th:nth-child(6),.svc-page .dg td:nth-child(6){text-align:center;white-space:nowrap}
+.svc-page .dg td .nm{display:block}
+.svc-page .dg td .pill + .sub{margin-top:3px}
+.svc-page .pill.off{color:var(--clr-muted)}
+.svc-page .pill.unk{color:var(--clr-muted);border-style:dashed}
+.svc-page .pill.need{color:var(--clr-action-fg);border-color:var(--clr-action);background:var(--clr-action-soft)}
+.svc-page tr.svc-flash td{background:var(--clr-warning-soft)}
+.svc-tg{display:inline-block;position:relative;width:44px;height:24px;border:0;padding:0;border-radius:20px;background:var(--clr-border);vertical-align:middle;cursor:pointer}
+.svc-tg::after{content:"";position:absolute;top:2px;inset-inline-end:2px;width:20px;height:20px;border-radius:50%;background:var(--clr-surface);box-shadow:0 1px 2px var(--shadow-strong);transition:inset-inline-end var(--dur-fast,.15s) ease}
+.svc-tg.on{background:var(--clr-action)}
+.svc-tg.on::after{inset-inline-end:22px}
+.svc-tg:disabled{opacity:.45;cursor:default}
+.svc-tg:focus-visible,.svc-ic:focus-visible{outline:2px solid var(--clr-action);outline-offset:2px}
+.svc-ic{width:32px;height:32px;display:inline-grid;place-items:center;border:1px solid transparent;border-radius:6px;color:var(--clr-muted);background:transparent;cursor:pointer}
+.svc-ic:hover{background:var(--clr-hover);color:var(--clr-text)}
+.svc-ic .ui-icon{width:16px;height:16px}
+.svc-legend{color:var(--clr-muted);font-size:var(--t-sm);margin:2px 0 0}
+@media (prefers-reduced-motion:reduce){.svc-tg::after{transition:none}}

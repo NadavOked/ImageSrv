@@ -95,10 +95,11 @@ def test_a_vm_leftover_that_stays_is_said(tmp_path, caplog, monkeypatch):
 
 
 def test_an_unreadable_sender_log_is_said(tmp_path, caplog):
-    from server.rounds.sender import sender_log_tail
-    with caplog.at_level(logging.WARNING, logger="imagesrv.sender"):
-        assert sender_log_tail(tmp_path / "no-such.log") == ""
-    assert "udp-sender log" in caplog.text and "unreadable" in caplog.text, caplog.text
+    """#3173: the sender is `chunkcast send`, and its log is `chunklog`'s."""
+    from server.rounds.chunklog import log_tail
+    with caplog.at_level(logging.WARNING, logger="imagesrv.chunklog"):
+        assert log_tail(tmp_path / "no-such.log") == ""
+    assert "chunkcast send log" in caplog.text and "unreadable" in caplog.text, caplog.text
 
 
 # --- A-NET-25: the interserver listener ----------------------------------------------

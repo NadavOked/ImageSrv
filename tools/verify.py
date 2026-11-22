@@ -46,7 +46,7 @@ GROUPS: dict[str, list[str]] = {
         "tests/test_wol.py", "tests/test_server_streams.py",
         "tests/test_concurrency.py",
     ],
-    "שידור ו-fanout": ["tests/test_sender.py", "tests/test_fanout.py"],
+    "שידור ו-fanout": ["tests/test_chunksend_2533.py", "tests/test_fanout.py"],
     "אתחול, VLAN ורג'יסטרי": [
         "tests/test_boot_http.py", "tests/test_boot_loop.py",
         "tests/test_hello_vlan.py", "tests/test_hivewrite.py",

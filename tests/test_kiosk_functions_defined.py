@@ -169,9 +169,10 @@ def kiosk_files(lib: Path = LIB) -> list[str]:
     tools = lib / "tools.sh"
     if "tools.sh" in loaded:
         text = tools.read_text(encoding="utf-8")
-        assert "toolbins.sh" in text and "/tools_*.sh" in text, \
-            "tools_load no longer pulls toolbins.sh + tools_*.sh -- update kiosk_files()"
-        files += ["toolbins.sh", *sorted(p.name for p in lib_files(lib) if p.match("tools_*.sh"))]
+        assert "toolbins.sh" in text and "tooldest.sh" in text and "/tools_*.sh" in text, \
+            "tools_load no longer pulls toolbins.sh + tooldest.sh + tools_*.sh -- update kiosk_files()"
+        files += ["toolbins.sh", "tooldest.sh",   # #2804
+                  *sorted(p.name for p in lib_files(lib) if p.match("tools_*.sh"))]
     return list(dict.fromkeys(files))
 
 

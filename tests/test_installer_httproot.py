@@ -73,13 +73,13 @@ def parsed_boot_dir(http_root: str, role: str = "standalone") -> str:
     storage = (
         template
         .replace("$HTTP_ROOT", http_root)
-        .replace("$PRIMARY_URL", "http://10.0.0.2:8080")
+        .replace("$PRIMARY_URL", "http://10.0.0.2:7712")
     )
     exec_line = exec_start_line(UNIT.read_text(encoding="utf-8"))
     assert "$IMAGESRV_STORAGE_ARGS" in exec_line, exec_line
     expanded = (
         exec_line
-        .replace("${IMAGESRV_URL}", "http://10.44.12.10:8080")
+        .replace("${IMAGESRV_URL}", "http://10.44.12.10:7712")
         .replace("$IMAGESRV_STORAGE_ARGS", storage)
     )
     parts = expanded.split()
@@ -99,7 +99,7 @@ def test_the_default_http_root_still_serves_from_the_hardcoded_path():
     הצדדים כבר היו קשיחים על /srv/imagesrv/boot."""
     assert parsed_boot_dir(DEFAULT_ROOT) == DEFAULT_ROOT
     parser = build_parser()
-    args = parser.parse_args(["--server-url", "http://10.44.12.10:8080"])
+    args = parser.parse_args(["--server-url", "http://10.44.12.10:7712"])
     assert args.boot_dir == DEFAULT_ROOT
 
 

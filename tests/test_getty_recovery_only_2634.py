@@ -106,7 +106,7 @@ def test_the_update_installs_it_on_a_server_installed_before(tmp_path):
     fake_tool(bindir, "systemctl", f'''
 case "$*" in
   daemon-reload) if [ -f "{posix(installed)}" ]; then echo yes; else echo no; fi >> "{posix(seen)}" ;;
-  show*) echo "IMAGESRV_URL=http://10.10.10.8:8080 X=y" ;;
+  show*) echo "IMAGESRV_URL=http://10.10.10.8:7712 X=y" ;;
 esac
 exit 0''')
     fake_tool(bindir, "curl", "exit 0")

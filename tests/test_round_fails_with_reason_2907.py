@@ -145,7 +145,7 @@ def test_a_classroom_broadcast_orphaned_by_a_restart_is_failed_with_a_reason(
     ctx.conn.execute("INSERT INTO session_members (session_id, mac, state, updated_at)"
                      " VALUES (?, ?, 'writing', 'x')", (sid, mac))
     ctx.conn.commit()
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
     second = _boot(tmp_path, monkeypatch, seed=False)
     ctx = second["ctx"]
@@ -154,4 +154,4 @@ def test_a_classroom_broadcast_orphaned_by_a_restart_is_failed_with_a_reason(
     assert _row(ctx, "SELECT state FROM session_members WHERE session_id = ?", sid)["state"] == "failed"
     shown = ctx.store.latest_failed_broadcast()
     assert shown is not None and shown["id"] == sid
-    ctx.sender.stop()
+    ctx.chunk.stop()

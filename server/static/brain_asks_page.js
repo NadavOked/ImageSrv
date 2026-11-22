@@ -113,12 +113,12 @@ function brainAsksPage(tab = 0) {
   const crumbs = [{ label: "שרת אימג'ים", onclick: "selectPageById('home')" }, { label: "שאלות המוח" }];
   const actions = `<button class="btn" onclick="refreshPage()">${uiIcon("refresh")} רענון</button>`;
   if (!BRAIN_ASKS) {   // לא נקרא אף פעם: "לא הצלחנו לקרוא", לא "אין שאלות" (עיקרון 5)
-    const header = UI.objHeader({ crumbs, icon: "help", name: "שאלות המוח", sub: "לא נקרא", pill: UI.pill("err", "לא נקרא"), actions, compact: true });
+    const header = UI.objHeader({ crumbs, icon: "brain", name: "שאלות המוח", sub: "לא נקרא", pill: UI.pill("err", "לא נקרא"), actions, compact: true });
     return `<div class="page aligned">${header}<div class="body"><div class="c12">${UI.note("err", `לא הצלחנו לקרוא את השאלות מהשרת: ${esc(BRAIN_ASKS_ERR)}. ניסיון חוזר בעוד <bdi dir="ltr">10</bdi> שניות.`)}</div></div></div>`;
   }
   const n = BRAIN_ASKS.open.length, hist = BRAIN_ASKS.history;
   const sub = n ? `${n} ממתינות לתשובה · בלי תשובה מתבצעת ברירת המחדל הבטוחה` : "המוח שואל רק כשההחלטה צריכה להיות של אדם";
-  const header = UI.objHeader({ crumbs, icon: "help", name: "שאלות המוח", sub, pill: n ? UI.pill("warn", `${n} ממתינות`) : UI.pill("", "אין שאלות פתוחות"),
+  const header = UI.objHeader({ crumbs, icon: "brain", name: "שאלות המוח", sub, pill: n ? UI.pill("warn", `${n} ממתינות`) : UI.pill("", "אין שאלות פתוחות"),
     actions, compact: true, tabs: [["פתוחות", String(n)], hist ? ["היסטוריה", String(hist.total)] : "היסטוריה"], tab });
   const stale = BRAIN_ASKS_ERR
     ? `<div class="c12">${UI.note("err", `לא הצלחנו לקרוא את השאלות מהשרת. מוצג מה שנקרא לפני ${brainAgo(Date.now() - BRAIN_ASKS_OK_AT)}, והרשימה אינה בהכרח עדכנית. ניסיון חוזר בעוד <bdi dir="ltr">10</bdi> שניות.`)}</div>` : "";

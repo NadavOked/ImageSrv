@@ -3,10 +3,10 @@
 
 tools_erase_list() {
     cat <<'EOF'
-nvme-sanitize|disk|מחיקה מלאה בבקר NVMe (Block Erase)|destroy|/dev/nvmeXn1
-nvme-sanitize-status|disk|מצב מחיקת NVMe|ro|/dev/nvmeXnY
-zap-partition-table|disk|מחיקת טבלת מחיצות GPT/MBR|destroy|/dev/sdX
-nwipe|disk|מחיקה בשלושה מעברים ואימות (DoD short)|destroy|/dev/sdX
+nvme-sanitize|wipe|מחיקה מלאה בבקר NVMe (Block Erase)|destroy|disk:דיסק NVMe למחיקה|מריץ sanitize מלא בבקר, כשמדיניות המכללה דורשת מחיקה ברמת החומרה.
+nvme-sanitize-status|wipe|מצב מחיקת NVMe|ro|disk:דיסק NVMe|מציג אם פעולת sanitize הסתיימה, אחרי מחיקה ולפני שמחזירים את המחשב.
+zap-partition-table|wipe|מחיקת טבלת מחיצות GPT/MBR|destroy|disk:הדיסק למחיקה|מוחק את טבלת המחיצות לגמרי, כשרוצים שהדיסק "ייראה ריק" בלי דריסת כל הבלוקים.
+nwipe|wipe|מחיקה בשלושה מעברים ואימות (DoD short)|destroy|disk:הדיסק למחיקה|מחיקה בסגנון DBAN (DoD/Gutmann) לדיסק מכני כשמדיניות דורשת כמה מעברים.
 EOF
 }
 

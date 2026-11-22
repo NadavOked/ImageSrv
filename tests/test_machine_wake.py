@@ -45,7 +45,7 @@ def server(tmp_path: Path, images_root):
     from server.app import create_app
 
     woken: list[bytes] = []
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      wol_send=woken.append)
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
@@ -66,7 +66,7 @@ def server(tmp_path: Path, images_root):
             "mac": mac, "name": name, "group_id": group}).status_code == 200
     yield {"app": app, "admin": admin, "deploy": deploy, "anon": TestClient(app),
            "woken": woken, "ctx": ctx}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def journal_rows(server, event: str) -> list:
@@ -184,7 +184,7 @@ def broken_server(tmp_path: Path, images_root):
         # OSError גולמי מקבל משפט קבוע — ראה test_a_raw_oserror_is_not_shown_raw.
         raise WakeRefused("no-carrier: אין carrier על eth1")
 
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      wol_send=dead)
     ctx = app.state.ctx
     # #1073: WoL למכונה הוא פעולת קונסולה — admin (ל-deploy אין קונסולה).
@@ -198,7 +198,7 @@ def broken_server(tmp_path: Path, images_root):
         " VALUES (?, 'INS', 'grp_BUILD', '2026-09-17T00:00:00Z')", (BUILD,))
     ctx.conn.commit()
     yield {"admin": admin, "ctx": ctx}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def test_a_failed_send_is_visible_with_its_reason_and_in_the_journal(broken_server):
@@ -225,7 +225,7 @@ def test_a_raw_oserror_is_not_shown_raw(tmp_path: Path, images_root):
     def dead(packet: bytes) -> None:
         raise OSError("raw-kernel-text /proc/secret")
 
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      wol_send=dead)
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test",
@@ -241,7 +241,7 @@ def test_a_raw_oserror_is_not_shown_raw(tmp_path: Path, images_root):
         assert body["failed"] == 1 and body["reasons"] == [SEND_FAILED]
         assert "raw-kernel-text" not in str(body)
     finally:
-        ctx.sender.stop()
+        ctx.chunk.stop()
 
 
 # --- קבוצה: grp_BUILD ----------------------------------------------------------

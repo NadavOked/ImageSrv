@@ -276,7 +276,7 @@ def test_the_server_sweeps_when_it_comes_up(tmp_path, images_root):
     make_area(images_root, ".capture-tsk_0930", size=7168)
     make_area(images_root, ".capture-tsk_live")
 
-    app = create_app(data_dir, images_root, "http://10.44.12.10:8080")
+    app = create_app(data_dir, images_root, "http://10.44.12.10:7712")
 
     assert not (images_root / ".capture-tsk_0930").exists()
     assert (images_root / ".capture-tsk_live" / "p1.esp.pcl.zst").is_file()

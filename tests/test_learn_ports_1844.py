@@ -18,6 +18,7 @@ from server.rounds import room_precheck
 from server.system import housekeeping
 from server.learn import ports as learn_ports
 
+from fakesend import wait_for
 from test_server_room import (CLONER1, CLONER2, cloner_hello, heartbeat, room,  # noqa: F401
                               room_body, room_server)
 
@@ -176,6 +177,9 @@ def test_the_room_learns_from_finished_waves_and_tells_the_next_one(room_server)
                  "crc_delta": 0},
             ]}).status_code == 200
         heartbeat(room_server)
+        # #3173: המגירות דיווחו `done` לפני שמנוע החתיכות שידר (אף `chunk-pass` לא נשלח): סגירת הגל עוצרת אותו,
+        # והוא יוצא מההמתנה ל-`listening` עד `chunksend.POLL_S` אחר כך. גל שיוצא לפני כן נדחה ("המנוע עדיין משדר").
+        assert wait_for(lambda: ctx.chunk._thread is None or not ctx.chunk._thread.is_alive())
     got = {(r["port"], r["serial"]): r["crc_delta"]
            for r in ctx.conn.execute("SELECT * FROM port_history")}
     assert got == {(1, "S1"): 7, (2, "S2"): 0, (1, "S3"): 7, (2, "S4"): 0}, got

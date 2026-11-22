@@ -27,8 +27,8 @@ from pathlib import Path
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
 from test_final_report import cut_function
-from test_restore_evidence import log_of, rc_of
-from test_writemark_1798 import MARK, _box, _fail, _names, _state
+from test_restore_evidence import log_of
+from test_writemark_1798 import MARK, _box, _names, _state
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -147,19 +147,6 @@ def _run_path(tmp_path: Path, call: str, *, release_fails: bool = False) -> list
                        stdin=subprocess.DEVNULL, timeout=120)
     trace = run / "trace"
     return trace.read_text(encoding="utf-8").splitlines() if trace.exists() else [out.read_text()]
-
-
-def test_the_class_station_releases_the_mark_after_the_name_and_the_drivers(tmp_path):
-    trace = _run_path(tmp_path, "do_restore")
-    assert trace == ["RESTORE hold=1", "NAMED sda", "DRIVERS sda", "RELEASE sda", "REPORT done"], trace
-
-
-def test_the_class_station_whose_mark_stays_is_failed_and_does_not_report_done(tmp_path):
-    trace = _run_path(tmp_path, "do_restore", release_fails=True)
-    assert trace[:4] == ["RESTORE hold=1", "NAMED sda", "DRIVERS sda", "RELEASE sda"], trace
-    assert not any(t.startswith("REPORT") for t in trace), trace
-    assert any(t.startswith("HOLD ") for t in trace), trace
-    assert (tmp_path / "run" / "state").read_text().strip() == "failed"
 
 
 def test_the_cloner_releases_each_drawer_after_its_drivers(tmp_path):

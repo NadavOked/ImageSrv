@@ -21,13 +21,16 @@ import json
 import logging
 import secrets
 import sqlite3
+import threading
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
 from server.console import auth
-from server.rounds import drawer_cancel, drive_rates, prodline, room_drivers, room_names, room_precheck
+from server.core import unreadable
+from server.rounds import drawer_cancel, drive_rates, prodline, room_drivers, room_names, room_precheck, round_cloners
+from server.rounds import room_stream   # #3173/#3978: the stream rate and the network card, from the chunk engine
 from server.library import drivers, minfree
 from server.agent import registry, reports
 from server.disks import disk_events, disk_failures, disk_rule, disk_sets, drawer_slots, slot_names
@@ -54,7 +57,7 @@ from server.rounds.sessions import SessionError, SessionStore, SessionSuperseded
 #: #2594: חישובי המצב הטהורים של הסבב יושבים ב-`room_state` ומיובאים לכאן בחזרה,
 #: כך ש-`room.<שם>` ממשיך לעבוד לכל קורא קיים (גם בטסטים).
 from server.rounds.room_state import (  # noqa: F401 -- re-export (#2594)
-    _cancelled, _closed, _disks, _expected, _fresh_disks, _no_disk_count, _port,
+    _cancelled, _closed, _disks, _expected, _fresh_disks, _no_disk_count, _port, active_rounds, round_of_mac,
     _red, _remaining, _roster, _selected_ports, _skipped, _unconfirmed, _written,
     active_round, fresh_serials, has_fresh_drawers, ready_drives, red_drives,
     shown_disks, target_disks, target_ports, visible_round, wave_drives,
@@ -71,6 +74,10 @@ log = logging.getLogger("imagesrv.room")
 CLONERS_GROUP = registry.CLONERS_GROUP
 #: #1554: חברי החדר — כל קבוצה בתפקיד cloner (ראו registry.ROOM_GROUPS).
 _IN_ROOM = f"group_id IN {registry.ROOM_GROUPS}"
+#: #3898 (שלב 1): האם מותר סבב שני בזמן שסבב אחר פעיל. **כבוי, במכוון, עד שלב 3**: חריץ השידור (`one_active_broadcast`) והמנועים
+#: (`ctx.sender`, `ctx.chunk`) עדיין יחידים, וגל שני שיוצא בזמן שהראשון משדר היה נכשל בשמו ("המנוע עדיין משדר").
+#: כבוי = ההתנהגות כמו לפני #3898, בית-בבית. הבלעדיות של המשכפל (`round_cloners`) נאכפת בשני המצבים.
+PARALLEL_ROUNDS = False
 #: מי רשאי להפעיל את חדר השיכפולים. רשימת-היתר מפורשת, ולא "מחובר".
 #:
 #: אותה הכרעה כמו ``station.ROUND_OPENER_ROLES`` (#94), ובאותו נימוק:
@@ -285,8 +292,8 @@ def drawer_list(conn: sqlite3.Connection, mac: str, written: set[str],
             # #552: המפעיל ראה "0 of 5 written" במשך 75 דקות. המונה
             # הזה סופר מגירות ש**סיימו**, ולכן הוא 0 גם כשהכול רץ מצוין
             # וגם כשהכול תקוע — ואי-אפשר להבחין. הבייטים הם ההבחנה.
-            "bytes_written": _int(target.get("bytes_written")),
-            "bytes_total": _int(target.get("bytes_total")),
+            "bytes_written": _int(target.get("bytes_written"), "bytes_written"),
+            "bytes_total": _int(target.get("bytes_total"), "bytes_total"),
             "stalled_s": _stalled_s(target.get("moved_at")),
             # #410: קצב ו-ETA — מהבייטים שדווחו, לא מהערכה. None = לא נמדד.
             **_pace(target, started_at),
@@ -315,7 +322,7 @@ def drawer_list(conn: sqlite3.Connection, mac: str, written: set[str],
             "sata_issues": _sata_issues(disk.get("sata_issues")),
             # #710: הגודל שהסוכן דיווח (sysinfo.sh), כדי שהגריד יראה קיבולת
             # אמיתית לכל דיסק ולא 0. חסר => 0, לא נחסם (עיקרון 5).
-            "size_bytes": _int(disk.get("size_bytes")),
+            "size_bytes": _int(disk.get("size_bytes"), "size_bytes"),
             # #432: קישור ה-SATA (מהירות/מקסימום/מצב) ועליית מונה ה-CRC מאז
             # הסבב הקודם של הדיסק. None/`unknown` = לא נקרא — לא "תקין".
             **room_precheck.drawer_fields(conn, disk, mac),
@@ -350,10 +357,19 @@ def _write_mbps(target: dict) -> int | None:
     return mbps if isinstance(mbps, int) and not isinstance(mbps, bool) and mbps > 0 else None
 
 
-def _int(value) -> int:
+_BAD_INT_SEEN: set[tuple[str, str]] = set()
+
+
+def _int(value, field: str = "") -> int:
+    """A reported number. Missing (None) is 0 as before; a value that is there but is not a
+    number is still 0 for the screen, but it is no longer silent (#3129, A-DB-08): one
+    warning per field and value, so a broken agent report shows in the server log."""
     try:
         return int(value)
     except (TypeError, ValueError):
+        if value is not None and len(_BAD_INT_SEEN) < 256 and (field, repr(value)) not in _BAD_INT_SEEN:
+            _BAD_INT_SEEN.add((field, repr(value)))
+            log.warning("report field %s is not a number, counted as 0: %r", field or "?", value)
         return 0
 
 
@@ -377,8 +393,8 @@ def _pace(target: dict, started_at: str | None) -> dict:
     if (not isinstance(rate, int) or isinstance(rate, bool) or rate <= 0
             or age is None or age > RATE_STALE_S):
         return none
-    written = _int(target.get("bytes_written"))
-    total = _int(target.get("bytes_total"))
+    written = _int(target.get("bytes_written"), "bytes_written")
+    total = _int(target.get("bytes_total"), "bytes_total")
     avg = _average_bps(target, written)
     eta = int((total - written) / avg) if total > written and avg else None
     return {"rate_bps": int(rate), "eta_s": eta}
@@ -577,7 +593,7 @@ def disk_floor(conn: sqlite3.Connection, selected: list[dict] | None = None
             port = port if isinstance(port, int) and not isinstance(port, bool) else None
             if chosen is not None and port not in chosen[row["mac"]]:
                 continue
-            size = _int(disk.get("size_bytes"))
+            size = _int(disk.get("size_bytes"), "size_bytes")
             if size <= 0:
                 continue
             if floor is None or size < floor["size_bytes"]:
@@ -751,9 +767,21 @@ def library_packages(ctx) -> list[dict]:
     return list(ctx.drivers.scan().values()) if ctx.drivers is not None else []
 
 
+#: #3898: פתיחת סבב אחת בכל פעם. הבדיקה "המשכפל תפוס?" והכתיבה של הסבב החדש הן שני צעדים, ושני מפעילים שפותחים יחד על אותו
+#: משכפל היו עוברים את שתי הבדיקות; בתוך הנעילה, הבדיקה של השני רואה את הסבב של הראשון. פתיחה נדירה, ולכן נעילה גסה.
+_OPEN_LOCK = threading.Lock()
+
+
 def open_round(ctx, image_id: str, target_drives: int, user: str,
                target_slots=None, expand_partition=None, driver_models=None,
                hostnames=None) -> dict:
+    with _OPEN_LOCK:
+        return _open_round(ctx, image_id, target_drives, user, target_slots, expand_partition, driver_models, hostnames)
+
+
+def _open_round(ctx, image_id: str, target_drives: int, user: str,
+                target_slots=None, expand_partition=None, driver_models=None,
+                hostnames=None) -> dict:
     manifest = ctx.library.get(image_id)
     if manifest is None:
         raise RoundRefusal("אימג' לא קיים בספרייה")
@@ -776,12 +804,17 @@ def open_round(ctx, image_id: str, target_drives: int, user: str,
     ).fetchone()["n"]
     if machines == 0:
         raise RoundRefusal("אין מחשבי שיכפול רשומים — רשמו אותם בקונסולה קודם")
-    if active_round(ctx.conn) is not None:
+    if active_rounds(ctx.conn) and not PARALLEL_ROUNDS:   # #3898: עד שלב 3 -- כמו תמיד
         raise SessionError("כבר יש סבב חדר פעיל")
 
     # #1410: בחירת דיסקי היעד מפורשת וחובה. מאמתים אותה לפני שנוגעים
     # בשום דבר; אין fallback לכתיבה לכל המגירות.
     selected = _validate_target_slots(ctx.conn, target_slots)
+    # #3898: משכפל בסבב אחד בלבד -- סירוב בשם, לפני שנפתח גל. אטומי מול פותח אחר: כל הפתיחה תחת `_OPEN_LOCK`.
+    taken = round_cloners.busy(ctx.conn, {item["mac"] for item in selected})
+    if taken:
+        mac = sorted(taken)[0]
+        raise SessionError(f"{round_cloners.label(ctx.conn, mac)} כבר בסבב אחר ({round_label(ctx, taken[mac])})")
     selected_count = sum(len(item["ports"]) for item in selected)
     if target_drives < selected_count:
         raise RoundRefusal(
@@ -902,20 +935,16 @@ def close_round(ctx, user: str, confirm_name: str) -> None:
         ).fetchone()
         if wave is not None and wave["state"] in ("open", "running"):
             ctx.store.close(wave["id"], user)
-        # store.close קורא on_closed → sender.stop רק כשהגל עוד open/running.
+        # store.close קורא on_closed → עצירת המנוע רק כשהגל עוד open/running.
         # גל שכבר סגור (או חסר) היה מחזיר ok והמשדר נשאר חי (#439).
         # מזהה הגל מונע מסגירה מאוחרת של כשל ישן לעצור שידור חדש שכבר
         # נפתח בחריץ שהתפנה (#773).
-        left = ctx.sender.stop(round_row["wave_session_id"])
-        # #2533: ומנוע החתיכות, באותה ראיה — גל סגור אינו קורא ל-`on_closed` גם בשבילו.
-        left_chunk = (ctx.chunk.stop(round_row["wave_session_id"])
-                      if ctx.chunk is not None else None)
-        for program, pid in (("udp-sender", left), ("chunkcast send", left_chunk)):
-            if pid is not None:
-                who = f"PID {pid}" if pid > 0 else "לא הצלחנו לוודא שהוא מת"
-                raise SessionError(
-                    f"{program} עדיין רץ ({who}) אחרי ניסיון העצירה — הסבב לא נסגר"
-                )
+        pid = ctx.chunk.stop(round_row["wave_session_id"]) if ctx.chunk is not None else None
+        if pid is not None:
+            who = f"PID {pid}" if pid > 0 else "לא הצלחנו לוודא שהוא מת"
+            raise SessionError(
+                f"chunkcast send עדיין רץ ({who}) אחרי ניסיון העצירה — הסבב לא נסגר"
+            )
         _settle(ctx.conn)
         with _write_lock, writing(ctx.conn):
             ctx.conn.execute(
@@ -1142,9 +1171,20 @@ def _unseen(conn: sqlite3.Connection, store: SessionStore,
         seen = _iso_or_none(row["last_seen"]) if row else None
         # #2909: משכפל שמחזיק תוצאות (#2031) עוד שולח hello לא-מצטרף — ה-beat של מסכי
         # השיכפול המקומי — ו-`last_seen` הטרי שלו אינו "חזר לתור": הוא לא יצטרף עד "כבה".
-        if seen is None or seen < opened or held.is_held(conn, mac):
+        # #2940: "seen after the opening" is not "still awake": a cloner switched off from the
+        # console (its hold gone) kept a `last_seen` after the opening and was never woken.
+        if seen is None or seen < opened or held.is_held(conn, mac) or _hello_stale(seen):
             unseen.append(mac)
     return unseen
+
+
+def _hello_stale(seen: datetime) -> bool:
+    """#2940: the last hello is older than `AWAKE_SECONDS` (the beat of a cloner that is up is
+    ~10 s). Real time, like `_fresh`: `last_seen` is written with it. A stamp in the future
+    (clock step, #774) is not called stale here -- the clock-jump rules (#1947) own that case."""
+    if seen.tzinfo is None:
+        seen = seen.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - seen > timedelta(seconds=AWAKE_SECONDS)
 
 
 def _rewake(conn: sqlite3.Connection, store: SessionStore,
@@ -1592,6 +1632,7 @@ def _held_elsewhere(conn: sqlite3.Connection, round_row: sqlite3.Row,
         try:
             disks = json.loads(row["disks_json"])
         except (TypeError, ValueError):
+            unreadable.said("net_devices.disks_json", row["disks_json"])    # #3129: a corrupt row is said
             continue
         held = [d for d in disks if isinstance(d, dict) and d.get("serial") == serial]             if isinstance(disks, list) else []
         if not held:
@@ -2374,11 +2415,9 @@ def status_view(ctx) -> dict:
             "source": _direct().source_view(ctx.conn, round_row),
             # #410: זמן, קצב והערכת סיום של הגל — null כשאין מה למדוד.
             **_wave_pace(started_at, machines, forecast),
-            # #989: מה ש-udp-sender של השרת מדפיס — קצב הזרם ובלוקים ששודרו
-            # שוב. null כשהשרת אינו המשדר (מחשב בנייה, #715) או לא נמדד.
-            **(ctx.sender.stream_stats(round_row["wave_session_id"])
-               if ctx.sender is not None and round_row["wave_session_id"]
-               else {"throughput_bps": None, "loss_blocks": None}),
+            # #989/#3173/#3978: קצב הזרם וכרטיס "מצב הרשת" (`network`) -- ממנוע החתיכות: הגל שהוא מחזיק עכשיו, ואחרת
+            # הגל האחרון של הסבב שנרשם (`room_stream`). null = "לא נמדד" (עיקרון 5), לא 0.
+            **room_stream.view(ctx.conn, ctx.chunk, round_row),
             # #447: באיזו תקרה הגל יוצא (או יצא), ולפי איזה כונן.
             "wave_rate": _wave_rate(ctx, round_row, wave),
             # #1843: כמה זמן הגל צפוי לקחת לפי הגלים הקודמים של אותם מחשבי שיכפול
@@ -2441,10 +2480,10 @@ def _wave_rate(ctx, round_row: sqlite3.Row, wave: sqlite3.Row | None) -> dict | 
                 "projected": False}
     if wave is None or wave["state"] != "open" or round_row["state"] != "active":
         return None
-    ceiling = ctx.sender.max_bitrate if ctx.sender is not None else None
+    ceiling = ctx.chunk.max_bitrate if ctx.chunk is not None else None
     # כרטיס ההפצה (15/10) — רק כשהשרת הוא המשדר; גל ישיר יוצא מהכרטיס של
     # מחשב הבנייה.
-    link = ctx.sender.link() if ctx.sender is not None and not direct else None
+    link = ctx.chunk.link() if ctx.chunk is not None and not direct else None
     return {**drive_rates.choose(ctx.conn, wave_drives(ctx.conn, session_id), ceiling,
                                  session_id, direct=direct, link=link),
             "projected": True}
@@ -2524,6 +2563,11 @@ def _wake_targets(conn: sqlite3.Connection, macs) -> set[str]:
     return chosen
 
 
+def _suggest():
+    from server.rounds import suggest            # noqa: PLC0415 -- suggest מייבא את room
+    return suggest
+
+
 def _interrupt():
     from server.rounds import interrupt              # noqa: PLC0415 -- interrupt imports room
     return interrupt
@@ -2569,6 +2613,14 @@ def create_room_router(ctx, wake=None, origin: str = "console") -> APIRouter:
         """#1269: הדגמים שיש להם חבילת דרייברים בספרייה — הרשימה שממנה
         המפעיל בוחר. רק מכללי הדגם של המניפסטים (`drivers.models`)."""
         return drivers.models(library_packages(ctx))
+
+    @router.get("/suggest")
+    def suggest_round(target_drives: int, user=Depends(current_user)):
+        """#3897: אילו משכפלים ומגירות השרת מציע ל-N דיסקים. קריאה בלבד -- לא פותחת ולא מעירה דבר."""
+        try:
+            return _suggest().suggest(ctx, target_drives)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
 
     @router.post("")
     async def open_(request: Request, user=Depends(room_operator)):

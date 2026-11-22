@@ -238,7 +238,7 @@ def test_the_upgrade_marks_its_stages_and_leaves_no_marker_when_done(tmp_path, b
                              'rev-parse) echo "commit-of-$FAKE_TAG" ;; rev-list) echo "commit-of-$4" ;; esac')
     fake_tool(bindir, "systemctl",
               f'case "$1" in restart) [ "$2" != imagesrv-server ] || cp "{posix(marker)}" "{posix(seen_at_restart)}" ;; '
-              'show) echo "IMAGESRV_URL=http://10.10.10.8:8080 X=y" ;; esac')
+              'show) echo "IMAGESRV_URL=http://10.10.10.8:7712 X=y" ;; esac')
     proc = _run_upgrade(tmp_path, bindir, repo, data)
     assert proc.returncode == 0, proc.stderr + (tmp_path / "upgrade.log").read_text(encoding="utf-8")
     assert not marker.exists()

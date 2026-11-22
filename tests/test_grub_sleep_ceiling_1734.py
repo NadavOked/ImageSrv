@@ -29,7 +29,7 @@ import pytest
 
 from boot.grub_menu import GrubConfig, render, render_bootstrap
 
-CFG = GrubConfig(server_base="http://10.44.12.10:8080")
+CFG = GrubConfig(server_base="http://10.44.12.10:7712")
 PROMISE = 'echo "Contact IT. This computer will stay powered on."'
 STEPS = 2000          # תקרת הסימולציה: לולאת העצירה אמורה לרוץ לנצח
 

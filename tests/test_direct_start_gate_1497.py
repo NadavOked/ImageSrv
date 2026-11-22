@@ -16,17 +16,19 @@ test_an_unreadable_log_keeps_the_start_ceiling and
 test_direct_send_waits_for_udp_sender_start_evidence fail (killed at
 t=310 / stage=timeout); the ungated and one-shot tests pass on both, which
 is their point: the other callers (capture, drawers, restore) are unchanged.
+
+#3173: udp-sender is gone, and with it the only caller that set the gate (direct_send_one); the
+direct send's waits are the chunk pass's now (directchunk.sh). The gate's own tests stay while
+waits.sh keeps it.
 """
 
 from __future__ import annotations
 
 import subprocess
 
-import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH
-from test_directsend import direct_run
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -119,22 +121,3 @@ def test_gate_variables_are_one_shot(tmp_path):
     out = subprocess.run([BASH, "--posix", "-c", script], capture_output=True,
                          text=True, timeout=10, stdin=subprocess.DEVNULL)
     assert out.stdout.strip().splitlines() == ["killed=310", "result=1 t=310"]
-
-
-def test_direct_send_waits_for_udp_sender_start_evidence(tmp_path):
-    delayed_sender = (
-        '#!/bin/sh\n'
-        'printf "%s\\n" "$@" >> "$UDP_ARGV"\n'
-        'sleep 6\n'
-        'echo "Starting transfer: 0000000"\n'
-        'cat > /dev/null\n'
-        'exit 0\n'
-    )
-    box, run, out = direct_run(
-        tmp_path, env={"WAIT_POLL_S": "1", "WAIT_STREAM_START_S": "20",
-                       "WAIT_STREAM_STALL_S": "2"},
-        udp_sender=delayed_sender, timeout=90,
-    )
-    assert out.strip().endswith("rc=0"), out + (run / "agent.log").read_text(
-        "utf-8", "replace"
-    )

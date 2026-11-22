@@ -35,16 +35,16 @@ from boot.grub_menu import ROLES_WITH_GUI, GrubConfig, render
 #: תצורה שבה שני ה-initramfs זמינים. זה המצב שבו הבחירה בכלל אפשרית,
 #: ולכן זה המצב שבו ההבחנה בין התפקידים נמדדת.
 CFG = GrubConfig(
-    server_base="http://10.44.12.10:8080",
+    server_base="http://10.44.12.10:7712",
     gui_initrd_path="/boot/initrd.img.gui",
 )
 
 #: אותו שרת בדיוק, אבל בלי initramfs גרפי על הדיסק. זה מה ש-`boot/http.py`
 #: מוסר כשהקובץ אינו קיים — None, ולא נתיב שאולי יעבוד.
-CFG_NO_GUI = GrubConfig(server_base="http://10.44.12.10:8080")
+CFG_NO_GUI = GrubConfig(server_base="http://10.44.12.10:7712")
 
-TEXT_INITRD = "initrd (http,10.44.12.10:8080)/boot/initrd.img"
-GUI_INITRD = "initrd (http,10.44.12.10:8080)/boot/initrd.img.gui"
+TEXT_INITRD = "initrd (http,10.44.12.10:7712)/boot/initrd.img"
+GUI_INITRD = "initrd (http,10.44.12.10:7712)/boot/initrd.img.gui"
 
 
 def answer(**overrides) -> dict:
@@ -174,7 +174,7 @@ def test_the_gui_path_never_reaches_the_kernel_command_line():
 def test_the_default_config_has_no_gui_path():
     """ברירת המחדל של `GrubConfig` היא בלי גואי. מי שרוצה אותו מצהיר
     עליו — אחרי שווידא שהקובץ קיים."""
-    assert GrubConfig(server_base="http://10.44.12.10:8080").gui_initrd_path is None
+    assert GrubConfig(server_base="http://10.44.12.10:7712").gui_initrd_path is None
 
 
 @pytest.mark.parametrize("role", ["build", "classroom"])

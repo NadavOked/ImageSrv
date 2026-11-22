@@ -210,6 +210,83 @@ def test_2763_with_answers_the_guard_lets_the_first_boot_go_on(tmp_path):
     assert "PASSED" in r["got"].stdout and r["status"] == [] and r["calls"] == ""
 
 
+# ---------------------------------------------------------------------------
+# #3173 (owner 21/11, "כן, שההתקנה תיכשל"): no chunkcast = no installed server
+# ---------------------------------------------------------------------------
+
+#: gcc at the system boundary, as tools/server-tools-build.sh calls it (`-o <new>`). The REAL build script
+#: runs it and then runs what it wrote: `fail` does not compile, `nolib` writes a binary that does not run
+#: (a missing library: 127), `noversion` says the usage but not `--version`, `ok` behaves like chunkcast.
+FAKE_GCC = r"""#!/bin/sh
+out=""
+while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done
+case "$FAKE_GCC" in
+  fail) echo "agent/chunkcast.c:1:1: error: expected declaration" >&2; exit 1 ;;
+  nolib) printf '#!/bin/sh\necho "chunkcast: error while loading shared libraries: libzstd.so.1" >&2\nexit 127\n' > "$out" ;;
+  noversion) printf '#!/bin/sh\necho "usage: chunkcast send|recv|apply" >&2\nexit 2\n' > "$out" ;;
+  ok) printf '#!/bin/sh\nif [ "$1" = --version ]; then echo "chunkcast 3"; exit 0; fi\necho "usage: chunkcast send|recv|apply" >&2\nexit 2\n' > "$out" ;;
+esac
+chmod 755 "$out"
+"""
+
+
+def _chunkcast_step() -> str:
+    """firstboot.sh's own chunkcast step: from its comment to stage B's header (the same markers before and after)."""
+    code = FIRSTBOOT.read_text(encoding="utf-8")
+    start = code.index("# #2533: chunkcast on the server itself")
+    return code[start:code.index("\n# ----", start)]
+
+
+def _firstboot_chunkcast(tmp_path: Path, mode: str) -> dict:
+    src = tmp_path / "src"
+    (src / "agent" / "blake3").mkdir(parents=True)
+    for name in ("chunkcast.c", "fanout.c", "blake3/blake3_one.c"):
+        (src / "agent" / name).write_text("/* the fake gcc does not read it */\n", encoding="ascii")
+    (src / "tools").mkdir()
+    shutil.copy(REPO / "tools" / "server-tools-build.sh", src / "tools" / "server-tools-build.sh")
+    (tmp_path / "fakecc").mkdir()
+    gcc = tmp_path / "fakecc" / "gcc"
+    gcc.write_text(FAKE_GCC, encoding="ascii", newline="\n")
+    gcc.chmod(0o755)
+    tail = (f'export PATH="$T/fakecc:$PATH" IMAGESRV_SERVER_BIN_DIR="$T/srvbin" FAKE_GCC={mode}\n'
+            + _chunkcast_step() + "\necho AFTER-CHUNKCAST\n")
+    return _firstboot_harness(tmp_path, tail)
+
+
+@pytest.mark.parametrize("mode,reason", [
+    ("fail", "chunkcast did not compile"),
+    ("nolib", "did not run as expected (exit 127)"),
+    ("noversion", "did not answer --version"),
+])
+def test_3173_a_chunkcast_that_was_not_built_or_does_not_run_fails_the_installation(tmp_path, mode, reason):
+    """The real build script, a gcc that fails or writes a binary that does not run: the first boot stops on its own
+    screen (what failed, what it means, what to do) and goes no further -- no DCUI, no "server ready"."""
+    r = _firstboot_chunkcast(tmp_path, mode)
+    assert r["got"].returncode == 1, r["got"].stdout + r["got"].stderr
+    assert "AFTER-CHUNKCAST" not in r["got"].stdout, "the installation went on with a server that cannot send a wave"
+    assert _values(r["status"], "state") == ["chunkcast-failed"], r["status"]
+    assert not (tmp_path / "srvbin" / "chunkcast").exists()
+    assert _values(r["state"], "fail") == ["bad|1|מנוע השידור לא נבנה|first boot failed · chunkcast-failed|server"], r["state"]
+    why = _values(r["state"], "fail_why")[0]
+    assert "chunkcast" in why and "לא יכול לשכפל" in why, why
+    steps = _values(r["state"], "fail_step")
+    assert any("הפעילו את השרת מחדש" in s for s in steps), steps          # what to do: try again
+    assert any("journalctl -u imagesrv-firstboot" in s for s in steps), steps  # where the log is
+    assert not any("תמיכה" in s for s in steps), "#3208: no screen sends the operator to someone else"
+    assert any(s.startswith("השורה ביומן:") and reason in s for s in steps), steps   # the reason, as the script said it
+    assert len(steps) <= 4 and all(len(s.encode("utf-8")) < 240 for s in steps), steps   # ui.h: MAX_FAIL_STEPS, 240 bytes
+    assert "failure screen: on the GUI" in r["got"].stdout
+    assert "first boot failed [chunkcast-failed]" in r["tty"]
+
+
+def test_3173_a_chunkcast_that_answers_lets_the_first_boot_go_on(tmp_path):
+    """The guard: a build whose binary answers `--version` is installed, and the first boot goes on to stage B."""
+    r = _firstboot_chunkcast(tmp_path, "ok")
+    assert r["got"].returncode == 0, r["got"].stdout + r["got"].stderr
+    assert "AFTER-CHUNKCAST" in r["got"].stdout and r["status"] == [] and r["calls"] == ""
+    assert (tmp_path / "srvbin" / "chunkcast").is_file()
+
+
 def test_2517_the_unit_execs_the_installed_binary_and_names_its_beat():
     unit = INSTALLER_GUI_UNIT.read_text(encoding="utf-8")
     assert "Type=exec" in unit, "203/EXEC must be a failed start, not an active unit"
@@ -416,6 +493,21 @@ def test_the_server_role_draws_the_servers_header_not_a_stations(tmp_path, role,
     for station in ("מחשב בנייה", "מכונה", "טרם הסתיים hello ראשון", "MAC"):
         assert station not in words, f"{station!r}: a station's header/status on the server's own screen"
     assert not any(w.startswith("סוכן ") for w in words), words
+
+
+@GUI_BUILD
+def test_3173_the_chunkcast_failure_is_drawn_with_what_it_means_and_what_to_do(tmp_path):
+    """The records failgui.sh writes for chunkcast-failed, drawn by the real GUI: the title, the meaning, the retry,
+    the log, and the script's own line -- no typed word, nothing to press (--no-input)."""
+    made = subprocess.run(
+        [BASH, "-c", '. "$1"; failgui_firstboot chunkcast-failed "$2"', "_", posix(FAILGUI),
+         "The chunk engine (chunkcast) was not built or does not run (exit 1): server-tools-build: chunkcast did not compile"],
+        capture_output=True, text=True, encoding="utf-8", timeout=30, stdin=subprocess.DEVNULL)
+    assert made.returncode == 0, made.stderr
+    words = " ".join(_failure_card_words(tmp_path, made.stdout))
+    for said in ("מנוע השידור לא נבנה", "לא יכול לשכפל", "הפעילו את השרת מחדש", "journalctl -u imagesrv-firstboot",
+                 "chunkcast did not compile"):
+        assert said in words, (said, words)
 
 
 @GUI_BUILD

@@ -33,7 +33,7 @@ START = 400000                                  # kbit/s
 
 
 def _cmd(learned_max, kbps=100000, write_kbps=START):
-    engine = SimpleNamespace(port=9002, interface=None, feedback=True, write_floor=lambda: 20)
+    engine = SimpleNamespace(port=7713, interface=None, feedback=True, write_floor=lambda: 20)   # פורט-הפצה-מכוון
     wave = SimpleNamespace(key="0123456789abcdef", round=1)
     return ChunkEngine._command(engine, wave, {"index": 3}, Path("image.zst"), kbps, write_kbps, None, learned_max)
 

@@ -83,7 +83,7 @@ def _app(tmp_path: Path, images_root: Path, clock, machine: Machine, *, fake_tim
     if fake_time:
         hooks.update(netcfg_sleep=machine.sleep, netcfg_monotonic=lambda: machine.now)
     dhcp_hooks = {"interfaces": hooks["interfaces"], "netcfg_management": lambda: ""}
-    app = create_app(tmp_path / "data", images_root, "http://10.10.10.8:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.10.10.8:7712",
                      now_fn=clock, netcfg_hooks=hooks, dhcp_hooks=dhcp_hooks,
                      netcfg_state_dir=tmp_path / "netstate")
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test",

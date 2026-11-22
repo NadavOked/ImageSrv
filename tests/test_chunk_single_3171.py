@@ -255,22 +255,17 @@ def test_zero_exit_without_ledger_cannot_complete(tmp_path, binaries, image):
     assert "READBACK" not in trace and "GUI-DONE" not in trace
 
 
-@pytest.mark.parametrize("fmt,engine", [(1, "chunk"), (2, "udpcast"), (2, None)])
+# #3173: the server never names `udpcast` any more (`engine_of` is always `chunk`): that case went with it.
+# What is left is the agent's own choice: a format 1 image, or an answer that names no engine, is the legacy writer.
+@pytest.mark.parametrize("fmt,engine", [(1, "chunk"), (2, None)])
 def test_legacy_selection_is_unchanged(tmp_path, binaries, image, fmt, engine):
     trace, _, ranges = run_restore(tmp_path, binaries, image, fmt=fmt, engine=engine)
     assert "LEGACY" in trace and "RC=0" in trace and ranges == [], trace
 
 
 def test_pull_response_names_configured_engine_chunk(chunk_engine, derive):
-    """With the switch on `chunk` the pull's answer names it -- once #3231's gate has the image's index ready."""
+    """The pull's answer names the chunk engine (#3173: the only one) -- once #3231's gate has the image's index ready."""
     _fresh_capture(chunk_engine["ctx"])
     answers = []
     assert wait_for(lambda: answers.append(_pull(chunk_engine)) or answers[-1].status_code == 200), answers[-1].text
     assert answers[-1].json()["engine"] == "chunk"
-
-
-def test_pull_response_names_configured_engine_udpcast(room_server, derive):
-    _fresh_capture(room_server["ctx"])
-    answer = _pull(room_server)
-    assert answer.status_code == 200, answer.text
-    assert answer.json()["engine"] == "udpcast"

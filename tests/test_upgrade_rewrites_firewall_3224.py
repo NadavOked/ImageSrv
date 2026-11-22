@@ -68,7 +68,7 @@ def test_what_the_generator_writes_today_is_not_stale(name):
 
 def test_a_conf_from_before_the_set_is_stale_and_says_why(tmp_path):
     reason = deploy_net.stale_firewall(_conf(tmp_path, LEGACY))
-    assert reason and "known_macs" in reason and "udpcast" in reason
+    assert reason and "known_macs" in reason
 
 
 def test_no_imagesrv_firewall_is_nothing_to_rewrite(tmp_path):
@@ -87,11 +87,11 @@ def test_a_conf_that_cannot_be_read_is_not_a_conf_that_is_fine(tmp_path):
 # -- 2. server start -----------------------------------------------------------------------
 
 def _runtime(tmp_path, images_root, *, stale, fw_step, loaded):
-    from test_sender import Recorder                                      # noqa: PLC0415
+    from fakesend import Recorder                                         # noqa: PLC0415
     from server.app import create_runtime                                 # noqa: PLC0415
 
     return create_runtime(
-        tmp_path / "data", images_root, "http://10.44.12.10:8080",
+        tmp_path / "data", images_root, "http://10.44.12.10:7712",
         sender_runner=Recorder(block=True), wol_send=lambda _p: None,
         nic_hooks={"firewall": fw_step},
         known_macs_hooks={"apply": lambda text: None, "firewall": lambda macs: loaded.append("loaded"),
@@ -111,7 +111,7 @@ def test_a_stale_firewall_is_rewritten_at_start_before_the_registered_list_loads
         assert _journal(rt.conn, "firewall_rewritten") == ["old conf"]
         assert _journal(rt.conn, "firewall_rewrite_failed") == []
     finally:
-        rt.ctx.sender.stop()
+        rt.ctx.chunk.stop()
 
 
 def test_a_rewrite_that_failed_is_journaled_by_name_and_the_start_goes_on(tmp_path, images_root):
@@ -124,7 +124,7 @@ def test_a_rewrite_that_failed_is_journaled_by_name_and_the_start_goes_on(tmp_pa
         assert _journal(rt.conn, "firewall_rewritten") == []
         assert order == ["loaded"]
     finally:
-        rt.ctx.sender.stop()
+        rt.ctx.chunk.stop()
 
 
 def test_a_step_that_raises_is_a_failure_in_the_journal_not_a_crash(tmp_path, images_root):
@@ -135,7 +135,7 @@ def test_a_step_that_raises_is_a_failure_in_the_journal_not_a_crash(tmp_path, im
     try:
         assert _journal(rt.conn, "firewall_rewrite_failed") == ["old conf — no nft binary"]
     finally:
-        rt.ctx.sender.stop()
+        rt.ctx.chunk.stop()
 
 
 def test_a_current_firewall_is_not_touched_by_a_normal_start(tmp_path, images_root):
@@ -146,7 +146,7 @@ def test_a_current_firewall_is_not_touched_by_a_normal_start(tmp_path, images_ro
         assert steps == []
         assert _journal(rt.conn, "firewall_rewritten") == [] == _journal(rt.conn, "firewall_rewrite_failed")
     finally:
-        rt.ctx.sender.stop()
+        rt.ctx.chunk.stop()
 
 
 def test_both_events_have_a_hebrew_line_and_the_failure_is_an_error():
@@ -243,11 +243,32 @@ def test_a_server_without_an_imagesrv_firewall_upgrades_and_nothing_is_enabled(t
     assert "אין חומת אש של ImageSrv" in text or "אינו של ImageSrv" in text
 
 
-def test_a_conf_with_known_macs_but_without_the_feedback_port_is_stale_3512(tmp_path):
-    """#3512: the range before the chunk engine's feedback port (portbase+3) joined it. A server upgraded from it
-    keeps dropping the receivers' feedback until the rules are written again."""
+def _without_the_ports_mark(text: str) -> str:
+    """What a generator of before #3871 wrote: the same ruleset, without the mark line."""
+    lines = text.splitlines(keepends=True)
+    kept = [line for line in lines if not line.startswith(deploy_net.PORTS_MARK)]
+    assert len(kept) == len(lines) - 1, "the fixture carries the mark exactly once, as its own line"
+    return "".join(kept)
+
+
+def test_a_conf_with_known_macs_but_the_ports_of_before_3871_is_stale(tmp_path):
+    """#3871: a ruleset written before the 77xx ports keeps the console, the agent and Trident closed after the
+    upgrade, and the ports nothing listens on open. Every ruleset the generator writes since carries `PORTS_MARK`;
+    one without it is written again. This also covers what #3512 (no feedback port) and #3173 (the removed
+    sender's two ports still open) told by their ranges: both were written before the mark."""
     text = (FIXTURES / "primary.conf").read_text(encoding="utf-8")
-    old = text.replace("udp dport 9000-9003", "udp dport 9000-9001")        # פורט-הפצה-מכוון: the old installed range
-    assert old != text and deploy_net.KNOWN_MACS_DECL in old
+    old = _without_the_ports_mark(text)
+    assert deploy_net.KNOWN_MACS_DECL in old
+    assert deploy_net.stale_firewall(_conf(tmp_path, text)) is None
     reason = deploy_net.stale_firewall(_conf(tmp_path, old))
-    assert reason and "portbase+3" in reason
+    assert reason and "77xx" in reason and "443" in reason
+
+
+def test_a_conf_that_still_opens_the_removed_udpcast_ports_is_stale_3173(tmp_path):
+    """#3173: udpcast went, and its two ports (portbase, portbase+1) went with it. A server installed before that
+    has known_macs and the feedback port -- and without a rewrite it keeps 9000-9001 open on the deploy NIC, for a
+    program that is no longer there. Since #3871 such a file is told by the missing ports mark. (פורט-הפצה-מכוון)"""
+    text = _without_the_ports_mark((FIXTURES / "primary.conf").read_text(encoding="utf-8"))
+    old = text.replace("udp dport 7713-7714", "udp dport 9000-9001")        # פורט-הפצה-מכוון: the removed sender's range
+    assert old != text and deploy_net.KNOWN_MACS_DECL in old
+    assert deploy_net.stale_firewall(_conf(tmp_path, old)), "a conf that opens 9000-9001 was called up to date"   # פורט-הפצה-מכוון

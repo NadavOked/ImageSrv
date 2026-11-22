@@ -63,7 +63,7 @@ def receivers_rcvbuf(conn) -> int | None:
 
 def receivers_abandoned(conn) -> int | None:
     """S41 (G7): סכום החתיכות שמקלטי החתיכות נטשו באמצע (`chunkcast`: `evicted`), אותו מקור ואותו כלל של
-    `receivers_rcvbuf`. בגל udpcast אין שדה כזה, ולכן התשובה שם ``None``: "אין מדידה", לא "אפס נטישות"."""
+    `receivers_rcvbuf`. סוכן שלא מדד אינו שולח שדה כזה, ולכן התשובה שם ``None``: "אין מדידה", לא "אפס נטישות"."""
     return _receivers(conn, "abandoned")
 
 

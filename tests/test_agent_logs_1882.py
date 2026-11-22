@@ -242,7 +242,7 @@ def _send(tmp_path: Path, curl_rc: int, failed: bool) -> tuple[str, Path]:
                     f"exit {curl_rc}\n", encoding="utf-8", newline="\n")
     fake.chmod(0o755)
     out = sh(f'export PATH="$(cd {posix(bin_dir)!r} && pwd):$PATH" RUN_DIR={posix(run)!r} LOG_FILE={posix(log)!r}'
-             f' SERVER=http://10.0.0.1:8080 MAC={MAC}; . {posix(LIB)}/common.sh;'
+             f' SERVER=http://10.0.0.1:7712 MAC={MAC}; . {posix(LIB)}/common.sh;'
              f' . {posix(LIB)}/datareport.sh; agent_log_send ses_9; echo "rc=$?"')
     return out, log
 
@@ -252,7 +252,7 @@ def test_the_agent_sends_the_gzipped_tail_once_with_the_reason(tmp_path):
     out, log = _send(tmp_path, 0, failed=True)
     assert "rc=0" in out
     args = (tmp_path / "curl.args").read_text(encoding="utf-8").splitlines()
-    assert f"http://10.0.0.1:8080/api/v1/agent/log?mac={MAC}&session_id=ses_9&reason=failed" in args
+    assert f"http://10.0.0.1:7712/api/v1/agent/log?mac={MAC}&session_id=ses_9&reason=failed" in args
     body = gzip.decompress((tmp_path / "body.gz").read_bytes()).decode()
     assert body.splitlines()[-1] == "[10:00:00] line 2599"
     assert len(body.splitlines()) == 2000 and "line 599\n" not in body   # #3125 (R13): 2000 lines, not 400

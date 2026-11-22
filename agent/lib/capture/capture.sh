@@ -190,7 +190,8 @@ capture_disk() {
             continue
         fi
         _file="p$_idx.$_role.pcl.zst"
-        _used=$(capture_used_bytes "$_node" "$_fs"); cd_used "$_idx" "$_used" 2>/dev/null || :
+        _used=$(capture_used_bytes "$_node" "$_fs") || { _capture_failed "$_disk" "מחיצה $_idx ($_fs): מדידת used_bytes בעותק נכשלה"; return 1; }
+        cd_used "$_idx" "$_used" 2>/dev/null || :
         log "partition $_idx ($_role, $_fs): reading"; cd_part "$_idx" "$_role" "$_fs" reading 2>/dev/null || :
 
         _out="$RUN_DIR/upload.$_idx"

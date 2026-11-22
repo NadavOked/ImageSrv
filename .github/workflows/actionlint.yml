@@ -69,8 +69,6 @@ jobs:
           set -euo pipefail
           command -v shellcheck
           shellcheck --version | sed -n 2p
-          # ההחרגה היחידה, ובשם: SC2209 על `sh=bash` ב-shellcheck.yml — מחרוזת
-          # שהוקצתה במכוון, לא פקודה. נמדד 13/11; #3086 יסיר
-          # את השורה הזו. כל ממצא אחר מאדים.
-          "$RUNNER_TEMP/actionlint" -color -shellcheck="$(command -v shellcheck)" \
-            -ignore 'SC2209:'
+          # בלי החרגות, כל ממצא מאדים. ‏SC2209 על `sh=bash` ב-shellcheck.yml
+          # תוקן בשורש (#3086): ההקצאה צוטטה (`sh='bash'`), לא הושתקה.
+          "$RUNNER_TEMP/actionlint" -color -shellcheck="$(command -v shellcheck)"

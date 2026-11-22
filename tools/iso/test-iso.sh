@@ -15,9 +15,9 @@
 #      עכשיו מכיל מערכת, נבדק בשלב 2).
 #   2. אתחול מהדיסק המותקן (בלי ה-ISO) → האתחול הראשון בונה ומריץ את
 #      המתקין. הראיות (R25 §4), כולן דרך פורטים שמועברים מהמארח:
-#        GET :8080/boot/vmlinuz   → 200, ‏Content-Length > 1MB
-#        GET :8080/boot/initrd.img → 200, ‏Content-Length > 1MB
-#        GET :8081/               → 200 (הקונסולה, HTTPS עצמי)
+#        GET :7712/boot/vmlinuz   → 200, ‏Content-Length > 1MB
+#        GET :7712/boot/initrd.img → 200, ‏Content-Length > 1MB
+#        GET :443/               → 200 (הקונסולה, HTTPS עצמי)
 #      ‏`systemctl is-active imagesrv-server` ו-`is-enabled dnsmasq` =
 #      ‏disabled **אינם** נבדקים כאן — אין דרך אל תוך ה-VM (בלי sshd
 #      בכוונה, הכרעת נדב 19/09). זה נשאר לבדיקה במסך — נאמר בשמו.
@@ -91,7 +91,7 @@ qemu_common=(
     -drive "if=pflash,format=raw,readonly=on,file=$OVMF_CODE"
     -drive "if=pflash,format=raw,file=$VARS"
     -drive "file=$DISK,format=qcow2,if=virtio"
-    -netdev "user,id=n0,hostfwd=tcp:127.0.0.1:$HTTP_PORT-:8080,hostfwd=tcp:127.0.0.1:$CONSOLE_PORT-:8081"
+    -netdev "user,id=n0,hostfwd=tcp:127.0.0.1:$HTTP_PORT-:7712,hostfwd=tcp:127.0.0.1:$CONSOLE_PORT-:443"
     -device "virtio-net-pci,netdev=n0"
     -display none -serial "file:$TMP/serial.log"
     -no-reboot

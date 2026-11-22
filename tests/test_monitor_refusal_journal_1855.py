@@ -121,7 +121,7 @@ def test_each_failure_before_the_bridge_is_journaled_by_code(server):
         assert _closed(ada) == (4409, "המכונה בצפייה של noc")
     assert journal_rows(server, "monitor_refused") == [
         ("not-a-mac 4404 מכונה לא מוכרת", "noc"),
-        (f"{MAC} 4512 המכונה לא דיווחה סוד מוניטור — סוכן ישן?", "noc"),
+        (f"{MAC} 4512 {monitor.STILL_COMING_UP_HE}", "noc"),   # #3020: a row from the boot menu, no hello yet
         (f"{MAC} 4409 המכונה בצפייה של noc", "ada"),
     ]
 
@@ -172,3 +172,14 @@ def test_a_view_that_moved_is_translated_to_hebrew(server):
         EVENTS_HE["monitor_closed"], f"{who} · {moved}")
     assert tr.translate("monitor_closed", f"{MAC} moved node=n2")[1] == (
         f"{who} · {moved} · node=n2")
+
+
+def test_no_secret_is_an_old_agent_only_when_a_hello_was_taken_3020(server):
+    """#3020: the machine asked for its boot menu (a row, no hello): it is coming up. A hello that
+    was taken and carried no secret (`agent_version` set) is the old agent -- same code, 4512."""
+    conn = server["ctx"].conn
+    prepare_secret_machine(server, secret=None)
+    noc = _client(server, FakeMachine)
+    assert _closed(noc) == (monitor.WS_MACHINE_AUTH, monitor.STILL_COMING_UP_HE)
+    net_seen(conn, MAC, IP, agent_version="v0.50.0")           # the agent's hello, without a secret
+    assert _closed(noc) == (monitor.WS_MACHINE_AUTH, monitor.OLD_AGENT_HE)

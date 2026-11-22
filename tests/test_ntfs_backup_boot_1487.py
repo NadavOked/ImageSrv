@@ -93,7 +93,7 @@ def prelude(box: Path, *, dd: bool = False) -> str:
         + make_stubs(box / "stubs", stubs)
         + f"export TMPDIR={posix(box)!r} RUN_DIR={posix(box / 'run')!r} DEVROOT={posix(box / 'dev')!r} "
         "WAIT_POLL_S=1 WAIT_DRAWER_S=5 WAIT_HELPER_S=5 WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20\n"
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + "ata_capture() { :; }\n"
     )
 
@@ -233,23 +233,6 @@ def test_unicast_restore_fails_when_the_backup_does_not_land(tmp_path):
     assert out.strip().endswith("rc=1"), out
     log = (box / "run" / "agent.log").read_text(encoding="utf-8")
     assert "מחיצה 3: סקטור אתחול הגיבוי של NTFS" in log and "dd rc=5" in log, log
-
-
-def test_a_round_fails_only_the_drawer_whose_backup_did_not_land(tmp_path):
-    """drawers.sh -> verdict.sh: a round (and a direct send's receivers). The
-    failing drawer fails by name with the partition and the cause; its
-    neighbour gets the backup and stays alive."""
-    box, pre = stream_box(tmp_path, disks=("sda", "sdb"), dd_fail_on="sda1")
-    out = run_sh(pre + f'restore_partition_drawers unicast http://s img 1 ntfs p1.zst {PART_SHA} "" sda sdb '
-                 '> /dev/null 2>&1; echo "rc=$?"')
-    assert out.strip().endswith("rc=0"), out              # one drawer alive
-    st, err = state(box, "sda")
-    assert st == "failed" and "מחיצה 1: סקטור אתחול הגיבוי של NTFS" in err and "dd rc=5" in err, (st, err)
-    st, err = state(box, "sdb")
-    assert st != "failed", (st, err)
-    after = (box / "dev" / "sdb1").read_bytes()
-    assert sector(after, 2047) == sector(after, 0)
-    assert (box / "run" / "targets" / "sdb" / "ntfs_boot").read_text().split() == ["1"]
 
 
 SHA16 = "a" * 16

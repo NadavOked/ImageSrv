@@ -106,7 +106,7 @@ def test_kiosk_serves_the_class_list_when_classrooms_are_on(server, monkeypatch)
     assert kiosk.get("/api/console/groups").status_code == 200
 
 
-# --- נתיבי הסוכן (station.py, פורט 8080) --------------------------------------
+# --- נתיבי הסוכן (station.py, פורט 7712) --------------------------------------
 #
 # הכרעת נדב 11/10, המשך: "השרת מסרב לפקודות כיתות כל עוד הכיתות כבויות" —
 # כולל נתיבי הסוכן, **בלי תלות** במתג `class_deploy_enabled` (#880).

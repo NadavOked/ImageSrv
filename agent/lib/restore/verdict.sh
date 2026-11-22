@@ -1,69 +1,11 @@
 # verdict.sh -- turning the evidence a drawer left behind into its state.
 # POSIX sh (busybox ash).
 #
-# `drawers.sh` runs the stream; this file answers "so did it work?". The
-# split is deliberate: the evidence a drawer leaves is three separate
-# records -- `fanout`'s report line, `zstd.rc`, and `pipeline.rc` -- and
-# every bug this file has carried came from folding two of them into one.
-# ‏#440 (a dead disk reported as the network), #527 (a lost zstd exit
-# code), #520 (a sha waived by a dead sibling): all of them are the same
-# shape, and all of them lived here.
-#
-# Loaded by drawers.sh. Nothing else sources it.
-
-_write_fail() {
-    # $1=dev $2=idx $3=סיבת fanout. הקבצים היו על הדיסק ולא נקראו —
-    # לכן דיסק מת דווח כרשת (#440). חסר ≠ דיסק תקין ≠ רשת.
-    _t="$RUN_DIR/targets/$1"
-    _prc=$(cat "$_t/pipeline.rc" 2>/dev/null)
-    _plog=$(tail -n 1 "$_t/partclone.log" 2>/dev/null | tr -d '\r')
-    [ ! -f "$_t/writeback.failed" ] || _plog="periodic fsync failed (write_error)"
-    fail_written_target "$1" \
-        "partition $2: הכתיבה לדיסק נכשלה (fanout: ${3:-אין דיווח}; partclone rc=${_prc:-לא נרשם}${_plog:+; $_plog})"
-}
-
-_read_fanout_report() {
-    # דוח fanout + קודי הצינור → מצב המגירה. ‏done רק כשכולם הסכימו.
-    # $1 = index, $2 = fs, $3.. = disks.
-    _idx="$1"; _fs="$2"; shift 2
-    for _d in "$@"; do
-        _t="$RUN_DIR/targets/$_d"
-        case "$(cat "$_t/state")" in failed|cancelled) continue ;; esac   # #1386
-        _line=$(grep -F "$_t/feed " "$RUN_DIR/fanout.out" 2>/dev/null)
-        case "$_line" in
-            *" ok")
-                # שלושה מסכימים, לא שניים: ‏fanout מסר את הבייטים,
-                # ‏zstd פרס אותם, ו-partclone כתב. ‏zstd שנפל בשקט
-                # משאיר partclone שיוצא 0 על קלט חלקי (#527).
-                _rc=$(cat "$_t/pipeline.rc" 2>/dev/null)
-                _zrc=$(cat "$_t/zstd.rc" 2>/dev/null)
-                if [ "$_rc" = "0" ] && [ "$_zrc" = "0" ]; then
-                    # #1487: partclone -r leaves the NTFS backup boot sector unwritten.
-                    if ntfs_boot_target "$_d" "$_idx" "$_fs"; then target_partition_done "$_d"
-                    else fail_written_target "$_d" "$NTFS_BOOT_ERROR"; fi
-                elif [ "$_rc" = "0" ] && [ -z "$_zrc" ]; then
-                    # אין קובץ = לא נמדד. זה אינו "zstd הצליח" ואינו
-                    # כישלון של partclone — מצב שלישי בשם (עיקרון 5).
-                    _write_fail "$_d" "$_idx" "ok (zstd rc לא נרשם)"
-                else
-                    _write_fail "$_d" "$_idx" "ok"
-                fi
-                ;;
-            *" failed empty stream"|*" failed short stream"*|*" failed long stream"*)
-                # #1728: fanout's length verdict is the stream's -- every drawer got
-                # the same bytes. No ata_log, no disk_failure on a healthy disk.
-                fail_written_target "$_d" \
-                    "partition $_idx: הזרם הגיע ריק או חלקי (fanout: ${_line#* failed })" stream
-                ;;
-            *" failed "*)
-                _write_fail "$_d" "$_idx" "${_line#* failed }"
-                ;;
-            *)
-                _write_fail "$_d" "$_idx" "אין דיווח"
-                ;;
-        esac
-    done
-}
+# The drawers' shared verdicts: which drawers are still alive, the machine's
+# state from theirs, a drawer the kernel says is dead (drawer_watch, the local
+# clone's stream; chunkwatch.sh, a chunk pass), a round the server closed, and
+# a drawer cancelled on request. The chunk engine's own per-drawer verdict is
+# chunkrecv.sh's (#3173: the fanout stream of the old receiver is gone).
 
 _any_alive() {
     for _d in $1; do
@@ -171,7 +113,7 @@ drawer_dead_mark() {
     # $1 = disk, $2 = 1 if /sys/block/$1 existed when the stream began, $3 = this
     # tick's dmesg. 0 = the kernel says it is dead (drawer_dead_reason): it gets
     # `dead` (and `pulled`), it is heard, and DRAWER_WHY is the operator's sentence.
-    # One answer for the udpcast stream (drawer_watch) and a chunk pass (chunkwatch.sh).
+    # One answer for a fanout stream (drawer_watch) and a chunk pass (chunkwatch.sh).
     DRAWER_WHY=$(drawer_dead_reason "$1" "$2" "$3") || return 1
     echo "$DRAWER_WHY" > "$RUN_DIR/targets/$1/dead"; [ "$DRAWER_WHY" != "$DRAWER_GONE_WHY" ] || : > "$RUN_DIR/targets/$1/pulled"
     if [ "$DRAWER_WHY" = "$DRAWER_GONE_WHY" ]; then event_beep pulled; else event_beep failure; fi
@@ -182,7 +124,7 @@ drawer_dead_mark() {
 drawer_watch() {
     # $1 = the stream's pid, $2 = partition index, $3 = the disks. In the
     # background while the stream runs. A dead drawer gets `dead`, the reader of
-    # its fifo (reader.pid: its partclone, or its zstd -- drawerfeed.sh) is
+    # its fifo (reader.pid: its partclone, or its zstd) is
     # killed -- fanout's next write is EPIPE and the drawer is out -- and it is
     # failed by name, with its kernel evidence.
     _dw_seen=" "; _dw_k="$RUN_DIR/dmesg.watch"; _dw_blind=0
@@ -208,27 +150,6 @@ drawer_watch() {
     done
     if command -v drawer_stall_clear > /dev/null; then drawer_stall_clear "$3"; fi
     rm -f "$_dw_k"
-}
-
-# --- #2200: a drawer fanout evicted is out at the stream's end, not 300s later ---
-# fanout drops a drawer that held the stream (45s, #1796; no write progress 150s, #674)
-# and never feeds it again, so it cannot end `done`. Waiting WAIT_DRAWER_S on its stuck
-# partclone held the machine's next partition 5 minutes (metal 25/10, cloner 2).
-
-drawer_stop() {   # $1 = disk. Its fifo's reader too: killing the pipeline's shell left partclone (#2200)
-    kill -9 "$(cat "$RUN_DIR/targets/$1/reader.pid" 2>/dev/null)" 2>/dev/null
-    unblock_fifo "$RUN_DIR/targets/$1/feed"
-}
-
-drawer_evicted_out() {
-    # $1 = disk, $2 = partition index. 0 = fanout's report says it evicted this drawer: its
-    # reader is stopped and it is failed by name. 1 = no such line (or no report): waited for as before.
-    _de_l=$(grep -F "$RUN_DIR/targets/$1/feed failed stalled" "$RUN_DIR/fanout.out" 2>/dev/null) || return 1
-    _de_p=$(cat "$RUN_DIR/targets/$1/pipeline.pid" 2>/dev/null)
-    log "$1: evicted by fanout (${_de_l#* failed }) -- failed now, not waited for"
-    if kill -0 "$_de_p" 2>/dev/null; then drawer_stop "$1"; fi
-    wait_pid "$_de_p" "$WAIT_HELPER_S" "המגירה $1 (הוצאה, מחיצה $2)" || :
-    fail_written_target "$1" "מחיצה $2: הוצאה מהזרם -- המגירה הפסיקה לקבל נתונים ועיכבה את השאר (fanout: ${_de_l#* failed })"
 }
 
 # ברזל 17/10: progress_loop (progress.sh) משאיר את הסמן כשהשרת עונה not_open --

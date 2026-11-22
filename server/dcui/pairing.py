@@ -139,7 +139,7 @@ def save_advertised(conn, raw: str) -> ActionResult:
     try:
         wanted = storage_nodes.normalize_advertised_url(raw)
     except interserver_auth.InterserverURLError:
-        return ActionResult(False, "Invalid address: use host:port, for example 203.0.113.40:8443.")
+        return ActionResult(False, "Invalid address: use host:port, for example 203.0.113.40:7700.")
     try:
         stored = storage_nodes.set_advertised_url(conn, wanted)
     except sqlite3.Error:

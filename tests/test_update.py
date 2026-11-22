@@ -229,7 +229,7 @@ def update_server(tmp_path: Path, images_root: Path, clock):
             or (state["run_ok"], state.get("run_err", ""))
         ),
     }
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, update_hooks=hooks, repo_dir="/repo")
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
     admin = TestClient(app)

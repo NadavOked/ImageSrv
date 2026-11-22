@@ -5,7 +5,7 @@ same screen. On metal the night before, a cloner's NIC was down 75 s and its str
 from 30% to 32%. The cloner's code is the reference, and the build machine now runs it:
 
 * **the wait and its ceiling.** The cloner's receiver (udp-receiver) holds a cut for
-  ``--receive-timeout $UDPCAST_STALL_TIMEOUT`` (120 s, or the console's drawer_net_wait_seconds --
+  ``--receive-timeout $STREAM_STALL_TIMEOUT`` (120 s, or the console's drawer_net_wait_seconds --
   timing.sh; until 18/11: 300, or the lost wait + 120). The build machine's restore streams over HTTP, and its curl gave up after
   ``HTTP_STALL_TIMEOUT`` (120 s, a constant the console never moved). Now that curl waits
   out the cloner's ceiling: the TCP connection survives the cut and the stream goes on from
@@ -116,7 +116,7 @@ def stubs(tmp_path_factory) -> Path:
 def _restore(box: Path, stubs: Path, server: _Server, *, ceiling: int, http: int,
              sample: bool = False) -> dict:
     """The real restore_partition of the build machine (unicast) under busybox ash. ``ceiling``
-    is the cloner's (UDPCAST_STALL_TIMEOUT = WAIT_STREAM_STALL_S, as timing.sh keeps them),
+    is the cloner's (STREAM_STALL_TIMEOUT = WAIT_STREAM_STALL_S, as timing.sh keeps them),
     ``http`` the old HTTP_STALL_TIMEOUT. ``sample``: the card's writer samples every 0.3 s."""
     run, dev = box / "run", box / "dev"
     (box / "sys/event5/device").mkdir(parents=True)
@@ -137,10 +137,10 @@ def _restore(box: Path, stubs: Path, server: _Server, *, ceiling: int, http: int
         make_stubs(stubs, {"fanout": None, "partclone.dd": PARTCLONE})
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(dev)!r} SYSFS_INPUT={posix(box / 'sys')!r}\n"
         + "export D_ROLE=build WAIT_POLL_S=1 WAIT_STREAM_START_S=30 WAIT_HELPER_S=10 WAIT_DRAWER_S=30 "
-        + f"WAIT_STREAM_STALL_S={ceiling} UDPCAST_STALL_TIMEOUT={ceiling} HTTP_STALL_TIMEOUT={http} "
+        + f"WAIT_STREAM_STALL_S={ceiling} STREAM_STALL_TIMEOUT={ceiling} HTTP_STALL_TIMEOUT={http} "
         + "HTTP_TIMEOUT=4 NETLOST_AFTER_S=2\n"
         + agent_sources("common", "sysinfo", "diskinfo", "waits", "jsonq", "progress", "restore", "writeback", "drawers",
-                        "drawerfeed", "verdict", "failmark", "ntfsboot", "roundbeep", "srgui", "clonergui") + "\n"
+                        "verdict", "failmark", "ntfsboot", "roundbeep", "srgui", "clonergui") + "\n"
         + "node_is_block() { true; }\n"   # a regular file stands for the partition (test_timeouts.py)
         + f'target_init sda {len(PAYLOAD)}; target_set sda writing; echo writing > "$RUN_DIR/state"\n'
         + 'echo 1 > "$RUN_DIR/targets/sda/partition"\n'

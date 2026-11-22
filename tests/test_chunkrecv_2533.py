@@ -79,7 +79,7 @@ export RUN_DIR="$1" LOG_FILE="$1/agent.log"; MAC=aa:bb:cc:00:00:21; SERVER=http:
 [ ! -f agent/lib/restore/roundnote.sh ] || . agent/lib/restore/roundnote.sh
 WAIT_STREAM_STALL_S=1; WAIT_DRAWER_S=1; STREAM_START_CEILING=${TEST_START_CEILING:-1}; CHUNK_ASK_POLL_S=1; HTTP_TIMEOUT=5
 CHUNK_FETCH_TELL_S=${TEST_TELL_S:-1}; FILL_WORD_S=${TEST_FILL_WORD_S:-0}   # no reporter here: a measure does not wait for the brain's answer (fillword.sh)
-CHUNK_GROUP=239.83.67.1; CHUNK_PORT=9002; CHUNK_KEY=0123456789abcdef; CHUNK_SESSION=ses_1
+CHUNK_GROUP=239.84.82.1; CHUNK_PORT=7713; CHUNK_KEY=0123456789abcdef; CHUNK_SESSION=ses_1   # פורט-הפצה-מכוון
 trace() { echo "$*" >> "$RUN_DIR/trace"; }
 sleep() { [ -z "${REAL_SLEEP:-}" ] || command sleep "$@"; }
 watchdog_beat() { trace "beat"; }

@@ -2,19 +2,25 @@
 
 from __future__ import annotations
 
+import re
+
 from .harness import check
+
+_HEBREW = re.compile("[א-ת]")
 
 
 def run(ctx) -> None:
     print("\n10. יומן")
-    status, rows = ctx.console.json("GET", "/api/console/journal",)
+    status, rows = ctx.console.json("GET", "/api/console/journal?limit=1000")
     events = {r["event"] for r in rows}
-    for needed in ("capture_start", "capture_done", "image_upload",
-                   "session_open", "session_start_auto", "session_close",
-                   "client_failed", "unknown_mac", "agent_login_failed",
-                   "room_open", "room_wave", "room_done"):
+    # #3173: בלי סבבי כיתה (שלב 6 — נדחים) אין כאן `client_failed` של תחנה ואין `agent_login_failed` של
+    # סיסמה שגויה בפתיחת סבב (הסירוב קודם לסיסמה, #1282). במקומם — מה שמנוע החתיכות והפצה ישירה משאירים.
+    for needed in ("capture_start", "capture_done", "image_upload", "unknown_mac",
+                   "room_open", "room_wave", "room_done",
+                   "send_start", "send_done", "send_delegated",
+                   "room_open_direct", "direct_manifest", "direct_done", "direct_failed", "room_failed"):
         check(f"היומן מכיל {needed}", needed in events)
-    failure = next(r for r in rows if r["event"] == "client_failed")
-    check("היומן בעברית ובשמות",
-          failure["label"] == "כתיבה נכשלה במחשב" and "LAB1" in failure["text"],
+    failure = next(r for r in rows if r["event"] == "direct_failed")
+    # הכישלון של שלב 9ב (מניפסט שאינו חותם על רשימת ה-BLAKE3 שהועלתה): כותרת בעברית, והסיבה בשמה
+    check("היומן בעברית ובשם הסיבה", bool(_HEBREW.search(failure["label"])) and "chunk_b3" in failure["text"],
           f'{failure["label"]} | {failure["text"]}')

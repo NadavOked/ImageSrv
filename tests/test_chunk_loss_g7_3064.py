@@ -19,7 +19,7 @@ import json
 import re
 
 import chunkcast_rig as C
-from test_chunk_loss_3064 import UNIT, _json, _unit, needs_cc   # noqa: F401 -- the shell harness of the stage-4 tests
+from test_chunk_loss_3064 import NO_CARD, UNIT, _json, _unit, needs_cc   # noqa: F401 -- the shell harness of the stage-4 tests
 from test_chunkcast_2533 import _pass, cc, img   # noqa: F401 -- cc and img are fixtures: the real chunkcast
 from server.agent import reports
 
@@ -38,8 +38,9 @@ def test_the_buffer_the_kernel_gave_and_the_way_the_pass_ended_ride_in_the_repor
 snmp 0 0; chunk_loss_mark; printf 'listening\nabandoned 0\nrcvbuf 425984\n' > "$RUN_DIR/recv.out"; chunk_loss_tell "$RUN_DIR/recv.out"; show during
 printf 'abandoned 0\npass complete\n' >> "$RUN_DIR/recv.out"; chunk_loss_end "$RUN_DIR/recv.out"; show end
 ''')
-    assert _full(got, "during") == {"rcvbuf": 0, "inerrors": 0, "abandoned": 0, "rcvbuf_bytes": 425984, "pass_word": None}
-    assert _full(got, "end") == {"rcvbuf": 0, "inerrors": 0, "abandoned": 0, "rcvbuf_bytes": 425984,
+    assert _full(got, "during") == {"rcvbuf": 0, "inerrors": 0, "abandoned": 0, **NO_CARD, "rcvbuf_bytes": 425984,
+                                  "pass_word": None}
+    assert _full(got, "end") == {"rcvbuf": 0, "inerrors": 0, "abandoned": 0, **NO_CARD, "rcvbuf_bytes": 425984,
                                  "pass_word": "complete"}
     assert "receive buffer granted=425984, ended: complete" in (tmp_path / "agent.log").read_text(encoding="utf-8")
 

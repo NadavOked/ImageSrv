@@ -12,7 +12,7 @@
 # ו"השרת לא ענה" אינו 404 ואינו 200: זו בדיקה שלא רצה, וזה כישלון
 # (‏CLAUDE.md, עיקרון 5).
 #
-#   sudo bash deploy/verify-boot-payload.sh --server-url http://10.44.12.10:8080
+#   sudo bash deploy/verify-boot-payload.sh --server-url http://10.44.12.10:7711
 #
 # מידות הקרנל וה-initrd הטקסטואלי מגיעות מ-`server/system/health.py`: מסך הבריאות
 # והמתקין חייבים לומר עליהם אותו דבר. ה-initrd הגרפי נשאר לא-חוסם במסך
@@ -29,7 +29,7 @@ usage() {
     cat <<'EOF'
 ImageSrv — בדיקה שהשרת מגיש את הקרנל ואת ה-initrd.
 
-  sudo bash deploy/verify-boot-payload.sh --server-url http://<כתובת>:8080
+  sudo bash deploy/verify-boot-payload.sh --server-url http://<כתובת>:7711
 
   --server-url URL     חובה — הכתובת שהתחנות פונות אליה (זו שב-grub.cfg)
   --http-root PATH     תיקיית האתחול על הדיסק (ברירת מחדל /srv/imagesrv/boot)

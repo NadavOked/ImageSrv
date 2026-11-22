@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -254,17 +253,28 @@ def test_a_malformed_boot_id_is_unknown_and_not_another_boot(room_server):
     assert kept.get("boot_id") == BOOT_A, "ערך פגום דרס את מזהה האתחול שנרשם"
 
 
+def start_direct(room_server, boot: str | None = BOOT_A) -> str:
+    """A round whose source is a build machine (direct), up to a running wave the cloner was handed at boot `boot`.
+
+    #3173: a direct wave goes out on the chunk engine only, and only once the source uploaded the chunk index of its
+    partitions -- so this is a real direct round (`test_direct_server`: the build machine registered, the task
+    opened, the index and the manifest uploaded), not a room round relabelled in the DB."""
+    from test_direct_server import _put_manifest, _setup           # noqa: PLC0415
+    opened = _setup(room_server)                                   # the direct round is on CLONER1's two drawers
+    anon = room_server["anon"]
+    hello(anon, CLONER1, ["S1", "S2"], boot)
+    assert _put_manifest(room_server, opened["task_id"]).status_code == 200
+    for _ in range(3):
+        session = hello(anon, CLONER1, ["S1", "S2"], boot)["session"]
+        if session is not None and session["state"] == "running":
+            return session["id"]
+    raise AssertionError(f"הגל הישיר לא יצא: {session}")
+
+
 def test_a_round_from_the_build_machine_is_not_asked(room_server):
-    """הפצה ישירה אינה בשלב הזה: המשכפל שאותחל באמצע אינו מקבל שאלה, כמו קודם. הסבב מסומן
-    כאן כסבב מדיסק חי מיד אחרי הפתיחה (עם מניפסט, כדי שהגל ייצא) — בלי מחשב בנייה אמיתי."""
+    """הפצה ישירה אינה בשלב הזה: המשכפל שאותחל באמצע אינו מקבל שאלה, כמו קודם."""
     ctx, anon = room_server["ctx"], room_server["anon"]
-
-    def as_direct() -> None:
-        ctx.conn.execute("UPDATE room_rounds SET source_kind = 'build_disk',"
-                         " live_manifest_json = ?", (json.dumps({"partitions": []}),))
-        ctx.conn.commit()
-
-    wave = start(room_server, after_open=as_direct)
+    wave = start_direct(room_server)
     progress(anon, wave, CLONER1, {"sda": "writing", "sdb": "writing"})
     assert hello(anon, CLONER1, ["S1", "S2"], BOOT_B)["session"] is None
     assert question(room_server["deploy"]) is None and "round_interrupted" not in events(ctx)
@@ -272,13 +282,7 @@ def test_a_round_from_the_build_machine_is_not_asked(room_server):
 
 def test_a_round_from_the_build_machine_keeps_no_ledger(room_server):
     ctx = room_server["ctx"]
-
-    def as_direct() -> None:
-        ctx.conn.execute("UPDATE room_rounds SET source_kind = 'build_disk',"
-                         " live_manifest_json = ?", (json.dumps({"partitions": []}),))
-        ctx.conn.commit()
-
-    start(room_server, after_open=as_direct)
+    start_direct(room_server)
     assert ledger_rows(ctx) == []
 
 

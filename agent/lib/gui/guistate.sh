@@ -216,7 +216,7 @@ gui_server_addr() {
     # #1252: server_addr=<host of $SERVER> -- imagesrv.server, which init
     # normalised to a URL. Known without the server, so the failure snapshot
     # and the cloner screen carry it too. Empty $SERVER = empty = unknown.
-    _ga=${SERVER:-}; _ga=${_ga#*://}; _ga=${_ga%%/*}; _ga=${_ga%:*}
+    _ga=${TLS_IP:-${SERVER:-}}; _ga=${_ga#*://}; _ga=${_ga%%/*}; _ga=${_ga%:*}
     printf 'server_addr=%s\n' "$(printf '%s' "$_ga" | tr '\r\n|' '   ')"
 }
 

@@ -75,12 +75,23 @@ failgui_firstboot() {
         printf 'fail_ctx=שלב|%s\n' "$(failgui_clean "$1")"
         return 0
     fi
+    if [ "$1" = chunkcast-failed ]; then
+        # Owner 21/11: since #3173 the chunk engine is the only sender, and a server without it cannot clone at all.
+        # What failed, what it means, what to do: a restart runs the first boot again from this step (stage A is stamped).
+        failgui_records bad 1 server "מנוע השידור לא נבנה" "first boot failed · chunkcast-failed" \
+            "מנוע השידור של השרת (chunkcast) לא נבנה, או שנבנה ולא רץ. בלעדיו השרת לא יכול לשכפל: אף מחשב לא יקבל ממנו אימג׳." "$2" \
+            "השרת לא הושלם, והוא נשאר דלוק. ‏Alt+F2 פותח מסוף כניסה." \
+            "כדי לנסות שוב, הפעילו את השרת מחדש: ההכנה תמשיך מבניית המנוע. אם זה חוזר, הבעיה בבנייה עצמה: היומן המלא מראה איזה שלב נכשל." \
+            "היומן המלא: ⁦journalctl -u imagesrv-firstboot⁩"
+        printf 'fail_ctx=שלב|%s\n' "$(failgui_clean "$1")"
+        return 0
+    fi
     case "$1" in
         payload-failed)      _gf_w="בניית קובצי האתחול של השרת (שלב א׳) נכשלה, ולכן מחשבים ברשת עוד לא יכולים לעלות ממנו." ;;
         apt-repo-missing)    _gf_w="מאגר החבילות שהמתקין השאיר בשרת חסר או פגום, והגדרת השרת בלי אינטרנט לא יכולה להמשיך." ;;
         wizard-guard-failed) _gf_w="חומת האש שמגינה על אשף ההתקנה לא נטענה, ולכן האשף לא הופעל." ;;
-        wizard-failed)       _gf_w="אשף ההתקנה בדפדפן (פורט 8081) לא עלה." ;;
-        installer-gui-failed) _gf_w="מסך ההתקנה לא צייר דבר על המסך הזה. אשף ההתקנה בדפדפן (פורט 8081) פועל." ;;
+        wizard-failed)       _gf_w="אשף ההתקנה בדפדפן (פורט 443) לא עלה." ;;
+        installer-gui-failed) _gf_w="מסך ההתקנה לא צייר דבר על המסך הזה. אשף ההתקנה בדפדפן (פורט 443) פועל." ;;
         answers-*)           _gf_w="התשובות שנאספו במתקין חסרות או פגומות, ולכן השרת לא הוגדר מהן." ;;
         hostname-failed)     _gf_w="שם השרת שנבחר במתקין לא נקבע." ;;
         installer-failed)    _gf_w="הגדרת השרת מהתשובות של המתקין נכשלה." ;;

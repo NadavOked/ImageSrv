@@ -47,6 +47,7 @@ def _run_main(tmp_path: Path, monkeypatch, platform: str) -> dict:
     monkeypatch.setattr(server.app, "create_runtime", fake_create_runtime)
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(uvicorn, "Config", lambda *a, **k: None)
     monkeypatch.setattr(uvicorn, "Server", lambda config: object())
     monkeypatch.setattr(server.main, "serve_all", lambda servers: None)

@@ -134,6 +134,7 @@ def setup(tmp_path: Path, modules: dict[str, str] | None = None,
     gui = tmp_path / "gui"; gui.mkdir()
     fake = tmp_path / "bin"; fake.mkdir()
     shutil.copy(AGENT / "lib" / "tools" / "toolbins.sh", lib / "toolbins.sh")
+    shutil.copy(AGENT / "lib" / "tools" / "tooldest.sh", lib / "tooldest.sh")   # #2804: tools_load sources it
     sel = write_selection(tmp_path, ALL_FAKE_IDS if selection is None else selection)
     (run / "response.json").write_text(json.dumps({"role": "build", "tools": tools}),
                                        encoding="utf-8", newline="\n")

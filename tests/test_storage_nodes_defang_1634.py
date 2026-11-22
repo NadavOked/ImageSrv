@@ -33,7 +33,7 @@ class _Client:
 def _node(server, monkeypatch, answers) -> str:
     conn = server["ctx"].conn
     conn.execute("INSERT INTO storage_nodes (id, label, base_url, credential_ref, enrolled_at)"
-                 " VALUES ('n1634', 'חיפה', 'https://10.30.0.8:8443/api/interserver/v1', 'c', ?)",
+                 " VALUES ('n1634', 'חיפה', 'https://10.30.0.8:7700/api/interserver/v1', 'c', ?)",
                  (db.now_iso(),))
     conn.commit()
     monkeypatch.setattr(storage_nodes, "node_client", lambda *a, **k: (_Client(answers), "t"))

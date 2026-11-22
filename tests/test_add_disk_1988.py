@@ -322,12 +322,10 @@ def env(tmp_path: Path, images_root: Path, clock, monkeypatch):
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
 
-    from server.rounds import sender as sender_module
     from server.console import users
     from server.app import create_app
-    from test_sender import Recorder
+    from fakesend import Recorder
 
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
     fake = DiskFake()
     tftp = tmp_path / "tftp"
     (tftp / "grub").mkdir(parents=True)
@@ -339,7 +337,7 @@ def env(tmp_path: Path, images_root: Path, clock, monkeypatch):
         "tftp_root": lambda: tftp, "udp_sender_pids": lambda: [],
     }
     app = create_app(
-        tmp_path / "data", images_root, "http://10.44.12.10:8080",
+        tmp_path / "data", images_root, "http://10.44.12.10:7712",
         now_fn=clock, sender_runner=Recorder(block=True),
         storage_hooks=fake.as_dict(), storage_check_interval=10**9,
         health_hooks=health_hooks,
@@ -355,7 +353,7 @@ def env(tmp_path: Path, images_root: Path, clock, monkeypatch):
     assert deploy.post("/api/console/login",
                        json={"username": "labtech", "password": "deploy-pass-1"}).status_code == 200
     yield {"ctx": ctx, "admin": admin, "deploy": deploy, "fake": fake, "data": tmp_path / "data"}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 BASE = "/api/console/storage-locations"

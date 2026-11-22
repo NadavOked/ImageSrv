@@ -29,7 +29,7 @@
 ל-`--kbps`/`--write-kbps` (`hrtimer_nanosleep`) ורק 16% ממתין לקריאה, ודיסק הספרייה היה פנוי 64% מהזרם. בגל חתיכות
 (`end(..., sender=..., need_sender=True)`) `server_disk` נקבע רק כש**גם** השולח לא ישן לקצב שלו יותר מ-`SENDER_ASLEEP_MAX` מהמעבר
 הראשון (`paced_ms`, `first_pass_s` של `ChunkEngine.rate_outcome`). אחרת `basis` ריק -- **"לא נקבע"**, לא `server_disk` ולא `ok` --
-ו-`undecided` ב-`result_json` אומר למה: `sender_not_measured` או `sender_paced`; מה שהספים אמרו נשאר ב-`looked`. גלי udpcast והקליטה: בלי שינוי.
+ו-`undecided` ב-`result_json` אומר למה: `sender_not_measured` או `sender_paced`; מה שהספים אמרו נשאר ב-`looked`. הקליטה: בלי שינוי.
 
 **#3553 -- הראיה היא ההמתנה לקריאה, לא השינה.** "לא ישן לקצב שלו" אינה מה שהשער שואל: המנוע ישן לתקרות (`--kbps`, `--write-kbps`) 57-69% מהמעבר
 הראשון **במכוון**, ולכן 22 מ-24 גלי חתיכות של ברזל 16/11 יצאו "לא נקבע" (`sender_paced`) גם כשדיסק הספרייה היה פנוי, ותקרת השרת ותקרת הרשת

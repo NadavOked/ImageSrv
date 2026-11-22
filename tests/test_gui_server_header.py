@@ -49,8 +49,8 @@ def test_no_mockup_server_values_in_the_screens():
 
 
 @pytest.mark.parametrize("server, addr", [
-    ("http://10.44.0.1:8080", "10.44.0.1"),
-    ("https://ta.college.ac.il:8443/x", "ta.college.ac.il"),
+    ("http://10.44.0.1:7712", "10.44.0.1"),
+    ("https://ta.college.ac.il:7700/x", "ta.college.ac.il"),
     ("http://10.10.10.8", "10.10.10.8"),
     ("", ""),
 ])
@@ -64,7 +64,7 @@ def test_the_address_is_the_host_of_imagesrv_server(server, addr):
 @requires_native(("bash", BASH), "jq", why="gui_state בונה את המצב ב-jq")
 def test_gui_state_writes_the_server_name_address_and_version(tmp_path):
     rows = state_records(
-        tmp_path, None, env="SERVER=http://10.44.0.1:8080",
+        tmp_path, None, env="SERVER=http://10.44.0.1:7712",
         station={**STATION, "server_name": "TA", "server_version": "v0.59.2"})
     assert "server_name=TA" in rows, rows
     assert "server_version=v0.59.2" in rows, rows

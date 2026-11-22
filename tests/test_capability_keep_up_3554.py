@@ -84,7 +84,8 @@ def test_a_loss_or_a_hot_cpu_is_judged_as_before():
     (json.dumps({"chunk": {"asked_bps": ASKED}}), None),
     (json.dumps({"chunk": {"achieved_bps": -1}}), None),
     (json.dumps({"chunk": {"achieved_bps": True}}), None),
-    (json.dumps({"sent_bytes": 18545476482, "loss_blocks": 0, "stream_bps": 63_584_090, "stream_s": 290.1}), 508_672_720),   # bytes a second
+    # #3173: `stream_bps` of udp-sender (an old udpcast row of an upgraded DB) is not read any more
+    (json.dumps({"sent_bytes": 18545476482, "loss_blocks": 0, "stream_bps": 63_584_090, "stream_s": 290.1}), None),
     (json.dumps({"sent_bytes": 1, "stream_bps": None}), None),
     (json.dumps({"stream_bps": "63584090"}), None),
     (None, None), ("", None), ("not json", None), (json.dumps([1]), None),
@@ -119,12 +120,13 @@ def test_a_wave_that_did_not_reach_the_rate_through_the_server_is_not_pushed_and
     assert _cap(conn) is None
 
 
-def test_a_udpcast_stream_through_the_server_is_read_in_bytes_a_second(conn):
-    """(neg) The wave of `O0-1`: `stream_bps` of a udpcast wave is BYTES a second -- 63,584,090 is 508.7Mb/s, under 80% of 669m. No senses, as on the metal."""
+def test_an_old_udpcast_stream_through_the_server_teaches_nothing(conn):
+    """The wave of `O0-1`, a udpcast row of an upgraded DB (#3173: udpcast is gone). Its `stream_bps` is not read: nothing
+    says what the wave reached, and nothing is learned. No senses, as on the metal."""
     stream = json.dumps({"sent_bytes": 18545476482, "loss_blocks": 0, "stream_bps": 63_584_090, "stream_s": 290.1, "wall_s": 374.6})
     _wave(conn, "ses_udp", bps=ASKED, senses=False, stream=stream)
     [row] = _rows(conn, "ses_udp")
-    assert row["verdict"] == "NOT_PUSHED" and "achieved_bps=508672720" in row["evidence"] and "disks_behind=unmeasured" in row["evidence"], row
+    assert row["verdict"] == "UNDECIDED" and "achieved_bps=unmeasured" in row["evidence"], row
     assert _cap(conn) is None
 
 

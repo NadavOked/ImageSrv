@@ -31,13 +31,13 @@ WHOLE = 2 * (8192 + 4096)   # the originals, then the patterns: the same lengths
 
 @pytest.fixture()
 def env(tmp_path: Path, images_root: Path):
-    from test_sender import Recorder   # noqa: PLC0415
+    from fakesend import Recorder   # noqa: PLC0415
 
-    rt = create_runtime(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    rt = create_runtime(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                         sender_runner=Recorder(block=True), wol_send=lambda _p: None)
     registry.add_machine(rt.conn, MAC, "cloner-9", "grp_CLONERS", "test")   # #3283: only a registered cloner uses it
     yield rt, TestClient(create_agent_app(rt), raise_server_exceptions=False)
-    rt.ctx.sender.stop()
+    rt.ctx.chunk.stop()
 
 
 def _post(client, blob: bytes, regions: str = REGIONS, sha: str | None = None, **over):

@@ -176,7 +176,7 @@ class FakeRfbServer(threading.Thread):
 
 @pytest.fixture()
 def machine(secondary, monkeypatch):
-    """מכונה של המשני עם מוניטור מזויף חי; הפורט מוזרק במקום 5900."""
+    """מכונה של המשני עם מוניטור מזויף חי; הפורט מוזרק במקום 7710."""
     fake = FakeRfbServer()
     fake.start()
     monkeypatch.setattr(monitor, "MONITOR_PORT", fake.port)

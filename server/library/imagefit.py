@@ -17,8 +17,7 @@ from __future__ import annotations
 # `_whole` מיובא ולא משוכפל: "מה נחשב מספר בייטים" חייב להיות תשובה
 # אחת. `bool` הוא `int` בפייתון, ורצפה `True` שנקראת כ-1 היא מספר
 # שנראה תקין לחלוטין ואינו נכון — בדיוק סוג הפער ששני עותקים מייצרים.
-from server.library.images import (GPT_TAIL_BYTES, _whole, layout_end_bytes,
-                           required_bytes)
+from server.library.imagegeom import GPT_TAIL_BYTES, _whole, layout_end_bytes, required_bytes
 
 
 def expandable_candidate(manifest: dict) -> dict | None:

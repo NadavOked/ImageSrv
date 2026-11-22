@@ -1,9 +1,11 @@
 """#2533, שלב 3: `chunk_gate` (`agent/lib/restore/chunkgate.sh`) — איזה מנוע מקבל את הגל.
 
-השרת בוחר, והסוכן מקבל את הבחירה ב-`session.engine` של תשובת ה-hello. בלי השדה
-(המתג כבוי, או שרת ישן) הסוכן נשאר ב-udpcast, בדיוק כמו היום. כל מצב אחר שאינו
-"chunk עם שלושת הפרמטרים שלו, על אימג' בפורמט 2, עם מקלט באימג'" הוא סירוב בשם,
-לפני שנוגעים בדיסק — ולא נפילה שקטה ל-udp-receiver מול שולח שאינו udp-sender.
+מנוע החתיכות הוא המנוע היחיד (#3173), והשרת אומר אותו ב-`session.engine` של תשובת ה-hello.
+כל מצב שאינו "chunk עם שלושת הפרמטרים שלו, על אימג' בפורמט 2, עם מקלט באימג'" -- כולל
+hello בלי השדה, או עם המנוע הישן בשמו -- הוא סירוב בשם, לפני שנוגעים בדיסק: אין נתיב אחר ליפול אליו.
+
+**בקרה שלילית (#3173):** עם `agent/lib/restore/chunkgate.sh` של fa33a4068 שלוש הבדיקות הראשונות נופלות:
+hello בלי מנוע או עם `udpcast` עובר (`rc=0 mode=multicast`), ומנוע לא מוכר נדחה בנוסח האחר.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ JQ_SHIM = posix(REPO / "tests" / "jq_shim.py")
 JQ_FN = "" if shutil.which("jq") else f'jq() {{ python "{JQ_SHIM}" "$@"; }}; '
 pytestmark = requires_native(("bash", BASH))
 
-CHUNK = {"group": "239.83.67.1", "port": 9002, "key": "0123456789abcdef"}
+CHUNK = {"group": "239.84.82.1", "port": 7713, "key": "0123456789abcdef"}   # פורט-הפצה-מכוון
 
 
 def _gate(tmp_path, session: dict, *, image_format=2, receiver=True) -> str:
@@ -46,23 +48,26 @@ def _gate(tmp_path, session: dict, *, image_format=2, receiver=True) -> str:
     return lines[-1] if lines else proc.stdout + proc.stderr
 
 
-def test_no_engine_field_is_udpcast_as_it_always_was(tmp_path):
-    """המתג כבוי: השרת אינו שולח את השדה, והסוכן אינו משנה דבר."""
-    assert _gate(tmp_path, {}, image_format=None, receiver=False).startswith("rc=0 mode=multicast ")
+def test_no_engine_field_is_refused_by_name(tmp_path):
+    """#3173: hello בלי `session.engine` אינו "המנוע הישן" אלא שרת שלא הציע את מנוע החתיכות."""
+    out = _gate(tmp_path, {}, image_format=None, receiver=False)
+    assert out.startswith("rc=1 mode= ") and "did not offer the chunk engine (session.engine 'null')" in out, out
+    assert "nothing was written" in out
 
 
-def test_udpcast_by_name_is_udpcast(tmp_path):
-    assert _gate(tmp_path, {"engine": "udpcast"}, receiver=False).startswith("rc=0 mode=multicast ")
+def test_the_old_engine_by_name_is_refused_by_name(tmp_path):
+    out = _gate(tmp_path, {"engine": "udpcast", "chunk": CHUNK})
+    assert out.startswith("rc=1 mode= ") and "did not offer the chunk engine (session.engine 'udpcast')" in out, out
 
 
 def test_the_chunk_engine_with_its_three_parameters_is_taken(tmp_path):
     out = _gate(tmp_path, {"engine": "chunk", "chunk": CHUNK})
-    assert out.startswith("rc=0 mode=chunk to=239.83.67.1:9002 key=0123456789abcdef ses=ses_1 why="), out
+    assert out.startswith("rc=0 mode=chunk to=239.84.82.1:7713 key=0123456789abcdef ses=ses_1 why="), out   # פורט-הפצה-מכוון
 
 
 def test_an_engine_this_agent_does_not_know_is_refused_by_name(tmp_path):
     out = _gate(tmp_path, {"engine": "warp", "chunk": CHUNK})
-    assert out.startswith("rc=1 mode=multicast ") and "does not know ('warp')" in out and "nothing was written" in out
+    assert out.startswith("rc=1 mode= ") and "(session.engine 'warp')" in out and "nothing was written" in out
 
 
 @pytest.mark.parametrize("field,bad", [
@@ -75,17 +80,17 @@ def test_a_chunk_session_with_an_unusable_parameter_is_refused_not_guessed(tmp_p
     if bad is None:
         del chunk[field]
     out = _gate(tmp_path, {"engine": "chunk", "chunk": chunk})
-    assert out.startswith("rc=1 mode=multicast ") and "is not usable -- nothing was written" in out, out
+    assert out.startswith("rc=1 mode= ") and "is not usable -- nothing was written" in out, out
 
 
 def test_an_old_format_image_is_refused_for_the_chunk_engine(tmp_path):
     out = _gate(tmp_path, {"engine": "chunk", "chunk": CHUNK}, image_format=None)
-    assert out.startswith("rc=1 mode=multicast ") and "needs a format-2 image" in out, out
+    assert out.startswith("rc=1 mode= ") and "needs a format-2 image" in out, out
 
 
-def test_an_initramfs_without_the_receiver_refuses_instead_of_running_udp_receiver(tmp_path):
+def test_an_initramfs_without_the_receiver_refuses_by_name(tmp_path):
     out = _gate(tmp_path, {"engine": "chunk", "chunk": CHUNK}, receiver=False)
-    assert out.startswith("rc=1 mode=multicast ") and "has no chunkcast" in out, out
+    assert out.startswith("rc=1 mode= ") and "has no chunkcast" in out, out
 
 
 # --- #1079 / #2485: the address the receiver takes packets from (`session.chunk.source`) -----------------------
@@ -111,4 +116,4 @@ def test_a_hello_without_a_source_is_todays_behaviour_with_a_warning_in_the_log(
 @pytest.mark.parametrize("bad", ["10.55.0", "srv.example", "1.2.3.4.5", "10..0.1", "::1", 5, True])
 def test_a_source_that_is_not_an_ipv4_address_is_refused_by_name_not_dropped_to_any_source(tmp_path, bad):
     out = _gate(tmp_path, {"engine": "chunk", "chunk": {**CHUNK, "source": bad}})
-    assert out.startswith("rc=1 mode=multicast ") and "source" in out and "is not usable -- nothing was written" in out, out
+    assert out.startswith("rc=1 mode= ") and "source" in out and "is not usable -- nothing was written" in out, out

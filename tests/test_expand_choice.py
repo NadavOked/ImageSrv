@@ -71,70 +71,46 @@ def test_garbage_is_refused_instead_of_silently_falling_back():
         validate_expand_choice(MANIFEST_256, "banana")
 
 
-# --- סבב כיתה: מהקונסולה ועד ה-hello ------------------------------------------
+# --- מהקונסולה ועד ה-hello וליומן ------------------------------------------
+#
+# #3173: הבחירה עוברת באותה דרך (`store.open` → `session_open`, hello) בגל של חדר
+# השיכפול, והיא נבדקת כאן עליו — הגל שמשודר ב-v1. שני הטסטים של סבב כיתה ("בלי בחירה
+# = auto", "בחירה פסולה נדחית לפני הכול") בסוף הקובץ, על הדגל של v2 (`conftest.setup_classroom`).
 
 
-def _open_classroom(server, **extra):
-    ids = setup_classroom(server)
-    body = {"group_id": ids["group"], "image_id": "img_7f3a91",
-            "prefix": "LAB1", "expected_clients": 2, **extra}
-    return server["admin"].post("/api/console/sessions", json=body), ids
+def _open_room(room_server, **extra):
+    """סבב חדר של מחשב שיכפול אחד ושתי מגירות — היעד מכוסה, והגל יוצא עם ה-hello שלו."""
+    body = {"image_id": "img_7f3a91", "target_drives": 2,
+            "target_slots": room_slots(room_server["ctx"].conn, {CLONER1: ["S1", "S2"]}), **extra}
+    return room_server["deploy"].post("/api/console/room", json=body)
 
 
-def _hello(server, mac):
-    return server["anon"].post("/api/v1/agent/hello", json=hello_body(mac)).json()
+def _session_open(room_server) -> dict:
+    rows = room_server["admin"].get("/api/console/journal").json()
+    return next(r for r in rows if r["event"] == "session_open")
 
 
-def test_a_round_opened_with_no_choice_reads_back_as_auto(server):
-    """ברירת המחדל: מי שלא שלח את השדה בכלל (בדיוק כמו לפני #59)."""
-    opened, ids = _open_classroom(server)
-    assert opened.status_code == 200
-    answer = _hello(server, ids["mac1"])
-    assert answer["session"]["expand_partition"] == "auto"
-
-
-def test_disabling_expansion_reaches_the_agent_and_the_journal(server):
-    opened, ids = _open_classroom(server, expand_partition="none")
-    assert opened.status_code == 200
-    answer = _hello(server, ids["mac1"])
+def test_disabling_expansion_reaches_the_agent_and_the_journal(room_server):
+    assert _open_room(room_server, expand_partition="none").status_code == 200
+    answer = cloner_hello(room_server["anon"], CLONER1, ["S1", "S2"])
     assert answer["session"]["expand_partition"] == "none"
 
-    rows = server["admin"].get("/api/console/journal").json()
-    opened_row = next(r for r in rows if r["event"] == "session_open")
-    assert "הרחבה כבויה" in opened_row["text"]
+    assert "הרחבה כבויה" in _session_open(room_server)["text"]
 
 
-def test_a_manual_choice_reaches_the_agent_and_the_journal(server):
-    opened, ids = _open_classroom(server, expand_partition="3")
-    assert opened.status_code == 200
-    answer = _hello(server, ids["mac1"])
+def test_a_manual_choice_reaches_the_agent_and_the_journal(room_server):
+    assert _open_room(room_server, expand_partition="3").status_code == 200
+    answer = cloner_hello(room_server["anon"], CLONER1, ["S1", "S2"])
     assert answer["session"]["expand_partition"] == "3"
 
-    rows = server["admin"].get("/api/console/journal").json()
-    opened_row = next(r for r in rows if r["event"] == "session_open")
-    assert "הרחבת מחיצה 3" in opened_row["text"]
+    assert "הרחבת מחיצה 3" in _session_open(room_server)["text"]
 
 
-def test_a_default_round_open_does_not_mention_expansion_in_the_journal(server):
+def test_a_default_round_open_does_not_mention_expansion_in_the_journal(room_server):
     """"auto" הוא ברירת המחדל השקטה — סבב שלא נגע בהרחבה לא נראה
     ביומן כמו החלטה שמישהו קיבל (בניגוד לשני הטסטים שמעליו)."""
-    opened, _ids = _open_classroom(server)
-    assert opened.status_code == 200
-    rows = server["admin"].get("/api/console/journal").json()
-    opened_row = next(r for r in rows if r["event"] == "session_open")
-    assert "הרחבה" not in opened_row["text"]
-
-
-def test_opening_with_an_invalid_choice_is_refused_before_anything_opens(server):
-    ids = setup_classroom(server)
-    opened = server["admin"].post("/api/console/sessions", json={
-        "group_id": ids["group"], "image_id": "img_7f3a91",
-        "prefix": "LAB1", "expected_clients": 2, "expand_partition": "1",
-    })
-    assert opened.status_code == 400
-    # לא נפתח סבב בכלל — לא רק שהשדה נדחה.
-    answer = _hello(server, ids["mac1"])
-    assert answer["session"] is None
+    assert _open_room(room_server).status_code == 200
+    assert "הרחבה" not in _session_open(room_server)["text"]
 
 
 # --- סבב חדר: הבחירה חלה על כל הגלים, לא רק על הראשון -------------------------
@@ -185,3 +161,34 @@ def test_an_invalid_room_choice_is_refused_before_anything_wakes(room_server):
     })
     assert response.status_code == 400
     assert not room_server["woken"], "החדר לא אמור להתעורר על בקשה שנדחתה"
+
+
+def _open_classroom(server, **extra):
+    ids = setup_classroom(server)
+    body = {"group_id": ids["group"], "image_id": "img_7f3a91",
+            "prefix": "LAB1", "expected_clients": 2, **extra}
+    return server["admin"].post("/api/console/sessions", json=body), ids
+
+
+def _hello(server, mac):
+    return server["anon"].post("/api/v1/agent/hello", json=hello_body(mac)).json()
+
+
+def test_a_round_opened_with_no_choice_reads_back_as_auto(server):
+    """ברירת המחדל: מי שלא שלח את השדה בכלל (בדיוק כמו לפני #59)."""
+    opened, ids = _open_classroom(server)
+    assert opened.status_code == 200
+    answer = _hello(server, ids["mac1"])
+    assert answer["session"]["expand_partition"] == "auto"
+
+
+def test_opening_with_an_invalid_choice_is_refused_before_anything_opens(server):
+    ids = setup_classroom(server)
+    opened = server["admin"].post("/api/console/sessions", json={
+        "group_id": ids["group"], "image_id": "img_7f3a91",
+        "prefix": "LAB1", "expected_clients": 2, "expand_partition": "1",
+    })
+    assert opened.status_code == 400
+    # לא נפתח סבב בכלל — לא רק שהשדה נדחה.
+    answer = _hello(server, ids["mac1"])
+    assert answer["session"] is None

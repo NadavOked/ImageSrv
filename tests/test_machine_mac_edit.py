@@ -26,7 +26,7 @@ OTHER = "aa:bb:cc:00:00:21"
 def server(tmp_path, images_root, clock):
     fake = {"applied": [], "error": None}
     hooks = {"apply": lambda text: (fake["applied"].append(text), fake["error"])[1]}
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, known_macs_hooks=hooks)
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
@@ -38,7 +38,7 @@ def server(tmp_path, images_root, clock):
         assert admin.post("/api/console/machines", json={
             "mac": mac, "name": name, "group_id": group}).status_code == 200
     yield {"ctx": ctx, "admin": admin, "deploy": deploy, "fake": fake}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def rows(server) -> dict[str, dict]:

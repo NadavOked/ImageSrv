@@ -288,13 +288,13 @@ def room_server(tmp_path: Path):
     if TestClient is None:
         pytest.skip("fastapi is required")
     from test_room_image_fit import CLONER1, DISK_500, hello_with_disks, open_round
-    from test_sender import Recorder
+    from fakesend import Recorder
     from server.console import users
     from server.app import create_app
 
     images = tmp_path / "images"
     write_image(images, old_image())
-    app = create_app(tmp_path / "data", images, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images, "http://10.44.12.10:7712",
                      now_fn=Clock(), sender_runner=Recorder(), wol_send=lambda _b: None)
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True,
@@ -306,7 +306,7 @@ def room_server(tmp_path: Path):
     yield {"admin": admin, "anon": anon, "ctx": ctx, "images": images,
            "hello": lambda: hello_with_disks(anon, CLONER1, [DISK_500, DISK_500]),
            "open": lambda: open_round(admin, "img_5790e4")}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def test_the_console_list_carries_the_reason(room_server):

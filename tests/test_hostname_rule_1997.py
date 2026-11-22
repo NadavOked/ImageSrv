@@ -115,13 +115,13 @@ def test_a_legacy_hebrew_machine_is_listed_and_flagged_not_renamed(server):
 def test_the_server_starts_on_a_database_with_legacy_names(server, tmp_path, images_root, clock):
     """הרשומות הישנות אינן חוסמות עלייה: אפליקציה חדשה על אותו DB קוראת אותן."""
     from server.app import create_app
-    from test_sender import Recorder
+    from fakesend import Recorder
     conn = server["ctx"].conn
     _legacy_machine(conn, "עמדה 1", group="grp_CLONERS")
     conn.execute("INSERT INTO storage_nodes (id, label, base_url, credential_ref, enrolled_at)"
-                 " VALUES ('n1', 'חיפה', 'https://10.0.0.8:8443', 'r', '2026-10-01')")
+                 " VALUES ('n1', 'חיפה', 'https://10.0.0.8:7700', 'r', '2026-10-01')")
     conn.commit()
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, sender_runner=Recorder(block=True),
                      health_hooks={"interfaces": lambda: []})
     try:
@@ -132,7 +132,7 @@ def test_the_server_starts_on_a_database_with_legacy_names(server, tmp_path, ima
             "SELECT label FROM storage_nodes WHERE id = 'n1'").fetchone()["label"]
         assert label == "חיפה", "אין מיגרציה שמשנה את שם שרת המשנה"
     finally:
-        app.state.ctx.sender.stop()
+        app.state.ctx.chunk.stop()
 
 
 def test_a_legacy_name_can_be_fixed_from_the_link(server):
@@ -180,7 +180,7 @@ ADMIN = ("noc", "admin")
 
 def _enroll(conn, label: str):
     return storage_nodes.enroll_node(
-        conn, ADMIN, label=label, base_url="https://10.0.0.8:8443", node_id="sn_" + "1" * 16,
+        conn, ADMIN, label=label, base_url="https://10.0.0.8:7700", node_id="sn_" + "1" * 16,
         pinned_spki="aa" * 32, client_cert_ref="c", credential_ref="r", protocol_version="2.1")
 
 
@@ -209,11 +209,11 @@ def test_the_enroll_route_refuses_a_hebrew_label_before_pairing(server, monkeypa
     monkeypatch.setattr(storage_client, "fetch_server_spki", lambda *a, **k: calls.append(2))
     admin = server["admin"]
     r = admin.post("/api/console/storage-nodes/enroll", json={
-        "url": "https://10.20.0.30:8443/api/interserver/v1", "label": "חיפה",
+        "url": "https://10.20.0.30:7700/api/interserver/v1", "label": "חיפה",
         "code": "ABC-DEF-GHJ", "expected_secondary_spki": "cc" * 32, "protocol_version": "2.1"})
     assert r.status_code == 400 and RULE_WORDS in r.json()["detail"]
     r = admin.post("/api/console/storage-nodes/enroll/preview", json={
-        "url": "https://10.20.0.30:8443", "label": "חיפה"})
+        "url": "https://10.20.0.30:7700", "label": "חיפה"})
     assert r.status_code == 400 and RULE_WORDS in r.json()["detail"]
     assert calls == [], "לא פנו לשרת המשנה"
 
@@ -221,7 +221,7 @@ def test_the_enroll_route_refuses_a_hebrew_label_before_pairing(server, monkeypa
 def test_a_legacy_hebrew_secondary_is_listed_and_flagged(server):
     conn = server["ctx"].conn
     conn.execute("INSERT INTO storage_nodes (id, label, base_url, credential_ref, enrolled_at)"
-                 " VALUES ('n1', 'חיפה', 'https://10.0.0.8:8443', 'r', '2026-10-01')")
+                 " VALUES ('n1', 'חיפה', 'https://10.0.0.8:7700', 'r', '2026-10-01')")
     conn.commit()
     nodes = server["admin"].get("/api/console/storage-nodes").json()
     assert [n["label"] for n in nodes] == ["חיפה"]

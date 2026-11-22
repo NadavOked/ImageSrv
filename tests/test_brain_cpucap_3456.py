@@ -374,7 +374,7 @@ def test_health_gets_the_cpu_row_only_when_the_hook_is_injected(tmp_path, images
              "http_get": lambda url: 200, "http_size": lambda url: (200, 31_000_000), "interfaces": lambda: [],
              "tftp_root": lambda: tmp_path, "udp_sender_pids": lambda: []}      # בלי ss ו-systemctl אמיתיים
     for hooks, want in ((quiet, False), ({**quiet, "brain_cpu": hook}, True)):
-        app = create_app(tmp_path / f"d{want}", images_root, "http://10.44.12.10:8080", now_fn=clock,
+        app = create_app(tmp_path / f"d{want}", images_root, "http://10.44.12.10:7712", now_fn=clock,
                          health_hooks=hooks)
         users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True,
                      check_policy=False)

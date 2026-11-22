@@ -101,6 +101,51 @@ def test_no_two_hit_ids_share_a_value():
     assert not clashes, clashes
 
 
+# --- 1b. the toolbox's blocks are wider than 100 ids (#649) ---------------------------
+
+
+def _define(path: str, name: str) -> int:
+    src = (SRC / path).read_text(encoding="utf-8")
+    m = re.search(rf"#define\s+{name}\s+(\d+)", src)
+    assert m, f"{name} is not a #define in {path}"
+    return int(m[1])
+
+
+def _tool_cats() -> int:
+    """TOOL_NCATS: the entries of the TCAT_* enum in tools.h, counted."""
+    src = (SRC / "tools.h").read_text(encoding="utf-8")
+    body = re.search(r"enum\s*\{\s*TCAT_DISK(.*?)TOOL_NCATS\s*\}", src, re.S)
+    assert body, "tools.h: the TCAT_* enum is not where the test expects it"
+    return 1 + body[1].count(",")
+
+
+def test_the_toolbox_id_blocks_clear_every_plain_id_and_every_other_block():
+    """A tool row spans MAX_TOOLS (160) ids, but the test above caps a block at 100 -- it cannot
+    see a toolbox block run into a plain id (HIT_PLAIN_HIGH and above: 4001..) or into the next
+    base. At 3900 (#3654's HIT_BASK_OPT_BASE) the 160 rows reached both. Here the toolbox's four
+    bases carry their real widths and nothing else may stand inside them."""
+    enum = _hit_enum()
+    values = dict(enum)
+    width = {"HIT_TOOL_BASE": _define("ui.h", "MAX_TOOLS"), "HIT_TOOL_PAGE_BASE": _define("ui.h", "MAX_TOOLS"),
+             "HIT_TOOL_PART_BASE": _define("ui.h", "MAX_TOOL_PARTS"), "HIT_TOOL_CAT_BASE": _tool_cats(),
+             "HIT_TOOL_DISK_BASE": _define("ui.h", "MAX_DISKS") + _define("localclone.h", "LC_MAX_DISKS")}
+    assert set(width) <= set(values), sorted(set(width) - set(values))
+    bases = sorted({v for n, v in enum if n.endswith("_BASE")}
+                   | {v for n, v in _install_defines().items() if n.endswith("_BASE")})
+    nxt = dict(zip(bases, bases[1:] + [bases[-1] + 100]))
+    blocks = {n: (v, v + width[n]) if n in width else (v, min(nxt[v], v + 100))
+              for n, v in enum if n.endswith("_BASE")}
+    blocks.update({n: (v, min(nxt[v], v + 100)) for n, v in _install_defines().items() if n.endswith("_BASE")})
+    plain = [(n, v) for n, v in enum if not n.endswith("_BASE") and n != "HIT_NONE"]
+    clashes = [f"{n}={v} in {b} {lo}..{hi}" for b, (lo, hi) in blocks.items() if b in width
+               for n, v in plain if lo <= v < hi]
+    clashes += [f"{a} {blocks[a]} overlaps {b} {blocks[b]}" for a in width for b in blocks
+                if a != b and blocks[a][0] < blocks[b][1] and blocks[b][0] < blocks[a][1]]
+    assert not clashes, clashes
+    assert min(blocks[n][0] for n in ("HIT_TOOL_BASE", "HIT_TOOL_CAT_BASE", "HIT_TOOL_PART_BASE", "HIT_TOOL_PAGE_BASE")) \
+        > values["HIT_PLAIN_HIGH"], "the toolbox blocks belong above the plain ids' marker"
+
+
 # --- 2. הדרייבר: לחיצה אמיתית דרך handle() ----------------------------------------
 
 DRIVER = r'''

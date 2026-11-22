@@ -149,12 +149,12 @@ void install_draw_disk(App *a,cairo_t *cr,InstallLayout l){
 }
 
 static void result_box(App *a,cairo_t *cr,Rect r){InstallState *s=&a->install;const Theme *t=a->theme;if(!s->primary_checked)return;Rgb bg=s->primary_ok?t->success_soft:t->danger_soft,line=s->primary_ok?t->success_ink:t->danger;draw_fill_rrect(cr,r,t->radius,bg);draw_border_rrect(cr,r,t->radius,line,1);
-    if(s->primary_ok){char top[220],fp[160];snprintf(top,sizeof top,"✓  השרת הראשי ענה · %s · %s",s->primary_name,s->primary_version[0]?s->primary_version:"גרסה לא נקראה");install_text_r(cr,t,top,13,600,r.x+r.w-14,r.y+10,r.w-28,line);snprintf(fp,sizeof fp,"SHA-256  %s",s->primary_fingerprint);install_text_ltr(cr,fp,11,400,r.x+14,r.y+38,r.w-28,t->ink);}else{char failure[380];snprintf(failure,sizeof failure,"התקשרות אל %s בפורט 8443 נכשלה. ודא כי חומת האש שבין האתרים פתוחה",s->primary_url);install_text_r(cr,t,s->primary_error[0]?s->primary_error:failure,13,600,r.x+r.w-14,r.y+12,r.w-28,line);}}
+    if(s->primary_ok){char top[220],fp[160];snprintf(top,sizeof top,"✓  השרת הראשי ענה · %s · %s",s->primary_name,s->primary_version[0]?s->primary_version:"גרסה לא נקראה");install_text_r(cr,t,top,13,600,r.x+r.w-14,r.y+10,r.w-28,line);snprintf(fp,sizeof fp,"SHA-256  %s",s->primary_fingerprint);install_text_ltr(cr,fp,11,400,r.x+14,r.y+38,r.w-28,t->ink);}else{char failure[380];snprintf(failure,sizeof failure,"התקשרות אל %s בפורט 7700 נכשלה. ודא כי חומת האש שבין האתרים פתוחה",s->primary_url);install_text_r(cr,t,s->primary_error[0]?s->primary_error:failure,13,600,r.x+r.w-14,r.y+12,r.w-28,line);}}
 
 void install_draw_role(App *a,cairo_t *cr,InstallLayout l){InstallState *s=&a->install;const Theme *t=a->theme;double w=l.body.w,x=l.body.x,y=l.body.y;   /* the one column (mockup 10/10) */
     install_text_r(cr,t,"נבחר בתפריט ההתקנה",12,500,x+w,y,w,t->muted);y+=24;
     install_radio(a,cr,(Rect){x,y,w,74},"שרת ראשי","מנהל את הספרייה, השיכפול ושרתי המשנה.",!s->secondary,HIT_INSTALL_PRIMARY);y+=86;
-    install_radio(a,cr,(Rect){x,y,w,74},"שרת משנה","שרת באתר נוסף; הראשי יוזם אליו חיבור מאובטח בפורט 8443.",s->secondary,HIT_INSTALL_SECONDARY);y+=96;
+    install_radio(a,cr,(Rect){x,y,w,74},"שרת משנה","שרת באתר נוסף; הראשי יוזם אליו חיבור מאובטח בפורט 7700.",s->secondary,HIT_INSTALL_SECONDARY);y+=96;
     if(s->secondary){install_field_draw(a,cr,(Rect){x,y,w-150,56},"כתובת השרת הראשי",s->primary_url,0,HIT_INSTALL_PRIMARY_URL,1);Text check=btn_label(cr,"בדוק חיבור");Rect cb={x+w-138,y+19,138,36};draw_btn(a,cr,cb,&check,BTN_PLAIN,HIT_INSTALL_CHECK_PRIMARY);install_focus_ring(a,cr,cb,HIT_INSTALL_CHECK_PRIMARY);text_free(&check);y+=60;install_text_r(cr,t,"כתובת ה-IP של השרת הראשי, כפי שהיא נראית מאתר זה",12,400,x+w,y,w-150,t->muted);y+=26;result_box(a,cr,(Rect){x,y,w,70});y+=82;}
     if(s->error[0])install_text_r(cr,t,s->error,13,600,x+w,y,w,t->danger_fg);
     install_footer(a,cr,l,"הבא",HIT_INSTALL_NEXT,1,install_role_ready(s));   /* #1310: no green, no next */

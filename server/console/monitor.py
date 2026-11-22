@@ -8,6 +8,7 @@ import hmac
 import json
 import logging
 import socket
+import sqlite3
 import struct
 import threading
 import time
@@ -19,6 +20,9 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket
 from fastapi.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 
+from server.core import ports as product_ports   # #3871
+from server.core.logtext import one_line
+
 from server.console import auth, viewer_sessions
 from server.agent import registry
 from server.agent.api import ServerContext
@@ -26,7 +30,7 @@ from server.db import get_setting, journal, monitor_rekeyed, set_setting
 
 log = logging.getLogger("imagesrv.monitor")
 
-MONITOR_PORT = 5900
+MONITOR_PORT = product_ports.MONITOR   # server/core/ports.py (#3871)
 ONLINE_SECONDS = 90
 STATION_KEY = "monitor:stations"
 CMDLINE_PARAM = "imagesrv.monitor=1"
@@ -48,8 +52,13 @@ SESSION_ENDED_REASON = "נותקת מהקונסולה"
 #: #839: הפרוקסי לא הצליח להזדהות מול המוניטור **במכונה** — המכונה לא
 #: דיווחה סוד (סוכן ישן), המוניטור לא הציע את סוג-האבטחה שלנו (מוניטור
 #: ישן, או מי שמתחזה לו), או שדחה את הסוד. מובחן מ-4403 (המשתמש בדפדפן
-#: אינו admin) ומ-4502 (אין מי שיענה על 5900).
+#: אינו admin) ומ-4502 (אין מי שיענה על 7710).
 WS_MACHINE_AUTH = 4512
+
+#: #3020: a machine that asked for its boot menu has a `net_devices` row (ip, last_seen) but no
+#: hello of the agent yet, so no secret. That is a machine that is still coming up, not an old agent.
+STILL_COMING_UP_HE = "המכונה עולה, הסוכן עוד לא דיווח — נסו שוב בעוד רגע"
+OLD_AGENT_HE = "המכונה לא דיווחה סוד מוניטור — סוכן ישן?"
 
 #: The authenticated machine-side TCP stream ended while the browser was still
 #: watching.  This is deliberately different from a browser/network close
@@ -63,7 +72,7 @@ WS_IDLE = 4408
 IDLE_SECONDS = 600
 
 # The first hello makes a booting machine visible before monitor_start() has a
-# framebuffer to serve and binds 5900.  Keep the accepted WebSocket open (the
+# framebuffer to serve and binds 7710.  Keep the accepted WebSocket open (the
 # browser continues to show "מתחבר…") while that short startup window closes.
 MONITOR_CONNECT_WAIT_SECONDS = 15.0
 MONITOR_CONNECT_ATTEMPT_SECONDS = 3.0
@@ -212,7 +221,7 @@ async def accept_browser(websocket: WebSocket) -> None:
 
 #: RFB security type 2 — מסגור VNC Authentication (challenge של 16
 #: בייטים, תשובה של 16 בייטים). התשובה היא HMAC-SHA256(סוד, challenge)
-#: קטום ל-16 בייטים (#1077); הסוד עצמו אינו עובר על 5900.
+#: קטום ל-16 בייטים (#1077); הסוד עצמו אינו עובר על 7710.
 RFB_SECURITY_SECRET = 2
 RFB_VERSION = b"RFB 003.008\n"
 MONITOR_AUTH_HMAC = "hmac"
@@ -293,7 +302,7 @@ def keep_alive(sock) -> None:
 
 
 #: #2844: המכונה עלתה לפני שמתג המוניטור הופעל — שורת הקרנל נקבעת באתחול ואין
-#: שירות שיענה על 5900. לא "סירבה לחיבור", שנראה כתקלה.
+#: שירות שיענה על 7710. לא "סירבה לחיבור", שנראה כתקלה.
 BOOTED_BEFORE_MONITOR = "המכונה עלתה לפני שהמוניטור הופעל — הפעילו אותה מחדש"
 
 
@@ -407,6 +416,17 @@ def next_secret(secret: str, challenge: bytes) -> str:
                     hashlib.sha256).digest()[:HMAC_RESPONSE_LEN].hex()
 
 
+def _never_said_hello(ctx: ServerContext, mac: str) -> bool:
+    """#3020: the row exists and no agent hello was ever taken (`agent_version` empty). A read that
+    failed, or no row, is not evidence -- the caller keeps the old-agent sentence."""
+    try:
+        row = ctx.conn.execute("SELECT agent_version FROM net_devices WHERE mac = ?", (mac,)).fetchone()
+    except sqlite3.Error:
+        log.exception("reading agent_version of %s failed", one_line(mac))
+        return False
+    return row is not None and not row["agent_version"]
+
+
 def _target(ctx: ServerContext, mac: str,
             now: datetime | None = None
             ) -> tuple[str, str, str | None, str | None]:
@@ -489,7 +509,7 @@ async def authenticate_machine(reader, writer, secret: str) -> str:
     """
     banner = await _read_exact(reader, 12)
     if not banner.startswith(b"RFB 003."):
-        raise MachineAuthError("על 5900 עונה משהו שאינו RFB")
+        raise MachineAuthError("על 7710 עונה משהו שאינו RFB")
     writer.write(RFB_VERSION)
     await writer.drain()
     count = (await _read_exact(reader, 1))[0]
@@ -1130,7 +1150,10 @@ def create_monitor_router(
         if secret is None:
             # #839: בלי סוד אין עם מה להזדהות — ולכן גם אין TCP. מוניטור
             # שהיה נפתח כאן "כמו פעם" הוא בדיוק המסלול הלא-מאומת שנסגר.
-            await refuse(canonical, WS_MACHINE_AUTH, "המכונה לא דיווחה סוד מוניטור — סוכן ישן?")
+            # #3020: "old agent?" only with positive evidence (a hello was taken, so `agent_version`
+            # is set). A row that never had a hello is a machine that has not finished booting.
+            await refuse(canonical, WS_MACHINE_AUTH,
+                         STILL_COMING_UP_HE if _never_said_hello(ctx, canonical) else OLD_AGENT_HE)
             return
         if machine_auth != MONITOR_AUTH_HMAC:
             # #1077: סוכן ישן ששולח סוד גולמי. לא נופלים לגולמי בשקט —

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """מייצר את grub.cfg הקבוע שיושב על ה-TFTP.
 
-    python tools/render_bootstrap.py http://10.44.12.10:8080 > grub.cfg
+    python tools/render_bootstrap.py http://10.44.12.10:7712 > grub.cfg
 
 מריצים את זה פעם אחת בהתקנה, ושוב רק אם כתובת השרת משתנה. הקובץ שנוצר
 מועתק לשורש ה-TFTP תחת grub/grub.cfg, ליד ה-shim וה-GRUB החתומים.

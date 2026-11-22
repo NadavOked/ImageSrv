@@ -134,8 +134,8 @@ def _app_on(data_dir, images_root, clock, **kw):
     """אפליקציה מלאה על ``data_dir`` נתון, עם שולח מזויף — כדי לבנות
     שתי הפעלות רצופות על אותו קובץ נתונים (סימולציית ריסטארט)."""
     from server.app import create_app
-    from test_sender import Recorder                       # noqa: PLC0415
-    return create_app(data_dir, images_root, "http://10.44.12.10:8080",
+    from fakesend import Recorder                       # noqa: PLC0415
+    return create_app(data_dir, images_root, "http://10.44.12.10:7712",
                       now_fn=clock, sender_runner=Recorder(block=True), **kw)
 
 
@@ -147,29 +147,29 @@ def test_restart_without_flag_keeps_stored_secondary(tmp_path, images_root, cloc
     data_dir = tmp_path / "data"
 
     app1 = _app_on(data_dir, images_root, clock,
-                   storage_role="secondary", primary_url="http://parent:8080")
+                   storage_role="secondary", primary_url="http://parent:7712")
     try:
         assert storage_nodes.role(app1.state.ctx.conn) == "secondary"
     finally:
-        app1.state.ctx.sender.stop()
+        app1.state.ctx.chunk.stop()
 
     # "ריסטארט" — בדיוק כמו main בונה argv בלי הדגל, ומעביר את הערך הלאה.
-    args = build_parser().parse_args(["--server-url", "http://10.44.12.10:8080"])
+    args = build_parser().parse_args(["--server-url", "http://10.44.12.10:7712"])
     assert args.storage_role is None                       # הראיה על התיקון ב-main
     app2 = _app_on(data_dir, images_root, clock,
                    storage_role=args.storage_role, primary_url=args.primary_url)
     try:
         assert storage_nodes.role(app2.state.ctx.conn) == "secondary"
-        assert storage_nodes.primary_url(app2.state.ctx.conn) == "http://parent:8080"
+        assert storage_nodes.primary_url(app2.state.ctx.conn) == "http://parent:7712"
     finally:
-        app2.state.ctx.sender.stop()
+        app2.state.ctx.chunk.stop()
 
 
 def test_storage_role_flag_defaults_to_none():
     """הראיה הישירה על התיקון ב-main: ברירת המחדל של הדגל היא None,
     ולכן create_app לא כותב תפקיד בהפעלה בלי הדגל (app.py:100)."""
     from server.main import build_parser
-    args = build_parser().parse_args(["--server-url", "http://10.44.12.10:8080"])
+    args = build_parser().parse_args(["--server-url", "http://10.44.12.10:7712"])
     assert args.storage_role is None
     assert args.primary_url is None
 
@@ -216,9 +216,9 @@ def test_persist_config_atomic_rolls_back_role_on_url_failure(server, monkeypatc
     import pytest
 
     conn = server["ctx"].conn
-    storage_nodes.persist_config(conn, "secondary", "http://p1:8080")
+    storage_nodes.persist_config(conn, "secondary", "http://p1:7712")
     assert storage_nodes.role(conn) == "secondary"
-    assert storage_nodes.primary_url(conn) == "http://p1:8080"
+    assert storage_nodes.primary_url(conn) == "http://p1:7712"
 
     orig = conn.execute
     calls = {"settings_inserts": 0}
@@ -237,4 +237,4 @@ def test_persist_config_atomic_rolls_back_role_on_url_failure(server, monkeypatc
 
     # אטומי: התפקיד לא הפך ל-standalone, והכתובת נשמרה.
     assert storage_nodes.role(conn) == "secondary"
-    assert storage_nodes.primary_url(conn) == "http://p1:8080"
+    assert storage_nodes.primary_url(conn) == "http://p1:7712"

@@ -35,17 +35,18 @@ def health(tmp_path: Path, images_root: Path, clock):
     from server.app import create_app
 
     fake = {"interfaces": [_nic("ens192")],
-            "deploy": DeployState("console", "ens192", "http://10.44.12.10:8080")}
+            "deploy": DeployState("console", "ens192", "http://10.44.12.10:7712")}
     hooks = {
         "ss": lambda: "", "unit_active": lambda name: "active",
         "http_get": lambda url: 200, "http_size": lambda url: (200, 9_000_000),
-        "tftp_root": lambda: tmp_path, "udp_sender_pids": lambda: [],
+        # #3173: the sender's orphan check, under the name it had and the one `test_server_health.SENDER_PIDS` expects
+        "tftp_root": lambda: tmp_path, "udp_sender_pids": lambda: [], "chunk_sender_pids": lambda: [],
         "nft_ruleset": lambda: RULES,
         "interfaces": lambda: fake["interfaces"],
         "deploy": lambda: fake["deploy"],
         "db_free": lambda data_dir: 50 * 1024 ** 3,
     }
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, health_hooks=hooks)
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test",
                  check_policy=False)
@@ -59,7 +60,7 @@ def health(tmp_path: Path, images_root: Path, clock):
         return {r["id"]: r for r in admin.get("/api/console/ports").json()}
 
     yield {"fake": fake, "rows": rows, "ports": port_rows, "conn": app.state.ctx.conn}
-    app.state.ctx.sender.stop()
+    app.state.ctx.chunk.stop()
 
 
 def test_a_deploy_nic_that_exists_is_ok(health):
@@ -131,7 +132,7 @@ def _completion_context(tmp_path, calls):
     from server.net import deploy_net
 
     return deploy_net.DeployContext(
-        state=DeployState("none", None, None), agent_port=8080,
+        state=DeployState("none", None, None), agent_port=7712,
         tftp_root=tmp_path / "tftp", repo_dir=tmp_path, servers_interface="eth0",
         hooks={
             "write_grub_cfg": lambda *a: calls.append("write_grub_cfg"),
@@ -169,7 +170,7 @@ def test_completion_checks_presence_before_any_step(tmp_path, names, expected_er
             assert calls == ["write_grub_cfg", "enable_dnsmasq",
                              ("firewall", {"deploy_if": "ens192", "servers_if": "eth0",
                                            "primary_ip": None}), "restart_server"]
-            assert deploy_net.stored(conn) == ("ens192", "http://10.44.12.10:8080")
+            assert deploy_net.stored(conn) == ("ens192", "https://10.44.12.10:7712")
     finally:
         conn.close()
 
@@ -186,7 +187,7 @@ def test_cli_firewall_checks_current_interfaces(tmp_path, images_root, interface
 
     calls = []
     deploy = _completion_context(tmp_path, calls)
-    deploy.state = DeployState("cli", interface, "http://10.44.12.10:8080")
+    deploy.state = DeployState("cli", interface, "http://10.44.12.10:7712")
     app = create_app(tmp_path / "data", images_root, deploy.state.url, deploy=deploy,
                      health_hooks={"interfaces": lambda: [_nic(name) for name in names]})
     try:
@@ -200,7 +201,7 @@ def test_cli_firewall_checks_current_interfaces(tmp_path, images_root, interface
             assert calls == [("firewall", {"deploy_if": interface, "servers_if": "eth0",
                                            "primary_ip": None})]
     finally:
-        app.state.ctx.sender.stop()
+        app.state.ctx.chunk.stop()
 
 
 @pytest.mark.parametrize("sources", [
@@ -222,12 +223,12 @@ def test_app_shares_injected_interfaces_without_overriding_deploy_hook(
                 for source in sources}
     if explicit:
         injected[sources[0]]["interfaces"] = lambda: [_nic("other0")]
-    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080",
+    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:7712",
                      deploy=deploy, **injected)
     try:
         assert deploy.hooks["interfaces"] is chosen
     finally:
-        app.state.ctx.sender.stop()
+        app.state.ctx.chunk.stop()
 
 
 def test_console_refuses_a_nic_that_disappears_during_the_dhcp_probe(tmp_path, images_root):
@@ -246,7 +247,7 @@ def test_console_refuses_a_nic_that_disappears_during_the_dhcp_probe(tmp_path, i
         present[:] = [_nic("eth0")]
         return dhcp.ProbeResult(True, ())
 
-    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080",
+    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:7712",
                      deploy=deploy, dhcp_hooks={
                          "interfaces": lambda: present, "probe": probe,
                          "apply": lambda text: applied.append(text),
@@ -273,4 +274,4 @@ def test_console_refuses_a_nic_that_disappears_during_the_dhcp_probe(tmp_path, i
         assert not get_setting(conn, "dhcp:ens192")
         assert deploy.state == DeployState("none", None, None)
     finally:
-        app.state.ctx.sender.stop()
+        app.state.ctx.chunk.stop()

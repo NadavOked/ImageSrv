@@ -43,7 +43,7 @@ SHA = "0123456789abcdef0123456789abcdef01234567"
 TESTS = '''import pytest
 
 
-@pytest.mark.parametrize("addr", ["::1", "[::]:8080", "fe80::1%eth0", "a::b[c]"])
+@pytest.mark.parametrize("addr", ["::1", "[::]:7712", "fe80::1%eth0", "a::b[c]"])
 def test_listen(addr):
     pass
 

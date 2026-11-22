@@ -32,6 +32,7 @@ from server.agent import body as agent_body
 from server.rounds import chunkledger, repair
 from server.rounds.durableseq import DurableSeq
 from agentlib import agent_sources
+from fakesend import wait_for
 from test_agent import AGENT, BASH, posix
 from test_chunksend_2533 import _index_the_image, _room_wave
 from test_server_room import CLONER1, room_server   # noqa: F401 -- a fixture
@@ -76,7 +77,6 @@ def _wave(room_server, chunks: int = 10) -> str:
     ctx = room_server["ctx"]
     room_server["recorder"].block = True
     _index_the_image(ctx, chunks=chunks)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     wave, _hello = _room_wave(room_server)
     return wave
 
@@ -507,13 +507,26 @@ def test_a_ledger_write_that_failed_once_mid_round_does_not_shrink_what_the_repa
     ctx.chunk.stop(wave)
 
 
-def _udpcast_wave_of_an_image_not_indexed_yet(room_server, monkeypatch) -> str:
-    """A round of today's engine on the fixture image as it is: no index derived, none verified. The
-    ledger refuses its `durable` for now ("no verified chunk index yet") -- and the manifest it keeps is
-    read again every time here, so the test does not wait out its quarter of a minute."""
+def _wave_of_an_image_not_verified_yet(room_server, monkeypatch) -> str:
+    """A running wave whose image the ledger does not hold as verified: the manifest has no `readback_chunks`.
+    The ledger refuses its `durable` for now ("no verified chunk index yet") -- and the manifest it keeps is
+    read again every time here, so the test does not wait out its quarter of a minute.
+
+    #3173: this was a udpcast wave, the one engine that went out on an image with no index. The chunk engine
+    does not start a wave without a verified index (`ChunkEngine._send`), so the wave goes out on the verified
+    fixture image, and the verification is taken from the manifest only once the engine has read it and is
+    waiting for the cloner -- what the ledger is asked here does not depend on which engine sends."""
     monkeypatch.setattr(chunkledger, "MANIFEST_TTL_S", 0.0)
     chunkledger._SEEN.clear()                                                     # noqa: SLF001
+    ctx = room_server["ctx"]
     wave, _hello = _room_wave(room_server)
+    assert wait_for(lambda: (ctx.chunk.status() or {}).get("state") == "sending"), ctx.chunk.status()
+    manifest_file = ctx.library.file_path("img_7f3a91", next(
+        p["file"] for p in MANIFEST_256["partitions"] if p.get("file"))).parent / "manifest.json"
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    for part in manifest["partitions"]:
+        part.pop("readback_chunks", None)                                         # derived, not yet verified
+    manifest_file.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
     return wave
 
 
@@ -523,7 +536,7 @@ def test_three_reports_the_ledger_cannot_take_yet_and_then_one_it_can(room_serve
     keeps sending what it has since its last acknowledgement; once the index is verified it is taken,
     and the server holds the truth."""
     ctx = room_server["ctx"]
-    wave = _udpcast_wave_of_an_image_not_indexed_yet(room_server, monkeypatch)
+    wave = _wave_of_an_image_not_verified_yet(room_server, monkeypatch)
     for held in ([[0, 9]], [[0, 19]], [[0, 29]]):                                 # the disk goes on writing
         waiting = _progress(room_server, wave, 0, held)
         assert waiting["ok"] is True and "durable_seq" not in waiting and "durable_full" not in waiting
@@ -540,7 +553,7 @@ def test_the_agent_keeps_sending_since_its_last_ack_until_the_ledger_takes_it(ro
     since the last acknowledgement (there is none yet), none of them is acknowledged, and after the
     fourth the server's union is exactly what the disk holds."""
     ctx, anon = room_server["ctx"], room_server["anon"]
-    wave = _udpcast_wave_of_an_image_not_indexed_yet(room_server, monkeypatch)
+    wave = _wave_of_an_image_not_verified_yet(room_server, monkeypatch)
     agent = Agent(tmp_path, wave)
 
     def report():

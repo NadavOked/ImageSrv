@@ -68,7 +68,7 @@ def test_overview_pulls_carry_the_opener_too(server):
 
 
 def test_the_unauthenticated_agent_route_does_not_leak_who_opened_the_round(server):
-    """`/api/v1/agent/sessions/active` מוגש לסוכן ב-8080 בלי הרשאת קונסולה (וחולק את `build()` עם הקונסולה):
+    """`/api/v1/agent/sessions/active` מוגש לסוכן ב-7712 בלי הרשאת קונסולה (וחולק את `build()` עם הקונסולה):
     שם המשתמש שפתח את הסבב ותפקידו לא יוצאים לשם. המידע הזה רק בתשובת הקונסולה המאומתת."""
     _insert_running_session(server["ctx"])
     anon = server["anon"].get("/api/v1/agent/sessions/active")

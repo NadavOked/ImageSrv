@@ -43,15 +43,15 @@ parse_answers() {
 }
 
 # #1310: the primary's address as the person types it -- an IP or a name,
-# optionally HOST:8443 or https://HOST:8443[/] -- printed in the one stored
-# form, https://HOST:8443. Anything else (http://, another port, a path,
-# a space inside) is refused, not "fixed": the inter-site port is 8443.
+# optionally HOST:7700 or https://HOST:7700[/] -- printed in the one stored
+# form, https://HOST:7700. Anything else (http://, another port, a path,
+# a space inside) is refused, not "fixed": the inter-site port is 7700.
 normalize_primary_url() {
     _np=$1
     while :; do case "$_np" in ' '*) _np=${_np# } ;; *' ') _np=${_np% } ;; *) break ;; esac; done
-    _np=${_np#https://}; _np=${_np%/}; _np=${_np%:8443}
+    _np=${_np#https://}; _np=${_np%/}; _np=${_np%:7700}
     case "$_np" in ''|*[!A-Za-z0-9.-]*|.*|-*) return 1 ;; esac
-    printf 'https://%s:8443' "$_np"
+    printf 'https://%s:7700' "$_np"
 }
 
 valid_ipv4() {
@@ -93,7 +93,7 @@ validate_answers() {
             [ -z "$ANSWER_PRIMARY_FINGERPRINT" ] || fail invalid-primary-url "standalone requires an empty primary_fingerprint" ;;
         secondary)
             ANSWER_PRIMARY_URL=$(normalize_primary_url "$ANSWER_PRIMARY_URL") \
-                || fail invalid-primary-url "secondary requires the primary's IP or name (or https://HOST:8443)"
+                || fail invalid-primary-url "secondary requires the primary's IP or name (or https://HOST:7700)"
             # #1310: no secondary without a primary that answered -- the GUI
             # bridge writes the fingerprint only from its own green check.
             case "$ANSWER_PRIMARY_FINGERPRINT" in *[!0-9a-f]*|'') fail primary-unverified "the primary was not verified (no green connection check)" ;; esac

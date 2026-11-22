@@ -68,7 +68,7 @@ def test_every_interserver_context_refuses_everything_below_tls13(contexts, monk
     interserver_auth.build_pinned_client_context("aa" * 32, cert, key)
     monkeypatch.setattr(storage_client.socket, "create_connection", no_network)
     with pytest.raises(ConnectionRefusedError):
-        storage_client.fetch_server_spki("10.0.0.9", 8443)     # ה-preview של ה-SPKI
+        storage_client.fetch_server_spki("10.0.0.9", 7700)     # ה-preview של ה-SPKI
     assert len(contexts) == 3
     assert [_below_13_refused(ctx) for ctx in contexts] == [True, True, True]
 
@@ -82,7 +82,7 @@ def test_a_token_path_that_would_leave_secondaries_is_refused(server, tmp_path, 
     monkeypatch.setattr(storage_client, "pair_secondary", lambda *a, **k: {"token": "fake-token"})
     monkeypatch.setattr(storage_nodes, "valid_node_id", lambda value: True)
     r = server["admin"].post("/api/console/storage-nodes/enroll", json={
-        "url": "https://10.20.0.30:8443/api/interserver/v1", "label": "imagesrv-haifa",
+        "url": "https://10.20.0.30:7700/api/interserver/v1", "label": "imagesrv-haifa",
         "code": "ABC-DEF-GHJ", "expected_secondary_spki": "/../../escaped9",
         "protocol_version": "2.1"})
     assert r.status_code == 400, r.text

@@ -59,7 +59,6 @@ python3-guestfs
 busybox-static
 zstd
 partclone
-udpcast
 gdisk
 curl
 jq
@@ -121,6 +120,7 @@ foremost
 extundelete
 magicrescue
 recoverjpeg
+libjpeg-turbo-progs
 squashfs-tools
 libarchive-tools
 gddrescue

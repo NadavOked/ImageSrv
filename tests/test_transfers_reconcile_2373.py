@@ -34,7 +34,7 @@ ROWS = (("t_q", "queued", "push", None), ("t_s", "sending", "push", None),
 def _seed(conn) -> None:
     conn.execute(
         "INSERT INTO storage_nodes (id, label, base_url, credential_ref, enrolled_at)"
-        " VALUES ('n1', 'חיפה', 'https://10.0.0.2:8443', 'x', '2026-11-04T00:00:00+00:00')")
+        " VALUES ('n1', 'חיפה', 'https://10.0.0.2:7700', 'x', '2026-11-04T00:00:00+00:00')")
     for tid, state, direction, error in ROWS:
         conn.execute(
             "INSERT INTO storage_transfers (id, node_id, image_id, image_name, state,"
@@ -54,7 +54,7 @@ def test_a_transfer_cut_by_a_restart_fails_by_name_and_no_longer_blocks(tmp_path
     _seed(first["ctx"].conn)
     assert "העברת אימג' בין אתרים" in auto_reboot.busy_reason(
         SimpleNamespace(conn=first["ctx"].conn), include_update=False)   # לפני: חוסם
-    first["ctx"].sender.stop()
+    first["ctx"].chunk.stop()
 
     second = _boot(tmp_path, monkeypatch, seed=False)
     conn = second["ctx"].conn
@@ -67,7 +67,7 @@ def test_a_transfer_cut_by_a_restart_fails_by_name_and_no_longer_blocks(tmp_path
     assert rows["t_f"]["state"] == "failed" and rows["t_f"]["error"] == "המשני סירב"
     assert _events(second["ctx"]).count("storage_transfer_failed") == 4
     assert auto_reboot.busy_reason(SimpleNamespace(conn=conn), include_update=False) is None
-    second["ctx"].sender.stop()
+    second["ctx"].chunk.stop()
 
 
 def test_reconcile_reports_the_transfers_it_failed(tmp_path):

@@ -1,0 +1,33 @@
+#!/bin/sh
+# imagesrv-power -- /bin/reboot and /bin/poweroff of the initramfs (#3756).
+# PID 1 is /init, a shell: busybox reboot/poweroff WITHOUT -f only signal it,
+# the kernel drops the signal, and the command exits 0 having done nothing --
+# a typed `reboot` (ssh, the lab) left the machine up with the same boot_id.
+#   -f among the arguments  the caller meant it (agent/init, common.sh,
+#                           monitor.c all say -f): straight to busybox
+#   reboot                  sync, then busybox reboot -f
+#   poweroff                safe_poweroff -- the agent's own path, Wake-on-LAN
+#                           armed first; a plain `poweroff -f` skips it and the
+#                           machine does not wake (#587)
+# Any return from here is a failure and says so: rc != 0, never "it went down".
+n=${0##*/}
+BB="${IMAGESRV_BUSYBOX:-/bin/busybox}"
+for a in "$@"; do
+    case $a in -*f*) exec "$BB" "$n" "$@" ;; esac
+done
+PATH="$PATH:/usr/sbin:/sbin:/usr/bin:/bin"
+case $n in
+    reboot)
+        sync
+        "$BB" reboot -f "$@"
+        echo "reboot: returned rc=$? -- the machine is still on" >&2
+        exit 1 ;;
+    poweroff)
+        _lib="${IMAGESRV_LIB:-/usr/lib/imagesrv}/common.sh"
+        [ -r "$_lib" ] || { echo "poweroff: $_lib not readable -- not powering off" >&2; exit 1; }
+        . "$_lib"
+        safe_poweroff "poweroff (typed)" && exit 0
+        echo "poweroff: the machine is still on (Wake-on-LAN not armed, or the command returned) -- $LOG_FILE" >&2
+        exit 1 ;;
+    *) echo "imagesrv-power: not reboot or poweroff: $n" >&2; exit 2 ;;
+esac

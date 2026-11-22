@@ -11,7 +11,13 @@
 
 הערה על ההנחה שבישיו: "שחזור יוניקאסט פותח session עם expected_clients==1"
 אינו מדויק. סבב של מחשב אחד הוא **עדיין מולטיקאסט** (אותו udp-sender עם
-`--min-receivers 1`), ולכן הוא נשאר חסום — יש כאן בדיקה שמקבעת את זה.
+`--min-receivers 1`), ולכן הוא נשאר חסום.
+
+#3173: udp-sender נמחק, ומנוע החתיכות משדר את גלי חדר השיכפול בלבד; סבב כיתה
+הוא v2. הטענות על המשיכה מול "הסבב" נבדקות כאן מול סבב של חדר השיכפול
+(`open_room`) — המולטיקאסט שמשודר. שלושת הטסטים של החריץ היחיד מול סבב כיתה
+(בסוף הקובץ, `open_round`) רצים על הדגל של v2 (`conftest.setup_classroom`):
+הסבב נפתח ותופס את החריץ, וגל שלו אינו משודר.
 """
 
 from __future__ import annotations
@@ -24,12 +30,13 @@ pytest.importorskip("fastapi")
 #: כיתה ובודקות את זרימת v1.2 — ולכן מדליקות את היכולת (`classrooms_on`).
 pytestmark = pytest.mark.usefixtures("classrooms_on")
 
-from conftest import HANG_S, hello_body, room_slots, setup_classroom
+from conftest import HANG_S, MANIFEST_256, hello_body, room_slots, setup_classroom
+from server.rounds import room as room_mod
 
 #: הכתובת שאיתה נוצר השרת ב-conftest — וילן ההפצה.
-VLAN = "http://10.44.12.10:8080"
+VLAN = "http://10.44.12.10:7712"
 #: כתובת מקומית אחרת של אותו שרת: תחנה שמגיעה מרשת אחרת (#42).
-OFF_VLAN = "http://10.10.10.8:8080"
+OFF_VLAN = "http://10.10.10.8:7712"
 
 CREDS = {"username": "labtech", "password": "deploy-pass-1"}
 
@@ -53,11 +60,21 @@ def second_class(server) -> dict:
             "mac2": "b4:2e:99:07:2a:02"}
 
 
-def open_round(server, group: str, image: str = "img_7f3a91", expected: int = 2):
-    return server["deploy"].post(
-        "/api/console/sessions",
-        json={"group_id": group, "image_id": image, "expected_clients": expected},
-    )
+#: מחשב השיכפול של `open_room`, ומגירה אחת שלו
+ROOM_CLONER, ROOM_SERIALS = "b4:2e:99:07:3a:01", ["S1"]
+
+
+def open_room(server, image: str = "img_7f3a91"):
+    """סבב של חדר השיכפול (#3173: המולטיקאסט היחיד ב-v1): מחשב שיכפול אחד ומגירה אחת.
+    הגל שלו נפתח עם הסבב ותופס את חריץ המולטיקאסט."""
+    assert server["admin"].post(
+        "/api/console/machines",
+        json={"mac": ROOM_CLONER, "name": "01", "group_id": room_mod.CLONERS_GROUP},
+    ).status_code == 200
+    return server["deploy"].post("/api/console/room", json={
+        "image_id": image, "target_drives": len(ROOM_SERIALS),
+        "target_slots": room_slots(server["ctx"].conn, {ROOM_CLONER: ROOM_SERIALS}),
+    })
 
 
 def pull(server, mac: str, image: str = "img_7f3a91", base: str = VLAN,
@@ -81,58 +98,12 @@ def overview(server) -> dict:
     return response.json()
 
 
-# --- החריץ היחיד נשאר יחיד ---------------------------------------------------
-
-
-def test_a_second_multicast_round_is_still_refused(server):
-    lab1 = setup_classroom(server)
-    lab2 = second_class(server)
-    assert open_round(server, lab1["group"]).status_code == 200
-
-    second = open_round(server, lab2["group"])
-
-    assert second.status_code == 409
-    assert "כבר יש סבב פעיל" in second.json()["detail"]
-
-
-def test_a_one_machine_round_is_a_broadcast_too_and_is_refused(server):
-    """סבב של מחשב אחד אינו "יוניקאסט": הוא רץ על אותו udp-sender."""
-    lab1 = setup_classroom(server)
-    lab2 = second_class(server)
-    assert open_round(server, lab1["group"]).status_code == 200
-
-    single = server["deploy"].post(
-        "/api/console/sessions",
-        json={"group_id": lab2["group"], "image_id": "img_7f3a91",
-              "macs": [lab2["mac1"]], "expected_clients": 1},
-    )
-
-    assert single.status_code == 409
-    assert "כבר יש סבב פעיל" in single.json()["detail"]
-
-
-def test_a_room_wave_still_takes_the_slot_from_a_class_round(server):
-    """גל חדר השיכפולים הוא מולטיקאסט — הכלל הישן נשאר גם עליו."""
-    lab1 = setup_classroom(server)
-    assert server["admin"].post(
-        "/api/console/machines",
-        json={"mac": "b4:2e:99:07:3a:01", "name": "01", "group_id": "grp_CLONERS"},
-    ).status_code == 200
-    assert server["deploy"].post("/api/console/room", json={
-        "image_id": "img_7f3a91", "target_drives": 4,
-        "target_slots": room_slots(server["ctx"].conn, {"b4:2e:99:07:3a:01": ["S1", "S2"]}),
-    }).status_code == 200
-
-    assert open_round(server, lab1["group"]).status_code == 409
-
-
 # --- משיכת יוניקאסט אינה תופסת את החריץ --------------------------------------
 
 
 def test_a_unicast_pull_opens_while_a_round_is_open(server):
-    lab1 = setup_classroom(server)
     lab2 = second_class(server)
-    assert open_round(server, lab1["group"]).status_code == 200
+    assert open_room(server).status_code == 200
 
     response = pull(server, lab2["mac1"])
 
@@ -157,12 +128,12 @@ def test_two_unicast_pulls_run_side_by_side(server):
 
 def test_a_round_opens_while_pulls_are_running(server):
     """הכיוון השני: משיכה פעילה אינה חוסמת שידור."""
-    lab1 = setup_classroom(server)
     lab2 = second_class(server)
     assert pull(server, lab2["mac1"]).status_code == 200
     assert pull(server, lab2["mac2"]).status_code == 200
 
-    assert open_round(server, lab1["group"]).status_code == 200
+    opened = open_room(server)
+    assert opened.status_code == 200, opened.text
 
 
 def test_the_same_machine_does_not_pull_twice(server):
@@ -216,14 +187,13 @@ def test_a_pull_that_reported_is_not_handed_out_again(server):
 
 
 def test_the_overview_shows_the_round_and_the_pulls_together(server):
-    lab1 = setup_classroom(server)
     lab2 = second_class(server)
-    assert open_round(server, lab1["group"]).status_code == 200
+    assert open_room(server).status_code == 200
     pull_id = pull(server, lab2["mac1"]).json()["id"]
 
     view = overview(server)
 
-    assert view["session"]["group_id"] == lab1["group"]
+    assert view["session"]["group_id"] == room_mod.CLONERS_GROUP
     assert [p["id"] for p in view["pulls"]] == [pull_id]
     only = view["pulls"][0]
     assert only["kind"] == "unicast"
@@ -419,13 +389,13 @@ def test_the_background_clock_sweeps_pulls(tmp_path, monkeypatch):
     fired = threading.Event()
     monkeypatch.setattr(pulls_mod, "sweep", lambda store: fired.set())
 
-    app = create_app(tmp_path / "data", images, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images, "http://10.44.12.10:7712",
                      now_fn=Clock(), room_clock_interval=0.02)
     try:
         with TestClient(app):
             assert fired.wait(timeout=5.0), "שעון-הרקע אינו סוגר משיכות"
     finally:
-        app.state.ctx.sender.stop()
+        app.state.ctx.chunk.stop()
 
 
 def test_a_pull_sweep_that_throws_is_journaled_and_the_clock_goes_on(tmp_path, monkeypatch):
@@ -447,13 +417,13 @@ def test_a_pull_sweep_that_throws_is_journaled_and_the_clock_goes_on(tmp_path, m
         raise RuntimeError("boom")
 
     monkeypatch.setattr(pulls_mod, "sweep", broken)
-    app = create_app(tmp_path / "data", images, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images, "http://10.44.12.10:7712",
                      now_fn=Clock(), room_clock_interval=0.02)
     try:
         with TestClient(app):
             assert again.wait(timeout=5.0), "הלולאה מתה על הכשל הראשון"
     finally:
-        app.state.ctx.sender.stop()
+        app.state.ctx.chunk.stop()
     rows = app.state.ctx.conn.execute(
         "SELECT detail FROM journal WHERE event = 'pull_sweep_failed'").fetchall()
     assert any("boom" in r["detail"] for r in rows)
@@ -482,18 +452,19 @@ def test_a_pull_is_not_the_round_the_station_screen_shows(server):
 
 
 def test_closing_a_pull_does_not_stop_the_broadcast(server_with_sender):
-    """`on_closed` מגיע ל-SenderEngine שמתעלם ממזהה הסבב: סגירת משיכה
-    הייתה הורגת את השידור של הכיתה."""
-    from test_sender import wait_for
+    """`on_closed` הגיע ל-SenderEngine שהתעלם ממזהה הסבב: סגירת משיכה
+    הייתה הורגת את השידור של הכיתה. #3173: השידור הוא גל החתיכות של חדר השיכפול."""
+    from fakesend import Cloners
+    from test_server_room import cloner_hello                      # noqa: PLC0415
 
     server, recorder = server_with_sender
-    lab1 = setup_classroom(server)
     lab2 = second_class(server)
-    assert open_round(server, lab1["group"], expected=1).status_code == 200
-    server["anon"].post("/api/v1/agent/hello", json=hello_body(lab1["mac1"]))
-    server["anon"].post("/api/v1/agent/hello", json=hello_body(lab1["mac1"]))
+    assert open_room(server).status_code == 200
+    wave = cloner_hello(server["anon"], ROOM_CLONER, ROOM_SERIALS)["session"]["id"]   # covers the target: the wave ripens
+    assert server["deploy"].get("/api/console/room").json()["round"]["wave_state"] == "running"
+    first = next(p["index"] for p in MANIFEST_256["partitions"] if p.get("file"))
+    Cloners(server["anon"], wave, {ROOM_CLONER: ROOM_SERIALS}).listen(first)
     assert recorder.spawned.wait(timeout=HANG_S)
-    assert wait_for(lambda: len(recorder.commands) >= 1)
 
     pull_id = pull(server, lab2["mac1"]).json()["id"]
     assert server["deploy"].post(
@@ -501,8 +472,8 @@ def test_closing_a_pull_does_not_stop_the_broadcast(server_with_sender):
         json={"confirm_name": "Office 2024 Standard"}).status_code == 200
 
     assert recorder.processes[0].terminated is False
-    assert server["admin"].get(
-        "/api/console/overview").json()["sender"]["state"] == "sending"
+    status = server["ctx"].chunk.status()
+    assert status["session_id"] == wave and status["state"] == "sending", status
 
 
 # --- מי מורשה לפתוח משיכה (#42 לא משתנה) ------------------------------------
@@ -577,3 +548,52 @@ def test_a_pull_of_an_unknown_image_is_refused(server):
 
     assert response.status_code == 404
     assert response.json()["code"] == "no_image"
+
+
+def open_round(server, group: str, image: str = "img_7f3a91", expected: int = 2):
+    return server["deploy"].post(
+        "/api/console/sessions",
+        json={"group_id": group, "image_id": image, "expected_clients": expected},
+    )
+
+
+def test_a_second_multicast_round_is_still_refused(server):
+    lab1 = setup_classroom(server)
+    lab2 = second_class(server)
+    assert open_round(server, lab1["group"]).status_code == 200
+
+    second = open_round(server, lab2["group"])
+
+    assert second.status_code == 409
+    assert "כבר יש סבב פעיל" in second.json()["detail"]
+
+
+def test_a_one_machine_round_is_a_broadcast_too_and_is_refused(server):
+    """סבב של מחשב אחד אינו "יוניקאסט": הוא רץ על אותו udp-sender."""
+    lab1 = setup_classroom(server)
+    lab2 = second_class(server)
+    assert open_round(server, lab1["group"]).status_code == 200
+
+    single = server["deploy"].post(
+        "/api/console/sessions",
+        json={"group_id": lab2["group"], "image_id": "img_7f3a91",
+              "macs": [lab2["mac1"]], "expected_clients": 1},
+    )
+
+    assert single.status_code == 409
+    assert "כבר יש סבב פעיל" in single.json()["detail"]
+
+
+def test_a_room_wave_still_takes_the_slot_from_a_class_round(server):
+    """גל חדר השיכפולים הוא מולטיקאסט — הכלל הישן נשאר גם עליו."""
+    lab1 = setup_classroom(server)
+    assert server["admin"].post(
+        "/api/console/machines",
+        json={"mac": "b4:2e:99:07:3a:01", "name": "01", "group_id": "grp_CLONERS"},
+    ).status_code == 200
+    assert server["deploy"].post("/api/console/room", json={
+        "image_id": "img_7f3a91", "target_drives": 4,
+        "target_slots": room_slots(server["ctx"].conn, {"b4:2e:99:07:3a:01": ["S1", "S2"]}),
+    }).status_code == 200
+
+    assert open_round(server, lab1["group"]).status_code == 409

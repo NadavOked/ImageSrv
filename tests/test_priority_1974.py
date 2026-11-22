@@ -15,25 +15,26 @@ import threading
 import pytest
 
 from server.system import priority
-from server.rounds import sender
+from server.rounds import chunklog
 
 LINUX = sys.platform.startswith("linux")
 #: ioprio_get(2) — לקריאה בחזרה של מה ש-`lower_this_thread` כתב.
 IOPRIO_GET = {"x86_64": 252, "aarch64": 31}.get(platform.machine())
 
 
-def test_udp_sender_runs_under_nice_and_ionice(monkeypatch, tmp_path):
+def test_the_chunk_sender_runs_under_nice_and_ionice(monkeypatch, tmp_path):
+    """#3173: השולח היחיד הוא `chunkcast send`, ו-`chunklog.run_process` הוא מי שמפעיל אותו בשרת."""
     seen = {}
 
     def fake_popen(argv, **kwargs):
         seen["argv"] = argv
         return object()
 
-    monkeypatch.setattr(sender, "SENDER_LOG", tmp_path / "udp-sender.log")
-    monkeypatch.setattr(sender.subprocess, "Popen", fake_popen)
+    monkeypatch.setattr(chunklog, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(chunklog.subprocess, "Popen", fake_popen)
     monkeypatch.setattr(priority.shutil, "which", lambda name: f"/usr/bin/{name}")
-    cmd = ["udp-sender", "--file", str(tmp_path / "img" / "p1.esp.pcl.zst"), "--portbase", "9000"]  # פורט-הפצה-מכוון: argv ל-Popen מזויף
-    sender.run_process(cmd)
+    cmd = ["chunkcast", "send", "--file", str(tmp_path / "img" / "p1.esp.pcl.zst")]
+    chunklog.run_process(cmd)
     assert seen["argv"] == [*priority.BACKGROUND_PREFIX, *cmd]
     # best-effort 7 ולא idle: idle מרעיב את השידור לכיתה כשיש עבודת דיסק אחרת.
     assert seen["argv"][:8] == ["nice", "-n", "10", "ionice", "-c", "2", "-n", "7"]
@@ -43,7 +44,7 @@ def test_a_missing_tool_is_said_and_the_sender_still_runs(monkeypatch, caplog):
     monkeypatch.setattr(priority.shutil, "which",
                         lambda name: None if name == "ionice" else f"/usr/bin/{name}")
     with caplog.at_level("WARNING", logger="imagesrv.priority"):
-        assert priority.background_cmd(["udp-sender", "--x"]) == ["udp-sender", "--x"]
+        assert priority.background_cmd(["chunkcast", "--x"]) == ["chunkcast", "--x"]
     assert "normal priority" in caplog.text
 
 

@@ -5,8 +5,9 @@ send failed on partition 1 with "the bytes sent differ from the manifest", and
 every drawer then failed with "sha256 mismatch in p1.esp.pcl.zst".
 
 The suspects were three, and this file measures each one on a real loop disk,
-with the real partclone.fat, ``zstd -T0`` and fanout -- only udp-sender, curl
-and the server's answer are stubs:
+with the real partclone.fat, ``zstd -T0`` and fanout -- only the wave, curl
+and the server's answer are stubs (#3173: the wave is test_directsend.CHUNK_RUN -- pass 2 read
+as the chunk pass reads it, the real cutter, hashed against the manifest):
 
 * the bytes of the ESP change between the passes (boot_ca mounts it after
   pass 1) -- ``test_boot_ca_mount_does_not_change_the_esp``;
@@ -33,7 +34,7 @@ import pytest
 
 import lcfx
 from native import requires_native
-from test_directsend import TASK, _answer
+from test_directsend import CHUNK_RUN, TASK, _answer
 from test_local_clone_engine import LIB, REPO, _root, _sudo_ok, _tool
 
 pytestmark = requires_native(
@@ -45,7 +46,7 @@ pytestmark = requires_native(
 )
 
 LIBS = ("common", "sysinfo", "diskinfo", "waits", "jsonq", "gptboot", "progress", "failmark", "restore", "manifest", "bootca",
-        "hibernation", "ntfsunhib", "captureview", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink", "directsend", "directrecv", "ui")   # #1798: capture_disk reads the mark; #1901/#1808: the source gates
+        "hibernation", "ntfsunhib", "captureview", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink", "directsend", "directchunk", "directserve", "ui")   # #1798: capture_disk reads the mark; #1901/#1808: the source gates
 
 #: udp-sender: says it started (as the real one does once receivers joined)
 #: and swallows the stream. What it read is what fanout hashed.
@@ -70,6 +71,7 @@ ln -sf "$SRC" "$DEVROOT/sda"; ln -sf "${SRC}p1" "$DEVROOT/sda1"
 cat "/sys/block/$L/size" > "$SYSROOT/sys/block/sda/size"
 cat "/sys/block/$L/queue/logical_block_size" > "$SYSROOT/sys/block/sda/queue/logical_block_size"
 %(sources)s
+%(chunk_run)s
 send_hello() { cp "$T/answer.json" "$RESP"; }
 echo "before $(sha256sum < "${SRC}p1" | cut -c1-64)"
 case "$MODE" in
@@ -112,7 +114,7 @@ def _drive(fx: Path, stubs: Path, mode: str, env: tuple[str, ...] = ()) -> dict:
     (t / "answer.json").write_text(json.dumps(_answer(receivers=1)), encoding="utf-8")
     script = t / "drive.sh"
     sources = "\n".join(f'[ ! -f "$LIB_DIR/{n}.sh" ] || . "$LIB_DIR/{n}.sh"' if n == "captureview" else f'. "$LIB_DIR/{n}.sh"' for n in LIBS)
-    script.write_text(DRIVER % {"lib": LIB, "sources": sources, "task": TASK}, newline="\n")
+    script.write_text(DRIVER % {"lib": LIB, "sources": sources, "task": TASK, "chunk_run": CHUNK_RUN}, newline="\n")
     done = _root(*env, "sh", str(script), str(fx), mode, str(t), timeout=600)
     words = dict(line.split(None, 1) for line in done.stdout.splitlines() if " " in line)
     log = _root("cat", str(fx / "run" / "agent.log")).stdout
@@ -148,7 +150,7 @@ def test_direct_send_from_a_real_esp_sends_what_the_manifest_says(esp, stubs):
     assert r["rc"] == "rc=0", r["raw"] + r["out"] + r["log"] + _error(esp)
     manifest = json.loads(_root("cat", str(esp / "run" / "new-manifest.json")).stdout)
     assert manifest["partitions"][0]["role"] == "esp"
-    assert _sha_file(esp, "dsha.1") == manifest["partitions"][0]["sha256"]
+    assert _root("cat", str(esp / "run" / "chunk.run")).returncode == 0   # #3173: pass 2 read and hashed it (CHUNK_RUN)
     # #2533: both reads were cut by the real chunkcut, into the same frames -- the manifest
     # says image_format 2, and the index of pass 2 is the one pass 1 signed.
     assert manifest["image_format"] == 2

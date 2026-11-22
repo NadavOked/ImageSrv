@@ -1,6 +1,6 @@
 """#2488 + #2489 (5, 8) — the inter-server channel, before and after authentication.
 
-* **#2488** — on a secondary, port 8443 completes the TLS handshake with any
+* **#2488** — on a secondary, port 7700 completes the TLS handshake with any
   self-signed client certificate; authentication comes later, in the request.
   Before it: the head was read with no size cap, there was no timeout after the
   handshake, and every connection got a thread with no cap. Now: a head past
@@ -15,7 +15,7 @@
 
 The live tests run real TLS on loopback, as `test_interserver_tls`. What is not
 measured here: how much memory and how many threads a secondary takes before it
-falls, and whether 8443 is reachable from an untrusted host -- that is the VM lab.
+falls, and whether 7700 is reachable from an untrusted host -- that is the VM lab.
 
 Negative control: with every production file of this PR back at origin/main,
 every test here fails except the ones marked "control".
@@ -247,7 +247,7 @@ def test_a_normal_answer_is_read_as_before():
 def _fake_node(server, n: int) -> str:
     return storage_nodes.enroll_node(
         server["ctx"].conn, ("noc", "admin"), label=f"NODE{n}",
-        base_url=f"https://127.0.0.{n}:8443/api/interserver/v1",
+        base_url=f"https://127.0.0.{n}:7700/api/interserver/v1",
         node_id=f"sn_{n:016x}", pinned_spki=f"{n:02x}" * 32,
         client_cert_ref="unused", credential_ref="unused", protocol_version="2.1")
 

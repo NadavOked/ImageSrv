@@ -5,8 +5,8 @@ lc-pull פותח סבב חדר של מכונה אחת (`POST /api/v1/agent/clone
 "מנוע שידור" -- ולא לפי מי שפתח. הטסטים כאן הם הצד של השרת, בלי ברזל ובלי chunkcast;
 `test_lc_pull_chunk_3162.py` מריץ את אותו מסלול מקצה לקצה עם שרת אמיתי.
 
-- הגל של הסבב שנפתח ממסך המשכפל הוא חדר של מכונה אחת, ו-`chunk_wave` עונה עליו לפי המתג **בלבד**: `chunk` --
-  כן, וגם חסר או ערך שאינו מוכר (ברירת המחדל היא מנוע החתיכות, #3173); `udpcast` בלבד -- לא.
+- הגל של הסבב שנפתח ממסך המשכפל הוא חדר של מכונה אחת, ומנוע החתיכות לוקח אותו **תמיד** (#3173: המנוע היחיד).
+  ערך שנשמר ב-`stream_engine` לפני השדרוג -- `chunk`, `udpcast`, או כל דבר אחר -- אינו נקרא להחלטה.
 - **אימג' בפורמט 1** (בלי `image_format: 2`) אינו מופץ עוד (הכרעת נדב 12/11) -- באף מתג: אינו מוצע במסך
   המשכפל, והפתיחה שלו מסורבת בשם, ולא נפתח סבב. "ההתנהגות של היום" היא הסירוב הזה, ולא נפילה שקטה לכותב ישן.
 """
@@ -18,7 +18,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from conftest import MANIFEST_256, hello_body, write_image
-from server.db import set_setting, set_settings
+from server.db import set_setting
 from server.rounds import room
 from test_cloner_round_server import (IMG_256, MAC1, ask, cloner, no_round, now,  # noqa: F401 -- `now` is autouse there
                                       register)
@@ -27,22 +27,20 @@ from test_machine_identity import identity_server  # noqa: F401
 LEGACY = {k: v for k, v in MANIFEST_256.items() if k != "image_format"} | {"id": "img_old_fmt1", "name": "format one"}
 
 
-@pytest.mark.parametrize("setting,on_chunk", [("chunk", True), ("udpcast", False), (None, True), ("nonsense", True)],
-                         ids=["chunk", "udpcast", "unset", "unknown"])
-def test_the_wave_of_a_round_opened_from_the_cloner_goes_by_the_switch_alone(identity_server, setting, on_chunk):
+@pytest.mark.parametrize("setting", ["chunk", "udpcast", None, "nonsense"],
+                         ids=["chunk", "the-removed-engine", "unset", "unknown"])
+def test_the_wave_of_a_round_opened_from_the_cloner_is_the_chunk_engines_whatever_was_stored(identity_server, setting):
     srv = identity_server
     ctx = srv["ctx"]
-    if setting is not None:
+    if setting is not None:                     # written straight to the DB, as a server from before #3173 stored it
         set_setting(ctx.conn, "stream_engine", setting)
-    else:                                       # #3173: a server that never chose (the fixture chose udpcast explicitly)
-        set_settings(ctx.conn, {}, remove=("stream_engine",))
     cloner(srv)
     assert ask(srv, ports=[1]).status_code == 200
     wave = room.active_round(ctx.conn)["wave_session_id"]
     row = ctx.conn.execute("SELECT prefix, kind, expected_clients FROM sessions WHERE id = ?", (wave,)).fetchone()
     # one machine, a room wave: what chunk_wave is asked about, and what the multicast engine has always taken
     assert (row["prefix"], row["kind"], row["expected_clients"]) == ("ROOM", "multicast", 1), dict(row)
-    assert ctx.chunk.wants(wave) is on_chunk
+    assert ctx.chunk.wants(wave) is True
 
 
 @pytest.mark.parametrize("setting", ["chunk", "udpcast"])

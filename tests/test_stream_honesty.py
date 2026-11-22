@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 from native import requires_native
-from test_agent import AGENT, BASH, posix
+from test_agent import BASH, posix
 from test_timeouts import log_of, make_stubs, run_sh
 from agentlib import agent_sources, lib_path
 
@@ -66,43 +66,6 @@ FANOUT_WITHOUT_HASH = GOOD_FANOUT.replace('fanout_eof "$tmp"\n', "", 1)
 assert FANOUT_WITHOUT_HASH != GOOD_FANOUT, "the fake still hashes"
 
 
-def drawer_run(tmp_path, script_tail: str, stubs: dict, disks=("sda", "sdb"),
-               source: str | None = None) -> tuple[Path, str]:
-    """מריץ restore_partition_drawers אמיתי מול זרם ו-fanout מזויפים."""
-    box = tmp_path / "box"
-    run = box / "run"
-    payload = box / "part.bin"
-    box.mkdir(parents=True)
-    payload.write_bytes(PAYLOAD)
-    (run / "targets").mkdir(parents=True)
-
-    if source is None:
-        source = f'stream_source() {{ cat {posix(payload)!r}; }}; '
-    out = run_sh(
-        make_stubs(box / "stubs", stubs)
-        + f"export TMPDIR={posix(tmp_path)!r} RUN_DIR={posix(run)!r} DEVROOT={posix(box)}/dev "
-        "WAIT_POLL_S=1 WAIT_DRAWER_S=3 WAIT_HELPER_S=3 "
-        "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
-        + "".join(f"target_init {d} {len(PAYLOAD)}; " for d in disks)
-        + source + script_tail
-    )
-    return run, out
-
-
-def call(sha: str, disks=("sda", "sdb")) -> str:
-    return ("restore_partition_drawers unicast http://s img 3 dd part.zst "
-            f"{sha} '' {' '.join(disks)} > /dev/null 2>&1; " 'echo "rc=$?"')
-
-
-def errors_of(run: Path, disks=("sda", "sdb")) -> dict[str, str]:
-    out = {}
-    for dev in disks:
-        path = run / "targets" / dev / "error"
-        out[dev] = path.read_text(encoding="utf-8").strip() if path.exists() else ""
-    return out
-
-
 GOOD_SHA = hashlib.sha256(PAYLOAD).hexdigest()
 #: sha תקין לחלוטין בצורתו — 64 ספרות hex — ופשוט לא זה של הבייטים.
 #: זו הבקרה השלילית: אי-התאמה אמיתית חייבת להמשיך להיקרא בשמה.
@@ -110,103 +73,6 @@ WRONG_SHA = "0" * 64
 
 
 # --- הכשל של #73 עצמו --------------------------------------------------------
-
-
-def test_a_fanout_that_was_killed_is_not_reported_as_a_corrupt_image(tmp_path):
-    """#73 במלואו: fanout שנהרג באמצע הזרם (rc=137, כמו ה-OOM killer).
-
-    ה-sha אכן אינו תואם — הוא חושב על בייטים חלקיים — אבל זו תוצאה של
-    הכשל ולא הכשל עצמו. ההודעה חייבת לדבר על הפצת הזרם, ו**אסור** לה
-    להזכיר אי-התאמת sha256: זו הטענה שמפנה את האבחון לספרייה.
-    """
-    run, out = drawer_run(tmp_path, call(GOOD_SHA), {"fanout": DYING_FANOUT})
-    assert out.strip().endswith("rc=1"), out
-
-    errors = errors_of(run)
-    for dev, error in errors.items():
-        assert error, f"{dev} נכשלה בלי סיבה כתובה"
-        assert "sha256" not in error, (
-            f"{dev} עדיין מאשימה את ה-sha על בדיקה שלא נעשתה: {error}")
-        assert "הפצת הזרם" in error, error
-        # קוד היציאה עצמו בהודעה: זה מה שמפריד "נהרג" מ"יצא בשגיאה".
-        assert "137" in error, error
-
-    log = log_of(run)
-    assert "sha256 mismatch" not in log and "אי-התאמת sha256" not in log
-    assert "הפצת הזרם" in log
-
-
-def test_a_stream_cut_at_the_source_is_reported_as_a_cut_stream(tmp_path):
-    """המקור נפל באמצע (udp-receiver שפקע, curl שנפל) ו-fanout סיים
-    בשלום על מה שהגיע — הוא ראה EOF תקין ואין לו מה לדווח אחרת.
-
-    `$?` של צינור ב-POSIX sh הוא של האחרון בלבד, ולכן קוד היציאה של
-    המקור לא היה קיים כאן כלל, והמצב הזה נבלע בענף ה-sha.
-    """
-    run, out = drawer_run(
-        tmp_path, call(GOOD_SHA), {"fanout": GOOD_FANOUT},
-        source="stream_source() { printf 'partial'; return 28; }; ",
-    )
-    assert out.strip().endswith("rc=1"), out
-
-    for dev, error in errors_of(run).items():
-        assert "הזרם נקטע" in error, f"{dev}: {error}"
-        assert "sha256" not in error, f"{dev}: {error}"
-        assert "28" in error, f"קוד היציאה של המקור אינו בהודעה: {error}"
-
-
-def test_a_sha_that_was_never_computed_is_not_called_a_mismatch(tmp_path):
-    """הזרם הגיע, ההפצה הצליחה — ורק חישוב ה-sha לא הניב ערך.
-
-    "לא הצלחנו לבדוק" ו"בדקנו והבייטים שגויים" הם שני מצבים, וזה בדיוק
-    הקיפול שעיקרון 5 אוסר. המחיצה עדיין **נכשלת** — היעדר ראיה אינו
-    היתר להמשיך — אבל היא נכשלת בשמה הנכון.
-    """
-    run, out = drawer_run(
-        tmp_path, call(GOOD_SHA),
-        {"fanout": FANOUT_WITHOUT_HASH},
-    )
-    assert out.strip().endswith("rc=1"), out
-
-    for dev, error in errors_of(run).items():
-        assert "לא חושב" in error, f"{dev}: {error}"
-        assert "אי-התאמת" not in error, f"{dev}: {error}"
-
-
-# --- הבקרה השלילית: אי-התאמה אמיתית נשארת אי-התאמה ---------------------------
-
-
-def test_bytes_that_really_are_wrong_are_still_called_a_mismatch(tmp_path):
-    """בלי זה התיקון הוא רק החלפת שקר בשקר.
-
-    כאן הכול עבד — המקור יצא 0, fanout דיווח על כל מגירה, ה-sha חושב
-    ויש לו ערך — ופשוט אינו הערך שבמניפסט. זה **המצב היחיד** שבו מותר
-    לומר "אי-התאמת sha256", וכאן הוא נאמר.
-    """
-    run, out = drawer_run(tmp_path, call(WRONG_SHA), {"fanout": GOOD_FANOUT})
-    assert out.strip().endswith("rc=1"), out
-
-    for dev, error in errors_of(run).items():
-        assert "אי-התאמת sha256" in error, f"{dev}: {error}"
-        assert "part.zst" in error, f"שם הקובץ חסר בהודעה: {error}"
-        assert "לא חושב" not in error and "נקטע" not in error, f"{dev}: {error}"
-
-
-def test_a_stream_that_arrives_whole_still_succeeds(tmp_path):
-    """הבקרה השלילית השנייה: המסלול התקין לא נשבר בדרך.
-
-    ה-sha התואם הוא הראיה החיובית שהזרם הגיע שלם, והוא נשאל ראשון —
-    ולכן שום קוד יציאה מוזר במקור אינו יכול להפיל מחיצה שאומתה.
-    """
-    run, out = drawer_run(tmp_path, call(GOOD_SHA), {"fanout": GOOD_FANOUT})
-    assert out.strip().endswith("rc=0"), out
-    assert errors_of(run) == {"sda": "", "sdb": ""}
-    states = {d: (run / "targets" / d / "state").read_text().strip()
-              for d in ("sda", "sdb")}
-    assert "failed" not in states.values(), states
-
-
-# --- אותו הפרש בתחנה הבודדת --------------------------------------------------
 
 
 def station_run(tmp_path, sha: str, stubs: dict) -> tuple[Path, str]:
@@ -252,19 +118,10 @@ def test_the_single_station_still_reports_a_real_mismatch(tmp_path):
 # --- הנעילה: אף מסלול לא משווה sha שלא נקרא ----------------------------------
 
 
-@pytest.mark.parametrize("name", ["restore.sh", "drawers.sh"])
+@pytest.mark.parametrize("name", ["restore.sh"])
 def test_no_sha_is_compared_before_it_is_known_to_be_a_digest(name):
     """הדפוס עצמו, ולא רק המופע: כל השוואת sha בסוכן עוברת קודם דרך
     `is_sha256`. בלעדיה `_got` ריק שווה ל"לא תאם", וזה בדיוק הבאג —
     טסט שבודק רק את ההודעה היה עובר גם אם מישהו יוסיף השוואה שלישית."""
     source = (lib_path(name)).read_text(encoding="utf-8")
     assert "is_sha256" in source, f"{name} משווה sha בלי לוודא שהוא נקרא"
-
-
-def test_the_drawers_ask_the_source_for_its_own_exit_code():
-    """`$?` של צינור הוא של האחרון בלבד. בלי לכידה מפורשת של קוד היציאה
-    של המקור, "הזרם נקטע" אינו מצב שאפשר בכלל לזהות — והוא נבלע בענף
-    ה-sha, שהוא כל #73."""
-    source = (AGENT / "lib" / "restore" / "drawers.sh").read_text(encoding="utf-8")
-    assert "source.rc" in source
-    assert 'echo "$?" > "$RUN_DIR/source.rc"' in source

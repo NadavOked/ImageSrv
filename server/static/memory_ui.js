@@ -233,14 +233,9 @@ function memHistoryEvents(journalEvents, mem) {
 let MEM_OPEN_ROUND = null;
 function memRoundPath(id) { return `/room/history/${encodeURIComponent(id)}/summary`; }
 function memRateText(bps) { return bps == null ? "" : `${Math.round(bps / 1e6)} Mbps`; }
-/* "קצב ואיבוד": הקצב של הגל האחרון ששרד, ובלוקים שאבדו. גל ש-wave_rates כבר לא זוכר = "לא נשמר" (לא 0). */
-function memFlowCell(flow) {
-  if (!flow) return memNone("לא נקרא");
-  if (!flow.kept) return `<span class="muted" title="הגל נמחק מהזיכרון הקצר, ואין לו סיכום">לא נשמר</span>`;
-  const rate = flow.rate_bps == null ? memNone("קצב לא נמדד") : `<span class="mono">${esc(memRateText(flow.rate_bps))}</span>`;
-  const lost = flow.loss_blocks == null ? "איבוד לא נמדד" : flow.loss_blocks === 0 ? "בלי איבוד" : `איבוד ${flow.loss_blocks} בלוקים`;
-  return `${rate}<span class="sub">${esc(lost)}</span>`;
-}
+/* מה שאבד בגל, בסיכום הסבב: גל חתיכות סופר חתיכות שלא הגיעו במעבר הראשון (lost_chunks, #3173); שורה ישנה של השולח
+   הישן -- את הבלוקים שלו (loss_blocks). ‏#3978 (נדב 21/11): העמודה "קצב ואיבוד" ירדה מטבלת הסבבים, והכותרת "חתיכות שאבדו". */
+function memLost(x) { return x.loss_blocks != null ? x.loss_blocks : x.lost_chunks; }
 function memRoundToggle(id) {
   MEM_OPEN_ROUND = MEM_OPEN_ROUND === id ? null : id;
   if (MEM_OPEN_ROUND) memLoad(memRoundPath(id), () => { if (MEM_OPEN_ROUND === id && current === "deploy") renderCurrent(); });
@@ -263,10 +258,10 @@ function memRoundDetail(h, cols) {
     const wave = s.waves.length === 0 ? UI.note("info", "לא נמצא גל לסבב הזה.")
       : s.waves.length === 1 ? UI.kv([["קצב שנבחר", w && w.rate_bps != null ? ltr(memRateText(w.rate_bps)) : memNone(w ? "לא נמדד" : "לא נשמר")],
         ["נשלחו", w && w.sent_bytes != null ? ltr(fmtBytes(w.sent_bytes)) : memNone(w ? "לא נמדד" : "לא נשמר")],
-        ["בלוקים שאבדו", w && w.loss_blocks != null ? (w.loss_blocks ? `<b>${w.loss_blocks}</b> · שודרו מחדש` : "אין") : memNone(w ? "לא נמדד" : "לא נשמר")],
+        ["חתיכות שאבדו", w && memLost(w) != null ? (memLost(w) ? `<b>${memLost(w)}</b> · שודרו מחדש` : "אין") : memNone(w ? "לא נמדד" : "לא נשמר")],
         ["זמן הסבב", esc(roomRoundMinutes(h))]])
-      : UI.datagrid({ columns: ["גל", "קצב", "נשלחו", "בלוקים שאבדו"], rows: s.waves.map((x, i) => [String(i + 1), x.kept && x.rate_bps != null ? ltr(memRateText(x.rate_bps)) : memNone(x.kept ? "לא נמדד" : "לא נשמר"),
-        x.kept && x.sent_bytes != null ? ltr(fmtBytes(x.sent_bytes)) : memNone("—"), x.kept && x.loss_blocks != null ? String(x.loss_blocks) : memNone(x.kept ? "לא נמדד" : "לא נשמר")]) });
+      : UI.datagrid({ columns: ["גל", "קצב", "נשלחו", "חתיכות שאבדו"], rows: s.waves.map((x, i) => [String(i + 1), x.kept && x.rate_bps != null ? ltr(memRateText(x.rate_bps)) : memNone(x.kept ? "לא נמדד" : "לא נשמר"),
+        x.kept && x.sent_bytes != null ? ltr(fmtBytes(x.sent_bytes)) : memNone("—"), x.kept && memLost(x) != null ? String(memLost(x)) : memNone(x.kept ? "לא נמדד" : "לא נשמר")]) });
     const n = (v) => (v == null ? memNone("לא נקרא") : String(v));
     const receivers = s.receivers.length ? UI.datagrid({ columns: ["משכפל", "זריקות buffer", "שגיאות קלט", "ויתר"], rows: s.receivers.map((r) => [esc(r.machine || r.mac), n(r.rcvbuf), r.inerrors ? `<b>${r.inerrors}</b>` : n(r.inerrors), n(r.abandoned)]) })
       + memCap("זריקות ושגיאות קלט בסוף הגל. לא נקרא מוצג כך, לא 0.") : `<div class="muted">אין נתוני מקלטים לסבב הזה.</div>`;

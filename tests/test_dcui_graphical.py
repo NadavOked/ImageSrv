@@ -124,7 +124,7 @@ def test_no_deploy_network_is_grey_on_an_unpaired_secondary_and_red_on_a_primary
 def test_a_paired_secondary_without_contact_is_never_green():
     deploy = NicInfo("ens34", "10.45.0.1/16", "static", "up", "1000")
     snapshot = replace(samples.SECONDARY, services=dict(samples.UP), deploy=deploy)
-    extras = view.Extras(has_parent=True, primary_url="https://10.20.10.5:8443")
+    extras = view.Extras(has_parent=True, primary_url="https://10.20.10.5:7700")
     frame = _render(_runtime(snapshot, extras))
     hero = _first(frame, "hero")
     assert hero[1] == "warn" and "מגע לא ידוע" in hero[2] and "✓" not in hero[2]
@@ -136,7 +136,7 @@ def test_a_fresh_parent_contact_is_green_and_a_stale_one_is_orange():
     deploy = NicInfo("ens34", "10.45.0.1/16", "static", "up", "1000")
     snapshot = replace(samples.SECONDARY, services=dict(samples.UP), deploy=deploy)
     fresh_at = (TODAY.astimezone() - timedelta(minutes=4)).isoformat()
-    extras = view.Extras(has_parent=True, primary_url="https://10.20.10.5:8443",
+    extras = view.Extras(has_parent=True, primary_url="https://10.20.10.5:7700",
                          parent_last_contact=fresh_at)
     frame = _render(_runtime(snapshot, extras))
     assert _first(frame, "hero")[1] == "ok"
@@ -155,7 +155,7 @@ def test_a_fresh_parent_contact_is_green_and_a_stale_one_is_orange():
 def test_a_paired_secondary_still_needs_its_deploy_network():
     deploy = NicInfo("ens34", "10.45.0.1/16", "static", "up", "1000")
     snapshot = replace(samples.SECONDARY, services=dict(samples.UP), deploy=deploy)
-    extras = view.Extras(has_parent=True, primary_url="https://10.20.10.5:8443")
+    extras = view.Extras(has_parent=True, primary_url="https://10.20.10.5:7700")
     # paired, it distributes to its own network -- so it needs one now
     frame = _render(_runtime(replace(snapshot, deploy=None), extras))
     assert any(rec[3] == "רשת ההפצה לא הוגדרה" for rec in _all(frame, "prob"))

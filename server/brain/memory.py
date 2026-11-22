@@ -66,11 +66,25 @@ SNAPSHOT_DAYS = 90
 #: תוצאה של החלטה שהייתה פתוחה כשהשרת עלה מחדש: היא לא נסגרה, ואין לנו ראיה למה שקרה לה.
 ORPHAN_HE = "השרת הופעל מחדש לפני שההחלטה נסגרה: התוצאה לא ידועה"
 
+#: #3750: החלטה שאין לה תוצאה במהותה (צל שלא מבצע, אירוע שנצפה, "לא הוחלט") נרשמת עם ``outcome`` שמתחיל בזה -- ולא ריקה. ריק פירושו
+#: "עוד פתוחה או שלא נסגרה" (באג), ו-``n/a`` פירושו "בכוונה אין". אותו טקסט חופשי בעברית כמו שאר ה-outcome, וקורא לא נשבר.
+NA_PREFIX = "n/a: "
+
 _STARTED = now_iso()
 _orphans_closed = False
 
 
 # --- החלטות ------------------------------------------------------------------------------------------------------
+
+
+def na(why: str) -> str:
+    """#3750: ``outcome`` של החלטה שאין לה תוצאה בכוונה, עם הסיבה (``n/a: <סיבה>``)."""
+    return NA_PREFIX + why
+
+
+def na_in_shadow(mode: str, why: str) -> str | None:
+    """#3750: בצל המוח לא מבצע דבר, ולכן ההחלטה מסומנת ``n/a``; ב-enforce ``None``: היא נסגרת בנקודת הביצוע."""
+    return na(why) if mode == "shadow" else None
 
 
 def _write(conn, sql: str, params: Iterable) -> sqlite3.Cursor:
@@ -291,9 +305,14 @@ def _wave(row) -> dict:
     decision = _json(row["decision"]) or {}
     stream = _json(row["stream"]) or {}
     drops = _json(row["drops"]) or {}
+    # #3173: a chunk wave keeps only `stream["chunk"]`: `stream_zbytes` is what it multicast (the unit of `sent_bytes`),
+    # `lost_chunks` the chunks that did not arrive in the first pass (its own key: chunks, not the old sender's blocks)
+    chunk = stream.get("chunk") if isinstance(stream, dict) and isinstance(stream.get("chunk"), dict) else {}
+    sent = _num(stream.get("sent_bytes")) if isinstance(stream, dict) else None
     out = {"max_bitrate_bps": _bitrate(decision.get("max_bitrate")) if isinstance(decision, dict) else None,
            "loss_blocks": _num(stream.get("loss_blocks")) if isinstance(stream, dict) else None,
-           "sent_bytes": _num(stream.get("sent_bytes")) if isinstance(stream, dict) else None}
+           "sent_bytes": sent if sent is not None else _num(chunk.get("stream_zbytes")),
+           "lost_chunks": _num(chunk.get("lost_chunks"))}
     if isinstance(drops, dict) and drops:
         for field in ("rcvbuf", "abandoned"):
             values = [d.get(field) if isinstance(d, dict) else None for d in drops.values()]
@@ -369,10 +388,13 @@ def _in_round(alias: str) -> str:
             " AND julianday(room_rounds.closed_at)")
 
 
-def _wave_total(field: str) -> str:
+def _wave_total(*fields: str) -> str:
     """סכום שדה מספרי של `wave_rates.stream` בגלי הסבב. NULL = אף גל לא דיווח אותו (לא 0); JSON פגום או שדה
-    שאינו מספר אינו נספר -- ואינו מפיל את הסיכום של כל הסבבים."""
-    return (f"(SELECT SUM(v) FROM (SELECT json_extract(w.stream, '$.{field}') AS v FROM wave_rates w"
+    שאינו מספר אינו נספר -- ואינו מפיל את הסיכום של כל הסבבים. #3173: כמה נתיבים = הראשון שיש לו ערך בכל גל
+    (גל של השולח הישן ברמה העליונה, גל חתיכות תחת `chunk`)."""
+    value = ", ".join(f"json_extract(w.stream, '$.{field}')" for field in fields)
+    value = value if len(fields) == 1 else f"COALESCE({value})"
+    return (f"(SELECT SUM(v) FROM (SELECT {value} AS v FROM wave_rates w"
             f" WHERE json_valid(w.stream) AND {_in_round('w')}) WHERE typeof(v) IN ('integer', 'real'))")
 
 
@@ -381,7 +403,8 @@ _ROUND_SELECT = ", ".join((
     "ROUND((julianday(closed_at) - julianday(created_at)) * 86400) AS seconds",
     f"(SELECT AVG(d.rate_bps) FROM drive_rates d WHERE {_in_round('d')}) AS rate_bps",
     f"{_wave_total('loss_blocks')} AS loss_blocks",
-    f"{_wave_total('sent_bytes')} AS sent_bytes",
+    f"{_wave_total('chunk.lost_chunks')} AS lost_chunks",      # #3173
+    f"{_wave_total('sent_bytes', 'chunk.stream_zbytes')} AS sent_bytes",
     f"(SELECT COUNT(*) FROM wave_rates w WHERE {_in_round('w')}) AS waves"))
 
 
@@ -389,7 +412,8 @@ SOURCES: dict[str, Source] = {s.rule: s for s in (
     Source("room_rounds", "room_rounds", "closed_at", lambda r: _has(("round", r["id"])),
            lambda r: {"disks": _num(r["target_drives"]), "ok": _num(r["written_drives"]),
                       "seconds": _num(r["seconds"]), "rate_bps": _num(r["rate_bps"]),
-                      "loss_blocks": _num(r["loss_blocks"]), "sent_bytes": _num(r["sent_bytes"]),
+                      "loss_blocks": _num(r["loss_blocks"]), "lost_chunks": _num(r["lost_chunks"]),
+                      "sent_bytes": _num(r["sent_bytes"]),
                       "waves": _num(r["waves"])},
            lambda r: {"when": r["created_at"], "image_id": r["image_id"], "state": r["state"],
                       "reason": r["failed_reason"]},

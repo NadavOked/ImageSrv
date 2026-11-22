@@ -56,12 +56,15 @@ SESSION = "ses_a91f"
 IMAGE = "img_7f3a91"
 
 MANIFEST = {"id": IMAGE, "name": "Windows 11 Lab", "family": 256,
-            "total_compressed_bytes": 40960}
+            "total_compressed_bytes": 40960, "image_format": 2}   # #3173: the chunk engine's, the only one
 ANSWER = {"schema": 1, "known": True, "role": "classroom",
           "session": {"id": SESSION, "state": "running", "image_id": IMAGE,
                       "prefix": "LAB1",
                       # #1410: סבב חדר בלי בחירת מגירות מפורשת נעצר ב-die_local
-                      "target_ports": [1, 2]},
+                      "target_ports": [1, 2],
+                      # #3173: the chunk engine is the only one (chunkgate.sh refuses a wave without it)
+                      "engine": "chunk",
+                      "chunk": {"group": "239.84.82.1", "port": 30201, "key": "0123456789abcdef", "source": "10.55.0.1"}},
           "group": {"suffix": "05"}}
 
 #: תקרה על הריצה כולה — רשת ביטחון ולא כוונון תזמון. הדרך היחידה להגיע
@@ -212,6 +215,9 @@ def journal(run: Path) -> str:
 #: ב-task, ותמיד בדיוק אחד מהם מלא (ממשק 4) — כך העקבה נושאת את המזהה
 #: של שני המסלולים בלי רווח תלוי-מסלול בסוף השורה.
 LOOP_STUB = 'progress_loop() { echo "LOOP $1$4" >> "$RUN_DIR/trace"; }; '
+#: the reporter that starts after the final report was refused (its warning is in the log by then): hold_unheard's
+AFTER_REFUSAL_STUB = ('progress_loop() { grep -q "did not acknowledge the final report" "${LOG_FILE:-$RUN_DIR/agent.log}" '
+                      '&& echo "LOOP-AFTER-REFUSAL $1$4" >> "$RUN_DIR/trace"; echo "LOOP $1$4" >> "$RUN_DIR/trace"; }; ')
 
 #: #2077: סוף משימה עם D_ROLE=classroom (`finish_and_stop` אחרי 'כבה')
 #: קורא ל-`reboot -f` בלי שומר IMAGESRV_TEST. זיוף ב-PATH נכשל ורושם;
@@ -263,6 +269,7 @@ STUBS = (
     # #2657: the open-round gate before the disk -- the same isolation; its
     # own tests (test_open_gate_2657.py) source the real opengate.sh after these.
     'session_open_gate() { :; }; '
+    'chunkcast() { :; }; '   # #3173: chunk_gate asks that the receiver is in the image
     'pick_internal_disk() { echo sda; }; '
     'list_drawers() { echo "sdb sdc"; }; '
     # #1410: resolve_target_drawers ממפה כל פורט שנבחר לדיסק אחד בדיוק
@@ -320,8 +327,8 @@ def run_path(tmp_path: Path, server: str, call: str, *, tries: int = 2,
         f"RESTORE_RC={restore_rc} {env}; "
         + sourced_libs()
         + STUBS
-        + stubs
         + LOOP_STUB
+        + stubs   # after LOOP_STUB: a test may name its own reporter
         + f". {posix(funcs)}; "
         # `wait` ולא `sleep`: `hold_unheard` מרימה את הדווח ברקע, ופייתון
         # קורא את העקבה רק אחרי שכל תהליכי הרקע של המעטפת באמת יצאו.
@@ -355,28 +362,6 @@ HOLD = "FAILED: the work finished but the server never confirmed it"
 
 
 @native_tools
-def test_a_class_round_does_not_reboot_when_the_final_report_was_refused(
-        tmp_path, reports):
-    """**לב האיסיו, מסלול סבב הכיתה.**
-
-    השרת אינו מאשר את דיווח הסיום. הקוד שלפני התיקון ישן שש שניות,
-    הרג את הדווח ואתחל — והמכונה הזאת, שהשרת עדיין סופר אותה כמי שלא
-    סיימה, הייתה מקבלת את אותו הסבב באתחול הבא ומשחזרת שוב.
-    """
-    reports.refuse_first = -1
-
-    result = run_path(tmp_path, url_of(reports), "do_restore")
-
-    assert "TEST-HOLD" in result["out"], "המכונה המשיכה בלי אישור מהשרת"
-    assert HOLD in result["out"]
-    assert "RETURNED rc=1" in result["out"]
-    # הדיווח באמת נשלח, ולא פעם אחת בלבד — ראיה שהתקרה היא ניסיונות.
-    assert len(reports.received) == 2
-    assert reports.received[-1]["state"] == "done"
-    assert "did not acknowledge the final report" in result["log"]
-
-
-@native_tools
 def test_the_cloning_room_powers_off_even_when_the_final_report_was_refused(
         tmp_path, reports):
     """נדב 17/10: מחשב שיכפול נכבה בכל מצב — גם כשה-`done` לא אושר.
@@ -404,28 +389,15 @@ def test_the_held_machine_stays_visible_instead_of_going_quiet(tmp_path, reports
     מורם בחזרה כדי שה-`done` ינחת ברגע שהשרת יחזור לענות."""
     reports.refuse_first = -1
 
-    result = run_path(tmp_path, url_of(reports), "do_restore")
+    result = run_path(tmp_path, url_of(reports), "do_restore", stubs=AFTER_REFUSAL_STUB)
 
     assert "Leave the computer on and contact IT." in result["out"]
-    # `hold_unheard` מרימה את הדווח מחדש — הזיוף רושם את הקריאה השנייה.
-    assert result["trace"].count(f"LOOP {SESSION}") == 2
+    # `hold_unheard` מרימה את הדווח מחדש — אחרי שהדווח הסופי סורב. #3173: במסלול התחנה הדווח הראשון
+    # נהרג מיד (`report_final`), לפעמים לפני ששורת ה-LOOP שלו נכתבה, ולכן לא "שתי קריאות" אלא זו שאחרי הסירוב.
+    assert result["trace"].count(f"LOOP-AFTER-REFUSAL {SESSION}") == 1, result["trace"]
 
 
 # --- הצד החיובי: עם אישור, וכשהוא מאחר -------------------------------------
-
-
-@native_tools
-def test_a_class_round_reboots_once_the_server_took_the_report(tmp_path, reports):
-    """אישור הוא אישור: 200 → המכונה מסיימת את דרכה כרגיל."""
-    result = run_path(tmp_path, url_of(reports), "do_restore")
-
-    assert "TEST-HOLD" not in result["out"]
-    assert "RETURNED" not in result["out"], "המסלול לא הגיע לאתחול"
-    assert len(reports.received) == 1
-    report = reports.received[0]
-    assert report["session_id"] == SESSION and report["state"] == "done"
-    assert report["targets"][0]["dev"] == "sda"
-    assert report["targets"][0]["state"] == "done"
 
 
 @native_tools
@@ -434,22 +406,13 @@ def test_the_final_report_is_retried_until_the_server_comes_back(tmp_path, repor
     אחר כך — הדיווח האחרון מגיע, והמכונה ממשיכה כרגיל."""
     reports.refuse_first = 2
 
-    result = run_path(tmp_path, url_of(reports), "do_restore", tries=4)
+    # #3173: on the cloning room's road -- a classroom station no longer restores (v2)
+    result = run_path(tmp_path, url_of(reports), f"do_restore_drawers {IMAGE} {SESSION}", tries=4)
 
     assert "TEST-HOLD" not in result["out"]
-    assert "RETURNED" not in result["out"]
-    assert len(reports.received) == 3
+    assert "the done report was not confirmed" not in result["log"]
+    assert len(reports.received) == 3 and reports.received[-1]["state"] == "done"
     assert "got through on try 3" in result["log"]
-
-
-@native_tools
-def test_a_restore_that_failed_still_holds_on_its_own_message(tmp_path, reports):
-    """שחזור שנכשל לא נגע בשינוי הזה: המסך שלו הוא "restore did not
-    complete", והדווח נשאר לרוץ כדי שהקונסולה תראה `failed`."""
-    result = run_path(tmp_path, url_of(reports), "do_restore", restore_rc=1)
-
-    assert "FAILED: restore did not complete" in result["out"]
-    assert HOLD not in result["out"]
 
 
 # --- report_final עצמו: עוצר את הלולאה, וקורא את התשובה ---------------------
@@ -547,7 +510,8 @@ def test_no_restore_path_sleeps_instead_of_reading_the_answer():
 def test_the_answer_is_read_before_the_machine_leaves():
     """הסדר הוא כל העניין: קודם אישור, ורק אחריו אתחול או כיבוי."""
     station = agent_functions("do_restore")
-    assert station.index("report_final") < station.index("reboot -f")
+    # #3173: the station's road is a failure told to the server, and it never reboots by itself
+    assert "report_final" in station and "reboot" not in station
     room = agent_functions("do_restore_drawers")
     # rindex ולא index: שער ה-SMART (#652) מוסיף `finish_and_stop` *מוקדם*
     # במסלול "החלף דיסק" — כיבוי לפני שנכתב בייט, שאין עליו דיווח סיום.

@@ -65,15 +65,13 @@ def _health_hooks(tmp_path: Path) -> dict:
 def identity_server(tmp_path: Path, images_root: Path, clock, monkeypatch):
     """כמו `server`, עם קובץ חכירות מוזרק: MAC1 ו-BUILD חכורים ל-STATION_IP,
     MAC2 בלי חכירה. שני לקוחות אנונימיים — מכתובת החכירה ומכתובת זרה."""
-    from server.rounds import sender as sender_module
     from server.console import users
-    from test_sender import Recorder
+    from fakesend import Recorder
 
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
     leases = write_leases(tmp_path / "dnsmasq.leases",
                           {MAC1: STATION_IP, BUILD: STATION_IP})
     app = server.app.create_app(
-        tmp_path / "data", images_root, "http://10.44.12.10:8080",
+        tmp_path / "data", images_root, "http://10.44.12.10:7712",
         now_fn=clock, sender_runner=Recorder(block=True),
         health_hooks=_health_hooks(tmp_path),
         identity_hooks={"leases": identity.LeaseFile(leases)},
@@ -96,7 +94,7 @@ def identity_server(tmp_path: Path, images_root: Path, clock, monkeypatch):
         "anon": TestClient(app, client=(STATION_IP, 40003)),
     }
     yield bundle
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def hello(client: TestClient, mac: str):
@@ -118,15 +116,38 @@ def net_macs(server) -> set[str]:
     return {row["mac"] for row in server["admin"].get("/api/console/net").json()}
 
 
-def open_round(server, expected: int) -> dict:
-    ids = setup_classroom(server, expected)
-    response = server["deploy"].post(
-        "/api/console/sessions",
-        json={"group_id": ids["group"], "image_id": IMAGE,
-              "prefix": "LAB1", "expected_clients": expected})
+#: #3173: הסבב כאן הוא של חדר השיכפול (סבב כיתה הוא v2), ומחשבי השיכפול שלו.
+CLONER1 = "aa:bb:cc:00:00:21"
+CLONER2 = "aa:bb:cc:00:00:22"
+
+
+def cloner_hello(client: TestClient, mac: str, serial: str):
+    """hello של מחשב שיכפול עם מגירה אחת בחריץ 1 (כמו `test_server_room.cloner_hello`,
+    בלי לדרוש 200 — כאן הקוד הוא מה שנבדק)."""
+    body = hello_body(mac)
+    body["disks"] = [{"dev": "sda", "size_bytes": 256060514304, "model": "Drawer SSD",
+                      "serial": serial, "removable": False, "scheme": "gpt",
+                      "has_data": False, "port": 1}]
+    return client.post("/api/v1/agent/hello", json=body)
+
+
+def open_round(server, drawers: dict[str, str]) -> str:
+    """סבב של חדר השיכפול: מגירה אחת (`serial`) לכל משכפל ב-`drawers`, והיעד
+    הוא כולן — הגל יוצא כשכולם הצטרפו. המשכפלים חכורים לכתובת התחנה, כמו
+    MAC1, כדי ש-hello מהכתובת הזרה יסורב כזיוף (`identity_refused`) ולא כמי
+    שאין לו חכירה. מחזיר את מזהה הגל."""
+    from test_server_room import room_body                    # noqa: PLC0415
+
+    write_leases(server["leases"], {MAC1: STATION_IP, BUILD: STATION_IP,
+                                    **{mac: STATION_IP for mac in drawers}})
+    for number, mac in enumerate(drawers, start=1):
+        assert server["admin"].post("/api/console/machines", json={
+            "mac": mac, "name": f"shich-{number}", "group_id": "grp_CLONERS",
+        }).status_code == 200
+    response = server["deploy"].post("/api/console/room", json=room_body(
+        server, len(drawers), {mac: [serial] for mac, serial in drawers.items()}))
     assert response.status_code == 200, response.text
-    ids["session"] = response.json()["id"]
-    return ids
+    return server["ctx"].store.active()["id"]
 
 
 def session_state(server, session_id: str) -> str:
@@ -220,24 +241,22 @@ def test_a_forged_hello_does_not_hand_over_the_task_token(identity_server):
 
 def test_a_forged_hello_neither_joins_nor_ripens_a_round(identity_server):
     """פריט 3: חברות והבשלה של סבב לפי MAC מוצהר. שני hello מזויפים
-    (שתי המכונות הצפויות) אינם מצרפים ואינם מניעים `start_auto`; שני
+    (שתי המכונות שנבחרו) אינם מצרפים ואינם מניעים `start_auto`; שני
     hello אמיתיים כן."""
-    ids = open_round(identity_server, expected=2)
+    drawers = {CLONER1: "S1", CLONER2: "S2"}
+    wave = open_round(identity_server, drawers)
     store = identity_server["ctx"].store
-    for mac in (ids["mac1"], ids["mac2"]):
-        assert hello(identity_server["stranger"], mac).status_code == 403
-    assert store.joined_count(ids["session"]) == 0
-    assert session_state(identity_server, ids["session"]) == "open"
+    for mac, serial in drawers.items():
+        refused = cloner_hello(identity_server["stranger"], mac, serial)
+        assert refused.status_code == 403 and refused.json()["code"] == "identity_refused"
+    assert store.joined_count(wave) == 0
+    assert session_state(identity_server, wave) == "open"
     assert journal_events(identity_server, "session_start_auto") == []
-    # MAC2 אין לו חכירה בפיקסטורה — מוסיפים אותה: הסבב צריך שתי מכונות אמיתיות.
-    write_leases(identity_server["leases"], {MAC1: STATION_IP, MAC2: STATION_IP,
-                                             BUILD: STATION_IP})
-    for mac in (ids["mac1"], ids["mac2"]):
-        assert hello(identity_server["station"], mac).status_code == 200
-    assert store.joined_count(ids["session"]) == 2
-    # ההבשלה נמדדת ב-hello **שאחרי** המצטרף האחרון (`maybe_start` קודם ל-`record_hello`).
-    assert hello(identity_server["station"], ids["mac1"]).status_code == 200
-    assert session_state(identity_server, ids["session"]) == "running"
+    for mac, serial in drawers.items():
+        assert cloner_hello(identity_server["station"], mac, serial).status_code == 200
+    assert store.joined_count(wave) == 2
+    # בגל של החדר, ה-hello שמשלים את המגירות מוציא את הגל באותה תשובה (#1703).
+    assert session_state(identity_server, wave) == "running"
 
 
 def test_a_mac_without_a_lease_is_unverifiable_not_ok(identity_server):
@@ -337,22 +356,22 @@ def _round_report(mac: str, session_id: str) -> dict:
 def test_a_round_report_from_another_address_is_refused(identity_server):
     """פריט 4: דיווח סבב לפי `session_id`+MAC מהגוף. מכתובת זרה → 403,
     והחבר אינו משתנה; מכתובת החכירה → כרגיל."""
-    ids = open_round(identity_server, expected=1)
-    for _ in range(2):      # הצטרפות, ואז ה-hello שמבשיל (maybe_start קודם ל-record_hello)
-        assert hello(identity_server["station"], ids["mac1"]).status_code == 200
-    assert session_state(identity_server, ids["session"]) == "running"
+    wave = open_round(identity_server, {CLONER1: "S1"})
+    # ההצטרפות היא גם ההבשלה: המגירה היחידה מכסה את היעד (#1703).
+    assert cloner_hello(identity_server["station"], CLONER1, "S1").status_code == 200
+    assert session_state(identity_server, wave) == "running"
 
     forged = identity_server["stranger"].post(
-        "/api/v1/agent/progress", json=_round_report(ids["mac1"], ids["session"]))
+        "/api/v1/agent/progress", json=_round_report(CLONER1, wave))
     assert forged.status_code == 403, forged.text
     assert forged.json()["code"] == "identity_refused"
     row = identity_server["ctx"].conn.execute(
         "SELECT state, bytes_written FROM session_members WHERE session_id = ? AND mac = ?",
-        (ids["session"], ids["mac1"])).fetchone()
+        (wave, CLONER1)).fetchone()
     assert (row["state"], row["bytes_written"]) == ("waiting", 0)
 
     genuine = identity_server["station"].post(
-        "/api/v1/agent/progress", json=_round_report(ids["mac1"], ids["session"]))
+        "/api/v1/agent/progress", json=_round_report(CLONER1, wave))
     assert genuine.status_code == 200, genuine.text
 
 
@@ -403,7 +422,7 @@ def test_main_installs_the_lease_file_by_default(tmp_path: Path, monkeypatch):
     import asyncio
     import uvicorn
 
-    args = server.main.build_parser().parse_args(["--server-url", "http://10.44.12.10:8080"])
+    args = server.main.build_parser().parse_args(["--server-url", "http://10.44.12.10:7712"])
     assert args.dhcp_leases == identity.DEFAULT_LEASES == "/var/lib/misc/dnsmasq.leases"
 
     captured: dict = {}
@@ -415,13 +434,14 @@ def test_main_installs_the_lease_file_by_default(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(server.app, "create_runtime", fake_create_runtime)
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(uvicorn, "Config", lambda app, **kwargs: object())
     monkeypatch.setattr(uvicorn, "Server", lambda config: object())
     monkeypatch.setattr(server.main, "serve_all", lambda servers: None)
     monkeypatch.setattr(asyncio, "run", lambda coro=None: None)
     monkeypatch.setattr(server.main, "_interface_for", lambda url: None)
     monkeypatch.setattr("sys.argv", [
-        "server.main", "--server-url", "http://10.44.12.10:8080",
+        "server.main", "--server-url", "http://10.44.12.10:7712",
         "--data-dir", str(tmp_path / "data"), "--images", str(tmp_path / "img"),
         "--dhcp-leases", str(tmp_path / "custom.leases"),
     ])

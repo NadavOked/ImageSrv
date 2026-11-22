@@ -10,7 +10,7 @@
 של היום, והסיבה נאמרת (עיקרון 5: "לא נקרא" אינו 1GbE).
 
 שום טסט כאן אינו קורא את /sys של המכונה: עץ מזויף ב-tmp_path, או hook
-מוזרק ל-`SenderEngine`/`create_app`.
+מוזרק ל-`ChunkEngine`/`create_app` (#3173: מנוע החתיכות הוא המנוע היחיד).
 """
 
 from __future__ import annotations
@@ -20,7 +20,8 @@ from pathlib import Path
 import pytest
 
 from server import db
-from server.rounds import drive_rates, nic_speed
+from server.brain import budget
+from server.rounds import chunk_rate, drive_rates, nic_speed
 from test_server_room import room_server  # noqa: F401 — fixture של nic_room
 
 FAST_MAC = "aa:bb:cc:00:00:21"
@@ -57,6 +58,18 @@ def _link(mbps):
 
 def _drive(serial):
     return {"serial": serial, "model": "EVO 870", "mac": "aa:bb:cc:00:00:21", "port": 1}
+
+
+#: מה שמנוע החתיכות אומר על גל שאיבד 10% מהחתיכות במעבר הראשון (`ChunkEngine.rate_outcome`, `chunk_rate.record`):
+#: מעל `chunk_rate.LOSS_PERMILLE`, והגל הבא יורד ל-`CUT_PERCENT` מהקצב (#3173: במקום `loss_blocks` של udp-sender).
+LOSSY = {"ended": "send_done", "chunks": 2500, "lost_chunks": 250, "first_pass_s": 300, "bytes": 10 ** 10,
+         "stream_zbytes": 10 ** 10, "cloners": 1}
+
+
+def _chunk_wave(conn, session, drives, link):
+    """הקצב של גל חתיכות כפי ש-`app.chunk_wave_bitrate` בוחר אותו: `decide` עם `chunk_rate.adjust` (K8)."""
+    return drive_rates.decide(conn, session, lambda: drives, None, link=lambda: link,
+                              adjust=lambda chosen, wave: chunk_rate.adjust(conn, chosen, wave))
 
 
 # --- קריאת המהירות --------------------------------------------------------------
@@ -160,29 +173,30 @@ def test_a_slow_link_lowers_the_ceiling_under_a_high_cap(conn):
 
 
 def test_the_learned_rate_never_goes_above_the_link(conn):
-    """גל קודם עם אותם כוננים יצא ב-6000m (כרטיס 10G) ונשאר שם; הכרטיס
+    """גל חתיכות קודם עם אותם כוננים יצא ב-6000m (כרטיס 10G) ונשאר שם; הכרטיס
     הוחלף ל-1G — הזיכרון אינו גובר על הקישור."""
-    assert drive_rates.decide(conn, "ses_1", lambda: [_drive("S1")], None,
-                              link=lambda: _link(10000)) == "6000m"
-    drive_rates.record_stream(conn, "ses_1", {     # מעט שידורים חוזרים, ומקלט
-        "sent_bytes": 10 ** 10, "loss_blocks": 10,  # שלא דיווח (17/10) — נשאר
-        "stream_bps": None, "stream_s": None})
+    assert _chunk_wave(conn, "ses_1", [_drive("S1")], _link(10000)) == "6000m"
+    # the memory itself: that wave ended clean at the rate it was sent at (what `chunk_rate.record` keeps of it) --
+    # without it the last assert below would hold with nothing learned at all
+    chunk_rate.record(conn, "ses_1", {**LOSSY, "lost_chunks": 0, "first_pass_s": 600,
+                                      "stream_zbytes": int(6000 * 10 ** 6 / 8 * .95) * 600})
+    assert chunk_rate.last_sample(conn) is not None, "the clean wave was not remembered"
     remembered = drive_rates.choose(conn, [_drive("S1")], None, link=_link(10000))
     assert remembered["max_bitrate"] == "6000m" and remembered["basis"] == "unmeasured"
     got = drive_rates.choose(conn, [_drive("S1")], None, link=_link(1000))
     assert got["max_bitrate"] == "900m" and got["basis"] == "ceiling"
+    # #3173: a chunk wave stops under the link's 900m at what the brain leaves of it after HTTP's floor (`cap_of`)
+    assert _chunk_wave(conn, "ses_2", [_drive("S1")], _link(1000)) == f"{(900_000_000 - budget.FLOOR_BPS) // 10 ** 6}m"
+    assert drive_rates.decision(conn, "ses_2")["basis"] == "chunk_cap"
 
 
 def test_the_floor_does_not_grow_with_the_link(conn):
-    """כרטיס 10G בשרת אינו אומר שהמקבלים ב-10G: אחרי גל אחרי גל של שידורים
-    חוזרים הקצב יורד עד 150m (כמו היום) — לא נעצר ב-1500m."""
+    """כרטיס 10G בשרת אינו אומר שהמקבלים ב-10G: אחרי גל אחרי גל של אבדן
+    הקצב יורד עד 150m (כמו היום) — לא נעצר ב-1500m."""
     rates = []
     for n in range(16):
-        rates.append(drive_rates.decide(conn, f"ses_{n}", lambda: [_drive("S1")], None,
-                                        link=lambda: _link(10000)))
-        drive_rates.record_stream(conn, f"ses_{n}", {
-            "sent_bytes": 10 ** 10, "loss_blocks": 10 ** 6, "stream_bps": None,
-            "stream_s": None})
+        rates.append(_chunk_wave(conn, f"ses_{n}", [_drive("S1")], _link(10000)))
+        chunk_rate.record(conn, f"ses_{n}", LOSSY)
     assert rates[:3] == ["6000m", "4500m", "3375m"]
     assert rates[-1] == "150m"
 
@@ -215,8 +229,10 @@ def test_a_throwing_reader_is_the_start_rate_not_a_dead_wave(conn):
 
 
 def test_the_sender_without_a_reader_says_not_wired():
-    from server.rounds.sender import SenderEngine                  # noqa: PLC0415
-    engine = SenderEngine(library=None, interface="eth1", simulate=True)
+    from server.rounds import chunksend                            # noqa: PLC0415
+    import chunkcast_rig as C                                      # noqa: PLC0415
+    engine = chunksend.ChunkEngine(None, interface="eth1", live_members=lambda sid: [], lost_wait=lambda: 1,
+                                   write_floor=lambda: 50, ledger=C.MemLedger())
     assert engine.link() == {"interface": "eth1", "speed_mbps": None, "why": "not_wired"}
     engine.link_speed = lambda iface: _link(2500) | {"interface": iface}
     assert engine.link()["speed_mbps"] == 2500
@@ -238,19 +254,20 @@ def test_main_wires_the_real_reader(tmp_path, monkeypatch):
     monkeypatch.setattr(server.app, "create_runtime", fake_create_runtime)
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(uvicorn, "Config", lambda app, **kwargs: object())
     monkeypatch.setattr(uvicorn, "Server", lambda config: object())
     monkeypatch.setattr(server.main, "serve_all", lambda servers: None)
     monkeypatch.setattr(asyncio, "run", lambda coro=None: None)
     monkeypatch.setattr(server.main, "_interface_for", lambda url: None)
     monkeypatch.setattr("sys.argv", [
-        "server.main", "--server-url", "http://10.44.12.10:8080",
+        "server.main", "--server-url", "http://10.44.12.10:7712",
         "--data-dir", str(tmp_path / "data"), "--images", str(tmp_path / "img")])
     server.main.main()
     assert captured["link_speed"] is drive_rates.read_link
 
 
-# --- קצה-לקצה מול ה-API: udp-sender והמסך ---------------------------------------
+# --- קצה-לקצה מול ה-API: מנוע החתיכות והמסך ---------------------------------------
 
 
 @pytest.fixture()
@@ -258,7 +275,7 @@ def nic_room(room_server):
     """שרת החדר הרגיל, עם כרטיס הפצה מזויף שהטסט קובע את מהירותו."""
     from test_server_room import CLONER1, CLONER2                    # noqa: PLC0415
     state = {"link": _link(10000)}
-    room_server["ctx"].sender.link_speed = lambda iface: dict(state["link"])
+    room_server["ctx"].chunk.link_speed = lambda iface: dict(state["link"])
     for mac in (CLONER1, CLONER2):         # המקבלים 10G — רק כרטיס השרת חוסם
         nic_speed.set_manual(room_server["ctx"].conn, mac, 10000)
     room_server["link"] = state
@@ -296,9 +313,9 @@ def test_create_app_passes_the_reader_to_the_sender(tmp_path):
     pytest.importorskip("fastapi")
     from server.app import create_app                       # noqa: PLC0415
     reader = lambda iface: _link(2500)                      # noqa: E731
-    app = create_app(tmp_path / "data", tmp_path / "img", "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", tmp_path / "img", "http://10.44.12.10:7712",
                      link_speed=reader)
-    assert app.state.ctx.sender.link_speed is reader
+    assert app.state.ctx.chunk.link_speed is reader
 
 
 # --- 15/10 (ב): מחשבי השיכפול — הכרטיס האיטי בגל ----------------------------------
@@ -409,11 +426,8 @@ def test_a_slow_cloner_keeps_the_floor_logic(conn):
     got = drive_rates.choose(conn, [_on(SLOW_MAC, "S1")], None, link=_link(1000))
     assert (got["ceiling"], got["start"]) == ("90m", "60m")
     for n in range(12):
-        rate = drive_rates.decide(conn, f"ses_{n}", lambda: [_on(SLOW_MAC, "S1")], None,
-                                  link=lambda: _link(1000))
-        drive_rates.record_stream(conn, f"ses_{n}", {
-            "sent_bytes": 10 ** 10, "loss_blocks": 10 ** 6, "stream_bps": None,
-            "stream_s": None})
+        rate = _chunk_wave(conn, f"ses_{n}", [_on(SLOW_MAC, "S1")], _link(1000))
+        chunk_rate.record(conn, f"ses_{n}", LOSSY)
     assert rate == "15m"
 
 

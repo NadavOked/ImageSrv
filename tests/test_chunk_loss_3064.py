@@ -31,6 +31,9 @@ pytestmark = requires_native(("bash", BASH), why="the agent's shell")
 #: the loop of chunkrecv.sh reads the server's answers with jq, as the agent does
 needs_jq = requires_native(("bash", BASH), "jq", why="the server's answers are read with jq")
 
+#: a scene with no /proc/net/softnet_stat and no interface to ask: what the card and the CPU queue say is "not read"
+NO_CARD = {"softnet": None, "nic": None}
+
 UNIT = r'''
 export RUN_DIR="$1" LOG_FILE="$1/agent.log" SYSROOT="$1/sysroot"
 . agent/lib/core/common.sh; . agent/lib/core/waits.sh
@@ -50,9 +53,9 @@ def _unit(tmp_path, script: str) -> list[str]:
     return [line.split(" ", 1) for line in proc.stdout.splitlines()]
 
 
-#: the three counters of #3064 stage 4. The two facts beside them (rcvbuf_bytes, pass_word: G7) have their own file,
-#: test_chunk_loss_g7_3064.py -- here the counters are judged as they were, with nothing else to compare.
-COUNTERS = ("rcvbuf", "inerrors", "abandoned")
+#: the counters of #3064 stage 4 and #3168 (softnet, nic). The two facts beside them (rcvbuf_bytes, pass_word: G7) have their own
+#: file, test_chunk_loss_g7_3064.py -- here the counters are judged as they were, with nothing else to compare.
+COUNTERS = ("rcvbuf", "inerrors", "abandoned", "softnet", "nic")
 
 
 def _counters(report):
@@ -79,10 +82,10 @@ snmp 160 6; chunk_loss_mark; printf 'listening\nabandoned 0\n' > "$RUN_DIR/recv.
 snmp 165 9; printf 'abandoned 2\n' >> "$RUN_DIR/recv.out"; chunk_loss_tell "$RUN_DIR/recv.out"; show during2
 chunk_loss_end "$RUN_DIR/recv.out"; show end2
 ''')
-    assert _json(got, "during1") == {"rcvbuf": 30, "inerrors": 1, "abandoned": 4}
-    assert _json(got, "end1") == {"rcvbuf": 50, "inerrors": 1, "abandoned": 7}
-    assert _json(got, "during2") == {"rcvbuf": 55, "inerrors": 4, "abandoned": 9}   # the restore's sum + this pass
-    assert _json(got, "end2") == {"rcvbuf": 55, "inerrors": 4, "abandoned": 9}
+    assert _json(got, "during1") == {"rcvbuf": 30, "inerrors": 1, "abandoned": 4, **NO_CARD}
+    assert _json(got, "end1") == {"rcvbuf": 50, "inerrors": 1, "abandoned": 7, **NO_CARD}
+    assert _json(got, "during2") == {"rcvbuf": 55, "inerrors": 4, "abandoned": 9, **NO_CARD}   # the restore's sum + this pass
+    assert _json(got, "end2") == {"rcvbuf": 55, "inerrors": 4, "abandoned": 9, **NO_CARD}
     assert "chunks abandoned half-received=2" in (tmp_path / "agent.log").read_text(encoding="utf-8")
 
 
@@ -94,10 +97,10 @@ snmp 10 0; chunk_loss_mark; printf 'listening\nabandoned 3\n' > "$RUN_DIR/recv.o
 chunk_loss_tell "$RUN_DIR/recv.out"; show later
 ''')
     # no /proc/net/snmp when the pass began, and a chunkcast that never said "abandoned" (an older binary)
-    assert _json(got, "nothing") == {"rcvbuf": None, "inerrors": None, "abandoned": None}
-    assert _json(got, "end1") == {"rcvbuf": None, "inerrors": None, "abandoned": None}
+    assert _json(got, "nothing") == {"rcvbuf": None, "inerrors": None, "abandoned": None, **NO_CARD}
+    assert _json(got, "end1") == {"rcvbuf": None, "inerrors": None, "abandoned": None, **NO_CARD}
     # one pass unread = the restore's sum unread: a partial sum would read as "the receiver is clean"
-    assert _json(got, "later") == {"rcvbuf": None, "inerrors": None, "abandoned": None}
+    assert _json(got, "later") == {"rcvbuf": None, "inerrors": None, "abandoned": None, **NO_CARD}
 
 
 def test_a_new_restore_starts_from_nothing(tmp_path):
@@ -107,7 +110,7 @@ udp_drops_reset; show reset
 snmp 4 0; chunk_loss_mark; printf 'abandoned 1\n' > "$RUN_DIR/recv.out"; snmp 5 0; chunk_loss_tell "$RUN_DIR/recv.out"; show next
 ''')
     assert dict(got)["reset"] == "none"
-    assert _json(got, "next") == {"rcvbuf": 1, "inerrors": 0, "abandoned": 1}
+    assert _json(got, "next") == {"rcvbuf": 1, "inerrors": 0, "abandoned": 1, **NO_CARD}
 
 
 def test_the_server_keeps_abandoned_beside_rcvbuf_and_absent_stays_absent():
@@ -129,13 +132,15 @@ def lossy_harness(monkeypatch):
         "            echo listening\n",
         "            echo listening; echo 'abandoned 0'\n"
         "            [ -z \"${RECV_LOSS:-}\" ] || { command sleep 2; echo \"abandoned $RECV_LOSS\";"
-        " printf 'Udp: InErrors RcvbufErrors\\nUdp: 0 %s\\n' \"$RECV_LOSS\" > \"$SYSROOT/proc/net/snmp\"; command sleep 2; }\n",
+        " printf 'Udp: InErrors RcvbufErrors\\nUdp: 0 %s\\n' \"$RECV_LOSS\" > \"$SYSROOT/proc/net/snmp\";"
+        " printf '00000100 %08x 00000000\\n' \"$RECV_LOSS\" > \"$SYSROOT/proc/net/softnet_stat\"; command sleep 2; }\n",
         1)
     assert harness != recv_test.HARNESS
     harness = harness.replace(
         'export SYSROOT="$RUN_DIR/sysroot"; ',
         'export SYSROOT="$RUN_DIR/sysroot"; mkdir -p "$SYSROOT/proc/net";'
-        " printf 'Udp: InErrors RcvbufErrors\\nUdp: 0 0\\n' > \"$SYSROOT/proc/net/snmp\"; ", 1)
+        " printf 'Udp: InErrors RcvbufErrors\\nUdp: 0 0\\n' > \"$SYSROOT/proc/net/snmp\";"
+        " printf '00000100 00000000 00000000\\n' > \"$SYSROOT/proc/net/softnet_stat\"; ", 1)
     monkeypatch.setattr(recv_test, "HARNESS", harness)
 
 
@@ -154,9 +159,9 @@ def test_a_chunk_pass_writes_what_its_receiver_lost_while_it_runs(tmp_path, loss
         watcher.kill()
         watcher.wait()
     assert got["trace"][-1] == "rc=0", got
-    assert _drops(tmp_path) == {"rcvbuf": 6, "inerrors": 0, "abandoned": 6}
+    assert _drops(tmp_path) == {"rcvbuf": 6, "inerrors": 0, "abandoned": 6, "softnet": 6, "nic": None}
     during = [_counters(json.loads(line)) for line in seen.read_text().splitlines() if line.strip()]
-    assert {"rcvbuf": 6, "inerrors": 0, "abandoned": 6} in during, "the report did not move before the pass ended"
+    assert {"rcvbuf": 6, "inerrors": 0, "abandoned": 6, "softnet": 6, "nic": None} in during, "the report did not move before the pass ended"
     assert "chunks abandoned half-received=6" in got["log"]
 
 
@@ -169,7 +174,7 @@ def test_without_chunkcast_saying_it_the_report_says_not_read(tmp_path, monkeypa
     monkeypatch.setattr(recv_test, "HARNESS", harness)
     got = recv_test._run(tmp_path, [recv_test.RECEIVE1, recv_test.DONE])
     assert got["trace"][-1] == "rc=0", got
-    assert _drops(tmp_path) == {"rcvbuf": 0, "inerrors": 0, "abandoned": None}
+    assert _drops(tmp_path) == {"rcvbuf": 0, "inerrors": 0, "abandoned": None, **NO_CARD}
 
 
 # --- chunkcast itself: the "abandoned N" line (agent/chunkcast.c) ---------------------------------------------------

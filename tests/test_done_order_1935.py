@@ -61,12 +61,6 @@ def _assert_done_last(result: dict, reports, steps: list[str]) -> None:
 
 
 @native_tools
-def test_a_station_reports_done_only_after_the_name_the_drivers_and_the_mark(tmp_path, reports):
-    result = run_path(tmp_path, url_of(reports), "do_restore", stubs=SPIES)
-    _assert_done_last(result, reports, ["name", "drivers", "mark"])
-
-
-@native_tools
 def test_a_cloner_reports_done_only_after_the_drivers_and_the_mark(tmp_path, reports):
     result = run_path(tmp_path, url_of(reports), f"do_restore_drawers {IMAGE} {SESSION}", stubs=SPIES)
     _assert_done_last(result, reports, ["drivers", "mark"])

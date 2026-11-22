@@ -156,7 +156,7 @@ class Box:
             # #433: SYSROOT ריק היה מפנה את bootentry.sh ל-efivars **האמיתי** של
             # מכונת הבדיקות (מעבדת ה-VM היא UEFI) — ו-efibootmgr היה כותב ל-NVRAM שלה.
             f'SYSROOT={posix(self.run)!r}/sys LIB_DIR={posix(AGENT)!r}/lib '
-            f'SERVER=http://10.44.12.10:8080 MAC=b4:2e:99:07:1a:c4 {env}; '
+            f'SERVER=http://10.44.12.10:7712 MAC=b4:2e:99:07:1a:c4 {env}; '
             f'. {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/core/jsonq.sh; '
             + agent_sources("sysinfo", "diskinfo", "progress", "failmark")   # #2434: assert_target (the disk chosen, bound in stage)
             + f'. {posix(AGENT)}/lib/restore/restore.sh; . {posix(AGENT)}/lib/postdeploy/hostname.sh; . {posix(AGENT)}/lib/postdeploy/unattend.sh; '
@@ -367,10 +367,10 @@ def test_the_progress_report_carries_drivers_only_once_it_exists(tmp_path):
 def test_the_agent_stages_after_the_name_and_before_the_closing_report():
     main = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     assert '"$LIB_DIR/postdeploy.sh"' in main
-    i_name = main.index('name_this_machine "$_disk" "$_ses"')
-    i_stage = main.index('stage_drivers "$_disk" "$RUN_DIR/manifest.json"')
-    i_report = main.index('report_final "$_ppid" "$_ses"', i_name)
-    assert i_name < i_stage < i_report
+    # #3173: the classroom station's own restore is v2 (it fails by name before the disk); the cloner's
+    # drawers stage theirs in do_restore_drawers, before its closing report
+    room = main[main.index("do_restore_drawers() {"):main.index("do_restore() {")]
+    assert room.index('stage_drawer_drivers "$2"') < room.index('report_final "$_ppid" "$2"')
     single = (AGENT / "lib" / "restore" / "single_restore.sh").read_text(encoding="utf-8")
     assert single.index('stage_drivers "$_sr_disk"') < single.index("pull_close ")
 

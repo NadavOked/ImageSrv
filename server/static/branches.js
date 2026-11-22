@@ -467,13 +467,13 @@ const ENROLL_PROTOCOL_VERSION = "2.1";
    ‏https://<ip>:<פורט>. הפורט הוא פורט ה-API הבין-שרתי של השרת
    (health.DEFAULT_OWN_PORTS["interserver"] = ברירת המחדל של ‎--interserver-port
    ב-main.py); טסט ב-test_console_static מצמיד את שניהם, כדי שלא ייסחפו. */
-const INTERSERVER_PORT = 8443;
+const INTERSERVER_PORT = 7700;
 const ENROLL_NEW_GROUP = "__new__";
 const ENROLL_IPV4_RE = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 const ENROLL_HOST_RE = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i;
 
 /* מה שהמפעיל הקליד → ‏base_url מלא, או חריגה עם הסירוב בעברית. כתובת מלאה
-   שהודבקה (‏https://10.20.0.5:8443/, ‏10.20.0.5:8443, גם עם ‎/api/interserver/v1)
+   שהודבקה (‏https://10.20.0.5:7700/, ‏10.20.0.5:7700, גם עם ‎/api/interserver/v1)
    מנורמלת ולא נדחית; פורט מפורש נשמר. השרת ממשיך לקבל base_url מלא. */
 function enrollUrlFromInput(raw) {
   const bad = "כתובת לא תקינה — הקלידו את כתובת ה-IP של שרת המשנה (למשל 10.20.0.5) או את שם השרת";

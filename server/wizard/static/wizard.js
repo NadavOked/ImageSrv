@@ -7,7 +7,7 @@ const terminal = new Set([
   "validation-failed", "check-error",
 ]);
 const phaseIndex = {validating: 0, hostname: 1, installing: 2, handoff: 3, verifying: 4, done: 5};
-const phaseText = {validating: "בודק את ההגדרות…", hostname: "מגדיר את שם השרת…", installing: "מתקין קבצים ושירותים…", handoff: "מעביר את הקונסולה לפורט 8081…", verifying: "מאמת את מטען האתחול…", done: "ההתקנה הושלמה."};
+const phaseText = {validating: "בודק את ההגדרות…", hostname: "מגדיר את שם השרת…", installing: "מתקין קבצים ושירותים…", handoff: "מעביר את הקונסולה לפורט 443…", verifying: "מאמת את מטען האתחול…", done: "ההתקנה הושלמה."};
 const retryDelays = [1000, 2000, 5000];
 const reconnectLimitMs = 5 * 60 * 1000;
 
@@ -148,7 +148,7 @@ function isValidHost(host) {
 function consoleGuess() {
   const current = config();
   const host = current.mode === "static" && current.address ? current.address : current.hostname;
-  return lastProgress.console_url || (isValidHost(host) ? `https://${host}:8081` : location.origin);
+  return lastProgress.console_url || (isValidHost(host) ? `https://${host}` : location.origin);
 }
 
 function renderProgress(progressData) {
@@ -249,7 +249,7 @@ function finish(result) {
   clearTimeout(pollTimer);
   if (result.state === "done") {
     $("#console-url").textContent = result.console_url;
-    // codeql[js/xss-through-dom] false positive: href is https://<host>:8081 (fixed scheme) or the server's value -- never HTML, never javascript: (#291)
+    // codeql[js/xss-through-dom] false positive: href is https://<host> (fixed scheme) or the server's value -- never HTML, never javascript: (#291)
     $("#console-url").href = result.console_url;
     // codeql[js/xss-through-dom] false positive: same as the line above (#291)
     $("#console-button").href = result.console_url;

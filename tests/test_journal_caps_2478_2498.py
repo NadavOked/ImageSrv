@@ -159,7 +159,7 @@ def test_random_macs_off_the_deploy_vlan_are_capped_but_the_first_is_seen(identi
     there is no lease to check there -- but a random MAC per request is capped."""
     from server.agent import api as agent_api
     cap = _cap(agent_api)
-    off = TestClient(identity_server["app"], base_url="http://10.99.0.1:8080",
+    off = TestClient(identity_server["app"], base_url="http://10.99.0.1:7712",
                      client=(STRANGER_IP, 40010))
     macs = _random_macs(cap * 4)
     texts = _menus(off, macs)
@@ -173,7 +173,7 @@ def test_a_real_unregistered_machine_is_journaled_during_the_flood(identity_serv
     """Control (the issue's): the same MAC from its own lease address still writes
     `unknown_mac` -- also after the flood has used the cap."""
     from server.agent import api as agent_api
-    off = TestClient(identity_server["app"], base_url="http://10.99.0.1:8080",
+    off = TestClient(identity_server["app"], base_url="http://10.99.0.1:7712",
                      client=(STRANGER_IP, 40011))
     _menus(off, _random_macs(_cap(agent_api) * 2))
     identity_server["station"].get(f"/boot/menu?mac={MAC1}")

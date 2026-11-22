@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import logging
 import os
 import re
@@ -43,6 +44,7 @@ from server.core.atomicfile import fsync_dir, write_atomic
 from server.core.logtext import one_line
 from server.db import get_setting, set_settings
 from server.net.dhcp_host import list_interfaces
+from server.system.timedrun import run_timed
 
 log = logging.getLogger(__name__)
 
@@ -71,16 +73,16 @@ def missing_nic(name: str, interfaces: list[dict]) -> str | None:
         return f"רשימת כרטיסי הרשת ריקה — לא ניתן לבדוק שכרטיס ההפצה {name} קיים; לא נכתב דבר"
     if name not in names:
         return (f"כרטיס ההפצה {name} לא קיים במערכת (יש: {', '.join(names)}) — "
-                "חומת האש, ה-DHCP ו-udp-sender היו מפנים לשם שאינו קיים; "
+                "חומת האש, ה-DHCP והשידור היו מפנים לשם שאינו קיים; "
                 "לא נכתב דבר. בחרו כרטיס בלשונית רשת הפצה")
     return None
 
 
 def primary_ip_of(url: str, resolve: Callable | None = None) -> tuple[str | None, str | None]:
-    """הכתובת שחומת האש של משני פותחת לה את 8443 → ``(ip, None)`` או ``(None, סיבה)``.
+    """הכתובת שחומת האש של משני פותחת לה את 7700 → ``(ip, None)`` או ``(None, סיבה)``.
 
     #2160: ``--primary-url`` עם שם מארח השאיר ``primary_ip=None`` בשקט, והמחולל
-    בלי ``--primary-ip`` פותח את 8443 מכל הכרטיס — חומת אש רחבה שנראית תקינה.
+    בלי ``--primary-ip`` פותח את 7700 מכל הכרטיס — חומת אש רחבה שנראית תקינה.
     כמו המתקין (``getent ahostsv4``, הראשונה): שם נפתר ל-IPv4. שם שלא נפתר
     אינו "בלי הגבלה" — זו סיבה, וחומת האש לא מחוללת מחדש עד שהיא נפתרת."""
     host = urllib.parse.urlsplit(url or "").hostname or ""
@@ -145,7 +147,26 @@ def record(conn, interface: str, url: str) -> None:
 
 
 def deploy_url(server_ip: str, port: int) -> str:
-    return f"http://{server_ip}:{port}"
+    return f"https://{server_ip}:{port}"
+
+
+def with_agent_port(url: str, port: int) -> str:
+    """#3871: כתובת ההפצה, עם הפורט שהסוכן באמת מאזין בו.
+
+    הכתובת שנשמרה (ביחידה, ב-`deploy:url`, או ב-bootstrap שעל ה-TFTP) נושאת את הפורט של יום ההתקנה. שרת
+    ששודרג מגרסה שבה פורט הסוכן היה אחר מאזין בפורט החדש, והכתובת השמורה הייתה שולחת כל תחנה (GRUB, שורת
+    הקרנל) לפורט שאיש אינו מאזין בו. פורט מפורש שונה מוחלף; כתובת בלי פורט מפורש, או כתובת שלא פוענחה,
+    חוזרת כמות שהיא."""
+    try:
+        parts = urllib.parse.urlsplit(url)
+        explicit, host = parts.port, parts.hostname
+    except ValueError:
+        return url
+    if explicit is None or explicit == port or not host:
+        return url
+    if ":" in host:
+        host = f"[{host}]"
+    return urllib.parse.urlunsplit((parts.scheme, f"{host}:{port}", parts.path, parts.query, parts.fragment))
 
 
 def deploy_ip(server_base: str, state: "DeployState | None") -> str | None:
@@ -169,8 +190,8 @@ def _run(cmd: list[str], *, stdin_text: str | None = None,
     kwargs = ({"input": stdin_text} if stdin_text is not None
               else {"stdin": subprocess.DEVNULL})
     try:
-        done = subprocess.run(cmd, capture_output=True, text=True,
-                              timeout=timeout, check=False, **kwargs)
+        done = run_timed(cmd, what=" ".join(cmd[:2]), capture_output=True, text=True,
+                         timeout=timeout, check=False, **kwargs)   # #3127: how long, and how it ended
     except (OSError, subprocess.SubprocessError) as exc:
         # הטקסט הגולמי של מערכת ההפעלה ([WinError 2]…) — ללוג בלבד (#1016).
         logging.getLogger(__name__).warning("deploy_net: %s failed to run: %s", cmd[:3], exc)
@@ -204,7 +225,7 @@ def write_grub_cfg(url: str, tftp_root: str | Path, password_hash: str = "") -> 
 _FALLBACK_LINE = re.compile(r"^set imagesrv_fallback=(\S+)$", re.M)
 
 
-def refresh_grub_cfg(tftp_root: str | Path, password_hash: str) -> str | None:
+def refresh_grub_cfg(tftp_root: str | Path, password_hash: str, agent_port: int | None = None) -> str | None:
     """#2437: שרת משודרג נועל את ה-bootstrap שהשאיר על ה-TFTP — בעלייה.
 
     #2491: נכתב מחדש **בכל עלייה**, עם ה-hash של הסיסמה הנוכחית. קובץ שכבר
@@ -212,9 +233,17 @@ def refresh_grub_cfg(tftp_root: str | Path, password_hash: str) -> str | None:
     `/etc/imagesrv/grub-password` ביד הוא המשיך לאמת את הסיסמה הישנה. מלח חדש
     בכל עלייה בסדר (`grub_password`). hash ריק (הסיסמה לא נקראה) = נעול בלי
     סיסמה, כמו התפריטים שהשרת מגיש באותה עלייה. הכתובת נלקחת **מהקובץ עצמו**
-    (`set imagesrv_fallback=`), כך שהנעילה אינה משנה לאן התחנות פונות. אין
+    (`set imagesrv_fallback=`), כך שהנעילה אינה משנה לאן התחנות פונות. #3871: הפורט
+    שבקובץ הולך אחרי `agent_port`, הפורט שהסוכן מאזין בו בעלייה הזו (`with_agent_port`):
+    bootstrap של גרסה עם פורט אחר היה שולח את GRUB לפורט סגור. #3486: הקורא מעביר את הפורט ש-GRUB
+    פונה אליו (`DeployContext.grub_port`: מאזין ה-/boot, 7711). `None` = לא נוגעים בפורט. אין
     קובץ — אין מה לרענן (#1088: הקונסולה תכתוב אותו). קובץ שלא אנחנו כתבנו
-    נשאר כמות שהוא, ונאמר."""
+    נשאר כמות שהוא, ונאמר.
+
+    #3486: `port` — הפורט ש-GRUB צריך לפנות אליו (פורט ה-/boot אם יש, אחרת פורט
+    הסוכן). המארח נשאר זה שבקובץ; הפורט הוא מה שהשרת הזה מאזין עליו **עכשיו**,
+    ולכן גם החזרה מ-`--boot-port` לברירת המחדל מחזירה את הקובץ לפורט הסוכן.
+    `None` = הפורט שבקובץ (כמו קודם)."""
     path = Path(tftp_root) / "grub" / "grub.cfg"
     try:
         text = path.read_text(encoding="ascii")
@@ -227,7 +256,10 @@ def refresh_grub_cfg(tftp_root: str | Path, password_hash: str) -> str | None:
     if not found:
         return (f"{path} has no 'set imagesrv_fallback=' line -- not a file this server "
                 "wrote; left unlocked as it is (#2437)")
-    return write_grub_cfg(f"http://{found.group(1)}", tftp_root, password_hash)
+    base = f"http://{found.group(1)}"
+    if agent_port is not None:
+        base = with_agent_port(base, agent_port)
+    return write_grub_cfg(base, tftp_root, password_hash)
 
 
 def enable_dnsmasq() -> str | None:
@@ -257,15 +289,50 @@ def firewall_installed(conf: str | Path = NFTABLES_CONF) -> bool | None:
 
 #: #3224: מה שהמחולל כותב כשהוא מצהיר על הקבוצה (`deploy/nftables-rules.sh`).
 KNOWN_MACS_DECL = "set known_macs"
-#: #3512: the range before the chunk engine's feedback port joined it (`deploy/nftables-rules.sh`, MCAST_PORTS).
-OLD_MCAST_RANGE = "udp dport 9000-9001"
+#: #3871: the line every ruleset the generator wrote since the 77xx ports carries (`deploy/nftables-rules.sh`). A file
+#: without it opens the ports of before: after the upgrade the console, the agent and Trident would be closed, and the
+#: ports nothing listens on any more would stay open. It also covers what #3512 and #3173 told by their ranges (a file
+#: without the feedback port, a file that still opens the removed sender's two ports): each was written before the mark.
+PORTS_MARK = "# פורטים 77xx (#3871)"
+#: #3486: the line a ruleset carries since `/boot` has a listener of its own. A 77xx file without it opens the agent's
+#: port but not the boot port, and GRUB, which the server sends to the boot port at every start, would find it closed.
+TLS_MARK = "# Agent API requires TLS (#3580)"
+BOOT_MARK = "# /boot במאזין משלו (#3486)"
+#: the marker `tools/server-upgrade.sh` keeps in the data dir from its first stage until the upgrade is verified or
+#: rolled back (`UPGRADE_STATE`), and the key its 77xx version writes into it.
+UPGRADE_MARKER = "server-upgrade.state"
+UPGRADE_PORTS_KEY = "ports"
+UPGRADE_PORTS_77XX = "77xx"
+
+
+def upgrade_hold(data_dir: str | Path) -> str | None:
+    """#3871: האם העלייה הזו היא בתוך שדרוג שמריץ סקריפט של גרסה שקדמה לפורטי 77xx.
+
+    כפתור העדכון מריץ את `server-upgrade.sh` של התג **הישן** (#2350). הסקריפט הזה מחפש את השרת החדש בפורט
+    הקונסולה הקודם, לא מוצא אותו, ומחזיר את התג הישן. אם השרת החדש כבר כתב בינתיים את חומת האש ואת ה-bootstrap
+    של GRUB בפורטים החדשים, השרת הישן שחוזר נשאר סגור מאחוריהם. לכן כל עוד שדרוג כזה לא אומת, שום דבר שנשאר
+    אחרי החזרה אינו נכתב. הסקריפט של 77xx כותב `"ports": "77xx"` לסמן, ואינו מעוכב.
+
+    None = אין סמן (אין שדרוג רץ), או שהסמן של סקריפט 77xx. אחרת הסיבה, בעברית. סמן שלא נקרא אינו "אין שדרוג"
+    (עיקרון 5): גם הוא סיבה, ולא כותבים על סמך ניחוש."""
+    path = Path(data_dir) / UPGRADE_MARKER
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as exc:
+        return f"סמן השדרוג {path} לא נקרא ({exc.__class__.__name__}) — לא ידוע איזה סקריפט מריץ את השדרוג"
+    if isinstance(doc, dict) and doc.get(UPGRADE_PORTS_KEY) == UPGRADE_PORTS_77XX:
+        return None
+    return ("השדרוג רץ בסקריפט של גרסה שקדמה לפורטי 77xx (#3871); הוא יחזיר את התג הקודם, "
+            "ולכן מה שנשאר אחרי החזרה לא נכתב")
 
 
 def stale_firewall(conf: str | Path = NFTABLES_CONF) -> str | None:
-    """#3224: האם `/etc/nftables.conf` הוא של גרסה שקדמה ל-`known_macs`.
+    """#3224, #3871: האם `/etc/nftables.conf` הוא של גרסה שקדמה ל-`known_macs`, או לפורטי 77xx.
 
     None = אין מה לכתוב מחדש: אין חומת אש של ImageSrv (`--no-firewall`, #2440 --
-    שדרוג אינו מדליק אותה), או שהקובץ כבר מצהיר על הקבוצה. אחרת הסיבה, בעברית.
+    שדרוג אינו מדליק אותה), או שהקובץ כבר מצהיר על הקבוצה ונושא את סימן הפורטים. אחרת הסיבה, בעברית.
     קובץ שלא ניתן לקרוא אינו "תקין" (עיקרון 5): הסיבה חוזרת, והקורא לא מדלג."""
     try:
         text = Path(conf).read_text(encoding="utf-8", errors="replace")
@@ -276,11 +343,16 @@ def stale_firewall(conf: str | Path = NFTABLES_CONF) -> str | None:
     if "ImageSrv" not in text:
         return None
     if KNOWN_MACS_DECL in text:
-        if OLD_MCAST_RANGE in text:         # #3512: with known_macs, but without the feedback port (portbase+3)
-            return (f"{conf} פותח רק {OLD_MCAST_RANGE.split()[-1]}: חסר פורט משוב הקצב של מנוע החתיכות (portbase+3), "
-                    "והמשוב לא יגיע לשרת")
+        if PORTS_MARK not in text:          # #3871: with known_macs, but the ports of before 77xx (#3512 and #3173 too)
+            return (f"{conf} נכתב לפני פורטי 77xx (#3871): הוא פותח את הפורטים הקודמים, והקונסולה (443), "
+                    "הסוכן ו-Trident היו נשארים סגורים")
+        if BOOT_MARK not in text:           # #3486: 77xx, but /boot still on the agent's port
+            return (f"{conf} נכתב לפני המאזין הנפרד של /boot (#3486): פורט האתחול (7711) סגור בו, "
+                    "ו-GRUB לא היה מגיע לתפריט")
+        if TLS_MARK not in text:
+            return f"{conf} נכתב לפני הצפנת ערוץ הסוכן (#3580)"
         return None
-    return (f"{conf} הוא של גרסה קודמת: אין בו את הקבוצה known_macs, ופורטי udpcast "
+    return (f"{conf} הוא של גרסה קודמת: אין בו את הקבוצה known_macs, ופורטי השידור "
             "פתוחים לכל מחשב בכרטיס ההפצה")
 
 
@@ -289,7 +361,8 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
                         conf: str | Path = NFTABLES_CONF,
                         services: list[tuple[str, list[str]]] | None = None,
                         proxy_interfaces: list[str] | None = None,
-                        sender_portbase: int | None = None) -> str | None:
+                        sender_portbase: int | None = None,
+                        boot_port: int | None = None) -> str | None:
     """מריץ שוב את `deploy/nftables-rules.sh` עם שני הכרטיסים, בודק תחביר
     (`nft -c`), כותב ומטעין. חומת אש שלא הותקנה — לא נוגעים; הותקנה
     וכרטיס השרתים אינו ידוע — שגיאה בשם (הכללים לוילן ההפצה לא ייכתבו).
@@ -298,8 +371,10 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
     והכללים נגזרים מהם בלבד (`--per-nic`); אז שני הכרטיסים אינם נדרשים.
     `proxy_interfaces` (#1829) names the interfaces configured for PXE proxy;
     UDP 4011 additionally requires a deploy/netboot rule for that interface.
-    `sender_portbase`: the portbase `udp-sender` really takes (`--sender-portbase`); the
-    generator opens `portbase`..`portbase+3` (udpcast, the chunk engine, its feedback port: #3512). None = the generator's 9000-9003."""
+    `sender_portbase`: the portbase the server was started with (`--sender-portbase`); the generator opens
+    `portbase+2`..`portbase+3` (the chunk engine and its feedback port, #3512). None = the generator's own defaults (Trident, `server/core/ports.py`).
+    `boot_port` (#3486): פורט מאזין ה-/boot של GRUB — כלל משלו (`--boot-port`);
+    None = ברירת המחדל של המחולל (`ports.BOOT`)."""
     installed = firewall_installed(conf)
     if installed is None:
         return f"לא ניתן לקרוא את {conf} — חומת האש לא עודכנה"
@@ -322,8 +397,10 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
     for nic in proxy_interfaces or []:
         args += ["--proxy-if", nic]
     if sender_portbase is not None:
-        # P..P+3: udpcast (P, P+1), מנוע החתיכות (P+2) ומשוב הקצב שלו (P+3, #3512)
-        args += ["--mcast-ports", f"{sender_portbase}-{sender_portbase + 3}"]
+        # P+2..P+3: מנוע החתיכות (P+2) ומשוב הקצב שלו (P+3, #3512). P ו-P+1 היו של השולח שהוסר (#3173), ונשארים סגורים
+        args += ["--mcast-ports", f"{sender_portbase + 2}-{sender_portbase + 3}"]
+    if boot_port:
+        args += ["--boot-port", str(boot_port)]
     ok, ruleset, err = _run(args)
     if not ok or not ruleset.strip():
         return f"מחולל חומת האש נכשל: {err or 'פלט ריק'}"
@@ -389,7 +466,7 @@ def firewall_gate(conf: str | Path = NFTABLES_CONF,
 
     המתקין כתב חומת אש (`firewall_installed`) — אז הטבלה `inet imagesrv` חייבת
     להיות טעונה עכשיו. nftables שלא עלה באתחול (קובץ פגום, מודול חסר) השאיר
-    את 8080/8081/8443 פתוחים לכל כרטיס, והשרת עלה כאילו כלום. `nft` שלא נקרא
+    את 7712/443/7700 פתוחים לכל כרטיס, והשרת עלה כאילו כלום. `nft` שלא נקרא
     אינו "טעונה" (עיקרון 5). שרת בלי חומת אש מותקנת (`--no-firewall`) עולה —
     זה מצב שהמתקין תומך בו, ומסך הבריאות מציג "לא נטענה"."""
     installed = firewall_installed(conf)
@@ -416,9 +493,8 @@ def firewall_proxy_interfaces(conn) -> list[str]:
 
     Unreadable settings propagate an error; they must not look like proxy off.
     """
-    from server.console import dhcp as console_dhcp
-    from server.net import dhcp
-    configs = console_dhcp.proxy_configs(console_dhcp.load_configs(conn))
+    from server.net import dhcp, dhcp_configs
+    configs = dhcp_configs.proxy_configs(dhcp_configs.load_configs(conn))
     names = []
     for cfg in dhcp.proxy_only(configs):
         dhcp.validate_name(cfg.name)
@@ -449,6 +525,14 @@ class DeployContext:
     #: #2437: ה-hash של סיסמת עורך ה-GRUB, ל-`grub/grub.cfg` שההשלמה כותבת.
     #: `create_runtime` ממלא אותו; ריק = נעול בלי סיסמה.
     grub_password_hash: str = ""
+    #: #3486: פורט מאזין ה-/boot של GRUB (`--boot-port`). `main` מעביר תמיד; None =
+    #: בדיקות בלי מאזין כזה (/boot על פורט הסוכן). קובע את ה-`grub.cfg` וכלל חומת האש.
+    boot_port: int | None = None
+
+    @property
+    def grub_port(self) -> int:
+        """הפורט ש-GRUB פונה אליו: פורט ה-/boot אם יש, אחרת פורט הסוכן."""
+        return self.boot_port or self.agent_port
 
 
 def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str,
@@ -466,7 +550,7 @@ def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str,
     result = {"ok": False, "url": url, "interface": interface,
               "errors": [], "restarting": False, "recorded": False}
     # #2428: כרטיס הניהול אינו רשת ההפצה — בכל מסלול שמגיע לכאן, לפני כל
-    # צעד. אחרת dnsmasq, 67/69/8080 ומולטיקאסט נפתחים ברשת המכללה.
+    # צעד. אחרת dnsmasq, 67/69/7712 ומולטיקאסט נפתחים ברשת המכללה.
     # #2668: החריג היחיד — שרת עם כרטיס יחיד, מחלון רשת ההפצה בלבד, אחרי
     # שהשומר של DHCP קיים החזיר "נבדק, נקי" והמפעיל אישר (`management_confirmed`).
     if (ctx.servers_interface and interface == ctx.servers_interface
@@ -480,7 +564,9 @@ def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str,
         result["errors"].append(error)
         return result
     steps = [
-        ("grub.cfg", lambda: hooks["write_grub_cfg"](url, ctx.tftp_root)),
+        # #3486: ל-GRUB — פורט ה-/boot; `url` (פורט הסוכן) הוא מה שנרשם ב-DB.
+        ("grub.cfg", lambda: hooks["write_grub_cfg"](
+            f"http://{server_ip}:{ctx.grub_port}", ctx.tftp_root)),
         ("dnsmasq", hooks["enable_dnsmasq"]),
     ]
     per_nic = ctx.services(interface) if ctx.services is not None else None
@@ -498,6 +584,7 @@ def complete(ctx: DeployContext, conn, *, interface: str, server_ip: str,
         ctx.repo_dir, deploy_if=interface, servers_if=ctx.servers_interface,
         primary_ip=ctx.primary_ip,
         **({"proxy_interfaces": proxy} if proxy else {}),
+        **({"boot_port": ctx.boot_port} if ctx.boot_port else {}),   # #3486
         **({"services": per_nic} if per_nic is not None else {}))))
     for label, call in steps:
         err = call()

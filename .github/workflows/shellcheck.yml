@@ -62,7 +62,9 @@ jobs:
   shellcheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # 13/11: הבינארי הרשמי של 0.11.0 ולא apt. ‏apt של Ubuntu נותן 0.9.0, ושם
       # אין את הניב `busybox` (נוסף ב-0.10.0) — והסוכן רץ ב-busybox ash, לא
@@ -124,7 +126,7 @@ jobs:
                   echo "::error::אין קריאה של השורה הראשונה של $f — הניב אינו נגזר"
                   exit 1
                 fi
-                case "$first" in *bash*) sh=bash ;; *) sh=sh ;; esac
+                case "$first" in *bash*) sh='bash' ;; *) sh='sh' ;; esac
                 echo "$sh $f" >> "$RUNNER_TEMP/rest" ;;
             esac
           done < "$RUNNER_TEMP/all"

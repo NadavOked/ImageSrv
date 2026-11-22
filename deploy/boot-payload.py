@@ -29,6 +29,10 @@ INPUT_DIRS = ("agent", "native-gui")
 INPUT_FILES = ("tools/build_initramfs.sh", "tools/boot-payload-build.sh",
                "tools/agent-lib-flatten.sh", "tools/initramfs-version.sh",
                "deploy/boot-payload.py")
+#: #1076: the initrds whose agent CA sidecars (``<initrd>.ca.pem`` and
+#: ``<initrd>.agent-name``, tools/build_initramfs.sh) say which CA is baked in.
+INITRDS = ("initrd.img", "initrd.img.gui")
+CA_SIDECAR, NAME_SIDECAR = ".ca.pem", ".agent-name"
 VERSION_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._+-")
 
 
@@ -165,6 +169,36 @@ def verify_files(directory: Path, doc: dict) -> str | None:
     return None
 
 
+def baked_ca(payload: Path) -> str | None:
+    """#1076: sha256 of the agent CA every initrd here was built with, or None
+    for a generic payload (none has one). Some with and some without, or two
+    different CAs, is not a payload anyone can vouch for."""
+    found = set()
+    for name in INITRDS:
+        side = payload / (name + CA_SIDECAR)
+        try:
+            found.add(sha(side) if side.is_file() else None)
+        except OSError as exc:
+            raise Refused(f"cannot hash {side}: {exc}") from exc
+    if len(found) != 1:
+        raise Refused(f"the initrds in {payload} do not carry one and the same agent CA (#1076)")
+    return found.pop()
+
+
+def _baked_or_mixed(payload: Path) -> str | None:
+    try:
+        return baked_ca(payload)
+    except Refused as exc:
+        return f"refused: {exc}"     # never equal to a sha256 or to None: not current
+
+
+def _created_ca(payload: Path) -> str | None:
+    try:
+        return baked_ca(payload)
+    except Refused as exc:
+        fail(str(exc))
+
+
 def create(args: argparse.Namespace) -> None:
     payload = Path(args.payload_dir)
     rows = flags(Path(args.flags))
@@ -176,6 +210,8 @@ def create(args: argparse.Namespace) -> None:
         "source_commit": args.source_commit,
         "flags": normalized_flags(rows),
         "input_hash": input_hash(Path(args.source), args.kernel, rows, version),
+        # #1076: None = generic (ISO/release, --no-agent-ca); else this server's CA.
+        "agent_ca_sha256": _created_ca(payload),
     }
     out = Path(args.output)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -187,6 +223,11 @@ def create(args: argparse.Namespace) -> None:
 
 def install_verified(source: Path, target: Path, manifest: Path, doc: dict) -> None:
     target.mkdir(parents=True, exist_ok=True)
+    # #1076: a prebuilt payload is generic. The sidecars of the initrds it
+    # replaces go first: left beside it they would vouch for a CA it lacks.
+    for name in INITRDS:
+        for suffix in (CA_SIDECAR, NAME_SIDECAR):
+            (target / (name + suffix)).unlink(missing_ok=True)
     staged: list[tuple[Path, Path]] = []
     try:
         for name in FILES:
@@ -217,6 +258,11 @@ def decide(args: argparse.Namespace) -> None:
         # "Could not tell which version this tree is" is not "the same version".
         fail("rebuild\tthe source version is unknown, so no prebuilt or current payload can be matched to it", 10)
     wanted_hash = input_hash(source, args.kernel, rows, version)
+    # #1076: the CA this server bakes now (server.agent.tls ca); None = none.
+    try:
+        wanted_ca = sha(Path(args.agent_ca)) if args.agent_ca else None
+    except OSError as exc:
+        fail(f"cannot hash the agent CA {args.agent_ca}: {exc}")
 
     local_manifest = target / "boot-payload.json"
     if local_manifest.is_file():
@@ -224,7 +270,8 @@ def decide(args: argparse.Namespace) -> None:
             doc = load_manifest(local_manifest)
         except Refused:
             doc = None
-        if doc and doc["input_hash"] == wanted_hash and not verify_files(target, doc):
+        if (doc and doc["input_hash"] == wanted_hash and not verify_files(target, doc)
+                and doc.get("agent_ca_sha256") == wanted_ca and _baked_or_mixed(target) == wanted_ca):
             print("current\tboot payload: inputs unchanged, current payload verified")
             return
 
@@ -247,6 +294,11 @@ def decide(args: argparse.Namespace) -> None:
         fail("rebuild\tprebuilt flags do not match initrd.flags", 10)
     if doc["input_hash"] != wanted_hash:
         fail("rebuild\tprebuilt inputs do not match this source tree", 10)
+    if doc.get("agent_ca_sha256") is not None:
+        fail("rebuild\tprebuilt payload carries an agent CA; a prebuilt payload must be generic (#1076)", 10)
+    if wanted_ca is not None:
+        fail("rebuild\tthis server bakes its own agent CA into the initrd and the prebuilt payload "
+             "is generic (#1076)", 10)
     bad = verify_files(prebuilt, doc)
     if bad:
         fail(f"rebuild\tprebuilt payload rejected: {bad}", 10)
@@ -270,6 +322,7 @@ def parser() -> argparse.ArgumentParser:
     d.add_argument("--manifest")
     d.add_argument("--prebuilt-dir")
     d.add_argument("--current-only", action="store_true")
+    d.add_argument("--agent-ca", help="#1076: the agent CA this server bakes (server.agent.tls ca)")
     return p
 
 

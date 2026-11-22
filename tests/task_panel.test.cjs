@@ -160,12 +160,4 @@ test('sidebar: nav and rail end above the dock (34px closed, + panel height open
   assert.match(css,/\.sidebar \.nav-full,\.sidebar \.rail\{bottom:var\(--dock-h\)\}/);
 });
 
-test('Multicast dot: an udp-sender inside an open round is "sending" (green), an orphan is red with the reason in the tooltip',()=>{
-  const {run}=setup();
-  run(`globalThis.el={cls:new Set(),attrs:{},classList:{toggle(c,on){ on?el.cls.add(c):el.cls.delete(c); }},setAttribute(k,v){el.attrs[k]=v;}};
-    document.querySelector=(s)=>s==='[data-svc="Multicast"]'?el:null; document.getElementById=()=>null;`);
-  const paint=(state,detail)=>{ run(`HEALTH=[{id:"udp_sender",state:${JSON.stringify(state)},detail:${JSON.stringify(detail)}}]; el.cls.clear(); paintServiceStatus()`); return {cls:run('[...el.cls].join()'),title:run('el.attrs.title')}; };
-  let r=paint('warn','רץ (PID 7) — יש סבב פתוח'); assert.equal(r.cls,'svc-ok'); assert.match(r.title,/משדר כעת/);
-  r=paint('bad','רץ בלי סבב (PID 7) — יתום אחרי סגירה, יש לעצור אותו'); assert.equal(r.cls,'svc-err'); assert.match(r.title,/Multicast \(משדר udp-sender\): תקלה — רץ בלי סבב/);
-  r=paint('warn','משהו אחר'); assert.equal(r.cls,'svc-warn');
-});
+// ‏#3967: נקודת ה-Multicast (וכל פס המצב) ירדה מה-dock — הבדיקה שהיא איננה ב-console_usability.test.cjs.

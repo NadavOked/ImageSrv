@@ -901,15 +901,6 @@ async function showApp() {
   const versionEl = document.getElementById("serverVersion");
   if (versionEl) versionEl.textContent = ME.version
     ? `${ME.version}${ME.version_verified === false ? " · לא מאומת" : ""}` : "";
-  // ‏#703 (tracer 5): מצב ה-TLS של הקונסולה מ-/me. טביעת האצבע (SHA-256
-  // של התעודה, כמו בדפדפן) — מקוצרת בשורת הסטטוס, מלאה ב-title
-  // וב"פרטי החיבור" — כדי שהאישור החד-פעמי של התעודה יהיה השוואה.
-  const tlsEl = document.getElementById("serverTls");
-  if (tlsEl) {
-    const fp = ME.tls && ME.tls.fingerprint_sha256;
-    tlsEl.innerHTML = fp ? `TLS ${tlsModeHe(ME.tls)} · <span dir="ltr">${esc(fp.slice(0, 23))}…</span>` : "";
-    tlsEl.title = fp ? `SHA-256 ${fp}` : "";
-  }
   document.querySelectorAll("[data-admin]").forEach(
     (el) => el.classList.toggle("hidden", ME.role !== "admin"));
   // רכיבים מותנים ביכולת נגזרת-שרת (#655/#723): מוצגים רק כשהדגל
@@ -1322,10 +1313,8 @@ async function loadHealth() {
     HEALTH = null;
     healthError = e.message;
     noteServerHealth(SERVER_CTX || "", null, e);
-    paintServiceStatus();
     toast("טעינת הבריאות נכשלה: " + e.message);
   }
-  if (current === "health") await loadHealthServices();   // #1267: כרטיס השירותים; העדכונים עברו להגדרות (stage 3)
   if (current === "home" || current === "health") renderCurrent();
 }
 
@@ -1540,33 +1529,6 @@ function machineIsFailed(m) {
   return s === "failed" || s === "fail" || s === "error" || s === "err" || s === "bad" || s === "נכשל";
 }
 
-/* שורת הסטטוס והכותרת התחתונה של העץ היו קבועות — ירוק "כל השירותים פעילים" גם כש-/health אדום.
-   עכשיו הן נגזרות מאותן בדיקות, וללא נתון הן אפורות ("לא נבדק", עיקרון 5) ולא ירוקות. */
-const SERVICE_DOTS = { API: ["server"], PXE: ["tftp_port", "boot_files"], Multicast: ["udp_sender"] };
-const SERVICE_RANK = { bad: 4, warn: 3, unknown: 2, ok: 1, info: 1, off: 0, not_applicable: 0 };   // ‏#2765: info = ok
-function serviceState(ids) {
-  if (!Array.isArray(HEALTH)) return { state: "unknown", detail: "" };
-  const found = HEALTH.filter((c) => ids.includes(c.id));
-  if (!found.length) return { state: "unknown", detail: "" };
-  let worst = found[0];
-  for (const c of found) if ((SERVICE_RANK[c.state] ?? 2) > (SERVICE_RANK[worst.state] ?? 2)) worst = c;
-  return { state: (SERVICE_RANK[worst.state] ?? 2) === 0 ? "off" : worst.state, detail: worst.detail || "" };
-}
-function paintServiceStatus() {
-  for (const [name, ids] of Object.entries(SERVICE_DOTS)) {
-    const el = document.querySelector(`[data-svc="${name}"]`);
-    if (!el) continue;
-    let { state, detail } = serviceState(ids);
-    // משדר שרץ בתוך סבב פתוח הוא מצב תקין ("warn" בשרת רק כדי שהמפעיל ידע שיש שידור) — לא צהוב.
-    const sending = name === "Multicast" && state === "warn" && /סבב פתוח/.test(detail);
-    const cls = sending ? "ok" : healthStatusClass(state) || "off";
-    // קידומת svc-: ל-.ok/.err הגלובליים יש כללי טקסט-הודעה (גודל, שוליים) שהזיזו את "API" 6px.
-    for (const c of ["ok", "warn", "err", "unk", "off"]) el.classList.toggle("svc-" + c, c === cls);
-    const what = name === "Multicast" ? "Multicast (משדר udp-sender)" : name;
-    el.setAttribute("title", `${what}: ${sending ? "משדר כעת" : healthStatusLabel(state)}${detail ? " — " + detail : ""}`);
-  }
-}
-
 /* נדב 18/10: "למה ליד חיפה יש עיגול ירוק וליד TA אין?" + "אין רשת הפצה בחיפה, והוא מראה ירוק בעץ וכתום
    בסקירה". נקודה אחת לכל שרת בעץ — TA וכל שרת משנה — מחושבת כאן בלבד (serverDotState), מאותן בדיקות
    ‏/health שהסקירה של **אותו** שרת מציגה ב"דורש טיפול": ירוק = מחובר וכל הבדיקות תקינות; כתום = מחובר
@@ -1627,7 +1589,6 @@ async function refreshServerDots(force = false) {
 }
 
 function updateAlertBadge() {
-  paintServiceStatus();
   const badge = document.getElementById("alertBadge");
   if (!badge) return;
   let n = 0;
@@ -1921,7 +1882,7 @@ function branchLeafKids(n, page, wasOpen) {
     return plain("תרשים", "t-network", go("openNetwork(0,null,this)"), ` data-net-tab="0"`)
       + `<div class="inventory-node" data-net-tab="1" id="srv-${esc(n.id)}-nicNode" role="treeitem" tabindex="0" onclick="${go("openNetwork(1,null,this)")}"><span class="tree-arrow-sp" id="srv-${esc(n.id)}-nicTreeArrow"></span><span>${uiIcon("t-nic")}</span><span>חיבורים פיזיים</span></div><div id="srv-${esc(n.id)}-nicTree" class="inventory-children" role="group" hidden></div>`
       + plain("רשת הפצה", "deploy", go("openNetwork(2,null,this)"), ` data-net-tab="2"`)
-      + plain("פורטים", "t-ports", `openSecondaryPage('${idEnc}','ports',this)`, ` data-branch-page="ports" data-branch-node="${esc(n.id)}" data-adv`);   // ‏#3033
+      + plain("שירותים", "t-ports", `openSecondaryPage('${idEnc}','ports',this)`, ` data-branch-page="ports" data-branch-node="${esc(n.id)}" data-adv`);   // ‏#3033
   }
   return null;
 }
@@ -1981,7 +1942,6 @@ function resetServerCaches() {
   ROOM = null; ROOM_HISTORY = null; ROOM_KEY = ""; DRIVER_MODELS = null;
   CAPTURE_TASKS = []; CAPTURE_TASKS_READ = false; SESSION_MACHINES = { group: null, list: [] };
   HEALTH_UPDATE = null; UPDATE_STATUS = null; UPDATE_CHECK = null; updateError = ""; UPDATE_INFO = {};
-  HEALTH_SVC = null; healthSvcError = "";
   SETTINGS = null; settingsError = ""; TOOLS = null; toolsError = "";
   // הקבצים שנטענים אחרי console.js (בדפדפן כולם קיימים; ב-node רק חלקם).
   if (typeof DRIVERS !== "undefined") { DRIVERS = null; driversError = ""; }
@@ -2171,6 +2131,15 @@ function homeStorageLevel(pct, st) {
   const byReserve = r && free < 2 * r ? "err" : r && free < 5 * r ? "warn" : "";
   return byPct === "err" || byReserve === "err" ? "err" : byPct || byReserve;
 }
+/* בדיקת יום ראשון 21/11: "כמעט מלא — 14% בשימוש" סתר את עצמו. כשהשורה נדלקת בגלל הרזרבה למערכת ולא בגלל
+   האחוז, היא אומרת כמה נשאר לאימג'ים בפועל: הפנוי פחות הרזרבה = האימג' הגדול ביותר שעוד ייכנס. */
+function homeStorageLine(st, spct, keep, keepNote) {
+  const free = Number(st.free_bytes);
+  if (spct >= 90 || !keep) return `<b>אחסון האימג'ים כמעט מלא</b> — ${ltr(spct + "%")} בשימוש, נשארו ${ltr(fmtBytes(free))} פנויים.${keepNote}`;
+  const room = Math.max(0, free - keep);
+  return `<b>מעט מקום לאימג'ים חדשים</b> — נשארו ${ltr(fmtBytes(free))}, מתוכם ${ltr(fmtBytes(keep))} שמורים למערכת (ה-DB, היומנים ועדכוני השרת)`
+    + (room ? `: אימג' גדול מ-${ltr(fmtBytes(room))} לא ייכנס.` : `: אין מקום לאימג' חדש.`);
+}
 function homeStorageKpi() {
   const st = OVERVIEW ? OVERVIEW.storage : null, pct = homeStoragePct(st);
   const label = `<div class="l">${esc("אחסון אימג'ים")}</div>`;
@@ -2333,7 +2302,7 @@ function shrinkCaptureState(r) {
   if (!CAPTURE_TASKS_READ || HOME.err.tasks) return "unknown";
   return (CAPTURE_TASKS || []).some((t) => (t.state === "pending" || t.state === "running") && shrinkOfTask(r, t)) ? "active" : "stale";
 }
-/* טקסט גולמי = רוב האותיות לטיניות (שגיאת מערכת/נתיב/שם קובץ): "timeout", "udp-sender לא נמצא".
+/* טקסט גולמי = רוב האותיות לטיניות (שגיאת מערכת/נתיב/שם קובץ): "timeout", "chunkcast לא נמצא".
    משפט עברי שמזכיר "SATA" או שם מכונה נשאר בגוף הפריט. */
 function isRawTechnical(text) {
   const t = String(text == null ? "" : text);
@@ -2353,7 +2322,7 @@ function homeAttention() {
   const st = OVERVIEW && OVERVIEW.storage, spct = homeStoragePct(st);
   const slvl = spct == null ? "" : homeStorageLevel(spct, st), keep = homeStorageReserve(st);
   const keepNote = keep && st.free_bytes < 5 * keep ? ` השרת שומר ${ltr(fmtBytes(keep))} למערכת (ה-DB, היומנים ועדכוני השרת), ומסרב לכל קליטה, העלאה או העברה של אימג' שתשאיר פחות מזה.` : "";
-  if (slvl) items.push(attnItem(slvl, `<b>אחסון האימג'ים כמעט מלא</b> — ${ltr(spct + "%")} בשימוש, נשארו ${ltr(fmtBytes(st.free_bytes))} פנויים.${keepNote}`, ["לאחסון", "selectPageById('storage')"]));
+  if (slvl) items.push(attnItem(slvl, homeStorageLine(st, spct, keep, keepNote), ["לאחסון", "selectPageById('storage')"]));
   // נדב 18/10: שום מידע על דיסקים כאן — לא כשלי כתיבה (אדום/כתום), לא SMART ולא "נקה אחרי החלפה". הם בדף
   // "מחשבים" (לשונית "דיסקים אדומים", עם "נקה"), בחלון המכונה ("נקה אחרי החלפה"), במגירות ובמסכי המשכפל;
   // דף "דיסקים" — #1765.
@@ -2691,7 +2660,7 @@ function deploy(tab = 0) {
        מה שדורש פעולה — שאלות, אדום/כתום, גל שהסתיים — בהערות מתחת לכרטיס, רק כשיש מה לומר */
     body = (r.state === "failed" ? `<div class="c12">${UI.note("err", `נכשל: ${esc(r.failed_reason || "סיבה לא ידועה")}`)}</div>` : "")
       /* ‏#3181: פס ייצור — עיצוב r1 (console-prodline.js) במקום המדדים והגריד; ההערות, הדרייברים וההערה על WoL נשארים */
-      + (r.production_line ? plBody(kids, r) : `<div class="c12 kpis">${roomKpis(r, pct)}</div>` + roomGridCard(kids))
+      + (r.production_line ? plBody(kids, r) : `<div class="c12 kpis">${roomKpis(r, pct)}</div>` + roomNetCard(r) + roomGridCard(kids))
       + roomNotes(kids, st, roomWaveHint(r)) + roomDriversResults(kids) + roomWakeSkipped(kids, r);
   } else body = roomGridCard(kids) + roomNotes(kids, st);
   return `<div class="page">${header}<div class="body">${stale}${body}</div></div>`;
@@ -2749,18 +2718,76 @@ function roomWaveLink(w) {
   }
   return l || (c && w.cap_by === "cloner") ? `${out} · תקרת שידור: ${ltr(bitrateBytesText(w.ceiling))}` : "";
 }
-/* שלושת אריחי המוקאפ (P.deploy ‏.kpis): התקדמות כוללת (ממוצע המגירות שהצטרפו — wavePct), קצב זרם ובלוקים
-   ששודרו שוב — מה ש-udp-sender של השרת מדפיס (/room.round, #989). ‏null = "—" + "לא נמדד" עם הסיבה, לא 0
-   (עיקרון 5); 0 הוא מדידה. הזרם שעצר — כתום על אריח הקצב. */
+/* שני אריחי המוקאפ (P.deploy ‏.kpis): התקדמות כוללת (ממוצע המגירות שהצטרפו — wavePct) וקצב זרם (/room.round, #989;
+   #3173: ממנוע החתיכות). ‏#3978 (אפשרות א, נדב 21/11): האריח "בלוקים שודרו שוב" ירד — מונה של המשדר שהוסר — ובמקומו
+   כרטיס "מצב הרשת" (roomNetCard). ‏null = "—" + "לא נמדד" עם הסיבה, לא 0 (עיקרון 5); 0 הוא מדידה. הזרם שעצר — כתום. */
 function roomKpis(r, pct) {
   const stalled = !!ROOM.stream_stalled;
   const tile = (cls, label, value, why, extra = "") => UI.kpi({ cls, label, value: value == null ? "—" : value,
     sub: [value == null ? `<b title="${esc(why)}">לא נמדד</b>` : "", extra].filter(Boolean).join(" · ") });
   return tile("info", "התקדמות כוללת", pct == null ? null : `${pct}%`, r.wave_state === "open" ? "הגל טרם התחיל" : "עוד אין דיווח כתיבה מהמגירות שהצטרפו")
     + tile(stalled ? "warn" : "info", "קצב זרם", r.throughput_bps != null ? `${fmtBytes(r.throughput_bps)}/s` : null,
-      "‏/room.round.throughput_bps הוא null: אין עדיין שתי שורות מ-udp-sender של השרת, או שהמשדר אינו השרת", stalled ? "<b>הזרם עצר</b>" : "")
-    + tile("info", "בלוקים שודרו שוב", r.loss_blocks != null ? String(r.loss_blocks) : null,
-      "‏/room.round.loss_blocks הוא null: הלוג של udp-sender לא נקרא, או שהמשדר אינו השרת");
+      "‏/room.round.throughput_bps הוא null: עוד לא הסתיים מעבר ראשון של מחיצה בגל הזה ואין גל קודם בסבב שמנוע החתיכות רשם, או שהשרת אינו המשדר", stalled ? "<b>הזרם עצר</b>" : "");
+}
+/* ‏#3978 (אפשרות א, נדב 21/11): כרטיס "מצב הרשת" — pill, משפט אחד, ארבעה אריחים והרחבה "פרטים נוספים". הנתונים
+   מ-/room.round.network (server/rounds/room_stream.py): הגל שהמנוע מחזיק, ואחרת הגל האחרון של הסבב שנרשם. ‏state הוא
+   ההכרעה של השרת (ספי הקטלוג T-NET-OK/T-NET-BAD, T-NET-REPAIRS) — הקונסולה אינה מחשבת סף. ‏null = "לא נמדד", לא 0. */
+const NET_HE = { ok: ["ok", "תקינה", "הרשת עובדת טוב"], loss: ["warn", "יש אבדן", "יש אבדן ברשת"], bad: ["err", "בעייתית", "הרשת בעייתית"] };
+function netNum(n) { return `<bdi dir="ltr">${esc(Number(n).toLocaleString("en-US"))}</bdi>`; }
+function netPermille(p) { return p === 0 ? "0" : p < 1 ? p.toFixed(1) : String(Math.round(p)); }
+function netClock(s) { const t = Math.round(s); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; }
+function netWaited(ms) { return ms < 60000 ? `<bdi dir="ltr">${(ms / 1000).toFixed(1)}</bdi> שנ'` : `<bdi dir="ltr">${netClock(ms / 1000)}</bdi> דק'`; }
+function netNone() { return `<span class="muted">לא נמדד</span>`; }
+function netSentence(n) {
+  const lost = n.lost_chunks * 100 / n.chunks, rounds = n.repair_rounds, away = n.away;
+  const head = n.state === "ok" ? (n.lost_chunks === 0 ? "כל החתיכות הגיעו בשידור הראשון." : "כמעט כל החתיכות הגיעו בשידור הראשון.")
+    : `כ-${lost < 1 ? lost.toFixed(1) : Math.round(lost)}% מהחתיכות לא הגיעו בשידור הראשון.`;
+  const fix = rounds == null || rounds === 0 ? "" : rounds === 1 ? " נדרש סבב תיקון אחד." : ` נדרשו ${rounds} סבבי תיקון.`;
+  const fell = !away ? "" : away === 1 ? " מכונה אחת נפלה מהגל." : ` ${away} מכונות נפלו מהגל.`;
+  return head + fix + fell;
+}
+function netLimit(p) {
+  if (!p) return netNone();
+  const who = p.disk > p.wire ? "דיסקי המשכפלים" : p.wire > p.disk ? "הרשת" : "לא הוכרע";
+  return `${who} <small>(זמן שהשולח המתין: המשכפלים: ${netWaited(p.disk)} · הרשת: ${netWaited(p.wire)})</small>`;
+}
+function netDetails(n) {
+  const v = (x, html) => (x == null ? netNone() : html);
+  const got = n.chunks != null && n.lost_chunks != null;
+  return UI.kv([
+    ["הגיעו בשידור הראשון", got ? `<bdi dir="ltr">${(100 - n.lost_chunks * 100 / n.chunks).toFixed(1)}%</bdi> <small>(${netNum(n.chunks - n.lost_chunks)} מתוך ${netNum(n.chunks)} חתיכות)</small>` : netNone()],
+    ["תוקנו בשידור חוזר (multicast)", v(n.multicast_chunks, `${netNum(n.multicast_chunks)} חתיכות`)],
+    ["נמשכו ב-HTTP", v(n.fetched_chunks, `${netNum(n.fetched_chunks)} חתיכות`)],
+    ["סבבי תיקון", v(n.repair_rounds, esc(String(n.repair_rounds)))],
+    ["המעבר הראשון", v(n.first_pass_s, `<bdi dir="ltr">${netClock(n.first_pass_s)}</bdi> דק' <small>(בלי סבבי התיקון)</small>`)],
+    ["עבר ברשת, אחרי דחיסה", v(n.stream_zbytes, `<bdi dir="ltr">${esc(fmtBytes(n.stream_zbytes))}</bdi>`)],
+    ["מכונות שנפלו מהגל", v(n.away, n.away ? `<b>${esc(String(n.away))}</b> <small>ניתוק — לא אשמת הקצב</small>` : "אין")],
+    ["מה הגביל את הזרם", netLimit(n.paced_ms)],
+    ["קצב כתיבה שנדרש מהדיסקים", v(n.write_kbps, `<bdi dir="ltr">${esc(fmtBytes(n.write_kbps * 125))}/s</bdi>`)]]);
+}
+function roomNetCard(r) {
+  const n = r.network;
+  const card = (body) => UI.card({ title: "מצב הרשת", small: "מנוע החתיכות", cls: "c12 netc", body });
+  if (!n) return card(`<p class="wait">נתוני הרשת לא נמדדו: עוד לא הסתיים גל בסבב הזה.</p>`);
+  if (n.measuring) return card(`<p class="wait">${uiIcon("refresh")} המעבר הראשון עוד רץ. נתוני הרשת יופיעו כשיסתיים, ועד אז הם "לא נמדדו", לא אפס.</p>`);
+  const he = NET_HE[n.state];
+  const tile = (cls, label, value, sub) => UI.kpi({ cls, label, value: value == null ? "—" : value, sub: value == null ? `<b>לא נמדד</b>` : sub });
+  const head = he ? `<div class="nv">${UI.pill(he[0], he[1])}<b>${esc(he[2])}</b><span class="tx">${esc(netSentence(n))}</span></div>`
+    : `<div class="nv">${UI.pill("", "לא נמדד")}<b>האבדן ברשת לא נמדד</b><span class="tx">מכונה אחת לפחות לא דיווחה מה הדיסק שלה לא הספיק לכתוב, ולכן אי אפשר לדעת מה אבד ברשת.</span></div>`;
+  const tiles = tile(he ? he[0] : "", "אבדן בשידור הראשון", n.loss_permille == null ? null : `${netPermille(n.loss_permille)}‰`, n.lost_chunks == null ? "" : `${netNum(n.lost_chunks)} חתיכות`)
+    + tile(n.repair_warn ? "warn" : "info", "סבבי תיקון", n.repair_rounds == null ? null : String(n.repair_rounds),
+      n.multicast_chunks == null || n.fetched_chunks == null ? "" : `${netNum(n.multicast_chunks)} בשידור · ${netNum(n.fetched_chunks)} ב-HTTP`)
+    + tile("info", "מעבר ראשון", n.first_pass_s == null ? null : netClock(n.first_pass_s), "דקות")
+    + tile("info", "עבר ברשת", n.stream_zbytes == null ? null : fmtBytes(n.stream_zbytes), "אחרי דחיסה");
+  return card(`${head}<div class="kpis">${tiles}</div><details><summary>פרטים נוספים</summary>${netDetails(n)}</details>`);
+}
+/* ‏#3978: עמודת "הרשת" בהיסטוריה — pill, ‰ וסבבי תיקון של הגל האחרון שנרשם (‏/room/history[].network). הסבב הפעיל: "נמדד…". */
+function roomNetCell(h, live) {
+  if (live) return `<span class="muted">נמדד…</span>`;
+  const n = h.network, he = n && NET_HE[n.state];
+  if (!he) return netNone();
+  const rounds = n.repair_rounds == null ? "" : ` · ${n.repair_rounds} ${n.repair_rounds === 1 ? "סבב תיקון" : "סבבי תיקון"}`;
+  return `${UI.pill(he[0], he[1])} <small class="muted"><bdi dir="ltr">${netPermille(n.loss_permille)}‰</bdi>${rounds}</small>`;
 }
 /* שורת ההסבר של הגל — אותה שורה שבגואי (screens_room.c, renderLive): גל פתוח = כמה מוכנות וכמה חסרות;
    גל רץ = עבר / קצב / נותרו, **רק מה שנמדד** (קצב null ≠ 0, עיקרון 5). */
@@ -5195,21 +5222,22 @@ function roomHistoryHtml() {
   const active = roomRound();
   if (!ROOM_HISTORY.length && !active) return UI.note("info", "אין סבבים קודמים בחדר");
   const rounds = active ? [active, ...ROOM_HISTORY.filter((h) => h.id !== active.id)] : ROOM_HISTORY;
-  /* #3185: "קצב ואיבוד" (מ-wave_rates של גלי הסבב) ושורה שנפתחת לסיכום: גל, מקלטים, דיסקים והחלטות המוח (memory_ui.js). */
-  const mem = typeof memFlowCell === "function";
-  const cols = ["#", "אימג׳", "מחשבים", "נכתבו", "גלים", "משך"].concat(mem ? ["קצב ואיבוד"] : [], ["מצב", "תאריך"]);
+  /* #3185: שורה שנפתחת לסיכום: גל, מקלטים, דיסקים והחלטות המוח (memory_ui.js). ‏#3978 (נדב 21/11): עמודת הקצב והאיבוד
+     ירדה, ו"הרשת" (roomNetCell) לבדה אומרת מה היה ברשת. */
+  const mem = typeof memRoundDetail === "function";
+  const cols = ["#", "אימג׳", "מחשבים", "נכתבו", "גלים", "משך", "מצב", "הרשת", "תאריך"];
   const rows = [];
   rounds.forEach((h, i) => {
     const live = active && h === active;
     const cells = [String(h.wave_number || rounds.length - i), esc(h.image_name || h.image_id || ""), String(h.machine_count ?? h.machines ?? "—"),
       `${h.written_drives || 0}/${h.target_drives || 0}`, live ? "—" : h.waits && Number.isFinite(h.waits.waves) ? String(h.waits.waves) : "—",
-      live ? "פעיל" : esc(roomRoundMinutes(h))].concat(mem ? [live ? "—" : memFlowCell(h.flow)] : [],
-      [live ? UI.pill("info", WAVE_HE[h.wave_state] || "פעיל") : roomRoundResult(h) + roomRoundWaits(h),
-      `<span class="mono">${esc(h.created_at ? (isToday(h.created_at) ? fmtClock(h.created_at) : fmtDate(h.created_at)) : "—")}</span>`]);
+      live ? "פעיל" : esc(roomRoundMinutes(h)),
+      live ? UI.pill("info", WAVE_HE[h.wave_state] || "פעיל") : roomRoundResult(h) + roomRoundWaits(h), roomNetCell(h, live),
+      `<span class="mono">${esc(h.created_at ? (isToday(h.created_at) ? fmtClock(h.created_at) : fmtDate(h.created_at)) : "—")}</span>`];
     rows.push(mem && !live ? { attrs: memRoundRowAttrs(h), cells } : cells);
     if (mem && !live && MEM_OPEN_ROUND === h.id) rows.push({ html: memRoundDetail(h, cols.length) });
   });
-  return UI.datagrid({ opt: mem ? [7, 8] : [6, 7], columns: cols, rows });
+  return UI.datagrid({ opt: [6, 7, 8], columns: cols, rows });
 }
 /* ציר הסבבים של קבוצה: הסבב הפעיל (/overview.session) + ההיסטוריה ("דורש API"). סבבי חדר המשכפלים —
    בדף ההפצה (roomHistoryHtml); דף המשכפלים לפי המוקאפ אינו מציג אותם (#1485). */
@@ -5320,7 +5348,7 @@ const DRAWER_ERROR_RE = [
   [/\bpartition (\d+)/g, (_, n) => `מחיצה ${n}`],
 ];
 /* שמות כלים וקיצורים שהסוכן עצמו כותב בתוך משפט עברי (מאז #1503) — לא "אנגלית". */
-const DRAWER_TECH = /\b(?:partclone|zstd|sgdisk|fanout|mkswap|mkfifo|ntfsresize|ntfsfix|ntfs|btrfs|xfs|dd|cmp|umount|blockdev|efibootmgr|openssl|swap|rc|dirty|gpt|esp|guid|smart|uefi|bios|secure boot|windows|linux|mib|gib|gb|mb|udp-sender|dsend|dfanout|dzstd|dpcl)\b/gi;
+const DRAWER_TECH = /\b(?:partclone|zstd|sgdisk|fanout|mkswap|mkfifo|ntfsresize|ntfsfix|ntfs|btrfs|xfs|dd|cmp|umount|blockdev|efibootmgr|openssl|swap|rc|dirty|gpt|esp|guid|smart|uefi|bios|secure boot|windows|linux|mib|gib|gb|mb|dsend|dfanout|dzstd|dpcl)\b/gi;
 /* אנגלית = מילה לטינית (2+ אותיות) שאינה כלי מהרשימה ואינה מזהה (מזהה = יש בו ספרה, נקודה, קו נטוי או קו תחתון, או גיבוב הקסדצימלי). */
 function drawerEnglish(piece) {
   return /[A-Za-z]{2,}/.test(piece.replace(/[A-Za-z0-9_./-]*[0-9_./][A-Za-z0-9_./-]*|\b[0-9a-f]{8,}\b/gi, " ").replace(DRAWER_TECH, " "));
@@ -6946,8 +6974,8 @@ const HEALTH_GROUPS = [["agent_loop:", "לולאות אתחול", "agent_loops"]
   ["storage_", "אחסון — מיקומים", "storage_summary"]];   // ‏#1066: שורה לכל מיקום (storage_<id>), בלי שורת סיכום → קבוצה בסוף
 /* עמודת "פעולה": לאן הולכים לטפל — הדף שבו יושב מה שנבדק. אין ב-/health שדה
    "איך מתקנים"; ה-detail של השרת כבר נושא את ההוראה ("הריצו את המתקין"). */
-const HEALTH_GOTO = { deploy_net: ["רשת הפצה", "openNetwork(2)"], dhcp_port: ["רשת הפצה", "openNetwork(2)"], tftp_port: ["פורטים", "selectPageById('ports')"], dnsmasq: ["רשת הפצה", "openNetwork(2)"],
-  server: ["פורטים", "selectPageById('ports')"], udp_sender: ["פורטים", "selectPageById('ports')"], nics: ["חיבורים פיזיים", "openNetwork(1)"],
+const HEALTH_GOTO = { deploy_net: ["רשת הפצה", "openNetwork(2)"], dhcp_port: ["רשת הפצה", "openNetwork(2)"], tftp_port: ["שירותים", "selectPageById('ports')"], dnsmasq: ["רשת הפצה", "openNetwork(2)"],
+  server: ["שירותים", "selectPageById('ports')"], chunk_sender: ["שירותים", "selectPageById('ports')"], nics: ["חיבורים פיזיים", "openNetwork(1)"],
   agent_loops: ["מחשבים", "machines"], off_vlan: ["מחשבים", "machines"] };
 let healthError = "", HEALTH_AT = "";
 let HEALTH_UPDATE = null, UPDATE_STATUS = null, UPDATE_CHECK = null, updateError = "";
@@ -7218,71 +7246,8 @@ function health() {
     ? UI.note("err", `לא הצלחתי לקרוא את הבדיקות: ${esc(healthError)}`)
     : UI.datagrid({ columns: ["בדיקה", "מצב", "פירוט", ""], rows: healthRows(checks), empty: "אין בדיקות — השרת החזיר רשימה ריקה" });
   const checksCard = UI.card({ title: "בדיקות", body, flush: !!HEALTH && checks.length > 0 });
-  return `<div class="page aligned">${header}<div class="body">${HEALTH ? healthKpis(checks) : ""}${checksCard}${HEALTH ? healthOpenCard(checks) : ""}${healthServicesCard()}</div></div>`;
+  return `<div class="page aligned">${header}<div class="body">${HEALTH ? healthKpis(checks) : ""}${checksCard}${HEALTH ? healthOpenCard(checks) : ""}</div></div>`;
 }
-
-/* ---------- #1267 המשך (נדב 11/10): עצירה/הפעלה של שירות — כאן, ליד כל שירות ----------
-   אותו API שדף הפורטים קרא לו (PUT toggle_url = /ports/{id}; ‏#996/#1013) — רק שורות ‏/ports
-   שהמתג שלהן חי שם: TFTP 69, ‏8080, ‏8081, ‏8443. ‏DHCP/proxy — ברשת הפצה; מוניטור — בדף שלו.
-   עצירה = חלון אישור עם ההשלכות וכפתור אדום, בלי הקלדה (#1270); ‏toggle "confirm" — המילה
-   שהשרת דורש נשלחת מהשורה (confirm_word). הפעלה = כפתור רגיל. לא נקרא = "לא נבדק", בלי כפתור. */
-let HEALTH_SVC = null, healthSvcError = "";
-async function loadHealthServices() {
-  try {
-    const list = await api("/ports");
-    // תשובה שאינה רשימה = "לא נבדק", לא רשימה ריקה ולא קריסת ציור (עיקרון 5)
-    if (!Array.isArray(list)) throw new Error("‏/ports החזיר תשובה שאינה רשימה");
-    HEALTH_SVC = list; healthSvcError = "";
-  }
-  catch (e) { HEALTH_SVC = null; healthSvcError = e.message; }
-}
-const healthSvcList = () => (HEALTH_SVC || []).filter((p) => p.toggle && p.toggle !== "none" && String(p.toggle_url || "").startsWith("/api/console/ports/"));
-const healthSvcUnread = (p) => p.listening === null || p.listening === undefined || p.enabled === null || p.enabled === undefined;
-function healthSvcRow(p) {
-  const k = encodeId(p.id);
-  const label = healthSvcUnread(p) ? "לא נבדק" : p.enabled && p.listening ? "פועל" : !p.enabled && !p.listening ? "עצור" : healthStatusLabel(p.state);
-  const state = `${UI.status(healthSvcUnread(p) ? "unk" : healthStatusClass(p.state), label)}<span class="sub">${esc(p.detail || "")}</span>`;
-  const act = healthSvcUnread(p) ? ""
-    : p.enabled ? `<button class="btn sm danger" onclick="healthSvcStop('${k}')">עצור…</button>`
-    : `<button class="btn sm" onclick="healthSvcStart('${k}')">הפעל</button>`;
-  return [UI.nameHtml(p.name, esc(p.desc || "")), `<span class="mono">${esc(p.port)}/${esc(p.proto)}</span>`, state, act];
-}
-function healthServicesCard() {
-  const body = HEALTH_SVC === null
-    ? UI.note("", `לא נבדק — ‏/ports לא נקרא${healthSvcError ? `: ${esc(healthSvcError)}` : ""}`)
-    : UI.datagrid({ columns: ["שירות", "פורט", "מצב", ""], rows: healthSvcList().map(healthSvcRow), empty: "אין שירות שאפשר לעצור או להפעיל מכאן" });
-  return UI.card({ title: "שירותים", small: "עצירה והפעלה — מצב נמדד מ-/ports, נקרא מחדש אחרי כל שינוי", body, flush: HEALTH_SVC !== null && healthSvcList().length > 0 });
-}
-async function healthSvcSend(p, enabled) {
-  const body = { enabled };
-  if (!enabled && p.toggle === "confirm") {
-    // ‏#1780: השרת משווה לשם המארח של עכשיו — המילה נקראת מ-/ports ברגע השליחה, לא מהשורה
-    // שבזיכרון ולא מ-ME, שנקראו לפני שינוי שם ונשלחו בלי שאיש הקליד אותם.
-    const list = await api("/ports");
-    const now = Array.isArray(list) ? list.find((x) => x.id === p.id) : null;
-    if (!now || !now.confirm_word) throw new Error(`${p.name} ${p.port} — לא נשלח: ‏/ports לא החזיר את מילת האישור של השורה`);
-    body.confirm = now.confirm_word;
-  }
-  const r = await put(p.toggle_url.replace(/^\/api\/console/, ""), body);
-  toast(r && r.ok ? `${p.name} ${p.port} — ${enabled ? "הופעל" : "נעצר"}, ואומת`
-    : `${p.name} ${p.port} — נשמר, אבל לא אומת${r && r.detail ? `: ${r.detail}` : ""}`);
-  await loadHealthServices();
-  if (current === "health") renderCurrent();
-}
-function healthSvcStop(idEnc) {
-  const id = portIdOf(idEnc), p = healthSvcList().find((x) => x.id === id);
-  if (!p || healthSvcUnread(p)) return;
-  const warn = p.warning_he || (p.off_means ? `מה קורה אם עוצרים: ${p.off_means}` : "");
-  sheet({ title: `לעצור את ${p.name} ${p.port}/${p.proto}?`, sub: p.desc || "", danger: true, submitLabel: "עצירה",
-    note: warn ? `<div class="sheet-note danger" data-testid="svc-warning">${esc(warn)}</div>` : "",
-    onSubmit: () => healthSvcSend(p, false) });
-}
-async function healthSvcStart(idEnc) {
-  const id = portIdOf(idEnc), p = healthSvcList().find((x) => x.id === id);
-  if (!p || healthSvcUnread(p)) return;
-  try { await healthSvcSend(p, true); } catch (e) { toast(`ההפעלה נכשלה: ${e.message}`); }
-}
-healthSvcStart = guarded("healthSvcStart", healthSvcStart);   // ‏#2840: לחיצה כפולה = בקשה אחת
 
 /* ‏#1933: "YYYY-MM-DD HH:MM:SS" / "HH:MM:SS" באזור התצוגה (‏zoneParts); מה שאינו חותמת — כפי שהוא. */
 function fmtWhen(ts) {
@@ -7758,14 +7723,14 @@ function netServicesOn(n) {
 }
 /* סוג הוילן "לפי הגדרה" (1:1 עם הכרטיס; מודל וילן = #705): הפצה / proxy / רשת המכללה / שרתים / לא מוגדר.
    מודל האתרים (נדב 18/09): לכל אתר שלושה וילנים — שרתים / הפצה / כיתות. אין וילן "ניהול" נפרד: הקונסולה, הערוץ
-   הבין-שרתי (8443) ו-DHCP המשרדים כולם על וילן השרתים; כרטיס שנושא רק 8443 הוא עדיין וילן השרתים. */
+   הבין-שרתי (7700) ו-DHCP המשרדים כולם על וילן השרתים; כרטיס שנושא רק 7700 הוא עדיין וילן השרתים. */
 function netVlanOf(n) {
   const svc = netServicesOn(n) || [];
   if (n.enabled) return { kind: "deploy", label: "וילן ההפצה" };
   if (n.proxy) return { kind: "proxy", label: "PXE proxy — DHCP של רשת אחרת" };
   if (n.trunk) return { kind: "trunk", label: "רשת המכללה (trunk)" };
-  if (svc.some((s) => /8081/.test(s))) return { kind: "mgmt", label: "שרתים — קונסולה" };
-  if (svc.some((s) => /8443/.test(s))) return { kind: "inter", label: "שרתים — בין-שרתי" };
+  if (svc.some((s) => /\b443\b/.test(s))) return { kind: "mgmt", label: "שרתים — קונסולה" };
+  if (svc.some((s) => /\b7700\b/.test(s))) return { kind: "inter", label: "שרתים — בין-שרתי" };
   return { kind: "none", label: "לא מוגדר" };
 }
 function netRoleLabel(n) {
@@ -7853,7 +7818,7 @@ function netAddrList(ips) {
   if (!ips.length) return "ללא כתובת";
   return ips.slice(0, 2).map(bidi).join(" · ") + (ips.length > 2 ? ` · ${bidi(`+${ips.length - 2}`)}` : "");
 }
-/* שורת "מותר" קצרה: שירותים באותו שם מתקפלים לפורט אחד — "HTTP 8080/8081". הרשימה הגולמית (netServicesOn) נשארת בכרטיס הנבחר. */
+/* שורת "מותר" קצרה: שירותים באותו שם מתקפלים לפורט אחד — "HTTP 7712/443". הרשימה הגולמית (netServicesOn) נשארת בכרטיס הנבחר. */
 function netAllowedShort(list) {
   const byName = new Map();
   for (const item of list) {
@@ -7905,13 +7870,13 @@ function netDiagramModel() {
     tip: ses === null ? undefined : ses.map((x) => `${x.user} · ${bidi(x.ip || "—")} · נכנס ${ago(x.since)} · נראה ${ago(x.last_seen)}`).join(" · ") || undefined }, null,
     () => laneOf(["mgmt", "trunk", "inter", "none", "proxy", "deploy"]));
   // שרתי משנה — /storage-nodes + connected נמדד. שרת המשנה יושב מאחורי FW משלו (interfaces.md §18, נדב 18/09): הראשי יוזם,
-  // ורק 8443 פתוח ביניהם — ולכן הקו מקווקו (מעבר ל-FW, לא לקוח על הוילן), והתיבה נשארת לפי connected.
+  // ורק 7700 פתוח ביניהם — ולכן הקו מקווקו (מעבר ל-FW, לא לקוח על הוילן), והתיבה נשארת לפי connected.
   for (const n of NETW.nodes || []) {
     const off = !!n.disabled_at;
     const state = off ? "מושבת" : n.connected ? "מחובר" : `לא ענה${n.error ? `: ${n.error}` : ""}`;
     place({ kind: "branch", row: { name: n.label, ip: urlHost(n.base_url), kind: "branch", ok: off ? false : !!n.connected }, title: `${n.label} — שרת משנה`, led: off ? "" : n.connected ? "ok" : "err", dashed: off, viaFw: true,
-      sub: `דרך FW · 8443 בלבד · ${bidi(n.base_url || "")} · ${state}`,
-      tip: `שרת המשנה מאחורי FW משלו; הראשי יוזם, רק 8443 · ${bidi(n.base_url || "")} · ${state}` },
+      sub: `דרך FW · 7700 בלבד · ${bidi(n.base_url || "")} · ${state}`,
+      tip: `שרת המשנה מאחורי FW משלו; הראשי יוזם, רק 7700 · ${bidi(n.base_url || "")} · ${state}` },
       urlHost(n.base_url), () => laneOf(["inter", "mgmt", "trunk", "none"]));
   }
   // לא רשומים — /net registered=false, לפי הכתובת שקיבלו
@@ -8038,8 +8003,8 @@ function netUnreadNotes() {
   const rb = NETCFG && NETCFG.rollback && typeof rollbackBanner === "function" ? rollbackBanner(NETCFG.rollback) : "";
   return (rb ? `<div class="c12">${rb}</div>` : "") + out.map((h) => `<div class="c12">${h}</div>`).join("");
 }
-const NET_TABS = ["תרשים", "חיבורים פיזיים", "רשת הפצה", "פורטים"];
-function netTabClick(i) { return i === 3 ? "selectPageById('ports')" : `openNetwork(${i})`; }
+const NET_TABS = ["תרשים", "חיבורים פיזיים", "רשת הפצה"];   // ‏#3887: "שירותים" הוא דף משלו בעץ, תחת "רשת"
+function netTabClick(i) { return `openNetwork(${i})`; }
 /* ‏#1300 (console-full.html P.network): כותרת אחת לארבע הלשוניות — "רשת", פיל DHCP, ומשנה = הרשתות
    (ניהול · הפצה) כפי שנמדדו. הפעולות של כל לשונית יושבות בכרטיסים שלה; בכותרת רק רענון.
    דף הפורטים קורא את הכרטיסים ל-PORTS_NICS — אותה כותרת משם. לא נקרא = "לא נקרא", לא ריק. */
@@ -8115,7 +8080,7 @@ function netNicRow(n) {
   const acts = UI.rowMenu(n.name, [["הגדרת כרטיס…", `netEditNic('${enc}')`], ["תיאור…", `netDescribe('${enc}')`], ["נתיבים סטטיים…", `netRoutesDrawer('${enc}')`],
     ...(n.enabled ? [["כיבוי DHCP…", `netDhcpOff('${enc}')`, "danger"]] : []),
     ...(n.present ? [] : [["שכחה…", `netForget('${enc}')`, "danger"]])]);
-  // ‏#3028: השירותים של הכרטיס עברו לדף "פורטים" (nicsvcPortsCard); כאן רק החיבור
+  // ‏#3887: השירותים של הכרטיס — בכרטיס "שירותים לפי כרטיס" מתחת לטבלה (nicsvcPortsCard); כאן רק החיבור
   return { attrs: `data-nic="${esc(n.name)}"`,
     cells: [typeof nicsvcNameCell === "function" ? nicsvcNameCell(n) : `<b>${esc(n.name)}</b>`, n.description ? esc(n.description) : "—", `<span class="mono">${esc(n.mac || "—")}</span>`, netLinkText(n), netAddrText(n), netRolePill(n), acts] };
 }
@@ -8145,6 +8110,7 @@ function networkNicsTab() {
     const table = UI.datagrid({ columns: ["כרטיס", "תיאור", "MAC", "קישור", "כתובת", "תפקיד", { html: `<span class="sr">פעולות</span>` }], rows: nics.map(netNicRow), cls: "kebab-col", opt: [2],
       empty: "לא נמצאו כרטיסי רשת — השרת לא רואה אף כרטיס, ואין הגדרה שמורה" });
     body = netUnreadNotes() + UI.card({ title: "כרטיסי רשת", acts: `<button class="btn primary sm" onclick="addNic()">${uiIcon("plus")} כרטיס</button>`, body: table, flush: nics.length > 0 })
+      + (isAdmin() && typeof nicsvcPortsCard === "function" ? nicsvcPortsCard() : "")   // ‏#3887: "שירותים לפי כרטיס" חזרו לכאן
       + (typeof vmnetCardHtml === "function" ? vmnetCardHtml() : "");
   }
   return `<div class="page aligned">${header}<div class="body">${body}</div></div>`;
@@ -8347,152 +8313,22 @@ function wireNetPage() {
   if (typeof startCountdown === "function") startCountdown();
 }
 
-/* ---------- #1267: רשת › פורטים — כרטיס לכל רשת ----------
-   מוקאפ: docs/design/apple-mockups/console-full.html (P.network ports, W.portDrawer);
-   docs/architecture/interfaces.md §16. הכול מ-/ports: השורות, `network` (לאיזו רשת שייכת השורה)
-   ו-`firewall`/`firewall_detail` (טבלת inet imagesrv של השרת — רק לפורטים שבין רשתות).
-   נדב 10/10: ברשת ההפצה השרת מנהל את הפורטים — אין עמודת חומת אש ואין פעולות;
-   בניהול ובין שרתים — חומת אש (פתוח=ירוק, חסום=אדום, לא נבדק=אפור) ו"מה לפתוח
-   בחומת האש של המכללה" מה-note. אין "פתח/סגור פורט" בשום מקום — רק "בדוק עכשיו"
-   (קריאה חוזרת של /ports) ו"הצג פרטים" (מגירה). */
+/* ---------- #3887: מה שנשאר מדף "פורטים" ----------
+   הדף עצמו הוא "שירותים" (console-services.js, ‏pages.ports). כאן רק מה שדפים אחרים קוראים:
+   הכרטיסים ל-PORTS_NICS (כותרת הרשת), "מה קורה אם מכבים" של DHCP ומוניטור, וגוף ה-PUT של כרטיס. */
 let PORTS_NICS = null, portsNicsError = "";
 let PORTS_AT = "";
 const PORT_OFF_MEANS = {
   dhcp: "אף מכונה בוילן ההפצה לא מקבלת כתובת — אין PXE, אין סבב",
-  pxe_proxy: "תחנות בוילן שה-DHCP בו אינו שלנו לא רואות את התפריט — עולות מהדיסק",
   monitor: "תופס באתחול הבא של כל תחנה — מכונה שעולה לא מפעילה שירות צפייה",
 };
-const PORT_API_NEEDED = "דורש API (#996)";
 const offMeansNote = (text) => `<div class="sheet-note danger">מה קורה אם מכבים: ${esc(text)}</div>`;
 
 function nicBody(n, over) {
   return { enabled: n.enabled, proxy: n.proxy, trunk: n.trunk, range_start: n.range_start, range_end: n.range_end,
     netmask: n.netmask, gateway: n.gateway, dns: n.dns, lease: n.lease, server_ip: n.server_ip, confirm: n.name, ...over };
 }
-
-// שם כרטיס/כתובת בודדת (מחרוזת) — mono LTR; טקסט עברי ("בתחנה, לא בשרת") —
-// רגיל. רשימת bind מהשרת (#1015, תמיד מערך) — כל הכתובות, mono LTR; ריק = "—".
-/* רשימת כתובות ההאזנה (#1015 `bind`): שורה לכתובת, IPv4 קודם, link-local של IPv6
-   מקופל ל-"+N" עם tooltip — אחרת שורת TFTP (8 כתובות) מתחה את הטבלה מעבר למסך
-   והמתגים נעלמו מימין (נדב 17/09). */
-function portNicHtml(nic) {
-  if (nic === null) return UI.status("unk", "לא נקרא");
-  if (Array.isArray(nic)) {
-    if (!nic.length) return `<span class="muted">—</span>`;
-    const main = nic.filter((a) => !a.startsWith("[fe80") && !a.startsWith("[::1]"));
-    const shown = (main.length ? main : nic).slice(0, 4);
-    const hidden = nic.filter((a) => !shown.includes(a));
-    const more = hidden.length
-      ? ` <span class="muted" title="${esc(hidden.join(" · "))}">+${hidden.length}</span>` : "";
-    return `<span class="mono bindlist" dir="ltr">${shown.map((a) => esc(a)).join("<br>")}</span>${more}`;
-  }
-  if (!nic) return `<span class="muted" title="${PORT_API_NEEDED}: כתובת ההאזנה">—</span>`;
-  return /^[ -~]+$/.test(nic) ? `<span class="mono">${esc(nic)}</span>` : esc(nic);
-}
-
-/* הרשתות לפי הסדר במוקאפ; שורה בלי `network` מוכר נופלת לכרטיס "ללא שיוך" — לא נעלמת. */
-const PORT_NETWORKS = [
-  ["deploy", "רשת הפצה", "השרת מנהל את רשת ההפצה ואת הפורטים שלה — אין בה חומת אש ואין מה לפתוח."],
-  ["mgmt", "רשת ניהול", "חומת האש של המכללה לא נראית מהשרת — העמודה האחרונה אומרת מה לפתוח בה."],
-  ["interserver", "בין שרתים", "חומת האש של המכללה לא נראית מהשרת — העמודה האחרונה אומרת מה לפתוח בה."],
-  ["per_nic", "לפי כרטיס רשת", "השירות מופעל בנפרד בכל כרטיס, בכרטיס «שירותים לפי כרטיס» למעלה."],
-];
-const PORT_FW = { open: ["ok", "פתוח"], blocked: ["err", "חסום"] };   // כל ערך אחר (null) = "לא נבדק", אפור (עיקרון 5)
-const portCross = (p) => p.network === "mgmt" || p.network === "interserver" || p.network === "per_nic";
-const portHidden = (p) => p.id === "firewall";
-const portFwLabel = (p) => (PORT_FW[p.firewall] || ["", "לא נבדק"])[1];
-const portFwHtml = (p) => `<span title="${esc(p.firewall_detail || "")}">${UI.pill((PORT_FW[p.firewall] || [""])[0], portFwLabel(p))}</span>`;
-const portOpenNote = (p) => String(p.note || "").replace(/^לפתוח ב-FW:\s*/, "") || "—";
-const portStateHtml = (p) => `${UI.status(healthStatusClass(p.state), healthStatusLabel(p.state))}<span class="sub">${esc(p.detail || "")}</span>`;
-/* ‏#1300 (console-full.html P.network "ports"): עמודת "מאזין" = פיל אחד — מאזין / לא מאזין / כבוי / בזמן סבב / לא נבדק;
-   מה שהשרת מדד (detail) — ב-title. */
-const PORT_LISTEN_PILL = { ok: ["ok", "מאזין"], err: ["err", "לא מאזין"], warn: ["warn", "דורש בדיקה"], "": ["", "כבוי"], unk: ["", "לא נבדק"] };
-function portListenPill(p) {
-  const [cls, text] = p.id === "multicast" && p.state !== "bad" ? ["info", "בזמן סבב"] : PORT_LISTEN_PILL[healthStatusClass(p.state)] || ["", healthStatusLabel(p.state)];
-  return `<span title="${esc(p.detail || "")}">${UI.pill(cls, text)}</span>`;
-}
 const portIdOf = (idEnc) => { try { return decodeURIComponent(idEnc); } catch (e) { return idEnc; } };
-
-/* כותרת הכרטיס: הפצה = הכרטיסים שמשרתים DHCP/proxy (מ-/ports) + הכתובת שלהם (מ-/net/interfaces,
-   אם נקרא); ניהול = הכתובות ש-8081 מאזין עליהן בפועל (bind), בלי loopback ו-link-local. */
-function portCardTitle(net, label, rows) {
-  if (net === "deploy") {
-    const dhcp = (PORTS || []).find((p) => p.id === "dhcp");
-    const names = ((dhcp && dhcp.interfaces) || []).filter((i) => i.enabled || i.proxy).map((i) => i.name);
-    return [label, ...names.map((n) => {
-      const nic = (PORTS_NICS || []).find((x) => x.name === n), ip = nic && (nic.addresses || [])[0];
-      return ip ? `${n} · ${String(ip).split("/")[0]}` : n;
-    })].join(" · ");
-  }
-  if (net === "mgmt") {
-    const c = rows.find((p) => p.id === "http_console");
-    const addrs = (c && Array.isArray(c.bind) ? c.bind : [])
-      .filter((a) => !/^(127\.|\[::1\]|\[fe80)/.test(a)).map((a) => a.replace(/:\d+$/, ""));
-    return [label, ...addrs].join(" · ");
-  }
-  return label;
-}
-
-function portCells(p) {
-  const cells = [`<span class="mono">${esc(p.port)}/${esc(p.proto)}</span>`, esc(p.desc ? `${p.name} — ${p.desc}` : p.name), esc(p.target || "—"), portListenPill(p)];
-  if (!portCross(p)) return cells;
-  const k = encodeId(p.id);
-  return cells.concat([portFwHtml(p), `<span class="wrap">${esc(portOpenNote(p))}</span>`,
-    UI.rowMenu(`${p.name} ${p.port}`, [["בדוק עכשיו", `portCheckNow('${k}')`], ["הצג פרטים", `portDetail('${k}')`]])]);
-}
-
-function portCard(net, label, explain, rows) {
-  const cross = net === "mgmt" || net === "interserver" || net === "per_nic";
-  const columns = ["פורט", "שירות", "מי פונה", "מאזין"].concat(cross ? ["חומת אש", "מה לפתוח בחומת האש של המכללה", { html: `<span class="sr">פעולות</span>` }] : []);
-  const grid = UI.datagrid({ columns, rows: rows.map(portCells), cls: cross ? "kebab-col" : "", opt: cross ? [5] : [] });
-  const intro = explain ? `<p class="port-intro">${esc(explain)}</p>` : "";
-  return UI.card({ title: portCardTitle(net, label, rows), body: intro + grid, flush: true });
-}
-
-/* "הצג פרטים" — מגירה (W.portDrawer): מה נמדד בשרת, ומה לפתוח במכללה. */
-function portDetail(idEnc) {
-  const id = portIdOf(idEnc);
-  const p = (PORTS || []).find((x) => x.id === id);
-  if (!p) { toast("הפורט לא מופיע ברשימה שנקראה"); return; }
-  const measured = UI.kv([["מאזין", portStateHtml(p)], ["כתובות האזנה", portNicHtml(p.bind)],
-    ["חומת אש בשרת", `${portFwHtml(p)} ${esc(p.firewall_detail || "")}`], ["נבדק", esc(PORTS_AT || "—")]]);
-  const college = UI.kv([["מה לפתוח", esc(portOpenNote(p))]])
-    + UI.note("info", "חומת האש של המכללה לא נראית מהשרת. &quot;בדוק עכשיו&quot; בודק רק את מה שבשרת עצמו.");
-  openDrawer(`${p.port}/${p.proto} · ${p.name}`, `<div class="page drw"><div class="obj-sub">${esc(p.desc || "")} · ${esc(p.target || "")}</div>`
-    + `<div><div class="sec">מצב שנמדד</div>${measured}<div class="sec">חומת האש של המכללה</div>${college}</div>`
-    + `<div style="border-top:1px solid var(--hair);padding-top:12px;display:flex;gap:6px"><button class="btn sm primary" onclick="portCheckNow('${encodeId(p.id)}', true)">בדוק עכשיו</button></div></div>`);
-}
-
-/* "בדוק עכשיו" — קריאה חוזרת של /ports (ss + nft בשרת, קריאה בלבד) ודיווח מה נמדד. כשל = "הבדיקה נכשלה", לא "תקין". */
-async function portCheckNow(idEnc, reopen = false) {
-  const id = portIdOf(idEnc);
-  await loadPorts();
-  if (!PORTS) { toast(`הבדיקה נכשלה: ${portsError}`); return; }
-  const p = PORTS.find((x) => x.id === id);
-  if (!p) { toast("הפורט לא מופיע ברשימה שנקראה עכשיו"); return; }
-  toast(`${p.port}/${p.proto}: ${healthStatusLabel(p.state)} — ${p.detail || ""} · חומת אש בשרת: ${portFwLabel(p)}`);
-  if (reopen) portDetail(id);
-}
-
-function ports() {
-  if (!PORTS && !portsError) return pagePlaceholder();
-  const rows = PORTS ? PORTS.filter((p) => !portHidden(p)) : [];
-  // ‏#1300 (console-full.html P.network): אותה כותרת "רשת" כמו שלוש הלשוניות האחרות (‏#954 גל 8: לשונית של אובייקט הרשת).
-  const header = netHeader(3);
-  if (!PORTS) return `<div class="page aligned">${header}<div class="body">${UI.note("err", `לא הצלחתי לקרוא את רשימת הפורטים: ${esc(portsError)}`)}</div></div>`;
-  // ‏#1300 (console-full.html P.network "ports", אחד-לאחד): רק הכרטיסים. חומת האש של השרת — הודעה רק כשהיא לא תקינה
-  // או לא נקראה (המצב לכל פורט — בעמודת "חומת אש").
-  const fw = PORTS.find((p) => p.id === "firewall");
-  const fwNote = !fw ? `<div class="c12">${UI.note("warn", "חומת האש של השרת: לא נקרא")}</div>`
-    : healthStatusClass(fw.state) === "ok" ? "" : `<div class="c12">${UI.note(healthStatusClass(fw.state) === "err" ? "err" : "warn", esc(`חומת האש של השרת: ${fw.detail}`))}</div>`;
-  const known = PORT_NETWORKS.map(([net]) => net);
-  const cards = PORT_NETWORKS.map(([net, label, explain]) => [net, label, explain, rows.filter((p) => p.network === net)])
-    .filter(([, , , list]) => list.length).map((c) => portCard(...c)).join("");
-  const other = rows.filter((p) => !known.includes(p.network));
-  const otherCard = other.length ? portCard("", "ללא שיוך לרשת", "השרת לא אמר לאיזו רשת שייכות השורות האלה.", other) : "";
-  const svcCard = isAdmin() && typeof nicsvcPortsCard === "function" ? nicsvcPortsCard() : "";   // ‏#3028
-  return `<div class="page aligned">${header}<div class="body">${fwNote}${svcCard}${cards}${otherCard}</div></div>`;
-}
 
 /* ---------- #954 גל 6: מוניטור — הרשימה ----------
    נבנה לפי docs/design/console-redesign/monitor.md: טבלה אחת (בלי לשוניות),
@@ -8563,7 +8399,7 @@ function monitorViewerHtml(list, enabled) {
   // ‏#1300 (console-full.html P.monitor): מצב ריק עם סמל, כותרת ושורת הסבר — לא iframe ריק.
   const say = (t) => `<div class="empty mon-empty"><span class="eic">${uiIcon("t-monitor")}</span><b class="et">${esc(t[0])}</b>${esc(t[1])}</div>`;
   let body;
-  if (!enabled) body = say(["המוניטור כבוי", "הדלק את המתג בכותרת כדי לצפות במסך של תחנה. הדלקה חושפת 5900 על וילן ההפצה ותופסת באתחול הבא של כל מכונה."]);
+  if (!enabled) body = say(["המוניטור כבוי", "הדלק את המתג בכותרת כדי לצפות במסך של תחנה. הדלקה חושפת 7710 על וילן ההפצה ותופסת באתחול הבא של כל מכונה."]);
   else if (!m) body = say(["בחר מחשב לצפייה", "המסך של התחנה יוצג כאן. אפשר לשלוח מקשים בלבד כשהתחנה מחוברת לסוכן."]);
   else if (!m.online) body = say([`${m.name || m.mac} אינה מחוברת`, "אין למה להתחבר: התחנה לא נראתה ב-90 השניות האחרונות. אפשר להעיר אותה (WoL) מהרשימה."]);
   else if (MON_OUT) body = say(["המסך פתוח בחלון נפרד", "לחיצה על המחשב ברשימה מחזירה את הצפייה לכאן."]);   // ‏#1851
@@ -8622,7 +8458,7 @@ function monitorPage() {
     ? ["צפייה בתחנות מרחוק", `${online.length} מתוך ${list.length} מחוברות`].map(esc).join(" · ")
     : `‏/monitor לא נקרא: ${esc(monitorError)}`;
   // ‏#1300: המתג לבד (בלי פיל מצב בכותרת ובלי הערה למעלה) — המשמעות ב-title שלו ובכרטיס הצפייה.
-  const sw = !MONITOR ? "" : `<span class="swrow" title="כבוי כברירת מחדל — הדלקה חושפת 5900 על וילן ההפצה ותופסת באתחול הבא של כל מכונה"><button type="button" class="sw${enabled ? " on" : ""}" role="switch" aria-checked="${enabled ? "true" : "false"}" aria-label="מוניטור לתחנות" onclick="monitorToggle(${enabled ? "false" : "true"})"></button><span class="cap">מוניטור לתחנות</span></span>`;
+  const sw = !MONITOR ? "" : `<span class="swrow" title="כבוי כברירת מחדל — הדלקה חושפת 7710 על וילן ההפצה ותופסת באתחול הבא של כל מכונה"><button type="button" class="sw${enabled ? " on" : ""}" role="switch" aria-checked="${enabled ? "true" : "false"}" aria-label="מוניטור לתחנות" onclick="monitorToggle(${enabled ? "false" : "true"})"></button><span class="cap">מוניטור לתחנות</span></span>`;
   const header = UI.objHeader({ crumbs: [{ label: "שרת אימג'ים", onclick: "selectPageById('home')" }, { label: "תשתית" }, { label: "מוניטור" }],
     icon: "t-monitor", name: "מוניטור", sub, pill: MONITOR ? "" : UI.pill("err", "לא נקרא"), actions: sw + `<button class="btn" onclick="refreshPage()">${uiIcon("refresh")} רענון</button>`, compact: true });
   let body;
@@ -9570,7 +9406,7 @@ const pages = {
   disks: { crumb: "דיסקים", title: "דיסקים", tabs: [], render: () => disksPage(), load: () => loadDisks(), own: true },   // ‏#1857: דיסקים וסטים (disks.js, נטען אחרי הקובץ הזה)
   storage: { crumb: "אחסון", title: "אחסון", tabs: [], render: () => storagePage(), load: () => loadStorage(), own: true },   // ‏#1066 שלב ב': מיקומי הספרייה (storage.js, נטען אחרי הקובץ הזה)
   usbstick: { crumb: "דיסק-און-קי", title: "דיסק-און-קי", tabs: [], render: () => usbStickPage(), load: () => loadUsbStick(), own: true },   // ‏#1920 (usbstick.js, נטען אחרי הקובץ הזה)
-  ports: { crumb: "פורטים", title: "פורטים", tabs: ["חיבורים פיזיים", "רשת הפצה", "פורטים"], render: ports, load: loadPorts, own: true },   // ‏#954 גל 5: מתג בכל שורה
+  ports: { crumb: "שירותים", title: "שירותים", tabs: [], render: () => servicesPage(), load: () => loadServices(), own: true },   // ‏#3887: דף "שירותים" (console-services.js); המזהה נשאר ports
 };
 let current = "home";
 let currentTab = 0;
@@ -9639,7 +9475,6 @@ function treeNodeForTab() {
   if (current !== "network") return null;
   if (currentTab === 1) return q('.inventory-node[data-net-tab="1"]');   // ‏#1300: עלה, כמו במוקאפ (בלי תת-עץ כרטיסים)
   if (currentTab === 2) return q('.inventory-node[data-net-tab="2"]');
-  if (currentTab === 3) return q('.inventory-node[data-page="ports"]');
   return q('.inventory-node[data-net-tab="0"]') || q('.inventory-node[data-page="network"]');
 }
 function syncTreeToTab() {
@@ -11542,6 +11377,7 @@ const UI_ICON_PATHS = {
   "search": "<circle cx=\"10\" cy=\"10\" r=\"7\"/><path d=\"m15 15 6 6\"/>",
   "bell": "<path d=\"M4 17h16l-2-3V8a6 6 0 0 0-12 0v6ZM9 21h6\"/>",
   "close": "<path d=\"m6 6 12 12M18 6 6 18\"/>",
+  "brain": '<path d="M12 5.5a3 3 0 0 0-5.2-1.6 3.2 3.2 0 0 0-2.6 4.7 3.3 3.3 0 0 0 .3 5.6 3.4 3.4 0 0 0 3.3 4.6 2.6 2.6 0 0 0 4.2.7Z"/><path d="M12 5.5a3 3 0 0 1 5.2-1.6 3.2 3.2 0 0 1 2.6 4.7 3.3 3.3 0 0 1-.3 5.6 3.4 3.4 0 0 1-3.3 4.6 2.6 2.6 0 0 1-4.2.7Z"/><path d="M12 5.5v14M8.6 9.2c1.2 0 2 .8 2 2M15.4 9.2c-1.2 0-2 .8-2 2M7.8 14.8c1 0 1.8-.6 2-1.5M16.2 14.8c-1 0-1.8-.6-2-1.5"/>',   /* ‏#3968: שאלות המוח */
   "help": "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M9 8a3 3 0 0 1 6 0c0 2-3 2-3 5M12 17h.01\"/>",
   "sun": "<circle cx=\"12\" cy=\"12\" r=\"4\"/><path d=\"M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1 1M18 18l1 1M5 19l1-1M18 6l1-1\"/>",
   "moon": "<path d=\"M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11Z\"/>",

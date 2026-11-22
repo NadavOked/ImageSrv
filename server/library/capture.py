@@ -44,6 +44,7 @@ from server.db import _write_lock, journal, now_iso, update_one, writing
 from server.library import capture_detail
 from server.learn import eta as learn_eta
 from server.system import priority
+from server.library import ingest_pool   # #1517
 from server.agent import readbackhash
 from server.core.progress_view import capture_progress
 from server.library.images import (ImageLibrary, LEGACY_FORMAT, MACHINE_MAC, carries_a_stream_file,
@@ -133,6 +134,11 @@ def _flush_to_disk(handle) -> None:
 
 class _DiskFull(Exception):
     """אזל המקום באזור הביניים תוך כדי זרם. הסיבה נוקבת בשם הקובץ."""
+
+
+class _IngestWorkerFailed(Exception):
+    """#1517: תהליך הקליטה העובד נפל, נתקע או דיווח מה שאינו תואם את הדיסק.
+    ההודעה נוקבת למה — המשימה נכשלת בשם (עיקרון 5), לא "הזרם הסתיים"."""
 
 
 class _StagingGone(Exception):
@@ -241,7 +247,26 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
         # #1470: רשומה ישנה של העלאה קודמת לאותו שם אינה ראיה על הבייטים האלה.
         record = upload_sha_path(path)
         record.unlink(missing_ok=True)
+        slots = ingest_pool.configured()   # #1517: 0 = כבוי = המסלול שלמטה, כמות שהוא
+        use_worker = bool(slots) and ingest_pool.take(slots)
         try:
+            if use_worker:
+                # #1517: הגיבוב והכתיבה בתהליך עובד; השער, ה-DB והרזרבה נשארים כאן.
+                try:
+                    got, _ = await ingest_pool.stream(
+                        request.stream(), path, batch=CHUNK, sync_every=SYNC_EVERY, wrote=guard.wrote)
+                except ingest_pool.IngestFailed as exc:
+                    path.unlink(missing_ok=True)
+                    if exc.kind == "enospc":
+                        raise _DiskFull(f"אזל המקום בשרת בזמן כתיבת {path.name} — הדיסק התמלא") from exc
+                    raise _IngestWorkerFailed(f"{path.name}: {exc}") from exc
+                try:
+                    record.write_text(got, encoding="ascii")
+                    fsync_file(record)
+                    fsync_dir(path.parent)
+                except FileNotFoundError as exc:
+                    raise _StagingGone(f"תיקיית הביניים של {path.name} נמחקה בזמן ההעלאה") from exc
+                return got
             with path.open("wb") as handle:
                 # #1488: הכתיבה והגיבוב בתהליכון, באצוות של CHUNK — לא על
                 # הלולאה שמשותפת לסוכנים ולקונסולה. ה-await על כל אצווה הוא
@@ -388,6 +413,11 @@ def create_agent_capture_router(ctx: ServerContext) -> APIRouter:
         except _DiskFull as exc:
             await run_in_threadpool(_fail, ctx.conn, ctx.library.root, task_id, str(exc))
             raise HTTPException(507, str(exc))
+        except _IngestWorkerFailed as exc:
+            # #1517: עובד שנכשל נכשל בגלוי — המשימה נכשלת בשם, והקובץ החלקי כבר נמחק.
+            upload_sha_path(path).unlink(missing_ok=True)
+            await run_in_threadpool(_fail, ctx.conn, ctx.library.root, task_id, str(exc))
+            raise HTTPException(500, str(exc))
         except _StagingGone as exc:
             gone = str(exc)   # #1470+#532: מצב המשימה למטה מכריע — ביטול = 409
         await run_in_threadpool(_upload_settle, task_id, path, gone)

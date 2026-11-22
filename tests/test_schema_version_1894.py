@@ -74,7 +74,7 @@ FINGERPRINTS = {1: "f35aff9de1e2da2378ec9825cedb3248626acaa849d6e23d2209ace73279
                 # 25: session_members.beeps_json (#3125, S62, 15/11); on top of 23 (#3324) and 24 (#3347). Recomputed in the merged tree (argus 15/11)
                 25: "f19602c51ccd8c665425eb8a2533611f5459dfe46503f00978b7c3ce5dc56322",
                 # 26: brain_asks (#3654, 18/11): the brain's one channel to the user
-                26: "4397fc272cada3ab58e2041da86dbd5ec93cad64c9189a0cb8a282daed0a4591"}
+                26: "e8a745590108e25d0e8bb161877ae551e689fe9abfc393320576989697af521b"}
 
 
 def _fingerprint(conn) -> str:

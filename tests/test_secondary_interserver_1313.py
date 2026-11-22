@@ -1,7 +1,7 @@
-"""#1313 — משני שהותקן מה-ISO לא האזין ב-8443.
+"""#1313 — משני שהותקן מה-ISO לא האזין ב-7700.
 
 נמדד במעבדה (12/10): חיפה, role=secondary, imagesrv-server active — ומ-FW-TA
-`curl https://<חיפה>:8443/` → connection refused. השורש: `server/main.py`
+`curl https://<חיפה>:7700/` → connection refused. השורש: `server/main.py`
 מרים את מאזין ה-enrollment הבין-שרתי רק כשניתן `--interserver-host`, והמתקין
 (`setup-boot-server.sh`, שגם האשף וגם firstboot מה-ISO קוראים לו) לא העביר
 אותו.
@@ -33,7 +33,7 @@ from test_installer_1131 import BASH
 
 REPO = Path(__file__).resolve().parent.parent
 INSTALLER = REPO / "deploy" / "setup-boot-server.sh"
-PRIMARY = "https://10.30.0.5:8443"
+PRIMARY = "https://10.30.0.5:7700"
 
 needs_bash = requires_native(("bash", BASH), why="קטע המתקין הוא bash")
 
@@ -65,6 +65,7 @@ def installer_storage_args(role: str, *, servers_if: str = "ens18",
         "IFACE=\n"
         f"SERVERS_IF={servers_if}\n"
         f"CONSOLE_HOST={console_host or servers_if}\n"
+        "BOOT_PORT=7711\n"              # #3486: the installer's top-level value
     )
     proc = subprocess.run(
         [BASH, "-c", prelude + storage_args_block() + '\nprintf "%s" "$STORAGE_ARGS"\n'],
@@ -76,12 +77,12 @@ def installer_storage_args(role: str, *, servers_if: str = "ens18",
 
 def parsed(argv: list[str]):
     return server.main.build_parser().parse_args(
-        ["--server-url", "http://10.44.12.10:8080", *argv])
+        ["--server-url", "http://10.44.12.10:7712", *argv])
 
 
 @needs_bash
 def test_installer_gives_a_secondary_the_interserver_listener_on_the_servers_nic():
-    """הבאג כפי שנמדד: override של משני בלי --interserver-host = אין 8443."""
+    """הבאג כפי שנמדד: override של משני בלי --interserver-host = אין 7700."""
     args = parsed(installer_storage_args("secondary", servers_if="ens18"))
     assert args.storage_role == "secondary"
     assert args.interserver_host == "ens18"
@@ -89,7 +90,7 @@ def test_installer_gives_a_secondary_the_interserver_listener_on_the_servers_nic
 
 @needs_bash
 def test_the_interserver_nic_is_the_servers_nic_even_with_an_explicit_console_host():
-    """חומת האש פותחת 8443 על `iifname $SERVERS_IF` (nftables-rules.sh) —
+    """חומת האש פותחת 7700 על `iifname $SERVERS_IF` (nftables-rules.sh) —
     המאזין חייב לשבת על אותו כרטיס, גם כשהקונסולה קיבלה כתובת מפורשת."""
     args = parsed(installer_storage_args("secondary", servers_if="ens19",
                                          console_host="10.30.0.8"))
@@ -99,7 +100,7 @@ def test_the_interserver_nic_is_the_servers_nic_even_with_an_explicit_console_ho
 
 @needs_bash
 def test_installer_does_not_give_a_standalone_the_interserver_listener():
-    """הראשי יוזם; ל-standalone אין מה להאזין ב-8443."""
+    """הראשי יוזם; ל-standalone אין מה להאזין ב-7700."""
     argv = installer_storage_args("standalone")
     assert "--interserver-host" not in argv
     assert parsed(argv).interserver_host is None
@@ -151,6 +152,7 @@ def run_main(tmp_path: Path, monkeypatch, *, stored_role: str,
                         lambda *a, **k: SimpleNamespace(conn=None, ctx=None))
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(uvicorn, "Config", lambda app, **k: object())
     monkeypatch.setattr(uvicorn, "Server", lambda config: object())
     monkeypatch.setattr(server.main, "serve_all", lambda listeners: None)
@@ -166,7 +168,7 @@ def run_main(tmp_path: Path, monkeypatch, *, stored_role: str,
     monkeypatch.setattr(storage_nodes, "ensure_identity", lambda *a, **k: {
         "cert_pem": "", "key_pem": "", "node_id": "sn_x", "server_spki": "0" * 64})
     monkeypatch.setattr("sys.argv", [
-        "server.main", "--server-url", "http://10.44.12.10:8080",
+        "server.main", "--server-url", "http://10.44.12.10:7712",
         "--data-dir", str(tmp_path / "data"), "--images", str(tmp_path / "img"),
         *argv])
     server.main.main()
@@ -177,21 +179,21 @@ def run_main(tmp_path: Path, monkeypatch, *, stored_role: str,
 def test_a_secondary_installed_by_the_installer_registers_the_8443_listener(
         tmp_path: Path, monkeypatch):
     """שרשרת שלמה: ה-argv שהמתקין כותב → main רושם `interserver` על
-    הכתובת של כרטיס השרתים, בפורט 8443."""
+    הכתובת של כרטיס השרתים, בפורט 7700."""
     argv = installer_storage_args("secondary", servers_if="ens18")
     threaded = run_main(tmp_path, monkeypatch, stored_role="secondary", argv=argv)
     assert [t["id"] for t in threaded] == ["interserver"]
-    assert threaded[0]["port"] == 8443
+    assert threaded[0]["port"] == 7700
     assert threaded[0]["hosts"] == ["10.30.0.8"]
 
 
 @needs_bash
 def test_a_standalone_installed_by_the_installer_has_no_8443_listener(
         tmp_path: Path, monkeypatch):
-    """אין מאזין mTLS. 8443 של standalone/ראשי הוא "אתה שם?" בלבד (#1310)."""
+    """אין מאזין mTLS. 7700 של standalone/ראשי הוא "אתה שם?" בלבד (#1310)."""
     argv = installer_storage_args("standalone", servers_if="ens18")
     assert run_main(tmp_path, monkeypatch, stored_role="standalone", argv=argv) == []
-    assert [a["port"] for a in ALIVE] == [8443]
+    assert [a["port"] for a in ALIVE] == [7700]
 
 
 def legacy_secondary_argv() -> list[str]:
@@ -205,7 +207,7 @@ def test_an_already_installed_secondary_gets_the_listener_after_the_update(
         tmp_path: Path, monkeypatch):
     """`server-upgrade.sh` אינו כותב את override.conf מחדש, והוא רץ מהעץ
     **הישן** (ה-checkout מחליף את הקובץ תחתיו) — לכן תיקון במתקין או בסקריפט
-    השדרוג לא היה מגיע לחיפה. השרת החדש עצמו מרים את 8443 על --console-host."""
+    השדרוג לא היה מגיע לחיפה. השרת החדש עצמו מרים את 7700 על --console-host."""
     threaded = run_main(tmp_path, monkeypatch, stored_role="secondary",
                         argv=legacy_secondary_argv())
     assert [t["id"] for t in threaded] == ["interserver"]
@@ -231,7 +233,7 @@ def test_the_fallback_needs_the_secondary_flag_not_only_a_stored_role(
 
 def test_the_fallback_does_not_bind_8443_on_loopback(tmp_path: Path, monkeypatch):
     """קונסולה על loopback (ברירת המחדל, #770) — הראשי לעולם לא יגיע לשם,
-    ו-8443 על 127.0.0.1 רק היה תופס פורט."""
+    ו-7700 על 127.0.0.1 רק היה תופס פורט."""
     argv = ["--storage-role", "secondary", "--primary-url", PRIMARY,
             "--console-host", "127.0.0.1"]
     assert run_main(tmp_path, monkeypatch, stored_role="secondary", argv=argv) == []
@@ -246,7 +248,7 @@ def test_an_explicit_interserver_host_still_wins(tmp_path: Path, monkeypatch, ex
     assert threaded[0]["hosts"] == [expected]
 
 
-# --- #1310 × #1313: שני מאזינים על 8443, לעולם לא באותו שרת -------------------
+# --- #1310 × #1313: שני מאזינים על 7700, לעולם לא באותו שרת -------------------
 
 @pytest.mark.parametrize("stored_role", ["standalone", "primary", "secondary"])
 @pytest.mark.parametrize("argv", [
@@ -259,11 +261,11 @@ def test_an_explicit_interserver_host_still_wins(tmp_path: Path, monkeypatch, ex
 def test_8443_has_at_most_one_listener_per_server(tmp_path: Path, monkeypatch, stored_role, argv):
     """"אתה שם?" של הראשי (#1310) עולה כשהתפקיד השמור **אינו** secondary;
     ה-mTLS של המשני (#1313) רק כשהוא secondary. שניהם נרשמים כ-`interserver`
-    על 8443 — ושניהם יחד היו bind כפול. בכל צירוף: לכל היותר אחד."""
+    על 7700 — ושניהם יחד היו bind כפול. בכל צירוף: לכל היותר אחד."""
     threaded = run_main(tmp_path, monkeypatch, stored_role=stored_role, argv=argv)
     assert len(threaded) + len(ALIVE) <= 1, (threaded, ALIVE)
     if stored_role == "secondary":
         assert ALIVE == [], "משני אינו עונה 'אתה שם?'"
     else:
         assert threaded == [], "ראשי/standalone אינו פותח את ה-mTLS"
-        assert [a["port"] for a in ALIVE] == [8443], "ראשי עם קונסולה על כרטיס עונה על 8443"
+        assert [a["port"] for a in ALIVE] == [7700], "ראשי עם קונסולה על כרטיס עונה על 7700"

@@ -402,7 +402,7 @@ def test_the_health_screen_carries_the_row(tmp_path, images_root, clock, conn):
 
     watch, _ = make(conn, Clock(), [(reply_frame(), BROADCAST)])
     run_step(watch)
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
                      health_hooks={"interfaces": lambda: [], "rogue_dhcp": watch.health})
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test",
                  check_policy=False)

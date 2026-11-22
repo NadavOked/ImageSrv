@@ -126,22 +126,24 @@ def has_runner(tool_id: str) -> bool:
 
 
 def test_the_plan_is_the_union_of_the_selected_ids_binaries(tmp_path):
-    """magicrescue נבחר ואין לו מודול (#1104): הוא אינו בתוכנית, ונקוב בשמו."""
-    chosen = ["disk-blkdiscard", "win-users", "win-blank-password", "magicrescue",
+    """testdisk נבחר ואין לו מודול (#1104): הוא אינו בתוכנית, ונקוב בשמו.
+    magicrescue — מאז #2804 יש לו מודול, והוא נארז עם recoverjpeg ו-jpegtran."""
+    chosen = ["disk-blkdiscard", "win-users", "win-blank-password", "testdisk", "magicrescue",
               "disk-dd-zero", "nvme-sanitize", "disk-nvme-format"]
     sel = selection(tmp_path, chosen, student=["photorec"])
     out = sh(f"tools_bins_plan {posix(sel)!r}", strict=True)
     assert out.returncode == 0, out.stderr
     expected = []
     for tool_id in chosen:
-        if tool_id == "magicrescue":
+        if tool_id == "testdisk":
             continue
         for b in bins_of(tool_id):
             if b not in expected:
                 expected.append(b)
-    assert out.stdout.split() == expected == ["blkdiscard", "chntpw", "nvme"]
-    assert "7 build ids, 1 student ids (student ignored, v2)" in out.stderr
-    assert "not packed -- no station module runs them yet (#1104): magicrescue\n" in out.stderr
+    assert out.stdout.split() == expected == ["blkdiscard", "chntpw", "magicrescue", "recoverjpeg",
+                                              "jpegtran", "nvme"]
+    assert "8 build ids, 1 student ids (student ignored, v2)" in out.stderr
+    assert "not packed -- no station module runs them yet (#1104): testdisk\n" in out.stderr
 
 
 def test_the_whole_catalog_plans_every_runnable_binary_once(tmp_path):
@@ -154,8 +156,7 @@ def test_the_whole_catalog_plans_every_runnable_binary_once(tmp_path):
     assert len(planned) == len(set(planned))
     assert set(planned) == {b for t in RUNNABLE for b in bins_of(t)}
     orphans = {b for t in PACKED_ONLY for b in bins_of(t)} - set(planned)
-    assert orphans == {"testdisk", "photorec", "scalpel", "foremost", "extundelete",
-                       "magicrescue", "recoverjpeg", "ddrescue", "safecopy"}, orphans
+    assert orphans == {"testdisk", "photorec"}, orphans   # #2804: the six that save files have modules
     assert sorted(out.stderr.split("(#1104):")[1].split("\n")[0].split()) == PACKED_ONLY
 
 
@@ -254,11 +255,15 @@ def test_without_the_flag_no_toolbox_binary_is_in_the_base_list():
 
 
 def station(tmp_path: Path, build: list[str], with_file: bool = True) -> subprocess.CompletedProcess:
+    """#2804: on the stick with its data partition -- the one machine that has a
+    destination today, so the six tools that save files are listed too
+    (tests/test_tools_dest_2804.py proves they are missing everywhere else)."""
     sel = selection(tmp_path, build) if with_file else tmp_path / "none.json"
     run = tmp_path / "run"; run.mkdir()
+    (run / "usb.data").write_text("mounted\n")
     script = (
         f'export PATH="/usr/bin:/bin" LIB_DIR={posix(LIB)!r} RUN_DIR={posix(run)!r} '
-        f"TOOLS_SELECTION={posix(sel)!r}; "
+        f"TOOLS_SELECTION={posix(sel)!r} IMAGESRV_MODE=usbclone; "
         f". {posix(LIB)}/common.sh; . {posix(LIB)}/tools.sh; tools_list; echo rc=$?"
     )
     return subprocess.run([BASH, "-c", script], capture_output=True, text=True,
@@ -270,12 +275,14 @@ def listed(out: subprocess.CompletedProcess) -> list[str]:
     return [l.split("|")[0] for l in out.stdout.splitlines() if "|" in l]
 
 
-# #1104: the remaining eight need a wizard or a recovery destination; until a
+# #1104: testdisk and photorec need a wizard (mockup 14, pages 10-11); until a
 # module runs them they are not packed either (tools_has_runner, toolbins.sh).
+# #2804: the six that save files to a destination have modules now.
 RUNNABLE = ["disk-blkdiscard", "disk-hdparm-erase", "disk-nvme-format", "disk-dd-zero",
             "disk-wipefs-all", "win-users", "win-blank-password", "esp-fsck-repair", "tpm-clear",
             "nvme-sanitize", "nvme-sanitize-status", "zap-partition-table", "nwipe",
-            "windows-ntfs-cat", "ntfs-recover-scan", "unsquashfs", "bsdtar"]
+            "windows-ntfs-cat", "ntfs-recover-scan", "unsquashfs", "bsdtar",
+            "scalpel", "foremost", "extundelete", "magicrescue", "ddrescue-image", "safecopy"]
 PACKED_ONLY = sorted(set(CATALOG_IDS) - set(RUNNABLE))
 
 
@@ -290,9 +297,7 @@ def test_the_station_with_the_whole_catalog_lists_exactly_the_runnable_ids(tmp_p
     שנופלת כשמישהו מוסיף או מוחק מימוש בלי לעדכן אותה."""
     out = station(tmp_path, CATALOG_IDS)
     assert sorted(listed(out)) == sorted(RUNNABLE), listed(out)
-    assert len(PACKED_ONLY) == 8
-    assert PACKED_ONLY == sorted(["testdisk", "photorec", "scalpel", "foremost",
-                                  "extundelete", "magicrescue", "ddrescue-image", "safecopy"])
+    assert PACKED_ONLY == ["photorec", "testdisk"]
 
 
 def test_the_station_without_a_selection_file_lists_nothing(tmp_path):
@@ -311,7 +316,8 @@ def test_the_station_with_an_empty_selection_lists_nothing(tmp_path):
 
 @pytest.mark.parametrize("name", ["tools.sh", "toolbins.sh", "tools_disk.sh",
                                   "tools_windows.sh", "tools_boot.sh", "tools_hw.sh",
-                                  "tools_erase.sh", "tools_recover.sh"])
+                                  "tools_erase.sh", "tools_recover.sh", "tooldest.sh",
+                                  "tools_carve.sh", "tools_rescue.sh"])
 def test_touched_lib_files_stay_within_the_limit(name):
     sizelimit.assert_within_limit(LIB / name)
 
@@ -327,5 +333,5 @@ def test_no_tools_bins_module_shadows_the_glob():
     כתחום "bins" בלי `tools_bins_list` — לכן הטבלה היא `toolbins.sh`."""
     assert not (LIB / "tools_bins.sh").exists()
     modules = sorted(p.name for p in lib_files(LIB) if p.match("tools_*.sh"))
-    assert modules == ["tools_boot.sh", "tools_disk.sh", "tools_erase.sh", "tools_hw.sh",
-                       "tools_recover.sh", "tools_windows.sh"]
+    assert modules == ["tools_boot.sh", "tools_carve.sh", "tools_disk.sh", "tools_erase.sh", "tools_hw.sh",
+                       "tools_recover.sh", "tools_rescue.sh", "tools_windows.sh"]

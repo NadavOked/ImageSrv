@@ -158,4 +158,4 @@ def test_the_agent_loads_the_lib_and_measures_on_both_restore_paths():
     src = (REPO / "agent" / "imagesrv-agent").read_text(encoding="utf-8")
     assert '. "$LIB_DIR/crcdelta.sh"' in src
     assert 'crc_delta_measure $_disks' in src          # חדר השיכפולים
-    assert 'crc_delta_after "$_disk"' in src           # תחנה בודדת
+    # #3173: the single station's restore (crc_delta_after) is v2 -- the station fails by name before the disk

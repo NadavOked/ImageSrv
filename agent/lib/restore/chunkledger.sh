@@ -16,7 +16,7 @@
 # lag behind the disk, never lead it -- a chunk named durable that is not on the
 # platter is a quiet hole in the middle of a disk that looks whole (#1388).
 #
-# The pipe of today (udp-receiver | zstd -dc | partclone -r) writes no
+# A stream through partclone (zstd -dc | partclone -r) writes no
 # `written.<part>`: partclone is a closed box, and nothing here can say which
 # chunks it had written before a given fsync. The receiver of stage 3 writes chunk
 # by chunk, and is the first writer of these files.

@@ -126,9 +126,7 @@ def test_the_server_notes_it_when_it_starts(tmp_path, images_root, clock, monkey
     """`create_app` קורא ל-`note_retired`: ערך שמור במסד שנפתח מחדש נרשם בלי שמישהו קרא לפונקציה."""
     from conftest import _build_server
     from server.db import connect, get_setting, set_setting
-    from test_sender import Recorder
-    from server.rounds import sender as sender_module
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
+    from fakesend import Recorder
     data = tmp_path / "data"
     data.mkdir()
     pre = connect(data / "imagesrv.db")
@@ -140,4 +138,4 @@ def test_the_server_notes_it_when_it_starts(tmp_path, images_root, clock, monkey
         assert get_setting(conn, "brain_suspect_seconds") == "77"
         assert conn.execute("SELECT COUNT(*) FROM journal WHERE event = 'brain_setting_retired'").fetchone()[0] == 1
     finally:
-        bundle["ctx"].sender.stop()
+        bundle["ctx"].chunk.stop()

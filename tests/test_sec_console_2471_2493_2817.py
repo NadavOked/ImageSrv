@@ -5,7 +5,7 @@
   ביצירה מחדש של משתמש באותו שם.
 - #2493 ס' 1: `NaN`/`Infinity` ב-hello נדחים ב-400, ו-`GET /machines` אינו נופל ב-500.
 - #2493 ס' 3: צופה ה-VM בודק `still_admin` אחרי הרישום, כמו המוניטור (#1853).
-- #2817 ס' 1 (#2493 ה1): כותרות האבטחה של 8081.
+- #2817 ס' 1 (#2493 ה1): כותרות האבטחה של 443.
 - #2817 ס' 2: מתעד סטטיסטיקה שזורק אינו משאיר את הגל פתוח.
 """
 
@@ -38,7 +38,7 @@ SESSION_ENDED = "נותקת מהקונסולה"
 
 
 def _console_anon(server) -> TestClient:
-    """אפליקציית 8081 עצמה, בלי עוגייה; 500 חוזר כתשובה ולא כחריגה בטסט."""
+    """אפליקציית 443 עצמה, בלי עוגייה; 500 חוזר כתשובה ולא כחריגה בטסט."""
     return TestClient(create_console_app(server["app"].state.runtime),
                       raise_server_exceptions=False)
 
@@ -232,7 +232,7 @@ def test_an_admin_still_gets_the_vm_viewer(server, vm, monkeypatch):
     assert _vm_close_within(client) == "a bridge byte arrived"
 
 
-# --- #2817 ס' 1: כותרות האבטחה של 8081 -----------------------------------------
+# --- #2817 ס' 1: כותרות האבטחה של 443 -----------------------------------------
 
 EXPECTED_HEADERS = {
     "x-frame-options": "SAMEORIGIN",

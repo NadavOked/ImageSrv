@@ -23,7 +23,7 @@ import pytest
 from boot import trace
 from boot.grub_menu import GrubConfig, render, render_bootstrap, render_local_only
 
-CFG = GrubConfig(server_base="http://10.44.12.10:8080")
+CFG = GrubConfig(server_base="http://10.44.12.10:7712")
 WINDOWS = "/EFI/Microsoft/Boot/bootmgfw.efi"
 
 

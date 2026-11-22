@@ -11,6 +11,15 @@
 #                                   [--tools-selection FILE]
 #                                   [--source-date-epoch SECONDS]
 #                                   [--version VERSION]
+#                                   [--server-ca CA.pem --server-name NAME]
+#
+# --server-ca bakes the certificate of THIS server's agent CA (#1076; every
+# server is a CA of its own) into /etc/imagesrv/agent-ca.pem, and --server-name
+# the name in its leaf into /etc/imagesrv/agent-name -- an initrd trusts only
+# the server that built it; OUTPUT.ca.pem and OUTPUT.agent-name go next to
+# the image. See server/agent/tls.py. tools/boot-payload-build.sh passes them
+# on every build; the USB stick (build_usb_clone.sh) never does -- it has no
+# server.
 #
 # The output is reproducible (#1125, feeding #1078): the same checkout and
 # the same builder give the same bytes. Every mtime in the image is set to
@@ -43,6 +52,10 @@ WITH_GUI=0
 WITH_INSTALLER=0
 TOOLS_SELECTION_FILE=""
 SOURCE_VERSION=""
+#: #1076: this server's agent channel CA (server/agent/tls.py). Empty = an initrd without
+#: a CA, and network agent operation is unavailable as before #1076.
+SERVER_CA=""
+SERVER_NAME=""
 #: `auto` (ברירת המחדל — `finish_and_stop` גוזר מהתפקיד: כיתה=reboot,
 #: בנייה/שיכפול=poweroff), `poweroff` או `reboot`. `reboot` הוא ההגדרה
 #: שכלי המעבדה כותב (tools/lab/after-task-reboot.sh).
@@ -63,6 +76,8 @@ while [ $# -gt 0 ]; do
         --tools-selection) TOOLS_SELECTION_FILE="$2"; shift 2 ;;
         --source-date-epoch) SOURCE_DATE_EPOCH="$2"; shift 2 ;;
         --version)        SOURCE_VERSION="$2"; shift 2 ;;
+        --server-ca)      SERVER_CA="$2"; shift 2 ;;
+        --server-name)    SERVER_NAME="$2"; shift 2 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
@@ -78,6 +93,30 @@ EXTRA_OVERLAY="${IMAGESRV_EXTRA_OVERLAY:-}"
 if [ -n "$EXTRA_OVERLAY" ]; then
     [ -d "$EXTRA_OVERLAY" ] \
         || { echo "IMAGESRV_EXTRA_OVERLAY is not a directory: $EXTRA_OVERLAY" >&2; exit 1; }
+fi
+
+# --- the agent channel CA (--server-ca, #1076) ----------------------------------
+# Checked here, before apt, for the same reason as the overlay: exactly one
+# certificate that openssl can read, and a CA -- and the name of this server's
+# leaf with it, never one without the other. Anything else would be an initrd
+# whose agent refuses every server -- caught now, not at a classroom.
+if [ -n "$SERVER_CA" ] || [ -n "$SERVER_NAME" ]; then
+    [ -n "$SERVER_CA" ] && [ -n "$SERVER_NAME" ] \
+        || { echo "--server-ca and --server-name go together" >&2; exit 2; }
+    [[ "$SERVER_NAME" =~ ^imagesrv-agent-[a-z0-9][a-z0-9-]{0,46}$ ]] \
+        || { echo "--server-name is not an imagesrv-agent-... name: '$SERVER_NAME'" >&2; exit 2; }
+fi
+if [ -n "$SERVER_CA" ]; then
+    [ -f "$SERVER_CA" ] || { echo "--server-ca: no such file: $SERVER_CA" >&2; exit 2; }
+    if [ "$(grep -c -- '-----BEGIN CERTIFICATE-----' "$SERVER_CA")" != 1 ] \
+        || ! openssl x509 -noout -in "$SERVER_CA" 2>/dev/null; then
+        echo "--server-ca is not one PEM certificate: $SERVER_CA" >&2
+        exit 2
+    fi
+    if ! openssl x509 -noout -text -in "$SERVER_CA" | grep -q 'CA:TRUE'; then
+        echo "--server-ca is a certificate but not a CA: $SERVER_CA" >&2
+        exit 2
+    fi
 fi
 
 # --- the toolbox selection (--tools-selection, #1050) ---------------------------
@@ -107,7 +146,7 @@ declare -A TOOL_PKG=(
     [tpm2_clear]=tpm2-tools  [chntpw]=chntpw       [ntfscat]=ntfs-3g
     [ntfsundelete]=ntfs-3g   [photorec]=testdisk   [testdisk]=testdisk
     [scalpel]=scalpel        [foremost]=foremost   [extundelete]=extundelete
-    [magicrescue]=magicrescue [recoverjpeg]=recoverjpeg
+    [magicrescue]=magicrescue [recoverjpeg]=recoverjpeg [jpegtran]=libjpeg-turbo-progs
     [unsquashfs]=squashfs-tools [bsdtar]=libarchive-tools
     [ddrescue]=gddrescue     [safecopy]=safecopy   [fsck.vfat]=dosfstools
 )
@@ -199,8 +238,6 @@ fi
 
 # Binaries the agent scripts call. tests/test_agent.py cross-checks this
 # list against the actual commands in agent/ -- update both together.
-# udp-sender (#715): the build machine streams its own disk to the cloning
-# machines; the udpcast package ships both halves, so nothing new to install.
 # efibootmgr (#433): the Boot#### entry for the restored Windows on UEFI;
 # copy_bin pulls libefiboot/libefivar/libpopt through ldd and stops the
 # build if one is missing.
@@ -214,15 +251,15 @@ fi
 # its own applet before anything on PATH (testrunner, 10/11).
 BINARIES=(curl jq zstd pv sgdisk blockdev sha256sum od hdparm ntfsresize openssl
           ntfs-3g ntfs-3g.probe ntfsfix umount blkid df mount ethtool smartctl
-          e2fsck resize2fs btrfs xfs_growfs
-          udp-receiver udp-sender partclone.ntfs partclone.fat partclone.ext4
+          e2fsck resize2fs dumpe2fs btrfs xfs_growfs
+          partclone.ntfs partclone.fat partclone.ext4
           partclone.btrfs partclone.xfs partclone.dd
           dmidecode lspci efibootmgr dmsetup nice mkswap)
 
 if [ "$SKIP_APT" -eq 0 ]; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get install -y --no-install-recommends \
-        busybox-static zstd partclone udpcast gdisk curl jq pv \
+        busybox-static zstd partclone gdisk curl jq pv \
         ntfs-3g libhivex-dev hdparm coreutils util-linux openssl \
         e2fsprogs btrfs-progs xfsprogs cpio gzip gcc libc6-dev ethtool \
         smartmontools dmidecode pciutils pci.ids efibootmgr dmsetup tzdata
@@ -330,6 +367,10 @@ EOF
 
 install -m 0755 "$AGENT_DIR/init"           "$ROOT/init"
 install -m 0755 "$AGENT_DIR/imagesrv-agent" "$ROOT/usr/bin/imagesrv-agent"
+# #3756: a typed `reboot`/`poweroff` (ssh, the lab) must do something. PID 1 is /init, a shell, so busybox's
+# applet without -f only signals it and exits 0; these two names are agent/imagesrv-power (replacing the busybox links).
+install -m 0755 "$AGENT_DIR/imagesrv-power" "$ROOT/usr/bin/imagesrv-power"
+for _pw in reboot poweroff; do ln -sf ../usr/bin/imagesrv-power "$ROOT/bin/$_pw"; done
 bash "$SCRIPT_DIR/agent-lib-flatten.sh" "$AGENT_DIR/lib" "$ROOT/usr/lib/imagesrv"
 # #1921: the two knowledge tables (SMART, hardware) -- smartjudge.sh reads them from here, and the
 # server reads the same files from the repo. A build without them would judge nothing: stop.
@@ -495,6 +536,15 @@ for _tb in "${TOOL_BINS[@]}"; do
         cp -L "$_tcti" "$ROOT$_tcti"
         copy_libs "$_tcti"
     fi
+    if [ "$_tb" = magicrescue ]; then
+        # #2804: the two JPEG recipes tools_carve.sh runs are data files ldd
+        # cannot see; without them magicrescue carves nothing.
+        for _mr in jpeg-jfif jpeg-exif; do
+            [ -s "/usr/share/magicrescue/recipes/$_mr" ] \
+                || { echo "tools: magicrescue packed but its recipe $_mr is missing" >&2; exit 1; }
+            install -D -m 0644 "/usr/share/magicrescue/recipes/$_mr" "$ROOT/usr/share/magicrescue/recipes/$_mr"
+        done
+    fi
 done
 if [ "$WITH_INSTALLER" -eq 1 ]; then
     # A busybox applet link in /bin shadows the real tool for anything that
@@ -604,6 +654,19 @@ esac
 echo "$AFTER_TASK" > "$ROOT/etc/imagesrv/after-task"
 echo "after-task: $AFTER_TASK"
 
+# --- the CA in the tree (#1076) -------------------------------------------------
+# agent/lib/core/tls.sh reads it: present = the API only over TLS to a server
+# whose leaf this CA signed for this name, never a fallback to HTTP; absent =
+# network agent startup fails closed.
+if [ -n "$SERVER_CA" ]; then
+    install -m 0644 "$SERVER_CA" "$ROOT/etc/imagesrv/agent-ca.pem"
+    printf '%s\n' "$SERVER_NAME" > "$ROOT/etc/imagesrv/agent-name"
+    echo "agent channel: TLS to $SERVER_NAME, CA $SERVER_CA"
+else
+    rm -f "$ROOT/etc/imagesrv/agent-ca.pem" "$ROOT/etc/imagesrv/agent-name"
+    echo "agent channel: no --server-ca -- network agent operation is unavailable (#1076)"
+fi
+
 # --- the kiosk (optional): the build machine's graphical face ----------------
 # Native Pango/Cairo rendering onto DRM/KMS, with evdev input. Apt installs
 # transitive runtime dependencies; ldd selects the actual shared-library
@@ -703,7 +766,7 @@ EOF
     chmod 0755 "$ROOT/usr/bin/imagesrv-kiosk"
 
     # --- the remote monitor (#690) -------------------------------------------
-    # An RFB server exposing /dev/fb0 over TCP 5900, packed only in the GUI
+    # An RFB server exposing /dev/fb0 over TCP 7710, packed only in the GUI
     # image: build and cloner have a framebuffer, and a classroom station
     # never starts it (agent/lib/core/monitor.sh gates by role). Input mode needs
     # the uinput module, declared in REQUIRED_MODULES below.
@@ -1352,6 +1415,17 @@ case "$INITRAMFS_COMPRESSION" in
         | cpio -o -H newc --null --reproducible --quiet | gzip -9n) > "$OUTPUT" ;;
     *) echo "unknown initramfs compressor: $INITRAMFS_COMPRESSION" >&2; exit 1 ;;
 esac
+
+# --- the CA sidecar (#1076) -----------------------------------------------------
+# What server/system/health.py compares with the CA that signed the served
+# leaf. Read back from the tree that was packed, not from the flag; no CA = no
+# sidecar, so a stale one can never vouch for an initrd that has none.
+if [ -f "$ROOT/etc/imagesrv/agent-ca.pem" ]; then
+    cp "$ROOT/etc/imagesrv/agent-ca.pem" "$OUTPUT.ca.pem"
+    cp "$ROOT/etc/imagesrv/agent-name" "$OUTPUT.agent-name"
+else
+    rm -f "$OUTPUT.ca.pem" "$OUTPUT.agent-name"
+fi
 
 SIZE=$(du -h "$OUTPUT" | cut -f1)
 echo

@@ -262,7 +262,7 @@ stream_net_record() {
     if [ "$_rb_net" = lost ]; then
         _rb_since=; [ ! -r "$RUN_DIR/beep.netsince" ] || read -r _rb_since < "$RUN_DIR/beep.netsince"
         case "$_rb_since" in *[!0-9]*) _rb_since= ;; esac
-        _rb_ceil=${UDPCAST_STALL_TIMEOUT:-120}; case "$_rb_ceil" in ''|*[!0-9]*) _rb_ceil= ;; esac
+        _rb_ceil=${STREAM_STALL_TIMEOUT:-120}; case "$_rb_ceil" in ''|*[!0-9]*) _rb_ceil= ;; esac
         printf 'net=lost|%s|%s\n' "$_rb_since" "$_rb_ceil"; return 0
     fi
     [ -r "$RUN_DIR/beep.netend" ] || return 0

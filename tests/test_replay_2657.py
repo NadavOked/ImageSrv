@@ -24,7 +24,25 @@ pytest.importorskip("fastapi")
 
 from server.core.tasks import TOKEN_HEADER
 from test_capture import do_capture, make_task, manifest_for, setup_build_machine, task_token
-from test_report_mac_forms import hello, open_session
+from test_server_room import cloner_hello, room_body
+
+#: #3173: the round whose reports are replayed must be RUNNING, and the only round that runs is the cloning room's
+#: (a class round is v2: it opens under v2's flag and fails by name when it starts). One cloner, one drawer.
+CLONER = "b4:2e:99:07:1a:c4"
+
+
+def hello(server, mac):
+    """The cloner's hello with its one drawer (S1, `sda`): the joining hello ripens the wave."""
+    return cloner_hello(server["anon"], mac, ["S1"])
+
+
+def open_session(server, expected=1):
+    assert expected == 1
+    assert server["admin"].post("/api/console/machines", json={
+        "mac": CLONER, "name": "shich-1", "group_id": "grp_CLONERS"}).status_code == 200
+    response = server["deploy"].post("/api/console/room", json=room_body(server, 1, {CLONER: ["S1"]}))
+    assert response.status_code == 200, response.text
+    return {"session": response.json()["wave_session_id"], "mac1": CLONER}
 
 
 def _send(server, raw: bytes, headers: dict):

@@ -77,7 +77,7 @@ def well_formed_drivers(value: object) -> dict | None:
 
 
 #: #3064 (G7, S42/S43): מפתחות אופציונליים של `udp_drops` שמסבירים אובדן, ואינם מונים: `rcvbuf_asked`/`rcvbuf_bytes` =
-#: ה-SO_RCVBUF שהתבקש ומה שהקרנל נתן באמת (`rcvbuf.sh` בגל udpcast, `chunkcast` בגל חתיכות); `pass_word` = איך המעבר
+#: ה-SO_RCVBUF שהתבקש ומה שהקרנל נתן באמת (`chunkcast`, בגל חתיכות); `pass_word` = איך המעבר
 #: האחרון של מקלט החתיכות נגמר (`chunkcast`: complete, ended, stalled, no-stream...). **נשמרים כמו שהם**, ואינם מסוננים
 #: לפי רשימה סגורה של מילים: מילה חדשה של `chunkcast` נשמרת, ורק צורה פגומה היא "לא נקרא".
 _UDP_DROPS_EXTRA = {
@@ -85,6 +85,9 @@ _UDP_DROPS_EXTRA = {
     "rcvbuf_bytes": lambda v: isinstance(v, int) and not isinstance(v, bool) and v >= 0,
     "pass_word": lambda v: isinstance(v, str) and re.fullmatch(r"[a-z][a-z0-9-]{0,31}", v) is not None,
 }
+
+#: #3168: מה שגל חתיכות מוסיף ל-`udp_drops` מעבר ל-rcvbuf/inerrors
+CHUNK_LOSS_FIELDS = ("abandoned", "softnet", "nic")
 
 
 def well_formed_udp_drops(payload: dict) -> dict | None:
@@ -99,10 +102,13 @@ def well_formed_udp_drops(payload: dict) -> dict | None:
         return None
     value = payload["udp_drops"]
     unread = {"rcvbuf": None, "inerrors": None}
-    if isinstance(value, dict) and "abandoned" in value:
-        # #3064 (G7): גל חתיכות מוסיף את החתיכות שהמקלט נטש באמצע (`agent/lib/restore/chunkloss.sh`).
-        # בגל udpcast השדה חסר -- וחסר נשאר חסר, לא "0 נטישות".
-        unread["abandoned"] = None
+    if isinstance(value, dict):
+        # #3064 (G7): גל חתיכות מוסיף את החתיכות שהמקלט נטש באמצע (`agent/lib/restore/chunkloss.sh`), ו-#3168
+        # את מה שתור הקלט של המעבד (`softnet`) והכרטיס (`nic`, `ethtool -S`) זרקו.
+        # סוכן שלא מדד אינו שולח את השדות -- וחסר נשאר חסר, לא "0 נטישות".
+        for extra in CHUNK_LOSS_FIELDS:
+            if extra in value:
+                unread[extra] = None
     if not isinstance(value, dict):
         return unread
     # #3064 (G7): מה שנשלח נשמר; מה שלא נשלח חסר (לא 0 ולא null). שדה כזה שפגום הוא "לא נקרא" **לבדו**: הוא אינו
@@ -319,7 +325,7 @@ def ingest(conn: sqlite3.Connection, payload: dict,
         )
 
     # #3041/#3125: what the machine itself felt in this chunk wave (S46-S50) -- kept per wave for the brain's learning.
-    # Absent = the agent did not measure (a udpcast wave, an older agent): nothing is written. Never raises.
+    # Absent = the agent did not measure (an older agent): nothing is written. Never raises.
     from server.brain import wavesense                   # noqa: PLC0415
     senses = wavesense.well_formed(payload.get("wave_senses"))
     wavesense.record(conn, session_id, mac, senses)

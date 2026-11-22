@@ -38,7 +38,6 @@ def test_the_server_predicts_the_wave_with_its_slow_drive_completing_from_the_dr
     ctx, anon = room_server["ctx"], room_server["anon"]
     _earlier(ctx.conn, "ses_earlier", {"S2": {"bytes": 4503 * CHUNK, "seconds": 306.0}})
     _index_the_image(ctx, chunks=10)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     wave, _hello = _room_wave(room_server)
     part = next(p["index"] for p in MANIFEST_256["partitions"] if p.get("file"))
     told = anon.post("/api/v1/agent/chunk-pass", json={

@@ -177,7 +177,9 @@ def decide_answer(conn, **facts) -> AnswerCall | None:
             _answered.clear()
         _answered.add(key)
     try:
-        silence.record(conn, [call], round_id=facts.get("round_id") or "", entity_kind="machine")
+        rows = silence.record(conn, [call], round_id=facts.get("round_id") or "", entity_kind="machine")
+        # #3750: התשובה מוחזרת למנוע באותה קריאה, ומשם לתגובת הדיווח של המשכפל
+        silence.settle(conn, rows.get(call.target), f"התשובה {call.verdict} נמסרה למנוע")
     except Exception:                           # noqa: BLE001 -- רישום אינו מפיל תשובה
         log.exception("brain: %s of %s was not recorded", ANSWER_ACTION, facts.get("round_id"))
     return call

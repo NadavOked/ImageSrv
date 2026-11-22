@@ -25,18 +25,16 @@ came back. A clock is left only as a ceiling against a hang.
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
-from test_drawer_progress import COUNTING_FANOUT
-from test_timeouts import make_stubs, run_sh
+from test_timeouts import run_sh
 from agentlib import agent_sources
 
 pytestmark = requires_native(("bash", BASH))
 
-LIBS = ("common", "waits", "jsonq", "sysinfo", "diskinfo", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux", "writeback", "drawers", "drawerfeed",
+LIBS = ("common", "waits", "jsonq", "sysinfo", "diskinfo", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "hostname", "hostname_linux", "writeback", "drawers",
         "verdict", "failmark", "ntfsboot", "writecheck",
         "writemark")   # #1877: finish_grow -> writemark_release (writemark.sh) -> writemark_clear (stubbed)
 
@@ -91,7 +89,7 @@ def test_three_drawers_write_their_tables_in_the_time_of_one(tmp_path):
         f'_n=$((_n + 1)); [ "$_n" -lt {BARRIER_TENTHS} ] || {{ PLAN_ERROR="$1 waited alone at the barrier"; return 1; }}; '
         'sleep 0.1; done; '
         f'echo "$1 ${{PREP_TAG:-none}}" >> {t}/calls; return 0;'))
-    out = run_sh(prelude + 'run_restore_drawers multicast http://s img m.json sda sdb sdc; echo "rc=$?"',
+    out = run_sh(prelude + 'run_restore_drawers chunk http://s img m.json sda sdb sdc; echo "rc=$?"',
                  timeout=120)
     assert out.strip().endswith("rc=0"), out
     assert [_error(run, d) for d in ("sda", "sdb", "sdc")] == ["", "", ""], "the tables were not written at once"
@@ -105,7 +103,7 @@ def test_a_drawer_whose_table_is_refused_fails_alone_and_by_its_own_reason(tmp_p
     """Isolation at once as it was one by one: the job of sdb fails sdb, with the
     plan's own reason; sda and sdc are written, the machine is partial."""
     run, prelude = _room(tmp_path, '[ "$1" = sdb ] && { PLAN_ERROR="הסיבה של sdb"; return 1; }; return 0;')
-    out = run_sh(prelude + 'run_restore_drawers multicast http://s img m.json sda sdb sdc; echo "rc=$?"; '
+    out = run_sh(prelude + 'run_restore_drawers chunk http://s img m.json sda sdb sdc; echo "rc=$?"; '
                  'echo "machine=$(_machine_state "sda sdb sdc")"')
     assert out.strip().splitlines()[-2] == "rc=0", out
     assert _state(run, "sdb") == "failed" and _error(run, "sdb") == "הסיבה של sdb"
@@ -124,7 +122,7 @@ def test_a_hung_table_fails_its_drawer_by_name_and_the_others_go_on(tmp_path):
     t = repr(posix(tmp_path))
     run, prelude = _room(tmp_path, f'[ "$1" = sdb ] && {{ sleep 40; echo back > {t}/sdb.back; }}; return 0;',
                          WAIT_DRAWER_S=5)
-    out = run_sh(prelude + 'run_restore_drawers multicast http://s img m.json sda sdb sdc; echo "rc=$?"',
+    out = run_sh(prelude + 'run_restore_drawers chunk http://s img m.json sda sdb sdc; echo "rc=$?"',
                  timeout=120)
     assert out.strip().endswith("rc=0"), out
     assert not (tmp_path / "sdb.back").exists(), "the machine waited for the hung table to come back"
@@ -240,55 +238,3 @@ def test_a_ceiling_is_still_a_ceiling_in_tenths(tmp_path):
 # Windows. The host's speed, not the code's waiting. Now the waiting is read from
 # the code itself: every `sleep` it asks for, by caller -- no clock at all.
 WAITS_POLL_S = 10   # one poll period; a wait that sleeps one out is >= 10 s of sleep
-
-
-def test_one_partition_s_own_waiting_in_the_room_is_under_a_second(tmp_path):
-    """restore_partition_drawers end to end with a stream that is over at once
-    (64 KB, the counting fanout of test_drawer_progress): what is left is the
-    waiting between "the bytes ended" and "the next partition may start" -- the
-    3 s of every transition on metal. Old: every wait slept a whole WAIT_POLL_S
-    before it looked (wait_progress, the watcher, the drawers' wait_pid), so at
-    WAIT_POLL_S=1 a partition waited >= 1 s whatever the host.
-
-    The proof, by what the code asked to sleep (a `sleep` that records its caller
-    and its seconds) at WAIT_POLL_S=10 -- two partitions:
-    1. every sleep of the waits is one tick (<= 0.1 s), never a poll period;
-    2. all their ticks together are less than ONE poll period: a wait that ticks
-       a period out without looking (a `_nap` with no kill -0) is >= 10 s alone.
-    Ticks while a process is still alive are honest waiting; a slow host adds a
-    few of them (3.0 s in all on a loaded Windows, 05/11), never a period."""
-    box = tmp_path / "box"
-    run = box / "run"
-    payload = box / "part.bin"
-    box.mkdir(parents=True)
-    payload.write_bytes(b"imagesrv" * 8192)
-    sha = hashlib.sha256(payload.read_bytes()).hexdigest()
-    for dev in ("sda", "sdb"):
-        (run / "targets" / dev).mkdir(parents=True)
-    prelude = (
-        make_stubs(box / "stubs", {"fanout": COUNTING_FANOUT})
-        + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
-        f"WAIT_POLL_S={WAITS_POLL_S} WAIT_DRAWER_S=60 WAIT_HELPER_S=60 WAIT_STREAM_START_S=60 WAIT_STREAM_STALL_S=60; "
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict",
-                        "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
-        + "target_init sda 131072; target_init sdb 131072; "
-        f"stream_source() {{ cat {posix(payload)!r}; }}; "
-        # every sleep the code asks for, with the function that asked (bash's FUNCNAME;
-        # subshells inherit it); the real sleep still runs
-        f'sleep() {{ printf "%s %s\\n" "${{FUNCNAME[1]:-main}}" "$1" >> {posix(box)!r}/slept; command sleep "$@"; }}; '
-    )
-    one = (f"restore_partition_drawers unicast http://s img 3 dd part.zst {sha} '' sda sdb "
-           f">> {posix(box)}/pipe.out 2>&1 || echo bad; ")
-    out = run_sh(prelude + one + one + "echo ok", timeout=180)
-    assert out.strip().endswith("ok") and "bad" not in out.split(),         out + (box / "pipe.out").read_text(encoding="utf-8", errors="replace")
-    slept = [line.split() for line in (box / "slept").read_text(encoding="utf-8").splitlines()]
-    # writeback_watch's fsync period runs beside the pipe and nobody waits on it
-    # (the pipe kills it at its end) -- not waiting, so not counted
-    waits = [(who, float(s)) for who, s in slept if who != "writeback_watch"]
-    assert waits, f"no wait slept at all -- the recording broke, not a pass: {slept}"
-    longest = max(waits, key=lambda w: w[1])
-    assert longest[1] <= 0.1, f"{longest[0]} slept {longest[1]} s at once -- a wait sleeps a tick, then looks"
-    total = sum(s for _, s in waits)
-    print(f"#1705: the room's waits slept {total:.1f}s in {len(waits)} ticks over two partitions "
-          f"(one poll period: {WAITS_POLL_S} s)")
-    assert total < WAITS_POLL_S, f"{total:.1f}s of ticks over two partitions -- a wait slept a poll period out"
