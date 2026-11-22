@@ -50,7 +50,7 @@ ADMIN_PASS_FD=""
 # לשורת הפקודה של הקרנל (עיקרון 2). מועבר ל-server.main דרך היחידה.
 STORAGE_ROLE="standalone"
 PRIMARY_URL=""
-# ‏#703 (tracer 5): כתובת כרטיס הניהול שעליה הקונסולה (8081, HTTPS) מאזינה.
+# ‏#703 (tracer 5): כתובת כרטיס הניהול שעליה הקונסולה (443, HTTPS) מאזינה.
 # ‏#1088: ריק = כרטיס השרתים שנבחר, **לפי שם** (השרת עוקב אחרי הכתובת
 # שה-DHCP נותן). התעודה נוצרת כאן בכל מקרה, לפני ההרמה.
 CONSOLE_HOST=""
@@ -63,7 +63,10 @@ IMAGES_DIR="/srv/imagesrv/images"
 # (פרסום נקי, קומיט יחיד לגרסה): הוא היחיד ש-clone אנונימי ממנו מצליח.
 REPO_URL="https://github.com/NadavOked/ImageSrv"
 DRY_RUN=0
-PORT=8080
+PORT=7712
+# ‏#3486: /boot של GRUB והקושחה במאזין משלו, תמיד. אותו מספר כמו ports.BOOT
+# ב-server/core/ports.py וכמו BOOT_PORT ב-deploy/nftables-rules.sh.
+BOOT_PORT=7711
 # ‏#1131 ס' 3: המתקין הוא התקנה; עדכון קוד הוא tools/server-upgrade.sh.
 # שרת שכבר מותקן עוצר כאן, אלא אם --force (דורס תצורה, עם גיבוי).
 FORCE=0
@@ -318,7 +321,7 @@ DHCP לא נדלק כאן בכלל — מגדירים אותו אחר כך מה�
 
 דגלים (רשות — לאוטומציה ולדיבאג בלבד):
   --deploy-if IFACE    כרטיס ההפצה (מדלג על השאלה); --interface הוא שם ישן לאותו דגל
-  --servers-if IFACE   כרטיס וילן השרתים (קונסולה 8081); בלי דגל — נשאל, או = כרטיס ההפצה באוטומציה
+  --servers-if IFACE   כרטיס וילן השרתים (קונסולה 443); בלי דגל — נשאל, או = כרטיס ההפצה באוטומציה
   --servers-mode MODE  dhcp (ברירת מחדל) או static לכרטיס השרתים (#1088)
   --servers-address A  --servers-netmask M  --servers-gateway G  --servers-dns D1,D2
                        פרטי הכתובת הסטטית לכרטיס השרתים (עם --servers-mode static)
@@ -337,7 +340,9 @@ DHCP לא נדלק כאן בכלל — מגדירים אותו אחר כך מה�
   --http-root PATH     ברירת מחדל /srv/imagesrv/boot; מועבר לשרת כ---boot-dir
   --storage-role ROLE  standalone (ברירת מחדל) או secondary (#655/#723)
   --primary-url URL    כתובת השרת הראשי — חובה ל-secondary
-  --console-host ADDR  כתובת/שם כרטיס הניהול לקונסולה (8081, HTTPS); ברירת מחדל: כרטיס השרתים לפי שם (#1088)
+  --console-host ADDR  כתובת/שם כרטיס הניהול לקונסולה (443, HTTPS); ברירת מחדל: כרטיס השרתים לפי שם (#1088)
+  --boot-port N        פורט מאזין ה-/boot של GRUB והקושחה (#3486, ברירת מחדל 7711): grub.cfg,
+                       חומת האש והיחידה מקבלים אותו. פורט הסוכן (7712) משרת רק מחשבים רשומים
   --force              מריץ שוב על שרת שכבר מותקן (דורס תצורה, עם גיבוי .pre-imagesrv.<זמן>);
                        לעדכון קוד — כפתור "עדכן" בקונסולה / tools/server-upgrade.sh, לא המתקין
   --dry-run            מראה מה יקרה בלי לשנות כלום
@@ -374,6 +379,7 @@ while [[ $# -gt 0 ]]; do
         --storage-role) STORAGE_ROLE="${2:?}"; shift 2 ;;
         --primary-url) PRIMARY_URL="${2:?}"; shift 2 ;;
         --console-host) CONSOLE_HOST="${2:?}"; shift 2 ;;
+        --boot-port)   BOOT_PORT="${2:?}"; shift 2 ;;
         --force)       FORCE=1; shift ;;
         --dry-run)     DRY_RUN=1; shift ;;
         -h|--help)     usage; exit 0 ;;
@@ -437,7 +443,7 @@ if [[ -z "$IFACE" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# שאלה 1 — כרטיס וילן השרתים (קונסולה 8081), מתוך רשימה של מה שקיים
+# שאלה 1 — כרטיס וילן השרתים (קונסולה 443), מתוך רשימה של מה שקיים
 # ---------------------------------------------------------------------------
 #
 # ‏#1088: הכרטיס הזה הוא לקוח DHCP של המכללה כברירת מחדל — הכתובת מגיעה
@@ -524,7 +530,7 @@ if [[ -n "$IFACE" ]]; then
         ADDR="$(iface_ip "$IFACE")"
         [[ -n "$ADDR" ]] || die "לכרטיס $IFACE אין כתובת IP.
     קבעו לו כתובת סטטית (זה שרת) והריצו שוב — או בחרו 'לא עכשיו' והגדירו מהקונסולה."
-        SERVER_URL="http://$ADDR:$PORT"
+        SERVER_URL="https://$ADDR:$PORT"
     fi
 elif [[ -n "$SERVER_URL" ]]; then
     die "--server-url בלי כרטיס הפצה (--deploy-if) — הכתובת חייבת לשבת על כרטיס"
@@ -541,9 +547,9 @@ fi
 
 case "$SERVER_URL" in
     "")        ;;   # #1088: אין כרטיס הפצה עדיין — הכתובת תיקבע מהקונסולה
-    http://*)  ;;
-    https://*) die "https לא נתמך: ה-GRUB החתום של דביאן נבנה בלי TLS. השתמש ב-http." ;;
-    *)         die "--server-url חייב להתחיל ב-http:// (התקבל: $SERVER_URL)" ;;
+    https://*) ;;
+    http://*)  SERVER_URL="https://${SERVER_URL#http://}" ;;  # migrate saved installer input
+    *)         die "--server-url: invalid agent URL: $SERVER_URL" ;;
 esac
 # תצורת ה-Storage Node (#655/#723): משני מחייב כתובת שרת ראשי לא-ריקה,
 # ותצורה סותרת נכשלת בקול ולא מתגלגלת ל-standalone בשקט (עיקרון 5).
@@ -558,13 +564,22 @@ case "$STORAGE_ROLE" in
     *)          die "--storage-role חייב להיות standalone או secondary (התקבל: $STORAGE_ROLE)" ;;
 esac
 
+# ‏#3486: ערך שאינו פורט, או שתפוס ע"י פורט אחר של השרת, עוצר לפני שנגענו בדבר.
+[[ "$BOOT_PORT" =~ ^[0-9]+$ ]] && (( BOOT_PORT > 0 && BOOT_PORT < 65536 )) \
+    || die "--boot-port חייב להיות פורט (1-65535) (התקבל: $(printf '%q' "$BOOT_PORT"))"
+case "$BOOT_PORT" in
+    "$PORT"|443|7700) die "--boot-port $BOOT_PORT תפוס (סוכן/קונסולה/בין-שרתים) — פורט נפרד חייב להיות שונה" ;;
+esac
+
 GRUB_HOST=""; GRUB_PORT=80
 if [[ -n "$SERVER_URL" ]]; then
-    GRUB_HOST="${SERVER_URL#http://}"; GRUB_HOST="${GRUB_HOST%%/*}"
+    GRUB_HOST="${SERVER_URL#*://}"; GRUB_HOST="${GRUB_HOST%%/*}"
     # הפורט לבדו — קובץ ה-GRUB מרכיב איתו את הכתובת שה-DHCP/proxy ענה בפועל.
     # ‏if מלא ולא "&&": תחת set -e תנאי שנכשל בשורה עליונה מפיל את הסקריפט.
     GRUB_PORT="${GRUB_HOST##*:}"
     if [[ "$GRUB_PORT" == "$GRUB_HOST" ]]; then GRUB_PORT=80; fi
+    # ‏#3486: ל-GRUB — פורט ה-/boot (לא פורט הסוכן שב---server-url).
+    GRUB_HOST="${GRUB_HOST%:*}:$BOOT_PORT"; GRUB_PORT="$BOOT_PORT"
 fi
 
 # ---------------------------------------------------------------------------
@@ -929,6 +944,8 @@ install_firewall() {
             [[ -z "$NICSVC_SPEC" ]] || NFT_ARGS+=(--service "$NICSVC_SPEC")
         done <<< "$NICSVC_FOR_NFT"
     fi
+    # ‏#3486: מאזין ה-/boot של GRUB — כלל משלו (ריק = אין).
+    NFT_ARGS+=(--boot-port "$BOOT_PORT")
     # #1829: a reinstall must preserve proxy mode selected in the console.
     local PROXY_FOR_NFT PROXY_NIC
     PROXY_FOR_NFT="$(console_proxy_interfaces_from_db)" || die "לא ניתן לקרוא הגדרות proxy לחומת האש"
@@ -953,7 +970,7 @@ install_firewall() {
         if [[ ! "$PRIMARY_IP" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             RESOLVED="$(getent ahostsv4 "$PRIMARY_IP" 2>/dev/null | awk 'NR==1 {print $1}')"
             [[ -n "$RESOLVED" ]] || die "שרת משני: השם $PRIMARY_IP לא נפתר לכתובת — חומת האש צריכה כתובת"
-            warn "חומת האש תפתח 8443 ל-$RESOLVED (מה ש-$PRIMARY_IP פותר אליו עכשיו); אם הראשי בלקוח DHCP — קבעו לו reservation"
+            warn "חומת האש תפתח 7700 ל-$RESOLVED (מה ש-$PRIMARY_IP פותר אליו עכשיו); אם הראשי בלקוח DHCP — קבעו לו reservation"
             PRIMARY_IP="$RESOLVED"
         fi
         NFT_ARGS+=(--primary-ip "$PRIMARY_IP")
@@ -1267,6 +1284,17 @@ run install -m 0644 "$APP_DIR/deploy/90-imagesrv-console.conf" /etc/sysctl.d/90-
 if (( ! DRY_RUN )); then
     sysctl -q -p /etc/sysctl.d/90-imagesrv-console.conf || warn "sysctl kernel.printk לא הוחל עכשיו — ייכנס באתחול הבא"
 fi
+# ‏#3124 (B-NET-18): תקרת ה-SO_SNDBUF של `chunkcast send` (4MiB שהוא מבקש; הקרנל נתן 416KB בלי זה).
+# ‏read-back, לא קוד יציאה של sysctl בלבד: מה שנקרא חזרה הוא הראיה (עיקרון 5). כישלון נאמר, לא נבלע.
+run install -m 0644 "$APP_DIR/deploy/91-imagesrv-net-buffers.conf" /etc/sysctl.d/91-imagesrv-net-buffers.conf
+if (( ! DRY_RUN )); then
+    _wmem_want=$(sed -n 's/^net\.core\.wmem_max[[:space:]]*=[[:space:]]*//p' "$APP_DIR/deploy/91-imagesrv-net-buffers.conf")
+    sysctl -q -p /etc/sysctl.d/91-imagesrv-net-buffers.conf || warn "sysctl net.core.wmem_max לא הוחל עכשיו — ייכנס באתחול הבא"
+    _wmem_got=$(sysctl -n net.core.wmem_max 2>/dev/null || true)
+    if ! { [[ "$_wmem_want" =~ ^[0-9]+$ && "$_wmem_got" =~ ^[0-9]+$ ]] && (( _wmem_got >= _wmem_want )); }; then
+        warn "net.core.wmem_max נקרא חזרה ${_wmem_got:-ריק}, ונדרש ${_wmem_want:-?} — שולח החתיכות יקבל חוצץ קטן"
+    fi
+fi
 # ‏#1737: תקרה ליומן המערכת (1G, ‏90 יום) — האימג'ים, ה-DB והיומן על אותה מחיצה.
 # ההנמקה בקובץ עצמו וב-server/storage/disk_reserve.py. ‏restart — מעכשיו, לא מהאתחול הבא.
 run install -D -m 0644 "$APP_DIR/deploy/journald-imagesrv.conf" /etc/systemd/journald.conf.d/90-imagesrv.conf
@@ -1297,14 +1325,16 @@ fi
 if [[ "$TFTP_ROOT" != "/srv/tftp" ]]; then
     STORAGE_ARGS+=" --tftp-root $TFTP_ROOT"
 fi
+# ‏#3486: מאזין /boot נפרד — השרת מאזין עליו, וכותב אותו ל-grub.cfg בכל עלייה.
+STORAGE_ARGS+=" --boot-port $BOOT_PORT"
 # ‏#703 (tracer 5) / #1088: הקונסולה על כרטיס הניהול — ברירת המחדל היא
 # כרטיס השרתים **לפי שם**, כדי שהיא תעקוב אחרי הכתובת שה-DHCP נותן.
 # מצורף לאותו משתנה שהיחידה מרחיבה.
 if [[ -n "$CONSOLE_HOST" ]]; then
     STORAGE_ARGS+=" --console-host $CONSOLE_HOST"
 fi
-# ‏#1313: משני — מאזין 8443 (mTLS, #740) על כרטיס השרתים **לפי שם**, כמו
-# הקונסולה; זה הכרטיס שחומת האש פותחת בו 8443 מכתובת הראשי
+# ‏#1313: משני — מאזין 7700 (mTLS, #740) על כרטיס השרתים **לפי שם**, כמו
+# הקונסולה; זה הכרטיס שחומת האש פותחת בו 7700 מכתובת הראשי
 # (nftables-rules.sh). בלי הדגל המאזין לא עלה, והראשי קיבל connection refused.
 # ‏standalone אינו מקבל אותו — הראשי יוזם, ואין לו מה להאזין.
 if [[ "$STORAGE_ROLE" == "secondary" ]]; then
@@ -1367,12 +1397,12 @@ run systemctl enable imagesrv-dcui.service
 run systemctl enable imagesrv-boot-splash.service
 run systemctl enable imagesrv-shutdown-screen@reboot.service imagesrv-shutdown-screen@poweroff.service   # #1741
 run systemctl restart imagesrv-dcui.service
-# האשף מחזיק את 8081 בזמן ההתקנה. ממש לפני שהקונסולה עולה הוא משחרר את
+# האשף מחזיק את 443 בזמן ההתקנה. ממש לפני שהקונסולה עולה הוא משחרר את
 # המאזין ומחזיר אישור על socketpair פרטי; אין סיסמה או נתון משתמש ב-FD הזה.
 if [[ -n "${IMAGESRV_WIZARD_HANDOFF_FD:-}" ]]; then
     [[ "$IMAGESRV_WIZARD_HANDOFF_FD" =~ ^[0-9]+$ ]] || die "IMAGESRV_WIZARD_HANDOFF_FD אינו FD מספרי"
-    printf 'release-8081\n' >&"$IMAGESRV_WIZARD_HANDOFF_FD" || die "הודעת handoff לאשף נכשלה"
-    IFS= read -r wizard_ack <&"$IMAGESRV_WIZARD_HANDOFF_FD" || die "האשף לא אישר ששחרר את 8081"
+    printf 'release-443\n' >&"$IMAGESRV_WIZARD_HANDOFF_FD" || die "הודעת handoff לאשף נכשלה"
+    IFS= read -r wizard_ack <&"$IMAGESRV_WIZARD_HANDOFF_FD" || die "האשף לא אישר ששחרר את 443"
     [[ "$wizard_ack" == "released" ]] || die "אישור handoff לא צפוי מהאשף: $wizard_ack"
 fi
 run systemctl enable --now imagesrv-server
@@ -1380,7 +1410,7 @@ run systemctl enable --now imagesrv-server
 # ‏#1131 ס' 1: השרת עונה? (liveness ללא הזדהות, על loopback) — לפני שנוגעים
 # בחומת האש, כי אחריה כשל = שרת שאין דרך פנימה לתקן.
 if (( ! DRY_RUN )); then
-    bash "$APP_DIR/deploy/console-live.sh" "https://127.0.0.1:8081" "" 60 "$DATA_DIR/console-tls/console.crt" \
+    bash "$APP_DIR/deploy/console-live.sh" "https://127.0.0.1" "" 60 "$DATA_DIR/console-tls/console.crt" \
         || { journalctl -u imagesrv-server -n 30 --no-pager >&2 || warn "journalctl -u imagesrv-server נכשל"
              die "השרת לא עלה (imagesrv-server) — חומת האש לא הופעלה. תקן והרץ שוב עם --force."; }
 fi
@@ -1410,8 +1440,8 @@ else
 fi
 cat <<EOF
 
-  קונסולה        https://${CONSOLE_SHOWN}:8081  (משתמש: $ADMIN_USER)
-                 גם https://$(hostname):8081 — כרטיס השרתים $SERVERS_IF ב-$SERVERS_MODE;
+  קונסולה        https://${CONSOLE_SHOWN}  (משתמש: $ADMIN_USER)
+                 גם https://$(hostname) — כרטיס השרתים $SERVERS_IF ב-$SERVERS_MODE;
                  בלקוח DHCP הכתובת יכולה להתחלף, הקונסולה עוקבת אחריה (#1088)
                  $ADMIN_LOGIN_MESSAGE
                  תעודה עצמית — הדפדפן יבקש אישור פעם אחת; להשוות:
@@ -1436,7 +1466,9 @@ EOF
 READY=1
 # ‏#1088: בלי כרטיס הפצה הסוכן מאזין על loopback בלבד — הבדיקה שואלת אותו שם.
 # (אחרי READY=1: tests/test_boot_payload_gate.py מריץ את הקטע מכאן ועד הסוף.)
-VERIFY_URL="${SERVER_URL:-http://127.0.0.1:${PORT:-8080}}"
+# ‏#3486: הקרנל וה-initrd מוגשים רק מפורט ה-boot — זו הכתובת ש-GRUB מקבל.
+VERIFY_URL="${GRUB_HOST:+http://$GRUB_HOST}"
+VERIFY_URL="${VERIFY_URL:-http://127.0.0.1:$BOOT_PORT}"
 if (( DRY_RUN )); then
     printf '%s    would run: deploy/verify-boot-payload.sh --server-url %s%s\n' \
         "$DIM" "$VERIFY_URL" "$OFF"

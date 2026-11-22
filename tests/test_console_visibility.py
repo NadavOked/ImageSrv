@@ -48,7 +48,7 @@ def clients(server):
     conn.execute(
         "INSERT INTO storage_nodes (id, label, base_url, credential_ref,"
         " enrolled_at) VALUES (?, ?, ?, ?, ?)",
-        (NODE, "סניף א'", "https://node1.example:8443/api/interserver/v1",
+        (NODE, "סניף א'", "https://node1.example:7700/api/interserver/v1",
          "cred:missing", now_iso()))
     conn.commit()
     from conftest import complete_console_login

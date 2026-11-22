@@ -48,7 +48,7 @@ IMAGE_300 = _manifest("img_f17300", "Needs 300", 299 * GB)
 def fit_server(tmp_path: Path):
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from test_sender import Recorder                       # noqa: PLC0415
+    from fakesend import Recorder                       # noqa: PLC0415
 
     from server.console import users
     from server.app import create_app
@@ -57,7 +57,7 @@ def fit_server(tmp_path: Path):
     write_image(images, IMAGE_230)
     write_image(images, IMAGE_300)
     app = create_app(
-        tmp_path / "data", images, "http://10.44.12.10:8080",
+        tmp_path / "data", images, "http://10.44.12.10:7712",
         now_fn=Clock(), sender_runner=Recorder(), wol_send=lambda _b: None,
     )
     ctx = app.state.ctx
@@ -70,7 +70,7 @@ def fit_server(tmp_path: Path):
             "mac": mac, "name": name, "group_id": "grp_CLONERS",
         }).status_code == 200
     yield {"admin": admin, "anon": TestClient(app)}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def hello_with_disks(client, mac: str, sizes: list[int]) -> None:

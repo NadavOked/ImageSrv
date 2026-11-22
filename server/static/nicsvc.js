@@ -78,8 +78,8 @@ function nicsvcPort(id, fallback) {
   return row && row.port ? `${row.port}/tcp` : fallback;
 }
 function nicsvcPt(s) {
-  if (s.k === "console") return nicsvcPort("http_console", "8081/tcp");
-  if (s.k === "interserver") return nicsvcPort("interserver", "8443/tcp");
+  if (s.k === "console") return nicsvcPort("http_console", "443/tcp");
+  if (s.k === "interserver") return nicsvcPort("interserver", "7700/tcp");
   if (s.k === "ntp") return "123/udp";
   return s.pt || "";
 }
@@ -99,9 +99,11 @@ function nicsvcYou() { return (NICSVC && NICSVC.you) || {}; }
 /* "דרכו אתה מחובר" — כולל "לא ידוע" (null): מי שלא יודע דרך מה הוא מחובר מניח שזה הכרטיס שלו (עיקרון 5) */
 function nicsvcIsYou(name) { const y = nicsvcYou().interface; return y === name || (y === null && !!NICSVC); }
 function nicsvcConsoleUrl(row) {
-  const port = (nicsvcPort("http_console", "8081/tcp") || "").split("/")[0];
+  const port = (nicsvcPort("http_console", "443/tcp") || "").split("/")[0];
   const scheme = typeof ME !== "undefined" && ME && ME.tls ? "https" : (location && location.protocol === "http:" ? "http" : "https");
-  return `${scheme}://${row.address}${port ? ":" + port : ""}`;
+  /* #3871: פורט ברירת המחדל של הסכמה אינו נכתב (https על 443), כמו בכתובת שהשרת מחזיר ב-`go` (ports.console_url) */
+  const implied = scheme === "https" ? "443" : "80";
+  return `${scheme}://${row.address}${port && port !== implied ? ":" + port : ""}`;
 }
 
 /* --- טבלה --- */
@@ -206,7 +208,7 @@ function nicsvcDrawerHtml() {
     else if (locked) msg = `<div class="ns-msg info">${nsIc("lock")}<span>זה הכרטיס היחיד עם קונסולה, ולכן היא נעולה כאן. הפעל קונסולה בכרטיס אחר כדי לשחרר.</span></div>`;
     else if (s.k === "console" && you && was && !on) msg = `<div class="ns-msg">${nsIc("warn")}<span><b>אתה מחובר דרך הכרטיס הזה.</b> אחרי השמירה תתנתק, ותצטרך לאשר תוך ${NICSVC.window_seconds} שניות מ-<span class="ns-addr">${esc((others[0] || {}).address || "")}</span> — אחרת השינוי חוזר לבד.</span></div>`;
     else if (odd) msg = `<div class="ns-msg" role="status">${nsIc("warn")}<span><b>צירוף חריג.</b> ${esc(odd)} אפשר לשמור — רק שתדע.</span></div>`;
-    else if (s.k === "netboot" && on && !n.enabled && !(typeof netBondMember === "function" && netBondMember(D.name))) msg = `<div class="ns-msg info">${nsIc("info")}<span>אין DHCP מוגדר בכרטיס הזה — השרת יגיש בו TFTP וערוץ סוכן (8080), אבל לא יחלק כתובות. חלוקת כתובות מופעלת ב"הגדרת כרטיס…".</span></div>`;
+    else if (s.k === "netboot" && on && !n.enabled && !(typeof netBondMember === "function" && netBondMember(D.name))) msg = `<div class="ns-msg info">${nsIc("info")}<span>אין DHCP מוגדר בכרטיס הזה — השרת יגיש בו TFTP וערוץ סוכן (7712), אבל לא יחלק כתובות. חלוקת כתובות מופעלת ב"הגדרת כרטיס…".</span></div>`;
     const pt = nicsvcPt(s);
     return `<li class="ns-svr${on ? " on" : ""}" data-k="${s.k}"><div class="rw"><span class="ico">${nsIc(s.k)}</span>
       <div class="t"><label for="ns-${s.k}">${esc(s.n)}${pt ? `<span class="pt">${esc(pt)}</span>` : ""}</label><p id="ns-d-${s.k}">${esc(s.d)}</p>${nicsvcStatus(s, on, was, row)}</div>

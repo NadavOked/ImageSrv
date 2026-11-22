@@ -64,10 +64,8 @@ def run(data_dir, images_dir) -> SimpleNamespace:
     status, _ = console.json("POST", "/api/console/settings",
                              {"class_deploy_enabled": "true"})
     check("הפצה לכיתות הודלקה (#880)", status == 200, str(status))
-    # #3173: ברירת המחדל היא מנוע החתיכות, ול-`--sender-simulate` אין סימולטור שולח שלו
-    # (`chunk_wave` עונה udpcast תחתיו בכל מקרה). הסימולציה בוחרת udpcast במפורש, כמו מפעיל.
-    status, _ = console.json("POST", "/api/console/settings", {"stream_engine": "udpcast"})
-    check("מנוע השידור udpcast נבחר במפורש (#3173)", status == 200, str(status))
+    # #3173: אין כאן בחירת מנוע שידור — השרת רץ על ברירת המחדל, מנוע החתיכות, שהוא היחיד.
+    # הראיה שהגלים יצאו בו היא בשלבים 9 ו-9ב (`engine: chunk` ב-hello, הפקודות של המנוע).
     status, imported = console.json("POST", "/api/console/machines/import", {
         "group_id": "grp_LAB1",
         "text": "\n".join(f"{m} {i:02d}" for i, m in enumerate(CLASS_MACS, start=5)),

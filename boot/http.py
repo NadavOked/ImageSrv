@@ -14,7 +14,7 @@ uvicorn עצמו משמר את האותיות כפי שנשלחו, ולכן הנ
 
     app.mount("/boot", create_boot_asgi(
         resolve=my_lookup,                       # ראו חתימת Resolver למטה
-        config=GrubConfig(server_base="http://10.44.0.10:8080"),
+        config=GrubConfig(server_base="http://10.44.0.10:7712"),
         boot_dir="/srv/imagesrv/boot",           # vmlinuz + initrd.img
     ))
 """
@@ -23,12 +23,20 @@ import ipaddress
 import logging
 from pathlib import Path
 from typing import Callable, Protocol
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 from . import trace
 from .grub_menu import GrubConfig, normalize_mac, render, render_local_only
 
 log = logging.getLogger("imagesrv.boot")
+
+
+def _one_line(value: object) -> str:
+    """A value from the query string, as one log line (CR/LF -> space; CodeQL py/log-injection).
+
+    The same rule as `server.core.logtext.one_line`; `boot/` imports nothing from `server/`."""
+    return str(value).replace("\r", " ").replace("\n", " ")
+
 
 #: כותרות שחייבות ללוות כל תשובה — באותיות גדולות, בשביל GRUB.
 #: בלי no-store, proxy ברשת המכללה יכול להגיש למחשב את ההחלטה של מחשב
@@ -118,36 +126,36 @@ def record_step(record: Recorder | None, raw_mac: object, raw_step: object,
     mac = normalize_mac(raw_mac)
     if mac is None:
         log.warning("boot step %r from %s carried an unusable mac %r",
-                    raw_step, client_ip, raw_mac)
+                    _one_line(raw_step), _one_line(client_ip), _one_line(raw_mac))
         return False
     if not trace.is_step(raw_step):
         log.warning("boot step %r from %s (%s) is not in the declared list %s",
-                    raw_step, mac, client_ip, trace.STEPS)
+                    _one_line(raw_step), _one_line(mac), _one_line(client_ip), trace.STEPS)
         return False
     if record is None:
         log.warning("boot step %r from %s arrived with no recorder wired in",
-                    raw_step, mac)
+                    _one_line(raw_step), _one_line(mac))
         return False
     try:
         recorded = bool(record(mac, raw_step))
     except Exception:  # noqa: BLE001 — אבחון שמפיל בקשת אתחול הוא נזק
-        log.exception("could not record boot step %s for %s", raw_step, mac)
+        log.exception("could not record boot step %s for %s", _one_line(raw_step), _one_line(mac))
         return False
     if recorded and raw_up is not None:
         try:
             marks = trace.parse_marks(raw_up)
             if marks is None:
                 log.warning("boot marks %r from %s (%s) are malformed -- not logged",
-                            raw_up, mac, client_ip)
+                            _one_line(raw_up), _one_line(mac), _one_line(client_ip))
             else:
-                log.info("boot marks %s %s: %s", raw_step, mac,
+                log.info("boot marks %s %s: %s", _one_line(raw_step), _one_line(mac),
                          " ".join(f"{key}={value:.2f}"
                                   for key, value in marks.items()))
                 if marks_record is not None:
                     # #2830: רק אחרי שהפירור עצמו נרשם — אותה בדיקת זהות (#2411) חלה גם כאן.
                     marks_record(mac, marks)
         except Exception:  # noqa: BLE001 — diagnostics never alter the step result
-            log.exception("could not log boot marks for %s", mac)
+            log.exception("could not log boot marks for %s", _one_line(mac))
     return recorded
 
 
@@ -195,13 +203,19 @@ def config_for_scope(scope: dict, config: GrubConfig) -> GrubConfig:
             return config
         if ipaddress.ip_address(host).version != 4:
             return config
+        # #3486: עם מאזין /boot נפרד, הפורט שהחיבור הגיע עליו אינו פורט הסוכן.
+        # הכתובת נלקחת מהחיבור, אבל `imagesrv.server=` נשאר פורט הסוכן שבתצורה;
+        # ו-GRUB ממשיך לפורט ה-boot (גם כשהתפריט הגיע מפורט הסוכן, #3486).
+        if config.boot_port is not None:
+            port = urlsplit(config.server_base).port or port
         return GrubConfig(
-            server_base=f"http://{host}:{port}",
+            server_base=f"{urlsplit(config.server_base).scheme}://{host}:{port}",
             kernel_path=config.kernel_path,
             initrd_path=config.initrd_path,
             gui_initrd_path=config.gui_initrd_path,
             extra_cmdline=config.extra_cmdline,
             password_hash=config.password_hash,   # #2437: a scoped menu is locked too
+            boot_port=config.boot_port,
         )
     except Exception:  # noqa: BLE001 — כאן זו בדיוק הכוונה
         return config

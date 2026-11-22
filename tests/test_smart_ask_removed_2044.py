@@ -48,7 +48,7 @@ def server(tmp_path: Path, images_root):
     from server.app import create_app
     from server.console import users
 
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      wol_send=lambda _packet: None)
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
@@ -57,7 +57,7 @@ def server(tmp_path: Path, images_root):
     assert admin.post("/api/console/machines", json={
         "mac": CLONER, "name": "01", "group_id": "grp_CLONERS"}).status_code == 200
     yield {"ctx": ctx, "admin": admin, "anon": TestClient(app)}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def _hello(server, **extra) -> dict:

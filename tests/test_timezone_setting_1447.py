@@ -73,14 +73,14 @@ class Machine:
 @pytest.fixture()
 def tz(tmp_path, images_root, clock, monkeypatch):
     from server.app import create_app
-    from test_sender import Recorder
+    from fakesend import Recorder
 
     monkeypatch.setattr(timezone, "ZONEINFO", _zoneinfo(tmp_path / "zoneinfo"))
     # set_system_zone re-reads the zone (time.tzset) on success; the fake
     # machine changed nothing, and this process's zone must stay as it is.
     monkeypatch.setattr(time, "tzset", lambda: None, raising=False)
     machine = Machine()
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
                      sender_runner=Recorder(block=True), host_hooks=machine.hooks())
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", check_policy=False)
@@ -90,7 +90,7 @@ def tz(tmp_path, images_root, clock, monkeypatch):
     assert deploy.post("/api/console/login",
                        json={"username": "labtech", "password": "deploy-pass-1"}).status_code == 200
     yield {"ctx": ctx, "admin": admin, "deploy": deploy, "anon": TestClient(app), "machine": machine}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def events(conn, name):
@@ -215,9 +215,9 @@ def test_create_runtime_applies_only_when_asked(tmp_path, images_root):
     from server.app import create_runtime
     off, on = Machine("Etc/UTC"), Machine("Etc/UTC")
     for machine, flag, sub in ((off, False, "a"), (on, True, "b")):
-        rt = create_runtime(tmp_path / sub, images_root, "http://10.44.12.10:8080",
+        rt = create_runtime(tmp_path / sub, images_root, "http://10.44.12.10:7712",
                             host_hooks=machine.hooks(), apply_timezone=flag)
-        rt.ctx.sender.stop()
+        rt.ctx.chunk.stop()
     assert off.calls == [], "tests (the default) never touch the zone"
     assert on.calls == ["Asia/Jerusalem"]
 

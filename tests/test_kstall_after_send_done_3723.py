@@ -151,7 +151,7 @@ def _two_writing_drawers_standing(room_server, standing_s: int = 400) -> str:
     ctx.conn.commit()
     # `target_drives` = 4 מול שני דיסקים: הסבב לא יוצא לדרך, אין שולח ואין `send_done` אלא מה שהטסט עצמו כותב. עם 2 מול 2 הסבב
     # יצא לדרך לבד, והשולח המזויף של הפיקסצ'ר רושם `send_done` מתהליכון רקע בזמן לא קבוע (3 מ-4 ריצות נפלו על זה).
-    assert ctx.sender.status() is None
+    assert ctx.chunk.status() is None
     assert ctx.conn.execute("SELECT COUNT(*) FROM journal WHERE event = 'send_done'").fetchone()[0] == 0
     return wave
 

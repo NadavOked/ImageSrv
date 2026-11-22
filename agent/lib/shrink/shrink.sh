@@ -138,6 +138,7 @@ _shrink_direct() {
     # ב-direct_send_task אחרי השנייה. אין זנב או אין עותק: גם כן גודל מלא, וביומן למה.
     # ‏0 = יוצאים לדרך (‏$2 מצומצם או כפי שהיה); ‏1 = SHRINK_ERROR.
     if ! shrink_plan "$1" "$2" "$3"; then
+        [ "${SHRINK_LINUX:-0}" = 0 ] || return 1
         [ ! -s "$RUN_DIR/capture.unhib" ] || return 1   # #2213: a required view cannot bypass a failed measure
         log "direct send: no tail -- $SHRINK_ERROR; the layout is sent at its full size"; SHRINK_ERROR=""; return 0
     fi
@@ -148,6 +149,7 @@ _shrink_direct() {
     [ "$_sd_dec" = continue ]         || { log "direct send: no tail -- the shrink was not confirmed ($_sd_dec; no answer is cancel); the layout is sent at its full size"; return 0; }
     _shrink_view "$1" "$2"; _sd_rc=$?
     [ "$_sd_rc" = 3 ] || return "$_sd_rc"
+    [ "${SHRINK_LINUX:-0}" = 0 ] || { SHRINK_ERROR="$LC_SNAP_WHY"; return 1; }
     log "direct send: no tail -- no RAM view ($LC_SNAP_WHY); the layout is sent at its full size"
 }
 

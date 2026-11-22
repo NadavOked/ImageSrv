@@ -23,6 +23,7 @@ import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from server.console import auth
 from server.core import capabilities
@@ -99,20 +100,22 @@ def create_tools_router(ctx: ServerContext, data_dir: Path) -> APIRouter:
         body = await request.json()
         if not isinstance(body, dict):
             raise HTTPException(422, "הגוף חייב להיות אובייקט עם build ו-student")
-        selection: dict[str, list[str]] = {}
-        for target in TARGETS:
-            ids = body.get(target)
-            if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
-                raise HTTPException(422, f"{target}: חייבת להיות רשימת מזהי כלים")
-            unknown = sorted(set(ids) - known_ids)
-            if unknown:
-                raise HTTPException(422, f"{target}: כלים שאינם בקטלוג: {', '.join(unknown)}")
-            selection[target] = sorted(set(ids), key=ids.index)   # בלי כפילויות, בסדר שנשלח
-        set_setting(ctx.conn, SELECTION_KEY, json.dumps(selection, ensure_ascii=False))
-        write_selection_file(data_dir, selection)
-        journal(ctx.conn, "tools_selection",
-                f"build={len(selection['build'])} student={len(selection['student'])}", user[0])
-        return {"ok": True, "selection": selection,
-                "summary": {t: summarize(catalog["tools"], selection[t]) for t in TARGETS}}
+        def work():
+            selection: dict[str, list[str]] = {}
+            for target in TARGETS:
+                ids = body.get(target)
+                if not isinstance(ids, list) or not all(isinstance(i, str) for i in ids):
+                    raise HTTPException(422, f"{target}: חייבת להיות רשימת מזהי כלים")
+                unknown = sorted(set(ids) - known_ids)
+                if unknown:
+                    raise HTTPException(422, f"{target}: כלים שאינם בקטלוג: {', '.join(unknown)}")
+                selection[target] = sorted(set(ids), key=ids.index)   # בלי כפילויות, בסדר שנשלח
+            set_setting(ctx.conn, SELECTION_KEY, json.dumps(selection, ensure_ascii=False))
+            write_selection_file(data_dir, selection)
+            journal(ctx.conn, "tools_selection",
+                    f"build={len(selection['build'])} student={len(selection['student'])}", user[0])
+            return {"ok": True, "selection": selection,
+                    "summary": {t: summarize(catalog["tools"], selection[t]) for t in TARGETS}}
+        return await run_in_threadpool(work)   # #2750
 
     return router

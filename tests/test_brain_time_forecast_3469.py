@@ -52,7 +52,8 @@ def _iso(t: float) -> str:
 
 
 def _wave(conn, delivered: dict, *, wall: float, total: float) -> str:
-    """גל שהסתיים (כמו ב-`test_learn_eta_1843`): `sessions` ו-`wave_rates` עם `stream.wall_s` ו-`delivered`."""
+    """גל חתיכות שהסתיים (כמו ב-`test_learn_eta_1843`): `sessions` ו-`wave_rates` עם `stream.chunk.first_pass_s`
+    (משך הזרם, #3549), `chunk.ended` ו-`delivered`. #3173: `stream.wall_s` של השולח הקודם נמחק איתו."""
     sid = f"ses_tf{next(_seq):04d}"
     conn.execute(
         "INSERT INTO sessions (id, group_id, image_id, prefix, expected_clients, wait_seconds,"
@@ -62,8 +63,8 @@ def _wave(conn, delivered: dict, *, wall: float, total: float) -> str:
     roster = [{"mac": mac, "serial": f"{sid}-{mac}-{k}", "model": "M"}
               for mac, got in delivered.items() for k in range(got["drawers"])]
     conn.execute("INSERT INTO wave_rates (session_id, decision, at, stream, delivered) VALUES (?,?,?,?,?)",
-                 (sid, json.dumps({"max_bitrate": "400m", "roster": roster}), _iso(T0),
-                  json.dumps({"wall_s": wall, "ended": "send_done"}), json.dumps(delivered)))
+                 (sid, json.dumps({"max_bitrate": "400m", "roster": roster, "engine": "chunk"}), _iso(T0),
+                  json.dumps({"chunk": {"first_pass_s": wall, "ended": "send_done"}}), json.dumps(delivered)))
     conn.commit()
     return sid
 

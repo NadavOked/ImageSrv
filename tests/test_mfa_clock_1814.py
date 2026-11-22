@@ -29,10 +29,8 @@ HINT = "ייתכן שהשעון בשרת לא מדויק"
 @pytest.fixture()
 def srv(tmp_path, images_root, clock, monkeypatch):
     from server.console import users
-    from server.rounds import sender as sender_module
-    from test_sender import Recorder
+    from fakesend import Recorder
 
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
     clock_state = {"value": {"synchronized": True, "offset_ms": 3.0}}
 
     def timesync_status():
@@ -42,7 +40,7 @@ def srv(tmp_path, images_root, clock, monkeypatch):
         return value
 
     app = create_app(
-        tmp_path / "data", images_root, "http://10.44.12.10:8080",
+        tmp_path / "data", images_root, "http://10.44.12.10:7712",
         now_fn=clock, sender_runner=Recorder(block=True),
         health_hooks={"interfaces": lambda: [], "timesync_status": timesync_status},
     )
@@ -51,7 +49,7 @@ def srv(tmp_path, images_root, clock, monkeypatch):
     admin = TestClient(app)
     complete_console_login(admin, ctx.conn, "noc", "admin-pass-123")
     yield {"app": app, "ctx": ctx, "admin": admin, "clock": clock_state}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def _client(srv):

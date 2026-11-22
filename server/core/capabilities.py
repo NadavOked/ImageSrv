@@ -14,6 +14,10 @@ CLASSROOMS = False
 # v1.1 מדליק.
 TOOLS = False
 
+# #3173: סבב כיתה (שידור לתחנות של כיתה). כבוי גם כש-CLASSROOMS דלוק: השולח שלו הוסר, ולמחשב תלמיד אין
+# מקלט חתיכות. v2 מדליק, כשיהיה לו מקלט -- עד אז השרת מסרב בשמו (`sessions.CLASS_ROUND_V2`).
+CLASS_ROUNDS = False
+
 
 def classrooms() -> bool:
     return CLASSROOMS
@@ -21,3 +25,7 @@ def classrooms() -> bool:
 
 def tools() -> bool:
     return TOOLS
+
+
+def class_rounds() -> bool:
+    return CLASS_ROUNDS

@@ -287,7 +287,7 @@ def test_a_listener_that_cannot_start_raises_our_sentence(caplog):
         raise os_error(errno.EADDRINUSE)
 
     mgr = ports.Listeners()
-    mgr.add_threaded("interserver", start=start, stop=lambda obj: None, port=8443, hosts=[])
+    mgr.add_threaded("interserver", start=start, stop=lambda obj: None, port=7700, hosts=[])
     with pytest.raises(ports.ListenerError) as caught:
         asyncio.run(mgr._open("interserver"))
     assert str(caught.value) == f"interserver: המאזין לא עלה — {TAIL}"
@@ -318,7 +318,7 @@ def test_an_unresolved_primary_names_the_host_not_the_resolver_text(caplog):
     def resolve(*_a):
         raise OSError(-2, f"fake-gaierror {SECRET}")
 
-    ip, error = deploy_net.primary_ip_of("https://primary.lab:8443", resolve=resolve)
+    ip, error = deploy_net.primary_ip_of("https://primary.lab:7700", resolve=resolve)
     assert ip is None and "primary.lab" in error and SECRET not in error
     assert "fake-gaierror" in logged(caplog)
 
@@ -328,7 +328,7 @@ def test_an_unwritable_grub_cfg_names_our_path_only(tmp_path, caplog):
     caplog.set_level("WARNING", logger="server.net.deploy_net")
     tftp = tmp_path / "tftp"
     tftp.write_text("not a folder")          # mkdir של grub/ נכשל ב-OSError
-    error = deploy_net.write_grub_cfg("http://10.44.0.1:8080", tftp)
+    error = deploy_net.write_grub_cfg("http://10.44.0.1:7712", tftp)
     assert error and error.endswith(TAIL)
     assert logged(caplog)
 

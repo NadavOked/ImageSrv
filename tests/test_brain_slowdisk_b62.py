@@ -283,6 +283,8 @@ def test_it_never_blocks_a_round(room_server):
     for path in (*(repo / "server" / "rounds").rglob("*.py"), *(repo / "server" / "disks").glob("write*.py"),
                  *(repo / "agent" / "lib" / "restore").glob("write*.sh"), *(repo / "agent" / "lib" / "restore").glob("drawer*.sh"),
                  repo / "agent" / "lib" / "restore" / "restore.sh"):
+        if path.name == "suggest.py":
+            continue   # #3897: the proposal of drawers is a suggestion -- the avoided drawer can still be chosen by hand, so it blocks nothing
         text = path.read_text(encoding="utf-8", errors="replace")
         assert not any(word in text for word in ("slowdisk", "write_decisions", "idle_wc_decision")), f"{path.name} reads the decision"
 

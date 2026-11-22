@@ -128,7 +128,7 @@ def server(tmp_path, images_root, clock, monkeypatch):
               "http_get": lambda url: None, "http_size": lambda url: (None, None),
               "interfaces": lambda: [], "tftp_root": lambda: tmp_path / "tftp",
               "udp_sender_pids": lambda: []}
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
                      update_hooks=hooks, repo_dir="/repo", health_hooks=health, vm_host=True)
     users.create(app.state.ctx.conn, "nadav", "admin-pass-123", "admin", by="test",
                  is_builtin=True, check_policy=False)

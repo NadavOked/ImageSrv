@@ -50,7 +50,7 @@ async def finish_login(conn, request: Request, response: Response, *,
                        tls, kiosk: bool = False):
     # #2446: גוף פגום (`{`, `\xff\xfe`, ריק), גוף שאינו אובייקט, או שם/סיסמה שאינם
     # מחרוזת — 400 לפני כל בדיקה, ולא 500 מ-`.strip()`/`.get()` על מה שהגיע.
-    # `body.read_json` — אותה תקרה, עומק ונרמול של הסוכן; הנתיב חשוף גם ב-8080.
+    # `body.read_json` — אותה תקרה, עומק ונרמול של הסוכן; הנתיב חשוף גם ב-7712.
     try:
         body = await agent_body.read_json(request)
     except agent_body.BodyError as exc:

@@ -1,6 +1,6 @@
 """Network-rate learning for waves of the chunk engine (#3163, #3174).
 
-udpcast learns its rate from what `udp-sender` counts (`drive_rates.record_stream`, `_climb`). The chunk engine
+The sender that was removed (#3173) learned its rate from its own counters. The chunk engine
 (`chunksend.py`) multicasts at a constant rate and completes what is missing afterwards, so it has no
 retransmission counter. This module learns the rate of the multicast stream (`--kbps`) from what the engine
 itself measures at the end of a wave, in the AIMD shape the brain's network budget uses (`brain/budget.py`, K7):
@@ -26,8 +26,8 @@ is not "none lost": the rate then holds. #3164's metric, when it exists, goes in
 No history means today's rate (`drive_rates.choose`): `adjust` returns what it was given. Learning switched off
 (`learned_rate_enabled`) records nothing and changes nothing -- not the mistake of #3046.
 
-The thresholds are opening constants of the code, not settings (Nadav 14/11): the udpcast ones (`LOSS_DOWN_RATIO`,
-`STEP_UP`, `DOWN_FACTOR`), measured on `udp-sender` counters -- for the chunk engine a starting point, not a
+The thresholds are opening constants of the code, not settings (Nadav 14/11): the removed sender's (`LOSS_DOWN_RATIO`,
+`STEP_UP`, `DOWN_FACTOR`), measured on its counters -- for the chunk engine a starting point, not a
 measurement (untested-on-metal). Never above the network budget: the lowest of the wave's ceiling (card, slowest
 cloner, `IMAGESRV_MAX_BITRATE`) and the brain's ceiling (`brain_net_ceiling_mbps`) minus what HTTP keeps.
 """
@@ -42,7 +42,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 
-from server.brain import budget, memory, netcap, wavesense, writerate
+from server.brain import budget, memory, netcap, rateinputs, wavesense, writerate
 from server.db import _write_lock, journal, writing
 from server.learn import server_cap, server_io
 from server.rounds import drive_rates
@@ -54,7 +54,7 @@ STREAM_KEY = "chunk"
 
 #: the AIMD of the wave rate: the loss that cuts (permille), the step up (Mbps), the rate after a cut (percent of the
 #: last). Opening constants, NOT settings (Nadav 14/11: technical thresholds are the brain's, which may calibrate them
-#: from its memory later). They are udpcast's (`LOSS_DOWN_RATIO`, `STEP_UP`, `DOWN_FACTOR`), measured on `udp-sender`
+#: from its memory later). They are the removed sender's (`LOSS_DOWN_RATIO`, `STEP_UP`, `DOWN_FACTOR`), measured on its
 #: counters -- for the chunk engine a starting point, not a measurement (untested-on-metal).
 LOSS_PERMILLE = round(drive_rates.LOSS_DOWN_RATIO * 1000)
 STEP_MBPS = drive_rates.STEP_UP // 10 ** 6
@@ -65,6 +65,8 @@ CUT_PERCENT = round(drive_rates.DOWN_FACTOR * 100)
 #: drive memory 21MB/s against a write check of 179-209MB/s (-88%), and its server at avg10=46%.
 STALE_HOURS = 12
 PROBE_DIFF_PERCENT = 50
+#: Maximum upward retry without a network measurement. Reuse the AIMD step as an initial estimate.
+PROBE_RAISE_MBPS = STEP_MBPS
 #: #3498: how many of the newest waves after the one that cut the rate must ALL show that the library disk, not the rate,
 #: was the limit, for the cut to be dropped (`server_release`). One wave can be a pulse of the disk (14/11: one busy
 #: wave); two in a row are a pattern. Opening constant, NOT a setting (Nadav 14/11) -- a reasoned guess, untested-on-metal.
@@ -107,6 +109,7 @@ class Config:
     write_margin: float = writerate.MARGIN
     write_held_percent: int = WRITE_HELD_PERCENT
     behind_permille: int = BEHIND_PERMILLE
+    probe_raise_bps: int = PROBE_RAISE_MBPS * 10 ** 6
 
 
 def config(conn: sqlite3.Connection) -> Config:
@@ -115,6 +118,7 @@ def config(conn: sqlite3.Connection) -> Config:
     del conn
     return Config(loss_permille=LOSS_PERMILLE, step_bps=STEP_MBPS * 10 ** 6, cut_percent=CUT_PERCENT,
                   stale_hours=STALE_HOURS, probe_diff_percent=PROBE_DIFF_PERCENT,
+                  probe_raise_bps=PROBE_RAISE_MBPS * 10 ** 6,
                   release_waves=RELEASE_WAVES, write_step_percent=WRITE_STEP_PERCENT, write_margin=writerate.MARGIN,
                   write_held_percent=WRITE_HELD_PERCENT, behind_permille=BEHIND_PERMILLE)
 
@@ -143,7 +147,10 @@ def sample_of(asked: int | None, outcome: dict) -> dict:
     ses_43eebdbc (LabRoot 14/11) logged sent=494Mb/s at asked=150m, and nearly every wave "kept up". ``achieved_bps``
     is that times the share that arrived, and only when the loss was measured; ``loss_permille`` is None when it
     was not. #3296: ``stream_zbytes`` and ``drives`` pass through as the engine gave them -- what the drive memory
-    learns from (`drive_rates.record_wave`); None = not measured."""
+    learns from (`drive_rates.record_wave`); None = not measured. #3977: ``goodput`` -- what each cloner made durable
+    in the first passes, per drawer and second (`rateinputs.goodput_of`; None = not measured), and ``away_macs`` --
+    the cloners the server lost in a first pass (None = the engine did not say who)."""
+    away = outcome.get("away_macs")
     paced = outcome.get("paced_ms")        # #3498: how long the sender slept for --kbps / --write-kbps; None = not measured
     sends = outcome.get("sendstats")       # #3553: how long the sender waited for the library file (`chunklog.sendstats_of`); None = not measured
     wrote, serials = outcome.get("write_kbps"), outcome.get("write_serials")    # #3506: --write-kbps and whose check set it
@@ -159,8 +166,15 @@ def sample_of(asked: int | None, outcome: dict) -> dict:
             "bytes": size if _count(size) else None,
             "cloners": outcome.get("cloners") if _count(outcome.get("cloners")) else None,
             "repair_rounds": outcome.get("repair_rounds") if _count(outcome.get("repair_rounds")) else None,
+            # #3978: what the repair rounds sent again, and the machines lost during a first pass -- `/room.round.network`
+            # after the wave (`room_stream`)
+            "multicast_chunks": outcome.get("multicast_chunks") if _count(outcome.get("multicast_chunks")) else None,
+            "fetched_chunks": outcome.get("fetched_chunks") if _count(outcome.get("fetched_chunks")) else None,
+            "away": outcome.get("away") if _count(outcome.get("away")) else None,
             "stream_zbytes": wire if _count(wire) else None,
             "drives": outcome.get("drives") if isinstance(outcome.get("drives"), dict) else None,
+            "goodput": rateinputs.goodput_of(outcome.get("drives"), seconds),
+            "away_macs": sorted(away) if isinstance(away, list) and all(isinstance(m, str) for m in away) else None,
             "behind": outcome.get("behind") if isinstance(outcome.get("behind"), dict) else None,
             "paced_ms": paced if isinstance(paced, dict) and _count(paced.get("wire")) and _count(paced.get("disk")) else None,
             "sendstats": sends if isinstance(sends, dict) and _count(sends.get("read_ms")) and sends.get("reader") in ("inline", "thread")
@@ -320,6 +334,12 @@ def record(conn: sqlite3.Connection, session_id: str, outcome: dict) -> None:
                 f" cloners={sample['cloners']} "
                 + ("teaches" if sample["teaches"] else f"teaches nothing: {sample['skip']}"),
                 round_id=session_id)
+        if asked is not None and sample["away_macs"]:
+            # #3977: the cloners lost in a first pass, with the rate asked -- what `adjust` reads before the next waves.
+            # In shadow too (an observation); `off` remembers nothing
+            inputs_mode = rateinputs.mode(conn)
+            if inputs_mode != rateinputs.OFF:
+                rateinputs.remember_drops(conn, session_id, asked, sample["away_macs"], inputs_mode)
         if str(sample["skip"]).startswith("server_"):
             # #3269: the server held the wave back -- `unlearned`, with the reason, where the brain keeps its decisions
             memory.record(conn, mode="enforce", rule=RULE, point="#3269", action="WAVE_RATE_LEARN",
@@ -343,16 +363,112 @@ def last_sample(conn: sqlite3.Connection) -> dict | None:
     return None
 
 
-def adjust(conn: sqlite3.Connection, chosen: dict, wave: list[dict]) -> dict:
+def _taught(conn: sqlite3.Connection) -> list[dict]:
+    """#3977: the samples of the waves that taught, newest first, each with its `session_id` and `at` (the last `MEMORY_SCAN`
+    waves) -- the first is `last_sample`'s."""
+    out = []
+    for row in conn.execute("SELECT session_id, at, stream FROM wave_rates ORDER BY rowid DESC LIMIT ?",
+                            (drive_rates.MEMORY_SCAN,)):
+        try:
+            got = (json.loads(row["stream"]) if row["stream"] else {}).get(STREAM_KEY)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if isinstance(got, dict) and got.get("teaches") is True and _count(got.get("asked_bps")) and got["asked_bps"] > 0:
+            out.append({**got, "session_id": row["session_id"], "at": row["at"]})
+    return out
+
+
+def _cleans(taught: list[dict]) -> dict[str, list[tuple[int, float]]]:
+    """#3977: {mac: [(the rate asked, when)]} of the waves that taught with a loss that was measured and not above
+    `LOSS_PERMILLE` (`_clean`), for every cloner that made a drawer durable in their first passes (`goodput`): the waves
+    that say a cloner took a rate (`rateinputs.wall_of`)."""
+    out: dict[str, list[tuple[int, float]]] = {}
+    for got in taught:
+        at = _epoch(got.get("at"))
+        if at is None or not _clean(got) or not isinstance(got.get("goodput"), dict):
+            continue
+        for mac in got["goodput"]:
+            out.setdefault(mac, []).append((got["asked_bps"], at))
+    return out
+
+
+def _inputs(conn: sqlite3.Connection, session_id: str | None, wave: list[dict], wanted: int, basis: str, cfg: Config,
+            now: float, floor: int, mode_: str) -> tuple[int, str, dict | None, dict | None]:
+    """#3977: (the rate, the basis, the goodput verdict, the unsafe-rate verdict) after the two inputs the AIMD does not read
+    (`rateinputs`): what each cloner made durable, and the rate a cloner fell at. Each can only hold or lower `wanted`; a
+    verdict that is not ``PEAK`` / ``WALL`` leaves the rate exactly as it came (not measured is no decision). With a
+    `session_id`, every verdict is a row in `brain_decisions` (K8: `WAVE_GOODPUT`, `WAVE_UNSAFE_RATE`).
+
+    `mode_` (`rateinputs.mode`; the caller does not come here in ``off``). ``enforce``: as above. ``shadow``: the same
+    verdicts, computed the same way, and `wanted` / `basis` come back exactly as they came. In both, each verdict carries
+    `mode`, `aimd_bps` (the rate without the inputs) and `would_bps` (the rate with them) -- both over `floor`, both before
+    the budget of `adjust`, which can only lower them (`chunk_cap`)."""
+    macs = Counter(d.get("mac") for d in wave if d.get("mac"))
+    taught = _taught(conn)
+    was, was_basis, live = wanted, basis, mode_ == rateinputs.ENFORCE
+    goodput = None
+    if basis == "chunk_up":
+        goodput = rateinputs.peak(taught, dict(macs))
+        if goodput["verdict"] == rateinputs.PEAK:
+            wanted, basis = goodput["rate"], "chunk_peak"
+    if goodput is not None:
+        goodput = {**goodput, "mode": mode_, "aimd_bps": max(was, floor), "would_bps": max(wanted, floor)}
+    unsafe = rateinputs.unsafe(conn, sorted(macs), _cleans(taught), now, REPROBE_WAVES)
+    held = unsafe is not None and unsafe["verdict"] == rateinputs.WALL and wanted >= unsafe["rate"]
+    if held:
+        wanted, basis = unsafe["rate"] - cfg.step_bps, "chunk_unsafe"
+    if unsafe is not None:
+        unsafe = {**unsafe, "mode": mode_, "aimd_bps": max(was, floor), "would_bps": max(wanted, floor)}
+    outcome = "applied" if live else "shadow"
+    if session_id is not None:
+        if goodput is not None:
+            goes = (f"הגל יוצא בו ולא ב-{_fmt(was)}" if live
+                    else f"צל: הגל היה יוצא בו, והוא יוצא ב-{_fmt(max(was, floor))}")
+            say = {rateinputs.PEAK: f"קצב מעל {_fmt(goodput['rate'] or 0)} נוסה ואף משכפל לא כתב בו יותר: {goes}",
+                   rateinputs.CLIMB: "מה שהמשכפלים כתבו עלה עם הקצב: ממשיכים לטפס"}.get(
+                       goodput["verdict"], f"לא נמדד ({goodput['why']}): הקצב כמו בלי המדידה")
+            memory.record(conn, mode=mode_, rule=RULE, point="#3977", action=rateinputs.GOODPUT_ACTION,
+                          verdict=goodput["verdict"], reason=say, evidence=[goodput], round_id=session_id,
+                          entity=("round", session_id), outcome=outcome)
+        if unsafe is not None:
+            goes = ("הקצב כבר מתחתיו" if not held else "הגל יוצא מתחתיו" if live
+                    else f"צל: הגל היה יוצא ב-{_fmt(max(wanted, floor))}, והוא יוצא ב-{_fmt(max(was, floor))}")
+            say = {rateinputs.WALL: f"המשכפל {unsafe['mac']} נפל {rateinputs.UNSAFE_MIN_DROPS} פעמים לפחות עד {_fmt(unsafe['rate'] or 0)}: {goes}",
+                   rateinputs.NO_WALL: f"יש נפילות בזיכרון ואין חומה ({unsafe['why']})"}.get(
+                       unsafe["verdict"], "הזיכרון של משכפל לא נקרא: הקצב כמו בלי הזיכרון")
+            memory.record(conn, mode=mode_, rule=RULE, point="#3977", action=rateinputs.UNSAFE_ACTION,
+                          verdict=unsafe["verdict"], reason=say, evidence=[unsafe], round_id=session_id,
+                          entity=("round", session_id), outcome=outcome)
+    return (wanted, basis, goodput, unsafe) if live else (was, was_basis, goodput, unsafe)
+
+
+def adjust(conn: sqlite3.Connection, chosen: dict, wave: list[dict], session_id: str | None = None,
+           now: float | None = None) -> dict:
     """`choose`'s answer for a chunk wave, with the learned rate in it when there is one. Never raises: on any
-    failure the answer is returned as it came."""
+    failure the answer is returned as it came. #3977: `session_id` -- the wave, for the rows of `_inputs`; the two inputs
+    move the rate only when `rateinputs.mode` is ``enforce`` (``shadow``, the default: rows only; ``off``: not read)."""
     try:
         if chosen.get("basis") in ("disabled", "bad_ceiling") or chosen.get("direct"):
             return chosen
+        cfg = config(conn)
+        start = drive_rates.parse_bitrate(chosen.get("start")) or drive_rates.START_BITRATE
+        floor = int(min(start, drive_rates.START_BITRATE) * drive_rates.FLOOR_RATIO)
+        now = time.time() if now is None else now
+        inputs_mode = rateinputs.mode(conn)
         last = last_sample(conn)
         if last is None:
-            return chosen                  # no history: the rate of today
-        cfg = config(conn)
+            # no history: the rate of today -- unless a cloner of the wave fell at it before (#3977: the falls are the
+            # machine's memory, and a wave that loses a cloner never teaches, so there may be no history at all)
+            today = drive_rates.parse_bitrate(chosen.get("max_bitrate"))
+            if today is None or inputs_mode == rateinputs.OFF:
+                return chosen
+            wanted, basis, _goodput, unsafe = _inputs(conn, session_id, wave, today, chosen.get("basis"), cfg, now,
+                                                      floor, inputs_mode)
+            if basis != "chunk_unsafe":
+                return chosen
+            return {**chosen, "max_bitrate": _fmt(max(wanted, floor)), "basis": basis, "by": None,
+                    "previous": {"session_id": None, "max_bitrate": chosen.get("max_bitrate"), "rule": "chunk",
+                                 "loss_blocks": None, "mac": unsafe["mac"], "drawers": None, "unsafe": unsafe}}
         wanted, basis = next_rate(last, len({d.get("mac") for d in wave}), cfg)
         release = None
         if basis == "chunk_down":
@@ -362,9 +478,11 @@ def adjust(conn: sqlite3.Connection, chosen: dict, wave: list[dict]) -> dict:
             release = server_release(conn, last, cfg)
             if release["verdict"] == "RELEASE":
                 wanted, basis = release["asked_bps"] + cfg.step_bps, "chunk_release"
+        goodput = unsafe = None
+        if inputs_mode != rateinputs.OFF:
+            wanted, basis, goodput, unsafe = _inputs(conn, session_id, wave, wanted, basis, cfg, now, floor, inputs_mode)
         cap, capped_by = cap_of(conn, chosen)
-        start = drive_rates.parse_bitrate(chosen.get("start")) or drive_rates.START_BITRATE
-        bits = min(max(wanted, int(min(start, drive_rates.START_BITRATE) * drive_rates.FLOOR_RATIO)), cap)
+        bits = min(max(wanted, floor), cap)
         if bits < wanted:
             basis = "chunk_cap"
         previous = {"session_id": last["session_id"], "max_bitrate": _fmt(last["asked_bps"]), "rule": "chunk",
@@ -372,7 +490,8 @@ def adjust(conn: sqlite3.Connection, chosen: dict, wave: list[dict]) -> dict:
                     "mac": None, "drawers": None, "cloners": last.get("cloners"),
                     "loss_permille": last.get("loss_permille"), "sent_bps": last.get("sent_bps"),
                     "achieved_bps": last.get("achieved_bps"), "capped_by": capped_by if bits < wanted else None,
-                    **({"release": release} if release else {})}
+                    **({"release": release} if release else {}),
+                    **({"goodput": goodput} if goodput else {}), **({"unsafe": unsafe} if unsafe else {})}
         return {**chosen, "max_bitrate": _fmt(bits), "basis": basis, "by": None, "previous": previous}
     except Exception as exc:      # noqa: BLE001 -- the learning never stops a wave
         log.exception("the learned chunk rate failed; using the rate of today")
@@ -384,7 +503,7 @@ def adjust(conn: sqlite3.Connection, chosen: dict, wave: list[dict]) -> dict:
 
 #: the bases of `choose` / `adjust` that come from a past wave (or a drive's memory) -- not from today's numbers
 LEARNED = frozenset({"learned", "climb", "peak", "back", "held", "up", "down", "drawers", "unmeasured", "fleet",
-                     "chunk_up", "chunk_hold", "chunk_down", "chunk_cap", "chunk_release"})
+                     "chunk_up", "chunk_hold", "chunk_down", "chunk_cap", "chunk_release", "chunk_peak", "chunk_unsafe"})
 #: `brain_decisions.rule`: the rate of a wave (`catalog.toml`, K8)
 RULE = "K8"
 
@@ -487,14 +606,24 @@ def _server_cap(conn: sqlite3.Connection, session_id: str, bits: int, floor: int
         return bits
 
 
+def _raise_cap(decision: dict, bits: int, cfg: Config) -> tuple[int, str]:
+    """Bound a stale-start retry by the measured-loss AIMD decision, or one step without it."""
+    loss = (decision.get("previous") or {}).get("loss_permille")
+    if str(decision.get("basis") or "").startswith("chunk_") and _number(loss):
+        return bits, "net_learned"
+    return bits + cfg.probe_raise_bps, "raise_step"
+
+
 def start(conn: sqlite3.Connection, session_id: str, bits: int, probes: dict, now: float | None = None) -> int:
     """#3269: the rate a chunk wave goes out at, once the write check of its drawers is known (`ChunkEngine.wave_start`,
     after the drawers of the first partition listened). Never raises: on any failure, `bits` as it came.
 
-    A start learned from the past (`LEARNED`) that is stale or not this wave's (`_why_not`) is replaced by what was
-    measured now: the lowest write check of the wave's drawers, up to the most the wave may ask (`cap_of`: its ceiling
-    and the network budget), never under the floor of `choose` (`basis: "probe"`). A learned start that is fresh and
-    matching, a start that was not learned, a write check that is missing for one drawer -- the rate as chosen.
+    A learned start that is stale or not this wave's is replaced by what was measured now: the lowest write check of
+    the wave's drawers, up to the most the wave may ask (`cap_of`: its ceiling and the network budget), never under the
+    floor of `choose` (`basis: "probe"`) -- and, metal 21/11, never over `_raise_cap`: the write check is a ceiling of the
+    drives, not a network rate, so a start the AIMD learned from a measured wave is not raised by it, and any other start
+    by at most one step. A learned start that is fresh and matching, a start that was not learned, a write check that
+    is missing for one drawer -- the rate as chosen.
     Either way the decision is kept in `wave_rates.decision.start_check` and in `brain_decisions` (K8); a changed rate
     is a second `wave_rate` line in the journal. #3464: the rate that comes out of this is then held against the read
     ceiling of the library disk (`_server_cap`) -- a shadow decision, which changes nothing unless `brain_server_cap` is on."""
@@ -518,12 +647,28 @@ def start(conn: sqlite3.Connection, session_id: str, bits: int, probes: dict, no
         cap, capped_by = cap_of(conn, decision)
         floor = int(min(drive_rates.parse_bitrate(decision.get("start")) or drive_rates.START_BITRATE,
                         drive_rates.START_BITRATE) * drive_rates.FLOOR_RATIO)
-        change = ev is not None and bool(why)
-        new = max(min(int(probe * 8 * 10 ** 6), cap), floor) if change else bits
+        retry = ev is not None and bool(why)
+        new = max(min(int(probe * 8 * 10 ** 6), cap), floor) if retry else bits
+        # #3977: a start replaced by the write check still does not land on a rate a cloner of the wave fell at (`adjust`).
+        # The wave was decided in a mode (`previous.unsafe.mode`): in shadow the wall only says what it would have done
+        wall = (decision.get("previous") or {}).get("unsafe") or {}
+        walled = None
+        if retry and wall.get("verdict") == rateinputs.WALL and _count(wall.get("rate")) and new >= wall["rate"]:
+            walled = {"mode": wall.get("mode"), "would": _fmt(max(wall["rate"] - cfg.step_bps, floor))}
+            if wall.get("mode") == rateinputs.ENFORCE:
+                new, why = max(wall["rate"] - cfg.step_bps, floor), [*why, "unsafe_wall"]
+        raise_cap, raise_by = _raise_cap(decision, bits, cfg)
+        limited = retry and new > raise_cap
+        if limited:
+            why.append(raise_by)
+            new = raise_cap
+        change = new != bits
         held = _server_cap(conn, session_id, new, floor)
         check = {"was": _fmt(bits), "was_basis": basis, "why": why or ["fresh_matching"], "probe_mbps": probe,
                  "cap": _fmt(cap), "capped_by": capped_by,
-                 "from": None if ev is None else {k: ev[k] for k in ("session_id", "at", "mac", "serial", "ref_mbps")}}
+                 **({"raise_cap": _fmt(raise_cap), "raise_by": raise_by} if limited else {}),
+                 "from": None if ev is None else {k: ev[k] for k in ("session_id", "at", "mac", "serial", "ref_mbps")},
+                 **({"unsafe_wall": walled} if walled else {})}
         release = (decision.get("previous") or {}).get("release")
         if release:
             check["release"] = release          # #3498: why the cut was kept, dropped, or could not be decided

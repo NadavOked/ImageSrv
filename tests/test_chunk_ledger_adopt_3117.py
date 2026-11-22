@@ -79,7 +79,6 @@ def test_the_engine_does_not_read_a_row_of_another_image_as_durable(room_server)
     `adopt` would leave) is not evidence for the wave. The real `DbLedger`, a real wave."""
     ctx, anon = room_server["ctx"], room_server["anon"]
     _index_the_image(ctx)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     wave, _answer = _room_wave(room_server)
     part = next(p["index"] for p in MANIFEST_256["partitions"] if p.get("file"))
     assert anon.post("/api/v1/agent/chunk-pass", json={

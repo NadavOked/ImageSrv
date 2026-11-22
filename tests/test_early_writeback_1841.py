@@ -6,14 +6,14 @@ failed, yet partclone ran to the end of the partition -- write() lands in the
 page cache and the EIO came back only at partclone's own fsync, 18.8 of 19.5 GB
 later -- and the cause was ``unclassified``.
 
-The real pipes -- ``restore_pipe`` (drawers.sh, the single restore) and
-``_drawer_pipeline`` (drawerfeed.sh, the drawers' in both shapes, #1746) --
-with ``writeback_watch`` (writeback.sh): a stream fed slowly through the
+The real pipe -- ``restore_pipe`` (drawers.sh, the single restore; #3173: the
+drawers' pipes of the old receiver are gone with it, chunkcast writes the
+drawers and its own write errors are test_chunk_write_error_1841.py) -- with ``writeback_watch`` (writeback.sh): a stream fed slowly through the
 fifo, a stand-in partclone that copies it to the node, and a stand-in ``dd``
 whose fsync is refused once ``$BOX/eio`` exists -- what the kernel answers on a
 partition whose writeback failed (errseq; the real thing is in the PR, a
-dm-error device on the lab). Then the drawer's failure line as verdict.sh
-builds it, classified by the server.
+dm-error device on the lab). Then the target's failure line as run_restore
+builds it (writeback_why), classified by the server.
 
 **Negative control** (imagesrv-agent, drawers.sh, verdict.sh, restore.sh,
 smart.sh, server/disks/ata_cause.py of 9001fc91; writeback.sh removed; Testrunner
@@ -27,8 +27,6 @@ from __future__ import annotations
 import subprocess
 import time
 from pathlib import Path
-
-import pytest
 
 from native import requires_native
 from server.disks import ata_cause
@@ -52,8 +50,8 @@ STANDINS = {
 }
 
 
-def _pipe(tmp_path: Path, *, eio_after_s: float | None, shape: str | None = None) -> tuple[str, Path, float]:
-    """``shape`` None = ``restore_pipe``; shared|each = the drawer's pipe (drawerfeed.sh)."""
+def _pipe(tmp_path: Path, *, eio_after_s: float | None) -> tuple[str, Path, float]:
+    """``restore_pipe`` (#3173: the drawers' own pipes of the old receiver are gone with it)."""
     box = tmp_path / "box"
     (box / "bin").mkdir(parents=True)
     run, t = box / "run", box / "run" / "targets" / "sdb"
@@ -64,22 +62,18 @@ def _pipe(tmp_path: Path, *, eio_after_s: float | None, shape: str | None = None
         p.chmod(0o755)
     (box / "node").write_bytes(b"")
     node = posix(box / "node")
-    call = (f'restore_pipe "$T" partclone.ntfs {node!r} pipeline.rc; ' if shape is None else
-            'DRAWER_NICE=""; DRAWER_DIRECT=""; '
-            f'partition_node() {{ echo {node!r}; }}; '
-            f'_drawer_pipeline sdb ntfs 3 {shape}; wait "$(cat "$T/pipeline.pid")"; ')
+    call = f'restore_pipe "$T" partclone.ntfs {node!r} pipeline.rc; '
     script = (
         f'export PATH={posix(box / "bin")!r}:"$PATH" BOX={posix(box)!r} RUN_DIR={posix(run)!r} '
         'WRITE_FSYNC_INTERVAL_S=1; '
-        + agent_sources("common", "restore", "writeback", "drawers", "drawerfeed", "verdict")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "restore", "writeback", "drawers", "verdict")   # #2272: imagesrv-agent's order
         + f'T={posix(t)!r}; mkfifo "$T/feed"; '
         f'( i=0; while [ "$i" -lt {STREAM_S * 4} ]; do head -c 4096 /dev/zero; sleep 0.25; i=$((i + 1)); done ) > "$T/feed" & '
         + call
         + 'echo "RC $(cat "$T/pipeline.rc")"; '
         'echo "WB $(cat "$T/writeback.failed" 2>/dev/null)"; '
-        # the line verdict.sh writes for the drawer -- failmark.sh's evidence and GPT wipe are not this test's
-        'fail_written_target() { echo "$2" > "$RUN_DIR/targets/$1/error"; }; '
-        '_write_fail sdb 3 ok; echo "ERR $(cat "$T/error" 2>/dev/null)"; '
+        # the reason run_restore puts on the target (restore.sh: "N of M partitions written" + writeback_why)
+        'echo "ERR written 0 of 1$(writeback_why sdb)"; '
         'kill $(jobs -p) 2>/dev/null; wait'
     )
     proc = subprocess.Popen([BASH, "-c", script], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -96,9 +90,8 @@ def _line(out: str, tag: str) -> str:
     return next((ln[len(tag) + 1:] for ln in out.splitlines() if ln.startswith(tag + " ")), "")
 
 
-@pytest.mark.parametrize("shape", [None, "shared", "each"])
-def test_a_target_that_rejects_its_writes_fails_mid_partition_as_write_error(tmp_path, shape):
-    out, box, took = _pipe(tmp_path, eio_after_s=1.5, shape=shape)
+def test_a_target_that_rejects_its_writes_fails_mid_partition_as_write_error(tmp_path):
+    out, box, took = _pipe(tmp_path, eio_after_s=1.5)
     assert _line(out, "RC") == "1", out
     assert _line(out, "WB").startswith("periodic fsync failed (write_error)"), out
     assert "Input/output error" in _line(out, "WB")                  # the kernel's word, kept
@@ -108,9 +101,8 @@ def test_a_target_that_rejects_its_writes_fails_mid_partition_as_write_error(tmp
     assert ata_cause.classify([], error) == "write_error"
 
 
-@pytest.mark.parametrize("shape", [None, "shared", "each"])
-def test_a_target_that_keeps_its_writes_is_written_to_the_end(tmp_path, shape):
-    out, box, took = _pipe(tmp_path, eio_after_s=None, shape=shape)
+def test_a_target_that_keeps_its_writes_is_written_to_the_end(tmp_path):
+    out, box, took = _pipe(tmp_path, eio_after_s=None)
     assert _line(out, "RC") == "0", out
     assert _line(out, "WB") == "", out
     assert took >= STREAM_S - 1, took                                   # the whole stream went through

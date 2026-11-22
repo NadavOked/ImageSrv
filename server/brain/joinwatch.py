@@ -327,8 +327,10 @@ class Watch:
         s.last[key] = sig
         self._log({"rule": call.rule, "action": call.action, "verdict": call.verdict, "entity": list(entity),
                    "reason": call.reason, "evidence": list(call.evidence)})
+        # #3750: R4 הוא אירוע שנצפה (דיסק השלים/נכתב/נכשל), לא פעולה; השאר החלטות צל שהמוח לא מבצע. בשני המקרים אין מה לסגור: n/a
+        why = "אירוע שנצפה: אין פעולה לסגור" if call.rule == "R4" else "צל: נרשם בלבד, המוח לא ביצע פעולה"
         memory.record(conn, mode=SHADOW, rule=call.rule, action=call.action, verdict=call.verdict, reason=call.reason,
-                      evidence=call.evidence, round_id=round_row["id"], entity=entity)
+                      evidence=call.evidence, round_id=round_row["id"], entity=entity, outcome=memory.na(why))
 
     def _log(self, fields: dict) -> None:
         stamp = datetime.fromtimestamp(self._wall(), timezone.utc).isoformat(timespec="seconds")

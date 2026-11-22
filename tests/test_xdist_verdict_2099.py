@@ -26,14 +26,14 @@ def test_a_worker_hands_its_hygiene_findings_to_the_controller(monkeypatch):
 
     # לא monkeypatch: הוא מתפרק אחרי `_no_real_sender`, שהיה רואה את הרשומה
     # המזויפת ומכשיל את הטסט הזה כאילו הגיע לשולח אמיתי.
-    hygiene.blocked_spawns.append(["udp-sender", "--probe-2099"])
+    hygiene.blocked_spawns.append(["chunkcast", "--probe-2099"])
     try:
         conftest.pytest_sessionfinish(session, 0)
     finally:
         hygiene.blocked_spawns.pop()
 
     handed = out[conftest.WORKER_PROBLEMS_KEY]
-    assert any("udp-sender --probe-2099" in line for line in handed), handed
+    assert any("chunkcast --probe-2099" in line for line in handed), handed
 
 
 def test_the_controller_fails_the_run_on_a_finding_a_worker_handed_over(monkeypatch):
@@ -53,36 +53,29 @@ def test_the_controller_fails_the_run_on_a_finding_a_worker_handed_over(monkeypa
     assert session.exitstatus == 1
 
 
-def test_each_worker_writes_its_own_sender_logs(monkeypatch):
-    """לוג המחיצה נגזר מ-`SENDER_LOG` ומשם הקובץ בלבד — שני workers עם אותו
-    מניפסט כתבו לאותו קובץ (שם ראה טסט אחד את `Starting transfer` של אחר)."""
-    from server.rounds import sender
-    shared = sender.SENDER_LOG.with_name("imagesrv-sender.log")
+def test_each_worker_writes_its_own_sender_logs(monkeypatch, tmp_path):
+    """The partition's log is derived from `chunklog.LOG_DIR` and the file's name only -- two workers with the
+    same manifest wrote the same file (one test read the evidence of another's pass). Each worker's basetemp is
+    its own (`popen-gwN`), and that is where its logs go."""
+    from server.rounds import chunklog
     part = "/x/images/img_7f3a91/p1.esp.pcl.zst"
+    monkeypatch.setattr(chunklog, "LOG_DIR", chunklog.LOG_DIR)        # put back after the test
+    monkeypatch.setattr(hygiene, "_run_tmp", hygiene._run_tmp)        # and the root a stand-in sender must sit under
     seen = []
-    for worker in ("gw0", "gw1"):
-        monkeypatch.setattr(sender, "SENDER_LOG", shared)
-        hygiene.isolate_sender_log(worker)
-        seen.append(sender.partition_log(part))
+    for worker in ("popen-gw0", "popen-gw1"):
+        assert hygiene.sender_logs_under(tmp_path / worker) == tmp_path / worker
+        seen.append(chunklog.log_path(part))
     assert seen[0] != seen[1], seen
-    assert all(p.parent == shared.parent for p in seen), seen
+    assert [p.parent for p in seen] == [tmp_path / "popen-gw0", tmp_path / "popen-gw1"], seen
 
 
 def test_the_sender_logs_are_under_the_run_s_basetemp(tmp_path_factory):
-    """#2180: `$TMPDIR/imagesrv-sender*.log` outlived every run (the lab gate's
+    """#2180: `$TMPDIR/imagesrv-*.log` outlived every run (the lab gate's
     TMPDIR summary). The run's own basetemp holds them -- worker or serial."""
-    from server.rounds import sender
+    from server.rounds import chunklog
     base = tmp_path_factory.getbasetemp()
-    assert sender.SENDER_LOG.parent == base, sender.SENDER_LOG
-    assert sender.partition_log("/x/images/img_7f3a91/p1.esp.pcl.zst").parent == base
-
-
-def test_a_serial_run_keeps_the_sender_log_where_it_was(monkeypatch):
-    from server.rounds import sender
-    monkeypatch.setattr(sender, "SENDER_LOG", sender.SENDER_LOG)
-    before = sender.SENDER_LOG
-    assert hygiene.isolate_sender_log(None) is None
-    assert sender.SENDER_LOG == before
+    assert chunklog.LOG_DIR == base, chunklog.LOG_DIR
+    assert chunklog.log_path("/x/images/img_7f3a91/p1.esp.pcl.zst").parent == base
 
 
 def test_a_controller_with_nothing_handed_over_stays_green(monkeypatch):

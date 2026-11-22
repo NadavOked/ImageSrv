@@ -31,12 +31,10 @@ def clocked(tmp_path, monkeypatch):
     (`status["now"]` — מה ש-`timesync.status` היה מחזיר; None = לא הוזרק)."""
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from test_sender import Recorder                       # noqa: PLC0415
+    from fakesend import Recorder                       # noqa: PLC0415
     from server.console import users
-    from server.rounds import sender as sender_module
     from server.app import create_app
 
-    monkeypatch.setattr(sender_module, "port_holders", lambda _port: [])
     images = tmp_path / "images"
     write_image(images, MANIFEST_256)
     status = {"now": {"synchronized": True, "offset_ms": 0.0}, "calls": 0}
@@ -48,7 +46,7 @@ def clocked(tmp_path, monkeypatch):
             raise got
         return got
 
-    app = create_app(tmp_path / "data", images, "http://10.44.12.10:8080", now_fn=Clock(),
+    app = create_app(tmp_path / "data", images, "http://10.44.12.10:7712", now_fn=Clock(),
                      sender_runner=Recorder(), wol_send=lambda _p: None,
                      health_hooks={"timesync_status": timesync_status})
     ctx = app.state.ctx
@@ -58,7 +56,7 @@ def clocked(tmp_path, monkeypatch):
     assert admin.post("/api/console/machines", json={
         "mac": CLONER1, "name": "shich-1", "group_id": "grp_CLONERS"}).status_code == 200
     yield {"ctx": ctx, "admin": admin, "anon": anon, "status": status}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def _open(env, target: int) -> dict:

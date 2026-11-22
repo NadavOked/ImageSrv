@@ -36,11 +36,11 @@ def test_rules_follow_the_services_of_each_nic(shell) -> None:
                "--service", "ens36:")
     assert proc.returncode == 0, proc.stderr
     got = rules(proc.stdout)
-    assert 'iifname "ens35" tcp dport 8081 accept' in got
-    assert not any('"ens33" tcp dport 8081' in r for r in got), "console off on ens33 = no rule"
-    assert 'iifname "ens33" tcp dport 8443 accept' in got
+    assert 'iifname "ens35" tcp dport 443 accept' in got
+    assert not any('"ens33" tcp dport 443' in r for r in got), "console off on ens33 = no rule"
+    assert 'iifname "ens33" tcp dport 7700 accept' in got
     assert {'iifname "ens34" udp dport 67 accept', 'iifname "ens34" udp dport 69 accept',
-            'iifname "ens34" tcp dport 8080 accept',
+            'iifname "ens34" tcp dport 7712 accept',
             'iifname "ens34" udp dport 7000-7001 ether saddr @known_macs accept'} <= set(got)   # נדב 14/11: רק רשומים
     assert not any('"ens36"' in r for r in got)
     assert "policy drop" in proc.stdout and "flush ruleset" in proc.stdout
@@ -52,7 +52,7 @@ def test_secondary_keeps_8443_to_the_primary_only(shell) -> None:
     proc = run(shell, "--per-nic", "--primary-ip", "10.10.10.1",
                "--service", "ens33:console,interserver")
     assert proc.returncode == 0, proc.stderr
-    assert 'iifname "ens33" ip saddr 10.10.10.1 tcp dport 8443 accept' in rules(proc.stdout)
+    assert 'iifname "ens33" ip saddr 10.10.10.1 tcp dport 7700 accept' in rules(proc.stdout)
 
 
 @needs_bash

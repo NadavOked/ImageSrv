@@ -32,9 +32,9 @@ MAC = "aa:bb:cc:00:00:10"
 
 
 def _runtime(tmp_path, images_root, describe):
-    from test_sender import Recorder                       # noqa: PLC0415
+    from fakesend import Recorder                       # noqa: PLC0415
     return create_runtime(
-        tmp_path / "data", images_root, "http://10.44.0.1:8080",
+        tmp_path / "data", images_root, "http://10.44.0.1:7712",
         sender_runner=Recorder(block=True),
         update_hooks={"describe": describe}, repo_dir="/repo")
 
@@ -65,6 +65,6 @@ def test_an_unread_version_is_null_not_a_number(tmp_path, images_root):
 
 
 def test_without_a_setting_the_name_is_the_host_name(tmp_path, images_root):
-    app = create_app(tmp_path / "data", images_root, "http://10.44.0.1:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.0.1:7712",
                      update_hooks={"describe": lambda _repo: "v0.59.2"}, repo_dir="/repo")
     assert _state(app)["server_name"] == socket.gethostname()

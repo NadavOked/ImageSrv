@@ -163,34 +163,67 @@ def test_in_a_git_tree_build_artifacts_are_not_inputs(tmp_path: Path) -> None:
     assert again.returncode == 10, again.stdout
 
 
-@requires_native("bash", "curl", posix=True, why="deploy/boot-payload-release.sh is bash + curl")
-@pytest.mark.parametrize("asset", ["ok", "corrupt", "missing"])
-def test_the_update_installs_release_assets_only_through_the_signed_manifest(tmp_path: Path, asset: str) -> None:
-    """The release script downloads into its own work dir and hands the files to
-    decide with the manifest of the signed tree; a corrupt or missing asset is a
-    named rebuild (exit 10), and nothing reaches the payload directory."""
-    src, prebuilt, target, flags = fixture(tmp_path)
+def _release(src: Path, flags: Path, target: Path, tmp_path: Path) -> subprocess.CompletedProcess[str]:
+    """The release script of the tree, with the real server.agent.tls (the fake tree has no server/)."""
     shutil.copy(ROOT / "deploy" / "boot-payload-release.sh", src / "deploy" / "boot-payload-release.sh")
-    shutil.move(str(prebuilt / "boot-payload.json"), src / "deploy" / "boot-payload.json")   # in the signed tag
-    if asset == "corrupt":
-        (prebuilt / "initrd.img.gui").write_bytes(b"tampered")
-    elif asset == "missing":
-        (prebuilt / "vmlinuz").unlink()
     manifest = tmp_path / "iso-release.json"
     manifest.write_text(json.dumps({"imagesrv_tag": "v9.9.9"}), encoding="utf-8")
     env = {**os.environ, "IMAGESRV_ISO_MANIFEST": str(manifest), "IMAGESRV_DATA_DIR": str(tmp_path / "data"),
-           "IMAGESRV_BOOT_PAYLOAD_URL": prebuilt.resolve().as_uri()}
-    proc = subprocess.run(["bash", str(src / "deploy" / "boot-payload-release.sh"), "v9.9.9", str(src),
+           "PYTHONPATH": str(ROOT)}
+    return subprocess.run(["bash", str(src / "deploy" / "boot-payload-release.sh"), "v9.9.9", str(src),
                            str(flags), str(target), "6.12-test"], env=env, text=True,
                           capture_output=True, stdin=subprocess.DEVNULL)
-    if asset == "ok":
-        assert proc.returncode == 0 and proc.stdout.startswith("prebuilt\t"), proc.stdout + proc.stderr
-        assert (target / "initrd.img.gui").read_bytes() == b"initrd.img.gui verified\n"
-    else:
-        assert proc.returncode == 10 and proc.stdout.startswith("rebuild\t"), proc.stdout + proc.stderr
-        assert ("sha256 mismatch for initrd.img.gui" if asset == "corrupt" else "vmlinuz is missing") in proc.stdout
-        assert not any((target / name).exists() for name in FILES)
-    assert not (tmp_path / "data" / "boot-payload-release").exists(), "the download dir is left behind"
+
+
+def _site_ca(tmp_path: Path, where: str = "data") -> Path:
+    from server.agent import tls
+    return tls.ensure_identity(tmp_path / where)[0].ca_path
+
+
+def _built_here(src: Path, flags: Path, target: Path, ca: Path, tmp_path: Path) -> None:
+    """A payload as boot-payload-build.sh leaves it: the images, each with the CA it packed, and the manifest."""
+    target.mkdir()
+    for name in FILES:
+        (target / name).write_bytes((name + " built here\n").encode())
+    for name in ("initrd.img", "initrd.img.gui"):
+        shutil.copyfile(ca, target / (name + ".ca.pem"))
+        (target / (name + ".agent-name")).write_text("imagesrv-agent-0123456789abcdef\n", encoding="utf-8")
+    made = run("create", "--source", src, "--kernel", "6.12-test", "--flags", flags, "--payload-dir", target,
+               "--source-commit", "abc123", "--output", target / "boot-payload.json", tmp=tmp_path)
+    assert made.returncode == 0, made.stdout + made.stderr
+
+
+@requires_native("bash", posix=True, why="deploy/boot-payload-release.sh is bash")
+def test_the_release_payload_is_never_installed_on_a_server_that_bakes_its_own_ca(tmp_path: Path) -> None:
+    """#3580: the initrds of this server carry its own CA, so the generic payload of a release is not one it can
+    use. The release script asks for a rebuild (10) and nothing reaches the payload directory -- a release asset
+    that happens to be available changes nothing."""
+    src, prebuilt, target, flags = fixture(tmp_path)
+    proc = _release(src, flags, target, tmp_path)
+    assert proc.returncode == 10 and proc.stdout.startswith("rebuild\t"), proc.stdout + proc.stderr
+    assert not any((target / name).exists() for name in FILES)
+
+
+@requires_native("bash", posix=True, why="deploy/boot-payload-release.sh is bash")
+def test_a_payload_built_with_this_servers_ca_is_current_and_one_with_another_ca_is_not(tmp_path: Path) -> None:
+    src, prebuilt, target, flags = fixture(tmp_path)
+    _built_here(src, flags, target, _site_ca(tmp_path), tmp_path)
+    same = _release(src, flags, target, tmp_path)
+    assert same.returncode == 0 and same.stdout.startswith("current\t"), same.stdout + same.stderr
+    # the same inputs, the same bytes -- baked for another server: this one's machines would refuse it
+    other_target = tmp_path / "target-of-another-site"
+    _built_here(src, flags, other_target, _site_ca(tmp_path, "other-site"), tmp_path)
+    other = _release(src, flags, other_target, tmp_path)
+    assert other.returncode == 10 and other.stdout.startswith("rebuild\t"), other.stdout + other.stderr
+
+
+@requires_native("bash", posix=True, why="deploy/boot-payload-release.sh is bash")
+def test_one_initrd_without_the_ca_makes_the_payload_not_current(tmp_path: Path) -> None:
+    src, prebuilt, target, flags = fixture(tmp_path)
+    _built_here(src, flags, target, _site_ca(tmp_path), tmp_path)
+    (target / "initrd.img.gui.ca.pem").unlink()           # the GUI initrd lost its sidecar: not one CA for both
+    proc = _release(src, flags, target, tmp_path)
+    assert proc.returncode == 10 and proc.stdout.startswith("rebuild\t"), proc.stdout + proc.stderr
 
 
 # The publishing side (manifest in the signed tag, files on the Release) is tested
@@ -203,6 +236,6 @@ def test_server_upgrade_rebuilds_with_a_reason_and_never_installs_unverified() -
     assert "[[ -f deploy/boot-payload-release.sh ]]" in upgrade   # an older tag: rebuild, not rollback
     assert "rebuilding boot payload" in upgrade
     assert 'rollback "החלטת מטען האתחול נכשלה' in upgrade
-    # the downloaded files go through decide (manifest from the signed tree), never straight to HTTP_ROOT
-    assert '--manifest "$MANIFEST" --prebuilt-dir "$WORK"' in release
-    assert 'MANIFEST="$REPO/deploy/boot-payload.json"' in release
+    # #3580: only the installed payload can be current; a release asset is never fetched or installed here
+    assert "--current-only" in release and "--agent-ca" in release
+    assert "--prebuilt-dir" not in release and "curl" not in release.lower()

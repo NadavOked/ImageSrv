@@ -151,7 +151,9 @@ EOF
     KVER=$(find "${IMAGESRV_MODULES_DIR:-/lib/modules}" -mindepth 1 -maxdepth 1 -printf '%f\n' | awk '$0 !~ /cloud/' | sort -V | tail -n1) \
         || fail payload-failed "Could not inspect installed kernels"
     [[ -n "$KVER" ]] || fail payload-failed "No installed non-cloud kernel was found"
-    decision_out=$(python3 "$SRC/deploy/boot-payload.py" decide --source "$SRC" \
+    ca_out=$(cd "$SRC" && python3 -m server.agent.tls ca --data-dir "${IMAGESRV_DATA_DIR:-/var/lib/imagesrv}") || fail payload-failed "Cannot load agent TLS identity"
+    ca_args=(--agent-ca "$(head -n1 <<<"$ca_out")")
+    decision_out=$(python3 "$SRC/deploy/boot-payload.py" decide --source "$SRC" "${ca_args[@]}" \
         --kernel "$KVER" --flags "$ETC/initrd.flags" --payload-dir "$HTTP_ROOT" \
         --manifest /var/lib/imagesrv/iso-boot-payload/boot-payload.json \
         --prebuilt-dir /var/lib/imagesrv/iso-boot-payload 2>&1) && decision_rc=0 || decision_rc=$?
@@ -186,17 +188,18 @@ EOF
     fi
 fi
 
-# #2533: chunkcast on the server itself -- the sender of the experimental chunk
-# engine (behind a switch that is off). On a prebuilt payload too: the initrd
-# carries the receiver, the server needs the sender. A failure here does not
-# stop the installation; it is said, and with the switch on a wave without a
-# sender fails by name.
-# The reason is the script's own last line, and it is said here -- not swallowed: whoever
-# reads this log later is told why the switch in the console refuses to turn on.
-if ! tools_said=$(bash "$SRC/tools/server-tools-build.sh" --source "$SRC" 2>&1); then
-    log "chunkcast (the experimental chunk engine's sender) was NOT built on this server: ${tools_said##*$'\n'}"
-    log "the 'stream engine' switch will refuse to turn on until it is built (tools/server-tools-build.sh)"
-fi
+# #2533: chunkcast on the server itself -- the sender of the chunk engine, the
+# only engine since #3173. On a prebuilt payload too: the initrd carries the
+# receiver, the server needs the sender. Owner 21/11: without it the installation
+# FAILS (chunkcast-failed, failgui.sh) -- a server that cannot send a single wave is
+# not a server that is up. Exit 0 of the script is the evidence: it ran the new
+# binary's `--version` before installing it (principle 5). Its whole output goes to the journal
+# (the compiler's lines too); its last line, the reason, is on the screen.
+tools_rc=0
+tools_said=$(bash "$SRC/tools/server-tools-build.sh" --source "$SRC" 2>&1) || tools_rc=$?
+printf '%s\n' "$tools_said"
+[[ "$tools_rc" == 0 ]] \
+    || fail chunkcast-failed "The chunk engine (chunkcast) was not built or does not run (exit $tools_rc): ${tools_said##*$'\n'}"
 
 # ---------------------------------------------------------------------------
 # שלב ב' (#1190) — מהתשובות של המתקין החי: הכול כבר נענה על מסך השרת, אין
@@ -215,4 +218,4 @@ systemctl enable imagesrv-dcui.service || fail check-error "Could not enable ima
 TTY_PROGRESS=0
 systemctl restart imagesrv-dcui.service || fail check-error "Could not start imagesrv-dcui.service"
 rm -rf "$TMPDIR"
-log "Stage B complete from the installer's answers: the DCUI is on tty1, the console on 8081"
+log "Stage B complete from the installer's answers: the DCUI is on tty1, the console on 443"

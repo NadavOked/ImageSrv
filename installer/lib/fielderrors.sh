@@ -32,7 +32,7 @@ he_for_code() {
         invalid-raid) printf '%s' 'בחירת ה-RAID אינה תקינה — מספר הכוננים או הכוננים שנבחרו אינם מתאימים לרמה' ;;
         raid-virtual) printf '%s' 'זהו שרת וירטואלי: RAID נעשה ברמת המארח (ESXi/Hyper-V), לא בתוך המכונה' ;;
         invalid-role) printf '%s' 'תפקיד השרת אינו תקין' ;;
-        invalid-primary-url) printf '%s' 'כתובת השרת הראשי אינה תקינה (כתובת IP או שם, או https://HOST:8443)' ;;
+        invalid-primary-url) printf '%s' 'כתובת השרת הראשי אינה תקינה (כתובת IP או שם, או https://HOST:7700)' ;;
         primary-unverified) printf '%s' 'השרת הראשי לא אומת — הריצו בדיקת חיבור עד שהיא ירוקה' ;;
         invalid-interface) printf '%s' 'כרטיס הרשת שנבחר אינו תקין' ;;
         invalid-mac) printf '%s' 'כתובת ה-MAC של כרטיס הרשת אינה תקינה' ;;

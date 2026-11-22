@@ -72,7 +72,7 @@ def _success_tools(bindir: Path) -> None:
 case "$1" in
   show) case "$*" in
     *imagesrv-dcui*) printf "LoadState=%s\nActiveState=%s\n" "${FAKE_DCUI_LOAD-loaded}" "${FAKE_DCUI_ACTIVE-active}" ;;
-    *) echo "IMAGESRV_URL=http://10.10.10.8:8080 X=y" ;;
+    *) echo "IMAGESRV_URL=http://10.10.10.8:7712 X=y" ;;
   esac ;;
   is-active) case "$*" in *imagesrv-dcui*) [ -z "${FAKE_DCUI_DEAD:-}" ] || exit 3 ;; esac ;;
 esac

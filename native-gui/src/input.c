@@ -255,6 +255,8 @@ static void key_event(Input *in, Dev *d, int code, int value) {
     case KEY_BACKSPACE: e.type = UIEV_KEY; e.key = KEYSYM_BACKSPACE; push(in, e); return;
     case KEY_ESC:       e.type = UIEV_KEY; e.key = KEYSYM_ESC; push(in, e); return;
     case KEY_DELETE:    e.type = UIEV_KEY; e.key = KEYSYM_DELETE; push(in, e); return;   /* #1386 */
+    case KEY_PAGEUP:    e.type = UIEV_KEY; e.key = KEYSYM_PGUP; push(in, e); return;     /* #649 */
+    case KEY_PAGEDOWN:  e.type = UIEV_KEY; e.key = KEYSYM_PGDN; push(in, e); return;
     case KEY_UP:        e.type = UIEV_KEY; e.key = KEYSYM_UP; push(in, e); return;
     case KEY_DOWN:      e.type = UIEV_KEY; e.key = KEYSYM_DOWN; push(in, e); return;
     case KEY_LEFT:      e.type = UIEV_KEY; e.key = KEYSYM_LEFT; push(in, e); return;    /* the menu grid (mockup 10/10) */

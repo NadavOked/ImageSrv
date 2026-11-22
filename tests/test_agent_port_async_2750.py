@@ -41,6 +41,9 @@ MODULES = sorted((ROOT / "server" / "agent").glob("*.py")) + [
     ROOT / "server" / "console" / "backup_target.py",  # #2750 part B, slice 2 (console)
     ROOT / "server" / "console" / "drivers.py",
     ROOT / "server" / "console" / "isos.py",
+    ROOT / "server" / "console" / "net.py",            # #2750 part B, slice 3 (console)
+    ROOT / "server" / "console" / "learning.py",
+    ROOT / "server" / "console" / "tools.py",
 ]
 ROUTE_METHODS = {"get", "post", "put", "delete", "patch", "api_route", "websocket"}
 
@@ -49,7 +52,7 @@ ROUTE_METHODS = {"get", "post", "put", "delete", "patch", "api_route", "websocke
 #: cannot rot into a blanket pass.
 EXEMPT: dict[tuple[str, str], str] = {
     ("server/library/capture.py", "create_capture"):
-        "console route (8081, admin_only), not the agent port -- #2750 part B",
+        "console route (443, admin_only), not the agent port -- #2750 part B",
 }
 
 
@@ -313,3 +316,63 @@ def test_a_console_write_on_a_locked_db_does_not_block_another_request(server):
     assert pol.status_code == 200, pol.text
     assert fol.status_code == 200, fol.text
     assert pol_at >= LOCK_SECONDS - 0.1 and fol_at >= LOCK_SECONDS - 0.1, (pol_at, fol_at)
+
+
+def test_a_net_device_write_on_a_locked_db_does_not_block_another_request(server):
+    """Part B slice 3: `POST /net` and `PUT /net/{mac}` write `net_devices`. While
+    another connection holds the write lock they wait for it -- and a light `/me`
+    request must not wait with them."""
+    pytest.importorskip("fastapi")
+    httpx = pytest.importorskip("httpx")
+    admin = server["admin"]
+    mac = "b4:2e:99:07:1a:c5"
+    assert admin.post("/api/console/net", json={"mac": mac}).status_code == 200   # a row for PUT, and the warm-up
+
+    locker = sqlite3.connect(server["ctx"].conn._path, isolation_level=None,
+                             check_same_thread=False)
+    locker.execute("BEGIN IMMEDIATE")
+    released = threading.Event()
+
+    def release():
+        locker.execute("ROLLBACK")
+        released.set()
+
+    timer = threading.Timer(LOCK_SECONDS, release)
+
+    async def scenario():
+        transport = httpx.ASGITransport(app=server["app"])
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver",
+                                     cookies=admin.cookies) as client:
+            t0 = time.monotonic()
+
+            async def add():
+                r = await client.post("/api/console/net", json={"mac": "b4:2e:99:07:1a:c6"})
+                return r, time.monotonic() - t0
+
+            async def describe():
+                r = await client.put(f"/api/console/net/{mac}", json={"description": "lock2750"})
+                return r, time.monotonic() - t0
+
+            async def light():
+                await asyncio.sleep(0.2)          # both writes are already waiting on the lock
+                r = await client.get("/api/console/me")
+                return r, time.monotonic() - t0
+
+            return await asyncio.gather(add(), describe(), light())
+
+    timer.start()
+    try:
+        (add, add_at), (desc, desc_at), (me, me_at) = asyncio.run(scenario())
+    finally:
+        timer.cancel()
+        if not released.is_set():
+            release()
+        locker.close()
+
+    assert me.status_code == 200, me.text
+    assert me_at < LOCK_SECONDS - 0.5, (
+        f"/me finished {me_at:.2f}s after the lock was taken; the lock was held"
+        f" {LOCK_SECONDS}s -- a net-device write blocked the event loop")
+    assert add.status_code == 200, add.text
+    assert desc.status_code == 200, desc.text
+    assert add_at >= LOCK_SECONDS - 0.1 and desc_at >= LOCK_SECONDS - 0.1, (add_at, desc_at)

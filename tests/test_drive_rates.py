@@ -261,8 +261,15 @@ def _with_disks(conn, model="EVO 870"):
 
 
 def _decided(conn, session="ses_w1", ceiling=CEILING, roster=("S1",)):
-    """הגל יצא — עם רשימת הכוננים שהשרת ראה לפני שיצא."""
-    drive_rates.decide(conn, session, lambda: [_drive(s) for s in roster], ceiling)
+    """הגל יצא — עם רשימת הכוננים שהשרת ראה לפני שיצא — כגל של מנוע החתיכות (#3173: היחיד), ובסוף המעברים
+    הראשונים המנוע אמר כמה כל כונן לקח מהשידור (`chunk.drives`, #3296): 15GB ב-1000 ש', מתוך 25MB/s ששודרו."""
+    drive_rates.decide(conn, session, lambda: [_drive(s) for s in roster], ceiling,
+                       adjust=lambda chosen, wave: chosen)
+    took = {"aa:bb:cc:00:00:21": {s: 15_000 * MB for s in roster}}
+    conn.execute("UPDATE wave_rates SET stream = ? WHERE session_id = ?",
+                 (json.dumps({"chunk": {"first_pass_s": 1000, "stream_zbytes": CAP_200M * 1000, "drives": took}}),
+                  session))
+    conn.commit()
 
 
 def test_a_finished_drawer_leaves_its_rate(conn):
@@ -304,10 +311,8 @@ def test_recording_twice_is_one_sample(conn):
 @pytest.mark.parametrize("target", [
     _done(state="failed"),
     _done(serial=None),
-    _done(first=None),
-    _done(first="not a time"),
-    _done(last="2026-10-11T10:00:30+00:00"),     # 30 שניות — רעש, לא קצב
     _done(written=100 * MB),                      # מתחת ל-1GB
+    # #3173: `first_moved_at` → `moved_at` היה החלון של גל udpcast; גל חתיכות נמדד מהמעברים הראשונים בלבד
 ])
 def test_a_drawer_without_a_real_measurement_leaves_nothing(conn, target):
     _with_disks(conn)

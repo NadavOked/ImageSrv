@@ -26,7 +26,7 @@ import pytest
 
 from boot.grub_menu import GrubConfig, render, render_bootstrap, render_local_only
 
-CFG = GrubConfig(server_base="http://10.44.12.10:8080")
+CFG = GrubConfig(server_base="http://10.44.12.10:7712")
 
 #: פקודות GRUB שמסיימות את ההפעלה של המכונה. מסך שמבטיח להישאר דולק
 #: לא מכיל אף אחת מהן.

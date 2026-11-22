@@ -107,7 +107,7 @@ class _FakeClient:
 def _enroll(conn, label, i):
     return storage_nodes.enroll_node(
         conn, ("noc", "admin"), label=label,
-        base_url=f"https://10.0.0.{i}:8443/api/interserver/v1",
+        base_url=f"https://10.0.0.{i}:7700/api/interserver/v1",
         node_id=f"sn_{i:016x}",
         pinned_spki="00" * 32, client_cert_ref="ref", credential_ref="unused",
         protocol_version="2.1")
@@ -137,8 +137,8 @@ def test_beat_targets_only_enabled_rows_and_one_failure_does_not_stop_the_rest(
     result = storage_heartbeat.beat(fake_nodes["conn"], tmp_path)
 
     assert set(result) == {ids["haifa"], ids["dead"]}          # המושבת לא נשאל
-    assert sorted(fake_nodes["called"]) == ["https://10.0.0.1:8443/api/interserver/v1",
-                                            "https://10.0.0.2:8443/api/interserver/v1"]
+    assert sorted(fake_nodes["called"]) == ["https://10.0.0.1:7700/api/interserver/v1",
+                                            "https://10.0.0.2:7700/api/interserver/v1"]
     assert result[ids["haifa"]] is None and "לא עונה" in result[ids["dead"]]
     assert fake_nodes["timeouts"] == [storage_heartbeat.TIMEOUT_SECONDS] * 2
     conn = fake_nodes["conn"]
@@ -167,7 +167,7 @@ def _app(tmp_path, **kwargs):
     from server.app import create_app
     images = tmp_path / "images"
     write_image(images, MANIFEST_256)
-    return create_app(tmp_path / "data", images, "http://10.44.12.10:8080",
+    return create_app(tmp_path / "data", images, "http://10.44.12.10:7712",
                       now_fn=Clock(), **kwargs)
 
 
@@ -176,7 +176,7 @@ def test_the_runtime_defaults_to_the_150s_heartbeat(tmp_path):
     try:
         assert app.state.runtime.heartbeat_interval == storage_heartbeat.HEARTBEAT_SECONDS
     finally:
-        app.state.ctx.sender.stop()
+        app.state.ctx.chunk.stop()
 
 
 def test_the_heartbeat_fires_from_the_lifespan_at_its_interval(tmp_path, monkeypatch):
@@ -200,7 +200,7 @@ def test_the_heartbeat_fires_from_the_lifespan_at_its_interval(tmp_path, monkeyp
         with TestClient(app):
             assert three.wait(timeout=10.0), "הדופק לא ירה שלוש פעמים — הלולאה אינה מחוברת"
     finally:
-        app.state.ctx.sender.stop()
+        app.state.ctx.chunk.stop()
     # לא לולאה צפופה: בין הדופק הראשון לשלישי עברו לפחות שני מרווחים.
     assert stamps[2] - stamps[0] >= 2 * 0.2 * 0.9
     assert seen_args[0] == app.state.runtime.data_dir
@@ -235,5 +235,5 @@ def test_a_stuck_heartbeat_does_not_hold_the_room_clock(tmp_path, monkeypatch):
             release.set()
     finally:
         release.set()
-        app.state.ctx.sender.stop()
+        app.state.ctx.chunk.stop()
     assert moved >= 3, f"שעון החדר עמד בזמן שהדופק תקוע ({moved} דגימות)"

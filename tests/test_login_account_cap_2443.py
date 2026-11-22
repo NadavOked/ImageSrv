@@ -2,7 +2,7 @@
 
 עד כאן המונה של `login_guard` היה לפי (שם, IP) בלבד: אחרי 10 כשלונות מכתובת A
 נעילה, ובאותו רגע מכתובת B הסיסמה הנכונה נכנסה. מי שמנחש סיסמה של admin מכמה
-מחשבים (קיוסק ב-8080, או הקונסולה) לא נעצר לעולם.
+מחשבים (קיוסק ב-7712, או הקונסולה) לא נעצר לעולם.
 
 הכרעות נדב (04/11): MFA למנהלים **נשאר כבוי** כברירת מחדל; אסור שאפשר יהיה לנעול
 את המנהל האחרון מחוץ לשרת. לכן הנעילה פגה לבד, והאיפוס הפיזי ב-DCUI מאפס אותה.
@@ -223,15 +223,15 @@ def test_station_login_failures_never_reach_the_console_cap(identity_server, gua
 
 @pytest.fixture()
 def split_apps(tmp_path, images_root):
-    """הפיצול האמיתי: פורט הסוכן (8080) ופורט הקונסולה (8081) על runtime אחד.
+    """הפיצול האמיתי: פורט הסוכן (7712) ופורט הקונסולה (443) על runtime אחד.
     בלי קובץ חכירות — `identity_gate` אינו חל, ו-`/agent/login` נבדק כאן על הסיסמה."""
     from server.app import create_agent_app, create_console_app, create_runtime
-    from test_sender import Recorder
-    rt = create_runtime(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    from fakesend import Recorder
+    rt = create_runtime(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                         sender_runner=Recorder(block=True))
     users.create(rt.ctx.conn, "noc", "admin-pass-123", "admin", by="test", check_policy=False)
     yield create_agent_app(rt), create_console_app(rt)
-    rt.ctx.sender.stop()
+    rt.ctx.chunk.stop()
 
 
 GOOD = {"username": "noc", "password": "admin-pass-123"}

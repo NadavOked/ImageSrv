@@ -165,11 +165,13 @@ nic_bus_record() (
         printf '{"bus":"unknown"}'
         return
     fi
-    bridge=null
+    # #3982: no link attributes = no PCIe capability, which alone is not a PCI slot -- the PCH's own NIC (82578DM,
+    # 00:19.0) sits on root bus 00 with none. Only a parent with header type 1 (a PCI-to-PCI bridge, e.g. 00:1e.0)
+    # puts it on a conventional PCI segment. Anything else, an unread parent included, is unknown: no banner.
     header=$(od -An -tu1 -j 14 -N 1 ../config 2>/dev/null)
-    case $((${header:-0} & 127)) in 1) bridge=$(_pci_66_capable ../config 30) ;; esac
+    case $((${header:-0} & 127)) in 1) ;; *) printf '{"bus":"unknown"}'; return ;; esac
     printf '{"bus":"pci","capable_66mhz":%s,"bridge_capable_66mhz":%s}' \
-        "$(_pci_66_capable "$pci/config" 6)" "$bridge"
+        "$(_pci_66_capable "$pci/config" 6)" "$(_pci_66_capable ../config 30)"
 )
 
 build_hello() {
@@ -221,7 +223,7 @@ build_hello() {
 
     # #720+#1049+#1048: inventory, probe, netprobe fragments (each with a leading comma).
     _wol=""; [ "$(cat "$RUN_DIR/wol_armed" 2>/dev/null)" = false ] && _wol=',"wol_armed":false'
-    if command -v chunkcast >/dev/null 2>&1; then _wol="$_wol,\"engines\":[\"udpcast\",\"chunk\"]"; fi   # #2533: the stream engines this image can receive
+    if command -v chunkcast >/dev/null 2>&1; then _wol="$_wol,\"engines\":[\"chunk\"]"; fi   # #2533: the stream engines this image can receive (#3173: the chunk engine only)
     # #2528: the kernel's id of THIS boot. The server keeps the one that was handed a wave; a
     # joining hello with another id mid-stream is a machine that was powered off or rebooted.
     # Unreadable or not in the kernel's form = the field is absent ("not known"), never invented.
@@ -236,5 +238,5 @@ build_hello() {
         "$_mac" "$_all" "$IP" "$_uuid_json" \
         "$(detect_firmware)" "$(detect_secure_boot)" "$AGENT_VERSION" \
         "$(detect_memory_bytes)" "$_joining" "$_disks" "$(disk_probe)" \
-        "$_msecret" "$(command -v inventory_json >/dev/null 2>&1 && inventory_json)$(command -v probe_json >/dev/null 2>&1 && probe_json)$(command -v netprobe_json >/dev/null 2>&1 && netprobe_json)$(command -v netwatch_json >/dev/null 2>&1 && netwatch_json)$(command -v optical_json >/dev/null 2>&1 && optical_json)$(command -v sata_lpm_json >/dev/null 2>&1 && sata_lpm_json)$(command -v timing_json >/dev/null 2>&1 && timing_json)$(command -v firmware_json >/dev/null 2>&1 && firmware_json)$(command -v idle_wc_report_json >/dev/null 2>&1 && idle_wc_report_json)" "$_wol$_boot$(cat "$RUN_DIR/direct.finished" 2>/dev/null)"   # #1952: direct_hello's fragment; absent = not reported
+        "$_msecret" "$(command -v inventory_json >/dev/null 2>&1 && inventory_json)$(command -v probe_json >/dev/null 2>&1 && probe_json)$(command -v netprobe_json >/dev/null 2>&1 && netprobe_json)$(command -v netwatch_json >/dev/null 2>&1 && netwatch_json)$(command -v optical_json >/dev/null 2>&1 && optical_json)$(command -v sata_lpm_json >/dev/null 2>&1 && sata_lpm_json)$(command -v timing_json >/dev/null 2>&1 && timing_json)$(command -v firmware_json >/dev/null 2>&1 && firmware_json)$(command -v idle_wc_report_json >/dev/null 2>&1 && idle_wc_report_json)" "$_wol$_boot"   # #3173: no direct_finished any more (the old direct sender's log is gone)
 }

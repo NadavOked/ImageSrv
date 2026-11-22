@@ -184,9 +184,15 @@ def _wave_row(row: sqlite3.Row) -> dict:
     decision, stream, drops = _json(row["decision"]), _json(row["stream"]), _json(row["drops"])
     decision = decision if isinstance(decision, dict) else {}
     stream = stream if isinstance(stream, dict) else {}
+    # #3173: a chunk wave keeps only `stream["chunk"]` (`chunk_rate.record`): what it multicast (`stream_zbytes`, the
+    # compressed bytes -- the unit of the old `sent_bytes`) and the chunks that did not arrive in the first pass
+    # (`lost_chunks`, the worst machine). Chunks are not the old sender's blocks, so they have their own key.
+    chunk = stream.get("chunk") if isinstance(stream.get("chunk"), dict) else {}
+    sent = _int(memory._num(stream.get("sent_bytes")))
     return {"at": row["at"], "rate_bps": drive_rates.parse_bitrate(decision.get("max_bitrate")),
-            "sent_bytes": _int(memory._num(stream.get("sent_bytes"))),
+            "sent_bytes": sent if sent is not None else _int(memory._num(chunk.get("stream_zbytes"))),
             "loss_blocks": _int(memory._num(stream.get("loss_blocks"))),
+            "lost_chunks": _int(memory._num(chunk.get("lost_chunks"))),
             "drops": drops if isinstance(drops, dict) else None}
 
 
@@ -204,12 +210,14 @@ def round_waves(conn: sqlite3.Connection, created_at: str, closed_at: str | None
 
 def flow(waves: list[dict]) -> dict:
     """"קצב ואיבוד" של סבב: הקצב שבו הגל האחרון ששרד שודר, וסך הבלוקים שאבדו בגליו.
+    #3173: ובגלי חתיכות -- סך החתיכות שלא הגיעו במעבר הראשון (`lost_chunks`), בשדה משלו: יחידה אחרת.
     ``None`` = לא נשמר / לא נמדד -- לעולם לא 0 (עיקרון 5)."""
     kept = [w for w in waves if w["kept"]]
     rates = [w["rate_bps"] for w in kept if w.get("rate_bps") is not None]
     losses = [w["loss_blocks"] for w in kept if w.get("loss_blocks") is not None]
+    chunks = [w["lost_chunks"] for w in kept if w.get("lost_chunks") is not None]
     return {"waves": len(waves), "kept": len(kept), "rate_bps": rates[-1] if rates else None,
-            "loss_blocks": sum(losses) if losses else None}
+            "loss_blocks": sum(losses) if losses else None, "lost_chunks": sum(chunks) if chunks else None}
 
 
 def _drives(conn: sqlite3.Connection, ids: list[str], names: dict[str, str]) -> list[dict]:

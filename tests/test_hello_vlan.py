@@ -22,9 +22,9 @@ pytest.importorskip("fastapi")
 from conftest import hello_body, setup_classroom
 
 #: הכתובת שאיתה נוצר השרת ב-conftest — וילן ההפצה.
-VLAN = "http://10.44.12.10:8080"
+VLAN = "http://10.44.12.10:7712"
 #: כתובת מקומית אחרת של אותו שרת: הרגל שלו ברשת המכללה.
-OFF_VLAN = "http://10.10.10.8:8080"
+OFF_VLAN = "http://10.10.10.8:7712"
 
 
 def hello_at(server, base: str | None, mac: str) -> dict:
@@ -103,10 +103,10 @@ def test_a_scope_that_says_nothing_useful_behaves_exactly_as_before(server):
         ({"server": None}, VLAN),
         ({"server": ("testserver", 80)}, VLAN),      # שם ולא כתובת
         ({"server": ("10.10.10.8",)}, VLAN),         # לא זוג
-        ({"server": "10.10.10.8:8080"}, VLAN),       # לא tuple
-        ({"server": ("999.1.1.1", 8080)}, VLAN),     # לא כתובת תקינה
-        ({"server": ("10.10.10.8", 8080)}, None),    # אין כתובת שרת מוגדרת
-        ({"server": ("10.10.10.8", 8080)}, "http://imagesrv.local:8080"),  # שם בתצורה
+        ({"server": "10.10.10.8:7712"}, VLAN),       # לא tuple
+        ({"server": ("999.1.1.1", 7712)}, VLAN),     # לא כתובת תקינה
+        ({"server": ("10.10.10.8", 7712)}, None),    # אין כתובת שרת מוגדרת
+        ({"server": ("10.10.10.8", 7712)}, "http://imagesrv.local:7712"),  # שם בתצורה
         ({"server": ("10.44.12.10", 9999)}, VLAN),   # אותה כתובת, פורט אחר
     ],
     ids=["absent", "none", "hostname", "short", "string", "bad-ip",
@@ -121,4 +121,4 @@ def test_only_a_comparable_pair_can_mark_a_request_as_off_vlan(scope, base):
 def test_a_different_local_address_is_off_vlan():
     from server.agent.hello import off_deploy_vlan
 
-    assert off_deploy_vlan({"server": ("10.10.10.8", 8080)}, VLAN) is True
+    assert off_deploy_vlan({"server": ("10.10.10.8", 7712)}, VLAN) is True

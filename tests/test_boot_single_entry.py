@@ -25,7 +25,7 @@ import pytest
 
 from boot.grub_menu import AGENT, LOCAL, GrubConfig, decide, render
 
-CFG = GrubConfig(server_base="http://10.44.12.10:8080")
+CFG = GrubConfig(server_base="http://10.44.12.10:7712")
 
 
 def answer(**overrides) -> dict:
@@ -147,7 +147,7 @@ def test_the_entry_carries_nothing_but_the_server_and_the_mode():
     for leak in ["classroom", "grp_LAB1", "img_7f3a91", "LAB1", "role=", "task"]:
         assert leak not in line
     flags = [word for word in line.split() if word.startswith("imagesrv.")]
-    assert flags == ["imagesrv.server=http://10.44.12.10:8080",
+    assert flags == ["imagesrv.server=https://10.44.12.10:7712",
                      "imagesrv.mode=recovery"]
 
 

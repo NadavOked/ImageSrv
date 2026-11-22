@@ -43,7 +43,7 @@ def role_of(conn, username):
 def console_extras(store, row: sqlite3.Row) -> dict:
     """#1255: שדות "משימות אחרונות" — **רק** לתשובת הקונסולה המאומתת (`/overview`).
 
-    `build()` משותף גם ל-`station.active_session_view`, שמוגש לסוכן על 8080 בלי הרשאת קונסולה:
+    `build()` משותף גם ל-`station.active_session_view`, שמוגש לסוכן על 7712 בלי הרשאת קונסולה:
     שם המשתמש שפתח את הסבב ותפקידו לא יוצאים לשם. כאן: מי פתח (`None` = לא ידוע), מתי התחיל ומתי נסגר."""
     return {
         "opened_by": row["opened_by"] or None,

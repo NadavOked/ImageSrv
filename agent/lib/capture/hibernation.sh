@@ -95,7 +95,14 @@ capture_fs_of() {
 
 capture_used_bytes() {
     # $1=node $2=fs. An encrypted volume is never mounted, not even to measure.
-    if [ "$2" = BitLocker ]; then echo null; else _used_bytes "$1" "$2"; fi
+    case "$1:$2" in
+        *:BitLocker) echo null ;;
+        "$DEVROOT"/mapper/lc-cut-*:ext4|"$DEVROOT"/mapper/lc-cut-*:btrfs)
+            _cu_used=$(_used_bytes "$1" "$2") || return 1
+            case "$_cu_used" in ''|*[!0-9]*) return 1 ;; esac
+            echo "$_cu_used" ;;
+        *) _used_bytes "$1" "$2" ;;
+    esac
 }
 
 capture_bitlocker_note() {

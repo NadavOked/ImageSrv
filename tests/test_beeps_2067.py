@@ -392,33 +392,31 @@ def test_a_round_whose_drawers_were_all_skipped_ends_in_failure(tmp_path):
     assert frequencies(tmp_path) == expected("failure")
 
 
-@pytest.mark.parametrize("restored,kind", [(True, "success"), (False, "failure")])
-def test_build_machine_restore_end(tmp_path, restored, kind):
-    # Nadav 24/10: the build machine beeps at the end of a restore too. On
-    # success the tune is over before the reboot that would cut it.
+def test_build_machine_handed_a_round_beeps_failure(tmp_path):
+    # Nadav 24/10: the build machine beeps at the end of a restore too. #3173: a machine that is not a
+    # cloner no longer restores a round (v2) -- it fails by name, and that is the failure tune.
     script = prelude(tmp_path, role="build") + _function(AGENT / "imagesrv-agent", "do_restore", "# --- main loop")
-    script += f"""
+    script += """
         . "$LIB_DIR/waits.sh"   # wait_pid: the bounded wait before the reboot
-        for fn in job_reset target_init smart_note_apply name_this_machine stage_drivers ui_clear ui_header session_stream session_open_gate report_final writemark_release_done sync; do eval "$fn() {{ :; }}"; done
-        crc_delta_after() {{ _r=$?; return "$_r"; }}
-        pick_internal_disk() {{ echo sda; }}
-        http_get() {{ echo '{{}}'; }}
-        progress_loop() {{ :; }}
-        smart_gate() {{ echo sda; }}
-        run_restore() {{ {'return 0' if restored else 'return 1'}; }}
-        ui_error_hold() {{ echo "held: $1" >> "$RUN_DIR/held"; }}
-        reboot() {{ wc -c < "$DEVROOT/input/event5" > "$RUN_DIR/at-reboot"; }}
-        sleep() {{ command sleep .01; }}
+        for fn in job_reset target_init smart_note_apply name_this_machine stage_drivers ui_clear ui_header session_stream session_open_gate report_final writemark_release_done sync; do eval "$fn() { :; }"; done
+        crc_delta_after() { _r=$?; return "$_r"; }
+        pick_internal_disk() { echo sda; }
+        http_get() { echo '{}'; }
+        progress_loop() { :; }
+        smart_gate() { echo sda; }
+        run_restore() { echo RESTORE >> "$RUN_DIR/held"; return 0; }
+        ui_error_hold() { echo "held: $1" >> "$RUN_DIR/held"; }
+        reboot() { wc -c < "$DEVROOT/input/event5" > "$RUN_DIR/at-reboot"; }
+        sleep() { command sleep .01; }
         SERVER=unused; MAC=unused; IMAGESRV_TEST=0
         do_restore
         wait
     """
     run_ash(script, timeout=20)
-    assert frequencies(tmp_path) == expected(kind)
-    if restored:
-        assert (tmp_path / "at-reboot").read_text().strip() == str(24 * len(expected(kind)))
-    else:
-        assert "restore did not complete" in (tmp_path / "held").read_text()
+    assert frequencies(tmp_path) == expected("failure")
+    held = (tmp_path / "held").read_text()
+    assert "arrives in version 2" in held and "RESTORE" not in held, held
+    assert not (tmp_path / "at-reboot").exists()
 
 
 @pytest.mark.parametrize("states,stopped,kinds", [

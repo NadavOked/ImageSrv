@@ -242,20 +242,20 @@ test('new round: POST /room {image_id, target_drives}; a 409 fit refusal is show
   assert.ok(d.requests.some(x=>x.url==='/api/console/room'&&x.options.method==='POST'),'deploy is a room operator');
 });
 
-test('running wave (mockup P.deploy): "סבב הפצה" + "פעיל", "גל N · image · N מחשבים", "עצירת הסבב…"; three tiles — overall progress, stream rate, re-sent blocks — then the room card, then the notes', () => {
+test('running wave (mockup P.deploy): "סבב הפצה" + "פעיל", "גל N · image · N מחשבים", "עצירת הסבב…"; two tiles — overall progress, stream rate (#3978: the re-sent blocks tile went) — then the network card, the room card, then the notes', () => {
   const {run}=setup({room:roomRunning()});
   const html=run('deploy(0)'); balanced(html);
   assert.match(html,/obj-name">סבב הפצה<span class="pill info">פעיל<\/span><\/div><div class="obj-sub"[^>]*>גל 2 · office365 · 3 מחשבים</);
   assert.match(html,/<div class="obj-actions"><button class="btn danger" onclick="stopRoom\(\)">עצירת הסבב…<\/button><\/div>/,'the one header action of the mockup');
   assert.doesNotMatch(html,/startWave|openRoomRound|wakeRoom\(\)">|toggleRoomBig|refreshPage/);
   assert.doesNotMatch(html,/rnew/,'no new-round form while a round is active');
-  const order=['<div class="c12 kpis">','<div class="c12 card"><div class="card-h"><span>חדר המשכפלים','<div class="c12 rnotes">'].map((x)=>html.indexOf(x));
-  assert.ok(order.every((i,k)=>i>0&&(k===0||i>order[k-1])),'tiles → room card → notes '+order);
-  const kpis=between(html,'<div class="c12 kpis">','<div class="c12 card">');
-  assert.equal((kpis.match(/<div class="kpi /g)||[]).length,3,'three tiles, like the mockup');
+  const order=['<div class="c12 kpis">','<div class="c12 netc card"><div class="card-h"><span>מצב הרשת','<div class="c12 card"><div class="card-h"><span>חדר המשכפלים','<div class="c12 rnotes">'].map((x)=>html.indexOf(x));
+  assert.ok(order.every((i,k)=>i>0&&(k===0||i>order[k-1])),'tiles → network card → room card → notes '+order);
+  const kpis=between(html,'<div class="c12 kpis">','<div class="c12 netc card">');
+  assert.equal((kpis.match(/<div class="kpi /g)||[]).length,2,'two tiles (#3978, option A)');
+  assert.doesNotMatch(html,/בלוקים שודרו שוב/,'the tile of the old sender went (#3978)');
   assert.match(kpis,/<div class="kpi info"><div class="l">התקדמות כוללת<\/div><div class="v"><bdi dir="auto">31%<\/bdi><\/div><\/div>/,'the average of the joined drawers (wavePct)');
   assert.match(kpis,/<div class="kpi info"><div class="l">קצב זרם<\/div><div class="v"><bdi dir="auto">—<\/bdi><\/div><div class="s"><b title="[^"]*throughput_bps[^"]*">לא נמדד<\/b><\/div><\/div>/,'null → "not measured", not 0 (#989)');
-  assert.match(kpis,/<div class="kpi info"><div class="l">בלוקים שודרו שוב<\/div><div class="v"><bdi dir="auto">—<\/bdi><\/div><div class="s"><b title="[^"]*loss_blocks[^"]*">לא נמדד<\/b><\/div><\/div>/);
   assert.doesNotMatch(html,/Gb\/s|איבוד 0|מתוך 3 גלים/,'no invented rate, loss or wave total');
   const foot=between(html,'<div class="room-foot">','<div class="c12 rnotes">');
   assert.match(foot,/^<div class="room-foot"><p>גל 2 · נכתבו 5 מתוך 12 · נשארו 7 · [^<]*<\/p><p>הגל משדר — /,'what the mockup has no room for and needs no action is a quiet line at the foot of the room card, not a banner');
@@ -264,15 +264,74 @@ test('running wave (mockup P.deploy): "סבב הפצה" + "פעיל", "גל N ·
   assert.match(s2.run('deploy(0)'),/התקדמות כוללת<\/div><div class="v"><bdi dir="auto">—<\/bdi><\/div><div class="s"><b title="עוד אין דיווח כתיבה מהמגירות שהצטרפו">לא נמדד<\/b>/,'no report → "—", not 0%');
 });
 
-test('running wave: the stream tiles come from /room.round (udp-sender of the server, #989) — 0 is a measurement, null is not', () => {
-  const {run}=setup({room:roomRunning({throughput_bps:117964800,loss_blocks:0})});
+test('running wave: the stream rate comes from /room.round (the chunk engine, #989/#3173) — null is "not measured"', () => {
+  const {run}=setup({room:roomRunning({throughput_bps:117964800})});
   let html=run('deploy(0)');
   assert.match(html,/<div class="kpi info"><div class="l">קצב זרם<\/div><div class="v"><bdi dir="auto">113 MB\/s<\/bdi><\/div><\/div>/);
-  assert.match(html,/<div class="kpi info"><div class="l">בלוקים שודרו שוב<\/div><div class="v"><bdi dir="auto">0<\/bdi><\/div><\/div>/,'0 re-sent blocks is a measurement');
-  assert.doesNotMatch(between(html,'<div class="c12 kpis">','<div class="c12 card">'),/דורש API|לא נמדד/);
-  html=setup({room:roomRunning({throughput_bps:null,loss_blocks:37})}).run('deploy(0)');
+  assert.doesNotMatch(between(html,'<div class="c12 kpis">','<div class="c12 netc card">'),/דורש API|לא נמדד/);
+  html=setup({room:roomRunning({throughput_bps:null})}).run('deploy(0)');
   assert.match(html,/קצב זרם<\/div><div class="v"><bdi dir="auto">—<\/bdi><\/div><div class="s"><b title="[^"]*">לא נמדד<\/b>/);
-  assert.match(html,/בלוקים שודרו שוב<\/div><div class="v"><bdi dir="auto">37<\/bdi><\/div><\/div>/);
+});
+
+/* ‏#3978 (אפשרות א, נדב 21/11): כרטיס "מצב הרשת" -- המוקאפ m3978-chunk-stats.html. הנתונים מ-/room.round.network, וההכרעה (state)
+   היא של השרת; מה שלא נמדד הוא "לא נמדד", לא 0. */
+const NET=(o={})=>({measuring:false,state:'loss',loss_permille:3,repair_warn:false,chunks:412000,lost_chunks:1236,repair_rounds:1,
+  multicast_chunks:1180,fetched_chunks:56,first_pass_s:372,stream_zbytes:44236500992,away:0,paced_ms:{wire:300,disk:4100},write_kbps:917504,...o});
+const netCard=(html)=>between(html,'<div class="c12 netc card">','<div class="c12 card">');
+test('#3978: the network card — pill, one sentence, four tiles, and "more details" folded', () => {
+  let card=netCard(setup({room:roomRunning({throughput_bps:1,network:NET({state:'ok',loss_permille:0.5})})}).run('deploy(0)'));
+  assert.match(card,/<div class="card-h"><span>מצב הרשת <small>מנוע החתיכות<\/small><\/span><\/div>/);
+  assert.match(card,/<div class="nv"><span class="pill ok">תקינה<\/span><b>הרשת עובדת טוב<\/b><span class="tx">כמעט כל החתיכות הגיעו בשידור הראשון\. נדרש סבב תיקון אחד\.<\/span><\/div>/);
+  const tiles=between(card,'<div class="kpis">','<details>');
+  assert.equal((tiles.match(/<div class="kpi /g)||[]).length,4,'four tiles, like the mockup');
+  assert.match(tiles,/<div class="kpi ok"><div class="l">אבדן בשידור הראשון<\/div><div class="v"><bdi dir="auto">0\.5‰<\/bdi><\/div><div class="s"><bdi dir="ltr">1,236<\/bdi> חתיכות<\/div><\/div>/);
+  assert.match(tiles,/<div class="kpi info"><div class="l">סבבי תיקון<\/div><div class="v"><bdi dir="auto">1<\/bdi><\/div><div class="s"><bdi dir="ltr">1,180<\/bdi> בשידור · <bdi dir="ltr">56<\/bdi> ב-HTTP<\/div><\/div>/);
+  assert.match(tiles,/<div class="kpi info"><div class="l">מעבר ראשון<\/div><div class="v"><bdi dir="auto">6:12<\/bdi><\/div><div class="s">דקות<\/div><\/div>/);
+  assert.match(tiles,/<div class="kpi info"><div class="l">עבר ברשת<\/div><div class="v"><bdi dir="auto">41\.2 GB<\/bdi><\/div><div class="s">אחרי דחיסה<\/div><\/div>/);
+  const more=between(card,'<details>');
+  assert.match(more,/^<details><summary>פרטים נוספים<\/summary><div class="kv">/,'folded by default: no "open"');
+  for (const [k,v] of [['הגיעו בשידור הראשון','<bdi dir="ltr">99.7%</bdi>'],['תוקנו בשידור חוזר \\(multicast\\)','<bdi dir="ltr">1,180</bdi> חתיכות'],['נמשכו ב-HTTP','<bdi dir="ltr">56</bdi> חתיכות'],
+    ['המעבר הראשון','<bdi dir="ltr">6:12</bdi> דק'],['מכונות שנפלו מהגל','אין'],['מה הגביל את הזרם','דיסקי המשכפלים <small>\\(זמן שהשולח המתין: המשכפלים: <bdi dir="ltr">4.1</bdi> שנ'],['קצב כתיבה שנדרש מהדיסקים','<bdi dir="ltr">109 MB/s</bdi>']])
+    assert.match(more,new RegExp(`<span class="k">${k}</span><span class="v">${v}`),k);
+});
+test('#3978: the pill and the tile colour are the server\'s verdict; repairs above the threshold are orange; machines that fell are said', () => {
+  let card=netCard(setup({room:roomRunning({network:NET({state:'bad',loss_permille:240,lost_chunks:98900,repair_rounds:14,repair_warn:true,away:2,paced_ms:{wire:250000,disk:1000}})})}).run('deploy(0)'));
+  assert.match(card,/<span class="pill err">בעייתית<\/span><b>הרשת בעייתית<\/b><span class="tx">כ-24% מהחתיכות לא הגיעו בשידור הראשון\. נדרשו 14 סבבי תיקון\. 2 מכונות נפלו מהגל\.<\/span>/);
+  assert.match(card,/<div class="kpi err"><div class="l">אבדן בשידור הראשון<\/div><div class="v"><bdi dir="auto">240‰<\/bdi>/);
+  assert.match(card,/<div class="kpi warn"><div class="l">סבבי תיקון<\/div><div class="v"><bdi dir="auto">14<\/bdi>/);
+  assert.match(card,/<span class="k">מכונות שנפלו מהגל<\/span><span class="v"><b>2<\/b> <small>ניתוק — לא אשמת הקצב<\/small>/);
+  assert.match(card,/<span class="k">מה הגביל את הזרם<\/span><span class="v">הרשת <small>/);
+  card=netCard(setup({room:roomRunning({network:NET({state:'loss',loss_permille:58,lost_chunks:24100})})}).run('deploy(0)'));
+  assert.match(card,/<span class="pill warn">יש אבדן<\/span><b>יש אבדן ברשת<\/b>/); assert.match(card,/<div class="kpi warn"><div class="l">אבדן בשידור הראשון/);
+});
+test('#3978: what is not measured is "לא נמדד", never 0 — the first pass still running, no wave yet, a loss nobody could measure', () => {
+  let card=netCard(setup({room:roomRunning({network:{...NET(),measuring:true,state:null,loss_permille:null,chunks:null,lost_chunks:null,first_pass_s:null,stream_zbytes:null,away:null}})}).run('deploy(0)'));
+  assert.match(card,/<p class="wait">[\s\S]*המעבר הראשון עוד רץ\. נתוני הרשת יופיעו כשיסתיים, ועד אז הם "לא נמדדו", לא אפס\.<\/p>/);
+  assert.doesNotMatch(card,/class="kpi |‰/);
+  card=netCard(setup({room:roomRunning({network:null})}).run('deploy(0)'));
+  assert.match(card,/<p class="wait">נתוני הרשת לא נמדדו: עוד לא הסתיים גל בסבב הזה\.<\/p>/);
+  card=netCard(setup({room:roomRunning({network:NET({state:null,loss_permille:null,lost_chunks:null,repair_rounds:null,paced_ms:null,write_kbps:null})})}).run('deploy(0)'));
+  assert.match(card,/<span class="pill ">לא נמדד<\/span><b>האבדן ברשת לא נמדד<\/b>/);
+  assert.match(card,/<div class="kpi "><div class="l">אבדן בשידור הראשון<\/div><div class="v"><bdi dir="auto">—<\/bdi><\/div><div class="s"><b>לא נמדד<\/b><\/div>/);
+  assert.match(card,/<div class="l">סבבי תיקון<\/div><div class="v"><bdi dir="auto">—<\/bdi><\/div><div class="s"><b>לא נמדד<\/b>/);
+  assert.match(card,/<span class="k">הגיעו בשידור הראשון<\/span><span class="v"><span class="muted">לא נמדד<\/span>/);
+  assert.match(card,/<span class="k">מה הגביל את הזרם<\/span><span class="v"><span class="muted">לא נמדד<\/span>/);
+  assert.doesNotMatch(card,/>0‰|>0<\/bdi> חתיכות/,'no invented zero');
+});
+test('#3978: the history has the column "הרשת" — pill, permille and repair rounds; the active round "נמדד…"; none "לא נמדד"', () => {
+  const {run}=setup({room:roomRunning()});
+  const rounds=[{id:'rr_11',state:'closed',image_id:'img_9',image_name:'Lab-CAD',target_drives:4,written_drives:4,created_at:'2026-10-02T08:00:00Z',closed_at:'2026-10-02T08:52:00Z',
+      network:NET({state:'ok',loss_permille:0.5})},
+    {id:'rr_10',state:'closed',image_id:'img_9',image_name:'Office',target_drives:4,written_drives:3,created_at:'2026-09-28T08:00:00Z',closed_at:'2026-09-28T08:34:00Z',
+      network:NET({state:'loss',loss_permille:58,repair_rounds:5})},
+    {id:'rr_9',state:'closed',image_id:'img_9',image_name:'Linux',target_drives:2,written_drives:2,created_at:'2026-09-21T08:00:00Z',closed_at:'2026-09-21T08:09:00Z',network:null}];
+  run('ROOM_HISTORY='+JSON.stringify(rounds));
+  const html=run('roomHistoryHtml()');
+  assert.match(html,/<th[^>]*>מצב<\/th><th[^>]*>הרשת<\/th><th[^>]*>תאריך<\/th>/);
+  assert.match(html,/<span class="pill ok">תקינה<\/span> <small class="muted"><bdi dir="ltr">0\.5‰<\/bdi> · 1 סבב תיקון<\/small>/);
+  assert.match(html,/<span class="pill warn">יש אבדן<\/span> <small class="muted"><bdi dir="ltr">58‰<\/bdi> · 5 סבבי תיקון<\/small>/);
+  assert.match(html,/<span class="muted">נמדד…<\/span>/,'the active round');
+  assert.match(html,/Linux<\/td>.*<span class="muted">לא נמדד<\/span>/);
 });
 
 test('#447: the wave rate line names the drive that lowered it; without wave_rate nothing is shown', () => {
@@ -542,7 +601,7 @@ test('class tab: the existing session code as-is inside cards (row, start/stop, 
   // ‏#980 §3: החדר מ-/room/history; הכיתות (v2) נשארות "דורש API".
   assert.match(html,/היסטוריית הסבבים לא נקראה/,'unread history is said');
   run('ROOM_HISTORY='+JSON.stringify(fixtures['/room/history'])); html=run('deploy(2)'); balanced(html);
-  assert.match(html,/<th>#<\/th><th>אימג׳<\/th><th>מחשבים<\/th><th>נכתבו<\/th><th>גלים<\/th><th>משך<\/th><th[^>]*>מצב<\/th><th[^>]*>תאריך<\/th>/);
+  assert.match(html,/<th>#<\/th><th>אימג׳<\/th><th>מחשבים<\/th><th>נכתבו<\/th><th>גלים<\/th><th>משך<\/th><th[^>]*>מצב<\/th><th[^>]*>הרשת<\/th><th[^>]*>תאריך<\/th>/);
   assert.match(html,/win11-base<\/td><td>—<\/td><td>6\/6<\/td><td>—<\/td><td>90 דק(?:'|&#39;)<\/td><td[^>]*><span class="pill ok">הצליח<\/span>/,'history follows the mockup columns and keeps the result pill');
   assert.match(html,/סבבים קודמים בכיתות — <b[^>]*>דורש API<\/b>/);
 });

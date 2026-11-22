@@ -68,10 +68,10 @@ jobs:
       SHARD: ${{ matrix.shard }}
       PY: ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
           # התלויות מוצמדות ב-requirements.txt, ולכן מפתח המטמון יציב
@@ -122,7 +122,7 @@ jobs:
           sha=$(python tests/impeccable_gate.py pin | sed -n 's/^sha256=//p')
           [ -n "$sha" ] || { echo "impeccable_gate.py pin: no sha256" >&2; exit 1; }
           echo "sha256=$sha" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/impeccable
           key: impeccable-${{ steps.impeccable.outputs.sha256 }}
@@ -257,7 +257,7 @@ jobs:
       # שורפת את מכסת האחסון על מה שאיש לא יפתח.
       - name: Keep the logs when something failed
         if: failure()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: logs-py${{ matrix.python-version }}-shard-${{ matrix.shard }}
           path: |
@@ -284,7 +284,7 @@ jobs:
         run: echo "$GITHUB_SHA" > "$RUNNER_TEMP/gate/finished"
       - name: Hand the evidence to the merge (#2952)
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: gate-py${{ matrix.python-version }}-shard-${{ matrix.shard }}
           path: ${{ runner.temp }}/gate
@@ -333,10 +333,10 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
       # ‏lab_gate ממפה id לשם ב-junit דרך הקוד של pytest עצמו (`_pytest.junitxml`).
@@ -344,7 +344,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pytest
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: gate-py${{ matrix.python-version }}-shard-*
           path: ${{ runner.temp }}/shards

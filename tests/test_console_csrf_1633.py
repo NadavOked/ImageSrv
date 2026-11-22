@@ -1,6 +1,6 @@
-"""#1633: שומר הקונסולה (:8081) — X-Frame-Options, Fetch Metadata, סוג גוף.
+"""#1633: שומר הקונסולה (:443) — X-Frame-Options, Fetch Metadata, סוג גוף.
 
-מה שנבדק כאן הוא ההתנהגות על ``create_console_app`` — האפליקציה שרצה על 8081
+מה שנבדק כאן הוא ההתנהגות על ``create_console_app`` — האפליקציה שרצה על 443
 בייצור — ולא על המעטפת המשולבת: ``create_app`` מרכיב גם את נתיבי הסוכן
 והקיוסק, והשומר במכוון אינו שם.
 
@@ -26,7 +26,7 @@ from server.app import create_agent_app, create_console_app
 
 
 def _console(server):
-    """לקוח מחובר כ-admin על אפליקציית הקונסולה עצמה (8081)."""
+    """לקוח מחובר כ-admin על אפליקציית הקונסולה עצמה (443)."""
     console = TestClient(create_console_app(server["app"].state.runtime))
     complete_console_login(console, server["ctx"].conn, "noc", "admin-pass-123")
     return console
@@ -150,7 +150,7 @@ def test_own_page_user_action_and_non_browser_pass(server, site):
 # TestClient מדבר עם ``http://testserver`` — זה ה-origin של "הקונסולה עצמה" כאן.
 
 @pytest.mark.parametrize("origin", [
-    "http://testserver:8082",        # אותו host, פורט אחר — הדף שהמיון תיאר
+    "http://testserver:7711",        # אותו host, פורט אחר — הדף שהמיון תיאר
     "https://testserver",            # scheme אחר
     "http://evil.example",           # host אחר
     "null",                          # sandbox / file:// / הפניה
@@ -252,7 +252,7 @@ def test_tar_upload_type_reaches_the_handler(server):
 # --- מה שאסור לשבור ----------------------------------------------------------
 
 def test_agent_port_is_untouched(server):
-    """פורט הסוכן (8080, קיוסק וסוכן): בלי השומר ובלי הכותרת."""
+    """פורט הסוכן (7712, קיוסק וסוכן): בלי השומר ובלי הכותרת."""
     agent = TestClient(create_agent_app(server["app"].state.runtime))
     r = agent.post("/api/console/login", content=b"{}", headers={"Content-Type": "text/plain"})
     assert r.status_code != 415, r.text

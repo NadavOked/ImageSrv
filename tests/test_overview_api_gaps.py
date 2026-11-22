@@ -52,16 +52,16 @@ def test_default_hooks_carry_the_uptime_reader():
 
 
 def test_deploy_ip_is_the_host_of_server_base():
-    state = deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:8080")
-    assert deploy_net.deploy_ip("http://10.44.9.10:8080", state) == "10.44.9.10"
-    assert deploy_net.deploy_ip("http://10.44.9.10:8080", None) == "10.44.9.10"
+    state = deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:7712")
+    assert deploy_net.deploy_ip("http://10.44.9.10:7712", state) == "10.44.9.10"
+    assert deploy_net.deploy_ip("http://10.44.9.10:7712", None) == "10.44.9.10"
 
 
 def test_deploy_ip_is_null_when_the_deploy_network_is_not_configured():
     """#1088: בלי רשת הפצה server_base הוא loopback — וזו לא כתובת שתחנה
     רואה. null, לא "127.0.0.1"."""
     none = deploy_net.DeployState("none", None, None)
-    assert deploy_net.deploy_ip("http://127.0.0.1:8080", none) is None
+    assert deploy_net.deploy_ip("http://127.0.0.1:7712", none) is None
 
 
 # --- יחידה: severity -----------------------------------------------------------
@@ -112,12 +112,12 @@ def gap_server(tmp_path: Path, images_root: Path, clock):
     hooks = {"uptime": lambda: reading["uptime"]}
 
     def build(source: str, name: str):
-        state = (deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:8080")
+        state = (deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:7712")
                  if source == "cli" else deploy_net.DeployState("none", None, None))
         deploy = deploy_net.DeployContext(
-            state=state, agent_port=8080, tftp_root=tmp_path / "tftp",
+            state=state, agent_port=7712, tftp_root=tmp_path / "tftp",
             repo_dir=tmp_path, servers_interface="eth0")
-        base = "http://10.44.9.10:8080" if source == "cli" else "http://127.0.0.1:8080"
+        base = "http://10.44.9.10:7712" if source == "cli" else "http://127.0.0.1:7712"
         app = create_app(tmp_path / f"data-{name}", images_root, base,
                          now_fn=clock, health_hooks=hooks, deploy=deploy)
         users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test",

@@ -112,7 +112,7 @@ MAX_KERNEL_CHARS = 300
 def _kernel(raw: object) -> dict | None:
     """``{drawer: [lines] | None}``. A list (even an empty one) = the agent read dmesg and these are the drawer's ATA lines;
     **None = not read**, and it stays None -- a drawer whose value is not a list of strings is not "a clean kernel" (principle
-    5). Not an object at all = the agent did not say (an older agent, a udpcast wave): None."""
+    5). Not an object at all = the agent did not say (an older agent): None."""
     if not isinstance(raw, dict):
         return None
     out = {}
@@ -199,6 +199,10 @@ def numbers(senses_json: str | None) -> dict:
            "net_rx_ps_max": _peak(c.get("net_rx_ps_max") for c in cpu if isinstance(c, dict)),
            "rx_missed": _peak([nic.get("rx_missed")]), "rx_no_buffer": _peak([nic.get("rx_no_buffer")]),
            "ring_rx": _peak([nic.get("ring_rx")]), "rx_bytes": _peak([nic.get("rx_bytes")]),
+           "ring_rx_max": _peak([nic.get("ring_rx_max")]),
+           # #3815: pause frames (the counters) and the pause setting (`ethtool -a`: on = 1, off = 0; not said = absent)
+           **{k: _peak([nic.get(k)]) for k in ("tx_xon", "tx_xoff", "rx_xon", "rx_xoff")},
+           **{k: None if not isinstance(nic.get(k), bool) else float(nic[k]) for k in ("pause_rx", "pause_tx")},
            "disk_util_max": _peak(d.get("util_max") for d in disks),
            "disk_inflight_max": _peak(d.get("inflight_max") for d in disks),
            "disk_w_ms_max": _peak(d.get("w_ms_max") for d in disks)}

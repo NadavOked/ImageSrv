@@ -27,7 +27,7 @@ def _fake_run(stdout):
 
 def test_matching_address_returns_its_interface(monkeypatch):
     monkeypatch.setattr(subprocess, "run", _fake_run(_IP_JSON))
-    assert _interface_for("http://10.44.0.1:8080") == "eth0"
+    assert _interface_for("http://10.44.0.1:7712") == "eth0"
 
 
 def test_no_ip_command_is_a_dev_station_none(monkeypatch):
@@ -35,13 +35,13 @@ def test_no_ip_command_is_a_dev_station_none(monkeypatch):
     def boom(*a, **k):
         raise FileNotFoundError("ip")
     monkeypatch.setattr(subprocess, "run", boom)
-    assert _interface_for("http://10.44.0.1:8080") is None
+    assert _interface_for("http://10.44.0.1:7712") is None
 
 
 def test_ip_ran_but_no_nic_matches_fails_loudly(monkeypatch):
     monkeypatch.setattr(subprocess, "run", _fake_run(_IP_JSON))
     with pytest.raises(InterfaceDetectionError):
-        _interface_for("http://10.99.99.99:8080")
+        _interface_for("http://10.99.99.99:7712")
 
 
 def test_ip_present_but_failed_fails_loudly(monkeypatch):
@@ -50,7 +50,7 @@ def test_ip_present_but_failed_fails_loudly(monkeypatch):
         raise subprocess.CalledProcessError(1, "ip")
     monkeypatch.setattr(subprocess, "run", boom)
     with pytest.raises(InterfaceDetectionError):
-        _interface_for("http://10.44.0.1:8080")
+        _interface_for("http://10.44.0.1:7712")
 
 
 def test_hostname_url_is_resolved_before_matching(monkeypatch):
@@ -60,14 +60,14 @@ def test_hostname_url_is_resolved_before_matching(monkeypatch):
         _socket, "getaddrinfo",
         lambda host, port: [(None, None, None, "", ("10.44.0.1", 0))],
     )
-    assert _interface_for("http://imagesrv.lab:8080") == "eth0"
+    assert _interface_for("http://imagesrv.lab:7712") == "eth0"
 
 
 def test_ip_present_but_malformed_json_fails_loudly(monkeypatch):
     # `ip` יצא 0 אבל הפלט אינו JSON — שרת אמיתי, לא None שקט (Codex #2).
     monkeypatch.setattr(subprocess, "run", _fake_run('{"truncated'))
     with pytest.raises(InterfaceDetectionError):
-        _interface_for("http://10.44.0.1:8080")
+        _interface_for("http://10.44.0.1:7712")
 
 
 def test_address_for_interface_returns_ipv4(monkeypatch):

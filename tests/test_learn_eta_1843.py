@@ -33,8 +33,9 @@ def conn(tmp_path):
 def _wave(conn, delivered: dict, *, wall: float, total: float, ended: str = "send_done",
           state: str = "closed", direct: bool = False) -> str:
     """גל שהסתיים: `sessions` (started_at → closed_at = `total` שניות) ושורת
-    `wave_rates` עם `stream.wall_s` ו-`delivered` — הצורה ש-`drive_rates`
-    כותב (`record_stream` / `record_wave`)."""
+    `wave_rates` עם `stream.chunk.first_pass_s` (משך הזרם, #3549) ו-`chunk.ended`,
+    ו-`delivered` — הצורה שמנוע החתיכות (`chunk_rate.record`) ו-`drive_rates.record_wave`
+    כותבים. #3173: `stream.wall_s` של udp-sender נמחק איתו."""
     sid = f"ses_eta{next(_seq):04d}"
     start = 1_700_000_000
     from datetime import datetime, timezone
@@ -48,9 +49,9 @@ def _wave(conn, delivered: dict, *, wall: float, total: float, ended: str = "sen
               for mac, got in delivered.items() for k in range(got["drawers"])]
     conn.execute("INSERT INTO wave_rates (session_id, decision, at, stream, delivered)"
                  " VALUES (?,?,?,?,?)",
-                 (sid, json.dumps({"max_bitrate": "400m", "roster": roster,
+                 (sid, json.dumps({"max_bitrate": "400m", "roster": roster, "engine": "chunk",
                                    **({"direct": True} if direct else {})}),
-                  iso(start), json.dumps({"wall_s": wall, "ended": ended}),
+                  iso(start), json.dumps({"chunk": {"first_pass_s": wall, "ended": ended}}),
                   json.dumps(delivered)))
     conn.commit()
     return sid

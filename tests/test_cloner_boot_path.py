@@ -21,13 +21,13 @@ import pytest
 
 from boot.grub_menu import GrubConfig, render, render_local_only
 
-CFG = GrubConfig(server_base="http://10.44.12.10:8080")
+CFG = GrubConfig(server_base="http://10.44.12.10:7712")
 
 #: אותו שרת, אבל עם ה-initramfs הגרפי זמין על הדיסק. מאז שה-cloner
 #: קיבל מסך (הכרעת הבעלים) הוא ב-ROLES_WITH_GUI, וזה המצב שבו נבדק
 #: שהמסך לא שבר את #17: עדיין ערך יחיד, חבוי, ובלי דיסק מקומי.
 CFG_GUI = GrubConfig(
-    server_base="http://10.44.12.10:8080",
+    server_base="http://10.44.12.10:7712",
     gui_initrd_path="/boot/initrd.img.gui",
 )
 
@@ -115,9 +115,9 @@ def test_the_cloner_file_still_loads_the_agent(a):
     """בקרה על הכיוון השני: קובץ בלי דיסק **ובלי סוכן** הוא מכונה
     תקועה. מה שנשאר חייב להיות מסלול שלם — קרנל, initrd, וכתובת השרת."""
     text = render(a, CFG)
-    assert "linux (http,10.44.12.10:8080)/boot/vmlinuz" in text
-    assert "initrd (http,10.44.12.10:8080)/boot/initrd.img" in text
-    assert "imagesrv.server=http://10.44.12.10:8080" in text
+    assert "linux (http,10.44.12.10:7712)/boot/vmlinuz" in text
+    assert "initrd (http,10.44.12.10:7712)/boot/initrd.img" in text
+    assert "imagesrv.server=https://10.44.12.10:7712" in text
 
 
 @pytest.mark.parametrize("a", CLONER_ANSWERS)

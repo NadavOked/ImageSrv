@@ -110,7 +110,8 @@ def test_lists_contract_fields_and_valid_risks():
     )
     rows = done.stdout.splitlines()
     assert [row.split("|")[0] for row in rows] == list(TOOLS)
-    assert all(len(row.split("|")) == 5 for row in rows)
+    assert all(len(row.split("|")) == 6 for row in rows)       # #2804: id|domain|title|risk|args|what
+    assert all(row.split("|")[1] == "windows" and row.split("|")[5].strip() for row in rows)
     assert all(row.split("|")[3] in {"ro", "rw", "destroy"} for row in rows)
 
 

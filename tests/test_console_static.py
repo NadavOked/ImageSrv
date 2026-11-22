@@ -238,12 +238,12 @@ def test_static_includes_are_at_9_9():
     לקח את 8.0 במקביל); בשער be שניהם יחד = 8.2; #649 שלב 1 (ארגז כלים) = 8.3;
     #1049 שלב ב' (בריאות המכונה בכרטיס) = 8.4; #1048 (כבל ו-LLDP) ותרשים
     הרשת — טקסט התיבות ב-foreignObject במקום <text> שגלש על הקווים = 8.6;
-    מודל האתרים (וילן השרתים במקום "ניהול", משני דרך FW · 8443 בקו מקווקו) = 8.7;
+    מודל האתרים (וילן השרתים במקום "ניהול", משני דרך FW · 7700 בקו מקווקו) = 8.7;
     #1073 (הפצה בלי וובי — `message_he` בכניסה, מטריצת ההרשאות) = 8.8;
     #1066 שלב ב' (דף "אחסון", storage.js) = 8.9;
     #1093 (ערכת נושא לפי משתמש, נשמרת בשרת) = 8.9;
     #1081 (v1 בלי כיתות — `capabilities.classrooms`) = 8.9;
-    #1077 (מוניטור כבוי בברירת מחדל — אזהרת 5900) = 8.9;
+    #1077 (מוניטור כבוי בברירת מחדל — אזהרת 7710) = 8.9;
     #1085 שלב ב' (מסכי כניסה לפי המוקאפ) = 9.0;
     #1033 (גריד הקלונרים — מלבן אנכי, דיסקים מוערמים לפי SATA, שתי שורות
     בתיבת דיסק) = 9.0;
@@ -329,26 +329,31 @@ def test_static_includes_are_at_9_9():
     #3658 (18/11): שתי הגדרות חדשות, "המתנה של מגירה לדיסק" ו"...לרשת" (console.js, SETTING_ROWS) = 14.15.
     #3726 (18/11): שורת המגירה העומדת מציגה רק את הזמן שעבר, בלי "ייכשל אחרי" ובלי "עד" (console.js stallText) = 14.15.
     #3666 (18/11): הצבע של הדיסק מגיע מהמוח (`rule`), והקונסולה אינה מחשבת אותו (console.js: אין diskRule/diskFacts) = 14.19.
+    #3887/#3967/#3968 (21/11): דף "שירותים" במקום "פורטים" (console-services.js), פס המצב התחתון ירד,
+    אייקון מוח ל"שאלות המוח" = 14.27 (14.21–14.26 שמורים לענפים המקבילים של גרסת המכללה).
     לשונית "עותקי בדיקת כתיבה" בדף הדיסקים (#3284, disks.js) = 13.72.
     שירותי הכרטיסים עברו מ"חיבורים פיזיים" לדף "פורטים" (#3028, nicsvc.js/console.js) = 13.73 (13.71/13.72 תפוסים ב-#3271 וב-#3284).
     פס ייצור: "מצטרף ומשלים" ו"חסרות N חתיכות" בשורת מגירה שחזרה (#3064 R5, console-prodline.js) = 13.91 (ענף המעבדה lab/vm-1114f עומד על 13.90).
+    #3173/#3978 (21/11): קצב הזרם ממנוע החתיכות, כרטיס "מצב הרשת" ועמודת "הרשת" בהיסטוריה (אפשרות א), והאיבוד של גל חתיכות בהיסטוריה (console.js, console.css, memory_ui.js) = 14.22.
+    #3978 (21/11, נדב "כן"): העמודה "קצב ואיבוד" יורדת מהיסטוריית הסבבים, ו"בלוקים שאבדו" נהיה "חתיכות שאבדו" (console.js, memory_ui.js) = 14.23.
+    integ/r49 (21/11): האיחוד של גרסת המכללה — room-tiles (14.23) ודף השירותים (14.27) יחד, גבוה משניהם = 14.28. #3871 (פורטי 77xx: console.js, nicsvc.js, branches.js) = 14.29.
     שוויון על כל ה-includes — bump חלקי הוא הבאג."""
 
     page = _index()
     versions = set(re.findall(r'\?v=(\d+\.\d+)"', page))
-    assert versions == {"14.20"}, versions
+    assert versions == {"14.29"}, versions
     # ביקורת 10/10: monitor.html מושך את אותם console.css ו-design-tokens.css — הם נשארו על 3.29 לנצח,
     # ולכן דפדפן שזכר אותם הציג את המוניטור בעיצוב ישן. monitor.js לבדו שומר על גרסה משלו (test_monitor).
     mon = (STATIC / "monitor.html").read_text(encoding="utf-8")
     shared = set(re.findall(r'(?:design-tokens|console)\.css\?v=(\d+\.\d+)"', mon))
-    assert shared == {"14.20"}, shared
+    assert shared == {"14.29"}, shared
     assert 'monitor.js?v=3.42' in mon
 
 
 def test_iso_tab_script_is_included_after_console_js():
     """#404: iso.js נשען על UI/api/sheet מ-console.js, ולכן נטען אחריו, באותה גרסה."""
     page = _index()
-    assert '<script src="iso.js?v=14.20"></script>' in page
+    assert '<script src="iso.js?v=14.29"></script>' in page
     assert page.index('src="console.js?v=') < page.index('src="iso.js?v=')
 
 
@@ -504,7 +509,7 @@ def test_deploy_page_is_the_cloners_room_from_the_api_only():
                    "function roomNewWindow(", "function stopRoom(", "function startWave(", "function imageFitReason(", "function deployClassView(",
                    'post("/room", body)', 'post("/room/start")', 'post("/room/close", { confirm_name: name })',
                    'title: "חדר המשכפלים"', "כשל במחשב אחד לא עוצר את השאר", "עצירת הסבב…", "לא מחובר — לא הצטרף לסבב",
-                   "בלי תשובה הסוכן ממשיך לכתוב", "בלי תשובה הסוכן מדלג", "r.throughput_bps != null", "r.loss_blocks != null", "דורש API",
+                   "בלי תשובה הסוכן ממשיך לכתוב", "בלי תשובה הסוכן מדלג", "r.throughput_bps != null", "function roomNetCard(r)", "דורש API",
                    'deploy: { crumb: "סבב הפצה", title: "סבב הפצה", tabs: deployTabs(), render: deploy, load: loadDeploy, own: true }'):
         assert needed in js, needed
     block = js[js.index("/* ---------- #954 גל 4"):js.index("/* ---------- ספריית אימג'ים (#954 גל 2)")]
@@ -535,35 +540,34 @@ def test_failed_rounds_show_the_reason_and_offer_close_or_reopen():
         assert needed in js, needed
 
 
-def test_health_and_ports_pages_are_tables_from_the_api_and_ports_have_no_switches():
+def test_health_and_services_pages_are_tables_from_the_api():
     """#954 גל 5: בריאות = טבלת בדיקות (חמישה מצבים, "לא נבדק" אינו ירוק,
-    לולאות אתחול מקובצות) + כרטיס גרסה ועדכון (הקלדת שם השרת) — בלי מתגים
-    ובלי הלשוניות הזהות "סקירה/שירותים/בדיקות" (#829 M5).
-    #1267 (נדב 10/10): פורטים = כרטיס לכל רשת (הפצה / ניהול / בין שרתים),
-    חומת אש רק בין רשתות, ו**אין "פתח/סגור פורט"** — רק "בדוק עכשיו" ו"הצג
-    פרטים". המתגים של #996/#1015 יצאו מהדף, ומתג המוניטור בדף המוניטור.
-    #1266: SSH יצא מהמוצר — אין מתג SSH לשרת בחיבורים פיזיים ואין /ssh."""
+    לולאות אתחול מקובצות) — בלי הלשוניות הזהות "סקירה/שירותים/בדיקות" (#829 M5).
+    #3887 (נדב 20/11): דף "פורטים" הוחלף בדף "שירותים" (console-services.js): בלי כרטיס לכל רשת,
+    בלי "מה לפתוח בחומת האש של המכללה" (עובר לוויקי, #3515), בלי "בדוק עכשיו"/"הצג פרטים";
+    כרטיס "שירותים" ירד מהבריאות. #1266: SSH יצא מהמוצר — אין /ssh."""
     js = _console_js()
     for needed in ("function health()", "function healthRows(", "function updateActionsHtml(", "async function loadHealthUpdate(",
                    'unknown: ["unk", "לא נבדק"]', 'off: ["", "כבוי"]', '["agent_loop:", "לולאות אתחול", "agent_loops"]',
-                   "function ports()", "function portCard(", "function portDetail(", "async function portCheckNow(",
-                   '"מה לפתוח בחומת האש של המכללה"', 'const PORT_FW = { open: ["ok", "פתוח"], blocked: ["err", "חסום"] }',
+                   "function servicesPage()", "async function loadServices()", "function svcStop(", "async function svcStart(",
                    "nicBody(n, { enabled: false, proxy: false })",
                    'onSubmit: () => send({ confirm: "imagesrv.monitor" })',
                    'health: { crumb: "בריאות ושירותים", title: "בריאות ושירותים", tabs: [], render: health, load: loadHealth, own: true }',
-                   'render: ports, load: loadPorts, own: true }'):
+                   'ports: { crumb: "שירותים", title: "שירותים", tabs: [], render: () => servicesPage(), load: () => loadServices(), own: true }'):
         assert needed in js, needed
     for gone in ('id="ssh-body"', "function loadSsh(", "function sshLight(", "SSH_LIGHT", 'title="בקרוב (נדרש endpoint)"',
                  'tabs: ["סקירה", "שירותים", "בדיקות"]', "health: [health,", "ports: [ports]",
+                 "function ports()", "function portCard(", "function portDetail(", "function portCheckNow(", "PORT_NETWORKS",
+                 "מה לפתוח בחומת האש של המכללה", "function healthServicesCard(", "function healthSvcStop(",
                  "function portRows(", "function portServerToggle(", "function portToggleUrl(", "havePortsDhcp", "PORTS_MONITOR",
                  "function portSwitchHtml(", "function portSshNic(", "function sshToggle(", "SSH_STATE", 'api("/ssh")'):
         assert gone not in js, gone
-    block = js[js.index("/* ---------- #1267: רשת › פורטים"):js.index("/* ---------- #954 גל 6: מוניטור — הרשימה")]   # גל 6: המוניטור אחרי הפורטים
-    assert 'role="switch"' not in block[block.index("const PORT_NETWORKS"):], "אין מתג בדף הפורטים (#1267)"
-    assert "disabled" not in block, "כפתור מנוטרל במקום 'דורש API' (README §8)"
-    assert "prompt(" not in block and "confirm(" not in block.replace("confirmSheet(", ""), "prompt/confirm חסומים — רק sheet()"
+    svc = (STATIC / "console-services.js").read_text(encoding="utf-8")
+    assert "prompt(" not in svc and "confirm(" not in svc, "prompt/confirm חסומים — רק sheet()"
+    assert "verify:" not in svc and "fields:" not in svc, "בלי הקלדת מילה (#1270): המילה נקראת מ-/ports, לא מוקלדת"
     css = (STATIC / "console.css").read_text(encoding="utf-8")
-    for sel in (".page .st.unk::before{", ".page .sw{", ".page .sw.unk{", ".page dl.mkv{", ".page label.msw{"):   # #1300: .upd → dl.kv/label.sw של המוקאפ
+    for sel in (".page .st.unk::before{", ".page .sw{", ".page .sw.unk{", ".page dl.mkv{", ".page label.msw{",
+                ".svc-tg{", ".svc-tg.on{background:var(--clr-action)}", ".svc-page .pill.unk{"):
         assert sel in css, sel
 
 
@@ -639,7 +643,7 @@ def test_network_is_one_object_page_with_the_diagram_nics_and_deploy_tabs():
     for needed in ("function networkPage(", "function loadNetwork(", "function netDiagramModel(", "function netMapSvg(", "function netLaneOpen(", "function netLaneDrawerHtml(", "function networkDiagramTab(",
                    "function networkNicsTab(", "function networkDeployTab(", "function netServicesOn(", "function netProbe(", "function openNetwork(",
                    'network: { crumb: "רשת", title: "רשת", tabs: NET_TABS, render: (i) => networkPage(i), load: loadNetwork, own: true }',
-                   'const NET_TABS = ["תרשים", "חיבורים פיזיים", "רשת הפצה", "פורטים"];',
+                   'const NET_TABS = ["תרשים", "חיבורים פיזיים", "רשת הפצה"];',   # #3887: "שירותים" — דף משלו בעץ
                    'width="${W}" height="340" viewBox="0 0 ${W} 340"',   # gotcha: SVG עם height מפורש
                    "מה מותר: דורש API", 'title: "כיתות — v2"', "`/net/interfaces/${encodeId(name)}/probe`",
                    "editNicConfig(n.name)", "editDeployNet(n.name)", "routeDeleteSheet(", 'cls: "stable",'):
@@ -650,7 +654,7 @@ def test_network_is_one_object_page_with_the_diagram_nics_and_deploy_tabs():
                  # #1263: "קבצי dnsmasq" ו"הקובץ של הכרטיס" הוסרו מהקונסולה
                  "previewDnsmasq", "netShowFile", "קבצי dnsmasq", "editNic(", "editAddress("):
         assert gone not in js, gone
-    block = js[js.index("/* ---------- #954 גל 8: רשת כאובייקט"):js.index("/* ---------- #1267: רשת › פורטים")]
+    block = js[js.index("/* ---------- #954 גל 8: רשת כאובייקט"):js.index("/* ---------- #3887: מה שנשאר מדף \"פורטים\"")]
     assert "prompt(" not in block and "confirm(" not in block.replace("confirmSheet(", ""), "prompt/confirm חסומים — רק sheet()"
     assert "disabled" not in block.replace("disabled_at", ""), "כפתור מנוטרל במקום 'דורש API' (README §8)"
     assert "function routeDeleteSheet(" in (STATIC / "netcfg.js").read_text(encoding="utf-8")
@@ -846,7 +850,9 @@ def test_the_register_window_builds_the_address_on_the_interserver_port():
     port = int(re.search(r"^const INTERSERVER_PORT = (\d+);$", js, flags=re.M).group(1))
     assert port == health.DEFAULT_OWN_PORTS["interserver"]
     main = (STATIC.parent / "main.py").read_text(encoding="utf-8")
-    assert f'"--interserver-port", type=int, default={port},' in main
+    from server.core import ports as product_ports
+    assert product_ports.INTERSERVER == port  # #3871: the default comes from the one port table
+    assert '"--interserver-port", type=int, default=product_ports.INTERSERVER,' in main
 
 
 def test_a_secondary_root_is_indented_like_ta():

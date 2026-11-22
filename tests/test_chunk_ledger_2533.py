@@ -247,6 +247,23 @@ def _verified(ctx, chunks: int = CHUNKS) -> None:
     assert ctx.library.record_index("img_7f3a91", {3: {
         "index": index.render(), "list": listing, "list_xxh64": xxh64_reference(listing.encode("ascii")),
         "bytes": index.data_bytes}}) == [3]
+    # #3173: a wave goes out only with the BLAKE3 list beside the file too (`indexprep.missing`), as long as the index
+    (path.parent / "p3.win.pcl.zst.b3").write_bytes(bytes(32 * chunks))
+
+
+def _unverified(ctx) -> None:
+    """img_7f3a91's p3 as a capture leaves it: the server has not derived and verified its index yet. After the
+    wave is open -- a wave does not open on such an image (#3137), and the ledger is asked about a report."""
+    path = Path(ctx.library.root) / "img_7f3a91" / "manifest.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    for part in raw["partitions"]:
+        if part.get("index") == 3:
+            for field in ("readback_xxh64", "readback_chunks", "readback_bytes", "readback_chunk_bytes", "chunk_b3"):
+                part.pop(field, None)
+    path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
+    for name in ("p3.win.pcl.zst.idx", "p3.win.pcl.zst.b3"):
+        (path.parent / name).unlink()
+    L._SEEN.clear()                                                      # the manifest is kept MANIFEST_TTL_S
 
 
 def _wave(room_server) -> str:
@@ -291,8 +308,9 @@ def test_a_refused_ledger_does_not_fail_the_report(room_server):
 
 
 def test_no_ledger_for_an_image_whose_index_is_not_verified(room_server):
-    ctx = room_server["ctx"]                                                 # the fixture image: no index at all
+    ctx = room_server["ctx"]
     wave = _wave(room_server)
+    _unverified(ctx)                                                         # no index at all
     assert _progress(room_server, wave, [{"dev": "sda", "durable": [{"part": 3, "ranges": [[0, 5]]}]}]).json()["ok"]
     assert L.of_disk(ctx.conn, "S1", SIZE) == {}
 
@@ -316,7 +334,8 @@ def test_a_refusal_that_the_server_may_lift_says_retry_later(room_server, monkey
     not name the disk. The reason by name stays in the list, beside the mark -- and
     once the server knows, the very same report is recorded."""
     ctx = room_server["ctx"]
-    wave = _wave(room_server)                                            # the fixture image: no index yet
+    wave = _wave(room_server)
+    _unverified(ctx)                                                     # no index yet
     report = {"session_id": wave, "targets": [{"dev": "sda", "durable": [{"part": 3, "ranges": [[0, 5]]}]}]}
     problems = L.note_report(ctx, CLONER1, report)
     assert len(problems) == 2 and "no verified chunk index yet" in problems[0] and problems[1] == L.RETRY_LATER

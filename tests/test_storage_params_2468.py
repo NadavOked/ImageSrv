@@ -228,7 +228,7 @@ def test_create_app_wires_boot_dir_and_tftp_root(tmp_path, images_root, clock):
     boot, tftp = tmp_path / "data" / "boot", tmp_path / "data" / "tftp"
     for d in (boot, tftp):
         d.mkdir(parents=True)
-    deploy = deploy_net.DeployContext(state=deploy_net.DeployState("none", None, None), agent_port=8080, tftp_root=tftp,
+    deploy = deploy_net.DeployContext(state=deploy_net.DeployState("none", None, None), agent_port=7712, tftp_root=tftp,
                                       repo_dir=tmp_path)
     captured = {}
     import server.app as app_module
@@ -241,10 +241,10 @@ def test_create_app_wires_boot_dir_and_tftp_root(tmp_path, images_root, clock):
     mp = pytest.MonkeyPatch()
     mp.setattr(app_module, "create_storage_locations_router", spy)
     try:
-        app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+        app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                          now_fn=clock, boot_dir=boot, deploy=deploy,
                          storage_check_interval=10**9)
-        app.state.ctx.sender.stop()
+        app.state.ctx.chunk.stop()
     finally:
         mp.undo()
     assert set(captured.get("boot_trees") or ()) == {str(boot), str(tftp)}

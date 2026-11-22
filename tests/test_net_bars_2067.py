@@ -61,7 +61,7 @@ def test_an_outage_is_a_red_record_with_the_moment_of_the_last_byte(tmp_path):
 @_ASH
 def test_the_ceiling_is_the_receivers_own(tmp_path):
     """The bar says when the round fails: udp-receiver's --receive-timeout, not a constant of the bar."""
-    got = _ticks(tmp_path, "UDPCAST_STALL_TIMEOUT=120; t=2000; stream_beep_tick 45; wait; rec")
+    got = _ticks(tmp_path, "STREAM_STALL_TIMEOUT=120; t=2000; stream_beep_tick 45; wait; rec")
     assert got == ["net=lost|1955|120"], got
 
 

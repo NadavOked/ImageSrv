@@ -37,10 +37,14 @@ def test_the_stream_is_a_real_tar(tmp_path):
 
     with tarfile.open(fileobj=io.BytesIO(raw)) as tar:
         names = sorted(tar.getnames())
-        assert names == [
+        assert names == [                       # every file of the folder: the index and the BLAKE3 list go with it
             "img_7f3a91/manifest.json",
             "img_7f3a91/p1.esp.pcl.zst",
+            "img_7f3a91/p1.esp.pcl.zst.b3",
+            "img_7f3a91/p1.esp.pcl.zst.idx",
             "img_7f3a91/p3.win.pcl.zst",
+            "img_7f3a91/p3.win.pcl.zst.b3",
+            "img_7f3a91/p3.win.pcl.zst.idx",
         ]
         content = tar.extractfile("img_7f3a91/p1.esp.pcl.zst").read()
         assert content == b"compressed-partition-bytes"

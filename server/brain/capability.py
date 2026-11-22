@@ -7,11 +7,11 @@
   או שכל הליבות עברו את רף המעבד **שנלמד** (`cpu_threshold`), **בזמן שהדיסקים לא היו עמוסים**. נרשם אות יכולת (``LIMITED``).
 - **הדיסק עיכב** = המקלט אומר שהדיסקים פיגרו (``busy`` ב-rxstats) או שמגירה הייתה עמוסה כמעט כל הגל. אובדן
   באותו גל אינו ראיה על המשכפל: ``DISK_BOUND``, **ולא נלמד דבר**.
-- **לא נקרא** = ``UNDECIDED`` ולא נלמד דבר (עיקרון 5): אין קצב זרם, אין מונה אובדן, או לא ידוע אם הדיסקים פיגרו. גל udpcast
-  (בלי חושי הגל) תמיד כאן.
+- **לא נקרא** = ``UNDECIDED`` ולא נלמד דבר (עיקרון 5): אין קצב זרם, אין מונה אובדן, או לא ידוע אם הדיסקים פיגרו. גל ישן של
+  המנוע הקודם מ-DB משודרג (בלי חושי הגל ובלי ``stream.chunk``, #3173) תמיד כאן.
 - **גל שהמשכפל עמד בו** (קרא את מונה האובדן, והוא 0, והמעבד מתחת לרף) -- ``CLEAN``: הוכחה שהוא מקבל **לפחות** את הקצב הזה.
   זו הקצב הגבוה ביותר בלי אובדן. **#3554: "קיבל לפחות X" דורש שהגל באמת הגיע ל-X.** שלושה תנאים נוספים, כולם ראיה חיובית: הקצב שהושג
-  (`Evidence.achieved_bps`: ``chunk.achieved_bps`` של גל חתיכות, או ``stream_bps`` x 8 של udpcast) לפחות ``drive_rates.KEEP_UP`` x הקצב שהתבקש;
+  (`Evidence.achieved_bps`: ``chunk.achieved_bps`` של גל החתיכות) לפחות ``drive_rates.KEEP_UP`` x הקצב שהתבקש;
   הדיסקים **נמדדו** ולא פיגרו. ברזל 16/11 (RS-1): אובדן 0, מעבד 46%, אבל הושגו 419.6Mb/s מתוך 669, ו-``disks_behind``; והוא נרשם CLEAN ו"קיבל
   לפחות 669Mb/s". היום: דיסקים שפיגרו = ``DISK_BOUND``; לא הגיע לקצב = ``NOT_PUSHED``; קצב שהושג או דיסקים שלא נקראו = ``UNDECIDED``. אף אחד מהם לא נלמד.
 
@@ -176,16 +176,11 @@ def _count(v: object) -> int | None:
 
 
 def _achieved(stream_raw: object) -> int | None:
-    """#3554: הקצב שהגל הגיע אליו בביטים לשנייה, מ-`wave_rates.stream`: גל חתיכות -- `chunk.achieved_bps` (`chunk_rate.sample_of`: מה ששודר כפול
-    החלק שהגיע); גל udpcast -- `stream_bps` (בייטים לשנייה, `sender.wave_outcome`) x 8. None = לא נקרא (הזרם עוד לא נרשם, או שהאבדן לא נמדד)."""
+    """#3554: הקצב שהגל הגיע אליו בביטים לשנייה, מ-`wave_rates.stream`: `chunk.achieved_bps` (`chunk_rate.sample_of`: מה ששודר כפול
+    החלק שהגיע). None = לא נקרא (הזרם עוד לא נרשם, או שהאבדן לא נמדד). #3173: `stream_bps` של השולח הקודם (גל ישן) אינו נקרא."""
     stream = _json(stream_raw)
-    if not isinstance(stream, dict):
-        return None
-    chunk = stream.get("chunk")
-    if isinstance(chunk, dict):
-        return _count(chunk.get("achieved_bps"))
-    bytes_per_s = _count(stream.get("stream_bps"))
-    return None if bytes_per_s is None else bytes_per_s * 8
+    chunk = stream.get("chunk") if isinstance(stream, dict) else None
+    return _count(chunk.get("achieved_bps")) if isinstance(chunk, dict) else None
 
 
 def _evidence(conn, session_id: str, mac: str, machine_raw: object) -> tuple[Evidence, dict]:

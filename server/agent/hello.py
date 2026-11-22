@@ -154,7 +154,7 @@ def self_probe(scope: dict | None) -> bool:
     שני תנאים, ושניהם חובה: הכותרת `X-ImageSrv-Probe: 1` נמצאת, **והפונה
     הוא השרת עצמו** — `scope["client"]` הוא loopback, או שווה לכתובת
     המקומית שעליה החיבור התקבל (`scope["server"]`). השני נחוץ כי
-    בייצור הבדיקה פונה ל-`http://<כתובת ההפצה>:8080`, וחיבור מקומי
+    בייצור הבדיקה פונה ל-`http://<כתובת ההפצה>:7712`, וחיבור מקומי
     לכתובת כזו יוצא **ממנה** ולא מ-`127.0.0.1`. מכונה ברשת אינה יכולה
     להשלים לחיצת יד TCP מכתובת השרת, ולכן הכותרת אינה דלת אחורית:
     מבחוץ היא מתעלמת, והבקשה נרשמת כמו כל GRUB.
@@ -333,7 +333,6 @@ def build_answer(
     monitor_on: bool | None = None,
     hw_inventory: dict | None = None,
     hw_probe: dict | None = None,
-    multicast: dict | None = None,
     prompt: str | None = None,
     record_journal: bool = True,
     disk_probe: str | None = None,
@@ -343,7 +342,6 @@ def build_answer(
     local_clone: str | None = None,
     optical: list | None = None,
     optical_reported: bool = False,
-    direct_finished: tuple[bool, list[str] | None] = (False, None),
     read_only: bool = False,
 ) -> dict:
     # #2550: `read_only` — התשובה שהתפריט היה נותן, **בלי שום תופעת לוואי**: לא
@@ -392,6 +390,11 @@ def build_answer(
     # מתעלם משדה שאינו מכיר; סוכן חדש שלא קיבל אותו מתנהג ככבוי.
     extra = ({"class_deploy_enabled": class_deploy_enabled(conn)}
              if machine["role"] == "build" else {})
+    if machine["role"] == "build" and capabilities.tools():
+        # #3056: הבחירה שהמפעיל שמר בקונסולה מגיעה לתחנה בתשובה, ולא כקובץ ב-initrd שאף נתיב בנייה לא ארז.
+        # רשימה ריקה = "לא נבחרו כלים" (נאמר); שדה חסר = סוכן ישן / גרסה בלי ארגז: התחנה חוזרת לקובץ שב-initrd.
+        from server.console import tools as console_tools    # מאוחר: הקונסולה מייבאת את הסוכן
+        extra["tools_selection"] = console_tools.read_selection(conn)["build"]
     answer: dict = {
         **extra,
         # #1081: edition flag. v1 = False (hardcoded). v2 turns this on.
@@ -479,13 +482,10 @@ def build_answer(
 
     # משימה גוברת על סבב: היא מופנית למכונה הזו, לא לקבוצה.
     if answer["task"] is not None:
-        # #715: מחשב הבנייה שהוא המקור מקבל גם את מצב הגל ופרמטרי
-        # השידור (`task.direct`, ממשק 3). `multicast` הוא של `SenderEngine`
-        # (api.py); בלעדיו — ברירות המחדל של המנוע.
+        # #715: מחשב הבנייה שהוא המקור מקבל גם את מצב הגל (`task.direct`, ממשק 3).
         # #2550: `task_block` יכול לכתוב (גל ישיר שנגמרו לו מקבלים נכשל ונרשם ביומן).
         if answer["task"]["type"] == direct.DIRECT_SEND and not read_only:
-            answer["task"]["direct"] = direct.task_block(
-                conn, store, answer["task"], multicast, *direct_finished)   # #1952
+            answer["task"]["direct"] = direct.task_block(conn, store, answer["task"])
         return answer
 
     if machine["role"] == "cloner":
@@ -570,10 +570,6 @@ def build_answer(
         # שלא עודכנו) — סוכן ישן שלא מכיר את השדה מתעלם ממנו וממשיך
         # בבחירה האוטומטית בדיוק כמו קודם (עיקרון 1).
         "expand_partition": session["expand_partition"] or "auto",
-        # #1826: ה-portbase שהשולח של **השרת הזה** משדר בו — אותו ערך שמחשב
-        # בנייה מקבל ב-`task.direct.multicast`. בלעדיו הסוכן הניח 9000, ו-
-        # `--sender-portbase` של השרת לא הגיע לאף מקלט.
-        "portbase": (multicast or direct.default_multicast())["portbase"],
     }
     # #695: לסבב חדר, המכונה מקבלת את **הפורטים שנבחרו לכתיבה עבורה בלבד**.
     # null שמור בכוונה לסבב ישן (התנהגות "כל הדיסקים"); קבוצה ריקה = לא נבחרה.

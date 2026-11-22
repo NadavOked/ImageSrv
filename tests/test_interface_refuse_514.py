@@ -36,6 +36,7 @@ def fake_startup(tmp_path: Path, monkeypatch) -> dict:
     monkeypatch.setattr(server.app, "create_runtime", fake_create_runtime)
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(uvicorn, "Config", lambda app, **kwargs: object())
     monkeypatch.setattr(uvicorn, "Server", lambda config: object())
     monkeypatch.setattr(server.main, "serve_all", lambda servers: None)
@@ -45,7 +46,7 @@ def fake_startup(tmp_path: Path, monkeypatch) -> dict:
     monkeypatch.setattr(server.main, "_address_for_interface", lambda name: "10.44.12.10")
     captured["argv"] = ["server.main", "--data-dir", str(tmp_path / "data"),
                         "--images", str(tmp_path / "img"),
-                        "--server-url", "http://10.44.12.10:8080"]
+                        "--server-url", "http://10.44.12.10:7712"]
     return captured
 
 

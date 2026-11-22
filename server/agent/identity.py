@@ -39,6 +39,7 @@ from pathlib import Path
 from boot.grub_menu import normalize_mac as lenient_mac
 
 from server.db import get_setting, set_setting
+from server.core import unreadable
 
 #: המתג בטבלת `settings`. **חסר = דלוק**: הבדיקה כבויה רק כשמישהו כתב
 #: "false" במפורש מהקונסולה (`setting_change` ביומן אומר מי).
@@ -219,7 +220,10 @@ def _recent(stamp: str | None, now: datetime | None = None) -> bool:
     try:
         seen = datetime.fromisoformat(stamp) if stamp else None
     except ValueError:
+        unreadable.said("net_devices.last_seen", stamp)   # #3129
         return False
+    if seen is not None and seen.tzinfo is None:
+        unreadable.said("net_devices.last_seen (no time zone)", stamp)   # #3129
     if seen is None or seen.tzinfo is None:
         return False
     age = (now or datetime.now(timezone.utc)) - seen

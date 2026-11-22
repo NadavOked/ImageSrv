@@ -138,5 +138,8 @@ def decide_disk(conn, raw: object, *, rotational: int, role: str, support: bool,
                            round_id=None, entity_kind="disk")
         return None
     if conn is not None:
-        silence.record(conn, [call], round_id=None, entity_kind="disk")
+        rows = silence.record(conn, [call], round_id=None, entity_kind="disk")
+        # #3750: `hdd_policy.decision` מחזיר את התוצאה למבצע מיד (סירוב, או הרצפה)
+        silence.settle(conn, rows.get(call.target), "הדיסק נדחה: הסירוב הוחזר למבצע" if call.verdict == REFUSED
+                       else f"הרצפה {call.mbps}MB/s נמסרה למבצע")
     return call

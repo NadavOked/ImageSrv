@@ -33,7 +33,7 @@ def station(tmp_path, images_root, clock):
 
     write_image(images_root, old_image(OLD))          # C: לא נמדד -- הכלל אינו ניתן לבדיקה
     woken: list[bytes] = []
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, wol_send=woken.append)
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test",

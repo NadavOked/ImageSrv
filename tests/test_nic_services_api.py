@@ -2,7 +2,7 @@
 
 הכתובת המקומית של החיבור (`scope["server"]`) היא מה שמכריע "אתה מחובר דרך
 הכרטיס הזה" — TestClient ממלא אותה מה-`base_url`, ולכן לקוח על
-`https://10.10.10.8:8081` מתנהג כמו דפדפן שמחובר דרך ens33.
+`https://10.10.10.8` מתנהג כמו דפדפן שמחובר דרך ens33.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def rig(server):
         "firewall": lambda n: None})
 
     def via(address: str) -> TestClient:
-        client = TestClient(server["app"], base_url=f"https://{address}:8081")
+        client = TestClient(server["app"], base_url=f"https://{address}")
         complete_console_login(client, ctx.conn, "noc", "admin-pass-123")
         return client
     return {**server, "nic": nic, "applied": applied, "scheduled": scheduled, "via": via}
@@ -69,10 +69,10 @@ def test_handoff_flow_from_the_nic_you_are_on(rig):
     assert on33.put(f"{URL}/ens35", json={"services": ["console", "monitor"]}).status_code == 200
     r = on33.put(f"{URL}/ens33", json={"services": ["monitor", "interserver"]})
     assert r.status_code == 409 and r.json()["code"] == "needs_handoff"
-    assert r.json()["go"] == ["https://10.20.0.8:8081"]
+    assert r.json()["go"] == ["https://10.20.0.8"]
     r = on33.put(f"{URL}/ens33", json={"services": ["monitor", "interserver"], "handoff": True})
     assert r.status_code == 200, r.text
-    assert r.json()["pending"]["seconds_left"] == 60 and r.json()["go"] == ["https://10.20.0.8:8081"]
+    assert r.json()["pending"]["seconds_left"] == 60 and r.json()["go"] == ["https://10.20.0.8"]
     on35 = rig["via"]("10.20.0.8")
     assert on35.get(URL).json()["pending"]["interface"] == "ens33"
     # #2914: "השאר" לפני ההחלה הדחויה מסורב -- הסמן נשאר, וההחלה עוד תרוץ.
@@ -101,7 +101,7 @@ def test_failed_apply_is_502_and_the_db_is_back(rig):
 
 
 def test_monitor_websocket_is_gated_only_after_an_edit(rig):
-    """המוניטור עובר ב-8081 — השער נאכף לפי הכתובת המקומית של החיבור, לפני
+    """המוניטור עובר ב-443 — השער נאכף לפי הכתובת המקומית של החיבור, לפני
     שהשרת פותח TCP למכונה (כאן: לפני בדיקת ה-MAC). TestClient מדווח
     `server=testserver` ב-WebSocket — כתובת שאינה של אף כרטיס, ולכן אחרי
     עריכה היא נחסמת (עיקרון 5: "לא ידוע" אינו "מותר"); לפני עריכה — היום."""

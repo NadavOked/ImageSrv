@@ -33,6 +33,7 @@ hello_post() {
         -o "$3.next" -w '%{http_code}' -H "Content-Type: application/json" \
         --data-binary "@$2" "$1")
     _hp_rc=$?
+    case "$_hp_rc" in 60|77) die_local "TLS: אימות תעודת השרת נכשל עבור $TLS_NAME (curl $_hp_rc)$(tls_clock_note)" ;; esac
     case "$_hp_code" in 000|*[!0-9]*|"") _hp_code="" ;; esac
     # #1447: before hello.state is stamped, so its time is the corrected one.
     [ "$_hp_rc" -eq 0 ] && clock_from_server "$3.next"

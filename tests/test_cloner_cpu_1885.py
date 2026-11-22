@@ -69,9 +69,8 @@ def test_no_throttle_and_an_unread_throttle_are_silent(conn):
 def _wave(conn, sid, cpu, rate="400m"):
     roster = [{"mac": MAC, "serial": f"{sid}-1", "model": "M"}]
     conn.execute("INSERT INTO wave_rates (session_id, decision, at, stream, delivered) VALUES (?,?,?,?,?)",
-                 (sid, json.dumps({"max_bitrate": rate, "roster": roster}), db.now_iso(),
-                  json.dumps({"sent_bytes": 10 ** 10, "loss_blocks": 0, "wall_s": 400,
-                              "ended": "send_done"}),
+                 (sid, json.dumps({"max_bitrate": rate, "roster": roster, "engine": "chunk"}), db.now_iso(),
+                  json.dumps({"chunk": {"ended": "send_done", "first_pass_s": 400}}),   # #3173: a chunk wave
                   json.dumps({MAC: {"drawers": 1, "done": 1, "written_bytes": 0, "cpu": cpu}})))
     conn.commit()
 

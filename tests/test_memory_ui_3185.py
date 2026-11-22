@@ -249,13 +249,13 @@ def seed_round(conn, days=5, loss=41, rate="260m", kept=True):
 def test_the_round_row_has_the_rate_and_the_loss_of_its_waves(conn):
     created, closed = seed_round(conn)
     got = memory_view.flow(memory_view.round_waves(conn, created, closed))
-    assert got == {"waves": 1, "kept": 1, "rate_bps": 260_000_000, "loss_blocks": 41}
+    assert got == {"waves": 1, "kept": 1, "rate_bps": 260_000_000, "loss_blocks": 41, "lost_chunks": None}
 
 
 def test_a_wave_nobody_kept_is_not_kept_and_not_zero_loss(conn):
     created, closed = seed_round(conn, kept=False)
     got = memory_view.flow(memory_view.round_waves(conn, created, closed))
-    assert got == {"waves": 1, "kept": 0, "rate_bps": None, "loss_blocks": None}
+    assert got == {"waves": 1, "kept": 0, "rate_bps": None, "loss_blocks": None, "lost_chunks": None}
 
 
 def test_a_loss_that_was_not_measured_is_not_zero(conn):
@@ -326,6 +326,6 @@ def test_the_history_row_carries_its_flow_and_opens_to_a_summary(server):
     ctx.conn.commit()
     rows = admin.get("/api/console/room/history").json()
     mine = next(r for r in rows if r["id"] == "rr1")
-    assert mine["flow"] == {"waves": 1, "kept": 1, "rate_bps": 260_000_000, "loss_blocks": 41}
+    assert mine["flow"] == {"waves": 1, "kept": 1, "rate_bps": 260_000_000, "loss_blocks": 41, "lost_chunks": None}
     summary = admin.get("/api/console/room/history/rr1/summary").json()
     assert summary["flow"] == mine["flow"] and summary["waves"][0]["session_id"] == "ses_a"

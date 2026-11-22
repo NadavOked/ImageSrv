@@ -1,17 +1,19 @@
 """מה שהריצה משאירה אחריה חי.
 
-חבילת הטסטים הפעילה `udp-sender` **אמיתי** — על אותו portbase שהשרת
-מקצה להפצה — והוא נמצא רץ שעתיים וחצי אחרי שהריצה הסתיימה, משדר קובץ
-שכבר נמחק (#79). `--max-wait 120` לא עזר: בלי מקבל אחד udpcast ממתין
-בלי גבול, ותקרת המתנה שלא נבדקה היא הבטחה ולא ראיה. תהליך כזה על פורט
-ההפצה מפיל שידור אמיתי, והאבחון נראה כמו תקלת רשת.
+חבילת הטסטים הפעילה שולח **אמיתי** — על אותו portbase שהשרת מקצה
+להפצה — והוא נמצא רץ שעתיים וחצי אחרי שהריצה הסתיימה, משדר קובץ
+שכבר נמחק (#79). תקרת המתנה שלא נבדקה היא הבטחה ולא ראיה. תהליך כזה
+על פורט ההפצה מפיל שידור אמיתי, והאבחון נראה כמו תקלת רשת. השולח אז
+היה של המנוע הישן; מאז #3173 השולח היחיד הוא `chunkcast send` של מנוע
+החתיכות, ושלוש השכבות שומרות עליו.
 
 שלוש שכבות, וכולן על ראיה חיובית:
 
-1. **חסימה** — בתוך הטסטים מנוע השידור לא *יכול* להפעיל תהליך אמיתי.
-   `block_real_processes` מחליף את `subprocess` בתוך `server.rounds.sender`
-   בלבד. כל ניסיון נרשם ב-`blocked_spawns`, והטסט שגרם לו נכשל בשמו —
-   כי טסט שמגיע לשולח האמיתי אינו בודק את מה שהוא חושב שהוא בודק.
+1. **חסימה** — בתוך הטסטים מנוע השידור לא *יכול* להפעיל את `chunkcast`
+   המותקן. `block_real_processes` מחליף את `subprocess` בתוך
+   `server.rounds.chunklog` בלבד (שם `run_process`, ה-runner של הייצור).
+   כל ניסיון נרשם ב-`blocked_spawns`, והטסט שגרם לו נכשל בשמו — כי טסט
+   שמגיע לשולח האמיתי אינו בודק את מה שהוא חושב שהוא בודק.
 2. **portbase שאינו יכול להתנגש** — `assign_test_portbase` מקצה לריצה
    portbase גבוה ואקראי. שתי השכבות האחרות מניחות שמישהו מנקה, ושתיהן
    נשברות באותה נקודה: ריצה **שנקטעה** לא מריצה ניקוי, ויתום שלה אינו
@@ -39,14 +41,23 @@ import mountleak
 
 #: הכלים שמזרימים בייטים ברשת. אלה שיכולים לשרוד את הריצה ולהפריע
 #: לשידור אמיתי; שאר תת-התהליכים בטסטים (gcc, sh) מסיימים מעצמם.
-STREAM_TOOLS = ("udp-sender", "udp-receiver")
+#: `chunkcast` הוא השולח וגם המקלט של מנוע החתיכות (`send` / `recv`).
+STREAM_TOOLS = ("chunkcast",)
 
 #: כל ניסיון להפעיל תהליך אמיתי ממנוע השידור, לפי הסדר.
 blocked_spawns: list[list[str]] = []
 
 
 class _NoRealProcess:
-    """מחליף את המודול `subprocess` — בתוך `server.rounds.sender` בלבד.
+    """מחליף את המודול `subprocess` — בתוך `server.rounds.chunklog` בלבד.
+
+    `chunkcast` **בשמו החשוף** — מה שהמנוע מריץ, ומה ש-PATH מפרש לבינארי
+    המותקן — מסורב ונרשם. שני דברים רצים כרגיל, כי אינם השולח המותקן:
+    פקודה אחרת (ילד-דמה שטסט מפעיל בנתיב מלא כדי לבדוק את `run_process`
+    עצמו), ו-`chunkcast` ש-PATH מפרש לקובץ **תחת ה-basetemp של הריצה** — תחליף
+    שטסט שם שם בכוונה כדי לבדוק את ה-runner של הייצור (#3340, #3125).
+    בינארי מותקן אינו יושב ב-tmp; ו"אין `chunkcast` בכלל" מסורב ונרשם גם
+    הוא — הטסט התכוון להריץ שולח, ולא הזריק אחד.
 
     לא `monkeypatch`: תהליכון השידור ממשיך לרוץ גם אחרי שהטסט נגמר,
     וכל החזרה של המקור בסוף טסט פותחת בדיוק את החלון שבו הוא מספיק
@@ -57,86 +68,90 @@ class _NoRealProcess:
 
     @staticmethod
     def Popen(cmd, *args, **kwargs):          # noqa: N802 — חתימה של subprocess
-        blocked_spawns.append([str(part) for part in cmd])
-        raise OSError(
-            "הטסטים חוסמים הפעלת udp-sender אמיתי (#79) — הזרק `sender_runner`"
-        )
+        argv = [str(part) for part in cmd]
+        named = [part for part in argv if part in STREAM_TOOLS]
+        if named and not _stand_in(named[0], kwargs.get("env")):
+            blocked_spawns.append(argv)
+            raise OSError(
+                "הטסטים חוסמים הפעלת chunkcast אמיתי (#79) — הזרק `sender_runner`"
+            )
+        return subprocess.Popen(cmd, *args, **kwargs)
+
+
+#: ה-basetemp של הריצה (`sender_logs_under`): רק קובץ תחתיו הוא תחליף של טסט. None = עוד לא נקבע, ואין תחליפים.
+_run_tmp: Path | None = None
+
+
+def _stand_in(tool: str, env: dict | None) -> bool:
+    """`tool` על ה-PATH **של הילד** הוא קובץ תחת ה-basetemp של הריצה: תחליף של טסט, לא הבינארי המותקן
+    (ולא `chunkcast` שמישהו בנה במקום אחר ב-tmp). ילד שקיבל סביבה בלי PATH מחפש ב-`os.defpath`, לא ב-PATH שלנו."""
+    if _run_tmp is None:
+        return False
+    path = os.environ.get("PATH") if env is None else env.get("PATH", os.defpath)
+    found = shutil.which(tool, path=path)
+    if found is None:
+        return False
+    root = os.path.realpath(_run_tmp)
+    try:
+        return os.path.commonpath([root, os.path.realpath(found)]) == root
+    except ValueError:                         # כוננים שונים בווינדוס: אינו תחת ה-basetemp
+        return False
 
 
 def block_real_processes() -> bool:
     """מתקין את החסימה. False כשאין בכלל שרת לייבא (עמדה בלי fastapi)."""
     try:
-        from server.rounds import sender
+        from server.rounds import chunklog
     except ImportError:                        # pragma: no cover — עמדה חסרה
         return False
-    sender.subprocess = _NoRealProcess
+    chunklog.subprocess = _NoRealProcess
     return True
 
 
 #: הטווח שממנו נבחר ה-portbase של הריצה: גבוה, רחוק מפורטי ההפצה,
 #: ו**מתחת** לטווח הפורטים הארעיים של לינוקס (32768-60999) — סוקט יוצא
-#: מקרי שיושב שם רגע היה נראה לבדיקת הפורטים כמו יתום. הצעד 2 שומר
-#: שהזוג (`portbase`, `portbase+1`) של ריצה אחת לא ייפול על ה-portbase
-#: של ריצה מקבילה.
-TEST_PORTBASE_RANGE = (20000, 30000, 2)
+#: מקרי שיושב שם רגע היה נראה לבדיקת הפורטים כמו יתום. הצעד 4 שומר
+#: שהפורטים של ריצה אחת (`portbase+2` לשידור ו-`+3` לבקרה, `chunksend.PORT_OFFSET`)
+#: לא ייפלו על אלה של ריצה מקבילה.
+TEST_PORTBASE_RANGE = (20000, 30000, 4)
 
 #: ה-portbase שהוקצה לריצה הזאת; None כשלא הוקצה בכלל.
 test_portbase: int | None = None
 
 
 def assign_test_portbase() -> int | None:
-    """נועל את **כל** מנועי השידור בריצה על portbase גבוה ואקראי (#156).
+    """נועל את מנוע השידור של **כל** אפליקציה בריצה על portbase גבוה ואקראי (#156).
 
     לא מספיק שכל טסט יעביר portbase משלו: `create_app` בונה מנוע משלו
     בלי לשאול, וזה המנוע שהשאיר יתום על פורטי ההפצה. לכן דורסים את
-    ברירת המחדל של המודול — פעם אחת לריצה ובלי החזרה, מאותה סיבה
-    שהחסימה אינה מוחזרת.
+    ברירת המחדל של המודול (`chunkctx.DEFAULT_PORTBASE`, שהמנוע קורא) — פעם
+    אחת לריצה ובלי החזרה, מאותה סיבה שהחסימה אינה מוחזרת.
 
     מחזיר את ה-portbase שהוקצה, או `None` כשאין בכלל שרת לייבא.
     """
     global test_portbase
     try:
-        from server.rounds import sender
+        from server.rounds import chunkctx
     except ImportError:                        # pragma: no cover — עמדה חסרה
         return None
     test_portbase = random.SystemRandom().randrange(*TEST_PORTBASE_RANGE)
-    sender.DEFAULT_PORTBASE = test_portbase
+    chunkctx.DEFAULT_PORTBASE = test_portbase
     return test_portbase
 
 
-def isolate_sender_log(worker: str | None):
-    """#2099: לוג משלו לכל worker של pytest-xdist.
-
-    `sender.SENDER_LOG` הוא `$TMPDIR/imagesrv-sender.log` ברמת המודול, ולוג
-    המחיצה נגזר ממנו ומשם הקובץ בלבד (`partition_log`) — כל טסט עם אותו
-    מניפסט כותב **לאותו קובץ**. בריצה סדרתית זה בטוח (טסט אחד בכל רגע);
-    במקביל, worker אחד כתב `Starting transfer` ללוג של טסט ב-worker אחר,
-    וזה ראה "השידור התחיל" ולא הריץ מחדש את מחיצה 1 (נמדד: test_sender,
-    test_sequence_scenarios_17_10, test_sender_lost_receiver_1950).
-    בתוך worker הסדר סדרתי כמו קודם, ולכן הקובץ שלו מתנהג בדיוק כמו פעם.
-    בלי worker (ריצה סדרתית) — לא נוגעים. מחזיר את הנתיב, או `None`."""
-    if not worker:
-        return None
+def sender_logs_under(basetemp: Path):
+    """#2180, #2099: הלוגים של השולח (`chunklog.log_path`, לוג לכל מחיצה) תחת ה-basetemp של
+    הריצה, לא ב-`$TMPDIR` עצמו — שם הם נשארו אחרי כל ריצה, ושם כל ה-workers של pytest-xdist
+    כתבו **לאותו קובץ** (אותו אימג', אותה מחיצה): worker אחד קרא את הראיה של טסט ב-worker אחר.
+    ה-basetemp הוא של ה-worker (`popen-gwN`), ולכן הלוג שלו שלו. מחזיר את התיקייה, או `None`."""
     try:
-        from server.rounds import sender
+        from server.rounds import chunklog
     except ImportError:                        # pragma: no cover — עמדה חסרה
         return None
-    log = sender.SENDER_LOG
-    sender.SENDER_LOG = log.with_name(f"{log.stem}-{worker}{log.suffix}")
-    return sender.SENDER_LOG
-
-
-def sender_log_under(basetemp: Path):
-    """#2180: הלוגים של השולח (`SENDER_LOG` ולוגי המחיצות שנגזרים ממנו) תחת
-    ה-basetemp של הריצה, לא ב-`$TMPDIR` עצמו — שם הם נשארו אחרי כל ריצה
-    (`imagesrv-sender-gw*-img_7f3a91-p*.log` בסיכומי השער). השם נשמר, כולל
-    הסיומת של ה-worker. מחזיר את הנתיב, או `None`."""
-    try:
-        from server.rounds import sender
-    except ImportError:                        # pragma: no cover — עמדה חסרה
-        return None
-    sender.SENDER_LOG = Path(basetemp) / sender.SENDER_LOG.name
-    return sender.SENDER_LOG
+    global _run_tmp
+    _run_tmp = Path(basetemp)                  # ומכאן גם: רק תחליף של `chunkcast` שיושב תחתיו רץ (`_stand_in`)
+    chunklog.LOG_DIR = Path(basetemp)
+    return chunklog.LOG_DIR
 
 
 def scan_supported() -> bool:
@@ -233,7 +248,7 @@ def session_verdict(basetemp: str | None, native_required: bool) -> list[str]:
     if basetemp is None:
         return []
     if not scan_supported():
-        # לא בדקנו אינו "נקי". בווינדוס אין `/proc` ואין udpcast, ולכן
+        # לא בדקנו אינו "נקי". בווינדוס אין `/proc` ואין שולח אמיתי, ולכן
         # זו לא תקלה; במקום שבו דורשים כלים מקומיים — היא כן.
         return ["אי אפשר לסרוק תהליכים יתומים בלי /proc — הריצה לא נבדקה"] \
             if native_required else []

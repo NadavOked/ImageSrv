@@ -1,8 +1,8 @@
 # directchunk.sh -- the build machine as the SOURCE of a chunk-engine wave (#3161).
 # POSIX sh (busybox ash). No bashisms.
 #
-# directsend.sh sends a disk through udp-sender. This file sends it through the
-# chunk engine (#2533), when the server says so (task.direct.engine = "chunk").
+# directsend.sh is the task; this file sends the disk through the chunk engine
+# (#2533), the only engine (#3173): the server says so (task.direct.engine = "chunk").
 # The server stays the only orchestrator -- its ChunkEngine, the receivers'
 # chunk-pass, the repair plan, the ledger -- and THIS machine is its sender:
 #
@@ -43,13 +43,15 @@ _direct_put() {   # $1 = url, $2 = file, $3 = content type. The task's token, as
 }
 
 direct_chunk_offer() {
-    # $1 = task, $2 = disk, $3 = the live manifest. 0 = the server did not ask for
-    # indexes (the switch is off: a udpcast wave), or it took them all. 1 = said.
-    # A hello that failed offers nothing: with the switch on the server then
-    # refuses the wave by name -- it never becomes a udpcast wave quietly.
-    _co_rc=0
-    if send_hello && [ "$(json_get "$RESP" ".task.id")" = "$1" ] \
-            && [ "$(json_get "$RESP" ".task.direct.engine")" = chunk ]; then
+    # $1 = task, $2 = disk, $3 = the live manifest. 0 = the server took every index
+    # (or the hello failed: nothing is offered, and the server refuses the wave by
+    # name). 1 = said: a task the server did not hand to the chunk engine is
+    # refused here by name (#3173) -- there is no other engine to send with.
+    _co_rc=0; _co_ours=0
+    send_hello && [ "$(json_get "$RESP" ".task.id")" = "$1" ] && _co_ours=1
+    if [ "$_co_ours" = 1 ] && [ "$(json_get "$RESP" ".task.direct.engine")" != chunk ]; then
+        _direct_failed "$2" "השרת לא הציע את מנוע החתיכות להפצה הישירה -- לא נשלח דבר"; _co_rc=1
+    elif [ "$_co_ours" = 1 ]; then
         manifest_plan "$3" > "$RUN_DIR/dchunk.plan" || : > "$RUN_DIR/dchunk.plan"
         while IFS='|' read -r _co_i _co_g _co_r _co_fs _co_st _co_sz _co_f _co_rest <&3; do
             case "$_co_f" in ''|null) continue ;; esac

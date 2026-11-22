@@ -89,8 +89,6 @@ def pytest_configure(config) -> None:
     # portbase גבוה ואקראי לכל הריצה: יתום של ריצה שנקטעה לא ינקה איש,
     # ולכן ההגנה היא שלא יהיה לו במה להתנגש (#156).
     hygiene.assign_test_portbase()
-    # #2099: תחת xdist — לוג שולח לכל worker; סדרתי — כמו קודם.
-    hygiene.isolate_sender_log(os.environ.get("PYTEST_XDIST_WORKER"))
     hostguard.block_real_host_reads()
     hostguard.detach_host_dev()
     # #893: בווינדוס סקריפט `-c` ארוך נחתך בשקט — טסט שמעביר כזה נכשל בשמו.
@@ -208,7 +206,7 @@ def _run_basetemp(tmp_path_factory) -> None:
     """תיקיית ה-tmp של הריצה הזאת. רק תהליכים שמזכירים אותה ייסרקו
     וייהרגו — ריצה מקבילה של מישהו אחר על אותו שרת אינה שלנו."""
     _run["basetemp"] = str(tmp_path_factory.getbasetemp())
-    hygiene.sender_log_under(tmp_path_factory.getbasetemp())   # #2180
+    hygiene.sender_logs_under(tmp_path_factory.getbasetemp())   # #2180, #2099: של ה-worker הזה בלבד
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -263,7 +261,7 @@ def _no_real_sender():
     escaped = hygiene.blocked_spawns[before:]
     if escaped:
         pytest.fail(
-            "הטסט הגיע ל-udp-sender האמיתי במקום לשולח מזויף (#79): "
+            "הטסט הגיע לשולח האמיתי (chunkcast send) במקום לשולח מזויף (#79): "
             + " | ".join(" ".join(cmd) for cmd in escaped),
             pytrace=False,
         )
@@ -355,13 +353,35 @@ MANIFEST_LINUX = {
 PARTITION_BYTES = b"compressed-partition-bytes"
 
 
-def write_image(root: Path, manifest: dict) -> None:
-    """כותב אימג' מזויף לדיסק — עם sha256 אמיתי.
+#: how many chunks every partition file of `write_image` is, in the index beside it
+INDEX_CHUNKS = 1
+#: the chunk size of the format (4MiB), as the server records it in the manifest
+INDEX_CHUNK_BYTES = 4 * 1024 * 1024
+
+
+def index_text(data: bytes) -> str:
+    """The format 2 index of a partition file that is one raw chunk (`chunkformat`): what the server derives
+    after ingest, for a file whose one frame is `data`. The XXH64 is the public reference's, not the server's."""
+    from test_fanout import xxh64_reference                         # noqa: PLC0415
+    return (f"IMAGESRV-IDX 2 raw {INDEX_CHUNK_BYTES} 0 0 - {len(data)} {INDEX_CHUNKS} {len(data)}\n"
+            f"0 {len(data)} {xxh64_reference(data)}\n")
+
+
+def write_image(root: Path, manifest: dict, *, index: bool = True) -> None:
+    """כותב אימג' מזויף לדיסק — עם sha256 אמיתי, ועם האינדקס של פורמט 2 ליד כל קובץ מחיצה.
 
     הערכים בקבועים למעלה הם ממלאי מקום לצורת המבנה; מה שנכתב לדיסק
     חייב להיות עקבי עם עצמו, אחרת בדיקות שמאמתות אימג' (ייבוא, שחזור)
     נכשלות על נתוני בדיקה ולא על באג.
-    """
+
+    #3173: מנוע החתיכות הוא המנוע היחיד, והוא משדר רק מחיצה שיש לה אינדקס מאומת ורשימת BLAKE3 ליד הקובץ
+    (`indexprep.missing`). לכן אימג' של בדיקה נכתב כמו אימג' **אחרי** שהשרת גזר ואימת את האינדקס שלו
+    (`ImageLibrary.record_index`): `<file>.idx`, `<file>.b3`, ובמניפסט `index_xxh64`, `readback_*`
+    ו-`chunk_b3`. האינדקס עקבי עם הקובץ (חתיכה אחת, באורך הקובץ) וה-XXH64 שלו אמיתי; רשימת ה-BLAKE3 היא
+    ממלא מקום באורך הנכון -- השרת אינו בודק אותה (הסוכן בודק), ואין `chunkcast` בתחנת הפיתוח.
+    `index=False`: אימג' שנקלט ועוד לא נגזר לו דבר (בלי אינדקס ובלי השדות האלה). מניפסט שכבר נושא `index_xxh64`
+    במחיצה כלשהי הוא של הטסט: הוא חתם על אינדקס משלו (ומחיצה שלא חתם עליה היא "מחיצה בלי אינדקס"), ולכן
+    לא נוגעים באף מחיצה שלו."""
     folder = root / manifest["id"]
     folder.mkdir(parents=True)
     digest = hashlib.sha256(PARTITION_BYTES).hexdigest()
@@ -369,12 +389,48 @@ def write_image(root: Path, manifest: dict) -> None:
     for part in on_disk["partitions"]:
         if part.get("file"):
             part["sha256"] = digest
+    indexed: list[str] = []
+    if index:
+        from test_fanout import xxh64_reference                     # noqa: PLC0415
+        text = index_text(PARTITION_BYTES)
+        listing = "".join(line.split()[2] + "\n" for line in text.splitlines()[1:])
+        if not any("index_xxh64" in part for part in on_disk["partitions"]):
+            indexed = [part["file"] for part in on_disk["partitions"] if part.get("file")]
+        for part in on_disk["partitions"]:
+            if part.get("file") in indexed:
+                part.update({
+                    "index_xxh64": xxh64_reference(text.encode("ascii")),
+                    "readback_xxh64": xxh64_reference(listing.encode("ascii")),
+                    "readback_chunks": INDEX_CHUNKS, "readback_bytes": len(PARTITION_BYTES),
+                    "readback_chunk_bytes": INDEX_CHUNK_BYTES, "chunk_b3": "b" * 64,
+                })
     (folder / "manifest.json").write_text(
         json.dumps(on_disk, ensure_ascii=False), encoding="utf-8"
     )
     for part in on_disk["partitions"]:
         if part.get("file"):
             (folder / part["file"]).write_bytes(PARTITION_BYTES)
+            if part["file"] in indexed:
+                (folder / (part["file"] + ".idx")).write_bytes(text.encode("ascii"))
+                (folder / (part["file"] + ".b3")).write_bytes(bytes(32 * INDEX_CHUNKS))
+
+
+def unindex_image(root: Path, image_id: str, *, unsigned: bool = False) -> None:
+    """האימג' כמו שקליטה משאירה אותו, לפני שהשרת גזר ואימת את האינדקס שלו: בלי `<file>.idx` ו-`<file>.b3`,
+    ובלי `readback_*` ו-`chunk_b3` במניפסט. `index_xxh64` -- החתימה של הקליטה -- נשאר, אלא אם `unsigned`
+    (אימג' שאף מחיצה שלו לא נחתמה: מה ש-`write_image(..., index=False)` כותב). לטסט שבודק את מה שקורה
+    **לפני** הגזירה, על אימג' ש-fixture כבר כתב."""
+    folder = root / image_id
+    path = folder / "manifest.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    for part in raw["partitions"]:
+        if part.get("file"):
+            for field in ("readback_xxh64", "readback_chunks", "readback_bytes", "readback_chunk_bytes", "chunk_b3",
+                          *(("index_xxh64",) if unsigned else ())):
+                part.pop(field, None)
+            for suffix in (".idx", ".b3"):
+                (folder / (part["file"] + suffix)).unlink(missing_ok=True)
+    path.write_text(json.dumps(raw, ensure_ascii=False), encoding="utf-8")
 
 
 @pytest.fixture()
@@ -430,7 +486,7 @@ def _build_server(tmp_path: Path, images_root: Path, clock: Clock, recorder) -> 
     from server.app import create_app
 
     app = create_app(
-        tmp_path / "data", images_root, "http://10.44.12.10:8080",
+        tmp_path / "data", images_root, "http://10.44.12.10:7712",
         now_fn=clock, sender_runner=recorder,
         health_hooks={"interfaces": lambda: []},
     )
@@ -451,62 +507,29 @@ def _build_server(tmp_path: Path, images_root: Path, clock: Clock, recorder) -> 
 
 
 @pytest.fixture()
-def server(tmp_path: Path, images_root: Path, clock: Clock, monkeypatch):
+def server(tmp_path: Path, images_root: Path, clock: Clock):
     """האפליקציה המלאה + לקוחות מחוברים כ-admin וכ-deploy.
 
     השולח מזויף **גם כאן**, ולא רק ב-`server_with_sender`: סבב מבשיל
-    בכמה מסלולים — hello, מבט-על, תחנה — וכל אחד מהם הפעיל `udp-sender`
-    אמיתי, על פורט השידור של השרת, שנשאר לרוץ אחרי סוף הריצה (#79).
-
-    `port_holders` מוזרק לריק: בלי `/proc/net/udp` (ווינדוס) המנוע נכשל
-    *לפני* השידור המזויף, והטסט מת על כשל סביבתי במקום על ההתנהגות
-    שהוא בודק (#312). זה אותו מקור-אמת ש-`free_ports` מחליף ב-test_sender.
+    בכמה מסלולים — hello, מבט-על, חדר השיכפול — וכל אחד מהם היה מפעיל
+    `chunkcast send` אמיתי שנשאר לרוץ אחרי סוף הריצה (#79). ה-`Recorder`
+    (`fakesend`) הוא שולח החתיכות המזויף: כל פקודה שהמנוע היה מריץ נרשמת
+    בו, והתהליך שהוא מחזיר נחסם עד שהטסט משחרר אותו.
     """
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from server.rounds import sender as sender_module             # noqa: PLC0415
-    from test_sender import Recorder                       # noqa: PLC0415
+    from fakesend import Recorder                          # noqa: PLC0415
 
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
     bundle = _build_server(tmp_path, images_root, clock, Recorder(block=True))
     yield bundle
-    bundle["ctx"].sender.stop()
+    # `close`, לא `stop`: `stop` אינו מחכה לתהליכון השידור, והוא היה ממשיך לרוץ לתוך הטסט הבא
+    bundle["ctx"].chunk.close()
 
 
 @pytest.fixture()
 def server_with_sender(server: dict):
     """כמו `server`, ועם ה-Recorder בידיים — לבדיקות של השידור עצמו."""
     return server, server["recorder"]
-
-
-@pytest.fixture(autouse=True)
-def _fake_udp_sender_means_udpcast(monkeypatch):
-    """#3173 (נדב 21/11): ברירת המחדל של `stream_engine` היא מנוע החתיכות. אפליקציה של בדיקה שהוזרק לה
-    `sender_runner` (ה-Recorder של `test_sender`, udp-sender מזויף) בודקת את udpcast, ולכן היא **בוחרת udpcast
-    במפורש** כאן, מיד אחרי שנבנתה -- כמו מפעיל שבחר בו בהגדרות. טסט שמדליק `chunk` ממשיך לעשות זאת בעצמו, וטסט
-    של ברירת המחדל מוחק את ההגדרה (`set_settings(conn, {}, remove=("stream_engine",))`) ובודק את מה שבתוקף."""
-    import sys                                                    # noqa: PLC0415
-    try:
-        from server import app as app_module                      # noqa: PLC0415
-        from server.db import set_setting                         # noqa: PLC0415
-    except ImportError:                                           # בלי fastapi: אין אפליקציה לבנות
-        yield
-        return
-    import functools                                              # noqa: PLC0415
-    real = app_module.create_runtime
-
-    # wraps: טסטים שקוראים את `inspect.getsource`/`signature` של `create_runtime` (#1805, #1494) רואים את המקור
-    @functools.wraps(real)
-    def create_runtime(*args, **kwargs):
-        rt = real(*args, **kwargs)
-        if kwargs.get("sender_runner") is not None:
-            set_setting(rt.ctx.conn, "stream_engine", "udpcast")
-        return rt
-
-    # גם מודול בדיקה שייבא את `create_runtime` בשמו (`from server.app import create_runtime`) מקבל את העטיפה
-    for module in [app_module, *(m for m in list(sys.modules.values()) if getattr(m, "create_runtime", None) is real)]:
-        monkeypatch.setattr(module, "create_runtime", create_runtime)
-    yield
 
 
 @pytest.fixture(autouse=True)
@@ -519,8 +542,10 @@ def _classrooms_restore():
     `monkeypatch` של `classrooms_on`, ושחזור יחסי היה משאיר True דולף."""
     from server.core import capabilities                        # noqa: PLC0415
     before = capabilities.CLASSROOMS
+    rounds = getattr(capabilities, "CLASS_ROUNDS", False)       # #3173: `setup_classroom` מדליק גם אותו
     yield
     capabilities.CLASSROOMS = before
+    capabilities.CLASS_ROUNDS = rounds
 
 
 @pytest.fixture(autouse=True)
@@ -556,17 +581,29 @@ def _host_free_space(request, monkeypatch):
 
 @pytest.fixture()
 def classrooms_on(monkeypatch):
-    """v1.2 לטסט אחד: כיתות דלוקות בשרת (`capabilities.CLASSROOMS`)."""
+    """v1.2 לטסט אחד: כיתות דלוקות בשרת (`capabilities.CLASSROOMS`), וסבב כיתה איתן
+    (`capabilities.CLASS_ROUNDS`, #3173 — ראו `setup_classroom`; `raising=False`: בעץ שלפני השינוי אין דגל כזה)."""
     from server.core import capabilities                        # noqa: PLC0415
     monkeypatch.setattr(capabilities, "CLASSROOMS", True)
+    monkeypatch.setattr(capabilities, "CLASS_ROUNDS", True, raising=False)
 
 
-def setup_classroom(server: dict, expected: int = 2) -> dict:
+def setup_classroom(server: dict, expected: int = 2, *, class_rounds: bool = True) -> dict:
     """קבוצת כיתה עם שתי מכונות רשומות; מחזיר מזהים שימושיים.
 
-    מדליק את הכיתות (v1.2) עד סוף הטסט — ראה `_classrooms_restore`."""
+    מדליק את הכיתות (v1.2) עד סוף הטסט — ראה `_classrooms_restore`.
+
+    #3173: ו**סבב כיתה** איתן (`capabilities.CLASS_ROUNDS`). ב-v1 השרת מסרב לסבב כיתה בשמו ("סבב כיתה יגיע
+    בגרסה 2") בשני הנתיבים שפותחים אותו, לפני כל בדיקה אחרת, גם כשהכיתות דלוקות: השולח שלו הוסר, ולמחשב
+    תלמיד אין מקלט חתיכות. מה שמאחורי הסירוב נשאר בקוד ל-v2 — שם וסיסמה בפתיחה מהתחנה, בחירת מחשבים, קידומת
+    שמות, מקום פנוי, WoL לכיתה, תחנה שחברה בסבב פתוח — והטסטים שלו רצים כאן על מה ש-v2 ידליק, כמו עם הכיתות.
+    שני דברים אינם משתנים מזה: גל של סבב כיתה עדיין אינו משודר (`app.on_running` מכשיל אותו בשמו) — טסט
+    שצריך גל **רץ** הוא טסט של חדר השיכפול — והסירוב עצמו נבדק עם `class_rounds=False` (הכיתות דלוקות, הסבב
+    לא). בעץ שלפני השינוי אין דגל כזה, והסבב נפתח בלעדיו."""
     from server.core import capabilities                        # noqa: PLC0415
     capabilities.CLASSROOMS = True
+    if class_rounds:
+        capabilities.CLASS_ROUNDS = True
     admin = server["admin"]
     assert admin.post(
         "/api/console/groups",
@@ -607,6 +644,7 @@ def hello_body(mac: str, disk_bytes: int = 256060514304) -> dict:
         "firmware": "uefi",
         "secure_boot": True,
         "agent_version": "0.1.0",
+        "engines": ["chunk"],            # #2533: the stream engine this agent image can receive (interface 2)
         "memory_bytes": 8589934592,
         "disks": [
             {

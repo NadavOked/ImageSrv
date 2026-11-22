@@ -8,11 +8,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from server.console import auth
 from server.agent import boottrace, registry
 from server.agent.api import ServerContext
-from server.db import journal, now_iso, update_one
+from server.db import _write_lock, journal, now_iso, update_one, writing
 
 
 def create_net_router(ctx: ServerContext) -> APIRouter:
@@ -61,35 +62,41 @@ def create_net_router(ctx: ServerContext) -> APIRouter:
     async def add_device(request: Request, user=Depends(admin_only)):
         """הוספה ידנית — למכונה שעוד לא דיברה עם השרת."""
         body = await request.json()
-        mac = registry.normalize_mac(body.get("mac", ""))
-        if mac is None:
-            raise HTTPException(400, "MAC לא תקין")
-        ts = now_iso()
-        ctx.conn.execute(
-            "INSERT INTO net_devices (mac, ip, description, first_seen, last_seen)"
-            " VALUES (?, ?, ?, ?, ?)"
-            " ON CONFLICT (mac) DO UPDATE SET description = excluded.description",
-            (mac, (body.get("ip") or "").strip() or None,
-             (body.get("description") or "").strip(), ts, ts),
-        )
-        ctx.conn.commit()
-        journal(ctx.conn, "net_add", mac, user[0], machine=mac)
-        return {"mac": mac}
+
+        def work():
+            mac = registry.normalize_mac(body.get("mac", ""))
+            if mac is None:
+                raise HTTPException(400, "MAC לא תקין")
+            ts = now_iso()
+            with _write_lock, writing(ctx.conn):   # #54: a failed write leaves no lock behind
+                ctx.conn.execute(
+                    "INSERT INTO net_devices (mac, ip, description, first_seen, last_seen)"
+                    " VALUES (?, ?, ?, ?, ?)"
+                    " ON CONFLICT (mac) DO UPDATE SET description = excluded.description",
+                    (mac, (body.get("ip") or "").strip() or None,
+                     (body.get("description") or "").strip(), ts, ts),
+                )
+            journal(ctx.conn, "net_add", mac, user[0], machine=mac)
+            return {"mac": mac}
+        return await run_in_threadpool(work)   # #2750
 
     @router.put("/net/{mac}")
     async def describe_device(mac: str, request: Request, user=Depends(admin_only)):
         body = await request.json()
-        canonical = registry.normalize_mac(mac)
-        if not update_one(
-            ctx.conn,
-            "UPDATE net_devices SET description = ? WHERE mac = ?",
-            ((body.get("description") or "").strip(), canonical),
-        ):
-            raise HTTPException(404, "התקן לא ברשימה")
-        ctx.conn.commit()
-        journal(ctx.conn, "net_describe", f"{canonical} {body.get('description', '')}", user[0],
-                machine=canonical)
-        return {"ok": True}
+
+        def work():
+            canonical = registry.normalize_mac(mac)
+            with _write_lock, writing(ctx.conn):   # `update_one` covers the row not found; `writing` the rest (#54)
+                if not update_one(
+                    ctx.conn,
+                    "UPDATE net_devices SET description = ? WHERE mac = ?",
+                    ((body.get("description") or "").strip(), canonical),
+                ):
+                    raise HTTPException(404, "התקן לא ברשימה")
+            journal(ctx.conn, "net_describe", f"{canonical} {body.get('description', '')}", user[0],
+                    machine=canonical)
+            return {"ok": True}
+        return await run_in_threadpool(work)   # #2750
 
     @router.delete("/net/{mac}")
     def forget_device(mac: str, user=Depends(admin_only)):

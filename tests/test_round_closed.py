@@ -13,14 +13,13 @@ stopping`) — ועצרה **רק את עצמה**. המסלול הראשי המש
 
 from __future__ import annotations
 
-import hashlib
 
 import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
-from test_drawer_progress import COUNTING_FANOUT, drawer_box
-from test_timeouts import make_stubs, run_sh
+from test_drawer_progress import drawer_box
+from test_timeouts import run_sh
 from agentlib import agent_sources
 
 pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required")
@@ -80,7 +79,7 @@ def test_a_round_closed_before_writing_touches_no_disk(tmp_path):
              + 'write_check_round() { echo wc >> "$RUN_DIR/touched"; }; '
              + 'plan_gate() { return 0; }; apply_gpt() { echo "gpt $1" >> "$RUN_DIR/touched"; }; '
              + 'restore_partition_drawers() { echo "fed $4" >> "$RUN_DIR/touched"; }; '
-             + 'run_restore_drawers multicast http://s img m.json sda sdb; echo "rc=$?"')
+             + 'run_restore_drawers chunk http://s img m.json sda sdb; echo "rc=$?"')
     assert out.strip().endswith("rc=1"), out
     assert not (run / "touched").exists(), (run / "touched").read_text()
     assert (run / "state").read_text().strip() == "failed"
@@ -96,45 +95,11 @@ def test_a_round_closed_between_partitions_feeds_no_more(tmp_path):
              + "echo '2|G|win|ntfs|4096|1024|p2.zst|s|false|U|'; }; "
              + 'restore_partition_drawers() { echo "$4" >> "$RUN_DIR/fed"; '
              + 'echo ses > "$RUN_DIR/session-closed"; return 0; }; '
-             + 'run_restore_drawers multicast http://s img m.json sda; echo "rc=$?"')
+             + 'run_restore_drawers chunk http://s img m.json sda; echo "rc=$?"')
     assert out.strip().endswith("rc=1"), out
     assert (run / "fed").read_text().split() == ["1"]
     assert (run / "state").read_text().strip() == "failed"
     assert _targets(run) == {"sda": ("failed", WHY)}
-
-
-def test_a_round_closed_while_waiting_for_the_stream_stops_the_receiver(tmp_path):
-    """הצורה של 08:16:12: udp-receiver ממתין לשולח שכבר יצא (כאן: מקור
-    שותק), והסבב נסגר שתי שניות אחרי. הזרם נעצר תוך שניות — לא בתקרת
-    ההתחלה (40ש' כאן, 600 במכונה) — והמגירה נכשלת עם הסיבה האמיתית, לא
-    "פג הזמן"."""
-    box = tmp_path / "box"
-    run = box / "run"
-    payload = box / "part.bin"
-    box.mkdir(parents=True)
-    payload.write_bytes(b"imagesrv" * 1024)
-    sha = hashlib.sha256(payload.read_bytes()).hexdigest()
-    (run / "targets" / "sda").mkdir(parents=True)
-
-    out = run_sh(
-        make_stubs(box / "stubs", {"fanout": COUNTING_FANOUT})
-        + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
-        "WAIT_POLL_S=1 WAIT_DRAWER_S=5 WAIT_HELPER_S=2 "
-        "WAIT_STREAM_START_S=40 WAIT_STREAM_STALL_S=40; "
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
-        + "target_init sda 8192; "
-        "stream_source() { sleep 120; }; "
-        '( sleep 2; echo ses_d6e79f65 > "$RUN_DIR/session-closed" ) & '
-        "s=$(date +%s); "
-        f"restore_partition_drawers multicast http://s img 1 vfat p1.zst {sha} '' sda "
-        f"> {posix(box)}/pipe.out 2>&1; "
-        'rc=$?; e=$(date +%s); echo "rc=$rc elapsed=$((e - s))"', timeout=120)
-    last = out.strip().splitlines()[-1]
-    rc, elapsed = (int(kv.split("=")[1]) for kv in last.split())
-    assert rc == 1, out
-    assert elapsed < 30, f"הזרם לא נעצר על סגירת הסבב ({elapsed}ש')"
-    state, error = _targets(run)["sda"]
-    assert state == "failed" and WHY in error, (state, error)
 
 
 def test_the_machine_hold_names_the_closed_round():

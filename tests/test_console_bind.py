@@ -1,13 +1,13 @@
 """#770 (tracer-4 של #703): הקונסולה נקשרת פר-ממשק, לא ל-0.0.0.0.
 
-בפריסת המעבדה שרת הקונסולה (8081) נקשר ל-``0.0.0.0`` ולכן (א) התנגש עם
-שרת ה-preseed על ``10.44.3.1:8081`` ו-(ב) חשף את API הניהול על וילן
+בפריסת המעבדה שרת הקונסולה (443) נקשר ל-``0.0.0.0`` ולכן (א) התנגש עם
+שרת ה-preseed על ``10.44.3.1:443`` ו-(ב) חשף את API הניהול על וילן
 ההפצה/הכיתות — בדיוק מה שמודל ה-FW אוסר (#703: "הגבול הוא ה-socket").
 
 מודל ה-FW: הקונסולה על ממשק המשרדים/שרתים **בלבד**. לכן הקונסולה מקבלת
 דגל ``--console-host`` משלה, בנפרד מ-``--host`` (הסוכן על וילן
 ההפצה). ברירת המחדל fail-closed — loopback, לא ``0.0.0.0``: בלי כתובת
-ניהול מפורשת הקונסולה אינה נגישה מאף כרטיס חיצוני, ואינה תופסת 8081
+ניהול מפורשת הקונסולה אינה נגישה מאף כרטיס חיצוני, ואינה תופסת 443
 בממשקי ההפצה (עיקרון 5 — השומר עובד כברירת מחדל, לא רק אם זכרו דגל).
 
 שרשרת הראיות שתי חוליות, כל אחת בטסט משלה: ``build_parser`` נותן
@@ -27,7 +27,7 @@ def test_agent_host_defaults_to_unset_not_all_interfaces() -> None:
     """#1074: ברירת המחדל של ``--host`` אינה 0.0.0.0 — None, ו-main
     ממלא מכתובת כרטיס ההפצה."""
     args = server.main.build_parser().parse_args(
-        ["--server-url", "http://10.44.12.10:8080"])
+        ["--server-url", "http://10.44.12.10:7712"])
     assert getattr(args, "host", "0.0.0.0") is None
 
 
@@ -38,7 +38,7 @@ def test_console_host_defaults_to_loopback_not_all_interfaces() -> None:
     getattr עם ברירת מחדל ``0.0.0.0`` נותן כשל **התנהגותי** (AssertionError
     עם הערך בפועל) גם כשהדגל עדיין לא קיים, במקום AttributeError."""
     args = server.main.build_parser().parse_args(
-        ["--server-url", "http://10.44.12.10:8080"])
+        ["--server-url", "http://10.44.12.10:7712"])
     console_host = getattr(args, "console_host", "0.0.0.0")
     assert console_host == "127.0.0.1"
     assert console_host != "0.0.0.0"
@@ -61,6 +61,7 @@ def run_main(tmp_path: Path, monkeypatch, *extra_argv: str) -> dict[str, list[di
     monkeypatch.setattr(server.app, "create_runtime", lambda *a, **k: "rt")
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(uvicorn, "Config", fake_config)
     monkeypatch.setattr(uvicorn, "Server", lambda config: object())
     monkeypatch.setattr(server.main, "serve_all", lambda servers: None)
@@ -69,7 +70,7 @@ def run_main(tmp_path: Path, monkeypatch, *extra_argv: str) -> dict[str, list[di
     monkeypatch.setattr(asyncio, "run", lambda coro=None: None)
     monkeypatch.setattr(server.main, "_interface_for", lambda url: None)
     monkeypatch.setattr("sys.argv", [
-        "server.main", "--server-url", "http://10.44.12.10:8080",
+        "server.main", "--server-url", "http://10.44.12.10:7712",
         "--data-dir", str(tmp_path / "data"), "--images", str(tmp_path / "img"),
         *extra_argv,
     ])
@@ -107,11 +108,11 @@ def test_console_on_a_management_nic_also_listens_on_loopback(
     מאזין **שני** על 127.0.0.1, על אותו פורט — ורק היא: לסוכן
     אין מה לחפש על loopback."""
     configs = run_main(tmp_path, monkeypatch,
-                       "--console-host", "10.30.0.8", "--console-port", "8081")
+                       "--console-host", "10.30.0.8", "--console-port", "443")
 
     console = configs["console"]
     assert sorted(c["host"] for c in console) == ["10.30.0.8", "127.0.0.1"]
-    assert {c["port"] for c in console} == {8081}
+    assert {c["port"] for c in console} == {443}
     assert len(configs["agent"]) == 1 and "kiosk" not in configs   # #1247
 
 
@@ -127,7 +128,7 @@ def test_console_on_loopback_gets_a_single_listener(
 
 def test_agent_binds_to_interface_address_by_default(
         tmp_path: Path, monkeypatch) -> None:
-    """#1074: ברירת המחדל של 8080 היא כתובת ``--interface``, לא
+    """#1074: ברירת המחדל של 7712 היא כתובת ``--interface``, לא
     0.0.0.0. R20-F1 — bind לכל הכרטיסים היה החשיפה הרחבה."""
     monkeypatch.setattr(server.main, "_address_for_interface",
                         lambda name: "10.44.9.1")
@@ -161,7 +162,7 @@ def test_console_source_allowlist_flag_is_gone_and_refused_by_name(capsys) -> No
 
     with pytest.raises(SystemExit):
         server.main.build_parser().parse_args([
-            "--server-url", "http://10.44.12.10:8080",
+            "--server-url", "http://10.44.12.10:7712",
             "--console-allow-from", "10.10.10.0/24",
         ])
     assert "--console-allow-from" in capsys.readouterr().err

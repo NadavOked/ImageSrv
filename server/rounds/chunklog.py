@@ -2,7 +2,7 @@
 
 `chunkcast send` אומר בעצמו למה נפל (`ir_say`: "cannot send to ...: Operation not permitted", "... ended inside
 chunk N", "the socket refused a packet: ..."), אבל הוא נופל עם קוד יציאה בלבד, והמפעיל ראה רק את הקוד.
-כאן הפלט של התהליך נכתב לקובץ ליד מחיצה (כמו `udp-sender`, ומאותה סיבה: אף אחד לא קורא את הצינור, וצינור
+כאן הפלט של התהליך נכתב לקובץ ליד מחיצה (אף אחד לא קורא את הצינור, וצינור
 שלא נקרא נחסם כשהחוצץ מתמלא), וכאן קוראים את סופו.
 
 **אין כאן תלות ב-`sender.py`.** הפונקציות האלה הן התאומים של `partition_log`, `run_process` ו-`sender_log_tail`
@@ -30,7 +30,8 @@ log = logging.getLogger("imagesrv.chunklog")
 #: לניסוי, לא סיבת כישלון.
 #: #3535: שורת `knobs` נושאת גם `pace=<legacy|smooth> batch=<n>`, ו-`sendstats` גם `over_ms=<n>` בסופה; שתי הצורות (עם ובלי) מוכרות.
 #: #3535 (תהליכון קורא): `knobs` גם `reader=<inline|thread> readq=<n>` אחרי `batch`, ו-`sendstats` גם `readq_empty_ms=<n> readq_full_ms=<n>` אחרי `over_ms`.
-_PROGRESS = re.compile(r"(sent \d+ \d+|paced \d+ \d+|done \d+ \d+ -?\d+|rate \d+ [a-z-]+|feedback malformed=\d+"
+#: #3124 (B-NET-18): `sndbuf <asked> <granted>` -- the send buffer the kernel gave (-1 = not read), once at the start; evidence, not a reason.
+_PROGRESS = re.compile(r"(sent \d+ \d+|paced \d+ \d+|sndbuf \d+ -?\d+|done \d+ \d+ -?\d+|rate \d+ [a-z-]+|feedback malformed=\d+"
                        r"|left-behind [0-9a-f]{16} \S+ \d+"
                        r"|knobs ahead=\d+ readahead=(?:legacy|on) order=(?:seq|mixed) fb_low=\d+ fb_high=\d+ qcap=\d+"
                        r"(?: pace=(?:legacy|smooth) batch=\d+(?: reader=(?:inline|thread) readq=\d+)?)?"

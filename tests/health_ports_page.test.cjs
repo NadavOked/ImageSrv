@@ -14,8 +14,8 @@ const root=path.resolve(__dirname,'../server/static');
 const MAC1='a0:48:1c:8a:18:40', MAC2='78:ac:c0:9b:11:c2';
 const check=(id,label,state,detail)=>({id,label,state,detail});
 const HEALTH=[
-  check('server','השרת בכתובת ההפצה','ok','http://10.44.9.10:8080 עונה על תפריט האתחול'),
-  check('udp_sender','מולטיקאסט (udp-sender)','warn','udp-sender לא נמצא ב-PATH'),
+  check('server','השרת בכתובת ההפצה','ok','http://10.44.9.10:7712 עונה על תפריט האתחול'),
+  check('chunk_sender','מולטיקאסט (chunkcast)','warn','chunkcast לא נמצא ב-PATH'),
   check('tftp_port','פורט 69 (TFTP)','bad','אף אחד לא מגיש TFTP — מחשבים לא יעלו ב-PXE'),
   check('identity','זהות מכונה','off','שומר הזהות כבוי'),
   check('shim_fresh','עדכניות ה-shim','unknown','לא ניתן לקרוא /usr/lib/shim — לא נבדק'),
@@ -27,11 +27,11 @@ const HEALTH=[
 const port=(id,name,p,proto,state,detail,extra={})=>({id,name,port:p,proto,desc:'desc '+id,target:'target '+id,state,detail,note:'לפתוח ב-FW: '+p,...extra});
 const PORTS_OLD=[
   port('tftp','TFTP','69','udp','ok','dnsmasq מגיש'),
-  port('http_boot','HTTP','8080','tcp','ok','עונה על תפריט האתחול'),
-  port('http_console','HTTP','8081','tcp','off','אין hook שקורא את ההאזנה על הפורט הזה — לא אומת'),
+  port('http_boot','HTTP','7712','tcp','ok','עונה על תפריט האתחול'),
+  port('http_console','HTTP','443','tcp','off','אין hook שקורא את ההאזנה על הפורט הזה — לא אומת'),
   port('pxe_proxy','PXE','4011','udp','off','אין hook — לא אומת'),
-  port('multicast','Multicast','9000–9001','udp','off','אין udp-sender חי — ואין סבב'),
-  port('monitor','Monitor (RFB)','5900','tcp','off','המתג monitor:stations כבוי'),
+  port('multicast','Multicast','7713–7714','udp','off','אין chunkcast חי — ואין סבב'),
+  port('monitor','Monitor (RFB)','7710','tcp','off','המתג monitor:stations כבוי'),
 ];
 const nic=(name,extra={})=>({name,mac:'00:11:22:33:44:'+name.slice(-2),state:'up',present:true,addresses:['10.0.0.1/24'],enabled:false,proxy:false,trunk:false,
   range_start:'',range_end:'',netmask:'255.255.255.0',gateway:'',dns:[],lease:'12h',server_ip:'',description:'',
@@ -50,7 +50,7 @@ function setup(over={}) {
   }
   const fixtures={'/health':HEALTH,'/update':{current:'v0.34.0',enabled:true,previous:'v0.33.0',server_name:'srv'},'/update/status':{state:'idle'},
     '/update/check':{at:`${new Date().toISOString().slice(0,10)}T06:00:00+00:00`,current:'v0.34.0',latest:'v0.35.0',available:true,reason:''},   // "היום" = תאריך UTC של היום, לא תאריך קשיח (נפל ב-20/09 על 19/09)
-    '/ports':PORTS_OLD,'/monitor/settings':{port:5900,enabled:false},'/net/interfaces':NICS,'/net/proxy-support':{read:true,version:'2.90',verified:false,broken:true,reason:'dnsmasq 2.90 — proxy שבור'},
+    '/ports':PORTS_OLD,'/monitor/settings':{port:7710,enabled:false},'/net/interfaces':NICS,'/net/proxy-support':{read:true,version:'2.90',verified:false,broken:true,reason:'dnsmasq 2.90 — proxy שבור'},
     '/machines':[{mac:MAC1,suffix:'מחשב 1',group_id:'grp_CLONERS',disks:null}],'/groups':[{id:'grp_CLONERS',label:'מחשבי שיכפול',role:'cloner',sort:1}],
     ...over};
   const ctx=vm.createContext({console,URLSearchParams,URL,Date,Set,Map,Number,Math,JSON,Promise,String,Array,Object,encodeURIComponent,decodeURIComponent,
@@ -92,7 +92,7 @@ test('health is an own page without tabs; ports is an own page; loaders wired',(
   const {run}=setup();
   assert.equal(run('pages.health.own'),true); assert.equal(run('pages.health.tabs.length'),0);
   assert.equal(run('pages.health.load===loadHealth'),true);
-  assert.equal(run('pages.ports.own'),true); assert.equal(run('pages.ports.load===loadPorts'),true);
+  assert.equal(run('pages.ports.own'),true); assert.match(run('String(pages.ports.load)'),/loadServices/);   // ‏#3887
   assert.equal(run('typeof loadSsh'),'undefined','loadSsh moved into the ports page');
   assert.equal(run('health()'),run('pagePlaceholder()'),'placeholder before the first read');
 });
@@ -103,7 +103,7 @@ test('the checks table shows all five states with their own colour — "not chec
   const html=run('health()'); balanced(html);
   assert.match(html,/<table class="dg">/); assert.match(html,/<th>בדיקה<\/th><th>מצב<\/th><th>פירוט<\/th>/,'#1300: console-full.html P.health');
   assert.match(row(html,'השרת בכתובת ההפצה'),/class="pill ok">תקין</);
-  assert.match(row(html,'מולטיקאסט (udp-sender)'),/class="pill warn">אזהרה</);
+  assert.match(row(html,'מולטיקאסט (chunkcast)'),/class="pill warn">אזהרה</);
   assert.match(row(html,'פורט 69 (TFTP)'),/class="pill err">תקלה</);
   const unk=row(html,'עדכניות ה-shim');
   assert.match(unk,/class="pill unk">לא נבדק</); assert.doesNotMatch(unk,/pill ok/);
@@ -149,8 +149,8 @@ test('stage 3: "תקלות פתוחות" lists bad, warn and unknown (worst firs
   await run('loadHealth()');
   const html=run('health()');
   const card=html.slice(html.indexOf('תקלות פתוחות'),html.indexOf('<span>שירותים'));
-  assert.ok(card.indexOf('פורט 69 (TFTP)')<card.indexOf('מולטיקאסט (udp-sender)'),'errors before warnings');
-  assert.ok(card.indexOf('מולטיקאסט (udp-sender)')<card.indexOf('עדכניות ה-shim'),'warnings before unchecked');
+  assert.ok(card.indexOf('פורט 69 (TFTP)')<card.indexOf('מולטיקאסט (chunkcast)'),'errors before warnings');
+  assert.ok(card.indexOf('מולטיקאסט (chunkcast)')<card.indexOf('עדכניות ה-shim'),'warnings before unchecked');
   assert.match(cell(card,'עדכניות ה-shim',400),/pill unk">לא נבדק</);
   assert.doesNotMatch(card,/class="empty"/);
   assert.doesNotMatch(card,/SSH בתחנות/,'off is not an open fault');
@@ -354,135 +354,145 @@ test('#1000: the health header time comes from the X-Health-Checked-At header (s
   assert.equal(s.run('typeof clockNow'),'function','clockNow is still used for the ports page — but not for /health');
 });
 
-/* ---------- רשת › פורטים — #1267: מופרדים לפי רשת, חומת אש רק בין רשתות ----------
-   נדב 10/10: כרטיס לכל רשת (הפצה / ניהול / בין שרתים). ברשת ההפצה השרת מנהל את
-   הפורטים — אין עמודת חומת אש ואין פעולות. בין רשתות: חומת אש בשרת (פתוח=ירוק,
-   חסום=אדום, לא נבדק=אפור), "מה לפתוח בחומת האש של המכללה" מה-note, ותפריט
-   "בדוק עכשיו" / "הצג פרטים" בלבד. אין "פתח/סגור" בשום מקום, ו-22/SSH לא מוצג (#1266). */
+/* ---------- #3887: דף "שירותים" במקום דף "פורטים" (m3887-services.html, נדב 20/11) ----------
+   שורה לכל שירות: מצב נמדד, "בעלייה" לקריאה בלבד, פורט כמידע, מתג כחול, הגדרות. פורטי הליבה (קונסולה,
+   HTTP, TFTP) לא נכבים מכאן (#2445); כיבוי של שירות שאינו ליבה = חלון אדום בלי הקלדה (#1270).
+   SSH, ‏proxy DHCP, מולטיקאסט וחומת האש אינם בדף. "לא ידוע" ≠ "כבוי" (עיקרון 5). */
 const p1267=(id,name,p,proto,network,state,detail,extra={})=>({id,name,port:p,proto,desc:'desc '+id,target:'target '+id,state,detail,
   note:'לפתוח ב-FW: '+proto.toUpperCase()+' '+p+' הסבר '+id,enabled:null,listening:null,bind:[],toggle:'none',toggle_url:null,confirm_word:null,confirm_when:null,
   off_means:'',network,firewall:null,firewall_detail:null,...extra});
-const PORTS_1267=[
-  p1267('tftp','TFTP','69','udp','deploy','ok','dnsmasq מגיש',{listening:true,bind:['0.0.0.0:69'],toggle:'confirm',enabled:true}),
-  p1267('dhcp','DHCP','67','udp','deploy','ok','dnsmasq מאזין',{listening:true,bind:['0.0.0.0:67'],toggle:'confirm',enabled:true,interfaces:[{name:'ens19',enabled:true,proxy:false}]}),
-  p1267('http_boot','HTTP','8080','tcp','deploy','ok','עונה על תפריט האתחול',{listening:true,bind:['0.0.0.0:8080'],toggle:'confirm',enabled:true}),
-  p1267('http_console','HTTPS','8081','tcp','mgmt','ok','המתג דלוק ומאזין',{listening:true,bind:['10.44.10.1:8081','127.0.0.1:8081'],toggle:'confirm',enabled:true,
-    firewall:'open',firewall_detail:'כלל פתיחה בטבלת imagesrv: iifname "ens18" tcp dport 8081 accept'}),
+const PORTS_SVC=[
+  p1267('tftp','TFTP','69','udp','deploy','ok','dnsmasq מגיש',{enabled:true,listening:true,toggle:'confirm',toggle_url:'/api/console/ports/tftp',confirm_word:'srv',confirm_when:'off'}),
+  p1267('dhcp','DHCP','67','udp','deploy','ok','dnsmasq מאזין',{enabled:true,listening:true,toggle:'confirm',toggle_url:'/api/console/net/interfaces/{name}'}),
+  p1267('http_boot','HTTP','7712','tcp','deploy','off','כבוי על ידי המפעיל — לא מאזין',{enabled:false,listening:false,toggle:'confirm',
+    toggle_url:'/api/console/ports/http_boot',confirm_word:'srv',confirm_when:'off'}),
+  p1267('http_console','HTTPS','443','tcp','mgmt','ok','המתג דלוק ומאזין',{enabled:true,listening:true,toggle:'confirm',toggle_url:'/api/console/ports/http_console',confirm_word:'srv'}),
   p1267('pxe_proxy','PXE','4011','udp','deploy','off','כבוי על ידי המפעיל — לא מאזין'),
-  p1267('multicast','Multicast','9000–9001','udp','deploy','ok','אין udp-sender חי — ואין סבב'),
-  p1267('monitor','Monitor (RFB)','5900','tcp','deploy','off','המתג monitor:stations כבוי'),
-  p1267('interserver','HTTPS (mTLS)','8443','tcp','interserver','off','לא מאזין',{listening:false,
-    firewall:'blocked',firewall_detail:'אין כלל פתיחה בטבלת imagesrv, ו-policy drop חוסם חיבור מבחוץ',off_means:'שרתים משניים לא יוכלו להירשם'}),
+  p1267('multicast','Multicast','7713–7714','udp','deploy','ok','אין chunkcast חי — ואין סבב'),
+  p1267('monitor','Monitor (RFB)','7710','tcp','deploy','off','המתג monitor:stations כבוי',{enabled:false,toggle:'confirm',toggle_url:'/api/console/monitor/settings'}),
+  p1267('ntp','שרת זמן (NTP)','123','udp','per_nic','ok','המתג דלוק ומאזין',{enabled:true,listening:true,toggle:'api',interfaces:['ens19']}),
+  p1267('interserver','HTTPS (mTLS)','7700','tcp','interserver','ok','המתג דלוק ומאזין',{enabled:true,listening:true,toggle:'api',
+    toggle_url:'/api/console/ports/interserver',warning_he:'כיבוי 7700 (בין-שרתי) מנתק את שרת המשנה.',off_means:'שרתים משניים לא יוכלו להירשם'}),
   p1267('firewall','חומת אש','—','nft',null,'ok','פעילה, 9 כללים לטבלת imagesrv'),
 ];
-const card=(html,title)=>{const i=html.indexOf('<span>'+title); assert.ok(i>=0,'missing card: '+title); const s=html.lastIndexOf('<div class="',i); const n=html.indexOf('<div class="c12 card"',i+1); return html.slice(s,n<0?undefined:n);};
-const menuOf=(r)=>JSON.parse(r.match(/data-menu="([^"]*)"/)[1].replaceAll('&quot;','"').replaceAll('&#39;',"'"));
+const UPS_OK={mode:'net',target:'ups@10.0.0.5',state:'ok',detail:'על חשמל',modes:{none:'בלי UPS',net:'שרת NUT'}};
+const svcRowOf=(html,id)=>row(html,`data-svc="${id}"`);
+async function svcSetup(over={}) {
+  const t=setup({'/ports':PORTS_SVC,'/ups':UPS_OK,...over}); t.run('current="ports"');
+  await t.run('pages.ports.load()');
+  return t;
+}
 
-test('#1267 ports page: three cards by network — deploy has no firewall column and no actions; management and inter-server do',async()=>{
-  const {run}=setup({'/ports':PORTS_1267}); run('current="ports"');
-  assert.equal(run('ports()'),run('pagePlaceholder()'));
-  await run('loadPorts()');
-  const html=run('ports()'); balanced(html);
-  const dep=card(html,'רשת הפצה'), mgmt=card(html,'רשת ניהול'), inter=card(html,'בין שרתים');
-  // הפצה: הכרטיס שמשרת DHCP (מה-/ports) + הכתובת שלו (מ-/net/interfaces)
-  assert.match(dep,/<span>רשת הפצה · ens19 · 10\.0\.0\.1</);
-  for(const p of ['67/udp','69/udp','8080/tcp','4011/udp','9000–9001/udp','5900/tcp']) assert.ok(dep.includes(p),'deploy card is missing '+p);
-  assert.match(dep,/<th>פורט<\/th><th>שירות<\/th><th>מי פונה<\/th><th>מאזין<\/th><\/tr>/,'deploy: four columns, no firewall');
-  assert.doesNotMatch(dep,/חומת אש<\/th>|מה לפתוח בחומת|class="kebab"/,'deploy: no firewall column and no row menu');
-  assert.match(dep,/השרת מנהל את רשת ההפצה ואת הפורטים שלה/);
-  // ניהול: 8081, חומת אש פתוח = ירוק, מה לפתוח = ה-note בלי הקידומת
-  assert.match(mgmt,/<span>רשת ניהול · 10\.44\.10\.1</,'the management address is the measured bind of 8081, loopback left out');
-  assert.match(mgmt,/<th>פורט<\/th><th>שירות<\/th><th>מי פונה<\/th><th>מאזין<\/th><th>חומת אש<\/th><th class="c-opt">מה לפתוח בחומת האש של המכללה<\/th>/);
-  const r8081=row(mgmt,'8081/tcp');
-  assert.match(r8081,/class="pill ok">פתוח</); assert.match(r8081,/>TCP 8081 הסבר http_console</); assert.doesNotMatch(r8081,/לפתוח ב-FW/);
-  assert.match(mgmt,/חומת האש של המכללה לא נראית מהשרת/);
-  // בין שרתים: 8443 חסום = אדום
-  assert.match(row(inter,'8443/tcp'),/class="pill err">חסום</);
-  assert.ok(!dep.includes('8081') && !dep.includes('8443') && !mgmt.includes('8443'),'each port in its own card only');
-  // מצב חומת האש של השרת כולה — מה-/ports (שורת firewall), לא כשורת פורט; ‏#1300: הודעה רק כשאינה תקינה (כמו המוקאפ — רק הכרטיסים)
-  assert.doesNotMatch(html,/חומת האש של השרת: פעילה/);
-  const bad=setup({'/ports':PORTS_1267.map((p)=>p.id==='firewall'?{...p,state:'bad',detail:'לא פעילה'}:p)}); bad.run('current="ports"');
-  await bad.run('loadPorts()');
-  assert.match(bad.run('ports()'),/class="note err"[^]*חומת האש של השרת: לא פעילה/);
-  assert.doesNotMatch(html,/<span class="mono">—\/nft</);
+test('#3887 the page: one row per service in the mockup order, title "שירותים", no SSH/proxy/multicast/firewall rows',async()=>{
+  const {run}=setup({'/ports':PORTS_SVC,'/ups':UPS_OK}); run('current="ports"');
+  assert.equal(run('pages.ports.crumb'),'שירותים'); assert.equal(run('pages.ports.tabs.length'),0);
+  assert.equal(run('servicesPage()'),run('pagePlaceholder()'),'placeholder before the first read');
+  await run('pages.ports.load()');
+  const html=run('servicesPage()'); balanced(html);
+  assert.match(html,/<div class="obj-name">שירותים</);
+  const ids=[...html.matchAll(/data-svc="([^"]+)"/g)].map((m)=>m[1]);
+  assert.deepEqual(ids,['http_console','http_boot','tftp','dhcp','ntp','monitor','interserver','ups']);
+  assert.match(html,/<th>שירות<\/th><th>מצב<\/th><th>בעלייה<\/th><th>פורט<\/th><th>הפעלה<\/th><th>הגדרות<\/th>/);
+  assert.doesNotMatch(html,/9000|udp-sender|Multicast|מולטיקאסט|4011|22\/tcp|SSH|—\/nft/);
+  assert.doesNotMatch(html,/מה לפתוח בחומת האש|בדוק עכשיו|הצג פרטים/,'the firewall table left the code (#3515)');
+  assert.match(svcRowOf(html,'http_console'),/<span class="mono">443\/tcp<\/span>/,'the port numbers of the 77xx table (#3871)');
+  assert.match(svcRowOf(html,'monitor'),/7710\/tcp<\/span><span class="sub">בתחנה</);
 });
 
-test('#1267 ports page: no open/close anywhere, no switches, no typed confirmations, and 22/SSH is not shown',async()=>{
-  const {run}=setup({'/ports':PORTS_1267}); run('current="ports"');
-  await run('loadPorts()');
-  const html=run('ports()');
-  assert.doesNotMatch(html,/role="switch"/,'no switch on the ports page');
-  assert.doesNotMatch(html,/22\/tcp|SSH|🔒/,'SSH rows are not shown (#1266)');
-  const kebabs=[...html.matchAll(/data-menu="([^"]*)"/g)];
-  assert.equal(kebabs.length,2,'a row menu only for 8081 and 8443');
-  for(const k of kebabs) assert.deepEqual(menuOf(k[0]).map((i)=>i[0]),['בדוק עכשיו','הצג פרטים']);
-  assert.doesNotMatch(html,/פתח…|סגור…|הקלד/);
+test('#3887 the console switch is locked; HTTP and TFTP stop through a red confirm (mockup §2) and start without a dialog',async()=>{
+  const {run,requests,fixtures}=await svcSetup();
+  const html=run('servicesPage()');
+  assert.match(svcRowOf(html,'http_console'),/class="svc-tg on" role="switch" aria-checked="true"[^>]*disabled/);
+  assert.match(svcRowOf(html,'http_console'),/לא נכבית מכאן/);
+  assert.match(svcRowOf(html,'tftp'),/class="svc-tg on" role="switch" aria-checked="true"[^>]*onclick="svcStop\('tftp'\)"/);
+  const boot=svcRowOf(html,'http_boot');
+  assert.match(boot,/class="pill off">כבוי</);
+  assert.match(boot,/class="svc-tg" role="switch" aria-checked="false"[^>]*onclick="svcStart\('http_boot'\)"/);
+  const n=run('sheets.length');
+  await run("svcStart('http_boot')");
+  assert.equal(run('sheets.length'),n,'start has no dialog');
+  assert.deepEqual(requests.filter((r)=>r.method==='PUT').at(-1),{url:'/ports/http_boot',method:'PUT',body:{enabled:true}});
+  run("svcStop('http_console')");
+  assert.equal(run('sheets.length'),n,'the console is never stopped from its own page');
+  // ‏#1780: המילה שהשרת דורש נקראת מ-/ports ברגע השליחה — שם שהשתנה אחרי הטעינה הוא זה שנשלח
+  fixtures['/ports']=PORTS_SVC.map((p)=>p.confirm_word?{...p,confirm_word:'srv-renamed'}:p);
+  run("svcStop('tftp')");
+  const s=run('sheets.at(-1)');
+  assert.equal(s.danger,true); assert.equal(s.verify,undefined,'no typed word'); assert.equal(s.fields,undefined); assert.equal(s.submitLabel,'עצירה');
+  await s.onSubmit();
+  assert.deepEqual(requests.filter((r)=>r.method==='PUT').at(-1),{url:'/ports/tftp',method:'PUT',body:{enabled:false,confirm:'srv-renamed'}});
 });
 
-test('#1267 firewall not read → "לא נבדק", never green; the header pill says so',async()=>{
-  const unread=PORTS_1267.map((p)=>p.network==='mgmt'||p.network==='interserver'?{...p,firewall:null,firewall_detail:'nft לא נקרא — לא נבדק'}:p);
-  const {run}=setup({'/ports':unread}); run('current="ports"');
-  await run('loadPorts()');
-  const html=run('ports()');
-  const r=row(card(html,'רשת ניהול'),'8081/tcp');
-  assert.match(r,/<span title="nft לא נקרא — לא נבדק"><span class="pill ">לא נבדק<\/span><\/span>/,'the firewall cell: not checked, never green or red');
-  assert.doesNotMatch(r,/class="pill err"/);
-  // ‏#1300 (console-full.html P.network "ports"): עמודת "מאזין" היא פיל אחד; מה שנמדד — ב-title
-  assert.match(r,/<span title="המתג דלוק ומאזין"><span class="pill ok">מאזין<\/span><\/span>/);
+test('#3887 #1780 a "confirm" row that /ports no longer reports with its word is not sent with a guessed name',async()=>{
+  const {run,requests,fixtures}=await svcSetup();
+  fixtures['/ports']=PORTS_SVC.map((p)=>p.id==='tftp'?{...p,confirm_word:null}:p);
+  run("svcStop('tftp')");
+  await assert.rejects(()=>run('sheets.at(-1)').onSubmit(),/מילת האישור/);
+  assert.equal(requests.filter((r)=>r.method==='PUT').length,0,'nothing is sent with a guessed name');
 });
 
-test('#1267 "בדוק עכשיו" re-reads /ports and reports what was measured; "הצג פרטים" opens a real drawer',async()=>{
-  const {run,requests}=setup({'/ports':PORTS_1267}); run('current="ports"');
-  await run('loadPorts()'); run('ports()');
-  const before=requests.filter((r)=>r.url==='/ports').length;
-  await run("portCheckNow('interserver')");
-  assert.equal(requests.filter((r)=>r.url==='/ports').length,before+1,'a real re-read, not a canned toast');
-  assert.match(run('toasts.at(-1)'),/8443\/tcp: כבוי — לא מאזין · חומת אש בשרת: חסום/);
-  run("portDetail('http_console')");
-  assert.equal(run('document.getElementById("drawerTitle").textContent'),'8081/tcp · HTTPS');
-  const body=run('document.getElementById("drawerBody").innerHTML');
-  assert.match(body,/class="page drw"/); assert.match(body,/מצב שנמדד/); assert.match(body,/10\.44\.10\.1:8081/);
-  assert.ok(body.includes('iifname &quot;ens18&quot; tcp dport 8081 accept'),'the rule that opened it');
-  assert.match(body,/חומת האש של המכללה/); assert.match(body,/TCP 8081 הסבר http_console/);
-  assert.match(body,/onclick="portCheckNow\('http_console', true\)">בדוק עכשיו</);
-  assert.ok(!requests.some((r)=>r.method!=='GET'),'nothing is written');
-  assert.equal(run('sheets.length'),0,'no modal, no typed word');
-  // תוצאה שלא נקראה — הבדיקה נכשלה, לא "תקין"
-  run('api=async()=>{throw new Error("DB down")}');
-  await run("portCheckNow('http_console')");
-  assert.match(run('toasts.at(-1)'),/הבדיקה נכשלה: DB down/);
+test('#3887 stopping inter-server is a red confirm with the consequences and no typed word',async()=>{
+  const {run,requests}=await svcSetup();
+  const r=svcRowOf(run('servicesPage()'),'interserver');
+  assert.match(r,/class="svc-tg on" role="switch" aria-checked="true"[^>]*onclick="svcStop\('interserver'\)"/);
+  run("svcStop('interserver')");
+  const s=run('sheets.at(-1)');
+  assert.equal(s.danger,true); assert.equal(s.verify,undefined,'no typed word'); assert.equal(s.fields,undefined); assert.equal(s.submitLabel,'עצירה');
+  assert.match(s.note,/מנתק את שרת המשנה/);
+  const before=requests.filter((x)=>x.url==='/ports').length;
+  await s.onSubmit();
+  assert.deepEqual(requests.filter((x)=>x.method==='PUT').at(-1),{url:'/ports/interserver',method:'PUT',body:{enabled:false}});
+  assert.ok(requests.filter((x)=>x.url==='/ports').length>before,'the state is re-read after the change');
 });
 
-test('#1267 /ports that could not be read is a red note, not an empty page',async()=>{
-  const {run}=setup({'/ports':new Error('DB down')}); run('current="ports"');
-  await run('loadPorts()');
-  const html=run('ports()');
-  assert.notEqual(html,run('pagePlaceholder()')); assert.match(html,/note err.*לא הצלחתי לקרוא את רשימת הפורטים: DB down/);
-  assert.doesNotMatch(html,/<table/); assert.doesNotMatch(html,/port-state|כל השורות נמדדו/,'nothing measured is claimed');
-  // ‏#954 גל 8: הלשוניות הן של אובייקט הרשת — הדף הזה הוא לשונית 3; ‏#1300: אותה כותרת "רשת" כמו שאר הלשוניות
-  assert.match(html,/<div class="obj-name">רשת</);
-  assert.match(html,/role="tab" aria-selected="true" tabindex="0" onclick="selectPageById\('ports'\)">פורטים/);
+test('#3887 DHCP is state only with a gear to the deploy network; NTP opens the physical connections; monitor uses its own switch; "בעלייה" is read-only text',async()=>{
+  const {run}=await svcSetup();
+  const html=run('servicesPage()');
+  const dhcp=svcRowOf(html,'dhcp');
+  assert.match(dhcp,/מצב בלבד/); assert.doesNotMatch(dhcp,/role="switch"/); assert.match(dhcp,/onclick="openNetwork\(2\)"/);
+  assert.match(dhcp,/class="pill need">הסבב צריך</);
+  assert.match(svcRowOf(html,'ntp'),/onclick="openNetwork\(1\)">לפי כרטיס…</);
+  assert.match(svcRowOf(html,'ntp'),/בכרטיס ens19, מתוך 3 כרטיסים/);
+  assert.match(svcRowOf(html,'monitor'),/onclick="monitorToggle\(true\)"/);
+  for(const id of ['http_console','http_boot','tftp','dhcp','ntp','monitor','interserver','ups'])
+    assert.doesNotMatch(svcRowOf(html,id).split('</td>')[2]||'',/<button|<input|role="switch"/,id+': "בעלייה" is text only');
+  assert.match(html,/הסבב צריך: <b>HTTP<\/b>, <b>TFTP<\/b> ו-<b>DHCP<\/b>\. HTTP לא פועל — הסבב לא יתחיל\./);
+});
+
+test('#3887 "לא ידוע" is never "כבוי": an unread row has no switch, only "בדיקה חוזרת"; /ups that was not read is unknown too',async()=>{
+  const unread=PORTS_SVC.map((p)=>p.id==='interserver'?{...p,state:'unknown',listening:null,detail:'טבלת הסוקטים לא נקראה'}:p);
+  const {run}=await svcSetup({'/ports':unread,'/ups':new Error('NUT down')});
+  const html=run('servicesPage()');
+  const r=svcRowOf(html,'interserver');
+  assert.match(r,/class="pill unk">\? לא ידוע</); assert.doesNotMatch(r,/role="switch"|pill off/); assert.match(r,/בדיקה חוזרת/);
+  const u=svcRowOf(html,'ups');
+  assert.match(u,/class="pill unk">\? לא ידוע</); assert.match(u,/NUT down/); assert.match(u,/בדיקה חוזרת/);
+});
+
+test('#3887 /ports that could not be read is a red note, not an empty page',async()=>{
+  const {run}=await svcSetup({'/ports':new Error('DB down')});
+  const html=run('servicesPage()');
+  assert.notEqual(html,run('pagePlaceholder()')); assert.match(html,/note err.*לא הצלחתי לקרוא את מצב השירותים: DB down/);
+  assert.doesNotMatch(html,/<table/);
+});
+
+test('#3887 the page sits under "רשת" in the tree and is no longer a network tab; per-NIC services are back on the physical connections tab',()=>{
+  const {run}=setup();
+  assert.deepEqual(JSON.parse(run('JSON.stringify(NET_TABS)')),['תרשים','חיבורים פיזיים','רשת הפצה']);
+  const idx=fs.readFileSync(path.join(root,'index.html'),'utf8');
+  const net=idx.slice(idx.indexOf('id="netTA"'),idx.indexOf('data-page="monitor"'));
+  assert.match(net,/data-page="ports"[^]*<span>שירותים<\/span>/); assert.doesNotMatch(idx,/<span>פורטים<\/span>/);
+  const cjs=fs.readFileSync(path.join(root,'console.js'),'utf8');
+  const nics=cjs.slice(cjs.indexOf('function networkNicsTab('),cjs.indexOf('/* --- לשונית 2'));
+  assert.match(nics,/nicsvcPortsCard\(\)/);
 });
 
 test('deploy role: the pages stay admin-only and no admin endpoint is requested',async()=>{
-  const {run,requests}=setup({'/health':403,'/monitor/settings':403,'/update':403});
+  const {run,requests}=setup({'/health':403,'/monitor/settings':403,'/update':403,'/ups':403});
   run('ME={timezone:"UTC",username:"mafitz",role:"deploy",server_name:"srv",capabilities:{}}; current="ports"');
   assert.equal(run('pageAllowed("health")'),false); assert.equal(run('pageAllowed("ports")'),false);
-  await run('loadPorts()');
-  for(const u of ['/monitor/settings','/net/interfaces']) assert.ok(!requests.some((r)=>r.url===u),u+' must not be requested by deploy');
-});
-
-// --- נדב 17/09: שורת TFTP עם 8 כתובות האזנה מתחה את הטבלה מעבר למסך ---------------
-test('a long bind list renders one address per line, IPv6 link-local folded into +N, never one long inline string', () => {
-  const {run}=setup();
-  const html=run(`portNicHtml(${JSON.stringify(['127.0.0.1:69','10.10.10.8:69','10.44.3.1:69','10.44.0.1:69','[fe80::215:5dff:fe44:3c07]%eth3:69','[fe80::215:5dff:fe10:1]%br0:69','[fe80::215:5dff:fe10:2]%eth1:69','[::1]:69'])})`);
-  assert.match(html,/class="mono bindlist" dir="ltr"/);
-  assert.match(html,/10\.10\.10\.8:69<br>10\.44\.3\.1:69/,'one per line');
-  assert.doesNotMatch(html,/fe80[^<]*<br>/,'link-local is not in the visible list');
-  assert.match(html,/title="[^"]*fe80[^"]*">\+4</,'the rest is folded into +N with a tooltip');
-  assert.doesNotMatch(html,/, \[fe80/,'no comma-joined inline string');
-  assert.match(run(`portNicHtml(['0.0.0.0:8080'])`),/0\.0\.0\.0:8080/);
-  assert.match(run(`portNicHtml([])`),/—/);
+  await run('pages.ports.load()');
+  for(const u of ['/monitor/settings','/net/interfaces','/ups']) assert.ok(!requests.some((r)=>r.url===u),u+' must not be requested by deploy');
 });
 
 // apple-pending-4 · 4: פיל ה-TLS עבר מכותרת הסקירה לדף הבריאות
@@ -508,85 +518,12 @@ test('#1300: raw English detail never sits in a health row — a short Hebrew li
   assert.match(row(html,'חומת אש'),/<span class="wrap">לא נבדק<\/span><details class="tech">/);
 });
 
-/* ---------- #1267 המשך (נדב 11/10): עצירה/הפעלה של שירות עברה מדף הפורטים לדף הבריאות ----------
-   אותו API של דף הפורטים (PUT toggle_url = /ports/{id}); עצירה = חלון אישור עם השלכות וכפתור אדום,
-   בלי הקלדה; הפעלה = כפתור רגיל; מצב שלא נקרא = "לא נבדק" בלי כפתור. */
-const TFTP_SVC_WARN='כיבוי 69 (TFTP) עוצר את ה-PXE: מחשבי בנייה ושיכפול לא יעלו מהשרת.';
-const PORTS_SVC=[
-  p1267('tftp','TFTP','69','udp','deploy','ok','dnsmasq מגיש',{enabled:true,listening:true,toggle:'confirm',toggle_url:'/api/console/ports/tftp',
-    confirm_word:'srv',confirm_when:'off',warning_he:TFTP_SVC_WARN,off_means:'אין shim/GRUB'}),
-  p1267('dhcp','DHCP','67','udp','deploy','ok','dnsmasq מאזין',{enabled:true,listening:true,toggle:'confirm',toggle_url:'/api/console/net/interfaces/{name}'}),
-  p1267('http_boot','HTTP','8080','tcp','deploy','off','כבוי על ידי המפעיל — לא מאזין',{enabled:false,listening:false,toggle:'confirm',
-    toggle_url:'/api/console/ports/http_boot',confirm_word:'srv',confirm_when:'off'}),
-  p1267('http_console','HTTPS','8081','tcp','mgmt','unknown','טבלת הסוקטים לא נקראה',{enabled:true,listening:null,bind:null,toggle:'confirm',
-    toggle_url:'/api/console/ports/http_console',confirm_word:'srv',confirm_when:'off'}),
-  p1267('monitor','Monitor (RFB)','5900','tcp','deploy','off','המתג כבוי',{enabled:false,toggle:'confirm',toggle_url:'/api/console/monitor/settings'}),
-  p1267('interserver','HTTPS (mTLS)','8443','tcp','interserver','ok','המתג דלוק ומאזין',{enabled:true,listening:true,toggle:'api',
-    toggle_url:'/api/console/ports/interserver',off_means:'שרתים משניים לא יוכלו להירשם או לסנכרן מול השרת הזה'}),
-  p1267('firewall','חומת אש','—','nft',null,'ok','פעילה'),
-];
-
-test('#1267 health page: a services card with stop/start per service — stop is a red confirm with consequences and no typed word, start is a plain button',async()=>{
+/* ‏#3887: כרטיס "שירותים" ירד מדף הבריאות (נדב 20/11: כפול לדף השירותים). */
+test('#3887 the health page has no services card and does not read /ports',async()=>{
   const {run,requests}=setup({'/ports':PORTS_SVC}); run('current="health"');
   await run('loadHealth()');
   const html=run('health()'); balanced(html);
-  const svc=card(html,'שירותים');
-  for(const p of ['69/udp','8080/tcp','8081/tcp','8443/tcp']) assert.ok(svc.includes(p),'services card is missing '+p);
-  assert.ok(!svc.includes('67/udp') && !svc.includes('5900/tcp'),'DHCP/monitor keep their own pages — their switch is not a /ports/{id} service');
-  assert.doesNotMatch(svc,/disabled/);
-  // TFTP פועל → "עצור…" → sheet אדום עם האזהרה, בלי הקלדה; נשלחת המילה שהשרת דורש, מהשורה
-  const tftp=row(svc,'69/udp');
-  assert.match(tftp,/class="btn sm danger" onclick="healthSvcStop\('tftp'\)">עצור…</);
-  run("healthSvcStop('tftp')");
-  let s=run('sheets.at(-1)');
-  assert.equal(s.danger,true); assert.equal(s.verify,undefined,'no typed word'); assert.equal(s.submitLabel,'עצירה');
-  assert.ok(s.note.includes(TFTP_SVC_WARN),'the consequences are in the dialog');
-  const before=requests.filter((r)=>r.url==='/ports').length;
-  await s.onSubmit();
-  assert.deepEqual(requests.filter((r)=>r.method==='PUT').at(-1),{url:'/ports/tftp',method:'PUT',body:{enabled:false,confirm:'srv'}});
-  assert.ok(requests.filter((r)=>r.url==='/ports').length>before,'the state is re-read after the change');
-  // 8080 עצור → "הפעל" רגיל, בלי חלון
-  const boot=row(svc,'8080/tcp');
-  assert.match(boot,/class="btn sm" onclick="healthSvcStart\('http_boot'\)">הפעל</);
-  const nSheets=run('sheets.length');
-  await run("healthSvcStart('http_boot')");
-  assert.equal(run('sheets.length'),nSheets,'start has no dialog');
-  assert.deepEqual(requests.filter((r)=>r.method==='PUT').at(-1),{url:'/ports/http_boot',method:'PUT',body:{enabled:true}});
-  // 8081: מצב שלא נקרא — "לא נבדק", בלי כפתור
-  const con=row(svc,'8081/tcp');
-  assert.match(con,/class="st unk">לא נבדק</); assert.doesNotMatch(con,/<button/);
-  // 8443 (api): עצירה — אותו חלון אדום, בלי confirm בגוף
-  run("healthSvcStop('interserver')");
-  s=run('sheets.at(-1)'); assert.equal(s.danger,true); assert.equal(s.verify,undefined); assert.match(s.note,/שרתים משניים לא יוכלו להירשם/);
-  await s.onSubmit();
-  assert.deepEqual(requests.filter((r)=>r.method==='PUT').at(-1),{url:'/ports/interserver',method:'PUT',body:{enabled:false}});
-});
-
-/* ‏#1780: השרת משווה את confirm לשם המארח של עכשיו. שם שנקרא לפני שינוי השם — מהשורה
-   שנטענה או מ-ME — נשלח בלי שאיש הקליד אותו, וחזר "יש להקליד בדיוק". */
-test('#1780 stopping a "confirm" service sends the server name as /ports reports it now, not the one read before a rename',async()=>{
-  const {run,requests,fixtures}=setup({'/ports':PORTS_SVC}); run('current="health"');
-  await run('loadHealth()');
-  // השם שונה אחרי טעינת /me והשורות: ME והשורה שבזיכרון עדיין "srv"
-  fixtures['/ports']=PORTS_SVC.map((p)=>p.confirm_word?{...p,confirm_word:'srv-renamed'}:p);
-  assert.equal(run('ME.server_name'),'srv');
-  run("healthSvcStop('tftp')");
-  await run('sheets.at(-1)').onSubmit();
-  assert.deepEqual(requests.filter((r)=>r.method==='PUT').at(-1),{url:'/ports/tftp',method:'PUT',body:{enabled:false,confirm:'srv-renamed'}});
-});
-
-test('#1780 a "confirm" row that /ports no longer reports with its word is not sent with a guessed name',async()=>{
-  const {run,requests,fixtures}=setup({'/ports':PORTS_SVC}); run('current="health"');
-  await run('loadHealth()');
-  fixtures['/ports']=PORTS_SVC.map((p)=>p.id==='tftp'?{...p,confirm_word:null}:p);
-  run("healthSvcStop('tftp')");
-  await assert.rejects(()=>run('sheets.at(-1)').onSubmit(),/מילת האישור/);
-  assert.equal(requests.filter((r)=>r.method==='PUT').length,0,'nothing is sent with ME.server_name as a guess');
-});
-
-test('#1267 health page: /ports that could not be read → services "לא נבדק", no buttons',async()=>{
-  const {run}=setup({'/ports':new Error('DB down')}); run('current="health"');
-  await run('loadHealth()');
-  const svc=card(run('health()'),'שירותים');
-  assert.match(svc,/לא נבדק/); assert.match(svc,/DB down/); assert.doesNotMatch(svc,/<button/);
+  assert.doesNotMatch(html,/<span>שירותים/); assert.doesNotMatch(html,/healthSvc|svcStop|role="switch"/);
+  assert.ok(!requests.some((r)=>r.url==='/ports'),'the health page does not read /ports');
+  assert.equal(run('typeof healthServicesCard'),'undefined');
 });

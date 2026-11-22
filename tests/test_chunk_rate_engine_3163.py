@@ -169,8 +169,10 @@ def test_the_server_sends_a_chunk_wave_at_the_rate_the_last_wave_taught_and_reco
         ctx.chunk.stop()
 
 
-def test_a_stale_learned_rate_gives_way_to_the_write_check_of_the_wave(room_server):
-    """#3269, the wiring of `chunk.wave_start` in `server.app`: the same earlier wave, two days old."""
+def test_a_stale_learned_network_rate_is_not_lifted_by_the_write_check_of_the_wave(room_server):
+    """#3269, the wiring of `chunk.wave_start` in `server.app`: the same earlier wave, two days old. Metal 21/11: the write
+    check (150MB/s = 1200m) is a ceiling of the drives, not a network rate -- a stale start the AIMD learned from a wave
+    whose loss was measured is checked (`stale`) and kept at 800m, not taken to the ceiling."""
     ctx = room_server["ctx"]
     _taught_by_an_earlier_wave(ctx, 700_000_000, at="2026-01-01T10:00:00+00:00")
     runner = Runner(block=True)
@@ -179,10 +181,10 @@ def test_a_stale_learned_rate_gives_way_to_the_write_check_of_the_wave(room_serv
         cmd = runner.commands[0]
         chosen = json.loads(ctx.conn.execute("SELECT decision FROM wave_rates WHERE session_id = ?",
                                              (wave,)).fetchone()["decision"])
-        assert chosen["basis"] == "probe" and chosen["start_check"]["why"] == ["stale"]
+        assert chosen["start_check"]["why"] == ["stale", "net_learned"]
         assert chosen["start_check"]["was"] == "800m" and chosen["start_check"]["probe_mbps"] == 150
-        assert cmd[cmd.index("--kbps") + 1] == str(int(chosen["max_bitrate"][:-1]) * 1000)
-        assert int(chosen["max_bitrate"][:-1]) > 800                       # 150MB/s = 1200m, up to the ceiling
+        assert chosen["basis"] == "chunk_up" and chosen["max_bitrate"] == "800m"
+        assert cmd[cmd.index("--kbps") + 1] == "800000"
     finally:
         ctx.chunk.stop()
 

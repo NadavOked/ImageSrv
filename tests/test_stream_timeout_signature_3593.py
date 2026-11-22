@@ -21,7 +21,7 @@ STREAM_STOPS = [
     ("[17:40:35] פג הזמן: restore stream -- 300 שניות בלי התקדמות (עצר על 123456 בייטים) -- נכשל",
      "core/waits.sh", "שניות בלי התקדמות"),
     ("[17:41:02] פג הזמן: chunkcast p3 לא הסתיים ולא התקדם -- נכשל", "restore/chunkrecv.sh", "לא הסתיים ולא התקדם"),
-    ("[17:41:09] פג הזמן -- הזרם לא הגיע", "restore/drawers.sh", "פג הזמן -- הזרם לא הגיע"),
+    ("[17:41:09] פג הזמן -- הזרם לא הגיע", None, None),   # #3173: its emitter (drawers.sh, udpcast) is gone
     ("[17:41:10] udp-receiver: receive-timeout", None, None),
 ]
 

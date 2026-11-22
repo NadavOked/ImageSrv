@@ -33,7 +33,7 @@ def _cut_stop(ctx, wave_state: str) -> str:
     conn.execute("UPDATE sessions SET state = ? WHERE id = ?", (wave_state, row["wave_session_id"]))
     conn.commit()
     assert busy_db.reason(conn) is not None      # לפני העלייה: השרת "עסוק"
-    ctx.sender.stop()
+    ctx.chunk.stop()
     return row["id"]
 
 
@@ -65,7 +65,7 @@ def test_a_round_cut_while_closing_is_closed_on_start_and_the_server_is_not_busy
     # tick (hello) לא פותח את הסבב מחדש: המפעיל ביקש לעצור.
     cloner_hello(second["anon"], CLONER1, ["S1", "S2"], joining=False)
     assert _round(ctx, round_id)["state"] == "closed"
-    second["ctx"].sender.stop()
+    second["ctx"].chunk.stop()
 
 
 def test_a_round_cut_while_closing_with_its_wave_still_open_closes_the_wave_too(
@@ -89,7 +89,7 @@ def test_a_round_cut_while_closing_with_its_wave_still_open_closes_the_wave_too(
     assert ctx.conn.execute("SELECT state FROM sessions WHERE id = ?",
                             (row["wave_session_id"],)).fetchone()["state"] == "closed"
     assert busy_db.reason(ctx.conn) is None
-    second["ctx"].sender.stop()
+    second["ctx"].chunk.stop()
 
 
 def test_reconcile_reports_the_rounds_it_closed_and_leaves_the_others(tmp_path):

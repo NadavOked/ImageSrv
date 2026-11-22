@@ -44,7 +44,7 @@ DEFAULTS = {"lost_wait_seconds": 180, "idle_poweroff_seconds": 300, "end_powerof
 CONST = {"stall": 120, "udp": 120, "idle": 300, "end": 20, "disk": 120000, "chunk": 120000}
 
 
-UNSET = ("unset WAIT_STREAM_STALL_S UDPCAST_STALL_TIMEOUT IDLE_POWEROFF_S END_POWEROFF_S "
+UNSET = ("unset WAIT_STREAM_STALL_S STREAM_STALL_TIMEOUT IDLE_POWEROFF_S END_POWEROFF_S "
          "DISK_STALL_S FANOUT_STALL_EVICT_MS CHUNKCAST_WRITE_STALL_MS DRAWER_HOLD_S; ")
 
 #: jq for a station without it (Windows): the narrow test shim, only when no real one
@@ -86,7 +86,7 @@ def run_answers(machine: dict, answers: list[dict], env: str = "") -> tuple[dict
         + "min_free_take() { :; }\n" + _cut("read_answer")
         + f'RESP={posix(run)!r}/response.json; ' + feeds
         + 'build_hello > "$RUN_DIR/hello.json"; '
-        'echo "ceilings stall=$WAIT_STREAM_STALL_S udp=$UDPCAST_STALL_TIMEOUT '
+        'echo "ceilings stall=$WAIT_STREAM_STALL_S udp=$STREAM_STALL_TIMEOUT '
         'idle=$IDLE_POWEROFF_S end=$END_POWEROFF_S disk=$FANOUT_STALL_EVICT_MS chunk=$CHUNKCAST_WRITE_STALL_MS"')
     line = [ln for ln in out.splitlines() if ln.startswith("ceilings ")][-1]
     ceilings = {k: int(v) for k, v in (kv.split("=") for kv in line.split()[1:])}

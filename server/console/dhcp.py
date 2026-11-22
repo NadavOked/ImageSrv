@@ -25,6 +25,7 @@ from server.console import auth, netcfg as console_netcfg
 from server.core import capabilities
 from server.core.logtext import one_line
 from server.net import deploy_net, dhcp, ports
+from server.net.dhcp_configs import load_configs, proxy_configs   # noqa: F401 -- #2531: defined there, re-exported
 from server.agent.api import ServerContext
 from server.db import get_setting, journal, set_setting
 
@@ -47,24 +48,6 @@ CARRIER_POLL_S = 0.5
 
 
 # --- ה-render מה-DB — מקום אחד לראוטר, למתג ה-TFTP ולעליית השרת (#1013) ---
-
-
-def load_configs(conn) -> list[dhcp.InterfaceConfig]:
-    rows = conn.execute(
-        "SELECT key, value FROM settings WHERE key LIKE ?",
-        (dhcp.SETTING_PREFIX + "%",),
-    ).fetchall()
-    return [
-        dhcp.InterfaceConfig.from_json(r["key"][len(dhcp.SETTING_PREFIX):], r["value"])
-        for r in rows
-    ]
-
-
-def proxy_configs(configs: list[dhcp.InterfaceConfig]) -> list[dhcp.InterfaceConfig]:
-    """מה שאינסטנס ה-proxy רשאי לראות. הכרעת נדב 11/10: proxy שייך לכיתות —
-    כשהן כבויות (v1) גם רשומת proxy=true שנשמרה לפני הגידור אינה מוחלת
-    (#1303), ולא רק ה-PUT מסרב לכתוב חדשה."""
-    return configs if capabilities.classrooms() else []
 
 
 def _proxy_gate() -> None:

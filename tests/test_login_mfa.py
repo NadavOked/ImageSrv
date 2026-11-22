@@ -27,16 +27,14 @@ def _mfa_required_for_admins(monkeypatch):
 
 
 def _fresh(tmp_path, images_root, clock, monkeypatch):
-    """אפליקציית הקונסולה (:8081) — MFA והחלפה כפויה. הקיוסק נבדק בנפרד.
+    """אפליקציית הקונסולה (:443) — MFA והחלפה כפויה. הקיוסק נבדק בנפרד.
 
     `create_app` המשולב שם את הקיוסק ראשון (#1073), ולכן login שם מדלג
     על MFA. בייצור הם על שני פורטים.
     """
-    from server.rounds import sender as sender_module
-    from test_sender import Recorder
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
+    from fakesend import Recorder
     rt = create_runtime(
-        tmp_path / "data", images_root, "http://10.44.12.10:8080",
+        tmp_path / "data", images_root, "http://10.44.12.10:7712",
         now_fn=clock, sender_runner=Recorder(block=True),
     )
     return create_console_app(rt)

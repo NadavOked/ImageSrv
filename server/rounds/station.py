@@ -30,7 +30,7 @@ from server.db import journal
 from server.agent.hello import class_deploy_enabled
 from server.library.images import restore_refusal
 from server.agent.registry import normalize_mac
-from server.rounds.sessions import SessionError
+from server.rounds.sessions import CLASS_ROUND_V2, SessionError
 
 
 #: מי רשאי לפתוח סבב מהתחנה. רשימת-היתר מפורשת, ולא "הסיסמה נכונה".
@@ -198,6 +198,9 @@ def create_station_router(ctx: ServerContext,
         refused = classrooms_off()
         if refused is not None:
             return refused
+        if not capabilities.class_rounds():
+            # #3173: כמו `classrooms_off` -- 409 בשם, לפני כל בדיקה אחרת: נתיב שאין מאחוריו כלום לא בודק סיסמאות (#1282)
+            return _error(409, CLASS_ROUND_V2, "class_round_v2")
         try:                                   # #2410/#2416: תקרה, עומק, surrogate
             body = await agent_body.read_json(request)
         except agent_body.BodyError as exc:

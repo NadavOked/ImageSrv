@@ -35,14 +35,14 @@ def test_a_group_label_longer_than_100_chars_is_refused(server):
 
 
 def test_self_probe_without_a_client_is_false_not_an_exception():
-    scope = {"headers": [(hello.PROBE_HEADER, b"1")], "client": None, "server": ("10.44.0.1", 8080)}
+    scope = {"headers": [(hello.PROBE_HEADER, b"1")], "client": None, "server": ("10.44.0.1", 7712)}
     assert hello.self_probe(scope) is False
-    assert hello.self_probe({"headers": [(hello.PROBE_HEADER, b"1")], "server": ("10.44.0.1", 8080)}) is False
+    assert hello.self_probe({"headers": [(hello.PROBE_HEADER, b"1")], "server": ("10.44.0.1", 7712)}) is False
 
 
 @pytest.mark.parametrize("base", [
-    'http://10.44.12.10:8080/$x', 'http://10.44.12.10:8080/"', "http://10.44.12.10 :8080",
-    "http://10.44.12.10:8080;reboot", "http://10.44.12.10:8080/`id`",
+    'http://10.44.12.10:7712/$x', 'http://10.44.12.10:7712/"', "http://10.44.12.10 :7712",
+    "http://10.44.12.10:7712;reboot", "http://10.44.12.10:7712/`id`",
 ])
 def test_a_server_base_with_a_grub_metacharacter_is_rejected(base):
     with pytest.raises(ValueError, match="metacharacter"):
@@ -50,7 +50,7 @@ def test_a_server_base_with_a_grub_metacharacter_is_rejected(base):
 
 
 def test_a_plain_server_base_still_passes():
-    assert GrubConfig(server_base="http://imagesrv-tlv.college.ac.il:8080").server_base
+    assert GrubConfig(server_base="http://imagesrv-tlv.college.ac.il:7712").server_base
 
 
 def test_an_oversized_hello_field_is_refused_with_413(server):

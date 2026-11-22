@@ -36,16 +36,14 @@ except ImportError:   # בקרה שלילית: בלי המודול הטסטים 
 
 def _boot(tmp_path: Path, monkeypatch, *, seed: bool, **runtime_options):
     """שרת על `tmp_path/data`. `seed=True` בפעם הראשונה: משתמשים ומכונות."""
-    from server.rounds import sender as sender_module
     from server.console import users
     from server.app import create_app
-    from test_sender import Recorder
+    from fakesend import Recorder
 
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
     images = tmp_path / "images"
     if seed:
         write_image(images, MANIFEST_256)
-    app = create_app(tmp_path / "data", images, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images, "http://10.44.12.10:7712",
                      now_fn=Clock(), sender_runner=Recorder(block=True),
                      wol_send=lambda frame: None, **runtime_options)
     ctx = app.state.ctx
@@ -106,7 +104,7 @@ def _task(ctx, task_id: str):
 def test_a_running_wave_is_closed_as_a_failure_by_name_and_the_writer_does_not_get_it_again(tmp_path, monkeypatch):
     first = _boot(tmp_path, monkeypatch, seed=True)
     wave = _running_wave(first)
-    first["ctx"].sender.stop()
+    first["ctx"].chunk.stop()
 
     second = _boot(tmp_path, monkeypatch, seed=False)
     ctx = second["ctx"]
@@ -121,7 +119,7 @@ def test_a_running_wave_is_closed_as_a_failure_by_name_and_the_writer_does_not_g
     assert not (answer.get("session") and answer["session"].get("id") == wave)
     # לא נמחק דבר: הסבב, החברים והמגירות שנכתבו נשארים לקריאה.
     assert ctx.conn.execute("SELECT COUNT(*) FROM session_members WHERE session_id = ?", (wave,)).fetchone()[0] == 2
-    second["ctx"].sender.stop()
+    second["ctx"].chunk.stop()
 
 
 def test_the_room_round_survives_and_the_next_pulse_opens_a_fresh_wave(tmp_path, monkeypatch):
@@ -130,7 +128,7 @@ def test_the_room_round_survives_and_the_next_pulse_opens_a_fresh_wave(tmp_path,
     `_mark_lost`. הגל שנפל נכשל; לא נמשך."""
     first = _boot(tmp_path, monkeypatch, seed=True)
     wave = _running_wave(first)
-    first["ctx"].sender.stop()
+    first["ctx"].chunk.stop()
 
     second = _boot(tmp_path, monkeypatch, seed=False)
     view = room(second["admin"])
@@ -144,7 +142,7 @@ def test_the_room_round_survives_and_the_next_pulse_opens_a_fresh_wave(tmp_path,
     assert "room_wave_lost" in _events(second["ctx"])
     assert second["ctx"].conn.execute(
         "SELECT wave_session_id FROM room_rounds").fetchone()[0] != wave
-    second["ctx"].sender.stop()
+    second["ctx"].chunk.stop()
 
 
 @pytest.mark.skipif(not hasattr(time, "tzset"), reason="TZ/tzset is POSIX-only")
@@ -153,7 +151,7 @@ def test_startup_timezone_reconcile_and_next_wave_store_real_utc(tmp_path, monke
     opens its replacement; every persisted ISO value remains real UTC."""
     first = _boot(tmp_path, monkeypatch, seed=True)
     old_wave = _running_wave(first)
-    first["ctx"].sender.stop()
+    first["ctx"].chunk.stop()
     journal_cut = first["ctx"].conn.execute("SELECT COALESCE(MAX(rowid), 0) FROM journal").fetchone()[0]
 
     current_zone = "Etc/UTC"
@@ -190,7 +188,7 @@ def test_startup_timezone_reconcile_and_next_wave_store_real_utc(tmp_path, monke
         assert all(stamp.utcoffset().total_seconds() == 0 for stamp in stamps)
         assert all(before - timedelta(seconds=2) <= stamp <= after
                    for stamp in stamps), stamps
-        second["ctx"].sender.stop()
+        second["ctx"].chunk.stop()
     finally:
         monkeypatch.undo()
         time.tzset()
@@ -205,20 +203,20 @@ def test_an_open_session_waiting_for_joiners_is_not_touched(tmp_path, monkeypatc
     cloner_hello(first["anon"], CLONER1, ["S1"])       # מוכנות 1 מול יעד 4 — הגל נשאר open
     wave = first["ctx"].conn.execute("SELECT wave_session_id FROM room_rounds").fetchone()[0]
     assert first["ctx"].conn.execute("SELECT state FROM sessions WHERE id = ?", (wave,)).fetchone()["state"] == "open"
-    first["ctx"].sender.stop()
+    first["ctx"].chunk.stop()
 
     second = _boot(tmp_path, monkeypatch, seed=False)
     assert second["ctx"].conn.execute(
         "SELECT state FROM sessions WHERE id = ?", (wave,)).fetchone()["state"] == "open"
     assert "session_orphaned" not in _events(second["ctx"])
-    second["ctx"].sender.stop()
+    second["ctx"].chunk.stop()
 
 
 def test_a_running_capture_whose_upload_died_with_the_server_fails_by_name(tmp_path, monkeypatch):
     first = _boot(tmp_path, monkeypatch, seed=True)
     _insert_task(first["ctx"], "tsk_dead", "img_dead")
     _insert_task(first["ctx"], "tsk_wait", "img_wait", state="pending")
-    first["ctx"].sender.stop()
+    first["ctx"].chunk.stop()
 
     second = _boot(tmp_path, monkeypatch, seed=False)
     dead = _task(second["ctx"], "tsk_dead")
@@ -226,7 +224,7 @@ def test_a_running_capture_whose_upload_died_with_the_server_fails_by_name(tmp_p
     assert dead["error"] == RESTARTED_TASK
     assert _task(second["ctx"], "tsk_wait")["state"] == "pending", "משימה שטרם התחילה ממתינה למכונה"
     assert "capture_failed" in _events(second["ctx"])
-    second["ctx"].sender.stop()
+    second["ctx"].chunk.stop()
 
 
 def test_a_capture_whose_image_already_landed_in_the_library_is_done_not_failed(tmp_path, monkeypatch):
@@ -234,11 +232,11 @@ def test_a_capture_whose_image_already_landed_in_the_library_is_done_not_failed(
     `running` עם אימג' שלם בספרייה. הדיסק הוא מקור האמת (עיקרון 3)."""
     first = _boot(tmp_path, monkeypatch, seed=True)
     _insert_task(first["ctx"], "tsk_land", "img_7f3a91")      # האימג' הזה כבר בספרייה
-    first["ctx"].sender.stop()
+    first["ctx"].chunk.stop()
 
     second = _boot(tmp_path, monkeypatch, seed=False)
     landed = _task(second["ctx"], "tsk_land")
     assert landed["state"] == "done" and landed["error"] is None
     assert "capture_done" in _events(second["ctx"])
     assert "capture_failed" not in _events(second["ctx"])
-    second["ctx"].sender.stop()
+    second["ctx"].chunk.stop()

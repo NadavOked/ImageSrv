@@ -1,5 +1,5 @@
 # ImageSrv — אשף ההתקנה הראשונית (#910). יחידה זמנית: firstboot מפעיל אותה
-# בלי enable; בסיום מוצלח האשף משחרר את 8081 והקונסולה עולה במקומו.
+# בלי enable; בסיום מוצלח האשף משחרר את 443 והקונסולה עולה במקומו.
 [Unit]
 Description=ImageSrv first-boot web wizard
 After=network-online.target
@@ -13,7 +13,7 @@ WorkingDirectory=/opt/imagesrv-src
 # (deploy/nftables-wizard.sh, ‏firstboot טוען אותו), גם כשמשהו אחר מפעיל
 # את היחידה (Wants= של imagesrv-installer-gui).
 ExecStartPre=/usr/sbin/nft list table inet imagesrv_wizard
-ExecStart=/usr/bin/python3 -m server.wizard --host 0.0.0.0 --port 8081 \
+ExecStart=/usr/bin/python3 -m server.wizard --host 0.0.0.0 --port 443 \
     --data-dir /var/lib/imagesrv \
     --status-file /etc/imagesrv/firstboot.status \
     --installer-nic /etc/imagesrv/installer-nic \

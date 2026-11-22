@@ -27,7 +27,7 @@ const he=setup();
 /* האורקל — **מחמיר מהקוד**: שמות כלים מרשימה סגורה בלבד (הרשימה כאן ב-console.js נפרדת בכוונה), מזהה = יש בו
    ספרה / נקודה / קו נטוי / קו תחתון / גיבוב. כל מילה לטינית אחרת (2+ אותיות) = אנגלית. כלי חדש בטקסט עברי של הסוכן
    מפיל את הטסט, והתיקון הוא החלטה: להוסיף לרשימה כאן ו-ב-DRAWER_TECH, או לנסח מחדש. */
-const TOOLS=/\b(?:partclone|zstd|sgdisk|fanout|mkswap|mkfifo|ntfsresize|ntfsfix|ntfs|btrfs|xfs|dd|cmp|umount|blockdev|openssl|swap|rc|dirty|gpt|esp|guid|smart|uefi|bios|secure boot|windows|linux|mib|gib|gb|mb|udp-sender|dsend|dfanout|dzstd|dpcl)\b/gi;
+const TOOLS=/\b(?:partclone|zstd|sgdisk|fanout|mkswap|mkfifo|ntfsresize|ntfsfix|ntfs|btrfs|xfs|dd|cmp|umount|blockdev|openssl|swap|rc|dirty|gpt|esp|guid|smart|uefi|bios|secure boot|windows|linux|mib|gib|gb|mb|dsend|dfanout|dzstd|dpcl)\b/gi;
 const latinWords=(s)=>s.replace(/[A-Za-z0-9_./-]*[0-9_./][A-Za-z0-9_./-]*|\b[0-9a-f]{8,}\b/gi,' ').replace(TOOLS,' ').match(/[A-Za-z]{2,}/g)||[];
 const GENERIC='הכתיבה נכשלה — הפרטים בריחוף על הדיסק';
 
@@ -71,8 +71,8 @@ test('fanout reasons keep their numbers and their wording',()=>{
 });
 
 /* ---- העטיפות: איך הסוכן שם את סיבת fanout ב-error ---- */
-test('the wrappers in the agent are the ones the console parses (verdict.sh _write_fail, lccopy.sh lc_judge)',()=>{
-  assert.ok(fs.readFileSync(path.join(agent,'lib/restore/verdict.sh'),'utf8').includes('partition $2: הכתיבה לדיסק נכשלה (fanout: ${3:-אין דיווח}; partclone rc=${_prc:-לא נרשם}${_plog:+; $_plog})'));
+// #3173: verdict.sh's _write_fail left with the old receiver's room; its form still reaches the console in older reports
+test('the wrapper in the agent is the one the console parses (lccopy.sh lc_judge)',()=>{
   assert.ok(fs.readFileSync(path.join(agent,'lib/localclone/lccopy.sh'),'utf8').includes('מחיצה $2: שגיאת כתיבה אחרי $_lj_at$LC_RLM — ${_lj_line#* failed }${_lj_log:+ · $_lj_log}'));
 });
 const PCL='Partclone fail, please check /var/log/partclone.log !';          // השורה האחרונה של partclone.log — גולמית
@@ -145,7 +145,6 @@ const AGENT_REASONS=[
   ['lcsnap.sh','דגל ה-dirty לא נוקה בעותק של מחיצה 2 (ntfsfix -d rc=1) — המקור לא נכתב'],
   ['shrink.sh+localclone.sh',"לא הצלחנו לקרוא את כניסת מחיצה 2 בטבלה (sgdisk -i: דגלים '0x8000') — הדיסק לא שונה"],
   ['directsend.sh:_direct_failed','מחיצה 2: השליחה נכשלה (שלב=dsend rc=1)'],
-  ['directsend.sh:_direct_failed','מחיצה 2: אף מחשב משכפל לא הצטרף לזרם (udp-sender לא התחיל את ההעברה)'],
   ['directsend.sh:_direct_failed','מחיצה 2: ה-sha256 של מה שנשלח לא חושב — אין ראיה שהזרם תאם למניפסט'],
   // #1805: the read-back after the write (readback.sh), with fanout --readback's own words in it
   ['readback.sh:rb_digest (rc 4)',"מחיצה 3: האימות אחרי הכתיבה נכשל — הדיסק לא שמר את מה שנכתב (הקריאה מהדיסק נכשלה: read error on /dev/sdb3 at byte 1048576: Input/output error)"],

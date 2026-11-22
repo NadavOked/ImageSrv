@@ -64,8 +64,8 @@ def flat_lib() -> Path:
 
 AGENT_MAIN = REPO_ROOT / "agent" / "imagesrv-agent"
 #: A library whose functions call another's at run time, so a test that loads it
-#: must load that one too -- as the agent does. drawers.sh (restore_pipe) and
-#: drawerfeed.sh (_drawer_pipeline) start `writeback_watch &` (writeback.sh, #1841).
+#: must load that one too -- as the agent does. drawers.sh (restore_pipe)
+#: starts `writeback_watch &` (writeback.sh, #1841).
 #: Without it the job is "not found" and exits at once; its SIGCHLD lands while
 #: busybox ash is blocked opening the drawer's fifo, ash does not retry that open
 #: on EINTR (dash and bash do), and the drawer never starts (#2248, #2272).
@@ -75,7 +75,7 @@ AGENT_MAIN = REPO_ROOT / "agent" / "imagesrv-agent"
 #: progress.sh's target_init calls target_ident_keep (failmark.sh): without it the
 #: drawer's `seen` (serial|port|ata, #1602) is never written (#2289). The agent
 #: loads failmark after progress; the call is at run time, so presence is the rule.
-NEEDS = {"drawers": ("writeback",), "drawerfeed": ("writeback",), "neighborfill": ("waits",),   # wait_pid, the fill's ceiling
+NEEDS = {"drawers": ("writeback",), "neighborfill": ("waits",),   # wait_pid, the fill's ceiling
          "chunkfeed": ("waits",),   # B5: wait_pid, for its curl
          "peerfill": ("neighborfill", "waits"),   # B29: its list, piece, ceiling and re-read helpers
          "peerwire": ("peerfill", "neighborfill", "waits"),   # B29: what the answers say, in the flow (#3064)
@@ -126,6 +126,10 @@ def agent_libs(*names: str) -> list[str]:
     # An agent without bgfds (before #3548, the negative control) is loaded as it was.
     if {"attended", "hold", "monitor", "roundbeep", "netcache", "probe_bg"} & set(names) and "bgfds" in order and "bgfds" not in names:
         names = (*names, "bgfds")
+    # #2547: shrink_plan and the shrink measure ext4/btrfs with shrinkext4.sh/shrinkbtrfs.sh -- loaded with them, the
+    # agent's way. Only where the agent sources them (before #2547, the negative control, they are not there).
+    if {"shrinkplan", "shrink"} & set(names):
+        names = (*names, *(n for n in ("shrinkext4", "shrinkbtrfs") if n in order and n not in names))
     unknown = sorted(set(names) - set(order))
     if unknown:
         raise ValueError(f"not sourced by {AGENT_MAIN.name}: {unknown}")

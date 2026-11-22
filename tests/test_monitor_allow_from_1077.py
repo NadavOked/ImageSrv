@@ -1,4 +1,4 @@
-"""#1077: 5900 נפתח רק לכתובת השרת — ובלי כתובת שרת שאפשר לפרסר, לא עולה.
+"""#1077: 7710 נפתח רק לכתובת השרת — ובלי כתובת שרת שאפשר לפרסר, לא עולה.
 
 הטסט הקיים (`test_agent.py::test_monitor_does_not_start_without_a_server_ip`)
 עבר גם כשהשער הוסר (בקרה רטרואקטיבית, 24/10): הוא לא כיבה את ההמתנה לגואי
@@ -46,7 +46,7 @@ def _start(tmp_path, server: str) -> tuple[int, str | None, str]:
 
 @pytest.mark.parametrize("server", [
     "",                                   # אין imagesrv.server בשורת הקרנל
-    "http://imagesrv.college:8080",       # שם מארח — אין IPv4 להגביל אליו
+    "http://imagesrv.college:7712",       # שם מארח — אין IPv4 להגביל אליו
 ])
 def test_no_parsable_server_ip_means_no_monitor(tmp_path, server):
     rc, args, log = _start(tmp_path, server)
@@ -56,8 +56,8 @@ def test_no_parsable_server_ip_means_no_monitor(tmp_path, server):
 
 
 def test_with_a_server_ip_the_monitor_starts_limited_to_it(tmp_path):
-    """הצד החיובי — אותה הרצה עם כתובת: עולה, ו-5900 מוגבל אליה בלבד."""
-    rc, args, log = _start(tmp_path, "http://10.0.0.1:8080")
+    """הצד החיובי — אותה הרצה עם כתובת: עולה, ו-7710 מוגבל אליה בלבד."""
+    rc, args, log = _start(tmp_path, "http://10.0.0.1:7712")
     assert rc == 0, log
     assert args is not None, log
     words = args.split()

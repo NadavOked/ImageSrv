@@ -7,8 +7,8 @@
 
 tools_windows_list() {
     cat <<'EOF'
-win-users|windows|רשימת משתמשי Windows|ro|SAM path
-win-blank-password|windows|איפוס סיסמה מקומית|destroy|SAM:path:user
+win-users|windows|רשימת משתמשי Windows|ro|נתיב לקובץ SAM|מציגה משתמשים מקומיים ומצב נעילה, בלי לעלות ווינדוס, כשמישהו נעול מחוץ לחשבון.
+win-blank-password|windows|איפוס סיסמה מקומית|destroy|נתיב SAM:שם משתמש|מאפס סיסמה מקומית לריקה, כשסטודנט או מרצה נעולים ואין אדמין אחר.
 EOF
 }
 

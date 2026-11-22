@@ -36,6 +36,7 @@ from server.system import backup_job
 from server.system import raid_status
 from server.brain import gate_core   # #3064 (B51): מקור הבריאות של שער המוח
 from server.system.health_rows import check
+from server.core import ports as product_ports   # #3871
 
 log = logging.getLogger("imagesrv.health")
 
@@ -80,7 +81,7 @@ def _run(cmd: list[str], *, check: bool = False) -> str:
 def default_hooks() -> dict:
     return {
         "ss": lambda: _run(["ss", "-ulnp"]),
-        # #996: גם TCP — המאזינים של השרת עצמו (8080/8081/8443) נקראים
+        # #996: גם TCP — המאזינים של השרת עצמו (7712/443/7700) נקראים
         # מטבלת הסוקטים, לא מההגדרה. `port_listeners` (מנהל המאזינים,
         # `ports.Listeners`) מוזרק מ-main.py; None = אין מנהל בתהליך הזה.
         "ss_tcp": lambda: _run(["ss", "-ltnp"]),
@@ -100,7 +101,7 @@ def default_hooks() -> dict:
         "http_size": _http_size,
         "interfaces": dhcp.list_interfaces,
         "tftp_root": lambda: Path("/srv/tftp"),
-        "udp_sender_pids": live_udp_sender_pids,
+        "chunk_sender_pids": live_chunk_sender_pids,
         # #1074: חומת האש נקראת מ-nft, לא מההגדרה. None מה-hook =
         # לא הצלחנו לבדוק; מחרוזת בלי טבלת imagesrv = לא נטענה.
         "nft_ruleset": ports.read_nft_ruleset,
@@ -300,6 +301,13 @@ UNSYNC_WHY = {"no_gateway": "בשרת אין שער ברירת מחדל — שר
                "no_dns": "בשרת אין DNS — שמות שרתי הזמן לא יתורגמו"}
 
 
+def _sample_limit_s(sample: dict | None) -> int | None:
+    """#2800: how old the freshest sample may be before the row stops being green: two poll
+    intervals and a margin for the reply. None = the poll interval is not known."""
+    poll = sample.get("poll_s") if isinstance(sample, dict) else None
+    return 2 * poll + 10 if isinstance(poll, int) and isinstance(sample.get("age_s"), int) else None
+
+
 def time_sync_check(status: dict | str, legacy_sync: str | None = None) -> dict:
     # Compatibility for callers from before #1773; the live route uses the
     # structured measurement above, including its explicit unknown state.
@@ -314,9 +322,20 @@ def time_sync_check(status: dict | str, legacy_sync: str | None = None) -> dict:
     if synchronized is None:
         return check("time_sync", "שעון", "off", "לא נבדק")
     parts = [f"מקור {status.get('server') or 'לא ידוע'}", "מסונכרן" if synchronized else "לא מסונכרן"]
+    stale = False
     if synchronized:
         offset = status.get("offset_ms")
         parts.append("סטייה לא נמדדה" if offset is None else _offset_he(offset))
+        # #2800: right after a resume chrony still says "synchronised" from its old estimate; the
+        # evidence is how long ago the freshest source was really heard (Nadav 12/11). Older than
+        # twice its poll interval = no fresh sample, and the row is not green. No sample or no poll
+        # in the status = the age is not known; that is not "stale", and not "fresh" either, so the
+        # row stays as it was (the tracking figure above).
+        sample = status.get("last_sample")
+        limit = _sample_limit_s(sample)
+        if limit is not None and sample["age_s"] > limit:
+            stale = True
+            parts.append(f"אין דגימה טרייה מ-{sample['server']}: האחרונה לפני {_ago_he(sample['age_s'])}")
     else:
         # #2796: unsynchronised, chronyc's "System time" is the estimate from chrony's last
         # clock update, not a measurement: after a resume it read -0.019 ms for 5 minutes
@@ -333,13 +352,15 @@ def time_sync_check(status: dict | str, legacy_sync: str | None = None) -> dict:
                          f"{_offset_he(offset)}")
     if offset is not None and abs(offset) >= 30_000:
         return check("time_sync", "שעון", "bad", " · ".join(parts + ["קודי MFA לא יתקבלו"]))
-    steady = synchronized and (offset is None or abs(offset) < 1000)
+    steady = synchronized and not stale and (offset is None or abs(offset) < 1000)
     return check("time_sync", "שעון", "ok" if steady else "warn", " · ".join(parts))
 
 
-def live_udp_sender_pids() -> list[int] | None:
-    """PIDs של udp-sender חיים. None = לא הצלחנו לסרוק (#439)."""
-    root = Path("/proc")
+def live_chunk_sender_pids(root: Path = Path("/proc")) -> list[int] | None:
+    """PIDs של `chunkcast send` חיים. None = לא הצלחנו לסרוק (#439). `root` -- לבדיקות.
+
+    לפי שורת הפקודה ולא לפי `comm`: `chunkcast b3list` (גזירת האינדקס אחרי קליטה) הוא אותו בינארי, רץ בלי
+    סבב, ואינו שולח -- הוא לא יתום."""
     if not root.is_dir():
         return None
     try:
@@ -352,17 +373,17 @@ def live_udp_sender_pids() -> list[int] | None:
         if not entry.name.isdigit():
             continue
         try:
-            comm = (entry / "comm").read_text().strip()
+            argv = (entry / "cmdline").read_bytes().split(b"\0")
         except OSError:
             continue
         saw = True
-        if comm == "udp-sender":
+        if len(argv) > 1 and argv[0].rsplit(b"/", 1)[-1] == b"chunkcast" and argv[1] == b"send":
             found.append(int(entry.name))
     return sorted(found) if saw else None
 
 
 def _hook_pids(hooks: dict) -> list[int] | None:
-    getter = hooks.get("udp_sender_pids")
+    getter = hooks.get("chunk_sender_pids")
     if getter is None:
         return None
     try:
@@ -372,12 +393,12 @@ def _hook_pids(hooks: dict) -> list[int] | None:
 
 
 def _send_in_progress(ctx) -> bool:
-    sender = getattr(ctx, "sender", None)
+    engine = getattr(ctx, "chunk", None)
     try:
-        status = sender.status() if sender is not None else None
+        status = engine.status() if engine is not None else None
     except Exception:  # noqa: BLE001 — status שנפל אינו "אין סבב"
         status = None
-    if status and status.get("state") in ("starting", "sending"):
+    if status and status.get("state") in ("starting", "sending", "repairing"):
         return True
     try:
         return ctx.conn.execute(
@@ -393,17 +414,17 @@ def sender_check(pids: list[int] | None, live_round: bool) -> dict:
     None (הבדיקה לא רצה) אינו ok: "לא רץ" הוא הירוק, ואי-בדיקה שנראית
     כמו ירוק היא בדיוק עיקרון 5.
     """
-    label = "משדר udp-sender"
+    label = "משדר chunkcast"
     if pids is None:
-        return check("udp_sender", label, "bad",
-                     "לא הצלחנו לבדוק אם udp-sender רץ — אין לדעת אם נשאר יתום")
+        return check("chunk_sender", label, "bad",
+                     "לא הצלחנו לבדוק אם chunkcast send רץ — אין לדעת אם נשאר יתום")
     if not pids:
-        return check("udp_sender", label, "ok", "לא רץ")
+        return check("chunk_sender", label, "ok", "לא רץ")
     shown = ", ".join(f"PID {p}" for p in pids)
     if live_round:
-        return check("udp_sender", label, "warn",
+        return check("chunk_sender", label, "warn",
                      f"רץ ({shown}) — יש סבב פתוח")
-    return check("udp_sender", label, "bad",
+    return check("chunk_sender", label, "bad",
                  f"רץ בלי סבב ({shown}) — יתום אחרי סגירה, יש לעצור אותו")
 
 
@@ -555,9 +576,11 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     # שרשרת האתחול, משני קצותיה: הקבצים על שורש ה-TFTP, ומיד אחריהם
     # הקרנל וה-initramfs כפי שהתחנה מושכת אותם ב-HTTP (#333).
     root = hooks["tftp_root"]()
+    # #3486: ה-/boot מוגש ממאזין משלו, וזה הוא ש-GRUB פונה אליו — לא פורט הסוכן.
+    boot_id, boot_base = boot_listener(hooks, server_base)
     problems = [] if unconfigured else tftp_file_problems(root)
     if not unconfigured:
-        problems += boot_asset_problems(hooks["http_size"], server_base)
+        problems += boot_asset_problems(hooks["http_size"], boot_base)
     if unconfigured:
         results.append(check("boot_files", "קבצי האתחול", "not_applicable",
                              NOT_APPLICABLE))
@@ -591,28 +614,30 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     # שני מצבים שונים, ורק השני הוא תקלה.
     if unconfigured:
         status = "unconfigured"
-    elif not ports.enabled(ctx.conn, "http_boot"):
+    elif not ports.enabled(ctx.conn, boot_id):
         status = "disabled"
     else:
-        status = hooks["http_get"](server_base.rstrip("/") + "/boot/menu?mac=00:00:00:00:00:00")
+        status = hooks["http_get"](boot_base.rstrip("/") + "/boot/menu?mac=00:00:00:00:00:00")
     if status == "unconfigured":
         results.append(check("server", "השרת בכתובת ההפצה", "not_applicable",
                              NOT_APPLICABLE))
     elif status == "disabled":
         results.append(check("server", "השרת בכתובת ההפצה", "off",
-                             "פורט הסוכן (8080) כבוי על ידי המפעיל בדף הפורטים — "
+                             ("פורט ה-/boot של GRUB (7711)" if boot_id == "http_grub"
+                              else "פורט הסוכן (7712)")
+                             + " כבוי על ידי המפעיל בדף הפורטים — "
                              "תחנות לא יגיעו לתפריט עד שיודלק"))
     elif status == 200:
         results.append(check("server", "השרת בכתובת ההפצה", "ok",
-                             f"{server_base} עונה על תפריט האתחול"))
+                             f"{boot_base} עונה על תפריט האתחול"))
     elif status is None:
         results.append(check("server", "השרת בכתובת ההפצה", "bad",
-                             f"{server_base} לא עונה — מחשבים לא יגיעו לתפריט"))
+                             f"{boot_base} לא עונה — מחשבים לא יגיעו לתפריט"))
     else:
         results.append(check("server", "השרת בכתובת ההפצה", "warn",
-                             f"{server_base} החזיר {status}"))
+                             f"{boot_base} החזיר {status}"))
 
-    # udp-sender חי בלי סבב הוא יתום שתופס את פורטי ההפצה (#439).
+    # `chunkcast send` חי בלי סבב הוא יתום שתופס את פורט ההפצה (#439).
     # הבדיקה מזהה ומראה — היא אינה הורגת: ההריגה שייכת לנתיב הסגירה.
     results.append(sender_check(_hook_pids(hooks), _send_in_progress(ctx)))
 
@@ -638,7 +663,7 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
             else " · DHCP לא הודלק על אף כרטיס"
         results.append(check("nics", "כרטיסי רשת", "ok", detail))
 
-    # #1810: כרטיס ההפצה נשמר **כשם** (nft, dnsmasq, udp-sender). שם שהשתנה
+    # #1810: כרטיס ההפצה נשמר **כשם** (nft, dnsmasq, כרטיס השידור). שם שהשתנה
     # (שדרוג דביאן, vNIC חדש, כרטיס שהוחלף) — הכול נטען ושום דבר לא נתפס.
     # כרטיס שנשמר ב-DB (`deploy:interface`) בלי שהמצב "הוגדר" הוא בדיוק המקרה
     # שבו השם השתנה באתחול: `resolve` רואה שאין כתובת על אף כרטיס ומחזיר
@@ -744,8 +769,20 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
 #: הפורטים של השרת עצמו כשאין מנהל מאזינים בתהליך (create_app של
 #: הבדיקות): מה ש-main.py קושר כברירת מחדל. עם מנהל (#996) הפורט
 #: והכתובות נקראים ממנו, ומה שבאמת מאזין — מטבלת הסוקטים.
-DEFAULT_OWN_PORTS = {"http_boot": 8080, "http_console": 8081,
-                     "interserver": 8443}
+DEFAULT_OWN_PORTS = {"http_boot": product_ports.AGENT, "http_console": product_ports.CONSOLE,
+                     "interserver": product_ports.INTERSERVER}
+
+
+def boot_listener(hooks: dict, server_base: str) -> tuple[str, str]:
+    """#3486: (מזהה הפורט, כתובת הבסיס) של מה ש-GRUB פונה אליו. עם מאזין `http_grub`
+    (`--boot-port`) — הוא, באותו מארח ובפורט שלו; בלעדיו — הסוכן, כמו תמיד."""
+    listeners = hooks.get("port_listeners")
+    if listeners is None or "http_grub" not in listeners.ids():
+        return "http_boot", server_base
+    parts = urlsplit(server_base)
+    host = parts.hostname or ""
+    host = f"[{host}]" if ":" in host else host
+    return "http_grub", f"http://{host}:{listeners.spec('http_grub')['port']}"
 
 
 def _port(port_id: str, name: str, port: str, proto: str, desc: str,
@@ -797,7 +834,7 @@ def _own_row(ctx, hooks: dict, port_id: str, ss_tcp: str, *,
     listening = None if bind is None else bool(bind)
     toggle, off_means = ports.OWN[port_id]
     if port_id == "interserver" and not registered:
-        # 8443 עולה על משני עם --interserver-host, ועל ראשי שהקונסולה שלו על
+        # 7700 עולה על משני עם --interserver-host, ועל ראשי שהקונסולה שלו על
         # כרטיס שרתים ("אתה שם?" בלבד, #1310); בלעדיהם אין מה לכבות.
         state, detail = ports.measured_state(None, listening)
         return _port(port_id, name, str(port), "tcp", desc, target, state,
@@ -821,12 +858,16 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
 
     #996: לכל שורה מתג — `enabled`/`bind`/`toggle`/`toggle_url`/
     `off_means` (ראה `_port`) — והשורות שחסרו: DHCP 67, בין-שרתים
-    8443. `listening` ו-`bind` באים מ-`ss` (udp
+    7700. `listening` ו-`bind` באים מ-`ss` (udp
     ו-tcp), לא מההגדרה."""
     ss_out = hooks["ss"]()
     ss_tcp = hooks["ss_tcp"]()
     entries = []
     dhcp_flags = _dhcp_flags(ctx)
+    # בדיקת יום ראשון 21/11: לפני שרשת ההפצה הוגדרה, TFTP ו-DHCP הם "לא ישים" — כמו ב-`collect`
+    # (#1088), ולא "תקלה". אחרת כרטיס "שירותים" בסקירה ודף השירותים צבעו אדום את מה שהבריאות קוראת לו לא ישים.
+    deploy_state = hooks.get("deploy")() if hooks.get("deploy") else None
+    unconfigured = deploy_state is not None and not deploy_state.configured
 
     # TFTP 69 (#1013): המתג נשמר כ-`port:tftp` ומוחל דרך ה-render של
     # dnsmasq; `ports.tftp_switch` מחליט אם יש מתג בכלל (קובץ המתקין).
@@ -848,6 +889,8 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
                          if flag is False else ("ok", "dnsmasq מגיש"))
     else:
         listening, state, detail = True, "warn", f"מוגש על ידי {owner}, לא על ידי dnsmasq"
+    if unconfigured:
+        state, detail = "not_applicable", NOT_APPLICABLE
     entries.append(_port("tftp", "TFTP", "69", "udp",
         "bootloader — shim/GRUB והתפריט", "תחנות (PXE)", state, detail, tftp_note,
         listening=listening, bind=tftp_bind, **switch))
@@ -863,6 +906,8 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
         d_state, d_detail = "bad", f"תפוס על ידי {owner} — יתנגש עם dnsmasq"
     else:
         d_state, d_detail = ports.measured_state(dhcp_on, owner is not None)
+    if unconfigured:
+        d_state, d_detail = "not_applicable", NOT_APPLICABLE
     entries.append(_port("dhcp", "DHCP", "67", "udp",
         "חלוקת כתובות ו-dhcp-boot לתחנות (dnsmasq)", "תחנות (PXE)",
         d_state, d_detail, "לפתוח ב-FW: UDP 67/68 בתוך וילן ההפצה בלבד — ברודקאסט",
@@ -872,10 +917,13 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
         off_means="תחנות לא יקבלו כתובת ולא dhcp-boot — אין PXE מהשרת הזה",
         interfaces=dhcp_flags))
 
-    http = _own_row(ctx, hooks, "http_boot", ss_tcp, name="HTTP",
-        desc="אתחול (boot/vmlinuz/initrd) ו-API הסוכן", target="תחנות, סוכן",
-        note="לפתוח ב-FW: TCP 8080 מוילן ההפצה לשרת")
-    if http["state"] == "ok":
+    grub_id, grub_base = boot_listener(hooks, server_base)
+    split = grub_id == "http_grub"
+    http = _own_row(ctx, hooks, "http_boot", ss_tcp, name="HTTPS" if split else "HTTP",
+        desc="API הסוכן" if split else "אתחול (boot/vmlinuz/initrd) ו-API הסוכן",
+        target="תחנות, סוכן",
+        note="לפתוח ב-FW: TCP 7712 מוילן ההפצה לשרת")
+    if http["state"] == "ok" and not split:
         # מאזין ודלוק — ועכשיו גם עונה? הראיה של #822 נשארת.
         status = hooks["http_get"](
             server_base.rstrip("/") + "/boot/menu?mac=00:00:00:00:00:00")
@@ -886,11 +934,26 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
         else:
             http["state"], http["detail"] = "warn", f"{server_base} החזיר {status}"
     entries.append(http)
+    if split:
+        # #3486: מאזין ה-/boot של GRUB והקושחה — פורט משלו, ובדיקת התפריט עליו.
+        grub = _own_row(ctx, hooks, "http_grub", ss_tcp, name="HTTP (GRUB)",
+            desc="אתחול: תפריט, קרנל ו-initrd ל-GRUB ולקושחה", target="תחנות (PXE)",
+            note=f"לפתוח ב-FW: TCP {hooks['port_listeners'].spec('http_grub')['port']} מוילן ההפצה לשרת")
+        if grub["state"] == "ok":
+            status = hooks["http_get"](
+                grub_base.rstrip("/") + "/boot/menu?mac=00:00:00:00:00:00")
+            if status == 200:
+                grub["detail"] = f"{grub_base} עונה על תפריט האתחול"
+            elif status is None:
+                grub["state"], grub["detail"] = "bad", f"{grub_base} לא עונה"
+            else:
+                grub["state"], grub["detail"] = "warn", f"{grub_base} החזיר {status}"
+        entries.append(grub)
 
     # #703 (tracer 5): הקונסולה מוגשת ב-HTTPS בלבד (תעודה חתומה-עצמית).
     entries.append(_own_row(ctx, hooks, "http_console", ss_tcp, name="HTTPS",
         desc="קונסולת הניהול (TLS, תעודה עצמית)", target="דפדפן (מנהל)",
-        note="לפתוח ב-FW: TCP 8081 (HTTPS) מתחנת הניהול בלבד — לא לוילן הכיתות"))
+        note="לפתוח ב-FW: TCP 443 (HTTPS) מתחנת הניהול בלבד — לא לוילן הכיתות"))
 
     # #1303 (נדב 12/10): PXE proxy שייך לכיתות (v1.2) — `PUT /net/interfaces` מסרב לו ב-409
     # כשהן כבויות. ב-v1 אין שורת 4011 בדף הפורטים (שארית מוצגת של יכולת שאין).
@@ -907,10 +970,14 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
             interfaces=dhcp_flags))
 
     sender = sender_check(_hook_pids(hooks), _send_in_progress(ctx))
-    entries.append(_port("multicast", "Multicast", "9000–9001", "udp",
+    # #3173, #3871: Trident משדר את הנתונים על פורט אחד ושומע את משוב הקצב על הבא אחריו (#3512). הפורט הוא זה שהמנוע
+    # של התהליך הזה באמת תופס (`ctx.chunk.port`; עם `--sender-portbase` הוא אינו של הייצור), ולא טקסט קבוע.
+    mcast_port = getattr(getattr(ctx, "chunk", None), "port", None) or product_ports.TRIDENT_DATA
+    mcast_range = f"{mcast_port}–{mcast_port + 1}"
+    entries.append(_port("multicast", "Multicast", mcast_range, "udp",
         "שידור אימג׳ (fanout)", "תחנות", sender["state"], sender["detail"],
-        "לפתוח ב-FW: UDP 9000–9001 בתוך וילן ההפצה בלבד",
-        off_means="אין מתג: זה udp-sender של סבב פתוח, לא מאזין קבוע — "
+        f"לפתוח ב-FW: UDP {mcast_range} בתוך וילן ההפצה בלבד",
+        off_means="אין מתג: זה chunkcast send של סבב פתוח, לא מאזין קבוע — "
                   "עצירת סבב היא הכיבוי (מאחורי הקלדת שם)"))
 
     monitor_on = monitor.stations_enabled(ctx.conn)
@@ -941,7 +1008,7 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
 
     entries.append(_own_row(ctx, hooks, "interserver", ss_tcp, name="HTTPS (mTLS)",
         desc="רישום וסנכרון של שרתי משנה (#740)", target="שרת ראשי/שרת משנה",
-        note="לפתוח ב-FW: TCP 8443 בין השרתים בלבד"))
+        note="לפתוח ב-FW: TCP 7700 בין השרתים בלבד"))
 
     ruleset = hooks["nft_ruleset"]()
     fw_state, fw_detail = ports.firewall_status(

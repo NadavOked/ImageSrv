@@ -195,13 +195,11 @@ class CredsFile:
 @pytest.fixture()
 def restored(tmp_path, images_root, clock, monkeypatch):
     """The ``env`` app with a creds_password_present fake, built the same way."""
-    from server.rounds import sender as sender_module
     from server.console import users
     from server.app import create_app
     from fastapi.testclient import TestClient
-    from test_sender import Recorder
+    from fakesend import Recorder
 
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
     fake = FakeHooks()
     creds = CredsFile(fake)
     tftp = tmp_path / "tftp"
@@ -213,7 +211,7 @@ def restored(tmp_path, images_root, clock, monkeypatch):
         "http_size": lambda url: (200, 9_000_000), "interfaces": lambda: list(fake.interfaces),
         "tftp_root": lambda: tftp, "udp_sender_pids": lambda: [],
     }
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
                      sender_runner=Recorder(block=True), storage_hooks=fake.as_dict(),
                      storage_check_interval=10**9, health_hooks=health_hooks)
     ctx = app.state.ctx
@@ -223,7 +221,7 @@ def restored(tmp_path, images_root, clock, monkeypatch):
     assert admin.post("/api/console/login",
                       json={"username": "noc", "password": "admin-pass-123"}).status_code == 200
     yield {"ctx": ctx, "admin": admin, "fake": fake, "creds": creds}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def _restored_location(env, kind: str) -> str:

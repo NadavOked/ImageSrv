@@ -30,6 +30,12 @@ SS_STRANGER = """State  Recv-Q Send-Q Local Address:Port Peer Address:Port Proce
 UNCONN 0      0            0.0.0.0:67        0.0.0.0:*     users:(("isc-dhcp-server",pid=99,fd=4))
 """
 
+#: #3173: udp-sender נמחק, ואיתו שורת הבריאות שלו (`udp_sender`). בדיקת היתום של #439 נשארת על השולח
+#: היחיד -- `chunkcast send` של מנוע החתיכות. **שמות מונחים** (הקוד של כותב A עוד לא בעץ): השורה
+#: `chunk_sender` וה-hook `chunk_sender_pids` (PIDs של `chunkcast send` חיים; None = הסריקה לא רצה),
+#: באותם שלושה מצבים ובאותן מילים כמו השורה של udp-sender.
+SENDER_ROW, SENDER_PIDS = "chunk_sender", "chunk_sender_pids"
+
 
 def test_port_owner_reads_ss_output():
     assert port_owner(SS_DNSMASQ, 67) == "dnsmasq"
@@ -76,7 +82,7 @@ def health_server(tmp_path: Path, images_root: Path, clock, monkeypatch):
                        "initrd.img": (200, 31_000_000)},
             # ריק = לא רץ. None = הבדיקה לא רצה. לא סורקים /proc של
             # המכונה שהטסט רץ עליה (#439).
-            "udp_sender_pids": [],
+            SENDER_PIDS: [],
             # #1074: ברירת המחדל כאן — טבלה טעונה, כדי ש-all-green יישאר
             # ירוק. שלושת המצבים נבדקים בנפרד עם subprocess מזויף.
             "nft_ruleset": (
@@ -96,9 +102,9 @@ def health_server(tmp_path: Path, images_root: Path, clock, monkeypatch):
                                                     (404, 9)),
         "interfaces": lambda: fake["interfaces"],
         "tftp_root": lambda: tftp,
-        "udp_sender_pids": lambda: fake["udp_sender_pids"],
+        SENDER_PIDS: lambda: fake[SENDER_PIDS],
     }
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, health_hooks=hooks)
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
     users.create(app.state.ctx.conn, "labtech", "deploy-pass-1", "deploy", by="test", check_policy=False)
@@ -188,7 +194,8 @@ def test_a_healthy_server_is_all_green(health_server):
     assert "לא הודלק" in rows["nics"]["detail"]
     # #1266: SSH יצא מהמוצר — אין לו בדיקת בריאות בכלל.
     assert not any(k.startswith("ssh") for k in rows), rows.keys()
-    assert rows["udp_sender"]["state"] == "ok"
+    assert rows[SENDER_ROW]["state"] == "ok"
+    assert "udp_sender" not in rows, "#3173: udp-sender נמחק, ושורה שלו אינה נשארת"
     assert rows["firewall"]["state"] == "ok"
     assert "פעילה" in rows["firewall"]["detail"]
     assert "כללים לטבלת imagesrv" in rows["firewall"]["detail"]
@@ -404,42 +411,44 @@ def test_a_shim_that_cannot_be_read_is_unknown_and_not_ok(health_server, tmp_pat
     assert r["state"] != "ok"
 
 
-# --- #439: udp-sender חי בלי סבב הוא יתום, לא הצלחה שקטה ---------------
+# --- #439: שולח חי בלי סבב הוא יתום, לא הצלחה שקטה ---------------------
 #
 # הבדיקה מזהה ומראה. היא אינה הורגת — ההריגה שייכת לנתיב הסגירה.
+# #3173: השולח הוא `chunkcast send` של מנוע החתיכות (`SENDER_ROW`, `SENDER_PIDS` למעלה).
 
-def test_udp_sender_not_running_is_ok(health_server):
-    health_server["fake"]["udp_sender_pids"] = []
+def test_a_sender_not_running_is_ok(health_server):
+    health_server["fake"][SENDER_PIDS] = []
     rows = health_server["admin"].get("/api/console/health").json()
-    assert any(r["id"] == "udp_sender" and r["state"] == "ok"
+    assert any(r["id"] == SENDER_ROW and r["state"] == "ok"
                and "לא רץ" in r["detail"] for r in rows)
 
 
-def test_udp_sender_during_a_round_is_a_warning(health_server):
-    from server.rounds.sender import SendState
+def test_a_sender_during_a_round_is_a_warning(health_server):
+    from server.rounds import chunksend
     ctx = health_server["admin"].app.state.ctx
-    ctx.sender._state = SendState("ses_1", "img_7f3a91")
-    ctx.sender._state.state = "sending"
-    health_server["fake"]["udp_sender_pids"] = [4321]
+    wave = chunksend._Wave("ses_1", "img_7f3a91", "0" * 16)
+    wave.state = "sending"
+    ctx.chunk._wave = wave
+    health_server["fake"][SENDER_PIDS] = [4321]
     rows = health_server["admin"].get("/api/console/health").json()
-    assert any(r["id"] == "udp_sender" and r["state"] == "warn"
+    assert any(r["id"] == SENDER_ROW and r["state"] == "warn"
                and "4321" in r["detail"] and "סבב" in r["detail"]
                for r in rows)
 
 
-def test_an_orphan_udp_sender_is_red(health_server):
-    health_server["fake"]["udp_sender_pids"] = [4321]
+def test_an_orphan_sender_is_red(health_server):
+    health_server["fake"][SENDER_PIDS] = [4321]
     rows = health_server["admin"].get("/api/console/health").json()
-    assert any(r["id"] == "udp_sender" and r["state"] == "bad"
+    assert any(r["id"] == SENDER_ROW and r["state"] == "bad"
                and "4321" in r["detail"] and "יתום" in r["detail"]
                for r in rows)
 
 
-def test_a_udp_sender_check_that_could_not_run_is_not_ok(health_server):
+def test_a_sender_check_that_could_not_run_is_not_ok(health_server):
     """"לא הצלחנו לבדוק" אינו "לא רץ" — ו"לא רץ" הוא הירוק (#439)."""
-    health_server["fake"]["udp_sender_pids"] = None
+    health_server["fake"][SENDER_PIDS] = None
     rows = health_server["admin"].get("/api/console/health").json()
-    assert any(r["id"] == "udp_sender" and r["state"] != "ok"
+    assert any(r["id"] == SENDER_ROW and r["state"] != "ok"
                and "לא הצלחנו לבדוק" in r["detail"] for r in rows)
 
 

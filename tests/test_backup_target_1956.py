@@ -57,12 +57,10 @@ NFS = {"server": "10.44.10.21", "export": "/pool/dbbackup", "version": "4.1"}
 
 @pytest.fixture()
 def bk(tmp_path: Path, images_root: Path, clock, monkeypatch):
-    from server.rounds import sender as sender_module
     from server.console import users
     from server.app import create_app
-    from test_sender import Recorder
+    from fakesend import Recorder
 
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
     fake = FakeHooks()
     fake.mounted = set()                      # what the fake mount "mounted" -- the is_mount evidence
 
@@ -79,7 +77,7 @@ def bk(tmp_path: Path, images_root: Path, clock, monkeypatch):
     hooks = {**fake.as_dict(), "mount": mount, "umount": umount,
              "is_mount": lambda path: str(path) in fake.mounted}
     data = tmp_path / "data"
-    app = create_app(data, images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(data, images_root, "http://10.44.12.10:7712", now_fn=clock,
                      sender_runner=Recorder(block=True), storage_hooks=hooks,
                      storage_check_interval=10**9)
     ctx = app.state.ctx
@@ -90,7 +88,7 @@ def bk(tmp_path: Path, images_root: Path, clock, monkeypatch):
     assert deploy.post("/api/console/login", json={"username": "labtech", "password": "deploy-pass-1"}).status_code == 200
     yield {"ctx": ctx, "conn": ctx.conn, "admin": admin, "deploy": deploy, "fake": fake, "data": data,
            "tmp": tmp_path}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def _set(bk, kind, params=None):

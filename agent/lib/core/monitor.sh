@@ -1,12 +1,12 @@
 # monitor.sh -- supervised RFB monitor, behind its own kernel-line gate.
 # POSIX sh (busybox ash).
 
-MONITOR_PORT="${MONITOR_PORT:-5900}"
+MONITOR_PORT="${MONITOR_PORT:-$IMAGESRV_MONITOR_PORT}"   # ports.sh (#3871)
 MONITOR_BIN="${MONITOR_BIN:-/usr/bin/imagesrv-monitor}"
 # The framebuffer device; guibridge.sh tests the same one (#835).
 FB_DEV="${FB_DEV:-/dev/fb0}"
 
-# #839/#1077: the session secret. 5900 listens on the distribution address,
+# #839/#1077: the session secret. The monitor port listens on the distribution address,
 # so the RFB handshake is the gate -- and the secret behind it is drawn
 # HERE, on the machine, reported in hello, and rewritten by imagesrv-monitor
 # at every successful authentication (#1837). Direction matters: hello is
@@ -139,7 +139,7 @@ monitor_start() {
         return 1
     }
     # #839: no secret file, no monitor. build_hello draws it before the first
-    # hello; if that failed, an unauthenticated 5900 is the wrong fallback.
+    # hello; if that failed, an unauthenticated monitor port is the wrong fallback.
     _msf=$(_monitor_secret_file)
     [ -s "$_msf" ] || {
         log "monitor: no boot secret at $_msf; not starting"

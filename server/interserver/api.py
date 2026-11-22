@@ -753,7 +753,7 @@ CONSOLE_GETS: tuple[tuple[str, type], ...] = (
 #: #1179 שלב 2: כתיבה מהראשי — רשימה נפרדת, (שיטה, ביטוי לנתיב), לפי הסדר שנקבע:
 #: משתמשים → הגדרות → רשת. **מחוץ לרשימה במכוון:** ``/users/{n}/reset-password``
 #: (הסיסמה החדשה חוזרת בתשובה, ו-``defang`` היה משבש בה תווים כמו ``&``), ``/ports/…``
-#: (כיבוי 8443 במשני מנתק אותו מהראשי — ואין דרך להדליק בחזרה מכאן), מחיקת אימג'/
+#: (כיבוי 7700 במשני מנתק אותו מהראשי — ואין דרך להדליק בחזרה מכאן), מחיקת אימג'/
 #: מכונה וכל העלאה.
 CONSOLE_WRITES: tuple[tuple[str, str], ...] = (
     # שליטת הראשי בסבב של המשני (הכרעת נדב 17/10): פתיחה ועצירה בלבד.
@@ -1013,7 +1013,7 @@ def authenticate_machine_sync(sock: socket.socket, secret: str) -> str:
                             hmac_response, next_secret)
     banner = _recv_exact(sock, 12)
     if not banner.startswith(b"RFB 003."):
-        raise MachineAuthError("על 5900 עונה משהו שאינו RFB")
+        raise MachineAuthError("על 7710 עונה משהו שאינו RFB")
     sock.sendall(RFB_VERSION)
     count = _recv_exact(sock, 1)[0]
     if count == 0:

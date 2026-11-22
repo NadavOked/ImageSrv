@@ -8,8 +8,8 @@
 
 * `test_the_tests_that_leaked_leave_nothing` -- מריץ את הטסטים שדלפו
   בריצת pytest משלהם **בלי השומר** (כדי שלא הוא ינקה), ואז סורק את
-  `/proc` אחרי נתיב ה-tmp שלהם. (`test_round_closed.py` נכנס לרשימה
-  כשהוא קיים בעץ.)
+  `/proc` אחרי נתיב ה-tmp שלהם. (טסט המקלט של `test_round_closed.py` יצא
+  עם udpcast, #3173.)
 * `test_the_guard_*` -- הבקרה השלילית של השומר: טסט שמשאיר `sleep` חי
   נכשל בשמו, ונקי / תהליך שבדרך החוצה אינם נכשלים.
 * `test_the_scan_*` -- לוגיקת הסריקה על עץ `/proc` מזויף; רצה בכל מערכת.
@@ -36,14 +36,12 @@ LINUX = pytest.mark.skipif(
     reason="צריך /proc ו-bash: בווינדוס אין ראיה לתהליכי יתומים (מוצהר, #1736)",
 )
 
-#: הטסטים שדלפו (#1736). הראשונים בקובץ שבעץ; השני נכנס כשהקובץ קיים.
+#: הטסטים שדלפו (#1736).
 LEAKERS = [
     "tests/test_cloner_pull_agent.py::test_the_session_checks_again_then_opens_and_leaves",
     "tests/test_cloner_pull_agent.py::test_a_refused_open_stays_on_the_screen_and_back_leaves",
     "tests/test_cloner_pull_agent.py::test_images_that_could_not_be_read_are_said_not_hidden",
 ]
-ROUND_CLOSED = ("tests/test_round_closed.py::"
-                "test_a_round_closed_while_waiting_for_the_stream_stops_the_receiver")
 
 
 def _inner(args: list[str], cwd: Path, out: Path, env_extra: dict[str, str],
@@ -166,9 +164,7 @@ def test_the_guard_fails_the_test_that_leaves_a_sleep_and_only_it(tmp_path):
 @LINUX
 def test_the_tests_that_leaked_leave_nothing(tmp_path):
     repo = TESTS.parent
-    targets = list(LEAKERS)
-    if (repo / "tests" / "test_round_closed.py").exists():
-        targets.append(ROUND_CLOSED)
+    targets = list(LEAKERS)   # #3173: test_round_closed's receiver test went with udpcast
     bt = tmp_path / "bt"
     out = tmp_path / "out.txt"
     try:

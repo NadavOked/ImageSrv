@@ -44,17 +44,22 @@ GIT_EPOCH = 1800000000
 
 STUB_BUILD = """#!/usr/bin/env bash
 printf 'build_initramfs %s\\n' "$*" >> "$FAKE_LOG"
-out=""; kver=""; gui=0
+out=""; kver=""; gui=0; ca=""; name=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --output) out="$2"; shift 2 ;;
     --kernel-version) kver="$2"; shift 2 ;;
+    --server-ca) ca="$2"; shift 2 ;;
+    --server-name) name="$2"; shift 2 ;;
     --with-gui) gui=1; shift ;;
     *) shift ;;
   esac
 done
 if [ "$gui" = 1 ] && [ -n "${STUB_FAIL_GUI:-}" ]; then echo "gui build broke" >&2; exit 3; fi
 printf 'initrd gui=%s kver=%s\\n' "$gui" "$kver" > "$out"
+# #3580: the builder's contract -- beside the image, the CA it packed and the name it expects, and only then.
+if [ -n "$ca" ] && [ -z "${STUB_DROP_CA:-}" ]; then cp "$ca" "$out.ca.pem"; fi
+if [ -n "$name" ] && [ -z "${STUB_DROP_NAME:-}" ]; then printf '%s\\n' "$name" > "$out.agent-name"; fi
 """
 
 
@@ -89,9 +94,13 @@ def _host(tmp_path: Path) -> Path:
 
 
 def _host_env(host: Path) -> dict:
+    # #3580: the fake source tree carries no server/ -- the CA of the agent channel comes from the real
+    # server.agent.tls. The identity directory (IMAGESRV_DATA_DIR) is the fake host's for firstboot and the
+    # build tests, and the upgrade's own (_upgrade_env) for the upgrade.
     return {"IMAGESRV_MODULES_DIR": posix(host / "modules"),
             "IMAGESRV_KERNEL_DIR": posix(host / "kernels"),
-            "IMAGESRV_BUILD_TMPDIR": posix(host / "var-tmp")}
+            "IMAGESRV_BUILD_TMPDIR": posix(host / "var-tmp"),
+            "PYTHONPATH": posix(REPO)}
 
 
 def _with_payload_builder(tree: Path) -> None:
@@ -133,7 +142,8 @@ def _run_firstboot(tmp_path: Path, host: Path, bindir: Path, env: dict | None = 
         f'FIRSTBOOT_TTY="{posix(tmp_path / "tty1")}"; TTY_PROGRESS=1\n'
         + _firstboot_stage_a()
     )
-    return run_bash(script, tmp_path, bindir, env={**_host_env(host), **(env or {})})
+    return run_bash(script, tmp_path, bindir,
+                    env={**_host_env(host), "IMAGESRV_DATA_DIR": posix(host / "data"), **(env or {})})
 
 
 def _flag_lines(path: Path) -> list[str]:
@@ -192,7 +202,7 @@ case "$1" in
   *) echo "unexpected git $*" >&2; exit 64 ;;
 esac''')
     fake_tool(bindir, "systemctl",
-              'case "$1" in show) echo "IMAGESRV_URL=http://10.10.10.8:8080 X=y" ;; esac; exit 0')
+              'case "$1" in show) echo "IMAGESRV_URL=http://10.10.10.8:7712 X=y" ;; esac; exit 0')
     fake_tool(bindir, "curl", "exit 0")
 
 

@@ -1,6 +1,6 @@
 """הפצה ישירה במנוע החתיכות (#3161): המקור הוא דיסק במחשב בנייה, והשולח הוא מחשב הבנייה.
 
-עד כאן הפצה ישירה (`direct.py`, #715) רצה רק ב-udpcast: למנוע החתיכות (`chunksend.py`) נחוצים
+עד #3161 להפצה ישירה (`direct.py`, #715) היה שולח משלה: למנוע החתיכות (`chunksend.py`) נחוצים
 קובץ ואינדקס בשרת, ובהפצה ישירה האימג' אינו נכתב בשרת (הכרעת נדב, 12/09). כאן השרת נשאר
 המתזמר היחיד -- אותו `ChunkEngine`, אותה התייצבות ב-`chunk-pass`, אותו שלב השלמה, אותו
 יומן -- ושלושה דברים באים מהמקור:
@@ -19,7 +19,7 @@
    שחזרה, מחשב שדיווח באיחור -- `fetch` של חתיכות שלמות מועבר מכאן לשרת הפריימים של המקור
    (`file_response`, `_relay`; #3209). השרת מעביר ואינו מחזיק.
 
-המתג "מנוע שידור" כבוי: דבר מכל זה אינו רץ, והפצה ישירה היא udpcast כמו תמיד.
+#3173: זה הנתיב היחיד של הפצה ישירה.
 """
 
 from __future__ import annotations
@@ -46,6 +46,7 @@ from server.agent import readbackhash
 from server.core.logtext import one_line
 from server.library import chunkformat
 from server.library.images import streamed_partitions
+from server.core import ports as product_ports   # #3871
 from server.rounds import chunklog, direct
 
 log = logging.getLogger("imagesrv.directchunk")
@@ -223,15 +224,43 @@ class LiveStore:
             return False
 
 
+#: #3871 (נדב 19/11, 20/11): שרתי הפריימים של המקור, פורט TCP לכל מחיצה **לפי הסדר שבו המחיצות נשלחות** -- הראשונה
+#: ב-`serve_port() + 1`, השנייה ב-+2, ובייצור 7720..7729 (`server/core/ports.py`). הבסיס נגזר מפורט המנוע, כדי ששרת עם
+#: `--sender-portbase` (הסימולציה, חבילת הטסטים) לא ייגע בפורט של הייצור.
+SERVE_OFFSET = product_ports.DIRECT_FIRST - 1 - product_ports.TRIDENT_DATA
+#: יותר מחיצות לשלוח מזה -- אין לכולן פורט בטווח: מסורב, ולא גולש לטווח של הכיתות.
+MAX_SERVED_PARTITIONS = product_ports.DIRECT_COUNT
+
+
+def serve_ports(manifest: dict, base: int) -> dict[int, int]:
+    """#3871: מחיצה (`index`) -> הפורט של שרת הפריימים שלה, לפי סדר השליחה (סדר המחיצות בזרם במניפסט, כמו
+    שהמנוע שולח אותן). השרת הוא שקובע, ומחשב הבנייה מקבל את המיפוי כמו שהוא (`chunk.serve_ports`) ואינו מחשב לבד."""
+    # beyond the range, none: such a manifest is refused at `seal` (`partition_refusal`), and nothing spills into the classrooms'
+    return {part["index"]: base + 1 + k for k, part in enumerate(streamed_partitions(manifest)) if k < MAX_SERVED_PARTITIONS}
+
+
+def partition_refusal(manifest: dict) -> str | None:
+    """#3871: יותר מחיצות לשלוח משיש פורטים בטווח -- הסיבה; None = לכל אחת יש פורט."""
+    count = len(streamed_partitions(manifest))
+    if count > MAX_SERVED_PARTITIONS:
+        first = product_ports.DIRECT_FIRST
+        return (f"הפצה ישירה מגישה עד {MAX_SERVED_PARTITIONS} מחיצות, פורט לכל אחת ({first}-{first + MAX_SERVED_PARTITIONS - 1}),"
+                f" ובאימג' הזה {count} מחיצות לשלוח. דבר לא שודר")
+    return None
+
+
 def seal(store: LiveStore, image_id: str, manifest: dict) -> str | None:
     """נקרא כשהמניפסט החי מגיע. None = מתקבל; אחרת הסיבה שהוא מסורב.
 
-    מקור שלא העלה דבר (המתג כבוי, או סוכן שלפני #3161) אינו מסומן ואינו מסורב: הגל שלו הוא udpcast.
+    מקור שלא העלה דבר (סוכן שלפני #3161) אינו מסומן, והגל שלו מסורב בשמו (`refusal`).
     מקור שהעלה -- **כל** מחיצה בזרם חייבת אינדקס שה-XXH64 שלו הוא ה-`index_xxh64` שבמניפסט, וראש
     כשיש לה מפה. העלאה חלקית אינה "אין העלאה": היא מניפסט שמסורב בשמו. `readback_chunks` -- מספר
     החתיכות שהמנוע והיומן נשענים עליו -- חייב להסכים עם האינדקס כשהמקור דיווח אותו, ונרשם ממנו כשלא."""
     if not store.uploaded(image_id):
         return None
+    refused = partition_refusal(manifest)
+    if refused is not None:
+        return refused
     for part in streamed_partitions(manifest):
         n = part["index"]
         raw, index = store.index_bytes(image_id, n), store.index(image_id, n)
@@ -265,7 +294,7 @@ def seal(store: LiveStore, image_id: str, manifest: dict) -> str | None:
 class LiveLibrary:
     """הספרייה כפי שמנוע החתיכות והיומן שלו קוראים אותה, עם האימג' החי של הפצה ישירה לצידה.
 
-    אימג' חי "נמצא" רק אחרי `seal`: מניפסט בלי הסימן הוא גל של udpcast, ולמנוע אין מה לחפש בו."""
+    אימג' חי "נמצא" רק אחרי `seal`: מניפסט בלי הסימן עוד לא נחתם, ולמנוע אין מה לחפש בו."""
 
     def __init__(self, library, conn, store: LiveStore):
         self.library, self.conn, self.store = library, conn, store
@@ -412,18 +441,17 @@ class DirectChunks:
         return manifest is not None and manifest.get(MARK) is True
 
     def refusal(self, session_id: str) -> str | None:
-        """למה גל ישיר אינו יוצא כשהמתג דלוק והמקור לא העלה אינדקסים. אין נפילה שקטה ל-udpcast."""
+        """למה גל ישיר אינו יוצא כשהמקור לא העלה אינדקסים: נכשל בשמו, לא בשקט."""
         if not self.engine_on() or self.wants(session_id):
             return None
-        return ("המתג 'מנוע שידור' דלוק, ומחשב הבנייה לא העלה אינדקס חתיכות למחיצות שלו — הסוכן שלו ישן,"
-                " או שהמתג הודלק אחרי שהקריאה התחילה. יש לעדכן את אימג' הסוכן או לכבות את המתג,"
-                " ולהפיץ שוב. דבר לא שודר")
+        return ("מחשב הבנייה לא העלה אינדקס חתיכות למחיצות שלו — הסוכן שלו ישן."
+                " יש לעדכן את אימג' הסוכן ולהפיץ שוב. דבר לא שודר")
 
     def runner(self, inner: Callable[[list[str]], object] | None) -> Callable[[list[str]], object]:
         """ה-`runner` של המנוע: פקודה על קובץ של אימג' חי הופכת להזמנה למקור; כל פקודה אחרת רצה כאן.
 
         **ברירת המחדל של "כאן" היא `chunklog.run_process`**, התהליך שמנוע החתיכות כותב בו את הלוג שהוא עצמו קורא
-        (`chunklog.log_path`). בייצור `inner` הוא `None`, ובעבר זו נפלה ל-`udpcast.run_process` (השולח הישן):
+        (`chunklog.log_path`). בייצור `inner` הוא `None`, ובעבר זו נפלה ל-`run_process` של השולח הישן:
         הפלט של `chunkcast send` נכתב ל-`partition_log` והמנוע קרא קובץ אחר (#3340)."""
         local = inner or chunklog.run_process
 
@@ -476,9 +504,12 @@ class DirectChunks:
                 return {"engine": "chunk"}
             if session_id is None or not self.wants(session_id):
                 return {}
+        manifest = direct.live_manifest(self.conn, image_id)
         return {"engine": "chunk", "chunk": {
-            # #3209: the source's frame servers listen on this port + the partition's index (TCP)
-            "serve_port": self.serve_port(),
+            # #3209, #3871: the port of each partition's frame server (TCP), in the order the partitions are sent -- the
+            # source listens where it is told, and computes nothing itself. JSON keys are strings: the partition's index
+            "serve_ports": ({str(n): port for n, port in serve_ports(manifest, self.serve_port()).items()}
+                            if manifest is not None else {}),
             # the frame servers answer only a request that carries it (the review of #3216). Not a log line, not an argv
             "serve_token": self.serve_token(image_id),
             "order": self.order_for(image_id),
@@ -495,8 +526,8 @@ class DirectChunks:
             return order.public()
 
     def serve_port(self) -> int:
-        """הבסיס של שרתי הפריימים במחשב הבנייה (`chunkcast serve`, פורט לכל מחיצה): אחרי הפורט של המנוע."""
-        return self.engine.port + 1
+        """הבסיס של שרתי הפריימים במחשב הבנייה (`chunkcast serve`): המחיצה ה-k שנשלחת ב-בסיס+k (`serve_ports`, #3871)."""
+        return self.engine.port + SERVE_OFFSET
 
     def serve_token(self, image_id: str) -> str:
         """האסימון של הסבב של האימג' החי הזה: אקראי, נוצר בבקשה הראשונה, ואותו אסימון לכל ה-hello של הסבב.
@@ -514,7 +545,11 @@ class DirectChunks:
             "SELECT n.ip FROM room_rounds r JOIN net_devices n ON n.mac = r.source_mac"
             " WHERE r.image_id = ? AND r.state = 'active' ORDER BY r.created_at DESC LIMIT 1", (image_id,)).fetchone()
         try:
-            return (str(ipaddress.ip_address(row["ip"])), self.serve_port() + int(part)) if row is not None else None
+            manifest = direct.live_manifest(self.conn, image_id) if row is not None else None
+            port = serve_ports(manifest, self.serve_port()).get(int(part)) if manifest is not None else None
+            if port is None:                    # #3871: the mapping the source got has no port for it = none to ask
+                return None
+            return (str(ipaddress.ip_address(row["ip"])), port)
         except (TypeError, ValueError):
             return None
 

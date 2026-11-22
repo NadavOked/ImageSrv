@@ -1,11 +1,11 @@
-"""#2533, שלב 3: מנוע החתיכות בצד השרת (`server/rounds/chunksend.py`) והמתג שלו.
+"""#2533, שלב 3: מנוע החתיכות בצד השרת (`server/rounds/chunksend.py`).
 
-- המתג "מנוע שידור" כבוי כברירת מחדל, ואז הגל יוצא ב-`udp-sender` **בלי שום שדה חדש**.
-- כשהוא דלוק: המשכפלים מתייצבים ב-HTTP, מעבר אחד משדר הכול, ושלב ההשלמה משדר
+- #3173: מנוע החתיכות הוא המנוע היחיד; המתג "מנוע שידור" ו-`udp-sender` נמחקו.
+- המשכפלים מתייצבים ב-HTTP, מעבר אחד משדר הכול, ושלב ההשלמה משדר
   שוב רק מה שחסר לשני מחשבים ומעלה, ונותן למחשב בודד להוריד את שלו.
 - מקלט שנעלם אינו מעכב את האחרים; דיסק שלא הושלם בתקרה נכשל בשמו.
 
-המנוע רץ כאן עם `chunkcast` מזויף (מוזרק, כמו `udp-sender` ב-test_sender): הלוגיקה
+המנוע רץ כאן עם `chunkcast` מזויף (מוזרק, `Runner` למטה, ו-`fakesend.Recorder` באפליקציה): הלוגיקה
 של ההתייצבות וההשלמה היא מה שנבדק. התהליכים האמיתיים — ב-test_chunkcast_2533.py.
 """
 
@@ -20,14 +20,13 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from server.db import set_setting
 from server.library import chunkformat
 from server.brain import writerate, repairrule
-from server.rounds import chunkledger, chunksend, indexprep, repair
+from server.rounds import chunkctx, chunkledger, chunksend, indexprep, repair
 
 import chunkcast_rig as C
 
-from conftest import MANIFEST_256, hello_body, setup_classroom
+from conftest import MANIFEST_256, hello_body
 from test_server_room import (           # noqa: F401 — room_server הוא fixture
     CLONER1, CLONER2, room, room_body, room_server,
 )
@@ -116,7 +115,7 @@ def rig(tmp_path, monkeypatch):
                 wave_bitrate=lambda session: "700m", ledger=kw.pop("ledger", None) or C.MemLedger(),
                 on_event=lambda event, detail, sid: self.events.append((event, detail, sid)), **kw)
             for mac in self.members if self.capable is None else self.capable:
-                self.engine.note_agent(mac, ["udpcast", "chunk"])     # what their hello declared
+                self.engine.note_agent(mac, ["chunk"])                # what their hello declared
             assert self.engine.start({"id": SID, "image_id": "img_1"}) is None
             return self.engine
 
@@ -400,7 +399,7 @@ def test_every_event_the_engine_writes_has_a_hebrew_label():
         assert event in journal_he.EVENTS_HE, event
 
 
-# --- המתג, מקצה לקצה דרך האפליקציה ---------------------------------------------------
+# --- גל חדר, מקצה לקצה דרך האפליקציה -------------------------------------------------
 
 def _hello(room_server, engines, joining=None):
     """hello של המשכפל עם שתי המגירות שלו, ועם מה שהאימג' שלו יודע לקבל (`engines`)."""
@@ -410,14 +409,16 @@ def _hello(room_server, engines, joining=None):
     body["disks"] = [{"dev": f"sd{chr(ord('a') + i)}", "size_bytes": 256060514304, "model": "Drawer SSD",
                       "serial": serial, "removable": False, "scheme": "gpt", "has_data": False, "port": i + 1}
                      for i, serial in enumerate(["S1", "S2"])]
-    if engines is not None:
+    if engines is None:
+        body.pop("engines", None)               # an agent image from before the engine: no `engines` at all
+    else:
         body["engines"] = list(engines)
     response = room_server["anon"].post("/api/v1/agent/hello", json=body)
     assert response.status_code == 200, response.text
     return response.json()
 
 
-def _room_wave(room_server, engines=("udpcast", "chunk")):
+def _room_wave(room_server, engines=("chunk",)):
     """סבב חדר שיכפול עם משכפל אחד ושתי מגירות, עד שהגל רץ. מחזיר (מזהה הגל, ה-hello)."""
     opened = room_server["deploy"].post("/api/console/room",
                                         json=room_body(room_server, 2, {CLONER1: ["S1", "S2"]}))
@@ -430,8 +431,6 @@ def _room_wave(room_server, engines=("udpcast", "chunk")):
 
 def test_a_cloner_with_an_old_agent_image_fails_a_chunk_wave_by_name(room_server):
     ctx = room_server["ctx"]
-    _index_the_image(ctx)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     opened = room_server["deploy"].post("/api/console/room",
                                         json=room_body(room_server, 2, {CLONER1: ["S1", "S2"]}))
     assert opened.status_code == 200, opened.text
@@ -442,33 +441,10 @@ def test_a_cloner_with_an_old_agent_image_fails_a_chunk_wave_by_name(room_server
     assert room_server["recorder"].commands == []
 
 
-def test_udpcast_chosen_explicitly_makes_the_wave_udpcast_with_no_new_field(room_server):
-    # #3173: the default is the chunk engine (`test_chunk_default_3173.py`); udpcast is the explicit choice the fixture made
-    ctx, recorder = room_server["ctx"], room_server["recorder"]
-    assert chunksend.engine_of(ctx.conn) == "udpcast"
-    assert room_server["admin"].get("/api/console/settings").json()["stream_engine"] == "udpcast"
-    _wave, hello = _room_wave(room_server)
-    assert recorder.spawned.wait(timeout=5)
-    assert recorder.commands[0][0] == "udp-sender"
-    assert hello["session"]["state"] == "running"
-    assert "engine" not in hello["session"] and "chunk" not in hello["session"]
-    assert ctx.chunk.status() is None and not any(c[0] == "chunkcast" for c in recorder.commands)
-
-
-def test_only_an_admin_turns_the_switch_and_only_to_a_known_engine(room_server):
-    ctx = room_server["ctx"]
-    assert room_server["deploy"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 403
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "fast"}).status_code == 400
-    assert chunksend.engine_of(ctx.conn) == "udpcast"
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
-    assert room_server["admin"].get("/api/console/settings").json()["stream_engine"] == "chunk"
-    set_setting(ctx.conn, "stream_engine", "something-else")
-    assert chunksend.engine_of(ctx.conn) == "chunk"                        # an unknown value is the default (#3173)
-
-
 def _index_the_image(ctx, chunks: int = 1):
     """מה ששלב 2 עושה אחרי קליטה: אינדקס ליד כל קובץ מחיצה, ובמניפסט מה שנרשם כשהוא אומת.
-    ``chunks`` > 1: המחיצה הראשונה היא של `chunks` חתיכות (פריים של בית אחד לחתיכה)."""
+    ``chunks`` > 1: המחיצה הראשונה היא של `chunks` חתיכות (פריים של בית אחד לחתיכה).
+    #3173: `conftest.write_image` כבר כותב אינדקס של חתיכה אחת; כאן -- לטסט שצריך יותר ממנה."""
     first = next(p["index"] for p in MANIFEST_256["partitions"] if p.get("file"))
     manifest_file = ctx.library.file_path("img_7f3a91", next(
         p["file"] for p in MANIFEST_256["partitions"] if p.get("file"))).parent / "manifest.json"
@@ -495,9 +471,8 @@ def _index_the_image(ctx, chunks: int = 1):
 
 
 def test_with_the_switch_on_a_room_wave_is_the_chunk_engines_and_hello_says_so(room_server):
+    """#3173: אין מתג -- מנוע החתיכות הוא היחיד. השם נשאר, כדי שההיסטוריה של הטסט תימצא."""
     ctx, recorder, anon = room_server["ctx"], room_server["recorder"], room_server["anon"]
-    _index_the_image(ctx)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     wave, hello = _room_wave(room_server)
     chunk = hello["session"]["chunk"]
     assert hello["session"]["engine"] == "chunk" and chunk["port"] == ctx.chunk.port
@@ -515,23 +490,9 @@ def test_with_the_switch_on_a_room_wave_is_the_chunk_engines_and_hello_says_so(r
     assert recorder.spawned.wait(timeout=5)
     cmd = recorder.commands[0]
     assert cmd[:2] == ["chunkcast", "send"] and cmd[cmd.index("--session") + 1] == chunk["key"]
-    assert not any(c[0] == "udp-sender" for c in recorder.commands)
-    assert ctx.sender.status() is None                                      # the other engine never started
+    assert all(c[:2] == ["chunkcast", "send"] for c in recorder.commands), recorder.commands   # nothing but the engine ran
+    assert ctx.chunk.status()["session_id"] == wave
     ctx.chunk.stop(wave)
-
-
-def test_a_wave_that_is_not_the_cloning_rooms_stays_udpcast_even_with_the_switch_on(server_with_sender):
-    """תחנה בודדת (סבב כיתה) אינה יודעת לקבל מהמנוע החדש — היא לא מקבלת אותו."""
-    server, recorder = server_with_sender
-    assert server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
-    ids = setup_classroom(server)
-    server["deploy"].post("/api/console/sessions", json={
-        "group_id": ids["group"], "image_id": "img_7f3a91", "prefix": "LAB1", "expected_clients": 2})
-    answers = [server["anon"].post("/api/v1/agent/hello", json=hello_body(mac)).json()
-               for mac in (ids["mac1"], ids["mac2"], ids["mac1"])]
-    assert recorder.spawned.wait(timeout=5)
-    assert recorder.commands[0][0] == "udp-sender" and "engine" not in answers[-1]["session"]
-    recorder.processes[0].release()
 
 
 def test_the_partition_file_route_answers_a_range_with_exactly_those_bytes(server):
@@ -575,7 +536,7 @@ def test_hello_names_the_engine_and_the_same_key_before_the_engine_has_started(t
     before = engine.session_fields("S-9")
     assert before["engine"] == "chunk" and len(before["chunk"]["key"]) == 16
     assert engine.session_fields("S-other") == {}                          # a wave the switch does not cover
-    engine.note_agent("a", ["udpcast", "chunk"])
+    engine.note_agent("a", ["chunk"])
     assert engine.start({"id": "S-9", "image_id": "img_1"}) is None
     try:
         assert engine.session_fields("S-9") == before
@@ -690,8 +651,6 @@ def test_the_real_ledger_is_one_table_with_two_writers_and_the_engine_reads_it(r
     מה שדיווח ההתקדמות (הכותב של שלב 2) רשם — המנוע קורא כאותה שורה; שורה של סבב אחר אינה ראיה;
     ודיסק שה-hello לא נשא את המספר הסידורי שלו, או טווח שמחוץ למחיצה, מסורבים בשמם ואינם נרשמים."""
     ctx, anon = room_server["ctx"], room_server["anon"]
-    _index_the_image(ctx)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     wave, _hello_answer = _room_wave(room_server)
     part = next(p["index"] for p in MANIFEST_256["partitions"] if p.get("file"))
     ledger, size = ctx.chunk.ledger, 256060514304
@@ -759,8 +718,6 @@ def test_a_report_larger_than_the_body_cap_is_refused_whole_and_by_code(room_ser
     בחלקה. הסוכן אינו בונה הודעה כזו עוד (test_chunk_delta_2533.py); מי שכן שולח אותה מקבל את אותה תשובה."""
     from server.agent import body as agent_body
     ctx, anon = room_server["ctx"], room_server["anon"]
-    _index_the_image(ctx)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     wave, _hello_answer = _room_wave(room_server)
     part = next(p["index"] for p in MANIFEST_256["partitions"] if p.get("file"))
     worst = "[" + ",".join(f"[{2 * i},{2 * i}]" for i in range(23_750)) + "]"         # as the agent writes it
@@ -781,13 +738,19 @@ def test_a_report_larger_than_the_body_cap_is_refused_whole_and_by_code(room_ser
 
 
 def _capture_without_derived_index(ctx):
-    """the manifest of an image just captured: it carries the `index_xxh64` the agent signed, no index was derived."""
+    """the manifest of an image just captured: it carries the `index_xxh64` the agent signed, no index was derived.
+    #3173: `conftest.write_image` writes an image whose index was already derived; what the derivation leaves (the
+    `.idx` and `.b3` beside each file, the `readback_*` and `chunk_b3` fields) is taken away here."""
     manifest_file = ctx.library.file_path("img_7f3a91", next(
         p["file"] for p in MANIFEST_256["partitions"] if p.get("file"))).parent / "manifest.json"
     manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     for part in manifest["partitions"]:
         if part.get("file"):
             part["index_xxh64"] = "0" * 16                # the capture's word; nothing derived, nothing verified
+            for derived in ("readback_xxh64", "readback_chunks", "readback_bytes", "readback_chunk_bytes", "chunk_b3"):
+                part.pop(derived, None)
+            for suffix in (".idx", ".b3"):
+                (manifest_file.parent / (part["file"] + suffix)).unlink(missing_ok=True)
     manifest["image_format"] = 2
     manifest_file.write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
 
@@ -809,15 +772,14 @@ def test_an_image_whose_index_cannot_be_derived_fails_the_round_by_name_before_t
         joined.wait(10)
         derive_now(self, job)
     monkeypatch.setattr(indexprep.IndexPrep, "_derive", derive_after_join)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     opened = room_server["deploy"].post("/api/console/room", json=room_body(room_server, 2, {CLONER1: ["S1", "S2"]}))
     assert opened.status_code == 200, opened.text
     wave = opened.json()["wave_session_id"]
-    _hello(room_server, ("udpcast", "chunk"))
+    _hello(room_server, ("chunk",))
     joined.set()
 
     def failed():
-        _hello(room_server, ("udpcast", "chunk"), joining=False)        # the room's pulse
+        _hello(room_server, ("chunk",), joining=False)                  # the room's pulse
         return room(room_server["deploy"])["round"]["state"] == "failed"
     assert wait_for(failed, 10), room(room_server["deploy"])["round"]
     reason = room(room_server["deploy"])["round"]["failed_reason"]
@@ -844,11 +806,10 @@ def test_a_round_failed_before_the_first_hello_has_no_member(room_server, monkey
     monkeypatch.setattr(indexprep, "threading", types.SimpleNamespace(Lock=threading.Lock, Thread=Inline))
     ctx = room_server["ctx"]
     _capture_without_derived_index(ctx)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     opened = room_server["deploy"].post("/api/console/room", json=room_body(room_server, 2, {CLONER1: ["S1", "S2"]}))
     assert opened.status_code == 200, opened.text
     wave = opened.json()["wave_session_id"]
-    answer = _hello(room_server, ("udpcast", "chunk"))
+    answer = _hello(room_server, ("chunk",))
     assert room(room_server["deploy"])["round"]["state"] == "failed" and answer.get("session") is None, answer
     assert ctx.conn.execute("SELECT 1 FROM session_members WHERE session_id = ?", (wave,)).fetchone() is None
     first = next(p["index"] for p in MANIFEST_256["partitions"] if p.get("file"))
@@ -1116,51 +1077,58 @@ def test_the_shells_exit_code_for_a_program_that_did_not_run_is_named_as_that(ri
     assert "לא רץ" in why and "אינו מותקן בשרת" in why and f"קוד {code}" in why and "נכשל על" not in why
 
 
-def test_the_switch_does_not_turn_on_without_a_sender_and_says_why(room_server):
-    """סקירה, ממצא 6: המתג בקונסולה. בלי שולח הוא אינו נדלק (409, עם הסיבה), וההגדרה נשארת udpcast.
-    כיבוי אינו שואל דבר."""
-    ctx, admin = room_server["ctx"], room_server["admin"]
-    ctx.chunk.binary_check = lambda: chunksend.NOT_INSTALLED
-    refused = admin.post("/api/console/settings", json={"stream_engine": "chunk"})
-    assert refused.status_code == 409 and "מנוע השידור לא הודלק" in refused.json()["detail"]
-    assert "אינו מותקן בשרת" in refused.json()["detail"] and chunksend.engine_of(ctx.conn) == "udpcast"
-    assert admin.post("/api/console/settings", json={"stream_engine": "udpcast"}).status_code == 200
-    ctx.chunk.binary_check = lambda: None
-    assert admin.post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
-    assert chunksend.engine_of(ctx.conn) == "chunk"
+def test_the_chunk_engine_does_not_send_beside_another_round_of_its_own(rig):
+    """סקירה, ממצא 7: שני שידורים אינם יוצאים במקביל (אותה רשת, אותם דיסקים בשרת, וקצב גל שנקבע לשולח אחד).
+    #3173: עד המחיקה זה נבדק בין שני המנועים; עכשיו יש מנוע אחד, וגל של סבב אחר בזמן שהוא משדר מסורב בשמו,
+    ושום `chunkcast` נוסף אינו מופעל."""
+    rig.runner = Runner(block=True)
+    engine = rig.make()
+    for mac in rig.members:
+        rig.tell(mac, 1, "listening", {mac.upper() + "1": []})
+    assert wait_for(lambda: len(rig.runner.commands) == 1)
+    refused = engine.start({"id": "S-other", "image_id": "img_1"})
+    assert refused and "S-other" in refused and f"המנוע עדיין משדר את הסבב {SID}" in refused, refused
+    assert engine.status()["session_id"] == SID and engine.status()["state"] == "sending"
+    assert len(rig.runner.commands) == 1, rig.runner.commands
 
 
-def _open_a_room_wave(room_server):
-    opened = room_server["deploy"].post("/api/console/room", json=room_body(room_server, 2, {CLONER1: ["S1", "S2"]}))
-    assert opened.status_code == 200, opened.text
-    _hello(room_server, ("udpcast", "chunk"))
-    _hello(room_server, ("udpcast", "chunk"), joining=False)
-    return room(room_server["deploy"])["round"]
+def test_the_next_wave_right_after_a_stop_is_not_refused(rig):
+    """#3173: the room closes a wave (`on_closed` -> `stop`) and the next one may go running a moment later. `stop` does
+    not wait for the sending thread; the thread still writes its end (`send_stopped`: the journal, the rate's sample).
+    Here that end takes 0.3 s, as a journal under load does. The next wave waits for a thread that was told to stop --
+    it is not refused with "the engine is still sending", and the round does not fail by that name.
+    **Negative control:** on the code before the fix `start` answers that refusal."""
+    rig.runner = Runner(block=True)
+    engine = rig.make()
+    for mac in rig.members:
+        rig.tell(mac, 1, "listening", {mac.upper() + "1": []})
+    assert wait_for(lambda: len(rig.runner.commands) == 1)
+    record = engine.on_event
+
+    def slow_end(event, detail, sid):
+        if event == "send_stopped":
+            time.sleep(0.3)
+        record(event, detail, sid)
+    engine.on_event = slow_end
+    assert engine.stop(SID) is None
+    assert engine.start({"id": "S-2", "image_id": "img_1"}) is None
+    assert engine.status()["session_id"] == "S-2"
+    assert rig.named("send_stopped") == [SID], rig.events
 
 
-def test_the_chunk_engine_does_not_send_beside_a_udp_sender_of_another_round(room_server, monkeypatch):
-    """סקירה, ממצא 7: שני המנועים אינם משדרים במקביל. גל במנוע החתיכות מסורב בשמו כש-`udp-sender` של
-    סבב אחר עוד משדר, ושום `chunkcast` אינו מופעל."""
-    ctx = room_server["ctx"]
-    _index_the_image(ctx)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
-    monkeypatch.setattr(ctx.sender, "status", lambda: {"session_id": "ses_other", "state": "sending"})
-    wave = _open_a_room_wave(room_server)
-    assert wave["wave_state"] == "failed", wave
-    said = [r["detail"] for r in ctx.conn.execute("SELECT detail FROM journal WHERE event = 'send_failed'")]
-    assert any("udp-sender של הסבב ses_other עדיין משדר" in d and "מנוע החתיכות אינו משדר במקביל" in d for d in said), said
-    assert ctx.chunk.status() is None and room_server["recorder"].commands == []
-
-
-def test_udp_sender_does_not_send_beside_the_chunk_engine_of_another_round(room_server, monkeypatch):
-    """וההפך: המתג כבוי, ומנוע החתיכות עוד משלים סבב אחר."""
-    ctx = room_server["ctx"]
-    monkeypatch.setattr(ctx.chunk, "status", lambda: {"session_id": "ses_other", "state": "repairing"})
-    wave = _open_a_room_wave(room_server)
-    assert wave["wave_state"] == "failed", wave
-    said = [r["detail"] for r in ctx.conn.execute("SELECT detail FROM journal WHERE event = 'send_failed'")]
-    assert any("מנוע החתיכות עדיין משדר את הסבב ses_other" in d and "udp-sender אינו משדר במקביל" in d for d in said), said
-    assert room_server["recorder"].commands == []
+def test_a_wave_closed_before_its_start_arrived_sends_nothing(rig):
+    """#2427 (the old sender had it; #3173 ports it): the commit to `running` comes before `on_running`, and a close
+    that falls between them reached `stop` for a wave the engine had not heard of yet -- a no-op. The `start` that came
+    after it sent a closed wave, and held the next one off until "nobody listened". Now that `start` is refused by name.
+    **Negative control:** on the code before the fix the closed wave is started."""
+    engine = rig.make()
+    assert engine.stop(SID) is None and wait_for(lambda: not engine._thread.is_alive())   # an idle engine
+    assert engine.stop("S-closed") is None                    # the close, before its start
+    refused = engine.start({"id": "S-closed", "image_id": "img_1"})
+    assert refused and "S-closed" in refused and "נסגר לפני שהשידור שלו התחיל" in refused, refused
+    assert engine.status()["session_id"] == SID and not engine._thread.is_alive()   # nothing started
+    # the guard: another wave still starts, and the closed one is refused once, not forever
+    assert engine.start({"id": "S-3", "image_id": "img_1"}) is None
 
 
 def test_a_thousand_ranges_of_one_file_do_not_scan_the_library_a_thousand_times(server, monkeypatch):
@@ -1346,7 +1314,7 @@ def test_a_later_partition_nobody_settles_on_names_the_wait_it_waited(rig, monke
     """#3112, G3 (ברזל 13/11, room_714f980d): הסבב נסגר אחרי 780 שניות -- `later_start_timeout`, ההמתנה לכך שמשכפל
     יתחיל להאזין למחיצה **מאוחרת** -- וההודעה אמרה "תוך 180 שניות": המספר של המחיצה הראשונה. כאן הראשונה 1 שנייה
     והמאוחרת 2, ואיש אינו מאזין למחיצה 5: ההודעה אומרת 2."""
-    monkeypatch.setattr(chunksend.udpcast, "LATER_MAX_WAIT", 1)
+    monkeypatch.setattr(chunkctx, "LATER_MAX_WAIT", 1)
     engine = rig.make(lib=_TwoParts(tmp_path))
     for mac in rig.members:
         rig.tell(mac, 1, "listening", {mac.upper() + "1": []})

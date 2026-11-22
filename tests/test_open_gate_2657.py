@@ -61,8 +61,10 @@ WRITE = (
     'echo verifying > "$RUN_DIR/state"; return 0; }; '
 )
 
+#: #3173: the one road that writes. A station that is not a cloner no longer restores a round at all -- its
+#: receiver went with udpcast, and `do_restore` fails by name before any disk step
+#: (tests/test_station_round_refused_3173.py). The gate is the cloning room's.
 PATHS = {
-    "station": "do_restore",
     "cloner": f"do_restore_drawers {IMAGE} {SESSION}",
 }
 
@@ -196,18 +198,19 @@ def _body(source: str, start: str, end: str) -> str:
     return source[source.index(start):source.index(end)]
 
 
-def test_the_gate_stands_before_every_disk_step_of_both_paths():
+def test_the_gate_stands_before_every_disk_step_of_the_writing_path():
     """Where the call sits, read off the script: before the reporter, the
-    SMART gate (cloning room: also the RAID/split gates) and the write."""
+    SMART gate, the RAID/split gates and the write. And the station's road
+    (#3173) has no write to stand before: nothing in it reaches a disk."""
     agent = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
     drawers = _body(agent, "do_restore_drawers() {", "do_restore() {")
     station = _body(agent, "do_restore() {", "# --- main loop")
-    for body, write in ((drawers, "run_restore_drawers"), (station, "run_restore ")):
-        gate = body.index('session_open_gate "')
-        # target_init first: the report carries this job's targets (#1916).
-        assert (body.index('target_init "') < gate < body.index('progress_loop "')
-                < body.index('smart_gate "') < body.index(write)), body
-    assert drawers.index('session_open_gate "') < drawers.index("drawer_gates")
+    gate = drawers.index('session_open_gate "')
+    # target_init first: the report carries this job's targets (#1916).
+    assert (drawers.index('target_init "') < gate < drawers.index('progress_loop "')
+            < drawers.index('smart_gate "') < drawers.index("run_restore_drawers")), drawers
+    assert gate < drawers.index("drawer_gates")
+    assert "run_restore " not in station and "smart_gate" not in station, station
 
 
 # --- the server: the reply that opens the gate --------------------------------

@@ -41,7 +41,7 @@ REPO = Path(__file__).resolve().parent.parent
 SOURCE = REPO / "agent" / "chunkcut.c"
 CAPTURE = AGENT / "lib" / "capture" / "capture.sh"
 SINK = AGENT / "lib" / "capture" / "capturesink.sh"
-DIRECT = AGENT / "lib" / "capture" / "directsend.sh"
+DIRECT = AGENT / "lib" / "capture" / "directchunk.sh"   # #3173: the direct send's pass is the chunk engine's
 PY = RB.PyXxh64
 
 needs_cut = requires_native("gcc", "zstd", posix=True, why="chunkcut is C, linked to the system's libzstd")
@@ -289,7 +289,7 @@ def test_both_reads_of_a_direct_send_and_the_capture_cut_through_one_function():
     pass 2 of a direct send must give the bytes pass 1 hashed."""
     capture, direct, sink = (p.read_text(encoding="utf-8") for p in (CAPTURE, DIRECT, SINK))
     assert '| { capture_cut "$_pcl" "$RUN_DIR/idx.$_idx" 2>> "$LOG_FILE"' in capture
-    assert '| { capture_cut "$_do_pcl" "$RUN_DIR/didx.$2" 2>> "$LOG_FILE"' in direct
+    assert '| { capture_cut "$_dp_pcl" "$RUN_DIR/didx.$3" 2>> "$LOG_FILE"' in direct
     assert 'chunkcut $_cc_raw -l "$CAPTURE_LEVEL" -T "$CAPTURE_THREADS" -i "$2"' in sink
     for source in (capture, direct):
         assert "zstd -" not in source.replace("zstd -dc", ""), "a second compressor beside capture_cut"

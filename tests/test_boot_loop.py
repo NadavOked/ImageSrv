@@ -21,7 +21,7 @@ from conftest import hello_body, setup_classroom          # noqa: E402
 from boot.grub_menu import AGENT, GrubConfig, LOCAL, decide, render  # noqa: E402
 from server.agent.bootguard import ATTEMPT_LIMIT                # noqa: E402
 
-CONFIG = GrubConfig(server_base="http://10.44.12.10:8080")
+CONFIG = GrubConfig(server_base="http://10.44.12.10:7712")
 
 OPEN_SESSION = {
     "schema": 1, "known": True, "role": "classroom",
@@ -288,9 +288,9 @@ def test_the_menu_still_does_not_join_anyone(server):
 # מגיש את שרשרת האתחול, ולכן אין לו ראיה שהמכונה עברה בתפריט שלו.
 
 #: כתובת וילן ההפצה — זו שאיתה נוצר השרת ב-conftest.
-VLAN = "http://10.44.12.10:8080"
+VLAN = "http://10.44.12.10:7712"
 #: כתובת מקומית אחרת של אותו שרת: הרגל שלו ברשת המכללה.
-OFF_VLAN = "http://10.10.10.8:8080"
+OFF_VLAN = "http://10.10.10.8:7712"
 
 
 def menu_at(server, base: str, mac: str) -> str:

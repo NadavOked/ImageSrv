@@ -31,7 +31,7 @@
 כבר ``numbers`` משמיט מפתח שלא נקרא, ושם חסר = לא נמדד.
 
 **``rcvbuf_asked`` חסר** (גל חתיכות מדווח רק ``rcvbuf_bytes``): נלקחת הבקשה של הקוד, 16MB (``CC_RCVBUF`` ב-``chunkcast.c``
-ו-``UDPCAST_RCVBUF`` ב-``rcvbuf.sh``), והראיה אומרת ``default``. אם הסוכן שונה מהקוד -- הפסק לא נכון, וזה כתוב.
+ו-``RECV_RCVBUF`` ב-``rcvbuf.sh``), והראיה אומרת ``default``. אם הסוכן שונה מהקוד -- הפסק לא נכון, וזה כתוב.
 
 **ספי ההתחלה הם הערכה, לא הגדרות, ולא נמדדו על ברזל** (נדב 14/11): 85% הוא הכרעה של נדב ב-#3041, ו-90% לדיסק הוא הערכה.
 ``disk_util_max`` הוא **שיא** על פני חלונות הגל, לא ממוצע -- חלון אחד עמוס מספיק. ``cpu_busy_min_core`` הוא החלון
@@ -79,8 +79,18 @@ def _num(v) -> float | None:
     return float(v) if type(v) in (int, float) and v >= 0 else None
 
 
+#: #3815: the pause setting of `ethtool -a` as `wavesense.numbers` keeps it (on = 1, off = 0); not said = absent = "unmeasured"
+_PAUSE_SETTING = {1.0: "on", 0.0: "off"}
+
+
 def _say(v) -> str:
     return "unmeasured" if v is None else f"{v:g}" if isinstance(v, float) else str(v)
+
+
+def _whole(v) -> str:
+    """#3815: a byte or frame count in full (`7000000`, not `7e+06`); not read = "unmeasured"."""
+    n = _num(v)
+    return "unmeasured" if n is None else str(int(n))
 
 
 def _size(n: int) -> str:
@@ -148,7 +158,13 @@ def diagnose(drops: dict | None, wave: dict | None, senses: dict | None, cpu: di
           f"rcvbuf_asked={_say(asked)}({asked_how})" if asked is not None else "rcvbuf_asked=unmeasured",
           f"rcvbuf_bytes={_say(got)}", f"pass_word={_say(word)}",
           *((f"rx.{k}={_say(_int(rx.get(k)))}" for k in ("foreign", "evicted", "busy", "bad_pkt", "bad_chunk")) if rx else ("rx=unmeasured",)),
-          f"rx_missed={_say(missed)}", f"rx_no_buffer={_say(no_buf)}", f"cpu_busy_min_core={_say(min_core)}",
+          f"rx_missed={_say(missed)}", f"rx_no_buffer={_say(no_buf)}",
+          # #3815: evidence only, no threshold -- a switch that sends the card pause frames looks like loss
+          f"rx_bytes={_whole(w.get('rx_bytes'))}", f"ring_rx={_whole(w.get('ring_rx'))}",
+          f"ring_rx_max={_whole(w.get('ring_rx_max'))}",
+          *(f"{k}={_whole(w.get(k))}" for k in ("tx_xon", "tx_xoff", "rx_xon", "rx_xoff")),
+          *(f"{k}={_PAUSE_SETTING.get(_num(w.get(k)), 'unmeasured')}" for k in ("pause_rx", "pause_tx")),
+          f"cpu_busy_min_core={_say(min_core)}",
           f"softirq_max={_say(_num(w.get('softirq_max')))}", f"net_rx_ps_max={_say(_num(w.get('net_rx_ps_max')))}",
           f"disk_util_max={_say(util)}", f"throttle_delta={_say(throttle)}", f"cpu_busy_pct={_say(_int(c.get('busy_pct')))}",
           f"cpu_iowait_pct={_say(_int(c.get('iowait_pct')))}", f"temp_max_c={_say(_int(c.get('temp_max_c')))}",

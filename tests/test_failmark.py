@@ -28,9 +28,7 @@ import pytest
 from native import requires_native
 from test_agent import AGENT, BASH, posix
 from agentlib import agent_sources
-from test_drawer_evidence import MIXED_FANOUT
 from test_restore_evidence import build_box, restore_run
-from test_stream_honesty import GOOD_FANOUT, GOOD_SHA, call, drawer_run, errors_of
 from test_timeouts import log_of, make_stubs, run_sh
 
 pytestmark = requires_native(("bash", BASH))
@@ -324,44 +322,6 @@ BOUND = "target_bind sda; target_bind sdb; "
 WRITTEN = BOUND + "target_write_started sda; target_write_started sdb; "
 
 
-def test_only_the_drawer_that_failed_carries_evidence_and_no_disk_is_renamed(tmp_path):
-    """הטופולוגיה של #440/#520: sda שרדה, sdb נפלה בכתיבה. הראיה על sdb
-    בלבד, ואף מחיצה — של אף דיסק — אינה משנה שם (#845 הוסר)."""
-    # חותמת מעבר ל-uptime של תחנת הבדיקה: target_init רושם `since` מ-/proc/uptime
-    # (קיים גם ב-MSYS), ושורה "ישנה" ממנו נופלת בצדק.
-    box = tmp_path / "box"
-    run, out = drawer_run(
-        tmp_path, IDENT + 'dmesg() { echo "[ 99999999.0] ata2.00: error: { UNC }"; }; '
-        + WRITTEN + call(GOOD_SHA, disks=("sda", "sdb")),
-        {"fanout": MIXED_FANOUT, "sgdisk": stub_for(box)},
-        disks=("sda", "sdb"),
-    )
-    assert out.strip().endswith("rc=0"), out
-    assert rename_calls(box) == [], sgdisk_calls(box)
-    errors = errors_of(run, disks=("sda", "sdb"))
-    assert errors["sda"] == "" and "הכתיבה לדיסק נכשלה" in errors["sdb"], errors
-    assert "סומן" not in errors["sdb"]
-    assert not (run / "targets" / "sda" / "ata_log").exists()
-    assert (run / "targets" / "sdb" / "ata_log").read_text().strip() == "[ 99999999.0] ata2.00: error: { UNC }"
-
-
-def test_a_wave_that_succeeds_leaves_no_evidence(tmp_path):
-    box = tmp_path / "box"
-    run, out = drawer_run(
-        tmp_path, IDENT + BOUND + call(GOOD_SHA, disks=("sda", "sdb")),
-        {"fanout": GOOD_FANOUT, "sgdisk": stub_for(box)},
-        disks=("sda", "sdb"),
-    )
-    assert out.strip().endswith("rc=0"), out
-    assert rename_calls(box) == []
-    for dev in ("sda", "sdb"):
-        assert not (run / "targets" / dev / "ata_log").exists()
-        assert errors_of(run)[dev] == ""
-
-
-# --- תחנה בודדת: run_restore -----------------------------------------------------
-
-
 def test_a_station_whose_second_partition_failed_carries_evidence_and_is_not_renamed(tmp_path):
     box, run, prelude = build_box(tmp_path)
     prelude += make_stubs(box / "failmark-stubs", {"sgdisk": stub_for(box)})
@@ -375,21 +335,6 @@ def test_a_station_whose_second_partition_failed_carries_evidence_and_is_not_ren
     assert zap_calls(box) == [f"--zap-all {posix(box)}/dev/sda"]
     assert error_of(run, "sda") == "נכתבו 1 מתוך 3 מחיצות"
     assert (run / "targets" / "sda" / "ata_log").read_text().strip() == "[ 99999999.0] ata1: SError: { ICRC }"
-
-
-def test_only_the_failed_drawer_has_its_gpt_wiped(tmp_path):
-    box = tmp_path / "box"
-    run, out = drawer_run(
-        tmp_path, IDENT + WRITTEN + call(GOOD_SHA, disks=("sda", "sdb")),
-        {"fanout": MIXED_FANOUT, "sgdisk": stub_for(box)}, disks=("sda", "sdb"))
-    assert out.strip().endswith("rc=0"), out
-    zaps = zap_calls(box)
-    # apply_gpt אינו רץ בטסט הזה (הזרם בלבד) — המחיקה היחידה היא של הכשל
-    assert zaps == [f"--zap-all {posix(box)}/dev/sdb"], zaps
-    assert (run / "targets/sdb/ata_log").exists()
-
-
-# --- באתחול: אדום מזיכרון השרת, לא מהדיסק ------------------------------------------
 
 
 def fake_jq(*lines: str) -> str:

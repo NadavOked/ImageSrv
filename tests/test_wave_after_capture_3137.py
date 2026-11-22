@@ -36,7 +36,7 @@ from server.library import chunkformat as F
 from test_server_room import CLONER1, room, room_body, room_server   # noqa: F401 -- room_server is a fixture
 
 IMAGE = "img_7f3a91"
-ENGINES = ("udpcast", "chunk")
+ENGINES = ("chunk",)
 DC = {"cmd": C.STORED_DC, "frame_cmd": C.STORED_DC, "new": RB.PyXxh64}
 # 1025 used blocks of 4KiB: two chunks, the last one short (as in test_chunk_format_2533)
 STREAM = P.image(1030, list(range(0, 1000)) + list(range(1003, 1027)) + [1029], 4096)
@@ -73,9 +73,17 @@ def _folder(ctx):
 
 def _fresh_capture(ctx, blob: bytes = BLOB):
     """What a capture leaves in the library: every partition file in format 2 and the index the agent
-    signed in the manifest (`index_xxh64`) -- and nothing the server derives: no `.idx`, no `readback_*`."""
+    signed in the manifest (`index_xxh64`) -- and nothing the server derives: no `.idx`, no `readback_*`.
+    #3173: `conftest.write_image` writes an image whose index was already derived; what the derivation
+    leaves (`.idx`, `.b3`, `readback_*`, `chunk_b3`) is taken away here first."""
     folder = _folder(ctx)
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+    for part in manifest["partitions"]:
+        if part.get("file"):
+            for derived in ("readback_xxh64", "readback_chunks", "readback_bytes", "readback_chunk_bytes", "chunk_b3"):
+                part.pop(derived, None)
+            for suffix in (".idx", ".b3"):
+                (folder / (part["file"] + suffix)).unlink(missing_ok=True)
     manifest = C.signed(manifest, {p["index"]: INDEX for p in manifest["partitions"] if p.get("file")})
     manifest["image_format"] = 2
     for part in manifest["partitions"]:
@@ -116,7 +124,6 @@ def derive(monkeypatch):
 
 
 def _open(room_server):
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     opened = room_server["deploy"].post("/api/console/room", json=room_body(room_server, 2, {CLONER1: ["S1", "S2"]}))
     assert opened.status_code == 200, opened.text
     return opened.json()["wave_session_id"]
@@ -282,7 +289,7 @@ def test_a_wave_waits_for_the_background_pass_that_already_derives_its_image(roo
 def test_the_background_pass_leaves_an_image_a_wave_is_deriving(tmp_path, derive):
     from server.library.images import ImageLibrary
     from conftest import write_image
-    write_image(tmp_path, C.signed({**MANIFEST_256, "id": "img_3137aa"}, {3: INDEX}))
+    write_image(tmp_path, C.signed({**MANIFEST_256, "id": "img_3137aa"}, {3: INDEX}), index=False)   # nothing derived yet
     (tmp_path / "img_3137aa" / "p3.win.pcl.zst").write_bytes(BLOB)
     lib = ImageLibrary(tmp_path)
     assert RB.claim("img_3137aa", lib.get("img_3137aa"))
@@ -301,19 +308,3 @@ def test_the_derivation_reports_how_much_of_the_file_it_has_read(tmp_path):
     assert got.render() == INDEX
     assert seen and all(t == seen[0][1] for _, t in seen) and seen[-1][0] == seen[0][1] == len(STREAM)
     assert [d for d, _ in seen] == sorted(d for d, _ in seen)
-
-
-# --- a udpcast wave needs no index and waits for nothing -------------------------------------------------
-
-
-def test_with_the_switch_off_the_wave_does_not_wait_for_an_index(room_server, derive):
-    ctx = room_server["ctx"]
-    _fresh_capture(ctx)
-    derive.hold.clear()
-    opened = room_server["deploy"].post("/api/console/room", json=room_body(room_server, 2, {CLONER1: ["S1", "S2"]}))
-    assert opened.status_code == 200, opened.text
-    _hello(room_server)
-    _hello(room_server, joining=False)
-    view = room(room_server["deploy"])["round"]
-    assert view["wave_state"] == "running" and view.get("preparing") is None and derive.calls == []
-    derive.hold.set()

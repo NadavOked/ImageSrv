@@ -27,7 +27,7 @@ from test_igmp_querier_1972 import Clock as QClock, ip_packet, make as make_q, r
 from test_netwatch_c_3064 import BCAST, ME_NOT, FRAMES, eth, mcast_frame  # noqa: E402
 
 MAC = "b4:2e:99:07:1a:c4"
-GROUP = "239.83.67.1"
+GROUP = "239.84.82.1"
 
 
 @pytest.fixture(autouse=True)
@@ -166,9 +166,10 @@ def test_n6_who_asked_for_the_group_is_not_a_victim():
     assert _n6(flooded_sample(), member=None).state == l2sense.FLOODED, "membership unread is not 'is a member'"
 
 
-def test_n6_udpcast_has_no_known_group_so_nothing_is_judged():
+def test_n6_a_group_that_was_not_read_means_nothing_is_judged():
+    # #3173: the only engine is the chunk engine and its group is always known; `None` is "not read" (principle 5)
     s = _n6(flooded_sample(), engine_group=None)
-    assert s.state == l2sense.UNMEASURED and "udpcast" in s.why
+    assert s.state == l2sense.UNMEASURED and "לא נקראה" in s.why
 
 
 def test_n6_unread_joined_groups_are_not_checked():
@@ -212,7 +213,7 @@ def test_n8_our_own_group_is_subtracted_and_other_multicast_is_foreign():
     assert s.state == l2sense.FOREIGN_SEEN and s.evidence["foreign_in_sample"] == 5
 
 
-def test_n8_with_udpcast_multicast_is_unattributed_not_foreign():
+def test_n8_without_a_known_group_multicast_is_unattributed_not_foreign():
     nw = sample(classes={"mcast_ip": 900}, groups=[{"group": "233.254.1.2", "n": 900}], passed=900, sampled=900)
     s = _n8(nw, engine_group=None)
     assert s.state == l2sense.QUIET and s.evidence["mcast_unattributed"] == 900
@@ -307,10 +308,9 @@ def test_the_cloner_context_reads_engine_wave_and_membership(conn):
     # #3173: a server that never chose an engine runs the chunk engine, so its group is known without any setting
     ctx = l2sense.cloner_context(conn, MAC, 2000.0)
     assert ctx["engine_group"] == GROUP and ctx["wave_age_s"] is None and ctx["member"] is False
-    db.set_setting(conn, "stream_engine", "chunk")
+    # a value saved before #3173 is not read for a decision (`chunksend.engine_of` is always the chunk engine)
+    db.set_setting(conn, "stream_engine", "udpcast")
     assert l2sense.cloner_context(conn, MAC, 2000.0)["engine_group"] == GROUP
-    db.set_setting(conn, "stream_engine", "udpcast")          # chosen explicitly: its group is not known
-    assert l2sense.cloner_context(conn, MAC, 2000.0)["engine_group"] is None
 
 
 # --- ה-hello עד ה-DB ----------------------------------------------------------------------------------------------

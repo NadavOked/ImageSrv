@@ -24,7 +24,7 @@ def make_client(tmp_path, with_boot=True):
         (boot / "vmlinuz").write_bytes(b"fake-kernel")
         (boot / "initrd.img").write_bytes(b"fake-initramfs")
     app = create_app(tmp_path / "data", tmp_path / "images",
-                     "http://127.0.0.1:8080", boot_dir=boot)
+                     "http://127.0.0.1:7712", boot_dir=boot)
     return TestClient(app)
 
 

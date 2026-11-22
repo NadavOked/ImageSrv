@@ -277,7 +277,7 @@ def render_menu(snapshot: Snapshot, selected: int = 0, seconds: int = 90) -> lis
     canvas.put(16, 3, "(use the web console)")
     descriptions = (
         ("Configure Management Network", "The NIC the web console listens on",
-         "(HTTPS 8081). DHCP client or a static", "address, gateway and DNS.",
+         "(HTTPS 443). DHCP client or a static", "address, gateway and DNS.",
          f"Current: {snapshot.management.name}  {snapshot.management.address or 'no IPv4'}  {snapshot.management.mode.upper()}",
          "Changes have a 60 s rollback window."),
         ("Restart Management Network", f"ifdown/ifup {snapshot.management.name} with its saved",
@@ -286,7 +286,7 @@ def render_menu(snapshot: Snapshot, selected: int = 0, seconds: int = 90) -> lis
         ("Restart Services", "Restarts imagesrv-server and dnsmasq only", "when dnsmasq is enabled, then reads back", "each service state."),
         ("Display TLS Certificate", "Shows SHA-256, certificate SANs and", "the not-after date read from the cert."),
         ("Primary-Visible Address", "The address at which the primary", "server reaches this secondary (port",
-         "8443); behind NAT, the outside one.", "F4 shows it on the pairing screen."),
+         "7700); behind NAT, the outside one.", "F4 shows it on the pairing screen."),
         ("Add Disk", "An EMPTY disk in this server becomes", "an image storage location: GPT, ext4,",
          "mounted by UUID (fstab, nofail).", "Only disks with no partition table,",
          "no signature and zeroed head/tail.", "ALL DATA ON THE DISK IS ERASED."),
@@ -305,7 +305,7 @@ def render_network(snapshot: Snapshot, interfaces: list[NicInfo], form: dict[str
         _title("Configure Management Network", f"admin  (auto-logout in {seconds} s)"),
         "<Space> Toggle  <Tab> Next field  <Enter> Apply (60 s window)  <Esc> Cancel",
     )
-    canvas.put(3, 3, "Interface (web console, HTTPS port 8081):")
+    canvas.put(3, 3, "Interface (web console, HTTPS port 443):")
     selected = form.get("interface", "")
     for index, nic in enumerate(interfaces[:3]):
         marker = "*" if nic.name == selected else " "
@@ -515,9 +515,9 @@ def render_advertised(value: str, seconds: int = 90, error: str = "") -> list[st
     canvas = Canvas(_title("Primary-Visible Address", f"admin  (auto-logout in {seconds} s)"),
                     "<Enter> Save                            <Esc> Cancel")
     canvas.put(4, 4, "The address at which the primary server reaches this server")
-    canvas.put(5, 4, "(port 8443). Behind NAT: the outside address. Empty clears it.")
+    canvas.put(5, 4, "(port 7700). Behind NAT: the outside address. Empty clears it.")
     canvas.put(8, 4, f"Address:  [ {value[:44]:<44}_ ]")
-    canvas.put(10, 4, "Example: 203.0.113.40:8443   (https:// is added)")
+    canvas.put(10, 4, "Example: 203.0.113.40:7700   (https:// is added)")
     if error:
         canvas.put(13, 4, error, 72)
     return canvas.lines()

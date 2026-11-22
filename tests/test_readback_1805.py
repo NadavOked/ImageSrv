@@ -33,7 +33,7 @@ from pathlib import Path
 from agentlib import lib_files
 
 import pytest
-from conftest import MANIFEST_256, write_image
+from conftest import MANIFEST_256, unindex_image, write_image
 
 import chunk_image as C
 import pcl_image as P
@@ -454,11 +454,12 @@ def test_a_round_kicks_its_image_and_the_thread_is_given_the_busy_and_rank():
     import inspect
     from server import app
     from server.rounds import room, sessions
-    assert "readbackhash.kick(image_id)" in inspect.getsource(room.open_round)
+    assert "readbackhash.kick(image_id)" in inspect.getsource(room._open_round)   # #3928: open_round = the lock
     assert "readbackhash.kick(image_id)" in inspect.getsource(sessions.SessionStore.open)
     src = inspect.getsource(app.create_runtime)
-    assert '"busy": readbackhash.server_busy(conn, sender)' in src and '"rank": readbackhash.last_use(conn)' in src
-    assert src.index("sender = SenderEngine(") < src.index("readbackhash.run_forever")
+    # #3173: the sender the digest gives way to is the chunk engine, the only one left -- built before the thread starts
+    assert '"busy": readbackhash.server_busy(conn, chunk)' in src and '"rank": readbackhash.last_use(conn)' in src
+    assert src.index("chunk = chunksend.ChunkEngine(") < src.index("readbackhash.run_forever")
 
 
 def test_the_capture_kicks_the_pass_and_main_starts_it():
@@ -501,6 +502,7 @@ def test_the_manifest_the_agent_reads_carries_the_mode(server):
 
 def test_the_list_is_served_only_when_it_is_whole(server):
     anon, ctx = server["anon"], server["ctx"]
+    unindex_image(Path(ctx.library.root), "img_7f3a91")      # as the capture left it: the fixture's image is derived
     assert anon.get("/api/v1/images/img_7f3a91/readback/3").status_code == 404     # not derived yet
     xxh = xxh64_reference(LIST_A.encode("ascii"))
     path = Path(ctx.library.root) / "img_7f3a91" / "manifest.json"

@@ -29,7 +29,7 @@ import pytest
 from boot.grub_menu import GrubConfig
 from boot.http import create_boot_asgi
 
-CONFIG = GrubConfig(server_base="http://127.0.0.1:8080")
+CONFIG = GrubConfig(server_base="http://127.0.0.1:7712")
 MAC = "c8:d9:d2:0b:fe:32"
 
 #: התשובה שהשרת נותן לכל תפקיד; `build` הוא זה שנפל על ברזל.

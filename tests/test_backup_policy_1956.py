@@ -523,12 +523,10 @@ def test_the_default_folder_is_writable_in_both_units():
 def console(tmp_path: Path, images_root: Path, clock, monkeypatch):
     from server.app import create_app
     from server.console import users
-    from server.rounds import sender as sender_module
-    from test_sender import Recorder
+    from fakesend import Recorder
 
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
     data = tmp_path / "data"
-    app = create_app(data, images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(data, images_root, "http://10.44.12.10:7712", now_fn=clock,
                      sender_runner=Recorder(block=True), storage_hooks=FakeHooks().as_dict(),
                      storage_check_interval=10**9)
     ctx = app.state.ctx
@@ -538,7 +536,7 @@ def console(tmp_path: Path, images_root: Path, clock, monkeypatch):
     assert admin.post("/api/console/login", json={"username": "noc", "password": "admin-pass-123"}).status_code == 200
     assert deploy.post("/api/console/login", json={"username": "labtech", "password": "deploy-pass-1"}).status_code == 200
     yield {"conn": ctx.conn, "admin": admin, "deploy": deploy, "data": data}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def _post(console, **body):

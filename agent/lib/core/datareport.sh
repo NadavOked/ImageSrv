@@ -22,17 +22,61 @@ agent_log_send() {
     done
     [ "$(cat "$RUN_DIR/state" 2>/dev/null)" = failed ] && _al_r=failed
     [ -z "${2:-}" ] || _al_r=$2
-    _al_f="$RUN_DIR/agentlog.gz"
-    if tail -n "$AGENT_LOG_LINES" "$LOG_FILE" 2>/dev/null | tail -c "$AGENT_LOG_BYTES" | gzip -c > "$_al_f" 2>/dev/null \
-        && curl -sfS --max-time "${HTTP_TIMEOUT:-10}" -H "Content-Type: application/gzip" \
+    _al_f="$RUN_DIR/agentlog.gz"; _al_t="$RUN_DIR/agentlog.txt"
+    # #3031: partclone's progress frames out, then the tail; $_al_cut = 1 when the agent cut (or could not tell)
+    _al_cut=$(agent_log_prepare "$_al_t")
+    if gzip -c < "$_al_t" > "$_al_f" 2>/dev/null \
+        && curl -sfS --max-time "${HTTP_TIMEOUT:-10}" -H "Content-Type: application/gzip" -H "X-Imagesrv-Log-Cut: $_al_cut" \
             --data-binary "@$_al_f" "$SERVER/api/v1/agent/log?mac=$MAC&session_id=${1:-}&reason=$_al_r" \
             > /dev/null 2>&1; then
         log "agent log: sent to the server ($_al_r)"
     else
         log "agent log: NOT delivered to the server ($_al_r) -- the round is unaffected"
     fi
-    rm -f "$_al_f"
+    rm -f "$_al_f" "$_al_t"
     return 0
+}
+
+agent_log_compact() {
+    # #3031: $1 = the log with every CR already a newline. partclone redraws its
+    # progress (ESC[A + CR) a few lines each update, and 84-99% of the 64KB tail
+    # was those frames -- the start of the wave never reached the server. Frames
+    # out, everything else as it was; the LAST frame (its two lines) only, once, at the end. A
+    # log line glued behind a frame (the frame has no newline) is kept whole.
+    awk '
+        function keep(s) {
+            if (s ~ /^[ \t]*$/) return
+            if (s ~ /Elapsed:.*Completed:/ || s ~ /[Cc]urrent block:.*[Cc]omplete:/) {
+                if (s ~ /Elapsed:/) lastE = s; else lastB = s
+                if (match(s, /\[[0-9][0-9]:[0-9][0-9]:[0-9][0-9]\] /)) print substr(s, RSTART)
+                return
+            }
+            print s
+        }
+        { n = split($0, p, "\033")
+          for (i = 1; i <= n; i++) { s = p[i]; if (i > 1) sub(/^\[[0-9;]*[A-Za-z]/, "", s); keep(s) } }
+        END { if (lastE != "") print "(last partclone progress frame) " lastE
+              if (lastB != "") print "(last partclone progress frame) " lastB }' "$1"
+}
+
+agent_log_prepare() {
+    # $1 = the file to write; prints 0 or 1: 1 = the agent cut the log (past the
+    # lines/bytes ceilings) or could not tell. "Not known to be whole" is not "whole"
+    # (principle 5): the server sets agent_logs.truncated from this (#3031).
+    _ap_all="$1.all"
+    if tr '\r' '\n' 2>/dev/null < "$LOG_FILE" > "$1.raw" && agent_log_compact "$1.raw" > "$_ap_all" 2>/dev/null; then
+        _ap_l=$(wc -l < "$_ap_all" 2>/dev/null | tr -d ' '); _ap_b=$(wc -c < "$_ap_all" 2>/dev/null | tr -d ' ')
+        tail -n "$AGENT_LOG_LINES" "$_ap_all" 2>/dev/null | tail -c "$AGENT_LOG_BYTES" > "$1" 2>/dev/null
+        case "$_ap_l$_ap_b" in
+            ''|*[!0-9]*) echo 1 ;;   # the count itself failed
+            *) if [ "$_ap_l" -le "$AGENT_LOG_LINES" ] && [ "$_ap_b" -le "$AGENT_LOG_BYTES" ]; then echo 0; else echo 1; fi ;;
+        esac
+    else
+        log "agent log: progress frames NOT removed (tr/awk failed) -- the raw tail is sent, marked cut" >&2
+        tail -n "$AGENT_LOG_LINES" "$LOG_FILE" 2>/dev/null | tail -c "$AGENT_LOG_BYTES" > "$1" 2>/dev/null
+        echo 1
+    fi
+    rm -f "$1.raw" "$_ap_all"
 }
 
 # #2841 (work, 11/11): a cloner went quiet mid-read-back and rebooted; the log

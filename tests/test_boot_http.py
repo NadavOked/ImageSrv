@@ -17,7 +17,7 @@ import pytest
 from boot.grub_menu import GrubConfig
 from boot.http import create_boot_asgi
 
-CONFIGURED = "10.44.12.10:8080"
+CONFIGURED = "10.44.12.10:7712"
 CONFIG = GrubConfig(server_base=f"http://{CONFIGURED}")
 
 #: תשובת שרת (ממשק 3) שמייצרת רשומת סוכן — שם מופיעות שורות
@@ -33,7 +33,7 @@ class _Absent:
 _ABSENT = _Absent()
 
 
-def fetch_menu(config: GrubConfig = CONFIG, server=("10.44.12.10", 8080)) -> str:
+def fetch_menu(config: GrubConfig = CONFIG, server=("10.44.12.10", 7712)) -> str:
     """מריץ בקשת /boot/menu אחת מול האפליקציה הגולמית ומחזיר את הגוף."""
     app = create_boot_asgi(resolve=lambda mac, ip: dict(ANSWER), config=config)
 
@@ -65,18 +65,18 @@ def fetch_menu(config: GrubConfig = CONFIG, server=("10.44.12.10", 8080)) -> str
 
 
 def test_menu_points_at_the_address_the_station_actually_reached():
-    text = fetch_menu(server=("10.10.10.8", 8080))
+    text = fetch_menu(server=("10.10.10.8", 7712))
 
-    assert "linux (http,10.10.10.8:8080)/boot/vmlinuz" in text
-    assert "initrd (http,10.10.10.8:8080)/boot/initrd.img" in text
-    assert "imagesrv.server=http://10.10.10.8:8080" in text
+    assert "linux (http,10.10.10.8:7712)/boot/vmlinuz" in text
+    assert "initrd (http,10.10.10.8:7712)/boot/initrd.img" in text
+    assert "imagesrv.server=https://10.10.10.8:7712" in text
     # שום שריד של כתובת ההפצה, שמהרשת הזו לא נגישה בכלל.
     assert CONFIGURED not in text
 
 
 def test_deployment_vlan_output_is_unchanged():
     """הווילן הרגיל: ה-scope תואם לתצורה, ולכן הפלט זהה לקוד הישן."""
-    assert fetch_menu(server=("10.44.12.10", 8080)) == fetch_menu(server=_ABSENT)
+    assert fetch_menu(server=("10.44.12.10", 7712)) == fetch_menu(server=_ABSENT)
 
 
 @pytest.mark.parametrize(
@@ -84,14 +84,14 @@ def test_deployment_vlan_output_is_unchanged():
     [
         _ABSENT,                    # השרת לא מילא כלום
         None,
-        ("2001:db8::1", 8080),      # IPv6 — התחביר של GRUB לא סובל אותו כאן
+        ("2001:db8::1", 7712),      # IPv6 — התחביר של GRUB לא סובל אותו כאן
         ("testserver", 80),         # שם ולא כתובת
         ("10.10.10.8", None),       # פורט חסר
         ("10.10.10.8",),            # לא זוג
-        "10.10.10.8:8080",          # לא tuple בכלל
-        ("999.1.1.1", 8080),        # לא כתובת תקינה
+        "10.10.10.8:7712",          # לא tuple בכלל
+        ("999.1.1.1", 7712),        # לא כתובת תקינה
         ("10.10.10.8", 0),          # פורט מחוץ לתחום
-        ("10.10.10.8", "8080"),     # פורט כמחרוזת
+        ("10.10.10.8", "7712"),     # פורט כמחרוזת
     ],
     ids=["absent", "none", "ipv6", "hostname", "no-port", "short", "string",
          "bad-ip", "port-zero", "port-string"],
@@ -100,7 +100,7 @@ def test_anything_unusable_falls_back_to_the_configured_address(server):
     text = fetch_menu(server=server)
 
     assert f"linux (http,{CONFIGURED})/boot/vmlinuz" in text
-    assert f"imagesrv.server=http://{CONFIGURED}" in text
+    assert f"imagesrv.server=https://{CONFIGURED}" in text
 
 
 def test_only_the_server_address_is_replaced():
@@ -111,16 +111,16 @@ def test_only_the_server_address_is_replaced():
         initrd_path="/boot/initrd-lab.img",
         extra_cmdline=("console=ttyS0,115200",),
     )
-    text = fetch_menu(config=config, server=("10.10.10.8", 8080))
+    text = fetch_menu(config=config, server=("10.10.10.8", 7712))
 
-    assert "linux (http,10.10.10.8:8080)/boot/vmlinuz-lab" in text
-    assert "initrd (http,10.10.10.8:8080)/boot/initrd-lab.img" in text
+    assert "linux (http,10.10.10.8:7712)/boot/vmlinuz-lab" in text
+    assert "initrd (http,10.10.10.8:7712)/boot/initrd-lab.img" in text
     assert "console=ttyS0,115200" in text
 
 
 def test_derived_menu_keeps_the_kernel_command_line_clean():
     """הכתובת מהחיבור לא פותחת פתח לפרטי משימה בשורת הקרנל."""
-    text = fetch_menu(server=("10.10.10.8", 8080))
+    text = fetch_menu(server=("10.10.10.8", 7712))
 
     cmdline = next(line for line in text.splitlines() if " linux (http," in line)
     assert "deploy" not in cmdline
