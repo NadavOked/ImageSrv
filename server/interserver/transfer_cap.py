@@ -50,7 +50,7 @@ BYTES_PER_MBPS = 125_000
 
 def parse(raw: object) -> int | None:
     """מספר שלם 0–100,000 — או `None`. `bool` אינו מספר; מחרוזת עם אפס
-    מוביל, סימן או נקודה — נדחית (כמו `crcwarn.parse`)."""
+    מוביל, סימן או נקודה — נדחית."""
     if isinstance(raw, bool):
         return None
     if isinstance(raw, int):

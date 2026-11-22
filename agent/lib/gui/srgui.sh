@@ -28,9 +28,9 @@ SR_GUI_TICK_S="${SR_GUI_TICK_S:-1}"     # the state is re-written this often
 SR_RLM=$(printf '\342\200\217')         # U+200F: "SATA 0 ..." would lay the line out LTR (#1502)
 
 sr_disk_label() {
-    # $1 = disk. "דיסק N" by the drawer mapping (#1495) -- the restore
-    # screen's own number; not in the mapping: its connection "(לא ממופה)";
-    # neither: the device name. Never a guessed number.
+    # $1 = disk. #2980 (Nadav 04/11): a build/student machine has one disk -- "הדיסק של המחשב" (the GUI's OWN_DISK_HE),
+    # never "SATA 3 (לא ממופה)". A cloner: "דיסק N" by the mapping (#1495), else "<conn> (לא ממופה)", else the device.
+    [ "${D_ROLE:-}" = cloner ] || { printf 'הדיסק של המחשב'; return 0; }
     _sl_p=$(disk_port "$1"); case "$_sl_p" in ''|*[!0-9]*) _sl_p=0 ;; esac
     drawer_slots_refresh || :
     _sl_m=$(disk_drawer "$1" "$_sl_p"); _sl_n=${_sl_m%%|*}; _sl_c=${_sl_m#*|}

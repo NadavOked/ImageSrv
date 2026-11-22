@@ -26,18 +26,18 @@ function ctx(settings = {}) {
   return c;
 }
 
-test('#1675: a Hebrew unit reads in Hebrew order — no dir="ltr" around "N שגיאות"', () => {
+test('#1675: a Hebrew unit reads in Hebrew order — no dir="ltr" around "N דקות"', () => {
   const c = ctx();
-  const crc = vm.runInContext('settingRow("crc_warn_threshold")', c);
+  const crc = vm.runInContext('settingRow("interrupt_ask_minutes")', c);
   const html = c.settingNumberText(crc, '25');
-  assert.equal(html, '<bdi>25 שגיאות</bdi>');
+  assert.equal(html, '<bdi>25 דקות</bdi>');
   assert.doesNotMatch(html, /dir="ltr"/);
   assert.doesNotMatch(js, /ltr\(`\$\{v\} \$\{r\.unit\}`\)/, 'the old ltr() around value + unit is gone');
 });
 
-test('#1675: 0 of the CRC warning means off — shown as "כבויה", never "0 שגיאות"', () => {
+test('#1675: 0 of a setting that has zeroText means off — shown as "כבויה", never "0 שניות"', () => {
   const c = ctx();
-  const crc = vm.runInContext('settingRow("crc_warn_threshold")', c);
+  const crc = vm.runInContext('settingRow("unregistered_autoboot_seconds")', c);
   assert.equal(c.settingNumberText(crc, '0'), '<span class="muted">כבויה</span>');
   const gb = vm.runInContext('settingRow("min_free_gb")', c);
   assert.equal(c.settingNumberText(gb, '0'), '<bdi>0 GB</bdi>', 'only a setting where 0 = off says off');
@@ -50,4 +50,10 @@ test('scheduled reboot reads as one sentence: off / every day at / every <day> a
   assert.equal(ctx({auto_reboot: 'off', auto_reboot_time: '03:00', auto_reboot_weekday: '0'}).autoRebootText(), 'כבוי', 'off does not show a time and a day');
   assert.equal(ctx({auto_reboot: 'daily', auto_reboot_time: '03:00', auto_reboot_weekday: '0'}).autoRebootText(), 'כל יום ב-03:00');
   assert.equal(ctx({auto_reboot: 'weekly', auto_reboot_time: '04:30', auto_reboot_weekday: '6'}).autoRebootText(), 'כל יום ראשון ב-04:30');
+});
+
+test('#2861: the settings card has no CRC-threshold row — the server no longer keeps it', () => {
+  const c = ctx();
+  assert.equal(vm.runInContext('settingRow("crc_warn_threshold")', c), undefined);
+  assert.doesNotMatch(js, /crc_warn_threshold/);
 });

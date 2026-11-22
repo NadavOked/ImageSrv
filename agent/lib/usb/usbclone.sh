@@ -252,6 +252,7 @@ usbclone_main() {
     power_watch_start   # #1918: the power button, with this boot's safe_poweroff (usb_offline)
     while :; do
         lc_session
+        [ ! -f "$LC/usbinstall.go" ] || usb_install_handover || :   # #2062: "התקן שרת" in the settings -- returns only when the installer was not started
         log "usbclone: the local screen ended (${LC_END:-}) -- back to it"
         lc_gui_alive || gui_parent || usb_stop "מסך השיכפול נסגר ולא עלה שוב" "$USB_NOGUI" nogui
         [ "${IMAGESRV_TEST:-0}" = 1 ] && [ -n "${IMAGESRV_TEST_ONCE:-}" ] && exit 0

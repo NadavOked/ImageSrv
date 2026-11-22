@@ -37,10 +37,10 @@ const IdleDisk *idle_for_port(const State *s, int port);
 int eff_drawer(int drawer, int port);
 void conn_text(const char *conn, int port, const char *dev, char *out, size_t n);
 void unmapped_label(const char *name, const char *conn, int port, const char *dev, char *out, size_t n);
-/* #2030: the NAME on a drawer card. The big number on the card's end is the drawer; the name
- * says the other thing -- the connection ("SATA 0", "NVMe 03:00.0") -- instead of repeating the
- * number as "דיסק N". An operator's slot name (#704) still wins; a disk outside the mapping keeps
- * "(לא ממופה)". Never a device name: "sda" is a log word, not the operator's. */
+/* The NAME on a drawer card. Nadav 12/11 (mockup-gui-unified-1112, decisions 3 and 8, replacing
+ * #2030's "the connection is the name"): "דיסק N" -- the same name the title, the build machine and
+ * the console give that drawer; the connection ("SATA 0") is not on the row. An operator's slot name
+ * (#704) still wins; a disk outside the mapping keeps "(לא ממופה)". Never a device name. */
 void card_name(const char *name, int bay, const char *conn, int port, char *out, size_t n);
 const CUsed *cused_for_dev(const State *s, const char *dev);   /* #2030: NULL = no size read for it */
 const char *disk_label_for_dev(const State *s, const char *dev);   /* #1857: "קוריאים · xx-7", or "" = no set */
@@ -52,6 +52,9 @@ void cloner_bay_conn(const State *s, int bay, char *out, size_t n);
  * "דיסק N". <out> >= SLOT_NAME_MAX + 16 bytes, or a long name is cut. */
 void cloner_slot_label(const State *s, int bay, char *out, size_t n);
 int room_selectable(const RoomDrawer *d);
+/* #2980 (Nadav 04/11, mockup-gui-unified-1112 decision 1): a build or student machine has one disk -- no drawer,
+ * no mapping, so never "דיסק N" or "SATA 3 (לא ממופה)" for it. The agent says the same words (srgui.sh). */
+#define OWN_DISK_HE "הדיסק של המחשב"
 int room_pickable(const RoomDrawer *d);   /* #1732: selectable and not red */
 int room_drawer_red(const RoomDrawer *d);
 #include "disk_rule.h"   /* #2848: the one rule (DR_* colours, disk_rule_he) */   /* #2848: SMART failed, a SATA problem or a slow write -- not a target */

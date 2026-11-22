@@ -165,7 +165,7 @@ def test_two_clean_waves_adjust_with_previous_new_and_the_number_behind_it(conn)
     assert (start["previous_he"], start["value_he"]) == ("600 Mb/s", "700 Mb/s")
     assert "700 Mb/s" in start["why_he"] and "2 שיכפולים" in start["why_he"]
     assert sorted(state["adjusted_keys"]) == sorted(rows)
-    assert [u["key"] for u in state["run"]["unchanged"]] == ["crc_warn_threshold"]
+    assert state["run"]["unchanged"] == []
 
 
 def test_a_wave_that_failed_means_not_learned_and_nothing_changes(conn):

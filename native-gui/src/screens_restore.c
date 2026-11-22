@@ -109,7 +109,7 @@ void screen_restore(App *a, cairo_t *cr, double W, double H, double head_h) {
         snprintf(target_info, sizeof target_info, "השחזור חסום");
     }
     Text dh = rtl_block_make(cr, 15, 600, "יעד", dest.w - 2 * pad);
-    Text dl = rtl_block_make(cr, 12, 400, pull ? "מגירות המחשב — לחצו כדי לסמן" : "הדיסק המקומי", dest.w - 2 * pad);
+    Text dl = rtl_block_make(cr, 12, 400, pull ? "מגירות המחשב — לחצו כדי לסמן" : OWN_DISK_HE, dest.w - 2 * pad);   /* #2980: one name */
     Text dv = rtl_block_make(cr, 18, 600, target_name, dest.w - 2 * pad);
     Text di = text_make(cr, FONT_MONO, 12, 400, target_info, 0, DIR_LTR);
     double dy = dest.y + pad;

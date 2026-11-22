@@ -32,7 +32,7 @@
 #define DCUI_MAX_TILES 4
 #define DCUI_MAX_ROWS 7
 #define DCUI_MAX_PROBS 3
-#define DCUI_MAX_ITEMS 8                /* #2198: USB automatic power-off, before reset */
+#define DCUI_MAX_ITEMS 9                /* #2062: USB install server, after reset (#2198: power-off) */
 #define DCUI_MAX_PROWS 8                /* #1962: a row per drawer, up to 8 */
 #define DCUI_MAX_NOTES 4
 #define DCUI_MAX_KEYS 8

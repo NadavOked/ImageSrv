@@ -31,6 +31,8 @@ direct_gui_records() {
       (if (.round.target_slots? | type) == "array" then [.round.target_slots[].mac] as $t
          | .machines |= map(select(.mac as $m | any($t[]; . == $m))) else . end) |
       "cloner=" + ((.round.image_name? // "") | clean),
+      # #2980: the time since the wave started -- the number the room screen shows (round.elapsed_s); none = not said
+      (if (.round.elapsed_s? | type) == "number" and .round.elapsed_s >= 0 then "wave_elapsed=\(.round.elapsed_s | floor)" else empty end),
       # the size of each drawer (cused=dev|size|-1, the card shows "500 GB") -- only with one cloner: a dev
       # names a disk on one machine, and sdb of two cloners would give one of them the size of the other
       ([.machines[] | select([(.drawer_list // [])[] | select(.state != null or .selected == true)] | length > 0)] as $with
@@ -49,4 +51,14 @@ direct_gui_records() {
             (if (.stall_limit_s | type) == "number" then (.stall_limit_s | floor) else "" end)] | map(clean) | join("|")))))
       end' "$GUI_DIR/room.json" 2> /dev/null > "$GUI_DIR/direct.next" || { printf 'direct_targets=unread\n'; return 0; }
     cat "$GUI_DIR/direct.next"
+}
+
+# #2980 (Nadav 12/11): "זמן שעבר" on the cloner, as the build machine's room screen -- from the same start: the
+# wave's started_at on the server (session.started_at, an epoch; this machine's clock is the server's, #1447).
+# wave_elapsed=<seconds>. No start, or one ahead of this clock: nothing printed -- the screen says "—", never 00:00.
+gui_elapsed_record() {
+    _cg_st=$(json_get "$RUN_DIR/response.json" '.session.started_at | if type == "number" then floor else empty end')
+    case "$_cg_st" in ''|*[!0-9]*) return 0 ;; esac
+    _cg_el=$(( $(date +%s) - _cg_st )); [ "$_cg_el" -lt 0 ] || printf 'wave_elapsed=%s\n' "$_cg_el"
+    return 0
 }

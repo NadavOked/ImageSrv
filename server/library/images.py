@@ -662,13 +662,19 @@ class ImageLibrary:
         return self.scan().get(image_id)
 
     def file_path(self, image_id: str, filename: str) -> Path | None:
-        """הנתיב לקובץ מחיצה — רק אם המניפסט מכריז עליו בדיוק בשם הזה."""
+        """הנתיב לקובץ מחיצה — רק אם המניפסט מכריז עליו בדיוק בשם הזה.
+
+        #86: גם עדכון ה-UEFI db החתום שמגיע עם האימג' (`db_update.file`) — אותו כלל: מוצהר בשמו
+        המדויק, בתוך התיקייה, בלי קישור סמלי. ה-sha256 והחתימה נבדקים בסוכן לפני כל כתיבה."""
         manifest = self.get(image_id)
         if manifest is None:
             return None
         if not manifest.get("_dir") or not manifest.get("_available", True):
             return None
         declared = {part["file"] for part in streamed_partitions(manifest)}
+        db_update = manifest.get("db_update")
+        if isinstance(db_update, dict) and isinstance(db_update.get("file"), str):
+            declared.add(db_update["file"])
         if filename not in declared:
             return None
         return guarded_image_path(manifest["_dir"], filename)

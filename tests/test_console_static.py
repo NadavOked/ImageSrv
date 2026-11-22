@@ -329,6 +329,7 @@ def test_static_includes_are_at_9_9():
     #3658 (18/11): שתי הגדרות חדשות, "המתנה של מגירה לדיסק" ו"...לרשת" (console.js, SETTING_ROWS) = 14.15.
     #3726 (18/11): שורת המגירה העומדת מציגה רק את הזמן שעבר, בלי "ייכשל אחרי" ובלי "עד" (console.js stallText) = 14.15.
     #3666 (18/11): הצבע של הדיסק מגיע מהמוח (`rule`), והקונסולה אינה מחשבת אותו (console.js: אין diskRule/diskFacts) = 14.19.
+    #86 (20/11): המתג "הכשרת המחשב לאימג' בשחזור (עדכון UEFI db)" בהגדרות (console.js, SETTING_ROWS) = 14.30 (14.21 על הבסיס lab/vm-1114f; 14.29 הוא main).
     #3887/#3967/#3968 (21/11): דף "שירותים" במקום "פורטים" (console-services.js), פס המצב התחתון ירד,
     אייקון מוח ל"שאלות המוח" = 14.27 (14.21–14.26 שמורים לענפים המקבילים של גרסת המכללה).
     לשונית "עותקי בדיקת כתיבה" בדף הדיסקים (#3284, disks.js) = 13.72.
@@ -336,24 +337,24 @@ def test_static_includes_are_at_9_9():
     פס ייצור: "מצטרף ומשלים" ו"חסרות N חתיכות" בשורת מגירה שחזרה (#3064 R5, console-prodline.js) = 13.91 (ענף המעבדה lab/vm-1114f עומד על 13.90).
     #3173/#3978 (21/11): קצב הזרם ממנוע החתיכות, כרטיס "מצב הרשת" ועמודת "הרשת" בהיסטוריה (אפשרות א), והאיבוד של גל חתיכות בהיסטוריה (console.js, console.css, memory_ui.js) = 14.22.
     #3978 (21/11, נדב "כן"): העמודה "קצב ואיבוד" יורדת מהיסטוריית הסבבים, ו"בלוקים שאבדו" נהיה "חתיכות שאבדו" (console.js, memory_ui.js) = 14.23.
-    integ/r49 (21/11): האיחוד של גרסת המכללה — room-tiles (14.23) ודף השירותים (14.27) יחד, גבוה משניהם = 14.28. #3871 (פורטי 77xx: console.js, nicsvc.js, branches.js) = 14.29.
+    integ/r49 (21/11): האיחוד של גרסת המכללה — room-tiles (14.23) ודף השירותים (14.27) יחד, גבוה משניהם = 14.28. #3871 (פורטי 77xx: console.js, nicsvc.js, branches.js) = 14.30.
     שוויון על כל ה-includes — bump חלקי הוא הבאג."""
 
     page = _index()
     versions = set(re.findall(r'\?v=(\d+\.\d+)"', page))
-    assert versions == {"14.29"}, versions
+    assert versions == {"14.30"}, versions
     # ביקורת 10/10: monitor.html מושך את אותם console.css ו-design-tokens.css — הם נשארו על 3.29 לנצח,
     # ולכן דפדפן שזכר אותם הציג את המוניטור בעיצוב ישן. monitor.js לבדו שומר על גרסה משלו (test_monitor).
     mon = (STATIC / "monitor.html").read_text(encoding="utf-8")
     shared = set(re.findall(r'(?:design-tokens|console)\.css\?v=(\d+\.\d+)"', mon))
-    assert shared == {"14.29"}, shared
+    assert shared == {"14.30"}, shared
     assert 'monitor.js?v=3.42' in mon
 
 
 def test_iso_tab_script_is_included_after_console_js():
     """#404: iso.js נשען על UI/api/sheet מ-console.js, ולכן נטען אחריו, באותה גרסה."""
     page = _index()
-    assert '<script src="iso.js?v=14.29"></script>' in page
+    assert '<script src="iso.js?v=14.30"></script>' in page
     assert page.index('src="console.js?v=') < page.index('src="iso.js?v=')
 
 

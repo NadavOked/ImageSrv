@@ -40,7 +40,12 @@ DEFAULTS = {"min_free_gb": 20, "readback_mode": "sample", "temp_warn_c": 60,
             "cloner_beep": True, "poweroff_s": 20}   # #2131
 FSI, PDI = "\u2068", "\u2069"   # view.iso: a Latin run in a Hebrew line, "20 GB" and never "GB 20"
 ITEMS = ["מקום פנוי מינימלי אחרי שחזור", "אימות מלא אחרי הכתיבה", "סף חום", "מיפוי חיבורים",
-         "צליל בסיום סבב שיכפול", "כיבוי אוטומטי אחרי הצלחה", "החזר לברירת המחדל"]   # #1962: the mapping, #2131: the beep, before the reset
+         "צליל בסיום סבב שיכפול", "כיבוי אוטומטי אחרי הצלחה", "החזר לברירת המחדל",
+         "התקן שרת ImageSrv על המחשב הזה"]   # #1962: the mapping, #2131: the beep, before the reset; #2062: the server installer, after it
+RESET_ITEM = ITEMS.index("החזר לברירת המחדל")
+#: the dialog an item opens when it is not its own title. #2062: this kiosk has no stick, so the install is refused
+DIALOGS = {"החזר לברירת המחדל": "להחזיר את ברירות המחדל?",
+           "התקן שרת ImageSrv על המחשב הזה": "אי אפשר להתקין שרת מהדיסק-און-קי הזה"}
 
 pytestmark = requires_native(("bash", BASH))
 native_gui = requires_native(
@@ -288,7 +293,7 @@ def test_a_click_on_an_item_opens_it_as_its_keys_do(drivers, tmp_path, index):
     sent = tokens(gui(drivers["plain"], gui_dir, "click:%d,%d" % centres[index]))
     assert sent, f"a click on {ITEMS[index]!r} sent nothing"
     frame, _ = frame_now(tmp_path, sent)
-    want = "להחזיר את ברירות המחדל?" if index == len(ITEMS) - 1 else ITEMS[index]
+    want = DIALOGS.get(ITEMS[index], ITEMS[index])
     assert dialog_title(frame) == want, (sent, frame)
     keys = (["KEY DOWN"] * index) + ["KEY ENTER"]                   # what a person would have pressed
     assert sent == keys
@@ -320,7 +325,7 @@ def test_the_reset_by_mouse_alone(drivers, tmp_path):
     """Open the item, press the red button -- no key at all."""
     kiosk(tmp_path, CUSTOM)
     _frame, gui_dir = frame_now(tmp_path, [])
-    sent = tokens(gui(drivers["hits"], gui_dir, "click:%d,%d" % items_drawn(drivers["plain"], gui_dir)[len(ITEMS) - 1]))
+    sent = tokens(gui(drivers["hits"], gui_dir, "click:%d,%d" % items_drawn(drivers["plain"], gui_dir)[RESET_ITEM]))
     frame, gui_dir = frame_now(tmp_path, sent)
     assert dialog_title(frame) == "להחזיר את ברירות המחדל?", frame
     press = tokens(gui(drivers["hits"], gui_dir, "click:%d,%d" % hit(drivers["hits"], gui_dir, "btn:החזר לברירת המחדל")))

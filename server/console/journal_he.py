@@ -212,6 +212,9 @@ EVENTS_HE = {
     "disk_failure": "דיסק נכשל בכתיבה — נרשם לזיכרון הכשלים",
     "disk_failure_cleared": "רשומת כשל דיסק נוקתה",
     "disk_write_slow": "דיסק נפסל כאיטי בבדיקת הכתיבה — לא נכתב",   # #2956
+    "db_update_applied": "המחשב הוכשר לאימג': עדכון ה-UEFI db החתום הוחל ונקרא בחזרה",   # #86
+    "db_update_refused": "עדכון ה-UEFI db לא הוחל — לא נכתב דבר",   # #86
+    "db_update_failed": "עדכון ה-UEFI db נכתב ולא נקרא בחזרה כמצופה",   # #86
     "boot_loop_local": "מחשב אתחל שוב ושוב — נשלח לדיסק המקומי",
     "boot_loop_unverified": "ספירת האתחולים נכשלה — המחשב נשלח לדיסק המקומי",
     "agent_loop": "מחשב הגיע לסוכן בלי משימה ובלי סבב",
@@ -541,6 +544,7 @@ _SEVERITY_ERR = {
     "agent_login_failed", "agent_role_refused", "class_deploy_refused",
     "session_image_bound", "pull_refused", "pull_failed", "pull_sweep_failed", "task_sweep_failed", "cloner_round_refused", "client_failed", "wol_failed",
     "room_wave_lost", "room_failed", "room_wake_failed", "room_drawer_no_disk", "send_failed", "direct_failed", "disk_failure", "disk_write_slow",
+    "db_update_failed",   # #86
     "session_orphaned", "identity_refused", "storage_transfer_failed", "storage_disk_prepare_failed", "storage_disk_add_failed", "storage_location_disconnect_failed", "logo_refused",
     "capture_failed", "drivers_failed", "boot_storage_failed", "dhcp_apply_failed", "nic_services_apply_failed",
     "known_macs_apply_failed", "known_macs_firewall_failed", "firewall_rewrite_failed", "deploy_unregistered", "dnsmasq_dropin_failed", "vmupdate_failed", "vmupdate_firewall_lost", "retention_failed",
@@ -563,6 +567,7 @@ _SEVERITY_ERR = {
     "mfa_disable_failed",       # ביטול MFA בקוד שגוי -- כמו login_failed
 }
 _SEVERITY_WARN = {
+    "db_update_refused",   # #86: nothing was written; the machine was not qualified
     "nic_link_low",   # #3277: the distribution card's link is low -- orange, information only
     "chunk_peer_failed",   # B29: ההשלמה עברה לשרת, הסבב ממשיך
     "prodline_full",   # #3181: a disk the round did not need was not written
@@ -606,6 +611,7 @@ _SEVERITY_WARN = {
     "timezone_apply_failed",        # אזור הזמן לא יושר בעלייה -- הקודם של המערכת נשאר
 }
 _SEVERITY_OK = {
+    "db_update_applied",   # #86: written and read back
     "nic_link_back",   # #3277: the card is back at a full link
     "login", "capture_done", "client_done", "pull_done", "room_done",
     "send_done", "direct_done", "storage_transfer_done", "net_confirmed", "nic_services_confirmed",
@@ -686,6 +692,7 @@ SETTINGS_HE = {
     "auto_reboot_weekday": "יום",
     "cloner_beep": "צלילי המשכפל ומחשב הבנייה",   # #1967, as in console.js
     "hdd_support": "תמיכה ב-HDD",   # #3268, as in console.js
+    "secure_boot_db_update": "הכשרת המחשב לאימג' בשחזור (עדכון UEFI db)",   # #86, as in console.js
     "backup_target": "יעד גיבוי המסד",   # #1956: הסוג, ואחריו היעד (בלי סיסמה)
     "backup_policy": "מדיניות גיבוי המסד",   # #1956: השעה והמקום השמור
     "backup:enabled": "גיבוי אוטומטי",   # #2865: המתג בהגדרות ← גיבוי המסד

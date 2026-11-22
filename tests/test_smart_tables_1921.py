@@ -58,7 +58,7 @@ def judge(body: str, tmp_path: Path, crc: int = 500) -> list[list[str]]:
     return [line.split("|") for line in out.stdout.splitlines() if line]
 
 
-def probe(tmp_path: Path, body: str, dev: str = "sda", rc: int = 0, crc: int | None = None,
+def probe(tmp_path: Path, body: str, dev: str = "sda", rc: int = 0,
           extra: str = "") -> tuple[str, list[str], Path]:
     """smart_probe end to end on a fake smartctl (ro=0): (verdict, cached record, run dir)."""
     run = tmp_path / "run"; run.mkdir(exist_ok=True)
@@ -67,8 +67,7 @@ def probe(tmp_path: Path, body: str, dev: str = "sda", rc: int = 0, crc: int | N
     blk = tmp_path / "sysro" / "sys" / "block" / dev; blk.mkdir(parents=True, exist_ok=True)
     (blk / "ro").write_text("0\n", newline="\n")
     sc = make_smartctl(tmp_path, body, rc)
-    fake = f'json_get() {{ case "$2" in .crc_warn_threshold) echo {crc} ;; *) echo null ;; esac; }}; ' if crc is not None else ""
-    out = sh(env(run, dev_dir, sysroot=tmp_path / "sysro", smartctl=sc) + PRELUDE + fake + extra
+    out = sh(env(run, dev_dir, sysroot=tmp_path / "sysro", smartctl=sc) + PRELUDE + extra
              + f'smart_probe {dev}')
     assert out.returncode == 0, out.stderr
     return out.stdout.strip(), (run / "smart" / f"{dev}.v").read_text().split(), run
@@ -122,18 +121,17 @@ def test_the_cloner2_disks_are_green_and_their_crc_history_is_no_note(tmp_path, 
     found = judge(fixture(name), tmp_path)
     assert [f for f in found if f[0] in ("red", "orange", "unknown")] == [], found   # every name known
     assert [f for f in found if f[0] == "hw"] == [], found
-    verdict, rec, run = probe(tmp_path, fixture(name), crc=1)
+    verdict, rec, run = probe(tmp_path, fixture(name))
     assert (verdict, rec[:2]) == ("ok", ["ok", "ok"])
     assert "crc" not in (run / "smart" / "sda.hw").read_text().split()
 
 
 def test_the_server_shows_crc_as_information_only(tmp_path):
     """Coordinator 20/10: the server works the same way with both tables. #2846: the CRC row is the
-    hardware table's, as information -- no note, whatever crc_warn_threshold holds."""
+    hardware table's, as information -- no note."""
     from server import db
     from server.disks import smart_history
     conn = db.connect(tmp_path / "t.db")
-    db.set_setting(conn, "crc_warn_threshold", "500")
     attrs = {"ata": [[5, 100, 100, 10, 0, "Reallocated_Sector_Ct"], [199, 99, 99, 0, 1752, "CRC_Error_Count"],
                      [198, 0, 0, 0, 48211, "Host_Reads_GiB"]], "nvme": None}
     view = smart_history.describe(conn, {"serial": "S9", "dev": "sda", "smart_attrs": attrs})
@@ -287,7 +285,7 @@ def test_logs_unc_and_a_failed_self_test_are_orange(tmp_path):
     icrc = base + "\n  Error: ICRC, ABRT 1 sectors at LBA = 0x00000000 = 0\n"
     # Nadav 21/10: an ICRC in the error log is a note on the drawer (the hardware table), never a colour
     assert judge(icrc, tmp_path) == [["hw", "icrc_logged", "errlog", "-", "ICRC", "1"]]
-    verdict, rec, run = probe(tmp_path, icrc, crc=500)
+    verdict, rec, run = probe(tmp_path, icrc)
     assert (verdict, rec[:2]) == ("ok", ["ok", "ok"]), "the disk stays green"
     assert (run / "smart" / "sda.hw").read_text().split() == ["icrc_logged"]
     st = base + ("\nSMART Extended Self-test Log Version: 1 (1 sectors)\nNum  Test_Description    Status                  Remaining  LifeTime(hours)  LBA_of_first_error\n"

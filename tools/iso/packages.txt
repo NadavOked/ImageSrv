@@ -83,6 +83,7 @@ pci.ids
 pciutils
 efibootmgr
 dmsetup             # #1466: שיכפול מקומי/קליטה — מבט copy-on-write בזיכרון על המקור
+lvm2                # #3627: LVM2 in the initramfs (lvm vgchange/vgscan for restoring LVM-based Linux disks)
 tzdata              # #2957: /usr/share/zoneinfo in the live installer (the time step's zones); the server has it anyway
 
 # --- [gui] tools/build_initramfs.sh · GUI_PACKAGES (--with-gui) -----------

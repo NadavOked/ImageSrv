@@ -6,8 +6,8 @@ reads neither, so an older agent that still fills them colours nothing. Before #
 
 The links:
 
-* **the kiosk** (``clonergui.sh``): ``cdisk=`` field 9 = the CRC count when it is
-  over the hello's ``crc_warn_threshold`` (empty otherwise, or with an older
+* **the kiosk** (``clonergui.sh``): ``cdisk=`` field 9: the standby record carries no absolute CRC
+  (empty otherwise, or with an older
   server); on ``fail`` field 6 = the SMART reason of the F1 stop.
 * **the agent** (``guistate.sh``): ``room_drawer=`` field 13 = the count when the
   server says ``crc_suspect``.
@@ -55,9 +55,9 @@ def _standby_record(tmp_path: Path, smart: str, hello: dict | None) -> list[str]
 
 
 @pytest.mark.parametrize("smart, hello", [
-    ("ok ok 0 0 0 42355", {"crc_warn_threshold": 500}),     # 11/11, the work disks: history
-    ("ok ok 0 0 0 59165", {"crc_warn_threshold": 1}),
-    ("ok ok 0 0 0 667", {"crc_warn_threshold": 500}),       # #1366's own case
+    ("ok ok 0 0 0 42355", None),     # 11/11, the work disks: history
+    ("ok ok 0 0 0 59165", None),
+    ("ok ok 0 0 0 667", None),       # #1366's own case
     ("ok ok 0 0 0 1752", None),
 ])
 def test_the_standby_record_never_carries_an_absolute_crc(tmp_path, smart, hello):
@@ -66,7 +66,7 @@ def test_the_standby_record_never_carries_an_absolute_crc(tmp_path, smart, hello
 
 @pytest.mark.parametrize("reason", ["health_failed", "pending_sectors", "uncorrectable"])
 def test_a_fail_carries_its_f1_reason_in_field_six(tmp_path, reason):
-    f = _standby_record(tmp_path, f"fail {reason} 0 4 2 0", {"crc_warn_threshold": 500})
+    f = _standby_record(tmp_path, f"fail {reason} 0 4 2 0", None)
     assert f[4:6] == ["fail", reason], f
 
 

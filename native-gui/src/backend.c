@@ -87,7 +87,30 @@ static void vt_restore(Backend *b) {
 
 /* ---- DRM / KMS ----------------------------------------------------------------- */
 
-static int drm_try(Backend *b, const char *path, char *err, size_t n) {
+/* #2876: the mode for a display that did not say its own size. A monitor
+ * behind a KVM switch sends no EDID; the kernel then lists only its fallback
+ * modes (drm_add_modes_noedid: up to 1024x768, none preferred -- DP: 640x480
+ * preferred) and fbdev comes up at 800x600 or 640x480, under what the
+ * screens are built for. A display with a preferred mode of 1024x768 or more
+ * has told us its size: -1, nothing changes. Otherwise 1024x768 when the
+ * connector lists it (60 Hz when there, the safest for a KVM), else -1. */
+int backend_pick_mode(const drmModeModeInfo *m, int n) {
+    for (int i = 0; i < n; i++)
+        if (m[i].type & DRM_MODE_TYPE_PREFERRED) {
+            if (m[i].hdisplay >= 1024 && m[i].vdisplay >= 768) return -1;
+            break;
+        }
+    int best = -1;
+    for (int i = 0; i < n; i++) {
+        if (m[i].hdisplay != 1024 || m[i].vdisplay != 768) continue;
+        if (best < 0 || abs((int)m[i].vrefresh - 60) < abs((int)m[best].vrefresh - 60)) best = i;
+    }
+    return best;
+}
+
+/* upgrade (#2876): only when backend_pick_mode chooses a mode; 1 + why when
+ * it does not (the caller keeps fbdev). 0 = modes[0], as always. */
+static int drm_try(Backend *b, const char *path, int upgrade, char *err, size_t n) {
     int fd = open(path, O_RDWR | O_CLOEXEC);
     if (fd < 0) { snprintf(err, n, "%s: %s", path, strerror(errno)); return -1; }
     drmModeRes *res = drmModeGetResources(fd);
@@ -116,7 +139,22 @@ static int drm_try(Backend *b, const char *path, char *err, size_t n) {
     }
     if (!crtc) { snprintf(err, n, "%s: no CRTC for connector %u", path, conn->connector_id); drmModeFreeConnector(conn); drmModeFreeResources(res); close(fd); return -1; }
 
-    b->mode = conn->modes[0];                       /* preferred mode is first */
+    int pick = 0;                                   /* preferred mode is first */
+    if (upgrade) {
+        pick = backend_pick_mode(conn->modes, conn->count_modes);
+        if (pick < 0) {
+            int pi = -1;
+            for (int i = 0; i < conn->count_modes && pi < 0; i++)
+                if (conn->modes[i].type & DRM_MODE_TYPE_PREFERRED) pi = i;
+            if (pi >= 0) snprintf(err, n, "connector %u: EDID mode %ux%u, %s", conn->connector_id,
+                                  conn->modes[pi].hdisplay, conn->modes[pi].vdisplay,
+                                  conn->modes[pi].hdisplay >= 1024 && conn->modes[pi].vdisplay >= 768
+                                  ? "the display's own size" : "no 1024x768 to raise to");
+            else snprintf(err, n, "connector %u: no EDID, and no 1024x768 among its %d modes", conn->connector_id, conn->count_modes);
+            drmModeFreeConnector(conn); drmModeFreeResources(res); close(fd); return 1;
+        }
+    }
+    b->mode = conn->modes[pick];
     b->w = b->mode.hdisplay; b->h = b->mode.vdisplay;
     b->conn_id = conn->connector_id; b->crtc_id = crtc;
     drmModeFreeConnector(conn);
@@ -148,7 +186,7 @@ static int drm_open(Backend *b, char *err, size_t n) {
     static const char *paths[] = { "/dev/dri/card0", "/dev/dri/card1", "/dev/dri/card2" };
     char why[3][160];
     for (int i = 0; i < 3; i++)
-        if (drm_try(b, paths[i], why[i], sizeof why[i]) == 0) return 0;
+        if (drm_try(b, paths[i], 0, why[i], sizeof why[i]) == 0) return 0;
     snprintf(err, n, "no usable KMS device: %s; %s; %s", why[0], why[1], why[2]);
     return -1;
 }
@@ -178,6 +216,36 @@ static int fb_open(Backend *b, char *err, size_t n) {
     b->fbvar = vi;                              /* kept for the FBIOPAN_DISPLAY flush */
     b->fd = fd; b->kind = KIND_FBDEV;
     return 0;
+}
+
+/* ---- #2876: fbdev under 1024x768 with no EDID -> KMS at 1024x768 -----------------
+ * fbdev is the proven path (#641) and stays the one on every display that said
+ * its size: this runs only when fb0 came up under 1024x768, and changes the
+ * screen only when the connector has no EDID mode of 1024x768 or more and
+ * lists 1024x768. Any failure -- no KMS, another DRM master, a refused
+ * modeset -- keeps fb0 as it was, and the log says which. */
+static void fb_raise_noedid(Backend *b) {
+    if (b->w >= 1024 && b->h >= 768) return;
+    static const char *paths[] = { "/dev/dri/card0", "/dev/dri/card1", "/dev/dri/card2" };
+    char why[3][160];
+    for (int i = 0; i < 3; i++) {
+        Backend k = { .fd = -1, .tty_fd = -1, .mir_fd = -1 };
+        int rc = drm_try(&k, paths[i], 1, why[i], sizeof why[i]);
+        if (rc == 0) {
+            fprintf(stderr, "native-gui: display: fb0 %dx%d, %s has no EDID mode of 1024x768 or more -- KMS %ux%u@%u instead (#2876)\n",
+                    b->w, b->h, paths[i], k.mode.hdisplay, k.mode.vdisplay, k.mode.vrefresh);
+            munmap(b->map, b->map_len); close(b->fd);
+            *b = k;
+            return;
+        }
+        if (k.saved) drmModeFreeCrtc(k.saved);
+        if (rc > 0) {                               /* the display said its size, or no 1024x768 */
+            fprintf(stderr, "native-gui: display: fb0 %dx%d kept -- %s (#2876)\n", b->w, b->h, why[i]);
+            return;
+        }
+    }
+    fprintf(stderr, "native-gui: display: fb0 %dx%d kept -- no KMS to raise it: %s; %s; %s (#2876)\n",
+            b->w, b->h, why[0], why[1], why[2]);
 }
 
 /* ---- none (#2768) ------------------------------------------------------------------
@@ -305,7 +373,7 @@ Backend *backend_open(const char *kind, const char *mem_path, char *err, size_t 
     int ok = -1;
     char e1[512] = "", e2[512] = "", e3[512] = "";
     if (strcmp(kind, "drm") == 0)        ok = drm_open(b, err, n);
-    else if (strcmp(kind, "fbdev") == 0) ok = fb_open(b, err, n);
+    else if (strcmp(kind, "fbdev") == 0) { ok = fb_open(b, err, n); if (!ok) fb_raise_noedid(b); }
     else if (strcmp(kind, "mem") == 0)   ok = mem_open(b, mem_path, err, n);
     else if (strcmp(kind, "none") == 0)  ok = none_open(b);
     else if (strcmp(kind, "auto") == 0) {

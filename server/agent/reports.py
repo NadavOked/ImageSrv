@@ -19,6 +19,7 @@ from boot.grub_menu import normalize_mac as lenient_mac
 from server.library import capture_detail
 from server.agent import beeps as beep_report, cloner_cpu, restore_stages
 from server.rounds import drawer_cancel
+from server.agent import db_update_log
 from server.disks import disk_failures, slot_names, slow_write, smart_history
 from server.system import steadyclock
 from server.db import _settle, _write_lock, journal, now_iso, update_one, writing
@@ -418,6 +419,8 @@ def ingest(conn: sqlite3.Connection, payload: dict,
             drawer_cancel.confirmed(conn, session_id, mac, t["dev"], f"{mac} {named}")
     # #2956: דיסק שנפסל כאיטי בבדיקת הכתיבה — ביומן, פעם אחת, במעבר.
     slow_write.journal_new(conn, session_id, mac, previous_targets, targets)
+    # #86: עדכון ה-UEFI db בשחזור -- הוחל, סורב (לא נכתב) או נכשל, עם db לפני ואחרי. פעם אחת למצב.
+    db_update_log.journal_new(conn, session_id, mac, previous_targets, targets)
     # #2916 §3: בקשת ביטול שהסוכן כבר לא יכול לקיים (המגירה סיימה לכתוב) נסגרת בשמה,
     # לפני ש-`pending` שולח אותה שוב.
     drawer_cancel.close_moot(conn, session_id, mac, targets)

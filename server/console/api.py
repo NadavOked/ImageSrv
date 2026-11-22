@@ -26,7 +26,7 @@ from server.rounds import drive_rates, nic_live, nic_speed, room, room_names
 from server.agent import boot_preview, identity, inventory, probe, readbackhash, registry
 from server.system import backup_target, timezone
 from server.net import dhcp, ports
-from server.disks import (crcwarn, disk_events, disk_failures, disk_sets, drawer_slots, shrink_records, slot_names,
+from server.disks import (disk_events, disk_failures, disk_sets, drawer_slots, shrink_records, slot_names,
                           smart_history, disk_rule)
 from server.storage import disk_reserve, locations as storage_locations
 from server.interserver import storage_nodes, transfer_cap
@@ -90,6 +90,7 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   # נדב 18/10: חיוב MFA למנהלים — כבוי כברירת מחדל.
                   console_mfa.SETTING,
                   "console_idle_seconds", "class_deploy_enabled", "cloner_beep", "hdd_support",
+                  "secure_boot_db_update",   # #86: עדכון ה-UEFI db בשחזור -- דלוק, ואפשר לכבות
                   # #748: כפתור "עדכן" — כבוי כברירת מחדל (נדב, 16/09).
                   "update_enabled",
                   # #855: שומר הזהות (MAC + חכירת DHCP). חסר = דלוק; "false"
@@ -99,8 +100,6 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   drive_rates.SETTING,
                   # #2028 (נדב 23/10): למידה אוטומטית — כבוי כברירת מחדל.
                   learn_tuning.SETTING,
-                  # #1366: סף CRC מוחלט — מעליו המגירה כתומה (0 = כבוי).
-                  crcwarn.SETTING,
                   # #1354: מינימום GB פנויים במחיצת המערכת אחרי שחזור (0–500).
                   minfree.SETTING,
                   # סף מהירות הכתיבה (`writecheck_min_mbps`) יצא מההגדרות (נדב 14/11 בערב): הלמידה (LR5) היא שכותבת אותו.
@@ -137,6 +136,7 @@ BOOLEAN_SETTINGS = {
     "class_deploy_enabled": "הפצה לכיתה ממסך התחנה",
     "cloner_beep": "צלילי המשכפל ומחשב הבנייה",
     "hdd_support": "תמיכה ב-HDD",   # #3268 (נדב 14/11): כבוי = HDD רק כמקור, וכיעד "איטי" כבר בבדיקה בהכנסה
+    "secure_boot_db_update": "הכשרת המחשב לאימג' בשחזור (עדכון UEFI db)",   # #86
     "update_enabled": "עדכון גרסה מהקונסולה",
     identity.SETTING: "אימות מחשבים לפי כתובת ה-DHCP",
     drive_rates.SETTING: "קצב שידור אוטומטי לפי הכוננים בחדר",
@@ -181,11 +181,6 @@ def _validate_write_settings(body: dict) -> dict[str, str]:
             if idle is None:
                 raise HTTPException(400, IDLE_REFUSAL_HE)
             normalized[key] = str(idle)
-        elif key == crcwarn.SETTING:
-            limit = crcwarn.parse(value)
-            if limit is None:
-                raise HTTPException(400, f"סף CRC: מספר שלם 0–{crcwarn.MAXIMUM}")
-            normalized[key] = str(limit)
         elif key == minfree.SETTING:
             gb = minfree.parse_gb(value)
             if gb is None:
@@ -1594,8 +1589,6 @@ def create_console_router(
         values = {key: get_setting(ctx.conn, key) for key in sorted(WRITE_SETTINGS)}
         # #1300: אותו שם כמו /me — לקריאה בלבד; משנים אותו ב-POST /hostname (נדב 17/10).
         values["server_name"] = ports.server_name(ctx.conn)
-        # #1366: הערך שבתוקף — ברירת המחדל כשלא נקבע, לא "לא נקבע".
-        values[crcwarn.SETTING] = str(crcwarn.threshold(ctx.conn))
         # #1354: הערך שבתוקף — ברירת המחדל כשלא נקבע, לא "לא נקבע".
         values[minfree.SETTING] = str(minfree.min_free_gb(ctx.conn))
         values[interrupt.SETTING] = str(interrupt.ask_minutes(ctx.conn))   # #2528: הערך שבתוקף

@@ -542,6 +542,9 @@ typedef struct State {
      * (clonergui.sh, from the hello's session.forecast). fc_clock: the server proved its clock synced, so an HH:MM may be
      * drawn at all; fc_at: the end from history, 0 = none; fc_nohist: the server said there is no history. All 0 = not said. */
     int fc_clock, fc_nohist; long long fc_at;
+    /* #2980: wave_elapsed=<s> -- the time since the wave started, from the server's start of it (clonergui.sh,
+     * directgui.sh); the cloner's "זמן שעבר", as the room screen's. -1 = not said. */
+    int wave_elapsed;
     /* #3181 (Nadav 14/11): a production line -- a round that asks for more disks than the drawers (prodlinegui.sh,
      * from the server's production_line). pl_on = a pline= record in shape; nothing else draws without it, and a
      * regular round has none: its screen as it was. The counter ("נכתבו X מתוך Y"), whether the round has names,

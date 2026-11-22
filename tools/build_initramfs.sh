@@ -249,12 +249,16 @@ fi
 # the manifest's UUID (#48). util-linux's binary is packed (copy_bin stops the
 # build without it) and make_swap calls it as /usr/bin/mkswap: busybox sh runs
 # its own applet before anything on PATH (testrunner, 10/11).
+# chattr (#86): efivarfs marks db immutable; the signed db update (dbupdate.sh)
+# clears the flag for its one write and sets it back. e2fsprogs' binary (already
+# in the apt list), so the build stops when it is missing rather than relying on
+# a busybox config option nobody checks.
 BINARIES=(curl jq zstd pv sgdisk blockdev sha256sum od hdparm ntfsresize openssl
           ntfs-3g ntfs-3g.probe ntfsfix umount blkid df mount ethtool smartctl
           e2fsck resize2fs dumpe2fs btrfs xfs_growfs
           partclone.ntfs partclone.fat partclone.ext4
           partclone.btrfs partclone.xfs partclone.dd
-          dmidecode lspci efibootmgr dmsetup nice mkswap)
+          dmidecode lspci efibootmgr dmsetup lvm nice mkswap chattr)
 
 if [ "$SKIP_APT" -eq 0 ]; then
     export DEBIAN_FRONTEND=noninteractive
@@ -262,7 +266,7 @@ if [ "$SKIP_APT" -eq 0 ]; then
         busybox-static zstd partclone gdisk curl jq pv \
         ntfs-3g libhivex-dev hdparm coreutils util-linux openssl \
         e2fsprogs btrfs-progs xfsprogs cpio gzip gcc libc6-dev ethtool \
-        smartmontools dmidecode pciutils pci.ids efibootmgr dmsetup tzdata
+        smartmontools dmidecode pciutils pci.ids efibootmgr dmsetup lvm2 tzdata
     # #1050: the toolbox delta -- only what the selection needs, or nothing.
     if [ "${#TOOL_PKGS[@]}" -gt 0 ]; then
         echo "tools: installing ${TOOL_PKGS[*]}"
@@ -331,6 +335,22 @@ copy_bin() {
 for b in "${BINARIES[@]}"; do
     copy_bin "$b"
 done
+
+# #3627: the busybox initramfs has devtmpfs but no udev daemon. The
+# linear target is linked into dm-mod, already required for local clone.
+mkdir -p "$ROOT/etc/lvm"
+cat > "$ROOT/etc/lvm/lvm.conf" <<'EOF'
+devices {
+    obtain_device_list_from_udev = 0
+    external_device_info_source = "none"
+    use_devicesfile = 0
+}
+activation {
+    udev_sync = 0
+    udev_rules = 0
+    monitoring = 0
+}
+EOF
 
 # lspci needs Debian's PCI ID table for human-readable vendor/device names
 # (about 1.5 MB installed in Debian 13); a numeric-only diagnostic is incomplete.
@@ -1428,6 +1448,18 @@ else
 fi
 
 SIZE=$(du -h "$OUTPUT" | cut -f1)
+# #3627: test the loader against the final packed tree, including overlays.
+# No host libraries, mounted filesystems or access to block devices required.
+# It sits after the archive, not inside the reproducible-pack block: that block
+# is also run by tests/test_build_initramfs_gates.py on a fake tree as a
+# non-root user, where chroot cannot work. A failure removes the archive and its
+# sidecars, so no initrd with an unloadable lvm is left at $OUTPUT.
+chroot "$ROOT" /lib64/ld-linux-x86-64.so.2 --list /usr/bin/lvm || {
+    rc=$?
+    echo "packed LVM runtime dependencies could not be loaded (rc=$rc)" >&2
+    rm -f "$OUTPUT" "$OUTPUT.ca.pem" "$OUTPUT.agent-name"
+    exit "$rc"
+}
 echo
 echo "initramfs ready: $OUTPUT ($SIZE)"
 echo

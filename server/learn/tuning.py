@@ -26,8 +26,7 @@
     `learned_start_mbps`  = הקצב שבו **כל** גלי הסבב עמדו, מעוגל מטה ל-`REFINE_STEP`,
                             בלי אבדן מעל `LOSS_DOWN_RATIO`. הגג של `drive_rates.choose` נשאר.
 
-שתיהן עד `MAX_STEP` מהערך הנוכחי בסבב אחד. `crc_warn_threshold` מוצג בסיכום ואינו משתנה:
-סף CRC הוא הכרעה של מנהל.
+שתיהן עד `MAX_STEP` מהערך הנוכחי בסבב אחד.
 
 **לא סומכים על מספר שמכונה מדווחת** (סקירת אבטחה 06/11: מכונה ברשת ההפצה יכולה לשקר, והרף
 חל על כולן). `write_preflight.mbps` הוא דיווח של הסוכן, ולכן:
@@ -57,7 +56,7 @@ import statistics
 from server.db import _settle, _write_lock, get_setting, journal, now_iso, set_settings, writing
 from server.brain import floorrule, learnset
 from server.core import unreadable
-from server.disks import crcwarn, writefloor
+from server.disks import writefloor
 from server.learn import models as learn_models
 from server.rounds import drive_rates
 
@@ -73,7 +72,6 @@ ANY_DISK_MAX_MBPS = 8000
 
 CHANGE_LABELS = {writefloor.SETTING: "סף מהירות כתיבה לדיסק",
                  drive_rates.START_SETTING: "קצב פתיחה של המולטיקאסט"}
-CRC_LABEL = "אזהרת CRC למגירה"
 
 
 class Refused(Exception):
@@ -309,16 +307,6 @@ def _start_change(conn: sqlite3.Connection, sessions: list[str]) -> tuple[dict, 
     return _row(base, call, _mbit(current), lambda v: str(v // 10 ** 6), _mbit), call
 
 
-def _crc_row(conn: sqlite3.Connection, sessions: list[str]) -> dict:
-    limit = crcwarn.threshold(conn)
-    rises = conn.execute(f"SELECT COUNT(*) AS n FROM port_history WHERE crc_delta > 0"
-                         f" AND session_id IN ({_in(sessions)})", sessions).fetchone()["n"]
-    return {"key": crcwarn.SETTING, "label_he": CRC_LABEL,
-            "value_he": f"{limit} שגיאות" if limit else "כבויה",
-            "why_he": (f"עליית CRC ב-{rises} מדידות: מוצג בחלון מיפוי חיבורים, והסף נשאר למנהל"
-                       if rises else "אין היסטוריית CRC שמצדיקה סף")}
-
-
 def _levels(conn: sqlite3.Connection, sessions: list[str]) -> dict:
     """מה שנמדד בסבב, בשלוש הרמות. `null` בשדה = לא נמדד, לא אפס."""
     disks = {"count": 0, "min_mbps": None, "max_mbps": None}
@@ -363,8 +351,7 @@ def _finish(conn: sqlite3.Connection, run: sqlite3.Row, waves: list[sqlite3.Row]
     changes = [r for r in rows if "value" in r]
     rejected = _measured(conn, good)[1] if learned else []
     summary = {"levels": _levels(conn, sessions),
-               "unchanged": ([{**r, "label_he": CHANGE_LABELS[r["key"]]} for r in rows if "value" not in r]
-                             + [_crc_row(conn, good)]) if learned else []}
+               "unchanged": [{**r, "label_he": CHANGE_LABELS[r["key"]]} for r in rows if "value" not in r] if learned else []}
     at = now_iso()
     written: dict[str, int] = {}
     _settle(conn)

@@ -27,7 +27,7 @@ from server.brain import ask as brain_ask   # #3654 (K14)
 from server.brain import idleceil as brain_idle   # #3672 (A15): תקרות בדיקת הכתיבה של מסך ההמתנה -- המוח מחליט
 from server.library import minfree
 from server.system import timezone
-from server.disks import (disk_sets, crcwarn, disk_failures, drawer_slots, shrink_records,
+from server.disks import (disk_sets, disk_failures, drawer_slots, shrink_records,
                           slot_names, smart_history)
 from server.core.agent_version import server_version
 from server.agent.boot_cancel import cancel_gui_tasks_on_boot
@@ -431,6 +431,9 @@ def build_answer(
         "writecheck_min_mbps": writefloor.mbps(conn),
         # #3268 (נדב 14/11): מתג המדיניות "תמיכה ב-HDD" (כבוי כברירת מחדל): כבוי = דיסק מכני הוא מקור בלבד, וכיעד "איטי" כבר בהכנסה
         "hdd_support": get_setting(conn, "hdd_support") == "true",
+        # #86 (נדב 04/11, 12/11): מדיניות המפעיל -- האם הסוכן רשאי להחיל את עדכון ה-db החתום שמגיע עם
+        # האימג' כשהקושחה אינה מכירה את ה-CA שלו. רק `true` מפורש פותח; כל השאר = לא נכתב.
+        "secure_boot_db_update": get_setting(conn, "secure_boot_db_update") == "true",
         # #1859: מה שהשרת למד מאז הסבב הקודם של כל סידורי (183/188 שעלו, מאפיין קריטי
         # שעלה, חום בכתיבה) — [{"serial", "reason"}]. הסוכן הופך את המילה לשאלה כתומה.
         "smart_learned": smart_history.learned_for(conn, disks),
@@ -443,9 +446,6 @@ def build_answer(
         # #704: השמות שהמפעיל נתן לחיבורים של המכונה הזו ({"sata:1": "דיסק 1"}).
         # מסך מחשב השיכפול מצייר אותם במקום "דיסק N"; {} = אין שמות.
         "slot_names": slot_names.for_mac(conn, mac),
-        # #1366: סף ה-CRC המוחלט (הגדרה בקונסולה) — המסך הממתין של מחשב
-        # השיכפול צובע ממנו כתום לפני שיש סבב. 0 = כבוי.
-        "crc_warn_threshold": crcwarn.threshold(conn),
         # #1354: המינימום הפנוי במחיצת המערכת אחרי שחזור (הגדרה בקונסולה).
         # בכל תשובה ולא רק בסבב: השיכפול המקומי (בלי שרת) משתמש באחרון שהגיע.
         "min_free_gb": minfree.min_free_gb(conn),

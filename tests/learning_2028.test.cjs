@@ -96,13 +96,13 @@ test('a wave that was not evidence says why, and not-learned changes nothing on 
 });
 
 test('summary: old struck, new bold, a revert per change, an unchanged row, and revert-all', () => {
-  const v = ctx().learningView(state({run: run({state: 'done', learned: 2, unchanged: [{label_he: 'אזהרת CRC למגירה', value_he: 'כבויה', why_he: 'אין היסטוריית CRC שמצדיקה סף'}]}),
+  const v = ctx().learningView(state({run: run({state: 'done', learned: 2, unchanged: [{label_he: 'קצב פתיחה של המולטיקאסט', value_he: '600 Mb/s', why_he: 'אין מספיק ראיה'}]}),
     changes: [change(), change({id: 6, state: 'reverted', label_he: 'קצב פתיחה של המולטיקאסט'})]}));
   assert.equal(v.title, 'הלמידה הסתיימה: 2 שיכפולים');
   assert.match(v.note, /class="num old"><bdi dir="ltr">50 MB\/s/); assert.match(v.note, /class="num new"><bdi dir="ltr">75 MB\/s/);
   assert.match(v.note, /data-fn="learningRevert\(5\)">החזר/);
   assert.doesNotMatch(v.note, /learningRevert\(6\)/, 'what was reverted cannot be reverted again');
-  assert.match(v.note, /הוחזר/); assert.match(v.note, /לא שונה \(<bdi>כבויה<\/bdi>\)/);
+  assert.match(v.note, /הוחזר/); assert.match(v.note, /לא שונה \(<bdi>600 Mb\/s<\/bdi>\)/);
   assert.equal(v.extra.label, 'החזר הכול');
   assert.match(v.note, /וההגדרות נשארות כפי שהן/);
 });

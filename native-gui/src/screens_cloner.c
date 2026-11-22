@@ -87,7 +87,7 @@ static void entry_label(const State *s, const ClonerEntry *e, char *out, size_t 
     }
 }
 
-/* #2030: the card's name -- the connection (or the operator's slot name), never "דיסק N" again. */
+/* The card's name (card_name): the operator's slot name, else "דיסק N" (#2980; was the connection, #2030). */
 static void entry_card_name(const State *s, const ClonerEntry *e, char *out, size_t n) {
     int bay = entry_drawer(e);
     const char *conn = e->drawer && e->drawer->conn[0] ? e->drawer->conn : e->idle ? e->idle->conn : "";
@@ -159,7 +159,7 @@ static void entry_bay(const App *a, const ClonerEntry *e, LcBay *y) {
         snprintf(y->pct, sizeof y->pct, "%s", e->insert); y->share = -1;
         return;
     }
-    entry_card_name(&a->st, e, y->name, sizeof y->name);   /* #2030: the connection, not "דיסק N" twice */
+    entry_card_name(&a->st, e, y->name, sizeof y->name);   /* #2980: "דיסק N", the title's name for it (card_name) */
     /* #2030: the size -- from the cused record (any disk, round or idle), else the idle inventory's;
      * the model when the idle inventory has it. Never the device name. */
     const CUsed *cu = cused_for_dev(&a->st, d ? d->dev : idle ? idle->dev : "");
@@ -584,9 +584,14 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
     }
     y += lc_hero_eta(a, cr, x0, xr, y, label, title, s2, big, &fe, ended && nf && !held_end) + (compact ? 8 : 16);   /* #2081: the held end title is ink, the rows carry the red */
 
-    /* .mets: speed, what was received, the disks -- not on a held end (#2081: no summary cards) */
-    double mw = (cw - 24) / 3, mh = held_end || compact ? -12 : 80;
-    char v1[48], v2[64], v3[512] = RLM, c3[240];
+    /* .mets: speed, what was received, the disks, the time passed -- not on a held end (#2081: no summary cards) */
+    double mw = (cw - 36) / 4, mh = held_end || compact ? -12 : 80;   /* #2980: four tiles, as mockup-gui-unified-1112 */
+    char v1[48], v2[64], v3[512] = RLM, c3[240], v4[32];
+    /* #2980 (Nadav 12/11): "זמן שעבר" as the build machine's room screen says it (screens_room.c) -- mm:ss since the
+     * wave started, the server's start of it (wave_elapsed=, clonergui.sh / directgui.sh). Not said, or the write is
+     * over: "—", as the room's tile once the wave stops running -- never a number that keeps counting after the end. */
+    if (s->wave_elapsed >= 0 && !ended) snprintf(v4, sizeof v4, "%02d:%02d", s->wave_elapsed / 60, s->wave_elapsed % 60);
+    else snprintf(v4, sizeof v4, "—");
     if (rate > 0) snprintf(v1, sizeof v1, "%.0f MB/s", rate / 1e6); else snprintf(v1, sizeof v1, "%s", stalled ? "0 MB/s" : nw ? "עוד לא נמדדה" : "—");
     if (whole) snprintf(v2, sizeof v2, "%.1f / %.1f GB", most / 1e9, whole / 1e9);
     else snprintf(v2, sizeof v2, "%s", most ? "" : "—");
@@ -642,7 +647,8 @@ void screen_cloner(App *a, cairo_t *cr, double W, double H, double head_h) {
            stalled ? t->warn : t->muted);   /* #2055: the stream stands -- orange, the write is not stopped */
     lc_met(a, cr, (Rect){ xr - 2 * mw - 12, y, mw, mh }, src_only ? "נקראו מהמקור" : "התקבלו", v2, whole ? "בזרם הדחוס" : "", t->muted);
     }
-    lc_disks_met(a, cr, (Rect){ x0, y, mw, mh }, v3, c3);
+    lc_disks_met(a, cr, (Rect){ xr - 3 * mw - 24, y, mw, mh }, v3, c3);
+    lc_met(a, cr, (Rect){ x0, y, mw, mh }, "זמן שעבר", v4, "", t->muted);   /* #2980 */
     }
     y += mh + 12;
     { double nbh = sb_nic_banner(a, cr, x0, y, cw); if (nbh > 0) y += nbh + 12; }   /* #3776 (mockup 1119 clone-pci): between the cards and the table, above the "מהירות" it explains */

@@ -176,7 +176,7 @@ def test_the_success_card_says_the_name_was_not_written_before_the_count(tmp_pat
     done = [body(c) for c in cards(r["seen"]) if "השחזור הושלם" in c]
     assert done, r["seen"]
     subs = [m for c in done for m in re.findall(r"^sub=(.*)$", c, re.M)]
-    assert subs and all(s.startswith(f"{RLM}דיסק 1 · שם המחשב לא נכתב: עריכת הרג׳יסטרי נכשלה · ") for s in subs), subs
+    assert subs and all(s.startswith(f"{RLM}הדיסק של המחשב · שם המחשב לא נכתב: עריכת הרג׳יסטרי נכשלה · ") for s in subs), subs
     assert any("המחשב יכבה בעוד" in s for s in subs) and subs[-1].endswith("מכבה את המחשב…"), subs
     assert all(len(s.encode()) < 200 for s in subs), subs
     assert r["error"].strip() == "שם המחשב לא נכתב: עריכת הרג׳יסטרי נכשלה", r["error"]

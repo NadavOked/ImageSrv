@@ -68,16 +68,11 @@ void screen_pick(App *a, cairo_t *cr, double W, double H, double head_h) {
     }
     for (int k = 0; k < n; k++) {
         const Disk *d = &s->disks[idx[k]];
-        char size[32], small[256], label[128], dev_i[40];
+        char size[32], small[256], dev_i[40];
         fmt_bytes(size, sizeof size, (double)d->size_bytes);
         bidi_isolate(d->dev, dev_i, sizeof dev_i);   /* #3053: "/dev/sda" is one LTR run, not "dev/sda/" */
-        if (!d->slot_known) snprintf(small, sizeof small, "%s · %s", dev_i, size);
-        else if (eff_drawer(d->drawer, 0) > 0)
-            snprintf(small, sizeof small, "דיסק %d · %s · %s", eff_drawer(d->drawer, 0), dev_i, size);
-        else {
-            unmapped_label("", d->conn, 0, d->dev, label, sizeof label);
-            snprintf(small, sizeof small, "%s · %s · %s", label, dev_i, size);
-        }
+        /* #2980: the build machine's disk is "הדיסק של המחשב" -- not a drawer it does not have, not "SATA 3 (לא ממופה)" */
+        snprintf(small, sizeof small, "%s · %s · %s", OWN_DISK_HE, dev_i, size);
         dd[k] = text_make(cr, FONT_SANS, N_DISK_SIDE, 400, d->has_data ? "יש מערכת על הכונן" : "ריק", 0, DIR_RTL);
         text_w[k] = inner - 2 * N_DISK_PAD - N_DISK_ICON_COL - 2 * N_DISK_COL_GAP - dd[k].w;
         db[k] = rtl_block_make(cr, N_DISK_TITLE, 700, d->model[0] ? d->model : "כונן", text_w[k]);

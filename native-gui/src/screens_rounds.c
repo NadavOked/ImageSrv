@@ -147,7 +147,7 @@ void unmapped_label(const char *name, const char *conn, int port, const char *de
 
 void card_name(const char *name, int bay, const char *conn, int port, char *out, size_t n) {
     if (bay > 0 && name && name[0]) snprintf(out, n, "%s", name);
-    else if (bay > 0) conn_text(conn, port, "", out, n);
+    else if (bay > 0) snprintf(out, n, "דיסק %d", bay);   /* Nadav 12/11, decisions 3 and 8: not "SATA N-1" */
     else unmapped_label(name, conn, port, "", out, n);
 }
 
