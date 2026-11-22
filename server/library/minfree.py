@@ -11,7 +11,7 @@
 מ-X GB", וחדר השיכפולים מסרב ממנו לפני שנפתח גל.
 
 **מחיצת המערכת** = `system_partition` (#1875): המסומנת `"system": true`
-בקליטה, אחרת מחיצת ה-`windows` הגדולה ביותר, ואם אין — ה-`linux` הראשונה.
+בקליטה, אחרת מחיצת ה-`windows` הגדולה ביותר, ואם אין — מחיצת ה-`linux` היחידה (#1899).
 אותו כלל בסוכן (`system_part`, diskfit.sh) וב-hostname.sh. היא גדלה על היעד רק כשהיא
 המחיצה שהשחזור מותח (`expandable_candidate`) ורק מעבר לסף של 1GiB של
 `expand_last`. #1897 (הכרעת נדב 04/11): כל מחיצה אחרת שהקליטה כיווצה (D:, E:)
@@ -27,7 +27,7 @@ import sqlite3
 
 from server.db import get_setting
 from server.library.imagefit import expandable_candidate
-from server.library.images import _whole, required_bytes
+from server.library.imagegeom import _whole, required_bytes
 
 log = logging.getLogger("imagesrv.minfree")
 
@@ -86,7 +86,7 @@ def system_partition(manifest: dict) -> dict | None:
     #1875): מחיצת ה-`windows` **הגדולה ביותר** — מחיצת OEM/כלים קטנה, C:
     מחזיקה את המערכת (Vm: 3GB לפני 223GB). שתיים בגודל העליון, או אחת בלי
     גודל = `AMBIGUOUS`, שהקוראים מדווחים "לא נבדק" ולא "לא נכנס" שגוי
-    (עיקרון 5). אין `windows` — ה-`linux` הראשונה על הפלטה. אין — `None`."""
+    (עיקרון 5). אין `windows` — מחיצת ה-`linux` היחידה, או ספק אם יש כמה. אין — `None`."""
     parts = [p for p in manifest.get("partitions") or []
              if isinstance(p, dict) and _whole(p.get("start_sector")) is not None]
     wins = [p for p in parts if p.get("system") is True] \
@@ -247,6 +247,8 @@ def min_disk_bytes(manifest: dict, gb: int) -> int | None:
     בגודלן במקור ואת המועמד בגודלו באימג' (`volumes_fit` בסוכן) — וגם את
     `gb` במחיצת המערכת: כשהיא המועמד, היא לבדה מתפשרת; כשהיא אחת מהחוזרות,
     המקום שבה קבוע, ואם הוא קטן מ-`gb` — אין דיסק שבו האימג' נכנס."""
+    # A Linux capture on a cut snapshot already has the reduced layout here.
+    # Earlier full-size streams still require their recorded partition size.
     need = required_bytes(manifest)
     if need is None:
         return None

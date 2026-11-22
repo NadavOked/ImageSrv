@@ -17,9 +17,7 @@
 # הקליטה, בשם (עיקרון 5). ‏#2972 (נדב 12/11, "כמו Clonezilla"): NTFS ש-ntfsresize
 # מוצא **לא עקבי** אינו סירוב -- הוא נקלט בגודלו המלא, בלי כיווץ, ונרשם ב-
 # ‏$RUN_DIR/shrink.dirty (‏partclone -I קורא אותו, #643; ‏Windows מריץ chkdsk
-# באתחול הראשון). "לא כווץ" אינו "נכשל", ואינו "כווץ" -- התווית אומרת זאת. מחיצה שאין מה לכווץ
-# בה, או שאינה NTFS (‏ext4 הוא מסלול נפרד עם e2fsck, לא כאן), פשוט אינה
-# בתוכנית; כשהאימג' עדיין גדול מהיעד, ‏shrink_unshrinkable_hint אומר זאת.
+# באתחול הראשון). מחיצות Linux מסוג ext4 ו־btrfs נמדדות ללא עיגון.
 
 # ‏#1202 (הכרעת נדב 22/09, "כמו FOG"): "256GB" של יצרן אחד קטן במגה-בייטים
 # מזה של אחר (‏1,744,896 בייט, נמדד על ברזל 20/09). כש-C: כמעט מלאה הכיווץ
@@ -69,27 +67,47 @@ shrink_plan() {
     # ומריץ 100% מהחישוב ("You might resize at N bytes"); בלי -f: ווליום
     # מלוכלך או עם סקטורים פגומים נעצר כאן, בהודעה של הכלי. ‏#2972: "NTFS is
     # inconsistent" -- המחיצה מחוץ לתוכנית ושורה ב-shrink.dirty, לא סירוב.
+    SHRINK_LINUX=0
     _sp="$RUN_DIR/shrink.plan"; : > "$_sp"; _sp_m="$RUN_DIR/shrink.meas"; : > "$_sp_m"
     _sp_d="$RUN_DIR/shrink.dirty"; : > "$_sp_d" || { SHRINK_ERROR="לא הצלחנו להכין את רשימת המחיצות שלא יכווצו — הדיסק לא שונה."; return 1; }
     _shrink_candidates "$2" > "$RUN_DIR/shrink.cand"
     while IFS='|' read -r _sp_idx _sp_guid _sp_uguid _sp_start _sp_size <&3; do
         [ -n "$_sp_idx" ] || continue
         _sp_node=$(partition_node "$1" "$_sp_idx")
-        case "$(_fs_of "$_sp_node")" in ntfs) ;; *) log "partition $_sp_idx: not NTFS -- not shrunk here"; continue ;; esac
         _sp_cur=$((_sp_size * $3))
-        ntfsresize --info --no-progress-bar "$_sp_node" > "$RUN_DIR/ntfsresize.info.$_sp_idx" 2>&1
-        _sp_min=$(sed -n 's/.*You might resize at \([0-9][0-9]*\) bytes.*/\1/p' "$RUN_DIR/ntfsresize.info.$_sp_idx" | head -n 1)
-        case "$_sp_min" in ''|*[!0-9]*)
-            # #1502 (metal 16/10): the tool's own words stay in the log and in
-            # ntfsresize.info.N; the screen gets Hebrew first and the fix.
-            log "partition $_sp_idx: ntfsresize --info gave no minimum: $(tail -n 1 "$RUN_DIR/ntfsresize.info.$_sp_idx" 2>/dev/null | tr -d '\r')"
-            LC_ALL=C grep -qF "NTFS is inconsistent" "$RUN_DIR/ntfsresize.info.$_sp_idx"; _sp_rc=$?
-            if [ "$_sp_rc" -eq 0 ]; then   # #2972: read at its full size, labelled -- never refused
-                echo "$_sp_idx" >> "$_sp_d" || { SHRINK_ERROR="לא הצלחנו לרשום שמחיצה $_sp_idx בדיסק $1 לא תכווץ (NTFS לא עקבי) — הדיסק לא שונה."; return 1; }
-                log "partition $_sp_idx: NTFS is inconsistent (ntfsresize) -- not shrunk, captured at its full size (#2972)"; continue
-            fi   # 1 = another refusal, 2 = grep itself failed: neither is a diagnosis
-            SHRINK_ERROR="לא הצלחנו לבדוק כמה אפשר לכווץ את מחיצה $_sp_idx בדיסק $1 — פרטי ntfsresize ביומן הסוכן. הדיסק לא שונה."
-            return 1 ;;
+        _sp_fs=$(_fs_of "$_sp_node")
+        case "$(_partition_role "$_sp_guid"):$_sp_fs" in
+        linux:ext4)
+            SHRINK_LINUX=1
+            _sp_min=$(ext4_geometry "$_sp_node" used) || {
+                SHRINK_ERROR="מחיצה $_sp_idx ($_sp_fs): מדידת dumpe2fs נכשלה"; return 1; } ;;
+        linux:btrfs)
+            SHRINK_LINUX=1
+            _sp_min=$(btrfs_geometry "$_sp_node" bytes_used) || {
+                SHRINK_ERROR="מחיצה $_sp_idx (btrfs): מדידת dump-super נכשלה, היומן ממתין או שמערכת הקבצים אינה על התקן יחיד"; return 1; } ;;
+        *:ntfs)
+            ntfsresize --info --no-progress-bar "$_sp_node" > "$RUN_DIR/ntfsresize.info.$_sp_idx" 2>&1
+            _sp_min=$(sed -n 's/.*You might resize at \([0-9][0-9]*\) bytes.*/\1/p' "$RUN_DIR/ntfsresize.info.$_sp_idx" | head -n 1)
+            case "$_sp_min" in ''|*[!0-9]*)
+                # #1502 (metal 16/10): the tool's own words stay in the log and in
+                # ntfsresize.info.N; the screen gets Hebrew first and the fix.
+                log "partition $_sp_idx: ntfsresize --info gave no minimum: $(tail -n 1 "$RUN_DIR/ntfsresize.info.$_sp_idx" 2>/dev/null | tr -d '\r')"
+                LC_ALL=C grep -qF "NTFS is inconsistent" "$RUN_DIR/ntfsresize.info.$_sp_idx"; _sp_rc=$?
+                if [ "$_sp_rc" -eq 0 ]; then   # #2972: read at its full size, labelled -- never refused
+                    echo "$_sp_idx" >> "$_sp_d" || { SHRINK_ERROR="לא הצלחנו לרשום שמחיצה $_sp_idx בדיסק $1 לא תכווץ (NTFS לא עקבי) — הדיסק לא שונה."; return 1; }
+                    log "partition $_sp_idx: NTFS is inconsistent (ntfsresize) -- not shrunk, captured at its full size (#2972)"; continue
+                fi   # 1 = another refusal, 2 = grep itself failed: neither is a diagnosis
+                SHRINK_ERROR="לא הצלחנו לבדוק כמה אפשר לכווץ את מחיצה $_sp_idx בדיסק $1 — פרטי ntfsresize ביומן הסוכן. הדיסק לא שונה."
+                return 1 ;;
+            esac
+            ;;
+        linux:swap) continue ;;
+        linux:*) log "partition $_sp_idx: $_sp_fs -- not shrunk here"; continue ;;   # as before #2547: not a refusal
+        *) continue ;;
+        esac
+        case "$_sp_fs" in ext4|btrfs)
+            [ "$_sp_min" -gt 0 ] && [ "$_sp_min" -le "$_sp_cur" ] || {
+                SHRINK_ERROR="מחיצה $_sp_idx ($_sp_fs): מדידת הגודל אינה תקינה ($_sp_min)"; return 1; } ;;
         esac
         _sp_new=$(_shrink_target "$_sp_min" "$_sp_cur")
         [ "${CAPTURE_SINK:-upload}" != discard ] || _sp_new=$_sp_cur   # #1171: a direct send takes the tail only
@@ -172,13 +190,13 @@ shrink_ask() {
 shrink_unshrinkable_hint() {
     # $1 disk $2 parts file $3 sector size. ‏#929: הסירוב על הרצפה
     # (‏capture.sh) אומר גם **למה** הכיווץ לא הספיק -- מחיצת windows/linux
-    # שאינה NTFS אינה מכווצת כאן, ומה לעשות. הגדלים של המקור (parts.orig.txt
+    # שמסלול הכיווץ אינו מטפל בה. הגדלים של המקור (parts.orig.txt
     # כשכווץ) -- מה שהמפעיל רואה. ריק = אין מה להוסיף.
     _uh_src="$2"; [ -f "$RUN_DIR/parts.orig.txt" ] && _uh_src="$RUN_DIR/parts.orig.txt"
     _shrink_candidates "$_uh_src" | while IFS='|' read -r _uh_idx _uh_guid _uh_uguid _uh_first _uh_size; do
         _uh_fs=$(_fs_of "$(partition_node "$1" "$_uh_idx")")
-        [ "$_uh_fs" = ntfs ] && continue
-        printf ' — מחיצה %s (%s, %s) אינה NTFS והכיווץ בקליטה פועל על NTFS בלבד: כווצו אותה בעצמכם (resize2fs) או מחקו אותה, וקלטו מחדש' \
+        case "$(_partition_role "$_uh_guid"):$_uh_fs" in *:ntfs|linux:ext4|linux:btrfs|linux:swap) continue ;; esac
+        printf ' — מחיצה %s (%s, %s) לא כווצה בפריסה זו' \
             "$_uh_idx" "$(_shrink_gb $((_uh_size * $3)))" "$_uh_fs"
         break
     done

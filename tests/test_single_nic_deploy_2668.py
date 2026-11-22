@@ -102,10 +102,10 @@ def single(tmp_path: Path, images_root: Path, clock):
         "restart_server": lambda: fake["deploy_calls"].append(("restart",)) or None,
     }
     deploy = deploy_net.DeployContext(
-        state=deploy_net.DeployState("none", None, None), agent_port=8080,
+        state=deploy_net.DeployState("none", None, None), agent_port=7712,
         tftp_root=tmp_path / "tftp", repo_dir=REPO, servers_interface="eth0",
         hooks=deploy_hooks)
-    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080",
+    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:7712",
                      now_fn=clock, netcfg_hooks=netcfg_hooks, dhcp_hooks=dhcp_hooks,
                      deploy=deploy, netcfg_state_dir=tmp_path / "netstate")
     conn = app.state.ctx.conn
@@ -154,7 +154,7 @@ def test_a_clean_probe_and_an_explicit_ok_make_the_one_card_the_deploy_network(s
     assert [c[0] for c in fake["deploy_calls"]] == ["grub", "dnsmasq", "fw", "restart"]
     fw = fake["deploy_calls"][2][1]
     assert fw["deploy_if"] == "eth0" and fw["servers_if"] == "eth0"
-    assert deploy_net.stored(single["conn"]) == ("eth0", f"http://{ADDR}:8080")
+    assert deploy_net.stored(single["conn"]) == ("eth0", f"https://{ADDR}:7712")
     events = [r["event"] for r in single["conn"].execute("SELECT event FROM journal")]
     assert "net_deploy_on_management" in events
 
@@ -267,8 +267,8 @@ def test_no_second_card_bond_over_the_management_card(single):
     set_setting(conn, dhcp.SETTING_PREFIX + "eth0", dhcp.InterfaceConfig(
         "eth0", enabled=True, range_start="10.0.0.100", range_end="10.0.0.200",
         server_ip=ADDR).to_json())
-    deploy_net.record(conn, "eth0", f"http://{ADDR}:8080")
-    single["deploy"].state = deploy_net.DeployState("console", "eth0", f"http://{ADDR}:8080")
+    deploy_net.record(conn, "eth0", f"http://{ADDR}:7712")
+    single["deploy"].state = deploy_net.DeployState("console", "eth0", f"http://{ADDR}:7712")
     fake["interfaces"] += [{"name": "eth1", "state": "up", "mac": "aa:aa:aa:aa:aa:01",
                             "addresses": []},
                            {"name": "lo", "state": "up", "mac": "", "addresses": ["127.0.0.1/8"]}]
@@ -297,16 +297,16 @@ def test_the_firewall_opens_console_and_deploy_on_the_same_card():
     # פורט שאינו פורט ההפצה (#156) — כמו ב-test_nftables_rules.
     text = generate("--deploy-if", "eth0", "--servers-if", "eth0", "--mcast-ports", "2232-2233")
     for rule in ('iifname "eth0" udp dport 67 accept', 'iifname "eth0" udp dport 69 accept',
-                 'iifname "eth0" tcp dport 8080 accept',
+                 'iifname "eth0" tcp dport 7712 accept',
                  'iifname "eth0" udp dport 2232-2233 ether saddr @known_macs accept',   # נדב 14/11: רק רשומים
-                 'iifname "eth0" tcp dport 8081 accept'):
+                 'iifname "eth0" tcp dport 443 accept'):
         assert rule in text, rule
     assert "policy drop" in text
 
 
 def test_after_the_restart_agent_and_console_both_bind_the_one_address(tmp_path, monkeypatch):
     """העלייה שאחרי ההשלמה: `--console-host eth0` ו-`deploy:interface=eth0` —
-    הסוכן (8080) והקונסולה על 10.0.0.2, וכרטיס השרתים של ההשלמה הוא eth0."""
+    הסוכן (7712) והקונסולה על 10.0.0.2, וכרטיס השרתים של ההשלמה הוא eth0."""
     import uvicorn
 
     import server.app
@@ -317,7 +317,7 @@ def test_after_the_restart_agent_and_console_both_bind_the_one_address(tmp_path,
     data = tmp_path / "data"
     data.mkdir()
     conn = connect(data / "imagesrv.db")
-    deploy_net.record(conn, "eth0", f"http://{ADDR}:8080")
+    deploy_net.record(conn, "eth0", f"http://{ADDR}:7712")
     conn.close()
     configs: dict = {}
     captured: dict = {}
@@ -327,6 +327,7 @@ def test_after_the_restart_agent_and_console_both_bind_the_one_address(tmp_path,
                         lambda *a, **k: (captured.update(args=a, kwargs=k), "rt")[1])
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(uvicorn, "Config",
                         lambda app, **kw: configs.setdefault(app, []).append(kw) or object())
     monkeypatch.setattr(uvicorn, "Server", lambda config: object())
@@ -339,7 +340,7 @@ def test_after_the_restart_agent_and_console_both_bind_the_one_address(tmp_path,
         "server.main", "--server-url", "", "--console-host", "eth0",
         "--data-dir", str(data), "--images", str(tmp_path / "img")])
     server.main.main()
-    assert captured["args"][2] == f"http://{ADDR}:8080"
+    assert captured["args"][2] == f"http://{ADDR}:7712"
     assert captured["kwargs"]["interface"] == "eth0"
     assert captured["kwargs"]["deploy"].servers_interface == "eth0"
     assert [c["host"] for c in configs["agent"]] == [ADDR]

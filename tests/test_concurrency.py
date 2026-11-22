@@ -21,7 +21,29 @@ pytest.importorskip("fastapi")
 
 from server.db import connect, now_iso
 
-from conftest import hello_body, setup_classroom
+from conftest import hello_body
+from test_server_room import room_body
+
+
+def _open_room(server, drawers: dict[str, list[str]], target: int) -> None:
+    """סבב של חדר השיכפול (#3173: סבב כיתה הוא v2) על המשכפלים שב-`drawers`."""
+    for number, mac in enumerate(drawers, start=1):
+        assert server["admin"].post("/api/console/machines", json={
+            "mac": mac, "name": f"shich-{number}", "group_id": "grp_CLONERS",
+        }).status_code == 200
+    opened = server["deploy"].post("/api/console/room",
+                                   json=room_body(server, target, drawers))
+    assert opened.status_code == 200, opened.text
+
+
+def _cloner_hello(mac: str, serial: str) -> dict:
+    """גוף hello של מחשב שיכפול עם מגירה אחת בחריץ 1 — כמו
+    `test_server_room.cloner_hello`, בלי לשלוח (התהליכון רושם את הקוד)."""
+    body = hello_body(mac)
+    body["disks"] = [{"dev": "sda", "size_bytes": 256060514304, "model": "Drawer SSD",
+                      "serial": serial, "removable": False, "scheme": "gpt",
+                      "has_data": False, "port": 1}]
+    return body
 
 
 def _admin_client(app):
@@ -178,21 +200,20 @@ def test_a_rejected_conditional_update_releases_the_write_lock(tmp_path):
 
 
 def test_console_polling_during_hello_never_500s(server):
-    """בדיוק מה שנפל ב-CI: מבט-על נדגם תוך כדי hello של הכיתה.
+    """בדיוק מה שנפל ב-CI: מבט-על נדגם תוך כדי hello של החדר.
 
     `/api/console/overview` הוא `def` (תהליכון מהמאגר) ו-`/agent/hello`
     הוא `async def` (לולאת האירועים). שניהם כותבים. כל תשובה שאינה
     200 כאן היא הכשל שהצריך הרצה חוזרת ב-GitHub Actions.
+
+    (#3173: על גל של חדר השיכפול. המגירה השלישית שנבחרה אינה מדברת,
+    ולכן שתי ההצטרפויות לא מבשילות את הגל — כמו `expected_clients=99`.)
     """
     from fastapi.testclient import TestClient
 
-    ids = setup_classroom(server)
+    macs = ["aa:bb:cc:00:00:21", "aa:bb:cc:00:00:22", "aa:bb:cc:00:00:23"]
+    _open_room(server, {mac: [f"S{n}"] for n, mac in enumerate(macs, start=1)}, 3)
     app = server["app"]
-    assert server["deploy"].post(
-        "/api/console/sessions",
-        json={"group_id": ids["group"], "image_id": "img_7f3a91",
-              "prefix": "LAB1", "expected_clients": 99},
-    ).status_code == 200
     consoles = [_admin_client(app)]
 
     statuses: list[tuple[str, int]] = []
@@ -203,11 +224,10 @@ def test_console_polling_during_hello_never_500s(server):
             statuses.append((label, status))
 
     def agent(index: int) -> None:
-        mac = ids["mac1"] if index == 0 else ids["mac2"]
         client = TestClient(app)
         for _ in range(40):
             record("hello", client.post("/api/v1/agent/hello",
-                                        json=hello_body(mac)).status_code)
+                                        json=_cloner_hello(macs[index], f"S{index + 1}")).status_code)
 
     def console(index: int) -> None:
         client = consoles[0]
@@ -226,16 +246,15 @@ def test_the_session_starts_once_when_two_threads_ripen_it(server):
     המעבר open→running הוא UPDATE מותנה, ולכן המפסיד מקבל rowcount=0.
     בהתחלה אוטומטית זה לא כישלון אלא מרוץ שנגמר טוב; הוא מאמת בקריאה
     חוזרת שהסבב אכן רץ, ורק אז ממשיך.
+
+    (#3173: גל של חדר השיכפול, מגירה אחת מול יעד 1. ה-hello מבשיל אותו
+    דרך `room.pulse`, והמבט-על דרך `room.tick` — שניהם ב-`start_auto`.)
     """
     from fastapi.testclient import TestClient
 
-    ids = setup_classroom(server)
+    cloner = "aa:bb:cc:00:00:21"
+    _open_room(server, {cloner: ["S1"]}, 1)
     app = server["app"]
-    assert server["deploy"].post(
-        "/api/console/sessions",
-        json={"group_id": ids["group"], "image_id": "img_7f3a91",
-              "prefix": "LAB1", "expected_clients": 1},
-    ).status_code == 200
 
     statuses: list[int] = []
     guard = threading.Lock()
@@ -244,12 +263,12 @@ def test_the_session_starts_once_when_two_threads_ripen_it(server):
 
     def ripen(index: int) -> None:
         # hello של מכונה אחת מספיק כדי להבשיל סבב של 1/1; המבט-על
-        # והתחנה מגיעים לאותו maybe_start מתהליכונים אחרים.
+        # מגיע לאותו start_auto מתהליכונים אחרים.
         client = clients[index]
         for _ in range(30):
             if index == 0:
                 status = client.post("/api/v1/agent/hello",
-                                     json=hello_body(ids["mac1"])).status_code
+                                     json=_cloner_hello(cloner, "S1")).status_code
             else:
                 status = client.get("/api/console/overview").status_code
             with guard:

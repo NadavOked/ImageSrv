@@ -434,7 +434,7 @@ def server(tmp_path: Path, images_root, classrooms_on):
     from server.app import create_app
 
     woken: list[bytes] = []
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      wol_send=woken.append)
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
@@ -455,7 +455,7 @@ def server(tmp_path: Path, images_root, classrooms_on):
     }).status_code == 200
     yield {"admin": admin, "deploy": deploy, "anon": TestClient(app),
            "woken": woken, "ctx": ctx}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def test_the_console_wake_button_wakes_the_room_and_nothing_else(server):
@@ -508,7 +508,7 @@ def test_the_real_server_pins_wol_to_the_deployment_vlan(tmp_path, monkeypatch):
 
     monkeypatch.setattr(app_module.wol, "broadcast_sender", fake_sender)
     app_module.create_app(tmp_path / "d", tmp_path / "i",
-                          "http://10.44.0.1:8080", interface="eth0")
+                          "http://10.44.0.1:7712", interface="eth0")
     assert pinned == ["eth0"], "השרת לא כפה את ממשק וילן ההפצה על WoL"
 
 

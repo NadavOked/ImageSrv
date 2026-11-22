@@ -26,11 +26,8 @@ from pathlib import Path
 
 import pytest
 
-from native import requires_native
 from server import db
 from server.disks import disk_failures
-from test_agent import BASH
-from test_stream_honesty import drawer_run, errors_of
 
 REPO = Path(__file__).resolve().parent.parent
 MAC = "b4:2e:99:07:1a:c4"
@@ -101,8 +98,7 @@ def test_kernel_evidence_next_to_an_empty_stream_still_wins(conn):
 def test_the_stream_phrases_are_what_fanout_and_the_agent_write():
     """הביטוי חייב להיות המילים שנכתבות בפועל, אחרת הסיווג "עובד" רק בטסט."""
     fanout = (REPO / "agent" / "fanout.c").read_text(encoding="utf-8")
-    verdict = (REPO / "agent" / "lib" / "restore" / "verdict.sh").read_text(encoding="utf-8")
-    assert "(fanout: " in verdict
+    # #3173: verdict.sh's "(fanout: ...)" line left with the old receiver's room; fanout.c still writes them
     # getattr: בבקרה השלילית הטסט נופל על ה-assert, לא על סמל חסר.
     assert getattr(disk_failures, "STREAM_PHRASES", ()) == (
         "fanout: empty stream", "fanout: short stream", "fanout: long stream")
@@ -130,26 +126,3 @@ EMPTY_FANOUT = (
     'rm -f "$tmp"\n'
     "exit 1\n"
 )
-
-
-@requires_native(("bash", BASH))
-def test_an_empty_stream_fails_the_drawers_without_disk_evidence(tmp_path):
-    run, out = drawer_run(
-        tmp_path,
-        # הכתיבה כבר החלה (טבלת המחיצות נכתבה) — בלי זה ata_capture לא רץ
-        # ממילא (#1429), והטסט לא היה מבחין בין לפני לאחרי.
-        ": > \"$RUN_DIR/targets/sda/write_started\"; : > \"$RUN_DIR/targets/sdb/write_started\"; "
-        "restore_partition_drawers unicast http://s img 1 dd part.zst "
-        f"{'0' * 64} '' sda sdb > /dev/null 2>&1; " 'echo "rc=$?"',
-        {"fanout": EMPTY_FANOUT},
-        source="stream_source() { :; }; ",
-    )
-    assert out.strip().endswith("rc=1"), out
-    errors = errors_of(run)
-    for dev in ("sda", "sdb"):
-        target = run / "targets" / dev
-        assert (target / "state").read_text(encoding="utf-8").strip() == "failed"
-        assert "empty stream" in errors[dev], errors[dev]
-        assert not (target / "ata_log.json").exists(), (
-            f"{dev}: זרם ריק נאסף כראיית דיסק — השרת ירשום disk_failure על דיסק תקין"
-            f" (error={errors[dev]!r})")

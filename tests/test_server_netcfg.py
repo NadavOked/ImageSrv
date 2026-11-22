@@ -427,6 +427,7 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         nic(name)["addresses"] = []
         return None
 
+    skew = {"s": 0.0}
     hooks = {
         "interfaces": lambda: [dict(n) for n in fake["interfaces"]],
         "netcfg_read_conf": lambda name, root=None: fake["confs"].get(name),
@@ -438,6 +439,8 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         "netcfg_sourced": lambda *a: True,
         "netcfg_timer_active": lambda *a: fake["timer"],
         "netcfg_now": clock,
+        # #3771: ה-monotonic הולך עם השעון המדומה, פרט לקפיצה שמוסיפים ל-`skew` (שעון קיר שקפץ).
+        "netcfg_mono": lambda: clock() - skew["s"],
         "netcfg_boot_id": lambda *a: "boot-A",
         "netcfg_local_address": lambda request: fake["local"],
         "netcfg_peer_address": lambda request: fake["peer"],   # #2418
@@ -465,7 +468,7 @@ def net_server(tmp_path: Path, images_root: Path, clock):
         "dnsmasq_version": lambda: "Dnsmasq version 2.91\n",
         "netcfg_management": lambda: fake["management"],
     }
-    app = create_app(tmp_path / "data", images_root, "http://10.10.10.8:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.10.10.8:7712",
                      now_fn=clock, netcfg_hooks=hooks, dhcp_hooks=dhcp_hooks,
                      netcfg_state_dir=state_dir)
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
@@ -476,7 +479,7 @@ def net_server(tmp_path: Path, images_root: Path, clock):
     deploy.post("/api/console/login",
                 json={"username": "labtech", "password": "deploy-pass-1"})
     return {"admin": admin, "deploy": deploy, "fake": fake, "app": app,
-            "state_dir": state_dir, "ctx": app.state.ctx, "clock": clock,
+            "state_dir": state_dir, "ctx": app.state.ctx, "clock": clock, "skew": skew,
             # אותם hooks בדיוק שזרוע ההחזרה של #56 מקבלת בבדיקות שלה,
             # כדי שגם היא לא תיגע במכונה.
             "hooks": hooks}

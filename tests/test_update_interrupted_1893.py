@@ -122,7 +122,7 @@ def test_server_start_runs_the_reconcile(tmp_path, images_root, clock):
     data.mkdir()
     seed = connect(data / "imagesrv.db")
     update._set_status(seed, RUNNING)
-    app = create_app(data, images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(data, images_root, "http://10.44.12.10:7712", now_fn=clock,
                      update_hooks={"describe": lambda repo: "v0.98.0",
                                    "upgrade_unit_state": lambda: "inactive"}, repo_dir="/repo")
     with TestClient(app):

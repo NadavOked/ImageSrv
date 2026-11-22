@@ -38,7 +38,7 @@ BOOT = DRAWERS + 'D_ROLE=cloner; ' + GUI_UP
 def run(tmp_path: Path, script: str, timeout: int = 60, **env):
     import subprocess
     run_dir = tmp_path / "run"; run_dir.mkdir(exist_ok=True)
-    pre = f'export RUN_DIR={posix(run_dir)!r} IMAGESRV_TEST=1 MAC=aa:bb:cc:dd:ee:ff SERVER=http://10.0.0.1:8080; '
+    pre = f'export RUN_DIR={posix(run_dir)!r} IMAGESRV_TEST=1 MAC=aa:bb:cc:dd:ee:ff SERVER=http://10.0.0.1:7712; '
     pre += "".join(f'export {k}={v!r}; ' for k, v in env.items())
     pre += "".join(f'. {posix(LIB)}/{name}.sh; ' for name in LIBS)
     # #1579: lc_pull_session starts the hello beat (attended_start: a background
@@ -172,7 +172,7 @@ def test_the_round_is_open_only_on_positive_evidence(tmp_path, code, body, ok, e
         assert error in out.stdout
     body_line = next(l for l in lines if l.startswith("{"))
     assert json.loads(body_line) == {"mac": "aa:bb:cc:dd:ee:ff", "nonce": "ab12", "image_id": "img_7f3a91", "ports": [1, 3]}
-    assert "--retry" not in lines and "http://10.0.0.1:8080/api/v1/agent/cloner-round" in lines
+    assert "--retry" not in lines and "http://10.0.0.1:7712/api/v1/agent/cloner-round" in lines
 
 
 @requires_native(("jq", shutil.which("jq")))
@@ -192,7 +192,7 @@ def test_the_screen_token_is_kept_only_on_positive_evidence(tmp_path, code, body
     if not kept:   # a refusal is said on the console (log), never silent
         assert "imagesrv: pull: the server gave no screen token" in out.stdout, out.stdout
     assert (kept in lines) if kept else "old" not in lines           # a stale token never survives
-    assert "http://10.0.0.1:8080/api/v1/agent/cloner-round/nonce" in lines and "--retry" not in lines
+    assert "http://10.0.0.1:7712/api/v1/agent/cloner-round/nonce" in lines and "--retry" not in lines
 
 
 def test_the_session_checks_again_then_opens_and_leaves(tmp_path):

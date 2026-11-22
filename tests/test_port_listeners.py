@@ -231,16 +231,16 @@ def test_bind_failure_at_boot_propagates_and_stops_others():
 
 
 def test_threaded_listener_is_opened_and_stopped_by_the_manager():
-    """המאזין הבין-שרתי (8443) הוא thread, לא uvicorn — אותו מתג."""
+    """המאזין הבין-שרתי (7700) הוא thread, לא uvicorn — אותו מתג."""
     log: list[str] = []
 
     class Threaded:
-        port = 8443
+        port = 7700
 
     async def scenario():
         mgr = ports.Listeners()
         mgr.add_threaded("interserver", start=lambda: (log.append("start"), Threaded())[1],
-                         stop=lambda obj: log.append("stop"), port=8443, hosts=["10.0.0.1"])
+                         stop=lambda obj: log.append("stop"), port=7700, hosts=["10.0.0.1"])
         task = asyncio.ensure_future(mgr.serve(lambda pid: True))
         await _wait(lambda: mgr.is_open("interserver"))
         assert log == ["start"]

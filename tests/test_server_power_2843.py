@@ -41,9 +41,9 @@ class Power:
 def _build(tmp_path: Path, images_root: Path, clock, hooks):
     from server.app import create_app
     from server.console import users
-    from test_sender import Recorder
+    from fakesend import Recorder
 
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
                      sender_runner=Recorder(block=True), host_hooks=hooks)
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", check_policy=False)
@@ -60,7 +60,7 @@ def host(tmp_path, images_root, clock):
     power = Power()
     app, ctx, admin, deploy = _build(tmp_path, images_root, clock, {"power": power})
     yield {"app": app, "ctx": ctx, "admin": admin, "deploy": deploy, "power": power}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def journal_rows(ctx, event):
@@ -110,7 +110,7 @@ def test_unknown_action_is_refused_before_the_hook(host, body):
 
 
 def test_cross_site_request_is_refused_on_the_console_app(host):
-    """CSRF: אפליקציית הקונסולה (:8081) — השומר של #1633 חל גם על הנתיב הזה."""
+    """CSRF: אפליקציית הקונסולה (:443) — השומר של #1633 חל גם על הנתיב הזה."""
     from server.app import create_console_app
     console = TestClient(create_console_app(host["app"].state.runtime))
     complete_console_login(console, host["ctx"].conn, "noc", "admin-pass-123")
@@ -163,7 +163,7 @@ def test_without_an_installed_hook_the_route_refuses_503(tmp_path, images_root, 
         assert journal_rows(ctx, "server_power") == []
         assert len(journal_rows(ctx, "server_power_failed")) == 1
     finally:
-        ctx.sender.stop()
+        ctx.chunk.stop()
 
 
 def test_schedule_later_runs_systemctl_in_a_transient_unit_after_the_reply(monkeypatch):

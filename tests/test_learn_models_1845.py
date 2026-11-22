@@ -17,6 +17,7 @@ from server.rounds import room_precheck
 from server.system import housekeeping
 from server.learn import models as learn_models
 
+from fakesend import wait_for
 from test_server_room import (CLONER1, cloner_hello, heartbeat, room,  # noqa: F401
                               room_body, room_server)
 
@@ -153,6 +154,9 @@ def test_the_room_learns_the_model_from_finished_waves(room_server):
                  "write_preflight": {"state": "ok", "reason": "", "mbps": mbps}}
                 for dev, mbps in zip(("sda", "sdb"), speeds)]}).status_code == 200
         heartbeat(room_server)
+        # #3173: המגירות דיווחו `done` לפני שמנוע החתיכות שידר (אף `chunk-pass` לא נשלח): סגירת הגל עוצרת אותו,
+        # והוא יוצא מההמתנה ל-`listening` עד `chunksend.POLL_S` אחר כך. גל שיוצא לפני כן נדחה ("המנוע עדיין משדר").
+        assert wait_for(lambda: ctx.chunk._thread is None or not ctx.chunk._thread.is_alive())
     got = {r["serial"]: r["mbps"] for r in ctx.conn.execute("SELECT * FROM model_speeds")}
     assert got == {"S1": 400, "S2": 410, "S3": 390, "S4": 120}, got
     # S4 נכנס שוב: מולו S1/S2/S3 (חציון 400) — 120 < 280 → כתום, עם המדידה הקודמת שלו

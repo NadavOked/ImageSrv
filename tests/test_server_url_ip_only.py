@@ -37,6 +37,7 @@ def fake_startup(tmp_path: Path, monkeypatch) -> dict:
     monkeypatch.setattr(server.app, "create_runtime", fake_create_runtime)
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(uvicorn, "Config", lambda app, **kwargs: object())
     monkeypatch.setattr(uvicorn, "Server", lambda config: object())
     monkeypatch.setattr(server.main, "serve_all", lambda servers: None)
@@ -56,7 +57,7 @@ def _start(monkeypatch, fake_startup: dict, server_url: str) -> None:
 def test_hostname_server_url_is_refused_before_runtime(
         monkeypatch, fake_startup, capsys):
     with pytest.raises(SystemExit) as exc:
-        _start(monkeypatch, fake_startup, "http://imagesrv.college:8080")
+        _start(monkeypatch, fake_startup, "http://imagesrv.college:7712")
     assert exc.value.code == 2                        # parser.error, לא קריסה
     assert "runtime" not in fake_startup              # לא הגיע ל-create_runtime
     err = capsys.readouterr().err
@@ -65,8 +66,8 @@ def test_hostname_server_url_is_refused_before_runtime(
 
 
 @pytest.mark.parametrize("server_url", [
-    "http://10.44.12.10:8080",
-    "http://[fd00:44::10]:8080",                      # IPv6 מילולי גם כן כתובת
+    "http://10.44.12.10:7712",
+    "http://[fd00:44::10]:7712",                      # IPv6 מילולי גם כן כתובת
 ])
 def test_ip_literal_server_url_starts(monkeypatch, fake_startup, server_url):
     _start(monkeypatch, fake_startup, server_url)

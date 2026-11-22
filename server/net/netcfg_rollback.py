@@ -93,6 +93,10 @@ class Pending:
     setting: str | None = None
     interfaces_dir: str = netcfg_host.INTERFACES_DIR
     resolv_path: str = netcfg_host.RESOLV_CONF
+    #: #3771: סוף החלון ב-`CLOCK_MONOTONIC` של האתחול הזה. שעון ה-monotonic משותף לכל התהליכים
+    #: באותו אתחול (השרת כותב, הזרוע קוראת), וקפיצת שעון הקיר אינה זזה בו. תקף **רק** כש-`boot`
+    #: זהה; באתחול אחר, או בלי `boot`, נשאר הדדליין של שעון הקיר.
+    deadline_mono: float | None = None
 
     def to_json(self) -> str:
         return json.dumps({"schema": SCHEMA, **self.__dict__}, ensure_ascii=False)
@@ -125,6 +129,8 @@ def read_pending(state_dir: str | Path) -> Pending | None:
             interfaces_dir=str(data.get("interfaces_dir",
                                         netcfg_host.INTERFACES_DIR)),
             resolv_path=str(data.get("resolv_path", netcfg_host.RESOLV_CONF)),
+            deadline_mono=(None if data.get("deadline_mono") is None
+                           else float(data["deadline_mono"])),
         )
     except (KeyError, TypeError, ValueError):
         return None
@@ -158,7 +164,26 @@ def corrupt_pending(state_dir: str | Path) -> bool:
 # --- ההחלטה (טהורה) ----------------------------------------------------------
 
 
-def decide(marker: Pending | None, now: float, boot: str) -> str | None:
+def mono_left(marker: Pending | None, mono: float | None, boot: str) -> float | None:
+    """כמה שניות נשארו לפי ה-monotonic, או None כשאי אפשר לסמוך עליו (#3771).
+
+    סומכים עליו רק כשהסמן נושא `deadline_mono`, שני הצדדים יודעים באיזה אתחול הם, והאתחול זהה:
+    שעון monotonic של אתחול אחר הוא מספר שאין לו קשר לסמן. אחרת — שעון הקיר, עם הגדר של #3752.
+    """
+    if marker is None or mono is None:
+        return None
+    deadline = getattr(marker, "deadline_mono", None)
+    if deadline is None or not marker.boot or not boot or marker.boot != boot:
+        return None
+    return deadline - mono
+
+
+def seconds_left(marker: Pending, now: float, mono: float | None = None, boot: str = "") -> float:
+    left = mono_left(marker, mono, boot)
+    return marker.deadline - now if left is None else left
+
+
+def decide(marker: Pending | None, now: float, boot: str, mono: float | None = None) -> str | None:
     """למה להחזיר עכשיו — או None. **זו כל הלוגיקה**, והיא טהורה.
 
     סדר הבדיקות מכוון: אתחול קודם לפקיעה, כדי שהפירור יסביר את הסיבה
@@ -168,21 +193,31 @@ def decide(marker: Pending | None, now: float, boot: str) -> str | None:
         return None
     if marker.boot and boot and marker.boot != boot:
         return REASON_BOOT
+    left = mono_left(marker, mono, boot)
+    if left is not None:
+        # #3771: באותו אתחול ה-monotonic הוא המשך — שעון הקיר שקפץ (קדימה או אחורה) אינו פוקע
+        # ואינו מאריך את החלון, ואין צורך בגדר של #3752.
+        return REASON_EXPIRED if left <= 0 else None
     if now >= marker.deadline:
         return REASON_EXPIRED
     # #3752: חלון האישור הוא `WINDOW_SECONDS`. תפוגה רחוקה מזה = השעון חזר אחורה, והמפעיל
     # שנחתך היה מחכה שעות (ושל nic_services, שה-tick שלו לא נקבע מחדש, לא היה מחזיר עד
-    # אתחול). מחזירים עכשיו — החזרה היא הכיוון הבטוח. קפיצה קדימה פוקעת מוקדם, גם היא
-    # בכיוון הבטוח: ההגדרה הקודמת חוזרת, והמפעיל מחיל שוב (#3752, ראו ה-Issue של המשך).
+    # אתחול). מחזירים עכשיו — החזרה היא הכיוון הבטוח. בלי `deadline_mono` (סמן ישן, או אתחול
+    # שאינו ידוע) קפיצה קדימה פוקעת מוקדם, גם היא בכיוון הבטוח (#3771 סוגר אותה כשיש monotonic).
     if marker.deadline - now > WINDOW_SECONDS + CLOCK_SLACK_SECONDS:
         return REASON_CLOCK
     return None
 
 
-def expired(marker: Pending | None, now: float) -> bool:
+def expired(marker: Pending | None, now: float, mono: float | None = None, boot: str = "") -> bool:
     """האם חלון האישור נסגר. אישור אחרי הרגע הזה אינו מבטל החזרה."""
-    return marker is not None and (
-        now >= marker.deadline or marker.deadline - now > WINDOW_SECONDS + CLOCK_SLACK_SECONDS)
+    if marker is None:
+        return False
+    left = mono_left(marker, mono, boot)
+    if left is not None:
+        return left <= 0
+    return (now >= marker.deadline
+            or marker.deadline - now > WINDOW_SECONDS + CLOCK_SLACK_SECONDS)
 
 
 # --- הפירור ------------------------------------------------------------------
@@ -287,14 +322,18 @@ def _release(name: str, hooks: dict) -> list[str]:
 
 
 def run_once(state_dir: str | Path, hooks: dict | None = None,
-             now: float | None = None, boot: str | None = None) -> str | None:
+             now: float | None = None, boot: str | None = None,
+             mono: float | None = None) -> str | None:
     """סבב אחד של הזרוע: להחליט, להחזיר, לנקות, להשאיר פירור.
 
     מחזיר את סיבת ההחזרה או None. הסמן נמחק **אחרי** ההחזרה: אם המכונה
     מתה באמצע, הסבב הבא (או האתחול הבא) יראה סמן פתוח ויחזור שוב —
     החזרה חוזרת על עצמה היא בטוחה, החזרה שלא קרתה אינה.
     """
-    now = time.time() if now is None else now
+    if now is None:
+        # #3771: הזרוע (בלי `now`) קוראת גם את ה-monotonic; בדיקה שמזריקה `now` מזריקה גם `mono`.
+        now = time.time()
+        mono = time.monotonic() if mono is None else mono
     boot = boot_id() if boot is None else boot
     if corrupt_pending(state_dir):
         stamp = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
@@ -302,7 +341,7 @@ def run_once(state_dir: str | Path, hooks: dict | None = None,
         clear_pending(state_dir)
         return None
     marker = read_pending(state_dir)
-    reason = decide(marker, now, boot)
+    reason = decide(marker, now, boot, mono)
     if reason is None or marker is None:
         return None
     errors = restore(marker, hooks)

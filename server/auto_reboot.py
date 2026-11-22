@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -13,6 +12,7 @@ from server.paths import REPO_ROOT
 from server.brain import busy as brain_busy
 from server.rounds import room
 from server.system import busy_db, inflight, steadyclock
+from server.system.timedrun import run_timed
 from . import update
 from server.core.atomicfile import write_atomic
 from .db import get_setting, journal
@@ -179,7 +179,7 @@ def _busy_reason(rt, now: datetime | None, include_update: bool, seen: dict[str,
 
 
 def default_reboot() -> None:
-    subprocess.run(["systemctl", "reboot"], check=True)
+    run_timed(["systemctl", "reboot"], check=True)   # #3127: how long, and how it ended
 
 
 def consume_marker(conn, data_dir: str | Path) -> datetime | None:

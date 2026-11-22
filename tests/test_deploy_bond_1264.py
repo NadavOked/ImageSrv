@@ -231,10 +231,10 @@ def lab(tmp_path: Path, images_root: Path, clock):
         "firewall": lambda repo, **kw: fake["deploy_calls"].append(("fw", kw["deploy_if"])) or None,
         "restart_server": lambda: fake["deploy_calls"].append(("restart",)) or None,
     }
-    ctx = deploy_net.DeployContext(state=deploy_net.DeployState("none", None, None), agent_port=8080,
+    ctx = deploy_net.DeployContext(state=deploy_net.DeployState("none", None, None), agent_port=7712,
                                    tftp_root=tmp_path / "tftp", repo_dir=REPO,
                                    servers_interface="eth0", hooks=deploy_hooks)
-    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:7712", now_fn=clock,
                      dhcp_hooks=dhcp_hooks, netcfg_hooks=netcfg_hooks, deploy=ctx,
                      netcfg_state_dir=tmp_path / "netstate")
     users.create(app.state.ctx.conn, "noc", "Admin-pass-123!", "admin", by="test")
@@ -244,7 +244,7 @@ def lab(tmp_path: Path, images_root: Path, clock):
         "network": "10.44.9.0", "netmask": "255.255.255.0", "range_start": "10.44.9.50",
         "range_end": "10.44.9.200", "lease": "12h", "confirm": "eth1"})
     assert r.status_code == 200 and r.json()["deploy"]["ok"], r.text
-    assert deploy_net.stored(app.state.ctx.conn) == ("eth1", "http://10.44.9.1:8080")
+    assert deploy_net.stored(app.state.ctx.conn) == ("eth1", "https://10.44.9.1:7712")
     fake["applied"].clear(); fake["deploy_calls"].clear(); m.calls.clear()
     return SimpleNamespace(client=client, conn=app.state.ctx.conn, m=m, fake=fake,
                            deploy=ctx, module_conf=module_conf)
@@ -279,7 +279,7 @@ def test_adding_a_second_card_moves_everything_bound_to_the_deploy_name_to_the_b
     assert moved["enabled"] and moved["range_start"] == "10.44.9.50" and moved["server_ip"] == "10.44.9.1"
     # ההשלמה של #1088 לשם החדש: חומת אש, אתחול (udp-sender --interface), רישום
     assert ("fw", "bond0") in lab.fake["deploy_calls"] and ("restart",) in lab.fake["deploy_calls"]
-    assert deploy_net.stored(lab.conn) == ("bond0", "http://10.44.9.1:8080")
+    assert deploy_net.stored(lab.conn) == ("bond0", "https://10.44.9.1:7712")
     assert lab.deploy.state.interface == "bond0"
     assert "interface=bond0" in lab.fake["applied"][-1]
     assert "interface=eth1" not in lab.fake["applied"][-1]
@@ -331,7 +331,7 @@ def test_removing_the_second_card_moves_everything_back_to_the_first(lab):
     cfgs, offers = _settings(lab.conn, netcfg.SETTING_PREFIX), _settings(lab.conn, dhcp.SETTING_PREFIX)
     assert "bond0" not in cfgs and "bond0" not in offers
     assert json.loads(offers["eth1"])["enabled"] is True
-    assert deploy_net.stored(lab.conn) == ("eth1", "http://10.44.9.1:8080")
+    assert deploy_net.stored(lab.conn) == ("eth1", "https://10.44.9.1:7712")
     assert ("fw", "eth1") in lab.fake["deploy_calls"]
     assert "interface=eth1" in lab.fake["applied"][-1] and "bond0" not in lab.fake["applied"][-1]
 
@@ -348,7 +348,7 @@ def test_a_bond_that_did_not_verify_restores_the_old_card_and_records_nothing(la
     assert lab.m.nics["eth1"] == ["10.44.9.1/24"], "and the deploy card carries its address again"
     assert "eth1" in _settings(lab.conn, netcfg.SETTING_PREFIX)
     assert "bond0" not in _settings(lab.conn, dhcp.SETTING_PREFIX)
-    assert deploy_net.stored(lab.conn) == ("eth1", "http://10.44.9.1:8080")
+    assert deploy_net.stored(lab.conn) == ("eth1", "https://10.44.9.1:7712")
     assert lab.fake["deploy_calls"] == [] and lab.fake["applied"] == []
 
 
@@ -415,7 +415,7 @@ def test_an_open_round_blocks_the_change(lab):
 
 
 def test_a_deploy_network_from_the_unit_flag_is_refused(lab):
-    lab.deploy.state = deploy_net.DeployState("cli", "eth1", "http://10.44.9.1:8080")
+    lab.deploy.state = deploy_net.DeployState("cli", "eth1", "http://10.44.9.1:7712")
     _refused(lab, _second(lab, "eth1", "eth2"), 409, "--server-url")
 
 
@@ -451,14 +451,14 @@ def test_a_failed_completion_is_named_dnsmasq_still_follows_and_a_retry_on_the_n
     body = r.json()
     assert body["ok"] is False and "nft -c נפל" in body["apply_error"]
     assert body["deploy"]["ok"] is False and body["deploy"]["recorded"] is False
-    assert deploy_net.stored(lab.conn) == ("eth1", "http://10.44.9.1:8080"), "not recorded"
+    assert deploy_net.stored(lab.conn) == ("eth1", "https://10.44.9.1:7712"), "not recorded"
     assert "interface=bond0" in lab.fake["applied"][-1], "the DHCP follows the address"
     lab.m.calls.clear()
     lab.deploy.hooks["firewall"] = lambda repo, **kw: lab.fake["deploy_calls"].append(("fw", kw["deploy_if"])) or None
     r = _second(lab, "bond0", "eth2")
     assert r.status_code == 200 and r.json()["ok"] is True, r.text
     assert lab.m.calls == [], "the machine is already bonded — nothing is touched again"
-    assert deploy_net.stored(lab.conn) == ("bond0", "http://10.44.9.1:8080")
+    assert deploy_net.stored(lab.conn) == ("bond0", "https://10.44.9.1:7712")
     assert ("fw", "bond0") in lab.fake["deploy_calls"]
 
 
@@ -533,7 +533,7 @@ def _assert_1804_rolled_back(lab, before, result):
     assert not lab.module_conf.exists()
     assert "bond0" not in _settings(lab.conn, netcfg.SETTING_PREFIX)
     assert "bond0" not in _settings(lab.conn, dhcp.SETTING_PREFIX)
-    assert deploy_net.stored(lab.conn) == ("eth1", "http://10.44.9.1:8080")
+    assert deploy_net.stored(lab.conn) == ("eth1", "https://10.44.9.1:7712")
     assert lab.fake["deploy_calls"] == [] and lab.fake["applied"] == []
 
 
@@ -629,4 +629,4 @@ def test_1804_failed_removal_restores_module_file_and_bond(lab, monkeypatch, cap
     assert "הוחזרה ואומתה" in result["apply_error"]
     assert lab.module_conf.read_text(encoding="utf-8") == original
     assert lab.m.confs == before and lab.m.nics["bond0"] == ["10.44.9.1/24"]
-    assert deploy_net.stored(lab.conn) == ("bond0", "http://10.44.9.1:8080")
+    assert deploy_net.stored(lab.conn) == ("bond0", "https://10.44.9.1:7712")

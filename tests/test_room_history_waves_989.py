@@ -10,14 +10,13 @@ def _room_history_html() -> str:
 
 
 def test_room_history_has_waves_after_written_and_keeps_optional_columns():
-    """#3185: "קצב ואיבוד" נכנס לפני "מצב" (המוקאפ שנדב אישר 14/11); שאר העמודות והסדר שלהן כמו קודם."""
+    """#3978 (נדב 21/11): "קצב ואיבוד" ירדה, ו"הרשת" נכנסה בין "מצב" ל"תאריך"; שאר העמודות והסדר שלהן כמו קודם."""
     body = _room_history_html()
-    columns = re.search(r'const cols = \[([^\]]+)\]\.concat\(mem \? \[([^\]]+)\] : \[\], \[([^\]]+)\]\)', body)
+    columns = re.search(r'const cols = \[([^\]]+)\];', body)
     assert columns is not None
-    head, flow, tail = ([re.findall(r'"([^"]*)"', g) for g in columns.groups()])
-    assert head + flow + tail == ["#", "אימג׳", "מחשבים", "נכתבו", "גלים", "משך", "קצב ואיבוד", "מצב", "תאריך"]
-    assert head[-1] == "משך" and tail[0] == "מצב", "waves still follow 'written', and the rate sits right before the state"
-    assert re.search(r"opt:\s*mem\s*\?\s*\[7,\s*8\]\s*:\s*\[6,\s*7\]", body)
+    assert re.findall(r'"([^"]*)"', columns.group(1)) == ["#", "אימג׳", "מחשבים", "נכתבו", "גלים", "משך", "מצב", "הרשת", "תאריך"]
+    assert "קצב ואיבוד" not in body and "memFlowCell" not in body
+    assert re.search(r"opt:\s*\[6,\s*7,\s*8\]", body)
 
 
 def test_room_history_waves_require_a_finite_measurement_and_inactive_round():

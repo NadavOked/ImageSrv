@@ -1,6 +1,12 @@
-"""#1432: direct-send receiver counts follow the live wave membership."""
+"""#1432: direct-send receiver counts follow the live wave membership.
 
-from test_direct_server import (BUILD, _build_hello, _open_direct,
+#3173: a direct send is a wave of the chunk engine (#3161), which counts the live members itself
+(`live_members`); `--min-receivers` of the build machine's udp-sender is gone with it. What the source
+is still told is `receivers` -- what its waiting screen shows."""
+
+import threading
+
+from test_direct_server import (BUILD, _build_hello, _cloners, _open_direct, _order,
                                 _put_manifest, _register_build)
 from test_server_room import CLONER1, CLONER2, cloner_hello, report, room_server  # noqa: F401
 
@@ -26,7 +32,7 @@ def _running_three(room_server):
     assert admin.post("/api/console/room/start").status_code == 200
     first = _build_hello(anon)["task"]["direct"]
     assert first["session_state"] == "running"
-    assert first["multicast"]["min_receivers"] == 3
+    assert first["receivers"] == 3
     return opened
 
 
@@ -41,7 +47,9 @@ def test_partition_two_waits_only_for_the_two_targets_still_alive(room_server):
 
     second = _build_hello(room_server["anon"])["task"]["direct"]
     assert second["receivers"] == 2
-    assert second["multicast"]["min_receivers"] == 2
+    # and the engine waits for those two only: they listen, and the source is ordered to send
+    _cloners(room_server, opened, {CLONER1: ["S1"], CLONER2: ["S2"]}).listen(1)
+    assert _order(room_server)["part"] == 1
 
 
 def test_direct_send_with_no_live_targets_fails_with_a_reason(room_server):
@@ -68,10 +76,15 @@ def test_direct_send_with_no_live_targets_fails_with_a_reason(room_server):
 
 
 def test_direct_send_without_failures_keeps_all_three_receivers(room_server):
-    _running_three(room_server)
+    opened = _running_three(room_server)
     next_partition = _build_hello(room_server["anon"])["task"]["direct"]
     assert next_partition["receivers"] == 3
-    assert next_partition["multicast"]["min_receivers"] == 3
+    # two of the three listen: the engine still waits for the third (`max_wait`), and nothing is ordered
+    _cloners(room_server, opened, {CLONER1: ["S1"], CLONER2: ["S2"]}).listen(1)
+    threading.Event().wait(1.0)                             # five polls of the engine (`chunksend.POLL_S`)
+    assert _build_hello(room_server["anon"])["task"]["direct"]["chunk"]["order"] is None
+    _cloners(room_server, opened, {CLONER3: ["S3"]}).listen(1)
+    assert _order(room_server)["part"] == 1
 
 
 def _source_done(room_server, opened):

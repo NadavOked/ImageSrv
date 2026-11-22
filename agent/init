@@ -267,9 +267,10 @@ echo "ImageSrv: network up on $IFACE ($IP)"
 # Never fatal, and never silent: trace_step always returns 0 and logs a
 # failed delivery. A diagnostic that stops a machine booting is damage.
 if [ -f "$LIB_DIR/common.sh" ]; then
-    SERVER="$IMAGESRV_SERVER"
-    MAC=$(cat "/sys/class/net/$IFACE/address" 2>/dev/null)
-    trace_step agent-net "up=$_up"
+    . "$LIB_DIR/tls.sh"
+    # a server this machine cannot verify is the agent's to refuse, by name (hello.sh); a reboot here would loop
+    if tls_config; then MAC=$(cat "/sys/class/net/$IFACE/address" 2>/dev/null); trace_step agent-net "up=$_up"
+    else echo "ImageSrv: $TLS_WHY"; fi
 fi
 
 # --- hand over ---------------------------------------------------------------

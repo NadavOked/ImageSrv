@@ -14,11 +14,9 @@ import pytest
 
 from server import db
 from server.rounds import drive_rates
-from server.learn import netloss as learn_netloss, server_io
+from server.learn import server_io
 
 MAC = "78:ac:c0:9b:18:84"
-SENT = 19_500_000_000
-BLOCKS = -(-SENT // drive_rates.UDPCAST_BLOCK)
 _seq = iter(range(10 ** 6))
 
 
@@ -123,16 +121,15 @@ def test_the_proc_files_are_parsed(tmp_path):
 # --- גל: התחלה וסוף, ומה שהלמידה עושה איתו --------------------------------------
 
 
-def _wave(conn, loss: float, rate="400m") -> str:
+def _wave(conn, rate="400m") -> str:
+    """גל של מנוע החתיכות (#3173: היחיד), כפי ש-`decide` שומר אותו (`engine: chunk`). האבדן ברשת של גל כזה מול
+    דיסק הספרייה נבדק ב-`test_chunk_netloss_3164` (`server_disk`)."""
     sid = f"ses_io{next(_seq):05d}"
     roster = [{"mac": MAC, "serial": f"{sid}-{k}", "model": "M"} for k in range(2)]
     conn.execute("INSERT INTO wave_rates (session_id, decision, at) VALUES (?,?,?)",
-                 (sid, json.dumps({"max_bitrate": rate, "roster": roster,
+                 (sid, json.dumps({"max_bitrate": rate, "roster": roster, "engine": "chunk",
                                    "link": {"interface": "eth1"}}), db.now_iso()))
     conn.commit()
-    drive_rates.record_stream(conn, sid, {"sent_bytes": SENT, "loss_blocks": round(BLOCKS * loss),
-                                          "wall_s": 400, "ended": "send_done",
-                                          "dropped_clients": 0, "timeouts": 10})
     return sid
 
 
@@ -145,39 +142,23 @@ def _bound(conn, tmp_path, sid, slow: bool) -> dict:
 
 
 def test_a_wave_the_server_slowed_is_marked_and_journaled(conn, tmp_path, device):
-    sid = _wave(conn, 0.004)
+    sid = _wave(conn)
     got = _bound(conn, tmp_path, sid, True)
     assert got["basis"] == "server_disk" and got["read_mbps"] == 100.0
     assert server_io.bound(conn, sid) is True
     line = conn.execute("SELECT detail FROM journal WHERE event = 'server_disk_slow'").fetchone()
     assert line["detail"].startswith(f"wave {sid} read=100.0MB/s") and "util=100% await=20.0ms" in line["detail"]
-    other = _wave(conn, 0.004)
+    other = _wave(conn)
     _bound(conn, tmp_path, other, False)
     assert server_io.bound(conn, other) is False
     assert server_io.bound(conn, "ses_never_measured") is False      # לא נמדד ≠ מוגבל
 
 
-def test_netloss_does_not_blame_the_network_for_a_server_bound_wave(conn, tmp_path, device):
-    for loss in (0.004, 0.005, 0.006):
-        _bound(conn, tmp_path, _wave(conn, loss), False)
-    slow = _wave(conn, 0.03)                                  # פי 6 מהבסיס
-    _bound(conn, tmp_path, slow, True)
-    assert learn_netloss.evaluate(conn, slow)["state"] == "server_disk"
-    assert conn.execute("SELECT 1 FROM journal WHERE event = 'net_loss_jump'").fetchone() is None
-    # ולא נכנס לבסיס של הגל הבא
-    nxt = _wave(conn, 0.005)
-    _bound(conn, tmp_path, nxt, False)
-    got = learn_netloss.assess(conn, nxt)
-    assert got["state"] == "ok" and got["waves"] == 3      # שלושת הרגועים, בלי האיטי
-    [line] = [c for c in learn_netloss.health_checks(conn)]
-    assert line["state"] == "ok"
-
-
 def test_the_rate_learning_skips_a_server_bound_wave(conn, tmp_path, device):
     """#1842: הגל הקודם של המכונה שממנו הקצב נגזר אינו הגל שהשרת האט."""
-    calm = _wave(conn, 0.0)
+    calm = _wave(conn)
     _bound(conn, tmp_path, calm, False)
-    slow = _wave(conn, 0.0, rate="300m")
+    slow = _wave(conn, rate="300m")
     drives = [{"mac": MAC, "serial": "n1"}, {"mac": MAC, "serial": "n2"}]
     _, _, before = drive_rates._from_previous(conn, drives, 600_000_000, None)
     assert before["session_id"] == slow                       # לא נמדד — נלמד כרגיל
@@ -188,11 +169,11 @@ def test_the_rate_learning_skips_a_server_bound_wave(conn, tmp_path, device):
 
 def test_the_health_line_names_the_slow_library_disk(conn, tmp_path, device, monkeypatch):
     assert server_io.health_checks(conn) == []
-    _bound(conn, tmp_path, _wave(conn, 0.0), True)
+    _bound(conn, tmp_path, _wave(conn), True)
     [line] = server_io.health_checks(conn)
     assert line["state"] == "warn" and "דיסק הספרייה איטי — 100 MB/s בגל האחרון" in line["detail"]
     assert "עסוק 100% מהזמן, 20.0ms לבקשה" in line["detail"]
-    sid = _wave(conn, 0.0)                                    # ההתקן של הספרייה לא זוהה (למשל NFS): "לא נבדק"
+    sid = _wave(conn)                                    # ההתקן של הספרייה לא זוהה (למשל NFS): "לא נבדק"
     monkeypatch.setattr(server_io, "_device_of", lambda root, proc: None)
     server_io.begin(conn, "wave", sid, tmp_path, proc=_proc(tmp_path, 0, 0, 0, 0, 0))
     got = server_io.end(conn, "wave", sid, tmp_path, proc=_proc(tmp_path, 0, 0, 0, 0, 0))
@@ -215,9 +196,9 @@ def test_the_wave_and_the_capture_are_wired():
     root = Path(__file__).resolve().parent.parent / "server"
     app = (root / "app.py").read_text(encoding="utf-8")
     assert 'server_io.begin(conn, "wave", session["id"]' in app
-    end_at = app.index('server_io.end(conn, "wave", session_id')
-    assert app.index("drive_rates.record_stream(conn, session_id, outcome)") < end_at \
-        < app.index("learn_netloss.evaluate(conn, session_id)")
+    # #3173: the chunk engine's end of a wave -- the library disk first, then the rate learning that reads it
+    end_at = app.index('server_io.end(conn, "wave", session_id, library.root, sender=outcome')
+    assert end_at < app.index("chunk_rate.record(conn, session_id")
     cap = (root / "library" / "capture.py").read_text(encoding="utf-8")
     assert 'server_io.begin(ctx.conn, "capture", task_id' in cap
     assert 'server_io.end(ctx.conn, "capture", task_id' in cap

@@ -40,7 +40,7 @@ from boot.http import build_config_text, config_for_scope
 from server.net import deploy_net
 from server.system import grub_password
 
-BASE = "http://10.44.12.10:8080"
+BASE = "http://10.44.12.10:7712"
 PASSWORD = "abcde-fghjk-mnpqr-stuvw"
 HASH = grub_lock.pbkdf2_hash(PASSWORD, iterations=1000)   # fast; the format is the same
 LOCK = 'set superusers="imagesrv"'
@@ -215,8 +215,8 @@ def test_a_malformed_mac_and_a_failed_lookup_are_locked_with_the_password():
 
 
 def test_the_address_the_station_reached_keeps_the_hash():
-    scoped = config_for_scope({"server": ("10.10.10.8", 8080)}, cfg())
-    assert scoped.server_base == "http://10.10.10.8:8080"
+    scoped = config_for_scope({"server": ("10.10.10.8", 7712)}, cfg())
+    assert scoped.server_base == "http://10.10.10.8:7712"
     assert scoped.password_hash == HASH
 
 
@@ -290,7 +290,7 @@ def test_complete_hands_the_password_to_the_default_writer(tmp_path):
     assert PASSWORD_LINE in (tmp_path / "grub" / "grub.cfg").read_text(encoding="ascii").splitlines()
 
 
-def _old_bootstrap(tmp_path: Path, host: str = "10.44.9.10:8080") -> Path:
+def _old_bootstrap(tmp_path: Path, host: str = "10.44.9.10:7712") -> Path:
     """What a server before #2437 left on its TFTP root."""
     text = render_bootstrap(GrubConfig(server_base=f"http://{host}"))
     text = "\n".join(line for line in text.splitlines() if line != LOCK) + "\n"
@@ -304,7 +304,7 @@ def test_an_upgraded_server_locks_the_bootstrap_it_left_on_the_tftp_root(tmp_pat
     path = _old_bootstrap(tmp_path)
     assert deploy_net.refresh_grub_cfg(tmp_path, HASH) is None
     assert path.read_text(encoding="ascii") == render_bootstrap(
-        GrubConfig(server_base="http://10.44.9.10:8080", password_hash=HASH))
+        GrubConfig(server_base="http://10.44.9.10:7712", password_hash=HASH))
 
 
 def test_a_locked_bootstrap_is_rewritten_with_this_starts_hash(tmp_path):

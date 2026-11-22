@@ -184,7 +184,7 @@ def server(tmp_path, images_root):
     from server.app import create_console_app                # noqa: PLC0415
     rt = _runtime(tmp_path, images_root)
     yield rt, create_console_app(rt)
-    rt.ctx.sender.stop()
+    rt.ctx.chunk.stop()
 
 
 def test_server_startup_clears_the_leftovers_of_a_save_that_was_cut(server):

@@ -29,7 +29,7 @@ def server(tmp_path: Path, images_root):
     from server.console import users
     from server.app import create_app
 
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      wol_send=lambda _packet: None)
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
@@ -42,7 +42,7 @@ def server(tmp_path: Path, images_root):
         assert admin.post("/api/console/machines", json={
             "mac": mac, "name": name, "group_id": group}).status_code == 200
     yield {"app": app, "ctx": ctx, "admin": admin, "deploy": deploy, "anon": TestClient(app)}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def hello(server, mac: str) -> dict:
@@ -155,7 +155,9 @@ def test_history_lists_finished_rounds_newest_first_without_the_one_on_screen(se
         "waits": {"waves": 0, "open_wait_s": None, "smart_hold_s": None, "smart_holds": 0,
                   "smart_unreleased": 0},
         # #3185: "קצב ואיבוד" -- אין גל בחלון: לא נשמר (kept 0), לא קצב 0 ולא איבוד 0.
-        "flow": {"waves": 0, "kept": 0, "rate_bps": None, "loss_blocks": None}}
+        "flow": {"waves": 0, "kept": 0, "rate_bps": None, "loss_blocks": None, "lost_chunks": None},
+        # #3978: "הרשת" -- אין גל שמנוע החתיכות רשם: null, לא "תקינה".
+        "network": None}
 
 
 def test_history_hides_a_failed_round_that_is_still_on_screen(server):

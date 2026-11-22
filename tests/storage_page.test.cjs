@@ -405,7 +405,7 @@ test('8. health: storage_<id> rows are grouped under one "אחסון" row with a
     {id: "server", label: "שרת (API)", state: "ok", detail: "uvicorn"},
     {id: "storage_loc_local", label: "מקומי", state: "ok", detail: "מחובר · 6 אימג'ים"},
     {id: "storage_loc_bbbb0002", label: "san-lun1", state: "bad", detail: "לא נגיש · no route"},
-    {id: "udp_sender", label: "מולטיקאסט", state: "warn", detail: "לא נמצא"}]))`);
+    {id: "chunk_sender", label: "מולטיקאסט", state: "warn", detail: "לא נמצא"}]))`);
   const parsed = JSON.parse(rows);
   const group = parsed.find(r => r.html && r.html.includes('class="group"'));
   assert.ok(group, 'a group row');

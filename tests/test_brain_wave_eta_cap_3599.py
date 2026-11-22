@@ -84,7 +84,7 @@ def test_the_write_check_start_is_the_slowest_probe_times_the_margin_never_under
 def test_k3_and_the_command_read_one_rate_max(conn):
     """The ceiling K3 predicts with is the `--rate-max` the engine puts on the command line for the same probes."""
     write_kbps = chunksend.probe_write_kbps(list(PROBES.values()), FLOOR)
-    engine = SimpleNamespace(port=9002, interface=None, feedback=True, write_floor=lambda: FLOOR)
+    engine = SimpleNamespace(port=7713, interface=None, feedback=True, write_floor=lambda: FLOOR)   # פורט-הפצה-מכוון
     cmd = ChunkEngine._command(engine, SimpleNamespace(key="0123456789abcdef", round=1), {"index": 3}, Path("image.zst"),
                                892_000, write_kbps, None, None)
     rate_max = int(cmd[cmd.index("--rate-max") + 1])
@@ -100,7 +100,7 @@ def test_k3_reads_the_rate_cap_the_command_carries_when_the_ceiling_can_grow(con
     with path.open("wb") as f:
         f.truncate(ZBYTES)
     write_kbps = chunksend.probe_write_kbps(list(PROBES.values()), FLOOR)
-    engine = SimpleNamespace(port=9002, interface=None, feedback=True, write_floor=lambda: FLOOR)
+    engine = SimpleNamespace(port=7713, interface=None, feedback=True, write_floor=lambda: FLOOR)   # פורט-הפצה-מכוון
     wave = SimpleNamespace(key="0123456789abcdef", round=1, part_chunks={3: CHUNKS})
     cmd = ChunkEngine._command(engine, wave, {"index": 3}, path, ASKED // 1000, write_kbps, None, None)
     rate_cap = int(cmd[cmd.index("--rate-cap") + 1])

@@ -308,7 +308,7 @@ def test_the_unknown_machine_is_not_a_failure_and_draws_its_own_records():
 
 def test_the_native_side_routes_parses_and_renders_the_block():
     screens = _src("screens.c")
-    route = screens[screens.index("void app_route(App *a){"):]
+    route = screens[screens.index("static void route_base(App *a){"):]   # app_route = route_base + the toolbox overlay (#649)
     route = route[:route.index("\n}\n")]
     assert route.index("SCREEN_FAILURE") < route.index("SCREEN_MESSAGE"), "הכישלון אינו לפני message="
     assert "case SCREEN_FAILURE:  screen_failure(" in screens

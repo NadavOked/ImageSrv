@@ -16,8 +16,8 @@ WRITE_FSYNC_INTERVAL_S="${WRITE_FSYNC_INTERVAL_S:-10}"
 
 writeback_watch() {
     # $1 = target dir (reader.pid), $2 = partition node, $3 = the pid of the shell
-    # that runs the pipe. In the background; the pipe (restore_pipe, drawers.sh;
-    # _drawer_pipeline, drawerfeed.sh -- both shapes, #1746) kills it at its
+    # that runs the pipe. In the background; the pipe (restore_pipe, drawers.sh)
+    # kills it at its
     # end, and it leaves by itself once $3 is gone (a pipe killed on a ceiling,
     # waits.sh) -- never an orphan fsyncing a drawer to the next boot.
     # Its own output goes nowhere: an orphaned `sleep` must not hold a pipe (#14).
@@ -33,7 +33,7 @@ writeback_watch() {
 }
 
 writeback_why() {
-    # $1 = disk. The station's twin of verdict.sh's _write_fail (#1841): the partition
+    # $1 = disk. (#1841): the partition
     # loop of run_restore fails the target with "N of M partitions written", and that
     # line overwrote the reason -- the server saw `unclassified`. Prints "; <the refused
     # fsync's line>" when this target's last partition was cut by writeback_watch,

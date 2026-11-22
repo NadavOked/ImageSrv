@@ -40,8 +40,8 @@ SS_NTP = SS_HEAD + 'UNCONN 0 0 0.0.0.0:123 0.0.0.0:* users:(("chronyd",pid=1,fd=
 
 
 def _hooks(*, udp=SS_UDP, tcp="listen", dnsmasq=(0, "active"), imagesrv=(0, "active"), dhcp_on=False):
-    """hooks לקריאה, בלי systemctl ובלי ss אמיתיים. `tcp="listen"` = 8080 מאזין."""
-    tcp = (SS_HEAD + 'LISTEN 0 2048 0.0.0.0:8080 0.0.0.0:* users:(("python3",pid=9,fd=7))\n') if tcp == "listen" else tcp
+    """hooks לקריאה, בלי systemctl ובלי ss אמיתיים. `tcp="listen"` = 7712 מאזין."""
+    tcp = (SS_HEAD + 'LISTEN 0 2048 0.0.0.0:7712 0.0.0.0:* users:(("python3",pid=9,fd=7))\n') if tcp == "listen" else tcp
     units = {"dnsmasq": dnsmasq, "imagesrv-server": imagesrv}
     return {"ss": lambda: udp, "ss_tcp": lambda: tcp, "unit": lambda name: units[name], "dhcp_on": lambda: dhcp_on}
 
@@ -118,7 +118,7 @@ def test_tftp_down_blocks_with_the_reason_in_hebrew_and_offers_the_button_for_it
 
 @pure
 def test_the_http_port_follows_the_listener_and_http_down_is_startable():
-    hooks = _hooks(tcp=SS_HEAD)                                       # הטבלה נקראה ואין 8080
+    hooks = _hooks(tcp=SS_HEAD)                                       # הטבלה נקראה ואין 7712
     got = _by(hooks)
     assert got["http_boot"].state == S.INACTIVE and got["http_boot"].startable
     hooks.update(ss_tcp=lambda: SS_HEAD + 'LISTEN 0 2048 0.0.0.0:9090 0.0.0.0:* users:(("python3",pid=9,fd=7))\n',
@@ -258,7 +258,7 @@ def _app(tmp_path: Path, images_root: Path, clock, *, listeners=None):
              "installer_conf": lambda: fake["installer_conf"],
              "brain_host": True, "brain_unit": lambda name: fake["units"][name]}
     dnsmasq = FakeDnsmasq(fake)
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock, health_hooks=hooks,
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock, health_hooks=hooks,
                      dhcp_hooks={"apply": dnsmasq.apply, "apply_proxy": dnsmasq.apply_proxy,
                                  "interfaces": lambda: ifaces,
                                  "probe": lambda name: dhcp.ProbeResult(True, ()),
@@ -369,7 +369,7 @@ def test_the_host_hooks_are_turned_on_only_by_main_and_without_them_there_is_no_
     quiet = {"ss": lambda: "", "ss_tcp": lambda: "", "nft_ruleset": lambda: None, "unit_active": lambda n: "active",
              "http_get": lambda u: 200, "http_size": lambda u: (200, 31_000_000), "interfaces": lambda: [],
              "tftp_root": lambda: tmp_path, "udp_sender_pids": lambda: []}
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock, health_hooks=quiet)
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock, health_hooks=quiet)
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
     client = TestClient(app)
     client.post("/api/console/login", json={"username": "noc", "password": "admin-pass-123"})

@@ -69,10 +69,10 @@ def test_unsynchronised_without_a_sample_shows_no_number():
 def test_the_freshest_sample_is_read_with_its_unit_age_and_sign():
     status = _status(TRACKING_UNSYNC, SOURCES_352_BEHIND)
     assert status.get("last_sample") == {"server": "109.237.76.250", "age_s": 21,
-                                         "offset_ms": -352000.0}
+                                         "offset_ms": -352000.0, "poll_s": 64}
     only_old = HEADER + "^x 195.189.140.250   2   6   177    5m   +415us[ +939us] +/- 8012us\n"
     assert _status(TRACKING_UNSYNC, only_old).get("last_sample") == {
-        "server": "195.189.140.250", "age_s": 300, "offset_ms": pytest.approx(0.415)}
+        "server": "195.189.140.250", "age_s": 300, "offset_ms": pytest.approx(0.415), "poll_s": 64}
     assert _status(TRACKING_UNSYNC, SOURCES_NO_SAMPLE).get("last_sample") is None
 
 

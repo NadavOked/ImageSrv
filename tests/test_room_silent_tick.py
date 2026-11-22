@@ -238,12 +238,12 @@ def test_the_room_clock_actually_fires_in_the_background(tmp_path, monkeypatch):
 
     monkeypatch.setattr(room_mod, "sweep", counting_sweep)
 
-    app = create_app(tmp_path / "data", images, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images, "http://10.44.12.10:7712",
                      now_fn=Clock(), room_clock_interval=0.02)
     try:
         with TestClient(app):                 # __enter__ מריץ את ה-lifespan
             assert fired.wait(timeout=5.0), "שעון-הרקע לא ירה — הלולאה אינה מחוברת"
     finally:
-        app.state.ctx.sender.stop()
+        app.state.ctx.chunk.stop()
 
     assert calls["n"] >= 1

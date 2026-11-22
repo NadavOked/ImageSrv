@@ -2,7 +2,7 @@
 
 הגלוב החיובי `[0-9]*-[0-9]*` מאפשר ל-`*` לתפוס רווח ושורה חדשה, ולכן ערך עם
 שורת כלל נוספת עבר ונכתב לחומת האש כמו שהוא (סקירת Fable, 04/11,
-`06-generator-validation.sh`: `dport 8081` ו-`dport 22` על כרטיס ההפצה). מהרשת
+`06-generator-validation.sh`: `dport 443` ו-`dport 22` על כרטיס ההפצה). מהרשת
 זה לא נגיש היום — זה פער אימות. כאן: סירוב, וגם שהערכים התקינים עוברים.
 """
 
@@ -15,7 +15,7 @@ import pytest
 
 from test_nftables_rules import BASH, GEN, PRIMARY_ARGS, generate, needs_bash
 
-INJECT_MCAST = '39000-39001 accept\n\t\tiifname "eth-deploy" tcp dport 8081 accept #INJECTED'
+INJECT_MCAST = '39000-39001 accept\n\t\tiifname "eth-deploy" tcp dport 443 accept #INJECTED'
 INJECT_IP = "1.2.3.4 tcp dport 22 accept #INJECTED"
 
 

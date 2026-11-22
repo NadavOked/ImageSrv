@@ -47,7 +47,7 @@ def udhcpc_prelude(net: Path, log: Path, ok_ifs: str, foreign_ifs: str = "") -> 
     (net.parent / "run").mkdir(exist_ok=True)
     return f"""
 LIB_DIR=/nonexistent-lib
-IMAGESRV_SERVER=http://{SERVER_IP}:8080
+IMAGESRV_SERVER=http://{SERVER_IP}:7712
 NET={posix(net)!r}
 LOG={posix(log)!r}
 RUN={posix(net.parent / "run")!r}

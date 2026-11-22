@@ -35,7 +35,6 @@ def test_the_server_decides_one_wave_for_cloners_of_one_capacity_and_says_it_is_
     """(neg) The college case: one cloner, two drawers, its card not reported (1Gb/s assumed). One capacity -> SAME."""
     ctx, anon = room_server["ctx"], room_server["anon"]
     _index_the_image(ctx, chunks=10)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     wave, _hello = _room_wave(room_server)
     part = next(p["index"] for p in MANIFEST_256["partitions"] if p.get("file"))
     told = anon.post("/api/v1/agent/chunk-pass", json={

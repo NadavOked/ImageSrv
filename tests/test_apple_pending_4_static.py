@@ -57,10 +57,10 @@ def test_row_menu_respects_reduced_motion():
 
 
 def test_wide_tables_use_the_kebab_pattern():
-    """הרשאות, חיבורים פיזיים ופורטים: מחלקת kebab-col וכותרת sr-only לעמודת הפעולות.
-    פורטים (#1267): רק בכרטיסים שבין רשתות יש תפריט — ברשת ההפצה אין פעולות."""
+    """הרשאות וחיבורים פיזיים: מחלקת kebab-col וכותרת sr-only לעמודת הפעולות.
+    #3887: דף הפורטים, עם התפריט בכרטיסים שבין רשתות, הוחלף בדף "שירותים" בלי תפריט שורה."""
     js = _js()
-    for needle in ('cls: "kebab-col", opt: [2]', 'columns: ["כרטיס", "תיאור", "MAC", "קישור", "כתובת", "תפקיד", { html: `<span class="sr">פעולות</span>` }], rows: nics.map(netNicRow), cls: "kebab-col", opt: [2]', 'cls: cross ? "kebab-col" : "", opt: cross ? [5] : []'):
+    for needle in ('cls: "kebab-col", opt: [2]', 'columns: ["כרטיס", "תיאור", "MAC", "קישור", "כתובת", "תפקיד", { html: `<span class="sr">פעולות</span>` }], rows: nics.map(netNicRow), cls: "kebab-col", opt: [2]'):
         assert needle in js, needle
     assert js.count('<span class="sr">פעולות</span>') >= 3
     assert "UI.rowMenu(u.username, items)" in js
@@ -115,7 +115,7 @@ def test_main_tree_has_no_duplicate_icons():
     בריאות=תשתית). עכשיו כל צומת בעץ הראשי עם אייקון משלו."""
     icons = _tree_icons()
     wanted = ["סקירה כללית", "סבב הפצה", "מלאי", "אימג'ים", "מחשבים", "תשתית", "בריאות ושירותים", "אחסון", "רשת", "חיבורים פיזיים",
-              "רשת הפצה", "פורטים", "מוניטור", "דרייברים", "ניהול", "הגדרות", "משתמשים והרשאות", "יומן", "החשבון שלי"]
+              "רשת הפצה", "שירותים", "מוניטור", "דרייברים", "ניהול", "הגדרות", "משתמשים והרשאות", "יומן", "החשבון שלי"]
     missing = [w for w in wanted if w not in icons]
     assert not missing, missing
     seen: dict[str, str] = {}
@@ -202,12 +202,11 @@ def test_build_card_is_the_mockup_kv_card_and_long_values_wrap():
 # ---------- דשבורדים: עקביות ----------
 
 def test_dashboard_pages_share_the_compact_header():
-    """סקירה, בריאות, אחסון, רשת (כל הלשוניות כולל פורטים), מוניטור וחדר ההפצה: אותה כותרת — שורה אחת + שורת משנה."""
+    """סקירה, בריאות, אחסון, רשת (כל הלשוניות; #3887: "שירותים" — דף משלו עם כותרת compact), מוניטור וחדר ההפצה: אותה כותרת — שורה אחת + שורת משנה."""
     js = _js()
     for needle in ('actions, tabs, tab, compact: true });',                       # סקירה
                    'name: "בריאות ושירותים", sub, pill, actions, compact: true });',            # בריאות
                    'tabs: NET_TABS, tab, tabClick: netTabClick, compact: true });',  # רשת
-                   'const header = netHeader(3);',                                  # פורטים — #1300: אותה כותרת "רשת"
                    'רענון</button>`, compact: true });',                           # מוניטור
                    'pill: tab === 0 ? pill : "", actions, tabs, tab, compact: true });'):  # חדר ההפצה
         assert needle in js, needle

@@ -86,14 +86,82 @@ def test_the_server_runs_the_sender_by_the_name_the_script_installs():
 # --- the adversarial review of #3063 (13/11) -------------------------------------------
 
 
-def test_the_installation_says_why_the_sender_was_not_built():
-    """ממצא 6: `>/dev/null 2>&1` בלע את הסיבה. ה-firstboot קורא את מה שהסקריפט אמר, וכותב ליומן את
-    השורה האחרונה שלו -- זו שאומרת למה."""
+def test_the_installation_keeps_the_build_scripts_reason():
+    """ממצא 6: `>/dev/null 2>&1` בלע את הסיבה. ה-firstboot קורא את מה שהסקריפט אמר, כותב את כולו ליומן,
+    ושם את השורה האחרונה שלו -- זו שאומרת למה -- בהודעת הכישלון. ההתנהגות נבדקת בהרצה
+    (test_failure_gui_server_1741, chunkcast-failed)."""
     text = (REPO / "tools/iso/firstboot.sh").read_text(encoding="utf-8")
-    call = text[text.index('bash "$SRC/tools/server-tools-build.sh"') - 40:]
-    call = call[:call.index("\nfi\n")]
+    start = text.index('bash "$SRC/tools/server-tools-build.sh"') - 40
+    call = text[start:text.index("\n# ----", start)]
     assert ">/dev/null" not in call, "the build script's reason is thrown away again"
     assert "tools_said=$(" in call and "2>&1" in call and "${tools_said##*$" in call
+
+
+@needs_gcc
+def test_a_program_that_says_the_usage_but_not_the_version_is_not_installed(tmp_path):
+    """#3173: the server asks `chunkcast --version` before every wave (binary_problem). A binary that would
+    fail that question is not installed -- the installation and the upgrade then fail on this exit."""
+    other = tmp_path / "src" / "agent"
+    other.mkdir(parents=True)
+    shutil.copy(REPO / "agent" / "fanout.c", other / "fanout.c")
+    shutil.copytree(REPO / "agent" / "blake3", other / "blake3")
+    (other / "chunkcast.c").write_text(
+        '#include <stdio.h>\nint main(void) { fprintf(stderr, "usage: chunkcast send|recv|apply\\n"); return 2; }\n',
+        encoding="ascii")
+    done = _run("--source", str(tmp_path / "src"), "--bin-dir", str(tmp_path / "bin"))
+    assert done.returncode != 0 and "did not answer --version" in done.stderr, done.stdout + done.stderr
+    assert not (tmp_path / "bin" / "chunkcast").exists()
+    assert not (tmp_path / "bin" / "chunkcast.new").exists()
+
+
+# --- #3173, owner 21/11: no sender = the upgrade fails, visibly -----------------------------
+
+FAILING_TOOLS = """#!/usr/bin/env bash
+echo "gcc: error: agent/chunkcast.c: compile failed" >&2
+echo "server-tools-build: chunkcast did not compile; the previous one is untouched" >&2
+exit 1
+"""
+
+
+@needs_bash
+def test_an_upgrade_whose_chunkcast_was_not_built_rolls_back_and_says_why(tmp_path):
+    """Since #3173 there is no other sender: a new tag that cannot build chunkcast is a server that cannot clone.
+    The upgrade goes back to the previous tag, and the status says it was the sender and why (the script's last line)."""
+    from test_installer_1131 import _fake_repo, _run_upgrade, _seed_db, _status, _upgrade_fakes, calls
+    data = tmp_path / "data"
+    _seed_db(data, previous="v0.48.0")
+    repo = _fake_repo(tmp_path, live_ok=True)
+    (repo / "tools" / "server-tools-build.sh").write_text(FAILING_TOOLS, encoding="utf-8", newline="\n")
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    _upgrade_fakes(bindir)
+    proc = _run_upgrade(tmp_path, bindir, repo, data)
+    log = (tmp_path / "upgrade.log").read_text(encoding="utf-8")
+    assert proc.returncode != 0, log
+    assert "git checkout --detach v0.48.0" in calls(tmp_path), log
+    assert "done and verified" not in log
+    status = _status(data)
+    assert status and status["state"] == "failed", status
+    assert "מנוע השידור (chunkcast) לא נבנה" in status["error"], status["error"]
+    assert "chunkcast did not compile" in status["error"] and "הוחזר ל-v0.48.0" in status["error"]
+    assert "gcc: error" in log, "the build's whole output is in the upgrade log"
+
+
+@needs_bash
+def test_an_upgrade_whose_chunkcast_was_built_goes_on(tmp_path):
+    """The guard: a build that succeeded (the stub of _fake_repo) does not stop the upgrade."""
+    from test_installer_1131 import _fake_repo, _run_upgrade, _seed_db, _status, _upgrade_fakes
+    data = tmp_path / "data"
+    _seed_db(data)
+    repo = _fake_repo(tmp_path, live_ok=True)
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    _upgrade_fakes(bindir)
+    proc = _run_upgrade(tmp_path, bindir, repo, data)
+    log = (tmp_path / "upgrade.log").read_text(encoding="utf-8")
+    assert proc.returncode == 0, proc.stderr + log
+    assert "server-tools-build: (stub) chunkcast is ready" in log and "done and verified" in log
+    assert (_status(data) or {}).get("state") != "failed"
 
 
 def _upgrade_functions(tmp_path: Path, script: str) -> subprocess.CompletedProcess:

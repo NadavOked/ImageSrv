@@ -9,7 +9,7 @@
   גם הקישור לא נקרא (כרטיס וירטואלי, ווינדוס) -- 900 Mbps, אותה תקרה שהגל מקבל בלי `IMAGESRV_MAX_BITRATE`.
 - ``השידור קודם.`` HTTP מקבל רק **מה שנשאר מהגבול אחרי השידור בפועל**. השידור בפועל (#3596) = **מה שהכרטיס נשא ואינו הגשת
   הקבצים שלנו** (מונה V9 פחות הבייטים שהוגשו, בין שני מחזורים), כשהוא נמדד -- גם כשהוא פחות ממה שהמנוע ביקש מהזרם
-  (`ChunkEngine.sending_bps`, או `max_bitrate` של הגל ב-udpcast; 17/11, J1: ביקשנו 892Mbps והחוט נשא 412, והתקציב ישב על הרצפה
+  (`ChunkEngine.sending_bps`; 17/11, J1: ביקשנו 892Mbps והחוט נשא 412, והתקציב ישב על הרצפה
   כל הגל). **הקצב המבוקש** הוא רק המקור במחזור הראשון (אין הפרש), או כשהכרטיס לא נקרא או נשא אפס; הוא נרשם בראיות (``asked``).
   אין שידור = כל הגבול.
 - ``AIMD בתוך השארית.`` אובדן במשכפלים (`RcvbufErrors`, ו-#3064 שלב 4: חתיכות שהמקלט נטש באמצע, G7)
@@ -70,7 +70,7 @@ TICK_S = 10.0
 FLOOR_BPS = 8_000_000
 STEP_BPS = 8_000_000
 CUT = 0.5
-#: לחץ I/O מלא על דיסק הספרייה שמעליו "השרת הוא הצוואר" (X12, B19). הערכה: 0.18 נמדד בגל udpcast על vmdk thin,
+#: לחץ I/O מלא על דיסק הספרייה שמעליו "השרת הוא הצוואר" (X12, B19). הערכה: 0.18 נמדד בגל של השולח הישן על vmdk thin,
 #: `server_io` שופט גל שלם לפי ההתקן של הספרייה (#3365: `SERVER_DISK_UTIL` ו-`SERVER_DISK_AWAIT_MS`), לא לפי PSI --
 #: כאן הסף של ה-PSI לחלון של 10 שניות.
 PSI_FULL_MAX = 0.2
@@ -649,23 +649,16 @@ class Budget:
 # --- החיבור לשרת ------------------------------------------------------------------------------------------------
 
 
-def _broadcast_bps(conn, chunk, sender) -> int | None:
+def _broadcast_bps(chunk) -> int | None:
     """הקצב שביקשנו מהזרם עכשיו: 0 = אין זרם, ``None`` = לא הצלחנו לשאול (אין להניח "אין שידור")."""
     try:
-        asked = chunk.sending_bps()
-        if asked:
-            return asked
-        status = sender.status()
-        if status and status.get("state") in ("starting", "sending"):
-            decided = drive_rates.decision(conn, status["session_id"]) or {}
-            return drive_rates.parse_bitrate(decided.get("max_bitrate"))      # הזרם רץ ואין קצב ידוע = None
-        return 0
+        return chunk.sending_bps()
     except Exception:                           # noqa: BLE001
         log.exception("brain: the rate of the stream could not be read")
         return None
 
 
-def production(conn, *, served, chunk, sender, interface: str | None = None, mode: Callable[[], str] | None = None,
+def production(conn, *, served, chunk, interface: str | None = None, mode: Callable[[], str] | None = None,
                sys_net=netsense.SYS_NET, proc=netsense.PROC) -> Budget:
     """התקציב של השרת האמיתי: המתג מההגדרות, הגבול מההגדרה או מהכרטיס, והמונים מהמנועים, מההגשה ומ-sysfs/proc."""
     from server.brain import veto                # כאן ולא למעלה: המתג מגיע מהווטו, והווטו לא צריך את התקציב
@@ -685,9 +678,9 @@ def production(conn, *, served, chunk, sender, interface: str | None = None, mod
 
     def read() -> Reading:
         integrity_observer.tick()                # לעולם אינו זורק; כבוי = לא נקרא (המחזור לא מגיע לכאן ב-off)
-        nic = netsense.nic_counters(chunk.interface or sender.interface or interface, sys_net)
+        nic = netsense.nic_counters(chunk.interface or interface, sys_net)
         return Reading(at=time.monotonic(), served_bytes=served.total_all(),
-                       broadcast_bps=_broadcast_bps(conn, chunk, sender),
+                       broadcast_bps=_broadcast_bps(chunk),
                        nic_tx_bytes=nic["tx_bytes"], nic_tx_dropped=nic["tx_dropped"],
                        rx_dropped=netsense.receivers_rcvbuf(conn), psi_full_us=netsense.psi_io_full_us(proc),
                        rx_abandoned=netsense.receivers_abandoned(conn),
@@ -695,6 +688,6 @@ def production(conn, *, served, chunk, sender, interface: str | None = None, mod
                        rx_no_buffer=netsense.receivers_card(conn, "rx_no_buffer"), direct=direct_wave())
 
     return Budget(mode=mode or (lambda: veto.mode(conn)),
-                  ceiling=lambda: ceiling_bps(conn, sender.link()), read=read,
+                  ceiling=lambda: ceiling_bps(conn, chunk.link()), read=read,
                   remember=lambda **row: memory.record(conn, **row),
                   resolve=lambda row, outcome: memory.resolve(conn, [row], outcome))

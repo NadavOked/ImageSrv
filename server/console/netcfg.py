@@ -83,6 +83,9 @@ def default_hooks() -> Hooks:
         # כרטיס חייבים להסכים מי קיים במכונה.
         "interfaces": dhcp.list_interfaces,
         "netcfg_now": time.time,
+        # #3771: סוף חלון האישור נשמר גם ב-monotonic (משותף לשרת ולזרוע באותו אתחול), כדי שקפיצת
+        # שעון קדימה לא תפקיע אותו לפני שהמפעיל אישר.
+        "netcfg_mono": time.monotonic,
         # #2349: ההמתנה ל-lease אחרי החלת DHCP — async, כדי שהסוכנים, GRUB
         # והקונסולה (אותו event loop) ייענו בזמן שהיא ממתינה.
         "netcfg_sleep": asyncio.sleep,
@@ -286,8 +289,10 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
             "window_seconds": netcfg_rollback.WINDOW_SECONDS,
             "pending": pending is not None,
             "interface": pending.interface if pending else "",
-            "seconds_left": max(0, int(pending.deadline - now)) if pending else 0,
-            "expired": netcfg_rollback.expired(pending, now),
+            "seconds_left": max(0, int(netcfg_rollback.seconds_left(
+                pending, now, hooks["netcfg_mono"](), hooks["netcfg_boot_id"]()))) if pending else 0,
+            "expired": netcfg_rollback.expired(
+                pending, now, hooks["netcfg_mono"](), hooks["netcfg_boot_id"]()),
             "corrupt": netcfg_rollback.corrupt_pending(state_dir),
         }
 
@@ -403,7 +408,8 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
 
     async def _configure(name: str, before: netcfg.NetConfig, cfg: netcfg.NetConfig,
                    body: dict, request: Request, user, live: dict,
-                   state: netcfg_host.LiveState | None = None) -> dict:
+                   state: netcfg_host.LiveState | None = None, *,
+                   deploy_dns_before: list[str] | None = None) -> dict:
         """מכאן — אחרי שהקלט נבדק: הקלדת השם, זרוע ההחזרה, כתיבה, קריאה חוזרת."""
         # #1558: הקונסולה כותבת ל-ifupdown. כשמשהו אחר מנהל את הרשת (שרת
         # חיפה: netplan) — סירוב בשם **לפני** הזרוע ולפני כל קובץ, ולא
@@ -447,7 +453,7 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
                 user[0])
         applying.add(name)
         try:
-            return await _apply(name, cfg, arm, now, user[0], live.get(name))
+            return await _apply(name, cfg, arm, now, user[0], live.get(name), deploy_dns_before)
         finally:
             applying.discard(name)
 
@@ -462,6 +468,7 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         marker = netcfg_rollback.Pending(
             interface=name,
             deadline=now + netcfg_rollback.WINDOW_SECONDS,
+            deadline_mono=hooks["netcfg_mono"]() + netcfg_rollback.WINDOW_SECONDS,
             armed_at=_iso(now),
             boot=hooks["netcfg_boot_id"](),
             files=[{"name": name,
@@ -490,7 +497,7 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         מגיע או עד `DHCP_LEASE_WAIT_S`. `dhcpcd -b` חוזר מיד, וה-lease מגיע
         שניות אחריו; קריאה מיידית אמרה "אין כתובת" על החלה שהצליחה.
 
-        ההמתנה היא `await` — ה-loop פנוי לסוכנים (8080) ולקונסולה (8081)
+        ההמתנה היא `await` — ה-loop פנוי לסוכנים (7712) ולקונסולה (443)
         בינתיים. כל קריאה עצמה (`ip addr`/`ip route`) סינכרונית וקצרה, כמו
         בכל נתיב אחר בראוטר הזה. סטטי נקרא פעם אחת ואינו ממתין כלל. תום
         הזמן אינו "בסדר": הפער האחרון חוזר, עם מספר השניות (עיקרון 5)."""
@@ -505,15 +512,25 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
             await hooks["netcfg_sleep"](netcfg_host.DHCP_POLL_S)
 
     async def _apply(name: str, cfg: netcfg.NetConfig, armed: bool, now: float,
-                     who: str, live: dict | None) -> dict:
+                     who: str, live: dict | None, deploy_dns_before: list[str] | None) -> dict:
         """כותב, מחיל, ואז **קורא בחזרה**. ok נקבע רק מהקריאה."""
         configs = sorted([c for c in all_configs() if c.name != name] + [cfg],
                          key=lambda c: c.name)
+        resolv = netcfg.render_resolv(configs)
+        expected_dns = None
+        if deploy_dns_before is not None:
+            expected_dns = netcfg_host.parse_resolv(resolv)
+            mgmt = load(management())
+            # A deploy save does not own the DHCP lease or its resolver file.
+            lease_dns = deploy_dns_before and mgmt.mode == netcfg.MODE_DHCP and not mgmt.dns
+            if not expected_dns or lease_dns:
+                resolv = None
+                expected_dns = deploy_dns_before
         errors = [hooks["netcfg_write_conf"](name,
                                              netcfg.render(cfg, hostname=hooks["hostname"]()),
-                                             netcfg_host.INTERFACES_DIR),
-                  hooks["netcfg_write_resolv"](netcfg.render_resolv(configs),
-                                               netcfg_host.RESOLV_CONF)]
+                                             netcfg_host.INTERFACES_DIR)]
+        if resolv is not None:
+            errors.append(hooks["netcfg_write_resolv"](resolv, netcfg_host.RESOLV_CONF))
         error = " · ".join(e for e in errors if e) or None
         if error is None:
             # #2840: ifdown/ifup (עד 35 ש') בתהליכון — לא על לולאת האירועים, שעליה
@@ -524,6 +541,8 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         else:
             state = hooks["netcfg_state"]()
             gaps = gaps_of(cfg, state)
+        if expected_dns is not None and state.checked and state.nameservers != expected_dns:
+            gaps.append(f"resolv.conf: שרתי DNS צפויים {expected_dns}, בפועל {state.nameservers}")
         verified = not gaps
         if error or not verified:
             journal(ctx.conn, "net_config_unverified",
@@ -637,7 +656,7 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         found = check(cfg, dhcp_cfg, state)
         if found:
             raise HTTPException(400, " · ".join(found))
-        # #2883: רשת הפצה **קיימת** שעוברת לכתובת אחרת — udp-sender קשור לכרטיס, וכל
+        # #2883: רשת הפצה **קיימת** שעוברת לכתובת אחרת — השידור קשור לכרטיס, וכל
         # מחשב שכבר קיבל כתובת ברשת הישנה מאבד את השרת. בזמן סבב או קליטה — סירוב
         # בשם (כמו /second), ולא גל שנתקע ב-98%. "עוברת" לפי מה שה-DHCP מכריז עליו, לא
         # לפי `netcfg.changed`: אחרי אישור של כתובת שחימשה את ההחזרה (#2840, #2970) הכתובת
@@ -661,8 +680,10 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
                 dhcp_steps["gates"], name, dhcp_cfg, dhcp_before, dhcp_body,
                 management_ok=on_management, raise_link=was_down)
             if netcfg.changed(before, cfg):
+                if not state.checked:
+                    raise HTTPException(409, f"לא הצלחנו לקרוא את שרתי ה-DNS הנוכחיים (resolv.conf), ולכן רשת ההפצה לא נשמרה: {state.reason}")
                 address_result = await _configure(name, before, cfg, body, request, user,
-                                                  live, state)
+                                                  live, state, deploy_dns_before=state.nameservers)
         except HTTPException as exc:
             if not was_down:
                 raise
@@ -676,6 +697,9 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
                 why = ("ממתינה לאישור שהקונסולה עדיין נגישה — אשרו, ואז שמרו "
                        "שוב את רשת ההפצה" if address_result["ok"] else
                        "לא אומתה מול המצב בפועל")
+                if not address_result["ok"]:
+                    why += " · " + (address_result["apply_error"] or
+                                    " · ".join(address_result["mismatches"]))
                 return {"ok": False, "server_ip": address, "address": address_result,
                         "dhcp": None, "apply_error": f"הכתובת {address} על {name} {why} "
                         "— ה-DHCP לא שונה"}
@@ -769,7 +793,7 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
 
         כל מה שקשור לשם כרטיס ההפצה עובר לשם החדש: הכתובת (`interfaces.d`),
         ה-DHCP (`dhcp:<שם>` → `interface=` ב-dnsmasq), `deploy:interface`,
-        חומת האש (`--deploy-if`), ו-udp-sender (`--interface`, בעליית השרת
+        חומת האש (`--deploy-if`), והשידור (`--interface`, בעליית השרת
         שאחרי) — אותה השלמה של #1088, לשם החדש.
 
         הסדר: כל הבדיקות **לפני** שנוגעים במשהו; אז ההעברה על המכונה עם
@@ -1000,7 +1024,7 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
 
     def _finish_second(cfg: netcfg.NetConfig, deploy, user) -> dict:
         """ההשלמה של #1088 לשם החדש — grub.cfg, dnsmasq באתחול, חומת אש עם
-        `--deploy-if` החדש, אתחול השרת (udp-sender), ורישום `deploy:interface`
+        `--deploy-if` החדש, אתחול השרת (כרטיס השידור), ורישום `deploy:interface`
         — ואז dnsmasq מה-DB. dnsmasq מוחל גם כשההשלמה נכשלה: הכתובת כבר
         עברה, וה-DHCP חייב ללכת אחריה."""
         result = deploy_net.complete(deploy, ctx.conn, interface=cfg.name,
@@ -1035,7 +1059,8 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
                                 "שהוא כבר הוחזר. בדקו את היומן ואת לשונית הרשת.")
         if body.get("interface") and body["interface"] != pending.interface:
             raise HTTPException(409, f"הממתין לאישור הוא {pending.interface}")
-        if netcfg_rollback.expired(pending, now):
+        if netcfg_rollback.expired(pending, now, hooks["netcfg_mono"](),
+                                   hooks["netcfg_boot_id"]()):
             raise HTTPException(409, f"חלון האישור על {pending.interface} נסגר. "
                                 "ההגדרה הקודמת חוזרת, ואי אפשר לבטל את זה מכאן.")
         netcfg_rollback.clear_pending(state_dir)

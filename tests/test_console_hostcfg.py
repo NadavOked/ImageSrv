@@ -161,12 +161,12 @@ def host(tmp_path: Path, images_root: Path, clock):
         pytest.skip("fastapi is required")
     from server.console import users
     from server.app import create_app
-    from test_sender import Recorder
+    from fakesend import Recorder
 
     machine = Machine()
     data = tmp_path / "data"
     tls = console_tls.ensure_console_cert(data, "10.0.0.1", "imagesrv-old")
-    app = create_app(data, images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(data, images_root, "http://10.44.12.10:7712", now_fn=clock,
                      sender_runner=Recorder(block=True), console_tls=tls,
                      host_hooks=machine.hooks())
     ctx = app.state.ctx
@@ -179,7 +179,7 @@ def host(tmp_path: Path, images_root: Path, clock):
                        json={"username": "labtech", "password": "deploy-pass-1"}).status_code == 200
     yield {"admin": admin, "deploy": deploy, "machine": machine, "tls": tls,
            "ctx": ctx, "dir": data / console_tls.CONSOLE_TLS_DIRNAME}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def open_round(ctx):
@@ -314,10 +314,10 @@ def test_upload_is_refused_when_the_console_runs_without_tls(tmp_path: Path, ima
     from server.console import users
     from server.app import create_app
     from conftest import complete_console_login
-    from test_sender import Recorder
+    from fakesend import Recorder
 
     machine = Machine()
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
                      sender_runner=Recorder(block=True), host_hooks=machine.hooks())
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test", check_policy=False)
     admin = TestClient(app)
@@ -326,7 +326,7 @@ def test_upload_is_refused_when_the_console_runs_without_tls(tmp_path: Path, ima
     cert, key, _ = make_pair()
     assert upload(admin, cert, key).status_code == 409
     assert machine.restarts == 0
-    app.state.ctx.sender.stop()
+    app.state.ctx.chunk.stop()
 
 
 @pytest.mark.parametrize("method,path", [("get", "/api/console/tls"), ("post", "/api/console/tls"), ("post", "/api/console/tls/reissue"),

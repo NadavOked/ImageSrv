@@ -10,7 +10,8 @@
    `/boot/…` ו-`hello` (הדרך לדיסק המקומי או למסך "לא רשום", #1802). שורת יומן
    אחת לכתובת בחלון, ותקרת הצפה. וילן הניהול והקונסולה — לא נוגעים.
 2. **nftables** (`deploy/nftables-rules.sh`, `server/net/known_fw.py`): המשוב של
-   udpcast נכנס רק מ-MAC רשום (`known_macs`), והקבוצה מתעדכנת עם כל שינוי ברשימה.
+   השידור (#3173: מנוע החתיכות; עד אז udpcast) נכנס רק מ-MAC רשום (`known_macs`), והקבוצה
+   מתעדכנת עם כל שינוי ברשימה.
 3. **`/agent/state`**: מחשב לא רשום אינו מקבל ממנו אף אימג' — גם מחוץ לשער (וילן אחר,
    או המתג `identity_check` כבוי). המקלט של מנוע החתיכות (`chunkcast --from`) — בענף
    המעבדה בלבד (#3214), כי המנוע אינו ב-main.
@@ -31,7 +32,7 @@ from fastapi.testclient import TestClient
 
 from conftest import hello_body
 from server.agent import deploy_gate, identity, registry
-from server.app import create_agent_app, create_console_app, create_runtime
+from server.app import create_agent_app, create_boot_app, create_console_app, create_runtime
 from server.console import users
 from server.db import set_setting, update_one, writing
 from server.net import known_fw
@@ -48,11 +49,11 @@ CLONERS = "grp_CLONERS"
 
 @pytest.fixture()
 def env(tmp_path: Path, images_root: Path):
-    from test_sender import Recorder                       # noqa: PLC0415
+    from fakesend import Recorder                       # noqa: PLC0415
 
     leases = write_leases(tmp_path / "dnsmasq.leases", {REG: REG_IP, UNREG: UNREG_IP})
     fw: list[list[str]] = []
-    rt = create_runtime(tmp_path / "data", images_root, f"http://{VLAN}:8080",
+    rt = create_runtime(tmp_path / "data", images_root, f"http://{VLAN}:7712",
                         sender_runner=Recorder(block=True), wol_send=lambda _p: None,
                         identity_hooks={"leases": identity.LeaseFile(leases)},
                         known_macs_hooks={"apply": lambda text: None,
@@ -62,11 +63,19 @@ def env(tmp_path: Path, images_root: Path):
 
     def client(ip: str, local: str = VLAN) -> TestClient:
         # `base_url` = הכתובת המקומית שהחיבור התקבל עליה (scope["server"]); `client` = הפונה.
-        return TestClient(agent_app, base_url=f"http://{local}:8080", client=(ip, 40000),
+        return TestClient(agent_app, base_url=f"http://{local}:7712", client=(ip, 40000),
                           raise_server_exceptions=False)
 
-    yield {"rt": rt, "conn": rt.conn, "client": client, "fw": fw, "leases": leases, "tmp": tmp_path}
-    rt.ctx.sender.stop()
+    boot_app = create_boot_app(rt)
+
+    def boot_client(ip: str, local: str = VLAN) -> TestClient:
+        # #3486: /boot במאזין משלו -- הפתוח היחיד למחשב לא רשום
+        return TestClient(boot_app, base_url=f"http://{local}:7711", client=(ip, 40000),
+                          raise_server_exceptions=False)
+
+    yield {"rt": rt, "conn": rt.conn, "client": client, "boot_client": boot_client, "fw": fw,
+           "leases": leases, "tmp": tmp_path}
+    rt.ctx.chunk.stop()
 
 
 def _journal(conn, event: str) -> list[str]:
@@ -103,8 +112,11 @@ def test_an_unregistered_machine_still_gets_its_way_to_the_local_disk_and_the_un
     hello = c.post("/api/v1/agent/hello", json=hello_body(UNREG))
     assert hello.status_code == 200, hello.text
     assert hello.json()["known"] is False and hello.json().get("session") is None
-    menu = c.get(f"/boot/menu?mac={UNREG}")
+    menu = env["boot_client"](UNREG_IP).get(f"/boot/menu?mac={UNREG}")
     assert menu.status_code == 200 and deploy_gate.EVENT not in menu.text, menu.text
+    # #3486: על פורט הסוכן אין /boot, והשער סוגר אותו למחשב לא רשום כמו כל נתיב אחר
+    on_agent_port = c.get(f"/boot/menu?mac={UNREG}")
+    assert on_agent_port.status_code == 403 and on_agent_port.json()["code"] == deploy_gate.EVENT
 
 
 def test_a_registered_machine_passes(env):
@@ -144,13 +156,13 @@ def test_the_identity_switch_off_is_the_operators_open_choice_as_for_every_ident
 
 def test_the_management_side_is_not_touched(env, images_root):
     """הבהרת נדב 14/11: בוילן הניהול ההגנה היא חומת האש וההזדהות, לא סינון לפי מחשב.
-    בקשה שהגיעה על כתובת אחרת של השרת אינה נבדקת, והקונסולה (8081) אינה עוברת בשער."""
+    בקשה שהגיעה על כתובת אחרת של השרת אינה נבדקת, והקונסולה (443) אינה עוברת בשער."""
     # main: `/sessions/active` is behind `source_gate` (#2489) everywhere, so the probe is `/state`:
     # its own identity check passes (the lease is this address), and only the gate would refuse it.
     assert env["client"](UNREG_IP, local=MGMT).get(f"/api/v1/agent/state?mac={UNREG}").status_code == 200
     rt = env["rt"]
     users.create(rt.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
-    console = TestClient(create_console_app(rt), base_url=f"http://{VLAN}:8081", client=(UNREG_IP, 40001))
+    console = TestClient(create_console_app(rt), base_url=f"http://{VLAN}:443", client=(UNREG_IP, 40001))
     assert console.post("/api/console/login",
                         json={"username": "noc", "password": "admin-pass-123"}).status_code == 200
 
@@ -199,9 +211,9 @@ def test_the_firewall_list_is_loaded_at_start_and_on_every_registration(env):
 
 
 def test_a_firewall_list_that_did_not_load_is_said_in_the_answer_and_the_journal(tmp_path, images_root):
-    from test_sender import Recorder                       # noqa: PLC0415
+    from fakesend import Recorder                       # noqa: PLC0415
 
-    rt = create_runtime(tmp_path / "data", images_root, f"http://{VLAN}:8080",
+    rt = create_runtime(tmp_path / "data", images_root, f"http://{VLAN}:7712",
                         sender_runner=Recorder(block=True), wol_send=lambda _p: None,
                         known_macs_hooks={"apply": lambda text: None, "firewall": lambda macs: "nft said no"})
     try:
@@ -212,7 +224,7 @@ def test_a_firewall_list_that_did_not_load_is_said_in_the_answer_and_the_journal
         r = admin.post("/api/console/machines", json={"mac": UNREG, "name": "cloner-2", "group_id": CLONERS})
         assert r.status_code == 200 and r.json()["network"] == {"applied": False, "error": "nft said no"}
     finally:
-        rt.ctx.sender.stop()
+        rt.ctx.chunk.stop()
 
 
 def test_the_list_file_empties_the_set_and_names_every_registered_mac():
@@ -266,7 +278,7 @@ def _rules(text: str) -> list[str]:
     (("--per-nic", "--mcast-ports", "2232-2233", "--service", "ens34:multicast,netboot",
       "--service", "ens35:console"), "ens34"),
 ])
-def test_udpcast_feedback_enters_only_from_a_registered_mac_and_the_rest_is_logged_and_dropped(args, nic):
+def test_the_stream_feedback_enters_only_from_a_registered_mac_and_the_rest_is_logged_and_dropped(args, nic):
     got = _rules(generate(*args))
     port = f'iifname "{nic}" udp dport 2232-2233'
     mine = [r for r in got if r.startswith(port)]
@@ -286,7 +298,7 @@ def test_dhcp_tftp_the_agent_port_and_the_console_are_as_they_were():
     הניהול פתוחה כמו קודם (הבהרת נדב 14/11)."""
     got = _rules(generate("--deploy-if", "eth-deploy", "--servers-if", "eth-srv", "--mcast-ports", "2232-2233"))
     for rule in ('iifname "eth-deploy" udp dport 67 accept', 'iifname "eth-deploy" udp dport 69 accept',
-                 'iifname "eth-deploy" tcp dport 8080 accept', 'iifname "eth-srv" tcp dport 8081 accept'):
+                 'iifname "eth-deploy" tcp dport 7712 accept', 'iifname "eth-srv" tcp dport 443 accept'):
         assert rule in got, rule
 
 

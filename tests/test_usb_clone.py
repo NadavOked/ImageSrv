@@ -205,7 +205,7 @@ def curl_recorder(tmp_path: Path) -> tuple[str, Path]:
 
 def test_the_offline_functions_send_nothing(tmp_path):
     bin_dir, log = curl_recorder(tmp_path)
-    out = run(tmp_path, bin_dir + 'SERVER=http://10.0.0.1:8080; usb_offline; '
+    out = run(tmp_path, bin_dir + 'SERVER=http://10.0.0.1:7712; usb_offline; '
                         'http_get "$SERVER/api/v1/agent/state"; echo "g=$?"; '
                         'http_post_json "$SERVER/api/v1/agent/hello" /dev/null; echo "p=$?"; '
                         'send_hello; echo "h=$?";'

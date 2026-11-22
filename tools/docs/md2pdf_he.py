@@ -6,7 +6,7 @@ blockquotes, fenced code, `code`, **bold**, [links](url), [[badge]], ---,
 and `<!-- pagebreak -->`.
 
 Every `code` span is wrapped as an LTR isolate (<code dir="ltr">), so ports,
-addresses and ranges such as `8081/tcp` or `9000-9001` keep their order inside
+addresses and ranges such as `443/tcp` or `9000-9001` keep their order inside
 right-to-left sentences.
 
 Usage:

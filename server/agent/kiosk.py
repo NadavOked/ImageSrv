@@ -1,6 +1,6 @@
-"""allowlist מחשב הבנייה על פורט הסוכן (:8080) — #738, מצומצם ב-#1247.
+"""allowlist מחשב הבנייה על פורט הסוכן (:7712) — #738, מצומצם ב-#1247.
 
-עד #1247 היה כאן גם הקיוסק כאפליקציה נפרדת על :8082 עם דף web
+עד #1247 היה כאן גם הקיוסק כאפליקציה נפרדת, על מאזין משלו, עם דף web
 (`/console/station`). הדף והמאזין הוסרו — מחשב הבנייה עולה לגואי
 הנייטיב. **הראוטר נשאר**, כי הצרכן שלו הוא הסוכן: buildmenu.sh/
 roomflow.sh/הגואי נכנסים ל-`/api/console/login`, קולטים וניהול חדר
@@ -93,7 +93,7 @@ def _allowlisted(source: APIRouter, allow: frozenset[tuple[str, str]]) -> list[A
 
 def mark_build_gui(request: Request) -> None:
     """#1576: בקשה שנכנסה בראוטר הזה על פורט הסוכן באה מהגואי של מחשב הבנייה.
-    אותם אובייקטי route משרתים גם את הקונסולה (:8081), ולכן הסימון הוא
+    אותם אובייקטי route משרתים גם את הקונסולה (:443), ולכן הסימון הוא
     dependency של **ההכללה** ב-`app._add_agent_routes`, לא של ה-route: משימה
     שהוזמנה כאן נרשמת `origin=build_gui` (`tasks.request_origin`) בלי קשר
     למה שהגוף אומר."""
@@ -110,7 +110,7 @@ def create_kiosk_router(ctx: ServerContext, *, room_wake, version=None) -> APIRo
         else KIOSK_CONSOLE_ROUTES - KIOSK_CLASS_ONLY_ROUTES
     # #1073: `kiosk=True` — הכניסה כאן מקבלת גם `deploy`. זו הדלת של
     # מחשב הבנייה (buildmenu.sh/ה-GUI נכנסים דרך `/api/console/login` על
-    # פורט הסוכן, שנושא את אותו allowlist); הקונסולה (:8081) מסרבת לו.
+    # פורט הסוכן, שנושא את אותו allowlist); הקונסולה (:443) מסרבת לו.
     for source in (create_console_router(ctx, kiosk=True), create_library_router(ctx),
                    create_console_capture_router(ctx)):
         router.routes.extend(_allowlisted(source, allow))

@@ -7,11 +7,17 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/imagesrv-src
-ExecStart=/usr/bin/python3 -m server.wizard --rerun --host 0.0.0.0 --port 8081 \
+ExecStart=/usr/bin/python3 -m server.wizard --rerun --host 0.0.0.0 --port 443 \
     --data-dir /var/lib/imagesrv \
     --status-file /etc/imagesrv/firstboot.status \
     --installer-nic /etc/imagesrv/installer-nic \
     --installer-role /etc/imagesrv/installer-role
 Restart=no
+# #2583: the wizard stops imagesrv-server for the setup (server/wizard/serverguard.py) and brings it
+# back itself; this is the net for a wizard that was killed. Starting a server that runs is a no-op.
+ExecStopPost=/usr/bin/systemctl start imagesrv-server.service
+# #3384: the same net for the server's own screen, which the wizard stops too (it holds imagesrv.db open). Only where it is
+# enabled: a headless server does not get a screen it never had; the leading '-' ignores that "not enabled" exit.
+ExecStopPost=-/bin/sh -c 'systemctl is-enabled --quiet imagesrv-dcui.service && systemctl start imagesrv-dcui.service'
 StandardOutput=journal+console
 StandardError=journal+console

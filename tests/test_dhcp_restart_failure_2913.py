@@ -61,7 +61,7 @@ def lab(tmp_path: Path, images_root: Path, clock, monkeypatch):
         "read_active_conf": lambda: dhcp_host.read_active_conf(conf),
         "service_active": lambda unit: True,
     }
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, dhcp_hooks=hooks,
                      nic_hooks={"firewall": lambda nic: None})
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test",

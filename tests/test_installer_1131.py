@@ -224,7 +224,7 @@ def test_installer_reads_the_console_deploy_nic_from_the_db(tmp_path, bindir):
         + 'printf "[%s]" "$(console_deploy_if_from_db)"'
     proc = run_bash(script, tmp_path, bindir)
     assert proc.returncode == 0 and proc.stdout == "[]", proc.stderr
-    deploy_net.record(conn, "eth1", "http://10.44.9.10:8080")
+    deploy_net.record(conn, "eth1", "http://10.44.9.10:7712")
     proc = run_bash(script, tmp_path, bindir)
     assert proc.returncode == 0 and proc.stdout == "[eth1]", proc.stderr
 
@@ -244,7 +244,7 @@ def test_installer_keeps_dnsmasq_and_the_deploy_rules_when_the_console_configure
 def test_firewall_is_the_last_step_after_the_server_answers():
     text = INSTALLER.read_text(encoding="utf-8")
     server_up = text.index("run systemctl enable --now imagesrv-server")
-    live = text.index('console-live.sh" "https://127.0.0.1:8081"')
+    live = text.index('console-live.sh" "https://127.0.0.1"')
     firewall = text.index("\ninstall_firewall\n")
     ready = text.index("\nREADY=1\n")
     assert server_up < live < firewall < ready
@@ -255,6 +255,7 @@ def test_firewall_is_the_last_step_after_the_server_answers():
 FIREWALL_PRELUDE = (
     "set -euo pipefail\n" + HELPERS + "DRY_RUN=0\nNO_FIREWALL=0\nLAST_BACKUP=''\n"
     "IFACE=eth1\nCONSOLE_DEPLOY_IF=''\nSERVERS_IF=eth0\nSTORAGE_ROLE=standalone\nPRIMARY_URL=''\n"
+    "BOOT_PORT=7711\n"                                   # #3486: the installer's top-level value
     f"APP_DIR='{posix(REPO)}'\nSCRIPT_DIR='{posix(REPO / 'deploy')}'\n"
     "DATA_DIR='/nonexistent-imagesrv-data'\n"           # #1829: no DB, no proxy interfaces
     + installer_function("write_file")
@@ -410,7 +411,7 @@ def test_health_live_is_unauthenticated_and_reports_the_version(tmp_path, images
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
     from server.app import create_app
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
                      update_hooks={"describe": lambda repo_dir: "v0.49.0"}, repo_dir="/repo")
     client = TestClient(app)
     r = client.get("/api/console/health/live")
@@ -428,7 +429,7 @@ def test_health_live_reports_the_version_the_process_loaded_not_the_tree_on_disk
     from fastapi.testclient import TestClient
     from server.app import create_app
     on_disk = {"tag": "v0.74.2"}
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
                      update_hooks={"describe": lambda repo_dir: on_disk["tag"]}, repo_dir="/repo")
     client = TestClient(app)
     on_disk["tag"] = "v0.75.0"                     # checkout בלי restart
@@ -449,7 +450,7 @@ def test_health_live_unread_at_startup_is_reread_until_it_succeeds_then_locked(
         if on_disk["tag"] is None:
             raise VersionError("not-a-git-tree", "no git here")
         return on_disk["tag"]
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
                      update_hooks={"describe": describe}, repo_dir="/repo")
     client = TestClient(app)
     assert client.get("/api/console/health/live").json() == {
@@ -483,6 +484,11 @@ def _fake_repo(tmp_path: Path, *, live_ok: bool, payload_ok: bool = True) -> Pat
     (repo / "tools" / "boot-payload-build.sh").write_text(
         '#!/usr/bin/env bash\nprintf "boot-payload-build %s\\n" "$*" >> "$FAKE_LOG"\n',
         encoding="utf-8", newline="\n")
+    # #3173 (owner 21/11): a chunkcast that was not built rolls the upgrade back; the build itself is
+    # tested in test_server_tools_build_2533 -- here it succeeded.
+    (repo / "tools" / "server-tools-build.sh").write_text(
+        '#!/usr/bin/env bash\necho "server-tools-build: (stub) chunkcast is ready"\n',
+        encoding="utf-8", newline="\n")
     # #1277: אימות החתימה נבדק ב-test_release_signing_1277; כאן — תג "חתום".
     (repo / "tools" / "verify-release-tag.py").write_text(
         'print("signed: stub SHA256:stub")\n', encoding="utf-8", newline="\n")
@@ -494,6 +500,10 @@ def _upgrade_env(tmp_path: Path, repo: Path, data: Path) -> dict:
     if not flags.exists():
         flags.write_text("--skip-apt --output /srv/imagesrv/boot/initrd.img\n",
                          encoding="utf-8", newline="\n")
+    splash = tmp_path / "splash-installed"   # #3739: a server the installer set up already has its boot picture; never the machine's /usr/share/imagesrv
+    if not splash.exists():
+        splash.mkdir()
+        (splash / "splash-640x240.raw").write_bytes(b"installer-copy")
     return {"IMAGESRV_DATA_DIR": posix(data), "IMAGESRV_UNIT_DIR": posix(tmp_path / "units"),
             "IMAGESRV_JOURNALD_DIR": posix(tmp_path / "journald.conf.d"),
             "IMAGESRV_UPGRADE_LOG": posix(tmp_path / "upgrade.log"),
@@ -504,6 +514,7 @@ def _upgrade_env(tmp_path: Path, repo: Path, data: Path) -> dict:
             "IMAGESRV_HTTP_ROOT": posix(tmp_path / "boot"),
             # #2795: the recovery script's copy outside the tree -- never /usr/local/sbin
             "IMAGESRV_RECOVER_COPY": posix(tmp_path / "sbin" / "imagesrv-upgrade-recover"),
+            "IMAGESRV_SPLASH_DIR": posix(splash),
             "IMAGESRV_LIVE_WAIT": "1", "PYTHONPATH": posix(REPO)}
 
 
@@ -514,7 +525,7 @@ def _upgrade_fakes(bindir: Path, *, restart_fails: bool = False, enable_fails: b
     enable = 'echo "Failed to enable unit" >&2; exit 1' if enable_fails else "exit 0"
     fake_tool(bindir, "systemctl",
               f'case "$1" in restart) {restart} ;; enable) {enable} ;; '
-              'show) echo "IMAGESRV_URL=http://10.10.10.8:8080 X=y" ;; esac')
+              'show) echo "IMAGESRV_URL=http://10.10.10.8:7712 X=y" ;; esac')
 
 
 def _status(data: Path) -> dict | None:
@@ -559,7 +570,7 @@ def test_upgrade_verifies_the_new_version_answers_before_declaring_done(tmp_path
     assert seen.count("systemctl restart imagesrv-server") == 1
     assert "systemctl is-active --quiet imagesrv-server" in seen
     assert any(c.startswith("console-live ") and " v0.49.0 " in c for c in seen)
-    assert any(c.startswith("verify-boot-payload ") and "http://10.10.10.8:8080" in c for c in seen)
+    assert any(c.startswith("verify-boot-payload ") and "http://10.10.10.8:7711" in c for c in seen)
     assert not [c for c in seen if c.startswith("git checkout")]
     assert (_status(data) or {}).get("state") != "failed"
     assert (tmp_path / "units" / "imagesrv-server.service").exists()

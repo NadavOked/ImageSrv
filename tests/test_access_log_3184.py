@@ -240,7 +240,7 @@ def test_through_real_uvicorn_a_slow_request_is_logged_with_its_time(live, path)
 
 def test_the_filter_survives_uvicorn_logging_setup():
     """``uvicorn.Config`` מריץ ``dictConfig`` על ``uvicorn.access`` -- ובין כמה
-    מאזינים (סוכן, קונסולה, 8443) הוא רץ שוב ושוב. הפילטר נשאר, ופעם אחת."""
+    מאזינים (סוכן, קונסולה, 7700) הוא רץ שוב ושוב. הפילטר נשאר, ופעם אחת."""
     uvicorn = pytest.importorskip("uvicorn")
     logger = logging.getLogger(accesslog.ACCESS_LOGGER)
     try:
@@ -261,7 +261,7 @@ def _has_stamp(app) -> bool:
 
 
 def test_the_production_apps_install_it(tmp_path: Path, images_root: Path):
-    """סוכן (8080) וקונסולה (8081) -- שתי האפליקציות שרצות בייצור."""
+    """סוכן (7712) וקונסולה (443) -- שתי האפליקציות שרצות בייצור."""
     from test_app_split import _runtime
     from server.app import create_agent_app, create_console_app
     rt = _runtime(tmp_path, images_root)
@@ -269,7 +269,7 @@ def test_the_production_apps_install_it(tmp_path: Path, images_root: Path):
         assert _has_stamp(create_agent_app(rt))
         assert _has_stamp(create_console_app(rt))
     finally:
-        rt.ctx.sender.stop()
+        rt.ctx.chunk.stop()
 
 
 def test_the_combined_app_installs_it(server):

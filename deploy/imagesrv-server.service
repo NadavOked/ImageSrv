@@ -23,7 +23,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# נקבע ב-systemctl edit: Environment=IMAGESRV_URL=http://10.44.12.10:8080
+# נקבע ב-systemctl edit: Environment=IMAGESRV_URL=https://10.44.12.10:7712
 # ריק (#1088) = מהקונסולה; ${IMAGESRV_URL} מתרחב לארגומנט ריק אחד, וזה
 # מה שאומר ל-server.main לקרוא את הכתובת מה-DB.
 Environment=IMAGESRV_URL=
@@ -32,7 +32,7 @@ Environment=IMAGESRV_URL=
 # override עולה בדיוק כמו קודם. ‏$IMAGESRV_STORAGE_ARGS (בלי סוגריים)
 # מתפצל למילים על ידי systemd; ריק מתרחב ללא ארגומנטים.
 # ‏#703 (tracer 5): גם `--console-host <כרטיס-הניהול>` נכנס לכאן (המתקין
-# עם --console-host, או systemctl edit). הקונסולה על 8081 היא HTTPS
+# עם --console-host, או systemctl edit). הקונסולה על 443 היא HTTPS
 # בלבד; התעודה ב-/var/lib/imagesrv/console-tls/ (בתוך ReadWritePaths).
 Environment=IMAGESRV_STORAGE_ARGS=
 WorkingDirectory=/opt/imagesrv
@@ -51,7 +51,8 @@ LimitNOFILE=65536
 # שהוא כותב (לשונית הרשת, אפיון סעיף 24): זה של האינסטנס הראשי
 # ב-/etc/dnsmasq.d, וזה של אינסטנס ה-proxy המבודד ב-/etc/imagesrv (#36).
 # ה-restart של dnsmasq ושל imagesrv-proxy, והאזנה לפורט 68 (זיהוי DHCP
-# קיים), דורשים root — וזה ה-User של היחידה.
+# קיים), דורשים root — וזה ה-User של היחידה. גם הקונסולה על 443 (#3871) נקשרת לפורט
+# מתחת ל-1024 בזכות זה: אין צורך ב-CAP_NET_BIND_SERVICE נפרד, וה-NoNewPrivileges אינו נוגע בו.
 #
 # ‏/etc/imagesrv מסומן אופציונלי (מקף) בכוונה: בשרת ותיק שהתיקייה עוד
 # לא נוצרה בו, השרת יעלה כרגיל ורק כתיבת קובץ ה-proxy תיכשל עם הודעה

@@ -44,7 +44,7 @@
 
 #include "hmac_sha256.h"
 
-#define DEFAULT_PORT 5900
+#define DEFAULT_PORT 7710   /* agent/lib/core/ports.sh, IMAGESRV_MONITOR_PORT (#3871); monitor.sh passes --port */
 #define DEFAULT_FPS 10
 #define UINPUT_NAME "ImageSrv remote monitor"
 #define ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
@@ -80,7 +80,7 @@ static int previous_buttons;
 static unsigned char key_down[KEY_MAX + 1];
 
 /*
- * The session secret (#839, #1077). 5900 is bound to the distribution
+ * The session secret (#839, #1077). The monitor port is bound to the distribution
  * address, so two gates sit in front of the RFB loop: (1) after accept,
  * only the ImageSrv server IP (--allow-from, from imagesrv.server) is
  * kept -- everyone else is closed before the handshake; (2) RFB security
@@ -489,7 +489,7 @@ static int hex_nibble(int c) {
 }
 
 /* 32 lowercase hex characters, optionally newline-terminated. Anything
- * else is a refusal to start: an unauthenticated 5900 is never the
+ * else is a refusal to start: an unauthenticated monitor port is never the
  * fallback (the agent's supervisor logs the reason and retries). */
 static void load_secret(const char *path) {
     char text[SECRET_LEN * 2 + 2];

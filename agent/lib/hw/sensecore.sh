@@ -28,8 +28,8 @@ ss_dir() {
 _ss_add() { _ss_out="${_ss_out:+$_ss_out,}\"$1\":$2"; }
 
 ss_tune_json() {
-    # #3816: what drawer_tune chose this job (restore/drawerfeed.sh), one line of JSON; null = it did not run (chunk
-    # engine, local clone) -- the brain records "not read", never a default.
+    # #3816: what drawer_tune chose this job, one line of JSON; null = it did not run -- the brain records "not
+    # read", never a default. #3173: drawer_tune left with the old receiver's pipeline, so today it is always null.
     [ -s "$RUN_DIR/drawer_tune.json" ] && head -n 1 "$RUN_DIR/drawer_tune.json" || printf 'null'
 }
 

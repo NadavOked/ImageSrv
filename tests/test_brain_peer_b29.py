@@ -231,7 +231,7 @@ def test_in_enforce_the_peer_hears_first_and_the_needy_cloner_after_it(room_serv
     assert len(serve) == 1
     s = serve[0]
     assert (s["dev"], s["part"], s["listen"], s["allow"]) == ("sda", 3, "10.55.0.22", "10.55.0.21"), s
-    assert s["listen"] != "0.0.0.0" and 48200 <= s["port"] < 48202
+    assert s["listen"] != "0.0.0.0" and 7717 <= s["port"] < 48202
     assert len(s["token"]) == 32 and 1 <= s["rate_mibs"] <= 100 and s["until_s"] > 0
     fill_ = _rejoin(room_server, wave)["peer_fill"]["A1"]
     assert (fill_["id"], fill_["token"], fill_["port"]) == (s["id"], s["token"], s["port"]), "one pairing, both sides"

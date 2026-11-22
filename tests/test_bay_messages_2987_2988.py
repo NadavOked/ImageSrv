@@ -213,7 +213,7 @@ def test_the_end_of_the_partition_clears_it(tmp_path):
 def test_the_watcher_ticks_it_and_the_agent_and_the_kiosk_load_it():
     agent = Path(__file__).resolve().parents[1] / "agent"
     verdict = (agent / "lib/restore/verdict.sh").read_text(encoding="utf-8")
-    watch = verdict[verdict.index("drawer_watch() {"):verdict.index("# --- #2200")]
+    watch = verdict[verdict.index("drawer_watch() {"):verdict.index("round_closed() {")]
     assert 'drawer_stall_tick "$3"' in watch and 'drawer_stall_clear "$3"' in watch
     main = (agent / "imagesrv-agent").read_text(encoding="utf-8")
     bridge = (agent / "lib/gui/guibridge.sh").read_text(encoding="utf-8")

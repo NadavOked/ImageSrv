@@ -34,8 +34,7 @@ pytest.importorskip("fastapi")
 
 from server import db
 from server.brain import veto
-from server.rounds import chunksend
-from server.rounds import sender as udpcast
+from server.rounds import chunkctx, chunksend
 
 import chunkcast_rig as C
 from test_chunksend_2533 import Runner, wait_for
@@ -75,7 +74,7 @@ def wave(tmp_path, monkeypatch, caplog):
     # raising=False: in the negative control (the hook removed) the constant does not exist, and the failure
     # has to be the behaviour, not an AttributeError here
     monkeypatch.setattr(chunksend, "VETO_RECHECK_S", 0.2, raising=False)
-    monkeypatch.setattr(udpcast, "LATER_MAX_WAIT", 1)        # p4's wait: 1 + 1 = 2 s (on the metal 600 + 180)
+    monkeypatch.setattr(chunkctx, "LATER_MAX_WAIT", 1)       # p4's wait: 1 + 1 = 2 s (on the metal 600 + 180)
     caplog.set_level(logging.INFO, logger="imagesrv.brain")
     veto.forget()
     conn = db.connect(tmp_path / "brain.db")
@@ -110,7 +109,7 @@ def wave(tmp_path, monkeypatch, caplog):
             self.engine.veto = lambda **kw: veto.check(conn, **kw).proceed     # what server.app wires
             self.engine.veto_settle = lambda **kw: veto.settle(conn, **kw)
             for mac in self.members:
-                self.engine.note_agent(mac, ["udpcast", "chunk"])
+                self.engine.note_agent(mac, ["chunk"])
             assert self.engine.start({"id": SID, "image_id": "img_1"}) is None
 
         def tell(self, mac, pass_, state, disks, part):

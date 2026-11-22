@@ -40,7 +40,7 @@ set -eu
 
 NIC_FACT=""
 SYS_NET="${IMAGESRV_SYS_NET:-/sys/class/net}"
-PORT="8081"
+PORT="443"
 
 die() { printf 'nftables-wizard: check-error: %s\n' "$*" >&2; exit 2; }
 

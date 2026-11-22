@@ -27,6 +27,9 @@ REPO = Path(__file__).resolve().parent.parent
 needs_installer = pytest.mark.skipif(INSTALLER_BASH is None or shutil.which("python3") is None,
                                      reason="the installer runs bash + python3")
 SERVERS, DEPLOY, OTHER = "eth-srv", "eth-deploy", "eth-lab"
+#: #3486: the installer always hands the generator the /boot listener (`--boot-port "$BOOT_PORT"`, default 7711), after the per-card part.
+BOOT = 7711
+BOOT_ARGS = ["--boot-port", str(BOOT)]
 
 
 def _server(tmp_path: Path, saved: dict[str, list[str]] | None, raw: dict[str, str] | None = None) -> Path:
@@ -57,7 +60,7 @@ def _install_firewall(tmp_path, bindir, sysnet):
     script = (
         "GRN=''; YEL=''; DIM=''; OFF=''; RED=''; DRY_RUN=1; NO_FIREWALL=0; STORAGE_ROLE=primary\n"
         f'APP_DIR="{REPO.as_posix()}"; SCRIPT_DIR="{REPO.as_posix()}/deploy"; DATA_DIR="{tmp_path.as_posix()}"\n'
-        f'SERVERS_IF={SERVERS}; IFACE={DEPLOY}; CONSOLE_DEPLOY_IF=""; SYS_NET="{sysnet.as_posix()}"\n'
+        f'SERVERS_IF={SERVERS}; IFACE={DEPLOY}; CONSOLE_DEPLOY_IF=""; SYS_NET="{sysnet.as_posix()}"; BOOT_PORT={BOOT}\n'
         + "".join(_function(n) for n in (
             "say", "warn", "die", "run", "console_proxy_interfaces_from_db", "console_ntp_interfaces_from_db",
             "console_nic_services_from_db", "install_firewall"))
@@ -93,9 +96,9 @@ def test_reinstall_hands_the_saved_nic_services_to_the_generator(tmp_path, bindi
     proc = _install_firewall(tmp_path, bindir, sysnet)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     args = _generator_args(proc.stdout)
-    assert args == _console_args(sysnet, tmp_path)
+    assert args == _console_args(sysnet, tmp_path) + BOOT_ARGS
     assert args == ["--per-nic", "--service", f"{DEPLOY}:multicast", "--service", f"{OTHER}:ntp",
-                    "--service", f"{SERVERS}:monitor"]
+                    "--service", f"{SERVERS}:monitor", *BOOT_ARGS]
     assert "--ntp-if" not in args and "--servers-if" not in args     # ב-per-nic המחולל מסרב להם
 
 
@@ -105,7 +108,7 @@ def test_reinstall_without_saved_services_writes_todays_default_rules(tmp_path, 
     sysnet = _server(tmp_path, None)
     proc = _install_firewall(tmp_path, bindir, sysnet)
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert _generator_args(proc.stdout) == ["--servers-if", SERVERS, "--deploy-if", DEPLOY]
+    assert _generator_args(proc.stdout) == ["--servers-if", SERVERS, "--deploy-if", DEPLOY, *BOOT_ARGS]
 
 
 @needs_installer
@@ -118,11 +121,11 @@ def test_the_rules_written_on_reinstall_contain_the_saved_services_and_not_the_c
     got = rules(run(shell, *_generator_args(proc.stdout)).stdout)
     assert f'iifname "{DEPLOY}" udp dport 69 accept' in got            # אתחול מהרשת נשמר
     assert f'iifname "{DEPLOY}" udp dport 123 accept' in got           # וגם הזמן
-    assert f'iifname "{DEPLOY}" tcp dport 8080 accept' in got
-    assert not any(f'"{SERVERS}" tcp dport 8081' in r for r in got), "המפעיל סגר את הקונסולה בכרטיס הזה"
+    assert f'iifname "{DEPLOY}" tcp dport 7712 accept' in got
+    assert not any(f'"{SERVERS}" tcp dport 443' in r for r in got), "המפעיל סגר את הקונסולה בכרטיס הזה"
     # הניגוד: ברירת המחדל (מה שנכתב לפני התיקון) כן פותחת אותה
     default = rules(run(shell, "--servers-if", SERVERS, "--deploy-if", DEPLOY).stdout)
-    assert f'iifname "{SERVERS}" tcp dport 8081 accept' in default
+    assert f'iifname "{SERVERS}" tcp dport 443 accept' in default
     assert not any(f'"{OTHER}"' in r for r in got), "כרטיס בלי שירותים נשאר סגור"
 
 

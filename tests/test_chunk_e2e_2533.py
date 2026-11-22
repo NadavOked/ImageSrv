@@ -50,7 +50,7 @@ pytestmark = requires_native("gcc", "zstd", "jq", "curl", ("bash", BASH), posix=
                              why="a real server, the real chunkcast and the agent's real shell")
 
 BUILD, CLONER_A, CLONER_B = "aa:bb:cc:00:e2:10", "aa:bb:cc:00:e2:21", "aa:bb:cc:00:e2:22"
-GROUP = "239.83.67.1"
+GROUP = "239.84.82.1"
 LOST = {1, 2}                       # chunks of partition 3 that lose a packet in the first pass
 
 
@@ -81,7 +81,8 @@ class Stack:
         self.esp = C.build(tmp / "esp", self.bin / "fanout", chunks=0.3, noisy=(0,), name="p1.esp.pcl.zst")
         self.win = C.build(tmp / "win", self.bin / "fanout", chunks=3.5, noisy=(1,), name="p3.windows.pcl.zst", salt=7)
         self.port, self.console_port, self.portbase = _tcp_port(), _tcp_port(), C.free_port()
-        self.base, self.console = f"http://127.0.0.1:{self.port}", f"http://127.0.0.1:{self.console_port}"
+        # #3580: the agent API is TLS-only; the console stays plain on loopback
+        self.base, self.console = f"https://127.0.0.1:{self.port}", f"http://127.0.0.1:{self.console_port}"
         self.passes: dict[int, int] = {}            # partition -> the pass the sender last announced
         self.agents: list[subprocess.Popen] = []    # every agent's shell, a process group each
 
@@ -122,11 +123,18 @@ class Stack:
                                   for i, mac in enumerate((BUILD, CLONER_A, CLONER_B))), encoding="ascii")
         self.data, self.images = tmp / "data", tmp / "images"
         self.images.mkdir()
+        # the identity the server will serve (it reuses it); the client and the agent's shell trust exactly it
+        from server.agent import tls
+        identity, _ = tls.ensure_identity(self.data)
+        H.trust_agent(self.base, identity)
+        (tmp / "agent-name").write_text(identity.name + "\n", encoding="ascii", newline="\n")
+        self.trust_env = {"SERVER_CA_FILE": identity.ca_path.as_posix(),
+                          "AGENT_NAME_FILE": (tmp / "agent-name").as_posix(), "NO_PROXY": "*", "no_proxy": "*"}
         self.log = (tmp / "server.log").open("wb")
         self.server = subprocess.Popen(
             [sys.executable, "-c", LOG_EVERY_REQUEST, "--server-url", self.base, "--data-dir", str(self.data),
              "--images", str(self.images), "--host", "127.0.0.1", "--port", str(self.port),
-             "--console-port", str(self.console_port), "--console-tls", "off",
+             "--console-port", str(self.console_port), "--console-tls", "off", "--boot-port", str(_tcp_port()),
              "--sender-portbase", str(self.portbase), "--dhcp-leases", str(leases)],
             cwd=str(REPO), stdout=self.log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
             env={**os.environ, "PATH": f"{shim}{os.pathsep}{os.environ['PATH']}",
@@ -143,7 +151,7 @@ class Stack:
 
     def _up(self) -> bool:
         try:
-            urllib.request.urlopen(self.base + "/api/v1/health", timeout=2).read()
+            H._open(self.base + "/api/v1/health", timeout=2).read()
         except urllib.error.HTTPError:
             return True                             # it answered: any HTTP status is a server
         except OSError:
@@ -243,9 +251,10 @@ def stack(tmp_path):
 
 AGENT = r'''
 export RUN_DIR="$1" LOG_FILE="$1/agent.log" CHUNKCAST_ALLOW_FILE=1
-PATH="$BIN:$PATH"; SERVER="$2"; IMAGE="$3"; MAC="$4"; DISKS="$5"
+PATH="$BIN:$PATH"; IMAGESRV_SERVER="$2"; IMAGE="$3"; MAC="$4"; DISKS="$5"
 IFACE=lo            # this host's card: the relay sends the group on loopback (TTL 0), and a join without a card takes the default route's
 . agent/lib/core/common.sh; . agent/lib/core/jsonq.sh; . agent/lib/core/waits.sh; . agent/lib/restore/verdict.sh
+. agent/lib/core/tls.sh; tls_config || { echo "tls_config: $TLS_WHY" >&2; exit 5; }   # #3580: $SERVER is the certificate name, curl trusts the site CA
 . agent/lib/restore/chunkgate.sh; . agent/lib/restore/chunkledger.sh; . agent/lib/restore/chunkrecv.sh
 . agent/lib/restore/chunkfetch.sh; . agent/lib/restore/chunkwatch.sh
 [ ! -f agent/lib/restore/chunkb3.sh ] || . agent/lib/restore/chunkb3.sh   # #3332: the partition's BLAKE3 list
@@ -295,7 +304,6 @@ def _open(stack: Stack, cloners: dict[str, list[str]]):
         return all(isinstance(parts[n].get("readback_chunks"), int) for n in (1, 3))
     stack._wait(derived, "the server derived the index of both partitions")
     assert stack.index(image, 3) is None, "the index was served to a machine that is in no round of this image"
-    assert stack.admin.json("POST", "/api/console/settings", {"stream_engine": "chunk"})[0] == 200
     disks = {}
     for n, (mac, serials) in enumerate(cloners.items(), start=1):
         stack.machine(mac, f"{n:02d}", "grp_CLONERS")
@@ -341,7 +349,7 @@ def _round(stack: Stack, cloners: dict[str, list[str]]):
                 [BASH, posix(run / "agent.sh"), posix(run), stack.base, image, mac,
                  " ".join(d["dev"] for d in disks[mac])],
                 cwd=str(REPO), stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                start_new_session=True, env={**os.environ, "BIN": str(stack.bin)}))
+                start_new_session=True, env={**os.environ, "BIN": str(stack.bin), **stack.trust_env}))
             stack.agents.append(runs[mac][1])
     for mac, (run, process) in runs.items():
         try:
@@ -419,8 +427,9 @@ def test_two_cloners_what_both_lost_is_sent_again_once(stack):
 
 
 FETCHER = r"""
-export RUN_DIR="$1" LOG_FILE="$1/agent.log"; SERVER="$2"; IMAGE="$3"; FILE="$4"; MAC=aa:bb:cc:00:e2:21
+export RUN_DIR="$1" LOG_FILE="$1/agent.log"; IMAGESRV_SERVER="$2"; IMAGE="$3"; FILE="$4"; MAC=aa:bb:cc:00:e2:21
 . agent/lib/core/common.sh; . agent/lib/core/jsonq.sh; . agent/lib/core/waits.sh; . agent/lib/restore/verdict.sh
+. agent/lib/core/tls.sh; tls_config || { echo "tls_config: $TLS_WHY" >&2; exit 5; }   # #3580
 . agent/lib/restore/chunkledger.sh; . agent/lib/restore/chunkrecv.sh; . agent/lib/restore/chunkfetch.sh
 . agent/lib/restore/chunkwatch.sh
 [ ! -f agent/lib/restore/chunkrc.sh ] || . agent/lib/restore/chunkrc.sh   # #3259: what the receiver's exit codes mean
@@ -463,7 +472,8 @@ def test_twenty_thousand_scattered_ranges_are_one_curl_on_one_connection(stack):
 
     began = time.monotonic()
     done = subprocess.run([BASH, posix(run / "fetcher.sh"), posix(run), stack.base, image, name],
-                          cwd=str(REPO), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=600)
+                          cwd=str(REPO), capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=600,
+                          env={**os.environ, **stack.trust_env})
     took = time.monotonic() - began
     log = (run / "agent.log").read_text(errors="replace") if (run / "agent.log").exists() else ""
     assert done.stdout.strip().splitlines()[-1] == "rc=0", done.stdout + done.stderr + log[-2000:]

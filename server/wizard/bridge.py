@@ -10,7 +10,7 @@ from pathlib import Path
 
 from server.console.tls import fingerprint_sha256
 
-API_BASE = "https://127.0.0.1:8081/api/wizard"
+API_BASE = "https://127.0.0.1/api/wizard"
 STATUS_FILE = Path("/etc/imagesrv/firstboot.status")
 ROLE_FILE = Path("/etc/imagesrv/installer-role")
 CERT_FILE = Path("/var/lib/imagesrv/console-tls/console.crt")
@@ -134,7 +134,7 @@ def main(argv: list[str] | None = None) -> int:
             _input()
             progress = _request("progress")
             if progress.pop("_http_status", None) == 404:
-                _finish()  # 8081 has already handed over to the real console.
+                _finish()  # 443 has already handed over to the real console.
             else:
                 _flat(progress)
         elif action == "check-primary":

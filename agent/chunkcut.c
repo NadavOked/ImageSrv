@@ -16,7 +16,7 @@
  * Every frame is a whole standard zstd frame (its content size in its header,
  * its checksum at its end), so the file as a whole is still what `zstd -dc`
  * turns back into partclone's stream, byte for byte: the pipe of today
- * (udp-sender -> zstd -dc -> partclone -r) reads it unchanged.
+ * (stream -> zstd -dc -> partclone -r) reads it unchanged.
  *
  * Usage:  chunkcut [-l <level 1..19>] [-T <threads, 0 = every core>] [--raw] -i <index-file>
  * Input:  stdin  -- `partclone.<fs> -c -a0` (or partclone.dd with --raw).

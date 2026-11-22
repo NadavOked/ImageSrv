@@ -11,11 +11,13 @@ contract with the server's engine:
 - a pass is "sent" only when the sha256 of what was read is the manifest's -- a disk that changed
   between the reads fails at the source, by name, and so does a sender that refused the stream;
 - the source is done only when the SERVER says so (`chunk.done`), and stops when the wave failed;
-- with the switch off nothing changes: udp-sender, and no index leaves the machine.
+- #3173: a task the server did not hand to the chunk engine is refused by name, and nothing is sent --
+  there is no other engine (the old udp-sender path is gone).
 
 **Negative control:** with `directchunk.sh` gone and `directsend.sh` / `capturesink.sh` back at the
-base commit, the source sends through udp-sender whatever the hello says: every test here except
-`test_with_the_switch_off...` fails on its own assertion (no chunkcast, no index PUT).
+base commit, the source sends through udp-sender whatever the hello says: every test here fails on its
+own assertion (no chunkcast, no index PUT). #3173's own: with `directsend.sh` / `directchunk.sh` of
+fa33a4068 the source without an engine goes on to udp-sender (rc=0, udp.argv written).
 """
 
 from __future__ import annotations
@@ -35,7 +37,7 @@ pytestmark = requires_native(("bash", BASH))
 KEY = "0123456789abcdef"
 TOKEN = "a1b2c3d4e5f60718293a4b5c6d7e8f90"       # the round's token, in the hello (`chunk.serve_token`)
 ORDER = {"seq": 1, "part": 1, "pass": 1, "kbps": 700000, "write_kbps": 400000,
-         "group": "239.83.67.1", "port": 9002, "key": KEY, "chunks": False}
+         "group": "239.84.82.1", "port": 7713, "key": KEY, "chunks": False}   # פורט-הפצה-מכוון
 
 #: chunkcast's stand-in: records its argv, takes the whole stream, and says "done" as the real one does.
 CHUNKCAST = (
@@ -74,12 +76,11 @@ CHUNKCUT_PARTCLONE = (
 )
 
 
-def _hello(*, state="running", engine=True, order=None, done=False, error=None, wave=True, token=TOKEN):
-    answer = _answer(state)
+def _hello(*, state="running", engine=True, order=None, done=False, error=None, wave=True, token=TOKEN, ports=None):
+    answer = _answer(state, engine="chunk" if engine else None)
     if engine:
-        answer["task"]["direct"]["engine"] = "chunk"
         if wave:
-            answer["task"]["direct"]["chunk"] = {"serve_port": 9003, "order": order, "done": done, "error": error,
+            answer["task"]["direct"]["chunk"] = {"serve_ports": {"1": 7722} if ports is None else ports, "order": order, "done": done, "error": error,
                                                  **({"serve_token": token} if token is not None else {})}
     return answer
 
@@ -98,8 +99,9 @@ def _run(tmp_path, hellos, *, env=None, extra_stubs=None):
     pre += f". {posix(flat_lib())}/directserve.sh; "
     box, run, out = direct_run(
         tmp_path, env={"HELLO_DIR": posix(box), "CC_ARGV": posix(box / "cc.argv"), "CURL_SENT": posix(box / "sent.jsonl"),
-                       "DIRECT_CHUNK_BEAT_S": "1", "SERVER": "http://10.55.0.1:8080", **(env or {})},
-        extra_stubs={"chunkcast": CHUNKCAST, "curl": CURL, **(extra_stubs or {})}, pre=pre, timeout=90)
+                       "DIRECT_CHUNK_BEAT_S": "1", "SERVER": "http://10.55.0.1:7712", **(env or {})},
+        extra_stubs={"chunkcast": CHUNKCAST, "curl": CURL, **(extra_stubs or {})}, pre=pre, timeout=90,
+        chunk_run=False)   # the real wave of directchunk.sh, loaded in `pre`
     return box, run, out
 
 
@@ -148,7 +150,7 @@ def test_the_indexes_go_before_the_manifest_and_the_pass_goes_through_chunkcast(
     assert "/head/" not in curl                             # a raw partition has no head
     flags = _flags(box)
     assert flags["_"] == ["send"] and "--stdin" in flags and "--file" not in flags
-    assert flags["--to"] == "239.83.67.1:9002" and flags["--session"] == KEY
+    assert flags["--to"] == "239.84.82.1:7713" and flags["--session"] == KEY   # פורט-הפצה-מכוון
     assert flags["--part"] == "1" and flags["--pass"] == "1"
     assert flags["--kbps"] == "700000" and flags["--write-kbps"] == "400000"
     assert flags["--index"] == f"{posix(run)}/idx.1"         # read 1's index, the one the receivers hold
@@ -209,7 +211,7 @@ def test_a_repair_order_reads_only_the_servers_chunks_and_not_the_partition_agai
     assert (run / "dchunk.list").read_text().strip() == "5-9"
     assert "/api/v1/direct/tsk_715/chunks/1" in (box / "curl.argv").read_text("utf-8")
     assert flags["--device"].endswith("/sda1") and flags["--level"] == "3" and "--stdin" not in flags
-    assert flags["--index"] == f"{posix(run)}/idx.1" and flags["--to"] == "239.83.67.1:9002"
+    assert flags["--index"] == f"{posix(run)}/idx.1" and flags["--to"] == "239.84.82.1:7713"   # פורט-הפצה-מכוון
     assert (box / "pcl.count").read_text().strip() == "1"   # read 1 only: the disk was not read through again
     assert (box / "cc.argv").read_text("utf-8").count("---") == 1
     assert _sent(box) == [{"seq": 1, "state": "done", "rc": 0, "error": ""}]
@@ -231,7 +233,7 @@ def test_the_frame_servers_run_for_the_wave_answer_the_server_only_and_are_stopp
     box, run, out = _run(tmp_path, WAVE)
     assert out.strip().endswith("rc=0"), out + _log(run)
     serve = _flags(box, 0, "cc.argv.serve")
-    assert serve["_"] == ["serve"] and serve["--listen"] == "0.0.0.0:9004"   # the port base + partition 1
+    assert serve["_"] == ["serve"] and serve["--listen"] == "0.0.0.0:7722"   # the port the server named for partition 1, not one computed here (#3871)
     assert serve["--allow"] == "10.55.0.1"                  # the image server's address: one more layer, not the only one
     assert serve["--index"] == f"{posix(run)}/idx.1" and serve["--device"].endswith("/sda1")
     assert serve["--level"] == "3"
@@ -257,7 +259,7 @@ def test_the_frame_servers_get_the_rounds_token_in_a_file_and_never_in_argv_or_t
 def test_a_server_known_by_a_name_still_gets_frame_servers_that_ask_for_the_token(tmp_path):
     """The review of #3216: with a name for an address, the frame servers answered ANY peer (--allow was left out). Now
     the token is what is asked, whatever the address is -- so the name no longer leaves the build machine open."""
-    box, run, out = _run(tmp_path, WAVE, env={"SERVER": "http://imagesrv.lab:8080"})
+    box, run, out = _run(tmp_path, WAVE, env={"SERVER": "http://imagesrv.lab:7712"})
     assert out.strip().endswith("rc=0"), out + _log(run)
     serve = _flags(box, 0, "cc.argv.serve")
     assert "--allow" not in serve and serve["--token-file"] == f"{posix(run)}/dserve.token"
@@ -275,6 +277,16 @@ def test_no_token_in_the_hello_means_no_frame_server_and_it_is_said(tmp_path):
     assert not (box / "cc.argv.serve").exists()             # `chunkcast serve` never ran
     assert "sent no token for the frame servers" in _log(run)
     assert not (run / "dserve.token").exists()
+
+
+def test_a_partition_the_server_named_no_port_for_is_not_served_and_it_is_said(tmp_path):
+    """#3871: the build machine listens only where the server told it -- it does not work a port out of the index."""
+    other = {"2": 7720}
+    box, run, out = _run(tmp_path, [_hello(state="open", wave=False), _hello(ports=other), _hello(order=ORDER, ports=other),
+                                    _hello(done=True, ports=other), _hello(state="closed", done=True, ports=other)])
+    assert out.strip().endswith("rc=0"), out + _log(run)
+    assert not (box / "cc.argv.serve").exists()             # `chunkcast serve` never ran for partition 1
+    assert "named no port for partition 1" in _log(run)
 
 
 def test_the_source_stays_until_the_round_closes_and_not_only_until_its_last_pass(tmp_path):
@@ -312,13 +324,16 @@ def test_a_wave_refused_before_it_started_does_not_leave_the_source_waiting(tmp_
     assert not (box / "cc.argv").exists() and not (box / "udp.argv").exists()
 
 
-def test_with_the_switch_off_the_source_is_udpcast_and_no_index_leaves_the_machine(tmp_path):
+def test_a_task_without_the_chunk_engine_is_refused_by_name_and_nothing_is_sent(tmp_path):
+    """#3173: a hello that names no engine is not "the old engine" -- there is none. The source fails
+    by name after read 1 (which only read), before the manifest and before any packet."""
     off = _hello(engine=False)
     box, run, out = _run(tmp_path, [off])
-    assert out.strip().endswith("rc=0"), out + _log(run)
-    assert (box / "udp.argv").exists() and not (box / "cc.argv").exists()
-    curl = (box / "curl.argv").read_text("utf-8")
-    assert "/index/" not in curl and "/head/" not in curl and "/manifest" in curl
+    assert out.strip().endswith("rc=1"), out + _log(run)
+    assert not (box / "udp.argv").exists() and not (box / "cc.argv").exists()
+    assert "השרת לא הציע את מנוע החתיכות" in _progress(box)["targets"][0]["error"]
+    curl = (box / "curl.argv").read_text("utf-8") if (box / "curl.argv").exists() else ""
+    assert "/index/" not in curl and "/head/" not in curl and "/manifest" not in curl
 
 
 def test_the_head_of_a_partclone_partition_is_cut_from_what_read_1_kept(tmp_path):

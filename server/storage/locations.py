@@ -26,6 +26,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from server.core.atomicfile import write_atomic
+from server.core import unreadable
 from server.db import _settle, _write_lock, journal, now_iso, writing
 from server.system.health_rows import check
 
@@ -43,7 +44,7 @@ LOCAL_ID = "loc_local"
 LOCAL_NAME = "מקומי"
 TYPES = ("local", "nfs", "smb", "iscsi")
 STATES = ("connected", "unreachable", "disconnected", "unchecked")
-SECRET_KEYS = ("secret", "chap_secret")
+from server.storage.secret_keys import SECRET_KEYS   # noqa: E402,F401 -- #2531: defined in a leaf module, re-exported
 #: #2460: הסודות יוצאים מכל עותק גיבוי של ה-DB (`backup._drop_console_secret`). על שרת
 #: ששוחזר יש משתמש ואין סיסמה — והמפעיל מקליד אותה מחדש ב-`/connect`. לכל סוג: (המשתמש,
 #: הסוד, ההודעה שהמפעיל רואה).
@@ -1123,6 +1124,7 @@ def params_of(row: dict) -> dict:
     try:
         data = json.loads(row.get("params_json") or "{}")
     except ValueError:
+        unreadable.said("storage_locations.params_json", row.get("params_json"))   # #3129 (the text carries secrets: not logged)
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -1171,6 +1173,7 @@ def last_df(row: dict) -> dict:
     try:
         data = json.loads(row.get("last_df_json") or "null")
     except ValueError:
+        unreadable.said("storage_locations.last_df_json", row.get("last_df_json"))   # #3129
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -1179,6 +1182,7 @@ def last_images(row: dict) -> list[dict]:
     try:
         data = json.loads(row.get("last_images_json") or "[]")
     except ValueError:
+        unreadable.said("storage_locations.last_images_json", row.get("last_images_json"))   # #3129
         return []
     return data if isinstance(data, list) else []
 

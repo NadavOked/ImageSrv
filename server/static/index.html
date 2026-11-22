@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ImageSrv — קונסולה</title>
-<link rel="icon" type="image/svg+xml" href="favicon.svg?v=14.20">
-<link rel="icon" href="favicon.ico?v=14.20" sizes="any">
-<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png?v=14.20">
-<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=14.20">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=14.20">
-<link rel="stylesheet" href="design-tokens.css?v=14.20">
-<link rel="stylesheet" href="console.css?v=14.20">
-<link rel="stylesheet" href="progress.css?v=14.20">
-<link rel="stylesheet" href="nicsvc.css?v=14.20">
-<link rel="stylesheet" href="vmupdate.css?v=14.20">
-<link rel="stylesheet" href="email_alerts.css?v=14.20">
-<link rel="stylesheet" href="learning.css?v=14.20">
+<link rel="icon" type="image/svg+xml" href="favicon.svg?v=14.29">
+<link rel="icon" href="favicon.ico?v=14.29" sizes="any">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png?v=14.29">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png?v=14.29">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=14.29">
+<link rel="stylesheet" href="design-tokens.css?v=14.29">
+<link rel="stylesheet" href="console.css?v=14.29">
+<link rel="stylesheet" href="progress.css?v=14.29">
+<link rel="stylesheet" href="nicsvc.css?v=14.29">
+<link rel="stylesheet" href="vmupdate.css?v=14.29">
+<link rel="stylesheet" href="email_alerts.css?v=14.29">
+<link rel="stylesheet" href="learning.css?v=14.29">
 <script>
   /* לפני הציור הראשון, אחרת המסך מהבהב בלבן לפני שהכהה נטען.
      המטמון הוא בחירה מפורשת (light/dark) בלבד; בלי מטמון — בהיר
@@ -31,7 +31,7 @@
 
 <div id="login" class="login">
   <div class="pane">
-    <div class="brand"><img class="lockup lockup-light" src="logo-lockup.svg?v=14.20" height="52" alt="ImageSrv — שרת אימג'ים"><img class="lockup lockup-dark" src="logo-lockup-dark.svg?v=14.20" height="52" alt="ImageSrv — שרת אימג'ים"></div>
+    <div class="brand"><img class="lockup lockup-light" src="logo-lockup.svg?v=14.29" height="52" alt="ImageSrv — שרת אימג'ים"><img class="lockup lockup-dark" src="logo-lockup-dark.svg?v=14.29" height="52" alt="ImageSrv — שרת אימג'ים"></div>
     <div class="pane-body" id="login-body"></div>
     <div class="foot">
       <span id="login-foot-host"></span><span class="sep" id="login-foot-sep1" hidden>·</span>
@@ -83,7 +83,7 @@
 <div id="app" class="app hidden" data-nav="full">
 <header class="topbar">
   <button class="icon-btn nav-toggle" type="button" aria-label="כיווץ לפס אייקונים" title="כיווץ לפס אייקונים" aria-controls="sidebar" aria-expanded="true" onclick="navButton()"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
-  <div class="brand"><img class="brand-lockup" src="logo-lockup-compact-dark.svg?v=14.20" height="24" alt="ImageSrv"></div>
+  <div class="brand"><img class="brand-lockup" src="logo-lockup-compact-dark.svg?v=14.29" height="24" alt="ImageSrv"></div>
   <div class="search"><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="m15 15 6 6"/></svg></span><input id="globalSearch" type="search" placeholder="חיפוש במערכת" aria-label="חיפוש במערכת" role="combobox" aria-expanded="false" aria-controls="gsPanel" aria-autocomplete="list" autocomplete="off" /><div id="gsPanel" class="gs-panel" role="listbox" aria-label="תוצאות חיפוש" hidden></div></div>
   <div class="top-actions">
     <button class="icon-btn" title="רענן" onclick="refreshPage()"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7a9 9 0 1 0 1 7M20 2v6h-6"/></svg></button>
@@ -102,7 +102,7 @@
     <div id="srvTA" class="inventory-children" role="group">
       <div class="inventory-node" data-page="home" onclick="selectPageById('home')" role="treeitem" tabindex="0"><span class="tree-arrow-sp"></span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="10" rx="1.5"/><rect x="13" y="3" width="8" height="6" rx="1.5"/><rect x="13" y="11" width="8" height="10" rx="1.5"/><rect x="3" y="15" width="8" height="6" rx="1.5"/></svg></span><span>סקירה כללית</span></div>
       <div class="inventory-node" data-page="deploy" onclick="selectPageById('deploy')" role="treeitem" tabindex="0"><span class="tree-arrow-sp"></span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg></span><span>סבב הפצה</span></div>
-      <div class="inventory-node" data-page="asks" data-admin onclick="selectPageById('asks')" role="treeitem" tabindex="0"><span class="tree-arrow-sp"></span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9 8a3 3 0 0 1 6 0c0 2-3 2-3 5M12 17h.01"/></svg></span><span>שאלות המוח</span><span class="ba-nav" id="navAskBdg" hidden>0</span></div>
+      <div class="inventory-node" data-page="asks" data-admin onclick="selectPageById('asks')" role="treeitem" tabindex="0"><span class="tree-arrow-sp"></span><span><svg class="ui-icon" viewBox="0 0 24 24" height="16" aria-hidden="true"><path d="M12 5.5a3 3 0 0 0-5.2-1.6 3.2 3.2 0 0 0-2.6 4.7 3.3 3.3 0 0 0 .3 5.6 3.4 3.4 0 0 0 3.3 4.6 2.6 2.6 0 0 0 4.2.7Z"/><path d="M12 5.5a3 3 0 0 1 5.2-1.6 3.2 3.2 0 0 1 2.6 4.7 3.3 3.3 0 0 1-.3 5.6 3.4 3.4 0 0 1-3.3 4.6 2.6 2.6 0 0 1-4.2.7Z"/><path d="M12 5.5v14M8.6 9.2c1.2 0 2 .8 2 2M15.4 9.2c-1.2 0-2 .8-2 2M7.8 14.8c1 0 1.8-.6 2-1.5M16.2 14.8c-1 0-1.8-.6-2-1.5"/></svg></span><span>שאלות המוח</span><span class="ba-nav" id="navAskBdg" hidden>0</span></div>
       <div class="inventory-node group" onclick="toggleInventoryGroup(this,'invTA')" role="treeitem" tabindex="0" aria-expanded="false"><span class="tree-arrow" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),'invTA')" data-open="false">▸</span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h13M8 12h13M8 19h13M3 5h.01M3 12h.01M3 19h.01"/></svg></span><span>מלאי</span></div>
       <div id="invTA" class="inventory-children" role="group" hidden>
         <div class="inventory-node" data-page="images" onclick="selectPageById('images')" role="treeitem" tabindex="0"><span class="tree-arrow-sp"></span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></span><span>אימג'ים</span></div>
@@ -125,7 +125,7 @@
             <div class="inventory-node" data-net-tab="0" onclick="openNetwork(0,null,this)" role="treeitem" tabindex="0"><span class="tree-arrow-sp"></span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-4h12v4"/></svg></span><span>תרשים</span></div>
             <div class="inventory-node" data-net-tab="1" onclick="openNetwork(1,null,this)" role="treeitem" tabindex="0"><span class="tree-arrow-sp"></span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="16" height="11" rx="1.5"/><path d="M8 17v3M16 17v3M8 10v3M12 10v3M16 10v3"/></svg></span><span>חיבורים פיזיים</span></div>
             <div class="inventory-node" data-net-tab="2" onclick="openNetwork(2,null,this)" role="treeitem" tabindex="0"><span class="tree-arrow-sp"></span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h15l-4-4M20 18H5l4 4M20 6v6M4 18v-6"/></svg></span><span>רשת הפצה</span></div>
-            <div class="inventory-node" data-page="ports" onclick="selectPageById('ports')" role="treeitem" tabindex="0"><span class="tree-arrow-sp"></span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v5M15 3v5M6 8h12v4a6 6 0 0 1-12 0Z"/><path d="M12 18v3"/></svg></span><span>פורטים</span></div>
+            <div class="inventory-node" data-page="ports" onclick="selectPageById('ports')" role="treeitem" tabindex="0"><span class="tree-arrow-sp"></span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3v5M15 3v5M6 8h12v4a6 6 0 0 1-12 0Z"/><path d="M12 18v3"/></svg></span><span>שירותים</span></div>
           </div>
           <div class="inventory-node" data-page="monitor" onclick="selectPageById('monitor')" role="treeitem" tabindex="0"><span class="tree-arrow-sp"></span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="m10 8.5 5 2.5-5 2.5Z"/><path d="M8 21h8M12 17v4"/></svg></span><span>מוניטור</span></div>
           <div class="inventory-node" data-page="drivers" data-adv onclick="selectPageById('drivers')" role="treeitem" tabindex="0"><span class="tree-arrow-sp"></span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M9 3v4M15 3v4M9 17v4M15 17v4M3 9h4M3 15h4M17 9h4M17 15h4"/></svg></span><span>דרייברים</span></div>
@@ -159,37 +159,38 @@
 
   <main class="content" id="content"></main>
 </div>
-<div class="task-panel" id="taskPanel"><div class="task-panel-head"><strong>משימות אחרונות</strong><button class="btn" type="button" id="allTasksLink" onclick="selectPageById('logs')" title="היסטוריית האירועים המלאה ביומן (התחלה, סיום וכישלון של קליטות)">כל המשימות</button><button class="btn" type="button" onclick="clearFinishedTasks()">נקה משימות שהסתיימו</button><button class="icon-btn" type="button" aria-label="סגור" title="סגור" onclick="toggleTaskPanel()"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="table-wrap"><table class="task-table"><thead><tr><th>משימה</th><th>יעד</th><th>התחלה</th><th>משך</th><th>מצב</th><th>יוזם</th></tr></thead><tbody><tr><td colspan="6">אין העברות פעילות</td></tr></tbody></table></div></div><div class="task-dock"><div class="task-dock-head" onclick="toggleTaskPanel()"><span>משימות</span><span class="task-count">0</span><span>⌃</span></div><div class="task-summary">אין העברות פעילות</div><div class="statusbar"><span class="statusbar-right"><span class="statusbar-item svc-unk" data-svc="API" title="API: לא נבדק"><i></i>API</span><span class="statusbar-item svc-unk" data-svc="PXE" title="PXE: לא נבדק"><i></i>PXE</span><span class="statusbar-item svc-unk" data-svc="Multicast" title="Multicast: לא נבדק"><i></i>Multicast</span><span id="serverTls"></span><span id="serverVersion"></span></span></div></div><div class="user-menu" id="userMenu"><div class="user-menu-head"><strong>מנהל</strong><small>Administrator</small></div><button onclick="openAccountPage()">החשבון שלי</button><button onclick="openSessionInfo()">פרטי ההתחברות</button><div class="user-menu-sep" role="separator"></div><button class="um-switch" id="viewToggle" type="button" role="menuitemcheckbox" aria-checked="false" onclick="toggleView()"><span>תצוגה מתקדמת<small>מציג את כל הלשוניות</small></span><span class="sw" aria-hidden="true"></span></button><div class="user-menu-sep hidden" data-admin role="separator"></div><button class="hidden" data-admin type="button" onclick="openServerPower('reboot')">הפעלה מחדש של השרת…</button><button class="danger-item hidden" data-admin type="button" onclick="openServerPower('poweroff')">כיבוי השרת…</button><div class="user-menu-sep" role="separator"></div><button id="logout" class="danger-item" type="button">התנתקות</button></div>
+<div class="task-panel" id="taskPanel"><div class="task-panel-head"><strong>משימות אחרונות</strong><button class="btn" type="button" id="allTasksLink" onclick="selectPageById('logs')" title="היסטוריית האירועים המלאה ביומן (התחלה, סיום וכישלון של קליטות)">כל המשימות</button><button class="btn" type="button" onclick="clearFinishedTasks()">נקה משימות שהסתיימו</button><button class="icon-btn" type="button" aria-label="סגור" title="סגור" onclick="toggleTaskPanel()"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="table-wrap"><table class="task-table"><thead><tr><th>משימה</th><th>יעד</th><th>התחלה</th><th>משך</th><th>מצב</th><th>יוזם</th></tr></thead><tbody><tr><td colspan="6">אין העברות פעילות</td></tr></tbody></table></div></div><div class="task-dock"><div class="task-dock-head" onclick="toggleTaskPanel()"><span>משימות</span><span class="task-count">0</span><span>⌃</span></div><div class="task-summary">אין העברות פעילות</div><div class="statusbar"><span class="statusbar-right"><span id="serverVersion"></span></span></div></div><div class="user-menu" id="userMenu"><div class="user-menu-head"><strong>מנהל</strong><small>Administrator</small></div><button onclick="openAccountPage()">החשבון שלי</button><button onclick="openSessionInfo()">פרטי ההתחברות</button><div class="user-menu-sep" role="separator"></div><button class="um-switch" id="viewToggle" type="button" role="menuitemcheckbox" aria-checked="false" onclick="toggleView()"><span>תצוגה מתקדמת<small>מציג את כל הלשוניות</small></span><span class="sw" aria-hidden="true"></span></button><div class="user-menu-sep hidden" data-admin role="separator"></div><button class="hidden" data-admin type="button" onclick="openServerPower('reboot')">הפעלה מחדש של השרת…</button><button class="danger-item hidden" data-admin type="button" onclick="openServerPower('poweroff')">כיבוי השרת…</button><div class="user-menu-sep" role="separator"></div><button id="logout" class="danger-item" type="button">התנתקות</button></div>
 <input class="selectable-file" id="csvFile" type="file" accept=".csv" aria-hidden="true">
 <div class="detail-backdrop" id="detailBackdrop"></div><aside class="drawer win n-drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" tabindex="-1"><div class="n-h drawer-head"><div><h2 id="drawerTitle">פרטים</h2><p id="drawerSub"></p><div class="n-meta" id="drawerMeta"></div></div><button class="n-x" type="button" aria-label="סגור" title="סגור" onclick="closeDrawer()"><svg class="n-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="n-tabs" id="drawerTabs" role="tablist" hidden></div><div class="n-b drawer-body" id="drawerBody" tabindex="0"></div><footer class="n-f-bar drawer-foot" id="drawerFoot" hidden></footer></aside>
 <div class="modal-backdrop" id="modal"><div class="modal win n-mid" id="modalBox" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1"><div class="n-h modal-h"><div><h2 id="modalTitle">פעולה</h2><p id="modalSub" hidden></p></div><button class="n-x" type="button" aria-label="סגור" title="סגור" onclick="closeModal()"><svg class="n-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div><div class="n-b modal-b" id="modalBody" tabindex="0"></div><footer class="n-f-bar modal-f"><span class="n-hint" id="modalHint"></span><button class="btn" type="button" id="modalCancel" onclick="closeModal()">ביטול</button><button class="btn primary" id="modalOk">אישור</button></footer></div><form id="sheet" class="sheet win n-narrow hidden" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" tabindex="-1"></form></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </div>
 
-<script src="progress.js?v=14.20"></script>
-<script src="console-core.js?v=14.20"></script>
-<script src="console.js?v=14.20"></script>
-<script src="update_screen.js?v=14.20"></script>
-<script src="console-prodline.js?v=14.20"></script>
-<script src="capture_detail.js?v=14.20"></script>
-<script src="reorder.js?v=14.20"></script>
-<script src="net.js?v=14.20"></script>
-<script src="netcfg.js?v=14.20"></script>
-<script src="nicsvc.js?v=14.20"></script>
-<script src="storage_nodes.js?v=14.20"></script>
-<script src="drivers.js?v=14.20"></script>
-<script src="storage.js?v=14.20"></script>
-<script src="disks.js?v=14.20"></script>
-<script src="memory_ui.js?v=14.20"></script>
-<script src="branches.js?v=14.20"></script>
-<script src="branch_transfer.js?v=14.20"></script>
-<script src="vmupdate.js?v=14.20"></script>
-<script src="email_alerts.js?v=14.20"></script>
-<script src="sessions.js?v=14.20"></script>
-<script src="learning.js?v=14.20"></script>
-<script src="brain_asks.js?v=14.20"></script>
-<script src="brain_asks_page.js?v=14.20"></script>
-<script src="iso.js?v=14.20"></script>
-<script src="usbstick.js?v=14.20"></script>
+<script src="progress.js?v=14.29"></script>
+<script src="console-core.js?v=14.29"></script>
+<script src="console.js?v=14.29"></script>
+<script src="update_screen.js?v=14.29"></script>
+<script src="console-prodline.js?v=14.29"></script>
+<script src="console-services.js?v=14.29"></script>
+<script src="capture_detail.js?v=14.29"></script>
+<script src="reorder.js?v=14.29"></script>
+<script src="net.js?v=14.29"></script>
+<script src="netcfg.js?v=14.29"></script>
+<script src="nicsvc.js?v=14.29"></script>
+<script src="storage_nodes.js?v=14.29"></script>
+<script src="drivers.js?v=14.29"></script>
+<script src="storage.js?v=14.29"></script>
+<script src="disks.js?v=14.29"></script>
+<script src="memory_ui.js?v=14.29"></script>
+<script src="branches.js?v=14.29"></script>
+<script src="branch_transfer.js?v=14.29"></script>
+<script src="vmupdate.js?v=14.29"></script>
+<script src="email_alerts.js?v=14.29"></script>
+<script src="sessions.js?v=14.29"></script>
+<script src="learning.js?v=14.29"></script>
+<script src="brain_asks.js?v=14.29"></script>
+<script src="brain_asks_page.js?v=14.29"></script>
+<script src="iso.js?v=14.29"></script>
+<script src="usbstick.js?v=14.29"></script>
 </body>
 </html>

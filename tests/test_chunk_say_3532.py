@@ -50,7 +50,7 @@ def flags(cmd):
 
 def command(chunks=None, say=None):
     """The command, and the list file of a completion pass removed (the engine removes it after the pass)."""
-    engine = SimpleNamespace(port=9002, interface=None, feedback=True, write_floor=lambda: 20)
+    engine = SimpleNamespace(port=7713, interface=None, feedback=True, write_floor=lambda: 20)   # פורט-הפצה-מכוון
     wave = SimpleNamespace(key="0123456789abcdef", round=1)
     cmd = ChunkEngine._command(engine, wave, {"index": 3}, Path("image.zst"), 100000, 400000, chunks, None, say)
     if "--chunks-file" in cmd:
@@ -167,7 +167,6 @@ def test_the_engine_asks_for_the_values_at_every_pass(rig):
 def _first_command(room_server):
     ctx, recorder, anon = room_server["ctx"], room_server["recorder"], room_server["anon"]
     _index_the_image(ctx)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     wave, _hello = _room_wave(room_server)
     first = next(p["index"] for p in MANIFEST_256["partitions"] if p.get("file"))
     answer = anon.post("/api/v1/agent/chunk-pass", json={

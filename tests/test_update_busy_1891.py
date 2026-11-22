@@ -199,7 +199,7 @@ def test_the_upgrade_script_honours_the_admin_override(tmp_path):
 def _transfer(conn, state: str) -> None:
     conn.execute(
         "INSERT INTO storage_nodes (id, label, base_url, credential_ref, enrolled_at)"
-        " VALUES ('n1', 'חיפה', 'https://10.0.0.2:8443', 'x', ?)", (NOW,))
+        " VALUES ('n1', 'חיפה', 'https://10.0.0.2:7700', 'x', ?)", (NOW,))
     conn.execute(
         "INSERT INTO storage_transfers (id, node_id, image_id, image_name, state,"
         " bytes_sent, bytes_total, started_by, created_at, updated_at)"

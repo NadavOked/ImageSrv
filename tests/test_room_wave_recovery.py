@@ -335,8 +335,8 @@ def test_a_wave_nobody_points_at_is_not_left_holding_the_slot(
 
 def test_the_successor_wave_is_never_broadcasting_when_on_closed_fires(
         room_server, monkeypatch):
-    """`SenderEngine.stop` מתעלם ממזהה הסבב — ולכן נמדד **מי** יכול
-    להיות משדר ברגע ש-`on_closed(replaces)` רץ.
+    """`SenderEngine.stop` (udpcast, נמחק ב-#3173) התעלם ממזהה הסבב — ולכן נמדד **מי** יכול
+    להיות משדר ברגע ש-`on_closed(replaces)` רץ. `ChunkEngine.stop` כן בודק את המזהה; השומר נשאר.
 
     הממצא היה שהקריאה רצה אחרי שהיורש כבר קיים, ולכן היא עלולה לעצור
     את שולח הגל החדש. מה שנמדד: היורש נולד `open`, והמסלול היחיד
@@ -356,7 +356,7 @@ def test_the_successor_wave_is_never_broadcasting_when_on_closed_fires(
         seen.append({
             "closing": session_id,
             "actives": [(r["id"], r["state"]) for r in _actives(ctx)],
-            "sender": ctx.sender.status(),
+            "sender": ctx.chunk.status(),
         })
         real(session_id)
 

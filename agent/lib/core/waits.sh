@@ -21,21 +21,19 @@
 # התהליך נתפס תוך 0.1ש' (_nap, #1705: ‏3ש' בכל מעבר מחיצה, ברזל 17/10).
 WAIT_POLL_S="${WAIT_POLL_S:-1}"
 
-# עד הבייט הראשון. השרת מפעיל udp-sender רק אחרי ש-min-receivers הצטרפו
+# עד הבייט הראשון. השרת מתחיל לשדר רק אחרי ש-min-receivers הצטרפו
 # או ש-max-wait פג, ותחנה שהצטרפה באמצע מחיצה ממתינה לשידור הבא —
 # דקות זה סביר. עשר דקות בלי בייט אחד זה כבר סבב שמת בשרת.
 WAIT_STREAM_START_S="${WAIT_STREAM_START_S:-600}"
 
 # עד הבייט הראשון של **המחיצה השנייה והלאה** (#957, כמו FOG GH-536).
 # שם ההמתנה אינה למפעיל אלא לחדר: השולח ממתין עד `max_wait_later`
-# (‏600ש', ‏server/sender.py) למגירה האיטית שעוד כותבת את המחיצה
+# (‏600ש', ‏server/rounds/chunkctx.py) למגירה האיטית שעוד כותבת את המחיצה
 # הקודמת — ואם המכונה הזו היא שהצטרפה ראשונה, היא ממתינה את כל
-# ה-600 בעצמה. ‏udp-receiver סופר את ההמתנה הזאת ב-`--start-timeout`
-# שלו (‏receivedata.c: הבייט הראשון אחרי החיבור נמדד ב-startTimeout, לא
-# ב-receiveTimeout), ולכן התקרה כאן חייבת להיות **גדולה** מ-600 —
-# אחרת המקבל שהגיע ראשון פוקע בדיוק כשהשולח מתחיל. ‏300 מעל: אותו
+# ה-600 בעצמה. המקבל סופר את ההמתנה הזאת עד הבייט הראשון, ולכן התקרה כאן
+# חייבת להיות **גדולה** מ-600 — אחרת המקבל שהגיע ראשון פוקע בדיוק כשהשולח מתחיל. ‏300 מעל: אותו
 # מרווח כמו תקרת השקט. גם מחשב הבנייה בהפצה ישירה ממתין כך למקבלים
-# שלו (‏`--start-timeout` של השולח שם הוא 780 = 600 + 180).
+# שלו (השולח שם ממתין עד 780 = 600 + 180).
 WAIT_STREAM_START_LATER_S="${WAIT_STREAM_START_LATER_S:-900}"
 
 # אחרי שהזרם התחיל: כמה שקט מותר באמצעו = כמה מגירה שממתינה לרשת ממתינה
@@ -101,7 +99,7 @@ next_stream_ceiling() {
     # ("המפעיל לא התחיל"); מהשנייה: WAIT_STREAM_START_LATER_S ("השולח
     # ממתין למגירה איטית"). פונקציה ולא ביטוי אצל הקוראים, כי שני
     # מסלולי השחזור (restore.sh, drawers.sh) והשידור הישיר חייבים
-    # לענות על השאלה הזאת באותה צורה, ולתת אותו מספר ל-udp-receiver
+    # לענות על השאלה הזאת באותה צורה, ולתת אותו מספר
     # ול-wait_progress שמסתכל עליו.
     if [ "${STREAMED_PARTITIONS:-0}" -gt 0 ]; then
         STREAM_START_CEILING="$WAIT_STREAM_START_LATER_S"
@@ -117,7 +115,7 @@ next_stream_ceiling() {
 # והם נשארים יתומים. ב-POSIX sh אין דרך נקייה להרוג קבוצת תהליכים בלי
 # job control, ולכן זה מכוון: המטרה כאן היא שהסוכן ימשיך וידווח, לא
 # שהמכונה תהיה נקייה. בפועל היתומים נגמרים מעצמם ברגע שהמקור מת — ולכן
-# ‏udp-receiver ו-curl קיבלו תקרות משלהם, ולכן unblock_fifo קיים: הם
+# ‏curl קיבל תקרה משלו, ולכן unblock_fifo קיים: הם
 # מטפלים בשורש, וההריגה כאן היא רשת הביטחון האחרונה.
 
 # One poll tick (#1450). Sets _tk to the tenths actually slept. Debian's
@@ -246,43 +244,21 @@ unblock_fifo() {
     ( exec 3<> "$1"; : ) 2>/dev/null &
 }
 
-# #1571: this machine's own UDP drops around one multicast stream. RcvbufErrors =
-# the kernel dropped datagrams because udp-receiver's socket buffer was full (it
-# did not get the CPU in time) -- a re-xmit the network did not cause. Counters
-# are machine-wide; on a cloner the stream is the only UDP of any volume.
+# #1571: this machine's own UDP drops. RcvbufErrors = the kernel dropped datagrams
+# because the receiver's socket buffer was full (it did not get the CPU in time) --
+# a loss the network did not cause. Counters are machine-wide; on a cloner the
+# stream is the only UDP of any volume. The chunk pass reads them while it runs
+# and keeps this restore's sum in udp_drops.sum / udp_drops.json (chunkloss.sh).
 udp_drops() {   # "<RcvbufErrors> <InErrors>"; rc 1 = not read -- never "0 0"
     awk '$1 == "Udp:" { if (!h) { for (i = 2; i <= NF; i++) c[$i] = i; h = 1; next }
         if (c["RcvbufErrors"] && c["InErrors"] && $c["RcvbufErrors"] ~ /^[0-9]+$/ &&
             $c["InErrors"] ~ /^[0-9]+$/) { print $c["RcvbufErrors"], $c["InErrors"]; ok = 1 }
         exit } END { exit !ok }' "${SYSROOT:-}/proc/net/snmp" 2>/dev/null || return 1
 }
-udp_drops_mark() { UDP_DROPS0=""; [ "$1" != multicast ] || UDP_DROPS0=$(udp_drops) || :; }
-udp_drops_log() {   # $1 = mode, $2 = what was streamed
-    [ "$1" = multicast ] || return 0
-    _ud1=$(udp_drops) || _ud1=""
-    if [ -n "${UDP_DROPS0:-}" ] && [ -n "$_ud1" ]; then
-        set -- "$2" $UDP_DROPS0 $_ud1
-        log "$1: udp drops on this machine rcvbuf=$(($4 - $2)) inerrors=$(($5 - $3))"
-        udp_drops_add $(($4 - $2)) $(($5 - $3))
-    else
-        log "$2: udp drops not read (/proc/net/snmp)"
-        udp_drops_add null null
-    fi
-}
 # Rate policy (Nadav 17/10): the server raises the next wave only when every
-# receiver reported rcvbuf=0. The sum over this restore's multicast partitions
-# rides in the progress report (udp_drops); one unread partition makes the whole
-# sum unread -- a partial sum would read as "no drops" (principle 5).
-udp_drops_reset() { rm -f "$RUN_DIR/udp_drops.sum" "$RUN_DIR/udp_drops.json" "$RUN_DIR/rcvbuf.min" "$RUN_DIR/udp_drops.abandoned" "$RUN_DIR/udp_drops.rcvbuf"; }   # rcvbuf.min: rcvbuf.sh (#2555); abandoned, rcvbuf: a chunk round's (chunkloss.sh)
-udp_drops_add() {   # $1 = rcvbuf, $2 = inerrors of one partition ("null" = not read)
-    _ua=$(cat "$RUN_DIR/udp_drops.sum" 2>/dev/null) || _ua="0 0"
-    case "$1 $_ua" in
-        *null*) set -- null null ;;
-        *) set -- $(($1 + ${_ua% *})) $(($2 + ${_ua#* })) ;;
-    esac
-    echo "$1 $2" > "$RUN_DIR/udp_drops.sum"
-    printf '{"rcvbuf":%s,"inerrors":%s%s}\n' "$1" "$2" "$(command -v rcvbuf_frag >/dev/null 2>&1 && rcvbuf_frag)" > "$RUN_DIR/udp_drops.json"   # #2555: the buffer they were dropped from (rcvbuf.sh)
-}
+# receiver reported rcvbuf=0. One unread pass makes the whole sum unread -- a
+# partial sum would read as "no drops" (principle 5).
+udp_drops_reset() { rm -f "$RUN_DIR/udp_drops.sum" "$RUN_DIR/udp_drops.json" "$RUN_DIR/udp_drops.abandoned" "$RUN_DIR/udp_drops.rcvbuf" "$RUN_DIR/udp_drops.net"; }   # a chunk round's sums, net: softnet/nic (chunkloss.sh, #3168)
 
 reread_table() {
     # $1 = the disk node. blockdev --rereadpt is refused (EBUSY) while anything holds a

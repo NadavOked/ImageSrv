@@ -70,7 +70,7 @@ fw_accept_post() {
     # kept answer at once; the next hello would take it away in a few seconds anyway.
     printf '{"mac":"%s"}' "$MAC" > "$RUN_DIR/fw_accept.json" || return 1
     _fa_c=$(curl -s -o /dev/null -w '%{http_code}' --max-time "${HTTP_TIMEOUT:-10}" -H "Content-Type: application/json" \
-        --data-binary "@$RUN_DIR/fw_accept.json" "${SERVER:-http://0.0.0.0}/api/v1/agent/firmware-accept" 2>/dev/null)
+        --data-binary "@$RUN_DIR/fw_accept.json" "${SERVER:-https://0.0.0.0}/api/v1/agent/firmware-accept" 2>/dev/null)
     rm -f "$RUN_DIR/fw_accept.json"
     [ "$_fa_c" = 200 ] || { date +%s > "$RUN_DIR/fw.failed"; return 1; }
     rm -f "$RUN_DIR/fw.failed"

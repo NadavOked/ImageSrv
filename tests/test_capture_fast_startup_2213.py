@@ -130,7 +130,7 @@ def succeeded(result, *, direct=False, action="unhibernated"):
         # Pass 2 uses the very same object, not a recreated snapshot.
         assert sum(s.startswith("dmsetup create lc-src-2 ") for s in steps) == 1
         assert not any(s.startswith("dmsetup remove") for s in steps)
-        assert (run / "dsha.2").read_text().split()[0] == manifest["partitions"][1]["sha256"]
+        assert (run / "chunk.run").exists()   # #3173: the chunk wave read it (test_directsend.CHUNK_RUN: hashed against the manifest)
     else:
         assert any(s.startswith("dmsetup remove --retry lc-src-2") for s in steps)
         assert not (box / "sys/module/brd").exists()

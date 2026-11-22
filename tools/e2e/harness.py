@@ -10,19 +10,26 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import http.client
+import os
+import socket
+import ssl
 import re
 import struct
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import zlib
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent
+#: #3173: משתנה הסביבה שבו השרת מקבל את הקובץ של `simsend` (אותו שם כמו `simsend.ENV`).
+SIMSEND_ENV = "IMAGESRV_SIM_SENDS"
 PORT = 8199
-BASE = f"http://127.0.0.1:{PORT}"
+BASE = f"https://127.0.0.1:{PORT}"
 #: אף אחד לא מאזין שם — זה "השרת השקט" של תרחיש ברירת המחדל.
 DEAD_BASE = f"http://127.0.0.1:{PORT + 1}"
 #: #731 (tracer 1 של #703): הקונסולה עברה לפורט נפרד. הסימולציה מריצה
@@ -30,6 +37,9 @@ DEAD_BASE = f"http://127.0.0.1:{PORT + 1}"
 #: קונסולה על CONSOLE_PORT. לא PORT+1 (זה DEAD_BASE, ה"שרת השקט").
 CONSOLE_PORT = PORT + 2
 CONSOLE_BASE = f"http://127.0.0.1:{CONSOLE_PORT}"
+#: #3486: מאזין ה-/boot (GRUB) הוא תמיד חלק מהשרת. לא ברירת המחדל של הייצור (7711, `server/core/ports.py`):
+#: שרת אמיתי על אותה מכונה היה מתנגש בו.
+BOOT_PORT = PORT + 3
 
 #: הקידומות שחיות על אפליקציית הקונסולה (CONSOLE_BASE), לא על הסוכן:
 #: הדף הסטטי ונתיבי הניהול `/api/console/*`.
@@ -37,12 +47,12 @@ _CONSOLE_PREFIXES = (
     "/console",
     "/api/console",
 )
-#: הפורט שהשרת של הסימולציה משדר עליו — 30199 ו-30200, ולא 9000/9001.
-#: זה **לא** נוחות: השרת שהסימולציה מרימה הוא שרת אמיתי, ובמעבדה מותקן
-#: `udp-sender` אמיתי ומחוברות אליה שתי מכונות פיזיות. שידור על 9000
-#: הוא שידור על וילן ההפצה, ויתום ששרד ריצה שנקטעה מפיל את ההפצה הבאה
-#: וזה נראה כמו תקלת רשת (#79, #156, #201). מספר גבוה שאינו מכיל "900"
-#: — כדי ש-`ss -lunp | grep :900` יישאר בדיקה שאין בה דו-משמעות.
+#: בסיס הפורטים של השרת של הסימולציה — 30199, ולא של הייצור (`chunkctx.PRODUCTION_PORTBASE`). מנוע החתיכות גוזר ממנו את
+#: הפורט של הגל (`portbase` + 2, ולידו פורט הבקרה ושרתי הפריימים של המקור).
+#: זה **לא** נוחות: השרת שהסימולציה מרימה הוא שרת אמיתי, ובמעבדה מחוברות אליו
+#: מכונות פיזיות. שידור על פורטי ההפצה הוא שידור על וילן ההפצה, ויתום ששרד ריצה
+#: שנקטעה מפיל את ההפצה הבאה וזה נראה כמו תקלת רשת (#79, #156, #201). מספר גבוה,
+#: רחוק מהטווח 77xx של המוצר — כדי ש-`ss -lunp | grep :77` יישאר בדיקה שאין בה דו-משמעות.
 SENDER_PORTBASE = 30199
 
 ESP_GUID = "C12A7328-F81F-11D2-BA4B-00A0C93EC93B"
@@ -69,6 +79,11 @@ DEPLOY = {"username": "madrich", "password": "Sim-deploy-99!"}
 
 #: #2533: ה-XXH64 של האינדקס של כל קובץ מחיצה שנבנה כאן — `index_xxh64` במניפסט.
 INDEX_XXH64: dict[bytes, str] = {}
+#: #3173: מה שמחשב הבנייה מחזיק על כל קובץ מחיצה כשהוא המקור של הפצה ישירה — טקסט
+#: האינדקס (מה ש-`chunkcut` כותב) וזרם הנתונים שה-BLAKE3 שלו נמדד, חתיכה-חתיכה.
+CHUNKED: dict[bytes, dict] = {}
+#: #3173: ה-`chunkcast` שהסימולציה בנתה (`build_chunkcast`) — לשרת (BLAKE3, `--version`) ולמקור.
+CHUNKCAST: list[Path] = []
 
 
 def chunk_file(payload: bytes) -> bytes:
@@ -104,7 +119,63 @@ def chunk_file(payload: bytes) -> bytes:
     out = io.BytesIO()
     index, _sha, _total = chunkformat.cut(io.BytesIO(stream), out, False, compress=stored, new=PyXxh64)
     INDEX_XXH64[out.getvalue()] = list_digest(index, PyXxh64)
+    CHUNKED[out.getvalue()] = {"index": index, "data": data}
     return out.getvalue()
+
+
+def build_chunkcast(workdir: Path) -> Path:
+    """#3173: `chunkcast` אמיתי, נבנה כמו שבונה ה-initramfs (`tests/chunkcast_rig.py`), ל-`<workdir>/bin`.
+
+    מנוע החתיכות הוא המנוע היחיד, ושרת אינו מוציא גל בלעדיו: `chunkcast --version` הוא הראיה
+    שיש שולח (`chunksend.binary_problem`), ו-`chunkcast b3list`/`b3sum` מייצרים את רשימת ה-BLAKE3
+    שבלעדיה אימג' אינו מוכן לגל (`indexprep.missing`, #3332). מה שהשרת **אינו** מריץ ממנו הוא
+    `send` — במקומו `simsend`. אין gcc או libzstd: הסימולציה נעצרת בשם, ואינה רצה בלי מנוע (עיקרון 5)."""
+    agent = REPO / "agent"
+    tool = workdir / "bin" / "chunkcast"
+    tool.parent.mkdir(parents=True, exist_ok=True)
+    cmd = ["gcc", "-O2", "-pthread", "-o", str(tool), str(agent / "chunkcast.c"),
+           *(str(agent / "blake3" / f) for f in
+             ("blake3_one.c", "blake3_sse41_x86-64_unix.S", "blake3_sse2_x86-64_unix.S")),
+           "-l:libzstd.so.1"]
+    try:
+        done = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=300)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise SystemExit(f"FAILED: chunkcast לא נבנה ({type(exc).__name__}: {exc}) — "
+                         "הסימולציה צריכה gcc ו-libzstd.so.1 (לינוקס)") from exc
+    if done.returncode != 0:
+        raise SystemExit(f"FAILED: chunkcast לא נבנה (gcc יצא {done.returncode}):\n{done.stderr[-2000:]}")
+    CHUNKCAST[:] = [tool]
+    return tool
+
+
+def b3_list(data: bytes) -> bytes:
+    """רשימת ה-BLAKE3 של זרם נתונים: 32 בתים לכל 4MiB (`chunkcast b3list`, כמו `chunkcut` במקור)."""
+    done = subprocess.run([str(CHUNKCAST[0]), "b3list"], input=data, capture_output=True, timeout=60)
+    if done.returncode != 0 or not done.stdout or len(done.stdout) % 32:
+        raise SystemExit(f"FAILED: chunkcast b3list יצא {done.returncode}: {done.stderr!r}")
+    return done.stdout
+
+
+def b3_sum(listed: bytes) -> str:
+    """ה-BLAKE3 של הרשימה עצמה — `chunk_b3` במניפסט (`chunkcast b3sum`)."""
+    done = subprocess.run([str(CHUNKCAST[0]), "b3sum"], input=listed, capture_output=True, timeout=60)
+    text = done.stdout.decode("ascii", "replace").strip()
+    if done.returncode != 0 or len(text) != 64:
+        raise SystemExit(f"FAILED: chunkcast b3sum יצא {done.returncode}: {done.stderr!r}")
+    return text
+
+
+def sends_path(workdir: Path) -> Path:
+    """#3173: הקובץ שבו `simsend` רושם כל `chunkcast send` שהמנוע של השרת הריץ — שורת JSON לפקודה."""
+    return workdir / "sends.jsonl"
+
+
+def sent_commands(data_dir: Path) -> list[list[str]]:
+    """הפקודות שהמנוע של השרת הריץ עד עכשיו (`simsend`), לפי הסדר. אין קובץ = לא הורץ דבר."""
+    path = sends_path(data_dir.parent)
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
 
 
 #: תוכן המחיצות של שני האימג'ים — קטן, אבל עובר את אותו מסלול בדיוק.
@@ -161,6 +232,39 @@ def disk(dev: str, size_bytes: int, serial: str, port: int | None = None) -> dic
     return entry
 
 
+#: origin (``https://127.0.0.1:PORT``) -> the opener that verifies the agent listener there against its own CA and
+#: name (#3580). A rig that starts its own server registers it with `trust_agent`.
+_agent_openers: dict = {}
+
+
+def _sim_opener(identity, port):
+    context = ssl.create_default_context(cafile=str(identity.ca_path))
+
+    class AgentHTTPS(urllib.request.HTTPSHandler):
+        def https_open(self, request):
+            def connect(host, **kwargs):
+                conn = http.client.HTTPSConnection(identity.name, port, context=context, **kwargs)
+                conn._create_connection = lambda addr, *a: socket.create_connection(("127.0.0.1", port), *a)
+                return conn
+            return self.do_open(connect, request)
+
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), AgentHTTPS())
+
+
+def trust_agent(base: str, identity) -> None:
+    """The agent listener at `base` (https://127.0.0.1:PORT) is verified against `identity`'s CA and name."""
+    parts = urllib.parse.urlsplit(base)
+    _agent_openers[f"{parts.scheme}://{parts.netloc}"] = _sim_opener(identity, parts.port)
+
+
+def _open(request, timeout):
+    url = request if isinstance(request, str) else request.full_url
+    for origin, opener in _agent_openers.items():
+        if url.startswith(origin + "/") or url == origin:
+            return opener.open(request, timeout=timeout)
+    return urllib.request.urlopen(request, timeout=timeout)
+
+
 class Client:
     """לקוח HTTP קטן ששומר cookie — כמו דפדפן, בלי דפדפן.
 
@@ -180,6 +284,8 @@ class Client:
     def _base_for(self, path: str) -> str:
         if any(path.startswith(p) for p in _CONSOLE_PREFIXES):
             return self.console_base
+        if self.base == BASE and path.startswith("/boot/"):
+            return f"http://127.0.0.1:{BOOT_PORT}"
         return self.base
 
     def request(self, method, path, body=None, ctype="application/json", raw=False):
@@ -192,7 +298,9 @@ class Client:
         for key, value in self.headers.items():
             req.add_header(key, value)
         try:
-            with urllib.request.urlopen(req, timeout=10) as response:
+            # #3173: 30 ולא 10 -- `chunk-pass` של מנוע החתיכות מריץ את שערי המוח בתוך הבקשה, ועל tr1 עמוס
+            # (load 6, התור רץ) אחת מהן עברה 10 שניות והפילה את תהליכון המשכפל ב-"timed out"
+            with _open(req, timeout=30) as response:
                 set_cookie = response.headers.get("Set-Cookie")
                 if set_cookie:
                     self.cookie = set_cookie.split(";")[0]
@@ -214,7 +322,8 @@ def hello(client: Client, mac: str, disks: list[dict]):
         "schema": 1, "mac": mac, "all_macs": [mac], "ip": "10.44.12.50",
         "hostname_current": None, "uuid": "SIM", "firmware": "uefi",
         "secure_boot": True, "agent_version": "0.1.0", "memory_bytes": 8 << 30,
-        "disks": disks,
+        # #3173: הסוכן מכיר את מנוע החתיכות, והוא המנוע היחיד (ממשק 2, `engines`)
+        "engines": ["chunk"], "disks": disks,
     })
 
 
@@ -262,36 +371,43 @@ def write_leases(workdir: Path) -> Path:
 
 def start_server(workdir: Path) -> tuple[subprocess.Popen, Path, Path]:
     data_dir, images = workdir / "data", workdir / "images"
+    from server.agent.tls import ensure_identity
+    trust_agent(BASE, ensure_identity(data_dir)[0])
     images.mkdir(parents=True)
     leases = write_leases(workdir)
     # הפלט לקובץ ולא ל-PIPE: המכונות המדומות מייצרות אלפי שורות לוג,
     # ו-PIPE שאיש לא קורא מתמלא — והשרת נחסם על הכתיבה ומפסיק לענות.
     log = (workdir / "server.log").open("wb")
+    # #3173: ה-`chunkcast` שנבנה (`build_chunkcast`) ראשון ב-PATH של השרת, והקובץ שבו
+    # השולח המדומה רושם את מה שהמנוע הריץ.
+    env = dict(os.environ, PATH=os.pathsep.join([str(workdir / "bin"), os.environ.get("PATH", "")]))
+    env[SIMSEND_ENV] = str(sends_path(workdir))
     server = subprocess.Popen(
         # הכרעת נדב 11/10: השרת מסרב לכיתות כש-`capabilities.classrooms()`
-        # כבוי (v1). שלבי הכיתה (6-8) בודקים את זרימת v1.2, ולכן השרת כאן
-        # עולה עם היכולת דלוקה — המקבילה של monkeypatch לתהליך-בן.
+        # כבוי (v1). השרת כאן עולה עם היכולת **דלוקה** — המקבילה של monkeypatch
+        # לתהליך-בן — כדי ששלב 6 יוכיח שסבב כיתה נדחה גם כשהכיתות דלוקות: לתחנה
+        # אין נתיב במנוע החתיכות (#3173), והסירוב הוא של הסבב, לא רק של המהדורה.
+        # #3173: ו-`simsend` במקום `chunkcast send` — המנוע אמיתי, הפקודה אינה משדרת.
         [sys.executable, "-c",
          ("import server.core.capabilities as c; c.CLASSROOMS = True; "
+          "import tools.e2e.simsend as s; s.install(); "
           "from server.main import main; main()"),
          "--server-url", BASE,
          "--data-dir", str(data_dir), "--images", str(images),
          "--host", "127.0.0.1", "--port", str(PORT),
          # #731: פורט נפרד לקונסולה, כמו בייצור.
-         "--console-port", str(CONSOLE_PORT),
+         "--console-port", str(CONSOLE_PORT), "--boot-port", str(BOOT_PORT),
          # #703 (tracer 5): הקונסולה כאן על 127.0.0.1 (ברירת המחדל של
          # --console-host), ולכן ``off`` מותר — הלקוח למעלה מדבר http פשוט.
          # לחיצת-היד האמיתית עם התעודה נבדקת ב-tests/test_console_tls.py.
          "--console-tls", "off",
-         # #201: השרת הזה אמיתי ומגיע ל-udp-sender אמיתי. בלי הדגל הזה
-         # הוא משדר על פורטי ההפצה של הייצור.
+         # #201: השרת הזה אמיתי. בלי הדגל הזה פורט הגל שלו הוא של הייצור.
          "--sender-portbase", str(SENDER_PORTBASE),
-         # #854: בלי udp-sender (ווינדוס, CI) השולח נכשל וכשל השולח הוא
-         # עכשיו כשל הסבב — הסימולציה "עברה" רק כל עוד זה נבלע בשקט.
-         "--sender-simulate",
+         # #3173: אין כאן `--sender-simulate` ואין `stream_engine`: השרת רץ על ברירת
+         # המחדל — מנוע החתיכות — והשולח המדומה הוא `simsend` (למעלה).
          # #855: חכירות לכל מכונה מדומה — השומר פעיל, הקובץ הוא של הסימולציה.
          "--dhcp-leases", str(leases)],
-        cwd=str(REPO), stdout=log, stderr=subprocess.STDOUT,
+        cwd=str(REPO), stdout=log, stderr=subprocess.STDOUT, env=env,
     )
     return server, data_dir, images
 
@@ -347,7 +463,8 @@ def _responded(url: str) -> bool:
     """השרת מאזין אם הגיעה **תשובת HTTP** כלשהי — גם 404/405. רק סירוב
     חיבור/URLError אומר שהוא עוד לא עלה (#731: בודקים כל מאזין בנפרד)."""
     try:
-        urllib.request.urlopen(url, timeout=2)
+        with _open(url, timeout=2):
+            pass
         return True
     except urllib.error.HTTPError:
         return True

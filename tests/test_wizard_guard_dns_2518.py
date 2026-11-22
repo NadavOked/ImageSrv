@@ -1,11 +1,11 @@
 """#2518 (VM of #2490, v0.84.1, 06/11, ``ss -ltnp``): while the first-boot wizard
 runs -- before the permanent firewall -- dnsmasq (DNS, 53) and rpcbind (111)
-listen on 0.0.0.0, the deploy card included. The #2490 guard covered 8081 only.
+listen on 0.0.0.0, the deploy card included. The #2490 guard covered 443 only.
 
 Nobody on the network needs either before the install: the wizard is reached by
 address (no DNS), and nothing is served over NFS yet. The guard now drops 53 and
 111 (udp and tcp) on every card but loopback -- the installer card too -- and
-firstboot reads those drops back like the 8081 one; without them the wizard does
+firstboot reads those drops back like the 443 one; without them the wizard does
 not start.
 """
 

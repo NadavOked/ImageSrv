@@ -19,7 +19,7 @@ from test_agent import AGENT, BASH, fake_machine, posix, sh  # noqa: F401
 
 pytestmark = requires_native(("bash", BASH))
 
-SERVER = "http://10.44.0.1:8080"
+SERVER = "http://10.44.0.1:7712"
 
 
 def _stub(dir_: Path, name: str, body: str) -> Path:
@@ -56,7 +56,7 @@ def test_all_layers_measured(fake_machine, tmp_path):
     assert r["dhcp"] == {"server_id": "10.44.0.1"}
     assert r["gateway"] == {"addr": "10.44.0.254", "reachable": True}
     assert r["dns"] == {"servers": ["10.44.0.2"], "resolves": None}   # the server is an address: no name to look up
-    assert r["tcp"] == [{"host": "10.44.0.1", "port": 8080, "ok": True, "curl_rc": 0}]
+    assert r["tcp"] == [{"host": "10.44.0.1", "port": 7712, "ok": True, "curl_rc": 0}]
 
 
 def test_a_gateway_that_does_not_answer_is_reachable_false_not_missing(fake_machine, tmp_path):
@@ -82,13 +82,13 @@ def test_a_missing_tool_is_null_never_ok(fake_machine, tmp_path):
 def test_curl_000_is_closed_not_open(fake_machine, tmp_path):
     # http=000 counted as "the path is open" is the pattern CLAUDE.md principle 5 names
     r = _report(fake_machine, tmp_path, curl="printf 000; exit 7")
-    assert r["tcp"] == [{"host": "10.44.0.1", "port": 8080, "ok": False, "curl_rc": 7}]
+    assert r["tcp"] == [{"host": "10.44.0.1", "port": 7712, "ok": False, "curl_rc": 7}]
     r = _report(fake_machine, tmp_path, curl="printf 000; exit 0")
     assert r["tcp"][0]["ok"] is False
 
 
 def test_a_named_server_is_looked_up_and_a_failed_lookup_is_false(fake_machine, tmp_path):
-    named = "http://imagesrv.college.local:8080"
+    named = "http://imagesrv.college.local:7712"
     assert _report(fake_machine, tmp_path, server=named)["dns"]["resolves"] is True
     assert _report(fake_machine, tmp_path, server=named, nslookup="exit 1")["dns"]["resolves"] is False
 

@@ -76,7 +76,7 @@ def test_grub_cfg_survives_a_write_that_dies_halfway(tmp_path, monkeypatch):
     cfg.parent.mkdir()
     cfg.write_text("set default=local\n", encoding="ascii")
     with disk_fills_mid_write(monkeypatch):
-        error = deploy_net.write_grub_cfg("http://10.0.0.1:8080", tmp_path)
+        error = deploy_net.write_grub_cfg("http://10.0.0.1:7712", tmp_path)
     assert error is not None
     assert cfg.read_text(encoding="ascii") == "set default=local\n"
 

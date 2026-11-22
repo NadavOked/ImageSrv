@@ -120,7 +120,7 @@ const machines = () => [
 const base = {
   '/groups': [{id: 'grp_BUILD', role: 'build', label: 'בנייה', machines: 1}, {id: 'grp_CLONERS', role: 'cloner', label: 'שיכפול', machines: 1}],
   '/machines': [{mac: 'aa:bb:cc:dd:ee:01', suffix: 'Builder', group_id: 'grp_BUILD'}, {mac: 'aa:bb:cc:dd:ee:02', suffix: 'Cloner-1', group_id: 'grp_CLONERS'}],
-  '/monitor/settings': {port: 5900, enabled: true},
+  '/monitor/settings': {port: 7710, enabled: true},
   '/net': [],
 };
 const flush = async () => { for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r)); };

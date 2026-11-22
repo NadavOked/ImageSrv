@@ -42,14 +42,13 @@ def production(tmp_path, monkeypatch):
     (bin_dir / "chunkcast").write_text(SCRIPT, encoding="utf-8")
     (bin_dir / "chunkcast").chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
-    app = create_app(tmp_path / "data", tmp_path / "images", "http://10.44.12.10:8080", wol_send=lambda _b: None)
+    app = create_app(tmp_path / "data", tmp_path / "images", "http://10.44.12.10:7712", wol_send=lambda _b: None)
     ctx = app.state.ctx
     started = []
     yield ctx.chunk.runner, started
     for process in started:
         process.kill()
         process.wait(30)
-    ctx.sender.stop()
     ctx.chunk.close()
 
 
@@ -60,7 +59,7 @@ def test_the_place_in_the_stream_is_read_from_the_log_the_production_runner_wrot
     parts.mkdir(parents=True)
     Lib(parts, chunks=10)
     part = parts / "p3.windows.pcl.zst"
-    cmd = ["chunkcast", "send", "--to", "239.83.67.1:20568", "--session", "k", "--part", "3", "--pass", "1",
+    cmd = ["chunkcast", "send", "--to", "239.84.82.1:20568", "--session", "k", "--part", "3", "--pass", "1",
            "--index", f"{part}.idx", "--file", str(part), "--kbps", "700000", "--write-kbps", "864000"]
     process = runner(cmd)
     started.append(process)

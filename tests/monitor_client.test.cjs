@@ -28,7 +28,7 @@ function setup(search = '?mac=aa:bb:cc:dd:ee:ff&name=Cloner01', doc = {}, extra 
   FakeWebSocket.OPEN = 1;
   const ctx = vm.createContext({
     console, URLSearchParams, Uint8Array, Uint8ClampedArray, TextEncoder, TextDecoder, Promise, Math, Error, Array, JSON, Number,
-    encodeURIComponent, location: {search, protocol: 'http:', host: 'srv:8081'},
+    encodeURIComponent, location: {search, protocol: 'http:', host: 'srv:443'},
     document: {getElementById: (() => { const nodes = {}; return (id) => (nodes[id] ||= stub()); })(), title: '',
       addEventListener(name, fn) { (docListeners[name] ||= []).push(fn); }, removeEventListener() {},
       documentElement: {classList: {_s: new Set(), add(c) { this._s.add(c); }, remove(c) { this._s.delete(c); }, contains(c) { return this._s.has(c); }}}, ...doc},

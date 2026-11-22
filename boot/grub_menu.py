@@ -109,8 +109,7 @@ _ASCII_SAFE_MULTILINE = re.compile(r"[^\x20-\x7e\n]")
 class GrubConfig:
     """כתובות ותזמונים. לא חלק מאף ממשק — תצורת פריסה מקומית.
 
-    server_base חייב להיות http (לא https): ה-GRUB החתום של דביאן נבנה בלי
-    תמיכת TLS, וה-http module שלו מדבר HTTP פשוט בלבד.
+    server_base identifies the agent. GRUB itself always uses its HTTP device.
     """
 
     server_base: str
@@ -138,12 +137,20 @@ class GrubConfig:
     #: ריק = נעול בלי סיסמה: איש אינו עורך, והאתחול אינו נפגע. השרת ממלא
     #: אותו מ-`/etc/imagesrv/grub-password` (`server/system/grub_password.py`).
     password_hash: str = ""
+    #: #3486: פורט מאזין ה-`/boot` כש-GRUB והקושחה מקבלים מאזין משלהם. `None` =
+    #: כמו תמיד: אותו פורט כמו `server_base`. `server_base` נשאר כתובת **הסוכן**
+    #: (`imagesrv.server=` בשורת הקרנל); רק מה ש-GRUB עצמו פונה אליו (התפריט,
+    #: הקרנל, ה-initrd, הפירורים וה-bootstrap) עובר לפורט הזה.
+    boot_port: int | None = None
 
     def __post_init__(self) -> None:
+        if self.boot_port is not None and (
+                isinstance(self.boot_port, bool) or not 0 < self.boot_port < 65536):
+            raise ValueError(f"boot_port must be 1-65535, got {self.boot_port!r}")
         parts = urlsplit(self.server_base)
-        if parts.scheme != "http":
+        if parts.scheme not in ("http", "https"):
             raise ValueError(
-                f"server_base must be http:// (GRUB has no TLS), got {self.server_base!r}"
+                f"server_base must be an HTTP(S) URL, got {self.server_base!r}"
             )
         if not parts.netloc:
             raise ValueError(f"server_base has no host: {self.server_base!r}")
@@ -156,8 +163,14 @@ class GrubConfig:
 
     @property
     def grub_host(self) -> str:
-        """ה-netloc בתחביר ההתקן של GRUB: (http,10.44.0.10:8080)."""
-        return urlsplit(self.server_base).netloc
+        """ה-netloc בתחביר ההתקן של GRUB: (http,10.44.0.10:7712).
+
+        עם `boot_port` (#3486) — אותו מארח, בפורט של מאזין ה-/boot."""
+        parts = urlsplit(self.server_base)
+        if self.boot_port is None:
+            return parts.netloc
+        host = parts.hostname or ""
+        return f"[{host}]:{self.boot_port}" if ":" in host else f"{host}:{self.boot_port}"
 
     @property
     def base(self) -> str:
@@ -828,7 +841,7 @@ def _kernel_cmdline(config: GrubConfig, *, recovery: bool) -> str:
     """
     parts = [
         "ip=dhcp",
-        f"imagesrv.server={config.base}",
+        f"imagesrv.server=https://{urlsplit(config.base).netloc}",
         "console=tty0",
         "quiet",
         "loglevel=3",

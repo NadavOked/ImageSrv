@@ -19,8 +19,8 @@ from boot.grub_menu import GrubConfig, render_bootstrap
 INSTALLER = Path(__file__).resolve().parent.parent / "deploy" / "setup-boot-server.sh"
 PLACEHOLDER = "@@GRUB_HOST@@"
 PORT_PLACEHOLDER = "@@GRUB_PORT@@"
-HOST = "10.44.12.10:8080"
-PORT = "8080"
+HOST = "10.44.12.10:7712"
+PORT = "7712"
 
 
 def embedded_bootstrap() -> str:
@@ -72,9 +72,12 @@ def test_the_installer_still_works_without_the_repo():
     assert "git clone" in text
 
 
-def test_the_installer_refuses_https():
-    """ה-GRUB החתום נבנה בלי TLS. עדיף להיכשל בהתקנה מאשר מול כיתה."""
-    assert "https לא נתמך" in INSTALLER.read_text(encoding="utf-8")
+def test_the_installer_takes_https_for_the_agent_api():
+    """#3580: the agent API is TLS now, so the installer no longer refuses https; an http URL saved by an older
+    run is migrated to https. (The signed GRUB still has no TLS -- it reads /boot on its own http listener, #3486.)"""
+    text = INSTALLER.read_text(encoding="utf-8")
+    assert "https לא נתמך" not in text
+    assert 'http://*)  SERVER_URL="https://${SERVER_URL#http://}"' in text
 
 
 @pytest.mark.parametrize("arch", ["client-arch,7", "client-arch,9"])

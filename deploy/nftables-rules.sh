@@ -6,7 +6,7 @@
 #
 # מודל האתר: שלושה וילנים. הכיתות (v2) אינן נפתחות כאן כלל.
 #   הפצה  — DHCP/TFTP/סוכן/מולטיקאסט. WoL יוצא ב-output (לא נחסם).
-#   שרתים — קונסולה HTTPS. 8443: במשני רק מכתובת הראשי; בראשי "אתה שם?" (#1310).
+#   שרתים — קונסולה HTTPS. 7700: במשני רק מכתובת הראשי; בראשי "אתה שם?" (#1310).
 #   אין כלל TCP 22 בשום מצב (#1266).
 #   כיתות — כלום.
 #
@@ -15,14 +15,14 @@
 # שני התפקידים הקבועים למעלה. בלי הדגלים הפלט זהה בית-בבית לקודם.
 #   console     — tcp קונסולה (המוניטור עובר בה, אין לו פורט משלו)
 #   netboot     — udp 67 + udp 69 + tcp סוכן; proxy mode also opens udp 4011
-#   multicast   — udp טווח udpcast
-#   interserver — tcp 8443 (במשני: רק מכתובת הראשי)
+#   multicast   — udp של מנוע החתיכות: portbase+2 (נתונים) ו-portbase+3 (משוב הקצב)
+#   interserver — tcp 7700 (במשני: רק מכתובת הראשי)
 #
 # שימוש:
 #   nftables-rules.sh --deploy-if <if> --servers-if <if> \
 #     [--primary-ip <ip>] [--mcast-ports a-b] \
-#     [--console-port 8081] [--agent-port 8080] \
-#     [--interserver-port 8443]
+#     [--console-port 443] [--agent-port 7712] [--boot-port 7711] \
+#     [--interserver-port 7700]
 #   nftables-rules.sh --per-nic [--service IF:svc,svc]... [options]
 
 set -eu
@@ -30,10 +30,13 @@ set -eu
 DEPLOY_IF=""
 SERVERS_IF=""
 PRIMARY_IP=""
-MCAST_PORTS="9000-9003"
-CONSOLE_PORT="8081"
-AGENT_PORT="8080"
-INTERSERVER_PORT="8443"
+# הפורטים: server/core/ports.py הוא המקור, ו-tests/test_ports_3871.py משווה את ברירות המחדל כאן אליו (#3871).
+# MCAST_PORTS = Trident (מנוע החתיכות): הנתונים, והבקרה שאליה המקבלים שולחים את משוב הקצב.
+MCAST_PORTS="7713-7714"
+CONSOLE_PORT="443"
+AGENT_PORT="7712"
+BOOT_PORT="7711"   # #3486: ‏/boot של GRUB והקושחה במאזין משלו (ports.BOOT)
+INTERSERVER_PORT="7700"
 PER_NIC=""
 SERVICE_SPECS=""
 PROXY_IFS=" "
@@ -48,17 +51,20 @@ Usage: nftables-rules.sh --servers-if IF [--deploy-if IF] [options]
   --deploy-if IF          כרטיס וילן ההפצה; בלעדיו (#1088: טרם הוגדר מהקונסולה)
                           נכתבים כללי וילן השרתים בלבד, וההפצה סגורה
   --servers-if IF         כרטיס וילן השרתים (חובה)
-  --primary-ip IP         כתובת הראשי — רק במשני; פותח 8443 ממנה בלבד
+  --primary-ip IP         כתובת הראשי — רק במשני; פותח 7700 ממנה בלבד
   --proxy-if IF           PXE proxy enabled on IF (repeatable); opens UDP 4011
                           only on --deploy-if or a per-NIC netboot interface
-  --mcast-ports A-B       טווח UDP של udpcast ושל מנוע החתיכות: portbase..portbase+3
-                          (ברירת מחדל 9000-9003; שרת שרץ עם --sender-portbase P
-                          מקבל כאן P-(P+3), וה-Python שקורא למחולל גוזר אותו)
+  --mcast-ports A-B       טווח UDP של מנוע החתיכות: portbase+2..portbase+3
+                          (ברירת מחדל 7713-7714; שרת שרץ עם --sender-portbase P
+                          מקבל כאן (P+2)-(P+3), וה-Python שקורא למחולל גוזר אותו).
+                          ‏portbase ו-portbase+1 אינם נפתחים עוד: המנוע הישן שהשתמש בהם הוסר (#3173)
   --ntp-if IF             (ברירת המחדל, לא --per-nic) הכרטיס ש-chrony מגיש בו זמן:
                           פותח UDP 123 עליו (חוזר לכל כרטיס). ב-per-nic: IF:ntp
-  --console-port N        קונסולה (ברירת מחדל 8081)
-  --agent-port N          סוכן (ברירת מחדל 8080)
-  --interserver-port N    בין-שרתים (ברירת מחדל 8443)
+  --console-port N        קונסולה (ברירת מחדל 443)
+  --agent-port N          סוכן (ברירת מחדל 7712)
+  --boot-port N           (#3486) מאזין ה-/boot של GRUB והקושחה (ברירת מחדל 7711) —
+                          פתוח גם למחשב לא רשום; פורט הסוכן משרת רק רשומים
+  --interserver-port N    בין-שרתים (ברירת מחדל 7700)
   --per-nic               (#705) כללים לפי כרטיס בלבד — בלי --deploy-if/--servers-if
   --service IF:LIST       (#705) מה הכרטיס נותן: console,monitor,multicast,netboot,interserver,ntp
                           (חוזר לכל כרטיס; מפעיל --per-nic)
@@ -85,6 +91,7 @@ while [ $# -gt 0 ]; do
         --mcast-ports)      MCAST_PORTS="${2:?}"; shift 2 ;;
         --console-port)     CONSOLE_PORT="${2:?}"; shift 2 ;;
         --agent-port)       AGENT_PORT="${2:?}"; shift 2 ;;
+        --boot-port)        BOOT_PORT="${2:?}"; shift 2 ;;
         --interserver-port) INTERSERVER_PORT="${2:?}"; shift 2 ;;
         --per-nic)          PER_NIC=1; shift ;;
         --service)          SERVICE_SPECS="${SERVICE_SPECS}${2:?}
@@ -105,7 +112,7 @@ case "$DEPLOY_IF$SERVERS_IF" in
     *[!A-Za-z0-9_.:-]*|*"'"*|*"\""*) die "interface name is not safe for nftables" ;;
 esac
 # ‏#2441: גלוב **שלילי** קודם. ב-sh ה-`*` של `[0-9]*-[0-9]*` תופס גם רווח ושורה
-# חדשה, ו-"9000-9003 accept<LF>iifname ... accept" עבר ונכתב לחומת האש.
+# חדשה, ו-"7713-7714 accept<LF>iifname ... accept" עבר ונכתב לחומת האש.
 case "$MCAST_PORTS" in
     *[!0-9-]*|*-*-*) die "--mcast-ports must be A-B (got: $MCAST_PORTS)" ;;
     [0-9]*-[0-9]*) ;;
@@ -117,6 +124,10 @@ for p in "$CONSOLE_PORT" "$AGENT_PORT" "$INTERSERVER_PORT"; do
         *[!0-9]*|"") die "port must be a number (got: $p)" ;;
     esac
 done
+# ‏#3486: ערך שאינו מספר (או ריק) הוא סירוב, לא כלל שנשמט.
+case "$BOOT_PORT" in
+    *[!0-9]*|"") die "--boot-port must be a number (got: $BOOT_PORT)" ;;
+esac
 
 if [ -n "$PRIMARY_IP" ]; then
     case "$PRIMARY_IP" in
@@ -167,9 +178,11 @@ if [ -n "$PER_NIC" ]; then
                     case "$PROXY_IFS" in
                         *" ${nic} "*) add_rule "iifname \"${nic}\" udp dport 4011 accept" ;;
                     esac
-                    add_rule "iifname \"${nic}\" tcp dport ${AGENT_PORT} accept" ;;
+                    add_rule "iifname \"${nic}\" tcp dport ${AGENT_PORT} accept"
+                    # ‏#3486: מאזין ה-/boot של GRUB — אותו כרטיס, פורט משלו.
+                    add_rule "iifname \"${nic}\" tcp dport ${BOOT_PORT} accept" ;;
                 multicast)
-                    # נדב 14/11 (#2485): המשוב של udpcast רק ממחשב רשום (known_macs, server/net/known_fw.py)
+                    # נדב 14/11 (#2485): משוב הקצב רק ממחשב רשום (known_macs, server/net/known_fw.py)
                     add_rule "iifname \"${nic}\" udp dport ${MCAST_PORTS} ether saddr @known_macs accept"
                     add_rule "iifname \"${nic}\" udp dport ${MCAST_PORTS} limit rate 5/minute log prefix \"imagesrv-unregistered \" level info"
                     add_rule "iifname \"${nic}\" udp dport ${MCAST_PORTS} drop"
@@ -200,9 +213,13 @@ if [ -n "$DEPLOY_IF" ]; then
 		iifname \"${DEPLOY_IF}\" udp dport 67 accept
 		# TFTP: קריאת shim/GRUB. העברת הנתונים היא related אם nf_conntrack_tftp טעון.
 		iifname \"${DEPLOY_IF}\" udp dport 69 accept
-		# סוכן (hello/boot/images) — HTTP על כרטיס ההפצה בלבד.
+		# סוכן (hello/images) — HTTP על כרטיס ההפצה בלבד. מחשב לא רשום מקבל ממנו 403 (חוץ מ-hello).
 		iifname \"${DEPLOY_IF}\" tcp dport ${AGENT_PORT} accept
-		# מולטיקאסט: udpcast portbase ו-portbase+1, מנוע החתיכות portbase+2 ומשוב הקצב (feedback) שלו portbase+3 (ברירת מחדל 9000-9003, #3512).
+		# GRUB/boot (#3486): תפריט, קרנל ו-initrd, במאזין משלו. פתוח למחשב לא רשום, כי רק הוא
+		# מחליט שם בין הדיסק המקומי למסך \"לא רשום\" (#1802).
+		iifname \"${DEPLOY_IF}\" tcp dport ${BOOT_PORT} accept
+		# מולטיקאסט: מנוע החתיכות portbase+2 ומשוב הקצב (feedback) שלו portbase+3 (ברירת מחדל 7713-7714, #3512, #3871).
+		# ‏portbase ו-portbase+1 אינם נפתחים עוד: המנוע הישן שהשתמש בהם הוסר (#3173).
 		# נדב 14/11 (#2485): רק ממחשב רשום -- ה-MAC שלו בקבוצה known_macs, שהשרת כותב בכל שינוי
 		# ברשימת המכונות (server/net/known_fw.py). מחשב לא רשום: שורת יומן מרוסנת, ו-drop.
 		# DHCP/TFTP/סוכן נשארים פתוחים לכולם: מחשב לא רשום מקבל מהם רק את הדרך לדיסק המקומי
@@ -223,15 +240,15 @@ else
 		# כותבת את הקובץ הזה מחדש עם הכרטיס כשמודלק עליו DHCP."
 fi
 
-# משני: 8443 נכנס רק מכתובת הראשי (mTLS). ראשי (#1310): 8443 על וילן השרתים,
+# משני: 7700 נכנס רק מכתובת הראשי (mTLS). ראשי (#1310): 7700 על וילן השרתים,
 # ושם מאזין "אתה שם?" בלבד — הראשי אינו יודע מראש את כתובות המשניים, ו-FW
 # האתר הוא שמגביל את המקור לאתרים המשניים.
 if [ -n "$PRIMARY_IP" ]; then
-    INTERSERVER_RULE="		# משני בלבד: 8443 נכנס רק מוילן השרתים ורק מכתובת הראשי.
+    INTERSERVER_RULE="		# משני בלבד: 7700 נכנס רק מוילן השרתים ורק מכתובת הראשי.
 		# הראשי יוזם; תשובות הן established. mTLS עדיין חובה מעל זה.
 		iifname \"${SERVERS_IF}\" ip saddr ${PRIMARY_IP} tcp dport ${INTERSERVER_PORT} accept"
 else
-    INTERSERVER_RULE="		# ראשי: 8443 עונה רק ל\"אתה שם?\" של מתקין משני (#1310) — GET אחד,
+    INTERSERVER_RULE="		# ראשי: 7700 עונה רק ל\"אתה שם?\" של מתקין משני (#1310) — GET אחד,
 		# בלי הזדהות ובלי פעולות. כל השאר ביוזמת הראשי.
 		iifname \"${SERVERS_IF}\" tcp dport ${INTERSERVER_PORT} accept"
 fi
@@ -260,6 +277,9 @@ cat <<EOF
 #!/usr/sbin/nft -f
 # ImageSrv — נוצר על ידי deploy/nftables-rules.sh. אל תערוך ביד.
 # מדיניות לפי וילן (R20 §4 / #1074): input drop, output accept, forward drop.
+# פורטים 77xx (#3871): הסוכן, Trident, בין-שרתים, והקונסולה ב-443.
+# Agent API requires TLS (#3580)
+# /boot במאזין משלו (#3486): תפריט האתחול, הקרנל וה-initrd על BOOT_PORT, לא על פורט הסוכן.
 # השרת אינו נתב — forward סגור כדי שכרטיס הפצה לא יהפוך לגשר לכיתות.
 
 flush ruleset

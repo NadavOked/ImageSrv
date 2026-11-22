@@ -2,10 +2,13 @@
 
 מה שנבדק כאן מול ה-API, כמו שזה קורה בחדר: פתיחת סבב עם
 `source: {kind: build_disk}` — WoL רק לנבחרים, משימת `direct_send` למחשב
-הבנייה עם פרמטרי השידור של השרת; המניפסט החי מוגש למקבלים באותו נתיב
-כמו אימג' מהספרייה; הגל אינו יוצא לפני המניפסט; המנוע של השרת **אינו**
-משדר; הסבב יחיד ונסגר עם הגל; עצירה סוגרת גם את המשימה; והסירובים —
-כל אחד בשמו.
+הבנייה; המניפסט החי מוגש למקבלים באותו נתיב כמו אימג' מהספרייה; הגל אינו
+יוצא לפני המניפסט; המנוע של השרת מתזמר ו**אינו** משדר בעצמו; הסבב יחיד
+ונסגר עם הגל; עצירה סוגרת גם את המשימה; והסירובים — כל אחד בשמו.
+
+#3173: הפצה ישירה היא חתיכות בלבד (#3161). מחשב הבנייה מעלה את אינדקס
+החתיכות (ואת רשימת ה-BLAKE3) לפני המניפסט, `ChunkEngine` של השרת מתזמר את
+הגל, ומחשב הבנייה משדר רק את ההזמנה שהמנוע נותן לו (`task.direct.chunk.order`).
 """
 
 from __future__ import annotations
@@ -14,11 +17,17 @@ import json
 
 import pytest
 from conftest import hello_body, room_slots
+from fakesend import Cloners, wait_for
+from test_fanout import xxh64_reference
 from test_server_room import CLONER1, CLONER2, cloner_hello, report, room, room_server  # noqa: F401
 
 from server.core.tasks import TOKEN_HEADER
 
 BUILD = "aa:bb:cc:00:00:10"
+#: #3161: האינדקס ש-`_put_manifest` מעלה לפני המניפסט: מחיצה 1, עשר חתיכות של "פריים" בן בית אחד.
+CH = 4194304
+CHUNKS = 10
+HEAD = b"\x28\xb5\x2f\xfd" + b"head-frame-of-the-test" * 3
 
 
 def _build_hello(client, mac=BUILD, disks=("sda",)):
@@ -78,11 +87,82 @@ def _setup(room_server, slots=None):
     return r.json()
 
 
+def _index(chunks: int = CHUNKS, kind: str = "raw") -> bytes:
+    """A consistent format-2 index: one-byte "frames", as test_chunksend_2533's library has."""
+    head = len(HEAD) if kind == "partclone" else 0
+    first = (f"IMAGESRV-IDX 2 partclone {CH} 200 {head} {'ab' * 8} {chunks * CH} {chunks} {head + chunks}\n"
+             if kind == "partclone" else f"IMAGESRV-IDX 2 raw {CH} 0 0 - {chunks * CH} {chunks} {chunks}\n")
+    return (first + "".join(f"{head + k} 1 {k:016x}\n" for k in range(chunks))).encode("ascii")
+
+
+def _b3_list(index: bytes) -> bytes:
+    """#3332: the BLAKE3 list a source uploads beside its index -- 32 bytes a chunk (what they hold is not read here)."""
+    return bytes(range(32)) * int(index.split(b"\n", 1)[0].split(b" ")[8])
+
+
+def _b3_of(data: bytes) -> str:
+    from server.agent import readbackhash   # noqa: PLC0415
+    tool = readbackhash.b3_tool()
+    assert tool is not None, "the tests' BLAKE3 tool (conftest._b3_tool) was not built"
+    return readbackhash.b3_hex(data, tool)
+
+
+def _manifest(index: bytes | None, **more) -> dict:
+    """The live manifest that signs `index` (`index_xxh64`) and its BLAKE3 list (`chunk_b3`, #3332)."""
+    manifest = _live_manifest()
+    if index is not None:
+        manifest["partitions"][0]["index_xxh64"] = xxh64_reference(index)
+        manifest["partitions"][0]["chunk_b3"] = _b3_of(_b3_list(index))        # #3332
+    manifest["partitions"][0].update(more)
+    return manifest
+
+
+def _upload(room_server, task_id: str, what: str, part: int, body: bytes, *, b3: bool = True):
+    """`b3`: an index taken is followed by its BLAKE3 list, as the source uploads it (#3332, directchunk.sh)."""
+    put = room_server["anon"].put(f"/api/v1/direct/{task_id}/{what}/{part}", content=body,
+                                  headers={TOKEN_HEADER: _token(room_server, task_id)})
+    if what == "index" and b3 and put.status_code == 200:
+        listed = room_server["anon"].put(f"/api/v1/direct/{task_id}/b3/{part}", content=_b3_list(body),
+                                         headers={TOKEN_HEADER: _token(room_server, task_id)})
+        assert listed.status_code == 200, listed.text
+    return put
+
+
 def _put_manifest(room_server, task_id, manifest=None, token=None):
+    """`manifest=None` is what a build machine sends (#3161, #3173): the chunk index of partition 1 and its BLAKE3
+    list first, and then the manifest that signs them -- the wave of the chunk engine. A direct send is chunks only:
+    a manifest of a source that uploaded nothing (`manifest=_live_manifest()`) is accepted, and its wave then fails
+    by name when it would go out (`directchunk.refusal`).
+
+    The upload's own answer is not asserted here: a task that is no longer open refuses it as it refuses the
+    manifest (404), and the manifest's answer is what every caller asserts. A refused upload leaves a manifest that
+    signs nothing that was uploaded -- the wave fails by name, never quietly."""
+    if manifest is None:
+        index = _index()
+        _upload(room_server, task_id, "index", 1, index)
+        manifest = _manifest(index)
     head = {TOKEN_HEADER: _token(room_server, task_id) if token is None else token}
     return room_server["anon"].put(
         f"/api/v1/direct/{task_id}/manifest",
-        content=json.dumps(manifest or _live_manifest()).encode(), headers=head)
+        content=json.dumps(manifest).encode(), headers=head)
+
+
+def _cloners(room_server, opened, members=None) -> Cloners:
+    """The cloners of a direct wave, speaking the chunk protocol (`fakesend.Cloners`): partition 1 of `_index()`."""
+    return Cloners(room_server["anon"], opened["wave_session_id"],
+                   members or {CLONER1: ["S1", "S2"]}, parts=[(1, CHUNKS)])
+
+
+def _order(room_server) -> dict:
+    """The pass the engine ordered the source to send (`task.direct.chunk.order`), once there is one."""
+    got = {}
+
+    def ordered():
+        got["order"] = (_build_hello(room_server["anon"])["task"]["direct"].get("chunk") or {}).get("order")
+        return got["order"] is not None
+
+    assert wait_for(ordered), "the engine never ordered the source to send"
+    return got["order"]
 
 
 # --- פתיחה: מי מוער, מי מקבל מה ----------------------------------------------
@@ -100,19 +180,15 @@ def test_open_wakes_only_the_selected_and_hands_the_build_machine_a_task(room_se
     assert view["target_drives"] == 2 and view["image_name"] == "build-01:sda"
     assert view["image_id"] == opened["image_id"] and opened["image_id"].startswith("live_")
 
-    # מחשב הבנייה: משימת direct_send עם הגל ופרמטרי השידור של השרת.
+    # מחשב הבנייה: משימת direct_send עם הגל. #3173: בלי פרמטרים של udp-sender (`multicast`) -- לפני
+    # המניפסט הוא מתבקש להעלות את אינדקסי החתיכות שלו (#3161), והשידור עצמו הוא הזמנה מהמנוע.
     task = _build_hello(anon)["task"]
     assert task["type"] == "direct_send" and task["id"] == opened["task_id"]
     assert task["disk"] == "sda" and task["image_id"] == opened["image_id"]
     assert task["direct"]["session_id"] == opened["wave_session_id"]
     assert task["direct"]["session_state"] == "open"
-    mc = task["direct"]["multicast"]
-    assert set(mc) == {"portbase", "min_receivers", "max_wait", "start_timeout",
-                       "max_wait_later", "start_timeout_later",   # #957
-                       "retries_until_drop", "max_bitrate"}
-    assert mc["portbase"] == room_server["ctx"].sender.portbase
-    assert mc["max_wait_later"] == room_server["ctx"].sender.max_wait_later
-    assert mc["start_timeout_later"] == room_server["ctx"].sender.start_timeout_later
+    assert "multicast" not in task["direct"]
+    assert task["direct"]["engine"] == "chunk"
 
     # המשכפל שנבחר מצטרף ורואה את הפורטים שלו; זה שלא נבחר — אין לו סבב.
     joined = cloner_hello(anon, CLONER1, ["S1", "S2"])
@@ -120,7 +196,6 @@ def test_open_wakes_only_the_selected_and_hands_the_build_machine_a_task(room_se
     assert joined["session"]["target_ports"] == [1, 2]
     assert cloner_hello(anon, CLONER2, ["S3", "S4"])["session"] is None
     assert _build_hello(anon)["task"]["direct"]["receivers"] == 1
-    assert _build_hello(anon)["task"]["direct"]["multicast"]["min_receivers"] == 1
 
 
 def test_refusals_each_by_name(room_server):
@@ -179,12 +254,15 @@ def test_the_wave_waits_for_the_manifest_and_the_server_engine_never_sends(room_
     assert served.json()["partitions"][0]["sha256"] == "ab" * 32
     assert served.json()["id"] == image_id
 
-    # הדופק הבא מוציא את הגל — והמנוע של השרת לא הופעל.
+    # הדופק הבא מוציא את הגל — המנוע של השרת מתזמר אותו, ושום שולח אינו רץ בשרת (#3161).
     cloner_hello(anon, CLONER1, ["S1", "S2"])
     assert room(admin)["round"]["wave_state"] == "running"
-    assert ctx.sender.status() is None
+    assert ctx.chunk.status()["session_id"] == opened["wave_session_id"]
+    _cloners(room_server, opened).listen(1)
+    assert _order(room_server)["part"] == 1                   # השידור הוא הזמנה למחשב הבנייה
+    assert room_server["recorder"].commands == []            # ולא `chunkcast send` בשרת
     events = [r["event"] for r in ctx.conn.execute("SELECT event FROM journal")]
-    assert "send_delegated" in events and "send_start" not in events
+    assert "send_delegated" in events
     # מחשב הבנייה רואה running ומשדר.
     direct = _build_hello(anon)["task"]["direct"]
     assert direct["session_state"] == "running" and direct["receivers"] == 1
@@ -377,7 +455,8 @@ def test_a_library_round_still_starts_the_server_engine(room_server):
     assert room(admin)["round"]["wave_state"] == "running"
     events = [r["event"] for r in ctx.conn.execute("SELECT event FROM journal")]
     assert "send_delegated" not in events
-    assert ctx.sender.status() is not None
+    status = ctx.chunk.status()
+    assert status is not None and status["image_id"] == "img_7f3a91"
 
 
 # --- קצב אוטומטי (הכרעת נדב 11/10): גם הזרם ממחשב הבנייה עובר ברשת -----------
@@ -395,12 +474,12 @@ def _running_direct(room_server):
 
 def test_without_a_configured_cap_the_build_machine_sends_at_600m(room_server):
     """עד היום: בלי `IMAGESRV_MAX_BITRATE` מחשב הבנייה שידר בלי `--max-bitrate`
-    כלל. מעכשיו — קצב הפתיחה, כבר בגל הפתוח (לפני שנבחר לו קצב)."""
-    assert room_server["ctx"].sender.max_bitrate is None
-    _setup(room_server)
-    direct = _build_hello(room_server["anon"])["task"]["direct"]
-    assert direct["session_state"] == "open"
-    assert direct["multicast"]["max_bitrate"] == "600m"
+    כלל. מעכשיו — קצב הפתיחה. #3173: הקצב מגיע למקור בהזמנה של המנוע (`kbps`),
+    ולא בפרמטרים של udp-sender בגל הפתוח."""
+    assert room_server["ctx"].chunk.max_bitrate is None
+    opened = _running_direct(room_server)
+    _cloners(room_server, opened).listen(1)
+    assert _order(room_server)["kbps"] == 600_000            # 600m -- לעולם לא "בלי תקרה"
 
 
 def test_the_running_direct_wave_gets_the_decided_rate_and_the_room_says_why(room_server):
@@ -408,7 +487,8 @@ def test_the_running_direct_wave_gets_the_decided_rate_and_the_room_says_why(roo
     opened = _running_direct(room_server)
     direct = _build_hello(room_server["anon"])["task"]["direct"]
     assert direct["session_state"] == "running"
-    assert direct["multicast"]["max_bitrate"] == "600m"
+    _cloners(room_server, opened).listen(1)
+    assert _order(room_server)["kbps"] == 600_000
     shown = room(admin)["round"]["wave_rate"]
     assert shown["max_bitrate"] == "600m" and shown["basis"] == "start"
     assert shown["direct"] is True and shown["projected"] is False
@@ -418,6 +498,7 @@ def test_the_running_direct_wave_gets_the_decided_rate_and_the_room_says_why(roo
 
 
 def test_the_build_machine_respects_a_configured_cap(room_server):
-    room_server["ctx"].sender.max_bitrate = "200m"
-    _running_direct(room_server)
-    assert _build_hello(room_server["anon"])["task"]["direct"]["multicast"]["max_bitrate"] == "200m"
+    room_server["ctx"].chunk.max_bitrate = "200m"
+    opened = _running_direct(room_server)
+    _cloners(room_server, opened).listen(1)
+    assert _order(room_server)["kbps"] == 200_000

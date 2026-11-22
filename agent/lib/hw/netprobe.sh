@@ -91,7 +91,7 @@ _netprobe_fresh() {
     fi
     # #2234: "report" = the layers up to the server (netreport.sh); absent loader = not checked
     _rep=null
-    if command -v netreport_json >/dev/null 2>&1; then _rep=$(netreport_json "$_if" "${SERVER:-}"); [ -n "$_rep" ] || _rep=null; fi
+    if command -v netreport_json >/dev/null 2>&1; then _rep=$(netreport_json "$_if" "${IMAGESRV_SERVER:-${SERVER:-}}"); [ -n "$_rep" ] || _rep=null; fi
     printf ',"netprobe":{"cable":%s,"lldp":%s,"report":%s}' "$(_np_cable "$_if")" "$(_np_lldp "$_if")" "$_rep"
 }
 

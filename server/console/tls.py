@@ -1,10 +1,10 @@
 """TLS לקונסולה (#703, tracer 5).
 
-הקונסולה (8081, כרטיס הניהול) הגישה HTTP וסיסמת admin עברה גלויה —
+הקונסולה (443, כרטיס הניהול) הגישה HTTP וסיסמת admin עברה גלויה —
 במכללה שמלמדת סייבר. מ-tracer 5 המאזין של הקונסולה הוא **HTTPS בלבד**:
 תעודה חתומה-עצמית שנוצרת בהפעלה הראשונה ל-``<data_dir>/console-tls/``
 (``console.crt`` + ``console.key`` ב-0600) ונשארת **אותה תעודה** בכל
-הפעלה — הדפדפן של המפעיל מאשר אותה פעם אחת. HTTP על 8081 אינו מוגש
+הפעלה — הדפדפן של המפעיל מאשר אותה פעם אחת. HTTP על 443 אינו מוגש
 (fail-closed): אין הפניה שקטה ואין מאזין-מפנה, כי מאזין HTTP על אותו
 פורט הוא בדיוק מה שהדפדפן (או תלמיד) היה נופל אליו קודם.
 
@@ -18,7 +18,7 @@
 
 **למה stdlib ssl ולא pyOpenSSL:** uvicorn מקבל ``ssl_certfile``/
 ``ssl_keyfile`` ובונה ``ssl.SSLContext`` בעצמו; לקונסולה אין תעודת-לקוח
-ואין exporter, ולכן אין צורך ב-terminator של pyOpenSSL כמו ב-8443.
+ואין exporter, ולכן אין צורך ב-terminator של pyOpenSSL כמו ב-7700.
 
 **EKU ותוקף (#1815):** התעודה העצמית נושאת EKU ``serverAuth`` בלבד — היא
 מוגשת לדפדפן ואינה משמשת כתעודת-לקוח. **התוקף נשאר 3650 יום, וזו מגבלה
@@ -42,6 +42,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from server.core.atomicfile import write_atomic
+from server.core import ports as product_ports   # #3871
 from server.interserver.auth import (generate_self_signed, is_loopback,
                                                  write_credential_0600)
 
@@ -279,7 +280,7 @@ def ensure_console_cert(data_dir, console_host: str,
                       cert_pem=cert_pem, key_pem=key_path.read_bytes())
 
 
-def presented_console_cert(address: tuple[str, int] = ("127.0.0.1", 8081),
+def presented_console_cert(address: tuple[str, int] = ("127.0.0.1", product_ports.CONSOLE),
                            timeout: float = 1.0) -> bytes:
     """#2148: התעודה שמאזין הקונסולה **מציג עכשיו** (PEM) — מה שהדפדפן יראה.
 
@@ -361,7 +362,7 @@ BROWSER_CURVES = ("secp256r1", "secp384r1")
 
 def _browsers_accept(cert) -> None:
     """#2425: ``load_cert_chain`` מצליח גם על תעודה שהדפדפן ידחה (ed25519, secp256k1,
-    EKU של clientAuth בלבד). פורט 8081 אינו נופל ל-HTTP, ולכן אחרי האתחול הקונסולה הייתה
+    EKU של clientAuth בלבד). פורט 443 אינו נופל ל-HTTP, ולכן אחרי האתחול הקונסולה הייתה
     ננעלת עד שמחזירים את ``.prev`` ממסוף השרת. מתקבלים: RSA, EC על P-256/P-384, ו-EKU
     שכולל serverAuth (Apple דורשת את ההרחבה עצמה — support.apple.com/103769)."""
     from cryptography import x509

@@ -23,6 +23,7 @@ from server.net import deploy_net, ifaddr, netcfg, netcfg_host, netcfg_rollback
 from server.interserver import storage_nodes
 from server.db import connect, get_setting
 from server.system import backup_job
+from server.core import ports as product_ports   # #3871
 
 DATA_DIR = Path("/var/lib/imagesrv")
 STATUS_FILE = Path("/etc/imagesrv/firstboot.status")
@@ -31,7 +32,7 @@ PREINSTALL_REPO = Path("/opt/imagesrv-src")
 SERVER_OVERRIDE = Path("/etc/systemd/system/imagesrv-server.service.d/override.conf")
 SYS_NET = Path("/sys/class/net")
 #: #2516: the card the installer configured (state=/mac=) -- the one card the
-#: first-boot wizard guard (deploy/nftables-wizard.sh, #2490) opens 8081 on.
+#: first-boot wizard guard (deploy/nftables-wizard.sh, #2490) opens 443 on.
 INSTALLER_NIC = Path("/etc/imagesrv/installer-nic")
 
 
@@ -131,7 +132,7 @@ class Snapshot:
     #: above the hero; the server stays "תקין"
     backup_off: bool = False
     #: #2516 (pre-install only): the installer card by name, as the wizard guard finds it
-    #: (by MAC); "" = undecidable -- the guard keeps 8081 on loopback only
+    #: (by MAC); "" = undecidable -- the guard keeps 443 on loopback only
     installer_nic: str = ""
 
 
@@ -438,7 +439,7 @@ def _preinstall_snapshot(rows: list[dict], runner: Runner, sys_net: Path,
         ))
     addressed = next((nic for nic in interfaces if nic.address), None)
     # #2516: the browser address is the installer card's -- the only card the wizard
-    # guard opens 8081 on. The first card with an address (the deploy card, 06/11)
+    # guard opens 443 on. The first card with an address (the deploy card, 06/11)
     # was a URL the guard drops: the operator who did what the screen said got a timeout.
     installer = _installer_nic(installer_fact, interfaces)
     address = installer.address.split("/")[0] if installer and installer.address else ""
@@ -446,7 +447,7 @@ def _preinstall_snapshot(rows: list[dict], runner: Runner, sys_net: Path,
     return Snapshot(
         hostname=socket.gethostname(),
         version=version, version_verified=version_verified,
-        console_url=f"https://{address}:8081" if address else "",
+        console_url=product_ports.console_url(address) if address else "",
         no_address=not bool(address), fingerprint="not created",
         management=installer or addressed or (interfaces[0] if interfaces else NicInfo("unknown")),
         interfaces=tuple(interfaces), refreshed=current.strftime("%H:%M:%S"),
@@ -457,7 +458,7 @@ def _preinstall_snapshot(rows: list[dict], runner: Runner, sys_net: Path,
 def _installer_nic(fact: Path, interfaces: list[NicInfo]) -> NicInfo | None:
     """#2516: the card deploy/nftables-wizard.sh opens the wizard port on -- the same
     rule: ``state=configured`` and the ``mac=`` of a card here (the name in the
-    installer is not necessarily the name here). None = the guard keeps 8081 on
+    installer is not necessarily the name here). None = the guard keeps 443 on
     loopback only (no file, not configured, a MAC on no card, a file not read)."""
     values = _read_key_values(fact)
     mac = values.get("mac", "").strip().lower()
@@ -468,7 +469,7 @@ def _installer_nic(fact: Path, interfaces: list[NicInfo]) -> NicInfo | None:
 
 #: #2148: where the DCUI asks the console which certificate it presents
 #: (the console always listens on loopback too, #904).
-CONSOLE_LOCAL = ("127.0.0.1", 8081)
+CONSOLE_LOCAL = ("127.0.0.1", product_ports.CONSOLE)
 #: the fingerprint while first boot still runs: none, rather than one that the
 #: end of first boot replaces (the server is restarted there, #2095).
 FIRST_BOOT_PENDING = "pending (first boot still running)"
@@ -550,7 +551,7 @@ def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
     deploy = _nic(conn, next((r for r in rows if r["name"] == deploy_name), None)) \
         if deploy_state.configured else None
     address = management.address.split("/")[0] if management.address else ""
-    console_url = f"https://{address or '127.0.0.1'}:8081"
+    console_url = product_ports.console_url(address or '127.0.0.1')
     # #2095: read, never issue -- this screen re-issued the certificate for
     # whatever address it saw, behind the running server's back.
     fingerprint, certificate_sans, certificate_not_after = _console_certificate(status_file)
@@ -586,7 +587,7 @@ def collect_snapshot(data_dir: Path = DATA_DIR, *, runner: Runner = run_argv,
 def demo_snapshot() -> Snapshot:
     return Snapshot(
         hostname="imagesrv-ta", version="v0.48.0",
-        console_url="https://10.44.9.12:8081", no_address=False,
+        console_url="https://10.44.9.12", no_address=False,
         fingerprint=("3F:0A:9C:71:E2:5B:88:D4:16:AF:C3:09:7E:B2:44:D1:"
                      "6A:0F:93:C8:25:E7:1B:6C:D9:42:8F:A0:35:7D:1E:96"),
         certificate_sans=("10.44.9.12", "imagesrv-ta"),

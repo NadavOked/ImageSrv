@@ -2,7 +2,7 @@
 
 1. `imagesrv-server.service` הצהיר רק `After=network-online.target` — בלי שום קשר
    ל-`nftables.service` (נמדד במעבדה: `ORDERING ON nftables: NONE`). nftables
-   שלא עלה באתחול השאיר את 8080/8081/8443 בלי סינון, והשרת עלה כרגיל.
+   שלא עלה באתחול השאיר את 7712/443/7700 בלי סינון, והשרת עלה כרגיל.
 2. `regenerate_firewall` החזיר `None` — "הצליח" — כשלא הותקנה חומת אש, וההגדרה
    מהקונסולה דיווחה OK בלי שנכתב כלל אחד.
 
@@ -33,6 +33,7 @@ def _run_main(tmp_path: Path, monkeypatch) -> list:
     monkeypatch.setattr(server.app, "create_runtime", lambda *a, **k: built.append(a) or "rt")
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(uvicorn, "Config", lambda app, **kw: object())
     monkeypatch.setattr(uvicorn, "Server", lambda config: object())
     monkeypatch.setattr(server.main, "serve_all", lambda servers: None)
@@ -40,7 +41,7 @@ def _run_main(tmp_path: Path, monkeypatch) -> list:
     monkeypatch.setattr(asyncio, "run", lambda coro=None: None)
     monkeypatch.setattr(server.main, "_interface_for", lambda url: None)
     monkeypatch.setattr("sys.argv", [
-        "server.main", "--server-url", "http://10.44.12.10:8080",
+        "server.main", "--server-url", "http://10.44.12.10:7712",
         "--data-dir", str(tmp_path / "data"), "--images", str(tmp_path / "img")])
     server.main.main()
     return built
@@ -98,7 +99,7 @@ def test_completing_the_install_without_a_firewall_continues_with_a_warning(tmp_
         "restart_server": lambda: None,
     }
     ctx = deploy_net.DeployContext(
-        state=deploy_net.DeployState("none", None, None), agent_port=8080,
+        state=deploy_net.DeployState("none", None, None), agent_port=7712,
         tftp_root=tmp_path / "tftp", repo_dir=REPO, servers_interface="eth0", hooks=hooks)
     result = deploy_net.complete(ctx, conn, interface="eth1", server_ip="10.44.9.10")
     assert result["ok"] is True and result["recorded"] is True, result
@@ -108,14 +109,14 @@ def test_completing_the_install_without_a_firewall_continues_with_a_warning(tmp_
 def test_nic_services_on_a_server_without_a_firewall_journal_it(tmp_path, images_root):
     """שינוי שירותים לכל כרטיס אינו מוחזר בגלל חומת אש שאינה קיימת — אבל נרשם."""
     deploy = deploy_net.DeployContext(
-        state=deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:8080"),
-        agent_port=8080, tftp_root=tmp_path / "tftp", repo_dir=REPO,
+        state=deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:7712"),
+        agent_port=7712, tftp_root=tmp_path / "tftp", repo_dir=REPO,
         servers_interface="eth0",
         hooks={"firewall": lambda repo, **kw: deploy_net.regenerate_firewall(
             repo, **kw, conf=tmp_path / "absent.conf")})
     # #1810: הצעד בודק שכרטיס ההפצה (eth1) קיים לפני שהוא מחולל כללים —
     # רשימת הכרטיסים מוזרקת (#113), לא נקראת מהמכונה שמריצה את הבדיקה.
-    app = server.app.create_app(tmp_path / "data", images_root, "http://10.44.9.10:8080",
+    app = server.app.create_app(tmp_path / "data", images_root, "http://10.44.9.10:7712",
                                 deploy=deploy, health_hooks={
                                     "interfaces": lambda: [{"name": "eth0"}, {"name": "eth1"}]})
     ctx = app.state.ctx

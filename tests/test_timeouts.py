@@ -13,7 +13,6 @@ GitHub במקום ליפול תוך דקה.
 
 from __future__ import annotations
 
-import hashlib
 import re
 import shutil
 import subprocess
@@ -354,52 +353,6 @@ FEED_ONLY_THE_FIRST = (
 )
 
 
-def test_a_drawer_that_is_never_fed_fails_by_name_and_its_neighbour_finishes(tmp_path):
-    """הרגרסיה של #49, בזמן אמיתי.
-
-    מגירה אחת מקבלת את הזרם ומסיימת; השנייה תקועה על fifo שאיש לא כתב
-    אליו. הקוד הישן היה מחכה לה לנצח, וכל החדר היה נראה קפוא. עכשיו היא
-    נכשלת בשמה, השכנה שלה מסיימת (תרחיש QA: כשל במגירה אחת לא עוצר את
-    השאר), והפונקציה חוזרת בהצלחה כי מישהו כן שרד.
-    """
-    box = tmp_path / "box"
-    run = box / "run"
-    payload = box / "part.bin"
-    box.mkdir(parents=True)
-    payload.write_bytes(b"imagesrv" * 4096)
-    sha = hashlib.sha256(payload.read_bytes()).hexdigest()
-    for dev in ("sda", "sdb"):
-        target = run / "targets" / dev
-        target.mkdir(parents=True)
-        (target / "state").write_text("writing\n")
-        (target / "base").write_text("0\n")
-        (target / "bytes.raw").write_text("")
-
-    out = run_sh(
-        make_stubs(box / "stubs", {"fanout": FEED_ONLY_THE_FIRST})
-        + f"export RUN_DIR={posix(run)!r} "
-        f"DEVROOT={posix(box)!r} "
-        "WAIT_POLL_S=1 WAIT_DRAWER_S=3 WAIT_HELPER_S=3 "
-        "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
-        + f'stream_source() {{ cat {posix(payload)!r}; }}; '
-        "target_bind sda; target_bind sdb; "   # #2434: the drawers chosen, as target_init binds them
-        "restore_partition_drawers unicast http://s img 3 dd part.zst "
-        f"{sha} '' sda sdb > {posix(box)}/pipe.out 2>&1; echo \"rc=$?\""
-    )
-
-    assert out.strip().endswith("rc=0"), out
-    states = {d: (run / "targets" / d / "state").read_text().strip()
-              for d in ("sda", "sdb")}
-    assert states["sda"] != "failed", "המגירה שקיבלה את הזרם נפסלה"
-    assert states["sdb"] == "failed", "המגירה הרעבה לא סומנה ככישלון"
-
-    error = (run / "targets" / "sdb" / "error").read_text(encoding="utf-8")
-    assert "פג הזמן" in error
-    log = log_of(run)
-    assert "פג הזמן" in log and "sdb" in log
-
-
 def test_a_station_whose_stream_never_arrives_fails_instead_of_freezing(tmp_path):
     """תחנה בודדת: המקור פתוח ושותק. הצינור כולו היה מחכה לו לנצח."""
     box = tmp_path / "box"
@@ -440,202 +393,21 @@ def test_a_station_whose_stream_never_arrives_fails_instead_of_freezing(tmp_path
 
 
 # --- #957: המחיצה הראשונה ממתינה למפעיל, הבאות ממתינות לחדר ----------------
-
-#: udp-receiver מזויף: רושם את ה-argv שלו ומוציא את התוכן — כמו האמיתי,
-#: רק בלי רשת. הזרם עצמו כאן אינו הנבדק; הדגלים שהוא קיבל הם הנבדק.
-RECORDING_RECEIVER = (
-    '#!/bin/sh\n'
-    'printf "%s\n" "$@" >> "$UDP_ARGV"\n'
-    'echo "---" >> "$UDP_ARGV"\n'
-    'cat "$UDP_PAYLOAD"\n'
-)
-
-
-#: fanout מזויף למגירה אחת: מזין את ה-fifo שלה ומדווח עליה `ok`.
-FEED_ONE = (
-    '#!/bin/sh\n'
-    'shift\n'
-    'tmp="$(mktemp)"\n'
-    'cat > "$tmp"\n'
-    'fanout_eof "$tmp"\n'
-    'cat "$tmp" > "$1"\n'
-    'rm -f "$tmp"\n'
-    'echo "$1 ok"\n'
-)
-
-
-def _argv_blocks(path: Path) -> list[list[str]]:
-    text = path.read_text(encoding="utf-8")
-    return [b.splitlines() for b in text.split("---\n") if b.strip()]
-
-
-def _flag(argv: list[str], flag: str) -> str:
-    return argv[argv.index(flag) + 1]
-
-
-def _two_streams(tmp_path, harness: str, call: str) -> tuple[list[list[str]], list[str]]:
-    """מריץ שתי מחיצות מוזרמות בשחזור אחד, ומחזיר את ה-argv של כל
-    udp-receiver ואת התקרה ש-wait_progress קיבל לכל זרם."""
-    box = tmp_path / "box"
-    run = box / "run"
-    payload = box / "part.bin"
-    box.mkdir(parents=True)
-    payload.write_bytes(b"imagesrv" * 512)
-    sha = hashlib.sha256(payload.read_bytes()).hexdigest()
-    for dev in ("sda",):
-        target = run / "targets" / dev
-        target.mkdir(parents=True)
-        (target / "state").write_text("writing\n")
-        (target / "base").write_text("0\n")
-        (target / "bytes.raw").write_text("")
-    argv, ceilings = box / "udp.argv", box / "ceilings"
-    out = run_sh(
-        make_stubs(box / "stubs", {"udp-receiver": RECORDING_RECEIVER, "fanout": FEED_ONE})
-        + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
-        f"UDP_ARGV={posix(argv)!r} UDP_PAYLOAD={posix(payload)!r} "
-        "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
-        # wait_progress האמיתי — רק רושם את התקרה שקיבל לפני שהוא ממתין.
-        + "eval \"orig_$(declare -f wait_progress)\"; "
-        f'wait_progress() {{ echo "$3" >> {posix(ceilings)!r}; orig_wait_progress "$@"; }}; '
-        "node_is_block() { true; }; "
-        "target_bind sda; "   # #2434: the disk chosen, as target_init binds it
-        + harness
-        + f"{call} 2 dd p2.zst {sha} '' sda > {posix(box)}/pipe.out 2>&1; r1=$?; "
-        f"{call} 3 dd p3.zst {sha} '' sda >> {posix(box)}/pipe.out 2>&1; r2=$?; "
-        'echo "rc=$r1$r2"'
-    )
-    assert out.strip().endswith("rc=00"), out + (box / "pipe.out").read_text("utf-8", "replace")
-    return _argv_blocks(argv), ceilings.read_text(encoding="utf-8").split()
-
-
-@pytest.mark.parametrize(
-    ("harness", "call"),
-    [
-        pytest.param("STREAMED_PARTITIONS=0; ",
-                     "restore_partition multicast http://s img sda", id="station"),
-        pytest.param("target_init sda 4096; STREAMED_PARTITIONS=0; ",
-                     "restore_partition_drawers multicast http://s img", id="drawers"),
-    ],
-)
-def test_the_second_stream_waits_longer_for_its_first_byte_than_the_first(tmp_path, harness, call):
-    """#957 (FOG GH-536): למחיצה הראשונה ההמתנה היא "המפעיל לא התחיל"
-    — 600ש'. מהשנייה השולח ממתין עד 600ש' למגירה האיטית שעוד כותבת
-    את הקודמת, ו-udp-receiver מודד את ההמתנה הזאת ב-`--start-timeout`
-    שלו: תקרה של 600 שם הייתה מפילה דווקא את המקבל שהגיע ראשון, בדיוק
-    כשהשולח מתחיל. לכן הזרם השני מקבל תקרה גדולה יותר (900), ואותה
-    תקרה בדיוק מקבל wait_progress שמסתכל על המונה — בשני מסלולי
-    השחזור (תחנה בודדת, חדר שיכפולים).
-
-    **בקרה שלילית:** על הקוד הישן (`--start-timeout $UDPCAST_START_TIMEOUT`
-    אחיד) שני הזרמים מקבלים 600, וההשוואה של הזרם השני נופלת."""
-    blocks, ceilings = _two_streams(tmp_path, harness, call)
-    assert len(blocks) == 2, blocks
-    # ההתנהגות קודם, בלי להישען על הקבוע החדש: הזרם השני ממתין יותר.
-    got = [int(_flag(b, "--start-timeout")) for b in blocks]
-    assert got[1] > got[0], f"--start-timeout לכל זרם: {got}"
-    assert [int(c) for c in ceilings] == got, (ceilings, got)
-    first = _sh_default(WAITS, "WAIT_STREAM_START_S")
-    later = _sh_default(WAITS, "WAIT_STREAM_START_LATER_S")
-    assert _flag(blocks[0], "--start-timeout") == str(first)
-    assert _flag(blocks[1], "--start-timeout") == str(later)
-    assert ceilings == [str(first), str(later)], ceilings
-    # תקרת השקט אינה חלק מזה — היא על זרם שכבר התחיל, ונשארת אחידה.
-    assert {_flag(b, "--receive-timeout") for b in blocks} == {"20"}
-
-
-#: #1438: המונה של החדר נכתב עכשיו ב-fanout (-P), לא ב-pv. FEED_ONE
-#: שותק עד EOF — כך הקובץ מכיל רק את מה שנשאר מהמחיצה הקודמת, וזה מה
-#: ש-wait_progress קורא בסקירה הראשונה. FEED_ONE_TICKS_ZERO כותב "0"
-#: לפני הבייט הראשון, כמו pv -n — הצורה ש-waits.sh חייב לסנן.
-FEED_ONE_TICKS_ZERO = FEED_ONE.replace(
-    'tmp="$(mktemp)"\n', '[ -z "$_fo_P" ] || echo 0 >> "$_fo_P"\ntmp="$(mktemp)"\n', 1)
-
-
-@pytest.mark.parametrize(
-    "feed", [pytest.param(FEED_ONE_TICKS_ZERO, id="counter-ticks-zero"),
-             pytest.param(FEED_ONE, id="previous-partition-count")])
-def test_a_drawer_room_waits_out_a_late_second_partition_instead_of_the_stall_ceiling(
-        tmp_path, feed):
-    """#1430 (מעבדת ה-VM, 15/10): p1 נכתב, והשולח המתין למכונה שכבר
-    נכשלה לפני ששידר את p14. המכונה התקינה פקעה אחרי ~361ש' — 300 של
-    תקרת השקט ועוד ההמתנות למגירות — ולא אחרי 900 של תקרת ההתחלה.
-    השורש: `$RUN_DIR/bytes.raw` של החדר אינו מתאפס בין מחיצות, והמונה
-    הסופי של p1 נקרא ב-p14 כ"בייט ראשון" (ו-"0" של pv — באותה דרך).
-
-    כאן: הזרם השני מחכה לשלוש דגימות — יותר מתקרת השקט (2), פחות מתקרת
-    ההתחלה של מחיצה 2+ (20) — ואז מגיע. **בקרה שלילית:** על הקוד הישן
-    המחיצה השנייה נכשלת "פג הזמן -- הזרם לא הגיע". שני הזיופים של המונה
-    מכסים את שני המנגנונים: המונה של המחיצה הקודמת (drawers.sh) וה-"0"
-    שלפני הבייט הראשון (waits.sh) — כל אחד נופל כשרק התיקון שלו חסר."""
-    box = tmp_path / "box"
-    run = box / "run"
-    payload = box / "part.bin"
-    box.mkdir(parents=True)
-    payload.write_bytes(b"imagesrv" * 512)
-    sha = hashlib.sha256(payload.read_bytes()).hexdigest()
-    target = run / "targets" / "sda"
-    target.mkdir(parents=True)
-    (target / "state").write_text("writing\n")
-    # Signal after the optional zero counter is written, before reading stdin.
-    # The source cannot send p3 until wait_progress has sampled three times.
-    feed = feed.replace('tmp="$(mktemp)"\n',
-                        '[ "${TEST_LATE:-0}" != 1 ] || printf "ready\\n" > "$RUN_DIR/test-ready"\n'
-                        'tmp="$(mktemp)"\n', 1)
-    assert 'printf "ready\\n"' in feed
-    clock = r'''
-mkfifo "$RUN_DIR/test-ready" "$RUN_DIR/test-send"
-_test_samples=0
-_nap() {
-    _nap_t=0
-    # Other waits, and p2, complete normally before we inspect their result.
-    if [ "${TEST_LATE:-0}" != 1 ] || [ "$1" != "${_p_pid:-}" ]; then
-        wait "$1"; return 0
-    fi
-    _test_samples=$((_test_samples + 1))
-    if [ "$_test_samples" = 1 ]; then read -r ready < "$RUN_DIR/test-ready"; fi
-    if [ "$_test_samples" -le 3 ]; then
-        echo sample >> "$RUN_DIR/test-samples"
-    else
-        printf 'send\n' > "$RUN_DIR/test-send"
-        wait "$1"
-    fi
-}
-'''
-    out = run_sh(
-        make_stubs(box / "stubs", {"fanout": feed})
-        + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
-        "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 WAIT_STREAM_STALL_S=2 "
-        "WAIT_STREAM_START_S=20 WAIT_STREAM_START_LATER_S=20; "
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
-        + clock +
-        f'stream_source() {{ if [ "$4" = p3.zst ]; then read -r send < "$RUN_DIR/test-send"; fi; cat {posix(payload)!r}; }}; '
-        "target_init sda 4096; STREAMED_PARTITIONS=0; "
-        f"restore_partition_drawers multicast http://s img 2 dd p2.zst {sha} '' sda "
-        f"> {posix(box)}/pipe.out 2>&1; r1=$?; "
-        'export TEST_LATE=1; '
-        f"restore_partition_drawers multicast http://s img 3 dd p3.zst {sha} '' sda "
-        f">> {posix(box)}/pipe.out 2>&1; r2=$?; "
-        'echo "rc=$r1$r2"'
-    )
-    log = log_of(run)
-    assert out.strip().endswith("rc=00"), out + log
-    assert (run / "test-samples").read_text().splitlines() == ["sample"] * 3
-    assert (target / "state").read_text().strip() != "failed", log
-    assert "פג הזמן" not in log
+# #3173: the per-stream flags of the old receiver (--start-timeout) left with it; the chunk pass's
+# own waits are test_every_wait_of_the_chunk_engine_feeds_the_watchdog_or_ends_under_its_lease below.
 
 
 def test_the_later_ceiling_outlasts_the_senders_later_wait():
     """המספרים משני צידי הרשת חייבים להיות מסודרים, וזה נבדק כאן ולא
-    מונח: השולח (`server/rounds/sender.py`) ממתין למחיצות 2+ עד
+    מונח: השולח (`server/rounds/chunkctx.py`) ממתין למחיצות 2+ עד
     `max_wait_later` מהמקבל הראשון, ומוגבל ב-`start_timeout_later`
     שמכיל אותו; המקבל שהצטרף ראשון ממתין את כל ה-`max_wait_later`
     בעצמו, ולכן תקרת הבייט הראשון שלו חייבת להיות **גדולה** ממנו —
-    ומחשב הבנייה בהפצה ישירה ממתין ל-udp-sender שלו עד
+    ומחשב הבנייה בהפצה ישירה ממתין לשולח שלו עד
     `start_timeout_later`, ולכן היא חייבת להיות גדולה גם ממנו.
     והמחיצה הראשונה — לא השתנתה: הראשונה עדיין 600, ואינה ארוכה
     יותר מהשנייה."""
-    from server.rounds import sender as sender_module
+    from server.rounds import chunkctx as sender_module   # #3173: the chunk engine's home of these numbers
 
     first = _sh_default(WAITS, "WAIT_STREAM_START_S")
     later = _sh_default(WAITS, "WAIT_STREAM_START_LATER_S")
@@ -819,9 +591,10 @@ def test_the_permit_is_checked_against_the_loop_it_names():
     assert bare_waits("\n".join([*far, permit])) == [(len(far) + 1, permit.strip())]
 
 
-@pytest.mark.parametrize("name", ["restore.sh", "drawers.sh", "capture.sh"])
+@pytest.mark.parametrize("name", ["restore.sh", "capture.sh"])
 def test_every_streaming_library_waits_through_the_helpers(name):
-    """שלושת הקבצים שמזרימים בייטים — שחזור תחנה, חדר שיכפולים, קליטה —
+    """הקבצים שמזרימים בייטים בצינור של shell — שחזור בודד, קליטה (#3173: חדר השיכפולים הוא
+    מנוע החתיכות, והמתנותיו נבדקות למטה) —
     עוברים כולם דרך אותם שני עוזרים. אין קובץ שממציא המתנה משלו."""
     source = (lib_path(name)).read_text(encoding="utf-8")
     assert "wait_progress " in source, f"{name} מזרים בלי שעון על ההתקדמות"
@@ -849,8 +622,8 @@ def test_every_ceiling_is_defined_in_one_place():
         # חוסר-התקדמות — חיבור שנפל יוצא במקום להיתלות.
         ("lib/core/common.sh", ["--speed-limit", "--speed-time"]),
         ("lib/capture/capturesink.sh", ["--speed-limit", "--speed-time"]),   # #1217: capture_sink
-        # udp-receiver ממתין לשדר לנצח כברירת מחדל. אלה התקרות שלו עצמו.
-        ("lib/restore/restore.sh", ["--start-timeout", "--receive-timeout"]),
+        # #3173: the single restore's HTTP stream, under the cloner's stall ceiling (common.sh's curl flags)
+        ("lib/restore/restore.sh", ['http_get_stream "$2/api/v1/images/$3/files/$4" "$STREAM_STALL_TIMEOUT"']),
     ],
     ids=lambda v: str(v),
 )
@@ -882,7 +655,7 @@ def test_the_stream_stall_ceiling_is_120_and_stays_under_the_watchdog_lease():
     מעל ה-lease מפילה את בדיקת `< lease`."""
     stall = _sh_default(WAITS, "WAIT_STREAM_STALL_S")
     assert stall == 120
-    # הנפילה-אחורה של udp-receiver ב-restore.sh נעה יחד עם waits.sh.
+    # הנפילה-אחורה של זרם ה-HTTP ב-restore.sh נעה יחד עם waits.sh.
     m = re.search(r'WAIT_STREAM_STALL_S:-(\d+)', RESTORE.read_text(encoding="utf-8"))
     assert m and int(m.group(1)) == 120, "ה---receive-timeout ב-restore.sh לא תואם"
     lease = int(re.search(r'-ge (\d+)', WATCHDOG.read_text(encoding="utf-8")).group(1))

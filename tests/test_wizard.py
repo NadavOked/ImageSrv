@@ -214,7 +214,7 @@ def test_no_answers_console_cert_uses_selected_nic_ip(tmp_path: Path, monkeypatc
     assert ip_address("10.44.10.37") in sans.get_values_for_type(x509.IPAddress)
     assert "eth-test" not in sans.get_values_for_type(x509.DNSName)
     assert "imagesrv-haifa" in sans.get_values_for_type(x509.DNSName)
-    assert got["console_url"] == "https://10.44.10.37:8081"
+    assert got["console_url"] == "https://10.44.10.37"
     assert lookups == ([] if dev else [["ip", "-json", "-4", "addr", "show", "dev", "eth-test"]])
     assert state.paths.stamp_file.exists()
     assert core.read_fact(state.paths.status_file)["state"] == "done"
@@ -277,7 +277,7 @@ def test_apply_is_accepted_immediately_is_idempotent_and_progress_keeps_finish_p
         calls += 1
         entered.set()
         assert release.wait(5), "ה-hook של ההתקנה לא שוחרר"
-        state._set("done", console_url="https://10.44.10.37:8081", user="admin",
+        state._set("done", console_url="https://10.44.10.37", user="admin",
                    fingerprint="AA:" * 31 + "AA")
 
     state._apply = fake_apply  # type: ignore[method-assign]
@@ -314,7 +314,7 @@ def test_apply_is_accepted_immediately_is_idempotent_and_progress_keeps_finish_p
         assert status == 200
         assert finished == {
             "ok": True, "state": "done", "output": "", "job": first["job"],
-            "console_url": "https://10.44.10.37:8081", "user": "admin",
+            "console_url": "https://10.44.10.37", "user": "admin",
             "fingerprint": "AA:" * 31 + "AA",
         }
     finally:
@@ -420,7 +420,7 @@ def test_check_primary_endpoint_returns_measured_success_and_named_failure(tmp_p
     def post() -> dict:
         conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=1)
         try:
-            body = json.dumps({"primary_url": "https://primary:8443"}).encode()
+            body = json.dumps({"primary_url": "https://primary:7700"}).encode()
             conn.request("POST", "/api/wizard/check-primary", body,
                          {"Content-Type": "application/json"})
             response = conn.getresponse()
@@ -435,7 +435,7 @@ def test_check_primary_endpoint_returns_measured_success_and_named_failure(tmp_p
         })
         assert post()["fingerprint"] == "AA:BB"
         monkeypatch.setattr("server.wizard.httpd.check_primary", lambda _url: {
-            "ok": False, "error": "התקשרות לשרת הראשי בפורט 8443 נכשלה. ודא כי חומת האש שבין האתרים פתוחה.",
+            "ok": False, "error": "התקשרות לשרת הראשי בפורט 7700 נכשלה. ודא כי חומת האש שבין האתרים פתוחה.",
         })
         assert post()["ok"] is False
     finally:

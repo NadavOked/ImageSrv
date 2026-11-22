@@ -21,6 +21,7 @@ lc_gui_state() {
     _gs_n="$GUI_DIR/state.next"; _gs_scr=$(cat "$LC/screen" 2>/dev/null)
     { printf 'lc_screen=%s\n' "$_gs_scr"; gui_header_state "$RUN_DIR/response.json";
         gui_hello_state || :; } > "$_gs_n" || return 1
+    if command -v tools_menu_record > /dev/null 2>&1; then tools_menu_record >> "$_gs_n" || return 1; fi   # #2804: "כלים F3" on the local clone / the stick (buildmenuitems.sh)
     # #1367: the round on the server as the agent's beat last heard it
     # (attended.sh). Only "open" draws anything; empty = not known.
     printf 'lc_round=%s\n' "$(cat "$RUN_DIR/attended.round" 2>/dev/null)" >> "$_gs_n" || return 1

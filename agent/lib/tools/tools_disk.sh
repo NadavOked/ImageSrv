@@ -9,11 +9,11 @@
 
 tools_disk_list() {
     cat <<'EOF'
-disk-blkdiscard|disk|מחיקת SSD מהירה (TRIM לכל הבלוקים)|destroy|/dev/sdX
-disk-hdparm-erase|disk|מחיקה מאובטחת ATA (hdparm)|destroy|/dev/sdX
-disk-nvme-format|disk|פורמט NVMe עם SES=1|destroy|/dev/nvmeXnY
-disk-dd-zero|disk|דריסה באפסים (dd) — גיבוי איטי|destroy|/dev/sdX
-disk-wipefs-all|disk|מחיקת חתימות מערכת קבצים|destroy|/dev/sdX
+disk-blkdiscard|wipe|מחיקת SSD מהירה (TRIM לכל הבלוקים)|destroy|disk:הדיסק למחיקה|מוחק SSD ב-TRIM לכל הבלוקים, לפני מסירת מחשב או החזרה למעבדה.
+disk-hdparm-erase|wipe|מחיקה מאובטחת ATA (hdparm)|destroy|disk:הדיסק למחיקה|מוחק ברמת הבקר בדיסק ישן (לא NVMe), כשדרושה מחיקה חזקה יותר מ-TRIM.
+disk-nvme-format|wipe|פורמט NVMe עם SES=1|destroy|disk:דיסק NVMe למחיקה|מוחק נתוני משתמש בדיסק NVMe, לפני מסירה כשהדיסק הוא NVMe.
+disk-dd-zero|wipe|דריסה באפסים (dd) — גיבוי איטי|destroy|disk:הדיסק למחיקה|דורס באפסים כשאין TRIM (דיסק מכני); איטי, גיבוי לשיטות המהירות.
+disk-wipefs-all|wipe|מחיקת חתימות מערכת קבצים|destroy|disk:הדיסק למחיקה|מוחק חתימות כדי שהדיסק ייראה בלי מערכת קבצים, בלי למחוק את כל הנתונים.
 EOF
 }
 

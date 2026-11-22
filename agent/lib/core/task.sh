@@ -4,6 +4,24 @@
 # הראשית ושני מסלולי השחזור נשארו שם; המשתנים שהפונקציה קוראת (‏RESP, ‏SERVER,
 # ‏MAC) נקבעים שם לפני הלולאה, והיא נקראת רק ממנה.
 
+capture_gui_take() {
+    # #980 (metal 17/11, bld1117): a capture ordered from the console after a restore that left the machine on
+    # found that restore's GUI alive (srgui.sh) and gui_parent shut by its handoff (_gui_disabled=1): the capture
+    # ran with no screen of its own, and "השחזור הושלם -- המחשב לא כובה" stayed up while the server's stages moved
+    # on. That restore is over. Its keeper goes first (it would start the GUI again), then the GUI, and
+    # gui_parent starts the kiosk, which draws the progress card of the running task. A live kiosk, or no
+    # restore GUI, is left alone.
+    sr_gui_alive || return 0
+    [ "${_gui_disabled:-0}" = 1 ] || return 0
+    log "capture: the screen of the restore that ended on this boot is released -- the capture's own takes the display"
+    _ct_g=$(cat "$RUN_DIR/gui/restore.gpid" 2>/dev/null)
+    kill "$SR_GUI_PID" 2>/dev/null
+    wait_pid "$SR_GUI_PID" "$WAIT_HELPER_S" "restore GUI keeper" || :
+    case "$_ct_g" in ''|*[!0-9]*) ;; *) kill "$_ct_g" 2>/dev/null; wait_pid "$_ct_g" "$WAIT_HELPER_S" "restore GUI" || : ;; esac
+    SR_GUI_PID=; _gui_pid=; _gui_disabled=0
+    rm -f "$RUN_DIR/gui.pid" "$RUN_DIR/gui/restore.final" "$RUN_DIR/gui/restore.gpid"
+}
+
 do_task() {
     _type=$(json_get "$RESP" ".task.type")
     _tid=$(json_get "$RESP" ".task.id")
@@ -40,6 +58,7 @@ do_task() {
     # screens). A capture ordered from the web console can land before the
     # GUI was ever started -- start it now. No GUI = the question cannot be
     # asked, and shrink_ask cancels the capture (nothing shrinks without a yes).
+    capture_gui_take   # #980: a restore that left the machine on still owns the screen
     gui_parent || log "capture: native GUI unavailable -- a shrink question will cancel the capture"
 
     # Both roads out of here end at report_final (#127). `sleep 4; kill` was

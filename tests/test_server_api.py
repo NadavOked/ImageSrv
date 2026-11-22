@@ -13,6 +13,7 @@ pytest.importorskip("fastapi")
 
 from conftest import hello_body, setup_classroom
 from console_src import console_js
+from test_server_room import CLONER1, CLONER2, cloner_hello, room_body
 
 
 def hello(server, mac, **kwargs):
@@ -153,50 +154,83 @@ def test_malformed_hello_is_an_orderly_error(server):
 
 
 def open_session(server, expected=2):
+    """סבב כיתה פתוח, לטסטים (גם בקבצים אחרים) שצריכים תחנה רשומה שחברה בסבב **פתוח**.
+
+    #3173: סבב כיתה הוא v2 -- `setup_classroom` מדליק את הדגל של v2, והסבב נפתח, חברים מצטרפים אליו
+    ומדווחים. גל שלו אינו משודר, וסבב שהבשיל נכשל בשמו. טסט שצריך גל רץ: `running_room`."""
     ids = setup_classroom(server, expected)
     response = server["deploy"].post(
         "/api/console/sessions",
         json={"group_id": ids["group"], "image_id": "img_7f3a91",
               "prefix": "LAB1", "expected_clients": expected},
     )
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     ids["session"] = response.json()["id"]
     return ids
 
 
-def test_the_full_classroom_round(server):
-    ids = open_session(server, expected=2)
+def open_room(server, target=2, drawers=None):
+    """סבב של חדר השיכפול (#3173: סבב כיתה הוא v2, וזה הסבב של v1).
+
+    שני מחשבי שיכפול רשומים; ברירת המחדל בוחרת מגירה אחת בכל אחד, ויעד
+    2 — כך ש-hello של אחד בלבד משאיר את הגל `open`, וה-hello של השני
+    מבשיל אותו (`running`), כמו `expected_clients=2` בסבב הכיתה שהיה כאן.
+    מחזיר את מזהה הגל (ה-session) שהפתיחה יצרה."""
+    for mac, name in ((CLONER1, "shich-1"), (CLONER2, "shich-2")):
+        assert server["admin"].post("/api/console/machines", json={
+            "mac": mac, "name": name, "group_id": "grp_CLONERS"}).status_code == 200
+    drawers = drawers or {CLONER1: ["S1"], CLONER2: ["S2"]}
+    response = server["deploy"].post("/api/console/room",
+                                     json=room_body(server, target, drawers))
+    assert response.status_code == 200, response.text
+    return server["ctx"].store.active()["id"]
+
+
+def running_room(server):
+    """גל רץ עם שני חברים שעוד כותבים: חבר שסיים או נכשל אינו סוגר את הגל,
+    ולכן מה שנבדק אחריו נבדק על הגל הזה ולא על סבב שכבר הסתיים."""
+    wave = open_room(server)
+    assert cloner_hello(server["anon"], CLONER1, ["S1"])["session"]["state"] == "open"
+    assert cloner_hello(server["anon"], CLONER2, ["S2"])["session"]["state"] == "running"
+    return wave
+
+
+def test_the_full_round(server):
+    wave = open_room(server)
+    anon = server["anon"]
 
     # מכונה ראשונה מצטרפת דרך hello — בלי endpoint נפרד.
-    first = hello(server, ids["mac1"])
+    first = cloner_hello(anon, CLONER1, ["S1"])
+    assert first["session"]["id"] == wave
     assert first["session"]["state"] == "open"
     assert first["session"]["joined"] == 1
     assert first["ui"]["require_login"] is False   # סבב פתוח = בלי סיסמאות
 
-    # השנייה משלימה את המספר המוצהר; ה-hello הבא כבר רואה running.
-    hello(server, ids["mac2"])
-    running = hello(server, ids["mac1"])
+    # השנייה משלימה את היעד; ה-hello הבא כבר רואה running.
+    cloner_hello(anon, CLONER2, ["S2"])
+    running = cloner_hello(anon, CLONER1, ["S1"], joining=False)
     assert running["session"]["state"] == "running"
     assert running["session"]["image_id"] == "img_7f3a91"
     assert running["session"]["starts_in_seconds"] == 0
 
     # דיווח סיום — והסבב לא מוצע לאותה מכונה שוב (אין לולאת שחזור).
     report = {
-        "session_id": ids["session"], "mac": ids["mac1"], "state": "done",
+        "session_id": wave, "mac": CLONER1, "state": "done",
         "targets": [{"dev": "sda", "bytes_written": 57982058496,
                      "bytes_total": 57982058496, "state": "done"}],
     }
-    assert server["anon"].post("/api/v1/agent/progress", json=report).json()["ok"]
-    after = hello(server, ids["mac1"])
+    assert anon.post("/api/v1/agent/progress", json=report).json()["ok"]
+    after = cloner_hello(anon, CLONER1, ["S1"])
     assert after["session"] is None
     # אבל השנייה עדיין בפנים.
-    assert hello(server, ids["mac2"])["session"]["state"] == "running"
+    assert cloner_hello(anon, CLONER2, ["S2"], joining=False)["session"]["state"] == "running"
 
 
 def test_late_machine_waits_for_the_next_round(server):
-    ids = open_session(server, expected=1)
-    hello(server, ids["mac1"])                       # מצטרף ומתחיל (expected=1)
-    late = hello(server, ids["mac2"])
+    open_room(server)
+    cloner_hello(server["anon"], CLONER1, ["S1"])                  # מצטרף
+    assert server["deploy"].post("/api/console/room/start").status_code == 200
+    late = cloner_hello(server["anon"], CLONER2, ["S2"])
     assert late["session"] is None                   # מאחר → דיסק מקומי
 
 
@@ -205,7 +239,7 @@ def test_hello_cannot_join_a_wave_that_started_after_its_read(server, monkeypatc
     חבר, אף שה-hook מעביר את הסבב ל-``running`` בדיוק ביניהן."""
     from server.rounds.sessions import SessionStore             # noqa: PLC0415
 
-    ids = open_session(server, expected=2)
+    wave = open_room(server)
     original = SessionStore.record_hello
 
     def start_between_read_and_insert(self, session, mac):
@@ -216,21 +250,19 @@ def test_hello_cannot_join_a_wave_that_started_after_its_read(server, monkeypatc
         return original(self, session, mac)
 
     monkeypatch.setattr(SessionStore, "record_hello", start_between_read_and_insert)
-    answer = hello(server, ids["mac1"])
+    answer = cloner_hello(server["anon"], CLONER1, ["S1"])
     member = server["ctx"].conn.execute(
         "SELECT 1 FROM session_members WHERE session_id = ? AND mac = ?",
-        (ids["session"], ids["mac1"]),
+        (wave, CLONER1),
     ).fetchone()
     assert answer["session"] is None
     assert member is None
 
 
 def test_done_report_is_idempotent_without_a_second_journal_row(server):
-    ids = open_session(server, expected=1)
-    hello(server, ids["mac1"])
-    hello(server, ids["mac1"])
+    wave = running_room(server)
     payload = {
-        "session_id": ids["session"], "mac": ids["mac1"], "state": "done",
+        "session_id": wave, "mac": CLONER1, "state": "done",
         "targets": [{"dev": "sda", "bytes_written": 100,
                      "bytes_total": 100, "state": "done"}],
     }
@@ -238,7 +270,7 @@ def test_done_report_is_idempotent_without_a_second_journal_row(server):
     conn = server["ctx"].conn
     before = conn.execute(
         "SELECT state, done, targets_json, updated_at FROM session_members"
-        " WHERE session_id = ? AND mac = ?", (ids["session"], ids["mac1"]),
+        " WHERE session_id = ? AND mac = ?", (wave, CLONER1),
     ).fetchone()
     journal_before = conn.execute(
         "SELECT COUNT(*) AS n FROM journal WHERE event = 'client_done'"
@@ -251,7 +283,7 @@ def test_done_report_is_idempotent_without_a_second_journal_row(server):
     ).json()["ok"]
     after = conn.execute(
         "SELECT state, done, targets_json, updated_at FROM session_members"
-        " WHERE session_id = ? AND mac = ?", (ids["session"], ids["mac1"]),
+        " WHERE session_id = ? AND mac = ?", (wave, CLONER1),
     ).fetchone()
     journal_after = conn.execute(
         "SELECT COUNT(*) AS n FROM journal WHERE event = 'client_done'"
@@ -261,24 +293,21 @@ def test_done_report_is_idempotent_without_a_second_journal_row(server):
 
 
 def test_done_then_immediate_reboot_does_not_receive_the_same_round(server):
-    ids = open_session(server, expected=1)
-    hello(server, ids["mac1"])
-    hello(server, ids["mac1"])
+    wave = running_room(server)
     report = {
-        "session_id": ids["session"], "mac": ids["mac1"], "state": "done",
+        "session_id": wave, "mac": CLONER1, "state": "done",
         "targets": [{"dev": "sda", "bytes_written": 100,
                      "bytes_total": 100, "state": "done"}],
     }
     assert server["anon"].post("/api/v1/agent/progress", json=report).json()["ok"]
-    reboot = hello(server, ids["mac1"])
+    reboot = cloner_hello(server["anon"], CLONER1, ["S1"])
     assert reboot["session"] is None and reboot["task"] is None
 
 
 def test_failed_target_reaches_the_journal(server):
-    ids = open_session(server, expected=2)
-    hello(server, ids["mac1"])
+    wave = running_room(server)
     report = {
-        "session_id": ids["session"], "mac": ids["mac1"], "state": "failed",
+        "session_id": wave, "mac": CLONER1, "state": "failed",
         "targets": [{"dev": "sda", "bytes_written": 4194304,
                      "bytes_total": 57982058496, "state": "failed",
                      "error": "I/O error at sector 8419328"}],
@@ -289,43 +318,46 @@ def test_failed_target_reaches_the_journal(server):
     assert failures and "I/O error" in failures[0]["text"]
     # התרגום: תווית בעברית, וה-MAC נפתר לשם + קבוצה.
     assert failures[0]["label"] == "כתיבה נכשלה במחשב"
-    assert "05" in failures[0]["text"] and "LAB1" in failures[0]["text"]
+    assert "shich-1" in failures[0]["text"] and "מחשבי שיכפול" in failures[0]["text"]
+    assert CLONER1 not in failures[0]["text"]
 
     members = server["admin"].get("/api/console/overview").json()["session"]["members"]
-    assert members[0]["state"] == "failed"
+    assert next(m for m in members if m["mac"] == CLONER1)["state"] == "failed"
 
 
 def test_the_console_shows_names_not_identifiers(server):
-    """מי שמסתכל על הקונסולה מחפש "LAB1-05", לא b4:2e:99:07:1a:c4."""
-    ids = open_session(server, expected=2)
-    hello(server, ids["mac1"])
+    """מי שמסתכל על הקונסולה מחפש את שם המחשב, לא aa:bb:cc:00:00:21.
+
+    (#3173: השם שנגזר מקידומת סבב הכיתה, "LAB1-05", הוא של סבב כיתה — v2.
+    בגל של חדר השיכפול אין שם כזה, והשם שנכתב לדיסק נבחר בסבב עצמו.)"""
+    open_room(server)
+    cloner_hello(server["anon"], CLONER1, ["S1"])
     view = server["admin"].get("/api/console/overview").json()["session"]
 
-    assert view["group_label"] == "כיתה LAB1"
+    assert view["group_label"] == "מחשבי שיכפול"
     assert view["image_name"] == "Office 2024 Standard"
     assert view["single"] is False
 
     member = view["members"][0]
-    assert member["name"] == "05"
-    assert member["hostname"] == "LAB1-05"       # השם שייכתב למחשב בסיום
-    assert member["mac"] == ids["mac1"]          # ה-MAC נשאר, לטכנאי
+    assert member["name"] == "shich-1"
+    assert member["mac"] == CLONER1              # ה-MAC נשאר, לטכנאי
 
 
 def test_a_one_machine_round_is_marked_as_a_single_station(server):
-    ids = open_session(server, expected=1)
-    hello(server, ids["mac1"])
+    open_room(server, target=1, drawers={CLONER1: ["S1"]})
+    cloner_hello(server["anon"], CLONER1, ["S1"])
     view = server["admin"].get("/api/console/overview").json()["session"]
     assert view["single"] is True
 
 
 def test_an_unregistered_member_falls_back_to_its_mac(server):
     """מכונה שנמחקה מהטבלה באמצע סבב לא מפילה את התצוגה."""
-    ids = open_session(server, expected=2)
-    hello(server, ids["mac1"])
-    server["admin"].delete(f"/api/console/machines/{ids['mac1']}")
+    open_room(server)
+    cloner_hello(server["anon"], CLONER1, ["S1"])
+    server["admin"].delete(f"/api/console/machines/{CLONER1}")
     member = server["admin"].get("/api/console/overview").json()["session"]["members"][0]
     assert member["name"] is None and member["hostname"] is None
-    assert member["mac"] == ids["mac1"]
+    assert member["mac"] == CLONER1
 
 
 def test_edit_machine_rejects_an_unknown_field(server):
@@ -384,8 +416,8 @@ def test_malformed_disks_do_not_crash_and_do_not_record_empty_inventory(server):
 
 
 def test_progress_from_a_nonmember_is_rejected(server):
-    ids = open_session(server)
-    report = {"session_id": ids["session"], "mac": "aa:aa:aa:aa:aa:aa",
+    wave = open_room(server)
+    report = {"session_id": wave, "mac": "aa:aa:aa:aa:aa:aa",
               "state": "writing", "targets": []}
     response = server["anon"].post("/api/v1/agent/progress", json=report)
     assert response.status_code == 400
@@ -393,42 +425,16 @@ def test_progress_from_a_nonmember_is_rejected(server):
 
 
 def test_manual_start_and_close(server):
-    ids = open_session(server, expected=30)
-    hello(server, ids["mac1"])
+    open_room(server)
+    cloner_hello(server["anon"], CLONER1, ["S1"])
+    assert server["deploy"].post("/api/console/room/start").status_code == 200
+    assert cloner_hello(server["anon"], CLONER1, ["S1"],
+                        joining=False)["session"]["state"] == "running"
     assert server["deploy"].post(
-        f"/api/console/sessions/{ids['session']}/start"
-    ).status_code == 200
-    assert hello(server, ids["mac1"])["session"]["state"] == "running"
-    assert server["deploy"].post(
-        f"/api/console/sessions/{ids['session']}/close",
+        "/api/console/room/close",
         json={"confirm_name": "Office 2024 Standard"},
     ).status_code == 200
-    assert hello(server, ids["mac1"])["session"] is None
-
-
-def test_manual_start_with_no_members_is_refused_and_round_stays_open(server):
-    """#843: "התחל" לפני שמישהו הצטרף אינו מתקבל בשקט.
-
-    `record_hello` מצרף רק לסבב `open`, ולכן סבב שהותחל עם 0 חברים
-    הוא גל שאיש אינו יכול להצטרף אליו: ה-sender ממתין 180ש', רושם
-    `send_failed`, והסבב נשאר `running` ריק. נמדד במעבדה 15/09
-    (`room_e6951214`/`ses_58f96d6d`). הגבול הוא ה-API — 409, הסבב
-    נשאר `open`, ו-hello שמגיע אחר כך עדיין מצטרף.
-    """
-    ids = open_session(server, expected=30)
-    response = server["deploy"].post(
-        f"/api/console/sessions/{ids['session']}/start"
-    )
-    assert response.status_code == 409, response.text
-    assert "אין מכונות בסבב" in response.json()["detail"]
-    answer = hello(server, ids["mac1"])
-    assert answer["session"]["id"] == ids["session"]
-    assert answer["session"]["state"] == "open"
-    # עכשיו יש חבר — אותה לחיצה מתקבלת.
-    assert server["deploy"].post(
-        f"/api/console/sessions/{ids['session']}/start"
-    ).status_code == 200
-    assert hello(server, ids["mac1"])["session"]["state"] == "running"
+    assert cloner_hello(server["anon"], CLONER1, ["S1"])["session"] is None
 
 
 # --- מניפסטים וקבצים ---------------------------------------------------------
@@ -456,10 +462,12 @@ def test_partition_files_are_whitelisted(server):
 
 
 def test_boot_menu_is_wired_to_the_resolver(server):
-    ids = open_session(server)
-    response = server["anon"].get(f"/boot/menu?mac={ids['mac1']}")
+    open_room(server)
+    response = server["anon"].get(f"/boot/menu?mac={CLONER1}")
     assert response.status_code == 200
-    assert "chain_local" in response.text
+    # מחשב שיכפול בסבב מקבל את ערך ה-ImageSrv בלבד, בלי `chain_local` (#320) —
+    # ה-MAC זוהה, אחרת התפריט היה ערך הדיסק המקומי בלבד.
+    assert "--id imagesrv" in response.text
     response.text.encode("ascii")                    # הפלט חייב להישאר ASCII
 
     # תפריט שואל — הוא לא מצרף לסבב. ההצטרפות היא רק ב-hello.
@@ -480,7 +488,7 @@ def test_extra_cmdline_reaches_the_boot_menu(tmp_path, images_root, clock):
     from server.app import create_app
 
     app = create_app(
-        tmp_path / "data", images_root, "http://10.44.12.10:8080",
+        tmp_path / "data", images_root, "http://10.44.12.10:7712",
         now_fn=clock,
         extra_cmdline=("console=ttyS0,115200", "imagesrv.debug=1"),
     )
@@ -736,7 +744,37 @@ def test_journal_filters_require_admin(server):
     assert server["deploy"].get("/api/console/journal/events").status_code == 403
 
 
-# --- עצירת סבב כיתה: תפקיד והקלדת שם (עיקרון 7, #581) ------------------------
+# --- פתיחת סבב כיתה: תפקיד (#592) ---------------------------------------------
+# #3173: עצירת סבב כיתה (#581) ו"התחל" בלי חברים (#843) היו כאן על נקודות הקצה
+# של סבב הכיתה (v2). התאומים על חדר השיכפול נמצאים ב-`test_server_room.py`.
+
+
+def test_a_role_that_is_not_on_the_list_cannot_open_a_class_round(server):
+    """הבקרה השלילית של #592 — פתיחת הסבב עצמה, לא רק start/close.
+
+    #581 סגר את ``start``/``close`` מאחורי ``round_operator``, אבל
+    ``POST /api/console/sessions`` — **פתיחת** הסבב מהקונסולה — נשארה
+    ``current_user`` בלבד: כל חשבון מחובר יכול היה לפתוח שידור חי
+    לכיתה. אותה סכימת-מחר כמו #581: ``auditor`` אינו ברשימה, והשאלה
+    אינה מי מורשה עכשיו אלא האם הקוד **שואל** על התפקיד.
+    """
+    from fastapi.testclient import TestClient                  # noqa: PLC0415
+    from test_station import add_user_with_role                # noqa: PLC0415
+
+    ids = setup_classroom(server, expected=30)
+    add_user_with_role(server, "auditor", "audit-pass-12", "auditor")
+    client = TestClient(server["app"])
+    assert client.post("/api/console/login", json={
+        "username": "auditor", "password": "audit-pass-12"}).status_code == 200
+
+    # קריאה מותרת — היא אינה הרסנית
+    assert client.get("/api/console/overview").status_code == 200
+
+    # פתיחת סבב היא פעולת מפעיל — auditor חייב לקבל 403, לא 200
+    assert client.post(
+        "/api/console/sessions",
+        json={"group_id": ids["group"], "image_id": "img_7f3a91",
+              "prefix": "LAB1", "expected_clients": 30}).status_code == 403
 
 
 def test_close_without_typing_the_image_name_does_not_stop_the_class_round(server):
@@ -824,31 +862,3 @@ def test_a_role_that_is_not_on_the_list_cannot_drive_a_class_round(server):
         f"/api/console/sessions/{ids['session']}/close",
         json={"confirm_name": "Office 2024 Standard"}).status_code == 403
     assert hello(server, ids["mac1"])["session"]["state"] == "open"
-
-
-def test_a_role_that_is_not_on_the_list_cannot_open_a_class_round(server):
-    """הבקרה השלילית של #592 — פתיחת הסבב עצמה, לא רק start/close.
-
-    #581 סגר את ``start``/``close`` מאחורי ``round_operator``, אבל
-    ``POST /api/console/sessions`` — **פתיחת** הסבב מהקונסולה — נשארה
-    ``current_user`` בלבד: כל חשבון מחובר יכול היה לפתוח שידור חי
-    לכיתה. אותה סכימת-מחר כמו #581: ``auditor`` אינו ברשימה, והשאלה
-    אינה מי מורשה עכשיו אלא האם הקוד **שואל** על התפקיד.
-    """
-    from fastapi.testclient import TestClient                  # noqa: PLC0415
-    from test_station import add_user_with_role                # noqa: PLC0415
-
-    ids = setup_classroom(server, expected=30)
-    add_user_with_role(server, "auditor", "audit-pass-12", "auditor")
-    client = TestClient(server["app"])
-    assert client.post("/api/console/login", json={
-        "username": "auditor", "password": "audit-pass-12"}).status_code == 200
-
-    # קריאה מותרת — היא אינה הרסנית
-    assert client.get("/api/console/overview").status_code == 200
-
-    # פתיחת סבב היא פעולת מפעיל — auditor חייב לקבל 403, לא 200
-    assert client.post(
-        "/api/console/sessions",
-        json={"group_id": ids["group"], "image_id": "img_7f3a91",
-              "prefix": "LAB1", "expected_clients": 30}).status_code == 403

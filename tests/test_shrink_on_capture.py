@@ -808,7 +808,7 @@ def test_a_non_ntfs_data_partition_is_named_when_the_image_still_does_not_fit(tm
                                 env={"CAPTURE_TARGET_BYTES": "128000000000"})
     reason = refusal_reason(box, run, out)
     assert "הפריסה גדולה מכונן היעד" in reason, reason
-    assert "מחיצה 4" in reason and "ext4" in reason and "NTFS בלבד" in reason, reason
+    assert "מחיצה 4" in reason and "ext4" in reason and "לא כווצה" in reason, reason
     assert f"{DATA_SECTORS * 512 / 1e9:.1f} GB" in reason, reason
     assert "אינה האחרונה" not in reason, "ההודעה הישנה של #929 — הכיווץ כבר אינו מוגבל לאחרונה"
     # C: כווצה על העותק שלה (המקור לא נכתב); D: לא נמדדה אפילו.

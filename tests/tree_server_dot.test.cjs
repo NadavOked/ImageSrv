@@ -67,7 +67,7 @@ test('Nadav 18/10: a connected secondary with "deploy network not set" is orange
 });
 
 test('Nadav 18/10: a server that was not measured is never green; one that does not answer is red; TA uses the same function', async () => {
-  const {t, dots, rows, ctx, rail} = setup({[TA]: {status: 200, body: [...OK, {id: 'udp_sender', label: 'משדר', state: 'bad', detail: 'לא נמצא'}]},
+  const {t, dots, rows, ctx, rail} = setup({[TA]: {status: 200, body: [...OK, {id: 'chunk_sender', label: 'משדר', state: 'bad', detail: 'לא נמצא'}]},
     [HAIFA]: {status: 502, body: {detail: 'חיפה לא ענה: timeout'}}});
   assert.equal(t.serverDotState(undefined).cls, 'unk', 'never measured: grey');
   assert.equal(t.serverDotState({checks: null, error: '403', down: false}).cls, 'unk', 'read failed: grey, "not read"');
@@ -91,7 +91,7 @@ test('Nadav 18/10: no new heavy polling -- a server measured within SERVER_DOT_T
   assert.match(source, /const SERVER_DOT_TTL = (\d+);/);
   const ttl = Number(source.match(/const SERVER_DOT_TTL = (\d+);/)[1]);
   assert.ok(ttl >= 30000 && ttl <= 60000, '30-60 seconds');
-  const load = cut('async function loadHealth()', 'if (current === "health") await loadHealthServices()');
+  const load = cut('async function loadHealth()', 'if (current === "home" || current === "health") renderCurrent();');   // ‏#3887: כרטיס השירותים ירד מהבריאות
   assert.match(load, /noteServerHealth\(SERVER_CTX \|\| "", HEALTH, null\)/, 'what the page already loaded is the dot\'s data');
   assert.match(load, /noteServerHealth\(SERVER_CTX \|\| "", null, e\)/);
 });

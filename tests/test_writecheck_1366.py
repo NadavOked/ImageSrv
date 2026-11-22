@@ -65,7 +65,7 @@ pytestmark = requires_native(
 
 # expand: diskfit calls _expand_candidate since #1354 (2b195230), as imagesrv-agent sources it.
 LIBS = ("common", "jsonq", "waits", "sysinfo", "diskinfo", "progress", "failmark", "verdict", "ntfsboot", "expand", "diskfit",
-        "bootcadb", "restore", "writeback", "drawers", "drawerfeed", "clonergui", "drawerselect", "writecheck")
+        "bootcadb", "restore", "writeback", "drawers", "clonergui", "drawerselect", "writecheck")
 
 SETUP = r'''
 set -eu
@@ -161,14 +161,14 @@ room)   # $@ = the selected ports (line numbers); every fixture disk is a drawer
     readback_drawers() { :; }   # #1805: the read-back has its own tests (test_readback_agent_1805.py)
     : > "$F/calls"
     # shellcheck disable=SC2086
-    run_restore_drawers multicast http://127.0.0.1:9 img "$F/m.json" $_disks; echo "RR $?"
+    run_restore_drawers chunk http://127.0.0.1:9 img "$F/m.json" $_disks; echo "RR $?"
     show good full err zero unsel
     ;;
 station)
     # the real apply_gpt always sets PLAN_ERROR first (expand.sh); run_restore reads it (77557596)
     apply_gpt() { PLAN_ERROR=""; echo "gpt $1" >> "$F/calls"; return 1; }; plan_gate() { :; }   # #2412
     : > "$F/calls"; target_init "$(k "$1")" 0
-    run_restore multicast "$(k "$1")" http://127.0.0.1:9 img "$F/m.json"; echo "RS $?"
+    run_restore unicast "$(k "$1")" http://127.0.0.1:9 img "$F/m.json"; echo "RS $?"
     show "$1"
     ;;
 esac

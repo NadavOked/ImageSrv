@@ -575,39 +575,22 @@ def test_one_machine_that_did_not_report_makes_the_whole_wave_unread_not_clean(c
 class FakeChunk:
     interface = "eth1"
 
-    def __init__(self, bps=0):
-        self.bps = bps
+    def __init__(self, bps=0, link=None):
+        self.bps, self._link = bps, link or {"speed_mbps": 1000}
 
     def sending_bps(self):
         if isinstance(self.bps, Exception):
             raise self.bps
         return self.bps
 
-
-class FakeSender:
-    interface = None
-
-    def __init__(self, status=None, link=None):
-        self._status, self._link = status, link or {"speed_mbps": 1000}
-
-    def status(self):
-        return self._status
-
     def link(self):
         return self._link
 
 
-def test_the_stream_rate_is_the_chunk_engines_then_udpcasts_and_a_question_that_failed_is_unknown(conn, monkeypatch):
-    sending = {"session_id": "W-1", "state": "sending"}
-    assert B._broadcast_bps(conn, FakeChunk(700 * MBPS), FakeSender()) == 700 * MBPS
-    assert B._broadcast_bps(conn, FakeChunk(0), FakeSender()) == 0
-    monkeypatch.setattr(B.drive_rates, "decision", lambda c, s: {"max_bitrate": "600m"})
-    assert B._broadcast_bps(conn, FakeChunk(0), FakeSender(sending)) == 600 * MBPS
-    assert B._broadcast_bps(conn, FakeChunk(0), FakeSender({**sending, "state": "starting"})) == 600 * MBPS
-    assert B._broadcast_bps(conn, FakeChunk(0), FakeSender({**sending, "state": "done"})) == 0
-    monkeypatch.setattr(B.drive_rates, "decision", lambda c, s: None)
-    assert B._broadcast_bps(conn, FakeChunk(0), FakeSender(sending)) is None, "running at an unknown rate is not 'no stream'"
-    assert B._broadcast_bps(conn, FakeChunk(RuntimeError("boom")), FakeSender()) is None
+def test_the_stream_rate_is_the_chunk_engines_and_a_question_that_failed_is_unknown():
+    assert B._broadcast_bps(FakeChunk(700 * MBPS)) == 700 * MBPS
+    assert B._broadcast_bps(FakeChunk(0)) == 0
+    assert B._broadcast_bps(FakeChunk(RuntimeError("boom"))) is None, "a question that failed is not 'no stream'"
 
 
 def test_the_production_budget_reads_the_engines_the_served_counter_and_the_setting(conn, tmp_path):
@@ -616,7 +599,7 @@ def test_the_production_budget_reads_the_engines_the_served_counter_and_the_sett
     (stats / "tx_bytes").write_text("0")
     (stats / "tx_dropped").write_text("0")
     served = Served()
-    budget = B.production(conn, served=served, chunk=FakeChunk(300 * MBPS), sender=FakeSender(),
+    budget = B.production(conn, served=served, chunk=FakeChunk(300 * MBPS),
                           sys_net=tmp_path, proc=tmp_path / "proc")
     first = budget.tick()
     assert first.broadcast_bps == 300 * MBPS and first.rate_bps == 600 * MBPS and budget.mode == B.SHADOW
@@ -641,7 +624,7 @@ def test_the_served_counter_adds_up_every_byte_and_never_goes_down_when_a_source
 
 def test_the_production_budget_sees_the_files_served_between_two_cycles(conn, tmp_path):
     served = Served()
-    budget = B.production(conn, served=served, chunk=FakeChunk(300 * MBPS), sender=FakeSender(),
+    budget = B.production(conn, served=served, chunk=FakeChunk(300 * MBPS),
                           sys_net=tmp_path, proc=tmp_path / "proc")
     budget.tick()
     served.note("10.0.0.5", 5_000_000)
@@ -652,7 +635,7 @@ def test_the_production_budget_sees_the_files_served_between_two_cycles(conn, tm
 
 def test_the_production_budget_cuts_when_the_receivers_of_a_running_wave_report_drops(conn, tmp_path):
     _running_wave(conn, {"aa": {"rcvbuf": 0, "inerrors": 0}, "bb": {"rcvbuf": 0, "inerrors": 0}})
-    budget = B.production(conn, served=Served(), chunk=FakeChunk(300 * MBPS), sender=FakeSender(),
+    budget = B.production(conn, served=Served(), chunk=FakeChunk(300 * MBPS),
                           sys_net=tmp_path, proc=tmp_path / "proc")
     assert budget.tick().action == B.HOLD, "the first cycle has no deltas: nothing measured"
     time.sleep(0.05)
@@ -667,7 +650,7 @@ def test_the_production_budget_cuts_on_drops_of_the_servers_own_card(conn, tmp_p
     stats.mkdir(parents=True)
     (stats / "tx_bytes").write_text("0")
     (stats / "tx_dropped").write_text("0")
-    budget = B.production(conn, served=Served(), chunk=FakeChunk(300 * MBPS), sender=FakeSender(),
+    budget = B.production(conn, served=Served(), chunk=FakeChunk(300 * MBPS),
                           sys_net=tmp_path, proc=tmp_path / "proc")
     budget.tick()
     time.sleep(0.05)

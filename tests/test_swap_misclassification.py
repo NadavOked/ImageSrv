@@ -122,7 +122,7 @@ def test_an_ntfs_partition_without_a_file_never_reaches_mkswap(tmp_path, row, sh
     box, run, prelude = build_box(tmp_path, plan=[row])
     live_nodes(box, 3)
     stub_mkswap(box)
-    out = sh(prelude + 'run_restore multicast sda http://s img m.json; echo "rc=$?"')
+    out = sh(prelude + 'run_restore unicast sda http://s img m.json; echo "rc=$?"')
 
     assert rc_of(out) == "rc=1", out
     assert state_of(run) == "failed"
@@ -183,7 +183,7 @@ def test_no_drawer_is_touched_when_the_plan_is_refused(tmp_path):
     prelude += ('apply_gpt() { PLAN_ERROR="למחיצה 3 (ntfs) אין קובץ והיא אינה swap'
                 ' — המניפסט פגום, הדיסק לא שונה"; return 1; }; ')
 
-    out = sh(prelude + "run_restore_drawers multicast http://s img m.json "
+    out = sh(prelude + "run_restore_drawers chunk http://s img m.json "
              'sda sdb sdc; echo "rc=$?"')
 
     assert out.strip().endswith("rc=1"), out

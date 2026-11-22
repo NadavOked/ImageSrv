@@ -55,7 +55,11 @@ chunk_feed_start() {   # $1 = server, $2 = image, $3 = file, $4 = index, $5 = th
               printf "url = \"%s\"\nrange = \"%s-%s\"\nfail\nspeed-limit = 1\nspeed-time = %s\nconnect-timeout = %s\n", \
                   url, from, $1 + $2 - 1, stall, conn
               made++; i++
-              if (i <= n) print "next" } }
+              if (i <= n) {
+                  print "next"
+                  if (ENVIRON["TLS_CONNECT"] != "")
+                      printf "cacert = \"%s\"\ncapath = \"%s\"\nconnect-to = \"%s\"\nproto-redir = \"=https\"\n", ENVIRON["TLS_CA"], ENVIRON["CURL_HOME"], ENVIRON["TLS_CONNECT"]
+              } } }
         END { exit made == n ? 0 : 1 }' - "$CHUNK_IDX" > "$CHUNK_DIR/feed.curl" \
         || { log "HTTP beside the stream: a range of the server's answer is not in the index (or not ascending) -- the stream alone"
              rm -f "$CHUNK_DIR/feed.chunks.new" "$CHUNK_DIR/feed.curl"; return 0; }

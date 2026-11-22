@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from server.agent.api import ServerContext
 from server.agent import registry
@@ -42,9 +43,12 @@ def register(router: APIRouter, ctx: ServerContext, admin_only) -> None:
     @router.post("/machines/{mac}/learning")
     async def machine_offer(mac: str, request: Request, user=Depends(admin_only)):
         body = await request.json()
-        _guard(tuning.answer_offer, ctx.conn, known(mac),
-               body.get("action") if isinstance(body, dict) else None, user[0])
-        return {"ok": True}
+
+        def work():
+            _guard(tuning.answer_offer, ctx.conn, known(mac),
+                   body.get("action") if isinstance(body, dict) else None, user[0])
+            return {"ok": True}
+        return await run_in_threadpool(work)   # #2750
 
     @router.get("/machines/{mac}/wiring")
     def machine_wiring(mac: str, user=Depends(admin_only)):

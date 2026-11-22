@@ -479,7 +479,7 @@ def _console(tmp_path: Path, images_root: Path, password_file):
     from server.app import create_app
     from server.console import users
 
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      health_hooks={"interfaces": lambda: []}, grub_password_file=password_file)
     conn = app.state.ctx.conn
     users.create(conn, "noc", "admin-pass-123", "admin", by="test", check_policy=False)

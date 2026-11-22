@@ -10,15 +10,11 @@ unicast (אין UDP — אין שורה).
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 
 import pytest
 
 from test_agent import AGENT, BASH, posix, sh
-from test_drawer_progress import COUNTING_FANOUT
-from test_timeouts import make_stubs, run_sh
-from agentlib import agent_sources
 
 pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required")
 
@@ -57,53 +53,5 @@ def test_not_read_is_not_zero(tmp_path, content):
     assert drops(tmp_path) == ("", 1)
 
 
-def _stream(tmp_path: Path, mode: str, before: str | None, after: str | None) -> str:
-    """מחיצה אחת לשתי מגירות במסלול המגירות האמיתי; stream_source מזויף
-    מחליף את /proc/net/snmp באמצע הזרם — כאילו הקרנל זרק בזמן הזרם."""
-    box = tmp_path / "box"
-    run = box / "run"
-    sysroot = box / "root"
-    payload = box / "part.bin"
-    (sysroot / "proc/net").mkdir(parents=True)
-    run.mkdir(parents=True)
-    payload.write_bytes(b"imagesrv" * 8192)
-    sha = hashlib.sha256(payload.read_bytes()).hexdigest()
-    snmp_file = sysroot / "proc/net/snmp"
-    if before is not None:
-        snmp_file.write_text(before, newline="\n")
-    later = box / "snmp.after"
-    if after is not None:
-        later.write_text(after, newline="\n")
-    swap = (f"cp {posix(later)!r} {posix(snmp_file)!r}; " if after is not None
-            else f"rm -f {posix(snmp_file)!r}; ")
-    for dev in ("sda", "sdb"):
-        (run / "targets" / dev).mkdir(parents=True)
-    run_sh(
-        make_stubs(box / "stubs", {"fanout": COUNTING_FANOUT})
-        + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} SYSROOT={posix(sysroot)!r} "
-        "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 "
-        "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
-        + "target_init sda 131072; target_init sdb 131072; "
-        f"stream_source() {{ {swap}cat {posix(payload)!r}; }}; "
-        f"restore_partition_drawers {mode} http://s img 3 dd part.zst "
-        f"{sha} '' sda sdb > {posix(box)}/pipe.out 2>&1; "
-        'echo "rc=$?"'
-    )
-    return (run / "agent.log").read_text(encoding="utf-8")
-
-
-def test_a_multicast_stream_logs_what_this_machine_dropped(tmp_path):
-    log = _stream(tmp_path, "multicast", snmp(100, 110), snmp(137, 150))
-    assert "partition 3: udp drops on this machine rcvbuf=37 inerrors=40" in log, log
-
-
-def test_counters_that_vanish_mid_stream_say_not_read(tmp_path):
-    log = _stream(tmp_path, "multicast", snmp(100, 110), None)
-    assert "partition 3: udp drops not read" in log, log
-    assert "rcvbuf=" not in log, log
-
-
-def test_unicast_has_no_udp_line(tmp_path):
-    log = _stream(tmp_path, "unicast", snmp(100, 110), snmp(137, 150))
-    assert "udp drops" not in log, log
+# #3173: the per-partition line of the old receiver's room left with it; a chunk pass's own drops are
+# chunkloss.sh's (test_chunk_loss_3064.py), read through the same udp_drops above.

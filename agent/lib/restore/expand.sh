@@ -131,7 +131,7 @@ apply_gpt() {
     # The table never travels in the stream: it is derived from the manifest, the GPT backup is pushed to the real end of the disk.
     # #3262: a disk admitted by tailshrink.sh gets the manifest with its last partition cut (and the RAM node opened).
     if command -v tail_shrink_prepare > /dev/null 2>&1; then tail_shrink_prepare "$1" "$2" || return 1; set -- "$1" "${TS_MANIFEST:-$2}"; fi
-    plan_preflight "$1" "$2" || return 1
+    plan_preflight "$1" "$2" || { [ ! -f "$RUN_DIR/targets/$1/write_started" ] || { log "$1: the plan check failed a second time, after the write started: ${PLAN_ERROR:-no reason}"; PLAN_ERROR="הדיסק הפסיק לענות אחרי בדיקת הכתיבה — כבר נכתב עליו, והתוכנית לא נבדקה עד הסוף (הסיבה ביומן הסוכן)"; }; return 1; }   # #2647: write_started = the write check wrote it; "not changed" would lie
     target_write_started "$1" || { PLAN_ERROR="לא הצלחנו לתעד את זהות היעד לפני הכתיבה"; return 1; }
     # ‏#1545: על טבלה ישנה פגומה --zap-all מוחק ויוצא 2 (gptcl.cc); השני רץ על דיסק נקי וחייב 0
     sgdisk --zap-all "$DEVROOT/$1" >> "$LOG_FILE" 2>&1 || { log "$1: zap-all exited non-zero (damaged old table?) -- again on the wiped disk"; sgdisk --zap-all "$DEVROOT/$1" >> "$LOG_FILE" 2>&1; } || return 1

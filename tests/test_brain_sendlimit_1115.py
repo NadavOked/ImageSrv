@@ -414,13 +414,13 @@ def test_unit_note_wave_is_one_row_and_never_raises(conn):
 
 def test_unit_note_netloss_states_and_a_state_nobody_knows(conn):
     from server.brain import sendlimit as L
-    base = {"kind": "udpcast", "interface": "eth1", "drawers": 2, "rate": "400m", "loss": 0.02, "baseline": 0.002,
+    base = {"kind": "chunk", "interface": "eth1", "drawers": 2, "rate": "400m", "loss": 2.0, "baseline": 0.2,
             "waves": 3, "local": None}
     assert L.note_netloss(conn, "s1", {**base, "state": "jump"}) is not None
     assert L.note_netloss(conn, "s2", {**base, "state": "weird"}) is not None
     assert L.note_netloss(conn, "s3", "not a dict") is None
     rows = {r["round_id"]: r for r in _rows(conn, "NET_LOSS")}
-    assert rows["s1"]["verdict"] == "JUMP" and "2.00%" in rows["s1"]["reason"] and "0.20%" in rows["s1"]["reason"]
+    assert rows["s1"]["verdict"] == "JUMP" and "2.00/GB" in rows["s1"]["reason"] and "0.20/GB" in rows["s1"]["reason"]
     assert rows["s2"]["verdict"] == "NOT_MEASURED" and "לא מוכר" in rows["s2"]["reason"]
 
 

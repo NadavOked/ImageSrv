@@ -263,7 +263,7 @@ def _hello_with_monitor_lib(fake_machine) -> dict:
 def test_hello_carries_a_boot_monitor_secret_that_is_stable_per_boot(fake_machine):
     """32 ספרות hex, מוגרלות פעם אחת ל-RUN_DIR (= לאתחול): שני hello
     באותו אתחול נושאים את אותו סוד, והקובץ שהמוניטור יקרא מכיל בדיוק
-    אותו. זה הסוד שהפרוקסי יחשב ממנו HMAC ל-challenge של 5900."""
+    אותו. זה הסוד שהפרוקסי יחשב ממנו HMAC ל-challenge של 7710."""
     first = _hello_with_monitor_lib(fake_machine)
     assert SECRET_HEX.match(first["monitor_secret"]), first["monitor_secret"]
     assert first["monitor_auth"] == "hmac"
@@ -511,7 +511,7 @@ def test_cmdline_reads_only_server_and_mode(tmp_path):
     שני, לא מתועד — בדיוק מה שהמחולל נבדק עליו מהצד השני."""
     cmdline = tmp_path / "cmdline"
     cmdline.write_text(
-        "quiet imagesrv.server=10.0.0.1:8080 imagesrv.mode=recovery "
+        "quiet imagesrv.server=10.0.0.1:7712 imagesrv.mode=recovery "
         "imagesrv.image_id=img_7f3a91 imagesrv.session=ses_a91f\n"
     )
     run = tmp_path / "run"
@@ -523,7 +523,7 @@ def test_cmdline_reads_only_server_and_mode(tmp_path):
         f'set | grep "^IMAGESRV_" || true'
     )
     first, vars_dump = out.split("\n", 1)
-    assert first == "10.0.0.1:8080|recovery"
+    assert first == "10.0.0.1:7712|recovery"
     # שום משתנה עם פרטי המשימה לא נוצר.
     assert "img_7f3a91" not in vars_dump
     assert "ses_a91f" not in vars_dump
@@ -534,7 +534,7 @@ def test_debug_flag_is_an_unknown_parameter(tmp_path):
     אותה בעריכת GRUB ליד המחשב מקבל את מה שמקבל כל פרמטר imagesrv לא
     מוכר — אזהרה ביומן, ושום משתנה סביבה שקוד כלשהו יכול להישען עליו."""
     cmdline = tmp_path / "cmdline"
-    cmdline.write_text("quiet imagesrv.server=10.0.0.1:8080 imagesrv.debug=1\n")
+    cmdline.write_text("quiet imagesrv.server=10.0.0.1:7712 imagesrv.debug=1\n")
     run = tmp_path / "run"
     run.mkdir()
     out = sh(
@@ -735,7 +735,7 @@ def test_the_gui_sign_in_leaves_no_password_on_tmpfs(tmp_path):
     )
     out = sh(
         f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
-        f'export RUN_DIR={posix(run)!r} SERVER="http://10.44.12.10:8080" '
+        f'export RUN_DIR={posix(run)!r} SERVER="http://10.44.12.10:7712" '
         f'HTTP_TIMEOUT=1 HTTP_RETRIES=0 '
         f'RECOVERY_USER="labtech" RECOVERY_PASS="s3cret-in-the-classroom"; '
         f'chmod 0755 {posix(stub_dir)}/curl; '
@@ -1586,7 +1586,7 @@ def swap_box(tmp_path, disks=("sda",)):
     """קופסה עם mkswap מזויף שמתעד כל קריאה, ומגירות במצב writing.
 
     mkswap נכשל על התקן שרשום ב-box/fail — ככה נבדק שכשל במגירה אחת
-    לא גורר את השאר. שאר הכלים (fanout, udp-receiver, partclone) *לא*
+    לא גורר את השאר. שאר הכלים (fanout, chunkcast, partclone) *לא*
     מזויפים בכוונה: אם מסלול ה-swap ינסה בכל זאת להזרים, זה ייפול כאן."""
     box = tmp_path / "box"
     stub_dir = box / "stubs"
@@ -1613,7 +1613,7 @@ def swap_box(tmp_path, disks=("sda",)):
         f'export PATH="$(cd {posix(stub_dir)!r} && pwd):$PATH"; '
         f'export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev; '
         f'export MKSWAP_BIN={posix(stub_dir / "mkswap")!r}; '   # #2818: make_swap calls it by path
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + "log() { :; }; "
         # /dev/sdaN אינו קיים כאן, ומסלול ה-swap עובר באותה בדיקת התקן
         # של כל כתיבה (#51). היא נבדקת בנפרד ב-test_restore_evidence.py.
@@ -1635,7 +1635,7 @@ def test_a_swap_with_a_uuid_in_the_manifest_gets_it_back(tmp_path):
     """#48: /etc/fstab של מתקין דביאן מפנה לשורת ה-swap ב-`UUID=`. בלי
     -U כל שחזור חותם UUID חדש, ו-swapon --show חוזר ריק במערכת שעלתה."""
     _box, _run, calls, prelude = swap_box(tmp_path)
-    out = sh(prelude + "restore_partition multicast http://s img sda 3 swap "
+    out = sh(prelude + "restore_partition unicast http://s img sda 3 swap "
              f'null null "{SWAP_UUID}"; echo "rc=$?"')
     assert out.strip() == "rc=0"
     assert mkswap_calls(calls) == [f"-U {SWAP_UUID} {test_dev(tmp_path)}/sda3"]
@@ -1646,7 +1646,7 @@ def test_an_old_manifest_without_a_uuid_falls_back_to_a_plain_mkswap(tmp_path, u
     """נפילה אחורה (עיקרון 1): מניפסט שנקלט לפני #48 אין בו שדה, ו-jq
     מחזיר מחרוזת ריקה. זה לא כשל — זו בדיוק ההתנהגות הקודמת."""
     _box, _run, calls, prelude = swap_box(tmp_path)
-    out = sh(prelude + "restore_partition multicast http://s img sda 3 swap "
+    out = sh(prelude + "restore_partition unicast http://s img sda 3 swap "
              f'null null "{uuid}"; echo "rc=$?"')
     assert out.strip() == "rc=0"
     assert mkswap_calls(calls) == [f"{test_dev(tmp_path)}/sda3"]
@@ -1657,7 +1657,7 @@ def test_every_drawer_gets_exactly_one_mkswap_and_nothing_is_streamed(tmp_path):
     file=null — זרם ריק ואי-התאמת sha256. עכשיו כל מגירה בוראת אותה
     בעצמה, פעם אחת בדיוק, ואף fifo לא נפתח."""
     _box, run, calls, prelude = swap_box(tmp_path, disks=("sda", "sdb"))
-    out = sh(prelude + "restore_partition_drawers multicast http://s img 3 swap "
+    out = sh(prelude + "restore_partition_drawers chunk http://s img 3 swap "
              f'null null "{SWAP_UUID}" sda sdb; echo "rc=$?"')
     assert out.strip() == "rc=0"
     assert mkswap_calls(calls) == [
@@ -1672,7 +1672,7 @@ def test_a_drawer_that_cannot_make_swap_does_not_stop_the_others(tmp_path):
     """תרחיש QA: כשל במגירה אחת לא עוצר את השאר — גם על ה-swap."""
     box, run, calls, prelude = swap_box(tmp_path, disks=("sda", "sdb"))
     (box / "fail").write_text(f"{test_dev(tmp_path)}/sda3\n", newline="\n")
-    out = sh(prelude + "restore_partition_drawers multicast http://s img 3 swap "
+    out = sh(prelude + "restore_partition_drawers chunk http://s img 3 swap "
              f'null null "{SWAP_UUID}" sda sdb; echo "rc=$?"')
     assert out.strip() == "rc=0"
     assert state_of(run, "sda") == "failed"
@@ -1711,16 +1711,6 @@ def test_the_capture_reads_the_filesystem_uuid_not_the_gpt_guid(tmp_path):
     )
     assert out.strip() == SWAP_UUID
     assert calls.read_text().strip() == "-o value -s UUID /dev/sda3"
-
-
-def test_the_agent_writes_the_name_after_a_restore():
-    """הקישור עצמו: אחרי שחזור מוצלח נקראת כתיבת השם, לפני האתחול."""
-    source = (AGENT / "imagesrv-agent").read_text(encoding="utf-8")
-    assert "name_this_machine" in source
-    restore_at = source.index('run_restore "multicast"')
-    naming_at = source.index("name_this_machine \"$_disk\"")
-    reboot_at = source.index("sync; reboot -f", restore_at)
-    assert restore_at < naming_at < reboot_at
 
 
 def test_every_lib_file_is_loaded_and_packed():
@@ -1778,10 +1768,7 @@ def builder_binaries() -> set[str]:
 REAL_BINARIES_USED = {
     "curl", "jq", "zstd", "pv", "sgdisk", "blockdev", "sha256sum", "od",
     "hdparm", "ntfsresize", "ntfs-3g", "ntfs-3g.probe", "ntfsfix", "umount",
-    "blkid", "df", "mount", "udp-receiver",
-    # #715 — מחשב הבנייה משדר מהדיסק שלו ישירות למחשבי השיכפול
-    # (directsend.sh); אותה חבילה (udpcast) כמו udp-receiver.
-    "udp-sender",
+    "blkid", "df", "mount",
     "e2fsck", "resize2fs", "btrfs",
     # #667 — XFS grow on RHEL/Fedora golden images (mounted, xfs_growfs).
     "xfs_growfs",
@@ -1860,7 +1847,7 @@ def _fanout_buffer_for(tmp_path, mem_available_kb, drawers):
     )
     out = sh(
         f"export SYSROOT={posix(root)!r}; "
-        + agent_sources("common", "sysinfo", "diskinfo", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "writeback", "drawers", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
         + f"_fanout_buffer {drawers}"
     )
     return int(out.strip())
@@ -1988,7 +1975,7 @@ def _monitor_spawn_args(tmp_path, role=None, flag="1", ip="10.0.0.9",
     script = (
         'OUT=' + repr(posix(out)) + '; '
         f'export IMAGESRV_MONITOR={flag}; '
-        'export IMAGESRV_SERVER=http://10.0.0.1:8080; '
+        'export IMAGESRV_SERVER=http://10.0.0.1:7712; '
         'export RUN_DIR=' + repr(posix(run)) + '; '
         'export IP=' + ip + '; export MONITOR_BIN=/bin/sh; export FB_DEV=/dev/null; '
         # #1475: no GUI mirror here -- serve fb0 at once instead of waiting.
@@ -2019,8 +2006,8 @@ def test_monitor_enables_input_on_the_build_machine(tmp_path):
 
 
 def test_monitor_never_starts_on_a_classroom_machine(tmp_path):
-    """כיתה: המוניטור **לא עולה בכלל**, גם כשהדגל דלוק — 5900 לא נפתח על
-    מחשב תלמיד. זה השומר של 'כיתה בלי 5900' בצד הסוכן: השרת מסרב לפרוקסי
+    """כיתה: המוניטור **לא עולה בכלל**, גם כשהדגל דלוק — 7710 לא נפתח על
+    מחשב תלמיד. זה השומר של 'כיתה בלי 7710' בצד הסוכן: השרת מסרב לפרוקסי
     וה-FW הוא השכבה התפעולית, אך הסוכן כלל אינו פותח את הפורט מלכתחילה."""
     assert _monitor_spawn_args(tmp_path, role="classroom", flag="1") is None
 
@@ -2032,7 +2019,7 @@ def test_monitor_stays_off_without_the_boot_flag(tmp_path):
 
 def test_monitor_gets_the_boot_secret_file(tmp_path):
     """#839: המוניטור מקבל את קובץ הסוד — בלעדיו אין לו במה לאמת את
-    הפרוקסי, ו-5900 היה נפתח לכל הווילן."""
+    הפרוקסי, ו-7710 היה נפתח לכל הווילן."""
     args = _monitor_spawn_args(tmp_path, role="cloner").split()
     assert "--secret-file" in args, args
     path = args[args.index("--secret-file") + 1]
@@ -2040,7 +2027,7 @@ def test_monitor_gets_the_boot_secret_file(tmp_path):
 
 
 def test_monitor_gets_allow_from_the_server_ip(tmp_path):
-    """#1077: peer-check — רק IP השרת מ-imagesrv.server. בלי זה 5900
+    """#1077: peer-check — רק IP השרת מ-imagesrv.server. בלי זה 7710
     היה פתוח לכל הווילן גם עם HMAC."""
     args = _monitor_spawn_args(tmp_path, role="cloner").split()
     assert "--allow-from" in args, args
@@ -2054,7 +2041,7 @@ def test_monitor_does_not_start_without_a_boot_secret(tmp_path):
 
 
 def test_monitor_does_not_start_without_a_server_ip(tmp_path):
-    """בלי imagesrv.server אין למי להגביל את 5900 — לא עולים.
+    """בלי imagesrv.server אין למי להגביל את 7710 — לא עולים.
 
     MONITOR_MIRROR_WAIT_S=0 כמו ב-`_monitor_spawn_args` (#1475): בלעדיו,
     מוניטור שעולה בטעות ממתין קודם למראת ה-GUI, וה-`assert` רץ לפני ה-spawn

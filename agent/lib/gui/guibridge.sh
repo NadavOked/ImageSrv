@@ -69,6 +69,7 @@ gui_dispatch() {
         end-hold) case "$(cut -d'|' -f2 "$RUN_DIR/end.poweroff" 2>/dev/null)" in partial|failed) : > "$RUN_DIR/end.hold" ;; *) return 1 ;; esac ;;   # #1560: read the results
         logout) rm -f "$CONSOLE_JAR" "$RUN_DIR/console_login.json"; return $? ;;   # GUI sign-out ends the session here too
         boot-*|lc-*) [ "${GUI_SCREEN:-}" = cloner ] || return 1; lc_gui_dispatch; return $? ;;   # #1322, lcgui.sh
+        tool-list|"tool-run|"*) if [ "${GUI_SCREEN:-}" = cloner ]; then if [ "$token" = tool-list ]; then tools_gui_list; else tools_gui_run "$token"; fi; return $?; fi ;;   # #2804: the cloner and the stick sign nobody in (mockup 14: "כלים F3" there too); the build machine's below, after gui_role
         "drawer-cancel|"*) [ "${GUI_SCREEN:-}" = cloner ] || return 1; cancel_request "${token#*|}" "ממסך מחשב השיכפול"; [ $? -ne 1 ]; return $? ;;   # #1386: no sign-in, like SMART; 2 (asked) is not a handoff
         touch)
             # #434: a key press in the GUI -- the idle clock's activity, and

@@ -23,14 +23,14 @@ LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 . "$LIB_DIR/pull.sh"; . "$LIB_DIR/opengate.sh"   # אחרי progress.sh: pull_close קורא ל-report_final (#562); #2657: the open-round gate sends a report
 . "$LIB_DIR/expand.sh"; . "$LIB_DIR/grow.sh"; . "$LIB_DIR/ntfsunhib.sh"; . "$LIB_DIR/expandshare.sh"; . "$LIB_DIR/writemark.sh"   # ההרחבה: לפני הזרם ואחריו (#478); diskfit calls _expand_candidate (#1354); #1798 the mark
 . "$LIB_DIR/bootcadb.sh"; . "$LIB_DIR/discard.sh"; . "$LIB_DIR/restore.sh"; . "$LIB_DIR/streamid.sh"; . "$LIB_DIR/rcvbuf.sh"; . "$LIB_DIR/diskfit.sh"; . "$LIB_DIR/tailshrink.sh"; . "$LIB_DIR/writecheck.sh"; . "$LIB_DIR/idlecheck.sh"; . "$LIB_DIR/idlerecover.sh"; . "$LIB_DIR/idlelong.sh"; . "$LIB_DIR/idlebrain.sh"; . "$LIB_DIR/idlegate.sh"; . "$LIB_DIR/writeback.sh"   # #672/#1217/#1366/#1969: restore preflights; #1826 session_stream; #1841 early EIO
-. "$LIB_DIR/drawers.sh"; . "$LIB_DIR/drawerfeed.sh"; . "$LIB_DIR/verdict.sh"; . "$LIB_DIR/stall.sh"; . "$LIB_DIR/cancel.sh"; . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/targetwwn.sh"; . "$LIB_DIR/slotnames.sh"; . "$LIB_DIR/ntfsboot.sh"; . "$LIB_DIR/readback.sh"; . "$LIB_DIR/rbprog.sh"; . "$LIB_DIR/readbacklc.sh"; . "$LIB_DIR/readbackinline.sh"; . "$LIB_DIR/chunkgate.sh"; . "$LIB_DIR/chunkrc.sh"; . "$LIB_DIR/chunkb3.sh"; . "$LIB_DIR/chunkrecv.sh"; . "$LIB_DIR/chunkprog.sh"; . "$LIB_DIR/chunkfetch.sh"; . "$LIB_DIR/chunksingle.sh"; . "$LIB_DIR/chunkfeed.sh"; . "$LIB_DIR/chunkwatch.sh"; . "$LIB_DIR/chunkstall.sh"; . "$LIB_DIR/drawerback.sh"; . "$LIB_DIR/neighborfill.sh"; . "$LIB_DIR/peerfill.sh"; . "$LIB_DIR/peerwire.sh"; . "$LIB_DIR/drawerhold.sh"; . "$LIB_DIR/chunkloss.sh"; . "$LIB_DIR/chunkhold.sh"; . "$LIB_DIR/wavesense.sh"; . "$LIB_DIR/roundnote.sh"   # #2533 the chunk engine (#3332: its BLAKE3 list, chunkb3.sh; #3336: a drawer that stands still is said in seconds, chunkstall.sh; #3064: what its receiver lost, chunkloss.sh; #3181: a drawer filled from its neighbours, neighborfill.sh; B29: from a neighbour cloner, peerfill.sh, and its place in the flow, peerwire.sh; #3140: the last drawer pulled, drawerhold.sh; #2023: the server holds a completing drawer, chunkhold.sh); #1805 read-back after the write; (#704 slot names; #1487 NTFS backup boot) הזרם, הפסק עליו (#520), והראיה על כשל (#874)
+. "$LIB_DIR/drawers.sh"; . "$LIB_DIR/verdict.sh"; . "$LIB_DIR/stall.sh"; . "$LIB_DIR/cancel.sh"; . "$LIB_DIR/failmark.sh"; . "$LIB_DIR/targetwwn.sh"; . "$LIB_DIR/slotnames.sh"; . "$LIB_DIR/ntfsboot.sh"; . "$LIB_DIR/readback.sh"; . "$LIB_DIR/rbprog.sh"; . "$LIB_DIR/readbacklc.sh"; . "$LIB_DIR/readbackinline.sh"; . "$LIB_DIR/chunkgate.sh"; . "$LIB_DIR/chunkrc.sh"; . "$LIB_DIR/chunkb3.sh"; . "$LIB_DIR/chunkrecv.sh"; . "$LIB_DIR/chunkprog.sh"; . "$LIB_DIR/chunkfetch.sh"; . "$LIB_DIR/chunksingle.sh"; . "$LIB_DIR/chunkfeed.sh"; . "$LIB_DIR/chunkwatch.sh"; . "$LIB_DIR/chunkstall.sh"; . "$LIB_DIR/drawerback.sh"; . "$LIB_DIR/neighborfill.sh"; . "$LIB_DIR/peerfill.sh"; . "$LIB_DIR/peerwire.sh"; . "$LIB_DIR/drawerhold.sh"; . "$LIB_DIR/chunkloss.sh"; . "$LIB_DIR/chunkhold.sh"; . "$LIB_DIR/wavesense.sh"; . "$LIB_DIR/roundnote.sh"   # #2533 the chunk engine (#3332: its BLAKE3 list, chunkb3.sh; #3336: a drawer that stands still is said in seconds, chunkstall.sh; #3064: what its receiver lost, chunkloss.sh; #3181: a drawer filled from its neighbours, neighborfill.sh; B29: from a neighbour cloner, peerfill.sh, and its place in the flow, peerwire.sh; #3140: the last drawer pulled, drawerhold.sh; #2023: the server holds a completing drawer, chunkhold.sh); #1805 read-back after the write; (#704 slot names; #1487 NTFS backup boot) הזרם, הפסק עליו (#520), והראיה על כשל (#874)
 . "$LIB_DIR/manifest.sh"
 . "$LIB_DIR/drawerplug.sh"; . "$LIB_DIR/drawerfill.sh"; . "$LIB_DIR/prodline.sh"; . "$LIB_DIR/drawerout.sh"; . "$LIB_DIR/fillword.sh"; . "$LIB_DIR/linewait.sh"; . "$LIB_DIR/resume.sh"   # #2528: a cloner back from a power cut goes on (resume.sh); #3181: a drawer pushed back in is found at the kernel's word, takes the pass on the air, and completes from a neighbour, then HTTP
-. "$LIB_DIR/bootca.sh"; . "$LIB_DIR/hibernation.sh"; . "$LIB_DIR/shrinkplan.sh"; . "$LIB_DIR/shrink.sh"; . "$LIB_DIR/shrinkmem.sh"; . "$LIB_DIR/shrinkoffer.sh"   # לפני capture.sh: capture_disk קורא להם (#85, #651, #87, #926, #929)
-. "$LIB_DIR/capturedetail.sh"; . "$LIB_DIR/capturegate.sh"; . "$LIB_DIR/captureview.sh"; . "$LIB_DIR/capture.sh"; . "$LIB_DIR/capturesink.sh"; . "$LIB_DIR/directsend.sh"; . "$LIB_DIR/directchunk.sh"; . "$LIB_DIR/directserve.sh"; . "$LIB_DIR/directrecv.sh"   # #2213: the capture's RAM views; #1952: direct_finished; #715: pass 1 is capture_disk
+. "$LIB_DIR/bootca.sh"; . "$LIB_DIR/hibernation.sh"; . "$LIB_DIR/shrinkext4.sh"; . "$LIB_DIR/shrinkbtrfs.sh"; . "$LIB_DIR/shrinkplan.sh"; . "$LIB_DIR/shrink.sh"; . "$LIB_DIR/shrinkmem.sh"; . "$LIB_DIR/shrinkoffer.sh"   # לפני capture.sh: capture_disk קורא להם (#85, #651, #87, #926, #929)
+. "$LIB_DIR/capturedetail.sh"; . "$LIB_DIR/capturegate.sh"; . "$LIB_DIR/captureview.sh"; . "$LIB_DIR/capture.sh"; . "$LIB_DIR/capturesink.sh"; . "$LIB_DIR/directsend.sh"; . "$LIB_DIR/directchunk.sh"; . "$LIB_DIR/directserve.sh"   # #2213: the capture's RAM views; #1952: direct_finished; #715: pass 1 is capture_disk
 . "$LIB_DIR/hostname.sh"; . "$LIB_DIR/unattend.sh"; . "$LIB_DIR/hostname_linux.sh"; . "$LIB_DIR/drawernames.sh"; . "$LIB_DIR/bootentry.sh"; . "$LIB_DIR/bootorphans.sh"; . "$LIB_DIR/bootstorage.sh"; . "$LIB_DIR/linuxdrivers.sh"; . "$LIB_DIR/postdeploy.sh"   # #720: driver staging, after the name; #2786: a drawer's name; #433: Boot#### before it; #1331: boot-start storage + Linux initramfs check
 . "$LIB_DIR/sitehooks.sh"   # #1266: a site/lab overlay's start hooks; the product ships none
-. "$LIB_DIR/watchdog.sh"; . "$LIB_DIR/monitor.sh"; . "$LIB_DIR/installer_boot.sh"   # #690: RFB, role+flag gated; #1190: init-only (inert here, load gate #84)
+. "$LIB_DIR/watchdog.sh"; . "$LIB_DIR/ports.sh"; . "$LIB_DIR/monitor.sh"; . "$LIB_DIR/installer_boot.sh"   # #690: RFB, role+flag gated; #1190: init-only (inert here, load gate #84)
 . "$LIB_DIR/ui.sh"; . "$LIB_DIR/failscreen.sh"   # #1569: the one failure screen behind ui_error_hold and die_local
 . "$LIB_DIR/attended.sh"; . "$LIB_DIR/smart.sh"; . "$LIB_DIR/smartjudge.sh"; . "$LIB_DIR/hwissues.sh"; . "$LIB_DIR/f1mark.sh"; . "$LIB_DIR/smartattrs.sh"; . "$LIB_DIR/smarttable.sh"; . "$LIB_DIR/diskrule.sh"; . "$LIB_DIR/smartgate.sh"; . "$LIB_DIR/smartselftest.sh"; . "$LIB_DIR/crcdelta.sh"   # #652/#872/#1970 SMART paths; #1859: smarttable.sh runs in the kiosk, here for the load gate; #3666: so does diskrule.sh (the one disk table, for the machine with no server)
 . "$LIB_DIR/single_restore.sh"; . "$LIB_DIR/srgui.sh"   # #706: the write behind the GUI restore screen; its progress on the GUI
@@ -48,19 +48,15 @@ LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 . "$LIB_DIR/sensecore.sh"; . "$LIB_DIR/hostsense.sh"; . "$LIB_DIR/linksense.sh"; . "$LIB_DIR/disksense.sh"; . "$LIB_DIR/rxsense.sh"   # #3064: the brain's senses (the machine, the SATA link, the disk, the receiver) -- joined into the progress report
 . "$LIB_DIR/cpufreq.sh"; . "$LIB_DIR/satalpm.sh"   # #1441: called from init; sourced here for the load gate; #1827: SATA LPM
 . "$LIB_DIR/powerbtn.sh"; . "$LIB_DIR/interrupt.sh"; . "$LIB_DIR/ask.sh"   # #1918: the power button (power_watch, started below); #2528: the round's question; #3654: the brain's questions to the user
-. "$LIB_DIR/guistate.sh"; . "$LIB_DIR/tools.sh"; . "$LIB_DIR/toolbins.sh"; . "$LIB_DIR/tools_disk.sh"; . "$LIB_DIR/tools_windows.sh"; . "$LIB_DIR/tools_boot.sh"; . "$LIB_DIR/tools_hw.sh"; . "$LIB_DIR/tools_erase.sh"; . "$LIB_DIR/tools_recover.sh"   # #649/#1050/#1104: toolbox (run in the kiosk; here for the load gate)
+. "$LIB_DIR/guistate.sh"; . "$LIB_DIR/tools.sh"; . "$LIB_DIR/toolbins.sh"; . "$LIB_DIR/tools_disk.sh"; . "$LIB_DIR/tools_windows.sh"; . "$LIB_DIR/tools_boot.sh"; . "$LIB_DIR/tools_hw.sh"; . "$LIB_DIR/tools_erase.sh"; . "$LIB_DIR/tools_recover.sh"; . "$LIB_DIR/tooldest.sh"; . "$LIB_DIR/tools_carve.sh"; . "$LIB_DIR/tools_rescue.sh"   # #649/#1050/#1104/#2804: toolbox (run in the kiosk; here for the load gate)
 
 mkdir -p "$RUN_DIR/targets"
 agent_lock || exit 1   # #1929: never two agents on the same drawers (watchdog.sh)
 parse_cmdline
 [ "$IMAGESRV_MODE" != usbclone ] || usbclone_main   # #1914: never returns -- no server, no hello
 
-SERVER="$IMAGESRV_SERVER"
-[ -n "$SERVER" ] || die_local "no imagesrv.server on the kernel command line"
-case "$SERVER" in
-    http://*|https://*) : ;;
-    *) SERVER="http://$SERVER" ;;
-esac
+. "$LIB_DIR/tls.sh"
+tls_config || die_local "$TLS_WHY"
 
 # init leaves the DHCP result here.
 NET_FILE="${NET_FILE:-$RUN_DIR/net.conf}"
@@ -176,41 +172,17 @@ do_restore() {
         return $?
     fi
 
-    _disk=$(pick_internal_disk) || die_local "no single internal disk (none, or more than one -- #1807)"
-    http_get "$SERVER/api/v1/images/$_img/manifest" > "$RUN_DIR/manifest.json" \
-        || die_local "manifest fetch failed"
-    session_stream "$_img" "$RUN_DIR/manifest.json" "$RESP" || die_local "$STREAM_REFUSAL"   # #1826
-    _total=$(json_get "$RUN_DIR/manifest.json" ".total_compressed_bytes")
-
-    job_reset   # #1916
-    target_init "$_disk" "$_total"
-    session_open_gate "$_ses" "$MAC" "$SERVER" || die_local "$OPEN_GATE_WHY"   # #2657: before the write check, TRIM and the table
+    # #3173: a classroom station (any machine that is not a cloner) received its
+    # round from the old multicast receiver, which is gone; the chunk engine writes drawers only. It
+    # fails by name before a byte of the disk is touched (principle 1: the local
+    # disk stays whole), and the server is told 'failed' with the reason.
+    _why="a station restore over the network arrives in version 2 -- nothing written"
+    _disk=$(pick_internal_disk) || die_local "restore: $_why"
+    log "restore: $_why"
+    job_reset; target_init "$_disk" 0; target_set "$_disk" failed "$_why"; echo failed > "$RUN_DIR/state"
     progress_loop "$_ses" "$MAC" "$SERVER" &
-    _ppid=$!
-
-    # שער SMART לפני כתיבה (#652), אותו שער כמו בחדר השיכפולים.
-    _disk=$(smart_gate "$_ses" "$_disk"); _gr=$?
-    [ "$_gr" = 0 ] || { round_beep failure; ui_error_hold "the disk was skipped -- nothing written" hold_beat; return 1; }
-
-    ui_clear; ui_header
-    echo "  Receiving $(json_get "$RUN_DIR/manifest.json" ".name")"
-    echo "  Target: /dev/$_disk"
-
-    WRITEMARK_HOLD=1   # #1877: the mark comes off after the name and the drivers, not before them
-    if { EXPAND_OVERRIDE=$(json_get "$RESP" ".session.expand_partition") run_restore "multicast" "$_disk" "$SERVER" "$_img" "$RUN_DIR/manifest.json"; crc_delta_after "$_disk"; }; then   # #872
-        log "restore complete"; smart_note_apply "$_disk"   # #2042: an orange disk's note
-        name_this_machine "$_disk" "$_ses"; stage_drivers "$_disk" "$RUN_DIR/manifest.json"   # #720
-        WRITEMARK_HOLD=0; writemark_release_done "$_disk" \
-            || { echo failed > "$RUN_DIR/state"; round_beep failure; _m="the incomplete-write mark did not come off the disk"; [ ! -f "$RUN_DIR/targets/$_disk/foreign" ] || _m="the disk was replaced after the restore -- the new one was not written"; ui_error_hold "$_m" hold_beat; return 1; }   # #2434
-        echo "done" > "$RUN_DIR/state"
-        report_final "$_ppid" "$_ses" "$MAC" "$SERVER" \
-            || { hold_unheard "$_ses"; return 1; }
-        round_beep success; [ "${IMAGESRV_TEST:-0}" = "1" ] && exit 0   # #2067: the build machine too (a classroom logs "not heard")
-        wait_pid "$!" "$WAIT_HELPER_S" "the restore's tune" || :; sync; reboot -f   # the tune (~1 s) ends before the reboot cuts it
-    else
-        # progress_loop keeps running: the console must see 'failed'.
-        WRITEMARK_HOLD=0; round_beep failure; ui_error_hold "restore did not complete" hold_beat
-    fi
+    report_final "$!" "$_ses" "$MAC" "$SERVER" || { hold_unheard "$_ses"; return 1; }
+    round_beep failure; ui_error_hold "$_why" hold_beat; return 1
 }
 
 # --- main loop ---------------------------------------------------------------

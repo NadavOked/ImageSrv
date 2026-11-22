@@ -2,10 +2,10 @@
 
 tools_recover_list() {
     cat <<'EOF'
-windows-ntfs-cat|windows|קריאת קובץ מתוך NTFS|ro|/dev/sdX1:/path/to/file
-ntfs-recover-scan|windows|סריקת קבצים שנמחקו מ-NTFS|ro|/dev/sdX1
-unsquashfs|disk|בדיקת כותרת קובץ SquashFS|ro|/path/to/image.squashfs
-bsdtar|disk|רשימת קבצים בארכיון|ro|/path/to/archive
+windows-ntfs-cat|windows|קריאת קובץ מתוך NTFS|ro|מחיצה:נתיב לקובץ (/dev/sda2:/Users/a.docx)|שולף קובץ ממחיצת NTFS כשווינדוס לא עולה או שהמשתמש נעול וצריך מסמך.
+ntfs-recover-scan|recover|סריקת קבצים שנמחקו מ-NTFS|ro|part:מחיצת NTFS|סורק קבצים שנמחקו ממחיצת ווינדוס, כשסטודנט מחק עבודה.
+unsquashfs|recover|בדיקת כותרת קובץ SquashFS|ro|נתיב לקובץ squashfs|בודק/מחלץ קובץ-דמות בלי לעגן אותו, כשבודקים חבילת שיכפול.
+bsdtar|recover|רשימת קבצים בארכיון|ro|נתיב לארכיון|פותח מגוון פורמטי ארכיון כשצריך לחלץ קבצים מחבילה.
 EOF
 }
 

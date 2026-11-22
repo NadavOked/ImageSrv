@@ -37,7 +37,7 @@ try:
 except ImportError:                                          # pragma: no cover
     TestClient = None
 
-BASE = "http://10.44.12.10:8080"
+BASE = "http://10.44.12.10:7712"
 ZERO_MAC = "00:00:00:00:00:00"
 STATION_IP = "10.44.12.59"
 PROBE = {"X-ImageSrv-Probe": "1"}
@@ -49,7 +49,7 @@ def probing_server(tmp_path: Path, images_root: Path, clock):
     TestClient שמגיע מ-loopback, בדיוק כמו `urllib` על השרת."""
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from test_sender import Recorder                           # noqa: PLC0415
+    from fakesend import Recorder                           # noqa: PLC0415
 
     from server.console import users# noqa: PLC0415
     from server.app import create_app                          # noqa: PLC0415
@@ -93,7 +93,7 @@ def probing_server(tmp_path: Path, images_root: Path, clock):
         "station": TestClient(app, client=(STATION_IP, 40001)),
     }
     yield bundle
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def devices(server) -> dict:
@@ -240,7 +240,7 @@ def test_a_marked_request_from_outside_is_recorded_like_any_boot(probing_server)
 
 
 def test_the_servers_own_address_counts_as_itself(probing_server):
-    """בייצור השרת פונה ל-`http://10.44.12.10:8080` — וחיבור מקומי
+    """בייצור השרת פונה ל-`http://10.44.12.10:7712` — וחיבור מקומי
     לכתובת הזו יוצא **ממנה**, לא מ-`127.0.0.1`."""
     ids = setup_classroom(probing_server)
     before = evidence(station_boots_and_reports(probing_server, ids["mac1"]))

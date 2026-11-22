@@ -7,98 +7,123 @@
 
 הכרעה (03/11): בלי שדה חדש — השולח ממתין כל עוד לחבר חי בגל, לא במצב סופי,
 יש `net_devices.prompt`; והסוכן שולח hello בלי prompt כשהשאלה נגמרת.
+
+#3173: השולח היחיד הוא מנוע החתיכות (`ChunkEngine.pending_prompts`, `_wait_marks`), והגל הוא גל
+של חדר השיכפול (סבב כיתה הוא v2). ההחזקה ברמת המנוע בלבד: test_chunk_hold_2388_server.py
+ו-test_waits_prompt_events_3470.py; כאן — מה-hello ועד המנוע, דרך האפליקציה.
 """
 
 from __future__ import annotations
 
 import json
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
-from conftest import HANG_S, hello_body, setup_classroom
+from conftest import HANG_S, MANIFEST_256, hello_body
 
 pytest.importorskip("fastapi")
 
-from server.rounds import sender as sender_module                      # noqa: E402
-from server.rounds.sender import DEFAULT_START_TIMEOUT, SenderEngine    # noqa: E402
-from test_sender import (NOBODY_JOINED_LOG, Recorder, _journal_events,  # noqa: E402
-                         free_ports, library, wait_for)                 # noqa: F401 (fixtures)
+from fakesend import Cloners, wait_for                                   # noqa: E402
+from test_chunksend_2533 import rig                                      # noqa: E402,F401 (fixture)
+from test_server_room import CLONER1, room, room_body, room_server       # noqa: E402,F401 (fixture)
 
 #: השאלה כפי שהסוכן שולח אותה בזמן שאלת חלוקת המקום (attended.sh, drawergate.sh).
 SHARE_PROMPT = {"waiting_for": "operator", "prompt": "Disk 2: share question"}
+FIRST_PART = next(p["index"] for p in MANIFEST_256["partitions"] if p.get("file"))
 
 
-def test_a_share_question_holds_the_first_partition_until_it_is_answered(
-    server_with_sender, free_ports, monkeypatch,
-):
-    """התרחיש של 25/10. כל עוד ה-prompt פתוח — **אף udp-sender לא מופעל**;
-    ה-hello שמנקה אותו משחרר, עם `--start-timeout` מלא, והיומן אומר את שניהם
-    בשם משלו (`send_held_prompt`), בלי לגעת ב-`send_held_smart` של #1889.
+def _journal_events(ctx) -> list[str]:
+    return [r["event"] for r in ctx.conn.execute("SELECT event FROM journal ORDER BY id")]
+
+
+def _hello(room_server, **extra) -> dict:
+    """hello של המשכפל עם מגירה אחת (S1, חריץ 1), ועם מה ש-`extra` מוסיף (השאלה, `joining`)."""
+    body = hello_body(CLONER1)
+    body["disks"] = [{"dev": "sda", "size_bytes": 256060514304, "model": "Drawer SSD", "serial": "S1",
+                      "removable": False, "scheme": "gpt", "has_data": False, "port": 1}]
+    body.update(extra)
+    answer = room_server["anon"].post("/api/v1/agent/hello", json=body)
+    assert answer.status_code == 200, answer.text
+    return answer.json()
+
+
+def _running(room_server, **extra) -> str:
+    """סבב חדר של מגירה אחת, עד גל רץ; ה-hello שמצטרף נושא את `extra`. מחזיר את מזהה הגל."""
+    deploy = room_server["deploy"]
+    assert deploy.post("/api/console/room", json=room_body(room_server, 1, {CLONER1: ["S1"]})).status_code == 200
+    wave = _hello(room_server, **extra)["session"]["id"]       # the one drawer covers the target: this hello ripens the wave
+    assert room(deploy)["round"]["wave_state"] == "running"
+    return wave
+
+
+def test_a_share_question_holds_the_first_partition_until_it_is_answered(room_server):
+    """התרחיש של 25/10. כל עוד ה-prompt פתוח — **שום `chunkcast send` לא מופעל**;
+    ה-hello שמנקה אותו משחרר, והיומן אומר את שניהם בשם משלו (`send_held_prompt`),
+    בלי לגעת ב-`send_held_smart` של #1889.
 
     **בקרה שלילית:** על הקוד הישן השולח מופעל מיד עם תחילת הגל."""
-    monkeypatch.setattr(sender_module, "ASK_HOLD_POLL_S", 0.02)
-    server, recorder = server_with_sender
-    ctx = server["ctx"]
-    ids = setup_classroom(server)
-    server["deploy"].post(
-        "/api/console/sessions",
-        json={"group_id": ids["group"], "image_id": "img_7f3a91",
-              "prefix": "LAB1", "expected_clients": 1},
-    )
-    for _ in range(2):    # מצטרף ושואל; ה-hello השני מוצא סבב בשל ומתחיל את הגל
-        server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), **SHARE_PROMPT})
+    ctx, recorder = room_server["ctx"], room_server["recorder"]
+    wave = _running(room_server, **SHARE_PROMPT)
     assert wait_for(lambda: "send_start" in _journal_events(ctx))
+    assert wait_for(lambda: "send_held_prompt" in _journal_events(ctx)), _journal_events(ctx)
     threading.Event().wait(0.3)
-    assert recorder.commands == [], "udp-sender הופעל בזמן שהמכונה ממתינה לאדם"
-    assert "send_held_prompt" in _journal_events(ctx)
+    assert recorder.commands == [], "chunkcast send הופעל בזמן שהמכונה ממתינה לאדם"
 
-    # התשובה: ה-hello שהסוכן שולח כשהשאלה נגמרת — בלי prompt.
-    server["anon"].post("/api/v1/agent/hello", json={**hello_body(ids["mac1"]), "joining": False})
+    # התשובה: ה-hello שהסוכן שולח כשהשאלה נגמרת — בלי prompt. אחריה המכונה מתייצבת.
+    _hello(room_server, joining=False)
+    assert wait_for(lambda: "send_prompt_released" in _journal_events(ctx)), _journal_events(ctx)
+    Cloners(room_server["anon"], wave, {CLONER1: ["S1"]}).listen(FIRST_PART)
     assert recorder.spawned.wait(timeout=HANG_S)
     events = _journal_events(ctx)
     assert events.index("send_held_prompt") < events.index("send_prompt_released")
     assert "send_held_smart" not in events and "send_hold_released" not in events   # #1889
-    first = recorder.commands[0]
-    assert first[first.index("--start-timeout") + 1] == str(int(DEFAULT_START_TIMEOUT))
-    recorder.processes[0].release()
 
 
-def test_a_start_timeout_under_an_open_question_says_so_not_check_the_cable(library, free_ports):
+def test_a_start_timeout_under_an_open_question_never_says_check_the_cable(rig):
     """"אף מחשב לא הצטרף ... יש לבדוק כבל רשת" שלח את המפעיל לחפש תקלה במכונה
-    שחיכתה לו. udp-sender שיצא בלי לשדר בזמן שחבר בגל עומד על שאלה — נאמר כך.
+    שחיכתה לו. במנוע החתיכות שאלה פתוחה עוצרת את שעון ההתייצבות (#2202): גם אחרי
+    כמה תקרות התחלה הגל אינו נכשל, ולא "בכבל רשת".
 
-    **בקרה שלילית:** על הקוד הישן ההודעה היא "אף מחשב לא הצטרף"."""
-    failed: list[str] = []
-    recorder = Recorder(log_text=NOBODY_JOINED_LOG)        # יצא 0 בלי Starting transfer
-    engine = SenderEngine(library, runner=recorder,
-                          on_event=lambda e, d: failed.append(d) if e == "send_failed" else None)
-    # לפני ההפעלה אין שאלה (אין עצירה); אחרי שהשולח יצא — יש.
-    engine.pending_prompts = lambda _sid: ["78:ac:c0:9b:11:c2"] if recorder.commands else []
-    engine.start({"id": "ses_q", "image_id": "img_7f3a91", "joined": 1})
-    assert wait_for(lambda: failed)
-    assert "ממתין לתשובת מפעיל" in failed[0] and "78:ac:c0:9b:11:c2" in failed[0], failed
-    assert "אף מחשב לא הצטרף" not in failed[0], failed
+    **בקרה שלילית:** בלי `pending_prompts` הגל נכשל בתקרה ("אף מחשב לא התייצב")."""
+    rig.make(pending_prompts=lambda _sid: ["78:ac:c0:9b:11:c2"], start_timeout=0.3)
+    assert wait_for(lambda: rig.named("send_held_prompt")), rig.events
+    assert rig.named("send_held_prompt")[0].endswith("78:ac:c0:9b:11:c2")
+    threading.Event().wait(1.2)                         # four start ceilings under the question
+    assert rig.named("send_failed") == [], rig.events
+    assert rig.engine.status()["state"] == "sending" and rig.runner.commands == []
 
 
-def test_without_a_question_the_sender_starts_at_once_and_says_nothing_new(
-    server_with_sender, free_ports,
-):
+def test_the_answer_gives_the_room_its_whole_start_ceiling_again(rig):
+    """השאלה אינה "אוכלת" את שעון ההתייצבות: אחרי התשובה התקרה מתחילה מחדש, במלואה. (בשולח הישן זו הייתה
+    הטענה שה-udp-sender הראשון קיבל `--start-timeout` מלא; במנוע החתיכות השעון הוא של המנוע עצמו.)
+
+    איש אינו מתייצב כאן, ולכן הגל נכשל בשמו — תקרה שלמה **אחרי השחרור**, ולא מיד איתו. הגבול התחתון בלבד
+    נבדק: עומס על המכונה רק מאריך אותו.
+
+    **בקרה שלילית:** בלי האיפוס של `started` בזמן שאלה (`ChunkEngine._wait_marks_inner`) הכישלון בא ברגע השחרור."""
+    asking = {"open": True}
+    rig.make(pending_prompts=lambda _sid: ["78:ac:c0:9b:11:c2"] if asking["open"] else [], start_timeout=2.0)
+    assert wait_for(lambda: rig.named("send_held_prompt")), rig.events
+    threading.Event().wait(2.5)                         # more than a whole ceiling, under the question
+    assert rig.named("send_failed") == [], rig.events
+    asking["open"] = False                              # answered
+    assert wait_for(lambda: rig.named("send_prompt_released")), rig.events
+    released = time.monotonic()
+    assert wait_for(lambda: rig.named("send_failed")), rig.events
+    assert time.monotonic() - released >= 1.5, "the question ate the start ceiling"
+
+
+def test_without_a_question_the_sender_starts_at_once_and_says_nothing_new(room_server):
     """השומר: hello בלי prompt — שום עצירה ושום אירוע חדש (עובר בשני המצבים)."""
-    server, recorder = server_with_sender
-    ids = setup_classroom(server)
-    server["deploy"].post(
-        "/api/console/sessions",
-        json={"group_id": ids["group"], "image_id": "img_7f3a91",
-              "prefix": "LAB1", "expected_clients": 1},
-    )
-    for _ in range(2):
-        server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
+    recorder = room_server["recorder"]
+    wave = _running(room_server)
+    Cloners(room_server["anon"], wave, {CLONER1: ["S1"]}).listen(FIRST_PART)
     assert recorder.spawned.wait(timeout=HANG_S)
-    assert "send_held_prompt" not in _journal_events(server["ctx"])
-    recorder.processes[0].release()
+    assert "send_held_prompt" not in _journal_events(room_server["ctx"])
 
 
 # --- prompt_hold: מי מחזיק, ועד מתי -------------------------------------------

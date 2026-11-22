@@ -36,7 +36,7 @@ from server.library.images import restore_refusal, used_bytes_total
 from server.library.imagefit import validate_expand_choice
 from server.console.journal_he import EVENTS_HE, JournalTranslator, events_of, severity
 from server.rounds.session_view import label as session_label
-from server.rounds.sessions import SessionError
+from server.rounds.sessions import CLASS_ROUND_V2, SessionError
 from server.rounds.station import ROUND_OPENER_ROLES
 from server.agent import timing as agent_timing
 from server import auto_reboot
@@ -58,6 +58,7 @@ from server.brain import shadowgate as brain_shadowgate   # #3563
 from server.brain import completing as brain_completing   # #3064 (B30): המתג
 from server.brain import drawerhold as brain_drawerhold   # #2023: ההגדרה `brain_drawer_hold` (ביצוע ההחלטה של המוח על השלמה איטית)
 from server.brain import diskcolor as brain_diskcolor   # #3666 (K3/DISK_COLOR): המוח מסווג דיסק; הקונסולה מציגה
+from server.brain import rateinputs as brain_rateinputs   # #3977: `brain_rate_inputs` -- off / shadow / enforce של שני קלטי הקצב
 from server.brain import cpucap as brain_cpucap   # #3064 (K12): שער המעבד לפני פתיחת גל, מתג כבוי כברירת מחדל
 from server.brain import memory as brain_memory   # #3185: הזיכרון ארוך-הטווח, אותה קריאה של המוח
 from server.agent import unknown_screen   # #1802
@@ -103,8 +104,6 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   # #1354: מינימום GB פנויים במחיצת המערכת אחרי שחזור (0–500).
                   minfree.SETTING,
                   # סף מהירות הכתיבה (`writecheck_min_mbps`) יצא מההגדרות (נדב 14/11 בערב): הלמידה (LR5) היא שכותבת אותו.
-                  # #2533: מנוע השידור — "chunk" (ברירת המחדל, #3173) או "udpcast" (בחירה מפורשת).
-                  chunksend.SETTING,
                   interrupt.SETTING,   # #2528 (נדב 12/11): כמה דקות שאלה על משכפל שכבה באמצע סבב מחכה
                   # #3064 (שלב 2, נדב 14/11): המוח — מתג הווטו (off/shadow/enforce) והספים, עם ברירת מחדל כמו הגדרות הרשת.
                   *brain_veto.KEYS,
@@ -112,6 +111,8 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   brain_budget.SETTING,   # #3064 (שלב 3, נדב 14/11): הגבול העליון של תקציב הרשת. 0 = נמדד מהכרטיס
                   brain_completing.SETTING,   # #3064 (B30): מתג, כבוי כברירת מחדל -- הורדה של חתיכות שלא תאמו בלבד. on/off
                   brain_drawerhold.SETTING,   # #2023 (נדב 15/11): השלמה מעכבת רק את המגירה שנפגעה. slow (ברירת המחדל, #3605) = מבצע רק דיסק שהמוח סימן איטי; off = רק רישום בצל
+                  # #3977 (נדב 21/11): שני קלטי הקצב של מנוע החתיכות -- off / shadow (ברירת המחדל) / enforce; בלי שורה בקונסולה
+                  brain_rateinputs.SETTING,
                   brain_cpucap.SETTING,   # #3064 (K12, נדב 15/11): מחזיק פתיחת סבב כשהשרת עמוס. כבוי; בלעדיו ההכרעה רק נרשמת
                   # #1802 (נדב 04/11): מחשב UEFI לא רשום עולה מהדיסק אחרי N שניות (0 = כבוי). BIOS — לעולם לא (#345).
                   unknown_screen.SETTING,
@@ -208,11 +209,6 @@ def _validate_write_settings(body: dict) -> dict[str, str]:
             if factor is None:
                 raise HTTPException(400, f"{netrate.LABEL_HE}: מספר {netrate.MARGIN_RANGE[0]:g}–{netrate.MARGIN_RANGE[1]:g}, עד שתי ספרות אחרי הנקודה")
             normalized[key] = f"{factor:g}"
-        elif key == chunksend.SETTING:
-            engine = chunksend.parse_setting(value)
-            if engine is None:
-                raise HTTPException(400, "מנוע שידור: udpcast או chunk (ניסיוני)")
-            normalized[key] = engine
         elif key == readbackhash.SETTING:
             full = readbackhash.parse_setting(value)
             if full is None:
@@ -234,6 +230,11 @@ def _validate_write_settings(body: dict) -> dict[str, str]:
             if veto_mode is None:
                 raise HTTPException(400, f"{brain_veto.LABELS_HE[key]}: off, shadow או enforce")
             normalized[key] = veto_mode
+        elif key == brain_rateinputs.SETTING:
+            inputs_mode = brain_veto.parse_mode(value)   # #3977: אותן שלוש מילים של מתג הווטו
+            if inputs_mode is None:
+                raise HTTPException(400, f"{brain_rateinputs.LABEL_HE}: off, shadow או enforce")
+            normalized[key] = inputs_mode
         elif key == brain_completing.SETTING:
             if value not in ("on", "off"):
                 raise HTTPException(400, "אימות והורדה של חתיכות שלא תאמו: on או off")
@@ -589,7 +590,7 @@ def create_console_router(
                            sv.pull_forecast(ctx.store, row, ctx.library), ctx.clock_trust)}
                       for row in ctx.store.active_pulls()],
             "room": room_module.status_view(ctx)["round"],
-            "sender": ctx.sender.status() if ctx.sender else None,
+            "sender": ctx.chunk.status() if ctx.chunk else None,      # #3173: המנוע היחיד; שם השדה נשאר
             "machines": machines,
             "images": len(ctx.library.scan()),
             "storage": storage,
@@ -1206,6 +1207,8 @@ def create_console_router(
         ומספר מחשבים הם רשות — נגזרים מהקבוצה ומהבחירה, כמו בתחנה.
         """
         refuse_if_classrooms_off()
+        if not capabilities.class_rounds():      # #3173: לפני כל בדיקה אחרת -- אין סבב לפתוח
+            raise HTTPException(409, CLASS_ROUND_V2)
         body = await request.json()
         image_id = body.get("image_id", "")
         group_id = body.get("group_id", "")
@@ -1297,22 +1300,19 @@ def create_console_router(
         # כולל הנפילה חזרה ל-`image_id` כשהמניפסט נמחק באמצע הסבב.
         if typed != session_label(row, ctx.library):
             raise HTTPException(400, "השם שהוקלד אינו זהה לשם האימג' שהסבב משדר")
-        # #2427: הסגירה עוצרת את udp-sender (TERM, ואז KILL — עד 1.5 ש') — בתהליכון,
+        # #2427: הסגירה עוצרת את השולח (TERM, ואז KILL — עד 1.5 ש') — בתהליכון,
         # לא על לולאת האירועים, שקפאה בכל סגירה.
         try:
             await run_in_threadpool(ctx.store.close, session_id, user[0])
         except SessionError as exc:
             raise HTTPException(409, str(exc))
         # #2427: כמו `close_round` (#439) — "נסגר" רק עם ראיה שהמשדר מת.
-        if row["kind"] == "multicast" and ctx.sender is not None:
-            left = await run_in_threadpool(ctx.sender.stop, session_id)
-            # #2533: ומנוע החתיכות — סבב שכבר היה `closed` אינו קורא ל-`on_closed`.
-            left_chunk = (await run_in_threadpool(ctx.chunk.stop, session_id)
-                          if ctx.chunk is not None else None)
-            for program, pid in (("udp-sender", left), ("chunkcast send", left_chunk)):
-                if pid is not None:
-                    who = f"PID {pid}" if pid > 0 else "לא הצלחנו לוודא שהוא מת"
-                    raise HTTPException(500, f"הסבב נסגר, אבל {program} עדיין רץ ({who})")
+        if row["kind"] == "multicast" and ctx.chunk is not None:
+            # #2533: סבב שכבר היה `closed` אינו קורא ל-`on_closed`, ולכן העצירה נשאלת כאן שוב.
+            pid = await run_in_threadpool(ctx.chunk.stop, session_id)
+            if pid is not None:
+                who = f"PID {pid}" if pid > 0 else "לא הצלחנו לוודא שהוא מת"
+                raise HTTPException(500, f"הסבב נסגר, אבל chunkcast send עדיין רץ ({who})")
         return {"ok": True}
 
     # --- משתמשים, יומן, הגדרות (admin) --------------------------------------
@@ -1598,14 +1598,13 @@ def create_console_router(
         values[crcwarn.SETTING] = str(crcwarn.threshold(ctx.conn))
         # #1354: הערך שבתוקף — ברירת המחדל כשלא נקבע, לא "לא נקבע".
         values[minfree.SETTING] = str(minfree.min_free_gb(ctx.conn))
-        # #2533: הערך שבתוקף — "chunk" כשלא נקבע, וכשהשמור אינו מוכר (#3173).
-        values[chunksend.SETTING] = chunksend.engine_of(ctx.conn)
         values[interrupt.SETTING] = str(interrupt.ask_minutes(ctx.conn))   # #2528: הערך שבתוקף
         values.update(brain_veto.effective(ctx.conn))   # #3064: המצב (shadow כשלא נקבע); הספים אינם הגדרות
         values.update(brain_shadowgate.effective(ctx.conn))   # #3563: ערך ההתחלה כשלא נקבע
         values[brain_budget.SETTING] = brain_budget.effective(ctx.conn)   # #3064 (שלב 3): "0" = נמדד מהכרטיס
         values[brain_completing.SETTING] = "on" if brain_completing.verify_enabled(ctx.conn) else "off"   # #3064 (B30): כבוי כשלא נקבע
         values[brain_drawerhold.SETTING] = brain_drawerhold.mode(ctx.conn)   # #2023, #3605: "slow" כשלא נקבע
+        values[brain_rateinputs.SETTING] = brain_rateinputs.setting(ctx.conn)   # #3977: "shadow" כשלא נקבע
         # #1802: הערך שבתוקף — "0" (כבוי) כשלא נקבע או כשהשמור פגום.
         values[unknown_screen.SETTING] = str(unknown_screen.autoboot_seconds(ctx.conn))
         # #1473: הערך שבתוקף — "0" (ללא הגבלה) כשלא נקבע או כשהשמור פגום.
@@ -1640,17 +1639,15 @@ def create_console_router(
         if "server_name" in body:
             # נדב 17/10: שם השרת הוא שם המארח — שם אחד, משתנה במקום אחד.
             raise HTTPException(400, "שם השרת הוא שם המארח — משנים אותו ב-POST /hostname")
+        if chunksend.SETTING in body:
+            # #3173: מנוע החתיכות הוא היחיד, ואין מה לבחור. בשמו, ולא "הגדרה לא מוכרת": מי ששולח את השדה הוא כלי ישן.
+            raise HTTPException(422, chunksend.RETIRED_HE)
         unknown = next((key for key in body if key not in WRITE_SETTINGS), None)
         if unknown is not None:
             raise HTTPException(400, f"הגדרה לא מוכרת: {unknown}")
         # #1794: validate the complete request before writing any key. The
         # validator is deliberately exhaustive over WRITE_SETTINGS.
         normalized = _validate_write_settings(body)
-        # #2533: המתג "מנוע שידור" אינו נדלק בלי שולח — ואומר למה. בלי זה הוא נדלק, והגל הראשון נכשל.
-        if normalized.get(chunksend.SETTING) == chunksend.CHUNK and getattr(ctx, "chunk", None) is not None:
-            problem = await run_in_threadpool(ctx.chunk.binary_problem)
-            if problem:
-                raise HTTPException(409, f"מנוע השידור לא הודלק: {problem}")
         learning_was_on = learn_tuning.enabled(ctx.conn)
         set_settings(ctx.conn, normalized)
         learn_tuning.settings_written(ctx.conn, normalized, learning_was_on, user[0])   # #2028

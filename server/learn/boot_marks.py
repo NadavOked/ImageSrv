@@ -24,6 +24,7 @@ import sqlite3
 from boot.trace import INIT_MARKS
 
 from server.db import _write_lock, now_iso, writing
+from server.core.logtext import one_line
 from server.learn import boot as learn_boot
 
 log = logging.getLogger("imagesrv.boot_marks")
@@ -53,7 +54,7 @@ def record(conn: sqlite3.Connection, mac: str, marks: dict[str, float]) -> bool:
                          " boot_marks WHERE mac = ? ORDER BY rowid DESC LIMIT ?)", (mac, mac, KEEP))
         return True
     except Exception:                  # noqa: BLE001 — אבחון שמפיל פירור הוא נזק
-        log.exception("could not store boot marks for %s", mac)
+        log.exception("could not store boot marks for %s", one_line(mac))
         return False
 
 

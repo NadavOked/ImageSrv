@@ -29,7 +29,7 @@ import pytest
 from conftest import hello_body
 from fastapi.testclient import TestClient
 from server.agent import identity
-from server.app import create_agent_app
+from server.app import create_boot_app
 from test_kiosk_app import _login_kiosk, kiosk_env  # noqa: F401
 from test_server_room import cloner_hello
 
@@ -65,7 +65,7 @@ def _q(kiosk_env, sql, *args):
 
 
 def _boot(kiosk_env, mac=BUILD):
-    assert kiosk_env["anon"].get(f"/boot/menu?mac={mac}").status_code == 200
+    assert kiosk_env["boot_anon"].get(f"/boot/menu?mac={mac}").status_code == 200
 
 
 def _hello_task(kiosk_env):
@@ -191,7 +191,7 @@ def test_boot_cancel_requires_the_macs_lease_1629(kiosk_env, tmp_path, kind, lea
     rt = kiosk_env["rt"]
     rt.ctx.leases = identity.LeaseFile(path)
     # Install the lease source before mounting /boot, just as create_runtime does.
-    app = create_agent_app(rt)
+    app = create_boot_app(rt)
     client = TestClient(app, base_url=rt.server_base, client=(source_ip, 40001))
     response = client.get(f"/boot/menu?mac={BUILD}",
                           headers={"X-Forwarded-For": owner_ip})
@@ -233,7 +233,7 @@ def test_a_repeated_boot_cancel_refusal_is_journaled_once_1629(kiosk_env, tmp_pa
     path.write_text(f"0 {BUILD} 10.44.12.50 build-01 *\n", encoding="utf-8")
     rt = kiosk_env["rt"]
     rt.ctx.leases = identity.LeaseFile(path)
-    client = TestClient(create_agent_app(rt), base_url=rt.server_base,
+    client = TestClient(create_boot_app(rt), base_url=rt.server_base,
                         client=("10.44.12.99", 40001))
     for _ in range(4):
         assert client.get(f"/boot/menu?mac={BUILD}").status_code == 200

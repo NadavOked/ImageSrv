@@ -21,7 +21,8 @@ enum { KEYSYM_TAB = 1, KEYSYM_BACKTAB, KEYSYM_ENTER, KEYSYM_BACKSPACE, KEYSYM_ES
                       * grab hides the chord from the kernel, so it is asked for here */,
        KEYSYM_DELETE /* #1386: "בטל את דיסק N" -- Del, never Enter */,
        KEYSYM_POWER  /* #1918: the machine's power button (ACPI "Power Button",
-                      * or a keyboard's power key) -- a short press */ };
+                      * or a keyboard's power key) -- a short press */,
+       KEYSYM_PGUP, KEYSYM_PGDN   /* #649 (mockup 14): a page of the toolbox's lists */ };
 
 typedef struct {
     EvType type;

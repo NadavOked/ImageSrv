@@ -778,7 +778,7 @@ def test_an_available_update_is_announced_once_per_version(conn, tmp_path, smtp)
 def _node(conn, *, seen, failed, error="timed out"):
     conn.execute("INSERT OR REPLACE INTO storage_nodes (id, label, base_url, credential_ref,"
                  " enrolled_at, last_seen_at, last_error, last_error_at)"
-                 " VALUES ('n1', 'branch-2', 'https://10.0.0.2:8443', 'x', ?, ?, ?, ?)",
+                 " VALUES ('n1', 'branch-2', 'https://10.0.0.2:7700', 'x', ?, ?, ?, ?)",
                  ((T0 - timedelta(days=1)).isoformat(), seen and seen.isoformat(), error,
                   failed and failed.isoformat()))
     conn.commit()
@@ -811,7 +811,7 @@ def test_a_secondary_never_checked_is_not_called_down(conn, tmp_path, smtp):
 def test_on_a_secondary_a_silent_primary_is_an_alert(conn, tmp_path, smtp):
     from server.interserver import storage_nodes
     set_setting(conn, storage_nodes.ROLE_KEY, storage_nodes.ROLE_SECONDARY)
-    set_setting(conn, storage_nodes.PRIMARY_URL_KEY, "https://10.0.0.1:8443")
+    set_setting(conn, storage_nodes.PRIMARY_URL_KEY, "https://10.0.0.1:7700")
     conn.execute("INSERT INTO parent_credentials (singleton, parent_id, token_hash, bound_cert_ref,"
                  " pinned_parent_spki, protocol_version, enrolled_at, last_contact_at)"
                  " VALUES (1, 'p', x'00', 'c', 's', '1', ?, ?)",
@@ -1247,8 +1247,8 @@ def test_the_view_lists_providers_categories_and_languages(api):
 def test_the_server_starts_the_alert_thread_and_its_heartbeat(tmp_path, images_root, clock):
     from fastapi.testclient import TestClient
     from server.app import create_app
-    from test_sender import Recorder
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+    from fakesend import Recorder
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
                      sender_runner=Recorder(block=True), health_hooks={"interfaces": lambda: []})
     beat = tmp_path / "data" / ea.HEARTBEAT_FILE
     with TestClient(app):

@@ -1,7 +1,7 @@
 # lccopy.sh -- #1322 local clone: the copy itself. The source is read ONCE
 # per partition and fanned out to every target in parallel -- the drawers
-# pipeline of a round (drawers.sh), with partclone reading a local partition
-# where a round has udp-receiver. POSIX sh (busybox ash).
+# pipeline (fanout, one ring per target), with partclone reading a local partition
+# as the source. POSIX sh (busybox ash).
 #
 #   partclone -c <source part> > src.fifo          (used blocks only; an
 #     unknown filesystem goes through partclone.dd -- the whole partition)

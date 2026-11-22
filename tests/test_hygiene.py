@@ -3,7 +3,7 @@
 כל האימות של הפרויקט נשען על משפט אחד — "N עברו, אפס דילוגים" — ועל
 הנחה שקטה: שכשהריצה נגמרה, היא נגמרה. שתיהן נמצאו לא נכונות. #52:
 שלוש חבילות שלמות יכלו לדלג ו-`pytest` יצא 0. #79: טסט השאיר
-`udp-sender` אמיתי רץ שעתיים וחצי על פורט השידור של השרת.
+שולח אמיתי רץ שעתיים וחצי על פורט השידור של השרת.
 
 הקובץ הזה בודק את שני התיקונים בראיה חיובית: שהדגל באמת הופך דילוג
 לכישלון, ושהסורק באמת מוצא תהליך חי ובאמת מוודא שהוא מת אחרי ההריגה.
@@ -25,7 +25,7 @@ import hygiene
 import native
 from native import requires_native
 
-from conftest import HANG_S, hello_body, setup_classroom
+from conftest import HANG_S
 
 
 # --- #52: כלי חסר במקום שהוא אמור להיות -------------------------------------
@@ -228,33 +228,46 @@ def test_the_server_fixture_never_hands_out_the_real_sender(server):
     """הראיה החיובית: מנוע השידור מחזיק שולח מוזרק, לא את זה של המערכת.
 
     לפני התיקון `server` בנה אפליקציה בלי `sender_runner`, ולכן כל סבב
-    שהבשיל תחתיו הפעיל `udp-sender` אמיתי — וזה הטסט שנכשל על הקוד ההוא.
-    """
-    from server.rounds.sender import run_process
+    שהבשיל תחתיו הפעיל שולח אמיתי — וזה הטסט שנכשל על הקוד ההוא.
 
-    assert server["ctx"].sender.runner is server["recorder"]
-    assert server["ctx"].sender.runner is not run_process
+    המנוע עוטף את ה-runner שהוזרק (`DirectChunks.runner`: פקודה על אימג' חי
+    היא הזמנה למחשב הבנייה), ולכן הראיה היא מה שהעטיפה מריצה על קובץ של
+    הספרייה: ה-Recorder רשם את הפקודה, והחסימה של `chunklog` לא נגעה בה.
+    """
+    from server.rounds import chunklog
+
+    ctx, recorder = server["ctx"], server["recorder"]
+    assert ctx.chunk.runner is not chunklog.run_process
+    part = ctx.library.file_path("img_7f3a91", "p1.esp.pcl.zst")
+    before = len(hygiene.blocked_spawns)
+    ctx.chunk.runner(["chunkcast", "send", "--file", str(part)])
+    assert recorder.commands == [["chunkcast", "send", "--file", str(part)]]
+    assert hygiene.blocked_spawns[before:] == []
 
 
 def test_a_ripened_round_records_the_command_instead_of_broadcasting(server):
-    """המסלול המדויק מ-#79: סבב של 1/1 מבשיל תוך כדי hello.
+    """המסלול המדויק מ-#79: סבב שמבשיל תוך כדי hello.
 
     `test_the_session_starts_once_when_two_threads_ripen_it` עשה בדיוק
-    את זה, והשאיר מאחוריו שולח חי על ה-portbase של ההפצה.
+    את זה, והשאיר מאחוריו שולח חי על ה-portbase של ההפצה. הסבב כאן הוא
+    של חדר השיכפול (#3173: סבב כיתה הוא v2): המגירה היחידה שנבחרה מכסה
+    את היעד, ה-hello מבשיל את הגל, והמשכפל מתייצב — ורק אז המנוע משדר.
     """
-    ids = setup_classroom(server)
-    assert server["deploy"].post(
-        "/api/console/sessions",
-        json={"group_id": ids["group"], "image_id": "img_7f3a91",
-              "prefix": "LAB1", "expected_clients": 1},
-    ).status_code == 200
+    from fakesend import Cloners
+    from test_server_room import CLONER1, cloner_hello, room_body
 
-    server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
-    server["anon"].post("/api/v1/agent/hello", json=hello_body(ids["mac1"]))
+    assert server["admin"].post("/api/console/machines", json={
+        "mac": CLONER1, "name": "shich-1", "group_id": "grp_CLONERS"}).status_code == 200
+    opened = server["deploy"].post("/api/console/room", json=room_body(server, 1, {CLONER1: ["S1"]}))
+    assert opened.status_code == 200, opened.text
+    wave = cloner_hello(server["anon"], CLONER1, ["S1"])["session"]["id"]
+    cloner_hello(server["anon"], CLONER1, ["S1"], joining=False)
 
+    cloners = Cloners(server["anon"], wave, {CLONER1: ["S1"]})
+    cloners.listen(cloners.parts[0][0])
     recorder = server["recorder"]
     assert recorder.spawned.wait(timeout=HANG_S), "השידור לא יצא לדרך בכלל"
-    assert recorder.commands[0][0] == "udp-sender"
+    assert recorder.commands[0][:2] == ["chunkcast", "send"]
 
 
 def test_windows_allowed_failures_stay_empty():
@@ -299,7 +312,6 @@ def test_windows_env_skip_tags_have_not_grown():
                 if "issue-312-windows-env" in window:
                     found.append(f"{path.name}::{line[4:].split('(')[0]}")
     expected = [
-        "test_sender_ports.py::test_a_busy_udpcast_port_refuses_the_broadcast",
         "test_wol.py::test_no_sysfs_at_all_is_unknown_and_still_sends",
         "test_wol.py::test_an_unreadable_link_state_is_unknown_and_still_sends",
         "test_wol.py::test_the_journal_carries_the_reason_and_not_only_the_count",
@@ -318,12 +330,12 @@ def test_the_guard_blocks_a_real_spawn_and_records_it(tmp_path, monkeypatch):
     הרישום הוא מה שהופך את זה לראיה: החסימה לבדה הייתה "אין תהליך",
     ואי אפשר להבדיל בינה לבין "אין באג".
     """
-    from server.rounds import sender
+    from server.rounds import chunklog
 
-    monkeypatch.setattr(sender, "SENDER_LOG", tmp_path / "sender.log")
+    monkeypatch.setattr(chunklog, "LOG_DIR", tmp_path)
     with pytest.raises(OSError):
-        sender.run_process(["udp-sender", "--portbase", "21000",
-                            "--file", str(tmp_path)])
+        chunklog.run_process(["chunkcast", "send", "--to", "239.84.82.1:21002",
+                              "--file", str(tmp_path / "img" / "p1.esp.pcl.zst")])
     # `_no_real_sender` מפיל טסט שהשאיר רישום — הרישום הזה מכוון.
     # #1974: השולח רץ תחת `nice … ionice …` כשהכלים קיימים (priority.background_cmd) —
     # מה שנחסם הוא אותה שורת פקודה, עם הקידומת או בלעדיה.
@@ -332,19 +344,19 @@ def test_the_guard_blocks_a_real_spawn_and_records_it(tmp_path, monkeypatch):
     prefix = list(priority.BACKGROUND_PREFIX)
     if spawned[:len(prefix)] == prefix:
         spawned = spawned[len(prefix):]
-    assert spawned[0] == "udp-sender", spawned
+    assert spawned[:2] == ["chunkcast", "send"], spawned
 
 
 @requires_native("cat", paths=("/proc",), why="הסריקה קוראת ב-/proc")
 def test_the_scan_finds_a_live_sender_and_proves_it_died(tmp_path):
     """סורקים, הורגים, וקוראים שוב — "שלחנו SIGTERM" אינו "התהליך מת".
 
-    התהליך כאן הוא עותק של `cat` בשם `udp-sender`, חסום על fifo שאיש
+    התהליך כאן הוא עותק של `cat` בשם `chunkcast`, חסום על fifo שאיש
     אינו כותב אליו: אותה צורה שהסורק מחפש (שם התוכנית **וגם** הנתיב),
     בלי לשדר בית אחד לרשת ובלי להשאיר אחריו תת-תהליך משלו. סקריפט עם
     shebang לא היה עובד — הקרנל מחליף את argv[0] בשם המפרש.
     """
-    fake = tmp_path / "udp-sender"
+    fake = tmp_path / "chunkcast"
     shutil.copy(shutil.which("cat"), fake)
     pipe = tmp_path / "stream"
     os.mkfifo(pipe)
@@ -399,10 +411,10 @@ def test_the_session_verdict_says_not_checked_instead_of_clean(monkeypatch):
 def test_the_block_is_installed_for_the_whole_run():
     """החסימה מותקנת פעם אחת ואינה מוחזרת — אחרת תהליכון השידור שממשיך
     לרוץ אחרי סוף הטסט מוצא את `subprocess` האמיתי בדיוק בחלון הזה."""
-    from server.rounds import sender
+    from server.rounds import chunklog
 
-    assert sender.subprocess is not subprocess
-    assert getattr(sender.subprocess, "STDOUT", None) == subprocess.STDOUT
+    assert chunklog.subprocess is not subprocess
+    assert getattr(chunklog.subprocess, "STDOUT", None) == subprocess.STDOUT
 
 
 # --- #1940: תקרת run_group כשתהליך יוצא מהקבוצה ---------------------------

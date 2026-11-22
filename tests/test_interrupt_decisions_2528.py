@@ -37,8 +37,6 @@ SETTING = "interrupt_ask_minutes"
 def _ports_are_free(monkeypatch):
     """כמו ב-`room_server`: בדיקת הפורטים של השולח מקבלת ראיה מזויפת חיובית (ב-Windows אין
     `/proc/net/udp`, ו-#1126 מפיל אז את הגל בצדק) — גם ב-`kiosk_env`, שאינו מזייף אותה."""
-    from server.rounds import sender as sender_module   # noqa: PLC0415
-    monkeypatch.setattr(sender_module, "port_holders", lambda _port: [])
 
 
 # --- 1. התקרה היא הגדרה ----------------------------------------------------------------
