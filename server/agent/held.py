@@ -19,7 +19,7 @@ import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-from server.db import NET_SEEN_MIN_INTERVAL_SECONDS, _settle, _write_lock, writing
+from server.db import NET_SEEN_MIN_INTERVAL_SECONDS, _settle, _write_lock, journal, writing
 
 #: ארבע פעימות של 15ש' — דיווח אחד או שניים שאבדו אינם "כבה".
 FRESH_SECONDS = 60
@@ -70,8 +70,12 @@ def note(conn: sqlite3.Connection, mac: str, problems: list[dict],
                       (now.isoformat(timespec="seconds"), body, mac))
 
 
-def clear(conn: sqlite3.Connection, mac: str) -> None:
-    """המכונה כבר אינה מחזיקה (hello מצטרף / כיבוי נמסר). SELECT קודם — רוב ה-hello אינם כותבים."""
+def clear(conn: sqlite3.Connection, mac: str, now: datetime | None = None) -> None:
+    """המכונה כבר אינה מחזיקה (hello מצטרף / כיבוי נמסר). SELECT קודם — רוב ה-hello אינם כותבים.
+
+    #3912: הרגע שבו עזבה את המוחזק נרשם ב-``held_released`` (השעון ב-``detail``, לא ב-``ts``:
+    ``ts`` הוא שעון הקיר, ושעון החדר בבדיקה מזויף). ``now`` חסר = שעון הקיר, שזהה ל-``room._utcnow``
+    בשרת. היומן נכתב אחרי המנעול: ``journal`` נועל אותו שוב, והמנעול אינו רקורסיבי."""
     row = conn.execute("SELECT held_at FROM net_devices WHERE mac = ?", (mac,)).fetchone()
     if row is None or row["held_at"] is None:
         return
@@ -79,6 +83,11 @@ def clear(conn: sqlite3.Connection, mac: str) -> None:
     with _write_lock, writing(conn):
         conn.execute("UPDATE net_devices SET held_at = NULL, held_json = NULL WHERE mac = ?",
                      (mac,))
+    stamp = now or datetime.now(timezone.utc)
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    released = stamp.isoformat(timespec="seconds")
+    journal(conn, "held_released", released, machine=mac)
 
 
 def view(held_at: str | None, held_json: str | None,

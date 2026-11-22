@@ -338,23 +338,24 @@ def test_static_includes_are_at_9_9():
     #3173/#3978 (21/11): קצב הזרם ממנוע החתיכות, כרטיס "מצב הרשת" ועמודת "הרשת" בהיסטוריה (אפשרות א), והאיבוד של גל חתיכות בהיסטוריה (console.js, console.css, memory_ui.js) = 14.22.
     #3978 (21/11, נדב "כן"): העמודה "קצב ואיבוד" יורדת מהיסטוריית הסבבים, ו"בלוקים שאבדו" נהיה "חתיכות שאבדו" (console.js, memory_ui.js) = 14.23.
     integ/r49 (21/11): האיחוד של גרסת המכללה — room-tiles (14.23) ודף השירותים (14.27) יחד, גבוה משניהם = 14.28. #3871 (פורטי 77xx: console.js, nicsvc.js, branches.js) = 14.30.
+    #3029 (22/11): הלשונית והצומת "רשת הפצה" מופיעים רק אחרי שהוגדרה רשת הפצה (console.js, console.css) = 14.32.
     שוויון על כל ה-includes — bump חלקי הוא הבאג."""
 
     page = _index()
     versions = set(re.findall(r'\?v=(\d+\.\d+)"', page))
-    assert versions == {"14.30"}, versions
+    assert versions == {"14.32"}, versions
     # ביקורת 10/10: monitor.html מושך את אותם console.css ו-design-tokens.css — הם נשארו על 3.29 לנצח,
     # ולכן דפדפן שזכר אותם הציג את המוניטור בעיצוב ישן. monitor.js לבדו שומר על גרסה משלו (test_monitor).
     mon = (STATIC / "monitor.html").read_text(encoding="utf-8")
     shared = set(re.findall(r'(?:design-tokens|console)\.css\?v=(\d+\.\d+)"', mon))
-    assert shared == {"14.30"}, shared
+    assert shared == {"14.32"}, shared
     assert 'monitor.js?v=3.42' in mon
 
 
 def test_iso_tab_script_is_included_after_console_js():
     """#404: iso.js נשען על UI/api/sheet מ-console.js, ולכן נטען אחריו, באותה גרסה."""
     page = _index()
-    assert '<script src="iso.js?v=14.30"></script>' in page
+    assert '<script src="iso.js?v=14.32"></script>' in page
     assert page.index('src="console.js?v=') < page.index('src="iso.js?v=')
 
 
@@ -643,7 +644,8 @@ def test_network_is_one_object_page_with_the_diagram_nics_and_deploy_tabs():
         assert gone not in page, gone
     for needed in ("function networkPage(", "function loadNetwork(", "function netDiagramModel(", "function netMapSvg(", "function netLaneOpen(", "function netLaneDrawerHtml(", "function networkDiagramTab(",
                    "function networkNicsTab(", "function networkDeployTab(", "function netServicesOn(", "function netProbe(", "function openNetwork(",
-                   'network: { crumb: "רשת", title: "רשת", tabs: NET_TABS, render: (i) => networkPage(i), load: loadNetwork, own: true }',
+                   'network: { crumb: "רשת", title: "רשת", get tabs() { return netTabs(); }, render: (i) => networkPage(i), load: loadNetwork, own: true }',
+                   "function netTabs() { return netDeployUnset() ? NET_TABS.slice(0, 2) : NET_TABS; }",   # #3029: "רשת הפצה" רק אחרי שהוגדרה
                    'const NET_TABS = ["תרשים", "חיבורים פיזיים", "רשת הפצה"];',   # #3887: "שירותים" — דף משלו בעץ
                    'width="${W}" height="340" viewBox="0 0 ${W} 340"',   # gotcha: SVG עם height מפורש
                    "מה מותר: דורש API", 'title: "כיתות — v2"', "`/net/interfaces/${encodeId(name)}/probe`",

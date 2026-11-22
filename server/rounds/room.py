@@ -1166,16 +1166,20 @@ def _unseen(conn: sqlite3.Connection, store: SessionStore,
         if mac in joined or not fresh_serials(conn, mac, written,
                                               _selected_ports(round_row, mac)):
             continue
-        row = conn.execute("SELECT last_seen FROM net_devices WHERE mac = ?",
-                           (mac,)).fetchone()
-        seen = _iso_or_none(row["last_seen"]) if row else None
-        # #2909: משכפל שמחזיק תוצאות (#2031) עוד שולח hello לא-מצטרף — ה-beat של מסכי
-        # השיכפול המקומי — ו-`last_seen` הטרי שלו אינו "חזר לתור": הוא לא יצטרף עד "כבה".
-        # #2940: "seen after the opening" is not "still awake": a cloner switched off from the
-        # console (its hold gone) kept a `last_seen` after the opening and was never woken.
-        if seen is None or seen < opened or held.is_held(conn, mac) or _hello_stale(seen):
+        if _not_back(conn, mac, opened):
             unseen.append(mac)
     return unseen
+
+
+def _not_back(conn: sqlite3.Connection, mac: str, opened: datetime) -> bool:
+    """המכונה לא נראתה מאז שהגל נפתח (או נראתה ושתקה, או מחזיקה תוצאות)."""
+    row = conn.execute("SELECT last_seen FROM net_devices WHERE mac = ?", (mac,)).fetchone()
+    seen = _iso_or_none(row["last_seen"]) if row else None
+    # #2909: משכפל שמחזיק תוצאות (#2031) עוד שולח hello לא-מצטרף — ה-beat של מסכי
+    # השיכפול המקומי — ו-`last_seen` הטרי שלו אינו "חזר לתור": הוא לא יצטרף עד "כבה".
+    # #2940: "seen after the opening" is not "still awake": a cloner switched off from the
+    # console (its hold gone) kept a `last_seen` after the opening and was never woken.
+    return seen is None or seen < opened or held.is_held(conn, mac) or _hello_stale(seen)
 
 
 def _hello_stale(seen: datetime) -> bool:
@@ -1185,6 +1189,51 @@ def _hello_stale(seen: datetime) -> bool:
     if seen.tzinfo is None:
         seen = seen.replace(tzinfo=timezone.utc)
     return datetime.now(timezone.utc) - seen > timedelta(seconds=AWAKE_SECONDS)
+
+
+def _aware(at: datetime | None) -> datetime | None:
+    if at is None:
+        return None
+    return at if at.tzinfo is not None else at.replace(tzinfo=timezone.utc)
+
+
+def _left_held(conn: sqlite3.Connection, mac: str, opened: datetime, now: datetime) -> datetime | None:
+    """מתי ``mac`` עבר ממוחזק לשקט **בגל הזה**, או None.
+
+    כיבוי מהקונסולה (`held.clear`) כותב `held_released` והשעון ב-detail (לא ב-`ts`: הוא שעון הקיר).
+    החזקה שהתיישנה בלי clear — חשמל שנמשך — נספרת מ-`held_at + FRESH_SECONDS`. שחרור של גל קודם
+    אינו נספר. משתי החותמות שבתוך הגל נלקחת המאוחרת."""
+    best: datetime | None = None
+    for row in conn.execute(
+            "SELECT detail FROM journal WHERE event = 'held_released' AND machine = ?", (mac,)):
+        at = _aware(_iso_or_none(row["detail"]))
+        if at is not None and opened <= at <= now and (best is None or at > best):
+            best = at
+    row = conn.execute("SELECT held_at FROM net_devices WHERE mac = ?", (mac,)).fetchone()
+    if row is not None and row["held_at"] and not held.is_held(conn, mac, now):
+        at = _aware(_iso_or_none(row["held_at"]))
+        if at is not None:
+            stale = at + timedelta(seconds=held.FRESH_SECONDS)
+            if opened <= stale <= now and (best is None or stale > best):
+                best = stale
+    return best
+
+
+def _silent_for(conn: sqlite3.Connection, quiet: list[str], opened: datetime | None,
+                now: datetime) -> float | None:
+    """כמה שניות עברו מאז שהמכונה השקטה האחרונה עזבה את המוחזק, או None.
+
+    None כשאחת מהשקטות לא עזבה מוחזק בגל הזה: היא הייתה כבויה מההתחלה, והשעון נשאר פתיחת הגל.
+    הגיל הקטן ביותר הוא השחרור המאוחר ביותר, כדי שמכונה שזה עתה נכבתה לא תירש שתיקה ארוכה של שכנה."""
+    if opened is None or not quiet:
+        return None
+    moments = []
+    for mac in quiet:
+        at = _left_held(conn, mac, opened, now)
+        if at is None:
+            return None
+        moments.append(at)
+    return (now - max(moments)).total_seconds()
 
 
 def _rewake(conn: sqlite3.Connection, store: SessionStore,
@@ -1200,8 +1249,11 @@ def _rewake(conn: sqlite3.Connection, store: SessionStore,
     **#3657: ההחלטה (מתי שוב, כמה פעמים, מתי נכשל, וגיל שלילי אחרי קפיצת שעון)
     היא של המוח** — `brain.silence.judge_rewake`, כלל K-REWAKE, נרשמת ב-
     `brain_decisions` עם הראיות והתוצאה. כאן נאספות העובדות (מי לא נראה, כמה
-    הערות נשלחו, כמה זמן מאז שהגל נפתח) ומתבצעת התוצאה. אין החלטה מהמוח = לא
-    שולחים, לא מכשילים ולא מכיילים."""
+    הערות נשלחו, כמה זמן מאז שהגל נפתח, ומתי עבר ממוחזק לשקט) ומתבצעת התוצאה.
+    אין החלטה מהמוח = לא שולחים, לא מכשילים ולא מכיילים.
+
+    **#3912:** גל שחיכה למוחזק סופר את ההערות ואת תקרת האתחול מרגע השחרור,
+    לא מפתיחת הגל. בלי רגע כזה לכל שקט — השעון נשאר פתיחת הגל."""
     unseen = _unseen(conn, store, round_row, wave)
     if not unseen:
         return
@@ -1209,8 +1261,9 @@ def _rewake(conn: sqlite3.Connection, store: SessionStore,
     # לשווא, והיא נשארת "לא נראתה" רק כדי שהסבב ייכשל בשמה אחרי אותה תקרה.
     waiting = [mac for mac in unseen if held.is_held(conn, mac)]
     quiet = [mac for mac in unseen if mac not in waiting]
-    now = _utcnow()
-    age = (now - _iso_or_none(wave["created_at"])).total_seconds()
+    now = _aware(_utcnow())
+    opened = _aware(_iso_or_none(wave["created_at"]))
+    age = (now - opened).total_seconds()
     sent = conn.execute(
         "SELECT COUNT(*) AS n FROM journal WHERE event = 'room_rewake' AND detail LIKE ?",
         (wave["id"] + " %",),
@@ -1226,7 +1279,8 @@ def _rewake(conn: sqlite3.Connection, store: SessionStore,
         return (_utcnow() - last_at).total_seconds() if last_at else None
 
     call = silence.decide_rewake(conn, round_id=round_row["id"], sent=sent, age_s=age, since_last=since_last,
-                                 quiet=len(quiet), waiting=len(waiting))
+                                 quiet=len(quiet), waiting=len(waiting),
+                                 silent_for_s=_silent_for(conn, quiet, opened, now))
     if call is None or call.verdict == silence.WAIT:
         return
     rows = silence.record(conn, [call], round_id=round_row["id"], entity_kind="round")
@@ -1297,6 +1351,42 @@ def _k10(conn: sqlite3.Connection, store: SessionStore,
         log.exception("wave %s: K10 failed", wave["id"])
 
 
+def _line_cloners(conn: sqlite3.Connection, round_row: sqlite3.Row, roster) -> list:
+    """המשכפלים של סבב פס ייצור כפי ש-B24 רואה אותם: מספר, מגירות, ומוחזק."""
+    cloners = []
+    for mac in roster:
+        row = conn.execute("SELECT suffix FROM machines WHERE mac = ?", (mac,)).fetchone()
+        suffix = str(row["suffix"]) if row else ""
+        drawers = max(prodline.machine_drawers(conn, mac), len(_selected_ports(round_row, mac) or ()))
+        cloners.append(brain_line.Cloner(mac=mac, name=_machine_name(conn, mac),
+                                         number=int(suffix) if suffix.isdigit() else None,
+                                         drawers=drawers or None, held=held.is_held(conn, mac)))
+    return cloners
+
+
+def _relight(conn: sqlite3.Connection, store: SessionStore,
+             round_row: sqlite3.Row, wave: sqlite3.Row) -> None:
+    """#3916: בפס ייצור, משכפל שנכבה ועוד יש לו סבב (ב-`keep` של B24) מודלק ב-WoL. **ההחלטה של המוח**
+    (`brain.line.relight`, נרשמת ב-`brain_decisions`): ב-`shadow` רק נרשם, ב-`enforce` נשלח. אין כאן כישלון
+    של הסבב: מי שלא חזר גם אחרי ההדלקות נשאר ל-K-LOST ול-`_rewake`. לעולם אינו זורק אל הדופק."""
+    try:
+        roster, opened = _roster(round_row), _iso_or_none(wave["created_at"])
+        if roster is None or opened is None or prodline.line_of(conn, round_row["id"]) is None:
+            return
+        joined = {m["mac"] for m in store.members(wave["id"])}
+        off = {mac for mac in roster if mac not in joined and _not_back(conn, mac, opened)}
+        if not off:
+            return
+        macs = brain_line.relight(conn, round_id=round_row["id"], wave_id=wave["id"], remaining=_remaining(round_row),
+                                  cloners=_line_cloners(conn, round_row, roster), off=off)
+        if macs:
+            store.on_opened(CLONERS_GROUP, None, macs)
+            journal(conn, "room_relight", f'{wave["id"]} {round_row["id"]} {", ".join(_machine_name(conn, m) for m in macs)}',
+                    round_id=round_row["id"])
+    except Exception:                            # noqa: BLE001 -- הסבב ממשיך גם כשהמוח נכשל
+        log.exception("wave %s: relight failed", wave["id"])
+
+
 def _brain_after_wave(conn: sqlite3.Connection, round_row: sqlite3.Row, members: list[sqlite3.Row],
                       closed: int) -> None:
     """B33 ו-B50 (כל גל) ו-B24 (גל של פס ייצור), בצל: רושם בלבד; לעולם אינו זורק אל סיום הגל.
@@ -1308,16 +1398,8 @@ def _brain_after_wave(conn: sqlite3.Connection, round_row: sqlite3.Row, members:
     try:
         if roster is None or prodline.line_of(conn, round_row["id"]) is None:
             return
-        cloners = []
-        for mac in roster:
-            row = conn.execute("SELECT suffix FROM machines WHERE mac = ?", (mac,)).fetchone()
-            suffix = str(row["suffix"]) if row else ""
-            drawers = max(prodline.machine_drawers(conn, mac), len(_selected_ports(round_row, mac) or ()))
-            cloners.append(brain_line.Cloner(mac=mac, name=_machine_name(conn, mac),
-                                             number=int(suffix) if suffix.isdigit() else None,
-                                             drawers=drawers or None, held=held.is_held(conn, mac)))
         brain_line.after_wave(conn, round_id=round_row["id"], wave_id=wave_id,
-                              remaining=round_row["target_drives"] - closed, cloners=cloners,
+                              remaining=round_row["target_drives"] - closed, cloners=_line_cloners(conn, round_row, roster),
                               joined={m["mac"] for m in members})
     except Exception:                            # noqa: BLE001 -- הסבב ממשיך גם כשהמוח נכשל
         log.exception("wave %s: B24 failed", wave_id)
@@ -1413,6 +1495,7 @@ def tick(conn: sqlite3.Connection, store: SessionStore) -> None:
                 direct.cancel_source_task(conn, round_row, "")
         else:
             _rewake(conn, store, round_row, wave)         # #1721
+            _relight(conn, store, round_row, wave)        # #3916
     elif wave["state"] == "running":
         members = store.members(wave["id"])
         # #450: מכונה שנעלמה (כובתה, איבדה רשת, קרסה) לעולם אינה מדווחת

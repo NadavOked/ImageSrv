@@ -132,3 +132,10 @@ def slowest(conn: sqlite3.Connection, macs) -> dict | None:
     # בשוויון — המונחת: השורה במסך אומרת שהתקרה נשענת על הנחה.
     low = min(seen, key=lambda m: (m["speed_mbps"], m["source"] != "assumed"))
     return {**low, "assumed": [m["mac"] for m in seen if m["source"] == "assumed"]}
+
+
+def reported_speeds(conn: sqlite3.Connection, macs) -> dict[str, int]:
+    """#3940: `{mac: Mb/s}` של המכונות שמהירותן **נקראה** (`reported`/`manual`) -- בלי מי שהונחה. נשמר בהחלטת הגל כשהוא
+    יוצא, כי בסופו של גל ארוך (או גל שעבר אתחול) הדיווח הטרי כבר פג, והלמידה (`capability`) אינה צריכה להמציא 'לא נמדד'."""
+    seen = {mac: view(conn, mac) for mac in sorted({m for m in macs if m})}
+    return {mac: v["speed_mbps"] for mac, v in seen.items() if v["source"] in ("reported", "manual")}

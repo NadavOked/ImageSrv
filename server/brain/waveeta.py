@@ -175,7 +175,7 @@ class WaveEta:
             return None, None, "הגודל הדחוס של האימג' לא ידוע"
         return sum(counts), size, None
 
-    def _achieved_before(self, session_id: str, serials: frozenset[str]) -> tuple[int, str] | None:
+    def _achieved_before(self, session_id: str, serials: frozenset[str], asked: int) -> tuple[int, str] | None:
         """#3550 + #3640: (``achieved_bps``, the wave) of the **last chunk-engine wave on the same drives** before this one, or None --
         no prediction from what was achieved. #3640 (J3b, 18/11): the wave before it ran on a Samsung and an APS, and the APS held the
         whole wave to 165Mb/s; J3b ran on two other Samsungs and took 346s, not the 897s K3 predicted from that rate. The rate a wave
@@ -184,7 +184,11 @@ class WaveEta:
         or an empty ``serials``, cannot be compared: it is not the base either (principle 5: "could not check" is not "same drives").
         A wave of the removed sender carries no `stream.chunk` and a chunk wave on other drives is not this wave's evidence: both are skipped. The last
         wave ON THESE DRIVES that did not end in `send_done` (failed, stopped), or whose `achieved_bps` is not a positive number: None,
-        not an older wave -- which wave to take is not guessed."""
+        not an older wave -- which wave to take is not guessed.
+        #3812 (Zeus 22/11): and only a wave that ASKED for at least ``asked`` (this wave's rate) counts: a lower wave proves nothing about
+        a higher rate, and a higher one that ended below it proves the drives could not reach it. A wave whose ``asked_bps`` is not a
+        positive number cannot be compared and is skipped like one on other drives (principle 5). 0.31 and 1.96 of 19/11 were a wave
+        asked 892 read for one asking 400, and a wave asked 400 read for one asking 600."""
         if not serials:
             return None
         for row in self.conn.execute("SELECT session_id, stream FROM wave_rates WHERE session_id IS NOT ?"
@@ -196,6 +200,9 @@ class WaveEta:
             sample = stream.get("chunk") if isinstance(stream, dict) else None
             if not isinstance(sample, dict) or _wave_serials(sample) != serials:
                 continue
+            was = sample.get("asked_bps")
+            if not isinstance(was, (int, float)) or isinstance(was, bool) or was < asked:
+                continue                        # #3812: it asked for less than this wave (or not a number): not this wave's evidence
             got = sample.get("achieved_bps")
             if (sample.get("ended") != "send_done" or not isinstance(got, (int, float)) or isinstance(got, bool)
                     or got <= 0):
@@ -266,7 +273,7 @@ class WaveEta:
         slow = [Slow(serial, behind[serial][0], NEIGHBOR if mac is not None and any(
             m == mac and other != serial and other not in behind for m, other in drives) else HTTP, mac)
             for serial, mac in macs.items()]
-        before = self._achieved_before(session_id, frozenset(serial for _mac, serial in probes) | frozenset(behind))
+        before = self._achieved_before(session_id, frozenset(serial for _mac, serial in probes) | frozenset(behind), bits)
         used = bits if before is None else min(bits, before[0])         # #3550: not faster than the last wave managed
         uncapped = used
         cap, basis = self._rate_cap(probes, bits, chunks, zbytes)

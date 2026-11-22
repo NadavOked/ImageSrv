@@ -120,7 +120,7 @@ button{cursor:pointer}
 #login .rules li.ok i .ui-icon{display:block}
 #login .otp{display:flex;gap:8px;direction:ltr;margin:6px 0 18px}
 #login .otp input{flex:1;min-width:0;height:46px;text-align:center;font-size:var(--t-xl);font-family:var(--font-mono);border:1px solid var(--clr-border);border-radius:var(--r-sm);background:var(--clr-field);outline:none;margin:0;padding:0}
-#login .otp input:focus{border-color:var(--clr-action);box-shadow:0 0 0 3px color-mix(in srgb,var(--clr-action) 25%,transparent)}
+#login .otp input:focus{outline:2px solid var(--clr-action);outline-offset:1px;border-color:var(--clr-action);box-shadow:0 0 0 3px color-mix(in srgb,var(--clr-action) 25%,transparent)}
 #login .qr-row{display:flex;gap:18px;align-items:flex-start;margin:0 0 18px}
 #login .qr{width:132px;height:132px;flex:none;background:var(--on-ink);border:1px solid var(--clr-border);border-radius:var(--r);padding:6px}
 #login .qr svg{width:100%;height:100%;display:block}
@@ -1163,7 +1163,7 @@ th,.table th,.page .dg th{letter-spacing:.02em}
   border:1px solid var(--clr-border);border-radius:var(--r-sm);font-size:var(--t-base);outline:0;transition:border-color var(--dur-fast),box-shadow var(--dur-fast)}
 .win textarea.n-in,.win .field textarea{height:auto;min-height:96px;padding:8px 12px;resize:vertical}
 .win .n-in:hover,.win .field input:hover,.win .field select:hover{border-color:color-mix(in srgb,var(--clr-border),var(--clr-text) 25%)}
-.win .n-in:focus,.win .field input:focus,.win .field select:focus,.win .field textarea:focus{border-color:var(--clr-action);box-shadow:0 0 0 3px color-mix(in srgb,var(--clr-action) 25%,transparent)}
+.win .n-in:focus,.win .field input:focus,.win .field select:focus,.win .field textarea:focus{outline:2px solid var(--clr-action);outline-offset:1px;border-color:var(--clr-action);box-shadow:0 0 0 3px color-mix(in srgb,var(--clr-action) 25%,transparent)}
 .win .n-in.n-mono,.win .n-mono{font-family:var(--font-mono);direction:ltr;text-align:start;unicode-bidi:isolate}
 .win .n-help{font-size:var(--t-xs);color:var(--clr-muted);margin-top:6px}
 .win .field label{display:block;font-size:var(--t-sm);font-weight:500;color:var(--clr-text);margin:0 0 6px}
@@ -1568,12 +1568,12 @@ body.tasks-open .app>.task-dock{bottom:var(--task-h,220px);border-top:1px solid 
 .page.settings .set-col{grid-column:1/-1;width:100%;max-width:880px}
 .page.settings .set-grp{margin:0 0 22px}
 .page.settings .set-grp .card-b{padding:2px 16px}
-.page.settings dl.mkv{grid-template-columns:minmax(0,1fr) auto}
+.page.settings dl.mkv{grid-template-columns:minmax(0,1fr) minmax(0,max-content)}
 .page.settings dl.mkv dt,.page.settings dl.mkv dd{padding:11px 0;min-height:22px}
 .page.settings dl.mkv dt{color:var(--clr-text);display:flex;align-items:center}
-.page.settings dl.mkv dd{justify-content:flex-end;gap:10px}
+.page.settings dl.mkv dd{justify-content:flex-end;gap:10px;max-width:min(560px,65vw)}   /* #2870: הודעת כשל ארוכה עוטפת בעמודה שלה, לא על התווית */
 .page.settings dl.mkv dt:last-of-type,.page.settings dl.mkv dd:last-of-type{border-bottom:0}
-.page.settings dl.mkv .sv{color:var(--clr-muted)}
+.page.settings dl.mkv .sv{color:var(--clr-muted);min-width:0;overflow-wrap:anywhere}
 .page.settings dl.mkv .sv.mono{color:var(--clr-text)}
 .page.settings dl.mkv details.tech{flex-basis:100%;text-align:end}
 .page.settings label.msw.solo{gap:0}
@@ -2190,6 +2190,9 @@ body.tasks-open .scroll{padding-block-end:calc(44px + var(--task-h,220px))}
 .pl-big{font-size:var(--t-xl);font-weight:700;color:var(--clr-success-fg)}.pl-w{flex:1;font-size:var(--t-sm)}.pl-w small{display:block;color:var(--clr-muted)}
 .pl-dc{padding:9px 14px;border-bottom:1px solid var(--clr-row-border);font-size:var(--t-sm);line-height:1.4}.pl-dc:last-child{border:0}.pl-dc time{color:var(--clr-muted);font-size:var(--t-xs);display:block}
 
+/* ‏#2874: באנר "צפייה בלבד" — הודעת info (כחול), לא כתום. */
+.view-only-bar{position:fixed;bottom:48px;inset-inline:0;margin-inline:auto;width:max-content;max-width:min(720px,calc(100vw - 32px));z-index:160;display:flex;gap:16px;align-items:center;justify-content:space-between;padding:10px 14px;border:1px solid var(--clr-info);border-radius:var(--r-sm);background:var(--clr-info-soft);color:var(--clr-action-fg);box-shadow:0 6px 24px var(--shadow-soft);font-size:var(--t-base)}
+body.view-only #content{opacity:.96}
 /* ‏#3181 (נדב 15/11): חלון "התחל סבב" לפי המוקאפ המאושר handoffs/open-distribution-mockup-1114 — לוח אימג'/יעד בצד,
    טבלת מגירות (שורה לכל מגירה), תגי SMART בגודל אחד, ושמות מחשב עם תצוגה מקדימה מפוצלת בפס ייצור. הצבעים — הטוקנים הקיימים. */
 #modalBox:has(.rn2){--w:1180px;width:min(1180px,calc(100vw - 30px))}
@@ -2332,3 +2335,4 @@ body.tasks-open .scroll{padding-block-end:calc(44px + var(--task-h,220px))}
 .svc-ic .ui-icon{width:16px;height:16px}
 .svc-legend{color:var(--clr-muted);font-size:var(--t-sm);margin:2px 0 0}
 @media (prefers-reduced-motion:reduce){.svc-tg::after{transition:none}}
+.inventory-node[hidden]{display:none}   /* ‏#3029: .inventory-node הוא flex, ו-hidden לבדו לא מנצח */

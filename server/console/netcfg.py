@@ -129,7 +129,8 @@ def drain_crumbs(ctx, state_dir, hooks: Hooks | None = None) -> int:
                   f"reason={crumb.get('reason') or '?'}")
         errors = crumb.get("errors") or []
         if errors:
-            detail += f" errors={len(errors)}: {' · '.join(str(e) for e in errors)[:200]}"
+            log.warning("net rollback errors: %s", " · ".join(str(e) for e in errors)[:200])   # #3021
+            detail += f" errors={len(errors)} — הפרטים ביומן השרת"
         journal(ctx.conn, "net_rollback", detail)
         # ה-DB חייב לחזור יחד עם המכונה: הגדרה שמוצגת בקונסולה ואינה
         # זו שעל הכרטיס היא בדיוק אותו שקר בכיוון ההפוך.
