@@ -260,8 +260,9 @@ def test_usbclone_main_sends_nothing_and_reaches_the_local_screen(tmp_path):
     assert out.returncode == 0, out.stdout + out.stderr
     assert not log.exists(), log.read_text()
     answer = json.loads((tmp_path / "run" / "response.json").read_text(encoding="utf-8"))
-    assert (answer["role"], answer["min_free_gb"], answer["readback_mode"], answer["crc_warn_threshold"]) == \
-        ("cloner", 20, "sample", 500)
+    assert (answer["role"], answer["min_free_gb"], answer["readback_mode"]) == \
+        ("cloner", 20, "sample")
+    assert "crc_warn_threshold" not in answer
     assert answer["usb"]["temp_warn_c"] == 60 and answer["usb"]["data"] == "failed"
     assert "לסשן הזה בלבד" in (tmp_path / "run" / "usb.notice").read_text(encoding="utf-8")
     assert (tmp_path / "run" / "min_free_gb").read_text().strip() == "20"
@@ -273,14 +274,20 @@ def settings(tmp_path: Path, body: str) -> subprocess.CompletedProcess:
     data = tmp_path / "usbdata"; data.mkdir(exist_ok=True)
     (data / "settings.json").write_text(body, encoding="utf-8")
     return run(tmp_path, f'USB_DATA_STATE=mounted; USB_DATA_DIR={posix(data)!r}; usb_settings_load; '
-                         'printf "%s|%s|%s|%s\\n%s\\n" "$USB_MIN_FREE_GB" "$USB_READBACK" "$USB_CRC_WARN" '
+                         'printf "%s|%s|%s\\n%s\\n" "$USB_MIN_FREE_GB" "$USB_READBACK" '
                          '"$USB_TEMP_WARN_C" "$USB_NOTICE"')
 
 
 @needs_jq
 def test_valid_settings_are_used(tmp_path):
-    out = settings(tmp_path, '{"min_free_gb": 0, "readback_mode": "full", "crc_warn_threshold": 0, "temp_warn_c": 55}')
-    assert out.stdout.splitlines()[:2] == ["0|full|0|55", ""], out.stdout + out.stderr
+    out = settings(tmp_path, '{"min_free_gb": 0, "readback_mode": "full", "temp_warn_c": 55}')
+    assert out.stdout.splitlines()[:2] == ["0|full|55", ""], out.stdout + out.stderr
+
+
+@needs_jq
+def test_an_old_sticks_crc_field_is_ignored_not_refused(tmp_path):
+    out = settings(tmp_path, '{"min_free_gb": 0, "crc_warn_threshold": "abc", "temp_warn_c": 55}')
+    assert out.stdout.splitlines()[:2] == ["0|sample|55", ""], out.stdout + out.stderr
 
 
 @needs_jq
@@ -293,7 +300,7 @@ def test_valid_settings_are_used(tmp_path):
 def test_a_value_that_is_not_valid_is_refused_aloud(tmp_path, body, bad):
     out = settings(tmp_path, body)
     first, notice = out.stdout.splitlines()[:2]
-    assert first == "20|sample|500|60", out.stdout + out.stderr     # the defaults stay
+    assert first == "20|sample|60", out.stdout + out.stderr     # the defaults stay
     assert "נדחו" in notice and bad in notice, notice
 
 
@@ -301,13 +308,13 @@ def test_a_value_that_is_not_valid_is_refused_aloud(tmp_path, body, bad):
 def test_a_settings_file_that_is_not_json_is_refused_aloud(tmp_path):
     out = settings(tmp_path, "{not json")
     first, notice = out.stdout.splitlines()[:2]
-    assert first == "20|sample|500|60" and "אינו JSON תקין" in notice, out.stdout
+    assert first == "20|sample|60" and "אינו JSON תקין" in notice, out.stdout
 
 
 def test_the_defaults_are_nadavs():
     text = (LIB / "usbclone.sh").read_text(encoding="utf-8")
     got = dict(re.findall(r"^USB_DEF_(\w+)=(\S+)", text, re.M))
-    assert got == {"MIN_FREE_GB": "20", "READBACK": "sample", "CRC_WARN": "500", "TEMP_WARN_C": "60",
+    assert got == {"MIN_FREE_GB": "20", "READBACK": "sample", "TEMP_WARN_C": "60",
                    "BEEP": "true", "POWEROFF_S": "20"}   # #2131: on, as the server's cloner_beep
 
 

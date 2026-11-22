@@ -29,7 +29,7 @@ from test_beeps_2067 import TUNES
 from test_cloner_gui import posix
 from test_usb_clone import KIOSK, LIB, needs_jq, run
 
-BEEP_ITEM = 5                                   # the item's index on the settings screen
+BEEP_ITEM = 4                                   # the item's index on the settings screen
 TO_BEEP = ["KEY DOWN"] * BEEP_ITEM + ["KEY ENTER"]
 FLIP = ["KEY LEFT", "KEY ENTER"]                # the other choice, saved
 TO_RESET = ["KEY DOWN"] * (BEEP_ITEM + 2) + ["KEY ENTER", "KEY TAB", "KEY ENTER"]

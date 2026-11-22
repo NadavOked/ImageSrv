@@ -22,10 +22,9 @@ USB_DATA_LABEL="${USB_DATA_LABEL:-IMGSRV_DATA}"
 USB_DATA_DIR="${USB_DATA_DIR:-$RUN_DIR/usbdata}"
 #: the stick appears a few seconds after init (USB enumeration); the ceiling
 USB_FIND_S="${USB_FIND_S:-20}"
-# Nadav 20/10: sample read-back, 20GB free (#1354 twin), CRC 500 (#1366), 60C (#1859)
+# Nadav 20/10: sample read-back, 20GB free (#1354 twin), 60C (#1859)
 USB_DEF_MIN_FREE_GB=20
 USB_DEF_READBACK=sample
-USB_DEF_CRC_WARN=500
 USB_DEF_TEMP_WARN_C=60
 USB_DEF_BEEP=true   # #2131: the tunes of #2067 (roundbeep.sh) -- the stick's own switch, no server
 USB_DEF_POWEROFF_S=20   # #2198: successful local clone only; 0 waits for the operator
@@ -110,12 +109,12 @@ _usb_int() {   # $1 = value, $2 = min, $3 = max. 0 = a whole number in range, no
 }
 
 usb_settings_load() {
-    # Sets USB_MIN_FREE_GB USB_READBACK USB_CRC_WARN USB_TEMP_WARN_C USB_BEEP USB_POWEROFF_S and
+    # Sets USB_MIN_FREE_GB USB_READBACK USB_TEMP_WARN_C USB_BEEP USB_POWEROFF_S and
     # USB_NOTICE (what the operator must be told; "" = nothing). The defaults,
     # then settings.json field by field: a field that is there and not valid
     # is refused by name and the default stays.
     USB_MIN_FREE_GB=$USB_DEF_MIN_FREE_GB; USB_READBACK=$USB_DEF_READBACK
-    USB_CRC_WARN=$USB_DEF_CRC_WARN; USB_TEMP_WARN_C=$USB_DEF_TEMP_WARN_C; USB_BEEP=$USB_DEF_BEEP; USB_NOTICE=""
+    USB_TEMP_WARN_C=$USB_DEF_TEMP_WARN_C; USB_BEEP=$USB_DEF_BEEP; USB_NOTICE=""
     USB_POWEROFF_S=$USB_DEF_POWEROFF_S
     _us_f=$(usb_settings_path)
     [ "${USB_DATA_STATE:-none}" = mounted ] \
@@ -128,8 +127,6 @@ usb_settings_load() {
     if [ -n "$_us_v" ]; then _usb_int "$_us_v" 0 500 && USB_MIN_FREE_GB=$_us_v || _us_bad="$_us_bad min_free_gb=$_us_v"; fi
     _us_v=$(jq -r '.readback_mode // empty' "$_us_f")
     case "$_us_v" in '') ;; sample|full) USB_READBACK=$_us_v ;; *) _us_bad="$_us_bad readback_mode=$_us_v" ;; esac
-    _us_v=$(jq -r '.crc_warn_threshold // empty' "$_us_f")
-    if [ -n "$_us_v" ]; then _usb_int "$_us_v" 0 1000000 && USB_CRC_WARN=$_us_v || _us_bad="$_us_bad crc_warn_threshold=$_us_v"; fi
     _us_v=$(jq -r '.temp_warn_c // empty' "$_us_f")
     if [ -n "$_us_v" ]; then _usb_int "$_us_v" 30 100 && USB_TEMP_WARN_C=$_us_v || _us_bad="$_us_bad temp_warn_c=$_us_v"; fi
     # a JSON true/false only; jq's // would read false as missing
@@ -157,10 +154,10 @@ usb_answer() {
     # last list in force goes (drawer_slots_refresh keeps a file otherwise).
     _ua_ds=$(usb_map_live) || _ua_ds=null
     jq -n --argjson ds "$_ua_ds" --arg v "${AGENT_VERSION:-unknown}" --argjson mf "$USB_MIN_FREE_GB" --arg rb "$USB_READBACK" \
-        --argjson crc "$USB_CRC_WARN" --argjson temp "$USB_TEMP_WARN_C" --arg st "${USB_DATA_STATE:-none}" --argjson beep "$USB_BEEP" \
+        --argjson temp "$USB_TEMP_WARN_C" --arg st "${USB_DATA_STATE:-none}" --argjson beep "$USB_BEEP" \
         '{schema: 1, known: true, role: "cloner", task: null, session: null, name: "USB",
           server_name: "דיסק-און-קי ImageSrv", server_version: null, tz: null,
-          min_free_gb: $mf, readback_mode: $rb, crc_warn_threshold: $crc, smart_learned: [],
+          min_free_gb: $mf, readback_mode: $rb, smart_learned: [],
           ui: {cloner_beep: $beep}, usb: {version: $v, data: $st, temp_warn_c: $temp}} + (if $ds == null then {} else {drawer_slots: $ds} end)' \
         > "$RUN_DIR/response.json" || return 1
     if [ "$_ua_ds" = null ]; then rm -f "$RUN_DIR/drawer_slots"; else drawer_slots_refresh; fi

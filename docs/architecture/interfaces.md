@@ -8997,7 +8997,7 @@ Pango markup, וכל ערך דינמי בתוכם עובר `esc`; ערך לטי�
 
 **ההגדרות של ה-USB (‏#1914, ‏#1960, ‏#1962)** הן אותו מסך בנתונים אחרים
 (`agent/lib/usb/usbset.sh`, ‏`usbmap.sh`), ונשמרות ב-`settings.json` במחיצה
-‏IMGSRV_DATA: ‏`min_free_gb`, ‏`readback_mode`, ‏`crc_warn_threshold`, ‏`temp_warn_c`,
+‏IMGSRV_DATA: ‏`min_free_gb`, ‏`readback_mode`, ‏`temp_warn_c`,
 ‏`cloner_beep` (‏#2131: ‏JSON ‏`true`/`false` בלבד, חסר = דלוק, כל ערך אחר נדחה בקול),
 ‏`poweroff_s` (‏#2198: מספר שלם ב-JSON, ‏0–3600, ברירת מחדל 20; חסר = 20,
 ערך פגום נדחה ונרשם ביומן = 20). חל רק אחרי שיכפול מקומי מוצלח ב-USB;
