@@ -223,7 +223,7 @@ run_restore() {
 
     # Firmware trust is checked before apply_gpt touches the target. Unchecked
     # follows the existing SMART rule: report and continue; mismatch refuses.
-    if ! boot_ca_preflight "$5" "$2"; then
+    if ! boot_ca_preflight "$5" "$2" && ! db_update_apply "$5" "$2" "$3" "$4"; then   # #86: a missing CA, and the signed db update did not put it there
         target_set "$2" "failed" "$BOOT_CA_PREFLIGHT_REASON"
         echo "failed" > "$RUN_DIR/state"
         return 1

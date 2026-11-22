@@ -7,6 +7,7 @@
 #
 #   sudo tools/build_usb_clone.sh --out DIR [--initrd FILE] [--publish DATA_DIR]
 #                                 [--skip-apt] [--no-bios] [--survey]
+#                                 [--server-iso FILE [--lab-iso]]
 #
 # What is in it (an MBR disk, two FAT partitions, nothing that needs a loop
 # device -- every step writes into a file, never a disk):
@@ -16,6 +17,12 @@
 #      /imagesrv-usb.json (the version the screen shows)
 #   2  IMGSRV_DATA (FAT)            settings.json and reports/ -- written by
 #      the agent on the stick (usbclone.sh); empty at build time
+#   3  IMAGESRV_INSTALL (iso9660, type 83) -- only with --server-iso (#2062): the
+#      server's install ISO, byte for byte. The settings' "התקן שרת" mounts it
+#      read-only and runs the live installer from the stick's own initramfs, which
+#      is then built with --installer too. No internet at install time (Nadav 12/11).
+#      The ISO must be this release's (tools/usb/install-part.sh); partitions 1 and 2
+#      do not move, and the boot path does not read partition 3.
 #
 # Legacy BIOS (#2186): GRUB i386-pc -- boot.img in the MBR's code bytes (0..439,
 # the partition table untouched) and core.img in sectors 1..2047, before
@@ -55,7 +62,7 @@ say() { printf 'build_usb_clone: %s\n' "$*" >&2; }
 die() { say "$*"; exit 1; }
 
 REPO=$(cd "$(dirname "$0")/.." && pwd)
-OUT=""; INITRD=""; PUBLISH=""; SKIP_APT=(); BIOS=1; SURVEY=0
+OUT=""; INITRD=""; PUBLISH=""; SKIP_APT=(); BIOS=1; SURVEY=0; SERVER_ISO=""; LAB_ISO=0; INSTALLER=()
 MODULES_DIR="${IMAGESRV_MODULES_DIR:-/lib/modules}"
 KERNEL_DIR="${IMAGESRV_KERNEL_DIR:-/boot}"
 SHIM="${USB_SHIM:-/usr/lib/shim/shimx64.efi.signed}"
@@ -80,12 +87,17 @@ while [[ $# -gt 0 ]]; do
         --skip-apt) SKIP_APT=(--skip-apt); shift ;;
         --no-bios)  BIOS=0; shift ;;
         --survey)   SURVEY=1; shift ;;
+        --server-iso) SERVER_ISO="${2:?}"; shift 2 ;;
+        --lab-iso)  LAB_ISO=1; shift ;;
         *) die "unknown option: $1" ;;
     esac
 done
 [[ -n "$OUT" ]] || die "--out DIR is required"
 [[ "$SURVEY" == 0 || -z "$PUBLISH" ]] || die "--survey is never published: the console's download is the regular stick"
 [[ "$SURVEY" == 0 ]] || DATA_MB=128
+[[ "$SURVEY" == 0 || -z "$SERVER_ISO" ]] || die "--survey takes no --server-iso: the survey stick only reads disks"
+[[ "$LAB_ISO" == 0 || -n "$SERVER_ISO" ]] || die "--lab-iso needs --server-iso"
+[[ "$LAB_ISO" == 0 || -z "$PUBLISH" ]] || die "--lab-iso is never published: the console's download is a release stick"
 
 for tool in mformat mcopy mmd mdir mtype sfdisk dd od sha256sum python3 git cpio gzip zstd stat truncate; do
     command -v "$tool" >/dev/null || die "missing $tool (apt install mtools fdisk coreutils python3 git)"
@@ -117,14 +129,22 @@ say "version $VERSION, kernel $KVER"
 
 install -d "$OUT"; OUT=$(cd "$OUT" && pwd)
 WORK="$OUT/work"; rm -rf "$WORK"; install -d "$WORK"
+ISO_SECT=0; INSTALL_JSON=null
+if [[ -n "$SERVER_ISO" ]]; then   # #2062: partition 3, and the live installer in the initramfs
+    # shellcheck source=tools/usb/install-part.sh
+    source "$REPO/tools/usb/install-part.sh"
+    usb_iso_check "$SERVER_ISO" "$VERSION" "$LAB_ISO"; INSTALLER=(--installer)
+    INSTALL_JSON=$(printf '{"iso": "%s", "iso_sha256": "%s", "tag": "%s", "label": "%s", "bytes": %s, "release": %s}' \
+        "$(basename "$SERVER_ISO")" "$ISO_SHA" "$ISO_TAG" "$INSTALL_LABEL" "$ISO_BYTES" "$([[ "$ISO_TAG" == "$VERSION" ]] && echo true || echo false)")
+fi
 
 # --- the initramfs --------------------------------------------------------------------
 if [[ -z "$INITRD" ]]; then
     [[ "$(id -u)" -eq 0 ]] || die "building the initramfs needs root (or pass --initrd FILE)"
     INITRD="$WORK/initrd.img"
-    say "building the GUI initramfs (build_initramfs.sh --with-gui) -- log: $WORK/initramfs.log"
+    say "building the GUI initramfs (build_initramfs.sh --with-gui ${INSTALLER[*]}) -- log: $WORK/initramfs.log"
     # #1937: + the old ATI/AMD (R600..Evergreen) microcode -- an HP 6005 had no screen without it
-    bash "$REPO/tools/build_initramfs.sh" "${SKIP_APT[@]}" --with-gui --radeon-legacy-firmware --kernel-version "$KVER" \
+    bash "$REPO/tools/build_initramfs.sh" "${SKIP_APT[@]}" "${INSTALLER[@]}" --with-gui --radeon-legacy-firmware --kernel-version "$KVER" \
         --source-date-epoch "$EPOCH" --version "$VERSION" --output "$INITRD" > "$WORK/initramfs.log" 2>&1 \
         || { tail -n 30 "$WORK/initramfs.log" >&2; die "build_initramfs.sh failed"; }
 fi
@@ -136,6 +156,7 @@ bash "$REPO/tools/iso/initrd-lab-gate.sh" "$INITRD" >/dev/null \
 ikver=$( (zstd -dc "$INITRD" 2>/dev/null || gzip -dc "$INITRD" 2>/dev/null || cat "$INITRD") \
     | cpio -t 2>/dev/null | grep -m1 -o '^lib/modules/[^/]*' | cut -d/ -f3 || true)
 [[ "$ikver" == "$KVER" ]] || die "the initramfs modules are for '${ikver:-none found}', the kernel is $KVER"
+[[ -z "$SERVER_ISO" ]] || usb_iso_initrd_check "$INITRD"
 
 # --- the boot partition (a FAT32 image in a file) ------------------------------------------
 STAGE="$WORK/esp"; install -d "$STAGE"
@@ -143,11 +164,12 @@ sed "s/@VERSION@/$VERSION/g" "$REPO/tools/usb/grub.cfg.in" > "$STAGE/grub.cfg"
 sed "s/@VERSION@/$VERSION/g" "$REPO/tools/usb/syslinux.cfg.in" > "$STAGE/syslinux.cfg"
 grep -q '^ *linux /imagesrv/vmlinuz imagesrv.mode=usbclone ' "$STAGE/grub.cfg" || die "grub.cfg has no usbclone kernel line"
 if grep -hv '^ *#' "$STAGE/grub.cfg" "$STAGE/syslinux.cfg" | grep -q 'imagesrv\.server'; then die "imagesrv.server on the stick's kernel line"; fi
-python3 - "$STAGE/imagesrv-usb.json" "$VERSION" "$KVER" "$EPOCH" "$(sha256sum "$INITRD" | cut -d' ' -f1)" "$SURVEY" <<'PY'
+python3 - "$STAGE/imagesrv-usb.json" "$VERSION" "$KVER" "$EPOCH" "$(sha256sum "$INITRD" | cut -d' ' -f1)" "$SURVEY" "$INSTALL_JSON" <<'PY'
 import json, sys
-out, ver, kver, epoch, isha, survey = sys.argv[1:7]
+out, ver, kver, epoch, isha, survey, install = sys.argv[1:8]
 json.dump({"product": "ImageSrv USB", "version": ver, "kernel": kver, "source_date_epoch": int(epoch),
-           "initrd_sha256": isha, "label": "IMGSRV_USB", "data_label": "IMGSRV_DATA", "survey": survey == "1"},
+           "initrd_sha256": isha, "label": "IMGSRV_USB", "data_label": "IMGSRV_DATA", "survey": survey == "1",
+           "install": json.loads(install)},   # #2062: the server ISO on partition 3, or null
           open(out, "w", encoding="utf-8"), indent=1)
 PY
 
@@ -156,8 +178,9 @@ ESP_MB=$(( payload * 13 / 10 / 1048576 + 64 ))
 (( ESP_MB >= 64 )) || ESP_MB=64
 ESP_SECT=$(( ESP_MB * 2048 )); ESP_START=2048
 DATA_START=$(( ESP_START + ESP_SECT )); DATA_SECT=$(( DATA_MB * 2048 ))
-TOTAL_SECT=$(( DATA_START + DATA_SECT + 2048 ))
-say "partition 1 $LABEL ${ESP_MB}MiB, partition 2 $DATA_LABEL ${DATA_MB}MiB"
+INST_START=$(( DATA_START + DATA_SECT ))   # #2062: after the two that every boot reads; 0 sectors without --server-iso
+TOTAL_SECT=$(( INST_START + ISO_SECT + 2048 ))
+say "partition 1 $LABEL ${ESP_MB}MiB, partition 2 $DATA_LABEL ${DATA_MB}MiB${SERVER_ISO:+, partition 3 $INSTALL_LABEL $(( ISO_SECT / 2048 ))MiB (server $ISO_TAG)}"
 
 ESP="$WORK/esp.img"; DATA="$WORK/data.img"
 truncate -s $(( ESP_SECT * 512 )) "$ESP"
@@ -196,16 +219,18 @@ mcopy -i "$DATA" "$STAGE/README.txt" ::/README.txt
 # --- the disk ------------------------------------------------------------------------------------
 NAME="imagesrv-usb-$VERSION.img"; [[ "$SURVEY" == 0 ]] || NAME="imagesrv-usb-survey-$VERSION.img"; IMG="$OUT/$NAME"
 rm -f "$IMG"; truncate -s $(( TOTAL_SECT * 512 )) "$IMG"
+P3=""; [[ -z "$SERVER_ISO" ]] || P3=$'\n'"start=$INST_START, size=$ISO_SECT, type=83"   # no line at all without it: the script sfdisk reads is today's
 sfdisk --no-reread --no-tell-kernel "$IMG" > "$WORK/sfdisk.log" 2>&1 <<EOF || { cat "$WORK/sfdisk.log" >&2; die "sfdisk failed"; }
 label: dos
 label-id: 0x19141914
 unit: sectors
 
 start=$ESP_START, size=$ESP_SECT, type=c, bootable
-start=$DATA_START, size=$DATA_SECT, type=c
+start=$DATA_START, size=$DATA_SECT, type=c$P3
 EOF
 dd if="$ESP" of="$IMG" bs=512 seek="$ESP_START" conv=notrunc,sparse status=none
 dd if="$DATA" of="$IMG" bs=512 seek="$DATA_START" conv=notrunc,sparse status=none
+[[ -z "$SERVER_ISO" ]] || dd if="$SERVER_ISO" of="$IMG" bs=1M seek=$(( INST_START / 2048 )) conv=notrunc,sparse status=none
 if [[ "$BIOS" == 1 && "$BIOS_LOADER" == syslinux ]]; then
     dd if="$SYSLINUX_MBR" of="$IMG" bs=440 count=1 conv=notrunc status=none
 elif [[ "$BIOS" == 1 ]]; then
@@ -243,6 +268,10 @@ layout=$(sfdisk -d "$IMG")
 grep -q "^label-id: 0x19141914$" <<<"$layout" || die "the disk id is not as written: $layout"
 grep -q "start= *$ESP_START, size= *$ESP_SECT, type=c, bootable" <<<"$layout" || die "partition 1 not as written: $layout"
 grep -q "start= *$DATA_START, size= *$DATA_SECT, type=c" <<<"$layout" || die "partition 2 not as written: $layout"
+if [[ -n "$SERVER_ISO" ]]; then
+    grep -q "start= *$INST_START, size= *$ISO_SECT, type=83" <<<"$layout" || die "partition 3 not as written: $layout"
+    usb_iso_readback "$IMG" "$INST_START" "$SERVER_ISO"
+elif [[ "$(grep -c "start=" <<<"$layout")" != 2 ]]; then die "a third partition on a stick built without --server-iso: $layout"; fi
 listing=$(mdir -i "$IMG@@$(( ESP_START * 512 ))" -b ::/EFI/BOOT) || die "the boot partition does not read back"
 for f in BOOTX64.EFI grubx64.efi grub.cfg; do grep -qi "/$f\$" <<<"$listing" || die "$f missing from /EFI/BOOT"; done
 cmp -s <(mtype -i "$IMG@@$(( ESP_START * 512 ))" ::/EFI/BOOT/BOOTX64.EFI) "$SHIM" || die "shim in the image differs from $SHIM"

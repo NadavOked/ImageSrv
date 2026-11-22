@@ -6,7 +6,8 @@ a round, the device name under it ("sda") -- the size was missing there altogeth
 number stays (what he writes on the drawer); the name is the connection ("SATA 0",
 "NVMe 03:00.0"); then the size; then how much is taken -- before the write what it
 will erase, after it what was written, "לא נמדד" when nobody measured (principle 5,
-never 0); "sda" leaves the screen.
+never 0); "sda" leaves the screen. #2980 (Nadav 12/11, mockup-gui-unified-1112): the name is "דיסק N"
+again -- the one name the title, the build machine and the console give that drawer.
 
 Two halves:
 
@@ -259,12 +260,14 @@ def words(binary: Path, tmp: Path, state: str | None, card: str, theme: str = "l
 
 
 @GUI_BUILD
-def test_a_round_card_says_the_connection_the_size_and_what_is_taken_and_never_sda(binary, tmp_path):
+def test_a_round_card_says_disk_n_the_size_and_what_is_taken_and_never_sda(binary, tmp_path):
+    """#2980 (mockup-gui-unified-1112, decisions 3 and 8) replaced "the connection is the name": the row is
+    "דיסק N", as the title and the build machine call it -- the connection is not on the row."""
     w = words(binary, tmp_path, ROUND, "cloner")
-    for conn in ("SATA 0", "SATA 1", "NVMe 03:00.0"):
-        assert conn in w, (conn, w)
+    for name in ("דיסק 1", "דיסק 2", "דיסק 3"):
+        assert name in w, (name, w)
+    assert not [l for l in w if l in ("SATA 0", "SATA 1", "NVMe 03:00.0")], "the connection as the name"
     assert not [l for l in w if l in ("sda", "sdb", "nvme0n1", "sdc")], "a device name on the screen"
-    assert not [l for l in w if re.fullmatch(r"דיסק [123]", l)], "the drawer number said a second time as the name"
     assert "500 GB" in w and "256 GB" in w, w                                   # the size, in a round: it was missing
     assert "תפוס עכשיו: 61.2 GB" in w, w                                       # a waiting drawer: what it will erase
     assert "נכתב: 85.9 GB" in w, w                                             # a done drawer: what it wrote
@@ -288,10 +291,10 @@ cused=sdb|{SIZE}|-1
 def test_the_waiting_cloner_says_what_is_on_each_disk_before_a_round_and_never_sda(binary, tmp_path):
     """Before a round the cloner is on the standby screen: this is where "what will be erased" lives."""
     w = words(binary, tmp_path, IDLE, "standby")
-    assert "SATA 0" in w and "SATA 1" in w and "SATA 2" in w, w                # the connection is the name, empty drawer too
+    assert "דיסק 1" in w and "דיסק 2" in w and "דיסק 3" in w, w                # #2980: "דיסק N", empty drawer too
+    assert not [l for l in w if l in ("SATA 0", "SATA 1", "SATA 2")], "the connection as the name"
     assert "תפוס עכשיו: 215 GB" in w and "תפוס עכשיו: לא נמדד" in w, w
     assert not [l for l in w if l in ("sda", "sdb")], "a device name on the screen"
-    assert not [l for l in w if re.fullmatch(r"דיסק [123]", l)], "the drawer number said again as the name"
     assert "6.0 Gb/s" in w, w                                                  # the link kept its place, under the name
 
 
@@ -315,11 +318,11 @@ def test_nothing_measured_is_said_never_zero(binary, tmp_path):
 
 @GUI_BUILD
 @pytest.mark.parametrize("card", ["lcsource", "lcsource-usb", "lcprogress", "lcprogress-usb"])
-def test_the_local_clone_and_the_stick_say_the_connection_and_no_device_name(binary, tmp_path, card):
+def test_the_local_clone_and_the_stick_say_disk_n_and_no_device_name(binary, tmp_path, card):
     w = words(binary, tmp_path, None, card)
-    assert "SATA 0" in w and "SATA 1" in w, w
+    assert "דיסק 1" in w and "דיסק 2" in w, w                                  # #2980: the round's name for a drawer
+    assert not [l for l in w if l in ("SATA 0", "SATA 1")], "the connection as the name"
     assert not [l for l in w if l in ("sda", "sdb", "sdc")], "a device name on the screen"
-    assert not [l for l in w if re.fullmatch(r"דיסק [123]", l)], w
     assert any(l.startswith("500 GB") for l in w), w                           # the size (and the model after it)
     if card.startswith("lcsource"):
         assert any(l.startswith("עליו עכשיו:") and "212 GB בשימוש" in l for l in w), w   # what the write will erase

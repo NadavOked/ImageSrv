@@ -14,8 +14,8 @@ _bc_u32() { # file, byte offset -- little-endian uint32
     echo $(($1 + ($2 * 256) + ($3 * 65536) + ($4 * 16777216)))
 }
 
-_bc_x509_subjects() { # db variable; one CN per X.509 EFI signature
-    _bc_file=$1; _bc_size=$(wc -c < "$_bc_file" 2>/dev/null) || return 1
+_bc_x509_subjects() { # efivar (db, KEK); one CN per X.509 signature. $2 (optional, #86): a dir for N.der + N.cn
+    _bc_file=$1; _bc_n=0; _bc_size=$(wc -c < "$_bc_file" 2>/dev/null) || return 1
     case "$_bc_size" in ''|*[!0-9]*) return 1 ;; esac
     [ "$_bc_size" -ge 32 ] || return 1
     _bc_at=4; _bc_left=128
@@ -39,7 +39,11 @@ _bc_x509_subjects() { # db variable; one CN per X.509 EFI signature
                     -noout -subject -nameopt RFC2253 \
                     > "$RUN_DIR/bootca-db-subject.txt" 2>/dev/null || return 1
                 sed -n 's/^subject=//; s/^.*CN=\([^,]*\).*$/\1/p' \
-                    "$RUN_DIR/bootca-db-subject.txt"
+                    "$RUN_DIR/bootca-db-subject.txt" > "$RUN_DIR/bootca-db.cn" || return 1
+                cat "$RUN_DIR/bootca-db.cn"
+                if [ -n "${2:-}" ]; then _bc_n=$((_bc_n + 1))   # #86: the KEK certificate itself is the trust anchor
+                    cp "$RUN_DIR/bootca-db.der" "$2/$_bc_n.der" && cp "$RUN_DIR/bootca-db.cn" "$2/$_bc_n.cn" || return 1
+                fi
                 _bc_data=$((_bc_data + _bc_sig))
             done
         fi

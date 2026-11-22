@@ -39,7 +39,7 @@ target_init() {
     echo "$_t/bytes.raw" > "$_t/counter"
     echo "$2" > "$_t/total"
     rm -f "$_t/error" "$_t/crc_delta" "$_t/temp_after" "$_t/ata_log" "$_t/ata_log.json" "$_t/ident" "$_t/evidence_only" \
-        "$_t/boot_ca_state" "$_t/boot_ca_reason" "$_t/write_check_state" "$_t/write_check_reason" "$_t/write_check_mbps" "$_t/refused_before_write" \
+        "$_t/boot_ca_state" "$_t/boot_ca_reason" "$_t/db_update.json" "$_t/write_check_state" "$_t/write_check_reason" "$_t/write_check_mbps" "$_t/refused_before_write" \
         "$_t/write_started" "$_t/foreign" "$_t/ntfs_boot" "$_t/dead" "$_t/pulled" "$_t/readback" "$_t/readback_reason" "$_t/readback_why" "$_t/rb_chunks" "$_t/rb_prog" "$_t/plan_why" "$_t/stages" "$_t/raid_wipe" "$_t/share.ok" "$_t/skip.chosen" "$_t/note"   # #1805; #1883; #1907; #1808/#1898; #2046: rb_prog; #2943: skip.chosen; #3167: note
     target_ident_keep "$1"; target_bind "$1"   # #1602: serial|port|ata while it is still in sysfs; #2434: the disk chosen (failmark.sh)
     # ‏#874: מאיפה dmesg נספר בכשל -- ריק (אין /proc/uptime) = מההתחלה.
@@ -172,7 +172,7 @@ build_progress() {
         case "$(cat "$_d/temp_after" 2>/dev/null)" in ''|*[!0-9]*) ;; *) _entry="$_entry,\"temp_c\":$(cat "$_d/temp_after")" ;; esac   # #1859: after the write
         if [ -s "$_d/boot_ca_state" ] && [ -s "$_d/boot_ca_reason" ]; then
             _entry="$_entry,\"boot_ca_preflight\":{\"state\":\"$(json_escape "$(cat "$_d/boot_ca_state")")\",\"reason\":\"$(json_escape "$(cat "$_d/boot_ca_reason")")\"}"
-        fi
+        fi; [ ! -s "$_d/db_update.json" ] || _entry="$_entry,\"db_update\":$(tr -d '\n' < "$_d/db_update.json")"   # #86: dbupdate.sh, db before and after
         _wm=$(cat "$_d/write_check_mbps" 2>/dev/null); case "$_wm" in ''|*[!0-9]*) _wm=null ;; esac   # #1366: null = not measured, never 0
         [ -s "$_d/write_check_state" ] && _entry="$_entry,\"write_preflight\":{\"state\":\"$(json_escape "$(cat "$_d/write_check_state")")\",\"reason\":\"$(json_escape "$(cat "$_d/write_check_reason" 2>/dev/null)")\",\"mbps\":$_wm}"
         # ‏#874: יעד שנכשל נושא סידורי, חריץ ושורות ה-ATA (failmark.sh) -- הראיה, לא סיווג.

@@ -216,7 +216,7 @@ def test_the_restore_shows_its_progress_on_one_gui(tmp_path):
     assert "--backend " in call
     seen = r["seen"]
     assert f"title={RLM}שחזור: Windows 11 Lab\n" in seen, seen
-    assert f"sub={RLM}דיסק 1 · מחיצה 2 מתוך 3 · " in seen
+    assert f"sub={RLM}הדיסק של המחשב · מחיצה 2 מתוך 3 · " in seen   # #2980: one disk -- never "דיסק N" / "SATA 3 (לא ממופה)"
     assert "pct=2\n" in seen and "bytes=1000000000\n" in seen and "moving=1\n" in seen
     # "partition=" would make the card say "(בלוקים)", the capture's block axis
     assert "partition=" not in seen
@@ -249,7 +249,7 @@ def test_the_restore_ends_on_a_success_card_then_powers_off_in_20_seconds(tmp_pa
     assert f"title={RLM}השחזור הושלם: Windows 11 Lab\n" in done[0] and "pct=100\n" in done[0], done[0]
     left = [int(n) for n in re.findall(r"המחשב יכבה בעוד (\d+) שניות", r["seen"])]
     assert left and left[0] in (19, 20) and left == sorted(left, reverse=True) and min(left) < 19, left
-    assert f"sub={RLM}דיסק 1 · מכבה את המחשב…\n" in done[-1], done[-1]
+    assert f"sub={RLM}הדיסק של המחשב · מכבה את המחשב…\n" in done[-1], done[-1]
     # #1560's dialog draws the count and "כבה עכשיו" from this record; its button says end-poweroff
     counting = [c for c in done if "המחשב יכבה בעוד" in c]
     assert counting and all(re.search(r"^end_poweroff=\d+\|restore$", c, re.M) for c in counting), counting
@@ -476,7 +476,7 @@ def test_cancel_stops_the_stream_wipes_the_table_and_powers_off(tmp_path):
     assert all("cancel=1" not in c for c in seen[asked:]), seen
     gone = [c for c in seen if c.startswith("message=השחזור בוטל — הדיסק ריק|")]
     assert gone and any(re.search(r"המחשב יכבה בעוד \d+ שניות", c) for c in gone), seen
-    assert gone[-1] == f"message=השחזור בוטל — הדיסק ריק|{RLM}דיסק 1 · מכבה את המחשב…\n", gone[-1]
+    assert gone[-1] == f"message=השחזור בוטל — הדיסק ריק|{RLM}הדיסק של המחשב · מכבה את המחשב…\n", gone[-1]
     assert all("end_poweroff=" not in c for c in gone)   # #1560's dialog would say "הושלם"
     assert r["beats"] == 20, r["beats"]
     assert len(r["calls"]) == 1, r["calls"]

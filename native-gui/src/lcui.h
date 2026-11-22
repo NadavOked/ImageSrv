@@ -29,7 +29,7 @@ void lc_gb(char *out, size_t n, double bytes);    /* "149 GB", "610 MB" */
  * write in flight, where 0 is a real count. bytes < 0 = not measured. Never 0 for "no measurement". */
 enum { USED_NOW, USED_WRITTEN, USED_SO_FAR };
 void card_used_text(int mode, long long bytes, char *out, size_t n);
-void lc_disk_card_name(const LcDisk *d, char *out, size_t n);   /* #2030: "SATA 0" -- the connection, not "דיסק N" */
+void lc_disk_card_name(const LcDisk *d, char *out, size_t n);   /* 12/11 (decision 3): "דיסק N" or the operator's name */
 void lc_pct(char *out, size_t n, double share);   /* #1437: "0.2%", "37%" -- floored */
 void lc_rate_sample(LcUi *u, int elapsed, long long copied);   /* #1437: one per reload */
 double lc_rate(const LcUi *u, int *span);         /* bytes/s over the window, -1 = none */

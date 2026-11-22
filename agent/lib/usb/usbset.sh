@@ -14,15 +14,16 @@
 USBSET="${LC:-$RUN_DIR/lc}/usbset"
 
 #: id|title|sub|kind|min|max -- kind num (a whole number), rb (one of two, _us_two), map (#1962,
-#: usbmap.sh) or reset (#1960)
+#: usbmap.sh), reset (#1960) or install (#2062, usbinstall.sh)
 USBSET_ITEMS='min_free_gb|מקום פנוי מינימלי אחרי שחזור|יעד שיישאר עם פחות מזה יוצג כ'"'"'לא נכנס'"'"'|num|0|500
 readback_mode|אימות מלא אחרי הכתיבה|כבוי: מדגם · דלוק: כל הבלוקים (xxh64)|rb||
 temp_warn_c|סף חום|דיסק חם מעל זה אחרי הכתיבה — כתום|num|30|100
 drawer_slots|מיפוי חיבורים|כל החיבורים — שם, ופעיל או לא|map||
 cloner_beep|צליל בסיום סבב שיכפול|הצלחה, כשל ומגירה שנשלפה — ברמקול של המחשב|rb||
 poweroff_s|כיבוי אוטומטי אחרי הצלחה|שניות עד שהמחשב נכבה לבד · 0 = לא נכבה|num|0|3600
-reset|החזר לברירת המחדל|כל ההגדרות חוזרות לערכים הקבועים|reset||'
-USBSET_LAST=6   # the last item's index
+reset|החזר לברירת המחדל|כל ההגדרות חוזרות לערכים הקבועים|reset||
+install|התקן שרת ImageSrv על המחשב הזה|מתקין השרת, מהדיסק-און-קי — בלי אינטרנט|install||'
+USBSET_LAST=7   # the last item's index
 
 _us_text() {
     # $1 = id, $2 = pane|dlg|short|field. The words of the server's settings screen
@@ -136,12 +137,13 @@ EOF
             "KEY UP") [ "$_uk_s" -gt 0 ] && _us_put sel $((_uk_s - 1)) ;;
             "KEY DOWN") [ "$_uk_s" -lt "$USBSET_LAST" ] && _us_put sel $((_uk_s + 1)) ;;
             "KEY ENTER") _us_put dlg 1; _us_put err ""; _us_put foc no   # #1960: the focus starts on "ביטול"
-                         if [ "$_uk_kind" = reset ]; then :; elif [ "$_uk_kind" = map ]; then usbset_map_open; elif [ "$_uk_kind" = rb ]; then _us_put opt "$(usbset_now "$_uk_id")"; else _us_put buf "$(usbset_now "$_uk_id")"; fi ;;
+                         if [ "$_uk_kind" = reset ]; then :; elif [ "$_uk_kind" = install ]; then usbinstall_open; elif [ "$_uk_kind" = map ]; then usbset_map_open; elif [ "$_uk_kind" = rb ]; then _us_put opt "$(usbset_now "$_uk_id")"; else _us_put buf "$(usbset_now "$_uk_id")"; fi ;;
             "KEY ESC") usbset_close; return 0 ;;
         esac
         usbset_frame; return 0
     fi
     if [ "$_uk_kind" = map ]; then usbset_map_key "$1"; usbset_frame; return 0; fi   # #1962 (usbmap.sh)
+    if [ "$_uk_kind" = install ]; then usbinstall_key "$1"; usbset_frame; return 0; fi   # #2062 (usbinstall.sh)
     case "$1:$_uk_kind" in
         "KEY ESC":*) _us_put dlg 0 ;;
         "KEY TAB":reset|"KEY BACKTAB":reset|"KEY LEFT":reset|"KEY RIGHT":reset)
@@ -191,6 +193,7 @@ usbset_frame() {
 $(_us_item "$_uf_s")
 EOF
         if [ "$_uf_k" = reset ]; then usbset_reset_frame "$_uf_dlg" "$_uf_saved" "$_uf_err"   # #1960
+        elif [ "$_uf_k" = install ]; then usbinstall_frame "$_uf_dlg" "$_uf_err"   # #2062
         elif [ "$_uf_k" = map ]; then usbset_map_frame "$_uf_dlg" "$_uf_saved" "$_uf_err"; else   # #1962
         _uf_v=$(usbset_now "$_uf_id"); _uf_show=$(_us_show "$_uf_id" "$_uf_v")
         _uf_def=""; [ "$_uf_v" != "$(_us_default "$_uf_id")" ] || _uf_def="ברירת המחדל"

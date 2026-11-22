@@ -126,6 +126,7 @@ void state_parse(State *s, FILE *fp) {
     memset(s, 0, sizeof *s);
     s->pct = -1;                                  /* no total known until said */
     s->elapsed_s = s->eta_s = -1; s->rate_bps = -1;   /* #410: unmeasured until said */
+    s->wave_elapsed = -1;                         /* #2980: not said until said */
     s->hello_age = -1;
     s->hello_rc = -1;
     s->driver_models_read = -1;                   /* #1269: not read until said */
@@ -698,6 +699,9 @@ void state_parse(State *s, FILE *fp) {
             if (f[1][0] && (!parse_uint(f[1], &u) || u > (unsigned long long)LLONG_MAX)) continue;
             if (f[2][0] && strcmp(f[2], "no_history")) continue;
             s->fc_clock = f[0][0] == '1'; s->fc_at = (long long)u; s->fc_nohist = f[2][0] != 0;
+        } else if (KEY("wave_elapsed")) {
+            unsigned long long u;   /* #2980: seconds, digits only -- anything else is not said, never 00:00 */
+            s->wave_elapsed = parse_uint(val, &u) && u <= INT_MAX ? (int)u : -1;
         } else if (KEY("pline")) {
             /* #3181: pline=<written>|<target>|<remaining>|<0|1> -- four whole numbers, written <= target, or not said */
             unsigned long long w, tg, lf;

@@ -273,8 +273,8 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
         else if (named) {   /* the operator's own name for the drawer (#704) */
             cloner_slot_label(s, bay, name, sizeof name);
             snprintf(sub, sizeof sub, "דיסק %d · %s%s%s", bay, conn, lk[0] ? " · " : "", lk);
-        } else {   /* #2030: the connection is the name -- the big number already says which drawer */
-            snprintf(name, sizeof name, "%s", conn); snprintf(sub, sizeof sub, "%s", lk);
+        } else {   /* #2980 (mockup-gui-unified-1112, decision 3): "דיסק N", as the round's row -- not the connection */
+            cloner_slot_label(s, bay, name, sizeof name); snprintf(sub, sizeof sub, "%s", lk);
         }
     }
     const char *why = d ? reason_he(d) : NULL;

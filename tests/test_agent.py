@@ -1792,6 +1792,8 @@ REAL_BINARIES_USED = {
     # #2818 — busybox's mkswap applet has no -U; make_swap runs util-linux's
     # by path (/usr/bin/mkswap), since busybox sh prefers an applet over PATH.
     "mkswap",
+    # #86 — efivarfs marks db immutable; the signed db update clears it for one write (dbupdate.sh).
+    "chattr",
 }
 
 #: מקומפל מהמקור בבנאי ולכן אינו ברשימת ה-BINARIES שנאספת מהמערכת.

@@ -367,6 +367,9 @@ updated=<epoch seconds>             # #410: when the agent wrote this snapshot -
 cloner_group=<name>|<mac>           # #2849: the drawer= records that follow are this cloner's -- one cage per
                                     # cloner, "מחשב שיכפול <name>"; absent (the cloner itself) = one cage, "יעדים"
 direct_targets=unread               # #2849: the room was not read -- "מצב המגירות לא נקרא מהשרת", never "no disks"
+wave_elapsed=<seconds>              # #2980: since the wave started, by the server's start of it (the cloner: hello's
+                                    # session.started_at; the direct send: the room's round.elapsed_s). The fourth
+                                    # tile, "זמן שעבר" in mm:ss as the room screen; absent, or the write is over = "—"
 drawer=<port>|<dev>|<state>|<bytes>|<total>|<error>|<rate_bps>|<eta_s>|<drawer>|<conn>
                                     # #410: fields 7-8 measured by the kiosk on the local counter; -1 / absent
                                     # (a six-field record) = not measured -- the line shows bytes only

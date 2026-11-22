@@ -164,6 +164,7 @@ cloner_gui_state() {
     if command -v tools_menu_record > /dev/null 2>&1; then tools_menu_record >> "$_cg_next" || return 1; fi   # #2804: "כלים F3" on the cloner (buildmenuitems.sh); no record = hidden
     gui_rb_mode >> "$_cg_next" || return 1   # #2046
     gui_forecast_record >> "$_cg_next" || return 1   # #1843
+    if command -v gui_elapsed_record > /dev/null 2>&1; then gui_elapsed_record >> "$_cg_next" || return 1; fi   # #2980 (directgui.sh)
     if command -v gui_prodline_records > /dev/null 2>&1; then gui_prodline_records >> "$_cg_next" || :; fi   # #3181: a production line's three records (prodlinegui.sh); a regular round = none, the screen as it was
     _cg_count=$(json_get "$RUN_DIR/response.json" ".drawer_count")
     case "$_cg_count" in [1-8]) printf 'drawer_count=%s\n' "$_cg_count" >> "$_cg_next" || return 1 ;; esac

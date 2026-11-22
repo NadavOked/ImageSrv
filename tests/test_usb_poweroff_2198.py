@@ -227,18 +227,18 @@ def test_zero_success_dialog_says_no_auto_off_and_keeps_button(driver, tmp_path)
 
 @native_gui
 @pytest.mark.parametrize("width", [1024, 1280])
-def test_all_eight_rows_are_drawn_and_clickable_inside_768_pixels(tmp_path, width):
+def test_all_eight_rows_are_drawn_and_clickable_inside_768_pixels(tmp_path, width):   # #2062: the eighth (the server installer), in the height of seven
     # Reuse the existing DCUI pixel and hit driver at the owner's two sizes.
     source = DRIVER.replace("enum { W = 1280, H = 800 };", f"enum {{ W = {width}, H = 768 }};")
     assert source != DRIVER
     (tmp_path / "driver.c").write_text(source, encoding="utf-8", newline="\n")
     binary = _compile(tmp_path, "rows", "-DWITH_HITS")
     frame, gui_dir = frame_now(tmp_path, [])
-    assert len([s for s in frame.splitlines() if s.startswith("item\t")]) == 7
+    assert len([s for s in frame.splitlines() if s.startswith("item\t")]) == 8
     lines = gui(binary, gui_dir, "items", "hits")
     pixels = [s.split() for s in lines if s.startswith("item ")]
     hits = [s.split(" ", 5) for s in lines if s.startswith("hit ") and " item:" in s]
-    assert len(pixels) == len(hits) == 7, lines
+    assert len(pixels) == len(hits) == 8, lines
     for index, (pixel, hit) in enumerate(zip(pixels, hits)):
         _, x, y, w, h, _name = hit
         x, y, w, h = map(float, (x, y, w, h))

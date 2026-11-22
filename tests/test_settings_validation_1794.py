@@ -15,11 +15,11 @@ CASES = [
     ("learning_enabled", "yes", "true", "למידה אוטומטית של הרשת והמחשבים"),   # #2028
     ("session_wait_seconds", "29", "30", "המתנה מהמצטרף האחרון"),
     ("console_idle_seconds", "61", "60", "ניתוק בחוסר פעילות"),
-    ("crc_warn_threshold", "1000001", "1000000", "סף CRC"),
     ("min_free_gb", "501", "500", "מינימום מקום פנוי"),
     ("unregistered_autoboot_seconds", "601", "600", "הערך חייב להיות בין 0 ל-600 שניות"),   # #1802
     ("cloner_beep", "yes", "true", "צלילי המשכפל ומחשב הבנייה"),
     ("hdd_support", "yes", "true", "תמיכה ב-HDD"),   # #3268
+    ("secure_boot_db_update", "yes", "true", "הכשרת המחשב לאימג' בשחזור"),   # #86
     ("readback_full", "yes", "true", "אימות מלא אחרי הכתיבה"),
     ("igmp_querier", "yes", "true", "IGMP querier"),
     ("lost_wait_seconds", "179", "180", "המתנה למחשב שהתנתק באמצע שיכפול"),   # #2056

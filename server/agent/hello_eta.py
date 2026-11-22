@@ -88,7 +88,7 @@ def _forecast(conn: sqlite3.Connection, library, session: dict, trusted: bool) -
 
 
 def add(conn: sqlite3.Connection, library, answer: dict, trust: ClockTrust) -> None:
-    """מוסיף `session.forecast` ל-`answer` של hello — רק למחשב שיכפול בגל חדר **רץ**.
+    """מוסיף `session.forecast` (ו-`session.started_at`, #2980) ל-`answer` של hello — רק למחשב שיכפול בגל חדר **רץ**.
     לעולם אינו מפיל את ה-hello: הערכה שנכשלה היא `why: "error"`, לא 500 למכונה שעומדת לכתוב."""
     session = answer.get("session")
     if answer.get("role") != "cloner" or not isinstance(session, dict) or session.get("prefix") != "ROOM":
@@ -96,6 +96,16 @@ def add(conn: sqlite3.Connection, library, answer: dict, trust: ClockTrust) -> N
     trusted = trust.ok()          # גם בגל פתוח: עד שהוא יוצא הקריאה כבר טרייה
     if session.get("state") != "running":
         return
+    # #2980: "זמן שעבר" במשכפל — מאותה התחלה שמסך החדר של מחשב הבנייה סופר ממנה (`round.elapsed_s`,
+    # `room._wave_pace`: `started_at` של הגל הרץ). epoch; חסר = לא נאמר, והמסך אומר "—".
+    try:
+        wave = conn.execute("SELECT state, started_at FROM sessions WHERE id = ?", (session["id"],)).fetchone()
+        started = _epoch(wave["started_at"]) if wave is not None and wave["state"] == "running" else None
+    except Exception:             # noqa: BLE001 — מספר על המסך, לעולם לא 500 למכונה שעומדת לכתוב
+        log.exception("hello started_at failed")
+        started = None
+    if started is not None:
+        session["started_at"] = started
     try:
         forecast = _forecast(conn, library, session, trusted)
     except Exception:             # noqa: BLE001

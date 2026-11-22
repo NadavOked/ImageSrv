@@ -65,7 +65,7 @@ static void gui_heartbeat(void) {
 #include "ui.h"
 #include "utf8.h"
 #include "lcui.h"   /* #1322 */
-#include "screens_rounds.h"   /* 16/10: smart_level; eff_drawer, unmapped_label */
+#include "screens_rounds.h"   /* 16/10: smart_level; #2980: OWN_DISK_HE */
 #include "smartdlg.h"        /* 16/10: the SMART warning window */
 #include "splash.h"         /* 17/10: the last-resort screen */
 #include "canceldlg.h"       /* #1386: "בטל דיסק זה" */
@@ -587,16 +587,11 @@ static void tool_again(App *a) {
 
 /* 16/10 (Nadav): a disk of THIS machine with a SMART warning (dsmart=) is
  * written or read only after the SMART warning window -- named as the disk
- * list names it (#1495): "דיסק N" by the drawer mapping, "<conn> (לא ממופה)",
- * or the device when the mapping was not reported. */
+ * list names it: #2980, "הדיסק של המחשב" (the build machine's one disk). */
 static int disk_smart_ask(App *a, int kind, int i) {
     if (i < 0 || i >= a->st.ndisks || !smart_level(a->st.disks[i].smart)) return 0;
     const Disk *d = &a->st.disks[i];
-    char label[SLOT_NAME_MAX + 64];
-    if (!d->slot_known) snprintf(label, sizeof label, "%s", d->dev);
-    else if (eff_drawer(d->drawer, 0) > 0) snprintf(label, sizeof label, "דיסק %d", eff_drawer(d->drawer, 0));
-    else unmapped_label("", d->conn, 0, d->dev, label, sizeof label);
-    sdlg_open(a, kind, i, d->dev, label, d->smart, d->smart_reason, d->model, d->serial);
+    sdlg_open(a, kind, i, d->dev, OWN_DISK_HE, d->smart, d->smart_reason, d->model, d->serial);
     return 1;
 }
 

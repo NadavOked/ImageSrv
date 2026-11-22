@@ -316,7 +316,7 @@ def words(binary: Path, tmp: Path, state: str, card: str, theme: str = "light") 
 def test_the_waiting_cloner_draws_the_set_and_sticker_as_a_chip_beside_the_drawers_name(binary, tmp_path):
     w = words(binary, tmp_path, IDLE, "standby")
     assert "קוריאים · xx-7" in w and "קוריאים · xx-12" in w, w
-    assert "SATA 0" in w and "6.0 Gb/s" in w, "the name and the link keep their place"
+    assert "דיסק 1" in w and "6.0 Gb/s" in w, "the name (#2980: דיסק N) and the link keep their place"
 
 
 @GUI_BUILD
@@ -342,5 +342,5 @@ def test_a_round_leads_the_size_line_with_the_set_and_sticker(binary, tmp_path):
 def test_a_label_record_that_cannot_be_read_draws_no_chip_and_does_not_crash(binary, tmp_path, junk):
     state = "\n".join(l for l in IDLE.splitlines() if not l.startswith("cdisk_label")) + "\n" + junk + "\n"
     w = words(binary, tmp_path, state, "standby")
-    assert "SATA 0" in w
+    assert "דיסק 1" in w   # #2980: the drawer's name, as the round's row
     assert not [l for l in w if l.startswith("קוריאים")], w
