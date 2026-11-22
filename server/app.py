@@ -1160,8 +1160,10 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
             hooks["timesync"](service)
         except Exception as exc:                              # noqa: BLE001
             from .db import journal
+            # #3021: הטקסט הגולמי ליומן השרת; ליומן האירועים — משפט שלנו.
+            log.warning("timesync apply on start failed: %s", exc or type(exc).__name__)
             journal(ctx.conn, "timesync_apply_failed",
-                    f"שרת NTP לפי כרטיס: {exc or type(exc).__name__}")
+                    "שרת NTP לפי כרטיס לא הוחל — הפרטים ביומן השרת")
     return service
 
 

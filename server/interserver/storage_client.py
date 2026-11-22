@@ -442,8 +442,9 @@ class PinnedMTLSClient:
         except InterserverClientError:
             raise
         except Exception as exc:                                 # noqa: BLE001
+            log.warning("secondary connection dropped after %s bytes: %s", already + got, exc)   # #3021
             raise InterserverClientError(
-                f"החיבור למשני נותק אחרי {already + got} בייטים: {exc}") from exc
+                f"החיבור למשני נותק אחרי {already + got} בייטים — הפרטים ביומן השרת") from exc
         if got != length:
             raise InterserverClientError(
                 f"{path}: התקבלו {got} מתוך {length} בייטים")
@@ -487,8 +488,9 @@ class PinnedMTLSClient:
                 if on_progress is not None:
                     on_progress(sent)
         except Exception as exc:                                 # noqa: BLE001
+            log.warning("secondary connection dropped after %s of %s bytes: %s", sent, total, exc)  # #3021
             raise InterserverClientError(
-                f"החיבור למשני נותק אחרי {sent} מתוך {total} בייטים: {exc}") from exc
+                f"החיבור למשני נותק אחרי {sent} מתוך {total} בייטים — הפרטים ביומן השרת") from exc
         if sent != total:
             raise InterserverClientError(
                 f"המקור הניב {sent} בייטים במקום {total} — ההעברה לא הושלמה")

@@ -955,7 +955,7 @@ class JournalTranslator:
                 text = (f"{m.group(1)} — {ROLLBACK_HE.get(m.group(3), m.group(3))}, "
                         f"בוצע ב-{m.group(2).replace('T', ' ')[:16]}")
                 if "errors=" in detail:
-                    text += f" · ההחזרה עצמה דיווחה שגיאות: {detail.split(': ', 1)[-1]}"
+                    text += " · ההחזרה עצמה דיווחה שגיאות — הפרטים ביומן השרת"      # #3021
         elif event == "net_config":
             m = re.search(r"(\S+) (\S+)(?: (\S+))? changed=(\S*)$", detail)
             if m:
