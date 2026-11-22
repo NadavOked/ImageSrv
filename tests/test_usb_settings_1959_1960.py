@@ -36,10 +36,10 @@ from test_cloner_gui import BASH, GUI, _pkgconfig, posix
 from test_usb_clone import KIOSK, LIB, needs_jq, run
 
 REPO = Path(__file__).resolve().parent.parent
-DEFAULTS = {"min_free_gb": 20, "readback_mode": "sample", "crc_warn_threshold": 500, "temp_warn_c": 60,
+DEFAULTS = {"min_free_gb": 20, "readback_mode": "sample", "temp_warn_c": 60,
             "cloner_beep": True, "poweroff_s": 20}   # #2131
 FSI, PDI = "\u2068", "\u2069"   # view.iso: a Latin run in a Hebrew line, "20 GB" and never "GB 20"
-ITEMS = ["מקום פנוי מינימלי אחרי שחזור", "אימות מלא אחרי הכתיבה", "אזהרת CRC למגירה", "סף חום", "מיפוי חיבורים",
+ITEMS = ["מקום פנוי מינימלי אחרי שחזור", "אימות מלא אחרי הכתיבה", "סף חום", "מיפוי חיבורים",
          "צליל בסיום סבב שיכפול", "כיבוי אוטומטי אחרי הצלחה", "החזר לברירת המחדל"]   # #1962: the mapping, #2131: the beep, before the reset
 
 pytestmark = requires_native(("bash", BASH))
@@ -70,9 +70,8 @@ def dialog_title(frame: str) -> str | None:
 
 CUSTOM = ["KEY ENTER", "KEY BACKSPACE", "KEY BACKSPACE", "CHAR 33", "CHAR 30", "KEY ENTER",   # 30 GB
           "KEY DOWN", "KEY ENTER", "KEY RIGHT", "KEY ENTER",                                   # full
-          "KEY DOWN", "KEY ENTER", "CHAR 31", "KEY ENTER",                                     # CRC 5001
           "KEY DOWN", "KEY ENTER", "KEY BACKSPACE", "KEY BACKSPACE", "CHAR 37", "CHAR 30", "KEY ENTER"]   # 70 C
-TO_RESET = ["KEY DOWN"] * 7 + ["KEY ENTER"]
+TO_RESET = ["KEY DOWN"] * 6 + ["KEY ENTER"]
 
 
 # --- #1960: the reset, in usbset.sh -------------------------------------------------------------
@@ -81,12 +80,12 @@ TO_RESET = ["KEY DOWN"] * 7 + ["KEY ENTER"]
 def test_reset_writes_the_defaults_reads_them_back_and_they_are_in_force(tmp_path):
     out, usb = kiosk(tmp_path, CUSTOM)
     assert json.loads((usb / "settings.json").read_text()) == {
-        "min_free_gb": 30, "readback_mode": "full", "crc_warn_threshold": 5001, "temp_warn_c": 70}, out.stdout + out.stderr
+        "min_free_gb": 30, "readback_mode": "full", "temp_warn_c": 70}, out.stdout + out.stderr
     out, usb = kiosk(tmp_path, TO_RESET + ["KEY TAB", "KEY ENTER"])
     assert json.loads((usb / "settings.json").read_text()) == DEFAULTS, out.stdout + out.stderr
     answer = json.loads((tmp_path / "run" / "response.json").read_text(encoding="utf-8"))
-    assert (answer["min_free_gb"], answer["readback_mode"], answer["crc_warn_threshold"], answer["usb"]["temp_warn_c"]) \
-        == (20, "sample", 500, 60)
+    assert (answer["min_free_gb"], answer["readback_mode"], answer["usb"]["temp_warn_c"]) == (20, "sample", 60)
+    assert "crc_warn_threshold" not in answer
     assert (tmp_path / "run" / "min_free_gb").read_text().strip() == "20"
     assert dialog_title(out.stdout) is None, out.stdout          # done: the dialog closed
     assert "prow\tמקום פנוי מינימלי\t\t20 GB\tmono\tברירת המחדל" in out.stdout, out.stdout
@@ -108,7 +107,7 @@ def test_the_confirmation_is_the_servers_red_button_with_the_focus_on_cancel(tmp
     assert dialog_title(out.stdout) == "להחזיר את ברירות המחדל?", out.stdout
     assert "dlg\tdanger\t640\t" in out.stdout
     assert "d.btn\tביטול\tEsc\tplain\t1" in out.stdout and "d.btn\tהחזר לברירת המחדל\t\tdanger\t0" in out.stdout
-    assert f"d.kv\tמקום פנוי מינימלי\t{FSI}20 GB{PDI}\t0" in out.stdout and f"d.kv\tאזהרת CRC\t{FSI}500{PDI}\t0" in out.stdout
+    assert f"d.kv\tמקום פנוי מינימלי\t{FSI}20 GB{PDI}\t0" in out.stdout
     assert "d.field" not in out.stdout                                 # no typed word (#1270)
     out, _usb = kiosk(tmp_path, TO_RESET + ["KEY TAB"])
     assert "d.btn\tהחזר לברירת המחדל\t\tdanger\t1" in out.stdout, out.stdout
@@ -136,15 +135,13 @@ def test_the_reset_writes_the_values_in_force_with_no_file():
     """No second copy of the numbers: usbset_reset writes USB_DEF_*, the ones usb_settings_load starts from."""
     text = (LIB / "usbset.sh").read_text(encoding="utf-8")
     body = text[text.index("usbset_reset() {"):text.index("\n}\n", text.index("usbset_reset() {"))]
-    for name in ("USB_DEF_MIN_FREE_GB", "USB_DEF_READBACK", "USB_DEF_CRC_WARN", "USB_DEF_TEMP_WARN_C"):
+    for name in ("USB_DEF_MIN_FREE_GB", "USB_DEF_READBACK", "USB_DEF_TEMP_WARN_C"):
         assert f'"${name}"' in body, name
     assert not re.search(r"\b(20|500|60|sample)\b", body.replace("USB_DEF_", "")), "a number copied into the reset"
 
 
 def test_the_sticks_defaults_are_the_servers_where_the_server_has_one(monkeypatch):
-    """min_free_gb, the read-back and the temperature are the server's own defaults. CRC is not:
-    the server's crc_warn_threshold is 0 (off, Nadav 13/10), the stick's 500 (Nadav 20/10) -- a
-    decision of its own, kept and named here, not a twin."""
+    """min_free_gb, the read-back and the temperature are the server's own defaults."""
     import sys
     sys.path.insert(0, str(REPO))
     from server.library import minfree
@@ -156,7 +153,6 @@ def test_the_sticks_defaults_are_the_servers_where_the_server_has_one(monkeypatc
     assert int(got["TEMP_WARN_C"]) == smart_history.TEMP_WARN_C
     monkeypatch.setattr(readbackhash, "get_setting", lambda conn, key: None)   # a server with no setting
     assert got["READBACK"] == readbackhash.mode(None)
-    assert int(got["CRC_WARN"]) == 500
 
 
 # --- #1959: the mouse, through the real lc_handle ----------------------------------------------

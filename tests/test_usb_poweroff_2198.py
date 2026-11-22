@@ -25,7 +25,7 @@ from test_usb_settings_1959_1960 import (
 
 TITLE = "כיבוי אוטומטי אחרי הצלחה"
 OFF = "המחשב לא ייכבה לבד (כיבוי אוטומטי: 0 בהגדרות)."
-TO_POWER = ["KEY DOWN"] * 6 + ["KEY ENTER"]
+TO_POWER = ["KEY DOWN"] * 5 + ["KEY ENTER"]
 pytestmark = requires_native(("bash", BASH))
 
 
@@ -206,7 +206,7 @@ def test_setting_does_not_change_a_server_connected_local_clone(tmp_path):
 @needs_jq
 def test_reset_restores_twenty_on_the_stick_and_after_reload(tmp_path):
     settings(tmp_path, 0)
-    out, usb = kiosk(tmp_path, ["KEY DOWN"] * 7 + ["KEY ENTER", "KEY TAB", "KEY ENTER"])
+    out, usb = kiosk(tmp_path, ["KEY DOWN"] * 6 + ["KEY ENTER", "KEY TAB", "KEY ENTER"])
     assert out.returncode == 0, out.stderr
     assert json.loads((usb / "settings.json").read_text())["poweroff_s"] == 20
     text, _record = finish(tmp_path)
@@ -234,11 +234,11 @@ def test_all_eight_rows_are_drawn_and_clickable_inside_768_pixels(tmp_path, widt
     (tmp_path / "driver.c").write_text(source, encoding="utf-8", newline="\n")
     binary = _compile(tmp_path, "rows", "-DWITH_HITS")
     frame, gui_dir = frame_now(tmp_path, [])
-    assert len([s for s in frame.splitlines() if s.startswith("item\t")]) == 8
+    assert len([s for s in frame.splitlines() if s.startswith("item\t")]) == 7
     lines = gui(binary, gui_dir, "items", "hits")
     pixels = [s.split() for s in lines if s.startswith("item ")]
     hits = [s.split(" ", 5) for s in lines if s.startswith("hit ") and " item:" in s]
-    assert len(pixels) == len(hits) == 8, lines
+    assert len(pixels) == len(hits) == 7, lines
     for index, (pixel, hit) in enumerate(zip(pixels, hits)):
         _, x, y, w, h, _name = hit
         x, y, w, h = map(float, (x, y, w, h))
@@ -246,5 +246,5 @@ def test_all_eight_rows_are_drawn_and_clickable_inside_768_pixels(tmp_path, widt
         assert abs(int(pixel[3]) - int(pixel[2]) - h) <= 3, (pixel, hit)
         sent = tokens(gui(binary, gui_dir, f"click:{x + w / 2},{y + h / 2}"))
         assert sent == ["KEY DOWN"] * index + ["KEY ENTER"], sent
-    pane, _ = frame_now(tmp_path, ["KEY DOWN"] * 6)
+    pane, _ = frame_now(tmp_path, ["KEY DOWN"] * 5)
     assert "<b>אחרי כשל, או כשיש דיסק כתום, המחשב לא נכבה לבד</b> — כמו היום." in pane
