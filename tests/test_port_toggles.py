@@ -35,7 +35,7 @@ SS_UDP = SS_DHCP_ONLY + (
 INSTALLER_OLD = "port=0\ninterface=eth0\nbind-interfaces\n\nenable-tftp\ntftp-root=/srv/tftp\n"
 INSTALLER_NEW = "port=0\ninterface=eth0\nbind-interfaces\n# enable-tftp moved (#1013)\n"
 
-PORTS = {"http_boot": 8080, "http_console": 8081, "interserver": 8443}
+PORTS = {"http_boot": 7712, "http_console": 443, "interserver": 7700}
 HOSTS = {"http_boot": ["0.0.0.0"], "http_console": ["10.44.0.1", "127.0.0.1"],
          "interserver": ["10.30.0.8"]}
 
@@ -135,7 +135,7 @@ def _build(tmp_path: Path, images_root: Path, clock, listeners, *, base_port=80,
     }
     fake["installer_conf"] = installer_conf
     dnsmasq = FakeDnsmasq(fake)
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, health_hooks=hooks,
                      # #1013: המתג של 69 כותב קובץ dnsmasq — לעולם לא את האמיתי.
                      dhcp_hooks={"apply": dnsmasq.apply, "apply_proxy": dnsmasq.apply_proxy,
@@ -205,15 +205,15 @@ def test_every_switch_row_warns_before_shutdown_in_the_69_wording(toggles):
 
 
 def test_the_missing_rows_are_there_now(toggles):
-    """DHCP 67 ובין-שרתים 8443 — חסרו ב-/ports. (#1266: SSH יצא מהמוצר.)"""
+    """DHCP 67 ובין-שרתים 7700 — חסרו ב-/ports. (#1266: SSH יצא מהמוצר.)"""
     rows = rows_of(toggles)
     assert rows["dhcp"]["port"] == "67" and rows["dhcp"]["proto"] == "udp"
-    assert rows["interserver"]["port"] == "8443"
+    assert rows["interserver"]["port"] == "7700"
 
 
 def test_bind_comes_from_the_socket_table_not_from_configuration(toggles):
     rows = rows_of(toggles)
-    assert rows["http_console"]["bind"] == ["10.44.0.1:8081", "127.0.0.1:8081"]
+    assert rows["http_console"]["bind"] == ["10.44.0.1:443", "127.0.0.1:443"]
     assert rows["http_console"]["listening"] is True
     assert rows["http_console"]["state"] == "ok"
     assert rows["tftp"]["bind"] == ["0.0.0.0:69"]
@@ -289,7 +289,7 @@ def test_bind_is_null_when_not_read_and_empty_only_when_read_and_not_listening(t
 
 
 def test_api_port_off_closes_the_listener_and_reads_back(toggles):
-    """הגדרת ה"גמור" של #996: כיבוי 8443 → ss (מוזרק) לא מראה מאזין +
+    """הגדרת ה"גמור" של #996: כיבוי 7700 → ss (מוזרק) לא מראה מאזין +
     `/ports.enabled=false`; הדלקה → חוזר."""
     resp = toggles["admin"].put("/api/console/ports/interserver", json={"enabled": False})
     assert resp.status_code == 200, resp.text
@@ -322,7 +322,7 @@ def test_the_state_is_saved_so_it_survives_a_restart(toggles):
 
 
 def test_http_boot_off_needs_the_server_name(toggles):
-    """8080 כבוי = אין PXE ואין סוכנים — הרסני, מאחורי הקלדת שם (עיקרון 7)."""
+    """7712 כבוי = אין PXE ואין סוכנים — הרסני, מאחורי הקלדת שם (עיקרון 7)."""
     put = lambda body: toggles["admin"].put("/api/console/ports/http_boot", json=body)  # noqa: E731
     assert put({"enabled": False}).status_code == 400
     assert put({"enabled": False, "confirm": "wrong"}).status_code == 400
@@ -347,12 +347,12 @@ def test_a_disabled_boot_port_is_off_by_operator_in_health_not_a_warning(toggles
 
 
 def test_the_console_cannot_be_closed_through_itself(tmp_path, images_root, clock):
-    """"הדלת האחרונה" — בקשה שמגיעה דרך 8081 לסגור את 8081 מסורבת בשמו."""
-    t = _build(tmp_path, images_root, clock, FakeListeners(), base_port=8081)
+    """"הדלת האחרונה" — בקשה שמגיעה דרך 443 לסגור את 443 מסורבת בשמו."""
+    t = _build(tmp_path, images_root, clock, FakeListeners(), base_port=443)
     resp = t["admin"].put("/api/console/ports/http_console",
                           json={"enabled": False, "confirm": server_name(t)})
     assert resp.status_code == 409, resp.text
-    assert "8081" in resp.json()["detail"]
+    assert "443" in resp.json()["detail"]
     assert t["listeners"].calls == []
     assert t["listeners"].is_open("http_console")
 
@@ -415,7 +415,7 @@ def test_without_a_listener_manager_the_switch_says_it_did_not_apply(
 
 
 def test_interserver_without_a_listener_has_no_switch(tmp_path, images_root, clock):
-    """8443 עולה רק על משני עם --interserver-host; בלעדיו השורה קיימת,
+    """7700 עולה רק על משני עם --interserver-host; בלעדיו השורה קיימת,
     אומרת שאינה מוגדרת, ואין לה מתג."""
     t = _build(tmp_path, images_root, clock,
                FakeListeners(("http_boot", "http_console")))
@@ -426,7 +426,7 @@ def test_interserver_without_a_listener_has_no_switch(tmp_path, images_root, clo
                 FakeListeners(("http_boot", "http_console", "interserver")))
     rows = rows_of(t2)
     assert rows["interserver"]["toggle"] == "api"
-    assert rows["interserver"]["bind"] == ["10.30.0.8:8443"]
+    assert rows["interserver"]["bind"] == ["10.30.0.8:7700"]
     assert rows["interserver"]["state"] == "ok"
 
 
@@ -434,7 +434,7 @@ def test_interserver_without_a_listener_has_no_switch(tmp_path, images_root, clo
 
 
 def test_tftp_row_carries_a_confirm_switch_and_the_warning(toggles):
-    """אותה צורה כמו 8080/8081 (#996): toggle/enabled/confirm_word/confirm_when,
+    """אותה צורה כמו 7712/443 (#996): toggle/enabled/confirm_word/confirm_when,
     ובנוסף warning_he — הטקסט שהקונסולה מציגה לפני הקלדת השם (נדב 19/09)."""
     row = rows_of(toggles)["tftp"]
     assert row["toggle"] == "confirm" and row["enabled"] is True

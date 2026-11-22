@@ -7,7 +7,7 @@
 
 tools_boot_list() {
     cat <<'EOF'
-esp-fsck-repair|boot|תיקון ESP ב-fsck.vfat|rw|מחיצת ESP
+esp-fsck-repair|boot|תיקון ESP ב-fsck.vfat|rw|part:מחיצת ESP|מתקן את ה-FAT של מחיצת האתחול כשהבדיקה מצאה שגיאות והמחשב לא מוצא את ווינדוס.
 EOF
 }
 

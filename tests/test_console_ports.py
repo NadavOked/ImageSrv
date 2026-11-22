@@ -10,6 +10,9 @@ from pathlib import Path
 
 import pytest
 
+import hygiene
+from server.rounds import chunksend
+
 pytest.importorskip("fastapi")
 
 try:
@@ -59,8 +62,10 @@ def ports_server(tmp_path: Path, images_root: Path, clock):
         "interfaces": lambda: fake["interfaces"],
         "tftp_root": lambda: tftp,
         "udp_sender_pids": lambda: fake["udp_sender_pids"],
+        # בדיקת יום ראשון 21/11: None = כמו בלי hook; אובייקט עם configured=False = רשת ההפצה טרם הוגדרה.
+        "deploy": lambda: fake.get("deploy"),
     }
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, health_hooks=hooks)
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
     users.create(app.state.ctx.conn, "labtech", "deploy-pass-1", "deploy", by="test", check_policy=False)
@@ -92,17 +97,19 @@ def test_ports_endpoint_requires_login(ports_server):
 
 
 def test_the_list_includes_5900_and_no_8082_and_no_ssh(ports_server):
-    """זה בדיוק מה שהעניין #822 מדווח: 5900 חסר ברשימה הקבועה הישנה.
-    #1247: 8082 הוסר ואינו ברשימה. #1266: SSH יצא מהמוצר — אין שורת 22,
+    """זה בדיוק מה שהעניין #822 מדווח: 7710 חסר ברשימה הקבועה הישנה.
+    #1247: הקיוסק הוסר ואינו ברשימה. #1266: SSH יצא מהמוצר — אין שורת 22,
     לא לתחנות ולא לשרת × כרטיס."""
     rows = by_id(ports_server["admin"].get("/api/console/ports").json())
-    assert rows["monitor"]["port"] == "5900"
-    assert "kiosk" not in rows and not any(r["port"] == "8082" for r in rows.values())
+    assert rows["monitor"]["port"] == "7710"
+    assert "kiosk" not in rows
     assert not any(r["port"] == "22" or r["id"].startswith("ssh") for r in rows.values()), rows.keys()
     # וגם הקיימים מקודם
     assert rows["tftp"]["port"] == "69"
-    assert rows["http_boot"]["port"] == "8080"
-    assert rows["multicast"]["port"] == "9000–9001"  # פורט-הפצה-מכוון
+    assert rows["http_boot"]["port"] == "7712"
+    # #3871: השורה מציגה את הפורט שהמנוע של התהליך הזה באמת תופס, והבקרה אחריו; בחבילת הטסטים הוא ליד ה-portbase האקראי (#156)
+    data_port = hygiene.test_portbase + chunksend.PORT_OFFSET
+    assert rows["multicast"]["port"] == f"{data_port}–{data_port + 1}"
     assert rows["ntp"]["port"] == "123" and rows["ntp"]["proto"] == "udp"
     assert rows["ntp"]["name"] == "שרת זמן (NTP)"
     assert rows["ntp"]["off_means"] == "השרת לא מספק שעה"
@@ -130,7 +137,7 @@ def test_monitor_switch_on_shows_a_warning_not_green(ports_server):
 
 
 def test_unverified_ports_say_so_and_are_not_painted_green(ports_server):
-    """8081: טבלת הסוקטים של TCP לא נקראה — "לא נקרא" הוא `unknown`
+    """443: טבלת הסוקטים של TCP לא נקראה — "לא נקרא" הוא `unknown`
     (אדום — דלת שאי אפשר לראות), ולעולם לא ok (עיקרון 5). #996
     החליף את "אין hook" הישן בקריאה אמיתית מ-`ss -ltnp`; 4011 נקרא
     מטבלת ה-UDP, שכאן קיימת ואין בה מאזין — ובלי proxy דלוק זה off."""
@@ -223,16 +230,16 @@ def test_every_port_row_names_its_network(ports_server):
 
 
 def test_cross_network_ports_read_the_server_firewall_per_port(ports_server):
-    """ראשי (primary.conf): 8081 פתוח על וילן השרתים, וגם 8443 — #1310,
+    """ראשי (primary.conf): 443 פתוח על וילן השרתים, וגם 7700 — #1310,
     "אתה שם?" של מתקין משני. הראיה היא הכלל עצמו, לא היעדר שגיאה."""
     ports_server["fake"]["nft_ruleset"] = _nft("primary.conf")
     rows = by_id(ports_server["admin"].get("/api/console/ports").json())
     assert rows["http_console"]["firewall"] == "open"
-    assert "tcp dport 8081 accept" in rows["http_console"]["firewall_detail"]
+    assert "tcp dport 443 accept" in rows["http_console"]["firewall_detail"]
     assert rows["interserver"]["firewall"] == "open"
-    assert "tcp dport 8443 accept" in rows["interserver"]["firewall_detail"]
+    assert "tcp dport 7700 accept" in rows["interserver"]["firewall_detail"]
 
-    # משני: 8443 נפתח רק מכתובת הראשי — והכלל (עם הכתובת) הוא ההסבר.
+    # משני: 7700 נפתח רק מכתובת הראשי — והכלל (עם הכתובת) הוא ההסבר.
     ports_server["fake"]["nft_ruleset"] = _nft("secondary.conf")
     rows = by_id(ports_server["admin"].get("/api/console/ports").json())
     assert rows["interserver"]["firewall"] == "open"
@@ -264,20 +271,37 @@ def test_port_firewall_ignores_comments_drops_and_longer_port_numbers():
     from server.net.ports import port_firewall
     body = ("table inet imagesrv {\n\tchain input {\n"
             "\t\ttype filter hook input priority filter; policy drop;\n"
-            "\t\t# tcp dport 8081 accept — הערה, לא כלל\n"
+            "\t\t# tcp dport 443 accept — הערה, לא כלל\n"
             "\t\tiifname \"x\" tcp dport 80810 accept\n"
-            "\t\tiifname \"x\" tcp dport 8443 drop\n"
-            "\t\tiifname \"x\" udp dport 8081 accept\n"
+            "\t\tiifname \"x\" tcp dport 7700 drop\n"
+            "\t\tiifname \"x\" udp dport 443 accept\n"
             "\t}\n}\n")
-    assert port_firewall(body, "tcp", "8081")[0] == "blocked"
-    assert port_firewall(body, "tcp", "8443")[0] == "blocked"
-    assert port_firewall(body, "udp", "8081")[0] == "open"
+    assert port_firewall(body, "tcp", "443")[0] == "blocked"
+    assert port_firewall(body, "tcp", "7700")[0] == "blocked"
+    assert port_firewall(body, "udp", "443")[0] == "open"
     accept_all = body.replace("policy drop", "policy accept")
-    assert port_firewall(accept_all, "tcp", "8081")[0] == "open"
+    assert port_firewall(accept_all, "tcp", "443")[0] == "open"
     # טווח/קבוצה שלא פוענחו אינם ראיה ל"חסום" — לא נבדק
     ranged = body.replace("80810", "8000-8100")
-    assert port_firewall(ranged, "tcp", "8081") == (
+    assert port_firewall(ranged, "tcp", "443") == (
         None, "יש בטבלת imagesrv כלל טווח/קבוצה שלא פוענח — לא נבדק")
-    # כללי udp של ההפצה אינם נוגעים לשאלה על tcp (#1310: בראשי 8443 פתוח)
-    assert port_firewall(_nft("primary.conf"), "tcp", "8443")[0] == "open"
+    # כללי udp של ההפצה אינם נוגעים לשאלה על tcp (#1310: בראשי 7700 פתוח)
+    assert port_firewall(_nft("primary.conf"), "tcp", "7700")[0] == "open"
     assert port_firewall(_nft("primary.conf"), "tcp", "4444")[0] == "blocked"
+
+
+def test_before_the_deploy_network_is_set_tftp_and_dhcp_are_not_applicable_not_red(ports_server):
+    """בדיקת יום ראשון 21/11 (v097-srv): כרטיס "שירותים" בסקירה הראה "פורט TFTP: תקלה" כשהבריאות אמרה
+    "לא ישים עד שתוגדר רשת ההפצה". /ports הוא המקור של הכרטיס ושל דף השירותים, ולכן הוא אומר אותו דבר."""
+    from types import SimpleNamespace
+    from server.system.health import NOT_APPLICABLE
+    ports_server["fake"]["ss"] = SS_DNSMASQ.splitlines()[0] + "\n"   # אף אחד לא מגיש: היום זה "bad"
+    before = by_id(ports_server["admin"].get("/api/console/ports").json())
+    assert before["tftp"]["state"] == "bad"
+    ports_server["fake"]["deploy"] = SimpleNamespace(configured=False, public=lambda: {"hint": "הגדירו"})
+    rows = by_id(ports_server["admin"].get("/api/console/ports").json())
+    for pid in ("tftp", "dhcp"):
+        assert rows[pid]["state"] == "not_applicable", pid
+        assert rows[pid]["detail"] == NOT_APPLICABLE, pid
+    health = {c["id"]: c for c in ports_server["admin"].get("/api/console/health").json()}
+    assert health["tftp_port"]["state"] == rows["tftp"]["state"], "the overview card and the health page agree"

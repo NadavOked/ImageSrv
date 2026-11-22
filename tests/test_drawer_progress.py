@@ -14,18 +14,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import os
-import re
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 
-from test_agent import AGENT, BASH, posix, sh
-from test_timeouts import make_stubs, run_sh
+from test_agent import BASH, posix, sh
 from agentlib import agent_sources
 
 pytestmark = pytest.mark.skipif(BASH is None, reason="bash is required")
@@ -58,84 +52,6 @@ COUNTING_FANOUT = (
 )
 
 
-def test_each_drawer_reports_the_bytes_that_were_written_to_it(tmp_path):
-    """#25: המונה שמגיע לשרת הוא של המגירה, לא של הזרם של המכונה.
-
-    שתי מגירות מקבלות כמויות שונות מאותו זרם. הקוד שלפני התיקון קרא
-    לשתיהן את `targets/<dev>/bytes.raw` — קובץ שאיש לא כתב אליו במסלול
-    המגירות — ודיווח `bytes_written: 0` על שתיהן, לנצח.
-    """
-    box = tmp_path / "box"
-    run = box / "run"
-    payload = box / "part.bin"
-    box.mkdir(parents=True)
-    payload.write_bytes(b"imagesrv" * 8192)          # 64KB
-    sha = hashlib.sha256(payload.read_bytes()).hexdigest()
-    for dev in ("sda", "sdb"):
-        (run / "targets" / dev).mkdir(parents=True)
-
-    out = run_sh(
-        make_stubs(box / "stubs", {"fanout": COUNTING_FANOUT})
-        + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
-        "WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 "
-        "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
-        + "target_init sda 131072; target_init sdb 131072; "
-        f'stream_source() {{ cat {posix(payload)!r}; }}; '
-        "restore_partition_drawers unicast http://s img 3 dd part.zst "
-        f"{sha} '' sda sdb > {posix(box)}/pipe.out 2>&1; rc=$?; "
-        f"build_progress ses_1 aa:bb:cc:00:00:21 > {posix(box)}/progress.json; "
-        'echo "rc=$rc"'
-    )
-    assert out.strip().endswith("rc=0"), out
-
-    report = json.loads((box / "progress.json").read_text(encoding="utf-8"))
-    written = {t["dev"]: t["bytes_written"] for t in report["targets"]}
-    assert written == {"sda": 65536, "sdb": 32768}, report
-
-
-def test_the_compiled_fanout_writes_the_counter_the_agent_reads(tmp_path):
-    """הקישור עצמו, בלי זיופים: הבינארי האמיתי כותב את המונה, והדיווח
-    קורא אותו. שני הצדדים מסכימים על שם קובץ אחד — טסט שבודק כל צד
-    לחוד היה עובר גם אם השם השתנה בצד אחד בלבד, והפסים היו חוזרים ל-0%.
-    """
-    if shutil.which("gcc") is None or os.name == "nt":
-        pytest.skip("fanout needs gcc and POSIX fifos")
-
-    box = tmp_path / "box"
-    stubs = box / "stubs"
-    run = box / "run"
-    payload = box / "part.bin"
-    stubs.mkdir(parents=True)
-    payload.write_bytes(b"imagesrv" * 8192)          # 64KB
-    sha = hashlib.sha256(payload.read_bytes()).hexdigest()
-    subprocess.run(["gcc", "-O2", "-o", str(stubs / "fanout"),
-                    str(AGENT / "fanout.c")], check=True, stdin=subprocess.DEVNULL)
-    for dev in ("sda", "sdb"):
-        (run / "targets" / dev).mkdir(parents=True)
-
-    out = run_sh(
-        make_stubs(stubs, {"fanout": None})   # the compiled one, not the fake
-        + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(box)!r} "
-        # מאגר קטן: המכונה הזו לא צריכה 256MB למגירה כדי להעביר 64KB.
-        "FANOUT_BUFFER=1048576 WAIT_POLL_S=1 WAIT_DRAWER_S=10 WAIT_HELPER_S=10 "
-        "WAIT_STREAM_START_S=20 WAIT_STREAM_STALL_S=20; "
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot")   # #2272: imagesrv-agent's order
-        + "target_init sda 131072; target_init sdb 131072; "
-        f'stream_source() {{ cat {posix(payload)!r}; }}; '
-        "restore_partition_drawers unicast http://s img 3 dd part.zst "
-        f"{sha} '' sda sdb > {posix(box)}/pipe.out 2>&1; rc=$?; "
-        f"build_progress ses_1 aa:bb:cc:00:00:21 > {posix(box)}/progress.json; "
-        'echo "rc=$rc"'
-    )
-    assert out.strip().endswith("rc=0"), (box / "pipe.out").read_text(
-        encoding="utf-8", errors="replace")
-
-    report = json.loads((box / "progress.json").read_text(encoding="utf-8"))
-    written = {t["dev"]: t["bytes_written"] for t in report["targets"]}
-    assert written == {"sda": 65536, "sdb": 65536}, report
-
-
 def drawer_box(tmp_path, disks=("sda", "sdb", "sdc"), failed=()) -> tuple[Path, str]:
     """run_restore_drawers מסביב לזרם מזויף: מה שנבדק כאן הוא רק המצב
     שהמחשב מדווח בסוף, לפי מה שקרה לכל מגירה. הכתיבה עצמה (טבלה,
@@ -144,7 +60,7 @@ def drawer_box(tmp_path, disks=("sda", "sdb", "sdc"), failed=()) -> tuple[Path, 
     run.mkdir()
     prelude = (
         f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev SYSROOT={posix(run)!r}/sys; "   # #3908: the host's /sys is not the test's (an HDD there is refused by writecheck.sh)
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
         + "log() { :; }; disk_fits() { return 0; }; plan_gate() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
         "expand_last() { return 0; }; grow_expanded() { return 0; }; writemark_clear() { return 0; }; "   # #1798: the table is stubbed, so is its mark
@@ -176,7 +92,7 @@ def test_the_machine_state_says_how_many_drawers_survived(tmp_path, failed, stat
     # שרד — המילה הסופית (`done`/`partial`) נכתבת ב-do_restore_drawers רק אחרי
     # הדרייברים והסימן; השרת נועל חבר שדיווח מצב סופי. `failed` נכתב כאן.
     run, prelude = drawer_box(tmp_path, failed=failed)
-    out = sh(prelude + 'run_restore_drawers multicast http://s img m.json '
+    out = sh(prelude + 'run_restore_drawers chunk http://s img m.json '
              'sda sdb sdc; echo "rc=$?"; echo "machine=$(_machine_state "sda sdb sdc")"')
     assert out.strip().splitlines()[-2] == f"rc={rc}", out
     assert out.strip().splitlines()[-1] == f"machine={state}", out
@@ -187,7 +103,7 @@ def test_a_partial_machine_still_names_the_drawer_that_failed(tmp_path):
     """עיקרון 4 בשתי הרמות בבת אחת: המחשב אומר "לא הכול", והמגירה
     אומרת מי ולמה. אחת בלי השנייה אינה כשל גלוי."""
     run, prelude = drawer_box(tmp_path, failed=("sdb",))
-    sh(prelude + "run_restore_drawers multicast http://s img m.json sda sdb sdc; "
+    sh(prelude + "run_restore_drawers chunk http://s img m.json sda sdb sdc; "
        '_machine_state "sda sdb sdc" > "$RUN_DIR/state"; '   # do_restore_drawers' last word (#1935)
        "build_progress ses_1 aa:bb:cc:00:00:21 > $RUN_DIR/progress.json")
 

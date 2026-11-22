@@ -168,7 +168,7 @@ lc_report_resend() {
         _rr_n=${_rr_f##*/}; _rr_n=${_rr_n%.json}; _rr_b=$(cat "$_rr_f.sending")
         printf '%s' "${_rr_b%\}},\"late_s\":$(( $(date +%s) - ${_rr_n#*_} ))}" > "$_rr_f.body"
         _rr_c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H "Content-Type: application/json" \
-            --data-binary "@$_rr_f.body" "${SERVER:-http://0.0.0.0}/api/v1/agent/local-clone" 2>/dev/null)
+            --data-binary "@$_rr_f.body" "${SERVER:-https://0.0.0.0}/api/v1/agent/local-clone" 2>/dev/null)
         rm -f "$_rr_f.body"
         if [ "$_rr_c" = 200 ]; then
             rm -f "$_rr_f.sending" "$_rr_f.tries"; log "local clone: the kept report reached the server journal (late)"

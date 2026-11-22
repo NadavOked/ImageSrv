@@ -149,11 +149,9 @@ def test_a_cancel_from_the_cloner_screen_is_recorded_as_such(room_server):
 
 
 def test_console_and_build_machine_are_told_apart(kiosk_env, monkeypatch):  # noqa: F811
-    """The split apps of production: the console (:8081) records "על ידי", the
-    kiosk of the build machine (:8080) "ממחשב הבנייה" -- same RBAC, same route."""
+    """The split apps of production: the console (:443) records "על ידי", the
+    kiosk of the build machine (:7712) "ממחשב הבנייה" -- same RBAC, same route."""
     from fastapi.testclient import TestClient                # noqa: PLC0415
-    from server.rounds import sender as sender_module               # noqa: PLC0415
-    monkeypatch.setattr(sender_module, "port_holders", lambda _port: [])   # as room_server: no /proc/net/udp here
     rt = kiosk_env["rt"]
     mac = "aa:bb:cc:00:00:20"
     kiosk = kiosk_env["kiosk"]

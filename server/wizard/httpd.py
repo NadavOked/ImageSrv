@@ -33,7 +33,7 @@ class WizardHTTPServer(ThreadingHTTPServer):
         super().__init__(address, WizardHandler)
 
     def release_port(self) -> None:
-        """Stop accepting new wizard connections before the console binds 8081."""
+        """Stop accepting new wizard connections before the console binds 443."""
         self.shutdown()
         self.server_close()
 

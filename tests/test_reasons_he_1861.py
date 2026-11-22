@@ -170,7 +170,10 @@ def die_local_lines() -> list[str]:
                 lines |= {raw.replace("$_sr_disk", "sda").replace("$_sr_why", w)
                           for w in re.findall(r'_sr_why="([^"]+)"', text)}
                 continue
-            lines.add(re.sub(r"\$\{[^}]*\}|\$\w+", "3", raw))
+            if "$_why" in raw:   # imagesrv-agent: the station's refusal (#3173), its why set just above it
+                lines.add(raw.replace("$_why", re.findall(r'\b_why="([^"]+)"', text[:m.start()])[-1]))
+                continue
+            lines.add(re.sub(r"\$\{[^}]*\}|\$\([^)]*\)|\$\w+", "3", raw))   # #3580: also a command substitution, $(tls_clock_note)
     return sorted(lines)
 
 
@@ -191,7 +194,7 @@ def test_every_die_local_line_has_its_own_hebrew_sentence():
     default, = _fatal_he(["a line nobody translated"])
     for line, he in zip(lines, _fatal_he(lines)):
         assert HEBREW.search(he) and he != default, f"{line!r} -> {he!r}"
-        english = {w for w in re.findall(r"[A-Za-z]{4,}", line)} - {"SMART"}
+        english = {w for w in re.findall(r"[A-Za-z]{4,}", line)} - {"SMART", "curl"}   # #3580: the TLS line is Hebrew and names curl's exit code, which the operator reads out
         assert not any(w in he for w in english), f"{line!r} -> {he!r}"
 
 

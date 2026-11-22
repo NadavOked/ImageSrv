@@ -243,7 +243,7 @@ def test_the_room_clock_closes_a_silent_task_in_the_background(tmp_path, monkeyp
     write_image(images, MANIFEST_256)
     if brain_silence is not None:               # the wait after startup, shortened
         monkeypatch.setattr(brain_silence, "SILENT_S", 1)
-    app = create_app(tmp_path / "data", images, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images, "http://10.44.12.10:7712",
                      now_fn=Clock(), room_clock_interval=0.02)
     ctx = app.state.ctx
     # inserted after startup: `reconcile_on_start` already ran and is not what closes it
@@ -265,7 +265,7 @@ def test_the_room_clock_closes_a_silent_task_in_the_background(tmp_path, monkeyp
                     break
                 time.sleep(0.1)
     finally:
-        ctx.sender.stop()
+        ctx.chunk.stop()
     assert closed.is_set(), "the room clock never closed the silent capture"
 
 
@@ -287,7 +287,7 @@ def test_a_direct_source_left_running_across_a_restart_fails_once_quiet(tmp_path
     first["ctx"].conn.execute("UPDATE room_rounds SET state = 'closing' WHERE id = ?",
                               (opened["id"],))     # the server dies mid "stop round"
     first["ctx"].conn.commit()
-    first["ctx"].sender.stop()
+    first["ctx"].chunk.stop()
 
     second = _boot(tmp_path, monkeypatch, seed=False)
     ctx = second["ctx"]
@@ -299,4 +299,4 @@ def test_a_direct_source_left_running_across_a_restart_fails_once_quiet(tmp_path
     assert row["state"] == "failed", "the source task outlived its round across a restart"
     assert "הפסיקה לדווח" in (row["error"] or "")
     assert active_task(ctx.conn, BUILD) is None
-    ctx.sender.stop()
+    ctx.chunk.stop()

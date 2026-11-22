@@ -33,7 +33,7 @@ def server(tmp_path, images_root):
     from server.console import users
     from server.app import create_app
 
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      wol_send=lambda _packet: None)
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
@@ -48,7 +48,7 @@ def server(tmp_path, images_root):
         assert admin.post("/api/console/machines", json={
             "mac": mac, "name": name, "group_id": group}).status_code == 200
     yield {"ctx": ctx, "admin": admin, "deploy": deploy, "anon": TestClient(app)}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def hello(server, mac: str) -> dict:

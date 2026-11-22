@@ -851,16 +851,16 @@ def run_forever(library, *, report=None, interval: float = INTERVAL_S,
         _KICK.clear()
 
 
-def server_busy(conn, sender=None):
+def server_busy(conn, engine=None):
     """#1864 (ברזל 20/10): `busy(image_id)` של התהליכון. סיבה = לפנות את הדרך:
-    שידור שזורם (`sender` במצב sending), קליטה או שליחה ישירה שרצות או מאומתות
+    שידור שזורם (`engine` במצב sending או repairing), קליטה או שליחה ישירה שרצות או מאומתות
     (`tasks`), העברה בין אתרים (`storage_transfers`), וסבב פתוח של **אימג' אחר**.
     סבב פתוח של האימג' הזה עצמו, לפני שהשידור התחיל (המכונות עוד עולות), אינו
     עוצר: זה החלון שבו הגיבוב שלו עוד יכול להגיע למניפסט שהסוכן קורא — ואם לא
     הגיע, הסבב "לא אומת", כמו קודם. None = שקט."""
     def busy(image_id: str) -> str | None:
-        status = sender.status() if sender is not None else None
-        if status and status.get("state") == "sending":
+        status = engine.status() if engine is not None else None
+        if status and status.get("state") in ("sending", "repairing"):
             return "שידור פעיל"
         if conn.execute("SELECT 1 FROM tasks WHERE state IN ('running', 'verifying') LIMIT 1").fetchone():
             return "קליטה או שליחה ישירה פעילה"

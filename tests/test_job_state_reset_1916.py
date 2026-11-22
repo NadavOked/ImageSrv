@@ -264,18 +264,6 @@ def test_a_second_drawer_round_after_a_failed_one_reports_only_itself(
     assert_reports_only_itself(result["snaps"][1], result["out"])
 
 
-def test_a_second_station_restore_after_a_failed_one_reports_only_itself(
-        tmp_path, reports):
-    """תחנה: שחזור שנכשל, ושחזור נוסף באותו `RUN_DIR`."""
-    result = run_jobs(
-        tmp_path, url_of(reports), "do_restore; do_restore",
-        stubs='smart_gate() { _await_snap; shift; echo "$@"; }; ',
-        env="RESTORE_RC=1")
-
-    assert len(result["snaps"]) == 2, result["out"]
-    assert_reports_only_itself(result["snaps"][1], result["out"])
-
-
 def test_a_direct_send_after_a_completed_one_does_not_report_done(
         tmp_path, reports):
     """הצורה החמורה: הפצה ישירה שהושלמה משאירה `done`, והשרת סוגר

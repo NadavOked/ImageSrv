@@ -215,7 +215,9 @@ class Completing:
         self._log({"mode": mode, "rule": RULE_VERIFY, "action": ACTION_VERIFY, "verdict": REPAIR, "mac": mac,
                    "disk": who, "bad_chunks": len(bad), "enforced": bool(on), "reason": reason})
         memory.record(conn, mode=mode, rule=RULE_VERIFY, action=ACTION_VERIFY, verdict=REPAIR, reason=reason,
-                      evidence=evidence, round_id=round_row["id"], entity=("disk", who))
+                      evidence=evidence, round_id=round_row["id"], entity=("disk", who),
+                      # #3750: ביצוע כבוי = אין פעולה לסגור. ביצוע דלוק נשאר פתוח: מי שסוגר אותו עוד לא נמצא (שאלה פתוחה ב-#3750)
+                      outcome=None if on else memory.na(f"הביצוע כבוי (מתג {SETTING}): נרשם בלבד"))
 
     # --- משותף -------------------------------------------------------------------------------------------------
 

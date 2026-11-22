@@ -26,7 +26,7 @@ async function apiFetch(url, options) {
 let lastApiFailure = { text: "", at: 0 };
 function noteApiFailure(text) { lastApiFailure = { text: String(text), at: Date.now() }; }
 /* ‏#1179: "הקשר שרת". כשנבחר שרת משנה בעץ, SERVER_CTX הוא המזהה שלו, וכל בקשת קונסולה
-   הולכת דרך ה-relay של הראשי (‏/storage-nodes/{id}/console/…, ‏8443) — אותן
+   הולכת דרך ה-relay של הראשי (‏/storage-nodes/{id}/console/…, ‏7700) — אותן
    פונקציות ה-load וה-render של הראשי מציירות את שרת המשנה, ולכן אותם עמודים ואותן לשוניות.
    ‏/me, כניסה ויציאה הם של המשתמש בראשי. גם post/put/del בהקשר שרת משנה הולכים ל-relay
    (שלב 2) — לעולם לא לנתיב של הראשי; ה-relay מעביר רק פעולות מהרשימה המותרת

@@ -5,7 +5,7 @@
    מלשונית ה-DHCP (`PUT /net/interfaces/{n}` → `deploy_net.complete`) בדקה רק
    שהכרטיס נושא את `server_ip`. כשהמתקין לא רשם כרטיס ניהול (או שהרישום לא
    נקרא), eth0 — הכרטיס שהקונסולה נקשרת אליו — נעשה רשת ההפצה: dnsmasq,
-   67/69/8080 ומולטיקאסט ברשת המכללה (ה-PoC של סריקה 6, ממצא F5).
+   67/69/7712 ומולטיקאסט ברשת המכללה (ה-PoC של סריקה 6, ממצא F5).
 2. WoL: כשרשת ההפצה לא הוגדרה (מצב המסירה) לא נבנה שולח כפוי, והשידור הלך
    לפי טבלת הניתוב — לרשת המכללה (ממצא F6).
 """
@@ -70,7 +70,7 @@ def test_first_dhcp_enable_on_the_deploy_nic_still_completes(console):
     response = client.put("/api/console/net/interfaces/eth1",
                           json={**GOOD, "confirm": "eth1"})
     assert response.status_code == 200, response.text
-    assert deploy_net.stored(ctx.conn) == ("eth1", "http://10.44.9.10:8080")
+    assert deploy_net.stored(ctx.conn) == ("eth1", "https://10.44.9.10:7712")
 
 
 # --- WoL --------------------------------------------------------------------
@@ -84,7 +84,7 @@ def test_without_a_deploy_nic_the_server_refuses_wol_by_name(tmp_path, monkeypat
     pinned = []
     monkeypatch.setattr(app_module.wol, "broadcast_sender",
                         lambda interface=None, **kw: pinned.append(interface) or (lambda p: None))
-    app = app_module.create_app(tmp_path / "d", tmp_path / "i", "http://10.44.0.1:8080")
+    app = app_module.create_app(tmp_path / "d", tmp_path / "i", "http://10.44.0.1:7712")
     send = app.state.runtime.wol_send
     assert send is not None, "בלי כרטיס הפצה השרת נפל לשולח שיוצא לפי טבלת הניתוב"
     assert pinned == []

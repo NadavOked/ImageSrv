@@ -1,8 +1,8 @@
 # chunkrecv.sh -- one partition through the chunk engine (#2533, stage 3).
 # POSIX sh (busybox ash).
 #
-# The drawers' side of server/rounds/chunksend.py. Where drawers.sh feeds one
-# udpcast stream through fanout into a partclone per drawer, this file runs
+# The drawers' side of server/rounds/chunksend.py, the only multicast engine (#3173):
+# drawers.sh prepares the drawers, and this file runs
 # one `chunkcast recv` for all the machine's drawers and then does what the
 # server answers, until the partition is whole on every live drawer:
 #
@@ -28,7 +28,7 @@
 # are handed to chunkcast: a drawer pulled and another disk pushed in between two
 # passes is not written. "Cancel this disk" (#1386) is carried out at the same
 # points, and waits for the pass to end. Inside a pass and a fetch the drawers are
-# watched as drawer_watch watches a udpcast stream (chunkwatch.sh, metal 13/11).
+# watched as drawer_watch watches a fanout stream (chunkwatch.sh, metal 13/11).
 #
 # What is durable is also published for the progress report, in the files stage 2
 # reads (chunkledger.sh, format-spec 9.1): targets/<dev>/ledger/durable.<part>.

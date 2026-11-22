@@ -17,7 +17,6 @@ guards against a default that overrides everything).
 
 from __future__ import annotations
 
-import subprocess
 import sys
 
 import pytest
@@ -25,18 +24,18 @@ import pytest
 pytest.importorskip("fastapi")
 
 from native import requires_native
-from server.rounds import chunklog, sender
+from server.rounds import chunklog
 
 from test_chunk_send_reason_3261 import PART_FILE
 
 READER, AHEAD = "CHUNKCAST_READER", "CHUNKCAST_AHEAD"
 
 #: the engine's own command for a library file (`ChunkEngine._command`): a `--file`, never a device or a stdin.
-FILE_CMD = ["chunkcast", "send", "--to", "239.83.67.1:21002", "--session", "0123456789abcdef", "--part", "3", "--pass", "1",
+FILE_CMD = ["chunkcast", "send", "--to", "239.84.82.1:21002", "--session", "0123456789abcdef", "--part", "3", "--pass", "1",
             "--index", "p3.idx", "--file", "/lib/img_1/p3.pcl.zst", "--kbps", "900000", "--write-kbps", "1200000", "--order", "mixed"]
-STDIN_CMD = ["chunkcast", "send", "--to", "239.83.67.1:21002", "--session", "0123456789abcdef", "--part", "3", "--pass", "1",
+STDIN_CMD = ["chunkcast", "send", "--to", "239.84.82.1:21002", "--session", "0123456789abcdef", "--part", "3", "--pass", "1",
              "--index", "p3.idx", "--stdin", "--kbps", "900000"]
-DEVICE_CMD = ["chunkcast", "send", "--to", "239.83.67.1:21002", "--session", "0123456789abcdef", "--part", "3", "--pass", "1",
+DEVICE_CMD = ["chunkcast", "send", "--to", "239.84.82.1:21002", "--session", "0123456789abcdef", "--part", "3", "--pass", "1",
               "--index", "p3.idx", "--device", "/dev/sdb3", "--chunks-file", "/tmp/c.txt"]
 
 
@@ -100,15 +99,15 @@ def production(tmp_path, monkeypatch):
     """The engine of an app built without `sender_runner`, as `server.main` builds it; the logs under tmp (see test_chunk_log_path_3340)."""
     from server.app import create_app
 
-    chunk_logs, sender_logs = tmp_path / "chunk-logs", tmp_path / "sender-logs"
-    chunk_logs.mkdir(), sender_logs.mkdir()
+    chunk_logs = tmp_path / "chunk-logs"
+    chunk_logs.mkdir()
     monkeypatch.setattr(chunklog, "LOG_DIR", chunk_logs)
-    monkeypatch.setattr(sender, "SENDER_LOG", sender_logs / "imagesrv-sender.log")
-    monkeypatch.setattr(sender, "subprocess", subprocess)       # tests/hygiene.py blocks it (#79); the child here ends by itself
-    app = create_app(tmp_path / "data", tmp_path / "images", "http://10.44.12.10:8080", wol_send=lambda _b: None)
+    # tests/hygiene.py refuses `chunkcast` by its bare name in `chunklog.subprocess` (#79); the child here is the Python
+    # interpreter by its full path, which ends by itself and is let through
+    app = create_app(tmp_path / "data", tmp_path / "images", "http://10.44.12.10:7712", wol_send=lambda _b: None)
     ctx = app.state.ctx
     yield {"runner": ctx.chunk.runner, "part": tmp_path / "images" / "img_1" / PART_FILE}
-    ctx.sender.stop()
+    ctx.chunk.stop()
     ctx.chunk.close()
 
 

@@ -299,8 +299,8 @@ def test_the_agents_final_report_after_the_manifest_gets_not_open(server, monkey
 def _reboot(tmp_path, images_root, clock):
     """שרת שני על אותו `--data-dir` ואותה ספרייה — "עלייה מחדש"."""
     from server.app import create_app
-    from test_sender import Recorder
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    from fakesend import Recorder
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, sender_runner=Recorder(block=True),
                      health_hooks={"interfaces": lambda: []})
     return app.state.ctx
@@ -326,7 +326,7 @@ def _died_while_verifying(server, monkeypatch) -> tuple[str, str]:
     monkeypatch.setattr(capture, "start_verification", lambda *a: None, raising=False)
     assert _put_manifest(server, created["id"], head).status_code == 202
     monkeypatch.setattr(capture, "start_verification", real, raising=False)
-    server["ctx"].sender.stop()
+    server["ctx"].chunk.stop()
     return created["id"], created["image_id"]
 
 
@@ -346,7 +346,7 @@ def test_a_restart_mid_verification_verifies_again_and_only_then_admits(
     assert _state_after_restart(ctx, tid)["state"] == "done"
     assert (images_root / image_id / "manifest.json").is_file()
     assert any("verifying again" in d for d in _journal(ctx, "capture_verifying"))
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def test_a_restart_never_admits_a_staged_image_that_does_not_verify(
@@ -357,7 +357,7 @@ def test_a_restart_never_admits_a_staged_image_that_does_not_verify(
     row = _state_after_restart(ctx, tid)
     assert row["state"] == "failed" and "sha256 mismatch on p3.windows.pcl.zst" in row["error"]
     assert not (images_root / image_id).exists()
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def test_a_restart_with_nothing_left_to_verify_fails_by_name(
@@ -368,7 +368,7 @@ def test_a_restart_with_nothing_left_to_verify_fails_by_name(
     row = _state_after_restart(ctx, tid)
     assert row == {"state": "failed", "error": RESTARTED_VERIFY}
     assert not (images_root / image_id).exists()
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def test_an_image_that_landed_before_the_restart_is_done(
@@ -379,4 +379,4 @@ def test_an_image_that_landed_before_the_restart_is_done(
     staging_dir(images_root, tid).rename(images_root / image_id)
     ctx = _reboot(tmp_path, images_root, clock)
     assert _state_after_restart(ctx, tid) == {"state": "done", "error": None}
-    ctx.sender.stop()
+    ctx.chunk.stop()

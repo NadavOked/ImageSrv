@@ -5,7 +5,7 @@
    עותק קריא לכולם של קובץ שהמנהל אולי נעל.
 2. 532: ``/api/v1/agent/log`` (פורט הסוכן, בלי כניסה) החזיר את טקסט החריגה של zlib.
 3. 267: ``--primary-url`` עם שם מארח השאיר ``primary_ip=None`` בשקט, וכל חילול של
-   חומת האש מהשרת פתח את 8443 מכל הכרטיס, בלי ``saddr``.
+   חומת האש מהשרת פתח את 7700 מכל הכרטיס, בלי ``saddr``.
 """
 
 from __future__ import annotations
@@ -110,7 +110,7 @@ def _main_deploy_context(tmp_path, monkeypatch, primary_url: str, resolve) -> di
 
 def test_a_primary_given_by_name_pins_the_firewall_to_its_resolved_address(tmp_path, monkeypatch):
     seen = _main_deploy_context(
-        tmp_path, monkeypatch, f"https://{PRIMARY_NAME}:8443",
+        tmp_path, monkeypatch, f"https://{PRIMARY_NAME}:7700",
         lambda: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (PRIMARY_IP, 0))])
     assert seen["primary_ip"] == PRIMARY_IP
 
@@ -119,20 +119,20 @@ def test_a_primary_name_that_does_not_resolve_is_a_named_reason_not_a_silent_non
     def fail():
         raise socket.gaierror(socket.EAI_NONAME, "Name or service not known")
 
-    seen = _main_deploy_context(tmp_path, monkeypatch, f"https://{PRIMARY_NAME}:8443", fail)
+    seen = _main_deploy_context(tmp_path, monkeypatch, f"https://{PRIMARY_NAME}:7700", fail)
     assert seen["primary_ip"] is None
     assert PRIMARY_NAME in (seen.get("primary_ip_error") or "")
 
 
 def test_a_primary_given_by_address_is_used_as_is(tmp_path, monkeypatch):
-    seen = _main_deploy_context(tmp_path, monkeypatch, f"https://{PRIMARY_IP}:8443",
+    seen = _main_deploy_context(tmp_path, monkeypatch, f"https://{PRIMARY_IP}:7700",
                                 lambda: pytest.fail("an address is not resolved"))
     assert seen["primary_ip"] == PRIMARY_IP and not seen.get("primary_ip_error")
 
 
 def _unresolved_ctx(tmp_path, hooks) -> deploy_net.DeployContext:
     ctx = deploy_net.DeployContext(
-        state=deploy_net.DeployState("none", None, None), agent_port=8080,
+        state=deploy_net.DeployState("none", None, None), agent_port=7712,
         tftp_root=tmp_path / "tftp", repo_dir=tmp_path, servers_interface="eth0",
         primary_ip=None, hooks=hooks)
     ctx.primary_ip_error = f"השם {PRIMARY_NAME} של השרת הראשי לא נפתר לכתובת"

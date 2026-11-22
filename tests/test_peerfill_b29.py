@@ -342,7 +342,7 @@ def holder(tmp: Path, replies: list[dict], *, state="writing", cap: str | None =
 
 
 def _serve(**over) -> dict:
-    return {"peer_serve": [{"id": ID, "dev": "sdb", "part": 3, "listen": "10.55.0.22", "port": 48200,
+    return {"peer_serve": [{"id": ID, "dev": "sdb", "part": 3, "listen": "10.55.0.22", "port": 7717,
                             "allow": "10.55.0.21", "token": TOKEN, "rate_mibs": 40, "until_s": 300, **over}]}
 
 
@@ -359,7 +359,7 @@ def test_the_neighbour_serves_only_on_the_named_card_to_the_one_asker_with_an_en
     serves = [l for l in got["argv"] if l.startswith("serve ")]
     assert len(serves) == 1, got["argv"]
     f = _flags(serves[0])
-    assert f["--listen"] == "10.55.0.22:48200" and f["--allow"] == "10.55.0.21", f
+    assert f["--listen"] == "10.55.0.22:7717" and f["--allow"] == "10.55.0.21", f
     assert f["--until-s"] == "300" and f["--read-mibs"] == "30", f
     assert f["--index-xxh64"] == "0011223344556677" and "--raw" in f, "the partition's image arguments"
     assert TOKEN not in serves[0] and got["token"] == TOKEN and got["mode"] == "600", got

@@ -8,9 +8,9 @@
 PING="${PING:-ping}"; NSLOOKUP="${NSLOOKUP:-nslookup}"; CURL="${CURL:-curl}"; IPCMD="${IPCMD:-ip}"
 RESOLV_CONF="${RESOLV_CONF:-${SYSROOT:-}/etc/resolv.conf}"
 
-# http://host:port/... -> "host port" (port 80 when none). Anything else -> failure.
+# http(s)://host:port/... -> "host port" (port 80 when none). Anything else -> failure.
 _nr_hostport() {
-    _u=${1#http://}; _u=${_u%%/*}
+    _u=${1#http://}; _u=${_u#https://}; _u=${_u%%/*}   # any other scheme keeps its :// and is refused below
     case "$_u" in ''|*://*|*@*) return 1 ;; esac
     case "$_u" in *:*) _h=${_u%%:*}; _p=${_u##*:} ;; *) _h=$_u; _p=80 ;; esac
     case "$_p" in ''|*[!0-9]*) return 1 ;; esac
@@ -57,7 +57,7 @@ _nr_dns() {
 _nr_tcp() {
     _hp=$(_nr_hostport "$1") || { printf 'null'; return; }
     _np_have "$CURL" || { printf 'null'; return; }
-    _code=$("$CURL" -s -o /dev/null --connect-timeout 3 -m 5 -w '%{http_code}' "http://${_hp% *}:${_hp#* }/" 2>/dev/null); _rc=$?
+    _code=$("$CURL" -s -o /dev/null --connect-timeout 3 -m 5 -w '%{http_code}' "${SERVER:-$1}/" 2>/dev/null); _rc=$?
     case "$_code" in [1-5][0-9][0-9]) _ok=true ;; *) _ok=false ;; esac
     printf '[{"host":"%s","port":%s,"ok":%s,"curl_rc":%s}]' "$(json_escape "${_hp% *}")" "${_hp#* }" "$_ok" "$_rc"
 }

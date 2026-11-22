@@ -36,7 +36,7 @@ tools_bins() {
         scalpel)              printf 'scalpel\n' ;;
         foremost)             printf 'foremost\n' ;;
         extundelete)          printf 'extundelete\n' ;;
-        magicrescue)          printf 'magicrescue recoverjpeg\n' ;;
+        magicrescue)          printf 'magicrescue recoverjpeg jpegtran\n' ;;   # #2804: its JPEG recipes call jpegtran
         unsquashfs)           printf 'unsquashfs\n' ;;
         bsdtar)               printf 'bsdtar\n' ;;
         ddrescue-image)       printf 'ddrescue\n' ;;
@@ -50,13 +50,14 @@ tools_bins() {
 tools_has_runner() {
     # $1 = catalog id -> rc 0 when a station module (tools_<domain>.sh) runs
     # it, rc 1 for the ids below. #1104: they are in the catalog, but no
-    # module runs them yet -- testdisk/photorec need a wizard, the rest a
-    # destination for what they recover (docs/tools/catalog-runners.md).
+    # module runs them yet -- testdisk/photorec need a wizard (mockup 14,
+    # pages 10-11). #2804 gave the six that need a destination their modules
+    # (tools_carve.sh, tools_rescue.sh; docs/tools/catalog-runners.md).
     # The plan does not pack them: a binary nothing on the station can start
     # is initrd weight. tests/test_tools_packing.py fails when this list and
     # the real modules drift.
     case "$1" in
-        testdisk|photorec|scalpel|foremost|extundelete|magicrescue|ddrescue-image|safecopy) return 1 ;;
+        testdisk|photorec) return 1 ;;
     esac
     return 0
 }
@@ -74,7 +75,16 @@ _tools_selection_list() {
 }
 
 tools_selection_ids() {
-    # The "build" ids of the selection file, one per line. rc 1 and a
+    # The "build" ids of the selection, one per line. #3056: the hello answer
+    # carries the operator's current choice (`.tools_selection`, an array; an
+    # empty one is "no tools selected") -- no build path ever packed the file
+    # into the initrd. Without that field (an older server) the file below.
+    _hf="${RESP:-${RUN_DIR:-}/response.json}"
+    if [ -f "$_hf" ] && [ "$(json_get "$_hf" '.tools_selection | type')" = array ]; then
+        json_get_join "$_hf" .tools_selection
+        return 0
+    fi
+    # The file: rc 1 and a
     # stderr line when there is no file -- "no tools selected" and "the
     # file is missing" are both an empty list, but they are said apart.
     _sf=${TOOLS_SELECTION:-/etc/imagesrv/tools-selection.json}

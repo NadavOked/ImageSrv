@@ -77,7 +77,7 @@ def _ck(data: bytes) -> str:
 
 def _fakes(bindir: Path, monkeypatch, data: Path) -> None:
     fake_tool(bindir, "sync", SYNC)
-    fake_tool(bindir, "systemctl", 'case "$1" in show) echo "IMAGESRV_URL=http://10.10.10.8:8080 X=y" ;; esac')
+    fake_tool(bindir, "systemctl", 'case "$1" in show) echo "IMAGESRV_URL=http://10.10.10.8:7712 X=y" ;; esac')
     monkeypatch.setenv("FAKE_MARKER", posix(data / "server-upgrade.state"))
 
 

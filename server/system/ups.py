@@ -34,6 +34,7 @@ from typing import Callable
 
 from server.db import _write_lock, get_setting, journal, now_iso, set_settings, update_one, writing
 from server.core.logtext import one_line
+from server.system.timedrun import run_timed
 
 log = logging.getLogger("imagesrv.ups")
 #: #2510: מה שהקונסולה מקבלת כשהכשל אינו `UpsError` שלנו — הטקסט המקורי ל-log.
@@ -215,10 +216,8 @@ def stop_all_work(ctx, reason: str) -> list[str]:
                           related=lambda sid=sid: room.fail_wave(conn, sid, reason, commit=False)):
             stopped.append(sid)
             journal(conn, "ups_work_stopped", f"{sid}: {reason}", round_id=sid)
-        if row["kind"] == "multicast":
-            ctx.sender.stop(sid)
-            if ctx.chunk is not None:           # #2533: `store.fail` אינו קורא ל-`on_closed`
-                ctx.chunk.stop(sid)
+        if row["kind"] == "multicast" and ctx.chunk is not None:   # #2533: `store.fail` אינו קורא ל-`on_closed`
+            ctx.chunk.stop(sid)
     for table, where, column in (("room_rounds", "state IN ('active', 'closing')", "failed_reason"),
                                  ("tasks", "state = 'running'", "error")):
         ids = [r["id"] for r in conn.execute(f"SELECT id FROM {table} WHERE {where}")]
@@ -234,8 +233,8 @@ def stop_all_work(ctx, reason: str) -> list[str]:
 
 
 def default_poweroff() -> None:
-    subprocess.run(["systemctl", "poweroff"], check=True, timeout=30,
-                   stdin=subprocess.DEVNULL, capture_output=True)
+    run_timed(["systemctl", "poweroff"], check=True, timeout=30,   # #3127: how long, and how it ended
+              stdin=subprocess.DEVNULL, capture_output=True)
 
 
 class UpsMonitor:
@@ -354,8 +353,8 @@ def render_usb() -> dict[str, str]:
 
 
 def _systemctl(*args: str) -> None:
-    done = subprocess.run(["systemctl", *args], capture_output=True, text=True, timeout=60,
-                          stdin=subprocess.DEVNULL, check=False)
+    done = run_timed(["systemctl", *args], capture_output=True, text=True, timeout=60,   # #3127
+                     stdin=subprocess.DEVNULL, check=False)
     if done.returncode:
         raise RuntimeError(f"systemctl {' '.join(args)}: {(done.stderr or done.stdout).strip()}")
 

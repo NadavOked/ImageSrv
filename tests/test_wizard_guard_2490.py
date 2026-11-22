@@ -1,4 +1,4 @@
-"""#2490 — אשף האתחול הראשון: 8081 רק על loopback ועל כרטיס ההתקנה.
+"""#2490 — אשף האתחול הראשון: 443 רק על loopback ועל כרטיס ההתקנה.
 
 `POST /api/wizard/apply` אינו דורש הזדהות, והקריאה הראשונה קובעת את סיסמת
 המנהל. firstboot מבקש DHCP זמני לכל כרטיס עם קישור (גם להפצה), והאשף
@@ -6,7 +6,7 @@
 באותו קטע רשת יכול היה לקבוע את סיסמת המנהל לפני המפעיל.
 
 התיקון אינו משנה מסך: טבלת nftables קטנה (``inet imagesrv_wizard``) נטענת
-ונקראת בחזרה **לפני** שהאשף עולה, ומתירה 8081 רק על ``lo`` (הגואי על
+ונקראת בחזרה **לפני** שהאשף עולה, ומתירה 443 רק על ``lo`` (הגואי על
 tty1 מדבר עם האשף דרך 127.0.0.1) ועל הכרטיס ש-``/etc/imagesrv/installer-nic``
 נוקב בו לפי MAC. היחידה עצמה מסרבת לעלות בלי הטבלה. חומת האש הקבועה
 (``flush ruleset``) מחליפה אותה בסוף ההתקנה.
@@ -34,8 +34,8 @@ WIZARD_UNIT = REPO / "deploy" / "imagesrv-wizard.service"
 SHELLS = [s for s in (BASH, shutil.which("dash")) if s]
 MAC = "52:54:00:12:34:56"
 OTHER_MAC = "52:54:00:ab:cd:ef"
-LO_RULE = 'iifname "lo" tcp dport 8081 accept'
-DROP_RULE = "tcp dport 8081 counter drop"
+LO_RULE = 'iifname "lo" tcp dport 443 accept'
+DROP_RULE = "tcp dport 443 counter drop"
 #: #2518: DNS and rpcbind dropped off loopback (test_wizard_guard_dns_2518.py).
 LOCAL_ONLY = [f'iifname != "lo" {proto} dport {port} counter drop'
               for port in (53, 111) for proto in ("udp", "tcp")]
@@ -79,7 +79,7 @@ def test_guard_opens_8081_on_loopback_and_the_installer_nic_only(tmp_path, shell
     fact = _fact(tmp_path, f"state=configured\ninterface=eth0\nmac={MAC.upper()}\nreason=dhcp\n")
     proc = _run(shell, "--nic-fact", str(fact), "--sys-net", str(sys_net))
     assert proc.returncode == 0, proc.stderr
-    assert _rules(proc.stdout) == [LO_RULE, 'iifname "ens19" tcp dport 8081 accept', DROP_RULE,
+    assert _rules(proc.stdout) == [LO_RULE, 'iifname "ens19" tcp dport 443 accept', DROP_RULE,
                                    *LOCAL_ONLY]
     assert "ens18" not in proc.stdout
     out = proc.stdout
@@ -162,4 +162,4 @@ def test_wizard_unit_refuses_to_start_without_the_guard() -> None:
 def test_the_local_gui_reaches_the_wizard_through_loopback() -> None:
     """המסלול הלגיטימי על מסך השרת: הגשר מתחבר ל-127.0.0.1, ו-lo פתוח בטבלה."""
     from server.wizard import bridge
-    assert bridge.API_BASE.startswith("https://127.0.0.1:8081/")
+    assert bridge.API_BASE.startswith("https://127.0.0.1/")

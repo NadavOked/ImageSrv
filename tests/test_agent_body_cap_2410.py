@@ -1,4 +1,4 @@
-"""#2410 — תקרת הגוף חלה על **כל** נתיב כתיבה בפורט הסוכן (:8080).
+"""#2410 — תקרת הגוף חלה על **כל** נתיב כתיבה בפורט הסוכן (:7712).
 
 הקומיט הראשון של #2410 חסם את 9 נתיבי `server/agent/api.py`. אבל באפליקציית
 הסוכן יושבים גם הקיוסק של מחשב הבנייה (`/api/console/{login,sessions,room…}` —
@@ -65,9 +65,9 @@ def _walk(routes, prefix: str = ""):
 
 @pytest.fixture()
 def agent_env(tmp_path: Path, images_root: Path):
-    from test_sender import Recorder                       # noqa: PLC0415
+    from fakesend import Recorder                       # noqa: PLC0415
 
-    rt = create_runtime(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    rt = create_runtime(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                         sender_runner=Recorder(block=True), wol_send=lambda _p: None)
     console_app, agent_app = create_console_app(rt), create_agent_app(rt)
     users.create(rt.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True,
@@ -77,7 +77,7 @@ def agent_env(tmp_path: Path, images_root: Path):
                       json={"username": "noc", "password": "admin-pass-123"}).status_code == 200
     yield {"rt": rt, "app": agent_app, "ctx": rt.ctx, "admin": admin,
            "anon": TestClient(agent_app, raise_server_exceptions=False)}
-    rt.ctx.sender.stop()
+    rt.ctx.chunk.stop()
 
 
 def _write_routes(app) -> list[tuple[str, str]]:

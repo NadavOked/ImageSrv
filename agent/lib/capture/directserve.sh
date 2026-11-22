@@ -60,13 +60,18 @@ direct_chunk_targeted() {
 }
 
 direct_serve_start() {
-    # $1 = disk. The plan is $RUN_DIR/direct.plan; the port base is in the hello that said the wave
-    # runs ($RESP). One `chunkcast serve` a streamed partition, on port base + partition index.
-    # A server that named no port (an older one) gets none: completions over HTTP then fail there,
+    # $1 = disk. The plan is $RUN_DIR/direct.plan; the port of each partition is in the hello that said the
+    # wave runs ($RESP, `serve_ports`: index -> port, in the order the server sends them -- #3871). One
+    # `chunkcast serve` a streamed partition, on the port the server named for it: nothing is computed here.
+    # A server that named no ports (an older one) gets none: completions over HTTP then fail there,
     # by name, as before #3209.
     : > "$RUN_DIR/dserve.pids"
-    _ds_port=$(json_get "$RESP" ".task.direct.chunk.serve_port")
-    case "$_ds_port" in ''|null|0|*[!0-9]*) log "direct: the server named no frame-server port -- single chunks are not served over HTTP"; return 0 ;; esac
+    # One flat object, {"<index>": port, ...}: blanks out (jq -r prints it indented), then read by key below.
+    _ds_map=$(json_get "$RESP" ".task.direct.chunk.serve_ports" | tr -d ' \t\r\n')
+    case "$_ds_map" in
+        '{'*'}') ;;
+        *) log "direct: the server named no frame-server ports -- single chunks are not served over HTTP"; return 0 ;;
+    esac
     # Who may ask is the round's token, not an address (a name is not resolved here, and a server with two
     # cards leaves from the one it likes): no token, no frame server -- completions over HTTP then fail at
     # the server by name. The token goes to chunkcast in a file that only this process reads, never in argv
@@ -75,14 +80,18 @@ direct_serve_start() {
     ( umask 077; json_get "$RESP" ".task.direct.chunk.serve_token" > "$_ds_tok" ) 2> /dev/null
     case "$(cat "$_ds_tok" 2> /dev/null)" in ''|null) rm -f "$_ds_tok"; log "direct: the server sent no token for the frame servers -- single chunks are not served over HTTP"; return 0 ;; esac
     # the image server's address, when it is a number, narrows it further; it is never the only condition
-    _ds_ip=${SERVER#*://}; _ds_ip=${_ds_ip%%[:/]*}
+    _ds_ip=${TLS_IP:-${SERVER#*://}}; _ds_ip=${_ds_ip%%[:/]*}
     case "$_ds_ip" in ''|*[!0-9.]*) _ds_ip="" ;; esac
     while IFS='|' read -r _ds_i _ds_g _ds_r _ds_fs _ds_st _ds_sz _ds_f _ds_rest <&3; do
         case "$_ds_f" in ''|null) continue ;; esac
+        _ds_port=$(printf '%s' "$_ds_map" | sed -n "s/.*[{,]\"$_ds_i\":\([0-9][0-9]*\)[,}].*/\1/p")
+        case "$_ds_port" in
+            ''|null|0|*[!0-9]*) log "direct: the server named no port for partition $_ds_i -- its single chunks are not served over HTTP"; continue ;;
+        esac
         _ds_x="$RUN_DIR/idx.$_ds_i"; _ds_h=""
         [ "$(awk 'NR == 1 { print $3 }' "$_ds_x" 2>/dev/null)" != partclone ] || _ds_h="$_ds_x.head"
         # shellcheck disable=SC2086 # the optional pairs are word lists
-        chunkcast serve --listen "0.0.0.0:$((_ds_port + _ds_i))" --token-file "$_ds_tok" ${_ds_ip:+--allow "$_ds_ip"} --index "$_ds_x" \
+        chunkcast serve --listen "0.0.0.0:$_ds_port" --token-file "$_ds_tok" ${_ds_ip:+--allow "$_ds_ip"} --index "$_ds_x" \
             --device "$(lc_src_node "$1" "$_ds_i")" ${_ds_h:+--head "$_ds_h"} --level "$CAPTURE_LEVEL" \
             < /dev/null > "$RUN_DIR/dserve.$_ds_i.out" 2>> "$LOG_FILE" &
         echo "$!" >> "$RUN_DIR/dserve.pids"

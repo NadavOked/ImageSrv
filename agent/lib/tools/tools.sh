@@ -31,6 +31,7 @@ tools_load() {
     [ -z "$TOOLS_LOADED" ] || return 0
     TOOLS_LOADED=1; TOOLS_DOMAINS=""
     . "${LIB_DIR:-/usr/lib/imagesrv}/toolbins.sh"
+    . "${LIB_DIR:-/usr/lib/imagesrv}/tooldest.sh"   # #2804: destination, source, partitions
     TOOLS_SELECTED=$(tools_selection_ids) || TOOLS_SELECTED=""
     for _tf in "${LIB_DIR:-/usr/lib/imagesrv}"/tools_*.sh; do
         [ -f "$_tf" ] || continue                  # unmatched glob = the literal
@@ -142,22 +143,30 @@ tools_core_run() {
 # --- the unified list, and the guarded run ---------------------------------------
 
 tools_list() {
-    # id|domain|title|risk|args, built-ins first, then every module in load
-    # order. A line without its four leading fields is dropped and said on
-    # stderr, not folded into a nameless row.
+    # id|domain|title|risk|args[|what], built-ins first, then every module in
+    # load order. A line without its four leading fields is dropped and said on
+    # stderr, not folded into a nameless row. #2804: a tool that saves files
+    # is not listed at all when this machine has nowhere to save them
+    # (Nadav 31/10: missing, not grey) -- named once on stderr.
     tools_load
+    _tlnd=""; tooldest_root || _tlnd=1; _tlh=""
     for _tp in core $TOOLS_DOMAINS; do
-        "tools_${_tp}_list" 2>/dev/null | while IFS= read -r _tl; do
+        _tlh="$_tlh$("tools_${_tp}_list" 2>/dev/null | while IFS= read -r _tl; do
             IFS='|' read -r _id _dom _title _risk _ <<EOF
 $_tl
 EOF
             if ! tools_id_ok "$_id" || [ -z "$_dom" ] || [ -z "$_title" ] || [ -z "$_risk" ]; then
                 printf 'tools: %s: malformed line dropped: %s\n' "$_tp" "$_tl" >&2
-            elif tools_selected "$_id"; then
-                printf '%s\n' "$_tl"
+            elif ! tools_selected "$_id"; then
+                :
+            elif [ -n "$_tlnd" ] && tooldest_needs "$_id"; then
+                printf ' %s' "$_id"
+            else
+                printf '%s\n' "$_tl" >&3
             fi
-        done
-    done
+        done)"
+    done 3>&1
+    [ -z "$_tlh" ] || printf 'tools: not offered -- %s:%s\n' "$TD_WHY" "$_tlh" >&2
 }
 
 _tools_find() {
@@ -183,6 +192,11 @@ tools_run() {
     tools_id_ok "$_id" || return 4
     _tools_find "$_id" || return 4
     tools_selected "$_id" || { log "tool $_id refused: not in the server's selection"; return 4; }
+    mkdir -p "$RUN_DIR" 2>/dev/null
+    if tools_busy; then   # #2804 (mockup 14): the toolbox is off while a disk here is written
+        printf 'לא הורץ: המחשב כותב עכשיו לדיסק. הכלים זמינים כשהכתיבה מסתיימת.\n' > "$RUN_DIR/tool-$_id.out"
+        log "tool $_id refused: a disk of this machine is being written"; return 2
+    fi
     case "$TOOL_RISK" in
         ro) ;;
         *)  # rw, destroy -- and any risk word this file does not know reads
@@ -193,7 +207,6 @@ tools_run() {
                 return 3
             fi ;;
     esac
-    mkdir -p "$RUN_DIR" 2>/dev/null
     _out="$RUN_DIR/tool-$_id.out"
     log "tool $_id ($TOOL_RISK) running via $TOOL_PROVIDER${_arg:+ with arg $_arg}"
     "tools_${TOOL_PROVIDER}_run" "$_id" "$_arg" "$_confirm" > "$_out" 2>&1
@@ -206,9 +219,12 @@ tools_run() {
 
 tools_gui_list() {
     # $GUI_DIR/tools: first line machine=<name the confirm window sends>, then
-    # the tools_list rows. Atomic, like every file the GUI polls.
+    # the tools_list rows. Atomic, like every file the GUI polls. #2804: and
+    # the partition picker's $GUI_DIR/tool-parts (tooldest.sh); a picker that
+    # could not be read is no file and a log line, never a failed list.
     { printf 'machine=%s\n' "$(tools_machine_name)"; tools_list; } > "$GUI_DIR/tools.next" &&
-        mv "$GUI_DIR/tools.next" "$GUI_DIR/tools"
+        mv "$GUI_DIR/tools.next" "$GUI_DIR/tools" || return 1
+    tools_gui_parts || log "tool-list: the partitions could not be read -- no $GUI_DIR/tool-parts"
 }
 
 tools_gui_run() {

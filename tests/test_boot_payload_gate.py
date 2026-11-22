@@ -224,6 +224,10 @@ def run_installer_tail(boot_dir: Path, base: str):
         f"APP_DIR={str(REPO)!r}\n"
         f"HTTP_ROOT={str(boot_dir)!r}\n"
         f"SERVER_URL={base!r}\n"
+        # #3486: the gate asks where GRUB fetches from -- the boot listener, which the installer derives
+        # from --server-url as GRUB_HOST (host:BOOT_PORT). Here the test's own server stands for it.
+        f"GRUB_HOST={base.split('://', 1)[1].rstrip('/')!r}\n"
+        "BOOT_PORT=7711\n"
     )
     env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     return subprocess.run(

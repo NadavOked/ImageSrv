@@ -39,7 +39,7 @@ def _cmd(tmp_path, *, learned_max=None, chunks=None, part_chunks=CHUNKS, size=ZB
     if size is not None:
         with path.open("wb") as f:
             f.truncate(size)
-    engine = SimpleNamespace(port=9002, interface=None, feedback=True, write_floor=lambda: FLOOR)
+    engine = SimpleNamespace(port=7713, interface=None, feedback=True, write_floor=lambda: FLOOR)   # פורט-הפצה-מכוון
     wave = SimpleNamespace(key="0123456789abcdef", round=1, part_chunks={3: part_chunks})
     return ChunkEngine._command(engine, wave, {"index": 3}, path, KBPS, WRITE, chunks, learned_max)
 

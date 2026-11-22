@@ -6,14 +6,14 @@
 #include "screens_rounds.h"   /* bidi_isolate, RLM */
 #include "he_time.h"          /* #1503 */
 
-/* #2097: under DHCP the address the NIC has now -- https://<name>:8081 works only
+/* #2097: under DHCP the address the NIC has now -- https://<name> works only
  * once the college's DNS knows the new server. The name when there is no address. */
 static void console_guess(const InstallState *s,char *out,size_t n){
     const char *now=s->nic>=0&&s->nic<s->nnics?s->nics[s->nic].address:"";
     const char *host=s->static_mode?s->address:now;char clean[96];
     if(!host[0])host=s->hostname;
     snprintf(clean,sizeof clean,"%s",host[0]?host:"imagesrv-server");char *slash=strchr(clean,'/');if(slash)*slash=0;
-    snprintf(out,n,"https://%s:8081",clean);
+    snprintf(out,n,"https://%s",clean);
 }
 
 static void summary_row(App *a,cairo_t *cr,Rect r,const char *key,const char *value,int row){

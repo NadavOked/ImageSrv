@@ -1,7 +1,7 @@
 /* chunkcast -- the chunk engine's sender and receiver (#2533, stage 3).
  *
- * udpcast sends a slice, waits for every receiver to acknowledge it and only
- * then goes on: a slow receiver slows the room, a silent one is dropped, and
+ * The old multicast engine (removed, #3173) sent a slice, waited for every receiver to acknowledge it and only
+ * then went on: a slow receiver slowed the room, a silent one is dropped, and
  * nothing that has passed can be asked for again ("the 90% drop", #656).
  * Here the sender never waits for acknowledgements. Trident feedback adjusts
  * its bounded rate in-wave; each receiver writes what arrived whole and tells the server what it
@@ -133,9 +133,9 @@
  *   chunkcast b3sum       (#3332) stdin -> "<64 hex>\n", the BLAKE3 of all of it: the list's own, for the manifest
  *
  * The sender holds TWO rates, and the slower one rules at every moment:
- * --kbps is what goes on the wire (the wave's bitrate, as udp-sender's
+ * --kbps is what goes on the wire (the wave's bitrate, the old sender's
  * --max-bitrate), and --write-kbps is what the receivers must WRITE -- the
- * chunks' decompressed bytes. udpcast needed no second number: a receiver that
+ * chunks' decompressed bytes. The old engine needed no second number: a receiver that
  * could not write held the sender back. Nothing holds this sender back, and a
  * run of zeroes is one packet a 4MiB chunk -- a gigabyte of writes in a
  * millisecond of stream, which no drive follows and no repair pass would fix.
@@ -186,7 +186,7 @@
  * The map helpers, XXH64 and CRC-32 are fanout.c's own, by
  * inclusion: the writer here is the mirror of `fanout --readback`, and two
  * copies of "which block is chunk k" would be two answers. fanout.c is not
- * edited for it. No line of udpcast or partclone (GPL) is used. From filecast
+ * edited for it. No line of the old multicast tools or of partclone (GPL) is used. From filecast
  * (github.com/gistrec/filecast, MIT -- read, not copied; THIRD_PARTY_NOTICES.md):
  * the packet shape (announce / data / end, a session id in every packet); a
  * stall clock that only OUR packets reset (its refreshDeadline, Receiver.cpp);
@@ -2717,6 +2717,9 @@ static int cc_send_run(int argc, char **argv)
     s = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
     if (s < 0) return 2;
     setsockopt(s, SOL_SOCKET, SO_SNDBUF, &snd, sizeof snd);
+    int snd_got = -1;                   /* #3124 (B-NET-18): what the kernel gave, read back; -1 = not read, never the ask */
+    socklen_t snd_gl = sizeof snd_got;
+    if (getsockopt(s, SOL_SOCKET, SO_SNDBUF, &snd_got, &snd_gl)) snd_got = -1;
     if (IN_MULTICAST(ntohl(sin.sin_addr.s_addr))) {
         unsigned char ttl = (unsigned char)a.ttl;
         struct ip_mreqn mr = { 0 };
@@ -2760,6 +2763,7 @@ static int cc_send_run(int argc, char **argv)
     if (low_ms_set || vq_mib)           /* #3531: only when asked for, so the legacy line is the same */
         printf(" fb_low_ms=%lld fb_high_ms=%lld vq_mib=%lld", low_ms, high_ms, vq_mib);
     puts("");
+    printf("sndbuf %d %d\n", snd, snd_got);     /* #3124 (B-NET-18): asked, then granted (-1 = not read) -- the sender's side of the recv `rcvbuf` line */
     if (fflush(stdout)) return 2;
     if (reader_thread) {
         /* before the announce: the first chunks are read while the lead-in goes out */

@@ -60,7 +60,7 @@ def node(server, monkeypatch):
     conn.execute(
         "INSERT INTO storage_nodes (id, label, base_url, credential_ref, enrolled_at)"
         " VALUES (?, ?, ?, ?, ?)",
-        (NODE, "haifa", "https://node1.example:8443/api/interserver/v1", "cred:missing", now_iso()))
+        (NODE, "haifa", "https://node1.example:7700/api/interserver/v1", "cred:missing", now_iso()))
     conn.commit()
     return server
 
@@ -177,7 +177,7 @@ def test_an_enrollment_row_that_failed_in_sqlite_is_our_sentence(node, monkeypat
         raise sqlite3.IntegrityError(f"UNIQUE constraint failed: {SECRET}")
     monkeypatch.setattr(storage_nodes, "enroll_node", integrity)
     r = node["admin"].post("/api/console/storage-nodes/enroll", json={
-        "url": "https://10.0.0.9:8443/api/interserver/v1", "label": "branch",
+        "url": "https://10.0.0.9:7700/api/interserver/v1", "label": "branch",
         "protocol_version": interserver_auth.PROTOCOL_VERSION,
         "expected_secondary_spki": spki, "code": "123456"})
     assert r.status_code == 409 and "רישום המשני נכשל" in r.json()["detail"]
@@ -198,7 +198,7 @@ def test_a_request_that_was_not_sent_says_ours_and_logs_the_os_text(caplog):
         def sendall(self, data):
             raise os_error(errno.EPIPE)
 
-    client = storage_client.PinnedMTLSClient("10.0.0.9", 8443, expected_secondary_spki="00" * 32,
+    client = storage_client.PinnedMTLSClient("10.0.0.9", 7700, expected_secondary_spki="00" * 32,
                                              cert_pem=b"", key_pem=b"")
     client._conn = Broken()
     with pytest.raises(storage_client.RequestNotSent) as caught:

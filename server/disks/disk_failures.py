@@ -22,6 +22,7 @@ import logging
 import sqlite3
 
 from server.disks import ata_cause, slot_names
+from server.core import unreadable
 from server.db import _write_lock, journal, now_iso, writing
 
 log = logging.getLogger("imagesrv.disk_failures")
@@ -33,11 +34,16 @@ log = logging.getLogger("imagesrv.disk_failures")
 #: שגיאה, היא ההסבר) ו-`error` של הסוכן. הביטויים הם המילים שהסוכן כותב
 #: (drawers.sh, verdict.sh, localclone) — מקום אחד, נבדק בטסט מולם.
 INTERRUPTION_PHRASES = (
-    "הזרם לא הגיע",                 # drawers.sh: פג הזמן -- הזרם לא הגיע
-    "הזרם נקטע לפני סופו",          # drawers.sh: המקור (udp-receiver/curl) יצא באמצע
+    "הזרם לא הגיע",                 # chunkrecv.sh: פג הזמן -- הזרם לא הגיע
+    "השרת לא ענה במשך",             # chunkrecv.sh: the stream's server went silent mid-partition (#3173)
     "השרת סגר את הסבב",             # verdict.sh: ROUND_CLOSED_WHY (ברזל 17/10)
     "כובה מהקונסולה",                # localclone: המחשב כובה באמצע
     "השיכפול נעצר לפני מחיצה",       # localclone: נעצר
+)
+#: #3173: what an agent before the chunk engine wrote, and is still in `disk_failures` rows recorded then: its fanout
+#: verdict on a source (curl / the previous receiver) that left mid-stream. No agent writes it now; a row of it stays quiet.
+LEGACY_INTERRUPTION_PHRASES = (
+    "הזרם נקטע לפני סופו",
 )
 
 
@@ -46,7 +52,7 @@ def interrupted(cause: str | None, error: str | None) -> bool:
     לעולם אינם עצירה; בלי `error` אין ראיה — הרשומה נשארת כמות שהיא."""
     if cause in ("cable", "disk") or not isinstance(error, str):
         return False
-    return any(p in error for p in INTERRUPTION_PHRASES)
+    return any(p in error for p in INTERRUPTION_PHRASES + LEGACY_INTERRUPTION_PHRASES)
 
 
 #: #1728 (ברזל rc5, 18/10): פסק האורך של fanout על הזרם עצמו — כל המגירות
@@ -94,6 +100,7 @@ def _lines(raw: str | None) -> list[str]:
     try:
         return ata_cause.clean_log(json.loads(raw or "[]"))
     except ValueError:
+        unreadable.said("disk_failures.ata_log", raw)   # #3129
         return []
 
 

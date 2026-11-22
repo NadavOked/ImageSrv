@@ -1,14 +1,14 @@
-"""#649 תחום 1 — מסך "כלים" ב-GUI הנייטיבי, נבדק על המקור (אין מהדר בווינדוס).
+"""#649 — ארגז הכלים ב-GUI הנייטיבי, נבדק על המקור (אין מהדר בווינדוס).
 
-מה שנאכף כאן בלי לקמפל: הכפתור "כלים" חי **רק** בתפריט מחשב הבנייה
-(`screen_menu` ב-`screens.c`) ולא במסכי הקלונר/הכיתה; שלושת המסכים
-(רשימה / אישור / פלט) קיימים עם המחרוזות שהמפעיל רואה; rc 2 מוצג
-כ"לא הצלחנו לבדוק" ו-rc 3 כ"האישור לא תואם"; המצב הריק אומר "אין כלים
-ארוזים"; והמסך צבוע **רק** בטוקנים הקיימים — אין `HEX(` בקובץ (כדי
-ש-`test_native_gui_theme` יישאר מקור האמת היחיד לצבעים). `--png`
-מקבל שלושה כרטיסים חדשים, ו-`want[]` גדל איתם (#715 לימד).
+מה שנאכף כאן בלי לקמפל: כפתור "כלים F3" בפס העליון (מוקאפ 14 עמוד 1, נדב 24/10) —
+לא בכרטיס התפריט של מחשב הבנייה ולא במסכי הקלונר/הכיתה; עשר הקטגוריות של
+מוקאפ 14; המסכים (הבית / קטגוריה / הרצה / תוצאה) עם המחרוזות שהמפעיל רואה; rc 2
+מוצג כ"לא הצלחנו לבדוק" ו-rc 3 כ"האישור לא תואם"; המצב הריק והטעינה; והמסכים
+צבועים **רק** בטוקנים הקיימים — אין `HEX(` בקבצים (כדי ש-`test_native_gui_theme`
+יישאר מקור האמת היחיד לצבעים). `--png` מקבל כרטיס לכל מצב, ו-`want[]` גדל איתם.
 
-הקומפילציה ו-`make png` — אצל המתאם במעבדה.
+ההתנהגות עצמה (F3 בשלושת המקומות, כבוי בזמן כתיבה, הניווט, מה נשלח לגשר) —
+`test_native_gui_toolbox_649.py`, על `handle()` האמיתי, במעבדה.
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parents[1] / "native-gui" / "src"
 TOOLS_C = (SRC / "screens_tools.c").read_text(encoding="utf-8")
+HOME_C = (SRC / "screens_tools_home.c").read_text(encoding="utf-8")
+NAV_C = (SRC / "tools_nav.c").read_text(encoding="utf-8")
 SCREENS_C = (SRC / "screens.c").read_text(encoding="utf-8")
 MAIN_C = (SRC / "main.c").read_text(encoding="utf-8")
 UI_H = (SRC / "ui.h").read_text(encoding="utf-8")
@@ -35,44 +37,59 @@ def function_body(text: str, name: str) -> str:
     return text[start:i]
 
 
-# --- הכפתור: בתפריט הבנייה בלבד -------------------------------------------------
+# --- הכפתור: בפס העליון (מוקאפ 14 עמוד 1) ----------------------------------------------
 
 
-def test_the_tools_button_lives_in_the_build_menu_only():
-    assert "HIT_TOOLS" in function_body(SCREENS_C, "screen_menu")
+def test_the_tools_button_is_in_the_top_bar_and_not_in_any_screen_body():
+    """נדב 24/10 + מוקאפ 14: "כלים F3" בפס העליון בלבד — הכפתור שישב בפינת
+    התפריט ירד, ואף מסך לא מצייר אותו בעצמו. הפס מצייר אותו בין F2 ל-F4."""
+    assert "HIT_TOOLS" not in function_body(SCREENS_C, "screen_menu")
     for other in ("screens_cloner.c", "screens_class.c", "screens_rounds.c", "screens_room.c",
-                  "screens_capture.c", "screens_restore.c"):
+                  "screens_capture.c", "screens_restore.c", "screens_standby.c", "screens_local.c"):
         assert "HIT_TOOLS" not in (SRC / other).read_text(encoding="utf-8"), other
-    # ואינו אחת מבחירות התפריט: לא בטבלת MENU, כפתור משני בראש הכרטיס.
     menu_table = re.search(r"MENU\[MENU_N\]\s*=\s*\{(.*?)\n\};", SCREENS_C, flags=re.S).group(1)
     assert "HIT_TOOLS" not in menu_table
-    assert "BTN_PLAIN, HIT_TOOLS" in SCREENS_C
+    header = function_body(SCREENS_C, "draw_header")
+    assert header.index("draw_tools_btn(") < header.index("draw_usbset_btn(")   # F2, F3, F4 -- left to right
+    btn = function_body(HOME_C, "draw_tools_btn")
+    assert "if (state == 1) hit_add(a, b, HIT_TOOLS);" in btn                 # grey = drawn, never clickable
 
 
-def test_the_button_is_registered_before_the_body_clip():
-    body = function_body(SCREENS_C, "screen_menu")
-    assert body.index("HIT_TOOLS") < body.index("body_clip_begin(a, cr, body)")
+def test_the_entry_is_the_three_places_and_grey_while_writing():
+    body = function_body(HOME_C, "tools_entry")
+    assert body.strip().startswith("if (!a->st.menu_tools) return 0;")
+    for case in ("case SCREEN_STANDBY: return 1;", "case SCREEN_MENU: return a->signed_in ? 1 : 0;",
+                 "return cloner_round_over(&a->st) ? 1 : 2;", "if (lc_view(a) == LCVIEW_PROGRESS) return 2;"):
+        assert case in body, case
+    assert "default: return 0;" in body
 
 
-def test_the_toolbox_routes_to_its_own_screen():
-    assert "case MODE_TOOLS:   a->screen = SCREEN_TOOLS" in SCREENS_C
+def test_the_toolbox_routes_to_its_own_screen_over_the_one_it_came_from():
+    route = function_body(SCREENS_C, "app_route")
+    assert "route_base(a);" in route and "a->tools_from=a->screen;a->screen=SCREEN_TOOLS;" in route
+    assert "tools_entry(a,a->screen)!=1){a->tools_open=0;" in route        # a write that starts closes it
     assert "case SCREEN_TOOLS:    screen_tools(a, cr, W, H, head_h)" in SCREENS_C
-    assert "SCREEN_TOOLS" in UI_H and "MODE_TOOLS" in UI_H
-    assert "src/screens_tools.c" in MAKEFILE
+    assert "SCREEN_TOOLS" in UI_H and "MODE_TOOLS" not in UI_H
+    for f in ("src/screens_tools.c", "src/screens_tools_home.c", "src/tools_nav.c", "src/tools_sample.c"):
+        assert f in MAKEFILE, f
 
 
 # --- שלושת המסכים והמחרוזות שהמפעיל רואה ------------------------------------------
 
 
-def test_the_list_groups_by_domain_with_hebrew_headings():
-    for domain, heading in (("disk", "דיסקים"), ("net", "רשת"), ("windows", "Windows"),
-                            ("boot", "אתחול"), ("hw", "חומרה")):
-        assert f'"{domain}"' in TOOLS_C and f'"{heading}"' in TOOLS_C, (domain, heading)
+def test_the_ten_categories_of_mockup_14():
+    table = re.search(r"TOOL_CATS\[TOOL_NCATS\] = \{(.*?)\n\};", HOME_C, flags=re.S).group(1)
+    for domain, heading in (("disk", "דיסק"), ("wipe", "מחיקת דיסקים"), ("net", "רשת"), ("windows", "Windows"),
+                            ("boot", "אתחול"), ("hw", "חומרה"), ("recover", "שחזור קבצים"), ("sec", "אבטחה"),
+                            ("other", "אחר"), ("combo", "בדיקות משולבות")):
+        assert f'{{ "{domain}",' in table and f'"{heading}"' in table, (domain, heading)
+    assert "return TCAT_OTHER;" in function_body(HOME_C, "tool_cat_of")     # unknown = "אחר", never dropped
 
 
 def test_the_risk_tags_carry_the_three_words():
-    for word in ("קריאה בלבד", "משנה דיסק", "הרסני"):
-        assert word in TOOLS_C, word
+    words = function_body(HOME_C, "tool_risk_word")
+    for word in ('"קריאה בלבד"', '"משנה"', '"הרסני"'):                     # mockup 14's legend
+        assert word in words, word
     # ומילה לא מוכרת נקראת כהרסנית, כמו ב-tools.sh -- לא כקריאה בלבד.
     body = function_body(TOOLS_C, "tools_risk_level")
     assert "return 2;" in body.split("rw")[-1]
@@ -87,8 +104,8 @@ def test_rc_2_and_rc_3_have_their_own_words_and_2_is_not_green():
 
 
 def test_the_empty_state_and_the_loading_state_are_two_texts():
-    assert "לא נבחרו כלים בשרת" in TOOLS_C   # #1050: the cause is the selection, not the initrd
-    assert "טוען את רשימת הכלים" in TOOLS_C
+    assert "לא נבחרו כלים בשרת" in HOME_C   # #1050: the cause is the selection, not the initrd
+    assert "טוען את רשימת הכלים" in HOME_C
 
 
 def test_the_confirm_view_asks_no_typed_name_rw_and_destroy_confirm_in_a_dialog():
@@ -111,8 +128,7 @@ def test_the_output_view_spins_while_running_and_offers_run_again():
 def test_run_again_never_replays_a_risky_run():
     """rw/destroy (או כלי עם ארגומנט) חוזר למסך האישור — ומשם לחלון האישור
     (#1270); רק ro בלי ארגומנט רץ שוב מיד."""
-    body = function_body(MAIN_C, "handle")
-    again = body[body.index("case HIT_TOOL_AGAIN:"):body.index("case HIT_TOOL_DOWN:")]
+    again = function_body(MAIN_C, "tool_again")
     assert "a->tools_view = TOOLS_CONFIRM;" in again and "else tool_run(a);" in again
 
 
@@ -129,18 +145,22 @@ def test_the_bridge_still_gets_the_machine_name_it_checks():
 # --- טוקנים בלבד, וטבלאות --png ---------------------------------------------------
 
 
-def test_the_tools_screen_defines_no_colour_of_its_own():
-    assert "HEX(" not in TOOLS_C
-    assert not re.search(r"cairo_set_source_rgb\s*\(", TOOLS_C)
-    assert not re.search(r"\(Rgb\)\s*\{", TOOLS_C)
+def test_the_tools_screens_define_no_colour_of_their_own():
+    for name, text in (("screens_tools.c", TOOLS_C), ("screens_tools_home.c", HOME_C), ("tools_nav.c", NAV_C)):
+        assert "HEX(" not in text, name
+        assert not re.search(r"cairo_set_source_rgb\s*\(", text), name
+        assert not re.search(r"\(Rgb\)\s*\{", text), name
 
 
-def test_png_cards_include_the_three_tools_views():
+def test_png_cards_include_every_tools_view():
     cards = re.search(r"PNG_CARDS\[\]\s*=\s*\{(.*?)\};", MAIN_C, flags=re.S).group(1)
-    for card in ('"tools"', '"tools-confirm"', '"tools-output"'):
-        assert card in cards, card
+    tools_cards = ("tools", "tools-confirm", "tools-output", "tools-search", "tools-search-empty", "tools-cat",
+                   "tools-run", "tools-confirm-part", "tools-dialog", "tools-running", "tools-output-ok",
+                   "tools-cloner", "tools-usb")
+    for card in tools_cards:
+        assert f'"{card}"' in cards, card
     want = re.search(r"static const Screen want\[\]\s*=\s*\{(.*?)\};", MAIN_C, flags=re.S).group(1)
-    assert want.count("SCREEN_TOOLS") == 3
+    assert want.count("SCREEN_TOOLS") == len(tools_cards)
 
 
 # --- הגשר: שתי שורות, אחרי gui_role -------------------------------------------------
@@ -178,12 +198,9 @@ GUISTATE = (AGENT / "lib" / "gui" / "guistate.sh").read_text(encoding="utf-8")
 
 
 def test_the_tools_button_is_drawn_only_when_menu_tools_is_on():
-    """הציור של HIT_TOOLS ב-`screen_menu` יושב בתוך `if (a->st.menu_tools)`,
-    `state.c` מפרסר את הרשומה (היעדר = 0 מ-memset), והדגימה של `--png`
-    מדליקה אותה כדי ששלושת כרטיסי הכלים יישארו ברי-רינדור."""
-    body = function_body(SCREENS_C, "screen_menu")
-    gate = body.index("if (a->st.menu_tools) {")
-    assert gate < body.index("BTN_PLAIN, HIT_TOOLS") < body.index("body_clip_begin(a, cr, body)")
+    """`tools_entry` (מקור הכפתור בפס ו-F3) מחזיר 0 בלי `menu_tools`, `state.c`
+    מפרסר את הרשומה (היעדר = 0 מ-memset), והדגימה של `--png` מדליקה אותה."""
+    assert function_body(HOME_C, "tools_entry").strip().startswith("if (!a->st.menu_tools) return 0;")
     assert 'KEY("menu_tools")' in STATE_C and "s->menu_tools = num(val, 0) != 0" in STATE_C
     assert "int menu_tools;" in UI_H
     assert "s->menu_tools = 1;" in function_body(MAIN_C, "sample_state")
@@ -279,7 +296,7 @@ def _cc():
 
 @requires_native(*_cc(), why="native-gui נבנה על המעבדה בלבד")
 def test_the_tools_button_is_not_drawn_without_menu_tools(tmp_path):
-    """`menu_tools=1` מצייר את כפתור "כלים" בראש כרטיס התפריט; 0 לא, ורשומה
+    """`menu_tools=1` מצייר את "כלים F3" בפס העליון של התפריט; 0 לא, ורשומה
     חסרה שווה ל-0 **פיקסל בפיקסל**. נמדד כהפרש בין שני רינדורים — לא בדיו
     הכהה לבדו: הכיתוב קטן ורוב פיקסליו גווני-ביניים של אנטי-אליאסינג
     (נמדד במעבדה 19/09: 2,166 פיקסלים שונים בתיבה של 57×38, ורק 13 כהים)."""

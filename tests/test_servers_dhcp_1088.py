@@ -348,6 +348,7 @@ def test_console_host_by_name_resolves_and_watches(tmp_path, monkeypatch):
     monkeypatch.setattr(server.app, "create_runtime", lambda *a, **k: (captured.update(kwargs=k), "rt")[1])
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(uvicorn, "Config", lambda app, **kw: configs.setdefault(app, []).append(kw) or object())
     monkeypatch.setattr(uvicorn, "Server", lambda config: object())
     monkeypatch.setattr(server.main, "serve_all", lambda servers: None)
@@ -357,7 +358,7 @@ def test_console_host_by_name_resolves_and_watches(tmp_path, monkeypatch):
     monkeypatch.setattr(server.main, "_interface_for", lambda url: None)
     monkeypatch.setattr(ifaddr.AddressWatcher, "start", lambda self: started.append(self) or self)
     monkeypatch.setattr("sys.argv", [
-        "server.main", "--server-url", "http://10.44.12.10:8080",
+        "server.main", "--server-url", "http://10.44.12.10:7712",
         "--data-dir", str(tmp_path / "data"), "--images", str(tmp_path / "img"),
         "--console-host", "eth0"])
     server.main.main()
@@ -381,6 +382,7 @@ def test_console_host_by_name_without_a_lease_yet_is_loopback_only(tmp_path, mon
     monkeypatch.setattr(server.app, "create_runtime", lambda *a, **k: "rt")
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(uvicorn, "Config", lambda app, **kw: configs.setdefault(app, []).append(kw) or object())
     monkeypatch.setattr(uvicorn, "Server", lambda config: object())
     monkeypatch.setattr(server.main, "serve_all", lambda servers: None)
@@ -391,7 +393,7 @@ def test_console_host_by_name_without_a_lease_yet_is_loopback_only(tmp_path, mon
     started = []
     monkeypatch.setattr(ifaddr.AddressWatcher, "start", lambda self: started.append(self) or self)
     monkeypatch.setattr("sys.argv", [
-        "server.main", "--server-url", "http://10.44.12.10:8080",
+        "server.main", "--server-url", "http://10.44.12.10:7712",
         "--data-dir", str(tmp_path / "data"), "--images", str(tmp_path / "img"),
         "--console-host", "ens18"])
     server.main.main()
@@ -405,7 +407,7 @@ def test_console_host_by_name_when_ip_fails_is_a_parser_error(tmp_path, monkeypa
     monkeypatch.setattr(ifaddr, "read_ipv4", broken)
     monkeypatch.setattr(server.app, "create_runtime", lambda *a, **k: pytest.fail("הגיע ל-runtime"))
     monkeypatch.setattr("sys.argv", [
-        "server.main", "--server-url", "http://10.44.12.10:8080",
+        "server.main", "--server-url", "http://10.44.12.10:7712",
         "--data-dir", str(tmp_path / "data"), "--images", str(tmp_path / "img"),
         "--console-host", "eth9"])
     with pytest.raises(SystemExit) as exc:
@@ -421,6 +423,7 @@ def _run_main_no_url(tmp_path, monkeypatch, interface_for=None):
                         lambda *a, **k: (captured.update(args=a, kwargs=k), "rt")[1])
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(uvicorn, "Config", lambda app, **kw: configs.setdefault(app, []).append(kw) or object())
     monkeypatch.setattr(uvicorn, "Server", lambda config: object())
     monkeypatch.setattr(server.main, "serve_all", lambda servers: None)
@@ -441,7 +444,7 @@ def test_without_server_url_and_without_a_console_record_the_server_is_unconfigu
     """התקנה נקייה (#1088): היחידה מעבירה ${IMAGESRV_URL} ריק. השרת עולה —
     סוכן על loopback בלבד, ומצב ההפצה נאמר: source=none."""
     configs, captured = _run_main_no_url(tmp_path, monkeypatch)
-    assert captured["args"][2] == "http://127.0.0.1:8080"
+    assert captured["args"][2] == "https://127.0.0.1:7712"
     assert [c["host"] for c in configs["agent"]] == ["127.0.0.1"]
     assert captured["kwargs"]["interface"] is None
     deploy = captured["kwargs"]["deploy"]
@@ -455,11 +458,11 @@ def test_without_server_url_the_console_record_wins(tmp_path, monkeypatch):
     data = tmp_path / "data"
     data.mkdir()
     conn = connect(data / "imagesrv.db")
-    deploy_net.record(conn, "eth1", "http://10.44.9.10:8080")
+    deploy_net.record(conn, "eth1", "http://10.44.9.10:7712")
     conn.close()
     configs, captured = _run_main_no_url(tmp_path, monkeypatch,
                                          interface_for=lambda url: "eth1")
-    assert captured["args"][2] == "http://10.44.9.10:8080"
+    assert captured["args"][2] == "http://10.44.9.10:7712"
     assert captured["kwargs"]["interface"] == "eth1"
     assert [c["host"] for c in configs["agent"]] == ["10.44.9.10"]
     assert captured["kwargs"]["deploy"].state.source == "console"
@@ -473,13 +476,13 @@ def test_a_console_record_whose_address_left_the_nic_degrades_instead_of_dying(
     data = tmp_path / "data"
     data.mkdir()
     conn = connect(data / "imagesrv.db")
-    deploy_net.record(conn, "eth1", "http://10.44.9.10:8080")
+    deploy_net.record(conn, "eth1", "http://10.44.9.10:7712")
     conn.close()
 
     def no_nic(url):
         raise server.main.InterfaceDetectionError("אף כרטיס אינו נושא את 10.44.9.10")
     configs, captured = _run_main_no_url(tmp_path, monkeypatch, interface_for=no_nic)
-    assert captured["args"][2] == "http://127.0.0.1:8080"
+    assert captured["args"][2] == "https://127.0.0.1:7712"
     assert captured["kwargs"]["deploy"].state.source == "none"
     assert "back to 'not configured'" in capsys.readouterr().out
 
@@ -488,7 +491,7 @@ def test_server_url_flag_still_wins_and_is_still_ip_only(tmp_path, monkeypatch):
     """#498 לא נשבר: עם הדגל — אותה בדיקה, אותה דחייה."""
     monkeypatch.setattr(server.app, "create_runtime", lambda *a, **k: pytest.fail("הגיע ל-runtime"))
     monkeypatch.setattr("sys.argv", [
-        "server.main", "--server-url", "http://imagesrv.college:8080",
+        "server.main", "--server-url", "http://imagesrv.college:7712",
         "--data-dir", str(tmp_path / "data"), "--images", str(tmp_path / "img")])
     with pytest.raises(SystemExit):
         server.main.main()
@@ -500,22 +503,22 @@ def test_server_url_flag_still_wins_and_is_still_ip_only(tmp_path, monkeypatch):
 def test_resolve_precedence(tmp_path):
     from server.db import connect
     conn = connect(tmp_path / "x.db")
-    assert deploy_net.resolve(conn, "http://1.2.3.4:8080", "eth0").source == "cli"
+    assert deploy_net.resolve(conn, "http://1.2.3.4:7712", "eth0").source == "cli"
     assert deploy_net.resolve(conn, None, None).source == "none"
-    deploy_net.record(conn, "eth1", "http://10.44.9.10:8080")
+    deploy_net.record(conn, "eth1", "http://10.44.9.10:7712")
     st = deploy_net.resolve(conn, None, None)
-    assert (st.source, st.interface, st.url) == ("console", "eth1", "http://10.44.9.10:8080")
-    assert deploy_net.resolve(conn, "http://1.2.3.4:8080", None).source == "cli"   # הדגל גובר
+    assert (st.source, st.interface, st.url) == ("console", "eth1", "http://10.44.9.10:7712")
+    assert deploy_net.resolve(conn, "http://1.2.3.4:7712", None).source == "cli"   # הדגל גובר
     assert st.public()["hint"] is None
     assert "בחר כרטיס" in deploy_net.DeployState("none", None, None).public()["hint"]
 
 
 def test_write_grub_cfg_uses_the_installers_generator(tmp_path):
     from boot.grub_menu import GrubConfig, render_bootstrap
-    assert deploy_net.write_grub_cfg("http://10.44.9.10:8080", tmp_path) is None
+    assert deploy_net.write_grub_cfg("http://10.44.9.10:7712", tmp_path) is None
     text = (tmp_path / "grub" / "grub.cfg").read_text(encoding="ascii")
-    assert text == render_bootstrap(GrubConfig(server_base="http://10.44.9.10:8080"))
-    assert "set imagesrv_fallback=10.44.9.10:8080" in text
+    assert text == render_bootstrap(GrubConfig(server_base="http://10.44.9.10:7712"))
+    assert "set imagesrv_fallback=10.44.9.10:7712" in text
 
 
 @pytest.mark.skipif(os.name != "posix", reason="requires POSIX umask and modes")
@@ -530,20 +533,20 @@ def test_1817_write_grub_cfg_is_0644_under_private_umask(tmp_path, existing):
         path.chmod(0o600)
     previous_umask = os.umask(0o077)
     try:
-        error = deploy_net.write_grub_cfg("http://10.44.9.10:8080", tmp_path)
+        error = deploy_net.write_grub_cfg("http://10.44.9.10:7712", tmp_path)
     finally:
         os.umask(previous_umask)
     assert error is None
     assert stat.S_IMODE(path.stat().st_mode) == 0o644
     assert path.read_text(encoding="ascii") == render_bootstrap(
-        GrubConfig(server_base="http://10.44.9.10:8080"))
+        GrubConfig(server_base="http://10.44.9.10:7712"))
 
 
 @pytest.mark.skipif(os.name != "posix", reason="requires POSIX umask and modes")
 def test_1817_write_grub_cfg_creates_a_traversable_grub_dir_under_private_umask(tmp_path):
     previous_umask = os.umask(0o077)
     try:
-        error = deploy_net.write_grub_cfg("http://10.44.9.10:8080", tmp_path)
+        error = deploy_net.write_grub_cfg("http://10.44.9.10:7712", tmp_path)
     finally:
         os.umask(previous_umask)
     assert error is None
@@ -560,7 +563,7 @@ def test_regenerate_firewall_skips_when_the_installer_wrote_none(tmp_path):
 
 def _complete_ctx(tmp_path, hooks, servers_interface="eth0"):
     return deploy_net.DeployContext(
-        state=deploy_net.DeployState("none", None, None), agent_port=8080,
+        state=deploy_net.DeployState("none", None, None), agent_port=7712,
         tftp_root=tmp_path / "tftp", repo_dir=REPO, servers_interface=servers_interface,
         primary_ip=None, hooks=hooks)
 
@@ -725,8 +728,8 @@ def test_complete_applies_every_step_and_commits_last(tmp_path):
     assert [c[0] for c in calls] == ["grub", "dnsmasq", "fw", "restart"]
     assert calls[2] == ("fw", "eth1", "eth0", None)
     assert seen_at_restart["stored"] == (None, None)        # עוד לא נרשם בזמן התזמון
-    assert deploy_net.stored(conn) == ("eth1", "http://10.44.9.10:8080")
-    assert result == {"ok": True, "url": "http://10.44.9.10:8080", "interface": "eth1",
+    assert deploy_net.stored(conn) == ("eth1", "https://10.44.9.10:7712")
+    assert result == {"ok": True, "url": "https://10.44.9.10:7712", "interface": "eth1",
                       "errors": [], "restarting": True, "recorded": True}
 
 
@@ -815,7 +818,7 @@ def test_render_dnsmasq_pins_tftp_unless_the_unit_names_the_deploy_nic(
     from server.console import dhcp as console_dhcp
     from server.app import create_app
     from server.db import set_setting
-    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080",
+    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:7712",
                      now_fn=clock)
     conn = app.state.ctx.conn
     set_setting(conn, dhcp.SETTING_PREFIX + "eth1",
@@ -823,8 +826,8 @@ def test_render_dnsmasq_pins_tftp_unless_the_unit_names_the_deploy_nic(
     named = source != "none"
     deploy = deploy_net.DeployContext(
         state=deploy_net.DeployState(source, "eth1" if named else None,
-                                     "http://10.44.9.10:8080" if named else None),
-        agent_port=8080, tftp_root=Path("/srv/tftp"), repo_dir=REPO)
+                                     "http://10.44.9.10:7712" if named else None),
+        agent_port=7712, tftp_root=Path("/srv/tftp"), repo_dir=REPO)
     main_text, _proxy_text = console_dhcp.render_dnsmasq(app.state.ctx, deploy)
     conn.close()
     assert "enable-tftp" in main_text
@@ -869,11 +872,11 @@ def console(tmp_path: Path, images_root: Path, clock):
     }
 
     def build(source: str):
-        state = (deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:8080") if source == "cli"
+        state = (deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:7712") if source == "cli"
                  else deploy_net.DeployState("none", None, None))
-        ctx = deploy_net.DeployContext(state=state, agent_port=8080, tftp_root=tmp_path / "tftp",
+        ctx = deploy_net.DeployContext(state=state, agent_port=7712, tftp_root=tmp_path / "tftp",
                                        repo_dir=REPO, servers_interface="eth0", hooks=deploy_hooks)
-        app = create_app(tmp_path / f"data-{source}", images_root, "http://127.0.0.1:8080",
+        app = create_app(tmp_path / f"data-{source}", images_root, "http://127.0.0.1:7712",
                          now_fn=clock, dhcp_hooks=hooks, deploy=ctx)
         users.create(app.state.ctx.conn, "noc", "Admin-pass-123!", "admin", by="test")
         client = TestClient(app)
@@ -946,9 +949,9 @@ def test_first_dhcp_enable_completes_the_install_and_restarts(console):
     r = client.put("/api/console/net/interfaces/eth1", json={**GOOD, "confirm": "eth1"})
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["deploy"] == {"ok": True, "url": "http://10.44.9.10:8080", "interface": "eth1",
+    assert body["deploy"] == {"ok": True, "url": "https://10.44.9.10:7712", "interface": "eth1",
                               "errors": [], "restarting": True, "recorded": True}
-    assert deploy_net.stored(ctx.conn) == ("eth1", "http://10.44.9.10:8080")
+    assert deploy_net.stored(ctx.conn) == ("eth1", "https://10.44.9.10:7712")
     assert [c[0] for c in fake["deploy_calls"]] == ["grub", "dnsmasq", "fw", "restart"]
     assert fake["deploy_calls"][2][1] == {"deploy_if": "eth1", "servers_if": "eth0", "primary_ip": None}
     # קובץ ה-dnsmasq שנכתב נושא את כרטיס ההפצה (R20-F1 במסירה).
@@ -1007,10 +1010,10 @@ def test_first_deploy_from_the_deploy_window_derives_the_address_then_completes(
         "firewall": lambda repo, **kw: fake["deploy_calls"].append(("fw", kw)) or None,
         "restart_server": lambda: fake["deploy_calls"].append(("restart",)) or None,
     }
-    ctx = deploy_net.DeployContext(state=deploy_net.DeployState("none", None, None), agent_port=8080,
+    ctx = deploy_net.DeployContext(state=deploy_net.DeployState("none", None, None), agent_port=7712,
                                    tftp_root=tmp_path / "tftp", repo_dir=REPO,
                                    servers_interface="eth0", hooks=deploy_hooks)
-    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:7712", now_fn=clock,
                      dhcp_hooks=dhcp_hooks, netcfg_hooks=netcfg_hooks, deploy=ctx,
                      netcfg_state_dir=tmp_path / "netstate")
     users.create(app.state.ctx.conn, "noc", "Admin-pass-123!", "admin", by="test")
@@ -1023,9 +1026,9 @@ def test_first_deploy_from_the_deploy_window_derives_the_address_then_completes(
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["server_ip"] == "10.44.9.1"
-    assert body["deploy"]["ok"] is True and body["deploy"]["url"] == "http://10.44.9.1:8080"
+    assert body["deploy"]["ok"] is True and body["deploy"]["url"] == "https://10.44.9.1:7712"
     assert [c[0] for c in fake["deploy_calls"]] == ["grub", "dnsmasq", "fw", "restart"]
-    assert deploy_net.stored(app.state.ctx.conn) == ("eth1", "http://10.44.9.1:8080")
+    assert deploy_net.stored(app.state.ctx.conn) == ("eth1", "https://10.44.9.1:7712")
     assert "interface=eth1" in fake["applied"][-1]
     # כרטיס הניהול (eth0) — אסור להיות רשת ההפצה, גם ב-API
     refused = client.put("/api/console/net/config/eth0/deploy", json={
@@ -1055,7 +1058,7 @@ def test_first_dhcp_enable_that_fails_to_complete_writes_nothing_and_can_be_retr
     fake["fw_error"] = None
     r = client.put("/api/console/net/interfaces/eth1", json={**GOOD, "confirm": "eth1"})
     assert r.status_code == 200 and r.json()["deploy"]["ok"] is True
-    assert deploy_net.stored(ctx.conn) == ("eth1", "http://10.44.9.10:8080")
+    assert deploy_net.stored(ctx.conn) == ("eth1", "https://10.44.9.10:7712")
     assert [c[0] for c in fake["deploy_calls"]][3:] == ["grub", "dnsmasq", "fw", "restart"]
 
 
@@ -1077,7 +1080,7 @@ def test_full_dhcp_on_another_nic_after_console_deploy_is_409(console, classroom
     assert "כרטיס ההפצה (eth1)" in r.json()["detail"] and "eth2" in r.json()["detail"]
     assert get_setting(ctx.conn, dhcp.SETTING_PREFIX + "eth2") is None
     assert len(fake["applied"]) == applied_before
-    assert deploy_net.stored(ctx.conn) == ("eth1", "http://10.44.9.10:8080")
+    assert deploy_net.stored(ctx.conn) == ("eth1", "https://10.44.9.10:7712")
     r = client.put("/api/console/net/interfaces/eth2",
                    json={"proxy": True, "confirm": "eth2", "confirm_proxy_broken": True})
     assert r.status_code == 200, r.text
@@ -1122,7 +1125,7 @@ def test_dhcp_enable_with_a_cli_address_does_not_touch_the_install(console):
     client, ctx, _ = build("cli")
     assert client.get("/api/console/net/deploy").json() == {
         "configured": True, "source": "cli", "interface": "eth1",
-        "url": "http://10.44.9.10:8080", "hint": None}
+        "url": "http://10.44.9.10:7712", "hint": None}
     r = client.put("/api/console/net/interfaces/eth1", json={**GOOD, "confirm": "eth1"})
     assert r.status_code == 200 and "deploy" not in r.json()
     assert fake["deploy_calls"] == [] and deploy_net.stored(ctx.conn) == (None, None)
@@ -1153,14 +1156,14 @@ def _health_hooks(deploy_state, servers_nic=None, tftp_root=None):
 @pytest.fixture()
 def health_ctx(tmp_path, images_root, clock):
     from server.app import create_app
-    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080", now_fn=clock)
+    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:7712", now_fn=clock)
     return app.state.ctx
 
 
 def test_health_says_deploy_not_configured_instead_of_red_pxe_rows(health_ctx):
     rows = {c["id"]: c for c in health.collect(
         health_ctx, _health_hooks(deploy_net.DeployState("none", None, None)),
-        "http://127.0.0.1:8080")}
+        "http://127.0.0.1:7712")}
     assert rows["deploy_net"]["state"] == "warn" and "בחר כרטיס" in rows["deploy_net"]["detail"]
     dependent = ("dhcp_port", "tftp_port", "dnsmasq", "boot_files", "server", "identity")
     assert all(rows[name]["state"] == "not_applicable" for name in dependent)
@@ -1171,8 +1174,8 @@ def test_health_says_deploy_not_configured_instead_of_red_pxe_rows(health_ctx):
 
 def test_health_keeps_the_red_rows_when_deploy_is_configured(health_ctx):
     rows = {c["id"]: c for c in health.collect(
-        health_ctx, _health_hooks(deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:8080")),
-        "http://10.44.9.10:8080")}
+        health_ctx, _health_hooks(deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:7712")),
+        "http://10.44.9.10:7712")}
     assert "deploy_net" not in rows
     assert rows["tftp_port"]["state"] == "bad"
     assert rows["dnsmasq"]["state"] == "bad"
@@ -1183,9 +1186,9 @@ def test_health_keeps_the_red_rows_when_deploy_is_configured(health_ctx):
 def test_health_servers_nic_row_only_when_injected(health_ctx):
     rows = {c["id"]: c for c in health.collect(
         health_ctx, _health_hooks(None, ("ok", "כתובת השרתים (eth0): 10.1.2.3 (DHCP, פג ב-18/09 12:00)")),
-        "http://10.44.9.10:8080")}
+        "http://10.44.9.10:7712")}
     assert rows["servers_nic"]["state"] == "ok" and "DHCP" in rows["servers_nic"]["detail"]
-    rows = {c["id"] for c in health.collect(health_ctx, _health_hooks(None), "http://10.44.9.10:8080")}
+    rows = {c["id"] for c in health.collect(health_ctx, _health_hooks(None), "http://10.44.9.10:7712")}
     assert "servers_nic" not in rows and "deploy_net" not in rows
 
 
@@ -1204,7 +1207,7 @@ def test_dhcp_stanza_sends_the_hostname():
 def test_console_preview_writes_the_hostname_into_the_dhcp_file(tmp_path, images_root, clock):
     from server.console import users
     from server.app import create_app
-    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:7712", now_fn=clock,
                      netcfg_hooks={"hostname": lambda: "imagesrv-haifa",
                                    "interfaces": lambda: [{"name": "eth0", "state": "up", "addresses": []}]})
     users.create(app.state.ctx.conn, "noc", "Admin-pass-123!", "admin", by="test")
@@ -1368,7 +1371,9 @@ def test_installer_text_deploy_is_optional_and_servers_nic_is_dhcp_by_default():
     assert 'NFT_ARGS+=(--deploy-if "$DEPLOY_FOR_NFT")' in text          # #1121 ס' 7
     assert "systemctl disable --now dnsmasq" in text
     assert "grub/grub.cfg לא נכתב" in text
-    assert 'VERIFY_URL="${SERVER_URL:-http://127.0.0.1:${PORT:-8080}}"' in text
+    # #3486: the payload is checked where GRUB gets it: the boot listener (GRUB_HOST, or loopback without a deploy NIC)
+    assert 'VERIFY_URL="${GRUB_HOST:+http://$GRUB_HOST}"' in text
+    assert 'VERIFY_URL="${VERIFY_URL:-http://127.0.0.1:$BOOT_PORT}"' in text
     # --interface ליחידה רק כשיש כרטיס; --console-host תמיד.
     assert re.search(r'if \[\[ -n "\$IFACE" \]\]; then\n\s+STORAGE_ARGS\+=" --interface \$IFACE"', text)
     assert 'STORAGE_ARGS+=" --console-host $CONSOLE_HOST"' in text
@@ -1395,8 +1400,8 @@ def test_server_main_accepts_an_empty_server_url_argument():
 
 def test_interserver_url_accepts_a_hostname_and_the_client_resolves_per_connection(monkeypatch):
     from server.interserver import auth as interserver_auth, storage_client
-    host, port, _ = interserver_auth.parse_interserver_url("https://imagesrv.college.local:8443/")
-    assert (host, port) == ("imagesrv.college.local", 8443)
+    host, port, _ = interserver_auth.parse_interserver_url("https://imagesrv.college.local:7700/")
+    assert (host, port) == ("imagesrv.college.local", 7700)
     seen = []
 
     def fake_connect(addr, timeout=None):
@@ -1405,7 +1410,7 @@ def test_interserver_url_accepts_a_hostname_and_the_client_resolves_per_connecti
     monkeypatch.setattr(socket, "create_connection", fake_connect)
     with pytest.raises(Exception):
         storage_client.fetch_server_spki(host, port, timeout=0.1)
-    assert seen == [("imagesrv.college.local", 8443)]          # השם, לא IP שנפתר מראש
+    assert seen == [("imagesrv.college.local", 7700)]          # השם, לא IP שנפתר מראש
 
 
 def test_the_parent_is_authenticated_by_certificate_not_by_address():
@@ -1415,8 +1420,8 @@ def test_the_parent_is_authenticated_by_certificate_not_by_address():
     from server.interserver import api as interserver_api
     assert {f.name for f in fields(interserver_api.TlsPeer)} == {"tls_version", "cert_der", "exporter"}
     from server.interserver.storage_nodes import normalize_config
-    assert normalize_config("secondary", "https://imagesrv.college.local:8443")[1] == \
-        "https://imagesrv.college.local:8443"
+    assert normalize_config("secondary", "https://imagesrv.college.local:7700")[1] == \
+        "https://imagesrv.college.local:7700"
 
 
 # --- #1013: קובץ ה-dnsmasq הראשי נגזר מה-DB בעליית השרת --------------------------
@@ -1435,12 +1440,12 @@ def _startup(tmp_path, images_root, clock, *, source: str, on_disk: str | None,
         "read_active_conf": lambda: on_disk, "service_active": lambda unit: True,
         "dnsmasq_version": lambda: "Dnsmasq version 2.91\n",
     }
-    state = {"cli": deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:8080"),
-             "console": deploy_net.DeployState("console", "eth1", "http://10.44.9.10:8080"),
+    state = {"cli": deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:7712"),
+             "console": deploy_net.DeployState("console", "eth1", "http://10.44.9.10:7712"),
              "none": deploy_net.DeployState("none", None, None)}[source]
-    ctx = deploy_net.DeployContext(state=state, agent_port=8080,
+    ctx = deploy_net.DeployContext(state=state, agent_port=7712,
                                    tftp_root=tftp_root or Path("/srv/tftp"), repo_dir=REPO)
-    app = create_app(tmp_path / f"data-{source}-{sync}", images_root, "http://127.0.0.1:8080",
+    app = create_app(tmp_path / f"data-{source}-{sync}", images_root, "http://127.0.0.1:7712",
                      now_fn=clock, dhcp_hooks=hooks, deploy=ctx, sync_dnsmasq=sync)
     return applied, app.state.ctx
 
@@ -1492,15 +1497,15 @@ def test_startup_honours_the_tftp_switch_and_the_console_deploy_interface(tmp_pa
              "apply_proxy": lambda text, active: None,
              "read_active_conf": lambda: None, "service_active": lambda unit: True}
     ctx = deploy_net.DeployContext(
-        state=deploy_net.DeployState("console", "eth1", "http://10.44.9.10:8080"),
-        agent_port=8080, tftp_root=Path("/data/tftp"), repo_dir=REPO)
+        state=deploy_net.DeployState("console", "eth1", "http://10.44.9.10:7712"),
+        agent_port=7712, tftp_root=Path("/data/tftp"), repo_dir=REPO)
     # ריצה ראשונה: המתג נשמר כבוי (כאילו המפעיל כיבה לפני האתחול)
     data = tmp_path / "data"
-    app = create_app(data, images_root, "http://127.0.0.1:8080", now_fn=clock,
+    app = create_app(data, images_root, "http://127.0.0.1:7712", now_fn=clock,
                      dhcp_hooks=hooks, deploy=ctx)
     ports_mod.set_enabled(app.state.ctx.conn, "tftp", False)
     app.state.ctx.conn.close()
-    app = create_app(data, images_root, "http://127.0.0.1:8080", now_fn=clock,
+    app = create_app(data, images_root, "http://127.0.0.1:7712", now_fn=clock,
                      dhcp_hooks=hooks, deploy=ctx, sync_dnsmasq=True)
     assert len(applied) == 1
     text = applied[0]
@@ -1509,6 +1514,6 @@ def test_startup_honours_the_tftp_switch_and_the_console_deploy_interface(tmp_pa
     app.state.ctx.conn.close()
     # ומתג דלוק עם שורש לא-ברירת-מחדל
     applied.clear()
-    app = create_app(tmp_path / "data2", images_root, "http://127.0.0.1:8080", now_fn=clock,
+    app = create_app(tmp_path / "data2", images_root, "http://127.0.0.1:7712", now_fn=clock,
                      dhcp_hooks=hooks, deploy=ctx, sync_dnsmasq=True)
     assert "tftp-root=/data/tftp" in applied[0]

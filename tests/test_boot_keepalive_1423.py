@@ -23,7 +23,7 @@ from boot.grub_menu import GrubConfig
 from boot.http import create_boot_asgi
 from native import requires_native
 
-CONFIG = GrubConfig(server_base="http://127.0.0.1:8080")
+CONFIG = GrubConfig(server_base="http://127.0.0.1:7712")
 ANSWER = {"schema": 1, "known": True, "role": "classroom", "task": {"type": "deploy"}}
 MAC = "b4:2e:99:07:1a:c4"
 
@@ -41,7 +41,7 @@ def _start_headers(app, path: str) -> list:
     query = f"mac={MAC}&s=entry" if path == "/step" else f"mac={MAC}"
     scope = {"type": "http", "method": "GET", "path": path, "root_path": "",
              "query_string": query.encode(), "headers": [],
-             "client": ("10.44.0.196", 21550), "server": ("127.0.0.1", 8080)}
+             "client": ("10.44.0.196", 21550), "server": ("127.0.0.1", 7712)}
     sent = []
 
     async def receive():

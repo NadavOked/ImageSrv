@@ -27,7 +27,7 @@ function setup({search = '?mac=aa:bb:cc:dd:ee:ff&name=Cloner02', copying = true}
   const answers = [];   // מה ש-POST עונה, לפי הסדר
   const ctx = vm.createContext({
     console, URLSearchParams, Uint8Array, TextDecoder, TextEncoder, Promise, Math, Error, JSON, Date, Object, Array,
-    encodeURIComponent, location: {search, protocol: 'http:', host: 'srv:8081'},
+    encodeURIComponent, location: {search, protocol: 'http:', host: 'srv:443'},
     document: {getElementById: (id) => (nodes[id] ||= stub(id)), title: '', fullscreenEnabled: false,
       createElement: () => stub('new'), addEventListener() {}, removeEventListener() {},
       documentElement: {classList: {add() {}, remove() {}}}},

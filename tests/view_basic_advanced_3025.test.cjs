@@ -301,7 +301,7 @@ test('#3033: every secondary tree gets its own "shown temporarily" section, and 
 
 test('#3033: a secondary tree\'s dots come from that server\'s own alerts, never from the main server\'s', () => {
   const ctx = vm.createContext({
-    SERVER_CTX: null, HEALTH: [{id: 'udp_sender', state: 'bad'}], MACHINES: [], NET: [], HOME: {net: []},
+    SERVER_CTX: null, HEALTH: [{id: 'chunk_sender', state: 'bad'}], MACHINES: [], NET: [], HOME: {net: []},
     OVERVIEW: null, SECONDARY_STATUS: {}, isAdmin: () => true, machineIsFailed: () => false,
     homeStoragePct: () => null, homeStorageLevel: () => '',
     SERVER_HEALTH: {haifa: {checks: [{id: 'storage_nas', state: 'bad'}, {id: 'deploy_net', state: 'warn'}]}, tlv: {checks: null, down: true}},

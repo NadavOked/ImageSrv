@@ -206,7 +206,7 @@ def test_create_runtime_reconciles_at_start_when_lit(tmp_path, units):
         assert target.read_bytes() == SOURCE.read_bytes()
         assert [e for e, _ in _events(rt.conn)] == ["dnsmasq_dropin_applied"]
     finally:
-        rt.ctx.sender.stop()
+        rt.ctx.chunk.stop()
         rt.conn.close()
 
 
@@ -219,5 +219,5 @@ def test_create_runtime_by_default_does_not_touch_the_unit_dir(tmp_path, units):
         assert not units.exists()
         assert _events(rt.conn) == []
     finally:
-        rt.ctx.sender.stop()
+        rt.ctx.chunk.stop()
         rt.conn.close()

@@ -25,7 +25,7 @@ from server.agent import loops as agent_loops, identity, inventory, probe, regis
 from server.agent.reportorder import STALE, STALE_REPLY, ReportOrder   # #3331 (I14)
 from server.console import login_guard, users
 from server.rounds import pulls
-from server.rounds.chunksend import CHUNK, engine_of
+from server.rounds.chunksend import CHUNK
 from server.rounds import ledger   # #2528
 from server.rounds import nic_live   # #3277
 from server.brain import resume as brain_resume   # #2528 שלב 4 (K11)
@@ -86,12 +86,11 @@ class ServerContext:
     conn: sqlite3.Connection
     library: ImageLibrary
     store: SessionStore
-    sender: object | None = None      # SenderEngine; None בבדיקות יחידה
-    #: #2533: מנוע החתיכות (`chunksend.ChunkEngine`), ברירת המחדל מ-#3173. None = בדיקות
-    #: שבונות ctx ביד, ואז כל גל הוא udpcast.
+    #: #2533: מנוע החתיכות (`chunksend.ChunkEngine`), המנוע היחיד מ-#3173. None = בדיקות שבונות ctx
+    #: ביד, ואז אין שידור.
     chunk: object | None = None
     #: #3161: הפצה ישירה במנוע החתיכות (`directchunk.DirectChunks`) -- מה שמחשב הבנייה העלה, וההזמנה
-    #: הפתוחה אליו. None = בדיקות שבונות ctx ביד, ואז הפצה ישירה היא udpcast.
+    #: הפתוחה אליו. None = בדיקות שבונות ctx ביד.
     direct_chunk: object | None = None
     #: #2533: המספר הרץ של דיווחי `durable` בדלתא, לכל (סבב, מכונה, ערוץ). בזיכרון בלבד, במכוון:
     #: שרת שאותחל אינו יודע מה קיבל, ולכן מבקש הכול מחדש (`durable_full`).
@@ -185,10 +184,10 @@ def _error(status: int, message: str, code: str) -> JSONResponse:
 def _pull_index_gate(ctx: ServerContext, mac: str, image_id: str) -> JSONResponse | None:
     """#3231: משיכה במנוע החתיכות אינה נפתחת לפני שהאינדקס של האימג' מוכן. הסוכן מוריד אותו
     (`GET …/index/<n>`) **אחרי** שטבלת המחיצות נמחקה, ואימג' שנקלט זה עתה לא היה לו כזה: 404 על דיסק
-    ריק. None = מוכן (או שאין שער: מנוע udpcast). 503 `index_preparing` = עוד נגזר (`curl --retry` של
+    ריק. None = מוכן (או שאין שער). 503 `index_preparing` = עוד נגזר (`curl --retry` של
     הסוכן שואל שוב); 409 `index_failed` = הגזירה נכשלה, עם הסיבה. בשניהם הדיסק לא נגע."""
     prep = ctx.index_prep
-    if prep is None or engine_of(ctx.conn) != CHUNK:
+    if prep is None:
         return None
     state = prep.pull_gate(image_id)
     if state is None:
@@ -683,13 +682,8 @@ def create_agent_router(ctx: ServerContext,
             optical_reported=True,
             # #2487: שורת `unknown_mac` נכתבת למטה, מרוסנת לפי MAC.
             record_journal=False,
-            # #1952: מי קיבל את המחיצה הקודמת עד סופה — מהלוג של מחשב הבנייה.
-            direct_finished=direct.clean_finished(body),
-            # #715: פרמטרי השידור למקור שהוא מחשב בנייה — של המנוע, אם יש.
-            multicast=ctx.sender.multicast_params() if ctx.sender is not None else None,
         )
         # #2533: גל שמנוע החתיכות משדר — `session.engine` ו-`session.chunk` (ממשק 3).
-        # גל של udpcast אינו מקבל אף שדה, והסוכן נשאר במסלול של היום.
         if ctx.chunk is not None and isinstance(answer.get("session"), dict):
             answer["session"].update(ctx.chunk.session_fields(answer["session"]["id"]))
         # #3161: מחשב בנייה שהוא המקור של גל חתיכות -- `task.direct.engine` ו-`task.direct.chunk` (ממשק 3).
@@ -904,7 +898,7 @@ def create_agent_router(ctx: ServerContext,
         # codeql[py/log-injection] false positive: MAC מנורמל, image_id קיים בספרייה, session_id נוצר בשרת (#291)
         log.info("unicast pull %s for %s (%s)", session_id, mac, image_id)
         return JSONResponse({"id": session_id, "kind": "unicast",
-                             "image_id": image_id, "engine": engine_of(ctx.conn)})
+                             "image_id": image_id, "engine": CHUNK})
 
     @router.post("/agent/progress")
     async def agent_progress(request: Request) -> JSONResponse:
@@ -1217,7 +1211,8 @@ def create_agent_router(ctx: ServerContext,
         return agent_logs.receive(
             ctx.conn, mac, request.query_params.get("session_id"),
             request.query_params.get("reason"), body,
-            known=registry.lookup(ctx.conn, mac) is not None)
+            known=registry.lookup(ctx.conn, mac) is not None,
+            cut_header=request.headers.get("x-imagesrv-log-cut"))   # #3031: did the agent cut the log
 
     @router.post("/agent/shrink-open")
     async def agent_shrink_open(request: Request) -> JSONResponse:

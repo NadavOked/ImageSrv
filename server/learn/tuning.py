@@ -37,7 +37,7 @@
 * מדידה מעל מה שהקישור שלה מסוגל לו, או מעל `MODEL_OUTLIER` מחציון הדגם מחוץ לסבב — נדחית,
   נרשמת ביומן ולא נספרת. מדידה **נמוכה** אינה נדחית: היא יכולה רק למנוע העלאה, ודיסק גוסס
   אמיתי הוא בדיוק מי שהסף חייב להתחשב בו.
-* **התקרה נמדדת בשרת:** הזרם (`stream_bps`, המונה של udp-sender בשרת) מתקדם בקצב המקבל האיטי,
+* **התקרה נמדדת בשרת:** הזרם (`chunk.sent_bps`, מה שמנוע החתיכות בשרת שידר) מתקדם בקצב המקבל האיטי,
   וכל דיסק שסיים עמד בו. מעליו אין ראיה משרתת, וגם אין צורך: דיסק מהיר מהזרם אינו מעכב גל.
   `learned_start_mbps` כולו ממדידה בשרת, ודיווח של סוכן אינו יכול להעלות אותו.
 * כיוון מטה חסום לגמרי: למידה אינה מורידה הגדרה.
@@ -54,8 +54,9 @@ import logging
 import sqlite3
 import statistics
 
-from server.db import _settle, _write_lock, get_setting, journal, now_iso, writing
+from server.db import _settle, _write_lock, get_setting, journal, now_iso, set_settings, writing
 from server.brain import floorrule, learnset
+from server.core import unreadable
 from server.disks import crcwarn, writefloor
 from server.learn import models as learn_models
 from server.rounds import drive_rates
@@ -95,6 +96,7 @@ def _json(raw: object) -> dict:
     try:
         got = json.loads(raw) if raw else {}
     except (TypeError, ValueError):
+        unreadable.said("learning.json", raw)   # #3129
         return {}
     return got if isinstance(got, dict) else {}
 
@@ -104,10 +106,12 @@ def _collecting(conn: sqlite3.Connection) -> sqlite3.Row | None:
                         " ORDER BY id DESC LIMIT 1").fetchone()
 
 
-#: `wave_rates.stream[...]` של מנוע החתיכות (`chunk_rate.STREAM_KEY`; טסט מחזיק את השניים שווים). אין לו את המונים של
-#: udp-sender (`sent_bytes`, `loss_blocks`, `ended`...): מה שהוא רואה נמצא בתוך המפתח הזה.
+#: `wave_rates.stream[...]` של מנוע החתיכות (`chunk_rate.STREAM_KEY`; טסט מחזיק את השניים שווים): מה שהוא רואה נמצא
+#: בתוך המפתח הזה.
 CHUNK_KEY = "chunk"
-UDPCAST_KEYS = ("sent_bytes", "loss_blocks", "ended")
+#: #3173: המונים של השולח הקודם ברמה העליונה של `stream`. המנוע הקודם נמחק; שורה שנושאת אותם היא גל שלו מ-DB משודרג,
+#: והיא אינה ראיה לסבב (`_evidence`) — נשארת בטבלה ואינה נקראת.
+OLD_ENGINE_KEYS = ("sent_bytes", "loss_blocks", "ended")
 #: למה גל חתיכות "לא לימד" (`chunk_rate._unlearned`), בעברית. קוד שאינו כאן נכתב כמות שהוא.
 CHUNK_WHY_HE = {
     "server_disk": "דיסק הספרייה בשרת עיכב את הזרם",
@@ -122,17 +126,17 @@ CHUNK_TEACHES = (None, "server_disk")
 
 
 def _chunk_sample(stream: dict) -> dict | None:
-    """#3443: ה-sample של גל חתיכות, או None כשזה גל udpcast (יש בו מוני udp-sender) או שאין sample."""
+    """#3443: ה-sample של גל חתיכות, או None כשזה גל ישן של המנוע הקודם (יש בו מוני השולח הקודם, #3173) או שאין sample."""
     sample = stream.get(CHUNK_KEY)
-    if isinstance(sample, dict) and not any(k in stream for k in UDPCAST_KEYS):
+    if isinstance(sample, dict) and not any(k in stream for k in OLD_ENGINE_KEYS):
         return sample
     return None
 
 
 def _chunk_why(sample: dict) -> str | None:
     """#3443: למה גל של מנוע החתיכות אינו ראיה ללמידה, **מהראיה של הגל עצמו** (`chunk_rate.sample_of`), או None -- הוא
-    ראיה. ברזל 15/11: שני גלים ש-`send_done` שלהם נרשם נסגרו "השולח לא סיים את הזרם", כי `ended` של udp-sender אינו
-    קיים אצלו. גל נספר רק לפי ראיה חיובית: `ended == send_done`, ואף מחשב לא אבד במעבר הראשון (`chunk_net_gap`).
+    ראיה. ברזל 15/11: שני גלים ש-`send_done` שלהם נרשם נסגרו "השולח לא סיים את הזרם", כי `ended` ברמה העליונה
+    אינו קיים אצלו. גל נספר רק לפי ראיה חיובית: `ended == send_done`, ואף מחשב לא אבד במעבר הראשון (`chunk_net_gap`).
     `skip` שאינו ידוע (`no_decision`, קוד חדש) אינו הוכחה שאיש לא אבד: הגל לא נספר, והקוד נכתב כמות שהוא."""
     ended, skip = sample.get("ended"), sample.get("skip")
     if ended is None:
@@ -147,15 +151,14 @@ def _chunk_why(sample: dict) -> str | None:
 
 
 def _counters(stream: dict) -> dict:
-    """המונים של השולח בצורה אחת: גל udpcast כמות שהוא; גל חתיכות -- המקבילים שלו מה-sample, רק כשהוא ראיה
-    (`_chunk_why`). `sent_bytes` = הבייטים הדחוסים שהמעבר הראשון שידר, `wall_s` = משכו, `stream_bps` = בייטים לשנייה
-    שהשרת שידר, `loss_ratio` = חתיכות שלא הגיעו מתוך החתיכות. אין `loss_blocks`: האבדן כבר יחס (`_loss`)."""
+    """המונים של השולח מה-sample של גל החתיכות, רק כשהוא ראיה (`_chunk_why`); אחרת `{}` — לא נמדד (גם גל ישן של
+    המנוע הקודם, #3173). `sent_bytes` = הבייטים הדחוסים שהמעבר הראשון שידר, `wall_s` = משכו, `stream_bps` = בייטים לשנייה
+    שהשרת שידר, `loss_ratio` = חתיכות שלא הגיעו מתוך החתיכות. מחשב שאבד (`chunk_net_gap`) כבר סינן את הגל."""
     sample = _chunk_sample(stream)
     if sample is None or _chunk_why(sample) is not None:
-        return stream
+        return {}
     return {"ended": sample["ended"], "sent_bytes": sample["stream_zbytes"], "wall_s": sample["first_pass_s"],
-            "stream_bps": sample["sent_bps"] // 8, "loss_ratio": sample["loss_permille"] / 1000,
-            "dropped_clients": 0}                      # `chunk_net_gap` (מחשב אבד) כבר סינן את הגל ב-`_chunk_why`
+            "stream_bps": sample["sent_bps"] // 8, "loss_ratio": sample["loss_permille"] / 1000}
 
 
 def _evidence(row: sqlite3.Row) -> str | None:
@@ -164,38 +167,32 @@ def _evidence(row: sqlite3.Row) -> str | None:
     if not raw:
         return "המונים של השולח לא נקראו"
     sample = _chunk_sample(raw)
-    if sample is not None and (why := _chunk_why(sample)):
-        return why                            # גל חתיכות: הסיבה מהראיה שלו, לא מ-`ended` שלא קיים
+    if sample is None:
+        # #3173: גל של המנוע הקודם מ-DB משודרג (או גל בלי sample): המונים שלו אינם של המנוע שנשאר
+        return "גל ישן של המנוע הקודם: אינו נספר" if any(k in raw for k in OLD_ENGINE_KEYS) else "המונים של השולח לא נקראו"
+    if why := _chunk_why(sample):
+        return why                            # הסיבה מהראיה של הגל, לא מ-`ended` שלא קיים
     stream = _counters(raw)
-    if stream.get("ended") != "send_done":
-        return "השולח לא סיים את הזרם"
     sent, wall = stream.get("sent_bytes"), stream.get("wall_s")
     if not _number(sent) or not _has_loss(stream) or not _number(wall):
         return "המונים של השולח לא נקראו"
     if sent < drive_rates.MIN_SAMPLE_BYTES or wall < drive_rates.MIN_SAMPLE_S:
         return "הזרם קצר מדי למדידה"
-    dropped = stream.get("dropped_clients")
-    if not _number(dropped):
-        return "יומן השולח לא נקרא"
-    if dropped:
-        return "השולח ניתק מקלט"
     done = [got for got in delivered.values() if isinstance(got, dict) and _number(got.get("done")) and got["done"] > 0]
     if not done:
         return "אף מגירה לא סיימה"
-    # גל חתיכות: "סיים" = נספרו בייטים שנכתבו בדיסק שלו (`written_bytes`, סכום ה-`bytes_written` של מגירות `done`).
-    if sample is not None and not any(_number(got.get("written_bytes")) and got["written_bytes"] > 0 for got in done):
+    # "סיים" = נספרו בייטים שנכתבו בדיסק שלו (`written_bytes`, סכום ה-`bytes_written` של מגירות `done`).
+    if not any(_number(got.get("written_bytes")) and got["written_bytes"] > 0 for got in done):
         return "אף מגירה לא סיימה עם בייטים שנכתבו"
     return None
 
 
 def _has_loss(stream: dict) -> bool:
-    return _number(stream.get("loss_blocks")) or _number(stream.get("loss_ratio"))
+    return _number(stream.get("loss_ratio"))
 
 
 def _loss(stream: dict) -> float:
-    if "loss_ratio" in stream:                # גל חתיכות: האבדן כבר יחס
-        return stream["loss_ratio"]
-    return stream["loss_blocks"] / -(-stream["sent_bytes"] // drive_rates.UDPCAST_BLOCK)
+    return stream["loss_ratio"]               # חתיכות שלא הגיעו מתוך החתיכות: כבר יחס
 
 
 def _mbit(bits: int) -> str:
@@ -217,7 +214,7 @@ def _waves(conn: sqlite3.Connection, sessions: list[str]) -> list[tuple[dict, di
 def _proven(past: dict, stream: dict) -> int | None:
     """הקצב שהגל באמת עמד בו, בביטים: זרם שרץ מתחת ל-`KEEP_UP` מהתקרה לא הוכיח את התקרה."""
     rate = drive_rates.parse_bitrate(past.get("max_bitrate"))
-    moved = stream.get("stream_bps")          # בייטים לשנייה (`SenderEngine.wave_outcome`)
+    moved = stream.get("stream_bps")          # בייטים לשנייה (`_counters`: מה שהמנוע שידר)
     if rate is None or not _number(moved):
         return None
     return rate if moved * 8 >= drive_rates.KEEP_UP * rate else int(moved * 8)
@@ -415,10 +412,14 @@ def _finish(conn: sqlite3.Connection, run: sqlite3.Row, waves: list[sqlite3.Row]
 
 
 def record_wave(conn: sqlite3.Connection, session_id: str) -> None:
-    """נקרא משני הקצוות של גל: כשהשולח סיים (`app.on_sender_event`) וכשהחדר סגר אותו
+    """נקרא משני הקצוות של גל: כשהשולח סיים (`app.on_chunk_event`) וכשהחדר סגר אותו
     (`room`). הסדר ביניהם אינו מובטח, ולכן מי שמגיע שני הוא שסופר: בלי המונים של השולח ובלי
     הספירה של החדר אין עדיין מה לשפוט, וזה אינו כישלון של הגל. גל שאינו של החדר (אין לו
-    `delivered`) אינו נספר. חוזר על עצמו בבטחה."""
+    `delivered`) אינו נספר. חוזר על עצמו בבטחה.
+
+    #3173: "המונים של השולח" = סוף השולח נרשם (`ended` או ה-sample של מנוע החתיכות). מה ש-`drive_rates.record_wave`
+    כותב ל-`stream` בסגירת החדר (`drives_unmeasured`, `drives_unlearned`) אינו סוף השולח, והגל אינו נספר עליו כ"השולח
+    לא סיים את הזרם" לפני שהשולח אמר את דברו."""
     try:
         run = _collecting(conn)
         if run is None:
@@ -428,6 +429,8 @@ def record_wave(conn: sqlite3.Connection, session_id: str) -> None:
         if row is None or row["stream"] is None or row["delivered"] is None \
                 or _json(row["decision"]).get("direct"):
             return
+        if not any(key in _json(row["stream"]) for key in (CHUNK_KEY, "ended")):
+            return                                    # the sender has not ended yet: it counts the wave when it does
         why = _evidence(row)
         _settle(conn)
         with _write_lock, writing(conn):
@@ -563,13 +566,21 @@ def machine_states(conn: sqlite3.Connection) -> dict[str, dict] | None:
 
 
 def answer_offer(conn: sqlite3.Connection, mac: str, action: str, user: str) -> None:
-    """`start` / `dismiss` על הצעת הלמידה למחשב. אינו נוגע במתג ואינו כותב לאף דיסק."""
+    """`start` / `dismiss` על הצעת הלמידה למחשב. אינו כותב לאף דיסק.
+
+    `start` מדליק את המתג הכללי `learning_enabled` (הכרעת נדב 12/11, #2028), באותו מסלול של
+    `POST /settings`: הגדרה, סבב למידה חדש ושורת `setting_change`. `dismiss` אינו נוגע במתג."""
     state = {"start": "started", "dismiss": "dismissed"}.get(action)
     if state is None:
         raise Refused(400, "פעולה לא מוכרת: start או dismiss")
+    was_on = enabled(conn)
     _settle(conn)
     with _write_lock, writing(conn):
         conn.execute("INSERT INTO learning_machines (mac, state, at, by) VALUES (?,?,?,?)"
                      " ON CONFLICT (mac) DO UPDATE SET state = excluded.state, at = excluded.at,"
                      " by = excluded.by", (mac, state, now_iso(), user))
     journal(conn, "learning_machine", f"{mac} {state}", user, machine=mac)
+    if action == "start" and not was_on:
+        set_settings(conn, {SETTING: "true"})
+        settings_written(conn, {SETTING: "true"}, False, user)
+        journal(conn, "setting_change", f"{SETTING}=true", user)

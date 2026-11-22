@@ -15,12 +15,13 @@ import pytest
 from fastapi import APIRouter
 
 from conftest import hello_body
+from fakesend import wait_for
 from server import db
 from server.console import journal_he, learning as console_learning
 from server.brain import floorrule
 from server.disks import writefloor
 from server.learn import tuning, wiring
-from server.rounds import drive_rates, nic_live
+from server.rounds import chunk_rate, drive_rates, nic_live
 
 from test_server_room import (CLONER1, CLONER2, cloner_hello, heartbeat, room,  # noqa: F401
                               room_body, room_server)
@@ -44,16 +45,25 @@ def _on(conn):
     tuning.settings_written(conn, {tuning.SETTING: "true"}, False, "noc")
 
 
-def _wave(conn, *, rate="700m", speeds=(140, 150), loss=0, ended="send_done", dropped=0,
-          bps=700_000_000 // 8, direct=False, done=1, wall=600, sent=20 * 10 ** 9, mac=CLONER1,
-          roster=None):
-    """גל שהסתיים, כפי שהשרת משאיר אותו: `wave_rates`, `model_speeds`, `port_history`."""
+def _wave(conn, *, rate="700m", speeds=(140, 150), ended="send_done", bps=700_000_000 // 8, direct=False,
+          done=1, wall=600, sent=20 * 10 ** 9, mac=CLONER1, roster=None, finished=None, **sample):
+    """גל שהסתיים, כפי שהשרת משאיר אותו: `wave_rates` (ב-`stream` רק ה-sample של מנוע החתיכות, `chunk_rate.record`),
+    `model_speeds`, ושורת `session_members` של המגירות (`tuning._finished_drives`).
+
+    #3173: udpcast נמחק, ואיתו המונים של udp-sender ברמה העליונה של `stream`. המקבילים ב-sample (`tuning._counters`):
+    `bps` — מה שהשרת שידר, בבייטים לשנייה (`sent_bps` / 8); `wall` — משך המעבר הראשון (`first_pass_s`); `sent` — הבייטים
+    הדחוסים ששודרו (`stream_zbytes`). `finished` — הסידוריים שהמגירה שלהם `done` עם `bytes_written` (ברירת מחדל: כולם);
+    השאר נכשלו. `sample` — שדות של ה-sample עצמו (`loss_permille`, `skip`...)."""
     session = f"ses_{next(_seq):05d}"
-    decision = {"max_bitrate": rate, "basis": "climb", "link": {"interface": "ens224"},
-                "roster": [{"mac": mac, "serial": f"D{i}", "model": "SSD"} for i in range(len(speeds))]
+    serials = [f"D{i}" for i in range(len(speeds))]
+    finished = serials if finished is None else finished
+    decision = {"max_bitrate": rate, "basis": "unmeasured", "engine": "chunk", "link": {"interface": "ens224"},
+                "roster": [{"mac": mac, "serial": s, "model": "SSD"} for s in serials]
                 if roster is None else roster, **({"direct": True} if direct else {})}
-    stream = {"sent_bytes": sent, "loss_blocks": loss, "stream_bps": bps, "stream_s": wall,
-              "wall_s": wall, "ended": ended, "dropped_clients": dropped, "timeouts": 0}
+    stream = {tuning.CHUNK_KEY: {"asked_bps": drive_rates.parse_bitrate(rate),
+                                 "sent_bps": None if bps is None else bps * 8, "stream_zbytes": sent,
+                                 "first_pass_s": wall, "loss_permille": 0.0, "ended": ended, "skip": None,
+                                 "teaches": True, **sample}}
     delivered = {mac: {"drawers": 2, "done": done, "written_bytes": sent}}
     conn.execute("INSERT INTO wave_rates (session_id, decision, at, stream, delivered)"
                  " VALUES (?,?,?,?,?)", (session, json.dumps(decision), db.now_iso(),
@@ -61,6 +71,13 @@ def _wave(conn, *, rate="700m", speeds=(140, 150), loss=0, ended="send_done", dr
     for i, mbps in enumerate(speeds):
         conn.execute("INSERT INTO model_speeds (session_id, serial, model, mac, mbps, at)"
                      " VALUES (?,?,?,?,?,?)", (session, f"D{i}", "SSD", mac, mbps, db.now_iso()))
+    conn.execute("INSERT INTO sessions (id, group_id, image_id, prefix, expected_clients, wait_seconds, state,"
+                 " opened_by, created_at, last_join_at) VALUES (?, 'grp_CLONERS', 'img', 'P', 1, 60, 'closed', 'noc', ?, 0)",
+                 (session, db.now_iso()))
+    targets = [{"serial": s, "dev": f"sd{i}", "state": "done" if s in finished else "failed",
+                "bytes_written": 18 * 10 ** 9 if s in finished else 0} for i, s in enumerate(serials)]
+    conn.execute("INSERT INTO session_members (session_id, mac, state, updated_at, targets_json)"
+                 " VALUES (?, ?, 'done', ?, ?)", (session, mac, db.now_iso(), json.dumps(targets)))
     conn.commit()
     return session
 
@@ -168,21 +185,6 @@ def test_a_wave_that_failed_means_not_learned_and_nothing_changes(conn):
     assert _settings(conn) == before
 
 
-@pytest.mark.parametrize("wave,why", [
-    ({"ended": "send_stopped"}, "השולח לא סיים את הזרם"),
-    ({"dropped": 1}, "השולח ניתק מקלט"),
-    ({"dropped": None}, "יומן השולח לא נקרא"),
-    ({"done": 0}, "אף מגירה לא סיימה"),
-    ({"wall": 10}, "הזרם קצר מדי למדידה"),
-    ({"sent": 1000}, "הזרם קצר מדי למדידה"),
-    ({"loss": None}, "המונים של השולח לא נקראו"),
-])
-def test_a_wave_is_evidence_only_on_positive_evidence(conn, wave, why):
-    _on(conn)
-    tuning.record_wave(conn, _wave(conn, **wave))
-    assert tuning.status(conn)["run"]["waves"][0]["why_he"] == why
-
-
 def test_the_room_may_close_the_wave_before_the_sender_ended_or_after(conn):
     """הסדר אינו מובטח. מי שמגיע שני סופר, וגל שעוד לא נסגר אינו כישלון."""
     _on(conn)
@@ -206,6 +208,47 @@ def test_the_room_may_close_the_wave_before_the_sender_ended_or_after(conn):
     conn.commit()
     tuning.record_wave(conn, other)                   # החדר שני
     assert tuning.status(conn)["run"]["state"] == "done"
+
+
+def test_what_the_room_writes_into_stream_is_not_the_senders_end(conn):
+    """#3173: the room closes first, and `drive_rates.record_wave` has already written `drives_unmeasured` into `stream`
+    -- that is not the sender's end. The wave is not counted on it as "the sender did not finish the stream"; the
+    sender's end (`chunk_rate.record`, then `record_wave` again) counts it, by its own evidence.
+    **Negative control:** on the code before the fix the room's call records it, not ok, "השולח לא סיים את הזרם"."""
+    _on(conn)
+    session = _wave(conn)
+    stream = conn.execute("SELECT stream FROM wave_rates WHERE session_id = ?", (session,)).fetchone()[0]
+    conn.execute("UPDATE wave_rates SET stream = ? WHERE session_id = ?",
+                 (json.dumps({"drives_unmeasured": ["D0"]}), session))
+    conn.commit()
+    tuning.record_wave(conn, session)                 # the room, first
+    assert tuning.status(conn)["run"]["attempts"] == 0
+    conn.execute("UPDATE wave_rates SET stream = ? WHERE session_id = ?",
+                 (json.dumps({"drives_unmeasured": ["D0"], **json.loads(stream)}), session))
+    conn.commit()
+    tuning.record_wave(conn, session)                 # the sender, second
+    assert tuning.status(conn)["run"]["waves"][0]["ok"] is True
+
+
+def test_a_sender_that_ended_after_the_room_closed_reaches_the_run(room_server):
+    """#2028 + #3173: the wiring in `app.on_chunk_event`. The room closed the wave before the chunk engine ended it: the
+    room's count found no sender end and waited. The engine's end (`send_done`) writes it (`chunk_rate.record`) and
+    counts the wave. (The udpcast twin left with `on_sender_event`.)
+    **Negative control:** on the code before the fix nothing counts it, and the run stays at 0 attempts."""
+    admin, ctx = room_server["admin"], room_server["ctx"]
+    wave = _open_wave(room_server)
+    assert wait_for(lambda: drive_rates.decision(ctx.conn, wave) is not None)
+    # the engine's own thread is stopped and gone first: its `send_stopped` must not be the end this test counts
+    ctx.chunk.stop(wave)
+    assert wait_for(lambda: ctx.chunk._thread is None or not ctx.chunk._thread.is_alive())
+    ctx.conn.execute("UPDATE wave_rates SET stream = NULL WHERE session_id = ?", (wave,))
+    ctx.conn.commit()
+    _close_wave(room_server, wave)
+    assert admin.get("/api/console/learning").json()["run"]["attempts"] == 0
+    ctx.chunk.on_event("send_done", f"{wave} {{}}", wave)
+    run = admin.get("/api/console/learning").json()["run"]
+    assert run["attempts"] == 1, run
+    assert run["waves"][0]["why_he"] != "השולח לא סיים את הזרם", run["waves"][0]
 
 
 def test_a_session_that_is_not_a_wave_of_the_room_is_not_counted(conn):
@@ -249,7 +292,7 @@ def test_too_few_disk_measurements_leave_the_floor(conn):
 def test_loss_above_the_limit_leaves_the_start_rate(conn):
     _on(conn)
     tuning.record_wave(conn, _wave(conn))
-    tuning.record_wave(conn, _wave(conn, loss=10 ** 6))
+    tuning.record_wave(conn, _wave(conn, loss_permille=50.0))          # 5% מהחתיכות לא הגיעו
     assert drive_rates.learned_start(conn) is None
     row = next(u for u in tuning.status(conn)["run"]["unchanged"]
                if u["key"] == drive_rates.START_SETTING)
@@ -304,12 +347,15 @@ def test_the_learned_start_cannot_jump_past_the_step(conn):
 
 
 def test_a_stream_that_was_not_measured_moves_no_floor(conn):
+    """#3173: במנוע החתיכות זרם שלא נמדד (`sent_bps` None) אינו ראיה לגל כולו (`tuning._chunk_why`), ולכן הסבב
+    אינו לומד ואינו מגיע לשאלת הסף. ב-udpcast הגל נספר והסף נשאר ("קצב הזרם לא נמדד בכל השיכפולים")."""
     _on(conn)
     for _ in range(2):
         tuning.record_wave(conn, _wave(conn, bps=None, speeds=(500, 520, 540)))
     assert writefloor.mbps(conn) == floorrule.DEFAULT
-    row = next(u for u in tuning.status(conn)["run"]["unchanged"] if u["key"] == writefloor.SETTING)
-    assert row["why_he"] == "קצב הזרם לא נמדד בכל השיכפולים"
+    run = tuning.status(conn)["run"]
+    assert run["state"] == "not_learned" and tuning.status(conn)["changes"] == []
+    assert [w["why_he"] for w in run["waves"]] == ["מנוע החתיכות: מוני הזרם לא נמדדו"] * 2
 
 
 def test_a_machine_that_is_not_registered_is_not_counted(conn):
@@ -432,11 +478,16 @@ def _close_wave(room_server, wave):
 
 
 def test_a_real_wave_of_the_room_reaches_the_run(room_server):
-    """החיבור ל-`room._finish_wave`: השולח סיים קודם, והחדר סוגר. בלי מונים הגל נספר ואינו ראיה."""
+    """החיבור ל-`room._finish_wave`: השולח סיים קודם, והחדר סוגר. בלי מונים הגל נספר ואינו ראיה.
+    #3173: "השולח סיים" הוא `chunk_rate.record` (מה שמנוע החתיכות כותב בסוף הגל), לא `record_stream` של udp-sender."""
     admin, ctx = room_server["admin"], room_server["ctx"]
     before = _settings(ctx.conn)
     wave = _open_wave(room_server)
-    drive_rates.record_stream(ctx.conn, wave, {"ended": "send_done"})
+    # מנוע החתיכות בוחר את הקצב (`drive_rates.decide`, שורת `wave_rates`) בתהליכון שלו, לפני שמשכפל מתייצב
+    assert wait_for(lambda: drive_rates.decision(ctx.conn, wave) is not None)
+    chunk_rate.record(ctx.conn, wave, {"ended": "send_done"})
+    stream = ctx.conn.execute("SELECT stream FROM wave_rates WHERE session_id = ?", (wave,)).fetchone()["stream"]
+    assert tuning._chunk_sample(json.loads(stream))["ended"] == "send_done", stream
     _close_wave(room_server, wave)
     run = admin.get("/api/console/learning").json()["run"]
     assert run["attempts"] == 1 and run["learned"] == 0
@@ -444,28 +495,6 @@ def test_a_real_wave_of_the_room_reaches_the_run(room_server):
     now = _settings(ctx.conn)
     now.pop(tuning.SETTING), before.pop(tuning.SETTING)
     assert now == before
-
-
-def test_a_sender_that_ended_after_the_room_closed_reaches_the_run(room_server, monkeypatch):
-    """החיבור ל-`app.on_sender_event`: החדר סגר קודם, והשולח סופר."""
-    admin, ctx = room_server["admin"], room_server["ctx"]
-    wave = _open_wave(room_server)
-    # השולח המזויף מסיים בתהליכון משלו, ו-`send_done` שלו כותב `stream` ומנסה לספור. בלי לחכות לו,
-    # הכתיבה הזו נוחתת מדי פעם אחרי ה-NULL שלמטה וממש לפני סגירת החדר -- והחדר סופר גל שהטסט
-    # התכוון שלא יספרו (`assert 1 == 0`, ריצה מלאה מקבילית). שולח שסיים הוא מצב ידוע; לא ניחוש.
-    sender = ctx.sender._thread
-    sender.join(10)
-    assert not sender.is_alive()
-    ctx.conn.execute("UPDATE wave_rates SET stream = NULL WHERE session_id = ?", (wave,))
-    ctx.conn.commit()
-    _close_wave(room_server, wave)
-    ctx.conn.execute("UPDATE wave_rates SET stream = NULL WHERE session_id = ?", (wave,))
-    ctx.conn.commit()
-    assert admin.get("/api/console/learning").json()["run"]["attempts"] == 0
-    monkeypatch.setattr(ctx.sender, "status", lambda: {"session_id": wave})
-    monkeypatch.setattr(ctx.sender, "wave_outcome", lambda session: {})
-    ctx.sender.on_event("send_done", wave)
-    assert admin.get("/api/console/learning").json()["run"]["attempts"] == 1
 
 
 # ---------- קצב הפתיחה ב-`choose` ----------
@@ -629,12 +658,20 @@ def test_a_row_where_nothing_was_measured_does_not_teach(room_server):
     assert _learning(admin, CLONER1)["state"] == "offer"
 
 
-def test_answering_the_offer_is_recorded_and_writes_no_setting(room_server):
+def test_answering_the_offer_is_recorded_and_start_turns_the_switch_on(room_server):
+    """#2028, הכרעת נדב 12/11: 'הפעל למידה' מדליק את המתג הכללי ופותח סבב; 'לא עכשיו' לא נוגע בו."""
     admin, ctx = room_server["admin"], room_server["ctx"]
     url = f"/api/console/machines/{CLONER1}/learning"
+    assert admin.post(url, json={"action": "dismiss"}).status_code == 200
+    assert db.get_setting(ctx.conn, tuning.SETTING) == "false", "'לא עכשיו' אינו מדליק את המתג"
     assert admin.post(url, json={"action": "start"}).status_code == 200
     assert _learning(admin, CLONER1)["state"] == "started"
-    assert db.get_setting(ctx.conn, tuning.SETTING) == "false", "ההצעה אינה מדליקה את המתג מאחורי הגב"
+    assert db.get_setting(ctx.conn, tuning.SETTING) == "true", "'הפעל למידה' לא הדליק את המתג"
+    assert admin.get("/api/console/learning").json()["run"]["state"] == "collecting", "המתג נדלק בלי סבב למידה"
+    assert ctx.conn.execute("SELECT detail FROM journal WHERE event = 'setting_change' AND detail = ?",
+                            (f"{tuning.SETTING}=true",)).fetchone() is not None
+    assert admin.post(url, json={"action": "start"}).status_code == 200      # again: no second run
+    assert ctx.conn.execute("SELECT COUNT(*) FROM learning_runs WHERE state = 'collecting'").fetchone()[0] == 1
     assert admin.post(url, json={"action": "dismiss"}).status_code == 200
     assert _learning(admin, CLONER1)["state"] == "dismissed"
     assert admin.post(url, json={"action": "explode"}).status_code == 400
@@ -848,20 +885,9 @@ CHUNK_OK = {"asked_bps": 700_000_000, "sent_bps": 700_000_000, "stream_zbytes": 
 
 
 def _chunk_wave(conn, *, finished=("D0", "D1"), speeds=(140, 150), done=1, **sample):
-    """גל של מנוע החתיכות כפי ש-`chunk_rate.record` משאיר אותו: ב-`stream` רק המפתח `chunk`, בלי מוני udp-sender.
+    """גל של מנוע החתיכות כפי ש-`chunk_rate.record` משאיר אותו (`_wave`), עם ה-sample `CHUNK_OK` כבסיס.
     `finished`: הסידוריים שהמגירה שלהם `done` עם `bytes_written` (`session_members.targets_json`); השאר נכשלו."""
-    session = _wave(conn, speeds=speeds, done=done)
-    conn.execute("UPDATE wave_rates SET stream = ? WHERE session_id = ?",
-                 (json.dumps({tuning.CHUNK_KEY: {**CHUNK_OK, **sample}}), session))
-    conn.execute("INSERT INTO sessions (id, group_id, image_id, prefix, expected_clients, wait_seconds, state,"
-                 " opened_by, created_at, last_join_at) VALUES (?, 'g', 'img', 'P', 1, 60, 'closed', 'noc', ?, 0)",
-                 (session, db.now_iso()))
-    targets = [{"serial": f"D{i}", "dev": f"sd{i}", "state": "done" if f"D{i}" in finished else "failed",
-                "bytes_written": 18 * 10 ** 9 if f"D{i}" in finished else 0} for i in range(len(speeds))]
-    conn.execute("INSERT INTO session_members (session_id, mac, state, updated_at, targets_json)"
-                 " VALUES (?, ?, 'done', ?, ?)", (session, CLONER1, db.now_iso(), json.dumps(targets)))
-    conn.commit()
-    return session
+    return _wave(conn, speeds=speeds, done=done, finished=finished, **{**CHUNK_OK, **sample})
 
 
 def test_the_chunk_stream_key_is_the_one_chunk_rate_writes():
@@ -906,14 +932,6 @@ def test_a_wave_where_only_some_drives_finished_learns_from_those_alone(conn):
     assert row["why_he"] == "אין מספיק מדידות: 2 מ-1 דיסקים"
     levels = tuning.status(conn)["run"]["levels"]["disks"]
     assert (levels["count"], levels["max_mbps"]) == (1, 140), "999 של הדיסק שנכשל אינו בשום מספר"
-
-
-def test_the_same_partial_wave_of_udpcast_is_untouched(conn):
-    """(בקרה) גל udpcast לא עבר שינוי: ה-`delivered` שלו לכל מכונה, כמו קודם."""
-    _on(conn)
-    for _ in range(2):
-        tuning.record_wave(conn, _wave(conn, speeds=(140, 150)))
-    assert tuning.status(conn)["run"]["levels"]["disks"]["count"] == 2
 
 
 @pytest.mark.parametrize("sample,why", [
@@ -985,9 +1003,3 @@ def test_a_chunk_wave_with_a_finished_drive_but_no_member_rows_changes_no_floor(
         tuning.record_wave(conn, session)
     assert writefloor.mbps(conn) == floorrule.DEFAULT
     assert tuning.status(conn)["run"]["levels"]["disks"]["count"] == 0
-
-
-def test_a_udpcast_wave_keeps_its_old_words(conn):
-    _on(conn)
-    tuning.record_wave(conn, _wave(conn, ended="send_failed"))
-    assert tuning.status(conn)["run"]["waves"][0]["why_he"] == "השולח לא סיים את הזרם"

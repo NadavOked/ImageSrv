@@ -38,7 +38,7 @@ def test_record_contact_success_clears_the_error_and_failure_keeps_last_seen(tmp
     conn = db.connect(tmp_path / "x.db")
     conn.execute(
         "INSERT INTO storage_nodes (id, label, base_url, credential_ref, enrolled_at)"
-        " VALUES ('n1', 'a', 'https://x:8443/api/interserver/v1', 'c', ?)",
+        " VALUES ('n1', 'a', 'https://x:7700/api/interserver/v1', 'c', ?)",
         (db.now_iso(),))
     conn.commit()
     assert storage_nodes.contact_fields(conn, "n1") == {
@@ -150,7 +150,7 @@ def test_record_version_only_when_the_field_was_in_the_answer(tmp_path):
     conn = db.connect(tmp_path / "v.db")
     conn.execute(
         "INSERT INTO storage_nodes (id, label, base_url, credential_ref, enrolled_at)"
-        " VALUES ('n1', 'a', 'https://x:8443/api/interserver/v1', 'c', ?)",
+        " VALUES ('n1', 'a', 'https://x:7700/api/interserver/v1', 'c', ?)",
         (db.now_iso(),))
     conn.commit()
     row = lambda: dict(conn.execute(  # noqa: E731

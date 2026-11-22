@@ -35,6 +35,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from server.db import _settle, _write_lock, get_setting, writing
+from server.core import unreadable
 
 log = logging.getLogger("imagesrv.agent_timing")
 
@@ -124,7 +125,7 @@ def lost_seconds(conn: sqlite3.Connection) -> int:
 
 
 def retries_until_drop(base: int, lost: int) -> int:
-    """תקרת הנטישה של ``udp-sender``: לפחות ``base``, ובהגדלת ההמתנה — באותו יחס."""
+    """תקרת הנטישה של השולח: לפחות ``base``, ובהגדלת ההמתנה — באותו יחס."""
     return max(base, math.ceil(lost * RETRIES_PER_SECOND))
 
 
@@ -174,7 +175,10 @@ def _recent(stamp: str | None, now: datetime) -> bool:
     try:
         seen = datetime.fromisoformat(stamp) if stamp else None
     except ValueError:
+        unreadable.said("net_devices.last_seen", stamp)   # #3129
         return False
+    if seen is not None and seen.tzinfo is None:
+        unreadable.said("net_devices.last_seen (no time zone)", stamp)   # #3129
     if seen is None or seen.tzinfo is None:
         return False
     return 0 <= (now - seen).total_seconds() <= CONNECTED_SECONDS

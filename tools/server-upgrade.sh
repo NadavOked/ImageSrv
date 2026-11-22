@@ -36,7 +36,7 @@
 # משתני סביבה (לבדיקות — בייצור ברירות המחדל): IMAGESRV_DATA_DIR,
 # IMAGESRV_UNIT_DIR, IMAGESRV_JOURNALD_DIR, IMAGESRV_INITRD_FLAGS, IMAGESRV_ISO_MANIFEST,
 # IMAGESRV_HTTP_ROOT, IMAGESRV_UPGRADE_LOG, IMAGESRV_CONSOLE_URL,
-# IMAGESRV_LIVE_WAIT.
+# IMAGESRV_LIVE_WAIT, IMAGESRV_SPLASH_DIR.
 # ‏#2419: ‏`-E` (errtrace) — ה-ERR trap שלמטה חל גם בתוך פונקציות. בלעדיו כשל
 # בתוך `stage()` (סמן השחזור) אחרי ה-checkout יצא ב-`set -e` בלי rollback.
 set -Eeuo pipefail
@@ -103,7 +103,7 @@ ENABLED_TIMERS=()
 FAILED_TIMER=""
 TIMER_NOTE=""
 LOG="${IMAGESRV_UPGRADE_LOG:-/var/log/imagesrv/server-upgrade.log}"
-CONSOLE_URL="${IMAGESRV_CONSOLE_URL:-https://127.0.0.1:8081}"
+CONSOLE_URL="${IMAGESRV_CONSOLE_URL:-https://127.0.0.1}"
 LIVE_WAIT="${IMAGESRV_LIVE_WAIT:-90}"
 CERT="$DATA_DIR/console-tls/console.crt"
 [[ -f "$CERT" ]] || CERT=""
@@ -184,9 +184,11 @@ path, repo, previous, tag, stage, http_root, db_snap_ver, payload_saved = sys.ar
 tmp = path + ".tmp"
 os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(tmp, "w", encoding="utf-8") as f:
+    # ‏#3871: "ports" אומר לשרת החדש שהסקריפט הזה מחפש אותו בפורטי 77xx. בלעדיו (סקריפט של תג ישן, #2350) השרת
+    # אינו כותב מחדש את חומת האש ואת ה-bootstrap של GRUB, כי התג הקודם עומד לחזור (deploy_net.upgrade_hold).
     json.dump({"repo": repo, "previous": previous, "tag": tag, "stage": stage,
                "http_root": http_root, "db_snap_ver": db_snap_ver,
-               "payload_saved": payload_saved == "1"}, f)
+               "payload_saved": payload_saved == "1", "ports": "77xx"}, f)
     f.flush(); os.fsync(f.fileno())
 os.replace(tmp, path)
 # ‏#2623: ה-rename עצמו הוא שינוי של התיקייה — בלי fsync אליה, חיתוך חשמל מיד
@@ -644,6 +646,29 @@ else
     echo "$JOURNALD_CONF אינו בתג $TAG — גרסה בלי תקרת יומן"
 fi
 
+# 3ד. ‏#3124 (B-NET-18): תקרת ה-SO_SNDBUF של `chunkcast send` — גם לשרת שהותקן לפניה. הוכחה היא ערך
+# שנקרא חזרה (`sysctl -n`) ולא קוד היציאה של `sysctl -p`. כשל אינו מחזיר את הקוד (השולח עובד גם עם
+# חוצץ קטן, פי 10 מהמתוכנן), אבל נאמר בסטטוס. גרסה בלי הקובץ = בלי היכולת.
+SYSCTL_NET="deploy/91-imagesrv-net-buffers.conf"
+SYSCTL_DIR="${IMAGESRV_SYSCTL_DIR:-/etc/sysctl.d}"
+if [[ -f "$SYSCTL_NET" ]]; then
+    wmem_want="$(sed -n 's/^net\.core\.wmem_max[[:space:]]*=[[:space:]]*//p' "$SYSCTL_NET")"
+    wmem_got=""
+    if sc_out="$(install -D -m 0644 "$SYSCTL_NET" "$SYSCTL_DIR/91-imagesrv-net-buffers.conf" 2>&1 \
+            && sysctl -q -p "$SYSCTL_DIR/91-imagesrv-net-buffers.conf" 2>&1)" \
+            && wmem_got="$(sysctl -n net.core.wmem_max 2>/dev/null)" \
+            && [[ "$wmem_want" =~ ^[0-9]+$ && "$wmem_got" =~ ^[0-9]+$ ]] && (( wmem_got >= wmem_want )); then
+        echo "תקרת ה-socket של השולח: net.core.wmem_max=$wmem_got"
+    else
+        sc_why="תקרת ה-socket של השולח (net.core.wmem_max, #3124) לא הוחלה: ${sc_out:+$(printf '%s\n' "$sc_out" | tail -n 1) · }נקרא חזרה ${wmem_got:-ריק}, נדרש ${wmem_want:-?}"
+        echo "server-upgrade: $sc_why"
+        UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }$sc_why"
+        set_status running
+    fi
+else
+    echo "$SYSCTL_NET אינו בתג $TAG — גרסה בלי תקרת socket לשולח"
+fi
+
 # ‏#1230: "העדכון עבר והמכונות על initrd ישן" אסור — סוכן ישן מול שרת חדש.
 # הבנייה היא tools/boot-payload-build.sh, אותו קוד של firstboot: הקרנל וה-
 # epoch נגזרים עכשיו (לא מהקובץ), ו-vmlinuz של הקרנל הזה מועתק. שלושה מצבים:
@@ -704,12 +729,44 @@ else
     rollback "החלטת מטען האתחול נכשלה: $payload_decision"
 fi
 
-# 4b. #2533: chunkcast על השרת עצמו -- השולח של מנוע החתיכות (ניסיוני, מאחורי מתג כבוי). גם כשהמטען
-# נלקח מוכן ולא נבנה: ה-initrd נושא את המקלט, והשרת צריך את השולח. כישלון כאן אינו מחזיר את העדכון
-# לאחור -- המנוע כבוי כברירת מחדל -- אבל הוא נאמר, ועם המתג דלוק גל בלי שולח נכשל בשמו.
+# 4א. ‏#3739: תמונת מסך האתחול של השרת (imagesrv-boot-splash, מותקנת ב-install_units). הגואי מצייר
+# אותה (--splash-raw), וה-binary נבנה בעץ רק בשלב הקודם; שרת שלא הותקן מה-ISO (שרת המעבדה:
+# setup-boot-server.sh רץ לפני הבנייה הראשונה) לא קיבל אותה מעולם, והיחידה נכשלה בכל אתחול
+# ב-"no prebuilt screen". עכשיו היא מצוירת כאן, ואומתה לפי הגודל. כשל = אזהרה, לא חזרה: בלעדיה
+# האתחול מוצג בטקסט. בלי binary ובלי תמונה = אזהרה בשם; תמונה קיימת (המתקין החי) נשארת.
+SPLASH_DIR="${IMAGESRV_SPLASH_DIR:-/usr/share/imagesrv}"
+SPLASH_RAW="$SPLASH_DIR/splash-640x240.raw"
+SPLASH_GUI="native-gui/imagesrv-station-gui"
+splash_why=""
+if [[ -x "$SPLASH_GUI" ]]; then
+    sp_rc=0; sp_new="$SPLASH_DIR/.splash-new.$$"   # not a splash-*x*.raw name: a half-drawn file is never picked, and an old picture survives a failure
+    sp_out="$(install -d "$SPLASH_DIR" && "$SPLASH_GUI" --splash-raw "$sp_new" --size 640x240 2>&1)" || sp_rc=$?
+    sp_size=0; [[ ! -f "$sp_new" ]] || sp_size="$(stat -c %s "$sp_new")" || sp_size=0
+    if [[ "$sp_rc" == 0 && "$sp_size" == $((640 * 240 * 4)) ]] && mv -f "$sp_new" "$SPLASH_RAW"; then
+        echo "server-upgrade: מסך האתחול של השרת צויר ($SPLASH_RAW)"
+    else
+        rm -f "$sp_new"
+        splash_why="תמונת מסך האתחול לא צוירה (קוד $sp_rc, גודל $sp_size): $(printf '%s\n' "${sp_out:-אין פלט}" | tail -n 1)"
+    fi
+elif ! compgen -G "$SPLASH_DIR/splash-*x*.raw" >/dev/null; then
+    splash_why="אין $SPLASH_GUI ואין תמונת מסך אתחול ב-$SPLASH_DIR — imagesrv-boot-splash ייכשל באתחול"
+fi
+if [[ -n "$splash_why" ]]; then
+    echo "server-upgrade: $splash_why"
+    UPGRADE_WARNING="${UPGRADE_WARNING:+$UPGRADE_WARNING · }$splash_why"
+fi
+
+# 4b. #2533: chunkcast על השרת עצמו -- השולח של מנוע החתיכות, המנוע היחיד מאז #3173. גם כשהמטען
+# נלקח מוכן ולא נבנה: ה-initrd נושא את המקלט, והשרת צריך את השולח. נדב 21/11: כישלון כאן **מחזיר את
+# העדכון לאחור** -- שרת בלי שולח אינו יכול לשדר אף גל, והגרסה הקודמת עוד יכולה. הראיה היא קוד היציאה
+# 0 של הסקריפט, שהריץ את הבינארי החדש (`--version`, כמו ChunkEngine.binary_problem); השורה האחרונה
+# שלו היא הסיבה, והפלט כולו ביומן העדכון.
 save_chunkcast || echo "server-upgrade: the chunkcast of before this upgrade was not saved; a rollback will leave the new one"
-bash tools/server-tools-build.sh --source "$REPO_DIR" \
-    || echo "server-upgrade: chunkcast (the experimental chunk engine's sender) was NOT built on this server; with the 'stream engine' switch on, a wave fails by name"
+tools_rc=0
+tools_said=$(bash tools/server-tools-build.sh --source "$REPO_DIR" 2>&1) || tools_rc=$?
+printf '%s\n' "$tools_said"
+[[ "$tools_rc" == 0 ]] \
+    || rollback "מנוע השידור (chunkcast) לא נבנה בשרת או לא רץ (קוד $tools_rc): ${tools_said##*$'\n'} -- בלעדיו השרת לא יכול לשכפל (הפירוט ב-$LOG)"
 
 # 5. restart + ראיה חיובית
 stage restart
@@ -728,15 +785,44 @@ if [[ -z "$AGENT_URL" ]]; then
 import sqlite3, sys
 conn = sqlite3.connect(sys.argv[1])
 row = conn.execute("SELECT value FROM settings WHERE key = 'deploy:url'").fetchone()
-print(row[0] if row and row[0] else "http://127.0.0.1:8080")
+print(row[0] if row and row[0] else "http://127.0.0.1:7712")
 PYEOF
-)" || AGENT_URL="http://127.0.0.1:8080"
+)" || AGENT_URL="http://127.0.0.1:7712"
 fi
-bash deploy/verify-boot-payload.sh --app-dir "$REPO_DIR" --http-root "$HTTP_ROOT" --server-url "$AGENT_URL" \
-    || rollback "verify-boot-payload.sh נכשל מול $AGENT_URL"
+# ‏#3871: הכתובת השמורה (ביחידה או ב-deploy:url) נושאת את פורט הסוכן של יום ההתקנה. השרת החדש מאזין בפורט של
+# היום ומוסר לתחנות את הכתובת איתו (server.main, `_on_agent_port`); הבדיקה כאן פונה לאותה כתובת, ואומרת זאת.
+# חישוב שנכשל אינו "אותה כתובת": הוא מחזיר לתג הקודם (עיקרון 5).
+SERVED_URL="$(python3 - "$REPO_DIR" "$AGENT_URL" <<'PYEOF'
+import sys
+sys.path.insert(0, sys.argv[1])
+from server.core import ports
+from server.net import deploy_net
+print(deploy_net.with_agent_port(sys.argv[2], ports.AGENT))
+PYEOF
+)" && [[ -n "$SERVED_URL" ]] || rollback "לא ניתן לחשב את כתובת הסוכן שהשרת מוסר לתחנות מתוך $AGENT_URL"
+if [[ "$SERVED_URL" != "$AGENT_URL" ]]; then
+    echo "server-upgrade: הכתובת השמורה $AGENT_URL נושאת פורט קודם; השרת מוסר לתחנות $SERVED_URL (#3871)"
+    AGENT_URL="$SERVED_URL"
+fi
+# ‏#3486: /boot מוגש רק ממאזין ה-boot (ports.BOOT, ‏7711; `--boot-port` ביחידה משנה), לא
+# מפורט הסוכן — וזו הכתובת ש-GRUB מקבל ב-grub.cfg, ולכן זו שמאמתים.
+BOOT_PORT="$(systemctl show -p Environment --value imagesrv-server \
+    | sed -n 's/.*--boot-port \([0-9][0-9]*\).*/\1/p' | head -n1)"
+BOOT_URL="$(python3 - "$REPO_DIR" "$AGENT_URL" "$BOOT_PORT" <<'PYEOF'
+import sys
+from urllib.parse import urlsplit
+sys.path.insert(0, sys.argv[1])
+from server.core import ports
+host = urlsplit(sys.argv[2]).hostname
+host = f"[{host}]" if ":" in host else host
+print(f"http://{host}:{int(sys.argv[3] or ports.BOOT)}")
+PYEOF
+)" && [[ -n "$BOOT_URL" ]] || rollback "לא ניתן לחשב את כתובת ה-/boot מתוך $AGENT_URL (#3486)"
+bash deploy/verify-boot-payload.sh --app-dir "$REPO_DIR" --http-root "$HTTP_ROOT" --server-url "$BOOT_URL" \
+    || rollback "verify-boot-payload.sh נכשל מול $BOOT_URL"
 
 # 5א. ‏#3224: חומת האש של גרסה קודמת. השדרוג שומר את nftables.conf הישן, והקבוצה
-# known_macs (#1079/#2485) לא הייתה בו — פורטי udpcast נשארו פתוחים לכל מחשב. השרת
+# known_macs (#1079/#2485) לא הייתה בו — פורטי השידור נשארו פתוחים לכל מחשב. השרת
 # החדש כותב את הקובץ מחדש בעלייה (server/app.py, `_rewrite_stale_firewall`: `nft -c`
 # לפני הטעינה, והחזרה לקודם בכישלון, #1121), וכאן **ראיה חיובית** שזה קרה: ההצהרה
 # בקובץ שיעלה באתחול, והקבוצה בחומת האש החיה. ‏/health/live עונה רק אחרי העלייה, כלומר
@@ -754,6 +840,16 @@ else
             fw_decl=0; grep -q 'set known_macs' "$NFT_CONF" || fw_decl=$?
             [[ $fw_decl == 0 ]] \
                 || rollback "חומת האש לא נכתבה מחדש: $NFT_CONF נשאר של גרסה קודמת, בלי known_macs (קוד grep $fw_decl) — הסיבה ביומן השרת (firewall_rewrite_failed)" firewall
+            # ‏#3871: סימן הפורטים. קובץ בלעדיו פותח את הפורטים הקודמים: הקונסולה (443), הסוכן ו-Trident סגורים,
+            # ומה שאיש אינו מאזין בו עוד נשאר פתוח. ‏`1` = אין סימן, `2` = לא נקרא; שניהם מחזירים לתג הקודם.
+            fw_mark=0; grep -q '^# פורטים 77xx (#3871)' "$NFT_CONF" || fw_mark=$?
+            [[ $fw_mark == 0 ]] \
+                || rollback "חומת האש לא נכתבה מחדש: $NFT_CONF נשאר על הפורטים שלפני 77xx (קוד grep $fw_mark) — הסיבה ביומן השרת (firewall_rewrite_failed)" firewall
+            # ‏#3486: סימן המאזין הנפרד של /boot. קובץ בלעדיו סוגר את פורט האתחול, ו-GRUB לא מגיע לתפריט.
+            grep -Fxq '# Agent API requires TLS (#3580)' "$NFT_CONF" || rollback "חסרה שורת אימות TLS של הסוכן" firewall
+            fw_boot=0; grep -q '^# /boot במאזין משלו (#3486)' "$NFT_CONF" || fw_boot=$?
+            [[ $fw_boot == 0 ]] \
+                || rollback "חומת האש לא נכתבה מחדש: $NFT_CONF נשאר בלי פורט ה-/boot (קוד grep $fw_boot) — הסיבה ביומן השרת (firewall_rewrite_failed)" firewall
             nft list set inet imagesrv known_macs >/dev/null 2>&1 \
                 || rollback "הקבוצה known_macs אינה טעונה בחומת האש החיה (nft list set inet imagesrv known_macs נכשל)" firewall ;;
         1) echo "server-upgrade: $NFT_CONF אינו של ImageSrv — לא נוגעים (#2440)" ;;

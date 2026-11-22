@@ -1,6 +1,6 @@
 // #1179 — the secondary's pages are the primary's pages in the secondary's context.
 // When a secondary is chosen in the tree (SERVER_CTX), api() sends every console GET
-// through the primary's relay (/storage-nodes/{id}/console/…, 8443), and the same
+// through the primary's relay (/storage-nodes/{id}/console/…, 7700), and the same
 // load/render functions draw the answer: the same tabs and cards by construction.
 // Phase 1 is read-only: post/put/del in that context are refused before any request.
 // All the console scripts run in a vm with a stub fetch, in index.html's order.
@@ -132,10 +132,10 @@ test('every page of the secondary has the primary\'s tabs and cards — same nam
   }
 });
 
-test('the network page keeps its four tabs on the secondary (תרשים / חיבורים פיזיים / רשת הפצה / פורטים)', async () => {
+test('the network page keeps its tabs on the secondary (תרשים / חיבורים פיזיים / רשת הפצה; #3887: שירותים is its own page)', async () => {
   const t = setup(both());
   const html = await draw(t, 'network', 0, true);
-  assert.equal(JSON.stringify(tabsOf(html)), JSON.stringify(['תרשים', 'חיבורים פיזיים', 'רשת הפצה', 'פורטים']));
+  assert.equal(JSON.stringify(tabsOf(html)), JSON.stringify(['תרשים', 'חיבורים פיזיים', 'רשת הפצה']));
 });
 
 test('in the secondary\'s context every console GET goes through the relay; /me stays the primary\'s', async () => {

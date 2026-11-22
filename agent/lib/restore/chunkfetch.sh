@@ -58,7 +58,11 @@ _chunk_fetch() {   # $1 = server, $2 = image, $3 = file, $4 = index, $5 = pass, 
               printf "url = \"%s\"\nrange = \"%s-%s\"\nfail\nspeed-limit = 1\nspeed-time = %s\nconnect-timeout = %s\n", \
                   url, from, $1 + $2 - 1, stall, conn
               made++; i++
-              if (i <= n) print "next" } }
+              if (i <= n) {
+                  print "next"
+                  if (ENVIRON["TLS_CONNECT"] != "")
+                      printf "cacert = \"%s\"\ncapath = \"%s\"\nconnect-to = \"%s\"\nproto-redir = \"=https\"\n", ENVIRON["TLS_CA"], ENVIRON["CURL_HOME"], ENVIRON["TLS_CONNECT"]
+              } } }
         END { exit made == n ? 0 : 1 }' - "$CHUNK_IDX" > "$CHUNK_DIR/fetch.curl" \
         || { log "chunk fetch: a range of the server's answer is not in the index"; return 1; }
     if command -v rx_http_begin >/dev/null 2>&1; then rx_http_begin; fi   # #3064 S59: the fetch's clock (rxsense.sh)

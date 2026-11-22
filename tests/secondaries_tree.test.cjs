@@ -69,8 +69,8 @@ function setup(fixtures, me = {}, slow = null) {
 const NODE = 'n0de';
 const base = {
   '/storage-nodes': [
-    {id: NODE, label: 'חיפה', base_url: 'https://10.30.0.8:8443/api/interserver/v1', group_id: null, group_label: null, enrolled_at: '2026-09-16T09:00:00+00:00', disabled_at: null},
-    {id: 'off1', label: 'באר שבע', base_url: 'https://10.40.0.8:8443/api/interserver/v1', group_id: null, group_label: 'דרום', enrolled_at: '2026-09-10T09:00:00+00:00', disabled_at: '2026-09-12T09:00:00+00:00'},
+    {id: NODE, label: 'חיפה', base_url: 'https://10.30.0.8:7700/api/interserver/v1', group_id: null, group_label: null, enrolled_at: '2026-09-16T09:00:00+00:00', disabled_at: null},
+    {id: 'off1', label: 'באר שבע', base_url: 'https://10.40.0.8:7700/api/interserver/v1', group_id: null, group_label: 'דרום', enrolled_at: '2026-09-10T09:00:00+00:00', disabled_at: '2026-09-12T09:00:00+00:00'},
   ],
   [`/storage-nodes/${NODE}/machines`]: {connected: true, error: null, node_id: 'sn_0123456789abcdef', machines: [
     {mac: 'aa:bb:cc:dd:ee:01', name: 'Builder-H', role: 'build', ip: '10.30.0.77', online: true},
@@ -242,9 +242,9 @@ test('the secondary\'s tree is the primary\'s tree — same groups, pages and su
   const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const sidebar = index.slice(index.indexOf('<div class="tree" role="tree"'), index.indexOf('<div id="secondaryServers"'));
   const [primary] = readTree(sidebar);
-  // down to the sub-nodes (Nadav: the same tree): מחשבים ▸ בנייה/שיכפול, רשת ▸ תרשים/חיבורים פיזיים/רשת הפצה/פורטים.
+  // down to the sub-nodes (Nadav: the same tree): מחשבים ▸ בנייה/שיכפול, רשת ▸ תרשים/חיבורים פיזיים/רשת הפצה/שירותים.
   const want = ['סקירה כללית', 'סבב הפצה', 'שאלות המוח', ['מלאי', ["אימג'ים", ['מחשבים', ['מחשבי בנייה', 'מחשבי שיכפול']], 'דיסקים']],
-    ['תשתית', ['בריאות ושירותים', 'אחסון', ['רשת', ['תרשים', 'חיבורים פיזיים', 'רשת הפצה', 'פורטים']], 'מוניטור', 'דרייברים', 'דיסק-און-קי']],
+    ['תשתית', ['בריאות ושירותים', 'אחסון', ['רשת', ['תרשים', 'חיבורים פיזיים', 'רשת הפצה', 'שירותים']], 'מוניטור', 'דרייברים', 'דיסק-און-קי']],
     ['ניהול', ['משתמשים והרשאות', 'יומן', 'הגדרות', 'החשבון שלי']]];   // סניפים starts hidden (capability)
   assert.equal(JSON.stringify(skeleton(primary.kids, 3)), JSON.stringify(want), 'the reader sees the primary tree (a parser that sees nothing proves nothing)');
 

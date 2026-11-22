@@ -53,7 +53,7 @@ def _drop_console_secret(copy: sqlite3.Connection) -> None:
     המיקום מבקש אותם מחדש (`secret_missing`). `params_json` שאינו JSON נקרא — אין דרך לדעת
     מה יש בו, ולכן הוא אינו נשמר (`{}`); מיקום כזה ממילא לא עבד (`params_of` מחזיר `{}`)."""
     import json   # noqa: PLC0415
-    from server.storage.locations import SECRET_KEYS   # noqa: PLC0415 — מקור אחד לרשימת הסודות
+    from server.storage.secret_keys import SECRET_KEYS   # noqa: PLC0415 — מקור אחד לרשימת הסודות
 
     tables = {name for (name,) in copy.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     if not tables & {"settings", "storage_locations"}:

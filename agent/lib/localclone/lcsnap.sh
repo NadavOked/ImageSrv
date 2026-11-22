@@ -2,34 +2,14 @@
 # source (owner, 16/10) -- for the local clone (lcplan.sh) and for the
 # capture (shrink.sh) alike. POSIX sh (busybox ash).
 #
-# Each NTFS partition the plan shrinks gets a device-mapper snapshot over it
-# (dm-snapshot, transient "N", 4 KiB chunks = NTFS's cluster) whose
-# copy-on-write store is a RAM disk (brd, one per view). ntfsresize -s and
-# ntfsfix -d run on /dev/mapper/lc-src-<idx>, partclone reads it
-# (lc_src_node), and the source partition is only ever read: no ntfsresize,
-# no ntfsfix, no sgdisk, no rereadpt on the source disk, and no server record
-# (#926) -- there is nothing to put back. The compacted layout reaches the
-# targets through the manifest exactly as in place (_shrink_compact). What
-# partclone reads is not the snapshot itself but a dm `linear` cut of its
-# first <new length> sectors (_snap_cut): ntfsresize shrinks the volume, the
-# device keeps the partition's old length, and partclone -c records the
-# DEVICE size -- a target partition of the new size then refuses the image
-# ("Target partition size is smaller than source", Testrunner 16/10).
+# Each planned partition gets a transient dm-snapshot backed by its own brd.
+# Verify its origin, store and length before any filesystem tool writes.
+# NTFS budgets relocations with ntfsresize -n; Linux verifies the resulting
+# filesystem geometry. All views must remain valid within their RAM limit.
+# Only the verified dm-linear cut goes to partclone, which records device size.
+# The compacted table is published in parts.txt; the source GPT stays intact.
 #
-# The budget, before anything is written to a view: `ntfsresize -n -s <new>`
-# on the view (a read-only run; a stray write would land in RAM) prints
-# "Needed relocations : N (M MB)". A view needs M + M/10 + LC_SNAP_META_MB
-# ($LogFile reset, $MFT/$Bitmap writes, the kernel's exception table). Each
-# view's store is (MemAvailable - LC_SNAP_RESERVE_MB) / views, and that is
-# the brd device's size: the kernel cannot give a view more, so the store
-# cannot run the machine out of memory -- a full store invalidates the view
-# (ntfsresize gets an I/O error, loudly). Relocations that were not read, a
-# need over the store, a missing dmsetup or module, a table that does not
-# read back -- return 3 + LC_SNAP_WHY (Hebrew, with the numbers): the caller
-# refuses the smaller target (owner 16/10, option B: never in place). "Could
-# not check" is never "fits" (principle 5).
-#
-# #2354 (owner 04/11, option A; metal 03/11: 27,706 MB to move, a 15,156 MB
+# #2354 (owner 04/11, option A; metal 03/11: 27,706 MB of NTFS relocations, a 15,156 MB
 # store): a capture has no target, so a plan over the store shrinks as far as the
 # store goes (_snap_partial) and the image comes out somewhat larger, with no word
 # in the confirm dialog. The local clone (`unhib`) must reach the target's size.
@@ -165,6 +145,15 @@ _snap_views() {
         { [ "$_sw_got" = "$_sw_want" ] && [ -e "$DEVROOT/mapper/$_sw_name" ]; } || {
             log "the view of partition $_sw_idx did not read back: '$_sw_got', not '$_sw_want'"
             LC_SNAP_WHY="העותק של מחיצה $_sw_idx לא נקרא בחזרה כפי שנוצר — הפרטים ביומן"; return 3; }
+        _sw_role=$(_partition_role "$_sw_g") || { LC_SNAP_WHY="מחיצה $_sw_idx: סוג המחיצה לא נקרא"; return 3; }
+        if [ "$_sw_role" = linux ]; then
+            _sw_fs=$(_fs_of "$_sw_node")
+            case "$_sw_fs" in ext4|btrfs|ntfs) ;; *) LC_SNAP_WHY="מחיצה $_sw_idx: כיווץ $_sw_fs אינו נתמך"; return 3 ;; esac
+            if [ "$_sw_fs" != ntfs ]; then
+                echo "$_sw_idx|$DEVROOT/mapper/$_sw_name|$_sw_st|$_sw_sz|$((_sw_new / 512))|$_sw_name|$_sw_fs" >> "$_sr/snap/views" || return 3
+                _sw_i=$((_sw_i + 1)); continue
+            fi
+        fi
         _sw_h=0; _sw_hs=clean; case "$_sn_u" in unhib|capture) _sw_hs=$(ntfs_state "$DEVROOT/mapper/$_sw_name") ;; esac   # the view, never the source
         if [ "$_sn_u" = capture ] && [ "$_sw_hs" = dirty ]; then LC_SNAP_WHY=$(capture_hibernated_message "$_sw_node"); return 3; fi
         case "$_sw_hs" in clean|dirty) ;; hibernated) _sw_h=1 ;;
@@ -216,7 +205,7 @@ _snap_cut() {
     _snap_dm create "$_sc_name" --table "0 $3 linear $DEVROOT/mapper/$2 0" >> "$LOG_FILE" 2>&1 \
         || { LC_SNAP_WHY="לא הצלחנו להציג את העותק של מחיצה $1 בגודלו החדש (dmsetup create $_sc_name)"; return 3; }
     _sc_mm=$(_snap_dm info -c --noheadings -o major,minor --separator : "$2" 2>> "$LOG_FILE" | tr -d ' ')
-    _sc_got=$(_snap_dm table "$_sc_name" 2>> "$LOG_FILE"); _sc_b=$(blockdev --getsize64 "$_sc_node" 2>> "$LOG_FILE")
+    _sc_got=$(_snap_dm table "$_sc_name" 2>> "$LOG_FILE") && _sc_b=$(blockdev --getsize64 "$_sc_node" 2>> "$LOG_FILE") &&
     [ -n "$_sc_mm" ] && [ "$_sc_got" = "0 $3 linear $_sc_mm 0" ] && [ "$_sc_b" = $(($3 * 512)) ] && return 0
     log "the cut of partition $1 did not read back: table '$_sc_got' (want '0 $3 linear $_sc_mm 0'), size '$_sc_b' (want $(($3 * 512)))"
     LC_SNAP_WHY="העותק של מחיצה $1 לא נקרא בחזרה בגודלו החדש ($(($3 * 512)) בייט) — הפרטים ביומן"; return 3
@@ -245,7 +234,7 @@ lc_snap_shrink() {
     _snap_views "$1" "$_sn_p" "$_sn_kib" || { _snap_back 3; return; }
     [ "$(awk 'END { print NR }' "$_sn_d/views" 2>/dev/null)" = "$_sn_k" ] \
         || { LC_SNAP_WHY="בתוכנית $_sn_k מחיצות, ולא נוצר עותק לכל אחת"; _snap_back 3; return; }
-    log "local clone: read-only path -- $_sn_k view(s) of the source, $(cat "$_sr/relocations_mb") MB to move, $((_sn_kib / 1024)) MB of RAM each"
+    log "local clone: read-only path -- $_sn_k view(s) of the source, $(cat "$_sr/relocations_mb") MB of NTFS relocations, $((_sn_kib / 1024)) MB of RAM each"
     date +%s > "$_sr/resize_at"; : > "$_sn_d/mark"; : > "$_sn_d/cuts"
     while IFS='|' read -r _sn_idx _sn_node _sn_st _sn_sz _sn_new _sn_name _sn_hib <&3; do
         _sn_prev=""; [ "$_sn_u" != capture ] || _sn_prev=$(cat "$_sr/src_unhib" 2>/dev/null)
@@ -256,9 +245,15 @@ lc_snap_shrink() {
         fi   # #2213: full-size view, no resize and no linear cut
         log "shrinking the VIEW of partition $_sn_idx on $1: $((_sn_sz * 512)) -> $((_sn_new * 512)) bytes (the source is not written)"
         # ‏-s בלי -f ועם "y" מפורש, כמו shrink.sh. ‏$? של הצינור הוא של ntfsresize.
-        printf 'y\n' | ntfsresize -s "$((_sn_new * 512))" --no-progress-bar "$_sn_node" >> "$LOG_FILE" 2>&1; _sn_rc=$?
-        _sn_why=$(tail -n 1 "$LOG_FILE" 2>/dev/null | tr -d '\r'); _sn_fx=0
-        [ "$_sn_rc" -ne 0 ] || { ntfsfix -d "$_sn_node" >> "$LOG_FILE" 2>&1; _sn_fx=$?; }
+        case "$_sn_hib" in ext4|btrfs)
+            "shrink_$_sn_hib" "$_sn_node" "$((_sn_new * 512))" || { _snap_back 1; return; }
+            _sn_rc=0; _sn_fx=0 ;;
+        *)
+            printf 'y\n' | ntfsresize -s "$((_sn_new * 512))" --no-progress-bar "$_sn_node" >> "$LOG_FILE" 2>&1; _sn_rc=$?
+            _sn_why=$(tail -n 1 "$LOG_FILE" 2>/dev/null | tr -d '\r'); _sn_fx=0
+            [ "$_sn_rc" -ne 0 ] || { ntfsfix -d "$_sn_node" >> "$LOG_FILE" 2>&1; _sn_fx=$?; }
+            ;;
+        esac
         # A store that filled up is the budget's miss: refused, by name. Anything
         # else is the filesystem's own answer: failed, by name.
         _snap_valid "$_sn_name" || { log "the view of partition $_sn_idx is not valid: ${_sv_st:-no status}"
@@ -268,12 +263,19 @@ lc_snap_shrink() {
         if [ "$_sn_fx" -ne 0 ]; then LC_ERROR="דגל ה-dirty לא נוקה בעותק של מחיצה $_sn_idx (ntfsfix -d rc=$_sn_fx) — המקור לא נכתב"; _snap_back 1; return; fi
         log "view of partition $_sn_idx shrunk; its RAM store holds $_sv_use sectors"
         _snap_cut "$_sn_idx" "$_sn_name" "$_sn_new" || { _snap_back 3; return; }
-        echo "$_sn_idx|$_sc_node" >> "$_sn_d/cuts"
-        echo "$_sn_idx|$_sn_st|$_sn_sz|$_sn_new" >> "$_sn_d/mark"
+        case "$_sn_hib" in ext4|btrfs)
+            [ "$(_fs_of "$_sc_node")" = "$_sn_hib" ] || {
+                LC_ERROR="מחיצה $_sn_idx: מערכת הקבצים $_sn_hib לא נקראה בחזרה בחיתוך"; _snap_back 1; return; } ;;
+        esac
+        echo "$_sn_idx|$_sc_node" >> "$_sn_d/cuts" && echo "$_sn_idx|$_sn_st|$_sn_sz|$_sn_new" >> "$_sn_d/mark" || {
+            LC_ERROR="מחיצה $_sn_idx: כתיבת הפריסה המכווצת נכשלה"; _snap_back 1; return; }
     done 3< "$_sn_d/views"
     cp "$_sr/parts.txt" "$RUN_DIR/parts.orig.txt" \
         && _shrink_compact "$_sn_d/mark" "$RUN_DIR/parts.orig.txt" > "$_sr/parts.txt" \
         || { LC_ERROR="לא הצלחנו לכתוב את הפריסה המצומצמת — המקור לא נכתב"; _snap_back 1; return; }
     # Last: only a complete success points the copy at the views -- at their cuts.
-    while IFS='|' read -r _sn_idx _sn_node; do echo "$_sn_node" > "$_sn_d/$_sn_idx.node"; done < "$_sn_d/cuts"
+    while IFS='|' read -r _sn_idx _sn_node; do
+        echo "$_sn_node" > "$_sn_d/$_sn_idx.node" && [ "$(cat "$_sn_d/$_sn_idx.node")" = "$_sn_node" ] || {
+            LC_ERROR="מחיצה $_sn_idx: צומת העותק לא נקרא בחזרה"; _snap_back 1; return; }
+    done < "$_sn_d/cuts"
 }

@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from boot.trace import LOCAL_STEPS, STEP_INDEX, STEPS, is_step
 
 from server.learn import boot as learn_boot, wol as learn_wol
+from server.core.logtext import one_line
 from server.db import _write_lock, now_iso, writing
 
 log = logging.getLogger("imagesrv.boottrace")
@@ -92,7 +93,7 @@ def record(conn, mac: str, step: str) -> bool:
                                 (mac,)).fetchone()
             seconds = learn_boot.measure(conn, mac, step, prev, epoch, version)
         except Exception:         # noqa: BLE001 — אבחון שמפיל פירור הוא נזק
-            log.exception("boot step timing for %s %s failed", mac, step)
+            log.exception("boot step timing for %s %s failed", one_line(mac), one_line(step))
         conn.execute(
             "INSERT INTO boot_steps (mac, step, idx, at, first_at, at_epoch)"
             " VALUES (?, ?, ?, ?, ?, ?)"

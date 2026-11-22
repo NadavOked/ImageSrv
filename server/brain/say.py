@@ -118,6 +118,12 @@ EXECUTED |= frozenset({"K-REPAIR"})
 ACTION_HE.update({"REPAIR_ANSWER": "מה עונים למשכפל שדיווח על מעבר"})   # #3659 (S14)
 VERDICT_HE.update({"ANSWER_RECEIVE": "להאזין למעבר", "ANSWER_FETCH": "להוריד בעצמו", "ANSWER_DONE": "שלם", "ANSWER_WAIT": "להמתין"})
 
+# --- #3977 (K8: what each cloner made durable, and the rate a cloner fell at) -------------------------------------------------
+ACTION_HE.update({"WAVE_GOODPUT": "מה שהמשכפלים כתבו מול הקצב", "CLONER_DROP": "משכפל שאבד במעבר ראשון",
+                  "WAVE_UNSAFE_RATE": "קצב שמשכפל נפל בו"})
+VERDICT_HE.update({"PEAK": "השיא: קצב גבוה יותר לא היה מהיר יותר", "CLIMB": "ממשיכים לטפס", "DROPPED": "אבד",
+                   "WALL": "לא מטפסים לקצב הזה", "NO_WALL": "אין חומה"})
+
 
 def line_he(d: dict) -> str:
     kind, key = d.get("entity_kind"), d.get("entity_key")

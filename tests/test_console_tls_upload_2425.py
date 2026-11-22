@@ -5,7 +5,7 @@ F3: a PEM holding both the key and the certificate, pasted into the *certificate
 ``console.crt`` and ``serving/console.crt`` at 0644 (``write_atomic``'s default).
 
 F4: ``load_cert_chain`` is all the server checked, and it loads certificates no browser takes
-(ed25519, secp256k1, an EKU of clientAuth only). Port 8081 does not fall back to HTTP, so after
+(ed25519, secp256k1, an EKU of clientAuth only). Port 443 does not fall back to HTTP, so after
 the restart the console was locked until someone put ``.prev`` back from the server's terminal.
 Accepted now: RSA, EC on P-256/P-384, and an EKU that includes serverAuth.
 """

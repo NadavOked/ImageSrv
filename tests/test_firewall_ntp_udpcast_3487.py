@@ -5,9 +5,10 @@
 1. **NTP.** המחולל כותב `udp dport 123` רק ב-`--per-nic`. המתקין, ברוץ שוב, כותב את ברירת המחדל בלי לקרוא
    את `nicsvc:*` -- וה-policy drop זורק את השאלות ל-chrony שממשיך להגיש. עכשיו: `--ntp-if` במחולל,
    `nic_services.ntp_interfaces` קורא את הכרטיסים מה-DB, והמתקין מעביר אותם.
-2. **udpcast.** `--sender-portbase P` תופס `P` ו-`P+1`; `regenerate_firewall` (הנתיב של הקונסולה) לא העביר
-   `--mcast-ports`, והכלל חזר לברירת המחדל של הייצור (פורט-הפצה-מכוון: 9000-9001). עכשיו הערך של `ctx.sender.portbase` מגיע למחולל -- ורק כשהוא
+2. **השידור.** `--sender-portbase P` קובע את פורטי השידור; `regenerate_firewall` (הנתיב של הקונסולה) לא העביר
+   `--mcast-ports`, והכלל חזר לברירת המחדל של הייצור. עכשיו ה-portbase האמיתי מגיע למחולל -- ורק כשהוא
    שונה מברירת המחדל (פורט-הפצה-מכוון: 9000), כדי ששרת ייצור יקרא בדיוק כמו קודם.
+   #3173: udpcast (P, P+1) הוסר, והטווח הוא של מנוע החתיכות בלבד: P+2 (נתונים) ו-P+3 (משוב הקצב).
 """
 
 from __future__ import annotations
@@ -21,9 +22,11 @@ from pathlib import Path
 import pytest
 
 import server.app
+from server.core import ports as product_ports
 from server.db import connect, set_setting
 from server.net import deploy_net, nic_services
-from server.rounds.sender import DEFAULT_PORTBASE
+from server.rounds import chunksend
+from server.rounds.chunkctx import DEFAULT_PORTBASE
 
 from test_installer_1131 import BASH as INSTALLER_BASH, bindir, fake_tool, installer_function, run_bash  # noqa: F401
 from test_nftables_per_nic import SHELLS, rules, run
@@ -167,17 +170,16 @@ def _generator_args(tmp_path, monkeypatch, **kw) -> list[str]:
 
 def test_regenerate_firewall_derives_the_range_from_the_sender_portbase(tmp_path, monkeypatch) -> None:
     args = _generator_args(tmp_path, monkeypatch, sender_portbase=30199)
-    assert args[args.index("--mcast-ports") + 1] == "30199-30202"
+    assert args[args.index("--mcast-ports") + 1] == "30201-30202"
 
 
 def test_the_derived_range_covers_the_chunk_engines_feedback_port_3512(tmp_path, monkeypatch) -> None:
-    """P..P+3: udpcast takes P and P+1, the chunk engine P+2, and the receivers' feedback datagram goes to P+3 (#3512).
-    The range of P-(P+1) closed that port the moment the console rewrote the firewall."""
-    from server.rounds import chunksend
-
+    """(P+2)..(P+3): the chunk engine sends on P+2, and the receivers' feedback datagram goes to P+3 (#3512).
+    The range of P-(P+1) closed that port the moment the console rewrote the firewall. #3173: P and P+1 were
+    udpcast's, and they stay closed."""
     args = _generator_args(tmp_path, monkeypatch, sender_portbase=30199)
     low, high = (int(n) for n in args[args.index("--mcast-ports") + 1].split("-"))
-    assert low == 30199 and low <= 30199 + chunksend.PORT_OFFSET + 1 <= high
+    assert low == 30199 + chunksend.PORT_OFFSET and high == low + 1
 
 
 def test_regenerate_firewall_without_a_portbase_leaves_the_generators_default(tmp_path, monkeypatch) -> None:
@@ -186,11 +188,11 @@ def test_regenerate_firewall_without_a_portbase_leaves_the_generators_default(tm
 
 def _app_with_firewall_recorder(tmp_path, seen: list, **kwargs):
     deploy = deploy_net.DeployContext(
-        state=deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:8080"),
-        agent_port=8080, tftp_root=tmp_path / "tftp", repo_dir=REPO, servers_interface="eth0",
+        state=deploy_net.DeployState("cli", "eth1", "http://10.44.9.10:7712"),
+        agent_port=7712, tftp_root=tmp_path / "tftp", repo_dir=REPO, servers_interface="eth0",
         hooks={"firewall": lambda repo, **kw: seen.append(kw)})
     return server.app.create_app(
-        tmp_path / "data", tmp_path / "images", "http://10.44.9.10:8080", deploy=deploy,
+        tmp_path / "data", tmp_path / "images", "http://10.44.9.10:7712", deploy=deploy,
         health_hooks={"interfaces": lambda: [{"name": "eth0"}, {"name": "eth1"}]}, **kwargs)
 
 
@@ -205,7 +207,7 @@ def test_the_console_path_hands_the_senders_real_portbase_to_the_firewall(tmp_pa
 def test_a_production_server_calls_the_firewall_exactly_as_before(tmp_path) -> None:
     seen: list = []
     app = _app_with_firewall_recorder(tmp_path, seen)
-    assert app.state.ctx.sender.portbase == DEFAULT_PORTBASE
+    assert app.state.ctx.chunk.port - chunksend.PORT_OFFSET == DEFAULT_PORTBASE
     nic = app.state.ctx.nic_services
     assert nic.hooks["firewall"](nic) is None
     assert "sender_portbase" not in seen[-1]
@@ -217,5 +219,7 @@ def test_the_derived_range_reaches_the_ruleset(tmp_path, monkeypatch) -> None:
     args = _generator_args(tmp_path, monkeypatch, sender_portbase=30199)
     ports = args[args.index("--mcast-ports") + 1]
     out = run(SHELLS[0], *PRIMARY, "--mcast-ports", ports).stdout
-    assert "udp dport 30199-30202 ether saddr @known_macs accept" in out
-    assert "dport 9000-9001" not in out   # פורט-הפצה-מכוון: ברירת המחדל הוחלפה
+    assert "udp dport 30201-30202 ether saddr @known_macs accept" in out
+    assert "dport 30199" not in out and "dport 30200" not in out   # #3173: udpcast's P and P+1 stay closed
+    default = f"{product_ports.TRIDENT_DATA}-{product_ports.TRIDENT_CONTROL}"
+    assert f"dport {default}" not in out   # ברירת המחדל של המחולל (הייצור) הוחלפה בטווח שנגזר

@@ -190,11 +190,11 @@ def test_installer_failure_headline_says_unmount_failed_in_hebrew(tmp_path) -> N
 @NATIVE
 def test_installer_summary_shows_the_dhcp_address_not_the_name(tmp_path) -> None:
     binary = _driver(tmp_path)
-    assert _run(binary, "guess", "0", "", "imagesrv-ta", "10.68.0.61") == ["https://10.68.0.61:8081"]
+    assert _run(binary, "guess", "0", "", "imagesrv-ta", "10.68.0.61") == ["https://10.68.0.61"]
     # no address yet: the name is all there is
-    assert _run(binary, "guess", "0", "", "imagesrv-ta", "") == ["https://imagesrv-ta:8081"]
+    assert _run(binary, "guess", "0", "", "imagesrv-ta", "") == ["https://imagesrv-ta"]
     # static: the address typed on the screen, as before
-    assert _run(binary, "guess", "1", "10.44.10.5", "imagesrv-ta", "10.68.0.61") == ["https://10.44.10.5:8081"]
+    assert _run(binary, "guess", "1", "10.44.10.5", "imagesrv-ta", "10.68.0.61") == ["https://10.44.10.5"]
 
 
 @NATIVE

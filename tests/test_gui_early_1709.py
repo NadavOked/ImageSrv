@@ -90,7 +90,15 @@ KIOSK_TRACE = '#!/bin/sh\necho "gui screen=$GUI_SCREEN" >> "$TRACE"\nexec sleep 
 STATION_OK = "#!/bin/sh\nexit 0\n"   # the `--help` load check
 
 
-def _init(tmp: Path, *, fb_name: str = "i915drmfb", cmdline: str = "imagesrv.server=127.0.0.1:9"):
+def _trust(tmp: Path) -> str:
+    """#3580: the early GUI starts only for a server it can verify -- the files the initrd carries (any CA text, a
+    name of the right shape) and the https address GRUB passes; shell `export` text for the script under test."""
+    _write(tmp / "agent-ca.pem", "-----BEGIN CERTIFICATE-----\nx\n-----END CERTIFICATE-----\n", 0o644)
+    _write(tmp / "agent-name", "imagesrv-agent-0123456789abcdef\n", 0o644)
+    return f"export SERVER_CA_FILE={posix(tmp / 'agent-ca.pem')!r} AGENT_NAME_FILE={posix(tmp / 'agent-name')!r}\n"
+
+
+def _init(tmp: Path, *, fb_name: str = "i915drmfb", cmdline: str = "imagesrv.server=https://127.0.0.1:9"):
     """Runs the real agent/init. Returns (trace lines, init's output, run dir)."""
     sysd, sysroot, run, mod = tmp / "sys", tmp / "sysroot", tmp / "run", tmp / "etc"
     trace, fb = tmp / "trace", tmp / "dev" / "fb0"
@@ -122,7 +130,7 @@ TRACE={posix(trace)!r}; RUN={posix(run)!r}; SYSD={posix(sysd)!r}; SYSROOT={posix
 export TRACE RUN SYSROOT
 export CMDLINE_FILE={posix(tmp / 'cmdline')!r} UPTIME_FILE={posix(tmp / 'uptime')!r} SYS_DIR="$SYSD"
 export GUI_KIOSK={posix(kiosk)!r} GUI_STATION={posix(station)!r} FB_DEV={posix(fb)!r}
-mount() {{ :; }}
+{_trust(tmp)}mount() {{ :; }}
 curl() {{ echo "curl $*" >> "$TRACE"; return 0; }}
 ip() {{ case "$*" in "-4 addr show"*) echo "    inet 10.0.0.9/24 brd 10.0.0.255" ;; esac; }}
 udhcpc() {{   # #2040: the -q probe records the server-id, like udhcpc.probe
@@ -206,7 +214,7 @@ def test_the_installer_iso_starts_no_early_gui(tmp_path):
     station = _write(box / "station", STATION_OK)
     fb = box / "fb0"
     _write(box / "sysroot" / "sys" / "class" / "graphics" / "fb0" / "name", "i915drmfb\n", 0o644)
-    _write(box / "cmdline", "imagesrv.server=127.0.0.1:9 imagesrv.mode=installer\n", 0o644)
+    _write(box / "cmdline", "imagesrv.server=https://127.0.0.1:9 imagesrv.mode=installer\n", 0o644)
     (box / "run").mkdir()
     script = (f"export RUN_DIR={posix(box / 'run')!r} LIB_DIR={posix(LIB)!r} TRACE={posix(box / 'trace')!r} "
               f"CMDLINE_FILE={posix(box / 'cmdline')!r} GUI_KIOSK={posix(kiosk)!r} GUI_STATION={posix(station)!r} "
@@ -240,12 +248,12 @@ def _agent(tmp: Path, body: str, bridge: str = KIOSK_BRIDGE) -> subprocess.Popen
     station = _write(tmp / "station", STATION_OK)
     fb = tmp / "fb0"
     _write(tmp / "sysroot" / "sys" / "class" / "graphics" / "fb0" / "name", "i915drmfb\n", 0o644)
-    _write(tmp / "cmdline", "imagesrv.server=127.0.0.1:9\n", 0o644)
+    _write(tmp / "cmdline", "imagesrv.server=https://127.0.0.1:9\n", 0o644)
     # #2275: the real stat, each call recorded -- the keeper's looks at the GUI's beat (ui.sh gui_beat_fresh)
     _write(tmp / "bin" / "stat", f'#!/bin/sh\necho "$*" >> "$RUN_DIR/stat.calls"\nexec {shutil.which("stat")} "$@"\n')
     script = (
         f"export PATH={shlex.quote(posix(tmp / 'bin'))}:\"$PATH\"; "
-        f"export RUN_DIR={shlex.quote(posix(run))} LIB_DIR={shlex.quote(posix(LIB))} IMAGESRV_TEST=1 WAIT_HELPER_S=5 "
+        f"{_trust(tmp)}export RUN_DIR={shlex.quote(posix(run))} LIB_DIR={shlex.quote(posix(LIB))} IMAGESRV_TEST=1 WAIT_HELPER_S=5 "
         f"CMDLINE_FILE={shlex.quote(posix(tmp / 'cmdline'))} GUI_KIOSK={shlex.quote(posix(kiosk))} "
         f"GUI_STATION={shlex.quote(posix(station))} FB_DEV={shlex.quote(posix(fb))} "
         f"SYSROOT={shlex.quote(posix(tmp / 'sysroot'))}; ln -s /dev/null \"$FB_DEV\"; "
@@ -351,7 +359,7 @@ def test_a_gui_still_starting_when_the_path_draws_none_is_closed_too(tmp_path):
 def _bridge(tmp: Path, body: str) -> subprocess.CompletedProcess:
     run = tmp / "run"
     (run / "gui").mkdir(parents=True)
-    script = (f"export RUN_DIR={posix(run)!r} GUI_DIR={posix(run / 'gui')!r} SERVER=http://10.0.0.1:8080 "
+    script = (f"export RUN_DIR={posix(run)!r} GUI_DIR={posix(run / 'gui')!r} SERVER=http://10.0.0.1:7712 "
               f"GUI_SCREEN=boot MAC= IP=; "
               f"for l in common waits jsonq guistate guiearly; do . {posix(LIB)}/$l.sh; done; "
               'cloner_gui_state_loop() { echo "cloner-loop $GUI_SCREEN $MAC $IP"; }; '

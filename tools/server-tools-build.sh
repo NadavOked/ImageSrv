@@ -6,10 +6,10 @@
 # Today that is one: chunkcast, the chunk engine's sender (agent/chunkcast.c).
 # The boot payload (tools/boot-payload-build.sh) packs the same program into
 # the stations' initrd, where it is the receiver; this script puts it where the
-# server's own process finds it -- "chunkcast send" by PATH, the way it finds
-# udp-sender, which a Debian package installs. There is no package for
-# chunkcast, so it is compiled here, with the flags of the initrd's build and
-# against the libzstd every Debian carries (by its file name: no libzstd-dev).
+# server's own process finds it -- "chunkcast send" by PATH. There is no
+# Debian package for chunkcast, so it is compiled here, with the flags of the
+# initrd's build and against the libzstd every Debian carries (by its file
+# name: no libzstd-dev).
 #
 # Called by tools/iso/firstboot.sh and tools/server-upgrade.sh, both AFTER the
 # boot payload is settled -- on a prebuilt payload as well as a rebuilt one:
@@ -18,11 +18,12 @@
 #   server-tools-build.sh --source DIR [--bin-dir DIR]
 #
 # Positive evidence only (principle 5): the new binary replaces the old one
-# only after it ran and said its own usage line. A build that fails leaves the
-# previous binary as it was and exits non-zero, with one ASCII line that says
-# why; the callers log it and go on, because the engine is behind an
-# experimental switch that is off by default -- and with the switch on, a wave
-# without a sender fails by name ("chunkcast send did not run"), never quietly.
+# only after it ran, said its own usage line, and answered `--version` the way
+# the server asks it before every wave (ChunkEngine.binary_problem). A build
+# that fails leaves the previous binary as it was and exits non-zero, with one
+# ASCII line that says why. Since #3173 the chunk engine is the only one, so a
+# server without it sends no wave at all: the callers FAIL on that exit (owner
+# 21/11) -- firstboot stops on its chunkcast-failed screen, the upgrade rolls back.
 #
 # IMAGESRV_SERVER_BIN_DIR overrides the directory (tests).
 set -euo pipefail
@@ -60,6 +61,15 @@ if [[ "$rc" != 2 || "$said" != *"usage: chunkcast send|recv|apply"* ]]; then
     rm -f "$new"
     die "the new chunkcast did not run as expected (exit $rc); the previous one is untouched"
 fi
+# The server's own question (binary_problem): `--version` exits 0 and names itself.
+set +e
+version=$("$new" --version 2>&1)
+rc=$?
+set -e
+if [[ "$rc" != 0 || "$version" != "chunkcast "* ]]; then
+    rm -f "$new"
+    die "the new chunkcast did not answer --version (exit $rc); the previous one is untouched"
+fi
 chmod 0755 "$new"
 mv -f "$new" "$BIN_DIR/chunkcast"
-echo "server-tools-build: $BIN_DIR/chunkcast is ready"
+echo "server-tools-build: $BIN_DIR/chunkcast is ready ($version)"

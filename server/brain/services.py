@@ -1,7 +1,7 @@
 """#3064 (K13): שירותי השרת שהסבב צריך -- המוח יודע, מסביר וממליץ. **הוא לא מדליק ולא מכבה.** (נדב 15/11)
 
 **מה נבדק** (`read`): dnsmasq ו-imagesrv כיחידות systemd (`systemctl is-active`), ו-TFTP (69/udp), DHCP (67/udp),
-HTTP (8080/tcp), NTP (123/udp) ו-syslog (514/udp) לפי **פורט מאזין** בטבלת הסוקטים (`ss`) -- אותם hooks שמסך הבריאות
+HTTP (7712/tcp), NTP (123/udp) ו-syslog (514/udp) לפי **פורט מאזין** בטבלת הסוקטים (`ss`) -- אותם hooks שמסך הבריאות
 והפורטים קוראים (`health.default_hooks`). שלושה מצבים, לא שניים (עיקרון 5): ``active`` (ראיה חיובית), ``inactive``
 (ראיה חיובית שאינו), ו-``unchecked`` -- הבדיקה עצמה לא הצליחה. **בדיקה שנכשלה אינה "פעיל" ואינה "כבוי".**
 
@@ -37,6 +37,7 @@ from server.brain import memory
 from server.core.logtext import one_line
 from server.db import journal
 from server.net import ports
+from server.core import ports as product_ports   # #3871
 from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.brain")
@@ -45,7 +46,7 @@ RULE, ACTION = "K13", "SERVICES_FOR_ROUND"
 READY, BLOCKED, UNDECIDED, NOT_RUN = "READY", "BLOCKED", "UNDECIDED", "OFF"
 ACTIVE, INACTIVE, UNCHECKED = "active", "inactive", "unchecked"
 #: id -> (שם בעברית, פרוטוקול, פורט ברירת מחדל). ה-id של TFTP/DHCP/HTTP/NTP הוא של שורות `/ports`.
-PORTS = {"tftp": ("TFTP", "udp", 69), "dhcp": ("DHCP", "udp", 67), "http_boot": ("HTTP", "tcp", 8080),
+PORTS = {"tftp": ("TFTP", "udp", 69), "dhcp": ("DHCP", "udp", 67), "http_boot": ("HTTP", "tcp", product_ports.AGENT),
          "ntp": ("NTP", "udp", 123), "syslog": ("syslog", "udp", 514)}
 UNITS = {"dnsmasq": ("dnsmasq (DHCP ו-TFTP)", "dnsmasq"), "imagesrv": ("imagesrv", "imagesrv-server")}
 #: הרשימה הסגורה של מה שמותר להדליק מהקונסולה. DHCP ו-dnsmasq אינם בה, בכוונה.
@@ -102,7 +103,7 @@ def _port_state(table: str | None, port: int) -> tuple[str, str]:
 
 def read(hooks: dict) -> list[Service]:
     """כל השירותים ברשימה, בסדר קבוע. ``hooks``: ``ss`` (udp), ``ss_tcp``, ``unit(name)``, ``dhcp_on()`` (True/False/None),
-    ``http_port()`` (או None = 8080). הקורא מזריק; בטסטים לעולם לא נוגעים במכונה."""
+    ``http_port()`` (או None = 7712). הקורא מזריק; בטסטים לעולם לא נוגעים במכונה."""
     try:
         udp, tcp = hooks["ss"](), hooks["ss_tcp"]()
     except Exception:                              # noqa: BLE001 -- ss שנכשל = "לא נקרא"

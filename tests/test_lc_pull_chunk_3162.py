@@ -47,6 +47,7 @@ TICKED = "1,3"                              # what the person ticks on the resto
 #: lcpull.sh as the cloner runs it, up to and including the open: the screen's image list, the ports check,
 #: the screen's token, and the open. `list_drawers` and `disk_port` are the only hardware it asks about.
 LC_PULL = r'''
+IMAGESRV_SERVER="$SERVER"; . agent/lib/core/tls.sh; tls_config || { echo "TLS-CONFIG-FAILED $TLS_WHY"; exit 7; }   # #3580: $SERVER is the certificate name
 list_drawers() { echo sda; echo sdb; echo sdc; }
 disk_port() { case "$1" in sda) echo 1;; sdb) echo 2;; sdc) echo 3;; *) echo 0;; esac; }
 mkdir -p "$LC"; HTTP_TIMEOUT=15
@@ -74,7 +75,6 @@ def _stage(stack, tmp_path):
         assert not any(p.get("index_error") for p in parts.values()), parts
         return all(isinstance(parts[n].get("readback_chunks"), int) for n in (1, 3))
     stack._wait(derived, "the server derived the index of both partitions")
-    assert stack.admin.json("POST", "/api/console/settings", {"stream_engine": "chunk"})[0] == 200
     stack.machine(CLONER_A, "01", "grp_CLONERS")
     disks = [H.disk(f"sd{chr(97 + i)}", H.GB256, serial, port=i + 1) for i, serial in enumerate(SERIALS)]
     stack.hello(CLONER_A, disks, engines=["udpcast", "chunk"])
@@ -84,7 +84,8 @@ def _stage(stack, tmp_path):
 def _pull_from_the_cloner(stack, tmp_path, image: str) -> str:
     """The cloner's own lcpull.sh opens the round. Returns what it said."""
     (tmp_path / "lc").mkdir()
-    out = run_lc_agent(tmp_path / "lc", LC_PULL, MAC=CLONER_A, SERVER=stack.base, IMAGE=image, PORTS=TICKED)
+    out = run_lc_agent(tmp_path / "lc", LC_PULL, MAC=CLONER_A, SERVER=stack.base, IMAGE=image, PORTS=TICKED,
+                       **stack.trust_env)
     said = out.stdout + out.stderr
     assert out.returncode == 0 and "OPENED" in out.stdout, f"{said}\nserver:\n{stack.tail()}"
     assert f"image={image}|Chunk E2E|E2E" in out.stdout, f"the cloner's screen did not offer the image\n{said}"
@@ -126,7 +127,7 @@ def _start(stack, tmp_path, rule=None, script=AGENT):
         process = subprocess.Popen(
             [BASH, posix(run / "agent.sh"), posix(run), stack.base, image, CLONER_A, " ".join(ticked)],
             cwd=str(REPO), stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-            start_new_session=True, env={**os.environ, "BIN": str(stack.bin)})
+            start_new_session=True, env={**os.environ, "BIN": str(stack.bin), **stack.trust_env})
     stack.agents.append(process)
     return image, disks, answer, run, process
 

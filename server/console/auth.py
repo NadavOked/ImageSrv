@@ -23,7 +23,7 @@ import time
 from server.db import _settle, _write_lock, get_setting, writing
 
 COOKIE_NAME = "imagesrv_session"
-#: #1179: הזהות של בקשה שהשרת הראשי שלח בערוץ הבין-שרתי (8443) — ``(user, role)``.
+#: #1179: הזהות של בקשה שהשרת הראשי שלח בערוץ הבין-שרתי (7700) — ``(user, role)``.
 #: מפתח ב-scope של ASGI, שרק קוד בתוך התהליך יכול לשים: uvicorn בונה את ה-scope
 #: מבקשת HTTP ואינו מעתיק לתוכו כותרות או עוגיות. ``interserver_api.run_console_get``
 #: שם אותו רק אחרי mTLS + טוקן כרוך (``authenticate_parent``).
@@ -33,11 +33,11 @@ TTL_SECONDS = 12 * 3600
 CLOCK_SLACK_SECONDS = 300
 PURPOSE_PWCHANGE = "pwchange"
 PURPOSE_MFAENROLL = "mfaenroll"
-#: #1340: עוגייה שהקיוסק (פורט הסוכן, :8080) הנפיק — סיסמה בלבד, בלי MFA,
+#: #1340: עוגייה שהקיוסק (פורט הסוכן, :7712) הנפיק — סיסמה בלבד, בלי MFA,
 #: ב-HTTP בוילן ההפצה. תקפה בפורט הסוכן; הקונסולה (``CONSOLE_APP_FLAG``) מסרבת לה.
 PURPOSE_KIOSK = "kiosk"
-#: #1340: ``app.state`` של אפליקציית הקונסולה (:8081) נושא את הדגל הזה, ושם
-#: עוגיית קיוסק אינה session; של אפליקציית הסוכן (:8080) — ``KIOSK_APP_FLAG``,
+#: #1340: ``app.state`` של אפליקציית הקונסולה (:443) נושא את הדגל הזה, ושם
+#: עוגיית קיוסק אינה session; של אפליקציית הסוכן (:7712) — ``KIOSK_APP_FLAG``,
 #: ושם הכניסה מנפיקה עוגיית קיוסק. ``create_app`` המשולב (בדיקות) אינו נושא
 #: אף אחד מהם, ושם ההתנהגות היא הישנה — הפיצול נבדק על שתי האפליקציות.
 CONSOLE_APP_FLAG = "refuses_kiosk_sessions"
@@ -129,13 +129,13 @@ def dependencies(conn: sqlite3.Connection):
 
 #: #1073 (הכרעת נדב 18/09): למשתמש הפצה אין קונסולה. הוא עובד ממחשב
 #: הבנייה (התפריט/ה-GUI, דרך פורט הסוכן); הניהול הוובי
-#: (:8081) הוא של admin בלבד.
+#: (:443) הוא של admin בלבד.
 DEPLOY_NO_CONSOLE = "deploy_no_console"
 DEPLOY_NO_CONSOLE_HE = "משתמש הפצה עובד ממחשב הבנייה, לא מהקונסולה"
 
 
 def console_only(conn: sqlite3.Connection):
-    """dependency לאפליקציית הקונסולה (:8081): תפקיד ``deploy`` → 403 על
+    """dependency לאפליקציית הקונסולה (:443): תפקיד ``deploy`` → 403 על
     **כל** נתיב, לא רק בכניסה (#1073).
 
     הכניסה עצמה מסרבת ל-deploy, אבל העוגייה שפורט הסוכן מנפיק

@@ -135,11 +135,11 @@ def test_close_round_queues_behind_a_writer_instead_of_failing_with_locked(
     if where == "claim":
         writer.arm()
     else:
-        # The `closing -> closed` write comes after the sender is stopped.
+        # The `closing -> closed` write comes after the sender is stopped (#3173: the chunk engine, the only one).
         def stop(*_args):
             writer.arm()
             return None
-        monkeypatch.setattr(ctx.sender, "stop", stop)
+        monkeypatch.setattr(ctx.chunk, "stop", stop)
 
     outcome = _close_on_its_own_thread(ctx)
     writer.release.set()
@@ -158,9 +158,9 @@ def test_the_restore_after_a_failed_close_queues_too_and_the_round_is_not_left_c
 
     def stop(*_args):
         writer.arm()
-        return 4242          # udp-sender is still alive after the stop: close_round must undo `closing`
+        return 4242          # chunkcast send is still alive after the stop: close_round must undo `closing`
 
-    monkeypatch.setattr(ctx.sender, "stop", stop)
+    monkeypatch.setattr(ctx.chunk, "stop", stop)
 
     outcome = _close_on_its_own_thread(ctx)
     writer.release.set()

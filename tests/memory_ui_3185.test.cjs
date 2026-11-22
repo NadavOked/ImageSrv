@@ -292,22 +292,12 @@ function roundCtx(history) {
   return t;
 }
 
-test('the round table has the "קצב ואיבוד" column: the rate, and the loss in words', () => {
+test('#3978 (נדב 21/11): the round table has no "קצב ואיבוד" column; "הרשת" says it alone', () => {
   const {ctx, run} = roundCtx([H(), H({id: 'rr2', flow: {waves: 1, kept: 1, rate_bps: 300e6, loss_blocks: 0}})]);
   const html = run('roomHistoryHtml()');
-  assert.match(html, /<th>קצב ואיבוד<\/th>/);
-  assert.match(strip(html), /260 Mbps איבוד 41 בלוקים/);
-  assert.match(strip(html), /300 Mbps בלי איבוד/);
-  assert.equal(ctx.memFlowCell(H().flow).includes('class="mono"'), true);
-});
-
-test('a round whose waves are gone from the short memory is "לא נשמר", and an unmeasured loss is not "no loss"', () => {
-  const {ctx} = roundCtx([]);
-  assert.match(ctx.memFlowCell({waves: 1, kept: 0, rate_bps: null, loss_blocks: null}), /לא נשמר/);
-  assert.doesNotMatch(strip(ctx.memFlowCell({waves: 1, kept: 0, rate_bps: null, loss_blocks: null})), /0|בלי איבוד/);
-  const unknown = strip(ctx.memFlowCell({waves: 1, kept: 1, rate_bps: 300e6, loss_blocks: null}));
-  assert.match(unknown, /איבוד לא נמדד/); assert.doesNotMatch(unknown, /בלי איבוד/);
-  assert.match(ctx.memFlowCell(undefined), /לא נקרא/);
+  assert.doesNotMatch(html, /קצב ואיבוד|איבוד 41 בלוקים|260 Mbps/);
+  assert.match(html, /<th[^>]*>מצב<\/th><th[^>]*>הרשת<\/th><th[^>]*>תאריך<\/th>/);
+  assert.equal(typeof ctx.memFlowCell, 'undefined');
 });
 
 test('a row opens to a summary on a click or Enter/Space, and only one round is open at a time', () => {
@@ -339,7 +329,7 @@ test('the opened row shows the wave, the receivers, the drives and the brain\'s 
   run(`MEM["/room/history/rr1/summary"] = ${JSON.stringify(SUMMARY())}`);
   const text = strip(ctx.memRoundDetail(H(), 9));
   assert.match(text, /win-f2-1113 · 05\/11\/2026/);
-  assert.match(text, /קצב שנבחר 260 Mbps/); assert.match(text, /נשלחו 16\.0 GB/); assert.match(text, /בלוקים שאבדו 41 · שודרו מחדש/);
+  assert.match(text, /קצב שנבחר 260 Mbps/); assert.match(text, /נשלחו 16\.0 GB/); assert.match(text, /חתיכות שאבדו 41 · שודרו מחדש/);
   assert.match(text, /משכפל 01 0 3 לא נקרא/, 'abandoned was never read: "not read", not 0');
   assert.match(text, /352 נכתב 78% מהממוצע של הדגם/);
   assert.match(text, /לא נכתב/); assert.match(text, /לא ידוע/);
@@ -351,7 +341,7 @@ test('a wave that was not kept is "לא נשמר" in the opened row, not zero lo
   const {ctx, run} = roundCtx([H()]);
   run(`MEM["/room/history/rr1/summary"] = ${JSON.stringify(SUMMARY({waves: [{session_id: 's', kept: false, created_at: 'x'}]}))}`);
   const one = strip(ctx.memRoundDetail(H(), 9));
-  assert.match(one, /קצב שנבחר לא נשמר/); assert.match(one, /בלוקים שאבדו לא נשמר/);
+  assert.match(one, /קצב שנבחר לא נשמר/); assert.match(one, /חתיכות שאבדו לא נשמר/); assert.doesNotMatch(one, /בלוקים שאבדו/);
   run(`MEM["/room/history/rr1/summary"] = ${JSON.stringify(SUMMARY({waves: [{session_id: 'a', kept: true, rate_bps: 300e6, sent_bytes: 5e9, loss_blocks: 0, created_at: 'x'}, {session_id: 'b', kept: false, created_at: 'y'}]}))}`);
   const html = ctx.memRoundDetail(H(), 9);
   assert.match(html, /<th>גל<\/th><th>קצב<\/th>/);
@@ -384,4 +374,14 @@ test('the console still loads in the order index.html gives, with memory_ui.js a
   const at = (n) => html.indexOf(`src="${n}?v=`);
   assert.ok(at('console.js') > 0 && at('disks.js') > at('console.js') && at('memory_ui.js') > at('disks.js'));
   assert.equal(new Set([...html.matchAll(/\?v=(\d+\.\d+)"/g)].map((m) => m[1])).size, 1, 'one ?v= for every include');
+});
+
+test('#3173: a chunk wave says its loss in chunks (lost_chunks) under "חתיכות שאבדו"; the old sender\'s blocks win where a row has them', () => {
+  const {ctx, run} = roundCtx([H()]);
+  run(`MEM["/room/history/rr1/summary"] = ${JSON.stringify(SUMMARY({waves: [{session_id: 's', kept: true, rate_bps: 300e6, sent_bytes: 5e9, loss_blocks: null, lost_chunks: 7, created_at: 'x'}]}))}`);
+  assert.match(strip(ctx.memRoundDetail(H(), 9)), /חתיכות שאבדו 7 · שודרו מחדש/);
+  run(`MEM["/room/history/rr1/summary"] = ${JSON.stringify(SUMMARY({waves: [{session_id: 's', kept: true, rate_bps: 300e6, sent_bytes: 5e9, loss_blocks: null, lost_chunks: null, created_at: 'x'}]}))}`);
+  assert.match(strip(ctx.memRoundDetail(H(), 9)), /חתיכות שאבדו לא נמדד/, 'not measured is not "none"');
+  run(`MEM["/room/history/rr1/summary"] = ${JSON.stringify(SUMMARY({waves: [{session_id: 'a', kept: true, rate_bps: 300e6, sent_bytes: 5e9, loss_blocks: null, lost_chunks: 3, created_at: 'x'}, {session_id: 'b', kept: true, rate_bps: 300e6, sent_bytes: 4e9, loss_blocks: null, lost_chunks: 0, created_at: 'y'}], drives: []}))}`);
+  assert.doesNotMatch(strip(ctx.memRoundDetail(H(), 9)), /לא נמדד/, 'both waves measured their loss in chunks');
 });

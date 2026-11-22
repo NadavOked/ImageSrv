@@ -38,8 +38,8 @@ function setup({search = '', fixtures = {}} = {}) {
       documentElement: {setAttribute() {}}, addEventListener() {}, removeEventListener() {}},
     window: {addEventListener() {}, matchMedia: () => ({matches: false}), open() {}},
     localStorage: {getItem: () => null, setItem() {}, removeItem() {}},
-    location: {pathname: '/', search, hash: '', origin: 'https://10.10.10.10:8081', hostname: '10.10.10.10',
-      href: 'https://10.10.10.10:8081/' + search, replace: (u) => navigated.push(u)},
+    location: {pathname: '/', search, hash: '', origin: 'https://10.10.10.10', hostname: '10.10.10.10',
+      href: 'https://10.10.10.10/' + search, replace: (u) => navigated.push(u)},
     history: {replaceState: (_s, _t, u) => replaced.push(u)},
     navigator: {clipboard: {writeText: async (t) => { ctx.copied = t; }}},
     CSS: {escape: (x) => x},
@@ -208,7 +208,7 @@ test('timeout: 10 minutes without an answer stops the checking and names what to
   assert.match(h, /השרת התנתק ב-11:02:13 ולא ענה מאז/, 'the time is on the server clock (skew from the last status)');
   assert.match(h, /<span class="u-led e"><\/span><span><b>אין תשובה מאז 11:02:13<\/b>/);
   assert.match(h, /<small>בלי תשובה<\/small>/);
-  assert.match(h, /מסך השרת עצמו[\s\S]*https:\/\/10\.10\.10\.10:8081[\s\S]*\/var\/log\/imagesrv\/server-upgrade\.log/);
+  assert.match(h, /מסך השרת עצמו[\s\S]*https:\/\/10\.10\.10\.10<[\s\S]*\/var\/log\/imagesrv\/server-upgrade\.log/);
   assert.match(h, /הבדיקה האוטומטית נעצרה\. אף שלב לא בוטל בשרת\./);
   assert.match(h, /onclick="updWaitMore\(\)">חכה עוד 10 דקות<[\s\S]*onclick="updCheckNow\(\)">בדוק עכשיו</);
   assert.doesNotMatch(h, /updClose/, 'the console is unusable while the server is down — no way "back" into it');

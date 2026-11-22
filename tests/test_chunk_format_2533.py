@@ -32,7 +32,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from conftest import MANIFEST_256, write_image
+from conftest import MANIFEST_256, unindex_image, write_image
 
 import chunk_image as C
 import pcl_image as P
@@ -462,20 +462,6 @@ def test_a_cloner_room_round_of_an_old_image_is_refused_by_name(room_server):
     assert ctx.conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 0
 
 
-def test_a_class_round_and_a_pull_of_an_old_image_are_refused_by_name(server, images_root):
-    from conftest import setup_classroom
-    ids = setup_classroom(server)
-    _make_legacy(images_root)
-    round_ = server["deploy"].post("/api/console/sessions",
-                                   json={"group_id": ids["group"], "image_id": "img_7f3a91"})
-    assert round_.status_code == 400 and "פורמט ישן" in round_.json()["detail"], round_.text
-    pull = server["anon"].post("/api/v1/agent/pulls", json={
-        "mac": ids["mac1"], "image_id": "img_7f3a91", **ADMIN})
-    assert pull.status_code in (400, 403), pull.text
-    assert "פורמט ישן" in pull.json()["error"], pull.text
-    assert server["ctx"].conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 0
-
-
 def test_the_console_list_carries_the_label(server, images_root):
     _make_legacy(images_root)
     shown = {item["id"]: item for item in server["admin"].get("/api/console/images").json()}
@@ -490,6 +476,7 @@ def test_the_console_list_carries_the_label(server, images_root):
 def _served(server, images_root: Path) -> tuple[bytes, str]:
     """img_7f3a91 of the server fixture, its p3 a real image_format 2 file with a verified index."""
     blob, index = built()
+    unindex_image(images_root, "img_7f3a91", unsigned=True)     # the fixture's image comes derived: here nothing is yet
     path = images_root / "img_7f3a91" / "manifest.json"
     raw = json.loads(path.read_text(encoding="utf-8"))
     signed = C.signed(raw, {3: index})
@@ -616,3 +603,17 @@ def test_the_servers_cut_with_real_zstd_derives_back(tmp_path):
     assert subprocess.run(["zstd", "-dc", str(path)], capture_output=True, check=True,
                           stdin=subprocess.DEVNULL).stdout == STREAM
     assert F.derive_index(path, False, TOTAL * 4096, new=PY).render() == text
+
+
+def test_a_class_round_and_a_pull_of_an_old_image_are_refused_by_name(server, images_root):
+    from conftest import setup_classroom
+    ids = setup_classroom(server)
+    _make_legacy(images_root)
+    round_ = server["deploy"].post("/api/console/sessions",
+                                   json={"group_id": ids["group"], "image_id": "img_7f3a91"})
+    assert round_.status_code == 400 and "פורמט ישן" in round_.json()["detail"], round_.text
+    pull = server["anon"].post("/api/v1/agent/pulls", json={
+        "mac": ids["mac1"], "image_id": "img_7f3a91", **ADMIN})
+    assert pull.status_code in (400, 403), pull.text
+    assert "פורמט ישן" in pull.json()["error"], pull.text
+    assert server["ctx"].conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 0

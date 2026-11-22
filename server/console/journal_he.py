@@ -15,6 +15,7 @@ from server.brain import shadowgate as brain_shadowgate   # #3563
 from server.brain import recall as brain_recall   # #3064 שלב 5: תוויות ספי הזיכרון
 from server.brain import drawerhold as brain_drawerhold   # #2023: תווית ההגדרה brain_drawer_hold
 from server.brain import cpucap as brain_cpucap   # #3064 (K12): תווית המתג
+from server.brain import rateinputs as brain_rateinputs   # #3977: תווית המתג של שני קלטי הקצב
 from server.brain import completing as brain_completing   # #3064 (B30): תווית המתג
 from server.disks import crcwarn, disk_sets, smart_history
 from server.learn import netrate, server_cap   # #3464: תווית ההגדרה; #3600
@@ -346,7 +347,8 @@ EVENTS_HE = {
     "known_macs_apply_failed": "עדכון רשימת המכונות הרשומות ל-dnsmasq נכשל",
     "known_macs_firewall_failed": "עדכון רשימת המכונות הרשומות בחומת האש של כרטיס ההפצה נכשל",   # נדב 14/11
     "firewall_rewritten": "חומת האש של גרסה קודמת נכתבה מחדש (נוספה הקבוצה known_macs)",   # #3224
-    "firewall_rewrite_failed": "כתיבת חומת האש מחדש אחרי שדרוג נכשלה — פורטי udpcast פתוחים לכל מחשב",   # #3224
+    "firewall_rewrite_failed": "כתיבת חומת האש מחדש אחרי שדרוג נכשלה — פורטי השידור פתוחים לכל מחשב",   # #3224
+    "firewall_rewrite_held": "חומת האש הישנה לא נכתבה מחדש: השדרוג עומד לחזור לגרסה הקודמת",   # #3871 (upgrade_hold)
     "deploy_unregistered": "פנייה משירותי השיכפול ממחשב לא רשום ברשת ההפצה — סורבה",   # נדב 14/11
     "nic_alias_learned": "כרטיס האתחול של מכונה שרשומה לפי כרטיס אחר זוהה (#524) -- ועובר את שער ההפצה",   # #3225
     "dnsmasq_dropin_applied": "הניסיון החוזר של dnsmasq הותקן ונטען בעליית השרת",   # #2174
@@ -483,7 +485,8 @@ EVENTS_HE = {
     "update_check": "בדיקת עדכון מול הריפו הציבורי",
     "user_disabled": "משתמש הושבת",
     "user_enabled": "משתמש הופעל מחדש",
-    "send_simulated": "שידור מדומה (סימולציה בלבד — אין udp-sender)",
+    "send_simulated": "שידור מדומה (סימולציה בלבד)",   # שורות יומן ישנות; השולח המדומה הוסר ב-#3173
+    "stream_engine_retired": "מנוע השידור הישן הוסר — השרת משדר במנוע החתיכות",   # #3173
     "shrink_open": "רשומת כיווץ נפתחה לדיסק — הטבלה המקורית נשמרה בשרת",
     # #1861: ברירת המחדל של `event` ב-`shrink_records.close_record`.
     "shrink_close": "רשומת כיווץ נסגרה",
@@ -664,6 +667,7 @@ SETTINGS_HE = {
     brain_budget.SETTING: brain_budget.LABEL_HE,   # #3064 (שלב 3): הגבול העליון של תקציב הרשת
     brain_drawerhold.SETTING: brain_drawerhold.LABEL_HE,   # #2023: השלמה מעכבת רק את המגירה שנפגעה
     brain_cpucap.SETTING: brain_cpucap.LABEL_HE,   # #3064 (K12): שער המעבד
+    brain_rateinputs.SETTING: brain_rateinputs.LABEL_HE,   # #3977: שני קלטי הקצב של מנוע החתיכות
     brain_completing.SETTING: "המוח: אימות והורדה מחדש של חתיכות שלא תאמו (במקום כתיבה מחדש של כל הדיסק)",   # #3064 (B30)
     **brain_recall.LABELS_HE,   # #3064 (שלב 5): ספי ההחלטות לפי הזיכרון
     "unregistered_autoboot_seconds": "מחשב לא רשום: עלייה אוטומטית מהדיסק (שניות)",   # #1802
@@ -688,7 +692,7 @@ SETTINGS_HE = {
     # #1991: אותן תוויות כמו בהגדרות הקונסולה (console.js)
     "identity_check": "אימות מחשבים לפי כתובת ה-DHCP",
     "readback_full": "אימות מלא אחרי הכתיבה",
-    "stream_engine": "מנוע שידור (ניסיוני)",
+    "stream_engine": "מנוע שידור",   # #3173: יצא מההגדרות; התווית נשארת לשורות יומן ישנות
     "update_enabled": "עדכון גרסה מהקונסולה",
 }
 
@@ -970,6 +974,8 @@ class JournalTranslator:
                     value = idle_minutes_he(m.group(2))
                 if m.group(1) == brain_veto.SETTING:   # #3064: "צל (רושם בלבד)", לא "shadow"
                     value = brain_veto.MODES_HE.get(m.group(2), m.group(2))
+                if m.group(1) == brain_rateinputs.SETTING:   # #3977: "צל (רושם בלבד)", לא "shadow"
+                    value = brain_rateinputs.MODES_HE.get(m.group(2), m.group(2))
                 if m.group(1) == brain_drawerhold.SETTING:   # #2023: "on"/"off", לא נוסח אנגלי
                     value = {"on": "פעיל", "off": "כבוי"}.get(m.group(2), m.group(2))
                 text = f"{name}: {value}"

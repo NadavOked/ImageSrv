@@ -231,13 +231,11 @@ def test_units_that_mount_storage_can_enter_pid1_namespace(unit):
 def _env(tmp_path, images_root, clock, monkeypatch, fake, **kwargs):
     from fastapi.testclient import TestClient
 
-    from server.rounds import sender as sender_module
     from server.console import users
     from server.app import create_app
-    from test_sender import Recorder
+    from fakesend import Recorder
 
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, sender_runner=Recorder(block=True),
                      storage_hooks=fake.as_dict(), **kwargs)
     ctx = app.state.ctx
@@ -268,7 +266,7 @@ def restart(tmp_path, images_root, clock, monkeypatch):
         "device": BLANK["device"], "serial": BLANK["serial"],
         "size_bytes": BLANK["size_bytes"], "name": "extra20", "confirm_erase": True})
     assert added.status_code == 200 and added.json()["state"] == "connected"
-    app.state.ctx.sender.stop()
+    app.state.ctx.chunk.stop()
     apps = []
 
     def again(fake, **kwargs):
@@ -279,7 +277,7 @@ def restart(tmp_path, images_root, clock, monkeypatch):
 
     yield again, added.json()
     for item in apps:
-        item.state.ctx.sender.stop()
+        item.state.ctx.chunk.stop()
 
 
 def test_after_restart_a_disk_that_is_not_mounted_is_not_shown_connected(restart):
@@ -309,7 +307,7 @@ def test_after_reboot_a_disk_that_is_mounted_again_is_not_shown_unreachable(rest
     app, client = again(down)
     sl.poll(app.state.ctx.conn, app.state.ctx.library, down.as_dict())
     assert _disk_row(client)["state"] == "unreachable"
-    app.state.ctx.sender.stop()
+    app.state.ctx.chunk.stop()
     up = DiskFake()
     up.mounted.add(str(Path(added["mount_point"])))    # ה-fstab עיגן באתחול
     app, client = again(up)
@@ -341,7 +339,7 @@ def test_the_local_folder_and_disconnected_locations_are_not_marked(restart):
     again, added = restart
     app, client = again(DiskFake())
     client.post(f"/api/console/storage-locations/{added['id']}/disconnect")
-    app.state.ctx.sender.stop()
+    app.state.ctx.chunk.stop()
     app, client = again(DiskFake())
     rows = {r["id"]: r for r in client.get("/api/console/storage-locations").json()["locations"]}
     assert rows["loc_local"]["state"] == "connected"

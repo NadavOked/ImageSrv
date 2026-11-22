@@ -44,7 +44,7 @@ def test_apply_writes_exact_dropin_restarts_and_reads_back():
     assert result == {"synchronized": True, "server": "1.2.3.4",
                       "offset_ms": -1.25, "checked_at": "2026-10-19T12:34:00+00:00",
                       "last_sample": {"server": "1.2.3.4", "age_s": 10,
-                                      "offset_ms": pytest.approx(-0.01)}}   # #2796
+                                      "offset_ms": pytest.approx(-0.01), "poll_s": 64}}   # #2796
 
 
 def test_default_write_has_exact_file_content(tmp_path, monkeypatch):
@@ -133,9 +133,9 @@ def test_unsynchronized_requires_both_normal_leap_and_selected_source():
 @pytest.fixture()
 def api(tmp_path, images_root, clock):
     from server.app import create_app
-    from test_sender import Recorder
+    from fakesend import Recorder
     machine = ClockMachine()
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
                      sender_runner=Recorder(block=True), host_hooks=machine.hooks())
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", check_policy=False)
@@ -144,7 +144,7 @@ def api(tmp_path, images_root, clock):
     complete_console_login(admin, ctx.conn, "noc", "admin-pass-123")
     assert deploy.post("/api/console/login", json={"username":"tech", "password":"deploy-pass-123"}).status_code == 200
     yield admin, deploy, machine, ctx
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def test_admin_can_read_change_and_check_now(api):

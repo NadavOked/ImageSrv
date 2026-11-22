@@ -46,8 +46,8 @@ REPO = Path(__file__).resolve().parents[1]
 #: ה-HP מה-Issue — לא רשום.
 STRANGER = "5c:60:ba:3e:b3:22"
 #: כתובת ההפצה שאיתה conftest יוצר את השרת, ורגל אחרת של אותו שרת.
-VLAN = "http://10.44.12.10:8080"
-OFF_VLAN = "http://10.10.10.8:8080"
+VLAN = "http://10.44.12.10:7712"
+OFF_VLAN = "http://10.10.10.8:7712"
 CFG = GrubConfig(server_base=VLAN)
 F2_LABEL = "F2 — הפעלה מחדש"
 SETTING = "unregistered_autoboot_seconds"
@@ -100,7 +100,7 @@ def test_the_flag_boots_the_agent_with_a_clean_kernel_line():
     assert "set default=imagesrv" in text and "set timeout=0" in text
     assert EFI_DEFAULT not in text                                     # המסך בשתי הפלטפורמות
     # עיקרון 2: רק הכתובת. בלי mode, בלי MAC, בלי שום דבר מהתשובה
-    assert linux_args(text) == ["imagesrv.server=http://10.44.12.10:8080"]
+    assert linux_args(text) == ["imagesrv.server=https://10.44.12.10:7712"]
     assert "unregistered" not in text.split("# decision: ")[1].split("\n", 1)[1]
     assert "--id local" in text                                        # הדיסק נשאר כנפילה
     text.encode("ascii")
@@ -126,7 +126,7 @@ def test_the_autoboot_file_boots_the_disk_on_uefi_only():
     assert head.index("set default=imagesrv") < head.index(EFI_DEFAULT), head
     assert "set timeout=0" in head
     assert "--id imagesrv" in text and "--id local" in text
-    assert linux_args(text) == ["imagesrv.server=http://10.44.12.10:8080"]
+    assert linux_args(text) == ["imagesrv.server=https://10.44.12.10:7712"]
     text.encode("ascii")
 
 
@@ -157,7 +157,7 @@ def test_the_screen_comes_on_every_boot(server):
         text = menu(server, STRANGER)
         assert decision(text) == "# decision: unregistered-screen", text
         assert "set default=imagesrv" in text and EFI_DEFAULT not in text
-        assert linux_args(text) == ["imagesrv.server=http://10.44.12.10:8080"]
+        assert linux_args(text) == ["imagesrv.server=https://10.44.12.10:7712"]
         assert STRANGER not in text.split('menuentry "ImageSrv"')[1]   # ה-MAC אינו בערך הסוכן
         text.encode("ascii")
     # #1802 דרישה 5: היומן נשאר `unknown_mac`
@@ -284,14 +284,14 @@ def _rendered(tmp_path, images_root, clock, source: str, interface: str | None) 
     from server.console import dhcp as console_dhcp
     from server.app import create_app
     from server.db import set_setting
-    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080", now_fn=clock)
+    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:7712", now_fn=clock)
     conn = app.state.ctx.conn
     set_setting(conn, dhcp.SETTING_PREFIX + "eth1", dhcp.InterfaceConfig("eth1", **GOOD).to_json())
     set_setting(conn, dhcp.SETTING_PREFIX + "eth2", dhcp.InterfaceConfig("eth2", **CLASS).to_json())
-    url = "http://10.44.9.10:8080" if source != "none" else None
+    url = "http://10.44.9.10:7712" if source != "none" else None
     deploy = deploy_net.DeployContext(
         state=deploy_net.DeployState(source, interface, url),
-        agent_port=8080, tftp_root=Path("/srv/tftp"), repo_dir=REPO)
+        agent_port=7712, tftp_root=Path("/srv/tftp"), repo_dir=REPO)
     text, _proxy = console_dhcp.render_dnsmasq(app.state.ctx, deploy)
     conn.close()
     return text

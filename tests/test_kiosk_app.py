@@ -1,6 +1,6 @@
 """#738 (tracer 2 של #703) + #1247: ה-allowlist של מחשב הבנייה על פורט הסוכן.
 
-#1247 הסיר את הקיוסק כאפליקציה נפרדת (:8082) ואת מסך התחנה בדפדפן
+#1247 הסיר את הקיוסק כאפליקציה נפרדת (מאזין משלה) ואת מסך התחנה בדפדפן
 (`/console/station`). ה-allowlist עצמו (`server/agent/kiosk.py`) נשאר, כי הסוכן
 (buildmenu.sh/roomflow.sh/הגואי הנייטיב) צורך אותו דרך פורט הסוכן.
 
@@ -33,7 +33,7 @@ from fastapi.testclient import TestClient
 
 from server.console import users
 from server import app as server_app
-from server.app import create_agent_app, create_console_app, create_runtime
+from server.app import create_agent_app, create_boot_app, create_console_app, create_runtime
 from server.console.storage import create_storage_router
 from server.console.api import create_console_router
 
@@ -67,6 +67,9 @@ EXPECTED_KIOSK_ROUTES = frozenset({
     # #1269: רשימת דגמי הדרייברים — מתג "להוסיף דרייברים" בגואי של מחשב הבנייה
     # (קריאה בלבד, current_user; `drivers.models`, בלי קבצים ובלי נתיבים)
     ("GET", "/api/console/room/driver-models"),
+    # #3897: which cloners and drawers the server proposes for N disks -- read only (current_user), next to
+    # POST /room that the build machine opens a round with
+    ("GET", "/api/console/room/suggest"),
     # #65 (הכרעת נדב 05/09: הבחירה במחשב הבנייה): "כבה אותו" — מכונה **אחת**
     # שהגל הפתוח מראה כחסרה. כיבוי כל החדר (`/room/poweroff`) נשאר בקונסולה בלבד.
     ("POST", "/api/console/room/missing/{mac}/poweroff"),
@@ -147,11 +150,11 @@ def kiosk_env(tmp_path: Path, images_root: Path, classrooms_on):
     WoL מזויף (`wol_send`) כדי ש-`/room/wake` יעבוד בלי חומרה. סבב לא
     נפתח בהקמה, אבל השולח נבנה בכל מקרה — ריאל אחד היה מגיע ל-udp-sender
     (conftest חוסם ומכשיל)."""
-    from test_sender import Recorder                       # noqa: PLC0415
+    from fakesend import Recorder                       # noqa: PLC0415
 
     woken: list[bytes] = []
     rt = create_runtime(
-        tmp_path / "data", images_root, "http://10.44.12.10:8080",
+        tmp_path / "data", images_root, "http://10.44.12.10:7712",
         sender_runner=Recorder(block=True), wol_send=woken.append,
     )
     console_app = create_console_app(rt)
@@ -174,10 +177,12 @@ def kiosk_env(tmp_path: Path, images_root: Path, classrooms_on):
         json={"group_id": "grp_CLONERS", "text": "aa:bb:cc:00:00:20 c1\n"},
     ).json()["saved"] == 1
 
+    boot_app = create_boot_app(rt)   # #3486: /boot במאזין משלו, לא על פורט הסוכן
     yield {"rt": rt, "console_app": console_app, "agent_app": agent_app,
+           "boot_app": boot_app, "boot_anon": TestClient(boot_app),
            "kiosk": TestClient(agent_app), "anon": TestClient(agent_app),
            "woken": woken}
-    rt.ctx.sender.stop()
+    rt.ctx.chunk.stop()
 
 
 def _login_kiosk(env, username="noc", password="admin-pass-123") -> TestClient:
@@ -207,13 +212,13 @@ def test_forbidden_admin_apis_are_not_reachable_on_kiosk(kiosk_env):
 
 
 def test_kiosk_app_listener_and_station_page_are_gone(kiosk_env):
-    """#1247: אין אפליקציית קיוסק, אין מאזין :8082, אין דף /console/station."""
+    """#1247: אין אפליקציית קיוסק, אין מאזין משלה, אין דף /console/station."""
     import inspect
     from server import main as server_main
 
     assert not hasattr(server_app, "create_kiosk_app")
     src = inspect.getsource(server_main)
-    assert "--kiosk-port" not in src and "8082" not in src
+    assert "--kiosk-port" not in src
     assert not (Path(server_app.__file__).parent / "static" / "station").exists()
     admin = TestClient(kiosk_env["console_app"])
     admin.post("/api/console/login", json={"username": "noc", "password": "admin-pass-123"})

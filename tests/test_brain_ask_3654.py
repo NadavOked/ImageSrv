@@ -444,7 +444,7 @@ def test_the_room_clock_expires_a_due_question_with_nobody_asking(tmp_path):
 
     images = tmp_path / "images"
     write_image(images, MANIFEST_256)
-    app = create_app(tmp_path / "data", images, "http://10.44.12.10:8080", now_fn=Clock(), room_clock_interval=0.02)
+    app = create_app(tmp_path / "data", images, "http://10.44.12.10:7712", now_fn=Clock(), room_clock_interval=0.02)
     ctx = app.state.ctx
     started = datetime.now(timezone.utc) - timedelta(hours=1)
     ask_id = opened(ctx.conn, now=started)            # נפתחה לפני שעה, ותקרתה עשר דקות
@@ -458,6 +458,6 @@ def test_the_room_clock_expires_a_due_question_with_nobody_asking(tmp_path):
                     break
                 time.sleep(0.1)
     finally:
-        ctx.sender.stop()
+        ctx.chunk.stop()
     assert expired, "the room clock never expired the due question"
     assert verdicts(ctx.conn) == ["ASKED", "EXPIRED"]

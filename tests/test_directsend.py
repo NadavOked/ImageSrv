@@ -1,88 +1,27 @@
-"""#715 — הפצה ישירה ממחשב הבנייה: הסוכן כמקור המולטיקאסט.
+"""#715 — הפצה ישירה ממחשב הבנייה: הסוכן כמקור הגל.
 
-השרת נשאר המתזמר; מחשב הבנייה מריץ `udp-sender` על הדיסק שלו. מה
-שנבדק כאן הוא שהשידור מהסוכן **זהה** לשידור מהשרת בכל דגל שקובע את
-התנהגות הזרם — אחרת מקבל שכוונן ל-`--retries-until-drop 200` של השרת
-(#437) היה מקבל ברירת מחדל אחרת ממקור אחר, והכשל היה נראה כמו רשת.
+השרת נשאר המתזמר; מחשב הבנייה קורא את הדיסק שלו ומשדר אותו. #3173: הגל הוא של מנוע
+החתיכות בלבד (directchunk.sh, test_directchunk_agent_3161.py) -- הדגלים של השולח הישן
+והבדיקות שלהם יצאו איתו. מה שנשאר כאן הוא הקופסה שכל בדיקות ההפצה הישירה נשענות עליה
+(`direct_run`), והמסלול שלפני הגל ואחריו: קריאה 1 בלי העלאה, המניפסט, ההמתנה לגל, ומה
+שהמקור עושה כשהגל לא בא.
+
+`udp-sender` מזויף נשאר בקופסה בכוונה: אם קוד כלשהו עוד מריץ אותו, `udp.argv` נכתב
+ובדיקה שבודקת שהוא לא קיים נופלת.
 """
 
 from __future__ import annotations
 
-import shlex
-from pathlib import Path
-
-from test_agent import AGENT, BASH, posix, sh
+from test_agent import BASH, posix
 from test_timeouts import make_stubs
 from native import requires_native
 from agentlib import flat_lib
 
 pytestmark = requires_native(("bash", BASH))
 
-#: udp-sender מזויף שרושם את ה-argv שלו ובולע את stdin.
-RECORD_ARGV = (
-    '#!/bin/sh\n'
-    'printf "%s\n" "$@" > "$UDP_ARGV"\n'
-    'cat > /dev/null\n'
-    'exit 0\n'
-)
-
-
-def _run_sender(tmp_path: Path, *args: str) -> list[str]:
-    box = tmp_path / "box"
-    run = box / "run"
-    run.mkdir(parents=True)
-    argv = box / "argv.txt"
-    quoted = " ".join(shlex.quote(a) for a in args)
-    sh(
-        make_stubs(box / "stubs", {"udp-sender": RECORD_ARGV})
-        + f"export RUN_DIR={posix(run)!r} IFACE=eth0 UDP_ARGV={posix(argv)!r}; "
-        f". {posix(AGENT)}/lib/core/common.sh; . {posix(AGENT)}/lib/capture/directsend.sh; "
-        f"printf 'bytes' | direct_udp_send {quoted}"
-    )
-    return argv.read_text(encoding="utf-8").splitlines()
-
-
-def _flags(argv: list[str]) -> dict[str, str | None]:
-    out: dict[str, str | None] = {}
-    i = 0
-    while i < len(argv):
-        word = argv[i]
-        assert word.startswith("--"), argv
-        if i + 1 < len(argv) and not argv[i + 1].startswith("--"):
-            out[word] = argv[i + 1]
-            i += 2
-        else:
-            out[word] = None
-            i += 1
-    return out
-
-
-def test_the_agent_sends_with_the_servers_own_flags(tmp_path):
-    """אותם דגלים בדיוק כמו `SenderEngine.command_for` — חוץ מ-`--file`
-    (הזרם מגיע ב-stdin) ו-`--interface` (הכרטיס של מחשב הבנייה)."""
-    from server.rounds.sender import SenderEngine
-
-    engine = SenderEngine(library=None, portbase=31200, max_wait=120,
-                          start_timeout=180, retries_until_drop=200,
-                          max_bitrate=None)
-    server_flags = _flags(engine.command_for(Path("p1.pcl.zst"), 2)[1:])
-    agent_flags = _flags(_run_sender(tmp_path, "31200", "2", "120", "180", "200", ""))
-
-    del server_flags["--file"]
-    assert agent_flags.pop("--interface") == "eth0"
-    assert agent_flags == server_flags
-
-
-def test_max_bitrate_is_passed_only_when_the_server_set_one(tmp_path):
-    with_cap = _flags(_run_sender(tmp_path / "cap", "31200", "1", "120", "180", "200", "800m"))
-    assert with_cap["--max-bitrate"] == "800m"
-    without = _flags(_run_sender(tmp_path / "nocap", "31200", "1", "120", "180", "200", ""))
-    assert "--max-bitrate" not in without
-
 
 # --- direct_send_run: שתי קריאות, מניפסט בלי העלאה, sha על החוט ---------------
 
-import hashlib
 import json
 import shutil
 
@@ -131,16 +70,31 @@ JQ_SHIM_PY = (REPO / "tests" / "jq_shim.py")
 JQ_STUB = '#!/bin/sh\nexec python "' + posix(JQ_SHIM_PY) + '" "$@"\n'
 
 
-def _answer(session_state="running", task=TASK, receivers=2, bitrate=None):
+def _answer(session_state="running", task=TASK, receivers=2, engine="chunk"):
+    """#3173: the chunk engine's task (task.direct.engine); `engine=None` = a server that named none."""
+    direct = {"session_id": "ses_1", "session_state": session_state, "receivers": receivers}
+    if engine is not None:
+        direct["engine"] = engine
     return {"schema": 1, "known": True, "role": "build", "task": {
         "id": task, "type": "direct_send", "disk": "sda", "image_id": "live_aabbcc",
-        "token": "t" * 48,
-        "direct": {"session_id": "ses_1", "session_state": session_state,
-                   "receivers": receivers,
-                   "multicast": {"portbase": 31200, "min_receivers": receivers,
-                                 "max_wait": 120, "start_timeout": 180,
-                                 "max_wait_later": 600, "start_timeout_later": 780,
-                                 "retries_until_drop": 200, "max_bitrate": bitrate}}}}
+        "token": "t" * 48, "direct": direct}}
+
+
+#: #3173: the chunk wave in a line, for the tests of what comes before and after it (the wave itself is
+#: test_directchunk_agent_3161.py's, with the real directchunk.sh). It is a pass as the real one reads: each
+#: streamed partition read once more -- the view read 1 read (lc_src_node), read 1's own flags, its own cut --
+#: and hashed against the manifest; bytes that differ fail the source by name, as the real pass does.
+CHUNK_RUN = (
+    'direct_chunk_run() { manifest_plan "$3" > "$RUN_DIR/dstub.plan" || return 1; '
+    '_st=$(json_get "$3" ".total_compressed_bytes"); case "$_st" in ""|*[!0-9]*) _st=0 ;; esac; '
+    'target_init "$2" "$_st"; capture_unhib_note "$2" || return 1; echo sending > "$RUN_DIR/state"; : > "$RUN_DIR/chunk.run"; '
+    'while IFS="|" read -r _si _sg _sr _sfs _ss _sz _sf _sh _srest <&3; do case "$_sf" in ""|null) continue ;; esac; '
+    '_sn=$(lc_src_node "$2" "$_si"); _sp=$(partclone_for_fs "$_sfs"); '
+    '_sx=$("$_sp" $(partclone_mode "$_sp" -c) $(capture_pcl_flags "$_sp" "$_sfs") -s "$_sn" -L "$RUN_DIR/targets/$2/partclone.log" 2>/dev/null '
+    '| capture_cut "$_sp" "$RUN_DIR/didx.$_si" 2>/dev/null | sha256sum | cut -c1-64); '
+    '[ "$_sx" = "$_sh" ] || { _direct_failed "$2" "מחיצה $_si: הבייטים שנשלחו שונים מהמניפסט"; return 1; }; '
+    'target_partition_done "$2"; done 3< "$RUN_DIR/dstub.plan"; return 0; }; '
+)
 
 
 #: sgdisk עם שתי מחיצות — ESP ואחריה מחיצת נתונים — לשידור של שני זרמים.
@@ -171,7 +125,8 @@ TWO_PARTITIONS = (
 
 
 def direct_run(tmp_path, *, answer=None, env=None, udp_silent=False, partitions=1,
-               timeout=45, udp_sender=None, extra_stubs=None, pre="", call="direct_send_run"):
+               timeout=45, udp_sender=None, extra_stubs=None, pre="", call="direct_send_run", chunk_run=True):
+    """`chunk_run`: the wave is CHUNK_RUN's (default), or the real directchunk.sh's (False)."""
     box = tmp_path / "box"
     dev, run = box / "dev", box / "run"
     dev.mkdir(parents=True); run.mkdir(parents=True)
@@ -202,12 +157,13 @@ def direct_run(tmp_path, *, answer=None, env=None, udp_silent=False, partitions=
         stubs.setdefault("blkid", "#!/bin/sh\nexit 2\n")
     libs =" ".join(f"[ ! -f {posix(flat_lib())}/{n}.sh ] || . {posix(flat_lib())}/{n}.sh;" if n == "captureview" else f". {posix(flat_lib())}/{n}.sh;" for n in (
         "common", "sysinfo", "diskinfo", "waits", "jsonq", "gptboot", "progress", "failmark", "restore", "manifest",
-        "bootca", "hibernation", "ntfsunhib", "captureview", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink", "directsend", "directrecv", "ui"))   # #87/#929: shrink*.sh לפני capture.sh, כמו בסוכן; #1217: capturesink.sh; #1466: lcsnap.sh (lc_src_node), כמו בסוכן
+        "bootca", "hibernation", "ntfsunhib", "captureview", "shrinkplan", "shrink", "lcsnap", "writemark", "diskfit", "capturegate", "capture", "capturesink", "directsend", "directchunk", "directserve", "ui"))   # #87/#929: shrink*.sh לפני capture.sh, כמו בסוכן; #1217: capturesink.sh; #1466: lcsnap.sh (lc_src_node), כמו בסוכן
     out = run_sh(
         make_stubs(box / "stubs", stubs) + exports + libs
         + "raid_member_reason() { :; }; "   # #1808: the RAID gate has its own tests (test_capture_gates.py); these disks are files
         + f' node_is_block() {{ grep -qxF "$1" {posix(nodes)!r} 2>/dev/null; }}; '
         f'send_hello() {{ cp {posix(box / "answer.json")!r} "$RESP"; }}; '
+        + (CHUNK_RUN if chunk_run else "")   # #3173: the wave, before `pre` -- a test's own wins
         + pre   # #1171: after the libraries, so it can replace one of their functions
         + f"{call} {TASK} sda > {posix(box)}/direct.out 2>&1; "
         'echo "rc=$?"; '
@@ -221,60 +177,6 @@ def _progress(box):
     return json.loads((box / "progress.json").read_text(encoding="utf-8"))
 
 
-def test_the_disk_is_read_twice_hashed_once_on_the_wire_and_nothing_is_uploaded(tmp_path):
-    box, run, out = direct_run(tmp_path)
-    assert out.strip().endswith("rc=0"), out + (run / "agent.log").read_text("utf-8", "replace")
-    manifest = json.loads((run / "new-manifest.json").read_text("utf-8"))
-    expected = hashlib.sha256(b"A" * 4096).hexdigest()
-    assert manifest["partitions"][0]["sha256"] == expected
-    # הקריאה השנייה גובבה על החוט והושוותה למניפסט
-    assert (run / "dsha.1").read_text("utf-8").split()[0] == expected
-    assert (box / "pcl.count").read_text().strip() == "2"
-    # שום בייט לא הועלה: curl נקרא רק ל-PUT של המניפסט, בלי -T ובלי /capture/
-    curl = (box / "curl.argv").read_text("utf-8")
-    assert "/api/v1/direct/tsk_715/manifest" in curl
-    assert "-T" not in curl.splitlines() and "/capture/" not in curl
-    # udp-sender קיבל את ערכי השרת, על הכרטיס שלנו, בלי --file
-    udp = (box / "udp.argv").read_text("utf-8").splitlines()
-    assert "--min-receivers" in udp and udp[udp.index("--min-receivers") + 1] == "2"
-    assert udp[udp.index("--interface") + 1] == "eth0" and "--file" not in udp
-    report = _progress(box)
-    assert report["state"] == "sending" and report["targets"][0]["state"] != "failed"
-    assert report["targets"][0]["bytes_total"] == manifest["total_compressed_bytes"]
-
-
-def test_the_second_partition_waits_for_the_drawers_not_for_the_operator(tmp_path):
-    """#957 בהפצה ישירה: אותו כלל כמו `SenderEngine` — המחיצה הראשונה
-    יוצאת עם `max_wait`/`start_timeout` של השרת, ומהשנייה עם
-    `max_wait_later`/`start_timeout_later` שלו (ממשק 3), כי שם ההמתנה
-    היא למגירה שעוד כותבת את הקודמת ולא למפעיל. הסוכן אינו ממציא את
-    המספרים — הוא מעביר את מה שהשרת נתן, לפי מספר הזרם.
-
-    **בקרה שלילית:** על directsend.sh הישן שני ה-udp-sender מקבלים
-    120/180, וההשוואה של השני נופלת."""
-    # שתי מחיצות = שני ניסיונות עיגון בקריאה הראשונה (~8ש' כל אחד בווינדוס)
-    # ועוד שני זרמים; 45 השניות של מחיצה אחת אינן מספיקות, וזה איטיות
-    # של הקופסה, לא תקיעה — הרצה שנתקעת עדיין נופלת, רק מאוחר יותר.
-    box, run, out = direct_run(tmp_path, partitions=2, timeout=120)
-    assert out.strip().endswith("rc=0"), out + (run / "agent.log").read_text("utf-8", "replace")
-    argv = (box / "udp.argv").read_text("utf-8").splitlines()
-    starts = [i for i, w in enumerate(argv) if w == "--interface"]
-    assert len(starts) == 2, argv
-    first, second = argv[starts[0]:starts[1]], argv[starts[1]:]
-    assert _flags(first)["--max-wait"] == "120" and _flags(first)["--start-timeout"] == "180"
-    assert _flags(second)["--max-wait"] == "600" and _flags(second)["--start-timeout"] == "780"
-    assert _flags(first)["--min-receivers"] == _flags(second)["--min-receivers"] == "2"
-
-
-def test_a_sender_that_exits_zero_without_transferring_is_a_failure(tmp_path):
-    """#438 בצד המקור: udp-sender שפג לו start-timeout יוצא 0 בלי מקבל."""
-    box, run, out = direct_run(tmp_path, udp_silent=True)
-    assert out.strip().endswith("rc=1"), out
-    report = _progress(box)
-    assert report["state"] == "failed"
-    assert "אף מחשב משכפל לא הצטרף לזרם" in report["targets"][0]["error"]   # #1503
-
-
 def test_bytes_that_differ_from_the_manifest_fail_at_the_source_by_name(tmp_path):
     box, run, out = direct_run(tmp_path, env={"PCL_SECOND": "B"})
     assert out.strip().endswith("rc=1"), out
@@ -286,7 +188,7 @@ def test_a_closed_wave_or_a_task_that_is_no_longer_ours_does_not_send(tmp_path):
     for name, answer in (("closed", _answer("closed")), ("other", _answer(task="tsk_x"))):
         box, run, out = direct_run(tmp_path / name, answer=answer)
         assert out.strip().endswith("rc=1"), out
-        assert not (box / "udp.argv").exists(), name
+        assert not (box / "udp.argv").exists() and not (run / "chunk.run").exists(), name
         assert "הגל לא התחיל" in _progress(box)["targets"][0]["error"]   # #1503
 
 

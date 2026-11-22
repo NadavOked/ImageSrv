@@ -65,7 +65,7 @@ function setup(fixtures, me = {}) {
 
 const NODE = 'n0de';
 const base = {
-  '/storage-nodes': [{id: NODE, label: 'חיפה', node_id: 'sn_0123456789abcdef', base_url: 'https://10.20.0.30:8443/api/interserver/v1', group_id: null, group_label: null, enrolled_at: '2026-09-16T09:00:00+00:00', disabled_at: null}],
+  '/storage-nodes': [{id: NODE, label: 'חיפה', node_id: 'sn_0123456789abcdef', base_url: 'https://10.20.0.30:7700/api/interserver/v1', group_id: null, group_label: null, enrolled_at: '2026-09-16T09:00:00+00:00', disabled_at: null}],
   '/storage-node-groups': [],
   '/storage-transfers': [
     {id: 't0', node_id: NODE, node_label: 'חיפה', image_id: 'img_7f3a91', image_name: 'Office 365', state: 'sending', bytes_sent: 3 * 1024 ** 3, bytes_total: 12 * 1024 ** 3, error: null, started_by: 'admin', created_at: '2026-09-16T10:00:00+00:00'},
@@ -129,7 +129,7 @@ test('the servers tab lists each secondary with a measured connection, not a fro
   const html = run('branchesPage(0)');
   assert.match(html, /חיפה/);
   assert.match(html, /sn_0123456789abcdef/);
-  assert.match(html, /10\.20\.0\.30:8443/);
+  assert.match(html, /10\.20\.0\.30:7700/);
   assert.match(html, /class="status ok" id="branch-row-conn-n0de"><i><\/i>מחובר/);
   assert.doesNotMatch(html, /בודק חיבור/, 'the connection check already resolved before the row was read');
   assert.match(html, /Office 365/, 'the last transfer shows in the row');
@@ -294,16 +294,16 @@ test('registering a secondary: address → SPKI preview → code (enroll/preview
   await run('loadBranchesData()');
   run('__step1=null; __step2=null; let n=0; sheet=(o)=>{ n++; if(n===1) __step1=o; else __step2=o; };');
   run('openEnrollSheet()');
-  await run('__step1.onSubmit({url: "https://203.0.113.40:8443", label: "צפת", group_id: ""})');
+  await run('__step1.onSubmit({url: "https://203.0.113.40:7700", label: "צפת", group_id: ""})');
   const preview = calls.find((c) => c.url.endsWith('/storage-nodes/enroll/preview'));
-  assert.ok(preview && preview.body.url === 'https://203.0.113.40:8443');
+  assert.ok(preview && preview.body.url === 'https://203.0.113.40:7700');
   assert.equal(run('typeof __step2.onSubmit'), 'function', 'a second sheet asks for the code, with the previewed SPKI shown');
   const note = run('__step2.note');
   // the four groups the secondary shows as "זהות השרת", highlighted; then the whole SPKI in groups
   assert.match(note, /<span class="enroll-hl">A1B2<\/span> <span class="enroll-hl">C3D4<\/span> <span class="enroll-hl">E5F6<\/span> <span class="enroll-hl">0718<\/span><\/div>/);
   assert.match(note, />A1B2 C3D4 E5F6 0718 9C3E 5D27 B04F 8A61 E2D7 C93B 5A0F 14E8 D6B2 7C39 A5E0 1F84</);
   assert.match(note, /sn_a1b2c3d4e5f60718/);
-  assert.match(note, /https:\/\/203\.0\.113\.40:8443/, 'the address that was checked');
+  assert.match(note, /https:\/\/203\.0\.113\.40:7700/, 'the address that was checked');
   assert.equal((note.match(/class="enroll-c"/g) || []).length, 8, 'eight code boxes');
   assert.equal(run('__step2.fields'), undefined, 'no free-text code field any more');
   fakeCodeForm(run, 'K7M4X9QD');
@@ -343,7 +343,7 @@ test('a refused code marks the boxes and says to take a new one on the secondary
   await run('loadBranchesData()');
   run('__step2=null; let n=0; sheet=(o)=>{ n++; if(n===2) __step2=o; else __step1=o; };');
   run('openEnrollSheet()');
-  await run('__step1.onSubmit({url: "https://203.0.113.40:8443", label: "צפת", group_id: ""})');
+  await run('__step1.onSubmit({url: "https://203.0.113.40:7700", label: "צפת", group_id: ""})');
   fakeCodeForm(run, 'K7M4X9QB');
   await assert.rejects(run('__step2.onSubmit({})'), /F5 ← קוד חדש/);
   assert.equal(run('__boxes.every((b) => b.cls.has("err"))'), true);
@@ -354,7 +354,7 @@ test('a code that is not eight characters is not sent', async () => {
   const {run, calls} = setup(fixtures);
   run('__step2=null; let n=0; sheet=(o)=>{ n++; if(n===2) __step2=o; else __step1=o; };');
   run('openEnrollSheet()');
-  await run('__step1.onSubmit({url: "https://203.0.113.40:8443", label: "צפת", group_id: ""})');
+  await run('__step1.onSubmit({url: "https://203.0.113.40:7700", label: "צפת", group_id: ""})');
   fakeCodeForm(run, 'K7M4');
   await assert.rejects(run('__step2.onSubmit({})'), /8 התווים/);
   assert.ok(!calls.find((c) => c.method === 'POST' && c.url.endsWith('/storage-nodes/enroll')));
@@ -362,15 +362,15 @@ test('a code that is not eight characters is not sent', async () => {
 
 test('Nadav 18/10: the address is the IP alone -- the console builds https://<ip>:<interserver port>; a pasted full address is normalized', () => {
   const {run} = setup(base);
-  assert.equal(run('INTERSERVER_PORT'), 8443);
+  assert.equal(run('INTERSERVER_PORT'), 7700);
   const norm = (x) => run(`enrollUrlFromInput(${JSON.stringify(x)})`);
-  assert.equal(norm('10.20.0.5'), 'https://10.20.0.5:8443');
-  assert.equal(norm('  10.20.0.5  '), 'https://10.20.0.5:8443');
-  assert.equal(norm('https://10.20.0.5:8443/'), 'https://10.20.0.5:8443');
-  assert.equal(norm('10.20.0.5:8443'), 'https://10.20.0.5:8443');
-  assert.equal(norm('https://10.20.0.5:8443/api/interserver/v1'), 'https://10.20.0.5:8443');
+  assert.equal(norm('10.20.0.5'), 'https://10.20.0.5:7700');
+  assert.equal(norm('  10.20.0.5  '), 'https://10.20.0.5:7700');
+  assert.equal(norm('https://10.20.0.5:7700/'), 'https://10.20.0.5:7700');
+  assert.equal(norm('10.20.0.5:7700'), 'https://10.20.0.5:7700');
+  assert.equal(norm('https://10.20.0.5:7700/api/interserver/v1'), 'https://10.20.0.5:7700');
   assert.equal(norm('10.20.0.5:9443'), 'https://10.20.0.5:9443', 'an explicit port is kept');
-  assert.equal(norm('Haifa-Srv.local'), 'https://haifa-srv.local:8443', 'a host name too');
+  assert.equal(norm('Haifa-Srv.local'), 'https://haifa-srv.local:7700', 'a host name too');
 });
 
 test('Nadav 18/10: what is not an IP or a host name is refused aloud, in Hebrew, and nothing is sent', async () => {
@@ -389,7 +389,7 @@ test('Nadav 18/10: what is not an IP or a host name is refused aloud, in Hebrew,
   assert.ok(!calls.find((c) => c.url.endsWith('/storage-nodes/enroll/preview')), 'a refused address is not sent');
   await run('__step1.onSubmit({url: "203.0.113.40", label: "צפת", group_id: ""})');
   const preview = calls.find((c) => c.url.endsWith('/storage-nodes/enroll/preview'));
-  assert.equal(preview.body.url, 'https://203.0.113.40:8443', 'the server still gets a full base_url');
+  assert.equal(preview.body.url, 'https://203.0.113.40:7700', 'the server still gets a full base_url');
 });
 
 test('"+ קבוצה חדשה…" in the register window opens the group window, and the new group comes back selected', async () => {
@@ -490,7 +490,7 @@ test('monitor.js connects to the remote path when node= is present, and to the l
     const ctx = vm.createContext({
       console, URLSearchParams, Uint8Array, Uint8ClampedArray, DataView, ArrayBuffer, Math, Number, JSON, Promise, Date, String,
       setTimeout: () => 1, clearTimeout() {},
-      location: {search, protocol: 'http:', host: '10.10.10.8:8080'},
+      location: {search, protocol: 'http:', host: '10.10.10.8:7712'},
       document: {getElementById: el, addEventListener() {}, removeEventListener() {}, title: ''},
       window: {addEventListener() {}},
       WebSocket: class { constructor(url) { urls.push(url); this.readyState = 0; } close() {} send() {} static get OPEN() { return 1; } },
@@ -500,8 +500,8 @@ test('monitor.js connects to the remote path when node= is present, and to the l
   mk('?node=n0de&mac=aa%3Abb%3Acc%3Add%3Aee%3A01&name=Builder-H');
   mk('?mac=aa%3Abb%3Acc%3Add%3Aee%3A01&name=Builder');
   assert.equal(JSON.stringify(urls), JSON.stringify([
-    'ws://10.10.10.8:8080/api/console/storage-nodes/n0de/monitor/aa%3Abb%3Acc%3Add%3Aee%3A01',
-    'ws://10.10.10.8:8080/api/console/monitor/aa%3Abb%3Acc%3Add%3Aee%3A01',
+    'ws://10.10.10.8:7712/api/console/storage-nodes/n0de/monitor/aa%3Abb%3Acc%3Add%3Aee%3A01',
+    'ws://10.10.10.8:7712/api/console/monitor/aa%3Abb%3Acc%3Add%3Aee%3A01',
   ]));
 });
 

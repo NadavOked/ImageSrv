@@ -92,7 +92,7 @@ function setupWithDom(fixtures, putResponses = {}) {
 const base = {
   '/groups': [{id: 'grp_BUILD', role: 'build', label: 'בנייה', machines: 1}, {id: 'grp_CLONERS', role: 'cloner', label: 'שיכפול', machines: 1}],
   '/machines': [{mac: 'aa:bb:cc:dd:ee:01', suffix: 'Builder', group_id: 'grp_BUILD'}, {mac: 'aa:bb:cc:dd:ee:02', suffix: 'Cloner-1', group_id: 'grp_CLONERS'}],
-  '/monitor/settings': {port: 5900, enabled: true},
+  '/monitor/settings': {port: 7710, enabled: true},
   '/monitor/machines': [
     {mac: 'aa:bb:cc:dd:ee:01', name: 'Builder', role: 'build', ip: '10.44.12.50', online: true, prompt: 'signin'},
     {mac: 'aa:bb:cc:dd:ee:02', name: 'Cloner-1', role: 'cloner', ip: null, online: false},
@@ -147,12 +147,12 @@ test('monitor button opens monitor.html for the machine through monitorMachine',
 });
 
 test('switch off shows the warning; empty list is an empty state, not an error', async () => {
-  const {run} = setup({...base, '/monitor/settings': {port: 5900, enabled: false}, '/monitor/machines': []});
+  const {run} = setup({...base, '/monitor/settings': {port: 7710, enabled: false}, '/monitor/machines': []});
   await run('loadMonitor()');
   const html = run('monitorPage()');
   // ‏#1300: ההסבר עבר לכרטיס הצפייה ול-title של המתג (בלי הערה בראש הדף ובלי פיל)
-  assert.match(html, /<b class="et">המוניטור כבוי<\/b>[^<]*הדלקה חושפת 5900 על וילן ההפצה/);
-  assert.match(html, /title="כבוי כברירת מחדל — הדלקה חושפת 5900/);
+  assert.match(html, /<b class="et">המוניטור כבוי<\/b>[^<]*הדלקה חושפת 7710 על וילן ההפצה/);
+  assert.match(html, /title="כבוי כברירת מחדל — הדלקה חושפת 7710/);
   assert.match(html, /class="muted">אין מחשבי בנייה או שיכפול רשומים/);
   assert.doesNotMatch(html, /note err/);
 });
@@ -215,11 +215,11 @@ test('the switch renders at the top of the page, reflecting server state', async
   assert.ok(toggleIdx >= 0 && listIdx >= 0 && toggleIdx < listIdx, 'the switch must render before the machine list');
   assert.match(htmlOn, /class="sw on" role="switch" aria-checked="true" aria-label="מוניטור לתחנות" onclick="monitorToggle\(false\)"/);
 
-  const {run: run2} = setup({...base, '/monitor/settings': {port: 5900, enabled: false}});
+  const {run: run2} = setup({...base, '/monitor/settings': {port: 7710, enabled: false}});
   await run2('loadMonitor()');
   const htmlOff = run2('monitorPage()');
   assert.match(htmlOff, /class="sw" role="switch" aria-checked="false"[^>]*onclick="monitorToggle\(true\)"/);
-  assert.match(htmlOff, /<span class="swrow" title="כבוי כברירת מחדל — הדלקה חושפת 5900 על וילן ההפצה[^"]*">/);   // #1077 → ‏#1300: ההסבר ב-title, המתג לבד
+  assert.match(htmlOff, /<span class="swrow" title="כבוי כברירת מחדל — הדלקה חושפת 7710 על וילן ההפצה[^"]*">/);   // #1077 → ‏#1300: ההסבר ב-title, המתג לבד
 });
 
 test('turning off sends PUT with no confirm word and no sheet() prompt', async () => {
@@ -233,7 +233,7 @@ test('turning off sends PUT with no confirm word and no sheet() prompt', async (
 });
 
 test('turning on is a confirm sheet with no typed field (#1270) — opening it sends no PUT', async () => {
-  const {run, calls, node} = setupWithDom({...base, '/monitor/settings': {port: 5900, enabled: false}});
+  const {run, calls, node} = setupWithDom({...base, '/monitor/settings': {port: 7710, enabled: false}});
   await run('loadMonitor()');
   run('monitorToggle(true)'); // opens the sheet() — does not itself call fetch
   assert.equal(calls.filter(c => c.method === 'PUT').length, 0, 'opening the sheet must not send a PUT by itself');
@@ -243,7 +243,7 @@ test('turning on is a confirm sheet with no typed field (#1270) — opening it s
 });
 
 test('turning on, confirmed in the sheet, sends PUT with the confirm word from code, then reloads', async () => {
-  const {run, calls, node} = setupWithDom({...base, '/monitor/settings': {port: 5900, enabled: false}});
+  const {run, calls, node} = setupWithDom({...base, '/monitor/settings': {port: 7710, enabled: false}});
   await run('loadMonitor()');
   run('monitorToggle(true)');
   const form = node('#sheet');
@@ -283,7 +283,7 @@ test('turning off: server-returned enabled disagrees (still true) — error toas
 
 test('turning on: server-returned enabled disagrees (still false) — error toast, not "הודלק" (#1227)', async () => {
   const {run, calls, node, toasts} = setupWithDom(
-    {...base, '/monitor/settings': {port: 5900, enabled: false}},
+    {...base, '/monitor/settings': {port: 7710, enabled: false}},
     {'/monitor/settings': {enabled: false}});
   await run('loadMonitor()');
   run('monitorToggle(true)');

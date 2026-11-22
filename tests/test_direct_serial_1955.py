@@ -66,7 +66,7 @@ def test_another_serial_on_the_named_device_is_refused_before_the_first_datagram
 @requires_native(("bash", BASH))
 def test_the_serial_it_was_ordered_for_is_sent(tmp_path):
     box, run, out = _run_task(tmp_path, "SERIAL-A", "SERIAL-A")
-    assert (box / "udp.argv").exists(), out + (run / "agent.log").read_text("utf-8", "replace")
+    assert (run / "chunk.run").exists(), out + (run / "agent.log").read_text("utf-8", "replace")   # #3173: the wave ran
     assert _progress(box)["targets"][0]["state"] != "failed"
 
 

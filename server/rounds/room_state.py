@@ -31,6 +31,20 @@ def active_round(conn: sqlite3.Connection) -> sqlite3.Row | None:
     ).fetchone()
 
 
+def active_rounds(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """#3898: כל הסבבים הפעילים, לפי סדר הפתיחה. `active_round` נשאר לקוראים שלא עברו (כשיש אחד -- אותו דבר)."""
+    return conn.execute(
+        "SELECT * FROM room_rounds WHERE state = 'active' ORDER BY created_at, rowid").fetchall()
+
+
+def round_of_mac(conn: sqlite3.Connection, mac: str) -> sqlite3.Row | None:
+    """#3898: הסבב הפעיל שהמשכפל נבחר בו, או None. משכפל נמצא בסבב אחד בלבד (`round_cloners`)."""
+    for row in active_rounds(conn):
+        if any(item.get("mac") == mac for item in json.loads(row["target_slots_json"] or "[]")):
+            return row
+    return None
+
+
 def visible_round(conn: sqlite3.Connection) -> sqlite3.Row | None:
     """מצב החדר החי או הכושל שעדיין דורש את תשומת לב המפעיל."""
     # החי קודם: חדר שנפתח מחדש באותה שנייה שבה הקודם נכשל חולק איתו

@@ -217,6 +217,15 @@ _SAMPLE = re.compile(r"(?m)^[\^=#][*+\-?x~]\s+(\S+)\s+\d+\s+\d+\s+[0-7]+\s+(\d+)
 _SAMPLE_MS = {"ns": 1e-6, "us": 1e-3, "ms": 1.0, "s": 1000.0}
 _AGE_S = {"": 1, "m": 60, "h": 3600, "d": 86400, "y": 31536000}
 
+def _poll_s(row: str) -> int | None:
+    """#2800: the source's poll interval in seconds. `chronyc sources` prints it as log2 (6 = 64 s)
+    in the 4th column; a value that is not a small number is None, not a guess."""
+    try:
+        exponent = int(row.split()[3])
+    except (IndexError, ValueError):
+        return None
+    return 1 << exponent if 0 <= exponent <= 17 else None
+
 def _last_sample(sources: str) -> dict | None:
     """#2796: the freshest real measurement, from any source -- chosen or not.
 
@@ -229,7 +238,8 @@ def _last_sample(sources: str) -> dict | None:
         age = int(match.group(2)) * _AGE_S[match.group(3)]
         if best is None or age < best["age_s"]:
             best = {"server": match.group(1), "age_s": age,
-                    "offset_ms": float(match.group(4)) * _SAMPLE_MS[match.group(5)]}
+                    "offset_ms": float(match.group(4)) * _SAMPLE_MS[match.group(5)],
+                    "poll_s": _poll_s(match.group(0))}   # #2800: how often that source is polled
     return best
 
 def status(hooks: Hooks) -> dict:

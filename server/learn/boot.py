@@ -36,6 +36,7 @@ import statistics
 from boot.trace import STEP_INDEX, STEPS
 
 from server.db import journal, now_iso
+from server.core.logtext import one_line
 from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.learn_boot")
@@ -105,7 +106,7 @@ def after_record(conn: sqlite3.Connection, mac: str, step: str, seconds: float |
                     f"{mac} {step} {got['seconds']:.1f}s baseline={got['baseline']:.1f}s"
                     f" ({got['samples']} boots)", machine=mac)
     except Exception:             # noqa: BLE001
-        log.exception("boot regression for %s %s failed", mac, step)
+        log.exception("boot regression for %s %s failed", one_line(mac), one_line(step))
 
 
 def version_compare(conn: sqlite3.Connection) -> dict | None:

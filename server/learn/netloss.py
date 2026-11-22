@@ -1,38 +1,25 @@
 """#1846 — אבדן חבילות ברשת ההפצה מול הבסיס שלה: "קפץ — סוויץ'/כבל/IGMP".
 
 הכרעת נדב 19/10: השרת לומד **ממדידה שלו**, ושום דבר אינו נחסם בגלל הלמידה —
-כאן זו שורת יומן ושורה במסך הבריאות.
+כאן זו שורת יומן ושורה במסך הבריאות. "1% אבדן" לבדו אינו אומר דבר; מה שאומר משהו
+הוא **קפיצה** מול מה שאותה רשת עשתה באותם תנאים.
 
-השידורים החוזרים של udp-sender (`loss_blocks`, `record_stream` — המונה של
-השולח עצמו) תלויים בקצב, במספר המגירות ובמקלטים — ולכן "1% אבדן" לבדו אינו
-אומר דבר. מה שאומר משהו הוא **קפיצה** מול מה שאותה רשת עשתה באותם תנאים:
-
-    יחס האבדן   = `loss_blocks` / הבלוקים שנשלחו (`sent_bytes` / `UDPCAST_BLOCK`)
-    הבסיס       = חציון היחס של עד `WINDOW` הגלים הקודמים **על אותו כרטיס הפצה**
-                  (`decision.link.interface`), **עם אותו מספר מגירות ואותו קצב**
-    קפץ         = יחס ≥ `JUMP` × הבסיס, **וגם** מעל `drive_rates.LOSS_DOWN_RATIO`
-
-"באותו מספר מגירות ובאותו קצב" הוא מה שה-Issue מבקש ("בלי שינוי במספר המגירות
-או בקצב"): קפיצה שבאה עם קצב גבוה יותר היא חיפוש השיא של #1758, לא תקלה ברשת.
-הרצפה `LOSS_DOWN_RATIO` (0.1%) — מתחתיה udp-sender עצמו מדפיס "0.0%", ובסיס
-של אפס היה הופך כל בלוק לקפיצה.
-
-בלי בסיס — פחות מ-`MIN_WAVES` גלים כאלה — `state: "unchecked"` ("לא נבדק"),
-**לא** "תקין". גם `rcvbuf` (הקרנל של המקלטים, `record_wave`) ו-`timeouts`
-(`Timeout notAnswered` לכל GB) מחושבים לאותו בסיס ומוצגים — ההתראה רק על האבדן.
-
-מה שנשמר: אין טבלה חדשה — הכול נגזר מ-`wave_rates` (#447/#1758). לעולם אינו זורק.
-
-#3164 — **גל חתיכות** (מנוע החתיכות, `chunksend`): אין שם `loss_blocks` ואין שידורים חוזרים, ולכן המדד אחר.
-המדד עצמו ומה שלא נמדד על ברזל מתועדים ב-`docs/architecture/interfaces.md`, סעיף #3164; כאן העיקר:
+#3164 — **גל חתיכות** (מנוע החתיכות, `chunksend`). #3173: המנוע הקודם נמחק, וזה המדד היחיד. המדד עצמו ומה שלא נמדד
+על ברזל מתועדים ב-`docs/architecture/interfaces.md`, סעיף #3164; כאן העיקר:
 
     האבדן      = `abandoned` — חתיכות שהמקלט נטש באמצע (`chunkloss.sh`, G7), סכום על המחשבים שבגל,
                  לכל GB שהם קיבלו (`delivered`: בייטים שנכתבו / מגירות שסיימו, לכל מחשב)
-    הבסיס      = כמו למעלה, **רק מגלי חתיכות**: שני המנועים אינם ברי השוואה (Issue #3164)
+    הבסיס      = חציון האבדן של עד `WINDOW` הגלים הקודמים **על אותו כרטיס הפצה** (`decision.link.interface`),
+                 **עם אותו מספר מגירות ואותו קצב** — קפיצה שבאה עם קצב אחר היא הלמידה של הקצב, לא תקלה ברשת
+    קפץ        = אבדן ≥ `JUMP` × הבסיס, **וגם** מעל `CHUNK_FLOOR_PER_GB`
     `local`    = מה שהקרנל והכרטיס של המקלטים עצמם זרקו (`rcvbuf` + `softnet` + `nic`, חבילות לכל GB):
-                 מוצג ליד האבדן ואינו מכריע (כמו `rcvbuf` של udpcast). אחד משלושת המונים לא נקרא — `None`
+                 מוצג ליד האבדן ואינו מכריע. אחד משלושת המונים לא נקרא — `None`
     גל שאינו מלמד: לא הסתיים ב-`send_done`; או נרשם בו `chunk_net_gap` (#3141: ניתוק — אינו בסיס, ואין בו
                  קפיצה), `state: "net_gap"`. כמו `server_disk` — הרשת אינה מואשמת בגל כזה
+
+בלי בסיס — פחות מ-`MIN_WAVES` גלים כאלה — `state: "unchecked"` ("לא נבדק"), **לא** "תקין".
+מה שנשמר: אין טבלה חדשה — הכול נגזר מ-`wave_rates` (#447/#1758). לעולם אינו זורק.
+גל של המנוע הקודם מ-DB משודרג (#3173) אינו נושא `abandoned`, ולכן אינו מדידה ואינו בסיס: נשאר בטבלה ואינו נקרא.
 
 ⚠️ **לא נמדד על ברזל** (`untested-on-metal`): הרצפה `CHUNK_FLOOR_PER_GB` מנומקת ולא מכוילת.
 """
@@ -61,11 +48,11 @@ JUMP = 3
 #: כמה גלים אחרונים סורקים — כמו `drive_rates.MEMORY_SCAN`.
 SCAN = 50
 
-#: #3164: שני סוגי הגלים — הבסיס של כל אחד נלמד רק מגלים מהסוג שלו.
-UDPCAST, CHUNK = "udpcast", "chunk"
+#: #3164: סוג הגל במדידה (`kind`). #3173: מנוע החתיכות הוא היחיד.
+CHUNK = "chunk"
 #: #3141: אירוע היומן של `chunksend` — חלקים לא הגיעו למחשב ברשת בשידור הראשון (ניתוק או אבדן).
 CHUNK_GAP = "chunk_net_gap"
-#: #3164: מתחת לכמה חתיכות נטושות לכל GB אין קפיצה — כמו `LOSS_DOWN_RATIO` של udpcast: בלי רצפה, בסיס אפס
+#: #3164: מתחת לכמה חתיכות נטושות לכל GB אין קפיצה: בלי רצפה, בסיס אפס
 #: הופך חתיכה אחת לקפיצה. ⚠️ ניחוש מנומק, **לא נמדד על ברזל**: חתיכה אחת לכל GB שקיבל מחשב.
 CHUNK_FLOOR_PER_GB = 1.0
 #: #3164: המונים של הקרנל והכרטיס של המקלט עצמו. `inerrors` אינו כאן: הוא כולל את `rcvbuf` (ספירה כפולה).
@@ -76,42 +63,21 @@ JUMP_HE = "האבדן ברשת ההפצה קפץ — סוויץ'/כבל/IGMP"
 
 
 def _load(row, seen: dict | None = None) -> dict | None:
-    """הגל כמדידה אחת, או None — אינו מדידה (ישיר, מונה שלא נקרא, גל חתיכות שלא הסתיים)."""
+    """הגל כמדידה אחת, או None — אינו מדידה (ישיר, מונה שלא נקרא, גל שלא הסתיים, גל ישן של המנוע הקודם)."""
     try:
         past = json.loads(row["decision"])
-        stream = json.loads(row["stream"]) if row["stream"] else None
         drops = json.loads(row["drops"]) if row["drops"] else None
         delivered = json.loads(row["delivered"]) if row["delivered"] else None
     except (TypeError, ValueError):
         return None
     if not isinstance(past, dict) or past.get("direct"):
         return None
-    if isinstance(stream, dict) and stream.get("loss_blocks") is not None:
-        return _load_udpcast(row, past, stream, drops)
     return _load_chunk(row, past, drops, delivered, seen or {})       # #3164
-
-
-def _load_udpcast(row, past: dict, stream: dict, drops) -> dict | None:
-    loss, sent = stream.get("loss_blocks"), stream.get("sent_bytes")
-    if not drive_rates._count(loss) or not drive_rates._count(sent) or sent <= 0:
-        return None                        # המונה לא נקרא — אינו מדידה (עיקרון 5)
-    blocks = -(-sent // drive_rates.UDPCAST_BLOCK)
-    roster = past.get("roster") or []
-    rcvbuf = drive_rates._rcvbuf(drops, roster)
-    timeouts = stream.get("timeouts")
-    link = past.get("link") if isinstance(past.get("link"), dict) else {}
-    return {"session_id": row["session_id"], "kind": UDPCAST, "gap": False,
-            "interface": link.get("interface"),
-            "drawers": len(roster), "rate": past.get("max_bitrate"),
-            "loss": loss / blocks, "loss_blocks": loss,
-            "rcvbuf": None if rcvbuf is None else rcvbuf / blocks, "local": None,
-            "timeouts_per_gb": (timeouts * 10 ** 9 / sent
-                                if drive_rates._count(timeouts) else None)}
 
 
 def _load_chunk(row, past: dict, drops, delivered, seen: dict) -> dict | None:
     """#3164: גל חתיכות. כל מחשב ברשימת הגל חייב לדווח `abandoned` ולהיות מי שכתב (`done`) — מחשב אחד שלא נקרא
-    הוא "לא נקרא" לכל הגל (סכום חלקי היה נקרא "נקי", עיקרון 5). גל udpcast אינו נושא את `abandoned` — לא נכנס לכאן."""
+    הוא "לא נקרא" לכל הגל (סכום חלקי היה נקרא "נקי", עיקרון 5). גל ישן של המנוע הקודם (#3173) אינו נושא את `abandoned` — לא נכנס לכאן."""
     marks = seen.get(row["session_id"]) or ()
     roster = past.get("roster") or []
     macs = {d.get("mac") for d in roster if isinstance(d, dict)}
@@ -137,7 +103,7 @@ def _load_chunk(row, past: dict, drops, delivered, seen: dict) -> dict | None:
     return {"session_id": row["session_id"], "kind": CHUNK, "gap": CHUNK_GAP in marks,
             "interface": link.get("interface"), "drawers": len(roster),
             "rate": past.get("max_bitrate"), "loss": abandoned / gb, "abandoned": abandoned,
-            "rcvbuf": None, "local": None if local is None else local / gb, "timeouts_per_gb": None}
+            "local": None if local is None else local / gb}
 
 
 def _seen(conn: sqlite3.Connection, ids: list[str]) -> dict:
@@ -155,21 +121,19 @@ def _seen(conn: sqlite3.Connection, ids: list[str]) -> dict:
 def _loaded(conn: sqlite3.Connection) -> list[dict]:
     """הגלים האחרונים שהם מדידה, מהחדש לישן."""
     rows = conn.execute(
-        "SELECT session_id, decision, stream, drops, delivered FROM wave_rates"
+        "SELECT session_id, decision, drops, delivered FROM wave_rates"
         " ORDER BY rowid DESC LIMIT ?", (SCAN,)).fetchall()
-    # היומן נשאל רק על גלים שנושאים `abandoned` -- בהתקנה של udpcast בלבד אין שאילתה נוספת בסוף כל גל
+    # היומן נשאל רק על גלים שנושאים `abandoned` -- שורות ישנות של המנוע הקודם אינן מוסיפות שאילתה
     seen = _seen(conn, [r["session_id"] for r in rows if r["drops"] and '"abandoned"' in r["drops"]])
     return [w for w in (_load(r, seen) for r in rows) if w is not None]
 
 
-def _show(kind: str, value: float) -> str:
-    return f"{100 * value:.2f}%" if kind == UDPCAST else f"{value:.2f}/GB"
+def _show(value: float) -> str:
+    return f"{value:.2f}/GB"
 
 
 def _local_note(got: dict) -> str:
     """#3164: מה שהקרנל והכרטיס של המקלטים עצמם זרקו — ליד האבדן, לא במקומו. `None` = לא נקרא."""
-    if got["kind"] != CHUNK:
-        return ""
     if got["local"] is None:
         return " · מה שהמקלטים עצמם זרקו לא נקרא"
     base = got.get("local_baseline")
@@ -179,16 +143,14 @@ def _local_note(got: dict) -> str:
 def assess(conn: sqlite3.Connection, session_id: str) -> dict | None:
     """הגל `session_id` מול הבסיס שלו. None — הגל אינו מדידה (ישיר, המונה לא
     נקרא, אין שורה). אחרת `{"session_id", "kind", "interface", "drawers", "rate", "loss",
-    "baseline", "waves", "rcvbuf", "rcvbuf_baseline", "local", "local_baseline",
-    "timeouts_per_gb", "timeouts_baseline", "state"}` — `state`: `jump` / `ok` /
-    `unchecked` / `server_disk` / `net_gap` (#3164: גל חתיכות עם ניתוק). `kind`: `udpcast`
-    (`loss` = יחס בלוקים) או `chunk` (`loss` = חתיכות נטושות לכל GB)."""
+    "baseline", "waves", "local", "local_baseline", "state"}` — `state`: `jump` / `ok` /
+    `unchecked` / `server_disk` / `net_gap` (#3164: גל עם ניתוק). `kind`: `chunk`
+    (`loss` = חתיכות נטושות לכל GB)."""
     loaded = _loaded(conn)
     me = next((w for w in loaded if w["session_id"] == session_id), None)
     if me is None:
         return None
-    none = {"waves": 0, "baseline": None, "rcvbuf_baseline": None, "local_baseline": None,
-            "timeouts_baseline": None}
+    none = {"waves": 0, "baseline": None, "local_baseline": None}
     if server_io.bound(conn, session_id):          # #1884: השרת האט, לא הרשת
         return {**me, **none, "state": "server_disk"}
     if me["gap"]:                                  # #3164, #3141: ניתוק — לא מאשימים ואין בסיס
@@ -201,20 +163,16 @@ def assess(conn: sqlite3.Connection, session_id: str) -> dict | None:
             continue
         if later or len(same) >= WINDOW:
             continue
-        if (w["kind"], w["interface"], w["drawers"], w["rate"]) == (
-                me["kind"], me["interface"], me["drawers"], me["rate"]) \
+        if (w["interface"], w["drawers"], w["rate"]) == (me["interface"], me["drawers"], me["rate"]) \
                 and not w["gap"] and not server_io.bound(conn, w["session_id"]):   # #1884, #3164: לא בסיס
             same.append(w)
     out = {**me, **none, "waves": len(same), "state": "unchecked"}
     if len(same) < MIN_WAVES:
         return out
     out["baseline"] = statistics.median(w["loss"] for w in same)
-    for key, base in (("rcvbuf", "rcvbuf_baseline"), ("local", "local_baseline"),
-                      ("timeouts_per_gb", "timeouts_baseline")):
-        got = [w[key] for w in same if w[key] is not None]
-        out[base] = statistics.median(got) if got else None
-    floor = drive_rates.LOSS_DOWN_RATIO if me["kind"] == UDPCAST else CHUNK_FLOOR_PER_GB
-    out["state"] = "jump" if me["loss"] >= JUMP * out["baseline"] and me["loss"] > floor else "ok"
+    got = [w["local"] for w in same if w["local"] is not None]
+    out["local_baseline"] = statistics.median(got) if got else None
+    out["state"] = "jump" if me["loss"] >= JUMP * out["baseline"] and me["loss"] > CHUNK_FLOOR_PER_GB else "ok"
     return out
 
 
@@ -227,10 +185,10 @@ def _note_for_brain(conn: sqlite3.Connection, session_id: str, got: dict) -> Non
         log.exception("net loss note for the brain of %s failed", session_id)
 
 
-def _evaluate(conn: sqlite3.Connection, session_id: str, kind: str) -> dict | None:
+def _evaluate(conn: sqlite3.Connection, session_id: str) -> dict | None:
     try:
         got = assess(conn, session_id)
-        if got is None or got["kind"] != kind:
+        if got is None:
             return None
         _note_for_brain(conn, session_id, got)
         if got["state"] == "jump" and conn.execute(
@@ -239,27 +197,20 @@ def _evaluate(conn: sqlite3.Connection, session_id: str, kind: str) -> dict | No
             local = "?" if got["local"] is None else f"{got['local']:.2f}/GB"
             journal(conn, "net_loss_jump",
                     f"{session_id} if={got['interface'] or '?'} drawers={got['drawers']}"
-                    f" rate={got['rate']} loss={_show(kind, got['loss'])}"
-                    f" baseline={_show(kind, got['baseline'])} ({got['waves']} waves)"
-                    + ("" if kind == UDPCAST else f" local={local}")
-                    + f" — {JUMP_HE}", round_id=session_id)
+                    f" rate={got['rate']} loss={_show(got['loss'])}"
+                    f" baseline={_show(got['baseline'])} ({got['waves']} waves)"
+                    f" local={local} — {JUMP_HE}", round_id=session_id)
         return got
     except Exception:             # noqa: BLE001 — הלמידה אינה מפילה את סיום השידור
         log.exception("net loss assessment of %s failed", session_id)
         return None
 
 
-def evaluate(conn: sqlite3.Connection, session_id: str) -> dict | None:
-    """נקרא כשהשולח סיים גל (`app.on_sender_event`, אחרי `record_stream`).
-    קפיצה — שורת יומן `net_loss_jump`. לעולם אינו זורק."""
-    return _evaluate(conn, session_id, UDPCAST)
-
-
 def evaluate_chunk(conn: sqlite3.Connection, session_id: str) -> dict | None:
     """#3164: נקרא כשהגל נסגר בחדר (`room`, אחרי `drive_rates.record_wave`): רק אז `wave_rates.drops` ו-`delivered`
-    של גל חתיכות שלמים. גל udpcast — None (השולח כבר העריך אותו). לעולם אינו זורק.
+    של גל חתיכות שלמים. לעולם אינו זורק.
     #3064 (X10): השיפוט של הגל מול הבסיס נרשם גם במוח (`server.brain.streamhit`), פעם אחת לגל."""
-    got = _evaluate(conn, session_id, CHUNK)
+    got = _evaluate(conn, session_id)
     from server.brain import streamhit           # noqa: PLC0415 — המוח מעל הלמידה, לא להפך
     streamhit.judge(conn, session_id, got)
     return got
@@ -278,9 +229,8 @@ def health_checks(conn: sqlite3.Connection) -> list[dict]:
             got = assess(conn, session_id)
             if got is None:
                 continue
-            label = (f"אבדן ברשת ההפצה ({interface or 'כרטיס לא נקרא'}"
-                     + (", מנוע חתיכות" if got["kind"] == CHUNK else "") + ")")
-            now = _show(got["kind"], got["loss"])
+            label = f"אבדן ברשת ההפצה ({interface or 'כרטיס לא נקרא'}, מנוע חתיכות)"
+            now = _show(got["loss"])
             if got["state"] == "server_disk":                # #1884
                 out.append(check(f"net_loss:{interface}", label, "off",
                                  f"לא נבדק — הגל האחרון היה מוגבל בדיסק הספרייה בשרת; {now}"))
@@ -292,7 +242,7 @@ def health_checks(conn: sqlite3.Connection) -> list[dict]:
                                  f"לא נבדק — {got['waves']} מתוך {MIN_WAVES} גלים באותם תנאים"
                                  f" ({got['drawers']} מגירות, {got['rate']}); הגל האחרון: {now}"))
             else:
-                base = _show(got["kind"], got["baseline"])
+                base = _show(got["baseline"])
                 if got["state"] == "jump":
                     out.append(check(f"net_loss:{interface}", label, "warn",
                                      f"{JUMP_HE}: {now} מול בסיס {base} ({got['waves']} גלים,"

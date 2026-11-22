@@ -279,13 +279,16 @@ class Brain:
             plan = decide(need, [str(n["dev"]) for n in neighbors], many, round_drawers,
                           self.budget(session, mac), stream_bps)
             who = str(t.get("serial") or t.get("dev") or "?")
-            self._record(conn, round_row, mode, mac, session, who, plan, need)
-            lim = self._limits(conn, round_row, mode, mac, session, who, plan, need)
+            row = self._record(conn, round_row, mode, mac, session, who, plan, need)
+            lim, lim_row = self._limits(conn, round_row, mode, mac, session, who, plan, need)
             if mode == ENFORCE:
                 out[who] = {"verdict": plan.verdict, "source": plan.source, "neighbors": list(plan.neighbors),
                             "per_neighbor_bps": plan.per_neighbor_bps, "budget_bps": plan.budget_bps}
                 if lim is not None:                      # A27: בלי החלטה התוכנית אינה נושאת אותם, והסוכן משתמש בקבוע שלו
                     out[who].update({"bad_max": lim.bad_max, "word_s": lim.word_s})
+                    memory.resolve(conn, [lim_row], f"הגבולות bad_max={lim.bad_max} word_s={lim.word_s} נמסרו בתשובה למשכפל")
+                # #3750: `out` חוזר לקורא ומשם לתשובה למשכפל; בצל השורה נרשמה כבר עם n/a
+                memory.resolve(conn, [row], f"המקור {plan.source} נמסר בתשובה למשכפל")
         return out
 
     def _hold_stream(self, session, stream_bps: int | None) -> int | None:
@@ -301,19 +304,20 @@ class Brain:
                 return stream_bps
             return self._stream.get(session)
 
-    def _limits(self, conn, round_row, mode, mac, session, who, plan: Plan, need: Need) -> Limits | None:
-        """A27: הגבולות של התוכנית, ושורה ב-``brain_decisions`` כשהם חדשים. כלל שנפל = ``None`` (אין החלטה), ולא תוכנית שנופלת."""
+    def _limits(self, conn, round_row, mode, mac, session, who, plan: Plan, need: Need) -> tuple[Limits | None, int | None]:
+        """A27: הגבולות של התוכנית, ושורה ב-``brain_decisions`` כשהם חדשים (ומספרה; ``None`` כשלא נרשמה שורה). כלל שנפל = ``None`` (אין החלטה), ולא תוכנית שנופלת.
+        #3750: בצל השורה נסגרת ``n/a`` כאן; ב-enforce המבצע (``plan``) סוגר אותה כשהגבולות נמסרים בתשובה."""
         try:
             lim = limits(plan)
         except Exception:                       # noqa: BLE001 — אין החלטה: הסוכן בקבועים שלו, התוכנית עצמה נשארת
             log.exception("brain: the completion limits of %s (%s) were not decided", who, mac)
-            return None
+            return None, None
         if lim is None:
-            return None
+            return None, None
         key, sig = (str(session), who, need.part), (lim.verdict, lim.ceiling_bps, lim.bad_max, lim.word_s)
         with self._lock:
             if self._told.get(key) == sig:
-                return lim
+                return lim, None
             self._told[key] = sig
             while len(self._told) > MAX_TOLD:
                 self._told.pop(next(iter(self._told)))
@@ -321,11 +325,12 @@ class Brain:
                    "disk": who, "part": need.part, "bad_max": lim.bad_max, "word_s": lim.word_s,
                    "peer_speed_kibs": lim.peer_speed_kibs, "peer_speed_s": lim.peer_speed_s,
                    "ceiling_mibps": round(lim.ceiling_bps / MIB, 1), "enforced": mode == ENFORCE, "reason": lim.reason})
-        memory.record(conn, mode=mode, rule=RULE_LIMITS, point=POINT_LIMITS, action=ACTION_LIMITS, verdict=lim.verdict,
+        row = memory.record(conn, mode=mode, rule=RULE_LIMITS, point=POINT_LIMITS, action=ACTION_LIMITS, verdict=lim.verdict,
                       reason=lim.reason, evidence=(f"mac={mac}", f"part={'unmeasured' if need.part is None else need.part}",
                                                    *lim.evidence),
-                      round_id=round_row["id"], entity=("disk", who))
-        return lim
+                      round_id=round_row["id"], entity=("disk", who),
+                      outcome=memory.na_in_shadow(mode, "צל: נרשם בלבד, הסוכן לא שומע את הגבולות"))
+        return lim, row
 
     def _tick_budget(self, conn, round_row, mac, session, targets, mode) -> None:
         rcvbuf = None
@@ -356,17 +361,19 @@ class Brain:
             return
         self._log({"mode": mode, "rule": RULE, "action": "FILL_BUDGET", "verdict": action, "mac": mac,
                    "budget_mibps": round(new / MIB, 1), "reason": why})
+        # #3750: התקציב הוא קלט פנימי של FILL_SOURCE, לא פעולה: אין לו תוצאה משלו, וההשפעה שלו נראית בשורות FILL_SOURCE
         memory.record(conn, mode=mode, rule=RULE, action="FILL_BUDGET", verdict=action, reason=why,
                       evidence=(f"budget={_mib(new)}", f"ceiling={_mib(CEILING_BPS)}",
                                 f"rcvbuf={'unmeasured' if rcvbuf is None else rcvbuf}",
                                 f"skipped={'unmeasured' if skipped is None else skipped}"),
-                      round_id=round_row["id"], entity=("machine", mac))
+                      round_id=round_row["id"], entity=("machine", mac),
+                      outcome=memory.na("תקציב פנימי של המוח: ההשפעה שלו נראית בשורות FILL_SOURCE"))
 
-    def _record(self, conn, round_row, mode, mac, session, who, plan: Plan, need: Need) -> None:
+    def _record(self, conn, round_row, mode, mac, session, who, plan: Plan, need: Need) -> int | None:
         key, sig = (str(session), who, need.part), (plan.verdict, plan.source, tuple(plan.neighbors))
         with self._lock:                        # #3837: אותה החלטה בדיווח הבא אינה שורה חדשה (כמו _told של _limits)
             if self._said.get(key) == sig:
-                return
+                return None                     # #3750: כפילות = אין שורה חדשה, ו-resolve מתעלם מ-None
             self._said[key] = sig
             while len(self._said) > MAX_TOLD:
                 self._said.pop(next(iter(self._said)))
@@ -374,10 +381,11 @@ class Brain:
                    "source": plan.source, "mac": mac, "disk": who, "missing": need.missing, "join": join_policy(need.missing),
                    "neighbors": list(plan.neighbors), "per_neighbor_mibps": round(plan.per_neighbor_bps / MIB, 1),
                    "enforced": mode == ENFORCE, "reason": plan.reason, "evidence": list(plan.evidence)})
-        memory.record(conn, mode=mode, rule=RULE, action="FILL_SOURCE", verdict=plan.verdict,
-                      reason=plan.reason, evidence=(f"source={plan.source}", f"mac={mac}", f"join={join_policy(need.missing)}",
-                                                    *plan.evidence),
-                      round_id=round_row["id"], entity=("disk", who))
+        return memory.record(conn, mode=mode, rule=RULE, action="FILL_SOURCE", verdict=plan.verdict,
+                             reason=plan.reason, evidence=(f"source={plan.source}", f"mac={mac}", f"join={join_policy(need.missing)}",
+                                                           *plan.evidence),
+                             round_id=round_row["id"], entity=("disk", who),
+                             outcome=memory.na_in_shadow(mode, "צל: נרשם בלבד, המוח לא ביצע פעולה"))
 
     def _log(self, fields: dict) -> None:
         stamp = datetime.fromtimestamp(self._wall(), timezone.utc).isoformat(timespec="seconds")

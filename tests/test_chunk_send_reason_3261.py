@@ -1,6 +1,6 @@
 """#3261 -- a failed `chunkcast send` shows the sender's own sentence, not only its exit code.
 
-`chunkcast send` says why it fell (`ir_say`: "cannot send to 239.83.67.1:9002: Operation not permitted") into the
+`chunkcast send` says why it fell (`ir_say`: "cannot send to 239.84.82.1:7713: Operation not permitted") into the (פורט-הפצה-מכוון)
 per-partition log the engine gives it; the engine read the exit code and never the log, so the cloner's screen
 (`failed_reason`) said "chunkcast send נכשל על p3... (קוד 2, מעבר 1)" and the reason stayed in a file on the server.
 The old sender had `sender_log_tail` (#2187); this is its twin in `chunklog.py`, with no dependency on `sender.py`
@@ -26,7 +26,7 @@ from server.rounds import chunklog, chunksend
 from test_chunksend_2533 import Proc, rig, wait_for   # noqa: F401 -- `rig` is a fixture
 
 PART_FILE = "p3.windows.pcl.zst"
-SAID = "chunkcast: send: cannot send to 239.83.67.1:9002: Operation not permitted"
+SAID = "chunkcast: send: cannot send to 239.84.82.1:7713: Operation not permitted"   # פורט-הפצה-מכוון
 
 
 class TalkingRunner:

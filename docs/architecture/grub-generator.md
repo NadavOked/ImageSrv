@@ -21,7 +21,7 @@
 לכן מה שעובר בשורת הפקודה הוא **רק מה שהסוכן לא יכול לדעת לפני שהוא מדבר עם השרת**:
 
 ```
-ip=dhcp imagesrv.server=http://10.44.12.10:8080 console=tty0 quiet loglevel=3 thermal.psv=-1
+ip=dhcp imagesrv.server=http://10.44.12.10:7712 console=tty0 quiet loglevel=3 thermal.psv=-1
 ```
 
 כתובת השרת, וזהו. ‏`console`, ‏`quiet`, ‏`loglevel` ו-`thermal.psv` אינם מידע על המשימה אלא הגדרות של הקרנל עצמו, זהות לכל מכונה. ‏`thermal.psv=-1` מבטל את נקודות ה-trip הפסיביות של דרייבר ה-ACPI thermal, ולכן ‏`_PSL` אינו מוערך: על HP EliteDesk 800 G6 ההערכה הזו נכשלה ב-timeouts בכל אתחול (#1848, ‏#1870). נדב בחר בו ולא ב-`thermal.off=1` (20/10, ‏#1871: "רק החלק שמאט"), כי הוא משאיר את אזורי ה-`acpitz`, את ‏`_CRT` ואת ‏`_ACx`. כל השאר — התפקיד, המשימה, הסבב, רשימת האימג'ים המותרים — מגיע מתשובת ה-`hello` (ממשק 3). יש בדיוק חריג אחד, `imagesrv.mode=recovery`, שמוסבר בהמשך.
@@ -219,7 +219,7 @@ ImageSrv ובלי שחזור. *"אם אין MAC הוא לא אמור לקבל GR
 זה מה שה-GRUB החתום של דביאן טוען. הוא כמעט לא משתנה. מייצרים אותו פעם אחת:
 
 ```bash
-python tools/render_bootstrap.py http://10.44.12.10:8080 > grub.cfg
+python tools/render_bootstrap.py http://10.44.12.10:7712 > grub.cfg
 ```
 
 ומעתיקים לשורש ה-TFTP תחת `grub/grub.cfg`, ליד ה-shim וה-GRUB.
@@ -235,9 +235,9 @@ configfile (http,$imagesrv_server)/boot/menu?mac=$net_default_mac
 #### מאיפה מגיעה `$imagesrv_server` (‎#37)
 
 ```
-set imagesrv_fallback=10.44.12.10:8080
+set imagesrv_fallback=10.44.12.10:7712
 if [ -n "$net_default_server" ]; then
-    set imagesrv_server=${net_default_server}:8080
+    set imagesrv_server=${net_default_server}:7712
 else
     set imagesrv_server=$imagesrv_fallback
 fi
@@ -349,7 +349,7 @@ app = FastAPI()
 app.include_router(
     create_router(
         resolve=my_lookup,
-        config=GrubConfig(server_base="http://10.44.12.10:8080"),
+        config=GrubConfig(server_base="http://10.44.12.10:7712"),
     )
 )
 ```

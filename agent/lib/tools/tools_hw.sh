@@ -7,7 +7,7 @@
 
 tools_hw_list() {
     cat <<'EOF'
-tpm-clear|hw|מחיקת בעלות ומפתחות TPM|destroy|confirm window (red button)
+tpm-clear|wipe|מחיקת בעלות ומפתחות TPM|destroy||מוחק בעלות ומפתחות מה-TPM לפני מסירה, כדי שהמחשב הבא לא יינעל על המפתחות הישנים.
 EOF
 }
 

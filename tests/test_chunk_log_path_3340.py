@@ -6,10 +6,14 @@ and what the senses of the server read from the same log). In production `create
 the output of `chunkcast send` went to one file and the engine read another. Every test of #3261 injected a runner that
 writes to `chunklog.log_path` itself, so none of them could see it.
 
+#3173: the old sender is gone, and with it the second log. What is left of the claim: the runner production really holds
+writes the log the engine reads (`chunklog.log_path`), and nowhere else.
+
 These tests build the app as production does (no `sender_runner`), take the runner the engine really holds, and run a
 real child through it.
 
-Negative control: server/rounds/directchunk.py back to the base (the fallback is `udpcast.run_process`).
+Negative control: `DirectChunks.runner` falling back to any runner other than `chunklog.run_process` (#3340: it was
+`udpcast.run_process`).
 """
 
 from __future__ import annotations
@@ -23,7 +27,7 @@ import pytest
 pytest.importorskip("fastapi")
 
 from native import requires_native
-from server.rounds import chunklog, sender
+from server.rounds import chunklog
 from test_chunk_send_reason_3261 import PART_FILE, SAID, _fail_with
 from test_chunksend_2533 import rig   # noqa: F401 -- a fixture
 
@@ -35,22 +39,21 @@ CHILD = f"import sys; print('sent 1 2'); print({SAID!r}, file=sys.stderr); sys.e
 
 @pytest.fixture()
 def production(tmp_path, monkeypatch):
-    """The engine of an app built without `sender_runner`, as `server.main` builds it; both log directories under tmp."""
+    """The engine of an app built without `sender_runner`, as `server.main` builds it; the log directory under tmp."""
     from server.app import create_app
 
-    chunk_logs, sender_logs = tmp_path / "chunk-logs", tmp_path / "sender-logs"
-    chunk_logs.mkdir(), sender_logs.mkdir()
+    chunk_logs = tmp_path / "chunk-logs"
+    chunk_logs.mkdir()
     monkeypatch.setattr(chunklog, "LOG_DIR", chunk_logs)
-    monkeypatch.setattr(sender, "SENDER_LOG", sender_logs / "imagesrv-sender.log")
-    # tests/hygiene.py makes `sender.subprocess` raise (#79), and that is what hides the bug: the production runner
-    # falls to the old sender's `run_process`, which a test never reaches with an injected runner. Here the child is
-    # a stand-in that this test starts and that ends by itself, so the real `subprocess` is put back for this test.
-    monkeypatch.setattr(sender, "subprocess", subprocess)
-    app = create_app(tmp_path / "data", tmp_path / "images", "http://10.44.12.10:8080", wol_send=lambda _b: None)
+    # tests/hygiene.py makes `chunklog.subprocess` refuse `chunkcast` by its bare name (#79), and a test never reaches
+    # the production runner with an injected one. Here the `chunkcast` is a stand-in on PATH that this test starts and
+    # that ends by itself, so the real `subprocess` is put back for this test.
+    monkeypatch.setattr(chunklog, "subprocess", subprocess)
+    app = create_app(tmp_path / "data", tmp_path / "images", "http://10.44.12.10:7712", wol_send=lambda _b: None)
     ctx = app.state.ctx
-    yield {"runner": ctx.chunk.runner, "chunk_logs": chunk_logs, "sender_logs": sender_logs,
+    yield {"runner": ctx.chunk.runner, "chunk_logs": chunk_logs,
            "part": tmp_path / "images" / "img_1" / PART_FILE}
-    ctx.sender.stop()
+    ctx.chunk.stop()
     ctx.chunk.close()
 
 
@@ -67,7 +70,7 @@ def _fake_chunkcast(tmp_path, monkeypatch):
 def test_the_log_of_the_production_runner_is_the_one_the_engine_reads(production):
     process = production["runner"]([sys.executable, "-c", CHILD, "--file", str(production["part"])])
     assert process.wait(30) == 2
-    wrote = {p.name: p.read_text() for d in (production["chunk_logs"], production["sender_logs"]) for p in d.iterdir()}
+    wrote = {p.name: p.read_text() for p in production["chunk_logs"].iterdir()}
     said = chunklog.log_tail(chunklog.log_path(production["part"]))
     assert said == SAID, f"the engine reads {chunklog.log_path(production['part']).name} and got {said!r}; written: {wrote}"
 

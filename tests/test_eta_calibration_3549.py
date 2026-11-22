@@ -137,10 +137,11 @@ def test_a_chunk_wave_without_a_positive_measurement_is_not_history(conn, stream
     assert got["seconds"] is None and got["why"] == "no_history", got
 
 
-def test_a_udpcast_wave_is_still_read_by_wall_s(conn):
+def test_an_old_udpcast_wave_is_not_history(conn):
+    """#3173: udpcast is gone. Its row in an upgraded DB (`wall_s` at the top) stays in the table and is not read."""
     _wave(conn, "ses_u", _stream("udp", 374.6, None), at=T0, seconds=413)
     got = learn_eta.wave(conn, [{"mac": MAC}], IMAGE, None, "ses_new")
-    assert got["why"] is None and got["seconds"] == pytest.approx(413, abs=1.5), got
+    assert got["why"] == "no_history" and got["seconds"] is None, got
 
 
 def _replay_k16(conn, series: str) -> tuple[list[tuple[float, float]], int]:

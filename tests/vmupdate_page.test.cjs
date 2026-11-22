@@ -27,7 +27,7 @@ function setup({user = 'nadav', role = 'admin'} = {}) {
       addEventListener() {}, removeEventListener() {}},
     window: {addEventListener() {}, matchMedia: () => ({matches: false})},
     localStorage: {getItem: () => null, setItem() {}}, sessionStorage: {getItem: () => null, setItem() {}},
-    CSS: {escape: (x) => x}, location: {protocol: 'https:', host: 'srv:8081'},
+    CSS: {escape: (x) => x}, location: {protocol: 'https:', host: 'srv:443'},
     setInterval: () => 1, clearInterval() {}, setTimeout: () => 1, clearTimeout() {},
     fetch: async () => ({status: 200, ok: true, headers: {get: () => null}, json: async () => ({})}),
   });

@@ -48,7 +48,7 @@ def station(tmp_path, images_root, clock):
     from server.app import create_app
 
     woken: list[bytes] = []
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, wol_send=woken.append)
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
@@ -510,7 +510,7 @@ def test_a_wake_failure_does_not_stop_the_rest(tmp_path, images_root, clock):
         if calls["n"] == 1:
             raise OSError("network is unhappy")
 
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, wol_send=flaky)
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)

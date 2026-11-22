@@ -26,16 +26,16 @@ except ImportError:  # pragma: no cover
     TestClient = None
 
 from server import app as app_module
-from server.app import (create_agent_app, create_console_app,
+from server.app import (create_agent_app, create_boot_app, create_console_app,
                         create_runtime)
 
 
 def _runtime(tmp_path: Path, images_root: Path):
     """runtime עם שולח מזויף — אף round לא נפתח כאן, אבל השולח נבנה
-    בכל מקרה, וריאל אחד היה מגיע ל-udp-sender (conftest חוסם ומכשיל)."""
-    from test_sender import Recorder                       # noqa: PLC0415
+    בכל מקרה, וריאל אחד היה מגיע ל-`chunkcast send` (conftest חוסם ומכשיל)."""
+    from fakesend import Recorder                       # noqa: PLC0415
     return create_runtime(
-        tmp_path / "data", images_root, "http://10.44.12.10:8080",
+        tmp_path / "data", images_root, "http://10.44.12.10:7712",
         sender_runner=Recorder(block=True),
     )
 
@@ -62,7 +62,7 @@ def split(tmp_path: Path, images_root: Path):
     agent_app = create_agent_app(rt)
     console_app = create_console_app(rt)
     yield rt, agent_app, console_app
-    rt.ctx.sender.stop()
+    rt.ctx.chunk.stop()
 
 
 # --- מלאי נתיבים -----------------------------------------------------------
@@ -78,7 +78,9 @@ def test_agent_routes_only_on_agent_app(split):
     # מבדילים דרך המתודה: GET על נתיב PUT → 405 אם הנתיב רשום, 404 אם לא.
     assert agent.get("/api/v1/capture/t1/manifest").status_code == 405
     assert console.get("/api/v1/capture/t1/manifest").status_code == 404
-    assert "/boot" in _mounts(agent_app)
+    # #3486: /boot במאזין משלו (create_boot_app) -- פורט הסוכן אינו מגיש אותו.
+    assert "/boot" not in _mounts(agent_app)
+    assert "/boot" in _mounts(create_boot_app(rt))
     assert "/boot" not in _mounts(console_app)
 
 
@@ -102,7 +104,7 @@ def test_console_routes_only_on_console_app(split):
 def test_station_router_on_agent_not_console(split):
     # #738 (tracer 2 של #703): `create_station_router` (prefix
     # `/api/v1/agent/{groups,state,sessions}`) חולץ מהקונסולה — ואפליקציית
-    # הניהול אינה מאזינה בוילן ההפצה. #1247: אפליקציית הקיוסק (:8082) הוסרה.
+    # הניהול אינה מאזינה בוילן ההפצה. #1247: אפליקציית הקיוסק (מאזין משלה) הוסרה.
     # #824: אותם נתיבים הם גם ה-API שהסוכן על המכונה צורך (guistate.sh,
     # guibridge.sh, guiparent.sh) דרך `$SERVER` = פורט
     # הסוכן — ולכן הם חיים גם על הסוכן. על הקונסולה — לא.
@@ -141,7 +143,7 @@ def test_agent_app_alone_serves_station_state(split):
 def test_build_flow_console_calls_on_agent_app(split):
     """17/09 01:06, מדוד על השרת החי: מחשב הבנייה (10.44.0.88) שלח
     `POST /api/console/login` ל-`$SERVER` = פורט הסוכן וקיבל **404** — הכניסה
-    במסך הבנייה נכשלה עם סיסמה נכונה. #738 העביר את allowlist מחשב הבנייה ל-:8082
+    במסך הבנייה נכשלה עם סיסמה נכונה. #738 העביר את allowlist מחשב הבנייה למאזין הקיוסק
     בלבד (הוסר ב-#1247), והסוכן (`buildmenu.sh:59,95,105`, `roomflow.sh`) קורא את אותם
     נתיבים דרך `$SERVER` — אותה משפחה כמו #824. ה-allowlist של הקיוסק (login,
     folders, images, tasks/capture, room) חי גם על הסוכן; נתיבי ניהול — לא."""
@@ -191,17 +193,18 @@ def test_startup_sweep_runs_once_per_runtime(tmp_path, images_root, monkeypatch)
         # runtime אחד → sweep אחד, גם אחרי בניית שתי האפליקציות.
         assert len(calls) == 1
     finally:
-        rt.ctx.sender.stop()
+        rt.ctx.chunk.stop()
 
 
 def test_the_real_lifespan_shutdown_closes_the_sender(split, monkeypatch):
     """#1426: ה-lifespan קרא ל-`rt.sender.close`, ול-ServerRuntime אין
     `sender` — כל עצירה נגמרה ב-"Application shutdown failed" והשולח לא
-    נסגר. ה-runtime כאן הוא האמיתי (`create_runtime`), לא מדומה."""
+    נסגר. ה-runtime כאן הוא האמיתי (`create_runtime`), לא מדומה.
+    #3173: השולח היחיד הוא מנוע החתיכות (`ctx.chunk`)."""
     rt, _agent_app, console_app = split
     closed = []
-    real_close = rt.ctx.sender.close
-    monkeypatch.setattr(rt.ctx.sender, "close", lambda: closed.append(1) or real_close())
+    real_close = rt.ctx.chunk.close
+    monkeypatch.setattr(rt.ctx.chunk, "close", lambda: closed.append(1) or real_close())
     with TestClient(console_app):
         pass
     assert closed == [1]
@@ -215,8 +218,8 @@ def test_two_listeners_on_one_console_app_run_one_clock_and_close_once(split, mo
     started, closed = [], []
     monkeypatch.setattr(app_module.auto_reboot, "run",
                         lambda *_a: started.append(1) or asyncio.sleep(3600))
-    real_close = rt.ctx.sender.close
-    monkeypatch.setattr(rt.ctx.sender, "close", lambda: closed.append(1) or real_close())
+    real_close = rt.ctx.chunk.close
+    monkeypatch.setattr(rt.ctx.chunk, "close", lambda: closed.append(1) or real_close())
     life = console_app.router.lifespan_context
 
     async def two_listeners():

@@ -154,9 +154,12 @@ def test_a_stream_with_no_entry_is_not_an_empty_clean_listing(stream):
 # --- item 4: boot-payload-build.sh runs the gate before the swap --------------------------
 
 STUB_BUILD = r"""#!/usr/bin/env bash
-out=""
-for a in "$@"; do case "$prev" in --output) out="$a" ;; esac; prev="$a"; done
+out=""; ca=""; name=""
+for a in "$@"; do case "$prev" in --output) out="$a" ;; --server-ca) ca="$a" ;; --server-name) name="$a" ;; esac; prev="$a"; done
 cp "$STUB_IMAGES/$(basename "$out" .new)" "$out"
+# #3580: the builder's contract -- beside the image, the CA it packed and the name it expects
+if [ -n "$ca" ]; then cp "$ca" "$out.ca.pem"; fi
+if [ -n "$name" ]; then printf '%s\n' "$name" > "$out.agent-name"; fi
 """
 OUTPUTS = ("initrd.img", "initrd.img.gui")
 
@@ -191,7 +194,8 @@ def _payload(tmp_path: Path, images: dict[str, bytes], *flags: str, gate_install
         f'bash "{posix(tree / "tools" / "boot-payload-build.sh")}" --http-root "{posix(boot)}"'
         f' --flags-file "{posix(flag_file)}" --manifest "{posix(host / "etc" / "iso-release.json")}"'
         f' --build-log "{posix(tmp_path / "build.log")}" {" ".join(flags)}',
-        tmp_path, tmp_path, env={**_host_env(host), "STUB_IMAGES": posix(stub_images)})
+        tmp_path, tmp_path, env={**_host_env(host), "IMAGESRV_DATA_DIR": posix(host / "data"),   # #3580: the build writes the agent CA under it
+                                                         "STUB_IMAGES": posix(stub_images)})
     return proc, boot
 
 

@@ -366,8 +366,8 @@ def test_the_reporters_loop_hands_every_answer_to_the_neighbour_wiring(tmp_path)
     (run / "chunk" / "p3.args").write_text("--index /x/p3.idx --index-xxh64 0011223344556677 --raw\n")
     (bin_ / "chunkcast").write_text('#!/bin/sh\necho "$*" >> "$RUN_DIR/cc.argv"\necho serving\nexec sleep 30\n', newline="\n")
     (bin_ / "chunkcast").chmod(0o755)
-    reply = {"ok": True, "peer_serve": [_serve_order(48200, listen="10.55.0.22", allow="10.55.0.21")],
-             "peer_fill": {"S1": _instruction(5, 48200, ranges=[[0, 4]], me="10.55.0.21", ip="10.55.0.22")}}
+    reply = {"ok": True, "peer_serve": [_serve_order(7717, listen="10.55.0.22", allow="10.55.0.21")],
+             "peer_fill": {"S1": _instruction(5, 7717, ranges=[[0, 4]], me="10.55.0.21", ip="10.55.0.22")}}
     (tmp_path / "reply.json").write_text(json.dumps(reply))
     script = (f"export RUN_DIR={posix(run)!r} DEVROOT={posix(tmp_path / 'dev')!r} CHUNK_DIR={posix(run / 'chunk')!r} NF_LEVEL=3 PROGRESS_INTERVAL_S=0.2 "
               f"PATH={posix(bin_)!r}:\"$PATH\"; " + agent_sources(*LIBS, "sysinfo", "progress", "failmark")

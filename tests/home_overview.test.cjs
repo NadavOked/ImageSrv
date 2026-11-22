@@ -28,8 +28,8 @@ function setup() {
     '/net':[{mac:'de:ad:be:ef:00:01',ip:'10.44.12.199',registered:false,last_seen:today+'T09:38:00Z'},
             {mac:'aa:aa:aa:aa:aa:aa',registered:true,last_seen:today+'T09:42:00Z'},
             {mac:'bb:bb:bb:bb:bb:bb',registered:true,last_seen:'2026-09-10T09:42:00Z'}],
-    '/ports':[{id:'http_console',name:'HTTP',port:'8081',state:'ok'},{id:'tftp',name:'TFTP',port:'69',state:'ok'},{id:'multicast',name:'Multicast',port:'9000–9001',state:'warn'}],
-    '/health':[{id:'server',label:'השרת בכתובת ההפצה',state:'ok',detail:'עונה'},{id:'udp_sender',label:'מולטיקאסט',state:'warn',detail:'udp-sender לא נמצא'}],
+    '/ports':[{id:'http_console',name:'HTTP',port:'443',state:'ok'},{id:'tftp',name:'TFTP',port:'69',state:'ok'},{id:'multicast',name:'Multicast',port:'7713–7714',state:'warn'}],
+    '/health':[{id:'server',label:'השרת בכתובת ההפצה',state:'ok',detail:'עונה'},{id:'chunk_sender',label:'מולטיקאסט',state:'warn',detail:'chunkcast לא נמצא'}],
     '/journal':[{ts:today+'T09:41:00Z',user:'nadav',event:'session_open',label:'סבב הפצה נפתח לכיתה 303',severity:'info'},
                 {ts:'2026-09-16T08:12:00Z',user:'server',event:'transfer_failed',label:'העברה נכשלה',severity:'err'}],
     '/update':{current:'v0.30.0',enabled:true},
@@ -240,11 +240,13 @@ test('#1737: near the system reserve the card colours and the row says what the 
   run('OVERVIEW={...OVERVIEW,storage:{total_bytes:100*1024**3,free_bytes:40*1024**3,reserve_bytes:10*1024**3}}');
   html=run('home(0)');
   assert.match(html,/kpi kpi-store warn/);
-  assert.match(html,/<li class="attn-i warn">.*<b>אחסון האימג'ים כמעט מלא<\/b> — <bdi dir="ltr">60%<\/bdi> בשימוש, נשארו <bdi dir="ltr">40.0 GB<\/bdi> פנויים\. השרת שומר <bdi dir="ltr">10.0 GB<\/bdi> למערכת \(ה-DB, היומנים ועדכוני השרת\), ומסרב לכל קליטה, העלאה או העברה של אימג' שתשאיר פחות מזה\./);
+  // בדיקת יום ראשון 21/11: "כמעט מלא — 14% בשימוש" סתר את עצמו. בגלל הרזרבה (ולא האחוז) השורה אומרת כמה נשאר לאימג'ים.
+  assert.match(html,/<li class="attn-i warn">.*<b>מעט מקום לאימג'ים חדשים<\/b> — נשארו <bdi dir="ltr">40.0 GB<\/bdi>, מתוכם <bdi dir="ltr">10.0 GB<\/bdi> שמורים למערכת \(ה-DB, היומנים ועדכוני השרת\): אימג' גדול מ-<bdi dir="ltr">30.0 GB<\/bdi> לא ייכנס\./);
+  assert.doesNotMatch(html,/כמעט מלא/,'60% is not "almost full"');
   // ‏19GB — פחות מ-2 רזרבות: אדום
   run('OVERVIEW={...OVERVIEW,storage:{total_bytes:100*1024**3,free_bytes:19*1024**3,reserve_bytes:10*1024**3}}');
   html=run('home(0)');
-  assert.match(html,/kpi kpi-store err/); assert.match(html,/<li class="attn-i err">.*השרת שומר <bdi dir="ltr">10.0 GB<\/bdi> למערכת/);
+  assert.match(html,/kpi kpi-store err/); assert.match(html,/<li class="attn-i err">.*מתוכם <bdi dir="ltr">10.0 GB<\/bdi> שמורים למערכת.*אימג' גדול מ-<bdi dir="ltr">9.0 GB<\/bdi> לא ייכנס/);
 });
 test('#1300: storage the server could not read is "unknown" — never 0 and never coloured (principle 5)',async()=>{
   const {run}=await loaded();
@@ -279,7 +281,7 @@ test('#1300: the "active round" card — image, bar, machines; the now-table mov
 });
 test('#1300: a cloning round shows written/target drives and the rate; unmeasured rate is not shown',async()=>{
   const {run}=await loaded();
-  // 17/10: the rate is round.rate_bps (the last 10 s, the GUI's number), not udp-sender's throughput_bps
+  // 17/10: the rate is round.rate_bps (the last 10 s, the GUI's number), not chunkcast's throughput_bps
   run('OVERVIEW={...OVERVIEW,session:null,room:{state:"active",image_name:"Office 2024",target_drives:4,written_drives:1,wave_state:"running",target_slots:[{mac:"a"},{mac:"b"}],rate_bps:111149056,throughput_bps:53687091}}');
   let card=run('homeRoundCard()');
   assert.match(card,/<b>Office 2024<\/b><span class="pct">25%<\/span>/);
@@ -318,9 +320,9 @@ test('"needs attention" lists the unregistered machine, the unreachable branch a
   assert.match(card,btn('רשום','openNewMachine\\(\\)'));
   // טקסט גולמי באנגלית (שגיאת מערכת מהשרת) לא בגוף הפריט — מאחורי "פרטים טכניים"
   assert.match(card,/<b>שרת משנה חיפה לא מגיב<\/b>\.<details class="tech"><summary>פרטים טכניים<\/summary><code dir="ltr">timeout<\/code><\/details><\/div><button class="btn sm flat" onclick="selectPageById\('branches'\)">פרטי שרת המשנה<\/button>/);
-  assert.match(card,/<b>מולטיקאסט<\/b>\.<details class="tech"><summary>פרטים טכניים<\/summary><code dir="ltr">udp-sender לא נמצא<\/code><\/details><\/div><button class="btn sm flat" onclick="selectPageById\('health'\)">לבריאות<\/button>/);
+  assert.match(card,/<b>מולטיקאסט<\/b>\.<details class="tech"><summary>פרטים טכניים<\/summary><code dir="ltr">chunkcast לא נמצא<\/code><\/details><\/div><button class="btn sm flat" onclick="selectPageById\('health'\)">לבריאות<\/button>/);
   assert.doesNotMatch(card,/<div class="b">[^<]*<a /,'no inline link inside the item text');
-  assert.doesNotMatch(card.replace(/<details class="tech">.*?<\/details>/g,''),/timeout|udp-sender/,'no raw English outside the technical details');
+  assert.doesNotMatch(card.replace(/<details class="tech">.*?<\/details>/g,''),/timeout|chunkcast/,'no raw English outside the technical details');
   assert.doesNotMatch(card,/השרת בכתובת ההפצה/,'ok checks are not attention items');
 });
 test('events come from /journal (dd/mm for older days, severity from the server) and link to the journal — on the events tab; no recent-images card on the summary (#1300)',async()=>{
@@ -341,9 +343,9 @@ test('#1300: the "services" card — four short tiles (one word each), detail in
   const tile=(n,cls,word,title)=>new RegExp('<div class="tile" title="'+title+'"><span class="led '+cls+'"></span><div><div class="tt">'+n+'</div><small>'+word+'</small>');
   assert.match(card,/<div class="tiles">/);
   assert.equal((card.match(/<div class="tile"/g)||[]).length,4);
-  assert.match(card,tile('שרת','ok','פעיל','תקין · 8081'));
+  assert.match(card,tile('שרת','ok','פעיל','תקין · 443'));
   assert.match(card,tile('פורט TFTP','ok','פעיל','תקין · 69'));
-  assert.match(card,tile('מולטיקאסט','warn','דורש בדיקה','אזהרה · 9000–9001'));
+  assert.match(card,tile('מולטיקאסט','warn','דורש בדיקה','אזהרה · 7713–7714'));
   assert.match(card,tile('DHCP הפצה','','לא נבדק','לא נקרא'),'DHCP without net.js is "not checked", not off');
   assert.doesNotMatch(card,/SSH/,'#1266: SSH is not part of the product');
   assert.match(card,/selectPageById\('health'\)">לבריאות</);
@@ -469,7 +471,7 @@ test('raw technical text goes to "technical details"; a Hebrew sentence that men
   const {run}=setup();
   assert.equal(run('isRawTechnical("Server status could not be read: [Errno 2] No such file")'),true);
   assert.equal(run('isRawTechnical("leases file /var/lib/misc/dnsmasq.leases not readable")'),true);
-  assert.equal(run('isRawTechnical("udp-sender לא נמצא")'),true);
+  assert.equal(run('isRawTechnical("chunkcast לא נמצא")'),true);
   assert.equal(run('isRawTechnical("כבל/חריץ SATA 2")'),false);
   assert.equal(run('isRawTechnical("")'),false);
   assert.equal(run('isRawTechnical(null)'),false);

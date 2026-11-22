@@ -21,7 +21,6 @@ CASES = [
     ("cloner_beep", "yes", "true", "צלילי המשכפל ומחשב הבנייה"),
     ("hdd_support", "yes", "true", "תמיכה ב-HDD"),   # #3268
     ("readback_full", "yes", "true", "אימות מלא אחרי הכתיבה"),
-    ("stream_engine", "fast", "chunk", "מנוע שידור"),   # #2533
     ("igmp_querier", "yes", "true", "IGMP querier"),
     ("lost_wait_seconds", "179", "180", "המתנה למחשב שהתנתק באמצע שיכפול"),   # #2056
     ("gui_idle_poweroff_seconds", "59", "60", "כיבוי כשאין פעילות"),   # #2059
@@ -42,6 +41,7 @@ CASES = [
     ("tail_shrink_enabled", "yes", "false", "הקטנת המחיצה האחרונה ביעד קטן"),   # #3262
     ("brain_server_cap", "yes", "false", "המוח: הגבלת קצב הגל לתקרת הקריאה של דיסק הספרייה"),   # #3464
     ("brain_cpu_gate", "on", "false", "המוח: שער מעבד לפני פתיחת גל"),   # #3064 (K12)
+    ("brain_rate_inputs", "on", "enforce", "המוח: קצב הגל לפי מה שהמשכפלים כתבו ולפי קצב שמשכפל נפל בו"),   # #3977
     ("wiring_net_margin", "0.5", "1.5", "מפת החיבורים: פי כמה מהיר מהיציאה"),   # #3600
     ("brain_gate_min_samples", "0", "50", "המוח: שער מצל לאכיפה, מינימום דגימות"),   # #3563
     ("brain_gate_min_agreement", "101", "95", "המוח: שער מצל לאכיפה, מינימום הסכמה"),   # #3563

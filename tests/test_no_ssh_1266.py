@@ -151,7 +151,7 @@ def test_the_server_exposes_no_ssh_route(tmp_path):
 
     images = tmp_path / "images"
     images.mkdir()
-    app = create_app(tmp_path / "data", images, "http://10.44.12.10:8080")
+    app = create_app(tmp_path / "data", images, "http://10.44.12.10:7712")
     paths = list(app.openapi()["paths"])
     # ראיה חיובית שהסכמה כוללת את ראוטרי הקונסולה ולא רק את הסוכן.
     assert "/api/console/ports" in paths and "/api/v1/agent/hello" in paths, paths

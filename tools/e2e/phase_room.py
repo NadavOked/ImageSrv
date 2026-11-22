@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from .harness import check, wait_until
+from .harness import FILES_A, SENDER_PORTBASE, check, sent_commands, sha, wait_until
 
 WAVE1 = [("sda", "done"), ("sdb", "done"),
          ("sdc", "failed", "queue overflow: target lost bytes")]
@@ -30,6 +30,11 @@ def _room(ctx) -> dict:
 def run(ctx) -> None:
     print("\n9. חדר השיכפולים — 3 מגירות, מגירה אחת נכשלת")
     ctx.cloner.write_plans = [WAVE1, WAVE2]
+    ctx.cloner.pull_files = True        # #3173: ההוכחה שהאימג' עצמו מגיע (למטה)
+    # #3173: המעבר שודר = המנוע של השרת הריץ את `chunkcast send` שלו (`simsend` רשם אותו)
+    ctx.cloner.pass_sent = lambda session, part: any(
+        c[c.index("--session") + 1] == session["chunk"]["key"] and c[c.index("--part") + 1] == str(part)
+        for c in sent_commands(ctx.data_dir))
     ctx.cloner.start()
     # GET no longer supplies a heartbeat (#446). Keep the simulated agent
     # polling through both waves, including after its final progress report.
@@ -82,3 +87,39 @@ def run(ctx) -> None:
     status, overview = ctx.console.json("GET", "/api/console/overview")
     check("לא נשאר סבב פעיל במערכת", overview["session"] is None,
           str(overview["session"]))
+
+    # #3173: שני הגלים יצאו במנוע החתיכות — ברירת המחדל, בלי שום הגדרה — ולא במנוע אחר.
+    waves = ctx.cloner.waves[-2:]
+    check("שני הגלים נאמרו למשכפל כגלי מנוע החתיכות (`engine: chunk` ב-hello)",
+          len(waves) == 2 and all(w.get("engine") == "chunk" for w in waves), str(waves))
+    check("הפורט של הגל נגזר מ-portbase של הסימולציה, לא מפורטי ההפצה",
+          all(w["chunk"]["port"] == SENDER_PORTBASE + 2 for w in waves), str(waves))
+    parts = [str(p["index"]) for p in ctx.manifest_a["partitions"] if p.get("file")]
+    sent = [c for c in sent_commands(ctx.data_dir) if f"{ctx.image_a}" in c[c.index("--file") + 1]]
+    passes = sorted((c[c.index("--session") + 1], c[c.index("--part") + 1], c[c.index("--pass") + 1])
+                    for c in sent)
+    keys = sorted(w["chunk"]["key"] for w in waves)
+    check("המנוע של השרת הריץ `chunkcast send` אחד לכל מחיצה בכל גל, מעבר 1, בלי השלמה",
+          passes == sorted((k, p, "1") for k in keys for p in parts),
+          f"{passes} keys={keys}")
+    check("כל שידור הלך לקבוצה ולפורט שה-hello נתן",
+          all(c[c.index("--to") + 1] == f'{waves[0]["chunk"]["group"]}:{SENDER_PORTBASE + 2}' for c in sent),
+          str([c[c.index("--to") + 1] for c in sent]))
+    wait_until(lambda: sorted(p for s, p in ctx.cloner.chunk_parts if s in {w["id"] for w in waves}) == [1, 1, 3, 3],
+               "המשכפל סגר כל מחיצה של שני הגלים מול המנוע (`done` ב-chunk-pass)",
+               detail=lambda: str(ctx.cloner.chunk_parts))
+    # ההוכחה שהאימג' עצמו מגיע: משיכת קובץ מחיצה ביוניקאסט (ממשק 7) מתוך הגל,
+    # והשוואת ה-sha256 למניפסט — אותם בייטים שמחשב הבנייה העלה.
+    ctx.cloner.pull_files = False
+    pulled = {name: got for (image, name), got in ctx.cloner.pulled.items() if image == ctx.image_a}
+    check("הבייטים שהמשכפל מושך בגל הם שהועלו בקליטה, sha256 תואם",
+          sorted(pulled) == sorted(FILES_A) and all(
+              status == 200 and payload == FILES_A[name]
+              and sha(payload) == next(p["sha256"] for p in ctx.manifest_a["partitions"] if p.get("file") == name)
+              for name, (status, payload) in pulled.items()),
+          str({n: (s, len(b)) for n, (s, b) in pulled.items()}))
+    # לפי סוג האירוע: ברירת המחדל של היומן היא 200 השורות האחרונות, וגל של מנוע החתיכות כותב עשרות
+    status, rows = ctx.console.json("GET", "/api/console/journal?event=send_start&limit=1000")
+    started = sorted(r["round_id"] for r in rows if r["event"] == "send_start")
+    check("היומן: send_start של כל אחד משני הגלים, פעם אחת (המנוע של השרת שידר אותם)",
+          started == sorted(w["id"] for w in waves), str(started))

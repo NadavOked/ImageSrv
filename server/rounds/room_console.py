@@ -29,6 +29,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.brain import memory_view
+from server.rounds import room_stream   # #3978: the column "הרשת"
 from server.console import auth
 from server.core import machine_names
 from server.learn import waits as learn_waits
@@ -240,6 +241,8 @@ def round_history(ctx, limit: int) -> list[dict]:
         "waits": learn_waits.round_waits(ctx.conn, r["created_at"], r["closed_at"]),
         # #3185: "קצב ואיבוד" -- מ-`wave_rates` של גלי הסבב; ``null`` בשדה = לא נשמר / לא נמדד, לא 0.
         "flow": memory_view.flow(memory_view.round_waves(ctx.conn, r["created_at"], r["closed_at"])),
+        # #3978: "הרשת" -- מה שמנוע החתיכות רשם על הגל האחרון של הסבב (`room_stream.network`); null = לא נרשם גל.
+        "network": room_stream.network(room_stream.recorded(ctx.conn, r["created_at"], r["closed_at"])),
     } for r in rows]
 
 

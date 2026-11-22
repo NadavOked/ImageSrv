@@ -186,12 +186,10 @@ class FakeHooks:
 
 @pytest.fixture()
 def env(tmp_path: Path, images_root: Path, clock, monkeypatch):
-    from server.rounds import sender as sender_module
     from server.console import users
     from server.app import create_app
-    from test_sender import Recorder
+    from fakesend import Recorder
 
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
     fake = FakeHooks()
     tftp = tmp_path / "tftp"
     (tftp / "grub").mkdir(parents=True)
@@ -207,7 +205,7 @@ def env(tmp_path: Path, images_root: Path, clock, monkeypatch):
         "udp_sender_pids": lambda: [],
     }
     app = create_app(
-        tmp_path / "data", images_root, "http://10.44.12.10:8080",
+        tmp_path / "data", images_root, "http://10.44.12.10:7712",
         now_fn=clock, sender_runner=Recorder(block=True),
         storage_hooks=fake.as_dict(),
         storage_check_interval=10**9,
@@ -225,7 +223,7 @@ def env(tmp_path: Path, images_root: Path, clock, monkeypatch):
                        json={"username": "labtech", "password": "deploy-pass-1"}).status_code == 200
     yield {"app": app, "ctx": ctx, "admin": admin, "deploy": deploy,
            "fake": fake, "images_root": images_root, "data": tmp_path / "data"}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def _nfs_params():
@@ -720,11 +718,11 @@ def test_installer_has_storage_packages_and_unique_initiator():
 
 def test_shared_nic_warning_needs_positive_evidence():
     """אין אזהרה בלי ראיה שה-IP ב-subnet של כרטיס ההפצה."""
-    assert sl.shared_nic_warning("10.44.10.20", [], "http://10.44.12.10:8080") is None
+    assert sl.shared_nic_warning("10.44.10.20", [], "http://10.44.12.10:7712") is None
     nics = [{"name": "ens19", "addresses": ["10.44.12.10/24"]}]
-    msg = sl.shared_nic_warning("10.44.12.50", nics, "http://10.44.12.10:8080")
+    msg = sl.shared_nic_warning("10.44.12.50", nics, "http://10.44.12.10:7712")
     assert msg and "10.44.12.50" in msg
-    assert sl.shared_nic_warning("10.44.10.20", nics, "http://10.44.12.10:8080") is None
+    assert sl.shared_nic_warning("10.44.10.20", nics, "http://10.44.12.10:7712") is None
 
 
 # --- #1123 (1): סיסמת SMB לא ב-argv ולא ב-fstab ------------------------------

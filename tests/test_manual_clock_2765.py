@@ -75,9 +75,9 @@ class ClockMachine:
 @pytest.fixture()
 def api(tmp_path, images_root, clock):
     from server.app import create_app
-    from test_sender import Recorder
+    from fakesend import Recorder
     machine = ClockMachine()
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
                      sender_runner=Recorder(block=True), host_hooks=machine.hooks(),
                      health_hooks={"interfaces": lambda: [],
                                    "timesync_status": lambda: (machine.override if machine.override is not None
@@ -87,7 +87,7 @@ def api(tmp_path, images_root, clock):
     admin = TestClient(app)
     complete_console_login(admin, ctx.conn, "noc", "admin-pass-123")
     yield admin, machine, ctx
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def _row(admin) -> dict:

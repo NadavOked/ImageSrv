@@ -90,17 +90,17 @@ def test_token_verify_matches_and_mismatches():
 
 def test_parse_interserver_url_accepts_strict_https():
     host, port, path = interserver_auth.parse_interserver_url(
-        "https://10.20.0.12:8443/api/interserver/v1")
-    assert (host, port, path) == ("10.20.0.12", 8443, "/api/interserver/v1")
+        "https://10.20.0.12:7700/api/interserver/v1")
+    assert (host, port, path) == ("10.20.0.12", 7700, "/api/interserver/v1")
 
 
 @pytest.mark.parametrize("url", [
-    "http://10.20.0.12:8443/api",          # לא https
+    "http://10.20.0.12:7700/api",          # לא https
     "https://10.20.0.12/api",              # פורט חסר
-    "https://u:p@10.20.0.12:8443/api",     # אישורים
-    "https://10.20.0.12:8443/api?x=1",     # query
-    "https://10.20.0.12:8443/api#frag",    # fragment
-    "ftp://10.20.0.12:8443",               # סכמה זרה
+    "https://u:p@10.20.0.12:7700/api",     # אישורים
+    "https://10.20.0.12:7700/api?x=1",     # query
+    "https://10.20.0.12:7700/api#frag",    # fragment
+    "ftp://10.20.0.12:7700",               # סכמה זרה
 ])
 def test_parse_interserver_url_rejects_unsafe(url):
     with pytest.raises(interserver_auth.InterserverURLError):
@@ -886,7 +886,7 @@ def test_enroll_node_inserts_trust_material(server):
     conn = server["ctx"].conn
     user = ("noc", "admin")
     rid = storage_nodes.enroll_node(
-        conn, user, label="BRANCH-B", base_url="https://sec.example:8443/api",
+        conn, user, label="BRANCH-B", base_url="https://sec.example:7700/api",
         node_id="sn_aaaaaaaaaaaaaaaa", pinned_spki="aa" * 32, client_cert_ref="bb" * 32,
         credential_ref="/data/secondaries/sn_aaaaaaaaaaaaaaaa.token", protocol_version="2.1")
     row = conn.execute("SELECT * FROM storage_nodes WHERE id = ?", (rid,)).fetchone()
@@ -906,7 +906,7 @@ def test_enroll_route_writes_0600_token_and_row(server, monkeypatch, tmp_path):
         "token": fake_token, "parent_id": "p", "secondary_id": derived,
         "secondary_spki": "cc" * 32})
     resp = admin.post("/api/console/storage-nodes/enroll", json={
-        "url": "https://10.20.0.30:8443/api/interserver/v1",
+        "url": "https://10.20.0.30:7700/api/interserver/v1",
         "label": "BRANCH-C", "code": "ABC-DEF-GHJ",
         "expected_secondary_spki": "cc" * 32, "protocol_version": "2.1"})
     assert resp.status_code == 200, resp.text
@@ -925,7 +925,7 @@ def test_enroll_route_writes_0600_token_and_row(server, monkeypatch, tmp_path):
 def test_enroll_route_rejects_non_https_url(server, monkeypatch):
     admin = _local_client(server)
     resp = admin.post("/api/console/storage-nodes/enroll", json={
-        "url": "http://10.20.0.30:8443/api", "label": "x", "code": "A",
+        "url": "http://10.20.0.30:7700/api", "label": "x", "code": "A",
         "expected_secondary_spki": "cc" * 32, "protocol_version": "2.1"})
     assert resp.status_code == 400
 
@@ -933,7 +933,7 @@ def test_enroll_route_rejects_non_https_url(server, monkeypatch):
 def test_enroll_route_wrong_protocol_version_rejected(server):
     admin = _local_client(server)
     resp = admin.post("/api/console/storage-nodes/enroll", json={
-        "url": "https://10.20.0.30:8443/api", "label": "x", "code": "A",
+        "url": "https://10.20.0.30:7700/api", "label": "x", "code": "A",
         "expected_secondary_spki": "cc" * 32, "protocol_version": "1.0"})
     assert resp.status_code == 426
 
@@ -976,7 +976,7 @@ def test_enroll_traversal_secondary_id_rejected_before_code_and_no_file(
     calls, token = _fake_pair_begin(monkeypatch, secondary_id="../x", spki=spki)
     data_dir = tmp_path / "data"
     resp = admin.post("/api/console/storage-nodes/enroll", json={
-        "url": "https://10.20.0.30:8443/api/interserver/v1",
+        "url": "https://10.20.0.30:7700/api/interserver/v1",
         "label": "BRANCH-C", "code": "ABC-DEF-GHJ",
         "expected_secondary_spki": spki, "protocol_version": "2.1"})
     assert resp.status_code == 400, resp.text
@@ -999,7 +999,7 @@ def test_enroll_node_id_is_derived_from_pinned_spki(server, monkeypatch, tmp_pat
     derived = interserver_auth.node_id_from_spki(spki)
     _calls, token = _fake_pair_begin(monkeypatch, secondary_id=derived, spki=spki)
     resp = admin.post("/api/console/storage-nodes/enroll", json={
-        "url": "https://10.20.0.31:8443/api/interserver/v1",
+        "url": "https://10.20.0.31:7700/api/interserver/v1",
         "label": "BRANCH-D", "code": "ABC-DEF-GHJ",
         "expected_secondary_spki": spki, "protocol_version": "2.1"})
     assert resp.status_code == 200, resp.text
@@ -1020,7 +1020,7 @@ def test_enroll_declared_id_differing_from_key_is_a_loud_mismatch(
     calls, _token = _fake_pair_begin(monkeypatch, secondary_id="sn_0000000000000000",
                                      spki="ee" * 32)
     resp = admin.post("/api/console/storage-nodes/enroll", json={
-        "url": "https://10.20.0.32:8443/api/interserver/v1",
+        "url": "https://10.20.0.32:7700/api/interserver/v1",
         "label": "x", "code": "A", "expected_secondary_spki": "ee" * 32,
         "protocol_version": "2.1"})
     assert resp.status_code == 400
@@ -1033,7 +1033,7 @@ def test_enroll_node_rejects_malformed_node_id(server, bad):
     with pytest.raises(ValueError):
         storage_nodes.enroll_node(
             server["ctx"].conn, ("noc", "admin"), label="x",
-            base_url="https://s:8443/api", node_id=bad, pinned_spki="aa" * 32,
+            base_url="https://s:7700/api", node_id=bad, pinned_spki="aa" * 32,
             client_cert_ref="bb" * 32, credential_ref="/x", protocol_version="2.1")
 
 
@@ -1044,7 +1044,7 @@ def test_a_primary_with_secondaries_can_enroll_another_one(conn):
     admin = ("noc", "admin")
     assert storage_nodes.can_enroll_secondary(conn, "admin") is True        # הראשון: אין משני עדיין
     for i in range(2):
-        storage_nodes.enroll_node(conn, admin, label=f"BRANCH-{i}", base_url=f"https://10.0.0.{i + 2}:8443",
+        storage_nodes.enroll_node(conn, admin, label=f"BRANCH-{i}", base_url=f"https://10.0.0.{i + 2}:7700",
                                   node_id=f"sn_{i:016x}", pinned_spki="aa" * 32, client_cert_ref="c",
                                   credential_ref="r", protocol_version="2.1")
     assert storage_nodes.enabled_node_count(conn) == 2

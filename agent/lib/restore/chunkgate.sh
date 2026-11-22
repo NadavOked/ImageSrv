@@ -1,35 +1,34 @@
 # chunkgate.sh -- which stream engine this session's wave uses (#2533, stage 3).
 # POSIX sh (busybox ash).
 #
-# The server chooses (settings: "stream engine", experimental, off by default)
-# and says so in the hello answer of a running session:
+# The chunk engine is the only multicast engine (#3173). The server says so in
+# the hello answer of a running session:
 #
-#   session.engine  absent | "udpcast"   today's path: udp-receiver | fanout | partclone
-#                   "chunk"              chunkcast recv (chunkrecv.sh), with
+#   session.engine  "chunk"              chunkcast recv (chunkrecv.sh), with
 #   session.chunk   {"group": "239.x.x.x", "port": N, "key": "<16 hex>", "source": "<the server's IPv4>"}
+#
+# Absent, or any other engine, is refused by name: "the server did not offer the chunk engine".
 #
 # The source (Nadav 14/11, #1079/#2485): chunkcast recv takes packets from that address only
 # (--from); the others are dropped, counted, and told to the server (chunk_stray_json, below).
 # A server that names none (older) gets today's behaviour -- every source -- and a WARNING in the
 # log; one that names an unusable one is refused, as for any other parameter.
 #
-# Nothing here falls back. An engine this agent does not know, a chunk session
-# without its three parameters, an image that is not format 2, or an initramfs
-# without the receiver are each refused BY NAME before a disk is touched: a
-# receiver that quietly ran udp-receiver against a chunkcast sender would wait
-# out its start timeout and blame the network (principle 5; the design, 5.7:
-# "an engine that fails is a round that fails, never a silent drop to the other").
+# Nothing here falls back. No engine named, an engine that is not the chunk one,
+# a chunk session without its three parameters, an image that is not format 2, or
+# an initramfs without the receiver are each refused BY NAME before a disk is
+# touched: there is no other path to fall to (principle 5; the design, 5.7: "an
+# engine that fails is a round that fails, never a silent drop to the other").
 
 chunk_gate() {
-    # $1 = the hello answer, $2 = the session's manifest. Sets STREAM_MODE
-    # (multicast | chunk) and, for chunk, CHUNK_GROUP / CHUNK_PORT / CHUNK_KEY /
-    # CHUNK_SESSION. 1 = refused, with CHUNK_REFUSAL said.
-    STREAM_MODE=multicast; CHUNK_REFUSAL=""; CHUNK_SOURCE=""
+    # $1 = the hello answer, $2 = the session's manifest. Sets STREAM_MODE=chunk
+    # and CHUNK_GROUP / CHUNK_PORT / CHUNK_KEY / CHUNK_SESSION. 1 = refused, with
+    # CHUNK_REFUSAL said (STREAM_MODE is then empty: no engine).
+    STREAM_MODE=""; CHUNK_REFUSAL=""; CHUNK_SOURCE=""
     _cg=$(json_get "$1" ".session.engine")
     case "$_cg" in
-        null|udpcast) return 0 ;;
         chunk) ;;
-        *) CHUNK_REFUSAL="restore: the server named a stream engine this agent does not know ('$_cg') -- nothing was written"
+        *) CHUNK_REFUSAL="restore: the server did not offer the chunk engine (session.engine '$_cg') -- nothing was written"
            return 1 ;;
     esac
     CHUNK_GROUP=$(json_get "$1" ".session.chunk.group"); CHUNK_PORT=$(json_get "$1" ".session.chunk.port")

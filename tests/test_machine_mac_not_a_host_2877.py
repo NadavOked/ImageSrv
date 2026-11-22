@@ -17,14 +17,14 @@ GOOD = "b4:2e:99:07:1a:c4"
 @pytest.fixture()
 def admin(tmp_path, images_root, clock):
     hooks = {"apply": lambda text: None}
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, known_macs_hooks=hooks)
     ctx = app.state.ctx
     users.create(ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
     c = TestClient(app)
     c.post("/api/console/login", json={"username": "noc", "password": "admin-pass-123"})
     yield c
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def macs(c):

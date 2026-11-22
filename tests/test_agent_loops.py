@@ -49,7 +49,7 @@ def loop_server(tmp_path: Path, images_root: Path, clock):
     """
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from test_sender import Recorder                           # noqa: PLC0415
+    from fakesend import Recorder                           # noqa: PLC0415
 
     from server.console import users# noqa: PLC0415
     from server.app import create_app                          # noqa: PLC0415
@@ -68,7 +68,7 @@ def loop_server(tmp_path: Path, images_root: Path, clock):
         "interfaces": lambda: [],
         "tftp_root": lambda: tftp,
     }
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, health_hooks=hooks,
                      sender_runner=Recorder(block=True))
     ctx = app.state.ctx
@@ -82,7 +82,7 @@ def loop_server(tmp_path: Path, images_root: Path, clock):
     bundle = {"app": app, "ctx": ctx, "admin": admin, "deploy": deploy,
               "anon": anon, "clock": clock}
     yield bundle
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def hello(server: dict, mac: str) -> dict:

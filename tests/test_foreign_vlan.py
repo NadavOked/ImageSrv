@@ -35,9 +35,9 @@ except ImportError:                                   # pragma: no cover
 T0 = "2026-08-29T14:00:00+00:00"
 
 #: הכתובת שאיתה נוצר השרת — וילן ההפצה.
-VLAN = "http://10.44.12.10:8080"
+VLAN = "http://10.44.12.10:7712"
 #: כתובת מקומית אחרת של אותו שרת: הרגל שלו ברשת המכללה.
-OFF_VLAN = "http://10.10.10.8:8080"
+OFF_VLAN = "http://10.10.10.8:7712"
 
 
 def at(seconds: int) -> str:
@@ -50,7 +50,7 @@ def vlan_server(tmp_path: Path, images_root: Path, clock):
     """שרת מלא עם בדיקות בריאות מזויפות — אותה תשתית כמו ב-#112."""
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from test_sender import Recorder                           # noqa: PLC0415
+    from fakesend import Recorder                           # noqa: PLC0415
 
     from server.console import users# noqa: PLC0415
     from server.app import create_app                          # noqa: PLC0415
@@ -79,7 +79,7 @@ def vlan_server(tmp_path: Path, images_root: Path, clock):
         "username": "noc", "password": "admin-pass-123"}).status_code == 200
     bundle = {"app": app, "ctx": ctx, "admin": admin, "anon": TestClient(app)}
     yield bundle
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def hello_at(server: dict, base: str, mac: str) -> dict:
@@ -195,7 +195,7 @@ def test_two_machines_from_another_network_are_two_rows(vlan_server):
 
 def test_the_row_survives_nine_minutes_and_drops_after_eleven(vlan_server):
     conn = vlan_server["ctx"].conn
-    foreign_vlan.note(conn, "b4:2e:99:07:1a:c4", {"server": ("10.10.10.8", 8080)},
+    foreign_vlan.note(conn, "b4:2e:99:07:1a:c4", {"server": ("10.10.10.8", 7712)},
                       off_vlan=True, now=T0)
 
     assert [r["mac"] for r in foreign_vlan.current(conn, now=at(540))] \
@@ -206,7 +206,7 @@ def test_the_row_survives_nine_minutes_and_drops_after_eleven(vlan_server):
 
 def test_a_machine_that_comes_back_after_silence_starts_a_new_count(vlan_server):
     conn = vlan_server["ctx"].conn
-    scope = {"server": ("10.10.10.8", 8080)}
+    scope = {"server": ("10.10.10.8", 7712)}
 
     assert foreign_vlan.note(conn, "aa:aa:aa:aa:aa:aa", scope,
                              off_vlan=True, now=T0) == 1

@@ -23,27 +23,22 @@ CLONER2 = "aa:bb:cc:00:00:22"
 
 
 @pytest.fixture()
-def room_server(tmp_path: Path, monkeypatch):
-    """שרת עם WoL מזויף ומנוע שידור מזויף, ושני מחשבי שיכפול רשומים."""
+def room_server(tmp_path: Path):
+    """שרת עם WoL מזויף ושולח חתיכות מזויף (`fakesend.Recorder`), ושני מחשבי שיכפול רשומים."""
     if TestClient is None:
         pytest.skip("fastapi is required")
-    from test_sender import Recorder                       # noqa: PLC0415
+    from fakesend import Recorder                       # noqa: PLC0415
 
-    from server.rounds import sender as sender_module
     from server.console import users
     from server.app import create_app
 
-    # ה-runner המזויף הוא הראיה שהשידור עצמו בשליטת הטסט. גם בדיקת
-    # הפורטים חייבת להיות ראיה מזויפת חיובית: ב-Windows אין /proc/net/udp,
-    # ובלי זה #1126 הופך בצדק את כשל הבדיקה ל-send_failed ומפסיק את החדר.
-    monkeypatch.setattr(sender_module, "port_holders", lambda _port: [])
-
+    # ה-runner המזויף הוא הראיה שהשידור עצמו בשליטת הטסט.
     images = tmp_path / "images"
     write_image(images, MANIFEST_256)
     woken: list[bytes] = []
     recorder = Recorder()
     app = create_app(
-        tmp_path / "data", images, "http://10.44.12.10:8080",
+        tmp_path / "data", images, "http://10.44.12.10:7712",
         now_fn=Clock(), sender_runner=recorder,
         wol_send=woken.append,
     )
@@ -62,7 +57,7 @@ def room_server(tmp_path: Path, monkeypatch):
         }).status_code == 200
     yield {"app": app, "ctx": ctx, "admin": admin, "deploy": deploy,
            "anon": TestClient(app), "woken": woken, "recorder": recorder}
-    ctx.sender.stop()
+    ctx.chunk.close()             # not `stop`: it does not wait for the sending thread, which would run into the next test
 
 
 def room_body(room_server, target: int, drawers: dict[str, list[str]]) -> dict:
@@ -165,7 +160,7 @@ def test_room_start_with_no_members_is_refused_and_wave_stays_open(room_server):
     זה בדיוק מה שקרה במעבדה 15/09: `room_open` ו-`session_start_manual`
     באותה שנייה, 180ש' אחר כך `send_failed` ("אף מחשב לא הצטרף"), והגל
     נשאר `running` בלי חברים — המשכפלים קיבלו `session: null` לנצח.
-    הגל חייב להישאר `open` כדי שה-hello הבא יצטרף, ו-udp-sender אסור
+    הגל חייב להישאר `open` כדי שה-hello הבא יצטרף, והשולח אסור
     שיצא לדרך.
     """
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
@@ -176,7 +171,8 @@ def test_room_start_with_no_members_is_refused_and_wave_stays_open(room_server):
     assert refused.status_code == 409, refused.text
     assert "אין מכונות בסבב" in refused.json()["detail"]
     assert room(deploy)["round"]["wave_state"] == "open"
-    assert ctx.sender.status() is None            # השידור לא יצא לדרך
+    assert ctx.chunk.status() is None             # השידור לא יצא לדרך
+    assert room_server["recorder"].commands == []
 
     # המכונה שמגיעה אחרי הלחיצה השגויה עדיין מצטרפת — ואז ההתחלה מתקבלת.
     joined = cloner_hello(anon, CLONER1, ["S1", "S2"])["session"]
@@ -191,7 +187,7 @@ def test_sender_failure_stops_room_until_operator_opens_it_again(room_server):
     `failed` הוא מצב סופי מפורש עם סיבה, לא `running` ולא `active`; דופק
     אינו פותח גל נוסף, ורק פתיחה מפורשת של מפעיל יוצרת חדר `active` חדש.
     """
-    from test_sender import wait_for                         # noqa: PLC0415
+    from fakesend import Cloners, wait_for                # noqa: PLC0415
 
     deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
     room_server["recorder"].code = 3
@@ -201,6 +197,9 @@ def test_sender_failure_stops_room_until_operator_opens_it_again(room_server):
     ).json()
     wave = cloner_hello(anon, CLONER1, ["S1"])["session"]["id"]
     assert deploy.post("/api/console/room/start").status_code == 200
+    # the engine sends only once the cloner listens; the fake sender then exits 3
+    cloners = Cloners(anon, wave, {CLONER1: ["S1"]})
+    cloners.listen(cloners.parts[0][0])
     assert wait_for(lambda: ctx.conn.execute(
         "SELECT state FROM room_rounds WHERE id = ?", (opened["id"],)
     ).fetchone()["state"] == "failed")
@@ -283,7 +282,7 @@ def test_close_marks_closing_before_sender_stop_so_tick_opens_no_wave(
         room_module.tick(ctx.conn, ctx.store)
         return None
 
-    monkeypatch.setattr(ctx.sender, "stop", stop_during_close)
+    monkeypatch.setattr(ctx.chunk, "stop", stop_during_close)
     closed = deploy.post(
         "/api/console/room/close",
         json={"confirm_name": "Office 2024 Standard"},

@@ -10,18 +10,19 @@
 **גל** (`wave`) — לכל מחשב שיכפול בגל, עם מספר המגירות שלו בגל:
 
     goodput     = הבייטים שהמגירות כתבו / מגירות / משך הזרם      (`wave_rates`,
-                  אותו מונה של #1758 — `delivered` ו-`stream.wall_s`)
+                  אותו מונה של #1758 — `delivered` ו-`stream.chunk.first_pass_s`)
     שלבים קבועים = (`closed_at` − `started_at` של הגל) − משך הזרם   (`sessions`:
                   ההמתנה לבייט הראשון, האימות וההרחבה אחרי הזרם — מה שנמדד, לא מנוחש)
     המכונה      = חציון השלבים + גודל האימג' / חציון ה-goodput
     הגל         = המכונה האיטית (הגל נגמר כשהאחרונה נגמרת)
 
-  **משך הזרם של גל חתיכות (#3549):** אין לו `wall_s` ואין לו `ended` ברמה העליונה של `stream` -- מנוע החתיכות רושם הכול
+  **משך הזרם של גל חתיכות (#3549):** אין לו `wall_s` ואין לו `ended` ברמה העליונה של `stream` (אלה היו של השולח הקודם,
+  ו-#3173 מחק אותו: שורה ישנה כזו ב-DB משודרג אינה נקראת) -- מנוע החתיכות רושם הכול
   תחת `stream.chunk` (`chunk_rate.sample_of`). משך הזרם שלו הוא `chunk.first_pass_s` (המעברים הראשונים של כל המחיצות, בשעון
   המנוע; אותו מיפוי כמו `learn/tuning.py: _counters`), ו-`chunk.ended`. ההשלמה אחריהם (שידורים חוזרים ב-HTTP, שלב המחיצה
   האחרונה) אינה נרשמת כמשך נפרד, ולכן נופלת ל"שלבים קבועים" (`closed_at` − `started_at` − משך הזרם) ואינה גדלה עם האימג':
   נכון להשלמה של חתיכות בודדות, והסכום `fixed + size / goodput` של אותו אימג' שווה בקירוב לזמן הגל בפועל. לפני התיקון 36 מ-36 גלי
-  חתיכות בברזל 16/11 (r11-r16) דולגו, וההיסטוריה (והחיזוי שהמפעיל רואה) הייתה גלי udpcast בלבד.
+  חתיכות בברזל 16/11 (r11-r16) דולגו, וההיסטוריה (והחיזוי שהמפעיל רואה) הייתה גלי המנוע הקודם בלבד.
 
   נלמד רק מגל שהסתיים כולו: `send_done`, כל מגירה של המכונה `done`, ונסגר
   (`closed`). מכונה אחת בגל בלי גל כזה **עם אותו מספר מגירות** — אין הערכה
@@ -121,10 +122,10 @@ def _ends(started_at: object, seconds: int) -> str | None:
 
 
 def _stream_clock(stream: dict) -> tuple[object, object]:
-    """(`ended`, משך הזרם בשניות) של `wave_rates.stream`: גל udpcast -- `ended` ו-`wall_s` כמות שהם; גל חתיכות (#3549) --
-    `chunk.ended` ו-`chunk.first_pass_s`. גל שיש בו `wall_s` הוא תמיד udpcast (אין בו `stream.chunk`)."""
+    """(`ended`, משך הזרם בשניות) של `wave_rates.stream`: `chunk.ended` ו-`chunk.first_pass_s` (#3549). #3173: גל של המנוע
+    הקודם מ-DB משודרג (`wall_s` ברמה העליונה, בלי `stream.chunk`) -- (None, None): אינו מדידה, נשאר בטבלה ואינו נקרא."""
     if "wall_s" in stream or not isinstance(stream.get("chunk"), dict):
-        return stream.get("ended"), stream.get("wall_s")
+        return None, None
     return stream["chunk"].get("ended"), stream["chunk"].get("first_pass_s")
 
 

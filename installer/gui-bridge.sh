@@ -12,7 +12,7 @@
 #   validate       the form (+ step) -> errors.<field>=... or nothing
 #   apply          writes the answers (0600), starts the engine, job=
 #   progress       the engine's state file, plus output= for the log tail
-#   check-primary  GET https://<primary>:8443/api/interserver/v1/alive (#1310);
+#   check-primary  GET https://<primary>:7700/api/interserver/v1/alive (#1310);
 #                  green only with name + fingerprint of the key TLS showed
 #   finish         what the done screen shows after a reboot-less handoff
 #   eject          eject the install medium (reported, never fatal)
@@ -216,7 +216,7 @@ do_check_primary() {
     rm -f "$PRIMARY_CHECK"
     _cp_url=$(normalize_primary_url "$(field primary_url)") || {
         emit ok 0; emit error 'כתובת לא תקינה: הקלד את כתובת ה-IP (או השם) של השרת הראשי'; return 0; }
-    _cp_host=${_cp_url#https://}; _cp_host=${_cp_host%:8443}
+    _cp_host=${_cp_url#https://}; _cp_host=${_cp_host%:7700}
     mkdir -p "$RUN_DIR" || { echo 'gui-bridge: cannot create the run dir' >&2; return 4; }
     _cp_tmp="$RUN_DIR/check.$$"
     curl -k -sS --max-time 5 -o "$_cp_tmp.body" -w '%{http_code}\n%{certs}' \
@@ -225,21 +225,21 @@ do_check_primary() {
     case "$_cp_rc" in
         0) _cp_why= ;;
         6) _cp_why="השם $_cp_host לא נפתר לכתובת (DNS). הקלד את כתובת ה-IP של השרת הראשי" ;;
-        7) _cp_why="אין נתיב אל $_cp_host בפורט 8443: בדוק את הכתובת, ושחומת האש של אתר זה מתירה יציאה אליה"
-           grep -qi refused "$_cp_tmp.err" && _cp_why="$_cp_host דחה את החיבור בפורט 8443 (refused): השרת הראשי אינו מאזין שם, או שחומת האש של האתר הראשי אינה מעבירה את 8443 אליו" ;;
-        28) _cp_why="אין תשובה מ-$_cp_host בפורט 8443 תוך 5 שניות (timeout): חומת אש חוסמת בשקט, או שהכתובת שגויה" ;;
-        35|53|54|58|59|60|66|80|83|90|91) _cp_why="מו\"מ ה-TLS עם $_cp_host:8443 נכשל (curl $_cp_rc): בפורט הזה עונה משהו שאינו השרת הראשי" ;;
-        52|56) _cp_why="$_cp_host:8443 סגר את החיבור בלי תשובה: זה אינו שרת ImageSrv ראשי" ;;
-        *) _cp_why="בדיקת החיבור אל $_cp_host:8443 נכשלה (curl $_cp_rc)" ;;
+        7) _cp_why="אין נתיב אל $_cp_host בפורט 7700: בדוק את הכתובת, ושחומת האש של אתר זה מתירה יציאה אליה"
+           grep -qi refused "$_cp_tmp.err" && _cp_why="$_cp_host דחה את החיבור בפורט 7700 (refused): השרת הראשי אינו מאזין שם, או שחומת האש של האתר הראשי אינה מעבירה את 7700 אליו" ;;
+        28) _cp_why="אין תשובה מ-$_cp_host בפורט 7700 תוך 5 שניות (timeout): חומת אש חוסמת בשקט, או שהכתובת שגויה" ;;
+        35|53|54|58|59|60|66|80|83|90|91) _cp_why="מו\"מ ה-TLS עם $_cp_host:7700 נכשל (curl $_cp_rc): בפורט הזה עונה משהו שאינו השרת הראשי" ;;
+        52|56) _cp_why="$_cp_host:7700 סגר את החיבור בלי תשובה: זה אינו שרת ImageSrv ראשי" ;;
+        *) _cp_why="בדיקת החיבור אל $_cp_host:7700 נכשלה (curl $_cp_rc)" ;;
     esac
     [ -z "$_cp_why" ] || { check_fail "$_cp_why"; return 0; }
     _cp_code=$(head -n1 "$_cp_tmp.meta")
-    [ "$_cp_code" = 200 ] || { check_fail "$_cp_host:8443 ענה HTTP $_cp_code: זה אינו שרת ImageSrv ראשי (או גרסה ישנה בלי בדיקת חיבור)"; return 0; }
+    [ "$_cp_code" = 200 ] || { check_fail "$_cp_host:7700 ענה HTTP $_cp_code: זה אינו שרת ImageSrv ראשי (או גרסה ישנה בלי בדיקת חיבור)"; return 0; }
     jq -e '(type | IN("object")) and (keys | IN(["fingerprint", "name", "version"]))
            and (.name | type | IN("string")) and (.name | test("^.{1,63}$") and (test("[[:cntrl:]]") | not))
            and (.fingerprint | type | IN("string")) and (.fingerprint | test("^[0-9a-f]{64}$"))
            and (.version | type | IN("string", "null")) and ((.version // "v") | test("^[A-Za-z0-9._+-]{1,64}$"))' "$_cp_tmp.body" >/dev/null 2>&1 \
-        || { check_fail "$_cp_host:8443 ענה, אבל לא בתשובת השרת הראשי (name/version/fingerprint): זה אינו שרת ImageSrv ראשי"; return 0; }
+        || { check_fail "$_cp_host:7700 ענה, אבל לא בתשובת השרת הראשי (name/version/fingerprint): זה אינו שרת ImageSrv ראשי"; return 0; }
     _cp_name=$(jq -r '.name' "$_cp_tmp.body"); _cp_ver=$(jq -r '.version // ""' "$_cp_tmp.body")
     _cp_fp=$(jq -r '.fingerprint' "$_cp_tmp.body")
     # The key TLS really showed (the first certificate curl printed). Each
@@ -248,10 +248,10 @@ do_check_primary() {
     openssl x509 -in "$_cp_tmp.pem" -pubkey -noout > "$_cp_tmp.pub" 2> "$_cp_tmp.err" \
         && openssl pkey -pubin -in "$_cp_tmp.pub" -outform DER -out "$_cp_tmp.der" 2> "$_cp_tmp.err" \
         && _cp_seen=$(sha256sum < "$_cp_tmp.der") \
-        || { check_fail "לא ניתן לקרוא את התעודה ש-$_cp_host:8443 הציג (openssl), ולכן החיבור לא אומת"; return 0; }
+        || { check_fail "לא ניתן לקרוא את התעודה ש-$_cp_host:7700 הציג (openssl), ולכן החיבור לא אומת"; return 0; }
     _cp_seen=${_cp_seen%% *}
     [ "${#_cp_seen}" -eq 64 ] && [ "$_cp_seen" = "$_cp_fp" ] \
-        || { check_fail "טביעת האצבע בתשובה אינה של התעודה ש-$_cp_host:8443 הציג: זה אינו השרת הראשי"; return 0; }
+        || { check_fail "טביעת האצבע בתשובה אינה של התעודה ש-$_cp_host:7700 הציג: זה אינו השרת הראשי"; return 0; }
     printf 'url=%s\nfingerprint=%s\n' "$_cp_url" "$_cp_fp" > "$PRIMARY_CHECK" \
         || { check_fail 'לא ניתן לשמור את תוצאת הבדיקה'; return 0; }
     rm -f "$_cp_tmp".*
@@ -263,7 +263,7 @@ do_finish() {
     _df_if=$(sed -n 's/^servers_if=//p' "$ANSWERS" 2>/dev/null | head -n1)
     _df_addr=$(sed -n 's/^servers_addr=//p' "$ANSWERS" 2>/dev/null | head -n1)
     [ -n "$_df_addr" ] || _df_addr=$(sed -n 's/^address=//p' "$DHCP_DIR/$_df_if" 2>/dev/null | head -n1)
-    [ -n "$_df_addr" ] && emit console_url "https://${_df_addr%%/*}:8081"
+    [ -n "$_df_addr" ] && emit console_url "https://${_df_addr%%/*}"
     emit user "$(sed -n 's/^admin_user=//p' "$ANSWERS" 2>/dev/null | head -n1)"
     # #2144: the engine's clock record, or "unchecked" -- a missing or
     # unreadable record is never "synced" (principle 5)

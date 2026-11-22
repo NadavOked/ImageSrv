@@ -5,11 +5,11 @@
 
 | שירות | מה נאכף |
 |---|---|
-| `console` | מאזין הקונסולה (8081) נקשר לכתובת הכרטיס או לא; כלל nft |
-| `monitor` | ה-WebSocket של המוניטור עובר ב-8081 (אין לו מאזין משלו — `monitor.py`); השרת מסרב לו לפי הכתובת המקומית של החיבור |
-| `multicast` | `udp-sender` משדר רק על כרטיס שבו השידור דלוק; אחרת הסבב נכשל בשם; כלל nft |
-| `netboot` | dnsmasq (`except-interface=`/`interface=`), ערוץ הסוכן 8080 נקשר לכתובת הכרטיס; כללי nft ל-67/69/8080 |
-| `interserver` | מאזין 8443 (ה-"אתה שם?" של הראשי / ה-mTLS של המשני); כלל nft |
+| `console` | מאזין הקונסולה (443) נקשר לכתובת הכרטיס או לא; כלל nft |
+| `monitor` | ה-WebSocket של המוניטור עובר ב-443 (אין לו מאזין משלו — `monitor.py`); השרת מסרב לו לפי הכתובת המקומית של החיבור |
+| `multicast` | השולח (`chunkcast send`) משדר רק על כרטיס שבו השידור דלוק; אחרת הסבב נכשל בשם; כלל nft |
+| `netboot` | dnsmasq (`except-interface=`/`interface=`), ערוץ הסוכן 7712 ומאזין ה-/boot של GRUB (`http_grub`, 7711, #3486) נקשרים לכתובת הכרטיס; כללי nft ל-67/69/7712/7711 |
+| `interserver` | מאזין 7700 (ה-"אתה שם?" של הראשי / ה-mTLS של המשני); כלל nft |
 
 **ברירת המחדל היא היום** (`defaults`): כל עוד המפעיל לא שמר אף כרטיס
 (`edited` = False) הקוד הישן קושר הכול בדיוק כמו קודם — שדרוג אינו משנה
@@ -85,8 +85,8 @@ class Baseline:
     """על איזה כרטיס כל דבר מאזין **היום** — ממה ש-`main` קשר בעלייה."""
 
     console: str | None = None       # --console-host (שם כרטיס, או הכרטיס של הכתובת)
-    deploy: str | None = None        # כרטיס ההפצה (udp-sender --interface, dnsmasq, 8080)
-    interserver: str | None = None   # הכרטיס שמאזין 8443 נקשר אליו, אם יש
+    deploy: str | None = None        # כרטיס ההפצה (כרטיס השידור, dnsmasq, 7712)
+    interserver: str | None = None   # הכרטיס שמאזין 7700 נקשר אליו, אם יש
 
 
 # --- הלוגיקה הטהורה ----------------------------------------------------------
@@ -693,8 +693,9 @@ def create_nic_services_router(ctx):
         address, port = local(request)
         scheme = request.url.scheme
 
-        def console_url(addr: str) -> str:
-            return f"{scheme}://{addr}:{port}" if port else f"{scheme}://{addr}"
+        def console_url(addr: str) -> str:   # #3871: 443 (https's own) is not written, as ports.console_url
+            default = {"https": 443, "http": 80}.get(scheme)
+            return f"{scheme}://{addr}:{port}" if port and port != default else f"{scheme}://{addr}"
         try:
             return service().set(name, body.get("services"), user_id=user[0],
                                   local_address=address, handoff=bool(body.get("handoff")),

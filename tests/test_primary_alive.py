@@ -1,9 +1,9 @@
-"""#1310: "אתה שם?" — מה שהראשי עונה על 8443, ורק זה.
+"""#1310: "אתה שם?" — מה שהראשי עונה על 7700, ורק זה.
 
 הכרעת נדב 12/10 (אפשרות א'): מתקין המשני שואל את הראשי אם הוא חי, כדי
-ש"בדוק חיבור" יוכל להיות ירוק. לפני #1310 הגשר שאל `https://<ראשי>:8443/
+ש"בדוק חיבור" יוכל להיות ירוק. לפני #1310 הגשר שאל `https://<ראשי>:7700/
 health/live` — נתיב שאינו קיים בשום מקום (`/health/live` חי רק תחת
-`/api/console` על 8081, ובראשי 8443 לא האזין כלל), ולכן הבדיקה נכשלה
+`/api/console` על 443, ובראשי 7700 לא האזין כלל), ולכן הבדיקה נכשלה
 **תמיד**, גם בתצורה הנכונה.
 
 מה שנבדק כאן:
@@ -165,6 +165,7 @@ def _run_main(tmp_path: Path, monkeypatch, role: str, *argv: str) -> dict:
     monkeypatch.setattr(server.app, "create_runtime", lambda *a, **k: rt)
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(server.app, "create_alive_app",
                         lambda rt, fp: configs.setdefault("fingerprint", fp) and "alive",
                         raising=False)
@@ -174,7 +175,7 @@ def _run_main(tmp_path: Path, monkeypatch, role: str, *argv: str) -> dict:
     monkeypatch.setattr(asyncio, "run", lambda coro=None: None)
     monkeypatch.setattr(server.main, "_interface_for", lambda url: None)
     monkeypatch.setattr("sys.argv", [
-        "server.main", "--server-url", "http://10.44.12.10:8080",
+        "server.main", "--server-url", "http://10.44.12.10:7712",
         "--data-dir", str(data), "--images", str(tmp_path / "img"), *argv])
     server.main.main()
     configs["conn"] = conn
@@ -184,7 +185,7 @@ def _run_main(tmp_path: Path, monkeypatch, role: str, *argv: str) -> dict:
 def test_main_puts_the_alive_listener_on_the_primary_console_card(tmp_path, monkeypatch):
     configs = _run_main(tmp_path, monkeypatch, "standalone", "--console-host", "10.10.10.8")
     alive = configs["alive"]
-    assert [(c["host"], c["port"]) for c in alive] == [("10.10.10.8", 8443)], \
+    assert [(c["host"], c["port"]) for c in alive] == [("10.10.10.8", 7700)], \
         "רק על כרטיס השרתים — לא על loopback ולא על כרטיס ההפצה"
     ident = storage_nodes.identity(configs["conn"])
     assert configs["fingerprint"] == ident["server_spki"]

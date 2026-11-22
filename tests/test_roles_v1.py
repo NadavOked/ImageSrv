@@ -1,10 +1,10 @@
 """#1073 — מודל התפקידים ל-v1 (הכרעת נדב 18/09).
 
 1. **למשתמש הפצה אין קונסולה.** `POST /api/console/login` על אפליקציית
-   הקונסולה (:8081) מסרב ל-`deploy` ב-403 עם ``deploy_no_console`` והודעה
+   הקונסולה (:443) מסרב ל-`deploy` ב-403 עם ``deploy_no_console`` והודעה
    שמסך הכניסה מציג; והסירוב יושב על **כל** נתיב ניהול, לא רק על הדלת —
    עוגייה שפורט הסוכן הנפיק חתומה באותו סוד ותקפה גם כאן.
-2. **מחשב הבנייה ממשיך לעבוד.** allowlist פורט הסוכן (:8080) וכניסת הסוכן
+2. **מחשב הבנייה ממשיך לעבוד.** allowlist פורט הסוכן (:7712) וכניסת הסוכן
    (`/api/v1/agent/login`) מקבלים deploy — משם `buildmenu.sh` וה-GUI נכנסים.
 3. **חיפה = ת"א.** שרת משני עונה לאדמין שלו בדיוק כמו standalone על כל
    נתיב, מלבד ההיררכיה (ניהול משניים — במשני אין צאצאים), והקונסולה
@@ -96,11 +96,11 @@ def _safe_hooks(tmp_path: Path) -> dict:
 
 @pytest.fixture()
 def split_env(tmp_path: Path, images_root: Path):
-    """console_app (:8081) + agent_app (:8080) על runtime אחד — כמו בייצור."""
+    """console_app (:443) + agent_app (:7712) על runtime אחד — כמו בייצור."""
     from server.app import create_agent_app, create_console_app, create_runtime
-    from test_sender import Recorder                       # noqa: PLC0415
+    from fakesend import Recorder                       # noqa: PLC0415
 
-    rt = create_runtime(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    rt = create_runtime(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                         sender_runner=Recorder(block=True), **_safe_hooks(tmp_path))
     users.create(rt.conn, *ADMIN, "admin", by="test",
                  is_builtin=True, check_policy=False)
@@ -108,7 +108,7 @@ def split_env(tmp_path: Path, images_root: Path):
     env = {"rt": rt, "console_app": create_console_app(rt),
            "agent_app": create_agent_app(rt)}
     yield env
-    rt.ctx.sender.stop()
+    rt.ctx.chunk.stop()
 
 
 # --- 1: הפצה בלי וובי ---------------------------------------------------------
@@ -156,7 +156,7 @@ def _http_routes(app) -> list[tuple[str, str]]:
 
 
 def test_a_kiosk_issued_deploy_cookie_is_refused_on_every_console_route(split_env):
-    """הסירוב אינו רק בדלת: העוגייה מ-:8080 תקפה קריפטוגרפית גם ב-:8081,
+    """הסירוב אינו רק בדלת: העוגייה מ-:7712 תקפה קריפטוגרפית גם ב-:443,
     ולכן כל נתיב ניהול מחזיר 403 עם אותה הודעה — כולל מה שסעיף 11 הישן
     פתח ל-deploy (`/overview`, `/images`, `/me`, `/room`)."""
     cookie = _kiosk_deploy_cookie(split_env)
@@ -245,12 +245,12 @@ def test_the_combined_test_app_keeps_deploy_on_the_kiosk_allowlist_only(server):
 
 def _combined_app(tmp_path: Path, images_root: Path, role: str):
     from server.app import create_app
-    from test_sender import Recorder                       # noqa: PLC0415
+    from fakesend import Recorder                       # noqa: PLC0415
 
     kwargs = {"storage_role": role, **_safe_hooks(tmp_path / role)}
     if role == "secondary":
-        kwargs["primary_url"] = "http://parent:8080"
-    app = create_app(tmp_path / f"data-{role}", images_root, "http://10.44.12.10:8080",
+        kwargs["primary_url"] = "http://parent:7712"
+    app = create_app(tmp_path / f"data-{role}", images_root, "http://10.44.12.10:7712",
                      sender_runner=Recorder(block=True), **kwargs)
     users.create(app.state.ctx.conn, *ADMIN, "admin", by="test",
                  is_builtin=True, check_policy=False)
@@ -273,9 +273,7 @@ def test_a_secondary_answers_its_admin_exactly_like_a_standalone(tmp_path, image
     """כל GET של הקונסולה, כפי שהאדמין המקומי רואה אותו: אותו קוד תשובה על
     משני ועל standalone — מלבד ההיררכיה, ששם ההבדל הוא הפיצ'ר (409/200
     הפוכים). כל נתיב אחר שסטה = משהו שהמשני מסתיר/מגביל, וזה באג."""
-    from server.rounds import sender as sender_module             # noqa: PLC0415
 
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
     sa_app, sa = _combined_app(tmp_path, images_root, "standalone")
     se_app, se = _combined_app(tmp_path, images_root, "secondary")
     try:
@@ -293,8 +291,8 @@ def test_a_secondary_answers_its_admin_exactly_like_a_standalone(tmp_path, image
         assert me == {"interbranch_transfer": False, "enroll_secondary": False,
                       "open_local_pairing": True, "classrooms": False, "tools": False}
     finally:
-        sa_app.state.ctx.sender.stop()
-        se_app.state.ctx.sender.stop()
+        sa_app.state.ctx.chunk.stop()
+        se_app.state.ctx.chunk.stop()
 
 
 def test_the_console_hides_nothing_on_a_secondary_but_the_hierarchy():

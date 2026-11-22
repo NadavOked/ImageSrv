@@ -1,4 +1,4 @@
-"""#1179: הקונסולה של המשני דרך הראשי — GET מרשימה מותרת, בערוץ 8443.
+"""#1179: הקונסולה של המשני דרך הראשי — GET מרשימה מותרת, בערוץ 7700.
 
 שני שרתים אמיתיים על loopback: הראשי (``server``) והמשני — אפליקציה מלאה
 (``create_app``) עם המאזין הבין-שרתי ``console_app=app``, כמו ``main.py``.
@@ -50,7 +50,7 @@ def secondary(tmp_path, clock):
     from conftest import complete_console_login                # noqa: PLC0415
     from server.console import users# noqa: PLC0415
     from server.app import create_app                          # noqa: PLC0415
-    from test_sender import Recorder                           # noqa: PLC0415
+    from fakesend import Recorder                           # noqa: PLC0415
     from test_server_health import SS_DNSMASQ                  # noqa: PLC0415
 
     root = tmp_path / "sec_images"
@@ -70,7 +70,7 @@ def secondary(tmp_path, clock):
         # #2275 again (public gate #61, 01/11): the clock offset is live too -- "+0.001 ms"
         # on one read and something else on the next
         "timesync_status": lambda: {"synchronized": False, "server": None, "offset_ms": 0.001}}
-    app = create_app(tmp_path / "sec", root, "http://10.30.0.8:8080",
+    app = create_app(tmp_path / "sec", root, "http://10.30.0.8:7712",
                      now_fn=clock, sender_runner=Recorder(block=True),
                      health_hooks=health_hooks,
                      dhcp_hooks={"interfaces": lambda: [NIC], "service_active": lambda unit: True,
@@ -88,7 +88,7 @@ def secondary(tmp_path, clock):
     yield {"conn": conn, "ctx": rt.ctx, "ident": ident, "server": server, "app": app,
            "port": server.port, "root": root, "admin": admin}
     server.stop()
-    rt.ctx.sender.stop()
+    rt.ctx.chunk.stop()
 
 
 def _stable(body):

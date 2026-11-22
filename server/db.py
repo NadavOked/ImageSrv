@@ -12,6 +12,7 @@ import os
 import secrets
 import sqlite3
 import threading
+import time
 import weakref
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -35,7 +36,65 @@ from pathlib import Path
 #: יש לו טרנזאקציה פתוחה — **אינו רשאי להמתין כאן**, אחרת שני הכיוונים
 #: נפגשים בנעילה משולבת. `_settle` הוא האכיפה, והוא נקרא לפני **כל**
 #: נטילה כאן.
-_write_lock = threading.Lock()
+class _TimedLock:
+    """``threading.Lock`` whose *wait* is measured (#3129, A-DB-04): until now a queue on the write
+    lock was invisible until a writer gave up with "database is locked". Behaviour is a plain Lock
+    (not reentrant; ``acquire(blocking, timeout)``, ``release``, ``locked``, context manager). A take
+    that did not have to wait reads no clock. Only the order of locks above matters, not this."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+
+    def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
+        if self._lock.acquire(False):
+            return True
+        if not blocking:
+            return False
+        started = time.monotonic()
+        got = self._lock.acquire(True, timeout)
+        _note_write_wait(time.monotonic() - started, got)
+        return got
+
+    def release(self) -> None:
+        self._lock.release()
+
+    def locked(self) -> bool:
+        return self._lock.locked()
+
+    def __enter__(self) -> bool:
+        return self.acquire()
+
+    def __exit__(self, *exc_info) -> None:
+        self.release()
+
+
+#: A wait longer than this is said in the server log, once per wait (a healthy server never gets here).
+WRITE_WAIT_WARN_S = 1.0
+_write_wait = {"waits": 0, "total_s": 0.0, "max_s": 0.0, "slow": 0, "gave_up": 0}
+
+
+def _note_write_wait(seconds: float, got: bool) -> None:
+    """Counts only takes that had to wait. Plain increments under the GIL; a lost update here
+    costs a count, never the write."""
+    _write_wait["waits"] += 1
+    _write_wait["total_s"] += seconds
+    if seconds > _write_wait["max_s"]:
+        _write_wait["max_s"] = seconds
+    if not got:
+        _write_wait["gave_up"] += 1
+    if seconds >= WRITE_WAIT_WARN_S:
+        _write_wait["slow"] += 1
+        log.warning("waited %.1f s for the write lock%s", seconds, "" if got else " and gave up")
+
+
+def write_wait_stats() -> dict:
+    """How long writers waited for ``_write_lock`` since the server started: the number of takes
+    that had to wait, their total and longest wait in seconds, how many were over
+    ``WRITE_WAIT_WARN_S``, and how many gave up (a timed ``acquire``)."""
+    return dict(_write_wait)
+
+
+_write_lock = _TimedLock()
 
 
 class SchemaError(RuntimeError):
@@ -80,7 +139,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     closed_at        TEXT,
     failed_reason    TEXT,
     roster_json      TEXT,              -- בחירת מחשבים; NULL = כל הקבוצה
-    -- הזרם: 'multicast' הוא udp-sender, ולכן אחד בכל המערכת. 'unicast'
+    -- הזרם: 'multicast' הוא השולח של השרת, ולכן אחד בכל המערכת. 'unicast'
     -- הוא משיכת HTTP של תחנה בודדת — לא נוגעת בשידור, וכמה כאלה יחד.
     kind             TEXT NOT NULL DEFAULT 'multicast'
                      CHECK (kind IN ('multicast', 'unicast')),
@@ -115,7 +174,7 @@ CREATE TABLE IF NOT EXISTS room_rounds (
     expand_partition TEXT,                 -- בחירת ההרחבה לכל גלי הסבב (#59); NULL=אוטומטי
     driver_models_json TEXT,               -- דגם דרייברים לכל דיסק יעד (#1269); NULL=בלי דרייברים
     hostnames_json  TEXT,                  -- שם מחשב לכל דיסק יעד (#2786); NULL=השם שבאימג' נשאר
-    -- \u200f#715: המקור. 'library' = udp-sender של השרת על אימג' מהספרייה;
+    -- \u200f#715: המקור. 'library' = השולח של השרת על אימג' מהספרייה;
     -- 'build_disk' = מחשב הבנייה משדר מהדיסק שלו, ו-image_id הוא מזהה
     -- חי (live_…) שהמניפסט שלו הוא live_manifest_json. סבב יחיד, בלי גלים.
     source_kind     TEXT NOT NULL DEFAULT 'library',
@@ -728,7 +787,7 @@ CREATE TABLE IF NOT EXISTS drive_rates (
 -- \u200f#447: התקרה שנבחרה לגל לפני שיצא, ולמה (JSON של `drive_rates.choose`).
 -- טבלה נפרדת ולא עמודה ב-`sessions`: \u200f`_rebuild_state_tables` מעתיק את
 -- `sessions` לפי רשימת עמודות מפורשת, ועמודה חדשה הייתה נמחקת שם.
--- \u200f`stream` — מה ש-udp-sender ספר בסוף הגל (`drive_rates.record_stream`):
+-- \u200f`stream` — מה שהשולח ספר בסוף הגל (`drive_rates.record_wave`):
 -- \u200fJSON של `sent_bytes` ו-`loss_blocks`; \u200fNULL = השולח לא דיווח.
 -- \u200f`drops` — \u200f`udp_drops` של כל מקלט בגל (`drive_rates.record_wave`, 17/10):
 -- \u200fJSON \u200f{mac: {"rcvbuf", "inerrors"} | null}; \u200fNULL = הגל לא נסגר דרך החדר.
@@ -743,7 +802,7 @@ CREATE TABLE IF NOT EXISTS wave_rates (
     delivered  TEXT
 );
 
--- \u200f#1761: קצב שהיה לא בטוח למכונה (`drive_rates._unsafe` — udp-sender ניתק
+-- \u200f#1761: קצב שהיה לא בטוח למכונה (שורות ישנות מלפני #3173 — השולח הישן ניתק
 -- מקלט, או מגירה אבדה עם שידורים חוזרים) — נזכר גם אחרי שהגל יוצא מחלון
 -- ה-goodput, ומעליו לא מחפשים. שורה לכל (מכונה, מגירות, קצב): חסומה במספר
 -- הקצבים, ואינה נמחקת (`housekeeping` אינו נוגע בה) — לשכוח היא הבאג.
@@ -1237,7 +1296,7 @@ ADDED_COLUMNS = [
     ("groups", "sort", "INTEGER NOT NULL DEFAULT 0"),
     ("net_devices", "disks_json", "TEXT"),
     # #839: סוד המוניטור שהמכונה הגרילה באתחול ודיווחה ב-hello. הפרוקסי
-    # (server/console/monitor.py) מזדהה איתו מול 5900 של אותה מכונה, ושום תשובת
+    # (server/console/monitor.py) מזדהה איתו מול 7710 של אותה מכונה, ושום תשובת
     # קונסולה אינה מחזירה אותו.
     ("net_devices", "monitor_secret", "TEXT"),
     # #500: הקושחה ומצב ה-Secure Boot שהסוכן מודד ושולח בכל hello — נמדדו
@@ -1431,13 +1490,13 @@ ADDED_COLUMNS = [
     # #1564: positive evidence on the secondary itself. Updated only after
     # the paired parent passes the shared mTLS/SPKI/token guard.
     ("parent_credentials", "last_contact_at", "TEXT"),
-    # קצב אוטומטי (הכרעת נדב 11/10): מה ש-udp-sender ספר בסוף הגל. NULL בשורות
+    # קצב אוטומטי (הכרעת נדב 11/10): מה שהשולח ספר בסוף הגל. NULL בשורות
     # שקדמו למיגרציה = "לא נמדד" — הקצב אינו עולה מהן.
     ("wave_rates", "stream", "TEXT"),
     # הכרעת נדב 17/10: `udp_drops` של מקלטי הגל. NULL בשורות שקדמו = "לא נקרא".
     ("wave_rates", "drops", "TEXT"),
     # #1758: מה שכל מחשב שיכפול כתב בגל — goodput. NULL בשורות שקדמו = "לא נמדד",
-    # והגל ההוא נבחן בכלל של לפני #1758 (`drive_rates._next_from`).
+    # והגל ההוא נבחן בכלל של לפני #1758 (לפני #3173).
     ("wave_rates", "delivered", "TEXT"),
     # #2443 (Fable): התקרה לפי חשבון נספרת לכל משטח בנפרד. שורות שקדמו = הקונסולה.
     ("login_account_failures", "surface", "TEXT NOT NULL DEFAULT 'console'"),
@@ -1732,6 +1791,24 @@ CHECKPOINT_EVERY_COMMITS = 200
 #: כמה ה-checkpoint ממתין לכותב שבאמצע טרנזאקציה. קצר מ-``busy_timeout``: הוא רץ
 #: בתוך commit של בקשה, ו-checkpoint שדולג ינוסה שוב אחרי ``CHECKPOINT_EVERY_COMMITS``.
 CHECKPOINT_WAIT_MS = 1000
+#: #3129 (A-DB-02): what the checkpoints saw, since the server started. `log_frames` is the WAL's length
+#: at the checkpoint and `checkpointed` how much of it went to the DB file; the gap is the WAL that
+#: stayed (readers on an old snapshot). Counted where the result is read, so a WAL that grows is a number.
+_wal = {"checkpoints": 0, "busy": 0, "skipped": 0, "max_log_frames": 0,
+        "last_log_frames": None, "last_checkpointed": None}
+
+
+def wal_stats() -> dict:
+    """The counters of `_wal` (see above); `last_*` are None until a checkpoint ran."""
+    return dict(_wal)
+
+
+def _note_checkpoint(busy: int, log_frames: int, done: int) -> None:
+    _wal["checkpoints"] += 1
+    _wal["busy"] += 1 if busy else 0
+    _wal["last_log_frames"], _wal["last_checkpointed"] = log_frames, done
+    if log_frames > _wal["max_log_frames"]:
+        _wal["max_log_frames"] = log_frames
 
 
 def checkpoint(path: str | Path) -> tuple[int, int, int]:
@@ -1960,8 +2037,10 @@ class Database:
         try:
             busy, log_frames, done = checkpoint(self._path)
         except (sqlite3.Error, RuntimeError) as exc:   # RuntimeError: `_open` שלא אימת הגדרה
+            _wal["skipped"] += 1
             log.warning("checkpoint skipped on %s: %s", self._path, exc)
             return
+        _note_checkpoint(busy, log_frames, done)
         # done < log_frames בלי busy הוא קורא על snapshot ישן — מצב רגיל של WAL, לא כשל.
         if busy:
             log.warning("checkpoint on %s busy: log=%s checkpointed=%s",
@@ -2372,6 +2451,16 @@ def note_disk_full(what: str) -> None:
     log.error("database write failed, disk is full: %s (#1892)", what)
 
 
+#: #3129 (A-DB-03): journal rows that were NOT written because the partition was full, since the
+#: server started. By design the caller goes on (#1892); this is how many rows that cost, and which
+#: event was the last one lost.
+_journal_lost = {"count": 0, "last_event": None}
+
+
+def journal_rows_lost() -> dict:
+    return dict(_journal_lost)
+
+
 def last_disk_full() -> dict | None:
     """{"at", "what"} של הכשל האחרון שעוד לא נוקה, או ``None``."""
     return dict(_last_full) or None
@@ -2423,6 +2512,8 @@ def journal(conn: sqlite3.Connection, event: str, detail: str = "", user: str = 
         if not disk_full(exc):
             raise
         note_disk_full(f"journal {event}")
+        _journal_lost["count"] += 1
+        _journal_lost["last_event"] = event
         return None
     _last_full.clear()   # ראיה חיובית שהכתיבה חזרה לעבוד
     return cur.lastrowid

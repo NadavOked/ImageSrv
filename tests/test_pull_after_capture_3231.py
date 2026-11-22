@@ -9,7 +9,8 @@
   החוזר (כמו `curl --retry` של הסוכן) נפתח כשהגזירה מסתיימת, והאינדקס שהוא יורד הוא זה שנגזר.
 - המתנה בתוך הבקשה: גזירה שמסתיימת בתוך `PULL_WAIT_S` נענית בבקשה אחת.
 - גזירה שנכשלת: 409 `index_failed` עם הסיבה ("הדיסק לא נגע"), וניסיון חוזר אחרי התיקון גוזר מחדש.
-- אין שינוי למי שאינו צריך את השער: אינדקס מוכן, או מנוע udpcast, נפתחים מיד ובלי גזירה.
+- אין שינוי למי שאינו צריך את השער: אינדקס מוכן נפתח מיד ובלי גזירה (#3173: מנוע udpcast, שגם הוא
+  לא נזקק לשער, נמחק).
 - בלי הרשאה אין גזירה: בקשה שלא עברה כניסה אינה מפעילה עבודה על השרת.
 """
 
@@ -49,14 +50,10 @@ def _sessions(ctx) -> int:
     return ctx.conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
 
 
-def _engine(room_server, engine):
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": engine}).status_code == 200
-
-
 @pytest.fixture()
 def chunk_engine(room_server, monkeypatch):
-    """The chunk engine is on, and the pull waits 0.3 s at most: a derivation that is held answers "preparing"."""
-    _engine(room_server, "chunk")
+    """The chunk engine (#3173: the only one, nothing to turn on), and the pull waits 0.3 s at most: a derivation
+    that is held answers "preparing"."""
     monkeypatch.setattr(indexprep, "PULL_WAIT_S", 0.3)
     return room_server
 
@@ -101,7 +98,6 @@ def test_the_retry_opens_when_the_derivation_is_done_and_the_index_is_the_one_th
 
 def test_a_derivation_that_ends_inside_the_wait_is_answered_by_the_same_request(room_server, derive, monkeypatch):
     """The server waits for the index before it answers: one request, no retry."""
-    _engine(room_server, "chunk")
     monkeypatch.setattr(indexprep, "PULL_WAIT_S", 20.0)
     ctx = room_server["ctx"]
     _fresh_capture(ctx)
@@ -131,7 +127,6 @@ def test_a_derivation_that_fails_refuses_the_pull_with_its_reason_and_a_retry_de
     The request that waits for the derivation gets the 409 of the gate. The derivation also writes what it found
     into the manifest (`index_error`), and from then on the image is refused by name before the gate is reached
     (`image_bound_to_another_machine`, "recapture") -- a refusal as good, and the second assertion below."""
-    _engine(room_server, "chunk")
     monkeypatch.setattr(indexprep, "PULL_WAIT_S", 20.0)          # one request waits the derivation out: no polling race
     chunk_engine = room_server
     ctx = chunk_engine["ctx"]
@@ -157,7 +152,6 @@ def test_a_derivation_that_fails_refuses_the_pull_with_its_reason_and_a_retry_de
 
 
 def test_a_file_that_is_not_format_2_refuses_the_pull_by_name(room_server, derive, monkeypatch):
-    _engine(room_server, "chunk")
     monkeypatch.setattr(indexprep, "PULL_WAIT_S", 20.0)
     ctx = room_server["ctx"]
     _fresh_capture(ctx, b"not zstd frames at all")
@@ -195,15 +189,6 @@ def test_an_image_whose_index_is_ready_opens_at_once_and_derives_nothing(chunk_e
     derive.calls.clear()
     answer = _pull(chunk_engine)
     assert answer.status_code == 200 and derive.calls == [] and _sessions(ctx) == 1, answer.text
-
-
-def test_with_the_switch_off_the_pull_does_not_wait_for_an_index(room_server, derive):
-    ctx = room_server["ctx"]
-    _fresh_capture(ctx)
-    derive.hold.clear()
-    answer = _pull(room_server)
-    assert answer.status_code == 200 and derive.calls == [] and _sessions(ctx) == 1, answer.text
-    derive.hold.set()
 
 
 def test_a_pull_that_is_not_authorised_starts_no_derivation(chunk_engine, derive):

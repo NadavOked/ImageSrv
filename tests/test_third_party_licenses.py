@@ -45,7 +45,7 @@ def test_third_party_notices_cover_main_gpl_components() -> None:
     assert NOTICES.is_file()
     notices = NOTICES.read_text(encoding="utf-8").lower()
     for component in (
-        "partclone", "udpcast", "busybox", "ntfs-3g", "hivex",
+        "partclone", "busybox", "ntfs-3g", "hivex",
         "libvncserver", "zstd", "curl", "dropbear",
     ):
         assert component in notices, f"THIRD_PARTY_NOTICES.md does not mention {component}"

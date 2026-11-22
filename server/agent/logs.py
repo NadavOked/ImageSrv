@@ -11,6 +11,11 @@
 **מה נשמר** (`agent_logs`): `mac`, `session_id`, `reason`, `at` (שעון השרת), `lines`,
 `bytes`, `truncated`, `signatures_json` והטקסט **אחרי סינון**, דחוס (`text_gz`).
 
+**`truncated` (#3031).** הסוכן מסיר את מסגרות ההתקדמות של partclone לפני החיתוך (הן היו 84-99%
+מהבייטים), וחותם בכותרת `X-Imagesrv-Log-Cut` אם חתך: `0` = כל הלוג שנשאר הגיע, `1` = נחתך. השרת
+קובע `truncated` לפי חיתוך שלו **או** של הסוכן, וכותרת חסרה או לא חוקית (סוכן ישן, ספירה שנכשלה)
+נספרת כחיתוך: "לא ידוע אם נחתך" אינו "לא נחתך".
+
 **פרטיות (#1924) וסודות.** לפני שנשמר בייט, `redact` מחליף: מפתחות/עוגיות/סיסמאות/אסימונים
 (כותרות HTTP, `token=`/`password=`…, מפתח פרטי), GUIDs, UUID של מערכות קבצים ומספרים סידוריים
 של NTFS, תוויות (`LABEL=`/`PARTLABEL=`), ושמות מחשב ומשתמשים **שנקראו מהדיסק** (`computer='…'`,
@@ -94,7 +99,7 @@ SIGNATURES: list[tuple[str, re.Pattern, str]] = [
     # #3593: "פג הזמן" לבדו תפס גם `capped_run` ("smartctl לא ענה תוך 5 שניות") והמתנות כלליות. רק
     # שורות שאומרות שהזרם עצמו לא התקדם: wait_progress ("... שניות בלי התקדמות"), מקלט החתיכות
     # ("לא הסתיים ולא התקדם") ו"פג הזמן -- הזרם לא הגיע" (drawers.sh).
-    ("stream_timeout", re.compile(r"(?i)receive-timeout|udp-receiver.*timed? ?out"
+    ("stream_timeout", re.compile(r"(?i)receive-timeout"
                                   r"|פג הזמן.*(?:בלי התקדמות|ולא התקדם|הזרם לא הגיע)"),
      "הזרם נעצר — פקיעת המתנה לשרת או לרשת"),
     ("hivex", re.compile(r"(?i)key not found"),
@@ -152,9 +157,17 @@ def _tail(text: str) -> tuple[str, bool]:
     return (cut[nl + 1:] if nl >= 0 else cut), True
 
 
+def agent_cut(header: object) -> bool:
+    """#3031: מה שהסוכן אמר על חיתוך (`X-Imagesrv-Log-Cut`). רק `"0"` = לא נחתך; `"1"` =
+    נחתך; חסר או כל ערך אחר (סוכן ישן, ספירה שנכשלה) = **לא ידוע**, וכמו חיתוך: "לא ידוע אם
+    נחתך" אינו "לא נחתך" (עיקרון 5)."""
+    return header != "0"
+
+
 def receive(conn: sqlite3.Connection, mac: str, session_id: object, reason: object,
-            body: bytes, known: bool) -> dict:
-    """`POST /api/v1/agent/log` אחרי שער הזהות. `known` — המכונה רשומה."""
+            body: bytes, known: bool, cut_header: object = None) -> dict:
+    """`POST /api/v1/agent/log` אחרי שער הזהות. `known` — המכונה רשומה. `cut_header` — הכותרת
+    `X-Imagesrv-Log-Cut` כמות שהגיעה (`None` = לא הגיעה); `truncated` = חיתוך השרת **או** של הסוכן."""
     try:
         if not known:
             return {"ok": False, "code": "unknown_machine", "error": "not a registered machine"}
@@ -168,6 +181,7 @@ def receive(conn: sqlite3.Connection, mac: str, session_id: object, reason: obje
         except BadLog as exc:
             return {"ok": False, "code": "bad_log", "error": str(exc)}
         text, truncated = _tail(redact(text))
+        truncated = truncated or agent_cut(cut_header)   # #3031: the agent's cut is invisible to the tail above
         signatures = classify(text)
         lines = len(text.splitlines())
         log_id = _store(conn, mac, session_id or None, reason, text, lines, truncated, signatures)

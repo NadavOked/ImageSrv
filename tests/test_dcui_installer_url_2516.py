@@ -2,9 +2,9 @@
 to a port the wizard guard drops.
 
 Without answers, firstboot asks DHCP on every card with a link, and the DCUI
-showed "Continue the installation from a browser: https://<first address>:8081"
+showed "Continue the installation from a browser: https://<first address>:443"
 -- there, the deploy card (ens4). The guard of #2490 (deploy/nftables-wizard.sh)
-opens 8081 on loopback and on the installer card only, found by the MAC in
+opens 443 on loopback and on the installer card only, found by the MAC in
 /etc/imagesrv/installer-nic; the operator who did what the screen said got a
 timeout.
 
@@ -82,11 +82,11 @@ def test_the_browser_address_is_the_installer_cards_not_the_first_card_with_one(
     """The name in the installer (ens3) is not the name here; the MAC is -- in any case."""
     snapshot = collect_snapshot(**_machine(tmp_path, "10.44.0.37"),
                                 installer_fact=_fact(tmp_path, CONFIGURED))
-    assert snapshot.console_url == "https://10.44.0.37:8081"
+    assert snapshot.console_url == "https://10.44.0.37"
     assert snapshot.installer_nic == "ens34"
     text, graphical = _screens(snapshot)
-    assert "https://10.44.0.37:8081" in text and "https://10.44.0.37:8081" in graphical
-    assert "10.90.2.139:8081" not in text + graphical, "the deploy card's address is not offered"
+    assert "https://10.44.0.37" in text and "https://10.44.0.37" in graphical
+    assert "10.90.2.139:443" not in text + graphical, "the deploy card's address is not offered"
 
 
 def test_an_installer_card_without_an_address_says_so_by_name(tmp_path):
@@ -97,7 +97,7 @@ def test_an_installer_card_without_an_address_says_so_by_name(tmp_path):
     assert "ens34 (the installer card) has no address." in text
     assert "Press F2 to set a static address on it." in text
     assert "לכרטיס ההתקנה" in graphical and "ens34" in graphical and "אין כתובת" in graphical
-    assert ":8081" not in text + graphical
+    assert ":443" not in text + graphical
 
 
 @pytest.mark.parametrize("fact", [
@@ -112,6 +112,6 @@ def test_an_undecidable_installer_card_shows_no_network_address(tmp_path, fact):
     snapshot = collect_snapshot(**_machine(tmp_path, "10.44.0.37"), installer_fact=path)
     assert snapshot.console_url == "" and snapshot.installer_nic == ""
     text, graphical = _screens(snapshot)
-    assert ":8081" not in text + graphical
+    assert ":443" not in text + graphical
     assert "The installer card is unknown" in text
     assert "כרטיס ההתקנה אינו ידוע" in graphical

@@ -236,7 +236,7 @@ trace_step() {
     # $SERVER and $MAC, which the agent sets before it can do anything else.
     [ -n "$SERVER" ] && [ -n "$MAC" ] || return 0
     if curl -sf -m "$TRACE_TIMEOUT" \
-        "$SERVER/boot/step?mac=$MAC&s=$1${2:+&$2}" > /dev/null 2>&1; then
+        "$SERVER/api/v1/agent/boot-step?mac=$MAC&s=$1${2:+&$2}" > /dev/null 2>&1; then
         return 0
     fi
     log "boot step '$1' was not delivered -- continuing"
