@@ -253,18 +253,14 @@ def test_the_observer_never_raises_into_the_budget_cycle(conn, monkeypatch):
 class _Chunk:
     interface = "eth1"
 
-    def sending_bps(self):
-        return 0
-
-
-class _Sender:
-    interface = None
-
     def status(self):
         return None
 
     def link(self):
         return {"speed_mbps": 1000}
+
+    def sending_bps(self):
+        return 0
 
 
 def test_the_production_budget_cycle_runs_the_rules(conn, tmp_path):
@@ -276,7 +272,7 @@ def test_the_production_budget_cycle_runs_the_rules(conn, tmp_path):
     crc_event(conn, "old", "A", 10)
     crc_event(conn, "current", "A", 12)
     member(conn, "current", "m1", [report("A")])
-    budget = B.production(conn, served=Served(), chunk=_Chunk(), sender=_Sender(),
+    budget = B.production(conn, served=Served(), chunk=_Chunk(),
                           sys_net=tmp_path, proc=tmp_path / "proc")
     budget.tick()
     got = {r["rule"]: r["verdict"] for r in memory.decisions(conn, round_id="current")}

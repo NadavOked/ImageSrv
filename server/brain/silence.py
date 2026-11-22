@@ -104,6 +104,7 @@ def _mode(conn) -> str:
     return veto.mode(conn)
 
 
+UNDECIDED_HE = "לא הוחלט: אין החלטה שאפשר לבצע"
 FAILED_KEYS = 256
 _failed: set[tuple[str, str]] = set()           # (כלל, גל) שכבר נרשם עליהם UNDECIDED בתהליך הזה
 _failed_lock = threading.Lock()
@@ -121,9 +122,11 @@ def record(conn, calls, *, round_id: str, entity_kind: str = "machine") -> dict[
         log.exception("brain: the mode was not read, %s of %s not recorded", [c.rule for c in calls], round_id)
         return {c.target: None for c in calls}
     for c in calls:
+        # #3750: "לא הוחלט" אינו ביצוע -- שורה כזו מסומנת n/a, ולא נשארת ריקה כמו החלטה שלא נסגרה
+        out = memory.na(UNDECIDED_HE) if c.verdict == UNDECIDED else None
         ids[c.target] = None if mode == OFF else memory.record(
             conn, mode=mode, rule=c.rule, point=c.point, action=c.action, verdict=c.verdict, reason=c.reason,
-            evidence=c.evidence, round_id=round_id, entity=(entity_kind, c.target) if entity_kind else None)
+            evidence=c.evidence, round_id=round_id, entity=(entity_kind, c.target) if entity_kind else None, outcome=out)
     return ids
 
 
@@ -420,7 +423,7 @@ STALL_ROUNDS = 16
 
 
 def stream_sent_done(conn, wave_id: str | None) -> bool:
-    """#3723: האם השידור של הגל הזה הסתיים -- יש שורת `send_done` ביומן על הגל (שני המנועים, udp-sender וחתיכות, רושמים
+    """#3723: האם השידור של הגל הזה הסתיים -- יש שורת `send_done` ביומן על הגל (המנוע רושם
     אותה עם `round_id` = מזהה הגל). **ראיה חיובית בלבד**: אין גל, אין חיבור, או שהקריאה נכשלה = ``False`` ("לא ידוע
     שהסתיים"), והתווית נשפטת כמו קודם: הכשל כאן לא מסתיר עצירה אמיתית. נקרא רק כשכל המגירות כבר עצורות (לא בכל דופק של המסך)."""
     if conn is None or not wave_id:

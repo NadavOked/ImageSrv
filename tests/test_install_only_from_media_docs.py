@@ -1,7 +1,7 @@
 """A published document must not teach installing a server any way but the ISO / USB.
 
 Nadav, 15/11/2026: the network install (`setup-boot-server.sh` on an existing Debian,
-finished in a browser wizard on 8081) is a leftover from before the ISO. The script stays
+finished in a browser wizard on 443) is a leftover from before the ISO. The script stays
 -- the ISO's first boot runs it -- but no published document may tell a reader to run it
 as the way to install, or to finish an install in the wizard.
 """
@@ -26,7 +26,7 @@ DOCS = (
 # `sudo ./deploy/setup-boot-server.sh`, `sudo bash deploy/setup-boot-server.sh --admin-pass ...`
 MANUAL_RUN = re.compile(r"sudo\s+(?:bash\s+)?\S*setup-boot-server\.sh")
 # the web wizard as a way to finish an install, or its units as something to start
-WIZARD = re.compile(r"systemctl\s+start\s+imagesrv-wizard|אשף\s+ה-?HTTPS|אשף\s+ב-?8081|אשף\s+דרך\s+הדפדפן")
+WIZARD = re.compile(r"systemctl\s+start\s+imagesrv-wizard|אשף\s+ה-?HTTPS|אשף\s+ב-?443|אשף\s+דרך\s+הדפדפן")
 
 
 def _text(rel: str) -> str:

@@ -273,7 +273,7 @@ lc_report() {
         "$(json_escape "$(cat "$_rp_r/snap_teardown" 2>/dev/null)")" "$_rp_x" > "$_rp_r/report.json"
     [ "${IMAGESRV_MODE:-}" != usbclone ] || { usb_report_save "$_rp_r"; return 0; }   # #1914: no server -- on the screen and the stick
     _rp_c=$(curl -s -o "$_rp_r/report.resp" -w '%{http_code}' --max-time 10 -H "Content-Type: application/json" \
-        --data-binary "@$_rp_r/report.json" "${SERVER:-http://0.0.0.0}/api/v1/agent/local-clone" 2>/dev/null)
+        --data-binary "@$_rp_r/report.json" "${SERVER:-https://0.0.0.0}/api/v1/agent/local-clone" 2>/dev/null)
     if [ "$_rp_c" = 200 ]; then echo sent > "$_rp_r/report"; log "local clone: reported to the server journal"
     else echo "failed|${_rp_c:-000}" > "$_rp_r/report"; lc_report_keep; log "local clone: the server did not take the report (http ${_rp_c:-000}) -- the copy stands, kept to send again"; fi
 }

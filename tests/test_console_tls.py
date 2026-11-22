@@ -1,4 +1,4 @@
-"""#703 (tracer 5): הקונסולה (8081) מוגשת ב-HTTPS עם תעודה חתומה-עצמית.
+"""#703 (tracer 5): הקונסולה (443) מוגשת ב-HTTPS עם תעודה חתומה-עצמית.
 
 מה שנבדק כאן, כהתנהגות:
 - הפעלה ראשונה עם --console-host שאינו loopback **יוצרת** תעודה+מפתח
@@ -7,11 +7,11 @@
 - ``--console-tls off`` מתקבל רק על loopback; על כרטיס ניהול — סירוב
   בשם שני הדגלים, לא נפילה שקטה ל-HTTP.
 - ``main`` מוליך את התעודה **למאזיני הקונסולה בלבד** (כולל המאזין
-  הכפול על 127.0.0.1, #904) — לא לסוכן (8080).
+  הכפול על 127.0.0.1, #904) — לא לסוכן (7712).
 - עוגיית ההתחברות נושאת ``Secure`` תחת TLS, ולא בלעדיו (שומר מפני
   תיקון-יתר שהיה שובר את הרצת הפיתוח על http://127.0.0.1).
 - ``/me`` מדווח ``tls`` עם טביעת האצבע (לשורת הסטטוס), ומסך הפורטים
-  קורא ל-8081 HTTPS.
+  קורא ל-443 HTTPS.
 - **לחיצת-יד אמיתית**: uvicorn עם התעודה שנוצרה, לקוח stdlib שסומך רק
   עליה — 200. זו הראיה ש-``ssl_certfile``/``ssl_keyfile`` של stdlib
   מקבלים את המפתח (EC P-256, PKCS8) שהמחולל המשותף מפיק.
@@ -176,7 +176,7 @@ def test_main_gives_the_cert_to_every_console_listener_and_nothing_else(
         tmp_path: Path, monkeypatch):
     """ברירת המחדל היא TLS דלוק. שני מאזיני הקונסולה (כרטיס הניהול +
     127.0.0.1, #904) מקבלים את אותה תעודה מ-``data_dir``; הסוכן והקיוסק
-    אינם משתנים (הסוכן הוא http בהכרח — GRUB בלי TLS)."""
+    אינם מקבלים את תעודת הקונסולה: הסוכן מגיש את התעודה של ערוץ הסוכן (#3580), ו-/boot נשאר http (GRUB בלי TLS)."""
     configs = run_main(tmp_path, monkeypatch, "--console-host", "10.0.0.1")
 
     console = configs["console"]
@@ -189,7 +189,11 @@ def test_main_gives_the_cert_to_every_console_listener_and_nothing_else(
         assert Path(cfg["ssl_keyfile"]) == served.with_name("console.key")
     assert served.read_bytes() == canonical.read_bytes()
     assert served.with_name("console.key").read_bytes() == canonical.with_name("console.key").read_bytes()
+    # #3580: the agent listener serves the agent channel's own certificate (never the console's); /boot stays plain
     for cfg in configs["agent"]:
+        assert Path(cfg["ssl_certfile"]).name == "agent.crt" and Path(cfg["ssl_certfile"]) != served
+        assert Path(cfg["ssl_keyfile"]).name == "agent.key"
+    for cfg in configs["boot"]:
         assert "ssl_certfile" not in cfg and "ssl_keyfile" not in cfg
 
 
@@ -224,16 +228,16 @@ def _console(tmp_path: Path, images_root: Path, clock, tls):
     from server.console import users
     from server.app import create_console_app, create_runtime
     from test_console_ports import SS_DNSMASQ
-    from test_sender import Recorder
+    from fakesend import Recorder
 
     hooks = {"ss": lambda: SS_DNSMASQ, "unit_active": lambda name: "active",
              "http_get": lambda url: 200, "http_size": lambda url: (200, 1),
              "http_text": lambda url: (200, ""), "interfaces": lambda: [],
              "tftp_root": lambda: tmp_path, "udp_sender_pids": lambda: []}
-    # אפליקציית הקונסולה **האמיתית** (8081), לא המעטפת המשולבת: במעטפת
+    # אפליקציית הקונסולה **האמיתית** (443), לא המעטפת המשולבת: במעטפת
     # ה-``/login`` של allowlist הסוכן (http) נרשם ראשון ומצל על זה של
     # הקונסולה, ועוגיית הסוכן בצדק אינה Secure.
-    rt = create_runtime(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    rt = create_runtime(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                         now_fn=clock, health_hooks=hooks, console_tls=tls,
                         sender_runner=Recorder(block=True))
     app = create_console_app(rt)
@@ -281,7 +285,7 @@ def test_ports_screen_calls_8081_https(tmp_path: Path, images_root: Path, clock)
     client, _login = _console(tmp_path, images_root, clock, None)
     rows = {r["id"]: r for r in client.get("/api/console/ports").json()}
     assert rows["http_console"]["name"] == "HTTPS"
-    assert rows["http_console"]["port"] == "8081"
+    assert rows["http_console"]["port"] == "443"
     assert "HTTPS" in rows["http_console"]["note"] or "https" in rows["http_console"]["note"]
 
 

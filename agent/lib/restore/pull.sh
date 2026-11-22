@@ -64,7 +64,7 @@ pull_open() {
     # caller does with that (the restore goes on; a person is standing there
     # and the disk is already being erased), but a pull that failed to open
     # silently would be the same blindness #60 set out to end.
-    PULL_SESSION=""; PULL_WHY=""; PULL_ENGINE=udpcast
+    PULL_SESSION=""; PULL_WHY=""; PULL_ENGINE=http   # #3173: the HTTP partition writer (restore_partition), unless the server says chunk
     _resp="$RUN_DIR/pull_resp.json"
     : > "$_resp"
     pull_body "$2" "$3" "$4" "$5" > "$RUN_DIR/pull.json"

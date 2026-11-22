@@ -1,7 +1,7 @@
 """#1074 — מחולל nftables לפי וילן, והמתקין שקורא לו.
 
 שלוש תצורות מול snapshot: ראשי, משני עם primary-ip, ו-mcast-ports שונה.
-האינווריאנטים נבדקים גם בלי snapshot (8443, 8081, policy drop) כדי
+האינווריאנטים נבדקים גם בלי snapshot (7700, 443, policy drop) כדי
 שסטיה בפורמט לא תסתיר כלל שגוי.
 """
 
@@ -75,13 +75,13 @@ def test_custom_mcast_ports_snapshot_matches_fixture() -> None:
 
 @needs_bash
 def test_primary_opens_8443_on_the_servers_card_only() -> None:
-    """#1310: בראשי 8443 עונה ל"אתה שם?" של מתקין משני — על כרטיס השרתים
+    """#1310: בראשי 7700 עונה ל"אתה שם?" של מתקין משני — על כרטיס השרתים
     בלבד (לא על ההפצה), בלי `ip saddr`: הראשי אינו יודע מראש את המשניים,
     ו-FW האתר מגביל את המקור. לפני #1310 לא היה כאן כלל כלל, והבדיקה
     במתקין נכשלה תמיד בתצורה הנכונה."""
     got = generate(*PRIMARY_ARGS)
-    assert 'iifname "eth-srv" tcp dport 8443 accept' in got
-    assert 'iifname "eth-deploy" tcp dport 8443' not in got
+    assert 'iifname "eth-srv" tcp dport 7700 accept' in got
+    assert 'iifname "eth-deploy" tcp dport 7700' not in got
     assert "ip saddr" not in got
     assert "policy drop" in got
 
@@ -89,18 +89,17 @@ def test_primary_opens_8443_on_the_servers_card_only() -> None:
 @needs_bash
 def test_secondary_opens_8443_only_from_primary_ip() -> None:
     got = generate(*PRIMARY_ARGS, "--primary-ip", "10.10.10.8")
-    assert 'iifname "eth-srv" ip saddr 10.10.10.8 tcp dport 8443 accept' in got
+    assert 'iifname "eth-srv" ip saddr 10.10.10.8 tcp dport 7700 accept' in got
     assert 'iifname "eth-deploy" ip saddr' not in got
-    assert "tcp dport 8443" in got
+    assert "tcp dport 7700" in got
 
 
 @needs_bash
 def test_console_8081_is_on_servers_if_not_deploy() -> None:
     got = generate(*PRIMARY_ARGS)
-    assert 'iifname "eth-srv" tcp dport 8081 accept' in got
-    assert 'iifname "eth-deploy" tcp dport 8081' not in got
-    assert 'iifname "eth-deploy" tcp dport 8080 accept' in got
-    assert "8082" not in got   # #1247: הקיוסק הוסר
+    assert 'iifname "eth-srv" tcp dport 443 accept' in got
+    assert 'iifname "eth-deploy" tcp dport 443' not in got
+    assert 'iifname "eth-deploy" tcp dport 7712 accept' in got
 
 
 @needs_bash
@@ -185,10 +184,10 @@ def test_without_deploy_if_only_the_servers_vlan_opens() -> None:
     פותח את הקונסולה בוילן השרתים ו**סוגר** את SSH ואת כל פורטי ההפצה.
     הקונסולה מריצה אותו שוב עם הכרטיס כשמודלק DHCP (deploy_net)."""
     text = generate("--servers-if", "eth-srv")
-    assert 'iifname "eth-srv" tcp dport 8081 accept' in text
+    assert 'iifname "eth-srv" tcp dport 443 accept' in text
     assert 'tcp dport 22' not in text
-    for closed in ("udp dport 67", "udp dport 69", "tcp dport 8080",
-                   "tcp dport 8082", "udp dport 9000-9001"):   # פורט-הפצה-מכוון: סגור בלי כרטיס
+    for closed in ("udp dport 67", "udp dport 69", "tcp dport 7712",
+                   "tcp dport 7711", "udp dport 7713-7714"):   # פורט-הפצה-מכוון: סגור בלי כרטיס
         assert closed not in text, closed
     assert "1088" in text
     assert "policy drop" in text
@@ -279,11 +278,12 @@ def _known_macs_range(rules: str) -> tuple[int, int]:
 @pytest.mark.parametrize("args", [PRIMARY_ARGS, ("--per-nic", "--service", "ens34:multicast,netboot")])
 def test_default_mcast_range_reaches_the_chunk_engines_feedback_port_3512(args) -> None:
     """The receivers' feedback datagram goes to portbase + PORT_OFFSET + 1 on the server (#3512): the generator's
-    default range must let it in, from registered machines only, and no further than that."""
-    from server.rounds import chunksend, sender
+    default range must let it in, from registered machines only, and no further than that. #3173: it starts at
+    the chunk engine's data port (portbase + PORT_OFFSET); udpcast's portbase and portbase+1 stay closed."""
+    from server.rounds import chunkctx, chunksend
 
     got = generate(*args)
     low, high = _known_macs_range(got)
-    feedback_port = sender.PRODUCTION_PORTBASE + chunksend.PORT_OFFSET + 1
-    assert (low, high) == (sender.PRODUCTION_PORTBASE, feedback_port)
+    data_port = chunkctx.PRODUCTION_PORTBASE + chunksend.PORT_OFFSET
+    assert (low, high) == (data_port, data_port + 1)
     assert f"udp dport {low}-{high} drop" in got       # an unregistered machine meets the same range and is dropped

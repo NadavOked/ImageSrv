@@ -295,7 +295,7 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
         why = slow_why; why_c = t->danger;
     }
     /* #3268: the waiting-screen write check, said before the round: slow = red with the numbers; failed/unchecked = said, never green; checking = grey, "בודק מהירות…" (#3268, 18/11: the sustained write, 10-30 s a disk) */
-    static char wc_why[240];
+    static char wc_why[400];   /* #3788: IdleDisk.wtext (320) + the longest words around it, never cut by this snprintf */
     if (d && !f1_why[0] && !sred && d->wstate[0] && strcmp(d->wstate, "ok") && (!why || !strcmp(d->wstate, "slow"))) {
         if (!strcmp(d->wstate, "checking")) {   /* 18/11: the server's memory of the serial is a line beside it (never red: the brain decides on the check now) */
             if (d->wtext[0]) { snprintf(wc_why, sizeof wc_why, "בודק מהירות… — %s", d->wtext); why = wc_why; } else why = "בודק מהירות…";

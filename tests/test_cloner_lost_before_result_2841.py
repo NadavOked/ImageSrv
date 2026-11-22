@@ -143,11 +143,11 @@ def test_the_watchdog_sends_the_log_before_it_reboots(tmp_path):
              f' WATCHDOG_UPTIME="$RUN_DIR/uptime"; . {posix(LIB)}/watchdog.sh;'
              ' reboot() { echo "REBOOT $*"; exit 0; };'
              " echo '0.0 0' > \"$WATCHDOG_UPTIME\"; echo 0 > \"$RUN_DIR/watchdog.beat\";"
-             ' WATCHDOG_DEVICE="$RUN_DIR/none"; WD_SERVER=http://20.0.0.1:8080; WD_MAC=64:31:50:42:b1:9c;'
+             ' WATCHDOG_DEVICE="$RUN_DIR/none"; WD_SERVER=http://20.0.0.1:7712; WD_MAC=64:31:50:42:b1:9c;'
              " sleep() { echo '600.0 0' > \"$WATCHDOG_UPTIME\"; }; watchdog_supervise 2>&1")
     assert "REBOOT -f" in out, out
     assert _curl_urls(tmp_path) == [
-        "http://20.0.0.1:8080/api/v1/agent/log?mac=64:31:50:42:b1:9c&session_id=ses_930ae04f&reason=fatal"], out
+        "http://20.0.0.1:7712/api/v1/agent/log?mac=64:31:50:42:b1:9c&session_id=ses_930ae04f&reason=fatal"], out
     assert out.index("the agent log was sent") < out.index("REBOOT -f")
 
 
@@ -168,7 +168,7 @@ def test_the_supervisor_is_told_where_the_server_is():
 
 def _agent(tmp_path: Path, run: Path, bin_dir: Path, body: str) -> str:
     return sh(f'export PATH="$(cd {posix(bin_dir)!r} && pwd):$PATH" RUN_DIR={posix(run)!r}'
-              f' LOG_FILE={posix(run)!r}/agent.log SERVER=http://20.0.0.1:8080 MAC=64:31:50:42:b1:9c'
+              f' LOG_FILE={posix(run)!r}/agent.log SERVER=http://20.0.0.1:7712 MAC=64:31:50:42:b1:9c'
               f' IMAGESRV_TEST=1; . {posix(LIB)}/common.sh; . {posix(LIB)}/jsonq.sh;'
               f' . {posix(LIB)}/datareport.sh; RESP="$RUN_DIR/response.json"; sleep() {{ :; }}; {body}')
 
@@ -179,7 +179,7 @@ def test_die_local_with_a_job_open_sends_the_log_first(tmp_path):
     out = _agent(tmp_path, run, bin_dir, '( die_local "readback broke" ); echo "rc=$?"')
     assert "TEST-REBOOT: readback broke" in out
     assert _curl_urls(tmp_path) == [
-        "http://20.0.0.1:8080/api/v1/agent/log?mac=64:31:50:42:b1:9c&session_id=ses_930ae04f&reason=fatal"]
+        "http://20.0.0.1:7712/api/v1/agent/log?mac=64:31:50:42:b1:9c&session_id=ses_930ae04f&reason=fatal"]
 
 
 @requires_native(("bash", BASH))
@@ -196,7 +196,7 @@ def test_die_local_with_no_job_sends_nothing(tmp_path):
 def test_the_readback_checkpoint_is_a_cloners_only(tmp_path, role, sent):
     run, bin_dir = _run_dir(tmp_path, "verifying"), _fake_bin(tmp_path)
     _agent(tmp_path, run, bin_dir, f"D_ROLE={role}; agent_log_checkpoint")
-    want = ["http://20.0.0.1:8080/api/v1/agent/log?mac=64:31:50:42:b1:9c"
+    want = ["http://20.0.0.1:7712/api/v1/agent/log?mac=64:31:50:42:b1:9c"
             "&session_id=ses_930ae04f&reason=checkpoint"] if sent else []
     assert _curl_urls(tmp_path) == want
 

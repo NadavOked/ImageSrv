@@ -1,6 +1,6 @@
 """A test room loads the agent's libraries as the agent does (#2272).
 
-drawers.sh and drawerfeed.sh start `writeback_watch &` (writeback.sh, #1841) in
+drawers.sh (and drawerfeed.sh, until #3173) start `writeback_watch &` (writeback.sh, #1841) in
 every partition's pipe. A test that sourced them without writeback.sh ran a
 pipe the agent never runs: the job was "not found", exited at once, and its
 SIGCHLD landed while busybox ash was blocked opening the drawer's fifo. ash
@@ -89,8 +89,8 @@ def test_the_scan_sees_both_shapes(tmp_path):
     for n in range(601):
         (tmp_path / f"test_pad_{n}.py").write_text("")
     (tmp_path / "test_path.py").write_text(
-        'X = f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/drawerfeed.sh; "\n')
-    (tmp_path / "test_names.py").write_text('LIBS = ("common", "restore", "drawers", "drawerfeed")\n')
+        'X = f". {posix(AGENT)}/lib/restore/drawers.sh; . {posix(AGENT)}/lib/restore/neighborfill.sh; "\n')
+    (tmp_path / "test_names.py").write_text('LIBS = ("common", "restore", "drawers", "neighborfill")\n')
     (tmp_path / "test_failpath.py").write_text(   # #2281: the failure path's own room
         'R = ("common", "progress", "failmark")\n'
         'X = f". {posix(AGENT)}/lib/core/progress.sh; "\n'
@@ -107,9 +107,9 @@ def test_the_scan_sees_both_shapes(tmp_path):
                    "test_failpath.py:3: loads progress without sysinfo, failmark",
                    "test_failpath.py:4: loads progress without failmark",
                    "test_names.py:1: loads drawers without writeback",
-                   "test_names.py:1: loads drawerfeed without writeback",
+                   "test_names.py:1: loads neighborfill without waits",
                    "test_path.py:1: sources drawers.sh by path -- use agent_sources",
-                   "test_path.py:1: sources drawerfeed.sh by path -- use agent_sources"], got
+                   "test_path.py:1: sources neighborfill.sh by path -- use agent_sources"], got
 
 
 def test_the_agent_loads_what_needs_says():
@@ -137,8 +137,8 @@ def test_target_init_in_a_room_writes_the_drawer_s_seen(tmp_path):
 
 def test_agent_libs_keeps_the_agent_order_and_refuses_a_lone_drawer():
     assert agent_libs("drawers", "common", "writeback", "restore") == ["common", "restore", "writeback", "drawers"]
-    with pytest.raises(ValueError, match="drawerfeed needs writeback"):
-        agent_libs("common", "drawerfeed")
+    with pytest.raises(ValueError, match="neighborfill needs waits"):
+        agent_libs("common", "neighborfill")
     with pytest.raises(ValueError, match="failmark needs sysinfo.*progress needs sysinfo"):   # #2281
         agent_libs("common", "progress", "failmark")
     with pytest.raises(ValueError, match="not sourced"):

@@ -379,7 +379,7 @@ def test_an_incoming_area_of_an_active_pull_is_kept_however_quiet(conn, tmp_path
     root = tmp_path / "images"
     now = time.time()
     conn.execute("INSERT INTO storage_nodes (id, label, base_url, credential_ref, enrolled_at)"
-                 " VALUES ('n1', 'חיפה', 'https://10.0.0.2:8443', 'c', ?)", (ago(1),))
+                 " VALUES ('n1', 'חיפה', 'https://10.0.0.2:7700', 'c', ?)", (ago(1),))
     conn.execute("INSERT INTO storage_transfers (id, node_id, image_id, image_name, state,"
                  " started_by, created_at, updated_at, direction) VALUES"
                  " ('t1', 'n1', 'img_bbbbbb', 'B', 'sending', 'noc', ?, ?, 'pull')",
@@ -450,7 +450,7 @@ def test_the_room_clock_runs_housekeeping_in_the_background(tmp_path, monkeypatc
         return result
 
     monkeypatch.setattr(housekeeping, "run", counting)
-    app = create_app(tmp_path / "data", images, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images, "http://10.44.12.10:7712",
                      now_fn=Clock(), room_clock_interval=0.02,
                      housekeeping_first=0.05, housekeeping_every=3600)
     orphan = area(images, ".capture-tsk_late")
@@ -459,7 +459,7 @@ def test_the_room_clock_runs_housekeeping_in_the_background(tmp_path, monkeypatc
         with TestClient(app):
             assert fired.wait(timeout=10.0), "the daily round never ran"
     finally:
-        app.state.ctx.sender.stop()
+        app.state.ctx.chunk.stop()
     assert not orphan.exists()
     assert "tsk_late" in events(app.state.ctx.conn)["work_area_swept"]
 

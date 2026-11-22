@@ -16,7 +16,6 @@
 
 הטסט אינו מריץ `shellcheck` — הוא רץ גם על ווינדוס, שם אין בינארי.
 """
-import glob
 import io
 import os
 import re
@@ -65,23 +64,30 @@ def _extras():
 
 
 def _all_shell():
-    cwd = os.getcwd()
-    os.chdir(ROOT)
-    try:
-        return {p.replace(os.sep, "/")
-                for p in glob.glob("**/*.sh", recursive=True)
-                if not p.startswith(".git")}
-    finally:
-        os.chdir(cwd)
+    """כל `*.sh` בעץ, **כולל תיקיות נסתרות** (#3100).
+
+    `glob.glob("**/*.sh", recursive=True)` מדלג על תיקייה שמתחילה בנקודה,
+    ואילו ה-`find` ב-workflow נכנס אליה: קובץ תחת `.github/` לא היה נספר
+    בשני צדי ההשוואה, ולכן ניכוי של `.github` ב-workflow לא היה מאדים
+    שום טסט. כאן רק `.git` עצמו מנוכה, כמו ב-`find . -name .git -prune`.
+    """
+    found = set()
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [d for d in dirnames if d != ".git"]
+        for name in filenames:
+            if name.endswith(".sh"):
+                rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
+                found.add(rel.replace(os.sep, "/"))
+    return found
 
 
-def _derived():
+def _derived(prunes=None):
     """מה שכללי הגזירה של ה-workflow יתפסו בעץ הזה.
 
     שכפול של ה-`find` שבקובץ: כל `*.sh` מלבד תת-עצים מנוכים, ועוד
     נקודות הכניסה של הסוכן שאין להן סיומת.
     """
-    prunes = _prunes()
+    prunes = _prunes() if prunes is None else set(prunes)
     out = {p for p in _all_shell()
            if not any(p == d or p.startswith(d + "/") for d in prunes)}
     cwd = os.getcwd()
@@ -193,3 +199,22 @@ def _match(pattern: str, path: str) -> bool:
     if pattern.endswith("/**"):
         return path.startswith(pattern[:-2])
     return path == pattern
+
+
+def test_a_shell_file_under_a_hidden_directory_is_derived():
+    """#3100: `.github/**/*.sh` נכנס לשני צדי ההשוואה, כמו ב-`find` של ה-workflow."""
+    hidden = {p for p in _all_shell() if p.startswith(".github/")}
+    assert hidden, "אין קובץ sh תחת .github/ — הטסט הזה אינו בודק דבר"
+    assert hidden <= _derived(), (
+        f"קבצי sh תחת .github/ שכללי הגזירה אינם תופסים: {sorted(hidden - _derived())}")
+
+
+def test_pruning_a_hidden_directory_is_caught():
+    """#3100, בקרת החלפה: ניכוי של `.github` ב-workflow מאדים את הבדיקה.
+
+    לפני התיקון `_all_shell()` לא ראה את `.github/`, ולכן גם `_derived`
+    עם הניכוי הזה החזיר אותה קבוצה והטסט נשאר ירוק.
+    """
+    dropped = _all_shell() - _derived(_prunes() | {".github"})
+    assert any(p.startswith(".github/") for p in dropped), (
+        "ניכוי של .github אינו מוציא קובץ מהסריקה בחישוב — הבדיקה עיוורת לו")

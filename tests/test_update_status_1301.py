@@ -33,7 +33,7 @@ def _hooks(state: dict) -> dict:
 
 def _app(data: Path, images_root: Path, clock, state: dict):
     from server.app import create_app
-    return create_app(data, images_root, "http://10.44.12.10:8080", now_fn=clock,
+    return create_app(data, images_root, "http://10.44.12.10:7712", now_fn=clock,
                       update_hooks=_hooks(state), repo_dir="/repo")
 
 

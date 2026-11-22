@@ -92,7 +92,7 @@ def env(tmp_path: Path, images_root: Path, clock):
     root.mkdir()
     fake = FakeStick(root)
     (root / "settings.json").write_text('{"cloner_beep": true}', encoding="utf-8")
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
                      usb_hooks={"scan": fake.scan, "open": fake.open})
     conn = app.state.ctx.conn
     users.create(conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)

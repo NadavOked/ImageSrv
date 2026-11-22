@@ -19,11 +19,11 @@ CLONER = "aa:bb:cc:00:00:31"
 def server(tmp_path: Path, images_root):
     from server.app import create_app
 
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      wol_send=lambda _packet: None)
     ctx = app.state.ctx
     yield {"ctx": ctx}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def _failure(ctx, mac, serial, cause, error, session="ses_x"):
@@ -36,7 +36,8 @@ def _failure(ctx, mac, serial, cause, error, session="ses_x"):
 
 @pytest.mark.parametrize("error", [
     "מחיצה 1: פג הזמן -- הזרם לא הגיע",                 # שליפת המגירה 17/10: sda התקין
-    "מחיצה 2: הזרם נקטע לפני סופו (מקור rc=1)",
+    "מחיצה 2: הזרם נקטע לפני סופו (מקור rc=1)",          # a row an agent before #3173 left
+    "מחיצה 2: השרת לא ענה במשך 95 שניות",                # #3173: the chunk receiver's server went silent
     "מחיצה 1: השרת סגר את הסבב -- הכתיבה הופסקה",
     "המחשב כובה מהקונסולה באמצע שיכפול מקומי — הדיסק שבור ואינו שמיש",
     "השיכפול נעצר לפני מחיצה 3 — היעד אינו שמיש",

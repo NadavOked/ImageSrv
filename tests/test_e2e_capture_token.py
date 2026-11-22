@@ -87,6 +87,7 @@ def test_phase_capture_uploader_sends_the_task_token(monkeypatch, tmp_path):
         return _Resp(json.dumps({"ok": True}).encode())
 
     monkeypatch.setattr("tools.e2e.harness.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("tools.e2e.harness._agent_openers", {})   # #3580: a server another test started trusts nothing here
 
     ctx = SimpleNamespace(
         console=SimpleNamespace(json=console_json),
@@ -114,6 +115,7 @@ def test_client_does_not_invent_a_task_token(monkeypatch):
         return _Resp(b"")
 
     monkeypatch.setattr("tools.e2e.harness.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("tools.e2e.harness._agent_openers", {})   # #3580: a server another test started trusts nothing here
     status, _ = Client().request("GET", "/api/v1/agent/hello")
     assert status == 200
     assert seen, "Client.request לא פנה ל-urlopen"

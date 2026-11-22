@@ -41,7 +41,7 @@ from server.brain import fill, memory
 log = logging.getLogger("imagesrv.brain")
 
 RULE, PREDICT, ACTUAL = "K3", "WAVE_ETA", "WAVE_ETA_ACTUAL"
-#: #3550: כמה גלים אחרונים ב-`wave_rates` עוברים עליהם כדי למצוא את הגל האחרון של מנוע החתיכות (גל udpcast ביניהם -- מדלגים).
+#: #3550: כמה גלים אחרונים ב-`wave_rates` עוברים עליהם כדי למצוא את הגל האחרון של מנוע החתיכות (גל ישן של השולח שהוסר ביניהם -- מדלגים).
 PREVIOUS_SCAN = 20
 OFF = "off"
 #: חתיכה במנוע החתיכות (`chunksend.CHUNK_BYTES`): מה שהכונן כותב.
@@ -182,7 +182,7 @@ class WaveEta:
         achieved is the rate of ITS drives, so a wave counts only when its drive set is exactly ``serials`` (this wave's: the write-checked
         drives and the ones K3 learned were behind). A wave whose drives are not recorded (`chunk.drives`, else `chunk.write_serials`),
         or an empty ``serials``, cannot be compared: it is not the base either (principle 5: "could not check" is not "same drives").
-        A udpcast wave carries no `stream.chunk` and a chunk wave on other drives is not this wave's evidence: both are skipped. The last
+        A wave of the removed sender carries no `stream.chunk` and a chunk wave on other drives is not this wave's evidence: both are skipped. The last
         wave ON THESE DRIVES that did not end in `send_done` (failed, stopped), or whose `achieved_bps` is not a positive number: None,
         not an older wave -- which wave to take is not guessed."""
         if not serials:

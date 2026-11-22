@@ -152,7 +152,7 @@ firstboot_from_answers() {
     fi
 
     bash "$APP_DIR/deploy/verify-boot-payload.sh" --app-dir "$APP_DIR" --http-root "$HTTP_ROOT" \
-        --server-url http://127.0.0.1:8080 >>"$BUILD_LOG" 2>&1 \
+        --server-url http://127.0.0.1:7711 >>"$BUILD_LOG" 2>&1 \
         || fail verify-failed "verify-boot-payload.sh failed; the installation is not marked complete (see $BUILD_LOG)"
     printf 'state=done\ntimestamp=%s\nservers_if=%s\nrole=%s\nsource=answers\nnic=%s\nnic_message=%s\n' \
         "$(date -u +%FT%TZ)" "$servers_if" "$role" "$nic" "$nic_message" > "$STATUS"

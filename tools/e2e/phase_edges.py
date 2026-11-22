@@ -75,4 +75,6 @@ def run(ctx) -> None:
     status, _ = probe.json("POST", "/api/v1/agent/sessions", {
         "username": "madrich", "password": "wrong-pass",
         "mac": CLASS_MACS[0], "group_id": "grp_LAB1", "image_id": ctx.image_a})
-    check("פתיחת סבב עם סיסמה שגויה נדחית", status == 401, str(status))
+    # #3173: סבב כיתה נדחה ב-v1 בכל מקרה (שלב 6), ונתיב שאין מאחוריו סבב אינו חייב לבדוק סיסמה
+    # (#1282) — 409 של הסירוב או 401 של הסיסמה, ובשניהם לא נפתח דבר.
+    check("פתיחת סבב עם סיסמה שגויה נדחית", status in (401, 409), str(status))

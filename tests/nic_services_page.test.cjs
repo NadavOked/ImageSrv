@@ -31,8 +31,8 @@ const TODAY={services:['console','monitor','multicast','netboot','interserver'],
         svcRow('ens35',[])]};
 const OFFICE=JSON.parse(JSON.stringify(TODAY));
 OFFICE.nics[2]={...svcRow('ens35',['console','monitor'],{address:'10.20.0.8',source:'saved'})};
-const PORTS=[{id:'http_console',name:'HTTP',port:'8081',proto:'tcp',state:'ok',detail:'',enabled:true,bind:'10.10.10.8',toggle:'confirm',off_means:'x'},
-             {id:'interserver',name:'mTLS',port:'8443',proto:'tcp',state:'ok',detail:'',enabled:true,bind:'10.10.10.8',toggle:'api',off_means:'x'}];
+const PORTS=[{id:'http_console',name:'HTTP',port:'443',proto:'tcp',state:'ok',detail:'',enabled:true,bind:'10.10.10.8',toggle:'confirm',off_means:'x'},
+             {id:'interserver',name:'mTLS',port:'7700',proto:'tcp',state:'ok',detail:'',enabled:true,bind:'10.10.10.8',toggle:'api',off_means:'x'}];
 
 function setup(over={}) {
   const nodes=new Map(), requests=[];
@@ -91,20 +91,21 @@ test('ports card (#3028): "שירותים שרצים עליו" with chips in the
   assert.match(r33,/<button class="btn sm" type="button" onclick="nicsvcOpen\('ens33'\)">עריכה…<\/button>/);
 });
 
-test('#3028 physical connections: the NIC table has no services column, no "שירותים…" in ⋯, and no row click to the drawer; the ports page carries the services card',async()=>{
+test('#3887 physical connections: the NIC table has no services column and no "שירותים…" in ⋯; the per-NIC services card is back under it, not on the services page',async()=>{
   const t=await loaded();
   const html=t.run('networkPage(1)'); balanced(html);
-  assert.doesNotMatch(html,/שירותים/); assert.doesNotMatch(html,/ns-sc|nicsvcRowClick|nicsvcOpen/);
-  const r33=row(html,'data-nic="ens33"');
+  const table=html.slice(0,html.indexOf('שירותים לפי כרטיס'));
+  assert.doesNotMatch(table,/ns-sc|nicsvcRowClick|nicsvcOpen/,'the NIC table itself carries no services');
+  const r33=row(table,'data-nic="ens33"');
   const menu=JSON.parse(r33.match(/data-menu="([^"]*)"/)[1].replaceAll('&quot;','"').replaceAll('&#39;',"'"));
   assert.deepEqual(menu.map(m=>m[0]),['הגדרת כרטיס…','תיאור…','נתיבים סטטיים…']);
+  assert.match(html,/שירותים לפי כרטיס/); assert.ok(html.indexOf('כרטיסי רשת')<html.indexOf('שירותים לפי כרטיס'),'the services card comes after the NIC table');
   await t.run('loadPorts()');
-  const ports=t.run('ports()'); balanced(ports);
-  assert.match(ports,/שירותים לפי כרטיס/); assert.match(ports,/data-nic="ens33"/);
-  assert.ok(ports.indexOf('שירותים לפי כרטיס')<ports.indexOf('מאזין'),'the services card comes first');
+  const page=t.run('servicesPage()'); balanced(page);
+  assert.doesNotMatch(page,/שירותים לפי כרטיס/,'the services page does not carry the per-NIC card (#3887)');
 });
 
-test('#3028 ports card: /net/interfaces unread → says so, not an empty table',async()=>{
+test('#3028 per-NIC services card: /net/interfaces unread → says so, not an empty table',async()=>{
   const t=setup({'/net/interfaces':new Error('boom')}); t.run('current="ports"'); await t.run('loadPorts()');
   const html=t.run('nicsvcPortsCard()');
   assert.match(html,/‏\/net\/interfaces לא נקרא/); assert.doesNotMatch(html,/data-nic=/);
@@ -127,7 +128,7 @@ test('drawer (ens33) + lockout-last: the console is locked on the last NIC that 
   assert.match(d,/אתה מחובר דרך הכרטיס הזה<\/b> — מהמחשב <span class="ns-addr">10\.10\.10\.51<\/span> לכתובת <span class="ns-addr">10\.10\.10\.8<\/span>/);
   assert.match(d,/<label class="n-sw" aria-disabled="true">.*?<input id="ns-console" type="checkbox" role="switch" checked aria-disabled="true"/);
   assert.match(d,/זה הכרטיס היחיד עם קונסולה, ולכן היא נעולה כאן/);
-  assert.match(d,/<span class="pt">8081\/tcp<\/span>/,'the port comes from /ports');
+  assert.match(d,/<span class="pt">443\/tcp<\/span>/,'the port comes from /ports');
   assert.match(d,/פעיל — השרת מאזין כאן/,'listening=true from the sockets');
   assert.match(d,/id="nsSave" onclick="nicsvcSave\(\)" disabled>שמירה והחלה</);
   t.run("nicsvcToggle('console',{checked:false,getAttribute:()=> 'true'})");
@@ -169,7 +170,7 @@ test('warn-table: a saved odd combination is an orange chip and a note with "פ�
 });
 
 test('lockout + handoff: console off on the NIC you are on → red confirm (no typed word) → PUT with handoff → the handoff screen',async()=>{
-  const out={ok:true,changed:true,nic:'ens33',services:['monitor','interserver'],pending:{interface:'ens33',seconds_left:60,window_seconds:60},go:['https://10.20.0.8:8081']};
+  const out={ok:true,changed:true,nic:'ens33',services:['monitor','interserver'],pending:{interface:'ens33',seconds_left:60,window_seconds:60},go:['https://10.20.0.8']};
   const t=await loaded({'/net/services':OFFICE,'PUT /net/services/ens33':out});
   t.run("nicsvcOpen('ens33')");
   assert.doesNotMatch(drawer(t),/aria-disabled/,'another NIC serves the console — not locked');
@@ -182,7 +183,7 @@ test('lockout + handoff: console off on the NIC you are on → red confirm (no t
   const s=t.run('sheets[0]');
   assert.equal(s.title,'לכבות את הקונסולה ב-ens33?'); assert.equal(s.submitLabel,'לכבות ולהתנתק'); assert.equal(s.danger,true);
   assert.equal(s.verify,undefined,'#1270: no typed word');
-  assert.match(s.note,/תתנתק ברגע ההחלה/); assert.match(s.note,/יש לך 60 שניות<\/b> להיכנס/); assert.match(s.note,/https:\/\/10\.20\.0\.8:8081/);
+  assert.match(s.note,/תתנתק ברגע ההחלה/); assert.match(s.note,/יש לך 60 שניות<\/b> להיכנס/); assert.match(s.note,/https:\/\/10\.20\.0\.8(?![:\d])/,"443 is the port https implies: not written, as in the address the server returns (#3871)");
   assert.match(s.note,/השרת מחזיר לבד את ההגדרה הקודמת, והקונסולה חוזרת ל-ens33/);
   const next=await t.run('sheets[0].onSubmit({})');
   const put=t.requests.find(r=>r.method==='PUT');
@@ -190,7 +191,7 @@ test('lockout + handoff: console off on the NIC you are on → red confirm (no t
   t.ctx.__next=next; t.run('__next()');
   const hand=t.node('#sheet').innerHTML; balanced(hand);
   assert.match(hand,/השינוי הוחל. החיבור הזה מתנתק./);
-  assert.match(hand,/<a class="btn primary" id="nsGo" href="https:\/\/10\.20\.0\.8:8081">/);
+  assert.match(hand,/<a class="btn primary" id="nsGo" href="https:\/\/10\.20\.0\.8">/);
   assert.match(hand,/class="ns-ring big"[^>]*role="timer" aria-label="נשארו 60 שניות"/);
   assert.match(hand,/והקונסולה חוזרת ל-ens33, בכתובת <span class="ns-addr">10\.10\.10\.8<\/span>/);
   assert.equal(t.run('modalOpen'),1);

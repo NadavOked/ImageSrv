@@ -188,7 +188,8 @@ test('#2840: vmuAct — one action at a time (the server state machine answers t
 test('#2840: every button listed in the audit is wrapped (a new unguarded copy of the pattern fails here)', () => {
   const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
   const wrapped = {
-    'console.js': ['scrubLibrary', 'startRound', 'reopenRound', 'startWave', 'reopenRoom', 'wakeRoom', 'wakeMachine', 'wakeGroup', 'clearDiskFailure', 'clearShrinkRecord', 'healthSvcStart'],
+    'console.js': ['scrubLibrary', 'startRound', 'reopenRound', 'startWave', 'reopenRoom', 'wakeRoom', 'wakeMachine', 'wakeGroup', 'clearDiskFailure', 'clearShrinkRecord'],
+    'console-services.js': ['svcStart'],   // ‏#3887: healthSvcStart עבר לדף השירותים
     'nicsvc.js': ['nicsvcSave', 'nicsvcKeep', 'nicsvcUndo'], 'netcfg.js': ['confirmNetRollback'], 'update_screen.js': ['updRetry'],
     'storage.js': ['storageConnect', 'storageScan'], 'learning.js': ['learningMachine'], 'vmupdate.js': ['vmuAct'],
     'email_alerts.js': ['emRuleDup', 'emSaveRelay', 'emSaveCustom', 'emSaveGmail', 'emSaveTo', 'emConnect'],

@@ -21,7 +21,7 @@ import pytest
 
 from boot.grub_menu import AGENT, LOCAL, GrubConfig, decide, render
 
-CFG = GrubConfig(server_base="http://10.44.12.10:8080")
+CFG = GrubConfig(server_base="http://10.44.12.10:7712")
 
 
 def answer(**overrides) -> dict:

@@ -80,13 +80,11 @@ def test_a_journal_error_that_is_not_disk_full_still_raises(tmp_path):
 @pytest.fixture()
 def app_full(tmp_path: Path, images_root: Path, clock, monkeypatch):
     """אפליקציה מלאה; `state["full"] = True` הופך כל כתיבה ל-SQLITE_FULL."""
-    from server.rounds import sender as sender_module
     from server.console import users
     from server.app import create_app
 
-    monkeypatch.setattr(sender_module, "port_holders", lambda port: [])
     state = {"full": False, "free": 50 * GIB}
-    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock,
                      health_hooks={"interfaces": lambda: [],
                                    "db_free": lambda data_dir: state["free"]})
@@ -105,7 +103,7 @@ def app_full(tmp_path: Path, images_root: Path, clock, monkeypatch):
 
     monkeypatch.setattr(db_module.Database, "execute", execute)
     yield {"app": app, "ctx": ctx, "admin": admin, "agent": TestClient(app), "state": state}
-    ctx.sender.stop()
+    ctx.chunk.stop()
 
 
 def _health(admin) -> dict:

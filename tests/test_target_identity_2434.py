@@ -236,8 +236,9 @@ def test_every_write_site_asks_assert_target():
     lib = REPO / "agent" / "lib"
     want = {
         "restore/expand.sh": ['assert_target "$1" || return 1   # #2434: the disk chosen, again'],
-        "restore/drawers.sh": ['assert_target "$_d" || continue   # #1386; #2434: before its fifo',
-                               'if assert_target "$_d" && make_swap'],
+        # #3173: the drawer's own fifo went with udpcast; the chunk receiver asks before every pass and fetch
+        "restore/chunkrecv.sh": ['assert_target "$_cn_d" || continue   # #2434: before every pass and every fetch'],
+        "restore/drawers.sh": ['if assert_target "$_d" && make_swap'],
         "localclone/lccopy.sh": ['assert_target "$_ls_t" || continue', 'assert_target "$_lk_t" || continue',
                                  'assert_target "$_lf_t" || continue'],
     }

@@ -19,7 +19,7 @@ def _conn(tmp_path):
     conn = db.connect(tmp_path / "p.db")
     conn.execute(
         "INSERT INTO storage_nodes (id, label, base_url, credential_ref, enrolled_at)"
-        " VALUES ('n1', 'חיפה', 'https://10.0.0.2:8443', 'x', '2026-10-16T00:00:00+00:00')")
+        " VALUES ('n1', 'חיפה', 'https://10.0.0.2:7700', 'x', '2026-10-16T00:00:00+00:00')")
     return conn
 
 

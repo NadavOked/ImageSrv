@@ -100,7 +100,7 @@ def target(run: Path, name: str) -> str:
 def round_run(prelude: str) -> str:
     # The stream is not what is tested: a good plan stops at the first partition.
     return sh(prelude + 'restore_partition_drawers() { return 1; }; '
-              'run_restore_drawers multicast http://s img m.json sda; echo "rc=$?"')
+              'run_restore_drawers chunk http://s img m.json sda; echo "rc=$?"')
 
 
 def test_a_round_whose_plan_is_refused_never_writes_trims_or_wipes_the_drawer(tmp_path):

@@ -127,8 +127,8 @@ def test_monitor_is_off_by_default_and_cmdline_flag_follows_the_switch():
 def test_settings_page_warns_that_enabling_exposes_5900():
     js = console_js()
     # #1300: האזהרה עברה מהערה בראש הדף ל-title של המתג ולכרטיס הצפייה (console-full.html P.monitor)
-    assert "כבוי כברירת מחדל — הדלקה חושפת 5900 על וילן ההפצה" in js
-    assert "הדלקה חושפת 5900 על וילן ההפצה ותופסת באתחול הבא של כל מכונה" in js
+    assert "כבוי כברירת מחדל — הדלקה חושפת 7710 על וילן ההפצה" in js
+    assert "הדלקה חושפת 7710 על וילן ההפצה ותופסת באתחול הבא של כל מכונה" in js
 
 
 def test_enabling_monitor_requires_explicit_confirmation(server):
@@ -286,7 +286,7 @@ def test_proxy_retries_while_booting_monitor_has_not_bound_5900(server, monkeypa
     async def connector(host, port):
         attempts.append((host, port))
         if len(attempts) < 3:
-            raise ConnectionRefusedError("5900 is not listening yet")
+            raise ConnectionRefusedError("7710 is not listening yet")
         return machine, machine
 
     client = monitor_client(server, "admin", connector)
@@ -303,7 +303,7 @@ def test_proxy_caps_startup_retry_and_reports_the_last_reason(server, monkeypatc
     monkeypatch.setattr(monitor, "MONITOR_CONNECT_BACKOFF", (0,))
 
     async def connector(_host, _port):
-        raise ConnectionRefusedError("5900 עדיין לא מאזין")
+        raise ConnectionRefusedError("7710 עדיין לא מאזין")
 
     client = monitor_client(server, "admin", connector)
     with pytest.raises(WebSocketDisconnect) as caught:
@@ -405,7 +405,7 @@ def test_monitor_machines_list_is_admin_only_and_server_decides_online(server):
 
 # --- #839/#1077: הפרוקסי מזדהה מול המוניטור ב-HMAC, לא בסוד גולמי ---------
 #
-# 5900 קשוב לכל הווילן, ולכן "רק ה-WebSocket של ה-admin מגיע לשם" לא היה
+# 7710 קשוב לכל הווילן, ולכן "רק ה-WebSocket של ה-admin מגיע לשם" לא היה
 # נכון מעולם. המוניטור מציע רק את סוג-אבטחה 2 (מסגור VNC Authentication),
 # והתשובה ל-challenge היא HMAC-SHA256(סוד, challenge) הקטום ל-16 בייטים.
 # סוכן בלי monitor_auth: hmac מסורב לפני TCP. הדפדפן רואה את אותה
@@ -717,7 +717,7 @@ def test_hello_without_monitor_auth_is_stored_as_legacy_not_hmac(server):
 
 
 def test_monitor_secret_never_leaves_the_server(server):
-    """הסוד נכנס דרך hello ויוצא רק אל 5900 של אותה מכונה. אף תשובת
+    """הסוד נכנס דרך hello ויוצא רק אל 7710 של אותה מכונה. אף תשובת
     קונסולה — גם של admin — אינה נושאת אותו."""
     prepare_secret_machine(server)
     admin = server["admin"]
@@ -868,12 +868,12 @@ def test_same_origin_or_no_origin_passes_the_origin_gate(server, headers):
 
 
 def test_origin_allowed_matches_host_only():
-    assert monitor.origin_allowed({"host": "10.44.12.1:8081"}) is True
-    assert monitor.origin_allowed({"host": "10.44.12.1:8081",
-                                   "origin": "http://10.44.12.1:8081"}) is True
-    assert monitor.origin_allowed({"host": "10.44.12.1:8081",
+    assert monitor.origin_allowed({"host": "10.44.12.1:443"}) is True
+    assert monitor.origin_allowed({"host": "10.44.12.1:443",
+                                   "origin": "http://10.44.12.1:443"}) is True
+    assert monitor.origin_allowed({"host": "10.44.12.1:443",
                                    "origin": "http://10.44.12.1"}) is False
-    assert monitor.origin_allowed({"host": "10.44.12.1:8081",
+    assert monitor.origin_allowed({"host": "10.44.12.1:443",
                                    "origin": "http://evil.example"}) is False
     assert monitor.origin_allowed({"origin": "http://x"}) is False   # אין Host
 
@@ -1210,7 +1210,7 @@ def _refused_reason(server, monkeypatch) -> str:
     monkeypatch.setattr(monitor, "MONITOR_CONNECT_BACKOFF", (0,))
 
     async def connector(_host, _port):
-        raise ConnectionRefusedError("nobody on 5900")
+        raise ConnectionRefusedError("nobody on 7710")
 
     client = monitor_client(server, "admin", connector)
     with pytest.raises(WebSocketDisconnect) as caught:

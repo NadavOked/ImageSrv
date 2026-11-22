@@ -20,7 +20,7 @@ import pytest
 
 from server import db
 from server.learn import netloss as learn_netloss, server_io
-from server.rounds import drive_rates, room
+from server.rounds import room
 
 MAC1 = "78:ac:c0:9b:11:c2"
 MAC2 = "78:ac:c0:9b:11:c3"
@@ -155,20 +155,18 @@ def test_another_card_rate_or_drawer_count_is_not_a_baseline(conn):
     assert _assess(conn, _wave(conn, 2.0, interface="eth2"))["state"] == "unchecked"
 
 
-def test_udpcast_waves_are_not_the_baseline_of_a_chunk_wave_and_the_other_way_round(conn):
-    """#3164 (מה שאסור): לא משווים אבדן של chunkcast מול בסיס שנלמד מ-udpcast. שני המנועים אינם ברי השוואה."""
-    sent = 19_500_000_000
-    blocks = -(-sent // drive_rates.UDPCAST_BLOCK)
+def test_old_udpcast_waves_are_not_the_baseline_of_a_chunk_wave(conn):
+    """#3164 (מה שאסור): לא משווים אבדן של chunkcast מול בסיס שנלמד מ-udpcast. #3173: udpcast נמחק; שורות שלו ב-DB
+    משודרג (המונים של udp-sender ב-`stream`) נשארות בטבלה ואינן מדידה כלל."""
     udp = []
-    for loss in (0.004, 0.005, 0.006):
+    for loss_blocks in (54_000, 67_000, 80_000):
         sid = f"ses_u{next(_seq):05d}"
-        conn.execute("INSERT INTO wave_rates (session_id, decision, at) VALUES (?,?,?)",
+        conn.execute("INSERT INTO wave_rates (session_id, decision, at, stream) VALUES (?,?,?,?)",
                      (sid, json.dumps(_decision(sid, rate="400m", drawers=2, interface="eth1",
-                                                direct=False, machines=(MAC1,))), db.now_iso()))
+                                                direct=False, machines=(MAC1,))), db.now_iso(),
+                      json.dumps({"sent_bytes": 19_500_000_000, "loss_blocks": loss_blocks, "wall_s": 400,
+                                  "ended": "send_done", "dropped_clients": 0, "timeouts": 10})))
         conn.commit()
-        drive_rates.record_stream(conn, sid, {"sent_bytes": sent, "loss_blocks": round(blocks * loss),
-                                              "wall_s": 400, "ended": "send_done",
-                                              "dropped_clients": 0, "timeouts": 10})
         udp.append(sid)
     chunk = _wave(conn, 2.0)
     assert _assess(conn, chunk)["state"] == "unchecked" and _assess(conn, chunk)["waves"] == 0
@@ -176,8 +174,7 @@ def test_udpcast_waves_are_not_the_baseline_of_a_chunk_wave_and_the_other_way_ro
         _wave(conn, 0.1)
     later = _wave(conn, 0.1)
     assert _assess(conn, later)["waves"] == 4                    # ארבעת גלי החתיכות הקודמים, בלי שלושת גלי udpcast
-    assert learn_netloss.assess(conn, udp[-1])["kind"] == "udpcast"
-    assert learn_netloss.assess(conn, udp[-1])["waves"] == 2     # ושני גלי udpcast הקודמים, בלי חתיכות
+    assert learn_netloss.assess(conn, udp[-1]) is None
 
 
 # --- מה שאינו מדידה ---------------------------------------------------------------------------------
@@ -381,13 +378,13 @@ def test_the_health_row_says_unread_when_the_receivers_own_drops_were_not_read(c
     assert row["state"] == "warn" and "לא נקרא" in row["detail"]
 
 
-# --- ה-udpcast לא זז ---------------------------------------------------------------------------------
+# --- סוף הגל ------------------------------------------------------------------------------------------
 
-def test_the_udpcast_end_of_a_wave_ignores_chunk_waves_and_the_chunk_end_ignores_udpcast(conn):
+def test_the_chunk_end_journals_a_jump_once(conn):
+    """#3173: `netloss.evaluate` (סוף השולח של udpcast) נמחק; גל נשפט רק בסוף החדר (`evaluate_chunk`), פעם אחת."""
     _base(conn)
     sid = _wave(conn, 2.0)
-    assert learn_netloss.evaluate(conn, sid) is None             # `evaluate` הוא של השולח, ולא של החדר
-    assert _jumps(conn) == []
+    assert not hasattr(learn_netloss, "evaluate")
     assert learn_netloss.evaluate_chunk(conn, sid)["state"] == "jump"
     assert len(_jumps(conn)) == 1
     assert learn_netloss.evaluate_chunk(conn, sid)["state"] == "jump"      # שנית -- בלי שורה נוספת

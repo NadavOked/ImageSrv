@@ -35,13 +35,13 @@ URL = "/api/v1/agent/write-backup/long"
 
 @pytest.fixture()
 def env(tmp_path: Path, images_root: Path):
-    from test_sender import Recorder   # noqa: PLC0415
+    from fakesend import Recorder   # noqa: PLC0415
 
-    rt = create_runtime(tmp_path / "data", images_root, "http://10.44.12.10:8080",
+    rt = create_runtime(tmp_path / "data", images_root, "http://10.44.12.10:7712",
                         sender_runner=Recorder(block=True), wol_send=lambda _p: None)
     registry.add_machine(rt.conn, MAC, "cloner-9", "grp_CLONERS", "test")
     yield rt, TestClient(create_agent_app(rt), raise_server_exceptions=False), tmp_path / "data"
-    rt.ctx.sender.stop()
+    rt.ctx.chunk.stop()
 
 
 def _post(client, blob: bytes, sha: str | None = None, **over):

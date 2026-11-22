@@ -44,21 +44,21 @@ ACTIVE = "/api/v1/agent/sessions/active"            # a `source_gate` route with
 
 @pytest.fixture()
 def env(tmp_path: Path, images_root: Path):
-    from test_sender import Recorder                       # noqa: PLC0415
+    from fakesend import Recorder                       # noqa: PLC0415
 
     leases = write_leases(tmp_path / "dnsmasq.leases", {A: A_IP, STRANGER: STRANGER_IP})
-    rt = create_runtime(tmp_path / "data", images_root, f"http://{VLAN}:8080",
+    rt = create_runtime(tmp_path / "data", images_root, f"http://{VLAN}:7712",
                         sender_runner=Recorder(block=True), wol_send=lambda _p: None,
                         identity_hooks={"leases": identity.LeaseFile(leases)})
     registry.add_machine(rt.conn, B, "cloner-1", CLONERS, "test")
     agent_app = create_agent_app(rt)
 
     def client(ip: str) -> TestClient:
-        return TestClient(agent_app, base_url=f"http://{VLAN}:8080", client=(ip, 40000),
+        return TestClient(agent_app, base_url=f"http://{VLAN}:7712", client=(ip, 40000),
                           raise_server_exceptions=False)
 
     yield {"rt": rt, "conn": rt.conn, "client": client, "leases": leases}
-    rt.ctx.sender.stop()
+    rt.ctx.chunk.stop()
 
 
 def _hello(client: TestClient, mac: str, all_macs: list[str]):

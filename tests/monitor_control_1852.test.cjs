@@ -24,7 +24,7 @@ function setup() {
   class FakeWebSocket { constructor(url) { this.url = url; this.sent = []; sockets.push(this); } send() {} close() {} }
   const ctx = vm.createContext({
     console, URLSearchParams, Uint8Array, TextDecoder, TextEncoder, Promise, Math, Error, JSON, Date,
-    encodeURIComponent, location: {search: '?mac=aa:bb:cc:dd:ee:ff&name=Cloner02', protocol: 'http:', host: 'srv:8081'},
+    encodeURIComponent, location: {search: '?mac=aa:bb:cc:dd:ee:ff&name=Cloner02', protocol: 'http:', host: 'srv:443'},
     document: {getElementById: (id) => (nodes[id] ||= element('x')), createElement: (t) => element(t), title: '',
       fullscreenEnabled: false, addEventListener() {}, removeEventListener() {},
       documentElement: {classList: {add() {}, remove() {}}}},

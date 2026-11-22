@@ -41,7 +41,7 @@ def _tools(bindir: Path, journald: str = "exit 0") -> None:
     fake_tool(bindir, "systemctl", f'''
 case "$*" in
   "restart systemd-journald") {journald} ;;
-  show*) echo "IMAGESRV_URL=http://10.10.10.8:8080 X=y" ;;
+  show*) echo "IMAGESRV_URL=http://10.10.10.8:7712 X=y" ;;
 esac
 exit 0''')
     fake_tool(bindir, "curl", "exit 0")

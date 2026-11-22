@@ -32,6 +32,7 @@ from server.interserver import (api as interserver_api, auth as interserver_auth
                                 storage_nodes, storage_transfer)
 from server.agent.api import ServerContext
 from server.db import journal, now_iso
+from server.core import ports as product_ports   # #3871
 
 log = logging.getLogger("imagesrv.console_storage")
 
@@ -42,7 +43,7 @@ def secondary_unreachable(exc: BaseException, port=None) -> str:
     עצמו נשאר גלוי (עיקרון 5)."""
     log.warning("secondary unreachable: %s: %s", type(exc).__name__, exc)
     return ("שרת המשנה לא עונה בכתובת הזו — בדקו כתובת, פורט "
-            f"{port if port else 8443} וחומת אש")
+            f"{port if port else product_ports.INTERSERVER} וחומת אש")
 
 
 def contact_failure(exc: BaseException, port=None) -> str:

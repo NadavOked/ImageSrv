@@ -26,7 +26,7 @@ UP = {name: ServiceState("active", "enabled") for name in
       ("imagesrv-server", "dnsmasq", "nftables")}
 
 PRIMARY = Snapshot(
-    hostname="TA", version="v0.71.0", console_url="https://10.20.10.5:8081",
+    hostname="TA", version="v0.71.0", console_url="https://10.20.10.5",
     no_address=False, fingerprint=FP, certificate_sans=("10.20.10.5", "TA"),
     certificate_not_after="Oct  9 12:00:00 2036 GMT",
     management=NicInfo("ens33", "10.20.10.5/24", "dhcp", "up", "10000",
@@ -43,7 +43,7 @@ PRIMARY = Snapshot(
 PRIMARY_EXTRAS = view.Extras(uptime_seconds=12 * 86400 + 3600, secondaries=("HAIFA",))
 
 SECONDARY = replace(
-    PRIMARY, hostname="HAIFA", console_url="https://10.20.10.8:8081",
+    PRIMARY, hostname="HAIFA", console_url="https://10.20.10.8",
     management=NicInfo("ens33", "10.20.10.8/24", "dhcp", "up", "10000",
                        "00:50:56:aa:10:08", "VMware VMXNET3"),
     interfaces=(NicInfo("ens33", "10.20.10.8/24", "dhcp", "up", "10000",
@@ -56,7 +56,7 @@ SECONDARY = replace(
 #: 16/10 (mockup #1525, a2): the code screen's data.
 SPKI = "a1b2c3d4e5f607189c3e5d27b04f8a61e2d7c93b5a0f14e8d6b27c39a5e01f84"
 CODE = pairing.Code("K7M4-X9QD", "5e0c41f2a9d7b380", NOW + 582,
-                    "sn_" + SPKI[:16], SPKI, "https://203.0.113.40:8443")
+                    "sn_" + SPKI[:16], SPKI, "https://203.0.113.40:7700")
 
 
 def _runtime(snapshot: Snapshot, extras: view.Extras, **state) -> Runtime:
@@ -79,12 +79,12 @@ def runtimes() -> dict[str, Runtime]:
     connected = replace(SECONDARY, services=dict(UP), deploy=NicInfo(
         "ens34", "10.45.0.1/16", "static", "up", "1000", "00:50:56:aa:45:01", ""))
     paired = view.Extras(uptime_seconds=3 * 86400, has_parent=True,
-                         primary_url="https://10.20.10.5:8443")
-    waiting_nat = view.Extras(uptime_seconds=1500, advertised_url="https://203.0.113.40:8443")
+                         primary_url="https://10.20.10.5:7700")
+    waiting_nat = view.Extras(uptime_seconds=1500, advertised_url="https://203.0.113.40:7700")
     form = {"interface": "ens33", "mode": "static", "address": "10.20.10.9",
             "netmask": "24", "gateway": "10.20.10.1", "dns": "10.20.10.2"}
     preinstall = replace(
-        PRIMARY, pre_install=True, console_url="https://10.20.10.37:8081",
+        PRIMARY, pre_install=True, console_url="https://10.20.10.37",
         fingerprint="not created",
         interfaces=(NicInfo("ens33", "10.20.10.37/24", "dhcp", "up", "10000",
                             "00:50:56:aa:10:37"),
@@ -134,10 +134,10 @@ def runtimes() -> dict[str, Runtime]:
         "13d-paired": _runtime(SECONDARY, paired, screen="pair", pair=CODE, pair_stage="paired",
                                paired={"parent_id": "sn_5e91c07a2b4d6f13",
                                        "enrolled_at": "2026-10-12T17:19:09+00:00",
-                                       "primary_url": "https://10.20.10.5:8443"}),
+                                       "primary_url": "https://10.20.10.5:7700"}),
         "14-unpair": _runtime(connected, paired, screen="unpair"),
         "15-advertised": _runtime(SECONDARY, waiting_nat, screen="advertised", menu_index=4,
-                                  advert="203.0.113.40:8443"),
+                                  advert="203.0.113.40:7700"),
         "16-clock-unsynced": _runtime(unsynced, four_minutes),
         "16b-clock-unchecked": _runtime(replace(unsynced, clock="unchecked"), four_minutes),
         # #1412: installed from a --lab ISO, and from one whose manifest did not answer

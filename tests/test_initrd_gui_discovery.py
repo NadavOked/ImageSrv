@@ -72,11 +72,11 @@ def test_config_for_scope_keeps_the_gui_path(tmp_path):
 
         AssertionError: assert None == '/boot/initrd.img.gui'
     """
-    base = GrubConfig(server_base="http://10.44.12.10:8080",
+    base = GrubConfig(server_base="http://10.44.12.10:7712",
                       gui_initrd_path=SERVED)
-    scoped = config_for_scope({"server": ("10.44.99.10", 8080)}, base)
+    scoped = config_for_scope({"server": ("10.44.99.10", 7712)}, base)
 
-    assert scoped.server_base == "http://10.44.99.10:8080", "השדה שזה בשבילו"
+    assert scoped.server_base == "http://10.44.99.10:7712", "השדה שזה בשבילו"
     assert scoped.gui_initrd_path == SERVED
     assert scoped.initrd_path == base.initrd_path
 
@@ -100,7 +100,7 @@ def make_client(tmp_path, *, with_gui: bool):
     if with_gui:
         (boot / GUI_INITRD_NAME).write_bytes(b"fake-gui-initramfs")
     app = create_app(tmp_path / "data", tmp_path / "images",
-                     "http://127.0.0.1:8080", boot_dir=boot)
+                     "http://127.0.0.1:7712", boot_dir=boot)
     return TestClient(app)
 
 
@@ -161,7 +161,7 @@ def registered_server(tmp_path, *, with_gui: bool):
 
     images = tmp_path / "images"
     images.mkdir()
-    app = create_app(tmp_path / "data", images, "http://10.44.12.10:8080",
+    app = create_app(tmp_path / "data", images, "http://10.44.12.10:7712",
                      boot_dir=boot)
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
     admin = TestClient(app)
@@ -193,7 +193,7 @@ def test_a_registered_classroom_station_really_gets_the_gui_from_the_server(tmp_
     client = registered_server(tmp_path, with_gui=True)
     text = client.get(f"/boot/menu?mac={CLASSROOM_MAC}").text
     assert "--id imagesrv" in text, "התחנה רשומה, ולכן יש לה ערך ImageSrv"
-    assert f"initrd (http,10.44.12.10:8080)/boot/{GUI_INITRD_NAME}" in text
+    assert f"initrd (http,10.44.12.10:7712)/boot/{GUI_INITRD_NAME}" in text
 
 
 def test_a_registered_cloner_really_gets_the_gui_initramfs_from_the_server(tmp_path, classrooms_on):
@@ -207,8 +207,8 @@ def test_a_registered_cloner_really_gets_the_gui_initramfs_from_the_server(tmp_p
     client = registered_server(tmp_path, with_gui=True)
     text = client.get(f"/boot/menu?mac={CLONER_MAC}").text
     assert "--id imagesrv" in text
-    assert f"initrd (http,10.44.12.10:8080)/boot/{GUI_INITRD_NAME}" in text
-    assert "initrd (http,10.44.12.10:8080)/boot/initrd.img\n" not in text
+    assert f"initrd (http,10.44.12.10:7712)/boot/{GUI_INITRD_NAME}" in text
+    assert "initrd (http,10.44.12.10:7712)/boot/initrd.img\n" not in text
 
 
 def test_without_the_gui_file_the_classroom_station_falls_back(tmp_path, classrooms_on):
@@ -216,5 +216,5 @@ def test_without_the_gui_file_the_classroom_station_falls_back(tmp_path, classro
     בטקסט. זו ההתנהגות שמפרידה בין "בלי גואי" לבין "לא עולה"."""
     client = registered_server(tmp_path, with_gui=False)
     text = client.get(f"/boot/menu?mac={CLASSROOM_MAC}").text
-    assert "initrd (http,10.44.12.10:8080)/boot/initrd.img\n" in text
+    assert "initrd (http,10.44.12.10:7712)/boot/initrd.img\n" in text
     assert GUI_INITRD_NAME not in text

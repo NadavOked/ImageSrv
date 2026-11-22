@@ -142,8 +142,7 @@ def n6_cloner(nw: object, *, engine_group: str | None, member: bool | None,
               wave_age_s: float | None) -> Sense:
     """האם משכפל **שלא הצטרף** לקבוצת הגל מקבל בכל זאת את התעבורה שלה.
 
-    ``engine_group`` -- הקבוצה של מנוע החתיכות, או ``None`` כשהמנוע הפעיל הוא udpcast (הקבוצה שלו נגזרת
-    מכתובת השרת ולא ידועה: `docs/guides/admin-guide-he.md` §4.4). ``member`` -- המשכפל חבר בגל שרץ עכשיו.
+    ``engine_group`` -- הקבוצה של מנוע החתיכות, או ``None`` כשהיא לא נקראה ("לא ידוע", עיקרון 5). ``member`` -- המשכפל חבר בגל שרץ עכשיו.
     ``wave_age_s`` -- כמה זמן גל שידור רץ ברצף, או ``None`` כשאין."""
     data, missing = read_cloner(nw)
     if data is None:
@@ -155,7 +154,7 @@ def n6_cloner(nw: object, *, engine_group: str | None, member: bool | None,
     if not isinstance(joined, list):
         return Sense("N6", NOT_CHECKED, "המשכפל לא קרא באילו קבוצות הצטרף (/proc/net/igmp)", evidence)
     if engine_group is None:
-        return Sense("N6", UNMEASURED, "המנוע הפעיל הוא udpcast: כתובת הקבוצה שלו נגזרת מכתובת השרת ואינה ידועה, "
+        return Sense("N6", UNMEASURED, "קבוצת המולטיקאסט של המנוע לא נקראה, "
                                        "ולכן אי אפשר לדעת איזו תעבורה היא שלנו", evidence)
     if engine_group in _ips(joined):
         return Sense("N6", UNMEASURED, "המשכפל עצמו הצטרף לקבוצה — קבלת התעבורה שלה היא בקשה, לא הצפה", evidence)
@@ -183,7 +182,7 @@ def n8(data: object, *, engine_group: str | None, who: str) -> Sense:
     """כמה מהמסגרות שהגיעו לפורט אינן של ImageSrv. ``data`` בצורת ה-JSON של `netwatch.c` (גם של המאזין בשרת).
 
     לא נספרים: ``arp``, ``dhcp``, ``wol``, ``igmp``, ``lldp``, ``l2ctl`` (צפויים), ו-``ipv6`` (רעש רקע, מדווח בנפרד).
-    מולטיקאסט IPv4: מופחת הזרם של מנוע החתיכות; ב-udpcast **כולו** מחוץ לספירה (הקבוצה שלו לא ידועה)."""
+    מולטיקאסט IPv4: מופחת הזרם של מנוע החתיכות; כשהקבוצה לא ידועה **כולו** מחוץ לספירה."""
     if not isinstance(data, dict) or not isinstance(data.get("classes"), dict):
         return Sense("N8", NOT_CHECKED, f"{who}: אין ספירת תעבורה", {})
     classes = {k: _n(data["classes"].get(k)) for k in l2frames.CLASSES}
@@ -249,7 +248,7 @@ def cloner_context(conn, mac: str, now: float) -> dict:
     from server.rounds import chunksend
     ctx: dict = {"engine_group": None, "wave_age_s": None, "member": None}
     try:
-        ctx["engine_group"] = chunksend.GROUP if chunksend.engine_of(conn) == chunksend.CHUNK else None
+        ctx["engine_group"] = chunksend.GROUP
     except Exception:                                   # noqa: BLE001
         log.exception("brain: the stream engine could not be read")
     try:

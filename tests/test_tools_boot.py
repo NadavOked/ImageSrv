@@ -133,9 +133,11 @@ def test_list_is_exactly_esp_fsck_repair():
     lines = [ln for ln in proc.stdout.splitlines() if ln.strip()]
     assert [ln.split("|", 1)[0] for ln in lines] == ["esp-fsck-repair"], lines
     parts = lines[0].split("|")
-    assert len(parts) == 5, lines[0]
+    assert len(parts) == 6, lines[0]                  # #2804: id|domain|title|risk|args|what
     assert parts[1] == "boot"
     assert parts[3] == "rw"
+    assert parts[4].startswith("part:"), lines[0]     # the GUI's partition picker
+    assert parts[5].strip(), lines[0]
 
 
 @pytest.mark.parametrize("tool_id", REMOVED)

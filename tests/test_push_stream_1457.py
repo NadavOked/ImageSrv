@@ -76,7 +76,7 @@ def test_partition_is_in_staging_before_the_body_ends_and_no_temp_file(secondary
         # הבייטים האחרונים עוד לא נשלחו — מה כבר על הדיסק של המשני?
         seen["transfer"] = [p.name for p in root.rglob("*") if p.suffix == ".transfer"]
         seen["staged"] = [p.read_bytes() for p in root.glob(".import-*/*/*")
-                          if p.name != "manifest.json"]
+                          if p.name.endswith(".pcl.zst")]              # the partition files (the index files travel too)
         yield body[-tail:]
 
     result = interserver_api.receive_image(ctx, _plan(root, len(body)), chunks())

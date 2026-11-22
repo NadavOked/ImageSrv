@@ -52,8 +52,8 @@ gui_early_boot() {
     done
     # gui_parent repeats this check after the hello, and says what failed there
     "$GUI_STATION" --help >> "$LOG_FILE" 2>&1 || return 0
-    SERVER=$IMAGESRV_SERVER
-    case "$SERVER" in http://*|https://*) ;; *) SERVER="http://$SERVER" ;; esac
+    . "$LIB_DIR/tls.sh"
+    tls_config || { log "$TLS_WHY"; return 0; }
     MAC=; IP=; GUI_SCREEN=boot
     export SERVER MAC IP RUN_DIR LIB_DIR GUI_SCREEN
     gui_keep &

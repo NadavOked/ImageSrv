@@ -22,7 +22,7 @@ FramebufferUpdate, שולח KeyEvent + PointerEvent, ומבקש שוב. התהל
 gcc + libvncserver-dev יש רק במעבדה (`build_initramfs.sh` מתקין אותם);
 בווינדוס הבדיקה מדלגת בהצהרה — `requires_native`, כמו `test_cloner_gui`.
 
-#839 — האימות: 5900 קשוב לכל וילן ההפצה, ולכן לחיצת-היד של ה-RFB היא
+#839 — האימות: 7710 קשוב לכל וילן ההפצה, ולכן לחיצת-היד של ה-RFB היא
 השער. המוניטור מציע **רק** סוג-אבטחה 2 (מסגור VNC Authentication); התשובה
 ל-challenge היא 16 בייטי סוד-האתחול (`--secret-file`, 32 hex). לקוח בלי
 הסוד לא מקבל מסך, לא מזריק קלט, ו**לא מפעיל reboot** — גם אם דחף
@@ -420,7 +420,7 @@ def test_power_cut_text_needs_an_authenticated_session(tmp_path):
 @NATIVE
 def test_monitor_refuses_to_start_without_a_usable_secret(tmp_path):
     """בלי `--secret-file` — usage ויציאה; קובץ שאינו 32 hex — יציאה עם
-    הסיבה. בשני המקרים 5900 לא נפתח: פתיחה בלי אימות אינה ברירת מחדל."""
+    הסיבה. בשני המקרים 7710 לא נפתח: פתיחה בלי אימות אינה ברירת מחדל."""
     binary = _build(tmp_path)
     fb = tmp_path / "fb0.raw"
     fb.write_bytes(bytes(WIDTH * HEIGHT * 4))
@@ -444,7 +444,7 @@ def test_monitor_refuses_to_start_without_a_usable_secret(tmp_path):
 
 @NATIVE
 def test_monitor_refuses_to_start_without_a_usable_allow_from(tmp_path):
-    """#1077: 5900 נגיש רק לשרת, ולכן `--allow-from` חובה וכתובת IPv4 תקינה.
+    """#1077: 7710 נגיש רק לשרת, ולכן `--allow-from` חובה וכתובת IPv4 תקינה.
     בלי הדגל — usage ויציאה; כתובת לא תקינה — יציאה בשמה. עד כאן אף טסט לא
     הפיל את הסרת שני השומרים (בקרה רטרואקטיבית, 24/10): בלעדיהם המוניטור
     עולה עם `allow_from` = 0.0.0.0 — שער שאיש לא קבע."""
@@ -502,7 +502,7 @@ def _source() -> str:
 
 def test_source_gates_rfb_on_the_secret_not_on_none():
     """authPasswdData לא-NULL + passwordCheck משלנו = None אינו מוצע.
-    בקרה שלילית: מחיקת שתי השורות מחזירה את 5900 הפתוח."""
+    בקרה שלילית: מחיקת שתי השורות מחזירה את 7710 הפתוח."""
     c = _source()
     assert "screen->authPasswdData = secret;" in c
     assert "screen->passwordCheck = secret_check;" in c

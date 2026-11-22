@@ -192,8 +192,8 @@ def test_each_missing_answer_is_named_and_no_disk_command_runs(tmp_path, missing
 @pytest.mark.parametrize(("changes", "code"), [
     ({"disk": "/dev/sda1"}, "invalid-disk"),
     ({"role": "primary"}, "invalid-role"),
-    ({"primary_url": "https://main.example:8443"}, "invalid-primary-url"),
-    ({"role": "secondary", "primary_url": "http://main:8443", "primary_fingerprint": FP}, "invalid-primary-url"),
+    ({"primary_url": "https://main.example:7700"}, "invalid-primary-url"),
+    ({"role": "secondary", "primary_url": "http://main:7700", "primary_fingerprint": FP}, "invalid-primary-url"),
     ({"role": "secondary", "primary_url": "main:9443", "primary_fingerprint": FP}, "invalid-primary-url"),
     ({"primary_fingerprint": FP}, "invalid-primary-url"),
     # #1310: a secondary whose primary never answered green is refused
@@ -232,7 +232,7 @@ def test_bad_answers_are_named_before_any_disk_command(tmp_path, changes, code):
     assert not calls.exists(), calls.read_text(encoding="utf-8") if calls.exists() else ""
 
 
-@pytest.mark.parametrize("typed", ["192.168.68.250", "https://192.168.68.250:8443", "imagesrv-ta:8443"])
+@pytest.mark.parametrize("typed", ["192.168.68.250", "https://192.168.68.250:7700", "imagesrv-ta:7700"])
 @LINUX_ONLY
 def test_a_secondary_with_a_verified_primary_passes_in_any_typed_form(tmp_path, typed):
     """#1310: the IP alone is enough -- and the fingerprint of a green check
@@ -245,13 +245,13 @@ def test_a_secondary_with_a_verified_primary_passes_in_any_typed_form(tmp_path, 
 
 
 @pytest.mark.parametrize(("typed", "stored"), [
-    ("192.168.68.250", "https://192.168.68.250:8443"),
-    ("  192.168.68.250 ", "https://192.168.68.250:8443"),
-    ("192.168.68.250:8443", "https://192.168.68.250:8443"),
-    ("https://192.168.68.250:8443/", "https://192.168.68.250:8443"),
-    ("imagesrv-ta.college.ac.il", "https://imagesrv-ta.college.ac.il:8443"),
+    ("192.168.68.250", "https://192.168.68.250:7700"),
+    ("  192.168.68.250 ", "https://192.168.68.250:7700"),
+    ("192.168.68.250:7700", "https://192.168.68.250:7700"),
+    ("https://192.168.68.250:7700/", "https://192.168.68.250:7700"),
+    ("imagesrv-ta.college.ac.il", "https://imagesrv-ta.college.ac.il:7700"),
     ("http://192.168.68.250", None), ("192.168.68.250:9443", None), ("", None),
-    ("https://x:8443/api", None), ("a b", None), ("-x", None),
+    ("https://x:7700/api", None), ("a b", None), ("-x", None),
 ])
 def test_normalize_primary_url_has_one_stored_form(typed, stored):
     """One rule for the GUI bridge and the engine (installer/lib/answers.sh)."""

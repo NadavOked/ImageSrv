@@ -11,7 +11,7 @@
  * and fanout blocks the reader until it drains: the stream is paced by the
  * slowest live drawer, and that backpressure is what slows the multicast
  * sender down (#23, #660). A slow drawer is never dropped -- the whole
- * machine follows it, the way udp-sender waits for a slow receiver rather
+ * machine follows it, the way a multicast sender waits for a slow receiver rather
  * than evicting it (#657). Only a write error -- a reader that has gone,
  * EPIPE -- fails a single target, while the others carry on. "Slow" has a
  * floor, though: a drawer that holds the reader for BLOCK_EVICT_MS while a
@@ -88,8 +88,8 @@
  * drawer before they fire, so its healthy siblings are not taken down with it.
  *
  * That clock alone is not enough (#1796, metal 19/10): while make_room()
- * waits, stdin is not read, udp-receiver blocks on its pipe and stops
- * answering, and udp-sender drops the whole machine after ~190s of silence
+ * waits, stdin is not read, the multicast receiver blocks on its pipe and stops
+ * answering, and the sender drops the whole machine after ~190s of silence
  * (--retries-until-drop 200). 146s of a held stdin burnt nearly all of that,
  * and the stream never recovered -- both drawers failed for one stopped zstd.
  * And a drawer that trickles (4KiB every 500ms) resets the stall clock with
@@ -1286,7 +1286,7 @@ static int open_counter(const char *path)
     return fd;
 }
 
-/* -U (drawerfeed.sh, one decoder for the whole machine): this fanout sits
+/* -U (one decoder for the whole machine; its shell caller left with #3173): this fanout sits
  * after zstd, so what it hands a drawer is decompressed -- but the drawer's
  * counter is read against the image's *compressed* total, by the console bar
  * and by the server's drive rates (#25, drive_rates.py). The fanout before
@@ -1463,7 +1463,7 @@ int main(int argc, char **argv)
     /* The stall ceilings are production constants; the env vars exist so the
      * negative-control tests can trip eviction in milliseconds instead of
      * minutes (both clocks, #674 and #1796), and so a single reader that
-     * legitimately waits longer (udp-sender before its receivers join,
+     * legitimately waits longer (a sender before its receivers join,
      * directsend.sh, #1444) can leave the ceiling to the shell. FANOUT_EXPECTED_BYTES is the length
      * check that separates an empty stdin, a producer that died mid-stream,
      * and a complete image -- without it those three share one EOF path and

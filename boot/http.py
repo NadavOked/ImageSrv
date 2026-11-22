@@ -14,7 +14,7 @@ uvicorn עצמו משמר את האותיות כפי שנשלחו, ולכן הנ
 
     app.mount("/boot", create_boot_asgi(
         resolve=my_lookup,                       # ראו חתימת Resolver למטה
-        config=GrubConfig(server_base="http://10.44.0.10:8080"),
+        config=GrubConfig(server_base="http://10.44.0.10:7712"),
         boot_dir="/srv/imagesrv/boot",           # vmlinuz + initrd.img
     ))
 """
@@ -23,7 +23,7 @@ import ipaddress
 import logging
 from pathlib import Path
 from typing import Callable, Protocol
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 from . import trace
 from .grub_menu import GrubConfig, normalize_mac, render, render_local_only
@@ -195,13 +195,19 @@ def config_for_scope(scope: dict, config: GrubConfig) -> GrubConfig:
             return config
         if ipaddress.ip_address(host).version != 4:
             return config
+        # #3486: עם מאזין /boot נפרד, הפורט שהחיבור הגיע עליו אינו פורט הסוכן.
+        # הכתובת נלקחת מהחיבור, אבל `imagesrv.server=` נשאר פורט הסוכן שבתצורה;
+        # ו-GRUB ממשיך לפורט ה-boot (גם כשהתפריט הגיע מפורט הסוכן, #3486).
+        if config.boot_port is not None:
+            port = urlsplit(config.server_base).port or port
         return GrubConfig(
-            server_base=f"http://{host}:{port}",
+            server_base=f"{urlsplit(config.server_base).scheme}://{host}:{port}",
             kernel_path=config.kernel_path,
             initrd_path=config.initrd_path,
             gui_initrd_path=config.gui_initrd_path,
             extra_cmdline=config.extra_cmdline,
             password_hash=config.password_hash,   # #2437: a scoped menu is locked too
+            boot_port=config.boot_port,
         )
     except Exception:  # noqa: BLE001 — כאן זו בדיוק הכוונה
         return config

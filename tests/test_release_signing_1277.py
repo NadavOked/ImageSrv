@@ -268,7 +268,7 @@ case "$1" in
   *) echo "unexpected git $*" >&2; exit 64 ;;
 esac''')
     fake_tool(bindir, "systemctl",
-              'case "$1" in show) echo "IMAGESRV_URL=http://127.0.0.1:8080" ;; esac; exit 0')
+              'case "$1" in show) echo "IMAGESRV_URL=http://127.0.0.1:7712" ;; esac; exit 0')
     fake_tool(bindir, "curl", "exit 0")
 
 

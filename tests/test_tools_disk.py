@@ -153,9 +153,11 @@ def test_tools_disk_list_is_exactly_the_catalog_wipe_tools(tmp_path: Path):
     assert ids == [t for t, _ in DESTROY_TOOLS], ids
     for ln in lines:
         parts = ln.split("|")
-        assert len(parts) == 5, ln
-        assert parts[1] == "disk"
+        assert len(parts) == 6, ln                    # #2804: id|domain|title|risk|args|what
+        assert parts[1] == "wipe"                     # mockup 14: the wipe tools are their own category
         assert parts[3] == "destroy"
+        assert parts[4].startswith("disk:"), ln       # the GUI's disk picker, not a typed /dev path
+        assert parts[5].strip(), ln
 
 
 # --- every tool writes outfile + "מה זה אומר" --------------------------------

@@ -1,28 +1,26 @@
-"""#1581 בהפצה ישירה — השרת אומר למקור שמחשב בגל ממתין לאדם.
+"""#1581 בהפצה ישירה — מחשב בגל שממתין לאדם מחזיק את השידור של הגל.
 
-`SenderEngine` של השרת אינו מפעיל את udp-sender של המחיצה הראשונה כל עוד
-חבר בגל עומד על שאלה למפעיל (`_hold_for_asks`, `prompt_hold`, #2202), ועוצר
-אותו אם השאלה עולה לפני הבייט הראשון. בגל שהמקור שלו הוא מחשב בנייה
-(#715) המנוע הזה **אינו רץ** — udp-sender רץ במחשב הבנייה, עם
-`--start-timeout 180` משלו, והשרת לא אמר לו דבר על השאלה. משכפל שעמד על
-שאלת חלוקת המקום (#1898) או RAID (#1808) יותר משלוש דקות — המקור יצא
-"אף מחשב משכפל לא הצטרף לזרם".
+עד #3173 השולח של הפצה ישירה היה udp-sender במחשב הבנייה, עם `--start-timeout 180` משלו, והשרת
+אמר לו ב-`task.direct.operator_wait` כמה חברים בגל עומדים על שאלה למפעיל (חלוקת המקום #1898, RAID
+#1808). משכפל שעמד על שאלה יותר משלוש דקות — המקור יצא "אף מחשב משכפל לא הצטרף לזרם".
 
-כאן: `task.direct.operator_wait` = כמה חברים בגל עומדים עכשיו על שאלה —
-אותה שאילתה ואותן תקרות כמו השולח של השרת.
-
-**בקרה שלילית:** על `server/rounds/direct.py` של `origin/main` השדה חסר
-(`KeyError: 'operator_wait'`) בשלושת הטסטים הראשונים; הרביעי (גל שלא רץ)
-נופל גם הוא על אותו שדה חסר.
+היום הפצה ישירה היא חתיכות בלבד (#3161): `ChunkEngine` של השרת מתזמר את הגל, ובזמן שהוא ממתין
+שהמשכפלים יתייצבו הוא שואל בעצמו את `prompt_hold` (`pending_prompts` -- אותה שאילתה ואותן תקרות
+#2202). מחשב הבנייה משדר רק הזמנה שהמנוע נתן לו, ולכן ההחזקה היא של המנוע: שאלה פתוחה מחזיקה את
+הגל (`send_held_prompt`, ואין הזמנה), התשובה משחררת אותו (`send_prompt_released`), חבר שעבר את
+התקרה משתחרר מהגל לבדו, וגל שלא רץ אינו מחזיק דבר.
 """
 
 from __future__ import annotations
 
+import threading
+
 import pytest
 
 from conftest import hello_body
+from fakesend import wait_for
 from test_direct_live_receivers import CLONER3, _running_three
-from test_direct_server import _build_hello
+from test_direct_server import _build_hello, _cloners, _order
 from test_server_room import CLONER1, CLONER2, room_server  # noqa: F401
 
 pytest.importorskip("fastapi")
@@ -42,13 +40,21 @@ def _direct(room_server) -> dict:
     return _build_hello(room_server["anon"])["task"]["direct"]
 
 
-def test_a_member_on_a_question_is_told_to_the_source(room_server):
-    _running_three(room_server)
-    assert _direct(room_server)["operator_wait"] == 0
+def _named(room_server, event: str) -> list[str]:
+    return [r["detail"] for r in room_server["ctx"].conn.execute(
+        "SELECT detail FROM journal WHERE event = ? ORDER BY id", (event,))]
+
+
+def test_a_member_on_a_question_holds_the_wave(room_server):
+    opened = _running_three(room_server)
+    assert _named(room_server, "send_held_prompt") == []
     _asks(room_server, CLONER2)
+    assert wait_for(lambda: _named(room_server, "send_held_prompt")), "the engine did not hold for the question"
+    assert _named(room_server, "send_held_prompt") == [f'{opened["wave_session_id"]} {CLONER2}']
     direct = _direct(room_server)
-    assert direct["operator_wait"] == 1
     assert direct["session_state"] == "running"      # הגל עצמו לא השתנה
+    assert direct["chunk"]["order"] is None           # ומחשב הבנייה לא התבקש לשדר
+    assert room_server["recorder"].commands == []
 
 
 def test_the_answer_clears_it(room_server):
@@ -56,31 +62,42 @@ def test_the_answer_clears_it(room_server):
     _running_three(room_server)
     _asks(room_server, CLONER1)
     _asks(room_server, CLONER3)
-    assert _direct(room_server)["operator_wait"] == 2
+    assert wait_for(lambda: _named(room_server, "send_held_prompt"))
     _asks(room_server, CLONER1, asking=False)
-    assert _direct(room_server)["operator_wait"] == 1
+    threading.Event().wait(1.0)                        # five polls of the engine (`chunksend.POLL_S`)
+    assert _named(room_server, "send_prompt_released") == [], "CLONER3 still waits for a person"
     _asks(room_server, CLONER3, asking=False)
-    assert _direct(room_server)["operator_wait"] == 0
+    assert wait_for(lambda: _named(room_server, "send_prompt_released")), "the answer did not release the wave"
+    assert len(_named(room_server, "send_held_prompt")) == 1   # one hold, and one release
 
 
 def test_a_member_past_the_ceiling_leaves_the_wave_and_stops_holding(room_server):
     """אותה תקרה כמו השולח של השרת (`ASK_HOLD_MAX_SECONDS` מתחילת הגל):
-    שאלה שאיש לא עונה עליה אינה מחזיקה את המקור לנצח — רק החבר הזה משתחרר."""
+    שאלה שאיש לא עונה עליה אינה מחזיקה את הגל לנצח — רק החבר הזה משתחרר."""
     opened = _running_three(room_server)
     conn = room_server["ctx"].conn
     _asks(room_server, CLONER2)
     conn.execute("UPDATE sessions SET started_at = '2020-01-01T00:00:00+00:00' WHERE id = ?",
                  (opened["wave_session_id"],))
     conn.commit()
-    assert _direct(room_server)["operator_wait"] == 0
-    state = conn.execute("SELECT state FROM session_members WHERE session_id = ? AND mac = ?",
-                         (opened["wave_session_id"], CLONER2)).fetchone()["state"]
-    assert state == "failed"
-    assert conn.execute("SELECT 1 FROM journal WHERE event = 'prompt_hold_expired'").fetchone()
+
+    def member():
+        return conn.execute("SELECT state FROM session_members WHERE session_id = ? AND mac = ?",
+                            (opened["wave_session_id"], CLONER2)).fetchone()["state"]
+
+    assert wait_for(lambda: member() == "failed"), member()       # the engine's own poll releases it
+    # the journal line is written after the member is failed (`prompt_hold.waiting_in_wave`), by the engine's thread
+    assert wait_for(lambda: conn.execute("SELECT 1 FROM journal WHERE event = 'prompt_hold_expired'").fetchone())
+    # a hold that began before the ceiling ended with it
+    assert wait_for(lambda: len(_named(room_server, "send_prompt_released"))
+                    == len(_named(room_server, "send_held_prompt")))
+    # and the wave goes on without it: the two that are left line up, and the source is ordered to send
+    _cloners(room_server, opened, {CLONER1: ["S1"], CLONER3: ["S3"]}).listen(1)
+    assert _order(room_server)["part"] == 1
 
 
 def test_a_wave_that_is_not_running_holds_nothing(room_server):
-    """המקור ממתין ל-`running` בכל מקרה; לפני כן אין מה לעצור."""
+    """לפני `running` אין גל של המנוע, ואין מה לעצור."""
     from test_direct_server import _open_direct, _register_build
     from test_server_room import cloner_hello
 
@@ -91,4 +108,5 @@ def test_a_wave_that_is_not_running_holds_nothing(room_server):
     _asks(room_server, CLONER1)
     direct = _direct(room_server)
     assert direct["session_state"] != "running"
-    assert direct["operator_wait"] == 0
+    assert room_server["ctx"].chunk.status() is None
+    assert _named(room_server, "send_held_prompt") == []

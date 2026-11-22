@@ -35,7 +35,7 @@ function ctx(state = {}) {
   for (const n of ['branchWhen', 'branchPillHtml', 'settingsSecondaryRow', 'settingsSecondariesTab']) vm.runInContext(fn(branchesJs, n), c);
   return c;
 }
-const node = (extra = {}) => ({id: 'n1', label: 'סניף חיפה', base_url: 'https://10.30.0.2:8443', enrolled_at: 'x', ...extra});
+const node = (extra = {}) => ({id: 'n1', label: 'סניף חיפה', base_url: 'https://10.30.0.2:7700', enrolled_at: 'x', ...extra});
 
 test('the tab exists only for an admin on a primary/standalone — never in a secondary context, never for deploy', () => {
   assert.equal(ctx().settingsSecondariesAllowed(), true, 'enroll_secondary alone is enough: the first secondary can be added');

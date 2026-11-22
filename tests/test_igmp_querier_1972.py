@@ -244,7 +244,7 @@ def test_the_health_screen_carries_the_querier_row(tmp_path, images_root):
              "interfaces": lambda: [{"name": "eth-deploy", "state": "up", "addresses": []}],
              "tftp_root": lambda: tmp_path / "tftp", "udp_sender_pids": lambda: [],
              "igmp_querier": lambda: ("ok", "פעיל על eth-deploy")}
-    app = create_app(tmp_path / "data", images_root, "http://10.0.0.1:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.0.0.1:7712",
                      health_hooks=hooks)
     client = TestClient(app)
     conn = app.state.ctx.conn

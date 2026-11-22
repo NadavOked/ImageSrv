@@ -3,8 +3,8 @@
 "בלי לעבור בשרת" = האימג' **לא נכתב ולא נשמר** בשרת (הכרעת נדב 12/09).
 השרת נשאר המתזמר היחיד: סבב חדר (`room.py`) עם `source_kind =
 build_disk`, גל רגיל על `grp_CLONERS`, אותם דיווחי התקדמות, אותה
-קונסולה. מה שמשתנה הוא **המקור**: במקום `SenderEngine` על קובץ מהספרייה,
-מחשב הבנייה מקבל משימת `direct_send` (ממשק 3) ומריץ `udp-sender` על
+קונסולה. מה שמשתנה הוא **המקור**: במקום שולח של השרת על קובץ מהספרייה,
+מחשב הבנייה מקבל משימת `direct_send` (ממשק 3) ומשדר ב-`chunkcast send` את
 הדיסק שלו, קריאה בלבד. הבייטים זורמים מחשב-בנייה → מגירות נבחרות.
 
 מה כן עובר בשרת: **המניפסט**. מחשב הבנייה קורא את הדיסק פעם אחת כמו
@@ -21,7 +21,6 @@ build_disk`, גל רגיל על `grp_CLONERS`, אותם דיווחי התקדמ�
 
 from __future__ import annotations
 
-import ipaddress
 import json
 import logging
 import re
@@ -32,7 +31,7 @@ from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
 from server.brain import ingest as brain_ingest   # #3669 (B6, B8), בצל
-from server.rounds import drive_rates, prompt_hold, room, room_drivers, sender as sender_module
+from server.rounds import prompt_hold, room, room_drivers
 from server.agent import registry
 from server.core import finite_json
 from server.disks import disk_rule
@@ -61,20 +60,6 @@ def new_live_id() -> str:
 
 def is_live_id(value: object) -> bool:
     return isinstance(value, str) and LIVE_ID.fullmatch(value) is not None
-
-
-def default_multicast() -> dict:
-    """הפרמטרים כשאין מנוע שידור (בדיקות יחידה, resolver של התפריט)."""
-    return {
-        "portbase": sender_module.DEFAULT_PORTBASE,
-        "max_wait": sender_module.DEFAULT_MAX_WAIT,
-        "start_timeout": sender_module.DEFAULT_START_TIMEOUT,
-        "max_wait_later": sender_module.later_max_wait(sender_module.DEFAULT_MAX_WAIT),
-        "start_timeout_later": sender_module.later_start_timeout(
-            sender_module.DEFAULT_MAX_WAIT, sender_module.DEFAULT_START_TIMEOUT),
-        "retries_until_drop": sender_module.DEFAULT_RETRIES_UNTIL_DROP,
-        "max_bitrate": None,
-    }
 
 
 # --- פתיחה --------------------------------------------------------------------
@@ -290,53 +275,9 @@ def round_for_task(conn: sqlite3.Connection, task_id: str) -> sqlite3.Row | None
     ).fetchone()
 
 
-#: #1952: תקרה לרשימת הכתובות ב-`direct_finished` — גל אמיתי הוא עשרות.
-FINISHED_MAX = 256
-
-
-def clean_finished(body: dict) -> tuple[bool, list[str] | None]:
-    """#1952: השדה `direct_finished` של ה-hello (ממשק 2) — (דווח?, הכתובות).
-
-    מחשב הבנייה שולח אותו לפני כל מחיצה מהשנייה: מי קיבל את הקודמת עד
-    סופה, מהלוג של ה-udp-sender **שלו** (לשרת אין את הלוג הזה במסלול
-    הישיר). היעדר = לא דווח (המחיצה הראשונה, סוכן ישן). `null`, או צורה
-    פגומה — דווח ש"לא נבדק" (None): עיקרון 5, לא "אף אחד"."""
-    if "direct_finished" not in body:
-        return False, None
-    raw = body["direct_finished"]
-    if (not isinstance(raw, list) or len(raw) > FINISHED_MAX
-            or not all(isinstance(item, str) for item in raw)):   # ip_address(7) = 0.0.0.7
-        return True, None
-    try:
-        return True, [str(ipaddress.ip_address(item)) for item in raw]
-    except (TypeError, ValueError):
-        return True, None
-
-
-def _lost_still_receiving(conn: sqlite3.Connection, store, session_id: str,
-                          finished: list[str] | None) -> int:
-    """#1952 — הכלל של #1950 (`SenderEngine._receivers`) במסלול הישיר: חבר
-    `lost` שכתובתו קיבלה את המחיצה הקודמת עד סופה יתחבר גם לבאה, ובלי
-    לספור אותו הוא "ממלא" את `--min-receivers` והשולח יוצא בלי החבר החי.
-    חבר שנזרק — לא נספר (#1432). `finished` None (לא נבדק) או כתובת לא
-    ידועה — נספר: המחיר הוא המתנה של `--max-wait`, לא מגירה חיה ריקה."""
-    still = [ip for ip in store.lost_ips(session_id)
-             if finished is None or ip is None or ip in finished]
-    if still:
-        journal(conn, "send_counts_lost", f"{session_id} {' '.join(ip or '?' for ip in still)}",
-                round_id=session_id)
-    return len(still)
-
-
-def task_block(conn: sqlite3.Connection, store, task: dict,
-               multicast: dict | None, finished_reported: bool = False,
-               finished: list[str] | None = None) -> dict:
-    """השדה `task.direct` של ממשק 3: מצב הגל, כמה הצטרפו, ופרמטרי השידור.
-
-    `multicast` הוא `SenderEngine.multicast_params()` — אותם ערכים שהמנוע
-    היה משדר בהם; `min_receivers` נגזר כאן, מהגל, כמו ב-`_run` של המנוע.
-    `finished_reported`/`finished` — `clean_finished` של ה-hello (#1952).
-    """
+def task_block(conn: sqlite3.Connection, store, task: dict) -> dict:
+    """השדה `task.direct` של ממשק 3: מצב הגל וכמה הצטרפו. פרמטרי השידור עצמם הם של מנוע החתיכות
+    (`directchunk.DirectChunks.task_fields`: `engine`, `chunk`)."""
     round_row = round_for_task(conn, task["id"])
     wave = None
     if round_row is not None and round_row["wave_session_id"]:
@@ -372,16 +313,8 @@ def task_block(conn: sqlite3.Connection, store, task: dict,
         ).fetchone()
         journal(conn, "direct_failed", f'{task["id"]} {reason}',
                 machine=round_row["source_mac"], round_id=round_row["id"])
-    params = dict(multicast or default_multicast())
-    still = (_lost_still_receiving(conn, store, wave["id"], finished)
-             if finished_reported and wave is not None and wave["state"] == "running" else 0)
-    params["min_receivers"] = max(1, receivers + still)
-    # קצב אוטומטי: מה שנבחר לגל כשיצא, ולפני כן קצב הפתיחה — לא "בלי תקרה".
-    params["max_bitrate"] = drive_rates.direct_bitrate(
-        conn, wave["id"] if wave is not None else None, params.get("max_bitrate"))
-    # #1581: מה ש-`SenderEngine._hold_for_asks` שואל — חברי הגל שעומדים עכשיו על
-    # שאלה למפעיל (`prompt_hold`, אותן תקרות). המקור אינו מפעיל את udp-sender של
-    # המחיצה הראשונה כל עוד המספר אינו 0, ועוצר אותו אם הוא עולה לפני הבייט הראשון.
+    # #1581: חברי הגל שעומדים עכשיו על שאלה למפעיל (`prompt_hold`, אותן תקרות). המקור אינו מתחיל את המחיצה
+    # הראשונה כל עוד המספר אינו 0.
     held = (len(prompt_hold.waiting_in_wave(conn, wave["id"]))
             if wave is not None and wave["state"] == "running" else 0)
     # #3942: המגירה הקטנה שנבחרה, מהמלאי של הרגע -- הכיווץ של מחשב הבנייה מכוון אליה.
@@ -392,14 +325,13 @@ def task_block(conn: sqlite3.Connection, store, task: dict,
         "session_state": wave["state"] if wave is not None else "closed",
         "receivers": receivers,
         "operator_wait": held,
-        "multicast": params,
         **target_floor(conn, slots),
     }
 
 
 def is_direct_wave(conn: sqlite3.Connection, session_id: str) -> bool:
-    """האם הגל הזה שייך לסבב שהמקור שלו הוא מחשב בנייה — ואז `SenderEngine`
-    של השרת **אינו** מתחיל (app.py)."""
+    """האם הגל הזה שייך לסבב שהמקור שלו הוא מחשב בנייה — ואז השרת מתזמר את
+    הגל ומחשב הבנייה משדר (app.py)."""
     return conn.execute(
         "SELECT 1 FROM room_rounds WHERE wave_session_id = ? AND source_kind = ?",
         (session_id, BUILD_DISK),

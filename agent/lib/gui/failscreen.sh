@@ -1,5 +1,4 @@
 # failscreen.sh -- the one failure screen (#1569, mockup PR #1550). POSIX sh.
-#
 # Owner, 17/10: "no screen that is not graphic in our design", and no English
 # on it. Until now a failure was `ui_error_hold`: English on the bare tty,
 # hidden behind a live GUI or shown as squares (ui.sh). Every failing path --
@@ -162,7 +161,6 @@ fail_texts() {
 }
 
 fail_fatal_he() {
-    # die_local's English, in Hebrew where the line is a known one.
     case "$1" in
         *"not confirmed open for this machine"*|*"did not confirm round"*|*"is not open -- nothing was written"*|*"did not open the pull"*) printf 'השרת לא אישר שהעבודה פתוחה למחשב הזה, ולכן לא נכתב דבר לדיסק (#2657).' ;;
         *"not authorized"*)        printf 'השחזור לא אושר מול השרת — כניסת הקונסולה של המסך הזה כבר אינה בתוקף. לא נכתב דבר.' ;;
@@ -174,10 +172,11 @@ fail_fatal_he() {
         *"no internal disk"*)      printf 'לא נמצא דיסק פנימי במחשב הזה.' ;;
         *"more than one internal disk"*|*"no single internal disk"*) printf 'במחשב אין דיסק פנימי אחד בדיוק (אף אחד, או יותר מאחד) — לא משחזרים בניחוש. לא נכתב דבר.' ;;   # #1807
         *"split of the room was not approved"*) printf 'חלוקת המקום בין המחיצות לא אושרה. לא נכתב דבר.' ;;   *"split of the room did not compute"*) printf 'לא הצלחנו לחשב את חלוקת המקום בין המחיצות. לא נכתב דבר.' ;;   # #1898
+        TLS:*) printf '%s' "$1" ;;
         *"server unreachable"*)    printf 'השרת לא ענה במשך יותר מדקה.' ;;
         *"no work for this"*)      printf 'אין למחשב הזה משימה — הוא עולה מהדיסק המקומי.' ;;   *"answer not understood"*) printf 'המחשב לא הבין את תשובת השרת (גרסת ממשק שאינה נתמכת), ולכן לא התחיל דבר.' ;;   # #2666
         *"MAC not registered"*)    printf 'המחשב אינו רשום במערכת — הוא עולה מהדיסק המקומי.' ;;   *"another vlan"*) printf 'הסבב פתוח ברשת אחרת — המחשב אינו ברשת ההפצה.' ;;
-        *"no image id"*|*"without image or id"*) printf 'לא נבחר אימג׳ למשימה. לא נכתב דבר.' ;;
+        *"no image id"*|*"without image or id"*) printf 'לא נבחר אימג׳ למשימה. לא נכתב דבר.' ;;   *"station restore over the network"*) printf 'שחזור תחנה מהרשת יגיע בגרסה 2 — ברשת משוחזרים רק משכפלים. לא נכתב דבר.' ;;   # #3173
         *"failed SMART"*)          printf 'הדיסק נכשל בבדיקת SMART ואינו יעד לכתיבה. לא נכתב דבר.' ;;   *"is read-only"*) printf 'הדיסק במצב קריאה בלבד ואינו יעד לכתיבה. לא נכתב דבר.' ;;   *"seen stopping the"*) printf 'נצפה F1 בהדלקה בדיסק הזה, והוא אינו יעד לכתיבה. לא נכתב דבר.' ;;   # #1858
         *"target selection"*|*"room target disks"*|*"selected drawer"*|*"selected no writable"*) printf 'בחירת המגירות לסבב חסרה או אינה תואמת לדיסקים במחשב. לא נכתב דבר.' ;;
         *"imagesrv.server"*|*"network configuration"*) printf 'הגדרות הרשת או כתובת השרת חסרות באתחול.' ;;   *"GUI unavailable"*) printf 'המסך הגרפי לא עלה.' ;;

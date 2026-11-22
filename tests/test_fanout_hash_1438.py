@@ -25,7 +25,7 @@ import json
 from native import requires_native
 from test_agent import BASH
 from test_capture_refusals import ONE_PARTITION, capture_run, refusal_reason
-from test_stream_honesty import GOOD_FANOUT, GOOD_SHA, PAYLOAD, call, drawer_run, errors_of
+from test_stream_honesty import GOOD_FANOUT
 
 pytestmark = requires_native(("bash", BASH))
 
@@ -87,13 +87,3 @@ def test_a_capture_without_a_hash_is_refused_not_shipped_with_an_empty_sha(tmp_p
     reason = refusal_reason(box, run, out)
     assert "sha256 לא חושב" in reason, reason
     assert not (run / "new-manifest.json").exists()
-
-
-def test_the_round_verdict_reads_the_files_fanout_writes(tmp_path):
-    run, out = drawer_run(tmp_path, call(GOOD_SHA), {"fanout": GOOD_FANOUT})
-    assert out.strip().endswith("rc=0"), out
-    assert errors_of(run) == {"sda": "", "sdb": ""}
-    # sha.out and bytes.raw are where the round passed -S and -P.
-    assert (run / "sha.out").read_bytes() == GOOD_SHA.encode() + b"\n"
-    counts = (run / "bytes.raw").read_text(encoding="utf-8").split()
-    assert counts and counts[-1] == str(len(PAYLOAD)), counts

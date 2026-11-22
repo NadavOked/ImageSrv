@@ -13,12 +13,12 @@ Since #3296 a chunk wave (`decision.engine = "chunk"`) records, for each drive, 
 pass ended (`ChunkEngine.rate_outcome.drives`, compressed bytes from the index's frame lengths) over `first_pass_s`,
 against what those passes offered (`stream_zbytes` over the same seconds). A drive with no such number -- the first
 passes not measured, the drive not in them, or most of it by HTTP -- is not learned, and says why (principle 5).
-udpcast waves do not move.
+(#3173: udpcast is gone, and the guard that its waves did not move went with it.)
 
 **Negative control:** `server/rounds/drive_rates.py`, `server/rounds/chunk_rate.py`, `server/rounds/chunksend.py` and
 `server/console/journal_he.py` back to the base: the Samsung is learned at 9.28MB/s and the next wave drops to
 `learned`; the 70% drive is learned over 1998 s; the drives with no stream measurement are learned anyway; the engine
-has no `drives` in its outcome. The udpcast test passes on both sides -- it is the guard that udpcast did not move.
+has no `drives` in its outcome.
 Nothing here sleeps.
 """
 
@@ -144,13 +144,3 @@ def test_a_drive_missing_from_the_first_passes_or_sizes_not_known_is_not_learned
     _close(conn, "ses_w2")
     assert not _rates(conn, "ses_w2")
     assert set(_stream(conn, "ses_w2")["drives_unmeasured"].values()) == {"no_first_pass"}
-
-
-def test_an_udpcast_wave_is_still_learned_over_its_counters_window(conn):
-    """The guard that udpcast did not move: no `adjust`, no `engine`, the same window and ceiling as before."""
-    drive_rates.decide(conn, "ses_u1", lambda: DRIVES, "150m")
-    assert "engine" not in drive_rates.decision(conn, "ses_u1")
-    _close(conn, "ses_u1")
-    row = _rates(conn, "ses_u1")[SAMSUNG]
-    assert row["rate_bps"] == int(WRITTEN / 1998) and row["seconds"] == 1998 and row["cap_bps"] == 150 * MB // 8
-    assert conn.execute("SELECT stream FROM wave_rates WHERE session_id = 'ses_u1'").fetchone()["stream"] is None

@@ -8,7 +8,7 @@
 # said "writing" and nothing was heard, and the server, never told, named it
 # "did not keep up with the stream".
 #
-# So a pass (and a fetch) is watched as drawers.sh watches a udpcast stream, in
+# So a pass (and a fetch) is watched as drawer_watch watches a fanout stream, in
 # the background beside _chunk_run's loop -- a disk that is dying can hold the
 # evidence it is asked for (fail_written_target), and the loop that feeds the
 # watchdog is not made to wait for that. Every tick:
@@ -72,7 +72,7 @@ chunk_watch() {   # $1 = the pid of the receiver or the fetch, $2 = partition in
         done
         if command -v drawer_left_mark > /dev/null 2>&1; then for _cw_d in "$@"; do drawer_left_mark "$_cw_d" || :; done; fi   # #3270: failed on refused writes, gone from sysfs since
         _chunk_verdicts "$_cw_idx" "$@"
-        # #3336: a drawer that stands still is said in seconds, as drawer_watch says it on a udpcast stream (chunkstall.sh); a state that was not read judges nothing
+        # #3336: a drawer that stands still is said in seconds, as drawer_watch says it on a fanout stream (chunkstall.sh); a state that was not read judges nothing
         if [ "$_cw_read" = 1 ] && command -v chunk_stall_tick > /dev/null; then chunk_stall_tick "$_cw_idx" "$_cw_live" "$@"; fi
         if [ -z "${CHUNK_TELL:-}" ] && [ -z "${CHUNK_BG:-}" ] && [ ! -s "$RUN_DIR/bytes.raw" ]; then   # CHUNK_BG: a completion (drawerback.sh) is not the round's stream
             # awk's 1 is an answer ("not yet"), not a failure; anything else that is not 0 is the check itself

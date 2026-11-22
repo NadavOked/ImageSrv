@@ -27,8 +27,8 @@ pytestmark = requires_native(("bash", BASH), why="boot-payload-build.sh is bash"
 #: GUI builds also hold a mkdir lock for a moment: a second GUI build that finds
 #: it held ran at the same time -- the collision the serial queue prevents.
 STUB = r"""#!/usr/bin/env bash
-out=""; gui=0
-for a in "$@"; do case "$prev" in --output) out="$a" ;; esac; prev="$a"; [ "$a" = --with-gui ] && gui=1; done
+out=""; gui=0; ca=""; nm=""
+for a in "$@"; do case "$prev" in --output) out="$a" ;; --server-ca) ca="$a" ;; --server-name) nm="$a" ;; esac; prev="$a"; [ "$a" = --with-gui ] && gui=1; done
 name=$(basename "$out" .new)
 echo "build $name TMPDIR=$TMPDIR"
 : > "$STUB_DIR/started-$name"
@@ -47,6 +47,7 @@ if [ "$gui" = 1 ]; then
 fi
 case " ${STUB_FAIL:-} " in *" $name "*) echo "$name broke" >&2; exit 3 ;; esac
 printf 'new %s\n' "$name" > "$out"
+if [ -n "$ca" ]; then cp "$ca" "$out.ca.pem"; printf '%s\n' "$nm" > "$out.agent-name"; fi   # #3580: the builder's contract
 """
 
 
@@ -72,8 +73,8 @@ def _setup(tmp_path: Path, lines: list[str]):
 def _build(tmp_path: Path, lines: list[str], *, wait_for: str = "", fail: str = "",
            tmpdir: str | None = None):
     host, tree, flags, stub_dir = _setup(tmp_path, lines)
-    env = {**_host_env(host), "STUB_DIR": posix(stub_dir), "STUB_WAIT_FOR": wait_for,
-           "STUB_FAIL": fail}
+    env = {**_host_env(host), "IMAGESRV_DATA_DIR": posix(host / "data"), "STUB_DIR": posix(stub_dir),
+           "STUB_WAIT_FOR": wait_for, "STUB_FAIL": fail}
     if tmpdir is not None:
         env["IMAGESRV_BUILD_TMPDIR"] = tmpdir
     log = tmp_path / "build.log"

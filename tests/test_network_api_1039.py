@@ -50,7 +50,7 @@ def _build(tmp_path: Path, images_root: Path, clock, *, leases: object = "file")
     elif leases is not None:
         identity_hooks = {"leases": leases}
     app = create_app(
-        tmp_path / "data", images_root, "http://10.44.12.10:8080", now_fn=clock,
+        tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
         identity_hooks=identity_hooks,
         dhcp_hooks={"apply": lambda text: pytest.fail("בדיקה נגעה ב-dnsmasq"),
                     "apply_proxy": lambda text, active: pytest.fail("בדיקה נגעה ב-dnsmasq"),

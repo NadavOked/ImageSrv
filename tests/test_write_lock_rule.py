@@ -58,8 +58,6 @@ STILL_BARE = frozenset({
     # upload_partition יצא מהחוב ב-#2750: ה-commit עבר ל-_upload_settle, בתוך writing().
     # reports.ingest יצא מהחוב ב-#2753: ה-UPDATE וה-commit של session_members בתוך writing().
     "dhcp.py:forget",
-    "net.py:add_device",
-    "net.py:describe_device",
     "net.py:forget_device",
     "pulls.py:open_pull",
     "reports.py:_ingest_task",
@@ -67,7 +65,8 @@ STILL_BARE = frozenset({
     "room.py:_finish_wave",
     "room.py:_resume",
     # close_round יצא מהחוב ב-#3707: שלוש כתיבותיו בתוך `_write_lock` + `writing()`.
-    "room.py:open_round",
+    # add_device/describe_device יצאו מהחוב ב-r49: ה-INSERT/UPDATE בתוך `_write_lock` + `writing()`.
+    "room.py:_open_round",   # #3928: open_round עוטף אותו ב-_OPEN_LOCK; אותו commit, שם אחר
     # sessions.py:_transition/close/open יצאו מהחוב ב-#3706: `_settle` + `_write_lock` + `writing()`.
 })
 
@@ -84,7 +83,7 @@ STILL_BARE = frozenset({
 MUST_BE_FOUND_BARE = frozenset({
     "dhcp.py:forget",
     "net.py:forget_device",       # #3706: sessions.py:_transition was the third canary, and is wrapped now
-    "room.py:open_round",
+    "room.py:_open_round",   # #3928: the body of open_round, under _OPEN_LOCK
 })
 
 

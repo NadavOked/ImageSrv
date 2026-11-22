@@ -110,14 +110,14 @@ def test_old_marker_does_not_fire_an_occurrence_that_already_passed(daily, tmp_p
 
 def test_runtime_carries_the_marker_time_for_the_scheduler(tmp_path, images_root):
     from server.app import create_runtime                  # noqa: PLC0415
-    from test_sender import Recorder                       # noqa: PLC0415
+    from fakesend import Recorder                       # noqa: PLC0415
     data = tmp_path / "data"
     data.mkdir()
     (data / auto_reboot.MARKER).write_text(SCHEDULED.isoformat(), encoding="ascii")
-    rt = create_runtime(data, images_root, "http://10.44.12.10:8080",
+    rt = create_runtime(data, images_root, "http://10.44.12.10:7712",
                         sender_runner=Recorder(block=True))
     try:
         assert getattr(rt, "auto_reboot_last", None) == SCHEDULED
         assert not (data / auto_reboot.MARKER).exists()
     finally:
-        rt.ctx.sender.stop()
+        rt.ctx.chunk.stop()

@@ -120,7 +120,7 @@ def _run(tmp_path, body: str) -> str:
     (run / "targets" / "sda").mkdir(parents=True, exist_ok=True)
     (run / "targets" / "sdb").mkdir(parents=True, exist_ok=True)
     return sh(
-        "unset WAIT_STREAM_STALL_S UDPCAST_STALL_TIMEOUT DISK_STALL_S FANOUT_STALL_EVICT_MS "
+        "unset WAIT_STREAM_STALL_S STREAM_STALL_TIMEOUT DISK_STALL_S FANOUT_STALL_EVICT_MS "
         "CHUNKCAST_WRITE_STALL_MS STALL_NET_LIMIT_S STALL_DISK_LIMIT_S; "
         f"export RUN_DIR={posix(run)!r} LOG_FILE={posix(run)!r}/agent.log; "
         + agent_sources("common", "timing", "waits", "stall", "chunkstall")

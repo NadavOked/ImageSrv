@@ -27,6 +27,7 @@ from server.net import ifaddr
 from server.core.atomicfile import write_atomic
 from server.console.tls import ensure_console_cert
 from server.interserver.auth import generate_self_signed
+from server.core import ports as product_ports   # #3871
 
 HOSTNAME_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 IFNAME_RE = re.compile(r"[A-Za-z0-9._-]+\Z")
@@ -161,9 +162,9 @@ def validate_config(config: WizardConfig, interface_names: set[str], *, rerun: b
             except ValueError:
                 port = None
             if (parts.scheme not in {"http", "https"} or not parts.hostname
-                    or parts.username or parts.password or port != 8443
+                    or parts.username or parts.password or port != product_ports.INTERSERVER
                     or not re.fullmatch(r"https?://[A-Za-z0-9._:/-]+", config.primary_url)):
-                errors["primary_url"] = "כתובת השרת הראשי אינה תקינה — נדרשת כתובת מלאה שמתחילה ב-http:// או https:// וכוללת פורט 8443."
+                errors["primary_url"] = "כתובת השרת הראשי אינה תקינה — נדרשת כתובת מלאה שמתחילה ב-http:// או https:// וכוללת פורט 7700."
     if config.interface not in interface_names:
         errors["interface"] = "יש לבחור כרטיס רשת קיים מרשימת הכרטיסים."
     if config.mode not in {"dhcp", "static"}:
@@ -197,18 +198,18 @@ def validate_config(config: WizardConfig, interface_names: set[str], *, rerun: b
 
 
 def check_primary(url: str, timeout: float = 5.0) -> dict:
-    """Perform a real TCP/TLS handshake on 8443 and report measured evidence."""
+    """Perform a real TCP/TLS handshake on 7700 and report measured evidence."""
     raw = url.strip()
     parts = urlsplit(raw if "://" in raw else f"https://{raw}")
     if not parts.hostname:
         return {"ok": False, "warning": True, "error": "כתובת השרת הראשי אינה תקינה.", "checked": "לא בוצעה בדיקה"}
-    host, port = parts.hostname, 8443
+    host, port = parts.hostname, product_ports.INTERSERVER
     try:
         resolved = sorted({item[4][0] for item in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)})
     except OSError as exc:
         return {"ok": False, "warning": True, "error": f"פתרון DNS נכשל: {exc}", "checked": f"DNS עבור {host}"}
     try:
-        # Port 8443 requires a client certificate even before pairing. The probe
+        # Port 7700 requires a client certificate even before pairing. The probe
         # presents a one-use identity; it stores no key and performs no pairing.
         probe_cert, probe_key = generate_self_signed("imagesrv-wizard-probe")
         with tempfile.TemporaryDirectory(prefix="imagesrv-wizard-probe-") as tmp:
@@ -234,16 +235,16 @@ def check_primary(url: str, timeout: float = 5.0) -> dict:
         peer_name = names[0].value if names else host
         return {"ok": True, "warning": False, "name": peer_name, "version": protocol,
                 "fingerprint": fingerprint, "resolved": resolved,
-                "checked": f"TCP 8443 ו-TLS אל {host}"}
+                "checked": f"TCP 7700 ו-TLS אל {host}"}
     except (OSError, ssl.SSLError) as exc:
         return {"ok": False, "warning": True,
-                "error": f"התקשרות אל {raw} בפורט 8443 נכשלה. ודא כי חומת האש שבין האתרים פתוחה.",
-                "reason": str(exc), "resolved": resolved, "checked": f"TCP 8443 ו-TLS אל {host}"}
+                "error": f"התקשרות אל {raw} בפורט 7700 נכשלה. ודא כי חומת האש שבין האתרים פתוחה.",
+                "reason": str(exc), "resolved": resolved, "checked": f"TCP 7700 ו-TLS אל {host}"}
     except Exception as exc:  # certificate generation/decoding is part of the check
         return {"ok": False, "warning": True,
                 "error": "בדיקת TLS לשרת הראשי לא הצליחה לרוץ.",
                 "reason": f"{type(exc).__name__}: {exc}", "resolved": resolved,
-                "checked": f"TCP 8443 ו-TLS אל {host}"}
+                "checked": f"TCP 7700 ו-TLS אל {host}"}
 
 
 @dataclass
@@ -406,7 +407,7 @@ class WizardState:
             assert parent_handoff is not None
             try:
                 signal = parent_handoff.recv(64)
-                if signal.startswith(b"release-8081"):
+                if signal.startswith(b"release-443"):
                     self._set("handoff")
                     if self.shutdown_for_handoff:
                         self.shutdown_for_handoff()
@@ -480,7 +481,7 @@ class WizardState:
                 return
             self._set("verifying")
             verify = script_command(self.paths.verify) + ["--app-dir", str(self.paths.app_dir),
-                      "--http-root", str(self.paths.http_root), "--server-url", "http://127.0.0.1:8080"]
+                      "--http-root", str(self.paths.http_root), "--server-url", f"http://127.0.0.1:{product_ports.AGENT}"]
             verify_rc = 0 if self.dev else self._run(verify)
             if self.dev:
                 self._append("dev: fake verify-boot-payload.sh completed\n")
@@ -506,7 +507,7 @@ class WizardState:
                 return
             self.paths.stamp_file.parent.mkdir(parents=True, exist_ok=True)
             self.paths.stamp_file.touch()
-            console_url = f"https://{console_host}:8081"
+            console_url = product_ports.console_url(console_host)
             self._set("done", console_url=console_url, user="admin",
                       fingerprint=tls.fingerprint_sha256)
         except Exception as exc:  # visible terminal state; never turn an exception into success

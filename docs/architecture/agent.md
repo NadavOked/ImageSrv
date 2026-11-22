@@ -19,8 +19,9 @@ cp imagesrv-initramfs.cpio.gz /srv/imagesrv/boot/initrd.img
 cp /boot/vmlinuz-$(uname -r)  /srv/imagesrv/boot/vmlinuz
 ```
 
-הבנאי אורז busybox, את הבינארים האמיתיים שהסוכן צריך (partclone, udpcast,
-zstd, sgdisk, curl, jq, pv ועוד — הרשימה המלאה ב-`BINARIES` בתוך הסקריפט),
+הבנאי אורז busybox, את הבינארים האמיתיים שהסוכן צריך (partclone, zstd,
+sgdisk, curl, jq, pv ועוד — הרשימה המלאה ב-`BINARIES` בתוך הסקריפט), את
+מה שהוא מקמפל מהמקור (‏`chunkcast`, ‏`chunkcut`, ‏`fanout` ועוד),
 דרייברים לכרטיסי רשת ולאחסון מהקרנל הנבחר, ואת סקריפטי הסוכן מ-`agent/`.
 יש בדיקה שמוודאת שכל פקודה שהסוכן קורא לה אכן נארזת — עדכון של צד אחד
 בלי השני מפיל את הבנייה.
@@ -37,7 +38,7 @@ init        מרכיב /proc /sys /dev, טוען דרייברים, DHCP על כ�
 imagesrv-agent
   ├─ hello         ממשק 2: MAC, דיסקים, קושחה → POST /api/v1/agent/hello
   ├─ החלטה         ממשק 3: known / role / task / session → פעולה אחת
-  ├─ שחזור         ממשק 7: GPT מהמניפסט → udp-receiver → zstd → partclone
+  ├─ שחזור         ממשק 7: GPT מהמניפסט → chunkcast recv (קבלה, zstd, בדיקה, כתיבה)
   └─ דיווח         ממשק 4: כל 2 שניות, תהליך רקע נפרד
 ```
 
@@ -133,7 +134,10 @@ swap לא נקרא בקליטה ולא משודר — `mkswap` בשחזור לפ
 גואי, או בלי תשובה תוך `CAPTURE_END_ASK_S` (‏20ש'; מאז #1560 הדיאלוג סופר
 אותן בפועל — ברזל 17/10: "20" הוצג כטקסט קבוע ונקרא כ"נכבה לבד") — כיבוי
 דרך
-`finish_and_stop` (‏`arm_wol` ואז `poweroff -f`). ‏#1560: אותה שאלה בסוף
+`finish_and_stop` (‏`arm_wol` ואז `poweroff -f`). ‏#3756: `reboot` ו-`poweroff` שמוקלדים (ssh, המעבדה) הם
+`agent/imagesrv-power` ולא applet של busybox — PID 1 הוא מעטפת, ו-applet בלי `-f` רק שולח לו אות שנזרק ויוצא 0 (אותו
+boot_id אחרי שלוש דקות). `reboot` = `sync` ו-`reboot -f`; `poweroff` = `safe_poweroff` (עם `arm_wol`); `-f` מפורש עובר
+ישר ל-busybox, וכל חזרה היא כישלון (rc ≠ 0). ‏#1560: אותה שאלה בסוף
 שליחה ישירה (‏`send-end`, במקום `sleep 20` וכיבוי) ובסוף סבב שנפתח מהגואי
 של מחשב הבנייה (‏`round-end`: ‏`roomflow.sh` רושם את הסבב ב-`room.watch`,
 והקיוסק מוסר `room.ended` כשהסבב **נעלם** מהחדר — לא כשנכשל ולא כשנסגר
@@ -216,7 +220,7 @@ swap לא נקרא בקליטה ולא משודר — `mkswap` בשחזור לפ
 היעד מסומן `failed`, והסוכן ממשיך — מגירה שפקעה לא עוצרת את שכנותיה.
 
 בשורש, כל מקור זרם מקבל גם תקרה משלו כדי שייגמר מעצמו במקום שיהרגו
-אותו: ל-`udp-receiver` יש `--start-timeout` ו-`--receive-timeout`, ול-curl
+אותו: ל-`chunkcast recv` יש `--start-s` ו-`--stall-s`, ול-curl
 של ההעברות הארוכות יש `--speed-limit 1 --speed-time` (בלי תקרת משך —
 מחיצה גדולה לוקחת זמן). ‏`timeout(1)` לא בשימוש: הוא אינו ברשימת
 הבינאריים של הבנאי, וההמתנה ממומשת ב-`kill -0` ולולאת `sleep`.
@@ -262,7 +266,7 @@ sudo env IMAGESRV_EXTRA_OVERLAY=/path/to/overlay ./tools/build_initramfs.sh
 |---|---|
 | מניפסט ב-HTTP | `GET /api/v1/images/<id>/manifest` — מחזיר ממשק 1 |
 | קבצי מחיצות | `GET /api/v1/images/<id>/files/<file>` — ליוניקאסט |
-| udpcast | `--portbase` מ-`session.portbase` של השרת (‏#1826, ‏`streamid.sh`); שרת ישן בלי השדה — 9000 |
+| גל חתיכות | הקבוצה, הפורט והמפתח מ-`session.chunk` של השרת (`{group, port, key}`); גל בלי `session.engine = "chunk"` אינו נכתב (`chunkgate.sh`) |
 | אחרי done | שרת שקיבל `state: done` ממחשב מפסיק להציע לו את הסבב — אחרת המחשב ישחזר בלולאה אחרי כל אתחול |
 
 ## מה עוד לא כאן
@@ -271,7 +275,7 @@ sudo env IMAGESRV_EXTRA_OVERLAY=/path/to/overlay ./tools/build_initramfs.sh
 |---|---|
 | כניסה במסך recovery | בגואי בלבד (מסך הכניסה של `imagesrv-station-gui`, ‏`gui_auth` → ‏`POST /api/console/login`). הכניסה בטקסט מול `POST /api/v1/agent/login` הוסרה ב-11/10 עם שאר מסכי הטקסט |
 | קליטת אימג' | משימת `capture` מגיעה בשדה `task` של תשובת ה-hello; הסוכן קורא עם partclone ומעלה בזרימה — פרטים ב-docs/architecture/server.md |
-| קונסולת מחשב הבנייה | הגואי הנייטיב (`native-gui/`, התהליך `imagesrv-kiosk`), עברית ו-RTL; הוא מדבר עם השרת דרך פורט הסוכן (8080). בלי `--with-gui` בבנאי אין גואי, ולכן מסך שצריך אדם מסתיים בדיסק המקומי (`gui_unavailable_local`) — אין מסך טקסט חלופי (11/10). (#1247: דף ה-web `/console/station` והפורט 8082 הוסרו.) |
+| קונסולת מחשב הבנייה | הגואי הנייטיב (`native-gui/`, התהליך `imagesrv-kiosk`), עברית ו-RTL; הוא מדבר עם השרת דרך פורט הסוכן (7712). בלי `--with-gui` בבנאי אין גואי, ולכן מסך שצריך אדם מסתיים בדיסק המקומי (`gui_unavailable_local`) — אין מסך טקסט חלופי (11/10). (#1247: דף ה-web `/console/station` והמאזין של הקיוסק הוסרו.) |
 
 ## חדר השיכפולים — הכותב המקבילי
 
@@ -304,9 +308,11 @@ sudo env IMAGESRV_EXTRA_OVERLAY=/path/to/overlay ./tools/build_initramfs.sh
 מכבה את המחשב — כי לפי נספח א' מחליפים מגירות במחשב כבוי, כך שכיבוי
 הוא הצעד הבא בסבב ולא כשל.
 
-**פענוח אחד למכונה (`agent/lib/restore/drawerfeed.sh`).** משתי מגירות ומעלה הזרם
-מפוענח **פעם אחת**: ‏`udp-receiver | fanout -S -P > mid`, ‏`zstd -dc < mid |
-fanout -U > feed1..N`, ו-`partclone` לכל מגירה. עד 18/10 כל מגירה הריצה
+**פענוח אחד למכונה.** בגל חתיכות `chunkcast recv` אחד מקבל, מפענח וכותב לכל
+המגירות של המכונה (`agent/lib/restore/chunkrecv.sh`). מה שלמטה הוא הרקע:
+בצינור הישן (udpcast, הוסר ב-#3173) משתי מגירות ומעלה הזרם פוענח **פעם אחת**:
+‏`fanout -S -P > mid`, ‏`zstd -dc < mid | fanout -U > feed1..N`, ו-`partclone`
+לכל מגירה (`agent/lib/restore/drawerfeed.sh`). עד 18/10 כל מגירה הריצה
 ‏`zstd -dc` משלה על אותם בייטים, ובמשכפל (‏i5-650, שתי ליבות) זה היה המעבד:
 מגירה אחת ב-450m, שתיים ב-264–370m. ה-fanout השני נותן לכל מגירה תור משלה
 ופוסל רק אותה (הבידוד לא זז), ו-`-U` משאיר את מונה המגירה בבייטים דחוסים —
@@ -365,7 +371,7 @@ device-mapper או מקום בזיכרון, היעד הקטן **מסורב** ב�
 הממשקים (פענוח JSON אמיתי, לא השוואת מחרוזות), את חסימת שורת הפקודה,
 ואת הסנכרון בין רשימת הבינארים של הבנאי לפקודות שבקוד.
 
-מה שאי אפשר לבדוק בלי חומרה — הצינור עצמו (udp-receiver, partclone,
+מה שאי אפשר לבדוק בלי חומרה — הצינור עצמו (chunkcast על כרטיס אמיתי, partclone,
 sgdisk על דיסק אמיתי), טעינת דרייברים, ו-DHCP — שייך לשלב א' של תוכנית
 הבדיקות: שני מחשבים על כבל.
 # Cloner dead-man recovery

@@ -222,8 +222,8 @@ def _curl_urls(m: dict) -> list[str]:
 
 
 @pytest.mark.parametrize("typed", [
-    "192.168.68.250", " 192.168.68.250 ", "192.168.68.250:8443",
-    "https://192.168.68.250:8443", "https://192.168.68.250:8443/",
+    "192.168.68.250", " 192.168.68.250 ", "192.168.68.250:7700",
+    "https://192.168.68.250:7700", "https://192.168.68.250:7700/",
 ])
 def test_check_primary_takes_a_bare_ip_and_asks_the_alive_path_on_8443(tmp_path, typed):
     """נדב 12/10: "למה לכתוב את כל זה ולא רק את ה-IP?" — כל הצורות מגיעות
@@ -231,17 +231,17 @@ def test_check_primary_takes_a_bare_ip_and_asks_the_alive_path_on_8443(tmp_path,
     m = _machine(tmp_path)
     rc, out, _ = bridge(m, "check-primary", {"primary_url": typed})
     assert rc == 0 and out["ok"] == ["0"]
-    assert _curl_urls(m) == ["https://192.168.68.250:8443" + ALIVE]
+    assert _curl_urls(m) == ["https://192.168.68.250:7700" + ALIVE]
 
 
 def test_check_primary_takes_a_host_name_too(tmp_path):
     m = _machine(tmp_path)
     bridge(m, "check-primary", {"primary_url": "imagesrv-ta.college.ac.il"})
-    assert _curl_urls(m) == ["https://imagesrv-ta.college.ac.il:8443" + ALIVE]
+    assert _curl_urls(m) == ["https://imagesrv-ta.college.ac.il:7700" + ALIVE]
 
 
 @pytest.mark.parametrize("typed", ["", "http://192.168.68.250", "192.168.68.250:9443",
-                                   "https://192.168.68.250:8443/x", "192.168 .68.250", "-x"])
+                                   "https://192.168.68.250:7700/x", "192.168 .68.250", "-x"])
 def test_an_address_that_is_not_one_is_red_without_asking_anyone(tmp_path, typed):
     m = _machine(tmp_path)
     rc, out, _ = bridge(m, "check-primary", {"primary_url": typed})
@@ -250,8 +250,8 @@ def test_an_address_that_is_not_one_is_red_without_asking_anyone(tmp_path, typed
 
 
 @pytest.mark.parametrize(("curl_rc", "stderr", "reason"), [
-    ("7", "curl: (7) Failed to connect to 192.168.68.250 port 8443: Connection refused", "(refused)"),
-    ("7", "curl: (7) Failed to connect to 192.168.68.250 port 8443: No route to host", "אין נתיב"),
+    ("7", "curl: (7) Failed to connect to 192.168.68.250 port 7700: Connection refused", "(refused)"),
+    ("7", "curl: (7) Failed to connect to 192.168.68.250 port 7700: No route to host", "אין נתיב"),
     ("28", "curl: (28) Connection timed out after 5001 milliseconds", "(timeout)"),
     ("35", "curl: (35) TLS connect error", "TLS"),
     ("6", "curl: (6) Could not resolve host", "(DNS)"),
@@ -276,7 +276,7 @@ def test_green_shows_name_version_fingerprint_and_records_the_check(tmp_path):
     assert out["ok"] == ["1"] and out["name"] == ["imagesrv-ta"]
     assert out["version"] == ["v0.60.0"] and out["fingerprint"] == [spki]
     record = (m["run"] / "primary-check").read_text()
-    assert record == f"url=https://192.168.68.250:8443\nfingerprint={spki}\n", \
+    assert record == f"url=https://192.168.68.250:7700\nfingerprint={spki}\n", \
         "the record holds what the answers need, nothing the primary chose to say"
 
 
@@ -308,10 +308,10 @@ def test_a_line_break_in_name_or_version_cannot_plant_a_fingerprint(tmp_path, fi
 
 
 @pytest.mark.parametrize("record", [
-    "url=https://192.168.68.250:8443\nfingerprint={bad}\nfingerprint={good}\n",
-    "url=https://192.168.68.250:8443\nname=x\nfingerprint={good}\n",
-    "fingerprint={good}\nurl=https://192.168.68.250:8443\n",
-    "url=https://192.168.68.250:8443\nfingerprint={good}x\n",
+    "url=https://192.168.68.250:7700\nfingerprint={bad}\nfingerprint={good}\n",
+    "url=https://192.168.68.250:7700\nname=x\nfingerprint={good}\n",
+    "fingerprint={good}\nurl=https://192.168.68.250:7700\n",
+    "url=https://192.168.68.250:7700\nfingerprint={good}x\n",
 ])
 def test_a_record_of_any_other_shape_is_not_a_green_check(tmp_path, record):
     """שכבה שנייה: גם רשומה שמישהו אחר כתב (או גרסה ישנה) אינה מכניסה טביעה
@@ -325,7 +325,7 @@ def test_a_record_of_any_other_shape_is_not_a_green_check(tmp_path, record):
 def test_the_exact_record_is_what_puts_the_fingerprint_in(tmp_path):
     """הצד החיובי של הטסט הקודם — אחרת "אף פעם לא" היה עובר אותו."""
     m = _machine(tmp_path)
-    (m["run"] / "primary-check").write_text(f"url=https://192.168.68.250:8443\nfingerprint={'ab' * 32}\n")
+    (m["run"] / "primary-check").write_text(f"url=https://192.168.68.250:7700\nfingerprint={'ab' * 32}\n")
     bridge(m, "validate", {**SECONDARY, "step": "2"})
     assert f"primary_fingerprint={'ab' * 32}\n" in (tmp_path / "answers.seen").read_text()
 
@@ -370,13 +370,13 @@ def test_answers_carry_the_fingerprint_only_from_a_green_check_of_the_same_addre
     m = _machine(tmp_path)
     seen = tmp_path / "answers.seen"
     bridge(m, "validate", {**SECONDARY, "step": "2"})
-    assert "primary_url=https://192.168.68.250:8443\n" in seen.read_text()
+    assert "primary_url=https://192.168.68.250:7700\n" in seen.read_text()
     assert "primary_fingerprint=\n" in seen.read_text(), "not checked = no fingerprint"
 
     pem, spki = _primary_cert(tmp_path)
     out, _ = _answer(m, tmp_path, {"name": "imagesrv-ta", "version": "v1", "fingerprint": spki}, pem=pem)
     assert out["ok"] == ["1"]
-    bridge(m, "validate", {**SECONDARY, "primary_url": "https://192.168.68.250:8443/", "step": "2",
+    bridge(m, "validate", {**SECONDARY, "primary_url": "https://192.168.68.250:7700/", "step": "2",
                            "primary_fingerprint": "ff" * 32})
     assert f"primary_fingerprint={spki}\n" in seen.read_text(), "the check, never the form"
 
@@ -410,7 +410,7 @@ def test_engine_refusal_lands_on_the_address_field(tmp_path):
 
 def test_check_primary_green_end_to_end_against_the_real_listener(tmp_path):
     """הראשי האמיתי (`server.interserver.primary_alive` + זהות + uvicorn TLS) על
-    כתובת loopback משלו בפורט 8443, ו-curl/openssl/jq **אמיתיים**: ירוק,
+    כתובת loopback משלו בפורט 7700, ו-curl/openssl/jq **אמיתיים**: ירוק,
     והטביעה היא זהות הראשי."""
     import socket
     import threading
@@ -421,12 +421,12 @@ def test_check_primary_green_end_to_end_against_the_real_listener(tmp_path):
     from server.interserver import primary_alive, storage_nodes
     host = "127.13.10.8"
     with socket.socket() as probe:
-        probe.bind((host, 8443))      # free? a busy port fails here, by name -- not a skip
+        probe.bind((host, 7700))      # free? a busy port fails here, by name -- not a skip
     conn = db.connect(tmp_path / "p.db")
     ident = storage_nodes.ensure_identity(conn, tmp_path / "data", host_sans=[host])
     app = primary_alive.create_alive_app(name=lambda: "imagesrv-ta", version=lambda: "v0.60.0",
                                          fingerprint=ident["server_spki"])
-    server = uvicorn.Server(primary_alive.server_config(app, ident, host, 8443))
+    server = uvicorn.Server(primary_alive.server_config(app, ident, host, 7700))
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     try:

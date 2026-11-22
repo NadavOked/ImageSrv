@@ -11,6 +11,8 @@
 #   * ‏SOURCE_DATE_EPOCH (#1125) — זמן הקומיט של העץ שנבנה (יש .git), אחרת
 #     ‏source_date_epoch ממניפסט ה-ISO (עץ בלי .git, בניית --source).
 #     בלי אף אחד מהם — כישלון בשם, לא `date` שקט.
+#   * Site CA and expected certificate name, for authenticated HTTPS.
+
 #
 # קובץ הדגלים (/etc/imagesrv/initrd.flags) — שורה לכל הרצת
 # ‏build_initramfs.sh: רק מה שקבוע (תפקיד ו---output). ‏# ושורה ריקה
@@ -24,7 +26,11 @@
 #
 #   boot-payload-build.sh --http-root DIR (--flags-file FILE | --iso-default)
 #                         [--manifest FILE] [--write-flags FILE] [--build-log FILE]
-#                         [--version VER] [--lab]
+#                         [--version VER] [--lab] [--no-agent-ca]
+#
+# ‏--no-agent-ca (#1076): מטען **כללי** — ה-ISO וה-Release (#1788). מטען מוכן מראש
+# מותקן בכל שרת, ולכן אסור שיישא CA של שרת כלשהו: בלי הדגל נאפה ה-CA של המכונה
+# שבונה — ובמכונת שחרור זה היה CA זר בכל initrd של כל מכללה.
 #
 # ‏--version: המחרוזת שנחתמת ב-initrd (agent-version) במקום `git describe`. רק
 # מי שבונה מטען מוכן מראש ל-Release מעביר אותה: הוא בונה מהעץ הפרטי, שאין בו
@@ -37,7 +43,8 @@
 # היה מכניס את dropbear ואת מפתח הטכנאי לכל תחנה.
 #
 # משתני סביבה (לבדיקות): IMAGESRV_MODULES_DIR (/lib/modules),
-# ‏IMAGESRV_KERNEL_DIR (/boot), IMAGESRV_BUILD_TMPDIR (/var/tmp).
+# ‏IMAGESRV_KERNEL_DIR (/boot), IMAGESRV_BUILD_TMPDIR (/var/tmp),
+# ‏IMAGESRV_DATA_DIR (/var/lib/imagesrv — זהות ה-TLS של ערוץ הסוכן, #1076).
 
 set -euo pipefail
 
@@ -47,6 +54,7 @@ die() { say "$*"; exit 1; }
 APP_DIR=$(cd "$(dirname "$0")/.." && pwd)
 MODULES_DIR="${IMAGESRV_MODULES_DIR:-/lib/modules}"
 KERNEL_DIR="${IMAGESRV_KERNEL_DIR:-/boot}"
+DATA_DIR="${IMAGESRV_DATA_DIR:-/var/lib/imagesrv}"
 HTTP_ROOT=""
 FLAGS_FILE=""
 ISO_DEFAULT=0
@@ -55,6 +63,7 @@ WRITE_FLAGS=""
 BUILD_LOG=""
 VERSION=""
 LAB=""
+NO_AGENT_CA=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -66,6 +75,7 @@ while [[ $# -gt 0 ]]; do
         --build-log)   BUILD_LOG="${2:?}"; shift 2 ;;
         --version)     VERSION="${2:?}"; shift 2 ;;
         --lab)         LAB=1; shift ;;
+        --no-agent-ca) NO_AGENT_CA=1; shift ;;
         *) die "unknown option: $1" ;;
     esac
 done
@@ -95,7 +105,7 @@ for line in "${lines[@]}"; do
     out=""
     for i in "${!words[@]}"; do
         case "${words[$i]}" in
-            --kernel-version|--source-date-epoch)
+            --kernel-version|--source-date-epoch|--server-ca|--server-name)
                 die "$FLAGS_FILE pins ${words[$i]}; it is derived at build time and must not be recorded ($line)" ;;
             --output) out="${words[$((i + 1))]:-}" ;;
         esac
@@ -123,6 +133,16 @@ fi
 [[ "$EPOCH" =~ ^[0-9]+$ ]] || die "SOURCE_DATE_EPOCH is not a number: '$EPOCH'"
 say "kernel $KVER, SOURCE_DATE_EPOCH=$EPOCH, ${#lines[@]} build(s)"
 
+# Release payloads are generic. Installed servers always bake their own CA.
+ca_args=()
+CA_FILE=""; CA_NAME=""
+if [[ "$NO_AGENT_CA" == 0 ]]; then
+    CA_OUT=$(cd "$APP_DIR" && python3 -m server.agent.tls ca --data-dir "$DATA_DIR") || die "Cannot load agent TLS identity"
+    { read -r CA_FILE; read -r CA_NAME; } <<<"${CA_OUT//$'\r'/}"
+    [[ -s "$CA_FILE" && -n "$CA_NAME" ]] || die "Incomplete agent TLS identity"
+    ca_args=(--server-ca "$CA_FILE" --server-name "$CA_NAME")
+fi
+
 # --- הבנייה, ל-.new — במקביל (#1465) ---------------------------------------------
 # שתי הבניות היו 498 ש' זו אחר זו (שרת המעבדה, 6 vCPU, 16/10); במקביל — הארוכה
 # מביניהן. עץ ה-staging (מאות MB לבנייה) הולך ל-/var/tmp שעל הדיסק ולא ל-/tmp,
@@ -148,9 +168,9 @@ build_line() {   # build_line <n>: one build_initramfs.sh run; the verdict is $L
     for i in "${!words[@]}"; do
         [[ "${words[$i]}" == --output ]] && words[i + 1]="$out.new"
     done
-    rm -f "$out.new"
+    rm -f "$out.new" "$out.new.ca.pem" "$out.new.agent-name"
     say "building $out (${lines[$n]})"
-    if bash "$APP_DIR/tools/build_initramfs.sh" "${words[@]}" ${VERSION:+--version "$VERSION"} \
+    if bash "$APP_DIR/tools/build_initramfs.sh" "${words[@]}" "${ca_args[@]}" ${VERSION:+--version "$VERSION"} \
         --kernel-version "$KVER" --source-date-epoch "$EPOCH" >"$LOGDIR/$n.log" 2>&1; then
         rc=0
     else
@@ -193,6 +213,14 @@ for n in "${!lines[@]}"; do
         failures+=("Build failed: ${lines[$n]} (exit ${rc:-unknown})")
     elif [[ ! -s "${outputs[$n]}.new" ]]; then
         failures+=("${outputs[$n]} is empty after the build")
+    elif [[ -n "$CA_FILE" ]]; then
+        # ‏#1076: הבנאי כותב את קובץ הלוואי מתוך העץ שנארז — הראיה שה-CA בפנים.
+        cmp -s "${outputs[$n]}.new.ca.pem" "$CA_FILE" \
+            || failures+=("${outputs[$n]} was built without the CA it was given")
+        [[ "$(cat "${outputs[$n]}.new.agent-name" 2>/dev/null)" == "$CA_NAME" ]] \
+            || failures+=("${outputs[$n]} was built without the server name it was given")
+    elif [[ -e "${outputs[$n]}.new.ca.pem" ]]; then
+        failures+=("${outputs[$n]} carries a CA it was not given")
     fi
 done
 if ((${#failures[@]})); then
@@ -217,7 +245,14 @@ done
 install -m 0644 "$VMLINUZ" "$HTTP_ROOT/vmlinuz.new"
 
 # --- הכול נבנה: מחליפים יחד -----------------------------------------------------
-for out in "${outputs[@]}"; do mv -f "$out.new" "$out"; done
+for out in "${outputs[@]}"; do
+    mv -f "$out.new" "$out"
+    if [[ -n "$CA_FILE" ]]; then
+        mv -f "$out.new.ca.pem" "$out.ca.pem"; mv -f "$out.new.agent-name" "$out.agent-name"
+    else
+        rm -f "$out.ca.pem" "$out.agent-name"
+    fi
+done
 mv -f "$HTTP_ROOT/vmlinuz.new" "$HTTP_ROOT/vmlinuz"
 
 if [[ -n "$WRITE_FLAGS" ]]; then

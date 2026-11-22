@@ -27,9 +27,9 @@ function loadGuess(form) {
 
 test('#293/#330: a typed host name or address becomes the https link', () => {
   assert.equal(loadGuess({mode: 'dhcp', hostname: 'imagesrv-01', address: ''})(),
-               'https://imagesrv-01:8081');
+               'https://imagesrv-01');
   assert.equal(loadGuess({mode: 'static', hostname: 'x', address: '10.44.0.5'})(),
-               'https://10.44.0.5:8081');
+               'https://10.44.0.5');
 });
 
 test('#293/#330: anything else typed on the form is not put into the link', () => {

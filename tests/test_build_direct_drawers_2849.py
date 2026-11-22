@@ -39,7 +39,7 @@ ROOM = {
             {"dev": "sda", "port": 2, "drawer": 2, "state": "failed", "bytes_written": 0, "bytes_total": 82587750957,
              "error": "איטי — 96 MB/s, פחות מחצי מ-209 MB/s", "rate_bps": None, "eta_s": None},
             {"dev": "sdb", "port": 3, "drawer": 3, "state": "writing", "bytes_written": 41000000000,
-             "bytes_total": 82587750957, "error": None, "rate_bps": 7100000, "eta_s": 5900},
+             "bytes_total": 82587750957, "error": None, "rate_bps": 7100000, "eta_s": 5950},
             {"dev": "sdd", "port": 4, "drawer": None, "state": None, "selected": False}]},
         {"name": "2", "mac": "aa:bb:cc:dd:ee:02", "drawer_list": [
             {"dev": "sdb", "port": 1, "drawer": 1, "state": "writing", "bytes_written": 5}]},
@@ -71,7 +71,7 @@ def test_the_cloners_drawers_become_the_cloners_own_records(tmp_path):
         "cloner_group=1|64:31:50:42:b1:9c",
         "drawer=1|sdc|writing|40000000000|82587750957||7200000|5800|1|SATA 0||",
         "drawer=2|sda|failed|0|82587750957|איטי — 96 MB/s, פחות מחצי מ-209 MB/s|-1|-1|2|SATA 1||",
-        "drawer=3|sdb|writing|41000000000|82587750957||7100000|5900|3|SATA 2||",
+        "drawer=3|sdb|writing|41000000000|82587750957||7100000|5950|3|SATA 2||",
     ]
 
 
@@ -145,7 +145,7 @@ STATE = ("task=running\ntask_name=\ntask_disk=sda\ntask_direct=1\nbytes=40000000
          "cloner_group=1|64:31:50:42:b1:9c\n"
          "drawer=1|sdc|writing|40000000000|82587750957||7200000|5800|1|SATA 0||\n"
          "drawer=2|sda|failed|0|82587750957|איטי — 96 MB/s, פחות מחצי מ-209 MB/s|-1|-1|2|SATA 1||\n"
-         "drawer=3|sdb|writing|41000000000|82587750957||7100000|5900|3|SATA 2||\n"
+         "drawer=3|sdb|writing|41000000000|82587750957||7100000|5950|3|SATA 2||\n"
          "updated=1794417933\n")
 
 

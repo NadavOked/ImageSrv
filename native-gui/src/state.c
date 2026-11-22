@@ -32,6 +32,14 @@ static void cp_utf8(char *dst, size_t n, const char *src) {
     if (len && ((unsigned char)dst[len - 1] & 0xC0) == 0xC0) len--;
     dst[len] = 0;
 }
+/* #3788: cp_utf8, and a cut is SAID -- the text ends in "…" (inside n, on a character boundary), never a sentence that stops as if it were whole */
+static void cp_utf8_dots(char *dst, size_t n, const char *src) {
+    cp(dst, n, src);
+    if (n < 5 || strlen(src) < n) return;
+    size_t len = n - 4;                                    /* room for the 3 bytes of "…" and the NUL */
+    while (len && ((unsigned char)dst[len] & 0xC0) == 0x80) len--;
+    memcpy(dst + len, "…", 4);                 /* "…" and its NUL */
+}
 static int  num(const char *s, int dflt) { return s[0] ? atoi(s) : dflt; }
 
 /* #1331: a drawer's drivers outcome -- only the words the agent writes; anything
@@ -589,7 +597,7 @@ void state_parse(State *s, FILE *fp) {
             if (nf >= 18 && (!strcmp(f[17], "checking") || !strcmp(f[17], "ok") || !strcmp(f[17], "slow")
                              || !strcmp(f[17], "failed") || !strcmp(f[17], "unchecked") || !strcmp(f[17], "history"))) {
                 cp(id->wstate, sizeof id->wstate, f[17]);
-                if (nf >= 19) cp_utf8(id->wtext, sizeof id->wtext, f[18]);
+                if (nf >= 19) cp_utf8_dots(id->wtext, sizeof id->wtext, f[18]);   /* #3788: a reason longer than the buffer ends in "…" */
             }
         } else if (KEY("cdisk_rule")) {
             /* #3666: dev|color|source|target|reason|sentence -- the agent's verdict for an idle drawer (diskrule.sh, the one table),

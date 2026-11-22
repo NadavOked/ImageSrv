@@ -104,9 +104,9 @@
 <!-- multicast -->
 <rect x="790" y="630" width="380" height="330" rx="18" class="blue"/>
 <text x="980" y="665" text-anchor="middle" class="h" direction="rtl" unicode-bidi="plaintext">מולטיקאסט + fanout</text>
-<text x="980" y="710" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">udp-sender בשרת</text>
+<text x="980" y="710" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">chunkcast send בשרת</text>
 <text x="980" y="745" text-anchor="middle" class="b">↓</text>
-<text x="980" y="775" text-anchor="middle" class="b">udp-receiver → zstd → partclone</text>
+<text x="980" y="775" text-anchor="middle" class="b">chunkcast recv → דיסק</text>
 <text x="980" y="810" text-anchor="middle" class="b">↓</text>
 <text x="980" y="840" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">דיסק 1 · דיסק 2 · דיסק 3</text>
 <rect x="825" y="865" width="310" height="65" rx="12" class="good"/>
@@ -140,7 +140,7 @@
 <!-- side paths -->
 <rect x="70" y="850" width="230" height="180" rx="18" class="purple"/>
 <text x="185" y="884" text-anchor="middle" class="h" direction="rtl" unicode-bidi="plaintext">הפצה ישירה</text>
-<text x="185" y="915" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">מחשב הבנייה = udp-sender</text>
+<text x="185" y="915" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">מחשב הבנייה = chunkcast send</text>
 <text x="185" y="943" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">שני מעברים: manifest + sha256</text>
 <text x="185" y="970" text-anchor="middle" class="s" direction="rtl" unicode-bidi="plaintext">ואז שידור · קריאה בלבד</text>
 <text x="185" y="1000" text-anchor="middle" class="b" direction="rtl" unicode-bidi="plaintext">לא נשמר אימג' בשרת</text>

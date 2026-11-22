@@ -87,7 +87,6 @@ Assistant, Cascadia Mono, ...) are system-font fallbacks; no font file is shippe
 |---|---|
 | BusyBox (`busybox-static`) | GPL-2.0 |
 | partclone | GPL-2.0+ |
-| udpcast (`udp-sender`, `udp-receiver`) | GPL-2.0; `fec.c` BSD-2-Clause |
 | ntfs-3g (`ntfs-3g`, `libntfs-3g89t64`) | GPL-2.0+; the bundled fuse-lite LGPL-2.0+ |
 | hivex (`libhivex0`, `libhivex-dev`) | LGPL-2.1 (library), GPL-2.0+ (tools such as `hivexsh`) |
 | zstd (the `zstd` tool; `libzstd1`, which `chunkcast` links dynamically) | BSD-3-Clause OR GPL-2.0 |

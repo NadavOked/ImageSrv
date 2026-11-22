@@ -252,19 +252,20 @@ test('audit: the topbar search filters table.dg rows too, never counts a group h
   assert.equal(rows.filter((r) => r.style.display === 'none').length, 0, 'a term in every data row keeps both groups');
 });
 
-test('audit: the status bar dots follow /health — green only on "ok", grey when nothing was measured', () => {
-  const {run, document} = setup();
+/* ‏#3967 (נדב 21/11): פס המצב התחתון — API · PXE · Multicast ו"תעודה עצמית · TLS" עם טביעת האצבע — ירד.
+   המידע קיים בבריאות, בדף השירותים ובהגדרות ← אבטחה ← "תעודת TLS". ב-dock נשארו המשימות והגרסה בלבד. */
+test('#3967 the bottom status bar is gone: no API/PXE/Multicast dots, no TLS fingerprint, and no code that paints them', () => {
+  const {run} = setup();
   const html = read('index.html');
-  for (const n of ['API', 'PXE', 'Multicast']) assert.match(html, new RegExp(`class="statusbar-item svc-unk" data-svc="${n}"`), n + ' starts grey, not green');
+  const dock = html.slice(html.indexOf('<div class="task-dock">'), html.indexOf('<div class="user-menu"'));
+  assert.doesNotMatch(dock, /data-svc=|statusbar-item|>API<|>PXE<|>Multicast<|id="serverTls"/, 'no service dots and no TLS slot in the dock');
+  assert.match(dock, /<span id="serverVersion"><\/span>/, 'the version stays');
   assert.doesNotMatch(html, /כל השירותים פעילים/, 'the static green claim is gone from the markup');
-  // נדב 18/10: הקופסה בתחתית העץ יצאה — מצב השרת הוא הנקודה ליד שמו (tree_server_dot.test.cjs)
-  const dot = (n) => document.querySelector(`[data-svc="${n}"]`);
-  run('HEALTH=null; healthError=""; paintServiceStatus()');
-  assert.ok(dot('Multicast').classList.contains('svc-unk'), 'no data: grey');
-  run('HEALTH=[{id:"udp_sender",state:"bad",detail:"לא נמצא"},{id:"tftp_port",state:"ok"},{id:"boot_files",state:"warn"},{id:"server",state:"ok"}]; paintServiceStatus()');
-  assert.ok(dot('Multicast').classList.contains('svc-err'), 'a failing udp_sender makes Multicast red');
-  assert.ok(dot('PXE').classList.contains('warn') === false && dot('PXE').classList.contains('svc-warn'), 'PXE = the worst of tftp_port + boot_files; the class is prefixed so the global .ok/.err message rules do not apply');
-  assert.ok(dot('API').classList.contains('svc-ok'));
+  assert.equal(run('typeof paintServiceStatus'), 'undefined');
+  assert.equal(run('typeof SERVICE_DOTS'), 'undefined');
+  assert.doesNotMatch(read('console.js'), /serverTls/, 'nothing writes the TLS line of the dock (the full card stays in settings)');
+  const css = read('console.css');
+  assert.doesNotMatch(css, /\.statusbar-item\.svc-/, 'the dot colours left with the dots');
 });
 
 // ---- S3: שורת הסטטוס אינה מכוסה ע"י ה-dock הקבוע --------------------------
@@ -287,7 +288,7 @@ test('S3 (stage 1): tasks and status are ONE bar — the status items live insid
   assert.equal(lastDecl(css, '.task-dock', 'position'), 'fixed');
   const html = read('index.html');
   const dock = html.slice(html.indexOf('<div class="task-dock">'), html.indexOf('<div class="user-menu"'));
-  assert.match(dock, /class="task-dock-head"[\s\S]*class="task-summary"[\s\S]*<div class="statusbar">[\s\S]*data-svc="API"[\s\S]*id="serverVersion"/, 'tasks, summary and the status line are in one dock');
+  assert.match(dock, /class="task-dock-head"[\s\S]*class="task-summary"[\s\S]*<div class="statusbar">[\s\S]*id="serverVersion"/, 'tasks, summary and the version are in one dock (#3967: no service dots)');
   assert.doesNotMatch(html.replace(dock, ''), /<div class="statusbar">/, 'there is no second status bar');
   assert.equal(px(lastDecl(css, '.task-dock', 'bottom')), 0, 'the dock rests on the bottom edge (no 22px bar under it any more)');
   assert.equal(px(lastDecl(css, '.task-panel', 'bottom')), px(lastDecl(css, '.task-dock', 'height')), 'task panel rests on the dock');
@@ -426,7 +427,7 @@ test('S6: .user-menu is fixed at inline-end, the same side as .user (margin-inli
 /* #931: `.main` הוא grid item עם גובה קבוע מ-.app (48px + 1fr), אבל
    `.sidebar` עצמו לא היה חתוך אליו — התוכן פשוט גדל מעבר לגבול (overflow
    גלוי כברירת מחדל) ודחף את הגוף כולו, בלי scrollbar ובלי שה-wheel יגיע
-   לאף אלמנט שבאמת גולל. נמדד בדפדפן אמיתי (127.0.0.1:8081, 1366×768):
+   לאף אלמנט שבאמת גולל. נמדד בדפדפן אמיתי (127.0.0.1:443, 1366×768):
    .sidebar.clientHeight גדל יחד עם .scrollHeight (937 שניהם) לפני התיקון,
    ואחריו .clientHeight נשאר 698 (קבוע) בעוד .scrollHeight גדל ל-847 —
    בדיוק ההפרש שמאפשר ל-`.tree{overflow-y:auto}` הקיים לעבוד.
@@ -500,7 +501,7 @@ test('S7: toggleInventoryGroup has no built-in de-dup — each call toggles once
    השורה מטגל; דאבל-קליק מדויק על הטקסט קורא ל-renameServer בלבד
    (עוצר propagation כדי שלא יגיע גם ל-ondblclick של השורה). קליק בודד
    בשום מקום בשורה הזו לא עושה כלום (לשורת שרת אין יעד ניווט).
-   נבדק חי בדפדפן (127.0.0.1:8081): דאבל-קליק על אזור האייקון טגל את
+   נבדק חי בדפדפן (127.0.0.1:443): דאבל-קליק על אזור האייקון טגל את
    srvTA; דאבל-קליק מדויק על הטקסט קרא ל-renameServer פעם אחת ו-srvTA
    נשאר פתוח (renameCalls:1, srvTAHidden:false). */
 test('S7: the primary server row (the only static one since #936) has no click-to-anything; dblclick toggles the row, and .server-name\'s own dblclick stops it from also reaching the row', () => {

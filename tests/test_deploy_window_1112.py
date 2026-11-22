@@ -82,6 +82,14 @@ def box(tmp_path: Path, images_root: Path, clock):
         return fake["raised_probe"] if (name, True) in m.links else fake["probe"]
 
     module_conf = tmp_path / "modules-load.d" / "imagesrv-bond.conf"
+    resolv = tmp_path / "resolv.conf"
+
+    def state():
+        live = m.state()
+        if resolv.exists():
+            live.nameservers.extend(netcfg_host.parse_resolv(resolv.read_text(encoding="utf-8")))
+        return live
+
     dhcp_hooks = {
         "interfaces": m.interfaces, "probe": probe, "link_set": m.link_set,
         "sleep": fake["slept"].append,
@@ -96,8 +104,8 @@ def box(tmp_path: Path, images_root: Path, clock):
         "netcfg_read_conf": lambda name, root=None: m.confs.get(name),
         "netcfg_write_conf": lambda name, text, root=None: (
             m.confs.pop(name, None) if text is None else m.confs.__setitem__(name, text)) and None,
-        "netcfg_write_resolv": lambda text, path=None: None,
-        "netcfg_apply": m.apply, "netcfg_down": m.down, "netcfg_state": m.state,
+        "netcfg_write_resolv": lambda text, path: netcfg_host.write_resolv(text, resolv),
+        "netcfg_apply": m.apply, "netcfg_down": m.down, "netcfg_state": state,
         "netcfg_bond_state": m.bond_state, "netcfg_bond_supported": lambda: True,
         "netcfg_read_bond_module": lambda: netcfg_host.read_bond_module(module_conf),
         "netcfg_write_bond_module": lambda text: netcfg_host.write_bond_module(text, module_conf),
@@ -116,10 +124,10 @@ def box(tmp_path: Path, images_root: Path, clock):
         "firewall": lambda repo, **kw: fake["deploy_calls"].append(("fw", kw["deploy_if"])) or None,
         "restart_server": lambda: fake["deploy_calls"].append(("restart",)) or None,
     }
-    ctx = deploy_net.DeployContext(state=deploy_net.DeployState("none", None, None), agent_port=8080,
+    ctx = deploy_net.DeployContext(state=deploy_net.DeployState("none", None, None), agent_port=7712,
                                    tftp_root=tmp_path / "tftp", repo_dir=REPO,
                                    servers_interface="eth0", hooks=deploy_hooks)
-    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:7712", now_fn=clock,
                      dhcp_hooks=dhcp_hooks, netcfg_hooks=netcfg_hooks, deploy=ctx,
                      netcfg_state_dir=tmp_path / "netstate")
     users.create(app.state.ctx.conn, "noc", "Admin-pass-123!", "admin", by="test")
@@ -127,10 +135,54 @@ def box(tmp_path: Path, images_root: Path, clock):
     client.post("/api/console/login", json={"username": "noc", "password": "Admin-pass-123!"})
     first = client.put(f"{CONF}/eth1/deploy", json=FIRST)
     assert first.status_code == 200 and first.json()["deploy"]["ok"], first.text
-    assert deploy_net.stored(app.state.ctx.conn) == ("eth1", "http://10.44.9.1:8080")
+    assert deploy_net.stored(app.state.ctx.conn) == ("eth1", "https://10.44.9.1:7712")
     fake["applied"].clear(); fake["deploy_calls"].clear(); fake["probed"].clear(); m.calls.clear()
     return SimpleNamespace(client=client, conn=app.state.ctx.conn, m=m, fake=fake, deploy=ctx,
-                           clock=clock)
+                           clock=clock, resolv=resolv)
+
+
+@pytest.mark.parametrize("mode, saved, other_dns", [(netcfg.MODE_DHCP, [], []),
+                                                    (netcfg.MODE_DHCP, [], ["10.1.2.53"]),
+                                                    (netcfg.MODE_STATIC, ["10.1.2.53"], [])])
+def test_deploy_save_keeps_management_dns(box, mode, saved, other_dns):
+    from server.db import set_setting
+
+    management = netcfg.NetConfig(name="eth0", mode=mode, dns=saved)
+    if mode == netcfg.MODE_STATIC:
+        management.address, management.netmask = "10.1.2.3", "255.255.255.0"
+    set_setting(box.conn, netcfg.SETTING_PREFIX + "eth0", management.to_json())
+    if other_dns:
+        other = netcfg.NetConfig(name="eth2", mode=netcfg.MODE_STATIC, address="10.80.0.1",
+                                 netmask="255.255.255.0", dns=other_dns)
+        set_setting(box.conn, netcfg.SETTING_PREFIX + "eth2", other.to_json())
+    live = ["10.20.10.1", "10.20.10.2", *other_dns]
+    box.resolv.write_text("".join(f"nameserver {ip}\n" for ip in live), encoding="utf-8")
+    response = box.client.put(f"{CONF}/eth1/deploy", json=MOVED)
+    assert response.json()["ok"], response.text
+    assert netcfg_host.parse_resolv(box.resolv.read_text(encoding="utf-8")) == (saved or live)
+
+
+def test_deploy_save_reports_dns_lost_during_apply(box, monkeypatch):
+    box.resolv.write_text("nameserver 10.20.10.1\n", encoding="utf-8")
+    original = box.m.state
+
+    def state():
+        if "10.44.30.1/24" in box.m.nics["eth1"]:
+            box.resolv.write_text("", encoding="utf-8")
+        return original()
+
+    monkeypatch.setattr(box.m, "state", state)
+    result = box.client.put(f"{CONF}/eth1/deploy", json=MOVED).json()
+    assert not result["ok"] and result["dhcp"] is None
+    assert "resolv.conf" in result["apply_error"]
+
+
+def test_deploy_save_refuses_unreadable_dns_baseline(box, monkeypatch):
+    monkeypatch.setattr(box.m, "state", lambda: netcfg_host.LiveState(False, reason="EACCES"))
+    response = box.client.put(f"{CONF}/eth1/deploy", json=MOVED)
+    assert response.status_code == 409
+    assert "resolv.conf" in response.json()["detail"] and "EACCES" in response.json()["detail"]
+    assert box.fake["applied"] == []
 
 
 def _offer(box, name="eth1") -> dhcp.InterfaceConfig:
@@ -153,13 +205,13 @@ def test_moving_the_deploy_network_finishes_on_the_new_address(box):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is True and body["server_ip"] == "10.44.30.1", body
-    assert body["deploy"]["ok"] is True and body["deploy"]["url"] == "http://10.44.30.1:8080"
+    assert body["deploy"]["ok"] is True and body["deploy"]["url"] == "https://10.44.30.1:7712"
     assert "    address 10.44.30.1" in box.m.confs["eth1"]
     assert _offer(box).server_ip == "10.44.30.1"
-    assert ("grub", "http://10.44.30.1:8080") in box.fake["deploy_calls"]
+    assert ("grub", "http://10.44.30.1:7712") in box.fake["deploy_calls"]
     assert ("restart",) in box.fake["deploy_calls"], "the server restarts on the new address"
-    assert deploy_net.stored(box.conn) == ("eth1", "http://10.44.30.1:8080")
-    assert box.deploy.state.url == "http://10.44.30.1:8080"
+    assert deploy_net.stored(box.conn) == ("eth1", "https://10.44.30.1:7712")
+    assert box.deploy.state.url == "https://10.44.30.1:7712"
     assert _events(box)[-1] == "deploy_net_set"
 
 
@@ -178,7 +230,7 @@ def test_a_failed_completion_of_the_move_is_named_and_not_recorded(box):
     body = r.json()
     assert body["ok"] is False and body["deploy"]["ok"] is False
     assert "השלמת הכתובת החדשה נכשלה" in body["apply_error"] and "nft -c נפל" in body["apply_error"]
-    assert deploy_net.stored(box.conn) == ("eth1", "http://10.44.9.1:8080"), "not recorded"
+    assert deploy_net.stored(box.conn) == ("eth1", "https://10.44.9.1:7712"), "not recorded"
     assert "deploy_net_failed" in _events(box)
 
 
@@ -208,7 +260,7 @@ def test_moving_the_deploy_network_during_a_round_is_refused_and_nothing_moves(b
     assert box.m.confs == confs and box.m.calls == []
     assert box.fake["applied"] == [] and box.fake["deploy_calls"] == []
     assert _offer(box).server_ip == "10.44.9.1"
-    assert deploy_net.stored(box.conn) == ("eth1", "http://10.44.9.1:8080")
+    assert deploy_net.stored(box.conn) == ("eth1", "https://10.44.9.1:7712")
     # the range alone may change during a round -- the address does not move
     keep = box.client.put(f"{CONF}/eth1/deploy", json={**FIRST, "range_end": "10.44.9.150"})
     assert keep.status_code == 200, keep.text
@@ -226,8 +278,8 @@ def test_a_move_that_armed_the_rollback_finishes_on_the_save_after_the_confirmat
     assert box.client.post(f"{CONF}/confirm", json={"interface": "eth1"}).status_code == 200
     again = box.client.put(f"{CONF}/eth1/deploy", json=MOVED)
     assert again.status_code == 200, again.text
-    assert again.json()["ok"] is True and again.json()["deploy"]["url"] == "http://10.44.30.1:8080"
-    assert deploy_net.stored(box.conn) == ("eth1", "http://10.44.30.1:8080")
+    assert again.json()["ok"] is True and again.json()["deploy"]["url"] == "https://10.44.30.1:7712"
+    assert deploy_net.stored(box.conn) == ("eth1", "https://10.44.30.1:7712")
 
 
 # --- #2824: no resolv.conf is "no DNS", and /second raises a disabled card ------

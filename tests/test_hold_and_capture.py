@@ -226,7 +226,7 @@ BEAT_COUNTER = (
 #: דופק שנכשל בלי הפסקה, עם הסיבה על stderr — בדיוק כמו curl.
 DEAD_BEAT = BEAT_COUNTER + (
     'beat() { _bump; [ "$_n" -ge "$BEATS" ] && exit 0; '
-    'echo "curl: (7) Failed to connect to 10.10.10.8 port 8080" >&2; '
+    'echo "curl: (7) Failed to connect to 10.10.10.8 port 7712" >&2; '
     'return 1; }; '
 )
 
@@ -303,7 +303,7 @@ def test_the_reason_curl_gave_is_not_thrown_away(tmp_path):
     להתחבר" ו"לא הצליח לפענח שם" שולחים טכנאי לשני מקומות שונים."""
     result = hold_probe(tmp_path, DEAD_BEAT)
 
-    assert "Failed to connect to 10.10.10.8 port 8080" in result["log"]
+    assert "Failed to connect to 10.10.10.8 port 7712" in result["log"]
 
 
 @native_tools

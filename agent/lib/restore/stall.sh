@@ -61,7 +61,7 @@ _stall_set() {
     # $1 = dev, $2 = kind, $3 = the epoch of its last byte.
     _ss_f="$RUN_DIR/targets/$1/stall"; _ss_k=; [ ! -r "$_ss_f" ] || read -r _ss_k _ss_x < "$_ss_f"
     [ "$_ss_k" != "$2" ] || return 0
-    # STALL_NET_LIMIT_S / STALL_DISK_LIMIT_S: the ceilings of an engine that is not udpcast+fanout (chunkstall.sh, #3336)
+    # STALL_NET_LIMIT_S / STALL_DISK_LIMIT_S: the ceilings of a stream that is not a fanout one (chunkstall.sh, #3336)
     if [ "$2" = waiting_net ]; then _ss_l=${STALL_NET_LIMIT_S:-$WAIT_STREAM_STALL_S}; else _ss_l=${STALL_DISK_LIMIT_S:-$((${FANOUT_STALL_EVICT_MS:-120000} / 1000))}; fi
     case "$_ss_l" in ''|*[!0-9]*) _ss_l=- ;; esac
     echo "$2 $3 $_ss_l" > "$_ss_f" || return 0

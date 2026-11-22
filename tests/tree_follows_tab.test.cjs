@@ -50,15 +50,14 @@ test('network tab → its own tree node is active and "רשת" is the soft ances
   assert.deepEqual(state(),{network:'anc',diagram:'',nic:'active',dist:'',ports:'',home:''},'physical connections');
   run('activateTab(2)');
   assert.deepEqual(state(),{network:'anc',diagram:'',nic:'',dist:'active',ports:'',home:''},'distribution network');
-  run('activateTab(3)');
-  assert.deepEqual(state(),{network:'anc',diagram:'',nic:'',dist:'',ports:'active',home:''},'ports tab');
+  // ‏#3887: "שירותים" אינו לשונית של הרשת אלא דף משלו בעץ (בדיקת הלחיצה על הצומת — למטה)
   run('activateTab(0)');
   assert.deepEqual(state(),{network:'anc',diagram:'active',nic:'',dist:'',ports:'',home:''},'back to the diagram node');
 });
 
 test('exactly one active node and the ancestor is never also active (no double marking)',()=>{
   const {run,nodes}=setup();
-  for (const t of [0,1,2,3,1,0]) {
+  for (const t of [0,1,2,1,0]) {
     run(`current="network"; activateTab(${t})`);
     const active=Object.values(nodes).filter((n)=>n.cls.has('active')), anc=Object.values(nodes).filter((n)=>n.cls.has('anc'));
     assert.equal(active.length,1,'tab '+t); assert.ok(anc.length<=1); assert.ok(!anc.some((n)=>n.cls.has('active')));

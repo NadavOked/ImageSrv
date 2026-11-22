@@ -40,7 +40,6 @@ def _evidence(row: dict, key: str) -> str | None:
 def _open_wave(room_server):
     ctx, anon = room_server["ctx"], room_server["anon"]
     _index_the_image(ctx, chunks=CHUNKS)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     wave, _hello = _room_wave(room_server)
     part = next(p["index"] for p in MANIFEST_256["partitions"] if p.get("file"))
 

@@ -113,7 +113,7 @@ def _hold(machine, timing: dict, env: str = "") -> str:
     """DRAWER_HOLD_S after the agent's own `read_answer` took one hello answer -- the path of test_agent_timing_2056_2059.py."""
     run = machine["run"]
     (run / "answer.json").write_text(json.dumps(answer(**timing)), encoding="utf-8")
-    out = sh(_path(run) + "unset WAIT_STREAM_STALL_S UDPCAST_STALL_TIMEOUT IDLE_POWEROFF_S END_POWEROFF_S DRAWER_HOLD_S; "
+    out = sh(_path(run) + "unset WAIT_STREAM_STALL_S STREAM_STALL_TIMEOUT IDLE_POWEROFF_S END_POWEROFF_S DRAWER_HOLD_S; "
              f'export RUN_DIR={posix(run)!r} LOG_FILE={posix(run)!r}/agent.log; ' + env
              + agent_sources(*LIBS) + "min_free_take() { :; }\n" + _cut("read_answer")
              + f'RESP={posix(run)!r}/response.json; cp {posix(run)!r}/answer.json "$RESP"; read_answer; echo "hold=$DRAWER_HOLD_S"')

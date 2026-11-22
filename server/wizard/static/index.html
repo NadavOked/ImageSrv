@@ -29,14 +29,14 @@
             <div class="notice">התפקיד נבחר בתפריט ההתקנה; אפשר לשנותו כאן.</div>
             <label class="choice"><input type="radio" name="role" value="standalone"><span><b>שרת ראשי</b><small>מנהל את ספריית האימג'ים והמחשבים באתר.</small></span></label>
             <label class="choice"><input type="radio" name="role" value="secondary"><span><b>שרת משני</b><small>מקבל אימג'ים מהשרת הראשי ומשרת אתר נוסף.</small></span></label>
-            <div id="primary-fields" class="field hidden"><label for="primary_url">כתובת השרת הראשי</label><div class="inline"><input id="primary_url" dir="ltr" placeholder="https://imagesrv-main.example:8443"><button id="check-primary" type="button" class="button">בדוק חיבור (8443)</button></div><small>כתובת מלאה כולל פורט 8443.</small><p class="error" data-error="primary_url" role="alert"></p></div>
+            <div id="primary-fields" class="field hidden"><label for="primary_url">כתובת השרת הראשי</label><div class="inline"><input id="primary_url" dir="ltr" placeholder="https://imagesrv-main.example:7700"><button id="check-primary" type="button" class="button">בדוק חיבור (7700)</button></div><small>כתובת מלאה כולל פורט 7700.</small><p class="error" data-error="primary_url" role="alert"></p></div>
             <div id="primary-result" class="notice hidden" role="status"></div>
             <p class="error" data-error="role" role="alert"></p>
           </div>
         </section>
 
         <section class="screen" data-step="2">
-          <div class="heading"><h1>הגדרת רשת הניהול (הקונסולה)</h1><p>הכרטיס שדרכו נכנסים לקונסולה ב־HTTPS 8081. רשת ההפצה מוגדרת אחר כך מהקונסולה.</p></div>
+          <div class="heading"><h1>הגדרת רשת הניהול (הקונסולה)</h1><p>הכרטיס שדרכו נכנסים לקונסולה ב־HTTPS 443. רשת ההפצה מוגדרת אחר כך מהקונסולה.</p></div>
           <div class="content">
             <div class="card"><h2>בחר כרטיס</h2><div class="table-wrap"><table><thead><tr><th></th><th>כרטיס</th><th>קישור</th><th>כתובת עכשיו</th><th>MAC</th></tr></thead><tbody id="nic-list"></tbody></table></div><p class="error" data-error="interface" role="alert"></p></div>
             <div class="choices"><label class="choice"><input type="radio" name="mode" value="dhcp"><span><b>לקוח DHCP</b><small>מומלץ ברשת המכללה.</small></span></label><label class="choice"><input type="radio" name="mode" value="static"><span><b>כתובת סטטית</b><small>לרשת ניהול ללא DHCP.</small></span></label></div>
@@ -62,7 +62,7 @@
 
         <section class="screen" data-step="progress">
           <div class="heading"><h1>מחיל את ההתקנה…</h1><p>אל תכבה את השרת. ההחלה ממשיכה גם אם הדפדפן נסגר.</p></div>
-          <div class="content"><div id="reconnect-status" class="notice warn" role="status" hidden></div><div class="card current-step"><h2>מה קורה עכשיו</h2><p id="current-step">בודק את ההגדרות…</p></div><div class="progress"><i id="progress-bar"></i></div><ol id="progress-list" class="progress-list"><li>בדיקת תקינות כוללת</li><li>שם השרת</li><li>קבצים ושירותים</li><li>העברת 8081 לקונסולה</li><li>אימות אתחול</li></ol><details><summary>פרטים טכניים</summary><pre id="output" dir="ltr"></pre></details></div>
+          <div class="content"><div id="reconnect-status" class="notice warn" role="status" hidden></div><div class="card current-step"><h2>מה קורה עכשיו</h2><p id="current-step">בודק את ההגדרות…</p></div><div class="progress"><i id="progress-bar"></i></div><ol id="progress-list" class="progress-list"><li>בדיקת תקינות כוללת</li><li>שם השרת</li><li>קבצים ושירותים</li><li>העברת 443 לקונסולה</li><li>אימות אתחול</li></ol><details><summary>פרטים טכניים</summary><pre id="output" dir="ltr"></pre></details></div>
         </section>
 
         <section class="screen" data-step="failed">

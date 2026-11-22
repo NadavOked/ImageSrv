@@ -1,11 +1,15 @@
-/* #649 domain 1: the IT toolbox screen of the build machine (native-only,
- * no HTML card). Three views on one Screen:
- *   list    -- $GUI_DIR/tools grouped by domain, a risk tag per row
- *   confirm -- what will happen, the argument (a disk row or a text field),
- *              and the typed machine name for rw/destroy (principle 7)
- *   output  -- "רץ…" with a spinner, then the tool's text and its verdict
- *              (rc 2 = "לא הצלחנו לבדוק", orange, never green -- principle 5)
- * Everything is drawn with the mockup's existing tokens: no new colour.
+/* #649 -- the toolbox's files and its two tool screens, mockup 14 page 4
+ * ("תבנית ההרצה", approved by Nadav 31/10):
+ *   the run view -- what will happen (the red box of a destructive tool), the
+ *                   input (a disk, a partition, or a text field), the run button
+ *                   (red for a destructive tool; rw/destroy then ask in the #1270
+ *                   dialog -- no typed name)
+ *   the result   -- the spinner while it runs, then a card whose colour is the
+ *                   tool's rc: 0 green, 2 "לא הצלחנו לבדוק" orange and dashed --
+ *                   never green (principle 5), anything else red; the tool's text
+ *                   under it, and the save line when the tool says where (dest_rec)
+ * The home and a category's list are screens_tools_home.c; the keys tools_nav.c.
+ * Everything is drawn with the existing tokens: no new colour.
  * The bridge side is agent/lib/tools/tools.sh (tools_gui_list / tools_gui_run). */
 #include <math.h>
 #include <stdio.h>
@@ -13,6 +17,8 @@
 #include <string.h>
 #include <sys/stat.h>
 #include "screens_rounds.h"
+#include "tools.h"
+#include "lcui.h"
 
 /* ---- the files next to --state ------------------------------------------------ */
 
@@ -60,15 +66,25 @@ int tools_risk_level(const char *risk) {
     return 2;                                 /* destroy, and every unknown word (tools.sh) */
 }
 
-/* machine=<name> first, then id|domain|title|risk|args per line. A row with
- * an empty id, domain or title is skipped (tools.sh drops those too). */
+/* One line of a '|' file into at most <max> fields; the missing ones are "". */
+static int fields(char *line, char **f, int max) {
+    int n = 0;
+    f[n++] = line;
+    for (char *q = line; *q && n < max; q++) if (*q == '|') { *q = 0; f[n++] = q + 1; }
+    for (int i = n; i < max; i++) f[i] = "";
+    return n;
+}
+
+/* machine=<name> first, then id|domain|title|risk|args[|what] per line -- the
+ * sixth field (a one-line description) is optional. A row with an empty id,
+ * domain or title is skipped (tools.sh drops those too). */
 void tools_parse(App *a, const char *text) {
     a->ntools = 0; a->tools_machine[0] = 0;
     const char *p = text;
     while (*p) {
         const char *nl = strchr(p, '\n');
         size_t len = nl ? (size_t)(nl - p) : strlen(p);
-        char line[512];
+        char line[768];
         if (len >= sizeof line) len = sizeof line - 1;
         memcpy(line, p, len); line[len] = 0;
         line[strcspn(line, "\r")] = 0;
@@ -76,19 +92,39 @@ void tools_parse(App *a, const char *text) {
         if (!line[0] || line[0] == '#') continue;
         if (!strncmp(line, "machine=", 8)) { cp(a->tools_machine, sizeof a->tools_machine, line + 8); continue; }
         if (a->ntools >= MAX_TOOLS) continue;
-        char *f[5]; int n = 0;
-        f[n++] = line;
-        for (char *q = line; *q && n < 5; q++) if (*q == '|') { *q = 0; f[n++] = q + 1; }
-        for (int i = n; i < 5; i++) f[i] = "";
+        char *f[6];
+        fields(line, f, 6);
         if (!f[0][0] || !f[1][0] || !f[2][0]) continue;
         Tool *t = &a->tools[a->ntools++];
         cp(t->id, sizeof t->id, f[0]); cp(t->domain, sizeof t->domain, f[1]);
         cp(t->title, sizeof t->title, f[2]); cp(t->risk, sizeof t->risk, f[3][0] ? f[3] : "destroy");
-        cp(t->args, sizeof t->args, f[4]);
+        cp(t->args, sizeof t->args, f[4]); cp(t->what, sizeof t->what, f[5]);
     }
     a->tools_loaded = 1;
     if (a->tool_sel >= a->ntools) a->tool_sel = -1;
-    if (a->tool_list_scroll >= a->ntools) a->tool_list_scroll = 0;
+}
+
+/* $GUI_DIR/tool-parts: dev|disk|size_bytes|fstype|label per partition */
+static void parts_parse(App *a, const char *text) {
+    a->ntool_parts = 0;
+    const char *p = text;
+    while (*p && a->ntool_parts < MAX_TOOL_PARTS) {
+        const char *nl = strchr(p, '\n');
+        size_t len = nl ? (size_t)(nl - p) : strlen(p);
+        char line[256];
+        if (len >= sizeof line) len = sizeof line - 1;
+        memcpy(line, p, len); line[len] = 0;
+        line[strcspn(line, "\r")] = 0;
+        p = nl ? nl + 1 : p + len;
+        char *f[5];
+        fields(line, f, 5);
+        if (!f[0][0] || strpbrk(f[0], "/ ")) continue;   /* a device name, nothing else (it is sent as /dev/<it>) */
+        ToolPart *t = &a->tool_parts[a->ntool_parts++];
+        cp(t->dev, sizeof t->dev, f[0]); cp(t->disk, sizeof t->disk, f[1]);
+        t->size = strtoull(f[2], NULL, 10);
+        cp(t->fstype, sizeof t->fstype, f[3]); cp(t->label, sizeof t->label, f[4]);
+    }
+    if (a->tool_part_sel >= a->ntool_parts) a->tool_part_sel = -1;
 }
 
 void tool_output_set(App *a, const char *text) {
@@ -110,9 +146,8 @@ void tool_output_set(App *a, const char *text) {
  * earlier session is ignored, and so is another tool's. */
 static int result_take(App *a, const char *text) {
     char line[600]; cp(line, sizeof line, text); line[strcspn(line, "\r\n")] = 0;
-    char *f[4]; int n = 0; f[n++] = line;
-    for (char *q = line; *q && n < 4; q++) if (*q == '|') { *q = 0; f[n++] = q + 1; }
-    if (n < 4) return 0;
+    char *f[4];
+    if (fields(line, f, 4) < 4) return 0;
     long seq = strtol(f[3], NULL, 10);
     if (seq <= a->tool_seq) return 0;
     if (a->tool_sel < 0 || strcmp(f[0], a->tools[a->tool_sel].id)) return 0;
@@ -131,8 +166,19 @@ int tools_poll(App *a) {
     int dirty = 0; char path[600];
     snprintf(path, sizeof path, "%s/tools", a->tools_dir);
     if (file_mark(path, &a->tools_mark) == 1) {
-        char *text = read_all(path, 64 * 1024);
+        char *text = read_all(path, 128 * 1024);
         if (text) { tools_parse(a, text); free(text); dirty = 1; }
+    }
+    /* tool-parts is written with the list; missing = "could not read", never "none" */
+    snprintf(path, sizeof path, "%s/tool-parts", a->tools_dir);
+    int pm = file_mark(path, &a->parts_mark);
+    if (pm == 1) {
+        char *text = read_all(path, 16 * 1024);
+        a->tool_parts_ok = text != NULL;
+        if (text) { parts_parse(a, text); free(text); } else a->ntool_parts = 0;
+        dirty = 1;
+    } else if (pm < 0 && a->tool_parts_ok) {
+        a->tool_parts_ok = 0; a->ntool_parts = 0; a->parts_mark.seen = 0; dirty = 1;
     }
     snprintf(path, sizeof path, "%s/tool-result", a->tools_dir);
     if (file_mark(path, &a->result_mark) == 1) {
@@ -142,310 +188,369 @@ int tools_poll(App *a) {
     return dirty;
 }
 
-/* --png sample: three domains, every risk level, one tool with a disk arg. */
-void tools_sample(App *a) {
-    tools_parse(a,
-        "machine=BUILD-01\n"
-        "sysinfo|hw|זיהוי המחשב: יצרן, דגם, מספר סידורי, BIOS|ro|\n"
-        "smart-health|disk|בריאות SMART של כל דיסק|ro|\n"
-        "chkdsk|disk|בדיקת NTFS ותיקון שגיאות|rw|disk:הדיסק לבדיקה\n"
-        "wipe|disk|מחיקה מלאה של דיסק|destroy|disk:הדיסק למחיקה\n"
-        "ping|net|בדיקת קישוריות לשרת|ro|כתובת או שם מחשב\n"
-        "bootfix|boot|תיקון מטען האתחול של Windows|rw|\n");
-}
+/* ---- the disks a tool can be pointed at ---------------------------------------- */
 
-/* ---- shared pieces -------------------------------------------------------------- */
-
-static const char *domain_title(const char *d) {
-    if (!strcmp(d, "disk"))    return "דיסקים";
-    if (!strcmp(d, "net"))     return "רשת";
-    if (!strcmp(d, "windows")) return "Windows";
-    if (!strcmp(d, "boot"))    return "אתחול";
-    if (!strcmp(d, "hw"))      return "חומרה";
-    return d;
-}
-static const char *DOMAIN_ORDER[] = { "disk", "net", "windows", "boot", "hw" };
-
-/* The risk tag: grey "קריאה בלבד" / orange "משנה דיסק" / red "הרסני", drawn
- * from the metric / warning / danger token triples of the mockup. */
-static const char *risk_word(int level) { return level == 0 ? "קריאה בלבד" : level == 1 ? "משנה דיסק" : "הרסני"; }
-static void risk_colors(const Theme *t, int level, Rgb *bg, Rgb *line, Rgb *ink) {
-    if (level == 0)      { *bg = t->metric;     *line = t->metric_line;  *ink = t->muted; }
-    else if (level == 1) { *bg = t->warning_bg; *line = t->warning_line; *ink = t->warning_ink; }
-    else                 { *bg = t->danger_bg;  *line = t->danger_line;  *ink = t->danger_fg;}
-}
-static double tag_draw(cairo_t *cr, const Theme *t, double x, double cy, const char *word, Rgb bg, Rgb line, Rgb ink) {
-    /* The triple is chosen by the caller; the box is the console's .tag:
-     * padding 3px 7px, 1px border, radius --r, font-size --t-xs (11px). */
-    Text w = text_make(cr, FONT_SANS, 11, 400, word, 0, DIR_RTL);
-    Rect r = { x, cy - (w.h + 8) / 2, w.w + 16, w.h + 8 };
-    draw_fill_rrect(cr, r, t->radius, bg);
-    draw_border_rrect(cr, r, t->radius, line, N_BORDER);
-    text_draw(cr, &w, r.x + 8, r.y + 4, ink);
-    text_free(&w);
-    return r.w;
-}
-
-static int arg_is_disk(const Tool *t) { return !strncmp(t->args, "disk:", 5); }
-
-/* ---- the list ---------------------------------------------------------------------- */
-
-/* Flattened: -1-k = the heading of DOMAIN_ORDER[k] (or of an unlisted
- * domain, -100-i for the first tool i carrying it), i >= 0 = tool i. */
-static int list_items(const App *a, int *items, int max) {
-    int n = 0, placed[MAX_TOOLS] = {0};
-    for (size_t k = 0; k < sizeof DOMAIN_ORDER / sizeof DOMAIN_ORDER[0]; k++) {
-        int first = 1;
-        for (int i = 0; i < a->ntools && n < max - 1; i++) {
-            if (placed[i] || strcmp(a->tools[i].domain, DOMAIN_ORDER[k])) continue;
-            if (first) { items[n++] = -1 - (int)k; first = 0; }
-            items[n++] = i; placed[i] = 1;
+int tools_disks(const App *a, ToolDisk *out, int max) {
+    const State *s = &a->st;
+    int n = 0;
+    if (s->ndisks) {                                   /* the build machine: disk= (guistate.sh) */
+        for (int i = 0; i < s->ndisks && n < max; i++) {
+            const Disk *d = &s->disks[i]; ToolDisk *o = &out[n++];
+            cp(o->dev, sizeof o->dev, d->dev); cp(o->model, sizeof o->model, d->model[0] ? d->model : "דיסק");
+            if (d->slot_known && eff_drawer(d->drawer, 0) > 0) snprintf(o->label, sizeof o->label, "דיסק %d", eff_drawer(d->drawer, 0));
+            else cp(o->label, sizeof o->label, o->model);
+            o->size = d->size_bytes;
+            cp(o->on, sizeof o->on, d->dev);
         }
-    }
-    for (int i = 0; i < a->ntools && n < max - 1; i++) {
-        if (placed[i]) continue;
-        items[n++] = -100 - i;
-        for (int j = i; j < a->ntools && n < max; j++)
-            if (!placed[j] && !strcmp(a->tools[j].domain, a->tools[i].domain)) { items[n++] = j; placed[j] = 1; }
+    } else if (s->lc.ndisks) {                         /* the USB stick / the local clone: lc_disk= */
+        for (int i = 0; i < s->lc.ndisks && n < max; i++) {
+            const LcDisk *d = &s->lc.disks[i]; ToolDisk *o = &out[n++];
+            cp(o->dev, sizeof o->dev, d->dev); cp(o->model, sizeof o->model, d->model);
+            char l[LC_LABEL_MAX]; lc_disk_label(d, l, sizeof l); cp(o->label, sizeof o->label, l);
+            char h[200]; lc_has_text(d, h, sizeof h); cp(o->on, sizeof o->on, h);
+            o->size = d->size;
+        }
+    } else {                                           /* the cloner's wait: its drawers */
+        for (int i = 0; i < s->nidisks && n < max; i++) {
+            const IdleDisk *d = &s->idisks[i]; ToolDisk *o = &out[n++];
+            cp(o->dev, sizeof o->dev, d->dev); cp(o->model, sizeof o->model, d->model);
+            if (eff_drawer(d->drawer, 0) > 0) snprintf(o->label, sizeof o->label, "דיסק %d", eff_drawer(d->drawer, 0));
+            else cp(o->label, sizeof o->label, d->model[0] ? d->model : d->dev);
+            o->size = d->size; cp(o->on, sizeof o->on, d->dev);
+        }
     }
     return n;
 }
 
-static const char *item_heading(const App *a, int item) {
-    if (item <= -100) return domain_title(a->tools[-100 - item].domain);
-    return domain_title(DOMAIN_ORDER[-1 - item]);
+/* ---- --png: mockup 14's catalogue (tools_sample.c) ------------------------------- */
+
+extern const char TOOLS_SAMPLE[];
+void tools_sample(App *a) {
+    tools_parse(a, TOOLS_SAMPLE);
+    if (!a->tool_parts_ok) {
+        parts_parse(a, "sda1|sda|104857600|vfat|EFI\nsda2|sda|16777216||\nsda3|sda|499000000000|ntfs|Windows\n");
+        a->tool_parts_ok = 1;
+    }
 }
 
-static void tools_list_view(App *a, cairo_t *cr, double W, double H, double head_h) {
+/* ---- shared pieces ------------------------------------------------------------ */
+
+static int line_is_ascii(const char *s) { for (; *s; s++) if ((unsigned char)*s >= 0x80) return 0; return 1; }
+
+/* a Latin run kept left-to-right inside a Hebrew line: LRM on both sides, so its edge slashes stay
+ * with it ("/dev/sda" was drawn "dev/sda/" in the RTL row; FSI/LRI did not hold it here) */
+static void ltr_isolate(const char *in, char *out, size_t n) { snprintf(out, n, "\xE2\x80\x8E%s\xE2\x80\x8E", in); }
+
+static int arg_kind(const Tool *t) { return !strncmp(t->args, "disk:", 5) ? 1 : !strncmp(t->args, "part:", 5) ? 2 : t->args[0] ? 3 : 0; }
+
+/* The target the run is sent to, as the person sees it ("דיסק 2", "מחיצה sda1",
+ * the typed value), or "" for a tool that reads the whole machine. */
+static void target_label(const App *a, char *out, size_t n) {
+    const Tool *t = &a->tools[a->tool_sel];
+    out[0] = 0;
+    if (arg_kind(t) == 1) {
+        ToolDisk d[MAX_DISKS + LC_MAX_DISKS]; int nd = tools_disks(a, d, MAX_DISKS + LC_MAX_DISKS);
+        if (a->tool_disk_sel >= 0 && a->tool_disk_sel < nd) snprintf(out, n, "%s", d[a->tool_disk_sel].label);
+    } else if (arg_kind(t) == 2) {
+        if (a->tool_part_sel >= 0 && a->tool_part_sel < a->ntool_parts) snprintf(out, n, "מחיצה %s", a->tool_parts[a->tool_part_sel].dev);
+    } else if (arg_kind(t) == 3) snprintf(out, n, "%s", a->tool_arg);
+}
+
+static void crumb_of(const App *a, char *out, size_t n) {
+    snprintf(out, n, "כלים › %s ›", TOOL_CATS[tool_cat_of(&a->tools[a->tool_sel])].title);
+}
+
+/* .alert.bad / .alert.warn: the soft fill, a 1px line, the round "!" (24px) and
+ * a bold first sentence (15px) over the rest (14px) */
+static double alert_box(App *a, cairo_t *cr, double x0, double cw, double y, int bad, const char *b, const char *rest) {
     const Theme *t = a->theme;
-    double inner = card_width(W) - 2 * N_PAD, btn_h = btn_height(cr);
-    char sub[240];
-    if (a->tools_machine[0])
-        snprintf(sub, sizeof sub, "כלי אבחון ותיקון לאיש ה-IT. פעולה שמשנה דיסק נשאלת בחלון אישור — %s.", a->tools_machine);
-    else
-        snprintf(sub, sizeof sub, "כלי אבחון ותיקון לאיש ה-IT. פעולה שמשנה דיסק נשאלת בחלון אישור.");
-    Head hd = head_make(cr, "כלים", sub, inner);
-    int items[MAX_TOOLS + 16], nitems = list_items(a, items, MAX_TOOLS + 16);
-    int cols = inner < N_NARROW_W ? 1 : 2;
-    double cw = (inner - (cols - 1) * N_CHOICE_GAP) / cols;
-    double row_h = 2 * N_LABEL_GAP + 2 * N_ACTION_GAP + text_line_height(cr, FONT_SANS, N_CHOICE_TITLE);
-    double head_row = text_line_height(cr, FONT_SANS, N_LABEL) + N_LABEL_GAP + N_ACTION_GAP;
-
-    Text labels[3]; int kinds[3], ids[3], nb = 0;
-    labels[nb] = btn_label(cr, "חזרה"); kinds[nb] = BTN_PLAIN; ids[nb++] = HIT_BACK;
-    /* body: fill the card; the frame clips what does not fit, the scroll
-     * buttons in the footer move the window (no wheel in input.c). */
-    Rect body, foot;
-    card_frame(a, cr, W, H, head_h, &hd, H, foot_height(cr, btn_h), &body, &foot);
-    body_clip_begin(a, cr, body);
-    double x0 = body.x + N_PAD, y0 = body.y + N_PAD, avail = body.h - N_PAD;
-    if (!a->tools_loaded || nitems == 0) {
-        Text empty = sub_make(cr, a->tools_loaded ? "לא נבחרו כלים בשרת (תשתית › ארגז כלים)." : "טוען את רשימת הכלים…", inner);
-        text_draw_r(cr, &empty, x0 + inner, y0, t->muted);
-        text_free(&empty);
-    }
-    if (a->tool_list_scroll < 0 || a->tool_list_scroll >= nitems) a->tool_list_scroll = 0;
-    int i = a->tool_list_scroll, shown_all = 1;
-    for (int c = 0; c < cols && i < nitems; c++) {
-        double x = x0 + inner - cw - c * (cw + N_CHOICE_GAP), y = y0;
-        while (i < nitems) {
-            double h = items[i] < 0 ? head_row : row_h;
-            if (y + h > y0 + avail) { shown_all = 0; break; }
-            if (items[i] < 0) {
-                Text hl = label_make(cr, item_heading(a, items[i]), cw);
-                text_draw(cr, &hl, x, y + N_ACTION_GAP, t->muted);
-                text_free(&hl);
-            } else {
-                const Tool *tool = &a->tools[items[i]];
-                int level = tools_risk_level(tool->risk);
-                Rect r = { x, y, cw, row_h - N_LABEL_GAP };
-                int hov = hovered(a, r);
-                draw_fill_rrect(cr, r, RADIUS_SM, hov ? t->indigo_soft : t->choice);
-                draw_border_rrect(cr, r, RADIUS_SM, hov ? t->selected_line : t->choice_line, N_BORDER);
-                Rgb bg, line, ink; risk_colors(t, level, &bg, &line, &ink);
-                double tw = tag_draw(cr, t, r.x + N_ACTION_GAP, r.y + r.h / 2, risk_word(level), bg, line, ink);
-                Text ti = rtl_block_make(cr, N_CHOICE_TITLE, 500, tool->title, cw - 3 * N_ACTION_GAP - tw);
-                text_draw(cr, &ti, r.x + 2 * N_ACTION_GAP + tw, r.y + (r.h - ti.h) / 2, t->ink);
-                text_free(&ti);
-                hit_add(a, r, HIT_TOOL_BASE + items[i]);
-            }
-            y += h; i++;
-        }
-    }
-    body_clip_end(a, cr);
-    if (!shown_all || a->tool_list_scroll > 0) {
-        labels[nb] = btn_label(cr, "למטה"); kinds[nb] = BTN_PLAIN; ids[nb++] = HIT_TOOL_DOWN;
-        labels[nb] = btn_label(cr, "למעלה"); kinds[nb] = BTN_PLAIN; ids[nb++] = HIT_TOOL_UP;
-    }
-    foot_draw_bg(cr, t, foot);
-    foot_buttons(a, cr, foot, labels, kinds, ids, nb);
-    card_end(a, cr);
+    double iw = cw - 32 - 24 - 12;
+    Text tb = text_make(cr, FONT_SANS, 15, 600, b, (int)iw, DIR_RTL), tr = text_make(cr, FONT_SANS, 14, 400, rest, (int)iw, DIR_RTL);
+    double h = 12 + tb.h + tr.h + 12;
+    Rect r = { x0, y, cw, h };
+    draw_fill_rrect(cr, r, RADIUS_SM, bad ? t->danger_soft : t->warning_soft);
+    draw_border_rrect(cr, r, RADIUS_SM, bad ? t->danger : t->warn, 1);
+    double xr = r.x + r.w - 16;
+    cairo_new_sub_path(cr); cairo_arc(cr, xr - 12, y + 12 + 13, 12, 0, 2 * M_PI); draw_set(cr, bad ? t->danger : t->warn); cairo_fill(cr);
+    Text ex = text_make(cr, FONT_SANS, 14, 700, "!", 0, DIR_LTR);
+    text_draw(cr, &ex, xr - 12 - ex.w / 2.0, y + 12 + 13 - ex.h / 2.0, t->on_ink); text_free(&ex);
+    text_draw_r(cr, &tb, xr - 24 - 12, y + 12, bad ? t->danger_fg : t->warning_ink);
+    text_draw_r(cr, &tr, xr - 24 - 12, y + 12 + tb.h, t->ink);
+    text_free(&tb); text_free(&tr);
+    return h;
 }
 
-/* ---- confirm: argument + the machine name ---------------------------------------- */
+/* .pick: a radio, "דיסק 2" over its details, the size at the far edge. The
+ * chosen row: a 2px line and the soft fill -- red for a destructive tool
+ * (.pick.sel), blue otherwise (.pick.bsel). */
+static void pick_row(App *a, cairo_t *cr, Rect r, const char *title, const char *detail, const char *size,
+                     const char *small, int sel, int red, int id) {
+    const Theme *t = a->theme;
+    int hov = hovered(a, r);
+    Rgb c = red ? t->danger : t->indigo;
+    draw_fill_rrect(cr, r, RADIUS_SM, sel ? (red ? t->danger_soft : t->indigo_soft) : t->surface);
+    draw_border_rrect(cr, r, RADIUS_SM, sel ? c : hov ? t->indigo : t->hair, sel ? 2 : 1);
+    double xr = r.x + r.w - 14, cy = r.y + r.h / 2;
+    cairo_new_sub_path(cr);
+    if (sel) { cairo_arc(cr, xr - 8, cy, 5.5, 0, 2 * M_PI); cairo_set_line_width(cr, 5); draw_set(cr, c); cairo_stroke(cr); }
+    else { cairo_arc(cr, xr - 8, cy, 7, 0, 2 * M_PI); cairo_set_line_width(cr, 2); draw_set(cr, t->hair); cairo_stroke(cr); }
+    double tx = xr - 16 - 12, iw = r.w - 28 - 28 - 190;
+    Text tt = tools_line(cr, FONT_SANS, 14, 600, title, iw, 1), td = tools_line(cr, FONT_SANS, 12.5, 400, detail, iw, 1);
+    double by = cy - (tt.h + td.h) / 2;
+    text_draw_r(cr, &tt, tx, by, t->ink); text_draw_r(cr, &td, tx, by + tt.h, t->muted);
+    Text ts = text_make(cr, FONT_MONO, 15, 500, size, 0, DIR_LTR), tm = text_make(cr, FONT_MONO, 11.5, 400, small, 0, DIR_LTR);
+    pango_layout_set_width(tm.layout, 180 * PANGO_SCALE); pango_layout_set_ellipsize(tm.layout, PANGO_ELLIPSIZE_END);
+    pango_layout_get_pixel_size(tm.layout, &tm.w, &tm.h);
+    double sy = cy - (ts.h + tm.h) / 2, sx = r.x + 14;   /* .sz: at the far edge, text-align left */
+    text_draw(cr, &ts, sx, sy, t->ink); text_draw(cr, &tm, sx, sy + ts.h, t->muted);
+    text_free(&tt); text_free(&td); text_free(&ts); text_free(&tm);
+    hit_add(a, r, id);
+}
+
+/* ---- the run view: what will happen, the input, the button ---------------------- */
 
 static void tools_confirm_view(App *a, cairo_t *cr, double W, double H, double head_h) {
-    const Theme *t = a->theme; const State *s = &a->st;
+    const Theme *t = a->theme;
     const Tool *tool = &a->tools[a->tool_sel];
-    int level = tools_risk_level(tool->risk);
-    double inner = card_width(W) - 2 * N_PAD, in_h = field_height(cr), btn_h = btn_height(cr);
-    char sub[200];
-    snprintf(sub, sizeof sub, "%s · %s", domain_title(tool->domain), risk_word(level));
-    Head hd = head_make(cr, tool->title, sub, inner);
-
-    Text warn = { NULL, 0, 0 }; double warn_h = 0;
-    if (level) {
-        warn = alert_make(cr, level == 1 ? "הפעולה משנה את הדיסק של המחשב הזה. ודאו שזה המחשב הנכון לפני שממשיכים."
-                                         : "פעולה הרסנית: מה שיימחק לא יחזור. ודאו שזה המחשב והדיסק הנכונים.", inner);
-        warn_h = alert_height(&warn) + N_ACTION_TOP;
+    int level = tools_risk_level(tool->risk), kind = arg_kind(tool), compact = H < 700;
+    double x0, cw; tools_col(W, &x0, &cw, 0);
+    double y = head_h + (compact ? 16 : 30), bottom = H - N_STATUS_H - (compact ? 10 : 16);
+    char crumb[160]; crumb_of(a, crumb, sizeof crumb);
+    y = tools_title(a, cr, x0, cw, y, crumb, tool->title, tool->what, level, 0) + (compact ? 12 : 20);
+    if (level == 2) y += alert_box(a, cr, x0, cw, y, 1, "מה שיימחק לא יחזור.", "ודאו שזה המחשב והדיסק הנכונים לפני שממשיכים.") + 12;
+    else if (level == 1) y += alert_box(a, cr, x0, cw, y, 0, "הכלי משנה את המחשב הזה.", "ודאו שזה המחשב הנכון לפני שממשיכים.") + 12;
+    double btn_y = bottom - 38, list_bottom = btn_y - 18 - (ERROR_MIN_H + 4);
+    if (kind) {   /* the question: the label from args (mockup h3, 14px 600) */
+        Text q = tools_line(cr, FONT_SANS, 14, 600, kind == 3 ? tool->args : tool->args + 5, cw, 1);
+        text_draw_r(cr, &q, x0 + cw, y, t->ink); y += q.h + 8; text_free(&q);
     }
-    int disk = arg_is_disk(tool), has_arg = tool->args[0] != 0;
-    Text l_arg = { NULL, 0, 0 }; double arg_h = 0, drow = 0;
-    if (has_arg) {
-        l_arg = label_make(cr, disk ? tool->args + 5 : tool->args, inner);
-        drow = 2 * N_LABEL_GAP + 2 * N_ACTION_GAP + text_line_height(cr, FONT_SANS, N_CHOICE_TITLE);
-        arg_h = l_arg.h + N_LABEL_GAP + (disk ? (s->ndisks ? s->ndisks : 1) * drow : in_h) + N_FORM_GAP;
-    }
-    Text err = error_make(cr, a->tool_error, inner);
-    double body_h = N_PAD + warn_h + arg_h + dmax(err.h, ERROR_MIN_H);
-
-    /* one destructive pattern: the run button opens only once what tool_run()
-     * needs is there (disk, argument), red only for a destructive tool, named
-     * after the tool; rw/destroy then ask in the #1270 confirm dialog (no
-     * typed machine name any more). */
-    int ready = (!disk || (a->tool_disk_sel >= 0 && a->tool_disk_sel < s->ndisks)) &&
-                (disk || !has_arg || a->tool_arg[0]);
-    char run_label[160];
-    if (level == 2 && strlen(tool->title) < 60) snprintf(run_label, sizeof run_label, "הרץ: %s…", tool->title);
-    else snprintf(run_label, sizeof run_label, level ? "הרץ…" : "הרץ");
-    Text labels[2]; int kinds[2], ids[2], nb = 0;
-    labels[nb] = btn_label(cr, run_label); kinds[nb] = !ready ? BTN_OFF : level == 2 ? BTN_DANGER : BTN_PRIMARY; ids[nb++] = HIT_TOOL_RUN;
-    labels[nb] = btn_label(cr, "חזרה"); kinds[nb] = BTN_PLAIN; ids[nb++] = HIT_TOOL_LIST;
-
-    Rect body, foot;
-    card_frame(a, cr, W, H, head_h, &hd, body_h, foot_height(cr, btn_h), &body, &foot);
-    body_clip_begin(a, cr, body);
-    double x = body.x + N_PAD, y = body.y + N_PAD;
-    if (level) { draw_alert(cr, t, (Rect){ x, y, inner, alert_height(&warn) }, &warn); y += warn_h; }
-    if (has_arg) {
-        text_draw(cr, &l_arg, x, y, t->muted); y += l_arg.h + N_LABEL_GAP;
-        if (disk) {
-            if (!s->ndisks) {
-                Text none = sub_make(cr, "לא נמצא דיסק במחשב הזה.", inner);
-                text_draw_r(cr, &none, x + inner, y, t->danger_fg); text_free(&none); y += drow;
-            }
-            for (int i = 0; i < s->ndisks; i++) {
-                const Disk *d = &s->disks[i];
-                Rect r = { x, y, inner, drow - N_LABEL_GAP };
-                int sel = a->tool_disk_sel == i, hov = hovered(a, r);
-                draw_fill_rrect(cr, r, RADIUS_SM, sel ? t->disk_selected : hov ? t->indigo_soft : t->disk_bg);
-                draw_border_rrect(cr, r, RADIUS_SM, sel ? t->disk_selected_line : t->disk_line, N_BORDER);
-                char sz[32], info[160]; fmt_bytes(sz, sizeof sz, (double)d->size_bytes);
-                snprintf(info, sizeof info, "%s · %s · %s", d->model[0] ? d->model : "דיסק", sz, d->dev);
-                Text ti = rtl_block_make(cr, N_CHOICE_TITLE, sel ? 700 : 500, info, inner - 2 * N_ACTION_GAP);
-                text_draw(cr, &ti, r.x + N_ACTION_GAP, r.y + (r.h - ti.h) / 2, t->ink);
-                text_free(&ti);
-                hit_add(a, r, HIT_TOOL_DISK_BASE + i);
-                y += drow;
-            }
-        } else {
-            draw_field(a, cr, (Rect){ x, y, inner, in_h }, a->tool_arg, 0, NULL, HIT_TOOL_ARG);
-            y += in_h;
+    double pitch = 62;
+    if (kind == 1 || kind == 2) {
+        ToolDisk d[MAX_DISKS + LC_MAX_DISKS];
+        int n = kind == 1 ? tools_disks(a, d, MAX_DISKS + LC_MAX_DISKS) : a->ntool_parts;
+        int sel = kind == 1 ? a->tool_disk_sel : a->tool_part_sel;
+        if (kind == 2 && !a->tool_parts_ok) {   /* principle 5: not read is not "none" -- orange */
+            n = 0;
+            Text e = text_make(cr, FONT_SANS, 14, 600, "לא הצלחנו לקרוא את המחיצות של המחשב הזה — אין ממה לבחור.", (int)cw, DIR_RTL);
+            text_draw_r(cr, &e, x0 + cw, y, t->warning_ink); y += e.h + 8; text_free(&e);
+        } else if (!n) {
+            Text e = text_make(cr, FONT_SANS, 14, 400, kind == 1 ? "לא נמצא דיסק במחשב הזה." : "אין מחיצות במחשב הזה.", (int)cw, DIR_RTL);
+            text_draw_r(cr, &e, x0 + cw, y, t->muted); y += e.h + 8; text_free(&e);
         }
-        y += N_FORM_GAP;
+        int per = (int)floor((list_bottom - y + 6) / pitch);
+        if (per < 1) per = 1;
+        int first = sel >= per ? sel - per + 1 : 0;
+        for (int i = first; i < n && i < first + per; i++) {
+            char sz[32], detail[400], small[96];
+            if (kind == 1) {
+                fmt_bytes(sz, sizeof sz, (double)d[i].size);
+                int named = strcmp(d[i].label, d[i].model) != 0;   /* "דיסק 2" over its model; a model once */
+                char m[120], o[240];   /* Latin runs (the model, /dev/sda) isolated: a slash does not jump sides */
+                ltr_isolate(named ? d[i].model : "", m, sizeof m);
+                if (line_is_ascii(d[i].on)) ltr_isolate(d[i].on, o, sizeof o); else snprintf(o, sizeof o, "%s", d[i].on);
+                snprintf(detail, sizeof detail, "%s%s%s", named ? m : "", named && d[i].on[0] ? " · " : "", o);
+                snprintf(small, sizeof small, "%s", d[i].model);
+                pick_row(a, cr, (Rect){ x0, y, cw, pitch - 6 }, d[i].label, detail, sz, small, i == sel, level == 2, HIT_TOOL_DISK_BASE + i);
+            } else {
+                const ToolPart *p = &a->tool_parts[i]; char ttl[64];
+                fmt_bytes(sz, sizeof sz, (double)p->size);
+                snprintf(ttl, sizeof ttl, "מחיצה %s", p->dev);
+                snprintf(detail, sizeof detail, "%s%s%s · בדיסק %s", p->fstype[0] ? p->fstype : "סוג לא מזוהה",
+                         p->label[0] ? " · " : "", p->label, p->disk[0] ? p->disk : "לא ידוע");
+                snprintf(small, sizeof small, "/dev/%s", p->dev);
+                pick_row(a, cr, (Rect){ x0, y, cw, pitch - 6 }, ttl, detail, sz, small, i == sel, level == 2, HIT_TOOL_PART_BASE + i);
+            }
+            y += pitch;
+        }
+        if (n > per) {
+            char more[64]; snprintf(more, sizeof more, "%d–%d מתוך %d · ↑ ↓", first + 1, first + per < n ? first + per : n, n);
+            Text m = text_make(cr, FONT_SANS, 12.5, 400, more, 0, DIR_RTL);
+            text_draw_r(cr, &m, x0 + cw - 4, y - 2, t->muted); y += m.h; text_free(&m);
+        }
+    } else if (kind == 3) {
+        draw_field(a, cr, (Rect){ x0, y, cw, field_height(cr) }, a->tool_arg, 0, NULL, HIT_TOOL_ARG);
+        y += field_height(cr) + 8;
     }
-    text_draw(cr, &err, x, y, t->danger_fg);
-    body_clip_end(a, cr);
-    foot_draw_bg(cr, t, foot);
-    foot_buttons(a, cr, foot, labels, kinds, ids, nb);
-    card_end(a, cr);
-    if (level) text_free(&warn);
-    if (has_arg) text_free(&l_arg);
-    text_free(&err);
+    if (a->tool_error[0]) {
+        Text err = error_make(cr, a->tool_error, cw);
+        text_draw_r(cr, &err, x0 + cw, fmin(y + 4, list_bottom + 4), t->danger_fg); text_free(&err);
+        y += err.h + 4;
+    }
+    /* .n-btns: the run button opens once what tool_run() needs is there, red for a
+     * destructive tool, named after its target; "…" when the #1270 dialog follows */
+    int ready = (kind != 1 || a->tool_disk_sel >= 0) && (kind != 2 || (a->tool_parts_ok && a->tool_part_sel >= 0)) &&
+                (kind != 3 || a->tool_arg[0]);
+    char tl[SLOT_NAME_MAX + 64], run[SLOT_NAME_MAX + 96]; target_label(a, tl, sizeof tl);
+    snprintf(run, sizeof run, "הרץ%s%s%s", tl[0] && kind != 3 ? " על " : "", kind != 3 ? tl : "", level ? "…" : "");
+    double by = fmin(y + 18, btn_y), xr = x0 + cw;
+    xr -= tools_btn(a, cr, xr, by, run, NULL, !ready ? TB_OFF : level == 2 ? TB_DANGER : TB_PRIMARY, HIT_TOOL_RUN) + 10;
+    xr -= tools_btn(a, cr, xr, by, "חזרה", "Esc", TB_PLAIN, HIT_TOOL_LIST) + 10;
+    if (level) {
+        Text n = text_make(cr, FONT_SANS, 12.5, 400, "אחרי הלחיצה נפתח חלון אישור.", 0, DIR_RTL);
+        text_draw_r(cr, &n, xr, by + (38 - n.h) / 2, t->muted); text_free(&n);
+    }
 }
 
-/* ---- output: spinner, verdict, the text ------------------------------------------- */
+/* ---- the result: the card of the run ----------------------------------------------- */
 
 static void spinner_draw(cairo_t *cr, Rgb c, double cx, double cy, double r, double angle) {
     cairo_set_line_width(cr, 2.5);
+    cairo_new_sub_path(cr);
     cairo_arc(cr, cx, cy, r, angle, angle + 1.5 * M_PI);
     draw_set(cr, c); cairo_stroke(cr);
 }
 
+/* .wr.ok / .wr.bad / .wr.nc of mockup 14: the fill, the 3px line, the words */
 static const char *rc_word(int rc, Rgb *bg, Rgb *line, Rgb *ink, const Theme *t) {
     switch (rc) {
-    case 0:  *bg = t->success_bg; *line = t->success_line; *ink = t->success_ink; return "הסתיים";
-    case 1:  *bg = t->danger_bg;  *line = t->danger_line;  *ink = t->danger_fg;     return "נמצאה בעיה";
-    case 2:  *bg = t->warning_bg; *line = t->warning_line; *ink = t->warning_ink; return "לא הצלחנו לבדוק";
-    case 3:  *bg = t->danger_bg;  *line = t->danger_line;  *ink = t->danger_fg;     return "האישור לא תואם";
-    case 4:  *bg = t->danger_bg;  *line = t->danger_line;  *ink = t->danger_fg;     return "כלי לא מוכר";
-    default: *bg = t->danger_bg;  *line = t->danger_line;  *ink = t->danger_fg;     return "נכשל";
+    case 0:  *bg = t->success_soft; *line = t->led_ok;       *ink = t->success_ink; return "✓ הסתיים";
+    case 1:  *bg = t->danger_soft;  *line = t->danger;       *ink = t->danger_fg;   return "✕ נמצאה בעיה";
+    case 2:  *bg = t->surface;      *line = t->warning_line; *ink = t->warning_ink; return "? לא הצלחנו לבדוק";   /* dashed */
+    case 3:  *bg = t->danger_soft;  *line = t->danger;       *ink = t->danger_fg;   return "✕ האישור לא תואם";
+    case 4:  *bg = t->danger_soft;  *line = t->danger;       *ink = t->danger_fg;   return "✕ כלי לא מוכר";
+    default: *bg = t->danger_soft;  *line = t->danger;       *ink = t->danger_fg;   return "✕ נכשל";
     }
 }
 
-static int line_is_ascii(const char *s) { for (; *s; s++) if ((unsigned char)*s >= 0x80) return 0; return 1; }
+/* The save line -- dest=<words>|<path>[|<free>] in the tool's output (mockup 14
+ * .dest): the green led, where, the path (mono, LTR), the free space at the end. */
+static double dest_box(App *a, cairo_t *cr, double x0, double cw, double y, const char *rec) {
+    const Theme *t = a->theme;
+    char buf[600]; cp(buf, sizeof buf, rec);
+    char *f[3]; fields(buf, f, 3);
+    double h = 38, xr = x0 + cw - 14;
+    Rect r = { x0, y, cw, h };
+    draw_fill_rrect(cr, r, RADIUS_SM, t->surface); draw_border_rrect(cr, r, RADIUS_SM, t->hair, 1);
+    draw_led(cr, xr - 5, y + h / 2, 10, t->led_ok); xr -= 10 + 10;
+    double free_w = 0;
+    if (f[2][0]) {   /* "פנוי: 1.2 TB" -- the number and its unit isolated LTR, as the mockup's <bdi> */
+        char iso[200]; size_t k = strcspn(f[2], "0123456789");
+        snprintf(iso, sizeof iso, "%.*s\xE2\x81\xA6%s\xE2\x81\xA9", (int)k, f[2], f[2] + k);
+        Text fr = text_make(cr, FONT_SANS, 12, 400, iso, 0, DIR_RTL);
+        text_draw(cr, &fr, x0 + 14, y + (h - fr.h) / 2, t->muted); free_w = fr.w + 14; text_free(&fr);
+    }
+    Text w = tools_line(cr, FONT_SANS, 13.5, 400, f[0], (cw - 28 - 20 - free_w) / 2, 1);
+    text_draw_r(cr, &w, xr, y + (h - w.h) / 2, t->ink); xr -= w.w + 10;
+    if (f[1][0]) {
+        Text pth = text_make(cr, FONT_MONO, 11.5, 400, f[1], 0, DIR_LTR);
+        pango_layout_set_width(pth.layout, (int)fmax(10, xr - (x0 + 14 + free_w)) * PANGO_SCALE);
+        pango_layout_set_ellipsize(pth.layout, PANGO_ELLIPSIZE_START);
+        pango_layout_get_pixel_size(pth.layout, &pth.w, &pth.h);
+        text_draw(cr, &pth, xr - pth.w, y + (h - pth.h) / 2, t->muted); text_free(&pth);
+    }
+    return h;
+}
+
+/* The save line of a tool's output -> the record dest_box draws, or NULL. Two spellings:
+ * "dest=<words>|<path>[|<free>]", and the line agent/lib/tools/tooldest.sh really prints
+ * (interfaces.md, the toolbox chapter): "יעד השמירה: <where> · <path> · פנוי: N MB". */
+#define DEST_SAYS "יעד השמירה: "
+#define DEST_SEP  " · "
+static const char *dest_rec(const char *l, char *buf, size_t n) {
+    if (!strncmp(l, "dest=", 5)) return l + 5;
+    if (strncmp(l, DEST_SAYS, sizeof DEST_SAYS - 1)) return NULL;
+    char rest[600]; cp(rest, sizeof rest, l + sizeof DEST_SAYS - 1);
+    char *path = strstr(rest, DEST_SEP), *fr = NULL;
+    if (path) { *path = 0; path += sizeof DEST_SEP - 1; fr = strstr(path, DEST_SEP); }
+    if (fr) { *fr = 0; fr += sizeof DEST_SEP - 1; }
+    snprintf(buf, n, "נשמר %s|%s|%s", rest, path ? path : "", fr ? fr : "");
+    return buf;
+}
 
 static void tools_output_view(App *a, cairo_t *cr, double W, double H, double head_h) {
     const Theme *t = a->theme;
     const Tool *tool = &a->tools[a->tool_sel];
-    int level = tools_risk_level(tool->risk);
-    double inner = card_width(W) - 2 * N_PAD, btn_h = btn_height(cr);
-    char sub[200];
-    snprintf(sub, sizeof sub, "%s · %s", domain_title(tool->domain), risk_word(level));
-    Head hd = head_make(cr, tool->title, sub, inner);
-    Text labels[4]; int kinds[4], ids[4], nb = 0;
-    if (!a->tool_running) { labels[nb] = btn_label(cr, "הרץ שוב"); kinds[nb] = BTN_PRIMARY; ids[nb++] = HIT_TOOL_AGAIN; }
-    labels[nb] = btn_label(cr, "חזרה"); kinds[nb] = BTN_PLAIN; ids[nb++] = HIT_TOOL_LIST;
-    Rect body, foot;
-    card_frame(a, cr, W, H, head_h, &hd, H, foot_height(cr, btn_h), &body, &foot);
-    body_clip_begin(a, cr, body);
-    double x = body.x + N_PAD, y = body.y + N_PAD, xr = x + inner, avail_end = body.y + body.h - N_PAD;
-    double status_h = text_line_height(cr, FONT_SANS, N_LABEL) + 2 * N_LABEL_GAP;
+    int level = tools_risk_level(tool->risk), compact = H < 700;
+    double x0, cw; tools_col(W, &x0, &cw, 0);
+    double y = head_h + (compact ? 16 : 30), bottom = H - N_STATUS_H - (compact ? 10 : 16);
+    char crumb[160], tl[SLOT_NAME_MAX + 64], h1[200];
+    crumb_of(a, crumb, sizeof crumb); target_label(a, tl, sizeof tl);
+    snprintf(h1, sizeof h1, a->tool_running ? "%s…" : "%s", tool->title);
+    y = tools_title(a, cr, x0, cw, y, crumb, h1, a->tool_running ? "הכלי רץ. התוצאה תופיע כאן כשהוא יסיים." : tool->what,
+                    level, 0) + (compact ? 12 : 20);
+    /* the save line is the tool's own record: drawn under the card, not printed as text */
+    const char *dest = NULL; int nl = 0; char dest_buf[700];
+    for (int i = 0; i < a->tool_nlines; i++) {
+        const char *l = a->tool_out + a->tool_line_off[i];
+        const char *d = dest_rec(l, dest_buf, sizeof dest_buf);
+        if (d) dest = d; else nl++;
+    }
+    if (a->tool_running) dest = NULL;
+    double btn_y = bottom - 38, card_bottom = btn_y - 18 - (dest ? 38 + 10 : 0);
+    Rgb bg = t->surface, line = t->hair, ink = t->action_fg;
+    const char *word = "רץ…";
+    if (!a->tool_running) word = rc_word(a->tool_rc, &bg, &line, &ink, t);
+    /* .wr-h: the target in bold, the tool in muted words, the verdict at the end */
+    Text wb = tools_line(cr, FONT_SANS, 14, 700, tl[0] ? tl : "המחשב הזה", cw / 3, 1);
+    Text ws = text_make(cr, FONT_SANS, 13.5, 600, word, 0, DIR_RTL);
+    double head = 12 + fmax(wb.h, ws.h) + 10, ch = head + 2;
+    if (!a->tool_running) ch = fmin(card_bottom - y, head + 8 + (nl ? nl * 19.0 : 22) + 10);
+    if (ch < head + 2) ch = head + 2;
+    Rect r = { x0, y, cw, ch };
+    draw_fill_rrect(cr, r, RADIUS_SM, bg);
+    if (!a->tool_running && a->tool_rc == 2) { double d[] = { 6, 4 }; cairo_set_dash(cr, d, 2, 0); }   /* "לא נבדק": dashed */
+    draw_border_rrect(cr, r, RADIUS_SM, line, a->tool_running ? 1 : 3);
+    cairo_set_dash(cr, NULL, 0, 0);
+    double xr = x0 + cw - 16, hy = y + 12;
+    text_draw_r(cr, &wb, xr, hy, t->ink);
+    Text tn = tools_line(cr, FONT_SANS, 12.5, 400, tool->title, cw / 3, 1);
+    text_draw_r(cr, &tn, xr - wb.w - 14, hy + text_baseline(&wb) - text_baseline(&tn), t->muted); text_free(&tn);
     if (a->tool_running) {
-        Text w = text_make(cr, FONT_SANS, N_SUB, 500, "רץ…", 0, DIR_RTL);
-        text_draw_r(cr, &w, xr, y + (status_h - w.h) / 2, t->ink);
-        spinner_draw(cr, t->led_write, xr - w.w - N_ACTION_GAP - status_h / 2, y + status_h / 2, status_h / 2 - 3, a->tool_spin);
-        text_free(&w);
-    } else {
-        Rgb bg, line, ink;
-        const char *word = rc_word(a->tool_rc, &bg, &line, &ink, t);
-        Text w = text_make(cr, FONT_SANS, N_LABEL, 500, word, 0, DIR_RTL);
-        double tw = w.w + 2 * N_ACTION_GAP;
-        tag_draw(cr, t, xr - tw, y + status_h / 2, word, bg, line, ink);
-        text_free(&w);
-    }
-    y += status_h + N_ACTION_TOP;
+        spinner_draw(cr, t->indigo, x0 + 16 + 8, hy + ws.h / 2.0, 7, a->tool_spin);
+        text_draw(cr, &ws, x0 + 16 + 16 + 8, hy, ink);
+    } else text_draw(cr, &ws, x0 + 16, hy, ink);
+    text_free(&wb); text_free(&ws);
     int shown_all = 1;
-    if (!a->tool_running && a->tool_nlines == 0) {
-        Text none = sub_make(cr, "(הכלי לא הדפיס כלום)", inner);
-        text_draw_r(cr, &none, xr, y, t->muted); text_free(&none);
+    if (!a->tool_running) {   /* the tool's text, under a line (.wr-d) */
+        cairo_rectangle(cr, x0 + 16, y + head, cw - 32, 1); draw_set(cr, t->track); cairo_fill(cr);
+        double ly = y + head + 8, inner = cw - 32, lines_bottom = y + ch - 8;
+        if (!nl) {
+            Text none = text_make(cr, FONT_SANS, 13, 400, "(הכלי לא הדפיס כלום)", 0, DIR_RTL);
+            text_draw_r(cr, &none, xr, ly, t->muted); text_free(&none);
+        }
+        if (a->tool_scroll < 0 || a->tool_scroll >= nl) a->tool_scroll = 0;
+        int skip = a->tool_scroll;
+        for (int i = 0; i < a->tool_nlines; i++) {
+            const char *l = a->tool_out + a->tool_line_off[i];
+            char skip_buf[700];
+            if (dest_rec(l, skip_buf, sizeof skip_buf)) continue;
+            if (skip > 0) { skip--; continue; }
+            int ascii = line_is_ascii(l);
+            Text tx = ascii ? text_make(cr, FONT_MONO, 12.5, 400, l[0] ? l : " ", (int)inner, DIR_LTR)
+                            : text_make(cr, FONT_SANS, 13, 400, l, (int)inner, DIR_RTL);
+            if (ly + tx.h > lines_bottom) { text_free(&tx); shown_all = 0; break; }
+            if (!ascii) {   /* a Hebrew line is an RTL paragraph even when it starts with a Latin word */
+                pango_layout_set_auto_dir(tx.layout, FALSE);
+                pango_layout_get_pixel_size(tx.layout, &tx.w, &tx.h);
+            }
+            if (ascii) text_draw(cr, &tx, x0 + 16, ly, t->ink); else text_draw_r(cr, &tx, xr, ly, t->ink);
+            ly += tx.h + 2;
+            text_free(&tx);
+        }
     }
-    if (a->tool_scroll < 0 || a->tool_scroll >= a->tool_nlines) a->tool_scroll = 0;
-    for (int i = a->tool_scroll; i < a->tool_nlines && !a->tool_running; i++) {
-        const char *line = a->tool_out + a->tool_line_off[i];
-        Text tl;
-        if (line_is_ascii(line)) tl = text_make(cr, FONT_MONO, N_SUB, 400, line[0] ? line : " ", (int)inner, DIR_LTR);
-        else                     tl = rtl_block_make(cr, N_SUB, 400, line, inner);
-        if (y + tl.h > avail_end) { text_free(&tl); shown_all = 0; break; }
-        text_draw(cr, &tl, x, y, t->ink);
-        y += tl.h + 2;
-        text_free(&tl);
+    y += ch + 10;
+    if (dest) y += dest_box(a, cr, x0, cw, y, dest) + 10;
+    double by = fmin(y + 8, btn_y), bx = x0 + cw;
+    if (!a->tool_running) {
+        bx -= tools_btn(a, cr, bx, by, "חזרה לכלים", "Esc", TB_PRIMARY, HIT_TOOL_LIST) + 10;
+        bx -= tools_btn(a, cr, bx, by, "הרץ שוב", NULL, TB_PLAIN, HIT_TOOL_AGAIN) + 10;
+        if (!shown_all || a->tool_scroll > 0) {   /* the text is longer than the card */
+            bx -= tools_btn(a, cr, bx, by, "למטה", "PgDn", shown_all ? TB_OFF : TB_PLAIN, HIT_TOOL_DOWN) + 10;
+            tools_btn(a, cr, bx, by, "למעלה", "PgUp", a->tool_scroll > 0 ? TB_PLAIN : TB_OFF, HIT_TOOL_UP);
+        }
+    } else {
+        Text n = text_make(cr, FONT_SANS, 12.5, 400, "אפשר לצאת מהארגז (F3) — הכלי ממשיך לרוץ, והתוצאה תחכה כאן.", 0, DIR_RTL);
+        text_draw_r(cr, &n, bx, by + (38 - n.h) / 2, t->muted); text_free(&n);
     }
-    body_clip_end(a, cr);
-    if (!shown_all || a->tool_scroll > 0) {
-        labels[nb] = btn_label(cr, "למטה"); kinds[nb] = BTN_PLAIN; ids[nb++] = HIT_TOOL_DOWN;
-        labels[nb] = btn_label(cr, "למעלה"); kinds[nb] = BTN_PLAIN; ids[nb++] = HIT_TOOL_UP;
-    }
-    foot_draw_bg(cr, t, foot);
-    foot_buttons(a, cr, foot, labels, kinds, ids, nb);
-    card_end(a, cr);
 }
 
 void screen_tools(App *a, cairo_t *cr, double W, double H, double head_h) {
-    if (a->tool_sel < 0 || a->tool_sel >= a->ntools) a->tools_view = TOOLS_LIST;
+    if ((a->tools_view == TOOLS_CONFIRM || a->tools_view == TOOLS_OUTPUT) && (a->tool_sel < 0 || a->tool_sel >= a->ntools))
+        a->tools_view = TOOLS_HOME;
     switch (a->tools_view) {
     case TOOLS_CONFIRM: tools_confirm_view(a, cr, W, H, head_h); break;
     case TOOLS_OUTPUT:  tools_output_view(a, cr, W, H, head_h); break;
-    default:            tools_list_view(a, cr, W, H, head_h); break;
+    case TOOLS_CAT:     tools_cat_view(a, cr, W, H, head_h); break;
+    default:            tools_home_view(a, cr, W, H, head_h); break;
     }
 }

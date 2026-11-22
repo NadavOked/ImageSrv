@@ -33,7 +33,6 @@ import pytest
 
 from native import requires_native
 from test_agent import AGENT, BASH, posix
-from test_stream_honesty import GOOD_SHA, call, drawer_run, errors_of
 from test_timeouts import make_stubs, run_sh
 from agentlib import agent_sources
 
@@ -92,46 +91,6 @@ DYING_PARTCLONE = (
 # --- #440: דיסק מת במגירה היחידה --------------------------------------------
 
 
-def test_the_last_drawer_dying_is_a_disk_fault_not_a_cut_stream(tmp_path):
-    """מגירה יחידה, fanout.rc=1, source.rc=141.
-
-    לפני התיקון ההודעה היא ``הזרם נקטע (מקור rc=141)`` והטכנאי נשלח
-    לרשת. אחריו — ההתקן והכתיבה, עם מה ש-fanout ו-partclone כתבו.
-    """
-    run, out = drawer_run(
-        tmp_path, call(GOOD_SHA, disks=("sda",)),
-        {"fanout": LAST_DRAWER_DIES, "partclone.dd": DYING_PARTCLONE},
-        disks=("sda",),
-    )
-    assert out.strip().endswith("rc=1"), out
-    assert state_of(run, "sda") == "failed"
-    err = errors_of(run, disks=("sda",))["sda"]
-    assert "הכתיבה לדיסק נכשלה" in err, err
-    assert "write error" in err, err
-    assert "Input/output error" in err, err
-    assert "מקור rc=" not in err, err
-    assert "הזרם נקטע" not in err, err
-    assert "sha256" not in err, err
-
-
-def test_a_missing_fanout_report_is_neither_ok_nor_a_network_cut(tmp_path):
-    """עיקרון 5 על המסווג עצמו: אין fanout.out — אין דיווח, לא רשת."""
-    run, out = drawer_run(
-        tmp_path, call(GOOD_SHA, disks=("sda",)),
-        {"fanout": LAST_DRAWER_DIES_SILENT, "partclone.dd": DYING_PARTCLONE},
-        disks=("sda",),
-    )
-    assert out.strip().endswith("rc=1"), out
-    err = errors_of(run, disks=("sda",))["sda"]
-    assert "אין דיווח" in err, err
-    assert "הכתיבה לדיסק נכשלה" in err, err
-    assert "מקור rc=" not in err, err
-    assert "הזרם נקטע" not in err, err
-    assert state_of(run, "sda") == "failed"
-
-
-# --- הרחבה best-effort אחרי שחזור מלא (שיטת קרונזילה, #648) ----------------
-
 FAILING = "#!/bin/sh\nexit 1\n"
 OK = "#!/bin/sh\nexit 0\n"
 E2FSCK_CORRECTED = "#!/bin/sh\nexit 1\n"
@@ -156,7 +115,7 @@ def grow_drawers(tmp_path, *, fs="ntfs", disks=("sda",), stubs=None,
     out = run_sh(
         make_stubs(tmp_path / "stubs", extra)
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev SYSROOT={posix(run)!r}/sys; "   # #3908: no /sys here -- the host's disks are not the test's (writecheck.sh reads queue/rotational)
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
         + "disk_fits() { return 0; }; plan_gate() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
         "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file
@@ -165,7 +124,7 @@ def grow_drawers(tmp_path, *, fs="ntfs", disks=("sda",), stubs=None,
         "restore_partition_drawers() { return 0; }; "
         + "".join(f"target_init {d} 100; " for d in disks)
         + marks
-        + "run_restore_drawers multicast http://s img m.json "
+        + "run_restore_drawers chunk http://s img m.json "
         + " ".join(disks) + '; echo "rc=$?"'
     )
     return run, out
@@ -194,7 +153,7 @@ def grow_station(tmp_path, *, fs="ntfs", stubs=None, mark=True) -> tuple[Path, s
         "restore_partition() { return 0; }; "
         "target_init sda 100; "
         + mark_cmd
-        + 'run_restore multicast sda http://s img m.json; echo "rc=$?"'
+        + 'run_restore unicast sda http://s img m.json; echo "rc=$?"'
     )
     return run, out
 
@@ -384,7 +343,7 @@ def _plan_drawers(tmp_path, *, plan_cmd, restore_cmd="return 0",
     out = run_sh(
         make_stubs(tmp_path / "stubs", {"ntfsfix": OK, "ntfsresize": OK, "sgdisk": OK})   # #1798: the mark's table read
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(run)!r}/dev SYSROOT={posix(run)!r}/sys; "   # #3908: as grow_drawers
-        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "drawerfeed", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
+        + agent_sources("common", "sysinfo", "diskinfo", "waits", "progress", "restore", "expand", "grow", "ntfsunhib", "expandshare", "writemark", "writeback", "drawers", "verdict", "failmark", "ntfsboot", "writecheck")   # #2272: imagesrv-agent's order
         + "disk_fits() { return 0; }; plan_gate() { return 0; }; apply_gpt() { return 0; }; "
         "write_check() { return 0; }; write_speed_verdict() { return 0; }; readback_drawers() { :; }; "
         "boot_hidden_disk() { return 0; }; "   # #2015: the hidden sectors have their own file
@@ -394,7 +353,7 @@ def _plan_drawers(tmp_path, *, plan_cmd, restore_cmd="return 0",
         'echo ran >> "$RUN_DIR/wrote"; '
         f"{restore_cmd}; }}; "
         + "".join(f"target_init {d} 100; " for d in disks)
-        + "run_restore_drawers multicast http://s img m.json "
+        + "run_restore_drawers chunk http://s img m.json "
         + " ".join(disks) + '; echo "rc=$?"'
     )
     return run, out

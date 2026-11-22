@@ -45,10 +45,10 @@ const NET=[
 const port=(id,name,p,proto,state,detail,extra={})=>({id,name,port:p,proto,desc:'desc '+id,target:'target '+id,state,detail,note:'',...extra});
 const PORTS=[
   port('tftp','TFTP','69','udp','ok','dnsmasq מגיש',{enabled:true,bind:'0.0.0.0',toggle:'confirm',off_means:'x'}),
-  port('http_boot','HTTP','8080','tcp','ok','uvicorn',{enabled:true,bind:'0.0.0.0',toggle:'confirm',off_means:'x'}),
-  port('http_console','HTTP','8081','tcp','ok','uvicorn',{enabled:true,bind:'10.44.10.1',toggle:'confirm',off_means:'x'}),
-  port('multicast','Multicast','9000–9001','udp','off','אין סבב',{enabled:true,bind:['10.44.9.10'],toggle:'none',off_means:'x'}),
-  port('interserver','mTLS','8443','tcp','off','כבוי',{enabled:false,bind:'',toggle:'api',off_means:'x'}),
+  port('http_boot','HTTP','7712','tcp','ok','uvicorn',{enabled:true,bind:'0.0.0.0',toggle:'confirm',off_means:'x'}),
+  port('http_console','HTTP','443','tcp','ok','uvicorn',{enabled:true,bind:'10.44.10.1',toggle:'confirm',off_means:'x'}),
+  port('multicast','Multicast','7713–7714','udp','off','אין סבב',{enabled:true,bind:['10.44.9.10'],toggle:'none',off_means:'x'}),
+  port('interserver','mTLS','7700','tcp','off','כבוי',{enabled:false,bind:'',toggle:'api',off_means:'x'}),
 ];
 const PORTS_NO_BIND=PORTS.map(({bind,...p})=>p);
 // ‏#1039: מי מחובר לקונסולה, וחכירות dnsmasq של כרטיס ההפצה (C1 גם ב-/net; LEASED רק בחכירה)
@@ -57,8 +57,8 @@ const SESSIONS=[{user:'nadav',ip:'10.44.10.50',since:ago(3600),last_seen:ago(30)
 const LEASES={interface:'ens19',checked:true,reason:'',path:'/var/lib/misc/dnsmasq.leases',leases:[
   {mac:C1,ip:'10.44.9.118',hostname:'cloner1',expires:'2026-09-24T10:00:00+00:00'},{mac:LEASED,ip:'10.44.9.150',hostname:null,expires:null}]};
 const MON=[{mac:C1,name:'מחשב 1',role:'cloner',ip:'10.44.9.118',online:true},{mac:C2,name:'מחשב 2',role:'cloner',ip:'10.44.9.59',online:false},{mac:B1,name:'בנייה 1',role:'build',ip:null,online:false}];
-const NODES=[{id:'sn1',label:'סניף חיפה',base_url:'https://10.44.13.5:8443',group_id:null,node_id:'sn_1',enrolled_at:'2026-09-10T00:00:00+00:00',disabled_at:null,group_label:null},
-             {id:'sn2',label:'סניף ישן',base_url:'https://10.44.10.77:8443',group_id:null,node_id:'sn_2',enrolled_at:'2026-09-01T00:00:00+00:00',disabled_at:'2026-09-02T00:00:00+00:00',group_label:null}];
+const NODES=[{id:'sn1',label:'סניף חיפה',base_url:'https://10.44.13.5:7700',group_id:null,node_id:'sn_1',enrolled_at:'2026-09-10T00:00:00+00:00',disabled_at:null,group_label:null},
+             {id:'sn2',label:'סניף ישן',base_url:'https://10.44.10.77:7700',group_id:null,node_id:'sn_2',enrolled_at:'2026-09-01T00:00:00+00:00',disabled_at:'2026-09-02T00:00:00+00:00',group_label:null}];
 
 function setup(over={},me={}) {
   const nodes=new Map(), requests=[];
@@ -118,16 +118,15 @@ async function loaded(over,me) { const t=setup(over,me); t.run('current="network
 
 /* ---------- האובייקט והניווט ---------- */
 
-test('network is one own page with four tabs (ports = the wave-5 page); the old nic/netdeploy/network pages are gone',()=>{
+test('network is one own page with three tabs (#3887: services is its own page under רשת); the old nic/netdeploy/network pages are gone',()=>{
   const {run}=setup();
-  assert.equal(run('pages.network.own'),true); assert.deepEqual(JSON.parse(run('JSON.stringify(pages.network.tabs)')),['תרשים','חיבורים פיזיים','רשת הפצה','פורטים']);
+  assert.equal(run('pages.network.own'),true); assert.deepEqual(JSON.parse(run('JSON.stringify(pages.network.tabs)')),['תרשים','חיבורים פיזיים','רשת הפצה']);
   assert.equal(run('pages.network.load===loadNetwork'),true);
   assert.equal(run('pages.nic'),undefined); assert.equal(run('pages.netdeploy'),undefined);
   for(const fn of ['renderNicCard','netBannerHtml','nic','netdeploy','saveNetwork','confirmSaveNetwork','loadNetcfgData','loadNetPages','editDeployNic','nicUnion','selectSidebarNic'])
     assert.equal(run(`typeof ${fn}`),'undefined',fn+' should be gone');
   assert.equal(run('networkPage(0)'),run('pagePlaceholder()'),'placeholder before the first read');
-  // לשונית "פורטים" מנווטת לדף הקיים; דף הפורטים מצביע חזרה ללשוניות האובייקט
-  assert.equal(run('netTabClick(3)'),"selectPageById('ports')"); assert.equal(run('netTabClick(1)'),'openNetwork(1)');
+  assert.equal(run('netTabClick(1)'),'openNetwork(1)');
 });
 
 test('loadNetwork reads every source once, sets the shared globals for net.js/netcfg.js/ports, and selects the deploy NIC',async()=>{
@@ -170,9 +169,9 @@ test('diagram model: a lane per NIC, VLAN kind by configuration, "allowed" only 
   assert.equal(model.lanes.length,4);
   const lane=(name)=>model.lanes.find(l=>l.nic.name===name);
   assert.equal(lane('ens19').vlan.kind,'deploy'); assert.equal(lane('ens18').vlan.kind,'mgmt'); assert.equal(lane('ens20').vlan.kind,'proxy'); assert.equal(lane('ens21').vlan.kind,'none');
-  assert.deepEqual(lane('ens19').allowed,['TFTP 69','HTTP 8080','Multicast 9000–9001'],'bind 0.0.0.0 + the NIC address; 8081 bound elsewhere');
-  assert.deepEqual(lane('ens18').allowed,['TFTP 69','HTTP 8080','HTTP 8081']);
-  assert.deepEqual(lane('ens21').allowed,['TFTP 69','HTTP 8080'],'no address → only wildcard binds');
+  assert.deepEqual(lane('ens19').allowed,['TFTP 69','HTTP 7712','Multicast 7713–7714'],'bind 0.0.0.0 + the NIC address; 443 bound elsewhere');
+  assert.deepEqual(lane('ens18').allowed,['TFTP 69','HTTP 7712','HTTP 443']);
+  assert.deepEqual(lane('ens21').allowed,['TFTP 69','HTTP 7712'],'no address → only wildcard binds');
   assert.equal(lane('ens19').led,'ok'); assert.equal(lane('ens21').led,'off');
   const kinds=(l)=>l.clients.map(c=>[c.kind,c.led,!!c.dashed]);
   // הפצה: משכפלים (1 מתוך 2 מחוברים = כתום), בנייה בלי כתובת (מקווקו), לא רשום (כתום)
@@ -184,7 +183,7 @@ test('diagram model: a lane per NIC, VLAN kind by configuration, "allowed" only 
   assert.deepEqual(kinds(lane('ens18')),[['console','ok',false],['branch','err',false],['branch','',true]],'not answering = red solid line; disabled = dashed');
   assert.equal(plain(lane('ens18').clients[0].sub),'2 מחוברים: nadav (10.44.10.50) · tech (10.44.10.51)','#1039: /sessions, not "דורש API"');
   assert.match(plain(lane('ens18').clients[0].tip),/nadav · 10\.44\.10\.50 · נכנס .* · נראה /);
-  assert.match(lane('ens18').clients[1].sub,/https:\/\/10\.44\.13\.5:8443 · לא ענה: timeout/);
+  assert.match(lane('ens18').clients[1].sub,/https:\/\/10\.44\.13\.5:7700 · לא ענה: timeout/);
   assert.match(lane('ens18').clients[2].sub,/מושבת/);
   // כיתות = תיבה סטטית v2 על ה-proxy, מקווקו, בלי נתונים
   assert.deepEqual(kinds(lane('ens20')),[['class','',true]]); assert.equal(lane('ens20').clients[0].title,'כיתות — v2');
@@ -212,7 +211,7 @@ test('network map: the server on top, a VLAN card per configured NIC with its NI
   assert.match(html,/<div class="obj-name">רשת<span class="pill ok">DHCP פעיל<\/span><\/div><div class="obj-sub"[^>]*>ניהול 10\.44\.10\.0\/24 · הפצה 10\.44\.9\.0\/24<\/div>/);
   assert.match(html,/<div class="obj-actions"><button class="btn" onclick="refreshPage\(\)">/,'only refresh in the header — "+ כרטיס" lives on the NIC card');
   assert.doesNotMatch(html,/previewDnsmasq|קבצי dnsmasq/,'#1263: removed');
-  assert.match(html,/role="tab" aria-selected="true" tabindex="0" onclick="openNetwork\(0\)">תרשים/); assert.match(html,/onclick="selectPageById\('ports'\)">פורטים/);
+  assert.match(html,/role="tab" aria-selected="true" tabindex="0" onclick="openNetwork\(0\)">תרשים/); assert.doesNotMatch(html,/>פורטים</,'#3887: no ports tab');
 });
 
 test('network map: a disconnected NIC is red + dashed + "מנותק" — in the card, the wire and the chip; an unread link is orange, not green',async()=>{
@@ -227,13 +226,13 @@ test('network map: a disconnected NIC is red + dashed + "מנותק" — in the 
   assert.match(vlans(svg).find(l=>l.nic==='ens19').inner,/class="nm-box warn"/); assert.match(svg,/ens19 · קישור לא נקרא/);
 });
 
-test('network map: the services chip is the visible "bind" only — same-name services fold ("HTTP 8080/8081"), clipped with the full text in the <title>',async()=>{
+test('network map: the services chip is the visible "bind" only — same-name services fold ("HTTP 7712/443"), clipped with the full text in the <title>',async()=>{
   const {run}=await loaded();
   const svg=plain(mapOf(run('networkPage(0)')));
   const ens19=vlans(svg).find(l=>l.nic==='ens19').inner;
-  assert.match(ens19,/TFTP 69 · HTTP 8080 · Multicast 9000–9001|TFTP 69 · HTTP 8080 · Multicast 9000…|TFTP 69 · HTTP 8080 · Multica…/);
-  assert.match(ens19,/<title>[^<]*TFTP 69 · HTTP 8080 · Multicast 9000–9001<\/title>/,'the full text is the tooltip');
-  assert.equal(run('netAllowedShort(["HTTPS 8443","HTTP 8082","HTTP 8080","DHCP 67"])'),'HTTPS 8443 · HTTP 8082/8080 · DHCP 67','same-name ports fold into one chip');
+  assert.match(ens19,/TFTP 69 · HTTP 7712 · Multicast 7713–7714|TFTP 69 · HTTP 7712 · Multicast 7713…|TFTP 69 · HTTP 7712 · Multica…/);
+  assert.match(ens19,/<title>[^<]*TFTP 69 · HTTP 7712 · Multicast 7713–7714<\/title>/,'the full text is the tooltip');
+  assert.equal(run('netAllowedShort(["HTTPS 7700","HTTP 7711","HTTP 7712","DHCP 67"])'),'HTTPS 7700 · HTTP 7711/7712 · DHCP 67','same-name ports fold into one chip');
   assert.equal(run('netAddrList([])'),'ללא כתובת'); assert.equal(run('netAddrList(["10.0.0.1"])'),'⁦10.0.0.1⁩'); assert.equal(run('netAddrList(["1.1.1.1","2.2.2.2","3.3.3.3"])'),'⁦1.1.1.1⁩ · ⁦2.2.2.2⁩ · ⁦+1⁩','each address isolated on its own — " · " is not ASCII');
 });
 
@@ -242,11 +241,11 @@ test('network map: without bind the chip says "דורש API", with bind null "ט
   assert.equal(run('netServicesOn(NETW.nics[1])'),null);
   const html=plain(run('networkPage(0)')); assert.match(mapOf(html),/מה מותר: דורש API/); assert.doesNotMatch(mapOf(html),/TFTP 69/);
   assert.match(run('networkPage(1)'),/<span title="— דורש API"><span class="pill ">לא מוגדר<\/span><\/span>/,'#1300: the services are the title of the role pill');
-  const server=[port('tftp','TFTP','69','udp','ok','',{bind:[]}),port('http_console','HTTP','8081','tcp','ok','',{bind:['10.44.10.1/24:8081']}),
-    port('interserver','HTTPS (mTLS)','8443','tcp','ok','',{bind:['10.44.10.1/24:8443']}),port('multicast','Multicast','9000–9001','udp','off','',{bind:['[::]:9000']})];
+  const server=[port('tftp','TFTP','69','udp','ok','',{bind:[]}),port('http_console','HTTP','443','tcp','ok','',{bind:['10.44.10.1/24:443']}),
+    port('interserver','HTTPS (mTLS)','7700','tcp','ok','',{bind:['10.44.10.1/24:7700']}),port('multicast','Multicast','7713–7714','udp','off','',{bind:['[::]:7713']})];
   let t=await loaded({'/ports':server});
-  assert.equal(t.run('JSON.stringify(netServicesOn(NETW.nics[0]))'),JSON.stringify(['HTTP 8081','HTTPS (mTLS) 8443','Multicast 9000–9001']));
-  assert.equal(t.run('JSON.stringify(netServicesOn(NETW.nics[1]))'),JSON.stringify(['Multicast 9000–9001']),'only the wildcard');
+  assert.equal(t.run('JSON.stringify(netServicesOn(NETW.nics[0]))'),JSON.stringify(['HTTP 443','HTTPS (mTLS) 7700','Multicast 7713–7714']));
+  assert.equal(t.run('JSON.stringify(netServicesOn(NETW.nics[1]))'),JSON.stringify(['Multicast 7713–7714']),'only the wildcard');
   t=await loaded({'/ports':server.map(p=>({...p,bind:[]}))});
   assert.equal(t.run('JSON.stringify(netServicesOn(NETW.nics[0]))'),'[]','every bind [] = read, and nothing listens here');
   t=await loaded({'/ports':server.map(p=>p.id==='tftp'?{...p,bind:null}:p)});
@@ -322,7 +321,7 @@ test('NICs table (#1300, console-full.html P.network "physical" 1:1): one card "
   assert.match(r19,/<td><b>ens19<\/b><\/td><td>הפצה<\/td><td class="c-opt"><span class="mono">bc:24:11:00:00:19<\/span><\/td><td><bdi dir="ltr">1 Gb<\/bdi><\/td>/);
   assert.match(r21,/<td><b>ens21<\/b><\/td><td>—<\/td>/); assert.match(r21,/<td>ללא קישור<\/td>/);
   assert.match(r18,/<td><span title="מוגדר: static 10\.44\.10\.1\/24 · gw 10\.44\.10\.254">10\.44\.10\.1<\/span><\/td>/,'the address as measured, no prefix; the configured text is the title');
-  assert.match(r18,/<span title="ניהול · TFTP 69 · HTTP 8080 · HTTP 8081"><span class="pill info">ניהול<\/span><\/span>/,'#1263: the management NIC is named; services in the title');
+  assert.match(r18,/<span title="ניהול · TFTP 69 · HTTP 7712 · HTTP 443"><span class="pill info">ניהול<\/span><\/span>/,'#1263: the management NIC is named; services in the title');
   assert.match(r19,/<span class="pill ok">הפצה · פעיל<\/span>/);
   assert.match(r20,/10\.44\.11\.2<\/span> <span title="כתובת: מוגדר 10\.44\.11\.1\/24, בפועל 10\.44\.11\.2\/24"><span class="pill err">לא תואם להגדרה<\/span>/,'a gap is a red pill, the detail in the title');
   assert.match(r20,/class="pill warn">רשת המכללה<|class="pill ">PXE proxy</);
@@ -621,20 +620,20 @@ test('probe ("מי עוד עונה"): checked=false is "the check did not run", 
 });
 
 /* 18/09 — מודל האתרים (הכרעת נדב, interfaces.md §18 "חוקי חומת האש בין האתרים"): לכל אתר שלושה וילנים — שרתים / הפצה / כיתות,
-   ואין וילן "ניהול" נפרד. שרת המשנה יושב מאחורי FW משלו, הראשי יוזם ורק 8443 פתוח ביניהם — ולכן הוא לא לקוח על הוילן אלא "מעבר ל-FW". */
-test('site model: the console/8443 VLAN is "שרתים", and a secondary is "דרך FW · 8443 בלבד" on a dashed line even when its box is red/green',async()=>{
+   ואין וילן "ניהול" נפרד. שרת המשנה יושב מאחורי FW משלו, הראשי יוזם ורק 7700 פתוח ביניהם — ולכן הוא לא לקוח על הוילן אלא "מעבר ל-FW". */
+test('site model: the console/7700 VLAN is "שרתים", and a secondary is "דרך FW · 7700 בלבד" on a dashed line even when its box is red/green',async()=>{
   const {run}=await loaded();
   const model=JSON.parse(plain(run('JSON.stringify(netDiagramModel())')));
   const lane=(name)=>model.lanes.find(l=>l.nic.name===name);
   assert.equal(lane('ens18').vlan.label,'שרתים — קונסולה');
-  // כרטיס שנושא רק 8443 (bind של interserver על כתובתו) — עדיין וילן השרתים, לא וילן משלו
+  // כרטיס שנושא רק 7700 (bind של interserver על כתובתו) — עדיין וילן השרתים, לא וילן משלו
   run('NETW.ports=NETW.ports.map(p=>p.id==="interserver"?{...p,bind:"10.44.13.1"}:p)');
   assert.equal(run('JSON.stringify(netVlanOf({enabled:false,proxy:false,trunk:false,addresses:["10.44.13.1/24"],name:"ens22"}))'),JSON.stringify({kind:'inter',label:'שרתים — בין-שרתי'}));
   const [console_,haifa,old]=lane('ens18').clients;
   assert.equal(console_.kind,'console'); assert.ok(!console_.viaFw,'the console is a client on the VLAN, not behind a FW');
-  assert.equal(haifa.sub,'דרך FW · 8443 בלבד · https://10.44.13.5:8443 · לא ענה: timeout');
-  assert.equal(haifa.tip,'שרת המשנה מאחורי FW משלו; הראשי יוזם, רק 8443 · https://10.44.13.5:8443 · לא ענה: timeout');
-  assert.equal(old.sub,'דרך FW · 8443 בלבד · https://10.44.10.77:8443 · מושבת');
+  assert.equal(haifa.sub,'דרך FW · 7700 בלבד · https://10.44.13.5:7700 · לא ענה: timeout');
+  assert.equal(haifa.tip,'שרת המשנה מאחורי FW משלו; הראשי יוזם, רק 7700 · https://10.44.13.5:7700 · לא ענה: timeout');
+  assert.equal(old.sub,'דרך FW · 7700 בלבד · https://10.44.10.77:7700 · מושבת');
   assert.equal(haifa.viaFw,true); assert.equal(old.viaFw,true); assert.equal(haifa.dashed,false,'the box stays solid — connected is measured; the line is what marks the FW');
   const html=plain(run('networkPage(0)')); balanced(html);
   assert.match(mapOf(html),/שרתים — קונסולה/); assert.doesNotMatch(html,/ניהול — קונסולה|>בין-שרתים —/);
@@ -670,9 +669,9 @@ test('#1088 deploy network not configured: /net/deploy configured=false → note
   t.run('netEditDeploy("ens19")');
   const sh=t.run('sheets[sheets.length-1]');
   assert.match(sh.note,/רשת ההפצה מוגדרת כאן <b>בפעם הראשונה<\/b>/);
-  t.fixtures['/net/interfaces/ens18']={ok:true,apply_error:null,interface:{},deploy:{ok:true,url:'http://10.44.9.10:8080',interface:'ens18',errors:[],restarting:true}};
+  t.fixtures['/net/interfaces/ens18']={ok:true,apply_error:null,interface:{},deploy:{ok:true,url:'http://10.44.9.10:7712',interface:'ens18',errors:[],restarting:true}};
   await t.run('saveNic("ens18",{enabled:true,confirm:"ens18"})');
-  assert.match(t.run('toasts[toasts.length-1]'),/רשת ההפצה הוגדרה על ens18 \(http:\/\/10\.44\.9\.10:8080\) — השרת מתאתחל/);
+  assert.match(t.run('toasts[toasts.length-1]'),/רשת ההפצה הוגדרה על ens18 \(http:\/\/10\.44\.9\.10:7712\) — השרת מתאתחל/);
   assert.equal(t.run('NET_DEPLOY.configured'),true);
   // ‏#1121: השלמה שנכשלה היא 500 — put זורק, שום דבר לא נרשם (NET_DEPLOY לא
   // מתהפך), והשגיאה מגיעה לטופס דרך ה-catch של sheet(); אין טוסט "עודכנה".
@@ -688,7 +687,7 @@ test('#1088 deploy network not configured: /net/deploy configured=false → note
   html=t.run('networkPage(2)'); assert.match(card(html,'רשת ההפצה'),/class="empty">אין כרטיס מוגדר כרשת הפצה/); assert.doesNotMatch(html,/רשת ההפצה לא הוגדרה/);
   t.run('netEditDeploy("ens19")'); assert.doesNotMatch(t.run('sheets[sheets.length-1]').note,/בפעם הראשונה/);
   // כשההפצה מוגדרת (cli) — אין הערה ואין "בפעם הראשונה"
-  t=await loaded({'/net/interfaces':none,'/net/deploy':{configured:true,source:'cli',interface:'ens19',url:'http://10.44.9.10:8080',hint:null}});
+  t=await loaded({'/net/interfaces':none,'/net/deploy':{configured:true,source:'cli',interface:'ens19',url:'http://10.44.9.10:7712',hint:null}});
   assert.doesNotMatch(t.run('networkPage(0)'),/רשת ההפצה לא הוגדרה/);
   // ‏/net/deploy שלא נקרא — נאמר, לא "מוגדר"
   t=await loaded({'/net/interfaces':none,'/net/deploy':new Error('boom')});
@@ -717,7 +716,7 @@ test('stage 2: devices whose address is outside every NIC subnet are named in a 
 
 /* ---------- ‏#1264: רשת ההפצה על שני כרטיסים (bond, ‏balance-alb) ---------- */
 
-const DEPLOY_CONSOLE={configured:true,source:'console',interface:'ens19',url:'http://10.44.9.10:8080',hint:null};
+const DEPLOY_CONSOLE={configured:true,source:'console',interface:'ens19',url:'http://10.44.9.10:7712',hint:null};
 // ‏ens22 פנוי (לא מוגדר, בלי כתובת); ‏ens21 מנותק ופנוי; ‏ens18 ניהול; ‏ens20 proxy+trunk
 const NICS_FREE=[...NICS,nic('ens22',{})];
 const NETCFG_FREE={...NETCFG,interfaces:[...NETCFG.interfaces,cfgRow('ens22',{mode:'manual',mode_he:'לא מנוהל'})]};
@@ -791,7 +790,7 @@ test('#1264 deploy window: "כרטיסים" — card 1 fixed, card 2 only free c
   assert.deepEqual(c2.options.map(o=>o.value),['','ens21','ens22'],'no management, no proxy/trunk, no card that is configured or carries an address');
   assert.equal(c2.value,''); assert.equal(c2.options[0].label,'בלי כרטיס שני');
   assert.match(c2.help,/שני הכרטיסים עובדים יחד על אותה כתובת/);
-  t.fixtures['/net/config/ens19/second']={ok:true,interface:'bond0',server_ip:'10.44.9.10',apply_error:null,deploy:{ok:true,url:'http://10.44.9.10:8080'},bond:{state:'ok'}};
+  t.fixtures['/net/config/ens19/second']={ok:true,interface:'bond0',server_ip:'10.44.9.10',apply_error:null,deploy:{ok:true,url:'http://10.44.9.10:7712'},bond:{state:'ok'}};
   const v={network:'10.44.9.0',netmask:'255.255.255.0',range_start:'10.44.9.100',range_end:'10.44.9.200',lease_n:'12',lease_u:'h',card1:'ens19',second:'ens22'};
   assert.equal(await t.run(`sheets[0].onSubmit(${JSON.stringify(v)}).then(()=>null,e=>e.message)`),null);
   const writes=t.requests.filter(r=>r.method!=='GET');
@@ -808,7 +807,7 @@ test('#1264 deploy window on the bond: card 2 is selected, and "בלי כרטי�
   const sh=sheetAt(t.run,0);
   assert.deepEqual(sh.fields.find(f=>f.id==='card1').options.map(o=>o.value),['ens19']);
   assert.equal(sh.fields.find(f=>f.id==='second').value,'ens22');
-  t.fixtures['/net/config/bond0/second']={ok:true,interface:'ens19',server_ip:'10.44.9.10',apply_error:null,deploy:{ok:true,url:'http://10.44.9.10:8080'},bond:null};
+  t.fixtures['/net/config/bond0/second']={ok:true,interface:'ens19',server_ip:'10.44.9.10',apply_error:null,deploy:{ok:true,url:'http://10.44.9.10:7712'},bond:null};
   const v={network:'10.44.9.0',netmask:'255.255.255.0',range_start:'10.44.9.100',range_end:'10.44.9.200',lease_n:'12',lease_u:'h',card1:'ens19',second:''};
   assert.equal(await t.run(`sheets[0].onSubmit(${JSON.stringify(v)}).then(()=>null,e=>e.message)`),null);
   assert.deepEqual(t.requests.filter(r=>r.method!=='GET').map(r=>[r.url,r.body]),[['/net/config/bond0/second',{second:''}]]);
@@ -834,7 +833,7 @@ test('#1274 the bond is up but the completion failed (/net/deploy still on card 
   assert.match(sh.note,/השרת יאותחל/);
   t.fixtures['/net/config/bond0/second']={ok:false,interface:'bond0',server_ip:'10.44.9.10',apply_error:'חומת אש: nft -c נפל',deploy:{ok:false,errors:['חומת אש: nft -c נפל']},bond:{state:'ok'}};
   assert.match(await sh.onSubmit().then(()=>'',e=>e.message),/nft -c נפל/,'a second failure stays in the window, named');
-  t.fixtures['/net/config/bond0/second']={ok:true,interface:'bond0',server_ip:'10.44.9.10',apply_error:null,deploy:{ok:true,url:'http://10.44.9.10:8080'},bond:{state:'ok'}};
+  t.fixtures['/net/config/bond0/second']={ok:true,interface:'bond0',server_ip:'10.44.9.10',apply_error:null,deploy:{ok:true,url:'http://10.44.9.10:7712'},bond:{state:'ok'}};
   assert.equal(await sh.onSubmit().then(()=>'ok',e=>e.message),'ok');
   assert.deepEqual(t.requests.filter(r=>r.method!=='GET').map(r=>[r.url,r.body]),
     [['/net/config/bond0/second',{second:'ens22'}],['/net/config/bond0/second',{second:'ens22'}]],'the same endpoint, the same card — nothing else is sent');
@@ -846,7 +845,7 @@ test('#1274 removing card 2 whose completion failed (/net/deploy still on bond0)
   const click=completeBtn(card(t.run('networkPage(2)'),'כרטיסים ברשת ההפצה'));
   assert.ok(click);
   t.run(click);
-  t.fixtures['/net/config/ens19/second']={ok:true,interface:'ens19',server_ip:'10.44.9.10',apply_error:null,deploy:{ok:true,url:'http://10.44.9.10:8080'},bond:null};
+  t.fixtures['/net/config/ens19/second']={ok:true,interface:'ens19',server_ip:'10.44.9.10',apply_error:null,deploy:{ok:true,url:'http://10.44.9.10:7712'},bond:null};
   assert.equal(await t.run('sheets.at(-1).onSubmit()').then(()=>'ok',e=>e.message),'ok');
   assert.deepEqual(t.requests.filter(r=>r.method!=='GET').map(r=>[r.url,r.body]),[['/net/config/ens19/second',{second:''}]]);
 });
@@ -939,7 +938,7 @@ test('#2891 deploy window: "כרטיס 2" has the skip-the-probe box, off by def
   assert.equal(box.type,'checkbox'); assert.equal(box.value,false);
   assert.equal(box.label,t.run('SECOND_ONLY_DEPLOY_LABEL'));
   assert.match(box.help,/רק אם השרת אמר שהבדיקה לא רצה/);
-  t.fixtures['/net/config/ens19/second']={ok:true,interface:'bond0',server_ip:'10.44.9.10',apply_error:null,deploy:{ok:true,url:'http://10.44.9.10:8080'},bond:{state:'ok'}};
+  t.fixtures['/net/config/ens19/second']={ok:true,interface:'bond0',server_ip:'10.44.9.10',apply_error:null,deploy:{ok:true,url:'http://10.44.9.10:7712'},bond:{state:'ok'}};
   const v={network:'10.44.9.0',netmask:'255.255.255.0',range_start:'10.44.9.100',range_end:'10.44.9.200',lease_n:'12',lease_u:'h',card1:'ens19',second:'ens22'};
   assert.equal(await t.run(`sheets[0].onSubmit(${JSON.stringify({...v,second_only_deploy:false})}).then(()=>null,e=>e.message)`),null);
   assert.equal(await t.run(`sheets[0].onSubmit(${JSON.stringify({...v,second_only_deploy:true})}).then(()=>null,e=>e.message)`),null);

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "tools.h"   /* #649: the toolbox (mockup 14) */
 #include "screens_rounds.h"
 #include "he_time.h"   /* #1503 */
 #include "lcui.h"   /* #1322 */
@@ -88,10 +89,14 @@ static void draw_theme_toggle(App *a,cairo_t *cr,double W,double head_h){
 
 /* mockup 01 section 2 (Nadav 24/10): the USB stick's "הגדרות" moved from the content's corner
  * (#1914) to the top bar, next to the theme switch, with F4. The fixed buttons sit left to right
- * in the order of their keys -- F2, (F3 "כלים", #649, not yet), F4 -- so a tools button goes in
- * between. Only where "הגדרות" was: the stick's source screen. */
+ * in the order of their keys -- F2, F3 "כלים" (#649, mockup 14), F4. Only where "הגדרות" was:
+ * the stick's source screen. */
 int app_usbset_here(const App *a){
     return a->screen==SCREEN_LOCAL&&a->st.lc.usb&&a->st.lc.screen!=LC_SCREEN_USBSET&&lc_view(a)==LCVIEW_SOURCE&&!a->lcu.confirm;
+}
+static double usbset_btn_w(cairo_t *cr){   /* the width draw_usbset_btn takes */
+    Text l=text_make(cr,FONT_SANS,13,500,"הגדרות",0,DIR_RTL), k=text_make(cr,FONT_MONO,11,600,"F4",0,DIR_LTR);
+    double w=8+k.w+8+l.w+6+14+10;text_free(&l);text_free(&k);return w;
 }
 static double draw_usbset_btn(App *a,cairo_t *cr,double x){
     const Theme *t=a->theme;
@@ -113,14 +118,18 @@ static double draw_usbset_btn(App *a,cairo_t *cr,double x){
 
 static double draw_header(App *a, cairo_t *cr, double W) {
     const Theme *t=a->theme;
+    const Screen scr=a->screen==SCREEN_TOOLS?a->tools_from:a->screen;   /* #649: the toolbox is over that screen */
+    const int tools=a->screen==SCREEN_TOOLS?1:tools_entry(a,a->screen);   /* mockup 14: 0 none, 1 on, 2 grey */
+    const double tools_w=tools?tools_hbtn_width(cr)+8:0;
+    int with_clock=1;
     Rect bar={0,0,W,N_HEADER_H}; draw_fill_rrect(cr,bar,0,t->header);
     double right=W-N_HEADER_PAD;
     /* #1302: the compact dark lockup (lockup-dark-32.png: 5px cells) on the header in both
      * themes -- always: an uploaded college logo is no longer drawn (Nadav 12/10) */
     right=draw_brand_lockup_r(cr,right,(N_HEADER_H-brand_symbol_height(5))/2,5,1,0)-22;
 
-    const int clone=a->force_cloner||a->force_standby||(a->screen==SCREEN_CLONER&&!a->st.task_direct)||a->screen==SCREEN_STANDBY||a->screen==SCREEN_LCBOOT||a->screen==SCREEN_LOCAL
-        ||(a->screen==SCREEN_FAILURE&&a->st.fail_cloner);   /* #1569: the failure record says whose failure it is; #2849: the build machine's direct send shows the cloner's card, not its role */
+    const int clone=a->force_cloner||a->force_standby||(scr==SCREEN_CLONER&&!a->st.task_direct)||scr==SCREEN_STANDBY||scr==SCREEN_LCBOOT||scr==SCREEN_LOCAL
+        ||(scr==SCREEN_FAILURE&&a->st.fail_cloner);   /* #1569: the failure record says whose failure it is; #2849: the build machine's direct send shows the cloner's card, not its role */
     const int server=a->screen==SCREEN_FAILURE&&a->st.fail_server;   /* #1741: the server's own screen (failgui.sh) */
     const char *role=server?(a->st.fail_server==2?"התקנת שרת":"שרת ImageSrv"):clone?"מחשב שיכפול":"מחשב בנייה";   /* #1252: the "2" was the mockup's */
     /* #2879: an unregistered machine has no known role either -- the failure record says so (field 5 = unknown) */
@@ -137,7 +146,7 @@ static double draw_header(App *a, cairo_t *cr, double W) {
      * #1257: the versions (agent · server) are drawn on their own line below. */
     char srv[160]; server_label(&a->st,srv,sizeof srv);
     const char *keys[]={"מכונה","שרת"};
-    const int local=a->screen==SCREEN_LOCAL;   /* #1322: no server in this flow -- said, in the server's place */
+    const int local=scr==SCREEN_LOCAL;   /* #1322: no server in this flow -- said, in the server's place */
     /* #1437: the name is the server's; with no hello this boot, the cloner says the MAC it knows itself */
     const char *vals[]={local&&!a->st.machine_name[0]&&a->mac[0]?a->mac:known(a->st.machine_name),srv};
     for(int i=0;i<(local?1:2);i++){
@@ -168,7 +177,14 @@ static double draw_header(App *a, cairo_t *cr, double W) {
                  ak?"v":"",ak?av:"לא ידוע");
     else snprintf(versions,sizeof versions,"סוכן %s%s · שרת %s%s",
              ak?"v":"",ak?av:"לא ידוע",sk?"v":"",sk?sv:"לא ידוע");
-    double vw=right-90-theme_btn_w(W)-12; if(vw<100)vw=100;   /* #1499: the clock moved over by the switch */
+    double vw=right-90-theme_btn_w(W)-12-tools_w;   /* #1499: the clock moved over by the switch; #649: and "כלים" */
+    /* #649: a narrow screen (960) with "כלים F3" has no room for both the clock and the versions --
+     * the versions stay (they say a mismatch), the clock goes (the stick never has one either) */
+    if(vw<100&&tools){vw=right-theme_btn_w(W)-tools_w-44;with_clock=0;}
+    /* the stick has no clock but "הגדרות F4": the versions end before the buttons (960: they ran over it) */
+    int usb_btns=a->st.lc.usb&&app_usbset_here(a);
+    if(usb_btns)vw=right-(N_HEADER_PAD+theme_btn_w(W)+8+tools_w+usbset_btn_w(cr)+8)-12;
+    if(vw<100)vw=usb_btns?fmax(vw,60):100;   /* the stick's line is "סוכן vX" alone -- it fits in 60 */
     Text vt=text_make(cr,FONT_SANS,11,400,versions,vw,DIR_RTL);
     text_draw_r(cr,&vt,right,mismatch?5:(N_HEADER_H-vt.h)/2,t->header_text);
     text_free(&vt);
@@ -188,9 +204,12 @@ static double draw_header(App *a, cairo_t *cr, double W) {
 #endif
     /* #1914 (Nadav, college 20/10): no clock on the stick -- a Windows machine keeps its RTC
        in local time, there is no server to set it by, and a wrong hour is worse than none */
-    if(a->st.lc.usb){if(app_usbset_here(a))draw_usbset_btn(a,cr,N_HEADER_PAD+theme_btn_w(W)+8);return N_HEADER_H;}   /* mockup 01 */
+    double lx=N_HEADER_PAD+theme_btn_w(W)+8;   /* left to right in the order of the keys: F2, F3, F4 (mockup 01, 14) */
+    if(tools)lx+=draw_tools_btn(a,cr,lx,tools)+8;
+    if(a->st.lc.usb){if(app_usbset_here(a))draw_usbset_btn(a,cr,lx);return N_HEADER_H;}   /* mockup 01 */
+    if(!with_clock)return N_HEADER_H;
     Text clock=text_make(cr,FONT_MONO,14,400,clock_s,0,DIR_LTR);
-    text_draw(cr,&clock,N_HEADER_PAD+theme_btn_w(W)+12,(N_HEADER_H-clock.h)/2,t->header_text); text_free(&clock);   /* #1499: after the corner switch */
+    text_draw(cr,&clock,lx+4,(N_HEADER_H-clock.h)/2,t->header_text); text_free(&clock);   /* #1499: after the corner switch */
     return N_HEADER_H;
 }
 
@@ -229,7 +248,7 @@ static const char *status_word(const App *a,char *buf,size_t n,Rgb *dot){
          if(!s->ndrawers&&s->task_direct)return s->task==TASK_PENDING?"ממתין לסוכן":"משימה פעילה";   /* #2984: the send runs; "כותב 0 דיסקים" was a sentence about a cloner */
          snprintf(buf,n,"כותב %d דיסקים במקביל",w);return buf;}
     case SCREEN_RESTORE:*dot=a->theme->warn;return "בחירת אימג' לשחזור";
-    case SCREEN_TOOLS:return a->tool_running?"מריץ כלי":"ארגז הכלים";
+    case SCREEN_TOOLS:*dot=a->theme->led_write;return a->tool_running?"מריץ כלי":"כלים";   /* mockup 14: "act:כלים" */
     case SCREEN_INSTALL:return "אשף התקנה";
     case SCREEN_LCBOOT: case SCREEN_LOCAL: break;   /* #1322: answered above */
     }
@@ -294,7 +313,7 @@ static const char *status_keys(const App *a,char *buf,size_t n){
     case SCREEN_CLASS:return a->st.has_session?"Enter  התחל עכשיו":"Esc  חזרה";
     case SCREEN_DONE:return "Enter  קליטה נוספת";
     case SCREEN_PROGRESS:return "אין פעולה במסך הזה";   /* mockup 10/10: it said "Esc חזרה" and Esc did nothing */
-    case SCREEN_TOOLS:return a->tools_view==TOOLS_CONFIRM?"Tab / Shift-Tab  מעבר    Esc  חזרה":"Esc  חזרה";
+    case SCREEN_TOOLS:return tools_status_keys(a);   /* #649: tools_nav.c -- the keys it acts on */
     case SCREEN_INSTALL:return "Tab / Shift-Tab  מעבר    Enter  אישור    Esc  חזרה";
     case SCREEN_FAILURE:{static char k[96];if(!a->st.nfail_btns)return "";if(!strncmp(a->st.fail_btns[0].label,"F2 ",3))return a->st.fail_btns[0].label;snprintf(k,sizeof k,"Enter  %s",a->st.fail_btns[0].label);return k;}   /* #2068: the first button; #1802: "F2 — הפעלה מחדש" names its own key */
     default:return "אין פעולה במסך הזה";   /* message: there is no way out to offer */
@@ -526,23 +545,6 @@ void screen_menu(App *a,cairo_t *cr,double W,double H,double head_h){
     double pw=menu_server_pill(a,cr,right,py);
     menu_cloner_pill(a,cr,right-pw-10,py);
     double line_y=py+24+12;cairo_rectangle(cr,N_PAD,line_y,inner,1);draw_set(cr,t->hair);cairo_fill(cr);
-    /* #649: the toolbox entry -- a secondary 38px button at the title row's
-     * inline end (left, next to the pills), bottom-aligned to the title block
-     * like the mockup's .ph (align-items:flex-end; its padding-bottom is the
-     * 12 above line_y), NOT one of the choice cards: it is
-     * the IT person's drawer, not an operator flow. Build menu only (cloner
-     * and class route before it). Registered before the body clip. v1 ships
-     * without the toolbox (Nadav, 19/09): drawn only when the state file says
-     * menu_tools=1 (absent = 0); v1.1 turns it on. */
-    if (a->st.menu_tools) {
-        Text tools_l = btn_label(cr, "כלים");
-        double tools_w = btn_width(&tools_l);
-        Rect tools_r = { N_PAD, line_y - 12 - N_BUTTON_H, tools_w, N_BUTTON_H };
-        draw_btn(a, cr, tools_r, &tools_l, BTN_PLAIN, HIT_TOOLS);
-        text_free(&tools_l);
-        /* keyboard order: the cards, "התנתק", then "כלים" (main.c menu_stops) */
-        if (a->menu_focus == (a->admin ? 4 : 3) + (a->st.menu_class ? 1 : 0) + 1) draw_focus_ring(a, cr, tools_r);
-    }
     /* the cards: two columns (.acts grid 1fr 1fr, gap 16), card 1 at the
      * right, each row as tall as its tallest card -- not the screen */
     int idx[MENU_N],count=0,cols=2;double gap=16,gy=line_y+17,bottom=H-N_STATUS_H-24-N_BUTTON_H-18;
@@ -592,7 +594,18 @@ void app_take_screen(App *a){
     else if(!strcmp(s->screen,"class"))a->mode=MODE_CLASSES;
 }
 
+static void route_base(App *a);
+/* #649 (mockup 14): the toolbox is drawn over the screen it was opened from, and only
+ * while that screen still offers it -- a write that starts (a round on the cloner, the
+ * stick's copy), a failure, a sign-out: the screen comes back and the toolbox closes. */
 void app_route(App *a){
+    route_base(a);
+    if(!a->tools_open)return;
+    if(a->install.active||tools_entry(a,a->screen)!=1){a->tools_open=0;if(a->confirm==CONFIRM_TOOL)a->confirm=CONFIRM_NONE;return;}
+    a->tools_from=a->screen;a->screen=SCREEN_TOOLS;
+}
+
+static void route_base(App *a){
     const State *s=&a->st;
     if(a->install.active){a->screen=SCREEN_INSTALL;return;}
     if(s->fail_title[0]){a->screen=SCREEN_FAILURE;return;}   /* #1569: the agent's own failure, before everything */
@@ -622,7 +635,6 @@ void app_route(App *a){
     case MODE_ROOM: case MODE_DIRECT: a->screen = SCREEN_ROOM; break;
     case MODE_CAPTURE: a->screen = SCREEN_PICK; break;
     case MODE_RESTORE: a->screen = SCREEN_RESTORE; break;
-    case MODE_TOOLS:   a->screen = SCREEN_TOOLS; break;     /* #649 */
     default:           a->screen = SCREEN_MENU; break;
     }
 }

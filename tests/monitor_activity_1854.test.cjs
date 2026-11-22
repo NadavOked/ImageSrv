@@ -32,7 +32,7 @@ function monitorPage(Channel, clock) {
   const nodes = {};
   const ctx = vm.createContext({
     console, URLSearchParams, Uint8Array, TextDecoder, TextEncoder, Promise, Math, Error, JSON,
-    location: {search: '', protocol: 'http:', host: 'srv:8081'},
+    location: {search: '', protocol: 'http:', host: 'srv:443'},
     document: {getElementById: (id) => (nodes[id] ||= stub()), title: '', fullscreenEnabled: false,
       addEventListener(name, fn) { (docListeners[name] ||= []).push(fn); }, removeEventListener() {},
       documentElement: {classList: {add() {}, remove() {}}}},

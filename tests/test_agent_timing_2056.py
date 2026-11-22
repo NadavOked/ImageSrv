@@ -188,19 +188,6 @@ def test_a_garbage_echo_is_ignored_and_keeps_the_previous_record(room_server):
     assert _applied(admin)["lost_wait_seconds"]["applied"] == 0
 
 
-# --- udp-sender follows the wait ------------------------------------------------------------
-
-
-def test_the_senders_drop_ceiling_never_undercuts_the_configured_wait():
-    from server.agent import timing as agent_timing
-    from server.rounds.sender import DEFAULT_RETRIES_UNTIL_DROP, SenderEngine
-    assert agent_timing.retries_until_drop(200, 180) == 200          # default: unchanged
-    assert agent_timing.retries_until_drop(200, 1800) == 1895        # 30 min: scaled 200 per 190 s
-    engine = SenderEngine(library=None, lost_wait=lambda: 600)
-    assert engine.effective_retries_until_drop() == 632 > DEFAULT_RETRIES_UNTIL_DROP
-    assert SenderEngine(library=None).effective_retries_until_drop() == DEFAULT_RETRIES_UNTIL_DROP
-
-
 def test_every_setting_has_a_journal_label():
     from server.console.journal_he import SETTINGS_HE
     assert set(KEYS) <= set(SETTINGS_HE)

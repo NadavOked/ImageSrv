@@ -324,18 +324,6 @@
 1	server/rounds/room_state.py	arg-type	Argument 1 to "_unconfirmed" has incompatible type "Row | None"; expected "Row"
 1	server/rounds/room_state.py	var-annotated	Need type annotation for "done" (hint: "done: set[<type>] = ...")
 1	server/rounds/room_state.py	var-annotated	Need type annotation for "open_" (hint: "open_: set[<type>] = ...")
-1	server/rounds/sender.py	arg-type	Argument 1 to "finished_receivers" has incompatible type "Path | None"; expected "Path"
-3	server/rounds/sender.py	index	Value of type "tuple[float, int] | None" is not indexable
-1	server/rounds/sender.py	list-item	List item 1 has incompatible type "str | Literal[True]"; expected "str"
-1	server/rounds/sender.py	union-attr	Item "None" of "SendState | None" has no attribute "commands"
-2	server/rounds/sender.py	union-attr	Item "None" of "SendState | None" has no attribute "done_at"
-1	server/rounds/sender.py	union-attr	Item "None" of "SendState | None" has no attribute "file"
-3	server/rounds/sender.py	union-attr	Item "None" of "SendState | None" has no attribute "first_byte_at"
-2	server/rounds/sender.py	union-attr	Item "None" of "SendState | None" has no attribute "index"
-2	server/rounds/sender.py	union-attr	Item "None" of "SendState | None" has no attribute "moved_bytes"
-2	server/rounds/sender.py	union-attr	Item "None" of "SendState | None" has no attribute "moved_s"
-3	server/rounds/sender.py	union-attr	Item "None" of "SendState | None" has no attribute "state"
-2	server/rounds/sender.py	union-attr	Item "None" of "SendState | None" has no attribute "total"
 2	server/rounds/sessions.py	index	Value of type "list[str] | None" is not indexable
 1	server/rounds/station.py	arg-type	Argument "roster" to "open" of "SessionStore" has incompatible type "list[str | None] | None"; expected "list[str] | None"
 1	server/rounds/station.py	arg-type	Argument 1 to "normalize_mac" has incompatible type "Any | None"; expected "str"

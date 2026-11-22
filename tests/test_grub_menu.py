@@ -22,7 +22,7 @@ from boot.grub_menu import (
     LOCAL_BOOT_PATHS,
 )
 
-CFG = GrubConfig(server_base="http://10.44.12.10:8080")
+CFG = GrubConfig(server_base="http://10.44.12.10:7712")
 
 
 # --- תשובת שרת מלאה, מועתקת מסעיף 3 בממשקים ---------------------------------
@@ -214,9 +214,9 @@ def test_a_machine_with_no_task_auto_boots_imagesrv_but_keeps_a_local_entry():
 
 def test_agent_config_loads_kernel_and_initrd_from_the_server():
     text = render(answer(task={"id": "tsk_1"}), CFG)
-    assert "linux (http,10.44.12.10:8080)/boot/vmlinuz" in text
-    assert "initrd (http,10.44.12.10:8080)/boot/initrd.img" in text
-    assert "imagesrv.server=http://10.44.12.10:8080" in text
+    assert "linux (http,10.44.12.10:7712)/boot/vmlinuz" in text
+    assert "initrd (http,10.44.12.10:7712)/boot/initrd.img" in text
+    assert "imagesrv.server=https://10.44.12.10:7712" in text
 
 
 @pytest.mark.parametrize(
@@ -233,9 +233,9 @@ def test_every_network_entry_retries_kernel_and_initrd_three_times(a):
     text = render(a, CFG)
     entry = text.split('menuentry "ImageSrv" --unrestricted --id imagesrv {', 1)[1].split("\n}", 1)[0]
     assert entry.count("for attempt in 1 2 3; do") == 2
-    assert 'if linux (http,10.44.12.10:8080)/boot/vmlinuz ' in entry
+    assert 'if linux (http,10.44.12.10:7712)/boot/vmlinuz ' in entry
     # `then` בשורה משלו מאז 54223f94 ("Fix GRUB retry command boundaries")
-    assert 'if initrd (http,10.44.12.10:8080)/boot/initrd.img\n        then\n' in entry
+    assert 'if initrd (http,10.44.12.10:7712)/boot/initrd.img\n        then\n' in entry
     assert 'echo "Loading kernel over HTTP (attempt $attempt of 3)..."' in entry
     assert 'echo "Loading initrd over HTTP (attempt $attempt of 3)..."' in entry
 
@@ -292,7 +292,7 @@ def test_retry_keeps_the_kernel_command_line_clean_and_the_menu_ascii():
     text = render(answer(task={"id": "tsk_1"}), CFG)
     linux = next(line for line in text.splitlines() if line.strip().startswith("if linux "))
     imagesrv_args = [word for word in linux.split() if word.startswith("imagesrv.")]
-    assert imagesrv_args == ["imagesrv.server=http://10.44.12.10:8080"]
+    assert imagesrv_args == ["imagesrv.server=https://10.44.12.10:7712"]
     assert "imagesrv.mode=recovery" not in linux
     text.encode("ascii")
 
@@ -300,7 +300,7 @@ def test_retry_keeps_the_kernel_command_line_clean_and_the_menu_ascii():
     recovery_linux = next(line for line in recovery.splitlines()
                           if line.strip().startswith("if linux "))
     recovery_args = [word for word in recovery_linux.split() if word.startswith("imagesrv.")]
-    assert recovery_args == ["imagesrv.server=http://10.44.12.10:8080",
+    assert recovery_args == ["imagesrv.server=https://10.44.12.10:7712",
                              "imagesrv.mode=recovery"]
 
 
@@ -309,7 +309,7 @@ def test_retry_keeps_the_kernel_command_line_clean_and_the_menu_ascii():
 # thermal.psv=-1: ACPI _PSL timeouts על HP EliteDesk 800 G6 (#1848, #1870). נדב 20/10:
 # רק החלק שמאט -- לא thermal.off. פרמטר של הקרנל ולא פרט משימה, ולכן נכנס לרשימה במודע.
 AGENT_KERNEL_PARAMS = {
-    "ip=dhcp", "imagesrv.server=http://10.44.12.10:8080", "console=tty0",
+    "ip=dhcp", "imagesrv.server=https://10.44.12.10:7712", "console=tty0",
     "quiet", "loglevel=3", "thermal.psv=-1", "imagesrv.mode=recovery",
 }
 
@@ -527,9 +527,9 @@ def test_the_boot_loop_guard_screen_also_points_at_recovery():
 # --- תצורה ------------------------------------------------------------------
 
 
-def test_https_is_rejected_because_signed_grub_has_no_tls():
-    with pytest.raises(ValueError, match="http"):
-        GrubConfig(server_base="https://10.44.12.10:8080")
+def test_invalid_agent_url_scheme_is_rejected():
+    with pytest.raises(ValueError, match="HTTP"):
+        GrubConfig(server_base="ftp://10.44.12.10:7712")
 
 
 def test_a_server_base_with_no_host_is_rejected():
@@ -551,14 +551,14 @@ def test_bootstrap_prefers_the_address_that_answered_dhcp():
     בפועל, ולכן היא הראשית; הפורט נלקח מהתצורה."""
     text = render_bootstrap(CFG)
     assert 'if [ -n "$net_default_server" ]; then' in text
-    assert "set imagesrv_server=${net_default_server}:8080" in text
+    assert "set imagesrv_server=${net_default_server}:7712" in text
 
 
 def test_bootstrap_keeps_the_configured_address_as_a_fallback():
     """next-server חסר או שגוי לא משאיר את התחנה בלי תפריט: הכתובת
     המפורשת מהתצורה נשארת, גם כברירת מחדל וגם כניסיון שני בכל סבב."""
     text = render_bootstrap(CFG)
-    assert "set imagesrv_fallback=10.44.12.10:8080" in text
+    assert "set imagesrv_fallback=10.44.12.10:7712" in text
     assert "set imagesrv_server=$imagesrv_fallback" in text
     loop = text.split("for attempt in 1 2 3; do", 1)[1].split("done", 1)[0]
     assert "configfile (http,$imagesrv_server)/boot/menu?mac=$net_default_mac" in loop

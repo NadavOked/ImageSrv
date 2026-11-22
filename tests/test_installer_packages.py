@@ -4,7 +4,7 @@
 ב-uvicorn, #690) החזיר 500 עד ``apt-get install python3-websockets``:
 uvicorn אינו מדבר WebSocket בעצמו, והחבילה לא הייתה ברשימה. הראשי
 במעבדה הותקן ידנית ולכן זה לא נראה שם. באותה משפחה: python3-cryptography
-ו-python3-openssl לערוץ הבין-שרתי 8443 (#740).
+ו-python3-openssl לערוץ הבין-שרתי 7700 (#740).
 
 הטסט קורא את מערך ``PKGS`` **מתוך המתקין עצמו** — לא מעתיק את הרשימה —
 ומוודא ששלוש החבילות שם, וש-``server/requirements.txt`` (מה שה-CI

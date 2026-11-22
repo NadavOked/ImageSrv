@@ -1,4 +1,4 @@
-"""הרצת השרת: python -m server.main --server-url http://10.44.12.10:8080
+"""הרצת השרת: python -m server.main --server-url https://10.44.12.10:7712
 
 אותה כתובת משמשת את תפריט ה-GRUB ואת הסוכן — היא מה שנכתב לשורת
 הפקודה של הקרנל, ולכן חייבת להיות הכתובת שהלקוחות רואים, לא localhost.
@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import ipaddress
 import json
+import logging
 import os
 import socket
 import subprocess
@@ -19,6 +20,7 @@ import urllib.parse
 from pathlib import Path
 
 from server.paths import REPO_ROOT
+from server.core import ports as product_ports   # #3871: the one place a port is named
 
 from server.net import deploy_net
 from server.console import server_power
@@ -61,8 +63,8 @@ def _ip_nics() -> list | None:
 def _interface_for(server_url: str) -> str | None:
     """הכרטיס שנושא את כתובת ה-server-url — הוא ממשק וילן ההפצה.
 
-    השידור (udp-sender) חייב לצאת דווקא ממנו: בלי --interface udpcast
-    בוחר את ברירת המחדל של הניתוב, וברשת עם שני כרטיסים זה ה-LAN —
+    השידור (`chunkcast send`) חייב לצאת דווקא ממנו: בלי כרטיס מפורש המולטיקאסט
+    יוצא לפי ברירת המחדל של הניתוב, וברשת עם שני כרטיסים זה ה-LAN —
     השידור לא פוגש אף מקבל ונכשל, וגרוע מזה, הוא מדבר ברשת הרגילה (#19).
 
     מחזיר `None` **רק** כשאין `ip` כלל — תחנת פיתוח (לא לינוקס), שם
@@ -86,7 +88,7 @@ def _interface_for(server_url: str) -> str | None:
             if addr.get("local") in candidates:
                 return nic.get("ifname")
     raise InterfaceDetectionError(
-        f"אף כרטיס אינו נושא את {host} — udp-sender היה משדר לכרטיס הלא "
+        f"אף כרטיס אינו נושא את {host} — השידור היה יוצא מהכרטיס הלא "
         f"נכון. העבר \u200e--interface\u200f במפורש.")
 
 
@@ -111,8 +113,8 @@ def _address_for_interface(name: str) -> str | None:
     raise InterfaceDetectionError(f"לא נמצא כרטיס בשם {name}")
 
 
-def agent_uvicorn_config(app, host: str, port: int):
-    """התצורה של מאזין הסוכן (8080) — /boot של GRUB ו-API הסוכן.
+def agent_uvicorn_config(app, host: str, port: int, **tls):
+    """התצורה של מאזין הסוכן (7712) — /boot של GRUB ו-API הסוכן.
 
     #1423: `http=ResetBootOnPeerClose` עונה ב-RST כש-GRUB סוגר חיבור
     /boot. בלעדיו השרת נשאר ב-LAST-ACK על החיבור האחרון, ו-GRUB, שיוצא
@@ -122,7 +124,7 @@ def agent_uvicorn_config(app, host: str, port: int):
 
     from server.net.grub_close import ResetBootOnPeerClose
     return uvicorn.Config(app, host=host, port=port, log_level="info",
-                          http=ResetBootOnPeerClose)
+                          http=ResetBootOnPeerClose, **tls)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -167,17 +169,17 @@ def build_parser() -> argparse.ArgumentParser:
                         help="כתובת ה-bind של הסוכן. ברירת מחדל: "
                              "כתובת כרטיס ההפצה (--interface). 0.0.0.0 רק "
                              "בבקשה מפורשת (R20-F1)")
-    parser.add_argument("--port", type=int, default=8080,
+    parser.add_argument("--port", type=int, default=product_ports.AGENT,
                         help="פורט הסוכן: hello/pulls/progress/images ו-/boot")
     # #731 (tracer 1 של #703): הקונסולה/הניהול מאזינים על פורט **נפרד**
     # מהסוכן, כדי שחומת אש תוכל לחשוף רק אותו לווילן הניהול.
-    parser.add_argument("--console-port", type=int, default=8081,
+    parser.add_argument("--console-port", type=int, default=product_ports.CONSOLE,
                         help="פורט הקונסולה/הניהול: /api/console ו-/console")
     # #770 (tracer 4 של #703): הקונסולה נקשרת פר-ממשק — לכרטיס הניהול/
     # המשרדים בלבד, ולא ל-`--host` (וילן ההפצה). קשירה ל-`0.0.0.0` חשפה
     # את API הניהול בכל הכרטיסים (כולל ההפצה/כיתות) והתנגשה עם ה-preseed
-    # על 8081. ברירת המחדל **fail-closed** היא loopback ולא `0.0.0.0`:
-    # בלי כתובת ניהול מפורשת הקונסולה נגישה מקומית בלבד, ואינה תופסת 8081
+    # על 443. ברירת המחדל **fail-closed** היא loopback ולא `0.0.0.0`:
+    # בלי כתובת ניהול מפורשת הקונסולה נגישה מקומית בלבד, ואינה תופסת 443
     # בממשקים אחרים — "הגבול הוא ה-socket" (#703), ועיקרון 5 (השומר עובד
     # כברירת מחדל, לא רק אם המפעיל זכר דגל). המפעיל קובע את כתובת הניהול
     # דרך היחידה (systemctl edit). TLS לקונסולה הוא tracer 5.
@@ -191,27 +193,26 @@ def build_parser() -> argparse.ArgumentParser:
                              "מחדש בהחלפת כתובת, #1088). ברירת מחדל loopback "
                              "(fail-closed); לעולם לא 0.0.0.0 בלי בקשה מפורשת")
     # #703 (tracer 5): הקונסולה מוגשת ב-HTTPS בלבד — תעודה חתומה-עצמית
-    # שנוצרת פעם אחת ל-`<data_dir>/console-tls/` ונשארת. HTTP על 8081
+    # שנוצרת פעם אחת ל-`<data_dir>/console-tls/` ונשארת. HTTP על 443
     # אינו מוגש (fail-closed, בלי הפניה). `off` מותר **רק** על loopback —
     # הרצת פיתוח ו-`tools/e2e`; על כרטיס ניהול הסיסמה הייתה עוברת גלויה.
     parser.add_argument("--console-tls", choices=("on", "off"), default="on",
-                        help="TLS לקונסולה (8081). off מותר רק עם "
+                        help="TLS לקונסולה (443). off מותר רק עם "
                              "--console-host על loopback (127.0.0.1) — "
                              "פיתוח/e2e; ברירת מחדל on")
-    # #201: הפורט שהשידור תופס בפועל (וגם portbase+1). בייצור לא נוגעים
-    # בו — #1826: הסוכן מקבל אותו ב-`session.portbase`, אבל סוכן ישן מצפה
-    # ל-9000, וחומת האש של המתקין פותחת 9000-9003 בלבד (portbase..portbase+3: ההפצה ומשוב הקצב של #3512).
+    # #201: הבסיס של פורט השידור. מנוע החתיכות משדר על portbase+2 ושומע את משוב הקצב על portbase+3 (#3512);
+    # הסוכן מקבל את הפורט ב-`session.chunk.port`. בייצור לא נוגעים בו: חומת האש של המתקין פותחת רק את פורטי Trident של `server/core/ports.py` (#3871).
     # #3487: כשהקונסולה כותבת את חומת האש מחדש היא גוזרת את הטווח מהערך הזה (`--mcast-ports`).
     # הדגל קיים בשביל מי שמריץ שרת אמיתי במקום שאסור לו להתנגש בהפצה:
     # `tools/e2e/harness.py`. **בכוונה דגל ולא משתנה סביבה** — משתנה
     # סביבה שנשאר תקוע ב-shell או ביחידה משנה את פורט ההפצה של הייצור
     # בשקט, ודווקא כאן זה הכשל שמנסים למנוע. דגל נראה ב-`ps`.
     parser.add_argument("--sender-portbase", type=int, default=None,
-                        help="portbase של udp-sender; ברירת המחדל היא 9000 "
-                             "(הייצור). לשימוש הסימולציה בלבד")
+                        help="הבסיס של פורט השידור (מנוע החתיכות משדר על +2); ברירת המחדל "
+                             "היא של הייצור (Trident, server/core/ports.py). לשימוש הסימולציה בלבד")
     parser.add_argument("--sender-simulate", action="store_true",
-                        help="שולח מדומה — בלי udp-sender ובלי בדיקת פורטים; "
-                             "tools/e2e_simulation.py בלבד, לעולם לא בשרת אמיתי")
+                        help="שולח מדומה — בלי chunkcast send; לשרת שאסור לו לשדר "
+                             "(tools/restore-drill.sh), לעולם לא בשרת אמיתי")
     # Storage Nodes (#655/#723): תפקיד ההתקנה של השרת. **תצורת שרת
     # בלבד** — אינה נכנסת לשורת הפקודה של הקרנל (עיקרון 2), רק להגדרות.
     # #732: ברירת המחדל היא ``None`` (לא ``standalone``). ריסטארט בלי
@@ -233,12 +234,34 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--interserver-host", default=None,
                         help="כתובת ה-bind של מאזין ה-enrollment הבין-שרתי — "
                              "כתובת או שם כרטיס (#1088, כמו --console-host)")
-    parser.add_argument("--interserver-port", type=int, default=8443,
+    parser.add_argument("--interserver-port", type=int, default=product_ports.INTERSERVER,
                         help="פורט מאזין ה-enrollment הבין-שרתי (mTLS 1.3)")
     parser.add_argument("--interserver-url", default=None,
                         help="הכתובת הבין-שרתית המפורשת ששרת המשנה מציג "
                              "(https://host:port/…, פורט מפורש חובה)")
+    # #3486: /boot של GRUB והקושחה במאזין **משלו**, תמיד. הוא השירות היחיד שפתוח למחשב
+    # לא רשום, ופורט הסוכן משרת רק רשומים. הערך קובע גם את grub.cfg על ה-TFTP; את כלל
+    # חומת האש המחולל מקבל מ-`DeployContext.boot_port` (ברירת מחדל זהה בשניהם).
+    parser.add_argument("--boot-port", type=int, default=product_ports.BOOT,
+                        help="פורט מאזין ה-/boot של GRUB והקושחה (תפריט, קרנל, "
+                             "initrd). נכתב ל-grub.cfg בכל עלייה, ונפתח בחומת האש "
+                             "(deploy/nftables-rules.sh --boot-port) — שניהם חייבים "
+                             "להסכים. ברירת מחדל %(default)s")
     return parser
+
+
+def _boot_listener_port(parser, args) -> int:
+    """#3486: פורט ה-/boot. ערך שאינו פורט, או שמתנגש בפורט אחר של השרת, עוצר את
+    העלייה בשמו — לא מאזין שנפל."""
+    if not 0 < args.boot_port < 65536:
+        parser.error(f"--boot-port חייב להיות פורט (1-65535), התקבל: {args.boot_port}")
+    taken = {"--port": args.port, "--console-port": args.console_port,
+             "--interserver-port": args.interserver_port}
+    clash = [flag for flag, value in taken.items() if value == args.boot_port]
+    if clash:
+        parser.error(f"--boot-port {args.boot_port} כבר תפוס על ידי {clash[0]} — "
+                     "פורט נפרד ל-/boot חייב להיות שונה")
+    return args.boot_port
 
 
 def _deploy_state(args) -> deploy_net.DeployState:
@@ -248,15 +271,31 @@ def _deploy_state(args) -> deploy_net.DeployState:
     ובדיקות שמזייפות את כל מה שאחרי הפרסור אינן נוגעות בדיסק.
     """
     if args.server_url:
-        return deploy_net.DeployState("cli", args.interface or None, args.server_url)
+        return _on_agent_port(deploy_net.DeployState("cli", args.interface or None, args.server_url), args.port)
     from .db import connect
     data_dir = Path(args.data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
     conn = connect(data_dir / "imagesrv.db")
     try:
-        return deploy_net.resolve(conn, None, None)
+        return _on_agent_port(deploy_net.resolve(conn, None, None), args.port)
     finally:
         conn.close()
+
+
+def _on_agent_port(state: deploy_net.DeployState, port: int) -> deploy_net.DeployState:
+    """#3871: כתובת ההפצה של הריצה נושאת את הפורט שהסוכן מאזין בו (`--port`).
+
+    הכתובת השמורה (ביחידה או ב-`deploy:url`) נכתבה ביום ההתקנה, עם פורט הסוכן של אז. שרת ששודרג מאזין
+    בפורט של היום, ו-GRUB ושורת הקרנל היו שולחים כל תחנה לפורט הקודם. מה שנשמר אינו נכתב מחדש כאן (שדרוג
+    שנכשל מחזיר את התג הקודם, והוא קורא את אותה כתובת); ההחלפה נעשית בכל עלייה, ונאמרת."""
+    if not state.url:
+        return state
+    url = deploy_net.with_agent_port(state.url, port)
+    if url == state.url:
+        return state
+    print(f"deploy address: {state.url} names another port than the agent listens on; "
+          f"the stations are told {url} (#3871)")
+    return deploy_net.DeployState(state.source, state.interface, url)
 
 
 def _resolve_bind_host(parser, flag: str, value: str | None) -> tuple[str | None, str | None]:
@@ -332,7 +371,7 @@ def _owner_nic(address: str | None) -> str | None:
 
 
 def _primary_alive(runtime, args, hostname: str):
-    """#1310: יצרן המאזין "אתה שם?" של הראשי — ``None`` במשני (שם 8443 הוא
+    """#1310: יצרן המאזין "אתה שם?" של הראשי — ``None`` במשני (שם 7700 הוא
     ה-mTLS, ובלעדיו אינו נפתח כלל). אחרת פונקציה ``כתובת → (יצרנים,
     כתובות)``, כמו ``console_servers``: #1088 בונה מחדש בחילוף כתובת, ובלי
     כתובת עדיין — אין מאזין, לא loopback (אין מה לשאול מקומית).
@@ -389,7 +428,7 @@ def _start_netwatch(runtime, deploy, interface: str | None, querier) -> None:
     from server.rounds import chunksend
 
     def engine_group() -> str | None:
-        return chunksend.GROUP if chunksend.engine_of(runtime.conn) == chunksend.CHUNK else None
+        return chunksend.GROUP
 
     watch = netwatch.Watch(runtime.conn, interface, querier=querier, engine_group=engine_group)
     l2sense.set_server_view(lambda: querier.sending(time.monotonic()) if querier is not None else None)
@@ -475,6 +514,7 @@ def main() -> None:
     serverlog.configure()
     parser = build_parser()
     args = parser.parse_args()
+    boot_port = _boot_listener_port(parser, args)   # #3486
 
     from server.net import ifaddr
 
@@ -490,9 +530,8 @@ def main() -> None:
     deploy = _deploy_state(args)
 
     if deploy.source == "cli":
-        if not args.server_url.startswith("http://"):
-            # אותו כלל כמו במתקין: ה-GRUB החתום נבנה בלי TLS.
-            parser.error("--server-url חייב להתחיל ב-http://")
+        if not args.server_url.startswith(("https://", "http://")):
+            parser.error("--server-url: כתובת שרת לא תקינה")
 
         # #498: המארח ב---server-url חייב להיות כתובת IP מספרית, לא שם.
         # `hello.off_deploy_vlan` משווה את ה-sockname של החיבור (תמיד כתובת)
@@ -567,7 +606,7 @@ def main() -> None:
     # #1088: כתובת ההפצה וכרטיסה — מהדגל (המעבדה, שרת שהותקן עם כרטיס
     # הפצה), ממה שנרשם מהקונסולה, או "לא הוגדרה". שלושת המקורות נאמרים.
     if deploy.source == "cli":
-        server_url = args.server_url
+        server_url = deploy.url              # #3871: `--server-url`, on the port the agent listens on
         if args.interface:
             interface = args.interface
         else:
@@ -606,7 +645,7 @@ def main() -> None:
               "broadcast is simulated)")
     host = urllib.parse.urlsplit(server_url).hostname
 
-    # #1074: הסוכן (8080) נקשר לכתובת כרטיס ההפצה. 0.0.0.0
+    # #1074: הסוכן (7712) נקשר לכתובת כרטיס ההפצה. 0.0.0.0
     # רק אם המפעיל ביקש במפורש — ואז נאמר, לא בשקט (R20-F1).
     if args.host is None:
         nic_addr = None
@@ -623,7 +662,7 @@ def main() -> None:
     import uvicorn
 
     from server.net import ports
-    from .app import create_agent_app, create_console_app, create_runtime
+    from .app import create_agent_app, create_boot_app, create_console_app, create_runtime
     from .db import journal
 
     # #996: מנהל המאזינים — נבנה לפני ה-runtime כי הוא מוזרק אליו
@@ -643,7 +682,7 @@ def main() -> None:
         state=deploy, agent_port=args.port, tftp_root=Path(args.tftp_root),
         repo_dir=Path(args.repo_dir) if args.repo_dir else REPO_ROOT,
         servers_interface=console_iface, primary_ip=primary_ip,
-        primary_ip_error=primary_ip_error)
+        primary_ip_error=primary_ip_error, boot_port=boot_port)
 
     def servers_nic_status():
         if not console_iface:
@@ -669,6 +708,7 @@ def main() -> None:
     # pytest.
     runtime = create_runtime(args.data_dir, args.images, server_url,
                              boot_dir=args.boot_dir, interface=interface,
+                             boot_port=boot_port,
                              multicast_interface_override=args.interface,
                              sender_portbase=args.sender_portbase,
                              sender_simulate=args.sender_simulate,
@@ -729,17 +769,29 @@ def main() -> None:
     _wire_server_disks(runtime)   # #3007
     agent_app = create_agent_app(runtime)
     console_app = create_console_app(runtime)
+    boot_app = create_boot_app(runtime)   # #3486
 
     # #996: ה-`Config` נבנה פעם אחת; ה-`Server` נבנה מחדש בכל פתיחה
     # (uvicorn.Server אינו רב-פעמי), ולכן המנהל מקבל **יצרנים**.
-    agent_config = agent_uvicorn_config(agent_app, args.host, args.port)
+    from server.agent import tls as agent_tls
+    agent_identity, _ = agent_tls.ensure_identity(args.data_dir)
+    agent_config = agent_uvicorn_config(agent_app, args.host, args.port, **agent_identity.uvicorn_kwargs())
     configs: dict[tuple[str, str], object] = {("agent", args.host): agent_config}
 
     def agent_factory(h: str):
         """#705: יצרן לכל כתובת — הסוכן נקשר לכל כרטיס שבו "אתחול מהרשת" דלוק."""
         if ("agent", h) not in configs:
-            configs[("agent", h)] = agent_uvicorn_config(agent_app, h, args.port)
+            configs[("agent", h)] = agent_uvicorn_config(agent_app, h, args.port, **agent_identity.uvicorn_kwargs())
         cfg = configs[("agent", h)]
+        return lambda: uvicorn.Server(cfg)
+
+    def boot_factory(h: str):
+        """#3486: מאזין ה-/boot של GRUB — אותן כתובות כמו הסוכן (אותו שירות
+        "אתחול מהרשת" לכל כרטיס), פורט משלו. אותה הגדרת קשירה כמו הסוכן,
+        כולל `ResetBootOnPeerClose` (#1423): זה בדיוק החיבור ש-GRUB סוגר."""
+        if ("boot", h) not in configs:
+            configs[("boot", h)] = agent_uvicorn_config(boot_app, h, boot_port)
+        cfg = configs[("boot", h)]
         return lambda: uvicorn.Server(cfg)
     # #770: הקונסולה על כרטיס הניהול (`--console-host`) בלבד — לא `--host`.
     # #703 (tracer 5): `ssl_certfile`/`ssl_keyfile` של uvicorn (stdlib ssl)
@@ -757,7 +809,7 @@ def main() -> None:
         #740) נאכפים על כתובת ה-peer, ומחיבור לכרטיס הניהול ה-peer לעולם
         אינו loopback: במעבדה `POST /storage-pairing-window` החזיר 403 תמיד,
         והמפעיל נאלץ ל-`ssh -L`. uvicorn 0.32 (דביאן 13) קושר `host` יחיד,
-        ולכן זה `Server` שני על אותו loop — כמו 8080/8081. loopback אינו
+        ולכן זה `Server` שני על אותו loop — כמו 7712/443. loopback אינו
         מרחיב את החשיפה (אותה מכונה בלבד), ולכן אינו שובר את fail-closed
         של #770. בלי כתובת על הכרטיס (#1088) — loopback בלבד, עד שתגיע.
         """
@@ -793,10 +845,13 @@ def main() -> None:
                                for h in console_hosts)
     listeners.add("http_boot", [agent_factory(h) for h in agent_hosts],
                   port=args.port, hosts=agent_hosts)
+    listeners.add("http_grub", [boot_factory(h) for h in agent_hosts],
+                  port=boot_port, hosts=agent_hosts)
     listeners.add("http_console", console_factories,
                   port=args.console_port, hosts=console_hosts)
-    print(f"agent on {' + '.join(agent_hosts)}:{args.port}"
+    print(f"agent HTTPS on {' + '.join(agent_hosts)}:{args.port}"
           f"  console on {console_binds}")
+    print(f"boot (GRUB) on {' + '.join(agent_hosts)}:{boot_port}  (#3486)")
     if console_iface:
         print(f"console interface: {console_iface} "
               f"({console_addr or 'no address yet — loopback until a lease arrives'})")
@@ -808,7 +863,7 @@ def main() -> None:
     else:
         print("console TLS: off (loopback only)")
 
-    # #1310: הראשי עונה על 8443 ל"אתה שם?" בלבד — על כרטיס השרתים, שהוא
+    # #1310: הראשי עונה על 7700 ל"אתה שם?" בלבד — על כרטיס השרתים, שהוא
     # כרטיס הקונסולה. קונסולה על loopback בלבד = אין כרטיס שרתים = אין מאזין.
     alive_servers = None
     if console_iface or (console_addr and not is_loopback(console_addr)) or nic_plan is not None:
@@ -963,9 +1018,13 @@ def main() -> None:
         run("סוכן", lambda: listeners.request_retarget(
             "http_boot", hosts=hosts["http_boot"] or [deploy_net.UNCONFIGURED_HOST],
             factory_for=agent_factory))
+        # #3486: אותו שירות ("אתחול מהרשת"), אותן כתובות, פורט משלו
+        run("אתחול (GRUB)", lambda: listeners.request_retarget(
+            "http_grub", hosts=hosts["http_boot"] or [deploy_net.UNCONFIGURED_HOST],
+            factory_for=boot_factory))
         if "interserver" not in listeners.ids():
             if hosts["interserver"]:
-                errors.append("בין-שרתים: אין מאזין 8443 בתהליך הזה — בראשי: אתחול "
+                errors.append("בין-שרתים: אין מאזין 7700 בתהליך הזה — בראשי: אתחול "
                               "השרת יעלה אותו לפי השירותים; בשרת המשנה: נדרש "
                               "\u200e--interserver-host ביחידה")
         elif alive_servers is not None:
@@ -993,8 +1052,27 @@ def main() -> None:
 
     # המצב השמור (`port:<id>` ב-DB) קובע מה נקשר בעלייה.
     listeners.want_open = lambda port_id: ports.enabled(runtime.conn, port_id)
+    async def serve():
+        async def renew():
+            while True:
+                await asyncio.sleep(3600)
+                try:
+                    current, _ = agent_tls.ensure_identity(args.data_dir)
+                    for (kind, _host), cfg in configs.items():
+                        if kind == "agent" and cfg.loaded:
+                            cfg.ssl.load_cert_chain(current.cert_path, current.key_path)
+                except Exception:
+                    logging.getLogger(__name__).exception("Agent TLS renewal failed")
+
+        renewal = asyncio.create_task(renew())
+        try:
+            await serve_all(listeners)
+        finally:
+            renewal.cancel()
+            await asyncio.gather(renewal, return_exceptions=True)
+
     try:
-        asyncio.run(serve_all(listeners))
+        asyncio.run(serve())
     finally:
         for watcher in watchers:
             watcher.stop()

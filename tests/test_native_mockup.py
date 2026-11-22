@@ -481,7 +481,8 @@ def test_one_destructive_pattern_red_and_only_after_the_confirmation():
     room = code(body(_src("screens_room.c"), "screen_room"))
     assert "BTN_DANGER" not in room
     tools = code(body(_src("screens_tools.c"), "tools_confirm_view"))
-    assert "kinds[nb] = !ready ? BTN_OFF : level == 2 ? BTN_DANGER : BTN_PRIMARY;" in tools
+    # #649 (mockup 14): the run view's own .n-btn -- off until ready, red only for a destructive tool
+    assert "!ready ? TB_OFF : level == 2 ? TB_DANGER : TB_PRIMARY, HIT_TOOL_RUN)" in tools
 
 
 def test_no_typed_word_confirmation_anywhere_1270():

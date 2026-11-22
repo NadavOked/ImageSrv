@@ -253,8 +253,8 @@ _EXACT = {
         "השרת הראשי עדיין רשום — הניתוק לא אומת.",
     "Disconnected from the primary server.": "השרת נותק מהשרת הראשי.",
     "Disconnect cancelled; nothing was changed.": "הניתוק בוטל — לא שונה דבר.",
-    "Invalid address: use host:port, for example 203.0.113.40:8443.":
-        "כתובת לא תקינה: כתובת ופורט, למשל \u2068203.0.113.40:8443\u2069.",
+    "Invalid address: use host:port, for example 203.0.113.40:7700.":
+        "כתובת לא תקינה: כתובת ופורט, למשל \u2068203.0.113.40:7700\u2069.",
     "The address could not be saved.": "לא הצלחנו לשמור את הכתובת.",
     "The address was not read back as saved.": "הכתובת שנקראה בחזרה אינה זו שנשמרה.",
     "Address saved.": "הכתובת נשמרה.",
@@ -1036,7 +1036,7 @@ def _net_fields(frame: Frame, runtime, names: tuple[tuple[str, str, int], ...],
 
 def _network_dialog(frame: Frame, runtime) -> None:
     frame.add("dlg", "plain", 640, "רשת ניהול",
-              "הכרטיס שהקונסולה מאזינה עליו (HTTPS 8081), ואיך הוא מקבל כתובת.")
+              "הכרטיס שהקונסולה מאזינה עליו (HTTPS 443), ואיך הוא מקבל כתובת.")
     selected = runtime.form.get("interface", "")
     for nic in runtime.interfaces[:4]:
         link = "חיבור תקין" if nic.link == "up" else "אין חיבור"
@@ -1255,11 +1255,11 @@ def _unpair_dialog(frame: Frame, extras: Extras) -> None:
 
 def _advertised_dialog(frame: Frame, runtime) -> None:
     frame.add("dlg", "plain", 640, "הכתובת שהראשי רואה",
-              "הכתובת שבה השרת הראשי מגיע לשרת הזה (פורט 8443). מאחורי NAT — הכתובת החיצונית.")
+              "הכתובת שבה השרת הראשי מגיע לשרת הזה (פורט 7700). מאחורי NAT — הכתובת החיצונית.")
     frame.add("d.field", "כתובת ופורט", runtime.advert, "text", 1, 1)
     if runtime.message:
         frame.add("d.error", he(runtime.message))
-    frame.add("d.note", f"לדוגמה {mono_m('203.0.113.40:8443')} — \u200fhttps:// נוסף לבד. "
+    frame.add("d.note", f"לדוגמה {mono_m('203.0.113.40:7700')} — \u200fhttps:// נוסף לבד. "
                         "שדה ריק מוחק את ההגדרה.")
     frame.add("d.btn", "שמירה", "Enter", "pri", 0)
     frame.add("d.btn", "ביטול", "Esc", "plain", 0)
@@ -1275,12 +1275,12 @@ def _settings_body(frame: Frame, runtime, today: datetime) -> None:
     mgmt = snapshot.management
     selected = runtime.menu_index
     if selected == 0:
-        frame.add("pane", "רשת ניהול", f"כרטיס הרשת שהקונסולה מאזינה עליו ({mono_m('HTTPS 8081')}). "
+        frame.add("pane", "רשת ניהול", f"כרטיס הרשת שהקונסולה מאזינה עליו ({mono_m('HTTPS 443')}). "
                                        "כתובת מ־DHCP או כתובת קבועה, שער ו־DNS.")
         frame.add(*nic_row("עכשיו", mgmt).record("prow"))
         frame.add("pnote", "<b>רשת ביטחון:</b> שינוי נכנס לתוקף ל־60 שניות, וחוזר לבד אם "
                            "לא אישרתם — כך לא ננעלים מחוץ לשרת.")
-        frame.add("pnote", "רשת ההפצה לא מוגדרת כאן — בקונסולה: רשת ← הפצה.")
+        frame.add("pnote", "רשת ההפצה (אתחול HTTP וסוכן HTTPS) מוגדרת בקונסולה: רשת ← הפצה.")
     elif selected == 1:
         frame.add("pane", "הפעלה מחדש של רשת הניהול",
                   f"מוריד ומעלה את {mono_m(mgmt.name)} עם ההגדרה השמורה, בלי לשנות דבר. "
@@ -1305,7 +1305,7 @@ def _settings_body(frame: Frame, runtime, today: datetime) -> None:
         frame.add("pnote", "המיקום החדש מופיע בקונסולה: תשתית ← אחסון.")
     elif selected == 4:
         frame.add("pane", "הכתובת שהראשי רואה",
-                  "הכתובת שבה השרת הראשי מגיע לשרת המשנה הזה (פורט 8443). מוצגת במסך "
+                  "הכתובת שבה השרת הראשי מגיע לשרת המשנה הזה (פורט 7700). מוצגת במסך "
                   "קוד הצימוד (F4) — זו הכתובת שמקלידים בראשי.")
         extras = getattr(runtime, "extras", None) or Extras()
         frame.add(*advertised_row(extras.advertised_url).record("prow"))

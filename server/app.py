@@ -24,6 +24,7 @@ from pathlib import Path
 from sqlite3 import Connection
 
 from fastapi import Depends, FastAPI
+from fastapi import Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -87,7 +88,7 @@ from server.brain import route as brain_route   # #3064 (K5): HTTP or a multicas
 from server.brain import cpucap as brain_cpucap, services as brain_services   # #3064 (K12, K13): the server's CPU and the services a round needs, explained
 from server.rounds import directchunk   # #3161: a direct send through it -- the build machine sends
 from server.disks import hdd_policy   # X16: numeric sender floor plus per-disk repair policy
-from server.rounds.sender import DEFAULT_PORTBASE, QUIET_SECONDS, SenderEngine
+from server.rounds import chunkctx
 from server.console.library import create_library_router
 from server.console.isos import create_iso_router
 from server.console.drivers import create_agent_drivers_router, create_drivers_router   # #720
@@ -120,7 +121,7 @@ from server.agent import readbackhash
 from server.rounds.room import CLONERS_GROUP, create_room_router
 from server.rounds.room_console import create_room_console_router
 from server.console.wake_api import create_wake_router
-from server.rounds.sessions import SessionStore
+from server.rounds.sessions import CLASS_ROUND_V2, SessionStore
 from server.console.users import ensure_admin
 from server.interserver import storage_nodes
 from server.console import monitor
@@ -278,6 +279,10 @@ class ServerRuntime:
     grub_password_hash: str = ""
     #: #2450: הקובץ עצמו — למנהל שרואה את הסיסמה בהגדרות. None = אין כזה.
     grub_password_file: "str | Path | None" = None
+    #: #3486: פורט מאזין ה-/boot של GRUB והקושחה. ``main`` מעביר תמיד: ה-/boot מוגש
+    #: **רק** משם, ופורט הסוכן אינו מגיש אותו. None = המעטפת המשולבת של הבדיקות
+    #: (``create_app``), שבה הכול על אפליקציה אחת: התפריט מפנה את GRUB לפורט הסוכן.
+    boot_port: int | None = None
 
 
 async def _room_clock(rt: ServerRuntime, interval: float) -> None:
@@ -440,8 +445,7 @@ def _install_room_clock(app: FastAPI, rt: ServerRuntime) -> None:
                 watcher = getattr(rt.ctx, "email_alerts", None)
                 if watcher is not None:
                     await asyncio.to_thread(watcher.stop)
-                # #1426: השולח יושב על ctx; ל-ServerRuntime אין `sender`
-                await asyncio.to_thread(rt.ctx.sender.close)
+                # #1426: המנוע יושב על ctx; ל-ServerRuntime אין שדה משלו
                 await asyncio.to_thread(rt.ctx.chunk.close)
 
     app.router.lifespan_context = lifespan
@@ -488,11 +492,11 @@ def create_runtime(
     now_fn=None,
     sender_runner=None,
     sender_portbase: int | None = None,
-    # e2e_simulation בלבד: שולח מדומה (ראו sender.Sender.simulate).
+    # שרת שאסור לו לשדר (`tools/restore-drill.sh`): תהליך-דמה במקום `chunkcast send` (`chunkctx.simulated_runner`).
     sender_simulate: bool = False,
     auto_reboot_hook=None,
     auto_reboot_interval: float = auto_reboot.CHECK_SECONDS,
-    # שתי תקרות ההמתנה של udpcast. None = ברירת המחדל של `sender.py`
+    # שתי תקרות ההמתנה של השידור. None = ברירת המחדל של `chunkctx`
     # (כמו `sender_portbase`): הערך בייצור אינו זז, ומי שצריך תקרה קצרה —
     # מעבדה, טסט, e2e — מעביר אותה כאן במקום לחכות דקות (#341).
     sender_max_wait: int | None = None,
@@ -519,6 +523,8 @@ def create_runtime(
     netcfg_state_dir: str | Path | None = None,
     boot_dir: str | Path | None = None,
     extra_cmdline: tuple[str, ...] = (),
+    # #3486: ראו ``ServerRuntime.boot_port``.
+    boot_port: int | None = None,
     # Storage Nodes (#655/#723): תפקיד ההתקנה. None = לא הועבר (בדיקות,
     # וקוד ישן) ואז ההגדרה נשארת כפי שהיא — התפקיד נקרא ממילא fail-closed
     # (storage_nodes.role). main מעביר תמיד את הערך מהדגל (ברירת מחדל
@@ -656,7 +662,7 @@ def create_runtime(
         wol_send = wol.broadcast_sender(interface) if interface else wol.unpinned_sender
 
     # מנוע השידור מחובר למעברי המצב של הסבב: running מתחיל לשדר,
-    # סגירה עוצרת. ניהול הסבב עצמו לא יודע מה זה udpcast.
+    # סגירה עוצרת. ניהול הסבב עצמו אינו יודע דבר על המנוע.
     #
     # תהליכון השידור כותב ליומן, ופעם היה צריך לשם כך חיבור משלו:
     # sqlite לא סובל שני תהליכונים שמנהלים טרנזאקציות על אותו חיבור.
@@ -664,107 +670,47 @@ def create_runtime(
     # לא רק לתהליכון השידור אלא גם לתהליכוני המאגר של uvicorn, שמריצים
     # כל endpoint סינכרוני וכל dependency סינכרוני של הקונסולה.
     # #201: `sender_portbase` הוא הפורט שהשידור **באמת** יתפוס. הוא נשאר
-    # `None` בייצור, ואז נופלים על `DEFAULT_PORTBASE` (9000) — ברירת המחדל
+    # `None` בייצור, ואז נופלים על `DEFAULT_PORTBASE` (הייצור: Trident, #3871) — ברירת המחדל
     # לא זזה. מי שמעביר ערך הוא מי שאסור לו להתנגש בהפצה אמיתית: ה-e2e,
     # שמריץ שרת אמיתי בתת-תהליך ולכן אין לאן להזריק לו שולח מזויף. הגנה
     # שאינה תלויה בכך שמישהו יזכור לנקות — פורט שאינו יכול להתנגש (#156).
-    def on_sender_event(event: str, detail: str) -> None:
-        status = sender.status()
-        session_id = status.get("session_id") if status else None
-        # #1296: הגל שהמנוע משדר — אותה הנחה כמו `record_stream` למטה. אין סטטוס = NULL.
-        journal(conn, event, detail, round_id=session_id)
-        if session_id and event in ("send_done", "send_failed", "send_stopped"):
-            # קצב אוטומטי (11/10): מה ש-udp-sender ספר בגל שהסתיים — הגל הבא
-            # עולה רק על אפס שידורים חוזרים שנקראו כאן. לעולם אינו זורק.
-            # #1758: ואיך השולח סיים — גל שנכשל עם שידורים חוזרים הוא ההגנה.
-            outcome = {**sender.wave_outcome(session_id), "ended": event}
-            drive_rates.record_stream(conn, session_id, outcome)
-            # #1884: הדיסק של הספרייה בגל — לפני #1846, שלא יאשים את הרשת בגל שהשרת האט.
-            server_io.end(conn, "wave", session_id, library.root, seconds=outcome.get("wall_s"))
-            # #3125: the last window, and the whole wave as the server saw it (`result_json.server`). Never raises.
-            wave_senses.end(session_id)
-            # #1846: האבדן של הגל מול הבסיס של כרטיס ההפצה — קפיצה נרשמת ביומן.
-            # לעולם אינו זורק.
-            learn_netloss.evaluate(conn, session_id)
-            # #2028: סבב למידה פתוח. החדר אולי כבר סגר את הגל. לעולם אינו זורק.
-            learn_tuning.record_wave(conn, session_id)
-        if event != "send_failed":
-            return
-        if session_id:
-            store.fail(
-                session_id, detail,
-                related=lambda: room.fail_wave(
-                    conn, session_id, detail, commit=False,
-                ),
-            )
-
     def wave_bitrate(session, link=None, adjust=None):
         if direct.is_direct_wave(conn, session["id"]):
-            # #3161: גל ישיר במנוע החתיכות -- מחשב הבנייה משדר; אותה בחירה ש-`on_running` עושה לו ב-udpcast
+            # #3161: גל ישיר -- מחשב הבנייה משדר, והקצב שלו נבחר כאן
             return drive_rates.decide(conn, session["id"], lambda: room.wave_drives(conn, session["id"]),
-                                      sender.max_bitrate, direct=True)
+                                      chunk.max_bitrate, direct=True)
         server_io.begin(conn, "wave", session["id"], library.root)
         wave_senses.begin(session["id"])          # #3125: the first reading of the server's senses. Never raises.
         return drive_rates.decide(
             conn, session["id"], lambda: room.wave_drives(conn, session["id"]),
-            sender.max_bitrate, link=link or sender.link, adjust=adjust)
+            chunk.max_bitrate, link=link or chunk.link, adjust=adjust)
 
     def chunk_wave_bitrate(session):
         # #3073: the card the chunk wave goes out on (`chunk.select_interface`, chosen just before
-        # this call in chunksend `_send`) -- not udp-sender's, which is the last udpcast wave's
+        # this call in chunksend `_send`)
         # #3163: and the rate the last chunk waves taught, inside the network budget (`chunk_rate.adjust`)
-        return wave_bitrate(session, link=lambda: sender.link_of(chunk.interface),
-                            adjust=lambda chosen, wave: chunk_rate.adjust(conn, chosen, wave))
+        return wave_bitrate(session, link=lambda: chunk.link_of(chunk.interface),
+                            adjust=lambda chosen, wave: chunk_rate.adjust(conn, chosen, wave, session["id"]))
 
-    sender = SenderEngine(
-        library,
-        interface=interface,
-        on_event=on_sender_event,
-        **({"runner": sender_runner} if sender_runner else {}),
-        **({"portbase": sender_portbase} if sender_portbase is not None else {}),
-        **({"simulate": True} if sender_simulate else {}),
-        **({"max_wait": sender_max_wait} if sender_max_wait is not None else {}),
-        **({"start_timeout": sender_start_timeout}
-           if sender_start_timeout is not None else {}),
-        link_speed=link_speed,
-        # #447 + קצב אוטומטי (11/10): הקצב לגל — מהגל הקודם של כל מחשב שיכפול
-        # (#1471) והכוננים שבו, לעולם לא מעל `max_bitrate` (בלעדיו — 900m) ולא מעל
-        # 90% מהקישור של כרטיס ההפצה (15/10).
-        # #1884: באותו רגע — צילום הדיסק של הספרייה ולחץ ה-I/O של השרת (לעולם אינו זורק).
-        wave_bitrate=wave_bitrate,
-        # #1430: `store` נבנה למטה (הוא צריך את `sender.stop`); הקריאה
-        # היא מתהליכון השולח, הרבה אחרי שהפונקציה הזו סיימה.
-        live_receivers=lambda session_id: store.live_count(session_id),
-        # #1950: חבר `lost` שעדיין מקבל את הזרם נספר במחיצה הבאה.
-        lost_receivers=lambda session_id: store.lost_ips(session_id),
-        # #1430: חבר שלא דיווח מעל דקה ולא סיים את המחיצה הקודמת אינו נספר
-        # במחיצה הבאה (`--min-receivers`).
-        quiet_receivers=lambda session_id: store.quiet_ips(
-            session_id, QUIET_SECONDS),
-        # #2056: תקרת הנטישה של השולח גדלה עם ההמתנה למחשב שהתנתק (הגדרה בקונסולה).
-        lost_wait=lambda: agent_timing.lost_seconds(conn),
-        # #2202: שאלה למפעיל בגל (net_devices.prompt — חלוקת המקום, RAID) עוצרת
-        # את שעון ה-180 של השולח; מכונה שחרגה מהתקרה (ASK_HOLD_MAX_SECONDS)
-        # משתחררת מהגל לבדה. שאלת ה-SMART שהייתה כאן הוסרה (#2044).
-        pending_prompts=lambda session_id: prompt_hold.waiting_in_wave(conn, session_id),
-    )
     # #3064 (K5): HTTP מול multicast בהשלמה -- צל בלבד. המנוע ותקציב הרשת מחוברים אליו כשהם נבנים, למטה.
     route_tracker = brain_route.Tracker(conn)
 
     def on_chunk_event(event: str, detail: str, session_id: str) -> None:
-        # #2533: המנוע הניסיוני. ביומן כמו השולח; כישלון שלו הוא כישלון הסבב, בשמו.
-        # `drive_rates.record_stream` (המונה של udp-sender) אינו ניזון ממנו; קצב הרשת שלו נלמד ב-`chunk_rate` (#3163), למטה.
+        # #2533: ביומן; כישלון של המנוע הוא כישלון הסבב, בשמו. קצב הרשת שלו נלמד ב-`chunk_rate` (#3163), למטה.
         journal(conn, event, detail, round_id=session_id)
         route_tracker.on_event(event, detail, session_id)      # לעולם אינו זורק
         if event in ("send_done", "send_failed", "send_stopped"):
-            # #3064 (G4): דיסק הספרייה גם בגל החתיכות — `begin` כבר רץ ב-`wave_bitrate`, כמו ב-udp-sender.
+            # #3064 (G4): דיסק הספרייה בגל — `begin` כבר רץ ב-`wave_bitrate`.
             # למנוע הזה אין `wall_s`: המשך הוא השעון בין שני הצילומים. לעולם אינו זורק.
             # #3508: `server_disk` needs the sender's own evidence (`paced`) that it was not asleep for its own pacing
             outcome = chunk.rate_outcome(session_id)
             server_io.end(conn, "wave", session_id, library.root, sender=outcome, need_sender=True)
-            wave_senses.end(session_id)           # #3125: as in `on_sender_event`. Never raises.
+            wave_senses.end(session_id)           # #3125: the last window, and the whole wave as the server saw it. Never raises.
             # #3163: what the wave showed of the network's rate -- after `server_io.end`, which it reads. Never raises.
             chunk_rate.record(conn, session_id, {**outcome, "ended": event})
+            # #2028: a learning run is open, and the room may have closed the wave already -- the second of the two
+            # counts it (`tuning.record_wave`). After `chunk_rate.record`, which writes the sender's end. Never raises.
+            learn_tuning.record_wave(conn, session_id)
         if event == "send_done":
             # #3164: אבדן הגל מול הבסיס של כרטיס ההפצה. ה-`drops` נרשם כשהחדר סוגר את הגל (`room`), וה-`send_done` נרשם
             # כאן: מי שמגיע אחרון רואה את שניהם, ושורה אחת ביומן גם כששניהם מעריכים. לעולם אינו זורק.
@@ -778,24 +724,17 @@ def create_runtime(
         drawer_hold.on_event(event, detail, session_id)        # #2023: סוגר את ההחלטות הפתוחות של הגל, ורושם את התקורה שלו
 
     def chunk_wave(session_id: str) -> bool:
-        # #2533: המתג "מנוע שידור". מנוע החתיכות הוא ברירת המחדל (#3173); udpcast רק בבחירה מפורשת. רק גל של חדר
-        # השיכפול שהמקור שלו הוא הספרייה: המקלט החדש כותב למגירות (`chunkrecv.sh`); תחנה בודדת
-        # (סבב כיתה, משיכה) והפצה ישירה נשארות ב-udpcast גם כשהמתג דלוק. hello ו-`on_running` שואלים
-        # את אותה שאלה, כדי שהסוכן והשולח לא יענו עליה אחרת.
-        if sender_simulate or chunksend.engine_of(conn) != chunksend.CHUNK:
-            return False
+        # #2533/#3173: גל של חדר השיכפול שהמקור שלו הוא הספרייה. המקלט כותב למגירות (`chunkrecv.sh`); לתחנה בודדת
+        # (סבב כיתה) אין מקלט, ולכן אין לה גל (`sessions.CLASS_ROUND_V2`). hello ו-`on_running` שואלים את אותה
+        # שאלה, כדי שהסוכן והשולח לא יענו עליה אחרת.
         row = conn.execute("SELECT prefix FROM sessions WHERE id = ?", (session_id,)).fetchone()
-        if row is None or row["prefix"] != "ROOM" or direct.is_direct_wave(conn, session_id):
-            return False
-        sending = sender.status()               # המתג הודלק אחרי שהגל הזה כבר יצא ב-udp-sender
-        return not (sending and sending["session_id"] == session_id
-                    and sending["state"] in ("starting", "sending"))
+        return row is not None and row["prefix"] == "ROOM" and not direct.is_direct_wave(conn, session_id)
 
-    # #3161: הפצה ישירה במנוע החתיכות. `chunk_wave` למעלה נשאר של הספרייה בלבד; גל שהמקור שלו הוא מחשב
-    # בנייה נשאל כאן (`live.wants`): המתג דלוק, והמקור העלה אינדקס לכל מחיצה לפני המניפסט.
+    # #3161: הפצה ישירה. `chunk_wave` למעלה הוא של הספרייה בלבד; גל שהמקור שלו הוא מחשב בנייה נשאל כאן
+    # (`live.wants`): המקור העלה אינדקס לכל מחיצה לפני המניפסט.
     live = directchunk.DirectChunks(
         conn, data_dir / "direct",
-        engine_on=lambda: not sender_simulate and chunksend.engine_of(conn) == chunksend.CHUNK,
+        engine_on=lambda: True,                  # #3173: המנוע היחיד
         silence=lambda: agent_timing.lost_seconds(conn) + directchunk.SILENCE_GRACE_S)
     chunk_library = directchunk.LiveLibrary(library, conn, live.store)
 
@@ -806,7 +745,7 @@ def create_runtime(
         wants=lambda session_id: chunk_wave(session_id) or live.wants(session_id),
         ledger=chunksend.DbLedger(conn, chunk_library),    # ההשלמה נשענת על `chunk_ledger`, לא על הזיכרון
         # "השולח מותקן ורץ" נשאל לפני כל גל ולפני הדלקת המתג; מי שהזריק שולח משלו (בדיקות) אינו נשאל
-        binary_check=None if sender_runner else chunksend.binary_problem,
+        binary_check=None if sender_runner or sender_simulate else chunksend.binary_problem,
         # מי שעוד יכול לקבל — אותה הגדרה של `store.live_count` (#1430).
         live_members=lambda session_id: [
             m["mac"] for m in store.members(session_id)
@@ -814,8 +753,10 @@ def create_runtime(
         lost_wait=lambda: agent_timing.lost_seconds(conn),
         write_floor=lambda: hdd_policy.RepairFloor(conn),
         wave_bitrate=chunk_wave_bitrate,         # הקצב נקבע כמו היום (הכרעה 9, 12/11), מהכרטיס של הגל (#3073)
+        link_speed=link_speed,                   # #3173: מהירות הקישור של כרטיס ההפצה, כאן ולא בשולח הישן
         pending_prompts=lambda session_id: prompt_hold.waiting_in_wave(conn, session_id),
-        runner=live.runner(sender_runner),       # פקודה על אימג' חי היא הזמנה למחשב הבנייה, לא תהליך כאן
+        # פקודה על אימג' חי היא הזמנה למחשב הבנייה, לא תהליך כאן
+        runner=live.runner(sender_runner or (chunkctx.simulated_runner if sender_simulate else None)),
         **({"portbase": sender_portbase} if sender_portbase is not None else {}),
         **({"max_wait": sender_max_wait} if sender_max_wait is not None else {}),
         **({"start_timeout": sender_start_timeout}
@@ -871,30 +812,24 @@ def create_runtime(
         now, window, _lease_macs if _leases is not None else None))
     # #3320 (R14): הקלטה של כל גל -- הצילום המלא שכל החלטה נשענה עליו, לסימולציה חוזרת (`recording.replay`)
     brain_recording.attach(conn, brain_recording.Recorder(data_dir / "brain" / "waves"))
+    chunksend.note_retired(conn, journal)       # #3173: `stream_engine` שמור בערך של המנוע שהוסר -- שורת יומן אחת, והערך נשאר
     brain_veto.note_retired(conn)               # KT2 (נדב 14/11 בערב): סף שיצא מההגדרות וערך שמור -- מתעלמים, לא מוחקים, ורושמים ביומן
     # #3064 (K7, שלב 3): תקציב הרשת של ההגשה ב-HTTP -- מה שנשאר מהגבול העליון אחרי השידור; ב-`shadow` נרשם ולא נאכף
-    net_budget = brain_budget.production(conn, served=served_bytes, chunk=chunk, sender=sender, interface=interface)
+    net_budget = brain_budget.production(conn, served=served_bytes, chunk=chunk, interface=interface)
     route_tracker.chunk, route_tracker.budget = chunk, net_budget
 
     # #3125 (V2, V6-V10, R8): what the server itself sees in a wave -- at its start (`wave_bitrate`), every
     # `server_senses.WINDOW_S` (`_server_senses_clock`), and at its end (the two `on_*_event`), next to the wave in
     # `server_io`. Measurement only: nothing decides on it yet.
     def _senses_read(session_id: str) -> dict:
-        state, card = None, sender.interface
-        for engine in (chunk, sender):              # the wave's engine, and the card it goes out on
-            got = engine.status()
-            if got and got.get("session_id") == session_id:
-                state, card = ({"engine": "udpcast", **got}, sender.interface) if engine is sender                     else (got, chunk.interface)
-                break
-        return server_senses.reading(root=library.root, interface=card or interface, served=served_bytes,
+        got = chunk.status()
+        state = got if got and got.get("session_id") == session_id else None
+        return server_senses.reading(root=library.root, interface=chunk.interface or interface, served=served_bytes,
                                      conn=conn, session_id=session_id, engine=lambda: state)
 
     def _live_wave() -> str | None:
         got = chunk.status()
-        if got and got.get("state") in ("starting", "sending", "repairing"):
-            return got["session_id"]
-        got = sender.status()
-        return got["session_id"] if got and got.get("state") in ("starting", "sending") else None
+        return got["session_id"] if got and got.get("state") in ("starting", "sending", "repairing") else None
 
     wave_senses = server_senses.Senses(conn, _senses_read, _live_wave)
 
@@ -915,38 +850,21 @@ def create_runtime(
         is_direct = direct.is_direct_wave(conn, session["id"])
         unindexed = live.refusal(session["id"]) if is_direct else None
         if unindexed:
-            # #3161: המתג דלוק והמקור לא העלה אינדקסים -- הגל נכשל בשמו, ואינו נופל ל-udpcast בשקט
+            # #3161: המקור לא העלה אינדקסים -- הגל נכשל בשמו
             if store.fail(session["id"], unindexed,
                           related=lambda: room.fail_wave(conn, session["id"], unindexed, commit=False)):
                 journal(conn, "send_failed", unindexed, round_id=session["id"])
             return
-        if is_direct and not live.wants(session["id"]):
-            journal(conn, "send_delegated", f'{session["id"]} {session["image_id"]}',
-                    round_id=session["id"])
-            # קצב אוטומטי: גם הזרם ממחשב הבנייה עובר ברשת — אותה פתיחה, אותו
-            # גג וירידה לכונן איטי; `task.direct.multicast.max_bitrate` מכאן.
-            drive_rates.decide(conn, session["id"],
-                               lambda: room.wave_drives(conn, session["id"]),
-                               sender.max_bitrate, direct=True)
-            return
-        # #2427: שידור שלא הופעל אינו `running` שקט — הסבב נכשל בשמו. `fail` הוא
-        # CAS על open/running: סבב שכבר נסגר (הסגירה הקדימה את ההתחלה) אינו משתנה.
-        # #2533: נקרא ברגע שהגל יוצא, ואינו מתחלף באמצע סבב; מנוע שנכשל אינו נופל לשני.
-        engine = chunk if is_direct or chunk_wave(session["id"]) else sender
-        if is_direct:                           # #3161: המנוע מתזמר, ומחשב הבנייה משדר
-            journal(conn, "send_delegated", f'{session["id"]} {session["image_id"]} engine=chunk',
-                    round_id=session["id"])
-        # שני המנועים אינם משדרים במקביל: אותה רשת, אותם דיסקים בשרת, וקצב גל שנקבע לשולח אחד.
-        # כל מנוע כבר מסרב לסבב שני משלו; כאן הוא מסרב גם כשהמנוע **האחר** משדר סבב אחר, בשמו.
-        other = sender if engine is chunk else chunk
-        busy = other.status()
-        if busy and busy["session_id"] != session["id"] and busy["state"] in ("starting", "sending", "repairing"):
-            refused = (f"השידור של {session['id']} לא הופעל: "
-                       + (f"udp-sender של הסבב {busy['session_id']} עדיין משדר, ומנוע החתיכות אינו משדר במקביל לו"
-                          if engine is chunk else
-                          f"מנוע החתיכות עדיין משדר את הסבב {busy['session_id']}, ו-udp-sender אינו משדר במקביל לו"))
-        else:
-            refused = engine.start(session)
+        # #3173: גל שאינו של חדר השיכפול ואינו הפצה ישירה -- סבב כיתה שנפתח לפני השדרוג. אין לו מקלט ואין לו שולח:
+        # הוא נכשל בשמו ואינו נשאר `running` בלי משדר (עיקרון 5).
+        refused = None if is_direct or chunk_wave(session["id"]) else CLASS_ROUND_V2
+        if refused is None:
+            if is_direct:                           # #3161: המנוע מתזמר, ומחשב הבנייה משדר
+                journal(conn, "send_delegated", f'{session["id"]} {session["image_id"]} engine=chunk',
+                        round_id=session["id"])
+            # #2427: שידור שלא הופעל אינו `running` שקט — הסבב נכשל בשמו. `fail` הוא CAS על open/running: סבב שכבר
+            # נסגר (הסגירה הקדימה את ההתחלה) אינו משתנה. המנוע עצמו מסרב לסבב שני בזמן שהוא משדר.
+            refused = chunk.start(session)
         if refused and store.fail(
                 session["id"], refused,
                 related=lambda: room.fail_wave(conn, session["id"], refused, commit=False)):
@@ -955,12 +873,12 @@ def create_runtime(
     store = SessionStore(
         conn,
         on_running=on_running,
-        on_closed=lambda session_id: (sender.stop(session_id), chunk.stop(session_id)),
+        on_closed=lambda session_id: chunk.stop(session_id),
         on_opened=wake_class,
         **({"now_fn": now_fn} if now_fn else {}),
     )
-    # #3137: a wave of the chunk engine does not leave before the index its engine checks is beside every
-    # file -- derived now, while the cloners boot. A udpcast wave needs no index and waits for nothing.
+    # #3137: a wave does not leave before the index its engine checks is beside every file -- derived now,
+    # while the cloners boot.
     prep = indexprep.IndexPrep(library, on_event=lambda event, detail, wave_id: journal(
         conn, event, detail, round_id=None if wave_id.startswith(indexprep.PULL_KEY) else wave_id))   # #3231: a pull's key is no session
     store.start_gate = lambda session_id, image_id, start=True: (
@@ -969,16 +887,16 @@ def create_runtime(
     store.image_bytes = lambda image_id: (library.get(image_id) or {}).get("total_compressed_bytes")
     # #411: מה שנשאר `running` מהריצה הקודמת — משימת קליטה, סבב שידור —
     # מסומן כישלון **בשם** לפני שהקונסולה עונה (הכרעת נדב 06/09, אפשרות
-    # 1). `sender.status()` הוא הראיה החיובית היחידה שסבב עדיין משודר;
+    # 1). `chunk.status()` הוא הראיה החיובית היחידה שסבב עדיין משודר;
     # מנוע שזה עתה נבנה אינו משדר דבר. אחרי ה-sweep (שמשאיר `running`
     # במכוון) ולפני שמישהו יכול לקרוא את הסבב "פעיל" ב-hello.
-    reconciled = reconcile_on_start(conn, library.root, sender.status())
+    reconciled = reconcile_on_start(conn, library.root, chunk.status())
     # #1470: קליטה שהאימות שלה נקטע באתחול — האימות רץ מחדש מההתחלה, ברקע;
     # האימג' נשאר מחוץ לספרייה עד שהוא עובר.
     for task_id in reconciled["tasks_reverify"]:
         start_verification(conn, library.root, task_id)
     # #720: ספריית חבילות הדרייברים — תיקייה ליד ה-DB, לא בספריית האימג'ים.
-    ctx = ServerContext(conn=conn, library=library, store=store, sender=sender, chunk=chunk, direct_chunk=live,
+    ctx = ServerContext(conn=conn, library=library, store=store, chunk=chunk, direct_chunk=live,
                         drivers=DriverLibrary(data_dir / "drivers"),
                         leases=(identity_hooks or {}).get("leases"),
                         data_dir=data_dir, served=served_bytes, budget=net_budget, index_prep=prep,
@@ -993,14 +911,14 @@ def create_runtime(
                                      nic_hooks, netcfg_hooks, health_hooks,
                                      apply_timesync=apply_timesync)
     ctx.nic_services.startup()
-    # #2533: מנוע החתיכות — אותו שער ואותה בחירה לכל גל; בלעדיהם הוא שידר על הכרטיס מזמן הבנייה.
-    sender.gate = chunk.gate = ctx.nic_services.multicast_refused
-    sender.select_interface = lambda session: ctx.nic_services.multicast_interface(
+    # #2533: השער והבחירה של כל גל; בלעדיהם המנוע שידר על הכרטיס מזמן הבנייה.
+    chunk.gate = ctx.nic_services.multicast_refused
+    wave_interface = lambda session: ctx.nic_services.multicast_interface(   # noqa: E731
         lambda: _multicast_addresses(ctx, session["id"]), multicast_interface_override,
         default=interface)
-    # #3161: גל ישיר יוצא מהכרטיס של מחשב הבנייה, לא של השרת: אין כרטיס לבחור ואין שער לשאול (כמו ב-udpcast)
+    # #3161: גל ישיר יוצא מהכרטיס של מחשב הבנייה, לא של השרת: אין כרטיס לבחור ואין שער לשאול
     chunk.select_interface = lambda session: (
-        None if direct.is_direct_wave(conn, session["id"]) else sender.select_interface(session))
+        None if direct.is_direct_wave(conn, session["id"]) else wave_interface(session))
 
     # בהתקנה טרייה: admin/admin עם החלפה כפויה (#1085). אם כבר יש מנהל — לא נוגעים.
     password = ensure_admin(conn)
@@ -1014,13 +932,15 @@ def create_runtime(
     # (console_api._sync_known_macs, אותם hooks בדיוק). `known_macs_hooks`
     # הוא `None` כברירת מחדל בכוונה: main.py הוא היחיד שמדליק אותו
     # במפורש — בלעדיו זו הרצת בדיקות, ואסור לה לגעת בדיסק/ב-dnsmasq.
+    # #3871: שדרוג שמריץ סקריפט של לפני 77xx יחזיר את התג הקודם; עד אז לא נכתב מה שנשאר אחרי החזרה.
+    upgrade_hold = deploy_net.upgrade_hold(data_dir)
     if known_macs_hooks is not None:
         error = known_macs_hooks["apply"](dhcp.render_known_macs(registry.all_macs(conn)))
         if error:
             journal(conn, "known_macs_apply_failed", error)
         # הכרעת נדב 14/11 (#1079/#2485): המחשבים הרשומים בחומת האש של כרטיס ההפצה.
         if "firewall" in known_macs_hooks:
-            _rewrite_stale_firewall(ctx, conn, known_macs_hooks)      # #3224 -- לפני הטעינה
+            _rewrite_stale_firewall(ctx, conn, known_macs_hooks, upgrade_hold)      # #3224 -- לפני הטעינה
             fw_error = known_macs_hooks["firewall"](registry.all_macs(conn))
             if fw_error:
                 journal(conn, "known_macs_firewall_failed", fw_error)
@@ -1030,7 +950,7 @@ def create_runtime(
     if dnsmasq_dropin:
         dnsmasq_dropin_mod.apply_on_start(
             conn, {**dnsmasq_dropin_mod.default_hooks(), **(host_hooks or {})}, repo_dir)
-    grub_hash = _grub_lock(conn, grub_password_file, deploy)
+    grub_hash = _grub_lock(conn, grub_password_file, deploy, upgrade_hold)
 
     engine = vmupdate_engine or VmUpdate(
         conn, library,
@@ -1045,7 +965,7 @@ def create_runtime(
         # ואימג' שנפתח לו סבב קודם לאימג' גדול שאיש לא פורס (`last_use`, `kick`).
         threading.Thread(target=readbackhash.run_forever, args=(library,),
                          kwargs={"report": _readback_reporter(conn),
-                                 "busy": readbackhash.server_busy(conn, sender),
+                                 "busy": readbackhash.server_busy(conn, chunk),
                                  "rank": readbackhash.last_use(conn)},
                          name="readback-digest", daemon=True).start()
     return ServerRuntime(
@@ -1068,15 +988,19 @@ def create_runtime(
         auto_reboot_last=auto_reboot_last,
         grub_password_hash=grub_hash,
         grub_password_file=grub_password_file,
+        boot_port=boot_port,
     )
 
 
-def _grub_lock(conn, password_file, deploy) -> str:
+def _grub_lock(conn, password_file, deploy, upgrade_hold: str | None = None) -> str:
     """#2437: הסיסמה של עורך ה-GRUB — נוצרת אם חסרה — וה-hash שלה.
 
     כשל אינו עוצר את השרת: התפריטים ננעלים בלי סיסמה (איש אינו עורך), והסיבה
     ביומן. אותו hash עובר ל-`DeployContext`, כדי שה-bootstrap שהקונסולה כותבת
-    בהדלקת DHCP יהיה נעול באותה סיסמה."""
+    בהדלקת DHCP יהיה נעול באותה סיסמה.
+
+    #3871: הפורט שב-bootstrap הולך אחרי פורט הסוכן של העלייה הזו (`refresh_grub_cfg`), חוץ מבשדרוג שסקריפט
+    של לפני 77xx מריץ (`upgrade_hold`): שם הקובץ נשאר על הפורט שלו, כי התג הקודם עומד לחזור."""
     if password_file is None:
         return ""
     password_hash, created, error = grub_password.ensure(Path(password_file))
@@ -1088,7 +1012,10 @@ def _grub_lock(conn, password_file, deploy) -> str:
                 f"נוצרה סיסמה לעורך ה-GRUB של התחנות ב-{password_file} (\u200f0600, \u200f#2437)")
     if deploy is not None:
         deploy.grub_password_hash = password_hash
-        problem = deploy_net.refresh_grub_cfg(deploy.tftp_root, password_hash)
+        # #3486: הפורט ש-GRUB פונה אליו הוא מה שהשרת הזה מאזין עליו עכשיו
+        # (פורט ה-/boot אם יש), ולא מה שהקובץ נשא בהרצה הקודמת.
+        problem = deploy_net.refresh_grub_cfg(deploy.tftp_root, password_hash,
+                                              agent_port=None if upgrade_hold else deploy.grub_port)
         if problem:
             journal(conn, "grub_cfg_lock_failed", f"ה-bootstrap על ה-TFTP לא ננעל: {problem}")
     return password_hash
@@ -1113,9 +1040,9 @@ def _multicast_addresses(ctx, session_id: str) -> list[str | None]:
     return addresses
 
 
-def _rewrite_stale_firewall(ctx, conn, known_macs_hooks) -> None:
+def _rewrite_stale_firewall(ctx, conn, known_macs_hooks, upgrade_hold: str | None = None) -> None:
     """#3224: שדרוג שומר את `/etc/nftables.conf` הישן -- בלי הקבוצה `known_macs`
-    (#1079/#2485), ופורטי udpcast נשארים פתוחים לכל מחשב. כאן, בעליית השרת שאחרי
+    (#1079/#2485), ופורטי השידור נשארים פתוחים לכל מחשב. כאן, בעליית השרת שאחרי
     השדרוג, הכללים נכתבים מחדש בדיוק כמו בשינוי שירותי כרטיס מהקונסולה (אותו
     `firewall` של `NicServices`: `nft -c` לפני הטעינה, והחזרה לקודם בכישלון, #1121).
 
@@ -1125,6 +1052,9 @@ def _rewrite_stale_firewall(ctx, conn, known_macs_hooks) -> None:
     stale = known_macs_hooks.get("firewall_stale")
     reason = stale() if stale is not None else None
     if reason is None:
+        return
+    if upgrade_hold:                                                      # #3871: the previous tag is about to come back
+        journal(conn, "firewall_rewrite_held", f"{reason} — {upgrade_hold}")
         return
     step = ctx.nic_services.hooks.get("firewall")
     try:
@@ -1166,17 +1096,20 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
         hooks["dnsmasq"] = dnsmasq_step
     if "firewall" not in hooks and deploy is not None:
         def firewall_step(nic):
-            if deploy.primary_ip_error:      # #2160: לא פותחים 8443 לכל הכרטיס בשקט
+            if deploy.primary_ip_error:      # #2160: לא פותחים 7700 לכל הכרטיס בשקט
                 return deploy.primary_ip_error
             regenerate = (deploy.hooks or {}).get("firewall", deploy_net.regenerate_firewall)
             per = nic.firewall_services()
             proxy = deploy_net.firewall_proxy_interfaces(ctx.conn)
             fw_extra = {"proxy_interfaces": proxy} if proxy else {}
-            # --sender-portbase: the multicast rule must follow the port udp-sender really takes.
-            # Only a non-default value is passed, so a server on 9000 calls exactly as before.
-            portbase = getattr(getattr(ctx, "sender", None), "portbase", None)
-            if portbase is not None and portbase != DEFAULT_PORTBASE:
+            # --sender-portbase: the multicast rule must follow the port the chunk engine really takes.
+            # Only a non-default value is passed, so a production server calls the generator with its own defaults.
+            port = getattr(getattr(ctx, "chunk", None), "port", None)
+            portbase = None if port is None else port - chunksend.PORT_OFFSET
+            if portbase is not None and portbase != chunkctx.DEFAULT_PORTBASE:
                 fw_extra["sender_portbase"] = portbase
+            if deploy.boot_port:      # #3486: כלל משלו למאזין ה-/boot
+                fw_extra["boot_port"] = deploy.boot_port
             if per is None:      # חזרנו ל"היום" — הכללים לפי שני התפקידים
                 if deploy.state.interface:
                     error = deploy_net.missing_nic(deploy.state.interface, nic.interfaces())
@@ -1292,6 +1225,7 @@ def _boot_asgi(rt: ServerRuntime):
                     monitor.stations_enabled(conn)),
                 # #2437: `e`/`c` נעולים בסיסמה; כל ערך `--unrestricted`.
                 password_hash=rt.grub_password_hash,
+                boot_port=rt.boot_port,   # #3486
             ),
             boot_dir=rt.boot_dir,
             # #400: שביל הפירורים. מוזרק כמו ה-resolver — `boot/` אינו
@@ -1308,7 +1242,8 @@ def _boot_asgi(rt: ServerRuntime):
     return boot_asgi
 
 
-def _add_agent_routes(app: FastAPI, rt: ServerRuntime, *, gui_channel: bool = True) -> None:
+def _add_agent_routes(app: FastAPI, rt: ServerRuntime, *, gui_channel: bool = True,
+                      boot: bool = True) -> None:
     """הצד שהסוכן (initramfs) והקושחה רואים: /api/v1 (hello/login/pulls/
     progress/disk-event/images), capture הסוכן, מסך התחנה, ומאזין ה-/boot.
 
@@ -1318,11 +1253,20 @@ def _add_agent_routes(app: FastAPI, rt: ServerRuntime, *, gui_channel: bool = Tr
     הנתיבים האלה מחזירים את מה ש-hello מחזיר ממילא למכונה (ראה ה-docstring
     של `station_state`), ואין ביניהם נתיב ניהול — הפעולה היחידה, פתיחת סבב,
     דורשת שם וסיסמה. ולכן הם חיים כאן ולא על הקונסולה (#703: הגבול הוא
-    ה-socket). #1247: מסך התחנה בדפדפן והמאזין :8082 הוסרו; הגואי הנייטיב
+    ה-socket). #1247: מסך התחנה בדפדפן והמאזין של הקיוסק הוסרו; הגואי הנייטיב
     הוא הצרכן היחיד."""
     app.include_router(create_agent_router(
         rt.ctx, rt.server_base, rt.data_dir,
         clock_status={**health_default_hooks(), **(rt.health_hooks or {})}["timesync_status"]))   # #1843
+    @app.get("/api/v1/agent/boot-step")
+    def agent_boot_step(request: Request, mac: str, s: str, up: str | None = None):
+        from boot.http import record_step
+        if not off_deploy_vlan(request.scope, rt.server_base):
+            record_step(lambda m, step: _record_verified(rt, request.scope, m, step),
+                        mac, s, request.client.host if request.client else None, raw_up=up,
+                        marks_record=lambda m, marks: boot_marks.record(rt.conn, m, marks))
+        return Response(status_code=204)
+
     app.include_router(create_agent_drivers_router(rt.ctx))   # #720
     app.include_router(create_write_backup_router(rt.ctx))   # #3268: the waiting-screen write check's copy
     app.include_router(brain_ask_api.create_agent_router(rt.ctx))   # #3654: the person at a machine's screen answers the brain's question
@@ -1337,7 +1281,10 @@ def _add_agent_routes(app: FastAPI, rt: ServerRuntime, *, gui_channel: bool = Tr
     app.include_router(create_kiosk_router(rt.ctx, room_wake=_kiosk_room_wake(rt),
                                            version=_server_version(rt)),
                        dependencies=[Depends(mark_build_gui)] if gui_channel else [])
-    app.mount("/boot", _boot_asgi(rt))
+    # #3486: בייצור ה-/boot יושב במאזין משלו (`create_boot_app`), לא באפליקציית הסוכן.
+    # `boot=True` רק במעטפת המשולבת של הבדיקות (`create_app`).
+    if boot:
+        app.mount("/boot", _boot_asgi(rt))
 
 
 def _server_version(rt: ServerRuntime):
@@ -1511,13 +1458,13 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
 
 
 def create_agent_app(rt: ServerRuntime) -> FastAPI:
-    """האפליקציה שהסוכן והקושחה מדברים איתה (:8080 בייצור)."""
+    """האפליקציה שהסוכן והקושחה מדברים איתה (:7712 בייצור)."""
     app = FastAPI(title="ImageSrv agent", docs_url=None, redoc_url=None)
     setattr(app.state, auth.KIOSK_APP_FLAG, True)   # #1340
     app.state.ctx = rt.ctx
     app.state.runtime = rt
     app.state.data_dir = rt.data_dir
-    _add_agent_routes(app, rt)
+    _add_agent_routes(app, rt, boot=False)   # #3486: /boot במאזין משלו (create_boot_app)
     # #2410: תקרת גוף לכל נתיבי הכתיבה בפורט הסוכן, חוץ מהעלאת נתוני האימג'.
     app.add_middleware(agent_body.BodyCap)
     accesslog.install(app)   # #3184: שורות הגישה -- חריגים בלבד
@@ -1527,15 +1474,32 @@ def create_agent_app(rt: ServerRuntime) -> FastAPI:
     return app
 
 
+def create_boot_app(rt: ServerRuntime) -> FastAPI:
+    """#3486: מאזין ה-/boot של GRUB והקושחה (``--boot-port``) -- `/boot/*` ושום דבר
+    אחר: אין hello, אין API ואין תמונות. כל נתיב אחר מחזיר 404.
+
+    זה השירות היחיד שפתוח למחשב לא רשום (פורט הסוכן סגור לו חוץ מ-hello, `deploy_gate`), ולכן אין כאן
+    שער זהות: התפריט עצמו מכריע לפי המכונה (`boot_identity_ok`, "לא רשום" ברשת
+    ההפצה בלבד). אותו runtime ואותה אפליקציית ASGI גולמית (`_boot_asgi`)
+    -- רק מאזין אחר."""
+    app = FastAPI(title="ImageSrv boot", docs_url=None, redoc_url=None)
+    app.state.ctx = rt.ctx
+    app.state.runtime = rt
+    app.state.data_dir = rt.data_dir
+    app.mount("/boot", _boot_asgi(rt))
+    accesslog.install(app)
+    return app
+
+
 def create_console_app(rt: ServerRuntime) -> FastAPI:
-    """אפליקציית הקונסולה/הניהול (:8081 בייצור)."""
+    """אפליקציית הקונסולה/הניהול (:443 בייצור)."""
     app = FastAPI(title="ImageSrv console", docs_url=None, redoc_url=None)
     setattr(app.state, auth.CONSOLE_APP_FLAG, True)   # #1340
     app.state.ctx = rt.ctx
     app.state.runtime = rt
     app.state.data_dir = rt.data_dir
     _add_console_routes(app, rt)
-    # #1633: X-Frame-Options + Fetch Metadata + סוג גוף — על 8081 בלבד. לא
+    # #1633: X-Frame-Options + Fetch Metadata + סוג גוף — על 443 בלבד. לא
     # ב-`_add_console_routes`: במעטפת המשולבת (`create_app`) יושבים גם נתיבי
     # הסוכן והקיוסק, ושם הלקוח הוא sh/curl ולא דפדפן.
     app.add_middleware(ConsoleFetchGuard)
@@ -1547,7 +1511,7 @@ def create_console_app(rt: ServerRuntime) -> FastAPI:
 
 
 def create_alive_app(rt: ServerRuntime, fingerprint: str) -> FastAPI:
-    """#1310: המאזין "אתה שם?" של הראשי על 8443 — אפליקציה **נפרדת**, בלי
+    """#1310: המאזין "אתה שם?" של הראשי על 7700 — אפליקציה **נפרדת**, בלי
     אף ראוטר של הקונסולה או הסוכן. השם הוא השם שהקונסולה מציגה בראש העץ,
     והגרסה מאותו מקור כמו `/me` (`_server_version`)."""
     from server.net import ports

@@ -63,7 +63,7 @@ def test_the_console_preview_drops_a_bad_kernel_hostname(tmp_path, images_root, 
     from server.app import create_app
     from server.console import users
 
-    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:8080", now_fn=clock,
+    app = create_app(tmp_path / "data", images_root, "http://127.0.0.1:7712", now_fn=clock,
                      netcfg_hooks={"hostname": lambda: "x;touch /tmp/pwn",
                                    "interfaces": lambda: [{"name": "eth0", "state": "up",
                                                            "addresses": []}]})
@@ -79,7 +79,7 @@ def test_the_console_preview_drops_a_bad_kernel_hostname(tmp_path, images_root, 
 
 # ---- the TFTP bootstrap ------------------------------------------------------------------
 
-BASE = "http://10.44.12.10:8080"
+BASE = "http://10.44.12.10:7712"
 OLD_PASSWORD = "abcde-fghjk-mnpqr-stuvw"
 NEW_PASSWORD = "zyxwv-tsrqp-nmkjh-gfedc"
 LOCK = 'set superusers="imagesrv"'

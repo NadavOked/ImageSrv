@@ -15,7 +15,7 @@
 # is not format 2 -- said in the log, never silently.
 
 chunk_single_enabled() {   # $1 = mode, $2 = manifest
-    [ "$1" = unicast ] && [ "${PULL_ENGINE:-udpcast}" = chunk ] &&
+    [ "$1" = unicast ] && [ "${PULL_ENGINE:-http}" = chunk ] &&
         [ "$(json_get "$2" '.image_format')" = 2 ]
 }
 

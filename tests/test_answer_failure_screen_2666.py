@@ -33,8 +33,8 @@ from boot.grub_menu import AGENT, LOCAL, GrubConfig, decide, render
 REPO = Path(__file__).resolve().parents[1]
 FLAG = "answer_failure_screen"
 CODE = "answer-failure-screen"
-VLAN = "http://10.44.12.10:8080"
-OFF_VLAN = "http://10.10.10.8:8080"
+VLAN = "http://10.44.12.10:7712"
+OFF_VLAN = "http://10.10.10.8:7712"
 CFG = GrubConfig(server_base=VLAN)
 #: מכונה שאינה רשומה — אין צורך בכיתה כדי שהתשובה תיבנה.
 MAC = "5c:60:ba:3e:b3:22"
@@ -63,7 +63,7 @@ def test_the_flag_on_an_unknown_schema_boots_the_agent_with_a_clean_kernel_line(
     text = render(answer, CFG)
     assert "set default=imagesrv" in text and "set timeout=0" in text
     # עיקרון 2: רק הכתובת — בלי mode ובלי שום דבר מהתשובה
-    assert linux_args(text) == ["imagesrv.server=http://10.44.12.10:8080"]
+    assert linux_args(text) == ["imagesrv.server=https://10.44.12.10:7712"]
     assert "tsk_secret" not in text and "classroom" not in text
     assert "--id local" in text                                     # הדיסק נשאר כנפילה בקובץ
     text.encode("ascii")
@@ -145,7 +145,7 @@ def test_on_the_distributing_card_the_menu_serves_the_screen(bad_schema):
     text = menu(bad_schema, MAC)
     assert decision(text) == f"# decision: {CODE}", text
     assert "set default=imagesrv" in text and "set timeout=0" in text
-    assert linux_args(text) == ["imagesrv.server=http://10.44.12.10:8080"]
+    assert linux_args(text) == ["imagesrv.server=https://10.44.12.10:7712"]
     assert MAC not in text.split('menuentry "ImageSrv"')[1]           # ה-MAC אינו בערך הסוכן
     text.encode("ascii")
 

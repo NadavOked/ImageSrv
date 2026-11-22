@@ -433,7 +433,7 @@ def test_a_crumb_left_while_the_server_was_down_is_read_at_startup(
         "at": "2026-08-29T04:05:06+03:00", "errors": [], "setting": None,
     }), encoding="utf-8")
 
-    app = create_app(tmp_path / "data", images_root, "http://10.10.10.8:8080",
+    app = create_app(tmp_path / "data", images_root, "http://10.10.10.8:7712",
                      now_fn=clock, netcfg_state_dir=state_dir)
     users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
     client = TestClient(app)

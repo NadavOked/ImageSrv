@@ -20,14 +20,15 @@ from test_agent import AGENT, BASH, posix, sh
 from test_closed_session_report import _payload, _session
 from test_directsend import JQ_STUB
 from test_drawer_progress import drawer_box
-from conftest import setup_classroom
-from test_sender import MANIFEST_256, Recorder, free_ports, wait_for, write_image  # noqa: F401 (fixture)
+import chunkcast_rig as C
+from conftest import MANIFEST_256, setup_classroom, write_image
+from fakesend import Recorder, wait_for
 from test_timeouts import make_stubs, run_sh
 from test_server_room import CLONER1, cloner_hello, room_body, room_server  # noqa: F401 (fixture)
 
 from server.agent import reports
 from server.library.images import ImageLibrary
-from server.rounds.sender import SenderEngine
+from server.rounds import chunksend
 
 pytest.importorskip("fastapi")
 
@@ -36,14 +37,19 @@ REASON = "קובץ מחיצה חסר באימג' img_8da804: p4.recovery.pcl.zst
 
 # --- the server ------------------------------------------------------------------
 
-def test_the_sender_names_the_image_and_says_it_is_missing(tmp_path, free_ports):  # noqa: F811
+def test_the_sender_names_the_image_and_says_it_is_missing(tmp_path):
+    """#3173: the sender is the chunk engine. The index beside the file is still there; the file is not."""
     write_image(tmp_path, MANIFEST_256)
     (tmp_path / MANIFEST_256["id"] / "p3.win.pcl.zst").unlink()
-    engine = SenderEngine(ImageLibrary(tmp_path), runner=Recorder())
+    recorder = Recorder()
+    engine = chunksend.ChunkEngine(
+        ImageLibrary(tmp_path), live_members=lambda sid: [], lost_wait=lambda: 1, write_floor=lambda: 50,
+        runner=recorder, wave_bitrate=lambda session: "700m", ledger=C.MemLedger())
     engine.start({"id": "ses_1", "image_id": "img_7f3a91", "joined": 2})
     assert wait_for(lambda: engine.status()["state"] == "failed")
     error = engine.status()["error"]
     assert "img_7f3a91" in error and "p3.win.pcl.zst" in error and "חסר או פגום" in error, error
+    assert recorder.commands == [], "nothing is sent of an image whose file is gone"
 
 
 def test_a_failed_round_answers_not_open_with_its_reason(server):

@@ -6,8 +6,9 @@ every wave after it started from that memory. Two things are tested here:
 
 1. **Where a wave starts** (`chunk_rate.start`, after the write check of the wave's drawers): a learned start that is
    stale, from another cloner, from another number of drawers, or whose write check is far from today's, gives way to
-   min(today's write check, the ceiling). A fresh and matching one is kept. Each decision is in `wave_rates.decision`
-   (`start_check`) and in `brain_decisions` (K8); a changed rate is a `wave_rate` line in the journal.
+   min(today's write check, the ceiling), raised from the learned rate by no more than one step unless the network was
+   measured (then not at all: metal 21/11, `test_wave_start_net_3269.py`). A fresh and matching one is kept. Each decision
+   is in `wave_rates.decision` (`start_check`) and in `brain_decisions` (K8); a changed rate is a `wave_rate` line in the journal.
 2. **The server is not the drives' fault**: a wave the library disk held back (`server_io` basis `server_disk`: util and
    await of the disk the library sits on, #3365) teaches no network cut (`chunk_rate.record`) and no slow drive
    (`drive_rates.record_wave`), and says so (`unlearned`, with the reason). #3367: the system-wide PSI alone decides
@@ -92,11 +93,13 @@ def test_the_spiral_of_14_11_a_stale_drive_memory_gives_way_to_the_write_check(c
     assert drive_rates.decision(conn, "ses_now")["basis"] == "learned" and bits < 160 * MB   # the floor, as on metal
     got = _start(conn, bits, {(MAC, "D1"): 179, (MAC, "D2"): 209})
     assert _cap(conn) >= 600 * MB                             # the test means something: the ceiling is far above
-    assert got == min(179 * 8 * MB, _cap(conn))
+    # metal 21/11: a drive's memory is no network measurement -- the write check raises it one step, not to 179MB/s
+    assert got == bits + chunk_rate.STEP_MBPS * MB < min(179 * 8 * MB, _cap(conn))
     decision = drive_rates.decision(conn, "ses_now")
     assert decision["basis"] == "probe" and drive_rates.parse_bitrate(decision["max_bitrate"]) == got
     check = decision["start_check"]
-    assert check["was_basis"] == "learned" and {"stale", "probe"} <= set(check["why"])
+    assert check["was_basis"] == "learned" and {"stale", "probe", "raise_step"} <= set(check["why"])
+    assert check["raise_by"] == "raise_step"
     assert check["probe_mbps"] == 179 and check["from"]["session_id"] == "ses_past2"
     (line,) = [r["detail"] for r in conn.execute(
         "SELECT detail FROM journal WHERE event = 'wave_rate' AND detail LIKE '%basis=probe%'")]
@@ -119,8 +122,8 @@ def test_a_fresh_memory_far_from_todays_write_check_is_not_this_drive(conn):
     _history(conn, hours_ago=1)
     bits = _now_wave(conn, [_drive("D1"), _drive("D2", port=2)])
     got = _start(conn, bits, {(MAC, "D1"): 179, (MAC, "D2"): 209})
-    assert got == min(179 * 8 * MB, _cap(conn))
-    assert drive_rates.decision(conn, "ses_now")["start_check"]["why"] == ["probe"]
+    assert got == bits + chunk_rate.STEP_MBPS * MB < min(179 * 8 * MB, _cap(conn))     # one step (metal 21/11)
+    assert drive_rates.decision(conn, "ses_now")["start_check"]["why"] == ["probe", "raise_step"]
 
 
 def test_the_drive_in_another_cloner_is_not_matching(conn):
@@ -222,14 +225,24 @@ def _member(targets, mac=MAC):
 
 
 def _done(serial, written):
-    return {"dev": "sda", "state": "done", "serial": serial, "bytes_written": written,
-            "first_moved_at": "2026-11-14T10:00:00+00:00", "moved_at": "2026-11-14T10:16:40+00:00"}
+    return {"dev": "sda", "state": "done", "serial": serial, "bytes_written": written}
+
+
+def _record(conn, sid, serial, written):
+    """The end of a chunk wave (#3173: the only engine): its first passes ran 1000 s at the wave's rate, and the drive took
+    `written` bytes from them (`chunk.drives`, #3296) -- then the room closes it (`record_wave`)."""
+    offered = drive_rates.parse_bitrate(drive_rates.decision(conn, sid)["max_bitrate"]) // 8 * 1000
+    conn.execute("UPDATE wave_rates SET stream = ? WHERE session_id = ?",
+                 (json.dumps({"chunk": {"first_pass_s": 1000, "stream_zbytes": offered,
+                                        "drives": {MAC: {serial: written}}}}), sid))
+    conn.commit()
+    return drive_rates.record_wave(conn, sid, [_member([_done(serial, written)])])
 
 
 def test_a_drive_that_wrote_slowly_under_server_pressure_is_not_learned_slow(conn):
     drive_rates.decide(conn, "ses_w1", lambda: [_drive("D1")], "200m")
     _pressure(conn, "ses_w1")
-    assert drive_rates.record_wave(conn, "ses_w1", [_member([_done("D1", 15_000 * MB)])]) == 0   # 15MB/s under 200m
+    assert _record(conn, "ses_w1", "D1", 15_000 * MB) == 0   # 15MB/s under 200m
     assert not conn.execute("SELECT 1 FROM drive_rates").fetchall()
     stream = json.loads(conn.execute("SELECT stream FROM wave_rates WHERE session_id = 'ses_w1'").fetchone()["stream"])
     assert stream["drives_unlearned"] == {"reason": "server_disk", "serials": ["D1"]}
@@ -241,14 +254,14 @@ def test_a_slow_drive_under_a_high_system_pressure_but_a_healthy_library_disk_is
     """#3367: the system-wide PSI alone no longer unlearns a drive: the library disk was fine, so the 15MB/s is the drive's."""
     drive_rates.decide(conn, "ses_w1", lambda: [_drive("D1")], "200m")
     _pressure(conn, "ses_w1", held=False)
-    assert drive_rates.record_wave(conn, "ses_w1", [_member([_done("D1", 15_000 * MB)])]) == 1
+    assert _record(conn, "ses_w1", "D1", 15_000 * MB) == 1
     assert not conn.execute("SELECT 1 FROM journal WHERE event = 'drive_rates_unlearned'").fetchall()
 
 
 def test_a_drive_that_kept_up_under_server_pressure_still_counts(conn):
     drive_rates.decide(conn, "ses_w1", lambda: [_drive("D1")], "200m")
     _pressure(conn, "ses_w1")
-    assert drive_rates.record_wave(conn, "ses_w1", [_member([_done("D1", 24_000 * MB)])]) == 1   # 24MB/s: kept up
+    assert _record(conn, "ses_w1", "D1", 24_000 * MB) == 1   # 24MB/s: kept up
 
 
 def test_a_simulated_spiral_stops(conn):
@@ -260,6 +273,6 @@ def test_a_simulated_spiral_stops(conn):
         rate = drive_rates.parse_bitrate(drive_rates.decide(conn, sid, lambda: [_drive("D1")], None))
         rates.append(rate)
         _pressure(conn, sid)
-        drive_rates.record_wave(conn, sid, [_member([_done("D1", min(rate // 8, 21 * MB) * 1000)])])
+        _record(conn, sid, "D1", min(rate // 8, 21 * MB) * 1000)
     assert rates[-1] >= rates[0] > 300 * MB, rates
     assert not conn.execute("SELECT 1 FROM drive_rates WHERE rate_bps < cap_bps * 0.8").fetchall()

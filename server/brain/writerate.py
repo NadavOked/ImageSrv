@@ -35,7 +35,7 @@ ACTION_BASE, ACTION_BOUNDS = "WRITE_BASE", "FEEDBACK_BOUNDS"
 #: ``PACE``: הדיסקים שנספרו קבעו את הקצב; ``FLOOR``: אין מדידה או מדידה אחת חסרה, ולכן הרצפה; ``SET``: הגבולות נקבעו.
 PACE, FLOOR, SET = "PACE", "FLOOR", "SET"
 
-#: S3, T4: המרווח מתחת למה שדיסק נמדד. נגזר מ-`drive_rates.MARGIN` (אותם 10% שמקבל הסף של udpcast); הערכה, לא מדידה. K8
+#: S3, T4: המרווח מתחת למה שדיסק נמדד. נגזר מ-`drive_rates.MARGIN` (אותם 10% של סף הקצב); הערכה, לא מדידה. K8
 #: (`chunk_rate`) מחיל אותו על מה שדיסק כתב בגל שפיגר בו, ולכן הערך כאן ולא עותק שני.
 MARGIN = 0.9
 #: S4, #3512: פי כמה מהבסיס הבקר רשאי להעלות את קצב הכתיבה בתוך הגל. הבקר עצמו הוא השומר (מאט כשהתור של מקלט גדל), ו-`--kbps`
@@ -125,8 +125,10 @@ def decide_base(conn, measured, history, floor_mbs: int, *, round_id: str, part:
             silence.undecided(conn, RULE_BASE, POINT_BASE, ACTION_BASE, round_id, f"{type(exc).__name__}: {exc}")
         return None
     if conn is not None:
-        silence.record(conn, [Call(call.rule, call.point, call.action, call.verdict, round_id, f"מחיצה {part}: {call.reason}",
-                                   (*call.evidence, f"part={part}"))], round_id=round_id, entity_kind="round")
+        rows = silence.record(conn, [Call(call.rule, call.point, call.action, call.verdict, round_id, f"מחיצה {part}: {call.reason}",
+                                          (*call.evidence, f"part={part}"))], round_id=round_id, entity_kind="round")
+        # #3750: הבסיס נמסר למנוע (`_write_base` מחזיר אותו מיד); K8 רשאי לשנות אותו אחר כך, ולכן "נמסר" ולא "נכתב לפקודה"
+        silence.settle(conn, rows.get(round_id), f"הבסיס נמסר למנוע השליחה: --write-kbps {call.kbps} (K8 רשאי לשנות אותו אחר כך)")
     return call
 
 
@@ -182,6 +184,8 @@ def decide_bounds(conn, kbps: int, write_kbps: int, floor_mbs: int, learned_max:
             silence.undecided(conn, RULE_BOUNDS, POINT_BOUNDS, ACTION_BOUNDS, round_id, f"{type(exc).__name__}: {exc}")
         return None
     if conn is not None:
-        silence.record(conn, [Call(call.rule, call.point, call.action, call.verdict, round_id, f"מחיצה {part}: {call.reason}",
-                                   (*call.evidence, f"part={part}"))], round_id=round_id, entity_kind="round")
+        rows = silence.record(conn, [Call(call.rule, call.point, call.action, call.verdict, round_id, f"מחיצה {part}: {call.reason}",
+                                          (*call.evidence, f"part={part}"))], round_id=round_id, entity_kind="round")
+        # #3750: `_command` מוסיף את הדגלים לפקודה מיד אחרי הקריאה הזו
+        silence.settle(conn, rows.get(round_id), f"הגבולות נמסרו לבניית הפקודה: {call.reason}")
     return call

@@ -170,9 +170,9 @@ def test_console_off_on_the_nic_you_are_on_needs_a_handoff(rig):
     rig["calls"].clear()
     with pytest.raises(ServiceError) as exc:
         svc.set("ens33", ["monitor", "interserver"], local_address="10.10.10.8",
-                console_url=lambda a: f"https://{a}:8081")
+                console_url=lambda a: f"https://{a}")
     assert exc.value.code == "needs_handoff"
-    assert exc.value.extra["go"] == ["https://10.20.0.8:8081"]
+    assert exc.value.extra["go"] == ["https://10.20.0.8"]
     assert rig["calls"] == [] and json.loads(get_setting(rig["conn"], "nicsvc:ens33") or "null") is None
 
 
@@ -358,18 +358,6 @@ def test_multicast_gate_refuses_a_nic_with_multicast_off(rig):
     assert "שידור כבוי בכרטיס ens34" in svc.multicast_refused("ens34")
 
 
-def test_sender_fails_by_name_when_multicast_is_off(tmp_path):
-    from server.rounds.sender import SenderEngine
-    events_seen = []
-    engine = SenderEngine(library=None, interface="ens34", simulate=True,
-                          on_event=lambda e, d: events_seen.append((e, d)))
-    engine.gate = lambda iface: f"שידור כבוי בכרטיס {iface}"
-    engine.start({"id": "ses_1", "image_id": "img_1"})
-    engine._thread.join(5)
-    assert engine.status()["state"] == "failed"
-    assert ("send_failed", "שידור כבוי בכרטיס ens34") in events_seen
-
-
 # --- dnsmasq וחומת אש ----------------------------------------------------------
 
 
@@ -395,7 +383,7 @@ def test_firewall_services_and_deploy_completion_carry_the_per_nic_choice(rig, t
     assert per["ens35"] == ["console"] and per["ens34"] == ["multicast", "netboot"]
     seen = {}
     ctx = deploy_net.DeployContext(
-        state=deploy_net.DeployState("none", None, None), agent_port=8080,
+        state=deploy_net.DeployState("none", None, None), agent_port=7712,
         tftp_root=tmp_path, repo_dir=tmp_path, servers_interface="ens33",
         services=svc.firewall_services,
         hooks={"write_grub_cfg": lambda *a: None, "enable_dnsmasq": lambda: None,
@@ -444,6 +432,7 @@ def _run_main(tmp_path, monkeypatch, nic):
     monkeypatch.setattr(server.app, "create_runtime", lambda *a, **k: rt)
     monkeypatch.setattr(server.app, "create_agent_app", lambda rt: "agent")
     monkeypatch.setattr(server.app, "create_console_app", lambda rt: "console")
+    monkeypatch.setattr(server.app, "create_boot_app", lambda rt: "boot")   # #3486
     monkeypatch.setattr(uvicorn, "Config", fake_config)
     monkeypatch.setattr(uvicorn, "Server", lambda config: object())
     monkeypatch.setattr(server.main, "serve_all", lambda listeners: None)
@@ -453,7 +442,7 @@ def _run_main(tmp_path, monkeypatch, nic):
     monkeypatch.setattr(asyncio, "run", lambda coro=None: None)
     monkeypatch.setattr(server.main, "_interface_for", lambda url: None)
     monkeypatch.setattr("sys.argv", [
-        "server.main", "--server-url", "http://10.44.0.1:8080", "--host", "10.44.0.1",
+        "server.main", "--server-url", "http://10.44.0.1:7712", "--host", "10.44.0.1",
         "--console-host", "10.10.10.8",
         "--data-dir", str(tmp_path / "data"), "--images", str(tmp_path / "img")])
     server.main.main()

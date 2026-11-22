@@ -71,6 +71,7 @@ static void gui_heartbeat(void) {
 #include "canceldlg.h"       /* #1386: "בטל דיסק זה" */
 #include "smarttbl.h"        /* #1859: the table of every SMART attribute (--png card "standby-smart") */
 #include "brain_ask.h"       /* #3654: the brain's question */
+#include "tools.h"           /* #649: the toolbox (mockup 14) */
 
 static volatile sig_atomic_t stop_now = 0;
 static void on_signal(int sig) { (void)sig; stop_now = 1; }
@@ -355,11 +356,12 @@ static int fields_on(const App *a, int *out) {
     case SCREEN_ROOM:
         if (!a->st.has_round && a->mode != MODE_DIRECT) out[n++] = HIT_ROOM_TARGET;   /* #715: no count field */
         break;
-    case SCREEN_TOOLS:                                   /* #649: the confirm view only */
+    case SCREEN_TOOLS:                                   /* #649: the run view's text, the home's search */
         if (a->tools_view == TOOLS_CONFIRM && a->tool_sel >= 0 && a->tool_sel < a->ntools) {
             const Tool *t = &a->tools[a->tool_sel];
-            if (t->args[0] && strncmp(t->args, "disk:", 5)) out[n++] = HIT_TOOL_ARG;
+            if (t->args[0] && strncmp(t->args, "disk:", 5) && strncmp(t->args, "part:", 5)) out[n++] = HIT_TOOL_ARG;
         }
+        if (a->tools_view == TOOLS_HOME && a->tool_searching) out[n++] = HIT_TOOL_SEARCH;
         break;
     default: break;
     }
@@ -414,7 +416,6 @@ static void go_menu(App *a) {
     a->newfolder_shown = 0;
     a->room_target_set = 0; a->confirm = CONFIRM_NONE;
     a->menu_focus = -1;
-    a->tools_view = TOOLS_LIST; a->tool_sel = -1;          /* #649 */
 }
 
 /* An action of a live classroom round without a session: classes.js
@@ -474,9 +475,9 @@ static int logout_modal(App *a, const Event *e) {
     return e->type == UIEV_CHAR;
 }
 
-/* The menu's keyboard stops, in order: the visible cards, "התנתק", and
- * "כלים" when the menu shows it (screens.c draws a ring on the same index). */
-static int menu_stops(const App *a, int ncards) { return ncards + 1 + (a->st.menu_tools ? 1 : 0); }
+/* The menu's keyboard stops, in order: the visible cards and "התנתק" (screens.c
+ * draws a ring on the same index). "כלים" is in the top bar, F3 (mockup 14). */
+static int menu_stops(const App *a, int ncards) { (void)a; return ncards + 1; }
 
 /* Arrows walk the two-column grid as it is drawn: card 1 at the right, so
  * Left is the next card and Right the previous one; Up/Down are a row. From
@@ -499,11 +500,6 @@ static int choose_card(App *a, int id) {
     case HIT_ROOM:    a->mode = MODE_ROOM; a->room_target_set = 0; a->image_sel = 0; a->pick_in_folder = 0; a->nroom_selection = 0; a->nroom_pick = 0; room_drv_reset(a); emit1("room"); break;   /* #1275: ticks are targets; #1269: drivers off */
     case HIT_DIRECT:  a->mode = MODE_DIRECT; a->room_target_set = 0; a->nroom_selection = 0; a->nroom_pick = 0; room_drv_reset(a); emit1("direct"); break;   /* #715; #1269: drivers off */
     case HIT_CLASSES: a->mode = MODE_CLASSES; emit1("classes"); break;
-    case HIT_TOOLS:                                       /* #649: ask the bridge for the list */
-        a->mode = MODE_TOOLS; a->tools_view = TOOLS_LIST; a->tool_sel = -1;
-        a->tool_error[0] = 0; a->tool_list_scroll = 0;
-        emit1("tool-list");
-        break;
     }
     return 0;
 }
@@ -517,10 +513,18 @@ static int tool_ready(App *a, char *arg, size_t n) {
     const Tool *t = &a->tools[a->tool_sel];
     arg[0] = 0;
     if (!strncmp(t->args, "disk:", 5)) {
-        if (a->tool_disk_sel < 0 || a->tool_disk_sel >= a->st.ndisks) {
+        ToolDisk d[MAX_DISKS + LC_MAX_DISKS]; int nd = tools_disks(a, d, MAX_DISKS + LC_MAX_DISKS);
+        if (a->tool_disk_sel < 0 || a->tool_disk_sel >= nd) {
             snprintf(a->tool_error, sizeof a->tool_error, "בחרו דיסק"); return 0;
         }
-        snprintf(arg, n, "%s", a->st.disks[a->tool_disk_sel].dev);
+        const char *dv = d[a->tool_disk_sel].dev;   /* disk= carries "sda"; the contract sends /dev/<it> */
+        snprintf(arg, n, "%s%s", strncmp(dv, "/dev/", 5) ? "/dev/" : "", dv);
+    } else if (!strncmp(t->args, "part:", 5)) {   /* the partitions tool-parts listed; none read = no run */
+        if (!a->tool_parts_ok) { snprintf(a->tool_error, sizeof a->tool_error, "לא הצלחנו לקרוא את המחיצות — אין ממה לבחור"); return 0; }
+        if (a->tool_part_sel < 0 || a->tool_part_sel >= a->ntool_parts) {
+            snprintf(a->tool_error, sizeof a->tool_error, "בחרו מחיצה"); return 0;
+        }
+        snprintf(arg, n, "/dev/%s", a->tool_parts[a->tool_part_sel].dev);
     } else if (t->args[0]) {
         snprintf(arg, n, "%s", a->tool_arg); trim(arg);
         if (!arg[0] || strpbrk(arg, "|\r\n ")) {
@@ -557,11 +561,11 @@ static void tool_run(App *a) {
  * rw/destroy then through the confirm dialog (#1270: no typed name). */
 static void tool_open(App *a, int i) {
     if (i < 0 || i >= a->ntools) return;
-    a->tool_sel = i; a->tool_disk_sel = -1; a->tool_arg[0] = a->tool_error[0] = 0;
+    a->tool_sel = i; a->tool_disk_sel = -1; a->tool_part_sel = -1; a->tool_arg[0] = a->tool_error[0] = 0;
     const Tool *t = &a->tools[i];
     if (!tools_risk_level(t->risk) && !t->args[0]) { tool_run(a); return; }
     a->tools_view = TOOLS_CONFIRM;
-    a->focus = t->args[0] && strncmp(t->args, "disk:", 5) ? HIT_TOOL_ARG : 0;
+    a->focus = t->args[0] && strncmp(t->args, "disk:", 5) && strncmp(t->args, "part:", 5) ? HIT_TOOL_ARG : 0;
 }
 
 /* "הרץ" on the confirm view: ro runs, rw/destroy ask first. */
@@ -569,6 +573,15 @@ static void tool_go(App *a) {
     char arg[96];
     if (!tool_ready(a, arg, sizeof arg)) return;
     if (tools_risk_level(a->tools[a->tool_sel].risk)) a->confirm = CONFIRM_TOOL;
+    else tool_run(a);
+}
+
+/* "הרץ שוב" on the result: an argument, or the confirmation of rw/destroy, is
+ * asked again -- never replayed */
+static void tool_again(App *a) {
+    if (a->tool_running || a->tool_sel < 0) return;
+    if (tools_risk_level(a->tools[a->tool_sel].risk) || a->tools[a->tool_sel].args[0])
+         a->tools_view = TOOLS_CONFIRM;
     else tool_run(a);
 }
 
@@ -1054,6 +1067,47 @@ static int fail_f2_btn(const App *a) {
     return -1;
 }
 
+/* ---- #649 (mockup 14): the way in and out of the toolbox ----------------------- */
+
+/* a question or a window is up -- F3 does not open anything under it */
+static int tools_blocked(const App *a) {
+    return a->confirm || a->logout_confirming || a->sdlg.kind || a->cdlg.open || a->st.shrink_pending ||
+           a->st.ask_pending || a->sysp_open || a->lcu.confirm || a->dd_open || a->smt.open;   /* #1859: the SMART drawer */
+}
+
+static void tools_close(App *a) {
+    a->tools_open = 0; a->focus = 0;
+    if (a->confirm == CONFIRM_TOOL) a->confirm = CONFIRM_NONE;
+}
+
+/* F3 or the top bar's "כלים": opens the toolbox over this screen, or leaves it.
+ * 1 = taken. Off (grey, while writing) or absent, F3 does nothing at all. */
+static int tools_toggle(App *a, const Event *e) {
+    int f3 = e->type == UIEV_KEY && e->key == KEYSYM_F3;
+    int clk = e->type == UIEV_CLICK && app_hit(a, e->x, e->y) == HIT_TOOLS;
+    if (!f3 && !clk) return 0;
+    if (a->screen == SCREEN_TOOLS) { if (!a->confirm) tools_close(a); return 1; }   /* Nadav 31/10: F3 inside leaves */
+    if (tools_blocked(a) || tools_entry(a, a->screen) != 1) return f3;
+    a->tools_open = 1; a->tools_from = a->screen;
+    tools_enter(a);
+    emit1("tool-list");                                   /* the bridge writes $GUI_DIR/tools (and tool-parts) */
+    return 1;
+}
+
+/* Every event while the toolbox is on screen: a question over it first, then its own keys. */
+static void tools_input(App *a, const Event *e) {
+    if (shrink_modal(a, e) || ask_modal(a, e) || confirm_modal(a, e)) return;
+    if (e->type == UIEV_MOVE || e->type == UIEV_CLICK) { a->ptr_x = e->x; a->ptr_y = e->y; }
+    if (e->type == UIEV_MOVE) { a->ptr_visible = !e->is_touch; return; }
+    switch (tools_nav(a, e, e->type == UIEV_CLICK ? app_hit(a, e->x, e->y) : -1)) {
+    case TA_EXIT:  tools_close(a); break;
+    case TA_OPEN:  tool_open(a, a->tool_sel); break;
+    case TA_RUN:   tool_go(a); break;
+    case TA_AGAIN: tool_again(a); break;
+    default: break;
+    }
+}
+
 static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
     if (idle_modal(a, e, demo)) return 0;          /* mockup 10: before the touch that would cancel it */
     if (e->type == UIEV_CLICK || e->type == UIEV_CHAR || e->type == UIEV_KEY) emit_touch(a, demo);
@@ -1072,6 +1126,8 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
     }
     if (power_modal(a, e)) return 0;               /* #1918: before every screen's own keys */
     if (end_modal(a, e)) return 0;                 /* #1560: before the local clone's own keys */
+    if (tools_toggle(a, e)) return 0;              /* #649: F3 / "כלים" -- in and out, from the three places */
+    if (a->screen == SCREEN_TOOLS) { tools_input(a, e); return 0; }
     if (a->screen == SCREEN_LCBOOT || a->screen == SCREEN_LOCAL) {   /* #1322: its own keys and clicks */
         /* #2911: a question drawn over it takes the input first, as over the failure
          * screen (#2743) -- #2017's "עצור" went to lc_handle, and the copy went on */
@@ -1175,9 +1231,6 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
             room_select_range(a, mi, mi + 1);
             break;
         }
-        /* #649: a tool row, or a disk row of the confirm view */
-        if (id >= HIT_TOOL_BASE && id < HIT_TOOL_BASE + MAX_TOOLS) { tool_open(a, id - HIT_TOOL_BASE); break; }
-        if (id >= HIT_TOOL_DISK_BASE && id < HIT_TOOL_DISK_BASE + MAX_DISKS) { a->tool_disk_sel = id - HIT_TOOL_DISK_BASE; break; }
         if (id >= HIT_OPTION_BASE && id < HIT_OPTION_BASE + MAX_IMAGES + 1) {
             int i = id - HIT_OPTION_BASE;
             if (a->dd_open == HIT_FOLDER) a->folder_sel = i + 1;   /* #1251: 1-based, no "no folder" row */
@@ -1204,12 +1257,12 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
         switch (id) {
         case HIT_LOGOUT: sign_out(a); break;     /* the button is the explicit choice; Esc asks */
         case HIT_USER: case HIT_PASS: case HIT_NAME: case HIT_DESC: case HIT_FOLDER_NEW:
-        case HIT_ROOM_TARGET: case HIT_TOOL_ARG:
+        case HIT_ROOM_TARGET:
             a->focus = id; break;
         case HIT_EYE:    a->show_pw = !a->show_pw; break;
         case HIT_LANG: a->lang_he = !a->lang_he; break;   /* #1245: the status bar chip; the focus stays */
         case HIT_SUBMIT: do_login(a, auth_cmd, demo); break;
-        case HIT_CAPTURE: case HIT_RESTORE: case HIT_ROOM: case HIT_DIRECT: case HIT_CLASSES: case HIT_TOOLS: return choose_card(a, id);
+        case HIT_CAPTURE: case HIT_RESTORE: case HIT_ROOM: case HIT_DIRECT: case HIT_CLASSES: return choose_card(a, id);
         case HIT_FOLDER: case HIT_ROOM_IMAGE: case HIT_RESTORE_IMAGE: case HIT_ROOM_DRV_MODEL: a->dd_open = id; break;
         /* #1269: "להוסיף דרייברים" and its two modes */
         case HIT_ROOM_DRV_SWITCH: a->drv_on = !a->drv_on; room_drv_after_reload(a); break;
@@ -1233,23 +1286,6 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
         case HIT_ROOM_POWEROFF_ALL: if (a->admin && a->st.room_label[0]) a->confirm = CONFIRM_ROOM_POWEROFF_ALL; break;
         case HIT_CLASS_START: if (class_gate(a)) emit1("class-start"); break;
         case HIT_CLASS_CLOSE: if (class_gate(a)) a->confirm = CONFIRM_CLASS_STOP; break;   /* #1270 */
-        /* #649 */
-        case HIT_TOOL_LIST:  if (!a->tool_running) { a->tools_view = TOOLS_LIST; a->tool_error[0] = 0; } break;
-        case HIT_TOOL_RUN:   tool_go(a); break;
-        case HIT_TOOL_AGAIN:
-            if (a->tool_running || a->tool_sel < 0) break;
-            /* an argument, or the confirmation of rw/destroy, is asked again -- never replayed */
-            if (tools_risk_level(a->tools[a->tool_sel].risk) || a->tools[a->tool_sel].args[0])
-                 a->tools_view = TOOLS_CONFIRM;
-            else tool_run(a);
-            break;
-        case HIT_TOOL_DOWN:
-            if (a->tools_view == TOOLS_OUTPUT) a->tool_scroll += 8; else a->tool_list_scroll += 6;
-            break;
-        case HIT_TOOL_UP:
-            if (a->tools_view == TOOLS_OUTPUT) { a->tool_scroll -= 8; if (a->tool_scroll < 0) a->tool_scroll = 0; }
-            else { a->tool_list_scroll -= 6; if (a->tool_list_scroll < 0) a->tool_list_scroll = 0; }
-            break;
         }
         break;
     }
@@ -1320,7 +1356,7 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
             /* the live round: Esc opens the stop question (#1270: a dialog; Esc there cancels) */
             if (a->screen == SCREEN_ROOM && a->st.has_round) { a->confirm = CONFIRM_ROOM_STOP; break; }
             if (a->screen == SCREEN_CLASS && !a->st.has_session) { go_menu(a); emit1("back"); break; }   /* like its "חזרה" */
-            if (a->screen == SCREEN_RESTORE || a->screen == SCREEN_PICK || a->screen == SCREEN_ROOM || a->screen == SCREEN_TOOLS) { go_menu(a); emit1("back"); break; }
+            if (a->screen == SCREEN_RESTORE || a->screen == SCREEN_PICK || a->screen == SCREEN_ROOM) { go_menu(a); emit1("back"); break; }
             break;
         }
         if (a->screen == SCREEN_MENU) {
@@ -1332,8 +1368,6 @@ static int handle(App *a, const Event *e, const char *auth_cmd, int demo) {
             else if (e->key == KEYSYM_ENTER && a->menu_focus >= 0 && a->menu_focus < n)
                 return choose_card(a, ids[a->menu_focus]);
             else if (e->key == KEYSYM_ENTER && a->menu_focus == n) sign_out(a);
-            else if (e->key == KEYSYM_ENTER && a->menu_focus == n + 1 && a->st.menu_tools)
-                return choose_card(a, HIT_TOOLS);
             break;
         }
         if (e->key == KEYSYM_BACKSPACE && a->dd_open == HIT_ROOM_IMAGE) { a->pick_in_folder = 0; break; }
@@ -1548,7 +1582,12 @@ static const char *PNG_CARDS[] = { "login", "menu", "pick", "progress", "done", 
                                    "restore-syspart",   /* #1896: the C: picker over the restore screen */
                                    "standby-smart",   /* #1859: the cloner's wait, the SMART table open */
                                    "build-direct",   /* #2984: the build machine's direct send, before a cloner reports a drawer */
-                                   "brain-ask", "brain-ask-pick" };   /* #3654: the brain's question over the cloner */
+                                   "brain-ask", "brain-ask-pick",   /* #3654: the brain's question over the cloner */
+                                   /* #649 (mockup 14): the search, its empty state, a category, the run view of
+                                    * a read-only disk tool and of a partition tool, the #1270 dialog, a run, a
+                                    * green result, the toolbox over the cloner's wait and over the USB stick */
+                                   "tools-search", "tools-search-empty", "tools-cat", "tools-run", "tools-confirm-part",
+                                   "tools-dialog", "tools-running", "tools-output-ok", "tools-cloner", "tools-usb" };
 
 static int png_builtin;   /* #1386: --png on the built-in sample, not a --state file */
 
@@ -1654,6 +1693,55 @@ static void png_cancel_sample(App *a, const char *card) {
 /* Put the App in the state that routes to <card>; the flags that override
  * the route (message, task, round, session, done) are cleared first so a
  * user-supplied --state file renders every card, not just its own. */
+/* #649 (mockup 14): the toolbox's cards -- over the build menu (the sample's machine),
+ * the cloner's wait ("tools-cloner") or the USB stick ("tools-usb"); a state file's
+ * tools file is drawn as it is, else the mockup's catalogue (tools_sample.c). */
+static void png_tools(App *a, const State *base, const char *card) {
+    a->st.menu_tools = 1;                         /* the cards exist to be drawn: the switch is the server's */
+    if (!strcmp(card, "tools-cloner")) { a->force_standby = 1; a->force_cloner = 1; a->st.ndrawers = 0; a->st.cloner_image[0] = 0; }
+    if (!strcmp(card, "tools-usb")) lc_png_setup(a, "lcsource-usb");
+    if (!a->ntools || !a->tools_dir[0]) tools_sample(a);
+    a->tools_open = 1; a->tool_running = 0; a->tool_rc = -1; a->tool_searching = 0; a->tool_q[0] = 0; a->tool_row = 0;
+    a->tool_disk_sel = a->tool_part_sel = -1; a->tool_arg[0] = a->tool_error[0] = 0; a->confirm = CONFIRM_NONE;
+    a->tools_view = TOOLS_HOME; a->tool_tile = tools_first_tile(a);
+    /* a read-only disk tool, a destructive one, a partition tool, a whole-machine one: the
+     * mockup's own (badblocks, blkdiscard, cpu-info) when the list has them, else the first */
+    int find[4] = { -1, -1, -1, -1 };
+    static const char *const pref[4] = { "badblocks", "blkdiscard", "", "cpu-info" };
+    for (int i = a->ntools - 1; i >= 0; i--) {
+        const Tool *t = &a->tools[i]; int l = tools_risk_level(t->risk), k = -1;
+        if (!strncmp(t->args, "disk:", 5) && l == 0) k = 0;
+        else if (!strncmp(t->args, "disk:", 5) && l == 2) k = 1;
+        else if (!strncmp(t->args, "part:", 5)) k = 2;
+        else if (!t->args[0] && l == 0) k = 3;
+        if (k >= 0 && (find[k] < 0 || strcmp(a->tools[find[k]].id, pref[k]))) find[k] = i;
+    }
+    if (!strcmp(card, "tools-search")) { a->tool_searching = 1; a->focus = HIT_TOOL_SEARCH; snprintf(a->tool_q, sizeof a->tool_q, "NVMe"); }
+    else if (!strcmp(card, "tools-search-empty")) { a->tool_searching = 1; a->focus = HIT_TOOL_SEARCH; snprintf(a->tool_q, sizeof a->tool_q, "עדכון BIOS"); }
+    else if (!strcmp(card, "tools-cat")) { a->tools_view = TOOLS_CAT; a->tool_cat = a->tool_tile >= 0 ? a->tool_tile : TCAT_DISK; }
+    else if (!strcmp(card, "tools-run") && find[0] >= 0) { a->tool_sel = find[0]; a->tools_view = TOOLS_CONFIRM; a->tool_disk_sel = 0; }
+    else if ((!strcmp(card, "tools-confirm") || !strcmp(card, "tools-dialog")) && find[1] >= 0) {
+        a->tool_sel = find[1]; a->tools_view = TOOLS_CONFIRM; a->tool_disk_sel = base->ndisks > 1 ? 1 : 0;
+        if (!strcmp(card, "tools-dialog")) a->confirm = CONFIRM_TOOL;
+    }
+    else if (!strcmp(card, "tools-confirm-part") && find[2] >= 0) { a->tool_sel = find[2]; a->tools_view = TOOLS_CONFIRM; a->tool_part_sel = a->ntool_parts ? 0 : -1; }
+    else if (!strcmp(card, "tools-running") && find[0] >= 0) { a->tool_sel = find[0]; a->tool_disk_sel = 0; a->tools_view = TOOLS_OUTPUT; a->tool_running = 1; a->tool_spin = 1.2; }
+    else if (!strcmp(card, "tools-output") && find[0] >= 0) {   /* rc 2: the run that could not check -- orange, dashed */
+        a->tool_sel = find[0]; a->tool_disk_sel = 0; a->tools_view = TOOLS_OUTPUT; a->tool_rc = 2;
+        tool_output_set(a, "הקריאה נעצרה ב-37% — הדיסק הפסיק לענות (badblocks -sv).\n"
+                           "Checking blocks 0 to 488386583\n"
+                           "Pass completed, 0 bad blocks found in the 37% that were read.\n"
+                           "אין תשובה מהדיסק, ולכן אין גם ראיה שהוא תקין. כדאי לבדוק כבל ומגירה, ולהריץ שוב.\n"
+                           "dest=היומן נשמר בשרת TA, בתיקייה של המחשב הזה|TA:/srv/imagectl/tools/BUILD-01/2026-11-12_0912/|פנוי: 1.2 TB\n");
+    }
+    else if (!strcmp(card, "tools-output-ok") && find[3] >= 0) {
+        a->tool_sel = find[3]; a->tools_view = TOOLS_OUTPUT; a->tool_rc = 0;
+        tool_output_set(a, "Intel(R) Core(TM) i5-650 CPU @ 3.20GHz\n"
+                           "2 ליבות · 4 תהליכונים · VT-x: יש\n"
+                           "Spectre v2: Vulnerable -- אין עדכון מיקרוקוד\nMeltdown: Mitigation: PTI\n");
+    }
+}
+
 static void png_setup(App *a, const State *base, const char *card) {
     a->st = *base;
     memset(&a->st.lc, 0, sizeof a->st.lc); memset(&a->lcu, 0, sizeof a->lcu);   /* #1322: its own cards below */
@@ -1662,6 +1750,7 @@ static void png_setup(App *a, const State *base, const char *card) {
     a->st.task = TASK_NONE; a->st.has_round = 0; a->st.has_session = 0;
     a->showing_done = a->watching = a->force_progress = a->force_cloner = a->force_standby = 0;
     a->signed_in = 1; a->admin = 1; a->mode = MODE_MENU; a->logout_confirming = 0; a->menu_focus = -1;
+    a->tools_open = 0;                                                         /* #649: on its cards only */
     a->chosen_disk = -1; a->confirm = CONFIRM_NONE; a->dd_open = 0;
     memset(&a->sdlg, 0, sizeof a->sdlg);                                       /* 16/10: on its three cards only */
     memset(&a->cdlg, 0, sizeof a->cdlg);                                       /* #1386: on its cards only */
@@ -1831,24 +1920,7 @@ static void png_setup(App *a, const State *base, const char *card) {
         }
         if (at >= 0) { a->pick_in_folder = 1; snprintf(a->pick_folder, sizeof a->pick_folder, "%s", a->st.images[at].folder); a->sysp_open = at + 1; }
     }
-    else if (!strncmp(card, "tools", 5)) {                                       /* #649 */
-        a->mode = MODE_TOOLS; a->tools_view = TOOLS_LIST; a->tool_sel = -1; a->tool_running = 0;
-        if (!a->ntools) tools_sample(a);
-        int wipe = -1, smart = -1;
-        for (int i = 0; i < a->ntools; i++) {
-            if (!strcmp(a->tools[i].id, "wipe")) wipe = i;
-            if (!strcmp(a->tools[i].id, "smart-health")) smart = i;
-        }
-        if (!strcmp(card, "tools-confirm")) {
-            a->tool_sel = wipe >= 0 ? wipe : 0; a->tools_view = TOOLS_CONFIRM; a->tool_disk_sel = base->ndisks ? 0 : -1;
-            a->focus = 0;
-        } else if (!strcmp(card, "tools-output")) {
-            a->tool_sel = smart >= 0 ? smart : 0; a->tools_view = TOOLS_OUTPUT; a->tool_rc = 2;
-            tool_output_set(a, "/dev/sda (Samsung SSD 870 EVO 500GB): תקין -- SMART overall-health PASSED\n"
-                                "/dev/nvme0n1 (WD Blue SN580 1TB): לא הצלחנו לבדוק -- smartctl לא הצליח לקרוא את הדיסק (rc 2). זה לא \"תקין\".\n"
-                                "\nמה זה אומר: PASSED הוא הדיווח של הדיסק על עצמו, לא ערובה; כשל ב-SMART הוא ראיה מספקת להחלפה.\n");
-        }
-    }
+    else if (!strncmp(card, "tools", 5)) png_tools(a, base, card);                 /* #649 (mockup 14) */
     bask_png(a, base, card);   /* #3654: a state that carries the brain's question shows it on every card */
 }
 
@@ -1901,7 +1973,9 @@ static int render_png(App *a, const State *base, const char *prefix, int w, int 
                                        SCREEN_RESTORE,   /* #1896: "restore-syspart" */
                                        SCREEN_STANDBY,   /* #1859: "standby-smart" */
                                        SCREEN_CLONER,    /* #2984: "build-direct" */
-                                       SCREEN_CLONER, SCREEN_CLONER };   /* #3654: "brain-ask", "brain-ask-pick" */
+                                       SCREEN_CLONER, SCREEN_CLONER,   /* #3654: "brain-ask", "brain-ask-pick" */
+                                       SCREEN_TOOLS, SCREEN_TOOLS, SCREEN_TOOLS, SCREEN_TOOLS, SCREEN_TOOLS,   /* #649: mockup 14 */
+                                       SCREEN_TOOLS, SCREEN_TOOLS, SCREEN_TOOLS, SCREEN_TOOLS, SCREEN_TOOLS };
         /* One entry per card, or want[c] reads past the table -- that is exactly
          * what the lab saw when "direct" was added to PNG_CARDS alone. */
         _Static_assert(sizeof want / sizeof want[0] == sizeof PNG_CARDS / sizeof PNG_CARDS[0],
@@ -2022,13 +2096,18 @@ int main(int argc, char **argv) {
         State base;
         if (sf_state.path[0]) {
             if (state_poll(&sf_state, &base) < 0) return 1;
+            /* #649: the toolbox cards draw the tools file next to it, when there is one */
+            snprintf(a.tools_dir, sizeof a.tools_dir, "%s", sf_state.path);
+            char *slash = strrchr(a.tools_dir, '/');
+            if (slash) *slash = 0; else snprintf(a.tools_dir, sizeof a.tools_dir, ".");
+            tools_poll(&a);
         } else {
             sample_state(&base); png_builtin = 1;
         }
         return render_png(&a, &base, png, pw, ph);
     }
 
-    a.tool_sel = -1; a.tool_disk_sel = -1; a.tool_rc = -1;
+    a.tool_sel = -1; a.tool_disk_sel = -1; a.tool_part_sel = -1; a.tool_tile = -1; a.tool_rc = -1;
     if (install_screen) {
         if (!demo && !wizard.cmd) {                 /* #2763: no engine to ask = no installer; never "inventory" on a bridge that has none */
             fputs("native-gui: --screen install needs --install-cmd (the live installer's bridge); this screen does not install without one\n", stderr);

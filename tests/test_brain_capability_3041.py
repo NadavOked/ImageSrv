@@ -326,7 +326,6 @@ def test_the_wave_split_the_eta_and_the_wave_rate_go_by_the_learned_capacity(roo
     ctx, anon = room_server["ctx"], room_server["anon"]
     memory.remember(ctx.conn, "machine", CLONER1, "capability", {"limited_bps": 2e6, "clean_bps": 1e6})
     _index_the_image(ctx, chunks=10)
-    assert room_server["admin"].post("/api/console/settings", json={"stream_engine": "chunk"}).status_code == 200
     wave, _hello = _room_wave(room_server)
     part = next(p["index"] for p in MANIFEST_256["partitions"] if p.get("file"))
     told = anon.post("/api/v1/agent/chunk-pass", json={

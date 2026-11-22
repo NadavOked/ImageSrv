@@ -116,6 +116,7 @@ def test_in_shadow_the_limits_are_recorded_once_and_the_agent_hears_nothing(room
     row = rows[0]
     assert (row["mode"], row["point"], row["action"], row["verdict"], row["entity_key"]) == \
         ("shadow", "A27", "FILL_LIMITS", "NEIGHBORS_THEN_HTTP", "A1")
+    assert row["outcome"].startswith("n/a: "), "#3750: in shadow the row is closed as not applicable, not left empty"
     evidence = row["evidence_json"]
     assert '"bad_max=3"' in evidence and '"word_s=6"' in evidence and "1024KiB/s for 30s" in evidence, evidence
     _rejoin_report(room_server, wave)
@@ -135,6 +136,8 @@ def test_in_enforce_the_plan_carries_the_limits(room_server):
     assert plan["budget_bps"] > 0 and "speed_kibs" not in plan, "the neighbour cloner's floor goes in peer_fill, not here"
     [row] = _rows(room_server)
     assert (row["mode"], row["verdict"]) == ("enforce", "NEIGHBORS_THEN_HTTP")
+    assert "bad_max=3" in row["outcome"] and "word_s=6" in row["outcome"], "#3750: closed with the limits the cloner was handed"
+    assert all(r["outcome"] for r in _rows(room_server, "K5")), "#3750: K5 rows are closed too"
 
 
 def test_http_only_is_a_decision_too(room_server):

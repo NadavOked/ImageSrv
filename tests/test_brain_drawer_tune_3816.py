@@ -9,6 +9,9 @@ corrupt `tune` does not raise and is `NOT_READ`.
 **Negative control:** with `agent/lib/restore/drawerfeed.sh`, `agent/lib/hw/sensecore.sh`, `server/agent/reports.py` and
 `server/brain/drawertune.py` back at the base commit, the tests marked (neg) fail on BEHAVIOUR -- no `drawer_tune.json`
 (senses carry no `tune` key: the assertion on the VALUE fails, never a missing function), no `K17` row. The tests never import `drawertune`.
+
+#3173: `drawer_tune` (drawerfeed.sh) left with the old receiver's pipeline, and with it the three tests of its choice. What
+stays on the agent's side is the sense itself: without it `senses.tune` is `null` -- today, always.
 """
 
 from __future__ import annotations
@@ -25,16 +28,15 @@ from server.brain import memory, veto
 from test_agent import BASH, posix
 
 REPO = Path(__file__).resolve().parent.parent
-FEED = REPO / "agent" / "lib" / "restore" / "drawerfeed.sh"
 SENSE = REPO / "agent" / "lib" / "hw" / "sensecore.sh"
 MAC = "78:ac:c0:9b:18:85"
 
 
 def _sh(tmp_path: Path, body: str) -> str:
-    """Runs `body` in bash with drawerfeed.sh and sensecore.sh loaded; output to a file, DEVNULL for the pipes."""
+    """Runs `body` in bash with sensecore.sh loaded; output to a file, DEVNULL for the pipes."""
     script, out = tmp_path / "s.sh", tmp_path / "out"
     stubs = "".join(f"{f}() {{ printf null; }}\n" for f in ("ss_carrier_json", "ss_psi_json", "ss_ctrl_json", "ss_rx_json", "ss_http_json"))
-    script.write_text(f'log() {{ :; }}\nds_temp_tick() {{ :; }}\n{stubs}. {posix(FEED)}\n. {posix(SENSE)}\nRUN_DIR={posix(tmp_path / "run")}\n{body}\n',
+    script.write_text(f'log() {{ :; }}\nds_temp_tick() {{ :; }}\n{stubs}. {posix(SENSE)}\nRUN_DIR={posix(tmp_path / "run")}\n{body}\n',
                       encoding="utf-8", newline="\n")
     with out.open("wb") as fh:
         rc = subprocess.run([BASH, posix(script)], stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT,
@@ -66,35 +68,11 @@ def _senses(tmp_path: Path, partition: int | None = 3) -> dict:
         raise AssertionError(f"not JSON: {raw!r}") from None
 
 
-def _tune(tmp_path: Path, partition: int = 3) -> dict:
-    senses = _senses(tmp_path, partition)
-    assert "tune" in senses, senses
-    return senses["tune"]
-
-
 # --- the agent --------------------------------------------------------------------------------------------------------
 
 
-def test_the_effective_choice_is_reported_with_drawers_and_cpus(tmp_path):
-    """(neg) two live drawers, nice 7, O_DIRECT on, two logical CPUs: all six values are what the sensor says."""
-    _room(tmp_path, {"sda": "writing", "sdb": "writing"}, tune="IMAGESRV_DRAWER_NICE=7\nIMAGESRV_DRAWER_DIRECTIO=1\n")
-    assert _tune(tmp_path) == {"decode": "shared", "nice": 7, "direct": 1, "drawers": 2, "cpus": 2, "partition": 3}
-
-
-def test_a_failed_drawer_is_not_a_live_one_and_the_defaults_stay(tmp_path):
-    """(neg) one of two drawers failed: `auto` keeps `each`, nice 0 and direct 0 -- the choice itself is unchanged by the report."""
-    _room(tmp_path, {"sda": "writing", "sdb": "failed"}, cpus=4)
-    assert _tune(tmp_path, partition=1) == {"decode": "each", "nice": 0, "direct": 0, "drawers": 1, "cpus": 4, "partition": 1}
-
-
-def test_an_unreadable_cpu_count_is_null_never_zero(tmp_path):
-    """(neg) no /proc/cpuinfo under SYSROOT: `cpus` is null (principle 5)."""
-    _room(tmp_path, {"sda": "writing"}, cpus=None)
-    assert _tune(tmp_path)["cpus"] is None
-
-
 def test_without_drawer_tune_the_sense_is_null(tmp_path):
-    """(neg) the chunk engine and the local clone never call drawer_tune: `null` = not read, not a default."""
+    """(neg) no drawer_tune ran (#3173: none is left): `null` = not read, not a default."""
     _room(tmp_path, {"sda": "writing"})
     senses = _senses(tmp_path, None)
     assert "tune" in senses and senses["tune"] is None, senses

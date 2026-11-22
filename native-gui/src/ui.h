@@ -27,8 +27,12 @@
 #define MAX_CLASSES  16
 #define MAX_DRAWERS   8
 #define MAX_ROOM_SELECTIONS (MAX_MACHINES * MAX_DRAWERS)
-/* #649: the IT toolbox -- rows of $GUI_DIR/tools, and one tool's output. */
-#define MAX_TOOLS      64
+/* #649: the IT toolbox -- rows of $GUI_DIR/tools, and one tool's output.
+ * Mockup 14 lists 118 tools and 17 combined checks; the server's selection
+ * is the allow-list, so the GUI holds them all. */
+#define TOOLBOX_649    1   /* mockup 14 (tests build their drivers without it on older trees) */
+#define MAX_TOOLS      160
+#define MAX_TOOL_PARTS 32
 #define TOOL_OUT_MAX   32768
 #define TOOL_OUT_LINES 512
 /* #928: the rows of the capture's shrink question (shrinkgui.sh,
@@ -116,14 +120,17 @@ enum {
     HIT_SHRINK_CONTINUE,
     HIT_SHRINK_PLAIN,
     HIT_SHRINK_CANCEL,
-    /* #649: the toolbox (native-only; build machine's menu) */
-    HIT_TOOLS,          /* the "כלים" button at the menu's top-left */
+    /* #649: the toolbox (native-only) -- mockup 14 */
+    HIT_TOOLS,          /* "כלים F3" in the top bar: opens the toolbox, and leaves it */
     HIT_TOOL_LIST,      /* back to the list from confirm / output */
     HIT_TOOL_RUN,       /* confirm view: run */
     HIT_TOOL_AGAIN,     /* output view: run again */
     HIT_TOOL_ARG,       /* confirm view: the free-text argument field */
     HIT_TOOL_UP,        /* list / output: scroll */
     HIT_TOOL_DOWN,
+    HIT_TOOL_EXIT,      /* "Esc חזרה" on the toolbox's home: out of it */
+    HIT_TOOL_SEARCH,    /* the search box of the home */
+    HIT_TOOL_CLEAR,     /* "נקה חיפוש" (#3032: the empty search's action) */
     /* #1188: first-boot installer. */
     HIT_INSTALL_BACK,
     HIT_INSTALL_NEXT,
@@ -203,9 +210,7 @@ enum {
     HIT_ROOM_DISK_BASE = 400,
     /* #714 machine name: +machine_index -- toggles all that machine's disks */
     HIT_ROOM_MACHINE_BASE = 700,
-    /* #649: a tool row (+index into a->tools) and a disk row of the
-     * confirm view (+index into st.disks) */
-    HIT_TOOL_BASE = 800,
+    /* #649: a disk row of the run view (+index into tools_disks()) */
     HIT_TOOL_DISK_BASE = 900,
     /* owner, 10/10: a folder of the image picker (+index from image_folders) */
     HIT_PICK_FOLDER_BASE = 950,
@@ -226,6 +231,11 @@ enum {
     HIT_IDENTIFY_BASE = 3700,  /* #1966: identify a drawer (+drawer index); not 3600 -- that is #1896's C: picker */
     HIT_SMT_BASE = 3800,       /* #1859: a drawer of the cloner's wait with a SMART table (+bay index) -- opens it */
     HIT_BASK_OPT_BASE = 3900,  /* #3654: an option of the brain's question (+index, MAX_BASK_OPTS of them) */
+    /* #649 (mockup 14): a tool row (+index into a->tools), a category tile (+index
+     * into TOOL_CATS), a partition row of the run view (+index into tool_parts), a
+     * page dot of a list (+page). Above HIT_PLAIN_HIGH's plain ids: 3900 is #3654's, and
+     * a tool row spans MAX_TOOLS (160) ids */
+    HIT_TOOL_BASE = 4200, HIT_TOOL_CAT_BASE = 4400, HIT_TOOL_PART_BASE = 4500, HIT_TOOL_PAGE_BASE = 4600,
 };
 
 typedef struct { Rect r; int id; } Hit;
@@ -243,7 +253,7 @@ typedef enum {
 /* station.js MODE: null (menu) / "capture" / "room" / "classes"; #706 adds restore */
 /* #715: MODE_DIRECT is the room screen without an image picker -- the source
  * is this machine's disk; open emits the chosen drawers as target_slots. */
-typedef enum { MODE_MENU, MODE_CAPTURE, MODE_ROOM, MODE_CLASSES, MODE_RESTORE, MODE_DIRECT, MODE_TOOLS } Mode;
+typedef enum { MODE_MENU, MODE_CAPTURE, MODE_ROOM, MODE_CLASSES, MODE_RESTORE, MODE_DIRECT } Mode;
 
 typedef enum { TASK_NONE, TASK_PENDING, TASK_RUNNING, TASK_DONE, TASK_FAILED } TaskState;
 
@@ -398,7 +408,7 @@ typedef struct { int port; char dev[32], model[48]; unsigned long long size; cha
                  char hw[240]; /* #1921: field 13 -- the drawer's hardware note (hw-issues.tsv), never the disk's colour */
                  char f1_date[12], f1_src[8]; /* #1858: fields 14/15 -- "נצפה F1" by serial: YYYY-MM-DD and manual|auto; "" = not marked */
                  char f1_smart[16]; /* #1858: field 16 -- the disk's own SMART beneath the F1 red (passed|warn|fail|unchecked); "" = not known */
-                 char wstate[12], wtext[160]; /* #3268: fields 18/19 -- the waiting-screen write check: checking|ok|slow|failed|unchecked and why; "" = an older agent */
+                 char wstate[12], wtext[320]; /* #3788: 320 (was 160); #3268: fields 18/19 -- the waiting-screen write check: checking|ok|slow|failed|unchecked and why; "" = an older agent */
                  DiskRule rule; /* #3666: cdisk_rule=dev|color|source|target|reason|sentence -- the agent's verdict from the one table (diskrule.sh); set 0 = none */ } IdleDisk;
 /* #2848 (Nadav 11/11): hwissues.sh's words, space-separated -- link_reset / drawer_gone is a SATA
  * problem: the disk is red, never a target, still a source. usb2 and icrc_logged stay a note. */
@@ -622,10 +632,16 @@ typedef struct State {
     Bask bask[MAX_BASKS]; int nbask, bask_broken;
 } State;
 
-/* #649: one row of $GUI_DIR/tools (id|domain|title|risk|args). risk is
- * ro / rw / destroy; anything else is treated as destroy, like tools.sh. */
-typedef struct { char id[48], domain[24], title[120], risk[12], args[96]; } Tool;
-typedef enum { TOOLS_LIST, TOOLS_CONFIRM, TOOLS_OUTPUT } ToolsView;
+/* #649: one row of $GUI_DIR/tools (id|domain|title|risk|args[|what]). risk is
+ * ro / rw / destroy; anything else is treated as destroy, like tools.sh. what
+ * is the optional one-line description (mockup 14's second line of a row). */
+typedef struct { char id[48], domain[24], title[120], risk[12], args[96], what[240]; } Tool;
+/* #649: one row of $GUI_DIR/tool-parts (dev|disk|size_bytes|fstype|label) --
+ * the partitions a part:<label> argument picks from */
+typedef struct { char dev[32], disk[32], fstype[24], label[64]; unsigned long long size; } ToolPart;
+/* mockup 14: the home (category tiles, and the search over it), one category's
+ * list, the run view (input, what will happen, the run button), the result */
+typedef enum { TOOLS_HOME, TOOLS_CAT, TOOLS_CONFIRM, TOOLS_OUTPUT } ToolsView;
 /* A polled file's identity: mtime (with the nanoseconds tmpfs keeps), size
  * and inode -- the bridge unlinks and recreates tool-result per run. */
 typedef struct { long sec, nsec, size, ino; int seen; } FileMark;
@@ -736,10 +752,25 @@ typedef struct App {
     int tools_loaded;           /* the tools file was read at least once */
     FileMark tools_mark, result_mark;
     ToolsView tools_view;
+    /* mockup 14: the toolbox is opened over the screen it was opened from -- the
+     * cloner's wait, the build menu, the USB stick's local clone -- and F3/Esc
+     * go back to it (tools_open = 0). app_route closes it when that screen
+     * starts writing. tools_from is the screen under it (the header's words). */
+    int tools_open; Screen tools_from;
+    int tool_cat;               /* TOOLS_CAT: the category, an index into TOOL_CATS */
+    int tool_tile;              /* the home's focused tile, an index into TOOL_CATS; -1 = none */
+    int tool_row;               /* the focused row of the list on screen (category or search) */
+    int tool_per_page;          /* rows of that list per page, as last drawn (PgUp/PgDn) */
+    int tool_searching;         /* the home is the search: tool_q over every category */
+    char tool_q[64];
+    ToolPart tool_parts[MAX_TOOL_PARTS]; int ntool_parts;
+    int tool_parts_ok;          /* tool-parts was read; 0 = missing -- "could not read", never "none" */
+    FileMark parts_mark;
     int tool_sel;               /* index into tools, -1 = none */
-    int tool_disk_sel;          /* confirm view disk picker: index into st.disks, -1 */
+    int tool_disk_sel;          /* run view disk picker: index into tools_disks(), -1 */
+    int tool_part_sel;          /* run view partition picker: index into tool_parts, -1 */
     char tool_arg[96], tool_error[160];
-    int tool_list_scroll, tool_scroll;
+    int tool_scroll;            /* the result's first line on screen */
     int tool_running, tool_rc;  /* rc -1 = no result yet */
     long tool_seq;              /* seq of the last result consumed */
     double tool_spin;           /* spinner angle while running */

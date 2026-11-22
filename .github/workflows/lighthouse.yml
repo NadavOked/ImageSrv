@@ -65,7 +65,7 @@ jobs:
           mkdir -p "$T/data" "$T/images" "$T/tftp" "$T/boot"
           nohup python -m server.main --server-url http://127.0.0.1:18080 \
             --host 127.0.0.1 --port 18080 \
-            --console-host 127.0.0.1 --console-port 18081 --console-tls off \
+            --console-host 127.0.0.1 --console-port 18081 --boot-port 18082 --console-tls off \
             --data-dir "$T/data" --images "$T/images" \
             --tftp-root "$T/tftp" --boot-dir "$T/boot" \
             < /dev/null > "$T/server.log" 2>&1 &

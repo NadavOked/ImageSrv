@@ -38,18 +38,14 @@ def conn(tmp_path):
 class _Chunk:
     interface = "eth1"
 
-    def sending_bps(self):
-        return 300 * MBPS
-
-
-class _Sender:
-    interface = None
-
     def status(self):
         return None
 
     def link(self):
         return {"speed_mbps": 1000}
+
+    def sending_bps(self):
+        return 300 * MBPS
 
 
 def _wave(conn, members):
@@ -77,7 +73,7 @@ def _nic(missed, no_buffer, ethtool=True):
 
 
 def _budget(conn, tmp_path):
-    return B.production(conn, served=Served(), chunk=_Chunk(), sender=_Sender(), sys_net=tmp_path, proc=tmp_path / "proc")
+    return B.production(conn, served=Served(), chunk=_Chunk(), sys_net=tmp_path, proc=tmp_path / "proc")
 
 
 def _clean_part(reason: str) -> str:

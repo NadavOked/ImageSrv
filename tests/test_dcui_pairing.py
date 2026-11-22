@@ -174,10 +174,10 @@ def test_disconnect_removes_the_primary_and_reads_it_back(conn):
 
 
 @pytest.mark.parametrize("typed,stored", [
-    ("203.0.113.40:8443", "https://203.0.113.40:8443"),
-    ("https://haifa.example.org:8443", "https://haifa.example.org:8443"),
-    ("  10.30.0.8:8443/ ", "https://10.30.0.8:8443"),
-    ("[2001:db8::5]:8443", "https://[2001:db8::5]:8443"),
+    ("203.0.113.40:7700", "https://203.0.113.40:7700"),
+    ("https://haifa.example.org:7700", "https://haifa.example.org:7700"),
+    ("  10.30.0.8:7700/ ", "https://10.30.0.8:7700"),
+    ("[2001:db8::5]:7700", "https://[2001:db8::5]:7700"),
 ])
 def test_the_address_the_primary_sees_is_normalized_saved_and_read_back(conn, typed, stored):
     result = pairing.save_advertised(conn, typed)
@@ -186,8 +186,8 @@ def test_the_address_the_primary_sees_is_normalized_saved_and_read_back(conn, ty
     assert pairing.advertised(conn) == stored
 
 
-@pytest.mark.parametrize("typed", ["203.0.113.40", "http://203.0.113.40:8443",
-                                   "203.0.113.40:8443/api", "u:p@203.0.113.40:8443"])
+@pytest.mark.parametrize("typed", ["203.0.113.40", "http://203.0.113.40:7700",
+                                   "203.0.113.40:7700/api", "u:p@203.0.113.40:7700"])
 def test_a_bad_address_is_refused_and_nothing_is_saved(conn, typed):
     result = pairing.save_advertised(conn, typed)
     assert result.ok is False and "Invalid address" in result.message
@@ -195,7 +195,7 @@ def test_a_bad_address_is_refused_and_nothing_is_saved(conn, typed):
 
 
 def test_an_empty_address_clears_it(conn):
-    pairing.save_advertised(conn, "203.0.113.40:8443")
+    pairing.save_advertised(conn, "203.0.113.40:7700")
     result = pairing.save_advertised(conn, "")
     assert result.ok and result.message == "Address cleared."
     assert storage_nodes.advertised_url(conn) == ""
@@ -290,7 +290,7 @@ def _kind(frame, kind):
 
 def test_f4_on_an_unpaired_secondary_shows_the_code_and_the_identity(tmp_path, conn):
     _secondary(conn)
-    pairing.save_advertised(conn, "203.0.113.40:8443")
+    pairing.save_advertised(conn, "203.0.113.40:7700")
     runtime = _runtime(tmp_path, conn)
     runtime.extras = view.collect_extras(conn)
     assert ["key", "F4", "צימוד לשרת ראשי", "0"] in _kind(_frame(runtime), "key")
@@ -303,7 +303,7 @@ def test_f4_on_an_unpaired_secondary_shows_the_code_and_the_identity(tmp_path, c
     kv = {rec[1]: rec[2] for rec in _kind(frame, "d.kv")}
     assert kv["זהות השרת"] == "A1B2 C3D4 E5F6 0718"
     assert kv["מזהה"] == "sn_a1b2c3d4e5f60718"
-    assert kv["הכתובת שהראשי מקליד"] == "https://203.0.113.40:8443"
+    assert kv["הכתובת שהראשי מקליד"] == "https://203.0.113.40:7700"
     assert not [rec for rec in _kind(frame, "d.alert") if rec[2:] == ["warn"]]
     # the text screen shows the same code and is 80x25 ASCII
     lines = dcui_app._current_lines(runtime, time.monotonic())
@@ -425,11 +425,11 @@ def test_f2_sets_the_address_the_primary_sees_behind_the_password(tmp_path, conn
     assert runtime.screen == "advertised"
     frame = _frame(runtime)
     assert _first_field(frame)[:2] == ["כתובת ופורט", ""]
-    _press(runtime, *"203.0.113.40:8443", "\n")
+    _press(runtime, *"203.0.113.40:7700", "\n")
     assert runtime.screen == "result" and runtime.result.ok
-    assert storage_nodes.advertised_url(conn) == "https://203.0.113.40:8443"
+    assert storage_nodes.advertised_url(conn) == "https://203.0.113.40:7700"
     _press(runtime, "\x1b", "\x1b", KEYS.KEY_F4)
-    assert runtime.pair.advertised == "https://203.0.113.40:8443"
+    assert runtime.pair.advertised == "https://203.0.113.40:7700"
 
 
 def _first_field(frame):
@@ -444,8 +444,8 @@ def test_every_new_screen_draws_80x25_ascii_text(tmp_path, conn):
         dcui_app.render_pair(code, "expired", time.time()),
         dcui_app.render_pair(code, "closed", time.time()),
         dcui_app.render_pair(code, "paired", time.time(), paired={"parent_id": "p"}),
-        dcui_app.render_unpair("https://10.20.10.5:8443"),
-        dcui_app.render_advertised("203.0.113.40:8443", 60, "Invalid address"),
+        dcui_app.render_unpair("https://10.20.10.5:7700"),
+        dcui_app.render_advertised("203.0.113.40:7700", 60, "Invalid address"),
         dcui_app.render_main(replace(demo_snapshot(), storage_role="secondary")),
     ]
     for lines in screens:

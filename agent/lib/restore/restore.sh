@@ -9,15 +9,11 @@
 # מה שצורך את הזרם עצמו. התקרות של כל ההמתנות כאן יושבות ב-waits.sh.
 # בדיקה 2.7 — האם האימג' נכנס לכונן (required_bytes, disk_fits) — ב-diskfit.sh (#1217).
 
-UDPCAST_PORTBASE="${UDPCAST_PORTBASE:-9000}"
-
-# ‏udp-receiver ממתין לשדר לנצח כברירת מחדל — התקרה של הכלי עצמו, הדרך
-# היחידה שיצא מרצונו במקום שנהרוג אותו מבחוץ. הערכים נגזרים מ-waits.sh
-# (מקום אחד); ההשמה כאן היא רק נפילה אחורה לקובץ שנטען לבדו (בדיקות).
-# ‏STALL=300 (11/09/2026): עד כאן 120, והיא נורתה כשהשולח האט למקבל איטי
-# בזנב אימג' גדול וקטע את הזרם ב-~90% (FOG/Clonezilla: לא להפיל את האיטי).
-# תקרת ההתחלה מגיעה לכל זרם בנפרד מ-next_stream_ceiling (waits.sh, #957).
-UDPCAST_STALL_TIMEOUT="${UDPCAST_STALL_TIMEOUT:-${WAIT_STREAM_STALL_S:-120}}"
+# The stream's stall ceiling: the HTTP stream (http_get_stream) gives up after
+# this many seconds without a byte. Derived from waits.sh (one place; timing.sh
+# moves it with the console's drawer_net_wait_seconds); the assignment here is
+# only the fallback for a file loaded alone (the tests).
+STREAM_STALL_TIMEOUT="${STREAM_STALL_TIMEOUT:-${WAIT_STREAM_STALL_S:-120}}"
 
 manifest_plan() {
     # $1 = manifest file. One line per partition:
@@ -113,14 +109,9 @@ node_is_block() {
 }
 
 stream_source() {
-    # $1 = mode, $2 = server URL, $3 = image id, $4 = file, $5 = תקרה עד הבייט הראשון.
-    if [ "$1" = "multicast" ]; then   # #2039: the NIC DHCP answered on (net.conf), as directsend's sender; >&2: stdout is the stream
-        [ -n "${IFACE:-}" ] || log "udp-receiver: IFACE is empty -- no --interface, udpcast picks its default NIC (#2039)" >&2; if command -v rcvbuf_check >/dev/null 2>&1; then rcvbuf_check >&2; fi   # #2994: RCVBUF_ASK (rcvbuf.sh)
-        udp-receiver --nokbd ${IFACE:+--interface "$IFACE"} --portbase "$UDPCAST_PORTBASE" \
-            --start-timeout "${5:-${WAIT_STREAM_START_S:-600}}" --receive-timeout "$UDPCAST_STALL_TIMEOUT" ${RCVBUF_ASK:+--rcvbuf "$RCVBUF_ASK"} 2>> "$LOG_FILE"
-    else
-        http_get_stream "$2/api/v1/images/$3/files/$4" "$UDPCAST_STALL_TIMEOUT"   # #2644: the cloner's ceiling (timing.sh moves it), not HTTP's 120
-    fi
+    # $1 = mode, $2 = server URL, $3 = image id, $4 = file. The partition file over
+    # HTTP; the multicast path is the chunk engine's (chunkrecv.sh, #3173).
+    http_get_stream "$2/api/v1/images/$3/files/$4" "$STREAM_STALL_TIMEOUT"   # #2644: the cloner's ceiling (timing.sh moves it), not HTTP's 120
 }
 
 is_swap_partition() {     # $1 = fs. ‏swap נקבעת מ-fs בלבד (#424): "בלי קובץ"
@@ -202,8 +193,7 @@ restore_partition() {
         return 1
     fi
 
-    # Verification is on the compressed bytes as received; in multicast there
-    # is no asking again. ‏-S נכתב רק ב-EOF נקי: fanout שנהרג (או שפג זמנו)
+    # Verification is on the compressed bytes as received. ‏-S נכתב רק ב-EOF נקי: fanout שנהרג (או שפג זמנו)
     # לא משאיר ערך, וההשוואה הישירה הייתה הופכת היעדר ראיה לטענה על בייטים (#73).
     _got=$(awk '{print $1}' "$_tdir/sha.out" 2>/dev/null)
     if ! is_sha256 "$_got"; then
@@ -217,7 +207,7 @@ restore_partition() {
 }
 
 run_restore() {
-    # $1 = mode (multicast/unicast), $2 = disk name, $3 = server URL,
+    # $1 = mode (unicast), $2 = disk name, $3 = server URL,
     # $4 = image id, $5 = manifest file.
     echo "writing" > "$RUN_DIR/state"
     target_set "$2" "writing"

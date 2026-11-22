@@ -79,7 +79,7 @@ def _iso_install(root: Path, src: Path, tag: str) -> Path:
 def test_health_live_reads_the_tag_from_a_shallow_clone_at_that_tag(
         no_parent_repo, images_root, clock, tag):
     app_dir = _iso_install(no_parent_repo, _public_repo(no_parent_repo), tag)
-    app = create_app(no_parent_repo / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(no_parent_repo / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, repo_dir=app_dir)            # בלי update_hooks: git אמיתי
     r = TestClient(app).get("/api/console/health/live")
     assert r.status_code == 200
@@ -94,7 +94,7 @@ def test_a_tree_without_git_is_a_fixed_category_unauthenticated_and_the_detail_g
     from server.console import users
     bare_tree = no_parent_repo / "opt" / "imagesrv"
     (bare_tree / "server").mkdir(parents=True)
-    app = create_app(no_parent_repo / "data", images_root, "http://10.44.12.10:8080",
+    app = create_app(no_parent_repo / "data", images_root, "http://10.44.12.10:7712",
                      now_fn=clock, repo_dir=bare_tree)
     anon = TestClient(app)
     with caplog.at_level(logging.WARNING, logger="imagesrv.update"):

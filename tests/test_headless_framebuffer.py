@@ -164,7 +164,7 @@ def _monitor_start(tmp_path, fb_dev, role="cloner", mem_file=False, env=""):
         (run_dir / FILE_NAME).write_bytes(b"x" * 64)
     script = (
         'OUT=' + repr(posix(out)) + '; LOGF=' + repr(posix(logf)) + '; '
-        'export IMAGESRV_MONITOR=1 IMAGESRV_SERVER=http://10.0.0.1:8080; '
+        'export IMAGESRV_MONITOR=1 IMAGESRV_SERVER=http://10.0.0.1:7712; '
         'export IP=10.0.0.9; export MONITOR_BIN=/bin/sh; '
         'export RUN_DIR=' + repr(posix(run_dir)) + '; '
         'export FB_DEV=' + repr(fb_dev) + '; '
@@ -222,7 +222,7 @@ def test_monitor_without_a_screen_waits_for_the_gui_file(tmp_path):
 def test_a_round_that_blocks_the_loop_still_gets_its_monitor(tmp_path):
     """#1849 (משכפל 2, 19/10): תשובת ה-hello הראשונה היא `restore`, והלולאה
     נחסמת ב-`do_restore` — אחרי ש-`monitor_start` כבר מצא שאין `fb.mem` ולפני
-    שהגואי יצר אותו. 5900 לא נפתח כל השחזור, גם בזמן שאלת SMART. כאן: הקובץ
+    שהגואי יצר אותו. 7710 לא נפתח כל השחזור, גם בזמן שאלת SMART. כאן: הקובץ
     נוצר שנייה אחרי הקריאה, הלולאה **לא** חוזרת — והמוניטור עולה בכל זאת,
     פעם אחת; הקריאה הבאה של הלולאה אינה מעלה שני. בקרה שלילית: על הקוד שלפני
     #1849 אין מי שיקרא שוב, ו-`spawned-while-blocked` אינו נוצר."""
@@ -235,7 +235,7 @@ def test_a_round_that_blocks_the_loop_still_gets_its_monitor(tmp_path):
     mem = run_dir / FILE_NAME
     script = (
         'OUT=' + repr(posix(out)) + '; LOGF=' + repr(posix(logf)) + '; '
-        'export IMAGESRV_MONITOR=1 IMAGESRV_SERVER=http://10.0.0.1:8080; '
+        'export IMAGESRV_MONITOR=1 IMAGESRV_SERVER=http://10.0.0.1:7712; '
         'export IP=10.0.0.9; export MONITOR_BIN=/bin/sh; '
         'export RUN_DIR=' + repr(posix(run_dir)) + '; '
         'export FB_DEV=' + repr(posix(tmp_path / "no-such-fb0")) + '; '

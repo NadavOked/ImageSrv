@@ -62,6 +62,7 @@ from datetime import datetime, timezone
 from typing import Callable
 
 from server.brain import fill, memory
+from server.core import ports as product_ports   # #3871
 from server.db import get_setting, journal
 from server.rounds import chunkledger
 
@@ -86,8 +87,8 @@ UNMEASURED_ROOM_BPS = fill.FLOOR_BPS
 K7_FLOOR_BYTES = 8_000_000 // 8
 _FAILED_MEMBER = ("failed",)
 #: ``enforce``: הפורטים של שרתי המסגרות של שכן (`chunkcast serve`), ובכמה מגירות שכן אחד מגיש בבת אחת.
-PORT_BASE = 48200
-MAX_SERVES_PER_PEER = 2
+PORT_BASE = product_ports.PEER_FIRST   # server/core/ports.py (#3871)
+MAX_SERVES_PER_PEER = product_ports.PEER_COUNT
 #: תפוגת שיבוץ: פי 3 ממה שהקצב מאפשר לחתיכות, ועוד 2 דקות (כמו התקרה של neighborfill.sh), ולא יותר מחצי שעה.
 UNTIL_SLACK_S = 120
 UNTIL_MAX_S = 1800
@@ -355,7 +356,10 @@ class Brain:
                       evidence=(f"source={c.source}", f"mac={mac}",
                                 *((f"peer={c.peer.mac}", f"peer_disk={c.peer.serial}") if c.peer else ()),
                                 *c.evidence),
-                      round_id=round_row["id"], entity=("disk", serial))
+                      round_id=round_row["id"], entity=("disk", serial),
+                      # #3750: צל, או החלטה שאינה שיבוץ שכן: אין מה לסגור. שיבוץ ב-enforce נשאר פתוח עד `peer_fill_result` (שאלה פתוחה ב-#3750)
+                      outcome=memory.na("צל: נרשם בלבד, ההשלמה נשארת ב-HTTP") if mode_now != ENFORCE
+                      else memory.na(f"לא שובץ שכן: ההשלמה נשארת במקור {c.source}") if c.source != PEER else None)
 
     # -- השיבוץ (``enforce`` בלבד) --
 
@@ -454,7 +458,8 @@ class Brain:
             memory.record(conn, mode=ENFORCE, rule=RULE, action="PEER_BANNED", verdict="BANNED",
                           reason=f"המשכפל השכן {a.peer_mac} לא מסר חתיכות שלמות: {why}. לא ישובץ שוב בגל הזה",
                           evidence=(f"id={a.id}", f"needy={mac}", f"result={result}"),
-                          round_id=round_row["id"], entity=("machine", a.peer_mac))
+                          round_id=round_row["id"], entity=("machine", a.peer_mac),
+                          outcome="השכן הוצא מכל השיבוצים בגל הזה")      # #3750: זה כבר בוצע למעלה (`_banned`, `_assign`)
 
 
 @dataclass

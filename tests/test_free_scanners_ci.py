@@ -44,15 +44,17 @@ def test_every_job_of_a_new_workflow_runs_only_in_the_public_repo(name):
             f"{name}:{job} has no `if: {PUBLIC}` -- it would run in the private repo")
 
 
-@pytest.mark.parametrize("name", (*NEW, "tests.yml"))
-def test_every_action_a_new_workflow_adds_is_pinned_to_a_full_sha(name):
+# #3087: the workflows that predate the rule are held to it too -- a floating
+# `@v7` tag is movable, so the code CI runs is not necessarily the code that was reviewed.
+PUBLIC_OLD = ("codeql.yml", "gitleaks.yml", "lint.yml", "nightly.yml", "semgrep.yml",
+              "shellcheck.yml", "tests.yml")
+
+
+@pytest.mark.parametrize("name", (*NEW, *PUBLIC_OLD))
+def test_every_action_of_a_public_workflow_is_pinned_to_a_full_sha(name):
     lines = [line for line in _text(name).splitlines()
              if re.match(r"^\s*(?:- )?uses:", line)]
-    assert lines or name == "tests.yml"
-    # tests.yml predates the rule; only what this change added to it is held to it.
-    if name == "tests.yml":
-        lines = [line for line in lines if "codecov" in line]
-        assert len(lines) == 1, "tests.yml: the Codecov upload step is gone"
+    assert lines, f"{name}: no `uses:` lines found -- the check would pass on nothing"
     for line in lines:
         assert PINNED.match(line), f"{name}: not pinned to a full SHA with a version comment: {line.strip()}"
 
@@ -66,12 +68,18 @@ def test_a_new_workflow_asks_for_no_write_permission_at_the_top(name):
     assert "write" not in top.group(1), f"{name}: write permission at the workflow level"
 
 
-@pytest.mark.parametrize("name", NEW)
-def test_every_checkout_of_a_new_workflow_drops_the_token(name):
+@pytest.mark.parametrize("name", (*NEW, *PUBLIC_OLD))
+def test_every_checkout_of_a_public_workflow_drops_the_token(name):
     steps = re.split(r"^ *- (?=(?:name|uses):)", _text(name), flags=re.MULTILINE)[1:]
-    for step in steps:
-        if "uses: actions/checkout@" in step:
-            assert re.search(r"^ +persist-credentials: false\s*$", step, re.MULTILINE), name
+    checkouts = [s for s in steps if "uses: actions/checkout@" in s]
+    assert checkouts or name in NEW, f"{name}: no checkout step found -- the check would pass on nothing"
+    for step in checkouts:
+        assert re.search(r"^ +persist-credentials: false\s*$", step, re.MULTILINE), name
+
+
+def test_dependabot_waits_a_week_before_proposing_a_new_release():
+    text = (WORKFLOWS.parent / "dependabot.yml").read_text(encoding="utf-8")
+    assert re.search(r"^    cooldown:\n      default-days: ([7-9]|\d\d+)$", text, re.MULTILINE)
 
 
 def test_the_actionlint_binary_is_verified_and_shellcheck_must_be_present():
@@ -81,8 +89,17 @@ def test_the_actionlint_binary_is_verified_and_shellcheck_must_be_present():
     assert 'sha256sum -c -' in text
     # Without shellcheck on PATH actionlint skips every `run:` block and says clean.
     assert "command -v shellcheck\n" in text
-    # The one exemption is named; a blanket `-ignore` would hide new findings.
-    assert re.findall(r"-ignore '([^']*)'", text) == ["SC2209:"]
+    # #3086: no exemptions at all -- SC2209 was fixed at the root, so any `-ignore`
+    # would hide a new finding in every workflow.
+    assert "-ignore" not in text
+    assert re.findall(r"-ignore '([^']*)'", text) == []
+
+
+def test_shellcheck_yml_quotes_the_dialect_it_assigns():
+    """`sh=bash` reads to shellcheck (SC2209) as an attempt to run bash; it is a string."""
+    text = _text("shellcheck.yml")
+    assert "case \"$first\" in *bash*) sh='bash' ;; *) sh='sh' ;; esac" in text
+    assert not re.search(r"sh=(bash|sh)(?!')", text)
 
 
 def test_osv_does_not_fail_on_the_documented_pins_and_does_not_guess_versions():

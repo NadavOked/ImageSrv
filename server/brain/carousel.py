@@ -183,7 +183,8 @@ class Carousel:
             memory.record(self.conn, mode=mode, rule=RULE, action=ACTION, verdict=got.verdict, reason=got.reason,
                           evidence=(*got.evidence, f"part={part}", f"pass={rnd}", f"executed={'yes' if act else 'no'}"),
                           round_id=session_id, entity=("round", session_id),
-                          outcome=None if act else "צל: התוכנית הרגילה רצה")
+                          # #3750: `full_pass` חוזר לקורא מיד למטה: זה "נמסר לביצוע" כמו S10, לא ריק
+                          outcome="התוכנית נמסרה לביצוע: מעבר מלא (קרוסלה)" if act else "צל: התוכנית הרגילה רצה")
             log.info("brain %s", json.dumps({"rule": RULE, "verdict": got.verdict, "round": session_id, "part": part,
                                               "pass": rnd, "reason": got.reason, "executed": act}, ensure_ascii=False))
             return full_pass(chunks, lacks, plan) if act else None

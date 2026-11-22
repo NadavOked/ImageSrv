@@ -103,7 +103,7 @@ def test_a_general_v2_query_is_counted_with_its_source(binary, tmp_path):
 
 @needs_cc
 def test_group_specific_and_v3_queries_are_told_apart(binary, tmp_path):
-    out = listen(binary, tmp_path, [igmp_frame(0x11, "239.83.67.1", dst_ip="239.83.67.1"),
+    out = listen(binary, tmp_path, [igmp_frame(0x11, "239.84.82.1", dst_ip="239.84.82.1"),
                                     igmp_frame(0x11, src="10.0.0.2", v3=True)])
     assert (out["igmp"]["queries"], out["igmp"]["general"], out["igmp"]["group"]) == (2, 1, 1)
     assert out["igmp"]["versions"] == [2, 3]
@@ -113,9 +113,9 @@ def test_group_specific_and_v3_queries_are_told_apart(binary, tmp_path):
 @needs_cc
 def test_reports_and_leaves_are_not_queries(binary, tmp_path):
     """דוח או leave של משכפל אחר אינו ראיה לכך שיש querier -- רק שאילתה היא."""
-    out = listen(binary, tmp_path, [igmp_frame(0x16, "239.83.67.1", dst_ip="239.83.67.1"),
-                                    igmp_frame(0x22, "239.83.67.1", dst_ip="224.0.0.22"),
-                                    igmp_frame(0x17, "239.83.67.1", dst_ip="224.0.0.2")])
+    out = listen(binary, tmp_path, [igmp_frame(0x16, "239.84.82.1", dst_ip="239.84.82.1"),
+                                    igmp_frame(0x22, "239.84.82.1", dst_ip="224.0.0.22"),
+                                    igmp_frame(0x17, "239.84.82.1", dst_ip="224.0.0.2")])
     assert out["igmp"]["queries"] == 0 and out["igmp"]["sources"] == []
     assert (out["igmp"]["reports"], out["igmp"]["leaves"]) == (2, 1)
     assert out["igmp"]["last_query_age_s"] is None
@@ -135,11 +135,11 @@ FRAMES = {
     "arp": eth(BCAST, ME_NOT, 0x0806, b"\0" * 28),
     "dhcp": eth(BCAST, ME_NOT, 0x0800, ipv4(17, "255.255.255.255", udp(68, 67), src="0.0.0.0")),
     "wol": eth(BCAST, ME_NOT, 0x0800, ipv4(17, "255.255.255.255", udp(40000, 9, b"\xff" * 102))),
-    "igmp": igmp_frame(0x16, "239.83.67.1", dst_ip="239.83.67.1"),
+    "igmp": igmp_frame(0x16, "239.84.82.1", dst_ip="239.84.82.1"),
     "lldp": eth("01:80:c2:00:00:0e", ME_NOT, 0x88CC, b"\0" * 20),
     "l2ctl": eth("01:80:c2:00:00:00", ME_NOT, 38, b"\x42\x42\x03" + b"\0" * 20),     # STP: 802.3 length, LLC
     "bcast_ip": eth(BCAST, ME_NOT, 0x0800, ipv4(17, "10.0.0.255", udp(137, 137))),          # NetBIOS
-    "mcast_ip": mcast_frame("239.83.67.1"),
+    "mcast_ip": mcast_frame("239.84.82.1"),
     "ipv6": eth("33:33:00:00:00:01", ME_NOT, 0x86DD, b"\0" * 40),
     "unicast_other": eth("aa:bb:cc:dd:ee:01", ME_NOT, 0x0800, ipv4(6, "10.0.0.50", b"\0" * 20)),
     "other": eth(BCAST, ME_NOT, 0x8035, b"\0" * 20),                                         # RARP
@@ -166,9 +166,9 @@ def test_a_vlan_tag_is_skipped_and_garbage_is_other(binary, tmp_path):
 
 @needs_cc
 def test_groups_are_listed_by_count_and_overflow_is_counted_not_dropped(binary, tmp_path):
-    frames = [mcast_frame("239.83.67.1")] * 5 + [mcast_frame(f"239.1.1.{n}") for n in range(2, 22)]
+    frames = [mcast_frame("239.84.82.1")] * 5 + [mcast_frame(f"239.1.1.{n}") for n in range(2, 22)]
     out = listen(binary, tmp_path, frames)
-    assert out["groups"][0] == {"group": "239.83.67.1", "n": 5}
+    assert out["groups"][0] == {"group": "239.84.82.1", "n": 5}
     assert len(out["groups"]) == 8
     # 21 קבוצות: 16 נשמרו, 5 נוספות נספרו, ו-8 מוצגות -- כולן מחושבות, אף אחת לא נעלמה
     assert out["groups_more"] == 21 - 8

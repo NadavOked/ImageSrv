@@ -17,7 +17,7 @@
 #                            raised the stream ceiling to its value + 120; it no longer
 #                            does -- drawer_net_wait_seconds is that ceiling's setting.)
 #   drawer_net_wait_seconds  -> the stream stall ceiling WAIT_STREAM_STALL_S and
-#                            udp-receiver's --receive-timeout (UDPCAST_STALL_TIMEOUT,
+#                            the HTTP stream's own ceiling (STREAM_STALL_TIMEOUT,
 #                            restore.sh): how long a drawer that waits for the NETWORK
 #                            waits before it gives up. Nadav 18/11: 120.
 #   drawer_disk_wait_seconds -> DISK_STALL_S, and with it fanout's
@@ -39,7 +39,7 @@
 # waits.sh (at its 300-line wall; and it is not a WAIT_* a shell function waits on): it is exported into the environment of fanout and chunkcast, which read
 # it there. A value the environment already holds (the tests') wins, as above.
 
-TIMING_ENV="${WAIT_STREAM_STALL_S:+net }${UDPCAST_STALL_TIMEOUT:+net }${IDLE_POWEROFF_S:+idle }${END_POWEROFF_S:+end }${DRAWER_HOLD_S:+hold }${DISK_STALL_S:+disk }${FANOUT_STALL_EVICT_MS:+disk }${CHUNKCAST_WRITE_STALL_MS:+disk }"
+TIMING_ENV="${WAIT_STREAM_STALL_S:+net }${STREAM_STALL_TIMEOUT:+net }${IDLE_POWEROFF_S:+idle }${END_POWEROFF_S:+end }${DRAWER_HOLD_S:+hold }${DISK_STALL_S:+disk }${FANOUT_STALL_EVICT_MS:+disk }${CHUNKCAST_WRITE_STALL_MS:+disk }"
 DISK_STALL_S="${DISK_STALL_S:-120}"
 : "${FANOUT_STALL_EVICT_MS:=$((DISK_STALL_S * 1000))}" "${CHUNKCAST_WRITE_STALL_MS:=$((DISK_STALL_S * 1000))}"
 export FANOUT_STALL_EVICT_MS CHUNKCAST_WRITE_STALL_MS
@@ -83,7 +83,7 @@ timing_take() {
     _timing_pick drawer_net_wait_seconds "$1" 30 900 net
     case " $TIMING_ENV " in
         *" net "*) ;;
-        *) WAIT_STREAM_STALL_S=${_tp:-$TIMING_OWN_STALL}; UDPCAST_STALL_TIMEOUT=$WAIT_STREAM_STALL_S ;;
+        *) WAIT_STREAM_STALL_S=${_tp:-$TIMING_OWN_STALL}; STREAM_STALL_TIMEOUT=$WAIT_STREAM_STALL_S ;;
     esac
     _timing_pick drawer_disk_wait_seconds "$1" 30 900 disk
     case " $TIMING_ENV " in

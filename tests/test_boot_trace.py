@@ -34,7 +34,7 @@ REPO = Path(__file__).resolve().parent.parent
 AGENT = REPO / "agent"
 
 MAC = "78:ac:c0:9b:11:c2"          # ה-HP הפיזי מ-#400
-HOST = "10.44.0.10:8080"
+HOST = "10.44.0.10:7712"
 CONFIG = GrubConfig(server_base=f"http://{HOST}")
 CLONER = {"schema": 1, "known": True, "role": "cloner", "task": None, "session": None}
 
@@ -48,7 +48,7 @@ def call(path: str, query: str = "", record=None) -> tuple[int, bytes]:
                            record=record)
     scope = {"type": "http", "method": "GET", "path": path, "root_path": "",
              "query_string": query.encode(), "headers": [],
-             "client": ("10.44.0.59", 51321), "server": ("10.44.0.10", 8080)}
+             "client": ("10.44.0.59", 51321), "server": ("10.44.0.10", 7712)}
     seen: list[dict] = []
 
     async def receive():
@@ -513,9 +513,9 @@ def _hello(mac: str) -> dict:
 # לווילן אינה נספרת — והמחיר הוא ששביל תחנת תרחיש-3 (#39) אינו נרשם.
 
 #: כתובת וילן ההפצה — זו שאיתה נוצר השרת ב-conftest.
-VLAN = "http://10.44.12.10:8080"
+VLAN = "http://10.44.12.10:7712"
 #: כתובת מקומית אחרת של אותו שרת — תרחיש 3 (#39).
-OFF_VLAN = "http://10.10.10.8:8080"
+OFF_VLAN = "http://10.10.10.8:7712"
 
 
 def step_row(server, mac: str):
@@ -709,7 +709,8 @@ def test_trace_step_carries_the_marks_in_the_url(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     urls = [line for line in result.stdout.splitlines() if line.startswith("http://")]
-    assert f"http://s/boot/step?mac={MAC}&s=agent-net&up=init:1.50,dhcp:3.20" in urls
+    # #3580: the agent's breadcrumbs go to the TLS API; /boot/step stays for GRUB's own, on the plain listener
+    assert f"http://s/api/v1/agent/boot-step?mac={MAC}&s=agent-net&up=init:1.50,dhcp:3.20" in urls
     assert urls[-1].endswith("&s=agent-start") and not urls[-1].endswith("&")
 
 
