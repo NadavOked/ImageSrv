@@ -11717,6 +11717,7 @@ JSON שאינו אובייקט, `NaN`, מצב יעד שאינו `done`/`failed` 
   `PROCEED`, ואין החלטה = דחייה). `evidence` = `site=`, `include_update=`, מצב כל חוש (`free`/`busy`/`unread`), `legacy=` (מה שהקוד הקיים
   החזיר) ו-`agree=0|1`; אי-הסכמה נרשמת בלוג ואינה משנה דבר. `brain_veto_mode=off` = לא נקרא ולא נרשם. כתיבה מהסקריפט (תהליך שאינו השרת)
   אינה סוגרת "החלטות יתומות" (`memory.record(orphans=False)`). אין שינוי סכמה ואין סף חדש.
+- **שינוי של הגדרת משתמש (#3675, חלק 1; `server/brain/usersetting.py`, כלל `B3675`):** ב-`POST /api/console/settings`, אחרי שהכתיבה עברה, נרשמת שורה ב-`brain_decisions` לכל מפתח שערכו השתנה מבין `hdd_support`, `tail_shrink_enabled`, `min_free_gb` ושלוש ברירות הזמן של הסוכן ושתי המתנות המגירה: `action` = `SETTING_CHANGE`, `verdict` = `SET`, ישות `settings`/<המפתח>, `mode` = `enforce`, `evidence` = `key=`, `old=` (`default` כשלא היתה שורה), `new=`, `by=`. כתיבה שלא שינתה ערך אינה נרשמת. זו עובדה על בחירת המשתמש ולא פסק של המוח, ולכן נרשמת בכל ערך של `brain_veto_mode`. כתיבה שנדחתה בבדיקה אינה נרשמת. `stream_engine` אינו ברשימה (#3173).
 - **הקלטת גל (#3320, R14):** `<data_dir>/brain/waves/<מזהה הגל>.jsonl` — שורת JSON לכל פעם שהמוח מחליט על הגל (`K2` בנקודה הרסנית,
   `K1` ב-tick, `K6`): `{"v": 1, "kind", "mode", "point", "held_s", "members", "snap", "snapshot", "cfg", "decisions", "ids"}`. `snapshot`
   = הצילום המלא (`asdict(observe.Snapshot)`), `snap` = ה-hash שלו, `cfg` = הספים, `ids` = מספרי השורות ב-`brain_decisions`. נשמרים
@@ -11982,7 +11983,8 @@ ask_row=<port now, 0 = not connected>|<port when written, 1-99>      (N rows, 1-
 שמבדילה; כולל #3595: K9 קבע `LINK` על אותו דיסק באותו גל) · `HOT` (מעל `smart_history.TEMP_WARN_C` בזמן הכתיבה, לא מוכח כסיבה) · `UNDECIDED` (גם החריץ וגם הדיסק חשודים, או שנכשל ואין ראיה).
 **הראיות** (`evidence`): `mac`, `port`, `serial`, `failed`, `crc_delta`, `link`, `cable_fail`, `link_events` (phy + איפוסי קישור של הגל, S52 + S53), `peak_c` (S54),
 `conn` (S58), ומה שהלמידה אמרה על החריץ והדיסק (`slot_bad_disks`, `disk_bad_slots`, `slot_failed_disks`),
-ו-`k9` (#3595): הפסק של K9 על הדיסק בגל (`LINK`/`DRIVE`/...), `none` = נקרא ואין שורה, `unread` = לא נקרא. **`null` = לא נמדד, ואינו 0.** חריץ בלי ראיה בגל אינו נרשם.
+ו-`k9` (#3595): הפסק של K9 על הדיסק בגל (`LINK`/`DRIVE`/...), `none` = נקרא ואין שורה, `unread` = לא נקרא,
+ו-`write` (#4007): `write_preflight.state`/`mbps` של הדיסק (`slow/15MBps`); `slow` נאמר בנימוק של `UNDECIDED`, ואינו משנה את הפסק. **`null` = לא נמדד, ואינו 0.** חריץ בלי ראיה בגל אינו נרשם.
 
 ## 49. ‏HDD — המתג "תמיכה ב-HDD" (‏X16, נדב 14/11)
 

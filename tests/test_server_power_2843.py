@@ -166,7 +166,7 @@ def test_without_an_installed_hook_the_route_refuses_503(tmp_path, images_root, 
         ctx.chunk.stop()
 
 
-def test_schedule_later_runs_systemctl_in_a_transient_unit_after_the_reply(monkeypatch):
+def test_schedule_later_runs_systemctl_in_a_transient_unit_after_the_reply(monkeypatch, caplog):
     """התשובה יוצאת לפני שהשרת יורד: systemd-run --on-active, שם יחידה ייחודי."""
     server_power = _sp()
     seen = []
@@ -181,7 +181,10 @@ def test_schedule_later_runs_systemctl_in_a_transient_unit_after_the_reply(monke
     units = [next(x for x in cmd if x.startswith("--unit=")) for cmd in seen]
     assert units[0] != units[1]
     monkeypatch.setattr(server_power.deploy_net, "_run", lambda cmd, **kw: (False, "", "denied"))
-    assert "denied" in server_power.schedule_later("reboot")
+    # #3091: the operator reads our sentence (a failure, visible); the raw stderr is in the server log only.
+    sentence = server_power.schedule_later("reboot")
+    assert sentence.endswith("הפרטים ביומן השרת") and "denied" not in sentence
+    assert "denied" in caplog.text
 
 
 def test_main_installs_the_real_hook(tmp_path, monkeypatch):

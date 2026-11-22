@@ -25,6 +25,7 @@ restart cannot leave the stick mounted in a namespace nobody sees.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from contextlib import contextmanager
@@ -32,6 +33,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from server.storage import locations as sl
+
+log = logging.getLogger("imagesrv.usbstick")
 
 DATA_LABEL = "IMGSRV_DATA"
 BOOT_LABEL = "IMGSRV_USB"
@@ -217,13 +220,15 @@ def open_stick(stick: Stick, *, write: bool = False, scanner=None, mount=None, u
     opts = ("rw,sync,nosuid,nodev,noexec,umask=0022" if write else "ro,nosuid,nodev,noexec,umask=0222")
     got = mount("vfat", source, mountpoint, opts)
     if got.status != sl.OK:
-        raise StickError(f"העיגון נכשל: {got.reason}")
+        log.warning("stick mount failed: %s", got.reason)       # #3021
+        raise StickError("העיגון נכשל — הפרטים ביומן השרת")
     try:
         yield Path(mountpoint)
     finally:
         gone = umount(mountpoint)
         if gone.status != sl.OK:
-            raise StickError(f"ההתקן נשאר מעוגן ({mountpoint}): {gone.reason} — אל תנתקו אותו לפני שהמעגן שוחרר")
+            log.warning("stick umount failed (%s): %s", mountpoint, gone.reason)    # #3021
+            raise StickError(f"ההתקן נשאר מעוגן ({mountpoint}) — אל תנתקו אותו לפני שהמעגן שוחרר; הפרטים ביומן השרת")
 
 
 def default_hooks() -> dict:

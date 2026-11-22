@@ -119,9 +119,12 @@ def _timedatectl_set(zone: str) -> str | None:
                               capture_output=True, text=True, timeout=20,
                               stdin=subprocess.DEVNULL)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return f"timedatectl לא רץ: {exc}"
+        log.warning("timedatectl set-timezone could not run: %s", exc)       # #3091
+        return "timedatectl לא רץ — הפרטים ביומן השרת"
     if done.returncode != 0:
-        return f"timedatectl החזיר {done.returncode}: {(done.stderr or done.stdout).strip()}"
+        log.warning("timedatectl set-timezone rc=%s: %s", done.returncode,
+                    (done.stderr or done.stdout).strip()[:300])
+        return f"timedatectl החזיר {done.returncode} — הפרטים ביומן השרת"
     return None
 
 
