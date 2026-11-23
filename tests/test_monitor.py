@@ -350,9 +350,8 @@ def test_monitor_client_shows_the_servers_close_reason():
     js = (static / "monitor.js").read_text(encoding="utf-8")
     assert "event.reason ||" in js
     page = (static / "monitor.html").read_text(encoding="utf-8")
-    versions = {tuple(int(x) for x in v.split("."))
-                for v in re.findall(r"\?v=([0-9.]+)", page)}
-    assert versions and min(versions) >= (3, 28), versions
+    # #4041: the number is the server's to fill (test_console_static_pages_4041); the source holds one placeholder.
+    assert set(re.findall(r"\?v=([^\"]+)", page)) == {"__IMAGESRV_V__"}
 
 
 def test_monitor_machines_list_is_admin_only_and_server_decides_online(server):
@@ -804,8 +803,7 @@ def test_the_console_translates_only_the_agent_fixed_prompts():
     assert "if (PROMPT_HE[p]) return PROMPT_HE[p];" in js
     assert "promptHe(m.prompt)" in js
     page = (static / "index.html").read_text(encoding="utf-8")
-    versions = {tuple(int(x) for x in v.split(".")) for v in re.findall(r"\?v=([0-9.]+)", page)}
-    assert len(versions) == 1 and min(versions) >= (6, 1), versions
+    assert set(re.findall(r"\?v=([^\"]+)", page)) == {"__IMAGESRV_V__"}   # #4041
 
 
 def test_a_long_question_is_cut_not_refused(server):

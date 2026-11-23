@@ -9,7 +9,8 @@ the line the other reads; a format changed on one side only fails here.
 
 **Negative control:** with `server/brain/waveeta.py` and `server/rounds/chunksend.py` BOTH back at `d6fb4201e`, the tests
 marked (neg) fail on behaviour (`behind=0`, no `drive=<serial>` in the evidence, no log line). The tests marked (guard)
-pass in both states: a serial without spaces, and the figures of the prediction itself.
+pass in both states: a serial without spaces, and the figures of the prediction itself. The RD2-1 test (one drive
+with no `write_history`) fails when `confidence=low` is not written into the evidence.
 """
 
 from __future__ import annotations
@@ -56,8 +57,10 @@ def _wave(rig, drive_a: str, drive_b: str, history: dict[str, tuple[int, str]]):
     return rig.named("chunk_write_behind")
 
 
-def _predict(conn, lines, drive_a, drive_b):
+def _predict(conn, lines, drive_a, drive_b, history=None):
     eta = _eta(conn, [0.0])
+    if history is not None:
+        eta.chunk.write_history = history.get          # the same hook the engine used (`ChunkEngine.write_history`)
     for line in lines:
         eta.on_event("chunk_write_behind", line, SID)
     eta.started(SID, 700 * MB, {("a", drive_a): 209, ("b", drive_b): 179})
@@ -108,6 +111,38 @@ def test_with_two_drives_behind_the_slow_one_is_the_one_the_eta_follows(rig, con
     assert f"eta_s={want.eta_s:.0f}" in ev, (ev, want)
     assert f"drive={APS}:49MB/s:http:{t[APS]:.0f}s" in ev, ev
     assert f"והכונן האיטי {APS} (49MB/s)" in row["reason"], row["reason"]
+
+
+# --- RD2-1: one drive has no write history ----------------------------------------------------------------------------
+
+
+def test_a_drive_with_no_write_history_next_to_one_that_has_one_is_low_confidence(rig, conn):
+    """(neg) RD2-1: the Samsung has a `write_history` (248MB/s) and the APS has none, so the engine journals only the
+    Samsung and the regex is not why the APS is missing. K3 still predicts the number it can (the Samsung), but the
+    evidence says `confidence=low` and names the drive it did not read a history for. Before: that row is a normal
+    prediction, with neither token."""
+    history = {SAMSUNG: (248, "ses_6881ed98")}
+    lines = _wave(rig, SAMSUNG, APS, history)
+    assert lines == [f'{SID} "{SAMSUNG}" check=209MB/s wrote=248MB/s in=ses_6881ed98 left_out'], lines
+    row = _predict(conn, lines, SAMSUNG, APS, history=history)
+    ev = row["evidence"]
+    want = W.predict(10_000, MANIFEST["total_compressed_bytes"], 700 * MB, [W.Slow(SAMSUNG, 248, W.HTTP)])
+    assert row["verdict"] == "PREDICT" and f"eta_s={want.eta_s:.0f}" in ev, (ev, want)
+    assert "confidence=low" in ev and f"no_history={APS}" in ev, ev
+    assert any(e.startswith(f"drive={SAMSUNG}:248MB/s:") for e in ev), ev
+    assert not any(e.startswith(f"drive={APS}:") for e in ev), ev
+    assert "ביטחון נמוך" in row["reason"] and APS in row["reason"], row["reason"]
+
+
+def test_a_drive_whose_history_kept_up_is_not_marked_low_confidence(rig, conn):
+    """(guard) Both drives have a history. The Samsung's (248MB/s) is above the pace, so only the APS is behind. The
+    prediction is a normal one: no `confidence=low`. This is what keeps the mark off every drive that is merely not behind."""
+    history = {APS: (49, "ses_27c0be8d"), SAMSUNG: (248, "ses_6881ed98")}
+    lines = _wave(rig, SAMSUNG, APS, history)
+    assert lines == [f'{SID} "{APS}" check=179MB/s wrote=49MB/s in=ses_27c0be8d left_out'], lines
+    ev = _predict(conn, lines, SAMSUNG, APS, history=history)["evidence"]
+    assert "confidence=low" not in ev and not any(e.startswith("no_history=") for e in ev), ev
+    assert any(e.startswith(f"drive={APS}:49MB/s:") for e in ev), ev
 
 
 # --- a line that is not read is not swallowed ------------------------------------------------------------------------

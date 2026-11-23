@@ -30,7 +30,7 @@ import sqlite3
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
-from server.brain import ingest as brain_ingest   # #3669 (B6, B8), בצל
+from server.brain import ceilings as brain_ceilings, ingest as brain_ingest   # #3669 (B6, B8), #3817 (F2, F3), בצל
 from server.rounds import prompt_hold, room, room_drivers
 from server.agent import registry
 from server.core import finite_json
@@ -192,6 +192,8 @@ def open_direct_round(ctx, source: dict, target_slots, target_drives,
             + f" {_floor_note(target_floor(ctx.conn, selected))}", user,   # #3942
             machine=mac, round_id=round_id)
     brain_ingest.silence_shadow(ctx.conn, round_id, task_id)   # #3669 (B8), בצל
+    from server.rounds import directchunk   # noqa: PLC0415 — directchunk imports this module
+    brain_ceilings.relay_shadow(ctx.conn, round_id, task_id, directchunk.RELAY_TIMEOUT_S)   # #3817 (F3), בצל
     return {"id": round_id, "wave_session_id": wave_id,
             "task_id": task_id, "image_id": image_id}
 

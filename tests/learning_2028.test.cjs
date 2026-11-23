@@ -150,6 +150,6 @@ test('no screen offers a run that writes to disks', () => {
 });
 
 test('the page loads the script and the style', () => {
-  assert.match(index, /<script src="learning\.js\?v=[\d.]+"><\/script>/);
-  assert.match(index, /<link rel="stylesheet" href="learning\.css\?v=[\d.]+">/);
+  assert.match(index, /<script src="learning\.js\?v=__IMAGESRV_V__"><\/script>/);
+  assert.match(index, /<link rel="stylesheet" href="learning\.css\?v=__IMAGESRV_V__">/);
 });

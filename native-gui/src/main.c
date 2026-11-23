@@ -591,7 +591,9 @@ static void tool_again(App *a) {
 static int disk_smart_ask(App *a, int kind, int i) {
     if (i < 0 || i >= a->st.ndisks || !smart_level(a->st.disks[i].smart)) return 0;
     const Disk *d = &a->st.disks[i];
-    sdlg_open(a, kind, i, d->dev, OWN_DISK_HE, d->smart, d->smart_reason, d->model, d->serial);
+    char cname[SLOT_NAME_MAX + 16];
+    mapped_disk_name("", d->slot_known ? d->drawer : 0, cname, sizeof cname);
+    sdlg_open(a, kind, i, d->dev, OWN_DISK_HE, d->smart, d->smart_reason, d->model, d->serial, cname);   /* #2980: the disk is "הדיסק של המחשב"; #3008: a cable cause names the connection as the operator set it */
     return 1;
 }
 

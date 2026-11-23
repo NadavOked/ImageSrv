@@ -253,14 +253,14 @@ def test_a_good_disk_is_written_in_three_places_and_read_back(fx):
     start, mid, end = _region(img, 0, 16), _region(img, 128, 16), _region(img, 240, 16)
     assert start.count(0) < MIB and mid.count(0) < MIB and end.count(0) < MIB
     assert len({start, mid, end}) == 3
-    # #1805 (CLR-02): and a 4KiB random marker at every power-of-two MiB -- between
-    # the places that is 16, 32 and 64 MiB; nothing else between them was touched.
-    between = bytearray(_region(img, 16, 112))
-    for mib in (16, 32, 64):
-        off = (mib - 16) * MIB
-        assert between[off:off + 4096].count(0) < 4096, mib
-        between[off:off + 4096] = bytes(4096)
-    assert bytes(between) == bytes(112 * MIB) and _region(img, 144, 96) == bytes(96 * MIB)
+    # #1805 (CLR-02) wrote a 4KiB marker at every power-of-two MiB and read it back; #4031: then zeroed it, and
+    # read that back too -- apply_gpt wipes only the table and the stream writes only used blocks, so a marker
+    # left here would stay on a free cluster of the restored partition. Between the places (16, 32 and 64 MiB
+    # hold markers) the disk is all zeros again, and the three places keep their patterns but for the 4KiB
+    # of a marker at 0, at 128 and in the last 4KiB of the disk.
+    assert _region(img, 16, 112) == bytes(112 * MIB) and _region(img, 144, 96) == bytes(96 * MIB)
+    assert start[:4096] == bytes(4096) and mid[:4096] == bytes(4096) and end[-4096:] == bytes(4096)
+    assert start[4096:].count(0) < MIB and mid[4096:].count(0) < MIB and end[:-4096].count(0) < MIB
     entry = next(t for t in json.loads((fx / "progress.json").read_text(encoding="utf-8"))["targets"])
     assert entry["write_preflight"]["state"] == "ok", entry
     # the speed, from dd's own summary: a number, measured (5b) -- never a made-up 0

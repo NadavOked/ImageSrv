@@ -55,7 +55,7 @@ HIERARCHY_ONLY = {
 #: דגלי `capabilities` שהקונסולה רשאית להסתיר לפיהם — היררכיה בלבד.
 HIERARCHY_CAPS = {"interbranch_transfer", "enroll_secondary", "open_local_pairing"}
 #: #1081: מהדורה (v1/v2), זהה בכל שרת. לא היררכיה — חיפה = ת"א.
-EDITION_CAPS = {"classrooms", "tools"}   # tools: v1 בלי ארגז הכלים (נדב 19/09)
+EDITION_CAPS = {"classrooms", "tools", "drivers"}   # tools: v1 בלי ארגז הכלים (נדב 19/09); drivers: #2554, קבוע בקוד, זהה בכל שרת
 
 
 def _login(client: TestClient, who: tuple[str, str]):
@@ -289,7 +289,7 @@ def test_a_secondary_answers_its_admin_exactly_like_a_standalone(tmp_path, image
         assert not drift, "המשני עונה אחרת מ-standalone:\n" + "\n".join(drift)
         me = se.get("/api/console/me").json()["capabilities"]
         assert me == {"interbranch_transfer": False, "enroll_secondary": False,
-                      "open_local_pairing": True, "classrooms": False, "tools": False}
+                      "open_local_pairing": True, "classrooms": False, "tools": False, "drivers": False}
     finally:
         sa_app.state.ctx.chunk.stop()
         se_app.state.ctx.chunk.stop()
