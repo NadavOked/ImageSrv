@@ -662,9 +662,12 @@ test('#1088 deploy network not configured: /net/deploy configured=false → note
   let t=await loaded({'/net/interfaces':none,'/net/deploy':{configured:false,source:'none',interface:null,url:null,hint}});
   assert.equal(t.run('NET_DEPLOY.source'),'none');
   let html=t.run('networkPage(0)'); balanced(html);
-  assert.match(html,new RegExp(hint+' — <a href="#" onclick="openNetwork\\(2\\);return false;">לשונית רשת הפצה</a>'));
-  html=t.run('networkPage(2)');
-  assert.match(html,new RegExp(hint+' — <a href="#" onclick="openNetwork\\(2\\);return false;">'),'#1300: the "not configured" hint is the note on every tab (the tab sub-line is shared now)');
+  // ‏#3029: אין עוד לשונית "רשת הפצה" לפני ההגדרה — ההודעה (מוקאפ m3029-v2) והכפתור פותח את חלון הבחירה, בלי קישור ללשונית
+  assert.match(html,/<b>רשת ההפצה לא הוגדרה\.<\/b> אי אפשר להפיץ אימג'ים עד שבוחרים כרטיס שיחלק כתובות למחשבי השיכפול והבנייה\.<br><br><button class="btn primary sm" onclick="netPickDeploy\(\)">הגדרת רשת הפצה…<\/button>/);
+  assert.doesNotMatch(html,/openNetwork\(2\)|לשונית רשת הפצה/);
+  html=t.run('networkPage(1)');
+  assert.match(html,/onclick="netPickDeploy\(\)">הגדרת רשת הפצה…<\/button>/,'the note is on the physical tab too, above the cards');
+  assert.ok(html.indexOf('netPickDeploy()')<html.indexOf('כרטיסי רשת'),'above the NIC table');
   // הטופס של ההדלקה הראשונה אומר שזו הגדרת רשת ההפצה, והשמירה מדווחת על האתחול
   t.run('netEditDeploy("ens19")');
   const sh=t.run('sheets[sheets.length-1]');
@@ -692,6 +695,53 @@ test('#1088 deploy network not configured: /net/deploy configured=false → note
   // ‏/net/deploy שלא נקרא — נאמר, לא "מוגדר"
   t=await loaded({'/net/interfaces':none,'/net/deploy':new Error('boom')});
   assert.match(t.run('networkPage(0)'),/\/net\/deploy לא נקרא[^<]*<details class="tech"><summary>פרטים טכניים<\/summary><code dir="ltr">boom<\/code>/);
+});
+
+// ‏#3029 (מוקאפ m3029-v2): "רשת הפצה" — לשונית וצומת בעץ — רק אחרי שהוגדרה רשת הפצה
+const DEPLOY_OFF={configured:false,source:'none',interface:null,url:null,hint:'x'};
+const DEPLOY_ON={configured:true,source:'console',interface:'ens19',url:'http://10.44.9.10:7712',hint:null};
+test('#3029 before the deploy network is set there are two tabs, the note carries the button, and the old tab index falls back to the physical tab',async()=>{
+  const t=await loaded({'/net/deploy':DEPLOY_OFF});
+  assert.deepEqual(JSON.parse(t.run('JSON.stringify(pages.network.tabs)')),['תרשים','חיבורים פיזיים']);
+  for(const tab of [0,1,2]) { const html=t.run(`networkPage(${tab})`); balanced(html);
+    assert.doesNotMatch(html,/openNetwork\(2\)">רשת הפצה</,'no deploy tab in the header, tab '+tab); }
+  assert.equal(t.run('networkPage(2)'),t.run('networkPage(1)'),'index 2 does not exist: it is the physical tab');
+  assert.doesNotMatch(t.run('networkPage(1)'),/רשת ההפצה חייבת להיות מבודדת/,'the isolation warning belongs to the deploy tab only');
+  t.run('currentTab=0; activateTab=(i)=>{ currentTab=i; }; pageAllowed=()=>true;'); t.run('openNetwork(2)');
+  assert.equal(t.run('currentTab'),1,'a stale openNetwork(2) lands on the physical tab');
+  assert.equal(t.run('HEALTH_GOTO.deploy_net[1]'),'netPickDeploy()','the health page link opens the window too');
+  assert.equal(t.run('HEALTH_GOTO.tftp_port[1]'),"selectPageById('ports')");
+});
+test('#3029 after the setup, and when /net/deploy was not read, the tab stays -- never hidden on "unknown"',async()=>{
+  for(const [name,over] of [['configured',{'/net/deploy':DEPLOY_ON}],['not read',{'/net/deploy':new Error('boom')}]]) {
+    const t=await loaded(over);
+    assert.deepEqual(JSON.parse(t.run('JSON.stringify(pages.network.tabs)')),['תרשים','חיבורים פיזיים','רשת הפצה'],name);
+    assert.match(t.run('networkPage(2)'),/רשת ההפצה חייבת להיות מבודדת/,name);
+    assert.doesNotMatch(t.run('networkPage(1)'),/netPickDeploy/,name+': no setup button');
+    assert.equal(t.run('HEALTH_GOTO.deploy_net[1]'),'openNetwork(2)',name);
+  }
+});
+test('#3029 the tree node "רשת הפצה" follows /net/deploy',async()=>{
+  const t=await loaded({'/net/deploy':DEPLOY_OFF});
+  t.run("globalThis.n2={hidden:false}; document.querySelectorAll=(s)=>s.includes('#netTA')&&s.includes('data-net-tab=\"2\"')?[n2]:[];");
+  t.run('syncNetDeployNode()'); assert.equal(t.run('n2.hidden'),true);
+  t.run('NET_DEPLOY='+JSON.stringify(DEPLOY_ON)+'; syncNetDeployNode()'); assert.equal(t.run('n2.hidden'),false,'after the setup the node appears');
+  t.run('NET_DEPLOY=null; syncNetDeployNode()'); assert.equal(t.run('n2.hidden'),false,'not read: shown');
+  t.fixtures['/net/deploy']=DEPLOY_OFF; await t.run('loadNetDeploy()'); assert.equal(t.run('n2.hidden'),true,'loadNetDeploy (boot / home) hides it without opening the network page');
+});
+test('#3029 the home alert: "הגדרת רשת הפצה…" opens the picker window directly, and the picker works before the network page was ever opened',async()=>{
+  const t=setup({'/net/deploy':DEPLOY_OFF,'/net/interfaces':NICS.map(n=>({...n,enabled:false,proxy:false}))});
+  t.run('current="home"; HOME=homeInit(); NET_DEPLOY='+JSON.stringify(DEPLOY_OFF)+'; HEALTH=[{id:"deploy_net",label:"הגדר את רשת ההפצה",state:"warn",detail:"רשת ההפצה לא הוגדרה"}];');
+  const html=t.run('homeAttention()');
+  assert.match(html,/<button class="btn sm flat" onclick="netPickDeploy\(\)">הגדרת רשת הפצה…<\/button>/);
+  assert.doesNotMatch(html,/openNetwork\(2\)/);
+  t.run('NET_DEPLOY='+JSON.stringify(DEPLOY_ON)+';');
+  assert.match(t.run('homeAttention()'),/onclick="openNetwork\(2\)">הגדר רשת הפצה</,'configured but broken: the tab exists, the old action stays');
+  t.run('NET_DEPLOY='+JSON.stringify(DEPLOY_OFF)+';');
+  assert.equal(t.run('NETW.nics'),null,'the network page was never loaded');
+  await t.run('netPickDeploy()');
+  assert.equal(t.run('sheets.length'),1); assert.equal(t.run('sheets[0].title'),'הגדר כרשת הפצה');
+  assert.deepEqual(JSON.parse(t.run('JSON.stringify(sheets[0].fields[0].options.map(o=>o.value))')),['','ens19','ens21'],'the sheet got its NICs (not the management one, not the trunk) from a load it did itself');
 });
 
 // apple-pending-4 · 4: פיל ה-DHCP עבר מכותרת הסקירה לדף הרשת (התרשים)
@@ -944,4 +994,20 @@ test('#2891 deploy window: "כרטיס 2" has the skip-the-probe box, off by def
   assert.equal(await t.run(`sheets[0].onSubmit(${JSON.stringify({...v,second_only_deploy:true})}).then(()=>null,e=>e.message)`),null);
   const bodies=t.requests.filter(r=>r.method==='PUT').map(r=>r.body);
   assert.deepEqual(bodies,[{second:'ens22'},{second:'ens22',ignore_existing:true}]);
+});
+
+/* ‏#2899: bind על 0.0.0.0 לא הופך כרטיס "לא מוגדר" לוילן שרתים, ו"מחובר ל-N וילנים" סופר רשתות ולא כרטיסים. */
+test('#2899: a wildcard bind does not make an unconfigured NIC a servers VLAN; two NICs on one subnet are one VLAN',async()=>{
+  const {run}=await loaded();
+  run('NETW.ports=NETW.ports.map(p=>p.id==="http_console"?{...p,bind:"0.0.0.0"}:p)');
+  const model=JSON.parse(plain(run('JSON.stringify(netDiagramModel())')));
+  assert.equal(model.lanes.find(l=>l.nic.name==='ens21').vlan.kind,'none','wildcard 443 on a NIC with no role stays "לא מוגדר"');
+  assert.equal(model.lanes.find(l=>l.nic.name==='ens18').vlan.kind,'mgmt','the chosen management NIC still counts by its services');
+  // שני כרטיסים על אותה רשת, ושניהם עם 443 קשור לכתובת שלהם
+  run(`NETW.nics.push(${JSON.stringify(nic('ens22',{addresses:['10.44.10.5/24']}))})`);
+  run('NETW.ports=NETW.ports.map(p=>p.id==="http_console"?{...p,bind:["10.44.10.1","10.44.10.5"]}:p)');
+  const svg=mapOf(plain(run('networkPage(0)')));
+  assert.equal(vlans(svg).length,4,'four cards on the map');
+  assert.match(svg,/מחובר ל-3 וילנים/,'three distinct subnets, not four cards');
+  assert.match(svg,/השרת ו-3 וילנים/);
 });

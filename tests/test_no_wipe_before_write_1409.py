@@ -15,6 +15,13 @@ write had started -> exactly one ``--zap-all``, on that disk only.
 Negative control (mutation): ``wipe_written_gpt`` without its evidence line (the
 ``write_started`` serial check) -- the unconditional wipe of #1388 as it was.
 
+The production files of THIS guard are failmark.sh (``wipe_written_gpt``,
+``fail_written_target``), core/progress.sh (``target_init`` clears ``write_started``) and
+localclone/localclone.sh (the refusals of ``lc_run``). Not expand.sh, restore.sh or
+writecheck.sh: those are 3dca834c (#2412), the other test below. A negative control that
+reverts them leaves this file green (23/11: 5 passed) and proves nothing about it.
+Each condition of the guard on its own: test_wipe_guard_1409.py.
+
 Not covered here: a drawer whose plan is refused by ``validate_restore_plan`` after
 the write check (writecheck.sh) already wrote it -- closed by 3dca834c (#2412),
 guarded in test_refused_plan_keeps_table_1409.py.

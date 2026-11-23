@@ -718,3 +718,42 @@ test('#1300 rail: the tooltip names the icon (and "› child" on a marked parent
   assert.ok(!fly.classList.contains('show'));
   void timers;
 });
+
+// ‏#2902: מונה הלשונית (<small>) ירש `smaller` של הדפדפן = 10.83px, מתחת לרצפת 11px.
+test('#2902: every <small> inside a tab has an explicit size at or above --t-xs, and a margin that survives a Latin label', () => {
+  const css = read('console.css');
+  for (const sel of ['.page .tab small', '.n-tab small']) {
+    const m = css.match(new RegExp(sel.replace(/\./g, '\.') + '\{([^}]*)\}'));
+    assert.ok(m, sel + ' has a rule');
+    assert.match(m[1], /font-size:var\(--t-xs\)/, sel + ' sets the floor size explicitly');
+    assert.match(m[1], /display:inline-block/, sel + ': inline-block keeps the margin next to "ISO"');
+  }
+});
+
+// ‏#2895: תא עם direction:ltr ו-text-align:start יושב בשמאל, מתחת לכותרת RTL שמיושרת לימין.
+test('#2895: no table cell or tech block pairs direction:ltr with text-align:start', () => {
+  const css = read('console.css');
+  for (const sel of ['.task-table td.num', '.page .dg td .tech code', '.page .attn-i .tech code', '.page .note .tech code', '.page .dg.storage td .sub.mono']) {
+    const i = css.indexOf(sel + '{');
+    assert.ok(i >= 0, sel + ' exists');
+    const rule = css.slice(i, css.indexOf('}', i));
+    assert.doesNotMatch(rule, /text-align:start/, sel);
+    assert.match(rule, /text-align:right/, sel + ' aligns to the RTL header side');
+  }
+  assert.match(css, /\.task-table td\.num\{[^}]*direction:ltr[^}]*unicode-bidi:isolate/, 'the isolation stays');
+});
+
+// ‏#2554: דרייברים — הלשונית לא מופיעה עד ש-/me מדליק capabilities.drivers; פתיחה ישירה חוזרת לבית.
+test('#2554: the drivers page is not allowed without the capability, and a direct open lands on home', () => {
+  const {run} = setup();
+  run('ME = {role:"admin", capabilities:{}}');
+  assert.equal(run('pageAllowed("drivers")'), false, 'flag off → no drivers');
+  assert.equal(run('driversOn()'), false);
+  run('ME = {role:"admin", capabilities:{drivers:true}}');
+  assert.equal(run('pageAllowed("drivers")'), true, 'flag on → it comes back');
+  run('ME = {role:"admin", capabilities:{}}; globalThis.went = []; selectPageById = (id) => { went.push(id); }');
+  run('selectPage(null, "drivers")');
+  assert.equal(run('JSON.stringify(went)'), '["home"]', 'not an empty page: back to home');
+  const html = read('index.html');
+  assert.match(html, /class="inventory-node hidden" data-page="drivers" data-cap="drivers"/);
+});

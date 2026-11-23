@@ -127,6 +127,7 @@ EVENTS_HE = {
     "room_failed": "סבב חדר השיכפולים נכשל — אף מגירה לא נכתבה בגל",   # 17/10
     # #1721: ה-WoL של הגל נבלע (המשכפל עוד היה בספירת הכיבוי) — נשלח שוב, עם תקרה.
     "room_rewake": "מחשב שיכפול לא חזר לגל הפתוח — נשלח WoL חוזר",
+    "room_relight": "מחשב שיכפול בפס הייצור כבה ועוד יש לו סבב — נשלח WoL",   # #3916
     "room_wake_failed": "סבב חדר השיכפולים נכשל — מחשב שיכפול לא התעורר לגל",
     "room_close": "סבב חדר השיכפולים נסגר",
     # #980: כיבוי החדר עובר דרך הסוכן (hello) — בקשה, מסירה, או פקיעה.
@@ -136,6 +137,7 @@ EVENTS_HE = {
     # #65: "כבה אותו" — מחשב שיכפול אחד שחסר בגל הפתוח, כדי להחליף בו מגירות.
     "room_missing_poweroff": "התבקש כיבוי מחשב שיכפול שחסר בגל",
     "held_poweroff": "התבקש כיבוי משכפל שמחכה ללחיצה (דיסק עם בעיה)",   # #2031
+    "held_released": "משכפל שמחזיק תוצאות עבר לשקט — ההחזקה נגמרה",   # #3912
     # #3123 (#3064, G13): "השאר דלוקים" — מי כובה ולמה, ומי דולג כי היה באמצע סבב.
     "room_keep_on": "השאר דלוקים — נבחרו משכפלים להישאר, והשאר התבקשו להיכבות",
     "room_keep_on_off": "התבקש כיבוי משכפל שלא נבחר להישאר דלוק",
@@ -312,6 +314,7 @@ EVENTS_HE = {
     "capture_done": "אימג' נקלט",
     "capture_index_derived": "האינדקס ורשימת ה-BLAKE3 של האימג' נגזרו בקליטה, לפני הכניסה לספרייה",   # #3502
     "capture_failed": "קליטת אימג' נכשלה",
+    "capture_staging_delete_failed": "מחיקת אזור הביניים של קליטה שנכשלה נכשלה — התיקייה נשארה על הדיסק",   # #3695
     "ntfs_not_shrunk": "מחיצת NTFS לא נסגרה כראוי — נקראה בגודלה המלא, בלי כיווץ",   # #2972
     "capture_space_warning": "אזהרת מקום בקליטה — יחס הדחיסה אינו ידוע",
     "capture_cancel": "קליטת אימג' בוטלה",
@@ -567,6 +570,7 @@ _SEVERITY_ERR = {
     "mfa_disable_failed",       # ביטול MFA בקוד שגוי -- כמו login_failed
 }
 _SEVERITY_WARN = {
+    "capture_staging_delete_failed",   # #3695: the capture is closed failed; only the leftover folder is still on the disk
     "db_update_refused",   # #86: nothing was written; the machine was not qualified
     "nic_link_low",   # #3277: the distribution card's link is low -- orange, information only
     "chunk_peer_failed",   # B29: ההשלמה עברה לשרת, הסבב ממשיך
@@ -586,7 +590,7 @@ _SEVERITY_WARN = {
     "net_rollback_unreadable", "net_rollback_marker_stuck", "work_area_kept", "nic_services_armed", "nic_services_reverted",
     "storage_node_disable",
     "chunk_drive_behind", "chunk_no_show", "drawer_stranger",   # #3125
-    "room_drawer_changed", "room_drawer_unidentified", "room_drawer_wake_mismatch", "room_rewake", "clock_jump",
+    "room_drawer_changed", "room_drawer_unidentified", "room_drawer_wake_mismatch", "room_rewake", "room_relight", "clock_jump",
     "room_drawer_serial_conflict", "shrink_refused",   # #2421, #2413
     "power_expired", "gui_failed", "wol_arm_failed", "net_loss_jump", "model_speed_dropped", "wol_no_wake", "wol_resent", "boot_step_slow", "server_disk_slow", "capture_space_refused", "capture_space_unchecked", "cloner_throttled", "vmupdate_force_off", "vmupdate_expired", "vmupdate_control_auto",
     "vmupdate_mac_created", "vmupdate_leftover_failed", "linux_initramfs_warning",
@@ -955,7 +959,7 @@ class JournalTranslator:
                 text = (f"{m.group(1)} — {ROLLBACK_HE.get(m.group(3), m.group(3))}, "
                         f"בוצע ב-{m.group(2).replace('T', ' ')[:16]}")
                 if "errors=" in detail:
-                    text += f" · ההחזרה עצמה דיווחה שגיאות: {detail.split(': ', 1)[-1]}"
+                    text += " · ההחזרה עצמה דיווחה שגיאות — הפרטים ביומן השרת"      # #3021
         elif event == "net_config":
             m = re.search(r"(\S+) (\S+)(?: (\S+))? changed=(\S*)$", detail)
             if m:

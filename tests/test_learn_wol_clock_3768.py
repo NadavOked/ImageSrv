@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from server import db
-from server.learn import wol as learn_wol
+from server.learn import wol as learn_wol, wol_sweep
 from server.system import steadyclock
 
 MAC = "78:ac:c0:9b:11:c2"
@@ -84,7 +84,7 @@ def test_a_jump_between_send_and_sweep_raises_no_false_no_wake(conn, clock, jump
         learn_wol.sent(conn, MAC)
         clock.tick(10)
         clock.jump(jump)
-        learn_wol.sweep(conn, send=lambda *a: sends.append(a))
+        wol_sweep.sweep(conn, send=lambda *a: sends.append(a))
         clock.tick(30)                              # ענתה אחרי 40ש' בסך הכול
         learn_wol.answered(conn, MAC)
         clock.tick(learn_wol.ANSWER_S + 10)

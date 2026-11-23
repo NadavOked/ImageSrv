@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -58,11 +59,12 @@ def journal(server, event: str) -> list[str]:
 
 def add_round(ctx, rid: str, state: str, created: str, *, closed: str | None = None,
               image_id: str = "img_gone", written: int = 0, target: int = 4,
-              reason: str | None = None) -> None:
+              reason: str | None = None, slots: list[str] | None = None) -> None:
     ctx.conn.execute(
         "INSERT INTO room_rounds (id, image_id, target_drives, written_drives, state,"
-        " opened_by, created_at, closed_at, failed_reason) VALUES (?,?,?,?,?,?,?,?,?)",
-        (rid, image_id, target, written, state, "noc", created, closed, reason))
+        " opened_by, created_at, closed_at, failed_reason, target_slots_json) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        (rid, image_id, target, written, state, "noc", created, closed, reason,
+         None if slots is None else json.dumps([{"mac": m} for m in slots])))
     ctx.conn.commit()
 
 
@@ -151,6 +153,8 @@ def test_history_lists_finished_rounds_newest_first_without_the_one_on_screen(se
         "target_drives": 4, "written_drives": 1, "opened_by": "noc",
         "created_at": "2026-09-15T08:00:00+00:00",
         "closed_at": "2026-09-15T08:20:00+00:00", "failed_reason": "send_failed",
+        # #980 §3: סבב ישן בלי בחירת מחשבים -- לא נמדד (null), לא 0; ולא נעצר ב"עצור סבב".
+        "machine_count": None, "stopped_by": None,
         # #1889: אין גלים בחלון — לא נמדד (null), לא 0.
         "waits": {"waves": 0, "open_wait_s": None, "smart_hold_s": None, "smart_holds": 0,
                   "smart_unreleased": 0},
@@ -158,6 +162,36 @@ def test_history_lists_finished_rounds_newest_first_without_the_one_on_screen(se
         "flow": {"waves": 0, "kept": 0, "rate_bps": None, "loss_blocks": None, "lost_chunks": None},
         # #3978: "הרשת" -- אין גל שמנוע החתיכות רשם: null, לא "תקינה".
         "network": None}
+
+
+def test_history_gives_the_machine_count_of_the_round(server):
+    """#980 §3: עמודת "מחשבים" -- כמה מחשבים בחרו לסבב (מחשבים שונים, לא חריצים)."""
+    ctx = server["ctx"]
+    add_round(ctx, "rr_1", "closed", "2026-09-12T08:00:00+00:00", closed="2026-09-12T09:00:00+00:00",
+              slots=[CLONER1, CLONER2, CLONER2])
+    add_round(ctx, "rr_2", "closed", "2026-09-13T08:00:00+00:00", closed="2026-09-13T09:00:00+00:00")
+    by_id = {r["id"]: r for r in server["admin"].get("/api/console/room/history").json()}
+    assert by_id["rr_1"]["machine_count"] == 2
+    assert by_id["rr_2"]["machine_count"] is None
+
+
+def test_history_tells_a_round_stopped_by_hand_from_one_that_closed_on_its_own(server):
+    """#980 §3: סבב שנעצר ב"עצור סבב" נסגר `closed` עם `failed_reason: null` -- כמו סבב שנסגר מעצמו
+    לפני היעד. ההבדל היחיד הוא שורת היומן `room_close` של הסבב: נכתבת רק בעצירה (ידנית או בהשלמת
+    עצירה שהשרת נפל באמצעה). ``stopped_by`` = המשתמש בשורה; ``null`` = אין שורה כזו."""
+    from server.db import journal
+
+    ctx = server["ctx"]
+    add_round(ctx, "rr_hand", "closed", "2026-09-12T08:00:00+00:00", closed="2026-09-12T09:00:00+00:00", written=0)
+    add_round(ctx, "rr_own", "closed", "2026-09-13T08:00:00+00:00", closed="2026-09-13T09:00:00+00:00", written=1)
+    add_round(ctx, "rr_boot", "closed", "2026-09-14T08:00:00+00:00", closed="2026-09-14T09:00:00+00:00")
+    journal(ctx.conn, "room_close", "rr_hand written=0/4", "nadav", round_id="rr_hand")
+    journal(ctx.conn, "room_done", "rr_own written=1/4", round_id="rr_own")
+    journal(ctx.conn, "room_close", "rr_boot written=0/4", round_id="rr_boot")   # השלמה בעלייה: משתמש לא נרשם
+    by_id = {r["id"]: r for r in server["admin"].get("/api/console/room/history").json()}
+    assert by_id["rr_hand"]["stopped_by"] == "nadav"
+    assert by_id["rr_own"]["stopped_by"] is None
+    assert by_id["rr_boot"]["stopped_by"] == ""
 
 
 def test_history_hides_a_failed_round_that_is_still_on_screen(server):

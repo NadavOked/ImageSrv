@@ -13,7 +13,7 @@
  * disk's number by the mapping ("דיסק 2") or its device. "" model/serial
  * are said as "לא דווח". The focus starts on "דלג". */
 void sdlg_open(App *a, int kind, int ref, const char *dev, const char *label, const char *verdict,
-               const char *reason, const char *model, const char *serial);
+               const char *reason, const char *model, const char *serial, const char *conn_name);   /* #3008: the operator's name of the connection (mapped_disk_name), "" = none */
 /* While the window is open every key, click, character and scroll is its
  * own -- returns 1 for those; a pointer move returns 0 (the pointer still
  * moves). When the person decided, the window closes and *done is a copy

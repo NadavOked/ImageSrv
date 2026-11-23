@@ -19,6 +19,7 @@ from server.rounds import chunksend
 from server.rounds.chunksend import ChunkEngine, feedback_bounds, feedback_grow_cap
 
 KBPS, WRITE, FLOOR = 892_000, 896_000, 74
+BIG_FILE = 100 << 20     # #4003: a test file bigger than this is a real write on Windows
 CHUNKS, ZBYTES = 18_441, 18_545_444_861
 
 
@@ -34,26 +35,28 @@ def test_without_what_to_convert_by_or_with_a_learned_maximum_there_is_no_growth
     assert feedback_grow_cap(kbps, learned, size, chunks) is None
 
 
-def _cmd(tmp_path, *, learned_max=None, chunks=None, part_chunks=CHUNKS, size=ZBYTES):
+def _cmd(tmp_path, monkeypatch, *, learned_max=None, chunks=None, part_chunks=CHUNKS, size=ZBYTES):
+    # #4003: the engine only needs the file's size; truncate() to 18GB is a real 18GB write on Windows (NTFS is not sparse by default)
     path = tmp_path / "p3.zst"
-    if size is not None:
-        with path.open("wb") as f:
-            f.truncate(size)
+    monkeypatch.setattr(chunksend, "_size_of", lambda p: size)
     engine = SimpleNamespace(port=7713, interface=None, feedback=True, write_floor=lambda: FLOOR)   # פורט-הפצה-מכוון
     wave = SimpleNamespace(key="0123456789abcdef", round=1, part_chunks={3: part_chunks})
-    return ChunkEngine._command(engine, wave, {"index": 3}, path, KBPS, WRITE, chunks, learned_max)
+    cmd = ChunkEngine._command(engine, wave, {"index": 3}, path, KBPS, WRITE, chunks, learned_max)
+    # #4003 guard: no test file of this size may exist (a real write on Windows)
+    assert not [q for q in tmp_path.rglob("*") if q.is_file() and q.stat().st_size > BIG_FILE]
+    return cmd
 
 
 def _flag(cmd, name):
     return int(cmd[cmd.index(name) + 1]) if name in cmd else None
 
 
-def test_a_full_pass_carries_the_cap(tmp_path):
-    cmd = _cmd(tmp_path)
+def test_a_full_pass_carries_the_cap(tmp_path, monkeypatch):
+    cmd = _cmd(tmp_path, monkeypatch)
     assert _flag(cmd, "--rate-max") == 1_792_000 and _flag(cmd, "--rate-cap") == 3_720_248
 
 
-def test_a_repair_pass_a_learned_maximum_or_a_missing_file_carries_none(tmp_path):
-    assert _flag(_cmd(tmp_path, chunks=[(5, 9)]), "--rate-cap") is None
-    assert _flag(_cmd(tmp_path, learned_max=1_000_000), "--rate-cap") is None
-    assert _flag(_cmd(tmp_path / "nothing-here", size=None), "--rate-cap") is None
+def test_a_repair_pass_a_learned_maximum_or_a_missing_file_carries_none(tmp_path, monkeypatch):
+    assert _flag(_cmd(tmp_path, monkeypatch, chunks=[(5, 9)]), "--rate-cap") is None
+    assert _flag(_cmd(tmp_path, monkeypatch, learned_max=1_000_000), "--rate-cap") is None
+    assert _flag(_cmd(tmp_path / "nothing-here", monkeypatch, size=None), "--rate-cap") is None

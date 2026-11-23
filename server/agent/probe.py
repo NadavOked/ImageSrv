@@ -176,6 +176,18 @@ def history(conn: sqlite3.Connection, mac: str) -> list[dict]:
     return [_row(row) for row in rows]
 
 
+def memory_bytes(probe: dict | None) -> int | None:
+    """#977 §7: סך הזיכרון שהמכונה מדדה (MemTotal), לשדה `memory_bytes` ב-`GET /machines`.
+
+    ``None`` = לא ידוע: מעולם לא דיווחה, `memory` לא נבדק או `{"error"}`, או ערך שאינו מספר חיובי.
+    אסור להפוך "לא ידוע" ל-0 (עיקרון 5): 0 היה נקרא "אין זיכרון"."""
+    mem = probe.get("memory") if isinstance(probe, dict) else None
+    total = mem.get("total_bytes") if isinstance(mem, dict) else None
+    if isinstance(total, bool) or not isinstance(total, int) or total <= 0:
+        return None
+    return total
+
+
 # --- השערים -----------------------------------------------------------------
 
 def verdicts(probe: dict | None) -> list[dict]:

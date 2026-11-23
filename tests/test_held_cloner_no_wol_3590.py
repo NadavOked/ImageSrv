@@ -26,7 +26,7 @@ pytest.importorskip("fastapi")
 
 from server import db  # noqa: E402
 from server.agent import held  # noqa: E402
-from server.learn import wol as learn_wol  # noqa: E402
+from server.learn import wol as learn_wol, wol_sweep  # noqa: E402
 from server.brain import silence  # noqa: E402
 from server.net import wol  # noqa: E402
 from server.rounds import room as room_mod  # noqa: E402
@@ -147,7 +147,7 @@ def test_the_early_resend_is_not_sent_to_a_held_cloner(learner):
     held.note(learner, MAC, [], now=datetime.fromtimestamp(now - 5, timezone.utc))
     packets: list[bytes] = []
 
-    learn_wol.sweep(learner, send=packets.append, now=now)
+    wol_sweep.sweep(learner, send=packets.append, now=now)
 
     assert packets == [] and learner.execute(
         "SELECT COUNT(*) FROM journal WHERE event = 'wol_resent'").fetchone()[0] == 0
@@ -157,7 +157,7 @@ def test_the_early_resend_still_goes_to_a_cloner_that_is_not_held(learner):
     """Guard (both states): no hold = the #1847 resend as it was."""
     packets: list[bytes] = []
 
-    learn_wol.sweep(learner, send=packets.append, now=learner.at + 30)
+    wol_sweep.sweep(learner, send=packets.append, now=learner.at + 30)
 
     assert len(packets) == 1 and learner.execute(
         "SELECT COUNT(*) FROM journal WHERE event = 'wol_resent'").fetchone()[0] == 1

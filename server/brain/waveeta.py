@@ -18,6 +18,8 @@
 
 **מה שלא נמדד הוא "לא נמדד":** גודל שלא נקרא, קצב זרם שאינו מספר חיובי, או הפצה ישירה (אין קובץ להוריד ממנו) -- אין
 חיזוי, ושורה אחת שאומרת למה. כונן איטי שלא נמצא לו משכפל -- המקור "לא ידוע", והוא נחזה ב-HTTP (המקור האיטי מבין השניים).
+**#3574, RD2-1:** כונן בלי `write_history` כשלכונן אחר בגל יש -- החיזוי נשאר המספר, והראיות נושאות `confidence=low`
+ו-`no_history=<serial>`. בלי הסימון זה חיזוי רגיל: "לא ידוע" התקפל לתוכו (ברזל 17/11, RD2-1, 321 ש' מול 1755).
 
 **הרישום** (`brain_decisions`, כלל ``K3``): ``WAVE_ETA`` (``PREDICT``) כשהגל יוצא, עם כל המספרים בראיות; בסוף הגל
 (`send_done`) -- ``WAVE_ETA_ACTUAL`` עם ``predicted_s``, ``actual_s``, ``ratio``, ומעבר ראשון חזוי מול בפועל
@@ -175,7 +177,7 @@ class WaveEta:
             return None, None, "הגודל הדחוס של האימג' לא ידוע"
         return sum(counts), size, None
 
-    def _achieved_before(self, session_id: str, serials: frozenset[str]) -> tuple[int, str] | None:
+    def _achieved_before(self, session_id: str, serials: frozenset[str], asked: int) -> tuple[int, str] | None:
         """#3550 + #3640: (``achieved_bps``, the wave) of the **last chunk-engine wave on the same drives** before this one, or None --
         no prediction from what was achieved. #3640 (J3b, 18/11): the wave before it ran on a Samsung and an APS, and the APS held the
         whole wave to 165Mb/s; J3b ran on two other Samsungs and took 346s, not the 897s K3 predicted from that rate. The rate a wave
@@ -184,7 +186,11 @@ class WaveEta:
         or an empty ``serials``, cannot be compared: it is not the base either (principle 5: "could not check" is not "same drives").
         A wave of the removed sender carries no `stream.chunk` and a chunk wave on other drives is not this wave's evidence: both are skipped. The last
         wave ON THESE DRIVES that did not end in `send_done` (failed, stopped), or whose `achieved_bps` is not a positive number: None,
-        not an older wave -- which wave to take is not guessed."""
+        not an older wave -- which wave to take is not guessed.
+        #3812 (Zeus 22/11): and only a wave that ASKED for at least ``asked`` (this wave's rate) counts: a lower wave proves nothing about
+        a higher rate, and a higher one that ended below it proves the drives could not reach it. A wave whose ``asked_bps`` is not a
+        positive number cannot be compared and is skipped like one on other drives (principle 5). 0.31 and 1.96 of 19/11 were a wave
+        asked 892 read for one asking 400, and a wave asked 400 read for one asking 600."""
         if not serials:
             return None
         for row in self.conn.execute("SELECT session_id, stream FROM wave_rates WHERE session_id IS NOT ?"
@@ -196,6 +202,9 @@ class WaveEta:
             sample = stream.get("chunk") if isinstance(stream, dict) else None
             if not isinstance(sample, dict) or _wave_serials(sample) != serials:
                 continue
+            was = sample.get("asked_bps")
+            if not isinstance(was, (int, float)) or isinstance(was, bool) or was < asked:
+                continue                        # #3812: it asked for less than this wave (or not a number): not this wave's evidence
             got = sample.get("achieved_bps")
             if (sample.get("ended") != "send_done" or not isinstance(got, (int, float)) or isinstance(got, bool)
                     or got <= 0):
@@ -242,6 +251,40 @@ class WaveEta:
                 return row["mac"]
         return None
 
+    def _no_history(self, probes: dict, behind: dict) -> tuple[str, ...]:
+        """#3574 (RD2-1): serials in this wave with no `write_history`, when another drive has one.
+
+        The engine's `write_history` is the hook that decided who was left out. A drive named in `chunk_write_behind`
+        has one: that line is the history. A drive the hook answers None for has none. No hook (not wired): nothing
+        was read, so this does not invent a mix. An answer that is not a history and not None was not read -- a log
+        line, not "no history"."""
+        hook = getattr(self.chunk, "write_history", None)
+        if hook is None:
+            return ()
+        serials = sorted((set(behind) | {serial for _mac, serial in probes}) - {""})
+        if len(serials) < 2:
+            return ()
+        missing: list[str] = []
+        has = False
+        for serial in serials:
+            if serial in behind:
+                has = True
+                continue
+            try:
+                got = hook(serial)
+            except Exception:                   # noqa: BLE001 -- the brain never raises into the wave
+                log.exception("brain: the write history of %s was not read", serial)
+                continue
+            if got is None:
+                missing.append(serial)
+                continue
+            if (isinstance(got, tuple) and len(got) == 2 and isinstance(got[0], int) and not isinstance(got[0], bool)
+                    and got[0] > 0 and isinstance(got[1], str)):
+                has = True
+                continue
+            log.warning("brain: the write history of %s was not a history, so K3 did not count it: %r", serial, got)
+        return tuple(missing) if has and missing else ()
+
     def _predict(self, session_id: str, bits: object, probes: dict) -> None:
         with self._lock:
             behind = dict(self._behind.get(session_id, {}))
@@ -266,7 +309,8 @@ class WaveEta:
         slow = [Slow(serial, behind[serial][0], NEIGHBOR if mac is not None and any(
             m == mac and other != serial and other not in behind for m, other in drives) else HTTP, mac)
             for serial, mac in macs.items()]
-        before = self._achieved_before(session_id, frozenset(serial for _mac, serial in probes) | frozenset(behind))
+        before = self._achieved_before(session_id, frozenset(serial for _mac, serial in probes) | frozenset(behind), bits)
+        gap = self._no_history(probes, behind)                          # #3574: one drive has no write history, another has one
         used = bits if before is None else min(bits, before[0])         # #3550: not faster than the last wave managed
         uncapped = used
         cap, basis = self._rate_cap(probes, bits, chunks, zbytes)
@@ -285,6 +329,7 @@ class WaveEta:
                     f"achieved_before_mbps={'unmeasured' if before is None else f'{before[0] / 1e6:.0f}'}",
                     f"achieved_before_match={'none' if before is None else 'drives'}",
                     *(() if before is None else (f"achieved_before_wave={before[1]}",)), f"drives={len(drives)}", f"behind={len(slow)}",
+                    *(f"no_history={serial}" for serial in gap), *(("confidence=low",) if gap else ()),
                     *(f"drive={serial}:{wrote:.0f}MB/s:{source}:{t:.0f}s" for serial, wrote, source, t in f.drives),
                     *(() if not learned else (f"learned_stream_mbps={learned / 1e6:.0f}",
                                               f"learned_eta_s={predict(chunks, zbytes, learned, slow).eta_s:.0f}")))
@@ -298,6 +343,7 @@ class WaveEta:
                   + (". אין גל קודם על אותם כוננים: החיזוי לפי הקצב המבוקש, ביטחון נמוך" if before is None else "")
                   + (f". תקרת המשוב (`--rate-max`) מגבילה את הקו ל-{cap / 1e6:.0f}Mb/s, לא ל-{uncapped / 1e6:.0f}Mb/s"
                      if bound else "")
+                  + (f". לכונן {', '.join(gap)} אין היסטוריית כתיבה, ולכונן אחר יש: ביטחון נמוך" if gap else "")
                   + (f". בקצב היכולת הנלמדת ({learned / 1e6:.0f}Mb/s) חזוי "
                      f"{predict(chunks, zbytes, learned, slow).eta_s / 60:.0f} דק'" if learned else "")
                   + ". חיזוי בלבד: שום קצב לא זז")

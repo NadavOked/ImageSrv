@@ -206,7 +206,7 @@ def test_dashboard_pages_share_the_compact_header():
     js = _js()
     for needle in ('actions, tabs, tab, compact: true });',                       # סקירה
                    'name: "בריאות ושירותים", sub, pill, actions, compact: true });',            # בריאות
-                   'tabs: NET_TABS, tab, tabClick: netTabClick, compact: true });',  # רשת
+                   'tabs: netTabs(), tab, tabClick: netTabClick, compact: true });',  # רשת
                    'רענון</button>`, compact: true });',                           # מוניטור
                    'pill: tab === 0 ? pill : "", actions, tabs, tab, compact: true });'):  # חדר ההפצה
         assert needle in js, needle
