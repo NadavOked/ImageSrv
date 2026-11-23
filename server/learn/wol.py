@@ -49,7 +49,6 @@ import statistics
 import time
 from datetime import datetime, timezone
 
-from server.agent import held
 from server.db import _write_lock, journal, writing
 from server.core.logtext import one_line
 from server.system import steadyclock
@@ -145,45 +144,6 @@ def stats(conn: sqlite3.Connection, mac: str, now: float | None = None) -> dict:
             "rate": len(good) / len(rows) if rows else None,
             "typical_s": statistics.median(good) if len(good) >= MIN_SAMPLES else None,
             "streak": streak}
-
-
-def sweep(conn: sqlite3.Connection, send=None, now: float | None = None) -> None:
-    """משעון החדר: שליחה חוזרת מוקדמת, והתראה על רצף. לעולם אינו זורק."""
-    from server.net import wol             # noqa: PLC0415 — wol מייבא אותנו
-    wall = time.time() if now is None else now
-    now = steadyclock.now() if now is None else now
-    send = send or wol._send_broadcast
-    try:
-        for row in conn.execute(
-                "SELECT id, mac, sent_epoch FROM wol_wakes WHERE answered_at IS NULL"
-                " AND early = 0 AND sent_epoch > ?", (now - ANSWER_S,)).fetchall():
-            typical = stats(conn, row["mac"], now)["typical_s"]
-            if typical is None or now - row["sent_epoch"] < EARLY_FACTOR * typical:
-                continue
-            if held.is_held(conn, row["mac"], datetime.fromtimestamp(wall, timezone.utc)):
-                continue          # #3590: the hold began after the wave's WoL; it is lit, not asleep
-            reason = wol._try_send(row["mac"], send)
-            with _write_lock, writing(conn):
-                conn.execute("UPDATE wol_wakes SET early = 1 WHERE id = ?", (row["id"],))
-            journal(conn, "wol_resent",
-                    f"{row['mac']} after={int(now - row['sent_epoch'])}s typical={int(typical)}s"
-                    + (f" failed: {reason}" if reason else ""), machine=row["mac"])
-        for (mac,) in conn.execute("SELECT DISTINCT mac FROM wol_wakes").fetchall():
-            got = stats(conn, mac, now)
-            if got["streak"] < FAIL_STREAK:
-                continue
-            newest = conn.execute(
-                "SELECT id, alerted FROM wol_wakes WHERE mac = ? AND answered_at IS NULL"
-                " AND sent_epoch <= ? ORDER BY sent_epoch DESC LIMIT 1",
-                (mac, now - ANSWER_S)).fetchone()
-            if newest is None or newest["alerted"]:
-                continue          # פעם אחת לרצף — ההערה האחרונה בו נושאת את הסימן
-            with _write_lock, writing(conn):
-                conn.execute("UPDATE wol_wakes SET alerted = 1 WHERE id = ?", (newest["id"],))
-            journal(conn, "wol_no_wake", f"{mac} {NO_WAKE_HE.format(n=got['streak'])}",
-                    machine=mac)
-    except Exception:             # noqa: BLE001 — שעון החדר ממשיך
-        log.exception("wol sweep failed")
 
 
 def health_checks(conn: sqlite3.Connection, now: float | None = None) -> list[dict]:

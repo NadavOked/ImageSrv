@@ -655,8 +655,7 @@ def test_the_console_settings_screen_wires_the_class_deploy_switch():
     switch = switch[:switch.index("\n}\n")]
     assert 'await post("/settings", { [key]: want ? "true" : "false" });' in switch
     page = (static / "index.html").read_text(encoding="utf-8")
-    versions = {tuple(int(x) for x in v.split(".")) for v in re.findall(r"\?v=([0-9.]+)", page)}
-    assert versions and min(versions) >= (4, 9), versions
+    assert set(re.findall(r"\?v=([^\"]+)", page)) == {"__IMAGESRV_V__"}   # #4041
 
 
 def test_recovery_login_toggle(server):

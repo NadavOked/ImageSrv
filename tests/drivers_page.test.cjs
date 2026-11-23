@@ -168,7 +168,7 @@ test('memberRow shows the staging outcome — and failed is visible, not silent'
 
 test('index.html loads drivers.js with the same cache version as the rest', () => {
   const page = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  const versions = new Set([...page.matchAll(/\?v=([0-9.]+)/g)].map((m) => m[1]));
+  const versions = new Set([...page.matchAll(/\?v=([^"]+)/g)].map((m) => m[1]));
   assert.equal(versions.size, 1, [...versions].join(','));
   assert.match(page, /drivers\.js\?v=/);
   assert.match(page, /data-page="drivers"/);

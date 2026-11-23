@@ -43,7 +43,7 @@ from server.brain import capability as brain_capability   # #3041 (LR24): the ca
 from server.brain import wavesplit as brain_wavesplit   # #1445 (B48): one wave or waves by the cloners' capacity, shadow
 from server.brain import drawerhold as brain_drawerhold   # #2023 (K3): does a slow drive's completion go on, or is it written again in the next wave -- shadow
 from server.net import deploy_net, dhcp
-from server.learn import netloss as learn_netloss, wol as learn_wol   # #1846, #1847
+from server.learn import netloss as learn_netloss, wol as learn_wol, wol_sweep as learn_wol_sweep   # #1846, #1847
 from server.learn import server_io   # #1884
 from server.learn import server_senses   # #3125
 from server.learn import boot_marks   # #2830
@@ -63,6 +63,7 @@ from server.console.hostcfg import create_hostcfg_router
 from server.console.server_power import create_server_power_router
 from server.console.timezone import create_timezone_router
 from server.console.timesync import create_timesync_router
+from server.console.static_pages import create_static_pages_router
 from server.console.ups import create_ups_router
 from server.console.email_alerts import create_email_router   # #1751
 from server.console.grubpw import create_grub_password_router, reminder as grub_reminder   # #2450, #2454
@@ -76,6 +77,7 @@ from server.interserver import storage_heartbeat
 from server.system import housekeeping   # #1737
 from server.system import clockstep, silent_tasks   # #2905
 from server.system import grub_password   # #2437
+from server.system import grub_lock_state   # #2452
 from server.system import accesslog   # #3184
 from .db import journal
 from server.net import wol
@@ -83,7 +85,7 @@ from server.rounds import direct
 from server.rounds import prompt_hold
 from server.rounds import chunksend   # #2533: the chunk engine, behind its experimental switch
 from server.rounds import indexprep   # #3137: a chunk wave waits for its image's index
-from server.brain import budget as brain_budget, cause as brain_cause, grace as brain_grace, recording as brain_recording, served as brain_served, veto as brain_veto   # #3064: the brain's veto, network budget and failure cause (K9), shadow by default
+from server.brain import budget as brain_budget, cause as brain_cause, ceilings as brain_ceilings, grace as brain_grace, recording as brain_recording, served as brain_served, veto as brain_veto   # #3064: the brain's veto, network budget and failure cause (K9), shadow by default
 from server.brain import wavesense as brain_wavesense   # #3064 (K9): the kernel lines of a drawer, from the wave's senses
 from server.brain import route as brain_route   # #3064 (K5): HTTP or a multicast pass in the completion, shadow only
 from server.brain import cpucap as brain_cpucap, services as brain_services   # #3064 (K12, K13): the server's CPU and the services a round needs, explained
@@ -325,7 +327,7 @@ async def _room_clock(rt: ServerRuntime, interval: float) -> None:
         await asyncio.to_thread(silent_tasks.background_sweep, rt.conn, rt.store,
                                 rt.library.root, up_since)
         # #1847: שליחה חוזרת מוקדמת להערה שעברה פי 2 מהזמן הטיפוסי, והתראה על רצף.
-        await asyncio.to_thread(learn_wol.sweep, rt.conn, rt.wol_send)
+        await asyncio.to_thread(learn_wol_sweep.sweep, rt.conn, rt.wol_send)
         # #1887: מה ש-dnsmasq ראה (קריאת journal בלבד) — כל `pxe_log.EVERY_S`. לעולם אינו זורק.
         pxe_elapsed += interval
         if pxe_elapsed >= pxe_log.EVERY_S:
@@ -881,7 +883,10 @@ def create_runtime(
     # #3137: a wave does not leave before the index its engine checks is beside every file -- derived now,
     # while the cloners boot.
     prep = indexprep.IndexPrep(library, on_event=lambda event, detail, wave_id: journal(
-        conn, event, detail, round_id=None if wave_id.startswith(indexprep.PULL_KEY) else wave_id))   # #3231: a pull's key is no session
+        conn, event, detail, round_id=None if wave_id.startswith(indexprep.PULL_KEY) else wave_id),   # #3231: a pull's key is no session
+        on_ceiling=lambda wave_id, image_id, size, ceiling: brain_ceilings.prep_shadow(
+            conn, wave_id, image_id, size, ceiling, base_s=indexprep.CEILING_BASE_S,
+            floor_bps=indexprep.CEILING_FLOOR_BPS))   # #3817 (F2): the ceiling is a brain row, in shadow
     store.start_gate = lambda session_id, image_id, start=True: (
         prep.gate(session_id, image_id, start=start) if chunk_wave(session_id) else None)
     # #3277: the image size for the brain's link ETA (`linkwarn.image_bytes`) -- the pulse has no library of its own.
@@ -1160,8 +1165,10 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
             hooks["timesync"](service)
         except Exception as exc:                              # noqa: BLE001
             from .db import journal
+            # #3021: הטקסט הגולמי ליומן השרת; ליומן האירועים — משפט שלנו.
+            log.warning("timesync apply on start failed: %s", exc or type(exc).__name__)
             journal(ctx.conn, "timesync_apply_failed",
-                    f"שרת NTP לפי כרטיס: {exc or type(exc).__name__}")
+                    "שרת NTP לפי כרטיס לא הוחל — הפרטים ביומן השרת")
     return service
 
 
@@ -1319,6 +1326,9 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     health_hooks = dict(rt.health_hooks or {})
     # #2454: שורת "סיסמת GRUB" — צהובה עד "שמרתי"; אין קובץ (בדיקות, פיתוח) = אין שורה.
     health_hooks.setdefault("grub_password", lambda: grub_reminder(ctx.conn, rt.grub_password_file))
+    # #2452: ואם ה-GRUB של השרת עצמו נעול — אותו תנאי: בלי קובץ סיסמה (בדיקות, פיתוח) אין GRUB של השרת ואין שורה.
+    if rt.grub_password_file is not None:
+        health_hooks.setdefault("grub_server_lock", grub_lock_state.lock_status)
     # #748: תיקיית העץ נופלת לתיקיית הקוד עצמה כשאין ``--repo-dir``
     # מפורש (בדיקות/הרצה ישירה) — ראו ``main.py``.
     repo_dir = rt.repo_dir or REPO_ROOT
@@ -1447,6 +1457,8 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     include(create_wake_router(ctx, rt.wol_send))
     # #980: כיבוי החדר + היסטוריית סבבים — קונסולה בלבד, לא בסוכן.
     include(create_room_console_router(ctx))
+    # #4041: index/monitor עם ?v= = גרסת המוצר; לפני ה-mount כדי שיגיעו קודם.
+    app.include_router(create_static_pages_router(lambda: running_version().version))
     app.mount("/console", StaticFiles(directory=STATIC_DIR, html=True), name="console")
     app.add_middleware(ConsoleNoStaleCache)
     # #2757: חידוש עוגיית הקונסולה בשימוש פעיל -- רק כאן, כי רק כאן ה-middleware שמוסר

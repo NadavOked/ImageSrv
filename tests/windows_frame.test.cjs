@@ -229,3 +229,14 @@ test('#2840: the deploy-network window passes its own "saving and applying" text
   assert.match(win, /busy: \{ label: "שומר ומחיל… \(עד כדקה — לא לסגור את החלון\)"/);
   assert.match(win, /slow: "זה צפוי: השרת בודק שאין ברשת שרת DHCP אחר/);
 });
+
+// ‏#2931: הטקסט "שומר ומחיל…" ישב בסוף .sbody הגולל — בחלון רשת ההפצה הוא נפל מתחת לקפל. עכשיו הוא בפס התחתון הקבוע.
+test('#2931: the busy line lives in the fixed footer, outside the scrolling .sbody', () => {
+  const body = source.slice(source.indexOf('function sheet('));
+  const sbody = body.indexOf('<div class="n-b sbody">'), foot = body.indexOf('<footer class="n-f-bar sfoot">');
+  const busy = body.indexOf('id="sf-busy"');
+  assert.ok(sbody > 0 && foot > sbody && busy > foot, 'sf-busy is after the footer opens');
+  assert.ok(busy < body.indexOf('</footer>', foot), 'and inside it');
+  const css = fs.readFileSync(path.join(root, 'console.css'), 'utf8');
+  assert.match(css, /\.win \.n-f-bar \.n-busy\{flex:1 0 100%;order:-1/, 'its own row above the buttons');
+});

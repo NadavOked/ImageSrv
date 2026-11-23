@@ -57,12 +57,12 @@ def test_the_top_bar_and_login_show_the_imagesrv_lockup():
     page = (STATIC / "index.html").read_text(encoding="utf-8")
     top = page[page.index('<header class="topbar"'):]
     top = top[:top.index("</header>")]
-    assert re.search(r'<img[^>]+src="logo-lockup-compact-dark\.svg\?v=[\d.]+"[^>]+alt="ImageSrv"', top)
+    assert re.search(r'<img[^>]+src="logo-lockup-compact-dark\.svg\?v=[^"]+"[^>]+alt="ImageSrv"', top)
     assert "brandmark" not in top and 'class="mark"' not in top
     login = page[page.index('<div id="login"'):]
     login = login[:login.index('id="login-body"')]
-    assert re.search(r'<img[^>]+class="lockup lockup-light"[^>]+src="logo-lockup\.svg\?v=[\d.]+"', login)
-    assert re.search(r'<img[^>]+class="lockup lockup-dark"[^>]+src="logo-lockup-dark\.svg\?v=[\d.]+"', login)
+    assert re.search(r'<img[^>]+class="lockup lockup-light"[^>]+src="logo-lockup\.svg\?v=[^"]+"', login)
+    assert re.search(r'<img[^>]+class="lockup lockup-dark"[^>]+src="logo-lockup-dark\.svg\?v=[^"]+"', login)
     # SVG עם viewBox בלבד קורס ל-0 תחת max-height (CLAUDE.md) — גובה מפורש.
     for tag in re.findall(r"<img[^>]+logo-lockup[^>]*>", page):
         assert re.search(r'\sheight="\d+"', tag), tag
@@ -77,7 +77,7 @@ def test_favicons_and_title_say_imagesrv(page):
     assert re.search(r"<title>ImageSrv — ", html)
     assert "ImageCtl" not in html
     for href in ("favicon.svg", "favicon.ico", "favicon-16.png", "favicon-32.png", "apple-touch-icon.png"):
-        assert re.search(rf'<link rel="(?:icon|apple-touch-icon)"[^>]+href="{re.escape(href)}\?v=[\d.]+"', html), href
+        assert re.search(rf'<link rel="(?:icon|apple-touch-icon)"[^>]+href="{re.escape(href)}\?v=[^"]+"', html), href
         assert (STATIC / href).is_file(), href
 
 

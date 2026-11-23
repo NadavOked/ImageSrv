@@ -243,15 +243,11 @@ def test_both_console_screens_warn_when_the_dhcp_update_failed():
 
 
 def test_the_console_assets_were_bumped_together():
-    """gotcha ידוע: JS ישן מול API חדש. כל ה-`?v=` ב-index.html זהים
-    ו-≥ 4.6 (הבאמפ של #857)."""
+    """gotcha ידוע: JS ישן מול API חדש. כל ה-`?v=` ב-index.html זהים (#4041:
+    placeholder אחד שהשרת ממלא בגרסת המוצר, ראו test_console_static_pages_4041)."""
     import re   # noqa: PLC0415
     page = (STATIC / "index.html").read_text(encoding="utf-8")
-    versions = set(re.findall(r"\?v=([0-9.]+)", page))
-    assert len(versions) == 1, versions
-    version = versions.pop()
-    major, minor = (int(x) for x in version.split("."))
-    assert (major, minor) >= (4, 6), version
+    assert set(re.findall(r"\?v=([^\"]+)", page)) == {"__IMAGESRV_V__"}
 
 
 # --- מכונה לא רשומה: /boot/menu עדיין מתעד ביומן (רשת ביטחון שנייה) ----------

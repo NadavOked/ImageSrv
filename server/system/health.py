@@ -702,6 +702,11 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     if grub_reminder:
         results.append(check("grub_password", "סיסמת GRUB", *grub_reminder))
 
+    # #2452: האם ה-GRUB של השרת עצמו נעול (`grub_lock_state.lock_status`) — נעול / פתוח / לא נבדק. לא תזכורת הסיסמה.
+    grub_lock = hooks["grub_server_lock"]() if hooks.get("grub_server_lock") else None
+    if grub_lock:
+        results.append(check("grub_server_lock", "נעילת GRUB של השרת", *grub_lock))
+
     # #1372: מארח שאינו מוכן ל-VM הוא אזהרה בשם — לא שקט ירוק אחרי עדכון.
     if hooks.get("vm_host"):
         results.append(check("vm_host", "עדכון ב-VM", *hooks["vm_host"]()))

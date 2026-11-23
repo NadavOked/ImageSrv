@@ -29,10 +29,10 @@ static void cpy(char *d, size_t n, const char *s) { snprintf(d, n, "%s", s ? s :
 
 /* The reason, in words: what the agent classified (smart.sh), or what the
  * server remembers of the previous clone (#874) for a red disk. */
-static void reason_words(const char *verdict, const char *reason, char *out, size_t n) {
+static void reason_words(const char *verdict, const char *reason, const char *conn_name, char *out, size_t n) {
     if (!strcmp(verdict, "failed_last")) {
-        snprintf(out, n, "%s", !strcmp(reason, "cable") ? "נכשל בשיכפול הקודם — סיבה: כבל/חריץ"
-                             : !strcmp(reason, "disk") ? "נכשל בשיכפול הקודם — סיבה: הדיסק"
+        if (!strcmp(reason, "cable")) { cable_he(conn_name, out, n); return; }   /* #3008: the connection's mark, not the disk's */
+        snprintf(out, n, "%s", !strcmp(reason, "disk") ? "נכשל בשיכפול הקודם — סיבה: הדיסק"
                              : !strcmp(reason, "readonly") ? "נכשל בשיכפול הקודם — סיבה: הדיסק במצב קריאה בלבד"   /* #1742 */
                              : "נכשל בשיכפול הקודם");
         return;
@@ -43,7 +43,7 @@ static void reason_words(const char *verdict, const char *reason, char *out, siz
 }
 
 void sdlg_open(App *a, int kind, int ref, const char *dev, const char *label, const char *verdict,
-               const char *reason, const char *model, const char *serial) {
+               const char *reason, const char *model, const char *serial, const char *conn_name) {
     SmartDlg *d = &a->sdlg;
     memset(d, 0, sizeof *d);
     d->kind = kind; d->ref = ref; d->go = 0;
@@ -53,7 +53,7 @@ void sdlg_open(App *a, int kind, int ref, const char *dev, const char *label, co
     d->readonly = reason && !strcmp(reason, "readonly");   /* #1742: the refusal says why */
     cpy(d->dev, sizeof d->dev, dev); cpy(d->disk, sizeof d->disk, label);
     cpy(d->model, sizeof d->model, model); cpy(d->serial, sizeof d->serial, serial);
-    reason_words(verdict ? verdict : "", reason ? reason : "", d->reason, sizeof d->reason);
+    reason_words(verdict ? verdict : "", reason ? reason : "", conn_name ? conn_name : "", d->reason, sizeof d->reason);
     d->go = kind == SDLG_LC_SOURCE && d->level == 1;   /* #2017: the notice's one button has the focus */
 }
 

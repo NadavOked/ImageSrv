@@ -72,7 +72,9 @@ NO_LEASE_MAC = "de:ad:be:ef:00:02"
 #: כל מכונה שהסימולציה מפעילה, כולל ה-MAC "הלא מוכר" של שלב הקצוות:
 #: בייצור גם מכונה לא רשומה מקבלת חכירה מ-dnsmasq (dhcp-range מחלק לכולם;
 #: tag:known של #141 מגביל רק את dhcp-boot), ו-hello שלה עונה known=false.
-SIM_MACS = (BUILD_MAC, CLONER_MAC, UNKNOWN_MAC, *CLASS_MACS)
+#: #3546: שני המשכפלים של שלב 9ג (מגירה מאחרת והשלמה); שלהם חכירות, כמו לכל מכונה בסימולציה.
+CHUNK_MACS = ("aa:bb:cc:00:00:31", "aa:bb:cc:00:00:32")
+SIM_MACS = (BUILD_MAC, CLONER_MAC, UNKNOWN_MAC, *CLASS_MACS, *CHUNK_MACS)
 
 ADMIN = {"username": "noc", "password": "Sim-pass-1234!"}
 DEPLOY = {"username": "madrich", "password": "Sim-deploy-99!"}

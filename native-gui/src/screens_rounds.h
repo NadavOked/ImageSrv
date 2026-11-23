@@ -30,6 +30,8 @@ Rgb smart_color(const Theme *t, const char *smart);
 const char *smart_he(const char *smart);
 /* the agent's SMART reason code (smart.sh) in words; "" for none or ok */
 const char *smart_reason_text(const char *reason);
+void cable_he(const char *name, char *out, size_t n);   /* #3008: "חיבור של <name> לא תקין"; "" = "חיבור של הדיסק לא תקין" */
+void mapped_disk_name(const char *slot_name, int drawer, char *out, size_t n);   /* #3008: the operator's name, else "דיסק N" of a mapped drawer, else "" */
 const char *smart_he_why(const char *smart, const char *reason);   /* #1742: read-only says so */
 const char *red_refusal_he(const char *reason);   /* #1732/#1742: "לא כותבים" on red, by the reason */
 const IdleDisk *idle_for_port(const State *s, int port);

@@ -190,7 +190,7 @@ function setup({roundOpen=false}={}) {
     '/room/history':[
       {id:'rr_15',state:'failed',image_id:'img_1',image_name:'office365',source_kind:'library',target_drives:4,written_drives:1,opened_by:'nadav',created_at:'2026-09-15T08:00:00Z',closed_at:'2026-09-15T08:20:00Z',failed_reason:'send_failed'},
       {id:'rr_12',state:'closed',image_id:'img_9',image_name:'win11-base',source_kind:'library',target_drives:6,written_drives:6,opened_by:'nadav',created_at:'2026-09-12T08:00:00Z',closed_at:'2026-09-12T09:30:00Z',failed_reason:null},
-      {id:'rr_10',state:'closed',image_id:'img_gone',image_name:'img_gone',source_kind:'library',target_drives:6,written_drives:2,opened_by:'yossi',created_at:'2026-09-10T08:00:00Z',closed_at:'2026-09-10T08:40:00Z',failed_reason:null}],
+      {id:'rr_10',state:'closed',image_id:'img_gone',image_name:'img_gone',source_kind:'library',target_drives:6,written_drives:2,opened_by:'yossi',created_at:'2026-09-10T08:00:00Z',closed_at:'2026-09-10T08:40:00Z',failed_reason:null,machine_count:2,stopped_by:'yossi'}],
   };
   const ctx=vm.createContext({console,URLSearchParams,URL,Date,Set,Map,Number,Math,JSON,Promise,String,Array,encodeURIComponent,decodeURIComponent,
     document:{hidden:false,querySelector:node,querySelectorAll:()=>[],getElementById:id=>node('#'+id),
@@ -473,7 +473,9 @@ test('#980 §3: room history (deploy page) from /room/history — newest first, 
   assert.match(html,/<th>#<\/th><th>אימג׳<\/th><th>מחשבים<\/th><th>נכתבו<\/th><th>גלים<\/th><th>משך<\/th><th[^>]*>מצב<\/th><th[^>]*>הרשת<\/th><th[^>]*>תאריך<\/th>/);
   assert.match(rows[0],/office365<\/td><td>—<\/td><td>1\/4<\/td><td>—<\/td><td>20 דק(?:'|&#39;)<\/td><td[^>]*><span class="pill err">נכשל<\/span><span class="sub">send_failed<\/span>/,'failed: red pill + the reason, duration from created/closed');
   assert.match(rows[1],/win11-base<\/td><td>—<\/td><td>6\/6<\/td><td>—<\/td><td>90 דק(?:'|&#39;)<\/td><td[^>]*><span class="pill ok">הצליח<\/span>/,'every declared drive written → green');
-  assert.match(rows[2],/img_gone<\/td><td>—<\/td><td>2\/6<\/td><td>—<\/td><td>40 דק(?:'|&#39;)<\/td><td[^>]*><span class="pill warn">2 מתוך 6<\/span>/,'closed short of the target is not green');
+  assert.match(rows[2],/img_gone<\/td><td>2<\/td><td>2\/6<\/td><td>—<\/td><td>40 דק(?:'|&#39;)<\/td><td[^>]*><span class="pill warn">2 מתוך 6<\/span>/,'closed short of the target is not green; machine_count fills the "מחשבים" column (#980 §3)');
+  assert.match(rows[2],/<span class="pill warn">2 מתוך 6<\/span><span class="sub">נעצר ידנית על ידי yossi<\/span>/,'#980 §3: stopped by hand says so, with who');
+  assert.doesNotMatch(rows[0]+rows[1],/נעצר ידנית/,'a failed or finished round never claims a manual stop');
   run('ROOM_HISTORY=[{id:"x",state:"closed",image_name:"a",target_drives:2,written_drives:2,opened_by:"n",created_at:"2026-09-10T08:00:00Z",closed_at:null}]'); html=run('roomHistoryHtml()');
   assert.match(html,/<td>—<\/td><td>2\/2<\/td><td>—<\/td><td>—<\/td><td[^>]*><span class="pill ok">הצליח/);
   run('ROOM_HISTORY=[]'); html=run('roomHistoryHtml()'); assert.match(html,/אין סבבים קודמים בחדר/);
@@ -562,4 +564,22 @@ test('#1485 NVMe: a controller is shown by its PCI address (stable), not by nvme
   assert.match(t,/<bdi dir="ltr">512GB<\/bdi>/);
   assert.doesNotMatch(t,/nvme0n1/,'never the enumeration name');
   assert.equal(run(`diskLabel(MACHINES.find(m=>m.mac==='${C2}'), MACHINES.find(m=>m.mac==='${C2}').disks[0])`),'דיסק 1');
+});
+
+/* ‏#2896: מחשב שהמוניטור רואה מחובר לא מופיע ב"מחשבים שלא דיווחו" גם אם last_seen ב-/net ישן (גואי "מחכה ללחיצה" לא מחדש hello). */
+test('#2896 silent cloners: a machine the monitor sees online is not silent; offline with a stale hello is; monitor unread falls back to /net only',()=>{
+  const {run}=setup();
+  run("openClass('grp_CLONERS')");
+  const stale=new Date(Date.now()-41*60000).toISOString();
+  run(`NET.forEach(n=>{ n.last_seen=${JSON.stringify(stale)}; })`);
+  const silentNames=()=>JSON.parse(run('JSON.stringify((silentMachines(MACHINES.filter(m=>m.group_id==="grp_CLONERS"))||[]).map(m=>m.mac))'));
+  run('MONITOR_ROWS.forEach(r=>{ r.online=true; })');
+  const online=silentNames();
+  assert.ok(!online.includes('78:ac:c0:9b:11:c2'),'online in the monitor → not silent, no WoL button for a running machine');
+  run('MONITOR_ROWS.forEach(r=>{ r.online=false; })');
+  assert.ok(silentNames().includes('78:ac:c0:9b:11:c2'),'offline in the monitor and a 41-minute-old hello → silent, WoL stays');
+  run('MONITOR_ROWS=null');
+  assert.ok(silentNames().includes('78:ac:c0:9b:11:c2'),'monitor not read → /net alone decides (not "everyone reported")');
+  run('NET=null');
+  assert.equal(run('silentMachines([])'),null,'/net unread stays "not checked" (principle 5)');
 });
