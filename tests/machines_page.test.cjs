@@ -219,7 +219,7 @@ test('the machine drawer: header line, actions (monitor, WoL for the room, "requ
   assert.match(html,/<span class="k">דגם<\/span><span class="v">LENOVO M720q</); assert.match(html,/<span class="k">TPM<\/span><span class="v">לא נבדק</); assert.match(html,/דף הדרייברים לא נטען/);
   assert.match(html,/טוען את היומן…/);
   const j=requests.find(r=>r.url.startsWith('/api/console/journal?'));
-  assert.equal(new URL(j.url,'http://x').searchParams.get('machine'),'מחשב 2','history is filtered by the machine name (the journal translates MACs to names)');
+  assert.equal(new URL(j.url,'http://x').searchParams.get('machine'),'78:ac:c0:9b:11:c2','#2944: history is filtered by the MAC — the structural target, not a substring of the name');
   await new Promise(r=>setImmediate(r)); await new Promise(r=>setImmediate(r));
   html=node('#drawerBody').innerHTML;
   assert.match(html,/<span class="d err"><\/span><span>דיסק נכשל בכתיבה — מחשב 2 — דיסק 3/); assert.match(html,/15\/09\/2026/); assert.match(html,/מכונה נוספה — מחשב 2/);

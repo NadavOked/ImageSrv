@@ -484,7 +484,6 @@ def test_the_console_offers_no_network_destination():
 
 def test_the_console_files_are_bumped_together():
     html = (REPO / "server" / "static" / "index.html").read_text(encoding="utf-8")
-    versions = set(re.findall(r"\?v=([0-9.]+)", html))
-    # one ?v= for every include; which number is test_console_static's
-    assert len(versions) == 1, versions
+    # one ?v= for every include (#4041: the placeholder the server fills)
+    assert set(re.findall(r"\?v=([^\"]+)", html)) == {"__IMAGESRV_V__"}
 

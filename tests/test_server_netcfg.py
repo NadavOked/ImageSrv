@@ -1044,8 +1044,7 @@ def test_the_console_assets_all_carry_the_same_version():
     """מטמון הדפדפן: חצי bump גרוע מאין bump. netcfg.js חדש מול
     console.js ישן הוא JS שקורא ל-`sheet()` בחתימה שכבר השתנתה."""
     page = (REPO / "server" / "static" / "index.html").read_text(encoding="utf-8")
-    versions = set(re.findall(r"\?v=([0-9.]+)", page))
-    assert len(versions) == 1, versions
+    assert set(re.findall(r"\?v=([^\"]+)", page)) == {"__IMAGESRV_V__"}   # #4041: one placeholder
     assert "netcfg.js?v=" in page
 
 

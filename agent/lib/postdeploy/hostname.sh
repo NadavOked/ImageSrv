@@ -251,15 +251,14 @@ compose_hostname() {
 name_this_machine() {
     # $1 = disk, $2 = session id. Never fatal: an image that boots with the
     # wrong name is fixable in a minute; one that does not boot is not.
-    _prefix=$(json_get "$RESP" ".session.prefix")
-    _suffix=$(json_get "$RESP" ".group.suffix")
-    if [ "$_prefix" = "null" ] || [ "$_suffix" = "null" ]; then
-        log "no prefix/suffix in the server answer -- skipping the hostname"
-        return 0
+    _name=${3:-}   # #3906: $3 = the name itself, $4 = the manifest -- the build machine's own restore: its registered name, no round prefix
+    if [ -z "$_name" ]; then
+        _prefix=$(json_get "$RESP" ".session.prefix"); _suffix=$(json_get "$RESP" ".group.suffix")
+        [ "$_prefix" != "null" ] && [ "$_suffix" != "null" ] || { log "no prefix/suffix in the server answer -- skipping the hostname"; return 0; }
+        _name=$(compose_hostname "$_prefix" "$_suffix")
     fi
     assert_target "$1" || return 0; echo "naming" > "$RUN_DIR/state"   # #2434: it failed by name; the mark stays
-    _name=$(compose_hostname "$_prefix" "$_suffix")
-    _result=$(write_hostname "$1" "$RUN_DIR/manifest.json" "$_name")
+    _result=$(write_hostname "$1" "${4:-$RUN_DIR/manifest.json}" "$_name")
     _hrc=$?
     echo "$_result" > "$RUN_DIR/hostname.json"
     log "hostname: $_result"
