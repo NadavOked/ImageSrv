@@ -248,7 +248,7 @@ def test_network_load_failure_reaches_the_existing_safe_fallback():
 
     cloner = render(answer(role="cloner", task={"id": "tsk_1"}), CFG)
     assert "try_local" not in cloner
-    assert cloner.count("This Legacy BIOS cloning machine has no local system") == 2
+    assert cloner.count("This cloning machine has no local system to start.") == 2
     assert cloner.count("while [ \"$stay_on\" = \"y\" ]; do") == 2
 
 
@@ -268,7 +268,9 @@ def test_cloner_does_not_promise_a_fallback_it_does_not_have(a, label):
     "no local system to start" -- הבטחה וסתירתה. עכשיו ההודעה היא הראשונה."""
     text = render(a, CFG)
     after = _after_load_failure(text, label)
-    assert after[0] == 'echo "This Legacy BIOS cloning machine has no local system to start."'
+    assert after[0] == 'echo "This cloning machine has no local system to start."'
+    # #3198: a UEFI cloner reads this too -- the failure text must not name the firmware
+    assert "Legacy BIOS" not in " ".join(after[:2])
     assert after[1].startswith('echo "Nothing will be started.')
     assert "Falling back" not in text
     assert "sleep --interruptible 3" not in text    # וגם לא השהיה של "fallback" שאין

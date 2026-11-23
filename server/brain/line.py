@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import time
 from dataclasses import dataclass
 
 from server.brain import memory
@@ -33,6 +34,7 @@ log = logging.getLogger("imagesrv.brain")
 
 RULE_POWER, RULE_LINE = "K10", "LINE"
 POWER, OBJECTIVE, ANSWER = "LINE_POWER", "OBJECTIVE", "AUTO_ANSWER"
+RELIGHT, WOL = "LINE_RELIGHT", "WOL"
 KEEP, UNDECIDED = "KEEP", "UNDECIDED"
 FASTEST_DISK, MOST_PER_HOUR = "FASTEST_DISK", "MOST_PER_HOUR"
 REWRITE = "REWRITE"
@@ -158,6 +160,7 @@ _decided: set[str] = set()
 def forget() -> None:
     """לבדיקות: התהליך מתחיל בלי סבבים שהוכרעו."""
     _decided.clear()
+    _lit.clear()
 
 
 def decide_objective(conn, *, round_id: str, target: int, drawers: int | None, cloners: int) -> Finding | None:
@@ -211,3 +214,57 @@ def on_answer(conn, *, round_id: str, choice: str, origin: str) -> None:
             memory.resolve(conn, rows, f"המפעיל ענה {choice} ({origin}) -- {same} למה שהמוח היה עונה")
     except Exception:                           # noqa: BLE001
         log.exception("brain: B42 outcome on %s was not recorded", round_id)
+
+
+# --- #3916: משכפל שנכבה ועוד צריך אותו ---------------------------------------------------------------------------
+
+#: WoL חוזר לאותו משכפל באותו גל: אותם ערכים של K-REWAKE (`silence.REWAKE_S` / `REWAKE_MAX`), ולא רשת שמוצפת.
+RELIGHT_S, RELIGHT_MAX = 60, 6
+RELIGHT_SAY = "צל: לא נשלח WoL -- הקוד הקיים ממשיך כרגיל"
+#: (גל, MAC) -> שעון מונוטוני של ההדלקה האחרונה. בזיכרון בלבד: אחרי אתחול השרת ההמתנה מתחילה מחדש (הספירה ב-DB).
+_lit: dict[tuple[str, str], float] = {}
+
+
+def relight(conn, *, round_id: str, wave_id: str, remaining: int, cloners: list[Cloner], off: set[str],
+            now: float | None = None) -> list[str]:
+    """#3916 (נדב 20/11, #3897 הכרעה 2): בפס ייצור המשכפלים נשארים דולקים, ומי שנכבה **ועוד יש לו סבב** מודלק מחדש.
+    "יש לו עוד סבב" = הוא ב-``keep`` של `power` (B24). משכפל שאינו ב-``keep`` לא מודלק, וגם לא מוחזק (#2031) ולא מי
+    שלא נראה את מספר המגירות שלו (`UNDECIDED`: לא הוכרע, לא "אין לו").
+
+    ``off`` = מי מהרשימה לא נראה מאז שהגל נפתח. מחזיר את מי ששולחים לו WoL **עכשיו**. ב-``shadow`` ההחלטה נרשמת
+    פעם אחת למשכפל בגל, והרשימה ריקה: שום WoL לא יוצא. רק ב-``enforce`` יוצא WoL, עד ``RELIGHT_MAX`` לגל, אחת ל-
+    ``RELIGHT_S`` שניות. לעולם אינו זורק."""
+    try:
+        mode = _mode(conn)
+        if mode == OFF or remaining <= 0 or not off:
+            return []
+        f = power(remaining, cloners)
+        if f.verdict != KEEP:
+            return []
+        names = {c.mac: c.name for c in cloners}
+        at = time.monotonic() if now is None else now
+        send = []
+        for mac in f.keep:
+            if mac not in off:
+                continue
+            sent = [d for d in memory.decisions(conn, kind="machine", key=mac, rule=RULE_LINE, limit=64)
+                    if d["action"] == RELIGHT and d.get("point") == wave_id]
+            if mode != ENFORCE and sent:
+                continue
+            if mode == ENFORCE and (len(sent) >= RELIGHT_MAX or at - _lit.get((wave_id, mac), -RELIGHT_S) < RELIGHT_S):
+                continue
+            reason = (f"{names[mac]} לא נראה מאז שהגל נפתח, והוא ב-keep של B24 (נשארו {remaining} דיסקים):"
+                      f" עוד יש לו סבב, ולכן {'שולח' if mode == ENFORCE else 'היה שולח'} לו WoL")
+            memory.record(conn, mode=mode, rule=RULE_LINE, action=RELIGHT, verdict=WOL, reason=reason,
+                                evidence=(f"remaining={remaining}", f"machine={names[mac]}", f"attempt={len(sent) + 1}",
+                                          *(f"keep={names[m]}" for m in f.keep)),
+                                point=wave_id, round_id=round_id, entity=("machine", mac),
+                                outcome="נשלח WoL" if mode == ENFORCE else RELIGHT_SAY)
+            _log(mode, RULE_LINE, RELIGHT, round_id, Finding(WOL, reason, (mac,), f.evidence))
+            if mode == ENFORCE:
+                _lit[(wave_id, mac)] = at
+                send.append(mac)
+        return send
+    except Exception:                           # noqa: BLE001 -- הסבב ממשיך גם כשהמוח נכשל
+        log.exception("brain: relight on %s failed", wave_id)
+        return []
