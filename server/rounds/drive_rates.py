@@ -389,7 +389,9 @@ def choose(conn: sqlite3.Connection, drives: list[dict],
               **({"direct": True} if direct else {}),
               **({"start_learned": True} if learned and learned == start_at else {}),
               **({"link": {**link, "applied": server is not None}} if link else {}),
-              **({"cloner": cloner} if cloner else {})}
+              **({"cloner": cloner} if cloner else {}),
+              **({"cloner_links": links} if cloner and (links := nic_speed.reported_speeds(
+                  conn, [d.get("mac") for d in drives])) else {})}
     if ceiling is None:
         return {**result, "basis": "bad_ceiling"}
     start = min(start_at, ceiling)

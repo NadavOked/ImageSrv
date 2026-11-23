@@ -163,7 +163,7 @@ def test_deploy_role_gets_403(api, path, method):
     assert response.status_code == 403 and machine.restarts == 0
 
 
-def test_a_server_without_chrony_still_comes_up_and_says_why(tmp_path):
+def test_a_server_without_chrony_still_comes_up_and_says_why(tmp_path, caplog):
     """The NTP-server step at start-up (port 0 by default) reads
     /etc/chrony/chrony.conf. On a server where it is missing -- the restore
     drill's second server, or an updated server whose chrony did not install
@@ -177,8 +177,11 @@ def test_a_server_without_chrony_still_comes_up_and_says_why(tmp_path):
         raise FileNotFoundError(2, "No such file or directory", "/etc/chrony/chrony.conf")
 
     ctx = SimpleNamespace(conn=connect(tmp_path / "imagesrv.db"))
+    caplog.set_level("WARNING", logger="imagesrv.app")
     service = _nic_services(ctx, None, None, None, False,
                             {"interfaces": lambda: [], "timesync": no_chrony}, apply_timesync=True)
     assert service is not None
     rows = ctx.conn.execute("SELECT detail FROM journal WHERE event = 'timesync_apply_failed'").fetchall()
-    assert len(rows) == 1 and "chrony.conf" in rows[0][0], rows
+    # #3021: ביומן האירועים משפט שלנו; הפרט ("chrony.conf") ביומן השרת.
+    assert len(rows) == 1 and "chrony.conf" not in rows[0][0] and "הפרטים ביומן השרת" in rows[0][0], rows
+    assert "chrony.conf" in " ".join(r.getMessage() for r in caplog.records)

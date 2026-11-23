@@ -549,6 +549,38 @@ function idleKeepAlive(now = Date.now()) {
   return true;
 }
 
+/* ‏#2874 (הכרעת נדב 14/11, אפשרות ב): בסבב פעיל, אחרי ה-idle, הקונסולה לא מתנתקת אלא עוברת ל"צפייה בלבד" — הנתונים
+   ממשיכים להתעדכן, וכל פעולה דורשת כניסה מחדש. כשהסבב נגמר חוזרת ההתנהגות הרגילה (ניתוק). זו חסימה בלקוח; השרת ממשיך
+   לאמת כל בקשה. צבע ההודעה: info (כחול) — הכתום שמור לדיסקים. */
+let VIEW_ONLY = false;
+function activeRoundNow() { try { return typeof roomRound === "function" && !!roomRound(); } catch (e) { return false; } }
+function setViewOnly(on) {
+  VIEW_ONLY = !!on;
+  document.body.classList.toggle("view-only", VIEW_ONLY);
+  let bar = document.getElementById("viewOnlyBar");
+  if (!VIEW_ONLY) { if (bar) bar.remove(); return; }
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "viewOnlyBar"; bar.className = "view-only-bar"; bar.setAttribute("role", "status");
+    bar.innerHTML = `<span><b>צפייה בלבד.</b> לא הייתה פעילות והסבב עדיין רץ. הנתונים ממשיכים להתעדכן; כדי לפעול יש להיכנס מחדש.</span>`
+      + `<button class="btn primary" type="button" id="viewOnlyLogin">כניסה מחדש</button>`;
+    document.body.appendChild(bar);
+    bar.querySelector("#viewOnlyLogin").addEventListener("click", viewOnlyReenter);
+  }
+}
+async function viewOnlyReenter() {
+  try { await post("/logout"); } catch (e) { /* הסשן כבר פג בשרת — המסך הבא הוא כניסה בכל מקרה */ }
+  clearInterval(idleTimer); setViewOnly(false); ME = null; showLogin();
+}
+/* בצפייה בלבד: ניווט וצפייה פתוחים; כל פעולה (כפתור, שדה, מתג) נעצרת ומבקשת כניסה מחדש. */
+document.addEventListener("click", (e) => {
+  if (!VIEW_ONLY || !e.target || !e.target.closest) return;
+  const act = e.target.closest("button,.btn,input,select,textarea,[role=switch],label.msw,a[onclick]");
+  if (!act || act.closest("#viewOnlyBar,.inventory-node,.rail,.vcenter-tab,.tabs,.tab,summary,.user,.user-menu")) return;
+  e.preventDefault(); e.stopPropagation();
+  toast("צפייה בלבד — כדי לפעול יש להיכנס מחדש");
+}, true);
+
 function startIdleWatch() {
   clearInterval(idleTimer);
   if (!ME || !ME.idle_seconds) return;
@@ -558,7 +590,9 @@ function startIdleWatch() {
     const idle = (Date.now() - lastActivity) / 1000;
     const left = ME.idle_seconds - idle;
     if (left > 0) idleKeepAlive();
+    if (left <= 0 && activeRoundNow()) { if (!VIEW_ONLY) setViewOnly(true); return; }   // #2874: סבב פעיל — צפייה בלבד, לא ניתוק
     if (left <= 0) {
+      if (VIEW_ONLY) setViewOnly(false);   // הסבב נגמר בזמן הצפייה: חוזרים להתנהגות הרגילה
       if (inFlight) return;
       inFlight = true;
       try {
@@ -913,7 +947,7 @@ async function showApp() {
   applyServerName();
   renderActivity();
   selectPageById("home");
-  if (isAdmin()) { loadMachines(); loadHealth(); if (typeof loadBrainAsks === "function") loadBrainAsks(); }   // ‏#3654: שאלות המוח בפעמון
+  if (isAdmin()) { loadMachines(); loadHealth(); loadNetDeploy(); if (typeof loadBrainAsks === "function") loadBrainAsks(); }   // ‏#3654: שאלות המוח בפעמון
   loadImages();
   populateSidebarImages();
   populateSidebarGroups();
@@ -1722,6 +1756,7 @@ function treeAlerts(key) {
 }
 
 function paintTabAlerts() {
+  if (typeof syncNetDeployNode === "function") syncNetDeployNode();   // ‏#3029
   const srv = document.getElementById("srvTA");
   const real = (el, ...fns) => !!el && fns.every((f) => typeof el[f] === "function");   // בלי DOM מלא (טסטים) — רק הפס
   if (!real(srv, "querySelectorAll", "querySelector") || !real(document, "querySelectorAll")) { drawRail(); return; }
@@ -2075,6 +2110,7 @@ async function loadHome() {
   grab("ports", "/ports");
   if (isAdmin()) {
     jobs.push(loadHealth());
+    jobs.push(loadNetDeploy());   // ‏#3029: "הגדרת רשת הפצה…" בסקירה תלוי בזה
     grab("journal", "/journal?limit=50");
     grab("mon", "/monitor/machines");   // ‏#1300: "מחשבים מחוברים" (admin_only)
   }
@@ -2352,7 +2388,7 @@ function homeAttention() {
   }
   for (const c of Array.isArray(HEALTH) ? HEALTH : []) {
     if (c.state !== "warn" && c.state !== "bad") continue;
-    const action = c.id === "deploy_net" ? ["הגדר רשת הפצה", "openNetwork(2)"] : ["לבריאות", "selectPageById('health')"];
+    const action = c.id === "deploy_net" ? (netDeployUnset() ? ["הגדרת רשת הפצה…", "netPickDeploy()"] : ["הגדר רשת הפצה", "openNetwork(2)"]) : ["לבריאות", "selectPageById('health')"];   // ‏#3029: לא הוגדרה = אין לשונית, הכפתור פותח את החלון
     const raw = c.detail && isRawTechnical(c.detail);
     items.push(attnItem(c.state === "bad" ? "err" : "warn", `<b>${esc(c.label)}</b>${c.detail && !raw ? " — " + esc(c.detail) : ""}.`, action, raw ? c.detail : ""));
   }
@@ -6485,7 +6521,7 @@ function openMachineDetail(mac, tab = "") {
   loadMachineData(m.mac, () => { if (gen === drawerGeneration) setDrawerBody(machineDrawerHtml(m)); });
   loadFirmware(m.mac, () => { if (gen === drawerGeneration) setDrawerBody(machineDrawerHtml(m)); });   // ‏#2080
   if (MCH.history[m.mac]) return;
-  api("/journal?machine=" + encodeURIComponent(machineName(m) || m.mac) + "&limit=20")
+  api("/journal?machine=" + encodeURIComponent(m.mac) + "&limit=20")   // #2944: לפי MAC — היעד המבני, לא תת-מחרוזת של שם
     .then((rows) => { MCH.history[m.mac] = rows; })
     .catch((e) => { MCH.history[m.mac] = { error: e.message }; })
     .then(() => { if (gen === drawerGeneration) setDrawerBody(machineDrawerHtml(m)); });
@@ -6974,7 +7010,9 @@ const HEALTH_GROUPS = [["agent_loop:", "לולאות אתחול", "agent_loops"]
   ["storage_", "אחסון — מיקומים", "storage_summary"]];   // ‏#1066: שורה לכל מיקום (storage_<id>), בלי שורת סיכום → קבוצה בסוף
 /* עמודת "פעולה": לאן הולכים לטפל — הדף שבו יושב מה שנבדק. אין ב-/health שדה
    "איך מתקנים"; ה-detail של השרת כבר נושא את ההוראה ("הריצו את המתקין"). */
-const HEALTH_GOTO = { deploy_net: ["רשת הפצה", "openNetwork(2)"], dhcp_port: ["רשת הפצה", "openNetwork(2)"], tftp_port: ["שירותים", "selectPageById('ports')"], dnsmasq: ["רשת הפצה", "openNetwork(2)"],
+/* ‏#3029: "רשת הפצה" שלא הוגדרה — אין לה לשונית, ויעד שאמור היה להגיע אליה פותח את חלון ההגדרה. */
+const deployGoto = () => (netDeployUnset() ? ["הגדרת רשת הפצה", "netPickDeploy()"] : ["רשת הפצה", "openNetwork(2)"]);
+const HEALTH_GOTO = { get deploy_net() { return deployGoto(); }, get dhcp_port() { return deployGoto(); }, tftp_port: ["שירותים", "selectPageById('ports')"], get dnsmasq() { return deployGoto(); },
   server: ["שירותים", "selectPageById('ports')"], chunk_sender: ["שירותים", "selectPageById('ports')"], nics: ["חיבורים פיזיים", "openNetwork(1)"],
   agent_loops: ["מחשבים", "machines"], off_vlan: ["מחשבים", "machines"] };
 let healthError = "", HEALTH_AT = "";
@@ -7989,7 +8027,7 @@ function netUnreadNotes() {
   const e = NETW.err, out = [];
   const T = UI.noteTech;
   // ‏#1088: אחרי התקנה נקייה — מה שהמנהל צריך לעשות, לפני כל אזהרה אחרת.
-  if (NET_DEPLOY && NET_DEPLOY.configured === false) out.push(UI.note("warn", `${esc(NET_DEPLOY.hint || "רשת ההפצה לא הוגדרה")} — <a href="#" onclick="openNetwork(2);return false;">לשונית רשת הפצה</a>`));
+  if (NET_DEPLOY && NET_DEPLOY.configured === false) out.push(UI.note("warn", `<b>רשת ההפצה לא הוגדרה.</b> אי אפשר להפיץ אימג'ים עד שבוחרים כרטיס שיחלק כתובות למחשבי השיכפול והבנייה.<br><br><button class="btn primary sm" onclick="netPickDeploy()">הגדרת רשת הפצה…</button>`));
   else if (e.deploy) out.push(T("warn", "‏/net/deploy לא נקרא", e.deploy, " — לא ידוע אם רשת ההפצה הוגדרה"));
   if (e.config) out.push(T("warn", "‏/net/config לא נקרא", e.config, ' — "מוגדר" ו"פער" אינם ידועים'));
   else if (NETCFG && NETCFG.live && !NETCFG.live.checked) out.push(T("warn", "המצב בפועל לא נקרא", NETCFG.live.reason || "", " — אף כתובת אינה מאומתת"));
@@ -8004,6 +8042,20 @@ function netUnreadNotes() {
   return (rb ? `<div class="c12">${rb}</div>` : "") + out.map((h) => `<div class="c12">${h}</div>`).join("");
 }
 const NET_TABS = ["תרשים", "חיבורים פיזיים", "רשת הפצה"];   // ‏#3887: "שירותים" הוא דף משלו בעץ, תחת "רשת"
+/* ‏#3029 (מוקאפ m3029-v2): "רשת הפצה" היא לשונית אחרונה, ומופיעה רק אחרי שהוגדרה. הראיה היא /net/deploy עם
+   configured=false; לא נקרא (null) אינו "לא הוגדרה" — הלשונית נשארת (עיקרון 5). לא מסתירים אותה בתצוגה הבסיסית. */
+function netDeployUnset() { return !!NET_DEPLOY && NET_DEPLOY.configured === false; }
+function netTabs() { return netDeployUnset() ? NET_TABS.slice(0, 2) : NET_TABS; }
+function syncNetDeployNode() {
+  const off = netDeployUnset();
+  document.querySelectorAll('#netTA .inventory-node[data-net-tab="2"]').forEach((el) => { el.hidden = off; });
+  if (off && current === "network" && currentTab === 2) activateTab(1);
+}
+async function loadNetDeploy() {
+  try { const d = await api("/net/deploy"); if (d && typeof d === "object") NET_DEPLOY = d; } catch (e) { /* לא נקרא: הלשונית נשארת */ }
+  syncNetDeployNode();
+  if (current === "home") renderCurrent();
+}
 function netTabClick(i) { return `openNetwork(${i})`; }
 /* ‏#1300 (console-full.html P.network): כותרת אחת לארבע הלשוניות — "רשת", פיל DHCP, ומשנה = הרשתות
    (ניהול · הפצה) כפי שנמדדו. הפעולות של כל לשונית יושבות בכרטיסים שלה; בכותרת רק רענון.
@@ -8023,7 +8075,7 @@ function netCommonHead() {
 function netHeader(tab) {
   const crumbs = [{ label: "שרת אימג'ים", onclick: "selectPageById('home')" }, { label: "תשתית" }, { label: "רשת" }];
   const { sub, pill } = netCommonHead();
-  return UI.objHeader({ crumbs, icon: "t-network", name: "רשת", sub, pill, actions: `<button class="btn" onclick="refreshPage()">${uiIcon("refresh")} רענון</button>`, tabs: NET_TABS, tab, tabClick: netTabClick, compact: true });
+  return UI.objHeader({ crumbs, icon: "t-network", name: "רשת", sub, pill, actions: `<button class="btn" onclick="refreshPage()">${uiIcon("refresh")} רענון</button>`, tabs: netTabs(), tab, tabClick: netTabClick, compact: true });
 }
 
 /* --- לשונית 0: התרשים --- */
@@ -8205,7 +8257,10 @@ function deployDefaultNic(candidates) {
   if (!via && !(NETCFG && NETCFG.management_interface)) return null;
   return candidates.find((n) => n.name !== via) || null;
 }
-function netPickDeploy() {
+async function netPickDeploy() {
+  // ‏#3029: נקרא גם מסקירה/בריאות, לפני שדף הרשת נטען — הכרטיסים והכרטיס של הקונסולה נקראים כאן.
+  if (NETW.nics === null) { try { await loadNetwork(); } catch (e) { toast("קריאת כרטיסי הרשת נכשלה: " + e.message); return; } }
+  if (NETW.nics === null || !deployCandidates().length) { toast("אין כרטיס שאפשר להגדיר כרשת הפצה — כרטיסי הרשת לא נקראו או שאין כרטיס פנוי"); return; }
   const via = NETCFG && NETCFG.console_interface;
   sheet({ title: "הגדר כרשת הפצה", sub: "על איזה כרטיס ירוץ ה-DHCP למחשבי השיכפול והבנייה", submitLabel: "המשך",
     fields: [{ id: "nic", label: "כרטיס", type: "select", value: "",
@@ -8262,7 +8317,8 @@ function networkDeployTab() {
 function networkPage(tab = 0) {
   if (NETW.nics === null && !Object.keys(NETW.err).length) return pagePlaceholder();
   if (tab === 1) return networkNicsTab();
-  if (tab === 2) return networkDeployTab();
+  if (tab === 2 && !netDeployUnset()) return networkDeployTab();
+  if (tab === 2) return networkNicsTab();
   return networkDiagramTab();
 }
 
@@ -8270,13 +8326,15 @@ function networkPage(tab = 0) {
 function openNetwork(tab = 0, nicEnc = null, el = null) {
   if (nicEnc) { let name = nicEnc; try { name = decodeURIComponent(nicEnc); } catch (e) {} NETW.sel = name; }
   if (!pageAllowed("network")) return;
-  const t = Number(tab) || 0;
+  let t = Number(tab) || 0;
+  if (t === 2 && netDeployUnset()) t = 1;   // ‏#3029: אין לשונית — ההודעה והכפתור בראש "חיבורים פיזיים"
   if (current !== "network") selectPage(el || document.querySelector('.inventory-node[data-page="network"]'), "network");
   else if (el) markTreeSelection(el, "network");
   if (t !== currentTab) activateTab(t); else renderCurrent();
   closeSidebar();   // ‏#1300: גם כשכבר בדף הרשת — בחירת לשונית/כרטיס מהעץ נכנסת אליו
 }
 function populateSidebarNics() {
+  syncNetDeployNode();
   const treeId = sideId("nicTree");
   const tree = document.getElementById(treeId);
   if (!tree) return;
@@ -9397,7 +9455,7 @@ const pages = {
   machines: { crumb: "מחשבים", title: "מחשבים", tabs: ["כל המחשבים", "נראו ברשת", "דיסקים אדומים"], render: machines, load: loadMachines, own: true },
   health: { crumb: "בריאות ושירותים", title: "בריאות ושירותים", tabs: [], render: health, load: loadHealth, own: true },   // ‏#954 גל 5: בלי לשוניות — בדיקות + עדכון
   // ‏#954 גל 8: רשת כאובייקט — תרשים · חיבורים פיזיים · רשת הפצה · פורטים (=pages.ports). deploy: לא מוצג (pageAllowed).
-  network: { crumb: "רשת", title: "רשת", tabs: NET_TABS, render: (i) => networkPage(i), load: loadNetwork, own: true },
+  network: { crumb: "רשת", title: "רשת", get tabs() { return netTabs(); }, render: (i) => networkPage(i), load: loadNetwork, own: true },
   account: { crumb: "החשבון שלי", title: "החשבון שלי", tabs: [], render: account, load: async () => {}, own: true },
   permissions: { crumb: "משתמשים והרשאות", title: "משתמשים והרשאות", tabs: [], render: permissions, load: loadUsersData, own: true },   // ‏#954 גל 6: טבלה אחת + מטריצה
   logs: { crumb: "יומן", title: "יומן", tabs: [], render: logs, load: loadJournalData, own: true },   // ‏#954 גל 6: יומן אחד עם סינון בדף
