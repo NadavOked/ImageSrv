@@ -221,8 +221,10 @@ test('a page header in the secondary\'s context names the secondary in its crumb
 test('a click on a primary tree node leaves the secondary\'s context before its own onclick; an expand arrow does not', () => {
   const t = setup(both());
   t.run(`setServerContext("${NODE}", "חיפה")`);
-  const capture = t.listeners.find((l) => l.type === 'click' && l.capture);
-  assert.ok(capture, 'a capture-phase click listener is registered');
+  // כמו ב-DOM: כל מאזיני ה-click של שלב הלכידה רצים, לפי הסדר (#3390 הוסיף לפניו את מאזין "צפייה בלבד")
+  const captures = t.listeners.filter((l) => l.type === 'click' && l.capture);
+  assert.ok(captures.length, 'a capture-phase click listener is registered');
+  const capture = {fn: (e) => captures.forEach((l) => l.fn(e))};
   const target = (opts) => ({closest(sel) {
     if (sel === '.inventory-node') return {getAttribute: () => opts.onclick, closest: (s) => (s === '#sidebar' ? {} : s === '#secondaryServers' ? (opts.secondary ? {} : null) : null)};
     if (sel === '.tree-arrow') return opts.arrow ? {} : null;
@@ -240,7 +242,8 @@ test('a click on a primary tree node leaves the secondary\'s context before its 
 test('a console download link in the secondary\'s context is blocked (it would download the primary\'s file)', () => {
   const t = setup(both());
   t.run(`setServerContext("${NODE}", "חיפה")`);
-  const capture = t.listeners.find((l) => l.type === 'click' && l.capture);
+  const captures = t.listeners.filter((l) => l.type === 'click' && l.capture);
+  const capture = {fn: (e) => captures.forEach((l) => l.fn(e))};
   let prevented = false;
   capture.fn({target: {closest: (sel) => (sel.startsWith('a[href') ? {} : null)}, preventDefault() { prevented = true; }, stopPropagation() {}});
   assert.ok(prevented);

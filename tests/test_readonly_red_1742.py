@@ -395,10 +395,11 @@ def test_the_native_refusal_and_the_failed_last_words_name_read_only(tmp_path):
     src.write_text("#include <stdio.h>\n#include <string.h>\n"
                    "const char *smart_reason_text(const char *reason);\n"
                    + _c_function("smart_he") + _c_function("smart_reason_text") + _c_function("red_refusal_he")
+                   + "void cable_he(const char *nm, char *o, size_t n) { (void)nm; (void)o; (void)n; }   /* #3008: tested apart */\n"
                    + words.group(0)
                    + "\nint main(int c, char **v) { (void)c; char o[256];\n"
                      "  if (!strcmp(v[1], \"refusal\")) puts(red_refusal_he(v[2]));\n"
-                     "  else { reason_words(v[2], v[3], o, sizeof o); puts(o); } }\n",
+                     "  else { reason_words(v[2], v[3], \"\", o, sizeof o); puts(o); } }\n",
                    encoding="utf-8", newline="\n")
     built = subprocess.run([CC, "-Wall", "-Wextra", "-o", str(tmp_path / "t"), str(src)],
                            capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
@@ -412,7 +413,7 @@ def test_the_native_refusal_and_the_failed_last_words_name_read_only(tmp_path):
     assert said("refusal", "readonly") == READONLY_HE
     assert said("refusal", "health_failed") == SMART_RED
     assert said("words", "failed_last", "readonly") == "נכשל בשיכפול הקודם — סיבה: " + READONLY_HE
-    assert said("words", "failed_last", "cable") == "נכשל בשיכפול הקודם — סיבה: כבל/חריץ"
+    assert said("words", "failed_last", "disk") == "נכשל בשיכפול הקודם — סיבה: הדיסק"   # #3008: cable is the drawer's, see test_drawer_vs_disk_screen_3008
 
 
 def test_the_native_screens_use_the_reason_not_a_fixed_smart_sentence():

@@ -508,7 +508,7 @@ test('settings card after the run: updated / refused / returned are named notes;
 
 test('index.html loads update_screen.js after console.js with the same cache-buster', () => {
   const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  const m = index.match(/<script src="console\.js\?v=([\d.]+)"><\/script>\n<script src="update_screen\.js\?v=([\d.]+)"><\/script>/);
+  const m = index.match(/<script src="console\.js\?v=([^"]+)"><\/script>\n<script src="update_screen\.js\?v=([^"]+)"><\/script>/);
   assert.ok(m, 'update_screen.js right after console.js');
   assert.equal(m[1], m[2]);
 });

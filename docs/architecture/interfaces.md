@@ -462,8 +462,9 @@
     | `cable` | err | `netprobe.cable.status` הוא `open` או `short` — "כבל פגום: זוג X פתוח/קצר ב-N מטר". ‏`lldp.unheard` **אינו** שער (מתג שלא משדר אינו תקלה). |
   - **נחשף** ב-`GET /api/console/machines` (‏admin ו-deploy — מידע, לא
     פעולה) כ-`probe` (‏`null` = מעולם לא דיווחה — סוכן ישן),
-    ‏`probe_seen_at` (= `sampled_at`, הדגימה האחרונה) ו-`probe_verdicts`
-    (‏`[]` גם כשאין probe). מוצג בכרטיס המכונה בקבוצה "בריאות המכונה":
+    ‏`probe_seen_at` (= `sampled_at`, הדגימה האחרונה), ‏`probe_verdicts`
+    (‏`[]` גם כשאין probe) ו-`memory_bytes` (#977 §7: ‏`probe.memory.total_bytes`,
+    ‏`null` = לא ידוע — לא 0). מוצג בכרטיס המכונה בקבוצה "בריאות המכונה":
     ‏`null` = "לא נבדק" (אפור, לא "תקין"), ‏`{"error"}` = "לא הצלחנו
     לבדוק: …" (כתום), ערך = מוצג.
 - **`netprobe`** (‏#1048, schema נשאר 2) — בדיקת כבל ומתג+פורט שהסוכן
@@ -2179,7 +2180,7 @@
   **#3295 (ב'), ‏`server/brain/waveeta.py`:** בגל חתיכות, כשקצב ההתחלה נקבע (`ChunkEngine.wave_start`), נרשמת `K3/WAVE_ETA`
   (‏`PREDICT`, או `UNPREDICTED` עם הסיבה) -- ETA שכולל את ההשלמה של כונן שפיגר בגל קודם (`chunk_write_behind`): ‏`eta_s`,
   ‏`t1_s` (המעבר הראשון בקצב המהירים), ‏`chunks`, ‏`zbytes`, ‏`stream_mbps` (הקצב שהחיזוי השתמש בו), ‏`asked_mbps` (המבוקש), ‏`achieved_before_mbps` (מה שהגל הקודם של מנוע החתיכות השיג, `stream.chunk.achieved_bps` ב-`wave_rates`; `unmeasured` כשאין גל כזה או שלא הסתיים ב-`send_done`) ו-`achieved_before_wave` (שמו, רק כשנמדד), ‏`rate_cap_mbps` ו-`t1_cap_bound` (**#3599:** תקרת המשוב של המנוע בקו — `--rate-max` = פי 2 מ-`--write-kbps` של בדיקת הכתיבה, בבתים דחוסים לפי יחס הדחיסה של האימג'; `unmeasured` כשאי אפשר לקרוא אותה. `rate_cap_basis` (`ceiling` = `--rate-max` הוא המקסימום; `grow` = **#3616:** אין תקרה שנלמדה ל-K8, השולח מרחיב את `--rate-max` עד `--rate-cap` (קיבולת החוט), ולכן התקרה אינה חוסמת דבר ו-`t1_cap_bound=0`; `unmeasured`). `t1_cap_bound=1` = היא נמוכה מהמבוקש ומהגל הקודם, ולכן `stream_mbps` ו-`t1_s` נגזרים ממנה — ב-J1 חיזוי 229 ש' מול 378 בפועל; החיזוי בלבד: הקצב עצמו לא משתנה), ‏`drives`, ‏`behind`, ולכל כונן איטי
-  `drive=<serial>:<MB/s>:<neighbor|http>:<שניות>`. ב-`send_done` -- ‏`K3/WAVE_ETA_ACTUAL` עם `predicted_s`, ‏`actual_s`, ‏`ratio`,
+  `drive=<serial>:<MB/s>:<neighbor|http>:<שניות>`. **#3574 (RD2-1):** כשלכונן אחד בגל אין `write_history` ולכונן אחר יש, הראיות נושאות גם `confidence=low` ו-`no_history=<serial>` (המספר נשאר; בלי הסימון זה חיזוי רגיל). ב-`send_done` -- ‏`K3/WAVE_ETA_ACTUAL` עם `predicted_s`, ‏`actual_s`, ‏`ratio`,
   ‏`t1_predicted_s`, ‏`t1_actual_s`, ‏`prediction=<מספר השורה>` (#3321). גל שנכשל או נעצר: "לא נמדד". **#3550:** קצב הזרם בחיזוי הוא `min(המבוקש, achieved_before)`; בלי גל קודם של המנוע -- המבוקש, כמו קודם (ברזל 16/11: 222 ש' בכל גל מול 335-475 בפועל כשהמבוקש 669Mb/s והושג 327-461). חיזוי בלבד, גם ב-enforce.
   **#1445 (B48), ‏`server/brain/wavesplit.py`:** מיד אחרי ה-ETA, פעם אחת לגל של סבב חדר, נרשמת `B48/WAVE_SPLIT`: גל אחד,
   או גל של המהירים ואחריו גל של האיטיים, לפי היכולת של כל משכפל (כרטיס הרשת מה-hello × 90%, או הנלמד כשיהיה, #3041) ומה
@@ -2583,7 +2584,7 @@
   ‏`can_poweroff: false` (אינה עונה — אין למי למסור). התשובה `{"requested": 1,
   "ttl_s": 120}` — בקשה נרשמה, לא "כובתה". יומן `room_missing_poweroff` (‏`<mac>
   (<שם>)`, עם המשתמש). כיבוי **כל** החדר (`POST /room/poweroff`) נשאר בקונסולה בלבד.
-- **`GET /api/console/room/history?limit=N`** (‏#980, כל מחובר; קונסולה בלבד) — סבבי החדר שהסתיימו (‏`state` ‏`closed`/`failed`) מטבלת `room_rounds`, מהחדש לישן; **בלי** הסבב שמוצג עכשיו ב-`GET /room` (פעיל, או כושל שטרם נסגר). ‏`limit` ברירת מחדל 10, תקרה 50, ‏`<1` → ‏`400`. כל שורה: `{"id", "state", "image_id", "image_name", "source_kind", "target_drives", "written_drives", "opened_by", "created_at", "closed_at", "failed_reason"}` — ‏`image_name` כמו ב-`GET /room` (שם האימג', ‏`image_id` כשכבר אינו בספרייה, `<מכונה>:<דיסק>` לסבב מדיסק הבנייה). רשימה ריקה = אין סבבים קודמים; הקונסולה מציגה קריאה שנכשלה כ"לא נקראה", לא כרשימה ריקה. **אין כאן מספר גלים** — ממתין להכרעת נדב (‏#989 §3).
+- **`GET /api/console/room/history?limit=N`** (‏#980, כל מחובר; קונסולה בלבד) — סבבי החדר שהסתיימו (‏`state` ‏`closed`/`failed`) מטבלת `room_rounds`, מהחדש לישן; **בלי** הסבב שמוצג עכשיו ב-`GET /room` (פעיל, או כושל שטרם נסגר). ‏`limit` ברירת מחדל 10, תקרה 50, ‏`<1` → ‏`400`. כל שורה: `{"id", "state", "image_id", "image_name", "source_kind", "target_drives", "written_drives", "opened_by", "created_at", "closed_at", "failed_reason", "machine_count", "stopped_by"}` — ‏`image_name` כמו ב-`GET /room` (שם האימג', ‏`image_id` כשכבר אינו בספרייה, `<מכונה>:<דיסק>` לסבב מדיסק הבנייה). ‏`machine_count` (#980 §3, עמודת "מחשבים") = כמה מחשבים נבחרו לסבב (`target_slots_json`, מחשבים שונים ולא חריצים); ‏`null` = סבב ישן בלי בחירה, לא `0`. ‏`stopped_by` (#980 §3) = המשתמש שבשורת היומן `room_close` של הסבב, שנכתבת **רק** בעצירה ("עצור סבב", או השלמת עצירה שהשרת נפל באמצעה — אז `""`, המשתמש לא נרשם); סבב שנסגר מעצמו כותב `room_done`/`room_failed`, ולכן `null` = לא נעצר ידנית (או שהיומן נוקה). סבב שנעצר באמצע כתיבה הוא `closed` עם `failed_reason: null` — `stopped_by` הוא מה שמבדיל אותו מסבב שנסגר מעצמו לפני היעד; הקונסולה מציגה "נעצר ידנית על ידי X" ליד "N מתוך M". רשימה ריקה = אין סבבים קודמים; הקונסולה מציגה קריאה שנכשלה כ"לא נקראה", לא כרשימה ריקה. **אין כאן מספר גלים** — ממתין להכרעת נדב (‏#989 §3).
 - **`POST /api/console/room/drawer/cancel`** (‏#1386, "בטל דיסק זה") — מגירה אחת יוצאת מגל שכותב; שאר המגירות ממשיכות באותו זרם. גוף `{"mac": "<mac>", "dev": "<dev>"}` — המגירה כפי שהיא ב-`drawer_list`. הרשאה: ‏`ROOM_OPERATOR_ROLES` (admin + deploy, ‏`room_operator`), כמו `/room/wake`; הראוטר יושב גם על פורט הסוכן (הקיוסק של מחשב הבנייה), ושם הבקשה נרשמת כ-`build` ("ממחשב הבנייה"), בקונסולה כ-`console` ("על ידי"). בלי הקלדת שם (‏#1270): חלון האישור הוא האישור. **‏400** — גוף שאינו אובייקט, ‏MAC לא תקין, או `dev` שאינו אלפאנומרי; **‏409** (עם הסיבה בעברית) — אין סבב פעיל, הגל עוד לא יצא (`open` — אין כתיבה לבטל), המחשב אינו בגל, הדיסק כבר בוטל (הסיבה אומרת על ידי מי), או שהדיווח האחרון של המגירה אינו `writing` (רק לשורה שכותבת יש כפתור). ‏**200** `{"ok": true}` = **הבקשה נרשמה** (טבלת `drawer_cancels`), לא "בוטל": היא נמסרת לסוכן בתשובת הדיווח הבא (~2 ש', סעיף 4), והיומן רושם `room_drawer_cancel_requested` עם המשתמש. ב-`GET /room`, ‏**`drawer_list[].cancel`** — ‏`null`, או `{"by", "source", "requested_at", "done_at", "done", "text_he"}`: ‏`done` = הסוכן דיווח `cancelled`; בקשה בלי `done` על מגירה שכותבת מוצגת "מבטל…"; ‏`text_he` = "בוטל על ידי nadav · 16:06" (השעה באזור הזמן של השרת). הגואי הנייטיב של מחשב הבנייה מקבל את `dev` כשדה 18 של `room_drawer=`, את `text_he` כשדה 19 ואת `done` (‏1/0) כשדה 20, ושולח `room-drawer-cancel` עם `cloner=` ו-`dev=` (‏`roomflow.sh:room_drawer_cancel`); מחשב השיכפול מקבל ב-`drawer=` את מי ביטל (שדה 11, ריק = אף אחד) ומתי בוצע (שדה 12, epoch), ושולח `drawer-cancel|<dev>`. **בקשה שהסוכן כבר לא יכול לקיים** (‏#2916: הדיווח הבא אומר שהמגירה `verifying`/`done`/`failed` — הסוכן מקבל ביטול רק על `writing`) נמחקת מ-`drawer_cancels` ביומן `room_drawer_cancel_refused` עם הסיבה ("הכתיבה כבר הסתיימה — באימות"), ו-`cancel` של המגירה חוזר `null` — לא "מבטל…" עד סוף הסבב, ולא "בוטל".
 - **`POST /api/console/room/close`** — עצירת סבב פעיל **או שנכשל** (וסגירת הגל הפעיל). פעולה הרסנית מאחורי הקלדת שם (עיקרון 7): הגוף הוא `{"confirm_name": "<image_name>"}`, ומה שמוקלד הוא **בדיוק ה-`image_name` שה-`GET` מחזיר** — כלומר שם האימג' מהמניפסט, או ה-`image_id` כשהאימג' כבר אינו בספרייה. אישור חסר או שגוי = 400, והסבב ממשיך לשדר. לפני עצירת המשדר השרת שומר `room_round.state = closing`; דופק החדר מתעלם ממצב זה ואינו יכול לפתוח גל בחלון שבין `sender.stop()` ל-`closed`. כשל עצירה מחזיר את המצב הקודם במקום לדווח הצלחה.
 
@@ -11138,6 +11139,14 @@ password_pbkdf2 imagesrv grub.pbkdf2.sha512.<c>.<salt-hex>.<hash-hex>
   ביד, או גיבוי ששוחזר לשרת שהותקן מחדש; ‏`ok` אחרי הסימון; ‏`unknown` כשהקובץ לא
   נקרא (עיקרון 5). אין קובץ — אין שורה. בקונסולה: "הצג סיסמה" ו"שמרתי" בשורה
   הצהובה; בהקשר שרת משנה — בלי כפתורים (לא ב-relay).
+- **שורת בריאות `grub_server_lock` ("נעילת GRUB של השרת", #2452) ב-`GET /api/console/health`** — האם ה-GRUB של השרת עצמו נעול;
+  אינה `grub_password` (תזכורת שמירה, #2454), שצהובה גם בשרת נעול. הראיה: `/boot/grub/grub.cfg` נקרא בחזרה
+  (`server/system/grub_lock_state.py`, `lock_status`), והתנאי כמו ה-verdict של המתקין: `set superusers="imagesrv"`
+  ושורת `password_pbkdf2 imagesrv grub.pbkdf2.sha512...` **לפני הערך הראשון**. שלוש תשובות נפרדות: `ok` — נעול;
+  `bad` — נקרא ואינו נעול (הפירוט אומר מה חסר, והוראה איך לנעול); `unknown` — הקובץ לא נקרא, או שאין בו אף ערך תפריט
+  (עיקרון 5: "לא נקרא" אינו "נעול" ואינו "פתוח"). אותו תנאי של `grub_password`: בלי `grub_password_file` (בדיקות,
+  תחנת פיתוח) אין שורה. שורה זו נקראת גם ב-B51 (שער בריאות המערכת של המוח): `bad`/`warn` = `WARN`, `unknown` = `UNDECIDED`.
+  הקוד אינו מריץ `grub-lock-host.sh` בעלייה: קריאה בלבד.
 - **בגיבוי:** ההגדרה נכנסת כמו כל הגדרה; הסיסמה אינה ב-DB ולכן אינה בגיבוי המסד
   (האוטומטי, ההורדה מהקונסולה). ‏`tools/backup-server.sh` מעתיק את `/etc/imagesrv` כולה
   ל-`system/` — כולל `grub-password`; זה מחוץ ל-#2454.
@@ -11717,6 +11726,7 @@ JSON שאינו אובייקט, `NaN`, מצב יעד שאינו `done`/`failed` 
   `PROCEED`, ואין החלטה = דחייה). `evidence` = `site=`, `include_update=`, מצב כל חוש (`free`/`busy`/`unread`), `legacy=` (מה שהקוד הקיים
   החזיר) ו-`agree=0|1`; אי-הסכמה נרשמת בלוג ואינה משנה דבר. `brain_veto_mode=off` = לא נקרא ולא נרשם. כתיבה מהסקריפט (תהליך שאינו השרת)
   אינה סוגרת "החלטות יתומות" (`memory.record(orphans=False)`). אין שינוי סכמה ואין סף חדש.
+- **שינוי של הגדרת משתמש (#3675, חלק 1; `server/brain/usersetting.py`, כלל `B3675`):** ב-`POST /api/console/settings`, אחרי שהכתיבה עברה, נרשמת שורה ב-`brain_decisions` לכל מפתח שערכו השתנה מבין `hdd_support`, `tail_shrink_enabled`, `min_free_gb` ושלוש ברירות הזמן של הסוכן ושתי המתנות המגירה: `action` = `SETTING_CHANGE`, `verdict` = `SET`, ישות `settings`/<המפתח>, `mode` = `enforce`, `evidence` = `key=`, `old=` (`default` כשלא היתה שורה), `new=`, `by=`. כתיבה שלא שינתה ערך אינה נרשמת. זו עובדה על בחירת המשתמש ולא פסק של המוח, ולכן נרשמת בכל ערך של `brain_veto_mode`. כתיבה שנדחתה בבדיקה אינה נרשמת. `stream_engine` אינו ברשימה (#3173).
 - **הקלטת גל (#3320, R14):** `<data_dir>/brain/waves/<מזהה הגל>.jsonl` — שורת JSON לכל פעם שהמוח מחליט על הגל (`K2` בנקודה הרסנית,
   `K1` ב-tick, `K6`): `{"v": 1, "kind", "mode", "point", "held_s", "members", "snap", "snapshot", "cfg", "decisions", "ids"}`. `snapshot`
   = הצילום המלא (`asdict(observe.Snapshot)`), `snap` = ה-hash שלו, `cfg` = הספים, `ids` = מספרי השורות ב-`brain_decisions`. נשמרים
@@ -11824,6 +11834,23 @@ JSON שאינו אובייקט, `NaN`, מצב יעד שאינו `done`/`failed` 
 
 הפניה מגרסה שאיננו מכירים נשארת ב-`evidence` ולא נפרשת. **הצילום משוחזר גם אחרי אתחול של השרת** (נבדק: `tests/test_brain_snapshot_3571a.py`);
 ה-`Ledger` אינו משוחזר, ומכאן שמונה שנספר לפני האתחול אינו נספר אחריו.
+
+### המוח של השרת: שלושה מישורי תקרה (#3571 פרוסה ב; `server/brain/planes.py`)
+
+**אין שדה חדש על החוט ואין דגל חדש בפקודת `chunkcast send`.** ההחלטה נרשמת ב-`brain_decisions` (כלל `K-PLANES`) ואינה משנה את הקצב.
+השולח היום עדיין מדווח backlog של הכתיבה לכל משכפל, לא לכל דיסק, ובלי RTT. `note_send` רושם פעם לגל שאין את החיישנים האלה:
+שלוש שורות `NOT_MEASURED` ושורת `PLANE_BIND` = `UNDECIDED`. זה "לא נמדד", לא "הרשת והדיסק תקינים".
+
+כשיש דיווח מלא, ארבע שורות לאותו גל (`entity` = `round`):
+
+| `action` | מה |
+|---|---|
+| `PLANE_NET` | תקרת רשת. `CAPPED` = נוסחת TFMCC (RFC 5348 משוואה 3) מ-אבדן, RTT ושידורים חוזרים. `CLEAR` = אבדן 0 וגם 0 שידורים חוזרים. `STALE` = דיווח ישן מ-`REPORT_STALE_MS` (2000, הערכה). `SUPPRESSED` = דיווח זהה לקודם |
+| `PLANE_STORE` | תקרת אחסון לכל דיסק יעד: כתיבה עמידה, backlog, שיפוע, וקריאת דיסק הספרייה. `PACE` = המינימום. דיסק איטי עקבי נרשם `behind=<serial>` ואינו נכנס למינימום. חלון קצר או דיסק חסר = `UNDECIDED`, ו-`partial_kbps` בראיה אינו התקרה |
+| `PLANE_DIST` | הפצה (#3568, עדיין בלי חיישן בנתיב). `NO_PEER` = חוסר, אין עמית בריא, והשרת אינו גיבוי, תקרה 0. `peers_seen=0` = `NOT_MEASURED`, לא "אין עמית" |
+| `PLANE_BIND` | התקרה המחמירה: `NET` / `STORE` / `DIST` והמספר, רק כששלושת המישורים נספרו. אחרת `UNDECIDED` והמספר ריק |
+
+`obey` מחזיר את המספר רק כש-`brain_veto_mode=enforce` וגם `brain_planes=on` (ברירת מחדל כבוי, חסר = כבוי) ויש תקרה שנמדדה. שום קוד בנתיב השליחה אינו קורא ל-`obey`. הספים הערכה, לא נמדדו על ברזל.
 
 ### המוח של השרת: החלטות לפי הזיכרון (#3064, שלב 5)
 
@@ -11982,7 +12009,8 @@ ask_row=<port now, 0 = not connected>|<port when written, 1-99>      (N rows, 1-
 שמבדילה; כולל #3595: K9 קבע `LINK` על אותו דיסק באותו גל) · `HOT` (מעל `smart_history.TEMP_WARN_C` בזמן הכתיבה, לא מוכח כסיבה) · `UNDECIDED` (גם החריץ וגם הדיסק חשודים, או שנכשל ואין ראיה).
 **הראיות** (`evidence`): `mac`, `port`, `serial`, `failed`, `crc_delta`, `link`, `cable_fail`, `link_events` (phy + איפוסי קישור של הגל, S52 + S53), `peak_c` (S54),
 `conn` (S58), ומה שהלמידה אמרה על החריץ והדיסק (`slot_bad_disks`, `disk_bad_slots`, `slot_failed_disks`),
-ו-`k9` (#3595): הפסק של K9 על הדיסק בגל (`LINK`/`DRIVE`/...), `none` = נקרא ואין שורה, `unread` = לא נקרא. **`null` = לא נמדד, ואינו 0.** חריץ בלי ראיה בגל אינו נרשם.
+ו-`k9` (#3595): הפסק של K9 על הדיסק בגל (`LINK`/`DRIVE`/...), `none` = נקרא ואין שורה, `unread` = לא נקרא,
+ו-`write` (#4007): `write_preflight.state`/`mbps` של הדיסק (`slow/15MBps`); `slow` נאמר בנימוק של `UNDECIDED`, ואינו משנה את הפסק. **`null` = לא נמדד, ואינו 0.** חריץ בלי ראיה בגל אינו נרשם.
 
 ## 49. ‏HDD — המתג "תמיכה ב-HDD" (‏X16, נדב 14/11)
 
@@ -12285,3 +12313,9 @@ XXH64/BLAKE3 verifier and durable-write path. No negotiation or automatic enable
 ## 51. שער המעבר מצל לאכיפה: מדידה לכל כלל (‏#3563, אפיק #3653)
 
 `GET /api/console/brain/shadow-gate` (מנהל; משתמש הפצה 403). **קריאה בלבד, ואינו מעביר שום כלל**: המוח מציע, והמעבר ל-`enforce` הוא החלטה של אדם. התשובה: `{thresholds: {min_samples, min_agreement_pct}, rules: [...], ready_for_canary: [rule, ...]}`. לכל כלל: `rule`, `mode` (`shadow`/`enforce`, לפי השורה האחרונה), `state`, `reasons`, `shadow_rows`, `measured`, `unmeasured`, `samples`, `agreement_pct` (`null` כשלא נמדד דבר), `last_at`. **`state`:** `READY` (מוכן ל-canary: המלצה בלבד), `NOT_READY` (`reasons`: `few_samples` ו/או `low_agreement`), `NOT_MEASURED` (אין אף שורת צל עם `matched`), `ENFORCE` (כבר אוכף; השער אינו חל). **הסכמה** = שורות צל עם `matched = 1` חלקי שורות צל עם `matched` (0/1). **`matched = NULL` (לא נמדד, כולל החלטה בלי `outcome`, #3750) אינו הסכמה**: לא במונה ולא במכנה, ונספר ב-`unmeasured`. **`samples`** = אירועים בלתי תלויים: שורות באותו `round_id` הן דגימה אחת. הספים הם הגדרות (`brain_gate_min_samples`, `brain_gate_min_agreement`, אחוזים, `GET/POST /api/console/settings`); ערכי ההתחלה 30 ו-90 הם הערכה ולא נמדדו. הקריאה דרך `memory.rule_tally`, כמו כל קריאה של `brain_decisions`. **לא נבנה:** canary, rollback, replay, ובדיקת זמן גל ושיעור כשל.
+
+### Receiver rate proposals (#3564)
+
+At chunk-wave completion the brain records a shadow `REPRESENTATIVE_RECEIVER` decision scoped to this wave. Evidence includes the requested cap (`asked_bps`), observed wire rate (`sent_bps`), and mean durable first-pass compressed bits/s per drawer by MAC. A complete eligible wave gets a lower-quartile `proposed_bps`, a `limiting_mac` and strictly slower `leave_behind` MACs. Incomplete measurements yield NOT_MEASURED. Interrupted or small waves yield UNDECIDED. No sender or future roster consumes these proposals.
+
+The companion `RECEIVER_SPEED_STREAMS` shadow decision (#3565) carries the same wave evidence and eligibility. Its `fill` list contains MACs below 8,000,000 bit/s. Other MACs form `streams.slow`, `streams.medium` and `streams.fast`, equal-width bands ending at one third, two thirds and all of the fastest observed rate (inclusive upper bounds). Each MAC occurs once. Empty bands need no sender.

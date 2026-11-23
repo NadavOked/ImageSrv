@@ -29,24 +29,8 @@ __all__ = ["STALL_SECONDS", "STEP_LABELS", "describe", "record", "trail"]
 #: כבר תקיעה ודאית ולא איטיות. ה-HP של #400 שתק שבע דקות.
 STALL_SECONDS = 60
 
-#: מה שהמפעיל רואה. עברית, כי זו הקונסולה; הצד של GRUB נשאר ASCII.
-STEP_LABELS: dict[str, str] = {
-    "menu": "תפריט האתחול נמסר",
-    "entry": "GRUB נכנס לערך ImageSrv",
-    "http-ok": "מודול ה-HTTP נטען",
-    "pre-linux": "לפני משיכת הקרנל",
-    "pre-initrd": "הקרנל נטען",
-    "pre-boot": "ה-initramfs נטען",
-    "agent-net": "הרשת עלתה ב-initramfs",
-    "agent-start": "הסוכן התחיל",
-    "agent-hello": "לפני ה-hello הראשון",
-    # #416: ענף הדיסק המקומי. אינו המשך של הרשימה — הסתעפות ממנה.
-    "local-entry": "GRUB נכנס לערך הדיסק המקומי",
-    "local-search-ok": "נמצא מטען אתחול על הדיסק המקומי",
-    "local-search-empty": "יש דיסק, ולא נמצאה עליו מערכת",
-    "local-no-disk": "GRUB אינו רואה דיסק כלל",
-    "local-chain-refused": "מטען האתחול נמצא ונדחה",
-}
+#: מה שהמפעיל רואה. נמצא ב-`learn.boot` (#2531: הוא מייבא אותו, ולא להפך).
+STEP_LABELS: dict[str, str] = learn_boot.STEP_LABELS
 
 #: #416: מה בא אחרי כל צעד בענף המקומי. זו אינה רשימה אלא תוצאה:
 #: אחרי `local-entry` מגיעה אחת משלוש תוצאות (או `boot` שמצליח), ואחרי

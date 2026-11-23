@@ -59,6 +59,7 @@ PARTCLONE = '#!/bin/sh\nwhile [ "$#" -gt 0 ]; do [ "$1" = -O ] && o=$2; shift; d
 class _Server(ThreadingHTTPServer):
     daemon_threads = True               # a handler asleep in its cut does not hold the shutdown
     pause = 0.0
+    hiccup = 0.0                        # a stall of the stream inside the tail, shorter than any outage
     cut = False                         # #3106: inside the cut the agent's reports are not answered either
     gets: list[str]
 
@@ -76,6 +77,8 @@ class _Handler(BaseHTTPRequestHandler):
                     self.server.cut = True
                     time.sleep(self.server.pause)   # the cut: not a byte, the connection kept
                     self.server.cut = False
+                if i == HEAD + 3:
+                    time.sleep(self.server.hiccup)  # not a cut: the connection and the sampler go on
                 self.wfile.write(PAYLOAD[i * CHUNK:(i + 1) * CHUNK]); self.wfile.flush()
                 time.sleep(0.3 if i < HEAD else 0.4)
         except (BrokenPipeError, ConnectionResetError):
@@ -138,7 +141,7 @@ def _restore(box: Path, stubs: Path, server: _Server, *, ceiling: int, http: int
         + f"export RUN_DIR={posix(run)!r} DEVROOT={posix(dev)!r} SYSFS_INPUT={posix(box / 'sys')!r}\n"
         + "export D_ROLE=build WAIT_POLL_S=1 WAIT_STREAM_START_S=30 WAIT_HELPER_S=10 WAIT_DRAWER_S=30 "
         + f"WAIT_STREAM_STALL_S={ceiling} STREAM_STALL_TIMEOUT={ceiling} HTTP_STALL_TIMEOUT={http} "
-        + "HTTP_TIMEOUT=4 NETLOST_AFTER_S=2\n"
+        + "HTTP_TIMEOUT=4 NETLOST_AFTER_S=4\n"
         + agent_sources("common", "sysinfo", "diskinfo", "waits", "jsonq", "progress", "restore", "writeback", "drawers",
                         "verdict", "failmark", "ntfsboot", "roundbeep", "srgui", "clonergui") + "\n"
         + "node_is_block() { true; }\n"   # a regular file stands for the partition (test_timeouts.py)
@@ -237,11 +240,19 @@ def test_other_downloads_keep_their_own_http_ceiling(tmp_path):
 @_AGENT
 def test_the_cut_is_the_cloners_red_then_green_bar_and_its_two_tunes(tmp_path, stubs, server):
     """The card's writer (sr_gui_state, once a tick) during a 6 s cut, with the cloner's 30 s
-    as 2: "net=lost|<last byte>|<ceiling>" while it lasts, "net=back|<s>|<at>" when bytes
+    as 4: "net=lost|<last byte>|<ceiling>" while it lasts, "net=back|<s>|<at>" when bytes
     move, and the speaker plays netlost then netback -- the cloner's own records and tunes.
     Negative control: on main no record is written and no tune plays (a 6 s cut itself is
-    survived there -- the ceiling is the test above)."""
+    survived there -- the ceiling is the test above).
+
+    The outage limit here is 4 s (NETLOST_AFTER_S), not 2, and a 1.9 s stall inside the tail
+    pins why: the age is read off whole-second clocks (``date +%s``), so a true gap of g s
+    reads as up to ceil(g) s -- a limit of 2 turns a ~1 s hiccup into "lost" again, and a
+    loaded CI runner made that hiccup (lost, back, lost, back; the tunes played twice).
+    With the limit at 2 the stall alone fails this test 6 of 6 on tr2; at 4 it passes 6 of 6.
+    The product's 30 s is two orders of magnitude clear of that granularity."""
     server.pause = 6
+    server.hiccup = 1.9
     r = _restore(tmp_path, stubs, server, ceiling=12, http=2, sample=True)
     assert r["rc"] == 0 and r["disk"] == PAYLOAD, (r["out"], r["log"])
     recs = [l for l in r["samples"].splitlines() if l.startswith("net=")]

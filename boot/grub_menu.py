@@ -12,12 +12,15 @@ schema לא מוכר, JSON פגום, חריגה בקוד — נופל לשם.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 from urllib.parse import urlsplit
 
 from .grub_lock import lock_lines
 from .trace import grub_call, grub_function
+
+log = logging.getLogger(__name__)
 
 __all__ = [
     "GrubConfig",
@@ -416,6 +419,8 @@ def render(answer: object, config: GrubConfig, *, recovery: bool = False) -> str
             decision = Decision(AGENT, "recovery-requested", recovery_mode=True)
         return _render_decision(decision, config)
     except Exception:  # noqa: BLE001 — כאן זו בדיוק הכוונה
+        # #3130 (B-CFG-01): the fallback is the point; doing it without a trace is not.
+        log.exception("boot menu generator failed -- served the local-only file (generator-error)")
         return render_local_only("generator-error",
                                  password_hash=getattr(config, "password_hash", ""))
 
@@ -757,7 +762,9 @@ def _retry_load(command: str, label: str, *, fallback_local: bool) -> str:
         try_local"""
     else:
         failure = (
-            """        echo "This Legacy BIOS cloning machine has no local system to start."
+            # #3198: this branch is chosen by the machine's role, not by $grub_platform -- a UEFI
+            # cloner lands here too, so the text must not name the firmware.
+            """        echo "This cloning machine has no local system to start."
         echo "Nothing will be started. Fix the server or network, then power-cycle it."
 """ + _STAY_POWERED_ON)
     variable = f"imagesrv_{label}_loaded"

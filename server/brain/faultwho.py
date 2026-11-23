@@ -73,6 +73,8 @@ class Seen:
     failed_disks: int | None = None     # דיסקים שונים שנכשלו בחריץ כשמגירה אחרת במשכפל לא נכשלה; None = לא נקרא
     k9: str | None = None               # #3595: הפסק של K9 על הדיסק בגל הזה (`LINK`...), `K9_NONE` = אין שורה, None = לא נקרא
     k9_reason: str | None = None        # הסיבה ש-K9 כתב, לציטוט
+    write: str | None = None            # #4007: `write_preflight.state` של הדיסק בגל (`slow`...), None = לא דווח
+    write_mbps: int | None = None       # ה-MB/s שהסוכן מדד בבדיקת הכתיבה, None = לא נמדד
 
     @property
     def hot(self) -> bool:
@@ -109,6 +111,13 @@ def judge(s: Seen) -> tuple[str, str] | None:
         return HOT, (f"הדיסק היה ב-{s.peak_c}C בזמן הכתיבה (סף {smart_history.TEMP_WARN_C}C), והכשל לא הוסבר בראיה אחרת: "
                      "החום נאמר, לא מוכח כסיבה")
     lost = " (ההיסטוריה של החריץ לא נקראה)" if s.port_suspect is None else ""
+    if s.write == "slow":
+        # #4007: הדיסק נפסל כאיטי בבדיקת הכתיבה שלפני הזרם (בלי אירועי קו): "אין ראיה" אינו נכון. הפסק נשאר UNDECIDED --
+        # מדידה אחת אינה היסטוריה, והמוח מציע ולא פוסל -- אבל הנימוק אומר מה נמדד
+        mbps = f" ({s.write_mbps} MB/s)" if s.write_mbps is not None else ""
+        return UNDECIDED, ("הכתיבה בחריץ נכשלה ואין היסטוריה או ראיית קו (phy, איפוס, CRC, קישור) שמבדילות בין החריץ, הכבל והדיסק. "
+                           f"הדיסק נפסל כאיטי בבדיקת הכתיבה שלפני הזרם{mbps}: ראיה על הדיסק עצמו, לא מוכחת כסיבה ואינה מכריעה לבד" + lost
+                           + (" (K9 לא נקרא)" if s.k9 is None else ""))
     lost += " (K9 לא נקרא)" if s.k9 is None else ""
     if s.k9 not in (None, "none"):
         # #3619: K9 סיווג את הכשל בגל הזה (DRIVE, NETWORK, SOFTWARE, UNCLASSIFIED): "אין ראיה" אינו נכון. הפסק נשאר UNDECIDED --
@@ -147,8 +156,28 @@ def _k9(conn, wave_id: str, serial: str | None) -> tuple[str | None, str | None]
     return (pick["verdict"], pick["reason"]) if pick is not None else (K9_NONE, None)
 
 
-def _senses(conn, members) -> dict[tuple[str, str], dict]:
+def _senses(targets: dict[tuple[str, str], dict]) -> dict[tuple[str, str], dict]:
     """``{(mac, serial): senses}`` של היעדים של הגל, מה שהסוכן דיווח (`agentsenses.well_formed_target`)."""
+    out: dict[tuple[str, str], dict] = {}
+    for (mac, serial), t in targets.items():
+        senses = agentsenses.well_formed_target(t.get("senses"))
+        if senses is not None:
+            out[(mac, serial)] = senses
+    return out
+
+
+def _write_check(t: dict | None) -> tuple[str | None, int | None]:
+    """(state, mbps) של `write_preflight` ביעד. ``(None, None)`` = לא דווח, לא "תקין"."""
+    pre = t.get("write_preflight") if t else None
+    if not isinstance(pre, dict):
+        return None, None
+    mbps = pre.get("mbps")
+    return (pre["state"] if isinstance(pre.get("state"), str) else None,
+            mbps if isinstance(mbps, int) and not isinstance(mbps, bool) and mbps > 0 else None)
+
+
+def _targets(conn, members) -> dict[tuple[str, str], dict]:
+    """``{(mac, serial): target}`` מ-`targets_json` של חברי הגל."""
     out: dict[tuple[str, str], dict] = {}
     for m in members:
         try:
@@ -160,9 +189,8 @@ def _senses(conn, members) -> dict[tuple[str, str], dict]:
             if not isinstance(t, dict) or not isinstance(t.get("dev"), str):
                 continue
             serial = t.get("serial") if isinstance(t.get("serial"), str) and t.get("serial") else smart_history.serial_of(conn, mac, t["dev"])
-            senses = agentsenses.well_formed_target(t.get("senses"))
-            if serial and senses is not None:
-                out[(mac, serial)] = senses
+            if serial:
+                out[(mac, serial)] = t
     return out
 
 
@@ -185,7 +213,7 @@ def _evidence(row, s: Seen, senses: dict | None) -> list[str]:
             f"cable_fail={row['cable_fail']}", f"link_events={show(s.link_events)}", f"peak_c={show(s.peak_c)}",
             "conn=" + ("null" if conn_ is None else f"ata{conn_['ata']}/SATA {conn_['sata']}/drawer={conn_['drawer']}"),
             f"slot_bad_disks={show(s.port_disks)}", f"disk_bad_slots={show(s.disk_ports)}", f"slot_failed_disks={show(s.failed_disks)}",
-            f"k9={'unread' if s.k9 is None else s.k9}"]
+            f"k9={'unread' if s.k9 is None else s.k9}", f"write={show(s.write)}/{show(s.write_mbps)}MBps"]
 
 
 def after_wave(conn, wave_id: str, round_id: str | None, members=()) -> int:
@@ -194,7 +222,8 @@ def after_wave(conn, wave_id: str, round_id: str | None, members=()) -> int:
         mode = veto.mode(conn)
         if mode == veto.OFF:
             return 0
-        senses = _senses(conn, members)
+        targets = _targets(conn, members)
+        senses = _senses(targets)
         rows = conn.execute("SELECT mac, port, serial, crc_delta, link_gbps, link_max_gbps, cable_fail, failed FROM port_history"
                             " WHERE session_id = ?", (wave_id,)).fetchall()
     except Exception:                           # noqa: BLE001 -- המוח אינו עוצר סיום גל
@@ -208,12 +237,13 @@ def after_wave(conn, wave_id: str, round_id: str | None, members=()) -> int:
             verdict = learn_ports.verdict(conn, row["mac"], row["port"], row["serial"])
             temp = got["temp"] if got else None
             k9, k9_reason = _k9(conn, wave_id, row["serial"])
+            write, write_mbps = _write_check(targets.get((row["mac"], row["serial"])))
             seen = Seen(failed=None if row["failed"] is None else bool(row["failed"]),
                         problem=learn_ports._problem(row["crc_delta"], row["link_gbps"], row["link_max_gbps"], row["cable_fail"]),
                         link_events=_link_events(got), peak_c=temp["peak_during_c"] if temp else None,
                         port_suspect=verdict["port_suspect"], port_disks=verdict["port_disks"],
                         disk_suspect=verdict["disk_suspect"], disk_ports=verdict["disk_ports"],
-                        failed_disks=_failed_disks(conn, row["mac"], row["port"]), k9=k9, k9_reason=k9_reason)
+                        failed_disks=_failed_disks(conn, row["mac"], row["port"]), k9=k9, k9_reason=k9_reason, write=write, write_mbps=write_mbps)
             judged = judge(seen)
             if judged is None:
                 continue

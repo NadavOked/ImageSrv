@@ -92,10 +92,13 @@ static void sata_of(const LcDisk *d, char *out, size_t n) {
     conn_text(d->conn, d->port, d->dev, out, n);
 }
 
-static const char *smart_reason_he(const LcDisk *d) {
+/* #3008: a failed_last whose cause is the cable/slot marks the drawer, not the disk */
+static int cable_mark(const LcDisk *d) { return !strcmp(d->smart, "failed_last") && !strcmp(d->smart_reason, "cable"); }
+
+static const char *smart_reason_he(const LcDisk *d, char *buf, size_t n) {
+    if (cable_mark(d)) { char nm[LC_LABEL_MAX]; mapped_disk_name(d->name, d->drawer, nm, sizeof nm); cable_he(nm, buf, n); return buf; }
     if (!strcmp(d->smart, "failed_last"))
-        return !strcmp(d->smart_reason, "cable") ? "נכשל בשיכפול הקודם — סיבה: כבל/חריץ"
-             : !strcmp(d->smart_reason, "disk") ? "נכשל בשיכפול הקודם — סיבה: הדיסק"
+        return !strcmp(d->smart_reason, "disk") ? "נכשל בשיכפול הקודם — סיבה: הדיסק"
              : !strcmp(d->smart_reason, "readonly") ? "נכשל בשיכפול הקודם — סיבה: הדיסק במצב קריאה בלבד"   /* #1742 */
              : "נכשל בשיכפול הקודם";
     if (!strcmp(d->smart_reason, "readonly")) return smart_reason_text(d->smart_reason);   /* #1742 */
@@ -117,7 +120,7 @@ static const char *smart_chip(const LcDisk *d, Rgb *fg, Rgb *bg, const Theme *t)
     if (lvl < 2 && r.color == DR_YELLOW && !strcmp(r.reason, "write_incomplete")) { *fg = t->yellow_fg; *bg = t->yellow_soft; return "כתיבה לא הושלמה"; }
     if (lvl == 2) { *fg = t->danger; *bg = t->danger_soft;   /* #1580; #1742: read-only says so */
                     return !strcmp(d->smart_reason, "readonly") ? "קריאה בלבד" : "SMART תקול"; }
-    if (lvl == 1 && !strcmp(d->smart, "failed_last")) { *fg = t->yellow_fg; *bg = t->yellow_soft; return "נכשל בשיכפול הקודם"; }   /* #2848: yellow */
+    if (lvl == 1 && !strcmp(d->smart, "failed_last")) { *fg = t->yellow_fg; *bg = t->yellow_soft; return cable_mark(d) ? "חיבור לא תקין" : "נכשל בשיכפול הקודם"; }   /* #2848: yellow; #3008 */
     if (lvl == 1) { *fg = t->warn; *bg = t->warning_soft; return "SMART חצי תקין"; }   /* #2848 */
     if (!strcmp(d->smart, "ok") || !strcmp(d->smart, "passed")) { *fg = t->led_ok; *bg = t->success_soft; return RLM "SMART תקין"; }
     *fg = t->muted; *bg = t->hover; return RLM "SMART לא נבדק";
@@ -288,11 +291,11 @@ static void bay(App *a, cairo_t *cr, Rect b, int i, const LcDisk *src) {
         sb_pill(cr, wl + pw, cy, chip, fg, bg); wl += pw + 18; }
     double ww = fr - wl;
     /* .who */
-    char name[LC_LABEL_MAX], has[200], l2[400], l3[300], mk[900], e1[200], e2[400], col[8];
+    char name[LC_LABEL_MAX], has[200], l2[400], l3[300], mk[900], e1[200], e2[400], col[8], why1[160];
     lc_disk_card_name(d, name, sizeof name); lc_has_text(d, has, sizeof has);   /* #2030: the name IS the connection, so the line under it no longer says it again */
     Text tn = text_make(cr, FONT_SANS, 18, 600, name, 0, DIR_RTL);
     const char *tag = isrc ? "מקור" : role == LCR_TARGET ? "יעד" : NULL;
-    if (lvl && (!isrc || lvl == 1)) { hexc(lvl == 2 ? t->danger_fg : yellow ? t->yellow_fg : t->warning_ink, col);   /* #2848 */ text_escape(smart_reason_he(d), e1, sizeof e1);
+    if (lvl && (!isrc || lvl == 1)) { hexc(lvl == 2 ? t->danger_fg : yellow ? t->yellow_fg : t->warning_ink, col);   /* #2848 */ text_escape(smart_reason_he(d, why1, sizeof why1), e1, sizeof e1);
         snprintf(mk, sizeof mk, "<span foreground='%s'>%s</span>", col, e1); }
     else mk[0] = 0;
     if (hw) {   /* #1921: the drawer's hardware note -- the cable, the drawer, USB 2.0 (words only, #2203) */
@@ -476,11 +479,12 @@ static double wrow(App *a, cairo_t *cr, double x, double y, double w, int i, con
     double h = 13 + ta.h + 4 + tz.h + 13, ah = 0;
     int lvl = smart_level(d->smart); Text tw = { NULL, 0, 0 }, tl = { NULL, 0, 0 };
     if (lvl) {
-        char lk[160], am[700], r1[200]; snprintf(lk, sizeof lk, "הוצא את %s מהשיכפול", lb);
+        char lk[160], am[700], r1[200], why2[160]; snprintf(lk, sizeof lk, "הוצא את %s מהשיכפול", lb);
         tl = text_make(cr, FONT_SANS, 13, 600, lk, 0, DIR_RTL);
-        text_escape(smart_reason_he(d), r1, sizeof r1); hexc(lvl == 2 ? t->danger : !strcmp(d->smart, "failed_last") ? t->yellow_fg : t->warn, col);   /* #2848 */
-        snprintf(am, sizeof am, "<span foreground='%s' weight='bold'>%s:</span> %s. הדיסק עלול להיכשל באמצע או אחרי ההתקנה בכיתה.",
-                 col, lvl == 2 ? "SMART תקול" : strcmp(d->smart, "failed_last") ? "SMART חצי תקין" : "נכשל בשיכפול הקודם", r1);
+        text_escape(smart_reason_he(d, why2, sizeof why2), r1, sizeof r1); hexc(lvl == 2 ? t->danger : !strcmp(d->smart, "failed_last") ? t->yellow_fg : t->warn, col);   /* #2848 */
+        snprintf(am, sizeof am, "<span foreground='%s' weight='bold'>%s:</span> %s. %s",
+                 col, lvl == 2 ? "SMART תקול" : cable_mark(d) ? "אזהרת מגירה" : strcmp(d->smart, "failed_last") ? "SMART חצי תקין" : "נכשל בשיכפול הקודם", r1,
+                 cable_mark(d) ? "החיבור עלול להכשיל את השיכפול באמצע." : "הדיסק עלול להיכשל באמצע או אחרי ההתקנה בכיתה.");
         tw = text_make_markup(cr, FONT_SANS, 13, 400, am, (int)(inner - tl.w - 30), DIR_RTL);
         ah = 8 + fmax(tw.h, tl.h) + 20; h += ah;
     }

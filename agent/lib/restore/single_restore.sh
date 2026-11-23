@@ -74,6 +74,10 @@ single_restore_run() {
         sr_name_machine "$_sr_disk"
         # #720: driver staging before the closing report -- its outcome rides
         # in that report. Never fatal; a Linux image is skipped inside.
+        # #3906: and the machine's name (a Linux image kept the source's) -- the registered one the operator
+        # confirmed (guibridge.sh read it fresh); never fatal, a failure rides in the closing report (#856).
+        _sr_nm=$(jq -er '.name | select(type == "string" and length > 0)' "$RUN_DIR/gui-restore-name.json" 2>/dev/null)             || log "restore: no registered name to write into the image (#3906)"
+        [ -z "$_sr_nm" ] || name_this_machine "$_sr_disk" "$PULL_SESSION" "$_sr_nm" "$RUN_DIR/sr-manifest.json"
         stage_drivers "$_sr_disk" "$RUN_DIR/sr-manifest.json"
         writemark_release_done "$_sr_disk" || { _sr_rc=1; echo failed > "$RUN_DIR/state"; }   # #1877: after the last write; a mark that stays = failed
     fi
