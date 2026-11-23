@@ -218,6 +218,9 @@ def config_for_scope(scope: dict, config: GrubConfig) -> GrubConfig:
             boot_port=config.boot_port,
         )
     except Exception:  # noqa: BLE001 — כאן זו בדיוק הכוונה
+        # #3130 (B-CFG-06): the fixed address is served; say that it was not the connection's own.
+        log.warning("config_for_scope: could not read the connection's server address %r -- the fixed config is served",
+                    scope.get("server") if isinstance(scope, dict) else scope)
         return config
 
 

@@ -63,6 +63,7 @@ from server.console.hostcfg import create_hostcfg_router
 from server.console.server_power import create_server_power_router
 from server.console.timezone import create_timezone_router
 from server.console.timesync import create_timesync_router
+from server.console.static_pages import create_static_pages_router
 from server.console.ups import create_ups_router
 from server.console.email_alerts import create_email_router   # #1751
 from server.console.grubpw import create_grub_password_router, reminder as grub_reminder   # #2450, #2454
@@ -76,6 +77,7 @@ from server.interserver import storage_heartbeat
 from server.system import housekeeping   # #1737
 from server.system import clockstep, silent_tasks   # #2905
 from server.system import grub_password   # #2437
+from server.system import grub_lock_state   # #2452
 from server.system import accesslog   # #3184
 from .db import journal
 from server.net import wol
@@ -1160,8 +1162,10 @@ def _nic_services(ctx, interface, deploy, dhcp_hooks, sync_dnsmasq, nic_hooks,
             hooks["timesync"](service)
         except Exception as exc:                              # noqa: BLE001
             from .db import journal
+            # #3021: הטקסט הגולמי ליומן השרת; ליומן האירועים — משפט שלנו.
+            log.warning("timesync apply on start failed: %s", exc or type(exc).__name__)
             journal(ctx.conn, "timesync_apply_failed",
-                    f"שרת NTP לפי כרטיס: {exc or type(exc).__name__}")
+                    "שרת NTP לפי כרטיס לא הוחל — הפרטים ביומן השרת")
     return service
 
 
@@ -1319,6 +1323,9 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     health_hooks = dict(rt.health_hooks or {})
     # #2454: שורת "סיסמת GRUB" — צהובה עד "שמרתי"; אין קובץ (בדיקות, פיתוח) = אין שורה.
     health_hooks.setdefault("grub_password", lambda: grub_reminder(ctx.conn, rt.grub_password_file))
+    # #2452: ואם ה-GRUB של השרת עצמו נעול — אותו תנאי: בלי קובץ סיסמה (בדיקות, פיתוח) אין GRUB של השרת ואין שורה.
+    if rt.grub_password_file is not None:
+        health_hooks.setdefault("grub_server_lock", grub_lock_state.lock_status)
     # #748: תיקיית העץ נופלת לתיקיית הקוד עצמה כשאין ``--repo-dir``
     # מפורש (בדיקות/הרצה ישירה) — ראו ``main.py``.
     repo_dir = rt.repo_dir or REPO_ROOT
@@ -1447,6 +1454,8 @@ def _add_console_routes(app: FastAPI, rt: ServerRuntime) -> None:
     include(create_wake_router(ctx, rt.wol_send))
     # #980: כיבוי החדר + היסטוריית סבבים — קונסולה בלבד, לא בסוכן.
     include(create_room_console_router(ctx))
+    # #4041: index/monitor עם ?v= = גרסת המוצר; לפני ה-mount כדי שיגיעו קודם.
+    app.include_router(create_static_pages_router(lambda: running_version().version))
     app.mount("/console", StaticFiles(directory=STATIC_DIR, html=True), name="console")
     app.add_middleware(ConsoleNoStaleCache)
     # #2757: חידוש עוגיית הקונסולה בשימוש פעיל -- רק כאן, כי רק כאן ה-middleware שמוסר

@@ -221,7 +221,8 @@ class RewakeCall(Call):
     of: int = 0
 
 
-def judge_rewake(*, round_id: str, sent: int, age_s: float, since_last, quiet: int, waiting: int) -> RewakeCall:
+def judge_rewake(*, round_id: str, sent: int, age_s: float, since_last, quiet: int, waiting: int,
+                 silent_for_s: float | None = None) -> RewakeCall:
     """טהור. מה לעשות עם גל פתוח שיש בו מחשבים שלא נראו: ``SEND`` (הערה חוזרת, מס' ``sent + 1`` מתוך ``REWAKE_MAX``), ``WAIT``,
     ``FAIL`` (הסבב נכשל בשמם, אחרי התקרה והאתחול), או ``CALIBRATE`` (שעון הגל בעתיד ואין ממה למדוד: מכיילים ל'עכשיו').
 
@@ -231,11 +232,20 @@ def judge_rewake(*, round_id: str, sent: int, age_s: float, since_last, quiet: i
 
     **שעון בעתיד** (#1771, ברזל: `created_at` שלוש שעות קדימה): גיל שלילי היה מדכא כל הערה. מודדים מההערה האחרונה (שנכתבה אחרי
     הקפיצה, כלומר זמן אמיתי): המרווח בין ההערות נשאר ``REWAKE_S`` והתקרה עדיין מכשילה, וגיל שלילי לא קופא ולא שורף שש הערות בנשימה
-    אחת. #3590: גל שממתין רק למחזיק לא שולח הערות, ואין לו חותמת זמן אמיתי למדוד ממנה, ולכן מכיילים אותו ל'עכשיו' והתקרה רצה מכאן."""
+    אחת. #3590: גל שממתין רק למחזיק לא שולח הערות, ואין לו חותמת זמן אמיתי למדוד ממנה, ולכן מכיילים אותו ל'עכשיו' והתקרה רצה מכאן.
+
+    **#3912:** ``silent_for_s`` הוא כמה שניות עברו מאז שהמכונה השקטה עזבה את המוחזק (השרת מודד; ``None`` = לא כולם עזבו מוחזק
+    בגל הזה, והשעון נשאר פתיחת הגל). גל שחיכה דקות למוחזק כבר מקיים ``age >= (sent+1)*REWAKE_S`` לכל ההערות, והתקרה כבר מאחוריו,
+    ולכן בלי זה ההערות יוצאות בכל דופק והאתחול לא מקבל את ``REWAKE_BOOT_S``. כשהוא נתון הוא **מחליף** את גיל הגל — לא נוסף עליו."""
     base = (RULE_REWAKE, POINT_REWAKE, "REWAKE")
     evidence = [f"sent={sent}/{REWAKE_MAX}", f"quiet={quiet}", f"held={waiting}", f"age={age_s:.0f}s"]
     age = age_s
-    if age < 0:
+    origin = "מאז שהגל נפתח"
+    if silent_for_s is not None:
+        age = silent_for_s
+        origin = "מאז שעבר משקט"
+        evidence.append(f"silent_for={silent_for_s:.0f}s")
+    elif age < 0:
         since = since_last()
         if since is None and not quiet:
             return RewakeCall(*base, CALIBRATE, round_id,
@@ -247,22 +257,24 @@ def judge_rewake(*, round_id: str, sent: int, age_s: float, since_last, quiet: i
     if quiet and sent < REWAKE_MAX:
         if age >= (sent + 1) * REWAKE_S:
             return RewakeCall(*base, SEND, round_id,
-                              f"הערה {sent + 1} מתוך {REWAKE_MAX}: עברו {age:.0f}ש' מאז שהגל נפתח (הערה כל {REWAKE_S}ש')",
+                              f"הערה {sent + 1} מתוך {REWAKE_MAX}: עברו {age:.0f}ש' {origin} (הערה כל {REWAKE_S}ש')",
                               tuple(evidence), n=sent + 1, of=REWAKE_MAX)
         return RewakeCall(*base, WAIT, round_id, f"עוד לא הגיע הזמן להערה {sent + 1}: {age:.0f}ש' מתוך {(sent + 1) * REWAKE_S}ש'",
                           tuple(evidence), n=sent + 1, of=REWAKE_MAX)
     limit = REWAKE_MAX * REWAKE_S + REWAKE_BOOT_S
     if age >= limit:
         return RewakeCall(*base, FAIL, round_id,
-                          f"עברו {age:.0f}ש' מאז שהגל נפתח (התקרה {limit}ש': {REWAKE_MAX} הערות ועוד {REWAKE_BOOT_S}ש' לאתחול): "
+                          f"עברו {age:.0f}ש' {origin} (התקרה {limit}ש': {REWAKE_MAX} הערות ועוד {REWAKE_BOOT_S}ש' לאתחול): "
                           "הסבב נכשל בשם המחשבים שלא חזרו", tuple(evidence), of=REWAKE_MAX)
     return RewakeCall(*base, WAIT, round_id, f"{age:.0f}ש' מתוך {limit}ש': ממתינים", tuple(evidence), of=REWAKE_MAX)
 
 
-def decide_rewake(conn, *, round_id: str, sent: int, age_s: float, since_last, quiet: int, waiting: int) -> RewakeCall | None:
+def decide_rewake(conn, *, round_id: str, sent: int, age_s: float, since_last, quiet: int, waiting: int,
+                  silent_for_s: float | None = None) -> RewakeCall | None:
     """S24. ``None`` = המוח נכשל (או שהעובדות אינן נקראות): אין החלטה, והשרת אינו שולח WoL, אינו מכשיל ואינו מכייל. לעולם אינו זורק."""
     try:
-        return judge_rewake(round_id=round_id, sent=sent, age_s=age_s, since_last=since_last, quiet=quiet, waiting=waiting)
+        return judge_rewake(round_id=round_id, sent=sent, age_s=age_s, since_last=since_last, quiet=quiet,
+                            waiting=waiting, silent_for_s=silent_for_s)
     except Exception as exc:                    # noqa: BLE001 — לא ידוע אינו "תקין", וגם אינו הכשלה
         log.exception("brain: %s of %s failed", RULE_REWAKE, round_id)
         undecided(conn, RULE_REWAKE, POINT_REWAKE, "REWAKE", round_id, f"{type(exc).__name__}: {exc}")

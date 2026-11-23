@@ -126,10 +126,8 @@ test('the machine drawer shows the last restore warning of this MAC', () => {
   assert.match(run('machineDrawerHtml.toString()'), /machineRestoreWarningHtml/, 'wired into the drawer (#954 wave 3)');
 });
 
-test('index.html was bumped so the browser does not run the old console.js', () => {
+test('index.html carries the one ?v= placeholder, so the server fills the product version and the browser does not run the old console.js (#4041)', () => {
   const page = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  const versions = new Set([...page.matchAll(/\?v=([0-9.]+)/g)].map((m) => m[1]));
-  assert.equal(versions.size, 1, [...versions].join(','));
-  // numeric, not lexical: '10.0' >= '6.6' is false as strings (caught at ?v=10.0, #1128)
-  assert.ok(parseFloat([...versions][0]) >= 6.6, `?v=${[...versions][0]} — #856 ships as 6.6`);
+  const versions = new Set([...page.matchAll(/\?v=([^"]+)/g)].map((m) => m[1]));
+  assert.deepEqual([...versions], ['__IMAGESRV_V__']);
 });
