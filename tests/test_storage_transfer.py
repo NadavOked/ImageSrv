@@ -47,6 +47,7 @@ IMAGE = MANIFEST_256["id"]
 class _Ctx:
     def __init__(self, conn, library, data_dir):
         self.conn = conn
+        self.store = type("_Store", (), {})()   # #3770: clockstep.guard keys a weak-ref detector by the room store
         self.library = library
         self.data_dir = data_dir
 
@@ -263,7 +264,7 @@ def test_corrupted_stream_is_rejected_at_the_secondary(server, secondary, paired
 # --- (ג) ניתוק/קטיעה: כשל גלוי, לא "נתקע", בלי שאריות -------------------------
 
 def test_source_failure_mid_stream_is_a_visible_failure(server, secondary, paired,
-                                                        monkeypatch):
+                                                        monkeypatch, caplog):
     real = archive.tar_stream
 
     def dying(directory, arcname):
@@ -277,7 +278,9 @@ def test_source_failure_mid_stream_is_a_visible_failure(server, secondary, paire
                      json={"image_id": IMAGE}).json()["id"]
     row = _wait(admin, paired, tid)
     assert row["state"] == "failed"
-    assert "נעלם באמצע" in row["error"]
+    # #3021: the operator reads our sentence (the failure stays visible); the raw OSError text is in the server log.
+    assert row["error"].endswith("הפרטים ביומן השרת") and "נעלם באמצע" not in row["error"]
+    assert "נעלם באמצע" in caplog.text
     assert secondary["ctx"].library.scan() == {}
     assert [p for p in secondary["root"].iterdir()] == []
 

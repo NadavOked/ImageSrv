@@ -217,6 +217,18 @@ def round_protect(conn: sqlite3.Connection) -> set[str]:
     return set(_roster(row) or []) if row is not None else set()
 
 
+def _stopped_by(conn: sqlite3.Connection, ids: list[str]) -> dict[str, str]:
+    """סבב -> המשתמש בשורת היומן `room_close` שלו. השורה נכתבת **רק** בעצירה
+    (`room.close_round`, או השלמת עצירה שהשרת נפל באמצעה, `reconcile`, בלי משתמש);
+    סבב שנסגר מעצמו כותב `room_done`/`room_failed`. אין שורה (לא נעצר, או שהיומן נוקה) = חסר."""
+    if not ids:
+        return {}
+    marks = ",".join("?" * len(ids))
+    return {r["round_id"]: r["user"] for r in conn.execute(
+        f"SELECT round_id, user FROM journal WHERE event = 'room_close' AND round_id IN ({marks})"
+        " ORDER BY id", ids)}
+
+
 def round_history(ctx, limit: int) -> list[dict]:
     """סבבי חדר שהסתיימו (`closed`/`failed`), מהחדש לישן. הסבב שמוצג
     עכשיו ב-`GET /room` (פעיל, או כושל שעוד לא נסגר) אינו כאן."""
@@ -225,6 +237,7 @@ def round_history(ctx, limit: int) -> list[dict]:
         "SELECT * FROM room_rounds WHERE state IN ('closed', 'failed') AND id != ?"
         " ORDER BY created_at DESC, rowid DESC LIMIT ?",
         (shown["id"] if shown is not None else "", limit)).fetchall()
+    stopped = _stopped_by(ctx.conn, [r["id"] for r in rows])
     return [{
         "id": r["id"],
         "state": r["state"],
@@ -237,6 +250,10 @@ def round_history(ctx, limit: int) -> list[dict]:
         "created_at": r["created_at"],
         "closed_at": r["closed_at"],
         "failed_reason": r["failed_reason"],
+        # #980 §3: כמה מחשבים נבחרו לסבב (`_roster`); null = סבב ישן בלי בחירה, לא 0.
+        "machine_count": None if _roster(r) is None else len(_roster(r)),
+        # #980 §3: מי עצר את הסבב ב"עצור סבב"; "" = נעצר והמשתמש לא נרשם; null = לא נעצר.
+        "stopped_by": stopped.get(r["id"]),
         # #1889: כמה זמן הסבב חיכה לאדם, ועל מה (`learn_waits.round_waits`; null = לא נמדד).
         "waits": learn_waits.round_waits(ctx.conn, r["created_at"], r["closed_at"]),
         # #3185: "קצב ואיבוד" -- מ-`wave_rates` של גלי הסבב; ``null`` בשדה = לא נשמר / לא נמדד, לא 0.

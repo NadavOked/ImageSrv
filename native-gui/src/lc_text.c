@@ -331,9 +331,9 @@ int lc_png_setup(App *a, const char *card) {
     if (!strcmp(card, "lcstop")) { u->stop = 1; u->focus = LCF_STOP_NO; }
     if (!strncmp(card, "lcdone", 6)) u->focus = LCF_OFF;
     if (!strcmp(card, "lcsource-orange")) {   /* #2017: "המשך לאישור" pressed on the orange source (drawer 3) */
-        const LcDisk *d = &a->st.lc.disks[2]; char label[48]; lc_disk_label(d, label, sizeof label);
+        const LcDisk *d = &a->st.lc.disks[2]; char label[48], cname[LC_LABEL_MAX]; lc_disk_label(d, label, sizeof label); mapped_disk_name(d->name, d->drawer, cname, sizeof cname);
         snprintf(a->st.lc.disks[2].serial, sizeof a->st.lc.disks[2].serial, "2236E6A1B2C3");
-        sdlg_open(a, SDLG_LC_SOURCE, 2, d->dev, label, d->smart, d->smart_reason, d->model, d->serial);
+        sdlg_open(a, SDLG_LC_SOURCE, 2, d->dev, label, d->smart, d->smart_reason, d->model, d->serial, cname);
     }
     return 1;
 }

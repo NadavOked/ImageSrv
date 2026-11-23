@@ -410,8 +410,9 @@ function sheet({ title, sub = "", fields = [], submitLabel = "שמירה", cance
   form.className = `sheet win ${winSizeClass(sizeName, "narrow")}`;
   form.innerHTML = `
     <div class="n-h shead"><div><h2 id="sheetTitle">${esc(title)}</h2>${sub ? `<p>${esc(sub)}</p>` : ""}</div>${winCloseBtn('id="sf-x"')}</div>
-    <div class="n-b sbody">${SERVER_CTX ? `<div class="sheet-note${danger ? " danger" : ""}" data-target-server>הפעולה תתבצע על <b>${esc(serverRootName("שרת המשנה"))}</b> (שרת משנה), דרך הערוץ בין השרתים.</div>` : ""}${note}${fields.map(fieldHtml).join("")}<p class="sheet-note n-busy" id="sf-busy" role="status" aria-live="polite" hidden></p><p class="error n-formerr" id="sf-error" role="alert"></p></div>
+    <div class="n-b sbody">${SERVER_CTX ? `<div class="sheet-note${danger ? " danger" : ""}" data-target-server>הפעולה תתבצע על <b>${esc(serverRootName("שרת המשנה"))}</b> (שרת משנה), דרך הערוץ בין השרתים.</div>` : ""}${note}${fields.map(fieldHtml).join("")}<p class="error n-formerr" id="sf-error" role="alert"></p></div>
     <footer class="n-f-bar sfoot">
+      <p class="sheet-note n-busy" id="sf-busy" role="status" aria-live="polite" hidden></p>
       <span class="n-hint" id="sf-hint">${esc(hint)}</span>
       <button class="btn" type="button" id="sf-cancel">${esc(cancelLabel)}</button>
       ${extra ? `<button class="btn" type="button" id="sf-extra">${esc(extra.label)}</button>` : ""}
@@ -549,6 +550,38 @@ function idleKeepAlive(now = Date.now()) {
   return true;
 }
 
+/* ‏#2874 (הכרעת נדב 14/11, אפשרות ב): בסבב פעיל, אחרי ה-idle, הקונסולה לא מתנתקת אלא עוברת ל"צפייה בלבד" — הנתונים
+   ממשיכים להתעדכן, וכל פעולה דורשת כניסה מחדש. כשהסבב נגמר חוזרת ההתנהגות הרגילה (ניתוק). זו חסימה בלקוח; השרת ממשיך
+   לאמת כל בקשה. צבע ההודעה: info (כחול) — הכתום שמור לדיסקים. */
+let VIEW_ONLY = false;
+function activeRoundNow() { try { return typeof roomRound === "function" && !!roomRound(); } catch (e) { return false; } }
+function setViewOnly(on) {
+  VIEW_ONLY = !!on;
+  document.body.classList.toggle("view-only", VIEW_ONLY);
+  let bar = document.getElementById("viewOnlyBar");
+  if (!VIEW_ONLY) { if (bar) bar.remove(); return; }
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "viewOnlyBar"; bar.className = "view-only-bar"; bar.setAttribute("role", "status");
+    bar.innerHTML = `<span><b>צפייה בלבד.</b> לא הייתה פעילות והסבב עדיין רץ. הנתונים ממשיכים להתעדכן; כדי לפעול יש להיכנס מחדש.</span>`
+      + `<button class="btn primary" type="button" id="viewOnlyLogin">כניסה מחדש</button>`;
+    document.body.appendChild(bar);
+    bar.querySelector("#viewOnlyLogin").addEventListener("click", viewOnlyReenter);
+  }
+}
+async function viewOnlyReenter() {
+  try { await post("/logout"); } catch (e) { /* הסשן כבר פג בשרת — המסך הבא הוא כניסה בכל מקרה */ }
+  clearInterval(idleTimer); setViewOnly(false); ME = null; showLogin();
+}
+/* בצפייה בלבד: ניווט וצפייה פתוחים; כל פעולה (כפתור, שדה, מתג) נעצרת ומבקשת כניסה מחדש. */
+document.addEventListener("click", (e) => {
+  if (!VIEW_ONLY || !e.target || !e.target.closest) return;
+  const act = e.target.closest("button,.btn,input,select,textarea,[role=switch],label.msw,a[onclick]");
+  if (!act || act.closest("#viewOnlyBar,.inventory-node,.rail,.vcenter-tab,.tabs,.tab,summary,.user,.user-menu")) return;
+  e.preventDefault(); e.stopPropagation();
+  toast("צפייה בלבד — כדי לפעול יש להיכנס מחדש");
+}, true);
+
 function startIdleWatch() {
   clearInterval(idleTimer);
   if (!ME || !ME.idle_seconds) return;
@@ -558,7 +591,9 @@ function startIdleWatch() {
     const idle = (Date.now() - lastActivity) / 1000;
     const left = ME.idle_seconds - idle;
     if (left > 0) idleKeepAlive();
+    if (left <= 0 && activeRoundNow()) { if (!VIEW_ONLY) setViewOnly(true); return; }   // #2874: סבב פעיל — צפייה בלבד, לא ניתוק
     if (left <= 0) {
+      if (VIEW_ONLY) setViewOnly(false);   // הסבב נגמר בזמן הצפייה: חוזרים להתנהגות הרגילה
       if (inFlight) return;
       inFlight = true;
       try {
@@ -913,7 +948,7 @@ async function showApp() {
   applyServerName();
   renderActivity();
   selectPageById("home");
-  if (isAdmin()) { loadMachines(); loadHealth(); if (typeof loadBrainAsks === "function") loadBrainAsks(); }   // ‏#3654: שאלות המוח בפעמון
+  if (isAdmin()) { loadMachines(); loadHealth(); loadNetDeploy(); if (typeof loadBrainAsks === "function") loadBrainAsks(); }   // ‏#3654: שאלות המוח בפעמון
   loadImages();
   populateSidebarImages();
   populateSidebarGroups();
@@ -1722,6 +1757,7 @@ function treeAlerts(key) {
 }
 
 function paintTabAlerts() {
+  if (typeof syncNetDeployNode === "function") syncNetDeployNode();   // ‏#3029
   const srv = document.getElementById("srvTA");
   const real = (el, ...fns) => !!el && fns.every((f) => typeof el[f] === "function");   // בלי DOM מלא (טסטים) — רק הפס
   if (!real(srv, "querySelectorAll", "querySelector") || !real(document, "querySelectorAll")) { drawRail(); return; }
@@ -1904,7 +1940,7 @@ function branchTreeHtml(n, wasOpen) {
     if (Array.isArray(x)) return leaf(x);
     const boxId = `srv-${n.id}-${x.id}`;
     const open = boxId in wasOpen ? wasOpen[boxId] : x.open;
-    return `<div class="inventory-node" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="toggleInventoryGroup(this,${jsStr(boxId)})"><span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),${jsStr(boxId)})">${open ? "▾" : "▸"}</span><span>${uiIcon(x.icon)}</span><span>${esc(x.label)}</span></div><div id="${esc(boxId)}" class="inventory-children" role="group"${open ? "" : " hidden"}>${x.kids.map(leaf).join("")}</div>`;
+    return `<div class="inventory-node" role="treeitem" tabindex="0" aria-expanded="${open}" onclick="toggleInventoryGroup(this,${jsStr(boxId)})"><span class="tree-arrow" data-open="${open}" onclick="event.stopPropagation();toggleInventoryGroup(this.closest('.inventory-node'),${jsStr(boxId)})">${open ? "▾" : "▸"}</span><span>${uiIcon(x.icon)}</span><span>${esc(x.label)}</span></div><div id="${esc(boxId)}" class="inventory-children" role="group"${open ? "" : " hidden"}>${x.kids.filter(([page]) => page !== "drivers" || (ME && ME.capabilities && ME.capabilities.drivers)).map(leaf).join("")}</div>`;
   }).join("");
 }
 
@@ -2075,6 +2111,7 @@ async function loadHome() {
   grab("ports", "/ports");
   if (isAdmin()) {
     jobs.push(loadHealth());
+    jobs.push(loadNetDeploy());   // ‏#3029: "הגדרת רשת הפצה…" בסקירה תלוי בזה
     grab("journal", "/journal?limit=50");
     grab("mon", "/monitor/machines");   // ‏#1300: "מחשבים מחוברים" (admin_only)
   }
@@ -2352,7 +2389,7 @@ function homeAttention() {
   }
   for (const c of Array.isArray(HEALTH) ? HEALTH : []) {
     if (c.state !== "warn" && c.state !== "bad") continue;
-    const action = c.id === "deploy_net" ? ["הגדר רשת הפצה", "openNetwork(2)"] : ["לבריאות", "selectPageById('health')"];
+    const action = c.id === "deploy_net" ? (netDeployUnset() ? ["הגדרת רשת הפצה…", "netPickDeploy()"] : ["הגדר רשת הפצה", "openNetwork(2)"]) : ["לבריאות", "selectPageById('health')"];   // ‏#3029: לא הוגדרה = אין לשונית, הכפתור פותח את החלון
     const raw = c.detail && isRawTechnical(c.detail);
     items.push(attnItem(c.state === "bad" ? "err" : "warn", `<b>${esc(c.label)}</b>${c.detail && !raw ? " — " + esc(c.detail) : ""}.`, action, raw ? c.detail : ""));
   }
@@ -4721,6 +4758,9 @@ function rowFailure(m, r, fails) {
   return fails.find((f) => (r.disk && f.serial && f.serial === r.disk.serial)
     || (f.mac === m.mac && f.port != null && r.key === `sata:${Number(f.port)}`)) || null;
 }
+/* #3008 (נדב 12/11, נוסח 23/11): כבל/חריץ שייך לחיבור ולא לדיסק — "נכשל בשיכפול הקודם" רק לדיסק (serial).
+   השם הוא מה שהמפעיל הגדיר בשרת (שם החיבור, אחרת "דיסק N" של המגירה הממופה); בלי שם — "הדיסק", בלי מספר מנוחש. */
+function cableDrawerText(name) { return `חיבור של ${name || "הדיסק"} לא תקין`; }
 function failureCauseText(f) {
   const cause = FAILURE_CAUSE_HE[f.cause] || f.cause || "";
   if (f.cause === "cable" && f.port != null) return `${cause} SATA ${f.port - 1}`;
@@ -5214,7 +5254,9 @@ function roomRoundWaits(h) {
 function roomRoundResult(h) {
   if (h.state === "failed") return UI.pill("err", "נכשל") + `<span class="sub">${esc(h.failed_reason || "סיבה לא ידועה")}</span>`;
   if (h.target_drives > 0 && h.written_drives >= h.target_drives) return UI.pill("ok", "הצליח");
-  return UI.pill("warn", `${h.written_drives} מתוך ${h.target_drives}`);
+  /* ‏#980 §3: ‏stopped_by (מ-journal `room_close`) — "" = נעצר ולא נרשם מי; null/חסר = לא נעצר ב"עצור סבב". */
+  const stop = h.stopped_by == null ? "" : `<span class="sub">${esc(h.stopped_by ? `נעצר ידנית על ידי ${h.stopped_by}` : "נעצר ידנית")}</span>`;
+  return UI.pill("warn", `${h.written_drives} מתוך ${h.target_drives}`) + stop;
 }
 // #989: מספר הגלים שהיו — waits.waves; null = לא נמדד
 function roomHistoryHtml() {
@@ -5562,7 +5604,7 @@ function diskTitle(m, s, d) {
   if (!d) return `דיסק ${s.n} · ${rowConn(s)} · ${m.disks == null ? "לא דווח" : "ריק"}`;
   /* ‏#704: מלבן עם שם — ה-tooltip פותח ב"דיסק N", כדי שהמספר לא ייעלם. */
   const parts = [s.n != null && slotName(m, s.n, d) ? `דיסק ${s.n}` : "", s.n != null ? rowConn(s) : `${rowConn(s)} — לא ממופה לאף דיסק`, d.set_text || "", d.model || "", d.serial || ""].filter(Boolean);   // #1857: "קוריאים · xx-7" -- איזה דיסק לשלוף
-  if (s.fail) parts.push(`נכשל בשיכפול הקודם ${fmtDate(s.fail.at)} · ${failureCauseText(s.fail)}`);   // #1580: orange
+  if (s.fail) parts.push(s.fail.cause === "cable" ? cableDrawerText(s.n != null ? slotLabel(m, s.n, d) : slotName(m, null, d)) : `נכשל בשיכפול הקודם ${fmtDate(s.fail.at)} · ${failureCauseText(s.fail)}`);   // #3008   // #1580: orange
   else if (drawerPulled(d)) parts.push(PULLED_HE);   // #3209
   else if (d.state === "failed") parts.push(`נכשל בסבב${d.error ? " — " + d.error : ""}`);
   if (s.live && d.state && d.state !== "failed") parts.push(DRAWER_STATE_HE[d.state] || d.state);
@@ -5790,7 +5832,12 @@ function clonerGridCard(g, kids) {
 /* מחשב "לא דיווח": אין hello מעל 10 דקות (‏/net.last_seen), או שלא נראה מעולם. ‏/net לא נקרא = לא נבדק. */
 function silentMachines(kids) {
   if (!NET) return null;
-  return kids.filter((m) => { const n = netFor(m.mac); return !n || !n.last_seen || Date.now() - new Date(n.last_seen).getTime() > 10 * 60000; });
+  // #2896: מחשב שהמוניטור רואה מחובר (אותו מקור כמו "N מחוברים" בכותרת) דיווח — גם אם last_seen ב-/net ישן
+  // (מחשב שעומד בגואי "מחכה ללחיצה" לא מחדש hello). מוניטור שלא נקרא = לא נבדק, ואז נשאר רק /net.
+  return kids.filter((m) => {
+    if (MONITOR_ROWS && (monitorRow(m.mac) || {}).online) return false;
+    const n = netFor(m.mac); return !n || !n.last_seen || Date.now() - new Date(n.last_seen).getTime() > 10 * 60000;
+  });
 }
 function silentCard(kids) {
   const admin = isAdmin(), silent = silentMachines(kids);
@@ -6100,7 +6147,7 @@ function diskBoxesHtml(m) {
     const smart = smartText(d);   // #1859: one wording ("SMART SMART אזהרה" was the old warn), with why
     const mark = inc ? ` · ${WRITE_MARK_HE}` : d.write_mark === "unchecked" ? " · לא נבדק אם הכתיבה האחרונה הושלמה" : "";
     const setTag = d.set_text ? UI.pill("info", d.set_text) : "";   // #1857 (מוקאפ 04): הסט והמדבקה ליד הדיסק; בלי סט -- כמו היום
-    return `<div class="disk ${cls}"><b>${esc(slotLabel(m, n, d))}</b>${setTag}<span>SATA ${n - 1}</span><span>${ltr(marketedDiskSize(d.size_bytes))}</span><span class="cap">${esc(d.model || "—")}${d.serial ? ` · <span class="mono">${esc(d.serial)}</span>` : ""}</span><span class="cap">${red && d.smart !== "fail" ? `נכשל בשיכפול הקודם — ${esc(failureCauseText(red))}` : esc(smart)}${esc(mark)}</span></div>`;
+    return `<div class="disk ${cls}"><b>${esc(slotLabel(m, n, d))}</b>${setTag}<span>SATA ${n - 1}</span><span>${ltr(marketedDiskSize(d.size_bytes))}</span><span class="cap">${esc(d.model || "—")}${d.serial ? ` · <span class="mono">${esc(d.serial)}</span>` : ""}</span><span class="cap">${red && d.smart !== "fail" ? (red.cause === "cable" ? esc(cableDrawerText(slotLabel(m, n, d))) : `נכשל בשיכפול הקודם — ${esc(failureCauseText(red))}`) : esc(smart)}${esc(mark)}</span></div>`;
   }).join("");
   return `<div class="disks">${boxes}</div>`;
 }
@@ -6485,7 +6532,7 @@ function openMachineDetail(mac, tab = "") {
   loadMachineData(m.mac, () => { if (gen === drawerGeneration) setDrawerBody(machineDrawerHtml(m)); });
   loadFirmware(m.mac, () => { if (gen === drawerGeneration) setDrawerBody(machineDrawerHtml(m)); });   // ‏#2080
   if (MCH.history[m.mac]) return;
-  api("/journal?machine=" + encodeURIComponent(machineName(m) || m.mac) + "&limit=20")
+  api("/journal?machine=" + encodeURIComponent(m.mac) + "&limit=20")   // #2944: לפי MAC — היעד המבני, לא תת-מחרוזת של שם
     .then((rows) => { MCH.history[m.mac] = rows; })
     .catch((e) => { MCH.history[m.mac] = { error: e.message }; })
     .then(() => { if (gen === drawerGeneration) setDrawerBody(machineDrawerHtml(m)); });
@@ -6545,6 +6592,7 @@ function smartPill(d, fail) {
   const chip = (cls, text) => `<span class="n-chip${cls ? " " + cls : ""}">${esc(text)}</span>`;
   if (d.smart === "fail") return chip("d", d.smart_reason === "readonly" ? "קריאה בלבד" : "SMART תקול");     // #1580: red, never written; #1742
   if (d.write_mark === "incomplete") return chip("y", WRITE_MARK_HE);   // #1798: not a source; a target -- #2848: yellow
+  if (fail && fail.cause === "cable") return chip("y", "חיבור לא תקין");   // #3008: the connection's mark
   if ((fail && fail.cause !== "readonly") || d.smart === "failed_last") return chip("y", "נכשל בשיכפול הקודם");   // #2848: yellow
   if (fail) return chip("d", "קריאה בלבד");   // #1742: a read-only record is red
   if (d.smart === "ok") return "";   // #1375 (נדב 07/11): תג רק כשיש בעיה — "תקין" קבוע הוא רעש; ראיה חיובית (smart==="ok") = שקט
@@ -6974,7 +7022,9 @@ const HEALTH_GROUPS = [["agent_loop:", "לולאות אתחול", "agent_loops"]
   ["storage_", "אחסון — מיקומים", "storage_summary"]];   // ‏#1066: שורה לכל מיקום (storage_<id>), בלי שורת סיכום → קבוצה בסוף
 /* עמודת "פעולה": לאן הולכים לטפל — הדף שבו יושב מה שנבדק. אין ב-/health שדה
    "איך מתקנים"; ה-detail של השרת כבר נושא את ההוראה ("הריצו את המתקין"). */
-const HEALTH_GOTO = { deploy_net: ["רשת הפצה", "openNetwork(2)"], dhcp_port: ["רשת הפצה", "openNetwork(2)"], tftp_port: ["שירותים", "selectPageById('ports')"], dnsmasq: ["רשת הפצה", "openNetwork(2)"],
+/* ‏#3029: "רשת הפצה" שלא הוגדרה — אין לה לשונית, ויעד שאמור היה להגיע אליה פותח את חלון ההגדרה. */
+const deployGoto = () => (netDeployUnset() ? ["הגדרת רשת הפצה", "netPickDeploy()"] : ["רשת הפצה", "openNetwork(2)"]);
+const HEALTH_GOTO = { get deploy_net() { return deployGoto(); }, get dhcp_port() { return deployGoto(); }, tftp_port: ["שירותים", "selectPageById('ports')"], get dnsmasq() { return deployGoto(); },
   server: ["שירותים", "selectPageById('ports')"], chunk_sender: ["שירותים", "selectPageById('ports')"], nics: ["חיבורים פיזיים", "openNetwork(1)"],
   agent_loops: ["מחשבים", "machines"], off_vlan: ["מחשבים", "machines"] };
 let healthError = "", HEALTH_AT = "";
@@ -7708,7 +7758,7 @@ function urlHost(u) { const m = String(u || "").match(/^[a-z]+:\/\/\[?([^\]/:]+)
    ‏#1039: ‏bind null = טבלת הסוקטים לא נקראה ≠ [] = נקראה ואף אחד לא מאזין. שורה אחת שלא נקראה = לא ידוע (עיקרון 5). */
 function netBindUnread() { return Array.isArray(NETW.ports) && NETW.ports.some((p) => p.bind === null); }
 function netAllowedUnknown() { return netBindUnread() ? "מה מותר — טבלת הסוקטים לא נקראה" : "מה מותר — דורש API (#705)"; }
-function netServicesOn(n) {
+function netServicesOn(n, specificOnly) {
   const ports = NETW.ports;
   // ‏bind בשרת: רשימת "כתובת[/bits][:port]" (ריקה = נקראה ואף אחד לא מאזין), null = לא נקרא, או מחרוזת (שרת ישן).
   const bindsOf = (p) => (Array.isArray(p.bind) ? p.bind : p.bind ? [p.bind] : []).map((b) => String(b).replace(/:\d+$/, "").replace(/\/\d+$/, ""));
@@ -7717,7 +7767,7 @@ function netServicesOn(n) {
   const out = [];
   for (const p of ports) {
     const binds = bindsOf(p);
-    if (binds.some((b) => b === "0.0.0.0" || b === "::" || b === "[::]" || b === "*" || ips.includes(b))) out.push(`${p.name} ${p.port}`);
+    if (binds.some((b) => (!specificOnly && (b === "0.0.0.0" || b === "::" || b === "[::]" || b === "*")) || ips.includes(b))) out.push(`${p.name} ${p.port}`);
   }
   return out;
 }
@@ -7725,7 +7775,9 @@ function netServicesOn(n) {
    מודל האתרים (נדב 18/09): לכל אתר שלושה וילנים — שרתים / הפצה / כיתות. אין וילן "ניהול" נפרד: הקונסולה, הערוץ
    הבין-שרתי (7700) ו-DHCP המשרדים כולם על וילן השרתים; כרטיס שנושא רק 7700 הוא עדיין וילן השרתים. */
 function netVlanOf(n) {
-  const svc = netServicesOn(n) || [];
+  // #2899: bind על 0.0.0.0 תופס כל כרטיס — הוא לא הופך כרטיס "לא מוגדר" לוילן שרתים. רק כרטיס הניהול שנבחר, או כרטיס
+  // שהשירות קשור לכתובת שלו במפורש, נחשב לפי שירותים.
+  const svc = (isMgmtNic(n.name) ? netServicesOn(n) : netServicesOn(n, true)) || [];
   if (n.enabled) return { kind: "deploy", label: "וילן ההפצה" };
   if (n.proxy) return { kind: "proxy", label: "PXE proxy — DHCP של רשת אחרת" };
   if (n.trunk) return { kind: "trunk", label: "רשת המכללה (trunk)" };
@@ -7953,9 +8005,11 @@ function netMapSvg(model) {
       + `<rect class="nm-chip${cls}" x="${cx - (BW - 40) / 2}" y="266" width="${BW - 40}" height="20" rx="10"/>`
       + T(cx, 280, "nm-c" + cls, clipText(chip, Math.floor((BW - 50) / 6.5))) + `</g>`;
   });
-  const sub = n ? `מחובר ל-${n} וילנים` : "אין כרטיס מוגדר";
+  // #2899: וילן = רשת (subnet) ייחודית, לא כרטיס — שני כרטיסים על אותה רשת הם וילן אחד.
+  const nets = new Set(lanes.map((l, i) => netNetworkOf(l.nic) || `#${i}`)).size;
+  const sub = n ? `מחובר ל-${nets} ${nets === 1 ? "וילן" : "וילנים"}` : "אין כרטיס מוגדר";
   // ‏gotcha (CLAUDE.md): SVG עם viewBox בלבד קורס ל-0 תחת max-height — width/height מפורשים.
-  return `<svg class="netmap-svg" xmlns="http://www.w3.org/2000/svg" width="${W}" height="340" viewBox="0 0 ${W} 340" role="img" aria-label="תרשים הרשת: השרת ו-${n} וילנים">`
+  return `<svg class="netmap-svg" xmlns="http://www.w3.org/2000/svg" width="${W}" height="340" viewBox="0 0 ${W} 340" role="img" aria-label="תרשים הרשת: השרת ו-${nets} ${nets === 1 ? "וילן" : "וילנים"}">`
     + `<rect class="nm-srv" x="${sx}" y="14" width="${SW}" height="80" rx="9"/>${T(W / 2, 46, "nm-st", srv)}${T(W / 2, 68, "nm-m", `${ME && ME.version ? ME.version + " · " : ""}${sub}`)}`
     + `${wires}${ports}${boxes}${T(W / 2, 326, "nm-m", "לחיצה על וילן פותחת פרטים ורשימת מחשבים")}</svg>`;
 }
@@ -7989,7 +8043,7 @@ function netUnreadNotes() {
   const e = NETW.err, out = [];
   const T = UI.noteTech;
   // ‏#1088: אחרי התקנה נקייה — מה שהמנהל צריך לעשות, לפני כל אזהרה אחרת.
-  if (NET_DEPLOY && NET_DEPLOY.configured === false) out.push(UI.note("warn", `${esc(NET_DEPLOY.hint || "רשת ההפצה לא הוגדרה")} — <a href="#" onclick="openNetwork(2);return false;">לשונית רשת הפצה</a>`));
+  if (NET_DEPLOY && NET_DEPLOY.configured === false) out.push(UI.note("warn", `<b>רשת ההפצה לא הוגדרה.</b> אי אפשר להפיץ אימג'ים עד שבוחרים כרטיס שיחלק כתובות למחשבי השיכפול והבנייה.<br><br><button class="btn primary sm" onclick="netPickDeploy()">הגדרת רשת הפצה…</button>`));
   else if (e.deploy) out.push(T("warn", "‏/net/deploy לא נקרא", e.deploy, " — לא ידוע אם רשת ההפצה הוגדרה"));
   if (e.config) out.push(T("warn", "‏/net/config לא נקרא", e.config, ' — "מוגדר" ו"פער" אינם ידועים'));
   else if (NETCFG && NETCFG.live && !NETCFG.live.checked) out.push(T("warn", "המצב בפועל לא נקרא", NETCFG.live.reason || "", " — אף כתובת אינה מאומתת"));
@@ -8004,6 +8058,20 @@ function netUnreadNotes() {
   return (rb ? `<div class="c12">${rb}</div>` : "") + out.map((h) => `<div class="c12">${h}</div>`).join("");
 }
 const NET_TABS = ["תרשים", "חיבורים פיזיים", "רשת הפצה"];   // ‏#3887: "שירותים" הוא דף משלו בעץ, תחת "רשת"
+/* ‏#3029 (מוקאפ m3029-v2): "רשת הפצה" היא לשונית אחרונה, ומופיעה רק אחרי שהוגדרה. הראיה היא /net/deploy עם
+   configured=false; לא נקרא (null) אינו "לא הוגדרה" — הלשונית נשארת (עיקרון 5). לא מסתירים אותה בתצוגה הבסיסית. */
+function netDeployUnset() { return !!NET_DEPLOY && NET_DEPLOY.configured === false; }
+function netTabs() { return netDeployUnset() ? NET_TABS.slice(0, 2) : NET_TABS; }
+function syncNetDeployNode() {
+  const off = netDeployUnset();
+  document.querySelectorAll('#netTA .inventory-node[data-net-tab="2"]').forEach((el) => { el.hidden = off; });
+  if (off && current === "network" && currentTab === 2) activateTab(1);
+}
+async function loadNetDeploy() {
+  try { const d = await api("/net/deploy"); if (d && typeof d === "object") NET_DEPLOY = d; } catch (e) { /* לא נקרא: הלשונית נשארת */ }
+  syncNetDeployNode();
+  if (current === "home") renderCurrent();
+}
 function netTabClick(i) { return `openNetwork(${i})`; }
 /* ‏#1300 (console-full.html P.network): כותרת אחת לארבע הלשוניות — "רשת", פיל DHCP, ומשנה = הרשתות
    (ניהול · הפצה) כפי שנמדדו. הפעולות של כל לשונית יושבות בכרטיסים שלה; בכותרת רק רענון.
@@ -8023,7 +8091,7 @@ function netCommonHead() {
 function netHeader(tab) {
   const crumbs = [{ label: "שרת אימג'ים", onclick: "selectPageById('home')" }, { label: "תשתית" }, { label: "רשת" }];
   const { sub, pill } = netCommonHead();
-  return UI.objHeader({ crumbs, icon: "t-network", name: "רשת", sub, pill, actions: `<button class="btn" onclick="refreshPage()">${uiIcon("refresh")} רענון</button>`, tabs: NET_TABS, tab, tabClick: netTabClick, compact: true });
+  return UI.objHeader({ crumbs, icon: "t-network", name: "רשת", sub, pill, actions: `<button class="btn" onclick="refreshPage()">${uiIcon("refresh")} רענון</button>`, tabs: netTabs(), tab, tabClick: netTabClick, compact: true });
 }
 
 /* --- לשונית 0: התרשים --- */
@@ -8205,7 +8273,10 @@ function deployDefaultNic(candidates) {
   if (!via && !(NETCFG && NETCFG.management_interface)) return null;
   return candidates.find((n) => n.name !== via) || null;
 }
-function netPickDeploy() {
+async function netPickDeploy() {
+  // ‏#3029: נקרא גם מסקירה/בריאות, לפני שדף הרשת נטען — הכרטיסים והכרטיס של הקונסולה נקראים כאן.
+  if (NETW.nics === null) { try { await loadNetwork(); } catch (e) { toast("קריאת כרטיסי הרשת נכשלה: " + e.message); return; } }
+  if (NETW.nics === null || !deployCandidates().length) { toast("אין כרטיס שאפשר להגדיר כרשת הפצה — כרטיסי הרשת לא נקראו או שאין כרטיס פנוי"); return; }
   const via = NETCFG && NETCFG.console_interface;
   sheet({ title: "הגדר כרשת הפצה", sub: "על איזה כרטיס ירוץ ה-DHCP למחשבי השיכפול והבנייה", submitLabel: "המשך",
     fields: [{ id: "nic", label: "כרטיס", type: "select", value: "",
@@ -8262,7 +8333,8 @@ function networkDeployTab() {
 function networkPage(tab = 0) {
   if (NETW.nics === null && !Object.keys(NETW.err).length) return pagePlaceholder();
   if (tab === 1) return networkNicsTab();
-  if (tab === 2) return networkDeployTab();
+  if (tab === 2 && !netDeployUnset()) return networkDeployTab();
+  if (tab === 2) return networkNicsTab();
   return networkDiagramTab();
 }
 
@@ -8270,13 +8342,15 @@ function networkPage(tab = 0) {
 function openNetwork(tab = 0, nicEnc = null, el = null) {
   if (nicEnc) { let name = nicEnc; try { name = decodeURIComponent(nicEnc); } catch (e) {} NETW.sel = name; }
   if (!pageAllowed("network")) return;
-  const t = Number(tab) || 0;
+  let t = Number(tab) || 0;
+  if (t === 2 && netDeployUnset()) t = 1;   // ‏#3029: אין לשונית — ההודעה והכפתור בראש "חיבורים פיזיים"
   if (current !== "network") selectPage(el || document.querySelector('.inventory-node[data-page="network"]'), "network");
   else if (el) markTreeSelection(el, "network");
   if (t !== currentTab) activateTab(t); else renderCurrent();
   closeSidebar();   // ‏#1300: גם כשכבר בדף הרשת — בחירת לשונית/כרטיס מהעץ נכנסת אליו
 }
 function populateSidebarNics() {
+  syncNetDeployNode();
   const treeId = sideId("nicTree");
   const tree = document.getElementById(treeId);
   if (!tree) return;
@@ -9397,7 +9471,7 @@ const pages = {
   machines: { crumb: "מחשבים", title: "מחשבים", tabs: ["כל המחשבים", "נראו ברשת", "דיסקים אדומים"], render: machines, load: loadMachines, own: true },
   health: { crumb: "בריאות ושירותים", title: "בריאות ושירותים", tabs: [], render: health, load: loadHealth, own: true },   // ‏#954 גל 5: בלי לשוניות — בדיקות + עדכון
   // ‏#954 גל 8: רשת כאובייקט — תרשים · חיבורים פיזיים · רשת הפצה · פורטים (=pages.ports). deploy: לא מוצג (pageAllowed).
-  network: { crumb: "רשת", title: "רשת", tabs: NET_TABS, render: (i) => networkPage(i), load: loadNetwork, own: true },
+  network: { crumb: "רשת", title: "רשת", get tabs() { return netTabs(); }, render: (i) => networkPage(i), load: loadNetwork, own: true },
   account: { crumb: "החשבון שלי", title: "החשבון שלי", tabs: [], render: account, load: async () => {}, own: true },
   permissions: { crumb: "משתמשים והרשאות", title: "משתמשים והרשאות", tabs: [], render: permissions, load: loadUsersData, own: true },   // ‏#954 גל 6: טבלה אחת + מטריצה
   logs: { crumb: "יומן", title: "יומן", tabs: [], render: logs, load: loadJournalData, own: true },   // ‏#954 גל 6: יומן אחד עם סינון בדף
@@ -9499,6 +9573,7 @@ function selectPage(el, id) {
     el = document.querySelector(`[data-branch-node="${CSS.escape(SERVER_CTX)}"][data-branch-page="${id}"]`)
       || document.querySelector(`[data-secondary="${CSS.escape(SERVER_CTX)}"]`);
   }
+  if (id === "drivers" && !driversOn()) { selectPageById("home"); return; }   // #2554: לא דף ריק
   if (!pageAllowed(id)) return;
   markTreeSelection(el, id);
   const page = pages[id];
@@ -11149,11 +11224,14 @@ async function wakeGroup(gidEnc) {
 wakeGroup = guarded("wakeGroup", wakeGroup);   // ‏#2840: לחיצה כפולה = בקשה אחת
 
 function isAdmin() { return !!ME && ME.role === "admin"; }
+/* #2554: דרייברים — עד שהם עובדים (#720/#1331) הלשונית והבלוק בחלון הסבב מוסתרים. ME.capabilities.drivers מדליק. */
+function driversOn() { return !!(ME && ME.capabilities && ME.capabilities.drivers); }
 function pageAllowed(id) {
   if (!ME) return false;
   // 16/10: גם בלי שרת משנה — ראשי/עצמאי (enroll_secondary) צריך את הדף כדי לרשום את **הראשון**
   if (id === "branches") return isAdmin() && !!(ME.capabilities?.interbranch_transfer || ME.capabilities?.enroll_secondary);
   if (id === "tools") return isAdmin() && toolsOn();   // v1 בלי ארגז הכלים; v1.1 מדליק
+  if (id === "drivers") return isAdmin() && driversOn();
   return ["home", "images", "deploy"].includes(id) || isAdmin();
 }
 function wireRestoredPage() {

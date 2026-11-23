@@ -27,6 +27,7 @@ from server.console import auth, viewer_sessions
 from server.agent import registry
 from server.agent.api import ServerContext
 from server.db import get_setting, journal, monitor_rekeyed, set_setting
+from server.system import clockstep
 
 log = logging.getLogger("imagesrv.monitor")
 
@@ -416,6 +417,14 @@ def next_secret(secret: str, challenge: bytes) -> str:
                     hashlib.sha256).digest()[:HMAC_RESPONSE_LEN].hex()
 
 
+def guarded_rows(ctx: ServerContext, now: datetime | None = None) -> list[dict]:
+    """#3770: ``machine_rows`` אחרי שגלאי קפיצת השעון (#1947) כייל את
+    ``last_seen`` — אחרת קפיצה קדימה מציגה מכונה חיה כמנותקת, וקפיצה אחורה
+    מציגה מכונה שותקת כמחוברת, עד שמישהו אחר מפעיל את הגלאי."""
+    clockstep.guard(ctx.conn, ctx.store, datetime.now(timezone.utc))   # השעון האמיתי, לא `now` מוזרק
+    return machine_rows(ctx.conn, now)
+
+
 def _never_said_hello(ctx: ServerContext, mac: str) -> bool:
     """#3020: the row exists and no agent hello was ever taken (`agent_version` empty). A read that
     failed, or no row, is not evidence -- the caller keeps the old-agent sentence."""
@@ -437,6 +446,7 @@ def _target(ctx: ServerContext, mac: str,
     if canonical is None:
         raise HTTPException(404, "מכונה לא מוכרת")
 
+    clockstep.guard(ctx.conn, ctx.store, datetime.now(timezone.utc))   # #3770: השעון האמיתי, לא `now` מוזרק
     row = ctx.conn.execute(
         "SELECT d.ip, d.last_seen, d.progress_seen, d.monitor_secret, d.monitor_auth, g.role "
         "FROM machines m "
@@ -861,7 +871,7 @@ def create_monitor_router(
         ואותו חלון-נוכחות של ``_target``, כדי ש"מחובר" בדף יהיה מה
         שהשרת יסכים לחבר אליו, ולא חישוב בדפדפן."""
         del user
-        return machine_rows(ctx.conn, now_fn() if now_fn else None)
+        return guarded_rows(ctx, now_fn() if now_fn else None)
 
     @router.put("/monitor/settings")
     def set_settings(body: dict, user=Depends(admin_only)):
