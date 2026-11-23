@@ -222,3 +222,15 @@ def test_the_machine_filter_finds_a_line_by_its_target_not_only_its_text(server)
     assert r.status_code == 200, r.text
     got = sorted((row["event"], row["machine"]) for row in r.json())
     assert got == [("agent_loop", None), ("gui_failed", MAC)]
+
+
+def test_a_line_with_a_target_is_not_matched_by_text_for_another_machine_2944(server):
+    """#2944: "מוניטור לא נפתח — HP-BUILD-2" נרשמה על מכונה אחת והופיעה בהיסטוריה של אחרת. שורה עם יעד מבני
+    נמצאת רק אצל היעד שלה, גם כשה-MAC של השואלת מופיע כתת-מחרוזת בטקסט."""
+    conn = server["ctx"].conn
+    other = "aa:bb:cc:00:00:09"
+    journal(conn, "monitor_refused", f"{other} 409 no bridge (near {MAC})", machine=other)
+    journal(conn, "agent_loop", MAC, machine=MAC)
+    r = server["admin"].get("/api/console/journal", params={"machine": MAC})
+    assert r.status_code == 200, r.text
+    assert [(row["event"], row["machine"]) for row in r.json()] == [("agent_loop", MAC)]

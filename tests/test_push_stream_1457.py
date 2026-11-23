@@ -35,6 +35,7 @@ IMAGE = MANIFEST_256["id"]
 class _Ctx:
     def __init__(self, library):
         self.conn = None
+        self.store = type("_Store", (), {})()   # #3770: clockstep.guard keys a weak-ref detector by the room store
         self.library = library
 
 

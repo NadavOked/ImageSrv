@@ -32,6 +32,7 @@ pytestmark = pytest.mark.skipif(
 class _Ctx:
     def __init__(self, conn, data_dir):
         self.conn = conn
+        self.store = type("_Store", (), {})()   # #3770: clockstep.guard keys a weak-ref detector by the room store
         self.data_dir = data_dir
 
 
@@ -277,6 +278,7 @@ def test_live_changed_primary_key_is_named_in_the_response_body(secondary, prima
     with other:
         status, _, body = other._request("GET", "/ping", headers={
             "Authorization": f"Bearer {token}"})
+    with other:     # #3084: 401 סוגר את החיבור -- הבקשה השנייה היא חיבור חדש, לא אותו חיבור
         with pytest.raises(storage_client.InterserverClientError) as exc:
             other.ping(token)
     assert status == 401
