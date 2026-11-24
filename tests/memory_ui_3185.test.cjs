@@ -373,7 +373,7 @@ test('the console still loads in the order index.html gives, with memory_ui.js a
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const at = (n) => html.indexOf(`src="${n}?v=`);
   assert.ok(at('console.js') > 0 && at('disks.js') > at('console.js') && at('memory_ui.js') > at('disks.js'));
-  assert.equal(new Set([...html.matchAll(/\?v=(\d+\.\d+)"/g)].map((m) => m[1])).size, 1, 'one ?v= for every include');
+  assert.equal(new Set([...html.matchAll(/\?v=([^"]+)"/g)].map((m) => m[1])).size, 1, 'one ?v= for every include');
 });
 
 test('#3173: a chunk wave says its loss in chunks (lost_chunks) under "חתיכות שאבדו"; the old sender\'s blocks win where a row has them', () => {

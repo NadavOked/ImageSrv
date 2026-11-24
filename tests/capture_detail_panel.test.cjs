@@ -132,5 +132,5 @@ test('#1505: index.html loads the panel after console.js, with the same ?v= as e
   const page=fs.readFileSync(path.join(root,'index.html'),'utf8');
   const at=(n)=>page.indexOf(`<script src="${n}?v=`);
   assert.ok(at('capture_detail.js')>at('console.js')&&at('console.js')>0);
-  assert.equal(new Set(page.match(/\?v=[\d.]+"/g)).size,1);
+  assert.equal(new Set(page.match(/\?v=[^"]+"/g)).size,1);
 });

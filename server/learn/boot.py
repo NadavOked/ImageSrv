@@ -134,10 +134,29 @@ def version_compare(conn: sqlite3.Connection) -> dict | None:
     return {"now": now_v, "before": before_v, "steps": steps}
 
 
+#: מה שהמפעיל רואה. עברית, כי זו הקונסולה; הצד של GRUB נשאר ASCII.
+STEP_LABELS: dict[str, str] = {
+    "menu": "תפריט האתחול נמסר",
+    "entry": "GRUB נכנס לערך ImageSrv",
+    "http-ok": "מודול ה-HTTP נטען",
+    "pre-linux": "לפני משיכת הקרנל",
+    "pre-initrd": "הקרנל נטען",
+    "pre-boot": "ה-initramfs נטען",
+    "agent-net": "הרשת עלתה ב-initramfs",
+    "agent-start": "הסוכן התחיל",
+    "agent-hello": "לפני ה-hello הראשון",
+    # #416: ענף הדיסק המקומי. אינו המשך של הרשימה — הסתעפות ממנה.
+    "local-entry": "GRUB נכנס לערך הדיסק המקומי",
+    "local-search-ok": "נמצא מטען אתחול על הדיסק המקומי",
+    "local-search-empty": "יש דיסק, ולא נמצאה עליו מערכת",
+    "local-no-disk": "GRUB אינו רואה דיסק כלל",
+    "local-chain-refused": "מטען האתחול נמצא ונדחה",
+}
+
+
 def health_checks(conn: sqlite3.Connection) -> list[dict]:
     """שורה כתומה לכל מכונה שהמעבר האחרון באחד השלבים שלה ארך פי 2 מהבסיס,
     ושורת לפני/אחרי עדכון. בלי מדידות — אין שורה."""
-    from server.agent.boottrace import STEP_LABELS          # noqa: PLC0415 — boottrace מייבא אותנו
     try:
         pairs = conn.execute("SELECT DISTINCT mac, step FROM boot_step_times"
                              " ORDER BY mac, step").fetchall()

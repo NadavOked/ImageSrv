@@ -135,12 +135,12 @@ def test_visibility_matrix(server, clients, row):
 @pytest.mark.parametrize(("server_role", "user_role", "caps"), [
     ("standalone", "admin",
      {"interbranch_transfer": True, "enroll_secondary": True, "open_local_pairing": False,
-      "classrooms": False, "tools": False}),
+      "classrooms": False, "tools": False, "drivers": False}),
     # #1073: ל-deploy אין `/me` בכלל — הקונסולה סגורה בפניו (403).
     ("standalone", "deploy", None),
     ("secondary", "admin",
      {"interbranch_transfer": False, "enroll_secondary": False, "open_local_pairing": True,
-      "classrooms": False, "tools": False}),
+      "classrooms": False, "tools": False, "drivers": False}),
     ("secondary", "deploy", None),
 ])
 def test_me_capabilities_follow_the_same_table(server, clients, server_role, user_role, caps):
@@ -199,3 +199,21 @@ def test_index_html_gates_the_tools_tree_node_behind_data_cap():
     from pathlib import Path
     page = (Path(__file__).resolve().parent.parent / "server" / "static" / "index.html").read_text(encoding="utf-8")
     assert 'class="inventory-node hidden" data-page="tools" data-admin data-cap="tools"' in page
+
+
+# --- #2554: לשונית הדרייברים מוסתרת עד שהם עובדים (הכרעת נדב 06/11) -----------------
+
+def test_drivers_capability_is_off_and_turning_it_on_shows_in_me(server, clients, monkeypatch):
+    """קבוע בקוד ולא הגדרה למפעיל. הדגל הוא מה שהקונסולה קוראת; ה-API נשאר (לא מוחקים)."""
+    from server.core import capabilities
+    assert capabilities.DRIVERS is False and capabilities.drivers() is False
+    assert clients["admin"].get("/api/console/me").json()["capabilities"]["drivers"] is False
+    monkeypatch.setattr(capabilities, "DRIVERS", True)
+    assert clients["admin"].get("/api/console/me").json()["capabilities"]["drivers"] is True
+
+
+def test_index_html_gates_the_drivers_tree_node_behind_data_cap():
+    from pathlib import Path
+    page = (Path(__file__).resolve().parent.parent / "server" / "static" / "index.html").read_text(encoding="utf-8")
+    node = page[page.index('data-page="drivers"') - 40:page.index('data-page="drivers"') + 80]
+    assert 'class="inventory-node hidden"' in node and 'data-cap="drivers"' in node, node

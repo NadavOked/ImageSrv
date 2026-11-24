@@ -13,7 +13,7 @@ import sqlite3
 from server.agent import bootguard
 from server.disks import disk_events
 from server.learn import eta as learn_eta
-from server.rounds.sessions import MULTICAST
+from server.rounds.session_kinds import MULTICAST
 
 
 def label(session: sqlite3.Row, library) -> str:

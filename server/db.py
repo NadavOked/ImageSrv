@@ -2179,6 +2179,11 @@ def _settle(conn) -> None:
 NET_SEEN_MIN_INTERVAL_SECONDS = 15
 
 
+#: #1888: IP-history rows kept per machine (`net_seen` prunes to this; #2531: it lives here, not in
+#: `learn.net_history`, which imports this module).
+KEEP_IPS = 50
+
+
 def _net_seen_unchanged(row: sqlite3.Row, ip: str | None,
                         disks_json: str | None, now: datetime,
                         monitor_secret: str | None = None,
@@ -2332,7 +2337,6 @@ def net_seen(
         # #1888: היסטוריית IP — שורה רק כשה-IP השתנה (או ראשון), באותה טרנזאקציה.
         moved = ip is not None and (row is None or ip != row["ip"])
         if moved:
-            from server.learn.net_history import KEEP_IPS   # noqa: PLC0415 — net_history מייבא את db
             conn.execute("INSERT INTO ip_history (mac, ip, previous, at) VALUES (?, ?, ?, ?)",
                          (mac, ip, row["ip"] if row is not None else None, ts))
             conn.execute("DELETE FROM ip_history WHERE mac = ? AND rowid NOT IN (SELECT rowid"

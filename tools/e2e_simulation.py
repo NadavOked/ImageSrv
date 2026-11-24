@@ -7,6 +7,7 @@
 - כיתה         — v2: פתיחת סבב כיתה נדחית בגלוי, והתחנה ממשיכה לדיסק המקומי (#3173)
 - מחשב שיכפול  — שלוש מגירות, מגירה נכשלת, הגל הבא משלים
 - הפצה ישירה   — מחשב הבנייה משדר מהדיסק שלו לשתי מגירות נבחרות (#715)
+- מגירה מאחרת  — חתיכה שחסרה למגירה מושלמת ב-HTTP, ויומן ההשלמה של השרת (#3546)
 
 כל גל יוצא במנוע החתיכות — ברירת המחדל והמנוע היחיד, בלי שום הגדרת מנוע (#3173). המנוע
 של השרת אמיתי; רק `chunkcast send` שלו מוחלף בשולח מדומה שאינו משדר (`tools/e2e/simsend.py`),
@@ -29,8 +30,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # הפלט בעברית; בלי זה ההרצה נופלת במסופים שאינם UTF-8 (ווינדוס, צינורות).
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-from tools.e2e import (harness, phase_capture, phase_class, phase_direct,  # noqa: E402
-                       phase_edges, phase_journal, phase_room, phase_setup)
+from tools.e2e import (harness, phase_capture, phase_chunk, phase_class,  # noqa: E402
+                       phase_direct, phase_edges, phase_journal, phase_room, phase_setup)
 
 #: כמה בדיקות חייבות לרוץ כדי שהריצה תיחשב ריצה.
 #:
@@ -38,7 +39,7 @@ from tools.e2e import (harness, phase_capture, phase_class, phase_direct,  # noq
 #: שלב שדולג, לולאה שהתרוקנה או פאזה שהוחזרה מוקדם היו מדפיסים "הלולאה
 #: נסגרה" ויוצאים ירוק, כי בדיקה שלא רצה גם לא נכשלת. הרף הופך את זה
 #: לכישלון גלוי. כשמוסיפים בדיקות — מעדכנים כלפי מעלה.
-MIN_CHECKS = 140    # #855: +1 — MAC בלי חכירה מסורב בשם; #2786: +2 — שם מחשב לכל מגירה, בשני הגלים
+MIN_CHECKS = 166    # #3546: +26 — שלב 9ג, מגירה מאחרת (נמדד 171 על tr2, בסיס 145); #855: +1 — MAC בלי חכירה מסורב בשם; #2786: +2 — שם מחשב לכל מגירה, בשני הגלים
 #: #3173: 128 → 140. בבסיס רצו 140 (שלבי הכיתה 6-8: 23, מתוכם 22 על סבבים במנוע הקודם); עכשיו 145 —
 #: שלב 6 (סירוב גלוי) 7, ושלבים 9, 9ב ו-10 קיבלו את הבדיקות של מנוע החתיכות.
 
@@ -66,6 +67,7 @@ def main() -> int:
         phase_class.run(ctx)
         phase_room.run(ctx)
         phase_direct.run(ctx)       # #715: אותו חדר, המקור הוא דיסק מחשב הבנייה
+        phase_chunk.run(ctx)        # #3546: מגירה מאחרת, השלמה ב-HTTP ויומן ההשלמה
         phase_journal.run(ctx)
 
         for machine in [ctx.builder, ctx.cloner, *ctx.stations.values()]:

@@ -110,6 +110,8 @@ function idleWatchContext(postImpl) {
     idleTimer: null,
     idleWarned: false,
     noteActivity: () => {},
+    activeRoundNow: () => false,   // #2874 (#3390): אין סבב פעיל — הניתוק הרגיל הוא מה שנבדק כאן
+    VIEW_ONLY: false, setViewOnly: () => {},
     post: postImpl,
     showLogin: () => { showLoginCalls++; },
     $: (sel) => sel === '#login-error' ? loginError : {textContent: ''},

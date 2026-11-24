@@ -66,6 +66,9 @@ PREDICTS.update({   # #3655 (S37)
 PREDICTS.update({   # #3659 (S10, S11, S12)
     "K-REPAIR": (None, "תוכנית ההשלמה אחרי המעבר (REPAIR_PLAN): multicast או HTTP, מכסה ודיסק איטי; תוכנית ולא חיזוי של מספר (#3659)"),
 })
+PREDICTS.update({   # #3571
+    "K-PLANES": (None, "תקרת שלושת המישורים (PLANE_BIND): המינימום של רשת, אחסון והפצה, או לא הוכרע; לא חיזוי של מספר (#3571)"),
+})
 
 
 def predicts(rule: str) -> tuple[str | None, str] | None:

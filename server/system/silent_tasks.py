@@ -80,6 +80,20 @@ def _last_sign_of_life(row: sqlite3.Row, library_root: Path) -> datetime | None:
     return max(last, datetime.fromtimestamp(newest, timezone.utc))
 
 
+def _drop_staging(conn: sqlite3.Connection, root: Path, row: sqlite3.Row) -> None:
+    """#3695: מחיקת אזור הביניים של קליטה שנכשלה נשארת אוטומטית (CG-S30 בקטלוג, הכרעת נדב 18/11: אין שם מה להציל), אבל
+    כשל במחיקה נרשם ביומן. "לא הצלחנו למחוק" אינו "נמחק" (עיקרון 5). אזור שאינו קיים (עוד לא עלה בייט) אינו כשל."""
+    folder = staging_dir(root, row["id"])
+    try:
+        shutil.rmtree(folder)
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        log.warning("silent capture %s: staging area %s was not deleted: %s", row["id"], folder, exc)
+        journal(conn, "capture_staging_delete_failed",
+                f'{row["id"]} {folder} {type(exc).__name__}: {" ".join(str(exc).split())[:150]}', machine=row["mac"])
+
+
 def sweep(conn: sqlite3.Connection, store, library_root: str | Path, up_since: float,
           now: datetime | None = None) -> list[str]:
     """סוגר כל משימה `running` ששקטה. מחזיר את המזהים שנסגרו.
@@ -118,7 +132,7 @@ def sweep(conn: sqlite3.Connection, store, library_root: str | Path, up_since: f
         silence.settle(conn, rows.get(row["mac"]), "השרת הכשיל את המשימה")
         capture = row["type"] == "capture"
         if capture:                                # #1915: like `capture._fail`
-            shutil.rmtree(staging_dir(root, row["id"]), ignore_errors=True)
+            _drop_staging(conn, root, row)
         journal(conn, "capture_failed" if capture else "direct_failed",
                 f'{row["id"]} {reason}', machine=row["mac"])
         closed.append(row["id"])

@@ -137,7 +137,8 @@ def test_the_file_path_runs_the_decompressor_and_reads_its_exit_code(tmp_path):
     # zstd's own frame check is part of the evidence, so no list (principle 5).
     with pytest.raises(RB.Underived, match="exited 3"):
         RB.digest_file(f, False, cmd=FAIL, new=PY)
-    with pytest.raises(RB.Underived, match="cannot run"):
+    # #3021: our sentence names the binary (not its path) and sends the details to the server log.
+    with pytest.raises(RB.Underived, match="לא ניתן להריץ no-such-decompressor-1805 — הפרטים ביומן השרת"):
         RB.digest_file(f, False, cmd=("no-such-decompressor-1805",), new=PY)
 
 
@@ -316,7 +317,7 @@ def test_the_map_is_read_in_bounded_pieces():
     assert RB.digest_partclone(_Spy(P.image(total, used, 512)), None, PY) == P.expected_list(data)
 
 
-def test_one_image_that_breaks_the_reader_does_not_stop_the_pass(tmp_path):
+def test_one_image_that_breaks_the_reader_does_not_stop_the_pass(tmp_path, caplog):
     _image(tmp_path, "img_1805aa")
     _image(tmp_path, "img_1805bb", both_b=True)
 
@@ -326,7 +327,11 @@ def test_one_image_that_breaks_the_reader_does_not_stop_the_pass(tmp_path):
         return INDEX_B
     tried: dict = {}
     results = {r["image_id"]: r for r in RB.fill(ImageLibrary(tmp_path), digest=digest, tried=tried)}
-    assert results["img_1805aa"]["written"] == {} and results["img_1805aa"]["problems"][0].startswith("MemoryError")
+    # #3021: the operator gets our sentence (failure stays visible), the raw error is in the server log only.
+    problems = results["img_1805aa"]["problems"]
+    assert results["img_1805aa"]["written"] == {} and problems[0].endswith("הפרטים ביומן השרת")
+    assert "MemoryError" not in str(problems) and "asked for everything" not in str(problems)
+    assert "a header that asked for everything" in caplog.text
     assert "img_1805aa" in tried and sorted(results["img_1805bb"]["written"]) == [1, 3]
 
 

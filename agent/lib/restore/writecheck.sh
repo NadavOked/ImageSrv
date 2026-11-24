@@ -8,9 +8,9 @@
 # כותבים WRITECHECK_MIB בשלושה מקומות (התחלה/אמצע/סוף) ישירות לדיסק
 # (‏oflag=direct + ‏conv=fsync), קוראים בחזרה (‏iflag=direct) ומשווים.
 #
-# זו אינה כתיבה "מחוץ לשיכפול" (ההכרעה של 16/09 ב-failmark.sh): הדיסק
-# נבחר, ו-apply_gpt עומד למחוק את אותם מקומות שנייה אחרי. מגירה שלא נבחרה
-# לא מגיעה לכאן — הקוראים מעבירים רק את רשימת הסבב (#1275).
+# זו אינה כתיבה "מחוץ לשיכפול" (ההכרעה של 16/09 ב-failmark.sh): הדיסק נבחר.
+# ‏apply_gpt מוחק רק את טבלת המחיצות, והזרם כותב רק בלוקים בשימוש — לכן הסוכן
+# מאפס בעצמו את הסמנים שכתב (#4031). מגירה שלא נבחרה לא מגיעה לכאן (#1275).
 #
 # שלושה מצבים, כמו שער ה-CA (bootcadb.sh) ושער ה-SMART:
 #   ok        — נכתב, נקרא בחזרה, זהה. ממשיכים.
@@ -109,22 +109,26 @@ _wc_alias() {
     # marker that a higher one overwrote is the wrap itself. Prints a line, 1 = a verdict.
     _wa_o=0; _wa_m=1
     while [ "$_wa_m" -lt "$3" ]; do _wa_o="$_wa_o $((_wa_m * 256))"; _wa_m=$((_wa_m * 2)); done
-    _wa_o="$_wa_o $(($3 * 256 - 1))"; _wa_i=0   # 4KiB blocks
-    for _wa_b in $_wa_o; do
-        _wa_i=$((_wa_i + 1)); [ -s "$2/mk.$_wa_i" ] || head -c 4096 /dev/urandom > "$2/mk.$_wa_i" 2>/dev/null   # #3268: idlecheck made them before the copy left
+    _wa_o="$_wa_o $(($3 * 256 - 1))"   # 4KiB blocks
+    _wa_z=""; _wc_marks "$1" "$2" "$_wa_o" /dev/urandom && { [ -z "${WC_ZERO_MARKS:-}" ] || { rm -f "$2"/mk.* && _wa_z=" (איפוס)" && _wc_marks "$1" "$2" "$_wa_o" /dev/zero; }; }   # #4031: the round zeroes them (apply_gpt wipes only the table, the stream writes only used blocks); the waiting screen puts its copy back
+}
+
+_wc_marks() { # $1 = node, $2 = work dir, $3 = the places (4KiB blocks), $4 = what a marker is made of: written, then read back and compared
+    _wa_i=0; for _wa_b in $3; do
+        _wa_i=$((_wa_i + 1)); [ -s "$2/mk.$_wa_i" ] || head -c 4096 "$4" > "$2/mk.$_wa_i" 2>/dev/null   # #3268: idlecheck made them before the copy left
         [ "$(wc -c < "$2/mk.$_wa_i" 2>/dev/null | tr -d ' ')" = 4096 ] || { echo "unchecked|לא נוצר סמן לבדיקה (urandom)"; return 1; }
         dd if="$2/mk.$_wa_i" of="$1" bs=4096 seek="$_wa_b" count=1 oflag=direct conv=fsync 2> "$2/err" \
             || { echo "failed|סמן ב-$((_wa_b / 256)) MiB: $(_wc_why "$2/err" 'הכתיבה נכשלה')"; return 1; }
     done
     _wa_i=0
-    for _wa_b in $_wa_o; do
+    for _wa_b in $3; do
         _wa_i=$((_wa_i + 1))
         dd if="$1" of="$2/back" bs=4096 skip="$_wa_b" count=1 iflag=direct 2> "$2/err" \
             || { echo "failed|סמן ב-$((_wa_b / 256)) MiB: הקריאה החוזרת נכשלה: $(_wc_why "$2/err" 'dd')"; return 1; }
         cmp -s "$2/mk.$_wa_i" "$2/back"; _wa_rc=$?
         case "$_wa_rc" in
             0) ;;
-            1) echo "failed|סמן ב-$((_wa_b / 256)) MiB נקרא בחזרה שונה — הדיסק מחזיר תוכן של מקום אחר (קיבולת מזויפת?)"; return 1 ;;
+            1) echo "failed|סמן ב-$((_wa_b / 256)) MiB${_wa_z:-} נקרא בחזרה שונה — הדיסק מחזיר תוכן של מקום אחר (קיבולת מזויפת?)"; return 1 ;;
             *) echo "unchecked|סמן ב-$((_wa_b / 256)) MiB: ההשוואה לא רצה (cmp rc=$_wa_rc)"; return 1 ;;
         esac
     done
@@ -155,7 +159,7 @@ write_check() {
     [ "$_wc_mib" -ge $((WRITECHECK_MIB * 3)) ] \
         || { _wc_finish "$1" unchecked "הדיסק קטן מ-$((WRITECHECK_MIB * 3))MiB"; return; }
     _wc_w="$RUN_DIR/writecheck/$1"; rm -rf "$_wc_w"; mkdir -p "$_wc_w"
-    ( _wc_body "$1" "$_wc_n" "$_wc_w" 0 $((_wc_mib / 2)) $((_wc_mib - WRITECHECK_MIB)) > "$_wc_w/result" ) &
+    ( WC_ZERO_MARKS=1; _wc_body "$1" "$_wc_n" "$_wc_w" 0 $((_wc_mib / 2)) $((_wc_mib - WRITECHECK_MIB)) > "$_wc_w/result" ) &
     if ! wait_pid "$!" "$WAIT_WRITECHECK_S" "בדיקת הכתיבה של $1"; then
         rm -rf "$_wc_w"
         _wc_finish "$1" failed "לא סיים לכתוב ולקרוא בחזרה תוך $WAIT_WRITECHECK_S שניות"; return

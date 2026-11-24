@@ -101,6 +101,14 @@ ACTION_HE.update({"WRITE_BASE": "הקצב שהדיסקים נדרשים לכתו
 VERDICT_HE.update({"PACE": "לפי הדיסק האיטי שנספר", "FLOOR": "הרצפה (אין בדיקה שנמדדה)", "SET": "נקבעו"})
 EXECUTED |= frozenset({"K-WRITE", "K-RATE-BOUNDS"})
 
+# --- #3571: שלושה מישורים. נרשם בלבד, גם ב-enforce: אין מוציא לפועל בנתיב הנתונים. ------------------------------------
+ACTION_HE.update({"PLANE_NET": "מישור הרשת", "PLANE_STORE": "מישור האחסון", "PLANE_DIST": "מישור ההפצה",
+                  "PLANE_BIND": "התקרה המחמירה",
+                  "REPRESENTATIVE_RECEIVER": "המקלט המייצג", "RECEIVER_SPEED_STREAMS": "זרמים לפי מהירות המקלטים"})
+VERDICT_HE.update({"STALE": "דיווח ישן", "SUPPRESSED": "דיווח זהה דוכא", "CLEAR": "נמדד ואינו מגביל",
+                   "CAPPED": "תקרה", "NO_PEER": "אין עמית מגיש",
+                   "NET": "הרשת קובעת", "STORE": "האחסון קובע", "DIST": "ההפצה קובעת"})
+
 # --- #3655 (S34: K-FLOOR) ---------------------------------------------------------------------------------------------------
 ACTION_HE.update({"WRITE_FLOOR": "הרצפה לכתיבה של הדיסק"})
 VERDICT_HE.update({"FROM_SETTING": "לפי ההגדרה", "LEARNED": "נלמד מהגלים של הדיסק", "ESTIMATE": "הערכת פתיחה (אין גל שנמדד)", "REFUSED": "נדחה"})
