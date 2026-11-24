@@ -37,7 +37,7 @@
 |---|---|
 | DHCP ‏`67/68` | `deploy/nftables-rules.sh:162-163`; `server/system/health.py:592-612`; כבוי בהתקנה: `docs/guides/server-install.md:296-304` |
 | TFTP ‏`69` + conntrack helper | `deploy/nftables-rules.sh:164-165`; `deploy/firewall-rules.md` §3 (אזהרת `nf_conntrack_tftp`); `server/system/health.py:574` |
-| HTTP ‏`7712` לתחנות, לא מוצפן | `server/main.py:149`; `deploy/nftables-rules.sh:166-167`; `README.md:290-296` (סיסמת משתמש ההפצה גלויה) |
+| HTTP ‏`7711` לאתחול (GRUB), לא מוצפן; HTTPS ‏`7712` לערוץ הסוכן | `server/main.py` (`--boot-port`, `agent_uvicorn_config`, ‏`agent_tls.ensure_identity`); `server/agent/tls.py`; `agent/lib/core/tls.sh`; `deploy/nftables-rules.sh` (‏`BOOT_PORT`, ‏`AGENT_PORT`) |
 | מולטיקאסט `7713-7714/udp`, ‏TTL 1 | `server/rounds/chunkctx.py` (‏`PRODUCTION_PORTBASE`, נגזר מ-`server/core/ports.py`); `server/rounds/chunksend.py` (‏`GROUP = "239.84.82.1"`, ‏`PORT_OFFSET = 2`: הנתונים ב-portbase+2, משוב הקצב ב-portbase+3); `agent/chunkcast.c` (‏`ttl = 1`); `deploy/nftables-rules.sh:35,168-169`; `README.md:248-249`; מחשב הבנייה כמקור: `agent/lib/capture/directsend.sh:36` |
 | ‏WoL ‏`9/udp` ‏`255.255.255.255` | `server/net/wol.py:28-29`, `server/net/wol.py:140-150` (על הממשק בלבד); `deploy/nftables-rules.sh:170` |
 | מוניטור `7710/tcp` שרת ← תחנה, כבוי כברירת מחדל | `server/console/monitor.py:21` (‏`MONITOR_PORT`), `server/console/monitor.py:656` (השרת פותח את החיבור); `deploy/nftables-rules.sh:135-136` (הדפדפן דרך פורט הקונסולה); `server/system/health.py:653-666` |

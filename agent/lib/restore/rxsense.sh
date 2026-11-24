@@ -44,10 +44,11 @@ rx_sense_pass() {
 
 ss_rx_json() {
     [ -s "$1/rx.sum" ] || { printf 'null'; return 0; }
-    awk '{ v[$1] = $2 } END { printf "{\"passes\":%d,\"read\":%d", v["passes"], v["read"]
+    awk '{ v[$1] = $2 } END { if (!NR) { print "null"; exit }
+        printf "{\"passes\":%d,\"read\":%d", v["passes"], v["read"]
         n = split("pkts foreign stray bad_pkt dup evicted busy bad_chunk good skipped conflict version", k, " ")
         for (i = 1; i <= n; i++) if (v["read"] > 0) printf ",\"%s\":%s", k[i], ((k[i] in v) && v[k[i]] != "-") ? v[k[i]] : "null"
-        printf "}" }' "$1/rx.sum"
+        printf "}" }' 2>/dev/null < "$1/rx.sum" || printf 'null'
 }
 
 rx_http_begin() { RX_HTTP_T0=$(cut -d' ' -f1 "${SYSROOT:-}/proc/uptime" 2>/dev/null); }
@@ -84,6 +85,7 @@ ss_http_json() {
     [ -s "$1/http.sum" ] || { printf 'null'; return 0; }
     awk 'function v(k) { return (k in a && a[k] != "-") ? a[k] : "null" }
          { a[$1] = $2 }
-         END { printf "{\"fetches\":%d,\"ranges\":%s,\"req_bytes\":%s,\"taken\":%s,\"secs\":%s,\"curl_rc\":%s,\"curl_failed\":%d}",
-                a["fetches"], v("ranges"), v("req_bytes"), v("taken"), v("secs"), v("curl_rc"), a["curl_failed"] }' "$1/http.sum"
+         END { if (!NR) { print "null"; exit }
+             printf "{\"fetches\":%d,\"ranges\":%s,\"req_bytes\":%s,\"taken\":%s,\"secs\":%s,\"curl_rc\":%s,\"curl_failed\":%d}",
+                a["fetches"], v("ranges"), v("req_bytes"), v("taken"), v("secs"), v("curl_rc"), a["curl_failed"] }' 2>/dev/null < "$1/http.sum" || printf 'null'
 }
