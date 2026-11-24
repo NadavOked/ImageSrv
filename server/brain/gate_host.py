@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import shutil
-import sqlite3
+from server.db import SqlConnection
 import time
 from pathlib import Path
 
@@ -43,7 +43,7 @@ def row_text(row: dict) -> str:
 # --- B49: RAID ----------------------------------------------------------------------------------------------
 
 
-def raid(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
+def raid(conn: SqlConnection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
     """B49: מערכי ה-RAID של השרת, מאותן שלוש קריאות של עמוד הבריאות (`/proc/mdstat`, `/etc/imagesrv/raid`, `/proc/mounts`).
 
     - מערך **לא פעיל** (inactive), או מערך שהמתקין יצר ואינו ב-mdstat בכלל = ``BLOCK``: הנתונים אינם נגישים.
@@ -96,7 +96,7 @@ def raid(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list
 # --- B60: מקום פנוי -----------------------------------------------------------------------------------------
 
 
-def _db_dir(conn: sqlite3.Connection) -> Path | None:
+def _db_dir(conn: SqlConnection) -> Path | None:
     """תיקיית קובץ ה-DB של החיבור (`PRAGMA database_list`), או ``None`` כשהוא בזיכרון."""
     for _seq, name, file in conn.execute("PRAGMA database_list"):
         if name == "main" and file:
@@ -104,7 +104,7 @@ def _db_dir(conn: sqlite3.Connection) -> Path | None:
     return None
 
 
-def _trend_rows(conn: sqlite3.Connection, connected: list[dict]) -> list[tuple[str, str, str]]:
+def _trend_rows(conn: SqlConnection, connected: list[dict]) -> list[tuple[str, str, str]]:
     """מיקום מחובר אחד = שורה אחת (`storage_history.health_checks`, אותו טקסט), ועוד הרזרבה למערכת מול הפנוי האחרון."""
     from server.storage import disk_reserve, history        # noqa: PLC0415
 
@@ -130,7 +130,7 @@ def _trend_rows(conn: sqlite3.Connection, connected: list[dict]) -> list[tuple[s
     return parts
 
 
-def library_space(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
+def library_space(conn: SqlConnection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
     """B60: מקום פנוי במחיצת ה-DB ובכל מיקום אחסון **מחובר**.
 
     ``SERVER_DISK_FULL`` אינו קיים בקוד (אומת): המקורות הם `db.last_disk_full`, `health.db_space_check`, `storage/history.trend`
@@ -166,7 +166,7 @@ def library_space(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str
 # --- B51: בריאות המערכת -------------------------------------------------------------------------------------
 
 
-def system_health(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
+def system_health(conn: SqlConnection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
     """B51 (הכרעת זאוס 15/11): **כל** שורות `GET /health`, כולל SMART של דיסקי השרת (`server_disks`, `health.collect`), דרך
     `gate_core.health_rows` -- אותו `collect` ואותם hooks, ואין הפעלה שנייה.
 
@@ -192,7 +192,7 @@ def system_health(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str
         if state in NEUTRAL_STATES:
             neutral += 1
             continue
-        verdict = {"ok": OPEN, "warn": WARN, "bad": WARN}.get(state, UNDECIDED)
+        verdict = {"ok": OPEN, "warn": WARN, "bad": WARN}.get(state, UNDECIDED) if isinstance(state, str) else UNDECIDED
         parts.append((verdict, row_text(row), f"{row.get('id')}={state}"))
     if not parts:
         return [undecided("כל שורות הבריאות לא רלוונטיות או מידע בלבד -- אין ראיה שהשרת תקין", (f"rows={len(rows)}", took))]

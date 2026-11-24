@@ -89,7 +89,7 @@ def space(*, used: int | None, free: int | None, keep: int, missing: list[str]) 
         unchecked.append("נפח תפוס")
     if free is None:
         unchecked.append("מקום פנוי באחסון השרת (loc_local)")
-    if unchecked:
+    if unchecked or used is None or free is None:        # `used`/`free` ``None`` כבר נכנסו ל-`unchecked`; התנאי רק מצמצם טיפוס
         return Space("unchecked", "לא נבדק: " + " · ".join(unchecked) + " — הקליטה נעצרה לפני הכיווץ")
     numbers = f"תפוס {used / 1e9:.1f} GB · פנוי בשרת {free / 1e9:.1f} GB"
     if keep:

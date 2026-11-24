@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -35,9 +36,21 @@ def _serial_of(key: str) -> str | None:
         return None
 
 
+class _OpenCopy(TypedDict):
+    id: str
+    serial: str
+    key: str
+    created: int
+    mac: str
+    machine: str | None
+    bytes: int
+    stale: dict[str, int] | None
+
+
 def open_copies(root: Path, names: dict[str, str]) -> dict:
     """כל העותקים הפתוחים. רשומה בלי הקובץ שלה אינה עותק (הקובץ נכתב ראשון ונמחק אחרון); רשומה שנקראת רע -- `unreadable`."""
-    copies, unreadable = [], []
+    copies: list[_OpenCopy] = []
+    unreadable = []
     base = root / "write-backups"
     for folder in sorted(base.iterdir()) if base.is_dir() else []:
         if not folder.is_dir():

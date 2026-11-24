@@ -82,8 +82,10 @@ static void draw_theme_toggle(App *a,cairo_t *cr,double W,double head_h){
         cairo_arc(cr,cx,cy,6,0,2*M_PI);draw_set(cr,ink);cairo_fill(cr);
         cairo_restore(cr);
     }
-    Text k=text_make(cr,FONT_MONO,11,600,"F2",0,DIR_LTR);
-    text_draw(cr,&k,b.x+b.w-k.w-7,b.y+(b.h-k.h)/2,ink);text_free(&k);
+    if(!a->no_keys){                             /* #2600: a screen that takes no keys must not offer F2 */
+        Text k=text_make(cr,FONT_MONO,11,600,"F2",0,DIR_LTR);
+        text_draw(cr,&k,b.x+b.w-k.w-7,b.y+(b.h-k.h)/2,ink);text_free(&k);
+    }
     hit_add(a,b,HIT_THEME);
 }
 

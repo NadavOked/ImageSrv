@@ -150,7 +150,8 @@ def rig(tmp_path, monkeypatch):
     rig.members = ["a", "b", "c"]
     rig.capable = None
     yield rig
-    rig.engine.close()
+    if hasattr(rig, "engine"):   # make() can fail before it is built (the base engine takes no `source`): that is a FAILED test, not an ERROR here
+        rig.engine.close()
 
 
 ALL = [[0, 9]]
@@ -1345,3 +1346,32 @@ def test_a_receiver_that_dropped_packets_of_another_source_is_named_once_per_gro
     assert named.startswith("a:") and "8 חבילות" in named and "מחיצה 3" in named and "מעבר 1" in named, named
     rig.tell("a", 1, "ended", {"A1": ALL}, stray=13)
     assert len(rig.named("chunk_stray_source")) == 2 and "13 חבילות" in rig.named("chunk_stray_source")[1]
+
+
+def test_the_wave_names_the_servers_source_and_the_sender_binds_to_it(rig):
+    """#1079/#2485: מה שהמקלטים מקבלים ב-hello (`session.chunk.source`) הוא אותה כתובת שהשולח נקשר אליה (`--from`)."""
+    engine = rig.make(source="10.20.0.1")
+    assert engine.session_fields(SID)["chunk"]["source"] == "10.20.0.1"
+    for mac in rig.members:
+        assert rig.tell(mac, 1, "listening", {mac.upper() + "1": []})["action"] == "receive"
+    assert wait_for(lambda: len(rig.runner.commands) == 1)
+    cmd = rig.runner.commands[0]
+    assert cmd[cmd.index("--from") + 1] == "10.20.0.1"
+
+
+def test_no_source_means_no_field_and_no_from(rig):
+    """אין כתובת שתחנה רואה: השדה אינו נשלח, והשולח אינו נקשר (הסוכן אומר זאת באזהרה)."""
+    engine = rig.make()
+    assert "source" not in engine.session_fields(SID)["chunk"]
+    for mac in rig.members:
+        rig.tell(mac, 1, "listening", {mac.upper() + "1": []})
+    assert wait_for(lambda: len(rig.runner.commands) == 1)
+    assert "--from" not in rig.runner.commands[0]
+
+
+@pytest.mark.parametrize("base,source", [
+    ("http://10.20.0.1:8080", "10.20.0.1"), ("http://10.20.0.1", "10.20.0.1"),
+    ("http://127.0.0.1:8080", None), ("http://0.0.0.0:8080", None),
+    ("http://server.example:8080", None), ("http://[fe80::1]:8080", None), ("", None), (None, None)])
+def test_source_of_is_the_numeric_address_of_the_server_url(base, source):
+    assert chunksend.source_of(base) == source

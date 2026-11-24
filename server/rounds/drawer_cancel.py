@@ -24,13 +24,13 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from server.system import timezone
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 
 #: מאיפה הגיע הביטול. `cloner` — מסך מחשב השיכפול עצמו (דווח בדיווח).
 SOURCES = ("console", "build", "cloner")
 
 
-def request(conn: sqlite3.Connection, session_id: str, mac: str, dev: str,
+def request(conn: SqlConnection, session_id: str, mac: str, dev: str,
             user: str, source: str) -> bool:
     """רושם בקשת ביטול. False = כבר יש בקשה למגירה הזו בגל הזה."""
     with _write_lock, writing(conn):
@@ -42,14 +42,14 @@ def request(conn: sqlite3.Connection, session_id: str, mac: str, dev: str,
     return cur.rowcount == 1
 
 
-def existing(conn: sqlite3.Connection, session_id: str, mac: str,
+def existing(conn: SqlConnection, session_id: str, mac: str,
              dev: str) -> sqlite3.Row | None:
     return conn.execute(
         "SELECT * FROM drawer_cancels WHERE session_id = ? AND mac = ? AND dev = ?",
         (session_id, mac, dev)).fetchone()
 
 
-def pending(conn: sqlite3.Connection, session_id: str, mac: str) -> list[dict]:
+def pending(conn: SqlConnection, session_id: str, mac: str) -> list[dict]:
     """מה נמסר לסוכן בתשובת הדיווח: כל בקשה מהשרת שטרם אושרה.
 
     `who_he` הוא מה שמסך מחשב השיכפול יכתוב ("בוטל <who_he>")."""
@@ -68,7 +68,7 @@ def _who_he(source: str, user: str | None) -> str:
     return f"על ידי {user}" if user else "מהקונסולה"
 
 
-def _hhmm(conn: sqlite3.Connection, iso: str | None) -> str:
+def _hhmm(conn: SqlConnection, iso: str | None) -> str:
     if not iso:
         return ""
     try:
@@ -82,7 +82,7 @@ def _hhmm(conn: sqlite3.Connection, iso: str | None) -> str:
         return ""
 
 
-def by_dev(conn: sqlite3.Connection, session_id: str, mac: str) -> dict[str, dict]:
+def by_dev(conn: SqlConnection, session_id: str, mac: str) -> dict[str, dict]:
     """הבקשות של מכונה בגל, לפי dev — מה ש-`drawer_list` מצרף לכל מגירה.
 
     `text_he` — השורה שהמסכים מציגים: "בוטל על ידי nadav · 16:06".
@@ -103,7 +103,7 @@ def by_dev(conn: sqlite3.Connection, session_id: str, mac: str) -> dict[str, dic
     return out
 
 
-def confirmed(conn: sqlite3.Connection, session_id: str, mac: str, dev: str,
+def confirmed(conn: SqlConnection, session_id: str, mac: str, dev: str,
               where: str) -> None:
     """הסוכן דיווח `cancelled` על המגירה — הראיה. נקרא מ-`reports.ingest`
     פעם אחת, במעבר. ביטול ממסך מחשב השיכפול לא עבר כאן קודם, ולכן נרשם
@@ -132,7 +132,7 @@ MOOT = {"verifying": "הכתיבה כבר הסתיימה — באימות",
         "failed": "הדיסק כבר נכשל בכתיבה"}
 
 
-def close_moot(conn: sqlite3.Connection, session_id: str, mac: str, targets: list) -> None:
+def close_moot(conn: SqlConnection, session_id: str, mac: str, targets: list) -> None:
     """בקשת ביטול שהסוכן **סירב לה בשקט** נסגרת בשמה.
 
     השרת מקבל ביטול לפי מצב המגירה בדיווח האחרון, והסוכן יכול כבר להיות הלאה (הדיווח

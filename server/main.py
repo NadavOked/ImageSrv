@@ -19,6 +19,7 @@ import sys
 import threading
 import urllib.parse
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from server.paths import REPO_ROOT
 from server.core import ports as product_ports   # #3871: the one place a port is named
@@ -28,6 +29,9 @@ from server.console import server_power
 from server.rounds import drive_rates
 from server.agent import identity
 from server.system import serverlog
+
+if TYPE_CHECKING:
+    from server.net.igmp_querier import Querier
 
 
 def _configure_stdio() -> None:
@@ -401,7 +405,7 @@ def _primary_alive(runtime, args, hostname: str):
     return servers
 
 
-def _start_igmp_querier(runtime, deploy, interface: str | None) -> None:
+def _start_igmp_querier(runtime, deploy, interface: str | None) -> Querier | None:
     """#1972: ה-querier על כרטיס ההפצה — ותמיד שורה במסך הבריאות. כאן בלבד
     (כמו `vm_host`): בבדיקות אין סוקט raw ואין תהליכון."""
     from server.system import health
@@ -611,7 +615,7 @@ def main() -> None:
     # #1088: כתובת ההפצה וכרטיסה — מהדגל (המעבדה, שרת שהותקן עם כרטיס
     # הפצה), ממה שנרשם מהקונסולה, או "לא הוגדרה". שלושת המקורות נאמרים.
     if deploy.source == "cli":
-        server_url = deploy.url              # #3871: `--server-url`, on the port the agent listens on
+        server_url = deploy.url or ""      # #3871: `--server-url`, on the port the agent listens on
         if args.interface:
             interface = args.interface
         else:
@@ -625,7 +629,7 @@ def main() -> None:
         # הכרטיס שנרשם חייב לשאת את הכתובת שנרשמה — אחרת השרת **אינו**
         # נופל (זה היה משאיר את המפעיל בלי קונסולה) אלא חוזר
         # ל"לא הוגדרה", ואומר זאת ביומן ובמסך הבריאות.
-        server_url, interface = deploy.url, deploy.interface
+        server_url, interface = deploy.url or "", deploy.interface
         try:
             found = _interface_for(server_url)
         except InterfaceDetectionError as exc:
@@ -781,7 +785,7 @@ def main() -> None:
     from server.agent import tls as agent_tls
     agent_identity, _ = agent_tls.ensure_identity(args.data_dir)
     agent_config = agent_uvicorn_config(agent_app, args.host, args.port, **agent_identity.uvicorn_kwargs())
-    configs: dict[tuple[str, str], object] = {("agent", args.host): agent_config}
+    configs: dict[tuple[str, str], uvicorn.Config] = {("agent", args.host): agent_config}
 
     def agent_factory(h: str):
         """#705: יצרן לכל כתובת — הסוכן נקשר לכל כרטיס שבו "אתחול מהרשת" דלוק."""

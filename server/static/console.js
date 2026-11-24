@@ -2194,7 +2194,7 @@ function homeSummary() {
   const o = OVERVIEW;
   if (!o) return "";
   const on = homeConnected(), parts = [];
-  if (o.images != null) parts.push(`${o.images} אימג'ים`);
+  if (o.images != null) parts.push(o.images === 1 ? "אימג' אחד" : `${o.images} אימג'ים`);
   if (o.machines != null) parts.push(`${o.machines} מחשבים${on != null ? ` (${on} מחוברים)` : ""}`);
   if (o.now) parts.push(`עודכן ${fmtClock(o.now)}`);
   return esc(parts.join(" · "));
@@ -6035,7 +6035,7 @@ function capturesTableCard(kids, cls) {
     taskWarning(t), esc(taskWhen(t))] }));
   const body = !CAPTURE_TASKS_READ ? UI.note("warn", "רשימת הקליטות לא נקראה")
     : UI.datagrid({ columns: ["אימג'", "תיקייה", "מחשב · דיסק", "מצב", "נקראו", "משך", "אזהרה / שגיאה", "מתי"], rows, empty: "אין קליטות עדיין — \"+ קליטת אימג'…\" פותחת את הראשונה" });
-  return UI.card({ title: "קליטות אחרונות", small: "עד 20 האחרונות מ-/tasks", cls, flush: true, body });
+  return UI.card({ title: "קליטות אחרונות", small: "20 הקליטות האחרונות", cls, flush: true, body });
 }
 function buildersView(g, kids) {
   const gidEnc = encodeId(g.id), admin = isAdmin();
@@ -7404,7 +7404,7 @@ function permissions() {
   const deployers = list.filter((u) => u.role === "deploy").length;
   const roleNames = [list.some((u) => u.role === "admin") ? "מנהל" : "", deployers ? "הפצה" : ""].filter(Boolean);
   const sub = USERS
-    ? [`${list.length} משתמשים`, roleNames.length ? `תפקידים: ${roleNames.join(", ")}` : ""].filter(Boolean).map(esc).join(" · ")
+    ? [list.length === 1 ? "משתמש אחד" : `${list.length} משתמשים`, roleNames.length ? `תפקידים: ${roleNames.join(", ")}` : ""].filter(Boolean).map(esc).join(" · ")
     : `‏/users לא נקרא: ${esc(usersError)}`;
   // ‏#2552: "סשנים" — מנהל בלבד, בשרת הראשי (sessions.js; בלעדיו — בלי הלשונית)
   const tabs = typeof sessionsAllowed === "function" && sessionsAllowed() ? ["משתמשים", "סשנים"] : [];
@@ -7420,11 +7420,11 @@ function permissions() {
   // ‏#1300: כרטיס לכל תפקיד (כמו המוקאפ). המטריצה המפורטת לא ירדה — מקופלת ב"הרשאות מפורטות".
   const roleCard = (title, text) => UI.card({ title, cls: "c6", body: `<p class="cap">${esc(text)}</p>` });
   const roles = roleCard("מנהל", "גישה מלאה: אימג'ים, מחשבים, תשתית, משתמשים והגדרות.")
-    + roleCard("הפצה", "תפקיד לתחנה ולתהליך התכנאי. אין לו כניסה לקונסולה.");
+    + roleCard("הפצה", "תפקיד לתחנה ולתהליך הטכנאי. אין לו כניסה לקונסולה.");
   const matrix = UI.datagrid({ columns: ["", "מנהל", "הפצה"],
     rows: ROLE_MATRIX.map(([area, a, d, src]) => [`<span title="${esc(src)}">${esc(area)}</span>`, UI.status(a[0], a[1]), UI.status(d[0], d[1])]) })
     + `<div class="cap" style="padding:10px 14px">אין הרשאה שקטה: מה שאינו "כן" מחזיר 403 בשרת, לא רק מוסתר בממשק. למשתמש הפצה אין כניסה לקונסולה (#1073) — הוא עובד ממחשב הבנייה: שיכפול מאימג' בשרת, שיכפול ישיר מהדיסק, ושחזור לדיסק שלו. המנהל הפעיל האחרון אינו ניתן למחיקה או להורדה. ריחוף על אזור מציג את ה-endpoint.</div>`;
-  const matrixCard = `<details class="c12 card perm-more"><summary class="card-h"><span>הרשאות מפורטות <small>מה כל תפקיד רואה — נגזר מה-Depends של כל endpoint</small></span></summary><div class="card-b flush">${matrix}</div></details>`;
+  const matrixCard = `<details class="c12 card perm-more"><summary class="card-h"><span>הרשאות מפורטות <small>מה כל תפקיד רואה, לפי ההרשאה של כל פעולה</small></span></summary><div class="card-b flush">${matrix}</div></details>`;
   return `<div class="page aligned">${header}<div class="body">${usersCard}${roles}${matrixCard}</div></div>`;
 }
 
@@ -8106,7 +8106,7 @@ function networkDiagramTab() {
   else {
     const model = netDiagramModel();
     // מקור כל נתון (ההערה שהייתה מתחת לתרשים) — ב-title של שורת המשנה של הכרטיס
-    const src = `נמדד: כתובות ופער — /net/config · DHCP חי — /net/interfaces · מחוברים — /monitor/machines, /net, /storage-nodes · "מה מותר" — bind של /ports בלבד. וילנים ומדיניות — דורש API (#705).${classroomsOn() ? " כיתות — v2." : ""}`;
+    const src = `מה שמוצג נמדד: הכתובות והפער מהגדרות הרשת, מצב ה-DHCP מהכרטיס עצמו, והמחשבים המחוברים מהמוניטור. "מה מותר" נקרא מהשירותים שמאזינים על הכרטיס. מדיניות לכל וילן עדיין לא נמדדת.${classroomsOn() ? " כיתות — v2." : ""}`;
     body = netUnreadNotes()
       + `<div class="c12 card"><div class="card-h"><span>מפת הרשת <small title="${esc(src)}">לחיצה על וילן פותחת פרטים</small></span></div><div class="card-b netdiag">${netMapBody(model)}</div></div>`;
   }
@@ -8476,7 +8476,12 @@ function monitorViewerHtml(list, enabled) {
   let body;
   if (!enabled) body = say(["המוניטור כבוי", "הדלק את המתג בכותרת כדי לצפות במסך של תחנה. הדלקה חושפת 7710 על וילן ההפצה ותופסת באתחול הבא של כל מכונה."]);
   else if (!m) body = say(["בחר מחשב לצפייה", "המסך של התחנה יוצג כאן. אפשר לשלוח מקשים בלבד כשהתחנה מחוברת לסוכן."]);
-  else if (!m.online) body = say([`${m.name || m.mac} אינה מחוברת`, "אין למה להתחבר: התחנה לא נראתה ב-90 השניות האחרונות. אפשר להעיר אותה (WoL) מהרשימה."]);
+  else if (!m.online) {
+    // ‏#2645/#2971 (נדב 07/11, 12/11): הודעה אחת וברורה, בלי ניסיונות חוזרים, כפתור הדלקה, וחזרה אוטומטית — הרשימה נדגמת
+    // כל כמה שניות, וכשהמחשב עולה ה-iframe נפתח לבד. אין iframe, ולכן אין "ניסיון חוזר בעוד N שנ'".
+    const wake = isAdmin() ? `<div class="mon-wake"><button class="btn primary" type="button" onclick="wakeMachine('${encodeId(m.mac)}')">הדלקה (WoL)</button></div>` : "";
+    body = say([`${m.name || m.mac} כבוי או לא מחובר`, "התחנה לא נראתה ב-90 השניות האחרונות. המוניטור יתחבר לבד כשהיא תעלה."]).replace(/<\/div>$/, `${wake}</div>`);
+  }
   else if (MON_OUT) body = say(["המסך פתוח בחלון נפרד", "לחיצה על המחשב ברשימה מחזירה את הצפייה לכאן."]);   // ‏#1851
   else {
     // ‏#1179/#1008: מכונה של שרת משנה — המציג עובר דרך שרת המשנה (#1129, ‏monitor.js ‏node=).

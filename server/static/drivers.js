@@ -117,7 +117,8 @@ function driversCoverageCard() {
 function driverModelLabel(m) {
   if (m.inventory == null) return null;
   const dmi = m.inventory.dmi || {};
-  return [dmi.sys_vendor, dmi.product_version || dmi.product_name].filter(Boolean).join(" ") || "דגם לא דווח";
+  const real = (v) => (v && String(v).trim().toLowerCase() !== "none" ? v : "");   // #2901: מלאי ישן ששמר "None" של VMware
+  return [real(dmi.sys_vendor), real(dmi.product_version) || real(dmi.product_name)].filter(Boolean).join(" ") || "דגם לא דווח";
 }
 function driverMachineVerdict(m) {
   const pci = (m.inventory && m.inventory.pci) || [];
@@ -154,7 +155,7 @@ function driversModelsCard() {
     cells: [`<b dir="auto">${esc(e.model)}</b>`, String(e.machines.length), String(e.covered), String(e.missing), driverModelPill(e), menu(e)] }));
   if (unreported.length) rows.push({ attrs: `data-model=""`, cells: [`<span class="muted">לא דיווחו חומרה</span>`, String(unreported.length), "—", "—", UI.pill("", "לא נבדק"), ""] });
   const table = UI.datagrid({ cls: "kebab-col", columns: ["דגם", "מחשבים", "מכוסים", "חסרים", "מצב", { html: `<span class="sr">פעולות</span>` }], rows, empty: "אין מחשבי בנייה או שיכפול רשומים — הוסיפו אותם בדף המחשבים" });
-  return UI.card({ title: "דגמי מחשבים שנמצאו ברשת", small: "הדגם נקבע מ-DMI שהמחשב מדווח ב-hello", cls: "c12", body: table, flush: rows.length > 0 });
+  return UI.card({ title: "דגמי מחשבים שנמצאו ברשת", small: "הדגם נקבע לפי מה שהמחשב מדווח על עצמו", cls: "c12", body: table, flush: rows.length > 0 });
 }
 function openDriverModel(enc) {
   let label = enc; try { label = decodeURIComponent(enc); } catch (e) {}
@@ -179,7 +180,7 @@ function driversPage(tab = 0) {
   const machines = dm ? dm.models.reduce((n, e) => n + e.machines.length, 0) + dm.unreported.length : null;
   const covered = dm ? dm.models.reduce((n, e) => n + e.covered, 0) : null;
   const sub = DRIVERS
-    ? (dm ? [`${dm.models.length} דגמים`, `${machines} מחשבים`, `${covered} מכוסים`] : ["מכונות: לא נקרא"]).map(esc).join(" · ")
+    ? (dm ? [dm.models.length === 1 ? "דגם אחד" : `${dm.models.length} דגמים`, `${machines} מחשבים`, `${covered} מכוסים`] : ["מכונות: לא נקרא"]).map(esc).join(" · ")
     : `‏/drivers לא נקרא: ${esc(driversError)}`;
   const actions = (admin ? `<button class="btn primary" onclick="openDriverImport()">העלאת דרייבר</button>` : "") + `<button class="btn" onclick="refreshPage()">${uiIcon("refresh")} רענון</button>`;
   const header = UI.objHeader({ crumbs: [{ label: "שרת אימג'ים", onclick: "selectPageById('home')" }, { label: "תשתית" }, { label: "דרייברים" }],

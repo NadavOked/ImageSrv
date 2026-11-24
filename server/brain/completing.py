@@ -75,9 +75,9 @@ def parse_bad_chunks(raw) -> list[tuple[int, int]] | None:
         if not isinstance(item, dict):
             return None
         part, chunk = item.get("partition"), item.get("chunk_index")
-        for value in (part, chunk):
-            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-                return None
+        if (not isinstance(part, int) or isinstance(part, bool) or part < 0
+                or not isinstance(chunk, int) or isinstance(chunk, bool) or chunk < 0):
+            return None
         out.add((part, chunk))
     return sorted(out)
 

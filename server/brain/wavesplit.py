@@ -83,13 +83,12 @@ def plan(chunks: int, zbytes: int, server_bps: int, cloners: list[Cloner], remai
     caps = sorted({min(server_bps, c.cap_bps) for c in cloners})
     if len(caps) < 2:
         return Plan(SAME, one, waves_one)
-    best = None
+    splits = []
     for cut in caps[1:]:
-        fast = [c for c in cloners if min(server_bps, c.cap_bps) >= cut]
-        waves, t = total([fast, [c for c in cloners if c not in fast]], fast)
-        if best is None or t < best[1]:
-            best = (waves, t, tuple(c.mac for c in fast))
-    waves, t, fast = best
+        group = [c for c in cloners if min(server_bps, c.cap_bps) >= cut]
+        waves, t = total([group, [c for c in cloners if c not in group]], group)
+        splits.append((waves, t, tuple(c.mac for c in group)))
+    waves, t, fast = min(splits, key=lambda s: s[1])
     if any(c.source == "assumed" for c in cloners):
         verdict = UNDECIDED
     else:
@@ -170,7 +169,7 @@ class WaveSplit:
                     f"split_s={'none' if p.split_s is None else f'{p.split_s:.0f}'}",
                     f"waves_split={'none' if p.waves_split is None else p.waves_split}",
                     *(f"fast={mac}" for mac in p.fast), *common)
-        if p.verdict == SAME:
+        if p.verdict == SAME or p.split_s is None:
             reason = (f"גל אחד: כל המשכפלים באותה יכולת ({min(server, cloners[0].cap_bps) // 10 ** 6}Mb/s), "
                       f"ואין מה לפצל. חזוי {p.one_s / 60:.0f} דק'")
         else:

@@ -29,7 +29,7 @@ import sqlite3
 
 from boot.grub_menu import normalize_mac as lenient_mac
 
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 from server.disks import smart_history
 
 log = logging.getLogger("imagesrv.shrink_records")
@@ -89,10 +89,11 @@ def _partition(entry: object) -> dict:
         raise BadRecord("bad_layout", "each partition must be an object")
     ints = {k: _int(entry.get(k)) for k in _INTS}
     type_guid = _text(entry.get("type_guid"))
-    if any(v is None for v in ints.values()) or type_guid is None:
+    idx, size_sectors = ints["idx"], ints["size_sectors"]
+    if any(v is None for v in ints.values()) or type_guid is None or idx is None or size_sectors is None:
         raise BadRecord("bad_layout", "idx, start_sector, size_sectors and type_guid are required")
     # GPT מתחיל מכניסה 1, ומחיצה בת 0 סקטורים אינה מחיצה (סקירת Fable).
-    if ints["idx"] < 1 or ints["size_sectors"] < 1:
+    if idx < 1 or size_sectors < 1:
         raise BadRecord("bad_layout", "idx and size_sectors must be at least 1")
     attrs = entry.get("attrs")
     if attrs not in (None, "") and not (isinstance(attrs, str) and _ATTRS.fullmatch(attrs)):
@@ -121,7 +122,7 @@ def _partitions(body: dict) -> list[dict]:
     return parts
 
 
-def open_record(conn: sqlite3.Connection, body: dict, require_reported: bool = False) -> dict:
+def open_record(conn: SqlConnection, body: dict, require_reported: bool = False) -> dict:
     """רושם את הפריסה המקורית לפני הכיווץ. מחזיר את הרשומה (עם `id`
     ו-`partitions`).
 
@@ -177,7 +178,7 @@ def open_record(conn: sqlite3.Connection, body: dict, require_reported: bool = F
     return row
 
 
-def open_owner(conn: sqlite3.Connection, serial: object,
+def open_owner(conn: SqlConnection, serial: object,
                record_id: int | None = None, mac: str | None = None) -> str | None:
     """#2413: ה-MAC שפתח את הרשומה הפתוחה של הסידורי (ו-`record_id`, אם ניתן),
     או None כשאין כזו. `api.py` משווה אותו ל-MAC של הפונה לפני close/note.
@@ -197,7 +198,7 @@ def open_owner(conn: sqlite3.Connection, serial: object,
     return row["mac"] if row is not None else None
 
 
-def close_record(conn: sqlite3.Connection, serial: str, record_id: int | None = None,
+def close_record(conn: SqlConnection, serial: str, record_id: int | None = None,
                  by: str = "agent", event: str = "shrink_close",
                  mac: str | None = None) -> bool:
     """סוגר את הרשומה הפתוחה של הסידורי. אמת רק אם רשומה פתוחה נסגרה
@@ -222,7 +223,7 @@ def close_record(conn: sqlite3.Connection, serial: str, record_id: int | None = 
     return done
 
 
-def note_record(conn: sqlite3.Connection, serial: str, record_id: int | None,
+def note_record(conn: SqlConnection, serial: str, record_id: int | None,
                 note: str, mac: str | None = None) -> bool:
     """למה הרשומה עדיין פתוחה — "הטבלה הוחזרה, מערכת הקבצים לא נמתחה
     (ntfsresize …)" — כדי שהקונסולה תראה סיבה ולא רק "מכווץ". אמת רק אם
@@ -254,7 +255,7 @@ def _row_dict(r: sqlite3.Row) -> dict:
     return d
 
 
-def open_for(conn: sqlite3.Connection, disks: list | None, mac: str | None = None) -> list[dict]:
+def open_for(conn: SqlConnection, disks: list | None, mac: str | None = None) -> list[dict]:
     """מה ה-hello עונה (ממשק 3): הרשומות הפתוחות שהסידורי שלהן הוא אחד
     מהדיסקים שהמכונה דיווחה.
 
@@ -279,7 +280,7 @@ def open_for(conn: sqlite3.Connection, disks: list | None, mac: str | None = Non
     return [_row_dict(r) for r in rows]
 
 
-def list_open(conn: sqlite3.Connection) -> list[dict]:
+def list_open(conn: SqlConnection) -> list[dict]:
     """הרשימה לקונסולה: כל הרשומות הפתוחות, החדשה ראשונה."""
     rows = conn.execute(
         "SELECT * FROM shrink_records WHERE closed_at IS NULL ORDER BY opened_at DESC, id DESC"
@@ -287,7 +288,7 @@ def list_open(conn: sqlite3.Connection) -> list[dict]:
     return [_row_dict(r) for r in rows]
 
 
-def clear(conn: sqlite3.Connection, record_id: int, by: str = "") -> bool:
+def clear(conn: SqlConnection, record_id: int, by: str = "") -> bool:
     """"נקה" מהקונסולה: המפעיל הרחיב בעצמו / הדיסק הוחלף. אמת רק אם
     רשומה פתוחה נסגרה עכשיו."""
     with _write_lock, writing(conn):

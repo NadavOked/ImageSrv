@@ -30,7 +30,7 @@ lc_gui_state() {
     # #1914: the USB stick's settings that were refused, or kept for this session only -- aloud
     [ -s "$RUN_DIR/usb.notice" ] && printf 'toast=%s\n' "$(_lc_clean "$(cat "$RUN_DIR/usb.notice")")" >> "$_gs_n"
     if [ "$_gs_scr" = boot ]; then
-        IFS='|' read -r _gs_dl _gs_p < "$LC/boot" 2>/dev/null || { _gs_dl=0; _gs_p=0; }
+        IFS='|' read -r _gs_dl _gs_p 2>/dev/null < "$LC/boot" || { _gs_dl=0; _gs_p=0; }
         printf 'lc_boot=%s|%s|%s\n' "${_gs_dl:-0}" "${_gs_p:-0}" "$(date +%s)" >> "$_gs_n"
         # 16/10: 1 = the local clone card is offered (two disks or more); else not
         printf 'lc_local=%s\n' "$(cat "$LC/boot.local" 2>/dev/null)" >> "$_gs_n"
@@ -39,7 +39,7 @@ lc_gui_state() {
     else
         printf 'lc_inv=%s\nlc_phase=%s\n' "$(cat "$LC/inv.state" 2>/dev/null)" "$(cat "$LC/phase" 2>/dev/null)" >> "$_gs_n"
         # #2991: the drawer being read now (lcscan.sh's inv/scan: dev|since|how many after it) -- drawer|seconds|left
-        if IFS='|' read -r _gs_sd _gs_st _gs_sl < "$LC/inv/scan" 2>/dev/null; then
+        if IFS='|' read -r _gs_sd _gs_st _gs_sl 2>/dev/null < "$LC/inv/scan"; then
             case "$_gs_st:$_gs_sl" in *[!0-9:]*|:*|*:) ;; *) _gs_m=$(disk_drawer "$_gs_sd" "$(disk_port "$_gs_sd" 2>/dev/null || echo 0)")
                 _gs_m=${_gs_m%%|*}; case "$_gs_m" in ''|*[!0-9]*) _gs_m=0 ;; esac   # not mapped = 0: "בודק את הדיסק…"
                 printf 'lc_scan=%s|%s|%s\n' "$_gs_m" "$(($(date +%s) - _gs_st))" "$_gs_sl" >> "$_gs_n" ;; esac

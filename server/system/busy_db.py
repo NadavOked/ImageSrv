@@ -7,10 +7,10 @@
 
 from __future__ import annotations
 
-import sqlite3
+from server.db import SqlConnection
 
 
-def reason(conn: sqlite3.Connection) -> str | None:
+def reason(conn: SqlConnection) -> str | None:
     if conn.execute("SELECT 1 FROM sessions WHERE state IN ('open','running') LIMIT 1").fetchone():
         return "יש סבב הפצה פתוח או רץ"
     if conn.execute("SELECT 1 FROM room_rounds WHERE state IN ('active','closing') LIMIT 1").fetchone():

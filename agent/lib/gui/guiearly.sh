@@ -43,7 +43,7 @@ gui_early_boot() {
     # (no GPU driver, or a firmware one only): gui_parent, after the hello.
     while :; do
         _ge_done=0; [ ! -e "$RUN_DIR/modules.done" ] || _ge_done=1
-        if [ -c "$_ge_fb" ] && read -r _ge_name < "$SYSROOT/sys/class/graphics/${_ge_fb##*/}/name" 2>/dev/null; then
+        if [ -c "$_ge_fb" ] && read -r _ge_name 2>/dev/null < "$SYSROOT/sys/class/graphics/${_ge_fb##*/}/name"; then
             case "$_ge_name" in *simple*|*VGA*) ;; *) break ;; esac
         fi
         [ "$_ge_done" = 0 ] || return 0
@@ -100,7 +100,7 @@ gui_early_stop() {
     # left the bridge it had started to bring the GUI up anyway (round 20, 31/10).
     # So while the keeper lives, wait for the bridge to name its GUI (a ceiling).
     _ge_t=0
-    until read -r _ge_s _ge_w < "$RUN_DIR/gui/station.pid" 2>/dev/null; do
+    until read -r _ge_s _ge_w 2>/dev/null < "$RUN_DIR/gui/station.pid"; do
         _ge_s=; _ge_w=
         kill -0 "$_gui_pid" 2>/dev/null && [ "$_ge_t" -lt $((GUI_EARLY_STOP_WAIT_S * 10)) ] || break
         poll_tick; _ge_t=$((_ge_t + _tk))
@@ -128,7 +128,7 @@ gui_early_state() {
 
 gui_early_env() {
     # The role, MAC, IP and IFACE the bridge was started without, from gui_early_role.
-    { IFS= read -r _ge_r && IFS= read -r _ge_m && IFS= read -r _ge_i && { IFS= read -r _ge_f || _ge_f=; }; } < "$RUN_DIR/gui.screen" 2>/dev/null || return 1
+    { IFS= read -r _ge_r && IFS= read -r _ge_m && IFS= read -r _ge_i && { IFS= read -r _ge_f || _ge_f=; }; } 2>/dev/null < "$RUN_DIR/gui.screen" || return 1
     case "$_ge_r" in menu) GUI_SCREEN= ;; class|cloner) GUI_SCREEN=$_ge_r ;; *) return 1 ;; esac
     MAC=$_ge_m; IP=$_ge_i; IFACE=$_ge_f   # #3754: the link banner's record needs it; none = the log line of #3644
     export GUI_SCREEN MAC IP IFACE

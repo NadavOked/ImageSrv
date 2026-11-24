@@ -21,10 +21,9 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 
 from server.brain import floorrule
-from server.db import get_setting
+from server.db import get_setting, SqlConnection
 from server.disks import writefloor
 
 log = logging.getLogger("imagesrv.hdd_policy")
@@ -33,19 +32,19 @@ SETTING = "hdd_support"
 REFUSED = "HDD — תמיכה ב-HDD כבויה בהגדרות"
 
 
-def enabled(conn: sqlite3.Connection) -> bool:
+def enabled(conn: SqlConnection) -> bool:
     """רק "true" מדליק. חסר (שרת לפני X16) או כל ערך אחר = כבוי, ברירת המחדל."""
     return get_setting(conn, SETTING) == "true"
 
 
-def expectation(conn: sqlite3.Connection, serial: str | None, model: str | None) -> int | None:
+def expectation(conn: SqlConnection, serial: str | None, model: str | None) -> int | None:
     """הציפייה שנלמדה לדיסק הזה, MB/s, או `None` = אין גל שנמדד (לא 0). השורות נאספות כאן; החישוב במוח (`floorrule.expect`)."""
     if not serial:
         return None
     return floorrule.expect(_rates(conn, serial, model))
 
 
-def _rates(conn: sqlite3.Connection, serial: str, model: str | None) -> list[tuple]:
+def _rates(conn: SqlConnection, serial: str, model: str | None) -> list[tuple]:
     """(בייטים, שניות) של הגלים האחרונים של הדיסק, החדשים ראשונים: עובדות למוח."""
     return [tuple(r) for r in conn.execute(
         "SELECT bytes, seconds FROM drive_rates WHERE serial = ? AND COALESCE(model, '') = ?"
@@ -61,7 +60,7 @@ def _rotational(disk: dict, where: str) -> int:
     return 0
 
 
-def decision(conn: sqlite3.Connection, disk: dict, *, role: str = "target",
+def decision(conn: SqlConnection, disk: dict, *, role: str = "target",
              support: bool | None = None, where: str = "") -> tuple[str | None, int | None]:
     """(סיבת סירוב או None, הרצפה בMB/s לדיסק הזה). מקור אינו נפסל לעולם. **המוח מחליט** (`floorrule.decide_disk`, K-FLOOR, S34, #3655);
     כאן נאספות העובדות ומבוצעת התוצאה. אין החלטה (המוח נכשל) = הרצפה של דיסק מוצק (`floorrule.DEFAULT`)."""
@@ -80,7 +79,7 @@ def decision(conn: sqlite3.Connection, disk: dict, *, role: str = "target",
     return None, call.mbps
 
 
-def _inventory(conn: sqlite3.Connection, mac: str | None = None) -> list[tuple[str, dict]]:
+def _inventory(conn: SqlConnection, mac: str | None = None) -> list[tuple[str, dict]]:
     """(mac, דיסק) מה-hello האחרון. JSON פגום = שורת יומן, והמכונה בלי דיסקים ידועים."""
     rows = conn.execute("SELECT mac, disks_json FROM net_devices WHERE disks_json IS NOT NULL"
                         + (" AND mac = ?" if mac else ""), (mac,) if mac else ()).fetchall()
@@ -95,7 +94,7 @@ def _inventory(conn: sqlite3.Connection, mac: str | None = None) -> list[tuple[s
     return out
 
 
-def manifest(conn: sqlite3.Connection) -> dict:
+def manifest(conn: SqlConnection) -> dict:
     """מה שהסוכן מקבל במניפסט: ערך הפתיחה, והציפיות שנלמדו (serial ← דגם ← MB/s)
     לכל HDD במלאי שיש לו גל שנמדד. רק כשהמתג דלוק: כבוי, אין לציפייה שימוש."""
     support = enabled(conn)
@@ -119,7 +118,10 @@ class RepairFloor(int):
     השימושים המספריים (`_write_kbps`, `_fail_slow_fetches`) אינם קוראים ל-DB מעבר לקודם.
     """
 
-    def __new__(cls, conn: sqlite3.Connection) -> "RepairFloor":
+    _conn: SqlConnection
+    _memo: dict[tuple[str, str], tuple[str | None, int | None]]
+
+    def __new__(cls, conn: SqlConnection) -> "RepairFloor":
         value = super().__new__(cls, writefloor.mbps(conn))
         value._conn = conn
         value._memo = {}

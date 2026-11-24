@@ -57,16 +57,15 @@ import json
 import logging
 import math
 import re
-import sqlite3
 from collections import Counter
 from pathlib import Path
-from typing import Callable
+from typing import Callable, TypeGuard
 
 from server.agent import cloner_cpu
 from server.disks import ata_cause, disk_failures
 from server.rounds import nic_speed
 from server.learn import server_io
-from server.db import _write_lock, get_setting, journal, now_iso, writing
+from server.db import _write_lock, get_setting, journal, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.drive_rates")
 
@@ -206,11 +205,11 @@ def parse_bitrate(raw: object) -> int | None:
     return bits if bits > 0 else None
 
 
-def enabled(conn: sqlite3.Connection) -> bool:
+def enabled(conn: SqlConnection) -> bool:
     return get_setting(conn, SETTING) == "true"
 
 
-def learned_start(conn: sqlite3.Connection) -> int | None:
+def learned_start(conn: SqlConnection) -> int | None:
     """#2028: קצב הפתיחה שנלמד, בביטים; None — לא נלמד, או ערך פגום (עם שורת יומן),
     ואז הפתיחה נשארת START_BITRATE. למידה רק מעלה את הפתיחה."""
     raw = get_setting(conn, START_SETTING)
@@ -223,7 +222,7 @@ def learned_start(conn: sqlite3.Connection) -> int | None:
     return bits
 
 
-def _limit_of(conn: sqlite3.Connection, serial: str,
+def _limit_of(conn: SqlConnection, serial: str,
               model: str | None) -> tuple[int | None, int | None, bool]:
     """(התקרה בביטים שהכונן מצדיק, הקצב המוגבל שנמדד לו, האם מוכר בכלל).
 
@@ -249,7 +248,7 @@ def _fmt(bits: int) -> str:
     return f"{max(1, bits // 10 ** 6)}m"
 
 
-def _count(value: object) -> bool:
+def _count(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
@@ -267,7 +266,7 @@ def _chunk_wave(past: dict, stream: object) -> bool:
     return past.get("engine") == "chunk" or (isinstance(stream, dict) and isinstance(stream.get("chunk"), dict))
 
 
-def _from_previous(conn: sqlite3.Connection, drives: list[dict], start: int,
+def _from_previous(conn: SqlConnection, drives: list[dict], start: int,
                    exclude: str | None) -> tuple[int, str, dict | None]:
     """(הקצב לפני הכוננים והגבולות, basis, הגל הקודם) — **לפי מחשבי השיכפול**.
 
@@ -329,7 +328,7 @@ def _from_previous(conn: sqlite3.Connection, drives: list[dict], start: int,
     return bits, basis, {**previous, "mac": mac}
 
 
-def choose(conn: sqlite3.Connection, drives: list[dict],
+def choose(conn: SqlConnection, drives: list[dict],
            ceiling_raw: str | None, session_id: str | None = None,
            direct: bool = False, link: dict | None = None) -> dict:
     """הקצב לגל של `drives` (`serial`, `model`, `mac`, `port`) — קריאה בלבד.
@@ -403,12 +402,14 @@ def choose(conn: sqlite3.Connection, drives: list[dict],
     bits, basis, previous = ((start, "start", None) if direct
                              else _from_previous(conn, drives, start, session_id))
     slowest, limit, rate = None, None, None
+    unknown = 0
     for drive in drives:
         got, measured, known = _limit_of(conn, drive["serial"], drive.get("model"))
         if not known:
-            result["unknown_drives"] += 1
+            unknown += 1
         if got is not None and (limit is None or got < limit):
             slowest, limit, rate = drive, got, measured
+    result = {**result, "unknown_drives": unknown}
     by = None
     if slowest is not None and limit < bits:
         bits, basis = limit, "learned"
@@ -425,7 +426,7 @@ def choose(conn: sqlite3.Connection, drives: list[dict],
             "previous": previous}
 
 
-def decision(conn: sqlite3.Connection, session_id: str | None) -> dict | None:
+def decision(conn: SqlConnection, session_id: str | None) -> dict | None:
     """מה שנבחר לגל כשיצא; None = לא נבחר (גל שהשרת אינו משדר, או ישן)."""
     if not session_id:
         return None
@@ -437,7 +438,7 @@ def decision(conn: sqlite3.Connection, session_id: str | None) -> dict | None:
         return None
 
 
-def decide(conn: sqlite3.Connection, session_id: str,
+def decide(conn: SqlConnection, session_id: str,
            drives: Callable[[], list[dict]], ceiling_raw: str | None,
            direct: bool = False,
            link: Callable[[], dict] | None = None,
@@ -501,7 +502,7 @@ def _cloner_note(cloner: dict | None, cap_by: str | None) -> str:
             f" assumed={len(cloner['assumed'])} cap_by={cap_by}")
 
 
-def direct_bitrate(conn: sqlite3.Connection, session_id: str | None,
+def direct_bitrate(conn: SqlConnection, session_id: str | None,
                    ceiling_raw: str | None) -> str:
     """`--max-bitrate` למחשב בנייה שמשדר (#715, `task.direct.multicast`):
     מה שנבחר לגל כשיצא (`app.on_running`); לפני כן, או בלי בחירה — קצב
@@ -542,7 +543,7 @@ def _from_stream(chunk: dict | None, mac: str, serial: str, written: int) -> tup
     return took, float(seconds), int(offered / seconds)
 
 
-def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
+def record_wave(conn: SqlConnection, session_id: str, members) -> int:
     """כל מגירה שסיימה (`done`) בגל משאירה את הקצב שכתבה. מחזיר כמה נרשמו.
 
     הקצב = מה שהכונן לקח מהשידור במעברים הראשונים (`_from_stream`, #3296). #3173: כל גל שהשרת משדר הוא גל
@@ -661,7 +662,7 @@ def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
                 "INSERT OR IGNORE INTO drive_rates (serial, model, session_id,"
                 " rate_bps, cap_bps, bytes, seconds, at) VALUES (?,?,?,?,?,?,?,?)",
                 row).rowcount for row in rows)
-        if held:
+        if held and pressure:
             from server.brain import memory
             journal(conn, "drive_rates_unlearned",
                     f"{session_id} {pressure}: " + " ".join(f"{r[0]}={r[3] / 1e6:.0f}MB/s" for r in held),
@@ -711,7 +712,7 @@ def _cpu(member) -> dict | None:
         return None
 
 
-def _failed(conn: sqlite3.Connection, detail: str) -> None:
+def _failed(conn: SqlConnection, detail: str) -> None:
     try:
         journal(conn, "drive_rates_failed", " ".join(detail.split())[:200])
     except Exception:             # noqa: BLE001 — גם היומן אינו מפיל

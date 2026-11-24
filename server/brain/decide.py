@@ -127,7 +127,8 @@ def _judge(p: Proposal, snap: Snapshot, states: dict[str, tuple[str, str, tuple[
         return Decision("K2", p.action, where, HOLD,
                         "; ".join(f"{mac}={state}: {why}" for mac, state, why, _ev in alive),
                         tuple(e for *_rest, ev in alive for e in ev))
-    held, notes, used = [], [], []
+    held, notes = [], []
+    used: list[int] = []
     for mac in p.targets:
         window, why, ids = remembered(snap.recall(mac), snap.now, cfg, snap.round_id)
         used += ids

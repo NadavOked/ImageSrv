@@ -47,7 +47,7 @@ def due(wave_id: str, mono: float) -> bool:
         if last is not None and mono - last < TICK_S:
             return False
         _last[wave_id] = mono
-        for old in sorted(_last, key=_last.get)[:max(len(_last) - WAVES, 0)]:
+        for old in sorted(_last, key=lambda w: _last[w])[:max(len(_last) - WAVES, 0)]:
             del _last[old]                  # גל שנגמר: הרשם אינו גדל לנצח
             for k in [k for k in _state if k[0] == old]:
                 del _state[k]
@@ -124,8 +124,8 @@ def run(conn, wave_id: str, *, now: float | None = None, mono=time.monotonic) ->
 def forget(wave_id: str | None = None) -> None:
     """מנקה את הרשם (סוף גל, ובדיקות)."""
     with _lock:
-        for k in [k for k in _last if wave_id is None or k == wave_id]:
-            del _last[k]
+        for w in [w for w in _last if wave_id is None or w == wave_id]:
+            del _last[w]
         for k in [k for k in _state if wave_id is None or k[0] == wave_id]:
             del _state[k]
         for k in [k for k in _suspect if wave_id is None or k[0] == wave_id]:

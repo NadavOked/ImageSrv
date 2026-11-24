@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import threading
 import time
 from dataclasses import dataclass
@@ -42,7 +41,7 @@ from typing import Callable
 
 from server.brain import gate_host, gate_machines, gate_round, memory, opengate, veto
 from server.brain.gate_core import BLOCK, OPEN, ROUND, UNDECIDED, VERDICTS, WARN, Reading, name_of, undecided  # noqa: F401 -- API
-from server.db import now_iso
+from server.db import now_iso, SqlConnection
 
 log = logging.getLogger("imagesrv.brain")
 
@@ -58,7 +57,7 @@ class Gate:
     id: str                 # מזהה הקטלוג = ``rule`` ב-brain_decisions
     name: str               # ``point``
     title_he: str
-    read: Callable[[sqlite3.Connection, tuple[str, ...], str], list[Reading]]
+    read: Callable[[SqlConnection, tuple[str, ...], str], list[Reading]]
     #: #3662 (B70): השער קורא רק מה שקיים **לפני** שהסבב נפתח (לא שורת `room_rounds`), ולכן הוא נכנס לפסק של `opengate.gate`.
     pre_open: bool = False
 
@@ -78,7 +77,7 @@ GATES: tuple[Gate, ...] = (
 )
 
 
-def _read(gate: Gate, conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
+def _read(gate: Gate, conn: SqlConnection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
     """קריאות השער, בלי שום מצב שאינו אחד מארבעת הפסקים. שער שלא ענה = ``UNDECIDED``, בשמו."""
     try:
         got = gate.read(conn, macs, round_id)
@@ -96,7 +95,7 @@ def _read(gate: Gate, conn: sqlite3.Connection, macs: tuple[str, ...], round_id:
     return out
 
 
-def _rows(conn: sqlite3.Connection, round_id: str, gate: Gate, readings: list[Reading]) -> list[tuple[Reading, int | None]]:
+def _rows(conn: SqlConnection, round_id: str, gate: Gate, readings: list[Reading]) -> list[tuple[Reading, int | None]]:
     """רושם: כל קריאה בשם הישות שלה, ו-``OPEN`` של משכפלים מקופל לשורה אחת לשער."""
     done, folded = [], [r for r in readings if r.mac is not None and r.verdict == OPEN]
     for r in readings:
@@ -106,14 +105,14 @@ def _rows(conn: sqlite3.Connection, round_id: str, gate: Gate, readings: list[Re
         done.append((r, memory.record(conn, mode="shadow", rule=gate.id, action=ACTION, point=gate.name, round_id=round_id,
                                       entity=entity, verdict=r.verdict, reason=r.reason, evidence=r.evidence, outcome=SHADOW_HE)))
     if folded:
-        macs = sorted(r.mac for r in folded)
+        macs = sorted(r.mac for r in folded if r.mac is not None)
         one = Reading(OPEN, f"{gate.title_he}: נבדקו {len(macs)} משכפלים, ואין מה להזהיר", tuple(f"mac={m}" for m in macs))
         done.append((one, memory.record(conn, mode="shadow", rule=gate.id, action=ACTION, point=gate.name, round_id=round_id,
                                         entity=("round", round_id), verdict=OPEN, reason=one.reason, evidence=one.evidence, outcome=SHADOW_HE)))
     return done
 
 
-def _read_within(gate: Gate, conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str, deadline: float) -> list[Reading]:
+def _read_within(gate: Gate, conn: SqlConnection, macs: tuple[str, ...], round_id: str, deadline: float) -> list[Reading]:
     """קריאת שער אחד בתהליכון משלו, עד ``deadline`` (זמן ``monotonic``). שער שלא ענה בזמן, או שלא נשאר לו זמן להתחיל, = ``UNDECIDED``.
     התהליכון של שער שנתקע ממשיך לרוץ ותוצאתו נזרקת; החיבור שלו ל-DB הוא של התהליכון (`db.Database`), לא של הרצה."""
     left = deadline - time.monotonic()
@@ -128,7 +127,7 @@ def _read_within(gate: Gate, conn: sqlite3.Connection, macs: tuple[str, ...], ro
     return box[0]
 
 
-def run(conn: sqlite3.Connection, round_id: str, macs, timeout_s: float | None = None) -> list[tuple[Gate, Reading]]:
+def run(conn: SqlConnection, round_id: str, macs, timeout_s: float | None = None) -> list[tuple[Gate, Reading]]:
     """כל השערים, לפי הסדר, עד ``timeout_s`` (ברירת מחדל `TIMEOUT_S`) לכולם יחד: קורא, רושם בצל ומחזיר מה נרשם (לטסטים).
     ``off`` = ריק, בלי לקרוא דבר. אינו זורק. **חוסם עד שנגמר**: פתיחת סבב קוראת ל-`start`, לא לכאן."""
     out: list[tuple[Gate, Reading]] = []
@@ -149,7 +148,7 @@ def run(conn: sqlite3.Connection, round_id: str, macs, timeout_s: float | None =
     return out
 
 
-def read_pre_open(conn: sqlite3.Connection, macs, timeout_s: float | None = None) -> list[tuple[Gate, Reading]]:
+def read_pre_open(conn: SqlConnection, macs, timeout_s: float | None = None) -> list[tuple[Gate, Reading]]:
     """#3662 (B70): קריאת השערים של ``pre_open`` בלבד, **לפני** שהסבב קיים (``round_id`` ריק), בלי לרשום דבר: מי שקורא (`opengate.gate`)
     מחליט ורושם פסק אחד. אותה תקרת זמן כמו `run`, ושער שלא ענה = ``UNDECIDED``. אינו בודק את `off` (זה של הקורא)."""
     deadline = time.monotonic() + (TIMEOUT_S if timeout_s is None else timeout_s)
@@ -157,7 +156,7 @@ def read_pre_open(conn: sqlite3.Connection, macs, timeout_s: float | None = None
     return [(gate, reading) for gate in GATES if gate.pre_open for reading in _read_within(gate, conn, roster, "", deadline)]
 
 
-def _job(conn: sqlite3.Connection, round_id: str, macs: tuple[str, ...], timeout_s: float | None) -> None:
+def _job(conn: SqlConnection, round_id: str, macs: tuple[str, ...], timeout_s: float | None) -> None:
     """הגוף של תהליכון הרקע: `run`, ואחריו הפסק האחד (`opengate.record_after_open`). ``off`` ל-`run` = ריק = לא נרשם פסק."""
     opengate.record_after_open(conn, round_id, run(conn, round_id, macs, timeout_s))
 
@@ -166,7 +165,7 @@ _running: list[threading.Thread] = []
 _running_lock = threading.Lock()
 
 
-def start(conn: sqlite3.Connection, round_id: str, macs, timeout_s: float | None = None) -> threading.Thread | None:
+def start(conn: SqlConnection, round_id: str, macs, timeout_s: float | None = None) -> threading.Thread | None:
     """מריץ את `run` **ברקע**, בתהליכון משלו, ומחזיר מיד: פתיחת הסבב אינה מחכה לשערים (ה-`collect` של B51 איטי). ה-`conn` הוא
     `db.Database`, וכל תהליכון מקבל ממנו חיבור משלו. אינו זורק; ``None`` = התהליכון לא יצא לדרך (נרשם בלוג)."""
     try:
