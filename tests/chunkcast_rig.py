@@ -16,6 +16,7 @@ chunks.
 
 from __future__ import annotations
 
+import errno
 import os
 import random
 import secrets
@@ -168,10 +169,68 @@ def build(tmp: Path, fanout: Path, *, kind: str = "partclone", noisy: tuple[int,
 
 # --- running chunkcast ---------------------------------------------------------
 
+#: #3870: the rig's UDP ports come from below the kernel's ephemeral range (and below
+#: tools/e2e/harness.py's fixed 30199). A port the kernel picked for bind(0) and then
+#: let go of was free only for that instant: every sender's data socket and every
+#: receiver's feedback socket is auto-bound from that same range, so under a loaded
+#: queue one of them could take it between this check and chunkcast's own bind
+#: ("send: ... cannot bind control socket", r44a bt4, 19/11).
+PORT_FLOOR, PORT_CEIL, BLOCK = 16384, 30000, 4
+#: A block is P..P+3: the data port, the default control port (P+1, chunkcast's own
+#: rule, never checked before), and the e2e server's portbase+2/+3. Its lock file is
+#: held until this process exits, so no other xdist worker and no other run on the
+#: host (each queue worker has its own TMPDIR, hence /tmp) is handed the same block.
+_held_locks: list[int] = []
+
+
+def _ephemeral_low() -> int:
+    span = Path("/proc/sys/net/ipv4/ip_local_port_range")
+    if not span.exists():                   # not Linux: the IANA dynamic range
+        return 49152
+    return int(span.read_text().split()[0])
+
+
+def _block_is_bindable(base: int) -> bool:
+    socks = []
+    try:
+        for port in range(base, base + BLOCK):
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            socks.append(s)
+            try:
+                s.bind(("0.0.0.0", port))   # no SO_REUSEADDR: any holder, on any address, refuses it
+            except OSError as e:
+                if e.errno == errno.EADDRINUSE:
+                    return False
+                raise
+        return True
+    finally:
+        for s in socks:
+            s.close()
+
+
 def free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+    """A UDP port P such that P..P+3 are unbound now, cannot be auto-assigned by the
+    kernel, and are handed to no other process of the rig while this one lives."""
+    import fcntl                            # POSIX only; this module is imported on Windows too
+
+    low = _ephemeral_low()
+    assert PORT_CEIL <= low, f"the ephemeral range starts at {low}, inside the rig's {PORT_FLOOR}-{PORT_CEIL}"
+    locks = Path("/tmp") / f"imagesrv-udp-ports-{os.getuid()}"
+    locks.mkdir(mode=0o700, exist_ok=True)
+    bases = list(range(PORT_FLOOR, PORT_CEIL, BLOCK))
+    random.shuffle(bases)
+    for base in bases:
+        fd = os.open(locks / str(base), os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:             # another worker (or this one, earlier) holds it
+            os.close(fd)
+            continue
+        if _block_is_bindable(base):
+            _held_locks.append(fd)
+            return base
+        os.close(fd)                        # something outside the rig holds a port of it
+    raise AssertionError(f"no free block of {BLOCK} UDP ports in {PORT_FLOOR}-{PORT_CEIL} ({len(_held_locks)} held here)")
 
 
 def new_session() -> str:

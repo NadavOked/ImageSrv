@@ -58,11 +58,7 @@ NONCLASSROOM_NAME_MAX = HOSTNAME_MAX - len(ROOM_PREFIX) - 1
 _PREFIX_OK = re.compile(r"[A-Z0-9-]+")
 
 
-#: שידור מולטיקאסט — שולח אחד, ולכן חריץ אחד בכל המערכת.
-MULTICAST = "multicast"
-#: משיכת HTTP של תחנה בודדת — בלי חריץ, כמה במקביל.
-UNICAST = "unicast"
-KINDS = (MULTICAST, UNICAST)
+from server.rounds.session_kinds import KINDS, MULTICAST, UNICAST   # noqa: E402,F401 -- #2531: a leaf module
 
 #: קידומת שם המחשב אינה רלוונטית למשיכה בודדת (אין סבב לגזור ממנו שם),
 #: אבל השדה אינו יכול להיות ריק — הוא מזהה את הסבב ביומן ובמסך.

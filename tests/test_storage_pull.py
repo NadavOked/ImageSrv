@@ -47,6 +47,7 @@ PULL_ID = PULL["id"]
 class _Ctx:
     def __init__(self, conn, library, data_dir):
         self.conn = conn
+        self.store = type("_Store", (), {})()   # #3770: clockstep.guard keys a weak-ref detector by the room store
         self.library = library
         self.data_dir = data_dir
 

@@ -26,6 +26,7 @@ from server.brain import waveeta as W
 from server.rounds import chunksend
 from server.rounds.chunksend import ChunkEngine, feedback_bounds
 
+BIG_FILE = 100 << 20     # #4003: a test file bigger than this is a real write on Windows
 CHUNKS, ZBYTES = 18_441, 18_545_444_861             # J1 `wave_rates.stream.chunk` (chunks, stream_zbytes)
 WHOLE = CHUNKS * W.CHUNK_BYTES                       # 77,347,160,064 -- the same figure as `stream.chunk.bytes`
 FLOOR = 74                                           # MB/s, `writecheck_min_mbps` of J1 (agentlog-cloner1.txt)
@@ -93,17 +94,18 @@ def test_k3_and_the_command_read_one_rate_max(conn):
     assert eta._rate_cap(PROBES, ASKED, CHUNKS, ZBYTES) == (int(rate_max * 1000 * ZBYTES / WHOLE), "ceiling")
 
 
-def test_k3_reads_the_rate_cap_the_command_carries_when_the_ceiling_can_grow(conn, tmp_path):
+def test_k3_reads_the_rate_cap_the_command_carries_when_the_ceiling_can_grow(conn, tmp_path, monkeypatch):
     """(neg) #3616: with no learned maximum the sender may grow `--rate-max` up to `--rate-cap` (the wire's capacity as a rate of data). K3 takes
     the cap from the same `feedback_grow_cap`: the number on the command line, as wire bps -- which is the asked rate, so it binds nothing."""
     path = tmp_path / "p3.zst"
-    with path.open("wb") as f:
-        f.truncate(ZBYTES)
+    monkeypatch.setattr(chunksend, "_size_of", lambda p: ZBYTES)   # #4003: truncate(18GB) is a real 18GB write on Windows
     write_kbps = chunksend.probe_write_kbps(list(PROBES.values()), FLOOR)
     engine = SimpleNamespace(port=7713, interface=None, feedback=True, write_floor=lambda: FLOOR)   # פורט-הפצה-מכוון
     wave = SimpleNamespace(key="0123456789abcdef", round=1, part_chunks={3: CHUNKS})
     cmd = ChunkEngine._command(engine, wave, {"index": 3}, path, ASKED // 1000, write_kbps, None, None)
     rate_cap = int(cmd[cmd.index("--rate-cap") + 1])
+    # #4003 guard: no test file of this size may exist (a real write on Windows)
+    assert not [q for q in tmp_path.rglob("*") if q.is_file() and q.stat().st_size > BIG_FILE]
     eta = W.WaveEta(conn, library=Lib(), chunk=Chunk(), mode=lambda: "shadow")
     assert eta._rate_cap(PROBES, ASKED, CHUNKS, ZBYTES) == (int(rate_cap * 1000 * ZBYTES / WHOLE), "grow")
 

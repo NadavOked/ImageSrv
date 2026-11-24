@@ -370,3 +370,31 @@ def test_hello_sibling_netprobe_is_stored_inside_probe(server):
     assert m["probe"]["netprobe"]["lldp"]["switch"] == "sw-lab-1"
     assert m["probe"]["netprobe"]["cable"]["skipped"] == "link up"
     assert m["probe_verdicts"] == []
+
+
+# --- #977 §7: memory_bytes ב-GET /machines -----------------------------------
+
+
+def test_machines_exposes_memory_bytes_from_the_probe(server):
+    """#977 §7: השדה קיים בתשובה ונושא את סך הזיכרון שהמכונה מדדה (לא נשמט, לא 0)."""
+    setup_classroom(server)
+    assert _hello(server, probe=GOOD).status_code == 200
+    assert _machine(server)["memory_bytes"] == 8589934592
+
+
+def test_memory_bytes_is_null_when_unknown_never_zero(server):
+    """עיקרון 5: מעולם לא דיווחה, `memory` לא נבדק או `{"error"}` = null, ולא 0."""
+    setup_classroom(server)
+    assert _machine(server)["memory_bytes"] is None       # מעולם לא דיווחה
+    assert _hello(server, probe=_with(memory=None)).status_code == 200
+    assert _machine(server)["memory_bytes"] is None       # לא נבדק
+    assert _hello(server, probe=_with(memory={"error": "MemTotal חסר"})).status_code == 200
+    assert _machine(server)["memory_bytes"] is None       # נכשל
+
+
+@pytest.mark.parametrize("bad", [None, {}, {"total_bytes": 0}, {"total_bytes": -5},
+                                 {"total_bytes": True}, {"total_bytes": "8589934592"}, {"error": "x"}], ids=str)
+def test_memory_bytes_helper_refuses_anything_that_is_not_a_positive_int(bad):
+    assert probe.memory_bytes({"memory": bad}) is None
+    assert probe.memory_bytes(None) is None
+    assert probe.memory_bytes({"memory": {"total_bytes": 4096}}) == 4096

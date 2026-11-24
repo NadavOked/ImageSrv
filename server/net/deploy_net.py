@@ -213,9 +213,12 @@ def write_grub_cfg(url: str, tftp_root: str | Path, password_hash: str = "") -> 
             path.parent.chmod(0o755)   # #1817: not the process umask (dnsmasq traverses it)
         # #1908: אטומי — grub.cfg חתוך הוא אף מחשב שלא מגיע לתפריט.
         # #1817: dnsmasq must also read a formerly private file, regardless of umask.
-        write_atomic(path, render_bootstrap(GrubConfig(server_base=url,
-                                                       password_hash=password_hash)),
-                     encoding="ascii", mode=0o644)
+        text = render_bootstrap(GrubConfig(server_base=url, password_hash=password_hash))
+        write_atomic(path, text, encoding="ascii", mode=0o644)
+        # #3130 (A-CFG-05): the file the machines will read, read back -- written is not served.
+        if path.read_text(encoding="ascii") != text:
+            log.warning("%s read back different from what was written (%d bytes expected)", path, len(text))
+            return f"{path}: הקריאה בחזרה אחרי הכתיבה שונה ממה שנכתב — הפרטים ביומן השרת"
     except (OSError, ValueError) as exc:
         log.warning("%s not written: %s", path, exc)
         return f"לא ניתן לכתוב את {path} — הפרטים ביומן השרת"
@@ -403,7 +406,8 @@ def regenerate_firewall(repo_dir: str | Path, *, deploy_if: str | None, servers_
         args += ["--boot-port", str(boot_port)]
     ok, ruleset, err = _run(args)
     if not ok or not ruleset.strip():
-        return f"מחולל חומת האש נכשל: {err or 'פלט ריק'}"
+        log.warning("firewall generator failed: %s", err or "empty output")      # #3021
+        return "מחולל חומת האש נכשל — הפרטים ביומן השרת"
     # #1121: candidate ליד הקובץ → `nft -c` → `nft -f candidate` → ורק אז
     # החלפה אטומית. הקובץ הישן נדרס רק אחרי שהקרנל קיבל את החדש; טעינה
     # שנכשלה מחזירה את ה-ruleset הישן מהקובץ הישן (שעדיין שם), כדי שמה
@@ -446,7 +450,10 @@ def restart_server_later(delay: int = RESTART_DELAY_SECONDS) -> str | None:
     ok, out, err = _run(["systemd-run", f"--on-active={delay}",
                          f"--unit={unit}", "--collect",
                          "systemctl", "restart", SERVER_UNIT], timeout=15)
-    return None if ok else f"לא ניתן לתזמן אתחול לשרת: {err or out.strip()}"
+    if ok:
+        return None
+    log.warning("systemd-run (server restart) failed: %s", err or out.strip())     # #3091
+    return "לא ניתן לתזמן אתחול לשרת — הפרטים ביומן השרת"
 
 
 def default_hooks(password_hash: str = "") -> Hooks:

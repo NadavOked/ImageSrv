@@ -28,7 +28,6 @@ from server.db import _settle, _write_lock, now_iso, writing
 
 log = logging.getLogger("imagesrv.net_history")
 
-KEEP_IPS = 50
 KEEP_NIC = 500
 NIC_GAP_S = 3600
 

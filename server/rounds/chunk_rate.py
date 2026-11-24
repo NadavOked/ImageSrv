@@ -42,7 +42,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 
-from server.brain import budget, memory, netcap, rateinputs, wavesense, writerate
+from server.brain import budget, memory, netcap, rateinputs, receiverplan, wavesense, writerate
 from server.db import _write_lock, journal, writing
 from server.learn import server_cap, server_io
 from server.rounds import drive_rates
@@ -315,10 +315,12 @@ def record(conn: sqlite3.Connection, session_id: str, outcome: dict) -> None:
     """Called when a chunk wave ended (`send_done`, `send_failed`, `send_stopped`): the observation of the wave,
     and whether it teaches. Never raises."""
     try:
+        decision = drive_rates.decision(conn, session_id) or {}
+        asked = drive_rates.parse_bitrate(decision.get("max_bitrate"))
+        sample = sample_of(asked, outcome)
+        receiverplan.observe(conn, session_id, decision, sample)
         if not drive_rates.enabled(conn):
             return
-        asked = drive_rates.parse_bitrate((drive_rates.decision(conn, session_id) or {}).get("max_bitrate"))
-        sample = sample_of(asked, outcome)
         sample["skip"] = _unlearned(conn, session_id, asked, sample, outcome)
         sample["teaches"] = sample["skip"] is None
         with _write_lock, writing(conn):

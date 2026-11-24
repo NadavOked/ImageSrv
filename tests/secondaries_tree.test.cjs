@@ -244,7 +244,7 @@ test('the secondary\'s tree is the primary\'s tree — same groups, pages and su
   const [primary] = readTree(sidebar);
   // down to the sub-nodes (Nadav: the same tree): מחשבים ▸ בנייה/שיכפול, רשת ▸ תרשים/חיבורים פיזיים/רשת הפצה/שירותים.
   const want = ['סקירה כללית', 'סבב הפצה', 'שאלות המוח', ['מלאי', ["אימג'ים", ['מחשבים', ['מחשבי בנייה', 'מחשבי שיכפול']], 'דיסקים']],
-    ['תשתית', ['בריאות ושירותים', 'אחסון', ['רשת', ['תרשים', 'חיבורים פיזיים', 'רשת הפצה', 'שירותים']], 'מוניטור', 'דרייברים', 'דיסק-און-קי']],
+    ['תשתית', ['בריאות ושירותים', 'אחסון', ['רשת', ['תרשים', 'חיבורים פיזיים', 'רשת הפצה', 'שירותים']], 'מוניטור', 'דיסק-און-קי']],
     ['ניהול', ['משתמשים והרשאות', 'יומן', 'הגדרות', 'החשבון שלי']]];   // סניפים starts hidden (capability)
   assert.equal(JSON.stringify(skeleton(primary.kids, 3)), JSON.stringify(want), 'the reader sees the primary tree (a parser that sees nothing proves nothing)');
 

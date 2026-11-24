@@ -269,9 +269,9 @@ static void set_source(App *a, int i) {
 
 /* 16/10 (Nadav): the SMART warning window about drawer i (smartdlg.c). */
 static void smart_ask(App *a, int kind, int i) {
-    const LcDisk *d = &a->st.lc.disks[i]; char label[LC_LABEL_MAX];
-    lc_disk_label(d, label, sizeof label);
-    sdlg_open(a, kind, i, d->dev, label, d->smart, d->smart_reason, d->model, d->serial);
+    const LcDisk *d = &a->st.lc.disks[i]; char label[LC_LABEL_MAX], cname[LC_LABEL_MAX];
+    lc_disk_label(d, label, sizeof label); mapped_disk_name(d->name, d->drawer, cname, sizeof cname);
+    sdlg_open(a, kind, i, d->dev, label, d->smart, d->smart_reason, d->model, d->serial, cname);
 }
 
 /* #1722: a source is proposed only with a system on it -- a partition table
