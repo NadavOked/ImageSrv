@@ -49,6 +49,7 @@ import re
 import secrets
 import shutil
 import sqlite3
+from server.db import SqlConnection
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -501,7 +502,7 @@ def _ago(seconds: float) -> str:
     return f"לפני {minutes // 60} שעות"
 
 
-def health_check(conn: sqlite3.Connection, data_dir: Path | None, timer_state: str,
+def health_check(conn: SqlConnection, data_dir: Path | None, timer_state: str,
                  now: datetime | None = None) -> dict:
     """שורת "גיבוי המסד" ב-`/health`. `timer_state` — `systemctl is-active` של
     `imagesrv-backup.timer` ("" = לא ניתן לבדוק). {"id","label","state","detail"}."""

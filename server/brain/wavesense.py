@@ -37,9 +37,8 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 
-from server.db import _settle, _write_lock, now_iso, writing
+from server.db import _settle, _write_lock, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.brain")
 
@@ -134,7 +133,7 @@ def well_formed(raw: object) -> dict | None:
     return out
 
 
-def kernel_lines(conn: sqlite3.Connection, session_id: str, mac: str, serial: str) -> tuple[str, ...] | None:
+def kernel_lines(conn: SqlConnection, session_id: str, mac: str, serial: str) -> tuple[str, ...] | None:
     """K9 (#3064): the kernel's ATA lines about the drawer holding ``serial`` on ``mac``, as the machine last reported them in
     this wave -- for `cause.judge` at the engine's points (D11, D12, D14, D15), which see ``skipped`` but not the kernel.
 
@@ -159,7 +158,7 @@ def kernel_lines(conn: sqlite3.Connection, session_id: str, mac: str, serial: st
         return None
 
 
-def record(conn: sqlite3.Connection, session_id: str, mac: str, senses: dict | None) -> bool:
+def record(conn: SqlConnection, session_id: str, mac: str, senses: dict | None) -> bool:
     """The wave's summary of one machine, replacing the one before it. True = kept. Never raises."""
     if senses is None:
         return False
@@ -190,10 +189,10 @@ def numbers(senses_json: str | None) -> dict:
         return {}
     if not isinstance(s, dict):
         return {}
-    cpu = s.get("cpu") if isinstance(s.get("cpu"), list) else []
-    nic = s.get("nic") if isinstance(s.get("nic"), dict) else {}
-    disks = [d for d in (s.get("disks") or {}).values() if isinstance(d, dict)] \
-        if isinstance(s.get("disks"), dict) else []
+    raw_cpu, raw_nic, raw_disks = s.get("cpu"), s.get("nic"), s.get("disks")
+    cpu = raw_cpu if isinstance(raw_cpu, list) else []
+    nic = raw_nic if isinstance(raw_nic, dict) else {}
+    disks = [d for d in raw_disks.values() if isinstance(d, dict)] if isinstance(raw_disks, dict) else []
     out = {"cpu_busy_max": _peak(c.get("busy_max") for c in cpu if isinstance(c, dict)),
            "cpu_busy_min_core": None, "softirq_max": _peak(c.get("softirq_max") for c in cpu if isinstance(c, dict)),
            "net_rx_ps_max": _peak(c.get("net_rx_ps_max") for c in cpu if isinstance(c, dict)),
@@ -208,5 +207,5 @@ def numbers(senses_json: str | None) -> dict:
            "disk_w_ms_max": _peak(d.get("w_ms_max") for d in disks)}
     busy = [c.get("busy") for c in cpu if isinstance(c, dict)]
     if busy and all(isinstance(v, int) and not isinstance(v, bool) for v in busy):
-        out["cpu_busy_min_core"] = float(min(busy))   # the least busy core of the last window: "every core above 85%"
+        out["cpu_busy_min_core"] = float(min(v for v in busy if isinstance(v, int)))   # the least busy core of the last window: "every core above 85%"
     return {k: v for k, v in out.items() if v is not None}

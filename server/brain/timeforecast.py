@@ -83,9 +83,9 @@ def _ready_s(conn, mac: str) -> float | None:
             continue
         got = [(agentsenses.well_formed_target(t.get("senses")) or {}).get("ready_s")
                for t in targets if isinstance(t, dict)] if isinstance(targets, list) else []
-        got = [v for v in got if v is not None]
-        if got:
-            worst.append(max(got))
+        ready = [v for v in got if v is not None]
+        if ready:
+            worst.append(max(ready))
         if len(worst) >= learn_boot.WINDOW:
             break
     return float(statistics.median(worst)) if len(worst) >= learn_boot.MIN_SAMPLES else None
@@ -94,16 +94,18 @@ def _ready_s(conn, mac: str) -> float | None:
 def machine_times(conn, mac: str, now: float) -> dict:
     """הזמנים שהשרת למד על מכונה: `wake_s`, `boot_s`, `ready_s`. ``None`` = לא נמדד. כל אחד נכשל לבדו."""
     out: dict = {"wake_s": None, "boot_s": None, "ready_s": None, "boot_missing": []}
-    for key, read in (("wake_s", lambda: learn_wol.stats(conn, mac, now)["typical_s"]),
-                      ("boot_s", lambda: _boot_s(conn, mac)), ("ready_s", lambda: _ready_s(conn, mac))):
-        try:
-            got = read()
-            if key == "boot_s":
-                out["boot_s"], out["boot_missing"] = got
-            else:
-                out[key] = got
-        except Exception:                        # noqa: BLE001 -- חוש שלא נקרא הוא "לא נמדד"
-            log.exception("brain: %s of %s was not read", key, mac)
+    try:
+        out["wake_s"] = learn_wol.stats(conn, mac, now)["typical_s"]
+    except Exception:                            # noqa: BLE001 -- חוש שלא נקרא הוא "לא נמדד"
+        log.exception("brain: %s of %s was not read", "wake_s", mac)
+    try:
+        out["boot_s"], out["boot_missing"] = _boot_s(conn, mac)
+    except Exception:                            # noqa: BLE001
+        log.exception("brain: %s of %s was not read", "boot_s", mac)
+    try:
+        out["ready_s"] = _ready_s(conn, mac)
+    except Exception:                            # noqa: BLE001
+        log.exception("brain: %s of %s was not read", "ready_s", mac)
     return out
 
 
@@ -134,7 +136,8 @@ def started(conn, wave_id: str, drives: list, image_bytes: object, now: float | 
         seconds = f.get("seconds")
         evidence = _evidence(conn, f, drives, image_bytes, now)
         if seconds is None:
-            why = WHY_HE.get(f.get("why"), "לא נחזה")
+            code = f.get("why")
+            why = WHY_HE.get(code, "לא נחזה") if isinstance(code, str) else "לא נחזה"
             verdict, predicted = UNPREDICTED, None
             reason = f"אין חיזוי: {why}" + (f" ({', '.join(f['missing'])})" if f.get("missing") else "")
         else:

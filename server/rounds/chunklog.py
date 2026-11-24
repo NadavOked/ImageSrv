@@ -17,6 +17,7 @@ import re
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Protocol
 
 from server.system import priority
 
@@ -76,12 +77,22 @@ def sender_env(cmd: list[str], environ: dict[str, str] | None = None) -> dict[st
     שלו גובר, וכך חוזרים ל-`inline`: `Environment=CHUNKCAST_READER=inline` ביחידה), וגם כשקבע `CHUNKCAST_AHEAD` (אין read-ahead
     ב-`thread`, והשולח מסרב ליחד). שילוב אסור שהמפעיל עשה בעצמו אינו מתוקן כאן ואינו נופל בשקט ל-`inline`: זה כישלון גלוי. `--stdin` ו-`--device`
     אינם נבנים בשרת, אבל נשללים כאן במפורש."""
-    environ = os.environ if environ is None else environ
-    if READER_ENV in environ or AHEAD_ENV in environ:
+    env = os.environ if environ is None else environ
+    if READER_ENV in env or AHEAD_ENV in env:
         return None
     if "--file" not in cmd or "--stdin" in cmd or "--device" in cmd:
         return None
-    return {**environ, READER_ENV: READER_THREAD}
+    return {**env, READER_ENV: READER_THREAD}
+
+
+class SendProcess(Protocol):
+    """מה שמנוע החתיכות דורש מ"התהליך" של מעבר: ארבע פעולות. `subprocess.Popen` מקיים אותו, וגם מה שנכנס במקומו
+    (`RemoteSend` של מחשב בנייה, `SimulatedSend` של שרת שאסור לו לשדר)."""
+
+    def poll(self) -> int | None: ...
+    def wait(self, timeout: float | None = None) -> int: ...
+    def terminate(self) -> None: ...
+    def kill(self) -> None: ...
 
 
 def run_process(cmd: list[str]) -> subprocess.Popen:

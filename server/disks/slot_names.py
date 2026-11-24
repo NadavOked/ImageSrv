@@ -20,11 +20,10 @@ from __future__ import annotations
 
 import json
 import re
-import sqlite3
 
 from server.disks import model_slots
 from server.disks.model_slots import NAME_MAX, clean_name   # noqa: F401 -- #2531: defined there, re-exported
-from server.db import _write_lock, now_iso, writing
+from server.db import _write_lock, now_iso, SqlConnection, writing
 
 #: ``ataN`` על בקר שני יכול לעבור את 8 (``drawer_count``); 32 מספיק לכל לוח.
 PORT_MAX = 32
@@ -56,7 +55,7 @@ def parse_key(raw) -> str:
     raise ValueError(f"חיבור לא תקין — sata:1..{PORT_MAX} או serial:<מספר סידורי>")
 
 
-def all_by_mac(conn: sqlite3.Connection) -> dict[str, dict[str, str]]:
+def all_by_mac(conn: SqlConnection) -> dict[str, dict[str, str]]:
     """כל השמות **האפקטיביים**, ``{mac: {slot: name}}`` — #2001: שמות הדגם
     (`model_slots`) למכונה בלי מיפוי משלה, ושמות המכונה מעליהם."""
     out: dict[str, dict[str, str]] = {}
@@ -67,7 +66,7 @@ def all_by_mac(conn: sqlite3.Connection) -> dict[str, dict[str, str]]:
     return out
 
 
-def for_mac(conn: sqlite3.Connection, mac: str) -> dict[str, str]:
+def for_mac(conn: SqlConnection, mac: str) -> dict[str, str]:
     own = {r["slot"]: r["name"] for r in conn.execute(
         "SELECT slot, name FROM machine_slot_names WHERE mac = ? ORDER BY slot", (mac,))}
     mapping = model_slots.for_mac(conn, mac)
@@ -83,7 +82,7 @@ def resolve(names: dict[str, str], port, serial, pci=None) -> str | None:
     return names.get(key) if key else None
 
 
-def label(conn: sqlite3.Connection, mac: str, *, port=None, serial=None,
+def label(conn: SqlConnection, mac: str, *, port=None, serial=None,
           dev: str | None = None) -> str | None:
     """השם לשורת יומן. כשהדיווח נושא רק ``dev`` (דיווח התקדמות של מגירה),
     החריץ והסידורי נלקחים מהדיסקים שהמכונה דיווחה ב-hello האחרון —
@@ -110,7 +109,7 @@ def journal_suffix(name: str | None) -> str:
     return f' name="{name}"' if name else ""
 
 
-def set_name(conn: sqlite3.Connection, mac: str, slot: str, name: str | None,
+def set_name(conn: SqlConnection, mac: str, slot: str, name: str | None,
              user: str) -> None:
     """שומר (או מוחק, ``name=None``) שם. LookupError = המכונה לא רשומה."""
     with _write_lock, writing(conn):

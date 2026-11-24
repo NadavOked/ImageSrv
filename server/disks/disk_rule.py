@@ -7,6 +7,7 @@
 | SMART תקין | ירוק | ✅ | ✅ |
 | SMART חצי תקין | כתום | ✅ | ✅ |
 | נכשל בשיכפול הקודם / כתיבה לא הושלמה | צהוב | ❌ | ✅ |
+| חיבור לא תקין (רשומת כשל שסיבתה כבל/חריץ, #3008) | צהוב | ❌ | ✅ |
 | SMART לא תקין | אדום | ✅ | ❌ |
 | איטי **בסבב הזה** | אדום | ✅ | ❌ |
 | בעיית SATA (הקישור התאפס / המגירה התנתקה) | אדום | ✅ | ❌ |
@@ -24,8 +25,12 @@
 והגואי מקבלים ממנו את הצבע והסיבה מוכנים ואינם מחשבים אותם. אין עותק של הטבלה ב-JS וב-C; סוכן במצב בלי שרת (שיכפול מקומי,
 אין מוח) קורא את אותו קובץ (``agent/lib/smart/diskrule.sh``).
 
-הקלט (`facts`) הוא שמות פשוטים: ``smart`` (ok/warn/fail/failed_last/unchecked), ``failed_last`` ו-``write_incomplete``,
+הקלט (`facts`) הוא שמות פשוטים: ``smart`` (ok/warn/fail/failed_last/unchecked), ``failed_last``, ``cable_failed`` ו-``write_incomplete``,
 ``sata_issue``, ``write_slow`` (בוליאניים). שדה חסר = לא ידוע = לא מחמיר.
+
+**#3008 (נדב 12/11, הוכרע 23/11): כבל/חריץ הוא של החיבור ולא של הדיסק.** רשומת כשל שסיבתה ``cable`` אינה ``failed_last`` אלא
+``cable_failed``: אותו צבע (צהוב) ואותן הרשאות, אבל המילים הן "חיבור לא תקין", ולא "נכשל בשיכפול הקודם" שמטיל את האשמה על הדיסק.
+כשל של הדיסק עצמו (סיבה אחרת, או ``smart=failed_last``) גובר: דיסק שנכשל באמת לא נעלם מאחורי כבל.
 """
 
 from __future__ import annotations
@@ -76,10 +81,11 @@ def judge(facts: dict) -> dict:
     `reason` — הסיבה של הצבע (אדום או צהוב), None בשאר. `target_reason` — למה אינו יעד,
     `source_reason` — למה אינו מקור; None = מותר."""
     first = {kind: next((r for r in ROWS if r["kind"] == kind and _holds(r["fact"], facts)), None)
-             for kind in ("red", "yellow", "smart")}
+             for kind in ("red", "yellow")}
+    smart = next(r for r in ROWS if r["kind"] == "smart" and _holds(r["fact"], facts))   # השורה האחרונה היא `smart` + `*`, תמיד חלה
     red = first["red"]["word"] if first["red"] else None
     yellow = first["yellow"]["word"] if first["yellow"] else None
-    color = "red" if red else "yellow" if yellow else first["smart"]["color"]
+    color = "red" if red else "yellow" if yellow else smart["color"]
     return {"color": color, "source": yellow is None, "target": red is None,
             "reason": red or yellow, "source_reason": yellow, "target_reason": red,
             #: #3666: **כל** הסיבות שחלות, לפי סדר הטבלה -- `reason` היא הראשונה בלבד (זו שנקבע לפיה הצבע).
@@ -87,7 +93,7 @@ def judge(facts: dict) -> dict:
 
 
 def facts_of(disk: dict, *, failed_last: bool = False, readonly: bool = False,
-             write_slow: bool = False) -> dict:
+             write_slow: bool = False, cable_failed: bool = False) -> dict:
     """העובדות מרשומת דיסק של ה-hello (או מ-`drawer_list`, שנושא את אותם שדות).
 
     `failed_last` — לשרת יש רשומת כשל פתוחה על הדיסק (`disk_failures.open_for`); `readonly` —
@@ -97,6 +103,7 @@ def facts_of(disk: dict, *, failed_last: bool = False, readonly: bool = False,
     return {
         "smart": "fail" if readonly else disk.get("smart") or "unchecked",
         "failed_last": bool(failed_last),
+        "cable_failed": bool(cable_failed),
         "write_incomplete": disk.get("write_mark") == "incomplete",
         "sata_issue": isinstance(sata, list) and any(w in ("link_reset", "drawer_gone") for w in sata),
         "write_slow": bool(write_slow),
@@ -104,13 +111,14 @@ def facts_of(disk: dict, *, failed_last: bool = False, readonly: bool = False,
 
 
 def failures_of(failures: list[dict], disk: dict) -> dict:
-    """`{"failed_last", "readonly"}` של הדיסק לפי רשומות `open_for` של המכונה: אותו סידורי, או
-    אותו חריץ (`port` שאינו None — רק של המכונה הזו). `readonly` אדום ולא צהוב (#1742)."""
+    """`{"failed_last", "readonly", "cable_failed"}` של הדיסק לפי רשומות `open_for` של המכונה: אותו סידורי, או
+    אותו חריץ (`port` שאינו None — רק של המכונה הזו). `readonly` אדום ולא צהוב (#1742); `cable` הוא של החיבור, לא
+    `failed_last` של הדיסק (#3008)."""
     serial, port = disk.get("serial"), disk.get("port")
-    out = {"failed_last": False, "readonly": False}
+    out = {"failed_last": False, "readonly": False, "cable_failed": False}
     for f in failures or []:
         if (serial and f.get("serial") == serial) or (port is not None and f.get("port") == port):
-            out["readonly" if f.get("cause") == "readonly" else "failed_last"] = True
+            out[{"readonly": "readonly", "cable": "cable_failed"}.get(f.get("cause"), "failed_last")] = True
     return out
 
 
