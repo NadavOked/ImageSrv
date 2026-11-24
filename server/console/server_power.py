@@ -21,6 +21,7 @@ systemd חולפת עם ``--on-active`` — אותה דרך כמו ``deploy_net.
 רשימה שנטענה לפני דקה אינה ראיה שאין עבודה (עיקרון 5).
 """
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Body, Depends, HTTPException
@@ -30,6 +31,8 @@ from server.console import auth
 from server.db import journal
 from server.net import deploy_net
 from server.update import restart_blocker
+
+log = logging.getLogger("imagesrv.server_power")
 
 ACTIONS = {"reboot": "הפעלה מחדש", "poweroff": "כיבוי"}
 VERB = {"reboot": "ההפעלה מחדש", "poweroff": "הכיבוי"}
@@ -45,7 +48,10 @@ def schedule_later(action: str, delay: int = DELAY_SECONDS) -> str | None:
     ok, out, err = deploy_net._run(["systemd-run", f"--on-active={delay}",
                                     f"--unit={unit}", "--collect",
                                     "systemctl", action], timeout=15)
-    return None if ok else f"systemd-run נכשל: {err or out.strip()}"
+    if ok:
+        return None
+    log.warning("systemd-run (%s) failed: %s", action, err or out.strip())      # #3091
+    return "systemd-run נכשל — הפרטים ביומן השרת"
 
 
 def create_server_power_router(ctx, schedule=None, busy_source=None) -> APIRouter:

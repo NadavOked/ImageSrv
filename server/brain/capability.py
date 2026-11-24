@@ -183,6 +183,13 @@ def _achieved(stream_raw: object) -> int | None:
     return _count(chunk.get("achieved_bps")) if isinstance(chunk, dict) else None
 
 
+def _wave_link(decision: object, mac: str) -> int | None:
+    """#3940: המהירות ש**נקראה** (`reported`/`manual`) כשהגל יצא (`drive_rates.choose`: `cloner_links`). None = לא נקראה."""
+    links = decision.get("cloner_links") if isinstance(decision, dict) else None
+    mbps = links.get(mac) if isinstance(links, dict) else None
+    return mbps if isinstance(mbps, int) and not isinstance(mbps, bool) and mbps > 0 else None
+
+
 def _evidence(conn, session_id: str, mac: str, machine_raw: object) -> tuple[Evidence, dict]:
     """מה שהמשכפל וגם השרת יודעים על המשכפל בגל. מחזיר גם את הכרטיס: ``{"iface", "mbps"}``."""
     wave = conn.execute("SELECT decision, stream FROM wave_rates WHERE session_id = ?", (session_id,)).fetchone()
@@ -214,6 +221,8 @@ def _evidence(conn, session_id: str, mac: str, machine_raw: object) -> tuple[Evi
         behind = False                                    # כל המגירות נקראו, ואף אחת לא עמוסה
     sensed_nic = nic_speed.view(conn, mac)
     mbps = sensed_nic["speed_mbps"] if sensed_nic["source"] in ("reported", "manual") else None
+    if mbps is None and sensed_nic["why"] in ("stale", "older_boot"):
+        mbps = _wave_link(decision, mac)      # #3940: הדיווח פג בגל ארוך; מה שהגל עצמו קרא כשיצא הוא ראיה, ולא הנחה
     iface = nic.get("iface") if isinstance(nic.get("iface"), str) and nic.get("iface") else None
     return (Evidence(stream, _count(drops.get("rcvbuf")), _count(drops.get("abandoned")),
                      _count(nic.get("rx_missed")), _count(nic.get("rx_no_buffer")), floor, behind,

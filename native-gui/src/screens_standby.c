@@ -277,7 +277,9 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
             cloner_slot_label(s, bay, name, sizeof name); snprintf(sub, sizeof sub, "%s", lk);
         }
     }
+    char cable_why[160];
     const char *why = d ? reason_he(d) : NULL;
+    if (d && !strcmp(d->smart, "failed_last") && !strcmp(d->cause, "cable")) { char nm[SLOT_NAME_MAX + 16]; if (unmapped) mapped_disk_name(d->port >= 1 && d->port <= MAX_DRAWERS ? s->cslot_names[d->port - 1] : "", 0, nm, sizeof nm); else cloner_slot_label(s, bay, nm, sizeof nm); cable_he(nm, cable_why, sizeof cable_why); why = cable_why; }   /* #3008: the connection's, by the operator's name */
     Rgb why_c = ink_of(t, col);
     /* #1858 (mockup 07/11): "נצפה F1 בהדלקה (24/10) · סומן בקונסולה", and under it what the disk's own SMART says */
     char f1_why[160] = "", f1_sub[96] = "";

@@ -61,6 +61,7 @@ from server.brain import diskcolor as brain_diskcolor   # #3666 (K3/DISK_COLOR):
 from server.brain import rateinputs as brain_rateinputs   # #3977: `brain_rate_inputs` -- off / shadow / enforce של שני קלטי הקצב
 from server.brain import cpucap as brain_cpucap   # #3064 (K12): שער המעבד לפני פתיחת גל, מתג כבוי כברירת מחדל
 from server.brain import memory as brain_memory   # #3185: הזיכרון ארוך-הטווח, אותה קריאה של המוח
+from server.brain import usersetting as brain_usersetting   # #3675: שינוי של הגדרת משתמש נרשם כהחלטה
 from server.agent import unknown_screen   # #1802
 from server.agent import held# #2031
 
@@ -514,6 +515,8 @@ def create_console_router(
                 "classrooms": capabilities.classrooms(),
                 # v1 בלי ארגז הכלים (נדב 19/09). קבוע בקוד; v1.1 מדליק.
                 "tools": capabilities.tools(),
+                # #2554: לשונית הדרייברים (ובלוק הדרייברים בחלון "התחל סבב") מוסתרת עד שהם עובדים.
+                "drivers": capabilities.drivers(),
             },
             # #1093: ערכת הנושא של המשתמש — auto/light/dark. ברירת מחדל
             # auto (לפי מערכת ההפעלה). לא הגדרת שרת: זה של המשתמש.
@@ -838,6 +841,7 @@ def create_console_router(
             row["probe"] = sample["probe"] if sample else None
             row["probe_seen_at"] = sample["sampled_at"] if sample else None
             row["probe_verdicts"] = probe.verdicts(row["probe"])
+            row["memory_bytes"] = probe.memory_bytes(row["probe"])   # #977 §7: null = לא ידוע
             # 15/10: מהירות כרטיס ההפצה — ידנית / מדווחת / הונחה 1Gb/s.
             row["nic_speed"] = nic_speed.view(ctx.conn, row["mac"], row["probe"], sampled=True,
                                               sampled_at=row["probe_seen_at"])
@@ -1508,9 +1512,15 @@ def create_console_router(
         result = []
         for r in rows:
             label, text = translator.translate(r["event"], r["detail"])
-            if (machine_q and not (machine_mac and r["machine"] == machine_mac)
-                    and machine_q not in text.lower() and machine_q not in r["detail"].lower()):
-                continue
+            if machine_q:
+                # #2944: שורה שיש לה יעד מבני — היעד הוא התשובה, בלי חיפוש טקסט: "מוניטור לא נפתח — HP-BUILD-2"
+                # נרשמה על מכונה אחת, ולא הופיעה בהיסטוריה של מכונה אחרת שהמחרוזת שלה "2" חלק מהטקסט.
+                # בלי יעד (שורה ישנה, או סינון לפי שם ולא MAC) — כמו קודם, בטקסט.
+                if machine_mac and r["machine"]:
+                    if r["machine"] != machine_mac:
+                        continue
+                elif machine_q not in text.lower() and machine_q not in r["detail"].lower():
+                    continue
             if text_q and not any(
                 text_q in field.lower() for field in (label, text, r["user"])
             ):
@@ -1642,7 +1652,9 @@ def create_console_router(
         # validator is deliberately exhaustive over WRITE_SETTINGS.
         normalized = _validate_write_settings(body)
         learning_was_on = learn_tuning.enabled(ctx.conn)
+        was = {key: get_setting(ctx.conn, key) for key in normalized if key in brain_usersetting.KEYS}   # #3675
         set_settings(ctx.conn, normalized)
+        brain_usersetting.record(ctx.conn, was, normalized, user[0])   # #3675: the user's decision, in the decision history
         learn_tuning.settings_written(ctx.conn, normalized, learning_was_on, user[0])   # #2028
         for key, value in normalized.items():
             journal(ctx.conn, "setting_change", f"{key}={value}", user[0])

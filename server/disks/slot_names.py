@@ -23,10 +23,9 @@ import re
 import sqlite3
 
 from server.disks import model_slots
+from server.disks.model_slots import NAME_MAX, clean_name   # noqa: F401 -- #2531: defined there, re-exported
 from server.db import _write_lock, now_iso, writing
 
-#: תקרת אורך בתווים — נכנס לתגית בגריד ולכותרת כרטיס בגואי הנייטיב.
-NAME_MAX = 24
 #: ``ataN`` על בקר שני יכול לעבור את 8 (``drawer_count``); 32 מספיק לכל לוח.
 PORT_MAX = 32
 
@@ -35,8 +34,6 @@ _SATA = re.compile(r"sata:([1-9][0-9]?)\Z")
 _SERIAL = re.compile(r"serial:([!-{}~]{1,80})\Z")
 #: אותיות וספרות (כל שפה, ``\w``), רווח, ו- ``- . # ( ) /``. בלי מירכאות,
 #: ``< > & ; \\ |`` ותווי בקרה: השם נכנס ל-HTML, ליומן ולקובץ המצב של הגואי.
-#: CodeQL #615: עוגן `^` מפורש — `.match` מעגן ממילא, אבל הניתוח קורא את הביטוי לבדו.
-_NAME = re.compile(r"^[\w \-.#()/]+\Z")
 
 
 def key_for(port, serial) -> str | None:
@@ -57,21 +54,6 @@ def parse_key(raw) -> str:
         if _SERIAL.match(raw):
             return raw
     raise ValueError(f"חיבור לא תקין — sata:1..{PORT_MAX} או serial:<מספר סידורי>")
-
-
-def clean_name(raw) -> str:
-    """מאמת שם: מחרוזת, לא ריקה אחרי חיתוך רווחים, עד ``NAME_MAX`` תווים,
-    מהתווים המותרים בלבד. ValueError = 400."""
-    if not isinstance(raw, str):
-        raise ValueError("השם חייב להיות טקסט")
-    name = raw.strip()
-    if not name:
-        raise ValueError("השם ריק — כדי לחזור לברירת המחדל שלחו null")
-    if len(name) > NAME_MAX:
-        raise ValueError(f"השם ארוך מדי ({len(name)} תווים, המקסימום {NAME_MAX})")
-    if not _NAME.match(name):
-        raise ValueError("השם יכול להכיל אותיות, ספרות, רווח ו- - . # ( ) / בלבד")
-    return name
 
 
 def all_by_mac(conn: sqlite3.Connection) -> dict[str, dict[str, str]]:

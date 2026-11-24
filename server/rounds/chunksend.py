@@ -51,6 +51,7 @@ from server.brain import drawerhold as brain_drawerhold   # #2023: CONTINUE / DR
 from server.brain import fecrule
 from server.brain import repairrule   # #3659 (S10, S11, S12): the multicast threshold, the repair cap and "slow, not failed" are decided there
 from server.brain import resume as brain_resume   # #3670 (S16): the first pass of a partition that resumes
+from server.brain import planes as brain_planes   # #3571: three ceilings, recorded only; the command below is not changed
 from server.brain import writerate as brain_writerate   # #3655 (S3, S4): `--write-kbps` and the feedback's bounds are decided there
 from server.db import get_setting
 from server.library import chunkformat
@@ -1492,6 +1493,8 @@ class ChunkEngine:
             with os.fdopen(fd, "w", encoding="ascii") as f:
                 f.write(repair.as_text(chunks) + "\n")
             cmd += ["--chunks-file", name]
+        # #3571: the command is already complete. This only records that per-disk durable, RTT and inventory are not on this path.
+        brain_planes.note_send(getattr(self, "brain_conn", None), round_id=getattr(w, "session_id", "") or "")
         return cmd
 
     def _learned_max(self, w: _Wave, part: int) -> int | None:

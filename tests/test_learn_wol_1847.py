@@ -15,7 +15,7 @@ import pytest
 from server.agent import boottrace
 from server import db
 from server.net import wol
-from server.learn import wol as learn_wol
+from server.learn import wol as learn_wol, wol_sweep
 
 from test_server_room import CLONER1, room_server  # noqa: F401
 from conftest import hello_body
@@ -91,11 +91,11 @@ def test_early_resend_after_twice_the_typical_time_once(conn):
         at = _cycle(conn, seconds, at)                  # טיפוסי 50ש'
     packets: list[bytes] = []
     learn_wol.sent(conn, MAC, now=at)
-    learn_wol.sweep(conn, packets.append, now=at + 90)  # 90 < 100 — עוד לא
+    wol_sweep.sweep(conn, packets.append, now=at + 90)  # 90 < 100 — עוד לא
     assert packets == []
-    learn_wol.sweep(conn, packets.append, now=at + 101)
+    wol_sweep.sweep(conn, packets.append, now=at + 101)
     assert packets == [wol.magic_packet(MAC)]
-    learn_wol.sweep(conn, packets.append, now=at + 200)  # פעם אחת בלבד
+    wol_sweep.sweep(conn, packets.append, now=at + 200)  # פעם אחת בלבד
     assert len(packets) == 1
     line = conn.execute("SELECT detail FROM journal WHERE event = 'wol_resent'").fetchone()
     assert line["detail"].startswith(f"{MAC} after=101s typical=50s")
@@ -104,7 +104,7 @@ def test_early_resend_after_twice_the_typical_time_once(conn):
 def test_no_early_resend_without_a_typical_time(conn):
     packets: list[bytes] = []
     learn_wol.sent(conn, MAC, now=T0)
-    learn_wol.sweep(conn, packets.append, now=T0 + 500)
+    wol_sweep.sweep(conn, packets.append, now=T0 + 500)
     assert packets == []
 
 
@@ -112,11 +112,11 @@ def test_a_streak_of_unanswered_wakes_alerts_once(conn):
     at = _cycle(conn, 40, T0)
     for _ in range(learn_wol.FAIL_STREAK - 1):
         at = _cycle(conn, None, at)
-    learn_wol.sweep(conn, lambda p: None, now=at)
+    wol_sweep.sweep(conn, lambda p: None, now=at)
     assert conn.execute("SELECT 1 FROM journal WHERE event = 'wol_no_wake'").fetchone() is None
     at = _cycle(conn, None, at)                         # השלישית ברצף
-    learn_wol.sweep(conn, lambda p: None, now=at)
-    learn_wol.sweep(conn, lambda p: None, now=at + 60)
+    wol_sweep.sweep(conn, lambda p: None, now=at)
+    wol_sweep.sweep(conn, lambda p: None, now=at + 60)
     lines = conn.execute("SELECT detail FROM journal WHERE event = 'wol_no_wake'").fetchall()
     assert len(lines) == 1 and "לא מתעורר מ-WoL — BIOS/כבל" in lines[0]["detail"]
     (row,) = learn_wol.health_checks(conn, now=at)

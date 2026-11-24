@@ -197,7 +197,7 @@ test('the console loads it after console.js, on the same version, and wires the 
   const html = fs.readFileSync(path.resolve(__dirname, '../server/static/index.html'), 'utf8');
   const at = (n) => html.indexOf(`src="${n}?v=`);
   assert.ok(at('console.js') > 0 && at('brain_asks.js') > at('console.js') && at('brain_asks_page.js') > at('brain_asks.js'));
-  const v = (n) => new RegExp(`src="${n}\\?v=([0-9.]+)"`).exec(html)[1];
+  const v = (n) => new RegExp(`src="${n}\\?v=([^"]+)"`).exec(html)[1];
   assert.equal(v('brain_asks.js'), v('console.js'));
   assert.equal(v('brain_asks_page.js'), v('console.js'));
   const lines = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8').split('\n');

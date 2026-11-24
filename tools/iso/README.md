@@ -20,6 +20,7 @@
 | `test-iso.sh` | ‏QEMU/OVMF עם Secure Boot, שני שלבים (התקנה → אתחול ראשון) — **טרם הורץ** (אין KVM במעבדה) |
 | `check-pool.py` | ‏#2520: האינדקס הממוזג עקבי — כל תלות-גרסה מתקיימת בגרסה הגבוהה של היעד (מה ש-debootstrap ו-apt בוחרים). ‏`build-iso.sh` נעצר בלעדיו |
 | `install-test.py` | ‏#2520: התקנה **מלאה** מה-ISO ב-QEMU (הקרנל וה-initramfs שלו, מעטפת על הסריאלי, המנוע עם תשובות) עד `state=done`. שלב חובה בשרשרת הגרסה (‏CONTRIBUTING, "גרסאות"). ‏`--medium fat32-usb` (#2761): אותה התקנה מדיסק-און-קי FAT32 כמו ש-Rufus במצב העתקת קבצים כותב (תווית `IMAGESRV_IN`), עם אתחול מלא דרך OVMF, shim ו-GRUB (בלי Secure Boot) |
+| `esxi-install-test.py` | ‏#4029: אותה התקנה **ב-ESXi** (שלב 11 בשרשרת): VM בשם `eit-…` (EFI, ‏pvscsi, ‏vmxnet3), תשעת מסכי הגואי מוקלדים ב-`govc vm.keystrokes` (מקש לכל קריאה) ומאומתים מצילום המסך, ואז `GET /api/console/health/live`. ‏`0` רק כשהגרסה נקראה ושווה לשם ה-ISO. מוחק רק את ה-VM שיצר. עובד עם `govc` ו-`esxi.env` (שורות `GOVC_*` בלבד), בלי SSH ל-ESXi |
 
 ## בנייה (על דביאן 13 עם אינטרנט — Testrunner)
 

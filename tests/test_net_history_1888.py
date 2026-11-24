@@ -36,7 +36,7 @@ def test_an_ip_row_is_written_only_when_it_changes_and_a_change_is_journaled(con
 
 
 def test_ip_rows_per_machine_are_capped(conn, monkeypatch):
-    monkeypatch.setattr(net_history, "KEEP_IPS", 2)
+    monkeypatch.setattr(db, "KEEP_IPS", 2)
     for last in range(5):
         db.net_seen(conn, MAC, f"10.0.0.{last}")
     assert [r["ip"] for r in net_history.ip_history(conn, MAC)] == ["10.0.0.4", "10.0.0.3"]

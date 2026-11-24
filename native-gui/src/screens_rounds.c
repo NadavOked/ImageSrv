@@ -118,6 +118,24 @@ const char *smart_reason_text(const char *reason) {
     return reason;
 }
 
+/* #3008 (Nadav 12/11, wording 23/11): a cable or slot is the connection's mark, not the disk's -- it stays on
+ * the connection when the disk is swapped. "נכשל בשיכפול הקודם" is only for the disk (serial/wwn).
+ * <name> is what the operator set on the server for that connection (mapped_disk_name); "" = not known:
+ * "חיבור של הדיסק לא תקין", never a number worked out here. */
+void cable_he(const char *name, char *out, size_t n) {
+    if (name && name[0]) snprintf(out, n, "חיבור של %s לא תקין", name);
+    else snprintf(out, n, "חיבור של הדיסק לא תקין");
+}
+
+/* The operator's name of a connection: the slot name it was given (#704/#2001), else "דיסק N" of the drawer
+ * the server mapped it to (drawer_slots, #1495). drawer <= 0 (unset or outside the mapping) with no slot name
+ * is "" -- the port is not a drawer number (eff_drawer's port fallback is for the card, not for this). */
+void mapped_disk_name(const char *slot_name, int drawer, char *out, size_t n) {
+    if (slot_name && slot_name[0]) snprintf(out, n, "%s", slot_name);
+    else if (drawer > 0) snprintf(out, n, "דיסק %d", drawer);
+    else if (n) out[0] = 0;
+}
+
 const IdleDisk *idle_for_port(const State *s, int port) {
     for (int i = 0; i < s->nidisks; i++)
         if (s->idisks[i].port == port) return &s->idisks[i];

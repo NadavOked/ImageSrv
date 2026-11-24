@@ -141,9 +141,30 @@ def machines_of(conn: sqlite3.Connection, model: str) -> list[str]:
             if models.get(r["mac"]) == model]
 
 
+#: תקרת אורך בתווים — נכנס לתגית בגריד ולכותרת כרטיס בגואי הנייטיב.
+NAME_MAX = 24
+
+#: CodeQL #615: עוגן `^` מפורש — `.match` מעגן ממילא, אבל הניתוח קורא את הביטוי לבדו.
+_NAME = re.compile(r"^[\w \-.#()/]+\Z")
+
+
+def clean_name(raw) -> str:
+    """מאמת שם: מחרוזת, לא ריקה אחרי חיתוך רווחים, עד ``NAME_MAX`` תווים,
+    מהתווים המותרים בלבד. ValueError = 400."""
+    if not isinstance(raw, str):
+        raise ValueError("השם חייב להיות טקסט")
+    name = raw.strip()
+    if not name:
+        raise ValueError("השם ריק — כדי לחזור לברירת המחדל שלחו null")
+    if len(name) > NAME_MAX:
+        raise ValueError(f"השם ארוך מדי ({len(name)} תווים, המקסימום {NAME_MAX})")
+    if not _NAME.match(name):
+        raise ValueError("השם יכול להכיל אותיות, ספרות, רווח ו- - . # ( ) / בלבד")
+    return name
+
+
 def clean(slots_raw, names_raw) -> tuple[list[str], dict[str, str]]:
     """מאמת מיפוי מהחלון. ValueError = 400, בעברית שהמפעיל קורא."""
-    from server.disks import slot_names   # slot_names מייבא את המודול הזה
     slots = sorted(drawer_slots.parse(slots_raw), key=drawer_slots.order)
     if names_raw is None:
         names_raw = {}
@@ -154,7 +175,7 @@ def clean(slots_raw, names_raw) -> tuple[list[str], dict[str, str]]:
         if key not in slots:
             raise ValueError(f"שם לחיבור שאינו פעיל: {key}")
         if raw is not None:
-            names[key] = slot_names.clean_name(raw)
+            names[key] = clean_name(raw)
     seen: dict[str, str] = {}
     for i, key in enumerate(slots):
         label = names.get(key) or f"דיסק {i + 1}"

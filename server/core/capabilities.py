@@ -14,6 +14,10 @@ CLASSROOMS = False
 # v1.1 מדליק.
 TOOLS = False
 
+# #2554 (הכרעת נדב 06/11): הדרייברים חלק מ-v1, אבל כל עוד הם לא עובדים לשונית
+# "דרייברים" לא מופיעה. הקוד, ה-API והטבלאות נשארים; מדליקים כש-#720/#1331 עוברים בדיקה על ברזל.
+DRIVERS = False
+
 # #3173: סבב כיתה (שידור לתחנות של כיתה). כבוי גם כש-CLASSROOMS דלוק: השולח שלו הוסר, ולמחשב תלמיד אין
 # מקלט חתיכות. v2 מדליק, כשיהיה לו מקלט -- עד אז השרת מסרב בשמו (`sessions.CLASS_ROUND_V2`).
 CLASS_ROUNDS = False
@@ -25,6 +29,10 @@ def classrooms() -> bool:
 
 def tools() -> bool:
     return TOOLS
+
+
+def drivers() -> bool:
+    return DRIVERS
 
 
 def class_rounds() -> bool:

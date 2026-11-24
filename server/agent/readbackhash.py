@@ -486,7 +486,8 @@ def digest_file(path: Path, raw: bool, limit: int | None = None, stop=None, *,
         proc = subprocess.Popen([*cmd, str(path)], stdin=subprocess.DEVNULL,
                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     except OSError as exc:
-        raise Underived(f"cannot run {cmd[0]}: {exc}") from exc
+        log.warning("cannot run %s: %s", cmd[0], exc)       # #3021
+        raise Underived(f"לא ניתן להריץ {Path(cmd[0]).name} — הפרטים ביומן השרת") from exc
     stream, done = _Counting(proc.stdout, stop, count), threading.Event()
 
     stalled = threading.Event()
@@ -727,8 +728,8 @@ def fill(library, *, digest=None, report=None, tried: dict | None = None,
                 with _LOCK:
                     _PRIORITY.pop(image_id, None)
         except Exception as exc:              # noqa: BLE001 — one image, by name; never "fine", never the end of the pass
-            log.exception("readback digest of %s failed", image_id)
-            values, problems = {}, [f"{type(exc).__name__}: {exc}"]
+            log.exception("readback digest of %s failed: %s", image_id, exc)
+            values, problems = {}, ["הגיבוב נכשל — הפרטים ביומן השרת"]       # #3021: הגולמי ב-log.exception
         finally:
             release(image_id)
         notes = [f"p{i}: {v['b3_note']}" for i, v in sorted(values.items()) if isinstance(v, dict) and v.get("b3_note")]

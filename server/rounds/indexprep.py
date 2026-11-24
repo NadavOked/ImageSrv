@@ -116,9 +116,11 @@ class IndexPrep:
     """ההכנה של כל גל, בתהליכון משלה. השעון וההמתנה מוזרקים לבדיקות."""
 
     def __init__(self, library, *, on_event: Callable[[str, str, str], None] | None = None,
+                 on_ceiling: Callable[[str, str, int, float], None] | None = None,
                  clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep):
         self.library = library
         self.on_event = on_event or (lambda event, detail, wave_id: None)
+        self.on_ceiling = on_ceiling or (lambda wave_id, image_id, size, ceiling: None)   # #3817: the brain records it, shadow
         self.clock, self.sleep = clock, sleep
         self._lock = threading.Lock()
         self._jobs: dict[str, _Job] = {}
@@ -154,6 +156,7 @@ class IndexPrep:
                 self.on_event("room_index_wait",
                               f"{wave_id} {image_id} parts={','.join(p['file'] for p in parts)}"
                               f" bytes={size} ceiling={job.ceiling:.0f}s", wave_id)
+                self.on_ceiling(wave_id, image_id, size, job.ceiling)
         if job is not None:
             if job.timed_out or self.clock() - job.started > job.ceiling:
                 return {"state": "failed", "error": TIMED_OUT.format(ceiling=job.ceiling, gb=job.gb, tail=tail)}

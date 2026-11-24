@@ -50,6 +50,10 @@ MAX_HEAD_BYTES = 64 * 1024
 #: #2488: חיבורים (תהליכונים) בו-זמנית. מעבר לזה החיבור נסגר ב-accept, לפני
 #: ה-TLS. ראשי אחד פותח כמה בודדים: דופק, ממסר קונסולה, מוניטור לכל מכונה, העברות.
 MAX_CONNECTIONS = 64
+#: #3084: מתוכם, לכל היותר כך לכל כתובת מקור — מקור אחד לא תופס את כל החריצים לפני האימות.
+#: חצי מהתקרה, כי הראשי האמיתי פותח כמה חיבורים במקביל (מוניטור לכל מכונה, העברות)
+#: ו-`MAX_CONNECTIONS` לא נמדד מול ראשי עם הרבה מוניטורים (#3023).
+MAX_CONNECTIONS_PER_ADDR = 32
 #: #1122: קוד תשובה בשם כשהמפתח של האב השתנה — הקונסולה בראשי מציגה אותו.
 PEER_CERT_CHANGED = "peer_cert_changed"
 PEER_CERT_CHANGED_DETAIL = "התעודה של הראשי השתנתה — יש לבצע רישום מחדש"
@@ -712,12 +716,12 @@ def list_machines(ctx, peer: TlsPeer, *, token: str, protocol_version: str,
                   has_console_cookie: bool = False) -> dict:
     """מה שדף המוניטור של המשני מראה — ``monitor.machine_rows`` — לאב
     המאומת. קריאה בלבד; ``node_id`` מצורף כדי שהאב ידע ממי קיבל."""
-    from server.console.monitor import machine_rows
+    from server.console.monitor import guarded_rows
     authenticate_parent(ctx.conn, peer, token=token, protocol_version=protocol_version,
                         has_console_cookie=has_console_cookie)
     return {"node_id": storage_nodes.identity(ctx.conn)["node_id"],
             "server_version": _own_version(),   # #1300
-            "machines": machine_rows(ctx.conn)}
+            "machines": guarded_rows(ctx)}
 
 
 # --- הקונסולה של המשני מהאב: GET מרשימה מותרת (#1179) -------------------------
@@ -1371,6 +1375,14 @@ _CONTINUE = b"HTTP/1.1 100 Continue\r\n\r\n"
 HANDLER_THREAD_NAME = "interserver-conn"
 
 
+def _peer_host(raw) -> str:
+    """#3084: כתובת המקור בלי הפורט — המפתח של התקרה לכל מקור."""
+    try:
+        return str(raw.getpeername()[0])
+    except (OSError, IndexError):
+        return "?"
+
+
 def _peer_addr(raw) -> str:
     try:
         host, port = raw.getpeername()[:2]
@@ -1438,6 +1450,10 @@ class InterserverTLSServer:
         #: #2488: חריץ לכל חיבור חי — נתפס ב-accept, משתחרר כשהתהליכון מסיים.
         self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
         self._refused = 0
+        #: #3084: כמה חיבורים חיים לכל כתובת מקור (ללא פורט), תחת `_addr_lock`.
+        self._per_addr: dict[str, int] = {}
+        self._addr_lock = threading.Lock()
+        self._addr_cap = MAX_CONNECTIONS_PER_ADDR
 
     def start(self) -> "InterserverTLSServer":
         self._thread.start()
@@ -1472,7 +1488,13 @@ class InterserverTLSServer:
                 break
             # #2488: מעבר לתקרה — סגירה מיד, לפני ה-TLS ובלי תהליכון. שורת לוג
             # לראשון ואחר כך לכל מאה, כדי שהצפה לא תהפוך להצפת לוג.
-            if not self._slots.acquire(blocking=False):
+            # #3084: קודם התקרה לכתובת המקור, ורק אז החריץ הכללי.
+            addr = _peer_host(raw)
+            admitted = self._take_addr(addr)
+            if admitted and not self._slots.acquire(blocking=False):
+                self._drop_addr(addr)
+                admitted = False
+            if not admitted:
                 self._refused += 1
                 if self._refused == 1 or self._refused % 100 == 0:
                     log.warning("interserver: %d connections open (the cap) -- refused %s"
@@ -1481,14 +1503,30 @@ class InterserverTLSServer:
                 raw.close()
                 continue
             import threading
-            threading.Thread(target=self._handle_in_slot, args=(tls_ctx, raw),
+            threading.Thread(target=self._handle_in_slot, args=(tls_ctx, raw, addr),
                              name=HANDLER_THREAD_NAME, daemon=True).start()
 
-    def _handle_in_slot(self, tls_ctx, raw) -> None:
+    def _take_addr(self, addr: str) -> bool:
+        with self._addr_lock:
+            if self._per_addr.get(addr, 0) >= self._addr_cap:
+                return False
+            self._per_addr[addr] = self._per_addr.get(addr, 0) + 1
+            return True
+
+    def _drop_addr(self, addr: str) -> None:
+        with self._addr_lock:
+            left = self._per_addr.get(addr, 0) - 1
+            if left > 0:
+                self._per_addr[addr] = left
+            else:
+                self._per_addr.pop(addr, None)
+
+    def _handle_in_slot(self, tls_ctx, raw, addr: str = "?") -> None:
         try:
             self._handle(tls_ctx, raw)
         finally:
             self._slots.release()
+            self._drop_addr(addr)
 
     def _handle(self, tls_ctx, raw) -> None:
         from OpenSSL import SSL
@@ -1561,7 +1599,12 @@ class InterserverTLSServer:
                 400, {"detail": f"גוף קצר מהמוצהר: התקבלו {len(body)} מתוך {length}"},
                 close=True))
             return False
-        conn.sendall(self._dispatch(peer, method, path, headers, body))
+        answer = self._dispatch(peer, method, path, headers, body)
+        if answer[9:12] in (b"401", b"403"):
+            # #3084: סירוב אימות סוגר את החיבור — לא מחזיקים חריץ בבקשות לא מאומתות.
+            conn.sendall(answer.replace(b"Connection: keep-alive", b"Connection: close", 1))
+            return False
+        conn.sendall(answer)
         return len(rest) <= length
 
     def _receive_stream(self, conn, peer, path, headers, rest) -> bool:
