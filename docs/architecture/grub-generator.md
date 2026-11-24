@@ -21,10 +21,10 @@
 לכן מה שעובר בשורת הפקודה הוא **רק מה שהסוכן לא יכול לדעת לפני שהוא מדבר עם השרת**:
 
 ```
-ip=dhcp imagesrv.server=http://10.44.12.10:7712 console=tty0 quiet loglevel=3 thermal.psv=-1
+ip=dhcp imagesrv.server=https://10.44.12.10:7712 console=tty0 quiet loglevel=3 thermal.psv=-1
 ```
 
-כתובת השרת, וזהו. ‏`console`, ‏`quiet`, ‏`loglevel` ו-`thermal.psv` אינם מידע על המשימה אלא הגדרות של הקרנל עצמו, זהות לכל מכונה. ‏`thermal.psv=-1` מבטל את נקודות ה-trip הפסיביות של דרייבר ה-ACPI thermal, ולכן ‏`_PSL` אינו מוערך: על HP EliteDesk 800 G6 ההערכה הזו נכשלה ב-timeouts בכל אתחול (#1848, ‏#1870). נדב בחר בו ולא ב-`thermal.off=1` (20/10, ‏#1871: "רק החלק שמאט"), כי הוא משאיר את אזורי ה-`acpitz`, את ‏`_CRT` ואת ‏`_ACx`. כל השאר — התפקיד, המשימה, הסבב, רשימת האימג'ים המותרים — מגיע מתשובת ה-`hello` (ממשק 3). יש בדיוק חריג אחד, `imagesrv.mode=recovery`, שמוסבר בהמשך.
+כתובת ערוץ הסוכן (HTTPS, פורט 7712), וזהו. ה-GRUB עצמו מוריד את התפריט, הקרנל וה-initrd ממאזין ה-/boot (HTTP, פורט 7711, `GrubConfig.boot_port`), ולא מפורט הסוכן. ‏`console`, ‏`quiet`, ‏`loglevel` ו-`thermal.psv` אינם מידע על המשימה אלא הגדרות של הקרנל עצמו, זהות לכל מכונה. ‏`thermal.psv=-1` מבטל את נקודות ה-trip הפסיביות של דרייבר ה-ACPI thermal, ולכן ‏`_PSL` אינו מוערך: על HP EliteDesk 800 G6 ההערכה הזו נכשלה ב-timeouts בכל אתחול (#1848, ‏#1870). נדב בחר בו ולא ב-`thermal.off=1` (20/10, ‏#1871: "רק החלק שמאט"), כי הוא משאיר את אזורי ה-`acpitz`, את ‏`_CRT` ואת ‏`_ACx`. כל השאר — התפקיד, המשימה, הסבב, רשימת האימג'ים המותרים — מגיע מתשובת ה-`hello` (ממשק 3). יש בדיוק חריג אחד, `imagesrv.mode=recovery`, שמוסבר בהמשך.
 
 יש בדיקה אוטומטית ששומרת על זה: `test_agent_config_leaks_nothing_from_the_answer` לוקחת תשובת שרת מלאה ומוודאת ששום מזהה ממנה לא מופיע בקובץ שנוצר. אם מישהו ינסה להוסיף פרט — הבדיקה תיפול.
 
@@ -219,7 +219,7 @@ ImageSrv ובלי שחזור. *"אם אין MAC הוא לא אמור לקבל GR
 זה מה שה-GRUB החתום של דביאן טוען. הוא כמעט לא משתנה. מייצרים אותו פעם אחת:
 
 ```bash
-python tools/render_bootstrap.py http://10.44.12.10:7712 > grub.cfg
+python tools/render_bootstrap.py http://10.44.12.10:7711 > grub.cfg   # כתובת מאזין ה-/boot, לא כתובת הסוכן
 ```
 
 ומעתיקים לשורש ה-TFTP תחת `grub/grub.cfg`, ליד ה-shim וה-GRUB.
@@ -235,9 +235,9 @@ configfile (http,$imagesrv_server)/boot/menu?mac=$net_default_mac
 #### מאיפה מגיעה `$imagesrv_server` (‎#37)
 
 ```
-set imagesrv_fallback=10.44.12.10:7712
+set imagesrv_fallback=10.44.12.10:7711
 if [ -n "$net_default_server" ]; then
-    set imagesrv_server=${net_default_server}:7712
+    set imagesrv_server=${net_default_server}:7711
 else
     set imagesrv_server=$imagesrv_fallback
 fi
@@ -245,7 +245,7 @@ fi
 
 **הכתובת הראשית היא זו שענתה בפועל.** `net_default_server` הוא ה-next-server מה-DHCP — כלומר הכתובת של השרת (או ה-PXE proxy) שהתחנה הזו באמת דיברה איתו. עד #37 הייתה כאן כתובת קשיחה אחת, זו של וילן ההפצה, ותחנה שאותחלה דרך proxy מרשת אחרת (**תרחיש 3 באפיון, בדיקות 3.4–3.5**) הייתה טוענת GRUB מ-TFTP ואז נתקעת: הכתובת בקובץ פשוט לא נגישה מהרשת שלה.
 
-**הפורט לא עובר ב-DHCP** — יש שם כתובת בלבד. לכן הוא נלקח מהכתובת שבתצורה (‎`urlsplit`, ברירת מחדל 80). בסקריפט ההתקנה זה פלייסהולדר שני, `@@GRUB_PORT@@`.
+**הפורט לא עובר ב-DHCP** — יש שם כתובת בלבד. לכן הוא נלקח מהכתובת שבתצורה (‎`urlsplit`, ברירת מחדל 80): פורט מאזין ה-/boot (7711), לא פורט הסוכן. בסקריפט ההתקנה זה פלייסהולדר שני, `@@GRUB_PORT@@`.
 
 **הכתובת המפורשת נשארה, כ-fallback:** אם `net_default_server` ריק (קושחה שלא מילאה next-server), היא הראשית; ובלולאת ה-retry כל ניסיון פונה אליה גם אחרי הראשית, אלא אם השתיים זהות. זה גם מה שמשאיר אותה שימושית לדיבאג — שרת ידוע בשם.
 
@@ -349,7 +349,7 @@ app = FastAPI()
 app.include_router(
     create_router(
         resolve=my_lookup,
-        config=GrubConfig(server_base="http://10.44.12.10:7712"),
+        config=GrubConfig(server_base="https://10.44.12.10:7712", boot_port=7711),
     )
 )
 ```

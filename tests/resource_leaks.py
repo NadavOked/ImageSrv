@@ -13,11 +13,22 @@ it cannot drift apart:
       of each test (so a leak is charged to the test that made it), and writes
       one JSON line per warning to DIR/leaks-<worker>.jsonl. Each worker also
       writes DIR/active-<worker>: the evidence that the plugin was on.
+      With --resource-leaks-no-trace tracemalloc stays off: the run only DETECTS
+      (the test and the object, `traced: false`, site unknown). tracemalloc is
+      what made the nightly's 3.13 run ~6x slower (#99, measured on tr1 23/11:
+      a 4229-test file 16.5s plain, 177s traced, 61.5s detect-only), so the
+      nightly detects everywhere and traces only the tests that leaked:
+
+  nodeids         python tests/resource_leaks.py nodeids DIR
+      The tests that leaked and have no traced row yet, one id per line. The
+      nightly runs just those again, traced, into the same DIR.
 
   report          python tests/resource_leaks.py report DIR --baseline FILE [--block-new]
       Groups the warnings by SITE -- the innermost frame under the rootdir (the repo) in
       the allocation traceback, as `path::source line` (not the line number:
-      an edit above it must not make an old leak look new). Prints every site,
+      an edit above it must not make an old leak look new). A leak that was
+      detected but never traced is `?::<test file>`; it is dropped once a traced
+      row for the same test exists. Prints every site,
       marks those not in the baseline, and writes the same to
       $GITHUB_STEP_SUMMARY. Exit 0; 1 with --block-new and a new site; 2 when
       no worker wrote its `active` file (the run proves nothing, principle 5).
@@ -72,6 +83,8 @@ def _allocation_witnesses(source) -> list:
 def pytest_addoption(parser) -> None:
     parser.addoption("--resource-leaks", metavar="DIR", default=None,
                      help="record every ResourceWarning with its allocation site into DIR")
+    parser.addoption("--resource-leaks-no-trace", action="store_true", default=False,
+                     help="detect only: no tracemalloc, so no allocation site (see `nodeids`)")
 
 
 def pytest_configure(config) -> None:
@@ -79,9 +92,10 @@ def pytest_configure(config) -> None:
     if not out:
         return
     is_worker = hasattr(config, "workerinput")
-    if not is_worker and config.pluginmanager.hasplugin("dsession"):
-        return                      # the xdist controller: the workers record
-    if not tracemalloc.is_tracing():
+    if not is_worker and (config.pluginmanager.hasplugin("dsession") or getattr(config.option, "numprocesses", None)):
+        return                      # the xdist controller: the workers record (it also gets each
+                                    # worker's warnings, so it wrote every row twice -- run 45139716346, 209 of 418 rows)
+    if not config.getoption("--resource-leaks-no-trace") and not tracemalloc.is_tracing():
         tracemalloc.start(FRAMES)
     config.addinivalue_line("filterwarnings", "always::ResourceWarning")
     worker = config.workerinput["workerid"] if is_worker else "main"
@@ -130,16 +144,38 @@ def load_baseline(path: Path) -> set[str]:
     return sites
 
 
+def load_rows(directory: Path) -> list[dict]:
+    """Every recorded row, minus the untraced rows of a test that a later traced run located."""
+    rows = [json.loads(line) for f in sorted(directory.glob("leaks-*.jsonl"))
+            for line in f.read_text(encoding="utf-8").splitlines()]
+    located = {r["nodeid"] for r in rows if r["traced"]}
+    kept = []
+    for r in rows:
+        if r["traced"]:
+            kept.append(r)
+        elif r["nodeid"] not in located:
+            kept.append({**r, "site": f"?::{r['nodeid'].split('::')[0]}"})
+    return kept
+
+
+def nodeids(directory: Path) -> int:
+    """The tests that leaked and were never traced, one per line (exit 2: the plugin did not run)."""
+    if not (directory.is_dir() and list(directory.glob("active-*"))):
+        print(f"resource-leaks: CANNOT VERIFY -- no active-* file in {directory}: the plugin did not run", file=sys.stderr)
+        return 2
+    for nodeid in sorted({r["nodeid"] for r in load_rows(directory) if not r["traced"]}):
+        print(nodeid)
+    return 0
+
+
 def report(directory: Path, baseline: set[str], block_new: bool) -> int:
     active = sorted(directory.glob("active-*")) if directory.is_dir() else []
     if not active:
         print(f"resource-leaks: CANNOT VERIFY -- no active-* file in {directory}: the plugin did not run")
         return 2
     by_site: dict[str, list[dict]] = defaultdict(list)
-    for f in sorted(directory.glob("leaks-*.jsonl")):
-        for line in f.read_text(encoding="utf-8").splitlines():
-            row = json.loads(line)
-            by_site[row["site"]].append(row)
+    for row in load_rows(directory):
+        by_site[row["site"]].append(row)
     new = sorted(set(by_site) - baseline)
     gone = sorted(baseline - set(by_site))
     lines = [f"## ResourceWarning -- {sum(map(len, by_site.values()))} warnings, {len(by_site)} sites, "
@@ -170,7 +206,11 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("dir", type=Path)
     r.add_argument("--baseline", type=Path, required=True)
     r.add_argument("--block-new", action="store_true")
+    n = sub.add_parser("nodeids")
+    n.add_argument("dir", type=Path)
     a = ap.parse_args(argv)
+    if a.cmd == "nodeids":
+        return nodeids(a.dir)
     return report(a.dir, load_baseline(a.baseline), a.block_new)
 
 

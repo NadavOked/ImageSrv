@@ -32,7 +32,7 @@ from agentlib import agent_sources
 from native import requires_native
 from test_agent import AGENT, BASH, posix, sh
 from test_chunkrecv_2533 import DONE, RECEIVE1, _run
-from test_drawer_rejoin_3181 import PULLED, WAIT_WHOLE
+from test_drawer_rejoin_3181 import PULLED
 
 # the passes are real seconds, and what is asserted is their order -- never how many seconds: not load-sensitive (#2118)
 pytestmark = requires_native(("bash", BASH), "jq", why="התשובות של השרת נקראות ב-jq, כמו בסוכן")
@@ -68,23 +68,61 @@ _back() {   # BACK_PORT: the slot the disk is pushed into (default 3, an empty o
     mkdir -p "$SYSROOT/sys/block/$2/device"; echo "$3" > "$SYSROOT/sys/block/$2/device/serial"
     echo 1000 > "$SYSROOT/sys/block/$2/size"; echo "${BACK_PORT:-3}" > "$SYSROOT/sys/block/$2/port"; : > "$SYSROOT/sys/block/$2/answers"
     trace "BACK $2"; [ -z "${PLUG_EVENT:-}" ] || : > "$RUN_DIR/chunk/plug"
+    [ -z "${NF_TRACE:-}" ] || _await_file "chunk/back.$2/p3.state"
+}
+if [ "${BACK_PORT:-}" = 2 ]; then
+    harness_answer() {
+        [ "$(jq -r .state "$1")" = ended ] || return 1
+        if [ ! -e "$RUN_DIR/back.inserted" ]; then
+            _back sdb sdb SER-other; : > "$RUN_DIR/back.inserted"
+        fi
+        if [ -f "$RUN_DIR/targets/sdb/newdisk" ] && [ "$(cat "$RUN_DIR/targets/sdb/state")" = writing ]; then
+            cat "$RUN_DIR/answer.last.json"
+        elif [ "$(cat "$RUN_DIR/posts")" -ge 66 ]; then
+            trace "SYNC-TIMEOUT targets/sdb/state=writing"
+            cat "$RUN_DIR/answer.last.json"
+        else
+            printf '%s\n' '{"ok":true,"action":"wait","whole":true}'
+        fi
+    }
+    harness_apply_wait() { _await_file targets/sdb/late; }
+fi
+_report_body() {
+    { printf '{"targets":['; _rs=""
+      for _rt in "$RUN_DIR"/targets/*/; do
+          [ -f "$_rt/state" ] || continue; _rh=${_rt%/}; _rh=${_rh##*/}; _rb=$(cat "$_rt/bound" 2> /dev/null); _rb=${_rb%|*|*}
+          printf '%s{"dev":"%s","serial":"%s","state":"%s"' "$_rs" "$_rh" "$_rb" "$(cat "$_rt/state")"
+          [ ! -e "$_rt/removed" ] || printf ',"removed":true'
+          [ ! -s "$_rt/rejoin" ] || printf ',"rejoin":%s' "$(cat "$_rt/rejoin")"
+          printf '}'; _rs=","
+      done; printf ']%s}\n' "$(line_wait_json 2> /dev/null)"; } > "$RUN_DIR/progress.json.new" && mv "$RUN_DIR/progress.json.new" "$RUN_DIR/progress.json"   # line_wait: linewait.sh's (not there = nothing)
+}
+_report_reply() {
+    [ ! -s "$RUN_DIR/reply.json" ] || cat "$RUN_DIR/reply.json" > "$RUN_DIR/progress.reply"
 }
 _reporter() {   # progress.sh's loop: a body with every target, then the server's answer -- emptied the moment the body goes out
     while [ ! -e "$RUN_DIR/ticker.stop" ]; do
-        { printf '{"targets":['; _rs=""
-          for _rt in "$RUN_DIR"/targets/*/; do
-              [ -f "$_rt/state" ] || continue; _rh=${_rt%/}; _rh=${_rh##*/}; _rb=$(cat "$_rt/bound" 2> /dev/null); _rb=${_rb%|*|*}
-              printf '%s{"dev":"%s","serial":"%s","state":"%s"' "$_rs" "$_rh" "$_rb" "$(cat "$_rt/state")"
-              [ ! -e "$_rt/removed" ] || printf ',"removed":true'
-              [ ! -s "$_rt/rejoin" ] || printf ',"rejoin":%s' "$(cat "$_rt/rejoin")"
-              printf '}'; _rs=","
-          done; printf ']%s}\n' "$(line_wait_json 2> /dev/null)"; } > "$RUN_DIR/progress.json.new"; mv "$RUN_DIR/progress.json.new" "$RUN_DIR/progress.json"   # line_wait: linewait.sh's (not there = nothing)
+        _report_body
         : > "$RUN_DIR/progress.reply"; command sleep 0.3
-        [ ! -s "$RUN_DIR/reply.json" ] || cat "$RUN_DIR/reply.json" > "$RUN_DIR/progress.reply"
+        _report_reply
         command sleep 0.4
     done
 }
-_reporter > /dev/null 2>&1 &
+'''
+
+REPORTER = r'''
+if [ -n "${NF_TRACE:-}" ]; then
+    sleep() {
+        if [ "${FUNCNAME[1]:-}" = fill_word ]; then
+            # Drive the fake reporter on the agent's polling tick, after rejoin has been written.
+            _report_body && : > "$RUN_DIR/progress.reply" && _report_reply
+        else
+            [ -z "${REAL_SLEEP:-}" ] || command sleep "$@"
+        fi
+    }
+else
+    _reporter > /dev/null 2>&1 &
+fi
 '''
 
 LINE = {"written": 1, "target": 5, "remaining": 4, "next_name": "LAB-11", "names": {"SER-other": "LAB-10"},
@@ -96,10 +134,11 @@ NEW = f"{PULLED} RECV_BACK_AS=sdc RECV_BACK_SERIAL=SER-other PLUG_EVENT=1 RECV_T
 
 def _line(tmp_path, answers, env, reply: dict | None) -> dict:
     tmp_path.mkdir(parents=True, exist_ok=True)
-    (tmp_path / "extra.sh").write_text(EXTRA, encoding="utf-8", newline="\n")
+    (tmp_path / "extra.sh").write_text(EXTRA + REPORTER, encoding="utf-8", newline="\n")
     if reply is not None:
         (tmp_path / "reply.json").write_text(json.dumps(reply))
     got = _run(tmp_path, answers, env=f"{env} HARNESS_EXTRA={posix(tmp_path / 'extra.sh')!r}")
+    assert not any(t.startswith("SYNC-TIMEOUT ") for t in got["trace"]), got
     got["final"] = (tmp_path / "final").read_text().strip() if (tmp_path / "final").exists() else ""
     return got
 
@@ -159,8 +198,8 @@ def test_a_new_disk_in_the_slot_and_under_the_name_of_a_pulled_drawer_holds_none
     """sdb (חריץ 2) נשלפה אחרי שתי חתיכות עמידות, והמעבר נגמר. דיסק **אחר** הוכנס לאותו חריץ, והקרנל נתן לו את אותו
     שם. היעד הישן יוצא מהדיווח; החדש מתחיל מאפס -- השורה של `/dev/sdb3` בקובץ המצב של הסבב היא של הדיסק הקודם -- ומוריד
     את כל חמש החתיכות. שאר המגירות אינן מחכות לו: הוא מסיים לבד, בשם שהשרת נתן ל-serial שלו, ומנותק."""
-    got = _line(tmp_path, [RECEIVE1] + [WAIT_WHOLE] * 6 + [DONE],
-                f"{PULLED} PLUG_EVENT=1 RECV_BACK_LATE=2:sdb:SER-other BACK_PORT=2 APPLY_SLOW=8",   # a long download: the round ends first
+    got = _line(tmp_path, [RECEIVE1, DONE],
+                f"{PULLED} PLUG_EVENT=1 BACK_PORT=2",
                 {"ok": True, "production_line": LINE})
     trace, log = got["trace"], got["log"]
     assert trace[-1] == "rc=0", got
@@ -169,6 +208,8 @@ def test_a_new_disk_in_the_slot_and_under_the_name_of_a_pulled_drawer_holds_none
     assert (tmp_path / "chunk" / "back.sdb" / "fetch.ranges").read_text().strip() == "0-4"   # not 2-4: 0-1 were the old disk's
     end = ["apply_gpt sdb", "DONE sdb", "readback sdb", "grow sdb", "HOSTNAME sdb LAB-10", "mark_off sdb", "DELETE sdb"]
     assert [trace.index(step) for step in end] == sorted(trace.index(step) for step in end), trace
+    timing = ["POST ended 3", "BACK sdb", "PART-RETURNED rc=0", "APPLY-END"]
+    assert [trace.index(step) for step in timing] == sorted(trace.index(step) for step in timing), trace
     assert "HOSTNAME sdb LAB-02" not in trace, trace                           # the slot's name was the old disk's
     assert got["final"].startswith("finish=0 disks=sda sdb "), got["final"]
     assert (tmp_path / "targets" / "sdb" / "detached").exists() and _state(tmp_path, "sdb") == "done"
@@ -177,7 +218,7 @@ def test_a_new_disk_in_the_slot_and_under_the_name_of_a_pulled_drawer_holds_none
 
 # --- the brain's word on a fill (fillword.sh), where the neighbours are read (drawerfill.sh) ----------------------------
 
-BACK = f"{PULLED} RECV_BACK_AS=sdc PLUG_EVENT=1 RECV_TAIL=8 SIDE_STATE='4 0-1,3-4' TEST_FILL_WORD_S=6"
+BACK = f"{PULLED} RECV_BACK_AS=sdc PLUG_EVENT=1 RECV_TAIL=0 SIDE_STATE='4 0-1,3-4' TEST_FILL_WORD_S=6"
 
 
 def _plan(source: str, neighbors: list[str]) -> dict:

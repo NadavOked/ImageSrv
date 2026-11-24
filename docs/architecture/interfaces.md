@@ -4399,7 +4399,7 @@ proxy ישנה מה-DB (‏`console_dhcp.proxy_configs`), ו-`GET /net/proxy-sup
 | `console` | מאזין הקונסולה (443) אינו נקשר לכתובת הכרטיס (loopback נשאר תמיד, #904); אין כלל nft |
 | `monitor` | ה-WebSocket ‏`/api/console/monitor/{mac}` עובר **ב-443** (אין לו מאזין משלו; 7710 הוא יוצא, אל המכונה). השרת סוגר 4403 לפי הכתובת המקומית של החיבור (`scope["server"]`), לפני TCP למכונה |
 | `multicast` | ‏`chunkcast send` יוצא מהכרטיס שבו השידור דלוק (`--iface` נבחר לכל גל, #2668); אין כרטיס כזה, או שאי אפשר לקבוע את הרשת — הסבב נכשל בשם (`send_failed`). אין כלל nft ל-UDP 7713–7714 |
-| `netboot` | ‏dnsmasq: ‏`except-interface=<כרטיס>` (גובר גם על `interface=` בקובץ המתקין) ‏+ ערוץ הסוכן 7712 אינו נקשר לכתובת; אין כללי nft ל-67/69/7712. דלוק בכרטיס בלי DHCP מוגדר = ‏`interface=` (TFTP + 7712) — חלוקת כתובות עדיין רק מ-`PUT /net/interfaces/{שם}` (#53) |
+| `netboot` | ‏dnsmasq: ‏`except-interface=<כרטיס>` (גובר גם על `interface=` בקובץ המתקין) ‏+ ערוץ הסוכן 7712 ומאזין ה-/boot 7711 אינם נקשרים לכתובת; אין כללי nft ל-67/69/7711/7712. דלוק בכרטיס בלי DHCP מוגדר = ‏`interface=` (TFTP + 7711 + 7712) — חלוקת כתובות עדיין רק מ-`PUT /net/interfaces/{שם}` (#53) |
 | `interserver` | מאזין 7700 (ה-"אתה שם?" של הראשי #1310, או ה-mTLS של המשני #740) אינו נקשר לכתובת; אין כלל nft (במשני — עדיין רק מכתובת הראשי) |
 
 **ברירות המחדל = היום.** כרטיס שלא נשמר מקבל את מה שהשרת נותן דרכו בלי
@@ -4706,7 +4706,7 @@ uses its name, and `chunkcast send` receives the same name as `--iface`.
 תפריט בכתובת ההפצה ומה כתוב בשורת הקרנל. הבקשות האלה נושאות את
 הכותרת **`X-ImageSrv-Probe: 1`**, והשרת מכבד אותה **רק כשהפונה הוא
 השרת עצמו**: ‏`scope["client"]` הוא loopback, או שווה לכתובת המקומית
-שעליה החיבור התקבל (חיבור מקומי ל-`http://<כתובת ההפצה>:7712` יוצא
+שעליה החיבור התקבל (חיבור מקומי ל-`http://<כתובת ההפצה>:7711`, מאזין ה-/boot, יוצא
 ממנה, לא מ-`127.0.0.1`). בקשה כזו מקבלת את התפריט האמיתי ואינה כותבת
 דבר — לא `net_devices`, לא `boot_steps` ולא `boot_attempts` (‏#75).
 
@@ -5583,7 +5583,7 @@ FIN (‏#1850: ‏`reboot -f`, ‏`poweroff -f`, כיבוי idle, חשמל): ה-
 
 | שדה | ערכים | משמעות |
 |---|---|---|
-| `network` | `deploy` / `mgmt` / `interserver` / `null` | לאיזו רשת שייכת השורה (`ports.network_of`): הפצה — 67, 69, 7712, 4011, 7713–7714, 7710; ניהול — 443; בין שרתים — 7700. ‏`null` — שורת `firewall` (מצב ה-nft כולו, לא פורט). הקונסולה מציגה כרטיס לכל רשת |
+| `network` | `deploy` / `mgmt` / `interserver` / `null` | לאיזו רשת שייכת השורה (`ports.network_of`): הפצה — 67, 69, 7711, 7712, 4011, 7713–7714, 7710; ניהול — 443; בין שרתים — 7700. ‏`null` — שורת `firewall` (מצב ה-nft כולו, לא פורט). הקונסולה מציגה כרטיס לכל רשת |
 | `firewall` | `open` / `blocked` / `null` | **רק ב-`mgmt`/`interserver`** — האם טבלת `inet imagesrv` של השרת מכניסה את הפורט (`ports.port_firewall`, מאותו `nft list ruleset` של שורת `firewall`). ‏`open` = כלל `accept` עם `<proto> dport <port>` בשרשרת input (או policy accept); ‏`blocked` = policy drop ואין כלל כזה. ‏`null` = לא נבדק: nft לא נקרא, הטבלה לא נטענה, או policy שלא זוהה — **לעולם לא `open` בלי ראיה** (עיקרון 5). ברשת ההפצה תמיד `null`: השרת מנהל אותה ואין בה חומת אש של המכללה |
 | `firewall_detail` | משפט / `null` | הראיה: שורת הכלל שפתחה, "policy drop חוסם", או למה לא נבדק. ‏`null` כש-`firewall` אינו רלוונטי (הפצה) |
 
@@ -5717,7 +5717,7 @@ as `ok: false` with `apply_error`; unreadable settings are not treated as off.
 |---|---|---|
 | loopback | הכול | pairing מקומי, קונסולה על 127.0.0.1 |
 | כל הכרטיסים | established/related; ICMP echo; ICMPv6 echo+ND (+PMTU) | תשובות, אבחון, שכנות IPv6 |
-| הפצה (`--deploy-if`) | UDP 67, 69; TCP 7712; UDP מולטיקאסט (ברירת מחדל 7713–7714: `chunkctx.DEFAULT_PORTBASE` + 2 ו-+3) | DHCP/TFTP/סוכן/שידור. WoL UDP 9 הוא **יוצא** — output לא נחסם, אין כלל כניסה |
+| הפצה (`--deploy-if`) | UDP 67, 69; TCP 7711 (`/boot`, גם למחשב לא רשום), 7712 (הסוכן); UDP מולטיקאסט (ברירת מחדל 7713–7714: `chunkctx.DEFAULT_PORTBASE` + 2 ו-+3) | DHCP/TFTP/סוכן/שידור. WoL UDP 9 הוא **יוצא** — output לא נחסם, אין כלל כניסה |
 | שרתים (`--servers-if`) | TCP 443 | קונסולה HTTPS. **אין TCP 22 בשום מצב** (‏#1266; ‏`--ssh-if` נדחה) |
 | שרתים, **משני** | TCP 7700 מ-`--primary-ip` בלבד (`ip saddr`) | הראשי יוזם; ‏mTLS מעל זה |
 | שרתים, **ראשי** | TCP 7700, בלי `ip saddr` | ‏#1310: רק "אתה שם?" מאזין שם; הראשי אינו יודע מראש את המשניים, ו-FW האתר מגביל את המקור |
@@ -5747,6 +5747,7 @@ imagesrv"` / `"לא נטענה"` / `"לא הצלחנו לבדוק"`. אין מת
 | 2 / הכול | established/related | stateful | allow; invalid drop |
 | 4 / host | לקוחות DHCP בוילן ההפצה → השרת | UDP 67 | allow על כרטיס ההפצה בלבד |
 | 6 / host | תחנות אתחול → `SRV_D` | UDP 69 | allow TFTP |
+| 6ב / host | תחנות אתחול → `SRV_D` | TCP 7711 (`/boot`) | allow, גם למחשב לא רשום (#3486) |
 | 7 / host | תחנות רשומות → `SRV_D` | TCP 7712 | allow (שער הזהות נשאר) |
 | 8 / host | ניהול → `SRV_S` | TCP 443 | allow HTTPS |
 | 10 / host | שולח ↔ מקבלים בוילן ההפצה | UDP 7713–7714 | allow בתוך ההפצה |

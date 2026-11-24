@@ -81,6 +81,13 @@ WAIT_STREAM_STALL_S=1; WAIT_DRAWER_S=1; STREAM_START_CEILING=${TEST_START_CEILIN
 CHUNK_FETCH_TELL_S=${TEST_TELL_S:-1}; FILL_WORD_S=${TEST_FILL_WORD_S:-0}   # no reporter here: a measure does not wait for the brain's answer (fillword.sh)
 CHUNK_GROUP=239.84.82.1; CHUNK_PORT=7713; CHUNK_KEY=0123456789abcdef; CHUNK_SESSION=ses_1   # פורט-הפצה-מכוון
 trace() { echo "$*" >> "$RUN_DIR/trace"; }
+_await_file() {
+    local n=0
+    until [ -e "$RUN_DIR/$1" ]; do
+        [ "$n" -lt 600 ] || { trace "SYNC-TIMEOUT $1"; return 1; }
+        command sleep 0.1; n=$((n + 1))
+    done
+}
 sleep() { [ -z "${REAL_SLEEP:-}" ] || command sleep "$@"; }
 watchdog_beat() { trace "beat"; }
 # the kernel's side, faked under $SYSROOT: a disk that left sysfs has no serial to read any more
@@ -136,6 +143,7 @@ http_post_json() {   # the n-th control message gets the n-th canned answer (the
     cp "$2" "$RUN_DIR/body.$_n.json"; trace "POST $(jq -r '"\(.state) \(.part)"' "$2")"
     # SERVER_GONE_AFTER=N: from the (N+1)-th question on the server does not answer (curl's 22)
     [ -z "${SERVER_GONE_AFTER:-}" ] || [ "$_n" -le "$SERVER_GONE_AFTER" ] || { trace "post-failed"; return 22; }
+    if command -v harness_answer > /dev/null && harness_answer "$2"; then return 0; fi
     cat "$RUN_DIR/answer.$_n.json" 2>/dev/null || cat "$RUN_DIR/answer.last.json"
 }
 _fake_state() {   # $1 = count, $2 = ranges, $3.. = chunkcast's own arguments: every node holds that
@@ -181,7 +189,12 @@ chunkcast() {
             # #3181: a drawer back inside the pass listens beside the round's receiver (drawerfill.sh), with a state of its own.
             # SIDE_STATE="<count> <ranges>" = what it holds when the pass ends for it, SIDE_S seconds after it began to listen
             # shellcheck disable=SC2086
-            case " $* " in *"/back."*) echo listening; command sleep "${SIDE_S:-2}"; _fake_state ${SIDE_STATE:-5 0-4} "$@"; trace "SIDE-END"; echo "pass ended"; return 0 ;; esac
+            case " $* " in
+                *"/back."*)
+                    echo listening
+                    [ -z "${RECV_WAIT_SIDE:-}" ] || : > "$RUN_DIR/side.listening"
+                    command sleep "${SIDE_S:-2}"; _fake_state ${SIDE_STATE:-5 0-4} "$@"; trace "SIDE-END"; echo "pass ended"; return 0 ;;
+            esac
             echo listening
             [ -z "${RECV_RC:-}" ] || return "$RECV_RC"   # RECV_RC=<n>: it listened, and then ended with that exit code (#3259)
             # RECV_DIES=<disk>:<how> (pass 1 only): a pass of seconds, and that drawer dies two seconds into it
@@ -196,6 +209,7 @@ chunkcast() {
                 [ -z "${RECV_BACK:-}" ] || { mkdir -p "$SYSROOT/sys/block/${RECV_DIES%%:*}/device"; echo 1000 > "$SYSROOT/sys/block/${RECV_DIES%%:*}/size"; : > "$SYSROOT/sys/block/${RECV_DIES%%:*}/answers"; trace "BACK"; }
                 # RECV_BACK_AS=<name>: it comes back under another name -- with its own serial, or RECV_BACK_SERIAL's (another disk)
                 [ -z "${RECV_BACK_AS:-}" ] || _back "${RECV_DIES%%:*}" "$RECV_BACK_AS" "${RECV_BACK_SERIAL:-SER-${RECV_DIES%%:*}}"
+                [ -z "${RECV_WAIT_SIDE:-}" ] || _await_file side.listening || return 2
                 command sleep "${RECV_TAIL:-1}"; trace "PASS-END"   # RECV_TAIL: the pass goes on that long after the drawer came back
                 # RECV_BACK_LATE=<seconds>:<name>[:<serial>]: it comes back that long AFTER the pass ended (#3140: the machine is waiting for it)
                 [ -z "${RECV_BACK_LATE:-}" ] || ( command sleep "${RECV_BACK_LATE%%:*}"; _bl="${RECV_BACK_LATE#*:}"; _bs="SER-${RECV_DIES%%:*}"
@@ -225,7 +239,11 @@ chunkcast() {
             # APPLY_TAKEN=<n>: a slow drive (#3149). It takes a chunk every 0.7 s -- the count in its own file, next to the state's -- and the first flush is back only after the n-th
             for _t in $(seq 1 "${APPLY_TAKEN:-0}"); do echo "$_t" > "$CHUNK_STATE.taken.new"; mv "$CHUNK_STATE.taken.new" "$CHUNK_STATE.taken"; command sleep 0.7; done
             command sleep 1.5; echo FLUSH >> "$RUN_DIR/order"; _fake_state 3 "0-2" "$@"
-            [ -n "${APPLY_SHORT:-}" ] || { command sleep "${APPLY_SLOW:-1.5}"; _fake_state 5 "0-4" "$@"; }   # APPLY_SHORT: it stops halfway; APPLY_SLOW: a long download
+            if [ -z "${APPLY_SHORT:-}" ]; then   # APPLY_SHORT: it stops halfway; APPLY_SLOW: a long download
+                if command -v harness_apply_wait > /dev/null; then harness_apply_wait || return 2
+                else command sleep "${APPLY_SLOW:-1.5}"; fi
+                _fake_state 5 "0-4" "$@"
+            fi
             trace "APPLY-END"
             echo "pass applied" ;;
     esac
