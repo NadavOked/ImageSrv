@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
+from server.db import SqlConnection
 from datetime import datetime
 
 from server.disks import drawer_slots, f1_marks, model_slots
@@ -62,7 +62,7 @@ def _epoch(stamp) -> float | None:
         return None
 
 
-def waiting(conn: sqlite3.Connection, now: float | None = None, mac: str | None = None) -> dict[str, dict] | None:
+def waiting(conn: SqlConnection, now: float | None = None, mac: str | None = None) -> dict[str, dict] | None:
     """`{mac: {sent_at, waited_s, typical_s, after_s, resent}}` לכל מכונה שהערתה האחרונה לא נענתה, שלא
     נראתה מאז, ושעבר הסף (או רק `mac`). `None` = הקריאה נכשלה (לא "אין אף אחת")."""
     now = steadyclock.now() if now is None else now      # #3826: `sent_epoch` נכתב ב-steadyclock (#3768)
@@ -118,7 +118,7 @@ def f1_disk(disks, slots: list[str] | None, marks: dict[str, dict] | None = None
     return min(found, key=lambda item: item[0])[1] if found else None
 
 
-def arrived(conn: sqlite3.Connection, mac: str, now: float | None = None) -> None:
+def arrived(conn: SqlConnection, mac: str, now: float | None = None) -> None:
     """מכונה שהקונסולה הציגה "לא הגיע · ייתכן F1" דיברה עם השרת: הדיסק שהוצג (SMART אדום) נרשם `auto`.
     נקרא מ-`hello._record_seen` **לפני** `net_seen` (ראו למעלה). הדיסק נלקח מ-`net_devices.disks_json`
     כפי שנשמר בהדלקה הקודמת — בדיוק מה שהקונסולה הציגה. לעולם אינו זורק: קריאה שנכשלה אינה סימון."""

@@ -35,7 +35,7 @@ import statistics
 
 from boot.trace import STEP_INDEX, STEPS
 
-from server.db import journal, now_iso
+from server.db import journal, now_iso, SqlConnection
 from server.core.logtext import one_line
 from server.system.health_rows import check
 
@@ -63,7 +63,7 @@ def version() -> str | None:
         return None
 
 
-def measure(conn: sqlite3.Connection, mac: str, step: str, prev: sqlite3.Row | None,
+def measure(conn: SqlConnection, mac: str, step: str, prev: sqlite3.Row | None,
             now_epoch: float, server_version: str | None = None) -> float | None:
     """נקרא מתוך הכתיבה של `boottrace.record` (כבר תחת `_write_lock`), **לפני**
     שהשורה החיה נדרסת. `prev` — השורה הקודמת של המכונה; `server_version` — מ-`version()`.
@@ -79,7 +79,7 @@ def measure(conn: sqlite3.Connection, mac: str, step: str, prev: sqlite3.Row | N
     return seconds
 
 
-def regression(conn: sqlite3.Connection, mac: str, step: str) -> dict:
+def regression(conn: SqlConnection, mac: str, step: str) -> dict:
     """המדידה האחרונה של (MAC, שלב) מול הבסיס שלה: `{"seconds", "baseline",
     "samples", "slow"}` — `slow` None = אין מדידה או אין בסיס."""
     rows = conn.execute(
@@ -95,7 +95,7 @@ def regression(conn: sqlite3.Connection, mac: str, step: str) -> dict:
     return out
 
 
-def after_record(conn: sqlite3.Connection, mac: str, step: str, seconds: float | None) -> None:
+def after_record(conn: SqlConnection, mac: str, step: str, seconds: float | None) -> None:
     """אחרי שהמעבר נרשם (מחוץ לנעילה): רגרסיה → `boot_step_slow`. לעולם אינו זורק."""
     if seconds is None:
         return
@@ -109,7 +109,7 @@ def after_record(conn: sqlite3.Connection, mac: str, step: str, seconds: float |
         log.exception("boot regression for %s %s failed", one_line(mac), one_line(step))
 
 
-def version_compare(conn: sqlite3.Connection) -> dict | None:
+def version_compare(conn: SqlConnection) -> dict | None:
     """`{"now", "before", "steps": [{"step", "before_s", "now_s", "slow"}]}` — לכל שלב
     עם `MIN_SAMPLES` מדידות בשתי הגרסאות. None — אין שתי גרסאות שנמדדו."""
     versions = [r["version"] for r in conn.execute(
@@ -126,9 +126,9 @@ def version_compare(conn: sqlite3.Connection) -> dict | None:
                 "SELECT seconds FROM boot_step_times WHERE version = ? AND step = ?"
                 " ORDER BY rowid DESC LIMIT ?", (version, step, WINDOW * 5))]
             sides.append(statistics.median(got) if len(got) >= MIN_SAMPLES else None)
-        if None in sides:
-            continue
         before_s, now_s = sides
+        if before_s is None or now_s is None:
+            continue
         steps.append({"step": step, "before_s": before_s, "now_s": now_s,
                       "slow": now_s >= FACTOR * before_s and now_s - before_s >= MIN_DELTA_S})
     return {"now": now_v, "before": before_v, "steps": steps}
@@ -154,7 +154,7 @@ STEP_LABELS: dict[str, str] = {
 }
 
 
-def health_checks(conn: sqlite3.Connection) -> list[dict]:
+def health_checks(conn: SqlConnection) -> list[dict]:
     """שורה כתומה לכל מכונה שהמעבר האחרון באחד השלבים שלה ארך פי 2 מהבסיס,
     ושורת לפני/אחרי עדכון. בלי מדידות — אין שורה."""
     try:
@@ -163,7 +163,8 @@ def health_checks(conn: sqlite3.Connection) -> list[dict]:
         if not pairs:
             return []
         names = {r["mac"]: r["suffix"] for r in conn.execute("SELECT mac, suffix FROM machines")}
-        out, slow_by_mac = [], {}
+        out = []
+        slow_by_mac: dict[str, list[str]] = {}
         for p in pairs:
             got = regression(conn, p["mac"], p["step"])
             if got["slow"]:

@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
+from server.db import SqlConnection
 from dataclasses import dataclass
 from typing import Callable
 
@@ -33,23 +33,23 @@ def undecided(reason: str, evidence: tuple[str, ...] = (), mac: str | None = ROU
     return Reading(UNDECIDED, reason, evidence, mac)
 
 
-def name_of(conn: sqlite3.Connection, mac: str) -> str:
+def name_of(conn: SqlConnection, mac: str) -> str:
     """שם המשכפל כפי שהמפעיל קורא אותו (`משכפל-N`), או ה-MAC כשהוא לא רשום."""
     from server.core import machine_names                                   # noqa: PLC0415 -- כמו `room._room_label`
     row = conn.execute("SELECT suffix FROM machines WHERE mac = ?", (mac,)).fetchone()
     return machine_names.label("cloner", row["suffix"]) if row else mac
 
 
-def attach_health(conn: sqlite3.Connection, collect: Callable[[], list[dict]] | None) -> None:
+def attach_health(conn: SqlConnection, collect: Callable[[], list[dict]] | None) -> None:
     """B51: מי שבנה את נתיב ה-`/health` (`health.create_health_router`) מוסר את ה-`collect` שלו, עם אותם hooks בדיוק (כולל SMART של
     דיסקי השרת, `server_disks`). נישא על החיבור, כמו `veto.attach`, כדי שהשער יקרא את אותן שורות שהמפעיל רואה."""
     try:
-        conn.brain_health = collect
+        setattr(conn, "brain_health", collect)   # רק חיבור שמקבל תכונות נושא אותו: SqlConnection גולמי = AttributeError
     except AttributeError:
         log.warning("brain: %s cannot carry the health source; the health gate is undecided", type(conn).__name__)
 
 
-def health_rows(conn: sqlite3.Connection) -> list[dict] | None:
+def health_rows(conn: SqlConnection) -> list[dict] | None:
     """כל שורות `/health` כפי שהמפעיל רואה אותן (`{"id", "label", "state", "detail"}`). ``None`` = המקור לא חובר: לא "אין שורות".
     זורק כשה-`collect` זורק: השער הופך אותו ל-`UNDECIDED`."""
     collect = getattr(conn, "brain_health", None)

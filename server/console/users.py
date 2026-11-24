@@ -16,7 +16,7 @@ import sqlite3
 import string
 import time
 
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 
 _log = logging.getLogger(__name__)
 
@@ -149,7 +149,7 @@ def _check_username(username: str) -> None:
         )
 
 
-def lookup(conn: sqlite3.Connection, username: str) -> sqlite3.Row | None:
+def lookup(conn: SqlConnection, username: str) -> sqlite3.Row | None:
     """שורה לפי שם, בלי תלות ברישיות. None אם אין."""
     return conn.execute(
         "SELECT * FROM users WHERE username = ? COLLATE NOCASE",
@@ -157,12 +157,12 @@ def lookup(conn: sqlite3.Connection, username: str) -> sqlite3.Row | None:
     ).fetchone()
 
 
-def canonical_name(conn: sqlite3.Connection, username: str) -> str | None:
+def canonical_name(conn: SqlConnection, username: str) -> str | None:
     row = lookup(conn, username)
     return None if row is None else row["username"]
 
 
-def flags(conn: sqlite3.Connection, username: str) -> dict:
+def flags(conn: SqlConnection, username: str) -> dict:
     row = lookup(conn, username)
     if row is None:
         return {"must_change_password": False, "mfa_enabled": False,
@@ -178,7 +178,7 @@ def flags(conn: sqlite3.Connection, username: str) -> dict:
     }
 
 
-def create(conn: sqlite3.Connection, username: str, password: str, role: str, by: str,
+def create(conn: SqlConnection, username: str, password: str, role: str, by: str,
            *, is_builtin: bool = False, must_change_password: bool = False,
            check_policy: bool = True, mfa_required: bool = False) -> None:
     if role not in ("admin", "deploy"):
@@ -217,7 +217,7 @@ def create(conn: sqlite3.Connection, username: str, password: str, role: str, by
 AUTH_EPOCH_FLOOR = "auth_epoch_floor"
 
 
-def _epoch_floor(conn: sqlite3.Connection) -> int:
+def _epoch_floor(conn: SqlConnection) -> int:
     """הרצפה, בתוך טרנזאקציית הכתיבה של הקורא. ערך פגום אינו "0" — הוא כשל בשם (עיקרון 5):
     רצפה שנקראה כאפס מחזירה לחיים עוגייה של משתמש שנמחק."""
     row = conn.execute("SELECT value FROM settings WHERE key = ?", (AUTH_EPOCH_FLOOR,)).fetchone()
@@ -228,7 +228,7 @@ def _epoch_floor(conn: sqlite3.Connection) -> int:
     return int(row["value"])
 
 
-def _raise_epoch_floor(conn: sqlite3.Connection, epoch: int) -> None:
+def _raise_epoch_floor(conn: SqlConnection, epoch: int) -> None:
     """מרים את הרצפה ל-``epoch`` אם הוא גבוה ממנה. בתוך טרנזאקציית הכתיבה של הקורא."""
     if epoch > _epoch_floor(conn):
         conn.execute(
@@ -237,7 +237,7 @@ def _raise_epoch_floor(conn: sqlite3.Connection, epoch: int) -> None:
             (AUTH_EPOCH_FLOOR, str(epoch)))
 
 
-def verify(conn: sqlite3.Connection, username: str, password: str) -> str | None:
+def verify(conn: SqlConnection, username: str, password: str) -> str | None:
     """מחזיר את התפקיד אם הסיסמה נכונה, אחרת None. השוואה קבועת-זמן.
 
     הפרמטרים לגיבוב באים **מהרשומה** ולא מהקבועים של הקובץ. כאן ישבו
@@ -279,7 +279,7 @@ def verify(conn: sqlite3.Connection, username: str, password: str) -> str | None
     return None
 
 
-def _upgrade_hash(conn: sqlite3.Connection, row: sqlite3.Row, password: str) -> None:
+def _upgrade_hash(conn: SqlConnection, row: sqlite3.Row, password: str) -> None:
     """#2591: כניסה מוצלחת = הסיסמה ביד, ולכן אפשר לגבב אותה מחדש בעלות
     הנוכחית. אף פעם לא בלי סיסמה, ואף פעם לא לערך נמוך מהקיים.
 
@@ -301,7 +301,7 @@ def _upgrade_hash(conn: sqlite3.Connection, row: sqlite3.Row, password: str) -> 
 
 
 def update(
-    conn: sqlite3.Connection, username: str, by: str,
+    conn: SqlConnection, username: str, by: str,
     password: str | None = None, role: str | None = None,
     *, check_policy: bool = True, mfa_required: bool | None = None,
 ) -> None:
@@ -355,7 +355,7 @@ def update(
         viewer_sessions.revoke_user(username)
 
 
-def set_disabled(conn: sqlite3.Connection, username: str, disabled: bool,
+def set_disabled(conn: SqlConnection, username: str, disabled: bool,
                  by: str) -> None:
     """חסימה או שחרור. שני שומרים, ושניהם על אותו היגיון כמו במחיקה.
 
@@ -384,7 +384,7 @@ def set_disabled(conn: sqlite3.Connection, username: str, disabled: bool,
         bump_auth_epoch(conn, username)
 
 
-def active_admin_count(conn: sqlite3.Connection) -> int:
+def active_admin_count(conn: SqlConnection) -> int:
     """מנהלים שאינם חסומים. `admin_count` סופר גם חסומים, ולכן הוא
     התשובה הלא נכונה לשאלה "האם יישאר מי שינהל"."""
     return conn.execute(
@@ -393,13 +393,13 @@ def active_admin_count(conn: sqlite3.Connection) -> int:
     ).fetchone()["n"]
 
 
-def admin_count(conn: sqlite3.Connection) -> int:
+def admin_count(conn: SqlConnection) -> int:
     return conn.execute(
         "SELECT COUNT(*) AS n FROM users WHERE role = 'admin'"
     ).fetchone()["n"]
 
 
-def delete(conn: sqlite3.Connection, username: str, by: str) -> None:
+def delete(conn: SqlConnection, username: str, by: str) -> None:
     """מחיקה שתובעת את השארית באותה כתיבה.
 
     השומר על "יישאר מי שינהל" ישב עד #521 ב-``console_api.del_user``
@@ -446,7 +446,7 @@ def delete(conn: sqlite3.Connection, username: str, by: str) -> None:
     viewer_sessions.revoke_user(username)
 
 
-def list_users(conn: sqlite3.Connection) -> list[dict]:
+def list_users(conn: SqlConnection) -> list[dict]:
     rows = conn.execute(
         "SELECT username, role, created_at, disabled_at,"
         " must_change_password, mfa_enabled, is_builtin, mfa_required,"
@@ -463,7 +463,7 @@ def list_users(conn: sqlite3.Connection) -> list[dict]:
     } for r in rows]
 
 
-def record_login(conn: sqlite3.Connection, username: str, ip: str) -> None:
+def record_login(conn: SqlConnection, username: str, ip: str) -> None:
     """#1008: כניסה שהנפיקה עוגייה — מתי ומאיזו כתובת (``request.client.host``).
 
     נקרא ליד כל ``attach_cookie`` של כניסה (``console_login``, ``/login/mfa``),
@@ -478,7 +478,7 @@ def record_login(conn: sqlite3.Connection, username: str, ip: str) -> None:
         )
 
 
-def get_theme(conn: sqlite3.Connection, username: str) -> str:
+def get_theme(conn: SqlConnection, username: str) -> str:
     """ערכת הנושא של המשתמש. ערך זר או שורה חסרה → ``auto`` — לא קריסה."""
     row = conn.execute(
         "SELECT theme FROM users WHERE username = ?", (username,)
@@ -487,7 +487,7 @@ def get_theme(conn: sqlite3.Connection, username: str) -> str:
     return theme if theme in THEMES else "auto"
 
 
-def set_theme(conn: sqlite3.Connection, username: str, theme: str) -> None:
+def set_theme(conn: SqlConnection, username: str, theme: str) -> None:
     """המשתמש על עצמו. בלי יומן — זו העדפה, לא פעולת ניהול."""
     if theme not in THEMES:
         raise ValueError("theme חייב להיות auto, light או dark")
@@ -498,7 +498,7 @@ def set_theme(conn: sqlite3.Connection, username: str, theme: str) -> None:
         )
 
 
-def get_view(conn: sqlite3.Connection, username: str) -> str:
+def get_view(conn: SqlConnection, username: str) -> str:
     """#3025: הבחירה השמורה, ואם אין — המנהל מההתקנה (``is_builtin``) מתקדם
     וכל השאר בסיסי (הכרעת נדב). שורה חסרה או ערך זר → בסיסי, לא קריסה."""
     row = conn.execute(
@@ -511,7 +511,7 @@ def get_view(conn: sqlite3.Connection, username: str) -> str:
     return "advanced" if row["is_builtin"] else "basic"
 
 
-def set_view(conn: sqlite3.Connection, username: str, view: str) -> None:
+def set_view(conn: SqlConnection, username: str, view: str) -> None:
     """המשתמש על עצמו, כמו ``set_theme``. בלי יומן — זו העדפה, לא פעולת ניהול."""
     if view not in VIEWS:
         raise ValueError("view חייב להיות basic או advanced")
@@ -522,7 +522,7 @@ def set_view(conn: sqlite3.Connection, username: str, view: str) -> None:
         )
 
 
-def change_own_password(conn: sqlite3.Connection, username: str,
+def change_own_password(conn: SqlConnection, username: str,
                         current: str, new: str) -> None:
     """החלפת סיסמה עצמית. מאמתת את הנוכחית, אוכפת נוהל, מורידה כפייה."""
     if verify(conn, username, current) is None:
@@ -542,7 +542,7 @@ def change_own_password(conn: sqlite3.Connection, username: str,
     journal(conn, "password_changed", stored, stored)
 
 
-def reset_password(conn: sqlite3.Connection, username: str, by: str) -> str:
+def reset_password(conn: SqlConnection, username: str, by: str) -> str:
     """איפוס על ידי admin: סיסמה אקראית חד-פעמית + החלפה כפויה בכניסה הבאה."""
     row = lookup(conn, username)
     if row is None:
@@ -562,7 +562,7 @@ def reset_password(conn: sqlite3.Connection, username: str, by: str) -> str:
     return new
 
 
-def bump_auth_epoch(conn: sqlite3.Connection, username: str) -> None:
+def bump_auth_epoch(conn: SqlConnection, username: str) -> None:
     """מבטל את כל ה-sessions החתומות של המשתמש. העוגייה נושאת את ה-epoch."""
     stored = canonical_name(conn, username)
     if stored is None:
@@ -577,7 +577,7 @@ def bump_auth_epoch(conn: sqlite3.Connection, username: str) -> None:
     viewer_sessions.revoke_user(stored)
 
 
-def ensure_admin(conn: sqlite3.Connection, password: str | None = None) -> str | None:
+def ensure_admin(conn: SqlConnection, password: str | None = None) -> str | None:
     """בהתקנה טרייה נוצר admin/admin עם החלפה כפויה, is_builtin=1.
 
     אם כבר יש מנהל — לא נוגעים. `password` (`--admin-pass`) מדלג על הכפייה.

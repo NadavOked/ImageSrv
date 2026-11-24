@@ -38,10 +38,9 @@ import gzip
 import json
 import logging
 import re
-import sqlite3
 import zlib
 
-from server.db import _settle, _write_lock, journal, now_iso, writing
+from server.db import _settle, _write_lock, journal, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.agent_logs")
 
@@ -164,7 +163,7 @@ def agent_cut(header: object) -> bool:
     return header != "0"
 
 
-def receive(conn: sqlite3.Connection, mac: str, session_id: object, reason: object,
+def receive(conn: SqlConnection, mac: str, session_id: object, reason: object,
             body: bytes, known: bool, cut_header: object = None) -> dict:
     """`POST /api/v1/agent/log` אחרי שער הזהות. `known` — המכונה רשומה. `cut_header` — הכותרת
     `X-Imagesrv-Log-Cut` כמות שהגיעה (`None` = לא הגיעה); `truncated` = חיתוך השרת **או** של הסוכן."""
@@ -194,7 +193,7 @@ def receive(conn: sqlite3.Connection, mac: str, session_id: object, reason: obje
         return {"ok": False, "code": "error", "error": "not stored"}
 
 
-def _store(conn: sqlite3.Connection, mac: str, session_id: str | None, reason: str,
+def _store(conn: SqlConnection, mac: str, session_id: str | None, reason: str,
            text: str, lines: int, truncated: bool, signatures: list[dict]) -> int:
     blob = gzip.compress(text.encode("utf-8"))
     _settle(conn)
@@ -208,7 +207,7 @@ def _store(conn: sqlite3.Connection, mac: str, session_id: str | None, reason: s
         return int(cur.lastrowid)
 
 
-def _trim(conn: sqlite3.Connection, mac: str) -> None:
+def _trim(conn: SqlConnection, mac: str) -> None:
     """התקרה בכל הכנסה — `KEEP_PER_MAC` למכונה, `KEEP_ROWS` בסך הכול."""
     conn.execute("DELETE FROM agent_logs WHERE mac = ? AND id NOT IN"
                  " (SELECT id FROM agent_logs WHERE mac = ? ORDER BY id DESC LIMIT ?)",
@@ -217,7 +216,7 @@ def _trim(conn: sqlite3.Connection, mac: str) -> None:
                  " (SELECT id FROM agent_logs ORDER BY id DESC LIMIT ?)", (KEEP_ROWS,))
 
 
-def list_for(conn: sqlite3.Connection, mac: str, limit: int = 10) -> list[dict]:
+def list_for(conn: SqlConnection, mac: str, limit: int = 10) -> list[dict]:
     """הרשומות האחרונות של המכונה, בלי הטקסט."""
     out = []
     for row in conn.execute(
@@ -233,7 +232,7 @@ def list_for(conn: sqlite3.Connection, mac: str, limit: int = 10) -> list[dict]:
     return out
 
 
-def text_of(conn: sqlite3.Connection, log_id: int) -> dict | None:
+def text_of(conn: SqlConnection, log_id: int) -> dict | None:
     row = conn.execute("SELECT id, mac, session_id, reason, at, truncated, text_gz"
                        " FROM agent_logs WHERE id = ?", (log_id,)).fetchone()
     if row is None:

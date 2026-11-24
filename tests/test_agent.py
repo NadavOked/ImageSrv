@@ -685,7 +685,7 @@ def test_the_builder_copies_the_overlay_and_packs_its_binaries(tmp_path):
     (overlay / ".binaries").write_text("# lab\nfoo\n\nbar\n", encoding="utf-8")
     root.mkdir()
     (tmp_path / "block.sh").write_text(block, encoding="utf-8", newline="\n")
-    sh(f'set -euo pipefail; ROOT={posix(root)!r}; EXTRA_OVERLAY={posix(overlay)!r}; '
+    sh(f'set -euo pipefail; declare -A PACKED_FROM=(); ROOT={posix(root)!r}; EXTRA_OVERLAY={posix(overlay)!r}; '
        f'copy_bin() {{ echo "$1" >> {posix(tmp_path / "bins")!r}; }}; '
        f'. {posix(tmp_path / "block.sh")!r}')
     assert (root / "etc" / "imagesrv" / "hooks.d" / "10-lab.sh").is_file()

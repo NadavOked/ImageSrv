@@ -25,12 +25,11 @@ from __future__ import annotations
 
 import logging
 import re
-import sqlite3
 import subprocess
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
-from server.db import _settle, _write_lock, get_setting, now_iso, set_setting, writing
+from server.db import _settle, _write_lock, get_setting, now_iso, set_setting, SqlConnection, writing
 from server.core.logtext import one_line
 
 log = logging.getLogger("imagesrv.pxe_log")
@@ -98,7 +97,7 @@ def parse(lines: list[str]) -> list[dict]:
     return out
 
 
-def _bind(conn: sqlite3.Connection, events: list[dict]) -> list[dict]:
+def _bind(conn: SqlConnection, events: list[dict]) -> list[dict]:
     """TFTP → ה-MAC שה-IP הזה הוצע/אושר לו לאחרונה (באצווה, ואחרת בטבלה). לא נקשר — נזנח."""
     last: dict[str, str] = {}
     out = []
@@ -131,7 +130,7 @@ def journal_reader(cursor: str | None) -> tuple[list[str], str | None]:
     return lines, new_cursor
 
 
-def sweep(conn: sqlite3.Connection, reader: Callable = journal_reader) -> int:
+def sweep(conn: SqlConnection, reader: Callable = journal_reader) -> int:
     """קורא מה שנוסף מאז הסמן, ושומר. מחזיר כמה אירועים נשמרו; -1 — הקריאה נכשלה."""
     try:
         lines, cursor = reader(get_setting(conn, CURSOR_KEY))
@@ -155,11 +154,11 @@ def sweep(conn: sqlite3.Connection, reader: Callable = journal_reader) -> int:
         return -1
 
 
-def readable(conn: sqlite3.Connection) -> bool:
+def readable(conn: SqlConnection) -> bool:
     return (get_setting(conn, STATE_KEY) or "").startswith("ok ")
 
 
-def verdict(conn: sqlite3.Connection, mac: str, since: str | None = None) -> dict:
+def verdict(conn: SqlConnection, mac: str, since: str | None = None) -> dict:
     """מה קרה למכונה מאז `since` (ISO; בלעדיו — `DEFAULT_WINDOW_S` אחורה). ראו את ראש המודול."""
     try:
         if since is None:
@@ -188,7 +187,7 @@ def verdict(conn: sqlite3.Connection, mac: str, since: str | None = None) -> dic
         return {"state": "unchecked", "he": STATES_HE["unchecked"], "since": since, "events": []}
 
 
-def since_last_wake(conn: sqlite3.Connection, mac: str) -> str | None:
+def since_last_wake(conn: SqlConnection, mac: str) -> str | None:
     """רגע ההערה האחרונה (`wol_wakes`, #1847), או None."""
     row = conn.execute("SELECT sent_at FROM wol_wakes WHERE mac = ? ORDER BY sent_epoch DESC LIMIT 1",
                        (mac,)).fetchone()

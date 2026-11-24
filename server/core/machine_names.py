@@ -99,7 +99,7 @@ def number_of(role: str | None, suffix: object) -> int | None:
 def label(role: str | None, suffix: object) -> str:
     """השם שהמפעיל רואה: ``משכפל-N`` / ``בנייה-N`` לממוספרת, אחרת ה-``suffix`` כמו שהוא."""
     number = number_of(role, suffix)
-    if number is None:
+    if number is None or role is None:     # `number_of` נותן מספר רק לתפקיד ידוע, לכן `role is None` כבר כלול ב-`None`
         return suffix if isinstance(suffix, str) else ""
     return display(role, number)
 

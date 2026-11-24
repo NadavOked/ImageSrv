@@ -6,7 +6,8 @@ ALL of these hold, read from one ``lsblk -J`` tree (``classify``):
 * its label is exactly ``IMGSRV_DATA`` and it is FAT;
 * its parent disk is on the USB bus (``tran == usb``) -- a disk the hypervisor hands to the
   guest as a SCSI disk is not accepted on a label alone (the Hyper-V case, see
-  docs/architecture/interfaces.md, "הדיסק-און-קי בשרת");
+  docs/architecture/interfaces.md, "הדיסק-און-קי בשרת"). On a server that **is** Hyper-V the
+  stick is not supported at all (#2693, Nadav 23/11): the page says so and scans nothing;
 * the same disk has the ``IMGSRV_USB`` partition (the stick's boot partition) and no second
   ``IMGSRV_DATA``;
 * the disk is writable media, and nothing has it mounted.
@@ -45,6 +46,13 @@ BY_ID_DIR = "/dev/disk/by-id"
 _SAFE_ID = re.compile(r"[^A-Za-z0-9._-]")
 
 NONE, CONNECTED, AMBIGUOUS, UNSAFE, UNREAD = "none", "connected", "ambiguous", "unsafe", "unread"
+#: #2693 (Nadav 23/11): the stick is supported on a metal server and on ESXi (USB passthrough) only. On
+#: Hyper-V there is no USB passthrough to a Linux guest: the stick would arrive as a SCSI disk, and a disk
+#: is not accepted on its label. ``systemd-detect-virt`` names Hyper-V "microsoft"; anything else it says
+#: -- or nothing, when it cannot run -- is NOT Hyper-V as far as this page can claim (no guessing).
+UNSUPPORTED = "unsupported"
+HYPERV = "microsoft"
+HYPERV_REASON = "ב-Hyper-V אין תמיכה במקל — להעלות דרך הקונסולה"
 
 
 @dataclass(frozen=True)
@@ -231,6 +239,17 @@ def open_stick(stick: Stick, *, write: bool = False, scanner=None, mount=None, u
             raise StickError(f"ההתקן נשאר מעוגן ({mountpoint}) — אל תנתקו אותו לפני שהמעגן שוחרר; הפרטים ביומן השרת")
 
 
+def detect_virt() -> str | None:
+    """What ``systemd-detect-virt`` says this server runs on (``vmnet.detect_virt``): None = it could not tell."""
+    from server.vm import vmnet   # noqa: PLC0415 -- the VM module is not needed by the stick's pure parts
+    return vmnet.detect_virt()
+
+
+def platform_refusal(virt) -> str:
+    """'' = this server may have a stick plugged in; else the sentence the page shows instead of the option."""
+    return HYPERV_REASON if virt() == HYPERV else ""
+
+
 def default_hooks() -> dict:
-    """The real stick. Tests inject ``{"scan": ..., "open": ...}`` (a directory, no device)."""
-    return {"scan": scan, "open": open_stick}
+    """The real stick. Tests inject ``{"scan": ..., "open": ..., "virt": ...}`` (a directory, no device)."""
+    return {"scan": scan, "open": open_stick, "virt": detect_virt}

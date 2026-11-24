@@ -30,7 +30,7 @@ from datetime import datetime, timedelta
 from boot.grub_menu import ANSWER_FAILURE_CODES, ANSWER_FAILURE_FLAG, decide
 
 from server.agent.bootguard import ATTEMPT_LIMIT
-from server.db import _write_lock, now_iso, writing
+from server.db import _write_lock, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.answer_failure")
 
@@ -63,7 +63,7 @@ def _within_budget(attempts: int) -> bool:
     return attempts <= ATTEMPT_LIMIT
 
 
-def offer(conn: sqlite3.Connection, mac: str, answer: dict,
+def offer(conn: SqlConnection, mac: str, answer: dict,
           now: str | None = None) -> dict:
     """תשובה לא מובנת לבקשת תפריט בכרטיס מפיץ → עם `FLAG` בתוך התקציב, אחרת כמו שהיא.
 
@@ -104,7 +104,7 @@ def offer(conn: sqlite3.Connection, mac: str, answer: dict,
     return {**answer, FLAG: True}
 
 
-def peek(conn: sqlite3.Connection, mac: str, answer: dict,
+def peek(conn: SqlConnection, mac: str, answer: dict,
          now: str | None = None) -> dict | None:
     """מה `offer` היה מחזיר לבקשת התפריט **הבאה** -- בלי לספור אותה (#2682).
 

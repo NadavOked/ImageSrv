@@ -37,11 +37,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Protocol, runtime_checkable
 
 from server.brain import repairrule
 from server.rounds import chunkledger
 
 Ranges = list[tuple[int, int]]      # סגורים, ממוינים, בלי חפיפה ובלי צמודים (חוזה 9.1)
+
+
+@runtime_checkable
+class _PerDiskFloor(Protocol):
+    """`hdd_policy.RepairFloor`: the minimum speed as a number, and the decision for one disk."""
+
+    def for_disk(self, mac: str, serial: str) -> tuple[str | None, int | None]: ...
 
 
 def slow_reason(taken: int, skipped: int | None, asked_mbps: float | None, floor_mbps: int | None) -> str | None:
@@ -147,7 +155,7 @@ def plan(chunks: int, durable: dict[str, dict[str, Ranges]], *, repairs_done: in
                 continue
             # X16: מדיניות HDD לכל דיסק (`hdd_policy.RepairFloor`) -- סירוב, או הציפייה שנלמדה לו
             refusal, disk_floor = (floor_mbps.for_disk(mac, serial)
-                                   if hasattr(floor_mbps, "for_disk") else (None, floor_mbps))
+                                   if isinstance(floor_mbps, _PerDiskFloor) else (None, floor_mbps))
             if refusal:
                 out.failed[(mac, serial)] = refusal
                 continue

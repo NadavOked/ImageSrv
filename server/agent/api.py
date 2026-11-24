@@ -14,6 +14,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
@@ -32,7 +33,7 @@ from server.brain import resume as brain_resume   # #2528 שלב 4 (K11)
 from server.net import foreign_vlan
 from server.disks import disk_events, drawer_slots, shrink_records
 from server.console.auth import COOKIE_NAME, PURPOSE_KIOSK, read_session
-from server.db import agent_seen, disk_full, journal, note_disk_full
+from server.db import agent_seen, disk_full, journal, note_disk_full, SqlConnection
 from server.rounds import chunkledger, direct, room_console
 from server.rounds.durableseq import DurableSeq
 from server.rounds import prodline, room_state   # #3181
@@ -62,6 +63,12 @@ from server.library.images import ImageLibrary, restore_refusal
 from server.rounds.sessions import SessionError, SessionStore
 from server.core.tasks import TOKEN_HEADER, discard_failed_staging
 
+if TYPE_CHECKING:           # the objects `server.app` attaches to the context (imported here only for their types)
+    from server.brain.route import Tracker
+    from server.rounds.chunksend import ChunkEngine
+    from server.rounds.directchunk import DirectChunks
+    from server.rounds.indexprep import IndexPrep
+
 log = logging.getLogger("imagesrv.api")
 
 #: #906: אורך השאלה שנשמרת מ-hello (`prompt`). שורת מסך אחת של הסוכן
@@ -83,15 +90,15 @@ HELLO_MAX_ALL_MACS = 16
 
 @dataclass
 class ServerContext:
-    conn: sqlite3.Connection
+    conn: SqlConnection
     library: ImageLibrary
     store: SessionStore
     #: #2533: מנוע החתיכות (`chunksend.ChunkEngine`), המנוע היחיד מ-#3173. None = בדיקות שבונות ctx
     #: ביד, ואז אין שידור.
-    chunk: object | None = None
+    chunk: ChunkEngine | None = None
     #: #3161: הפצה ישירה במנוע החתיכות (`directchunk.DirectChunks`) -- מה שמחשב הבנייה העלה, וההזמנה
     #: הפתוחה אליו. None = בדיקות שבונות ctx ביד.
-    direct_chunk: object | None = None
+    direct_chunk: DirectChunks | None = None
     #: #2533: המספר הרץ של דיווחי `durable` בדלתא, לכל (סבב, מכונה, ערוץ). בזיכרון בלבד, במכוון:
     #: שרת שאותחל אינו יודע מה קיבל, ולכן מבקש הכול מחדש (`durable_full`).
     durable_seq: DurableSeq = field(default_factory=DurableSeq)
@@ -136,9 +143,9 @@ class ServerContext:
     budget: object | None = None
     #: #3231: הכנת האינדקס של מנוע החתיכות (`indexprep.IndexPrep`) -- השער של משיכה, כמו של גל (#3137).
     #: None (בדיקות שבונות ctx ביד) = אין שער, ומשיכה נפתחת כמו לפני.
-    index_prep: object | None = None
+    index_prep: IndexPrep | None = None
     #: #3064 (K5): HTTP מול multicast בהשלמה (`brain.route.Tracker`) -- `ended` של `chunk-pass` סוגר את ההורדה (R9). צל בלבד
-    route: object | None = None
+    route: Tracker | None = None
     #: #3125 (V2, V6-V10, R8): החושים של השרת בזמן גל (`learn.server_senses.Senses`) -- חלון כל `WINDOW_S` שניות
     #: (`_server_senses_clock`). None (בדיקות שבונות ctx ביד) = אין חלונות; ההתחלה והסוף של הגל לא משתנים.
     senses: object | None = None
@@ -989,7 +996,7 @@ def create_agent_router(ctx: ServerContext,
                 extras["fill"] = plans
             extras.update(ctx.completing.observe(ctx.conn, round_row, mac, body, mode=veto.mode(ctx.conn)))   # #3064: `verify`, enforce + switch only
             ctx.join.observe(ctx.conn, round_row, mac, body, mode=veto.mode(ctx.conn), engine=_engine_status(),
-                             stream_Bps=_stream_bps(), budget_bps=ctx.fill.budget(body.get("session_id"), mac),
+                             stream_Bps=_stream_bps(), budget_bps=ctx.fill.budget(round_row["wave_session_id"], mac),
                              floor_mbps=_write_floor())
             extras.update(ctx.peer.observe(ctx.conn, round_row, mac, body, fill_brain=ctx.fill, budget=ctx.budget))
             return extras
