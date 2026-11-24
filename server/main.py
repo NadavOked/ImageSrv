@@ -1,7 +1,8 @@
 """הרצת השרת: python -m server.main --server-url https://10.44.12.10:7712
 
-אותה כתובת משמשת את תפריט ה-GRUB ואת הסוכן — היא מה שנכתב לשורת
-הפקודה של הקרנל, ולכן חייבת להיות הכתובת שהלקוחות רואים, לא localhost.
+הכתובת היא של ערוץ הסוכן (HTTPS) — היא מה שנכתב לשורת הפקודה של
+הקרנל, ולכן חייבת להיות הכתובת שהלקוחות רואים, לא localhost. ה-GRUB עצמו
+פונה לאותו מארח בפורט ה-/boot (`--boot-port`, 7711, HTTP).
 """
 
 from __future__ import annotations
@@ -114,11 +115,13 @@ def _address_for_interface(name: str) -> str | None:
 
 
 def agent_uvicorn_config(app, host: str, port: int, **tls):
-    """התצורה של מאזין הסוכן (7712) — /boot של GRUB ו-API הסוכן.
+    """התצורה של מאזין uvicorn לפורט אחד: הסוכן (7712, HTTPS, עם `**tls`)
+    והמאזין הנפרד של /boot של GRUB (7711, HTTP, בלי `**tls`, #3486).
 
     #1423: `http=ResetBootOnPeerClose` עונה ב-RST כש-GRUB סוגר חיבור
     /boot. בלעדיו השרת נשאר ב-LAST-ACK על החיבור האחרון, ו-GRUB, שיוצא
-    מאותם פורטי מקור בכל אתחול, נתקע עליו באתחול הבא.
+    מאותם פורטי מקור בכל אתחול, נתקע עליו באתחול הבא. אותה תצורה גם
+    למאזין הסוכן.
     """
     import uvicorn
 
@@ -137,8 +140,9 @@ def build_parser() -> argparse.ArgumentParser:
     # הוגדרה": הסוכן על loopback בלבד, והקונסולה אומרת מה לעשות.
     # היחידה מעבירה ``${IMAGESRV_URL}`` גם כשהוא ריק (ארגומנט ריק אחד).
     parser.add_argument("--server-url", default="",
-                        help="הכתובת שהלקוחות רואים, http בלבד (כמו במתקין). "
-                             "ריק = מה שהוגדר מהקונסולה (#1088)")
+                        help="כתובת ערוץ הסוכן שהלקוחות רואים: https://<IP>:7712 "
+                             "(נכתבת לשורת הקרנל; ה-/boot של GRUB במאזין נפרד, "
+                             "--boot-port). ריק = מה שהוגדר מהקונסולה (#1088)")
     parser.add_argument("--tftp-root", default="/srv/tftp",
                         help="שורש ה-TFTP שהמתקין פרס אליו — לשם נכתב grub.cfg "
                              "כשרשת ההפצה מוגדרת מהקונסולה (#1088)")
@@ -170,7 +174,8 @@ def build_parser() -> argparse.ArgumentParser:
                              "כתובת כרטיס ההפצה (--interface). 0.0.0.0 רק "
                              "בבקשה מפורשת (R20-F1)")
     parser.add_argument("--port", type=int, default=product_ports.AGENT,
-                        help="פורט הסוכן: hello/pulls/progress/images ו-/boot")
+                        help="פורט הסוכן (HTTPS): hello/pulls/progress/images. "
+                             "/boot של GRUB במאזין נפרד (--boot-port)")
     # #731 (tracer 1 של #703): הקונסולה/הניהול מאזינים על פורט **נפרד**
     # מהסוכן, כדי שחומת אש תוכל לחשוף רק אותו לווילן הניהול.
     parser.add_argument("--console-port", type=int, default=product_ports.CONSOLE,
@@ -795,7 +800,8 @@ def main() -> None:
         return lambda: uvicorn.Server(cfg)
     # #770: הקונסולה על כרטיס הניהול (`--console-host`) בלבד — לא `--host`.
     # #703 (tracer 5): `ssl_certfile`/`ssl_keyfile` של uvicorn (stdlib ssl)
-    # על **כל** מאזין קונסולה — ורק עליהם; הסוכן נשאר http.
+    # על **כל** מאזין קונסולה — ורק עליהם. הסוכן מגיש תעודה משלו
+    # (`server/agent/tls.py`, #3580), ו-/boot של GRUB נשאר http.
     console_ssl = console_tls.uvicorn_kwargs() if console_tls else {}
     console_scheme = "https" if console_tls else "http"
     from server.interserver.auth import is_loopback

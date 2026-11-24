@@ -350,13 +350,13 @@ class Lab:
         except (ValueError, KeyError, IndexError, TypeError):
             return 0
 
-    def shot(self, label, numbered=True):
+    def shot(self, label, numbered=True, *, allow_small=False):
         """A console screenshot: NN-label.png, or label.png (overwritten) for the polling ones. Returns its bytes."""
         if numbered:
             self.shots += 1
         path = self.out / (f"{self.shots:02d}-{label}.png" if numbered else f"{label}.png")
         rc, out = self.govc("vm.console", "-capture", str(path), self.name, timeout=120)
-        if rc != 0 or not path.is_file() or path.stat().st_size < 100:
+        if rc != 0 or not path.is_file() or (not allow_small and path.stat().st_size < 100):
             raise Failed(f"no console screenshot ({rc}): {out.strip()[-200:]}")
         return path.read_bytes()
 
@@ -370,7 +370,7 @@ class Lab:
         """Screenshots until the rail shows step `want`; the last screenshot is kept either way."""
         end = self.w.now() + seconds
         while True:
-            seen = rail_step(self.shot(label, numbered=False))
+            seen = rail_step(self.shot(label, numbered=False, allow_small=True))
             if seen == want:
                 return
             if self.w.now() >= end:

@@ -396,6 +396,36 @@ def test_no_screenshot_is_a_failure_not_a_blank_screen_read_as_a_step(tmp_path, 
     assert govc.names("vm.destroy") == ["eit-x"]
 
 
+@pytest.mark.parametrize("rc,expected_polls,error", [
+    (0, [0, 5], None),
+    (0, [0, 5, 10], "never showed step 1 within 10s"),
+    (1, [0], r"no console screenshot \(1\)"),
+])
+def test_wait_step_with_a_1x1_screenshot(tmp_path, rc, expected_polls, error):
+    tiny = bytes.fromhex(
+        "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753de"
+        "0000000c49444154789c63606060000000040001f61738550000000049454e44ae426082"
+    )
+    clock = Clock()
+    polls = []
+
+    def capture(*args, timeout):
+        polls.append(clock.now())
+        Path(args[2]).write_bytes(png(1) if error is None and len(polls) > 1 else tiny)
+        return rc, ""
+
+    w = esxi.World(FakeGovc())
+    w.govc.run = capture
+    w.sleep, w.now = clock.sleep, clock.now
+    lab = esxi.Lab(w, args_for(tmp_path), tmp_path)
+    if error is None:
+        lab.wait_step(1, "boot", 10)
+    else:
+        with pytest.raises(esxi.Failed, match=error):
+            lab.wait_step(1, "boot", 10)
+    assert polls == expected_polls
+
+
 def test_a_final_screenshot_that_fails_does_not_change_the_verdict(tmp_path, capsys):
     govc = FailingGovc({})
     base_run = govc.run

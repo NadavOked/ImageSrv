@@ -167,18 +167,17 @@ build_progress() {
         # ‏#435: רק בקליטה (task id). המכנה בציר הבלוקים, לצד bytes_* הדחוסים.
         [ -n "${3:-}" ] && _entry="$_entry$(_source_progress_json "$_dev")$(cd_json 2>/dev/null)"
         [ -f "$_d/error" ] && _entry="$_entry,\"error\":\"$(json_escape "$(cat "$_d/error")")\""; [ "$(cat "$_d/plan_why" 2>/dev/null)" != windows_no_partition_guid ] || _entry="$_entry,\"plan_why\":\"windows_no_partition_guid\""   # #1212: a fixed code beside the operator's words
-        [ -f "$_d/crc_delta" ] && _entry="$_entry,\"crc_delta\":$(cat "$_d/crc_delta")"   # ‏#872: רק כשנמדד; חסר = לא נקרא, לא 0
-        case "$(cat "$_d/readback" 2>/dev/null)" in verified|sampled|unverified) _entry="$_entry,\"readback\":\"$(cat "$_d/readback")\",\"readback_reason\":\"$(json_escape "$(cat "$_d/readback_reason" 2>/dev/null)")\""; if [ "$(cat "$_d/readback_why" 2>/dev/null)" = list_not_fetched ]; then _entry="$_entry,\"readback_why\":\"list_not_fetched\""; fi ;; esac   # #1805: absent = not read back (yet); #1907
-        case "$(cat "$_d/temp_after" 2>/dev/null)" in ''|*[!0-9]*) ;; *) _entry="$_entry,\"temp_c\":$(cat "$_d/temp_after")" ;; esac   # #1859: after the write
+        if _pr_crc=$(cat "$_d/crc_delta" 2>/dev/null) && [ -n "$_pr_crc" ]; then _entry="$_entry,\"crc_delta\":$_pr_crc"; fi   # ‏#872: רק כשנמדד; חסר = לא נקרא, לא 0
+        _pr_rb=$(cat "$_d/readback" 2>/dev/null) || _pr_rb=; case "$_pr_rb" in verified|sampled|unverified) _entry="$_entry,\"readback\":\"$_pr_rb\",\"readback_reason\":\"$(json_escape "$(cat "$_d/readback_reason" 2>/dev/null)")\""; if [ "$(cat "$_d/readback_why" 2>/dev/null)" = list_not_fetched ]; then _entry="$_entry,\"readback_why\":\"list_not_fetched\""; fi ;; esac   # #1805: absent = not read back (yet); #1907
+        _pr_tc=$(cat "$_d/temp_after" 2>/dev/null) || _pr_tc=; case "$_pr_tc" in ''|*[!0-9]*) ;; *) _entry="$_entry,\"temp_c\":$_pr_tc" ;; esac   # #1859: after the write
         if [ -s "$_d/boot_ca_state" ] && [ -s "$_d/boot_ca_reason" ]; then
             _entry="$_entry,\"boot_ca_preflight\":{\"state\":\"$(json_escape "$(cat "$_d/boot_ca_state")")\",\"reason\":\"$(json_escape "$(cat "$_d/boot_ca_reason")")\"}"
-        fi; [ ! -s "$_d/db_update.json" ] || _entry="$_entry,\"db_update\":$(tr -d '\n' < "$_d/db_update.json")"   # #86: dbupdate.sh, db before and after
+        fi; if _pr_db=$(cat "$_d/db_update.json" 2>/dev/null) && [ -n "$_pr_db" ]; then _entry="$_entry,\"db_update\":$_pr_db"; fi   # #86: dbupdate.sh, db before and after
         _wm=$(cat "$_d/write_check_mbps" 2>/dev/null); case "$_wm" in ''|*[!0-9]*) _wm=null ;; esac   # #1366: null = not measured, never 0
         [ -s "$_d/write_check_state" ] && _entry="$_entry,\"write_preflight\":{\"state\":\"$(json_escape "$(cat "$_d/write_check_state")")\",\"reason\":\"$(json_escape "$(cat "$_d/write_check_reason" 2>/dev/null)")\",\"mbps\":$_wm}"
+        if _pr_dr=$(cat "$_d/drivers.json" 2>/dev/null) && [ -n "$_pr_dr" ]; then _entry="$_entry,\"drivers\":$_pr_dr"; fi   # #1269
         # ‏#874: יעד שנכשל נושא סידורי, חריץ ושורות ה-ATA (failmark.sh) -- הראיה, לא סיווג.
-        [ -f "$_d/ata_log.json" ] && _entry="$_entry$(failure_json "$_dev")"
-        [ -s "$_d/drivers.json" ] && _entry="$_entry,\"drivers\":$(tr -d '\n' < "$_d/drivers.json")"   # #1269
-        _entry="$_entry$(ledger_json "$_dev" 2>/dev/null)$(target_extra_json "$_dev" 2>/dev/null)$(drawer_back_json "$_dev" 2>/dev/null)$(peerfill_result_json "$_dev" 2>/dev/null)}"   # #2533: the durable chunks (chunkledger.sh); #1883: the stages, once final (datareport.sh); B29: what a neighbour cloner gave (peerfill.sh)
+        _entry="$_entry$(failure_json "$_dev" 2>/dev/null)$(ledger_json "$_dev" 2>/dev/null)$(target_extra_json "$_dev" 2>/dev/null)$(drawer_back_json "$_dev" 2>/dev/null)$(peerfill_result_json "$_dev" 2>/dev/null)}"   # #2533: the durable chunks (chunkledger.sh); #1883: the stages, once final (datareport.sh); B29: what a neighbour cloner gave (peerfill.sh)
         [ -n "$_targets" ] && _targets="$_targets,"
         _targets="$_targets$_entry"
     done
@@ -188,8 +187,8 @@ build_progress() {
         _who=$(printf '"session_id":"%s"' "$1")
     fi
     # #720: driver staging outcome (postdeploy.sh); absent = did not run, not no_match.
-    _drivers=""; [ -s "$RUN_DIR/udp_drops.json" ] && _drivers=",\"udp_drops\":$(tr -d '\n' < "$RUN_DIR/udp_drops.json")"   # 17/10 rate policy; absent = not read
-    [ -s "$RUN_DIR/drivers.json" ] && _drivers="$_drivers,\"drivers\":$(tr -d '\n' < "$RUN_DIR/drivers.json")"
+    if _pr_udp=$(cat "$RUN_DIR/udp_drops.json" 2>/dev/null) && [ -n "$_pr_udp" ]; then _drivers=",\"udp_drops\":$_pr_udp"; else _drivers=""; fi   # 17/10 rate policy; absent = not read
+    if _pr_dr=$(cat "$RUN_DIR/drivers.json" 2>/dev/null) && [ -n "$_pr_dr" ]; then _drivers="$_drivers,\"drivers\":$_pr_dr"; fi
     [ -n "${3:-}" ] && [ -s "$RUN_DIR/stage" ] && _drivers="$_drivers,\"stage\":\"$(json_escape "$(cat "$RUN_DIR/stage")")\""   # #980 §4: task reports only
     printf '{%s,"mac":"%s","state":"%s","targets":[%s]%s}' \
         "$_who" "$2" "$_state" "$_targets" "$_drivers$(machine_extra_json "$1" "${3:-}" 2>/dev/null)$(ledger_seq_json progress 2>/dev/null)"   # #1885: cpu, once final; #2533: the ledger's seq, when the report carries ranges

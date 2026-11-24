@@ -222,6 +222,7 @@ wave_sense_tick() {   # once a second while a pass runs: a window closes every W
 }
 
 wave_sense_json() {   # $1 = the session of the report -> ,"wave_senses":{...} when this machine measured that wave
-    [ -n "${1:-}" ] && [ "$(cat "$(_ws)/session" 2>/dev/null)" = "$1" ] && [ -s "$(_ws)/senses.json" ] || return 0
-    printf ',"wave_senses":%s' "$(tr -d '\n' < "$(_ws)/senses.json")"
+    [ -n "${1:-}" ] && [ "$(cat "$(_ws)/session" 2>/dev/null)" = "$1" ] || return 0
+    _ws_j=$(cat "$(_ws)/senses.json" 2>/dev/null) || return 0
+    [ -z "$_ws_j" ] || printf ',"wave_senses":%s' "$_ws_j"
 }

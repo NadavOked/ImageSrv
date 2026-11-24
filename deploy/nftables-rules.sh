@@ -213,7 +213,7 @@ if [ -n "$DEPLOY_IF" ]; then
 		iifname \"${DEPLOY_IF}\" udp dport 67 accept
 		# TFTP: קריאת shim/GRUB. העברת הנתונים היא related אם nf_conntrack_tftp טעון.
 		iifname \"${DEPLOY_IF}\" udp dport 69 accept
-		# סוכן (hello/images) — HTTP על כרטיס ההפצה בלבד. מחשב לא רשום מקבל ממנו 403 (חוץ מ-hello).
+		# סוכן (hello/images) — HTTPS על כרטיס ההפצה בלבד. מחשב לא רשום מקבל ממנו 403 (חוץ מ-hello).
 		iifname \"${DEPLOY_IF}\" tcp dport ${AGENT_PORT} accept
 		# GRUB/boot (#3486): תפריט, קרנל ו-initrd, במאזין משלו. פתוח למחשב לא רשום, כי רק הוא
 		# מחליט שם בין הדיסק המקומי למסך \"לא רשום\" (#1802).

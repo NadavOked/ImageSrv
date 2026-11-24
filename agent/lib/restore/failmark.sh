@@ -173,13 +173,13 @@ failure_json() {
     # $1 = disk. מה ש-build_progress מצרף ליעד failed (ממשק 4): הזהות
     # והראיה, כשדות JSON עם פסיק מוביל. ריק כשלא נאספה ראיה (כשל לפני הכתיבה).
     _fj_t="$RUN_DIR/targets/$1"
-    [ -f "$_fj_t/ata_log.json" ] || return 0
+    _fj_log=$(cat "$_fj_t/ata_log.json" 2>/dev/null) && [ -n "$_fj_log" ] || return 0
     IFS='|' read -r _fj_s _fj_p _fj_a < "$_fj_t/ident" || return 0
     _fj_sj=null; [ -n "$_fj_s" ] && _fj_sj="\"$(json_escape "$_fj_s")\""
     case "$_fj_p" in ''|*[!0-9]*) _fj_p=null ;; esac
     case "$_fj_a" in ''|*[!0-9]*) _fj_a=null ;; esac
     printf ',"serial":%s,"port":%s,"ata_port":%s,"ata_log":%s' \
-        "$_fj_sj" "$_fj_p" "$_fj_a" "$(cat "$_fj_t/ata_log.json")"
+        "$_fj_sj" "$_fj_p" "$_fj_a" "$_fj_log"
 }
 
 restore_blame() {

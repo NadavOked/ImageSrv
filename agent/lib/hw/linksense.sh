@@ -50,7 +50,10 @@ ls_phy_after() {
     return 0
 }
 
-ls_phy_json() { if [ -s "$RUN_DIR/targets/$1/phy.json" ]; then tr -d '\n' < "$RUN_DIR/targets/$1/phy.json"; else printf 'null'; fi; }
+ls_phy_json() {
+    _lp_v=$(cat "$RUN_DIR/targets/$1/phy.json" 2>/dev/null) || _lp_v=
+    printf '%s' "${_lp_v:-null}"
+}
 
 ls_resets_refresh() {
     _lr_f="$RUN_DIR/senses/resets.now"; _lr_t=$(date +%s)
@@ -79,9 +82,8 @@ ls_resets_json() {
 
 ls_conn_json() {
     _lc_a=$(_hw_ata "$1"); [ -n "$_lc_a" ] || { printf 'null'; return 0; }   # NVMe, USB, a VM's SCSI: no ATA connection
-    _lc_d=null
-    if [ "$(head -n 1 "$RUN_DIR/drawer_slots" 2>/dev/null)" = ok ]; then
-        _lc_d=$(awk -F'|' -v k="sata:$_lc_a" 'NR > 1 && $2 == k { print $1; f = 1; exit } END { if (!f) print "\"unmapped\"" }' "$RUN_DIR/drawer_slots")
-    fi
-    printf '{"ata":%s,"sata":%s,"drawer":%s}' "$_lc_a" "$((_lc_a - 1))" "$_lc_d"
+    _lc_d=$(awk -F'|' -v k="sata:$_lc_a" 'NR == 1 { ok = ($0 == "ok") }
+        ok && NR > 1 && $2 == k { print $1; f = 1; exit }
+        END { if (ok && !f) print "\"unmapped\"" }' "$RUN_DIR/drawer_slots" 2>/dev/null) || _lc_d=
+    printf '{"ata":%s,"sata":%s,"drawer":%s}' "$_lc_a" "$((_lc_a - 1))" "${_lc_d:-null}"
 }

@@ -34,7 +34,7 @@ CLOCK_SLACK_SECONDS = 300
 PURPOSE_PWCHANGE = "pwchange"
 PURPOSE_MFAENROLL = "mfaenroll"
 #: #1340: עוגייה שהקיוסק (פורט הסוכן, :7712) הנפיק — סיסמה בלבד, בלי MFA,
-#: ב-HTTP בוילן ההפצה. תקפה בפורט הסוכן; הקונסולה (``CONSOLE_APP_FLAG``) מסרבת לה.
+#: בוילן ההפצה. תקפה בפורט הסוכן; הקונסולה (``CONSOLE_APP_FLAG``) מסרבת לה.
 PURPOSE_KIOSK = "kiosk"
 #: #1340: ``app.state`` של אפליקציית הקונסולה (:443) נושא את הדגל הזה, ושם
 #: עוגיית קיוסק אינה session; של אפליקציית הסוכן (:7712) — ``KIOSK_APP_FLAG``,
@@ -84,7 +84,7 @@ def _enforce_purpose(request, session: Session) -> None:
     if method == "POST" and path.rstrip("/") == "/api/console/logout":
         return
     if session.purpose == PURPOSE_KIOSK:
-        # #1340: הקיוסק נכנס בסיסמה בלבד וב-HTTP. בקונסולה זו אינה כניסה —
+        # #1340: הקיוסק נכנס בסיסמה בלבד, בפורט הסוכן. בקונסולה זו אינה כניסה —
         # 401 ולא 403: הדפדפן נשלח למסך הכניסה של הקונסולה, עם MFA.
         # deploy מקבל את הסירוב של #1073 כמו בכל נתיב קונסולה.
         if getattr(request.app.state, CONSOLE_APP_FLAG, False):
@@ -243,14 +243,18 @@ def issue(conn: sqlite3.Connection, username: str, role: str,
     return f"{payload}|{signature}"
 
 
-def cookie_flags(tls) -> dict:
-    """דגלי עוגיית ה-session — מקור יחיד, גם לכניסה וגם לחידוש (#2757)."""
+def cookie_flags(tls, secure: bool | None = None) -> dict:
+    """דגלי עוגיית ה-session — מקור יחיד, גם לכניסה וגם לחידוש (#2757).
+
+    ``secure`` (#4066): ברירת המחדל נגזרת מ-``tls`` של הקונסולה. מאזין הסוכן (:7712)
+    מוגש ב-HTTPS בתעודה אחרת ואין לו ``tls`` כזה, ולכן הכניסה של הקיוסק מעבירה כאן
+    במפורש את הסכמה של החיבור עצמו."""
     return {"httponly": True, "samesite": "lax", "max_age": TTL_SECONDS,
-            "secure": tls is not None}
+            "secure": (tls is not None) if secure is None else secure}
 
 
 def attach_cookie(response, conn: sqlite3.Connection, username: str, role: str,
-                  tls, purpose: str = "") -> None:
+                  tls, purpose: str = "", secure: bool | None = None) -> None:
     """#3891: העוגייה נבנית מהשם והתפקיד **שב-DB עכשיו**, לא ממה שהקורא העביר. הקוראים מעבירים שם שכבר אומת
     (סיסמה, MFA או session), אבל השם הגיע מהבקשה, ו-CodeQL (py/cookie-injection) צדק שזה המקור. משתמש שאינו
     קיים, או שהתפקיד שלו השתנה מאז שנקרא, אינו מקבל עוגייה -- נכשל בגלוי (עיקרון 5)."""
@@ -261,7 +265,7 @@ def attach_cookie(response, conn: sqlite3.Connection, username: str, role: str,
         raise RuntimeError("cannot issue a session cookie: the user or its role is not what the database holds now")
     response.set_cookie(
         COOKIE_NAME, issue(conn, row["username"], row["role"], purpose=purpose),
-        **cookie_flags(tls),
+        **cookie_flags(tls, secure),
     )
 
 

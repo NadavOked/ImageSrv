@@ -282,3 +282,67 @@ def _value(path: str, regex: str) -> str:
 def test_what_cannot_import_python_names_the_same_port(path, regex, expected) -> None:
     """sh, C ו-JS אינם יכולים לקרוא את `server/core/ports.py`; כל אחד מחזיק משתנה אחד בשם, וכאן הוא נבדק מולו."""
     assert _value(path, regex) == str(expected)
+
+
+# --- what the docs and the help say about the two listeners that share a host (#3486, #3580) -----------------
+#: The documents that describe the system as it is now (history, handoffs and the design mockups are not here).
+CURRENT_DOCS = (
+    "README.md", "docs/architecture/server.md", "docs/architecture/security-model.md",
+    "docs/architecture/grub-generator.md", "docs/architecture/interfaces.md", "docs/architecture/imagesrv-spec.md",
+    "docs/guides/server-install.md", "docs/guides/admin-guide-he.md", "docs/guides/admin-guide-sources.md",
+    "deploy/firewall-rules.md", "tools/render_bootstrap.py", "server/main.py",
+)
+#: The agent port described as plain text: a plain-http URL on it, or a plain-http phrase in the same clause after it.
+AGENT_AS_PLAIN_URL = re.compile(rf"http://(?:<[^>]*>|[^\s`'\")<])*:{AGENT}\b")
+AGENT_AS_PLAIN_TEXT = re.compile(
+    rf"\b{AGENT}\b[^.;|]{{0,50}}?(?:HTTP בלבד|HTTP גלוי|HTTP רגיל|HTTP לא מוצפן|http בלבד|גלוי\*{{0,2}} \(HTTP\)|בלי הצפנה)")
+#: /boot's port described as encrypted: HTTPS in the same clause after it.
+BOOT_AS_TLS = re.compile(rf"\b{BOOT}\b[^,.;|()]{{0,40}}?HTTPS")
+
+
+def _doc(path: str) -> list[str]:
+    return (REPO / path).read_text(encoding="utf-8").splitlines()
+
+
+@pytest.mark.parametrize("path", CURRENT_DOCS)
+def test_no_current_doc_calls_the_agent_port_plain_http_or_the_boot_port_https(path: str) -> None:
+    """7712 is the agent over HTTPS with a CA of its own (#3580); 7711 is `/boot` over plain HTTP, a listener of its
+    own (#3486). Before this, README, server.md, the admin guide and the spec still called 7712 "HTTP only" and
+    gave it GRUB, the kernel and the initrd."""
+    bad = []
+    for number, line in enumerate(_doc(path), 1):
+        if AGENT_AS_PLAIN_URL.search(line) or AGENT_AS_PLAIN_TEXT.search(line) or BOOT_AS_TLS.search(line):
+            bad.append(f"{path}:{number}: {line.strip()[:160]}")
+    assert not bad, "\n".join(bad)
+
+
+def test_the_dev_run_line_names_the_agent_url_with_https() -> None:
+    """`--server-url` is the agent's URL, and `https://` is what the kernel command line, the early GUI and the e2e rig use."""
+    found = []
+    for path in ("README.md", "docs/architecture/server.md"):
+        for line in _doc(path):
+            found += [(path, url) for url in re.findall(r"server\.main --server-url (\S+)", line)]
+    assert len(found) == 2, found
+    assert all(url.startswith("https://") and url.endswith(f":{AGENT}") for _, url in found), found
+
+
+def test_the_tables_name_the_protocol_of_each_port() -> None:
+    """The README table and the firewall table: 7711 is HTTP, 7712 is HTTPS, and the rule for the deploy VLAN opens both."""
+    rows = {path: [line for line in _doc(path) if line.startswith("|")] for path in ("README.md", "deploy/firewall-rules.md")}
+    for path, table in rows.items():
+        boot = [row for row in table if f"{BOOT}/tcp" in row.split("|")[1] + row.split("|")[2]]
+        agent = [row for row in table if f"{AGENT}/tcp" in row.split("|")[1] + row.split("|")[2]]
+        assert len(boot) == 1 and len(agent) == 1, (path, boot, agent)
+        assert "HTTP" in boot[0] and "HTTPS" not in boot[0].split("|")[1], (path, boot[0])
+        assert "HTTPS" in agent[0], (path, agent[0])
+    allow = [row for row in rows["deploy/firewall-rules.md"] if row.startswith("| L1 |")]
+    assert len(allow) == 1 and f"{BOOT}/tcp" in allow[0] and f"{AGENT}/tcp" in allow[0], allow
+
+
+def test_the_server_help_does_not_say_http_only_or_hand_boot_to_the_agent_port() -> None:
+    from server.main import build_parser
+
+    helps = {action.dest: action.help or "" for action in build_parser()._actions}
+    assert "http בלבד" not in helps["server_url"].lower() and "https://" in helps["server_url"]
+    assert "HTTPS" in helps["port"] and "ו-/boot" not in helps["port"] and "--boot-port" in helps["port"]
+    assert "/boot" in helps["boot_port"]
