@@ -53,7 +53,7 @@ ds_temp_json() {
 
 ds_ready_json() {
     _dr_f="$RUN_DIR/targets/$1/ss.ready"
-    [ -s "$_dr_f" ] && { cat "$_dr_f"; return 0; }
+    if _dr_v=$(cat "$_dr_f" 2>/dev/null) && [ -n "$_dr_v" ]; then printf '%s' "$_dr_v"; return 0; fi
     _dr_s=$(awk 'NR == 1 && $2 ~ /^[0-9]+(\.[0-9]+)?$/ { print $2 }' "$RUN_DIR/targets/$1/stages" 2>/dev/null)
     [ -n "$_dr_s" ] || { printf 'null'; return 0; }   # the write has not begun: nothing to measure yet
     _dr_l=$("$DMESG" 2>/dev/null) && [ -n "$_dr_l" ] || { printf 'null'; return 0; }   # a log that did not read is tried again next tick
@@ -75,5 +75,6 @@ ss_post_mark() {
 ds_boot_json() {
     [ -s "$RUN_DIR/senses/post.disks" ] || { printf 'null'; return 0; }
     _db_s=$(disk_serial "$1" | tr -d ' |')
-    awk -v d="$1" -v s="$_db_s" '$1 == "disk" && $2 == d && ($3 == s || $3 == "" || s == "") { f = 1 } END { print f ? "true" : "false" }' "$RUN_DIR/senses/post.disks"
+    awk -v d="$1" -v s="$_db_s" '$1 == "disk" && $2 == d && ($3 == s || $3 == "" || s == "") { f = 1 }
+        END { print NR ? (f ? "true" : "false") : "null" }' 2>/dev/null < "$RUN_DIR/senses/post.disks" || printf 'null'
 }

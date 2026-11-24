@@ -3390,6 +3390,7 @@ function roomDriversSummary(slots) {
   return `דרייברים: ${any ? parts.join(" · ") : "אף דיסק לא קיבל דגם"}`;
 }
 function roomDriversBlock(kids, direct) {
+  if (!driversOn()) return "";
   const models = DRIVER_MODELS;
   const why = models == null ? "רשימת הדגמים לא נקראה מהשרת" : !models.length ? "אין בספרייה חבילת דרייברים עם דגם מחשב — מוסיפים חבילה בדף הדרייברים" : "";
   const on = roomDriversOn();

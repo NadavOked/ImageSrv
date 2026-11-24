@@ -640,9 +640,17 @@ test('data: loadDeploy reads /overview, /room, /images, /machines, /groups, /dis
    אין "אוטומטי": החומרה שזוהתה היא של המשכפל, לא של המכונה שתקבל את הדיסק — דגם מפורש או "בלי". */
 const newCard=(html)=>html;
 
+test('#2554: the round form shows the drivers block only when the capability is on', () => {
+  const {run}=setup();
+  run('ME.capabilities.drivers=false; DRIVER_MODELS='+JSON.stringify(MODELS));
+  assert.equal(run('roomNewWindow(roomMachines())').includes('class="full rn-drv"'),false,'flag off: drivers block is hidden even with packages');
+  run('ME.capabilities.drivers=true');
+  assert.match(run('roomNewWindow(roomMachines())'),/id="rn-drv"/);
+});
+
 test('#1269 drivers: the switch is off by default, disabled with a reason when the list is unread (null) or empty ([]) — two reasons, never "automatic"', () => {
   const {run}=setup();
-  run('DRIVER_MODELS='+JSON.stringify(MODELS));
+  run('ME.capabilities.drivers=true; DRIVER_MODELS='+JSON.stringify(MODELS));
   const html=run('roomNewWindow(roomMachines())'); balanced(html);
   let form=newCard(html);
   assert.match(form,/<input type="checkbox" id="rn-drv" onchange="roomFormSet\('drv',this\.checked\)"> להוסיף דרייברים<\/label>/,'off, enabled');
@@ -657,7 +665,7 @@ test('#1269 drivers: the switch is off by default, disabled with a reason when t
 
 test('#1269 drivers on: a row per connected disk with "בלי" + the library models only; "a model for every disk" fills every row; the summary groups by machine', () => {
   const {run}=setup();
-  run('DRIVER_MODELS='+JSON.stringify(MODELS)+"; roomFormSet('drv',true)");
+  run('ME.capabilities.drivers=true; DRIVER_MODELS='+JSON.stringify(MODELS)+"; roomFormSet('drv',true)");
   assert.match(newCard(run('roomNewWindow(roomMachines())')),/סמנו דיסקים בגריד כדי לבחור להם דגם/,'no selection → no rows'); run('roomPickAll()');
   const html=run('roomNewWindow(roomMachines())'); balanced(html);
   let form=newCard(html);
@@ -723,7 +731,7 @@ test('#1269 drivers: loadDeploy reads /room/driver-models; a failed read is "unr
    ‏#3181 (המוקאפ המאושר 15/11): הגריד הוא טבלה אחת — שורת קבוצה (tr.g) לכל משכפל, שורה (tr.dr[data-key]) לכל דיסק, ומתחתיה שורת משפט (tr.sb2) כשיש מה לומר.
    הצבע: תג (.tg ok/or/tbad/yl/gr) ונורה (.lcb); שורה כתומה/אדומה נושאת dwn/dbd. */
 const bay=(html,key)=>{ const rows=html.split(/(?=<tr class="(?:dr|g)[ "])/), i=rows.findIndex(x=>x.includes(`data-key="${key}"`)); assert.ok(i>=0,'missing row '+key); return rows[i]+(rows[i+1]&&rows[i+1].startsWith('<tr class="dr sb2')?rows[i+1]:''); };
-const pk=(html)=>between(html,'<div class="card tb rn-pick">','<details class="full rn-drv"');
+const pk=(html)=>between(html,'<div class="card tb rn-pick">').split(/<details class="full rn-drv"|<div class="full nm" id="nm">/)[0];
 const pcard=(html,mac)=>{ const g=html.split(/(?=<tr class="g")/).find(c=>c.startsWith('<tr class="g"')&&c.includes(`data-mac="${mac}"`)); return g||''; };
 
 test('#1275/#2848 pick grid (#3181: a table): a group row per cloner and a row per present disk, each with [יעד][דלג]; nothing selected by default', () => {
