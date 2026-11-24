@@ -160,7 +160,7 @@ def integrity(targets: tuple[Target, ...]) -> list[Decision]:
     out = []
     for t in sorted(targets, key=lambda t: t.name):
         chunks = tuple(sorted(set(t.failed_chunks or ())))
-        evidence = (f"state={t.state}", f"readback={t.readback}", f"failed_chunks={list(chunks)}")
+        evidence: tuple[str, ...] = (f"state={t.state}", f"readback={t.readback}", f"failed_chunks={list(chunks)}")
         common = sorted(shared.intersection(chunks))
         if t.interrupted:
             verdict, why = HALF_WRITTEN, "הכתיבה נעצרה באמצע: הדיסק כתוב בחלקו"
@@ -195,7 +195,8 @@ def target(mac: str, raw: dict, *, closed: bool = False) -> Target | None:
             chunks = tuple(sorted({(c["partition"], c["chunk_index"]) for c in value}))
         else:
             readback = "evidence_unreadable"        # ראיה פגומה אינה "אין כשל": COULD_NOT_VERIFY
-    error = raw.get("error") if isinstance(raw.get("error"), str) else ""
+    raw_error = raw.get("error")
+    error = raw_error if isinstance(raw_error, str) else ""
     serial = raw.get("serial") if isinstance(raw.get("serial"), str) and raw.get("serial") else None
     return Target(mac, str(raw.get("dev") or "?"), serial, str(state), readback, chunks,
                   interrupted=interrupted(None, error) or (closed and state == "writing"),

@@ -76,10 +76,11 @@ def judge(facts: dict) -> dict:
     `reason` — הסיבה של הצבע (אדום או צהוב), None בשאר. `target_reason` — למה אינו יעד,
     `source_reason` — למה אינו מקור; None = מותר."""
     first = {kind: next((r for r in ROWS if r["kind"] == kind and _holds(r["fact"], facts)), None)
-             for kind in ("red", "yellow", "smart")}
+             for kind in ("red", "yellow")}
+    smart = next(r for r in ROWS if r["kind"] == "smart" and _holds(r["fact"], facts))   # השורה האחרונה היא `smart` + `*`, תמיד חלה
     red = first["red"]["word"] if first["red"] else None
     yellow = first["yellow"]["word"] if first["yellow"] else None
-    color = "red" if red else "yellow" if yellow else first["smart"]["color"]
+    color = "red" if red else "yellow" if yellow else smart["color"]
     return {"color": color, "source": yellow is None, "target": red is None,
             "reason": red or yellow, "source_reason": yellow, "target_reason": red,
             #: #3666: **כל** הסיבות שחלות, לפי סדר הטבלה -- `reason` היא הראשונה בלבד (זו שנקבע לפיה הצבע).

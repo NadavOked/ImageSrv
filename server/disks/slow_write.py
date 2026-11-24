@@ -14,9 +14,8 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 
-from server.db import journal
+from server.db import journal, SqlConnection
 from server.disks import disk_sets, drawer_slots, model_slots, slot_names
 
 log = logging.getLogger("imagesrv.slow_write")
@@ -45,7 +44,7 @@ def _slow_devs(raw: str | None) -> set[str]:
             and (_pre(t) or {}).get("state") == "slow"}
 
 
-def _hello_disk(conn: sqlite3.Connection, mac: str, dev: str) -> dict:
+def _hello_disk(conn: SqlConnection, mac: str, dev: str) -> dict:
     row = conn.execute("SELECT disks_json FROM net_devices WHERE mac = ?", (mac,)).fetchone()
     try:
         disks = json.loads(row["disks_json"]) if row is not None and row["disks_json"] else []
@@ -54,7 +53,7 @@ def _hello_disk(conn: sqlite3.Connection, mac: str, dev: str) -> dict:
     return next((d for d in disks if isinstance(d, dict) and d.get("dev") == dev), {})
 
 
-def _drawer(conn: sqlite3.Connection, mac: str, disk: dict) -> int | None:
+def _drawer(conn: SqlConnection, mac: str, disk: dict) -> int | None:
     """מספר המגירה כפי שהמסך מציג (#2677/#2945): אותו מיפוי כמו `room.py` -- `drawer_slots.effective`
     (המכונה, אחריה הדגם, אחריה "מגירה k = sata:k") ו-`drawer_of`. **לא** ה-`port`: חריץ ה-ATA אינו
     מספר המגירה. None = אין מיפוי (מכונה לא רשומה, או החריץ אינו בין המגירות) -- אין מספר מומצא."""
@@ -76,7 +75,7 @@ def _word(value: object, limit: int = 64) -> str:
     return text or "?"
 
 
-def journal_new(conn: sqlite3.Connection, session_id: str, mac: str,
+def journal_new(conn: SqlConnection, session_id: str, mac: str,
                 previous_json: str | None, targets: list) -> None:
     """שורת יומן לכל יעד שבדיווח הזה **נפסל לראשונה** כאיטי. לעולם אינו זורק: כשל ברישום אינו
     עוצר דיווח התקדמות של סבב (`log.exception`, לא שתיקה)."""

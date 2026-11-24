@@ -26,6 +26,7 @@ import logging
 import re
 import secrets
 import sqlite3
+from typing import TypeGuard
 
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
@@ -35,7 +36,7 @@ from server.rounds import prompt_hold, room, room_drivers
 from server.agent import registry
 from server.core import finite_json
 from server.disks import disk_rule
-from server.db import _write_lock, journal, now_iso, update_one, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, update_one, writing
 from server.library.images import journal_ntfs_inconsistent, restore_refusal
 from server.rounds.sessions import SessionError
 from server.core.tasks import (ORIGIN_CONSOLE, OPEN_STATES, TOKEN_HEADER, active_task, claim_task,
@@ -58,19 +59,19 @@ def new_live_id() -> str:
     return "live_" + secrets.token_hex(4)
 
 
-def is_live_id(value: object) -> bool:
+def is_live_id(value: object) -> TypeGuard[str]:
     return isinstance(value, str) and LIVE_ID.fullmatch(value) is not None
 
 
 # --- פתיחה --------------------------------------------------------------------
 
 
-def _reported_devs(conn: sqlite3.Connection, mac: str) -> set[str]:
+def _reported_devs(conn: SqlConnection, mac: str) -> set[str]:
     return {d.get("dev") for d in room._disks(conn, mac)
             if isinstance(d, dict) and isinstance(d.get("dev"), str)}
 
 
-def target_floor(conn: sqlite3.Connection, selected: list[dict] | None) -> dict:
+def target_floor(conn: SqlConnection, selected: list[dict] | None) -> dict:
     """#3942: המגירה **הקטנה ביותר** מבין אלה שנבחרו להפצה הישירה — השדות
     `target_bytes`/`target_name` של `task.direct` (ממשק 3).
 
@@ -228,7 +229,7 @@ def validate_live_manifest(manifest: object) -> str | None:
     return None
 
 
-def store_live_manifest(conn: sqlite3.Connection, task_row: dict,
+def store_live_manifest(conn: SqlConnection, task_row: dict,
                         manifest: dict) -> None:
     """שומר את המניפסט על הסבב הפעיל של המשימה ומעביר אותה ל-running.
 
@@ -254,7 +255,7 @@ def store_live_manifest(conn: sqlite3.Connection, task_row: dict,
             f' bytes={manifest["total_compressed_bytes"]}', machine=task_row.get("mac"))
 
 
-def live_manifest(conn: sqlite3.Connection, image_id: str) -> dict | None:
+def live_manifest(conn: SqlConnection, image_id: str) -> dict | None:
     """המניפסט שמחשב הבנייה דיווח עבור מזהה חי — או `None` (טרם / לא כזה)."""
     if not is_live_id(image_id):
         return None
@@ -270,14 +271,14 @@ def live_manifest(conn: sqlite3.Connection, image_id: str) -> dict | None:
 # --- מה שרואים משני הצדדים ------------------------------------------------------
 
 
-def round_for_task(conn: sqlite3.Connection, task_id: str) -> sqlite3.Row | None:
+def round_for_task(conn: SqlConnection, task_id: str) -> sqlite3.Row | None:
     return conn.execute(
         "SELECT * FROM room_rounds WHERE source_task_id = ? ORDER BY created_at"
         " DESC LIMIT 1", (task_id,),
     ).fetchone()
 
 
-def task_block(conn: sqlite3.Connection, store, task: dict) -> dict:
+def task_block(conn: SqlConnection, store, task: dict) -> dict:
     """השדה `task.direct` של ממשק 3: מצב הגל וכמה הצטרפו. פרמטרי השידור עצמם הם של מנוע החתיכות
     (`directchunk.DirectChunks.task_fields`: `engine`, `chunk`)."""
     round_row = round_for_task(conn, task["id"])
@@ -331,7 +332,7 @@ def task_block(conn: sqlite3.Connection, store, task: dict) -> dict:
     }
 
 
-def is_direct_wave(conn: sqlite3.Connection, session_id: str) -> bool:
+def is_direct_wave(conn: SqlConnection, session_id: str) -> bool:
     """האם הגל הזה שייך לסבב שהמקור שלו הוא מחשב בנייה — ואז השרת מתזמר את
     הגל ומחשב הבנייה משדר (app.py)."""
     return conn.execute(
@@ -358,7 +359,7 @@ def is_build_disk(round_row: sqlite3.Row) -> bool:
     return _kind(round_row) == BUILD_DISK
 
 
-def source_label(conn: sqlite3.Connection, round_row: sqlite3.Row) -> str:
+def source_label(conn: SqlConnection, round_row: sqlite3.Row) -> str:
     """שם המקור כפי שהמפעיל מקליד אותו כדי לעצור: `<סיומת המכונה>:<דיסק>`."""
     row = conn.execute("SELECT suffix FROM machines WHERE mac = ?",
                        (round_row["source_mac"],)).fetchone()
@@ -366,7 +367,7 @@ def source_label(conn: sqlite3.Connection, round_row: sqlite3.Row) -> str:
     return f"{who}:{round_row['source_disk']}"
 
 
-def source_view(conn: sqlite3.Connection, round_row: sqlite3.Row) -> dict:
+def source_view(conn: SqlConnection, round_row: sqlite3.Row) -> dict:
     """השדה `round.source` של `GET /api/console/room`."""
     if not is_build_disk(round_row):
         return {"kind": LIBRARY}
@@ -388,7 +389,7 @@ def source_view(conn: sqlite3.Connection, round_row: sqlite3.Row) -> dict:
 MANIFEST_REJECTED = "מחשב הבנייה שלח מניפסט שנדחה"
 
 
-def fail_round_of_task(conn: sqlite3.Connection, store, task_id: str,
+def fail_round_of_task(conn: SqlConnection, store, task_id: str,
                        reason: str) -> bool:
     """#2906: משימת המקור נכשלה — הסבב שלה והגל שלו נכשלים באותה טרנזאקציה.
 
@@ -413,7 +414,7 @@ def fail_round_of_task(conn: sqlite3.Connection, store, task_id: str,
     return failed
 
 
-def cancel_source_task(conn: sqlite3.Connection, round_row: sqlite3.Row,
+def cancel_source_task(conn: SqlConnection, round_row: sqlite3.Row,
                        user: str) -> None:
     """הסבב נעצר — המשימה של המקור נסגרת איתו, כדי שמחשב הבנייה יפסיק
     (הוא רואה ב-hello שהמשימה אינה שלו עוד, ואינו משדר)."""
@@ -485,6 +486,8 @@ def create_direct_router(ctx) -> APIRouter:
         if problem:
             _fail(task_id, problem, row["mac"])
             raise HTTPException(400, problem)
+        if not isinstance(manifest, dict):     # `validate_live_manifest` already refused anything else, by name
+            raise HTTPException(400, "manifest schema must be 1")
         # #381 בנתיב הזה: מניפסט שנושא קשירה למכונה אחת (`machine_mac`)
         # אינו נשפך על מגירות של מכונות אחרות. מחשב בנייה אינו קושר —
         # אבל השער יושב במי שפותח שחזור, לא בהנחה על מי ישלח (עיקרון 5).

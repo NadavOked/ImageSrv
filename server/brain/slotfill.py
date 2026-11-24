@@ -88,7 +88,8 @@ def observations(conn, mac: str, port: int) -> list[Obs]:
         offered, drives = chunk.get("stream_zbytes"), chunk.get("drives")
         if not isinstance(offered, int) or offered <= 0 or not isinstance(drives, dict):
             continue
-        mine = drives.get(mac) if isinstance(drives.get(mac), dict) else {}
+        mine_raw = drives.get(mac)
+        mine = mine_raw if isinstance(mine_raw, dict) else {}
         kept = _kept(mine.get(row["serial"]), offered)
         if kept is None:
             continue

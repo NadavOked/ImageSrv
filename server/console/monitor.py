@@ -1049,7 +1049,7 @@ def create_monitor_router(
         writer = bridges.get(canonical)
         if writer is None:
             raise HTTPException(
-                409, "אין מוניטור פתוח למכונה — הפקודה נוסעת דרך חיבור המוניטור")
+                409, "המחשב לא מחובר, ולכן אי אפשר לשלוח לו את הפקודה. אם הוא כבוי, הדליקו אותו (WoL) ונסו שוב")
         with lock:
             holder = active.get(canonical)
         if holder is None or holder.user != user[0]:

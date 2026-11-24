@@ -251,6 +251,24 @@ def test_a_second_cloner_with_the_same_token_or_another_id_gets_nothing(room_ser
     assert "peer_serve" not in _rejoin(room_server, wave)
 
 
+def test_a_rejoin_with_an_unhashable_dev_preserves_the_active_pairing(room_server):
+    from server.rounds import room_state                                    # noqa: PLC0415
+
+    wave = _setup(room_server)
+    _busy_server(room_server)
+    _enforce(room_server)
+    _rejoin(room_server, wave)
+    pairing_id = _peer_report(room_server, wave)["peer_serve"][0]["id"]
+
+    ctx = room_server["ctx"]
+    body = {"session_id": wave, "targets": [
+        {"dev": [], "serial": "A1", "rejoin": {"part": 3, "missing": 30, "chunks": 18254}}]}
+    assert ctx.peer.observe(ctx.conn, room_state.active_round(ctx.conn), CLONER1, body,
+                            fill_brain=ctx.fill, budget=ctx.budget) == {}
+
+    assert [a["id"] for a in _peer_report(room_server, wave).get("peer_serve", [])] == [pairing_id]
+
+
 def test_a_neighbour_that_sent_a_bad_chunk_is_out_of_every_pairing_of_the_round(room_server):
     wave = _setup(room_server)
     _busy_server(room_server)

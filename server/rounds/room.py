@@ -23,6 +23,7 @@ import secrets
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
+from typing import overload
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
@@ -36,7 +37,7 @@ from server.agent import registry, reports
 from server.disks import disk_events, disk_failures, disk_rule, disk_sets, drawer_slots, slot_names
 from server.storage import locations as storage_locations
 from server.disks import model_slots   # #2001
-from server.db import _settle, _write_lock, journal, now_iso, update_one, writing
+from server.db import _settle, _write_lock, journal, now_iso, SqlConnection, update_one, writing
 from server.system import clockstep
 from server.net import pxe_log
 from server.agent import readbackhash
@@ -106,7 +107,7 @@ RATE_STALE_S = 30
 ETA_MIN_SAMPLE_S = 90
 
 
-def fail_wave(conn: sqlite3.Connection, session_id: str, reason: str,
+def fail_wave(conn: SqlConnection, session_id: str, reason: str,
               *, commit: bool = True) -> bool:
     """הופך כשל שולח לסופי בחדר; רק מפעיל יכול לפתוח אותו מחדש.
 
@@ -123,7 +124,7 @@ def fail_wave(conn: sqlite3.Connection, session_id: str, reason: str,
         return update_one(conn, sql, args)
 
 
-def wake_check(conn: sqlite3.Connection, mac: str, disks) -> None:
+def wake_check(conn: SqlConnection, mac: str, disks) -> None:
     """#1954 (נדב 22/10): משכפל שנבחרו לו דיסקים כשהיה כבוי עלה — ה-hello שלו
     (`disks`, המלאי של עכשיו) מכריע פעם אחת לכל חריץ שנקשר ל-serial: אותו דיסק —
     הקשירה יורדת והחריץ נכתב כרגיל (גם בגלים הבאים, עם מגירות שהוחלפו); דיסק אחר
@@ -177,7 +178,7 @@ def wake_check(conn: sqlite3.Connection, mac: str, disks) -> None:
                 f" chosen={serial} found={now or 'missing'}", machine=mac, round_id=round_row["id"])
 
 
-def drawer_list(conn: sqlite3.Connection, mac: str, written: set[str],
+def drawer_list(conn: SqlConnection, mac: str, written: set[str],
                 member: sqlite3.Row | None = None,
                 selected_ports: set[int] | None = None,
                 started_at: str | None = None,
@@ -482,7 +483,7 @@ def _stalled_s(moved_at: str | None) -> int | None:
     return silence.STALL_S if elapsed < 0 else int(elapsed)
 
 
-def precheck_now(conn: sqlite3.Connection, store: SessionStore,
+def precheck_now(conn: SqlConnection, store: SessionStore,
                  round_row: sqlite3.Row) -> list[dict]:
     """#432: אותן אזהרות ש-`status_view` מציג, על חברי הגל הפתוח — ברגע
     שהוא יוצא לדרך, ביד או לבד."""
@@ -508,7 +509,7 @@ def _image_bytes(store: SessionStore, round_row: sqlite3.Row) -> int | None:
     return linkwarn.image_bytes(round_row, getattr(store, "image_bytes", None))
 
 
-def _wave_started(conn: sqlite3.Connection, store: SessionStore, round_row: sqlite3.Row) -> None:
+def _wave_started(conn: SqlConnection, store: SessionStore, round_row: sqlite3.Row) -> None:
     """#3277 (K3, צל): הגל יצא -- המוח רושם כל משכפל שהקישור שלו איטי, עם ETA חזוי. לעולם אינו זורק."""
     try:
         macs = [m["mac"] for m in store.members(round_row["wave_session_id"])]
@@ -524,7 +525,7 @@ def _wave_started(conn: sqlite3.Connection, store: SessionStore, round_row: sqli
         log.exception("wave %s: the brain's time forecast failed", round_row["wave_session_id"])
 
 
-def journal_precheck(conn: sqlite3.Connection, round_row: sqlite3.Row,
+def journal_precheck(conn: SqlConnection, round_row: sqlite3.Row,
                      warned: list[dict], user: str) -> None:
     """#432: "סבב שהתחיל בכל זאת חייב לרשום שהאזהרה הייתה שם". שורה אחת
     לגל, רק כשהייתה אזהרה; `user` ריק = הגל יצא לבד (המגירות כיסו את היתרה)."""
@@ -566,7 +567,7 @@ def _room_label(suffix: object) -> str:
     return machine_names.label("cloner", suffix)
 
 
-def disk_floor(conn: sqlite3.Connection, selected: list[dict] | None = None
+def disk_floor(conn: SqlConnection, selected: list[dict] | None = None
                ) -> dict | None:
     """המגירה **הקטנה ביותר** שמחשבי השיכפול דיווחו ב-hello האחרון — הרצפה
     שאימג' חייב להיכנס אליה כדי שסבב ייכתב על כל המגירות (#953).
@@ -688,7 +689,7 @@ def _refuse_if_changed_since_shown(mac: str, now: list[dict] | None, displayed: 
             raise RoundRefusal(f"אי אפשר לפתוח סבב: המלאי של {mac} השתנה מאז שהוצג (חריץ {d['port']}) — בחרו שוב")
 
 
-def _validate_target_slots(conn: sqlite3.Connection, raw) -> list[dict]:
+def _validate_target_slots(conn: SqlConnection, raw) -> list[dict]:
     """#695: מאמת את בחירת דיסקי היעד ומחזיר צורה קנונית. דוחה בגלוי כל
     קלט פגום — MAC זר, פורט מחוץ ל-drawer_count, פורט כפול, או פורט שאינו
     מחובר כרגע — כדי שלעולם לא ייכתב דיסק לא-נכון (עיקרון 4/5/7). אין
@@ -978,7 +979,7 @@ def _iso_or_none(ts: str | None) -> datetime | None:
         return None
 
 
-def _mark_lost(conn: sqlite3.Connection, store: SessionStore, wave: sqlite3.Row,
+def _mark_lost(conn: SqlConnection, store: SessionStore, wave: sqlite3.Row,
                members: list[sqlite3.Row]) -> list[sqlite3.Row]:
     """מסמן `lost` חבר גל שלא דיווח התקדמות מעל סף האובדן (#450).
 
@@ -1075,7 +1076,7 @@ def _unreported(member: sqlite3.Row) -> list[tuple[str, str]]:
             if isinstance(t, dict) and t.get("state") in _OPEN_TARGET_STATES]
 
 
-def _lost_before_result(conn: sqlite3.Connection, members: list[sqlite3.Row],
+def _lost_before_result(conn: SqlConnection, members: list[sqlite3.Row],
                         total: int, target: int) -> str | None:
     """#2841: אף מגירה לא נכתבה, ומשכפל הפסיק לדווח באמצע בלי תוצאה — הסיבה
     בשמה, או ``None`` כשזה לא המקרה (עבודה, 11/11: 0/3 שנסגר כ-`room_done`
@@ -1097,7 +1098,7 @@ def _lost_before_result(conn: sqlite3.Connection, members: list[sqlite3.Row],
             f" — {total}/{target} נכתבו")
 
 
-def _failed_before_write(conn: sqlite3.Connection, members: list[sqlite3.Row],
+def _failed_before_write(conn: SqlConnection, members: list[sqlite3.Row],
                          total: int, target: int, cancelled) -> str | None:
     """#2907: אף מגירה לא נכתבה, ומשכפל דיווח (או נרשם) `failed` — הסיבה בשמה,
     או ``None``. הסדר של #2841: משכפל שאבד קודם (`_lost_before_result`).
@@ -1120,7 +1121,7 @@ def _failed_before_write(conn: sqlite3.Connection, members: list[sqlite3.Row],
     return f"כל המגירות נכשלו: {', '.join(parts)} — {total}/{target} נכתבו"
 
 
-def _rebase_future(conn: sqlite3.Connection, wave: sqlite3.Row,
+def _rebase_future(conn: SqlConnection, wave: sqlite3.Row,
                    future: list[sqlite3.Row], now: datetime) -> None:
     """#1947: חותמות הגל שבעתיד (קפיצה שלא נצפתה) נקבעות ל-`now` — מותנה
     בערך שנקרא, כך שדיווח שהגיע בינתיים מנצח; ושורת `clock_jump` ביומן."""
@@ -1147,7 +1148,7 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _unseen(conn: sqlite3.Connection, store: SessionStore,
+def _unseen(conn: SqlConnection, store: SessionStore,
             round_row: sqlite3.Row, wave: sqlite3.Row) -> list[str]:
     """#1721: מחשבי השיכפול שהגל הפתוח עוד ממתין להם ושלא נראו מאז שנפתח.
 
@@ -1171,7 +1172,7 @@ def _unseen(conn: sqlite3.Connection, store: SessionStore,
     return unseen
 
 
-def _not_back(conn: sqlite3.Connection, mac: str, opened: datetime) -> bool:
+def _not_back(conn: SqlConnection, mac: str, opened: datetime) -> bool:
     """המכונה לא נראתה מאז שהגל נפתח (או נראתה ושתקה, או מחזיקה תוצאות)."""
     row = conn.execute("SELECT last_seen FROM net_devices WHERE mac = ?", (mac,)).fetchone()
     seen = _iso_or_none(row["last_seen"]) if row else None
@@ -1191,13 +1192,21 @@ def _hello_stale(seen: datetime) -> bool:
     return datetime.now(timezone.utc) - seen > timedelta(seconds=AWAKE_SECONDS)
 
 
+@overload
+def _aware(at: datetime) -> datetime: ...
+
+
+@overload
+def _aware(at: None) -> None: ...
+
+
 def _aware(at: datetime | None) -> datetime | None:
     if at is None:
         return None
     return at if at.tzinfo is not None else at.replace(tzinfo=timezone.utc)
 
 
-def _left_held(conn: sqlite3.Connection, mac: str, opened: datetime, now: datetime) -> datetime | None:
+def _left_held(conn: SqlConnection, mac: str, opened: datetime, now: datetime) -> datetime | None:
     """מתי ``mac`` עבר ממוחזק לשקט **בגל הזה**, או None.
 
     כיבוי מהקונסולה (`held.clear`) כותב `held_released` והשעון ב-detail (לא ב-`ts`: הוא שעון הקיר).
@@ -1219,7 +1228,7 @@ def _left_held(conn: sqlite3.Connection, mac: str, opened: datetime, now: dateti
     return best
 
 
-def _silent_for(conn: sqlite3.Connection, quiet: list[str], opened: datetime | None,
+def _silent_for(conn: SqlConnection, quiet: list[str], opened: datetime | None,
                 now: datetime) -> float | None:
     """כמה שניות עברו מאז שהמכונה השקטה האחרונה עזבה את המוחזק, או None.
 
@@ -1236,7 +1245,7 @@ def _silent_for(conn: sqlite3.Connection, quiet: list[str], opened: datetime | N
     return (now - max(moments)).total_seconds()
 
 
-def _rewake(conn: sqlite3.Connection, store: SessionStore,
+def _rewake(conn: SqlConnection, store: SessionStore,
             round_row: sqlite3.Row, wave: sqlite3.Row) -> None:
     """#1721: WoL חוזר — עם תקרה — למי שהגל הפתוח ממתין לו ולא חזר.
 
@@ -1263,6 +1272,11 @@ def _rewake(conn: sqlite3.Connection, store: SessionStore,
     quiet = [mac for mac in unseen if mac not in waiting]
     now = _aware(_utcnow())
     opened = _aware(_iso_or_none(wave["created_at"]))
+    if opened is None:
+        # a `created_at` that is not a date: how long the wave has waited is not known, and a WoL is not sent on a guess
+        log.warning("room: wave %s of round %s has no readable created_at (%r): no repeated WoL for it",
+                    wave["id"], round_row["id"], wave["created_at"])
+        return
     age = (now - opened).total_seconds()
     sent = conn.execute(
         "SELECT COUNT(*) AS n FROM journal WHERE event = 'room_rewake' AND detail LIKE ?",
@@ -1321,7 +1335,7 @@ def _rewake(conn: sqlite3.Connection, store: SessionStore,
         silence.settle(conn, rows.get(round_row["id"]), "הסבב כבר אינו פתוח: לא הוכשל")
 
 
-def _k10(conn: sqlite3.Connection, store: SessionStore,
+def _k10(conn: SqlConnection, store: SessionStore,
          round_row: sqlite3.Row, wave: sqlite3.Row) -> None:
     """#3276 (K10, צל): מה שהמוח רואה על הגל הפתוח -- כל משכפל שנבחר: יש לו מגירה לכתוב, מוחזק, הצטרף, וכמה
     שניות אחרי הדיווח הסופי האחרון שלו נפתח הגל (ה-WoL של הפתיחה). רושם בלבד; לעולם אינו זורק אל הדופק."""
@@ -1351,7 +1365,7 @@ def _k10(conn: sqlite3.Connection, store: SessionStore,
         log.exception("wave %s: K10 failed", wave["id"])
 
 
-def _line_cloners(conn: sqlite3.Connection, round_row: sqlite3.Row, roster) -> list:
+def _line_cloners(conn: SqlConnection, round_row: sqlite3.Row, roster) -> list:
     """המשכפלים של סבב פס ייצור כפי ש-B24 רואה אותם: מספר, מגירות, ומוחזק."""
     cloners = []
     for mac in roster:
@@ -1364,7 +1378,7 @@ def _line_cloners(conn: sqlite3.Connection, round_row: sqlite3.Row, roster) -> l
     return cloners
 
 
-def _relight(conn: sqlite3.Connection, store: SessionStore,
+def _relight(conn: SqlConnection, store: SessionStore,
              round_row: sqlite3.Row, wave: sqlite3.Row) -> None:
     """#3916: בפס ייצור, משכפל שנכבה ועוד יש לו סבב (ב-`keep` של B24) מודלק ב-WoL. **ההחלטה של המוח**
     (`brain.line.relight`, נרשמת ב-`brain_decisions`): ב-`shadow` רק נרשם, ב-`enforce` נשלח. אין כאן כישלון
@@ -1387,7 +1401,7 @@ def _relight(conn: sqlite3.Connection, store: SessionStore,
         log.exception("wave %s: relight failed", wave["id"])
 
 
-def _brain_after_wave(conn: sqlite3.Connection, round_row: sqlite3.Row, members: list[sqlite3.Row],
+def _brain_after_wave(conn: SqlConnection, round_row: sqlite3.Row, members: list[sqlite3.Row],
                       closed: int) -> None:
     """B33 ו-B50 (כל גל) ו-B24 (גל של פס ייצור), בצל: רושם בלבד; לעולם אינו זורק אל סיום הגל.
     ``closed`` = מה שהסבב כבר סגר אחרי הגל הזה (נכתב, אדום, בוטל, חריץ ריק)."""
@@ -1405,7 +1419,7 @@ def _brain_after_wave(conn: sqlite3.Connection, round_row: sqlite3.Row, members:
         log.exception("wave %s: B24 failed", wave_id)
 
 
-def _b38(conn: sqlite3.Connection, round_row: sqlite3.Row) -> None:
+def _b38(conn: SqlConnection, round_row: sqlite3.Row) -> None:
     """B38 (צל): המטרה של הסבב, פעם אחת, כשהגל הראשון פתוח. לעולם אינו זורק אל הדופק."""
     try:
         if round_row["target_slots_json"] is None:
@@ -1417,12 +1431,12 @@ def _b38(conn: sqlite3.Connection, round_row: sqlite3.Row) -> None:
         log.exception("round %s: B38 failed", round_row["id"])
 
 
-def _machine_name(conn: sqlite3.Connection, mac: str) -> str:
+def _machine_name(conn: SqlConnection, mac: str) -> str:
     row = conn.execute("SELECT suffix FROM machines WHERE mac = ?", (mac,)).fetchone()
     return _room_label(row["suffix"]) if row else mac
 
 
-def tick(conn: sqlite3.Connection, store: SessionStore) -> None:
+def tick(conn: SqlConnection, store: SessionStore) -> None:
     """Advance on cloner hellos, never on screen reads.
 
     With no hello, an idle room waits. No timer or additional SQLite writer.
@@ -1541,7 +1555,7 @@ def _one_line(value: object) -> str:
     return " ".join(text.split())[:_DETAIL_MAX]
 
 
-def pulse(conn: sqlite3.Connection, store: SessionStore, mac: str) -> bool:
+def pulse(conn: SqlConnection, store: SessionStore, mac: str) -> bool:
     """הדופק של הסבב מתוך מסלול ה-hello — לעולם אינו מפיל אותו.
 
     אותה מוסכמה כמו `agent_loops.note`: הפונקציה לעולם אינה זורקת
@@ -1569,7 +1583,7 @@ def pulse(conn: sqlite3.Connection, store: SessionStore, mac: str) -> bool:
         return False
 
 
-def sweep(conn: sqlite3.Connection, store: SessionStore) -> bool:
+def sweep(conn: SqlConnection, store: SessionStore) -> bool:
     """הדופק של הסבב מהרקע — **גל שאיש אינו צופה בו חייב להתקדם** (#456).
 
     `tick` מקודם היום משני מקורות בלבד: hello של משכפל (`pulse`) ו-GET
@@ -1598,7 +1612,7 @@ def sweep(conn: sqlite3.Connection, store: SessionStore) -> bool:
         return False
 
 
-def rejoined_mid_stream(conn: sqlite3.Connection, session: sqlite3.Row, mac: str) -> bool:
+def rejoined_mid_stream(conn: SqlConnection, session: sqlite3.Row, mac: str) -> bool:
     """#1728: hello **מצטרף** של חבר בגל `running` שכבר נכנס לזרם — אתחול.
 
     ברזל rc5 (18/10): `reboot -f` במשכפל באמצע מחיצה 3; הוא חזר תוך 27
@@ -1653,7 +1667,7 @@ def rejoined_mid_stream(conn: sqlite3.Connection, session: sqlite3.Row, mac: str
     return True
 
 
-def _revived(conn: sqlite3.Connection, wave_id: str, members: list[sqlite3.Row]) -> bool:
+def _revived(conn: SqlConnection, wave_id: str, members: list[sqlite3.Row]) -> bool:
     """#1728: האם חבר `lost` בגל הזה חזר וחי — אתחול באמצע הזרם (`room_rejoin`)
     ו-hello בחלון `AWAKE_SECONDS`. גל כזה שלא כתב דבר אינו "גל מת" (#1672):
     המשכפל מוכן לגל הבא. חבר שנעלם ולא חזר — אין ראיה, והסבב נכשל כמו קודם."""
@@ -1671,7 +1685,7 @@ def _revived(conn: sqlite3.Connection, wave_id: str, members: list[sqlite3.Row])
     return False
 
 
-def _journal_drawer_changed(conn: sqlite3.Connection, round_id: str,
+def _journal_drawer_changed(conn: SqlConnection, round_id: str,
                             member: sqlite3.Row, dev: str | None,
                             recorded: str | None, current: str | None,
                             event: str = "room_drawer_changed") -> None:
@@ -1690,7 +1704,7 @@ def _journal_drawer_changed(conn: sqlite3.Connection, round_id: str,
         journal(conn, event, detail, machine=member["mac"], round_id=round_id)
 
 
-def _held_elsewhere(conn: sqlite3.Connection, round_row: sqlite3.Row,
+def _held_elsewhere(conn: SqlConnection, round_row: sqlite3.Row,
                     member: sqlite3.Row, serial: str) -> str | None:
     """#2421: מכונה **אחרת** שמחזיקה את הסידורי הזה — או None.
 
@@ -1727,7 +1741,7 @@ def _held_elsewhere(conn: sqlite3.Connection, round_row: sqlite3.Row,
     return None
 
 
-def _journal_serial_conflict(conn: sqlite3.Connection, round_id: str, member: sqlite3.Row,
+def _journal_serial_conflict(conn: SqlConnection, round_id: str, member: sqlite3.Row,
                              dev: str | None, serial: str, other: str) -> None:
     detail = f"{round_id} {member['mac']} {dev or '?'} serial={serial} also on {other}"
     if conn.execute("SELECT 1 FROM journal WHERE event = ? AND detail = ?",
@@ -1749,7 +1763,7 @@ def _own_serial(target: dict, serial_of: dict) -> str | None:
     return current or None
 
 
-def _tally(conn: sqlite3.Connection, round_row: sqlite3.Row,
+def _tally(conn: SqlConnection, round_row: sqlite3.Row,
            members: list[sqlite3.Row]) -> tuple[int, set[str], set[str], set[str]]:
     """כמה מגירות נכתבו בסבב עד כה, ואילו — לפי serial; ואילו נסגרו בלי שנכתבו:
     דולגו כאדומות (#1760) או בוטלו בידי מפעיל (#1936).
@@ -1837,7 +1851,7 @@ def _tally(conn: sqlite3.Connection, round_row: sqlite3.Row,
             cancelled - written)
 
 
-def _reported_no_disk(conn: sqlite3.Connection, round_row: sqlite3.Row,
+def _reported_no_disk(conn: SqlConnection, round_row: sqlite3.Row,
                       member: sqlite3.Row) -> set[int]:
     """#2201: החריצים שהמשכפל קיבל לגל הזה (`target_ports`) ואין להם יעד בדיווח שלו.
 
@@ -1864,7 +1878,7 @@ def _reported_no_disk(conn: sqlite3.Connection, round_row: sqlite3.Row,
     return set(sent or []) - covered
 
 
-def _close_no_disk(conn: sqlite3.Connection, round_row: sqlite3.Row,
+def _close_no_disk(conn: SqlConnection, round_row: sqlite3.Row,
                    members: list[sqlite3.Row]) -> tuple[str | None, list[tuple[str, int]]]:
     """#2201 (הכרעה 03/11): חריץ שנבחר ואין בו דיסק **נסגר לסבב** כמו אדום (#1760) או
     מבוטל (#1936) — יוצא מ-`ports` (לא נשלח שוב, הגל הבא אינו ממתין לו) ונרשם
@@ -1896,7 +1910,7 @@ def _slots_claim(round_row: sqlite3.Row, slots_raw: str | None) -> tuple[str, tu
             " AND target_slots_json = ?", (round_row["target_slots_json"],))
 
 
-def _journal_no_disk(conn: sqlite3.Connection, round_row: sqlite3.Row,
+def _journal_no_disk(conn: SqlConnection, round_row: sqlite3.Row,
                      closed: list[tuple[str, int]]) -> None:
     for mac, port in closed:
         journal(conn, "room_drawer_no_disk",
@@ -1904,7 +1918,7 @@ def _journal_no_disk(conn: sqlite3.Connection, round_row: sqlite3.Row,
                 machine=mac, round_id=round_row["id"])
 
 
-def _clear_written_failures(conn: sqlite3.Connection, round_row: sqlite3.Row,
+def _clear_written_failures(conn: SqlConnection, round_row: sqlite3.Row,
                             written: set[str]) -> None:
     """#1792: מה שהגל הזה הוסיף ל-`written_serials` סוגר את רשומת הכשל הכתומה שלו.
     לפני התביעה (סגירת הגל / עדכון הסבב) ולא אחריה: הניקוי חוזר על עצמו בבטחה,
@@ -1922,7 +1936,7 @@ def _skipped_note(skipped: set[str], cancelled: set[str], no_disk: int = 0) -> s
             + (f" no_disk={no_disk}" if no_disk else ""))
 
 
-def _red_skip(conn: sqlite3.Connection, member: sqlite3.Row, dev: str | None,
+def _red_skip(conn: SqlConnection, member: sqlite3.Row, dev: str | None,
               serial: str, disks: list[dict]) -> bool:
     """#1760: היעד דולג **כאדום** — ראיה חיובית אחת משתיים: ה-disk_event של הגל
     על הדיסק הזה אומר `verdict: fail` עם `decision: skip` (smart_preflight), או
@@ -1937,7 +1951,7 @@ def _red_skip(conn: sqlite3.Connection, member: sqlite3.Row, dev: str | None,
     return any(d.get("serial") == serial and _red(d) for d in disks)
 
 
-def _resume(conn: sqlite3.Connection, store: SessionStore,
+def _resume(conn: SqlConnection, store: SessionStore,
             round_row: sqlite3.Row, wave: sqlite3.Row | None) -> None:
     """הסבב פעיל, והגל שהוא מצביע עליו סגור (או שאין כזה) — #217.
 
@@ -2024,7 +2038,7 @@ def _resume(conn: sqlite3.Connection, store: SessionStore,
     _attach_wave(conn, store, round_row, total)
 
 
-def _attach_wave(conn: sqlite3.Connection, store: SessionStore,
+def _attach_wave(conn: SqlConnection, store: SessionStore,
                  round_row: sqlite3.Row, total: int) -> None:
     """מצמיד לסבב גל — קיים או חדש.
 
@@ -2092,7 +2106,7 @@ NOTHING_TO_WRITE_REASON = ("אין מגירות לכתוב — כל המגירו
 DEAD_WAVE_REASON = "אף מגירה לא נכתבה בגל — הזרם נעצר, או שכל המחשבים נכשלו או נותקו"
 
 
-def _fail_dead_wave(conn: sqlite3.Connection, store: SessionStore,
+def _fail_dead_wave(conn: SqlConnection, store: SessionStore,
                     round_row: sqlite3.Row, total: int) -> None:
     """גל שכל יעדיו נכשלו או נותקו מסיים את הסבב כ-`failed` (נדב, ברזל 17/10).
 
@@ -2107,7 +2121,7 @@ def _fail_dead_wave(conn: sqlite3.Connection, store: SessionStore,
             f' written={total}/{round_row["target_drives"]}', round_id=round_row["id"])
 
 
-def _fail_round(conn: sqlite3.Connection, store: SessionStore,
+def _fail_round(conn: SqlConnection, store: SessionStore,
                 round_row: sqlite3.Row, reason: str) -> bool:
     """סוגר את הגל ומסמן את הסבב `failed` עם `reason`; מחזיר האם הקריאה הזו
     היא שהפילה אותו (הסגירה היא התביעה, #177) — ורק היא כותבת ליומן."""
@@ -2122,7 +2136,7 @@ def _fail_round(conn: sqlite3.Connection, store: SessionStore,
         )
 
 
-def _close_target_met(conn: sqlite3.Connection, store: SessionStore,
+def _close_target_met(conn: SqlConnection, store: SessionStore,
                       round_row: sqlite3.Row) -> bool:
     """#2908: הגל הפתוח ממתין למגירה שהסבב כבר אינו צריך — היעד ירד (`wake_check`, #1954:
     הדיסק בחריץ הוחלף) לכמה שכבר נכתב. הסבב נסגר `room_done`, לא `room_failed`: הסגירה היא
@@ -2147,7 +2161,7 @@ def _close_target_met(conn: sqlite3.Connection, store: SessionStore,
     return closed
 
 
-def _record_wave_stats(conn: sqlite3.Connection, session_id: str,
+def _record_wave_stats(conn: SqlConnection, session_id: str,
                        members: list[sqlite3.Row], *, ports: bool = True) -> None:
     """מה שהגל לימד, לפני הספירה. #2817: "לעולם אינו זורק" נאכף **כאן**, לא רק במוסכמה
     של כל מתעד — חריגה באחד מהם הייתה משאירה את הגל פתוח ואת הסבב תקוע. כל מתעד נקרא
@@ -2174,7 +2188,7 @@ def _record_wave_stats(conn: sqlite3.Connection, session_id: str,
                           session_id, name)
 
 
-def _finish_wave(conn: sqlite3.Connection, store: SessionStore,
+def _finish_wave(conn: SqlConnection, store: SessionStore,
                  round_row: sqlite3.Row, members: list[sqlite3.Row]) -> None:
     """הגל הסתיים: סופרים לפי serial אילו מגירות נכתבו, וממשיכים."""
     current = conn.execute(
@@ -2348,7 +2362,7 @@ def _is_awake(*stamps: str | None) -> bool:
     return any(_fresh(stamp) for stamp in stamps)
 
 
-def _stream_stalled(machines: list[dict], conn: sqlite3.Connection | None = None,
+def _stream_stalled(machines: list[dict], conn: SqlConnection | None = None,
                     round_id: str | None = None, wave_id: str | None = None) -> bool:
     """האם **כל** המגירות הכותבות עצרו יחד — כלומר הזרם, לא הכונן.
 
@@ -2516,7 +2530,7 @@ def _manifest_bytes(ctx, image_id: str) -> object:
     return manifest.get("total_compressed_bytes") if isinstance(manifest, dict) else None
 
 
-def _with_pxe(conn: sqlite3.Connection, missing: list[dict]) -> list[dict]:
+def _with_pxe(conn: SqlConnection, missing: list[dict]) -> list[dict]:
     """#1887: למכונה שחסרה כי היא כבויה/לא עונה — מה ש-dnsmasq ראה מאז ההערה האחרונה
     (`{state, he}`). מידע בלבד; `unchecked` = הלוג לא נקרא."""
     for item in missing:
@@ -2533,7 +2547,7 @@ def _wave_forecast(ctx, round_row: sqlite3.Row, wave: sqlite3.Row | None,
         getattr(ctx, "clock_trust", None))   # #2684
 
 
-def wave_forecast(conn: sqlite3.Connection, library, round_row: sqlite3.Row,
+def wave_forecast(conn: SqlConnection, library, round_row: sqlite3.Row,
                   wave: sqlite3.Row | None, started_at: str | None) -> dict | None:
     """#1843: `learn_eta.wave` לגל הנוכחי — לגל שרץ לפי הכוננים שיצא אליהם
     (`wave_rates.roster`), לגל פתוח לפי מי שהצטרף עד עכשיו. None = אין גל."""
@@ -2627,7 +2641,7 @@ def _wave_pace(started_at: str | None, machines: list[dict], forecast: dict | No
             "eta_verify_s": verify}
 
 
-def _wake_targets(conn: sqlite3.Connection, macs) -> set[str]:
+def _wake_targets(conn: SqlConnection, macs) -> set[str]:
     """נדב 17/10: "הער" מעיר רק את מה שנבחר. רשימה לא ריקה של מחשבי שיכפול
     רשומים, אחרת 400 — בקשה שלא נקראה אינה "כל החדר" (עיקרון 5): בחדר יש
     מכונה שאסור להעיר מרחוק, ו-`wol_sent grp_CLONERS count=3` העיר גם אותה."""

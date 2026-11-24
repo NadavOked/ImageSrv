@@ -50,7 +50,7 @@ def flags(cmd):
 
 def command(chunks=None, say=None):
     """The command, and the list file of a completion pass removed (the engine removes it after the pass)."""
-    engine = SimpleNamespace(port=7713, interface=None, feedback=True, write_floor=lambda: 20)   # פורט-הפצה-מכוון
+    engine = SimpleNamespace(port=7713, interface=None, source=None, feedback=True, write_floor=lambda: 20)   # פורט-הפצה-מכוון
     wave = SimpleNamespace(key="0123456789abcdef", round=1)
     cmd = ChunkEngine._command(engine, wave, {"index": 3}, Path("image.zst"), 100000, 400000, chunks, None, say)
     if "--chunks-file" in cmd:

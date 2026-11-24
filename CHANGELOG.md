@@ -23,6 +23,8 @@
 
 ## [Unreleased]
 
+- **The deploy network's chunk stream carries the server's source address, so a receiver takes packets from the server only** (#1079, #2485, Security; patch). `session.chunk.source` (the IPv4 of `--server-url`, none when it is a hostname or loopback) is now sent in hello (`chunksend.source_of`), and `chunkcast send --from` binds the sender to it. Until now the receiver read the field but no server sent it, so it took any source.
+
 ## [v0.100.1] - 2026-11-24
 
 - **The agent's progress report is valid JSON when a drawer's file disappears while it is being read** (#4095, Fixed): every optional file of the report is read once; an absent value is omitted or null, where `"rejoin":` used to go out with no value.

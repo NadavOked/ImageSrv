@@ -40,7 +40,7 @@ import sqlite3
 import time
 
 from server.core import hostname_rule
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 from server.disks import drawer_slots, model_slots
 from server.rounds import room_names
 from server.rounds.room_state import _disks, _written
@@ -72,7 +72,7 @@ QUEUE_NOT_LINE_HE = ("רשימת שמות בתור ניתנת רק לפס ייצ
 # --- המעבר האוטומטי -----------------------------------------------------------------------------------------
 
 
-def machine_drawers(conn: sqlite3.Connection, mac: str) -> int:
+def machine_drawers(conn: SqlConnection, mac: str) -> int:
     """כמה מגירות SATA יש למשכפל -- אותו מיפוי שפתיחת הסבב מאמתת מולו (`_validate_target_slots`)."""
     row = conn.execute("SELECT drawer_count, drawer_slots FROM machines WHERE mac = ?", (mac,)).fetchone()
     if row is None:
@@ -82,7 +82,7 @@ def machine_drawers(conn: sqlite3.Connection, mac: str) -> int:
         row["drawer_count"], row["drawer_slots"], model_map["slots"] if model_map else None)))
 
 
-def drawers(conn: sqlite3.Connection, selected: list[dict]) -> int:
+def drawers(conn: SqlConnection, selected: list[dict]) -> int:
     """מספר המגירות במשכפלים שנבחרו לסבב. משכפל שהמיפוי שלו קטן ממה שנבחר בו (לא אמור לקרות: הבחירה
     מאומתת מול המיפוי) נספר לפי מה שנבחר -- לעולם לא פחות מהמגירות שהסבב באמת כותב בהן."""
     return sum(max(machine_drawers(conn, item["mac"]), len(item["ports"])) for item in selected)
@@ -119,6 +119,8 @@ def validate_names(raw, selected: list[dict], target_drives: int, manifest: dict
         if refused is not None:
             raise ValueError(refused)
     chosen = room_names.validate({k: v for k, v in raw.items() if k != "queue"}, selected, slots, manifest)
+    if chosen is None:               # `validate` answers None only for a selection that is None, and this one is a dict
+        raise ValueError("בחירת שמות המחשב אינה תקינה")
     seen: set[str] = set()
     for name in [item["name"] for item in chosen["names"]] + list(queue):
         if name.upper() in seen:
@@ -131,7 +133,7 @@ def validate_names(raw, selected: list[dict], target_drives: int, manifest: dict
 # --- הפתיחה -------------------------------------------------------------------------------------------------
 
 
-def open_line(conn: sqlite3.Connection, round_id: str, selected: list[dict], target_drives: int,
+def open_line(conn: SqlConnection, round_id: str, selected: list[dict], target_drives: int,
               drawer_total: int, names: dict | None) -> None:
     """שורה לכל דיסק שהסבב ביקש. בלי commit: חלק מהטרנזאקציה של פתיחת הסבב (`room.open_round`)."""
     by_slot = {(item["mac"], item["port"]): item["name"] for item in (names or {}).get("names", [])}
@@ -154,13 +156,13 @@ def open_line(conn: sqlite3.Connection, round_id: str, selected: list[dict], tar
                      (round_id, seq + i, queue[i] if i < len(queue) else None, QUEUED, stamp))
 
 
-def line_of(conn: sqlite3.Connection, round_id: str | None) -> sqlite3.Row | None:
+def line_of(conn: SqlConnection, round_id: str | None) -> sqlite3.Row | None:
     if not round_id:
         return None
     return conn.execute("SELECT * FROM prodline_rounds WHERE round_id = ?", (round_id,)).fetchone()
 
 
-def _rows(conn: sqlite3.Connection, round_id: str) -> list[sqlite3.Row]:
+def _rows(conn: SqlConnection, round_id: str) -> list[sqlite3.Row]:
     return conn.execute("SELECT * FROM prodline_disks WHERE round_id = ? ORDER BY seq", (round_id,)).fetchall()
 
 
@@ -171,7 +173,7 @@ def _port(raw) -> int | None:
     return raw if isinstance(raw, int) and not isinstance(raw, bool) and raw >= 0 else None
 
 
-def identities(conn: sqlite3.Connection, mac: str, targets) -> list[tuple[dict, str, int]]:
+def identities(conn: SqlConnection, mac: str, targets) -> list[tuple[dict, str, int]]:
     """(יעד, serial, port) לכל יעד בדיווח שאפשר לזהות. בלי serial או בלי חריץ אין למה לקשור שם או ספירה,
     והיעד מדולג (עיקרון 5: "לא ידוע" אינו "דיסק חדש"). מה שחסר ביעד נלקח מהמלאי של ה-hello לפי ``dev``."""
     inventory = {d.get("dev"): d for d in _disks(conn, mac) if isinstance(d, dict)}
@@ -215,7 +217,7 @@ def _free(rows, mac: str | None = None, port: int | None = None):
     return None
 
 
-def note_report(conn: sqlite3.Connection, round_row: sqlite3.Row, mac: str, targets, wait=None) -> dict | None:
+def note_report(conn: SqlConnection, round_row: sqlite3.Row, mac: str, targets, wait=None) -> dict | None:
     """דיווח התקדמות של משכפל בסבב פס ייצור -> מה שהוא צריך לדעת (`reply`). ``None`` = הסבב אינו פס ייצור.
     ``wait`` = ``line_wait`` של הדיווח: המשכפל אומר שאין לו מה לכתוב, ושואל אם נשארו שמות (`_note_wait`).
 
@@ -271,7 +273,7 @@ def note_report(conn: sqlite3.Connection, round_row: sqlite3.Row, mac: str, targ
         return None
 
 
-def _extra(conn: sqlite3.Connection, round_id: str, rows, events: list[str]) -> sqlite3.Row | None:
+def _extra(conn: SqlConnection, round_id: str, rows, events: list[str]) -> sqlite3.Row | None:
     """B22: אין שם פנוי, אבל דיסק שנכשל (ושומר את שמו) השאיר מקום ביעד -- שורה חדשה בלי שם לדיסק שנכנס.
     כל עוד השורות שלא נכשלו מכסות את היעד, אין מקום, והדיסק נדחה כמו קודם (`prodline_full`)."""
     line = line_of(conn, round_id)
@@ -284,7 +286,7 @@ def _extra(conn: sqlite3.Connection, round_id: str, rows, events: list[str]) -> 
     return conn.execute("SELECT * FROM prodline_disks WHERE round_id = ? AND seq = ?", (round_id, seq)).fetchone()
 
 
-def _reserve(conn: sqlite3.Connection, round_id: str, events: list[str]) -> None:
+def _reserve(conn: SqlConnection, round_id: str, events: list[str]) -> None:
     """מגירה שהדיסק שנכתב בה הוצא, ואין בה דיסק אחר בסבב, שומרת לעצמה את השם הבא בתור."""
     rows = _rows(conn, round_id)
     busy = {(r["mac"], r["port"]) for r in rows if r["state"] in (RESERVED, WRITING, DONE, REMOVABLE)}
@@ -309,7 +311,7 @@ def _left_for(rows, mac: str) -> tuple[int, list[int]]:
             sorted(r["port"] for r in rows if r["mac"] == mac and r["state"] == RESERVED))
 
 
-def _note_wait(conn: sqlite3.Connection, round_id: str, mac: str, wait, events: list[str]) -> None:
+def _note_wait(conn: SqlConnection, round_id: str, mac: str, wait, events: list[str]) -> None:
     """``line_wait`` של הדיווח. המשכפל "ממתין לדיסק" רק כשהוא אמר זאת **ו**יש לו למה לחכות; כל דיווח אחר
     (בלי השדה, שדה שאינו ``{"s": שלם אי-שלילי}``, או שלא נשאר לו דבר) מוריד אותו. המעבר נרשם ביומן פעם אחת."""
     for key in [k for k in list(_WAITING) if k[0] != round_id]:
@@ -342,14 +344,14 @@ def counter(round_row: sqlite3.Row, rows) -> tuple[int, int]:
     return round_row["written_drives"] + len(extra), round_row["target_drives"]
 
 
-def written_serials(conn: sqlite3.Connection, round_id: str) -> set[str]:
+def written_serials(conn: SqlConnection, round_id: str) -> set[str]:
     """ה-serials שנכתבו בפס הייצור -- גם דיסק שכבר הוצא ואינו בדיווח האחרון של הגל (`room._tally`)."""
     if line_of(conn, round_id) is None:
         return set()
     return {r["serial"] for r in _rows(conn, round_id) if r["state"] in WRITTEN and r["serial"]}
 
 
-def reply(conn: sqlite3.Connection, round_row: sqlite3.Row, mac: str, refused=()) -> dict | None:
+def reply(conn: SqlConnection, round_row: sqlite3.Row, mac: str, refused=()) -> dict | None:
     """``production_line`` בתשובה לסוכן (progress ו-hello). ``None`` = הסבב אינו פס ייצור."""
     if line_of(conn, round_row["id"]) is None:
         return None
@@ -367,7 +369,7 @@ def reply(conn: sqlite3.Connection, round_row: sqlite3.Row, mac: str, refused=()
             "refused": sorted(refused)}
 
 
-def view(conn: sqlite3.Connection, round_row: sqlite3.Row) -> dict | None:
+def view(conn: SqlConnection, round_row: sqlite3.Row) -> dict | None:
     """``round.production_line`` ב-``GET /api/console/room``. ``None`` = הסבב אינו פס ייצור."""
     line = line_of(conn, round_row["id"])
     if line is None:

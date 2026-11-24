@@ -26,7 +26,7 @@ import logging
 import re
 import sqlite3
 
-from server.db import _settle, _write_lock, journal, now_iso, writing
+from server.db import _settle, _write_lock, journal, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.ledger")
 
@@ -40,7 +40,7 @@ def clean_boot_id(value: object) -> str | None:
     return value if isinstance(value, str) and _BOOT_ID.fullmatch(value) else None
 
 
-def note_boot(conn: sqlite3.Connection, mac: str, value: object) -> None:
+def note_boot(conn: SqlConnection, mac: str, value: object) -> None:
     """רושם את מזהה האתחול של ה-hello הזה. נכתב רק כשהשתנה (כמו `note_monitor_on`),
     ורק למכונה שכבר נראתה. hello בלי השדה אינו מוחק את מה שנרשם."""
     boot_id = clean_boot_id(value)
@@ -65,7 +65,7 @@ def note_boot(conn: sqlite3.Connection, mac: str, value: object) -> None:
             log.exception("boot id failure of %s was not journaled", mac)
 
 
-def boot_of(conn: sqlite3.Connection, mac: str) -> str | None:
+def boot_of(conn: SqlConnection, mac: str) -> str | None:
     row = conn.execute("SELECT boot_id FROM net_devices WHERE mac = ?", (mac,)).fetchone()
     return row["boot_id"] if row is not None else None
 
@@ -105,7 +105,7 @@ def identities(ports: list[int] | None, disks: list | None) -> list[dict]:
     return out
 
 
-def opened(conn: sqlite3.Connection, round_id: str, wave_id: str, mac: str,
+def opened(conn: SqlConnection, round_id: str, wave_id: str, mac: str,
            ports: list[int] | None, disks: list | None) -> int:
     """המשכפל קיבל עכשיו את הגל הרץ: שורה לכל דיסק יעד מזוהה, עם מזהה האתחול שלו.
 
@@ -134,13 +134,13 @@ def opened(conn: sqlite3.Connection, round_id: str, wave_id: str, mac: str,
     return len(found)
 
 
-def rows(conn: sqlite3.Connection, round_id: str, mac: str) -> list[sqlite3.Row]:
+def rows(conn: SqlConnection, round_id: str, mac: str) -> list[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM write_ledger WHERE round_id = ? AND mac = ? ORDER BY port, serial",
         (round_id, mac)).fetchall()
 
 
-def wave_boot(conn: sqlite3.Connection, wave_id: str, mac: str) -> str | None:
+def wave_boot(conn: SqlConnection, wave_id: str, mac: str) -> str | None:
     """מזהה האתחול של הריצה שקיבלה את הגל הזה, או ``None`` כשאין יומן."""
     row = conn.execute(
         "SELECT boot_id FROM write_ledger WHERE wave_id = ? AND mac = ? LIMIT 1",
@@ -148,7 +148,7 @@ def wave_boot(conn: sqlite3.Connection, wave_id: str, mac: str) -> str | None:
     return row["boot_id"] if row is not None else None
 
 
-def forget(conn: sqlite3.Connection, round_id: str, mac: str | None = None) -> int:
+def forget(conn: SqlConnection, round_id: str, mac: str | None = None) -> int:
     """מוחק את יומן הסבב (או של מכונה אחת בו). מחזיר כמה שורות נמחקו."""
     sql, args = "DELETE FROM write_ledger WHERE round_id = ?", [round_id]
     if mac is not None:
@@ -158,7 +158,7 @@ def forget(conn: sqlite3.Connection, round_id: str, mac: str | None = None) -> i
         return conn.execute(sql, args).rowcount
 
 
-def expire(conn: sqlite3.Connection, wave_id: str, mac: str) -> None:
+def expire(conn: SqlConnection, wave_id: str, mac: str) -> None:
     """המכונה לא חזרה בתוך `lost_wait_seconds`: אין המשך, והמידע נמחק (נדב 12/11).
     שורת יומן אחת, רק כשהיה מה למחוק."""
     _settle(conn)
@@ -170,7 +170,7 @@ def expire(conn: sqlite3.Connection, wave_id: str, mac: str) -> None:
                 machine=mac, round_id=wave_id)
 
 
-def _done_serials(conn: sqlite3.Connection, round_row: sqlite3.Row, wave_id: str,
+def _done_serials(conn: SqlConnection, round_row: sqlite3.Row, wave_id: str,
                   mac: str) -> set[str]:
     """מה שכבר הושלם: נספר בסבב, או שהחבר דיווח עליו `done` עם ה-serial שנקשר לו."""
     done = set(json.loads(round_row["written_serials"] or "[]"))
@@ -195,7 +195,7 @@ def _same(row: sqlite3.Row, disk: dict) -> bool:
     return row["wwid"] is None or wwid is None or wwid == row["wwid"]
 
 
-def _inventory(conn: sqlite3.Connection, mac: str) -> list[dict]:
+def _inventory(conn: SqlConnection, mac: str) -> list[dict]:
     """המלאי של ה-hello האחרון של המכונה. מלאי שלא נקרא הוא רשימה ריקה: שום דיסק "אינו כאן"."""
     seen = conn.execute("SELECT disks_json FROM net_devices WHERE mac = ?", (mac,)).fetchone()
     try:
@@ -214,7 +214,7 @@ def _port_now(row: sqlite3.Row, disks: list[dict]) -> int | None:
     return port if isinstance(port, int) and not isinstance(port, bool) else None
 
 
-def incomplete(conn: sqlite3.Connection, round_row: sqlite3.Row, mac: str) -> list[dict]:
+def incomplete(conn: SqlConnection, round_row: sqlite3.Row, mac: str) -> list[dict]:
     """הדיסקים של המכונה שהיומן אומר שהתחילו להיכתב ולא הושלמו, ואיפה כל אחד עכשיו.
 
     `port` = החריץ שבו הדיסק יושב לפי ה-hello **האחרון** (לפי הזהות, לא לפי החריץ שבו
@@ -229,7 +229,7 @@ def incomplete(conn: sqlite3.Connection, round_row: sqlite3.Row, mac: str) -> li
             for row in mine if row["serial"] not in done]
 
 
-def completed_here(conn: sqlite3.Connection, round_row: sqlite3.Row, mac: str) -> set[str]:
+def completed_here(conn: SqlConnection, round_row: sqlite3.Row, mac: str) -> set[str]:
     """הדיסקים של המכונה שהושלמו בגל שנקטע ו**נמצאים בה עכשיו** — בכל חריץ.
 
     `room._tally` סופר יעד `done` רק כשבאותו שם התקן עדיין יושב אותו serial; דיסק שהושלם
