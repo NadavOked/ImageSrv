@@ -114,6 +114,44 @@ def test_a_partial_machine_still_names_the_drawer_that_failed(tmp_path):
     assert [t for t in report["targets"] if t["dev"] == "sdb"][0]["error"]
 
 
+@pytest.mark.parametrize("vanishes", [False, True])
+def test_progress_when_rejoin_file_vanishes(tmp_path, vanishes):
+    run = tmp_path / "run"
+    target = run / "targets" / "sdb"
+    target.mkdir(parents=True)
+    (target / "state").write_text("writing", encoding="utf-8")
+    rejoin = target / "rejoin"
+    record = {"part": 1, "missing": 2, "chunks": 3, "away_s": None, "step": "http"}
+    rejoin.write_text(json.dumps(record), encoding="utf-8")
+    prelude = f"RUN_DIR={posix(run)!r}; REJOIN={posix(rejoin)!r}; "
+    if vanishes:
+        # Delete after a successful file check, or just before a direct read.
+        prelude += r'''
+function [ {
+    if builtin [ "$*" = "! -s $REJOIN ]" ] && builtin [ -s "$REJOIN" ]; then
+        rm "$REJOIN" || exit 1
+        return 1
+    fi
+    builtin [ "$@"
+}
+cat() {
+    if [ "$1" = "$REJOIN" ]; then rm "$REJOIN" || return 1; fi
+    command cat "$@"
+}
+'''
+    report = json.loads(sh(
+        prelude + agent_sources("sysinfo", "failmark", "progress", "drawerplug")
+        + 'target_same() { return 1; }; build_progress ses_1 aa:bb:cc:00:00:21'
+    ))
+    drawer, = report["targets"]
+    assert drawer["dev"] == "sdb"
+    if vanishes:
+        assert not rejoin.exists()
+        assert "rejoin" not in drawer
+    else:
+        assert drawer["rejoin"] == record
+
+
 # --- המסך --------------------------------------------------------------------
 
 

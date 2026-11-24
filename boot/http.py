@@ -14,7 +14,7 @@ uvicorn עצמו משמר את האותיות כפי שנשלחו, ולכן הנ
 
     app.mount("/boot", create_boot_asgi(
         resolve=my_lookup,                       # ראו חתימת Resolver למטה
-        config=GrubConfig(server_base="http://10.44.0.10:7712"),
+        config=GrubConfig(server_base="https://10.44.0.10:7712", boot_port=7711),
         boot_dir="/srv/imagesrv/boot",           # vmlinuz + initrd.img
     ))
 """

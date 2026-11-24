@@ -144,9 +144,10 @@ def test_a_neighbours_word_that_is_no_evidence_brings_nothing_and_all_of_it_is_f
 def test_its_own_receiver_does_not_outlive_the_rounds_pass(tmp_path):
     """המקלט שלה התחיל ולא נגמר עם המעבר (כאן: 40 שניות). אחרי שהמקלט של הסבב נגמר הוא נעצר, וההשלמה ממשיכה
     ממה שעמיד אצלה -- היא אינה מחכה לו."""
-    got = _run(tmp_path, [RECEIVE1, DONE], env=f"{PULLED} RECV_BACK_AS=sdc PLUG_EVENT=1 RECV_TAIL=3 SIDE_S=40 DRAWER_LIVE_TAIL_S=1")
+    got = _run(tmp_path, [RECEIVE1, DONE], env=f"{PULLED} RECV_BACK_AS=sdc PLUG_EVENT=1 RECV_WAIT_SIDE=1 RECV_TAIL=0 SIDE_S=40 DRAWER_LIVE_TAIL_S=1")
     trace = got["trace"]
     assert trace[-1] == "rc=0" and len(_side(trace)) == 1 and "DONE sdc" in trace, got
+    assert trace.index(_side(trace)[0]) < trace.index("PASS-END"), trace
     assert "SIDE-END" not in trace, trace
     assert _ranges(tmp_path) == "2-4"                                       # what it had before the pull stays; the rest is fetched
 

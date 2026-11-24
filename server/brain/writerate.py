@@ -43,6 +43,9 @@ MARGIN = 0.9
 RATE_MAX_FACTOR = 2
 #: kbit/s לכל MB/s של `--write-kbps` (8 × 1000).
 KBPS_PER_MBS = 8000
+#: #3803: המקסימום ש-`chunkcast` מקבל ב-`--rate-min`/`--rate-max`/`--rate-cap` (`cc_num(v, 1, 100000000, ...)` ב-`agent/chunkcast.c`).
+#: מעליו השולח מסרב ביציאה 2 והגל נכשל, ולכן ההחלטה אינה מוציאה מספר גדול ממנו. הערך הוא עותק של הקבוע ב-C; טסט קורא אותו משם.
+CHUNKCAST_RATE_LIMIT = 100_000_000
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,9 @@ class BaseCall(Call):
     left_out: tuple = ()
     #: כל הדיסקים פיגרו בעבר, ולכן כולם נספרו (האיטי קובע) -- ולא הוחרגו.
     all_behind: bool = False
+    #: #3822: הרצפה גברה על המדידה (האיטי × ``MARGIN`` נמוך ממנה). ``measured_mbs``: מה שהמדידה הייתה נותנת (MB/s), או ``None``.
+    clamped: bool = False
+    measured_mbs: int | None = None
 
 
 @dataclass(frozen=True)
@@ -109,10 +115,18 @@ def judge_base(measured: list[tuple[str, int | None]], history: dict[str, tuple[
     kbps = probe_kbps(fast or [v for _s, v in measured], floor_mbs)
     evidence += [f"behind[{s}]=check {v}MB/s, wrote {h[0]}MB/s in {h[1]}" for s, (v, h) in behind.items()]
     who = f"{len(counted)} מתוך {len(measured)} דיסקים נספרו" + (", כולם פיגרו בעבר (האיטי קובע)" if behind and not fast else "")
-    return BaseCall(*base, PACE, round_id,
-                    f"{kbps / KBPS_PER_MBS:g}MB/s: הדיסק האיטי שנספר × {MARGIN:g}, לא מתחת לרצפה ({floor_mbs}MB/s); {who}",
+    # #3822: מה שהמדידה לבדה הייתה נותנת. הרצפה גוברת בכוונה (ההחלטה לא השתנתה), אבל הראיה אומרת כשזה קרה
+    measured_mbs = int(min(fast or [v for _s, v in measured]) * MARGIN)
+    clamped = measured_mbs < floor_mbs
+    if clamped:
+        evidence += ["clamped=floor", f"measured={measured_mbs}MB/s"]
+        how = f"הרצפה ({floor_mbs}MB/s) גברה על המדידה (הדיסק האיטי שנספר × {MARGIN:g} = {measured_mbs}MB/s)"
+    else:
+        how = f"הדיסק האיטי שנספר × {MARGIN:g}, לא מתחת לרצפה ({floor_mbs}MB/s)"
+    return BaseCall(*base, PACE, round_id, f"{kbps / KBPS_PER_MBS:g}MB/s: {how}; {who}",
                     tuple(evidence), kbps=kbps, counted=tuple(sorted(counted)),
-                    left_out=tuple((s, v, h[0], h[1]) for s, (v, h) in behind.items()), all_behind=bool(behind) and not fast)
+                    left_out=tuple((s, v, h[0], h[1]) for s, (v, h) in behind.items()), all_behind=bool(behind) and not fast,
+                    clamped=clamped, measured_mbs=measured_mbs if clamped else None)
 
 
 def decide_base(conn, measured, history, floor_mbs: int, *, round_id: str, part: int) -> BaseCall | None:
@@ -150,10 +164,11 @@ def bounds(kbps: int, write_kbps: int, floor_mbs: int, learned_max: int | None =
 def grow_cap(kbps: int, learned_max: int | None, file_bytes: int | None, chunks: int | None, chunk_bytes: int) -> int | None:
     """טהור. `--rate-cap` (#3599): הגג שאליו `--rate-max` רשאי **לגדול** כל עוד כל המקלטים בריאים -- תקרת החוט `--kbps` (דחוסה) כקצב של
     נתונים לא דחוסים (חתיכות המחיצה × גודל חתיכה, מול הבייטים של הקובץ), קיבולת הרשת שנמדדה. ``None`` = לא גדל: מקסימום ש-K8 למד
-    לדיסקים של הגל הוא כל מה שהם הוכחו לכתוב, ובלי חוט, גודל או מספר חתיכות אין במה להמיר אותו."""
+    לדיסקים של הגל הוא כל מה שהם הוכחו לכתוב, ובלי חוט, גודל או מספר חתיכות אין במה להמיר אותו. #3803: חסום ב-
+    ``CHUNKCAST_RATE_LIMIT`` -- קובץ זעיר ביחס לחתיכות (ESP כמעט ריקה) נותן יחס עצום, ו-`chunkcast` מסרב למספר גדול ממנו."""
     if learned_max or not kbps or not file_bytes or not chunks or file_bytes <= 0 or chunks <= 0:
         return None
-    return kbps * chunks * chunk_bytes // file_bytes
+    return min(kbps * chunks * chunk_bytes // file_bytes, CHUNKCAST_RATE_LIMIT)
 
 
 def judge_bounds(kbps: int, write_kbps: int, floor_mbs: int, learned_max: int | None = None, *, file_bytes: int | None = None,
@@ -163,10 +178,12 @@ def judge_bounds(kbps: int, write_kbps: int, floor_mbs: int, learned_max: int | 
     ``--rate-max``; מעבר השלמה קצר ואינו מרחיב)."""
     low, high = bounds(kbps, write_kbps, floor_mbs, learned_max)
     cap = grow_cap(kbps, learned_max, file_bytes, chunks, chunk_bytes) if full_pass else None
+    clamped = cap == CHUNKCAST_RATE_LIMIT                       # #3803: הנוסחה חרגה מהתקרה של chunkcast והמוח חסם אותה
     if not (write_kbps and cap is not None and cap > high):
         cap = None
     evidence = (f"kbps={kbps}", f"write_kbps={write_kbps}", f"floor={floor_mbs}MB/s", f"factor={RATE_MAX_FACTOR}",
-                f"learned_max={learned_max if learned_max else 'none'}", f"full_pass={int(full_pass)}")
+                f"learned_max={learned_max if learned_max else 'none'}", f"full_pass={int(full_pass)}",
+                *((f"cap_limit={CHUNKCAST_RATE_LIMIT}",) if clamped and cap is not None else ()))
     return BoundsCall(RULE_BOUNDS, POINT_BOUNDS, ACTION_BOUNDS, SET, round_id,
                       f"--rate-min {low} --rate-max {high}" + (f" --rate-cap {cap}" if cap is not None else ""), evidence,
                       low=low, high=high, cap=cap)

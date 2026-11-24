@@ -222,7 +222,13 @@ _operator() {   # the person at the cloner: pulls what is detached, and some sec
 _reporter2 > /dev/null 2>&1 &
 ( _operator ) > /dev/null 2>&1 &
 '''
-E2E_EXTRA = EXTRA.replace("_reporter > /dev/null 2>&1 &\n", "") + LINE_E2E
+E2E_EXTRA = EXTRA + LINE_E2E
+
+
+def test_line_e2e_harness_can_load_its_reporter(tmp_path):
+    extra = tmp_path / "extra.sh"
+    extra.write_text(E2E_EXTRA, encoding="utf-8", newline="\n")
+    sh(f"bash -n {posix(extra)!r}")
 
 
 def _e2e(tmp_path) -> dict:

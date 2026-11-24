@@ -126,5 +126,6 @@ drawer_back_json() {   # $1 = target -> what the progress report adds to it (pro
         [ -z "$_wj_s" ] || printf ',"serial":"%s","port":%s' "$(json_escape "$_wj_s")" "$_wj_p"
     fi
     if command -v drawer_out_json > /dev/null 2>&1; then drawer_out_json "$1"; fi   # detached, removed (drawerout.sh)
-    [ ! -s "$RUN_DIR/targets/$1/rejoin" ] || printf ',"rejoin":%s' "$(tr -d '\n' < "$RUN_DIR/targets/$1/rejoin")"
+    _wj_r=$(cat "$RUN_DIR/targets/$1/rejoin" 2>/dev/null) || return 0
+    [ -z "$_wj_r" ] || printf ',"rejoin":%s' "$_wj_r"
 }

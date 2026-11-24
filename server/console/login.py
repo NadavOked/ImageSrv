@@ -100,10 +100,14 @@ async def finish_login(conn, request: Request, response: Response, *,
     if kiosk:
         if info["must_change_password"]:
             raise HTTPException(403, "החלף סיסמה בקונסולה קודם")
-        # #1340: בפורט הסוכן העוגייה מסומנת — סיסמה בלבד, ב-HTTP; הקונסולה מסרבת לה.
+        # #1340: בפורט הסוכן העוגייה מסומנת — סיסמה בלבד; הקונסולה מסרבת לה.
         purpose = auth.PURPOSE_KIOSK if getattr(
             request.app.state, auth.KIOSK_APP_FLAG, False) else ""
-        auth.attach_cookie(response, conn, stored, role, tls, purpose=purpose)
+        # #4066: `tls` כאן הוא של הקונסולה (ל-kiosk הוא `None`), ומאזין הסוכן מוגש ב-HTTPS בתעודה אחרת.
+        # `Secure` נקבע לפי החיבור שהבקשה באה בו: HTTPS = `Secure`; HTTP (פיתוח, loopback) נשאר בלי,
+        # כי עוגיית `Secure` על HTTP נזרקת והכניסה לא הייתה עובדת.
+        auth.attach_cookie(response, conn, stored, role, tls, purpose=purpose,
+                           secure=request.url.scheme == "https")
         users.record_login(conn, stored, ip)
         journal(conn, "login", "kiosk", stored)
         # #1499 (נדב 16/10): ערכת הנושא השמורה של המשתמש — ה-GUI הנייטיבי

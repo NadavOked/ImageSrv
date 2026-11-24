@@ -326,7 +326,7 @@ DHCP לא נדלק כאן בכלל — מגדירים אותו אחר כך מה�
   --servers-address A  --servers-netmask M  --servers-gateway G  --servers-dns D1,D2
                        פרטי הכתובת הסטטית לכרטיס השרתים (עם --servers-mode static)
   --no-firewall        מדלג על nftables, עם אזהרה ביומן (R20-F1)
-  --server-url URL     עוקף את הכתובת הנגזרת מהכרטיס (http בלבד)
+  --server-url URL     עוקף את הכתובת הנגזרת מהכרטיס (כתובת ערוץ הסוכן, https://IP:7712; http נקרא כ-https)
   --admin-user NAME    מדלג על שאלת המשתמש
   --admin-pass PASS    סיסמת המנהל (נשארת ברשימת התהליכים — עדיף --admin-pass-fd)
   --admin-pass-fd FD   קורא את הסיסמה מ-FD שכבר פתוח (האשף משתמש ב-3; אינו argv/env/log)

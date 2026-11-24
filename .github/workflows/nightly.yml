@@ -143,10 +143,12 @@ jobs:
           set -o pipefail
           args=(-p no:cacheprovider -m "not uinput and not vm_it")
           shard=(-p tools.git.ci_shard --ci-shard "$SHARD/4")
-          # 14/11: every ResourceWarning with the line that made the object (tests/resource_leaks.py),
-          # on 3.13 only -- tracemalloc doubles the run's memory, one version is the evidence.
+          # 14/11: every ResourceWarning (tests/resource_leaks.py), on 3.13 only -- one version is the evidence.
+          # #99 (public): with tracemalloc on every test the 3.13 shards ran ~6x slower than 3.12 and hit the 60-minute wall
+          # (22/11, 23/11). Here the run only DETECTS (--resource-leaks-no-trace); the step "Locate the leaks" below runs
+          # just the tests that leaked again, traced, to get the line that made the object.
           leaks=()
-          if [ "$PY" = "3.13" ]; then leaks=(-p tests.resource_leaks --resource-leaks "$RUNNER_TEMP/gate/leaks"); fi
+          if [ "$PY" = "3.13" ]; then leaks=(-p tests.resource_leaks --resource-leaks "$RUNNER_TEMP/gate/leaks" --resource-leaks-no-trace); fi
           gate="$RUNNER_TEMP/gate"
           mkdir -p "$gate"
           if ! python tools/git/lab_gate.py collect --out "$gate/collected.txt" -- "${args[@]}" "${shard[@]}" \
@@ -172,6 +174,33 @@ jobs:
             --junit "$gate/run-parallel.xml" --junit "$gate/run-serial.xml" \
             --problems "$gate/problems-parallel.json" --problems "$gate/problems-serial.json" \
             --allowed .github/ci-gate-allowed.json --pytest-rc "$rc1" --pytest-rc "$rc2"
+
+      # #99: the traced half of the leak recorder, on the few tests that leaked (ids from `nodeids`), same directory.
+      # pytest rc 0 / 1 (a test failed: the shard's verdict owns that) / 5 (no test of that kind) are fine; any
+      # other rc means this run itself broke, which is red (exit 2), not "no leaks". A test that does not leak again
+      # in isolation stays in the report as `?::<test file>` -- detected, not located.
+      - name: Locate the leaks (3.13)
+        if: always() && matrix.python-version == '3.13'
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          leaks="$RUNNER_TEMP/gate/leaks"
+          python tests/resource_leaks.py nodeids "$leaks" > "$RUNNER_TEMP/gate/leaked-tests.txt"
+          mapfile -t ids < "$RUNNER_TEMP/gate/leaked-tests.txt"
+          echo "leaked tests to locate: ${#ids[@]}"
+          [ "${#ids[@]}" -gt 0 ] || exit 0
+          base='not uinput and not vm_it'
+          set +e
+          python -m pytest "${ids[@]}" -q -p no:cacheprovider -m "$base and not serial" -n auto --dist load \
+            -p tests.resource_leaks --resource-leaks "$leaks" < /dev/null
+          rc1=$?
+          python -m pytest "${ids[@]}" -q -p no:cacheprovider -m "$base and serial" \
+            -p tests.resource_leaks --resource-leaks "$leaks" < /dev/null
+          rc2=$?
+          set -e
+          for rc in "$rc1" "$rc2"; do
+            case "$rc" in 0|1|5) ;; *) echo "locate: pytest rc=$rc -- CANNOT VERIFY"; exit 2;; esac
+          done
 
       # 14/11: a report, not a gate -- a site not in the baseline is listed as NEW in the
       # summary and gets an Issue by hand; blocking on it is a later decision (--block-new).
