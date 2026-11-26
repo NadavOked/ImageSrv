@@ -19,6 +19,7 @@ import sys
 import threading
 import urllib.parse
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from server.paths import REPO_ROOT
 from server.core import ports as product_ports   # #3871: the one place a port is named
@@ -28,6 +29,9 @@ from server.console import server_power
 from server.rounds import drive_rates
 from server.agent import identity
 from server.system import serverlog
+
+if TYPE_CHECKING:
+    from server.net.igmp_querier import Querier
 
 
 def _configure_stdio() -> None:
@@ -401,7 +405,7 @@ def _primary_alive(runtime, args, hostname: str):
     return servers
 
 
-def _start_igmp_querier(runtime, deploy, interface: str | None) -> None:
+def _start_igmp_querier(runtime, deploy, interface: str | None) -> Querier | None:
     """#1972: ה-querier על כרטיס ההפצה — ותמיד שורה במסך הבריאות. כאן בלבד
     (כמו `vm_host`): בבדיקות אין סוקט raw ואין תהליכון."""
     from server.system import health
@@ -513,25 +517,41 @@ def _host_config_writes() -> dict:
             "dnsmasq_dropin": True, "grub_password_file": grub_password.PASSWORD_FILE}
 
 
-def main() -> None:
+def _simulation_config_writes(config_dir: Path) -> dict:
+    """#3953: קובצי ה-MAC של הסימולציה נכתבים מקומית, ללא טעינה בשירותי המארח."""
+    from server.core.atomicfile import write_atomic
+    from server.net import known_fw
+
+    nft_dir = config_dir / "nft.d"
+    nft_dir.mkdir(parents=True, exist_ok=True)
+    return {"known_macs_hooks": {
+                "apply": lambda text: write_atomic(config_dir / "known-macs", text),
+                "firewall": lambda macs: write_atomic(nft_dir / "known-macs.nft", known_fw.render(macs)),
+            },
+            "sync_dnsmasq": False, "dnsmasq_dropin": False, "grub_password_file": None}
+
+
+def main(*, simulation_config_dir: Path | None = None) -> None:
     _configure_stdio()
     # #3157: הגדרת הלוגינג **היחידה** של השרת — root ב-INFO ל-stderr (journald).
     serverlog.configure()
     parser = build_parser()
     args = parser.parse_args()
     boot_port = _boot_listener_port(parser, args)   # #3486
+    host_enabled = simulation_config_dir is None
 
     from server.net import ifaddr
 
     # #2440: חומת אש שהותקנה ואינה טעונה = שרת בלי סינון. לא עולים, ואומרים
     # למה; Restart=on-failure מנסה שוב, והשרת עולה מעצמו כש-nftables עולה.
-    blocked = deploy_net.firewall_gate()
-    if blocked:
-        print(f"imagesrv: {blocked}", file=sys.stderr)
-        raise SystemExit(1)
-    if deploy_net.firewall_installed() is False:
-        print("warning: no ImageSrv firewall installed (--no-firewall) — every port "
-              "is open on every interface (#2440)")
+    if host_enabled:
+        blocked = deploy_net.firewall_gate()
+        if blocked:
+            print(f"imagesrv: {blocked}", file=sys.stderr)
+            raise SystemExit(1)
+        if deploy_net.firewall_installed() is False:
+            print("warning: no ImageSrv firewall installed (--no-firewall) — every port "
+                  "is open on every interface (#2440)")
     deploy = _deploy_state(args)
 
     if deploy.source == "cli":
@@ -611,7 +631,7 @@ def main() -> None:
     # #1088: כתובת ההפצה וכרטיסה — מהדגל (המעבדה, שרת שהותקן עם כרטיס
     # הפצה), ממה שנרשם מהקונסולה, או "לא הוגדרה". שלושת המקורות נאמרים.
     if deploy.source == "cli":
-        server_url = deploy.url              # #3871: `--server-url`, on the port the agent listens on
+        server_url = deploy.url or ""      # #3871: `--server-url`, on the port the agent listens on
         if args.interface:
             interface = args.interface
         else:
@@ -625,7 +645,7 @@ def main() -> None:
         # הכרטיס שנרשם חייב לשאת את הכתובת שנרשמה — אחרת השרת **אינו**
         # נופל (זה היה משאיר את המפעיל בלי קונסולה) אלא חוזר
         # ל"לא הוגדרה", ואומר זאת ביומן ובמסך הבריאות.
-        server_url, interface = deploy.url, deploy.interface
+        server_url, interface = deploy.url or "", deploy.interface
         try:
             found = _interface_for(server_url)
         except InterfaceDetectionError as exc:
@@ -722,7 +742,8 @@ def main() -> None:
                              # known_macs_hooks, ו-#1013: קובץ ה-dnsmasq הראשי נגזר
                              # מה-DB בעלייה (sync_dnsmasq) — כאן בלבד, ועל לינוקס
                              # בלבד (#2267: לא על תחנת פיתוח בווינדוס).
-                             **_host_config_writes(),
+                             **(_host_config_writes() if simulation_config_dir is None
+                                else _simulation_config_writes(simulation_config_dir)),
                              # הכרעת נדב 15/10: הגג והפתיחה של הקצב לפי מהירות
                              # כרטיס ההפצה — כאן בלבד, כמו sync_dnsmasq.
                              link_speed=drive_rates.read_link,
@@ -732,7 +753,7 @@ def main() -> None:
                              identity_hooks={"leases": identity.LeaseFile(args.dhcp_leases)},
                              # #2843: הפעלה מחדש/כיבוי מהקונסולה — כאן בלבד, ומאותו טעם:
                              # בלי hook הנתיב עונה 503, ואף הרצת בדיקות לא מכבה מכונה.
-                             host_hooks={"power": server_power.schedule_later},
+                             host_hooks={"power": server_power.schedule_later} if host_enabled else None,
                              extra_cmdline=tuple(args.extra_cmdline.split()),
                              repo_dir=args.repo_dir,
                              console_tls=console_tls,
@@ -740,16 +761,16 @@ def main() -> None:
                                            "deploy": lambda: deploy_ctx.state,
                                            "servers_nic": servers_nic_status,
                                            # #3064 (K12, K13): המוח קורא systemctl ו-ss -- כאן בלבד, כמו known_macs_hooks
-                                           "brain_host": True},
+                                           "brain_host": host_enabled},
                              deploy=deploy_ctx,
                              # #1372: המארח של עדכון ה-VM — שואל, ומכין אם חסר.
-                             vm_host=True,
+                             vm_host=host_enabled,
                              # #1494: used_bytes לאימג'ים ישנים מכותרת partclone.
                              backfill_used_bytes=True,
                              # #1805: הגיבוב לקריאה החוזרת מהדיסק אחרי כתיבה.
                              backfill_readback=True,
                              # #1447: אזור הזמן של המערכת = ההגדרה (timedatectl).
-                             apply_timezone=True, apply_timesync=True)
+                             apply_timezone=host_enabled, apply_timesync=host_enabled)
     # #1372: עדכון מהכפתור רץ בסקריפט של התג **הישן**, ולכן ההכנה של הגרסה
     # הזו אינה תלויה בו: מארח שאינו מוכן — deploy/vmupdate-host.sh שלנו, ברקע.
     # getattr: בדיקות של main מחליפות את create_runtime ברשומה משלהן.
@@ -767,10 +788,11 @@ def main() -> None:
     # getattr: בדיקות של main מחליפות את create_runtime ברשומה משלהן.
     if getattr(runtime, "conn", None) is not None:
         serverlog.bridge_to_journal(runtime.conn)
-    querier = _start_igmp_querier(runtime, deploy, interface)   # #1972
-    _start_netwatch(runtime, deploy, interface, querier)   # #3064 (N4, N8)
-    _start_rogue_dhcp_watch(runtime, deploy, interface)   # #2442
-    _start_ups_monitor(runtime)   # #1973
+    if host_enabled:
+        querier = _start_igmp_querier(runtime, deploy, interface)   # #1972
+        _start_netwatch(runtime, deploy, interface, querier)   # #3064 (N4, N8)
+        _start_rogue_dhcp_watch(runtime, deploy, interface)   # #2442
+        _start_ups_monitor(runtime)   # #1973
     _wire_server_disks(runtime)   # #3007
     agent_app = create_agent_app(runtime)
     console_app = create_console_app(runtime)
@@ -781,7 +803,7 @@ def main() -> None:
     from server.agent import tls as agent_tls
     agent_identity, _ = agent_tls.ensure_identity(args.data_dir)
     agent_config = agent_uvicorn_config(agent_app, args.host, args.port, **agent_identity.uvicorn_kwargs())
-    configs: dict[tuple[str, str], object] = {("agent", args.host): agent_config}
+    configs: dict[tuple[str, str], uvicorn.Config] = {("agent", args.host): agent_config}
 
     def agent_factory(h: str):
         """#705: יצרן לכל כתובת — הסוכן נקשר לכל כרטיס שבו "אתחול מהרשת" דלוק."""

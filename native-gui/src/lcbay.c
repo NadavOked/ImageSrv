@@ -143,6 +143,19 @@ void lc_bay_number(App *a, cairo_t *cr, double right, double cy, double big, int
     text_free(&nb); text_free(&nl);
 }
 
+Text lc_reason_text(cairo_t *cr, int size, int weight, const char *why, int width) {
+    /* #2900: keep the amount and its unit together inside the Hebrew agent reason. */
+    static GRegex *amount;
+    if (!amount) amount = g_regex_new(
+        "(שגיאת כתיבה אחרי |אין דיווח מהפיצול לאחר |הכתיבה נכשלה אחרי |איטי — |"
+        ", מתחת לסף |, פחות מחצי מ-|איטי — דיסק מכני \\(HDD\\), נמדד )"
+        "([0-9]+(?:\\.[0-9]+)? (?:GB|MB/s))\\b", G_REGEX_OPTIMIZE, 0, NULL);
+    char *shown = amount ? g_regex_replace(amount, why, -1, 0, "\\1\xE2\x81\xA6\\2\xE2\x81\xA9", 0, NULL) : NULL;
+    Text t = text_make(cr, FONT_SANS, size, weight, shown ? shown : why, width, DIR_RTL);
+    g_free(shown);
+    return t;
+}
+
 void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     const Theme *t = a->theme;
     int dwarn = g->kind == BAY_DONE && g->done_warn;   /* #2009: done, orange -- drawn as the SMART question's orange */
@@ -222,7 +235,7 @@ void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g) {
     /* .prog: what is happening, the percent, the bar */
     double px = fl, pw = fr - namew - 16 - fl;
     Text tp = text_make(cr, FONT_MONO, ins ? 24 : 14, 600, g->pct, 0, DIR_LTR);   /* #3181: .pc.nx -- the next name */
-    Text tl = text_make(cr, FONT_SANS, 12, bad || ask || going || hl ? 600 : 400, g->line, (int)fmax(10, pw - tp.w - 10), DIR_RTL);
+    Text tl = lc_reason_text(cr, 12, bad || ask || going || hl ? 600 : 400, g->line, (int)fmax(10, pw - tp.w - 10));
     pango_layout_set_ellipsize(tl.layout, PANGO_ELLIPSIZE_END); pango_layout_set_height(tl.layout, hl || g->line2 ? -2 : 0);
     if (hl || g->line2) pango_layout_get_pixel_size(tl.layout, NULL, &tl.h);   /* #2024: the reason gets two lines; #3167: a note too */
     Text td = { NULL, 0, 0 };   /* #1331: the drivers line under the bar */

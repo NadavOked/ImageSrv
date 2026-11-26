@@ -306,7 +306,7 @@ static double res_card(App *a, cairo_t *cr, double x, double y, double w, const 
     double inner = w - 44 - 54 - 18;
     Text th = text_make(cr, FONT_SANS, 20, 600, h3, (int)(inner - 200), DIR_RTL), tm = text_make(cr, FONT_MONO, 13, 500, mono, 0, DIR_LTR);
     Text tl[6]; double h = 18 + fmax(th.h, tm.h) + 8;
-    for (int i = 0; i < n; i++) { tl[i] = text_make(cr, FONT_SANS, 13, 400, li[i], (int)(inner - 22), DIR_RTL); h += tl[i].h + (i ? 4 : 0); }
+    for (int i = 0; i < n; i++) { tl[i] = lc_reason_text(cr, 13, 400, li[i], (int)(inner - 22)); h += tl[i].h + (i ? 4 : 0); }
     const char *todo = !bad ? NULL : g->pulled ? "הדיסק נשלף באמצע — לא נכתב עד הסוף. אפשר לשכפל אליו שוב."   /* #2045: not "broken" */
                                  : g->bytes > 0 || g->part > 0 ? "הדיסק לא יעלה ואינו שמיש. אל תכניסו אותו למחשב בכיתה — בדקו או החליפו אותו ושכפלו שוב."
                                                                  : "הדיסק לא נכתב — מה שהיה עליו נשאר.";

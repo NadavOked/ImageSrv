@@ -34,6 +34,7 @@ SENTENCES = {
     "write_slow": "נפסל כאיטי בבדיקת הכתיבה בסבב הזה — לא כותבים עליו בסבב הזה; אפשר להעתיק ממנו",
     "failed_last": "נכשל בשיכפול הקודם — לא מעתיקים ממנו; אפשר לכתוב עליו",
     "write_incomplete": WRITE_INCOMPLETE_HE,
+    "cable_failed": "חיבור לא תקין — לא מעתיקים ממנו; אפשר לכתוב עליו",   # #3008 (23/11): after the golden was cut
 }
 
 
@@ -84,19 +85,25 @@ def sig(v: dict) -> str:
                     ("color", "source", "target", "reason", "source_reason", "target_reason"))
 
 
+def sig_before(v: dict) -> str:
+    """`sig`, with the one word #3008 (23/11) changed put back: a cable cause was `failed_last` when the golden was cut, and is `cable_failed`
+    now -- same colour, same source, same target. Everything else must still be exactly what the golden says."""
+    return sig(v).replace("cable_failed", "failed_last")
+
+
 # --- 1. equivalence ------------------------------------------------------------------------------------------------
 
 def test_the_golden_fixture_is_whole():
     assert len(GOLDEN["facts"]) == len(facts_cases()) == 112
     assert len(GOLDEN["disks"]) == len(disk_cases()) == 1200
-    assert GOLDEN["reason_he"] == SENTENCES
+    assert GOLDEN["reason_he"] == {k: v for k, v in SENTENCES.items() if k != "cable_failed"}
     colors = {s.split("|")[0] for s in GOLDEN["facts"] + GOLDEN["disks"]}
     assert colors == {"red", "yellow", "orange", "green", "grey"}      # every colour is in the data, so no colour is untested
 
 
 def test_every_combination_of_facts_gives_the_same_verdict_as_before():
     from server.disks import disk_rule
-    got = [sig(disk_rule.judge(f)) for f in facts_cases()]
+    got = [sig_before(disk_rule.judge(f)) for f in facts_cases()]
     bad = [(f, g, w) for f, g, w in zip(facts_cases(), got, GOLDEN["facts"]) if g != w]
     assert not bad, bad[:3]
 
@@ -104,7 +111,7 @@ def test_every_combination_of_facts_gives_the_same_verdict_as_before():
 def test_every_disk_the_brain_classifies_gets_the_verdict_it_got_before():
     d = brain()
     got = [d.classify(disk, fails, write_slow=slow) for disk, fails, slow in disk_cases()]
-    bad = [(c, sig(g), w) for c, g, w in zip(disk_cases(), got, GOLDEN["disks"]) if sig(g) != w]
+    bad = [(c, sig_before(g), w) for c, g, w in zip(disk_cases(), got, GOLDEN["disks"]) if sig_before(g) != w]
     assert not bad, bad[:3]
     for g in got:                                                      # the words come with the verdict, the table's own
         for k in ("reason", "source_reason", "target_reason"):
@@ -145,9 +152,10 @@ def test_a_table_without_the_not_checked_row_does_not_load(tmp_path):
 def test_the_tables_sentences_are_the_ones_the_screens_say():
     from server.disks import disk_rule
     assert disk_rule.REASON_HE == SENTENCES
-    assert disk_rule.RED == ("smart_fail", "sata_issue", "write_slow") and disk_rule.YELLOW == ("failed_last", "write_incomplete")
+    assert disk_rule.RED == ("smart_fail", "sata_issue", "write_slow") and disk_rule.YELLOW == ("failed_last", "cable_failed", "write_incomplete")
     assert disk_rule.REASON_SHORT_HE == {"smart_fail": "SMART נכשל", "sata_issue": "בעיית SATA", "write_slow": "איטי בבדיקת הכתיבה",
-                                         "failed_last": "נכשל בשיכפול הקודם", "write_incomplete": "כתיבה לא הושלמה"}
+                                         "failed_last": "נכשל בשיכפול הקודם", "cable_failed": "חיבור לא תקין",
+                                         "write_incomplete": "כתיבה לא הושלמה"}
 
 
 # --- 2. the brain records the decision, with its evidence -----------------------------------------------------------

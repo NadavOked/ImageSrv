@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import sqlite3
+from server.db import SqlConnection
 
 from server.brain import precheck
 from server.disks import drawer_slots, smart_history
@@ -56,7 +57,7 @@ def link_state(gbps: float | None, max_gbps: float | None) -> str:
     return "ok"
 
 
-def crc_baseline(conn: sqlite3.Connection, serial: str | None) -> int | None:
+def crc_baseline(conn: SqlConnection, serial: str | None) -> int | None:
     """מונה ה-CRC של הדיסק בשער ה-SMART של הסבב האחרון שלו (`disk_events`),
     או None כשאין סבב קודם שבו המונה נקרא באמת."""
     if not serial:
@@ -71,7 +72,7 @@ def crc_baseline(conn: sqlite3.Connection, serial: str | None) -> int | None:
     return row["crc"] if row is not None else None
 
 
-def drawer_fields(conn: sqlite3.Connection, disk: dict, mac: str | None = None) -> dict:
+def drawer_fields(conn: SqlConnection, disk: dict, mac: str | None = None) -> dict:
     """השדות של #432 למגירה אחת ב-`drawer_list`, מרשומת הדיסק של ה-hello.
     `mac` — המכונה, ל-#1844 (מה שנלמד על החיבור); None = לא נשאל על החיבור."""
     gbps, max_gbps = _num(disk.get("link_gbps")), _num(disk.get("link_max_gbps"))
@@ -98,7 +99,7 @@ def drawer_fields(conn: sqlite3.Connection, disk: dict, mac: str | None = None) 
     }
 
 
-def _portcap(conn: sqlite3.Connection, disk: dict, mac: str | None, gbps: float | None, max_gbps: float | None) -> dict:
+def _portcap(conn: SqlConnection, disk: dict, mac: str | None, gbps: float | None, max_gbps: float | None) -> dict:
     """`port_cap_gbps` / `port_cap_known` / `port_cap_basis` / `port_drop` (`learn/portcap.py`). `None` = לא נשפט (אין MAC או חיבור, אין
     נתון, או שהשאילתה נכשלה): לא "תקין" ולא "ירידה". לעולם אינו זורק אל ה-hello."""
     out = {"port_cap_gbps": None, "port_cap_known": None, "port_cap_basis": None, "port_drop": None}
@@ -113,14 +114,14 @@ def _portcap(conn: sqlite3.Connection, disk: dict, mac: str | None, gbps: float 
             "port_cap_basis": cap["basis"], "port_drop": portcap.drop(cap, gbps, max_gbps)}
 
 
-def _ports(conn: sqlite3.Connection, disk: dict, mac: str | None) -> dict:
+def _ports(conn: SqlConnection, disk: dict, mac: str | None) -> dict:
     got = learn_ports.verdict(conn, mac, disk.get("port"), disk.get("serial") or None)
     return {"port_suspect": got["port_suspect"], "port_disks": got["port_disks"],
             "disk_suspect": got["disk_suspect"], "disk_ports": got["disk_ports"],
             "learned_he": got["text_he"]}
 
 
-def _learned(conn: sqlite3.Connection, disk: dict) -> dict:
+def _learned(conn: SqlConnection, disk: dict) -> dict:
     # #2706 (הוכרע): רק מה-hello. `smart_attrs: null` (לא נקרא מאז שהמכונה עלתה) = (None, None),
     # "לא נקרא עכשיו" -- גם כש-`smart_history` מחזיק שתי תמונות. תצוגת הקונסולה (`describe`, #2705)
     # מראה את התמונה של הסבב עם התאריך שלה; אזהרת הגל אינה מקבלת אותה כקריאה של עכשיו.

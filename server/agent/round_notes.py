@@ -18,10 +18,9 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 import threading
 
-from server.db import journal
+from server.db import journal, SqlConnection
 
 log = logging.getLogger("imagesrv.round_notes")
 
@@ -57,12 +56,12 @@ def well_formed(raw: object) -> list[dict]:
     return out
 
 
-def _written(conn: sqlite3.Connection, event: str, session_id: str, mac: str, text: str) -> bool:
+def _written(conn: SqlConnection, event: str, session_id: str, mac: str, text: str) -> bool:
     return conn.execute("SELECT 1 FROM journal WHERE event = ? AND round_id = ? AND machine = ? AND detail = ?"
                         " LIMIT 1", (event, session_id, mac, text)).fetchone() is not None
 
 
-def record(conn: sqlite3.Connection, session_id: str, mac: str, raw: object) -> int:
+def record(conn: SqlConnection, session_id: str, mac: str, raw: object) -> int:
     """כמה משפטים חדשים נכנסו ליומן. לעולם אינו זורק."""
     try:
         written = 0

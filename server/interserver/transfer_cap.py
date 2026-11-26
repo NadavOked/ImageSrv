@@ -31,11 +31,10 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 import time
 from typing import Callable
 
-from server.db import get_setting
+from server.db import get_setting, SqlConnection
 
 log = logging.getLogger("imagesrv.transfer_cap")
 
@@ -63,7 +62,7 @@ def parse(raw: object) -> int | None:
     return value if 0 <= value <= MAXIMUM else None
 
 
-def cap_mbps(conn: sqlite3.Connection) -> int:
+def cap_mbps(conn: SqlConnection) -> int:
     """התקרה שבתוקף ב-Mb/s; 0 = ללא הגבלה. פגומה = ברירת המחדל **עם לוג**."""
     raw = get_setting(conn, SETTING)
     if raw is None:
@@ -76,7 +75,7 @@ def cap_mbps(conn: sqlite3.Connection) -> int:
     return value
 
 
-def bytes_per_second(conn: sqlite3.Connection) -> int | None:
+def bytes_per_second(conn: SqlConnection) -> int | None:
     """התקרה בבייטים לשנייה; None = ללא הגבלה."""
     mbps = cap_mbps(conn)
     return mbps * BYTES_PER_MBPS if mbps > 0 else None
@@ -112,6 +111,6 @@ class Pacer:
             self._t0, self._b0 = now, sent          # מפגרת — בלי אשראי
 
 
-def pacer(conn: sqlite3.Connection, **kw) -> Pacer:
+def pacer(conn: SqlConnection, **kw) -> Pacer:
     """Pacer שקורא את ההגדרה מ-`conn` (חיבור התהליכון של ההעברה)."""
     return Pacer(lambda: bytes_per_second(conn), **kw)

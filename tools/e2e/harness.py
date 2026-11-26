@@ -382,7 +382,9 @@ def start_server(workdir: Path) -> tuple[subprocess.Popen, Path, Path]:
     log = (workdir / "server.log").open("wb")
     # #3173: ה-`chunkcast` שנבנה (`build_chunkcast`) ראשון ב-PATH של השרת, והקובץ שבו
     # השולח המדומה רושם את מה שהמנוע הריץ.
-    env = dict(os.environ, PATH=os.pathsep.join([str(workdir / "bin"), os.environ.get("PATH", "")]))
+    env = dict(os.environ, PATH=os.pathsep.join([str(workdir / "bin"), os.environ.get("PATH", "")]),
+               TMPDIR=str(workdir), PYTHONDONTWRITEBYTECODE="1",
+               IMAGESRV_SIM_ETC=str(workdir / "etc" / "imagesrv"))
     env[SIMSEND_ENV] = str(sends_path(workdir))
     server = subprocess.Popen(
         # הכרעת נדב 11/10: השרת מסרב לכיתות כש-`capabilities.classrooms()`
@@ -391,11 +393,13 @@ def start_server(workdir: Path) -> tuple[subprocess.Popen, Path, Path]:
         # אין נתיב במנוע החתיכות (#3173), והסירוב הוא של הסבב, לא רק של המהדורה.
         # #3173: ו-`simsend` במקום `chunkcast send` — המנוע אמיתי, הפקודה אינה משדרת.
         [sys.executable, "-c",
-         ("import server.core.capabilities as c; c.CLASSROOMS = True; "
+         ("import os; from pathlib import Path; "
+          "import server.core.capabilities as c; c.CLASSROOMS = True; "
           "import tools.e2e.simsend as s; s.install(); "
-          "from server.main import main; main()"),
+          "from server.main import main; main(simulation_config_dir=Path(os.environ['IMAGESRV_SIM_ETC']))"),
          "--server-url", BASE,
          "--data-dir", str(data_dir), "--images", str(images),
+         "--tftp-root", str(workdir / "tftp"), "--boot-dir", str(workdir / "boot"),
          "--host", "127.0.0.1", "--port", str(PORT),
          # #731: פורט נפרד לקונסולה, כמו בייצור.
          "--console-port", str(CONSOLE_PORT), "--boot-port", str(BOOT_PORT),
@@ -409,7 +413,7 @@ def start_server(workdir: Path) -> tuple[subprocess.Popen, Path, Path]:
          # המחדל — מנוע החתיכות — והשולח המדומה הוא `simsend` (למעלה).
          # #855: חכירות לכל מכונה מדומה — השומר פעיל, הקובץ הוא של הסימולציה.
          "--dhcp-leases", str(leases)],
-        cwd=str(REPO), stdout=log, stderr=subprocess.STDOUT, env=env,
+        cwd=str(REPO), stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, env=env,
     )
     return server, data_dir, images
 

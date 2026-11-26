@@ -77,9 +77,10 @@ def probe_kbps(probes: list[int | None], floor_mbs: int) -> int:
     """טהור. `--write-kbps` מבדיקת הכתיבה לבדה: הבדיקה האיטית × ``MARGIN``, לא מתחת לרצפה (MB/s); בדיקה שלא נמדדה (``None``)
     או שאין בדיקה כלל = הרצפה. `ChunkEngine._write_base` והחיזוי של K3 (`brain.waveeta`, #3599: `--rate-max` הוא פי ``RATE_MAX_FACTOR``
     מזה) קוראים את אותו מספר מכאן."""
-    if not probes or any(v is None for v in probes):
+    measured = [v for v in probes if v is not None]
+    if not probes or len(measured) != len(probes):
         return floor_mbs * KBPS_PER_MBS
-    return max(floor_mbs, int(min(probes) * MARGIN)) * KBPS_PER_MBS
+    return max(floor_mbs, int(min(measured) * MARGIN)) * KBPS_PER_MBS
 
 
 def left_out(measured: list[tuple[str, int | None]], history: dict[str, tuple[int, str]],

@@ -52,8 +52,14 @@ class FakeStick:
         self.open_error: Exception | None = None
         self.write_error: Exception | None = None
         self.corrupt_after_write: str | None = None
+        self.virt: str | None = "none"      # #2693: what systemd-detect-virt says -- a metal server, unless a test says otherwise
+        self.scans = 0
+
+    def platform(self):
+        return self.virt
 
     def scan(self):
+        self.scans += 1
         return self.scan_result
 
     @contextmanager
@@ -93,7 +99,7 @@ def env(tmp_path: Path, images_root: Path, clock):
     fake = FakeStick(root)
     (root / "settings.json").write_text('{"cloner_beep": true}', encoding="utf-8")
     app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
-                     usb_hooks={"scan": fake.scan, "open": fake.open})
+                     usb_hooks={"scan": fake.scan, "open": fake.open, "virt": fake.platform})
     conn = app.state.ctx.conn
     users.create(conn, "noc", "admin-pass-123", "admin", by="test", is_builtin=True, check_policy=False)
     users.create(conn, "labtech", "deploy-pass-1", "deploy", by="test", check_policy=False)
@@ -408,3 +414,40 @@ def test_the_download_row_of_the_settings_page_now_lives_here_and_the_api_stays(
     """#1914's /usb-clone* paths are unchanged: the page only moved the button."""
     assert env["admin"].get("/api/console/usb-clone").status_code == 200
     assert records.REPORTS_DIR == "reports" and knowledge.SYNC_DIR == "server-sync"
+
+
+# --- #2693 (Nadav 23/11): the stick is for a metal server and ESXi; on Hyper-V the page says so ----------------------
+
+
+def test_on_hyper_v_the_page_says_it_is_not_supported_and_scans_and_opens_nothing(env):
+    env["fake"].virt = "microsoft"
+    got = get(env)
+    assert got["state"] == "unsupported" and got["reason"] == "ב-Hyper-V אין תמיכה במקל — להעלות דרך הקונסולה"
+    assert got["device"] is None and got["plan"] is None and got["rows"] == [] and got["read_error"] is None
+    assert env["fake"].scans == 0 and env["fake"].opens == [], "a SCSI disk is not looked at, let alone opened"
+
+
+@pytest.mark.parametrize("virt", ["none", "vmware", "kvm", None])
+def test_anywhere_else_the_scan_decides_and_an_undetected_platform_is_not_called_hyper_v(env, virt):
+    """Metal ("none"), ESXi ("vmware"), another VM, and "systemd-detect-virt could not run" (None): no guessing."""
+    env["fake"].virt = virt
+    got = get(env)
+    assert got["state"] == "connected" and got["reason"] == "" and env["fake"].scans == 1
+
+
+def test_a_sync_on_hyper_v_is_refused_by_name_before_the_scan(env):
+    plan = get(env)["plan"]          # the page was drawn on a metal server; the same server is then seen as Hyper-V
+    env["fake"].virt = "microsoft"
+    scans = env["fake"].scans
+    r = env["admin"].post(BASE + "/sync", json={"digest": plan["digest"], "confirm": True})
+    assert r.status_code == 409 and r.json()["code"] == "usb_stick_unsupported"
+    assert "Hyper-V" in r.json()["detail"] and env["fake"].scans == scans and env["fake"].opens == [False]
+
+
+def test_the_real_hooks_ask_systemd_detect_virt_and_only_microsoft_is_hyper_v(monkeypatch):
+    from server.vm import vmnet
+    assert device.default_hooks()["virt"] is device.detect_virt
+    for said, refused in (("microsoft", True), ("vmware", False), ("none", False), ("kvm", False), (None, False)):
+        monkeypatch.setattr(vmnet, "detect_virt", lambda said=said: said)
+        assert bool(device.platform_refusal(device.detect_virt)) is refused, said
+

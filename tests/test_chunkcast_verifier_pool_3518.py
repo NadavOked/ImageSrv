@@ -79,7 +79,7 @@ def line(run, word):
     return {k: int(v) for k, v in (pair.split("=", 1) for pair in found[0].split()[1:])}
 
 
-def one_pass(cc, image, tmp_path, *, slow_so=None, slow_ms=0, threads=None, write_kbps, recv_extra=(), send_extra=()):
+def one_pass(cc, image, tmp_path, *, slow_so=None, slow_ms=0, threads=None, write_kbps, send_extra=()):
     """One sender, one receiver, one target. Returns (receiver, sender, target, state)."""
     env = dict(C.ENV)
     if slow_so:
@@ -91,10 +91,14 @@ def one_pass(cc, image, tmp_path, *, slow_so=None, slow_ms=0, threads=None, writ
     # stalls a write makes the writer's own queue overflow (`skipped <drive>`) -- a different drop, with another counter.
     shm = Path("/dev/shm")
     target = image.blank((shm if shm.is_dir() and os.access(shm, os.W_OK) else tmp_path) / f"pool3518-{os.getpid()}-{session}.disk")
+    control = C.free_port()
+    while control == port:
+        control = C.free_port()
+    feedback = ("--control-port", str(control))
     r = C.recv(cc, image, [target], f"127.0.0.1:{port}", session, state, tag=tmp_path / "recv", env=env,
-               extra=(*b3_args(cc, image, tmp_path), *recv_extra))
+               extra=(*b3_args(cc, image, tmp_path), *feedback))
     s = C.send(cc, image, f"127.0.0.1:{port}", session, tag=tmp_path / "send", write_kbps=write_kbps,
-               extra=send_extra)
+               extra=(*feedback, *send_extra))
     try:
         assert s.wait(120) == 0, s.log()
         assert r.wait(120) == 0, r.log()
@@ -218,11 +222,8 @@ def rate_lines(run):
 def test_a_slow_verifier_makes_the_sender_slow_down_before_the_queue_and_the_slots_run_out(cc, img, tmp_path, slow):
     """One verifier (60 ms a chunk) against a chunk every 42 ms at the start: the queue's depth is in the feedback's
     backlog, the sender's rate falls (`decrease`), and not one chunk is dropped for it."""
-    control = C.free_port()
     r, s, _t, _st = one_pass(cc, img, tmp_path, slow_so=slow, slow_ms=60, threads=1, write_kbps=START,
-                             recv_extra=("--control-port", str(control)),
-                             send_extra=("--control-port", str(control), "--rate-min", str(MIN),
-                                         "--rate-max", str(MAX)))
+                             send_extra=("--rate-min", str(MIN), "--rate-max", str(MAX)))
     seen = rate_lines(s)
     assert any(reason == "decrease" for _, reason in seen) and min(rate for rate, _ in seen) < START, s.log()
     assert line(r, "verifier")["threads"] == 1, r.log()

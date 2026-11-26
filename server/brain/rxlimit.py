@@ -83,6 +83,10 @@ def _num(v) -> float | None:
 _PAUSE_SETTING = {1.0: "on", 0.0: "off"}
 
 
+def _pause(value: float | None) -> str:
+    return "unmeasured" if value is None else _PAUSE_SETTING.get(value, "unmeasured")
+
+
 def _say(v) -> str:
     return "unmeasured" if v is None else f"{v:g}" if isinstance(v, float) else str(v)
 
@@ -163,7 +167,7 @@ def diagnose(drops: dict | None, wave: dict | None, senses: dict | None, cpu: di
           f"rx_bytes={_whole(w.get('rx_bytes'))}", f"ring_rx={_whole(w.get('ring_rx'))}",
           f"ring_rx_max={_whole(w.get('ring_rx_max'))}",
           *(f"{k}={_whole(w.get(k))}" for k in ("tx_xon", "tx_xoff", "rx_xon", "rx_xoff")),
-          *(f"{k}={_PAUSE_SETTING.get(_num(w.get(k)), 'unmeasured')}" for k in ("pause_rx", "pause_tx")),
+          *(f"{k}={_pause(_num(w.get(k)))}" for k in ("pause_rx", "pause_tx")),
           f"cpu_busy_min_core={_say(min_core)}",
           f"softirq_max={_say(_num(w.get('softirq_max')))}", f"net_rx_ps_max={_say(_num(w.get('net_rx_ps_max')))}",
           f"disk_util_max={_say(util)}", f"throttle_delta={_say(throttle)}", f"cpu_busy_pct={_say(_int(c.get('busy_pct')))}",

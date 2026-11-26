@@ -36,7 +36,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
@@ -48,6 +48,9 @@ from server.library import chunkformat
 from server.library.images import streamed_partitions
 from server.core import ports as product_ports   # #3871
 from server.rounds import chunklog, direct
+
+if TYPE_CHECKING:
+    from server.rounds.chunksend import ChunkEngine
 
 log = logging.getLogger("imagesrv.directchunk")
 
@@ -384,7 +387,7 @@ class DirectChunks:
                  clock: Callable[[], float] = time.monotonic, poll_s: float = 0.5):
         self.conn, self.store = conn, LiveStore(root)
         self.engine_on, self.silence, self.clock, self.poll_s = engine_on, silence, clock, poll_s
-        self.engine = None                      # ה-`ChunkEngine`; `server.app` מחבר אותו אחרי שנבנה
+        self.engine: ChunkEngine | None = None  # ה-`ChunkEngine`; `server.app` מחבר אותו אחרי שנבנה
         self.index_max, self.head_max = INDEX_MAX, HEAD_MAX     # תקרות ההעלאה, בבתים
         self.max_uploads = MAX_UPLOADS
         self._uploads = 0                       # העלאות שהגוף שלהן נקרא עכשיו
@@ -447,7 +450,7 @@ class DirectChunks:
         return ("מחשב הבנייה לא העלה אינדקס חתיכות למחיצות שלו — הסוכן שלו ישן."
                 " יש לעדכן את אימג' הסוכן ולהפיץ שוב. דבר לא שודר")
 
-    def runner(self, inner: Callable[[list[str]], object] | None) -> Callable[[list[str]], object]:
+    def runner(self, inner: Callable[[list[str]], chunklog.SendProcess] | None) -> Callable[[list[str]], chunklog.SendProcess]:
         """ה-`runner` של המנוע: פקודה על קובץ של אימג' חי הופכת להזמנה למקור; כל פקודה אחרת רצה כאן.
 
         **ברירת המחדל של "כאן" היא `chunklog.run_process`**, התהליך שמנוע החתיכות כותב בו את הלוג שהוא עצמו קורא
@@ -455,7 +458,7 @@ class DirectChunks:
         הפלט של `chunkcast send` נכתב ל-`partition_log` והמנוע קרא קובץ אחר (#3340)."""
         local = inner or chunklog.run_process
 
-        def run(cmd: list[str]):
+        def run(cmd: list[str]) -> chunklog.SendProcess:
             path = Path(cmd[cmd.index("--file") + 1])
             if path.parent.parent != self.store.root:
                 return local(cmd)
@@ -513,8 +516,8 @@ class DirectChunks:
             # the frame servers answer only a request that carries it (the review of #3216). Not a log line, not an argv
             "serve_token": self.serve_token(image_id),
             "order": self.order_for(image_id),
-            "done": bool(ours and status["state"] == "done"),
-            "error": status["error"] if ours else None}}
+            "done": bool(ours and status is not None and status["state"] == "done"),
+            "error": status["error"] if ours and status is not None else None}}
 
     def order_for(self, image_id: str) -> dict | None:
         """ההזמנה הפתוחה של האימג' החי, כפי שהמקור רואה אותה -- או None. מי ששואל חי: השאלה היא דופק."""
@@ -527,7 +530,10 @@ class DirectChunks:
 
     def serve_port(self) -> int:
         """הבסיס של שרתי הפריימים במחשב הבנייה (`chunkcast serve`): המחיצה ה-k שנשלחת ב-בסיס+k (`serve_ports`, #3871)."""
-        return self.engine.port + SERVE_OFFSET
+        engine = self.engine
+        if engine is None:
+            raise RuntimeError("the chunk engine is not attached yet (`server.app` attaches it after it is built)")
+        return engine.port + SERVE_OFFSET
 
     def serve_token(self, image_id: str) -> str:
         """האסימון של הסבב של האימג' החי הזה: אקראי, נוצר בבקשה הראשונה, ואותו אסימון לכל ה-hello של הסבב.
@@ -611,7 +617,7 @@ class DirectChunks:
                 if manifest is not None else None)
         found = _RANGE.fullmatch(wanted.strip()) if isinstance(wanted, str) else None
         index = self.store.index(image_id, part["index"]) if part is not None else None
-        if index is None or found is None or int(found[1]) > int(found[2]):
+        if part is None or index is None or found is None or int(found[1]) > int(found[2]):
             return _error(404, "a direct send keeps no partition file on the server -- only its head frame, and"
                                " whole chunks by an exact Range, which the build machine reads", "no_file")
         first, last = int(found[1]), int(found[2])

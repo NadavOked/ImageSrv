@@ -14,12 +14,21 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
+from functools import partial
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from fastapi.testclient import TestClient
 
 import server.app
+import server.main
+from server.console import users
+from server.core import capabilities
+from server.net import deploy_net, dhcp_host, known_fw
 from server.rounds import chunklog
 from tools.e2e import harness, simsend
 from tools.e2e.machines import SimMachine
@@ -86,7 +95,7 @@ def test_the_server_runs_on_the_default_engine_with_no_simulated_udpcast(tmp_pat
     assert "--sender-simulate" not in argv
     assert not [a for a in argv if "udpcast" in a or "stream_engine" in a]
     bootstrap = argv[argv.index("-c") + 1]
-    assert "simsend" in bootstrap and bootstrap.index("s.install()") < bootstrap.index("main()")
+    assert "simsend" in bootstrap and bootstrap.index("s.install()") < bootstrap.index("from server.main import main; main(")
 
 
 def test_the_server_finds_the_built_chunkcast_first_and_knows_where_simsend_records(tmp_path, monkeypatch):
@@ -95,6 +104,87 @@ def test_the_server_finds_the_built_chunkcast_first_and_knows_where_simsend_reco
     assert env["PATH"].split(__import__("os").pathsep)[0] == str(tmp_path / "bin")
     assert env[harness.SIMSEND_ENV] == str(harness.sends_path(tmp_path))
     assert harness.SIMSEND_ENV == simsend.ENV
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_simulation_registration_keeps_host_etc_untouched(tmp_path, monkeypatch, existing):
+    """#3953: ההפעלה דרך start_server והרישום אינם נוגעים בנתיב המארח."""
+    host_etc = tmp_path / "host" / "etc" / "imagesrv"
+    hosts = host_etc / "known-macs"
+    rules = host_etc / "nft.d" / "known-macs.nft"
+    if existing:
+        rules.parent.mkdir(parents=True)
+        hosts.write_bytes(b"host-dhcp\n")
+        rules.write_bytes(b"host-firewall\n")
+
+    commands = []
+
+    def systemctl(action, unit):
+        commands.append(["systemctl", action, unit])
+
+    def nft(cmd, **kwargs):
+        commands.append(cmd)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(dhcp_host, "apply_known_macs",
+                        partial(dhcp_host.apply_known_macs, conf_path=hosts))
+    monkeypatch.setattr(dhcp_host, "_systemctl", systemctl)
+    monkeypatch.setattr(known_fw, "apply", partial(known_fw.apply, conf_path=rules, run=nft))
+    monkeypatch.setattr(deploy_net, "firewall_gate", lambda: commands.append(["nft", "list", "ruleset"]))
+    monkeypatch.setattr(deploy_net, "firewall_installed", lambda: False)
+    monkeypatch.setattr(server.main, "_interface_for", lambda url: None)
+    monkeypatch.setattr(server.main, "sys", SimpleNamespace(**{**vars(sys), "platform": "linux"}))
+    monkeypatch.setattr(server.main.serverlog, "configure", lambda: None)
+    monkeypatch.setattr(harness, "_agent_openers", {})
+    workdir = tmp_path / "simulation"
+    argv, kw = _start(workdir, monkeypatch)
+    kw["stdout"].close()
+    monkeypatch.setattr(sys, "argv", ["server.main", *argv[3:]])
+    for key, value in kw["env"].items():
+        if os.environ.get(key) != value:
+            monkeypatch.setenv(key, value)
+    monkeypatch.setattr(capabilities, "CLASSROOMS", True)
+    monkeypatch.setattr(simsend, "install", lambda: None)
+
+    class RuntimeConfigured(Exception):
+        pass
+
+    create_runtime = server.app.create_runtime
+    startup = {}
+
+    def capture_runtime(*args, **kwargs):
+        startup.update(args=args, kwargs=kwargs)
+        raise RuntimeConfigured
+
+    monkeypatch.setattr(server.app, "create_runtime", capture_runtime)
+    with pytest.raises(RuntimeConfigured):
+        exec(argv[2], {})
+
+    rt = create_runtime(*startup["args"], known_macs_hooks=startup["kwargs"]["known_macs_hooks"])
+    try:
+        users.create(rt.conn, **harness.ADMIN, role="admin", by="sim")
+        client = TestClient(server.app.create_console_app(rt))
+        login = client.post("/api/console/login", json=harness.ADMIN)
+        assert login.status_code == 200, login.text
+        result = client.post("/api/console/machines", json={
+            "mac": harness.BUILD_MAC, "name": "BUILD-PC", "group_id": "grp_BUILD",
+        })
+        assert result.status_code == 200, result.text
+        if existing:
+            assert hosts.read_bytes() == b"host-dhcp\n"
+            assert rules.read_bytes() == b"host-firewall\n"
+        else:
+            assert not host_etc.exists()
+        assert commands == []
+        assert result.json()["network"] == {"applied": True, "error": None}
+        for flag in ("sync_dnsmasq", "dnsmasq_dropin", "vm_host", "apply_timezone", "apply_timesync"):
+            assert startup["kwargs"][flag] is False, flag
+        assert startup["kwargs"]["grub_password_file"] is None
+        simulated = workdir / "etc" / "imagesrv"
+        assert harness.BUILD_MAC in (simulated / "known-macs").read_text(encoding="utf-8")
+        assert harness.BUILD_MAC in (simulated / "nft.d" / "known-macs.nft").read_text(encoding="utf-8")
+    finally:
+        rt.conn.close()
 
 
 # --- the simulated agent ---------------------------------------------------------------------------
