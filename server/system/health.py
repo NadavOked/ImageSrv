@@ -304,7 +304,9 @@ UNSYNC_WHY = {"no_gateway": "בשרת אין שער ברירת מחדל — שר
 def _sample_limit_s(sample: dict | None) -> int | None:
     """#2800: how old the freshest sample may be before the row stops being green: two poll
     intervals and a margin for the reply. None = the poll interval is not known."""
-    poll = sample.get("poll_s") if isinstance(sample, dict) else None
+    if not isinstance(sample, dict):
+        return None
+    poll = sample.get("poll_s")
     return 2 * poll + 10 if isinstance(poll, int) and isinstance(sample.get("age_s"), int) else None
 
 
@@ -333,7 +335,7 @@ def time_sync_check(status: dict | str, legacy_sync: str | None = None) -> dict:
         # row stays as it was (the tracking figure above).
         sample = status.get("last_sample")
         limit = _sample_limit_s(sample)
-        if limit is not None and sample["age_s"] > limit:
+        if limit is not None and isinstance(sample, dict) and sample["age_s"] > limit:
             stale = True
             parts.append(f"אין דגימה טרייה מ-{sample['server']}: האחרונה לפני {_ago_he(sample['age_s'])}")
     else:
@@ -505,14 +507,16 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     # לא כשל: השורה אומרת מה לעשות, ובדיקות ה-PXE שתלויות בה (TFTP,
     # dnsmasq, השרת בכתובת ההפצה) הופכות ל"לא רלוונטי עדיין" ולא לאדום
     # שמכסה על הבעיה האמיתית. כשהיא מוגדרת — אין שורה, והבדיקות כרגיל.
-    deploy_state = hooks.get("deploy")() if hooks.get("deploy") else None
+    deploy_hook = hooks.get("deploy")
+    deploy_state = deploy_hook() if deploy_hook else None
     unconfigured = deploy_state is not None and not deploy_state.configured
     if unconfigured:
         results.append(check("deploy_net", "הגדר את רשת ההפצה", "warn",
                              deploy_state.public()["hint"]))
 
     # #1088: כתובת כרטיס השרתים — DHCP ומתי החכירה פגה, או סטטי.
-    servers_nic = hooks.get("servers_nic")() if hooks.get("servers_nic") else None
+    servers_nic_hook = hooks.get("servers_nic")
+    servers_nic = servers_nic_hook() if servers_nic_hook else None
     if servers_nic is not None:
         results.append(check("servers_nic", "כתובת השרתים", *servers_nic))
 
@@ -680,7 +684,7 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
         results.append(check("deploy_nic", "כרטיס ההפצה", "bad",
                              f"כרטיס ההפצה {deploy_if} לא קיים במערכת (יש: "
                              f"{', '.join(names)}) — DHCP, TFTP וחומת האש מפנים "
-                             "לשם שאינו קיים; בחרו כרטיס בלשונית רשת הפצה"))
+                             f"לשם שאינו קיים; בעמוד הרשת לחצו על \"{deploy_net.SETUP_BUTTON}\" ובחרו כרטיס"))
     elif configured_if:
         results.append(check("deploy_nic", "כרטיס ההפצה", "ok",
                              f"{configured_if} קיים במערכת"))
@@ -871,7 +875,8 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
     dhcp_flags = _dhcp_flags(ctx)
     # בדיקת יום ראשון 21/11: לפני שרשת ההפצה הוגדרה, TFTP ו-DHCP הם "לא ישים" — כמו ב-`collect`
     # (#1088), ולא "תקלה". אחרת כרטיס "שירותים" בסקירה ודף השירותים צבעו אדום את מה שהבריאות קוראת לו לא ישים.
-    deploy_state = hooks.get("deploy")() if hooks.get("deploy") else None
+    deploy_hook = hooks.get("deploy")
+    deploy_state = deploy_hook() if deploy_hook else None
     unconfigured = deploy_state is not None and not deploy_state.configured
 
     # TFTP 69 (#1013): המתג נשמר כ-`port:tftp` ומוחל דרך ה-render של

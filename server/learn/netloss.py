@@ -28,12 +28,12 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import statistics
+from typing import TypeGuard
 
 from server.rounds import drive_rates
 from server.learn import server_io
-from server.db import journal
+from server.db import journal, SqlConnection
 from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.learn_netloss")
@@ -58,6 +58,10 @@ CHUNK_FLOOR_PER_GB = 1.0
 #: #3164: המונים של הקרנל והכרטיס של המקלט עצמו. `inerrors` אינו כאן: הוא כולל את `rcvbuf` (ספירה כפולה).
 LOCAL_FIELDS = ("rcvbuf", "softnet", "nic")
 GB = 10 ** 9
+
+
+def _count(value: object) -> TypeGuard[int]:
+    return drive_rates._count(value)
 
 JUMP_HE = "האבדן ברשת ההפצה קפץ — סוויץ'/כבל/IGMP"
 
@@ -84,29 +88,32 @@ def _load_chunk(row, past: dict, drops, delivered, seen: dict) -> dict | None:
     if "send_done" not in marks or not macs or not isinstance(drops, dict) \
             or not isinstance(delivered, dict):
         return None                        # לא הסתיים, או אין מה לקרוא — אינו מדידה
-    abandoned, gb, local = 0, 0.0, 0
+    abandoned, gb = 0, 0.0
+    local: int | None = 0
     for mac in macs:
         got, wrote = drops.get(mac), delivered.get(mac)
-        if not isinstance(got, dict) or not drive_rates._count(got.get("abandoned")) \
+        if not isinstance(got, dict) or not _count(got.get("abandoned")) \
                 or not isinstance(wrote, dict):
             return None
         done, written = wrote.get("done"), wrote.get("written_bytes")
-        if not drive_rates._count(done) or done <= 0 or not drive_rates._count(written):
+        if not _count(done) or done <= 0 or not _count(written):
             return None
         abandoned += got["abandoned"]
         gb += written / done / GB          # מה שהמחשב קיבל: כל מגירה כתבה אותו זרם
         counts = [got.get(field) for field in LOCAL_FIELDS]
-        local = None if local is None or not all(map(drive_rates._count, counts)) else local + sum(counts)
+        known = [c for c in counts if _count(c)]
+        local = None if local is None or len(known) != len(counts) else local + sum(known)
     if gb <= 0:
         return None
-    link = past.get("link") if isinstance(past.get("link"), dict) else {}
+    raw_link = past.get("link")
+    link = raw_link if isinstance(raw_link, dict) else {}
     return {"session_id": row["session_id"], "kind": CHUNK, "gap": CHUNK_GAP in marks,
             "interface": link.get("interface"), "drawers": len(roster),
             "rate": past.get("max_bitrate"), "loss": abandoned / gb, "abandoned": abandoned,
             "local": None if local is None else local / gb}
 
 
-def _seen(conn: sqlite3.Connection, ids: list[str]) -> dict:
+def _seen(conn: SqlConnection, ids: list[str]) -> dict:
     """session_id ← אילו מאירועי היומן שגל חתיכות נשען עליהם נרשמו לו. שאילתה אחת לכל הגלים."""
     if not ids:
         return {}
@@ -118,7 +125,7 @@ def _seen(conn: sqlite3.Connection, ids: list[str]) -> dict:
     return out
 
 
-def _loaded(conn: sqlite3.Connection) -> list[dict]:
+def _loaded(conn: SqlConnection) -> list[dict]:
     """הגלים האחרונים שהם מדידה, מהחדש לישן."""
     rows = conn.execute(
         "SELECT session_id, decision, drops, delivered FROM wave_rates"
@@ -140,7 +147,7 @@ def _local_note(got: dict) -> str:
     return f" · המקלטים עצמם זרקו {got['local']:.2f}/GB" + ("" if base is None else f" (בסיס {base:.2f})")
 
 
-def assess(conn: sqlite3.Connection, session_id: str) -> dict | None:
+def assess(conn: SqlConnection, session_id: str) -> dict | None:
     """הגל `session_id` מול הבסיס שלו. None — הגל אינו מדידה (ישיר, המונה לא
     נקרא, אין שורה). אחרת `{"session_id", "kind", "interface", "drawers", "rate", "loss",
     "baseline", "waves", "local", "local_baseline", "state"}` — `state`: `jump` / `ok` /
@@ -156,7 +163,7 @@ def assess(conn: sqlite3.Connection, session_id: str) -> dict | None:
     if me["gap"]:                                  # #3164, #3141: ניתוק — לא מאשימים ואין בסיס
         return {**me, **none, "state": "net_gap"}
     later = True
-    same = []
+    same: list[dict] = []
     for w in loaded:                       # מהחדש לישן — רק הגלים שלפני `me`
         if w["session_id"] == session_id:
             later = False
@@ -176,7 +183,7 @@ def assess(conn: sqlite3.Connection, session_id: str) -> dict | None:
     return out
 
 
-def _note_for_brain(conn: sqlite3.Connection, session_id: str, got: dict) -> None:
+def _note_for_brain(conn: SqlConnection, session_id: str, got: dict) -> None:
     """B58 (#3471): LR16 אל המוח, צל -- שורה אחת לגל. כישלון כאן אינו נוגע ביומן ובמסך הבריאות שלמטה."""
     try:
         from server.brain import sendlimit               # noqa: PLC0415
@@ -185,7 +192,7 @@ def _note_for_brain(conn: sqlite3.Connection, session_id: str, got: dict) -> Non
         log.exception("net loss note for the brain of %s failed", session_id)
 
 
-def _evaluate(conn: sqlite3.Connection, session_id: str) -> dict | None:
+def _evaluate(conn: SqlConnection, session_id: str) -> dict | None:
     try:
         got = assess(conn, session_id)
         if got is None:
@@ -206,7 +213,7 @@ def _evaluate(conn: sqlite3.Connection, session_id: str) -> dict | None:
         return None
 
 
-def evaluate_chunk(conn: sqlite3.Connection, session_id: str) -> dict | None:
+def evaluate_chunk(conn: SqlConnection, session_id: str) -> dict | None:
     """#3164: נקרא כשהגל נסגר בחדר (`room`, אחרי `drive_rates.record_wave`): רק אז `wave_rates.drops` ו-`delivered`
     של גל חתיכות שלמים. לעולם אינו זורק.
     #3064 (X10): השיפוט של הגל מול הבסיס נרשם גם במוח (`server.brain.streamhit`), פעם אחת לגל."""
@@ -216,7 +223,7 @@ def evaluate_chunk(conn: sqlite3.Connection, session_id: str) -> dict | None:
     return got
 
 
-def health_checks(conn: sqlite3.Connection) -> list[dict]:
+def health_checks(conn: SqlConnection) -> list[dict]:
     """שורה במסך הבריאות לכל כרטיס הפצה — לפי הגל האחרון שנמדד עליו.
     `warn` = קפץ; `ok` = בתוך הבסיס; `off` = "לא נבדק" (אין בסיס עדיין).
     בלי אף גל שנמדד — אין שורה. כשל בשאילתה — שורה `off` שאומרת זאת."""

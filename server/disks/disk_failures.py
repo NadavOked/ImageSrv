@@ -23,7 +23,7 @@ import sqlite3
 
 from server.disks import ata_cause, slot_names
 from server.core import unreadable
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.disk_failures")
 
@@ -70,18 +70,18 @@ def stream_fault(cause: str | None, error: str | None) -> bool:
     return any(p in error for p in STREAM_PHRASES)
 
 
-def quiet(row: sqlite3.Row) -> bool:
+def quiet(row: sqlite3.Row | dict) -> bool:
     """האם הרשומה אינה צובעת את הדיסק -- ה-hello (`open_for`), הקונסולה (`list_open`) ובריאות הדיסק
     (`disk_sets.health`, #3147) שואלים את אותה שאלה כאן, ולכן אינם יכולים להסתדר עם מילים שונות: עצירה באמצע (#1580), מגירה שנשלפה
-    (`removed`, נדב 17/10), או כשל של הזרם (#1728). רשומה שנרשמה `unclassified`
+    (`removed`, נדב 17/10), רשת שנפלה (`network`, #3844), או כשל של הזרם (#1728). רשומה שנרשמה `unclassified`
     לפני הסיווג הזה (id=1241 במעבדה) נקראת שוב לפי הראיה שבה — אחרת היא
     נשארת כתומה עד "נקה"."""
     cause, error = row["cause"], row["error"]
-    if cause == "removed" or interrupted(cause, error) or stream_fault(cause, error):
+    if cause in ("removed", "network") or interrupted(cause, error) or stream_fault(cause, error):
         return True
     if cause != "unclassified":
         return False
-    return ata_cause.classify(_lines(row["ata_log"]), error if isinstance(error, str) else "") == "removed"
+    return ata_cause.classify(_lines(row["ata_log"]), error if isinstance(error, str) else "") in ("removed", "network")
 
 
 def _cause(row: sqlite3.Row) -> str:
@@ -108,7 +108,7 @@ def _int(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
 
-def record(conn: sqlite3.Connection, session_id: str, mac: str, target: dict) -> dict | None:
+def record(conn: SqlConnection, session_id: str, mac: str, target: dict) -> dict | None:
     """רושם כשל כתיבה של יעד אחד, פעם אחת לכל (סבב, מכונה, יעד) -- חוץ ממה ש-`_escalate` מתאר (#3148).
 
     נקרא מ-`reports.ingest` על יעד `failed` שנושא `ata_log` (סוכן חדש;
@@ -152,7 +152,7 @@ def record(conn: sqlite3.Connection, session_id: str, mac: str, target: dict) ->
     return row
 
 
-def _brain_cause(conn: sqlite3.Connection, row: dict, lines: list[str]) -> None:
+def _brain_cause(conn: SqlConnection, row: dict, lines: list[str]) -> None:
     """#3064 (K9): הסיבה של הכשל שנרשם זה עתה, לפי הראיה -- פעם אחת לרשומה (חדשה, או שליפה שהפכה לכשל אמיתי,
     `_escalate`), לא בכל דיווח חוזר. רושם בלבד: הרשומה, הסיבה שלה והצבע אינם משתנים. `ata_log` נשלח רק אחרי
     שהכתיבה התחילה (`fail_written_target` בסוכן), ולכן ``wrote`` כאן הוא ראיה. לעולם אינו זורק."""
@@ -166,7 +166,7 @@ def _brain_cause(conn: sqlite3.Connection, row: dict, lines: list[str]) -> None:
         log.exception("disk_failures: K9 of %s %s failed", row.get("mac"), row.get("dev"))
 
 
-def _escalate(conn: sqlite3.Connection, row: dict, lines: list[str]) -> int | None:
+def _escalate(conn: SqlConnection, row: dict, lines: list[str]) -> int | None:
     """#3148 (עיקרון 5): הרשומה של (סבב, מכונה, יעד) כבר קיימת, והיא **שקטה** (`quiet`: שליפה, עצירה באמצע) -- והכשל
     שהגיע עכשיו **אינו**. מגירה שנשלפה, חזרה, ואז נכשלה כשל כתיבה אמיתי באותו סבב נבלעה ברשומת השליפה (`INSERT OR IGNORE`),
     ולכן לא צבעה כלום -- וה-hello, הקונסולה ובריאות הדיסק לא ידעו על הכשל השני.
@@ -193,7 +193,7 @@ def _escalate(conn: sqlite3.Connection, row: dict, lines: list[str]) -> int | No
 READONLY_SKIP_ERROR = "הדיסק במצב קריאה בלבד — דולג, לא נכתב (#1732)"
 
 
-def record_readonly(conn: sqlite3.Connection, session_id: str, mac: str, dev: str,
+def record_readonly(conn: SqlConnection, session_id: str, mac: str, dev: str,
                     serial: str | None) -> bool:
     """#1760 (ברזל D6b): הסוכן דילג על דיסק **אדום כי הוא לקריאה בלבד** (disk_event
     `fail`/`readonly`/`skip`) — נרשם כרשומה פתוחה `cause=readonly`, כדי שבגל הבא
@@ -225,7 +225,7 @@ def record_readonly(conn: sqlite3.Connection, session_id: str, mac: str, dev: st
     return inserted
 
 
-def open_for(conn: sqlite3.Connection, mac: str, disks: list | None) -> list[dict]:
+def open_for(conn: SqlConnection, mac: str, disks: list | None) -> list[dict]:
     """מה ה-hello עונה: הרשומות הפתוחות שתואמות למכונה הזאת (ממשק 3).
 
     **סידורי** — כל רשומה פתוחה על אחד הסידוריים שהמכונה דיווחה, מכל
@@ -266,7 +266,7 @@ def open_for(conn: sqlite3.Connection, mac: str, disks: list | None) -> list[dic
     return out
 
 
-def list_open(conn: sqlite3.Connection) -> list[dict]:
+def list_open(conn: SqlConnection) -> list[dict]:
     """הרשימה לקונסולה: כל הרשומות הפתוחות, החדשה ראשונה."""
     rows = conn.execute(
         "SELECT id, session_id, mac, dev, serial, port, ata_port, at, cause, error,"
@@ -293,7 +293,7 @@ def list_open(conn: sqlite3.Connection) -> list[dict]:
 AUTO_CLEARED_HE = "נוקה אוטומטית: נכתב בהצלחה בסבב {round_id}"
 
 
-def clear_written(conn: sqlite3.Connection, serials, round_id: str) -> list[int]:
+def clear_written(conn: SqlConnection, serials, round_id: str) -> list[int]:
     """#1792 (ברזל D2/D5, 19/10): דיסק שנכשל פעם אחת ונכתב אחר כך **במלואו** נשאר
     כתום ("נכשל בשיכפול הקודם"), והמשכפל עצר לשאלה בכל סבב עד "נקה" ידני.
 
@@ -332,7 +332,7 @@ def clear_written(conn: sqlite3.Connection, serials, round_id: str) -> list[int]
 RETURNED_CLEARED_HE = "נוקה אוטומטית: המגירה חזרה והושלמה בסבב {session_id}"
 
 
-def clear_returned(conn: sqlite3.Connection, session_id: str, mac: str, dev: str,
+def clear_returned(conn: SqlConnection, session_id: str, mac: str, dev: str,
                    serial: str | None) -> list[int]:
     """#3112: מגירה ש**נשלפה** (הרשומה נפתחה בכשל) וחזרה והושלמה — `done` באותו סבב, על
     אותו יעד — סוגרת את הרשומה שלה **בדיווח עצמו**, לא רק בספירת הגל (`clear_written`):
@@ -372,7 +372,7 @@ def clear_returned(conn: sqlite3.Connection, session_id: str, mac: str, dev: str
     return [failure_id for failure_id, _ in cleared]
 
 
-def clear(conn: sqlite3.Connection, failure_id: int, by: str = "") -> bool:
+def clear(conn: SqlConnection, failure_id: int, by: str = "") -> bool:
     """"נקה": הרשומה מקבלת `cleared_at`. אמת רק אם רשומה פתוחה נסגרה
     עכשיו — רשומה שאינה קיימת או שכבר נוקתה אינה "נוקתה" (עיקרון 5)."""
     with _write_lock, writing(conn):

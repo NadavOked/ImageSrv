@@ -16,11 +16,10 @@ from typing import NamedTuple
 import hashlib
 import hmac
 import re
-import sqlite3
 import threading
 import time
 
-from server.db import _settle, _write_lock, get_setting, writing
+from server.db import _settle, _write_lock, get_setting, SqlConnection, writing
 
 COOKIE_NAME = "imagesrv_session"
 #: #1179: הזהות של בקשה שהשרת הראשי שלח בערוץ הבין-שרתי (7700) — ``(user, role)``.
@@ -100,7 +99,7 @@ def _enforce_purpose(request, session: Session) -> None:
             raise HTTPException(403, "mfa_enrollment_required")
 
 
-def dependencies(conn: sqlite3.Connection):
+def dependencies(conn: SqlConnection):
     """(current_user, admin_only) — ה-dependencies המשותפים לכל הראוטרים."""
     from fastapi import Depends, HTTPException, Request
 
@@ -134,7 +133,7 @@ DEPLOY_NO_CONSOLE = "deploy_no_console"
 DEPLOY_NO_CONSOLE_HE = "משתמש הפצה עובד ממחשב הבנייה, לא מהקונסולה"
 
 
-def console_only(conn: sqlite3.Connection):
+def console_only(conn: SqlConnection):
     """dependency לאפליקציית הקונסולה (:443): תפקיד ``deploy`` → 403 על
     **כל** נתיב, לא רק בכניסה (#1073).
 
@@ -190,7 +189,7 @@ def _is_poll(connection) -> bool:
             and _POLL_PATH.fullmatch(connection.scope.get("path", "")) is not None)
 
 
-def _secret(conn: sqlite3.Connection) -> bytes:
+def _secret(conn: SqlConnection) -> bytes:
     """הסוד שחותם את ה-cookies, או חריגה. אין ברירת מחדל.
 
     כאן ישב ``or "00"``: סוד חסר הפך למפתח HMAC של בייט אחד **ידוע**,
@@ -215,7 +214,7 @@ def _secret(conn: sqlite3.Connection) -> bytes:
     return secret
 
 
-def assert_secret(conn: sqlite3.Connection) -> None:
+def assert_secret(conn: SqlConnection) -> None:
     """בדיקת עלייה: קוראים את הסוד פעם אחת, ליד ההתקנה ולא מול כיתה.
 
     `_secret` כבר מגן על כל בקשה, אבל שרת שעולה עם סוד שבור צריך
@@ -225,7 +224,7 @@ def assert_secret(conn: sqlite3.Connection) -> None:
     _secret(conn)
 
 
-def _auth_epoch(conn: sqlite3.Connection, username: str) -> int:
+def _auth_epoch(conn: SqlConnection, username: str) -> int:
     row = conn.execute(
         "SELECT auth_epoch FROM users WHERE username = ? COLLATE NOCASE",
         (username,),
@@ -233,7 +232,7 @@ def _auth_epoch(conn: sqlite3.Connection, username: str) -> int:
     return int(row["auth_epoch"] or 0) if row is not None else 0
 
 
-def issue(conn: sqlite3.Connection, username: str, role: str,
+def issue(conn: SqlConnection, username: str, role: str,
           purpose: str = "", epoch: int | None = None) -> str:
     expiry = int(time.time()) + TTL_SECONDS
     if epoch is None:
@@ -253,7 +252,7 @@ def cookie_flags(tls, secure: bool | None = None) -> dict:
             "secure": (tls is not None) if secure is None else secure}
 
 
-def attach_cookie(response, conn: sqlite3.Connection, username: str, role: str,
+def attach_cookie(response, conn: SqlConnection, username: str, role: str,
                   tls, purpose: str = "", secure: bool | None = None) -> None:
     """#3891: העוגייה נבנית מהשם והתפקיד **שב-DB עכשיו**, לא ממה שהקורא העביר. הקוראים מעבירים שם שכבר אומת
     (סיסמה, MFA או session), אבל השם הגיע מהבקשה, ו-CodeQL (py/cookie-injection) צדק שזה המקור. משתמש שאינו
@@ -269,7 +268,7 @@ def attach_cookie(response, conn: sqlite3.Connection, username: str, role: str,
     )
 
 
-def read_session(conn: sqlite3.Connection, token: str | None, *,
+def read_session(conn: SqlConnection, token: str | None, *,
                  ip: str = "", idle_exempt: bool = False,
                  no_touch: bool = False) -> Session | None:
     """מפענח עוגייה: 3 מפרידים (ישן) או 4 (purpose:epoch). None אם פסול.
@@ -330,7 +329,7 @@ def read_session(conn: sqlite3.Connection, token: str | None, *,
     return session if _active(conn, token, session, ip, idle_exempt, no_touch) else None
 
 
-def _active(conn: sqlite3.Connection, token: str, session: Session, ip: str,
+def _active(conn: SqlConnection, token: str, session: Session, ip: str,
             idle_exempt: bool, no_touch: bool = False) -> bool:
     """#2414: ``console_idle_seconds`` בשרת, לכל עוגייה חוץ מהקיוסק.
 
@@ -365,7 +364,7 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def revoke(conn: sqlite3.Connection, token: str | None) -> None:
+def revoke(conn: SqlConnection, token: str | None) -> None:
     """#1633: logout מבטל את העוגייה הזו בשרת — רק אותה, לא את שאר
     הדפדפנים של המשתמש (זה ``users.bump_auth_epoch``). השורה נשמרת עד
     התפוגה שבעוגייה, ואז נמחקת; עוגייה שאינה מפוענחת אינה נרשמת."""
@@ -396,7 +395,7 @@ def in_grace(token: str) -> bool:
         return until is not None
 
 
-def supersede(conn: sqlite3.Connection, token: str) -> None:
+def supersede(conn: SqlConnection, token: str) -> None:
     """#2757: מבטל את ``token`` בשרת (כמו logout) ופותח לו חסד קצר."""
     revoke(conn, token)
     now = time.time()
@@ -406,7 +405,7 @@ def supersede(conn: sqlite3.Connection, token: str) -> None:
         _grace[_token_hash(token)] = now + GRACE_SECONDS
 
 
-def revoke_hash(conn: sqlite3.Connection, token_hash: str, expires: float) -> None:
+def revoke_hash(conn: SqlConnection, token_hash: str, expires: float) -> None:
     """#2552: אותו ביטול לפי הגיבוב — מסך הסשנים של המנהל מכיר רק את ה-sha256
     של העוגייה (``console_sessions``), לא אותה. ``expires`` = תפוגת העוגייה."""
     with _grace_lock:
@@ -420,7 +419,7 @@ def revoke_hash(conn: sqlite3.Connection, token_hash: str, expires: float) -> No
         )
 
 
-def check(conn: sqlite3.Connection, token: str | None, *, ip: str = "",
+def check(conn: SqlConnection, token: str | None, *, ip: str = "",
           idle_exempt: bool = False, no_touch: bool = False) -> tuple[str, str] | None:
     """מחזיר (username, role) לטוקן תקף, אחרת None.
 

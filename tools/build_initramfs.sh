@@ -324,11 +324,16 @@ copy_libs() {
     done < <(printf '%s\n' "$_ldd_out" | awk '/=>/ { print $3 } /^\s*\// { print $1 }')
 }
 
+# #4011: copy_bin packs everything under /usr/bin, but the host binary can live
+# elsewhere (Debian 13: partclone and sgdisk are /usr/sbin). The license pass
+# below needs the host path, so the source is recorded when it is copied.
+declare -A PACKED_FROM=()
 copy_bin() {
     local src dst
     src=$(command -v "$1") || { echo "missing binary: $1" >&2; exit 1; }
     dst="$ROOT/usr/bin/$(basename "$src")"
     cp -L "$src" "$dst"
+    PACKED_FROM["$dst"]=$src
     copy_libs "$src"
 }
 
@@ -1385,6 +1390,10 @@ mapfile -d '' -t PACKED_FILES < <(find "$ROOT" -type f -print0)
 mkdir -p "$ROOT/usr/share/doc/licenses"
 for _packed in "${PACKED_FILES[@]}"; do
     _host_file="${_packed#"$ROOT"}"
+    # #4011: a file copy_bin packed under another path is looked up at the
+    # path it came from. Any other file with no host twin is ImageSrv's own
+    # (gcc output, generated config, agent scripts) and has no Debian owner.
+    [ -z "${PACKED_FROM[$_packed]:-}" ] || _host_file=${PACKED_FROM[$_packed]}
     [ -e "$_host_file" ] || continue
     _host_file=$(readlink -f "$_host_file")
     # C-CFG-08: dpkg-query -S answers 1 for "no package owns it" (ImageSrv's own

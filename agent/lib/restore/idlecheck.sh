@@ -151,8 +151,8 @@ idle_wc_disk() { # $1 = disk. The lock first, the hold after: a task that set th
     mkdir -p "$RUN_DIR/idlecheck"; mkdir "$RUN_DIR/idlecheck/busy.$1" 2>/dev/null || return 0   # held already (a task's recovery): not now
     [ ! -e "$RUN_DIR/idlecheck/hold" ] || { rm -rf "$RUN_DIR/idlecheck/busy.$1"; return 0; }
     _id_k=$(_ic_ident "$1") || _id_k=""   # #3271 L3: under the lock
-    _id_run "$1" "$DEVROOT/$1" "$_id_k"
-    rm -rf "$RUN_DIR/idlecheck/busy.$1"
+    command exec 9< "$DEVROOT/$1" || { _ic_res "$1" "$_id_k" unchecked "הדיסק לא נפתח להחזקה — לא נבדק, ולא נכתב דבר" ""; rm -rf "$RUN_DIR/idlecheck/busy.$1"; return 0; }   # #3297: an fd on the node for the whole check and put-back -- the kernel does not hand its sdX to a disk that comes in meanwhile. `command`: a failed exec must not end this shell, it holds the busy lock
+    _id_run "$1" "$DEVROOT/$1" "$_id_k"; exec 9<&-; rm -rf "$RUN_DIR/idlecheck/busy.$1"   # one close for every return of _id_run (it has many); the subshell's exit would close it too
 }
 
 _id_run() { # $1 = disk, $2 = node, $3 = key

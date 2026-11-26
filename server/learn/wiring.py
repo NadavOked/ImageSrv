@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from server.db import SqlConnection
 
 from server.disks import model_slots
 from server.learn import netrate, portcap, ports
@@ -59,7 +60,7 @@ def _gbps(value: float) -> str:
     return f"{value:g} Gb/s"
 
 
-def _windows(conn: sqlite3.Connection, macs: list[str]) -> dict[tuple[str, int], list[sqlite3.Row]]:
+def _windows(conn: SqlConnection, macs: list[str]) -> dict[tuple[str, int], list[sqlite3.Row]]:
     """`{(mac, port): התצפיות האחרונות, מהחדשה}`, בלי שורות שלא נמדד בהן דבר."""
     out: dict[tuple[str, int], list[sqlite3.Row]] = {}
     marks = ",".join("?" * len(macs))
@@ -140,7 +141,7 @@ def _cable_text_he(model: dict, avoid: list[int], machines: int, waves: int) -> 
     return f"{text} מבוסס על {machines} מחשבים מהדגם, {waves} שיכפולים."
 
 
-def _hello(conn: sqlite3.Connection, mac: str) -> dict[int, dict]:
+def _hello(conn: SqlConnection, mac: str) -> dict[int, dict]:
     row = conn.execute("SELECT disks_json FROM net_devices WHERE mac = ?", (mac,)).fetchone()
     disks = json.loads(row["disks_json"] or "[]") if row else []
     return {d["port"]: d for d in disks if isinstance(d, dict) and isinstance(d.get("port"), int)}
@@ -171,7 +172,7 @@ def _upgrades(model: dict, connected: dict, leave: list[int], free: list[int], t
     return out
 
 
-def advice(conn: sqlite3.Connection, mac: str) -> dict:
+def advice(conn: SqlConnection, mac: str) -> dict:
     """ההמלצה למחשב `mac`. קריאה בלבד; כשל בקריאה עולה למעלה — לא נבדק אינו "הכול תקין"."""
     model_name = model_slots.model_of(conn, mac)
     macs = [m for m, name in model_slots.models_by_mac(conn).items() if name == model_name] \

@@ -28,7 +28,7 @@ import sqlite3
 
 from boot.grub_menu import AGENT, decide
 
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.bootguard")
 
@@ -54,7 +54,7 @@ def context_of(answer: dict) -> str | None:
     return None
 
 
-def guard(conn: sqlite3.Connection, mac: str, answer: dict) -> dict:
+def guard(conn: SqlConnection, mac: str, answer: dict) -> dict:
     """סופר את בקשת התפריט הזו, ומחזיר את התשובה — אולי מסומנת.
 
     נקראת אך ורק ממסלול תפריט האתחול. `hello` אינו עובר כאן: הוא לא
@@ -97,7 +97,7 @@ def _over_budget(attempts: int) -> bool:
     return attempts > ATTEMPT_LIMIT
 
 
-def peek(conn: sqlite3.Connection, mac: str, answer: dict) -> tuple[dict, int] | None:
+def peek(conn: SqlConnection, mac: str, answer: dict) -> tuple[dict, int] | None:
     """**קריאה בלבד**: מה `guard` היה עושה בבקשת התפריט **הבאה** של המכונה הזו.
 
     מחזירה (התשובה כפי שהיא הייתה מוגשת, כמה פעמים השרת כבר שלח את המכונה
@@ -126,7 +126,7 @@ def peek(conn: sqlite3.Connection, mac: str, answer: dict) -> tuple[dict, int] |
     return answer, already
 
 
-def repeats(conn: sqlite3.Connection, context: str,
+def repeats(conn: SqlConnection, context: str,
             minimum: int = 2) -> dict[str, dict]:
     """מי אתחל יותר מפעם אחת לאותה עבודה — לפי MAC, לתצוגה בקונסולה.
 
@@ -153,7 +153,7 @@ def _exhausted(answer: dict) -> dict:
     return marked
 
 
-def _record(conn: sqlite3.Connection, mac: str, context: str) -> int | None:
+def _record(conn: SqlConnection, mac: str, context: str) -> int | None:
     """מונה את הניסיון ומחזיר את מספרו — או None אם לא ניתן לאשר שנספר.
 
     ההקשר הוא חלק מהעדכון עצמו: הקשר חדש מאפס את המונה באותה כתיבה,

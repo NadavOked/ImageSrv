@@ -120,7 +120,8 @@ def _commit_long(folder: Path, tmp: Path, bid: str, serial: str, meta: dict, wan
             if open_for(root, serial):
                 return "open_copy", "this serial still has an open copy -- restore it first", 409
         except UnreadableCopy as exc:
-            return "unreadable", f"an open copy of this serial cannot be read ({exc})", 500
+            log.warning("write-backup of %s: %s", one_line(serial), one_line(exc))
+            return "unreadable", UNREADABLE_OPEN, 500
         if stored_bytes(root) + want > MAX_TOTAL_BYTES:
             return "quota", "the folder of write-check copies is full", 507
         with open(tmp, "rb+") as f:
