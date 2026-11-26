@@ -49,7 +49,7 @@ mods_load_file() {
     done < "$1"
 }
 
-mods_names() { printf ' %s ' "$(tr '\n' ' ' < "$1" 2>/dev/null)"; }
+mods_names() { printf ' %s ' "$(tr '\n' ' ' 2>/dev/null < "$1")"; }
 
 # $1 = PCI base class (02 network, 03 display), $2 = "report" to name a device
 # no packaged driver claims. Only reads sysfs; `read` forks nothing.

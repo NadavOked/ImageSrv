@@ -269,6 +269,16 @@ def test_scan_says_unread_when_lsblk_cannot_run_or_is_not_json():
     assert device.scan(run=ok, by_id=dict).state == device.CONNECTED
 
 
+@pytest.mark.parametrize("status", [sl.FAILED, sl.UNCHECKED])
+def test_scan_keeps_lsblk_diagnostics_in_the_server_log(status, caplog):
+    stderr = "lsblk: fake stderr for /private/device"
+    got = device.scan(run=lambda *a, **kw: sl.HookResult(status, stderr), by_id=dict)
+    assert got.state == device.UNREAD
+    assert stderr not in got.reason
+    assert got.reason == "לא הצלחתי להריץ lsblk — הפרטים ביומן השרת"
+    assert stderr in caplog.text
+
+
 def test_lsblk_is_asked_for_names_and_the_columns_the_decision_needs():
     for col in ("NAME", "PKNAME", "TRAN", "LABEL", "FSTYPE", "SERIAL", "MOUNTPOINTS", "RO"):
         assert col in device.LSBLK_COLUMNS.split(",")

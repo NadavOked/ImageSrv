@@ -28,7 +28,7 @@ _dl_ahci_max() {
     # which libahci prints as bare hex in ahci_host_caps: 1/2/3 = 1.5/3.0/6.0.
     # This is the port's ceiling; libata's hw_sata_spd_limit stays <unknown>
     # unless the firmware wrote SControl.SPD ("SControl 300" = it did not).
-    _dl_c=$(tr -d '\n\r ' < "$SYSROOT/sys/class/scsi_host/host$1/ahci_host_caps" 2>/dev/null)
+    _dl_c=$(tr -d '\n\r ' 2>/dev/null < "$SYSROOT/sys/class/scsi_host/host$1/ahci_host_caps")
     case "$_dl_c" in ''|*[!0-9a-fA-F]*) return 1 ;; esac
     case $(( (0x$_dl_c >> 20) & 15 )) in
         1) printf '1.5' ;; 2) printf '3.0' ;; 3) printf '6.0' ;; *) return 1 ;;

@@ -22,12 +22,12 @@ EOF
 
 _trs_means() { printf '\nמה זה אומר: %s\n' "$1"; }
 
-_trs_size() { wc -c < "$1" 2>/dev/null | tr -d ' '; }
+_trs_size() { wc -c 2>/dev/null < "$1" | tr -d ' '; }
 
 _trs_prepare() {
     # $1 = image file name. -> TD_DIR and TRS_IMG; rc 2 on any refusal. The
     # need is the source size less what an earlier run already wrote.
-    _trsm=$(tr -d '\r\n|' < "${SYSROOT:-}/sys/block/$TD_SRC_DISK/device/model" 2>/dev/null)
+    _trsm=$(tr -d '\r\n|' 2>/dev/null < "${SYSROOT:-}/sys/block/$TD_SRC_DISK/device/model")
     if _trsr=$(tooldest_serial "$TD_SRC_DISK"); then _trsd="rescue/$_trsr"
     else _trsd="rescue/no-serial-$(tooldest_stamp)"; _trsr=""; fi
     tooldest_root || { printf 'סירוב: %s. הכלי לא הורץ ושום דבר לא נשמר.\n' "$TD_WHY"; return 2; }

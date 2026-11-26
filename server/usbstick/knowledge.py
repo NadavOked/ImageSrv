@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import sqlite3
+from server.db import SqlConnection
 import statistics
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -55,7 +55,7 @@ def _median(values: list[int]) -> int:
     return int(statistics.median_low(values))
 
 
-def server_rates(conn: sqlite3.Connection) -> list[dict]:
+def server_rates(conn: SqlConnection) -> list[dict]:
     """The write-check speed each computer model reached on this server, from ``model_speeds`` (#1845):
     the row's ``mac`` is the cloning machine whose drawers were tested, so its DMI model is the key.
     The controller mode is not something the server reads, so it is ``None`` -- not guessed."""
@@ -80,7 +80,7 @@ def usb_rates(rows: list[tuple]) -> list[dict]:
              "mbps": _median(v), "samples": len(v)} for (m, c), v in groups.items()]
 
 
-def stored_usb_rows(conn: sqlite3.Connection) -> list[tuple]:
+def stored_usb_rows(conn: SqlConnection) -> list[tuple]:
     return [(r["model"], r["controller"], r["copy_mbps"], r["result"])
             for r in conn.execute("SELECT model, controller, copy_mbps, result FROM usb_records")]
 
@@ -91,7 +91,7 @@ def smart_version(smart: bytes, hw: bytes) -> str:
     return hashlib.sha256(smart + b"\0" + hw).hexdigest()[:12]
 
 
-def build(conn: sqlite3.Connection, extra_usb_rows: list[tuple] = ()) -> Bundle:
+def build(conn: SqlConnection, extra_usb_rows: list[tuple] = ()) -> Bundle:
     entries = server_rates(conn) + usb_rates(stored_usb_rows(conn) + list(extra_usb_rows))
     entries.sort(key=lambda e: (e["model"], e["controller"] or "", e["basis"]))
     entries = entries[:MAX_ENTRIES]

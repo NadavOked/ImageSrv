@@ -68,6 +68,10 @@ def build(tmp: Path, *args: str, installer: bool = True) -> tuple[subprocess.Com
         (host / name).write_bytes(f"fake {name}\n".encode() * 32)
     tree = host / ("initrd-tree" if installer else "initrd-tree-plain")
     (tree / "lib" / "modules" / KVER).mkdir(parents=True, exist_ok=True)
+    # #3077: build_initramfs.sh writes the package list into the initrd; the stick build refuses one without it
+    pkglist = tree / "usr" / "share" / "doc" / "licenses" / "packages.tsv"
+    pkglist.parent.mkdir(parents=True, exist_ok=True)
+    pkglist.write_text("firmware-amd-graphics\t20250410-2\tnon-free-firmware/kernel\tGPL-2+\n")
     if installer:
         for rel in INSTALLER_FILES:
             (tree / rel).parent.mkdir(parents=True, exist_ok=True)

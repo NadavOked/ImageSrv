@@ -124,13 +124,19 @@ smart_ro_stale() {
     esac
 }
 
-smart_probe() {
+smart_probe() {   # #2848: one probe per disk at a time. The .out/.find/.v of a disk are shared files: a second smartctl opening .out (truncate) under the first one's output left a hole where the table was ("passed" on the card, "not read" under it). The second waits, then takes the cache. A lock older than its ceiling (a holder killed) is taken over
+    [ "${_sq_h:-}" != "$1" ] || { _smart_probe_run "$1"; return; }   # re-entered by disk_f1_red (f1mark.sh): the lock is this shell's already
+    _sq_l="$RUN_DIR/smart/$1.lk"; _sq_t=0; mkdir -p "$RUN_DIR/smart"
+    until mkdir "$_sq_l" 2>/dev/null; do [ "$_sq_t" -lt $((SMARTCTL_MAX_S * 25)) ] || { rm -rf "$_sq_l"; _sq_t=0; continue; }; poll_tick; _sq_t=$((_sq_t + ${_tk:-1})); done
+    _sq_h=$1; _smart_probe_run "$1"; _sq_r=$?; _sq_h=; rmdir "$_sq_l" 2>/dev/null; return "$_sq_r"
+}
+
+_smart_probe_run() {
     # $1 = disk name. מריץ smartctl פעם אחת, מסווג, ושומר רשומה. מדפיס
     # את ה-verdict. דיסק שלא נפתח / בלי SMART הוא `unchecked`, שנכתב; ‏UNKNOWN! של
     # smartctl (הדיסק דחה את הקריאה) אדום (#2078). תוצאה נשמרת במטמון — קריאה שנייה על אותו דיסק לא מריצה שוב.
     # ‏#1742: לפני הכול smart_ro_check -- דיסק לקריאה בלבד אדום בלי smartctl.
     _sp_d="$1"; _sp_dev="$DEVROOT/$1"
-    mkdir -p "$RUN_DIR/smart"
     smart_ro_check "$1"; _sp_ro=$?
     [ "$_sp_ro" = 0 ] && { echo fail; return; }
     _sp_serial=$(disk_serial "$1")
@@ -249,7 +255,7 @@ smart_reason_he() {
         f1_observed) printf 'נצפה F1 בהדלקה' ;;   # #1858: a mark by serial (f1mark.sh), not a SMART word
         media_readonly) printf 'הבקר נעל את הדיסק לקריאה בלבד (NVMe)' ;;   no_table) printf 'טבלת הידע של SMART חסרה — לא נבדק' ;;
         standby) printf 'הדיסק במצב המתנה ולא הוער לבדיקת SMART' ;;   # #1775: smartctl -n standby
-        cable) printf 'כבל/חריץ' ;;   disk) printf 'הדיסק' ;;   removed) printf 'המגירה נשלפה' ;;   write_error) printf 'שגיאת כתיבה לדיסק' ;;   unclassified) printf 'לא סווג' ;;
+        cable) printf 'כבל/חריץ' ;;   disk) printf 'הדיסק' ;;   removed) printf 'המגירה נשלפה' ;;   network) printf 'הרשת נפלה' ;;   write_error) printf 'שגיאת כתיבה לדיסק' ;;   unclassified) printf 'לא סווג' ;;
         *) printf 'סיבה לא מוכרת' ;;   # the word itself stays in the log and the disk_event
     esac
 }

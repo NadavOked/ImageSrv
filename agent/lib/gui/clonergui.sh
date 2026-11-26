@@ -76,7 +76,7 @@ cloner_gui_avg() {   # $1 = dev, $2 = bytes, $3 = total; the average since the a
 gui_rb_fields() {   # $1 = dev. Sets _cg_rbd/_cg_rbt; 1 = no bar (no file, or a line that is not two numbers)
     _cg_rbd=; _cg_rbt=
     [ -r "$RUN_DIR/targets/$1/rb_prog" ] || return 1
-    read -r _cg_rbd _cg_rbt < "$RUN_DIR/targets/$1/rb_prog" 2>/dev/null
+    read -r _cg_rbd _cg_rbt 2>/dev/null < "$RUN_DIR/targets/$1/rb_prog"
     case "$_cg_rbd:$_cg_rbt" in *[!0-9:]*|:*|*:) _cg_rbd=; _cg_rbt=; return 1 ;; esac
     [ "$_cg_rbt" -gt 0 ] && [ "$_cg_rbd" -le "$_cg_rbt" ] || { _cg_rbd=; _cg_rbt=; return 1; }
 }

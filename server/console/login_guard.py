@@ -29,9 +29,8 @@
 from __future__ import annotations
 
 import math
-import sqlite3
 
-from server.db import _write_lock, journal, writing
+from server.db import _write_lock, journal, SqlConnection, writing
 from server.system import steadyclock
 
 DELAY_AFTER = 5
@@ -73,7 +72,7 @@ def now() -> float:
     return steadyclock.now()
 
 
-def _fence_key(conn: sqlite3.Connection, key: str, t: float) -> None:
+def _fence_key(conn: SqlConnection, key: str, t: float) -> None:
     """#3752: נעילה או השהיה **בעתיד** מעבר למשך האפשרי = השעון חזר אחורה בין
     אתחולי השרת (חותמת שנכתבה בבסיס הזמן הישן). חותכים אותה לתקרת המשך: נעילה
     של 15 דקות לכל היותר מעכשיו, ולא שלוש שעות ועוד 15 דקות."""
@@ -89,21 +88,21 @@ def _key(username: str, ip: str) -> str:
     return f"{(username or '').strip().lower()}|{(ip or '?')}"
 
 
-def _row(conn: sqlite3.Connection, key: str):
+def _row(conn: SqlConnection, key: str):
     return conn.execute(
         "SELECT failures, locked_until, last_at FROM login_attempts WHERE key = ?",
         (key,),
     ).fetchone()
 
 
-def check(conn: sqlite3.Connection, username: str, ip: str, surface: str = CONSOLE) -> None:
+def check(conn: SqlConnection, username: str, ip: str, surface: str = CONSOLE) -> None:
     """דוחה אם המפתח בהשהיה או בנעילה. לא בודק סיסמה."""
     t = now()
     _check_key(conn, username, ip, t)
     _check_account(conn, username, ip, t, surface)
 
 
-def _check_key(conn: sqlite3.Connection, username: str, ip: str, t: float) -> None:
+def _check_key(conn: SqlConnection, username: str, ip: str, t: float) -> None:
     """התקרה לפי (שם, IP): השהיה אקספוננציאלית, ואז נעילה."""
     key = _key(username, ip)
     row = _row(conn, key)
@@ -137,7 +136,7 @@ def _account(username: str) -> str:
     return (username or "").strip().lower()
 
 
-def _check_account(conn: sqlite3.Connection, username: str, ip: str, t: float,
+def _check_account(conn: SqlConnection, username: str, ip: str, t: float,
                    surface: str) -> None:
     name = _account(username)
     if not name:
@@ -171,7 +170,7 @@ def _check_account(conn: sqlite3.Connection, username: str, ip: str, t: float,
     )
 
 
-def record_failure(conn: sqlite3.Connection, username: str, ip: str,
+def record_failure(conn: SqlConnection, username: str, ip: str,
                    surface: str = CONSOLE) -> None:
     key = _key(username, ip)
     t = now()
@@ -208,7 +207,7 @@ def record_failure(conn: sqlite3.Connection, username: str, ip: str,
                 username.strip())
 
 
-def _record_account_failure(conn: sqlite3.Connection, username: str, t: float,
+def _record_account_failure(conn: SqlConnection, username: str, t: float,
                             surface: str) -> bool:
     """שורה לכשל, וניקוי כל מה שמעבר לחלון. True רק בכשל שמגיע בדיוק לתקרה.
 
@@ -233,7 +232,7 @@ def _record_account_failure(conn: sqlite3.Connection, username: str, t: float,
     return count == ACCOUNT_LIMIT
 
 
-def _trim_keys(conn: sqlite3.Connection, t: float) -> int:
+def _trim_keys(conn: SqlConnection, t: float) -> int:
     """#2459: מעל `MAX_KEYS` — מפנה את המפתחות שהכי פחות חשובים, עד `MAX_KEYS`
     פחות עשירית. קודם מפתח בלי נעילה בתוקף, ובתוכם מהמעט-כשלונות לרב ומהישן לחדש:
     הצפה בשמות אקראיים (כשלון אחד לכל שם) מפנה את עצמה, ולא מוחקת נעילה של מישהו.
@@ -250,7 +249,7 @@ def _trim_keys(conn: sqlite3.Connection, t: float) -> int:
     return cur.rowcount
 
 
-def _trim_account_rows(conn: sqlite3.Connection) -> int:
+def _trim_account_rows(conn: SqlConnection) -> int:
     """#2478: מעל `MAX_ACCOUNT_ROWS` — מפנה עד `MAX_ACCOUNT_ROWS` פחות עשירית. קודם
     השורות של (שם, משטח) עם הכי מעט שורות, ובתוכן מהישנה לחדשה: הצפה בשמות אקראיים
     (שורה אחת לשם) מפנה את עצמה, וחשבון שננעל (`ACCOUNT_LIMIT` שורות) מתפנה אחרון.
@@ -269,7 +268,7 @@ def _trim_account_rows(conn: sqlite3.Connection) -> int:
     return cur.rowcount
 
 
-def clear(conn: sqlite3.Connection, username: str, ip: str) -> None:
+def clear(conn: SqlConnection, username: str, ip: str) -> None:
     """כניסה שהצליחה: מאפס את המונה של (שם, IP).
 
     המונה לפי חשבון **אינו** מתאפס כאן: אחרת מי שמצליח להיכנס כל 14 דקות היה

@@ -456,6 +456,11 @@ def usb_build_to_format(tmp_path: Path, contents: str) -> subprocess.CompletedPr
         (tmp_path / name).write_bytes(b"test EFI payload")
     tree = tmp_path / "initrd-tree"
     (tree / "lib" / "modules" / kver).mkdir(parents=True)
+    if contents != "invalid":
+        # #3077: build_initramfs.sh writes the package list into the initrd; the stick build refuses one without it
+        pkglist = tree / "usr" / "share" / "doc" / "licenses" / "packages.tsv"
+        pkglist.parent.mkdir(parents=True)
+        pkglist.write_text("firmware-amd-graphics\t20250410-2\tnon-free-firmware/kernel\tGPL-2+\n")
     if contents not in ("clean", "invalid"):
         marker = tree / contents
         marker.parent.mkdir(parents=True, exist_ok=True)

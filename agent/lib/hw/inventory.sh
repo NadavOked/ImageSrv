@@ -26,7 +26,7 @@ _pci_hex() {
     # $1 = a sysfs attribute holding 0x8086 / 0x020000. Prints lowercase hex
     # without the prefix; prints nothing and fails on anything that is not
     # hex -- a device whose ID cannot be read is left out, not made up.
-    _h=$(tr -d '\n\r ' < "$1" 2>/dev/null | tr 'A-F' 'a-f')
+    _h=$(tr -d '\n\r ' 2>/dev/null < "$1" | tr 'A-F' 'a-f')
     _h=${_h#0x}
     case "$_h" in ''|*[!0-9a-f]*) return 1 ;; esac
     printf '%s' "$_h"
@@ -55,7 +55,7 @@ inventory_tpm() {
     _t="$SYSROOT/sys/class/tpm"
     [ -d "$_t" ] || { printf 'null'; return; }
     [ -e "$_t/tpm0" ] || { printf '{"present":false}'; return; }
-    _maj=$(tr -dc '0-9' < "$_t/tpm0/tpm_version_major" 2>/dev/null)
+    _maj=$(tr -dc '0-9' 2>/dev/null < "$_t/tpm0/tpm_version_major")
     case "$_maj" in
         2) printf '{"present":true,"version":"2.0"}' ;;
         1) printf '{"present":true,"version":"1.2"}' ;;

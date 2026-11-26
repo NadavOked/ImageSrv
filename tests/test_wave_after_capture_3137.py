@@ -120,7 +120,16 @@ def derive(monkeypatch):
     fake = Derive()
     fake.hold.set()
     monkeypatch.setattr(F, "derive_index", fake)
-    return fake
+    existing = set(threading.enumerate())
+    try:
+        yield fake
+    finally:
+        # A 503 or a ceiling verdict can return while IndexPrep still owns a
+        # B3Lister. Let it finish (including kill/wait on errors) before teardown.
+        fake.hold.set()
+        for worker in threading.enumerate():
+            if worker not in existing and worker.name.startswith("indexprep-"):
+                worker.join()
 
 
 def _open(room_server):

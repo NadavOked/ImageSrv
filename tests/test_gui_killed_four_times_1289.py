@@ -11,19 +11,16 @@ from __future__ import annotations
 
 import os
 import signal
-import time
-from pathlib import Path
-
-from test_gui_keeper_1726 import (POSIX, _alive, _await, _lines, _report, _start, _stop, _write)
+from native import requires_native
 
 #: the bridge as test_gui_keeper_1726 mocks it, with its own pid kept so a test can kill THE BRIDGE (what `kill imagesrv-kiosk` hits).
 KIOSK_PID = r'''#!/bin/sh
-echo "$$" >> "$RUN_DIR/bridges"
 echo "run screen=$GUI_SCREEN" >> "$RUN_DIR/kiosk.runs"
 mkdir -p "$RUN_DIR/gui"
 sleep 300 & s=$!
 echo "$s $s" > "$RUN_DIR/gui/station.pid"
 echo "$s" >> "$RUN_DIR/stations"
+echo "$$" >> "$RUN_DIR/bridges"  # the keeper can now read this bridge's station PID
 wait "$s"
 '''
 
@@ -44,13 +41,10 @@ done
 '''
 
 
-def _bridges(tmp_path: Path) -> list[int]:
-    return [int(x) for x in _lines(tmp_path / "run" / "bridges")]
-
-
-@POSIX
+@requires_native(posix=True, why="the keeper and four signalled bridges")
 def test_the_gui_killed_four_times_gives_the_message_the_report_and_the_local_boot(tmp_path):
     import test_gui_keeper_1726 as keeper
+    from test_gui_keeper_1726 import _await, _lines, _report, _start, _stop
     original = keeper.KIOSK
     keeper.KIOSK = KIOSK_PID
     try:
@@ -60,17 +54,18 @@ def test_the_gui_killed_four_times_gives_the_message_the_report_and_the_local_bo
     run = tmp_path / "run"
     try:
         for i in range(1, 5):
-            first = _await(lambda: len(_bridges(tmp_path)) >= i, 20)
-            assert first, f"bridge {i} never started\n" + _report(tmp_path)
-            time.sleep(2)                                   # the GUI is up for a moment, as in the run
-            os.kill(_bridges(tmp_path)[i - 1], signal.SIGTERM)
+            ready = _await(lambda: _lines(run / "bridges")[i - 1:i], 20)
+            assert ready, f"bridge {i} never started\n" + _report(tmp_path)
+            os.kill(int(ready[0]), signal.SIGTERM)
         log = lambda: (run / "agent.log").read_text(encoding="utf-8") if (run / "agent.log").exists() else ""
         assert _await(lambda: "after 3 restarts -- the static screen instead" in log(), 15), \
             "the keeper never said it gave up\n" + _report(tmp_path) + "\n" + log()
         assert _await(lambda: "native GUI unavailable" in log(), 20), \
             "the main loop never reached gui_unavailable_local\n" + _report(tmp_path) + "\n" + log()
+        assert proc.wait(timeout=20) == 0, _report(tmp_path)
         reports = "\n".join(_lines(run / "reports"))
         assert "report cloner set" in reports and "DIE_LOCAL" in reports, (reports, log())
-        assert len(_bridges(tmp_path)) == 4, _bridges(tmp_path)   # the first and three restarts: no fifth
+        bridges = _lines(run / "bridges")
+        assert len(bridges) == 4, bridges   # the first and three restarts: no fifth
     finally:
         _stop(proc)

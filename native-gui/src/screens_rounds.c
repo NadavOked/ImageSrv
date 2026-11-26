@@ -113,6 +113,7 @@ const char *smart_reason_text(const char *reason) {
     if (!strcmp(reason, "cable")) return "סיבה: כבל/חריץ";
     if (!strcmp(reason, "disk")) return "סיבה: הדיסק";
     if (!strcmp(reason, "removed")) return "סיבה: המגירה נשלפה";   /* ata_cause.py, owner 17/10 */
+    if (!strcmp(reason, "network")) return "סיבה: הרשת נפלה";   /* #3844: the agent heard no answer from the server */
     if (!strcmp(reason, "write_error")) return "סיבה: שגיאת כתיבה לדיסק";   /* #1841: a refused fsync mid-partition */
     if (!strcmp(reason, "unclassified")) return "סיבה: לא סווג";
     return reason;

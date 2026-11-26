@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
+from server.db import SqlConnection
 
 from server.brain import gate_core
 from server.brain.gate_core import OPEN, UNDECIDED, WARN, Reading, undecided
@@ -17,11 +17,11 @@ from server.brain.gate_host import fold
 log = logging.getLogger("imagesrv.brain")
 
 
-def _count(conn: sqlite3.Connection, sql: str, *args) -> int:
+def _count(conn: SqlConnection, sql: str, *args) -> int:
     return conn.execute(sql, args).fetchone()[0]
 
 
-def questions(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
+def questions(conn: SqlConnection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
     """B55: שאלה פתוחה לאדם על הסבב (`round_interrupts`, `interrupt.view`), ותור פס הייצור (`prodline`).
 
     **מה אפשר לראות ברגע הזה.** השער רץ מיד אחרי שהסבב נוצר: שאלה נולדת רק מ-hello מצטרף של משכפל שכבר בתוך הזרם
@@ -52,7 +52,7 @@ def questions(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) ->
     return [Reading(OPEN, reason, seen)]
 
 
-def _held_part(conn: sqlite3.Connection, mac: str, name: str) -> tuple[str, str, str]:
+def _held_part(conn: SqlConnection, mac: str, name: str) -> tuple[str, str, str]:
     from server.agent import held as agent_held          # noqa: PLC0415
 
     row = conn.execute("SELECT held_at, held_json FROM net_devices WHERE mac = ?", (mac,)).fetchone()
@@ -66,7 +66,7 @@ def _held_part(conn: sqlite3.Connection, mac: str, name: str) -> tuple[str, str,
     return WARN, f"{name} דלוק ומחכה ללחיצה על 'כבה' — יש בו דיסק עם בעיה מהסבב הקודם", "held=yes " + ";".join(problems)
 
 
-def _probe_part(conn: sqlite3.Connection, mac: str, name: str) -> list[tuple[str, str, str]]:
+def _probe_part(conn: SqlConnection, mac: str, name: str) -> list[tuple[str, str, str]]:
     from server.agent import probe                       # noqa: PLC0415
 
     got = probe.latest(conn, mac)
@@ -87,7 +87,7 @@ def _probe_part(conn: sqlite3.Connection, mac: str, name: str) -> list[tuple[str
     return [(OPEN, "ה-probe נקרא ולא נמצאה בו בעיה במה שנמדד", f"probe=ok sampled_at={got['sampled_at']}")]
 
 
-def _f1_part(conn: sqlite3.Connection, mac: str, name: str, marks: dict | None) -> list[tuple[str, str, str]]:
+def _f1_part(conn: SqlConnection, mac: str, name: str, marks: dict | None) -> list[tuple[str, str, str]]:
     if marks is None:
         return [(UNDECIDED, f"{name}: סימוני ה-F1 של הדיסקים לא נקראו", "f1=unread")]
     row = conn.execute("SELECT disks_json FROM net_devices WHERE mac = ?", (mac,)).fetchone()
@@ -102,7 +102,7 @@ def _f1_part(conn: sqlite3.Connection, mac: str, name: str, marks: dict | None) 
             for d in hits]
 
 
-def held(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
+def held(conn: SqlConnection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
     """B57: לכל משכפל: מוחזק (`held`), ה-probe שלו (`probe.verdicts`), וסימוני F1 על הדיסקים שלו (`disk_f1_marks`).
 
     - מוחזק (דלוק ומחכה ל"כבה", דיסק עם בעיה), פריט ב-``probe.verdicts`` (``warn`` או ``err``), או דיסק שלו שסומן "נצפה F1"

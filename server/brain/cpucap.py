@@ -139,24 +139,30 @@ class Learned:
 
 
 def _num(value: object, *, positive: bool = False) -> float | None:
-    ok = isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 and (value > 0 or not positive)
-    return float(value) if ok else None
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 and (value > 0 or not positive):
+        return float(value)
+    return None
 
 
 def wave_cores(result: dict) -> float | None:
     """כמה ליבות הגל עלה: ה-cgroup של היחידה כשנקרא, ואחרת סכום V8 -- ורק כשכל שלושת המרכיבים נקראו."""
-    server = result.get("server") if isinstance(result.get("server"), dict) else {}
+    raw_server = result.get("server")
+    server = raw_server if isinstance(raw_server, dict) else {}
     unit = _num(server.get("unit_cpu"))
     if unit is not None:
         return unit
     parts = [_num(server.get(k)) for k in ("server_cpu", "children_cpu", "chunkcast_cpu")]
-    return None if None in parts else sum(parts)
+    read = [p for p in parts if p is not None]
+    return None if len(read) != len(parts) else sum(read)
 
 
 def learn(conn, limit: int = LEARN_WAVES) -> Learned:
     """ה-`limit` הגלים האחרונים ב-`server_io` שנמדד בהם מעבד וקצב. כשל בקריאה = לא נלמד כלום."""
     import json                                    # noqa: PLC0415 -- רק כאן
-    cores_, per_mbps, seconds, skipped = [], [], [], 0
+    cores_: list[float] = []
+    per_mbps: list[float] = []
+    seconds: list[float] = []
+    skipped = 0
     try:
         rows = conn.execute("SELECT result_json FROM server_io WHERE kind = 'wave' AND result_json IS NOT NULL"
                             " ORDER BY started_at DESC, rowid DESC LIMIT ?", (limit * 3,)).fetchall()
@@ -170,7 +176,8 @@ def learn(conn, limit: int = LEARN_WAVES) -> Learned:
             result = json.loads(row["result_json"])
         except (TypeError, ValueError):
             result = None
-        server = result.get("server") if isinstance(result, dict) and isinstance(result.get("server"), dict) else {}
+        raw_server = result.get("server") if isinstance(result, dict) else None
+        server = raw_server if isinstance(raw_server, dict) else {}
         used, mbps = wave_cores(result) if isinstance(result, dict) else None, _num(server.get("nic_tx_mbps"), positive=True)
         if used is None or mbps is None:
             skipped += 1
@@ -218,10 +225,15 @@ def judge(*, n_cores: float | None, source: str, learned: Learned, psi: float | 
     wait = "" if eta_s is None else f"; חיזוי: ~{eta_s:.0f} ש' עד שגל מסתיים"
     if psi >= PSI_BUSY:
         return WAIT, f"המעבד כבר במחסור: PSI {psi:.0%} מעל {PSI_BUSY:.0%}{wait}", evidence
-    if live >= 1 and live + 1 > top:
+    if top is None:                      # `per_wave` <= 0: אין תקרה. כמו קודם נכשל כאן (והקורא מתעד ומחזיר UNDECIDED), רק במפורש
+        if live >= 1:
+            raise TypeError("'>' not supported between instances of 'int' and 'NoneType'")
+        if live == 0:
+            raise TypeError("'<' not supported between instances of 'NoneType' and 'int'")
+    elif live >= 1 and live + 1 > top:
         return WAIT, (f"השרת מחזיק עד ~{top} גלים במקביל ({n_cores:g} ליבות, גל עולה ~{learned.per_wave:.2f}), "
                       f"ורצים {live}{wait}"), evidence
-    if live == 0 and top < 1:
+    elif live == 0 and top < 1:
         return OPEN, (f"גל אחד עולה ~{learned.per_wave:.2f} ליבות, יותר ממה שהתקרה מרשה ({n_cores:g} x {HEADROOM:g}), "
                       "אבל אין גל שרץ, ולכן אין ממה להמתין"), evidence
     return OPEN, f"השרת מחזיק עד ~{top} גלים במקביל, ורצים {live}", evidence

@@ -10,9 +10,9 @@ probe_display() {
     for _pd_d in "$SYSFS_ROOT"/class/drm/card*-*; do
         [ -r "$_pd_d/status" ] || continue
         _pd_st=$(_rf "$_pd_d/status") || _pd_st=unknown
-        _pd_e=$(wc -c < "$_pd_d/edid" 2>/dev/null | tr -d ' ') || _pd_e=
+        _pd_e=$(wc -c 2>/dev/null < "$_pd_d/edid" | tr -d ' ') || _pd_e=
         case "$_pd_e" in ''|*[!0-9]*) _pd_e=null ;; esac
-        _pd_m=null; IFS= read -r _pd_mm < "$_pd_d/modes" 2>/dev/null && [ -n "$_pd_mm" ] && _pd_m=$(_js "$_pd_mm")
+        _pd_m=null; IFS= read -r _pd_mm 2>/dev/null < "$_pd_d/modes" && [ -n "$_pd_mm" ] && _pd_m=$(_js "$_pd_mm")
         [ "$_pd_c" = 0 ] || _pd_cs="$_pd_cs,"; _pd_c=1
         _pd_cs="$_pd_cs{\"name\":$(_js "${_pd_d##*/}"),\"status\":$(_js "$_pd_st"),\"edid_bytes\":$_pd_e,\"mode\":$_pd_m}"
     done

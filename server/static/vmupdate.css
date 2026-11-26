@@ -86,7 +86,7 @@
   background: var(--clr-action-soft); color: var(--clr-action-fg); }
 .vmu-uc .ubadge svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .vmu-uc .ubadge.ok { background: var(--clr-success-soft); color: var(--clr-success-fg); }
-.vmu-uc .ubadge.bad { background: var(--clr-danger-soft); color: var(--clr-danger); }
+.vmu-uc .ubadge.bad { background: var(--clr-danger-soft); color: var(--clr-danger-fg); }
 .vmu-uc .utxt { flex: 1; min-width: 0; }
 .vmu-uc .utxt h2 { font-size: 1.25rem; font-weight: 600; letter-spacing: -.018em; line-height: 1.25; outline: 0; margin: 0; }
 .vmu-uc .utxt p { color: var(--clr-muted); font-size: var(--t-sm); margin: 3px 0 0; }
@@ -114,7 +114,7 @@
 .vmu-us li.cur .si::after { content: ""; position: absolute; inset: -2px; border-radius: 50%; border: 2px solid transparent;
   border-top-color: var(--clr-action); border-inline-start-color: var(--clr-action); animation: vmuRot 1s linear infinite; }
 .vmu-us li.cur .si i { width: 8px; height: 8px; border-radius: 50%; background: var(--clr-action); }
-.vmu-us li.bad .si { border-color: var(--clr-danger); color: var(--clr-danger); background: var(--clr-danger-soft); }
+.vmu-us li.bad .si { border-color: var(--clr-danger); color: var(--clr-danger-fg); background: var(--clr-danger-soft); }
 @keyframes vmuRot { to { transform: rotate(360deg); } }
 .vmu-bar { display: block; height: 6px; border-radius: 99px; background: var(--clr-row-border); overflow: hidden; margin-top: 7px; max-width: 320px; }
 .vmu-bar > i { display: block; height: 100%; background: var(--clr-action); border-radius: 99px; transition: width var(--dur-sheet, 320ms) var(--ease, ease); }

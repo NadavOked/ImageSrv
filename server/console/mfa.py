@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
-import sqlite3
 import string
 import time
 
@@ -18,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from server.agent import body as agent_body   # #2471
 from server.console import auth, login_guard, totp, users
 from server.agent.api import ServerContext
-from server.db import _write_lock, get_setting, journal, now_iso, writing
+from server.db import _write_lock, get_setting, journal, now_iso, SqlConnection, writing
 from server.system import steadyclock
 
 #: נדב 18/10: "תכלס לא צריך לזה MFA. אם בנוי, אפשר להפעיל או לא". "true" = כל מנהל
@@ -32,13 +31,13 @@ SELF_DISABLE_REQUIRED_HE = ("אימות דו-שלבי חובה למנהלים ב
                             "כבו קודם את \"חיוב אימות דו-שלבי למנהלים\" בהגדרות ← אבטחה")
 
 
-def mfa_demanded(conn: sqlite3.Connection, info: dict) -> bool:
+def mfa_demanded(conn: SqlConnection, info: dict) -> bool:
     """האם MFA חובה למשתמש הזה: החיוב הכללי למנהלים דלוק, או שסומן לו "דרוש אימות
     דו-שלבי" (נדב 18/10, users.mfa_required)."""
     return get_setting(conn, SETTING) == "true" or bool(info.get("mfa_required"))
 
 
-def enrollment_required(conn: sqlite3.Connection, role: str, info: dict) -> bool:
+def enrollment_required(conn: SqlConnection, role: str, info: dict) -> bool:
     """האם המשתמש חייב לרשום MFA לפני session מלאה. רק מנהל (ל-deploy אין קונסולה,
     ו-MFA הוא למנהל בלבד), לא המקומי (is_builtin), ורק כש-MFA חובה לו."""
     return (role == "admin" and not info["is_builtin"] and not info["mfa_enabled"]
@@ -82,7 +81,7 @@ def _backup_matches(code: str, stored: str) -> bool:
     return hmac.compare_digest(guess, digest)
 
 
-def make_challenge(conn: sqlite3.Connection, username: str) -> str:
+def make_challenge(conn: SqlConnection, username: str) -> str:
     raw = secrets.token_urlsafe(32)
     expires = time.time() + CHALLENGE_TTL
     with _write_lock, writing(conn):
@@ -94,7 +93,7 @@ def make_challenge(conn: sqlite3.Connection, username: str) -> str:
     return raw
 
 
-def _challenge_user(conn: sqlite3.Connection, raw: str) -> str | None:
+def _challenge_user(conn: SqlConnection, raw: str) -> str | None:
     row = conn.execute(
         "SELECT username, expires_at FROM mfa_challenges WHERE token_hash = ?",
         (_hash_token(raw or ""),),
@@ -108,7 +107,7 @@ def _challenge_user(conn: sqlite3.Connection, raw: str) -> str | None:
     return row["username"]
 
 
-def consume_challenge(conn: sqlite3.Connection, raw: str) -> None:
+def consume_challenge(conn: SqlConnection, raw: str) -> None:
     with _write_lock, writing(conn):
         conn.execute(
             "DELETE FROM mfa_challenges WHERE token_hash = ?",
@@ -116,7 +115,7 @@ def consume_challenge(conn: sqlite3.Connection, raw: str) -> None:
         )
 
 
-def _new_backup_codes(conn: sqlite3.Connection, username: str) -> list[str]:
+def _new_backup_codes(conn: SqlConnection, username: str) -> list[str]:
     codes = [
         "".join(secrets.choice(BACKUP_ALPHABET) for _ in range(BACKUP_LEN))
         for _ in range(BACKUP_COUNT)
@@ -136,7 +135,7 @@ def _replayed(step: int, last_step: int | None) -> bool:
     return last_step is not None and step <= last_step
 
 
-def consume_backup(conn: sqlite3.Connection, username: str, code: str) -> bool:
+def consume_backup(conn: SqlConnection, username: str, code: str) -> bool:
     rows = conn.execute(
         "SELECT code_hash, used_at FROM mfa_backup_codes WHERE username = ?",
         (username,),

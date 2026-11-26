@@ -17,6 +17,12 @@
 # את dnsmasq ואת known-macs **מה-DB שלו** לתוך /etc — ועותק שרץ כ-root
 # היה כותב את הגיבוי (אולי ישן) על תצורת הייצור החיה. כ-nobody הכתיבה
 # נכשלת ונרשמת ביומן של **העותק**, והייצור אינו נוגע.
+#
+# #4014: `nft` מסרב גם הוא ל-nobody, ושער #2440 ("חומת אש הותקנה ואינה טעונה
+# — השרת לא עולה") לא יכול לקרוא אותו. לכן העותק מקבל
+# `--firewall-gate-unreadable-ok`: הוא מוותר על "nft לא נקרא" **בלבד**, בקול
+# רם (שורת "חומת אש: לא נבדק" ביומן, ושורה כזו גם לפני ה-PASS). טבלה שנקראה
+# וחסרה עדיין עוצרת את העותק, ושרת הייצור אינו מקבל את הדגל לעולם.
 
 set -euo pipefail
 
@@ -130,7 +136,7 @@ say "מרים שרת שני על 127.0.0.1:$PORT/$CONSOLE_PORT (לוג: $LOG)"
 "${RUN_AS[@]}" env PYTHONPATH="$APP_DIR" python3 -m server.main \
     --server-url "http://127.0.0.1:$PORT" --data-dir "$RESTORE/data" --images "$RESTORE/images" \
     --host 127.0.0.1 --port "$PORT" --console-host 127.0.0.1 --console-port "$CONSOLE_PORT"     --boot-port "$((PORT + 2))" \
-    --console-tls off --tftp-root "$RESTORE/tftp" \
+    --console-tls off --firewall-gate-unreadable-ok --tftp-root "$RESTORE/tftp" \
     --boot-dir "$RESTORE/boot" --dhcp-leases "$RESTORE/leases" --sender-simulate \
     --repo-dir "$APP_DIR" >> "$LOG" 2>&1 </dev/null &
 SERVER_PID=$!
@@ -161,4 +167,7 @@ else
     say "אימג'ים לא שוחזרו (--skip-images / גיבוי בלי אימג'ים) — נבדקו DB ותיקיית הנתונים בלבד"
 fi
 DB_MACHINES="$(python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); print(c.execute('select count(*) from machines').fetchone()[0])" "$RESTORE/data/imagesrv.db")"
+if grep -q "חומת אש: לא נבדק" "$LOG"; then
+    say "חומת אש: לא נבדק בתרגיל (העותק רץ כ-nobody ו-nft מסרב לו) — הנבדק הוא השרת, לא חומת האש"
+fi
 say "PASS — ‏$DB_MACHINES מכונות ב-DB המשוחזר; גיבוי: $BACKUP"

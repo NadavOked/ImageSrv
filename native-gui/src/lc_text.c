@@ -8,6 +8,17 @@
 #include "screens_rounds.h"
 #include "smartdlg.h"   /* #2017: the orange source's notice card */
 
+/* #3997: the targets of the heading, one name each: "לדיסק 1 ולדיסק 3", "לדיסק 1, לדיסק 2 ולדיסק 3". The "ו" has a space before it:
+ * in RTL a digit that ends a name sticks to the word after it ("לדיסק 1ולדיסק 3"). Never overflows `out`. */
+void lc_join_targets(const char *const *names, int n, char *out, size_t cap) {
+    size_t k = 0; if (!cap) return; out[0] = 0;
+    for (int i = 0; i < n; i++) {
+        int w = snprintf(out + k, cap - k, "%s%s", i == 0 ? "ל" : i == n - 1 ? " ול" : ", ל", names[i]);
+        if (w < 0 || (size_t)w >= cap - k) return;
+        k += (size_t)w;
+    }
+}
+
 /* #1437: a share as the screen says it -- floored, so 100% is only the end,
  * and one decimal under 10%: 1 GB of 500 is "0.2%", not "0%". */
 void lc_pct(char *out, size_t n, double share) {

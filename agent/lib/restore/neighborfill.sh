@@ -191,7 +191,7 @@ _nf_worker() {   # $1 = neighbour, $2 = its number (its ports), $3 = readers. In
         _nf_feed "$_nw_d.pieces" "$3" "$_nw_d.why" | chunkcast apply --part "$NF_P" $CHUNK_IMAGE_ARGS --state "$_nw_d.state" \
             --chunks-file "$_nw_d.list" "$NF_NODE" >> "$_nw_d.apply.out" 2>> "$LOG_FILE"
         _nw_rc=$?
-        read -r _nw_k _nw_w < "$_nw_d.why" 2>/dev/null || { [ "$_nw_rc" = 0 ] || _nf_say "$1 -> $NF_NODE: apply rc=$_nw_rc"; break; }
+        read -r _nw_k _nw_w 2>/dev/null < "$_nw_d.why" || { [ "$_nw_rc" = 0 ] || _nf_say "$1 -> $NF_NODE: apply rc=$_nw_rc"; break; }
         [ "$_nw_w" = bad ] && [ "$_nw_rc" != 5 ] || break   # stopped (the ceiling, the clock), or no target: the rest stays missing
         _nw_bad=$((_nw_bad + 1))
         _nf_say "$1 -> $NF_NODE: the piece from chunk $_nw_k was not read whole from $1 -- what of it was not written stays missing"

@@ -231,7 +231,7 @@ def note_wave(conn, session_id: str, summary) -> int | None:
 _NET_VERDICTS = {"jump": "JUMP", "ok": "OK", "unchecked": "UNCHECKED", "server_disk": "SERVER_DISK", "net_gap": "NET_GAP"}
 
 
-def _loss(kind: str, value) -> str:
+def _loss(kind: object, value) -> str:
     v = _num(value)
     return "לא נמדד" if v is None else f"{v:.2f}/GB"       # #3173: `kind` is always the chunk engine's
 
@@ -263,7 +263,7 @@ def note_netloss(conn, session_id: str, assessed) -> int | None:
             reason = f"מצב לא מוכר של LR16 ({_say(state)}): לא הוכרע"
         evidence = tuple(f"{key}={_say(assessed.get(key))}" for key in (
             "state", "kind", "interface", "drawers", "rate", "loss", "baseline", "waves", "local", "local_baseline"))
-        return _write(conn, session_id, NET_ACTION, _NET_VERDICTS.get(state, NOT_MEASURED), reason, evidence)
+        return _write(conn, session_id, NET_ACTION, _NET_VERDICTS.get(state, NOT_MEASURED) if isinstance(state, str) else NOT_MEASURED, reason, evidence)
     except Exception:                           # noqa: BLE001 -- המוח אינו מפיל את סוף הגל
         log.exception("brain: the B58 net-loss note of %s failed", session_id)
         return None

@@ -157,8 +157,10 @@ def test_apply_mount_refuses_a_stored_filesystem_outside_the_list(tmp_path):
     row = {"id": "loc_x", "type": "iscsi", "mount_point": str(tmp_path / "m"),
            "params_json": json.dumps({"device_by_path": DEVICE, "fs_type": "vfat"})}
     called = []
-    result = sl.apply_mount(row, {"mount": lambda *a: called.append(a) or sl.HookResult(OK)})
+    result = sl.apply_mount(row, {"mount": lambda *a: called.append(a) or sl.HookResult(OK)},
+                            data_dir=tmp_path)   # #4178: else the path guard refuses first, for another reason
     assert result.status == sl.FAILED and called == []
+    assert "vfat" in result.reason
 
 
 # ---------- #2468: fstab_write מסרב לשדה עם רווח או תו בקרה ----------

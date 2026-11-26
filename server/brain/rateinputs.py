@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from typing import TypeGuard
 
 from server.brain import memory
 from server.db import get_setting
@@ -100,11 +101,11 @@ def mode(conn) -> str:
         return DEFAULT
 
 
-def _count(value: object) -> bool:
+def _count(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
-def _number(value: object) -> bool:
+def _number(value: object) -> TypeGuard[float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0
 
 
@@ -158,7 +159,7 @@ def peak(taught: list[dict], macs: dict[str, int], noise: float = GOODPUT_NOISE,
     ``CLIMB``: the highest rate tried is the best -- the climb paid, the AIMD goes on.
     ``UNDECIDED``: the last wave is not a point (`last_wave_not_measured`), or only one rate was tried (`one_rate_tried`).
     `tried`: the points compared, lowest rate first -- the evidence."""
-    answer = {"verdict": UNDECIDED, "why": "last_wave_not_measured", "rate": None, "tried": []}
+    answer: dict[str, object] = {"verdict": UNDECIDED, "why": "last_wave_not_measured", "rate": None, "tried": []}
     if not taught:
         return answer
     stream = taught[0].get("stream_zbytes")
@@ -166,13 +167,11 @@ def peak(taught: list[dict], macs: dict[str, int], noise: float = GOODPUT_NOISE,
     for i, wave in enumerate(taught[:window]):
         asked, sent = wave.get("asked_bps"), wave.get("sent_bps")
         got = _mine(wave, macs)
-        usable = (got is not None and _count(stream) and stream > 0 and wave.get("stream_zbytes") == stream
-                  and _count(asked) and asked > 0 and _count(sent) and sent >= drive_rates.KEEP_UP * asked)
-        if not usable:
-            if i == 0:
-                return answer
-            continue
-        newest.setdefault(asked, {"session_id": wave.get("session_id"), "rate": asked, "bps": got})
+        if (got is not None and _count(stream) and stream > 0 and wave.get("stream_zbytes") == stream
+                and _count(asked) and asked > 0 and _count(sent) and sent >= drive_rates.KEEP_UP * asked):
+            newest.setdefault(asked, {"session_id": wave.get("session_id"), "rate": asked, "bps": got})
+        elif i == 0:
+            return answer
     tried = sorted(newest.values(), key=lambda p: p["rate"])
     answer["tried"] = tried
     if len(tried) < 2:
@@ -247,7 +246,10 @@ def unsafe(conn, macs: list[str], cleans: dict[str, list[tuple[int, float]]], no
 
     ``WALL``: `rate` is the lowest wall of the wave's cloners, `mac` whose. ``NO_WALL``: falls are remembered and none
     is a wall. ``UNDECIDED``: the memory of a cloner was not read, and no wall was found in what was -- not "no wall"."""
-    cloners, walls, unread = {}, [], []
+    cloners: dict[str, dict[str, object]] = {}
+    whys: dict[str, str] = {}
+    walls: list[tuple[int, str]] = []
+    unread: list[str] = []
     for mac in macs:
         drops = drops_of(conn, mac, now)
         if drops is None:
@@ -257,6 +259,7 @@ def unsafe(conn, macs: list[str], cleans: dict[str, list[tuple[int, float]]], no
             continue
         rate, why = wall_of(drops, cleans.get(mac, []), reprobe)
         cloners[mac] = {"drops": sorted(r for r, _at in drops), "why": why, "wall": rate}
+        whys[mac] = why
         if rate is not None:
             walls.append((rate, mac))
     if walls:
@@ -266,5 +269,5 @@ def unsafe(conn, macs: list[str], cleans: dict[str, list[tuple[int, float]]], no
         return {"verdict": UNDECIDED, "why": "memory_unread", "rate": None, "mac": None, "cloners": cloners, "unread": unread}
     if not cloners:
         return None
-    return {"verdict": NO_WALL, "why": ",".join(sorted({c["why"] for c in cloners.values()})), "rate": None, "mac": None,
+    return {"verdict": NO_WALL, "why": ",".join(sorted(set(whys.values()))), "rate": None, "mac": None,
             "cloners": cloners, "unread": unread}

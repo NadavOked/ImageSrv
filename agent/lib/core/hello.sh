@@ -18,7 +18,7 @@ clock_from_server() {
     _cs_here=$(date +%s) || { log "clock: cannot read the local clock; not set"; return 0; }
     _cs_off=$((_cs_here - _cs_now))
     [ "$_cs_off" -gt "$CLOCK_SLACK_S" ] || [ "$_cs_off" -lt "-$CLOCK_SLACK_S" ] || { : > "$RUN_DIR/clock.ok"; return 0; }
-    _cs_n=$(wc -l < "$LOG_FILE" 2>/dev/null) || _cs_n=0   # #3850: lines so far carry the RTC; log() marks them "rtc", never rewritten
+    _cs_n=$(wc -l 2>/dev/null < "$LOG_FILE") || _cs_n=0   # #3850: lines so far carry the RTC; log() marks them "rtc", never rewritten
     if date -s "@$_cs_now" > /dev/null; then
         : > "$RUN_DIR/clock.ok"
         log "clock: set from the server, was ${_cs_off}s off (local $_cs_here, server $_cs_now); the ${_cs_n:-0} lines before this are stamped rtc"

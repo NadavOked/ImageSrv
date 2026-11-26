@@ -41,7 +41,7 @@ direct_chunk_targeted() {
     # ceiling, or one the server no longer waits for, is stopped by its own pid.
     while kill -0 "$_dt_pid" 2>/dev/null; do
         sleep 1
-        _dt_now=$(wc -c < "$_dp_w.out" 2>/dev/null)
+        _dt_now=$(wc -c 2>/dev/null < "$_dp_w.out")
         if [ "$_dt_now" != "$_dt_seen" ]; then _dt_seen="$_dt_now"; _dt_still=0; else _dt_still=$((_dt_still + 1)); fi
         if [ -e "$RUN_DIR/dchunk.abort" ] || [ "$_dt_still" -ge "$WAIT_STREAM_STALL_S" ]; then
             _dt_kill=$((_dt_kill + 1)); [ "$_dt_kill" -le 10 ] || break

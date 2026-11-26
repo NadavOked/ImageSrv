@@ -27,6 +27,7 @@ from urllib.parse import urlsplit
 
 from server.core.atomicfile import write_atomic
 from server.core import unreadable
+from server.core.logtext import one_line
 from server.db import _settle, _write_lock, journal, now_iso, writing
 from server.system.health_rows import check
 
@@ -278,6 +279,79 @@ def local_path_problem(path, data_dir, is_mount, boot_trees=()) -> str | None:
     return LOCAL_PATH_REFUSED
 
 
+#: #4178: מה שהמפעיל רואה כשנתיב של מיקום אחסון יוצא מהשורשים המותרים. הפרטים ביומן.
+PATH_NOT_ALLOWED = ("הנתיב של המיקום מחוץ לתיקיות שהשרת מתיר (תיקיית הנתונים, /srv, או כונן מעוגן) — "
+                    "לא נוצרה תיקייה ולא בוצע עיגון")
+
+
+def _within(real: str, roots) -> str | None:
+    """`real` (אחרי realpath) שווה לשורש או מתחיל ב-`root + os.sep` -> הנתיב; אחרת None.
+    המקום היחיד שבו נתיב של מיקום אחסון מושווה לשורש. שורש שהוא שורש מערכת הקבצים אינו שורש."""
+    for root in roots:
+        if not root or os.path.dirname(root) == root:
+            continue
+        if real == root:
+            return root
+        if real.startswith(root + os.sep):
+            return real
+    return None
+
+
+def _inside_allowed(target, data_dir=None, is_mount=None) -> str | None:
+    """#4178: נתיב של מיקום אחסון נכנס ל-`Path`/`mkdir`/`is_dir` רק דרך כאן. מחזיר את הנתיב אחרי
+    `realpath` כשהוא בתוך אחד השורשים ש-`local_path_problem` כבר מתיר — `data_dir`, `LOCAL_ROOTS`,
+    או נקודת עיגון קיימת (`is_mount`, ברירת מחדל `is_mounted`) שאינה `/` ואינה תחת `LOCAL_SYSTEM_TREES`;
+    אחרת None. אותו כלל, לא כלל חדש: `local_path_problem` רץ ביצירה בלבד, וזו הבדיקה בכל פעם שהנתיב
+    משמש, אחרי ש-`..` וקישורים סימבוליים כבר נפתרו. נתיב ריק, יחסי, או עם תו בקרה נדחה.
+    בכוונה לא כאן: עצי האתחול ו-`DATA_DIR_RESERVED` — הם נבדקים ביצירה, ומיקום שמור אינו נבדק מחדש."""
+    raw = str(target or "")
+    if not raw or _CONTROL_CHARS.search(raw) or not (os.path.isabs(raw) or raw.startswith("/")):
+        return None
+    real = os.path.realpath(raw)
+    roots = [os.path.realpath(root) for root in LOCAL_ROOTS]
+    if data_dir:
+        roots.append(os.path.realpath(str(data_dir)))
+    found = _within(real, roots)
+    if found is not None:
+        return found
+    if _within(real, [os.path.realpath(tree) for tree in LOCAL_SYSTEM_TREES]) is not None:
+        return None
+    check = is_mount or is_mounted
+    mounts, point = [], real
+    while True:
+        if check(point):
+            mounts.append(point)
+        parent = os.path.dirname(point)
+        if parent == point:
+            break
+        point = parent
+    return _within(real, mounts)
+
+
+def _allowed_prefixes(real: str, data_dir=None, is_mount=None) -> tuple[str, ...]:
+    """#4178: the allowed roots of `_inside_allowed`, each as `root + os.sep`, for the check at the
+    point of use: `os.path.realpath(<path>/images).startswith(...)` right before Path/mkdir/is_dir.
+    CodeQL recognises only that inline form (measured 26/11 on CodeQL 2.27.6: a helper that returns
+    the path, or a startswith inside `or`/`and`, is not a barrier), and it also refuses an `images`
+    that is a symlink out of the location. A mount point under a system tree is not a root."""
+    roots = [os.path.realpath(root) for root in LOCAL_ROOTS]
+    if data_dir:
+        roots.append(os.path.realpath(str(data_dir)))
+    if _within(real, roots) is not None:                 # no mount probe when a fixed root holds it
+        return tuple(root + os.sep for root in roots if root and os.path.dirname(root) != root)
+    system = [os.path.realpath(tree) for tree in LOCAL_SYSTEM_TREES]
+    check = is_mount or is_mounted
+    point = real
+    while True:
+        if check(point) and _within(point, system) is None:
+            roots.append(point)
+        parent = os.path.dirname(point)
+        if parent == point:
+            break
+        point = parent
+    return tuple(root + os.sep for root in roots if root and os.path.dirname(root) != root)
+
+
 @dataclass(frozen=True)
 class HookResult:
     """תוצאת hook — שלושה מצבים, לא bool (עיקרון 5)."""
@@ -285,6 +359,22 @@ class HookResult:
     status: str
     reason: str = ""
     payload: dict = field(default_factory=dict)
+
+
+#: #3949: a command's raw stderr goes to the server log, never to the console, and a secret that
+#: the tool echoed (`password=...`, a CHAP secret) is masked before it is written there.
+_SECRET_PAIR = re.compile(r"(?i)\b(password|passwd|secret|chap_secret)\b(\s*[=:]\s*)\S+")
+_LOG_TEXT_MAX = 500
+
+
+def log_text(value: object) -> str:
+    """A value for a log line: secrets masked, one line, capped (CodeQL py/log-injection)."""
+    return one_line(_SECRET_PAIR.sub(r"\1\2[redacted]", str(value)))[:_LOG_TEXT_MAX]
+
+
+def operator_reason(result: HookResult, message: str) -> str:
+    log.warning("%s (%s): %s", log_text(message), log_text(result.status), log_text(result.reason))
+    return f"{message} — הפרטים ביומן השרת"
 
 
 # ---------------------------------------------------------------------------
@@ -1489,8 +1579,12 @@ def _write_probe(target: Path, readonly: bool) -> HookResult:
 
 def test_connection(kind: str, params: dict, hooks: dict, *,
                     tmp_target: Path | None = None,
-                    server_base: str = "") -> dict:
-    """בדיקת חיבור חיה. הצלחה = עיגון זמני + כתיבה + df שנקרא."""
+                    server_base: str = "",
+                    data_dir: str | Path | None = None) -> dict:
+    """בדיקת חיבור חיה. הצלחה = עיגון זמני + כתיבה + df שנקרא.
+
+    #4178: הנתיב של מיקום `local` עובר `_inside_allowed` (`data_dir` + `/srv` + כונן מעוגן) לפני
+    `is_dir` ו-df. `tmp_target` מגיע מהשרת עצמו, לא מהמפעיל, ולכן אינו נבדק כאן."""
     warnings: list[str] = []
     interfaces = hooks.get("interfaces", lambda: [])()
     if kind in ("nfs", "smb", "iscsi"):
@@ -1503,13 +1597,21 @@ def test_connection(kind: str, params: dict, hooks: dict, *,
         path = params.get("path") or params.get("mount_point")
         if not path:
             return {"ok": False, "reason": "חסר נתיב", "warnings": warnings}
-        target = Path(path)
+        safe = _inside_allowed(path, data_dir, hooks.get("is_mount"))
+        if safe is None:
+            log.warning("storage path refused in connection test: %s", log_text(path))
+            return {"ok": False, "reason": PATH_NOT_ALLOWED, "warnings": warnings}
+        images = os.path.realpath(os.path.join(safe, "images"))
+        if not images.startswith(_allowed_prefixes(safe, data_dir, hooks.get("is_mount"))):
+            log.warning("storage path refused in connection test: %s", log_text(path))
+            return {"ok": False, "reason": PATH_NOT_ALLOWED, "warnings": warnings}
+        target = Path(images).parent
         if not target.is_dir():
             return {"ok": False, "reason": f"הנתיב אינו תיקייה: {path}",
                     "warnings": warnings}
         space = hooks["df"](str(target))
         if space.status != OK:
-            return {"ok": False, "reason": space.reason or "לא הצלחנו לקרוא מקום פנוי",
+            return {"ok": False, "reason": operator_reason(space, "לא הצלחנו לקרוא מקום פנוי"),
                     "status": space.status, "warnings": warnings}
         return {"ok": True, "free_bytes": space.payload.get("free_bytes"),
                 "total_bytes": space.payload.get("total_bytes"), "warnings": warnings}
@@ -1522,15 +1624,17 @@ def test_connection(kind: str, params: dict, hooks: dict, *,
         target.mkdir(parents=True, exist_ok=True)
         mounted = hooks["mount"]("nfs", f"{server}:{export}", str(target), _nfs_opts(params))
         if mounted.status != OK:
-            return {"ok": False, "reason": mounted.reason, "status": mounted.status,
+            return {"ok": False, "reason": operator_reason(mounted, "בדיקת העיגון נכשלה"),
+                    "status": mounted.status,
                     "warnings": warnings}
         try:
             wrote = _write_probe(target, bool(params.get("readonly")))
             if wrote.status != OK:
-                return {"ok": False, "reason": wrote.reason, "warnings": warnings}
+                return {"ok": False, "reason": operator_reason(wrote, "כתיבת קובץ בדיקה נכשלה"),
+                        "warnings": warnings}
             space = hooks["df"](str(target))
             if space.status != OK:
-                return {"ok": False, "reason": space.reason or "לא הצלחנו לקרוא מקום פנוי",
+                return {"ok": False, "reason": operator_reason(space, "לא הצלחנו לקרוא מקום פנוי"),
                         "status": space.status, "warnings": warnings}
             return {"ok": True, "free_bytes": space.payload.get("free_bytes"),
                     "total_bytes": space.payload.get("total_bytes"), "warnings": warnings}
@@ -1549,22 +1653,25 @@ def test_connection(kind: str, params: dict, hooks: dict, *,
         if creds_file:
             written = hooks["creds_write"](creds_file, creds)
             if written.status != OK:
-                return {"ok": False, "reason": written.reason, "status": written.status,
+                return {"ok": False, "reason": operator_reason(written, "כתיבת קובץ ה-credentials נכשלה"),
+                        "status": written.status,
                         "warnings": warnings}
         try:
             mounted = hooks["mount"]("cifs", source, str(target),
                                      _smb_opts(params, creds_file))
             if mounted.status != OK:
-                return {"ok": False, "reason": mounted.reason, "status": mounted.status,
+                return {"ok": False, "reason": operator_reason(mounted, "בדיקת העיגון נכשלה"),
+                        "status": mounted.status,
                         "warnings": warnings}
             try:
                 wrote = _write_probe(target, bool(params.get("readonly")))
                 if wrote.status != OK:
-                    return {"ok": False, "reason": wrote.reason, "warnings": warnings}
+                    return {"ok": False, "reason": operator_reason(wrote, "כתיבת קובץ בדיקה נכשלה"),
+                            "warnings": warnings}
                 space = hooks["df"](str(target))
                 if space.status != OK:
                     return {"ok": False,
-                            "reason": space.reason or "לא הצלחנו לקרוא מקום פנוי",
+                            "reason": operator_reason(space, "לא הצלחנו לקרוא מקום פנוי"),
                             "status": space.status, "warnings": warnings}
                 return {"ok": True, "free_bytes": space.payload.get("free_bytes"),
                         "total_bytes": space.payload.get("total_bytes"),
@@ -1582,7 +1689,8 @@ def test_connection(kind: str, params: dict, hooks: dict, *,
             return {"ok": False, "reason": "חסר פורטל", "warnings": warnings}
         discovered = hooks["iscsi_discover"](portal)   # #2606: בלי CHAP — הוא של ה-login
         if discovered.status != OK:
-            return {"ok": False, "reason": discovered.reason, "status": discovered.status,
+            return {"ok": False, "reason": operator_reason(discovered, "גילוי יעדי iSCSI נכשל"),
+                    "status": discovered.status,
                     "warnings": warnings}
         items = (discovered.payload or {}).get("items") or []
         if iqn and not any(item.get("iqn") == iqn for item in items):
@@ -1600,16 +1708,29 @@ def test_connection(kind: str, params: dict, hooks: dict, *,
     return {"ok": False, "reason": f"סוג לא מוכר: {kind}", "warnings": warnings}
 
 
-def apply_mount(row: dict, hooks: dict) -> HookResult:
-    """עיגון קבוע לפי סוג + יצירת תת-תיקיית images/."""
+def apply_mount(row: dict, hooks: dict, *, failure_message: str = "העיגון נכשל",
+                data_dir: str | Path | None = None) -> HookResult:
+    """עיגון קבוע לפי סוג + יצירת תת-תיקיית images/.
+
+    #4178: לפני כל קובץ credentials, mount ותיקייה — `mount_point` חייב לעבור `_inside_allowed`
+    (`data_dir` + `/srv` + כונן מעוגן). אחרת FAILED בשם, ושום דבר לא נכתב. ל-hooks עובר `target`
+    כפי ששמור (שם העיגון וה-fstab), ולמערכת הקבצים — רק הנתיב שאושר."""
     params = params_of(row)
     kind = row["type"]
     target = row["mount_point"]
+    safe = _inside_allowed(target, data_dir, hooks.get("is_mount"))
+    if safe is None:
+        log.warning("storage path refused for %s: %s", log_text(row.get("id")), log_text(target))
+        return HookResult(FAILED, PATH_NOT_ALLOWED)
     if kind == "local" and is_disk(row):
         result = hooks["mount"](params.get("fs_type") or "ext4",
                                 f"UUID={params['uuid']}", target, "")
     elif kind == "local":
-        path = Path(target)
+        images = os.path.realpath(os.path.join(safe, "images"))
+        if not images.startswith(_allowed_prefixes(safe, data_dir, hooks.get("is_mount"))):
+            log.warning("storage path refused for %s: %s", log_text(row.get("id")), log_text(target))
+            return HookResult(FAILED, PATH_NOT_ALLOWED)
+        path = Path(images).parent
         if not path.is_dir():
             return HookResult(FAILED, f"הנתיב אינו תיקייה: {target}")
         return HookResult(OK)
@@ -1625,13 +1746,18 @@ def apply_mount(row: dict, hooks: dict) -> HookResult:
             # סיסמה — נשאר כמו שהוא; בלעדיו — כישלון בשם, לא mount.cifs בלי סיסמה.
             kept = hooks["creds_password_present"](creds_file)
             if kept.status == UNCHECKED:
-                return HookResult(UNCHECKED, f"{SECRET_OF['smb'][2]} · {kept.reason}")
+                # #3949: the message is the operator's; the log gets the literal, not SECRET_OF
+                # (CodeQL reads that name as a secret and flags the log call).
+                log.warning("smb credentials file unreadable (%s): %s",
+                            log_text(kept.status), log_text(kept.reason))
+                return HookResult(UNCHECKED, f"{SECRET_OF['smb'][2]} — הפרטים ביומן השרת")
             if kept.status != OK:
                 return HookResult(FAILED, SECRET_OF["smb"][2])
         elif creds_file:
             written = hooks["creds_write"](creds_file, creds)
             if written.status != OK:
-                return written
+                return HookResult(written.status, operator_reason(written, "כתיבת קובץ ה-credentials נכשלה"),
+                                  written.payload)
         result = hooks["mount"]("cifs", source, target, _smb_opts(params, creds_file))
     elif kind == "iscsi":
         device = iscsi_device(params)   # #2468
@@ -1643,11 +1769,18 @@ def apply_mount(row: dict, hooks: dict) -> HookResult:
         result = hooks["mount"](fs_type, device, target, "")
     else:
         return HookResult(FAILED, f"סוג לא מוכר: {kind}")
-    if result.status == OK:
-        try:
-            (Path(target) / "images").mkdir(parents=True, exist_ok=True)
-        except OSError as exc:
-            return HookResult(FAILED, f"העיגון הצליח אבל לא נוצרה תיקיית images/: {exc}")
+    if result.status != OK:
+        return HookResult(result.status, operator_reason(result, failure_message), result.payload)
+    try:
+        images = os.path.realpath(os.path.join(safe, "images"))
+        if not images.startswith(_allowed_prefixes(safe, data_dir, hooks.get("is_mount"))):
+            log.warning("storage path refused for %s: %s", log_text(row.get("id")), log_text(target))
+            return HookResult(FAILED, PATH_NOT_ALLOWED)
+        Path(images).mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        log.warning("could not create images/ after mounting %s: %s",
+                    log_text(target), log_text(exc))
+        return HookResult(FAILED, "העיגון הצליח אבל לא נוצרה תיקיית images/ — הפרטים ביומן השרת")
     return result
 
 
@@ -1721,7 +1854,10 @@ def measure(row: dict, hooks: dict) -> HookResult:
     disk = is_disk(row)
     if (disk or row["type"] in MOUNTED_TYPES) and             not hooks.get("is_mount", os.path.ismount)(row["mount_point"]):
         return HookResult(FAILED, "הכונן אינו מעוגן" if disk else "המיקום אינו מעוגן")
-    return hooks["df"](row["mount_point"])
+    space = hooks["df"](row["mount_point"])
+    if space.status != OK:
+        return HookResult(space.status, operator_reason(space, "הבדיקה נכשלה"), space.payload)
+    return space
 
 
 #: #2123: מה שהרשימה מראה בין עליית השרת לבדיקה הראשונה שלו.

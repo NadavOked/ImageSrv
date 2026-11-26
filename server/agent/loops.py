@@ -21,13 +21,12 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 from datetime import datetime, timedelta
 
 from boot.grub_menu import decide
 
 from server.agent import unknown_screen
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 from server.rounds.sessions import SessionStore
 from server.system.health_rows import check, last_seen as _last_seen
 
@@ -54,7 +53,7 @@ SILENCE_SECONDS = 600
 DELETION_GRACE_SECONDS = 600
 
 
-def _deleted_recently(conn: sqlite3.Connection, mac: str, now: str) -> bool:
+def _deleted_recently(conn: SqlConnection, mac: str, now: str) -> bool:
     cutoff = (datetime.fromisoformat(now)
               - timedelta(seconds=DELETION_GRACE_SECONDS)).isoformat(timespec="seconds")
     return conn.execute(
@@ -73,7 +72,7 @@ def _cutoff(now: str) -> str:
             - timedelta(seconds=SILENCE_SECONDS)).isoformat(timespec="seconds")
 
 
-def unexplained(conn: sqlite3.Connection, store: SessionStore, answer: dict,
+def unexplained(conn: SqlConnection, store: SessionStore, answer: dict,
                 *, off_vlan: bool) -> bool | None:
     """האם ה-hello הזה הוא ראיה לכך שהאתחול לדיסק המקומי נכשל.
 
@@ -126,7 +125,7 @@ def unexplained(conn: sqlite3.Connection, store: SessionStore, answer: dict,
         return None
 
 
-def note(conn: sqlite3.Connection, store: SessionStore, mac: str, answer: dict,
+def note(conn: SqlConnection, store: SessionStore, mac: str, answer: dict,
          *, off_vlan: bool = False, now: str | None = None) -> int | None:
     """סופר את ה-hello הזה בלולאה הנוכחית של המכונה ומחזיר את מספרו.
 
@@ -155,7 +154,7 @@ def note(conn: sqlite3.Connection, store: SessionStore, mac: str, answer: dict,
         return None
 
 
-def _count(conn: sqlite3.Connection, mac: str, ts: str) -> int | None:
+def _count(conn: SqlConnection, mac: str, ts: str) -> int | None:
     """ה-UPSERT, כולל איפוס הלולאה — בכתיבה אחת, בלי מרוץ קריאה-כתיבה.
 
     שתיקה ארוכה מ-`SILENCE_SECONDS` מתחילה ספירה חדשה באותה שורה:
@@ -201,7 +200,7 @@ def _count(conn: sqlite3.Connection, mac: str, ts: str) -> int | None:
     return int(row["hits"])
 
 
-def current(conn: sqlite3.Connection, now: str | None = None) -> list[dict]:
+def current(conn: SqlConnection, now: str | None = None) -> list[dict]:
     """מי בלולאה **עכשיו** — שורה אחת למחשב, האחרון שנראה בראש.
 
     ירידה מהרשימה אינה "נפתר". אין אירוע "נרפא", יש רק היעדר אירוע,

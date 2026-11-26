@@ -23,11 +23,10 @@ from __future__ import annotations
 
 import ipaddress
 import logging
-import sqlite3
 from datetime import datetime, timedelta
 
 from server.agent.loops import SILENCE_SECONDS
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 from server.system.health_rows import check, last_seen as _last_seen
 
 log = logging.getLogger("imagesrv.foreign_vlan")
@@ -61,7 +60,7 @@ def where(scope: dict | None) -> str | None:
         return None
 
 
-def note(conn: sqlite3.Connection, mac: str, scope: dict | None,
+def note(conn: SqlConnection, mac: str, scope: dict | None,
          *, off_vlan: bool, now: str | None = None) -> int | None:
     """רושם פנייה מרשת זרה ומחזיר את מספרה בחלון הנוכחי.
 
@@ -85,7 +84,7 @@ def note(conn: sqlite3.Connection, mac: str, scope: dict | None,
         return None
 
 
-def _count(conn: sqlite3.Connection, mac: str, address: str,
+def _count(conn: SqlConnection, mac: str, address: str,
            ts: str) -> int | None:
     """ה-UPSERT, כולל איפוס החלון — בכתיבה אחת, בלי מרוץ קריאה-כתיבה.
 
@@ -131,7 +130,7 @@ def _count(conn: sqlite3.Connection, mac: str, address: str,
     return int(row["hits"])
 
 
-def current(conn: sqlite3.Connection, now: str | None = None) -> list[dict]:
+def current(conn: SqlConnection, now: str | None = None) -> list[dict]:
     """מי פונה מרשת זרה **עכשיו** — שורה אחת למחשב, האחרון בראש.
 
     ירידה מהרשימה אינה "נפתר". אין אירוע "נרפא", יש רק היעדר אירוע:
