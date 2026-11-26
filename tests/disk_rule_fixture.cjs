@@ -23,8 +23,8 @@ const holds = (fact, facts) => fact.split('|').some((alt) => {
 });
 
 function factsOf(disk, { fail = null, write_slow = false } = {}) {
-  const ro = !!(fail && fail.cause === 'readonly');
-  return { smart: ro ? 'fail' : disk.smart || 'unchecked', failed_last: !!fail && !ro, write_incomplete: disk.write_mark === 'incomplete',
+  const ro = !!(fail && fail.cause === 'readonly'), cable = !!(fail && fail.cause === 'cable');   // #3008: a cable cause is the connection's (disk_rule.failures_of)
+  return { smart: ro ? 'fail' : disk.smart || 'unchecked', failed_last: !!fail && !ro && !cable, cable_failed: cable, write_incomplete: disk.write_mark === 'incomplete',
     sata_issue: Array.isArray(disk.sata_issues) && disk.sata_issues.some((w) => w === 'link_reset' || w === 'drawer_gone'),
     write_slow: write_slow === true || disk.write_slow === true };
 }

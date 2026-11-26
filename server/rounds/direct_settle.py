@@ -13,10 +13,9 @@
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime
 
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 from server.rounds import direct
 
 #: כמה שניות אחרי שהסבב נסגר (`closed` או `failed`) ממתינים לדיווח של המקור לפני שסוגרים את משימתו.
@@ -29,7 +28,7 @@ ROUND_FAILED = "הסבב נכשל, ולכן המקור נעצר"
 SOURCE_SILENT = "מחשב הבנייה לא דיווח סיום אחרי שהסבב נסגר"
 
 
-def _fail_active_rounds(conn: sqlite3.Connection, store) -> None:
+def _fail_active_rounds(conn: SqlConnection, store) -> None:
     """סבב פעיל שמשימת המקור שלו נסגרה בכשל או בביטול: הגל והסבב נכשלים בשם הסיבה.
     לא נוגעים כשכבר יש חבר שסיים לכתוב — אז הגל נסגר כרגיל והסבב נשאר שלם (`_finish_wave`)."""
     rows = conn.execute(
@@ -48,7 +47,7 @@ def _fail_active_rounds(conn: sqlite3.Connection, store) -> None:
         direct.fail_round_of_task(conn, store, row["task_id"], why)
 
 
-def _close_source_task(conn: sqlite3.Connection, task_id: str, round_row, state: str, why: str) -> None:
+def _close_source_task(conn: SqlConnection, task_id: str, round_row, state: str, why: str) -> None:
     with _write_lock, writing(conn):
         cur = conn.execute(
             "UPDATE tasks SET state = ?, error = ?, updated_at = ? WHERE id = ?"
@@ -59,7 +58,7 @@ def _close_source_task(conn: sqlite3.Connection, task_id: str, round_row, state:
                 machine=round_row["source_mac"], round_id=round_row["id"])
 
 
-def _close_source_tasks(conn: sqlite3.Connection, now: datetime) -> None:
+def _close_source_tasks(conn: SqlConnection, now: datetime) -> None:
     """סבב שנסגר או נכשל ומשימת המקור שלו עוד פתוחה. המקור לומד שהגל נגמר מהמשימה שלו עצמה
     (`task.direct.session_state`, ו-`chunk.error` במנוע החתיכות) ומדווח בעצמו, ולכן סוגרים אותה רק
     אחרי `SOURCE_SILENT_S` מהסגירה: `closed` — `failed` (לא דיווח סיום); `failed` — `cancelled`."""
@@ -81,6 +80,6 @@ def _close_source_tasks(conn: sqlite3.Connection, now: datetime) -> None:
             _close_source_task(conn, row["task_id"], row, "failed", SOURCE_SILENT)
 
 
-def settle(conn: sqlite3.Connection, store, now: datetime) -> None:
+def settle(conn: SqlConnection, store, now: datetime) -> None:
     _fail_active_rounds(conn, store)
     _close_source_tasks(conn, now)

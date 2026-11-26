@@ -82,8 +82,10 @@ static void draw_theme_toggle(App *a,cairo_t *cr,double W,double head_h){
         cairo_arc(cr,cx,cy,6,0,2*M_PI);draw_set(cr,ink);cairo_fill(cr);
         cairo_restore(cr);
     }
-    Text k=text_make(cr,FONT_MONO,11,600,"F2",0,DIR_LTR);
-    text_draw(cr,&k,b.x+b.w-k.w-7,b.y+(b.h-k.h)/2,ink);text_free(&k);
+    if(!a->no_keys){                             /* #2600: a screen that takes no keys must not offer F2 */
+        Text k=text_make(cr,FONT_MONO,11,600,"F2",0,DIR_LTR);
+        text_draw(cr,&k,b.x+b.w-k.w-7,b.y+(b.h-k.h)/2,ink);text_free(&k);
+    }
     hit_add(a,b,HIT_THEME);
 }
 
@@ -148,7 +150,7 @@ static double draw_header(App *a, cairo_t *cr, double W) {
     const char *keys[]={"מכונה","שרת"};
     const int local=scr==SCREEN_LOCAL;   /* #1322: no server in this flow -- said, in the server's place */
     /* #1437: the name is the server's; with no hello this boot, the cloner says the MAC it knows itself */
-    const char *vals[]={local&&!a->st.machine_name[0]&&a->mac[0]?a->mac:known(a->st.machine_name),srv};
+    const char *vals[]={local&&!a->st.machine_name[0]&&a->mac[0]?a->mac:(a->st.machine_name[0]?a->st.machine_name:"לא ידועה"),srv};   /* #2903: "מכונה" is feminine */
     for(int i=0;i<(local?1:2);i++){
         Text k=text_make(cr,FONT_SANS,13,400,keys[i],0,DIR_RTL);
         Text v=text_make(cr,FONT_MONO,13,400,vals[i],0,DIR_LTR);

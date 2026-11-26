@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import re
-import sqlite3
+from server.db import SqlConnection
 
 from server.brain import budget as brain_budget, veto as brain_veto   # #3064: תוויות המתג, הספים והגבול העליון
 from server.brain import shadowgate as brain_shadowgate   # #3563
@@ -831,7 +831,7 @@ def _expand_note(detail: str) -> str:
 class JournalTranslator:
     """בונה את מילוני השמות פעם אחת לכל בקשת יומן — לא שאילתה לשורה."""
 
-    def __init__(self, conn: sqlite3.Connection, library: ImageLibrary):
+    def __init__(self, conn: SqlConnection, library: ImageLibrary):
         self._machines = {
             row["mac"]: f'{machine_names.label(row["role"], row["suffix"])} · {row["label"]}'   # #3123
             for row in conn.execute(

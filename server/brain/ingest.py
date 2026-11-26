@@ -15,7 +15,7 @@
   מעל התקרות של הזרם (``evict_ms``). **הערכים נשארים בסוכן** (`directsend.sh` `_dw_miss`, `directchunk.sh` `_cr_miss`, ``DIRECT_POLL_S``,
   ``_do_evict``/``_dp_evict``), וטסט מחזיק אותם שווים לערכים כאן. נרשמת שורה אחת לסבב ישיר, בפתיחתו.
 
-**מה שאינו כאן:** אין נפילה שקטה לשולח הישן (קבוצה ג'; הוא הוסר ב-#3173), ו-``SILENCE_GRACE_S`` (שתיקת המקור בשרת, S32) -- סעיף נלווה שנשאר כמו שהוא.
+**מה שאינו כאן:** אין נפילה שקטה לשולח הישן (קבוצה ג'; הוא הוסר ב-#3173), ו-``SILENCE_GRACE_S`` (שתיקת המקור בשרת, S32) נרשם בצל ב-``ceilings.source_silence_shadow`` (B3687, #3687), לא כאן.
 **לעולם אינו זורק** אל הקליטה או אל פתיחת הסבב: מוח שנפל הוא שורת לוג.
 """
 
@@ -89,7 +89,7 @@ def space(*, used: int | None, free: int | None, keep: int, missing: list[str]) 
         unchecked.append("נפח תפוס")
     if free is None:
         unchecked.append("מקום פנוי באחסון השרת (loc_local)")
-    if unchecked:
+    if unchecked or used is None or free is None:        # `used`/`free` ``None`` כבר נכנסו ל-`unchecked`; התנאי רק מצמצם טיפוס
         return Space("unchecked", "לא נבדק: " + " · ".join(unchecked) + " — הקליטה נעצרה לפני הכיווץ")
     numbers = f"תפוס {used / 1e9:.1f} GB · פנוי בשרת {free / 1e9:.1f} GB"
     if keep:

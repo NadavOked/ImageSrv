@@ -48,11 +48,11 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sqlite3
 import time
 from pathlib import Path
+from typing import TypeGuard
 
-from server.db import _settle, _write_lock, journal, now_iso, writing
+from server.db import _settle, _write_lock, journal, now_iso, SqlConnection, writing
 from server.core.logtext import one_line
 from server.learn import server_cap
 from server.system.health_rows import check
@@ -90,8 +90,8 @@ def _device_of(root: str | Path, proc: Path) -> str | None:
 
 
 def _diskstats(proc: Path, device: str | None) -> dict:
-    out = {"read_sectors": None, "write_sectors": None, "io_ms": None,
-           "read_ios": None, "write_ios": None, "ios_ms": None}
+    out: dict[str, int | None] = {"read_sectors": None, "write_sectors": None, "io_ms": None,
+                                  "read_ios": None, "write_ios": None, "ios_ms": None}
     if device is None:
         return out
     try:
@@ -107,7 +107,7 @@ def _diskstats(proc: Path, device: str | None) -> dict:
 
 
 def _psi(proc: Path) -> dict:
-    out = {"psi_some_us": None, "psi_full_us": None}
+    out: dict[str, int | None] = {"psi_some_us": None, "psi_full_us": None}
     try:
         for line in (proc / "pressure" / "io").read_text(encoding="ascii").splitlines():
             kind, *fields = line.split()
@@ -124,7 +124,7 @@ def snapshot(root: str | Path, proc: Path = PROC) -> dict:
     return {"at": time.time(), "device": device, **_diskstats(proc, device), **_psi(proc)}
 
 
-def begin(conn: sqlite3.Connection, kind: str, ref: str, root: str | Path,
+def begin(conn: SqlConnection, kind: str, ref: str, root: str | Path,
           proc: Path = PROC) -> None:
     """הצילום בתחילת הגל/הקליטה. לעולם אינו זורק."""
     try:
@@ -144,7 +144,7 @@ def _delta(a: dict, b: dict, key: str) -> int | None:
     return y - x
 
 
-def _count(value: object) -> bool:
+def _count(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
@@ -171,7 +171,8 @@ def library_wait(sender: dict | None) -> float | None:
     רק ב-`readq_empty_ms` (התור ריק) -- `read_ms` של התהליכון רץ במקביל לשליחה ואינו המתנה של השולח."""
     stats, seconds = (sender.get("sendstats") if isinstance(sender, dict) else None), _seconds(sender)
     reader = stats.get("reader") if isinstance(stats, dict) else None
-    waited = stats.get({"inline": "read_ms", "thread": "readq_empty_ms"}.get(reader)) if isinstance(stats, dict) else None
+    wait_key = {"inline": "read_ms", "thread": "readq_empty_ms"}.get(reader) if isinstance(reader, str) else None
+    waited = stats.get(wait_key) if isinstance(stats, dict) and wait_key is not None else None
     return waited / (seconds * 1000) if _count(waited) and seconds is not None else None
 
 
@@ -189,35 +190,37 @@ def measure(start: dict, end: dict, seconds: float | None = None, sender: dict |
     busy = _delta(start, end, "io_ms") if same else None
     some, full = _delta(start, end, "psi_some_us"), _delta(start, end, "psi_full_us")
     done = [_delta(start, end, k) if same else None for k in ("read_ios", "write_ios")]
-    ios = None if None in done else sum(done)        # בקשות שהסתיימו בחלון
+    counted = [v for v in done if v is not None]
+    ios = None if len(counted) != len(done) else sum(counted)        # בקשות שהסתיימו בחלון
     ios_ms = _delta(start, end, "ios_ms") if same else None
     ok = span > 0                      # util לשעון הקיר; השאר למשך הזרם
+    util = round(min(1.0, busy / 1000 / wall), 3) if wall > 0 and busy is not None else None
+    await_ms = round(ios_ms / ios, 1) if ios and ios_ms is not None else None
     out = {
         "device": start.get("device") if same else None,
         "seconds": round(span, 1) if span > 0 else None,
         "read_mbps": round(reads * SECTOR / span / 1e6, 1) if ok and reads is not None else None,
         "write_mbps": round(writes * SECTOR / span / 1e6, 1) if ok and writes is not None else None,
-        "util": round(min(1.0, busy / 1000 / wall), 3) if wall > 0 and busy is not None else None,
-        "await_ms": round(ios_ms / ios, 1) if ios and ios_ms is not None else None,
+        "util": util,
+        "await_ms": await_ms,
         "psi_some": round(min(1.0, some / 1e6 / span), 3) if ok and some is not None else None,
         "psi_full": round(min(1.0, full / 1e6 / span), 3) if ok and full is not None else None,
     }
     # #3365: ראיה חיובית מההתקן של הספרייה בלבד. אין התקן / מונה שלא נקרא = None, לא "ok"
-    seen = out["util"] is not None and ios is not None and ios_ms is not None
-    out["basis"] = (None if not seen
-                    else "server_disk" if out["util"] >= SERVER_DISK_UTIL and out["await_ms"] is not None
-                    and out["await_ms"] >= SERVER_DISK_AWAIT_MS else "ok")
+    out["basis"] = (None if util is None or ios is None or ios_ms is None
+                    else "server_disk" if util >= SERVER_DISK_UTIL and await_ms is not None
+                    and await_ms >= SERVER_DISK_AWAIT_MS else "ok")
     if need_sender and out["basis"] is not None:
         wait = library_wait(sender)                                       # #3553: the sender's own count of its wait for the library file
         out["library_wait"] = None if wait is None else round(wait, 3)
         if out["basis"] == "server_disk" and wait is None:
             out.update(basis=None, looked="server_disk", undecided="sender_not_measured")   # #3508: busy by the thresholds; nobody says it was waited for
-        elif out["basis"] == "server_disk" and wait <= LIBRARY_WAIT_MAX:
+        elif out["basis"] == "server_disk" and wait is not None and wait <= LIBRARY_WAIT_MAX:
             out.update(basis="ok", looked="server_disk")                  # #3553: busy by the thresholds, and the sender did not wait for it
     return out
 
 
-def end(conn: sqlite3.Connection, kind: str, ref: str, root: str | Path,
+def end(conn: SqlConnection, kind: str, ref: str, root: str | Path,
         seconds: float | None = None, proc: Path = PROC, sender: dict | None = None,
         need_sender: bool = False) -> dict | None:
     """הצילום בסוף, והתוצאה. None — אין צילום פתיחה (גל שלא נבחר לו קצב). `sender`, `need_sender` -- ראו `measure` (#3508).
@@ -245,7 +248,7 @@ def end(conn: sqlite3.Connection, kind: str, ref: str, root: str | Path,
         return None
 
 
-def bound(conn: sqlite3.Connection, session_id: str) -> bool:
+def bound(conn: SqlConnection, session_id: str) -> bool:
     """האם הגל היה מוגבל בדיסק הספרייה — ראיה חיובית בלבד; לא נמדד = False."""
     try:
         row = conn.execute("SELECT basis FROM server_io WHERE kind = 'wave' AND ref = ?",
@@ -256,7 +259,7 @@ def bound(conn: sqlite3.Connection, session_id: str) -> bool:
         return False
 
 
-def result_of(conn: sqlite3.Connection, session_id: str) -> dict | None:
+def result_of(conn: SqlConnection, session_id: str) -> dict | None:
     """#3269: התוצאה של הגל (`measure`), או None — לא נמדד, עוד לא הסתיים, או לא נקרא."""
     try:
         row = conn.execute("SELECT result_json FROM server_io WHERE kind = 'wave' AND ref = ?",
@@ -282,7 +285,7 @@ def _numbers(r: dict) -> str:
             + ("" if "library_wait" not in r else f" libwait={f(None if r['library_wait'] is None else 100 * r['library_wait'], '{:.0f}')}%"))
 
 
-def health_checks(conn: sqlite3.Connection) -> list[dict]:
+def health_checks(conn: SqlConnection) -> list[dict]:
     """שורה אחת — לפי הגל האחרון שנמדד. בלי גל שנמדד — אין שורה."""
     try:
         row = conn.execute("SELECT ref, result_json FROM server_io WHERE kind = 'wave'"

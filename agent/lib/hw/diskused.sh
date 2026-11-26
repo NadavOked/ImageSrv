@@ -64,7 +64,7 @@ disk_used_measure() {
 _du_valid() {
     # $1 = disk, $2 = its size in bytes: a cache entry that says this size and was not written over
     [ -f "$DU_DIR/$1" ] && [ ! -f "$DU_DIR/$1.dirty" ] || return 1
-    read -r _du_cs _du_cu < "$DU_DIR/$1" 2>/dev/null && [ "$_du_cs" = "$2" ]
+    read -r _du_cs _du_cu 2>/dev/null < "$DU_DIR/$1" && [ "$_du_cs" = "$2" ]
 }
 
 disk_used_scan() {

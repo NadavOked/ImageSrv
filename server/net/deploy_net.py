@@ -63,6 +63,10 @@ SERVER_UNIT = "imagesrv-server"
 #: שהתהליך שכתב אותה נהרג.
 RESTART_DELAY_SECONDS = 3
 
+#: #4026: the button the console shows while no deploy network exists (the "רשת הפצה" tab appears only after one is set, #3029).
+#: Texts that send the operator somewhere name this button, not the tab. `tests/test_deploy_text_4026.py` pins it to console.js.
+SETUP_BUTTON = "הגדרת רשת הפצה…"
+
 Hooks = dict[str, Callable]
 
 
@@ -120,8 +124,8 @@ class DeployState:
         return {"configured": self.configured, "source": self.source,
                 "interface": self.interface, "url": self.url,
                 "hint": None if self.configured else
-                "רשת ההפצה לא הוגדרה — בחר כרטיס בלשונית רשת הפצה והגדר את "
-                "הרשת שלו; כתובת השרת נגזרת ממנה (#1263)"}
+                f"רשת ההפצה לא הוגדרה — לחץ על \"{SETUP_BUTTON}\" בעמוד הרשת, בחר כרטיס "
+                "והגדר את הרשת שלו; כתובת השרת נגזרת ממנה (#1263)"}
 
 
 def stored(conn) -> tuple[str | None, str | None]:
@@ -467,15 +471,26 @@ def default_hooks(password_hash: str = "") -> Hooks:
     }
 
 
+#: #4014: the line the server prints when the gate was told it may not read `nft` and could not. `restore-drill.sh`
+#: greps it to report "firewall: not checked" instead of a silent pass.
+GATE_UNCHECKED = "חומת אש: לא נבדק"
+
+
 def firewall_gate(conf: str | Path = NFTABLES_CONF,
-                  read_ruleset: Callable[[], str | None] | None = None) -> str | None:
+                  read_ruleset: Callable[[], str | None] | None = None,
+                  *, unreadable_ok: bool = False,
+                  note: Callable[[str], None] | None = None) -> str | None:
     """#2440: האם מותר לשרת לעלות ולהגיש. None = מותר; אחרת הסיבה.
 
     המתקין כתב חומת אש (`firewall_installed`) — אז הטבלה `inet imagesrv` חייבת
     להיות טעונה עכשיו. nftables שלא עלה באתחול (קובץ פגום, מודול חסר) השאיר
     את 7712/443/7700 פתוחים לכל כרטיס, והשרת עלה כאילו כלום. `nft` שלא נקרא
     אינו "טעונה" (עיקרון 5). שרת בלי חומת אש מותקנת (`--no-firewall`) עולה —
-    זה מצב שהמתקין תומך בו, ומסך הבריאות מציג "לא נטענה"."""
+    זה מצב שהמתקין תומך בו, ומסך הבריאות מציג "לא נטענה".
+
+    #4014: `unreadable_ok` (רק `--firewall-gate-unreadable-ok`, שרק תרגיל השחזור מעביר — העותק רץ כ-nobody ו-`nft`
+    מסרב לו) מוותר על **דבר אחד בלבד**: "nft לא נקרא". זה לא "טעונה" — ולכן `note` מקבל את `GATE_UNCHECKED` בקול
+    רם. `nft` שנקרא והטבלה לא בו עדיין חוסם, וללא הדגל (שרת אמיתי) "לא נקרא" נשאר כישלון."""
     installed = firewall_installed(conf)
     if installed is None:
         return f"לא ניתן לקרוא את {conf} — אי אפשר לדעת אם חומת האש אמורה להיות טעונה"
@@ -485,6 +500,10 @@ def firewall_gate(conf: str | Path = NFTABLES_CONF,
         from server.net.ports import read_nft_ruleset    # noqa: PLC0415 — ports כבד
         read_ruleset = read_nft_ruleset
     ruleset = read_ruleset()
+    if ruleset is None and unreadable_ok:
+        if note:
+            note(f"{GATE_UNCHECKED} (nft list ruleset נכשל, והשרת הופעל עם --firewall-gate-unreadable-ok)")
+        return None
     if ruleset is None:
         return ("לא ניתן לקרוא את חומת האש (nft list ruleset נכשל) — אי אפשר לוודא "
                 "שהטבלה inet imagesrv טעונה")

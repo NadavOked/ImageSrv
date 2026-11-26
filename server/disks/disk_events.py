@@ -12,12 +12,11 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 
 from boot.grub_menu import normalize_mac as lenient_mac
 
 from server.disks import disk_failures, slot_names, smart_history
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.disk_events")
 
@@ -31,7 +30,7 @@ def _int(value: object) -> int:
     return value if isinstance(value, int) and value >= 0 else 0
 
 
-def _was_red(conn: sqlite3.Connection, serial: str | None, session_id: str, mac: str,
+def _was_red(conn: SqlConnection, serial: str | None, session_id: str, mac: str,
              disk: str) -> bool:
     """האם המדידה האחרונה של הדיסק הזה כבר הייתה אדומה (#1751: התראה אחת לאירוע).
 
@@ -49,7 +48,7 @@ def _was_red(conn: sqlite3.Connection, serial: str | None, session_id: str, mac:
     return row is not None and row["verdict"] == "fail"
 
 
-def ingest(conn: sqlite3.Connection, payload: dict) -> dict:
+def ingest(conn: SqlConnection, payload: dict) -> dict:
     """שומר disk_event אחד. מחזיר {"ok": True} או שגיאה בתבנית המוסכמת."""
     session_id = payload.get("session_id")
     raw_mac = payload.get("mac")
@@ -64,7 +63,8 @@ def ingest(conn: sqlite3.Connection, payload: dict) -> dict:
         log.warning("disk_event with a malformed mac: %r", str(raw_mac)[:32])
         return {"ok": False, "error": "missing or malformed mac", "code": "bad_mac"}
 
-    smart = payload.get("smart") if isinstance(payload.get("smart"), dict) else {}
+    raw_smart = payload.get("smart")
+    smart = raw_smart if isinstance(raw_smart, dict) else {}
     verdict = smart.get("verdict")
     if verdict not in VERDICTS:
         # verdict לא-מוכר אינו "נכשל" ואינו נבלע: הוא קלט פגום, ומקבל
@@ -143,7 +143,7 @@ def ingest(conn: sqlite3.Connection, payload: dict) -> dict:
     return {"ok": True}
 
 
-def for_session(conn: sqlite3.Connection, session_id: str) -> list[dict]:
+def for_session(conn: SqlConnection, session_id: str) -> list[dict]:
     """כל אירועי הדיסקים של סבב, לצפיית #380. disk_number נגזר מ-port
     (חריץ 1 -> "דיסק 1"), ונופל אחורה לשם ההתקן כשאין חריץ."""
     rows = conn.execute(
@@ -176,7 +176,7 @@ def for_session(conn: sqlite3.Connection, session_id: str) -> list[dict]:
     return out
 
 
-def last_by_serial(conn: sqlite3.Connection, serials: list[str] | None = None) -> dict[str, dict]:
+def last_by_serial(conn: SqlConnection, serials: list[str] | None = None) -> dict[str, dict]:
     """#2706: הפסק של הסבב האחרון שקרא כל סידורי -- {serial: {"verdict", "reason", "at"}}.
 
     משכפל שהוער לסבב שולח hello אחד עם `smart: "unchecked"` (המטמון בסוכן לכל אתחול, וה-hello

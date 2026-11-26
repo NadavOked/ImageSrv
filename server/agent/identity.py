@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import ipaddress
 import json
-import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -38,7 +37,7 @@ from pathlib import Path
 
 from boot.grub_menu import normalize_mac as lenient_mac
 
-from server.db import get_setting, set_setting
+from server.db import get_setting, set_setting, SqlConnection
 from server.core import unreadable
 
 #: המתג בטבלת `settings`. **חסר = דלוק**: הבדיקה כבויה רק כשמישהו כתב
@@ -165,7 +164,7 @@ class LeaseFile:
         return None if leases is None else len(leases)
 
 
-def enabled(conn: sqlite3.Connection) -> bool:
+def enabled(conn: SqlConnection) -> bool:
     """"false" מפורש מכבה; כל ערך אחר — כולל הגדרה חסרה — דלוק."""
     return get_setting(conn, SETTING) != "false"
 
@@ -185,7 +184,7 @@ def _same_address(a: str, b: str) -> bool:
         return a == b
 
 
-def verify(conn: sqlite3.Connection, leases: LeaseFile,
+def verify(conn: SqlConnection, leases: LeaseFile,
            mac: str, client_ip: str | None) -> Verdict:
     """`mac` קנוני (הקורא נרמל); `client_ip` — ה-peer של החיבור, לא כותרת."""
     if not enabled(conn):
@@ -230,7 +229,7 @@ def _recent(stamp: str | None, now: datetime | None = None) -> bool:
     return timedelta(0) <= age <= timedelta(seconds=EXTRA_SEEN_SECONDS)
 
 
-def verify_extra(conn: sqlite3.Connection, leases: LeaseFile, mac: str, extra: str,
+def verify_extra(conn: SqlConnection, leases: LeaseFile, mac: str, extra: str,
                  client_ip: str | None) -> Verdict:
     """#2439: האם `extra` — כרטיס **רשום** מתוך `all_macs` של hello ש-`mac` שלו
     כבר עבר את `verify` — יכול לזהות את הפונה כמכונה שלו (#524).
@@ -271,8 +270,10 @@ ALIAS_REFRESH_SECONDS = 600
 
 def _parse_alias(raw: str | None) -> tuple[str, str, datetime] | None:
     """(מכונה, כתובת, מתי) -- או None על כל צורה אחרת. ערך פגום אינו "רשום" (עיקרון 5)."""
+    if not raw:
+        return None
     try:
-        doc = json.loads(raw) if raw else None
+        doc = json.loads(raw)
         machine, ip, at = doc["machine"], doc["ip"], datetime.fromisoformat(doc["at"])
     except (ValueError, TypeError, KeyError):
         return None
@@ -281,7 +282,7 @@ def _parse_alias(raw: str | None) -> tuple[str, str, datetime] | None:
     return machine, ip, at
 
 
-def learn_alias(conn: sqlite3.Connection, nic: str, machine: str, client_ip: str | None,
+def learn_alias(conn: SqlConnection, nic: str, machine: str, client_ip: str | None,
                 now: datetime | None = None) -> bool:
     """#3225: `nic` (כרטיס האתחול, חכור לכתובת הפונה) הוא כרטיס של המכונה הרשומה `machine`.
     הקורא קרא לכאן רק אחרי `identity_gate` ו-`verify_extra`. True = נכתב עכשיו."""
@@ -297,7 +298,7 @@ def learn_alias(conn: sqlite3.Connection, nic: str, machine: str, client_ip: str
     return True
 
 
-def holder_registered(conn: sqlite3.Connection, mac: str, client_ip: str | None,
+def holder_registered(conn: SqlConnection, mac: str, client_ip: str | None,
                       is_registered: Callable[[str], bool], now: datetime | None = None) -> bool:
     """#3225: "החכירה על הכתובת היא של מכונה רשומה" -- ה-MAC רשום בעצמו, או שהוא כרטיס
     אתחול ש-hello האחרון **מאותה כתובת** (עד `ALIAS_SECONDS`) צירף למכונה שעדיין רשומה.
@@ -305,7 +306,7 @@ def holder_registered(conn: sqlite3.Connection, mac: str, client_ip: str | None,
     if is_registered(mac):
         return True
     alias = _parse_alias(get_setting(conn, ALIAS_PREFIX + mac)) if client_ip else None
-    if alias is None:
+    if alias is None or client_ip is None:
         return False
     machine, ip, at = alias
     now = now or datetime.now(timezone.utc)
@@ -313,7 +314,7 @@ def holder_registered(conn: sqlite3.Connection, mac: str, client_ip: str | None,
             and is_registered(machine))
 
 
-def verify_source(conn: sqlite3.Connection, leases: LeaseFile, client_ip: str | None,
+def verify_source(conn: SqlConnection, leases: LeaseFile, client_ip: str | None,
                   is_registered: Callable[[str], bool],
                   has_open_job: Callable[[str], bool] | None = None) -> Verdict:
     """#997: זהות **בלי MAC מוצהר** — ל-`GET /images/…/manifest|files`, שבהם
@@ -354,7 +355,7 @@ def verify_source(conn: sqlite3.Connection, leases: LeaseFile, client_ip: str | 
     return Verdict(ok=True)
 
 
-def health_status(conn: sqlite3.Connection, leases: LeaseFile | None) -> tuple[str, str]:
+def health_status(conn: SqlConnection, leases: LeaseFile | None) -> tuple[str, str]:
     """(מצב, פירוט) לשורה "זהות מכונה" במסך הבריאות — לפי מה שנקרא
     בחזרה מהקובץ, לא לפי ההגדרה. `health.collect` עוטף ב-`check`."""
     if leases is None:

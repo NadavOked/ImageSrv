@@ -111,7 +111,7 @@ power_press() {
 power_answer() {
     # $1 = the answer file. Only for the question on the screen now (its nonce).
     IFS='|' read -r _pa_n _pa_a < "$1" || return 1
-    IFS='|' read -r _pa_q _pa_k _pa_s < "$RUN_DIR/power.ask" 2>/dev/null ||
+    IFS='|' read -r _pa_q _pa_k _pa_s 2>/dev/null < "$RUN_DIR/power.ask" ||
         { log "power button: an answer with no question on the screen -- dropped"; return 0; }
     [ -n "$_pa_n" ] && [ "$_pa_n" = "$_pa_q" ] || { log "power button: a stale answer ($_pa_n, the question is $_pa_q) -- dropped"; return 0; }
     case "$_pa_a" in

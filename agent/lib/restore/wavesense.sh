@@ -173,9 +173,9 @@ _ws_kernel() {   # -> {"sda":["ata2.00: ..."],"sdb":null}: each drawer's ATA lin
 
 _ws_nic_json() {   # the card's part of the summary; no $IFACE = null (nothing to read)
     case "${IFACE:-}" in ''|*[!A-Za-z0-9._-]*) echo null; return ;; esac
-    read -r _wj_m0 _wj_b0 _wj_y0 _wj_a0 _wj_c0 _wj_d0 _wj_e0 < "$(_ws)/nic0" 2>/dev/null \
+    read -r _wj_m0 _wj_b0 _wj_y0 _wj_a0 _wj_c0 _wj_d0 _wj_e0 2>/dev/null < "$(_ws)/nic0" \
         || { _wj_m0=null; _wj_b0=null; _wj_y0=null; _wj_a0=null; _wj_c0=null; _wj_d0=null; _wj_e0=null; }
-    read -r _wj_rc _wj_rx < "$(_ws)/ring" 2>/dev/null || { _wj_rc=null; _wj_rx=null; }
+    read -r _wj_rc _wj_rx 2>/dev/null < "$(_ws)/ring" || { _wj_rc=null; _wj_rx=null; }
     read -r _wj_m _wj_b _wj_y _wj_a _wj_c _wj_d _wj_e <<EOF
 $(_ws_nic0)
 EOF

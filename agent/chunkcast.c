@@ -1076,6 +1076,7 @@ static int vq_n, vq_stop, vq_busy, npool, nspare;       /* vq_busy: verifiers wo
 static int nver = 1, vq_cap = CC_VQ;                    /* #3518: verifier threads, and frames the queue holds (cc_verifiers) */
 static unsigned char *spare[CC_SLOTS + CC_VQ_MAX + CC_VER_MAX + 2]; /* frame buffers not in a slot or the queue */
 static struct cc_buf **pool;
+static unsigned char *rejected, *verified;
 static struct { uint64_t pkts, foreign, stray, bad_pkt, dup, evicted, busy, bad_chunk, good, skipped, conflict, version; } stat_rx;
 /* #3518: not in `rxstats` (its twelve keys are the agent's contract, rxsense.sh) but in the `verifier` line after it.
  * deferred: complete chunks that found the queue full and waited in their slot -- the pressure, before any drop. */
@@ -1236,6 +1237,9 @@ static void *cc_verifier(void *arg)
         else spare[nspare++] = z;
         pthread_mutex_unlock(&vq_mu);
         __atomic_add_fetch(ok ? &stat_rx.good : &stat_rx.bad_chunk, 1, __ATOMIC_RELAXED);
+        pthread_mutex_lock(&st_mu);
+        (ok ? verified : rejected)[k >> 3] |= (unsigned char)(1u << (k & 7));
+        pthread_mutex_unlock(&st_mu);
         for (int i = 0; ok && i < ntg; i++) {
             struct cc_tgt *t = &tg[i];
             pthread_mutex_lock(&st_mu);
@@ -1895,6 +1899,12 @@ static int cc_recv(int argc, char **argv)
             if (!(slots[i].parity = malloc(sizeof *slots[i].parity))) return 2;
     loss.counted = calloc((ix.n + 7) / 8, 1);
     if (!loss.counted) ir_say("chunkcast: מדידת צורת האובדן אינה זמינה\n");
+    rejected = calloc((ix.n + 7) / 8, 1);
+    verified = calloc((ix.n + 7) / 8, 1);
+    if (ix.n && (!rejected || !verified)) {
+        ir_say("chunkcast: אין זיכרון לרישום חתיכות שנפסלו\n");
+        return 2;
+    }
     for (int i = 0; i < CC_SLOTS; i++) if (!(slots[i].data = malloc(CC_ZMAX))) pool = NULL;
     for (nspare = 0; nspare < (vq_byte_cap ? 0 : vq_cap + nver + 1); nspare++) if (!(spare[nspare] = malloc(CC_ZMAX))) pool = NULL;
     if (!pool) { ir_say("chunkcast: recv: no memory for %d chunks of 4MiB\n", npool); return 2; }
@@ -2043,6 +2053,9 @@ static int cc_recv(int argc, char **argv)
     else if (rc == 0 && cc_complete()) word = "complete";
     else if ((rc == 0 || rc == 4) && stat_rx.conflict && !stat_rx.good) { rc = 7; word = "another-index"; }
     cc_say_abandoned();
+    if (stat_rx.bad_chunk)
+        for (uint64_t k = 0; k < ix.n; k++)
+            if (cc_bit(rejected, k) && !cc_bit(verified, k)) printf("bad_chunk %llu\n", (unsigned long long)k);
     for (int i = 0; i < CC_SLOTS; i++)
         if (slots[i].used && !slots[i].ready) cc_loss(&slots[i]);
     cc_loss_summary();
@@ -2720,6 +2733,17 @@ static int cc_send_run(int argc, char **argv)
     int snd_got = -1;                   /* #3124 (B-NET-18): what the kernel gave, read back; -1 = not read, never the ask */
     socklen_t snd_gl = sizeof snd_got;
     if (getsockopt(s, SOL_SOCKET, SO_SNDBUF, &snd_got, &snd_gl)) snd_got = -1;
+    if (a.from) {                               /* the source the receivers were told to take (recv --from) */
+        struct sockaddr_in me = { .sin_family = AF_INET };
+        if (inet_pton(AF_INET, a.from, &me.sin_addr) != 1) {
+            ir_say("chunkcast: send: --from '%s' is not an IPv4 address\n", a.from);
+            return 2;
+        }
+        if (bind(s, (struct sockaddr *)&me, sizeof me)) {
+            ir_say("chunkcast: send: cannot send from %s: %s\n", a.from, strerror(errno));
+            return 2;
+        }
+    }
     if (IN_MULTICAST(ntohl(sin.sin_addr.s_addr))) {
         unsigned char ttl = (unsigned char)a.ttl;
         struct ip_mreqn mr = { 0 };

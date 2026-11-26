@@ -74,7 +74,7 @@ def _text(path: Path) -> str | None:
 
 
 def _psi(proc: Path, name: str) -> dict:
-    out = {"some": None, "full": None}
+    out: dict[str, int | None] = {"some": None, "full": None}
     for line in (_text(proc / "pressure" / name) or "").splitlines():
         kind, *fields = line.split() or [""]
         total = next((f.split("=", 1)[1] for f in fields if f.startswith("total=")), None)
@@ -111,14 +111,14 @@ def processes(proc: Path = PROC, pid: int | None = None) -> dict:
     except (ValueError, OSError):
         hz = 100
     uptime = (_text(proc / "uptime") or "").split()
-    out = {"hz": hz, "uptime": float(uptime[0]) if uptime and uptime[0].replace(".", "", 1).isdigit() else None,
+    out: dict[str, float | int | dict[str, list[int]] | None] = {"hz": hz, "uptime": float(uptime[0]) if uptime and uptime[0].replace(".", "", 1).isdigit() else None,
            "server": int(own[11]) + int(own[12]) if own else None,
            "children": int(own[13]) + int(own[14]) if own else None, "chunkcast": None}
     try:
         entries = [e for e in proc.iterdir() if e.name.isdigit()]
     except OSError:
         return out                                  # the list of processes was not read: "not measured"
-    found = {}
+    found: dict[str, list[int]] = {}
     for entry in entries:
         if (_text(entry / "comm") or "").strip() != CHUNKCAST:
             continue
@@ -220,13 +220,14 @@ def window(a: dict, b: dict) -> dict:
     pa, pb = a.get("proc"), b.get("proc")
     disk = server_io.measure(a["disk"], b["disk"]) if a.get("disk") and b.get("disk") else None
     tx = _delta(_get(a, "nic", "tx_bytes"), _get(b, "nic", "tx_bytes"))
+    unit_ticks = _delta(a.get("unit_us"), b.get("unit_us"))
+    chunkcast = _get(pb, "chunkcast")
     out = {"seconds": round(dt, 1) if ok else None,
            "server_cpu": rate(_delta(_get(pa, "server"), _get(pb, "server"))),
            "children_cpu": rate(_delta(_get(pa, "children"), _get(pb, "children"))),
            "chunkcast_cpu": rate(_chunkcast_ticks(pa, pb)),
-           "unit_cpu": (None if not ok or _delta(a.get("unit_us"), b.get("unit_us")) is None
-                        else round(_delta(a.get("unit_us"), b.get("unit_us")) / 1e6 / dt, 3)),
-           "chunkcast": len(pb["chunkcast"]) if isinstance(_get(pb, "chunkcast"), dict) else None,
+           "unit_cpu": None if not ok or unit_ticks is None else round(unit_ticks / 1e6 / dt, 3),
+           "chunkcast": len(chunkcast) if isinstance(chunkcast, dict) else None,
            "psi_cpu_some": frac(_delta(_get(a, "cpu_psi", "some"), _get(b, "cpu_psi", "some"))),
            "psi_mem_some": frac(_delta(_get(a, "mem_psi", "some"), _get(b, "mem_psi", "some"))),
            "psi_mem_full": frac(_delta(_get(a, "mem_psi", "full"), _get(b, "mem_psi", "full"))),
@@ -246,7 +247,8 @@ def _http(a: dict | None, b: dict | None, dt: float) -> dict:
     """V6: per address, the Mbps served in the window and the downloads open at its end."""
     if not isinstance(a, dict) or not isinstance(b, dict) or dt <= 0:
         return {"http": None, "downloads": None, "http_mbps": None}
-    per, total = {}, 0.0
+    per = {}
+    total: float | None = 0.0
     for ip in sorted(set(b["bytes"]) | set(b["active"])):
         # an address first seen inside the window had 0 before it (`Served` counts from the first byte)
         got = _delta(a["bytes"].get(ip, 0), b["bytes"].get(ip, 0))
@@ -265,7 +267,8 @@ def _ledger(a: dict | None, b: dict | None, dt: float) -> dict | None:
     for mac, rows in b.items():
         before = a.get(mac, {})
         steps = [_delta(before.get(key), got) if key in before else None for key, got in rows.items()]
-        chunks = sum(steps) if steps and all(s is not None for s in steps) else None
+        counted = [s for s in steps if s is not None]
+        chunks = sum(counted) if steps and len(counted) == len(steps) else None
         out[mac] = {"chunks": chunks,
                     "mbps": round(chunks * CHUNK_BYTES / dt / 1e6, 1) if chunks is not None else None}
     return out

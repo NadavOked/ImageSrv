@@ -75,6 +75,11 @@ chunk_stray_json() {   # $1 = the control message's state -> `,"stray":N` of the
     # writes it after a pass and removes it at a fetch): one lifecycle. No line = not read (no --from, an older
     # chunkcast): the field is absent, never 0 (principle 5).
     [ "$1" = ended ] && [ -s "$CHUNK_DIR/skipped" ] || return 0
+    # #4155: the first CHUNK_BAD_MAX ids (ascending) and, when there are more, `bad_chunks_total` -- the server refuses a body over
+    # 1 MiB (413), and with it the evidence and the durable ranges. A cut list can only lose a verdict, never invent one.
+    awk -v max="${CHUNK_BAD_MAX:-4096}" '$1 == "bad_chunk" && $2 ~ /^(0|[1-9][0-9]*)$/ && !seen[$2]++ {
+             if (n < max + 0) printf "%s%s", (n++ ? "," : ",\"bad_chunks\":["), $2; else more++
+         } END { if (n) printf "]"; if (more) printf ",\"bad_chunks_total\":%d", n + more }' "$CHUNK_DIR/skipped"
     awk '$1 == "loss_shape" {printf ",\"loss_shape\":%s", $2}' "$CHUNK_DIR/skipped"
     awk '$1 == "stray" && $2 ~ /^[0-9]+$/ { v = $2 } END { if (v != "") printf ",\"stray\":%d", v }' "$CHUNK_DIR/skipped" 2>/dev/null   # chunkcast says it more than once a pass: the last is the pass's
     return 0

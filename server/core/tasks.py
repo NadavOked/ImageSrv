@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import re
 import secrets
-import sqlite3
+from server.db import SqlConnection
 from pathlib import Path
 
 from server.core.cleanup import remove_tree
@@ -76,7 +76,7 @@ def staging_dir(library_root: Path, task_id: str) -> Path:
     return Path(full)
 
 
-def discard_failed_staging(conn: sqlite3.Connection, library_root: Path, task_id: object) -> None:
+def discard_failed_staging(conn: SqlConnection, library_root: Path, task_id: object) -> None:
     """#1915: הסוכן דיווח `failed` (`/agent/progress`) — הדלת שבה BM-F04z
     עבר בפועל, ו-`capture._fail` אינו בה. האזור נמחק כמו בביטול ובאימות
     שנכשל — רק בקליטה, ורק כשהיא באמת `failed` עכשיו (השורה, לא הדיווח)."""
@@ -85,7 +85,7 @@ def discard_failed_staging(conn: sqlite3.Connection, library_root: Path, task_id
         remove_tree(staging_dir(library_root, row["id"]), f"capture staging of {row['id']}")
 
 
-def active_task(conn: sqlite3.Connection, mac: str) -> dict | None:
+def active_task(conn: SqlConnection, mac: str) -> dict | None:
     """המשימה הפתוחה של המכונה, במבנה של שדה `task` בממשק 3."""
     row = conn.execute(
         "SELECT * FROM tasks WHERE mac = ? AND state IN ('pending', 'running')"
@@ -109,7 +109,7 @@ def active_task(conn: sqlite3.Connection, mac: str) -> dict | None:
     }
 
 
-def claim_task(conn: sqlite3.Connection, task_id: str, token: str | None) -> dict | None:
+def claim_task(conn: SqlConnection, task_id: str, token: str | None) -> dict | None:
     """המשימה **הפתוחה** ששייכת ל-``token`` הזה, או ``None``.
 
     שלוש שאלות שונות, ואסור לקפל אותן: משימה שאינה קיימת, משימה

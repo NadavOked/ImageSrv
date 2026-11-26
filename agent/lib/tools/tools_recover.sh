@@ -52,7 +52,7 @@ _tr_cat() {
         printf 'סירוב: הקריאה לא הסתיימה תוך %s שניות ונעצרה; הקובץ לא נקרא, אין כאן תוצאה.\n' "$_tcsecs"
         return 2
     fi
-    _tcsz=$(wc -c < "$_tcdata" 2>/dev/null | tr -d ' ')
+    _tcsz=$(wc -c 2>/dev/null < "$_tcdata" | tr -d ' ')
     case "$_tcsz" in ''|*[!0-9]*)
         rm -f "$_tcdata" "$_tcerr"; printf 'סירוב: לא ניתן למדוד את הקובץ שנקרא.\n'; return 2 ;; esac
     if [ "$_tcsz" -ge "$_tcmax" ]; then

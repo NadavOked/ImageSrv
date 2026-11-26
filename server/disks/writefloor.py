@@ -21,17 +21,16 @@ room_2c946f3b) כונן TOSHIBA DT01ACA0 נמדד 33 MB/s ונפסל לפי הס
 from __future__ import annotations
 
 import logging
-import sqlite3
 
 from server.brain import floorrule
-from server.db import get_setting
+from server.db import get_setting, SqlConnection
 
 log = logging.getLogger("imagesrv.writefloor")
 
 SETTING = "writecheck_min_mbps"
 
 
-def mbps(conn: sqlite3.Connection) -> int:
+def mbps(conn: SqlConnection) -> int:
     """ההגדרה, או ברירת המחדל (`floorrule.DEFAULT`). פגומה = ברירת המחדל **עם שורת יומן** — לעולם לא 0, שהוא "בלי סף". ההחלטה במוח
     (`floorrule.setting_floor`); כאן נקראת ההגדרה ונכתבת שורת היומן."""
     raw = get_setting(conn, SETTING)

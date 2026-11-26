@@ -148,7 +148,8 @@ def n6_cloner(nw: object, *, engine_group: str | None, member: bool | None,
     if data is None:
         return Sense("N6", NOT_CHECKED, missing or "", {})
     joined = data.get("joined")
-    groups = data.get("groups") if isinstance(data.get("groups"), list) else []
+    raw_groups = data.get("groups")
+    groups = raw_groups if isinstance(raw_groups, list) else []
     evidence = _evidence(data, "promisc", "joined", "passed", "kernel_drops") | {
         "engine_group": engine_group, "member": member, "wave_age_s": None if wave_age_s is None else int(wave_age_s)}
     if not isinstance(joined, list):
@@ -185,16 +186,21 @@ def n8(data: object, *, engine_group: str | None, who: str) -> Sense:
     מולטיקאסט IPv4: מופחת הזרם של מנוע החתיכות; כשהקבוצה לא ידועה **כולו** מחוץ לספירה."""
     if not isinstance(data, dict) or not isinstance(data.get("classes"), dict):
         return Sense("N8", NOT_CHECKED, f"{who}: אין ספירת תעבורה", {})
-    classes = {k: _n(data["classes"].get(k)) for k in l2frames.CLASSES}
-    if any(v is None for v in classes.values()):
-        return Sense("N8", NOT_CHECKED, f"{who}: ספירת התעבורה פגומה", {})
-    groups = data.get("groups") if isinstance(data.get("groups"), list) else []
+    classes: dict[str, int] = {}
+    for k in l2frames.CLASSES:
+        count = _n(data["classes"].get(k))
+        if count is None:
+            return Sense("N8", NOT_CHECKED, f"{who}: ספירת התעבורה פגומה", {})
+        classes[k] = count
+    raw_groups = data.get("groups")
+    groups = raw_groups if isinstance(raw_groups, list) else []
     ours = sum(_n(g.get("n")) or 0 for g in groups
                if isinstance(g, dict) and engine_group is not None and g.get("group") == engine_group)
     mcast_other = max(classes["mcast_ip"] - ours, 0) if engine_group is not None else 0
     foreign = sum(classes[k] for k in l2frames.FOREIGN) + mcast_other
-    evidence = {"who": who, "window_s": _n(data.get("window_s")), "passed": _n(data.get("passed")),
-                "sampled": _n(data.get("sampled")), "kernel_drops": _n(data.get("kernel_drops")),
+    passed, sampled = _n(data.get("passed")), _n(data.get("sampled"))
+    evidence = {"who": who, "window_s": _n(data.get("window_s")), "passed": passed,
+                "sampled": sampled, "kernel_drops": _n(data.get("kernel_drops")),
                 "foreign_in_sample": foreign, "classes": classes, "ours_group_frames": ours,
                 "mcast_unattributed": classes["mcast_ip"] if engine_group is None else 0,
                 "top_sources": data.get("macs") if isinstance(data.get("macs"), list) else None}
@@ -202,7 +208,6 @@ def n8(data: object, *, engine_group: str | None, who: str) -> Sense:
         return Sense("N8", FOREIGN_SEEN, f"{who}: {foreign} מסגרות שאינן של ImageSrv בחלון הדגימה "
                                          f"({classes['bcast_ip']} שידור, {mcast_other} מולטיקאסט, "
                                          f"{classes['unicast_other']} יוניקאסט למי שאינו אנחנו, {classes['other']} אחר)", evidence)
-    passed, sampled = evidence["passed"], evidence["sampled"]
     if passed is None or sampled is None:
         return Sense("N8", NOT_CHECKED, f"{who}: מונה הקרנל לא נקרא — אין לדעת אם כל מה שעבר נקרא", evidence)
     if passed > sampled + READ_SLACK:

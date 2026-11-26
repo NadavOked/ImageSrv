@@ -28,7 +28,7 @@ STATS = ("sendstats read_ms=12 lag_forgiven_wire=0 lag_forgiven_disk=3 forgiven_
 
 
 def _cmd(chunks=None, order=None):
-    engine = SimpleNamespace(port=7713, interface=None, feedback=True, write_floor=lambda: 20)   # פורט-הפצה-מכוון
+    engine = SimpleNamespace(port=7713, interface=None, source=None, feedback=True, write_floor=lambda: 20)   # פורט-הפצה-מכוון
     wave = SimpleNamespace(key="0123456789abcdef", round=1)
     return ChunkEngine._command(engine, wave, {"index": 3}, Path("image.zst"), 100000, 400000, chunks, None, None, order)
 

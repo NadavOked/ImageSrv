@@ -15,7 +15,7 @@ _bc_u32() { # file, byte offset -- little-endian uint32
 }
 
 _bc_x509_subjects() { # efivar (db, KEK); one CN per X.509 signature. $2 (optional, #86): a dir for N.der + N.cn
-    _bc_file=$1; _bc_n=0; _bc_size=$(wc -c < "$_bc_file" 2>/dev/null) || return 1
+    _bc_file=$1; _bc_n=0; _bc_size=$(wc -c 2>/dev/null < "$_bc_file") || return 1
     case "$_bc_size" in ''|*[!0-9]*) return 1 ;; esac
     [ "$_bc_size" -ge 32 ] || return 1
     _bc_at=4; _bc_left=128

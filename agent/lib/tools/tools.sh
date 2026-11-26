@@ -227,12 +227,14 @@ tools_gui_list() {
     tools_gui_parts || log "tool-list: the partitions could not be read -- no $GUI_DIR/tool-parts"
 }
 
-tools_gui_run() {
+tools_gui_run() { tools_gui_prep "$1" && tools_gui_exec; }   # synchronous: the unit the background wrapper below runs
+
+tools_gui_prep() {
     # $1 = the record token: tool-run|<id>|<arg>|<confirm>. The old result is
     # removed first so the GUI never reads a stale one as this run's; the new
     # one is id|rc|<path>|<seq>, seq strictly increasing per kiosk session.
-    # Returns 0 whenever a result was written -- a tool's own rc is a result,
-    # not a failed action (gui_records would toast it as one).
+    # Sets _id/_arg/_confirm/_seq for tools_gui_exec. A refusal returns 1 here,
+    # in the kiosk loop, so gui_records still toasts it.
     # #1303: the GUI hides the button on menu_tools=0, but a record can still
     # arrive; the gate is here. Off (v1) or unreadable = no run, no result.
     tools_on || { log "tool-run refused: the toolbox is off in this edition"; return 1; }
@@ -249,8 +251,29 @@ EOF
     # kiosk's own fresh copy of /agent/state); absent = hostname fallback.
     MACHINE_NAME=$(jq -r '.name // empty' "$GUI_DIR/station.json" 2>/dev/null | tr -d '\r')
     export MACHINE_NAME
+}
+
+tools_gui_exec() {
+    # Returns 0 whenever a result was written -- a tool's own rc is a result,
+    # not a failed action (gui_records would toast it as one).
     tools_run "$_id" "$_arg" "$_confirm"
     _rc=$?
     printf '%s|%s|%s|%s\n' "$_id" "$_rc" "$RUN_DIR/tool-$_id.out" "$_seq" > "$GUI_DIR/tool-result.next" &&
         mv "$GUI_DIR/tool-result.next" "$GUI_DIR/tool-result"
+}
+
+# #3057: a tool runs for minutes to hours (ddrescue, nwipe). In the kiosk's record loop it blocked every other
+# record, `touch` included, and the machine powered itself off mid-run. Now the loop starts it and moves on.
+# tool.running holds the job's pid; idle_exempt (idle.sh) reads it, so a running tool is activity, as a write is.
+# A dead pid (a killed kiosk) is no tool: the clock runs again, and no result is invented.
+tools_running() {
+    [ -s "$RUN_DIR/tool.running" ] || return 1
+    IFS= read -r _tr_pid < "$RUN_DIR/tool.running" && [ -n "$_tr_pid" ] && kill -0 "$_tr_pid" 2>/dev/null
+}
+
+tools_gui_bg() {
+    tools_running && { log "tool-run refused: a tool is already running"; return 1; }
+    tools_gui_prep "$1" || return 1
+    ( bg_detach_fds; tools_gui_exec || log "tool $_id: the result record was not written"; rm -f "$RUN_DIR/tool.running" ) &
+    printf '%s\n' "$!" > "$RUN_DIR/tool.running"
 }

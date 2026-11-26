@@ -45,7 +45,7 @@ function setup() {
       {mac:'b4:2e:99:07:1a:c1',ip:'10.44.12.101',description:'',first_seen:'2026-09-01T08:00:00Z',last_seen:minutesAgo(1),registered:true,name:'01',group_id:'grp_LAB303',group_label:'כיתה 303 — סייבר',role:'classroom',boot:null},
       {mac:'b4:2e:99:07:1a:c2',ip:'10.44.12.102',description:'',first_seen:'2026-09-01T08:00:00Z',last_seen:minutesAgo(1),registered:true,name:'02',group_id:'grp_LAB303',group_label:'כיתה 303 — סייבר',role:'classroom',boot:null},
       {mac:'de:ad:be:ef:00:01',ip:'10.44.12.187',description:'מדפסת?',first_seen:today+'T07:00:00Z',last_seen:minutesAgo(30),registered:false,name:null,group_id:null,group_label:null,role:null,boot:{step:'menu',label:'תפריט האתחול נמסר',index:1,total:9,seconds:1800,next_step:'entry',next_label:'GRUB נכנס לערך ImageSrv',stalled:true}}],
-    '/disk-failures':[{id:7,session_id:'r15',mac:'78:ac:c0:9b:11:c2',dev:'sdc',serial:'S5Y2NX0R12345',port:3,disk_number:3,ata_port:'ata3',at:'2026-09-15T10:00:00Z',cause:'cable',error:'ATA timeout',ata_log:['ata3.00: exception Emask','ata3: hard resetting link','ata3.00: failed command: WRITE FPDMA QUEUED']}],
+    '/disk-failures':[{id:7,session_id:'r15',mac:'78:ac:c0:9b:11:c2',dev:'sdc',serial:'S5Y2NX0R12345',port:3,disk_number:3,ata_port:'ata3',at:'2026-09-15T10:00:00Z',cause:'write_error',error:'ATA timeout',ata_log:['ata3.00: exception Emask','ata3: hard resetting link','ata3.00: failed command: WRITE FPDMA QUEUED']}],
     '/shrink-records':[],
     '/monitor/machines':[
       {mac:'c8:d9:d2:0b:fe:32',name:'בנייה 1',role:'build',ip:'10.44.12.20',online:false,prompt:'menu'},
@@ -138,6 +138,9 @@ test('red is red only on evidence: SMART fail or a read-only disk → "דיסק 
   assert.match(between(run('machines(0)'),'data-mac="78:ac:c0:9b:11:c2"','data-mac="b4:2e:99:07:1a:c1"'),/pill err">דיסק אדום</,'#1742: read-only is red');
   run("DISK_FAILURES[0].cause='cable'");
   html=run('machines(0)');
+  // #4057 (Nadav 12/11, 23/11): a cable record belongs to the slot -- it is not a red disk, in the header, the tab or the row
+  assert.doesNotMatch(html,/דיסק אדום|דיסקים אדומים<small>[1-9]/,'a cable record is never counted as a red disk');
+  assert.match(html,/obj-sub" title="8 רשומים · 2 מחוברים">/);
   const b3=between(html,'data-mac="c8:d9:d2:0b:fe:34"','data-mac="a0:48:1c:8a:18:40"');
   assert.match(b3,/muted">לא דיווח</); assert.match(b3,/pill ">לא נראה</); assert.doesNotMatch(b3.split('</tr>')[0],/pill ok/,'never seen is grey');
   assert.match(between(html,'data-mac="a0:48:1c:8a:18:40"','data-mac="78:ac:c0:9b:11:c2"'),/st warn">דיווח 0 דיסקים</,'zero disks is a finding, not "no data"');
@@ -203,7 +206,7 @@ test('the machine drawer: header line, actions (monitor, WoL for the room, "requ
   assert.doesNotMatch(html,/בקרוב/,'#977: nothing in the drawer is "soon" any more');
   assert.match(html,/<div class="grp">קושחה וחיבורים/,'#2080 (mockup 06): "קושחה וחיבורים" above "מערכת וחומרה", in place of the old firmware row'); assert.doesNotMatch(html,/<span class="k">קושחה<\/span>/);
   assert.match(html,/<span class="k">סוכן<\/span><span class="v"><span class="muted">לא דווח<\/span>/);
-  assert.match(html,/note err"[^]*<b>דיסק 3 אדום<\/b> — <span class="mono">S5Y2NX0R12345<\/span> נכשל בכתיבה .*סיבה: כבל\/חריץ SATA 2 \(ATA timeout\)/);
+  assert.match(html,/note err"[^]*<b>דיסק 3 אדום<\/b> — <span class="mono">S5Y2NX0R12345<\/span> נכשל בכתיבה .*סיבה: שגיאת כתיבה לדיסק \(ATA timeout\)/);
   assert.match(html,/clearDiskFailure\(7\)">נקה אחרי החלפה</); assert.match(html,/<summary>3 שורות קרנל<\/summary><pre class="ata-log">ata3.00: exception Emask/);
   assert.match(html,/<span class="k">מה המכונה עושה<\/span><span class="v"><span class="st ok">מחובר</);
   assert.match(html,/שלב אתחול אחרון<\/span><span class="v"><span class="st warn">GRUB נכנס לערך ImageSrv \(2\/9\) · לפני 9 דק&#39;<\/span><span class="sub">נעצר לפני: מודול ה-HTTP נטען/);
@@ -362,7 +365,7 @@ test('"נראו ברשת" (P.machines seen): only the unregistered, MAC · IP ·
   html=run('machines(2)'); balanced(html);
   assert.match(html,/card-h"><span>דיסקים אדומים<\/span><\/div>/);
   assert.deepEqual([...between(html,'<thead>','</thead>').matchAll(/<th(?:\s[^>]*)?>(.*?)<\/th>/g)].map(m=>m[1].replace(/<[^>]+>/g,'')),['מחשב','דיסק','סיבה','SMART','פעולות']);
-  assert.match(html,/<tr class="clk" onclick="mchRowClick\(event,'78%3Aac%3Ac0%3A9b%3A11%3Ac2'\)"><td><b>מחשב 2<\/b><\/td><td>דיסק 3 · <bdi dir="ltr">256GB<\/bdi><\/td><td>כבל\/חריץ SATA 2 · ATA timeout<\/td><td><span class="pill ok">תקין<\/span><\/td>/);
+  assert.match(html,/<tr class="clk" onclick="mchRowClick\(event,'78%3Aac%3Ac0%3A9b%3A11%3Ac2'\)"><td><b>מחשב 2<\/b><\/td><td>דיסק 3 · <bdi dir="ltr">256GB<\/bdi><\/td><td>שגיאת כתיבה לדיסק · ATA timeout<\/td><td><span class="pill ok">תקין<\/span><\/td>/);
   const menu=JSON.parse(html.match(/data-menu="([^"]*)"/)[1].replaceAll('&quot;','"').replaceAll('&#39;',"'"));
   assert.deepEqual(menu.map(i=>i[1]),["openMachineDetail('78%3Aac%3Ac0%3A9b%3A11%3Ac2')",'clearDiskFailure(7)'],'details + clear in the ⋯ (the kernel lines are in the drawer)');
   assert.doesNotMatch(html,/דיסקים מכווצים/,'#926 card only when there is something to show');

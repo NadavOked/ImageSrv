@@ -1,0 +1,7 @@
+# Non-free Debian packages an ImageSrv image (initramfs, USB, ISO live image) may ship (#3077).
+# tools/license_manifest.py fails the build for a non-free-section package not listed here;
+# each name must have its notice in THIRD_PARTY_NOTICES.md section F
+# (tests/test_license_manifest_3077.py).
+firmware-realtek          # rtl_nic/*, every build
+firmware-intel-graphics   # i915/*, --with-gui
+firmware-amd-graphics     # radeon/*, --radeon-legacy-firmware (the USB stick, #1937)

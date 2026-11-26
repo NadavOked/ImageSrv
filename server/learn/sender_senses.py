@@ -100,9 +100,10 @@ def _listed(path: str) -> int | None:
     except (OSError, ValueError):
         return None
     spans = [_RANGE.fullmatch(part) for part in text.split(",")] if text else []
-    if not spans or None in spans:
+    matched = [m for m in spans if m is not None]
+    if not spans or len(matched) != len(spans):
         return None
-    counts = [int(m[2]) - int(m[1]) + 1 for m in spans]
+    counts = [int(m[2]) - int(m[1]) + 1 for m in matched]
     return sum(counts) if all(c > 0 for c in counts) else None
 
 
@@ -119,7 +120,9 @@ def total(args: list[str]) -> int | None:
 def read(proc: Path, procs: dict | None) -> dict | None:
     """{pid: what its pass shows} for every `chunkcast` the server started (`server_senses.processes()["chunkcast"]`).
     None = not read (the list of processes was not); {} = none is running."""
-    found = procs.get("chunkcast") if isinstance(procs, dict) else None
+    if not isinstance(procs, dict):
+        return None
+    found = procs.get("chunkcast")
     if not isinstance(found, dict):
         return None
     uptime, hz = procs.get("uptime"), procs.get("hz")
@@ -158,11 +161,11 @@ def step(a: dict | None, b: dict | None, dt: float) -> dict | None:
     out = {}
     for pid, now in b.items():
         before = a.get(pid) if isinstance(a, dict) else None
-        same = isinstance(before, dict) and before.get("start") == now["start"] and dt > 0
-        moved = _delta(before.get("chunks"), now["chunks"]) if same else None
-        wire = _delta(before.get("bytes"), now["bytes"]) if same else None
+        prior = before if isinstance(before, dict) and before.get("start") == now["start"] and dt > 0 else None
+        moved = _delta(prior.get("chunks"), now["chunks"]) if prior is not None else None
+        wire = _delta(prior.get("bytes"), now["bytes"]) if prior is not None else None
         k, n = now["chunks"], now["of"]
-        slept = {f"{name}_wait_ms": _delta(before.get(f"{name}_ms"), now.get(f"{name}_ms")) if same else None
+        slept = {f"{name}_wait_ms": _delta(prior.get(f"{name}_ms"), now.get(f"{name}_ms")) if prior is not None else None
                  for name in ("wire", "disk")}
         out[pid] = {**{key: now[key] for key in ("part", "pass", "chunks", "of", "bytes", "elapsed_s", "done")},
                     "wire_ms": now.get("wire_ms"), "disk_ms": now.get("disk_ms"), **slept,

@@ -818,6 +818,7 @@ typedef struct App {
 
     Hit hits[MAX_HITS];
     int nhits;
+    int no_keys;                /* #2600: opened with --no-input: no key reaches this screen, so no key chip (F2) is drawn */
     int end_off_own;            /* #2081: this frame's screen drew its own "כבה את המחשב" -- the end bar is words only */
     Rect clip; int clip_on;     /* .sbody overflow: hits outside are dropped */
 } App;

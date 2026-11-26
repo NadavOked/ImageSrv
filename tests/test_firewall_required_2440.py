@@ -26,7 +26,7 @@ REPO = Path(__file__).resolve().parent.parent
 UNIT = REPO / "deploy" / "imagesrv-server.service"
 
 
-def _run_main(tmp_path: Path, monkeypatch) -> list:
+def _run_main(tmp_path: Path, monkeypatch, *extra: str) -> list:
     """main עם כל מה שאחרי השער מנוטרל. מחזיר את הקריאות ל-create_runtime."""
     uvicorn = pytest.importorskip("uvicorn")
     built = []
@@ -42,7 +42,7 @@ def _run_main(tmp_path: Path, monkeypatch) -> list:
     monkeypatch.setattr(server.main, "_interface_for", lambda url: None)
     monkeypatch.setattr("sys.argv", [
         "server.main", "--server-url", "http://10.44.12.10:7712",
-        "--data-dir", str(tmp_path / "data"), "--images", str(tmp_path / "img")])
+        "--data-dir", str(tmp_path / "data"), "--images", str(tmp_path / "img"), *extra])
     server.main.main()
     return built
 
@@ -134,3 +134,53 @@ def test_the_unit_orders_after_nftables_without_a_hard_dependency():
     after = " ".join(l.split("=", 1)[1] for l in lines if l.startswith("After="))
     assert "nftables.service" in after.split()
     assert not any(re.match(r"(Requires|Requisite|BindsTo)=.*nftables", l) for l in lines)
+
+
+# --- #4014: the restore drill's copy runs as nobody, and `nft` refuses nobody -------------------------------------
+
+def _nft_refuses_nobody(monkeypatch):
+    """The real `read_nft_ruleset`, over a `nft` that answers as it did to nobody on the lab server."""
+    import subprocess
+    monkeypatch.setattr(ports.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(
+        a[0], 1, "", "Operation not permitted (you must be root)"))
+    assert ports.read_nft_ruleset() is None
+
+
+def test_an_nft_that_refuses_us_still_blocks_a_real_server_by_name(monkeypatch):
+    """Without the flag, "could not read" is a failure that says so (principle 5): the production path is unchanged."""
+    _nft_refuses_nobody(monkeypatch)
+    monkeypatch.setattr(deploy_net, "firewall_installed", lambda conf=None: True)
+    reason = deploy_net.firewall_gate()
+    assert reason and "nft list ruleset נכשל" in reason
+
+
+def test_the_drill_flag_waives_only_unreadable_and_says_not_checked(monkeypatch):
+    _nft_refuses_nobody(monkeypatch)
+    monkeypatch.setattr(deploy_net, "firewall_installed", lambda conf=None: True)
+    notes: list[str] = []
+    assert deploy_net.firewall_gate(unreadable_ok=True, note=notes.append) is None
+    assert len(notes) == 1 and deploy_net.GATE_UNCHECKED in notes[0]
+    # a readable ruleset without the table is still a block, flag or not
+    monkeypatch.setattr(ports, "read_nft_ruleset", lambda: "table inet filter {}")
+    assert deploy_net.firewall_gate(unreadable_ok=True, note=notes.append)
+    assert len(notes) == 1
+
+
+def test_main_starts_with_the_drill_flag_and_stops_without_it(tmp_path, monkeypatch, capsys):
+    _nft_refuses_nobody(monkeypatch)
+    monkeypatch.setattr(deploy_net, "firewall_installed", lambda conf=None: True)
+    with pytest.raises(SystemExit) as stopped:
+        _run_main(tmp_path, monkeypatch)
+    assert stopped.value.code == 1
+    capsys.readouterr()
+    built = _run_main(tmp_path, monkeypatch, "--firewall-gate-unreadable-ok")
+    assert built, "the drill's server did not start"
+    assert deploy_net.GATE_UNCHECKED in capsys.readouterr().err
+
+
+def test_only_the_drill_passes_the_flag():
+    drill = (REPO / "tools" / "restore-drill.sh").read_text(encoding="utf-8")
+    assert "--firewall-gate-unreadable-ok" in drill
+    for other in (UNIT, *(REPO / "deploy").glob("*.sh"), REPO / "tools" / "server-upgrade.sh"):
+        if other.exists():
+            assert "firewall-gate-unreadable-ok" not in other.read_text(encoding="utf-8"), other

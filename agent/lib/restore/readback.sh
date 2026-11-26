@@ -154,7 +154,7 @@ EOF
         esac ;;
     sha)        # a manifest from before #1864, full mode: _rp_a = sha256, _rp_c = bytes
         rb_digest "$_rp_n" "$_rp_fs" "$_rp_c" "$2" || { echo "$RB_KIND|מחיצה $_rp_i: $RB_WHY"; return; }
-        read -r _rp_s _rp_g _rp_x < "$2/rb.out" 2>/dev/null
+        read -r _rp_s _rp_g _rp_x 2>/dev/null < "$2/rb.out"
         [ "$_rp_g" = "$_rp_c" ] \
             || { echo "failed|מחיצה $_rp_i: $READBACK_FAIL (מפת הבלוקים בדיסק: $_rp_g בייט, באימג': $_rp_c)"; return; }
         [ "$_rp_s" = "$_rp_a" ] || { echo "failed|מחיצה $_rp_i: $READBACK_FAIL"; return; }
@@ -238,7 +238,7 @@ rb_seed() {   # the sample's seed: drawn, and logged -- the same seed draws the 
 _rb_fetch() {   # $1 = index, $2 = file, $3 = xxh64, $4 = lines. 0 = the manifest's own list is in $2. #1907: tries again.
     _rg_n=1
     until http_get "$RB_SERVER/api/v1/images/$RB_IMAGE/readback/$1" > "$2" 2>> "$LOG_FILE" \
-          && [ "$(fanout --xxh64 < "$2" 2>/dev/null)" = "$3" ] && [ "$(grep -c . "$2")" = "$4" ]; do
+          && [ "$(fanout --xxh64 2>/dev/null < "$2")" = "$3" ] && [ "$(grep -c . "$2")" = "$4" ]; do
         [ "$_rg_n" -lt "$RB_LIST_TRIES" ] && [ $(( $(date +%s) - _pl_t0 )) -lt "$RB_LIST_WAIT_S" ] || return 1
         log "readback: partition $1: the list did not come down (try $_rg_n of $RB_LIST_TRIES)" > /dev/null
         sleep "$RB_LIST_PAUSE_S"; _rg_n=$((_rg_n + 1))

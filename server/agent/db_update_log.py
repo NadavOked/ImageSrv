@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 
-from server.db import journal
+from server.db import journal, SqlConnection
 
 log = logging.getLogger("imagesrv.db_update_log")
 
@@ -47,7 +46,7 @@ def _seen(raw: str | None) -> dict[str, str]:
             and (u := _update(t)) is not None}
 
 
-def journal_new(conn: sqlite3.Connection, session_id: str, mac: str,
+def journal_new(conn: SqlConnection, session_id: str, mac: str,
                 previous_json: str | None, targets: list) -> None:
     """שורת יומן לכל יעד שבדיווח הזה הגיע למצב חדש של עדכון ה-db. לעולם אינו זורק."""
     try:

@@ -1,10 +1,10 @@
 """#1773: chrony client source, server ACLs, and measured clock status."""
 from __future__ import annotations
-import ipaddress, logging, re, sqlite3, subprocess, time
+import ipaddress, logging, re, subprocess, time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
-from server.db import get_setting, journal, set_settings
+from server.db import get_setting, journal, set_settings, SqlConnection
 
 log = logging.getLogger("imagesrv.timesync")
 SETTING = "ntp_servers"
@@ -31,17 +31,17 @@ def validate(value: object) -> str:
             if not _HOST.fullmatch(item): raise ValueError(f"כתובת שרת זמן לא תקינה: {item}")
     return " ".join(parts)
 
-def configured(conn: sqlite3.Connection) -> str:
+def configured(conn: SqlConnection) -> str:
     return validate(get_setting(conn, SETTING) or "")
 
-def is_manual(conn: sqlite3.Connection) -> bool:
+def is_manual(conn: SqlConnection) -> bool:
     return get_setting(conn, MANUAL_SETTING) == "1"
 
-def manual_at(conn: sqlite3.Connection) -> str:
+def manual_at(conn: SqlConnection) -> str:
     """UTC ISO of the last manual setting; "" = not recorded (said as unknown, never guessed)."""
     return get_setting(conn, MANUAL_AT_SETTING) or ""
 
-def mode(conn: sqlite3.Connection) -> str:
+def mode(conn: SqlConnection) -> str:
     if is_manual(conn): return MODE_MANUAL
     return MODE_ORG if configured(conn) else MODE_AUTO
 
@@ -233,7 +233,7 @@ def _last_sample(sources: str) -> dict | None:
     (it stayed -0.019 ms while a resumed VM was 352 s behind); a source's last sample is what
     the wire said. Sign as chronyc documents it -- positive = the local clock is ahead -- the
     same as ``offset_ms``. None = no source has a sample."""
-    best = None
+    best: dict | None = None
     for match in _SAMPLE.finditer(sources):
         age = int(match.group(2)) * _AGE_S[match.group(3)]
         if best is None or age < best["age_s"]:
@@ -242,9 +242,12 @@ def _last_sample(sources: str) -> dict | None:
                     "poll_s": _poll_s(match.group(0))}   # #2800: how often that source is polled
     return best
 
+def _unread(hooks: Hooks) -> dict:
+    return {"synchronized": None, "server": None, "offset_ms": None, "last_sample": None,
+            "checked_at": hooks["now"]()}
+
 def status(hooks: Hooks) -> dict:
-    answer = {"synchronized": None, "server": None, "offset_ms": None, "last_sample": None,
-              "checked_at": hooks["now"]()}
+    answer = _unread(hooks)
     try: tracking, sources = hooks["tracking"](), hooks["sources"]()
     except Exception: return answer
     selected = re.search(r"(?m)^\^\*\s+(\S+)", sources)
@@ -257,15 +260,29 @@ def status(hooks: Hooks) -> dict:
         except Exception: answer["network_reason"] = None
     return answer
 
+#: #3973: after the restart chronyd may need a moment before chronyc answers; a status that is
+#: still unread after this many tries is "could not check", not "the time server did not answer".
+UNREAD_TRIES = 3
+
+def _unchecked(result: dict, why: str) -> dict:
+    """#3973: "we could not check" said as an answer -- ``ok`` False and a sentence of ours --
+    never an HTTP 500, and never ``synchronized`` False (that would say "checked: not in sync")."""
+    return {**result, "ok": False, "error": f"לא הצלחנו לבדוק את שעון השרת: {why}"}
+
 def check_now(hooks: Hooks) -> dict:
-    hooks["restart"]()
+    try: hooks["restart"]()
+    except Exception as exc: return _unchecked(_unread(hooks), said(exc))
     for attempt in range(16):
         result = status(hooks)
-        if result["synchronized"] is True: return result
+        if result["synchronized"] is True: return {**result, "ok": True}
+        if result["synchronized"] is None and attempt >= UNREAD_TRIES - 1:
+            try: hooks["tracking"](); hooks["sources"]()
+            except Exception as exc: return _unchecked(result, said(exc))
+            return _unchecked(result, "מצב הסנכרון לא נקרא")
         if attempt < 15: hooks["sleep"](1)
     raise TimeoutError("שרת הזמן לא ענה תוך 15 שניות")
 
-def apply_on_start(conn: sqlite3.Connection, hooks: Hooks) -> None:
+def apply_on_start(conn: SqlConnection, hooks: Hooks) -> None:
     if is_manual(conn):   # #2765: the source is "none" -- the time itself is kept by the clock, not set again
         try: hooks["ensure_confdir"](); hooks["write_manual"](); hooks["restart"]()
         except Exception as exc: journal(conn, "timesync_apply_failed", f"ידני: {said(exc)}")
@@ -276,7 +293,7 @@ def apply_on_start(conn: sqlite3.Connection, hooks: Hooks) -> None:
     except Exception as exc: journal(conn, "timesync_apply_failed", f"{value or 'אוטומטי'}: {said(exc)}")
     else: journal(conn, "timesync_applied", value or "אוטומטי")
 
-def save(conn: sqlite3.Connection, value: str, set_at: str | None = None) -> None:
+def save(conn: SqlConnection, value: str, set_at: str | None = None) -> None:
     """One transaction: the server list, and the manual flag with the moment it was set
     (``set_at`` None = not manual; the flag goes). Read back before it counts as saved."""
     if set_at is None:

@@ -20,6 +20,7 @@ hdparm רץ רק כש-`SYSROOT` ריק (מכונה אמיתית), ולכן הט�
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -133,3 +134,52 @@ def test_a_disk_with_no_identity_at_all_reports_nothing(tmp_path):
     root = _machine(tmp_path, serial=None, wwid=None)
     out, calls = _disk_serial(tmp_path, root, real_machine=False)
     assert (out, calls) == ("[]", [])
+
+
+# --- the same order, seen in the hello body (#1912, #16 and #30 only) -----------------------------------------------
+
+
+def _disk_tree(tmp_path: Path, disks: dict[str, tuple[str | None, str | None]]) -> Path:
+    """/sys fake with one entry per disk: name -> (serial, wwid). `None` = the file is not there."""
+    root = tmp_path / "root"
+    for name, (serial, wwid) in disks.items():
+        device = root / "sys" / "block" / name / "device"
+        device.mkdir(parents=True)
+        for fname, value in (("serial", serial), ("wwid", wwid)):
+            if value is not None:
+                (device / fname).write_text(value + "\n", encoding="utf-8")
+    return root
+
+
+def _hello_disks(tmp_path: Path, root: Path) -> dict[str, dict]:
+    """`build_disk_entry` of every disk in the tree (SYSROOT set: hdparm is never asked), parsed, by dev name."""
+    dev = tmp_path / "dev"
+    dev.mkdir(exist_ok=True)
+    script = ('export PATH="$PATH:/usr/bin:/bin"; '
+              f'export SYSROOT={_posix(root)!r} DEVROOT={_posix(dev)!r}; '
+              f'. {_posix(LIB / "core" / "common.sh")}; . {_posix(LIB / "hw" / "sysinfo.sh")}; . {_posix(LIB / "hw" / "diskinfo.sh")}; '
+              'for _d in $(list_disks); do build_disk_entry "$_d"; echo; done')
+    proc = subprocess.run([BASH, "-c", script], capture_output=True, text=True, encoding="utf-8",
+                          stdin=subprocess.DEVNULL, timeout=60)
+    assert proc.returncode == 0, proc.stderr
+    entries = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+    return {e["dev"]: e for e in entries}
+
+
+def test_the_hello_carries_serial_then_wwid_then_null(tmp_path):
+    """#16 in the body the server reads: a real serial, else the wwid, else `null` ("not identified") -- never "" and
+    never a disk dropped from the list."""
+    root = _disk_tree(tmp_path, {"sda": ("S4EWNX0R123456", WWID), "sdb": (None, WWID), "sdc": (None, None)})
+    disks = _hello_disks(tmp_path, root)
+    assert sorted(disks) == ["sda", "sdb", "sdc"], disks
+    assert disks["sda"]["serial"] == "S4EWNX0R123456"
+    assert disks["sdb"]["serial"] == WWID
+    assert disks["sdc"]["serial"] is None, "a disk with neither is `null`, not an empty string"
+
+
+def test_two_disks_with_the_same_wwid_are_both_reported_with_it(tmp_path):
+    """#16: the agent invents nothing and hides nothing -- twins that share a wwid both say it, and telling indistinguishable
+    twins apart is the server's rule (ledger.identities, #2448), not an agent that drops one of the two."""
+    root = _disk_tree(tmp_path, {"sda": (None, WWID), "sdb": (None, WWID)})
+    disks = _hello_disks(tmp_path, root)
+    assert [disks[d]["serial"] for d in ("sda", "sdb")] == [WWID, WWID], disks

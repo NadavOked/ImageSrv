@@ -311,7 +311,14 @@ def test_no_ledger_for_an_image_whose_index_is_not_verified(room_server):
     ctx = room_server["ctx"]
     wave = _wave(room_server)
     _unverified(ctx)                                                         # no index at all
-    assert _progress(room_server, wave, [{"dev": "sda", "durable": [{"part": 3, "ranges": [[0, 5]]}]}]).json()["ok"]
+    # Not through POST /progress: the wave's sender thread sees the index is gone and closes the wave (correct,
+    # #1928/#3137), so the HTTP answer is `ok` or `not_open` by timing, and a `not_open` report never reaches the
+    # ledger at all. The ledger is asked directly. The report is not failed by a refused ledger -- `note_report`
+    # answers with the refusal by name and does not raise -- and `test_a_refused_ledger_does_not_fail_the_report`
+    # holds the HTTP `ok`.
+    problems = L.note_report(ctx, CLONER1, {"session_id": wave, "targets": [
+        {"dev": "sda", "durable": [{"part": 3, "ranges": [[0, 5]]}]}]})
+    assert len(problems) == 2 and "no verified chunk index yet" in problems[0] and problems[1] == L.RETRY_LATER
     assert L.of_disk(ctx.conn, "S1", SIZE) == {}
 
 

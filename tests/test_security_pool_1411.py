@@ -609,7 +609,7 @@ def _frame(snapshot) -> str:
 
 def test_the_server_screen_shows_the_date_of_the_system_updates():
     row = _row(_frame(samples.PRIMARY), "עדכוני מערכת")
-    assert row[3] == f"מתאריך {view.FSI}{DAY}{view.PDI}", row
+    assert row[3] == f"מתאריך {view.FSI}15/10/2026{view.PDI}", row   # #2903: DD/MM/YYYY
     assert row[5] == "" and row[6:8] == ["", ""]
     records = [line.split("\t") for line in _frame(samples.PRIMARY).split("\n")]
     tiles = [rec[1] for rec in records[:records.index(row)] if rec[0] == "tile"]

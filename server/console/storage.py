@@ -544,7 +544,7 @@ def create_storage_router(ctx: ServerContext, data_dir=None) -> APIRouter:
         writer = tunnels.get(f"{nid}/{canonical}")
         if writer is None:
             raise HTTPException(
-                409, "אין מוניטור פתוח למכונה — הפקודה נוסעת דרך חיבור המוניטור")
+                409, "המחשב לא מחובר, ולכן אי אפשר לשלוח לו את הפקודה. אם הוא כבוי, הדליקו אותו (WoL) ונסו שוב")
         writer.write(monitor.power_frame(action))
         await writer.drain()
         journal(ctx.conn, "monitor_power", f"{canonical} {action} node={nid}"

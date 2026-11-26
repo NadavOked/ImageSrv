@@ -30,15 +30,23 @@ B54 B55 B56 B57 B60) לא חסם, ואף אחד לא חיבר את קריאות�
 from __future__ import annotations
 
 import logging
-import sqlite3
 from dataclasses import dataclass
-from typing import Callable, Sequence
+from typing import Callable, Protocol, Sequence
 
 from server.brain import memory, veto
 from server.brain.gate_core import BLOCK, OPEN, UNDECIDED, WARN, Reading
-from server.db import get_setting
+from server.db import get_setting, SqlConnection
 
 log = logging.getLogger("imagesrv.brain")
+
+
+class _Titled(Protocol):
+    """מה ש-`combine` קורא משער: מזהה וכותרת. פרוטוקול ולא `gates.Gate`, כי `gates` מייבא את המודול הזה."""
+    @property
+    def id(self) -> str: ...
+    @property
+    def title_he(self) -> str: ...
+
 
 SETTING = "brain_round_gate"
 SHADOW, ENFORCE = "shadow", "enforce"
@@ -54,7 +62,7 @@ ENFORCED_BLOCK_HE = "הסבב לא נפתח"
 ENFORCED_OPEN_HE = "הסבב נפתח"
 
 
-def mode(conn: sqlite3.Connection) -> str:
+def mode(conn: SqlConnection) -> str:
     """המתג. רק ``enforce`` בדיוק מדליק את האכיפה; חסר, פגום, לא מוכר או שלא נקרא = ``shadow`` (לעולם לא חוסם בגלל "לא יודע")."""
     try:
         return ENFORCE if get_setting(conn, SETTING) == ENFORCE else SHADOW
@@ -63,7 +71,7 @@ def mode(conn: sqlite3.Connection) -> str:
         return SHADOW
 
 
-def combine(pairs: Sequence[tuple[object, Reading]]) -> tuple[str, str, tuple[str, ...]]:
+def combine(pairs: Sequence[tuple[_Titled, Reading]]) -> tuple[str, str, tuple[str, ...]]:
     """``(פסק, סיבה בעברית, ראיות)`` מזוגות ``(שער, קריאה)`` (לשער ``id`` ו-``title_he``). טהור.
 
     הסיבה היא הסיבות של הקוד הקיים, מילה במילה, עם שם השער: המוח אינו מנסח מחדש. הראיות: הפסק החמור של כל שער
@@ -71,7 +79,7 @@ def combine(pairs: Sequence[tuple[object, Reading]]) -> tuple[str, str, tuple[st
     if not pairs:
         return UNDECIDED, "אף שער לא ענה: לא נבדק דבר, ולכן אין פסק", ("gates=0",)
     worst: dict[str, tuple[str, str]] = {}          # id השער -> (הפסק החמור, כותרת)
-    by: dict[str, list[tuple[object, Reading]]] = {BLOCK: [], WARN: [], UNDECIDED: [], OPEN: []}
+    by: dict[str, list[tuple[_Titled, Reading]]] = {BLOCK: [], WARN: [], UNDECIDED: [], OPEN: []}
     for gate, reading in pairs:
         by[reading.verdict].append((gate, reading))
         before = worst.get(gate.id)
@@ -103,8 +111,8 @@ class Decision:
         return f"הסבב לא נפתח: {self.reason}"
 
 
-def gate(conn: sqlite3.Connection, macs: Sequence[str], *, timeout_s: float | None = None,
-         read: Callable[[sqlite3.Connection, tuple[str, ...], float | None], Sequence[tuple[object, Reading]]] | None = None) -> Decision:
+def gate(conn: SqlConnection, macs: Sequence[str], *, timeout_s: float | None = None,
+         read: Callable[[SqlConnection, tuple[str, ...], float | None], Sequence[tuple[_Titled, Reading]]] | None = None) -> Decision:
     """הפסק **לפני** שהסבב נפתח. ב-``shadow`` (ברירת המחדל) ו-``off`` לא קורה כאן דבר ולא נקרא דבר: ``NOT_RUN``, בלי חסימה, כמו קודם.
     ב-``enforce``: קורא את שערי ``pre_open`` (ב-`gates.read_pre_open`, או ב-``read`` שהטסט מזריק), רושם פסק, ו-``BLOCK`` חוסם.
     ``UNDECIDED`` ו-``WARN`` אינם חוסמים. לעולם אינו זורק."""
@@ -125,7 +133,7 @@ def gate(conn: sqlite3.Connection, macs: Sequence[str], *, timeout_s: float | No
         return Decision(UNDECIDED, "ההכרעה נכשלה")
 
 
-def record_after_open(conn: sqlite3.Connection, round_id: str, pairs: Sequence[tuple[object, Reading]]) -> int | None:
+def record_after_open(conn: SqlConnection, round_id: str, pairs: Sequence[tuple[_Titled, Reading]]) -> int | None:
     """הפסק של **אחרי** הפתיחה, על כל עשרת השערים (`gates.run`), בצל תמיד: שורה אחת על הסבב, עם מה שהקוד הישן עשה (פתח) והאם המוח
     הסכים. ``pairs`` ריק (המתג הכללי ``off``) = לא נרשם. אינו זורק; ``None`` = לא נרשם."""
     try:

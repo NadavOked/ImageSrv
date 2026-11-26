@@ -19,6 +19,7 @@ import sys
 import threading
 import urllib.parse
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from server.paths import REPO_ROOT
 from server.core import ports as product_ports   # #3871: the one place a port is named
@@ -28,6 +29,9 @@ from server.console import server_power
 from server.rounds import drive_rates
 from server.agent import identity
 from server.system import serverlog
+
+if TYPE_CHECKING:
+    from server.net.igmp_querier import Querier
 
 
 def _configure_stdio() -> None:
@@ -143,6 +147,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="כתובת ערוץ הסוכן שהלקוחות רואים: https://<IP>:7712 "
                              "(נכתבת לשורת הקרנל; ה-/boot של GRUB במאזין נפרד, "
                              "--boot-port). ריק = מה שהוגדר מהקונסולה (#1088)")
+    # #4014: only `tools/restore-drill.sh` passes this (its copy runs as nobody, and `nft` refuses nobody). It waives
+    # "nft could not be read" alone, aloud; a table that is readable and missing still stops the server (#2440).
+    parser.add_argument("--firewall-gate-unreadable-ok", action="store_true",
+                        help="the #2440 gate: if nft cannot be read, start and say 'not checked' (restore drill only)")
     parser.add_argument("--tftp-root", default="/srv/tftp",
                         help="שורש ה-TFTP שהמתקין פרס אליו — לשם נכתב grub.cfg "
                              "כשרשת ההפצה מוגדרת מהקונסולה (#1088)")
@@ -401,7 +409,7 @@ def _primary_alive(runtime, args, hostname: str):
     return servers
 
 
-def _start_igmp_querier(runtime, deploy, interface: str | None) -> None:
+def _start_igmp_querier(runtime, deploy, interface: str | None) -> Querier | None:
     """#1972: ה-querier על כרטיס ההפצה — ותמיד שורה במסך הבריאות. כאן בלבד
     (כמו `vm_host`): בבדיקות אין סוקט raw ואין תהליכון."""
     from server.system import health
@@ -525,7 +533,9 @@ def main() -> None:
 
     # #2440: חומת אש שהותקנה ואינה טעונה = שרת בלי סינון. לא עולים, ואומרים
     # למה; Restart=on-failure מנסה שוב, והשרת עולה מעצמו כש-nftables עולה.
-    blocked = deploy_net.firewall_gate()
+    blocked = deploy_net.firewall_gate(
+        unreadable_ok=args.firewall_gate_unreadable_ok,
+        note=lambda text: print(f"imagesrv: {text}", file=sys.stderr))
     if blocked:
         print(f"imagesrv: {blocked}", file=sys.stderr)
         raise SystemExit(1)
@@ -611,7 +621,7 @@ def main() -> None:
     # #1088: כתובת ההפצה וכרטיסה — מהדגל (המעבדה, שרת שהותקן עם כרטיס
     # הפצה), ממה שנרשם מהקונסולה, או "לא הוגדרה". שלושת המקורות נאמרים.
     if deploy.source == "cli":
-        server_url = deploy.url              # #3871: `--server-url`, on the port the agent listens on
+        server_url = deploy.url or ""      # #3871: `--server-url`, on the port the agent listens on
         if args.interface:
             interface = args.interface
         else:
@@ -625,7 +635,7 @@ def main() -> None:
         # הכרטיס שנרשם חייב לשאת את הכתובת שנרשמה — אחרת השרת **אינו**
         # נופל (זה היה משאיר את המפעיל בלי קונסולה) אלא חוזר
         # ל"לא הוגדרה", ואומר זאת ביומן ובמסך הבריאות.
-        server_url, interface = deploy.url, deploy.interface
+        server_url, interface = deploy.url or "", deploy.interface
         try:
             found = _interface_for(server_url)
         except InterfaceDetectionError as exc:
@@ -781,7 +791,7 @@ def main() -> None:
     from server.agent import tls as agent_tls
     agent_identity, _ = agent_tls.ensure_identity(args.data_dir)
     agent_config = agent_uvicorn_config(agent_app, args.host, args.port, **agent_identity.uvicorn_kwargs())
-    configs: dict[tuple[str, str], object] = {("agent", args.host): agent_config}
+    configs: dict[tuple[str, str], uvicorn.Config] = {("agent", args.host): agent_config}
 
     def agent_factory(h: str):
         """#705: יצרן לכל כתובת — הסוכן נקשר לכל כרטיס שבו "אתחול מהרשת" דלוק."""
