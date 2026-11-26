@@ -48,7 +48,7 @@ import json
 import logging
 import sqlite3
 
-from server.db import _write_lock, now_iso, writing
+from server.db import _write_lock, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.learn_ports")
 
@@ -81,7 +81,7 @@ def _problem(crc_delta, link_gbps, link_max_gbps, cable_fail) -> bool:
     return bool((crc_delta or 0) > 0 or cable_fail)
 
 
-def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
+def record_wave(conn: SqlConnection, session_id: str, members) -> int:
     """נקרא כשגל החדר הסתיים (`room._finish_wave`). שורה לכל מגירה עם סידורי
     וחיבור שהיא ב-hello של המכונה. מחזיר כמה נרשמו; לעולם אינו זורק."""
     try:
@@ -125,15 +125,15 @@ def _bad(rows) -> list[sqlite3.Row]:
             if _problem(r["crc_delta"], r["link_gbps"], r["link_max_gbps"], r["cable_fail"])]
 
 
-def verdict(conn: sqlite3.Connection, mac: str | None, port: object,
+def verdict(conn: SqlConnection, mac: str | None, port: object,
             serial: str | None) -> dict:
     """מה שנלמד על החיבור ועל הדיסק: `{"port_suspect", "port_disks", "disk_suspect",
     "disk_ports", "slot_failed", "slot_seen", "text_he"}`. #3125: `slot_failed` = בכמה מ-`slot_seen` הגלים האחרונים
     בחריץ הזה (מכונה+חיבור) הכתיבה נכשלה, מכל סיבה; `slot_seen` סופר רק גלים שנרשמו להם (שורה בלי `failed` אינה
     נספרת לא במונה ולא במכנה); None = אין על מה לשאול, או שהשאילתה נכשלה. `port_suspect`/`disk_suspect` — None כשאין על מה
     לשאול (אין MAC/חיבור/סידורי) או שהשאילתה נכשלה; False — נבדק, לא עבר את הסף."""
-    out = {"port_suspect": None, "port_disks": None, "disk_suspect": None,
-           "disk_ports": None, "slot_failed": None, "slot_seen": None, "text_he": None}
+    out: dict[str, int | bool | str | None] = {"port_suspect": None, "port_disks": None, "disk_suspect": None,
+                                              "disk_ports": None, "slot_failed": None, "slot_seen": None, "text_he": None}
     try:
         port = _int(port)
         if mac and port is not None:
@@ -153,7 +153,7 @@ def verdict(conn: sqlite3.Connection, mac: str | None, port: object,
     except Exception:             # noqa: BLE001 — אין הכרעה, לא "תקין"
         log.exception("port verdict for %s:%s failed", mac, port)
         return {**out, "port_suspect": None, "disk_suspect": None, "slot_failed": None, "slot_seen": None}
-    texts = []
+    texts: list[str] = []
     if out["disk_suspect"]:
         texts.append(DISK_HE.format(n=out["disk_ports"]))
     if out["port_suspect"]:

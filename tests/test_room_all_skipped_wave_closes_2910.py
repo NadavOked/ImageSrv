@@ -16,7 +16,9 @@ import pytest
 pytest.importorskip("fastapi")
 
 from test_red_skip_closes_drawer_1760 import _disk_event, _events, _wave1  # noqa: E402
-from test_server_room import CLONER1, heartbeat, report, room, room_server  # noqa: E402,F401
+from test_server_room import (  # noqa: E402,F401
+    CLONER1, CLONER2, cloner_hello, heartbeat, report, room, room_body, room_server,
+)
 
 
 def _both_red(room_server) -> str:
@@ -49,3 +51,40 @@ def test_a_waiting_report_leaves_the_wave_open_for_the_lost_timer(room_server):
 
     assert room(deploy)["round"]["wave_state"] == "running"
     assert ctx.conn.execute("SELECT state FROM room_rounds").fetchone()["state"] == "active"
+
+
+@pytest.mark.parametrize("preflight", ["slow", "failed"])
+def test_only_a_disk_failed_as_slow_closes_its_slot_without_a_retry(room_server, preflight):
+    deploy, anon, ctx = room_server["deploy"], room_server["anon"], room_server["ctx"]
+    opened = deploy.post("/api/console/room", json=room_body(
+        room_server, 4, {CLONER1: ["S1", "S2"], CLONER2: ["S3", "S4"]}))
+    assert opened.status_code == 200, opened.text
+    wave = cloner_hello(anon, CLONER1, ["S1", "S2"])["session"]["id"]
+    assert cloner_hello(anon, CLONER2, ["S3", "S4"])["session"]["id"] == wave
+    heartbeat(room_server)
+    assert room(deploy)["round"]["wave_state"] == "running"
+    report(anon, wave, CLONER2, {"sda": "done", "sdb": "done"})
+    error = "איטי — 19 MB/s, מתחת לסף 74 MB/s" if preflight == "slow" else "שגיאת כתיבה"
+    response = anon.post("/api/v1/agent/progress", json={
+        "session_id": wave, "mac": CLONER1, "state": "partial",
+        "targets": [
+            {"dev": "sda", "state": "done", "bytes_written": 100, "bytes_total": 100},
+            {"dev": "sdb", "state": "failed", "bytes_written": 0, "bytes_total": 100,
+             "error": error, "write_preflight": {"state": preflight, "reason": error,
+                                                 "mbps": 19 if preflight == "slow" else None}},
+        ],
+    })
+    assert response.status_code == 200 and response.json().get("ok"), response.text
+    heartbeat(room_server)
+
+    row = ctx.conn.execute("SELECT * FROM room_rounds WHERE id = ?", (opened.json()["id"],)).fetchone()
+    assert row["written_drives"] == 3
+    if preflight == "slow":
+        assert _events(ctx, "room_wave") == []
+        assert _events(ctx, "room_rewake") == []
+        assert row["state"] == "closed" and row["wave_number"] == 1
+        assert json.loads(row["skipped_serials"]) == ["S2"]
+        assert _events(ctx, "room_done") == [f'{row["id"]} written=3/4 skipped_red=1']
+    else:
+        assert row["state"] == "active" and row["wave_number"] == 2
+        assert json.loads(row["skipped_serials"]) == []

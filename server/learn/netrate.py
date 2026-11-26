@@ -26,9 +26,8 @@ from __future__ import annotations
 import json
 import logging
 import math
-import sqlite3
 
-from server.db import get_setting
+from server.db import get_setting, SqlConnection
 from server.learn import portcap
 from server.rounds import drive_rates, nic_speed
 
@@ -45,7 +44,7 @@ LABEL_HE = "מפת החיבורים: פי כמה מהיר מהיציאה צרי�
 SCAN = 20
 
 
-def _server_card(conn: sqlite3.Connection) -> tuple[int | None, str | None]:
+def _server_card(conn: SqlConnection) -> tuple[int | None, str | None]:
     """`(Mb/s, None)` or `(None, why)` -- the card of the latest wave that recorded the server's own link."""
     for row in conn.execute("SELECT decision FROM wave_rates ORDER BY at DESC, rowid DESC LIMIT ?", (SCAN,)):
         try:
@@ -62,7 +61,7 @@ def _server_card(conn: sqlite3.Connection) -> tuple[int | None, str | None]:
     return None, "server_no_wave"
 
 
-def wire(conn: sqlite3.Connection, mac: str) -> dict:
+def wire(conn: SqlConnection, mac: str) -> dict:
     """`{"mbs", "mbps", "by", "cloner_mbps", "server_mbps", "why"}` for the cloner `mac`. `mbs` (MB/s the wire can give one target) is None
     unless both cards were measured; `why` is then `cloner_<why of nic_speed.measured>` / `server_unmeasured` / `server_no_wave`. A failed read is raised:
     "could not check" is not "nothing to say"."""
@@ -89,7 +88,7 @@ def parse_margin(raw: object) -> float | None:
     return value
 
 
-def margin(conn: sqlite3.Connection) -> float:
+def margin(conn: SqlConnection) -> float:
     """ההגדרה, או `DEFAULT_MARGIN`. פגומה = ברירת המחדל **עם שורת יומן**, לעולם לא 0 ("כל יציאה היא הצוואר")."""
     raw = get_setting(conn, MARGIN_SETTING)
     if raw is None:

@@ -117,7 +117,7 @@ def find(snap: dict, kind: str, key: str, name: str) -> dict | None:
 
 def usable(row: dict | None) -> bool:
     """האם המדד מצדיק החלטה: ``ok`` בלבד. ``stale``/``missing``/``clock``/אין שורה = חוסר ראיה."""
-    return bool(row) and row.get("quality") == "ok" and row.get("value") is not None
+    return row is not None and row.get("quality") == "ok" and row.get("value") is not None
 
 
 class Ledger:

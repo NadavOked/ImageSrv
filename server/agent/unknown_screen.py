@@ -31,7 +31,7 @@ import logging
 import sqlite3
 from datetime import datetime, timedelta
 
-from server.db import _write_lock, get_setting, now_iso, writing
+from server.db import _write_lock, get_setting, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.unknown_screen")
 
@@ -69,7 +69,7 @@ def parse(raw: object) -> int | None:
     return value if 0 <= value <= MAXIMUM else None
 
 
-def autoboot_seconds(conn: sqlite3.Connection) -> int:
+def autoboot_seconds(conn: SqlConnection) -> int:
     """ההגדרה, או 0 (כבוי). פגומה = כבוי **עם שורת יומן** — ספק אינו מאתחל."""
     raw = get_setting(conn, SETTING)
     if raw is None:
@@ -81,7 +81,7 @@ def autoboot_seconds(conn: sqlite3.Connection) -> int:
     return value
 
 
-def window_seconds(conn: sqlite3.Connection) -> int:
+def window_seconds(conn: SqlConnection) -> int:
     """החלון שבו הגשת המסך מסבירה את האתחול הבא: N שניות על המסך ועוד המרווח."""
     return autoboot_seconds(conn) + WINDOW_SECONDS
 
@@ -92,7 +92,7 @@ def _cutoff(now: str, seconds: int) -> str:
             - timedelta(seconds=seconds)).isoformat(timespec="seconds")
 
 
-def served_recently(conn: sqlite3.Connection, mac: str, now: str | None = None) -> bool:
+def served_recently(conn: SqlConnection, mac: str, now: str | None = None) -> bool:
     """האם השרת עצמו שלח את ה-MAC הזה למסך בחלון — ולכן ההגעה שלו לסוכן
     מוסברת (`agent_loops`). שגיאת קריאה = לא (ניטור בלבד)."""
     try:
@@ -105,7 +105,7 @@ def served_recently(conn: sqlite3.Connection, mac: str, now: str | None = None) 
     return row is not None and row["context"] == CONTEXT and row["last_at"] >= cutoff
 
 
-def offer(conn: sqlite3.Connection, mac: str, answer: dict,
+def offer(conn: SqlConnection, mac: str, answer: dict,
           now: str | None = None) -> dict:
     """תשובת `known: false` לבקשת תפריט בווילן ההפצה → עם אחד הדגלים, או כמו שהיא.
 

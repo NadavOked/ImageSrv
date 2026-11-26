@@ -26,10 +26,9 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import statistics
 
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.learn_models")
 
@@ -54,7 +53,7 @@ def _mbps(pre: object) -> int | None:
     return mbps if isinstance(mbps, int) and not isinstance(mbps, bool) and mbps > 0 else None
 
 
-def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
+def record_wave(conn: SqlConnection, session_id: str, members) -> int:
     """נקרא כשגל החדר הסתיים. מחזיר כמה נרשמו; לעולם אינו זורק.
 
     מדידה שהושלמה לדיסק בלי `model` או בלי `serial` ב-hello אינה נשמרת (#2532), ונרשמת
@@ -102,7 +101,7 @@ def record_wave(conn: sqlite3.Connection, session_id: str, members) -> int:
     return written
 
 
-def last_mbps(conn: sqlite3.Connection, serial: str | None) -> int | None:
+def last_mbps(conn: SqlConnection, serial: str | None) -> int | None:
     """המדידה האחרונה של הדיסק הזה, או None — לא נמדד מעולם."""
     if not serial:
         return None
@@ -111,14 +110,14 @@ def last_mbps(conn: sqlite3.Connection, serial: str | None) -> int | None:
     return row["mbps"] if row else None
 
 
-def judge(conn: sqlite3.Connection, model: str | None, serial: str | None,
+def judge(conn: SqlConnection, model: str | None, serial: str | None,
           mbps: int | None) -> dict:
     """`{"mbps", "median", "samples", "slow", "text_he"}` לדיסק אחד.
 
     `mbps` — המדידה של הגל הזה, ובלעדיה האחרונה של הסידורי (`last_mbps`).
     `slow`: True — מתחת ל-`SLOW_RATIO` מהבסיס; False — נבדק ואינו; None — אין
     מדידה לדיסק, אין בסיס לדגם, או שהשאילתה נכשלה ("לא נבדק", לא "תקין")."""
-    out = {"mbps": None, "median": None, "samples": 0, "slow": None, "text_he": None}
+    out: dict[str, float | bool | str | None] = {"mbps": None, "median": None, "samples": 0, "slow": None, "text_he": None}
     try:
         if mbps is None:
             mbps = last_mbps(conn, serial)

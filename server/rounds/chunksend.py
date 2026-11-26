@@ -31,6 +31,7 @@ them what each drive took from the first passes (`rate_outcome.drives`), not the
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import logging
 import os
@@ -39,10 +40,13 @@ import tempfile
 import subprocess
 import threading
 import time
+from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlsplit
 
 from server.core import shutdown
 from server.core import ports as product_ports   # #3871: the group and Trident's port
@@ -53,7 +57,7 @@ from server.brain import repairrule   # #3659 (S10, S11, S12): the multicast thr
 from server.brain import resume as brain_resume   # #3670 (S16): the first pass of a partition that resumes
 from server.brain import planes as brain_planes   # #3571: three ceilings, recorded only; the command below is not changed
 from server.brain import writerate as brain_writerate   # #3655 (S3, S4): `--write-kbps` and the feedback's bounds are decided there
-from server.db import get_setting
+from server.db import get_setting, SqlConnection
 from server.library import chunkformat
 from server.library.images import streamed_partitions
 from server.rounds import chunkctx, chunklog, chunkledger, chunkpass, repair
@@ -148,6 +152,22 @@ CHUNK_MB = 4194304 / 1_000_000          # חתיכה של זרם הנתונים,
 #: #3821: מנגנון, לא החלטה של המוח -- נרשם בקטלוג (`server/brain/catalog.toml`, `T-HELD-FRESH`), עם הסיווג והמקור.
 HELD_FRESH_S = 5
 CHUNK_BYTES = 4 * 1024 * 1024
+
+
+def source_of(server_base: str | None) -> str | None:
+    """כתובת המקור של השידור: כתובת ה-IPv4 שב-`--server-url` (כתובת וילן ההפצה, #498).
+
+    הכרעת נדב 14/11 (#1079/#2485): המקלט מקבל חבילות רק מכתובת המקור של השרת, שמגיעה
+    בהוראת הגל (`session.chunk.source`), והשולח נקשר אליה (`chunkcast send --from`) --
+    כך שתי הכתובות הן אותה כתובת בהגדרה ולא בניחוש של הקרנל. None = אין כתובת שתחנה
+    רואה (שם מארח, או loopback כשרשת ההפצה טרם הוגדרה, #1088); אז השדה אינו נשלח, והסוכן
+    מקבל מכל מקור ואומר זאת באזהרה (`chunkgate.sh`)."""
+    try:
+        host = urlsplit(server_base or "").hostname
+        ip = ipaddress.IPv4Address(host) if host else None
+    except ValueError:
+        return None
+    return None if ip is None or ip.is_loopback or ip.is_unspecified else str(ip)
 
 
 def engine_of(conn) -> str:
@@ -322,6 +342,7 @@ class _Mark:
     write_mbps: dict[str, int | None] = field(default_factory=dict)
     #: #3141/#3170: כמה חתיכות המקלט ויתר עליהן לכל דיסק במעבר הזה, כי הדיסק פיגר (`skipped` של הסוכן)
     skipped: dict[str, int] = field(default_factory=dict)
+    bad_chunks: frozenset[int] | None = None
 
 
 @dataclass
@@ -419,9 +440,10 @@ class ChunkEngine:
         live_members: Callable[[str], list[str]],
         lost_wait: Callable[[], int],
         write_floor: Callable[[], int],
-        runner: Callable[[list[str]], subprocess.Popen] = chunklog.run_process,
+        runner: Callable[[list[str]], chunklog.SendProcess] = chunklog.run_process,
         portbase: int | None = None,
         interface: str | None = None,
+        source: str | None = None,
         max_wait: int = chunkctx.DEFAULT_MAX_WAIT,
         start_timeout: float = chunkctx.DEFAULT_START_TIMEOUT,
         wave_bitrate: Callable[[dict], str | None] | None = None,
@@ -448,6 +470,8 @@ class ChunkEngine:
         self.runner = runner
         self.port = (chunkctx.DEFAULT_PORTBASE if portbase is None else portbase) + PORT_OFFSET
         self.interface = interface
+        #: כתובת המקור של כל חבילה (`source_of`): השולח נקשר אליה, והמקלטים מקבלים רק ממנה.
+        self.source = source
         self.feedback = feedback
         self.max_wait = max_wait
         self.start_timeout = start_timeout
@@ -495,7 +519,7 @@ class ChunkEngine:
         #: #3269: (session_id, הקצב שנבחר בביטים, {(mac, serial): MB/s של בדיקת הכתיבה או None}) -> הקצב שהגל יוצא בו.
         #: נשאל פעם אחת לגל, אחרי שהמגירות של המחיצה הראשונה התייצבו -- רק אז בדיקת הכתיבה של הגל ידועה.
         #: `chunk_rate.start` ב-`server.app`; None = לא מחובר (בדיקות): הקצב של `wave_bitrate`, בדיוק.
-        self.wave_start: Callable[[str, int, dict], int] | None = None
+        self.wave_start: Callable[[str, int, dict], object] | None = None
         #: #3295: serial -> (the MB/s it wrote in a past chunk wave it was behind in, that wave), or None -- no such wave
         #: (`chunk_rate.write_history`). Nadav 15/11: the stream goes at the pace of the fast drives; a drive that was
         #: behind is left out of `--write-kbps` and completes what it misses afterwards. None = not wired (tests):
@@ -513,7 +537,7 @@ class ChunkEngine:
         self.write_ceiling: Callable[[list[str]], int | None] | None = None
         #: #3655: the connection the brain records its decisions through (`writerate.decide_base/decide_bounds`, S3/S4) -- `server.app` wires it;
         #: None (tests that wire nothing) = the same decisions, not recorded.
-        self.brain_conn = None
+        self.brain_conn: SqlConnection | None = None
         #: #3064 (B7, B12, B47): `server.brain.carousel.Carousel.consider` -- after each pass of a partition, the brain
         #: weighs one more full multicast pass against the plan, and records it. A plan comes back only when its own
         #: switch is on (`brain_carousel`, off by default); None = the plan runs. `carousel_cut` -- during such a pass,
@@ -522,7 +546,7 @@ class ChunkEngine:
         self.carousel_cut: Callable[[str, int, int, list[str]], str | None] | None = None
         #: #2023 (K3, shadow): `server.brain.drawerhold.DrawerHold.evaluate` -- בכל דיווח `fetching`: האם ההשלמה של דיסק איטי
         #: ממשיכה או שהכתיבה מחדש בגל הבא קצרה ממנה. רושם בלבד, ואינו משנה דבר. None = לא מחובר (בדיקות).
-        self.drawer_hold: Callable[..., None] | None = None
+        self.drawer_hold: Callable[..., object] | None = None
         #: #2023: `DrawerHold.gap(session_id, seconds)` -- כמה עבר מסוף מחיצה עד שהשולח התחיל את הבאה (התקורה לכל מחיצה).
         self.part_gap: Callable[[str, float], None] | None = None
         #: #2023: `DrawerHold.executed(session_id, part, mac, serial, kind)` -- the engine did what the brain decided (hold / drop):
@@ -537,7 +561,7 @@ class ChunkEngine:
         self.sleep = sleep
         self._lock = threading.Lock()
         self._wave: _Wave | None = None
-        self._process: subprocess.Popen | None = None
+        self._process: chunklog.SendProcess | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         #: #2427 (ported from the old sender, #3173): waves closed (`stop(id)`) before their `start` arrived. The commit to
@@ -673,9 +697,11 @@ class ChunkEngine:
         paced = [w.part_paced.get(i) for i in w.pass1]
         sends = [w.part_sendstats.get(i) for i in w.pass1]
         written = [w.part_write.get(i) for i in w.pass1]
+        proven = [x for x in written if x is not None]       # (the set is complete when `len(proven) == len(written)`)
+        read = [p for p in paced if p is not None]
         # #3506: what `--write-kbps` was in the first passes and whose measurement set it -- only when every partition's
         # was set by a drive's check (not the floor, not the lock): the next wave's loop stands on it
-        wrote = bool(written) and all(x is not None and x[1] for x in written)
+        wrote = bool(written) and len(proven) == len(written) and all(x[1] for x in proven)
         chunks = sum(p["chunks"] for p in parts)
         sized = bool(parts) and all(p.get("drives") is not None for p in parts)
         return {"chunks": chunks, "bytes": chunks * CHUNK_BYTES, "first_pass_s": w.pass1_s,
@@ -684,13 +710,13 @@ class ChunkEngine:
                 "behind": _behind(parts),
                 # #3498: the time the sender slept for `--kbps` / `--write-kbps` in the first passes; None unless every
                 # partition's was read -- a sender held by its own pacing is not held by the library disk
-                "paced_ms": ({"wire": sum(p[0] for p in paced), "disk": sum(p[1] for p in paced)}
-                             if paced and all(p is not None for p in paced) else None),
+                "paced_ms": ({"wire": sum(p[0] for p in read), "disk": sum(p[1] for p in read)}
+                             if paced and len(read) == len(paced) else None),
                 # #3553: how long the sender waited for the library file in the first passes (`chunklog.sendstats_of`, summed);
                 # None unless every partition's was read -- it is what says whether the library disk held the stream
                 "sendstats": _sum_sendstats(sends),
-                "write_kbps": min(x[0] for x in written) if wrote else None,
-                "write_serials": sorted({s for x in written for s in x[1]}) if wrote else None,
+                "write_kbps": min(x[0] for x in proven) if wrote else None,
+                "write_serials": sorted({s for x in proven for s in x[1]}) if wrote else None,
                 "lost_chunks": (sum(p["lost"] for p in parts)
                                 if parts and all(p["measured"] for p in parts) else None),
                 "away": sum(p["away"] for p in parts),
@@ -758,7 +784,10 @@ class ChunkEngine:
             known = w is not None and w.session_id == session_id
         if not known and not (self.wants is not None and self.wants(session_id)):
             return {}
-        return {"engine": CHUNK, "chunk": {"group": GROUP, "port": self.port, "key": self.key_for(session_id)}}
+        chunk = {"group": GROUP, "port": self.port, "key": self.key_for(session_id)}
+        if self.source:
+            chunk["source"] = self.source       # הכרעת נדב 14/11: המקלט מקבל רק ממנה (`chunkcast recv --from`)
+        return {"engine": CHUNK, "chunk": chunk}
 
     def report(self, session_id: str, mac: str, body: dict) -> dict:
         """הודעת הבקרה של משכפל (``listening`` / ``ended`` / ``fetching``) → מה הוא עושה עכשיו.
@@ -781,7 +810,9 @@ class ChunkEngine:
         try:
             with self._lock:
                 w = self._wave
-                track = None if w is None or w.session_id != session_id else w.fetching.get((part, mac))
+                if w is None or w.session_id != session_id or not isinstance(part, int):
+                    return {}
+                track = w.fetching.get((part, mac))
                 if track is None or w.state in ("failed", "stopped"):
                     return {}                    # אין הורדה של המחשב הזה במחיצה הזו: אין מה לשפוט
                 order = list(w.part_chunks)
@@ -793,7 +824,8 @@ class ChunkEngine:
                                     "grown": have - base[serial] if serial in base else None})
                 args = {
                     "session_id": session_id, "part": part, "mac": mac, "drawers": drawers, "ended": ended,
-                    "received": w.received.get((part, mac, rnd)), "elapsed_s": self.clock() - track[0],
+                    "received": w.received.get((part, mac, rnd)) if isinstance(rnd, int) else None,
+                    "elapsed_s": self.clock() - track[0],
                     # מגירה שהשאר עברו הלאה בלעדיה משלימה גם את המחיצות שאחרי (אינה מקבלת את הזרם שלהן)
                     "later_chunks": sum(w.part_chunks[p] for p in order[order.index(part) + 1:]) if part in order else None,
                     "chunks_total": sum(w.part_chunks.values()) or None,
@@ -960,6 +992,10 @@ class ChunkEngine:
                     mark.write_mbps[serial] = mbps
                 if state == "ended" and skipped is not None:
                     mark.skipped[serial] = skipped
+            bad = body.get("bad_chunks")
+            if state == "ended" and rnd == mark.round and isinstance(bad, list) and chunks is not None:
+                if all(type(k) is int and 0 <= k < chunks for k in bad):
+                    mark.bad_chunks = frozenset(bad)
             # #1079/#2485: חבילות שהגיעו למקלט מכתובת שאינה של השרת ונזרקו. אירוע רק כשהמספר של אותו מעבר גדל
             # (ההודעה `ended` חוזרת אחרי הורדה); חסר, לא מספר או 0 = לא נאמר, ואין אירוע.
             stray = body.get("stray") if state == "ended" else None
@@ -1066,18 +1102,20 @@ class ChunkEngine:
                 lacks = {}
         fail = {serial: why for (m, serial), why in w.failed_disks.items() if m == mac}
         out: dict = {"ok": True, **({"fail": fail} if fail else {})}
-        late = None
+        late: repair.Ranges | None = None
         if part in w.done_parts and lacks:
             late = []
             for gap in lacks.values():
                 late = repair.union(late, gap)
         # `whole` / `others`: ההמתנה אינה שלו והסוכן אינו סופר אותה מול התקרה שלו (השרת עונה לו כל הזמן)
         mark = w.marks.get((part, mac))
-        planned = w.part == part and w.plan is not None and w.round > rnd
+        current = w.plan
+        planned = w.part == part and current is not None and w.round > rnd
         call = repairrule.decide_answer(
             getattr(self, "brain_conn", None), round_id=w.session_id, mac=mac, part_done=part in w.done_parts, late_ranges=late,
             no_lacks=not lacks, has_mark=mark is not None, ended_now=mark is not None and mark.state == "ended" and mark.round >= w.round,
-            planned=planned, in_receive=planned and mac in w.plan.receive, fetch=w.plan.fetch.get(mac) if planned else None,
+            planned=planned, in_receive=current is not None and planned and mac in current.receive,
+            fetch=current.fetch.get(mac) if current is not None and planned else None,
             rnd=rnd, wave_round=w.round)
         if call is None or call.verdict == repairrule.ANSWER_WAIT:
             return {**out, "action": "wait", "poll": 2,
@@ -1099,9 +1137,17 @@ class ChunkEngine:
         except Exception:                        # noqa: BLE001
             log.exception("chunksend: the partition gap of %s was not noted", w.session_id)
 
+    def _wave_now(self) -> _Wave:
+        """The wave the engine runs, or ran last. `_wave` is None only before the first `start`, and what calls this (the
+        sender thread, `_fail`) runs only after it."""
+        w = self._wave
+        if w is None:
+            raise RuntimeError("chunksend: no wave was started")
+        return w
+
     def _fail(self, message: str) -> None:
         with self._lock:
-            w = self._wave
+            w = self._wave_now()
             w.state, w.error = "failed", message
             self._ended.add(w.session_id)
         log.error("chunksend: %s", message)
@@ -1343,6 +1389,10 @@ class ChunkEngine:
                           f" of {chunks} (every disk listening holds the rest, read back)", w.session_id)
         return got.need
 
+    def _alive_among(self, w: _Wave, among: list[str] | set[str]) -> list[str]:
+        """מי מ-`among` חי עכשיו."""
+        return [m for m in self._live(w) if m in among]
+
     def _silent(self, w: _Wave, part: int, involved: list[str], reported: list[str]) -> list[str]:
         """מי ש-`_fail_silent` עומד להכשיל את הדיסקים שלו: לא דיווח, לא נשמט כאיטי, ועוד חסר לו."""
         with self._lock:
@@ -1377,8 +1427,11 @@ class ChunkEngine:
     def _ruled(self, w: _Wave, part: int, base: int, counted: list[str]) -> tuple[int, str | None]:
         """#3506: `write_rate` -- never raises, never under the floor; an answer that is not (a positive number, a label or
         None) is `base`."""
+        write_rate = self.write_rate
+        if write_rate is None:                  # the caller asks only when it is set
+            return base, None
         try:
-            got = self.write_rate(w.session_id, part, base, list(counted))
+            got = write_rate(w.session_id, part, base, list(counted))
         except Exception:                       # noqa: BLE001 -- the learning never stops a wave
             log.exception("chunksend: the write rate of %s part %d failed; keeping %d", w.session_id, part, base)
             return base, None
@@ -1485,6 +1538,8 @@ class ChunkEngine:
             cmd += ["--lead-ms", say[0], "--tail-ms", say[1]]
         if self.interface:
             cmd += ["--iface", self.interface]
+        if self.source:
+            cmd += ["--from", self.source]      # אותה כתובת שהמקלטים קיבלו בהוראת הגל
         if order is not None:                   # #3522: None = the sender's own `seq` (a caller that does not ask)
             cmd += ["--order", order]
         if chunks is not None:
@@ -1586,7 +1641,7 @@ class ChunkEngine:
             return False
         return True
 
-    def _wait_pass(self, w: _Wave, part: int, process: subprocess.Popen) -> int:
+    def _wait_pass(self, w: _Wave, part: int, process: chunklog.SendProcess) -> int:
         """`process.wait()` -- and during a full pass the carousel put in place of the plan (B7), `carousel_cut` is asked
         every `POLL_S` with the pass's live listeners: a reason = the pass is cut (B12 lone handoff, B47 no listener)."""
         if self.carousel_cut is None or w.carousel != (part, w.round):
@@ -1605,7 +1660,7 @@ class ChunkEngine:
                 return process.wait()
 
     def _run(self, session: dict) -> None:
-        w = self._wave
+        w = self._wave_now()
         try:
             self._send(w, session)
         except Exception as exc:                 # noqa: BLE001 — כאן נגמר התהליכון (#2427)
@@ -1660,15 +1715,15 @@ class ChunkEngine:
                 return
             # אותו תנאי שבו `GET …/index/<n>` מגיש את האינדקס למקלטים (`readbackhash.has_list`): אינדקס
             # שלם ועקבי ליד הקובץ (`chunkformat.read_index`), שמסכים עם מה שהשרת רשם במניפסט כשאימת אותו.
-            index = chunkformat.read_index(Path(path)) if path is not None else None
-            if (index is None or not isinstance(part.get("index_xxh64"), str)
-                    or part.get("readback_chunks") != index.chunks):
+            found = chunkformat.read_index(Path(path)) if path is not None else None
+            if (found is None or not isinstance(part.get("index_xxh64"), str)
+                    or part.get("readback_chunks") != found.chunks):
                 # האינדקס נגזר בשרת ברקע אחרי הקליטה (שלב 2): עד אז הקובץ אינו קיים
                 self._fail(f"למחיצה {part['file']} באימג' {session['image_id']} אין אינדקס מאומת ליד הקובץ"
                            " — הוא עדיין נבנה אחרי הקליטה, או שהאימג' בפורמט ישן. דבר לא שודר")
                 return
-            chunks_of[part["index"]] = index.chunks
-            zbytes_of[part["index"]] = [zbytes for _offset, zbytes, _xxh in index.rows]
+            chunks_of[part["index"]] = found.chunks
+            zbytes_of[part["index"]] = [zbytes for _offset, zbytes, _xxh in found.rows]
         with self._lock:
             w.part_chunks, w.part_zbytes = chunks_of, zbytes_of
             old = sorted(m for m in self._live(w) if m not in self._capable)
@@ -1716,7 +1771,8 @@ class ChunkEngine:
             floor = self.write_floor()          # המהירות המינימלית לכונן (#3170): פעם אחת למחיצה, מחוץ לנעילה
             self._note_part_gap(w)
             chunks = self._first_pass(w, part["index"], listening, index["chunks"])   # #2528: None = הכול
-            involved, fetchers = listening, set()
+            fetchers: set[str] = set()
+            involved: list[str] = listening
             while True:
                 if chunks != [] and (chunks is not None or w.round == 1) and index["chunks"]:
                     if not self._send_pass(w, part, path, bits // 1000, write_kbps, chunks):
@@ -1725,12 +1781,12 @@ class ChunkEngine:
                 ceiling = self.lost_wait() + ENDED_GRACE_S
                 reported = self._wait_marks(
                     w, part["index"], rnd, "ended",
-                    lambda involved=involved, rnd=rnd: self._live_noting_away(w, part["index"], rnd, involved), ceiling)
+                    partial(self._live_noting_away, w, part["index"], rnd, involved), ceiling)
                 if reported == [] and rnd == 1:
                     # #3064 (K2, D18): "אף מחשב לא דיווח על סיום המעבר" -- הווטו נשאל לפני שהגל כולו נכשל
                     reported = self._hold(
                         w, "FAIL_WAVE", "D18", part["index"],
-                        lambda involved=involved: [m for m in self._live(w) if m in involved],
+                        partial(self._alive_among, w, involved),
                         f"no ended for pass 1 in {ceiling:g}s, {part['file']}",
                         lambda silent: self._wait_marks(w, part["index"], rnd, "ended",
                                                         lambda: [m for m in self._live(w) if m in silent],
@@ -1740,7 +1796,7 @@ class ChunkEngine:
                     # #3064 (K2, D15): הדיסקים של מי ששתק נכשלים בשמם -- הווטו נשאל לפני כן
                     heard = self._hold(
                         w, "FAIL_DISKS", "D15", part["index"],
-                        lambda involved=involved, reported=reported: self._silent(w, part["index"], involved, reported),
+                        partial(self._silent, w, part["index"], involved, reported),
                         f"silent in repair pass {rnd} for {ceiling:g}s, {part['file']}",
                         lambda silent: self._wait_marks(w, part["index"], rnd, "ended",
                                                         lambda: [m for m in self._live(w) if m in silent],
@@ -1748,6 +1804,27 @@ class ChunkEngine:
                     reported = None if heard is None else [*reported, *heard]
                 if reported is None:
                     break
+                with self._lock:
+                    marks = {mac: w.marks.get((part["index"], mac)) for mac in reported}
+                    shared = set()
+                    if len(marks) >= 2 and all(m and m.round == rnd and m.state == "ended" and m.bad_chunks and m.serials
+                                               for m in marks.values()):
+                        serials = {s for m in marks.values() for s in m.serials}
+                        if len(serials) >= 2:
+                            shared = set.intersection(*(set(m.bad_chunks) for m in marks.values()))
+                    for mac, mark in marks.items():
+                        if not shared:
+                            break
+                        for serial in mark.serials:
+                            have = self.ledger.durable(w.session_id, mac, serial, part["index"])
+                            for k in tuple(shared):
+                                pos = bisect_right(have, (k, index["chunks"]))
+                                if pos and k <= have[pos - 1][1]:
+                                    shared.remove(k)
+                if shared:
+                    self._fail(f"{chunkpass.SOURCE_FAILURE_PREFIX}{part['index']}/chunk{min(shared)}: "
+                               f"כשל באימג' {w.image_id} — כל המקלטים פסלו את אותה חתיכה מול האינדקס")
+                    return
                 if rnd == 1 and not reported:
                     # אין ראיה שמישהו קיבל משהו: זה אינו "אין מה להשלים" (עיקרון 5)
                     self._fail(f"אף מחשב לא דיווח על סיום המעבר של {part['file']} (מעבר {rnd})"
@@ -1818,9 +1895,9 @@ class ChunkEngine:
                     # נרשם "היה חוסם" והגל נכשל כמו היום. `held` אחרי שהווטו כבר נשאל ולא הגיע דבר: מתכננים, ונכשלים.
                     heard = self._hold(
                         w, "FAIL_WAVE", "D19", part["index"],
-                        lambda involved=involved, rnd=rnd: self._unreported(w, part["index"], involved, rnd),
+                        partial(self._unreported, w, part["index"], involved, rnd),
                         f"no live machine with a disk left, pass {rnd}, {part['file']}",
-                        lambda silent, rnd=rnd: self._wait_marks(
+                        lambda silent: self._wait_marks(
                             w, part["index"], rnd, "ended",
                             lambda: [m for m in self._live(w) if m in silent], VETO_RECHECK_S),
                         until_any=True)
@@ -1864,13 +1941,13 @@ class ChunkEngine:
                     for mac in plan.fetch:
                         serials = w.marks[(part["index"], mac)].serials if (part["index"], mac) in w.marks else ()
                         base = {s: repair.count(self.ledger.durable(w.session_id, mac, s, part["index"])) for s in serials}
-                        held = sum(base.values())
-                        w.fetching[(part["index"], mac)] = [began, held, held, None]
+                        have = sum(base.values())
+                        w.fetching[(part["index"], mac)] = [began, have, have, None]
                         w.fetch_base[(part["index"], mac)] = base     # #2023: the base of each drive's own completion rate
                         w.gap.pop((part["index"], mac), None)
                 if chunks is not None:
                     ready = self._wait_marks(w, part["index"], w.round, "listening",
-                                             lambda plan=plan: [m for m in self._live(w) if m in plan.receive],
+                                             partial(self._alive_among, w, plan.receive),
                                              self.max_wait, self.lost_wait())
                     if ready is None:
                         break

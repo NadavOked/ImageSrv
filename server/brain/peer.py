@@ -288,8 +288,13 @@ class Brain:
         needy_bps = fill_brain.budget(session, mac)
         rejoining = set()
         for t, need in needs:
-            serial, size = disks.get(t.get("dev"), (t.get("serial"), None))
-            if not serial or not isinstance(t.get("dev"), str):
+            dev = t.get("dev")
+            if not isinstance(dev, str):
+                hash(dev)                    # כמו בחיפוש במילון: ערך לא גיבובי עוצר את הדיווח לפני _tell
+                continue
+            known = disks.get(dev)
+            serial, size = known if known is not None else (t.get("serial"), None)
+            if not serial:
                 continue
             rejoining.add(serial)
             choice = self._choose(conn, session, mac, serial, size, need, load, needy_bps, fill_brain)
@@ -365,31 +370,35 @@ class Brain:
 
     def _pair(self, conn, session, mac, serial, dev, need, c: Choice) -> None:
         """שיבוץ אחד: החסר (mac, serial) מהשכן שנבחר. השרת לבדו קובע את שני הצדדים, את הטווחים ואת האסימון."""
+        peer = c.peer
+        if peer is None or not peer.ip or not peer.dev:        # `choose` בוחרת שכן רק עם כתובת ו-dev; מי שלא, אין מה לשבץ
+            log.warning("brain %s: no pairing for %s/%s: the chosen peer has no address or dev", RULE, mac, serial)
+            return
         now = self._clock()
         needy_ip = _ip_of(conn, mac)
         with self._lock:
             self._expire(now)
             if any(a.session == session and a.needy_serial == serial for a in self._assign.values()):
                 return                       # כבר משובץ: לא שני שכנים לאותה מגירה
-            theirs = [a for a in self._assign.values() if a.peer_mac == c.peer.mac]
+            theirs = [a for a in self._assign.values() if a.peer_mac == peer.mac]
             used = sum(a.rate_bps for a in theirs)
             ports = {a.port for a in theirs}
         why = ("כתובת ה-IPv4 של המשכפל החסר אינה ידועה" if needy_ip is None
-               else f"השכן {c.peer.mac} כבר מגיש ל-{len(theirs)} מגירות" if len(theirs) >= MAX_SERVES_PER_PEER
+               else f"השכן {peer.mac} כבר מגיש ל-{len(theirs)} מגירות" if len(theirs) >= MAX_SERVES_PER_PEER
                else "")
         rate = min(c.rate_bps, CEILING_BPS - used)
         if not why and rate < fill.FLOOR_BPS:
-            why = f"לשכן {c.peer.mac} נשארו {_mib(max(rate, 0))} מתוך {_mib(CEILING_BPS)} (התקרה של קריאות המשכפל)"
-        if why:
+            why = f"לשכן {peer.mac} נשארו {_mib(max(rate, 0))} מתוך {_mib(CEILING_BPS)} (התקרה של קריאות המשכפל)"
+        if why or needy_ip is None:
             log.info("brain %s", json.dumps({"rule": RULE, "action": "PEER_PAIR", "verdict": "SKIPPED", "mac": mac,
-                                             "disk": serial, "peer_mac": c.peer.mac, "reason": why},
+                                             "disk": serial, "peer_mac": peer.mac, "reason": why},
                                             ensure_ascii=False))
             return
-        covers = min(c.peer.covers, need.missing)
+        covers = min(peer.covers, need.missing)
         until = int(min(UNTIL_MAX_S, covers * CHUNK_BYTES * 3 / rate + UNTIL_SLACK_S))
         a = Assignment(id=secrets.token_hex(8), session=session, needy_mac=mac, needy_ip=needy_ip,
-                       needy_serial=serial, needy_dev=dev, peer_mac=c.peer.mac, peer_ip=c.peer.ip,
-                       peer_dev=c.peer.dev, peer_serial=c.peer.serial, part=need.part, ranges=c.peer.ranges,
+                       needy_serial=serial, needy_dev=dev, peer_mac=peer.mac, peer_ip=peer.ip,
+                       peer_dev=peer.dev, peer_serial=peer.serial, part=need.part, ranges=peer.ranges,
                        rate_bps=int(rate), token=self._token(),
                        port=next(p for p in range(PORT_BASE, PORT_BASE + MAX_SERVES_PER_PEER) if p not in ports),
                        until_s=until, deadline=now + until)

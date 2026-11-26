@@ -20,7 +20,7 @@ import json
 import re
 import sqlite3
 
-from server.db import _settle, _write_lock, now_iso, writing
+from server.db import _settle, _write_lock, now_iso, SqlConnection, writing
 
 #: vendor:device:class — ארבע, ארבע ושש ספרות hex קטנות, כפי ש-sysfs
 #: מדווח אותן בלי ``0x`` (`agent/lib/hw/inventory.sh`).
@@ -50,7 +50,8 @@ def well_formed(value: object) -> dict | None:
         if raw is not None and not isinstance(raw, str):
             return None
         text = raw.strip()[:DMI_LIMIT] if isinstance(raw, str) else ""
-        out_dmi[field] = text or None
+        # #2901: ה-firmware של VMware מדווח את המחרוזת "None" בשדות ריקים — זה לא ערך, ולא נכנס לשם הדגם.
+        out_dmi[field] = None if text.casefold() == "none" else (text or None)
     if len(pci) > PCI_LIMIT:
         return None
     for item in pci:
@@ -72,7 +73,7 @@ def _text(inventory: dict) -> str:
     return json.dumps(inventory, sort_keys=True, ensure_ascii=False)
 
 
-def record(conn: sqlite3.Connection, mac: str, inventory: dict, history: bool = True) -> bool:
+def record(conn: SqlConnection, mac: str, inventory: dict, history: bool = True) -> bool:
     """שומר גרסה חדשה כשהמלאי השתנה. מחזיר האם נכתבה שורה.
 
     #2487: ``history=False`` — מכונה לא רשומה: מלאי שהשתנה דורס את השורה
@@ -106,7 +107,7 @@ def _row(row: sqlite3.Row) -> dict:
     return {"inventory": json.loads(row["inventory_json"]), "seen_at": row["seen_at"]}
 
 
-def latest(conn: sqlite3.Connection, mac: str) -> dict | None:
+def latest(conn: SqlConnection, mac: str) -> dict | None:
     """המלאי הנוכחי של מכונה: ``{"inventory": …, "seen_at": …}`` או ``None``
     כשמעולם לא דיווחה (schema 1, או סוכן ישן)."""
     row = conn.execute(
@@ -116,7 +117,7 @@ def latest(conn: sqlite3.Connection, mac: str) -> dict | None:
     return _row(row) if row is not None else None
 
 
-def latest_all(conn: sqlite3.Connection) -> dict[str, dict]:
+def latest_all(conn: SqlConnection) -> dict[str, dict]:
     """המלאי הנוכחי של כל מכונה שדיווחה, לפי MAC — ל"מתאים ל-N מכונות"
     בדף הדרייברים ולכרטיסי המכונות."""
     rows = conn.execute(
@@ -126,7 +127,7 @@ def latest_all(conn: sqlite3.Connection) -> dict[str, dict]:
     return {row["mac"]: _row(row) for row in rows}
 
 
-def history(conn: sqlite3.Connection, mac: str) -> list[dict]:
+def history(conn: SqlConnection, mac: str) -> list[dict]:
     """כל הגרסאות של מכונה, מהחדשה לישנה."""
     rows = conn.execute(
         "SELECT inventory_json, seen_at FROM machine_inventory WHERE mac = ?"

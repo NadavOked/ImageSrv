@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from server.core.sqlconn import SqlConnection
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:                       # annotations only -- no import cycle, no FastAPI
@@ -25,19 +26,19 @@ if TYPE_CHECKING:                       # annotations only -- no import cycle, n
 # --- שאילתות טהורות ----------------------------------------------------------
 
 
-def active_round(conn: sqlite3.Connection) -> sqlite3.Row | None:
+def active_round(conn: SqlConnection) -> sqlite3.Row | None:
     return conn.execute(
         "SELECT * FROM room_rounds WHERE state = 'active' LIMIT 1"
     ).fetchone()
 
 
-def active_rounds(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+def active_rounds(conn: SqlConnection) -> list[sqlite3.Row]:
     """#3898: כל הסבבים הפעילים, לפי סדר הפתיחה. `active_round` נשאר לקוראים שלא עברו (כשיש אחד -- אותו דבר)."""
     return conn.execute(
         "SELECT * FROM room_rounds WHERE state = 'active' ORDER BY created_at, rowid").fetchall()
 
 
-def round_of_mac(conn: sqlite3.Connection, mac: str) -> sqlite3.Row | None:
+def round_of_mac(conn: SqlConnection, mac: str) -> sqlite3.Row | None:
     """#3898: הסבב הפעיל שהמשכפל נבחר בו, או None. משכפל נמצא בסבב אחד בלבד (`round_cloners`)."""
     for row in active_rounds(conn):
         if any(item.get("mac") == mac for item in json.loads(row["target_slots_json"] or "[]")):
@@ -45,7 +46,7 @@ def round_of_mac(conn: sqlite3.Connection, mac: str) -> sqlite3.Row | None:
     return None
 
 
-def visible_round(conn: sqlite3.Connection) -> sqlite3.Row | None:
+def visible_round(conn: SqlConnection) -> sqlite3.Row | None:
     """מצב החדר החי או הכושל שעדיין דורש את תשומת לב המפעיל."""
     # החי קודם: חדר שנפתח מחדש באותה שנייה שבה הקודם נכשל חולק איתו
     # `created_at`, והסדר לבדו החזיר את הכושל למסך (rowid שובר את השוויון).
@@ -217,7 +218,7 @@ def shown_disks(round_row: sqlite3.Row | None, mac: str) -> list | None:
     return []
 
 
-def _disks(conn: sqlite3.Connection, mac: str) -> list[dict]:
+def _disks(conn: SqlConnection, mac: str) -> list[dict]:
     row = conn.execute(
         "SELECT disks_json FROM net_devices WHERE mac = ?", (mac,)
     ).fetchone()
@@ -227,7 +228,7 @@ def _disks(conn: sqlite3.Connection, mac: str) -> list[dict]:
     return disks if isinstance(disks, list) else []
 
 
-def fresh_serials(conn: sqlite3.Connection, mac: str, written: set[str],
+def fresh_serials(conn: SqlConnection, mac: str, written: set[str],
                   selected_ports: set[int] | None = None) -> list[str]:
     """המגירות של המכונה שעוד לא נכתבו בסבב הנוכחי. selected_ports מסנן
     לפורטים שנבחרו בלבד (None = כל הדיסקים, סבב ישן).
@@ -239,7 +240,7 @@ def fresh_serials(conn: sqlite3.Connection, mac: str, written: set[str],
     return [d["serial"] for d in _fresh_disks(conn, mac, written, selected_ports)]
 
 
-def _fresh_disks(conn: sqlite3.Connection, mac: str, written: set[str],
+def _fresh_disks(conn: SqlConnection, mac: str, written: set[str],
                  selected_ports: set[int] | None) -> list[dict]:
     return [
         d for d in _disks(conn, mac)
@@ -249,7 +250,7 @@ def _fresh_disks(conn: sqlite3.Connection, mac: str, written: set[str],
     ]
 
 
-def wave_drives(conn: sqlite3.Connection, session_id: str) -> list[dict]:
+def wave_drives(conn: SqlConnection, session_id: str) -> list[dict]:
     """#447: הכוננים שהגל הזה יכתוב — לפיהם נבחרת תקרת הקצב שלו.
 
     אותן מגירות ש-`ready_drives` סופר: טריות, ובפורטים שנבחרו, של המכונות
@@ -273,7 +274,7 @@ def wave_drives(conn: sqlite3.Connection, session_id: str) -> list[dict]:
     ]
 
 
-def has_fresh_drawers(conn: sqlite3.Connection, mac: str) -> bool:
+def has_fresh_drawers(conn: SqlConnection, mac: str) -> bool:
     """שער ההצטרפות לגל: מכונה שהמגירות שלה כבר נכתבו נשארת בהמתנה.
 
     בלי סבב חדר פעיל אין מה לסנן — מצטרפים כרגיל.
@@ -285,7 +286,7 @@ def has_fresh_drawers(conn: sqlite3.Connection, mac: str) -> bool:
                               _selected_ports(round_row, mac)))
 
 
-def ready_drives(conn: sqlite3.Connection, store: SessionStore,
+def ready_drives(conn: SqlConnection, store: SessionStore,
                  round_row: sqlite3.Row) -> int:
     """כמה כוננים טריים מחוברים למכונות שכבר הצטרפו לגל הפתוח."""
     written = _closed(round_row)
@@ -296,7 +297,7 @@ def ready_drives(conn: sqlite3.Connection, store: SessionStore,
     )
 
 
-def red_drives(conn: sqlite3.Connection, store: SessionStore,
+def red_drives(conn: SqlConnection, store: SessionStore,
                round_row: sqlite3.Row) -> int:
     """#1760: כמה מגירות שהגל הפתוח היה ממתין להן ה-hello האחרון אומר שהן
     אדומות (ולא נכתבו או נסגרו כבר) — הסוכן ידלג עליהן, והגל אינו ממתין להן.

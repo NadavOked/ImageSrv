@@ -25,7 +25,7 @@ import sqlite3
 
 from server.agent import registry
 from server.core import hostname_rule
-from server.db import get_setting
+from server.db import get_setting, SqlConnection
 
 #: ההגדרות (לשונית "שמות מחשב"): ברירות המחדל לחלון "התחל סבב".
 PAD_SETTING = "clone_name_pad"
@@ -57,16 +57,16 @@ def parse_instructor(raw: object) -> str | None:
     return raw if isinstance(raw, str) and _INSTRUCTOR_OK.fullmatch(raw) else None
 
 
-def pad(conn: sqlite3.Connection) -> int:
+def pad(conn: SqlConnection) -> int:
     """הערך שבתוקף — ברירת המחדל כשלא נקבע או כשהשמור פגום."""
     return parse_pad(get_setting(conn, PAD_SETTING)) or PAD_DEFAULT
 
 
-def instructor(conn: sqlite3.Connection) -> str:
+def instructor(conn: SqlConnection) -> str:
     return parse_instructor(get_setting(conn, INSTRUCTOR_SETTING)) or INSTRUCTOR_DEFAULT
 
 
-def settings_view(conn: sqlite3.Connection) -> dict:
+def settings_view(conn: SqlConnection) -> dict:
     """מה שהקונסולה צריכה כדי לחשב תבנית — גם למפעיל הפצה (`/settings` הוא admin)."""
     return {"pad": pad(conn), "instructor": instructor(conn),
             "max_len": hostname_rule.HOSTNAME_MAX}

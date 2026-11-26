@@ -33,7 +33,7 @@ from server.rounds import room_stream   # #3978: the column "הרשת"
 from server.console import auth
 from server.core import machine_names
 from server.learn import waits as learn_waits
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 from server.agent import registry
 from server.agent.registry import ROOM_GROUPS
 from server.agent.reports import FINAL
@@ -54,13 +54,13 @@ HISTORY_DEFAULT = 10
 HISTORY_MAX = 50
 
 
-def _cloners_label(conn: sqlite3.Connection) -> str | None:
+def _cloners_label(conn: SqlConnection) -> str | None:
     row = conn.execute(
         "SELECT label FROM groups WHERE id = ?", (CLONERS_GROUP,)).fetchone()
     return row["label"] if row else None
 
 
-def request_power(conn: sqlite3.Connection, macs: list[str], action: str,
+def request_power(conn: SqlConnection, macs: list[str], action: str,
                   user: str, confirmed: bool = False) -> int:
     """בקשה אחת לכל MAC (בקשה קודמת שעוד ממתינה — נדרסת). מחזיר כמה נרשמו.
 
@@ -78,7 +78,7 @@ def request_power(conn: sqlite3.Connection, macs: list[str], action: str,
     return len(macs)
 
 
-def take_power(conn: sqlite3.Connection, mac: str,
+def take_power(conn: SqlConnection, mac: str,
                now: datetime | None = None) -> tuple[str | None, bool]:
     """מה שה-hello של `mac` נושא ב-`power_action`: `"poweroff"`, `"reboot"` או None.
 
@@ -109,7 +109,7 @@ def take_power(conn: sqlite3.Connection, mac: str,
     return row["action"], confirmed
 
 
-def _leave_open_wave(conn: sqlite3.Connection, mac: str) -> None:
+def _leave_open_wave(conn: SqlConnection, mac: str) -> None:
     """#65: מכונה שנאמר לה לכבות יוצאת מהגל **הפתוח** — באותו hello שמוסר
     את הכיבוי (ה-hello הזה עצמו כבר צירף אותה מחדש). אחרת המגירות שדיווחה
     לפני שכבתה נספרות ב-`ready_drives`, ו"התחל בכל זאת" היה משגר גל עם
@@ -124,7 +124,7 @@ def _leave_open_wave(conn: sqlite3.Connection, mac: str) -> None:
 
 # --- #3123 / #3064: "השאר דלוקים" ---------------------------------------------
 
-def _room_machines(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+def _room_machines(conn: SqlConnection) -> list[sqlite3.Row]:
     """כל מחשבי השיכפול הרשומים (כל קבוצה שתפקידה cloner, #1554), לפי שם."""
     return conn.execute(
         "SELECT m.mac, m.suffix, d.last_seen, d.local_clone FROM machines m"
@@ -132,7 +132,7 @@ def _room_machines(conn: sqlite3.Connection) -> list[sqlite3.Row]:
         f" WHERE m.group_id IN {ROOM_GROUPS} ORDER BY m.suffix").fetchall()
 
 
-def resolve_keep(conn: sqlite3.Connection, tokens: object) -> list[str]:
+def resolve_keep(conn: SqlConnection, tokens: object) -> list[str]:
     """הרשימה ש-המפעיל בחר → MAC-ים של משכפלים רשומים, או ValueError.
 
     כל איבר: מספר (``3``, ``"3"``), שם תצוגה (``"משכפל-3"``), השם הטכני
@@ -157,7 +157,7 @@ def resolve_keep(conn: sqlite3.Connection, tokens: object) -> list[str]:
     return keep
 
 
-def _busy(conn: sqlite3.Connection, rows: list[sqlite3.Row]) -> dict[str, str]:
+def _busy(conn: SqlConnection, rows: list[sqlite3.Row]) -> dict[str, str]:
     """מי **באמצע סבב** ואסור לכבות: mac → הסיבה (קוד).
 
     ``in_round`` — חבר בגל פתוח או רץ שלא הגיע למצב סופי (``reports.FINAL``);
@@ -179,7 +179,7 @@ def _busy(conn: sqlite3.Connection, rows: list[sqlite3.Row]) -> dict[str, str]:
 _BUSY_HE = {"in_round": "באמצע סבב", "local_copy": "באמצע שיכפול מקומי"}
 
 
-def keep_on(conn: sqlite3.Connection, keep: list[str], user: str, why: str,
+def keep_on(conn: SqlConnection, keep: list[str], user: str, why: str,
             protect: frozenset[str] | set[str] = frozenset()) -> dict:
     """משאיר דלוקים את ``keep`` ומבקש כיבוי מכל שאר המשכפלים — חוץ ממי שבאמצע סבב.
 
@@ -211,13 +211,13 @@ def keep_on(conn: sqlite3.Connection, keep: list[str], user: str, why: str,
             "busy": [{**n, "reason": busy[n["mac"]]} for n in named(skipped)]}
 
 
-def round_protect(conn: sqlite3.Connection) -> set[str]:
+def round_protect(conn: SqlConnection) -> set[str]:
     """המשכפלים של הסבב הפעיל (הבחירה שלו) — לא נכבים בפתיחה גם אם לא נבחרו ב"השאר דלוקים"."""
     row = active_round(conn)
     return set(_roster(row) or []) if row is not None else set()
 
 
-def _stopped_by(conn: sqlite3.Connection, ids: list[str]) -> dict[str, str]:
+def _stopped_by(conn: SqlConnection, ids: list[str]) -> dict[str, str]:
     """סבב -> המשתמש בשורת היומן `room_close` שלו. השורה נכתבת **רק** בעצירה
     (`room.close_round`, או השלמת עצירה שהשרת נפל באמצעה, `reconcile`, בלי משתמש);
     סבב שנסגר מעצמו כותב `room_done`/`room_failed`. אין שורה (לא נעצר, או שהיומן נוקה) = חסר."""
@@ -251,7 +251,7 @@ def round_history(ctx, limit: int) -> list[dict]:
         "closed_at": r["closed_at"],
         "failed_reason": r["failed_reason"],
         # #980 §3: כמה מחשבים נבחרו לסבב (`_roster`); null = סבב ישן בלי בחירה, לא 0.
-        "machine_count": None if _roster(r) is None else len(_roster(r)),
+        "machine_count": None if (roster := _roster(r)) is None else len(roster),
         # #980 §3: מי עצר את הסבב ב"עצור סבב"; "" = נעצר והמשתמש לא נרשם; null = לא נעצר.
         "stopped_by": stopped.get(r["id"]),
         # #1889: כמה זמן הסבב חיכה לאדם, ועל מה (`learn_waits.round_waits`; null = לא נמדד).

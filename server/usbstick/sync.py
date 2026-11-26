@@ -31,7 +31,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-from server.db import _settle, _write_lock, journal, now_iso, writing
+from server.db import _settle, _write_lock, journal, now_iso, SqlConnection, writing
 from server.usbstick import knowledge, records
 from server.usbstick.device import Stick, StickError
 
@@ -101,11 +101,11 @@ class Plan:
         }
 
 
-def _stored_at(conn: sqlite3.Connection) -> dict[str, str]:
+def _stored_at(conn: SqlConnection) -> dict[str, str]:
     return {r["record_id"]: r["imported_at"] for r in conn.execute("SELECT record_id, imported_at FROM usb_records")}
 
 
-def plan(conn: sqlite3.Connection, hooks: dict, stick: Stick) -> Plan:
+def plan(conn: SqlConnection, hooks: dict, stick: Stick) -> Plan:
     """Read-only. Raises ``StickError`` (cannot open/close it) or ``records.ReadError`` (cannot read the log)."""
     with hooks["open"](stick, write=False) as root:
         reading = records.read_reports(root)
@@ -134,7 +134,7 @@ def _read_manifest(root: Path) -> dict | None:
         return None
 
 
-def import_records(conn: sqlite3.Connection, new: list[records.Record], device_id: str, user: str) -> int:
+def import_records(conn: SqlConnection, new: list[records.Record], device_id: str, user: str) -> int:
     """All of ``new`` or none. Returns how many rows went in (a concurrent twin is skipped, not an error)."""
     if not new:
         return 0
@@ -221,7 +221,7 @@ def _to_stick(conn, hooks, stick, plan_: Plan, server_version: str) -> dict:
             "smart_version": bundle.smart_version, "models": bundle.models}
 
 
-def run(conn: sqlite3.Connection, hooks: dict, stick: Stick, digest: str, user: str, server_version: str) -> dict:
+def run(conn: SqlConnection, hooks: dict, stick: Stick, digest: str, user: str, server_version: str) -> dict:
     if not LOCK.acquire(blocking=False):
         raise Busy()
     try:
@@ -251,7 +251,7 @@ def run(conn: sqlite3.Connection, hooks: dict, stick: Stick, digest: str, user: 
         LOCK.release()
 
 
-def _record(conn: sqlite3.Connection, summary: dict, user: str) -> None:
+def _record(conn: SqlConnection, summary: dict, user: str) -> None:
     _settle(conn)
     with _write_lock, writing(conn):
         conn.execute("INSERT INTO usb_syncs (at, by, device_id, state, summary_json) VALUES (?, ?, ?, ?, ?)",
@@ -265,6 +265,6 @@ def _record(conn: sqlite3.Connection, summary: dict, user: str) -> None:
             + (f" · התקן: {to_stick['error']}" if to_stick.get("error") else ""), user)
 
 
-def last_sync(conn: sqlite3.Connection) -> dict | None:
+def last_sync(conn: SqlConnection) -> dict | None:
     row = conn.execute("SELECT summary_json FROM usb_syncs ORDER BY id DESC LIMIT 1").fetchone()
     return json.loads(row["summary_json"]) if row else None

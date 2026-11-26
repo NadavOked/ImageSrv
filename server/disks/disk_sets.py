@@ -20,7 +20,7 @@ import re
 import sqlite3
 from datetime import datetime, timezone
 
-from server.db import NET_SEEN_MIN_INTERVAL_SECONDS, _settle, _write_lock, journal, now_iso, writing
+from server.db import _settle, _write_lock, journal, NET_SEEN_MIN_INTERVAL_SECONDS, now_iso, SqlConnection, writing
 from server.disks import disk_failures, f1_marks
 
 log = logging.getLogger("imagesrv.disk_sets")
@@ -67,7 +67,7 @@ def _serial(raw: object) -> str:
 
 # ---------------------------------------------------------------- inventory
 
-def note_hello(conn: sqlite3.Connection, mac: str, disks: object) -> None:
+def note_hello(conn: SqlConnection, mac: str, disks: object) -> None:
     """רושם את הדיסקים של hello (משכפל/בנייה). SELECT קודם -- hello שלא שינה דבר ובן פחות מ-15ש'
     אינו כותב (כמו ``net_seen``, #136)."""
     if not isinstance(disks, list):
@@ -102,7 +102,7 @@ def note_hello(conn: sqlite3.Connection, mac: str, disks: object) -> None:
 
 # ---------------------------------------------------------------- sets
 
-def _set_row(conn: sqlite3.Connection, set_id: int) -> sqlite3.Row:
+def _set_row(conn: SqlConnection, set_id: int) -> sqlite3.Row:
     row = conn.execute("SELECT * FROM disk_sets WHERE id = ?", (set_id,)).fetchone()
     if row is None:
         raise SetError("הסט לא נמצא", 404)
@@ -114,7 +114,7 @@ def planned(row: sqlite3.Row) -> list[str]:
     return ([INSTRUCTOR] if row["instructor"] else []) + [str(i) for i in range(1, row["students"] + 1)]
 
 
-def create(conn: sqlite3.Connection, name: object, prefix: object, students: object, instructor: object,
+def create(conn: SqlConnection, name: object, prefix: object, students: object, instructor: object,
            user: str) -> int:
     if not isinstance(name, str) or not name.strip() or len(name.strip()) > NAME_MAX:
         raise SetError(f"שם הסט: טקסט של 1–{NAME_MAX} תווים")
@@ -137,13 +137,15 @@ def create(conn: sqlite3.Connection, name: object, prefix: object, students: obj
             "INSERT INTO disk_sets (name, prefix, students, instructor, created_at, created_by)"
             " VALUES (?, ?, ?, ?, ?, ?)", (name, prefix, students, int(instructor), now_iso(), user))
         set_id = cur.lastrowid
+    if set_id is None:         # INSERT שהתבצע מחזיר תמיד מזהה; בלעדיו הסט לא נוצר, ולא מחזירים הצלחה בלי מזהה
+        raise SetError("הסט לא נוצר", 500)
     journal(conn, "disk_set_created", f"{name} · {prefix} · {students}{'+INS' if instructor else ''}", user)
     return set_id
 
 
 # ---------------------------------------------------------------- health
 
-def _written_at(conn: sqlite3.Connection) -> dict[str, str]:
+def _written_at(conn: SqlConnection) -> dict[str, str]:
     """הכתיבה התקינה האחרונה לכל סידורי: סוף הסבב שבו נכתב (`written_serials`)."""
     out: dict[str, str] = {}
     for r in conn.execute("SELECT written_serials, COALESCE(closed_at, created_at) AS at FROM room_rounds"):
@@ -157,7 +159,7 @@ def _written_at(conn: sqlite3.Connection) -> dict[str, str]:
     return out
 
 
-def _current_places(conn: sqlite3.Connection) -> dict[str, tuple[str, int | None]]:
+def _current_places(conn: SqlConnection) -> dict[str, tuple[str, int | None]]:
     """איפה כל דיסק **עכשיו** -- מה-hello האחרון של כל מכונה: ``{serial: (mac, port)}``."""
     out: dict[str, tuple[str, int | None]] = {}
     for r in conn.execute("SELECT mac, disks_json FROM net_devices WHERE disks_json IS NOT NULL"):
@@ -171,13 +173,13 @@ def _current_places(conn: sqlite3.Connection) -> dict[str, tuple[str, int | None
     return out
 
 
-def _machine_names(conn: sqlite3.Connection) -> dict[str, str]:
+def _machine_names(conn: SqlConnection) -> dict[str, str]:
     role = {"cloner": "משכפל", "build": "מחשב בנייה", "classroom": "תחנה"}
     return {r["mac"]: f"{role.get(r['role'], '')} {r['suffix']}".strip()
             for r in conn.execute("SELECT m.mac, m.suffix, g.role FROM machines m JOIN groups g ON g.id = m.group_id")}
 
 
-def health(conn: sqlite3.Connection, serials: list[str]) -> dict[str, dict]:
+def health(conn: SqlConnection, serials: list[str]) -> dict[str, dict]:
     """מצב כל סידורי: ``state`` (red/orange/ok/unchecked), ``reason`` (קוד, כמו ב-SMART), מתי נכשל, מתי נכתב.
 
     אדום = אירוע SMART ``fail`` אחרון, או כשל פתוח של דיסק (``disk_failures`` בלי ``cleared_at``,
@@ -242,7 +244,7 @@ def _disk_view(conn, serial, inv, member, set_by_id, hl, places, names, f1=None)
     }
 
 
-def disks(conn: sqlite3.Connection) -> list[dict]:
+def disks(conn: SqlConnection) -> list[dict]:
     """כל דיסק שהשרת מכיר: מהמלאי, מאירועי SMART, ומהסטים."""
     serials = {r[0] for r in conn.execute("SELECT serial FROM disk_inventory")}
     serials |= {r[0] for r in conn.execute("SELECT DISTINCT serial FROM disk_events WHERE serial IS NOT NULL AND serial != ''")}
@@ -265,7 +267,7 @@ def sort_key(d: dict):
     return (ORDER[d["state"]], num, d["serial"])
 
 
-def list_sets(conn: sqlite3.Connection) -> list[dict]:
+def list_sets(conn: SqlConnection) -> list[dict]:
     all_disks = {d["serial"]: d for d in disks(conn)}
     out = []
     for row in conn.execute("SELECT * FROM disk_sets ORDER BY name").fetchall():
@@ -285,7 +287,7 @@ def list_sets(conn: sqlite3.Connection) -> list[dict]:
     return out
 
 
-def members(conn: sqlite3.Connection, set_id: int) -> dict:
+def members(conn: SqlConnection, set_id: int) -> dict:
     row = _set_row(conn, set_id)
     by_serial = {d["serial"]: d for d in disks(conn)}
     rows = [by_serial[m["serial"]] for m in
@@ -294,7 +296,7 @@ def members(conn: sqlite3.Connection, set_id: int) -> dict:
     return {"id": set_id, "name": row["name"], "prefix": row["prefix"], "disks": rows}
 
 
-def rounds(conn: sqlite3.Connection, limit: int = 40) -> list[dict]:
+def rounds(conn: SqlConnection, limit: int = 40) -> list[dict]:
     """ההרצות שאפשר לשייך מהן: (סבב-גל, מכונה) עם הדיסקים שבו לפי סדר המגירות ותוצאת הכתיבה."""
     out = []
     names = _machine_names(conn)
@@ -330,7 +332,7 @@ def rounds(conn: sqlite3.Connection, limit: int = 40) -> list[dict]:
 
 # ---------------------------------------------------------------- changes
 
-def assign(conn: sqlite3.Connection, set_id: int, items: object, user: str) -> int:
+def assign(conn: SqlConnection, set_id: int, items: object, user: str) -> int:
     """משייך דיסקים לסט (אחרי אימות מלא, או כלום). ``items``: ``[{"serial", "suffix"}]``."""
     row = _set_row(conn, set_id)
     if not isinstance(items, list) or not items:
@@ -368,7 +370,7 @@ def assign(conn: sqlite3.Connection, set_id: int, items: object, user: str) -> i
     return len(clean)
 
 
-def replace(conn: sqlite3.Connection, set_id: int, suffix: object, new_serial: object, user: str) -> None:
+def replace(conn: SqlConnection, set_id: int, suffix: object, new_serial: object, user: str) -> None:
     """הדיסק הישן יוצא מהסט (נשמר בהיסטוריה) והשם עובר לחדש -- הכרעת ברירת המחדל של המוקאפ."""
     row = _set_row(conn, set_id)
     suffix, new = _norm_suffix(suffix), _serial(new_serial)
@@ -392,7 +394,7 @@ def replace(conn: sqlite3.Connection, set_id: int, suffix: object, new_serial: o
     journal(conn, "disk_set_replaced", f"{label(row['prefix'], suffix)}: {old['serial']} -> {new}", user)
 
 
-def remove(conn: sqlite3.Connection, serial: object, user: str) -> None:
+def remove(conn: SqlConnection, serial: object, user: str) -> None:
     serial = _serial(serial)
     m = conn.execute("SELECT m.set_id, m.suffix, s.prefix FROM disk_set_members m JOIN disk_sets s ON s.id = m.set_id"
                      " WHERE m.serial = ?", (serial,)).fetchone()
@@ -406,7 +408,7 @@ def remove(conn: sqlite3.Connection, serial: object, user: str) -> None:
     journal(conn, "disk_set_removed", f"{label(m['prefix'], m['suffix'])}: {serial}", user)
 
 
-def labels_for(conn: sqlite3.Connection, disks_: object) -> dict[str, dict]:
+def labels_for(conn: SqlConnection, disks_: object) -> dict[str, dict]:
     """לתשובת ה-hello: ``{serial: {"set", "label", "text"}}`` לדיסקים שהמכונה שלחה ושיש להם סט.
     דיסק בלי סט אינו מופיע ("בלי סט" מוצג כמו היום)."""
     serials = [d["serial"] for d in disks_ if isinstance(d, dict) and isinstance(d.get("serial"), str)] \
@@ -427,7 +429,7 @@ def _label_entry(r: sqlite3.Row) -> dict:
     return {"set": r["name"], "label": lab, "text": f"{r['name']} · {lab}"}
 
 
-def all_labels(conn: sqlite3.Connection) -> dict[str, dict]:
+def all_labels(conn: SqlConnection) -> dict[str, dict]:
     """#1857: כל הדיסקים ששויכו לסט, ``{serial: {"set", "label", "text"}}`` -- בשאילתה אחת, למסכים
     שמציגים הרבה דיסקים בבת אחת (רשימת המכונות, כשלי דיסק, היומן). דיסק בלי סט חסר."""
     return {r["serial"]: _label_entry(r) for r in conn.execute(

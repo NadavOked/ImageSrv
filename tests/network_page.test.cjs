@@ -206,7 +206,7 @@ test('network map: the server on top, a VLAN card per configured NIC with its NI
   assert.equal((svg.match(/class="nm-port"/g)||[]).length,3,'one port on the server per VLAN');
   assert.doesNotMatch(svg,/VLAN \d/,'no invented VLAN numbers'); assert.doesNotMatch(svg,/10\.10\.10\.|10\.44\.0\./,'no mockup data');
   assert.doesNotMatch(svg,/class="[^"]*\b(bad|warn)\b/,'every NIC is up here — nothing red or orange');
-  assert.match(html,/<span>מפת הרשת <small title="נמדד: כתובות ופער[^"]*">לחיצה על וילן פותחת פרטים<\/small><\/span>/,'#1300: the source note is the title of the card sub-line');
+  assert.match(html,/<span>מפת הרשת <small title="מה שמוצג נמדד: [^"]*">לחיצה על וילן פותחת פרטים<\/small><\/span>/,'#1300: the source note is the title of the card sub-line');
   // ‏#1300 (console-full.html P.network): כותרת אחת לארבע הלשוניות — "רשת", פיל DHCP, משנה = הרשתות
   assert.match(html,/<div class="obj-name">רשת<span class="pill ok">DHCP פעיל<\/span><\/div><div class="obj-sub"[^>]*>ניהול 10\.44\.10\.0\/24 · הפצה 10\.44\.9\.0\/24<\/div>/);
   assert.match(html,/<div class="obj-actions"><button class="btn" onclick="refreshPage\(\)">/,'only refresh in the header — "+ כרטיס" lives on the NIC card');

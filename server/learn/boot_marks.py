@@ -19,11 +19,10 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 
 from boot.trace import INIT_MARKS
 
-from server.db import _write_lock, now_iso, writing
+from server.db import _write_lock, now_iso, SqlConnection, writing
 from server.core.logtext import one_line
 from server.learn import boot as learn_boot
 
@@ -36,7 +35,7 @@ CHAIN: tuple[str, ...] = ("init", "modules", "nic", "link", "dhcp")
 _COLUMNS = tuple(f"{key}_s" for key in INIT_MARKS)
 
 
-def record(conn: sqlite3.Connection, mac: str, marks: dict[str, float]) -> bool:
+def record(conn: SqlConnection, mac: str, marks: dict[str, float]) -> bool:
     """שומר אתחול אחד. מחזיר האם נכתבה שורה חדשה — ראיה חיובית, לא היעדר חריגה."""
     if not marks or any(key not in INIT_MARKS for key in marks):
         return False
@@ -73,7 +72,7 @@ def _took(marks: dict[str, float | None]) -> dict[str, float | None]:
     return out
 
 
-def history(conn: sqlite3.Connection, mac: str, limit: int = 10) -> list[dict]:
+def history(conn: SqlConnection, mac: str, limit: int = 10) -> list[dict]:
     """האתחולים האחרונים של מכונה, החדש ראשון. `net_s` = `dhcp` — מתי הרשת עלתה מאז העלאת הקרנל."""
     rows = conn.execute(f"SELECT at, version, {', '.join(_COLUMNS)} FROM boot_marks WHERE mac = ?"
                         " ORDER BY rowid DESC LIMIT ?", (mac, limit)).fetchall()

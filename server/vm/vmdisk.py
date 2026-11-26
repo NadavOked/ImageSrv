@@ -25,7 +25,7 @@ import tempfile
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import IO, Callable
 
 from server.brain import ingest
 from server.core.cleanup import remove_tree
@@ -61,6 +61,14 @@ class DiskError(Exception):
         super().__init__(message)
         self.reason = reason
         self.message = message
+
+
+def _pipe(stream: IO[bytes] | None) -> IO[bytes]:
+    """הצינור ש-`Popen(stdin=PIPE / stdout=PIPE)` פתח. `None` = מי שקרא ל-`popen` לא ביקש צינור,
+    וזה באג בקריאה עצמה -- לא מצב של זמן ריצה."""
+    if stream is None:
+        raise TypeError("popen was called without PIPE for this stream")
+    return stream
 
 
 # --- ההעתקים הקטנים מהסוכן (נבדקים מול המקור) ---------------------------------
@@ -229,7 +237,7 @@ def restore_partition(host: Host, part: dict, src: Path, target: str, run_dir: P
         writer = host.popen([tool, *partclone_mode(tool, "-r"), "-s", "-", "-O", target,
                              "-L", str(run_dir / f"partclone.{index}.log")],
                             stdin=unzip.stdout, stdout=subprocess.DEVNULL, stderr=errfh)
-        unzip.stdout.close()
+        _pipe(unzip.stdout).close()
         digest = hashlib.sha256()
         broken = False
         try:
@@ -237,7 +245,7 @@ def restore_partition(host: Host, part: dict, src: Path, target: str, run_dir: P
                 while chunk := fh.read(CHUNK):
                     digest.update(chunk)
                     try:
-                        unzip.stdin.write(chunk)
+                        _pipe(unzip.stdin).write(chunk)
                     except BrokenPipeError:
                         broken = True
                         break
@@ -251,7 +259,7 @@ def restore_partition(host: Host, part: dict, src: Path, target: str, run_dir: P
             raise
         finally:
             try:
-                unzip.stdin.close()
+                _pipe(unzip.stdin).close()
             except (BrokenPipeError, ValueError):
                 broken = True
         rc_unzip, rc_write = _finish([unzip, writer], f"מחיצה {index}")
@@ -303,26 +311,27 @@ def capture_partition(host: Host, fs: str, source: str, out: Path, log_dir: Path
             if squeeze.returncode != 0 or not frame:
                 raise chunkformat.CutProblem(f"zstd rc={squeeze.returncode}")
             return frame
-        text = sha = total = None                 # CodeQL py/uninitialized-local-variable: נקבעים רק בתוך ה-with
+        cut: tuple[str, str, int] | None = None   # CodeQL py/uninitialized-local-variable: נקבע רק בתוך ה-with
         try:
             with out.open("wb") as fh:
-                text, sha, total = chunkformat.cut(reader.stdout, fh, raw, limit=limit,
-                                                   on_bytes=progress, compress=compress)
+                cut = chunkformat.cut(reader.stdout, fh, raw, limit=limit,
+                                      on_bytes=progress, compress=compress)
         except chunkformat.CutProblem as exc:
             problem = str(exc)
             reader.kill()
         except BaseException:                     # anything else: partclone does not outlive this function
             reader.kill()
-            reader.stdout.close()
+            _pipe(reader.stdout).close()
             reader.wait(timeout=30)
             raise
         finally:
-            reader.stdout.close()
+            _pipe(reader.stdout).close()
         rc_read, = _finish([reader], f"מחיצה {index}")
-    if problem is not None or rc_read:
+    if problem is not None or rc_read or cut is None:
         tail = err.read_text(encoding="utf-8", errors="replace").strip().splitlines()[-1:] or [""]
         raise DiskError("capture", f"מחיצה {index}: הקריאה מדיסק העבודה נכשלה "
                                    f"({tool} rc={rc_read}; {problem or 'הזרם נחתך שלם'}) {tail[0]}".strip())
+    text, sha, total = cut
     return sha, total, readbackhash.list_digest(text, readbackhash.xxh64_factory())
 
 

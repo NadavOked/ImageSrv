@@ -109,6 +109,18 @@ held_beat_start() {
 
 held_beat_stop() { [ -n "${HELD_PID:-}" ] || return 0; kill "$HELD_PID" 2>/dev/null; HELD_PID=""; }
 
+hold_clock() {
+    # #3068: the time a technician reads here is the GUI's -- the zone the server
+    # sent (response.json .tz, a POSIX TZ string; #1447). No zone known: UTC, and
+    # it says so. The journal keeps UTC; only what is shown goes through this.
+    _hc_tz=$(jq -r '.tz // empty' "$RUN_DIR/response.json" 2>/dev/null) || _hc_tz=
+    if [ -n "$_hc_tz" ] && _hc_t=$(TZ="$_hc_tz" date +%H:%M:%S 2>/dev/null) && [ -n "$_hc_t" ]; then
+        echo "$_hc_t"; return 0
+    fi
+    _hc_t=$(date -u +%H:%M:%S 2>/dev/null) && [ -n "$_hc_t" ] || { echo '--:--:--'; return 0; }
+    echo "$_hc_t UTC"
+}
+
 hold_watch() {
     # $1 = the heartbeat command, or "" for a hold whose caller deliberately
     # left its progress loop running instead. Returns only through
@@ -161,7 +173,7 @@ hold_watch() {
                         "$(tr '\n' ' ' < "$_beat_out")"
                     echo
                     echo "  NOTE: no contact with the server since" \
-                        "$(date -u +%H:%M:%S 2>/dev/null || echo '--:--:--')."
+                        "$(hold_clock)."
                     echo "        The console cannot see this machine, so it"
                     echo "        draws it as OFF -- check the network, not"
                     echo "        the power. The message above still stands."
