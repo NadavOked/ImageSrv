@@ -25,7 +25,7 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
+from server.db import SqlConnection
 from typing import Sequence
 
 from server.brain.gate_core import WARN
@@ -42,7 +42,8 @@ STARTED_HE = "צל: הגל יצא לדרך כמו קודם"
 def causes(d: dict, *, nic: dict | None, learned: str | None) -> tuple[str, ...]:
     """מה מצדיק אזהרה על מגירה אחת: ``d`` = שורת ה-`drawer_list` שלה, ``nic`` = ``nic_warn`` של המשכפל (`linkwarn`), ``learned`` = הטקסט של
     ``smart_history.LEARNED_HE`` כשה-SMART השתנה. ריק = אין אזהרה. טהור; שדה שלא נמדד (``None``) אינו ראיה."""
-    speed = d.get("model_speed") if isinstance(d.get("model_speed"), dict) else {}
+    model_speed = d.get("model_speed")
+    speed = model_speed if isinstance(model_speed, dict) else {}
     found = (("port_drop", d.get("port_drop") is True),
              ("crc_rise", (d.get("crc_rise") or 0) > 0),
              ("smart_learned", bool(learned)),
@@ -61,7 +62,7 @@ def judge(warned: Sequence[dict]) -> tuple[str, str, tuple[str, ...]]:
     return SEVERITY, f"{len(warned)} אזהרות לפני התחלת הגל, והוא יוצא בכל זאת: {shown}{more}", (*items, f"warnings={len(warned)}")
 
 
-def record(conn: sqlite3.Connection, round_id: str, warned: Sequence[dict], *, manual: bool) -> int | None:
+def record(conn: SqlConnection, round_id: str, warned: Sequence[dict], *, manual: bool) -> int | None:
     """שורה אחת לגל שיצא עם אזהרה. ``manual`` = המפעיל לחץ "התחל" (וגם: הגל יצא לבד כי המגירות כיסו את היתרה). לא נרשם כש-``warned`` ריק או
     כשהמוח כבוי. אינו זורק; ``None`` = לא נרשם."""
     try:

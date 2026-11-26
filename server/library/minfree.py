@@ -23,9 +23,8 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 
-from server.db import get_setting
+from server.db import get_setting, SqlConnection
 from server.library.imagefit import expandable_candidate
 from server.library.imagegeom import _whole, required_bytes
 
@@ -55,7 +54,7 @@ def parse_gb(raw: object) -> int | None:
     return value if 0 <= value <= MIN_FREE_GB_MAX else None
 
 
-def min_free_gb(conn: sqlite3.Connection) -> int:
+def min_free_gb(conn: SqlConnection) -> int:
     """ההגדרה, או ברירת המחדל. חסרה = לא נקבעה (ברירת המחדל, בשקט); פגומה
     = ברירת המחדל **עם שורת יומן** — לעולם לא 0, שהוא "הכלל כבוי"."""
     raw = get_setting(conn, SETTING)

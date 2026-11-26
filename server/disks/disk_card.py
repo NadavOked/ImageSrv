@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from server.db import SqlConnection
 from typing import Iterable
 
 from server.brain import memory, memory_view as view
@@ -36,7 +37,7 @@ def _reading(row: sqlite3.Row) -> dict:
             "media_errors": nvme.get("media_errors")}
 
 
-def _readings(conn: sqlite3.Connection, serials: Iterable[str] | None = None) -> dict[str, list[dict]]:
+def _readings(conn: SqlConnection, serials: Iterable[str] | None = None) -> dict[str, list[dict]]:
     """``{serial: [סבב, ...]}`` מהישן לחדש. ``serials=None`` = כל הדיסקים (דף הרשימה)."""
     out: dict[str, list[dict]] = {}
     sql = "SELECT serial, session_id, mac, at, attrs_json, temp_after FROM smart_history"
@@ -62,7 +63,12 @@ def trend_of(rows: list[dict], older: dict | None) -> dict:
         if (old["n"] if old else 0) + len(known) < 2:
             continue                                   # פחות משתי מדידות של המונה הזה: אין מגמה
         start = old["first"] if old else known[0]
-        end = known[-1] if known else old["last"]
+        if known:
+            end = known[-1]
+        elif old:
+            end = old["last"]
+        else:
+            continue
         state = "rose" if end > start else "fell" if end < start else "stable"
         mine = {"state": state, "counter": name, "from": int(start), "to": int(end), "rounds": rounds}
         if best is None or (state == "rose" and best["state"] != "rose"):
@@ -72,20 +78,20 @@ def trend_of(rows: list[dict], older: dict | None) -> dict:
     return best or {"state": "none", "counter": None, "from": None, "to": None, "rounds": rounds}
 
 
-def trends(conn: sqlite3.Connection, serials: Iterable[str]) -> dict[str, dict]:
+def trends(conn: SqlConnection, serials: Iterable[str]) -> dict[str, dict]:
     """המגמה של כל סידורי ברשימה (שאילתה אחת ל-SMART, וקריאת סיכום קטנה לכל דיסק)."""
     serials = list(serials)
     live = _readings(conn, serials if len(serials) < 500 else None)
     return {s: trend_of(live.get(s, []), memory.summary(conn, "disk", s).get("smart_history")) for s in serials}
 
 
-def _model_average(conn: sqlite3.Connection, model: str | None) -> dict:
+def _model_average(conn: SqlConnection, model: str | None) -> dict:
     s = view.Facts(conn, "model", model).stats("model_speeds") if model else None
     mbps = view.stat(s, "mbps") if s else None
     return {"mbps": view._avg(mbps), "n": mbps["n"] if mbps else 0}
 
 
-def card(conn: sqlite3.Connection, serial: str) -> dict | None:
+def card(conn: SqlConnection, serial: str) -> dict | None:
     """כל מה שהשרת יודע על דיסק אחד. ``None`` = אין עליו שום ידע (הנתיב מחזיר 404)."""
     inv = conn.execute("SELECT model, size_bytes, first_seen, last_seen FROM disk_inventory WHERE serial = ?",
                        (serial,)).fetchone()

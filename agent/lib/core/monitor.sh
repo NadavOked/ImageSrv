@@ -80,7 +80,7 @@ _monitor_spawn() {
 # #1849: a supervisor is up -- spawned here or by the background waiter.
 _monitor_alive() {
     [ -n "${_monitor_pid:-}" ] && kill -0 "$_monitor_pid" 2>/dev/null && return 0
-    read -r _mpf < "$RUN_DIR/monitor.pid" 2>/dev/null &&
+    read -r _mpf 2>/dev/null < "$RUN_DIR/monitor.pid" &&
         [ -n "$_mpf" ] && kill -0 "$_mpf" 2>/dev/null
 }
 
@@ -114,7 +114,7 @@ _monitor_waiter() {
 monitor_start() {
     [ "${IMAGESRV_MONITOR:-0}" = 1 ] || return 0
     _monitor_alive && return 0
-    read -r _mwp < "$RUN_DIR/monitor.waiter" 2>/dev/null &&
+    read -r _mwp 2>/dev/null < "$RUN_DIR/monitor.waiter" &&
         [ -n "$_mwp" ] && kill -0 "$_mwp" 2>/dev/null && return 1   # #1849: it is waiting
 
     case "${D_ROLE:-}" in

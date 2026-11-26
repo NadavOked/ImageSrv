@@ -126,9 +126,9 @@ void lc_draw_progress(App *a, cairo_t *cr, double W, double H, double head_h) {
     char mi[96]; bidi_isolate(src && src->model[0] ? src->model : l->run_src, mi, sizeof mi);
     snprintf(lb, sizeof lb, "שיכפול מקומי · מקור: %s (%s)", sl, mi);
     int nf = 0, alive = 0; for (int i = 0; i < l->ntgts; i++) { if (tfailed(tgt_of(a, i))) nf++; else alive++; }
-    char names[160] = ""; int k = 0;
-    for (int i = 0; i < l->ntgts; i++) if (!tfailed(tgt_of(a, i))) { char n2[48]; label_dev(a, l->tgts[i].dev, n2, sizeof n2);
-        k += snprintf(names + k, sizeof names - k > 0 ? sizeof names - k : 0, "%s%s", k ? "ול" : "ל", n2); }
+    char names[160] = "", nm[LC_MAX_DISKS][LC_LABEL_MAX]; const char *np[LC_MAX_DISKS]; int nn = 0;   /* #3997: joined by lc_join_targets */
+    for (int i = 0; i < l->ntgts && nn < LC_MAX_DISKS; i++) if (!tfailed(tgt_of(a, i))) { label_dev(a, l->tgts[i].dev, nm[nn], sizeof nm[nn]); np[nn] = nm[nn]; nn++; }
+    lc_join_targets(np, nn, names, sizeof names);
     if (!l->has_run) { snprintf(h1, sizeof h1, "מתחיל…"); snprintf(s2, sizeof s2, "בודק שוב את המקור ואת היעדים לפני הכתיבה."); }
     /* #1477: a local clone shrinks only a RAM view (#1466) -- the source is never written, on either path */
     else if (!strcmp(l->phase, "shrinking")) { snprintf(h1, sizeof h1, "מכין עותק מכווץ בזיכרון…"); snprintf(s2, sizeof s2, "המקור נקרא בלבד ולא נכתב."); }
@@ -306,7 +306,7 @@ static double res_card(App *a, cairo_t *cr, double x, double y, double w, const 
     double inner = w - 44 - 54 - 18;
     Text th = text_make(cr, FONT_SANS, 20, 600, h3, (int)(inner - 200), DIR_RTL), tm = text_make(cr, FONT_MONO, 13, 500, mono, 0, DIR_LTR);
     Text tl[6]; double h = 18 + fmax(th.h, tm.h) + 8;
-    for (int i = 0; i < n; i++) { tl[i] = text_make(cr, FONT_SANS, 13, 400, li[i], (int)(inner - 22), DIR_RTL); h += tl[i].h + (i ? 4 : 0); }
+    for (int i = 0; i < n; i++) { tl[i] = lc_reason_text(cr, 13, 400, li[i], (int)(inner - 22)); h += tl[i].h + (i ? 4 : 0); }
     const char *todo = !bad ? NULL : g->pulled ? "הדיסק נשלף באמצע — לא נכתב עד הסוף. אפשר לשכפל אליו שוב."   /* #2045: not "broken" */
                                  : g->bytes > 0 || g->part > 0 ? "הדיסק לא יעלה ואינו שמיש. אל תכניסו אותו למחשב בכיתה — בדקו או החליפו אותו ושכפלו שוב."
                                                                  : "הדיסק לא נכתב — מה שהיה עליו נשאר.";

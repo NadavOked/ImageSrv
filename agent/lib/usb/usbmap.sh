@@ -37,7 +37,7 @@ USBMAP_GENERIC='default defaultstring systemproductname systemmanufacturer syste
     type1productconfigid 123456789 1234567890 xx xxx'
 
 _um_dmi() {   # $1 = a file of /sys/class/dmi/id: its one line, or nothing
-    trim "$(tr -d '\r\n' < "$SYSROOT/sys/class/dmi/id/$1" 2>/dev/null)"
+    trim "$(tr -d '\r\n' 2>/dev/null < "$SYSROOT/sys/class/dmi/id/$1")"
 }
 
 usb_model() {

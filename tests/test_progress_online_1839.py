@@ -12,17 +12,19 @@
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 pytest.importorskip("fastapi")
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from server.console import auth, monitor
 from server import db as db_module
+from server.system import clockstep, steadyclock
 from test_monitor import (MAC, SERVER_INIT, browser_handshake,
                           prepare_secret_machine)
 
@@ -78,6 +80,7 @@ def test_progress_alone_for_120_seconds_keeps_the_machine_online(server, monkeyp
     start = datetime(2026, 10, 19, 19, 29, 30, tzinfo=timezone.utc)
     clock = _Clock(start)
     clock.install(monkeypatch)
+    monkeypatch.setattr(steadyclock, "now", lambda: clock.now.timestamp())
     machine = prepare_secret_machine(server)              # ה-hello היחיד, ב-start
     _writing_member(server)
 
@@ -130,3 +133,43 @@ def test_a_refused_progress_is_not_a_sign_of_life(server, monkeypatch):
     assert response.json().get("ok") is False
     rows = monitor.machine_rows(server["ctx"].conn, clock.now)
     assert [r["online"] for r in rows if r["mac"] == MAC] == [False]
+
+
+@pytest.mark.parametrize("step", [10800, -10800], ids=["forward", "backward"])
+def test_progress_presence_uses_elapsed_time_across_clock_steps(server, monkeypatch, step):
+    ctx = server["ctx"]
+    start = datetime.now(timezone.utc)
+    clock = _Clock(start)
+    clock.install(monkeypatch)
+    monkeypatch.setattr(monitor, "datetime", db_module.datetime)
+    mono = time.monotonic()
+    monkeypatch.setattr(clockstep, "_mono", lambda: mono)
+    monkeypatch.setattr(steadyclock, "_mono", lambda: mono)
+    monkeypatch.setattr(steadyclock, "_wall", lambda: clock.now.timestamp())
+    monkeypatch.setattr(steadyclock, "_anchor", (start.timestamp(), mono))
+    prepare_secret_machine(server)
+    _writing_member(server)
+    clockstep.guard(ctx.conn, ctx.store, start)
+
+    # ה-hello כבר ישן, ורק דיווח ההתקדמות משאיר את המכונה מחוברת.
+    clock.now += timedelta(seconds=120)
+    mono += 120
+    _progress(server, "ses_1839", 1 << 20)
+    clock.now += timedelta(seconds=step)
+
+    rows = monitor.guarded_rows(ctx)
+    assert [r["online"] for r in rows if r["mac"] == MAC] == [True]
+    assert monitor._target(ctx, MAC)[1] == "build"
+
+    clock.now += timedelta(seconds=monitor.ONLINE_SECONDS + 1)
+    mono += monitor.ONLINE_SECONDS + 1
+    rows = monitor.guarded_rows(ctx)
+    assert [r["online"] for r in rows if r["mac"] == MAC] == [False]
+    with pytest.raises(HTTPException) as err:
+        monitor._target(ctx, MAC)
+    assert err.value.status_code == 409
+
+    _progress(server, "ses_1839", 2 << 20)
+    rows = monitor.guarded_rows(ctx)
+    assert [r["online"] for r in rows if r["mac"] == MAC] == [True]
+    assert monitor._target(ctx, MAC)[1] == "build"

@@ -9,7 +9,7 @@ Two roles in one file, so the key that records a leak and the report that reads
 it cannot drift apart:
 
   pytest plugin   python -m pytest ... -p tests.resource_leaks --resource-leaks DIR
-      Turns ResourceWarning on ("always"), starts tracemalloc, runs gc at the end
+      Turns ResourceWarning on ("always"), starts tracemalloc once collection is done, runs gc at the end
       of each test (so a leak is charged to the test that made it), and writes
       one JSON line per warning to DIR/leaks-<worker>.jsonl. Each worker also
       writes DIR/active-<worker>: the evidence that the plugin was on.
@@ -95,14 +95,22 @@ def pytest_configure(config) -> None:
     if not is_worker and (config.pluginmanager.hasplugin("dsession") or getattr(config.option, "numprocesses", None)):
         return                      # the xdist controller: the workers record (it also gets each
                                     # worker's warnings, so it wrote every row twice -- run 45139716346, 209 of 418 rows)
-    if not config.getoption("--resource-leaks-no-trace") and not tracemalloc.is_tracing():
-        tracemalloc.start(FRAMES)
+    _STATE["trace"] = not config.getoption("--resource-leaks-no-trace")   # started after collection, below
     config.addinivalue_line("filterwarnings", "always::ResourceWarning")
     worker = config.workerinput["workerid"] if is_worker else "main"
     Path(out).mkdir(parents=True, exist_ok=True)
     (Path(out) / f"active-{worker}").write_text(f"{os.getpid()}\n", encoding="utf-8")
     _STATE["file"] = Path(out) / f"leaks-{worker}.jsonl"
     _STATE["root"] = Path(config.rootpath).resolve()   # the repo in a real run
+
+
+def pytest_collection_finish(session) -> None:
+    """tracemalloc starts here, after every test module is imported, not in pytest_configure (#99).
+    Traced from the first import, a worker needed ~110 s for 3 tests that run in ~19 s (5x; one test 2.3 s -> 34 s,
+    measured 26/11, Windows, 3.12) and the nightly's "Locate the leaks" waited ~4.5 min for its workers. The
+    leaked objects are made inside tests, which still run traced; an object made at import time is `traced: false`."""
+    if _STATE.get("trace") and not tracemalloc.is_tracing():
+        tracemalloc.start(FRAMES)
 
 
 @pytest.hookimpl(trylast=True)

@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from server.db import SqlConnection
 
 from server.agent import registry
 from server.core import machine_names
 from server.rounds.room_state import active_rounds
 
 
-def busy(conn: sqlite3.Connection, macs) -> dict[str, sqlite3.Row]:
+def busy(conn: SqlConnection, macs) -> dict[str, sqlite3.Row]:
     """mac -> שורת הסבב הפעיל שהמשכפל בו, לאלה מ-`macs` שתפוסים. קריאה בלבד."""
     found: dict[str, sqlite3.Row] = {}
     for row in active_rounds(conn):
@@ -27,6 +28,6 @@ def busy(conn: sqlite3.Connection, macs) -> dict[str, sqlite3.Row]:
     return found
 
 
-def label(conn: sqlite3.Connection, mac: str) -> str:
+def label(conn: SqlConnection, mac: str) -> str:
     row = conn.execute("SELECT suffix FROM machines WHERE mac = ?", (mac,)).fetchone()
     return machine_names.label("cloner", row["suffix"]) if row else (registry.normalize_mac(mac) or mac)

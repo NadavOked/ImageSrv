@@ -171,7 +171,7 @@ def test_the_bridge_dispatches_both_tokens_behind_the_session_gate():
     body = BRIDGE[start:BRIDGE.index("\n}\n", start)]
     gate = body.index("gui_role ||")
     assert body.index("tool-list) tools_gui_list") > gate
-    assert body.index('"tool-run|"*) tools_gui_run "$token"') > gate
+    assert body.index('"tool-run|"*) tools_gui_bg "$token"') > gate
     assert '. "$LIB_DIR/tools.sh"' in BRIDGE
 
 

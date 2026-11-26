@@ -22,7 +22,7 @@ import logging
 import sqlite3
 from datetime import datetime
 
-from server.db import _settle, _write_lock, journal, now_iso, writing
+from server.db import _settle, _write_lock, journal, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.f1_marks")
 
@@ -44,7 +44,7 @@ def _serial(raw: object) -> str:
     return raw.strip()
 
 
-def _known(conn: sqlite3.Connection, serial: str) -> bool:
+def _known(conn: SqlConnection, serial: str) -> bool:
     """הדיסק מוכר — במלאי, או ב-hello האחרון של איזושהי מכונה. סימון של מחרוזת שאין לה דיסק היה צובע
     בשקט דיסק עתידי שקיבל אותה."""
     from server.disks import disk_sets   # כאן ולא למעלה: disk_sets קורא את הסימונים (ייבוא מעגלי)
@@ -55,30 +55,34 @@ def _known(conn: sqlite3.Connection, serial: str) -> bool:
 
 def view(row: sqlite3.Row | None) -> dict | None:
     """מה שהקונסולה והשרת מציגים: `{at, date, source, by, mac}` או `None`."""
-    if row is None:
-        return None
+    return None if row is None else _view(row)
+
+
+def _view(row: sqlite3.Row) -> dict:
     return {"at": row["observed_at"], "date": local_date(row["observed_at"]), "source": row["source"],
             "by": row["marked_by"] or None, "mac": row["mac"]}
 
 
 def local_date(stamp: object) -> str | None:
     """התאריך (YYYY-MM-DD) לפי שעון השרת — לא UTC: הסימון של 00:30 הוא של היום."""
+    if not isinstance(stamp, str):
+        return None
     try:
         return datetime.fromisoformat(stamp).astimezone().date().isoformat()
     except (TypeError, ValueError):
         return None
 
 
-def all_marks(conn: sqlite3.Connection) -> dict[str, dict] | None:
+def all_marks(conn: SqlConnection) -> dict[str, dict] | None:
     """`{serial: view}` לכל הסימונים. `None` = הקריאה נכשלה (לא "אין סימונים")."""
     try:
-        return {r["serial"]: view(r) for r in conn.execute("SELECT * FROM disk_f1_marks")}
+        return {r["serial"]: _view(r) for r in conn.execute("SELECT * FROM disk_f1_marks")}
     except Exception:             # noqa: BLE001 — "לא בדקנו" אינו "אין F1"
         log.exception("reading the F1 marks failed")
         return None
 
 
-def for_hello(conn: sqlite3.Connection, disks: object) -> list[dict] | None:
+def for_hello(conn: SqlConnection, disks: object) -> list[dict] | None:
     """לתשובת ה-hello: `[{"serial", "date", "source"}]` לדיסקים שהמכונה שלחה ושמסומנים. `[]` = אין.
     `None` = הקריאה נכשלה — השדה נשמט, והסוכן משאיר את מה שקיבל קודם (כמו `disk_failures`)."""
     marks = all_marks(conn)
@@ -90,7 +94,7 @@ def for_hello(conn: sqlite3.Connection, disks: object) -> list[dict] | None:
             for s in dict.fromkeys(serials) if s in marks]
 
 
-def mark(conn: sqlite3.Connection, serial: object, source: str, user: str, mac: str | None = None,
+def mark(conn: SqlConnection, serial: object, source: str, user: str, mac: str | None = None,
          *, model: str | None = None) -> dict:
     """רושם "נצפה F1" לדיסק. כבר מסומן — 409 (הסימון הראשון נשאר, עם התאריך והמקור שלו)."""
     serial = _serial(serial)
@@ -107,10 +111,10 @@ def mark(conn: sqlite3.Connection, serial: object, source: str, user: str, mac: 
                      (serial, ts, source, user, mac))
     how = "סומן ידנית" if source == MANUAL else "סומן אוטומטית: המכונה לא הגיעה אחרי WoL וחזרה"
     journal(conn, "disk_f1_marked", f"{serial}{f' · {model}' if model else ''} · {how}", user, machine=mac)
-    return view(conn.execute("SELECT * FROM disk_f1_marks WHERE serial = ?", (serial,)).fetchone())
+    return _view(conn.execute("SELECT * FROM disk_f1_marks WHERE serial = ?", (serial,)).fetchone())
 
 
-def clear(conn: sqlite3.Connection, serial: object, user: str) -> None:
+def clear(conn: SqlConnection, serial: object, user: str) -> None:
     serial = _serial(serial)
     row = conn.execute("SELECT * FROM disk_f1_marks WHERE serial = ?", (serial,)).fetchone()
     if row is None:

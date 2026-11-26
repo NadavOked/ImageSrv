@@ -82,7 +82,7 @@ gui_dispatch() {
     case "$token" in
         capture|room|classes|restore|direct) printf '%s\n' "$token" > "$GUI_DIR/mode" ;;
         tool-list) tools_gui_list ;;                                    # #649: writes $GUI_DIR/tools
-        "tool-run|"*) tools_gui_run "$token" ;;                          # #649: guarded in tools.sh; result in $GUI_DIR/tool-result
+        "tool-run|"*) tools_gui_bg "$token" ;;                           # #649: guarded in tools.sh; result in $GUI_DIR/tool-result; #3057: in the background
         back|again) printf 'menu\n' > "$GUI_DIR/mode" ;;
         capture-start) gui_capture ;;   theme-light|theme-dark) gui_theme_save "${token#theme-}" ;;   # #1499: buildmenu.sh
         "syspart|"*) gui_syspart "$token" ;;   # #1896: C: of an old image, with this session (syspartgui.sh)

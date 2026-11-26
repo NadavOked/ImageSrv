@@ -157,6 +157,13 @@ ikver=$( (zstd -dc "$INITRD" 2>/dev/null || gzip -dc "$INITRD" 2>/dev/null || ca
     | cpio -t 2>/dev/null | grep -m1 -o '^lib/modules/[^/]*' | cut -d/ -f3 || true)
 [[ "$ikver" == "$KVER" ]] || die "the initramfs modules are for '${ikver:-none found}', the kernel is $KVER"
 [[ -z "$SERVER_ISO" ]] || usb_iso_initrd_check "$INITRD"
+# #3077: the packages the stick ships (name, version, license ids), written by build_initramfs.sh
+# into the initrd beside the licences. An initrd without it is one that never passed the non-free
+# gate -- the stick is not built from it.
+source "$REPO/tools/initramfs-format.sh"
+PKGLIST="$WORK/packages.tsv"
+initramfs_decompress "$INITRD" | cpio -i --to-stdout '*usr/share/doc/licenses/packages.tsv' > "$PKGLIST" 2>/dev/null || true
+[[ -s "$PKGLIST" ]] && grep -q $'^firmware-' "$PKGLIST" || die "the initramfs has no package list (usr/share/doc/licenses/packages.tsv) with its firmware: rebuild it with a build_initramfs.sh that has the #3077 gate"
 
 # --- the boot partition (a FAT32 image in a file) ------------------------------------------
 STAGE="$WORK/esp"; install -d "$STAGE"
@@ -290,6 +297,7 @@ d.update({"file": name, "sha256": sha, "size": int(size), "bios": bios == "1",
           "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
 json.dump(d, open(out, "w", encoding="utf-8"), indent=1)
 PY
+cp "$PKGLIST" "${IMG%.img}-packages.tsv"   # #3077: shipped beside the image (attach it to the Release)
 say "ready: $IMG ($(( $(stat -c %s "$IMG") / 1048576 )) MiB)"
 cat "$IMG.sha256"
 

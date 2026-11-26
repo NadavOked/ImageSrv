@@ -267,7 +267,7 @@ capture_disk() {
         # הבייטים של המחיצה הזו בלבד — מונה ה-pv שלה. target_bytes מחזיר
         # מצטבר-סבב, וחיבורו בכל סיבוב ניפח את total_compressed_bytes
         # פי כמה (האימג' הראשון במעבדה: 1.8GB במקום 490MB, ‏#12).
-        _bytes=$(tr -d '\r' < "$RUN_DIR/targets/$_disk/bytes.raw" 2>/dev/null | tail -n 1); [ -n "$_bytes" ] || _bytes=0
+        _bytes=$(tr -d '\r' 2>/dev/null < "$RUN_DIR/targets/$_disk/bytes.raw" | tail -n 1); [ -n "$_bytes" ] || _bytes=0
         _total=$((_total + _bytes))
         target_partition_done "$_disk"; cd_part "$_idx" "$_role" "$_fs" "done" 2>/dev/null || :
 

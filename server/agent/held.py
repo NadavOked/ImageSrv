@@ -16,10 +16,9 @@
 """
 
 import json
-import sqlite3
 from datetime import datetime, timedelta, timezone
 
-from server.db import NET_SEEN_MIN_INTERVAL_SECONDS, _settle, _write_lock, journal, writing
+from server.db import _settle, _write_lock, journal, NET_SEEN_MIN_INTERVAL_SECONDS, SqlConnection, writing
 
 #: ארבע פעימות של 15ש' — דיווח אחד או שניים שאבדו אינם "כבה".
 FRESH_SECONDS = 60
@@ -53,7 +52,7 @@ def _stamp(text: str | None) -> datetime | None:
     return stamp if stamp is not None and stamp.tzinfo is not None else None
 
 
-def note(conn: sqlite3.Connection, mac: str, problems: list[dict],
+def note(conn: SqlConnection, mac: str, problems: list[dict],
          now: datetime | None = None) -> None:
     """רושם "מוחזק". בחניקה של #136: אותן בעיות וחותמת צעירה מ-15ש' — אין כתיבה."""
     now = now or datetime.now(timezone.utc)
@@ -70,7 +69,7 @@ def note(conn: sqlite3.Connection, mac: str, problems: list[dict],
                       (now.isoformat(timespec="seconds"), body, mac))
 
 
-def clear(conn: sqlite3.Connection, mac: str, now: datetime | None = None) -> None:
+def clear(conn: SqlConnection, mac: str, now: datetime | None = None) -> None:
     """המכונה כבר אינה מחזיקה (hello מצטרף / כיבוי נמסר). SELECT קודם — רוב ה-hello אינם כותבים.
 
     #3912: הרגע שבו עזבה את המוחזק נרשם ב-``held_released`` (השעון ב-``detail``, לא ב-``ts``:
@@ -107,7 +106,7 @@ def view(held_at: str | None, held_json: str | None,
     return {"at": held_at, "problems": problems}
 
 
-def is_held(conn: sqlite3.Connection, mac: str, now: datetime | None = None) -> bool:
+def is_held(conn: SqlConnection, mac: str, now: datetime | None = None) -> bool:
     row = conn.execute("SELECT held_at, held_json FROM net_devices WHERE mac = ?",
                        (mac,)).fetchone()
     return row is not None and view(row["held_at"], row["held_json"], now) is not None

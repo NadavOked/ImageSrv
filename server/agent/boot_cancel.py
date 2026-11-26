@@ -23,9 +23,8 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 from server.rounds.direct import DIRECT_SEND
 from server.rounds.sessions import SessionError
 from server.core.tasks import ORIGIN_BUILD_GUI
@@ -39,7 +38,7 @@ REASON = "בוטלה: המכונה אותחלה לפני תחילת המשימה
 ROUND_REASON = "מחשב הבנייה אותחל לפני שההפצה הישירה התחילה — הסבב בוטל"
 
 
-def cancel_gui_tasks_on_boot(conn: sqlite3.Connection, store, mac: str) -> list[str]:
+def cancel_gui_tasks_on_boot(conn: SqlConnection, store, mac: str) -> list[str]:
     """מבטל את משימות הגואי של ``mac`` שעוד לא התחילו. מחזיר את המזהים שבוטלו."""
     rows = conn.execute(
         "SELECT id, type FROM tasks WHERE mac = ? AND state = 'pending' AND origin = ?",

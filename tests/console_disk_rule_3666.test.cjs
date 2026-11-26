@@ -33,6 +33,34 @@ const M={mac:'aa:bb:cc:00:00:01',drawer_count:1};
 const slot=(d)=>({n:1,disk:d});
 const J=JSON.stringify;
 
+test('a cable record is excluded from disk failure counts', () => {
+  const run=setup(), m={...M,disks:[{serial:'S1',port:1,smart:'ok'}]};
+  run(`DISK_FAILURES = ${J([{mac:m.mac,port:3,serial:'S1',cause:'cable'}])}`);
+  assert.equal(run(`groupFailures([${J(m)}]).length`),0);
+  assert.equal(run(`machineDiskFailures(${J(m)}).length`),0);
+  assert.equal(run(`machineRedDisk(${J(m)})`),'');
+  assert.equal(run('redDiskRows().length'),0);
+  run(`DISK_FAILURES.push(${J({mac:m.mac,port:2,serial:'S1',cause:'disk'})})`);
+  assert.equal(run(`groupFailures([${J(m)}]).length`),1);
+  assert.equal(run(`machineDiskFailures(${J(m)}).length`),1);
+});
+
+test('moving the disk from slot 3 to slot 1 leaves the cable warning on slot 3 until cleared', () => {
+  const run=setup(), m={...M,drawer_count:3,disks:[{serial:'S1',port:1,smart:'ok'}]};
+  run(`DISK_FAILURES = ${J([{id:1,mac:m.mac,port:3,serial:'S1',cause:'cable'}])}`);
+  const rows=()=>run(`diskMapHtml(${J(m)},false)`).match(/<tr class=.*?<\/tr>/g);
+  assert.doesNotMatch(rows()[0],/חיבור לא תקין/);
+  assert.match(rows()[2],/חיבור לא תקין/);
+  assert.match(run(`bayCardHtml(${J(m)},machineSlots(${J(m)}).slots[2])`),/חיבור לא תקין/);
+  const replacement={...m,disks:[...m.disks,{port:3,serial:'S2',smart:'ok',rule:ruleOf({smart:'ok'},{fail:{cause:'cable'}})}]};
+  const card=run(`bayCardHtml(${J(replacement)},machineSlots(${J(replacement)}).slots[2])`);
+  assert.match(card,/חיבור לא תקין/);
+  assert.doesNotMatch(card,/נכשל בשיכפול הקודם/);
+  assert.equal(run(`machineSlots(${J({...m,mac:'aa:bb:cc:00:00:02'})}).slots[0].fail`),null);
+  run('DISK_FAILURES = []');
+  assert.doesNotMatch(rows()[2],/חיבור לא תקין/);
+});
+
 // --- 1. the console holds no table and works no colour out -------------------------------------------------------
 
 test('console.js holds no copy of the disk rule: no table, no sentences, no diskRule / diskFacts', () => {

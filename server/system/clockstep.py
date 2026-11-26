@@ -22,13 +22,12 @@
 
 from __future__ import annotations
 
-import sqlite3
 import threading
 import time
 import weakref
 from datetime import datetime, timedelta
 
-from server.db import journal, writing
+from server.db import journal, SqlConnection, writing
 
 #: מעל כמה שניות שינוי בהפרש (קיר − מונוטוני) הוא קפיצה ולא סחיפה.
 JUMP_SECONDS = 60
@@ -98,7 +97,7 @@ def _shift_epoch(value, step: float, now_epoch: float) -> float | None:
     return new if new != value else None
 
 
-def rebase(conn: sqlite3.Connection, store, step: float, now: datetime) -> list[str]:
+def rebase(conn: SqlConnection, store, step: float, now: datetime) -> list[str]:
     """מזיז ב-`step` שניות את החותמות שהטיימרים של הסבבים הפעילים קוראים.
 
     כל עדכון מותנה בערך שנקרא: דיווח שהגיע בינתיים כבר כתב חותמת בבסיס
@@ -146,7 +145,7 @@ def rebase(conn: sqlite3.Connection, store, step: float, now: datetime) -> list[
     return ids
 
 
-def guard(conn: sqlite3.Connection, store, now: datetime) -> float | None:
+def guard(conn: SqlConnection, store, now: datetime) -> float | None:
     """נקרא בראש כל דופק שמחשב זמן מול חותמת שמורה. מחזיר את הקפיצה, אם הייתה.
 
     קפיצה נרשמת ביומן (`clock_jump`) **תמיד** — גם בלי סבב פעיל זו ראיה
