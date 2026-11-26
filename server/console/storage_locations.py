@@ -67,7 +67,7 @@ def create_storage_locations_router(
         if written.status != sl.OK:
             hooks["umount"](row["mount_point"])
             raise HTTPException(
-                409, f"העיגון הצליח אבל fstab לא נכתב — בוטל: {written.reason}")
+                409, sl.operator_reason(written, "העיגון הצליח אבל fstab לא נכתב — העיגון בוטל"))
 
     @router.get("")
     def list_locations(user=Depends(admin_only)):
@@ -103,9 +103,9 @@ def create_storage_locations_router(
         else:
             raise HTTPException(400, "סריקה רק ל-nfs / smb / iscsi")
         if result.status == sl.UNCHECKED:
-            raise HTTPException(503, result.reason or "לא הצלחנו לסרוק")
+            raise HTTPException(503, sl.operator_reason(result, "לא הצלחנו לסרוק"))
         if result.status != sl.OK:
-            raise HTTPException(409, result.reason or "הסריקה נכשלה")
+            raise HTTPException(409, sl.operator_reason(result, "הסריקה נכשלה"))
         payload = result.payload or {}
         return {"ok": True, "items": payload.get("items") or [],
                 "rejected": payload.get("rejected") or 0}
@@ -194,7 +194,7 @@ def create_storage_locations_router(
             if written.status != sl.OK:
                 _delete_row(loc_id)
                 raise HTTPException(
-                    409, f"fstab לא נכתב — המיקום לא נוצר: {written.reason}")
+                    409, sl.operator_reason(written, "fstab לא נכתב — המיקום לא נוצר"))
             mounted = sl.apply_mount(row, hooks)
             if mounted.status != sl.OK:
                 _delete_row(loc_id)
@@ -254,7 +254,7 @@ def create_storage_locations_router(
             chap, bool(params.get("auto", True)))
         if result.status != sl.OK:
             status = 503 if result.status == sl.UNCHECKED else 409
-            raise HTTPException(status, result.reason or "ההתחברות נכשלה")
+            raise HTTPException(status, sl.operator_reason(result, "ההתחברות נכשלה"))
         payload = result.payload or {}
         if sl.valid_iscsi_device(payload.get("device_by_path")):   # #2468
             params["device_by_path"] = payload["device_by_path"]
@@ -275,13 +275,11 @@ def create_storage_locations_router(
         result = hooks["disk_probe"](device)
         payload = dict(result.payload or {})
         payload.setdefault("device", device)
-        if result.status == sl.UNCHECKED:
-            payload["disk_status"] = "unknown"
-            payload["reason"] = result.reason or "לא הצלחנו לקרוא את הדיסק"
-            return payload
         if result.status != sl.OK:
+            payload.pop("stderr", None)
+            payload.pop("stdout", None)
             payload["disk_status"] = "unknown"
-            payload["reason"] = result.reason
+            payload["reason"] = sl.operator_reason(result, "לא הצלחנו לקרוא את הדיסק")
             return payload
         payload.setdefault("disk_status",
                            "fs" if payload.get("fs_type") else "empty")
@@ -353,14 +351,14 @@ def create_storage_locations_router(
             raise HTTPException(409, "על הדיסק יש מערכת קבצים — פירמוט רק עם wipe ואישור IQN")
         made = hooks["make_fs"](device, row["name"])
         if made.status != sl.OK:
-            raise HTTPException(409, made.reason or "הפירמוט נכשל")
+            raise HTTPException(409, sl.operator_reason(made, "הפירמוט נכשל"))
         params["fs_type"] = "ext4"
         params["fs_label"] = row["name"]
         if payload.get("fs_size") is not None:
             params["fs_size"] = payload.get("fs_size")
         sl.save_params(ctx.conn, loc_id, params)
         row = sl.get(ctx.conn, loc_id)
-        mounted = sl.apply_mount(row, hooks)
+        mounted = sl.apply_mount(row, hooks, failure_message="העיגון אחרי הפירמוט נכשל")
         if mounted.status != sl.OK:
             raise HTTPException(409, mounted.reason or "העיגון אחרי הפירמוט נכשל")
         _fstab_or_unmount(row)
@@ -409,10 +407,14 @@ def create_storage_locations_router(
                     and len((seen.payload or {}).get("missing") or []) == 2)
             if not gone:
                 status = 503 if sl.UNCHECKED in (result.status, seen.status) else 409
-                why = result.reason or seen.reason or "umount נכשל"
+                log.warning("disconnect %s: umount (%s): %s; mount check (%s): %s",
+                            sl.log_text(loc_id), sl.log_text(result.status),
+                            sl.log_text(result.reason), sl.log_text(seen.status),
+                            sl.log_text(seen.reason))
+                why = "הניתוק נכשל — הפרטים ביומן השרת"
                 journal(ctx.conn, "storage_location_disconnect_failed",
                         f"{loc_id} {row['name']} — {why}", user[0])
-                raise HTTPException(status, f"הניתוק נכשל: {why}")
+                raise HTTPException(status, why)
         params = sl.params_of(row)
         if row["type"] == "iscsi" and params.get("iqn"):
             hooks["iscsi_logout"](params.get("iqn"), params.get("portal") or "")
@@ -455,7 +457,7 @@ def create_storage_locations_router(
                 params.get("iqn") or "", params.get("portal") or "",
                 chap, bool(params.get("auto", True)))
             if logged.status != sl.OK:
-                why = logged.reason or "ההתחברות נכשלה"
+                why = sl.operator_reason(logged, "ההתחברות נכשלה")
                 if sl.secret_missing("iscsi", params):   # #2460: הסיבה הסבירה, בשם
                     why = f"{sl.SECRET_OF['iscsi'][2]} · {why}"
                 raise HTTPException(409, why)

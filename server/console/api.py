@@ -60,6 +60,7 @@ from server.brain import drawerhold as brain_drawerhold   # #2023: ההגדרה 
 from server.brain import diskcolor as brain_diskcolor   # #3666 (K3/DISK_COLOR): המוח מסווג דיסק; הקונסולה מציגה
 from server.brain import rateinputs as brain_rateinputs   # #3977: `brain_rate_inputs` -- off / shadow / enforce של שני קלטי הקצב
 from server.brain import cpucap as brain_cpucap   # #3064 (K12): שער המעבד לפני פתיחת גל, מתג כבוי כברירת מחדל
+from server.brain import scheduled_cast
 from server.brain import memory as brain_memory   # #3185: הזיכרון ארוך-הטווח, אותה קריאה של המוח
 from server.brain import usersetting as brain_usersetting   # #3675: שינוי של הגדרת משתמש נרשם כהחלטה
 from server.agent import unknown_screen   # #1802
@@ -113,6 +114,7 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   brain_drawerhold.SETTING,   # #2023 (נדב 15/11): השלמה מעכבת רק את המגירה שנפגעה. slow (ברירת המחדל, #3605) = מבצע רק דיסק שהמוח סימן איטי; off = רק רישום בצל
                   # #3977 (נדב 21/11): שני קלטי הקצב של מנוע החתיכות -- off / shadow (ברירת המחדל) / enforce; בלי שורה בקונסולה
                   brain_rateinputs.SETTING,
+                  scheduled_cast.SETTING,
                   brain_cpucap.SETTING,   # #3064 (K12, נדב 15/11): מחזיק פתיחת סבב כשהשרת עמוס. כבוי; בלעדיו ההכרעה רק נרשמת
                   # #1802 (נדב 04/11): מחשב UEFI לא רשום עולה מהדיסק אחרי N שניות (0 = כבוי). BIOS — לעולם לא (#345).
                   unknown_screen.SETTING,
@@ -132,6 +134,7 @@ WRITE_SETTINGS = {"recovery_require_login", "session_wait_seconds",
                   auto_reboot.MODE, auto_reboot.TIME, auto_reboot.WEEKDAY}
 
 BOOLEAN_SETTINGS = {
+    scheduled_cast.SETTING: "המתנה למשכפלים לפני שידור",
     "recovery_require_login": "שחזור מהשרת בלי סבב דורש כניסה",
     console_mfa.SETTING: "חיוב אימות דו-שלבי למנהלים",
     "class_deploy_enabled": "הפצה לכיתה ממסך התחנה",

@@ -32,6 +32,15 @@ from test_agent import AGENT, BASH
 
 pytestmark = requires_native(("bash", BASH))
 
+# #3136: the clock is the fake `sleep`, so a fake "second" costs the real time of one `tr | awk` poll. One fake poll = TICK fake
+# seconds keeps the ceilings (900 / 300) and shrinks the polls from ~90 to ~9, so a loaded machine (10 workers) has no timer
+# to miss; the subprocess timeout is only a hang guard now, the same in every test.
+TICK = 100
+HANG_GUARD_S = 120
+START, QUIET = 900, 300    # the ceilings the tests hand to wait_progress; the first move of the counter costs one poll
+START_KILL = [f"killed={START + TICK}", f"result=1 t={START + TICK}"]
+QUIET_KILL = [f"killed={QUIET + TICK}", f"result=1 t={QUIET + TICK}"]
+
 
 def _wait(tmp_path, *, gate_at=None, move_after_gate=False, exit_at=None,
           set_gate=True, gate_log="sender.log"):
@@ -49,7 +58,7 @@ def _wait(tmp_path, *, gate_at=None, move_after_gate=False, exit_at=None,
     make_gate = ': > "$gate"' if gate_log == "sender.log" else ":"   # an unreadable log is never created
     script = f'''
         . {AGENT.as_posix()!r}/lib/core/waits.sh
-        WAIT_POLL_S=10; t=0; counter={str(tmp_path.as_posix() + "/counter")!r}
+        WAIT_POLL_S={TICK}; t=0; counter={str(tmp_path.as_posix() + "/counter")!r}
         gate={str(tmp_path.as_posix() + "/" + gate_log)!r}; : > "$counter"; {make_gate}
         log() {{ :; }}
         unblock_fifo() {{ :; }}
@@ -59,18 +68,18 @@ def _wait(tmp_path, *, gate_at=None, move_after_gate=False, exit_at=None,
         }}
         wait() {{ return 0; }}
         sleep() {{
-            t=$((t + 10))
-            [ "$t" -eq 10 ] && echo 1 >> "$counter"
+            t=$((t + {TICK}))
+            [ "$t" -eq {TICK} ] && echo 1 >> "$counter"
             {gate_action}
             {later_move}
         }}
         poll_tick() {{ sleep; _tk=$((WAIT_POLL_S * 10)); }}   # #1705: one fake tick = one poll
         {gate_vars}
-        wait_progress 999 "$counter" 900 300 stream
+        wait_progress 999 "$counter" {START} {QUIET} stream
         echo "result=$? t=$t"
     '''
     return subprocess.run([BASH, "--posix", "-c", script], capture_output=True,
-                          text=True, timeout=120, stdin=subprocess.DEVNULL)   # ~90 polls x 3 processes: slow on Windows
+                          text=True, timeout=HANG_GUARD_S, stdin=subprocess.DEVNULL)
 
 
 def test_buffered_byte_does_not_shorten_start_wait(tmp_path):
@@ -81,43 +90,43 @@ def test_buffered_byte_does_not_shorten_start_wait(tmp_path):
 
 def test_stall_ceiling_starts_when_gate_opens(tmp_path):
     out = _wait(tmp_path, gate_at=600)
-    assert out.stdout.strip().splitlines() == ["killed=900", "result=1 t=900"]
+    assert out.stdout.strip().splitlines() == [f"killed={START}", f"result=1 t={START}"]
 
 
 def test_closed_gate_keeps_start_ceiling(tmp_path):
     out = _wait(tmp_path)
-    assert out.stdout.strip().splitlines() == ["killed=910", "result=1 t=910"]
+    assert out.stdout.strip().splitlines() == START_KILL
 
 
 def test_an_unreadable_log_keeps_the_start_ceiling(tmp_path):
     """udp-sender's log not there (yet, or at all): grep exits 2, which is
     "not started" -- the start ceiling, never the quiet one, never success."""
     out = _wait(tmp_path, gate_log="no-such-dir/sender.log")
-    assert out.stdout.strip().splitlines() == ["killed=910", "result=1 t=910"], out.stdout + out.stderr
+    assert out.stdout.strip().splitlines() == START_KILL, out.stdout + out.stderr
     assert "No such file" not in out.stderr, out.stderr
 
 
 def test_ungated_call_keeps_existing_counter_behaviour(tmp_path):
     out = _wait(tmp_path, set_gate=False)
-    assert out.stdout.strip().splitlines() == ["killed=310", "result=1 t=310"]
+    assert out.stdout.strip().splitlines() == QUIET_KILL
 
 
 def test_gate_variables_are_one_shot(tmp_path):
     script = f'''
         . {AGENT.as_posix()!r}/lib/core/waits.sh
-        WAIT_POLL_S=10; t=0; counter={str((tmp_path / "counter").as_posix())!r}
+        WAIT_POLL_S={TICK}; t=0; counter={str((tmp_path / "counter").as_posix())!r}
         gate={str((tmp_path / "gate").as_posix())!r}; : > "$counter"; : > "$gate"
         log() {{ :; }}; unblock_fifo() {{ :; }}
         kill() {{ if [ "$1" = -0 ]; then return 0; fi; echo "killed=$t"; }}
         wait() {{ return 0; }}
-        sleep() {{ t=$((t + 10)); [ "$t" -eq 10 ] && echo 1 >> "$counter"; }}
+        sleep() {{ t=$((t + {TICK})); [ "$t" -eq {TICK} ] && echo 1 >> "$counter"; }}
         poll_tick() {{ sleep; _tk=$((WAIT_POLL_S * 10)); }}   # #1705: one fake tick = one poll
         WAIT_STARTED_LOG="$gate" WAIT_STARTED_TEXT="Starting transfer:"
-        wait_progress 999 "$counter" 20 10 first >/dev/null
+        wait_progress 999 "$counter" {2 * TICK} {TICK} first >/dev/null
         : > "$counter"; t=0
-        wait_progress 999 "$counter" 900 300 second
+        wait_progress 999 "$counter" {START} {QUIET} second
         echo "result=$? t=$t"
     '''
     out = subprocess.run([BASH, "--posix", "-c", script], capture_output=True,
-                         text=True, timeout=10, stdin=subprocess.DEVNULL)
-    assert out.stdout.strip().splitlines() == ["killed=310", "result=1 t=310"]
+                         text=True, timeout=HANG_GUARD_S, stdin=subprocess.DEVNULL)
+    assert out.stdout.strip().splitlines() == QUIET_KILL

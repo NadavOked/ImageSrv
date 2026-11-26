@@ -21,12 +21,11 @@ from __future__ import annotations
 
 import logging
 import shutil
-import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from server.storage import disk_reserve, locations as storage_locations
-from server.db import _settle, _write_lock, now_iso, writing
+from server.db import _settle, _write_lock, now_iso, SqlConnection, writing
 from server.system.health_rows import check
 
 log = logging.getLogger("imagesrv.storage_history")
@@ -42,7 +41,7 @@ STALE_DAYS = 90
 WARN_DAYS = 30
 
 
-def sample(conn: sqlite3.Connection, loc_id: str, path, source: str,
+def sample(conn: SqlConnection, loc_id: str, path, source: str,
            usage: Callable = shutil.disk_usage) -> dict | None:
     """דגימה אחת. None — לא נקרא (נרשם ב-log). לעולם אינו זורק."""
     try:
@@ -61,13 +60,13 @@ def sample(conn: sqlite3.Connection, loc_id: str, path, source: str,
         return None
 
 
-def sample_local(conn: sqlite3.Connection, library, source: str) -> dict | None:
+def sample_local(conn: SqlConnection, library, source: str) -> dict | None:
     """הספרייה המקומית (`loc_local`) — בהזמנת קליטה ובפתיחת סבב. library חסרה — כלום."""
     root = getattr(library, "root", None)
     return None if root is None else sample(conn, storage_locations.LOCAL_ID, root, source)
 
 
-def sample_all(conn: sqlite3.Connection, source: str, usage: Callable = shutil.disk_usage) -> int:
+def sample_all(conn: SqlConnection, source: str, usage: Callable = shutil.disk_usage) -> int:
     """כל מיקום **מחובר**. מחזיר כמה נדגמו."""
     try:
         roots = storage_locations.library_roots(conn, "")
@@ -86,7 +85,7 @@ def _when(stamp: str) -> datetime | None:
     return got if got.tzinfo else None
 
 
-def trend(conn: sqlite3.Connection, loc_id: str, now: datetime | None = None) -> dict:
+def trend(conn: SqlConnection, loc_id: str, now: datetime | None = None) -> dict:
     """`{"free_bytes", "total_bytes", "at", "per_day", "days_left", "samples"}`. `per_day` — כמה
     בייטים פנויים נעלמים ביום (שלילי = מתפנה); None — פחות משתי דגימות ביום שונה. `days_left` —
     None כשהמקום אינו מתמלא או כשאין קצב."""
@@ -116,7 +115,7 @@ def _gb(n: int | float) -> str:
     return f"{n / 1e9:.1f} GB"
 
 
-def stale_images(conn: sqlite3.Connection, library, now: datetime | None = None,
+def stale_images(conn: SqlConnection, library, now: datetime | None = None,
                  limit: int = 3) -> list[dict]:
     """אימג'ים שלא שימשו בסבב `STALE_DAYS` יום (או מעולם), הגדולים קודם — **הצעה** בלבד."""
     now = now or datetime.now(timezone.utc)
@@ -136,7 +135,7 @@ def stale_images(conn: sqlite3.Connection, library, now: datetime | None = None,
     return sorted(out, key=lambda x: -x["bytes"])[:limit]
 
 
-def _previous(conn: sqlite3.Connection, library, name: str, folder: str, mac: str) -> dict | None:
+def _previous(conn: SqlConnection, library, name: str, folder: str, mac: str) -> dict | None:
     scanned = library.scan() if library is not None else {}
     same = [m for m in scanned.values() if isinstance(m, dict) and m.get("name") == name
             and (m.get("folder") or "") == folder
@@ -152,7 +151,7 @@ def _previous(conn: sqlite3.Connection, library, name: str, folder: str, mac: st
     return None
 
 
-def capture_check(conn: sqlite3.Connection, library, name: str, folder: str, mac: str,
+def capture_check(conn: SqlConnection, library, name: str, folder: str, mac: str,
                   free: int | None) -> dict:
     """`{"status": "ok"|"warning"|"refused", "reason", "previous", "need_bytes", "free_bytes",
     "suggest"}` — ראו את ראש המודול. לעולם אינו זורק (כשל = אזהרה)."""
@@ -184,7 +183,7 @@ def capture_check(conn: sqlite3.Connection, library, name: str, folder: str, mac
                 "previous": None, "need_bytes": None, "free_bytes": free, "suggest": []}
 
 
-def health_checks(conn: sqlite3.Connection) -> list[dict]:
+def health_checks(conn: SqlConnection) -> list[dict]:
     """שורה לכל מיקום שנדגם: `warn` — מתמלא בעוד פחות מ-`WARN_DAYS` ימים; `ok`; `off` — אין קצב עדיין."""
     try:
         out = []

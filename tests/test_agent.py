@@ -678,14 +678,15 @@ def test_the_builder_copies_the_overlay_and_packs_its_binaries(tmp_path):
     נכנס לאימג' בעצמו."""
     builder = (REPO / "tools" / "build_initramfs.sh").read_text(encoding="utf-8")
     start = builder.index("# --- site/lab overlay (#1266)")
-    block = builder[start:builder.index("# --- pack ---", start)]
+    # the overlay section alone: it ends where the licence section (#1707, #3077 package list) begins
+    block = builder[start:builder.index("# --- third-party licenses (#1707)", start)]
     overlay, root = tmp_path / "overlay", tmp_path / "root"
     (overlay / "etc" / "imagesrv" / "hooks.d").mkdir(parents=True)
     (overlay / "etc" / "imagesrv" / "hooks.d" / "10-lab.sh").write_text("true\n", encoding="utf-8")
     (overlay / ".binaries").write_text("# lab\nfoo\n\nbar\n", encoding="utf-8")
     root.mkdir()
     (tmp_path / "block.sh").write_text(block, encoding="utf-8", newline="\n")
-    sh(f'set -euo pipefail; ROOT={posix(root)!r}; EXTRA_OVERLAY={posix(overlay)!r}; '
+    sh(f'set -euo pipefail; declare -A PACKED_FROM=(); ROOT={posix(root)!r}; EXTRA_OVERLAY={posix(overlay)!r}; '
        f'copy_bin() {{ echo "$1" >> {posix(tmp_path / "bins")!r}; }}; '
        f'. {posix(tmp_path / "block.sh")!r}')
     assert (root / "etc" / "imagesrv" / "hooks.d" / "10-lab.sh").is_file()

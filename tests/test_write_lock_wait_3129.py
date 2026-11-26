@@ -7,6 +7,7 @@ locked". The lock is a plain Lock to its users (not reentrant, `acquire(blocking
 from __future__ import annotations
 
 import logging
+from collections import deque
 
 import pytest
 
@@ -17,6 +18,7 @@ from server import db
 def lock(monkeypatch):
     fresh = db._TimedLock()
     monkeypatch.setattr(db, "_write_wait", {"waits": 0, "total_s": 0.0, "max_s": 0.0, "slow": 0, "gave_up": 0})
+    monkeypatch.setattr(db, "_write_wait_recent", deque(maxlen=256))   # #4115: the health row's events
     return fresh
 
 

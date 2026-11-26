@@ -293,6 +293,11 @@ lab_flag=(); if $LAB; then lab_flag=(--lab); fi   # מערך ולא $(…) לא 
 lab_overlay=$(bash "$SCRIPT_DIR/initrd-lab-gate.sh" "$LIVE_INITRD" "${lab_flag[@]}") \
     || die "initrd של מעבדה דורש --lab מפורש"
 [[ "$ikver" == "$KVER" ]] || die "אי-התאמה: המודולים ב-initramfs הם של $ikver והקרנל ב-pool הוא $KVER — בנה את ה-initramfs מול linux-image-amd64 של ה-pool"
+# #3077: the live image's package list (written by build_initramfs.sh next to the licences) goes
+# on the ISO root beside THIRD_PARTY_NOTICES.md and into $OUT; one without it never passed the gate.
+initramfs_decompress "$LIVE_INITRD" | cpio -i --to-stdout '*usr/share/doc/licenses/packages.tsv'     > "$ISO_TREE/imagesrv-live-packages.tsv" 2>/dev/null || true
+[[ -s "$ISO_TREE/imagesrv-live-packages.tsv" ]]     || die "ב-$LIVE_INITRD אין usr/share/doc/licenses/packages.tsv — בנה אותו מחדש עם build_initramfs.sh שיש בו את שער #3077"
+cp "$ISO_TREE/imagesrv-live-packages.tsv" "$OUT/imagesrv-live-packages.tsv"
 install -m 0644 "$kvmlinuz" "$ISO_TREE/live/vmlinuz"
 install -m 0644 "$LIVE_INITRD" "$ISO_TREE/live/initrd.img"
 say "live: vmlinuz-$KVER + initrd.img ($(du -h "$LIVE_INITRD" | cut -f1)) — מודולים תואמים"

@@ -574,10 +574,12 @@ test('Nadav 18/10: no disk information in "needs attention" — not a failed wri
   assert.doesNotMatch(html,/S6PN|S1X|נכשל בשיכפול הקודם|נקה אחרי החלפה|קריאה בלבד|NVMe/,'not a word about disks on the overview');
   assert.match(card,/<span class="cnt">1<\/span>/,'only the battery verdict -- a machine item that is not a disk stays');
   assert.match(card,/המחשב על סוללה/);
-  assert.equal(run('JSON.stringify(machinesTabs().at(-1))'),JSON.stringify(['דיסקים אדומים','2']));
+  // #4057 (Nadav 12/11, 23/11): the cable record (id 3) belongs to the slot -- it is not a red disk, so the tab counts only the read-only one
+  assert.equal(run('JSON.stringify(machinesTabs().at(-1))'),JSON.stringify(['דיסקים אדומים','1']));
   const tab=run('diskFailuresCard()');   // the body of that tab
-  assert.match(tab,/clearDiskFailure\(2\)/); assert.match(tab,/clearDiskFailure\(3\)/);
+  assert.match(tab,/clearDiskFailure\(2\)/); assert.doesNotMatch(tab,/clearDiskFailure\(3\)/,'#4057: a cable record is not in the red-disks tab');
   const drawer=run('machineDrawerHtml(MACHINES[0])');
   assert.match(drawer,/clearDiskFailure\(2\)">נקה אחרי החלפה/,'cleared from the machine drawer');
-  assert.match(drawer,/clearDiskFailure\(3\)">נקה אחרי החלפה/);
+  assert.match(drawer,/clearDiskFailure\(3\)">נקה</,'#4057: the cable record is still cleared from the drawer, worded as a connection ("נקה"), not "after replacing the disk"');
+  assert.doesNotMatch(drawer,/clearDiskFailure\(3\)">נקה אחרי החלפה/);
 });

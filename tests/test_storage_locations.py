@@ -302,10 +302,16 @@ def test_create_without_test_is_422(env):
 
 def test_failed_test_rejects_create(env):
     env["fake"].mount_status = FAILED
+    tested = env["admin"].post("/api/console/storage-locations/test", json={
+        "type": "nfs", "params": _nfs_params(),
+    }).json()
+    assert tested["ok"] is False
+    assert tested["reason"] == "בדיקת העיגון נכשלה — הפרטים ביומן השרת"
     r = env["admin"].post("/api/console/storage-locations", json={
         "name": "nas-images", "type": "nfs", "params": _nfs_params(), "tested": True,
     })
     assert r.status_code == 409
+    assert r.json()["detail"] == tested["reason"]
     listed = env["admin"].get("/api/console/storage-locations").json()["locations"]
     assert all(loc["name"] != "nas-images" for loc in listed)
 
@@ -375,6 +381,7 @@ def test_iscsi_discover_login_unknown_disk_refuses_format(env):
     env["fake"].disk_status = "unknown"
     disk = env["admin"].get(f"/api/console/storage-locations/{loc_id}/disk").json()
     assert disk["disk_status"] == "unknown"
+    assert disk["reason"] == "לא הצלחנו לקרוא את הדיסק — הפרטים ביומן השרת"
     fmt = env["admin"].post(f"/api/console/storage-locations/{loc_id}/format", json={
         "confirm": IQN,
     })
@@ -449,7 +456,7 @@ def test_format_with_fs_and_wipe_and_confirm_formats(env):
 
 # --- מנטר 60ש' --------------------------------------------------------------
 
-def test_monitor_connected_to_unreachable_to_connected(env):
+def test_monitor_connected_to_unreachable_to_connected(env, caplog):
     created = _create_nfs(env)
     loc_id = created.json()["id"]
     mount = created.json()["mount_point"]
@@ -461,7 +468,8 @@ def test_monitor_connected_to_unreachable_to_connected(env):
     sl.poll(env["ctx"].conn, env["ctx"].library, env["fake"].as_dict())
     row = sl.get(env["ctx"].conn, loc_id)
     assert row["state"] == "unreachable"
-    assert "no route" in row["state_detail"]
+    assert row["state_detail"] == "הבדיקה נכשלה — הפרטים ביומן השרת"
+    assert "no route" in caplog.text
     since = row["state_since"]
 
     sl.poll(env["ctx"].conn, env["ctx"].library, env["fake"].as_dict())
@@ -510,7 +518,7 @@ def _connected_iscsi(env):
     (FAILED, "", 409),
     (UNCHECKED, "", 503),
 ])
-def test_disconnect_umount_failure_preserves_location(env, make, status, reason, http_status):
+def test_disconnect_umount_failure_preserves_location(env, make, status, reason, http_status, caplog):
     created = make(env)
     assert created.status_code == 200, created.text
     loc_id = created.json()["id"]
@@ -525,8 +533,10 @@ def test_disconnect_umount_failure_preserves_location(env, make, status, reason,
     response = env["admin"].post(f"/api/console/storage-locations/{loc_id}/disconnect")
 
     assert response.status_code == http_status, response.text
-    assert response.json()["detail"].startswith("הניתוק נכשל")
-    assert reason in response.json()["detail"]
+    detail = "הניתוק נכשל — הפרטים ביומן השרת"
+    assert response.json()["detail"] == detail
+    if reason:
+        assert reason in caplog.text
     after = sl.get(conn, loc_id)
     for field in ("state", "state_since", "state_detail"):
         assert after[field] == before[field]
@@ -543,6 +553,8 @@ def test_disconnect_umount_failure_preserves_location(env, make, status, reason,
     assert len(rows) == 1, rows
     assert rows[0]["label"] == "ניתוק מיקום האחסון נכשל — המיקום נשאר מחובר", rows
     assert rows[0]["severity"] == "err", rows
+    recorded = conn.execute("SELECT detail FROM journal WHERE id = ?", (rows[0]["id"],)).fetchone()[0]
+    assert recorded == f"{loc_id} {before['name']} — {detail}"
 
 
 def test_disconnect_of_a_mount_that_is_already_gone_is_not_blocked(env):
@@ -966,10 +978,15 @@ def test_create_fstab_failure_leaves_no_row_and_no_permanent_mount(env):
         env["fake"].mounts
 
 
-def test_create_mount_failure_removes_fstab_line_and_row(env):
+def test_create_mount_failure_removes_fstab_line_and_row(env, caplog):
     env["fake"].mount_fail_substr = "nas-images"   # רק העיגון הקבוע, לא הבדיקה
+    stderr = "mount.nfs: fake stderr for /private/mount"
+    env["fake"].mount_reason = stderr
     r = _create_nfs(env)
     assert r.status_code == 409
+    assert stderr not in r.json()["detail"]
+    assert r.json()["detail"] == "העיגון נכשל — הפרטים ביומן השרת"
+    assert stderr in caplog.text
     rows = [x for x in sl.list_rows(env["ctx"].conn) if x["name"] == "nas-images"]
     assert rows == []
     assert len(env["fake"].fstab) >= 2

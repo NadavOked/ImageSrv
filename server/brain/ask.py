@@ -38,7 +38,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 
 from server.brain import memory
-from server.db import _settle, _write_lock, writing
+from server.db import _settle, _write_lock, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.brain")
 
@@ -149,13 +149,13 @@ def _stamp(moment: datetime) -> str:
     return moment.isoformat(timespec="seconds")
 
 
-def _write(conn: sqlite3.Connection, sql: str, params) -> sqlite3.Cursor:
+def _write(conn: SqlConnection, sql: str, params) -> sqlite3.Cursor:
     _settle(conn)
     with _write_lock, writing(conn):
         return conn.execute(sql, tuple(params))
 
 
-def _update(conn: sqlite3.Connection, sql: str, params) -> bool:
+def _update(conn: SqlConnection, sql: str, params) -> bool:
     """UPDATE מותנה שמסתיים ב-commit בכל מסלול: ``True`` = שורה אחת השתנתה."""
     return _write(conn, sql, params).rowcount == 1
 
@@ -167,7 +167,7 @@ def _minutes(seconds: int) -> str:
 # --- פתיחה --------------------------------------------------------------------------------------------------------
 
 
-def open_ask(conn: sqlite3.Connection, spec: Spec, *, entity: tuple[str, str] | None = None, round_id: str | None = None,
+def open_ask(conn: SqlConnection, spec: Spec, *, entity: tuple[str, str] | None = None, round_id: str | None = None,
              detail_he: str = "", mode: str = "shadow", now: datetime | None = None) -> int | None:
     """שאלה פתוחה, ומספרה. שאלה פתוחה אחת לכל (נקודה, ישות, סבב): קריאה חוזרת מחזירה את הקיימת ולא פותחת שנייה.
     ``None`` = השאלה לא נפתחה (הכתיבה נכשלה, נרשם בלוג): הקורא פועל כמו כשאין תשובה."""
@@ -205,8 +205,16 @@ def open_ask(conn: sqlite3.Connection, spec: Spec, *, entity: tuple[str, str] | 
 # --- סגירה: תשובה, פקיעה, ביטול ------------------------------------------------------------------------------------
 
 
-def _row(conn: sqlite3.Connection, ask_id: int) -> sqlite3.Row | None:
+def _row(conn: SqlConnection, ask_id: int) -> sqlite3.Row | None:
     return conn.execute("SELECT * FROM brain_asks WHERE id = ?", (ask_id,)).fetchone()
+
+
+def _must_row(conn: SqlConnection, ask_id: int) -> sqlite3.Row:
+    """השורה שכרגע עודכנה: חייבת להיות שם (אותו 404 של `answer` לשורה שלא נמצאה)."""
+    row = _row(conn, ask_id)
+    if row is None:
+        raise AskError("unknown", 404, "אין שאלה כזו")
+    return row
 
 
 def _label(row: sqlite3.Row, option: str | None) -> str:
@@ -220,14 +228,14 @@ def _entity(row: sqlite3.Row) -> tuple[str, str] | None:
     return (row["entity_kind"], row["entity_key"]) if row["entity_kind"] else None
 
 
-def _close_row(conn: sqlite3.Connection, row: sqlite3.Row, *, verdict: str, reason: str, outcome: str, at: str) -> None:
+def _close_row(conn: SqlConnection, row: sqlite3.Row, *, verdict: str, reason: str, outcome: str, at: str) -> None:
     decision = memory.record(conn, mode=row["mode"], rule=row["point"], action="ASK", verdict=verdict, reason=reason,
                              evidence=[row["id"], row["opened_decision"]], round_id=row["round_id"],
                              entity=_entity(row), outcome=outcome, at=at)
     _update(conn, "UPDATE brain_asks SET closed_decision = ? WHERE id = ?", (decision, row["id"]))
 
 
-def answer(conn: sqlite3.Connection, ask_id: int, option: str, *, by: str, role: str,
+def answer(conn: SqlConnection, ask_id: int, option: str, *, by: str, role: str,
            now: datetime | None = None, only_entity: tuple[str, str] | None = None) -> dict:
     """תשובה של אדם. ``AskError``: ``unknown`` 404, ``closed`` 409 (נענתה, פקעה או בוטלה -- תשובה מאוחרת אינה נקלטת),
     ``forbidden`` 403, ``bad_option`` 400. התשובה היא אפשרות מהרשימה בלבד: אין טקסט חופשי ואין "הקלד שם".
@@ -248,14 +256,14 @@ def answer(conn: sqlite3.Connection, ask_id: int, option: str, *, by: str, role:
                       " closed_at = ? WHERE id = ? AND state = 'open' AND julianday(expires_at) > julianday(?)",
                       (ANSWERED, option, by, role, stamp, ask_id, stamp)):
         raise AskError("closed", 409, "השאלה כבר נסגרה")        # מישהו אחר ענה, או שהיא פקעה, בינתיים
-    row = _row(conn, ask_id)
+    row = _must_row(conn, ask_id)
     label = _label(row, option)
     _close_row(conn, row, verdict="ANSWERED", at=stamp, outcome=f"{by} ענה: {label}",
                reason=f"{row['title_he']}. {by} ({ROLE_HE[role]}) ענה: «{label}»")
-    return view(conn, _row(conn, ask_id), now)
+    return view(conn, _must_row(conn, ask_id), now)
 
 
-def expire_due(conn: sqlite3.Connection, now: datetime | None = None) -> int:
+def expire_due(conn: SqlConnection, now: datetime | None = None) -> int:
     """שאלות פתוחות שהגיע זמנן: ``expired``, וברירת המחדל הבטוחה. נרשם ``EXPIRED`` -- **לא** תשובה. מחזיר כמה נסגרו;
     לעולם אינו זורק (הלולאה שקוראת לו ממשיכה). נקרא מהשעון של השרת, ובנוסף בכל פתיחה, תשובה וקריאה."""
     try:
@@ -294,14 +302,14 @@ def _ttl(row: sqlite3.Row) -> int:
         return 0
 
 
-def cancel(conn: sqlite3.Connection, ask_id: int, why_he: str, now: datetime | None = None) -> bool:
+def cancel(conn: SqlConnection, ask_id: int, why_he: str, now: datetime | None = None) -> bool:
     """הכלל ששאל מושך את השאלה (המצב השתנה, והיא כבר לא רלוונטית). ברירת המחדל הבטוחה; נרשם ``CANCELLED``.
     ``False`` = לא הייתה פתוחה."""
     stamp = _stamp(now or _utcnow())
     if not _update(conn, "UPDATE brain_asks SET state = ?, closed_at = ? WHERE id = ? AND state = 'open'",
                       (CANCELLED, stamp, ask_id)):
         return False
-    row = _row(conn, ask_id)
+    row = _must_row(conn, ask_id)
     _close_row(conn, row, verdict="CANCELLED", at=stamp, outcome=f"בוטלה: {why_he}",
                reason=f"{row['title_he']}. בוטלה ({why_he}): «{_label(row, row['safe_default'])}» (ברירת המחדל הבטוחה)")
     return True
@@ -310,7 +318,7 @@ def cancel(conn: sqlite3.Connection, ask_id: int, why_he: str, now: datetime | N
 # --- מה הכלל עושה, ומה המסכים מציגים ---------------------------------------------------------------------------------
 
 
-def resolution(conn: sqlite3.Connection, ask_id: int, now: datetime | None = None) -> Resolution | None:
+def resolution(conn: SqlConnection, ask_id: int, now: datetime | None = None) -> Resolution | None:
     """מה לעשות עם השאלה: ``answered`` -> מה שהמשתמש בחר; ``expired``/``cancelled`` -> ברירת המחדל הבטוחה, ו-
     ``by_user=False``; ``open`` -> ``option=None`` (מחכים). ``None`` = אין שאלה כזו (לא הצלחנו לבדוק: אין פעולה).
     ברירת מחדל שנשמרה הרסנית או לא מוכרת (שורה פגומה) אינה מבוצעת: ``option=None``."""
@@ -329,7 +337,7 @@ def resolution(conn: sqlite3.Connection, ask_id: int, now: datetime | None = Non
     return Resolution(row["state"], default["id"], False)
 
 
-def view(conn: sqlite3.Connection, row: sqlite3.Row, now: datetime | None = None, *, closed_outcome: str | None = None) -> dict:
+def view(conn: SqlConnection, row: sqlite3.Row, now: datetime | None = None, *, closed_outcome: str | None = None) -> dict:
     """השורה כפי שהקונסולה והסוכן קוראים אותה -- אותו טקסט בכל מסך. ``expires_in_s`` רק לשאלה פתוחה."""
     now = now or _utcnow()
     out = {k: row[k] for k in ("id", "point", "title_he", "detail_he", "safe_default", "mode", "round_id", "created_at",
@@ -359,17 +367,17 @@ def _why(row: sqlite3.Row, outcome: str | None) -> str | None:
     return outcome.removeprefix("בוטלה: ")
 
 
-def open_asks(conn: sqlite3.Connection, now: datetime | None = None) -> list[dict]:
+def open_asks(conn: SqlConnection, now: datetime | None = None) -> list[dict]:
     expire_due(conn, now)
     return [view(conn, r, now) for r in conn.execute("SELECT * FROM brain_asks WHERE state = 'open' ORDER BY id")]
 
 
-def recent_closed(conn: sqlite3.Connection, limit: int = 20, now: datetime | None = None) -> list[dict]:
+def recent_closed(conn: SqlConnection, limit: int = 20, now: datetime | None = None) -> list[dict]:
     return [view(conn, r, now) for r in conn.execute(
         "SELECT * FROM brain_asks WHERE state != 'open' ORDER BY id DESC LIMIT ?", (max(int(limit), 0),))]
 
 
-def history(conn: sqlite3.Connection, *, days: int = HISTORY_DAYS, state: str | None = None, who: str | None = None,
+def history(conn: SqlConnection, *, days: int = HISTORY_DAYS, state: str | None = None, who: str | None = None,
             kind: str | None = None, q: str | None = None, limit: int = HISTORY_LIMIT,
             now: datetime | None = None) -> dict:
     """שאלות שנסגרו ב-``days`` הימים האחרונים (עד ``HISTORY_DAYS``), החדשה ראשונה. ``total`` = כמה נסגרו בטווח בלי הסינון,
@@ -416,7 +424,7 @@ def history(conn: sqlite3.Connection, *, days: int = HISTORY_DAYS, state: str | 
             "days": days, "today": today}
 
 
-def prune_history(conn: sqlite3.Connection, now: datetime | None = None) -> int:
+def prune_history(conn: SqlConnection, now: datetime | None = None) -> int:
     """שאלה שנסגרה לפני יותר מ-``HISTORY_DAYS`` ימים יוצאת מהטבלה (ההחלטה שלה נשארת ב-``brain_decisions`` לפי כלל השמירה
     שלה). לעולם אינו זורק; מחזיר כמה יצאו."""
     try:
@@ -431,7 +439,7 @@ def prune_history(conn: sqlite3.Connection, now: datetime | None = None) -> int:
         return 0
 
 
-def for_machine(conn: sqlite3.Connection, mac: str, now: datetime | None = None) -> list[dict]:
+def for_machine(conn: SqlConnection, mac: str, now: datetime | None = None) -> list[dict]:
     """מה שה-hello אומר למכונה: השאלות הפתוחות עליה שהיא רשאית לענות עליהן, וגם שאלות שנסגרו בעשר-חמש-עשרה הדקות
     האחרונות (``RECENT_CLOSED_S``) -- מסך שעוד מחכה לומד מהן שנענתה במקום אחר או שפקעה, ומה ברירת המחדל. ריק = אין."""
     now = now or _utcnow()

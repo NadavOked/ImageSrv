@@ -31,7 +31,7 @@ import re
 import sqlite3
 
 from server.disks import drawer_slots
-from server.db import _write_lock, now_iso, writing
+from server.db import _write_lock, now_iso, SqlConnection, writing
 
 
 #: ערכי DMI שיצרני לוחות משאירים כשלא מילאו את השדה — מנורמלים (``_norm``).
@@ -81,13 +81,13 @@ def _product(inventory_json: str | None) -> str | None:
     return model_key(inv.get("dmi") if isinstance(inv, dict) else None)
 
 
-def model_of(conn: sqlite3.Connection, mac: str) -> str | None:
+def model_of(conn: SqlConnection, mac: str) -> str | None:
     row = conn.execute("SELECT inventory_json FROM machine_inventory WHERE mac = ?"
                        " ORDER BY id DESC LIMIT 1", (mac,)).fetchone()
     return _product(row["inventory_json"]) if row else None
 
 
-def models_by_mac(conn: sqlite3.Connection) -> dict[str, str]:
+def models_by_mac(conn: SqlConnection) -> dict[str, str]:
     rows = conn.execute(
         "SELECT mac, inventory_json FROM machine_inventory"
         " WHERE id IN (SELECT MAX(id) FROM machine_inventory GROUP BY mac)").fetchall()
@@ -99,18 +99,18 @@ def _map(row: sqlite3.Row) -> dict:
             "set_at": row["set_at"], "set_by": row["set_by"]}
 
 
-def get(conn: sqlite3.Connection, model: str | None) -> dict | None:
+def get(conn: SqlConnection, model: str | None) -> dict | None:
     if not model:
         return None
     row = conn.execute("SELECT * FROM model_slot_maps WHERE model = ?", (model,)).fetchone()
     return _map(row) if row else None
 
 
-def all_maps(conn: sqlite3.Connection) -> dict[str, dict]:
+def all_maps(conn: SqlConnection) -> dict[str, dict]:
     return {r["model"]: _map(r) for r in conn.execute("SELECT * FROM model_slot_maps")}
 
 
-def for_mac(conn: sqlite3.Connection, mac: str) -> dict | None:
+def for_mac(conn: SqlConnection, mac: str) -> dict | None:
     """מיפוי הדגם שחל על המכונה — ``None`` כשיש לה מיפוי משלה, כשאין לה דגם,
     או כשלדגם אין מיפוי."""
     row = conn.execute("SELECT drawer_slots FROM machines WHERE mac = ?", (mac,)).fetchone()
@@ -121,7 +121,7 @@ def for_mac(conn: sqlite3.Connection, mac: str) -> dict | None:
     return get(conn, model_of(conn, mac))
 
 
-def by_mac(conn: sqlite3.Connection) -> dict[str, dict]:
+def by_mac(conn: SqlConnection) -> dict[str, dict]:
     """``{mac: מיפוי הדגם}`` לכל מכונה רשומה שהוא חל עליה — שאילתה לכל תשובת API."""
     maps = all_maps(conn)
     if not maps:
@@ -135,7 +135,7 @@ def by_mac(conn: sqlite3.Connection) -> dict[str, dict]:
     return out
 
 
-def machines_of(conn: sqlite3.Connection, model: str) -> list[str]:
+def machines_of(conn: SqlConnection, model: str) -> list[str]:
     models = models_by_mac(conn)
     return [r["mac"] for r in conn.execute("SELECT mac FROM machines ORDER BY mac")
             if models.get(r["mac"]) == model]
@@ -207,7 +207,7 @@ def _replace_machine(conn, mac, slots, names, user, now) -> None:
                      " VALUES (?, ?, ?, ?, ?)", (mac, key, name, now, user))
 
 
-def save(conn: sqlite3.Connection, mac: str, scope: str, slots: list[str] | None,
+def save(conn: SqlConnection, mac: str, scope: str, slots: list[str] | None,
          names: dict[str, str] | None, user: str, replace_machine_maps: bool = False) -> dict:
     """שומר (או, ``slots=None``, מחזיר לברירת המחדל) את המיפוי בהיקף שנבחר.
     LookupError = המכונה לא רשומה; ValueError = אין לה דגם (היקף ``model``);
@@ -253,7 +253,7 @@ def _complete(slots, names, disks):
     return done, {moved.get(k, k): v for k, v in names.items()}
 
 
-def complete_ordinals(conn: sqlite3.Connection, mac: str, disks) -> bool:
+def complete_ordinals(conn: SqlConnection, mac: str, disks) -> bool:
     """hello: "NVMe n" שנוסף ידנית מקבל את כתובת ה-PCI כשהמכונה מדווחת NVMe
     n-י (נדב 22/10: "הכתובת נשלמת אוטומטית"). כתיבה רק כשיש מה להשלים."""
     changed = False

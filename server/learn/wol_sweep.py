@@ -5,18 +5,17 @@ records every wake through `server.learn.wol` -- one module that imports both cl
 """
 from __future__ import annotations
 
-import sqlite3
 import time
 from datetime import datetime, timezone
 
 from server.agent import held
-from server.db import _write_lock, journal, writing
+from server.db import _write_lock, journal, SqlConnection, writing
 from server.learn import wol as learn_wol
 from server.net import wol
 from server.system import steadyclock
 
 
-def sweep(conn: sqlite3.Connection, send=None, now: float | None = None) -> None:
+def sweep(conn: SqlConnection, send=None, now: float | None = None) -> None:
     """משעון החדר: שליחה חוזרת מוקדמת, והתראה על רצף. לעולם אינו זורק."""
     wall = time.time() if now is None else now
     now = steadyclock.now() if now is None else now

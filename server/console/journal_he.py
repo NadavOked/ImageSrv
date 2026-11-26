@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import re
-import sqlite3
+from server.db import SqlConnection
 
 from server.brain import budget as brain_budget, veto as brain_veto   # #3064: תוויות המתג, הספים והגבול העליון
 from server.brain import shadowgate as brain_shadowgate   # #3563
@@ -677,6 +677,7 @@ SETTINGS_HE = {
     brain_budget.SETTING: brain_budget.LABEL_HE,   # #3064 (שלב 3): הגבול העליון של תקציב הרשת
     brain_drawerhold.SETTING: brain_drawerhold.LABEL_HE,   # #2023: השלמה מעכבת רק את המגירה שנפגעה
     brain_cpucap.SETTING: brain_cpucap.LABEL_HE,   # #3064 (K12): שער המעבד
+    "brain_scheduled_cast": "המתנה למשכפלים לפני שידור",   # #3569
     brain_rateinputs.SETTING: brain_rateinputs.LABEL_HE,   # #3977: שני קלטי הקצב של מנוע החתיכות
     brain_completing.SETTING: "המוח: אימות והורדה מחדש של חתיכות שלא תאמו (במקום כתיבה מחדש של כל הדיסק)",   # #3064 (B30)
     **brain_recall.LABELS_HE,   # #3064 (שלב 5): ספי ההחלטות לפי הזיכרון
@@ -831,7 +832,7 @@ def _expand_note(detail: str) -> str:
 class JournalTranslator:
     """בונה את מילוני השמות פעם אחת לכל בקשת יומן — לא שאילתה לשורה."""
 
-    def __init__(self, conn: sqlite3.Connection, library: ImageLibrary):
+    def __init__(self, conn: SqlConnection, library: ImageLibrary):
         self._machines = {
             row["mac"]: f'{machine_names.label(row["role"], row["suffix"])} · {row["label"]}'   # #3123
             for row in conn.execute(

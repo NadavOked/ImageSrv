@@ -231,7 +231,7 @@ chunk_partition_drawers() {
             CHUNK_OUT="$CHUNK_DIR/recv.out" CHUNK_TELL="" _chunk_run "המקלט של מחיצה $_cp_idx (מעבר $_cp_pass)" "$_cp_pid" "$_cp_idx" "$@"; _cp_rc=$?; [ -z "${CHUNK_RELIST:-}" ] || { set -- $_disks; CHUNK_RELIST=""; }   # #3181: a drawer came back under another name inside the pass
             log "partition $_cp_idx: chunkcast recv pass $_cp_pass rc=$_cp_rc: $(tail -n 1 "$CHUNK_DIR/recv.out" 2>/dev/null)"; _chunk_feed end "$CHUNK_DIR/recv.out"
             _chunk_verdicts "$_cp_idx" "$@"; _chunk_counters "$_cp_idx" "$@"; chunk_loss_end "$CHUNK_DIR/recv.out"   # the pass's last word: the counters, the ledger files, and what it lost (chunkloss.sh)
-            awk '$1 == "skipped" { print $2, $3 } $1 == "stray" || $1 == "loss_shape" { print $1, $2 }' "$CHUNK_DIR/recv.out" > "$CHUNK_DIR/skipped" 2>/dev/null || rm -f "$CHUNK_DIR/skipped"   # this pass's, for "ended" (+ `stray`, #1079: chunkgate.sh)
+            awk '$1 == "skipped" { print $2, $3 } $1 == "stray" || $1 == "loss_shape" || $1 == "bad_chunk" { print $1, $2 }' "$CHUNK_DIR/recv.out" > "$CHUNK_DIR/skipped" 2>/dev/null || rm -f "$CHUNK_DIR/skipped"   # this pass's, for "ended" (+ `stray`, #1079: chunkgate.sh)
             case "$_cp_rc" in
                 0|4|5) ;;   # the pass ended, or stalled with its state written, or no target is left: the ledger says what is there
                 3) # the first pass never came: the machine has nothing -- it listens again, and fails there unless the server holds the wave (#2388).

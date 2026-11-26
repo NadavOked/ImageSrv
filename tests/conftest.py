@@ -679,3 +679,12 @@ def room_slots(conn, drawers: dict[str, list[str]],
     conn.commit()
     return [{"mac": mac, "ports": list(range(1, len(serials) + 1))}
             for mac, serials in drawers.items()]
+
+
+@pytest.fixture(autouse=True)
+def _isolate_live_receiver_links():
+    from server.rounds import nic_live
+
+    nic_live.forget()
+    yield
+    nic_live.forget()

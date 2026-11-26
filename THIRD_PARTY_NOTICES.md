@@ -185,7 +185,8 @@ nvme-cli (GPL-2.0+), nwipe (GPL-2.0+, some files GPL-2.0), tpm2-tools
 
 * Linux kernel and the modules in the initramfs: GPL-2.0 (section B).
 * Firmware in the initramfs, shipped as binary blobs (from Debian
-  `firmware-realtek` and `firmware-intel-graphics`, non-free-firmware):
+  `firmware-realtek`, `firmware-intel-graphics` and, on the USB stick only,
+  `firmware-amd-graphics` (#1937, #3077), non-free-firmware):
   * `rtl_nic/*` (Realtek): Debian license id `binary-redist-Realtek-permissive`
     (distribution permitted with the copyright notice accompanying it); the
     `rtl8153*` and `rtl8156*` files: `binary-redist-Realtek-restrictive`
@@ -197,7 +198,19 @@ nvme-cli (GPL-2.0+), nwipe (GPL-2.0+, some files GPL-2.0), tpm2-tools
     conditions and disclaimer must be reproduced in the accompanying
     documentation; no reverse engineering; Intel's name may not be used to
     endorse derived products.
-  The ISO pool carries the whole of both packages: the rest of
+  * `radeon/*` (AMD; only the R600 to Evergreen files of `--radeon-legacy-firmware`,
+    the USB stick's HP 6005 Pro, no UVD), from `firmware-amd-graphics`
+    (version 20250410-2 as read on the Debian 13 test server 19/11; the exact one of a
+    given stick is in its `packages.tsv`). Debian's copyright file gives two license
+    ids for these files. `binary-redist-AMD-restrictive` (`radeon/*.bin`):
+    redistribution in binary form only; no reverse engineering, decompilation or
+    disassembly; the copyright notice, the permission notice and the disclaimers must
+    be reproduced in the documentation; a notice that the files are subject to US
+    export laws. `binary-redist-AMD-permissive` (`radeon/*_cp.bin`, `R600_me`,
+    `R600_pfp`, `RS780_*`, `RV*_me`, `RV*_pfp`): an MIT-style permission
+    notice. The full text of both is in the package's copyright file, which an image that packs
+    these files carries as `usr/share/doc/licenses/firmware-amd-graphics.copyright`.
+  The ISO pool carries the whole of the first two packages: the rest of
   `firmware-realtek` (`rtl_bt/*` and others) is under the same two Realtek
   ids, and `firmware-intel-graphics` also has one `intel/ipu` file under
   `binary-redist-Intel-2`.
@@ -238,6 +251,15 @@ nvme-cli (GPL-2.0+), nwipe (GPL-2.0+, some files GPL-2.0), tpm2-tools
     file; their license is not verified.
   * `firmware-ath9k-htc` (Debian main): BSD-3-Clause-Clear.
   * `firmware-carl9170` (Debian main): GPL-2.0+.
+
+* **The package list of an image** (#3077): `build_initramfs.sh` writes
+  `usr/share/doc/licenses/packages.tsv` into every initramfs it builds (name,
+  version, section, license ids of each package that owns a packed file). The USB
+  build writes it beside the image as `imagesrv-usb-<version>-packages.tsv` and the
+  ISO build puts it at the ISO root as `imagesrv-live-packages.tsv`; attach it to the
+  Release. A package of a `non-free` section that is not in
+  `tools/nonfree-declared.txt` stops the build, and every name in that file must have
+  its notice in this section (`tests/test_license_manifest_3077.py`).
 
 ### G. Build tools (ISO pool / installed server)
 

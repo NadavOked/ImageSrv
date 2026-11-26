@@ -46,11 +46,15 @@ def build(tmp: Path, **env: str) -> tuple[subprocess.CompletedProcess, Path | No
         (host / name).write_bytes(f"fake {name}\n".encode() * 32)
     tree = host / "initrd-tree"
     (tree / "lib" / "modules" / KVER).mkdir(parents=True)
+    # #3077: build_initramfs.sh writes the package list into the initrd; the stick build refuses one without it
+    pkglist = tree / "usr" / "share" / "doc" / "licenses" / "packages.tsv"
+    pkglist.parent.mkdir(parents=True)
+    pkglist.write_text("firmware-amd-graphics\t20250410-2\tnon-free-firmware/kernel\tGPL-2+\n")
     initrd = host / "initrd.img"
     # zstd, as build_initramfs.sh writes it: since #2091 the USB build runs the lab gate on
     # the initrd, and since #1775 the gate refuses an uncompressed cpio (round 20, 31/10)
     subprocess.run([BASH, "-o", "pipefail", "-c",
-                    f"cd {posix(tree)!r} && find lib | cpio -o -H newc --quiet | zstd -q > {posix(initrd)!r}"],
+                    f"cd {posix(tree)!r} && find lib usr | cpio -o -H newc --quiet | zstd -q > {posix(initrd)!r}"],
                    check=True, timeout=60, stdin=subprocess.DEVNULL)
     run_env = {k: v for k, v in os.environ.items() if not k.startswith("USB_")}
     run_env.update(IMAGESRV_MODULES_DIR=posix(host / "modules"), IMAGESRV_KERNEL_DIR=posix(host / "boot"),

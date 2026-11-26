@@ -46,11 +46,11 @@ test('#3064: the group is "המוח של השרת", with a foot that says shadow
   assert.match(g.foot, /אין אחוז קבוע/);
 });
 
-test('#3064: the mode row, the network ceiling (the upper bound) and the CPU gate switch (#3456, off by default) are in that group, in Hebrew; no technical threshold', () => {
+test('#3064: the mode row, the network ceiling (the upper bound) and the CPU gate switch (#3456, off by default) and the scheduled-cast switch (#3569) are in that group, in Hebrew; no technical threshold', () => {
   const c = ctx();
   const rows = vm.runInContext('SETTING_ROWS.filter((r) => r.card === "brain")', c);
   assert.deepEqual(JSON.parse(JSON.stringify(rows.map((r) => r.key))),
-    ['brain_veto_mode', 'brain_net_ceiling_mbps', 'brain_cpu_gate']);
+    ['brain_veto_mode', 'brain_net_ceiling_mbps', 'brain_cpu_gate', 'brain_scheduled_cast']);
   assert.equal(rows[2].type, 'switch');
   assert.ok(!rows[2].defaultOn, 'the CPU gate is off unless the operator turns it on');
   assert.equal(rows[0].type, 'brainmode');

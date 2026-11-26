@@ -22,7 +22,7 @@ _rf() {
 }
 _num() { case "$1" in ''|*[!0-9]*) return 1 ;; esac; printf '%s' "$1"; }
 _hex() {
-    _h=$(tr -d '\n\r ' < "$1" 2>/dev/null | tr 'A-F' 'a-f'); _h=${_h#0x}
+    _h=$(tr -d '\n\r ' 2>/dev/null < "$1" | tr 'A-F' 'a-f'); _h=${_h#0x}
     case "$_h" in ''|*[!0-9a-f]*) return 1 ;; esac; printf '%s' "$_h"
 }
 _jint() {

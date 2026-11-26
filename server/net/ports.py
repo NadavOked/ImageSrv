@@ -271,6 +271,12 @@ class Listeners:
             elif not want and port_id in self._wanted:
                 await self._close(port_id)
 
+    def _running_loop(self) -> asyncio.AbstractEventLoop:
+        """הלולאה של `serve` -- או `ListenerError` בשמו כשהמנהל לא רץ (כמו `request`)."""
+        if self._loop is None:
+            raise ListenerError("מנהל המאזינים אינו רץ")
+        return self._loop
+
     def request(self, port_id: str, want: bool, timeout: float | None = None) -> None:
         """המתג מתהליכון אחר — ה-endpoint הוא `def` שרץ במאגר של uvicorn,
         והלולאה בתהליכון הראשי. חוסם עד שהמעבר הסתיים (או נכשל)."""
@@ -357,9 +363,10 @@ class Listeners:
             for task in new_tasks:
                 task.add_done_callback(lambda t, p=port_id: self._task_done(p, t))
             try:
-                deadline = self._loop.time() + OPEN_TIMEOUT
+                loop = self._running_loop()
+                deadline = loop.time() + OPEN_TIMEOUT
                 while not all(s.started for s in new):
-                    if any(t.done() for t in new_tasks) or self._loop.time() > deadline:
+                    if any(t.done() for t in new_tasks) or loop.time() > deadline:
                         for s in new:
                             s.should_exit = True
                         await asyncio.wait(new_tasks, timeout=CLOSE_TIMEOUT)
@@ -423,10 +430,11 @@ class Listeners:
         # הראיה החיובית: `started` — uvicorn מסמן אותו רק אחרי create_server.
         # עד אז המשימה שנגמרה היא כשל bind (uvicorn עושה sys.exit).
         try:
-            began = self._loop.time()
+            loop = self._running_loop()
+            began = loop.time()
             deadline = began + timeout
             while not all(s.started for s in servers):
-                if any(t.done() for t in tasks) or self._loop.time() > deadline:
+                if any(t.done() for t in tasks) or loop.time() > deadline:
                     self._wanted.discard(port_id)
                     for s in servers:
                         s.should_exit = True
@@ -440,7 +448,7 @@ class Listeners:
                         f"({cause or f'לא דיווח started בזמן — {timeout:g} שניות'})"
                     ) from cause
                 await asyncio.sleep(0.01)
-            took = self._loop.time() - began
+            took = loop.time() - began
             if took > OPEN_TIMEOUT:
                 # #3151: האיטיות עצמה ביומן — בלעדיה "עלה" אחרי 30 שניות נראה כמו "עלה".
                 log.warning("listener %s: started after %.1f s (a console toggle gives up "

@@ -122,6 +122,23 @@ def test_the_ceilings_are_enforced_while_streaming_and_leave_no_file(env, monkey
     assert _list(client).json()["backups"] == []
 
 
+def test_an_unreadable_record_refuses_a_sustained_copy_without_exposing_details(env, caplog):
+    _rt, client, data = env
+    folder = write_backup._dir(data, Q["serial"])
+    folder.mkdir(parents=True)
+    record = folder / f"{'a' * 32}.json"
+    record.with_suffix(".bin").write_bytes(b"x")
+    broken = "{not json"
+    record.write_text(broken, encoding="utf-8")
+
+    r = _post(client, b"x" * (2 * 4096), regions=f"{OFF}:4096", pattern=4096)
+    assert r.status_code == 500 and r.json()["code"] == "unreadable", r.text
+    assert broken not in r.text and record.name not in r.text
+    assert r.json()["error"] == write_backup.UNREADABLE_OPEN
+    assert record.name in caplog.text and "line 1 column 2" in caplog.text
+    assert sorted(p.name for p in folder.iterdir()) == [record.with_suffix(".bin").name, record.name]
+
+
 def test_a_stale_mark_and_a_missing_blob_work_on_a_sustained_copy_like_on_a_short_one(env):
     _rt, client, _data = env
     blob = os.urandom(REGION + PATTERN)

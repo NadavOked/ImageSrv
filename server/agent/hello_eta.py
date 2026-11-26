@@ -22,7 +22,7 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
+from server.db import SqlConnection
 import threading
 import time
 from collections.abc import Callable
@@ -71,7 +71,7 @@ def _epoch(stamp: object) -> int | None:
     return int(got.timestamp()) if got is not None and got.tzinfo is not None else None
 
 
-def _forecast(conn: sqlite3.Connection, library, session: dict, trusted: bool) -> dict | None:
+def _forecast(conn: SqlConnection, library, session: dict, trusted: bool) -> dict | None:
     round_row = room.active_round(conn)
     wave = conn.execute("SELECT state, started_at FROM sessions WHERE id = ?", (session["id"],)).fetchone()
     if round_row is None or wave is None or round_row["wave_session_id"] != session["id"]:
@@ -87,7 +87,7 @@ def _forecast(conn: sqlite3.Connection, library, session: dict, trusted: bool) -
     return {"ends_at": ends, "why": None, "clock": True} if trusted else {"ends_at": None, "why": "clock", "clock": False}
 
 
-def add(conn: sqlite3.Connection, library, answer: dict, trust: ClockTrust) -> None:
+def add(conn: SqlConnection, library, answer: dict, trust: ClockTrust) -> None:
     """מוסיף `session.forecast` (ו-`session.started_at`, #2980) ל-`answer` של hello — רק למחשב שיכפול בגל חדר **רץ**.
     לעולם אינו מפיל את ה-hello: הערכה שנכשלה היא `why: "error"`, לא 500 למכונה שעומדת לכתוב."""
     session = answer.get("session")
