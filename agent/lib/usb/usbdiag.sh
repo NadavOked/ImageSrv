@@ -273,7 +273,7 @@ usb_diag() {
         for _dg_b in "$SYSROOT"/sys/block/*; do
             [ -e "$_dg_b" ] && echo "${_dg_b##*/} removable=$(cat "$_dg_b/removable" 2>/dev/null) size=$(cat "$_dg_b/size" 2>/dev/null)"
         done
-        echo "boot media (never a source or a target): $(tr '\n' ' ' < "$RUN_DIR/usb-media.disks" 2>/dev/null)"
+        echo "boot media (never a source or a target): $(tr '\n' ' ' 2>/dev/null < "$RUN_DIR/usb-media.disks")"
         echo; echo "== required modules that did not load"; cat "$RUN_DIR/modules.failed" 2>/dev/null || echo "(none)"
         echo; echo "== framebuffer / DRM"; ls "$SYSROOT/sys/class/graphics" "$SYSROOT/sys/class/drm" 2>&1
         echo; echo "== dmesg: ata, ahci, piix, pata, nvme, vmd, scsi, sd (no identify/serial lines)"

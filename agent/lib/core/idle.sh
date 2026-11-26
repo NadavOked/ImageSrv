@@ -35,7 +35,15 @@ idle_exempt() {
     [ "${D_SESSION_STATE:-}" = "open" ] && return 0  # a wave is about to start
     [ "${D_TASK:-null}" != "null" ] && return 0       # work was just handed to us
     idle_round_shown && return 0                     # #1560: a round this machine opened or shows
+    idle_tool_running && return 0                    # #3057: a toolbox tool is running: working, not waiting
     return 1
+}
+
+idle_tool_running() {
+    # #3057: tool.running = the pid of the toolbox job the kiosk started (tools.sh tools_running, the same read). A dead pid
+    # is no tool -- a killed kiosk must not keep the machine on for ever. Not sourced by the kiosk, so no shared function.
+    [ -s "$RUN_DIR/tool.running" ] || return 1
+    IFS= read -r _it_pid < "$RUN_DIR/tool.running" && [ -n "$_it_pid" ] && kill -0 "$_it_pid" 2>/dev/null
 }
 
 idle_round_shown() {
@@ -222,7 +230,7 @@ end_countdown() {
     end_problems "$@" && _ec_held=1
     end_record "$_ec_k" "$_ec_d" "$_ec_t"
     if [ "$_ec_held" = 1 ]; then
-        log "$_ec_w -- a disk has a problem: the results stay on the screen until 'כבה', no count (#2024): $(tr '\n' ';' < "$RUN_DIR/end.problems" 2>/dev/null)"
+        log "$_ec_w -- a disk has a problem: the results stay on the screen until 'כבה', no count (#2024): $(tr '\n' ';' 2>/dev/null < "$RUN_DIR/end.problems")"
     elif [ "$_ec_off" = 1 ]; then log "$_ec_w -- automatic power-off disabled; waiting for 'כבה עכשיו'"
     else log "$_ec_w -- powering off in ${_ec_s}s, or at once on 'כבה עכשיו'"; fi
     _ec_n=0   # counted like idle_check's warning; the screen counts to the epoch

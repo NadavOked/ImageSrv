@@ -126,8 +126,8 @@ def toolbox_binaries() -> frozenset[str]:
 #: Key: (file, function).
 DYNAMIC_SITES: dict[tuple[str, str], str] = {
     ("waits.sh", "capped_run"): "it IS the runner: it runs \"$@\"; its callers are resolved through RUNNERS",
-    ("smart.sh", "smart_probe"): "capped_run's command is \"$SMARTCTL\", default `smartctl` (smart.sh:20; BINARIES); "
-                                 "the variable exists so a test can put a stub there",
+    ("smart.sh", "_smart_probe_run"): "capped_run's command is \"$SMARTCTL\", default `smartctl` (smart.sh:20; BINARIES); "
+                                       "the variable exists so a test can put a stub there",
     ("hwissues.sh", "hw_refresh"): "\"$DMESG\", default `dmesg` (hwissues.sh; a busybox applet) -- "
                                    "the variable exists so a test can put a stub there (#1921)",
     ("hwissues.sh", "_hw_dmesg_t"): "the same \"$DMESG\" (dmesg), moved here by #1937: the time a drawer was identified at",

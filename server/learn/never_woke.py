@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
+from server.db import SqlConnection
 from datetime import datetime
 
 from server.disks import drawer_slots, f1_marks, model_slots
@@ -62,10 +62,13 @@ def _epoch(stamp) -> float | None:
         return None
 
 
-def waiting(conn: sqlite3.Connection, now: float | None = None, mac: str | None = None) -> dict[str, dict] | None:
+def waiting(conn: SqlConnection, now: float | None = None, mac: str | None = None) -> dict[str, dict] | None:
     """`{mac: {sent_at, waited_s, typical_s, after_s, resent}}` לכל מכונה שהערתה האחרונה לא נענתה, שלא
     נראתה מאז, ושעבר הסף (או רק `mac`). `None` = הקריאה נכשלה (לא "אין אף אחת")."""
     now = steadyclock.now() if now is None else now      # #3826: `sent_epoch` נכתב ב-steadyclock (#3768)
+    skew = steadyclock.skew()
+    if abs(skew) <= steadyclock.JUMP_SECONDS:
+        skew = 0.0                # בלי קפיצה — השוואה כמו תמיד (כמו `auto_reboot._stale`)
     try:
         out: dict[str, dict] = {}
         for row in conn.execute(
@@ -74,7 +77,10 @@ def waiting(conn: sqlite3.Connection, now: float | None = None, mac: str | None 
                 " AND w.id = (SELECT MAX(id) FROM wol_wakes WHERE mac = w.mac)"
                 + (" AND w.mac = ?" if mac is not None else ""), (mac,) if mac is not None else ()).fetchall():
             seen = _epoch(row["last_seen"])
-            if seen is not None and seen >= row["sent_epoch"]:
+            # #3834: `last_seen` הוא שעון קיר (מכויל ב-`clockstep.rebase` לבסיס הקיר *הנוכחי*) ו-`sent_epoch`
+            # הוא steadyclock. `skew` = גודל הקפיצה, ולכן `seen - skew` הוא אותה חותמת בסקאלה של
+            # `sent_epoch`. `last_seen` עצמו אינו משתנה — זו החותמת שהמפעיל רואה.
+            if seen is not None and seen - skew >= row["sent_epoch"]:
                 continue              # דיברה עם השרת אחרי השליחה — הגיעה
             typical = learn_wol.stats(conn, row["mac"], now)["typical_s"]
             waited = now - row["sent_epoch"]
@@ -118,7 +124,7 @@ def f1_disk(disks, slots: list[str] | None, marks: dict[str, dict] | None = None
     return min(found, key=lambda item: item[0])[1] if found else None
 
 
-def arrived(conn: sqlite3.Connection, mac: str, now: float | None = None) -> None:
+def arrived(conn: SqlConnection, mac: str, now: float | None = None) -> None:
     """מכונה שהקונסולה הציגה "לא הגיע · ייתכן F1" דיברה עם השרת: הדיסק שהוצג (SMART אדום) נרשם `auto`.
     נקרא מ-`hello._record_seen` **לפני** `net_seen` (ראו למעלה). הדיסק נלקח מ-`net_devices.disks_json`
     כפי שנשמר בהדלקה הקודמת — בדיוק מה שהקונסולה הציגה. לעולם אינו זורק: קריאה שנכשלה אינה סימון."""

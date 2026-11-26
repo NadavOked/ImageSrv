@@ -30,7 +30,8 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
+from server.db import SqlConnection
+from typing import TypeGuard
 
 from server.brain import memory
 from server.learn import server_cap, server_io
@@ -46,11 +47,11 @@ WOULD_CAP, WITHIN, UNPROVEN = "WOULD_CAP", "WITHIN", "UNPROVEN"
 SHADOW_OUTCOME_HE = "צל: הקצב של הגל לא שונה"
 
 
-def _count(value: object) -> bool:
+def _count(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
-def _number(value: object) -> bool:
+def _number(value: object) -> TypeGuard[float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0
 
 
@@ -58,7 +59,7 @@ def fmt(bps: int | None) -> str:
     return "?" if bps is None else f"{max(1, bps // 10 ** 6)}m"
 
 
-def _basis(conn: sqlite3.Connection, session_id: str) -> str | None:
+def _basis(conn: SqlConnection, session_id: str) -> str | None:
     """`server_io.basis` של הגל, או None -- לא נמדד (או לא נקרא). קריאה בלבד."""
     row = conn.execute("SELECT basis FROM server_io WHERE kind = 'wave' AND ref = ?", (session_id,)).fetchone()
     return row["basis"] if row is not None else None
@@ -71,10 +72,10 @@ def _pushed(sample: dict, disk: str | None) -> bool:
     ניחוש מנומק של אחרים, לא כויל על chunkcast."""
     asked, sent = sample.get("asked_bps"), sample.get("sent_bps")
     return (disk == "ok" and server_io.sender_asleep(sample) is None and _count(sent) and sent > 0
-            and sent >= drive_rates.KEEP_UP * asked)
+            and _count(asked) and sent >= drive_rates.KEEP_UP * asked)
 
 
-def _waves(conn: sqlite3.Connection, loss_permille: float) -> list[dict]:
+def _waves(conn: SqlConnection, loss_permille: float) -> list[dict]:
     """הגלים שמלמדים, מהחדש לישן: `{"session_id", "interface", "macs", "rate", "lossy", "disk", "pushed"}`.
     `rate` = מה שהמנוע דחף (`min(asked, sent)`; `asked` כשלא ידוע), `lossy` = האבדן שנמדד מעל `loss_permille`,
     `pushed` = ראיה חיובית שהשולח לא היה הגבול (`_pushed`, #3536): רק גל כזה מוכיח קצב.
@@ -96,7 +97,8 @@ def _waves(conn: sqlite3.Connection, loss_permille: float) -> list[dict]:
         disk = _basis(conn, row["session_id"])
         if disk == "server_disk":
             continue
-        link = decision.get("link") if isinstance(decision.get("link"), dict) else {}
+        raw_link = decision.get("link")
+        link = raw_link if isinstance(raw_link, dict) else {}
         roster = [d for d in decision.get("roster") or [] if isinstance(d, dict)]
         out.append({"session_id": row["session_id"], "interface": link.get("interface"),
                     "macs": {d["mac"] for d in roster if d.get("mac")},
@@ -119,7 +121,7 @@ def _of_path(waves: list[dict], kind: str, name: str) -> dict:
             "disk_unmeasured": best is not None and best["disk"] is None}
 
 
-def learn(conn: sqlite3.Connection, interface: str | None, macs, loss_permille: float) -> dict[str, dict]:
+def learn(conn: SqlConnection, interface: str | None, macs, loss_permille: float) -> dict[str, dict]:
     """לכל נתיב -- `{"path", "bps", "waves", "session_id", "lossy_bps", "disk_unmeasured"}`. `bps` None = אין הוכחה.
     `macs` = משכפלי הגל; `interface` = כרטיס ההפצה (None = לא נקרא: אין נתיב כרטיס). `waves` = כמה הוכחות נקיות
     שלא בוטלו (לא רק זו שנבחרה). לעולם אינו זורק: כשל בקריאה = מילון ריק (אין תקרה, לא תקרה שהומצאה)."""
@@ -142,7 +144,7 @@ def bound(bits: int, caps: dict[str, dict]) -> tuple[int, str | None]:
     return (low, who) if low < bits else (bits, None)
 
 
-def _server_path(conn: sqlite3.Connection) -> dict[str, dict]:
+def _server_path(conn: SqlConnection) -> dict[str, dict]:
     """#3464: תקרת הקריאה של דיסק הספרייה (`server_cap.learn`) כנתיב נוסף ב-`bound`, בצורה `{"bps": N}`. עוד לא נלמדה
     (`None`) = אין נתיב, לא נתיב עם 0. אינו זורק."""
     try:
@@ -157,12 +159,13 @@ def _server_path(conn: sqlite3.Connection) -> dict[str, dict]:
         return {}
 
 
-def shadow(conn: sqlite3.Connection, session_id: str, decision: dict, bits: int, loss_permille: float) -> None:
+def shadow(conn: SqlConnection, session_id: str, decision: dict, bits: int, loss_permille: float) -> None:
     """הגל יצא ב-`bits`: שורת צל אחת לגל -- מה היה הקצב אילו נלקח `min` עם התקרות הנלמדות. לא משנה דבר. לעולם אינו זורק."""
     try:
         if any(d["action"] == ACTION for d in memory.decisions(conn, round_id=session_id, rule=RULE, limit=64)):
             return                                            # גל אחד, שורה אחת
-        link = decision.get("link") if isinstance(decision.get("link"), dict) else {}
+        raw_link = decision.get("link")
+        link = raw_link if isinstance(raw_link, dict) else {}
         macs = [d.get("mac") for d in decision.get("roster") or [] if isinstance(d, dict)]
         caps = {**learn(conn, link.get("interface"), macs, loss_permille), **_server_path(conn)}
         would, who = bound(bits, caps)

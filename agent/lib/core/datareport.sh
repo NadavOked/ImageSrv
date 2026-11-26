@@ -25,7 +25,7 @@ agent_log_send() {
     _al_f="$RUN_DIR/agentlog.gz"; _al_t="$RUN_DIR/agentlog.txt"
     # #3031: partclone's progress frames out, then the tail; $_al_cut = 1 when the agent cut (or could not tell)
     _al_cut=$(agent_log_prepare "$_al_t")
-    if gzip -c < "$_al_t" > "$_al_f" 2>/dev/null \
+    if gzip -c 2>/dev/null < "$_al_t" > "$_al_f" \
         && curl -sfS --max-time "${HTTP_TIMEOUT:-10}" -H "Content-Type: application/gzip" -H "X-Imagesrv-Log-Cut: $_al_cut" \
             --data-binary "@$_al_f" "$SERVER/api/v1/agent/log?mac=$MAC&session_id=${1:-}&reason=$_al_r" \
             > /dev/null 2>&1; then
@@ -65,7 +65,7 @@ agent_log_prepare() {
     # (principle 5): the server sets agent_logs.truncated from this (#3031).
     _ap_all="$1.all"
     if tr '\r' '\n' 2>/dev/null < "$LOG_FILE" > "$1.raw" && agent_log_compact "$1.raw" > "$_ap_all" 2>/dev/null; then
-        _ap_l=$(wc -l < "$_ap_all" 2>/dev/null | tr -d ' '); _ap_b=$(wc -c < "$_ap_all" 2>/dev/null | tr -d ' ')
+        _ap_l=$(wc -l 2>/dev/null < "$_ap_all" | tr -d ' '); _ap_b=$(wc -c 2>/dev/null < "$_ap_all" | tr -d ' ')
         tail -n "$AGENT_LOG_LINES" "$_ap_all" 2>/dev/null | tail -c "$AGENT_LOG_BYTES" > "$1" 2>/dev/null
         case "$_ap_l$_ap_b" in
             ''|*[!0-9]*) echo 1 ;;   # the count itself failed
@@ -153,7 +153,7 @@ _cpu_throttle() {
     _ct=
     for _ctf in "${SYSROOT:-}"/sys/devices/system/cpu/cpu[0-9]*/thermal_throttle/core_throttle_count; do
         [ -r "$_ctf" ] || continue
-        read -r _ctv < "$_ctf" 2>/dev/null
+        read -r _ctv 2>/dev/null < "$_ctf"
         case "$_ctv" in ''|*[!0-9]*) continue ;; esac
         _ct=$(( ${_ct:-0} + _ctv ))
     done

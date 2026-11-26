@@ -316,7 +316,7 @@ static void sb_bay(App *a, cairo_t *cr, Rect b, int bay,
     int avail = (int)fmax(120, (fr - fl) - (d && !o ? sb_end_block_w(cr, s, d) + 16 + 22 + sb_pill_w(cr, pill_label) : 0));
     Text tn = text_make(cr, FONT_SANS, 18, 600, name, avail, DIR_RTL);
     Text ts = sub[0] ? text_make(cr, FONT_SANS, 12, 400, sub, avail, DIR_RTL) : (Text){ NULL, 0, 0 };
-    Text tw = why ? text_make(cr, FONT_SANS, 12, 400, why, avail, DIR_RTL) : (Text){ NULL, 0, 0 };
+    Text tw = why ? lc_reason_text(cr, 12, 400, why, avail) : (Text){ NULL, 0, 0 };
     Text tw2 = f1_sub[0] ? text_make(cr, FONT_SANS, 12, 400, f1_sub, avail, DIR_RTL) : (Text){ NULL, 0, 0 };   /* #1858 */
     if (tw.layout) {   /* the reason is wrapped; only if even the whole row cannot hold its lines does it end in "…" (a crowded cage: 640x480) */
         int lines = pango_layout_get_line_count(tw.layout), lh = lines > 0 ? tw.h / lines : tw.h;
@@ -621,9 +621,9 @@ void standby_status_info(App *a, cairo_t *cr, double left, double cy) {
     if (s->hello_age < 0) snprintf(hello, sizeof hello, "טרם הסתיים hello ראשון");   /* RLM below: Latin-first lines stay RTL */
     else {
         ago(s->hello_age, when, sizeof when);
-        if (s->hello_rc == 200 && standby_conn(s) == STANDBY_OK) snprintf(hello, sizeof hello, "השרת ענה hello 200 · %s", when);
+        if (s->hello_rc == 200 && standby_conn(s) == STANDBY_OK) snprintf(hello, sizeof hello, "השרת מגיב · %s", when);
         else if (s->hello_rc == 200) { char hm[16]; clock_ago(a, s->hello_age, hm, sizeof hm); snprintf(hello, sizeof hello, RLM "hello אחרון שנענה: %s", hm); }
-        else if (s->hello_rc >= 0) snprintf(hello, sizeof hello, "השרת ענה hello %d · %s", s->hello_rc, when);
+        else if (s->hello_rc >= 0) snprintf(hello, sizeof hello, "השרת החזיר שגיאה %d · %s", s->hello_rc, when);
         else snprintf(hello, sizeof hello, RLM "hello אחרון %s · ללא תשובה", when);
     }
     Text h = text_make(cr, FONT_SANS, 12, 400, hello, 0, DIR_RTL);

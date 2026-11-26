@@ -14,9 +14,14 @@ import sqlite3
 import threading
 import time
 import weakref
+from collections import deque
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TypedDict
+
+from server.core.sqlconn import SqlConnection
+from server.system import steadyclock
 
 #: התור של הכותבים בתוך התהליך. חיבור נפרד לכל תהליכון (ראו Database
 #: למטה) פותר את *שיתוף מצב הטרנזאקציה*, אבל לא את **ההוגנות**: sqlite
@@ -71,6 +76,11 @@ class _TimedLock:
 #: A wait longer than this is said in the server log, once per wait (a healthy server never gets here).
 WRITE_WAIT_WARN_S = 1.0
 _write_wait = {"waits": 0, "total_s": 0.0, "max_s": 0.0, "slow": 0, "gave_up": 0}
+#: #4115: the waits worth showing the operator (long ones and give-ups), each as ``(monotonic time, long, got)``, so
+#: the health row can say "in the last hour" and clear itself. Written only on the slow path of the lock, never on a take
+#: that did not wait. In process memory: a restart starts it empty. 256 is plenty for a window; more only caps the count.
+WRITE_WAIT_WINDOW_S = 3600.0
+_write_wait_recent: deque = deque(maxlen=256)
 
 
 def _note_write_wait(seconds: float, got: bool) -> None:
@@ -82,6 +92,8 @@ def _note_write_wait(seconds: float, got: bool) -> None:
         _write_wait["max_s"] = seconds
     if not got:
         _write_wait["gave_up"] += 1
+    if seconds >= WRITE_WAIT_WARN_S or not got:
+        _write_wait_recent.append((time.monotonic(), seconds >= WRITE_WAIT_WARN_S, got))
     if seconds >= WRITE_WAIT_WARN_S:
         _write_wait["slow"] += 1
         log.warning("waited %.1f s for the write lock%s", seconds, "" if got else " and gave up")
@@ -92,6 +104,16 @@ def write_wait_stats() -> dict:
     that had to wait, their total and longest wait in seconds, how many were over
     ``WRITE_WAIT_WARN_S``, and how many gave up (a timed ``acquire``)."""
     return dict(_write_wait)
+
+
+def write_wait_recent(window_s: float | None = None) -> dict:
+    """#4115: what the health row reads: within the last ``window_s`` seconds, how many takes waited
+    ``WRITE_WAIT_WARN_S`` or longer (``long``) and how many gave up (``gave_up``)."""
+    window_s = WRITE_WAIT_WINDOW_S if window_s is None else window_s
+    cutoff = time.monotonic() - window_s
+    events = [e for e in tuple(_write_wait_recent) if e[0] >= cutoff]
+    return {"window_s": window_s, "long": sum(1 for e in events if e[1]),
+            "gave_up": sum(1 for e in events if not e[2])}
 
 
 _write_lock = _TimedLock()
@@ -1797,8 +1819,17 @@ CHECKPOINT_WAIT_MS = 1000
 #: #3129 (A-DB-02): what the checkpoints saw, since the server started. `log_frames` is the WAL's length
 #: at the checkpoint and `checkpointed` how much of it went to the DB file; the gap is the WAL that
 #: stayed (readers on an old snapshot). Counted where the result is read, so a WAL that grows is a number.
-_wal = {"checkpoints": 0, "busy": 0, "skipped": 0, "max_log_frames": 0,
-        "last_log_frames": None, "last_checkpointed": None}
+class _WalCounters(TypedDict):
+    checkpoints: int
+    busy: int
+    skipped: int
+    max_log_frames: int
+    last_log_frames: int | None
+    last_checkpointed: int | None
+
+
+_wal: _WalCounters = {"checkpoints": 0, "busy": 0, "skipped": 0, "max_log_frames": 0,
+                      "last_log_frames": None, "last_checkpointed": None}
 
 
 def wal_stats() -> dict:
@@ -2235,7 +2266,7 @@ def _net_seen_unchanged(row: sqlite3.Row, ip: str | None,
     return 0 <= age < NET_SEEN_MIN_INTERVAL_SECONDS
 
 
-def note_monitor_on(conn: sqlite3.Connection, mac: str, on: bool | None) -> None:
+def note_monitor_on(conn: SqlConnection, mac: str, on: bool | None) -> None:
     """#2844: רושם אם שירות המוניטור רץ באתחול הזה. None (סוכן ישן) = לא נוגעים.
     נכתב רק כשהערך השתנה, כדי שה-hello לא יהפוך לכתיבה בכל סבב."""
     if on is None:
@@ -2249,7 +2280,7 @@ def note_monitor_on(conn: sqlite3.Connection, mac: str, on: bool | None) -> None
 
 
 def net_seen(
-    conn: sqlite3.Connection, mac: str, ip: str | None,
+    conn: SqlConnection, mac: str, ip: str | None,
     disks_json: str | None = None,
     monitor_secret: str | None = None,
     monitor_auth: str | None = None,
@@ -2346,7 +2377,7 @@ def net_seen(
         journal(conn, "ip_changed", f"{mac} {row['ip']} → {ip}", machine=mac)
 
 
-def monitor_rekeyed(conn: sqlite3.Connection, mac: str, used: str,
+def monitor_rekeyed(conn: SqlConnection, mac: str, used: str,
                     following: str) -> bool:
     """#1837: אימות מוניטור הצליח עם ``used``, והמכונה כבר עברה ל-``following``
     (`monitor.next_secret` / `rekey_secret` ב-`agent/monitor.c`). השרת עובר
@@ -2365,7 +2396,12 @@ def monitor_rekeyed(conn: sqlite3.Connection, mac: str, used: str,
         return cur.rowcount == 1
 
 
-def agent_seen(conn: sqlite3.Connection, mac: str,
+def progress_seen_now() -> datetime:
+    """#3752: זמן UTC מכויל לקפיצות שעון, לכתיבה ולקריאה של `progress_seen`."""
+    return datetime.fromtimestamp(steadyclock.now(), timezone.utc)
+
+
+def agent_seen(conn: SqlConnection, mac: str,
                now: datetime | None = None) -> bool:
     """#1839: בקשה מאומתת מהסוכן שאינה hello (progress) היא ראיה שהמכונה חיה.
 
@@ -2378,7 +2414,7 @@ def agent_seen(conn: sqlite3.Connection, mac: str,
     `monitor` קורא את שתיהן. בחניקה של #136: ``SELECT`` קורא, וכתיבה רק
     כשהחותמת ישנה מ-15ש' — או כשאי אפשר לקרוא אותה (עיקרון 5). מכונה שמעולם
     לא שלחה hello אינה נוצרת כאן. מחזיר האם נכתב."""
-    now = now or datetime.now(timezone.utc)
+    now = now or progress_seen_now()
     row = conn.execute("SELECT progress_seen FROM net_devices WHERE mac = ?",
                        (mac,)).fetchone()
     if row is None:
@@ -2397,12 +2433,12 @@ def agent_seen(conn: sqlite3.Connection, mac: str,
     return True
 
 
-def get_setting(conn: sqlite3.Connection, key: str) -> str | None:
+def get_setting(conn: SqlConnection, key: str) -> str | None:
     row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
     return row["value"] if row else None
 
 
-def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+def set_setting(conn: SqlConnection, key: str, value: str) -> None:
     """מסלול הכתיבה של **כל** מסכי ההגדרות — DHCP, כתובות, מתגים,
     רשימת התיקיות. `_write_lock` ו-`writing` מאותה סיבה כמו ב-`net_seen`
     (#313): כתיבה שנכשלה כאן משאירה את החיבור בטרנזאקציה, ומשם הקונסולה
@@ -2416,7 +2452,7 @@ def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
         )
 
 
-def set_settings(conn: sqlite3.Connection, pairs: dict[str, str],
+def set_settings(conn: SqlConnection, pairs: dict[str, str],
                  remove: tuple[str, ...] | list[str] = ()) -> None:
     """כותב כמה הגדרות ב**טרנזאקציה אחת** — הכל-או-כלום (#732).
 
@@ -2461,7 +2497,12 @@ def note_disk_full(what: str) -> None:
 #: #3129 (A-DB-03): journal rows that were NOT written because the partition was full, since the
 #: server started. By design the caller goes on (#1892); this is how many rows that cost, and which
 #: event was the last one lost.
-_journal_lost = {"count": 0, "last_event": None}
+class _JournalLost(TypedDict):
+    count: int
+    last_event: str | None
+
+
+_journal_lost: _JournalLost = {"count": 0, "last_event": None}
 
 
 def journal_rows_lost() -> dict:
@@ -2473,7 +2514,7 @@ def last_disk_full() -> dict | None:
     return dict(_last_full) or None
 
 
-def journal(conn: sqlite3.Connection, event: str, detail: str = "", user: str = "", *,
+def journal(conn: SqlConnection, event: str, detail: str = "", user: str = "", *,
             machine: str | None = None, round_id: str | None = None,
             class_id: str | None = None) -> int | None:
     """שורת יומן. נובע ישירות מריבוי המשתמשים — מי עשה מה ומתי.
@@ -2526,7 +2567,7 @@ def journal(conn: sqlite3.Connection, event: str, detail: str = "", user: str = 
     return cur.lastrowid
 
 
-def journal_detail(conn: sqlite3.Connection, row_id: int, detail: str) -> bool:
+def journal_detail(conn: SqlConnection, row_id: int, detail: str) -> bool:
     """#3157: מחליף את ``detail`` של שורת יומן קיימת -- רק המונה של אזהרת שרת
     חוזרת (`server.system.serverlog`) כותב כך. אותה נעילה ואותו טיפול במחיצה
     מלאה כמו ב-`journal`. ``True`` = שורה אחת עודכנה; ``False`` = השורה לא

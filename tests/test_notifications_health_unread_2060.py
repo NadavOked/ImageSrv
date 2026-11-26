@@ -33,7 +33,7 @@ def _drawer(tmp_path: Path, health_js: str, error: str = "", machines_js: str = 
     assert fn, "topNotifications is gone from console.js"
     probe = tmp_path / "probe.cjs"
     probe.write_text("""
-const esc = (x) => String(x);
+const esc = (x) => String(x), ltrRuns = (x) => String(x);
 const machineIsFailed = (m) => m.state === "failed", machineName = (m) => m.name || m.mac;
 const healthStatusClass = (s) => (s === "bad" ? "err" : "warn"), healthStatusLabel = (s) => (s === "bad" ? "תקלה" : "אזהרה");
 const UI = { pill: (cls, text) => JSON.stringify({ cls, text }) };

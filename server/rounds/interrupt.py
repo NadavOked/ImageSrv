@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 
 from server.agent import timing as agent_timing
 from server.brain import resume as brain_resume
-from server.db import _settle, _write_lock, get_setting, journal, now_iso, update_one, writing
+from server.db import _settle, _write_lock, get_setting, journal, now_iso, SqlConnection, update_one, writing
 from server.rounds import ledger
 
 log = logging.getLogger("imagesrv.interrupt")
@@ -71,7 +71,7 @@ def parse(raw: object) -> int | None:
     return value if MINIMUM <= value <= MAXIMUM else None
 
 
-def ask_minutes(conn: sqlite3.Connection) -> int:
+def ask_minutes(conn: SqlConnection) -> int:
     """ההגדרה, או ברירת המחדל. פגומה = ברירת המחדל עם שורת יומן — לעולם לא "בלי תקרה"."""
     raw = get_setting(conn, SETTING)
     if raw is None:
@@ -93,13 +93,15 @@ def _utcnow() -> datetime:
 
 
 def _age(stamp: object, now: datetime) -> float | None:
+    if not isinstance(stamp, str):
+        return None
     try:
         return (now - datetime.fromisoformat(stamp)).total_seconds()
     except (TypeError, ValueError):
         return None
 
 
-def _waited(conn: sqlite3.Connection, ask: sqlite3.Row, now: datetime) -> tuple[float | None, bool]:
+def _waited(conn: SqlConnection, ask: sqlite3.Row, now: datetime) -> tuple[float | None, bool]:
     """כמה שניות השאלה כבר מחכה, והאם הגל שלה עוד רץ. השעון נספר **מהמאוחר** מבין רגע
     השאלה לבין סוף הגל שבו המכונה כבתה (הכרעת נדב 13/11, סקירה 1-ג): התשובה מיושמת רק
     כשהגל מסתיים, ולכן משכפל שכבה בדקה 2 של גל ארוך מקבל את מלוא הזמן **אחרי** סוף הגל.
@@ -117,7 +119,7 @@ def _waited(conn: sqlite3.Connection, ask: sqlite3.Row, now: datetime) -> tuple[
     return max(0.0, min(raised, ended)), False
 
 
-def _library_round(conn: sqlite3.Connection, wave_id: str) -> sqlite3.Row | None:
+def _library_round(conn: SqlConnection, wave_id: str) -> sqlite3.Row | None:
     """הסבב הפעיל שהגל הזה שייך לו — רק כשהמקור שלו הוא הספרייה."""
     row = conn.execute(
         "SELECT * FROM room_rounds WHERE wave_session_id = ? AND state = 'active'",
@@ -127,7 +129,7 @@ def _library_round(conn: sqlite3.Connection, wave_id: str) -> sqlite3.Row | None
     return row
 
 
-def handed(conn: sqlite3.Connection, wave_id: str, mac: str,
+def handed(conn: SqlConnection, wave_id: str, mac: str,
            ports: list[int] | None, disks: list | None) -> bool:
     """המשכפל מקבל את הגל הרץ — פותחים לו יומן (`hello.build_answer`). **לעולם אינו זורק**
     (סקירה 1-ז). ``False`` = היומן לא נכתב: הקורא אינו מוסר את הגל ב-hello הזה (בלי יומן
@@ -149,7 +151,7 @@ def handed(conn: sqlite3.Connection, wave_id: str, mac: str,
         return False
 
 
-def other_boot(conn: sqlite3.Connection, wave_id: str, mac: str) -> bool:
+def other_boot(conn: SqlConnection, wave_id: str, mac: str) -> bool:
     """האם היומן של הגל הזה רשום על אתחול **אחר** מזה של ה-hello הנוכחי (סקירה 1-א).
     בלי יומן או בלי מזהה אתחול — ``False`` ("לא ידוע" אינו "אותחל"). בדיקה שנכשלה —
     ``True``: הגל אינו נמסר שוב על סמך בדיקה שלא רצה, ו-`checked` רושם את הכשל."""
@@ -161,7 +163,7 @@ def other_boot(conn: sqlite3.Connection, wave_id: str, mac: str) -> bool:
     return was is not None and now_boot is not None and was != now_boot
 
 
-def checked(conn: sqlite3.Connection, session: sqlite3.Row, mac: str,
+def checked(conn: SqlConnection, session: sqlite3.Row, mac: str,
             member: sqlite3.Row) -> bool:
     """`on_rejoin` מתוך מסלול ה-hello — **לעולם אינו זורק** (סקירה 1-ז, כמו `room.pulse`,
     #177: hello שמחזיר 500 אומר למשכפל שהשרת מת). מחזיר האם הבדיקה **רצה**; כשלא,
@@ -181,7 +183,7 @@ def checked(conn: sqlite3.Connection, session: sqlite3.Row, mac: str,
         return False
 
 
-def on_rejoin(conn: sqlite3.Connection, session: sqlite3.Row, mac: str,
+def on_rejoin(conn: SqlConnection, session: sqlite3.Row, mac: str,
               member: sqlite3.Row) -> bool:
     """hello מצטרף של חבר שכבר בתוך הזרם (`room.rejoined_mid_stream`). מחזיר האם
     זו מכונה ש**אותחלה** וחזרה בזמן — ואז נרשמת שאלה למפעיל.
@@ -220,7 +222,7 @@ def on_rejoin(conn: sqlite3.Connection, session: sqlite3.Row, mac: str,
     return True
 
 
-def _b42_ask(conn: sqlite3.Connection, round_row: sqlite3.Row, mac: str, incomplete: int) -> None:
+def _b42_ask(conn: SqlConnection, round_row: sqlite3.Row, mac: str, incomplete: int) -> None:
     """B42 (צל): בפס ייצור המוח היה עונה לבד ("כתוב מחדש"). השאלה למפעיל נשארת. לעולם אינו זורק."""
     from server.brain import line as brain_line      # noqa: PLC0415
     from server.rounds import prodline                # noqa: PLC0415
@@ -231,25 +233,25 @@ def _b42_ask(conn: sqlite3.Connection, round_row: sqlite3.Row, mac: str, incompl
         log.exception("brain: B42 on %s failed", round_row["id"])
 
 
-def asks(conn: sqlite3.Connection, round_id: str) -> list[sqlite3.Row]:
+def asks(conn: SqlConnection, round_id: str) -> list[sqlite3.Row]:
     return conn.execute(
         "SELECT * FROM round_interrupts WHERE round_id = ? ORDER BY raised_at, mac",
         (round_id,)).fetchall()
 
 
-def holds(conn: sqlite3.Connection, round_id: str) -> bool:
+def holds(conn: SqlConnection, round_id: str) -> bool:
     """האם יש על הסבב שאלה (פתוחה או שנענתה וטרם יושמה) — הגל שנגמר אינו מחליט לבד."""
     return bool(asks(conn, round_id))
 
 
-def _clear(conn: sqlite3.Connection, round_id: str) -> None:
+def _clear(conn: SqlConnection, round_id: str) -> None:
     _settle(conn)
     with _write_lock, writing(conn):
         conn.execute("DELETE FROM round_interrupts WHERE round_id = ?", (round_id,))
         conn.execute("DELETE FROM write_ledger WHERE round_id = ?", (round_id,))
 
 
-def _name(conn: sqlite3.Connection, mac: str) -> str:
+def _name(conn: SqlConnection, mac: str) -> str:
     row = conn.execute("SELECT suffix FROM machines WHERE mac = ?", (mac,)).fetchone()
     return row["suffix"] if row is not None and row["suffix"] else mac
 
@@ -265,7 +267,7 @@ def _left_he(count: int) -> str:
     return "דיסק אחד לא הושלם." if count == 1 else f"{count} דיסקים לא הושלמו."
 
 
-def machines(conn: sqlite3.Connection, round_row: sqlite3.Row,
+def machines(conn: SqlConnection, round_row: sqlite3.Row,
              rows: list[sqlite3.Row] | None = None) -> list[dict]:
     """לכל מכונה שעליה שואלים: השם שלה, והדיסקים שלא הושלמו (לפי הזהות)."""
     return [{"mac": a["mac"], "name": _name(conn, a["mac"]),
@@ -273,7 +275,7 @@ def machines(conn: sqlite3.Connection, round_row: sqlite3.Row,
             for a in (asks(conn, round_row["id"]) if rows is None else rows)]
 
 
-def settle(conn: sqlite3.Connection, store, round_row: sqlite3.Row, total: int) -> bool:
+def settle(conn: SqlConnection, store, round_row: sqlite3.Row, total: int) -> bool:
     """הסבב פעיל ובלי גל (`room._resume`). מחזיר ``True`` כשההכרעה כאן — ממתינים
     לתשובה, או שהסבב נסגר, או שהגל הבא נפתח — והקורא אינו ממשיך; ``False`` כשאין שאלה."""
     rows = asks(conn, round_row["id"])
@@ -318,7 +320,7 @@ def settle(conn: sqlite3.Connection, store, round_row: sqlite3.Row, total: int) 
     return True
 
 
-def _follow_moved(conn: sqlite3.Connection, round_row: sqlite3.Row,
+def _follow_moved(conn: SqlConnection, round_row: sqlite3.Row,
                   rows: list[sqlite3.Row]) -> None:
     """"כתוב מחדש" כותב את הדיסק שלא הושלם **איפה שהוא יושב עכשיו** (הכרעת נדב 12/11: אותו
     דיסק לפי המספר הסידורי, לא לפי המגירה). דיסק שהוחזר לחריץ שלא נבחר לסבב: הבחירה של
@@ -360,7 +362,7 @@ def _follow_moved(conn: sqlite3.Connection, round_row: sqlite3.Row,
                     machine=mac, round_id=round_row["id"])
 
 
-def _credit_moved(conn: sqlite3.Connection, round_row: sqlite3.Row,
+def _credit_moved(conn: SqlConnection, round_row: sqlite3.Row,
                   rows: list[sqlite3.Row], total: int) -> int:
     """דיסק שהושלם לפני הכיבוי ויושב עכשיו במגירה אחרת נספר בסבב לפי הזהות שלו
     (`ledger.completed_here`) — אחרת "כתוב מחדש" היה כותב אותו שוב. מחזיר את הספירה
@@ -393,7 +395,7 @@ def _credit_moved(conn: sqlite3.Connection, round_row: sqlite3.Row,
     return row["written_drives"] + len(serials)
 
 
-def _end(conn: sqlite3.Connection, round_row: sqlite3.Row, state: str,
+def _end(conn: SqlConnection, round_row: sqlite3.Row, state: str,
          reason: str | None) -> bool:
     """סוגר את הסבב שעומד על שאלה. התביעה היא ה-UPDATE (#177): רק מי שסגר כותב ליומן."""
     _settle(conn)
@@ -408,7 +410,7 @@ def _end(conn: sqlite3.Connection, round_row: sqlite3.Row, state: str,
     return ended
 
 
-def answer(conn: sqlite3.Connection, round_row: sqlite3.Row, choice: str,
+def answer(conn: SqlConnection, round_row: sqlite3.Row, choice: str,
            user: str, origin: str, macs: object) -> int:
     """התשובה של המפעיל, על השאלות הפתוחות של המכונות ש**המסך הציג לו** (`macs`, סקירה
     1-ב): שאלה של משכפל שנרשמה אחרי שהוא ראה את המסך נשארת פתוחה, והסבב ממשיך לחכות
@@ -435,7 +437,7 @@ def answer(conn: sqlite3.Connection, round_row: sqlite3.Row, choice: str,
     return count
 
 
-def for_cloner(conn: sqlite3.Connection, mac: str) -> dict | None:
+def for_cloner(conn: SqlConnection, mac: str) -> dict | None:
     """השדה `interrupt` בתשובת ה-hello של משכפל: השאלה הפתוחה ש**עליו** — מזהה הסבב והדיסקים
     שלא הושלמו (החריץ עכשיו, והחריץ שבו נכתבו). ``None`` כשאין שאלה פתוחה עליו. קריאה בלבד,
     ו**לעולם אינו זורק** (מסלול ה-hello, #177): שאלה שלא נקראה פשוט אינה מוצגת במסך המשכפל —
@@ -456,7 +458,7 @@ def for_cloner(conn: sqlite3.Connection, mac: str) -> dict | None:
         return None
 
 
-def view(conn: sqlite3.Connection, round_row: sqlite3.Row) -> dict | None:
+def view(conn: SqlConnection, round_row: sqlite3.Row) -> dict | None:
     """מה שהמסך מציג (`/room.round.interrupt`), או ``None`` כשאין שאלה. קריאה בלבד."""
     rows = asks(conn, round_row["id"]) if round_row["state"] == "active" else []
     if not rows:
@@ -466,6 +468,7 @@ def view(conn: sqlite3.Connection, round_row: sqlite3.Row) -> dict | None:
     waiting = [a for a in rows if a["answer"] is None]
     clocks = [_waited(conn, a, _utcnow()) for a in waiting]
     waited = [w for w, _running in clocks]
+    known = [w for w in waited if w is not None]
     return {
         "machines": who,
         "disks": left,
@@ -477,6 +480,6 @@ def view(conn: sqlite3.Connection, round_row: sqlite3.Row) -> dict | None:
         "wave_running": any(running for _w, running in clocks),
         # כמה שניות נשארו עד שהסבב נסגר בלי תשובה (מסוף הגל, אם הוא מאוחר מהשאלה);
         # None = כבר נענתה, או שלא ניתן למדוד.
-        "expires_in_s": (max(0, int(ask_minutes(conn) * 60 - max(waited)))
-                         if waited and all(w is not None for w in waited) else None),
+        "expires_in_s": (max(0, int(ask_minutes(conn) * 60 - max(known)))
+                         if waited and len(known) == len(waited) else None),
     }

@@ -7,7 +7,7 @@
 let USB_STICK = null, usbStickError = "";
 
 const USBS_STATE_HE = {
-  none: "לא מחובר", ambiguous: "יותר מהתקן אחד", unsafe: "לא נגעתי בו", unread: "לא נבדק", busy: "בשימוש",
+  none: "לא מחובר", ambiguous: "יותר מהתקן אחד", unsafe: "לא נגעתי בו", unread: "לא נבדק", busy: "בשימוש", unsupported: "לא נתמך כאן",
 };
 const USBS_RESULT = { ok: ["ok", "הצליח"], failed: ["err", "נכשל"], stopped: ["warn", "נעצר"] };
 const USBS_CTRL_HE = { ahci: "AHCI", ide: "IDE", other: "אחר" };
@@ -42,13 +42,15 @@ function usbsRow(r) {
 
 function usbsDeviceCard(s) {
   const d = s.device, plan = s.plan;
+  if (s.state === "unsupported")   // #2693 (Nadav 23/11): Hyper-V -- the sentence instead of the option: no retry, no sync
+    return UI.card({ title: "ההתקן המחובר", acts: UI.pill("", USBS_STATE_HE.unsupported), body: `<div class="usbs-none"><div class="usbs-help"><b>${esc(s.reason)}</b></div></div>` });
   if (s.state !== "connected" || !d) {
     const why = USBS_STATE_HE[s.state] || "לא מחובר";
     const main = s.state === "none"
       ? `<b>לא זוהה דיסק-און-קי עם התווית IMGSRV_DATA.</b><small>מחברים אותו פיזית לשרת, בחדר השרתים. אין קליטה אוטומטית בחיבור: אחרי החיבור לוחצים "סנכרן".</small>`
       : `<b>${esc(s.reason || "לא ניתן להשתמש בהתקן")}</b>${(s.notes || []).map((n) => `<small>${esc(n)}</small>`).join("")}`;
     const retry = `<button class="btn" type="button" onclick="refreshPage()">בדיקה מחדש</button>`;
-    const vm = `<div class="usbs-help"><b>השרת הוא VM?</b><small><b>Hyper-V:</b> דיסק pass-through לאורח. <b>ESXi:</b> USB passthrough מהמארח לאורח. במכונה פיזית ההתקן זמין ישירות. השרת מזהה רק התקן שמופיע לו על אפיק USB; דיסק שהמארח מציג לו כדיסק רגיל לא יזוהה, והעמוד יאמר זאת. ההתקן נקרא לקריאה בלבד.</small></div>`;
+    const vm = `<div class="usbs-help"><b>השרת הוא VM?</b><small><b>Hyper-V:</b> אין תמיכה במקל — להעלות דרך הקונסולה. <b>ESXi:</b> USB passthrough מהמארח לאורח. במכונה פיזית ההתקן זמין ישירות. השרת מזהה רק התקן שמופיע לו על אפיק USB; דיסק שהמארח מציג לו כדיסק רגיל לא יזוהה, והעמוד יאמר זאת. ההתקן נקרא לקריאה בלבד.</small></div>`;
     return UI.card({ title: "ההתקן המחובר", acts: UI.pill("", why), body: `<div class="usbs-none"><div class="usbs-help">${main}</div>${retry}</div>${vm}` });
   }
   const pend = plan
@@ -128,6 +130,7 @@ function usbStickPage() {
   const dl = typeof USB_CLONE !== "undefined" && USB_CLONE && USB_CLONE.available;
   const sync = connected
     ? `<button class="btn primary" type="button" onclick="usbStickSync()">סנכרן</button>`
+    : s && s.state === "unsupported" ? ""   // #2693: no button on Hyper-V, not a disabled one
     : `<button class="btn" type="button" disabled title="${esc(s ? "אין התקן שאפשר לסנכרן" : "הדף לא נקרא")}">סנכרן</button>`;
   const download = `<button class="btn" type="button" onclick="usbCloneSheet()"${dl ? "" : " disabled"} title="${dl ? "" : esc((USB_CLONE && USB_CLONE.reason) || "לא זמין")}">הורדת קובץ ה-USB…</button>`;
   const header = UI.objHeader({

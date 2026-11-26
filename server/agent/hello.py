@@ -18,6 +18,8 @@ import sqlite3
 from collections.abc import Callable
 from urllib.parse import urlsplit
 
+from starlette.types import Scope
+
 from server.agent import timing as agent_timing, bootguard, inventory, probe, registry, unknown_screen
 from server.agent import answer_failure   # #2666
 from server.core import capabilities
@@ -31,7 +33,7 @@ from server.disks import (disk_sets, disk_failures, drawer_slots, shrink_records
                           slot_names, smart_history)
 from server.core.agent_version import server_version
 from server.agent.boot_cancel import cancel_gui_tasks_on_boot
-from server.db import disk_full, get_setting, journal, net_seen, note_disk_full, note_monitor_on
+from server.db import disk_full, get_setting, journal, net_seen, note_disk_full, note_monitor_on, SqlConnection
 from server.agent import readbackhash
 from server.disks import f1_marks, model_slots   # #2001; #1858
 from server.disks import writefloor   # #3268
@@ -60,7 +62,7 @@ def well_formed_monitor_auth(value: object) -> bool:
     return value == "hmac"
 
 
-def off_deploy_vlan(scope: dict | None, server_base: str | None) -> bool:
+def off_deploy_vlan(scope: Scope | None, server_base: str | None) -> bool:
     """האם הבקשה התקבלה על כתובת מקומית שאינה כתובת וילן ההפצה (issue #42).
 
     המקור הוא scope["server"] — ה-sockname של החיבור, שאותו uvicorn ממלא
@@ -79,14 +81,14 @@ def off_deploy_vlan(scope: dict | None, server_base: str | None) -> bool:
     של ספק נשאר רק למקרים החד-פעמיים (scope חסר, TestClient).
     """
     try:
-        host, _port = scope.get("server")
+        host, _port = (scope or {}).get("server", ("", ""))
         configured = urlsplit(server_base).hostname
         return ipaddress.ip_address(host) != ipaddress.ip_address(configured)
     except Exception:  # noqa: BLE001 — כאן זו בדיוק הכוונה
         return False
 
 
-def on_deploy_vlan(scope: dict | None, server_base: str | None) -> bool:
+def on_deploy_vlan(scope: Scope | None, server_base: str | None) -> bool:
     """#1802: הבקשה התקבלה **על כתובת ההפצה** — המראה של `off_deploy_vlan`,
     עם הספק לכיוון ההפוך. שם ספק נספר "בפנים" (שומר שאינו סופר אינו
     שומר); כאן "בפנים" פותח את שרשרת האתחול למכונה לא רשומה, ולכן רק
@@ -94,14 +96,14 @@ def on_deploy_vlan(scope: dict | None, server_base: str | None) -> bool:
     scope חסר ושרת שרשת ההפצה שלו לא הוגדרה (loopback) — כולם False.
     """
     try:
-        host, _port = scope.get("server")
+        host, _port = (scope or {}).get("server", ("", ""))
         configured = urlsplit(server_base).hostname
         return ipaddress.ip_address(host) == ipaddress.ip_address(configured)
     except Exception:  # noqa: BLE001 — ספק = כמו היום
         return False
 
 
-def serves_images(scope: dict | None, server_base: str | None) -> bool:
+def serves_images(scope: Scope | None, server_base: str | None) -> bool:
     """#2666 (הבהרת נדב 07/11): הבקשה התקבלה על כרטיס **שהשרת מפיץ בו אימג'ים**.
 
     זה התנאי של שני המסכים במסלול התפריט — "המחשב הזה לא רשום" (#1802) ומסך
@@ -176,7 +178,7 @@ def self_probe(scope: dict | None) -> bool:
         return False
 
 
-def server_source(scope: dict | None) -> bool:
+def server_source(scope: Scope | None) -> bool:
     """האם מקור בקשת האתחול הוא השרת עצמו.
 
     curl מקומי אל כתובת הממשק יוצא מאותה כתובת; אל localhost הוא
@@ -184,8 +186,8 @@ def server_source(scope: dict | None) -> bool:
     כותרת ה-probe של מסך הבריאות.
     """
     try:
-        client = ipaddress.ip_address(scope.get("client")[0])
-        local = ipaddress.ip_address(scope.get("server")[0])
+        client = ipaddress.ip_address((scope or {}).get("client", ("",))[0])
+        local = ipaddress.ip_address((scope or {}).get("server", ("",))[0])
         return client.is_loopback or client == local
     except Exception:  # noqa: BLE001 — ספק נשאר בהתנהגות הישנה
         return False
@@ -207,7 +209,7 @@ def _debug_boot_skip_once(kind: str, mac: str, client_ip: str | None) -> None:
     log.debug("boot menu for %s from %s not recorded: %s", mac, client_ip, kind)
 
 
-def login_required(conn: sqlite3.Connection, has_open_session: bool,
+def login_required(conn: SqlConnection, has_open_session: bool,
                    off_vlan: bool = False) -> bool:
     """הכלל של אשף השחזור, במקום אחד.
 
@@ -224,7 +226,7 @@ def login_required(conn: sqlite3.Connection, has_open_session: bool,
     return get_setting(conn, "recovery_require_login") == "true"
 
 
-def _ui(conn: sqlite3.Connection, has_open_session: bool,
+def _ui(conn: SqlConnection, has_open_session: bool,
         off_vlan: bool = False, role: str | None = None) -> dict:
     ui = {"language": "he",
           "require_login": login_required(conn, has_open_session, off_vlan)}
@@ -233,7 +235,7 @@ def _ui(conn: sqlite3.Connection, has_open_session: bool,
     return ui
 
 
-def class_deploy_enabled(conn: sqlite3.Connection) -> bool:
+def class_deploy_enabled(conn: SqlConnection) -> bool:
     """#880: המתג של v1 "מהדורת שיכפול". hello למחשב הבנייה מכריז
     עליו (הכרטיס "הפצה לכיתות" מוצג רק כשהוא דלוק), ו-`station.py` אוכף
     אותו שוב בפתיחת הסבב — תפריט שמציע מה שהשרת יסרב לו הוא תפריט
@@ -241,13 +243,13 @@ def class_deploy_enabled(conn: sqlite3.Connection) -> bool:
     return get_setting(conn, "class_deploy_enabled") == "true"
 
 
-def journal_unknown(conn: sqlite3.Connection, mac: str, client_ip: str | None,
+def journal_unknown(conn: SqlConnection, mac: str, client_ip: str | None,
                     suffix: str = "") -> None:
     """שורת `unknown_mac`. `api.py` מרסן אותה לפי MAC ב-hello (#2487)."""
     journal(conn, "unknown_mac", f"{mac} from {client_ip or '?'}{suffix}", machine=mac)
 
 
-def _unknown(conn: sqlite3.Connection, mac: str, client_ip: str | None,
+def _unknown(conn: SqlConnection, mac: str, client_ip: str | None,
              off_vlan: bool = False, record_journal: bool = True) -> dict:
     if record_journal:
         journal_unknown(conn, mac, client_ip)
@@ -303,7 +305,7 @@ def _record_seen(conn, mac, ip, disks, monitor_secret, monitor_auth, prompt,
             l2sense.note_hello(conn, mac, hw_probe.get("netwatch"))
 
 
-def _asks(conn: sqlite3.Connection, mac: str, read_only: bool) -> list[dict] | None:
+def _asks(conn: SqlConnection, mac: str, read_only: bool) -> list[dict] | None:
     """#3654 (K14): שאלות המוח למכונה הזו -- הפתוחות עליה, ואלה שנסגרו ברבע השעה האחרונה (מה שנענה או פקע, ומה ברירת
     המחדל). ``[]`` = נקרא ואין; ``None`` = **לא נקרא** (קריאת-בלבד בלי תופעות לוואי, או כשל): המסך משאיר מה שיש לו, ואינו
     מסיק "אין שאלה" -- עיקרון 5. כשל כאן אינו מפיל hello."""
@@ -317,7 +319,7 @@ def _asks(conn: sqlite3.Connection, mac: str, read_only: bool) -> list[dict] | N
 
 
 def build_answer(
-    conn: sqlite3.Connection,
+    conn: SqlConnection,
     library: ImageLibrary,
     store: SessionStore,
     mac: str,
@@ -385,11 +387,13 @@ def build_answer(
     if (record_seen and disks and machine["role"] in ("cloner", "build")
             and model_slots.complete_ordinals(conn, mac, disks)):
         machine = registry.lookup(conn, mac, all_macs)
+        if machine is None:       # deleted at that very moment: a MAC that is not registered (principle 1), not a 500
+            return _unknown(conn, mac, client_ip, off_vlan, record_journal)
 
     # #880: רק מחשב הבנייה מקבל את השדה — הוא היחיד עם התפריט. סוכן ישן
     # מתעלם משדה שאינו מכיר; סוכן חדש שלא קיבל אותו מתנהג ככבוי.
-    extra = ({"class_deploy_enabled": class_deploy_enabled(conn)}
-             if machine["role"] == "build" else {})
+    extra: dict[str, object] = ({"class_deploy_enabled": class_deploy_enabled(conn)}
+                                if machine["role"] == "build" else {})
     if machine["role"] == "build" and capabilities.tools():
         # #3056: הבחירה שהמפעיל שמר בקונסולה מגיעה לתחנה בתשובה, ולא כקובץ ב-initrd שאף נתיב בנייה לא ארז.
         # רשימה ריקה = "לא נבחרו כלים" (נאמר); שדה חסר = סוכן ישן / גרסה בלי ארגז: התחנה חוזרת לקובץ שב-initrd.
@@ -495,7 +499,7 @@ def build_answer(
         # `agent_loops.note` שיושב באותו מסלול — והכישלון נרשם ביומן
         # ולא נבלע (#177).
         if not read_only:    # #2550: הדופק מקדם את הסבב; את זה מקדם הרקע (`room.sweep`)
-            room.pulse(conn, store, mac)
+            room.pulse(conn, store, mac, joining)     # #3569: a joiner at the deadline joins the wave
             # #1954: דיסק שנבחר כשהמשכפל היה כבוי — אותו דיסק נכתב, אחר או חסר מדולג בגלוי.
             room.wake_check(conn, mac, disks)
             # #2528: השאלה הפתוחה על המשכפל הזה — המסך שלו מציג אותה (בלי כפתורי תשובה: אין שם משתמש מחובר).
@@ -602,7 +606,7 @@ def build_answer(
     return answer
 
 
-def make_resolver(conn: sqlite3.Connection, library: ImageLibrary,
+def make_resolver(conn: SqlConnection, library: ImageLibrary,
                   store: SessionStore, server_base: str | None = None,
                   *, identity_ok: Callable[[str, str | None], bool] | None = None,
                   unknown_journal: Callable[[str, str | None, bool], None] | None = None):

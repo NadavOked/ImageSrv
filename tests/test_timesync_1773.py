@@ -156,6 +156,68 @@ def test_admin_can_read_change_and_check_now(api):
     assert admin.post("/api/console/timesync/check", json={}).json()["synchronized"] is True
 
 
+def _admin_without_chronyc(tmp_path, images_root, clock, monkeypatch, restart):
+    """#3973: the real ``chronyc`` hooks, with nothing called chronyc on PATH. Only ``restart`` and
+    ``sleep`` are ours: the first so the test never touches the host's chrony, the second for speed."""
+    import shutil
+
+    from server.app import create_app
+    from fakesend import Recorder
+    empty = tmp_path / "empty-path"
+    empty.mkdir()
+    monkeypatch.setenv("PATH", str(empty))
+    assert shutil.which("chronyc") is None
+    app = create_app(tmp_path / "data", images_root, "http://10.44.12.10:7712", now_fn=clock,
+                     sender_runner=Recorder(block=True),
+                     host_hooks={"restart": restart, "sleep": lambda _: None})
+    users.create(app.state.ctx.conn, "noc", "admin-pass-123", "admin", by="test", check_policy=False)
+    admin = TestClient(app)
+    complete_console_login(admin, app.state.ctx.conn, "noc", "admin-pass-123")
+    return app, admin
+
+
+def test_check_now_without_chronyc_says_it_could_not_check_and_is_not_a_500(tmp_path, images_root, clock, monkeypatch):
+    """#3973: "could not check" is an answer in Hebrew with ok=false -- not an HTTP 500 (and not the
+    misleading 504 "the time server did not answer", which says chrony was asked and was silent)."""
+    app, admin = _admin_without_chronyc(tmp_path, images_root, clock, monkeypatch, restart=lambda: None)
+    try:
+        response = admin.post("/api/console/timesync/check", json={})
+        body = response.json()
+        assert response.status_code == 200, body
+        assert body["ok"] is False
+        assert body["error"].startswith("לא הצלחנו לבדוק") and "chronyc" in body["error"]
+        assert body["synchronized"] is None        # not False: False would say "checked, and not in sync"
+        assert "No such file" not in body["error"] and "FileNotFoundError" not in body["error"]   # #2543
+    finally:
+        app.state.ctx.chunk.stop()
+
+
+def test_check_now_when_chrony_cannot_be_restarted_is_also_an_answer_not_a_500(tmp_path, images_root, clock, monkeypatch):
+    def restart():
+        raise RuntimeError("הפקודה systemctl לא רצה — הפרטים ביומן השרת")
+    app, admin = _admin_without_chronyc(tmp_path, images_root, clock, monkeypatch, restart=restart)
+    try:
+        response = admin.post("/api/console/timesync/check", json={})
+        assert response.status_code == 200 and response.json()["ok"] is False
+        assert "systemctl" in response.json()["error"] and response.json()["synchronized"] is None
+    finally:
+        app.state.ctx.chunk.stop()
+
+
+def test_check_now_says_ok_true_when_synchronized():
+    machine = ClockMachine()
+    assert timesync.check_now(machine.hooks())["ok"] is True
+
+
+def test_check_now_readable_but_unsynchronized_is_still_the_timeout_not_could_not_check():
+    """Over-broad guard: a chrony that answers and is not in sync after 15 s is a real "no answer from
+    the time server" (504), not "could not check"."""
+    machine = ClockMachine()
+    machine.sources = machine.sources.replace("^*", "^+")
+    with pytest.raises(TimeoutError, match="שרת הזמן לא ענה"):
+        timesync.check_now(machine.hooks())
+
+
 @pytest.mark.parametrize("path,method", [("/api/console/timesync", "get"), ("/api/console/timesync", "post"), ("/api/console/timesync/check", "post")])
 def test_deploy_role_gets_403(api, path, method):
     _, deploy, machine, _ = api

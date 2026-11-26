@@ -42,6 +42,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
+from typing import TypeGuard
 
 from server.brain import memory, veto
 from server.disks import slow_memory
@@ -72,7 +73,7 @@ class Now:
     floor_mbps: int | None = None   # הסף שהסוכן בדק מולו את המגירה הזו (``None`` = לא דווח: סוכן ישן, או מגירה שאין לה סף כזה)
 
 
-def _count(value: object) -> bool:
+def _count(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and 0 < value <= MAX_MBPS
 
 

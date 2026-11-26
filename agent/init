@@ -49,7 +49,7 @@ LIB_DIR="${LIB_DIR:-/usr/lib/imagesrv}"
 # נראה בדיוק כמו מודול שנטען. ‏`sungem: Unknown symbol` נמצא ככה רק
 # כשהודפס dmesg ידנית במעבדה. סופרים, מסווגים ומדווחים בשם (#76, #407).
 MOD_DIR="${MOD_DIR:-/etc/imagesrv}"
-_required=" $(tr '\n' ' ' < "$MOD_DIR/modules.required" 2>/dev/null) "
+_required=" $(tr '\n' ' ' 2>/dev/null < "$MOD_DIR/modules.required") "
 _req_fail=""
 _opt_fail=""
 _dmi="$(cat /sys/class/dmi/id/sys_vendor /sys/class/dmi/id/product_name 2>/dev/null)"

@@ -12,7 +12,7 @@ import sqlite3
 import struct
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Awaitable, Callable
 from urllib.parse import urlsplit
 
@@ -26,7 +26,7 @@ from server.core.logtext import one_line
 from server.console import auth, viewer_sessions
 from server.agent import registry
 from server.agent.api import ServerContext
-from server.db import get_setting, journal, monitor_rekeyed, set_setting
+from server.db import get_setting, journal, monitor_rekeyed, progress_seen_now, set_setting
 from server.system import clockstep
 
 log = logging.getLogger("imagesrv.monitor")
@@ -343,6 +343,12 @@ def station_cmdline(extra: tuple[str, ...], enabled: bool) -> tuple[str, ...]:
     return kept + ((CMDLINE_PARAM,) if enabled else ())
 
 
+def _in_window(age: float) -> bool:
+    """#3752: חותמת מהעתיד אינה "חי" -- אבל תיקון שעון קטן מסף הגלאי (`clockstep.JUMP_SECONDS`, #1947) לא מכויל על ידו: החותמת שנכתבה
+    הרגע נראית בעתיד עד ה-hello או ה-progress הבא, והמכונה החיה הוצגה מנותקת (#4163). עד הסף זה תיקון; מעליו זה של הגלאי."""
+    return -clockstep.JUMP_SECONDS <= age <= ONLINE_SECONDS
+
+
 def seen_within(last_seen: str | None,
                 now: datetime | None = None) -> bool:
     """"מחובר" לרשימת המוניטור: אותו חלון (ONLINE_SECONDS) שבו
@@ -357,7 +363,7 @@ def seen_within(last_seen: str | None,
     if seen.tzinfo is None:
         return False
     current = now or datetime.now(timezone.utc)
-    return current - seen <= timedelta(seconds=ONLINE_SECONDS)
+    return _in_window((current - seen).total_seconds())
 
 
 def machine_rows(conn, now: datetime | None = None) -> list[dict]:
@@ -374,6 +380,7 @@ def machine_rows(conn, now: datetime | None = None) -> list[dict]:
         "WHERE g.role IN ('build', 'cloner') "
         "ORDER BY g.role, m.suffix"
     ).fetchall()
+    progress_now = now or progress_seen_now()
     return [
         {
             "mac": r["mac"],
@@ -382,7 +389,7 @@ def machine_rows(conn, now: datetime | None = None) -> list[dict]:
             "ip": r["ip"],
             # #1839: hello **או** progress — משכפל שכותב אינו שולח hello.
             "online": bool(r["ip"]) and (seen_within(r["last_seen"], now)
-                                         or seen_within(r["progress_seen"], now)),
+                                         or seen_within(r["progress_seen"], progress_now)),
             "prompt": r["prompt"],   # #906: השאלה שממתינה לאדם, או None
             # #2240: כפתורי הכוח של המוניטור מזהירים לפני כיבוי באמצע שיכפול מקומי
             "local_copy": local_copy_now(r["local_clone"], r["last_seen"]),
@@ -472,8 +479,8 @@ def _target(ctx: ServerContext, mac: str,
     current = now or datetime.now(timezone.utc)
     # #1839: דיווח progress שהתקבל בחלון הוא ראיה שהמכונה חיה — בזמן כתיבה
     # הוא הקשר היחיד שלה, ובלעדיו המוניטור נדחה בדיוק כשהכי רוצים לצפות.
-    if (current - seen > timedelta(seconds=ONLINE_SECONDS)
-            and not seen_within(row["progress_seen"], current)):
+    if (not _in_window((current - seen).total_seconds())
+            and not seen_within(row["progress_seen"], now or progress_seen_now())):
         raise HTTPException(409, "המכונה אינה מחוברת")
     return row["ip"], row["role"], row["monitor_secret"], row["monitor_auth"]
 
@@ -1049,7 +1056,7 @@ def create_monitor_router(
         writer = bridges.get(canonical)
         if writer is None:
             raise HTTPException(
-                409, "אין מוניטור פתוח למכונה — הפקודה נוסעת דרך חיבור המוניטור")
+                409, "המחשב לא מחובר, ולכן אי אפשר לשלוח לו את הפקודה. אם הוא כבוי, הדליקו אותו (WoL) ונסו שוב")
         with lock:
             holder = active.get(canonical)
         if holder is None or holder.user != user[0]:

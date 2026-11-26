@@ -22,7 +22,7 @@ from server.rounds import drawer_cancel
 from server.agent import db_update_log
 from server.disks import disk_failures, slot_names, slow_write, smart_history
 from server.system import steadyclock
-from server.db import _settle, _write_lock, journal, now_iso, update_one, writing
+from server.db import _settle, _write_lock, journal, now_iso, SqlConnection, update_one, writing
 from server.core.tasks import CAPTURE_STAGES, OPEN_STATES, claim_task
 
 log = logging.getLogger("imagesrv.reports")
@@ -107,9 +107,9 @@ def well_formed_udp_drops(payload: dict) -> dict | None:
         # #3064 (G7): גל חתיכות מוסיף את החתיכות שהמקלט נטש באמצע (`agent/lib/restore/chunkloss.sh`), ו-#3168
         # את מה שתור הקלט של המעבד (`softnet`) והכרטיס (`nic`, `ethtool -S`) זרקו.
         # סוכן שלא מדד אינו שולח את השדות -- וחסר נשאר חסר, לא "0 נטישות".
-        for extra in CHUNK_LOSS_FIELDS:
-            if extra in value:
-                unread[extra] = None
+        for field_name in CHUNK_LOSS_FIELDS:
+            if field_name in value:
+                unread[field_name] = None
     if not isinstance(value, dict):
         return unread
     # #3064 (G7): מה שנשלח נשמר; מה שלא נשלח חסר (לא 0 ולא null). שדה כזה שפגום הוא "לא נקרא" **לבדו**: הוא אינו
@@ -164,7 +164,7 @@ def _well_formed_linux(value: object) -> dict | None:
     return out
 
 
-def _journal_linux(conn: sqlite3.Connection, outcome: dict | None, where: str,
+def _journal_linux(conn: SqlConnection, outcome: dict | None, where: str,
                    named: str = "", *, machine: str | None = None,
                    round_id: str | None = None) -> None:
     """#1331: יעד לינוקס שה-initramfs שלו לא אומת — שורת יומן, פעם אחת, עם
@@ -176,7 +176,7 @@ def _journal_linux(conn: sqlite3.Connection, outcome: dict | None, where: str,
                 machine=machine, round_id=round_id)
 
 
-def _journal_boot(conn: sqlite3.Connection, outcome: dict | None, where: str,
+def _journal_boot(conn: SqlConnection, outcome: dict | None, where: str,
                   named: str = "", *, machine: str | None = None,
                   round_id: str | None = None) -> None:
     """#1331: דרייבר אחסון שלא הוגדר לעלייה — שורת יומן, פעם אחת, עם
@@ -199,7 +199,7 @@ LOST = "lost"
 FINAL = frozenset({*TERMINAL, LOST})
 
 
-def ingest(conn: sqlite3.Connection, payload: dict,
+def ingest(conn: SqlConnection, payload: dict,
            token: str | None = None) -> dict:
     """`token` — כותרת `X-Imagesrv-Task-Token` של הבקשה, אם נשלחה.
     נבדק **רק** במסלול המשימה (#855); לסבב אין אסימון."""
@@ -237,6 +237,8 @@ def ingest(conn: sqlite3.Connection, payload: dict,
     if task_id:
         return _ingest_task(conn, task_id, mac, state, targets, sent_as, token,
                             stage=payload.get("stage"))
+    if not session_id:       # not reached: the check above needs a session_id or a task_id, and the task_id is handled
+        return {"ok": False, "error": "missing session_id/task_id, mac or targets", "code": "bad_report"}
 
     # #557: סבב שנסגר אינו מקבל דיווחים. עד כאן הוא קיבל — והחזיר
     # `200 OK` — ולכן `progress_loop` בסוכן, שלולאתו אינסופית ובולעת
@@ -435,7 +437,7 @@ def ingest(conn: sqlite3.Connection, payload: dict,
     return reply
 
 
-def _bound_serial(conn: sqlite3.Connection, session_id: str, mac: str, target: dict) -> dict:
+def _bound_serial(conn: SqlConnection, session_id: str, mac: str, target: dict) -> dict:
     """#2492: היעד כפי שייזכר ב-`disk_failures` — עם הסידורי רק כשהוא של המכונה
     הזאת: מה שדיווחה ל-`dev` הזה ב-hello האחרון, **או** מה שה-disk_event שלה
     בסבב הזה נשא עליו (נקשר בזמנו, לפני הכתיבה) — דיסק שנפל מהאפיק כבר אינו
@@ -453,7 +455,7 @@ def _bound_serial(conn: sqlite3.Connection, session_id: str, mac: str, target: d
     return {**target, "serial": None}
 
 
-def _closed_reason(conn: sqlite3.Connection, session_id: str,
+def _closed_reason(conn: SqlConnection, session_id: str,
                    session: sqlite3.Row | None) -> str | None:
     """#1928: למה הסבב כבר אינו פתוח — מה שמגירת המשכפל כותבת אחרי "השרת סגר את הסבב".
 
@@ -492,7 +494,7 @@ def _clean_target_drivers(targets: list) -> None:
                 t["drivers"] = clean
 
 
-def stamp_done_serials(conn: sqlite3.Connection, mac: str,
+def stamp_done_serials(conn: SqlConnection, mac: str,
                        previous_json: str | None, targets: list, session_id: str | None = None) -> list:
     """קושר יעד שהושלם למגירה הפיזית שהייתה בו ברגע ההשלמה.
 
@@ -544,7 +546,7 @@ def stamp_done_serials(conn: sqlite3.Connection, mac: str,
     return stamped
 
 
-def _returned_serial(conn: sqlite3.Connection, session_id: str | None, mac: str, dev: object,
+def _returned_serial(conn: SqlConnection, session_id: str | None, mac: str, dev: object,
                      inventory_serial: str | None, serial_of: dict) -> str | None:
     """#3139: הסידורי של מגירה שחזרה תחת שם אחר -- או None כשאין ראיה לכך.
 
@@ -669,7 +671,7 @@ def _close_targets(targets: list, final: str) -> list:
             for t in targets]
 
 
-def _ingest_task(conn: sqlite3.Connection, task_id: str, mac: str,
+def _ingest_task(conn: SqlConnection, task_id: str, mac: str,
                  state: str, targets: list, sent_as: str = "",
                  token: str | None = None, stage: object = None) -> dict:
     """דיווח קליטה: יעד אחד — דיסק המקור — ומצב על המשימה עצמה.

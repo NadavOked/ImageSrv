@@ -324,11 +324,16 @@ copy_libs() {
     done < <(printf '%s\n' "$_ldd_out" | awk '/=>/ { print $3 } /^\s*\// { print $1 }')
 }
 
+# #4011: copy_bin packs everything under /usr/bin, but the host binary can live
+# elsewhere (Debian 13: partclone and sgdisk are /usr/sbin). The license pass
+# below needs the host path, so the source is recorded when it is copied.
+declare -A PACKED_FROM=()
 copy_bin() {
     local src dst
     src=$(command -v "$1") || { echo "missing binary: $1" >&2; exit 1; }
     dst="$ROOT/usr/bin/$(basename "$src")"
     cp -L "$src" "$dst"
+    PACKED_FROM["$dst"]=$src
     copy_libs "$src"
 }
 
@@ -1383,8 +1388,13 @@ fi
 # a missing notice is a failed build, never an image with silent omissions.
 mapfile -d '' -t PACKED_FILES < <(find "$ROOT" -type f -print0)
 mkdir -p "$ROOT/usr/share/doc/licenses"
+_pkgs_seen=$(mktemp) || { echo "license: mktemp failed" >&2; exit 1; }
 for _packed in "${PACKED_FILES[@]}"; do
     _host_file="${_packed#"$ROOT"}"
+    # #4011: a file copy_bin packed under another path is looked up at the
+    # path it came from. Any other file with no host twin is ImageSrv's own
+    # (gcc output, generated config, agent scripts) and has no Debian owner.
+    [ -z "${PACKED_FROM[$_packed]:-}" ] || _host_file=${PACKED_FROM[$_packed]}
     [ -e "$_host_file" ] || continue
     _host_file=$(readlink -f "$_host_file")
     # C-CFG-08: dpkg-query -S answers 1 for "no package owns it" (ImageSrv's own
@@ -1405,7 +1415,20 @@ for _packed in "${PACKED_FILES[@]}"; do
         exit 1
     }
     cp -L "$_copyright" "$ROOT/usr/share/doc/licenses/$_pkg.copyright"
+    printf '%s
+' "$_pkg" >> "$_pkgs_seen"
 done
+# #3077: the list of packages the image ships (name, version, section, license ids) goes
+# beside the licences, and a non-free package that tools/nonfree-declared.txt does not
+# name stops the build. Version and section are read from dpkg, never defaulted.
+: > "$_pkgs_seen.tsv"
+while IFS= read -r _pkg; do
+    _row=$(dpkg-query -W -f='${Package}	${Version}	${Section}	' "$_pkg")         || { echo "license: dpkg-query -W $_pkg failed -- cannot list it" >&2; exit 1; }
+    printf '%s/usr/share/doc/%s/copyright
+' "$_row" "$_pkg" >> "$_pkgs_seen.tsv"
+done < <(LC_ALL=C sort -u "$_pkgs_seen")
+python3 -I "$SCRIPT_DIR/license_manifest.py" --declared "$SCRIPT_DIR/nonfree-declared.txt"     --out "$ROOT/usr/share/doc/licenses/packages.tsv" < "$_pkgs_seen.tsv"     || { echo "license: the package list / non-free gate failed (#3077)" >&2; exit 1; }
+rm -f "$_pkgs_seen" "$_pkgs_seen.tsv"
 
 # --- pack --------------------------------------------------------------------
 # Reproducible (#1125, feeding #1078 -- the initrd hash in grub.cfg): the

@@ -144,7 +144,7 @@ agent_lock() {
         ''|*[!0-9]*) ;;
         "$$") return 0 ;;
         *) if kill -0 "$_al_p" 2>/dev/null &&
-                   tr '\0' ' ' < "${SYSROOT:-}/proc/$_al_p/cmdline" 2>/dev/null | grep -q imagesrv-agent; then
+                   tr '\0' ' ' 2>/dev/null < "${SYSROOT:-}/proc/$_al_p/cmdline" | grep -q imagesrv-agent; then
                echo "agent: another agent (pid $_al_p) is running -- this one ($$) stops before it touches anything" >&2
                return 1
            fi ;;

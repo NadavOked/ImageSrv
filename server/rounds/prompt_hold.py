@@ -25,10 +25,9 @@
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime, timezone
 
-from server.db import journal, now_iso, update_one
+from server.db import journal, now_iso, SqlConnection, update_one
 
 #: ברזל 17/10: שאלה פתוחה עוצרת את השולח רק כל עוד המכונה ששואלת **נשמעת**.
 #: הדופק בזמן שאלה הוא 10ש' (`ATTENDED_BEAT_S`), ו-`net_devices.last_seen`
@@ -63,7 +62,7 @@ _OPEN_SQL = (
     " ORDER BY m.mac")
 
 
-def open_in_wave(conn: sqlite3.Connection, session_id: str,
+def open_in_wave(conn: SqlConnection, session_id: str,
                  now: datetime | None = None) -> list[str]:
     """ה-MAC של חברי הגל שממתינים עכשיו לאדם, חיים ובתוך התקרה."""
     now = now or datetime.now(timezone.utc)
@@ -77,7 +76,7 @@ def open_in_wave(conn: sqlite3.Connection, session_id: str,
     return waiting
 
 
-def release_overdue(conn: sqlite3.Connection, session_id: str,
+def release_overdue(conn: SqlConnection, session_id: str,
                     now: datetime | None = None) -> list[str]:
     """משחרר מהגל כל חבר שעדיין עומד על שאלה `ASK_HOLD_MAX_SECONDS` אחרי
     תחילת הגל. UPDATE מותנה במצב שנקרא — דיווח שהגיע בינתיים מנצח."""
@@ -98,7 +97,7 @@ def release_overdue(conn: sqlite3.Connection, session_id: str,
     return released
 
 
-def waiting_in_wave(conn: sqlite3.Connection, session_id: str,
+def waiting_in_wave(conn: SqlConnection, session_id: str,
                     now: datetime | None = None) -> list[str]:
     """מה שהשולח שואל בכל סבב המתנה: קודם משחררים את מי שחרג, ואז מי נשאר."""
     release_overdue(conn, session_id, now)

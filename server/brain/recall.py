@@ -89,8 +89,9 @@ def one(conn, mac: str, *, now: float, max_age_s: float) -> Recall:
                 if silence is not None and at is not None:
                     returns.append((row["id"], at, silence, round_id))
                 pending = None
-        if pending is not None and epoch(pending["at"]) is not None:
-            losses.append((pending["id"], epoch(pending["at"]), round_id))
+        lost_at = epoch(pending["at"]) if pending is not None else None
+        if pending is not None and lost_at is not None:
+            losses.append((pending["id"], lost_at, round_id))
     return Recall(mac, tuple(sorted(returns, key=lambda x: x[1])), tuple(sorted(losses, key=lambda x: x[1])))
 
 
@@ -114,7 +115,9 @@ def returned(conn, mac: str, round_id: str, *, now: float | None = None) -> int 
                 break
             if _lost(row, mac):
                 first = row
-        start = epoch(first["at"]) if first is not None else None
+        if first is None:
+            return None
+        start = epoch(first["at"])
         if start is None:
             return None
         silence = int(max(now - start, 0.0) + agent_timing.lost_seconds(conn))

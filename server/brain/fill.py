@@ -342,7 +342,8 @@ class Brain:
         except Exception:                       # noqa: BLE001 — חוש שנפל הוא "לא נמדד"
             log.exception("brain: the Rcvbuf counter of %s could not be read", mac)
         told = [_int(t.get("skipped")) for t in targets if "skipped" in t]
-        skipped = sum(told) if told and None not in told else None
+        counted = [v for v in told if v is not None]
+        skipped = sum(counted) if told and len(counted) == len(told) else None
         key = (session, mac)
         with self._lock:
             before = self._seen.get(key)

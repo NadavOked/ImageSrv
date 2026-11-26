@@ -632,6 +632,8 @@ def reread_problem(manifest: dict, folder: Path, on_bytes=None) -> str | None:
 def manifest_problem(manifest: object, folder: Path) -> str | None:
     """כל מה ש-`validate_manifest_files` בודק **חוץ מהגיבוב** — זול, ובלי
     לקרוא את קבצי המחיצות (#1470)."""
+    if not isinstance(manifest, dict):
+        return "not an object"                # the same words as `_validate` gives it
     problem = ImageLibrary._validate(manifest, require_library_fields=False)
     if problem:
         return problem

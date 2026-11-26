@@ -54,7 +54,7 @@ _wc_pats() {
     for _wb_o in "$@"; do
         _wb_i=$((_wb_i + 1))
         head -c "$_wb_b" /dev/urandom > "$_wb_w/pat.$_wb_i" 2>/dev/null
-        [ "$(wc -c < "$_wb_w/pat.$_wb_i" 2>/dev/null | tr -d ' ')" = "$_wb_b" ]             || { echo "unchecked|לא נוצר דפוס לבדיקה (urandom)"; return 1; }
+        [ "$(wc -c 2>/dev/null < "$_wb_w/pat.$_wb_i" | tr -d ' ')" = "$_wb_b" ]             || { echo "unchecked|לא נוצר דפוס לבדיקה (urandom)"; return 1; }
     done
 }
 
@@ -116,7 +116,7 @@ _wc_alias() {
 _wc_marks() { # $1 = node, $2 = work dir, $3 = the places (4KiB blocks), $4 = what a marker is made of: written, then read back and compared
     _wa_i=0; for _wa_b in $3; do
         _wa_i=$((_wa_i + 1)); [ -s "$2/mk.$_wa_i" ] || head -c 4096 "$4" > "$2/mk.$_wa_i" 2>/dev/null   # #3268: idlecheck made them before the copy left
-        [ "$(wc -c < "$2/mk.$_wa_i" 2>/dev/null | tr -d ' ')" = 4096 ] || { echo "unchecked|לא נוצר סמן לבדיקה (urandom)"; return 1; }
+        [ "$(wc -c 2>/dev/null < "$2/mk.$_wa_i" | tr -d ' ')" = 4096 ] || { echo "unchecked|לא נוצר סמן לבדיקה (urandom)"; return 1; }
         dd if="$2/mk.$_wa_i" of="$1" bs=4096 seek="$_wa_b" count=1 oflag=direct conv=fsync 2> "$2/err" \
             || { echo "failed|סמן ב-$((_wa_b / 256)) MiB: $(_wc_why "$2/err" 'הכתיבה נכשלה')"; return 1; }
     done

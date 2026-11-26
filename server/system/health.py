@@ -30,7 +30,7 @@ from server.core import capabilities
 from server.net import deploy_net, dhcp, foreign_vlan, ports
 from server.system import timesync, timezone as tz_setting
 from server.storage import disk_reserve
-from server.db import last_disk_full, now_iso
+from server.db import last_disk_full, now_iso, write_wait_recent
 from server import auto_reboot
 from server.system import backup_job
 from server.system import raid_status
@@ -125,6 +125,8 @@ def default_hooks() -> dict:
         "uptime": read_uptime,
         # #1892: הפנוי במחיצת ה-DB (data_dir); None = לא נמדד.
         "db_free": _db_free,
+        # #4115: המתנות ארוכות לנעילת הכתיבה ב-DB בחלון האחרון (`db.write_wait_recent`). שלא הוזרק = אין שורה.
+        "write_wait": write_wait_recent,
         # #1989: מערכי ה-RAID — /proc/mdstat הוא הראיה, /etc/imagesrv/raid
         # הוא מה שהמתקין יצר. None מה-hook = אין קובץ; OSError = לא נקרא.
         "mdstat": lambda: raid_status.read_optional(raid_status.MDSTAT_PATH),
@@ -185,6 +187,25 @@ def db_space_check(free: int | None, full: dict | None) -> dict:
         return check("db_space", label, "warn",
                      f"נותרו {shown}, פחות מרזרבת המערכת ({disk_reserve.gb(disk_reserve.reserve())})")
     return check("db_space", label, "ok", f"פנויים {shown}")
+
+
+def write_lock_check(recent: dict | None) -> dict:
+    """#4115: נעילת הכתיבה של ה-DB. אדום כשכותב ויתר על הנעילה, צהוב על המתנה ארוכה, ירוק רק על מדידה
+    תקינה בלי אף אחד מהם; מדידה שלא נקראה היא "לא נבדק" ולא ירוק (עיקרון 5). המונה בזיכרון התהליך — לכן
+    "מאז הפעלת השרת"."""
+    label = "נעילת כתיבה ל-DB"
+    counts = [recent.get(k) if isinstance(recent, dict) else None for k in ("long", "gave_up", "window_s")]
+    if not all(isinstance(n, (int, float)) and not isinstance(n, bool) for n in counts):
+        return check("write_lock", label, "unknown", "מונה ההמתנות לא נקרא — לא נבדק")
+    long, gave_up, window_s = counts
+    window = f"ב-{int(window_s // 60)} הדקות האחרונות"
+    if gave_up:
+        return check("write_lock", label, "bad",
+                     f"{int(gave_up)} כתיבות ויתרו על הנעילה {window} — ה-DB עמוס מדי")
+    if long:
+        return check("write_lock", label, "warn",
+                     f"{int(long)} המתנות של שנייה ומעלה לנעילת הכתיבה {window}")
+    return check("write_lock", label, "ok", f"אין המתנות ארוכות {window} (נספר מאז הפעלת השרת)")
 
 
 #: #968: המחשב, לא התהליך — למפעיל "השרת פעיל X" הוא המכונה; זמן
@@ -304,7 +325,9 @@ UNSYNC_WHY = {"no_gateway": "בשרת אין שער ברירת מחדל — שר
 def _sample_limit_s(sample: dict | None) -> int | None:
     """#2800: how old the freshest sample may be before the row stops being green: two poll
     intervals and a margin for the reply. None = the poll interval is not known."""
-    poll = sample.get("poll_s") if isinstance(sample, dict) else None
+    if not isinstance(sample, dict):
+        return None
+    poll = sample.get("poll_s")
     return 2 * poll + 10 if isinstance(poll, int) and isinstance(sample.get("age_s"), int) else None
 
 
@@ -333,7 +356,7 @@ def time_sync_check(status: dict | str, legacy_sync: str | None = None) -> dict:
         # row stays as it was (the tracking figure above).
         sample = status.get("last_sample")
         limit = _sample_limit_s(sample)
-        if limit is not None and sample["age_s"] > limit:
+        if limit is not None and isinstance(sample, dict) and sample["age_s"] > limit:
             stale = True
             parts.append(f"אין דגימה טרייה מ-{sample['server']}: האחרונה לפני {_ago_he(sample['age_s'])}")
     else:
@@ -497,6 +520,13 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
         results.append(time_sync_check(sync))
     results.append(db_space_check(hooks["db_free"](getattr(ctx, "data_dir", None)),
                                   last_disk_full()))
+    # #4115: המתנה לנעילת הכתיבה. hook שלא הוזרק (בדיקות עם hooks בנויים ביד) = אין שורה; hook שנכשל = "לא נבדק".
+    if hooks.get("write_wait") is not None:
+        try:
+            results.append(write_lock_check(hooks["write_wait"]()))
+        except Exception:                      # noqa: BLE001 -- שורה אחת אינה מפילה את מסך הבריאות
+            log.exception("health: write_wait failed")
+            results.append(write_lock_check(None))
     # #1895/#1956: גיבוי המסד — "ישן" אחרי יום ושעתיים, אדום על כשל, כתום כשהוא על כונן המסד.
     results.append(backup_job.health_check(ctx.conn, getattr(ctx, "data_dir", None),
                                            hooks["unit_active"](backup_job.TIMER_UNIT)))
@@ -505,14 +535,16 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
     # לא כשל: השורה אומרת מה לעשות, ובדיקות ה-PXE שתלויות בה (TFTP,
     # dnsmasq, השרת בכתובת ההפצה) הופכות ל"לא רלוונטי עדיין" ולא לאדום
     # שמכסה על הבעיה האמיתית. כשהיא מוגדרת — אין שורה, והבדיקות כרגיל.
-    deploy_state = hooks.get("deploy")() if hooks.get("deploy") else None
+    deploy_hook = hooks.get("deploy")
+    deploy_state = deploy_hook() if deploy_hook else None
     unconfigured = deploy_state is not None and not deploy_state.configured
     if unconfigured:
         results.append(check("deploy_net", "הגדר את רשת ההפצה", "warn",
                              deploy_state.public()["hint"]))
 
     # #1088: כתובת כרטיס השרתים — DHCP ומתי החכירה פגה, או סטטי.
-    servers_nic = hooks.get("servers_nic")() if hooks.get("servers_nic") else None
+    servers_nic_hook = hooks.get("servers_nic")
+    servers_nic = servers_nic_hook() if servers_nic_hook else None
     if servers_nic is not None:
         results.append(check("servers_nic", "כתובת השרתים", *servers_nic))
 
@@ -680,7 +712,10 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
         results.append(check("deploy_nic", "כרטיס ההפצה", "bad",
                              f"כרטיס ההפצה {deploy_if} לא קיים במערכת (יש: "
                              f"{', '.join(names)}) — DHCP, TFTP וחומת האש מפנים "
-                             "לשם שאינו קיים; בחרו כרטיס בלשונית רשת הפצה"))
+                             "לשם שאינו קיים; " + (
+                                 # #4164: מוגדר = הלשונית "רשת הפצה" קיימת והכפתור מוסתר; לא מוגדר (רק שם שמור) = הכפתור, והלשונית אינה (#4026)
+                                 "בחרו כרטיס בלשונית רשת הפצה" if configured_if else
+                                 f"בעמוד הרשת לחצו על \"{deploy_net.SETUP_BUTTON}\" ובחרו כרטיס")))
     elif configured_if:
         results.append(check("deploy_nic", "כרטיס ההפצה", "ok",
                              f"{configured_if} קיים במערכת"))
@@ -871,7 +906,8 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
     dhcp_flags = _dhcp_flags(ctx)
     # בדיקת יום ראשון 21/11: לפני שרשת ההפצה הוגדרה, TFTP ו-DHCP הם "לא ישים" — כמו ב-`collect`
     # (#1088), ולא "תקלה". אחרת כרטיס "שירותים" בסקירה ודף השירותים צבעו אדום את מה שהבריאות קוראת לו לא ישים.
-    deploy_state = hooks.get("deploy")() if hooks.get("deploy") else None
+    deploy_hook = hooks.get("deploy")
+    deploy_state = deploy_hook() if deploy_hook else None
     unconfigured = deploy_state is not None and not deploy_state.configured
 
     # TFTP 69 (#1013): המתג נשמר כ-`port:tftp` ומוחל דרך ה-render של

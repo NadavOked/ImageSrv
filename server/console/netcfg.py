@@ -517,10 +517,11 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
         """כותב, מחיל, ואז **קורא בחזרה**. ok נקבע רק מהקריאה."""
         configs = sorted([c for c in all_configs() if c.name != name] + [cfg],
                          key=lambda c: c.name)
-        resolv = netcfg.render_resolv(configs)
+        rendered = netcfg.render_resolv(configs)
+        resolv: str | None = rendered
         expected_dns = None
         if deploy_dns_before is not None:
-            expected_dns = netcfg_host.parse_resolv(resolv)
+            expected_dns = netcfg_host.parse_resolv(rendered)
             mgmt = load(management())
             # A deploy save does not own the DHCP lease or its resolver file.
             lease_dns = deploy_dns_before and mgmt.mode == netcfg.MODE_DHCP and not mgmt.dns
@@ -681,10 +682,12 @@ def create_netcfg_router(ctx: ServerContext, state_dir,
                 dhcp_steps["gates"], name, dhcp_cfg, dhcp_before, dhcp_body,
                 management_ok=on_management, raise_link=was_down)
             if netcfg.changed(before, cfg):
-                if not state.checked:
-                    raise HTTPException(409, f"לא הצלחנו לקרוא את שרתי ה-DNS הנוכחיים (resolv.conf), ולכן רשת ההפצה לא נשמרה: {state.reason}")
+                # כרטיס סטטי: `live_before` כבר קרא את המצב (cfg שאינו סטטי הוא `before`, ו-`changed` שלו ריק)
+                read = state if state is not None else hooks["netcfg_state"]()
+                if not read.checked:
+                    raise HTTPException(409, f"לא הצלחנו לקרוא את שרתי ה-DNS הנוכחיים (resolv.conf), ולכן רשת ההפצה לא נשמרה: {read.reason}")
                 address_result = await _configure(name, before, cfg, body, request, user,
-                                                  live, state, deploy_dns_before=state.nameservers)
+                                                  live, read, deploy_dns_before=read.nameservers)
         except HTTPException as exc:
             if not was_down:
                 raise
