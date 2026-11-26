@@ -249,7 +249,7 @@ smart_reason_he() {
         f1_observed) printf 'נצפה F1 בהדלקה' ;;   # #1858: a mark by serial (f1mark.sh), not a SMART word
         media_readonly) printf 'הבקר נעל את הדיסק לקריאה בלבד (NVMe)' ;;   no_table) printf 'טבלת הידע של SMART חסרה — לא נבדק' ;;
         standby) printf 'הדיסק במצב המתנה ולא הוער לבדיקת SMART' ;;   # #1775: smartctl -n standby
-        cable) printf 'כבל/חריץ' ;;   disk) printf 'הדיסק' ;;   removed) printf 'המגירה נשלפה' ;;   write_error) printf 'שגיאת כתיבה לדיסק' ;;   unclassified) printf 'לא סווג' ;;
+        cable) printf 'כבל/חריץ' ;;   disk) printf 'הדיסק' ;;   removed) printf 'המגירה נשלפה' ;;   network) printf 'הרשת נפלה' ;;   write_error) printf 'שגיאת כתיבה לדיסק' ;;   unclassified) printf 'לא סווג' ;;
         *) printf 'סיבה לא מוכרת' ;;   # the word itself stays in the log and the disk_event
     esac
 }

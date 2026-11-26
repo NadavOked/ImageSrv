@@ -31,10 +31,9 @@ from __future__ import annotations
 import json
 import logging
 import math
-import sqlite3
 from datetime import datetime, timezone
 
-from server.db import _settle, _write_lock, get_setting, writing
+from server.db import _settle, _write_lock, get_setting, SqlConnection, writing
 from server.core import unreadable
 
 log = logging.getLogger("imagesrv.agent_timing")
@@ -93,7 +92,7 @@ def parse(key: str, raw: object) -> int | None:
     return value if low <= value <= high else None
 
 
-def seconds(conn: sqlite3.Connection, key: str) -> int:
+def seconds(conn: SqlConnection, key: str) -> int:
     """ההגדרה, או ברירת המחדל. חסרה = לא נקבעה (ברירת מחדל, בשקט); פגומה = ברירת
     המחדל **עם שורת יומן** — לעולם לא "אינסוף" ולא 0."""
     default = RANGES[key][0]
@@ -108,7 +107,7 @@ def seconds(conn: sqlite3.Connection, key: str) -> int:
     return value
 
 
-def tail_shrink_enabled(conn: sqlite3.Connection) -> bool:
+def tail_shrink_enabled(conn: SqlConnection) -> bool:
     """המתג של #3262. רק ``"true"`` מדליק; חסר = כבוי; ערך פגום = כבוי **עם שורת יומן**
     (לא "דלוק": הכיווץ כותב לדיסק, וספק אינו הרשאה)."""
     raw = get_setting(conn, TAIL_SHRINK)
@@ -120,7 +119,7 @@ def tail_shrink_enabled(conn: sqlite3.Connection) -> bool:
     return raw == "true"
 
 
-def lost_seconds(conn: sqlite3.Connection) -> int:
+def lost_seconds(conn: SqlConnection) -> int:
     return seconds(conn, LOST)
 
 
@@ -129,7 +128,7 @@ def retries_until_drop(base: int, lost: int) -> int:
     return max(base, math.ceil(lost * RETRIES_PER_SECOND))
 
 
-def hello_fields(conn: sqlite3.Connection) -> dict[str, int]:
+def hello_fields(conn: SqlConnection) -> dict[str, int]:
     """השדות שנוספים לכל תשובת hello של מכונה רשומה (ממשק 3)."""
     return {"lost_wait_seconds": lost_seconds(conn),
             "idle_poweroff_seconds": seconds(conn, IDLE),
@@ -156,7 +155,7 @@ def well_formed(raw: object) -> dict[str, int] | None:
     return out
 
 
-def note_applied(conn: sqlite3.Connection, mac: str, raw: object) -> None:
+def note_applied(conn: SqlConnection, mac: str, raw: object) -> None:
     """רושם את ``applied_timing`` של המכונה. סוכן שלא שלח את השדה (ישן) משאיר את
     הרישום הקודם; סוכן ששלח — דורס. SELECT קודם: רוב ה-hello אינם משנים דבר."""
     applied = well_formed(raw)
@@ -184,7 +183,7 @@ def _recent(stamp: str | None, now: datetime) -> bool:
     return 0 <= (now - seen).total_seconds() <= CONNECTED_SECONDS
 
 
-def applied_counts(conn: sqlite3.Connection, now: datetime | None = None) -> dict[str, dict[str, int]]:
+def applied_counts(conn: SqlConnection, now: datetime | None = None) -> dict[str, dict[str, int]]:
     """לכל הגדרה: ``{"applied": N, "connected": M}`` — M המכונות המחוברות מהתפקידים
     הרלוונטיים, N מביניהן שהחזירו בדיוק את הערך שבתוקף. הערך שבתוקף הוא מה שהשרת
     מגיש עכשיו (כולל ברירת מחדל), כך שמכונה שמחילה את ברירת המחדל נספרת."""

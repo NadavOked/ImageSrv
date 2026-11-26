@@ -188,3 +188,60 @@ def test_the_ci_fetches_the_pinned_engine_before_the_suite(workflow):
     assert fetch_at < text.find("python -m pytest tests"), f"{workflow}: fetch אחרי pytest"
     assert gate.ENV_BIN in text
     assert "impeccable-${{ steps.impeccable.outputs.sha256 }}" in text
+
+
+# --- #3882: בינארי חסר אינו מעבר שקט -----------------------------------------
+# מריצים את טסט השער עצמו עם "אין בינארי", וקוראים מה הוא עושה עם הדגל ובלעדיו. התוצאה נקראת ב-try/except
+# ומושווית לפי סוג, לא ב-`pytest.raises`: שער שדילג איפה שצריך להיכשל היה מעביר `Skipped` החוצה, והטסט הזה
+# היה מדווח "דולג" -- אותו מעבר שקט, ברמה אחת למעלה.
+
+_FAILED, _SKIPPED = pytest.fail.Exception, pytest.skip.Exception
+_GATE = test_console_has_no_new_impeccable_findings_and_no_stale_ones
+
+
+def _set_flag(monkeypatch, flag: str | None) -> None:
+    if flag is None:
+        monkeypatch.delenv(native.ENV_FLAG, raising=False)
+    else:
+        monkeypatch.setenv(native.ENV_FLAG, flag)
+
+
+def _gate_without_binary(monkeypatch, flag: str | None):
+    """מה שטסט השער עושה כש-`resolve_binary` אינו מוצא כלום: החריג שלו, או None אם חזר."""
+    monkeypatch.setattr(gate, "resolve_binary", lambda *a, **k: None)
+    _set_flag(monkeypatch, flag)
+    try:
+        _GATE()
+    except (_FAILED, _SKIPPED) as exc:
+        return exc
+    return None
+
+
+@pytest.mark.parametrize("flag", ["1", "true", "yes"])
+def test_no_binary_where_the_tools_are_required_is_a_failure(monkeypatch, flag):
+    got = _gate_without_binary(monkeypatch, flag)
+    assert isinstance(got, _FAILED), f"הטסט לא נכשל בלי בינארי תחת {flag!r}: {got!r}"
+    assert native.ENV_FLAG in str(got), str(got)                  # והוא אומר למה
+
+
+@pytest.mark.parametrize("flag", [None, "", "0", "no", "false"])
+def test_no_binary_elsewhere_is_a_skip_that_names_the_reason(monkeypatch, flag):
+    got = _gate_without_binary(monkeypatch, flag)
+    assert isinstance(got, _SKIPPED), f"הטסט לא דילג בלי בינארי ובלי הדגל {flag!r}: {got!r}"
+    assert gate.ENV_BIN in str(got) and str(gate.LAB_BIN) in str(got), str(got)
+
+
+@pytest.mark.parametrize("flag", [None, "1"])
+def test_a_binary_that_is_there_is_never_the_missing_binary_branch(monkeypatch, tmp_path, flag):
+    """שומר נגד תיקון-יתר: עם בינארי טסט השער ממשיך לאמת אותו (כאן חריג-סימן עוצר אותו)."""
+    class Sentinel(Exception):
+        pass
+
+    def verify(path):
+        raise Sentinel(path)
+
+    monkeypatch.setattr(gate, "verify", verify)
+    monkeypatch.setattr(gate, "resolve_binary", lambda *a, **k: tmp_path / "imp")
+    _set_flag(monkeypatch, flag)
+    with pytest.raises(Sentinel):
+        _GATE()

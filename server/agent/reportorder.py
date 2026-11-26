@@ -29,6 +29,7 @@ import logging
 import threading
 from collections import deque
 from dataclasses import dataclass, field
+from typing import Literal
 
 from server.rounds.ledger import clean_boot_id
 
@@ -51,7 +52,7 @@ class _Boot:
     retired: deque = field(default_factory=lambda: deque(maxlen=RETIRED))
 
 
-def fields_of(body: dict) -> tuple[str, int] | None | bool:
+def fields_of(body: dict) -> tuple[str, int] | Literal[False] | None:
     """``(boot_id, seq)`` מהגוף; ``None`` = השדות חסרים כולם (סוכן ישן); ``False`` = יש שדה, ואינו תקין."""
     boot, seq = body.get("boot_id"), body.get("seq")
     if boot is None and seq is None:

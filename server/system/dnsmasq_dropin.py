@@ -26,13 +26,12 @@ dnsmasq עובד גם בלעדיו כשהכרטיס כבר קיים — אבל �
 from __future__ import annotations
 
 import os
-import sqlite3
 import subprocess
 from pathlib import Path
 from typing import Callable
 
 from server.core.atomicfile import write_atomic
-from server.db import journal
+from server.db import journal, SqlConnection
 from server.paths import REPO_ROOT
 
 UNIT = "dnsmasq.service"
@@ -122,7 +121,7 @@ def ensure(hooks: Hooks, repo_dir: str | Path | None = None) -> tuple[str, str]:
     return "dnsmasq_dropin_applied", f"{target} {what} ונטען ל-{UNIT}"
 
 
-def apply_on_start(conn: sqlite3.Connection, hooks: Hooks,
+def apply_on_start(conn: SqlConnection, hooks: Hooks,
                    repo_dir: str | Path | None = None) -> None:
     """עליית השרת: כל תוצאה שאינה "כבר תקין" — שורת יומן, וגם ביומן המערכת."""
     event, detail = ensure(hooks, repo_dir)

@@ -147,7 +147,8 @@ class Watch:
 
     def __init__(self, conn, interface: str, *, gate: Callable[[], str | None] = lambda: None, querier=None,
                  engine_group: Callable[[], str | None] = lambda: None,
-                 mac: Callable[[], bytes] | None = None, opener=open_tap, clock=time.monotonic) -> None:
+                 mac: Callable[[], bytes] | None = None,
+                 opener: Callable[[str, bytes], socket.socket] = open_tap, clock=time.monotonic) -> None:
         self.conn, self.interface, self.gate, self.querier = conn, interface, gate, querier
         self.engine_group = engine_group
         self.mac = mac or (lambda: read_mac(interface))
@@ -155,7 +156,7 @@ class Watch:
         self.slices: collections.deque[Slice] = collections.deque(maxlen=KEEP)
         self.refused: str | None = None
         self.error: str | None = None
-        self._tap = None
+        self._tap: socket.socket | None = None
 
     # --- הלולאה -------------------------------------------------------------
 
@@ -183,13 +184,13 @@ class Watch:
         if not stop.is_set():
             stop.wait(max(end - self.clock(), 0.0))     # הצפה: הקרנל סופר, אנחנו לא קוראים
         sl.seconds = self.clock() - started
-        sl.passed, sl.drops = self._read_stats()
+        sl.passed, sl.drops = self._read_stats(self._tap)
         self.slices.append(sl)
         self.record()
 
-    def _read_stats(self) -> tuple[int | None, int | None]:
+    def _read_stats(self, tap: socket.socket) -> tuple[int | None, int | None]:
         try:
-            packets, drops = struct.unpack("II", self._tap.getsockopt(dhcp_host.SOL_PACKET, dhcp_host.PACKET_STATISTICS, 8))
+            packets, drops = struct.unpack("II", tap.getsockopt(dhcp_host.SOL_PACKET, dhcp_host.PACKET_STATISTICS, 8))
         except (OSError, struct.error):
             return None, None
         return packets, drops

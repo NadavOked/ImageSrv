@@ -32,7 +32,7 @@ the loss that cuts the rate of the next wave.
 from __future__ import annotations
 
 import json
-import sqlite3
+from server.db import SqlConnection
 
 from server.agent.registry import ROOM_GROUPS
 from server.rounds import drive_rates
@@ -87,7 +87,7 @@ def network(got: dict | None, *, measuring: bool = False) -> dict | None:
             and _count(paced.get("disk")) is not None else None, **out}
 
 
-def recorded(conn: sqlite3.Connection, created_at: str, closed_at: str | None) -> dict | None:
+def recorded(conn: SqlConnection, created_at: str, closed_at: str | None) -> dict | None:
     """The ``chunk`` sample of the newest wave of the round (its window) that the engine kept; None = none."""
     from server.rounds import chunk_rate             # noqa: PLC0415 -- heavy (the brain); only for the room view
     rows = conn.execute(
@@ -106,7 +106,7 @@ def recorded(conn: sqlite3.Connection, created_at: str, closed_at: str | None) -
     return None
 
 
-def view(conn: sqlite3.Connection, engine, round_row) -> dict:
+def view(conn: SqlConnection, engine, round_row) -> dict:
     """`{"throughput_bps", "network"}` of the round -- live from the engine, else from the last wave it kept."""
     session_id = round_row["wave_session_id"]
     reader = getattr(engine, "stream_view", None)      # an engine that has no such view measures nothing here

@@ -31,7 +31,7 @@ import sqlite3
 
 from server.brain import probejudge
 from server.learn import net_history
-from server.db import _settle, _write_lock, now_iso, writing
+from server.db import _settle, _write_lock, now_iso, SqlConnection, writing
 
 #: המפתחות שהממשק מגדיר (docs/architecture/interfaces.md, hello → probe). מפתח אחר
 #: ברמה העליונה נזנח; מפתח חסר נשמר כ-``None`` = לא דווח.
@@ -107,7 +107,7 @@ def stable(probe: dict) -> dict:
     return out
 
 
-def record(conn: sqlite3.Connection, mac: str, probe: dict, history: bool = True) -> bool:
+def record(conn: SqlConnection, mac: str, probe: dict, history: bool = True) -> bool:
     """שומר. מחזיר האם נפתחה **גרסה** חדשה (שורה חדשה).
 
     #2487: ``history=False`` — מכונה לא רשומה: גם תוכן יציב שהשתנה מעדכן את
@@ -148,7 +148,7 @@ def _row(row: sqlite3.Row) -> dict:
             "sampled_at": row["sampled_at"]}
 
 
-def latest(conn: sqlite3.Connection, mac: str) -> dict | None:
+def latest(conn: SqlConnection, mac: str) -> dict | None:
     """הדגימה הנוכחית: ``{"probe", "seen_at", "sampled_at"}`` או ``None``
     כשמעולם לא דיווחה (סוכן ישן)."""
     row = conn.execute(
@@ -158,7 +158,7 @@ def latest(conn: sqlite3.Connection, mac: str) -> dict | None:
     return _row(row) if row is not None else None
 
 
-def latest_all(conn: sqlite3.Connection) -> dict[str, dict]:
+def latest_all(conn: SqlConnection) -> dict[str, dict]:
     """הדגימה הנוכחית של כל מכונה שדיווחה, לפי MAC — לכרטיסי המכונות."""
     rows = conn.execute(
         "SELECT mac, probe_json, seen_at, sampled_at FROM machine_probe"
@@ -167,7 +167,7 @@ def latest_all(conn: sqlite3.Connection) -> dict[str, dict]:
     return {row["mac"]: _row(row) for row in rows}
 
 
-def history(conn: sqlite3.Connection, mac: str) -> list[dict]:
+def history(conn: SqlConnection, mac: str) -> list[dict]:
     """כל הגרסאות של מכונה, מהחדשה לישנה."""
     rows = conn.execute(
         "SELECT probe_json, seen_at, sampled_at FROM machine_probe WHERE mac = ?"

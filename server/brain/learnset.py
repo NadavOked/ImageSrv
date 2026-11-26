@@ -23,9 +23,12 @@ import logging
 import statistics
 import threading
 from dataclasses import dataclass, replace
+from typing import Callable, TypeVar
 
 from server.brain import silence
 from server.brain.silence import Call
+
+_C = TypeVar("_C", bound=Call)
 
 log = logging.getLogger("imagesrv.brain")
 
@@ -126,7 +129,7 @@ def forget() -> None:
         _failed.clear()
 
 
-def _decide(conn, key: str, round_id: str, make) -> Call | None:
+def _decide(conn, key: str, round_id: str, make: Callable[[], _C]) -> _C | None:
     """מחליט (``make`` טהורה), רושם לפני הביצוע, ולעולם אינו זורק. ``None`` = המוח נכשל: אין החלטה, ולא משנים דבר, ושורת ``UNDECIDED`` אחת לכל מפתח."""
     try:
         call = make()

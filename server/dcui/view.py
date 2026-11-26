@@ -764,7 +764,10 @@ def system_updates_row(day: str) -> Row:
     line, last in the lower tile: the services tile is clipped once the hero
     lists problems (rendered 17/10 at 1024x768)."""
     if day:
-        return Row("עדכוני מערכת", f"מתאריך {iso(day)}")
+        # #2903: התאריך כמו בשאר המוצר (DD/MM/YYYY), לא ISO.
+        parts = str(day).split("-")
+        shown = f"{parts[2]}/{parts[1]}/{parts[0]}" if len(parts) == 3 and all(p.isdigit() for p in parts) else day
+        return Row("עדכוני מערכת", f"מתאריך {iso(shown)}")
     return Row("עדכוני מערכת", "תאריך לא ידוע", "", "warn", "לא נבדק")
 
 

@@ -237,3 +237,8 @@ def test_the_switch_is_a_boolean_setting_off_by_default(conn):
     assert server_cap.enabled(conn) is True
     db.set_setting(conn, server_cap.SETTING, "yes")
     assert server_cap.enabled(conn) is False                    # רק "true" בדיוק
+
+
+def test_server_cap_wave_starts_without_another_tests_live_link(conn):
+    asked, _ = _run(conn)
+    assert asked == drive_rates.START_BITRATE

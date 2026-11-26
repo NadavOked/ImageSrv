@@ -23,7 +23,7 @@ round_note() {   # $1 = kind, $2 = key, $3 = the sentence. Never fails: a note i
     _rn_f="$RUN_DIR/round_notes"
     _rn_head="{\"kind\":\"$(json_escape "$1")\",\"key\":\"$(json_escape "$2")\""
     if [ -s "$_rn_f" ] && grep -qF -- "$_rn_head," "$_rn_f" 2>/dev/null; then return 0; fi
-    if [ $(( $(wc -l < "$_rn_f" 2>/dev/null || echo 0) + 0 )) -ge "$ROUND_NOTES_MAX" ]; then
+    if [ $(( $(wc -l 2>/dev/null < "$_rn_f" || echo 0) + 0 )) -ge "$ROUND_NOTES_MAX" ]; then
         log "round note $1 ($2) dropped: $ROUND_NOTES_MAX notes already"; return 0
     fi
     printf '%s,"text":"%s"}\n' "$_rn_head" "$(json_escape "${3:-}")" >> "$_rn_f" 2>/dev/null || log "round note $1 ($2) was not written"

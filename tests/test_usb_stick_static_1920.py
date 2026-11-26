@@ -236,3 +236,23 @@ def test_the_log_has_a_link_column_between_the_controller_and_the_size_2694(tmp_
     stick = json.loads(json.dumps(CONNECTED))
     stick["rows"][0].pop("link_gbps", None)
     assert re.search(r"<tr>(.*?)</tr>", run(tmp_path, stick=stick)["page"], re.S).group(1).split("|")[3]         == '<span class="muted">לא נקרא</span>'
+
+
+@requires_native(("node", NODE))
+def test_on_hyper_v_the_sentence_replaces_the_option_no_sync_button_no_retry_no_vm_help(tmp_path):
+    """#2693 (Nadav 23/11): not a disabled button, not "אין התקן" -- the explanation, and the download stays."""
+    hyperv = {**CONNECTED, "state": "unsupported", "device": None, "plan": None, "rows": [],
+              "reason": "ב-Hyper-V אין תמיכה במקל — להעלות דרך הקונסולה"}
+    page = run(tmp_path, stick=hyperv)["page"]
+    assert "ב-Hyper-V אין תמיכה במקל — להעלות דרך הקונסולה" in page and "לא נתמך כאן" in page
+    assert "סנכרן" not in page and "usbStickSync" not in page and "disabled" not in page, "no button at all, and not a greyed one"
+    assert "בדיקה מחדש" not in page and "השרת הוא VM?" not in page and "לא זוהה דיסק-און-קי" not in page
+    assert "הורדת קובץ ה-USB…" in page, "the download of the cloner's boot USB is another feature and stays"
+
+
+@requires_native(("node", NODE))
+def test_the_vm_hint_of_the_empty_page_no_longer_offers_a_hyper_v_pass_through_disk(tmp_path):
+    none = {**CONNECTED, "state": "none", "device": None, "plan": None, "rows": []}
+    page = run(tmp_path, stick=none)["page"]
+    assert "pass-through" not in page and "<b>Hyper-V:</b> אין תמיכה במקל — להעלות דרך הקונסולה" in page
+

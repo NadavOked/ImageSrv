@@ -44,12 +44,11 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 import statistics
 import time
 from datetime import datetime, timezone
 
-from server.db import _write_lock, writing
+from server.db import _write_lock, SqlConnection, writing
 from server.core.logtext import one_line
 from server.system import steadyclock
 from server.system.health_rows import check
@@ -80,7 +79,7 @@ def _iso(epoch: float) -> str:
     return datetime.fromtimestamp(epoch, timezone.utc).isoformat(timespec="seconds")
 
 
-def _awake(conn: sqlite3.Connection, mac: str, now: float) -> bool:
+def _awake(conn: SqlConnection, mac: str, now: float) -> bool:
     row = conn.execute("SELECT last_seen FROM net_devices WHERE mac = ?", (mac,)).fetchone()
     try:
         seen = datetime.fromisoformat(row["last_seen"]).timestamp() if row else None
@@ -89,7 +88,7 @@ def _awake(conn: sqlite3.Connection, mac: str, now: float) -> bool:
     return seen is not None and 0 <= now - seen <= AWAKE_S
 
 
-def sent(conn: sqlite3.Connection, mac: str, now: float | None = None) -> None:
+def sent(conn: SqlConnection, mac: str, now: float | None = None) -> None:
     """WoL נשלח בהצלחה ל-`mac`. לעולם אינו זורק."""
     wall = time.time() if now is None else now
     now = steadyclock.now() if now is None else now
@@ -107,7 +106,7 @@ def sent(conn: sqlite3.Connection, mac: str, now: float | None = None) -> None:
         log.exception("recording a wake of %s failed", one_line(mac))
 
 
-def answered(conn: sqlite3.Connection, mac: str, now: float | None = None) -> None:
+def answered(conn: SqlConnection, mac: str, now: float | None = None) -> None:
     """המכונה דיברה עם השרת (פירור אתחול / hello) — סוגר הערה פתוחה. לעולם אינו זורק."""
     wall = time.time() if now is None else now
     now = steadyclock.now() if now is None else now
@@ -125,7 +124,7 @@ def answered(conn: sqlite3.Connection, mac: str, now: float | None = None) -> No
         log.exception("recording the answer of %s failed", one_line(mac))
 
 
-def stats(conn: sqlite3.Connection, mac: str, now: float | None = None) -> dict:
+def stats(conn: SqlConnection, mac: str, now: float | None = None) -> dict:
     """`{"decided", "answered", "rate", "typical_s", "streak"}` — `rate`/`typical_s`
     None כשאין על מה (אין הערות שהוכרעו / פחות מ-MIN_SAMPLES הצלחות). `streak` —
     כמה מההערות האחרונות שהוכרעו ברצף לא נענו."""
@@ -146,7 +145,7 @@ def stats(conn: sqlite3.Connection, mac: str, now: float | None = None) -> dict:
             "streak": streak}
 
 
-def health_checks(conn: sqlite3.Connection, now: float | None = None) -> list[dict]:
+def health_checks(conn: SqlConnection, now: float | None = None) -> list[dict]:
     """שורה כתומה לכל מכונה עם רצף של `FAIL_STREAK` הערות בלי תשובה. בלי הערות
     שנמדדו — אין שורה; עם הערות ובלי רצף — שורה ירוקה אחת."""
     now = steadyclock.now() if now is None else now
@@ -170,7 +169,7 @@ def health_checks(conn: sqlite3.Connection, now: float | None = None) -> list[di
         return [check("wol", "Wake-on-LAN", "off", "לא נבדק — הקריאה נכשלה")]
 
 
-def arm_failure_is_new(conn: sqlite3.Connection, mac: str, now: float | None = None) -> bool:
+def arm_failure_is_new(conn: SqlConnection, mac: str, now: float | None = None) -> bool:
     """`wol_arm_failed` פעם אחת לכל אתחול: True כשאין עוד שורה כזו למכונה מאז
     תחילת האתחול הנוכחי (`boot_steps.first_at`). בלי שביל אתחול (מחוץ לוילן,
     בדיקות) — פעם ב-24 שעות. כשל בקריאה — True: עדיף שורה כפולה משורה שנבלעה."""

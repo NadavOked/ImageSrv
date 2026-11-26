@@ -26,6 +26,7 @@
      נשאר לכפתורים ומסגרות; הטקסט עובר ל-*-fg כדי שכל זוג יעמוד ב-4.5:1 (tests/test_contrast_tokens.py). */
   --clr-action-fg:#006394; --clr-success-fg:#2A7300; --clr-danger-fg:#C41E00; --clr-warning-fg:#A84700;
   --clr-danger-fill:#E12200;
+  --clr-bright-fill-on:#10161b;
   --r-win:14px; --mat:rgb(255 255 255 / 72%);
 
   --clr-success:#318700; --clr-danger:#E12200; --clr-warning:#C25400; --clr-info:#0079B8;
