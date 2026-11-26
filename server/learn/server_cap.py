@@ -33,9 +33,10 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
+from server.db import SqlConnection
 import statistics
 from dataclasses import dataclass
+from typing import TypeGuard
 
 log = logging.getLogger("imagesrv.server_cap")
 
@@ -71,7 +72,7 @@ class Cap:
                 f" (נלמד מ-{len(self.waves)} גלים, {self.device})")
 
 
-def enabled(conn: sqlite3.Connection) -> bool:
+def enabled(conn: SqlConnection) -> bool:
     """הביצוע דלוק: רק `true` בדיוק. חסר, פגום, או שלא נקרא = כבוי (ההחלטה נרשמת בצל והקצב לא זז)."""
     try:
         row = conn.execute("SELECT value FROM settings WHERE key = ?", (SETTING,)).fetchone()
@@ -81,7 +82,7 @@ def enabled(conn: sqlite3.Connection) -> bool:
         return False
 
 
-def _number(value: object) -> bool:
+def _number(value: object) -> TypeGuard[float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
 
 
@@ -91,7 +92,7 @@ def saturated(got: dict) -> bool:
     return _number(util) and util >= SATURATED_UTIL
 
 
-def learn(conn: sqlite3.Connection) -> Cap | None:
+def learn(conn: SqlConnection) -> Cap | None:
     """התקרה הנלמדת של ההתקן הנוכחי, או None -- עוד לא נלמד, או שהראיה האחרונה סותרת אותה. לעולם אינו זורק."""
     try:
         seen: list[tuple[str, dict]] = []

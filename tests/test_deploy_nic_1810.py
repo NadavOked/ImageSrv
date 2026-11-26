@@ -275,3 +275,14 @@ def test_console_refuses_a_nic_that_disappears_during_the_dhcp_probe(tmp_path, i
         assert deploy.state == DeployState("none", None, None)
     finally:
         app.state.ctx.chunk.stop()
+
+
+def test_the_vanished_nic_text_names_the_setup_button_not_the_tab_that_is_hidden_until_setup_4026(health):
+    """#4026: with no deploy network the "רשת הפצה" tab does not exist (#3029); the text names the button that does."""
+    from server.db import set_setting
+    set_setting(health["conn"], "deploy:interface", "ens192")
+    health["fake"]["deploy"] = DeployState("none", None, None)
+    health["fake"]["interfaces"] = [_nic("enp11s0")]
+    detail = health["rows"]()["deploy_nic"]["detail"]
+    assert '"הגדרת רשת הפצה…"' in detail, detail
+    assert "בלשונית רשת הפצה" not in detail, detail

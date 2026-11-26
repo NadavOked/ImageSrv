@@ -108,6 +108,11 @@ def classify(ev: Evidence) -> Verdict:
         return Verdict(LINK, f"ניתוק בקרנל ({kernel}): כבל או מגירה, לא הדיסק", seen)
     if kernel in _KERNEL_DRIVE:
         return Verdict(DRIVE, f"שגיאת כונן מהקרנל ({kernel})", seen)
+    if kernel == "network":
+        if ev.kernel is None:   # עיקרון 5: "לא נקרא" נאמר בשמו, לא נקרא כ"בדקנו ואין"
+            return Verdict(NETWORK, "רשת: הסוכן דיווח שהשרת לא ענה (תקרת ההמתנה שלו); שורות הקרנל לא נקראו, ולכן אי אפשר לשלול כבל או כונן",
+                           (*seen, "kernel=unread"))
+        return Verdict(NETWORK, "רשת: הסוכן דיווח שהשרת לא ענה (תקרת ההמתנה שלו), והקרנל נקרא ואין בו שורה של כבל או כונן", seen)
     if ev.skipped == 0 and (ev.client_lost or (ev.lost_in_net or 0) > 0):
         how = "השרת איבד את המחשב באמצע המעבר" if ev.client_lost else f"{ev.lost_in_net} חלקים לא הגיעו למחשב"
         return Verdict(NETWORK, f"רשת: הדיסק לא פיגר (skipped=0), ו{how}", seen)

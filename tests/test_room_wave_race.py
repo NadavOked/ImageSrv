@@ -17,8 +17,8 @@
 **"היעד הושג"**: שני דופקים סוגרים את הסבב פעמיים וכותבים `room_done`
 כפול, וזה הטסט השני כאן.
 
-החלון נפתח כאן ביד ולא בתקווה למתזמן: התהליכון הראשון נעצר בתוך
-`SessionStore.members` — אחרי שקרא את הסבב ואת חבריו ולפני שהוא מסיק
+החלון נפתח כאן ביד ולא בתקווה למתזמן: הדופק הראשון נעצר בכניסה ל-
+`room._mark_lost` — אחרי שקרא את הסבב ואת חבריו ולפני שהוא מסיק
 מהם שהגל נגמר — והשני מספיק לסיים את הגל ולפתוח את הבא. אז הראשון
 משתחרר וממשיך עם בדיוק אותה תמונה ישנה שהייתה לו.
 
@@ -33,7 +33,6 @@ import pytest
 from conftest import hello_body
 
 from server.rounds import room
-from server.rounds.sessions import SessionStore
 
 from test_server_room import (          # noqa: F401 — room_server הוא fixture
     CLONER1, CLONER2, cloner_hello, room_body, report, room_server,
@@ -60,20 +59,19 @@ def _cloner_body(mac: str, serials: list[str]) -> dict:
 
 
 def _gate_the_wave(monkeypatch, gate: Gate, wave_id: str) -> None:
-    """עוצר את הקורא הראשון בתוך `SessionStore.members` על הגל הזה.
+    """עוצר את הדופק הראשון בכניסה ל-`room._mark_lost` על הגל הזה.
 
     זו הנקודה שבה `tick` כבר קרא את הסבב ואת מצב הגל, ועוד לא הכריע
     שהגל נגמר — כלומר בדיוק החלון שבו שני הדופקים חופפים.
     """
-    real = SessionStore.members
+    real = room._mark_lost
 
-    def gated(self, session_id: str):
-        rows = real(self, session_id)
-        if session_id == wave_id:
+    def gated(conn, store, wave, members):
+        if wave["id"] == wave_id:
             gate.trip()
-        return rows
+        return real(conn, store, wave, members)
 
-    monkeypatch.setattr(SessionStore, "members", gated)
+    monkeypatch.setattr(room, "_mark_lost", gated)
 
 
 def _wave_ready_to_finish(room_server, target: int = 6) -> str:
@@ -157,6 +155,18 @@ def _both_answered(results: dict) -> None:
             f"hello של {name} נפל: {outcome!r}"
         assert outcome.status_code == 200, \
             f"hello של {name} החזיר {outcome.status_code}: {outcome.text}"
+
+
+def test_chunk_sender_members_read_does_not_take_the_wave_gate(
+        room_server, monkeypatch):
+    wave_id = "ses_4099"
+    gate = Gate()
+    gate.release.set()
+    _gate_the_wave(monkeypatch, gate, wave_id)
+
+    room_server["ctx"].chunk.live_members(wave_id)
+
+    assert not gate.inside.is_set(), "קריאת החברים של השולח תפסה את מחסום הדופק"
 
 
 def test_two_cloners_finishing_together_open_exactly_one_next_wave(

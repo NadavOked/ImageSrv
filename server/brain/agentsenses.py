@@ -47,7 +47,7 @@ def _count(v: object, limit: int = 1 << 53) -> int | None:
 
 
 def _pct(v: object) -> float | None:
-    return float(v) if type(v) in (int, float) and 0 <= v <= 100 else None
+    return float(v) if (type(v) is int or type(v) is float) and 0 <= v <= 100 else None
 
 
 def _word(v: object, n: int = 40) -> str | None:

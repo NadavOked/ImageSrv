@@ -285,6 +285,7 @@ class B3Lister:
         import tempfile
         self.tool, self.out = tool, tempfile.TemporaryFile()
         self.failed: str | None = None
+        self.proc: subprocess.Popen[bytes] | None
         try:
             self.proc = subprocess.Popen([tool, "b3list"], stdin=subprocess.PIPE, stdout=self.out,
                                          stderr=subprocess.DEVNULL)
@@ -292,9 +293,10 @@ class B3Lister:
             self.proc, self.failed = None, f"chunkcast b3list did not start: {exc}"
 
     def write(self, data) -> None:
-        if self.failed is None:
+        proc = self.proc
+        if self.failed is None and proc is not None and proc.stdin is not None:
             try:
-                self.proc.stdin.write(data)
+                proc.stdin.write(data)
             except (BrokenPipeError, OSError) as exc:
                 self.failed = f"chunkcast b3list stopped taking the stream: {exc}"
 
@@ -307,12 +309,14 @@ class B3Lister:
     def finish(self, chunks: int) -> tuple[bytes, str]:
         """(הרשימה, ה-BLAKE3 שלה) -- או `B3Problem`."""
         try:
-            if self.failed is None:
+            proc = self.proc
+            if self.failed is None and proc is not None:
                 try:
-                    self.proc.stdin.close()
+                    if proc.stdin is not None:
+                        proc.stdin.close()
                 except OSError as exc:
                     self.failed = f"chunkcast b3list: {exc}"
-                rc = self.proc.wait(timeout=600)
+                rc = proc.wait(timeout=600)
                 if rc != 0 and self.failed is None:
                     self.failed = f"chunkcast b3list exited {rc}"
             if self.failed is not None:
@@ -506,7 +510,8 @@ def digest_file(path: Path, raw: bool, limit: int | None = None, stop=None, *,
         raise
     finally:
         done.set()
-        proc.stdout.close()
+        if proc.stdout is not None:
+            proc.stdout.close()
         rc = proc.wait()
     if rc != 0:
         # a decompressor that RAN and refused the file is evidence about the file; one that was

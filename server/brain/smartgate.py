@@ -43,7 +43,8 @@ def judge(attrs: object, before: object = None) -> dict | None:
     now, was = _raw(attrs), _raw(before)
     states = {}
     for i, v in now.items():
-        states[i] = (MISSING if v is None else ROSE if was[i] is not None and v > was[i] else POSITIVE if v > 0 else ZERO)
+        prev = was[i]
+        states[i] = (MISSING if v is None else ROSE if prev is not None and v > prev else POSITIVE if v > 0 else ZERO)
     color = ("orange" if any(s in (POSITIVE, ROSE) for s in states.values())
              else "grey" if MISSING in states.values() else "green")
     return {"color": color, "metrics": states}

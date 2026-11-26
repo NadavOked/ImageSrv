@@ -26,17 +26,18 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from typing import Callable
+from typing import Callable, TypeGuard
 
-from server.db import _settle, _write_lock, now_iso, writing
+from server.db import _settle, _write_lock, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.chunkpass")
 
 #: כמה מפתחות של "כבר נאמר" נשמרים בזיכרון: גל אחד, כמה מחיצות, כמה מעברים, כמה מחשבים -- הרבה מתחת לזה.
 MAX_SAID = 20_000
+SOURCE_FAILURE_PREFIX = "SOURCE_FAILURE p"
 
 
-def _count(value: object) -> bool:
+def _count(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
@@ -69,7 +70,7 @@ class PassLog:
         self.emit = emit                         # (event, detail, session_id) -- `ChunkEngine.on_event`
         self.chunk_mb = chunk_mb                 # חתיכה אחת, ב-MB: ההורדה נמדדת באותה יחידה כמו בדיקת הכתיבה
         #: חיבור ה-DB. None = לא מחובר (בדיקות של המנוע): רק היומן נכתב. מחובר ב-`server.app`.
-        self.conn = None
+        self.conn: SqlConnection | None = None
         self._lock = threading.Lock()
         self._said: set[tuple] = set()
 

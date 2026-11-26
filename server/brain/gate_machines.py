@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
+from server.db import SqlConnection
 from typing import Callable
 
 from server.brain.gate_core import BLOCK, OPEN, UNDECIDED, WARN, Reading, name_of, undecided
@@ -29,14 +29,14 @@ REPEATED_HE = "אתחל {n} פעמים ולא הצטרף"
 _RANK = {OPEN: 0, UNDECIDED: 1, WARN: 2, BLOCK: 3}
 
 
-def _name(conn: sqlite3.Connection, mac: str) -> str:
+def _name(conn: SqlConnection, mac: str) -> str:
     try:
         return name_of(conn, mac)
     except Exception:                                                       # noqa: BLE001 -- שם שלא נקרא אינו מפיל קריאה
         return mac
 
 
-def _each(conn: sqlite3.Connection, macs: tuple[str, ...], gate: str, one: Callable[[str], Reading]) -> list[Reading]:
+def _each(conn: SqlConnection, macs: tuple[str, ...], gate: str, one: Callable[[str], Reading]) -> list[Reading]:
     """קריאה לכל משכפל. משכפל שהבדיקה שלו זרקה = ``UNDECIDED`` בשמו, והשאר נקראים."""
     if not macs:
         return [undecided("לא נבחרו משכפלים לסבב, ואין מה לבדוק")]
@@ -50,7 +50,7 @@ def _each(conn: sqlite3.Connection, macs: tuple[str, ...], gate: str, one: Calla
     return out
 
 
-def _round(conn: sqlite3.Connection, round_id: str) -> tuple[str | None, dict[str, set[int]] | None]:
+def _round(conn: SqlConnection, round_id: str) -> tuple[str | None, dict[str, set[int]] | None]:
     """``(הקשר האתחול של גל הסבב, {mac: חיבורי ה-SATA שנבחרו})``. ``None`` = לא נקרא: אין לנחש מהו."""
     try:
         row = conn.execute("SELECT wave_session_id, target_slots_json FROM room_rounds WHERE id = ?", (round_id,)).fetchone()
@@ -67,7 +67,7 @@ def _round(conn: sqlite3.Connection, round_id: str) -> tuple[str | None, dict[st
 # --- B23: מצב בקר ה-SATA והדרייבר ---------------------------------------------------------------------------------------
 
 
-def ahci(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
+def ahci(conn: SqlConnection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
     """B23. ההחלטה היא של `agentsenses.ahci_gate` (אותו כלל כמו ב-hello), על התמונה האחרונה של הקושחה. ``ide``/``raid`` = ``WARN``;
     ``BLOCK`` רק בסבב שהוא פס ייצור (נדב 13/11: "בלי AHCI אין פס"), והסיבה אומרת שזה צל. לא נקרא = ``UNDECIDED``."""
     from server.agent import firmware_image                                 # noqa: PLC0415
@@ -98,7 +98,7 @@ def ahci(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list
 # --- B52: אתחולים שנכשלו ולולאות ----------------------------------------------------------------------------------------
 
 
-def boot(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
+def boot(conn: SqlConnection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
     """B52. ``boot_attempts`` (`bootguard`) ו-`agent_loops` (`loops`). ``BLOCK`` רק כשהשומר של #75 כבר מסרב למכונה בהקשר של
     **הסבב הזה** (נשלחה לדיסק המקומי); אתחול חוזר באותו הקשר, הגעה לסוכן בלי סיבה, ומכונה שהשומר שלח לדיסק המקומי בעבודה
     קודמת = ``WARN``. ``OPEN`` רק כששני המקורות נקראו ואין בהם דבר; מקור שלא נקרא = ``UNDECIDED``, לא "אין לולאות"."""
@@ -106,12 +106,14 @@ def boot(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list
     from server.console.journal_he import EVENTS_HE                         # noqa: PLC0415
 
     context, _slots = _round(conn, round_id)
+    last_context: dict[str, str] | None
+    repeated: dict[str, dict[str, dict]]
     try:
         last_context = {r["mac"]: r["context"] for r in conn.execute("SELECT mac, context FROM boot_attempts").fetchall()}
         repeated = {ctx: bootguard.repeats(conn, ctx) for ctx in set(last_context.values())}
     except Exception:                                                       # noqa: BLE001 -- מונה שלא נקרא אינו "אין אתחולים חוזרים"
         log.exception("brain: boot_attempts were not read by the boot gate")
-        last_context = repeated = None
+        last_context, repeated = None, {}
     try:
         in_loop = {r["id"]: r["detail"] for r in loops.loop_checks(loops.current(conn))}
     except Exception:                                                       # noqa: BLE001 -- ראו `health.py`: שאילתה שנפלה אינה "אין לולאות"
@@ -140,7 +142,7 @@ def boot(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list
         else:
             ev.append("loops=none")
         if found:
-            return Reading(max((v for v, _t in found), key=_RANK.get), f"{name}: " + " · ".join(t for _v, t in found), tuple(ev), mac)
+            return Reading(max((v for v, _t in found), key=_RANK.__getitem__), f"{name}: " + " · ".join(t for _v, t in found), tuple(ev), mac)
         unread = [he for he, bad in (("מונה האתחולים לא נקרא", last_context is None), ("רשימת הלולאות לא נקראה", in_loop is None)) if bad]
         if unread:
             return undecided(f"{name}: לא הצלחנו לבדוק אתחולים חוזרים ולולאות: " + "; ".join(unread), tuple(ev), mac)
@@ -152,7 +154,7 @@ def boot(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list
 # --- B53: אירועי PXE ו-DHCP --------------------------------------------------------------------------------------------
 
 
-def pxe(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
+def pxe(conn: SqlConnection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
     """B53. ``pxe_log.verdict`` מאז ההערה האחרונה של המכונה. ``hello`` (הגיעה לסוכן) = ``OPEN``. לוג שלא נקרא, או **אין אף אירוע**
     של המכונה בחלון = ``UNDECIDED`` ("לא נמדד", ואינו "לא עלתה": מכונה שיושבת בסוכן שעות אינה משאירה אירוע). בעיה שנמדדה
     (קיבלה DHCP ולא טענה, או טענה ולא הגיעה לסוכן) = ``WARN`` בטקסט של `STATES_HE`."""
@@ -193,7 +195,7 @@ def _nic_measured(sample: dict) -> list[str]:
     return out
 
 
-def nic(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
+def nic(conn: SqlConnection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
     """B54. הדגימה האחרונה של `probe` (S31, S32), ורק מה ש-`probe.verdicts` כבר מחליט עליו: שגיאות CRC, כבל פגום, כפילות IP.
     ממצא = ``WARN`` (שום כלל קיים אינו מסרב למכונה כזו, ולכן אין ``BLOCK``). ``OPEN`` רק כשמונה ה-CRC נמדד או שבדיקת הכבל החזירה
     ``ok``, ולא נמצא ממצא. אין דגימה, או שאף אחד משניהם לא נמדד = ``UNDECIDED``."""
@@ -220,7 +222,7 @@ def nic(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list[
 # --- B56: סטיית קושחה והמלצת חיווט -------------------------------------------------------------------------------------
 
 
-def _wiring(conn: sqlite3.Connection, mac: str, ports: set[int] | None) -> tuple[tuple[str, ...], str | None, bool]:
+def _wiring(conn: SqlConnection, mac: str, ports: set[int] | None) -> tuple[tuple[str, ...], str | None, bool]:
     """``(ראיות, טקסט אזהרה או None, האם לא הצלחנו לבדוק)``. בלי מספיק מדידה (`advice["enough"]`): ``wiring=no_basis``, ואין תרומה."""
     from server.learn import wiring                                         # noqa: PLC0415
 
@@ -239,7 +241,7 @@ def _wiring(conn: sqlite3.Connection, mac: str, ports: set[int] | None) -> tuple
     return ("wiring=avoid_in_round", *(f"avoid_port={p}" for p in bad)), " ".join([advice["text_he"] or "", *advice["move_notes_he"]]).strip(), False
 
 
-def firmware(conn: sqlite3.Connection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
+def firmware(conn: SqlConnection, macs: tuple[str, ...], round_id: str) -> list[Reading]:
     """B56. סטייה מול ההפניה של `firmware_image` (``baseline`` או ההדלקה הקודמת) = ``WARN``, בטקסט השינוי הקיים (אותו טקסט שביומן
     ``fw_changed``); וכן חיבור SATA של הסבב שהמלצת החיווט (LR9) אומרת להימנע ממנו. ``OPEN`` רק כשיש הפניה, אין סטייה, והחיווט
     נבדק או שאין לו בסיס. אין תמונה, אין הפניה, או חיווט שלא נקרא = ``UNDECIDED``."""

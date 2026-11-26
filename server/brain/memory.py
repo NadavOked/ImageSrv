@@ -43,7 +43,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Iterable
+from typing import Any, Callable, Iterable, Protocol, overload
 
 from server.brain import say
 from server.db import _settle, _write_lock, now_iso, writing
@@ -152,7 +152,8 @@ def resolve(conn, ids: Iterable[int | None], outcome: str, at: str | None = None
     try:
         marks = ",".join("?" * len(ids))
         stamp = at or now_iso()
-        extra, extra_params = "", ()
+        extra = ""
+        extra_params: tuple[str, ...] = ()
         if performed is not None or result_snapshot is not None:
             ref = {REF: "result", "v": REF_VERSION, "performed": performed, "snapshot": result_snapshot, "at": stamp}
             extra = (", evidence_json = CASE WHEN json_valid(evidence_json)"
@@ -307,7 +308,8 @@ def _wave(row) -> dict:
     drops = _json(row["drops"]) or {}
     # #3173: a chunk wave keeps only `stream["chunk"]`: `stream_zbytes` is what it multicast (the unit of `sent_bytes`),
     # `lost_chunks` the chunks that did not arrive in the first pass (its own key: chunks, not the old sender's blocks)
-    chunk = stream.get("chunk") if isinstance(stream, dict) and isinstance(stream.get("chunk"), dict) else {}
+    raw_chunk = stream.get("chunk") if isinstance(stream, dict) else None
+    chunk = raw_chunk if isinstance(raw_chunk, dict) else {}
     sent = _num(stream.get("sent_bytes")) if isinstance(stream, dict) else None
     out = {"max_bitrate_bps": _bitrate(decision.get("max_bitrate")) if isinstance(decision, dict) else None,
            "loss_blocks": _num(stream.get("loss_blocks")) if isinstance(stream, dict) else None,
@@ -317,8 +319,9 @@ def _wave(row) -> dict:
         for field in ("rcvbuf", "abandoned"):
             values = [d.get(field) if isinstance(d, dict) else None for d in drops.values()]
             # מקלט אחד שלא נקרא = כל הגל "לא נקרא" (אותו כלל של `drive_rates._rcvbuf`)
-            if values and all(isinstance(v, int) and not isinstance(v, bool) and v >= 0 for v in values):
-                out[field] = float(sum(values))
+            counts = [v for v in values if isinstance(v, int) and not isinstance(v, bool) and v >= 0]
+            if values and len(counts) == len(values):
+                out[field] = float(sum(counts))
     return out
 
 
@@ -348,11 +351,18 @@ def _server_io(row) -> dict:
     result = _json(row["result_json"]) or {}
     server = result.get("server") if isinstance(result, dict) else None
     server = server if isinstance(server, dict) else {}
-    peaks = server.get("peaks") if isinstance(server.get("peaks"), dict) else {}
+    raw_peaks = server.get("peaks")
+    peaks = raw_peaks if isinstance(raw_peaks, dict) else {}
     out = {k: _num(v) for k, v in (result.items() if isinstance(result, dict) else ()) if k != "server"}
     out.update({f"server_{k}" if k in out else k: _num(v) for k, v in server.items() if k != "peaks"})
     out.update({f"peak_{k}": _num(v) for k, v in peaks.items()})
     return {k: v for k, v in out.items() if v is not None}
+
+
+class RowLike(Protocol):
+    """שורה שנקראים ממנה שדות בשם: `sqlite3.Row` מהטבלה, או ה-`dict` שנשאר ממנה בזיכרון (`memory_view.Facts`)."""
+
+    def __getitem__(self, key: str, /) -> Any: ...
 
 
 @dataclass(frozen=True)
@@ -361,11 +371,11 @@ class Source:
     rule: str
     table: str
     at: str
-    keys: Callable[[sqlite3.Row], list[tuple[str, str]]]
-    nums: Callable[[sqlite3.Row], dict]
-    texts: Callable[[sqlite3.Row], dict] = lambda row: {}
+    keys: Callable[[RowLike], list[tuple[str, str]]]
+    nums: Callable[[RowLike], dict]
+    texts: Callable[[RowLike], dict] = lambda row: {}
     #: ישויות נוספות מאותה שורה, כל אחת עם המספרים שלה: גל אחד = מה שכל משכפל בו זרק (`wave_rates.drops`).
-    extra: Callable[[sqlite3.Row], dict] = lambda row: {}
+    extra: Callable[[RowLike], dict] = lambda row: {}
     #: #3185: טבלת פעולות -- השורות מסוכמות ואינן נמחקות (`room_rounds`). כלל השמירה בוחר אילו, וצריך לסנן שורה
     #: שכבר סוכמה (`fold` לא מוחק, ולכן לא יסכם אותה שוב מעצמו).
     keep: bool = False
@@ -510,6 +520,10 @@ def _combine(old: dict, new: dict) -> dict:
     return out
 
 
+@overload
+def _span(a: str | None, b: str, pick) -> str: ...
+@overload
+def _span(a: str | None, b: str | None, pick) -> str | None: ...
 def _span(a: str | None, b: str | None, pick) -> str | None:
     return b if a is None else a if b is None else pick(a, b)
 

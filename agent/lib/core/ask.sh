@@ -80,7 +80,7 @@ ask_gui_records() {
     # clock: the moment the list was read (asks.at) plus the server's expires_in_s. Open questions first, then the
     # closed ones (the newest first), 8 at most. No list, or no moment for it: no records.
     [ -s "$RUN_DIR/asks.json" ] || return 0
-    read -r _ag_at < "$RUN_DIR/asks.at" 2>/dev/null || return 0
+    read -r _ag_at 2>/dev/null < "$RUN_DIR/asks.at" || return 0
     case "$_ag_at" in ''|*[!0-9]*) return 0 ;; esac
     jq -r --argjson at "$_ag_at" '
       def c: (. // "") | tostring | gsub("[\\r\\n|]"; " ");

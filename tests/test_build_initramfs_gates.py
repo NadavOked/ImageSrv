@@ -251,7 +251,7 @@ def firmware_snippet() -> str:
     start = next(i for i, l in enumerate(lines) if l.startswith('for fw in "${FIRMWARE_DIRS'))
     while lines[start - 1].strip() and not lines[start - 1].startswith("#"):
         start -= 1
-    end = next(i for i, l in enumerate(lines[start:], start) if l.startswith("# --- pack"))
+    end = next(i for i, l in enumerate(lines[start:], start) if l.startswith("# --- site/lab overlay"))
     return "\n".join(lines[start:end]).rstrip()
 
 

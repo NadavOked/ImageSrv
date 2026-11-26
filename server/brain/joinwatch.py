@@ -258,16 +258,16 @@ class Watch:
             self._say(conn, round_row, s, J.catchup(need.missing, J.x17(learned["X17"]), tail), disk)
         siblings = [n.missing for o, o_serial, _p in targets if o_serial != serial
                     for n in [fill.parse_need(o.get("rejoin"))] if n is not None and n.missing > 0]
-        call = J.sibling(siblings, budget_bps, fill.CEILING_BPS)
-        if call is not None:
-            self._say(conn, round_row, s, call, disk)
+        sibling = J.sibling(siblings, budget_bps, fill.CEILING_BPS)
+        if sibling is not None:
+            self._say(conn, round_row, s, sibling, disk)
         skipped = _int(t.get("skipped"))
         taken = need.chunks - need.missing if need.chunks is not None else None
         slow = repair.slow_reason(taken, skipped, stream_Bps / 1e6 if stream_Bps else None, floor_mbps) \
             if taken is not None and taken >= 0 else None
-        call = J.late_slow(slow)
-        if call is not None:
-            self._say(conn, round_row, s, call, disk)
+        late = J.late_slow(slow)
+        if late is not None:
+            self._say(conn, round_row, s, late, disk)
         self._r5(s, mac, serial, port, need, conn)
 
     def _joined(self, conn, round_row, s, serial, now) -> None:

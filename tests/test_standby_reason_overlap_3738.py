@@ -27,6 +27,7 @@ pytestmark = _native
 SHORT = "בגל הקודם כתב 48MB/s"
 # the agent's wtext is at most 160 bytes (state.c, IdleDisk.wtext) -- this is as long as one can arrive
 LONG = "בגל הקודם כתב 48MB/s לאורך כל הגל (18/11), מתחת לסף 74 MB/s; הבדיקה עכשיו עברה, אבל הקצב נשאר נמוך"
+BIDI_ISOLATES = dict.fromkeys(range(0x2066, 0x206A))
 
 # two drawers: sda plain, sdb (the APS of r39/r40) red by the write check, "תפוס עכשיו" under its model; an F1 mark makes a second sub line
 STATE = ("hello_age=4\nhello_rc=200\nmachine_name=CLONE-01\nserver_name=imagesrv-ta\n"
@@ -88,7 +89,7 @@ def test_no_two_lines_of_a_red_drawer_share_a_pixel(tmp_path, size, reason):
     standby = {k: v for k, v in cards.items() if k in ("standby-light", "standby-dark")}   # not "standby-smart": its table is another card
     assert standby, f"no waiting screen drawn: {sorted(cards)}"
     for card, boxes in standby.items():
-        assert any(reason in b[4] for b in boxes), (card, "the reason is not on the screen", [b[4][:30] for b in boxes])   # said in full, not dropped
+        assert any(reason in b[4].translate(BIDI_ISOLATES) for b in boxes), (card, "the reason is not on the screen", [b[4][:30] for b in boxes])   # said in full, not dropped
         assert _overlaps(boxes) == [], (card, size, _overlaps(boxes))
 
 
@@ -98,7 +99,7 @@ def test_a_long_reason_wraps_inside_the_name_block_and_keeps_all_its_words(tmp_p
     binary = _build_gui(tmp_path)
     cards = _boxes(binary, tmp_path, STATE.format(words="", wstate="slow", wtext=LONG), "1280x800", "w")
     boxes = cards["standby-light"]
-    (why,) = [b for b in boxes if LONG in b[4]]
+    (why,) = [b for b in boxes if LONG in b[4].translate(BIDI_ISOLATES)]
     assert why[3] - why[1] >= 28, why                       # more than one 12px line: wrapped, not stretched across the row
     model = [b for b in boxes if b[4] == "APS-SL3N-512"]
     assert model and why[0] > model[0][2], (why, model)     # it ends before the end block begins

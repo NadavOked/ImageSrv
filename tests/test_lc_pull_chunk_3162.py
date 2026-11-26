@@ -35,7 +35,6 @@ import chunkcast_rig as C
 from native import requires_native
 from test_agent import BASH, posix
 from test_chunk_e2e_2533 import AGENT, CLONER_A, LOST, REPO, _sha, stack  # noqa: F401 -- `stack` is the fixture
-from test_cloner_pull_agent import run as run_lc_agent
 from tools.e2e import harness as H
 
 pytestmark = requires_native("gcc", "zstd", "jq", "curl", ("bash", BASH), posix=True,
@@ -73,8 +72,9 @@ def _stage(stack, tmp_path):
         assert status == 200, manifest
         parts = {p["index"]: p for p in manifest["partitions"]}
         assert not any(p.get("index_error") for p in parts.values()), parts
-        return all(isinstance(parts[n].get("readback_chunks"), int) for n in (1, 3))
-    stack._wait(derived, "the server derived the index of both partitions")
+        return all(isinstance(parts[n].get("readback_chunks"), int) and parts[n].get("chunk_b3")
+                   for n in (1, 3))
+    stack._wait(derived, "the server published the index and BLAKE3 list for both partitions")
     stack.machine(CLONER_A, "01", "grp_CLONERS")
     disks = [H.disk(f"sd{chr(97 + i)}", H.GB256, serial, port=i + 1) for i, serial in enumerate(SERIALS)]
     stack.hello(CLONER_A, disks, engines=["udpcast", "chunk"])
@@ -83,6 +83,8 @@ def _stage(stack, tmp_path):
 
 def _pull_from_the_cloner(stack, tmp_path, image: str) -> str:
     """The cloner's own lcpull.sh opens the round. Returns what it said."""
+    from test_cloner_pull_agent import run as run_lc_agent
+
     (tmp_path / "lc").mkdir()
     out = run_lc_agent(tmp_path / "lc", LC_PULL, MAC=CLONER_A, SERVER=stack.base, IMAGE=image, PORTS=TICKED,
                        **stack.trust_env)
@@ -104,23 +106,35 @@ def _running(stack, disks) -> dict:
 def _start(stack, tmp_path, rule=None, script=AGENT):
     """Everything up to the agent's run, and the run started. Returns (image, disks, answer, run dir, process)."""
     image, disks = _stage(stack, tmp_path)
+    # Build the simulated hardware before opening the wave starts its listener deadline.
+    run = tmp_path / "agent"
+    (run / "disks").mkdir(parents=True)
+    for d in disks:
+        (run / "disks" / f"{d['dev']}.serial").write_text(d["serial"], encoding="ascii")
+        stack.esp.blank(run / "disks" / f"{d['dev']}.p1")
+        stack.win.blank(run / "disks" / f"{d['dev']}.p3")
     _pull_from_the_cloner(stack, tmp_path, image)
     answer = _running(stack, disks)
     session = answer["session"]
     assert session.get("engine") == "chunk", f"the lc-pull wave is not on the chunk engine: {session}"
     assert session["chunk"]["port"] == stack.portbase + 2, session
     assert session["target_ports"] == [1, 3], session
-    manifest = stack.agent.request("GET", f"/api/v1/images/{image}/manifest")[1]
+
+    def sender_ready():
+        status, body = stack.admin.json("GET", "/api/console/overview")
+        assert status == 200, body
+        sender = body.get("sender") or {}
+        assert not sender.get("error"), sender
+        return (sender.get("session_id") == session["id"] and sender.get("state") == "sending"
+                and sender.get("partition") == 1)
+
+    stack._wait(sender_ready, "the chunk sender is waiting for the first partition's listener")
+    status, manifest = stack.agent.request("GET", f"/api/v1/images/{image}/manifest")
+    assert status == 200, manifest
     if rule is not None:
         stack.relay.rule = rule             # before the agent listens: the sender waits for it
-    run = tmp_path / "agent"
-    (run / "disks").mkdir(parents=True)
     (run / "resp.json").write_text(json.dumps(answer), encoding="utf-8")
     (run / "manifest.json").write_bytes(manifest)
-    for d in disks:                         # all three exist as disks; only the ticked two are handed to the agent
-        (run / "disks" / f"{d['dev']}.serial").write_text(d["serial"], encoding="ascii")
-        stack.esp.blank(run / "disks" / f"{d['dev']}.p1")
-        stack.win.blank(run / "disks" / f"{d['dev']}.p3")
     (run / "agent.sh").write_text(script, encoding="utf-8", newline="\n")
     ticked = [d["dev"] for d in disks if d["port"] in (1, 3)]
     with (run / "out").open("wb") as out:
@@ -137,6 +151,7 @@ def _wait_agent(stack, run, process, seconds: int = 240) -> tuple[object, list[s
         rc = process.wait(seconds)
     except subprocess.TimeoutExpired:
         process.kill()
+        process.wait()
         rc = "timeout"
     trace = (run / "trace").read_text(encoding="utf-8").splitlines() if (run / "trace").exists() else []
     log = (run / "agent.log").read_text(errors="replace")[-3000:] if (run / "agent.log").exists() else ""

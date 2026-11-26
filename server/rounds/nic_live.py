@@ -61,7 +61,7 @@ def clean_bus(value: object) -> dict | None:
         for key in ("current_link_speed", "max_link_speed", "current_link_width", "max_link_width"):
             n = value.get(key)
             valid = type(n) is int or (key.endswith("speed") and type(n) is float)
-            result[key] = n if valid and 0 < n <= 1024 else None
+            result[key] = n if valid and n is not None and 0 < n <= 1024 else None
         return result
     return {"bus": "unknown"}
 

@@ -17,16 +17,18 @@ import asyncio
 import logging
 import threading
 import time
+from collections.abc import Callable
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from sqlite3 import Connection
+from sqlite3 import OperationalError
 
 from fastapi import Depends, FastAPI
 from fastapi import Request, Response
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.types import Scope
 
 from boot.grub_menu import GrubConfig
 from boot.http import create_boot_asgi, gui_initrd_path
@@ -79,7 +81,7 @@ from server.system import clockstep, silent_tasks   # #2905
 from server.system import grub_password   # #2437
 from server.system import grub_lock_state   # #2452
 from server.system import accesslog   # #3184
-from .db import journal
+from .db import journal, SqlConnection
 from server.net import wol
 from server.rounds import direct
 from server.rounds import prompt_hold
@@ -160,7 +162,14 @@ def _off_vlan_decline(mac: str, step: str) -> bool:
     return False
 
 
-def _record_verified(rt: ServerRuntime, scope: dict, mac: str, step: str) -> bool:
+def _fail_wave_too(conn, session_id: str, detail: str) -> Callable[[], None]:
+    """`SessionStore.fail(related=...)` רץ בשביל השפעתו; מה ש-`room.fail_wave` מחזיר אינו נקרא."""
+    def related() -> None:
+        room.fail_wave(conn, session_id, detail, commit=False)
+    return related
+
+
+def _record_verified(rt: ServerRuntime, scope: Scope, mac: str, step: str) -> bool:
     """#2411: פירור אתחול (#400) על וילן ההפצה נרשם רק כשה-`?mac=` תואם את
     החכירה — אותה בדיקה כמו בתפריט (`api.boot_identity_ok`, אותו יומן ואותו
     ריסון של #1949). אחרת מכונה אחרת בוילן הייתה כותבת שביל מומצא ("הגיע עד
@@ -226,7 +235,7 @@ class ServerRuntime:
     שני sweep, שני תהליכי-רקע — וזה בדיוק מה שהפיצול הזה מונע."""
 
     ctx: ServerContext
-    conn: Connection
+    conn: SqlConnection
     library: ImageLibrary
     store: SessionStore
     server_base: str
@@ -248,6 +257,7 @@ class ServerRuntime:
     #: הקצב של שעון-הרקע של החדר (#456). ברירת המחדל היא הייצור; בדיקות
     #: מעבירות ערך קצר כדי שהלולאה תדגום מהר בלי להמתין 5ש'.
     room_clock_interval: float = ROOM_CLOCK_SECONDS
+    retry_chunk_failures: Callable[[], None] | None = None
     #: #1564: קצב הדופק למשניים המצומדים. בדיקות מעבירות ערך קצר.
     heartbeat_interval: float = storage_heartbeat.HEARTBEAT_SECONDS
     # #703 (tracer 5): זהות ה-TLS של הקונסולה, כשהיא מוגשת ב-HTTPS. ``None``
@@ -317,6 +327,8 @@ async def _room_clock(rt: ServerRuntime, interval: float) -> None:
     up_since = clockstep._mono()   # #2905: שקט של השרת עצמו אינו שקט של המכונה
     while True:
         await asyncio.sleep(interval)
+        if rt.retry_chunk_failures is not None:
+            await asyncio.to_thread(rt.retry_chunk_failures)
         await asyncio.to_thread(room.sweep, rt.conn, rt.store)
         # #3654: שאלה למשתמש שהגיע זמנה נסגרת `expired` וחוזרת לברירת המחדל הבטוחה גם כשאיש אינו שואל עליה. לעולם אינו זורק.
         await asyncio.to_thread(brain_ask.expire_due, rt.conn)
@@ -423,7 +435,7 @@ def _install_room_clock(app: FastAPI, rt: ServerRuntime) -> None:
             heartbeat_task = asyncio.create_task(
                 _storage_heartbeat(rt, rt.heartbeat_interval))
             budget = getattr(rt.ctx, "budget", None)
-            brain_tasks = ((asyncio.create_task(_brain_budget_clock(budget, brain_budget.TICK_S)),)
+            brain_tasks: tuple[asyncio.Task[None], ...] = ((asyncio.create_task(_brain_budget_clock(budget, brain_budget.TICK_S)),)
                            if budget is not None else ())
             senses = getattr(rt.ctx, "senses", None)
             if senses is not None:
@@ -449,12 +461,13 @@ def _install_room_clock(app: FastAPI, rt: ServerRuntime) -> None:
                 if watcher is not None:
                     await asyncio.to_thread(watcher.stop)
                 # #1426: המנוע יושב על ctx; ל-ServerRuntime אין שדה משלו
-                await asyncio.to_thread(rt.ctx.chunk.close)
+                if rt.ctx.chunk is not None:
+                    await asyncio.to_thread(rt.ctx.chunk.close)
 
     app.router.lifespan_context = lifespan
 
 
-def _backfill_used_bytes(conn: Connection, library: ImageLibrary) -> None:
+def _backfill_used_bytes(conn: SqlConnection, library: ImageLibrary) -> None:
     """#1494: שורת יומן לכל אימג' שנוסתה בו השלמה — מה נכתב, ומה לא ולמה."""
     def report(result: dict) -> None:
         written = ", ".join(f"p{i}={b}" for i, b in sorted(result["written"].items()))
@@ -471,7 +484,7 @@ def _backfill_used_bytes(conn: Connection, library: ImageLibrary) -> None:
         journal(conn, "image_used_bytes_underived", "ההשלמה נכשלה — ראו יומן השרת")
 
 
-def _readback_reporter(conn: Connection):
+def _readback_reporter(conn: SqlConnection):
     """#1805: שורת יומן לכל אימג' שנוסה — מה גובב לקריאה חוזרת, ומה לא ולמה."""
     def report(result: dict) -> None:
         # #3192: `written` הוא מה ש-`record_index` נגע בו, וגם `{"error": …}` נרשם שם
@@ -698,9 +711,36 @@ def create_runtime(
     # #3064 (K5): HTTP מול multicast בהשלמה -- צל בלבד. המנוע ותקציב הרשת מחוברים אליו כשהם נבנים, למטה.
     route_tracker = brain_route.Tracker(conn)
 
+    pending_chunk_failures: dict[str, str] = {}
+    chunk_failure_lock = threading.Lock()
+
+    def persist_chunk_failure(session_id: str, detail: str) -> None:
+        try:
+            store.fail(session_id, detail, related=_fail_wave_too(conn, session_id, detail))
+        except OperationalError:
+            log.exception("chunksend: could not persist failure of %s: %s", session_id, detail)
+            with chunk_failure_lock:
+                pending_chunk_failures[session_id] = detail
+        else:
+            with chunk_failure_lock:
+                pending_chunk_failures.pop(session_id, None)
+
+    def retry_chunk_failures() -> None:
+        with chunk_failure_lock:
+            pending = list(pending_chunk_failures.items())
+        for session_id, detail in pending:
+            persist_chunk_failure(session_id, detail)
+
     def on_chunk_event(event: str, detail: str, session_id: str) -> None:
         # #2533: ביומן; כישלון של המנוע הוא כישלון הסבב, בשמו. קצב הרשת שלו נלמד ב-`chunk_rate` (#3163), למטה.
-        journal(conn, event, detail, round_id=session_id)
+        if event == "send_failed":
+            persist_chunk_failure(session_id, detail)
+        try:
+            journal(conn, event, detail, round_id=session_id)
+        except OperationalError:
+            if event != "send_failed":
+                raise
+            log.exception("chunksend: could not journal failure of %s: %s", session_id, detail)
         route_tracker.on_event(event, detail, session_id)      # לעולם אינו זורק
         if event in ("send_done", "send_failed", "send_stopped"):
             # #3064 (G4): דיסק הספרייה בגל — `begin` כבר רץ ב-`wave_bitrate`.
@@ -718,9 +758,6 @@ def create_runtime(
             # #3164: אבדן הגל מול הבסיס של כרטיס ההפצה. ה-`drops` נרשם כשהחדר סוגר את הגל (`room`), וה-`send_done` נרשם
             # כאן: מי שמגיע אחרון רואה את שניהם, ושורה אחת ביומן גם כששניהם מעריכים. לעולם אינו זורק.
             learn_netloss.evaluate_chunk(conn, session_id)
-        if event == "send_failed":
-            store.fail(session_id, detail,
-                       related=lambda: room.fail_wave(conn, session_id, detail, commit=False))
         wave_eta.on_event(event, detail, session_id)           # #3295 (ב'): לעולם אינו זורק
         if event in ("send_done", "send_failed", "send_stopped"):
             carousel.forget(session_id)                         # #3064 (B7)
@@ -744,6 +781,7 @@ def create_runtime(
     chunk = chunksend.ChunkEngine(
         chunk_library,
         interface=interface,
+        source=chunksend.source_of(server_base),   # #1079/#2485: מקלטים מקבלים רק ממנה, והשולח נקשר אליה
         on_event=on_chunk_event,
         wants=lambda session_id: chunk_wave(session_id) or live.wants(session_id),
         ledger=chunksend.DbLedger(conn, chunk_library),    # ההשלמה נשענת על `chunk_ledger`, לא על הזיכרון
@@ -760,10 +798,9 @@ def create_runtime(
         pending_prompts=lambda session_id: prompt_hold.waiting_in_wave(conn, session_id),
         # פקודה על אימג' חי היא הזמנה למחשב הבנייה, לא תהליך כאן
         runner=live.runner(sender_runner or (chunkctx.simulated_runner if sender_simulate else None)),
-        **({"portbase": sender_portbase} if sender_portbase is not None else {}),
-        **({"max_wait": sender_max_wait} if sender_max_wait is not None else {}),
-        **({"start_timeout": sender_start_timeout}
-           if sender_start_timeout is not None else {}),
+        portbase=sender_portbase,
+        max_wait=chunkctx.DEFAULT_MAX_WAIT if sender_max_wait is None else sender_max_wait,
+        start_timeout=chunkctx.DEFAULT_START_TIMEOUT if sender_start_timeout is None else sender_start_timeout,
     )
     live.engine = chunk
     chunk.say = lambda: chunksend.say_ms(conn)   # #3532: --lead-ms / --tail-ms of every send
@@ -807,6 +844,8 @@ def create_runtime(
     _leases = (identity_hooks or {}).get("leases")
 
     def _lease_macs(ip: str) -> tuple[str, ...] | None:
+        if _leases is None:                                 # `attach` below passes this only when there are leases
+            return None
         holders = _leases.holders(ip)
         return holders.macs if holders.read else None       # None = הקובץ לא נקרא: "לא ידוע", לא "אין חכירה"
 
@@ -854,8 +893,7 @@ def create_runtime(
         unindexed = live.refusal(session["id"]) if is_direct else None
         if unindexed:
             # #3161: המקור לא העלה אינדקסים -- הגל נכשל בשמו
-            if store.fail(session["id"], unindexed,
-                          related=lambda: room.fail_wave(conn, session["id"], unindexed, commit=False)):
+            if store.fail(session["id"], unindexed, related=_fail_wave_too(conn, session["id"], unindexed)):
                 journal(conn, "send_failed", unindexed, round_id=session["id"])
             return
         # #3173: גל שאינו של חדר השיכפול ואינו הפצה ישירה -- סבב כיתה שנפתח לפני השדרוג. אין לו מקלט ואין לו שולח:
@@ -870,7 +908,7 @@ def create_runtime(
             refused = chunk.start(session)
         if refused and store.fail(
                 session["id"], refused,
-                related=lambda: room.fail_wave(conn, session["id"], refused, commit=False)):
+                related=_fail_wave_too(conn, session["id"], refused)):
             journal(conn, "send_failed", refused, round_id=session["id"])
 
     store = SessionStore(
@@ -882,8 +920,10 @@ def create_runtime(
     )
     # #3137: a wave does not leave before the index its engine checks is beside every file -- derived now,
     # while the cloners boot.
-    prep = indexprep.IndexPrep(library, on_event=lambda event, detail, wave_id: journal(
-        conn, event, detail, round_id=None if wave_id.startswith(indexprep.PULL_KEY) else wave_id),   # #3231: a pull's key is no session
+    def on_index_event(event: str, detail: str, wave_id: str) -> None:
+        journal(conn, event, detail, round_id=None if wave_id.startswith(indexprep.PULL_KEY) else wave_id)   # #3231: a pull's key is no session
+
+    prep = indexprep.IndexPrep(library, on_event=on_index_event,
         on_ceiling=lambda wave_id, image_id, size, ceiling: brain_ceilings.prep_shadow(
             conn, wave_id, image_id, size, ceiling, base_s=indexprep.CEILING_BASE_S,
             floor_bps=indexprep.CEILING_FLOOR_BPS))   # #3817 (F2): the ceiling is a brain row, in shadow
@@ -985,6 +1025,7 @@ def create_runtime(
         known_macs_hooks=known_macs_hooks,
         repo_dir=repo_dir, update_hooks=update_hooks,
         room_clock_interval=room_clock_interval,
+        retry_chunk_failures=retry_chunk_failures,
         heartbeat_interval=heartbeat_interval,
         housekeeping_first=housekeeping_first, housekeeping_every=housekeeping_every,
         console_tls=console_tls, deploy=deploy, host_hooks=host_hooks, usb_hooks=usb_hooks,

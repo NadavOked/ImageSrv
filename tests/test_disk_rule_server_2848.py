@@ -22,6 +22,7 @@ REASON_HE = {
     "sata_issue": "בעיית SATA (הקישור התאפס או המגירה התנתקה) — לא כותבים על הדיסק הזה; אפשר להעתיק ממנו",
     "write_slow": "נפסל כאיטי בבדיקת הכתיבה בסבב הזה — לא כותבים עליו בסבב הזה; אפשר להעתיק ממנו",
     "failed_last": "נכשל בשיכפול הקודם — לא מעתיקים ממנו; אפשר לכתוב עליו",
+    "cable_failed": "חיבור לא תקין — לא מעתיקים ממנו; אפשר לכתוב עליו",   # #3008
     "write_incomplete": "כתיבה לא הושלמה — לא מעתיקים ממנו; אפשר לכתוב עליו",
 }
 
@@ -110,8 +111,7 @@ def test_slow_is_red_in_its_own_round_and_green_in_the_next(room_server):
         "session_id": wave, "mac": CLONER1, "state": "partial", "targets": [SLOW_X, DONE_Y]}).status_code == 200
     _hello(room_server, CLONER1, [{"serial": "X"}, {"serial": "Y"}])
 
-    assert deploy.post("/api/console/room/close", json={"confirm_name": "Office 2024 Standard"}).json()["ok"]
-    _hello(room_server, CLONER1, [{"serial": "X"}, {"serial": "Y"}])
+    # #3985: X שנפסל איטי נספר skipped_red והסבב נסגר מעצמו — אין צורך ב"סגור" ידני.
     assert room(deploy)["round"] is None
 
     r = _open(room_server, ["X"])                     # round 2: X picked as a target -- accepted

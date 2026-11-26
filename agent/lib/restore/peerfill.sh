@@ -184,7 +184,7 @@ EOF
         _pf_feed "$NF_DIR/pieces" "$_pf_r" "$_pf_end" | chunkcast apply --part "$NF_P" $CHUNK_IMAGE_ARGS \
             --state "${PF_STATE:-$NF_DIR/peer.state}" --chunks-file "$NF_DIR/list" "$NF_NODE" > "$NF_DIR/apply.out" 2>> "$LOG_FILE"
         _pf_rc=$?
-        read -r _pf_wk _pf_ww < "$NF_DIR/why" 2>/dev/null || _pf_ww=""
+        read -r _pf_wk _pf_ww 2>/dev/null < "$NF_DIR/why" || _pf_ww=""
         case "$_pf_ww|$_pf_rc" in
             *"|2") echo "$PF_ID none apply did not start (rc=2): this cloner's, not the neighbour's" > "$NF_DIR/result" ;;
             bad*) echo "$PF_ID bad the piece from chunk $_pf_wk did not arrive whole" > "$NF_DIR/result" ;;

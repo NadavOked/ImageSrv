@@ -104,6 +104,10 @@ def _count(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
 
+def _positive(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+
+
 def _fmt(value: float | None) -> str:
     return "unmeasured" if value is None else f"{value:.0f}"
 
@@ -120,22 +124,29 @@ def judge(*, remaining: object, grown: object, received: object, elapsed_s: obje
     done = max(took, default=0)
     secs = elapsed_s if isinstance(elapsed_s, (int, float)) and not isinstance(elapsed_s, bool) \
         and math.isfinite(elapsed_s) and elapsed_s > 0 else None
-    redo = [v for v in (chunks_total, zbytes_total, bits, parts) if isinstance(v, int) and not isinstance(v, bool) and v > 0]
+    chunks_i, zbytes_i, bits_i, parts_i = _positive(chunks_total), _positive(zbytes_total), _positive(bits), _positive(parts)
+    redo = [v for v in (chunks_i, zbytes_i, bits_i, parts_i) if v is not None]
     why = [text for ok, text in (
         (left is not None, "מה שחסר לדיסק לא נקרא"),
         (later is not None, "מספר החתיכות של המחיצות שאחרי לא ידוע"),
         (done > 0 and secs is not None, "ההשלמה עוד לא הוסיפה דבר עמיד ליומן של הדיסק הזה: אין קצב של דיסק"
          " (מה שהמחשב קיבל מהזרם הוא ראיית עבודה משותפת, לא קצב; שתיקה נשפטת בכלל השתיקה, לא כאן)"),
         (len(redo) == 4, "גודל האימג' או קצב הגל לא ידועים")) if not ok]
-    t_this = t_cont = t1 = rate = rate_mbps = below = None
-    if not why:
+    t_this: float | None = None
+    t_cont: float | None = None
+    t_redo: float | None = None
+    rate: float | None = None
+    rate_mbps: float | None = None
+    below: bool | None = None
+    if (not why and left is not None and later is not None and secs is not None and chunks_i is not None
+            and zbytes_i is not None and bits_i is not None and parts_i is not None):    # `not why` כבר מבטיח הכול; התנאים רק מצמצמים טיפוס
         rate = done / secs
         rate_mbps = rate * waveeta.CHUNK_BYTES / 1e6
         floor = floor_mbps if isinstance(floor_mbps, (int, float)) and not isinstance(floor_mbps, bool) and floor_mbps > 0 else None
         below = None if floor is None else rate_mbps < floor
         t_this, t_cont = left / rate, (left + later) / rate
-        t1 = waveeta.predict(chunks_total, zbytes_total, bits, []).eta_s
-    t_redo = None if t1 is None else t1 + (parts * overhead_s if overhead_s is not None else 0.0)
+        t1 = waveeta.predict(chunks_i, zbytes_i, bits_i, []).eta_s
+        t_redo = t1 + (parts_i * overhead_s if overhead_s is not None else 0.0)
     ev = (f"remaining_chunks={'unmeasured' if left is None else left}",
           f"later_chunks={'unmeasured' if later is None else later}", f"done_chunks={done if took else 'unmeasured'}",
           f"elapsed_s={_fmt(secs)}", f"rate_chunks_s={'unmeasured' if rate is None else f'{rate:.2f}'}", "rate_source=durable_grown",
@@ -146,11 +157,11 @@ def judge(*, remaining: object, grown: object, received: object, elapsed_s: obje
           f"t_continue_s={_fmt(t_cont)}", f"t_continue_this_s={_fmt(t_this)}", f"t_redo_s={_fmt(t_redo)}",
           *(("overhead=unmeasured", "t_redo_basis=lower_bound") if overhead_s is None else
             (f"overhead_s={overhead_s:.1f}", f"overhead_n={overhead_n}", "t_redo_basis=measured")),
-          f"chunks={_fmt(chunks_total if redo and len(redo) == 4 else None)}",
-          f"zbytes={_fmt(zbytes_total if redo and len(redo) == 4 else None)}",
+          f"chunks={_fmt(chunks_i if len(redo) == 4 else None)}",
+          f"zbytes={_fmt(zbytes_i if len(redo) == 4 else None)}",
           f"stream_mbps={_fmt(bits / 1e6 if isinstance(bits, int) and bits > 0 else None)}",
           f"parts={parts if isinstance(parts, int) and parts > 0 else 'unmeasured'}")
-    if why:
+    if why or t_cont is None or t_redo is None:     # בלי `why` שני המספרים נקבעו; התנאים האחרונים רק מצמצמים טיפוס
         return Judgment(UNDECIDED, "לא נשפט: " + "; ".join(why), ev, t_cont, t_this, t_redo, rate, rate_mbps, below)
     if t_cont <= t_redo:
         return Judgment(CONTINUE, f"ההשלמה ממשיכה: {t_cont / 60:.0f} דק' עד שהדיסק שלם, מול {t_redo / 60:.0f} דק' לכתיבה מחדש"
@@ -347,8 +358,10 @@ class DrawerHold:
     @staticmethod
     def _since(prev: dict, elapsed_s: object) -> str:
         then, now = prev.get("elapsed"), elapsed_s
-        ok = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (then, now))
-        return f"{now - then:.0f}s" if ok else "זמן שלא נמדד"
+        if (isinstance(then, (int, float)) and not isinstance(then, bool)
+                and isinstance(now, (int, float)) and not isinstance(now, bool)):
+            return f"{now - then:.0f}s"
+        return "זמן שלא נמדד"
 
     def _close(self, session_id: str, part: int, mac: str, lacking: set, elapsed_s: object, ended: bool) -> None:
         """החלטות פתוחות של המחשב במחיצה שהדיסק שלהן כבר שלם (או, ב-``ended``, כולן): נסגרות עם מה שקרה."""

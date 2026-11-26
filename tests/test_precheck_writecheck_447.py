@@ -45,9 +45,8 @@ def test_a_disk_failed_slow_in_round_one_is_not_warned_in_round_two(room_server)
     assert deploy.post("/api/console/room", json=room_body(
         room_server, 2, {CLONER1: ["X", "Y"]})).status_code == 200
     _wave(room_server, ["X", "Y"], [SLOW_X, DONE_Y])
-    assert deploy.post("/api/console/room/close",
-                       json={"confirm_name": "Office 2024 Standard"}).json()["ok"] is True
-    heartbeat(room_server)
+    # #3985: X שנפסל איטי נספר skipped_red, אז הסבב נסגר מעצמו (written=1/2) — אין צורך ב"סגור".
+    assert _journal(ctx, "room_done") != [], "הסבב היה אמור להיסגר מעצמו אחרי שהדיסק האיטי נספר כאדום"
     assert room(deploy)["round"] is None
     assert ctx.conn.execute("SELECT mbps FROM model_speeds WHERE serial = 'X'").fetchone()["mbps"] == 33   # measured
 

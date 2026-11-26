@@ -21,7 +21,7 @@ import time
 from datetime import datetime, timezone
 
 from server.console import viewer_sessions
-from server.db import _settle, _write_lock, journal, writing
+from server.db import _settle, _write_lock, journal, SqlConnection, writing
 
 TOUCH_SECONDS = 60
 
@@ -41,7 +41,7 @@ def _iso(ts: float) -> str:
     return datetime.fromtimestamp(ts, timezone.utc).isoformat(timespec="seconds")
 
 
-def touch(conn: sqlite3.Connection, token: str, username: str, ip: str,
+def touch(conn: SqlConnection, token: str, username: str, ip: str,
           ttl: int) -> None:
     """נקרא על כל בקשת קונסולה **מאומתת**. כותב רק כשהעוגייה חדשה לתהליך
     או כשעברה דקה מהכתיבה הקודמת שלה.
@@ -86,7 +86,7 @@ def touch(conn: sqlite3.Connection, token: str, username: str, ip: str,
         log.warning("console_sessions: last_seen of %s not written: %s", username, exc)
 
 
-def idle_expired(conn: sqlite3.Connection, token: str, idle_seconds: int,
+def idle_expired(conn: SqlConnection, token: str, idle_seconds: int,
                  ttl: int) -> bool:
     """#2414: האם העוגייה לא נראתה יותר מ-``idle_seconds`` (``console_idle_seconds``).
 
@@ -107,7 +107,7 @@ def idle_expired(conn: sqlite3.Connection, token: str, idle_seconds: int,
     return _now() - last > idle_seconds + TOUCH_SECONDS
 
 
-def rekey(conn: sqlite3.Connection, old: str, new: str) -> None:
+def rekey(conn: SqlConnection, old: str, new: str) -> None:
     """#2757: חידוש עוגייה — השורה של הישנה עוברת לחדשה, עם ``since`` ו-``last_seen``
     שלה, כדי ש"מי מחובר" ימשיך להראות סשן אחד ולא שניים. אין שורה לישנה — אין מה להעביר;
     הבקשה הבאה של החדשה תיצור אחת."""
@@ -127,7 +127,7 @@ def rekey(conn: sqlite3.Connection, old: str, new: str) -> None:
             conn.execute("DELETE FROM console_sessions WHERE token_hash = ?", (old_key,))
 
 
-def forget(conn: sqlite3.Connection, token: str | None) -> None:
+def forget(conn: SqlConnection, token: str | None) -> None:
     """יציאה: העוגייה נמחקת מהדפדפן, והשורה — מכאן."""
     if not token:
         return
@@ -144,7 +144,7 @@ def forget(conn: sqlite3.Connection, token: str | None) -> None:
 SID_LEN = 6
 
 
-def active(conn: sqlite3.Connection, current_token: str | None = None) -> list[dict]:
+def active(conn: SqlConnection, current_token: str | None = None) -> list[dict]:
     """``[{sid, user, role, ip, since, last_seen, current, monitor}]`` — רק
     עוגיות שעדיין תקפות: לא פגו, המשתמש קיים ואינו מושבת, ה-``auth_epoch``
     שבעוגייה לא בוטל מאז (``users.bump_auth_epoch``, #1075), והיא לא בוטלה
@@ -161,7 +161,7 @@ def active(conn: sqlite3.Connection, current_token: str | None = None) -> list[d
              "monitor": bridges.get(r["token_hash"], 0)} for r in _live(conn)]
 
 
-def _live(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+def _live(conn: SqlConnection) -> list[sqlite3.Row]:
     return conn.execute(
         "SELECT s.token_hash, s.username, u.role, s.ip, s.since, s.last_seen, s.expires_at"
         " FROM console_sessions s"
@@ -183,7 +183,7 @@ class SessionRefused(Exception):
         self.message = message
 
 
-def revoke_one(conn: sqlite3.Connection, sid: str, by: str,
+def revoke_one(conn: SqlConnection, sid: str, by: str,
                current_token: str | None) -> dict:
     """#2552: ניתוק סשן בודד לפי המזהה הקצר: העוגייה שלו נדחית **מיד** (``revoked_tokens``,
     כמו logout), השורה נמחקת מהרשימה, וגשר מוניטור פתוח שלה נסגר.

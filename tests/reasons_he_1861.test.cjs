@@ -38,7 +38,7 @@ for(const f of fs.readdirSync(path.join(repo,'agent/lib'),{recursive:true}).filt
 
 test('the scans see what they were written for', () => {
   for(const r of ['health_failed','uncorrectable','pending_sectors','readonly','open_failed','no_smart','ro_unread']) assert.ok(smartReasons.includes(r),r);
-  assert.deepEqual(causes.sort(),['cable','disk','readonly','removed','unclassified','write_error']);   // write_error: #1841
+  assert.deepEqual(causes.sort(),['cable','disk','network','readonly','removed','unclassified','write_error']);   // write_error: #1841; network: #3844
   for(const s of ['skipped','cancelled']) assert.ok(states.has(s),s);   // #2042: no "replacing" -- it came only from "replace" on an orange disk's question
 });
 
