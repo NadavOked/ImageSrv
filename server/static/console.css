@@ -1689,7 +1689,7 @@ body.tasks-open .app>.task-dock{bottom:var(--task-h,220px);border-top:1px solid 
   transform:translateY(10px) scale(.97);transition:transform var(--dur-sheet) var(--ease);overflow:hidden}
 .upd.show .uc{transform:none}
 .upd .uh{display:flex;gap:14px;align-items:flex-start;padding:24px 26px 18px}
-.upd .ubadge{flex:none;width:46px;height:46px;border-radius:12px;display:grid;place-items:center;background:var(--clr-action-soft);color:var(--clr-action);transition:background var(--dur-base),color var(--dur-base)}
+.upd .ubadge{flex:none;width:46px;height:46px;border-radius:12px;display:grid;place-items:center;background:var(--clr-action-soft);color:var(--clr-action-fg);transition:background var(--dur-base),color var(--dur-base)}
 .upd .ubadge>svg{width:30px;height:18px}
 :root[data-theme="dark"] .upd .ubadge:not(.u-ok):not(.u-bad):not(.u-warn){color:var(--clr-action-fg)}
 .upd .ubadge.u-ok{background:var(--clr-success-soft);color:var(--clr-success-fg)}
@@ -2340,3 +2340,52 @@ body.view-only #content{opacity:.96}
 .svc-legend{color:var(--clr-muted);font-size:var(--t-sm);margin:2px 0 0}
 .inventory-node[hidden]{display:none}   /* ‏#3029: .inventory-node הוא flex, ו-hidden לבדו לא מנצח */
 @media (prefers-reduced-motion:reduce){.svc-tg::after{transition:none}}
+
+/* #2921: במצב כהה המילויים (כתום, ירוק, אדום) בהירים, ולבן עליהם 1.9-3.3:1. טקסט כהה על מילוי בהיר: מעל 4.5:1. */
+:root[data-theme="dark"] .topbar #alertBadge,
+:root[data-theme="dark"] #login .rules li.ok i,
+:root[data-theme="dark"] .pw-pol li.ok i,
+:root[data-theme="dark"] .tag.has-alerts{color:var(--clr-bright-fill-on)}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .topbar #alertBadge,
+  :root:not([data-theme="light"]) #login .rules li.ok i,
+  :root:not([data-theme="light"]) .pw-pol li.ok i,
+  :root:not([data-theme="light"]) .tag.has-alerts{color:var(--clr-bright-fill-on)}
+}
+
+/* ---------- #3897 · הצעת השרת בחלון "התחל סבב" (מוקאפ m3897-round-open, מצבים 1-3): אותם טוקנים, בלי צבע או גופן חדשים ---------- */
+.rn2 .rn-right{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
+.rn2 .num{display:flex;align-items:center;gap:8px}
+.rn2 .num input[type=number]{width:96px;height:36px;text-align:center;font:700 var(--t-lg) var(--font-mono);-moz-appearance:textfield}
+.rn2 .num input[type=number]::-webkit-outer-spin-button,.rn2 .num input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.rn2 .num .st{width:36px;height:36px;border:1px solid var(--clr-border);border-radius:6px;background:var(--clr-surface);color:var(--clr-muted);font-size:var(--t-lg);cursor:pointer}
+.rn2 .num .st:focus-visible,.rn2 .prop .dt:focus-visible,.rn2 .prop .cl .nm:focus-visible{outline:2px solid var(--clr-action);outline-offset:2px}
+.rn2 .prop{border:1px solid var(--clr-border);border-radius:8px;background:var(--clr-surface)}
+.rn2 .prop>.th{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--clr-border);font-weight:600;flex-wrap:wrap}
+.rn2 .prop>.th .s{font-weight:400;color:var(--clr-muted);font-size:var(--t-sm)}.rn2 .prop>.th .acts{margin-inline-start:auto;display:flex;gap:8px}
+.rn2 .prop .body{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.rn2 .prop .cls{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.rn2 .prop .cl{border:1px solid var(--clr-border);border-radius:8px;padding:7px 8px 8px;background:var(--clr-surface);min-width:0}
+.rn2 .prop .cl .t{display:flex;justify-content:space-between;align-items:center;gap:4px;font-weight:600;font-size:var(--t-sm);white-space:nowrap}
+.rn2 .prop .cl .t .tg{font-size:var(--t-xs);padding:0 7px}
+.rn2 .prop .cl .nm{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.rn2 .prop .dw{display:flex;gap:5px;margin-top:6px}
+.rn2 .prop .dt{flex:1;height:34px;border:1px solid var(--clr-border);border-radius:6px;display:grid;place-items:center;font:600 var(--t-sm) var(--font-mono);position:relative;background:var(--clr-surface);color:var(--clr-muted);cursor:pointer;padding:0}
+.rn2 .prop .dt .led{position:absolute;top:4px;inset-inline-start:4px;width:6px;height:6px;border-radius:50%;background:var(--led-ok)}
+.rn2 .prop .dt.sel2{border-color:var(--clr-action);background:var(--clr-action-soft);color:var(--clr-action-fg);box-shadow:inset 0 0 0 1px var(--clr-action)}
+.rn2 .prop .dt.red{border-color:var(--clr-danger);background:var(--clr-danger-soft);color:var(--clr-danger-fg);cursor:not-allowed}.rn2 .prop .dt.red .led{background:var(--clr-danger)}
+.rn2 .prop .dt.none{cursor:default;opacity:.6}.rn2 .prop .dt.none .led{display:none}
+.rn2 .prop .dt.add::after{content:"";position:absolute;bottom:3px;inset-inline-end:3px;width:5px;height:5px;border-radius:50%;background:var(--clr-action-fg)}
+.rn2 .prop .cl.busy{border-style:dashed;background:repeating-linear-gradient(135deg,var(--clr-hover) 0 6px,transparent 6px 12px);color:var(--clr-muted)}
+.rn2 .prop .cl.busy .rn{font-size:var(--t-xs);margin-top:5px;line-height:1.35;color:var(--clr-text);white-space:normal}
+.rn2 .prop .lgn{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:var(--t-xs);color:var(--clr-muted);align-items:center}
+.rn2 .prop .lgn .sq{display:inline-block;width:14px;height:14px;border:1px solid var(--clr-border);border-radius:4px;vertical-align:-3px;margin-inline-end:5px}
+.rn2 .prop .lgn .sq.s{border-color:var(--clr-action);background:var(--clr-action-soft)}.rn2 .prop .lgn .sq.r{border-color:var(--clr-danger);background:var(--clr-danger-soft)}
+.rn2 .prop .lgn .sq.b{border-style:dashed;background:repeating-linear-gradient(135deg,var(--clr-hover) 0 3px,transparent 3px 6px)}
+.rn2 .prop .alert{display:flex;gap:12px;align-items:flex-start;border:1px solid;border-radius:6px;padding:9px 12px;font-size:var(--t-sm)}
+.rn2 .prop .alert.info{background:var(--clr-info-soft);border-color:var(--clr-info);color:var(--clr-action-fg)}
+.rn2 .prop .alert.warn{background:var(--clr-warning-soft);border-color:var(--clr-warning);color:var(--clr-warning-fg)}
+.rn2 .prop .alert .tx{flex:1}.rn2 .prop .alert small{display:block;margin-top:2px;color:var(--clr-text);font-size:var(--t-sm)}
+.rn2 .prop .waves{display:flex;gap:6px;margin-top:6px}
+.rn2 .prop .waves div{flex:1;height:26px;border-radius:6px;background:var(--clr-surface);border:1px solid var(--clr-action);color:var(--clr-action-fg);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:var(--t-sm)}
+@media (max-width:900px){.rn2 .prop .cls{grid-template-columns:repeat(2,1fr)}}

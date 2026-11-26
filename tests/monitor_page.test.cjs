@@ -198,7 +198,7 @@ test('final mockup: the viewer card explains instead of an empty iframe (switch 
   run('MONITOR.settings.enabled=true');
   html = run('monitorPage()'); assert.match(html, /בחר מחשב לצפייה/); assert.doesNotMatch(html, /<iframe/);
   const online = run('MONITOR.machines.find((m) => m.online)'), off = run('MONITOR.machines.find((m) => !m.online)');
-  if (off) { run(`MON_SEL=${JSON.stringify(off.mac)}`); html = run('monitorPage()'); assert.match(html, /אינה מחוברת/); assert.doesNotMatch(html, /<iframe/); }
+  if (off) { run(`MON_SEL=${JSON.stringify(off.mac)}`); html = run('monitorPage()'); assert.match(html, /כבוי או לא מחובר/); assert.match(html, /הדלקה \(WoL\)/); assert.doesNotMatch(html, /<iframe/); }
   assert.ok(online, 'fixture has an online machine');
   run(`MON_SEL=${JSON.stringify(online.mac)}`); html = run('monitorPage()');
   assert.match(html, /<iframe class="mon-frame"[^>]*src="monitor\.html\?mac=/); assert.match(html, /פתח בחלון נפרד/);

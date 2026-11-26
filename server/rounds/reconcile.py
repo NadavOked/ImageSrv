@@ -44,11 +44,10 @@
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
 from server.agent import reports
-from server.db import _write_lock, journal, now_iso, update_one, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, update_one, writing
 from server.core.tasks import staging_dir
 
 #: הסיבה שנכתבת על המשימה/החבר — מה שהמפעיל קורא, לא קוד.
@@ -59,7 +58,7 @@ RESTARTED_TRANSFER = "נקטעה בהפעלה מחדש של השרת"
 RESTARTED_CLOSING = "השרת אותחל באמצע עצירת הסבב; העצירה הושלמה בעלייה"
 
 
-def reconcile_on_start(conn: sqlite3.Connection, library_root: str | Path,
+def reconcile_on_start(conn: SqlConnection, library_root: str | Path,
                        sending: dict | None = None) -> dict:
     """מסמן את מה שנשאר `running` מהריצה הקודמת. מחזיר מה סומן, ליומן
     ולבדיקות: ``{"tasks_done": [...], "tasks_failed": [...],

@@ -190,16 +190,30 @@ jobs:
           echo "leaked tests to locate: ${#ids[@]}"
           [ "${#ids[@]}" -gt 0 ] || exit 0
           base='not uinput and not vm_it'
+          # The shard's 60 minutes are one budget, and the 3.13 suite alone took 38-47 min of it (25/11, four shards):
+          # the locate step took 13-15 more and two shards were cancelled by the job wall. Both runs share ONE deadline
+          # (LOCATE_BUDGET_S, 9 min = the worst suite + set-up + this < 60). What it did not reach is said out loud
+          # and stays `?::<test file>` in the report -- detected, not located; it is not "no leaks".
+          deadline=$(( $(date +%s) + ${LOCATE_BUDGET_S:-540} ))
           set +e
-          python -m pytest "${ids[@]}" -q -p no:cacheprovider -m "$base and not serial" -n auto --dist load \
-            -p tests.resource_leaks --resource-leaks "$leaks" < /dev/null
+          timeout "$(( deadline - $(date +%s) ))" python -m pytest "${ids[@]}" -q -p no:cacheprovider \
+            -m "$base and not serial" -n auto --dist load -p tests.resource_leaks --resource-leaks "$leaks" < /dev/null
           rc1=$?
-          python -m pytest "${ids[@]}" -q -p no:cacheprovider -m "$base and serial" \
-            -p tests.resource_leaks --resource-leaks "$leaks" < /dev/null
-          rc2=$?
+          left=$(( deadline - $(date +%s) ))
+          if [ "$left" -gt 0 ]; then
+            timeout "$left" python -m pytest "${ids[@]}" -q -p no:cacheprovider -m "$base and serial" \
+              -p tests.resource_leaks --resource-leaks "$leaks" < /dev/null
+            rc2=$?
+          else
+            rc2=124
+          fi
           set -e
           for rc in "$rc1" "$rc2"; do
-            case "$rc" in 0|1|5) ;; *) echo "locate: pytest rc=$rc -- CANNOT VERIFY"; exit 2;; esac
+            case "$rc" in
+              0|1|5) ;;
+              124) echo "::warning::locate: the ${LOCATE_BUDGET_S:-540} s budget ran out -- tests not reached stay ?::<test file> in the report (detected, not located)";;
+              *) echo "locate: pytest rc=$rc -- CANNOT VERIFY"; exit 2;;
+            esac
           done
 
       # 14/11: a report, not a gate -- a site not in the baseline is listed as NEW in the

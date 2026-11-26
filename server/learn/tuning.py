@@ -52,8 +52,9 @@ import json
 import logging
 import sqlite3
 import statistics
+from typing import TypeGuard
 
-from server.db import _settle, _write_lock, get_setting, journal, now_iso, set_settings, writing
+from server.db import _settle, _write_lock, get_setting, journal, now_iso, set_settings, SqlConnection, writing
 from server.brain import floorrule, learnset
 from server.core import unreadable
 from server.disks import writefloor
@@ -82,15 +83,15 @@ class Refused(Exception):
         self.status = status
 
 
-def enabled(conn: sqlite3.Connection) -> bool:
+def enabled(conn: SqlConnection) -> bool:
     return get_setting(conn, SETTING) == "true"
 
 
-def _number(value: object) -> bool:
+def _number(value: object) -> TypeGuard[float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def _json(raw: object) -> dict:
+def _json(raw: str | bytes | bytearray | None) -> dict:
     try:
         got = json.loads(raw) if raw else {}
     except (TypeError, ValueError):
@@ -99,7 +100,7 @@ def _json(raw: object) -> dict:
     return got if isinstance(got, dict) else {}
 
 
-def _collecting(conn: sqlite3.Connection) -> sqlite3.Row | None:
+def _collecting(conn: SqlConnection) -> sqlite3.Row | None:
     return conn.execute("SELECT * FROM learning_runs WHERE state = 'collecting'"
                         " ORDER BY id DESC LIMIT 1").fetchone()
 
@@ -201,7 +202,7 @@ def _in(sessions: list[str]) -> str:
     return ",".join("?" * len(sessions))
 
 
-def _waves(conn: sqlite3.Connection, sessions: list[str]) -> list[tuple[dict, dict]]:
+def _waves(conn: SqlConnection, sessions: list[str]) -> list[tuple[dict, dict]]:
     """`(decision, stream)` לכל גל של הסבב שנרשם."""
     if not sessions:
         return []
@@ -218,7 +219,7 @@ def _proven(past: dict, stream: dict) -> int | None:
     return rate if moved * 8 >= drive_rates.KEEP_UP * rate else int(moved * 8)
 
 
-def _model_base(conn: sqlite3.Connection, row: sqlite3.Row, sessions: list[str]) -> float | None:
+def _model_base(conn: SqlConnection, row: sqlite3.Row, sessions: list[str]) -> float | None:
     """חציון הדגם מדיסקים אחרים **מחוץ לסבב**: סבב אינו הבסיס של עצמו."""
     rows = conn.execute(
         f"SELECT serial, mbps FROM model_speeds WHERE model = ? AND serial != ?"
@@ -229,7 +230,7 @@ def _model_base(conn: sqlite3.Connection, row: sqlite3.Row, sessions: list[str])
     return statistics.median(r["mbps"] for r in rows)
 
 
-def _finished_drives(conn: sqlite3.Connection, session: str) -> set[tuple[str, str]]:
+def _finished_drives(conn: SqlConnection, session: str) -> set[tuple[str, str]]:
     """#3443: `(mac, serial)` של כל דיסק שסיים בגל חתיכות ונספרו בו בייטים שנכתבו (`bytes_written > 0`, מגירה `done`).
     ב-`delivered` הספירה היא לכל מכונה: מכונה עם שני דיסקים, אחד סיים ואחד פיגר, הייתה מלמדת גם מהמדידה של זה
     שנכשל. כאן נספר רק מי שהמגירה שלו דיווחה שסיים. אין שורה, או `targets_json` שלא נקרא = אין דיסק שסיים."""
@@ -246,7 +247,7 @@ def _finished_drives(conn: sqlite3.Connection, session: str) -> set[tuple[str, s
     return out
 
 
-def _measured(conn: sqlite3.Connection, sessions: list[str]) -> tuple[list[sqlite3.Row], list[sqlite3.Row]]:
+def _measured(conn: SqlConnection, sessions: list[str]) -> tuple[list[sqlite3.Row], list[sqlite3.Row]]:
     """`(נספרות, נדחו)` מבין מדידות הכתיבה של הסבב — ראו למעלה."""
     good: list[sqlite3.Row] = []
     bad: list[sqlite3.Row] = []
@@ -281,7 +282,7 @@ def _row(base: dict, call, previous_he: str, store, show) -> dict:
     return {**base, "value": store(call.value), "previous_he": previous_he, "value_he": show(call.value), "why_he": call.reason}
 
 
-def _floor_change(conn: sqlite3.Connection, sessions: list[str]) -> tuple[dict, object]:
+def _floor_change(conn: SqlConnection, sessions: list[str]) -> tuple[dict, learnset.LearnCall | None]:
     """(שורת השינוי, ההחלטה). הראיות נאספות כאן; **ההחלטה** (החציון, האיטי, הזרם, הצעד, כלפי מעלה בלבד) במוח (`learnset.decide_floor`, S37)."""
     current = writefloor.mbps(conn)
     rows, rejected = _measured(conn, sessions)
@@ -294,7 +295,7 @@ def _floor_change(conn: sqlite3.Connection, sessions: list[str]) -> tuple[dict, 
     return _row(base, call, f"{current} MB/s", str, lambda v: f"{v} MB/s"), call
 
 
-def _start_change(conn: sqlite3.Connection, sessions: list[str]) -> tuple[dict, object]:
+def _start_change(conn: SqlConnection, sessions: list[str]) -> tuple[dict, learnset.LearnCall | None]:
     """(שורת השינוי, ההחלטה). **ההחלטה** (הנמוך מבין הגלים, בלי אבדן, צעד, כלפי מעלה בלבד) במוח (`learnset.decide_start`, S37)."""
     current = drive_rates.learned_start(conn) or drive_rates.START_BITRATE
     base = {"key": drive_rates.START_SETTING, "value_he": _mbit(current)}
@@ -307,12 +308,12 @@ def _start_change(conn: sqlite3.Connection, sessions: list[str]) -> tuple[dict, 
     return _row(base, call, _mbit(current), lambda v: str(v // 10 ** 6), _mbit), call
 
 
-def _levels(conn: sqlite3.Connection, sessions: list[str]) -> dict:
+def _levels(conn: SqlConnection, sessions: list[str]) -> dict:
     """מה שנמדד בסבב, בשלוש הרמות. `null` בשדה = לא נמדד, לא אפס."""
     disks = {"count": 0, "min_mbps": None, "max_mbps": None}
     links: dict[str, int] = {}
     machines, ports = set(), set()
-    network = {"top_mbit": None, "loss": None, "interface": None}
+    network: dict[str, float | str | None] = {"top_mbit": None, "loss": None, "interface": None}
     if not sessions:
         return {"disks": disks, "machines": {"count": 0, "ports": 0, "links": links}, "network": network}
     speeds = _measured(conn, sessions)[0]
@@ -340,7 +341,7 @@ def _levels(conn: sqlite3.Connection, sessions: list[str]) -> dict:
             "network": network}
 
 
-def _finish(conn: sqlite3.Connection, run: sqlite3.Row, waves: list[sqlite3.Row]) -> None:
+def _finish(conn: SqlConnection, run: sqlite3.Row, waves: list[sqlite3.Row]) -> None:
     sessions = [w["session_id"] for w in waves]
     good = [w["session_id"] for w in waves if w["ok"]]
     verdict = learnset.decide_run(conn, len(good), run["required"], run_id=run["id"], round_id=sessions[-1] if sessions else "")
@@ -353,7 +354,7 @@ def _finish(conn: sqlite3.Connection, run: sqlite3.Row, waves: list[sqlite3.Row]
     summary = {"levels": _levels(conn, sessions),
                "unchanged": [{**r, "label_he": CHANGE_LABELS[r["key"]]} for r in rows if "value" not in r] if learned else []}
     at = now_iso()
-    written: dict[str, int] = {}
+    written: dict[str, int | None] = {}
     _settle(conn)
     with _write_lock, writing(conn):
         done = conn.execute(
@@ -398,7 +399,7 @@ def _finish(conn: sqlite3.Connection, run: sqlite3.Row, waves: list[sqlite3.Row]
                                           f"{change['value_he']} ({change['why_he']})")
 
 
-def record_wave(conn: sqlite3.Connection, session_id: str) -> None:
+def record_wave(conn: SqlConnection, session_id: str) -> None:
     """נקרא משני הקצוות של גל: כשהשולח סיים (`app.on_chunk_event`) וכשהחדר סגר אותו
     (`room`). הסדר ביניהם אינו מובטח, ולכן מי שמגיע שני הוא שסופר: בלי המונים של השולח ובלי
     הספירה של החדר אין עדיין מה לשפוט, וזה אינו כישלון של הגל. גל שאינו של החדר (אין לו
@@ -435,7 +436,7 @@ def record_wave(conn: sqlite3.Connection, session_id: str) -> None:
         log.exception("learning from %s failed", session_id)
 
 
-def settings_written(conn: sqlite3.Connection, written: dict[str, str], was_on: bool, user: str) -> None:
+def settings_written(conn: SqlConnection, written: dict[str, str], was_on: bool, user: str) -> None:
     """נקרא אחרי `POST /settings`. הדלקה פותחת סבב, כיבוי סוגר אותו (ההגדרות נשארות),
     ושינוי ידני של הגדרה שהותאמה גובר ומסיר ממנה את התג."""
     at = now_iso()
@@ -460,7 +461,7 @@ def settings_written(conn: sqlite3.Connection, written: dict[str, str], was_on: 
         journal(conn, "learning_overridden", f"{key}={written[key]}", user)
 
 
-def _restore(conn: sqlite3.Connection, change: sqlite3.Row, at: str, user: str) -> bool:
+def _restore(conn: SqlConnection, change: sqlite3.Row, at: str, user: str) -> bool:
     """מחזיר בתוך טרנזאקציה פתוחה. False — הערך כבר אינו מה שהלמידה כתבה."""
     if get_setting(conn, change["key"]) != change["value"]:
         return False
@@ -473,11 +474,13 @@ def _restore(conn: sqlite3.Connection, change: sqlite3.Row, at: str, user: str) 
     return True
 
 
-def revert(conn: sqlite3.Connection, change_id: int | None, user: str) -> int:
+def revert(conn: SqlConnection, change_id: int | None, user: str) -> int:
     """מחזיר שינוי אחד, או את כולם (`None`). מחזיר כמה הוחזרו; נכשל בקול (`Refused`)."""
     where, args = ("id = ? AND state = 'applied'", (change_id,)) if change_id is not None \
         else ("state = 'applied'", ())
-    at, done, stale = now_iso(), [], []
+    at = now_iso()
+    done: list[sqlite3.Row] = []
+    stale: list[sqlite3.Row] = []
     _settle(conn)
     with _write_lock, writing(conn):
         for change in conn.execute(f"SELECT * FROM learning_changes WHERE {where}", args).fetchall():
@@ -492,18 +495,18 @@ def revert(conn: sqlite3.Connection, change_id: int | None, user: str) -> int:
     return len(done)
 
 
-def _wave_rows(conn: sqlite3.Connection, run_id: int) -> list[sqlite3.Row]:
+def _wave_rows(conn: SqlConnection, run_id: int) -> list[sqlite3.Row]:
     return conn.execute("SELECT session_id, ok, why_he, at FROM learning_waves WHERE run_id = ?"
                         " ORDER BY at, rowid", (run_id,)).fetchall()
 
 
-def _running(conn: sqlite3.Connection, seen: set[str]) -> bool:
+def _running(conn: SqlConnection, seen: set[str]) -> bool:
     return any(r["wave_session_id"] not in seen for r in conn.execute(
         "SELECT wave_session_id FROM room_rounds WHERE state = 'active'"
         " AND wave_session_id IS NOT NULL"))
 
 
-def status(conn: sqlite3.Connection) -> dict:
+def status(conn: SqlConnection) -> dict:
     """מה שחלון הלמידה מציג. קריאה בלבד."""
     run = conn.execute("SELECT * FROM learning_runs WHERE state != 'cancelled'"
                        " ORDER BY id DESC LIMIT 1").fetchone()
@@ -511,7 +514,7 @@ def status(conn: sqlite3.Connection) -> dict:
                  "adjusted_keys": []}
     run_id = run["id"] if run else None
     if run is not None:
-        waves = _wave_rows(conn, run_id)
+        waves = _wave_rows(conn, run["id"])
         ids = [w["session_id"] for w in waves]
         summary = _json(run["summary_json"])
         out["run"] = {
@@ -531,7 +534,7 @@ def status(conn: sqlite3.Connection) -> dict:
     return out
 
 
-def machine_states(conn: sqlite3.Connection) -> dict[str, dict] | None:
+def machine_states(conn: SqlConnection) -> dict[str, dict] | None:
     """`{mac: {"state", "waves", "ports", "required"}}` לכל מכונה שיש עליה מה לומר.
     `state`: `learned` / `started` / `dismissed`. מכונה שאינה ברשימה = הצעה (`offer`).
     None — לא נקרא, ואז אין הצעה: רשימת המכונות אינה נופלת בגלל הלמידה."""
@@ -552,7 +555,7 @@ def machine_states(conn: sqlite3.Connection) -> dict[str, dict] | None:
     return out
 
 
-def answer_offer(conn: sqlite3.Connection, mac: str, action: str, user: str) -> None:
+def answer_offer(conn: SqlConnection, mac: str, action: str, user: str) -> None:
     """`start` / `dismiss` על הצעת הלמידה למחשב. אינו כותב לאף דיסק.
 
     `start` מדליק את המתג הכללי `learning_enabled` (הכרעת נדב 12/11, #2028), באותו מסלול של

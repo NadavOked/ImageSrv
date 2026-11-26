@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from server.db import SqlConnection
 from dataclasses import dataclass
 
 from server.rounds import chunk_rate, drive_rates
@@ -43,7 +44,7 @@ class Memory:
     notes: tuple = ()
 
 
-def of(conn: sqlite3.Connection, serial: str) -> Memory:
+def of(conn: SqlConnection, serial: str) -> Memory:
     """What the server remembers of the disk with this serial. Never raises: a read that failed is ``unread``."""
     try:
         if not drive_rates.enabled(conn):

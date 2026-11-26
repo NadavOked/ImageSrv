@@ -80,7 +80,11 @@ CABLE_BEFORE_DROP_FLAGS = frozenset({"ICRC"})
 #: הדגלים שבתוך `{ ... }` — מה שהקרנל מדפיס כקבוצה, מופרד ברווחים.
 _BRACED = re.compile(r"\{([^}]*)\}")
 
-CAUSES = ("readonly", "write_error", "cable", "disk", "removed", "unclassified")
+#: סימני רשת (#3844) -- מה שהסוכן כותב ב-`error` כשהשרת שתק מעבר לתקרת ההמתנה (`chunkrecv.sh`: "השרת לא ענה במשך N שניות").
+#: זה אינו שגיאת קרנל ואינו אשמת הדיסק; נקרא **רק** בלי סימן קרנל, ואין כאן מספר שניות -- הסף שייך לסוכן ולמוח.
+NETWORK_PHRASES = ("השרת לא ענה במשך",)
+
+CAUSES = ("readonly", "write_error", "cable", "disk", "removed", "network", "unclassified")
 
 #: תקרות הקלט: הסוכן שולח עד 40 שורות; מעבר לזה — קלט לא מהסוכן שלנו.
 MAX_LINES = 40
@@ -104,7 +108,7 @@ def _flags(text: str) -> set[str]:
 
 
 def classify(lines: list[str], error: str = "") -> str:
-    """readonly / cable / disk / removed / unclassified — לפי הסימנים, בסדר הזה.
+    """readonly / cable / disk / removed / network / unclassified — לפי הסימנים, בסדר הזה.
     readonly ראשון: EPERM/EROFS הוא תשובת קריאת-המערכת של הכתיבה עצמה, וכשהוא
     שם הכתיבה לא הגיעה לקו ולא לדיסק — שורות ATA באותו חלון אינן הסיבה שלה.
     `error` הוא מה שהסוכן כתב על היעד: סוכן לפני #1602 לא שמר את שורת
@@ -127,4 +131,6 @@ def classify(lines: list[str], error: str = "") -> str:
         return "disk"
     if pulled or (any(p in text for p in OFFLINE_PHRASES) and "exception Emask" not in text):
         return "removed"
+    if any(p in text for p in NETWORK_PHRASES):
+        return "network"          # #3844: הרשת נפלה, לא הדיסק; ראיה חיובית מהסוכן, בלי ראיה מהקרנל
     return "unclassified"

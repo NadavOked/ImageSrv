@@ -4,6 +4,7 @@
 #define IMAGESRV_LCUI_H
 #include <cairo.h>
 #include "input.h"
+#include "text.h"
 #include "ui.h"
 
 /* one key=value record of the state file; 1 = it was an lc_ one */
@@ -36,6 +37,7 @@ double lc_rate(const LcUi *u, int *span);         /* bytes/s over the window, -1
 int lc_unmeasured(const LcState *l);              /* #1440: a partition not measured, 0 = none */
 void lc_disk_label(const LcDisk *d, char *out, size_t n);   /* visible drawer, or an unmapped label */
 #define LC_LABEL_MAX (SLOT_NAME_MAX + 16)  /* #2001: a buffer for lc_disk_label -- a name of 24 Hebrew letters is 48 bytes */
+void lc_join_targets(const char *const *names, int n, char *out, size_t cap);   /* #3997: "לדיסק 1 ולדיסק 3", "לדיסק 1, לדיסק 2 ולדיסק 3" */
 void lc_has_text(const LcDisk *d, char *out, size_t n);     /* "Windows · 3 מחיצות · 212 GB בשימוש" */
 void lc_scan_text(const LcState *l, char *out, size_t n);   /* #2991: "בודק את דיסק 2… 0:12 · עוד דיסק אחד ממתין" */
 void lc_copy_text(const LcState *l, const LcDisk *src, char *out, size_t n);   /* #1443: "203.1 GB יועתקו" */
@@ -117,6 +119,7 @@ enum { DRV_NONE, DRV_OK, DRV_MUTED, DRV_WARN, DRV_BAD, DRV_LGREY, DRV_LWARN };
 #define LC_BAY_H 86
 #define LC_BAY_DRV_H 104             /* the row with its drivers line (mockup v2: 86 + 18) */
 void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g);
+Text lc_reason_text(cairo_t *cr, int size, int weight, const char *why, int width);
 /* #2046: a row of a disk being checked (verifying) or whose check stopped (failed, with a bar): the green over
  * the blue, the percent of the CHECK, and for a failure the tick; same_as = "לאימג'" / "למקור" for "אומת". */
 void lc_bay_readback(LcBay *y, const RbBar *r, const char *same_as, const char *why);

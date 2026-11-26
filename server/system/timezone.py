@@ -21,14 +21,13 @@ from __future__ import annotations
 
 import logging
 import re
-import sqlite3
 import subprocess
 import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable
 
-from server.db import get_setting, journal
+from server.db import get_setting, journal, SqlConnection
 
 DEFAULT_ZONE = "Asia/Jerusalem"
 ZONEINFO = Path("/usr/share/zoneinfo")
@@ -43,7 +42,7 @@ _POSIX_RE = re.compile(r"^[A-Za-z0-9<>+\-,./:]{1,64}$")
 log = logging.getLogger(__name__)
 
 
-def zone_name(conn: sqlite3.Connection) -> str:
+def zone_name(conn: SqlConnection) -> str:
     value = get_setting(conn, SETTING)
     return value.strip() if value and value.strip() else DEFAULT_ZONE
 
@@ -52,7 +51,7 @@ def _unknown(zone: str, reason: str) -> None:
     log.warning("cannot derive POSIX timezone for %r: %s", zone, reason)
 
 
-def posix_tz(conn: sqlite3.Connection) -> str | None:
+def posix_tz(conn: SqlConnection) -> str | None:
     zone = zone_name(conn)
     if not _ZONE_RE.fullmatch(zone):
         _unknown(zone, "invalid zone name")
@@ -146,7 +145,7 @@ def set_system_zone(zone: str, hooks: Hooks) -> str | None:
     return error
 
 
-def apply_on_start(conn: sqlite3.Connection, hooks: Hooks) -> None:
+def apply_on_start(conn: SqlConnection, hooks: Hooks) -> None:
     """The server's start: the OS zone follows the setting (else the default).
     Every outcome other than "already equal" is a journal line."""
     zone = zone_name(conn)

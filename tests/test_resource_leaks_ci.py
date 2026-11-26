@@ -6,13 +6,18 @@ new leaks" in the nightly would be the absence of a report, not evidence.
 """
 
 import json
+import os
 import re
 import subprocess
 import sys
+import textwrap
+import time
 from pathlib import Path
 
 import pytest
 import resource_leaks
+from native import requires_native
+from test_agent import BASH, posix
 
 ROOT = Path(__file__).resolve().parent.parent
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
@@ -148,6 +153,42 @@ def test_detect_only_records_the_test_that_leaked_and_no_allocation_site(tmp_pat
     assert "test_leaks_a_file" in rows[0]["nodeid"]
 
 
+TRACE_PROBE = '''
+import tracemalloc
+from pathlib import Path
+
+AT_IMPORT = tracemalloc.is_tracing()          # collection: the module is imported here
+
+
+def test_probe():
+    Path(__file__).with_name("state.txt").write_text(f"{AT_IMPORT} {tracemalloc.is_tracing()}")
+'''
+
+
+def _trace_states(tmp_path: Path, *extra: str) -> str:
+    """`<tracing while the test module was imported> <tracing while the test ran>`."""
+    canary = tmp_path / "probe"
+    canary.mkdir()
+    (canary / "test_probe.py").write_text(TRACE_PROBE, encoding="utf-8")
+    (canary / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+    run = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-p", "tests.resource_leaks",
+         "-c", str(canary / "pytest.ini"), "--resource-leaks", str(tmp_path / "leaks"), *extra, str(canary)],
+        cwd=ROOT, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=300)
+    assert run.returncode == 0, run.stdout[-2000:] + run.stderr[-2000:]
+    return (canary / "state.txt").read_text(encoding="utf-8")
+
+
+def test_tracemalloc_starts_after_collection_not_with_the_first_import(tmp_path):
+    # 26/11 (#99): traced from the first import, 3 tests took ~110 s against ~19 s; the nightly's "Locate the
+    # leaks" spent ~4.5 min of its 15 on worker start-up. The tests themselves must still run traced.
+    assert _trace_states(tmp_path) == "False True"
+
+
+def test_detect_only_never_starts_tracemalloc(tmp_path):
+    assert _trace_states(tmp_path, "--resource-leaks-no-trace") == "False False"
+
+
 def test_nodeids_names_a_detected_leak_until_a_traced_run_locates_it(tmp_path):
     out = tmp_path / "leaks"
     _run(tmp_path, "--resource-leaks", str(out), "--resource-leaks-no-trace")
@@ -201,3 +242,66 @@ def test_nightly_detects_in_the_run_and_traces_only_the_tests_that_leaked():
     assert "--resource-leaks-no-trace" not in body, "the second run is the traced one"
     assert "exit 2" in body, "a pytest that broke is not 'no leaks' (principle 5)"
     assert text.index("Locate the leaks") < text.index("Resource leaks (report)"), "locate first, then report"
+
+
+# --- the locate step's time budget (26/11, #99) ----------------------------------------------------------------
+# 25/11: the 3.13 suite took 38-47 min of the shard's 60, the locate step 13-15 more, and two shards were cancelled
+# by the job wall (their evidence never reached `merge`). The step runs its REAL script here against a fake `python`.
+
+FAKE_PYTHON = """#!/bin/bash
+if [ "$1" = "tests/resource_leaks.py" ]; then printf 'tests/test_a.py::t1\\ntests/test_b.py::t2\\n'; exit 0; fi
+echo "$*" >> "$FAKE_CALLS"
+case "$FAKE_PYTEST" in
+  hang) exec sleep 30;;
+  rc*) exit "${FAKE_PYTEST#rc}";;
+esac
+"""
+
+
+def _locate_step() -> str:
+    text = NIGHTLY.read_text(encoding="utf-8")
+    step = re.search(r"- name: Locate the leaks \(3\.13\)\n(.*?)(?=\n      - |\n      # |\Z)", text, re.DOTALL)
+    assert step, "no locate step"
+    return textwrap.dedent(step.group(1).split("run: |\n", 1)[1])
+
+
+def _locate(tmp_path: Path, fake_pytest: str, budget: int = 2) -> tuple[int, str, float, int]:
+    """(exit code, output, seconds, how many pytest runs the step started)."""
+    (tmp_path / "bin").mkdir()
+    (tmp_path / "bin" / "python").write_text(FAKE_PYTHON, encoding="utf-8", newline="\n")
+    (tmp_path / "locate.sh").write_text(_locate_step(), encoding="utf-8", newline="\n")
+    (tmp_path / "rt" / "gate" / "leaks").mkdir(parents=True)
+    calls, out = tmp_path / "calls.txt", tmp_path / "out.txt"
+    calls.write_text("", encoding="utf-8")
+    env = {**os.environ, "RUNNER_TEMP": posix(tmp_path / "rt"), "LOCATE_BUDGET_S": str(budget),
+           "FAKE_PYTEST": fake_pytest, "FAKE_CALLS": posix(calls)}
+    bindir = posix(tmp_path / "bin")
+    start = time.monotonic()
+    with out.open("wb") as fh:    # a file, not a pipe: an orphan holding a pipe made `capture_output` wait (#14)
+        run = subprocess.run(
+            [BASH, "-c", f'export PATH="/usr/bin:$PATH"; chmod +x "{bindir}/python"; '
+                         f'export PATH="$(cygpath -u "{bindir}" 2>/dev/null || echo "{bindir}"):$PATH"; '
+                         f'bash -e "{posix(tmp_path)}/locate.sh"'],
+            cwd=tmp_path, env=env, stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT, timeout=120)
+    return (run.returncode, out.read_text(encoding="utf-8", errors="replace"), time.monotonic() - start,
+            len(calls.read_text(encoding="utf-8").splitlines()))
+
+
+@requires_native(("bash", BASH))
+def test_a_locate_that_runs_out_of_time_says_so_and_does_not_wait_for_pytest(tmp_path):
+    rc, text, seconds, _ = _locate(tmp_path, "hang")
+    assert rc == 0, text
+    assert "budget ran out" in text and "detected, not located" in text, text
+    assert seconds < 20, f"{seconds:.0f}s: the step waited for a pytest that was past its budget\n{text}"
+
+
+@requires_native(("bash", BASH))
+def test_a_locate_whose_pytest_broke_is_still_cannot_verify_not_a_budget_message(tmp_path):
+    rc, text, _, _ = _locate(tmp_path, "rc2")
+    assert rc == 2 and "CANNOT VERIFY" in text and "budget ran out" not in text, (rc, text)
+
+
+@requires_native(("bash", BASH))
+def test_a_locate_that_finishes_in_time_runs_both_halves_and_is_quiet(tmp_path):
+    rc, text, _, runs = _locate(tmp_path, "rc1")      # rc 1 = a test failed: the shard's verdict owns that
+    assert rc == 0 and runs == 2 and "budget ran out" not in text, (rc, runs, text)

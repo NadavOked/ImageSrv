@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -132,3 +134,35 @@ def test_enforce_stops_at_the_cap_and_spaces_the_notes(room_server):
         sent += _relight(conn, [one], [one.mac], remaining=1, now=now + i * line.RELIGHT_S)
         assert _relight(conn, [one], [one.mac], remaining=1, now=now + i * line.RELIGHT_S + 1) == [], "פחות מ-60 ש' מההערה"
     assert len(sent) == line.RELIGHT_MAX
+
+
+# --- #4043: סדר האירועים, לא עיגול לשנייה -------------------------------------------------------------------------
+
+
+def _not_back_at(rs, seen_offset: float) -> bool:
+    """`_not_back` למשכפל שה-hello האחרון שלו הוא `seen_offset` שניות (שלמות, כמו בכתיבה) מהפתיחה. הפתיחה 5 שניות לפני
+    "עכשיו" כדי ש-`_hello_stale` (30 ש', שעון אמיתי) לא יתערב: מה שנבדק כאן הוא ההשוואה לפתיחה בלבד."""
+    conn = rs["ctx"].conn
+    opened = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(seconds=5)
+    seen = (opened + timedelta(seconds=seen_offset)).isoformat(timespec="seconds")
+    conn.execute("INSERT OR REPLACE INTO net_devices (mac, ip, first_seen, last_seen) VALUES (?, '10.0.0.9', ?, ?)",
+                 (CLONER1, seen, seen))
+    conn.commit()
+    return room_mod._not_back(conn, CLONER1, opened)
+
+
+def test_a_hello_in_the_opening_second_or_the_next_one_is_not_a_cloner_that_did_not_come_back(room_server):
+    # שני החותמים נחתכים לשנייה: hello ב-S.9 ופתיחה ב-(S+1).1 נראים כהפרש של שנייה, ובפועל הם 0.2 ש' זה מזה.
+    assert _not_back_at(room_server, 0) is False, "אותה שנייה"
+    assert _not_back_at(room_server, 1) is False, "אחרי הפתיחה"
+    assert _not_back_at(room_server, -1) is False, "שנייה לפני: עיגול, לא סדר (הגל הראשון, ~1 מ-4 ב-tr2)"
+
+
+def test_a_hello_two_seconds_or_more_before_the_opening_is_still_not_back(room_server):
+    assert _not_back_at(room_server, -2) is True, "שתי שניות לפני הפתיחה: זה כבר 'לפני'"
+    assert _not_back_at(room_server, -20) is True
+
+
+def test_a_cloner_never_seen_is_not_back(room_server):
+    conn = room_server["ctx"].conn
+    assert room_mod._not_back(conn, CLONER2, datetime.now(timezone.utc)) is True

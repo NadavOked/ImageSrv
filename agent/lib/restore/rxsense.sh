@@ -57,7 +57,7 @@ rx_http_note() {
     # $1 = apply's exit code. One fetch: the ranges asked for and their bytes (from curl's own config), the chunks apply
     # took, the seconds, curl's exit code. What was not read stays "-" -- the sums say null, not 0.
     _rh_d=$(_rx_dir) || return 0
-    _rh_n=$(tr ',' '\n' < "$CHUNK_DIR/fetch.ranges" 2>/dev/null | grep -c .)
+    _rh_n=$(tr ',' '\n' 2>/dev/null < "$CHUNK_DIR/fetch.ranges" | grep -c .)
     _rh_b=$(awk -F'"' '/^range = / { split($2, r, "-"); s += r[2] - r[1] + 1 } END { if (NR) printf "%.0f", s }' "$CHUNK_DIR/fetch.curl" 2>/dev/null)
     _rh_t=$(_chunk_taken 2>/dev/null)
     _rh_e=$(cut -d' ' -f1 "${SYSROOT:-}/proc/uptime" 2>/dev/null)

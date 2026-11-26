@@ -51,9 +51,10 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
+from server.db import SqlConnection
 import statistics
 from datetime import datetime, timedelta
+from typing import TypeGuard
 
 from server.agent import restore_stages
 
@@ -80,7 +81,7 @@ def with_clock(forecast: dict | None, trust: object | None) -> dict | None:
     if forecast is None:
         return None
     try:
-        trusted = trust is not None and trust.ok() is True
+        trusted = trust is not None and getattr(trust, "ok")() is True   # `trust` מגיע כ-object: בלי `ok` זו AttributeError, והיא נתפסת כאן
     except Exception:             # noqa: BLE001 -- מדידה שנכשלה היא "לא הוכח"
         log.exception("clock trust failed")
         trusted = False
@@ -105,7 +106,7 @@ def _span(since: object, until: object) -> float | None:
     return seconds if seconds > 0 else None
 
 
-def _count(value: object) -> bool:
+def _count(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
@@ -129,7 +130,7 @@ def _stream_clock(stream: dict) -> tuple[object, object]:
     return stream["chunk"].get("ended"), stream["chunk"].get("first_pass_s")
 
 
-def _wave_samples(conn: sqlite3.Connection, want: dict[str, int],
+def _wave_samples(conn: SqlConnection, want: dict[str, int],
                   exclude: str | None) -> dict[str, list[dict]]:
     """לכל MAC ב-`want`: עד WINDOW מדידות מהגלים האחרונים שבהם היו לה בדיוק
     `want[mac]` מגירות, והגל הסתיים כולו (ראו את ראש המודול). **#3572:** וגם מספר המשכפלים בגל זהה (`len(want)`):
@@ -172,7 +173,7 @@ def _wave_samples(conn: sqlite3.Connection, want: dict[str, int],
     return found
 
 
-def wave(conn: sqlite3.Connection, drives: list[dict], image_bytes: object,
+def wave(conn: SqlConnection, drives: list[dict], image_bytes: object,
          started_at: str | None = None, session_id: str | None = None) -> dict:
     """ההערכה לגל של `drives` (`mac` לכל מגירה) על אימג' של `image_bytes`
     בייטים דחוסים (`total_compressed_bytes` — אותו ציר כמו `bytes_written`).
@@ -199,17 +200,20 @@ def wave(conn: sqlite3.Connection, drives: list[dict], image_bytes: object,
         if missing:
             return _none("no_history", missing=missing)
         machines = []
+        spans: list[int] = []
         for mac, got in sorted(samples.items()):
             goodput = statistics.median(s["goodput_bps"] for s in got)
             fixed = statistics.median(s["fixed_s"] for s in got)
             sessions = [s["session_id"] for s in got]
+            span = int(fixed + image_bytes / goodput)
+            spans.append(span)
             machines.append({"mac": mac, "drawers": want[mac], "waves": len(got),
                              "sessions": sessions,
                              # #1883: השלבים שנמדדו (חציון; None = הגלים לא נשאו ציר זמן)
                              "stages_s": restore_stages.medians(conn, mac, sessions),
                              "goodput_bps": int(goodput), "fixed_s": int(fixed),
-                             "seconds": int(fixed + image_bytes / goodput)})
-        seconds = max(m["seconds"] for m in machines)
+                             "seconds": span})
+        seconds = max(spans)
         return {"seconds": seconds, "ends_at": _ends(started_at, seconds), "why": None,
                 "machines": machines, "missing": []}
     except Exception:             # noqa: BLE001 — הערכה אינה מפילה את מסך החדר
@@ -220,7 +224,7 @@ def wave(conn: sqlite3.Connection, drives: list[dict], image_bytes: object,
 # --- משיכה --------------------------------------------------------------------
 
 
-def pull(conn: sqlite3.Connection, mac: str, image_bytes: object,
+def pull(conn: SqlConnection, mac: str, image_bytes: object,
          started_at: str | None = None, session_id: str | None = None) -> dict:
     """ההערכה למשיכה (שחזור) של `mac`: `{"seconds", "ends_at", "why", "pulls",
     "sessions", "rate_bps"}`. `why`: None · `no_image_size` · `no_history` · `error`."""
@@ -257,7 +261,7 @@ def pull(conn: sqlite3.Connection, mac: str, image_bytes: object,
 # --- קליטה --------------------------------------------------------------------
 
 
-def capture(conn: sqlite3.Connection, library, mac: str, used_bytes: object,
+def capture(conn: SqlConnection, library, mac: str, used_bytes: object,
             started_at: str | None = None, task_id: str | None = None) -> dict:
     """ההערכה לקליטה של `mac` כשהסוכן כבר דיווח כמה בשימוש (`used_bytes`):
     `{"seconds", "ends_at", "why", "captures", "tasks", "rate_bps"}`. `why`:

@@ -115,7 +115,7 @@ def describe(step: object, at: object, *, now: datetime | None = None) -> dict |
 
     ``next_label`` הוא כל הרעיון: **הצעד שלא הגיע**, בשמו.
     """
-    if not is_step(step):
+    if not isinstance(step, str) or not is_step(step):
         return None
     seconds = _age_seconds(at, now)
     if step in LOCAL_STEPS:

@@ -232,6 +232,14 @@ def test_a_busy_cpu_waits_even_when_there_is_no_wave_and_a_single_wave_over_the_
     assert cpucap.judge(live=1, **over)[0] == cpucap.WAIT
 
 
+@pure
+def test_busy_psi_waits_with_no_ceiling():
+    verdict, reason, evidence = cpucap.judge(n_cores=8.0, source="affinity", learned=_learned(per_wave=0.0),
+                                            psi=cpucap.PSI_BUSY, live=1)
+    assert verdict == cpucap.WAIT and "PSI" in reason
+    assert "ceiling=None" in evidence
+
+
 # --- ההחלטה בצל ------------------------------------------------------------------------------------------------
 
 

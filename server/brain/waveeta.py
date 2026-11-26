@@ -292,11 +292,12 @@ class WaveEta:
                 return                           # פעם אחת לגל
         no_file = getattr(self.chunk, "no_file", None)
         chunks, zbytes, why = self._image(session_id)
+        asked = bits if isinstance(bits, int) and not isinstance(bits, bool) and bits > 0 else None
         if no_file is not None and no_file(session_id):
             why = "הפצה ישירה: אין קובץ להשלים ממנו ב-HTTP"
-        elif not isinstance(bits, int) or isinstance(bits, bool) or bits <= 0:
+        elif asked is None:
             why = "קצב הזרם אינו מספר חיובי"
-        if why is not None:
+        if why is not None or asked is None or chunks is None or zbytes is None:     # בלי `why` שלושתם נקבעו; התנאים רק מצמצמים טיפוס
             memory.record(self.conn, mode=self._mode(), rule=RULE, action=PREDICT, verdict="UNPREDICTED",
                           reason=f"אין חיזוי: {why}", round_id=session_id, entity=("round", session_id),
                           outcome="לא נמדד")
@@ -309,22 +310,22 @@ class WaveEta:
         slow = [Slow(serial, behind[serial][0], NEIGHBOR if mac is not None and any(
             m == mac and other != serial and other not in behind for m, other in drives) else HTTP, mac)
             for serial, mac in macs.items()]
-        before = self._achieved_before(session_id, frozenset(serial for _mac, serial in probes) | frozenset(behind), bits)
+        before = self._achieved_before(session_id, frozenset(serial for _mac, serial in probes) | frozenset(behind), asked)
         gap = self._no_history(probes, behind)                          # #3574: one drive has no write history, another has one
-        used = bits if before is None else min(bits, before[0])         # #3550: not faster than the last wave managed
+        used = asked if before is None else min(asked, before[0])         # #3550: not faster than the last wave managed
         uncapped = used
-        cap, basis = self._rate_cap(probes, bits, chunks, zbytes)
+        cap, basis = self._rate_cap(probes, asked, chunks, zbytes)
         bound = cap is not None and basis == "ceiling" and cap < used     # `grow`: the ceiling reaches the wire, it binds nothing (and rounds below it)
-        if bound:
+        if bound and cap is not None:
             used = cap                                                  # #3599: nor than the feedback's own `--rate-max` lets it
         f = predict(chunks, zbytes, used, slow)
         learned = None
         if self._learned_rate is not None:
             members = [r["mac"] for r in self.conn.execute("SELECT mac FROM session_members WHERE session_id = ?",
                                                            (session_id,))]
-            learned = self._learned_rate(session_id, bits, members)
+            learned = self._learned_rate(session_id, asked, members)
         evidence = (f"eta_s={f.eta_s:.0f}", f"t1_s={f.t1_s:.0f}", f"chunks={chunks}", f"zbytes={zbytes}",
-                    f"stream_mbps={used / 1e6:.0f}", f"asked_mbps={bits / 1e6:.0f}",
+                    f"stream_mbps={used / 1e6:.0f}", f"asked_mbps={asked / 1e6:.0f}",
                     f"rate_cap_mbps={'unmeasured' if cap is None else f'{cap / 1e6:.0f}'}", f"t1_cap_bound={int(bound)}", f"rate_cap_basis={basis}",
                     f"achieved_before_mbps={'unmeasured' if before is None else f'{before[0] / 1e6:.0f}'}",
                     f"achieved_before_match={'none' if before is None else 'drives'}",
@@ -338,11 +339,11 @@ class WaveEta:
                   + (f", והכונן האיטי {slowest[0]} ({slowest[1]:.0f}MB/s) משלים "
                      f"{'מהשכנה' if slowest[2] == NEIGHBOR else 'ב-HTTP'} עד {slowest[3] / 60:.0f} דק'" if slowest else
                      ", ואין כונן שפיגר בגל קודם")
-                  + (f". הקצב שהושג בגל הקודם על אותם כוננים {before[0] / 1e6:.0f}Mb/s, לא המבוקש {bits / 1e6:.0f}Mb/s"
-                     if before is not None and before[0] < bits else "")
+                  + (f". הקצב שהושג בגל הקודם על אותם כוננים {before[0] / 1e6:.0f}Mb/s, לא המבוקש {asked / 1e6:.0f}Mb/s"
+                     if before is not None and before[0] < asked else "")
                   + (". אין גל קודם על אותם כוננים: החיזוי לפי הקצב המבוקש, ביטחון נמוך" if before is None else "")
                   + (f". תקרת המשוב (`--rate-max`) מגבילה את הקו ל-{cap / 1e6:.0f}Mb/s, לא ל-{uncapped / 1e6:.0f}Mb/s"
-                     if bound else "")
+                     if bound and cap is not None else "")
                   + (f". לכונן {', '.join(gap)} אין היסטוריית כתיבה, ולכונן אחר יש: ביטחון נמוך" if gap else "")
                   + (f". בקצב היכולת הנלמדת ({learned / 1e6:.0f}Mb/s) חזוי "
                      f"{predict(chunks, zbytes, learned, slow).eta_s / 60:.0f} דק'" if learned else "")

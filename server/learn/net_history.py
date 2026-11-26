@@ -20,11 +20,10 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 from datetime import datetime, timezone
 
 from server.brain import memory as brain_memory   # #3185
-from server.db import _settle, _write_lock, now_iso, writing
+from server.db import _settle, _write_lock, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.net_history")
 
@@ -36,7 +35,7 @@ def _int(v) -> int | None:
     return v if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else None
 
 
-def record_nic(conn: sqlite3.Connection, mac: str, probe: dict) -> int:
+def record_nic(conn: SqlConnection, mac: str, probe: dict) -> int:
     """מ-`probe.record`, אחרי שהבדיקה נשמרה. מחזיר כמה דגימות נשמרו."""
     try:
         nics = probe.get("nic") if isinstance(probe, dict) else None
@@ -47,7 +46,8 @@ def record_nic(conn: sqlite3.Connection, mac: str, probe: dict) -> int:
         for nic in nics:
             if not isinstance(nic, dict) or not isinstance(nic.get("name"), str):
                 continue
-            stats = nic.get("stats") if isinstance(nic.get("stats"), dict) else {}
+            raw_stats = nic.get("stats")
+            stats = raw_stats if isinstance(raw_stats, dict) else {}
             got = (_int(nic.get("speed_mbps")), _int(stats.get("rx_crc_errors")),
                    _int(stats.get("rx_dropped")))
             last = conn.execute("SELECT at, speed_mbps, rx_crc_errors, rx_dropped FROM nic_history"
@@ -79,18 +79,18 @@ def record_nic(conn: sqlite3.Connection, mac: str, probe: dict) -> int:
         return 0
 
 
-def ip_history(conn: sqlite3.Connection, mac: str, limit: int = 10) -> list[dict]:
+def ip_history(conn: SqlConnection, mac: str, limit: int = 10) -> list[dict]:
     return [dict(r) for r in conn.execute(
         "SELECT ip, previous, at FROM ip_history WHERE mac = ? ORDER BY rowid DESC LIMIT ?", (mac, limit))]
 
 
-def nic_history(conn: sqlite3.Connection, mac: str, limit: int = 20) -> list[dict]:
+def nic_history(conn: SqlConnection, mac: str, limit: int = 20) -> list[dict]:
     return [dict(r) for r in conn.execute(
         "SELECT iface, at, speed_mbps, rx_crc_errors, rx_dropped FROM nic_history WHERE mac = ?"
         " ORDER BY rowid DESC LIMIT ?", (mac, limit))]
 
 
-def wave_drops(conn: sqlite3.Connection, mac: str, limit: int = 10) -> list[dict]:
+def wave_drops(conn: SqlConnection, mac: str, limit: int = 10) -> list[dict]:
     """`wave_rates.drops[mac]` של הגלים האחרונים שהמכונה הייתה בהם — `rcvbuf`/`inerrors` (null = לא נקרא)."""
     out = []
     for row in conn.execute("SELECT session_id, at, drops FROM wave_rates WHERE drops IS NOT NULL"
