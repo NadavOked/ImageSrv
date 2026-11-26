@@ -78,7 +78,7 @@ _ic_save() { # $1 = node, $2 = work dir, $3.. = regions. r.N per region, and blo
         _is_i=$((_is_i + 1))
         dd if="$_is_n" of="$_is_w/r.$_is_i" bs=4096 skip=$((${_is_r%:*} / 4096)) count=$((${_is_r#*:} / 4096)) \
             iflag=direct 2> "$_is_w/err" || return 1
-        [ "$(wc -c < "$_is_w/r.$_is_i" 2>/dev/null | tr -d ' ')" = "${_is_r#*:}" ] || return 1
+        [ "$(wc -c 2>/dev/null < "$_is_w/r.$_is_i" | tr -d ' ')" = "${_is_r#*:}" ] || return 1
         cat "$_is_w/r.$_is_i" >> "$_is_w/blob" || return 1
     done
 }
@@ -151,8 +151,8 @@ idle_wc_disk() { # $1 = disk. The lock first, the hold after: a task that set th
     mkdir -p "$RUN_DIR/idlecheck"; mkdir "$RUN_DIR/idlecheck/busy.$1" 2>/dev/null || return 0   # held already (a task's recovery): not now
     [ ! -e "$RUN_DIR/idlecheck/hold" ] || { rm -rf "$RUN_DIR/idlecheck/busy.$1"; return 0; }
     _id_k=$(_ic_ident "$1") || _id_k=""   # #3271 L3: under the lock
-    _id_run "$1" "$DEVROOT/$1" "$_id_k"
-    rm -rf "$RUN_DIR/idlecheck/busy.$1"
+    command exec 9< "$DEVROOT/$1" || { _ic_res "$1" "$_id_k" unchecked "הדיסק לא נפתח להחזקה — לא נבדק, ולא נכתב דבר" ""; rm -rf "$RUN_DIR/idlecheck/busy.$1"; return 0; }   # #3297: an fd on the node for the whole check and put-back -- the kernel does not hand its sdX to a disk that comes in meanwhile. `command`: a failed exec must not end this shell, it holds the busy lock
+    _id_run "$1" "$DEVROOT/$1" "$_id_k"; exec 9<&-; rm -rf "$RUN_DIR/idlecheck/busy.$1"   # one close for every return of _id_run (it has many); the subshell's exit would close it too
 }
 
 _id_run() { # $1 = disk, $2 = node, $3 = key

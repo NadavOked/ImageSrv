@@ -65,7 +65,7 @@ agent_log_prepare() {
     # (principle 5): the server sets agent_logs.truncated from this (#3031).
     _ap_all="$1.all"
     if tr '\r' '\n' 2>/dev/null < "$LOG_FILE" > "$1.raw" && agent_log_compact "$1.raw" > "$_ap_all" 2>/dev/null; then
-        _ap_l=$(wc -l < "$_ap_all" 2>/dev/null | tr -d ' '); _ap_b=$(wc -c < "$_ap_all" 2>/dev/null | tr -d ' ')
+        _ap_l=$(wc -l 2>/dev/null < "$_ap_all" | tr -d ' '); _ap_b=$(wc -c 2>/dev/null < "$_ap_all" | tr -d ' ')
         tail -n "$AGENT_LOG_LINES" "$_ap_all" 2>/dev/null | tail -c "$AGENT_LOG_BYTES" > "$1" 2>/dev/null
         case "$_ap_l$_ap_b" in
             ''|*[!0-9]*) echo 1 ;;   # the count itself failed

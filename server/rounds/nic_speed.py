@@ -19,12 +19,11 @@
 
 from __future__ import annotations
 
-import sqlite3
 import time
 from datetime import datetime
 
 from server.agent import probe
-from server.db import get_setting, set_setting, set_settings
+from server.db import get_setting, set_setting, set_settings, SqlConnection
 from server.rounds import nic_live
 
 #: מפתח ההגדרה הידנית לכל MAC (טבלת `settings`, כמו `nicdesc:` של #1263).
@@ -37,7 +36,7 @@ ASSUMED_MBPS = 1000
 PROBE_MAX_AGE_S = 900
 
 
-def manual(conn: sqlite3.Connection, mac: str) -> int | None:
+def manual(conn: SqlConnection, mac: str) -> int | None:
     raw = get_setting(conn, PREFIX + mac)
     try:
         value = int(raw) if raw is not None else None
@@ -46,7 +45,7 @@ def manual(conn: sqlite3.Connection, mac: str) -> int | None:
     return value if value in CHOICES else None
 
 
-def set_manual(conn: sqlite3.Connection, mac: str, mbps: int | None) -> None:
+def set_manual(conn: SqlConnection, mac: str, mbps: int | None) -> None:
     """`None` = חזרה לאוטומטי (המפתח נמחק)."""
     if mbps is None:
         set_settings(conn, {}, remove=[PREFIX + mac])
@@ -85,7 +84,7 @@ def _epoch(value: object) -> float | None:
         return None
 
 
-def measured(conn: sqlite3.Connection, mac: str, sample: dict | None = None, sampled: bool = False,
+def measured(conn: SqlConnection, mac: str, sample: dict | None = None, sampled: bool = False,
              sampled_at: str | None = None, now: float | None = None) -> tuple[int | None, str | None]:
     """#3277: `(Mb/s, None)` או `(None, למה)` -- בלי ידני ובלי הנחה. קודם החי (`nic_live`), ואחריו דגימת ה-probe, ורק
     אם היא **ראויה**: לא נלקחה לפני האתחול הנוכחי, ולא ישנה מ-`PROBE_MAX_AGE_S`. דגימה בלי `sampled_at` שאפשר לקרוא
@@ -109,7 +108,7 @@ def measured(conn: sqlite3.Connection, mac: str, sample: dict | None = None, sam
     return mbps, None
 
 
-def view(conn: sqlite3.Connection, mac: str, sample: dict | None = None,
+def view(conn: SqlConnection, mac: str, sample: dict | None = None,
          sampled: bool = False, sampled_at: str | None = None, now: float | None = None) -> dict:
     """`{"speed_mbps", "source", "why"}` — `source`: `manual` · `reported` ·
     `assumed` (`speed_mbps` = `ASSUMED_MBPS`, `why` = למה הדיווח לא שימש).
@@ -123,7 +122,7 @@ def view(conn: sqlite3.Connection, mac: str, sample: dict | None = None,
     return {"speed_mbps": ASSUMED_MBPS, "source": "assumed", "why": why}
 
 
-def slowest(conn: sqlite3.Connection, macs) -> dict | None:
+def slowest(conn: SqlConnection, macs) -> dict | None:
     """המכונה האיטית בגל: `{"mac", "speed_mbps", "source", "why"}`, ו-`assumed`
     — כל המכונות שמהירותן הונחה. None — אין מכונות."""
     seen = [{"mac": mac, **view(conn, mac)} for mac in sorted({m for m in macs if m})]
@@ -134,7 +133,7 @@ def slowest(conn: sqlite3.Connection, macs) -> dict | None:
     return {**low, "assumed": [m["mac"] for m in seen if m["source"] == "assumed"]}
 
 
-def reported_speeds(conn: sqlite3.Connection, macs) -> dict[str, int]:
+def reported_speeds(conn: SqlConnection, macs) -> dict[str, int]:
     """#3940: `{mac: Mb/s}` של המכונות שמהירותן **נקראה** (`reported`/`manual`) -- בלי מי שהונחה. נשמר בהחלטת הגל כשהוא
     יוצא, כי בסופו של גל ארוך (או גל שעבר אתחול) הדיווח הטרי כבר פג, והלמידה (`capability`) אינה צריכה להמציא 'לא נמדד'."""
     seen = {mac: view(conn, mac) for mac in sorted({m for m in macs if m})}

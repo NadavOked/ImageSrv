@@ -257,6 +257,17 @@ def version_of(manifest: dict) -> int:
     return value if type(value) is int and value >= 1 else 1
 
 
+def latest_versions(images: dict[str, dict]) -> dict[str, dict]:
+    """{שושלת: המניפסט של הגרסה האחרונה} — הגבוהה ביותר, ובשוויון החדשה לפי `created` (#2551)."""
+    result: dict[str, dict] = {}
+    for manifest in images.values():
+        key = lineage_of(manifest)
+        best = result.get(key)
+        if best is None or (version_of(manifest), str(manifest.get("created", ""))) >                 (version_of(best), str(best.get("created", ""))):
+            result[key] = manifest
+    return result
+
+
 def default_versions(images: dict[str, dict], pointers: dict[str, str]) -> dict[str, str]:
     """{שושלת: מזהה ברירת המחדל}. ההצבעה שנקבעה בקונסולה גוברת — אם היא
     מצביעה על גרסה שקיימת **באותה שושלת**; אחרת הגרסה הגבוהה ביותר (ובשוויון
@@ -753,8 +764,10 @@ class ImageLibrary:
         result = []
         scanned = self.scan()
         chosen = set(self.defaults(scanned).values())
+        latest = latest_versions(scanned)
         for manifest in scanned.values():
             fmt_code, fmt_reason = format_problem(manifest) or (None, None)
+            newest = latest[lineage_of(manifest)]
             result.append(
                 {
                     "id": manifest["id"],
@@ -765,6 +778,10 @@ class ImageLibrary:
                     "family": manifest["family"],
                     "os": image_os(manifest),
                     "created": manifest.get("created", ""),
+                    # #2551: "עודכן" = הגרסה האחרונה בשושלת (לא הנקלטת); `updated_origin`
+                    # "vm" = היא נשמרה מעדכון ב-VM, אחרת "capture".
+                    "updated": newest.get("created", ""),
+                    "updated_origin": "vm" if newest.get("origin") == "vm" else "capture",
                     "source_disk_bytes": manifest.get("source_disk_bytes"),
                     # #953: "נכנס לדיסק מ-X" — הדרישה **הנגזרת** (`required_bytes`,
                     # מה שבדיקה 2.7 אוכפת), לא השדה הגולמי; None = לא ניתן לקבוע.
@@ -975,12 +992,12 @@ class ImageLibrary:
                     part["index_error"] = error[:300]
                     written.append(index)
                     continue
-                text, listing, xxh, count = (value.get("index"), value.get("list"),
-                                             value.get("list_xxh64"), value.get("bytes"))
+                text, listing, xxh = value.get("index"), value.get("list"), value.get("list_xxh64")
+                count = _whole(value.get("bytes"))
                 size = _whole(part.get("size_bytes"))
                 lines = listing.splitlines() if isinstance(listing, str) else None
                 chunk = self.READBACK_CHUNK_BYTES
-                if lines is None or not isinstance(text, str) or _whole(count) is None or size is None \
+                if lines is None or not isinstance(text, str) or count is None or size is None \
                         or count > size or len(lines) != (count + chunk - 1) // chunk \
                         or any(_HEX16.fullmatch(x) is None for x in lines) \
                         or not (isinstance(xxh, str) and _HEX16.fullmatch(xxh) is not None):
@@ -992,7 +1009,7 @@ class ImageLibrary:
                 b3_ok = (isinstance(b3, bytes) and len(b3) == 32 * len(lines) and isinstance(b3_hash, str)
                          and _HEX64.fullmatch(b3_hash) is not None)
                 write_atomic(base.with_name(base.name + ".idx"), text, encoding="ascii")
-                if b3_ok:                        # #3332: the list first, then the manifest that names it
+                if b3_ok and isinstance(b3, bytes):   # #3332: the list first, then the manifest that names it
                     write_atomic(base.with_name(base.name + ".b3"), b3)
                     part["chunk_b3"] = b3_hash
                 part.update({"readback_xxh64": xxh, "readback_chunks": len(lines),

@@ -110,7 +110,7 @@ _failed: set[tuple[str, str]] = set()           # (כלל, גל) שכבר נרש
 _failed_lock = threading.Lock()
 
 
-def record(conn, calls, *, round_id: str, entity_kind: str = "machine") -> dict[str, int | None]:
+def record(conn, calls, *, round_id: str | None, entity_kind: str = "machine") -> dict[str, int | None]:
     """רושם כל החלטה ב-``brain_decisions`` (יעד -> מספר השורה). ``off`` או כשל כתיבה = ``None`` לאותו יעד: ההחלטה
     בכל מקרה כבר התקבלה, והשרת מבצע אותה. לעולם אינו זורק."""
     if not calls:
@@ -303,9 +303,10 @@ def judge_pull(*, members, created_at: object, now: datetime, final, silent_s: f
         return Call(*base, FAIL_REPORTED, mac, errors or "המכונה דיווחה " + ", ".join(m["state"] for m in members),
                     tuple(f"state={m['state']}" for m in members))
     stamps = [_aware(m["updated_at"]) for m in members] or [_aware(created_at)]
-    if None in stamps:
+    read = [s for s in stamps if s is not None]
+    if len(read) != len(stamps):
         return Call(*base, UNMEASURED, mac, "חותמת הדיווח אינה נקראת (או בלי אזור זמן): לא נמדד, ולא מכריזים שקט")
-    last = max(stamps)
+    last = max(read)
     age = (now - last).total_seconds()
     evidence = (f"last={last.isoformat(timespec='seconds')}", f"age={age:.0f}s", f"limit={silent_s:g}s")
     if age <= silent_s:
@@ -400,9 +401,9 @@ def judge_stall(machines, round_id: str = "", *, stall_s: float = STALL_S, strea
     writing = [d for m in machines for d in m.get("drawer_list", []) if d.get("state") == "writing"]
     # #3896: המקור נקבע לפי מה שהסוכן ראה (`stall`, stall.sh), לא לפי "כולן עצרו". `waiting_disk` = הזרם המשיך להגיע ורק המגירה הזו לא
     # כתבה: הכונן. זה פסק גם למגירה בודדת וגם כשהשלמה רצה ב-HTTP בלבד (אין רוב, אבל יש ראיה ישירה).
-    frozen = [d for d in writing if d.get("stall") == "waiting_disk" and _held_s(d) is not None and _held_s(d) >= stall_s]
+    frozen = [h for d in writing if d.get("stall") == "waiting_disk" and (h := _held_s(d)) is not None and h >= stall_s]
     if frozen:
-        longest = max(_held_s(d) for d in frozen)
+        longest = max(frozen)
         return Call(*base, DISK_STALLED, round_id,
                     f"{len(frozen)} מתוך {len(writing)} המגירות הכותבות עומדות בגלל הכונן שלהן (הזרם המשיך להגיע, עד {longest:.0f}ש'): "
                     "הכונן קפא, לא הזרם",

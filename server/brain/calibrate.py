@@ -82,8 +82,8 @@ def learn(conn, mac: str, *, now: float, start_s: float, lost_s: float, max_age_
     """הסף של משכפל אחד, והסיבה לו. כל כשל בקריאה = ערך ההתחלה וסיבה "לא נקרא"."""
     try:
         rows = memory.decisions(conn, kind="machine", key=mac, rule=RULE, since=_iso(now - max_age_s), limit=LIMIT)
-        seen = [(_silence(r), r.get("round_id")) for r in rows if r.get("verdict") == VERDICT]
-        seen = [(s, rnd) for s, rnd in seen if s is not None]
+        measured = [(_silence(r), r.get("round_id")) for r in rows if r.get("verdict") == VERDICT]
+        seen = [(s, rnd) for s, rnd in measured if s is not None]
     except Exception:                       # noqa: BLE001 — הכיול אינו מפיל את ה-tick או הווטו
         log.exception("brain: the suspect history of %s was not read", mac)
         return Learned(start_s, f"ערך התחלה {start_s:g}s: ההיסטוריה לא נקראה")

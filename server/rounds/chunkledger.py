@@ -36,10 +36,9 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 import time
 
-from server.db import _write_lock, now_iso, writing
+from server.db import _write_lock, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.chunkledger")
 
@@ -131,7 +130,7 @@ def _part_facts(manifest: dict, part: object) -> tuple[str, int]:
 TWIN = -1          # `part` של שורת הסימון "שני דיסקים עונים לזהות הזו בסבב הזה": אין יומן לאף אחד מהם
 
 
-def record(conn: sqlite3.Connection, *, round_id: str, mac: str, serial: str, size_bytes: int,
+def record(conn: SqlConnection, *, round_id: str, mac: str, serial: str, size_bytes: int,
            image_id: str, manifest: dict, durable: object) -> None:
     """דיווח `durable` של יעד אחד → היומן. כולו או כלום: `LedgerProblem` = דבר לא נרשם.
 
@@ -183,7 +182,7 @@ def record(conn: sqlite3.Connection, *, round_id: str, mac: str, serial: str, si
                             " no ledger for either of them")
 
 
-def of_disk(conn: sqlite3.Connection, serial: str, size_bytes: int) -> dict[int, dict]:
+def of_disk(conn: SqlConnection, serial: str, size_bytes: int) -> dict[int, dict]:
     """היומן של דיסק: {מחיצה: {round_id, mac, image_id, index_xxh64, chunks, ranges,
     missing, updated_at}}. ריק = אין יומן (או תאומים), ולכן אין ממה להמשיך."""
     out = {}
@@ -199,10 +198,11 @@ def of_disk(conn: sqlite3.Connection, serial: str, size_bytes: int) -> dict[int,
     return out
 
 
-def forget(conn: sqlite3.Connection, *, serial: str | None = None, size_bytes: int | None = None,
+def forget(conn: SqlConnection, *, serial: str | None = None, size_bytes: int | None = None,
            round_id: str | None = None) -> int:
     """מוחק את היומן של דיסק (serial וגודל), או של סבב שלם ("התחל מחדש", סגירת הסבב,
     פקיעת ההמתנה). מחזיר כמה שורות נמחקו. בלי דיסק ובלי סבב — כלום (לא "הכול")."""
+    args: tuple[str | int, ...]
     if round_id is not None and serial is None:
         clause, args = "round_id = ?", (round_id,)
     elif serial is not None and size_bytes is not None:
@@ -213,7 +213,7 @@ def forget(conn: sqlite3.Connection, *, serial: str | None = None, size_bytes: i
         return conn.execute(f"DELETE FROM chunk_ledger WHERE {clause}", args).rowcount
 
 
-def forget_others(conn: sqlite3.Connection, disks: list[tuple[str, int]], round_id: str) -> int:
+def forget_others(conn: SqlConnection, disks: list[tuple[str, int]], round_id: str) -> int:
     """כתיבה נפתחה על הדיסקים האלה בסבב `round_id`: יומן שלהם מסבב **אחר** נמחק. בכל
     מנוע — גם מי שאינו מדווח `durable`: דיסק שנכתב מחדש אינו ממשיך מיומן ישן.
     קריאה אחת, בלי נעילת כתיבה, כשאין מה למחוק (הדיווח מגיע כל 2 שניות)."""
@@ -227,7 +227,7 @@ def forget_others(conn: sqlite3.Connection, disks: list[tuple[str, int]], round_
                                 (*d, round_id)).rowcount for d in stale)
 
 
-def adopt(conn: sqlite3.Connection, serial: str, size_bytes: int, round_id: str, *,
+def adopt(conn: SqlConnection, serial: str, size_bytes: int, round_id: str, *,
           image_id: str, manifest: dict) -> int:
     """שלב 4: סבב חדש ממשיך את הכתיבה של הדיסק הזה — היומן עובר אליו כמו שהוא,
     במקום להימחק בדיווח הראשון שלו. מחזיר כמה שורות עברו.
@@ -268,7 +268,7 @@ def _manifest(ctx, image_id: str, direct) -> dict | None:
     return kept[1]
 
 
-def _hello_disks(conn: sqlite3.Connection, mac: str) -> list[dict]:
+def _hello_disks(conn: SqlConnection, mac: str) -> list[dict]:
     """הדיסקים שה-hello האחרון של המכונה דיווח — כל רשומה שנוקבת בהתקן. `[]` = אין hello,
     אין בו דיסקים, או שאינו נקרא."""
     row = conn.execute("SELECT disks_json FROM net_devices WHERE mac = ?", (mac,)).fetchone()
@@ -288,12 +288,12 @@ def _named(disk: dict) -> bool:
             and type(disk.get("size_bytes")) is int and disk["size_bytes"] > 0)
 
 
-def disks_of(conn: sqlite3.Connection, mac: str) -> dict[str, tuple[str, int]]:
+def disks_of(conn: SqlConnection, mac: str) -> dict[str, tuple[str, int]]:
     """{התקן: (serial, גודל)} מה-hello האחרון של המכונה — רק דיסקים שדיווחו את שניהם."""
     return {d["dev"]: (d["serial"], d["size_bytes"]) for d in _hello_disks(conn, mac) if _named(d)}
 
 
-def nameless_of(conn: sqlite3.Connection, mac: str) -> set[str]:
+def nameless_of(conn: SqlConnection, mac: str) -> set[str]:
     """ההתקנים שה-hello האחרון **כן** דיווח, אבל בלי serial או בלי גודל. לדיסק כזה אין
     יומן ואין המשך (התכנון 2.3; סבב חדר אינו כותב אותו כלל, #2448), ושום דיווח מאוחר
     לא ישנה זאת — סירוב קבוע. להבדיל מהתקן שאינו ב-`disks_of` וגם אינו כאן: ה-hello לא

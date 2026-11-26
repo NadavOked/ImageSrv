@@ -25,7 +25,7 @@ import time
 from datetime import datetime, timezone
 from typing import Callable
 
-from server.db import _settle, _write_lock, get_setting, journal, now_iso, update_one, writing
+from server.db import _settle, _write_lock, get_setting, journal, now_iso, SqlConnection, update_one, writing
 from server.agent import readbackhash
 from server.core.hostname_rule import HOSTNAME_MAX
 
@@ -104,7 +104,7 @@ def _iso(ts: str | None) -> datetime | None:
 class SessionStore:
     def __init__(
         self,
-        conn: sqlite3.Connection,
+        conn: SqlConnection,
         now_fn: Callable[[], float] = time.time,
         on_running: Callable[[dict], None] | None = None,
         on_closed: Callable[[str], None] | None = None,
@@ -125,6 +125,8 @@ class SessionStore:
         #: `{"state": "preparing", "he": …}` (מכין את האימג') או `{"state": "failed", "error": …}`.
         #: `server.app` מחבר אותו להכנת האינדקס של מנוע החתיכות (`indexprep`); None = אין שער.
         self.start_gate: Callable[..., dict | None] | None = None
+        #: #3277: `image_id` -> גודל האימג' בבתים, לצורך אזהרת הקישור של המוח (`linkwarn.image_bytes`). `server.app` מחבר אותו; None = לא ידוע.
+        self.image_bytes: Callable[[str], object] | None = None
 
     # --- פתיחה וסגירה --------------------------------------------------------
 

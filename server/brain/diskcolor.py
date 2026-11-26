@@ -68,7 +68,7 @@ def evidence(disk: dict, failures: list[dict] | None, write_slow: bool) -> dict:
     own = disk_rule.failures_of(failures or [], disk)
     sata = disk.get("sata_issues")
     return {"smart": disk.get("smart") or "unchecked", "smart_reason": disk.get("smart_reason") or None,
-            "failed_last": own["failed_last"], "readonly": own["readonly"],
+            "failed_last": own["failed_last"], "cable_failed": own["cable_failed"], "readonly": own["readonly"],
             "write_mark": disk.get("write_mark") if isinstance(disk.get("write_mark"), str) else None,
             "sata_issues": sata if isinstance(sata, list) else None, "write_slow": bool(write_slow),
             "table": disk_rule.TABLE.name}

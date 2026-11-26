@@ -314,6 +314,8 @@ class Tracker:
             if d.get("action") != FETCH:
                 continue
             got = next((e.split("=", 1)[1] for e in d.get("evidence") or [] if str(e).startswith("rate_cps=")), None)
+            if got is None:
+                continue
             try:
                 out.append(float(got))
             except (TypeError, ValueError):
@@ -341,7 +343,8 @@ class Tracker:
             if r["state"] not in ("done", "failed", "partial", "lost")}
         with self._lock:
             failed = set(self._failed.get(session_id, ()))
-        chunks, out = None, {}
+        chunks: int | None = None
+        out: dict[str, dict[str, repair.Ranges]] = {}
         for row in self.conn.execute("SELECT mac, serial, chunks, ranges_json FROM chunk_ledger"
                                      " WHERE round_id = ? AND part = ?", (session_id, part)):
             if row["mac"] not in alive or (row["mac"], row["serial"]) in failed:

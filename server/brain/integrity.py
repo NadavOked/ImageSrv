@@ -47,6 +47,7 @@ from dataclasses import dataclass
 from server.brain import memory, veto
 from server.db import now_iso
 from server.disks.disk_failures import interrupted
+from server.rounds.chunkpass import SOURCE_FAILURE_PREFIX
 from server.rounds.room_precheck import _CRC_READ_FAIL_REASONS, _CRC_READ_VERDICTS
 
 log = logging.getLogger("imagesrv.brain")
@@ -143,6 +144,7 @@ class Target:
     interrupted: bool = False
     failed_readback: bool = False   # משפט הכשל של הסוכן: האימות רץ ומצא אי-התאמה
     error: str = ""
+    source_failure: str | None = None
 
     @property
     def name(self) -> str:
@@ -160,9 +162,11 @@ def integrity(targets: tuple[Target, ...]) -> list[Decision]:
     out = []
     for t in sorted(targets, key=lambda t: t.name):
         chunks = tuple(sorted(set(t.failed_chunks or ())))
-        evidence = (f"state={t.state}", f"readback={t.readback}", f"failed_chunks={list(chunks)}")
+        evidence: tuple[str, ...] = (f"state={t.state}", f"readback={t.readback}", f"failed_chunks={list(chunks)}")
         common = sorted(shared.intersection(chunks))
-        if t.interrupted:
+        if t.source_failure and ((t.interrupted and not t.error) or t.source_failure in t.error):
+            verdict, why = SOURCE_FAILURE, t.source_failure
+        elif t.interrupted:
             verdict, why = HALF_WRITTEN, "הכתיבה נעצרה באמצע: הדיסק כתוב בחלקו"
         elif common:
             verdict, why = SOURCE_FAILURE, "אותה חתיכה נכשלה באימות בדיסקים שונים: כשל של המקור, לא של הדיסק"
@@ -181,7 +185,7 @@ def integrity(targets: tuple[Target, ...]) -> list[Decision]:
     return out
 
 
-def target(mac: str, raw: dict, *, closed: bool = False) -> Target | None:
+def target(mac: str, raw: dict, *, closed: bool = False, source_failure: str | None = None) -> Target | None:
     """יעד אחד מ-``targets_json``, או ``None`` כשעוד אין מה לשפוט (הגל פתוח והיעד לא הסתיים)."""
     state = raw.get("state")
     if not closed and state not in FINAL:
@@ -195,19 +199,20 @@ def target(mac: str, raw: dict, *, closed: bool = False) -> Target | None:
             chunks = tuple(sorted({(c["partition"], c["chunk_index"]) for c in value}))
         else:
             readback = "evidence_unreadable"        # ראיה פגומה אינה "אין כשל": COULD_NOT_VERIFY
-    error = raw.get("error") if isinstance(raw.get("error"), str) else ""
+    raw_error = raw.get("error")
+    error = raw_error if isinstance(raw_error, str) else ""
     serial = raw.get("serial") if isinstance(raw.get("serial"), str) and raw.get("serial") else None
     return Target(mac, str(raw.get("dev") or "?"), serial, str(state), readback, chunks,
                   interrupted=interrupted(None, error) or (closed and state == "writing"),
-                  failed_readback=READBACK_FAILED in error, error=error)
+                  failed_readback=READBACK_FAILED in error, error=error, source_failure=source_failure)
 
 
 # --- הקריאה והרישום -----------------------------------------------------------------------------------------------
 
 
-def _targets(conn, session_id: str, closed: bool) -> list[Target]:
+def _targets(conn, session_id: str, closed: bool, source_failure: str | None) -> list[Target]:
     out = []
-    for row in conn.execute("SELECT mac, targets_json FROM session_members WHERE session_id = ? ORDER BY mac",
+    for row in conn.execute("SELECT mac, targets_json, error FROM session_members WHERE session_id = ? ORDER BY mac",
                             (session_id,)):
         try:
             raw = json.loads(row["targets_json"] or "[]")
@@ -218,7 +223,8 @@ def _targets(conn, session_id: str, closed: bool) -> list[Target]:
             raw = [{"dev": "?", "state": "failed", "error": "targets_json לא נקרא"}]
         if not raw and closed:
             raw = [{"dev": "?", "state": "failed", "error": "הגל נסגר בלי שום יעד בדיווח"}]
-        out += [t for t in (target(row["mac"], item, closed=closed) for item in raw) if t is not None]
+        reason = source_failure if row["error"] == source_failure else None
+        out += [t for t in (target(row["mac"], item, closed=closed, source_failure=reason) for item in raw) if t is not None]
     return out
 
 
@@ -228,7 +234,7 @@ def record_round(conn, session_id: str) -> list[Decision]:
     בהיסטוריה."""
     if veto.mode(conn) == veto.OFF:
         return []
-    session = conn.execute("SELECT image_id, state FROM sessions WHERE id = ?", (session_id,)).fetchone()
+    session = conn.execute("SELECT image_id, state, failed_reason FROM sessions WHERE id = ?", (session_id,)).fetchone()
     if session is None:
         return []
     decisions, entities = [], {}
@@ -238,7 +244,9 @@ def record_round(conn, session_id: str) -> list[Decision]:
         decisions.append(crc_delta(row["serial"], row["crc"] if _read(row) else None, base and base[0],
                                    target=name, base=base and base[1]))
         entities[name] = ("disk", row["serial"]) if row["serial"] else ("machine", row["mac"])
-    targets = _targets(conn, session_id, session["state"] in ("closed", "failed"))
+    reason = session["failed_reason"] or ""
+    source_failure = reason if session["state"] == "failed" and reason.startswith(SOURCE_FAILURE_PREFIX) else None
+    targets = _targets(conn, session_id, session["state"] in ("closed", "failed"), source_failure)
     entities.update({t.name: ("disk", t.serial) if t.serial else ("machine", t.mac) for t in targets})
     decisions += integrity(tuple(targets))
     latest: dict[tuple, dict] = {}

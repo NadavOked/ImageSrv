@@ -21,10 +21,9 @@ from __future__ import annotations
 import logging
 import math
 import re
-import sqlite3
 import statistics
 
-from server.db import _settle, _write_lock, now_iso, writing
+from server.db import _settle, _write_lock, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.restore_stages")
 
@@ -66,7 +65,7 @@ def clean_targets(targets: list) -> None:
                 t["stages"] = got
 
 
-def record(conn: sqlite3.Connection, session_id: str, mac: str, t: dict,
+def record(conn: SqlConnection, session_id: str, mac: str, t: dict,
            serial: str | None) -> int:
     """שורה לכל שלב של יעד סופי שנשא משכים. חוזר על עצמו בבטחה. לעולם אינו זורק."""
     try:
@@ -90,7 +89,7 @@ def _kind(stage: str) -> str:
     return "partitions" if stage.startswith("p") else stage
 
 
-def medians(conn: sqlite3.Connection, mac: str, sessions: list[str]) -> dict[str, float] | None:
+def medians(conn: SqlConnection, mac: str, sessions: list[str]) -> dict[str, float] | None:
     """#1843: לכל שלב קבוע (וסכום המחיצות כ-`partitions`) — החציון על הגלים `sessions` של המכונה,
     כשבכל גל נלקחת המגירה **האיטית** (הגל נגמר כשהיא נגמרת). None — אף גל לא נשא שלבים."""
     try:

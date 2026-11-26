@@ -30,7 +30,7 @@
 
 from __future__ import annotations
 
-import sqlite3
+from server.db import SqlConnection
 
 from server.disks import model_slots
 
@@ -50,7 +50,7 @@ def ceiling_mbps(gbps: object) -> int | None:
     return CEILING_MBPS.get(round(float(gbps), 1))
 
 
-def _seen(conn: sqlite3.Connection, macs: list[str], port: int) -> dict | None:
+def _seen(conn: SqlConnection, macs: list[str], port: int) -> dict | None:
     """מה שנצפה ביציאה `port` של המכונות `macs`: `{"max", "waves", "machines"}`, או None כשלא נקרא בה קישור מעולם."""
     marks = ",".join("?" * len(macs))
     row = conn.execute(
@@ -61,14 +61,14 @@ def _seen(conn: sqlite3.Connection, macs: list[str], port: int) -> dict | None:
         "max": float(row["top"]), "waves": row["waves"], "machines": row["machines"]}
 
 
-def _waves_at(conn: sqlite3.Connection, macs: list[str], port: int, top: float) -> int:
+def _waves_at(conn: SqlConnection, macs: list[str], port: int, top: float) -> int:
     """בכמה גלים נקרא ביציאה הקישור **הגבוה ביותר** (`top`): גלים שבהם ירד ממנו אינם עדות שזו היכולת."""
     marks = ",".join("?" * len(macs))
     return conn.execute(f"SELECT COUNT(DISTINCT session_id) AS n FROM port_history WHERE port = ?"
                         f" AND link_gbps >= ? AND mac IN ({marks})", (port, top - 0.01, *macs)).fetchone()["n"]
 
 
-def capability(conn: sqlite3.Connection, mac: str, port: object) -> dict:
+def capability(conn: SqlConnection, mac: str, port: object) -> dict:
     """היכולת שנלמדה של היציאה `port` של `mac` -- ראו את ראש המודול. `{"gbps", "basis", "known", "waves", "machines", "model"}`;
     `gbps` None = לא נמדד. כשל בשאילתה עולה למעלה: "לא הצלחנו לבדוק" אינו "אין נתון"."""
     out = {"gbps": None, "basis": None, "known": False, "waves": 0, "machines": 0, "model": None}

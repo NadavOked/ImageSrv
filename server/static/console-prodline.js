@@ -52,7 +52,7 @@ function plRow(r, pl, m, s) {
   if (row && row.state === "removable") return [plTag("ok", "אפשר להוציא"), true, bar, `נותק בבטחה · ${esc(plAgo(row.changed_at))}`];
   if (live && d.state === "done") return [plTag("ok", "הושלם"), true, bar, row && row.state === "done" ? "מנתק בבטחה — עדיין לא להוציא" : ""];
   if (live && drawerPulled(d)) return [plTag("mut", "נשלף"), false, "", PULLED_HE];   // #3209: grey -- the same tag and words as the cloner screen; the name has not returned to the queue
-  if (live && d.state === "failed") return [plTag("bad", "נכשל"), false, "", esc(d.error_short || drawerErrorText(d.error) || "") + (row && row.name ? ` · השם ${ltr(row.name)} נשמר לדיסק` : "")];
+  if (live && d.state === "failed") return [plTag("bad", "נכשל"), false, "", esc(drawerDisplayError(d)) + (row && row.name ? ` · השם ${ltr(row.name)} נשמר לדיסק` : "")];
   if (live && d.state === "writing" && d.rejoin) return [plTag("w", "מצטרף ומשלים") + (health ? " " + health : ""), false, bar, plRejoinNote(d.rejoin)];
   if (live && d.state === "writing") return [plTag("w", "כותב") + (health ? " " + health : ""), false, bar, ""];
   if (live && d.state === "verifying") return [plTag("mut", "מאמת") + (health ? " " + health : ""), false, bar, ""];

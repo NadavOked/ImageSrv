@@ -12,7 +12,7 @@ import sqlite3
 from dataclasses import dataclass
 
 from server.core import hostname_rule, machine_names
-from server.db import _write_lock, journal, now_iso, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, writing
 from server.rounds.sessions import HOSTNAME_MAX, NONCLASSROOM_NAME_MAX
 
 _MAC_CLEAN = re.compile(r"[^0-9a-f]")
@@ -43,7 +43,9 @@ def name_error(role: str, text: object) -> str:
         return _SUFFIX_BAD
     name = text.strip() if isinstance(text, str) else text
     if role in machine_names.PREFIX and machine_names.is_number_text(name):
-        return machine_names.refusal(name)   # #3123: "100" הוא מספר שגוי, לא שם חופשי
+        refused = machine_names.refusal(name)   # #3123: "100" הוא מספר שגוי, לא שם חופשי
+        if refused is not None:
+            return refused
     return hostname_rule.refusal(name, "שם המחשב") or _NAME_TOO_LONG
 
 #: כל כתיבה כאן עוברת ב-``with _write_lock, writing(conn)`` — שני
@@ -124,7 +126,7 @@ def normalize_name(role: str, text: str) -> str | None:
     return s if hostname_rule.is_valid(s) and len(s) <= NONCLASSROOM_NAME_MAX else None
 
 
-def number_taken(conn: sqlite3.Connection, role: str, suffix: str, mac: str | None) -> str | None:
+def number_taken(conn: SqlConnection, role: str, suffix: str, mac: str | None) -> str | None:
     """#3123: שם ממוספר שמכונה **אחרת** כבר מחזיקה → הודעת סירוב, אחרת ``None``.
 
     ``cloner-3`` הוא ה-hostname, ולכן שני מחשבים בשם הזה אינם "שני משכפלים
@@ -192,7 +194,7 @@ def parse_paste(text: str, role: str = "classroom") -> list[ImportLine]:
 
 
 def import_lines(
-    conn: sqlite3.Connection, group_id: str, lines: list[ImportLine], user: str
+    conn: SqlConnection, group_id: str, lines: list[ImportLine], user: str
 ) -> tuple[int, list[ImportLine]]:
     """שומר את השורות התקינות. מחזיר (כמה נשמרו, השורות שנדחו).
 
@@ -236,13 +238,13 @@ def import_lines(
     return saved, rejected
 
 
-def group_role(conn: sqlite3.Connection, group_id: str) -> str | None:
+def group_role(conn: SqlConnection, group_id: str) -> str | None:
     row = conn.execute("SELECT role FROM groups WHERE id = ?", (group_id,)).fetchone()
     return row["role"] if row else None
 
 
 def add_machine(
-    conn: sqlite3.Connection, mac_raw: str, name_raw: str, group_id: str, user: str
+    conn: SqlConnection, mac_raw: str, name_raw: str, group_id: str, user: str
 ) -> str:
     """הוספה ידנית של מכונה אחת. מחזיר את ה-MAC הקנוני; זורק ValueError."""
     role = group_role(conn, group_id)
@@ -271,7 +273,7 @@ def add_machine(
 
 
 def update_machine(
-    conn: sqlite3.Connection, mac_raw: str, name_raw: str | None,
+    conn: SqlConnection, mac_raw: str, name_raw: str | None,
     group_id: str | None, user: str,
 ) -> None:
     """עריכה מפורשת — הדרך היחידה לשנות שם קיים (הייבוא דוחה שינוי שקט)."""
@@ -309,7 +311,7 @@ class MacBusy(Exception):
     """עריכת MAC שנדחתה כי הכתובת תפוסה או שהמכונה עובדת עכשיו — 409."""
 
 
-def change_mac(conn: sqlite3.Connection, mac_raw: str, new_raw: object,
+def change_mac(conn: SqlConnection, mac_raw: str, new_raw: object,
                user: str) -> tuple[str, bool]:
     """#977 §5: כרטיס רשת שהוחלף. השורה עוברת לכתובת החדשה — שם, קבוצה
     וחריצים נשארים. מחזיר ``(new_mac, changed)``.
@@ -352,7 +354,7 @@ def change_mac(conn: sqlite3.Connection, mac_raw: str, new_raw: object,
 
 
 def lookup(
-    conn: sqlite3.Connection,
+    conn: SqlConnection,
     mac: str,
     all_macs: list[str] | None = None,
 ) -> sqlite3.Row | None:
@@ -378,7 +380,7 @@ def lookup(
     return None
 
 
-def all_macs(conn: sqlite3.Connection) -> list[str]:
+def all_macs(conn: SqlConnection) -> list[str]:
     """כל ה-MAC הרשומים, לפי הסדר — המקור ל-dhcp.render_known_macs (#141).
 
     ORDER BY קבוע כדי שקובץ ה-host לא יזוז בין קריאה לקריאה בלי סיבה
@@ -386,7 +388,7 @@ def all_macs(conn: sqlite3.Connection) -> list[str]:
     return [r["mac"] for r in conn.execute("SELECT mac FROM machines ORDER BY mac")]
 
 
-def export_csv(conn: sqlite3.Connection) -> str:
+def export_csv(conn: SqlConnection) -> str:
     """mac,suffix,group — לגיבוי ולעריכה חיצונית."""
     rows = conn.execute(
         "SELECT mac, suffix, group_id FROM machines ORDER BY group_id, suffix"

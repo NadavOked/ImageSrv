@@ -222,7 +222,7 @@ end_countdown() {
     end_problems "$@" && _ec_held=1
     end_record "$_ec_k" "$_ec_d" "$_ec_t"
     if [ "$_ec_held" = 1 ]; then
-        log "$_ec_w -- a disk has a problem: the results stay on the screen until 'כבה', no count (#2024): $(tr '\n' ';' < "$RUN_DIR/end.problems" 2>/dev/null)"
+        log "$_ec_w -- a disk has a problem: the results stay on the screen until 'כבה', no count (#2024): $(tr '\n' ';' 2>/dev/null < "$RUN_DIR/end.problems")"
     elif [ "$_ec_off" = 1 ]; then log "$_ec_w -- automatic power-off disabled; waiting for 'כבה עכשיו'"
     else log "$_ec_w -- powering off in ${_ec_s}s, or at once on 'כבה עכשיו'"; fi
     _ec_n=0   # counted like idle_check's warning; the screen counts to the epoch

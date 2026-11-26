@@ -402,7 +402,8 @@ class Conc:
         self._reset()
 
     def _reset(self) -> None:
-        self.over, self.who = 0, set()
+        self.over = 0
+        self.who: set[str] = set()
         self.peak = sum(self.active.values())
         self.peak_one = max(self.active.values(), default=0)
 

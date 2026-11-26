@@ -1,5 +1,7 @@
 # Changelog
 
+> Unreleased / Fixed (#3008): on the cloner card in the console a disk whose failure cause is `cable` is no longer marked "נכשל בשיכפול הקודם" -- the brain (`disk-rule.tsv`, new yellow row `cable_failed`) classifies it as the connection's fault and the card chip and line say "חיבור לא תקין", the same words and the same yellow as the disk-tab chip and the title "חיבור של <name> לא תקין". Colour, source/target permissions and a disk's own failure are unchanged.
+
 > Unreleased / Fixed (#3906): the build machine's own restore ("שחזור לדיסק הזה", `single_restore_run`) now writes the machine name into a Linux image -- its registered name, the one the operator confirmed, with no round prefix; `name_this_machine` takes the name and the manifest as optional arguments. Before, the step was shown on the screen but only the station path called it, and the disk booted with the source machine's name.
 > Unreleased / Fixed (#3770): the monitor machine list and `_target` run the clock-step detector (`clockstep.guard`) before judging presence, so a wall-clock step no longer shows a live machine as disconnected (forward) or a silent one as connected (backward) until another heartbeat runs it.
 
@@ -22,6 +24,16 @@
 ---
 
 ## [Unreleased]
+
+## [v0.100.2] - 2026-11-26
+
+- **The server texts name the "הגדרת רשת הפצה…" button, not a "רשת הפצה" tab that does not exist before setup** (#4026, Fixed; patch): the unconfigured-deploy-network hint (`GET /net/deploy`, the health row) and the health row of a deploy NIC that vanished. A text change only.
+- (#3099): `tools/lab/vm-it.sh` documents why the `pytest.log` redirect is not under sudo (`# shellcheck disable=SC2024` with a reason), so `shellcheck --severity=warning` exits 0. No behaviour change.
+- **A drawer that fails because the server went silent past the receiver's wait ceiling is `cause=network`, not `unclassified`** (#3844, Fixed; patch): the message "השרת לא ענה במשך N שניות" does not paint the disk, the console and the cloner screen say "הרשת נפלה", and K9 says `NETWORK`. No new wait threshold; kernel evidence still wins.
+- (#3753): the approved unified-GUI mockups of 12/11 (`docs/design/mockups-1112-gui-unified/`, incl. `06-bay-states-*.png`) are in the repo; the code of that branch (`lcbay.c` etc.) is not.
+- **A view-only console is not disconnected while a round runs** (#2874, Fixed; patch): the page reads `GET /room` in the last minute before the idle limit and, in view-only, once a minute, so the server does not revoke the cookie under it (a hidden tab polls nothing, #2414) and a round that ended there ends the view-only (the regular idle logout). No round: the regular logout, unchanged. No server change.
+- **On Hyper-V the clone stick page says it is not supported** (#2693, Changed; patch: no new screen or button, one message instead of one): when `systemd-detect-virt` says `microsoft` the page shows "ב-Hyper-V אין תמיכה במקל — להעלות דרך הקונסולה" instead of the sync button, `GET /usb-stick` returns `state: unsupported` without scanning and `POST /usb-stick/sync` is refused 409 `usb_stick_unsupported`. A metal server, ESXi, another VM, or a platform that could not be detected behave as before (no guessing). The hint under the empty page no longer offers a Hyper-V pass-through disk.
+- **The deploy network's chunk stream carries the server's source address, so a receiver takes packets from the server only** (#1079, #2485, Security; patch). `session.chunk.source` (the IPv4 of `--server-url`, none when it is a hostname or loopback) is now sent in hello (`chunksend.source_of`), and `chunkcast send --from` binds the sender to it. Until now the receiver read the field but no server sent it, so it took any source.
 
 ## [v0.100.1] - 2026-11-24
 

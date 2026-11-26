@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 
-from server.db import journal
+from server.db import journal, SqlConnection
 
 log = logging.getLogger("imagesrv.gui_failure")
 
@@ -41,7 +41,7 @@ def well_formed(raw: object) -> dict | None:
             "detail": " ".join(detail.split())[:DETAIL_MAX]}
 
 
-def note(conn: sqlite3.Connection, mac: str, raw: object, *, known: bool) -> bool:
+def note(conn: SqlConnection, mac: str, raw: object, *, known: bool) -> bool:
     """רושם ``gui_failed`` ביומן כשהשדה תקין והמכונה רשומה. מחזיר אם נרשם."""
     report = well_formed(raw)
     if report is None or not known:

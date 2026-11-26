@@ -26,6 +26,8 @@
 
 **איפוס:** כשהכרטיס (``iface``) או מהירות הקישור (כשנקראה, לא הונחה) משתנים, מה שנלמד נזרק. נרשמת שורה ביומן
 (``capability_reset``) ושורה ב-``brain_decisions`` עם מה שהיה, והמוח לומד מחדש בגל הבא. אין כפתור "בדוק שוב".
+**#4090: מהירות הקישור נבדקת בכל hello** (`reset_on_hello`), לפני ה-precheck ולפני חיזוי ה-ETA של הגל הבא; הבדיקה בסוף הגל
+נשארה רשת ביטחון. hello בלי מהירות (לא נקראה) אינו מאפס.
 
 **הרף של המעבד** (`cpu_threshold`): נקודת התחלה ``CPU_START`` (85%, נדב). אם המכונה הזו איבדה חבילות כשהליבה הפנויה ביותר
 שלה הייתה עסוקה פחות -- זה הרף שלה (עד ``CPU_FLOOR``, כדי שגל אחד חריג לא יהפוך כל גל ל"מעבד"). **רף העומס של הדיסק**
@@ -203,10 +205,12 @@ def _evidence(conn, session_id: str, mac: str, machine_raw: object) -> tuple[Evi
                           (session_id, mac)).fetchone()
     senses = _json(sensed["senses_json"]) if sensed is not None else None
     senses = senses if isinstance(senses, dict) else {}
-    nic = senses.get("nic") if isinstance(senses.get("nic"), dict) else {}
-    cores = senses.get("cpu") if isinstance(senses.get("cpu"), list) else []
+    raw_nic, raw_cpu = senses.get("nic"), senses.get("cpu")
+    nic = raw_nic if isinstance(raw_nic, dict) else {}
+    cores = raw_cpu if isinstance(raw_cpu, list) else []
     peaks = [c.get("busy_max") if isinstance(c, dict) else None for c in cores]
-    floor = float(min(peaks)) if peaks and all(isinstance(p, (int, float)) and not isinstance(p, bool) for p in peaks) else None
+    numeric = [p for p in peaks if isinstance(p, (int, float)) and not isinstance(p, bool)]
+    floor = float(min(numeric)) if peaks and len(numeric) == len(peaks) else None
     disks = list(senses["disks"].values()) if isinstance(senses.get("disks"), dict) else []
     utils = [d["util_max"] for d in disks if isinstance(d, dict) and isinstance(d.get("util_max"), (int, float))
              and not isinstance(d["util_max"], bool)]
@@ -230,8 +234,9 @@ def _evidence(conn, session_id: str, mac: str, machine_raw: object) -> tuple[Evi
             {"iface": iface, "mbps": mbps})
 
 
-def _check_card(conn, mac: str, session_id: str, mode: str, row: dict, card: dict) -> dict:
-    """הכרטיס או מהירות הקישור השתנו: מה שנלמד נזרק, ושורה ביומן. מחזיר את הסיכום שנשאר (ריק אחרי איפוס)."""
+def _check_card(conn, mac: str, session_id: str | None, mode: str, row: dict, card: dict, seen_at: str = "wave_end") -> dict:
+    """הכרטיס או מהירות הקישור השתנו: מה שנלמד נזרק, ושורה ביומן. מחזיר את הסיכום שנשאר (ריק אחרי איפוס).
+    ``seen_at`` = איפה זה נתפס (``hello`` -- #4090, או ``wave_end`` -- רשת הביטחון): נרשם בראיות."""
     old_iface, old_mbps = _text(row, "iface"), _stat(row, "link_mbps", "last")
     why = []
     if card["iface"] and old_iface and card["iface"] != old_iface:
@@ -246,11 +251,32 @@ def _check_card(conn, mac: str, session_id: str, mode: str, row: dict, card: dic
                   entity=("machine", mac), outcome=OUTCOME_LEARNED,
                   evidence=(f"was_bps={'unlearned' if was is None else was}", f"was_iface={old_iface}",
                             f"was_link_mbps={'unmeasured' if old_mbps is None else int(old_mbps)}",
-                            f"iface={card['iface']}", f"link_mbps={card['mbps'] or 'unmeasured'}"))
+                            f"iface={card['iface']}", f"link_mbps={card['mbps'] or 'unmeasured'}", f"seen_at={seen_at}"))
     memory.remember(conn, "machine", mac, SOURCE, {"link_mbps": card["mbps"]},
                     {"iface": card["iface"], "reset": reason}, replace=True)
     journal(conn, "capability_reset", f"{mac} {reason}", machine=mac, round_id=session_id)
     return _row(conn, mac)
+
+
+def reset_on_hello(conn, mac: str, mbps: int | None) -> None:
+    """#4090: ה-hello מדווח מהירות קישור שונה מזו שהיכולת הנלמדת נשמרה מולה -- היא נזרקת **עכשיו**, לפני ה-precheck של הסבב
+    ולפני חיזוי ה-ETA של הגל הבא, ולא רק בסוף הגל (ברזל 24/11: קישור שחזר מ-100 ל-1000 המשיך להזהיר ב-100Mb בשני גלים).
+    אותו איפוס בדיוק (`_check_card`: שורת `capability_reset` ו-LR24/RESET עם הסיבה), והאיפוס בסוף הגל נשאר רשת ביטחון.
+
+    ``mbps`` = מה ש-hello **קרא** (`nic_live.live`); ``None`` = לא נקרא (סוכן ישן, קישור למטה, sysfs שבור): לא מאפסים, כי
+    "לא נקרא" אינו "השתנה" (עיקרון 5). מהירות ידנית (`nic_speed.manual`) היא של המפעיל ולא של ה-hello: היכולת נשמרת מולה, ולכן
+    ה-hello אינו שופט אותה. הכרטיס (`iface`) אינו נבדק כאן: רק המהירות. אינו זורק."""
+    try:
+        if not isinstance(mbps, int) or isinstance(mbps, bool) or mbps <= 0:
+            return
+        mode = veto.mode(conn)
+        if mode == veto.OFF or nic_speed.manual(conn, mac) is not None:
+            return
+        row = _row(conn, mac)
+        if row:
+            _check_card(conn, mac, None, mode, row, {"iface": _text(row, "iface"), "mbps": mbps}, "hello")
+    except Exception:                       # noqa: BLE001 -- ה-hello אינו נעצר בגלל המוח
+        log.exception("brain: the capability of %s was not checked against the hello", mac)
 
 
 def learn(conn, mac: str, session_id: str, machine_raw: object, state: object) -> None:
@@ -281,6 +307,8 @@ def learn(conn, mac: str, session_id: str, machine_raw: object, state: object) -
 
 
 def _keep(conn, mac: str, row: dict, e: Evidence, card: dict, v: Verdict) -> None:
+    if e.stream_bps is None:                  # `judge` מחזירה ``UNDECIDED`` בלי קצב, ולכן לא מגיעים לכאן; `learn` מתעדת וממשיכה
+        raise ValueError("a learned verdict without a stream rate")
     rate = float(e.stream_bps)
     nums: dict = {"link_mbps": card["mbps"]}
     texts: dict = {"iface": card["iface"]}
@@ -322,7 +350,7 @@ def wave_rate(conn, session_id: str, bits: int, macs: list[str]) -> int | None:
                       evidence=(f"stream_bps={bits}", f"cloners={len(set(macs))}",
                                 *(f"learned={mac}:{c}" for mac, c in caps.items())),
                       round_id=session_id, entity=("round", session_id), outcome="צל: הגל יצא בקצב הרגיל")
-        return low[1] if verdict == WOULD_LOWER else None
+        return low[1] if low is not None and verdict == WOULD_LOWER else None
     except Exception:                       # noqa: BLE001 -- הגל יוצא גם כשהמוח נכשל
         log.exception("brain: the learned rate of wave %s was not recorded", session_id)
         return None

@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
+from typing import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -35,9 +36,21 @@ def _serial_of(key: str) -> str | None:
         return None
 
 
+class _OpenCopy(TypedDict):
+    id: str
+    serial: str
+    key: str
+    created: int
+    mac: str
+    machine: str | None
+    bytes: int
+    stale: dict[str, int] | None
+
+
 def open_copies(root: Path, names: dict[str, str]) -> dict:
     """כל העותקים הפתוחים. רשומה בלי הקובץ שלה אינה עותק (הקובץ נכתב ראשון ונמחק אחרון); רשומה שנקראת רע -- `unreadable`."""
-    copies, unreadable = [], []
+    copies: list[_OpenCopy] = []
+    unreadable = []
     base = root / "write-backups"
     for folder in sorted(base.iterdir()) if base.is_dir() else []:
         if not folder.is_dir():
@@ -69,7 +82,8 @@ def register(router: APIRouter, ctx: ServerContext, admin_only) -> None:
         try:
             return open_copies(ctx.data_dir, disk_sets._machine_names(ctx.conn))
         except OSError as exc:   # לא נקרא ≠ אין עותקים
-            raise HTTPException(500, f"לא הצלחתי לקרוא את תיקיית העותקים: {exc}") from None
+            log.warning("write copies directory cannot be read: %s", one_line(exc))
+            raise HTTPException(500, UNREADABLE_HE) from None
 
     @router.delete("/write-copies/{key}/{bid}")
     def release(key: str, bid: str, user=Depends(admin_only)):

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from server.db import SqlConnection
 import threading
 
 from starlette.concurrency import run_in_threadpool
@@ -37,7 +38,7 @@ RENEW_BELOW_SECONDS = auth.TTL_SECONDS // 2
 _commit_lock = threading.Lock()
 
 
-def propose(request, conn: sqlite3.Connection, session: auth.Session, token: str) -> None:
+def propose(request, conn: SqlConnection, session: auth.Session, token: str) -> None:
     """רושם ב-scope חידוש ``(ישן, חדש)`` אם מגיע לו. ללא תופעות לוואי אחרות --
     באפליקציה בלי ``SessionRenewal`` (פורט הסוכן) הרישום לא נקרא, ושום דבר לא מבוטל."""
     # מלאה בלבד: קיוסק (פטור מכל מנגנון ה-TTL של הקונסולה), pwchange ו-mfaenroll.
@@ -50,7 +51,7 @@ def propose(request, conn: sqlite3.Connection, session: auth.Session, token: str
         token, auth.issue(conn, session.username, session.role, epoch=session.epoch))
 
 
-def commit(conn: sqlite3.Connection, old: str, new: str) -> bool:
+def commit(conn: SqlConnection, old: str, new: str) -> bool:
     """האם ``new`` יוצא לדפדפן. הישנה נבדקת שוב כאן — ביטול (logout, ניתוק מהמסך,
     שינוי סיסמה, מחיקה) שקרה אחרי ``propose`` לא מקבל עוגייה חדשה."""
     with _commit_lock:
@@ -83,7 +84,7 @@ class SessionRenewal:
     תשובה שכבר קובעת עוגיית session בעצמה — כניסה, החלפת סיסמה, logout — נשארת
     כמות שהיא; החידוש לא דורס אותה."""
 
-    def __init__(self, inner, *, conn: sqlite3.Connection, tls=None):
+    def __init__(self, inner, *, conn: SqlConnection, tls=None):
         self.inner = inner
         self.conn = conn
         self.tls = tls

@@ -13,9 +13,8 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 
-from server.db import journal
+from server.db import journal, SqlConnection
 
 log = logging.getLogger("imagesrv.beeps")
 
@@ -49,7 +48,7 @@ def well_formed(raw: object) -> list[dict] | None:
 def summary(beeps: list[dict] | None) -> str:
     """"played: success · not heard: failure (no PC speaker (pcspkr)) · asked, outcome not known: netlost"."""
     played, unheard, asked = [], [], []
-    open_ = {}
+    open_: dict[str, int] = {}
     for b in beeps or []:
         if b["outcome"] == "requested":
             open_[b["kind"]] = open_.get(b["kind"], 0) + 1
@@ -72,7 +71,7 @@ def summary(beeps: list[dict] | None) -> str:
     return " · ".join(parts)
 
 
-def note_final(conn: sqlite3.Connection, mac: str, session_id: str, beeps: list[dict] | None) -> None:
+def note_final(conn: SqlConnection, mac: str, session_id: str, beeps: list[dict] | None) -> None:
     """במעבר הטרמינלי של המכונה (`reports.ingest`): שורת יומן אחת כשהסבב נשא צלילים. לעולם אינו זורק."""
     try:
         text = summary(beeps)

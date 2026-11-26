@@ -42,7 +42,7 @@ from pathlib import Path
 
 from server.brain import silence
 from server.core.tasks import staging_dir
-from server.db import _write_lock, journal, now_iso, update_one, writing
+from server.db import _write_lock, journal, now_iso, SqlConnection, update_one, writing
 from server.system import clockstep
 
 log = logging.getLogger("imagesrv.silent_tasks")
@@ -80,7 +80,7 @@ def _last_sign_of_life(row: sqlite3.Row, library_root: Path) -> datetime | None:
     return max(last, datetime.fromtimestamp(newest, timezone.utc))
 
 
-def _drop_staging(conn: sqlite3.Connection, root: Path, row: sqlite3.Row) -> None:
+def _drop_staging(conn: SqlConnection, root: Path, row: sqlite3.Row) -> None:
     """#3695: מחיקת אזור הביניים של קליטה שנכשלה נשארת אוטומטית (CG-S30 בקטלוג, הכרעת נדב 18/11: אין שם מה להציל), אבל
     כשל במחיקה נרשם ביומן. "לא הצלחנו למחוק" אינו "נמחק" (עיקרון 5). אזור שאינו קיים (עוד לא עלה בייט) אינו כשל."""
     folder = staging_dir(root, row["id"])
@@ -94,7 +94,7 @@ def _drop_staging(conn: sqlite3.Connection, root: Path, row: sqlite3.Row) -> Non
                 f'{row["id"]} {folder} {type(exc).__name__}: {" ".join(str(exc).split())[:150]}', machine=row["mac"])
 
 
-def sweep(conn: sqlite3.Connection, store, library_root: str | Path, up_since: float,
+def sweep(conn: SqlConnection, store, library_root: str | Path, up_since: float,
           now: datetime | None = None) -> list[str]:
     """סוגר כל משימה `running` ששקטה. מחזיר את המזהים שנסגרו.
 
@@ -139,7 +139,7 @@ def sweep(conn: sqlite3.Connection, store, library_root: str | Path, up_since: f
     return closed
 
 
-def background_sweep(conn: sqlite3.Connection, store, library_root: str | Path,
+def background_sweep(conn: SqlConnection, store, library_root: str | Path,
                      up_since: float) -> bool:
     """`sweep` משעון הרקע: לעולם אינו זורק, אבל כשל נרשם ביומן ולא נבלע."""
     try:

@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import errno
 import importlib.util
 import logging
@@ -65,15 +66,15 @@ def _keep_everything(monkeypatch):
 def test_a_failed_captures_staging_that_stays_is_said(tmp_path, caplog, monkeypatch):
     """A-DSK-22/23: `discard_failed_staging` (#1915) — האזור לא נמחק, ועכשיו יש שורה."""
     from server.core import tasks
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.execute("CREATE TABLE tasks (id TEXT, type TEXT, state TEXT)")
-    conn.execute("INSERT INTO tasks VALUES ('ab12', 'capture', 'failed')")
-    staging = tasks.staging_dir(tmp_path, "ab12")
-    staging.mkdir()
-    _keep_everything(monkeypatch)
-    with caplog.at_level(logging.WARNING, logger="imagesrv.cleanup"):
-        tasks.discard_failed_staging(conn, tmp_path, "ab12")
+    with contextlib.closing(sqlite3.connect(":memory:")) as conn:   # 3.13 warns on an unclosed connection (#99)
+        conn.row_factory = sqlite3.Row
+        conn.execute("CREATE TABLE tasks (id TEXT, type TEXT, state TEXT)")
+        conn.execute("INSERT INTO tasks VALUES ('ab12', 'capture', 'failed')")
+        staging = tasks.staging_dir(tmp_path, "ab12")
+        staging.mkdir()
+        _keep_everything(monkeypatch)
+        with caplog.at_level(logging.WARNING, logger="imagesrv.cleanup"):
+            tasks.discard_failed_staging(conn, tmp_path, "ab12")
     assert staging.exists()
     assert "capture staging of ab12 left behind" in caplog.text, caplog.text
 
@@ -270,7 +271,8 @@ def test_a_broken_dpkg_query_stops_the_license_pass(tmp_path, rc, out, code, sai
     (root / "usr" / "bin").mkdir(parents=True)
     (root / "usr" / "bin" / "env").write_text("x")
     block = _block("tools/build_initramfs.sh", 'mapfile -d \'\' -t PACKED_FILES', "\ndone\n")
-    proc = _bash(f"set -e; ROOT={posix(root)!r}; dpkg-query() {{ printf '%s\\n' {out!r}; return {rc}; }}; "
+    proc = _bash(f"set -e; ROOT={posix(root)!r}; declare -A PACKED_FROM=(); "
+                 f"dpkg-query() {{ printf '%s\\n' {out!r}; return {rc}; }}; "
                  f"readlink() {{ echo /usr/bin/env; }}; {block}")
     assert proc.returncode == code, proc.stderr
     assert said in proc.stderr, proc.stderr
