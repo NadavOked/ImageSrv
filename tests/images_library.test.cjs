@@ -86,7 +86,7 @@ test('the page is the datastore browser: header, three tabs, tree with counters,
   assert.equal((html.match(/<table class="dg kebab-col"/g)||[]).length,1);
   // ‏#1300 (console-full.html imgCols): שם · מערכת · גודל · מתאים לדיסק · תיקייה · מצב · נקלט; מערכת, תיקייה ונקלט — משניות
   for(const col of ['שם','גודל','מתאים לדיסק','מצב']) assert.match(html,new RegExp('<th>'+col+'</th>'));
-  for(const col of ['מערכת','תיקייה','נקלט']) assert.match(html,new RegExp('<th class="c-opt">'+col+'</th>'),'console-full.html P.images: OS, folder and date are secondary when the table is narrow');
+  for(const col of ['מערכת','תיקייה','<span title="עודכן לאחרונה">עודכן</span>']) assert.match(html,new RegExp('<th class="c-opt">'+col+'</th>'),'console-full.html P.images: OS, folder and date are secondary when the table is narrow');
   assert.doesNotMatch(html,/<th[^>]*>(בשימוש|בשרת|אימות|נוצר)<\/th>/,'#1300: the old column set is gone; "in use" is in the image drawer');
   assert.match(html,/<span class="fcrumb"><b>כל האימג'ים<\/b><\/span>/,'#1300: a prominent table title, not a tiny breadcrumb');
   assert.match(html,/placeholder="חיפוש אימג'"/);
@@ -203,7 +203,7 @@ test('the image drawer: header line, actions, verification note, properties, par
   assert.equal(node('#drawerTitle').textContent,'Ubuntu 24.04');
   let html=node('#drawerBody').innerHTML; balanced(html);
   // ‏#1300 (console-full.html W.imgDrawer): משנה קצרה (מערכת · גודל · נקלט מ-) ותגיות sha256 / בשימוש
-  assert.match(html,/class="page drw"/); assert.match(html,/<div class="obj-sub">לינוקס · <bdi dir="ltr">[^<]+<\/bdi> · נקלט <bdi dir="ltr">12\/09\/2026<\/bdi> מ-בנייה 1<span class="n-meta"><span class="n-chip ">sha256 אומת<\/span><span class="n-chip n">בשימוש: סבב שיכפול · גל 2<\/span><\/span><\/div>/);
+  assert.match(html,/class="page drw"/); assert.match(html,/<div class="obj-sub">לינוקס · <bdi dir="ltr">[^<]+<\/bdi> · עודכן <bdi dir="ltr">12\/09\/2026<\/bdi> מ-בנייה 1<span class="n-meta"><span class="n-chip ">sha256 אומת<\/span><span class="n-chip n">בשימוש: סבב שיכפול · גל 2<\/span><\/span><\/div>/);
   assert.match(html,/<span class="k">מזהה<\/span><span class="v"><span class="mono">img_lnx001<\/span>/);
   assert.ok(html.indexOf('<div class="sec">פרטים</div>')<html.indexOf('sha256 של כל מחיצה אומת'),'the sha256 note sits under the details (bottom of the overview)');
   assert.match(html,/class="btn primary" onclick="openRoundWithImage\('img_lnx001'\)">פתח סבב עם אימג' זה/,'console-full.html S148: the primary action opens a round with this image'); assert.match(html,/onclick="renameImage\('img_lnx001'\)">שינוי שם/); assert.match(html,/class="btn sm danger" onclick="deleteImage\('img_lnx001'\)">מחיקה…/); assert.match(html,/href="\/api\/console\/images\/img_lnx001\/download">הורדה/);

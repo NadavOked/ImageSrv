@@ -270,7 +270,8 @@ def test_a_broken_dpkg_query_stops_the_license_pass(tmp_path, rc, out, code, sai
     (root / "usr" / "bin").mkdir(parents=True)
     (root / "usr" / "bin" / "env").write_text("x")
     block = _block("tools/build_initramfs.sh", 'mapfile -d \'\' -t PACKED_FILES', "\ndone\n")
-    proc = _bash(f"set -e; ROOT={posix(root)!r}; dpkg-query() {{ printf '%s\\n' {out!r}; return {rc}; }}; "
+    proc = _bash(f"set -e; ROOT={posix(root)!r}; declare -A PACKED_FROM=(); "
+                 f"dpkg-query() {{ printf '%s\\n' {out!r}; return {rc}; }}; "
                  f"readlink() {{ echo /usr/bin/env; }}; {block}")
     assert proc.returncode == code, proc.stderr
     assert said in proc.stderr, proc.stderr

@@ -16,9 +16,8 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 
-from server.db import _settle, _write_lock, journal, now_iso, writing
+from server.db import _settle, _write_lock, journal, now_iso, SqlConnection, writing
 
 SATA_MODES = ("ahci", "ide", "raid")
 KEEP = 20
@@ -89,7 +88,7 @@ def build(prev: dict | None, hello: dict) -> dict:
             "model": model, "slots": slots}
 
 
-def _rows(conn: sqlite3.Connection, mac: str, limit: int = 2) -> list[tuple[str, dict]]:
+def _rows(conn: SqlConnection, mac: str, limit: int = 2) -> list[tuple[str, dict]]:
     out = []
     for r in conn.execute("SELECT at, snap_json FROM fw_snapshots WHERE mac = ? ORDER BY id DESC LIMIT ?", (mac, limit)):
         try:
@@ -123,7 +122,7 @@ def diff(ref: dict, cur: dict) -> list[dict]:
     return out
 
 
-def baseline(conn: sqlite3.Connection, mac: str) -> tuple[str, dict] | None:
+def baseline(conn: SqlConnection, mac: str) -> tuple[str, dict] | None:
     r = conn.execute("SELECT at, snap_json FROM fw_baseline WHERE mac = ?", (mac,)).fetchone()
     if r is None:
         return None
@@ -133,7 +132,7 @@ def baseline(conn: sqlite3.Connection, mac: str) -> tuple[str, dict] | None:
         return None
 
 
-def reference(conn: sqlite3.Connection, mac: str) -> tuple[str, dict, str] | None:
+def reference(conn: SqlConnection, mac: str) -> tuple[str, dict, str] | None:
     """התמונה שמשווים אליה: ה"הגדרה הנכונה" ששמרו, ואם אין -- ההדלקה הקודמת. ``(at, snap, "baseline"|"previous")``."""
     base = baseline(conn, mac)
     if base is not None:
@@ -142,7 +141,7 @@ def reference(conn: sqlite3.Connection, mac: str) -> tuple[str, dict, str] | Non
     return (rows[1][0], rows[1][1], "previous") if len(rows) == 2 else None
 
 
-def record(conn: sqlite3.Connection, mac: str, hello: dict) -> None:
+def record(conn: SqlConnection, mac: str, hello: dict) -> None:
     """נקרא מ-hello של מכונה רשומה. תמונה חדשה נכתבת רק כשהשתנתה; שינוי משמעותי -- שורת יומן."""
     last = _rows(conn, mac, 1)
     prev = last[0][1] if last else None
@@ -163,7 +162,7 @@ def record(conn: sqlite3.Connection, mac: str, hello: dict) -> None:
                     machine=mac)
 
 
-def change_counts(conn: sqlite3.Connection) -> dict[str, int]:
+def change_counts(conn: SqlConnection) -> dict[str, int]:
     """לכל מכונה: כמה שינויים מול ההפניה. מכונה בלי הפניה או בלי שינוי חסרה."""
     out = {}
     for r in conn.execute("SELECT DISTINCT mac FROM fw_snapshots"):
@@ -173,7 +172,7 @@ def change_counts(conn: sqlite3.Connection) -> dict[str, int]:
     return out
 
 
-def changes_for(conn: sqlite3.Connection, mac: str) -> dict:
+def changes_for(conn: SqlConnection, mac: str) -> dict:
     rows = _rows(conn, mac, 1)
     if not rows:
         return {"current": None, "changes": [], "ref_at": None, "ref_kind": None}
@@ -184,7 +183,7 @@ def changes_for(conn: sqlite3.Connection, mac: str) -> dict:
             "ref_at": ref[0] if ref else None, "ref_kind": ref[2] if ref else None, "ref": ref[1] if ref else None}
 
 
-def view(conn: sqlite3.Connection, mac: str) -> dict:
+def view(conn: SqlConnection, mac: str) -> dict:
     """מה שהמגירה מציגה: התמונה, השינויים, טבלת החיבורים (כולל "ריק, היה: …"), והשוואה לדגם."""
     v = changes_for(conn, mac)
     cur, ref = v["current"], v.get("ref")
@@ -225,14 +224,14 @@ def view(conn: sqlite3.Connection, mac: str) -> dict:
             "slots": table, "gap_below_populated": view_gap, "peers": peers, "controller": controller}
 
 
-def cloner_warning(conn: sqlite3.Connection, mac: str) -> dict | None:
+def cloner_warning(conn: SqlConnection, mac: str) -> dict | None:
     """מה שמסך ההמתנה של המשכפל מציג (#2080, מוקאפ 06 סעיף 2): **רק החיבורים** -- מצב הבקר של משכפל
     אינו משנה מה שהוא כותב, וחיבור שזז הוא מה שה-BIOS עוצר עליו. ``None`` = אין מה להציג."""
     texts = [c["text"] for c in changes_for(conn, mac)["changes"] if c["kind"] in ("moved", "gone")]
     return {"changes": texts[:WARN_MAX], "count": len(texts)} if texts else None
 
 
-def accept(conn: sqlite3.Connection, mac: str, user: str, *, at_cloner: str | None = None) -> bool:
+def accept(conn: SqlConnection, mac: str, user: str, *, at_cloner: str | None = None) -> bool:
     """"זו ההגדרה הנכונה": התמונה הנוכחית נשמרת כתמונה התקינה, ומכאן משווים אליה.
 
     ``at_cloner`` -- שם המשכפל שמי שעומד לידו לחץ "זה מכוון" (הכרעת נדב 25/10); ביומן "אושר במשכפל <שם>"."""

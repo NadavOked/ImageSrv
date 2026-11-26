@@ -39,7 +39,7 @@ def _cmd(tmp_path, monkeypatch, *, learned_max=None, chunks=None, part_chunks=CH
     # #4003: the engine only needs the file's size; truncate() to 18GB is a real 18GB write on Windows (NTFS is not sparse by default)
     path = tmp_path / "p3.zst"
     monkeypatch.setattr(chunksend, "_size_of", lambda p: size)
-    engine = SimpleNamespace(port=7713, interface=None, feedback=True, write_floor=lambda: FLOOR)   # פורט-הפצה-מכוון
+    engine = SimpleNamespace(port=7713, interface=None, source=None, feedback=True, write_floor=lambda: FLOOR)   # פורט-הפצה-מכוון
     wave = SimpleNamespace(key="0123456789abcdef", round=1, part_chunks={3: part_chunks})
     cmd = ChunkEngine._command(engine, wave, {"index": 3}, path, KBPS, WRITE, chunks, learned_max)
     # #4003 guard: no test file of this size may exist (a real write on Windows)

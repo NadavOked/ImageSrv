@@ -2720,6 +2720,17 @@ static int cc_send_run(int argc, char **argv)
     int snd_got = -1;                   /* #3124 (B-NET-18): what the kernel gave, read back; -1 = not read, never the ask */
     socklen_t snd_gl = sizeof snd_got;
     if (getsockopt(s, SOL_SOCKET, SO_SNDBUF, &snd_got, &snd_gl)) snd_got = -1;
+    if (a.from) {                               /* the source the receivers were told to take (recv --from) */
+        struct sockaddr_in me = { .sin_family = AF_INET };
+        if (inet_pton(AF_INET, a.from, &me.sin_addr) != 1) {
+            ir_say("chunkcast: send: --from '%s' is not an IPv4 address\n", a.from);
+            return 2;
+        }
+        if (bind(s, (struct sockaddr *)&me, sizeof me)) {
+            ir_say("chunkcast: send: cannot send from %s: %s\n", a.from, strerror(errno));
+            return 2;
+        }
+    }
     if (IN_MULTICAST(ntohl(sin.sin_addr.s_addr))) {
         unsigned char ttl = (unsigned char)a.ttl;
         struct ip_mreqn mr = { 0 };

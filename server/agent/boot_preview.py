@@ -32,13 +32,12 @@
 from __future__ import annotations
 
 import logging
-import sqlite3
 
 from boot.grub_menu import AGENT, LOCAL, decide
 
 from server.agent import answer_failure, bootguard
 from server.agent.hello import build_answer
-from server.db import now_iso
+from server.db import now_iso, SqlConnection
 from server.library.images import ImageLibrary
 from server.rounds.sessions import SessionStore
 
@@ -93,7 +92,7 @@ def _offered(answer: dict) -> tuple[dict | None, dict | None]:
     return task, session
 
 
-def preview(conn: sqlite3.Connection, library: ImageLibrary, store: SessionStore,
+def preview(conn: SqlConnection, library: ImageLibrary, store: SessionStore,
             mac: str) -> dict:
     """ההחלטה של האתחול הבא של מכונה **רשומה** אחת. לעולם אינה זורקת ואינה כותבת."""
     try:
@@ -136,7 +135,7 @@ def preview(conn: sqlite3.Connection, library: ImageLibrary, store: SessionStore
     }
 
 
-def preview_all(conn: sqlite3.Connection, library: ImageLibrary,
+def preview_all(conn: SqlConnection, library: ImageLibrary,
                 store: SessionStore) -> dict:
     """כל המכונות הרשומות בקריאה אחת — `{checked_at, machines: {mac: פריט}}`."""
     macs = [row["mac"] for row in conn.execute("SELECT mac FROM machines ORDER BY mac")]

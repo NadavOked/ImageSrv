@@ -4,6 +4,7 @@
 #define IMAGESRV_LCUI_H
 #include <cairo.h>
 #include "input.h"
+#include "text.h"
 #include "ui.h"
 
 /* one key=value record of the state file; 1 = it was an lc_ one */
@@ -117,6 +118,7 @@ enum { DRV_NONE, DRV_OK, DRV_MUTED, DRV_WARN, DRV_BAD, DRV_LGREY, DRV_LWARN };
 #define LC_BAY_H 86
 #define LC_BAY_DRV_H 104             /* the row with its drivers line (mockup v2: 86 + 18) */
 void lc_bay_draw(App *a, cairo_t *cr, Rect b, const LcBay *g);
+Text lc_reason_text(cairo_t *cr, int size, int weight, const char *why, int width);
 /* #2046: a row of a disk being checked (verifying) or whose check stopped (failed, with a bar): the green over
  * the blue, the percent of the CHECK, and for a failure the tick; same_as = "לאימג'" / "למקור" for "אומת". */
 void lc_bay_readback(LcBay *y, const RbBar *r, const char *same_as, const char *why);

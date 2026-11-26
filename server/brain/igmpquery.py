@@ -48,7 +48,12 @@ def other_wins(own: str | None, other: str | None) -> bool:
     """RFC 2236, סעיף 7: ה-querier עם הכתובת **הנמוכה** מנצח. ללא כתובת משלנו או ללא querier אחר אין "ניצחון" (ואין שליחה שנחסמת בגללו)."""
     if other is None or own is None:
         return False
-    return ipaddress.ip_address(other) < ipaddress.ip_address(own)
+    theirs, mine = ipaddress.ip_address(other), ipaddress.ip_address(own)
+    if isinstance(theirs, ipaddress.IPv4Address) and isinstance(mine, ipaddress.IPv4Address):
+        return theirs < mine
+    if isinstance(theirs, ipaddress.IPv6Address) and isinstance(mine, ipaddress.IPv6Address):
+        return theirs < mine
+    raise TypeError(f"'<' not supported between {type(theirs).__name__} and {type(mine).__name__}")
 
 
 def present(other: str | None, age_s: float | None, present_s: float) -> str | None:

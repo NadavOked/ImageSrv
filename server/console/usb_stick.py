@@ -40,7 +40,9 @@ def create_usb_stick_router(ctx: ServerContext, hooks: dict | None = None,
     h = {**device.default_hooks(), **(hooks or {})}
 
     def status() -> dict:
-        scan = h["scan"]()
+        # #2693: Hyper-V -- the sentence instead of the option, and no scan (a SCSI disk is not accepted anyway)
+        why = device.platform_refusal(h["virt"])
+        scan = device.Scan(device.UNSUPPORTED, reason=why) if why else h["scan"]()
         out: dict = {"state": scan.state, "reason": scan.reason, "notes": scan.notes, "device": None,
                      "plan": None, "rows": [], "read_error": None, "last_sync": sync.last_sync(ctx.conn)}
         if scan.state != device.CONNECTED or scan.stick is None:
@@ -70,6 +72,9 @@ def create_usb_stick_router(ctx: ServerContext, hooks: dict | None = None,
     def usb_stick_sync(body: SyncBody, user=Depends(admin_only)):
         if body.confirm is not True:
             return _refuse(400, "הסנכרון נכתב רק אחרי אישור המנהל על הסיכום", "confirm_required")
+        why = device.platform_refusal(h["virt"])
+        if why:
+            return _refuse(409, why, "usb_stick_" + device.UNSUPPORTED)
         scan = h["scan"]()
         if scan.state != device.CONNECTED or scan.stick is None:
             return _refuse(409, scan.reason or "הדיסק-און-קי כבר אינו מחובר", "usb_stick_" + scan.state)

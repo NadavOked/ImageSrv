@@ -23,7 +23,7 @@ report_seq_json() {
     _rq_b=$(cat "${SYSROOT:-}/proc/sys/kernel/random/boot_id" 2>/dev/null)
     case "$_rq_b" in ''|*[!0-9a-f-]*) return 0 ;; esac
     [ "${#_rq_b}" -eq 36 ] || return 0
-    _rq_u=; read -r _rq_u _rq_r < "${SYSROOT:-}/proc/uptime" 2>/dev/null
+    _rq_u=; read -r _rq_u _rq_r 2>/dev/null < "${SYSROOT:-}/proc/uptime"
     case "$_rq_u" in ''|*[!0-9.]*|*.*.*|.*|*.) return 0 ;; *.*) ;; *) return 0 ;; esac   # NNN.DD, exactly
     _rq_n="${_rq_u%.*}${_rq_u#*.}"
     while [ "${_rq_n#0}" != "$_rq_n" ]; do _rq_n="${_rq_n#0}"; done   # no leading zero: it is not JSON

@@ -19,9 +19,8 @@ from __future__ import annotations
 
 import json
 import logging
-import sqlite3
 
-from server.db import journal
+from server.db import journal, SqlConnection
 
 log = logging.getLogger("imagesrv.cloner_cpu")
 
@@ -47,7 +46,7 @@ def throttled(cpu: object) -> bool:
         and cpu["throttle_delta"] > 0
 
 
-def note_final(conn: sqlite3.Connection, mac: str, session_id: str, cpu: dict | None) -> None:
+def note_final(conn: SqlConnection, mac: str, session_id: str, cpu: dict | None) -> None:
     """במעבר הטרמינלי של המכונה (`reports.ingest`): יומן כשה-throttle עלה. לעולם אינו זורק."""
     try:
         if throttled(cpu):
@@ -60,7 +59,7 @@ def note_final(conn: sqlite3.Connection, mac: str, session_id: str, cpu: dict | 
         log.exception("cpu note of %s failed", mac)
 
 
-def history(conn: sqlite3.Connection, mac: str, limit: int = 5) -> list[dict]:
+def history(conn: SqlConnection, mac: str, limit: int = 5) -> list[dict]:
     """הגלים האחרונים של המכונה שנשאו `cpu` — למגירת המכונה."""
     out = []
     for row in conn.execute("SELECT session_id, updated_at, cpu_json FROM session_members"

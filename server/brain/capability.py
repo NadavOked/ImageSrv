@@ -203,10 +203,12 @@ def _evidence(conn, session_id: str, mac: str, machine_raw: object) -> tuple[Evi
                           (session_id, mac)).fetchone()
     senses = _json(sensed["senses_json"]) if sensed is not None else None
     senses = senses if isinstance(senses, dict) else {}
-    nic = senses.get("nic") if isinstance(senses.get("nic"), dict) else {}
-    cores = senses.get("cpu") if isinstance(senses.get("cpu"), list) else []
+    raw_nic, raw_cpu = senses.get("nic"), senses.get("cpu")
+    nic = raw_nic if isinstance(raw_nic, dict) else {}
+    cores = raw_cpu if isinstance(raw_cpu, list) else []
     peaks = [c.get("busy_max") if isinstance(c, dict) else None for c in cores]
-    floor = float(min(peaks)) if peaks and all(isinstance(p, (int, float)) and not isinstance(p, bool) for p in peaks) else None
+    numeric = [p for p in peaks if isinstance(p, (int, float)) and not isinstance(p, bool)]
+    floor = float(min(numeric)) if peaks and len(numeric) == len(peaks) else None
     disks = list(senses["disks"].values()) if isinstance(senses.get("disks"), dict) else []
     utils = [d["util_max"] for d in disks if isinstance(d, dict) and isinstance(d.get("util_max"), (int, float))
              and not isinstance(d["util_max"], bool)]
@@ -281,6 +283,8 @@ def learn(conn, mac: str, session_id: str, machine_raw: object, state: object) -
 
 
 def _keep(conn, mac: str, row: dict, e: Evidence, card: dict, v: Verdict) -> None:
+    if e.stream_bps is None:                  # `judge` מחזירה ``UNDECIDED`` בלי קצב, ולכן לא מגיעים לכאן; `learn` מתעדת וממשיכה
+        raise ValueError("a learned verdict without a stream rate")
     rate = float(e.stream_bps)
     nums: dict = {"link_mbps": card["mbps"]}
     texts: dict = {"iface": card["iface"]}
@@ -322,7 +326,7 @@ def wave_rate(conn, session_id: str, bits: int, macs: list[str]) -> int | None:
                       evidence=(f"stream_bps={bits}", f"cloners={len(set(macs))}",
                                 *(f"learned={mac}:{c}" for mac, c in caps.items())),
                       round_id=session_id, entity=("round", session_id), outcome="צל: הגל יצא בקצב הרגיל")
-        return low[1] if verdict == WOULD_LOWER else None
+        return low[1] if low is not None and verdict == WOULD_LOWER else None
     except Exception:                       # noqa: BLE001 -- הגל יוצא גם כשהמוח נכשל
         log.exception("brain: the learned rate of wave %s was not recorded", session_id)
         return None

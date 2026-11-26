@@ -9399,6 +9399,11 @@ error=named-code: message
   סבב פתוח ממשיך עם המזהה שנשמר בו.
 - `GET /api/console/images` מוסיף `lineage`, `version`, `is_default` לכל
   אימג' (כל הגרסאות ברשימה; הקונסולה מקבצת).
+- `GET /api/console/images` מוסיף גם (‏#2551) `updated` — `created` של **הגרסה האחרונה
+  בשושלת** (הגבוהה ביותר, ובשוויון החדשה לפי `created`), ו-`updated_origin` — `"vm"` כשהגרסה
+  הזו נשמרה מעדכון ב-VM (`origin: "vm"` במניפסט), אחרת `"capture"`. אותם ערכים לכל גרסה של
+  אותה שושלת. `created` נשאר תאריך הקליטה של הגרסה עצמה. הקונסולה מציגה אותם כעמודת "עודכן"
+  (ו"ב-VM" מתחתיו) ובכותרת המגירה; אין סימון "התיישן" ואין סף (הכרעת נדב 06/11).
 - `GET /api/console/images/{id}/versions` →
   `{lineage, default_id, latest_id, versions: [{id, name, description, version,
   previous_id, origin, created, created_by, total_compressed_bytes, is_default,
@@ -11382,6 +11387,7 @@ ISO (memdisk, iPXE או HTTP) ואיך זה חי עם Secure Boot דלוק ממ�
 | `ambiguous` | יותר ממקל אחד — לא בוחרים |
 | `unread` | `lsblk` לא רץ או שהפלט אינו עץ התקנים: **"לא נבדק"**, לא "לא מחובר" |
 | `busy` | קריאה או סנכרון אחרים רצים עכשיו (נעילה אחת להתקן) |
+| `unsupported` | **#2693:** השרת הוא Hyper-V (`systemd-detect-virt` = `microsoft`). אין סריקה ואין עיגון; `reason` = "ב-Hyper-V אין תמיכה במקל — להעלות דרך הקונסולה". בעמוד אין כפתור "סנכרן" |
 
 עיגון: `mount -t vfat` דרך `storage.locations.mount` (במרחב העיגון של PID 1, #2122) על `/media/imagesrv-usb`
 (ב-`ReadWritePaths` של היחידה). קריאה: `ro,nosuid,nodev,noexec`. כתיבה — רק בסנכרון שאושר: `rw,sync,nosuid,nodev,noexec`,
@@ -11391,9 +11397,10 @@ ISO (memdisk, iPXE או HTTP) ואיך זה חי עם Secure Boot דלוק ממ�
 
 * **פיזי:** ה-USB זמין ישירות.
 * **ESXi:** USB passthrough של ההתקן מהמארח לאורח; האורח רואה אותו על אפיק USB, והזיהוי למעלה עובד.
-* **Hyper-V:** אין USB passthrough. אפשר להעביר את **הדיסק הפיזי** (pass-through disk) — והאורח רואה אותו כדיסק SCSI, לא על אפיק USB.
-  השרת **אינו** מקבל אותו לפי התווית: הוא מוצג כ-`unsafe` עם ההסבר "הדיסק אינו על אפיק USB". **זו החלטה פתוחה** (איך מזהים
-  מקל שהמארח הציג כדיסק, בלי לפתוח את הדלת לכל דיסק שמישהו קרא לו `IMGSRV_DATA`) — ראו #1920.
+* **Hyper-V (הכרעת נדב 23/11, #2693): אין תמיכה.** אין USB passthrough לאורח לינוקס, והמקל מגיע כדיסק SCSI. השרת **אינו** מנסה
+  לזהות אותו (לא לפי תווית, לא לפי serial, לא בניחוש): כשהוא מזהה שהוא עצמו Hyper-V, `GET /usb-stick` מחזיר `state: "unsupported"`
+  עם ההסבר ו**בלי לסרוק**, ו-`POST /usb-stick/sync` מסורב 409 `usb_stick_unsupported`. הזיהוי הוא `systemd-detect-virt` בלבד
+  (`microsoft`); "לא הצלחנו להריץ" או כל ערך אחר אינם Hyper-V, והעמוד מתנהג כמו בברזל. אישור ידני של מקל לפי serial נדחה ל-v2 (נדב 11/11).
 
 ### מה נקרא מההתקן (`records.py`)
 
@@ -11611,7 +11618,7 @@ JSON שאינו אובייקט, `NaN`, מצב יעד שאינו `done`/`failed` 
 
 | מפתח | ברירת מחדל | טווח | מה |
 |---|---|---|---|
-| `brain_veto_mode` | `shadow` | `off` / `shadow` / `enforce` | `off` = כמו לפני המוח; `shadow` = רושם בלבד; `enforce` = חוסם פעולה הרסנית כשיש ראיית חיים |
+| `brain_veto_mode` | `shadow` | `off` / `shadow` / `enforce` | **משמעות לפי מצב הנקודה (#3696, הכרעת זאוס 18/11; `brain_state` בקטלוג):** נקודה שהועברה למוח והקוד הישן שלה נמחק (`decides`, למשל `silence.py`): `off` = המוח מחליט **ולא רושם**; `shadow` ו-`enforce` = מחליט ורושם. נקודה שהקוד הישן עדיין מחליט בה (`shadow`): `off` = לא רושם; `shadow` = רושם עם `agree=`; `enforce` = המוח מחליט והקוד הישן מבצע. אין "חזרה לקוד הישן" בנקודה שהועברה: רק revert. בווטו (K2): `shadow` = לא חוסם; `enforce` = חוסם פעולה הרסנית כשיש ראיית חיים |
 | `brain_rate_inputs` | `shadow` | `off` / `shadow` / `enforce` | **#3977 (נדב 21/11), בלי שורה בקונסולה:** שני קלטי הקצב של מנוע החתיכות (goodput לכל משכפל, והקצב שמשכפל נפל בו). `off` = לא מחושב, לא נרשם ולא נזכר; `shadow` = נרשם עם הקצב שהיה יוצא (`would_bps`), והקצב של הגל לא משתנה; `enforce` = ההכרעה משנה את הקצב. `brain_veto_mode=off` מכבה גם אותו. שורת היומן: "המוח: קצב הגל לפי מה שהמשכפלים כתבו ולפי קצב שמשכפל נפל בו: פעיל (משנה את הקצב)" |
 
 שורת היומן (`setting_change`) בעברית, והמצב במילים: "המוח: וטו על פעולות הרסניות: פעיל (חוסם)". אין אחוז קבוע בשום סף.
