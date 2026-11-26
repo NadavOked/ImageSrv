@@ -25,7 +25,7 @@ import json
 import sqlite3
 
 from server.disks import smart_names
-from server.db import _write_lock, now_iso, writing
+from server.db import _write_lock, now_iso, SqlConnection, writing
 
 #: a rise in one of these since the previous round: "replace the disk" (orange). #1921: by
 #: (id, smartctl's name) -- smart_names.CRITICAL_WORDS -- never by the id alone: 198 on an
@@ -71,7 +71,7 @@ def _nvme(attrs: object) -> dict[str, int]:
     return {k: v for k, v in nv.items() if isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool)}
 
 
-def record(conn: sqlite3.Connection, serial: str | None, session_id: str, mac: str, attrs: object,
+def record(conn: SqlConnection, serial: str | None, session_id: str, mac: str, attrs: object,
            dev: object = None) -> bool:
     """The round's snapshot of a disk (disk_event). True when stored; no serial or no
     attributes is no snapshot -- a disk we cannot name has no history.
@@ -95,7 +95,7 @@ def record(conn: sqlite3.Connection, serial: str | None, session_id: str, mac: s
     return True
 
 
-def record_temp(conn: sqlite3.Connection, serial: str | None, session_id: str, temp_c: object,
+def record_temp(conn: SqlConnection, serial: str | None, session_id: str, temp_c: object,
                 mac: str) -> bool:
     """The temperature after the write (final report `temp_c`), on this machine's row of the round."""
     if not serial or not isinstance(temp_c, int) or isinstance(temp_c, bool) or not 0 < temp_c < 150:
@@ -105,7 +105,7 @@ def record_temp(conn: sqlite3.Connection, serial: str | None, session_id: str, t
                             (temp_c, serial, session_id, mac)).rowcount == 1
 
 
-def serial_of(conn: sqlite3.Connection, mac: str, dev: str) -> str | None:
+def serial_of(conn: SqlConnection, mac: str, dev: str) -> str | None:
     """The serial of `dev` on `mac`, from the last hello's disks; None = not reported."""
     row = conn.execute("SELECT disks_json FROM net_devices WHERE mac = ?", (mac,)).fetchone()
     try:
@@ -118,7 +118,7 @@ def serial_of(conn: sqlite3.Connection, mac: str, dev: str) -> str | None:
     return None
 
 
-def previous(conn: sqlite3.Connection, serial: str | None, skip: int = 0) -> sqlite3.Row | None:
+def previous(conn: SqlConnection, serial: str | None, skip: int = 0) -> sqlite3.Row | None:
     """This serial's last snapshot, or None -- no previous round. Only rows a machine wrote for
     a disk it reported (`record` checks it; a row without a MAC is not one) count. `skip=1`: the
     one before it (#2705: the comparison of a view that shows the last snapshot itself)."""
@@ -157,7 +157,7 @@ def learned(now_attrs: object, prev: sqlite3.Row | None) -> str | None:
     return None
 
 
-def learned_for(conn: sqlite3.Connection, disks: object) -> list[dict]:
+def learned_for(conn: SqlConnection, disks: object) -> list[dict]:
     """The hello's `smart_learned`: [{"serial", "reason"}] for the disks of this hello
     whose attributes rose since their last snapshot. [] = nothing learned."""
     out = []
@@ -171,7 +171,7 @@ def learned_for(conn: sqlite3.Connection, disks: object) -> list[dict]:
     return out
 
 
-def rose_for(conn: sqlite3.Connection, disks: object) -> list[dict]:
+def rose_for(conn: SqlConnection, disks: object) -> list[dict]:
     """The hello's `smart_rose` (#1859, Nadav 07/11): [{"serial", "rose": {id: n}}] for each disk of
     this hello that has a previous round -- by how much each attribute rose since (ATA by id, NVMe by
     key; only those that rose). **No entry = no previous round**: the cloner's table says "אין עדיין
@@ -191,7 +191,7 @@ def rose_for(conn: sqlite3.Connection, disks: object) -> list[dict]:
     return out
 
 
-def describe(conn: sqlite3.Connection, disk: dict) -> dict:
+def describe(conn: SqlConnection, disk: dict) -> dict:
     """One disk for the console: every attribute in Hebrew, and what rose.
 
     #2705: the hello's `smart_attrs` is null when the agent did not read the disk *in this boot*
@@ -209,7 +209,8 @@ def describe(conn: sqlite3.Connection, disk: dict) -> dict:
     before = _rows(json.loads(prev["attrs_json"] or "{}")) if prev is not None else {}
     before_nvme = _nvme(json.loads(prev["attrs_json"] or "{}")) if prev is not None else {}
     rose = _rose(now, before)
-    rows, hw = [], []
+    rows = []
+    hw: list[dict] = []
     for i in sorted(now):
         r = now[i]
         he, note, known = smart_names.name(i, r["vendor"] or (before.get(i) or {}).get("vendor"))

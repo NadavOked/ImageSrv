@@ -235,7 +235,10 @@ def _left_behind(disks: tuple[Disk, ...]) -> list[str]:
         others = [other.durable_bps for other in disks if other.serial != disk.serial]
         if not others or disk.durable_bps is None or disk.slope_bps is None:
             continue
-        if (disk.durable_bps < _median(others) * SLOW_PCT / 100 and disk.slope_bps > 0
+        known = [v for v in others if v is not None]
+        if len(known) != len(others):            # `_disk_ok` כבר פסל דיסק בלי קצב; לא מדלגים עליו בשקט (כמו קודם: נכשל)
+            raise ValueError("a disk without a durable rate reached the left-behind check")
+        if (disk.durable_bps < _median(known) * SLOW_PCT / 100 and disk.slope_bps > 0
                 and type(disk.behind_ticks) is int and disk.behind_ticks >= STORE_BEHIND_MAX):
             marked.append(disk.serial)
     return [] if len(marked) == len(disks) else marked
@@ -335,7 +338,7 @@ def _dist(dist: Dist | None) -> Plane:
                 f"peers_seen={seen if seen is not None else 'unmeasured'}",
                 f"upload_kbps={upload if upload is not None else 'unmeasured'}",
                 f"server_fallback={fallback if fallback is not None else 'unmeasured'}")
-    if None in (short, healthy, seen, upload, fallback) or healthy > seen or seen == 0:
+    if short is None or healthy is None or seen is None or upload is None or fallback is None or healthy > seen or seen == 0:
         why = "אף עמית לא נראה: זה לא 'אין מי שיגיש'" if seen == 0 else "מלאי, עמיתים או תקרת ההעלאה לא נמדדו"
         return _plane("dist", NOT_MEASURED, None, False, why, evidence)
     if short == 0:
@@ -407,9 +410,9 @@ def _shot(obs: Observe, round_id: str) -> dict | None:
                                     _received(obs.now, age_ms), obs.now, max_age_s=age))
 
     net, store, dist = obs.net, obs.store, obs.dist
-    add("machine", "net", "loss", None if net is None or type(net.loss_permille) is not int else net.loss_permille / 1000,
+    add("machine", "net", "loss", None if net is None or net.loss_permille is None or type(net.loss_permille) is not int else net.loss_permille / 1000,
         "ratio", None if net is None else net.age_ms)
-    add("machine", "net", "rtt", None if net is None or _pos_time(net.rtt_ms) is None else net.rtt_ms / 1000,
+    add("machine", "net", "rtt", None if net is None or net.rtt_ms is None or _pos_time(net.rtt_ms) is None else net.rtt_ms / 1000,
         "s", None if net is None else net.age_ms)
     if store is not None:
         for disk in store.disks:
@@ -430,16 +433,15 @@ def _record(conn, found: Finding, round_id: str, obs: Observe, mode: str) -> Non
         shot = None if frozen is None else memory.save_snapshot(conn, frozen)
     except Exception:  # noqa: BLE001 -- בלי צילום ההחלטה עדיין נרשמת, והראיה אומרת שהצילום חסר
         log.exception("brain: the planes snapshot of %s was not saved", round_id)
-    common = dict(mode=mode, rule=RULE, point=POINT, round_id=round_id, entity=("round", round_id),
-                  snapshot=shot, rule_version=RULE_VERSION)
-    memory.record(conn, action="PLANE_NET", verdict=found.net.verdict, reason=found.net.reason,
-                  evidence=found.net.evidence, outcome=_SHADOW, **common)
-    memory.record(conn, action="PLANE_STORE", verdict=found.store.verdict, reason=found.store.reason,
-                  evidence=found.store.evidence, outcome=_SHADOW, **common)
-    memory.record(conn, action="PLANE_DIST", verdict=found.dist.verdict, reason=found.dist.reason,
-                  evidence=found.dist.evidence, outcome=_SHADOW, **common)
-    memory.record(conn, action="PLANE_BIND", verdict=found.verdict, reason=found.reason,
-                  evidence=found.evidence, outcome=_SHADOW, **common)
+    def record(action: str, verdict: str, reason: str, evidence: tuple[str, ...]) -> None:
+        memory.record(conn, mode=mode, rule=RULE, point=POINT, round_id=round_id, entity=("round", round_id),
+                      snapshot=shot, rule_version=RULE_VERSION, action=action, verdict=verdict, reason=reason,
+                      evidence=evidence, outcome=_SHADOW)
+
+    record("PLANE_NET", found.net.verdict, found.net.reason, found.net.evidence)
+    record("PLANE_STORE", found.store.verdict, found.store.reason, found.store.evidence)
+    record("PLANE_DIST", found.dist.verdict, found.dist.reason, found.dist.evidence)
+    record("PLANE_BIND", found.verdict, found.reason, found.evidence)
 
 
 def decide(conn, obs: Observe, *, round_id: str) -> Finding | None:

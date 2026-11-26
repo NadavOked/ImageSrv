@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import logging
 import re
-import sqlite3
+from server.db import SqlConnection
 from datetime import datetime, timedelta, timezone
 
 from server.agent.registry import ROOM_GROUPS
@@ -39,6 +39,8 @@ RECOMMEND_HE = "שקלו לענות מראש לדיסקים שנכשלו בעב�
 
 
 def _span(a: str | None, b: str | None) -> float | None:
+    if a is None or b is None:
+        return None
     try:
         x, y = datetime.fromisoformat(a), datetime.fromisoformat(b)
     except (TypeError, ValueError):
@@ -47,7 +49,7 @@ def _span(a: str | None, b: str | None) -> float | None:
     return s if s >= 0 else None
 
 
-def round_waits(conn: sqlite3.Connection, created_at: str, closed_at: str | None) -> dict:
+def round_waits(conn: SqlConnection, created_at: str, closed_at: str | None) -> dict:
     """`{"waves", "open_wait_s", "smart_hold_s", "smart_holds", "smart_unreleased"}` לסבב בחלון."""
     try:
         until = closed_at or datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -88,7 +90,7 @@ _HELD = ("send_held_smart", "send_held_prompt")
 _FREED = ("send_hold_released", "send_prompt_released")
 
 
-def wave_hold(conn: sqlite3.Connection, session_id: str) -> int | None:
+def wave_hold(conn: SqlConnection, session_id: str) -> int | None:
     """#3469: כמה שניות גל אחד עמד על שאלה למפעיל, משני זוגות האירועים. **`None` = לא נמדד**: אין שחרור ביומן
     (גם כשאין החזקה בכלל: מנוע החתיכות מחזיק גל על שאלה בלי לכתוב אירוע, ולכן "אין אירוע" אינו "0"), או שהייתה
     החזקה שלא שוחררה. אינו זורק."""
@@ -110,7 +112,7 @@ def wave_hold(conn: sqlite3.Connection, session_id: str) -> int | None:
         return None
 
 
-def week(conn: sqlite3.Connection, now: datetime | None = None) -> dict:
+def week(conn: SqlConnection, now: datetime | None = None) -> dict:
     """הסבבים שנסגרו ב-`WEEK_DAYS` הימים האחרונים: `{"rounds", "smart_hold_s", "longest_s",
     "open_wait_s"}` (None — לא נמדד באף סבב)."""
     now = now or datetime.now(timezone.utc)
@@ -128,7 +130,7 @@ def _min(s: int) -> str:
     return "פחות מדקה" if s < 60 else f"{round(s / 60)} דק'"
 
 
-def health_checks(conn: sqlite3.Connection) -> list[dict]:
+def health_checks(conn: SqlConnection) -> list[dict]:
     """סיכום שבועי. בלי סבב שנסגר בשבוע — אין שורה."""
     try:
         w = week(conn)

@@ -179,7 +179,7 @@ test('stage 3: models tab (first) — a row per DMI model with machines / covere
   await run('loadDrivers()');
   const html = run('driversPage()');
   assert.match(html, /role="tab" aria-selected="true"[^>]*>דגמים</);
-  assert.match(html, /דגמי מחשבים שנמצאו ברשת/); assert.match(html, /הדגם נקבע מ-DMI שהמחשב מדווח ב-hello/);
+  assert.match(html, /דגמי מחשבים שנמצאו ברשת/); assert.match(html, /הדגם נקבע לפי מה שהמחשב מדווח על עצמו/);
   // ‏#1300: עמודת "לא נבדקו" ירדה — מה שלא נבדק נאמר בפיל המצב; תפריט ⋯ לכל דגם
   assert.match(html, /<th>דגם<\/th><th>מחשבים<\/th><th>מכוסים<\/th><th>חסרים<\/th><th>מצב<\/th><th><span class="sr">פעולות<\/span><\/th>/);
   assert.match(html, /role="tab" aria-selected="true"[^>]*>דגמים<small>\d+<\/small>/);

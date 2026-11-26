@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from server.db import SqlConnection
 
 from server.agent.registry import ROOM_GROUPS
 from server.brain import memory
@@ -31,7 +32,7 @@ def _json(raw):
 class Facts:
     """ישות אחת: הסיכום של מה שיצא מהחלון + השורות שעוד בטבלאות. ``stats(rule)`` = שניהם יחד."""
 
-    def __init__(self, conn: sqlite3.Connection, kind: str, key: str):
+    def __init__(self, conn: SqlConnection, kind: str, key: str):
         got = memory.knowledge(conn, kind, key, limit=ALL)
         self.kind, self.key = kind, key
         self.recent, self.summary = got["recent"], got["summary"]
@@ -115,7 +116,7 @@ def _nic(n: Facts) -> dict | None:
             "dropped": dropped and {"last": _int(dropped["last"]), "max": _int(dropped["max"])}}
 
 
-def _drops(conn: sqlite3.Connection, n: Facts, mac: str) -> dict | None:
+def _drops(conn: SqlConnection, n: Facts, mac: str) -> dict | None:
     """מה שמקלט זרק, גל אחר גל: מ-`wave_rates.drops` (השורות החיות) ומהסיכום של מה שכבר יצא מהחלון."""
     waves, total = 0, {f: {"n": 0, "sum": 0.0} for f in ("rcvbuf", "inerrors", "abandoned")}
     for row in conn.execute("SELECT drops FROM wave_rates WHERE drops IS NOT NULL"):
@@ -142,7 +143,7 @@ def _drops(conn: sqlite3.Connection, n: Facts, mac: str) -> dict | None:
     return {"waves": waves, **{f: {"read": a["n"], "sum": _int(a["sum"]) if a["n"] else None} for f, a in total.items()}}
 
 
-def _slots(conn: sqlite3.Connection, mac: str) -> list[dict]:
+def _slots(conn: SqlConnection, mac: str) -> list[dict]:
     from server.disks import disk_card                              # noqa: PLC0415 -- disk_card מייבא את Facts
     ports = {r["port"] for r in conn.execute("SELECT DISTINCT port FROM port_history WHERE mac = ?", (mac,))}
     ports |= {int(e["key"].rpartition("/")[2]) for e in memory.entities(conn, "slot")
@@ -167,7 +168,7 @@ def _slots(conn: sqlite3.Connection, mac: str) -> list[dict]:
     return out
 
 
-def machine(conn: sqlite3.Connection, mac: str) -> dict:
+def machine(conn: SqlConnection, mac: str) -> dict:
     """הקבוצה "נתונים שנאספו", "מה היה בחריצים" וההחלטות של המוח -- לכרטיס מחשב אחד."""
     m, n = Facts(conn, "machine", mac), Facts(conn, "network", mac)
     nic, wol, boot = _nic(n), _wol(m), _boot(m)
@@ -187,7 +188,8 @@ def _wave_row(row: sqlite3.Row) -> dict:
     # #3173: a chunk wave keeps only `stream["chunk"]` (`chunk_rate.record`): what it multicast (`stream_zbytes`, the
     # compressed bytes -- the unit of the old `sent_bytes`) and the chunks that did not arrive in the first pass
     # (`lost_chunks`, the worst machine). Chunks are not the old sender's blocks, so they have their own key.
-    chunk = stream.get("chunk") if isinstance(stream.get("chunk"), dict) else {}
+    raw_chunk = stream.get("chunk")
+    chunk = raw_chunk if isinstance(raw_chunk, dict) else {}
     sent = _int(memory._num(stream.get("sent_bytes")))
     return {"at": row["at"], "rate_bps": drive_rates.parse_bitrate(decision.get("max_bitrate")),
             "sent_bytes": sent if sent is not None else _int(memory._num(chunk.get("stream_zbytes"))),
@@ -196,7 +198,7 @@ def _wave_row(row: sqlite3.Row) -> dict:
             "drops": drops if isinstance(drops, dict) else None}
 
 
-def round_waves(conn: sqlite3.Connection, created_at: str, closed_at: str | None) -> list[dict]:
+def round_waves(conn: SqlConnection, created_at: str, closed_at: str | None) -> list[dict]:
     """גלי הסבב (אותו חלון זמן כמו `learn.waits.round_waits`), עם מה ש-`wave_rates` עוד זוכר עליהם.
     גל שהשורה שלו נמחקה: ``kept: False`` -- "לא נשמר", לא 0."""
     rows = conn.execute(
@@ -220,7 +222,7 @@ def flow(waves: list[dict]) -> dict:
             "loss_blocks": sum(losses) if losses else None, "lost_chunks": sum(chunks) if chunks else None}
 
 
-def _drives(conn: sqlite3.Connection, ids: list[str], names: dict[str, str]) -> list[dict]:
+def _drives(conn: SqlConnection, ids: list[str], names: dict[str, str]) -> list[dict]:
     """הדיסקים שנכתבו בגלי הסבב: מגירה, דיסק, דגם, MB/s, ומה הוא ביחס לממוצע של הדגם."""
     out, averages = [], {}
     for e in conn.execute(
@@ -242,7 +244,7 @@ def _drives(conn: sqlite3.Connection, ids: list[str], names: dict[str, str]) -> 
     return out
 
 
-def round_summary(conn: sqlite3.Connection, created_at: str, closed_at: str | None) -> dict:
+def round_summary(conn: SqlConnection, created_at: str, closed_at: str | None) -> dict:
     """השורה שנפתחת בהיסטוריית הסבבים: הגלים, המקלטים (מה שזרקו), הדיסקים שנכתבו והחלטות המוח."""
     from server.disks import disk_sets                                  # noqa: PLC0415
     names = disk_sets._machine_names(conn)

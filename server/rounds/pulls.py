@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from server.agent import timing as agent_timing
 from server.brain import silence
 from server.system import clockstep
-from server.db import journal, now_iso
+from server.db import journal, now_iso, SqlConnection
 from server.agent.reports import FINAL
 from server.rounds.sessions import PULL_PREFIX, TAKEN, UNICAST, SessionError, SessionStore
 
@@ -89,7 +89,7 @@ def _is_the_same_request(store: SessionStore, row: sqlite3.Row,
     )
 
 
-def _resume_or_refuse(conn: sqlite3.Connection, store: SessionStore,
+def _resume_or_refuse(conn: SqlConnection, store: SessionStore,
                       row: sqlite3.Row, mac: str, image_id: str) -> str:
     if not _is_the_same_request(store, row, image_id):
         raise SessionError(TAKEN[UNICAST])
@@ -97,7 +97,7 @@ def _resume_or_refuse(conn: sqlite3.Connection, store: SessionStore,
     return row["id"]
 
 
-def open_pull(conn: sqlite3.Connection, store: SessionStore, mac: str,
+def open_pull(conn: SqlConnection, store: SessionStore, mac: str,
               group_id: str, image_id: str, opened_by: str) -> str:
     """פותחת משיכה ורושמת את המכונה כחברה בה מיד.
 
@@ -186,7 +186,7 @@ def background_sweep(store: SessionStore) -> bool:
         return False
 
 
-def journal_refusal(conn: sqlite3.Connection, mac: str, reason: str) -> None:
+def journal_refusal(conn: SqlConnection, mac: str, reason: str) -> None:
     """סירוב לפתוח משיכה נרשם. תחנה שאינה מצליחה למשוך היא תקלה שמישהו
     יחפש בקונסולה, ולא אירוע שקורה בשקט."""
     journal(conn, "pull_refused", f"{mac} — {reason}", machine=mac)

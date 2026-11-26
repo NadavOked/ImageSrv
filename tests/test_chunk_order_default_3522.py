@@ -57,7 +57,7 @@ def order_of(cmd):
 
 def command(chunks=None, order=None):
     """The command, and the list file of a completion pass removed (the engine removes it after the pass)."""
-    engine = SimpleNamespace(port=7713, interface=None, feedback=True, write_floor=lambda: 20)   # פורט-הפצה-מכוון
+    engine = SimpleNamespace(port=7713, interface=None, source=None, feedback=True, write_floor=lambda: 20)   # פורט-הפצה-מכוון
     wave = SimpleNamespace(key="0123456789abcdef", round=1)
     cmd = ChunkEngine._command(engine, wave, {"index": 3}, Path("image.zst"), 100000, 400000, chunks, None, None, order)
     if "--chunks-file" in cmd:
@@ -185,7 +185,7 @@ def test_through_the_app_the_environment_wins_over_the_setting(room_server, monk
 def test_a_direct_order_is_made_from_the_flags_it_needs_and_the_order_flag_is_not_one_of_them():
     """A direct wave (a build machine sends) goes through the same engine, whose command now carries `--order mixed`. The
     server turns it into an order for the source (`_issue`), which reads seven flags and no more: the order is not passed on."""
-    engine = SimpleNamespace(port=7713, interface=None, feedback=True, write_floor=lambda: 20)   # פורט-הפצה-מכוון
+    engine = SimpleNamespace(port=7713, interface=None, source=None, feedback=True, write_floor=lambda: 20)   # פורט-הפצה-מכוון
     wave = SimpleNamespace(key="0123456789abcdef", round=1)
     cmd = ChunkEngine._command(engine, wave, {"index": 3}, Path("image.zst"), 100000, 400000, [(5, 6)], None, ("400", "300"),
                                "mixed")

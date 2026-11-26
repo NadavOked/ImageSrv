@@ -582,6 +582,19 @@ document.addEventListener("click", (e) => {
   toast("צפייה בלבד — כדי לפעול יש להיכנס מחדש");
 }, true);
 
+/* #2874 (נדב 23/11, אושר המוקאפ: "הסשן לא נסגר"): בסבב פעיל מסך הצפייה בלבד אינו מתנתק, גם לא בשרת. השרת מבטל עוגייה שלא נראתה
+   console_idle_seconds (ועוד דקה, #2414), ולשונית מוסתרת אינה מתשאלת, ולכן בלי אות העוגייה נעלמת מתחת לצפייה בלבד. האות: GET /room
+   בדקה האחרונה לפני ה-idle ובצפייה בלבד, לכל היותר אחד בדקה. הוא פעילות בשרת (אינו poll של המוניטור, #2493), והוא גם מה שמכריע:
+   ROOM נקרא מהשרת, וסבב שנגמר מסיים את הצפייה והניתוק הרגיל חל. האות יוצא רק מהדף הפתוח והמחובר, ובלעדיו השרת מנתק כרגיל.
+   כשל בקריאה לא מחזיק כלום: השרת רואה שקט. */
+let roundPingAt = 0;
+function roundKeepAlive(now = Date.now()) {
+  if (!ME || now - roundPingAt < Math.min(60000, ME.idle_seconds * 500)) return false;
+  roundPingAt = now;
+  api("/room").then((v) => { if (ME) ROOM = v && Array.isArray(v.machines) ? v : null; }, () => {});
+  return true;
+}
+
 function startIdleWatch() {
   clearInterval(idleTimer);
   if (!ME || !ME.idle_seconds) return;
@@ -591,6 +604,7 @@ function startIdleWatch() {
     const idle = (Date.now() - lastActivity) / 1000;
     const left = ME.idle_seconds - idle;
     if (left > 0) idleKeepAlive();
+    if (left <= 60 && (left > 0 || activeRoundNow())) roundKeepAlive();   // #2874: קורא את הסבב מהשרת ומחזיק את העוגייה בצפייה בלבד
     if (left <= 0 && activeRoundNow()) { if (!VIEW_ONLY) setViewOnly(true); return; }   // #2874: סבב פעיל — צפייה בלבד, לא ניתוק
     if (left <= 0) {
       if (VIEW_ONLY) setViewOnly(false);   // הסבב נגמר בזמן הצפייה: חוזרים להתנהגות הרגילה
@@ -2194,7 +2208,7 @@ function homeSummary() {
   const o = OVERVIEW;
   if (!o) return "";
   const on = homeConnected(), parts = [];
-  if (o.images != null) parts.push(`${o.images} אימג'ים`);
+  if (o.images != null) parts.push(o.images === 1 ? "אימג' אחד" : `${o.images} אימג'ים`);
   if (o.machines != null) parts.push(`${o.machines} מחשבים${on != null ? ` (${on} מחוברים)` : ""}`);
   if (o.now) parts.push(`עודכן ${fmtClock(o.now)}`);
   return esc(parts.join(" · "));
@@ -3109,7 +3123,7 @@ function roomMachHtml(m, r) {
   const red = failed.length > 0 || bootRisk.length > 0;
   const name = (s) => slotLabel(m, s.n, s.disk);
   // #2987: a failed disk says the agent's short sentence (error_short); the diagnosis (error) stays in the hover
-  const why = (s) => s.noDisk ? "אין דיסק במגירה" : s.disk.state === "failed" ? (s.disk.error_short || drawerErrorText(s.disk.error)) : s.fail && s.fail.cause === "readonly" ? failureCauseText(s.fail)
+  const why = (s) => s.noDisk ? "אין דיסק במגירה" : s.disk.state === "failed" ? drawerDisplayError(s.disk) : s.fail && s.fail.cause === "readonly" ? failureCauseText(s.fail)
     : slotRule(s).target_reason_short_he || "SMART נכשל";   // #2848: the rule's reason, short on the card -- the brain's words (#3666)
   let sub;
   // #2987 (Nadav 12/11): a line per disk, not one paragraph
@@ -3179,7 +3193,7 @@ function roomNotes(kids, st, hint = "") {
     if (warn.length) out.push(UI.note("warn", `<b>${esc(whereList(warn))}</b> — ${SMART_HALF_HE} / CRC שעלה / קישור איטי: <b>הסוכן ממשיך לכתוב</b> (כתום = כותב), והדיסק ייבדק שוב באימות. דילוג מרחוק — <b title="אין endpoint לדילוג על מגירה">דורש API</b>.${clears(warn).length ? " " + clears(warn).join(" · ") : ""}`));
     /* ‏#1767: אדום הוא שלוש סיבות שונות (slotClass) — הכתיבה בסבב נכשלה, קריאה בלבד (#1742), SMART נכשל.
        הערה לכל סיבה, בסיבה שלה; רק ל-SMART נכשל "לא כותבים... מדולג" — דיסק שהכתיבה אליו נכשלה כן נכתב. */
-    const redWhy = (s) => s.disk.state === "failed" ? (s.disk.error ? `הכתיבה בסבב נכשלה: ${s.disk.error_short || drawerErrorText(s.disk.error)}` : "הכתיבה בסבב נכשלה")
+    const redWhy = (s) => s.disk.state === "failed" ? (s.disk.error ? `הכתיבה בסבב נכשלה: ${drawerDisplayError(s.disk)}` : "הכתיבה בסבב נכשלה")
       : s.fail && s.fail.cause === "readonly" ? failureCauseText(s.fail) : null;
     const byWhy = new Map();
     red.forEach((x) => { const k = redWhy(x.s); if (!byWhy.has(k)) byWhy.set(k, []); byWhy.get(k).push(x); });
@@ -3921,7 +3935,7 @@ function imageRow(r) {
     cells: [
       `<input type="checkbox" aria-label="בחירת ${esc(r.name)}" ${sel ? "checked" : ""} onchange="toggleImgSel('${idEnc}',this.checked)">`,
       `<span class="dskico">${uiIcon("storage")}</span><a role="link" tabindex="0" class="name" onclick="openImageDetail('${idEnc}')">${esc(r.name)}</a>${r.available === false ? ` ${UI.pill("err", "לא זמין")}` : ""}${imageHibernated(r) ? ` <span title="${esc(HIB_TIP)}">${UI.pill("warn", HIB_TAG)}</span>` : ""}${imageBitLocker(r) ? ` <span title="${esc(BL_NOTE)}">${UI.pill("warn", BL_TAG)}</span>` : ""}${imageNtfsInconsistent(r) ? ` <span title="${esc(NI_NOTE)}">${UI.pill("warn", NI_TAG)}</span>` : ""}`,   // ‏#1066: המיקום לא נגיש — רשום, לא נמחק. ‏#1300: בלי תיאור מתחת לשם (הוא במגירה)
-      esc(imageOsLabel(r.os)), ltr(fmtBytes(r.total_compressed_bytes)), r.system_unmarked ? sysUncheckedCell(r) : imgFits(r), r.folder ? esc(r.folder) : `<span class="muted">ללא תיקייה</span>`, imgVerify(r), ltr(fmtDate(r.created)),
+      esc(imageOsLabel(r.os)), ltr(fmtBytes(r.total_compressed_bytes)), r.system_unmarked ? sysUncheckedCell(r) : imgFits(r), r.folder ? esc(r.folder) : `<span class="muted">ללא תיקייה</span>`, imgVerify(r), imgUpdatedCell(r),
       UI.rowMenu(r.name, [["פרטים", `openImageDetail('${idEnc}')`], ["הפץ", `deployImage('${idEnc}')`]]
         .concat((r.system_candidates || []).length ? [["סימון מחיצת המערכת (C:)…", `markSystemPartition('${idEnc}')`]] : [])   // ‏#1896
         .concat(admin && typeof vmuImageMenuItem === "function" ? [vmuImageMenuItem(r)].filter(Boolean) : [])   // ‏#1334
@@ -3987,9 +4001,15 @@ function imagesTableHtml() {
   }
   const allSel = list.length > 0 && list.every((r) => IMG.sel.has(r.id));
   const columns = [{ html: `<input type="checkbox" aria-label="בחירת הכול" ${allSel ? "checked" : ""} onchange="toggleImgSelAll(this.checked)">` },
-    "שם", "מערכת", "גודל", "מתאים לדיסק", "תיקייה", "מצב", "נקלט", { html: `<span class="sr">פעולות</span>` }];
+    "שם", "מערכת", "גודל", "מתאים לדיסק", "תיקייה", "מצב", { html: `<span title="עודכן לאחרונה">עודכן</span>` }, { html: `<span class="sr">פעולות</span>` }];
   // ‏console-full.html imgCols: מערכת, תיקייה ונקלט — עמודות משניות (נעלמות בטבלה צרה). "בשימוש" — בראש מגירת האימג' (#1300).
   return UI.datagrid({ columns, cls: "kebab-col", opt: [2, 5, 7], rows: list.map(imageRow).concat(tasks.map((t) => ({ html: captureRowHtml(t) }))) }) + imagesSelBar(list);
+}
+/* ‏#2551 (מוקאפ m2551-v2, נדב 22/11): "עודכן" = התאריך של הגרסה האחרונה בשושלת (`updated`, מהשרת);
+   "ב-VM" כשהיא נשמרה מעדכון ב-VM. בלי "התיישן" ובלי סף (הכרעת נדב 06/11). שרת ישן בלי השדה — `created`. */
+function imgUpdatedWord(r) { return r.updated_origin === "vm" ? "עודכן ב-VM" : "עודכן"; }
+function imgUpdatedCell(r) {
+  return ltr(fmtDate(r.updated || r.created)) + (r.updated_origin === "vm" ? `<span class="sub muted">ב-VM</span>` : "");
 }
 /* ‏#954 גל 2: הדף נצבע מחדש רק כשרשימת /tasks השתנתה — אחרת הבחירה
    והסינון היו נמחקים בכל דגימה (2 שניות). */
@@ -4332,7 +4352,7 @@ function imageDrawerHtml(img) {
   // ‏"מ-<מחשב>" רק כשמשימת הקליטה של האימג' ידועה (/tasks) — לא ניחוש.
   const task = (CAPTURE_TASKS || []).find((t) => t.image_id === img.id && t.state === "done");
   const from = task && (task.machine || task.mac) ? ` מ-${esc(task.machine || task.mac)}` : "";
-  const sub = `${esc(imageOsLabel(img.os))} · ${ltr(fmtBytes(img.total_compressed_bytes))} · נקלט ${ltr(fmtDate(img.created))}${from}`;
+  const sub = `${esc(imageOsLabel(img.os))} · ${ltr(fmtBytes(img.total_compressed_bytes))} · ${imgUpdatedWord(img)} ${ltr(fmtDate(img.updated || img.created))}${from}`;
   const kv = UI.kv([
     ["תיאור", esc(img.description || "—") + (admin ? ` ${UI.link("עריכה", `editImageDescription('${idEnc}')`)}` : "")],
     ["תיקייה", esc(img.folder || "ללא תיקייה") + (admin ? ` ${UI.link("העבר", `moveImage('${idEnc}')`)}` : "")],
@@ -5414,6 +5434,12 @@ function drawerErrorText(raw) {
   if (!/[א-ת]/.test(out)) return "הכתיבה נכשלה — הפרטים בריחוף על הדיסק";
   return dropped ? `${out} — הפרטים בריחוף על הדיסק` : out;
 }
+function isolateDrawerAmounts(reason) {
+  return reason.replace(/(שגיאת כתיבה אחרי |אין דיווח מהפיצול לאחר |הכתיבה נכשלה אחרי |איטי — |, מתחת לסף |, פחות מחצי מ-|איטי — דיסק מכני \(HDD\), נמדד )([0-9]+(?:\.[0-9]+)? (?:GB|MB\/s))\b/g, "$1\u2066$2\u2069");
+}
+function drawerDisplayError(d) {
+  return isolateDrawerAmounts(d.error_short || drawerErrorText(d.error));
+}
 const DRAWER_STATE_HE = { writing: "כותב", done: "נכתב", failed: "נכשל", verifying: "מאמת", waiting: "ממתין", cancelled: "בוטל",
   skipped: "דולג", replacing: "ממתין להחלפה", asking: "ממתין להכרעת המפעיל" };   // #1386; #1861: every state the agent's target_set writes (smartgate.sh, drawergate.sh)
 /* ‏#1805: הקריאה החוזרת מהדיסק אחרי הכתיבה. ‏`unverified` = אין רשימת בדיקה — הדיסק נכתב ולא נבדק מולה:
@@ -5607,7 +5633,7 @@ function diskTitle(m, s, d) {
   const parts = [s.n != null && slotName(m, s.n, d) ? `דיסק ${s.n}` : "", s.n != null ? rowConn(s) : `${rowConn(s)} — לא ממופה לאף דיסק`, d.set_text || "", d.model || "", d.serial || ""].filter(Boolean);   // #1857: "קוריאים · xx-7" -- איזה דיסק לשלוף
   if (s.fail) parts.push(s.fail.cause === "cable" ? cableDrawerText(s.n != null ? slotLabel(m, s.n, d) : slotName(m, null, d)) : `נכשל בשיכפול הקודם ${fmtDate(s.fail.at)} · ${failureCauseText(s.fail)}`);   // #3008   // #1580: orange
   else if (drawerPulled(d)) parts.push(PULLED_HE);   // #3209
-  else if (d.state === "failed") parts.push(`נכשל בסבב${d.error ? " — " + d.error : ""}`);
+  else if (d.state === "failed") parts.push(`נכשל בסבב${d.error ? " — " + isolateDrawerAmounts(d.error) : ""}`);
   if (s.live && d.state && d.state !== "failed") parts.push(DRAWER_STATE_HE[d.state] || d.state);
   // #2848 (מוקאפ disk-colors, נדב 11/11): CRC רק כשהמונה עלה — בנוסח אחד, הערה ולא צבע
   if ((d.crc_delta != null && d.crc_delta > 0) || d.crc_rise > 0) parts.push(CRC_ROSE_HE);
@@ -5750,7 +5776,7 @@ function bayChip(s) {
     if (tr === "smart_fail") return ["red", (s.fail && s.fail.cause === "readonly") || d.smart_reason === "readonly" ? "קריאה בלבד" : "SMART לא תקין"];
     return ["red", tr === "write_slow" ? "איטי בסבב הזה" : "בעיית SATA"];
   }
-  if (r.color === "yellow") return ["yellow", r.source_reason === "write_incomplete" ? "כתיבה לא הושלמה" : "נכשל בשיכפול הקודם"];
+  if (r.color === "yellow") return ["yellow", r.source_reason_short_he || (r.source_reason === "write_incomplete" ? "כתיבה לא הושלמה" : "נכשל בשיכפול הקודם")];   // #3008: the brain's words -- a cable cause says "חיבור לא תקין", the connection's, not the disk's
   if (r.color === "orange") return ["orange", SMART_HALF_HE];
   return r.color === "green" ? ["green", "SMART תקין"] : ["grey", "SMART לא נבדק"];   // #2897: unchecked is grey, never green (#3666: green = the brain's verdict)
 }
@@ -5759,7 +5785,7 @@ function bayChip(s) {
 function bayLines(s) {
   const d = s.disk, r = slotRule(s), out = [];
   if (drawerPulled(d)) out.push(["", PULLED_HE]);   // #3209
-  else if (d.state === "failed") out.push(["bad", "נכשל בסבב" + (d.error ? " — " + (d.error_short || drawerErrorText(d.error)) : "")]);   // #2987
+  else if (d.state === "failed") out.push(["bad", "נכשל בסבב" + (d.error ? " — " + drawerDisplayError(d) : "")]);   // #2987
   if (r.color === "red") {
     const tr = r.target_reason;
     const why = tr === "smart_fail" ? (s.fail && s.fail.cause === "readonly" ? failureCauseText(s.fail) : smartText(d))
@@ -6035,7 +6061,7 @@ function capturesTableCard(kids, cls) {
     taskWarning(t), esc(taskWhen(t))] }));
   const body = !CAPTURE_TASKS_READ ? UI.note("warn", "רשימת הקליטות לא נקראה")
     : UI.datagrid({ columns: ["אימג'", "תיקייה", "מחשב · דיסק", "מצב", "נקראו", "משך", "אזהרה / שגיאה", "מתי"], rows, empty: "אין קליטות עדיין — \"+ קליטת אימג'…\" פותחת את הראשונה" });
-  return UI.card({ title: "קליטות אחרונות", small: "עד 20 האחרונות מ-/tasks", cls, flush: true, body });
+  return UI.card({ title: "קליטות אחרונות", small: "20 הקליטות האחרונות", cls, flush: true, body });
 }
 function buildersView(g, kids) {
   const gidEnc = encodeId(g.id), admin = isAdmin();
@@ -7404,7 +7430,7 @@ function permissions() {
   const deployers = list.filter((u) => u.role === "deploy").length;
   const roleNames = [list.some((u) => u.role === "admin") ? "מנהל" : "", deployers ? "הפצה" : ""].filter(Boolean);
   const sub = USERS
-    ? [`${list.length} משתמשים`, roleNames.length ? `תפקידים: ${roleNames.join(", ")}` : ""].filter(Boolean).map(esc).join(" · ")
+    ? [list.length === 1 ? "משתמש אחד" : `${list.length} משתמשים`, roleNames.length ? `תפקידים: ${roleNames.join(", ")}` : ""].filter(Boolean).map(esc).join(" · ")
     : `‏/users לא נקרא: ${esc(usersError)}`;
   // ‏#2552: "סשנים" — מנהל בלבד, בשרת הראשי (sessions.js; בלעדיו — בלי הלשונית)
   const tabs = typeof sessionsAllowed === "function" && sessionsAllowed() ? ["משתמשים", "סשנים"] : [];
@@ -7420,11 +7446,11 @@ function permissions() {
   // ‏#1300: כרטיס לכל תפקיד (כמו המוקאפ). המטריצה המפורטת לא ירדה — מקופלת ב"הרשאות מפורטות".
   const roleCard = (title, text) => UI.card({ title, cls: "c6", body: `<p class="cap">${esc(text)}</p>` });
   const roles = roleCard("מנהל", "גישה מלאה: אימג'ים, מחשבים, תשתית, משתמשים והגדרות.")
-    + roleCard("הפצה", "תפקיד לתחנה ולתהליך התכנאי. אין לו כניסה לקונסולה.");
+    + roleCard("הפצה", "תפקיד לתחנה ולתהליך הטכנאי. אין לו כניסה לקונסולה.");
   const matrix = UI.datagrid({ columns: ["", "מנהל", "הפצה"],
     rows: ROLE_MATRIX.map(([area, a, d, src]) => [`<span title="${esc(src)}">${esc(area)}</span>`, UI.status(a[0], a[1]), UI.status(d[0], d[1])]) })
     + `<div class="cap" style="padding:10px 14px">אין הרשאה שקטה: מה שאינו "כן" מחזיר 403 בשרת, לא רק מוסתר בממשק. למשתמש הפצה אין כניסה לקונסולה (#1073) — הוא עובד ממחשב הבנייה: שיכפול מאימג' בשרת, שיכפול ישיר מהדיסק, ושחזור לדיסק שלו. המנהל הפעיל האחרון אינו ניתן למחיקה או להורדה. ריחוף על אזור מציג את ה-endpoint.</div>`;
-  const matrixCard = `<details class="c12 card perm-more"><summary class="card-h"><span>הרשאות מפורטות <small>מה כל תפקיד רואה — נגזר מה-Depends של כל endpoint</small></span></summary><div class="card-b flush">${matrix}</div></details>`;
+  const matrixCard = `<details class="c12 card perm-more"><summary class="card-h"><span>הרשאות מפורטות <small>מה כל תפקיד רואה, לפי ההרשאה של כל פעולה</small></span></summary><div class="card-b flush">${matrix}</div></details>`;
   return `<div class="page aligned">${header}<div class="body">${usersCard}${roles}${matrixCard}</div></div>`;
 }
 
@@ -8106,7 +8132,7 @@ function networkDiagramTab() {
   else {
     const model = netDiagramModel();
     // מקור כל נתון (ההערה שהייתה מתחת לתרשים) — ב-title של שורת המשנה של הכרטיס
-    const src = `נמדד: כתובות ופער — /net/config · DHCP חי — /net/interfaces · מחוברים — /monitor/machines, /net, /storage-nodes · "מה מותר" — bind של /ports בלבד. וילנים ומדיניות — דורש API (#705).${classroomsOn() ? " כיתות — v2." : ""}`;
+    const src = `מה שמוצג נמדד: הכתובות והפער מהגדרות הרשת, מצב ה-DHCP מהכרטיס עצמו, והמחשבים המחוברים מהמוניטור. "מה מותר" נקרא מהשירותים שמאזינים על הכרטיס. מדיניות לכל וילן עדיין לא נמדדת.${classroomsOn() ? " כיתות — v2." : ""}`;
     body = netUnreadNotes()
       + `<div class="c12 card"><div class="card-h"><span>מפת הרשת <small title="${esc(src)}">לחיצה על וילן פותחת פרטים</small></span></div><div class="card-b netdiag">${netMapBody(model)}</div></div>`;
   }
@@ -8476,7 +8502,12 @@ function monitorViewerHtml(list, enabled) {
   let body;
   if (!enabled) body = say(["המוניטור כבוי", "הדלק את המתג בכותרת כדי לצפות במסך של תחנה. הדלקה חושפת 7710 על וילן ההפצה ותופסת באתחול הבא של כל מכונה."]);
   else if (!m) body = say(["בחר מחשב לצפייה", "המסך של התחנה יוצג כאן. אפשר לשלוח מקשים בלבד כשהתחנה מחוברת לסוכן."]);
-  else if (!m.online) body = say([`${m.name || m.mac} אינה מחוברת`, "אין למה להתחבר: התחנה לא נראתה ב-90 השניות האחרונות. אפשר להעיר אותה (WoL) מהרשימה."]);
+  else if (!m.online) {
+    // ‏#2645/#2971 (נדב 07/11, 12/11): הודעה אחת וברורה, בלי ניסיונות חוזרים, כפתור הדלקה, וחזרה אוטומטית — הרשימה נדגמת
+    // כל כמה שניות, וכשהמחשב עולה ה-iframe נפתח לבד. אין iframe, ולכן אין "ניסיון חוזר בעוד N שנ'".
+    const wake = isAdmin() ? `<div class="mon-wake"><button class="btn primary" type="button" onclick="wakeMachine('${encodeId(m.mac)}')">הדלקה (WoL)</button></div>` : "";
+    body = say([`${m.name || m.mac} כבוי או לא מחובר`, "התחנה לא נראתה ב-90 השניות האחרונות. המוניטור יתחבר לבד כשהיא תעלה."]).replace(/<\/div>$/, `${wake}</div>`);
+  }
   else if (MON_OUT) body = say(["המסך פתוח בחלון נפרד", "לחיצה על המחשב ברשימה מחזירה את הצפייה לכאן."]);   // ‏#1851
   else {
     // ‏#1179/#1008: מכונה של שרת משנה — המציג עובר דרך שרת המשנה (#1129, ‏monitor.js ‏node=).

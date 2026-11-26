@@ -1689,7 +1689,7 @@ body.tasks-open .app>.task-dock{bottom:var(--task-h,220px);border-top:1px solid 
   transform:translateY(10px) scale(.97);transition:transform var(--dur-sheet) var(--ease);overflow:hidden}
 .upd.show .uc{transform:none}
 .upd .uh{display:flex;gap:14px;align-items:flex-start;padding:24px 26px 18px}
-.upd .ubadge{flex:none;width:46px;height:46px;border-radius:12px;display:grid;place-items:center;background:var(--clr-action-soft);color:var(--clr-action);transition:background var(--dur-base),color var(--dur-base)}
+.upd .ubadge{flex:none;width:46px;height:46px;border-radius:12px;display:grid;place-items:center;background:var(--clr-action-soft);color:var(--clr-action-fg);transition:background var(--dur-base),color var(--dur-base)}
 .upd .ubadge>svg{width:30px;height:18px}
 :root[data-theme="dark"] .upd .ubadge:not(.u-ok):not(.u-bad):not(.u-warn){color:var(--clr-action-fg)}
 .upd .ubadge.u-ok{background:var(--clr-success-soft);color:var(--clr-success-fg)}
@@ -2340,3 +2340,15 @@ body.view-only #content{opacity:.96}
 .svc-legend{color:var(--clr-muted);font-size:var(--t-sm);margin:2px 0 0}
 .inventory-node[hidden]{display:none}   /* ‏#3029: .inventory-node הוא flex, ו-hidden לבדו לא מנצח */
 @media (prefers-reduced-motion:reduce){.svc-tg::after{transition:none}}
+
+/* #2921: במצב כהה המילויים (כתום, ירוק, אדום) בהירים, ולבן עליהם 1.9-3.3:1. טקסט כהה על מילוי בהיר: מעל 4.5:1. */
+:root[data-theme="dark"] .topbar #alertBadge,
+:root[data-theme="dark"] #login .rules li.ok i,
+:root[data-theme="dark"] .pw-pol li.ok i,
+:root[data-theme="dark"] .tag.has-alerts{color:var(--clr-bright-fill-on)}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .topbar #alertBadge,
+  :root:not([data-theme="light"]) #login .rules li.ok i,
+  :root:not([data-theme="light"]) .pw-pol li.ok i,
+  :root:not([data-theme="light"]) .tag.has-alerts{color:var(--clr-bright-fill-on)}
+}

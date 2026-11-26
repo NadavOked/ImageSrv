@@ -92,6 +92,18 @@ def test_a_known_failure_is_named_in_hebrew(line, key):
     assert hit["line"].endswith(line) and any("\u0590" <= c <= "\u05ff" for c in hit["he"])
 
 
+@pytest.mark.parametrize("line,writing", [
+    ("dd: /dev/sdb: Input/output error", False),
+    ("partclone: write failed: Input/output error", True),
+    ("partclone: write failed: EIO", True),
+    ("sdb: periodic fsync failed", True),
+])
+def test_io_error_names_writing_only_when_the_line_indicates_it(line, writing):
+    found = agent_logs.classify(line)
+    assert [hit["key"] for hit in found] == ["io_error"], found
+    assert ("בכתיבה" in found[0]["he"]) == writing, found
+
+
 def test_an_unknown_failure_is_not_guessed():
     assert agent_logs.classify("[10:00:00] something odd happened\n") == []
 

@@ -38,10 +38,9 @@ import gzip
 import json
 import logging
 import re
-import sqlite3
 import zlib
 
-from server.db import _settle, _write_lock, journal, now_iso, writing
+from server.db import _settle, _write_lock, journal, now_iso, SqlConnection, writing
 
 log = logging.getLogger("imagesrv.agent_logs")
 
@@ -89,7 +88,7 @@ SIGNATURES: list[tuple[str, re.Pattern, str]] = [
     ("offline", re.compile(r"(?i)rejecting I/O to offline|device offline"),
      "הדיסק יצא מהקו באמצע הכתיבה — נשלף, או שהבקר ויתר עליו"),
     ("io_error", re.compile(r"(?i)Input/output error|\bEIO\b|fsync.*fail"),
-     "שגיאת קלט/פלט בכתיבה לדיסק — הדיסק, הכבל או המגירה"),
+     "שגיאת קלט/פלט מהדיסק — הדיסק, הכבל או המגירה"),
     ("no_space", re.compile(r"(?i)No space left on device"),
      "אזל המקום ביעד"),
     ("zstd", re.compile(r"(?i)zstd.*(corrupt|error)"),
@@ -107,6 +106,8 @@ SIGNATURES: list[tuple[str, re.Pattern, str]] = [
     ("partition_write", re.compile(r"partition \d+ .*write failed \(rc="),
      "כתיבת מחיצה נכשלה (partclone/הזרם) — השורות שלפניה אומרות למה"),
 ]
+
+_IO_WRITE = re.compile(r"(?i)\b(?:write (?:failed|error)\b|write_error\b|error writing\b|fsync.*fail)")
 
 
 class BadLog(ValueError):
@@ -126,6 +127,8 @@ def classify(text: str) -> list[dict]:
     for key, pattern, he in SIGNATURES:
         hit = next((ln for ln in reversed(lines) if pattern.search(ln)), None)
         if hit is not None:
+            if key == "io_error" and _IO_WRITE.search(hit):
+                he = "שגיאת קלט/פלט בכתיבה לדיסק — הדיסק, הכבל או המגירה"
             found.append({"key": key, "he": he, "line": hit[:300]})
     return found
 
@@ -164,7 +167,7 @@ def agent_cut(header: object) -> bool:
     return header != "0"
 
 
-def receive(conn: sqlite3.Connection, mac: str, session_id: object, reason: object,
+def receive(conn: SqlConnection, mac: str, session_id: object, reason: object,
             body: bytes, known: bool, cut_header: object = None) -> dict:
     """`POST /api/v1/agent/log` אחרי שער הזהות. `known` — המכונה רשומה. `cut_header` — הכותרת
     `X-Imagesrv-Log-Cut` כמות שהגיעה (`None` = לא הגיעה); `truncated` = חיתוך השרת **או** של הסוכן."""
@@ -194,7 +197,7 @@ def receive(conn: sqlite3.Connection, mac: str, session_id: object, reason: obje
         return {"ok": False, "code": "error", "error": "not stored"}
 
 
-def _store(conn: sqlite3.Connection, mac: str, session_id: str | None, reason: str,
+def _store(conn: SqlConnection, mac: str, session_id: str | None, reason: str,
            text: str, lines: int, truncated: bool, signatures: list[dict]) -> int:
     blob = gzip.compress(text.encode("utf-8"))
     _settle(conn)
@@ -208,7 +211,7 @@ def _store(conn: sqlite3.Connection, mac: str, session_id: str | None, reason: s
         return int(cur.lastrowid)
 
 
-def _trim(conn: sqlite3.Connection, mac: str) -> None:
+def _trim(conn: SqlConnection, mac: str) -> None:
     """התקרה בכל הכנסה — `KEEP_PER_MAC` למכונה, `KEEP_ROWS` בסך הכול."""
     conn.execute("DELETE FROM agent_logs WHERE mac = ? AND id NOT IN"
                  " (SELECT id FROM agent_logs WHERE mac = ? ORDER BY id DESC LIMIT ?)",
@@ -217,7 +220,7 @@ def _trim(conn: sqlite3.Connection, mac: str) -> None:
                  " (SELECT id FROM agent_logs ORDER BY id DESC LIMIT ?)", (KEEP_ROWS,))
 
 
-def list_for(conn: sqlite3.Connection, mac: str, limit: int = 10) -> list[dict]:
+def list_for(conn: SqlConnection, mac: str, limit: int = 10) -> list[dict]:
     """הרשומות האחרונות של המכונה, בלי הטקסט."""
     out = []
     for row in conn.execute(
@@ -233,7 +236,7 @@ def list_for(conn: sqlite3.Connection, mac: str, limit: int = 10) -> list[dict]:
     return out
 
 
-def text_of(conn: sqlite3.Connection, log_id: int) -> dict | None:
+def text_of(conn: SqlConnection, log_id: int) -> dict | None:
     row = conn.execute("SELECT id, mac, session_id, reason, at, truncated, text_gz"
                        " FROM agent_logs WHERE id = ?", (log_id,)).fetchone()
     if row is None:

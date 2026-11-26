@@ -2028,7 +2028,7 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         const char *o = argv[i], *v = i + 1 < argc ? argv[i + 1] : NULL;
         if (!strcmp(o, "--demo")) demo = 1;
-        else if (!strcmp(o, "--no-input")) no_input = 1;
+        else if (!strcmp(o, "--no-input")) { no_input = 1; a.no_keys = 1; }
         else if (!strcmp(o, "--help") || !strcmp(o, "-h")) { fputs(USAGE, stdout); return 0; }
         else if (!v) { fputs(USAGE, stderr); return 2; }
         else if (!strcmp(o, "--mac")) { snprintf(a.mac, sizeof a.mac, "%s", argv[++i]); mac_upper(a.mac); }

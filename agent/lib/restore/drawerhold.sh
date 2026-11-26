@@ -36,7 +36,7 @@ _dh_pulled() {   # $@ = disks. 0 = one is out because it was PULLED, and drawer_
 
 _dh_finish() {   # $@ = disks: waits for each completion in the background to end (not for it to be read, only for its process)
     for _dh_f in "$@"; do
-        read -r _dh_pid _ < "$RUN_DIR/targets/$_dh_f/catchup" 2>/dev/null || continue
+        read -r _dh_pid _ 2>/dev/null < "$RUN_DIR/targets/$_dh_f/catchup" || continue
         while kill -0 "$_dh_pid" 2>/dev/null; do
             _chunk_beat; round_closed && return 1; sleep 1
         done

@@ -31,6 +31,7 @@ import json
 import math
 import re
 import sqlite3
+from server.db import SqlConnection
 
 from server.brain import memory, slowdisk
 from server.core import machine_names
@@ -61,7 +62,7 @@ def _date(ts: object) -> str:
     return f"{m.group(2)}/{m.group(1)}" if m else ""
 
 
-def slow_before(conn: sqlite3.Connection, serial: str) -> str | None:
+def slow_before(conn: SqlConnection, serial: str) -> str | None:
     """הסיבה (בעברית) שהדיסק הזה אינו מוצע כברירת מחדל כי נפסל כאיטי, או None = לא נמצאה ראיה.
 
     שני מקורות, כי `rule.target` אינו רואה אף אחד מהם (#2848: "איטי" הוא של הסבב הזה בלבד):
@@ -88,7 +89,7 @@ def _order(row: sqlite3.Row) -> tuple:
     return (number is None, number if number is not None else 0, row["suffix"])
 
 
-def _drawers(conn: sqlite3.Connection, row: sqlite3.Row) -> list[dict]:
+def _drawers(conn: SqlConnection, row: sqlite3.Row) -> list[dict]:
     """המגירות של משכפל כפי שהצעה רואה אותן, לפי מספר המגירה."""
     mac = row["mac"]
     model_map = model_slots.for_mac(conn, mac)

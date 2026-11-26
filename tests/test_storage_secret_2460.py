@@ -274,13 +274,14 @@ def test_smb_creds_file_that_survived_on_the_same_machine_is_used_not_overwritte
     assert f"credentials={sl.creds_path(loc_id)}" in restored["fake"].mounts[-1][3]
 
 
-def test_smb_creds_file_that_cannot_be_read_is_not_a_missing_password(restored):
+def test_smb_creds_file_that_cannot_be_read_is_not_a_missing_password(restored, caplog):
     loc_id = _restored_location(restored, "smb")
     restored["creds"].status, restored["creds"].reason = UNCHECKED, "Permission denied"
     writes = len(restored["fake"].creds_writes)
     r = restored["admin"].post(f"/api/console/storage-locations/{loc_id}/connect", json={})
     assert r.status_code == 409, r.text
-    assert MISSING_SMB in r.json()["detail"] and "Permission denied" in r.json()["detail"]
+    assert r.json()["detail"] == f"{MISSING_SMB} — הפרטים ביומן השרת"
+    assert "Permission denied" in caplog.text
     assert len(restored["fake"].creds_writes) == writes
 
 
@@ -324,14 +325,15 @@ def test_a_secret_for_a_location_without_a_user_is_refused(env):
     assert env["admin"].post(base + "/connect", json={}).status_code == 200, "the console posts {}"
 
 
-def test_iscsi_without_a_chap_secret_names_the_reason_and_a_typed_one_logs_in(restored):
+def test_iscsi_without_a_chap_secret_names_the_reason_and_a_typed_one_logs_in(restored, caplog):
     loc_id = _restored_location(restored, "iscsi")
     assert _row(restored, loc_id)["secret_missing"] is True
     base = f"/api/console/storage-locations/{loc_id}"
     restored["fake"].login_status, restored["fake"].login_reason = FAILED, "authorization failure"
     r = restored["admin"].post(base + "/connect", json={})
     assert r.status_code == 409, r.text
-    assert r.json()["detail"] == f"{MISSING_CHAP} · authorization failure"
+    assert r.json()["detail"] == f"{MISSING_CHAP} · ההתחברות נכשלה — הפרטים ביומן השרת"
+    assert "authorization failure" in caplog.text
     restored["fake"].login_status = OK
     r = restored["admin"].post(base + "/connect", json={"secret": "new-chap-secret"})
     assert r.status_code == 200, r.text

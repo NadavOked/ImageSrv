@@ -17,6 +17,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 
+from server.console import write_copies
 from server.disks.write_backup import _dir
 from test_server_room import CLONER1, room_server  # noqa: F401 -- fixture
 
@@ -60,6 +61,20 @@ def test_no_copies_is_an_empty_list_and_an_unreadable_record_is_not(room_server)
     (_dir(ctx.data_dir, "WD-1") / f"{A}.json").write_text("{not json", encoding="utf-8")
     got = admin.get(URL).json()
     assert got["copies"] == [] and [u["key"] for u in got["unreadable"]] == [key]   # said, not hidden
+
+
+def test_a_directory_read_failure_is_reported_without_exposing_details(room_server, monkeypatch, caplog):
+    message = "permission denied for /internal/write-backups"
+
+    def fail_to_list(_root, _names):
+        raise OSError(message)
+
+    monkeypatch.setattr(write_copies, "open_copies", fail_to_list)
+    r = room_server["admin"].get(URL)
+    assert r.status_code == 500, r.text
+    assert message not in r.json()["detail"]
+    assert r.json()["detail"] == write_copies.UNREADABLE_HE
+    assert message in caplog.text
 
 
 def test_only_an_admin_sees_or_releases(room_server):
