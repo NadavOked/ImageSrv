@@ -23,7 +23,7 @@ from starlette.types import Scope
 from server.agent import timing as agent_timing, bootguard, inventory, probe, registry, unknown_screen
 from server.agent import answer_failure   # #2666
 from server.core import capabilities
-from server.rounds import direct, prodline, room, room_drivers, room_names
+from server.rounds import direct, prodline, room, room_drivers, room_names, room_state
 from server.rounds import interrupt   # #2528
 from server.brain import ask as brain_ask   # #3654 (K14)
 from server.brain import idleceil as brain_idle   # #3672 (A15): תקרות בדיקת הכתיבה של מסך ההמתנה -- המוח מחליט
@@ -578,7 +578,7 @@ def build_answer(
     # #695: לסבב חדר, המכונה מקבלת את **הפורטים שנבחרו לכתיבה עבורה בלבד**.
     # null שמור בכוונה לסבב ישן (התנהגות "כל הדיסקים"); קבוצה ריקה = לא נבחרה.
     if machine["role"] == "cloner" and session["prefix"] == "ROOM":
-        round_row = room.active_round(conn)
+        round_row = room_state.round_of_wave(conn, session["id"])
         # #1790: בגל חוזר — בלי חריץ שהדיסק שבו כבר נכתב בסבב (לפי המלאי של ה-hello הזה).
         answer["session"]["target_ports"] = room.target_ports(round_row, mac, disks)
         # #2448: ה-serial והגודל שבכל חריץ כזה. #2458: בגל הראשון — מה שהקונסולה הציגה ברגע

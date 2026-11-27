@@ -74,7 +74,9 @@ FINGERPRINTS = {1: "f35aff9de1e2da2378ec9825cedb3248626acaa849d6e23d2209ace73279
                 # 25: session_members.beeps_json (#3125, S62, 15/11); on top of 23 (#3324) and 24 (#3347). Recomputed in the merged tree (argus 15/11)
                 25: "f19602c51ccd8c665425eb8a2533611f5459dfe46503f00978b7c3ce5dc56322",
                 # 26: brain_asks (#3654, 18/11): the brain's one channel to the user
-                26: "e8a745590108e25d0e8bb161877ae551e689fe9abfc393320576989697af521b"}
+                26: "e8a745590108e25d0e8bb161877ae551e689fe9abfc393320576989697af521b",
+                # 27: brain_asks.rows_json (#3673, 20/11): the detail table of a question (`.ba-rows`). Recomputed in the merged tree on top of main's 26
+                27: "3b1534f26ebf2387117f4939ee46b8894ed1875efe3510b0578b409f82c84e1e"}
 
 
 def _fingerprint(conn) -> str:
@@ -113,7 +115,7 @@ def test_both_lab_int_1022_migrations_run_from_3_and_from_4(tmp_path, found):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 26
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 27
     assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'model_slot_maps'").fetchone()
     assert "disk_serial" in [r[1] for r in conn.execute("PRAGMA table_info(tasks)")]
 
@@ -134,7 +136,7 @@ def test_both_round_1107c_migrations_run_from_12_and_from_13(tmp_path, found):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 26
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 27
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"usb_records", "usb_syncs", "disk_f1_marks"} <= names
 
@@ -151,7 +153,7 @@ def test_a_database_on_5_gains_the_held_columns_and_is_stamped_6(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 26
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 27
     columns = [r[1] for r in conn.execute("PRAGMA table_info(net_devices)")]
     assert "held_at" in columns and "held_json" in columns
 
@@ -168,7 +170,7 @@ def test_a_database_on_14_gains_monitor_on_and_is_stamped_15(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 26
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 27
     columns = [r[1] for r in conn.execute("PRAGMA table_info(net_devices)")]
     assert "monitor_on" in columns
 
@@ -186,7 +188,7 @@ def test_a_database_on_16_gains_users_view_and_keeps_every_user_on_the_default(t
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 26
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 27
     assert conn.execute("SELECT view FROM users WHERE username = 'old'").fetchone()[0] is None
 
 
@@ -201,7 +203,7 @@ def test_a_database_on_7_gains_the_email_queue_and_is_stamped_8(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 26
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 27
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
     assert {"email_queue", "email_queue_one_pending"} <= names
 
@@ -284,7 +286,7 @@ def test_a_database_on_8_gains_the_account_lockout_table_and_is_stamped_9(tmp_pa
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 26
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 27
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
     assert {"login_account_failures", "idx_login_account_failures"} <= names
 
@@ -303,7 +305,7 @@ def test_a_database_on_9_gains_the_cap_surface_and_old_rows_are_the_console(tmp_
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 26
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 27
     assert conn.execute("SELECT surface FROM login_account_failures").fetchone()[0] == "console"
 
 
@@ -321,7 +323,7 @@ def test_a_database_on_16_gains_the_write_ledger_and_is_stamped_21(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 26
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 27
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"write_ledger", "round_interrupts"} <= tables
     assert "boot_id" in [r[1] for r in conn.execute("PRAGMA table_info(net_devices)")]
@@ -338,7 +340,7 @@ def test_a_database_on_16_gains_boot_marks_and_is_stamped_17(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 26
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 27
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
     assert {"boot_marks", "boot_marks_mac"} <= names
     assert conn.execute("SELECT COUNT(*) FROM boot_marks").fetchone()[0] == 0
@@ -386,7 +388,7 @@ def test_main_18_and_lab_20_both_reach_21_with_every_table(tmp_path, found, tabl
     before = _shape(sqlite3.connect(path))
     assert before != fresh                                  # the drop really took something away
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 26
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 27
     assert _shape(conn) == fresh
     conn.close()
     again = connect(path)
@@ -405,6 +407,6 @@ def test_a_database_on_21_gains_the_production_line_tables_and_is_stamped_22(tmp
     raw.commit()
     raw.close()
     conn = connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 26
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == VERSION == 27
     names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     assert {"prodline_rounds", "prodline_disks"} <= names

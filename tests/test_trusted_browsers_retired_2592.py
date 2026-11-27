@@ -20,6 +20,10 @@ TABLE = "trusted_browsers"
 CREATE = "CREATE TABLE IF NOT EXISTS trusted_browsers ("
 #: טקסט בלבד: קובצי bytecode ותמונות אינם "קוד שקורא".
 TEXT = (".py", ".sh", ".js", ".sql", ".c", ".html", ".css", ".json", ".service", ".conf")
+# משקל השארד מזכיר את שם קובץ הטסט בלבד (#4148).
+ALLOWED_MENTIONS = {
+    "tools/git/ci_shard_weights.json": re.compile(r'"tests/test_trusted_browsers_retired_2592\.py": \d+(?:\.\d+)?,?'),
+}
 
 
 def _mentions(roots: tuple[str, ...]) -> list[str]:
@@ -28,9 +32,11 @@ def _mentions(roots: tuple[str, ...]) -> list[str]:
         for path in sorted((REPO / root).rglob("*")):
             if not path.is_file() or path.suffix not in TEXT:
                 continue
+            rel = path.relative_to(REPO).as_posix()
+            allowed = ALLOWED_MENTIONS.get(rel)
             for n, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
-                if TABLE in line:
-                    hits.append(f"{path.relative_to(REPO).as_posix()}:{n}: {line.strip()}")
+                if TABLE in line and (allowed is None or not allowed.fullmatch(line.strip())):
+                    hits.append(f"{rel}:{n}: {line.strip()}")
     return hits
 
 
