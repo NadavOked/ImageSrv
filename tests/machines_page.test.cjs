@@ -282,7 +282,7 @@ test('#977 §4: reboot from the drawer — a confirm window with the consequence
   run('rebootMachine("78%3Aac%3Ac0%3A9b%3A11%3Ac2")');
   assert.equal(run('formOptions.danger'),true); assert.equal(run('formOptions.fields'),undefined,'#1270: nothing to type');
   assert.match(run('formOptions.title'),/לאתחל את מחשב 2\?/);
-  const note=run('formOptions.note'); assert.match(note,/ב-hello הבא/); assert.match(note,/השרת מסרב/);
+  const note=run('formOptions.note'); assert.match(note,/כשידווח שוב לשרת/); assert.match(note,/השרת מסרב/);
   assert.ok(!requests.some(r=>r.url.includes('/reboot')),'nothing sent before the window is confirmed');
   await run('formOptions.onSubmit({})');
   const r=requests.find(x=>x.url.includes('/reboot'));

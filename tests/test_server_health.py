@@ -129,7 +129,7 @@ def test_1816_dnsmasq_names_the_missing_interface(health_server, active, nic):
     assert response.status_code == 200
     row = by_id(response.json())["dnsmasq"]
     assert row["state"] == "bad"
-    assert row["detail"] == f"dnsmasq down: unknown interface {nic}"
+    assert row["detail"] == f"שירות dnsmasq אינו פעיל: כרטיס הרשת {nic} אינו מוכר"
 
 
 @pytest.mark.parametrize("latest", [
@@ -141,14 +141,14 @@ def test_1816_dnsmasq_does_not_report_an_old_missing_interface(health_server, la
         active="failed", journal="unknown interface old0\nFAILED to start up\n" + latest)
     row = by_id(health_server["admin"].get("/api/console/health").json())["dnsmasq"]
     assert row["state"] == "bad"
-    assert "unknown interface" not in row["detail"]
+    assert row["detail"] == "השירות נכשל"
 
 
 def test_1816_missing_journal_keeps_dnsmasq_red_and_says_not_checked(health_server):
     health_server["fake"].update(active="failed", journal="")
     row = by_id(health_server["admin"].get("/api/console/health").json())["dnsmasq"]
     assert row["state"] == "bad"
-    assert "cause not checked" in row["detail"]
+    assert "סיבת התקלה לא נבדקה" in row["detail"]
 
 
 def test_1816_recovered_dnsmasq_does_not_read_old_errors(health_server):

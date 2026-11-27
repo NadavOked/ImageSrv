@@ -100,7 +100,7 @@ def test_a_database_on_12_gains_the_marks_table_and_keeps_its_rows(tmp_path):
     conn.commit()
     conn.close()
     conn = db.connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 26   # 25: session_members.beeps_json (#3125); 22: prodline (#3181); 21: lab/vm-1114c (main 17-18 + lab 19-20: chunk_ledger #2533, brain #3185); 18: users.view (#3025), 17: boot_marks (#2830); round/1107c: #1920 = 13, #1858 = 14; release/v0.91.11: 15 = net_devices.monitor_on (#2850)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 27   # 25: session_members.beeps_json (#3125); 22: prodline (#3181); 21: lab/vm-1114c (main 17-18 + lab 19-20: chunk_ledger #2533, brain #3185); 18: users.view (#3025), 17: boot_marks (#2830); round/1107c: #1920 = 13, #1858 = 14; release/v0.91.11: 15 = net_devices.monitor_on (#2850)
     assert f1_marks.all_marks(conn) == {}                                  # the table is back, empty
     conn.execute("INSERT INTO disk_f1_marks (serial, observed_at, source) VALUES ('S9', 'x', 'auto')")
     with pytest.raises(Exception):                                         # one mark per serial

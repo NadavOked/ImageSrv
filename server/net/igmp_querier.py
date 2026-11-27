@@ -239,15 +239,15 @@ class Querier:
         other = self.other_present(now)
         refused = self.refused()
         if refused is not None:
-            seen = (f" · querier אחר ברשת: {other}" if other else
-                    " · לא נשמע querier אחר — סוויץ' עם IGMP snooping עלול להציף או לחסום את השידור")
+            seen = (f" · שולח שאילתות אחר ברשת: {other}" if other else
+                    " · לא נשמעו שאילתות מהתקן אחר. המתג עלול להציף או לחסום את השידור")
             return "off", refused + seen
         if self.undecided:
             return "bad", f"המוח לא הוכרע אם לשלוח שאילתה על {self.interface} (הכלל נפל): לא נשלחת שאילתה"
         if self.error is not None:
             return "bad", f"לא פועל על {self.interface}: {self.error}"
         if self.other_wins(now):
-            return "ok", f"יש querier אחר ברשת ({other}) — השרת אינו שולח שאילתות"
+            return "ok", f"התקן אחר ברשת ({other}) שולח שאילתות IGMP — השרת אינו שולח שאילתות"
         if self.last_sent is None:
             return "unknown", f"טרם נשלחה שאילתה על {self.interface}"
         age = int(now - self.last_sent)
@@ -256,11 +256,11 @@ class Querier:
         text = (f"פעיל על {self.interface} — שאילתה כל {int(QUERY_INTERVAL)} שניות, "
                 f"האחרונה לפני {age} שניות")
         if other:
-            return "ok", text + f" · querier נוסף ({other}) — השרת קודם לו"
+            return "ok", text + f" · התקן נוסף שולח שאילתות ({other}) — השרת קודם לו"
         hears = self.hears() if self.hears else True
         if hears is False:
             return "warn", (text + f" · חומת האש אינה מקבלת IGMP על {self.interface}, ולכן "
-                            "querier אחר לא יישמע — שמירת שירותי הכרטיס כותבת אותה מחדש")
+                            "שאילתות מהתקן אחר לא יישמעו — שמירת שירותי הכרטיס כותבת אותה מחדש")
         if hears is None:
-            return "warn", text + " · לא נבדק אם חומת האש מקבלת IGMP — querier אחר אולי לא נשמע"
+            return "warn", text + " · לא נבדק אם חומת האש מקבלת IGMP, ולכן ייתכן ששאילתות מהתקן אחר לא יישמעו"
         return "ok", text

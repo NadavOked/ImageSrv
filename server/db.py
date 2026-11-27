@@ -1263,7 +1263,8 @@ CREATE TABLE IF NOT EXISTS brain_asks (
     answered_role   TEXT,
     closed_at       TEXT,
     opened_decision INTEGER,
-    closed_decision INTEGER
+    closed_decision INTEGER,
+    rows_json       TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS brain_asks_one_open ON brain_asks (dedupe) WHERE state = 'open';
 CREATE INDEX IF NOT EXISTS brain_asks_state ON brain_asks (state, id);
@@ -1398,6 +1399,8 @@ ADDED_COLUMNS = [
     ("session_members", "cpu_json", "TEXT"),
     # #3125 (S62): הצלילים של המכונה בסבב (`server/agent/beeps.well_formed`). NULL = לא דווח.
     ("session_members", "beeps_json", "TEXT"),
+    # #3673 (`.ba-rows`, מוקאפ 20/11): פירוט בשאלה (`ask.Rows`) -- תצוגה בלבד. '' = בלי פירוט.
+    ("brain_asks", "rows_json", "TEXT NOT NULL DEFAULT ''"),
     # סבב לחלק מהכיתה: רשימת ה-MAC שנבחרו. NULL = כל הקבוצה.
     # רק הנבחרים מוערים ב-WoL ורק הם מצטרפים — השאר עולים מהדיסק.
     ("sessions", "roster_json", "TEXT"),
@@ -1895,7 +1898,7 @@ def _restrict_mode(path: str) -> None:
 #: ``tests/test_schema_version_1894.py`` נכשל כשהסכמה השתנתה והמספר לא. קוד
 #: ישן שפוגש DB מגרסה גבוהה משלו (חזרה לגרסה קודמת אחרי שהחדשה כבר מיגרה)
 #: מסרב לעלות — ואינו מריץ עליו את המיגרציות שלו.
-SCHEMA_VERSION = 26  # 26: brain_asks (#3654, the brain's channel to the user) · 25: session_members.beeps_json (#3125, S62) · 24: chunk_pass_rates + chunk_pass_counters + brain_decisions.predicted/actual/unit/matched + port_history.failed (#3125, on top of #3324's 23) · 23: wave_senses (#3041/#3125, S46-S50) · 22: prodline_rounds + prodline_disks (#3181, lab/vm-1114d) · 21: lab/vm-1114c joins main (17 boot_marks, 18 users.view) and the lab (write_ledger/round_interrupts/net_devices.boot_id, 19 chunk_ledger, 20 brain_decisions + brain_memory) -- one number above both; every table and column is CREATE/ADD IF missing, so 18 (main) and 20 (lab) both reach it · 20: brain_decisions + brain_memory (#3185, #3064 stage 4; lab only) · 19: chunk_ledger (#2533/#2528 stage 2; lab only) · 18: users.view (#3025; 17 in its PR -- boot_marks took 17 first in release/v0.94.0) · 17: boot_marks (#2830) · 16: room_rounds.hostnames_json (#2786; 15 in its PR -- net_devices.monitor_on took 15 first in release/v0.91.11) · 15: net_devices.monitor_on (#2850/#2844, in release/v0.91.11 -- the PR added the column without the bump) · 14: disk_f1_marks (#1858; 13 in its PR -- #1920 took 13 first in round/1107c) · 13: usb_records/usb_syncs (#1920) · 12: learning_runs/learning_waves/learning_changes/learning_machines (#2028) · 11: journal.machine/round_id/class_id (#1296) ·10: login_account_failures.surface (#2443, Fable) · 9: login_account_failures (#2443) · 8: email_queue (#1751) · 7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
+SCHEMA_VERSION = 27  # 27: brain_asks.rows_json (#3673, the detail table of a question) · 26: brain_asks (#3654, the brain's channel to the user) · 25: session_members.beeps_json (#3125, S62) · 24: chunk_pass_rates + chunk_pass_counters + brain_decisions.predicted/actual/unit/matched + port_history.failed (#3125, on top of #3324's 23) · 23: wave_senses (#3041/#3125, S46-S50) · 22: prodline_rounds + prodline_disks (#3181, lab/vm-1114d) · 21: lab/vm-1114c joins main (17 boot_marks, 18 users.view) and the lab (write_ledger/round_interrupts/net_devices.boot_id, 19 chunk_ledger, 20 brain_decisions + brain_memory) -- one number above both; every table and column is CREATE/ADD IF missing, so 18 (main) and 20 (lab) both reach it · 20: brain_decisions + brain_memory (#3185, #3064 stage 4; lab only) · 19: chunk_ledger (#2533/#2528 stage 2; lab only) · 18: users.view (#3025; 17 in its PR -- boot_marks took 17 first in release/v0.94.0) · 17: boot_marks (#2830) · 16: room_rounds.hostnames_json (#2786; 15 in its PR -- net_devices.monitor_on took 15 first in release/v0.91.11) · 15: net_devices.monitor_on (#2850/#2844, in release/v0.91.11 -- the PR added the column without the bump) · 14: disk_f1_marks (#1858; 13 in its PR -- #1920 took 13 first in round/1107c) · 13: usb_records/usb_syncs (#1920) · 12: learning_runs/learning_waves/learning_changes/learning_machines (#2028) · 11: journal.machine/round_id/class_id (#1296) ·10: login_account_failures.surface (#2443, Fable) · 9: login_account_failures (#2443) · 8: email_queue (#1751) · 7: net_devices.applied_timing (#2056/#2059), disk_sets/disk_set_members/disk_set_history/disk_inventory (#1857), fw_snapshots/fw_baseline (#2080)
 
 
 def _initialize(conn: sqlite3.Connection) -> None:

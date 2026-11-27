@@ -981,8 +981,8 @@ def create_agent_router(ctx: ServerContext,
         ``fill`` -- תוכנית ההשלמה של המוח (K5), רק במצב ``enforce``. בצל המוח מחליט ורושם, והסוכן לא שומע.
         לעולם אינו מכשיל את הדיווח: כל חריגה נרשמת ביומן השרת והתשובה בלי התוספות."""
         try:
-            round_row = room_state.active_round(ctx.conn)
-            if round_row is None or round_row["wave_session_id"] != body.get("session_id"):
+            round_row = room_state.round_of_wave(ctx.conn, body["session_id"])
+            if round_row is None:
                 return {}
             extras: dict = {}
             line = prodline.note_report(ctx.conn, round_row, mac, body.get("targets"), body.get("line_wait"))
