@@ -131,7 +131,7 @@ def test_first_hello_with_run_dir_is_pending_then_cache(fake_machine, tmp_path):
     extra = (f"export IFACE=eth0 RUN_DIR={posix(run)!r} NETPROBE_TTL=900; ")
     first = netprobe_of(sysroot, extra=extra, ethtool=ethtool, lldp=sniffer, fresh=False)
     assert first == {"pending": True}
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + 20   # CI load: the background refresh took >5s (gate 1127)
     cache = run / "netprobe.json"
     while time.monotonic() < deadline and not cache.exists():
         time.sleep(0.05)
@@ -148,7 +148,7 @@ def test_first_hello_with_run_dir_is_pending_then_cache(fake_machine, tmp_path):
     # expired: the next call serves stale and starts a background refresh.
     stale = netprobe_of(sysroot, extra=extra, ethtool=ethtool, lldp=sniffer, fresh=False)
     assert stale["cable"]["status"] == "open"
-    deadline = time.monotonic() + 5
+    deadline = time.monotonic() + 20   # CI load: the background refresh took >5s (gate 1127)
     while time.monotonic() < deadline:
         later = netprobe_of(sysroot, extra=extra, ethtool=ethtool, lldp=sniffer, fresh=False)
         if later.get("cable", {}).get("status") == "short":

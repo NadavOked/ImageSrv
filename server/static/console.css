@@ -2274,6 +2274,19 @@ body.view-only #content{opacity:.96}
 .ba-cd .bar,.ba-t .bar{display:block;height:6px;background:var(--track);border-radius:3px;overflow:hidden}
 .ba-cd .bar i,.ba-t .bar i{display:block;height:100%;background:var(--indigo);border-radius:3px;width:var(--w,0%);margin-inline-start:auto;transition:none}
 .ba-cd .bar.warn i,.ba-t .bar.warn i{background:var(--warn-ink)}
+/* #3673 · פירוט בשאלה (מוקאפ 20/11, ask-kit.css (א)): טבלה קטנה בין ההודעה לספירה. רק טוקנים קיימים. */
+.ba-rows{margin:0 0 16px;border:1px solid var(--clr-border);border-radius:var(--r-sm);background:var(--clr-surface)}
+.ba-rows>h4{border-radius:var(--r-sm) var(--r-sm) 0 0;margin:0;padding:8px 12px;font-size:var(--t-xs);font-weight:600;color:var(--clr-muted);background:var(--clr-hover);border-bottom:1px solid var(--clr-row-border)}
+.ba-rows table{width:100%;border-collapse:collapse;font-size:var(--t-sm)}
+.ba-rows th{padding:4px 12px;text-align:start;font-weight:600;font-size:var(--t-xs);color:var(--clr-muted);border-bottom:1px solid var(--clr-row-border)}
+.ba-rows td{padding:8px 12px;text-align:start;border-bottom:1px solid var(--clr-row-border);vertical-align:top}
+.ba-rows tr:last-child td{border-bottom:0}
+.ba-rows .mono{font-family:var(--font-mono);direction:ltr;unicode-bidi:isolate;font-variant-numeric:tabular-nums}
+.ba-rows .arr{color:var(--clr-muted);padding-inline:4px}
+.ba-rows .dim{color:var(--clr-muted);font-size:var(--t-xs);display:block}
+.ba-rows .more{padding:8px 12px;font-size:var(--t-xs);color:var(--clr-muted);border-top:1px solid var(--clr-row-border)}
+.ba-rows .warnc{color:var(--clr-warning-fg);font-weight:600}
+.ba-rows .badc{color:var(--clr-danger-fg);font-weight:600}
 .ba-opts{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:20px}
 .ba-opts .n-opt small.bad{color:var(--clr-danger-fg);font-weight:600}
 .ba-opts .n-opt:has(input:checked){border-color:var(--clr-action);background:var(--clr-info-soft)}

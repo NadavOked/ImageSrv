@@ -29,7 +29,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from server.brain import memory_view
-from server.rounds import room_stream   # #3978: the column "הרשת"
+from server.rounds import room, room_stream   # #3978: the column "הרשת"
 from server.console import auth
 from server.core import machine_names
 from server.learn import waits as learn_waits
@@ -40,7 +40,7 @@ from server.agent.reports import FINAL
 from server.rounds.room import (
     CLONERS_GROUP, active_round, local_copy_now, round_label, visible_round,
 )
-from server.rounds.room_state import _roster
+from server.rounds.room_state import _roster, active_rounds
 
 #: מה שהשרת מבקש מסוכן דרך ה-hello. reboot — "אתחול מרחוק" ממגירת המחשב
 #: (#977 §4, `wake_api.py`): הצרכן שחסר כש-#980 פתח רק את הכיבוי.
@@ -183,8 +183,8 @@ def keep_on(conn: SqlConnection, keep: list[str], user: str, why: str,
             protect: frozenset[str] | set[str] = frozenset()) -> dict:
     """משאיר דלוקים את ``keep`` ומבקש כיבוי מכל שאר המשכפלים — חוץ ממי שבאמצע סבב.
 
-    ``protect`` — מי שנשאר דלוק גם בלי להיבחר (בפתיחת סבב: המשכפלים של הסבב
-    עצמו, שה-WoL של הפתיחה מעיר). ``why`` — מאיפה הבקשה, נכנס לכל שורת יומן.
+    ``protect`` — מי שנשאר דלוק גם בלי להיבחר (משכפלים שנבחרו לסבבים פעילים).
+    ``why`` — מאיפה הבקשה, נכנס לכל שורת יומן.
     ``keep`` מגיע מ-``resolve_keep`` (לא ריק, רק משכפלים רשומים). מחזיר מה נעשה:
     ``{"kept", "off", "busy"}``, כל אחד ``[{mac, name}]``."""
     rows = _room_machines(conn)
@@ -212,7 +212,9 @@ def keep_on(conn: SqlConnection, keep: list[str], user: str, why: str,
 
 
 def round_protect(conn: SqlConnection) -> set[str]:
-    """המשכפלים של הסבב הפעיל (הבחירה שלו) — לא נכבים בפתיחה גם אם לא נבחרו ב"השאר דלוקים"."""
+    """משכפלים שנבחרו לסבבים פעילים נשארים דלוקים גם אם לא נבחרו ב"השאר דלוקים"."""
+    if room.PARALLEL_ROUNDS:
+        return {mac for row in active_rounds(conn) for mac in (_roster(row) or [])}
     row = active_round(conn)
     return set(_roster(row) or []) if row is not None else set()
 
@@ -295,7 +297,8 @@ def create_room_console_router(ctx) -> APIRouter:
             keep = resolve_keep(ctx.conn, body.get("keep") if isinstance(body, dict) else None)
         except ValueError as exc:
             raise HTTPException(400, str(exc))
-        result = keep_on(ctx.conn, keep, user[0], "השאר דלוקים (מדף החדר)")
+        protect = round_protect(ctx.conn) if room.PARALLEL_ROUNDS else frozenset()
+        result = keep_on(ctx.conn, keep, user[0], "השאר דלוקים (מדף החדר)", protect=protect)
         return {**result, "requested": len(result["off"]), "ttl_s": POWEROFF_TTL_SECONDS}
 
     @router.post("/poweroff")

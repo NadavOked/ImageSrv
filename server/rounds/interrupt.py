@@ -9,7 +9,7 @@
 היום, בלי שאלה: דיסק שנשלף וחזר, ניתוק רשת (אותו אתחול), כשל כתיבה רגיל, וסוכן שאינו
 שולח מזהה אתחול ("לא ידוע" אינו "אותחל", עיקרון 5).
 
-**תוקף** — רק מכונה שחזרה בתוך `lost_wait_seconds` מהדיווח האחרון שלה. אחר כך אין
+**תוקף** — רק מכונה שחזרה בתוך סף האובדן בפועל מהדיווח האחרון שלה. אחר כך אין
 שאלה, והיומן שלה נמחק (`ledger.expire`, מ-`room._mark_lost`).
 
 **בזמן שהשאלה פתוחה** הגל הרץ מסתיים כרגיל למכונות האחרות, ואז הסבב נשאר `active`
@@ -189,7 +189,7 @@ def on_rejoin(conn: SqlConnection, session: sqlite3.Row, mac: str,
     זו מכונה ש**אותחלה** וחזרה בזמן — ואז נרשמת שאלה למפעיל.
 
     שלוש ראיות, כולן נדרשות: יומן של הגל הזה עם מזהה אתחול; מזהה אתחול אחר ב-hello
-    הזה; והדיווח האחרון של החבר בתוך `lost_wait_seconds`. חסרה אחת — ``False``, והמסלול
+    הזה; והדיווח האחרון של החבר בתוך סף האובדן בפועל. חסרה אחת — ``False``, והמסלול
     של #1728 ממשיך כמו שהיה."""
     was, now_boot = ledger.wave_boot(conn, session["id"], mac), ledger.boot_of(conn, mac)
     if was is None or now_boot is None or was == now_boot:
@@ -202,7 +202,7 @@ def on_rejoin(conn: SqlConnection, session: sqlite3.Row, mac: str,
     ages = [a for a in (_age(member["updated_at"], now),
                         _age(wave["started_at"] if wave is not None else None, now))
             if a is not None]
-    if not ages or min(ages) > agent_timing.lost_seconds(conn):
+    if not ages or min(ages) > agent_timing.effective_lost_seconds(conn):
         # לא חזרה בזמן (או שאי אפשר למדוד): אין המשך, והמידע נמחק.
         ledger.expire(conn, session["id"], mac)
         return False
@@ -443,12 +443,12 @@ def for_cloner(conn: SqlConnection, mac: str) -> dict | None:
     ו**לעולם אינו זורק** (מסלול ה-hello, #177): שאלה שלא נקראה פשוט אינה מוצגת במסך המשכפל —
     היא נשארת בקונסולה, והשרת אינו כותב בלעדיה."""
     try:
-        round_row = conn.execute("SELECT * FROM room_rounds WHERE state = 'active' LIMIT 1").fetchone()
+        # #3898: כמה סבבים פעילים -- הסבב שיש עליו שאלה פתוחה על המשכפל הזה (משכפל בסבב אחד בלבד).
+        round_row = conn.execute(
+            "SELECT r.* FROM room_rounds r JOIN round_interrupts i ON i.round_id = r.id"
+            " WHERE r.state = 'active' AND i.mac = ? AND i.answer IS NULL"
+            " ORDER BY r.created_at, r.rowid LIMIT 1", (mac,)).fetchone()
         if round_row is None:
-            return None
-        row = conn.execute("SELECT 1 FROM round_interrupts WHERE round_id = ? AND mac = ?"
-                           " AND answer IS NULL", (round_row["id"], mac)).fetchone()
-        if row is None:
             return None
         disks = [{"port": d["port"], "was_port": d["was_port"]}
                  for d in ledger.incomplete(conn, round_row, mac) if d["was_port"] is not None]

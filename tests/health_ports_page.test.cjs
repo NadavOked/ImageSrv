@@ -3,7 +3,7 @@
 // עיקרון 5: "לא נבדק" (unknown) ≠ "כבוי" (off) ≠ "לא מאזין" (bad) — שלושה צבעים;
 // כל endpoint שלא נקרא הוא מצב משלו, לא "אין".
 // הכרעות נדב 17/09: 06:12 המתגים בפורטים ולא בבריאות; 06:25 מתג בכל שורה, 🔒 = הקלדת שם.
-const {consoleFiles} = require('./console_src.cjs');
+const {consoleFiles, consoleJs} = require('./console_src.cjs');
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
@@ -482,7 +482,7 @@ test('#3887 the page sits under "רשת" in the tree and is no longer a network 
   const idx=fs.readFileSync(path.join(root,'index.html'),'utf8');
   const net=idx.slice(idx.indexOf('id="netTA"'),idx.indexOf('data-page="monitor"'));
   assert.match(net,/data-page="ports"[^]*<span>שירותים<\/span>/); assert.doesNotMatch(idx,/<span>פורטים<\/span>/);
-  const cjs=fs.readFileSync(path.join(root,'console.js'),'utf8');
+  const cjs=consoleJs();
   const nics=cjs.slice(cjs.indexOf('function networkNicsTab('),cjs.indexOf('/* --- לשונית 2'));
   assert.match(nics,/nicsvcPortsCard\(\)/);
 });

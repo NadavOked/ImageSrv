@@ -2,7 +2,7 @@
 // ‏sheet() כבר כך מאז #2860 (windows_frame.test.cjs); כאן `withBusy` שמכסה את כל השאר:
 // חלון openModalContent (למשל "הוסף" מחשב), כפתורי onclick ישירים (למשל "שכפל כלל") ו-vmuAct.
 // בלי דפדפן: console*.js + email_alerts.js + vmupdate.js ב-vm מול DOM מזערי; כל POST מחכה עד release().
-const {consoleFiles} = require('./console_src.cjs');
+const {consoleFiles, consoleJs} = require('./console_src.cjs');
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -186,7 +186,8 @@ test('#2840: vmuAct — one action at a time (the server state machine answers t
 });
 
 test('#2840: every button listed in the audit is wrapped (a new unguarded copy of the pattern fails here)', () => {
-  const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+  const js = consoleJs();
+  const read = (f) => f === 'console.js' ? js : fs.readFileSync(path.join(root, f), 'utf8');
   const wrapped = {
     'console.js': ['scrubLibrary', 'startRound', 'reopenRound', 'startWave', 'reopenRoom', 'wakeRoom', 'wakeMachine', 'wakeGroup', 'clearDiskFailure', 'clearShrinkRecord'],
     'console-services.js': ['svcStart'],   // ‏#3887: healthSvcStart עבר לדף השירותים
@@ -196,5 +197,5 @@ test('#2840: every button listed in the audit is wrapped (a new unguarded copy o
   };
   for (const [file, names] of Object.entries(wrapped)) for (const n of names)
     assert.match(read(file), new RegExp(`^${n} = guarded\\("${n}", ${n}`, 'm'), `${file}: ${n} is not wrapped in guarded()`);
-  assert.match(read('console.js'), /\(event\) => withBusy\(ok, \(\) => okFn\(event\)/, 'openModalContent wraps the ok button');
+  assert.match(js, /\(event\) => withBusy\(ok, \(\) => okFn\(event\)/, 'openModalContent wraps the ok button');
 });

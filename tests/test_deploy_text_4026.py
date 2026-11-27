@@ -3,12 +3,10 @@
 The text names the button the console shows instead. The label is pinned to console.js, so a rename there fails here.
 """
 
-from pathlib import Path
-
+from console_src import console_js
 from server.net.deploy_net import DeployState
 
 SETUP_BUTTON = "הגדרת רשת הפצה…"      # written out here on purpose: a rename must fail a test, not follow the code silently
-CONSOLE_JS = Path(__file__).resolve().parents[1] / "server" / "static" / "console.js"
 
 
 def test_the_unconfigured_hint_names_the_setup_button_and_not_the_hidden_tab():
@@ -19,4 +17,4 @@ def test_the_unconfigured_hint_names_the_setup_button_and_not_the_hidden_tab():
 
 
 def test_the_button_label_is_the_one_the_console_shows():
-    assert f'"{SETUP_BUTTON}"' in CONSOLE_JS.read_text(encoding="utf-8")
+    assert f'"{SETUP_BUTTON}"' in console_js()

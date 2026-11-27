@@ -59,7 +59,7 @@ from server.rounds.sessions import SessionError, SessionStore, SessionSuperseded
 #: #2594: חישובי המצב הטהורים של הסבב יושבים ב-`room_state` ומיובאים לכאן בחזרה,
 #: כך ש-`room.<שם>` ממשיך לעבוד לכל קורא קיים (גם בטסטים).
 from server.rounds.room_state import (  # noqa: F401 -- re-export (#2594)
-    _cancelled, _closed, _disks, _expected, _fresh_disks, _no_disk_count, _port, active_rounds, round_of_mac,
+    _cancelled, _closed, _disks, _expected, _fresh_disks, _no_disk_count, _port, active_rounds, round_of_mac, round_of_wave,
     _red, _remaining, _roster, _selected_ports, _skipped, _unconfirmed, _written,
     active_round, fresh_serials, has_fresh_drawers, ready_drives, red_drives,
     shown_disks, target_disks, target_ports, visible_round, wave_drives,
@@ -92,7 +92,7 @@ PARALLEL_ROUNDS = False
 ROOM_OPERATOR_ROLES = ("admin", "deploy")
 #: מכונה שדיברה עם השרת בטווח הזה נחשבת ערה — הסוכן דוגם כל ~2 שניות.
 AWAKE_SECONDS = 30
-#: #450, #3657: חבר גל שלא דיווח **התקדמות** (לא hello) מוכרז אבוד. הסף (`lost_wait_seconds`, הגדרה, ברירת מחדל 180) וההשוואה
+#: #450, #3657: חבר גל שלא דיווח **התקדמות** (לא hello) מוכרז אבוד. סף האובדן בפועל וההשוואה
 #: הם החלטה של המוח (`brain.silence.judge_lost`, K-LOST); `_mark_lost` אוסף חותמות ומבצע.
 #: #1721, #3657: WoL חוזר לגל פתוח (כל כמה זמן, כמה פעמים, ומתי הסבב נכשל בשם המחשבים שלא חזרו) הוא החלטה של המוח --
 #: `brain.silence.judge_rewake`, כלל K-REWAKE. `_rewake` אוסף עובדות ומבצע: שולח, מכשיל או מכייל.
@@ -134,7 +134,7 @@ def wake_check(conn: SqlConnection, mac: str, disks) -> None:
     אסור לכתוב לדיסק שלא נבחר. hello בלי מלאי, או חריץ שנראה ריק כשבמלאי יש
     דיסק בלי חריץ (סוכן ישן, כונן לא ממופה) — אין הכרעה: החריץ נשאר קשור ואינו
     נכתב (`_unconfirmed`)."""
-    round_row = active_round(conn)
+    round_row = round_of_mac(conn, mac) if PARALLEL_ROUNDS else active_round(conn)
     if (round_row is None or round_row["target_slots_json"] is None
             or not isinstance(disks, list)):
         return
@@ -901,14 +901,37 @@ def round_label(ctx, round_row: sqlite3.Row) -> str:
     return manifest["name"] if manifest else round_row["image_id"]
 
 
-def close_round(ctx, user: str, confirm_name: str) -> None:
-    round_row = visible_round(ctx.conn)
+def select_round(ctx, round_id: object, states: tuple[str, ...] = ("active",)) -> sqlite3.Row | None:
+    """#3898 (S2c): הסבב שהבקשה מתכוונת אליו, לפי `round_id` שבגוף.
+
+    `round_id` נתון -- הסבב הזה בלבד (סבב אחר או סגור: סירוב בשם). חסר -- `None`, והקורא נופל להתנהגות
+    של היום (סבב אחד פעיל), **אלא** אם יש כמה סבבים פעילים (`PARALLEL_ROUNDS`): אז הבקשה מסורבת, ולא
+    מנחשים לאיזה מהם היא מתכוונת."""
+    if round_id is not None:
+        if not isinstance(round_id, str) or not round_id:
+            raise ValueError("round_id לא תקין")
+        row = ctx.conn.execute("SELECT * FROM room_rounds WHERE id = ?", (round_id,)).fetchone()
+        if row is None or row["state"] not in states:
+            raise SessionError(f"אין סבב חדר {round_id} במצב שמאפשר את הפעולה")
+        return row
+    rows = active_rounds(ctx.conn) if PARALLEL_ROUNDS else []
+    if len(rows) > 1:
+        names = ", ".join(f"{r['id']} ({round_label(ctx, r)})" for r in rows)
+        raise SessionError(f"יש כמה סבבים פעילים ({names}) -- חובה לציין round_id")
+    return None
+
+
+def close_round(ctx, user: str, confirm_name: str, round_id: str | None = None) -> None:
+    picked = select_round(ctx, round_id, ("active", "failed"))
+    round_row = picked if picked is not None else visible_round(ctx.conn)
     if round_row is None:
         raise SessionError("אין סבב חדר פעיל")
     # פעולה הרסנית מאחורי הקלדת שם — אותו דפוס כמו מחיקת אימג'
     # (`console_library.delete_image`), ובאותה שורה באפיון. לפני #533
     # POST ריק עם עוגייה תקפה הרג משדר חי, וההקלדה נאכפה במסך בלבד.
-    if confirm_name != round_label(ctx, round_row):
+    # #3898: עם `round_id` המזהה הוא האישור (שני סבבים על אותו אימג' נושאים אותו שם);
+    # `confirm_name` נשאר רק לבקשה בלי מזהה (תאימות לאחור).
+    if picked is None and confirm_name != round_label(ctx, round_row):
         raise ValueError("השם שהוקלד אינו זהה לשם האימג' שהסבב משדר")
     original_state = round_row["state"]
     # #3707: שלוש הכתיבות של הסגירה — התביעה, `closed` והשחזור — עוברות ב-`_write_lock`
@@ -1006,7 +1029,7 @@ def _mark_lost(conn: SqlConnection, store: SessionStore, wave: sqlite3.Row,
     מקבלת את הסף כולו מעכשיו — חסום, לא קפוא, ולא אובדן מיידי.
     """
     now = _utcnow()
-    lost_limit = agent_timing.lost_seconds(conn)   # #2056: הגדרה בקונסולה; המוח קורא אותה כקלט, ולא מחזיק עותק
+    lost_limit = agent_timing.effective_lost_seconds(conn)
     # #3657 (K-LOST, S22): מי אבד ומי חותמתו בעתיד -- החלטה של המוח. אין החלטה (המוח נכשל) = לא מסמנים ולא מכיילים דבר
     calls = silence.decide_lost(conn, members, wave_id=wave["id"], started_at=wave["started_at"], now=now,
                                 lost_s=lost_limit, jump_s=clockstep.JUMP_SECONDS, final=reports.FINAL)
@@ -1457,16 +1480,43 @@ def tick(conn: SqlConnection, store: SessionStore, joiner: str | None = None) ->
     clockstep.guard(conn, store, _utcnow())
     from server.rounds import direct_settle           # noqa: PLC0415 -- #2985: imports direct, which imports room
     direct_settle.settle(conn, store, _utcnow())      # #2985: a closed direct round closes its source task too
-    round_row = active_round(conn)
-    if round_row is None:
-        roundend.settle(conn, None)                   # #3276: K10's open decisions get what the old code did
+    if not PARALLEL_ROUNDS:
+        round_row = active_round(conn)
+        if round_row is None:
+            roundend.settle(conn, None)               # #3276: K10's open decisions get what the old code did
+        else:
+            _tick_round(conn, store, round_row, joiner)
         return
+
+    # K10 settles across the room. Until S3 there is only one open broadcast wave.
+    open_wave = conn.execute(
+        "SELECT s.id FROM sessions s JOIN room_rounds r ON r.wave_session_id = s.id"
+        " WHERE r.state = 'active' AND s.state = 'open' LIMIT 1"
+    ).fetchone()
+    roundend.settle(conn, open_wave["id"] if open_wave is not None else None)
+    for round_row in active_rounds(conn):
+        try:
+            _tick_round(conn, store, round_row, joiner)
+        except Exception as exc:                     # noqa: BLE001 -- הסבבים הבאים עדיין צריכים להתקדם
+            round_id = round_row["id"]
+            log.exception("room tick failed for round %s", round_id)
+            try:
+                # היומן סוגר טרנזקציה פתוחה; אל תשמור כתיבה חלקית של סבב שנכשל.
+                conn.rollback()
+                journal(conn, "room_tick_failed", f"{round_id} — {_one_line(exc)}", round_id=round_id)
+            except Exception:                         # noqa: BLE001 -- כשל ביומן אינו עוצר את שאר הסבבים
+                log.exception("room tick failure for round %s was not journaled", round_id)
+
+
+def _tick_round(conn: SqlConnection, store: SessionStore, round_row: sqlite3.Row,
+                joiner: str | None) -> None:
     wave = None
     if round_row["wave_session_id"]:
         wave = conn.execute(
             "SELECT * FROM sessions WHERE id = ?", (round_row["wave_session_id"],)
         ).fetchone()
-    roundend.settle(conn, wave["id"] if wave is not None and wave["state"] == "open" else None)
+    if not PARALLEL_ROUNDS:
+        roundend.settle(conn, wave["id"] if wave is not None and wave["state"] == "open" else None)
 
     if wave is None or wave["state"] == "closed":
         # הסבב פעיל והגל שלו כבר אינו. בלי הענף הזה זה מצב **יציב**:
@@ -2777,7 +2827,7 @@ def create_room_router(ctx, wake=None, origin: str = "console") -> APIRouter:
             raise HTTPException(400, str(exc) or "בקשה לא תקינה")
         if keep is None:
             return opened
-        # המשכפלים של הסבב עצמו (ה-WoL של הפתיחה מעיר אותם) לא נכבים גם אם לא נבחרו.
+        # המשכפלים של הסבבים הפעילים נשארים דלוקים גם אם לא נבחרו.
         room_console = _console()
         result = room_console.keep_on(
             ctx.conn, keep, user[0], f"השאר דלוקים בפתיחת סבב {opened['id']}",
@@ -2785,8 +2835,18 @@ def create_room_router(ctx, wake=None, origin: str = "console") -> APIRouter:
         return {**opened, "keep_on": result}
 
     @router.post("/start")
-    def start_now(user=Depends(room_operator)):
-        round_row = active_round(ctx.conn)
+    async def start_now(request: Request, user=Depends(room_operator)):
+        try:
+            body = await request.json()
+        except Exception:                              # noqa: BLE001 -- גוף ריק = כמו תמיד
+            body = {}
+        try:
+            picked = select_round(ctx, body.get("round_id") if isinstance(body, dict) else None)
+        except SessionError as exc:       # לפני ValueError -- הוא יורש ממנו
+            raise HTTPException(409, str(exc))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        round_row = picked if picked is not None else active_round(ctx.conn)
         if round_row is None:
             raise HTTPException(409, "אין סבב חדר פעיל")
         if not _direct().source_ready(round_row):
@@ -2891,7 +2951,13 @@ def create_room_router(ctx, wake=None, origin: str = "console") -> APIRouter:
         dev = body.get("dev")
         if mac is None or not isinstance(dev, str) or not dev.isalnum() or len(dev) > 32:
             raise HTTPException(400, "חסר מחשב (mac) או דיסק (dev) תקין")
-        round_row = active_round(ctx.conn)
+        try:
+            picked = select_round(ctx, body.get("round_id"))
+        except SessionError as exc:       # לפני ValueError -- הוא יורש ממנו
+            raise HTTPException(409, str(exc))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        round_row = picked if picked is not None else active_round(ctx.conn)
         wave = (ctx.conn.execute("SELECT * FROM sessions WHERE id = ?",
                                  (round_row["wave_session_id"],)).fetchone()
                 if round_row is not None and round_row["wave_session_id"] else None)
@@ -2929,7 +2995,7 @@ def create_room_router(ctx, wake=None, origin: str = "console") -> APIRouter:
             body = {}
         typed = body.get("confirm_name", "") if isinstance(body, dict) else ""
         try:
-            close_round(ctx, user[0], typed)
+            close_round(ctx, user[0], typed, body.get("round_id") if isinstance(body, dict) else None)
         except SessionError as exc:       # לפני ValueError — הוא יורש ממנו
             raise HTTPException(409, str(exc))
         except ValueError as exc:
@@ -2953,7 +3019,13 @@ def create_room_router(ctx, wake=None, origin: str = "console") -> APIRouter:
 
     def _answer_interrupt(body: dict, who: str) -> dict:
         choice = body.get("answer")
-        round_row = active_round(ctx.conn)
+        try:
+            picked = select_round(ctx, body.get("round_id"))
+        except SessionError as exc:       # לפני ValueError -- הוא יורש ממנו
+            raise HTTPException(409, str(exc))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc))
+        round_row = picked if picked is not None else active_round(ctx.conn)
         if round_row is None:
             raise HTTPException(409, "אין סבב חדר פעיל")
         try:

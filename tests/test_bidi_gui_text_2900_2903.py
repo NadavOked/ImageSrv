@@ -37,9 +37,10 @@ def test_console_production_row_isolates_each_number_with_its_unit():
 const {readFileSync} = require('node:fs');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
-const consoleJs = readFileSync('server/static/console.js', 'utf8');
+const {consoleJs} = require('./tests/console_src.cjs');
+const js = consoleJs();
 const ctx = vm.createContext({esc: String, bayChip: () => ['green', ''], drawerPulled: () => false});
-vm.runInContext(consoleJs.slice(consoleJs.indexOf('const DRAWER_ERROR_HE'), consoleJs.indexOf('const DRAWER_STATE_HE')), ctx);
+vm.runInContext(js.slice(js.indexOf('const DRAWER_ERROR_HE'), js.indexOf('const DRAWER_STATE_HE')), ctx);
 vm.runInContext(readFileSync('server/static/console-prodline.js', 'utf8'), ctx);
 const display = (error, error_short) => ctx.plRow({}, {disks: []}, {}, {live: true, disk: {state: 'failed', error, error_short}})[3];
 const slow = 'איטי — 33 MB/s, מתחת לסף 50 MB/s';

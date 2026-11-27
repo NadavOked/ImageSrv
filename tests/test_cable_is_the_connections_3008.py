@@ -11,15 +11,14 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from server import db
 from server.brain import diskcolor, memory
 from server.disks import disk_rule
 
-ROOT = Path(__file__).resolve().parents[1]
 CABLE = {"serial": "S1", "port": 1, "cause": "cable"}
 DISK_HIS = {"serial": "S1", "port": 1, "cause": "disk"}
 DISK = {"serial": "S1", "port": 1, "smart": "ok"}
@@ -70,7 +69,7 @@ def test_what_is_not_a_cable_cause_did_not_move():
 def test_the_table_has_the_connection_row_and_its_words_are_the_table_chip():
     assert disk_rule.YELLOW == ("failed_last", "cable_failed", "write_incomplete")
     assert disk_rule.REASON_SHORT_HE["cable_failed"] == "חיבור לא תקין"
-    js = (ROOT / "server/static/console.js").read_text(encoding="utf-8")
+    js = console_js()
     pill = re.search(r'cause === "cable"\) return chip\("y", "([^"]+)"\)', js)
     assert pill and pill.group(1) == disk_rule.REASON_SHORT_HE["cable_failed"]          # the disk tab says the same word
 

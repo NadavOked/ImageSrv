@@ -11,11 +11,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const {consoleJs} = require('./console_src.cjs');
 
 const STATIC = path.resolve(__dirname, '../server/static');
 const read = (n) => fs.readFileSync(path.join(STATIC, n), 'utf8');
 // ה-UI האמיתי (objHeader / datagrid / kpi / card / note / kv / pill) מחולץ מ-console.js, לא מועתק לכאן
-const consoleLines = read('console.js').split('\n');
+const consoleLines = consoleJs().split('\n');
 const uiStart = consoleLines.findIndex((l) => l === 'const UI = {');
 const uiEnd = consoleLines.findIndex((l, i) => i > uiStart && l === '};');
 const UI_SRC = consoleLines.slice(uiStart, uiEnd + 1).join('\n');
@@ -189,7 +190,7 @@ test('text from the server is escaped everywhere it is drawn', () => {
 });
 
 test('the page is for the primary server only: the tree entry is admin-only, and a secondary server cannot reach it', () => {
-  const html = read('index.html'), js = read('console.js');
+  const html = read('index.html'), js = consoleJs();
   assert.match(html, /data-page="asks" data-admin onclick="selectPageById\('asks'\)"/);
   assert.ok(html.indexOf('data-page="asks"') > html.indexOf('data-page="deploy"'), 'under "סבב הפצה"');
   assert.ok(html.indexOf('data-page="asks"') < html.indexOf('data-page="images"'));

@@ -2,10 +2,9 @@
 
 שלושה ערכים שהיו קבועים בקוד:
 
-- ``lost_wait_seconds`` (#2056) — כמה זמן הסבב מחכה למשכפל שהפסיק לדווח לפני
-  שהוא מסומן "אבד". ברירת מחדל 180ש', **מותר רק להגדיל**,
-  עד 30 דקות. ערך אחד שולט על השרת (K-LOST, ``brain.silence``, #3657), על ``--retries-until-drop``
-  של השולח ועל הסוכן (שמקבל אותו ב-hello).
+- ``lost_wait_seconds`` (#2056) — ההמתנה המזערית של השרת למשכפל שהפסיק לדווח.
+  ברירת מחדל 180ש', **מותר רק להגדיל**, עד 30 דקות. סף האובדן בשרת
+  (``effective_lost_seconds``, #4044) מתחשב גם בתקרת הרשת. הסוכן מקבל ב-hello את הערך השמור.
 - ``gui_idle_poweroff_seconds`` (#2059) — כיבוי אוטומטי בגואי הקטן כשאין פעילות.
   ברירת מחדל 300ש' (``IDLE_POWEROFF_S`` ב-``agent/lib/core/idle.sh``), טווח 1–60 דקות.
 - ``gui_end_poweroff_seconds`` (#2059) — ספירה לכיבוי בסוף משימה. ברירת מחדל 20ש'
@@ -121,6 +120,11 @@ def tail_shrink_enabled(conn: SqlConnection) -> bool:
 
 def lost_seconds(conn: SqlConnection) -> int:
     return seconds(conn, LOST)
+
+
+def effective_lost_seconds(conn: SqlConnection) -> int:
+    """#4044: תקרת הרשת של המגירה ועוד 30 ש' לחידוש הדיווח, ובכל מקרה לפחות ההמתנה שהוגדרה."""
+    return max(lost_seconds(conn), seconds(conn, NET_WAIT) + 30)
 
 
 def retries_until_drop(base: int, lost: int) -> int:

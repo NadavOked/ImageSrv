@@ -307,7 +307,7 @@ def test_a_database_on_23_gains_the_forecast_columns_the_pass_tables_and_is_stam
     raw.commit()
     raw.close()
     conn = db.connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 26
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 27
     cols = {r[1] for r in conn.execute("PRAGMA table_info(brain_decisions)")}
     assert {"predicted", "actual", "unit", "matched"} <= cols
     assert "failed" in {r[1] for r in conn.execute("PRAGMA table_info(port_history)")}

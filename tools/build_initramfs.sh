@@ -660,7 +660,15 @@ chmod 0755 "$ROOT/etc/imagesrv/udhcpc.probe"
 # password field is locked on purpose: this file travels inside an
 # initramfs served over plain HTTP, so any password in it is a published
 # one. Nothing in the product image listens for a login (#1266).
-printf 'root:x:0:0:root:/root:/bin/sh\n' > "$ROOT/etc/passwd"
+# #4089: an overlay can provide SSH. BusyBox ash can run the reboot and
+# poweroff applets before PATH lookup, bypassing the imagesrv-power links.
+# Use Debian's dash for the login shell so bare commands find those links.
+root_shell=/bin/sh
+if [ -n "$EXTRA_OVERLAY" ]; then
+    [ -x "$ROOT/usr/bin/dash" ] || copy_bin dash
+    root_shell=/usr/bin/dash
+fi
+printf 'root:x:0:0:root:/root:%s\n' "$root_shell" > "$ROOT/etc/passwd"
 printf 'root:x:0:\n'                     > "$ROOT/etc/group"
 printf 'root:*:19000:0:99999:7:::\n'     > "$ROOT/etc/shadow"
 chmod 0600 "$ROOT/etc/shadow"
