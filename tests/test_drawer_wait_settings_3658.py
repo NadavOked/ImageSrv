@@ -16,9 +16,10 @@ import re
 
 import pytest
 
+from console_src import console_js
 from conftest import hello_body
 from native import requires_native
-from test_agent import AGENT, BASH, fake_machine, posix, sh  # noqa: F401
+from test_agent import BASH, fake_machine, posix, sh  # noqa: F401
 from agentlib import agent_sources
 from test_agent_timing_2056 import (   # noqa: F401 -- room_server is a fixture
     CLONER1, CLONER2, URL, _applied, _hello_applied, disk, drawers_hello, room_server)
@@ -102,7 +103,7 @@ def test_applied_counts_only_machines_that_read_the_new_values_back(room_server)
 
 def test_the_console_has_both_rows_in_the_cloning_card_with_the_servers_range():
     from server.agent import timing
-    js = (AGENT.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     for key in (DISK, NET):
         row = re.search(rf'\{{ key: "{key}", card: "deploy", type: "agenttime".*?\n(?:    .*\n)*?    sheetNote', js)
         assert row, f"console.js has no agenttime row for {key} in the deploy card"

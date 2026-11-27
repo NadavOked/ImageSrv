@@ -1054,16 +1054,6 @@ static int idle_modal(App *a, const Event *e, int demo) {
     return 1;
 }
 
-/* #1802 (Nadav 04/11): "המחשב הזה לא רשום" stays; its button is
- * fail_btn=reboot|F2 — הפעלה מחדש (ui.sh). A failure button whose label starts
- * with "F2 " is pressed by F2, not by Enter -- the label names its key. The
- * index of that button on the failure screen, or -1. */
-static int fail_f2_btn(const App *a) {
-    if (a->screen != SCREEN_FAILURE) return -1;
-    for (int i = 0; i < a->st.nfail_btns; i++) if (!strncmp(a->st.fail_btns[i].label, "F2 ", 3)) return i;
-    return -1;
-}
-
 /* ---- #649 (mockup 14): the way in and out of the toolbox ----------------------- */
 
 /* a question or a window is up -- F3 does not open anything under it */

@@ -128,7 +128,7 @@ def test_a_lower_querier_silences_the_server_until_it_goes_quiet(conn):
     # שאילתה ראשונה יצאה לפני שנשמע ה-querier; אחריה — שקט עד שהוא נעלם.
     assert [t - 1000.0 for t, *_ in sock.sent] == [0.0]
     state, detail = querier.health()
-    assert state == "ok" and "יש querier אחר ברשת (10.44.12.1)" in detail
+    assert state == "ok" and "התקן אחר ברשת (10.44.12.1) שולח שאילתות IGMP" in detail
     clock.now += q.OTHER_PRESENT
     sock = run(querier, clock, [1])
     assert len(sock.sent) == 1, "אחרי שה-querier האחר שתק — השרת חוזר לשאול"
@@ -140,7 +140,7 @@ def test_a_higher_querier_does_not_silence_the_server(conn):
     sock = run(querier, clock, [ip_packet("10.44.12.200", q.query_packet()), 130])
     assert len(sock.sent) == 2
     state, detail = querier.health()
-    assert state == "ok" and "querier נוסף (10.44.12.200)" in detail
+    assert state == "ok" and "התקן נוסף שולח שאילתות (10.44.12.200)" in detail
 
 
 def test_our_own_query_is_not_another_querier(conn):
@@ -158,7 +158,7 @@ def test_the_switch_turns_sending_off_and_says_so(conn):
     assert sock.sent == []
     state, detail = querier.health()
     assert state == "off" and detail.startswith("כבוי בהגדרות")
-    assert "querier אחר ברשת: 10.44.12.1" in detail
+    assert "שולח שאילתות אחר ברשת: 10.44.12.1" in detail
 
 
 def test_a_nic_with_multicast_off_is_not_queried(conn):

@@ -1,11 +1,12 @@
 """#989: room history displays measured wave counts, never inventing zero."""
 
 import re
-from pathlib import Path
+
+from console_src import console_js
 
 
 def _room_history_html() -> str:
-    js = (Path(__file__).resolve().parent.parent / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     return js.split("function roomHistoryHtml() {", 1)[1].split("\n}", 1)[0]
 
 

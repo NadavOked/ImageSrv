@@ -2374,6 +2374,12 @@ function isRawTechnical(text) {
   const latin = (t.match(/[A-Za-z]/g) || []).length, hebrew = (t.match(/[֐-׿]/g) || []).length;
   return latin >= 4 && latin > hebrew;
 }
+function isSystemDiagnostic(text) {
+  return /\b(?:Errno\s+\d+|Permission denied)\b/i.test(text || "");
+}
+function technicalDetails(text) {
+  return `<details class="tech"><summary>פרטים טכניים</summary><code dir="ltr">${esc(text)}</code></details>`;
+}
 /* ‏action = [תווית, onclick] — כפתור בעמודה נפרדת בקצה השורה (console-full.html P.home), לא קישור בתוך הטקסט. */
 function attnItem(cls, mainHtml, action = null, tech = "") {
   const techHtml = tech ? `<details class="tech"><summary>פרטים טכניים</summary><code dir="ltr">${esc(tech)}</code></details>` : "";
@@ -2418,7 +2424,7 @@ function homeAttention() {
   for (const c of Array.isArray(HEALTH) ? HEALTH : []) {
     if (c.state !== "warn" && c.state !== "bad") continue;
     const action = c.id === "deploy_net" ? (netDeployUnset() ? ["הגדרת רשת הפצה…", "netPickDeploy()"] : ["הגדר רשת הפצה", "openNetwork(2)"]) : ["לבריאות", "selectPageById('health')"];   // ‏#3029: לא הוגדרה = אין לשונית, הכפתור פותח את החלון
-    const raw = c.detail && isRawTechnical(c.detail);
+    const raw = c.detail && (isRawTechnical(c.detail) || isSystemDiagnostic(c.detail));
     items.push(attnItem(c.state === "bad" ? "err" : "warn", `<b>${esc(c.label)}</b>${c.detail && !raw ? " — " + ltrRuns(c.detail) : ""}.`, action, raw ? c.detail : ""));
   }
   // ‏#1049 שלב ב': שערי בדיקת המכונה (סוללה, שעון, NVMe, קריסה, כפילות IP, CRC)
@@ -4512,7 +4518,7 @@ function deleteImage(id) {
 function openImageIngest() {
   if (!(ME && ME.role === "admin")) { toast("אין הרשאה"); return; }
   sheet({ title: "העלאת קובץ tar", sub: "אימג׳ שנוצר במקום אחר", submitLabel: "העלה", size: "mid",
-    note: `<div class="form"><div class="field full">${dropzoneHtml({ id: "imageFile", accept: ".tar,application/x-tar", aria: "בחירת קובץ tar של אימג'" })}</div><div class="field full"><div class="form-note">הקובץ יועלה ויאומת מול ה-manifest. אימג׳ פגום לא ייכנס לספרייה.</div></div><div id="imageUploadProgress"></div></div>`,
+    note: `<div class="form"><div class="field full">${dropzoneHtml({ id: "imageFile", accept: ".tar,application/x-tar", aria: "בחירת קובץ tar של אימג'" })}</div><div class="field full"><div class="form-note">הקובץ יועלה ויאומת מול קובץ התיאור של האימג׳. אימג׳ פגום לא ייכנס לספרייה.</div></div><div id="imageUploadProgress"></div></div>`,
     onSubmit: startImageUpload });
 }
 
@@ -5483,8 +5489,8 @@ const SMART_REASON_HE = { health_failed: "בדיקת הבריאות נכשלה",
 /* #1861: the rest of smart.sh's reason words (unchecked) -- with SMART_REASON_HE and FAILURE_CAUSE_HE, every
    word the agent or the server puts in `reason` has Hebrew (tests/test_reasons_he_1861.py). Same words as smart.sh
    smart_reason_he and native-gui smart_reason_text. */
-const SMART_UNCHECKED_HE = { no_health: "הדיסק אינו מדווח על בריאות", no_smartctl: "smartctl חסר ב-initramfs", timeout: "smartctl לא ענה בזמן",
-  open_failed: "smartctl לא הצליח לפתוח את הדיסק", no_smart: "הדיסק אינו תומך ב-SMART", ro_unread: "לא נקרא אם הדיסק במצב קריאה בלבד",
+const SMART_UNCHECKED_HE = { no_health: "הדיסק אינו מדווח על בריאות", no_smartctl: "כלי בדיקת SMART חסר בסביבת האתחול", timeout: "כלי בדיקת SMART לא ענה בזמן",
+  open_failed: "כלי בדיקת SMART לא הצליח לפתוח את הדיסק", no_smart: "הדיסק אינו תומך ב-SMART", ro_unread: "לא נקרא אם הדיסק במצב קריאה בלבד",
   cmd_failed: "פקודת SMART לדיסק נכשלה", no_attrs: "הדיסק לא החזיר טבלת מאפייני SMART",   /* #1903 */
   no_table: "טבלת הידע של SMART חסרה — לא נבדק",
   standby: "הדיסק במצב המתנה ולא הוער לבדיקת SMART" };   /* #1775: smartctl -n standby */
@@ -5884,7 +5890,7 @@ function silentMachines(kids) {
 function silentCard(kids) {
   const admin = isAdmin(), silent = silentMachines(kids);
   const body = silent == null ? UI.note("warn", "רשימת הרשת לא נקראה — אי אפשר לדעת מי לא דיווח")
-    : !silent.length ? UI.empty("מחשב ללא hello מעל 10 דקות יופיע כאן עם אפשרות להעיר אותו (WoL).", "", "כל המחשבים הרשומים דיווחו")
+    : !silent.length ? UI.empty("מחשב שלא דיווח מעל 10 דקות יופיע כאן עם אפשרות להעיר אותו (WoL).", "", "כל המחשבים הרשומים דיווחו")
     : UI.datagrid({ columns: ["מחשב", "נראה לאחרונה", ""], rows: sortMachinesBySuffix(silent).map((m) => { const n = netFor(m.mac); return [
       `<b>${esc(machineName(m) || m.mac)}</b>`, esc(seenAgo(n && n.last_seen)),
       admin ? `<button class="btn sm" onclick="wakeMachine('${encodeId(m.mac)}')">WoL</button>` : ""]; }) });
@@ -5919,7 +5925,7 @@ function poweroffRoom(gidEnc) {
   const g = (GROUPS || []).find((x) => x.id === gid);
   if (!g || !isAdmin()) return;
   sheet({ title: "לכבות את כל מחשבי השיכפול?", sub: g.label,
-    note: impactList([["w", "כל משכפל שממתין נכבה ב-hello הבא שלו (עד כ-15 שניות); מחשב שלא יענה תוך 2 דקות לא ייכבה"],
+    note: impactList([["w", "כל משכפל שממתין ייכבה כשידווח שוב לשרת (עד כ-15 שניות); מחשב שלא יענה תוך 2 דקות לא ייכבה"],
       ["ok", "הכיבוי עובר דרך הסוכן ורק אחרי שדרך WoL — כך אפשר להעיר אותו שוב"], ["w", "בזמן סבב פעיל השרת מסרב"]]),
     danger: true, submitLabel: "כיבוי כל המשכפלים",
     onSubmit: async () => { const r = await post("/room/poweroff", { confirm_name: g.label }); toast(`בקשת כיבוי נשלחה ל-${r.requested} מחשבים — "מחוברים" יירד כשהם נכבים`, 6000); } });
@@ -6451,7 +6457,7 @@ function firmwareSectionHtml(m, fw) {
       : `<b>ריק</b><span class="sub">${was ? `היה: ${esc(was.model || "דיסק")} · ${esc(was.serial || "")}` : ""}</span>`;
     return { attrs: r.changed ? 'class="fw-row-chg"' : "", cells: [esc(r.connection), disk, d && d.link_gbps ? `<bdi dir="ltr">${esc(d.link_gbps)} Gb/s</bdi>` : "—"] };
   });
-  const table = rows.length ? UI.datagrid({ columns: ["חיבור", "דיסק", "קישור"], rows }) : `<div class="muted">אין רשימת חיבורים מה-hello האחרון.</div>`;
+  const table = rows.length ? UI.datagrid({ columns: ["חיבור", "דיסק", "קישור"], rows }) : `<div class="muted">אין רשימת חיבורים בדיווח האחרון של המכונה.</div>`;
   const macEnc = encodeId(m.mac);
   const acts = isAdmin() ? `<div class="fw-acts">${changes.length ? `<button class="btn primary" onclick="firmwareAccept('${macEnc}')">זו ההגדרה הנכונה — שמור</button>` : ""}${cur.model ? `<button class="btn" onclick="firmwareCompare('${macEnc}')">השווה לדגם${fw.peers && fw.peers.length ? ` (${fw.peers.length + 1} מכונות)` : ""}</button>` : ""}</div>` : "";
   const gap = fw.gap_below_populated && changes.length ? `<p class="cap">חיבור SATA ריק בזמן שחיבור גבוה ממנו מאוכלס: ה-BIOS של HP עלול לעצור על זה ב-F1 (שגיאה 1796). ראו Issue 1858.</p>` : "";
@@ -6609,7 +6615,7 @@ function rebootMachine(mac) {
     await post("/machines/" + encodeId(m.mac) + "/reboot", { confirm_name: m.suffix, confirm_local_copy: true });
     toast(`בקשת אתחול נשלחה ל-${name}`, 6000); });
   sheet({ title: `לאתחל את ${name}?`, sub: m.mac, danger: true, submitLabel: "אתחול",
-    note: impactList([["w", "המחשב יאותחל ב-hello הבא שלו (עד כ-15 שניות), רק אם הוא ממתין; מחשב שלא יענה תוך 2 דקות לא יאותחל"],
+    note: impactList([["w", "המחשב יאותחל כשידווח שוב לשרת (עד כ-15 שניות), רק אם הוא ממתין; מחשב שלא יענה תוך 2 דקות לא יאותחל"],
       ["w", "מחשב עם קליטה פתוחה, או משכפל בזמן סבב חדר — השרת מסרב"], ["ok", "האתחול עובר דרך הסוכן, לא ניתוק חשמל"]]),
     onSubmit: async () => { await post("/machines/" + encodeId(m.mac) + "/reboot", { confirm_name: m.suffix }); toast(`בקשת אתחול נשלחה ל-${name} — "מחובר" יתעדכן כשהוא יעלה מחדש`, 6000); } });
 }
@@ -7116,7 +7122,7 @@ const HEALTH_SHORT = { ok: "תקין", info: "מידע", warn: "דורש בדי�
 function healthDetailHtml(c) {
   const d = String(c.detail || "");
   if (!d) return "";
-  const raw = isRawTechnical(d);
+  const raw = isRawTechnical(d) || isSystemDiagnostic(d);
   const short = raw ? (HEALTH_SHORT[c.state] || "פרטים") : d.split(" — ")[0];
   if (short === d) return `<span class="wrap">${esc(d)}</span>`;
   const full = raw ? `<code dir="ltr">${esc(d)}</code>` : `<div>${esc(d)}</div>`;
@@ -7268,7 +7274,7 @@ function updateUpToDate() {
 function confirmSettingsBackup() {
   sheet({
     title: "הורדת גיבוי הגדרות",
-    sub: "הקובץ מכיל סודות: סיסמאות מגובבות, סודות MFA ומפתח התעודה. לשמור אותו כמו סיסמה — לא בתיקייה משותפת ולא במייל. האימג'ים אינם בפנים (הם בתיקיית האימג'ים ומגובים ב-rsync).",
+    sub: "הקובץ מכיל סודות: סיסמאות מגובבות, סודות MFA ומפתח התעודה. לשמור אותו כמו סיסמה — לא בתיקייה משותפת ולא במייל. האימג'ים אינם בפנים (הם בתיקיית האימג'ים ומגובים בנפרד).",
     submitLabel: "הורד",
     onSubmit: async () => {
       if (secondaryReadOnly()) throw new Error(SECONDARY_READ_ONLY);   // ‏#1179: הגיבוי היה של הראשי
@@ -7467,7 +7473,7 @@ function permissions() {
     + roleCard("הפצה", "תפקיד לתחנה ולתהליך הטכנאי. אין לו כניסה לקונסולה.");
   const matrix = UI.datagrid({ columns: ["", "מנהל", "הפצה"],
     rows: ROLE_MATRIX.map(([area, a, d, src]) => [`<span title="${esc(src)}">${esc(area)}</span>`, UI.status(a[0], a[1]), UI.status(d[0], d[1])]) })
-    + `<div class="cap" style="padding:10px 14px">אין הרשאה שקטה: מה שאינו "כן" מחזיר 403 בשרת, לא רק מוסתר בממשק. למשתמש הפצה אין כניסה לקונסולה (#1073) — הוא עובד ממחשב הבנייה: שיכפול מאימג' בשרת, שיכפול ישיר מהדיסק, ושחזור לדיסק שלו. המנהל הפעיל האחרון אינו ניתן למחיקה או להורדה. ריחוף על אזור מציג את ה-endpoint.</div>`;
+    + `<div class="cap" style="padding:10px 14px">אין הרשאה שקטה: מה שאינו "כן" מחזיר 403 בשרת, לא רק מוסתר בממשק. למשתמש הפצה אין כניסה לקונסולה (#1073) — הוא עובד ממחשב הבנייה: שיכפול מאימג' בשרת, שיכפול ישיר מהדיסק, ושחזור לדיסק שלו. המנהל הפעיל האחרון אינו ניתן למחיקה או להורדה. ריחוף על אזור מציג את נתיבי ה-API שלו.</div>`;
   const matrixCard = `<details class="c12 card perm-more"><summary class="card-h"><span>הרשאות מפורטות <small>מה כל תפקיד רואה, לפי ההרשאה של כל פעולה</small></span></summary><div class="card-b flush">${matrix}</div></details>`;
   return `<div class="page aligned">${header}<div class="body">${usersCard}${roles}${matrixCard}</div></div>`;
 }
@@ -7637,11 +7643,17 @@ function logFilter(key, value) {
 function logMore() { loadJournalData(true); }
 function logEventLabel(ev) { const e = (LOG.events || []).find((x) => x.event === ev); return e ? e.label : ev; }
 
+function journalDiagnostic(row) {
+  return isSystemDiagnostic(row.text)
+    || (["server_warning", "server_error"].includes(row.event) && isRawTechnical(row.text));
+}
+
 function logRowHtml(r, i) {
   const cls = journalCls(r);
   const t = isToday(r.ts) ? fmtHour(r.ts) : `${fmtDate(r.ts)} ${fmtHour(r.ts)}`;
+  const detail = journalDiagnostic(r) ? "שגיאת מערכת · הפירוט בפרטי האירוע" : r.text;
   return { attrs: `onclick="openLogDetail(${i})" tabindex="0"`, cells: [
-    `<span class="name">${esc(r.label || r.event || "")}</span>${r.text ? `<span class="sub">${esc(r.text)}</span>` : ""}`,
+    `<span class="name">${esc(r.label || r.event || "")}</span>${detail ? `<span class="sub">${esc(detail)}</span>` : ""}`,
     esc(r.user || "המערכת"),
     `<span class="mono">${esc(t)}</span>`,
     `<span title="${esc(LOG_SEV_HE[cls] || "")}">${UI.pill(cls, LOG_SEV_SHORT[cls] || cls)}</span>`,
@@ -7699,8 +7711,8 @@ function openLogDetail(i) {
     ["זמן", `<span class="mono">${esc(fmtDate(row.ts))} ${esc(fmtHour(row.ts))}</span>`],
     ["חומרה", UI.status(cls, LOG_SEV_HE[cls] || cls)],
     ["מה קרה", esc(row.label || "")],
-    ["פירוט", esc(row.text || "") || `<span class="muted">—</span>`],
-    ["event", `<span class="mono">${esc(row.event || "")}</span>`],
+    ["פירוט", journalDiagnostic(row) ? "שגיאת מערכת" + technicalDetails(row.text) : esc(row.text || "") || `<span class="muted">—</span>`],
+    ["מזהה אירוע", `<span class="mono">${esc(row.event || "")}</span>`],
     ["מי", esc(who)]])}</div>`, {
       sub: `${row.label || "אירוע"} · ${fmtDate(row.ts)} · ${fmtHour(row.ts)}`,
       meta: UI.pill("", who) + (cls === "err" ? UI.pill("err", "שגיאה") : UI.pill(cls, LOG_SEV_HE[cls] || cls)),
@@ -7840,7 +7852,7 @@ function netRoleLabel(n) {
   const svc = netServicesOn(n);
   if (svc && svc.length) parts.push(svc.join(" · "));
   if (parts.length) return esc(parts.join(" · "));
-  if (svc === null && netBindUnread()) return `<span class="muted" title="bind של /ports: טבלת הסוקטים לא נקראה">— לא נקרא</span>`;
+  if (svc === null && netBindUnread()) return `<span class="muted" title="טבלת החיבורים של השירותים לא נקראה">— לא נקרא</span>`;
   return svc === null ? `<span class="muted" title="דורש API (#705): מודל וילן / bind">— דורש API</span>` : `<span class="muted">—</span>`;
 }
 function netLinkStatus(n) {
@@ -8094,7 +8106,7 @@ function netUnreadNotes() {
   else if (NETCFG && NETCFG.live && !NETCFG.live.checked) out.push(T("warn", "המצב בפועל לא נקרא", NETCFG.live.reason || "", " — אף כתובת אינה מאומתת"));
   if (NETCFG && NETCFG.sourced === false) out.push(UI.note("err", "‏/etc/network/interfaces אינו טוען את interfaces.d — כל מה שנכתב שם לא ייקרא באתחול"));
   if (e.net) out.push(T("warn", "‏/net לא נקרא", e.net, ' — "מי נראה ברשת" ו"לא רשומים" אינם ידועים'));
-  if (e.ports) out.push(T("warn", "‏/ports לא נקרא", e.ports, ' — "מה מותר על כל וילן" אינו ידוע'));
+  if (e.ports) out.push(T("warn", "מצב השירותים לא נקרא", e.ports, ' — "מה מותר על כל וילן" אינו ידוע'));
   if (e.sessions) out.push(T("warn", "‏/sessions לא נקרא", e.sessions, " — מי מחובר לקונסולה אינו ידוע"));
   if (e.leases) out.push(T("warn", "חכירות dnsmasq לא נקראו", e.leases, " — מכונה שקיבלה כתובת ולא דיברה עם השרת אינה נראית"));
   if (e.monitor) out.push(T("warn", "‏/monitor/machines לא נקרא", e.monitor, " — משכפלים ובנייה אינם בתרשים"));
@@ -8336,8 +8348,8 @@ async function netPickDeploy() {
    הרשת, והשרת אינו יכול לבדוק את המתג. מוצגת תמיד, גם כשהכרטיסים לא נקראו ולפני שהוגדרה רשת. */
 const NET_ISOLATION_NOTE = '<div class="c12">' + UI.note("warn",
   "<b>רשת ההפצה חייבת להיות מבודדת — זה חלק מהאבטחה.</b> המחשבים, השידור והאתחול מהרשת סומכים על כך"
-  + " שרק המחשבים שלכם מחוברים אליה. במתג: וילן נפרד בלי ניתוב, port security (מחשב אחד לכל פורט)"
-  + " ו-DHCP snooping (רק הפורט של השרת מחלק כתובות). בלעדיהם, מחשב זר שמחובר לרשת יכול להתחזות"
+  + " שרק המחשבים שלכם מחוברים אליה. במתג: וילן נפרד בלי ניתוב, הגבלת החיבור למחשב אחד בכל פורט"
+  + " ו-הגבלת חלוקת כתובות DHCP לפורט של השרת. בלעדיהם, מחשב זר שמחובר לרשת יכול להתחזות"
   + " למחשב רשום, להעלות מחשב שיכפול מהאתחול שלו או להפיל סבב. השרת מתריע על DHCP זר, אבל אינו"
   + " חוסם אותו. ההגדרות: מדריך מנהל ה-IT, פרק 4.") + "</div>";
 
@@ -8609,7 +8621,7 @@ function monitorPage() {
    שם השרת = שם המארח (שם אחד, ‏POST /hostname); "מראה" עבר ל"החשבון שלי". */
 let SETTINGS = null, settingsError = "";
 const SETTING_GROUPS = [
-  { card: "general", title: "כללי", foot: "השם מופיע בעץ, בכותרת, במסכי התחנות וברשת (hostname). שינוי השם מפעיל את השרת מחדש." },
+  { card: "general", title: "כללי", foot: "השם מופיע בעץ, בכותרת, במסכי התחנות וברשת. שינוי השם מפעיל את השרת מחדש." },
   { card: "deploy", title: "שיכפול והפצה", foot: "סבב מתחיל לבד כשעבר הזמן הזה בלי מצטרף חדש. קצב אוטומטי כבוי = תמיד התקרה הקבועה; השינוי חל מהגל הבא. יעד שיישאר עם פחות מקום יוצג כ\"לא נכנס\"." },
   // ‏#2059 (מוקאפ 05, נדב 24/10): הכיבוי האוטומטי של הגואי הקטן -- הגדרה אחת לכל סוגי המכונות.
   // #3064 (שלב 2, נדב 14/11): המוח של השרת -- וטו על פעולות הרסניות. הספים עם ברירת מחדל, כמו הגדרות הרשת.
@@ -8621,7 +8633,7 @@ const SETTING_GROUPS = [
 /* שורה: key = מפתח /settings, או שורה מיוחדת (type: name/tls/version/lastcheck/reboot/backup) שהערך שלה בא ממקור אחר.
    ‏more — ההסבר המלא (title). ‏confirmOff — מתג שכיבויו מסוכן: חלון אישור לפני השמירה. */
 const SETTING_ROWS = [
-  { key: "server_name", card: "general", label: "שם השרת", type: "name", more: "שם אחד: בעץ, בכותרת, במסכי התחנות וברשת (hostname)" },
+  { key: "server_name", card: "general", label: "שם השרת", type: "name", more: "שם אחד: בעץ, בכותרת, במסכי התחנות וברשת" },
   // ‏#1447 (נדב 17/10): לא ב-/settings — ‏GET/POST /timezone (‏timedatectl וההגדרה יחד); ‏timezoneRow.
   { key: "timezone", card: "general", label: "אזור זמן", type: "timezone", action: "שינוי", more: "השעה המקומית במסך השרת, במסכי התחנות ובהפעלה מחדש האוטומטית. השרת שומר זמנים ב-UTC — רק התצוגה מקומית" },
   { key: "ntp_source", card: "general", label: "מקור השעה", type: "ntpsource" },
@@ -8661,8 +8673,8 @@ const SETTING_ROWS = [
   { key: "readback_full", card: "deploy", label: "אימות מלא אחרי הכתיבה", type: "switch",
     more: "אימות מלא מוסיף כ-5 דק' לסבב של 4 מגירות. כבוי (ברירת המחדל): נבדק במדגם — כ-5% מהבלוקים בשימוש, מפוזרים על כל המחיצה (התחלה, אמצע, סוף ואקראי)" },
   // ‏#1972 (נדב 22/10): השרת שולח שאילתות IGMP ברשת ההפצה — סוויץ' עם IGMP snooping בלי querier מציף או חוסם. חסר = דלוק.
-  { key: "igmp_querier", card: "deploy", label: "IGMP querier ברשת ההפצה", type: "switch", defaultOn: true, confirmOff: true,
-    more: "השרת שולח שאילתת IGMP כל 125 שניות בכרטיס ההפצה, כדי שסוויץ' עם IGMP snooping ידע לאן לשלוח את השידור. כשיש ברשת querier אחר עם כתובת נמוכה יותר — השרת שותק לבד. המצב במסך הבריאות." },
+  { key: "igmp_querier", card: "deploy", label: "שאילתות IGMP ברשת ההפצה", type: "switch", defaultOn: true, confirmOff: true,
+    more: "השרת שולח שאילתת IGMP כל 125 שניות בכרטיס ההפצה, כדי שהמתג ידע מי ביקש לקבל את השידור. כשהתקן אחר עם כתובת נמוכה יותר שולח שאילתות ברשת, השרת מפסיק לשאול. המצב במסך הבריאות." },
   { key: "class_deploy_enabled", card: "deploy", label: "הפצה לכיתה ממסך התחנה", more: "כבוי במהדורת השיכפול — הכרטיס יורד מהתפריט והשרת מסרב לסבב כיתה", type: "switch" },
   // ‏#3268 (נדב 14/11): כבוי (ברירת המחדל) — דיסק מכני נתמך כמקור בלבד, וכיעד מסומן "איטי" (אדום) כבר בבדיקה בהכנסה. דלוק — הוא נמדד מול ציפייה של דיסק מכני.
   { key: "hdd_support", card: "deploy", label: "תמיכה ב-HDD", type: "switch", defaultOn: false,
@@ -8776,7 +8788,7 @@ function settingSwitchHtml(r) {
 function secondaryReadOnlyRow(r) { return r.type === "name" && !!SERVER_CTX; }
 function tlsRowHtml() {
   if (!TLS_STATUS) return settingUnreadHtml(tlsError || "לא נטען");
-  if (!TLS_STATUS.enabled) return `<span class="muted">בלי TLS (loopback בלבד)</span>`;
+  if (!TLS_STATUS.enabled) return `<span class="muted">בלי TLS (גישה מהמחשב המקומי בלבד)</span>`;
   const c = TLS_STATUS.on_disk;
   const warn = (TLS_STATUS.pending_restart ? ` ${UI.pill("warn", "ממתינה לאתחול")}` : "")
     + (TLS_STATUS.covers_hostname ? "" : ` ${UI.pill("warn", "השם אינו בתעודה")}`);
@@ -9334,7 +9346,7 @@ function hostnameSheet(primary = false) {
     title: "שינוי שם השרת", sub: name,
     fields: [{ id: "hostname", label: "שם חדש", value: name, dir: "ltr", help: MACHINE_NAME_RULE }],
     note: impactList([["w", "השם מתחלף בעץ, בכותרת ובמסכי התחנות"],
-      ["w", "שם המכונה ברשת (hostname) מתחלף איתו — השרת יופעל מחדש והקונסולה תתנתק לכמה שניות"],
+      ["w", "שם השרת ברשת ישתנה גם הוא. השרת יופעל מחדש והקונסולה תתנתק לכמה שניות"],
       ["w", "אם השם החדש אינו בתעודת ה-TLS, הדפדפן יזהיר בגישה בשם"]]),
     danger: true, submitLabel: "שינוי שם והפעלה מחדש",
     onSubmit: async (v) => {
@@ -10653,11 +10665,15 @@ function topNotifications() {
   // ‏#2060: ‏HEALTH שאינו מערך = הבדיקות לא נקראו — "לא נבדק", לא "אין בעיות" (עיקרון 5)
   const healthRead = Array.isArray(HEALTH);
   if (!healthRead) {
-    rows.push(`<div class="list-row"><div class="list-main"><strong>בדיקת הבריאות לא נקראה: ${esc(healthError || "עדיין לא נטענה")}</strong><small>אין ראיה שהשרת תקין</small></div><span class="status warn"><i></i>לא נבדק</span></div>`);
+    const raw = isRawTechnical(healthError) || isSystemDiagnostic(healthError);
+    const detail = raw ? technicalDetails(healthError) : "";
+    rows.push(`<div class="list-row"><div class="list-main"><strong>בדיקת הבריאות לא נקראה: ${esc(raw ? "שגיאה בקריאה" : healthError || "עדיין לא נטענה")}</strong><small>אין ראיה שהשרת תקין</small>${detail}</div><span class="status warn"><i></i>לא נבדק</span></div>`);
   }
   for (const c of (healthRead ? HEALTH : [])) {
     if (c.state !== "warn" && c.state !== "bad") continue;
-    rows.push(`<div class="list-row"><div class="list-main"><strong>${esc(c.label)}</strong><small>${ltrRuns(c.detail || "")}</small></div><span class="status ${healthStatusClass(c.state)}"><i></i>${esc(healthStatusLabel(c.state))}</span></div>`);
+    const detail = isRawTechnical(c.detail) || isSystemDiagnostic(c.detail)
+      ? technicalDetails(c.detail) : `<small>${ltrRuns(c.detail || "")}</small>`;
+    rows.push(`<div class="list-row"><div class="list-main"><strong>${esc(c.label)}</strong>${detail}</div><span class="status ${healthStatusClass(c.state)}"><i></i>${esc(healthStatusLabel(c.state))}</span></div>`);
   }
   /* ‏#3654 (מוקאפ 18/11): סעיף "שאלות מהמוח" -- הפתוחות בלבד, עם "ענה", וכפתור "לכל שאלות המוח" בתחתית. רק הפתוחות נספרות. */
   const asked = typeof brainAskRows === "function" ? brainAskRows() : "", askOpen = typeof brainAskCount === "function" ? brainAskCount() : 0;
@@ -10674,7 +10690,7 @@ function topNotifications() {
 }
 
 function help() {
-  openDrawer("עזרה מהירה", `<div class="section-title">איך משתמשים במערכת?</div><div class="list"><div class="list-row"><div class="list-main"><strong>1. קליטת אימג׳</strong><small>העלה אימג׳ ואמת manifest + SHA-256.</small></div></div><div class="list-row"><div class="list-main"><strong>2. פתיחת סבב</strong><small>בחר אימג׳, כיתה וכלל התחלה.</small></div></div><div class="list-row"><div class="list-main"><strong>3. מעקב</strong><small>עקוב אחרי הצטרפות, כתיבה וכשלים לכל תחנה.</small></div></div><div class="list-row"><div class="list-main"><strong>4. מחשב שנכשל</strong><small>בודד אותו, בדוק PXE/WoL, וטפל בו בלי לעצור את הסבב.</small></div></div></div>`, {
+  openDrawer("עזרה מהירה", `<div class="section-title">איך משתמשים במערכת?</div><div class="list"><div class="list-row"><div class="list-main"><strong>1. קליטת אימג׳</strong><small>העלה אימג׳ ואמת את קובץ התיאור ואת SHA256.</small></div></div><div class="list-row"><div class="list-main"><strong>2. פתיחת סבב</strong><small>בחר אימג׳, כיתה וכלל התחלה.</small></div></div><div class="list-row"><div class="list-main"><strong>3. מעקב</strong><small>עקוב אחרי הצטרפות, כתיבה וכשלים לכל תחנה.</small></div></div><div class="list-row"><div class="list-main"><strong>4. מחשב שנכשל</strong><small>בודד אותו, בדוק PXE/WoL, וטפל בו בלי לעצור את הסבב.</small></div></div></div>`, {
     sub: "איך משתמשים בקונסולה",
     meta: UI.pill("info", "מדריך מהיר"),
   });
@@ -10806,7 +10822,7 @@ function openSessionInfo() {
   const fp = ME && ME.tls && ME.tls.fingerprint_sha256;
   const tls = fp
     ? `<div class="detail-box"><span class="k">הצפנה (TLS)</span><span class="v">${tlsModeHe(ME.tls)} · SHA-256 <span dir="ltr" style="word-break:break-all">${esc(fp)}</span></span></div>`
-    : `<div class="detail-box"><span class="k">הצפנה (TLS)</span><span class="v">כבויה (loopback)</span></div>`;
+    : `<div class="detail-box"><span class="k">הצפנה (TLS)</span><span class="v">כבויה (גישה מהמחשב המקומי בלבד)</span></div>`;
   const role = ME && ME.role === "admin" ? "מנהל" : "הפצה";
   openDrawer("פרטי החיבור", `<div class="detail-grid"><div class="detail-box"><span class="k">משתמש</span><span class="v">${name}</span></div><div class="detail-box"><span class="k">חיבור</span><span class="v">מחובר ומאומת</span></div>${tls}</div>`, {
     sub: `${ME && ME.username || ""} · ${role}`,
@@ -11040,7 +11056,7 @@ async function loadCaptures() {
   // ‏CAPTURE_TASKS מחזיק את כל 20 המשימות האחרונות (לא רק הפעילות) —
   // openMachineDetail, renderActivity והספרייה מסננים כל אחד לפי מה שהוא צריך.
   const all = await api("/tasks");
-  if (!Array.isArray(all)) throw new Error("/tasks: תשובה שאינה רשימה");   // לא נקרא ≠ אין קליטות (עיקרון 5)
+  if (!Array.isArray(all)) throw new Error("רשימת משימות הקליטה לא התקבלה");   // לא נקרא ≠ אין קליטות (עיקרון 5)
   CAPTURE_TASKS = all;
   if (typeof capDetailRefresh === "function") capDetailRefresh();   // ‏#1505: פאנל הפירוט הפתוח
   CAPTURE_TASKS_READ = true;

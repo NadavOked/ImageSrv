@@ -43,3 +43,13 @@ def test_prose_cites_the_value_that_is_in_the_code() -> None:
     for path in PROSE:
         text = (REPO / path).read_text(encoding="utf-8")
         assert value in text, f"{path} does not cite the code's eviction ceiling {value}"
+
+
+def test_interfaces_quotes_the_default_disk_wait_in_seconds() -> None:
+    """#4207: check the two descriptions that quote the timeout in seconds."""
+    text = (REPO / PROSE[0]).read_text(encoding="utf-8")
+    chunkcast_seconds = int(_define("agent/chunkcast.c", "CC_WRITE_STALL_MS")) // 1000
+    fanout_seconds = int(_define("agent/fanout.c", "STALL_EVICT_MS")) // 1000
+
+    assert f"זמן ההמתנה לדיסק ({chunkcast_seconds} שניות כברירת מחדל" in text
+    assert f"`FANOUT_STALL_EVICT_MS`/1000 (\u200f{fanout_seconds} כברירת מחדל" in text

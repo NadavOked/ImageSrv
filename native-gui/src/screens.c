@@ -49,6 +49,17 @@ static void server_label(const State *s, char *out, size_t n) {
     else snprintf(out, n, "%s", s->server_name[0] ? s->server_name : known(s->server_addr));
 }
 
+/* #1802 (Nadav 04/11): "המחשב הזה לא רשום" stays; its button is
+ * fail_btn=reboot|F2 — הפעלה מחדש (ui.sh). A failure button whose label starts
+ * with "F2 " is pressed by F2, not by Enter -- the label names its key. The
+ * index of that button on the failure screen, or -1. It lives here, not in main.c,
+ * because the theme chip below must not name a key that this button owns (#2898). */
+int fail_f2_btn(const App *a) {
+    if (a->screen != SCREEN_FAILURE) return -1;
+    for (int i = 0; i < a->st.nfail_btns; i++) if (!strncmp(a->st.fail_btns[i].label, "F2 ", 3)) return i;
+    return -1;
+}
+
 /* #1499 (Nadav 16/10): the theme switch in the top-left corner of every
  * screen -- a click or F2 (main.c: toggle_theme). On the header (dark in both
  * themes) it is an outline, not a filled pill: the header stays the header
@@ -82,7 +93,7 @@ static void draw_theme_toggle(App *a,cairo_t *cr,double W,double head_h){
         cairo_arc(cr,cx,cy,6,0,2*M_PI);draw_set(cr,ink);cairo_fill(cr);
         cairo_restore(cr);
     }
-    if(!a->no_keys){                             /* #2600: a screen that takes no keys must not offer F2 */
+    if(!a->no_keys&&fail_f2_btn(a)<0){   /* #2600: a screen that takes no keys must not offer F2; #2898: F2 presses the failure button there -- the chip names no key (a click still turns it) */
         Text k=text_make(cr,FONT_MONO,11,600,"F2",0,DIR_LTR);
         text_draw(cr,&k,b.x+b.w-k.w-7,b.y+(b.h-k.h)/2,ink);text_free(&k);
     }

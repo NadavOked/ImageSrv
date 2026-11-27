@@ -15,12 +15,10 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from console_src import console_js
 from test_agent import BASH, posix
-from test_final_report import REPO, cut_function, native_tools
+from test_final_report import cut_function, native_tools
 from test_single_restore_progress_gui import END, PROGRESS, restore
-
-STATIC = REPO / "server" / "static"
-
 
 def _ask_seconds(tmp_path: Path, env: str) -> str:
     """The seconds `build_end_ask` hands the GUI dialog (the last argument of gui_ask_choice)."""
@@ -60,6 +58,6 @@ def test_a_single_restore_counts_the_setting(tmp_path):
 
 
 def test_the_console_does_not_promise_five_minutes():
-    text = (STATIC / "console.js").read_text(encoding="utf-8")
+    text = console_js()
     assert "מחכה 5 דקות" not in text
     assert "אז המחשב נשאר דלוק עד שלוחצים על כבה." in text

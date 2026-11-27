@@ -13,21 +13,22 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+from console_src import console_js
+
 REPO = Path(__file__).resolve().parent.parent
 
 NODE = r"""
-const {readFileSync} = require('node:fs');
+const {consoleJs} = require('./tests/console_src.cjs');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
-const core = readFileSync('server/static/console-core.js', 'utf8');
-const js = readFileSync('server/static/console.js', 'utf8');
+const js = consoleJs();
 const cut = (src, from, to, what) => {
   const i = src.indexOf(from), j = src.indexOf(to, i);
   assert.ok(i >= 0 && j > i, what + ' is not in the console source');
   return src.slice(i, j + to.length);
 };
 const ctx = vm.createContext({});
-vm.runInContext(cut(core, 'const ESC_MAP', 'return (text == null ? "" : String(text)).replace(/[&<>"\'`]/g, (c) => ESC_MAP[c]);\n}', 'esc'), ctx);
+vm.runInContext(cut(js, 'const ESC_MAP', 'return (text == null ? "" : String(text)).replace(/[&<>"\'`]/g, (c) => ESC_MAP[c]);\n}', 'esc'), ctx);
 vm.runInContext(cut(js, 'function ltr(text)', 'return out + esc(s.slice(last));\n}', 'ltr/ltrRuns'), ctx);
 const run = (text) => vm.runInContext('ltrRuns', ctx)(text);
 const B = (t) => '<bdi dir="ltr">' + t + '</bdi>';
@@ -57,7 +58,7 @@ def test_a_path_and_an_amount_in_a_server_sentence_are_isolated_alone():
 
 def test_both_places_that_print_a_health_detail_use_it():
     """The Overview's attention item and the Health page's row: the detail goes through `ltrRuns`, not a bare `esc`."""
-    js = (REPO / "server/static/console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert '" — " + ltrRuns(c.detail)' in js, "the Overview attention item prints the detail bare"
     assert "<small>${ltrRuns(c.detail || \"\")}</small>" in js, "the Health page row prints the detail bare"
     assert " — \" + esc(c.detail)" not in js and "<small>${esc(c.detail || \"\")}</small>" not in js

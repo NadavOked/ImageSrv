@@ -256,7 +256,7 @@ function dkSetsTab() {
 function diskSetNewSheet() {
   if (!isAdmin()) return;
   sheet({ title: "סט חדש", sub: "השם מוצג בקונסולה ובמסך המשכפל, ליד המגירה. הוא לא נכתב לדיסק.",
-    fields: [{ id: "name", label: "שם הסט", value: "" }, { id: "prefix", label: "קידומת", value: "", dir: "ltr", help: "1–8 אותיות לטיניות או ספרות, למשל xx" },
+    fields: [{ id: "name", label: "שם הסט", value: "" }, { id: "prefix", label: "קידומת", value: "", dir: "ltr", help: "1–8 אותיות לטיניות או ספרות" },
       { id: "students", label: "כמה דיסקים לתלמידים", value: "29", dir: "ltr" }, { id: "instructor", label: "דיסק מרצה (INS)", type: "checkbox", value: true }],
     note: UI.note("info", "השמות יהיו <bdi dir=\"ltr\"><b>xx-INS, xx-1 … xx-N</b></bdi> לפי הקידומת והמספר שבחרתם. הדיסקים עצמם משויכים אחר כך, מסבב או מהרשימה."),
     submitLabel: "צור סט",

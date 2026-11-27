@@ -13,15 +13,13 @@ ceiling under 600m) pass in both states.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
+from console_src import console_js
 from server import db
 from server.rounds import chunk_rate, drive_rates
 
 MB = 10 ** 6
-CONSOLE = Path(__file__).resolve().parents[1] / "server" / "static" / "console.js"
 
 
 @pytest.fixture()
@@ -96,4 +94,4 @@ def test_switched_on_the_first_wave_still_opens_at_the_start_rate(conn):
 
 def test_the_console_still_promises_the_fixed_ceiling():
     """The promise the code now keeps: if the wording changes, the code here must change with it (#3036)."""
-    assert "כבוי = תמיד התקרה הקבועה (IMAGESRV_MAX_BITRATE)" in CONSOLE.read_text(encoding="utf-8")
+    assert "כבוי = תמיד התקרה הקבועה (IMAGESRV_MAX_BITRATE)" in console_js()

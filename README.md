@@ -67,6 +67,8 @@ ImageSrv קולט אימג'י דיסק, מפיץ אותם במולטיקאסט �
 | **מחשב בנייה** | קולט אימג' מדיסק (דחוס, בלוקים תפוסים בלבד, עם אימות `sha256`), משחזר אימג' מהשרת לדיסק שלו, ומשדר ישירות למחשבי שיכפול. |
 | **מחשבי שיכפול** | מחשבים עם מספר מגירות. כותבים את הזרם במקביל לכל המגירות, עם בדיקת SMART לפני הכתיבה ואימות אחריה. |
 
+השידור למחשבי השיכפול הוא מנוע החתיכות, Trident: שולח שאינו מחכה לאישורים, תיקון של מה שחסר בנפרד, ואימות כל חתיכה לפני שהיא נכתבת. הפרוטוקול מוסבר ב-[docs/architecture/trident.md](docs/architecture/trident.md).
+
 המחשבים עולים ב-PXE ומקבלים הוראות מהשרת. Windows ולינוקס נתמכים באותו מסלול ובאותו מניפסט (`partclone.ntfs`, `partclone.ext4` או `partclone.btrfs`), כולל הרחבה/כיווץ של המחיצה האחרונה וכתיבת שם מחשב לפני האתחול הראשון.
 
 ## זרימות
@@ -75,7 +77,7 @@ ImageSrv קולט אימג'י דיסק, מפיץ אותם במולטיקאסט �
 
 | זרימה | מי למי | מה קורה |
 |--------|--------|---------|
-| **קליטה** | בנייה ← שרת | הקונסולה מזמינה קליטה. מחשב הבנייה קורא את הדיסק ומעלה לשרת בזרם. השרת מאמת `sha256` לפני הכנסה לספרייה. Windows שלא כובה בכיבוי מלא או שמוצפן ב-BitLocker נדחה לפני שנוגעים בדיסק. רק מחשב בנייה מעלה אימג' לשרת. |
+| **קליטה** | בנייה ← שרת | הקונסולה מזמינה קליטה. מחשב הבנייה קורא את הדיסק ומעלה לשרת בזרם. השרת מאמת `sha256` לפני הכנסה לספרייה. מחיצת NTFS במצב שינה יכולה להיקלט דרך עותק זמני בזיכרון ([`captureview.sh:capture_prepare_views`](agent/lib/capture/captureview.sh#L23)). כרך BitLocker מועתק סקטור־אחר־סקטור, בלי פענוח ובלי כיווץ, ונרשם במניפסט כ-`fs: "BitLocker"`. אם בדיקת ה-BitLocker נכשלת, הקליטה נעצרת לפני תחילת ההעלאה ([`capture.sh:capture_disk`](agent/lib/capture/capture.sh#L42), [`hibernation.sh:capture_bitlocker_gate`](agent/lib/capture/hibernation.sh#L77)). רק מחשב בנייה מעלה אימג' לשרת. |
 | **שחזור** | שרת ← בנייה | מחשב הבנייה בוחר אימג' מהספרייה וכותב אותו לדיסק הפנימי שלו. |
 | **הפצה** | שרת ← מחשבי שיכפול | סבב מולטיקאסט אחד לקבוצה. מחשב שעולה מצטרף; השידור מתחיל כשכולם הגיעו, כשעבר הזמן מהמצטרף האחרון, או בלחיצה. גלים כשיש יותר מגירות ממקום. מחשב שיכפול יכול גם לפתוח סבב לעצמו מהמסך שלו. |
 | **ישיר** | בנייה ← מחשבי שיכפול | שידור ישיר מדיסק הבנייה. הזרם לא עובר בשרת; השרת רק מתזמר. חתיכות שלא הגיעו נמשכות ב-HTTP ממחשב הבנייה. |
@@ -243,9 +245,11 @@ Issue בריפו הפרטי מותר; פרסום לציבור לפני תיקו�
 | [docs/architecture/agent.md](docs/architecture/agent.md) | סוכן: החלטות, שחזור, קליטה, חדר שיכפולים |
 | [docs/architecture/grub-generator.md](docs/architecture/grub-generator.md) | מחולל תפריט GRUB |
 | [docs/architecture/security-model.md](docs/architecture/security-model.md) | מודל האמון: מה מאומת באתחול ובמשימה, ומה לא |
+| [docs/architecture/trident.md](docs/architecture/trident.md) | Trident, מנוע השידור: חבילות, משוב קצב, תיקון חסרים ואימות |
 | [docs/guides/server-install.md](docs/guides/server-install.md) | התקנת שרת |
 | [docs/guides/driver-packages.md](docs/guides/driver-packages.md) | חבילות דרייברים |
 | [docs/guides/local-clone.md](docs/guides/local-clone.md) | שיכפול מקומי והתקן USB |
+| [docs/guides/troubleshooting.md](docs/guides/troubleshooting.md) | שאלות נפוצות ותקלות: PXE, IGMP, Secure Boot, BitLocker, דיסק איטי, שרת שקט |
 | [SECURITY.md](SECURITY.md) | דיווח על חולשה |
 | `server/` | API, קונסולה, לוגיקה |
 | `agent/` | סוכן + סקריפטי initramfs |

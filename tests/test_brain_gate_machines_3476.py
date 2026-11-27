@@ -17,12 +17,12 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import pytest
 
 pytest.importorskip("fastapi")
 
+from console_src import console_js
 from conftest import hello_body
 from server import db
 from server.agent import bootguard, firmware_image, loops as agent_loops, probe, registry
@@ -36,7 +36,6 @@ from server.rounds.sessions import SessionStore
 from test_learning_2028 import _fleet                                     # noqa: F401 -- ``_fleet`` נשען על fixture
 from test_server_room import CLONER1, CLONER2, room_body, room_server    # noqa: F401 -- room_server הוא fixture
 
-ROOT = Path(__file__).resolve().parent.parent
 MAC1, MAC2, MAC3 = "aa:bb:cc:00:00:21", "aa:bb:cc:00:00:22", "aa:bb:cc:00:00:23"
 RID, WAVE = "room_t3476", "ses_wave3476"
 GATES = (gate_machines.ahci, gate_machines.boot, gate_machines.pxe, gate_machines.nic, gate_machines.firmware)
@@ -184,7 +183,7 @@ def reach_the_agent_without_a_reason(conn, mac):
 
 
 def test_the_console_still_says_the_boot_texts_the_gate_quotes():
-    js = (ROOT / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert gate_machines.BLOCKED_HE.format(n="${s.attempts}") in js and gate_machines.REPEATED_HE.format(n="${s.attempts}") in js
 
 

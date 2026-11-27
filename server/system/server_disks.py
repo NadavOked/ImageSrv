@@ -87,11 +87,11 @@ def run_smartctl(disk: str) -> tuple[int | None, str, str]:
         got = subprocess.run(["smartctl", "-H", "-A", "-j", f"/dev/{disk}"], capture_output=True,
                              text=True, timeout=SMARTCTL_TIMEOUT_S, stdin=subprocess.DEVNULL)
     except FileNotFoundError:
-        return None, "", "smartctl אינו מותקן בשרת"
+        return None, "", "כלי בדיקת SMART אינו מותקן בשרת"
     except subprocess.TimeoutExpired:
-        return None, "", f"smartctl לא ענה תוך {SMARTCTL_TIMEOUT_S} שניות"
+        return None, "", f"כלי בדיקת SMART לא ענה תוך {SMARTCTL_TIMEOUT_S} שניות"
     except OSError as exc:
-        return None, "", f"smartctl לא הורץ ({exc.strerror or exc})"
+        return None, "", f"כלי בדיקת SMART לא הופעל ({exc.strerror or exc})"
     return got.returncode, got.stdout, ""
 
 
@@ -146,9 +146,9 @@ def smart_verdict(rc: int | None, stdout: str, why: str, disk: str) -> tuple[str
     try:
         data = json.loads(stdout)
     except ValueError:
-        return "unknown", f"פלט smartctl לא נקרא (rc={rc}) — SMART לא נבדק"
+        return "unknown", f"הפלט של כלי בדיקת SMART לא נקרא (קוד יציאה {rc}) — SMART לא נבדק"
     if rc & OPEN_FAILED:
-        return "unknown", f"smartctl לא הצליח לפתוח את /dev/{disk} (rc={rc}) — SMART לא נבדק"
+        return "unknown", f"כלי בדיקת SMART לא הצליח לפתוח את /dev/{disk} (קוד יציאה {rc}) — SMART לא נבדק"
     status = data.get("smart_status")
     if not isinstance(status, dict) or not isinstance(status.get("passed"), bool):
         model = (data.get("model_name") or data.get("scsi_product") or "").strip()
