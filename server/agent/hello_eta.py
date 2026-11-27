@@ -28,7 +28,7 @@ import time
 from collections.abc import Callable
 from datetime import datetime
 
-from server.rounds import room
+from server.rounds import room, room_state
 
 log = logging.getLogger("imagesrv.hello_eta")
 
@@ -72,9 +72,9 @@ def _epoch(stamp: object) -> int | None:
 
 
 def _forecast(conn: SqlConnection, library, session: dict, trusted: bool) -> dict | None:
-    round_row = room.active_round(conn)
+    round_row = room_state.round_of_wave(conn, session["id"])
     wave = conn.execute("SELECT state, started_at FROM sessions WHERE id = ?", (session["id"],)).fetchone()
-    if round_row is None or wave is None or round_row["wave_session_id"] != session["id"]:
+    if round_row is None or wave is None:
         return None
     found = room.wave_forecast(conn, library, round_row, wave, wave["started_at"])
     if found is None:

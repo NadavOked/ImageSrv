@@ -26,6 +26,7 @@ from server.library.images import validate_display_name
 from server.library.library_scrub import forget_scrub, last_scrubs, scrub_library
 from server.library.archive import ArchiveError, import_tar, tar_size, tar_stream, unreadable_message
 from server.db import get_setting, journal, set_setting
+from server.rounds.room_state import active_rounds
 from server.rounds.sessions import ROOM_PREFIX
 from server.system import inflight
 
@@ -165,10 +166,9 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
         index = body.get("index") if isinstance(body, dict) else None
         if ctx.library.get(image_id) is None:
             raise HTTPException(404, "אימג' לא קיים")
-        from server.rounds import room as room_module  # noqa: PLC0415 — נמנע ממעגל ייבוא
-        active_session, round_row = ctx.store.active(), room_module.active_round(ctx.conn)
+        active_session = ctx.store.active()
         if (active_session is not None and active_session["image_id"] == image_id) \
-                or (round_row is not None and round_row["image_id"] == image_id):
+                or any(row["image_id"] == image_id for row in active_rounds(ctx.conn)):
             raise HTTPException(409, "האימג' נמצא בשימוש בסבב פעיל — סמנו אחרי שיסתיים")
         why = ctx.library.record_system_partition(image_id, index, only_unmarked=user[1] != "admin")
         if why is not None:
@@ -185,13 +185,16 @@ def create_library_router(ctx: ServerContext) -> APIRouter:
             raise HTTPException(404, "אימג' לא קיים")
         if body.get("confirm_name", "") != manifest["name"]:
             raise HTTPException(400, "השם שהוקלד אינו זהה לשם האימג'")
-        from server.rounds import room as room_module  # noqa: PLC0415 — נמנע ממעגל ייבוא
         active_session = ctx.store.active()
-        round_row = room_module.active_round(ctx.conn)
+        rounds = active_rounds(ctx.conn)
+        in_round = any(row["image_id"] == image_id for row in rounds)
         if (active_session is not None and active_session["image_id"] == image_id) \
-                or (round_row is not None and round_row["image_id"] == image_id) \
+                or in_round \
                 or any(p["image_id"] == image_id for p in ctx.store.active_pulls()):   # #1928
-            raise HTTPException(409, "האימג' נמצא בשימוש בסשן פעיל")
+            detail = "האימג' נמצא בשימוש בסשן פעיל"
+            if in_round and len(rounds) > 1:
+                detail = f"{detail}: {manifest['name']}"
+            raise HTTPException(409, detail)
         ctx.library.delete(image_id)
         forget_scrub(ctx.conn, image_id)
         journal(ctx.conn, "image_delete", f'{image_id} "{manifest["name"]}"', user[0])

@@ -622,7 +622,7 @@ async function vmuStartDialog(idEnc) {
     : refuse ? vmuNote("bad", esc(pre.error)) : "";
   const body = `${problem}<div class="n-sec"><h3>גרסת מקור</h3><div class="vmu-vsel">${rows.map(opt).join("")}</div></div>`
     + `<div class="n-sec"><h3>משאבים</h3>${resources}</div>`
-    + `<div class="n-sec">${vmuNote("info", "<b>ל-VM יש אינטרנט דרך כרטיס הניהול</b> — בשביל Windows Update. רשת ההפצה והשרת עצמו חסומים בפני ה-VM, וסבב שרץ לא מושפע.")}</div>`
+    + `<div class="n-sec">${vmuNote("info", "<b>ל-VM יש אינטרנט דרך כרטיס הניהול</b> — כדי לעדכן את Windows. רשת ההפצה והשרת עצמו חסומים בפני ה-VM, וסבב שרץ לא מושפע.")}</div>`
     + `<div class="n-sec"><h3>מה יקרה בסוף</h3><ol class="vmu-ol"><li>מכבים את Windows מתוכו, או בכפתור "כיבוי מסודר".</li>`
     + `<li>בוחרים: <b>לשמור כגרסה חדשה</b> או למחוק את השינויים.</li><li>הגרסה שנבחרה נשמרת כמו שהיא בכל מקרה.</li></ol></div>`;
   const foot = `<span class="n-hint">ההכנה לוקחת כמה דקות · אפשר לצאת מהעמוד בינתיים</span><button class="btn" type="button" onclick="vmuCloseWin()">ביטול</button>`
@@ -770,7 +770,7 @@ function vmuDrawerHtml(img) {
     : `<span class="muted">${esc(item ? item[0].replace(/^עדכן ב-VM… /, "") : "")}</span>`;
   const text = here
     ? `עדכון פתוח (${esc(st.state)}) — ${esc(st.controller || "")}${st.expires_in_seconds != null ? ` · הדיסק הזמני יימחק בעוד ${vmuDays(st.expires_in_seconds)}` : ""}`
-    : "פתיחת האימג' כמכונה וירטואלית בשרת: Windows Update, ושמירה כגרסה חדשה. הגרסה הנוכחית נשמרת.";
+    : "פתיחת האימג' כמכונה וירטואלית בשרת: עדכון Windows ושמירה כגרסה חדשה. הגרסה הנוכחית נשמרת.";
   return `<div><div class="sec">גרסאות</div><div class="vmu-dcard">${VMU_ICON.vm}<span>${text}</span>${btn}</div>`
     + `<div id="vmuVersions" data-image="${esc(img.id)}" class="vmu-vers"><span class="muted">טוען גרסאות…</span></div></div>`;
 }
@@ -841,9 +841,11 @@ function vmnetCardHtml() {
     ["הכתובת שה-VM קיבל", got],
   ]);
   const minutes = Math.round((v.lease_timeout_seconds || 300) / 60);
+  const hint = esc(v.hint || "").replace(/port group|Promiscuous mode|MAC address changes|Forged transmits = Accept|MAC learning|Advanced Features|Enable MAC address spoofing|port security/g,
+    (setting) => `<code dir="ltr">${setting}</code>`);
   const notes = (v.problem ? UI.note("err", esc(v.problem.error)) : "")
     + UI.note("info", `צרו ב-DHCP של הרשת הזאת <b>כתובת שמורה</b> ל-MAC <b class="mono">${esc(v.mac)}</b> — כך חומת האש של המכללה תזהה את ה-VM לפי הכתובת שלו. ה-MAC קבוע: הוא לא משתנה באתחול או בעדכון של השרת.`)
-    + UI.note("info", `ה-VM מקבל כתובת בעצמו (DHCP). את השרת עצמו הוא אינו רואה ברשת הזאת; מה שעובר דרך הנתב — חומת האש של המכללה צריכה לחסום. אם תוך ${minutes} דק' מההדלקה לא תגיע כתובת — הוא נכבה, וההודעה אומרת למה. ${esc(v.hint || "")}`);
+    + UI.note("info", `ה-VM מקבל כתובת בעצמו (DHCP). את השרת עצמו הוא אינו רואה ברשת הזאת; מה שעובר דרך הנתב — חומת האש של המכללה צריכה לחסום. אם תוך ${minutes} דק' מההדלקה לא תגיע כתובת — הוא נכבה, וההודעה אומרת למה. ${hint}`);
   return UI.card({ title: "כרטיס לעדכוני VM", cls: "c12",
     acts: `<button class="btn sm" type="button" onclick="vmnetChoose()">בחירה…</button>`,
     body: kv + notes });

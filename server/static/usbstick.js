@@ -50,7 +50,7 @@ function usbsDeviceCard(s) {
       ? `<b>לא זוהה דיסק-און-קי עם התווית IMGSRV_DATA.</b><small>מחברים אותו פיזית לשרת, בחדר השרתים. אין קליטה אוטומטית בחיבור: אחרי החיבור לוחצים "סנכרן".</small>`
       : `<b>${esc(s.reason || "לא ניתן להשתמש בהתקן")}</b>${(s.notes || []).map((n) => `<small>${esc(n)}</small>`).join("")}`;
     const retry = `<button class="btn" type="button" onclick="refreshPage()">בדיקה מחדש</button>`;
-    const vm = `<div class="usbs-help"><b>השרת הוא VM?</b><small><b>Hyper-V:</b> אין תמיכה במקל — להעלות דרך הקונסולה. <b>ESXi:</b> USB passthrough מהמארח לאורח. במכונה פיזית ההתקן זמין ישירות. השרת מזהה רק התקן שמופיע לו על אפיק USB; דיסק שהמארח מציג לו כדיסק רגיל לא יזוהה, והעמוד יאמר זאת. ההתקן נקרא לקריאה בלבד.</small></div>`;
+    const vm = `<div class="usbs-help"><b>השרת הוא VM?</b><small><b>Hyper-V:</b> אין תמיכה במקל — להעלות דרך הקונסולה. <b>ESXi:</b> חברו את התקן ה-USB של המארח למכונה הווירטואלית. במכונה פיזית ההתקן זמין ישירות. השרת מזהה רק התקן שמופיע לו על אפיק USB; דיסק שהמארח מציג לו כדיסק רגיל לא יזוהה, והעמוד יאמר זאת. ההתקן נקרא לקריאה בלבד.</small></div>`;
     return UI.card({ title: "ההתקן המחובר", acts: UI.pill("", why), body: `<div class="usbs-none"><div class="usbs-help">${main}</div>${retry}</div>${vm}` });
   }
   const pend = plan
