@@ -28,7 +28,7 @@ from server.net import wol
 from server.agent.api import ServerContext
 from server.db import journal
 from server.agent.registry import normalize_mac
-from server.rounds.room import ROOM_OPERATOR_ROLES, visible_round
+from server.rounds.room import ROOM_OPERATOR_ROLES
 
 #: מי מתעורר מהקונסולה ב-v1 — מחשבי בנייה ושיכפול. classroom = v2.
 WAKEABLE_ROLES = ("build", "cloner")
@@ -102,9 +102,9 @@ def create_wake_router(
                 "SELECT 1 FROM tasks WHERE mac = ? AND state IN ('pending', 'running')",
                 (canonical,)).fetchone():
             raise HTTPException(409, "למחשב יש משימה פתוחה — בטלו אותה לפני אתחול")
-        shown = visible_round(ctx.conn)
-        if (row["role"] == "cloner" and shown is not None   # #1554: כל קבוצת משכפלים
-                and shown["state"] in ("active", "closing")):
+        if row["role"] == "cloner" and ctx.conn.execute(   # #1554: כל קבוצת משכפלים
+                "SELECT 1 FROM room_rounds WHERE state IN ('active', 'closing') LIMIT 1"
+        ).fetchone():
             raise HTTPException(409, "יש סבב חדר פעיל — עצרו אותו לפני אתחול משכפל")
         # #1367 (נדב 14/10): אושר מעל אזהרת "באמצע שיכפול מקומי" — רק `true` ממש
         confirmed = body.get("confirm_local_copy") is True

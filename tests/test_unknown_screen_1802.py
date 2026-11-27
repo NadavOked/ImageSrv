@@ -445,7 +445,9 @@ def test_f2_presses_the_f2_button_not_the_theme():
     assert press < handle.index("toggle_theme(a);")
     assert "e->key == KEYSYM_F2 && fail_f2_btn(a) >= 0" in handle[:press]
     assert "e->key == KEYSYM_ENTER && fail_f2_btn(a) != 0) b = 0;" in handle
-    helper = main[main.index("static int fail_f2_btn("):]
+    screens = _src("screens.c")   # #2898: the helper moved here -- the theme chip asks it too
+    assert "static int fail_f2_btn(" not in main
+    helper = screens[screens.index("\nint fail_f2_btn("):]
     helper = helper[:helper.index("\n}\n")]
     assert "a->screen != SCREEN_FAILURE" in helper and 'strncmp(a->st.fail_btns[i].label, "F2 ", 3)' in helper
 

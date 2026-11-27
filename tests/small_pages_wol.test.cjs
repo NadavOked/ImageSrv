@@ -140,7 +140,7 @@ test('settings (סידור 17/10, המוקאפ settings-redesign): four groups, 
   assert.ok(groupOf('שיכפול והפצה').includes('id="srow-cloner_beep"')); assert.match(sw('cloner_beep'),/ checked /,'#1967: missing = on');
   assert.equal((html.match(/role="switch"/g)||[]).length,run('classroomsOn()')?15:14,'learned rate · learning (#2028) · full read-back (20/10) · IGMP querier (22/10) · cloner beep (22/10) · recovery · identity · update · idle logout · MFA for admins (18/10) · HDD support (#3268, 14/11) · brain CPU gate (#3456) · UEFI db update (#86) · scheduled cast (#3569) (+ class deploy with classrooms)');
   // תעודה ותחזוקה — שורה אחת כל אחת
-  assert.match(groupOf('אבטחה'),/<dt>תעודת TLS<\/dt><dd><span class="muted">בלי TLS \(loopback בלבד\)<\/span><\/dd>/);
+  assert.match(groupOf('אבטחה'),/<dt>תעודת TLS<\/dt><dd><span class="muted">בלי TLS \(גישה מהמחשב המקומי בלבד\)<\/span><\/dd>/);
   assert.match(groupOf('עדכונים ותחזוקה'),/<dt title="[^"]*">הפעלה מחדש אוטומטית<\/dt><dd[^>]*><span class="sv">כבוי<\/span> <button[^>]*autoRebootSheet\(\)">שינוי…</);
   assert.match(groupOf('עדכונים ותחזוקה'),/גיבוי הגדרות<\/dt><dd[^>]*><button[^>]*onclick="confirmSettingsBackup\(\)">הורדה…</);
   assert.doesNotMatch(html,/aria-label="ערכת נושא"|>מראה</,'"מראה" is in my account, not here');

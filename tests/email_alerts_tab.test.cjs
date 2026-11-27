@@ -74,9 +74,9 @@ test('not configured: four providers in the mockup order, Relay carries the "sim
   const s=setup();
   s.run('EM_VIEW='+JSON.stringify(view()));
   const html=s.run('emailAlertsTab()');
-  const order=['Office 365','Gmail / Google Workspace','Relay פנימי / Exchange, בלי משתמש','SMTP מותאם'].map(n=>html.indexOf(`<strong>${n}</strong>`));
+  const order=['Office 365','Gmail / Google Workspace','שרת דואר פנימי / Exchange, בלי משתמש','SMTP מותאם'].map(n=>html.indexOf(`<strong>${n}</strong>`));
   assert.ok(order.every(i=>i>0),order); assert.deepEqual([...order].sort((a,b)=>a-b),order);
-  assert.match(html,/Relay פנימי[^]*?<span class="em-tag">הכי פשוט, אם יש במכללה שרת דואר פנימי<\/span>/);
+  assert.match(html,/שרת דואר פנימי[^]*?<span class="em-tag">הכי פשוט, אם יש במכללה שרת דואר פנימי<\/span>/);
   assert.match(html,/התראות במייל לא מוגדרות/);
   assert.doesNotMatch(SRC,/התחבר עם Google/,'recommendation 2: no Google sign-in');
   s.run('EM.pick="gmail"');
