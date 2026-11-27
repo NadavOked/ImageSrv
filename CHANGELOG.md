@@ -1,11 +1,14 @@
 # Changelog
 
+> Unreleased (#3673, part 1): a question in the brain's channel can carry a detail table (`ask.Rows`, the approved `.ba-rows`): `brain_asks.rows_json` (schema 27), shown in the console answer window between the message and the countdown. Display only: the answer is still one option, and unreadable rows leave the question without a table. The machine screen and the agent records are the next slice.
 > Unreleased / Fixed (#3008): on the cloner card in the console a disk whose failure cause is `cable` is no longer marked "נכשל בשיכפול הקודם" -- the brain (`disk-rule.tsv`, new yellow row `cable_failed`) classifies it as the connection's fault and the card chip and line say "חיבור לא תקין", the same words and the same yellow as the disk-tab chip and the title "חיבור של <name> לא תקין". Colour, source/target permissions and a disk's own failure are unchanged.
 
 > Unreleased / Fixed (#3906): the build machine's own restore ("שחזור לדיסק הזה", `single_restore_run`) now writes the machine name into a Linux image -- its registered name, the one the operator confirmed, with no round prefix; `name_this_machine` takes the name and the manifest as optional arguments. Before, the step was shown on the screen but only the station path called it, and the disk booted with the source machine's name.
 > Unreleased / Fixed (#3770): the monitor machine list and `_target` run the clock-step detector (`clockstep.guard`) before judging presence, so a wall-clock step no longer shows a live machine as disconnected (forward) or a silent one as connected (backward) until another heartbeat runs it.
 
 > Unreleased / Fixed (#3008): a cable or slot cause is the connection's mark, not the disk's. The local clone, the SMART window, the cloner's waiting screen and the console say "חיבור של <name> לא תקין" instead of "נכשל בשיכפול הקודם" -- the name is the operator's own (the slot name, else "דיסק N" of the drawer the server mapped), and "חיבור של הדיסק לא תקין" when there is none, never a number worked out on the screen. The disk's own failure keeps its words.
+
+> Unreleased / Docs (#4194): the 13/09 native GUI mockup moved to `docs/design/archive/`. The 18/09 mockup is the approved one, and no test reads the 13/09 file. Its manifest line, the link in `docs/README.md` and the path in `native-gui-redesign-status.md` follow the move; the file's content is unchanged.
 
 כל שינוי שראוי לדעת עליו, לפי תג. הפורמט הוא
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), והגרסאות הן
@@ -24,6 +27,10 @@
 ---
 
 ## [Unreleased]
+
+- **`server/brain/README.md` no longer says the chunk engine "exists only there" and no longer names internal paths** (#4188, Documentation; patch: a document and a test, no behaviour change). The engine (`server/rounds/chunksend.py`, `server/rounds/repair.py`, `agent/chunkcast.c`) is on main, so the README now says where it is; the `lab/` and `handoffs/` references became "internal document". `tests/test_brain_readme_public_paths_4188.py` fails on any path in that README that starts with `lab/` or `handoffs/`.
+- **New `docs/architecture/trident.md`: the chunk engine's protocol, for readers from outside** (#4190, Documentation; patch: a doc page, one manifest line and two links, no behaviour change). What Trident is and how it differs from udpcast (no waiting for ACKs, the wire rate apart from the write rate), the packet layout, session / chunk / pass, the rate feedback, how what is missing is repaired (another multicast pass, HTTP Range, a neighbour), the XXH64 and BLAKE3 checks before a write, the trust boundaries and the known limits; every claim points at a function or constant (`file:symbol`).
+- **`docs/guides/troubleshooting.md`: an FAQ and a troubleshooting guide for the IT admin** (#4193, Documentation; patch: a document and a manifest line, no behaviour change). A short FAQ, then seven faults that are already documented in the repo: PXE that does not come up, IGMP snooping and the querier, Secure Boot (three different signs), a machine that boots from its disk instead of the menu (and why an unregistered MAC does so on purpose), a slow disk, BitLocker, and a silent server. Each has the sign, how to check, and the fix. Linked from `README.md` and `docs/README.md`; the public Wiki builds a page for it from `docs/` on the next release. The file is classified `[public]` in `tools/git/public-manifest.list`.
 
 ## [v0.101.0] - 2026-11-26
 

@@ -300,6 +300,9 @@ def test_D19_shadow_fails_the_wave_as_today_and_says_the_veto_would_have_blocked
     wave.start()
     _a_failed_b_silent(wave)
     assert wait_for(lambda: wave.state() == "failed", 10)
+    # the state turns "failed" under the engine lock and send_failed is journaled right after it (`_fail`): a reader
+    # between the two saw an empty list (public CI, v0.101.0 main). Wait for the event, not only the state
+    assert wait_for(lambda: wave.named("send_failed"), 10), "the wave failed without saying why"
     assert "לא נשאר אף מחשב חי" in wave.named("send_failed")[0]
     hold = wave.would_block("D19")
     assert len(hold) == 1 and hold[0]["say"] == "הווטו היה חוסם" and hold[0]["target"] == "b"
@@ -344,6 +347,9 @@ def test_D19_enforce_without_any_evidence_the_wave_fails_as_today(wave):
     wave.engine.report(SID, "a", {"part": 3, "pass": 1, "state": "ended", "targets": [
         {"serial": "a-sda", "failed": True, "write_mbps": 120, "durable": [{"part": 3, "ranges": []}]}]})
     assert wait_for(lambda: wave.state() == "failed", 10)
+    # the state turns "failed" under the engine lock and send_failed is journaled right after it (`_fail`): a reader
+    # between the two saw an empty list (public CI, v0.101.0 main). Wait for the event, not only the state
+    assert wait_for(lambda: wave.named("send_failed"), 10), "the wave failed without saying why"
     assert "לא נשאר אף מחשב חי" in wave.named("send_failed")[0]
 
 
@@ -361,6 +367,9 @@ def test_D19_hold_ends_at_the_ceiling_and_the_wave_then_fails_by_name(wave, jour
     assert not wait_for(lambda: wave.state() == "failed", 1)
     clock[0] += 1801                          # the default ceiling is 1800 s
     assert wait_for(lambda: wave.state() == "failed", 30)
+    # the state turns "failed" under the engine lock and send_failed is journaled right after it (`_fail`): a reader
+    # between the two saw an empty list (public CI, v0.101.0 main). Wait for the event, not only the state
+    assert wait_for(lambda: wave.named("send_failed"), 10), "the wave failed without saying why"
     assert "לא נשאר אף מחשב חי" in wave.named("send_failed")[0]
     said = [r[0] for r in wave.conn.execute("SELECT detail FROM journal WHERE event = 'brain_veto' ORDER BY id")]
     assert said[0].startswith("הווטו חסם D19") and said[-1].startswith("הווטו שחרר D19") and "התקרה" in said[-1]

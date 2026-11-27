@@ -100,6 +100,38 @@ const brainBellActs = () => `<div class="acts"><button class="btn" type="button"
 
 /* ---------- חלון התשובה: sheet() אחד ---------- */
 const brainNote = (kind, text) => `<div class="n-note ${kind}"><svg class="n-ic" viewBox="0 0 24 24" aria-hidden="true">${kind === "info" ? '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>' : '<path d="M12 4 2.8 20h18.4z"/><path d="M12 10v4.5M12 17.5h.01"/>'}</svg><span>${text}</span></div>`;
+/* #3673 (מוקאפ 20/11, `.ba-rows`): הפירוט שהכלל מצרף לשאלה -- טבלה קטנה בין ההודעה לספירה. תצוגה בלבד: אין בה פעולה, והתשובה היא האפשרות.
+   כל טקסט עובר esc(); גוון (warn/bad) נאמר גם בהדגשה, לא רק בצבע. פירוט שאינו בצורה המוכרת אינו מצויר (השאלה נשארת). */
+function brainSub(c) {
+  if (!c.sub) return "";
+  return `<span class="dim">${brainStyled(c.sub, c.sub_style)}</span>`;
+}
+/* mono = גופן קבוע (מספר, מזהה); ltr = לטיני בתוך משפט עברי, מבודד ובלי גופן אחר */
+function brainStyled(text, style) {
+  return style === "mono" ? `<span class="mono">${esc(text)}</span>` : style === "ltr" ? `<bdi dir="ltr">${esc(text)}</bdi>` : esc(text);
+}
+/* הערת תחתית: רצפים לטיניים (גודל דיסק, מזהה) מבודדים -- בלי זה "512 GB" בתוך משפט עברי מתהפך ל-"GB 512". */
+function brainLtr(text) {
+  return String(text).split(/([A-Za-z0-9][A-Za-z0-9.:\/_-]*(?: [A-Za-z0-9][A-Za-z0-9.:\/_-]*)*)/).map((part, i) => (i % 2 ? `<bdi dir="ltr">${esc(part)}</bdi>` : esc(part))).join("");
+}
+function brainCell(c) {
+  if (!c || typeof c.text !== "string") return null;
+  let t = brainStyled(c.text, c.style);
+  if (c.tone === "warn" || c.tone === "bad") t = `<span class="${c.tone === "bad" ? "badc" : "warnc"}">${t}</span>`;
+  return `<td>${c.arrow ? '<span class="arr">←</span>' : ""}${t}${brainSub(c)}</td>`;
+}
+function brainRowsHtml(a) {
+  const r = a && a.rows;
+  if (!r || !Array.isArray(r.cols) || !Array.isArray(r.rows) || !r.cols.length || !r.rows.length) return "";
+  const body = [];
+  for (const line of r.rows) {
+    const cells = Array.isArray(line) && line.length === r.cols.length ? line.map(brainCell) : null;
+    if (!cells || cells.includes(null)) return "";          // שורה חלקית אינה נראית כמו שורה שלמה: בלי טבלה
+    body.push(`<tr>${cells.join("")}</tr>`);
+  }
+  return `<div class="ba-rows"><h4>${esc(r.title_he)}</h4><table><thead><tr>${r.cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>`
+    + `<tbody>${body.join("")}</tbody></table>${r.more_he ? `<div class="more">${brainLtr(r.more_he)}</div>` : ""}</div>`;
+}
 function brainOptHint(a, o, on) {
   if (o.destructive) return on ? `<small class="bad">${esc(o.consequence_he)}</small>` : `<small>פעולה הרסנית — לא תתבצע בלי התשובה הזו</small>`;
   return o.id === a.safe_default ? `<small>ברירת המחדל כשאין תשובה</small>` : "";
@@ -117,7 +149,7 @@ function brainAskSheet(id, sel) {
   const impact = impactList([["ok", "ברירת המחדל אינה פעולה שמוחקת"]].concat(hasD ? [["b", "אפשרות הרסנית אינה נבחרת לבד: רק תשובה שלך מבצעת אותה"]] : []));
   BRAIN_SHEET_ID = a.id;
   sheet({ title: a.title_he, sub: `${where ? where + " · " : ""}שאלה מהמוח`,
-    note: (a.detail_he ? brainNote("info", esc(a.detail_he)) : "") + countdown,
+    note: (a.detail_he ? brainNote("info", esc(a.detail_he)) : "") + brainRowsHtml(a) + countdown,
     fields: [{ type: "html", html: opts + impact }], submitLabel: "אישור", size: "narrow", hint: "אפשר לענות גם במסך של המכונה",
     onSubmit: async () => {
       const chosen = document.querySelector('#sheet input[name="ba"]:checked');
