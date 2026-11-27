@@ -685,7 +685,7 @@ SETTINGS_HE = {
     "clone_name_pad": "שמות מחשב: מספר ספרות בריפוד",   # #2786
     "clone_name_instructor": "שמות מחשב: סיומת הדיסק של המרצה",   # #2786
     "intersite_rate_cap_mbps": "הגבלת קצב בין אתרים (Mb/s)",   # #1473
-    "igmp_querier": "IGMP querier ברשת ההפצה",   # #1972
+    "igmp_querier": "שאילתות IGMP ברשת ההפצה",   # #1972
     # #2056/#2059 (מוקאפ 05): אותן תוויות כמו בהגדרות הקונסולה; הערך בשניות
     "lost_wait_seconds": "המתנה למחשב שהתנתק באמצע שיכפול (שניות)",
     "gui_idle_poweroff_seconds": "כיבוי כשאין פעילות (שניות)",
@@ -876,8 +876,8 @@ class JournalTranslator:
             if m:
                 group = self._groups.get(m.group(2), m.group(2))
                 image = self._images.get(m.group(3), m.group(3))
-                text = (f'{group} — "{image}", קידומת {m.group(4)}'
-                        f'{_expand_note(detail)}')
+                context = "חדר המשכפלים" if m.group(2) == "grp_CLONERS" and m.group(4) == "ROOM" else f"קידומת {m.group(4)}"
+                text = f'{group} — "{image}", {context}{_expand_note(detail)}'
         elif event == "room_open":
             text = detail + _expand_note(detail)
         elif event == "room_precheck_warned":

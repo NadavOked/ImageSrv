@@ -297,7 +297,7 @@ test('empty and unread are messages, not an empty drawing: no NICs → empty sta
   assert.match(t.run('networkPage(1)'),/לא הצלחתי לקרוא את כרטיסי הרשת/); assert.match(t.run('networkPage(2)'),/לא הצלחתי לקרוא את כרטיסי הרשת/);
   t=await loaded({'/net':new Error('db locked'),'/ports':new Error('ss חסר'),'/monitor/machines':403,'/storage-nodes':409});
   html=t.run('networkPage(0)'); balanced(html);
-  assert.match(html,/\/net לא נקרא[^<]*<details class="tech"><summary>פרטים טכניים<\/summary><code dir="ltr">db locked<\/code>/,'raw system text is behind "technical details"'); assert.match(html,/\/ports לא נקרא: ss חסר/,'a Hebrew-dominant detail stays inline'); assert.match(html,/\/monitor\/machines לא נקרא/);
+  assert.match(html,/\/net לא נקרא[^<]*<details class="tech"><summary>פרטים טכניים<\/summary><code dir="ltr">db locked<\/code>/,'raw system text is behind "technical details"'); assert.match(html,/מצב השירותים לא נקרא: ss חסר/,'a Hebrew-dominant detail stays inline'); assert.match(html,/\/monitor\/machines לא נקרא/);
   assert.doesNotMatch(html,/class="note[^"]*">[^<]*storage-nodes/,'409 = no secondaries, not an error');
   assert.match(html,/<svg class="netmap-svg"/,'NICs were read — the map stays, without the unread machines');
   assert.match(mapOf(html),/מה מותר: דורש API/,'/ports unread → the chip says it does not know, it never draws a guessed policy');
@@ -517,7 +517,7 @@ test('#1263 DHCP off keeps the typed NIC name; the forget/description sheets are
 /* ---------- לשונית 2: רשת הפצה ---------- */
 
 test('#3002: the deploy tab always opens with the fixed isolation warning -- configured, no deploy NIC, NICs not read; and only there',async()=>{
-  const WARN=/^<div class="page aligned">[^]*?<div class="body"><div class="c12"><div class="note warn"><span aria-hidden="true">●<\/span><span><b>רשת ההפצה חייבת להיות מבודדת — זה חלק מהאבטחה\.<\/b>[^<]*port security[^<]*DHCP snooping[^<]*אינו חוסם אותו\.[^<]*פרק 4\.<\/span><\/div><\/div>/;
+  const WARN=/^<div class="page aligned">[^]*?<div class="body"><div class="c12"><div class="note warn"><span aria-hidden="true">●<\/span><span><b>רשת ההפצה חייבת להיות מבודדת — זה חלק מהאבטחה\.<\/b>[^<]*הגבלת החיבור למחשב אחד בכל פורט[^<]*הגבלת חלוקת כתובות DHCP לפורט של השרת[^<]*אינו חוסם אותו\.[^<]*פרק 4\.<\/span><\/div><\/div>/;
   let t=await loaded(); assert.match(t.run('networkPage(2)'),WARN,'configured');
   const none=NICS.map(n=>({...n,enabled:false,proxy:false,dhcp_live:{state:'off',checked:true,detail:''},dhcp_live_label:'כבוי'}));
   t=await loaded({'/net/interfaces':none}); assert.match(t.run('networkPage(2)'),WARN,'before a deploy NIC is chosen');

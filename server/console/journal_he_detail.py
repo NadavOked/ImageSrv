@@ -38,6 +38,7 @@ _REFUSALS = [(r" \[\+(\d+) identical refusals in the last (\d+)s not journaled\]
 
 # #3157: אזהרת שרת חוזרת (serverlog.JournalBridge) -- המונה באותה שורה
 _REPEATS = [(r" \[\+(\d+) identical in (\d+)s\]$", r" [חזרה עוד \1 פעמים ב-\2 השניות שאחריה]")]
+_ROOM_PROGRESS = [(r"\bwritten=(\d+)/(\d+)\b", r"נכתבו \1 מתוך \2")]
 
 #: event -> [(regex, replacement)], applied in order with re.sub.
 RULES: dict[str, list[tuple[str, str]]] = {
@@ -87,6 +88,10 @@ RULES: dict[str, list[tuple[str, str]]] = {
     "report_on_closed_session": _FOR,
     "report_from_nonmember": _FOR,
     "report_on_closed_task": _FOR,
+    "room_close": _ROOM_PROGRESS,
+    "room_done": _ROOM_PROGRESS,
+    "room_failed": _ROOM_PROGRESS,
+    "room_wave": [(r"\bwave=(\d+)\b", r"גל \1")] + _ROOM_PROGRESS,
     "room_tick_failed": [(r"^background — ", "ברקע — ")],
     # #1988: "<מיקום> <התקן> UUID=<uuid> <שם>"
     "storage_location_add_disk": [(r"\bUUID=", "מזהה מערכת הקבצים (UUID)=")],

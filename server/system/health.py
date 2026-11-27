@@ -148,11 +148,12 @@ def _dnsmasq_down_detail(active: str, journal: str) -> str:
             continue
         missing = re.fullmatch(r"unknown interface (\S+)", message)
         if missing:
-            return f"dnsmasq down: unknown interface {missing[1]}"
+            return f"שירות dnsmasq אינו פעיל: כרטיס הרשת {missing[1]} אינו מוכר"
         break
-    detail = f"מצב: {active}"
+    state = {"inactive": "השירות אינו פעיל", "failed": "השירות נכשל"}
+    detail = state.get(active, "השירות לא דיווח שהוא פעיל")
     if not journal.strip():
-        detail += " · dnsmasq journal unavailable or empty — cause not checked"
+        detail += " · יומן dnsmasq לא נקרא או ריק, ולכן סיבת התקלה לא נבדקה"
     return detail
 
 
@@ -601,7 +602,7 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
         if unconfigured
         else check("dnsmasq", "שירות dnsmasq", "ok", "רץ") if active == "active"
         else check("dnsmasq", "שירות dnsmasq", "off",
-                   "אי אפשר לבדוק כאן (systemctl לא זמין)") if not active
+                   "כלי ניהול השירותים אינו זמין כאן, ולכן מצב השירות לא נבדק") if not active
         else check("dnsmasq", "שירות dnsmasq", "bad",
                    _dnsmasq_down_detail(active, hooks.get("dnsmasq_journal", lambda: "")())))
 
@@ -726,7 +727,7 @@ def collect(ctx, hooks: dict, server_base: str) -> list[dict]:
 
     # #1972: querier ברשת ההפצה — פעיל / יש querier אחר / כבוי. #1973: מצב ה-UPS.
     if hooks.get("igmp_querier"):
-        results.append(check("igmp_querier", "IGMP querier", *hooks["igmp_querier"]()))
+        results.append(check("igmp_querier", "שאילתות IGMP", *hooks["igmp_querier"]()))
     if hooks.get("rogue_dhcp"):
         results.append(check("rogue_dhcp", "שרת DHCP זר", *hooks["rogue_dhcp"]()))
     if hooks.get("ups"):
@@ -933,7 +934,7 @@ def ports_snapshot(ctx, hooks: dict, server_base: str) -> list[dict]:
     if unconfigured:
         state, detail = "not_applicable", NOT_APPLICABLE
     entries.append(_port("tftp", "TFTP", "69", "udp",
-        "bootloader — shim/GRUB והתפריט", "תחנות (PXE)", state, detail, tftp_note,
+        "טוען האתחול — shim, GRUB והתפריט", "תחנות (PXE)", state, detail, tftp_note,
         listening=listening, bind=tftp_bind, **switch))
 
     # DHCP 67 — המתג חי ב-PUT /net/interfaces/{n} (enabled, +confirm = שם

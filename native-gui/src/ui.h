@@ -827,6 +827,7 @@ typedef struct App {
 void app_draw(App *a, cairo_t *cr, int W, int H);
 /* #2001: the USB stick's connections window is up -- F2 is its save there, not the theme */
 int app_usbset_window(const App *a);
+int fail_f2_btn(const App *a);   /* #1802/#2898: index of the failure button "F2 ...", or -1 */
 int app_usbset_here(const App *a);   /* mockup 01: the USB stick's "הגדרות" in the top bar (F4) */
 int standby_back_locked(const App *a);   /* #2079: screens_standby.c */
 /* The screen's scale (mockup 10/10): clamp(H/800, 1, 1.4) in quarter steps --

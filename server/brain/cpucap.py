@@ -334,8 +334,9 @@ def summary(conn, proc: Path = PROC, cgroup: Path = CGROUP) -> tuple[str, str]:
         if n_cores is None:
             return "unknown", "מספר הליבות של השרת לא נקרא"
         if top is None:
+            source_he = "הליבות הזמינות לתהליך" if source == "affinity" else "מכסת המעבד של השירות"
             return "info", (f"עדיין לא נלמד כמה גלים השרת מחזיק במקביל ({_learned_he(learned)}, נדרשים {MIN_WAVES}); "
-                            f"{n_cores:g} ליבות ({source})")
+                            f"{n_cores:g} ליבות לפי {source_he}")
         if top < 1:
             return "warn", (f"גל אחד עולה ~{learned.per_wave:.2f} ליבות, ולשרת {n_cores:g} ליבות: אפילו גל אחד חורג "
                             f"מהתקרה ({HEADROOM:g}) — נלמד מ-{learned.waves} גלים")
