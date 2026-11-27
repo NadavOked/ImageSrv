@@ -38,6 +38,14 @@ def active_rounds(conn: SqlConnection) -> list[sqlite3.Row]:
         "SELECT * FROM room_rounds WHERE state = 'active' ORDER BY created_at, rowid").fetchall()
 
 
+def round_of_wave(conn: SqlConnection, wave_session_id: str) -> sqlite3.Row | None:
+    """#3898: הסבב הפעיל שהגל הזה הוא הגל הנוכחי שלו."""
+    return conn.execute(
+        "SELECT * FROM room_rounds WHERE wave_session_id = ? AND state = 'active'",
+        (wave_session_id,),
+    ).fetchone()
+
+
 def round_of_mac(conn: SqlConnection, mac: str) -> sqlite3.Row | None:
     """#3898: הסבב הפעיל שהמשכפל נבחר בו, או None. משכפל נמצא בסבב אחד בלבד (`round_cloners`)."""
     for row in active_rounds(conn):
@@ -256,10 +264,7 @@ def wave_drives(conn: SqlConnection, session_id: str) -> list[dict]:
     אותן מגירות ש-`ready_drives` סופר: טריות, ובפורטים שנבחרו, של המכונות
     שהצטרפו. גל שאינו גל של סבב חדר פעיל — רשימה ריקה, והגל יוצא בקצב
     הפתיחה (`drive_rates.choose`)."""
-    round_row = conn.execute(
-        "SELECT * FROM room_rounds WHERE wave_session_id = ? AND state = 'active'",
-        (session_id,),
-    ).fetchone()
+    round_row = round_of_wave(conn, session_id)
     if round_row is None:
         return []
     written = _closed(round_row)
@@ -279,7 +284,10 @@ def has_fresh_drawers(conn: SqlConnection, mac: str) -> bool:
 
     בלי סבב חדר פעיל אין מה לסנן — מצטרפים כרגיל.
     """
-    round_row = active_round(conn)
+    round_row = round_of_mac(conn, mac)
+    if round_row is None:
+        # סבב ישן בלי בחירת משכפלים, או משכפל שאינו מוזמן לסבב.
+        round_row = active_round(conn)
     if round_row is None:
         return True
     return bool(fresh_serials(conn, mac, _closed(round_row),

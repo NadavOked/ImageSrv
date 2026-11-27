@@ -134,7 +134,7 @@ def test_an_inactive_array_blocks_because_the_data_is_unreachable(conn, monkeypa
     raid_files(monkeypatch, tmp_path, mdstat=INACTIVE, declared=DECLARED.replace("raid1", "raid10"))
     got = one(only(gate_host.raid))
     assert got.verdict == BLOCK
-    assert "המערך אינו פעיל (inactive)" in got.reason and "raid_md0=bad" in got.evidence
+    assert "המערך אינו פעיל" in got.reason and "raid_md0=bad" in got.evidence
 
 
 def test_a_declared_array_that_is_not_in_mdstat_blocks(conn, monkeypatch, tmp_path):
@@ -396,9 +396,9 @@ def test_an_unknown_or_off_or_foreign_state_is_undecided_not_open(conn, state):
 
 
 def test_a_smart_that_could_not_be_read_is_undecided_for_that_disk(conn):
-    wire(conn, [*GOOD, smart_row(PASSED_SMART, 2)])      # smartctl לא הצליח לפתוח את הדיסק
+    wire(conn, [*GOOD, smart_row(PASSED_SMART, 2)])      # כלי בדיקת SMART לא הצליח לפתוח את הדיסק
     got = one(gate_host.system_health(conn, (), RID))
-    assert got.verdict == UNDECIDED and "smartctl לא הצליח לפתוח" in got.reason, got
+    assert got.verdict == UNDECIDED and "כלי בדיקת SMART לא הצליח לפתוח" in got.reason, got
 
 
 def test_a_health_source_that_was_not_wired_is_undecided(conn):
@@ -435,7 +435,7 @@ def test_the_real_collect_with_a_dead_dnsmasq_is_warn_by_name(health_server_ctx)
     down = {**hooks, "unit_active": lambda name: "failed", "dnsmasq_journal": lambda: "dnsmasq: unknown interface eth9\n"}
     gate_core.attach_health(ctx.conn, lambda: health.collect(ctx, down, "http://x"))
     got = one(gate_host.system_health(ctx.conn, (), RID))
-    assert got.verdict == WARN and "שירות dnsmasq: dnsmasq down: unknown interface eth9" in got.reason, got
+    assert got.verdict == WARN and "כרטיס הרשת eth9 אינו מוכר" in got.reason, got
 
 
 @pytest.fixture()

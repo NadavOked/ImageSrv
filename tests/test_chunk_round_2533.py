@@ -146,9 +146,11 @@ def _ranges(chunks):
     return [[int(lo), int(hi)] for lo, hi in (r.split("-") for r in C.ranges_of(chunks).split(",") if r)]
 
 
-def test_lost_chunks_are_repaired_one_resend_for_two_machines_http_for_one(cc, img, tmp_path, monkeypatch):
+def test_lost_chunks_are_repaired_one_resend_for_two_machines_http_for_one(cc, tmp_path, monkeypatch):
     """a קיבל הכול. b איבד את 1 ואת 3, c איבד את 3 ואת 4 — במעבר הראשון בלבד.
     3 חסרה לשניים: משודרת שוב פעם אחת. 1 ו-4 חסרות למחשב אחד כל אחת: הוא מוריד."""
+    # #4073: keep the loopback stream small so the relay's deliberate drops define the loss pattern.
+    img = C.build(tmp_path / "img", cc / "fanout", noisy=())
     lost = {1: {1, 3}, 2: {3, 4}}
     seen_pass = {"n": 1}
 
@@ -173,9 +175,9 @@ def test_lost_chunks_are_repaired_one_resend_for_two_machines_http_for_one(cc, i
     for mac in disks:
         for path in disks[mac].values():
             assert path.read_bytes() == want, f"{path.name} is not the image"
-    assert wave.lists == [None, "3-3"]                                      # one resend, and only of chunk 3
+    assert wave.lists == [None, "3-3"], wave.events                         # one resend, and only of chunk 3
     status = wave.engine.status()
-    assert status["multicast_chunks"] == 1 and status["fetched_chunks"] == 2
+    assert status["multicast_chunks"] == 1 and status["fetched_chunks"] == 2, wave.events
     assert [e for e, _d in wave.events if e in ("send_failed", "chunk_disk_failed")] == []
     assert [e for e, _d in wave.events].count("send_done") == 1
 

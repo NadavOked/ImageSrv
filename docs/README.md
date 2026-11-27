@@ -14,6 +14,7 @@
 | [agent.md](architecture/agent.md) | הסוכן שרץ על המחשבים: החלטות, שחזור, קליטה, חדר שיכפולים |
 | [grub-generator.md](architecture/grub-generator.md) | מחולל תפריט האתחול (GRUB) |
 | [security-model.md](architecture/security-model.md) | מודל האמון: מה מאומת באתחול ובמשימה, ומה לא |
+| [trident.md](architecture/trident.md) | Trident, מנוע השידור: חבילות, משוב קצב, תיקון חסרים ואימות |
 
 ## מדריכים (`guides/`)
 
@@ -27,6 +28,7 @@
 | [driver-packages.md](guides/driver-packages.md) | חבילות דרייברים |
 | [vm-update.md](guides/vm-update.md) | עדכון אימג' Windows בתוך מכונה וירטואלית על השרת |
 | [email-alerts.md](guides/email-alerts.md) | התראות במייל: הגדרת שליחה ו-OAuth |
+| [troubleshooting.md](guides/troubleshooting.md) | שאלות נפוצות ותקלות: PXE, IGMP snooping, Secure Boot, מחשב שעולה מהדיסק, דיסק איטי, BitLocker, שרת שקט |
 
 ## תרשימים ומיתוג
 
@@ -42,7 +44,7 @@
 | מסמך | מה יש בו |
 |---|---|
 | [native-gui-mockup-2026-09-18.html](design/native-gui-mockup-2026-09-18.html) | המוקאפ המאושר של הממשק הנייטיבי, שהטסטים בודקים מולו את הצבעים |
-| [native-gui-mockup-2026-09-13.html](design/native-gui-mockup-2026-09-13.html) | המוקאפ הקודם של אותו ממשק |
+| [native-gui-mockup-2026-09-13.html](design/archive/native-gui-mockup-2026-09-13.html) | המוקאפ הקודם של אותו ממשק |
 
 דיווח על חולשת אבטחה: [SECURITY.md](../SECURITY.md).
 

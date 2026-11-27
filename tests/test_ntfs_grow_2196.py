@@ -43,7 +43,7 @@ INCONSISTENT = (
     "echo 'ERROR: NTFS is inconsistent. Run chkdsk /f on Windows then reboot it TWICE!'\n"
     "exit 1\n"
 )
-SAID = "ה-NTFS במקור אינו עקבי (ntfsresize). ב-Windows: chkdsk /f, ואז הרחבת הכונן בניהול הדיסקים"
+SAID = "ה-NTFS בדיסק המקור אינו עקבי. ב-Windows: chkdsk /f, ואז הרחבת הכונן בניהול הדיסקים"
 
 
 @pytest.mark.parametrize("runner", [grow_drawers, grow_station])
@@ -55,6 +55,8 @@ def test_an_inconsistent_ntfs_is_said_for_what_it_is_and_marked_deferred(tmp_pat
     assert "ההרחבה נדחתה" in err and SAID in err, err
     assert "טבלת המחיצות הוגדלה, מערכת הקבצים לא" in err, err
     assert len(err.encode()) < 400, len(err.encode())                # the screen's error[400]
+    # #2992 (ב): the cause is the SOURCE disk, in the operator's words -- no tool name, one pair of parentheses (the fs)
+    assert "ntfsresize" not in err and "בדיסק המקור" in err and err.count("(") == 1, err
     assert (run_dir / "targets" / "sda" / "grow_deferred").exists()
     assert not (run_dir / "ntfsresize.out").exists()                 # its words went to the log, the file did not stay
 

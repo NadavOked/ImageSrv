@@ -334,7 +334,7 @@ test('#1485 cloners: unread lists say so, empty group, and the deploy role', () 
   assert.match(html,/רשימת הרשת לא נקראה — אי אפשר לדעת מי לא דיווח/,'unread ≠ "everyone reported"');
   run("NET=[]; MACHINES=MACHINES.filter(m=>m.group_id!=='grp_CLONERS'); DISK_FAILURES=[]"); html=run('machines(0)'); balanced(html);
   assert.match(html,/0 מחשבים/); assert.match(html,/אין מחשבי שיכפול רשומים — הוסיפו את הראשון/);
-  assert.match(html,/<b class="et">כל המחשבים הרשומים דיווחו<\/b>מחשב ללא hello מעל 10 דקות יופיע כאן עם אפשרות להעיר אותו \(WoL\)\./);
+  assert.match(html,/<b class="et">כל המחשבים הרשומים דיווחו<\/b>מחשב שלא דיווח מעל 10 דקות יופיע כאן עם אפשרות להעיר אותו \(WoL\)\./);
   run('ME.role="deploy"'); assert.equal(run("pageAllowed('machines')"),false,'deploy never reaches the machines page');
   html=run('machines(0)'); assert.doesNotMatch(html,/openRoomRound|wakeRoom|openAddMachine|clearDiskFailure|monitorMachine|openMachineDetail/,'no admin actions rendered for deploy even if the page were reached');
 });
@@ -446,7 +446,7 @@ test('#980 §1: "power off all" is a danger sheet behind the typed group name, p
   run("poweroffRoom('grp_CLONERS')");
   assert.equal(run('formOptions.danger'),true);
   assert.ok(!run('formOptions.verify'),'#1270: no typed name');
-  assert.match(run('formOptions.note'),/hello הבא/); assert.match(run('formOptions.note'),/WoL/,'console-full.html: the consequences are an impact list in the note, the sub names the group');
+  assert.match(run('formOptions.note'),/כשידווח שוב לשרת/); assert.match(run('formOptions.note'),/WoL/,'console-full.html: the consequences are an impact list in the note, the sub names the group');
   await run('formOptions.onSubmit({})');
   const req=requests.find(r=>r.url==='/api/console/room/poweroff');
   assert.ok(req,'POST /room/poweroff was sent'); assert.equal(req.options.method,'POST');

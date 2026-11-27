@@ -59,7 +59,7 @@ from server.rounds.sessions import SessionError, SessionStore, SessionSuperseded
 #: #2594: חישובי המצב הטהורים של הסבב יושבים ב-`room_state` ומיובאים לכאן בחזרה,
 #: כך ש-`room.<שם>` ממשיך לעבוד לכל קורא קיים (גם בטסטים).
 from server.rounds.room_state import (  # noqa: F401 -- re-export (#2594)
-    _cancelled, _closed, _disks, _expected, _fresh_disks, _no_disk_count, _port, active_rounds, round_of_mac,
+    _cancelled, _closed, _disks, _expected, _fresh_disks, _no_disk_count, _port, active_rounds, round_of_mac, round_of_wave,
     _red, _remaining, _roster, _selected_ports, _skipped, _unconfirmed, _written,
     active_round, fresh_serials, has_fresh_drawers, ready_drives, red_drives,
     shown_disks, target_disks, target_ports, visible_round, wave_drives,

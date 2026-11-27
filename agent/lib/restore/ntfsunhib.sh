@@ -90,7 +90,7 @@ ntfs_grow_target() {
         LC_ALL=C grep -qF "NTFS is inconsistent" "$_ng_o"; _ng_g=$?   # grep: 0 found, 1 not, 2 the check broke
         rm -f "$_ng_o"
         case "$_ng_g" in
-            0) GROW_ERROR="טבלת המחיצות הוגדלה, מערכת הקבצים לא: ה-NTFS במקור אינו עקבי (ntfsresize). ב-Windows: chkdsk /f, ואז הרחבת הכונן בניהול הדיסקים" ;;
+            0) GROW_ERROR="טבלת המחיצות הוגדלה, מערכת הקבצים לא: ה-NTFS בדיסק המקור אינו עקבי. ב-Windows: chkdsk /f, ואז הרחבת הכונן בניהול הדיסקים" ;;
             *) GROW_ERROR="טבלת המחיצות הוגדלה, מערכת הקבצים לא: ntfsresize נכשל (rc=$_ng_rc)" ;;
         esac
         return 1
