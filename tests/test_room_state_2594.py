@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ast
 import re
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -74,3 +75,23 @@ def test_room_reexports_every_function_of_room_state_as_the_same_object():
     names = [n.name for n in _tree().body if isinstance(n, ast.FunctionDef)]
     assert len(names) >= 20
     assert [n for n in names if getattr(room, n, None) is not getattr(room_state, n)] == []
+
+
+def test_room_finds_only_the_active_round_for_a_wave():
+    from server.rounds import room
+
+    find_round = getattr(room, "round_of_wave", None)
+    assert callable(find_round)
+    conn = sqlite3.connect(":memory:")
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("CREATE TABLE room_rounds (id TEXT, wave_session_id TEXT, state TEXT)")
+        conn.executemany("INSERT INTO room_rounds VALUES (?, ?, ?)", [
+            ("old_round", "wave_1", "done"),
+            ("live_round", "wave_1", "active"),
+            ("closed_round", "wave_2", "done"),
+        ])
+        assert find_round(conn, "wave_1")["id"] == "live_round"
+        assert find_round(conn, "wave_2") is None
+    finally:
+        conn.close()

@@ -107,7 +107,7 @@ def array_check(array: Array) -> tuple[str, str]:
     """(state, detail) — ok / bad / warn, בעברית."""
     level = LEVEL_LABELS.get(array.level, array.level or "רמה לא ידועה")
     if not array.active:
-        return "bad", f"{level} · המערך אינו פעיל (inactive) — הנתונים אינם נגישים"
+        return "bad", f"{level} · המערך אינו פעיל — הנתונים אינם נגישים"
     bits = [level]
     if array.want is not None:
         bits.append(f"{array.have}/{array.want} כוננים")

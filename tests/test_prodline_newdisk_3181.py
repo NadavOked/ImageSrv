@@ -68,7 +68,14 @@ _back() {   # BACK_PORT: the slot the disk is pushed into (default 3, an empty o
     mkdir -p "$SYSROOT/sys/block/$2/device"; echo "$3" > "$SYSROOT/sys/block/$2/device/serial"
     echo 1000 > "$SYSROOT/sys/block/$2/size"; echo "${BACK_PORT:-3}" > "$SYSROOT/sys/block/$2/port"; : > "$SYSROOT/sys/block/$2/answers"
     trace "BACK $2"; [ -z "${PLUG_EVENT:-}" ] || : > "$RUN_DIR/chunk/plug"
-    [ -z "${NF_TRACE:-}" ] || _await_file "chunk/back.$2/p3.state"
+    if [ -n "${NF_TRACE:-}" ]; then
+        # _db_part seeds p3.state with the old chunks before the side receiver listens.
+        local n=0
+        until grep -Fxq SIDE-END "$RUN_DIR/trace"; do
+            [ "$n" -lt 600 ] || { trace "SYNC-TIMEOUT SIDE-END"; return 1; }
+            command sleep 0.1; n=$((n + 1))
+        done
+    fi
 }
 if [ "${BACK_PORT:-}" = 2 ]; then
     harness_answer() {

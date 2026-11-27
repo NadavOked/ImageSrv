@@ -29,8 +29,9 @@ NODE = shutil.which("node")
 
 def _drawer(tmp_path: Path, health_js: str, error: str = "", machines_js: str = "[]") -> dict:
     js = console_js()
-    fn = re.search(r"^function topNotifications\(\) \{.*?^\}", js, re.M | re.S)
-    assert fn, "topNotifications is gone from console.js"
+    names = ("isRawTechnical", "isSystemDiagnostic", "technicalDetails", "topNotifications")
+    functions = "\n".join(re.search(rf"^function {name}\([^\n]*\n.*?^}}", js, re.M | re.S)[0]
+                          for name in names)
     probe = tmp_path / "probe.cjs"
     probe.write_text("""
 const esc = (x) => String(x), ltrRuns = (x) => String(x);
@@ -40,7 +41,7 @@ const UI = { pill: (cls, text) => JSON.stringify({ cls, text }) };
 let OUT = null;
 const openDrawer = (title, body, opts) => { OUT = { title, body, sub: opts.sub, pill: JSON.parse(opts.meta) }; };
 """ + f"let MACHINES = {machines_js}, HEALTH = {health_js}, healthError = {json.dumps(error)};\n"
-        + fn.group(0) + "\ntopNotifications();\nconsole.log(JSON.stringify(OUT));\n",
+        + functions + "\ntopNotifications();\nconsole.log(JSON.stringify(OUT));\n",
         encoding="utf-8", newline="\n")
     out = subprocess.run([NODE, str(probe)], capture_output=True, text=True, encoding="utf-8",
                          stdin=subprocess.DEVNULL, timeout=60)
@@ -67,7 +68,8 @@ def test_health_not_loaded_yet_still_says_not_checked(tmp_path):
 def test_unread_health_next_to_a_failed_machine_lists_both(tmp_path):
     got = _drawer(tmp_path, "null", error="timeout",
                   machines_js='[{"mac": "aa", "name": "PC1", "state": "failed"}]')
-    assert "PC1" in got["body"] and "בדיקת הבריאות לא נקראה: timeout" in got["body"], got
+    assert "PC1" in got["body"] and "בדיקת הבריאות לא נקראה: שגיאה בקריאה" in got["body"], got
+    assert '<code dir="ltr">timeout</code>' in got["body"], got
     assert got["pill"]["cls"] == "warn", got
 
 

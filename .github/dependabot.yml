@@ -1,0 +1,32 @@
+# Dependabot — עדכוני גרסה אוטומטיים.
+#
+# ‏GitHub Actions כן מתעדכן: ב-2026-08-30 ה-CI כבר הזהיר ש-actions/checkout@v4
+# ו-codeql-action@v3 מורצים בכפייה על Node 24 כי Node 20 הוצא משימוש.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    # #3087: גרסה שפורסמה הרגע לא נכנסת מיד. אם תג של action נחטף, שבוע של
+    # המתנה הוא הזמן שבו הקהילה מגלה ומסירה אותו, לפני ש-PR שלנו מצמיד אליו.
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "ci"
+    labels:
+      - dependencies
+  # #4196: בקשות עדכון ל-pip חסומות. `server/requirements.txt` מצמיד את
+  # FastAPI ‏(0.115.11) ואת uvicorn ‏(0.32.0) לגרסאות שדביאן 13 מתקינה
+  # ב-apt. העלאת הגרסאות אוטומטית תחזיר את הפער שגרם ל-#113.
+  # התראות על פגיעויות מנוהלות בהגדרות הריפו.
+  - package-ecosystem: pip
+    directory: /server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"

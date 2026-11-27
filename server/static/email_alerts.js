@@ -22,8 +22,8 @@ const EM = { pick: null, change: false, device: null, test: null, adv: false, po
 /* הסדר כמו במוקאפ. המפתח הוא ה-provider של השרת. */
 const EM_PROV = [
   { key: "office365", name: "Office 365", sub: "חשבון Microsoft 365 של המכללה. מתחברים בדפדפן, בלי להקליד סיסמה כאן" },
-  { key: "gmail", name: "Gmail / Google Workspace", sub: "חשבון Google, עם סיסמת אפליקציה (App Password)" },
-  { key: "relay", name: "Relay פנימי / Exchange, בלי משתמש", sub: "שרת דואר ברשת המכללה שמקבל מהשרת הזה בלי סיסמה",
+  { key: "gmail", name: "Gmail / Google Workspace", sub: "חשבון Google, עם סיסמת אפליקציה" },
+  { key: "relay", name: "שרת דואר פנימי / Exchange, בלי משתמש", sub: "שרת דואר ברשת המכללה שמקבל מהשרת הזה בלי סיסמה",
     tag: "הכי פשוט, אם יש במכללה שרת דואר פנימי" },
   { key: "custom", name: "SMTP מותאם", sub: "כל שרת אחר: כתובת, משתמש וסיסמה" },
 ];
@@ -151,7 +151,7 @@ function emGmailPanel(a) {
     <div><label class="em-lbl" for="em-g-addr">כתובת Gmail</label><input class="em-in mono" id="em-g-addr" type="text" dir="ltr" placeholder="imagesrv.alerts@gmail.com" autocomplete="off" value="${esc(addr)}"></div>
     <div><label class="em-lbl" for="em-g-pass">סיסמת אפליקציה</label><input class="em-in mono" id="em-g-pass" type="password" dir="ltr" autocomplete="new-password"></div></div>
     <div class="em-row em-save">${emBtn("שמירה", "emSaveGmail()", "btn primary em-tall")}</div>${emErrSlot("em-g-err")}
-    <p class="em-help">סיסמת אפליקציה (App Password) נוצרת בחשבון Google, ודורשת אימות דו-שלבי בחשבון. <a class="em-link" href="${EM_GMAIL_HELP}" target="_blank" rel="noopener noreferrer">איך יוצרים סיסמת אפליקציה</a>. הסיסמה נשמרת בשרת ולא מוצגת שוב.</p></div>`;
+    <p class="em-help">סיסמת אפליקציה נוצרת בחשבון Google, ודורשת אימות דו-שלבי בחשבון. <a class="em-link" href="${EM_GMAIL_HELP}" target="_blank" rel="noopener noreferrer">איך יוצרים סיסמת אפליקציה</a>. הסיסמה נשמרת בשרת ולא מוצגת שוב.</p></div>`;
 }
 function emRelayPanel(a) {
   return `<div class="em-panel"><div class="em-opts em-fields">

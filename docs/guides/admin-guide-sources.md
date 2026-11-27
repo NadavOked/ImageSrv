@@ -147,7 +147,7 @@
 | פורטי המולטיקאסט: portbase+2 (נתונים) ו-portbase+3 (משוב), ‏portbase ברירת מחדל: `chunkctx.PRODUCTION_PORTBASE` (‏7713 פחות 2); הכרטיס `--iface` | `server/rounds/chunksend.py` (`_command`, `PORT_OFFSET`); `server/rounds/chunkctx.py` (`DEFAULT_PORTBASE`) |
 | זרם מולטיקאסט אחד בכל המערכת | `server/rounds/sessions.py:54` |
 | WoL: UDP 9, broadcast `255.255.255.255`, מוצמד לכרטיס ההפצה | `server/net/wol.py` (`WOL_PORT`, `broadcast_sender`) |
-| אין IGMP querier בשרת (Issues #1543, #1972) | חיפוש `querier` ב-`server/`, `agent/` — אין תוצאות |
+| IGMP querier בשרת (#1972): דלוק כברירת מחדל ופועל בכרטיס ההפצה שהוגדר | `server/net/igmp_querier.py:enabled`, ‏`server/main.py:_start_igmp_querier`, ‏`server/brain/igmpquery.py:judge` |
 | כתובת הקבוצה | `server/rounds/chunksend.py` (‏`GROUP`) — קבועה בקוד |
 | TCN, תקלות DHCP snooping, EEE, duplex, LACP | `C:\ImageCtl-Lab\evening-1015
 esearch-new-failures-1022.md` (N01, N02, N05, N07, N09, N28) |

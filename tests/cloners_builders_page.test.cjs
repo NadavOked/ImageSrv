@@ -334,7 +334,7 @@ test('#1485 cloners: unread lists say so, empty group, and the deploy role', () 
   assert.match(html,/רשימת הרשת לא נקראה — אי אפשר לדעת מי לא דיווח/,'unread ≠ "everyone reported"');
   run("NET=[]; MACHINES=MACHINES.filter(m=>m.group_id!=='grp_CLONERS'); DISK_FAILURES=[]"); html=run('machines(0)'); balanced(html);
   assert.match(html,/0 מחשבים/); assert.match(html,/אין מחשבי שיכפול רשומים — הוסיפו את הראשון/);
-  assert.match(html,/<b class="et">כל המחשבים הרשומים דיווחו<\/b>מחשב ללא hello מעל 10 דקות יופיע כאן עם אפשרות להעיר אותו \(WoL\)\./);
+  assert.match(html,/<b class="et">כל המחשבים הרשומים דיווחו<\/b>מחשב שלא דיווח מעל 10 דקות יופיע כאן עם אפשרות להעיר אותו \(WoL\)\./);
   run('ME.role="deploy"'); assert.equal(run("pageAllowed('machines')"),false,'deploy never reaches the machines page');
   html=run('machines(0)'); assert.doesNotMatch(html,/openRoomRound|wakeRoom|openAddMachine|clearDiskFailure|monitorMachine|openMachineDetail/,'no admin actions rendered for deploy even if the page were reached');
 });

@@ -57,6 +57,11 @@ MAX_OPTIONS = 8
 #: מוקאפ מאושר 18/11 (#3654): תווית עד 36 תווים -- בשורה אחת בחלון הצר, בלי חיתוך בשום מסך. הפועל של הכפתור האדום
 #: ("מחיקת המידע") קצר ממנה, וההשלכה ("המידע הישן יימחק...") בשורה אחת מתחת לתווית.
 MAX_LABEL, MAX_VERB, MAX_TEXT = 36, 24, 120
+#: פירוט בשאלה (#3673, מוקאפ מאושר 20/11, `.ba-rows`): טבלה קטנה בגוף החלון -- עד ארבע עמודות וחמש שורות (המוקאפ: "עד 5 שורות ו«ועוד N»"), כדי שגם הגואי
+#: (640x480) יצייר את כולה בלי לחתוך. מה שלא נכנס נאמר ב-``more_he`` ("ועוד 3 מחיצות"), לא נעלם בשקט.
+MAX_ROW_COLS, MAX_ROW_LINES, MAX_CELL, MAX_ROWS_TITLE = 4, 5, 60, 36
+ROW_STYLES = ("", "mono", "ltr")        # mono = גופן קבוע, ltr = טקסט לטיני בתוך משפט עברי (מבודד, בלי גופן אחר)
+ROW_TONES = ("", "warn", "bad")
 #: יותר מחמש אפשרויות מוצגות בשתי עמודות (מוקאפ n8; נקבע כאן פעם אחת, וכל מסך קורא `columns`).
 TWO_COLUMNS_FROM = 6
 #: ההיסטוריה שהשרת שומר ומציג: שלושים יום (הכרעת נדב 18/11). שאלה שנסגרה לפני כן נמחקת; ההחלטה נשארת ב-`brain_decisions`.
@@ -89,6 +94,66 @@ class Option:
     verb_he: str = ""
     consequence_he: str = ""
     outcome_he: str = ""
+
+
+@dataclass(frozen=True)
+class Cell:
+    """תא אחד בפירוט. ``style``: ``mono`` (מספר/מזהה), ``ltr`` (שם דיסק, גודל); ``tone``: ``warn``/``bad`` צובע וגם מדגיש
+    (המצב נאמר במילים, לא רק בצבע); ``sub`` = שורה קטנה מתחת; ``arrow`` = חץ "←" לפני הערך (מה שיהיה, מול מה שהיה)."""
+
+    text: str
+    style: str = ""
+    tone: str = ""
+    sub: str = ""
+    sub_style: str = ""
+    arrow: bool = False
+
+
+@dataclass(frozen=True)
+class Rows:
+    """הפירוט שהכלל מצרף לשאלה: מה נמצא / מה ייכתב / מה יימחק. **תצוגה בלבד** -- שום פעולה אינה נגזרת ממנו; הפעולה היא
+    האפשרות שנבחרה. נבדק בבנייה, כמו ``Spec``: פירוט פגום אינו מוצג בחצי."""
+
+    title_he: str
+    cols: tuple[str, ...]
+    rows: tuple[tuple[Cell, ...], ...]
+    more_he: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.title_he.strip() or len(self.title_he) > MAX_ROWS_TITLE:
+            raise ValueError(f"the rows have a title of up to {MAX_ROWS_TITLE} characters")
+        if not 1 <= len(self.cols) <= MAX_ROW_COLS or not all(c.strip() and len(c) <= MAX_CELL for c in self.cols):
+            raise ValueError(f"1-{MAX_ROW_COLS} columns, each named (up to {MAX_CELL} characters)")
+        if not 1 <= len(self.rows) <= MAX_ROW_LINES:
+            raise ValueError(f"1-{MAX_ROW_LINES} rows (the rest goes in more_he), got {len(self.rows)}")
+        for line in self.rows:
+            if len(line) != len(self.cols):
+                raise ValueError(f"every row has {len(self.cols)} cells, got {len(line)}")
+            for c in line:
+                if not isinstance(c, Cell) or not c.text.strip() or len(c.text) > MAX_CELL or len(c.sub) > MAX_CELL:
+                    raise ValueError(f"a cell has text of up to {MAX_CELL} characters: {c!r}")
+                if c.style not in ROW_STYLES or c.sub_style not in ROW_STYLES or c.tone not in ROW_TONES:
+                    raise ValueError(f"cell style/tone not recognised: {c!r}")
+        if len(self.more_he) > MAX_TEXT:
+            raise ValueError(f"more_he is up to {MAX_TEXT} characters")
+
+
+def _rows_json(rows: Rows | None) -> str:
+    return json.dumps(asdict(rows), ensure_ascii=False) if rows else ""
+
+
+def _rows_view(raw: str | None) -> dict | None:
+    """הפירוט כפי שנשמר. שורה פגומה או חסרה = ``None`` (השאלה עצמה עדיין מוצגת, בלי טבלה): פירוט אינו תנאי לתשובה."""
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        rows = Rows(data["title_he"], tuple(data["cols"]), tuple(tuple(Cell(**c) for c in line) for line in data["rows"]),
+                    data.get("more_he", ""))
+        return json.loads(json.dumps(asdict(rows), ensure_ascii=False))     # רשימות, לא tuple: אותה צורה בכל מסך
+    except (ValueError, KeyError, TypeError):
+        log.error("brain: the stored rows of a question are not readable -- shown without them")
+        return None
 
 
 @dataclass(frozen=True)
@@ -168,7 +233,8 @@ def _minutes(seconds: int) -> str:
 
 
 def open_ask(conn: SqlConnection, spec: Spec, *, entity: tuple[str, str] | None = None, round_id: str | None = None,
-             detail_he: str = "", mode: str = "shadow", now: datetime | None = None) -> int | None:
+             detail_he: str = "", mode: str = "shadow", now: datetime | None = None,
+             rows: Rows | None = None) -> int | None:
     """שאלה פתוחה, ומספרה. שאלה פתוחה אחת לכל (נקודה, ישות, סבב): קריאה חוזרת מחזירה את הקיימת ולא פותחת שנייה.
     ``None`` = השאלה לא נפתחה (הכתיבה נכשלה, נרשם בלוג): הקורא פועל כמו כשאין תשובה."""
     try:
@@ -182,10 +248,10 @@ def open_ask(conn: SqlConnection, spec: Spec, *, entity: tuple[str, str] | None 
         dedupe = "|".join((spec.point, kind or "", key or "", round_id or ""))
         try:
             cur = _write(conn, "INSERT INTO brain_asks (point, dedupe, title_he, detail_he, options_json, safe_default,"
-                         " who_json, mode, entity_kind, entity_key, round_id, created_at, expires_at, state)"
-                         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                         " who_json, mode, entity_kind, entity_key, round_id, created_at, expires_at, state, rows_json)"
+                         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                          (spec.point, dedupe, spec.title_he, detail_he, json.dumps([asdict(o) for o in spec.options], ensure_ascii=False), spec.safe_default, json.dumps(list(spec.who)), mode, kind, key,
-                          round_id, _stamp(now), _stamp(now + timedelta(seconds=spec.ttl_s)), OPEN))
+                          round_id, _stamp(now), _stamp(now + timedelta(seconds=spec.ttl_s)), OPEN, _rows_json(rows)))
         except sqlite3.IntegrityError:    # כבר פתוחה: אותה שאלה, לא עוד אחת
             row = conn.execute("SELECT id FROM brain_asks WHERE dedupe = ? AND state = 'open'", (dedupe,)).fetchone()
             return row["id"] if row else None
@@ -344,6 +410,7 @@ def view(conn: SqlConnection, row: sqlite3.Row, now: datetime | None = None, *, 
                               "expires_at", "state", "answer", "answered_by", "answered_role", "closed_at")}
     #: שורה שנכתבה לפני שדות הפועל וההשלכה (#3654, מוקאפ 18/11) -- שדה חסר = ריק, לא שגיאה.
     out["options"] = [{"verb_he": "", "consequence_he": "", "outcome_he": "", **o} for o in json.loads(row["options_json"])]
+    out["rows"] = _rows_view(row["rows_json"])
     out["columns"] = 2 if len(out["options"]) >= TWO_COLUMNS_FROM else 1
     out["ttl_s"] = _ttl(row)
     out["closed_note_he"] = _why(row, closed_outcome)
