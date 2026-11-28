@@ -669,6 +669,9 @@ if [ -n "$EXTRA_OVERLAY" ]; then
     root_shell=/usr/bin/dash
 fi
 printf 'root:x:0:0:root:/root:%s\n' "$root_shell" > "$ROOT/etc/passwd"
+# The overlay's login service refuses a shell not listed in /etc/shells;
+# with no file it only accepts /bin/sh, so dash needs the entry (#4089).
+printf '/bin/sh\n%s\n' "$root_shell" | sort -u > "$ROOT/etc/shells"
 printf 'root:x:0:\n'                     > "$ROOT/etc/group"
 printf 'root:*:19000:0:99999:7:::\n'     > "$ROOT/etc/shadow"
 chmod 0600 "$ROOT/etc/shadow"

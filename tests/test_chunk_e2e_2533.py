@@ -54,10 +54,17 @@ GROUP = "239.84.82.1"
 LOST = {1, 2}                       # chunks of partition 3 that lose a packet in the first pass
 
 
-def _tcp_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+def _tcp_ports(n: int) -> list[int]:
+    """n distinct free ports: every socket stays bound until all are picked, so the
+    kernel cannot hand the same port out twice (#4235: --boot-port == --port, 28/11)."""
+    socks = [socket.socket() for _ in range(n)]
+    try:
+        for s in socks:
+            s.bind(("127.0.0.1", 0))
+        return [s.getsockname()[1] for s in socks]
+    finally:
+        for s in socks:
+            s.close()
 
 
 def _sha(data: bytes) -> str:
@@ -80,7 +87,8 @@ class Stack:
         self.bin = C.build_binaries(tmp / "bin")
         self.esp = C.build(tmp / "esp", self.bin / "fanout", chunks=0.3, noisy=(0,), name="p1.esp.pcl.zst")
         self.win = C.build(tmp / "win", self.bin / "fanout", chunks=3.5, noisy=(1,), name="p3.windows.pcl.zst", salt=7)
-        self.port, self.console_port, self.portbase = _tcp_port(), _tcp_port(), C.free_port()
+        self.port, self.console_port, self.boot_port = _tcp_ports(3)
+        self.portbase = C.free_port()
         # #3580: the agent API is TLS-only; the console stays plain on loopback
         self.base, self.console = f"https://127.0.0.1:{self.port}", f"http://127.0.0.1:{self.console_port}"
         self.passes: dict[int, int] = {}            # partition -> the pass the sender last announced
@@ -134,7 +142,7 @@ class Stack:
         self.server = subprocess.Popen(
             [sys.executable, "-c", LOG_EVERY_REQUEST, "--server-url", self.base, "--data-dir", str(self.data),
              "--images", str(self.images), "--host", "127.0.0.1", "--port", str(self.port),
-             "--console-port", str(self.console_port), "--console-tls", "off", "--boot-port", str(_tcp_port()),
+             "--console-port", str(self.console_port), "--console-tls", "off", "--boot-port", str(self.boot_port),
              "--sender-portbase", str(self.portbase), "--dhcp-leases", str(leases)],
             cwd=str(REPO), stdout=self.log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
             env={**os.environ, "PATH": f"{shim}{os.pathsep}{os.environ['PATH']}",

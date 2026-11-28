@@ -37,6 +37,8 @@ for name in reboot poweroff; do
 done
 chmod +x "$ROOT/bin/"*
 IFS=: read -r user password uid gid gecos home shell < "$ROOT/etc/passwd"
+# dropbear refuses a login shell missing from /etc/shells (metal, 28/11).
+grep -qxF "$shell" "$ROOT/etc/shells" || {{ echo "no $shell in /etc/shells" >&2; exit 3; }}
 PATH="$ROOT/bin" "$ROOT$shell" -c 'reboot && poweroff'
 """
     (tmp_path / "check.sh").write_text(script, encoding="utf-8", newline="\n")
