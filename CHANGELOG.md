@@ -24,6 +24,8 @@
 
 ## [Unreleased]
 
+- **The README shows the console: a live round, the image library, the cloner progress screen and the installer, each in a light and a dark version** (#4192, Added; patch: documentation, no new screen or button): eight PNG files in `docs/screenshots/`, shown through `<picture>` like the logo, and `docs/screenshots/` is `[public]` in `tools/git/public-manifest.list`. Taken from a local development server and the native GUI built locally (`make png`), with demo data (generic names, `10.0.0.x` addresses), not from the lab.
+
 ## [v0.102.1] - 2026-11-28
 
 - (#4044, Fixed; patch): the server waits at least the network wait plus 30 seconds before it marks a cloner lost (`agent_timing.effective_lost_seconds`), so a cloner that is still waiting for the stream is no longer called lost.
