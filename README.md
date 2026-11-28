@@ -109,6 +109,36 @@ ImageSrv קולט אימג'י דיסק, מפיץ אותם במולטיקאסט �
 - **מוניטור** — צפייה ב-GUI של מחשב בנייה או שיכפול (כבוי כברירת מחדל).
 - **יומן בעברית** — הודעות קריאות ("כתיבה נכשלה במחשב: 06"), לא שורות לוג גולמיות.
 
+סבב הפצה חי: התקדמות כוללת, קצב הזרם, וכל כונן של מחשב השיכפול בנפרד.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/round-dark.png">
+  <img alt="הקונסולה — סבב הפצה חי עם התקדמות לכל כונן" src="docs/screenshots/round-light.png">
+</picture>
+
+ספריית האימג'ים: תיקיות, התאמה לדיסק, ואימות sha256 לכל אימג'.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/images-dark.png">
+  <img alt="הקונסולה — ספריית האימג'ים" src="docs/screenshots/images-light.png">
+</picture>
+
+מסך ההתקדמות במחשב השיכפול: כל כונן בנפרד, עם אחוזים וקצב.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/cloner-dark.png">
+  <img alt="מסך מחשב השיכפול — התקדמות לכל כונן" src="docs/screenshots/cloner-light.png">
+</picture>
+
+מסך ההתקנה של השרת מה-ISO.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/install-dark.png">
+  <img alt="מסך ההתקנה של השרת — התקנת החבילות" src="docs/screenshots/install-light.png">
+</picture>
+
+*צילומי המסך נלקחו מהקונסולה ומהגואי שנבנו מקומית, עם נתוני דוגמה (שמות וכתובות כלליים).*
+
 ## עקרונות בטיחות
 
 **ברירת המחדל היא תמיד אתחול מהדיסק המקומי.**
