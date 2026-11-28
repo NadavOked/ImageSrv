@@ -24,6 +24,9 @@
 
 ## [Unreleased]
 
+- **Cloners built with the technician overlay accept a login again** (#4089, Fixed): v0.102.1 set root's shell to `/usr/bin/dash` but wrote no `/etc/shells`, so the overlay's login service refused the shell and every remote login to a cloner failed. `tools/build_initramfs.sh` now writes `/etc/shells` with `/bin/sh` and the chosen shell, and `tests/test_ssh_power_4089.py` fails when the shell is missing from it. Found on cloner 2, 28/11.
+- **The README shows the console: a live round, the image library, the cloner progress screen and the installer, each in a light and a dark version** (#4192, Added; patch: documentation, no new screen or button): eight PNG files in `docs/screenshots/`, shown through `<picture>` like the logo, and `docs/screenshots/` is `[public]` in `tools/git/public-manifest.list`. Taken from a local development server and the native GUI built locally (`make png`), with demo data (generic names, `10.0.0.x` addresses), not from the lab.
+
 ## [v0.102.1] - 2026-11-28
 
 - (#4044, Fixed; patch): the server waits at least the network wait plus 30 seconds before it marks a cloner lost (`agent_timing.effective_lost_seconds`), so a cloner that is still waiting for the stream is no longer called lost.
