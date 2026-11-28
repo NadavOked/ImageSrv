@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from console_src import console_js
 from test_interrupt_question_2528 import (   # noqa: F401 — room_server הוא fixture
     BOOT_A, BOOT_B, CLONER1, CLONER2, ago, age_member, age_question, asks, beat, events, hello, interrupted,
     ledger_rows, post_answer, progress, question, room, room_server, round_row, start,
@@ -93,7 +94,7 @@ def test_the_console_row_has_the_servers_range_and_default():
     """לפי ה-gotchas: הטווח בשרת והטווח שהקונסולה מציגה הם אותם מספרים."""
     from server.rounds import interrupt   # noqa: PLC0415 — מודול חדש: לא באיסוף (בקרה שלילית)
 
-    js = (REPO / "server/static/console.js").read_text(encoding="utf-8")
+    js = console_js()
     row = re.search(r'\{ key: "interrupt_ask_minutes",[^\n]*\n[^\n]*\}', js)
     assert row is not None, "אין שורת הגדרה בקונסולה"
     text = row.group(0)

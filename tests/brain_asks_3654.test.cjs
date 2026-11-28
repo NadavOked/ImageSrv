@@ -12,6 +12,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const {consoleJs} = require('./console_src.cjs');
 
 const SRC = fs.readFileSync(path.resolve(__dirname, '../server/static/brain_asks.js'), 'utf8');
 
@@ -200,7 +201,7 @@ test('the console loads it after console.js, on the same version, and wires the 
   const v = (n) => new RegExp(`src="${n}\\?v=([^"]+)"`).exec(html)[1];
   assert.equal(v('brain_asks.js'), v('console.js'));
   assert.equal(v('brain_asks_page.js'), v('console.js'));
-  const lines = fs.readFileSync(path.resolve(__dirname, '../server/static/console.js'), 'utf8').split('\n');
+  const lines = consoleJs().split('\n');
   const body = (name) => {
     const start = lines.findIndex((l) => new RegExp(`^(async )?function ${name}\\(`).test(l));
     assert.ok(start >= 0, `${name} exists in console.js`);

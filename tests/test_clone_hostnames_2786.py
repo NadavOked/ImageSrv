@@ -236,7 +236,7 @@ PARITY = ["A", "1", "12345", "100-01", "100-INS", "a" * 15, "a" * 16, "-PC", "PC
           "PC_3", "PC.3", "כיתה-1", "Pé3", "", "7735-30-01", "0x1F", "--", "A-1"]
 
 _NODE_RULE = r"""
-const src = require('fs').readFileSync(process.argv[1], 'utf8');
+const src = require(process.argv[1]).consoleJs();
 const max = src.match(/const NM_MAX = (\d+)/);
 const body = src.slice(src.indexOf('function cloneNameRefusal('), src.indexOf('\n}\n', src.indexOf('function cloneNameRefusal(')) + 2);
 if (!max || !body.startsWith('function')) { console.log('NOT-FOUND'); process.exit(3); }
@@ -255,8 +255,8 @@ def test_the_console_refuses_exactly_what_the_server_refuses():
     from server.core import hostname_rule                            # noqa: PLC0415
     node = shutil.which("node")
     assert node, "Node is required (test_operator_javascript)"
-    console = Path(__file__).resolve().parent.parent / "server" / "static" / "console.js"
-    out = subprocess.run([node, "-e", _NODE_RULE, str(console), json.dumps(PARITY)],
+    helper = Path(__file__).resolve().with_name("console_src.cjs")
+    out = subprocess.run([node, "-e", _NODE_RULE, str(helper), json.dumps(PARITY)],
                          capture_output=True, text=True, encoding="utf-8",
                          stdin=subprocess.DEVNULL, timeout=60)
     assert out.returncode == 0, out.stdout + out.stderr

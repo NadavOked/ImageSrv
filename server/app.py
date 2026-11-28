@@ -144,7 +144,7 @@ from server.paths import REPO_ROOT, STATIC_DIR
 
 #: כל כמה שניות שעון-הרקע מריץ את הדופק של חדר השיכפולים (#456). זהו רק
 #: רשת-הביטחון לחדר **שקט לגמרי**: כשמכונות מדברות, ה-hello שלהן מקדם את
-#: ה-tick בקצב ~2ש' ממילא. הסף להכרזת אובדן הוא `lost_wait_seconds` (180, החלטת K-LOST),
+#: ה-tick בקצב ~2ש' ממילא. סף האובדן בפועל הוא הקלט להחלטת K-LOST,
 #: ולכן דגימה כל 5ש' מכריזה אובד תוך ~5ש' אחרי שהסף חלף — מספיק דק.
 ROOM_CLOCK_SECONDS = 5.0
 
@@ -791,7 +791,7 @@ def create_runtime(
         live_members=lambda session_id: [
             m["mac"] for m in store.members(session_id)
             if m["state"] not in ("done", "failed", "partial", "lost")],
-        lost_wait=lambda: agent_timing.lost_seconds(conn),
+        lost_wait=lambda: agent_timing.effective_lost_seconds(conn),
         write_floor=lambda: hdd_policy.RepairFloor(conn),
         wave_bitrate=chunk_wave_bitrate,         # הקצב נקבע כמו היום (הכרעה 9, 12/11), מהכרטיס של הגל (#3073)
         link_speed=link_speed,                   # #3173: מהירות הקישור של כרטיס ההפצה, כאן ולא בשולח הישן

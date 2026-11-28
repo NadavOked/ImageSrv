@@ -24,6 +24,14 @@
 
 ## [Unreleased]
 
+## [v0.102.1] - 2026-11-28
+
+- (#4044, Fixed; patch): the server waits at least the network wait plus 30 seconds before it marks a cloner lost (`agent_timing.effective_lost_seconds`), so a cloner that is still waiting for the stream is no longer called lost.
+- (#4089, Fixed): an image built with an overlay gives root a dash login shell, so a typed `reboot`/`poweroff` over ssh reaches `imagesrv-power` and not the busybox applet. Not yet checked on a cloner.
+- (#3898, S2b+S2c, Changed): every active round is ticked, and closing a round takes its `round_id` (409 without it when several are active); still behind `PARALLEL_ROUNDS=False`.
+- (#2579, C0+C1, Changed): console tests read the console through `tests/console_src.py`, and a new `tools/console_globals.py` maps the console's top-level names and fails on a name declared twice (one known: `imagesVisible`, #4232).
+- (tests, Fixed): `test_netprobe` waits 20s for the background refresh; three brain fixture tests wait for `send_failed` (#4235 tracks the CI-load timing failures).
+
 ## [v0.102.0] - 2026-11-27
 
 - **The console speaks Hebrew where it still showed English labels and system diagnostics** (#3973, Fixed; minor): the operator sees the new wording on the cloner, machine and diagnostics screens.

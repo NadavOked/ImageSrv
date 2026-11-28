@@ -34,6 +34,7 @@ from server import db
 from server.db import connect, get_setting
 from server.dcui import samples
 from server.system import backup_job, backup_target
+from console_src import console_js
 from native import requires_native
 from test_backup_policy_1956 import box, console, copies, health, status, tick   # noqa: F401 -- fixtures
 from test_installer_backup_1956 import SH_ONLY, _sh, disk   # noqa: F401 -- fixture
@@ -219,7 +220,7 @@ def _js(name: str, js: str) -> str:
 
 @requires_native(("node", NODE))
 def test_the_console_bar_is_shown_only_when_it_is_off(tmp_path):
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     probe = tmp_path / "probe.cjs"
     probe.write_text("""
 const esc = (x) => String(x == null ? "" : x);
@@ -257,7 +258,7 @@ console.log(JSON.stringify(out));
 
 
 def test_the_console_wiring():
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert '{ key: "backup_enabled", card: "update", label: "גיבוי אוטומטי", type: "backupswitch",' in js
     assert 'await post("/backup-policy", { enabled: want });' in js
     assert "body = backupOffBarHtml(backupOffFromHealth()) +" in js, "the home page"
@@ -267,7 +268,7 @@ def test_the_console_wiring():
 
 
 def test_the_home_health_does_not_count_off_as_a_warning():
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert 'HEALTH.filter((c) => c.state === "bad" || c.state === "warn")' in _js("homeHealth", js)
 
 

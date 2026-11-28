@@ -41,7 +41,7 @@ DEFAULT = SHADOW
 #: **הכרעת נדב 14/11 בערב: "הספים בהגדרות כנראה מפריעים למוח. הוא צריך לשלוט בהם, והם לא צריכים להיות בהגדרות."**
 #: אין כאן ספים: כל סף טכני של המוח הוא ערך התחלה בקוד (`decide.Config`), וסף שהיה הגדרה עבר ל-`RETIRED`.
 #: בהגדרות נשארים רק המתג (מדיניות) והגבול העליון של תקציב הרשת (`budget.SETTING`, נדב 14/11).
-#: LOST אינו כאן: הוא `lost_wait_seconds` הקיים (`agent_timing.lost_seconds`), מותר רק להגדיל.
+#: LOST נגזר מזמני ההמתנה הקיימים (`agent_timing.effective_lost_seconds`).
 
 #: כל מפתחות ההגדרות של המוח: `WRITE_SETTINGS` בקונסולה.
 KEYS = (SETTING,)
@@ -110,9 +110,9 @@ def effective(conn) -> dict[str, str]:
 
 def config(conn, macs=(), now: float | None = None) -> brain.Config:
     """הספים. `macs`: המשכפלים שהכיול של סף החשד שלהם (KT2, `calibrate`) נקרא ונרשם בצילום; בלעדיהם -- ערך ההתחלה."""
-    # רק LOST (`lost_wait_seconds`, הגדרה קיימת של זמני הסוכן) נקרא מההגדרות. כל שאר הספים הם ערכי ההתחלה שבקוד
+    # רק LOST נגזר מזמני ההמתנה בהגדרות. כל שאר הספים הם ערכי ההתחלה שבקוד
     # (`decide.Config`) והמוח הוא ששולט בהם (נדב 14/11 בערב).
-    cfg = brain.Config(lost_s=agent_timing.lost_seconds(conn))
+    cfg = brain.Config(lost_s=agent_timing.effective_lost_seconds(conn))
     return calibrate.apply(conn, cfg, macs, now=time.time() if now is None else now) if macs else cfg
 
 

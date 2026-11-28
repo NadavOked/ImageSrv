@@ -263,7 +263,7 @@ test('#3967 the bottom status bar is gone: no API/PXE/Multicast dots, no TLS fin
   assert.doesNotMatch(html, /כל השירותים פעילים/, 'the static green claim is gone from the markup');
   assert.equal(run('typeof paintServiceStatus'), 'undefined');
   assert.equal(run('typeof SERVICE_DOTS'), 'undefined');
-  assert.doesNotMatch(read('console.js'), /serverTls/, 'nothing writes the TLS line of the dock (the full card stays in settings)');
+  assert.doesNotMatch(consoleJs(), /serverTls/, 'nothing writes the TLS line of the dock (the full card stays in settings)');
   const css = read('console.css');
   assert.doesNotMatch(css, /\.statusbar-item\.svc-/, 'the dot colours left with the dots');
 });

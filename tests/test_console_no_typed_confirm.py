@@ -7,6 +7,8 @@
 import re
 from pathlib import Path
 
+from console_src import console_files, console_js
+
 STATIC = Path(__file__).resolve().parent.parent / "server" / "static"
 FILES = sorted(p for p in STATIC.rglob("*") if p.suffix in {".js", ".html"} and "vendor" not in p.parts)
 
@@ -28,14 +30,16 @@ def test_scan_finds_the_files():
 
 def test_no_typed_word_confirmation_in_console():
     found = []
-    for path in FILES:
-        text = path.read_text(encoding="utf-8")
+    linked = {STATIC / name for name in console_files()}
+    sources = [("console*.js", console_js())]
+    sources.extend((path.name, path.read_text(encoding="utf-8")) for path in FILES if path not in linked)
+    for name, text in sources:
         for label, pattern in CODE_PATTERNS.items():
             for m in re.finditer(pattern, text):
-                found.append(f"{path.name}:{text.count(chr(10), 0, m.start()) + 1} {label}")
+                found.append(f"{name}:{text.count(chr(10), 0, m.start()) + 1} {label}")
         for phrase in TEXT_PATTERNS:
             i = text.find(phrase)
             while i != -1:
-                found.append(f"{path.name}:{text.count(chr(10), 0, i) + 1} text {phrase!r}")
+                found.append(f"{name}:{text.count(chr(10), 0, i) + 1} text {phrase!r}")
                 i = text.find(phrase, i + 1)
     assert not found, "הקלדת מילה לאישור חזרה:\n" + "\n".join(found)

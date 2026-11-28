@@ -169,8 +169,8 @@ def judge_lost(members, *, started_at: object, now: datetime, lost_s: float, jum
 
     הדופק הנמדד הוא progress ולא hello (#450): מכונה שכותבת מפסיקה לשלוח hello אך מדווחת התקדמות כל ~2 שניות (#449), ולכן
     הפקעה לפי hello הייתה קוטלת מכונה בריאה עסוקה בכתיבה. `updated_at` זז על כל דיווח (וגם על מגירה קפואה: הוא זמן הדיווח,
-    לא זמן התנועה), ומכונה שנעלמה מפסיקה להזיז אותו. הסף (`lost_wait_seconds`, 180 ומותר רק להגדיל, הכרעת נדב 12/11) נגזר
-    מקצב הדיווח (~2 ש') עם שוליים גסים; אינו מדידת שדה.
+    לא זמן התנועה), ומכונה שנעלמה מפסיקה להזיז אותו. השרת מעביר את סף האובדן בפועל
+    (`agent_timing.effective_lost_seconds`, #4044).
 
     הגרייס נמדד מ-`max(updated_at, started_at)`: גל שרק התחיל נותן לכל חבר ``lost_s`` להשמיע קול ראשון (#450). שני
     המקורות ריקים = ``UNMEASURED``, לא "אבוד" (עיקרון 5)."""
@@ -189,7 +189,7 @@ def judge_lost(members, *, started_at: object, now: datetime, lost_s: float, jum
         source, last = max(stamps, key=lambda p: p[1])
         age = (now - last).total_seconds()
         evidence = (f"state={m['state']}", f"last={source}@{last.isoformat(timespec='seconds')}",
-                    f"limit={lost_s:g}s (lost_wait_seconds)")
+                    f"limit={lost_s:g}s")
         if last > ahead:
             out.append(Call(RULE_LOST, POINT_LOST, "MARK_LOST", FUTURE, m["mac"],
                             f"החותמת {source} בעתיד ({-age:.0f}ש'): קפיצת שעון, לא אובדן. מכוילת ל'עכשיו'",

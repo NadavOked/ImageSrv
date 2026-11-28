@@ -153,7 +153,7 @@ def test_a_stranger_cannot_plant_marks_for_a_station(identity_server):
 
 def test_the_console_page_and_docs_know_the_new_data():
     root = Path(__file__).resolve().parent.parent
-    js = (root / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     assert "bootMarksHtml(d.boot_marks)" in js
     doc = (root / "docs" / "architecture" / "interfaces.md").read_text(encoding="utf-8")
     assert "boot_marks" in doc and "#2830" in doc

@@ -14,6 +14,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from console_src import console_js
 from native import requires_native
 
 REPO = Path(__file__).resolve().parent.parent
@@ -121,7 +122,7 @@ def test_the_build_machines_smart_window_names_its_disk_and_passes_the_drawer():
 
 @requires_native(("node", NODE))
 def test_the_console_says_drawer_for_a_cable_and_disk_for_a_failure(tmp_path):
-    js = (REPO / "server" / "static" / "console.js").read_text(encoding="utf-8")
+    js = console_js()
     fn = re.search(r"^function cableDrawerText\(name\) \{.*?\}$", js, re.M)
     assert fn, "cableDrawerText() is gone from console.js"
     script = tmp_path / "t.js"

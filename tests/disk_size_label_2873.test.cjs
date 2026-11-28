@@ -1,10 +1,9 @@
 // #2873: מגירה/דיסק מציגים את הגודל האמיתי; סולם הגדלים הוא רק שם של כונן שבאמת קרוב אליו.
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const fs=require('node:fs');
-const path=require('node:path');
+const {consoleJs}=require('./console_src.cjs');
 const vm=require('node:vm');
-const src=fs.readFileSync(path.resolve(__dirname,'../server/static/console.js'),'utf8');
+const src=consoleJs();
 function grab(name){
   const i=src.indexOf('function '+name+'(');
   assert.ok(i>=0, name+' missing');
